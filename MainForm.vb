@@ -265,6 +265,13 @@ Public Class MainForm
     ' ── Boilerplate ───────────────────────────────────────────────────────────
     Public Sub New()
         InitializeComponent()
+        AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
+        ResizeControls()
     End Sub
+
+    Private Sub ResizeControls()
+        txtOutput.Size = New Size(Me.ClientSize.Width - 28, Me.ClientSize.Height - 134)
+    End Sub
+
 
 End Class
