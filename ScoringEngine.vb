@@ -55,13 +55,13 @@ Public Class ScoringEngine
         If adxStrong AndAlso dmiShort Then ss += 1
         breakdown.Add(("ADX>25", adxStrong AndAlso dmiLong, adxStrong AndAlso dmiShort, $"{r.ADX:F1}"))
 
-        ' Volume spike
+        ' Volume spike (only 3x qualifies for score per spec)
         Dim volSpike As Boolean = r.VolumeRatio >= 3.0
-        Dim volMod As Boolean = r.VolumeRatio >= 2.0
-        If volSpike Then ls += 1 : ss += 1
-        ElseIf volMod Then ' partial credit not in spec — only full 3x triggers score
+        If volSpike Then
+            ls += 1
+            ss += 1
         End If
-        breakdown.Add(("Volume ≥3×SMA", volSpike, volSpike, $"{r.VolumeRatio:F2}x"))
+        breakdown.Add(("Volume >=3xSMA", volSpike, volSpike, r.VolumeRatio.ToString("F2") & "x"))
 
         ' TIER 1 (max 5 each)
         ' VWAP
