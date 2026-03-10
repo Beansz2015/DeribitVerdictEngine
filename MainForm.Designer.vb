@@ -1,6 +1,10 @@
 ' MainForm.Designer.vb
 ' Auto-generated designer file — defines layout of all controls.
 
+Imports System.Drawing
+Imports System.Windows.Forms
+
+
 Partial Class MainForm
     Inherits System.Windows.Forms.Form
 
@@ -115,7 +119,7 @@ Partial Class MainForm
                                btnAnalyze, lblVerdictCaption, lblVerdict, txtOutput})
         Me.ResumeLayout(False)
         Me.PerformLayout()
-        Me.Resize += Sub(s, ev) ResizeControls()
+        AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
     End Sub
 

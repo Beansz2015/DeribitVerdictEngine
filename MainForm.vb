@@ -2,6 +2,8 @@
 ' UI logic — wires button click to data fetch → indicator calc → scoring → display.
 
 Imports System.Windows.Forms
+Imports System.Drawing
+
 
 Public Class MainForm
 
