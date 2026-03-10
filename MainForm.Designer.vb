@@ -1,5 +1,5 @@
 ' MainForm.Designer.vb
-' Designer-compatible layout file — classic property assignment style.
+' Designer-compatible layout file -- classic property assignment style.
 
 Imports System.Drawing
 Imports System.Windows.Forms
@@ -80,7 +80,7 @@ Partial Class MainForm
         Me.rbShort.AutoSize = True
 
         ' btnAnalyze
-        Me.btnAnalyze.Text = Chr(9654) & "  Analyze Now"
+        Me.btnAnalyze.Text = "[ Analyze Now ]"
         Me.btnAnalyze.Font = New Font("Consolas", 11.0F, FontStyle.Bold)
         Me.btnAnalyze.BackColor = Color.FromArgb(0, 120, 212)
         Me.btnAnalyze.ForeColor = Color.White
