@@ -7,10 +7,9 @@ Imports System.Windows.Forms
 Public Class MainForm
 
     ' OI snapshot history (stored in-memory for delta calculation)
-    ' Each entry: (timestamp_ms, open_interest)
     Private _oiHistory As New List(Of (Ts As Long, OI As Double))()
 
-    ' ── Resize handler ───────────────────────────────────────────────────────
+    ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
@@ -21,7 +20,7 @@ Public Class MainForm
         txtOutput.Size = New Size(Me.ClientSize.Width - 28, Me.ClientSize.Height - 134)
     End Sub
 
-    ' ── Button click: full pipeline ───────────────────────────────────────────
+    ' -- Button click: full pipeline ------------------------------------------
     Private Async Sub btnAnalyze_Click(sender As Object, e As EventArgs) Handles btnAnalyze.Click
         btnAnalyze.Enabled = False
         btnAnalyze.Text = "Fetching..."
@@ -87,9 +86,10 @@ Public Class MainForm
         ' RSI
         r.RSI = IndicatorEngine.CalcRSI(candles1m, 9)
 
-        ' Volume SMA
+        ' Volume (BTC from candle, USD from cost field)
         r.VolumeSMA9 = IndicatorEngine.CalcVolumeSMA(candles1m, 9)
         r.CurrentVolume = candles1m.Last().Volume
+        r.CurrentVolumeUSD = candles1m.Last().VolumUSD
         r.VolumeRatio = If(r.VolumeSMA9 > 0, r.CurrentVolume / r.VolumeSMA9, 1)
 
         ' DMI + ADX (5m)
@@ -205,6 +205,16 @@ Public Class MainForm
         Dim sb As New System.Text.StringBuilder()
         Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") & " UTC"
 
+        ' Format USD volume compactly: e.g. $8.5K, $1.2M
+        Dim usdStr As String
+        If r.CurrentVolumeUSD >= 1_000_000 Then
+            usdStr = "$" & (r.CurrentVolumeUSD / 1_000_000).ToString("F2") & "M"
+        ElseIf r.CurrentVolumeUSD >= 1_000 Then
+            usdStr = "$" & (r.CurrentVolumeUSD / 1_000).ToString("F1") & "K"
+        Else
+            usdStr = "$" & r.CurrentVolumeUSD.ToString("F0")
+        End If
+
         sb.AppendLine("===========================================================")
         sb.AppendLine("  VERDICT:    " & v.Verdict)
         sb.AppendLine("  CONFIDENCE: " & v.Confidence)
@@ -218,7 +228,8 @@ Public Class MainForm
         sb.AppendLine("CORE SIGNALS (1m):")
         sb.AppendLine("  ROC(9):       " & r.ROC.ToString("F3") & "  |  Slope: " & r.ROCSlope)
         sb.AppendLine("  RSI(9):       " & r.RSI.ToString("F1"))
-        sb.AppendLine("  Volume:       " & r.CurrentVolume.ToString("F2") & "  |  vs SMA: " & r.VolumeRatio.ToString("F2") & "x  |  SMA: " & r.VolumeSMA9.ToString("F2"))
+        sb.AppendLine("  Volume:       " & r.CurrentVolume.ToString("F4") & " BTC (" & usdStr & ")" &
+                      "  |  vs SMA: " & r.VolumeRatio.ToString("F2") & "x  |  SMA: " & r.VolumeSMA9.ToString("F4") & " BTC")
         sb.AppendLine()
         sb.AppendLine("TIER 1 SIGNALS:")
         sb.AppendLine("  VWAP:         " & r.VWAP.ToString("F1") & "  |  Dev: " & r.VWAPDevPct.ToString("F2") & "%  |  Price: " & r.CurrentPrice.ToString("F1"))
@@ -254,7 +265,6 @@ Public Class MainForm
 
         txtOutput.Text = sb.ToString()
 
-        ' Color-code verdict label using Select Case (VB.NET syntax)
         lblVerdict.Text = v.Verdict
         Select Case v.Verdict
             Case "STRONG LONG"

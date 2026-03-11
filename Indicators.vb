@@ -1,5 +1,5 @@
 ' Indicators.vb
-' Pure calculation layer — no I/O, no UI references.
+' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 
 Public Class IndicatorResults
@@ -11,7 +11,8 @@ Public Class IndicatorResults
     Public Property ATRAvg20d As Double      ' approximated from fetched 1m history
     Public Property ATRSizeMultiplier As Double
     Public Property VolumeSMA9 As Double
-    Public Property CurrentVolume As Double
+    Public Property CurrentVolume As Double  ' BTC volume -- used for scoring
+    Public Property CurrentVolumeUSD As Double ' USD volume -- display only
     Public Property VolumeRatio As Double
 
     ' Trend (5m)
@@ -32,16 +33,16 @@ Public Class IndicatorResults
     Public Property FundingRate As Double    ' raw 8h decimal e.g. 0.0001
     Public Property FundingBias As String
     Public Property OI_Current As Double
-    Public Property OI_Prev15m As Double     ' stored externally, passed in
+    Public Property OI_Prev15m As Double
     Public Property OI_Prev60m As Double
     Public Property OIChange15m As Double    ' % change
     Public Property OIChange60m As Double
-    Public Property OISignal As String       ' NEW LONGS / NEW SHORTS / COVERING / CAPITULATION
+    Public Property OISignal As String       ' NEW LONGS / NEW SHORTS / COVERING / CAPITULATION / NEUTRAL
 
     ' Tier 2
-    Public Property OFIRatio As Double       ' buy volume / sell volume from top 5 book levels
+    Public Property OFIRatio As Double
     Public Property OFISignal As String      ' BUY DOMINANT / SELL DOMINANT / BALANCED
-    Public Property LiqLongSize As Double    ' USD size of long liq in last 100 trades
+    Public Property LiqLongSize As Double
     Public Property LiqShortSize As Double
     Public Property LiqSignal As String
     Public Property EMA200_5m As Double
@@ -60,8 +61,8 @@ End Class
 
 Public Class IndicatorEngine
 
-    ' ── DMI + ADX ────────────────────────────────────────────────────────────
-    ' period = 9, smoothing = 9 (Wilder smoothing = same as RMA)
+    ' -- DMI + ADX ------------------------------------------------------------
+    ' period = 9, smoothing = 9 (Wilder smoothing)
     Public Shared Sub CalcDMI(candles As List(Of Candle), period As Integer,
                                ByRef plusDI As Double, ByRef minusDI As Double, ByRef adx As Double)
         If candles.Count < period + 2 Then
@@ -87,7 +88,6 @@ Public Class IndicatorEngine
             dmMinusList.Add(dmMinus)
         Next
 
-        ' Wilder smoothing (initial = sum of first `period` values)
         Dim smoothTR As Double = trList.Take(period).Sum()
         Dim smoothPlus As Double = dmPlusList.Take(period).Sum()
         Dim smoothMinus As Double = dmMinusList.Take(period).Sum()
@@ -112,7 +112,6 @@ Public Class IndicatorEngine
         plusDI = prevDI_Plus
         minusDI = prevDI_Minus
 
-        ' ADX = Wilder smoothed DX
         If adxList.Count < period Then
             adx = 0 : Return
         End If
@@ -123,7 +122,7 @@ Public Class IndicatorEngine
         adx = smoothADX
     End Sub
 
-    ' ── ATR ──────────────────────────────────────────────────────────────────
+    ' -- ATR ------------------------------------------------------------------
     Public Shared Function CalcATR(candles As List(Of Candle), period As Integer) As Double
         If candles.Count < period + 1 Then Return 0
         Dim trValues As New List(Of Double)
@@ -133,7 +132,6 @@ Public Class IndicatorEngine
                          Math.Max(Math.Abs(c.High - p.Close),
                                   Math.Abs(c.Low - p.Close))))
         Next
-        ' Wilder smoothed ATR
         Dim atr As Double = trValues.Take(period).Average()
         For i As Integer = period To trValues.Count - 1
             atr = (atr * (period - 1) + trValues(i)) / period
@@ -141,7 +139,7 @@ Public Class IndicatorEngine
         Return atr
     End Function
 
-    ' ── EMA ──────────────────────────────────────────────────────────────────
+    ' -- EMA ------------------------------------------------------------------
     Public Shared Function CalcEMA(candles As List(Of Candle), period As Integer) As Double
         If candles.Count < period Then Return 0
         Dim closes = candles.Select(Function(c) c.Close).ToList()
@@ -153,7 +151,6 @@ Public Class IndicatorEngine
         Return ema
     End Function
 
-    ' EMA on a raw double list (used for RSI signal line)
     Public Shared Function CalcEMAList(values As List(Of Double), period As Integer) As Double
         If values.Count < period Then Return 0
         Dim k As Double = 2.0 / (period + 1)
@@ -164,7 +161,7 @@ Public Class IndicatorEngine
         Return ema
     End Function
 
-    ' ── RSI (EMA-smoothed Wilder) ─────────────────────────────────────────────
+    ' -- RSI (Wilder EMA-smoothed) --------------------------------------------
     Public Shared Function CalcRSI(candles As List(Of Candle), period As Integer) As Double
         If candles.Count < period + 1 Then Return 50
         Dim gains As New List(Of Double)
@@ -174,7 +171,6 @@ Public Class IndicatorEngine
             gains.Add(If(diff > 0, diff, 0))
             losses.Add(If(diff < 0, Math.Abs(diff), 0))
         Next
-        ' Wilder initial average
         Dim avgGain As Double = gains.Take(period).Average()
         Dim avgLoss As Double = losses.Take(period).Average()
         For i As Integer = period To gains.Count - 1
@@ -186,8 +182,7 @@ Public Class IndicatorEngine
         Return 100 - (100 / (1 + rs))
     End Function
 
-    ' ── ROC ──────────────────────────────────────────────────────────────────
-    ' Returns last 3 ROC values so we can check slope
+    ' -- ROC ------------------------------------------------------------------
     Public Shared Function CalcROCSeries(candles As List(Of Candle), period As Integer) As List(Of Double)
         Dim result As New List(Of Double)
         If candles.Count < period + 3 Then Return result
@@ -201,19 +196,18 @@ Public Class IndicatorEngine
         Return result
     End Function
 
-    ' ── Volume SMA ───────────────────────────────────────────────────────────
+    ' -- Volume SMA -----------------------------------------------------------
     Public Shared Function CalcVolumeSMA(candles As List(Of Candle), period As Integer) As Double
         If candles.Count < period Then Return 0
         Return candles.Skip(candles.Count - period).Average(Function(c) c.Volume)
     End Function
 
-    ' ── VWAP (session from midnight UTC) ─────────────────────────────────────
+    ' -- VWAP (session from midnight UTC) -------------------------------------
     Public Shared Function CalcVWAP(candles As List(Of Candle)) As Double
-        ' Filter candles from session start (00:00 UTC today)
         Dim sessionStart As Long = New DateTimeOffset(
             DateTime.UtcNow.Date, TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim sessionCandles = candles.Where(Function(c) c.Timestamp >= sessionStart).ToList()
-        If sessionCandles.Count = 0 Then sessionCandles = candles ' fallback
+        If sessionCandles.Count = 0 Then sessionCandles = candles
         Dim cumTPV As Double = 0
         Dim cumVol As Double = 0
         For Each c In sessionCandles
@@ -224,8 +218,7 @@ Public Class IndicatorEngine
         Return If(cumVol > 0, cumTPV / cumVol, 0)
     End Function
 
-    ' ── Bollinger Band Width ──────────────────────────────────────────────────
-    ' Returns (current BBW, rolling 120-bar minimum BBW, squeeze status)
+    ' -- Bollinger Band Width -------------------------------------------------
     Public Shared Sub CalcBBW(candles As List(Of Candle), period As Integer, stdMult As Double,
                                ByRef bbw As Double, ByRef minBBW As Double, ByRef squeezeStatus As String)
         bbw = 0 : minBBW = Double.MaxValue : squeezeStatus = "NONE"
@@ -251,7 +244,7 @@ Public Class IndicatorEngine
         bbw = bbwSeries.Last()
         minBBW = bbwSeries.Min()
 
-        Dim squeezeThreshold As Double = minBBW * 1.05  ' within 5% of rolling min
+        Dim squeezeThreshold As Double = minBBW * 1.05
         If bbw <= squeezeThreshold Then
             squeezeStatus = "ACTIVE"
         ElseIf bbwSeries.Count >= 3 AndAlso
@@ -263,7 +256,7 @@ Public Class IndicatorEngine
         End If
     End Sub
 
-    ' ── Donchian Channel ─────────────────────────────────────────────────────
+    ' -- Donchian Channel -----------------------------------------------------
     Public Shared Sub CalcDonchian(candles As List(Of Candle), period As Integer,
                                     ByRef upper As Double, ByRef lower As Double)
         If candles.Count < period Then upper = 0 : lower = 0 : Return
@@ -272,8 +265,7 @@ Public Class IndicatorEngine
         lower = window.Min(Function(c) c.Low)
     End Sub
 
-    ' ── OBV ──────────────────────────────────────────────────────────────────
-    ' Returns (trend string, divergence string) based on last N candles
+    ' -- OBV ------------------------------------------------------------------
     Public Shared Sub CalcOBV(candles As List(Of Candle),
                                ByRef trend As String, ByRef divergence As String)
         trend = "FLAT" : divergence = "NONE"
@@ -292,7 +284,6 @@ Public Class IndicatorEngine
 
         If obvSeries.Count < 10 Then Return
 
-        ' Simple trend: compare last 5 OBV average vs previous 5
         Dim recent5OBV As Double = obvSeries.Skip(obvSeries.Count - 5).Average()
         Dim prev5OBV As Double = obvSeries.Skip(obvSeries.Count - 10).Take(5).Average()
         Dim recentPrice As Double = candles.Skip(candles.Count - 5).Average(Function(c) c.Close)
@@ -306,7 +297,6 @@ Public Class IndicatorEngine
             trend = "FLAT"
         End If
 
-        ' Simple divergence: price up, OBV down = bearish; price down, OBV up = bullish
         If recentPrice > prevPrice * 1.001 AndAlso recent5OBV < prev5OBV * 0.999 Then
             divergence = "BEARISH"
         ElseIf recentPrice < prevPrice * 0.999 AndAlso recent5OBV > prev5OBV * 1.001 Then
@@ -314,8 +304,7 @@ Public Class IndicatorEngine
         End If
     End Sub
 
-    ' ── Order Flow Imbalance (from static order book snapshot) ───────────────
-    ' Approximation: total bid size vs ask size across top 5 levels
+    ' -- Order Flow Imbalance -------------------------------------------------
     Public Shared Sub CalcOFI(book As OrderBookSnapshot,
                                ByRef ratio As Double, ByRef signal As String)
         ratio = 1.0 : signal = "BALANCED"
@@ -333,14 +322,12 @@ Public Class IndicatorEngine
         End If
     End Sub
 
-    ' ── Liquidation analysis ──────────────────────────────────────────────────
+    ' -- Liquidation analysis -------------------------------------------------
     Public Shared Sub CalcLiquidations(trades As List(Of TradeRecord),
                                         ByRef longLiqSize As Double,
                                         ByRef shortLiqSize As Double,
                                         ByRef signal As String)
         longLiqSize = 0 : shortLiqSize = 0 : signal = "NONE"
-        ' Liquidation field: "M" = maker liq, "T" = taker liq
-        ' Direction "sell" with liquidation = long liq; "buy" = short liq
         For Each t In trades
             If t.Liquidation = "none" OrElse t.Liquidation = "" Then Continue For
             If t.Direction = "sell" Then
