@@ -1,4 +1,4 @@
-' MainForm.Designer.vb  v0.13
+' MainForm.Designer.vb  v0.14
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
@@ -51,7 +51,7 @@ Partial Class MainForm
         Me.txtOutput.Name = "txtOutput"
         Me.txtOutput.ReadOnly = True
         Me.txtOutput.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Vertical
-        Me.txtOutput.Size = New System.Drawing.Size(940, 460)
+        Me.txtOutput.Size = New System.Drawing.Size(1136, 886)
         Me.txtOutput.TabIndex = 1
         Me.txtOutput.Text = ""
         '
@@ -62,7 +62,7 @@ Partial Class MainForm
         Me.lblVerdict.ForeColor = System.Drawing.Color.White
         Me.lblVerdict.Location = New System.Drawing.Point(590, 36)
         Me.lblVerdict.Name = "lblVerdict"
-        Me.lblVerdict.Size = New System.Drawing.Size(360, 40)
+        Me.lblVerdict.Size = New System.Drawing.Size(558, 40)
         Me.lblVerdict.TabIndex = 2
         Me.lblVerdict.Text = "-- "
         Me.lblVerdict.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
@@ -124,14 +124,14 @@ Partial Class MainForm
         Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.BackColor = System.Drawing.Color.FromArgb(CType(CType(20, Byte), Integer), CType(CType(20, Byte), Integer), CType(CType(20, Byte), Integer))
-        Me.ClientSize = New System.Drawing.Size(964, 572)
+        Me.ClientSize = New System.Drawing.Size(1160, 1000)
         Me.Controls.Add(Me.grpPosition)
         Me.Controls.Add(Me.lblVerdict)
         Me.Controls.Add(Me.txtOutput)
         Me.Controls.Add(Me.btnAnalyze)
         Me.Font = New System.Drawing.Font("Courier New", 8.25!)
         Me.ForeColor = System.Drawing.Color.Cyan
-        Me.MinimumSize = New System.Drawing.Size(700, 500)
+        Me.MinimumSize = New System.Drawing.Size(800, 700)
         Me.Name = "MainForm"
         Me.Text = "Deribit Scalp Verdict Engine -- BTC-PERPETUAL"
         Me.grpPosition.ResumeLayout(False)
