@@ -1,4 +1,4 @@
-' MainForm.Designer.vb  v0.14
+' MainForm.Designer.vb  v0.15
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
@@ -33,19 +33,19 @@ Partial Class MainForm
         '
         Me.btnAnalyze.BackColor = System.Drawing.Color.DodgerBlue
         Me.btnAnalyze.FlatStyle = System.Windows.Forms.FlatStyle.Flat
-        Me.btnAnalyze.Font = New System.Drawing.Font("Courier New", 12.0!, System.Drawing.FontStyle.Bold)
+        Me.btnAnalyze.Font = New System.Drawing.Font("Segoe UI", 11.0!, System.Drawing.FontStyle.Bold)
         Me.btnAnalyze.ForeColor = System.Drawing.Color.White
         Me.btnAnalyze.Location = New System.Drawing.Point(370, 36)
         Me.btnAnalyze.Name = "btnAnalyze"
         Me.btnAnalyze.Size = New System.Drawing.Size(200, 40)
         Me.btnAnalyze.TabIndex = 0
-        Me.btnAnalyze.Text = "[ Analyze Now ]"
+        Me.btnAnalyze.Text = "Analyze Now"
         Me.btnAnalyze.UseVisualStyleBackColor = False
         '
         ' txtOutput
         '
         Me.txtOutput.BackColor = System.Drawing.Color.Black
-        Me.txtOutput.Font = New System.Drawing.Font("Courier New", 9.0!)
+        Me.txtOutput.Font = New System.Drawing.Font("Consolas", 11.0!)
         Me.txtOutput.ForeColor = System.Drawing.Color.LightGreen
         Me.txtOutput.Location = New System.Drawing.Point(12, 100)
         Me.txtOutput.Name = "txtOutput"
@@ -58,7 +58,7 @@ Partial Class MainForm
         ' lblVerdict
         '
         Me.lblVerdict.BackColor = System.Drawing.Color.Gray
-        Me.lblVerdict.Font = New System.Drawing.Font("Courier New", 14.0!, System.Drawing.FontStyle.Bold)
+        Me.lblVerdict.Font = New System.Drawing.Font("Segoe UI", 13.0!, System.Drawing.FontStyle.Bold)
         Me.lblVerdict.ForeColor = System.Drawing.Color.White
         Me.lblVerdict.Location = New System.Drawing.Point(590, 36)
         Me.lblVerdict.Name = "lblVerdict"
@@ -72,7 +72,7 @@ Partial Class MainForm
         Me.grpPosition.Controls.Add(Me.rbNone)
         Me.grpPosition.Controls.Add(Me.rbLong)
         Me.grpPosition.Controls.Add(Me.rbShort)
-        Me.grpPosition.Font = New System.Drawing.Font("Courier New", 8.25!)
+        Me.grpPosition.Font = New System.Drawing.Font("Segoe UI", 9.0!)
         Me.grpPosition.ForeColor = System.Drawing.Color.Silver
         Me.grpPosition.Location = New System.Drawing.Point(12, 36)
         Me.grpPosition.Name = "grpPosition"
@@ -85,11 +85,11 @@ Partial Class MainForm
         '
         Me.rbNone.AutoSize = True
         Me.rbNone.Checked = True
-        Me.rbNone.Font = New System.Drawing.Font("Courier New", 8.25!, System.Drawing.FontStyle.Bold)
+        Me.rbNone.Font = New System.Drawing.Font("Segoe UI", 9.0!, System.Drawing.FontStyle.Bold)
         Me.rbNone.ForeColor = System.Drawing.Color.White
         Me.rbNone.Location = New System.Drawing.Point(10, 20)
         Me.rbNone.Name = "rbNone"
-        Me.rbNone.Size = New System.Drawing.Size(90, 17)
+        Me.rbNone.Size = New System.Drawing.Size(90, 19)
         Me.rbNone.TabIndex = 0
         Me.rbNone.TabStop = True
         Me.rbNone.Text = "No Position"
@@ -98,11 +98,11 @@ Partial Class MainForm
         ' rbLong
         '
         Me.rbLong.AutoSize = True
-        Me.rbLong.Font = New System.Drawing.Font("Courier New", 8.25!, System.Drawing.FontStyle.Bold)
+        Me.rbLong.Font = New System.Drawing.Font("Segoe UI", 9.0!, System.Drawing.FontStyle.Bold)
         Me.rbLong.ForeColor = System.Drawing.Color.Lime
         Me.rbLong.Location = New System.Drawing.Point(120, 20)
         Me.rbLong.Name = "rbLong"
-        Me.rbLong.Size = New System.Drawing.Size(70, 17)
+        Me.rbLong.Size = New System.Drawing.Size(70, 19)
         Me.rbLong.TabIndex = 1
         Me.rbLong.Text = "In Long"
         Me.rbLong.UseVisualStyleBackColor = True
@@ -110,11 +110,11 @@ Partial Class MainForm
         ' rbShort
         '
         Me.rbShort.AutoSize = True
-        Me.rbShort.Font = New System.Drawing.Font("Courier New", 8.25!, System.Drawing.FontStyle.Bold)
+        Me.rbShort.Font = New System.Drawing.Font("Segoe UI", 9.0!, System.Drawing.FontStyle.Bold)
         Me.rbShort.ForeColor = System.Drawing.Color.OrangeRed
         Me.rbShort.Location = New System.Drawing.Point(210, 20)
         Me.rbShort.Name = "rbShort"
-        Me.rbShort.Size = New System.Drawing.Size(75, 17)
+        Me.rbShort.Size = New System.Drawing.Size(75, 19)
         Me.rbShort.TabIndex = 2
         Me.rbShort.Text = "In Short"
         Me.rbShort.UseVisualStyleBackColor = True
@@ -129,7 +129,7 @@ Partial Class MainForm
         Me.Controls.Add(Me.lblVerdict)
         Me.Controls.Add(Me.txtOutput)
         Me.Controls.Add(Me.btnAnalyze)
-        Me.Font = New System.Drawing.Font("Courier New", 8.25!)
+        Me.Font = New System.Drawing.Font("Segoe UI", 9.0!)
         Me.ForeColor = System.Drawing.Color.Cyan
         Me.MinimumSize = New System.Drawing.Size(800, 700)
         Me.Name = "MainForm"
