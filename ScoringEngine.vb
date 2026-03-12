@@ -31,7 +31,7 @@ End Enum
 Public Enum SignalCategory
     Momentum
     Volume
-    Structure
+    MarketStructure
     Microstructure
 End Enum
 
@@ -69,15 +69,15 @@ Public Class ScoringEngine
         Dim rsiPartialShort As Boolean = r.RSI < 50 AndAlso r.RSI >= 40
         AddFull(state, rsiLong, rsiShort, SignalCategory.Momentum)
 
-        ' DMI (Structure)
+        ' DMI (MarketStructure)
         Dim dmiLong As Boolean = r.PlusDI > r.MinusDI
         Dim dmiShort As Boolean = r.MinusDI > r.PlusDI
-        AddFull(state, dmiLong, dmiShort, SignalCategory.Structure)
+        AddFull(state, dmiLong, dmiShort, SignalCategory.MarketStructure)
 
-        ' ADX (Structure)
+        ' ADX (MarketStructure)
         Dim adxLong As Boolean = r.ADX > 25 AndAlso dmiLong
         Dim adxShort As Boolean = r.ADX > 25 AndAlso dmiShort
-        AddFull(state, adxLong, adxShort, SignalCategory.Structure)
+        AddFull(state, adxLong, adxShort, SignalCategory.MarketStructure)
 
         ' Volume (Volume) -- direction-neutral
         Dim volSpike As Boolean = r.VolumeRatio >= 3.0
@@ -107,10 +107,10 @@ Public Class ScoringEngine
             state.FullShortCategories.Add(SignalCategory.Microstructure)
         End If
 
-        ' EMA Ribbon (Structure)
+        ' EMA Ribbon (MarketStructure)
         Dim emaBull As Boolean = r.EMAAlignment = "BULL"
         Dim emaBear As Boolean = r.EMAAlignment = "BEAR"
-        AddFull(state, emaBull, emaBear, SignalCategory.Structure)
+        AddFull(state, emaBull, emaBear, SignalCategory.MarketStructure)
 
         ' Funding (Microstructure)
         Dim fundOkLong As Boolean = r.FundingRate <= 0.0005
@@ -135,16 +135,16 @@ Public Class ScoringEngine
         Dim noShortLiq As Boolean = r.LiqSignal <> "SHORT LIQS"
         AddFull(state, noLongLiq, noShortLiq, SignalCategory.Microstructure)
 
-        ' 5m EMA200 (Structure)
+        ' 5m EMA200 (MarketStructure)
         Dim ema200Bull As Boolean = r.CurrentPrice > r.EMA200_5m AndAlso r.EMA200_5m > 0
         Dim ema200Bear As Boolean = r.CurrentPrice < r.EMA200_5m AndAlso r.EMA200_5m > 0
-        AddFull(state, ema200Bull, ema200Bear, SignalCategory.Structure)
+        AddFull(state, ema200Bull, ema200Bear, SignalCategory.MarketStructure)
 
         ' TIER 3
-        ' Donchian (Structure)
+        ' Donchian (MarketStructure)
         Dim donchLong As Boolean = r.DonchianSignal = "LONG"
         Dim donchShort As Boolean = r.DonchianSignal = "SHORT"
-        AddFull(state, donchLong, donchShort, SignalCategory.Structure)
+        AddFull(state, donchLong, donchShort, SignalCategory.MarketStructure)
 
         ' OBV (Volume)
         Dim obvLong As Boolean = r.OBVTrend = "RISING" AndAlso r.OBVDivergence = "NONE"
