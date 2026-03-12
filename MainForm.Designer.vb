@@ -1,4 +1,4 @@
-' MainForm.Designer.vb  v0.12
+' MainForm.Designer.vb  v0.13
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
@@ -22,7 +22,6 @@ Partial Class MainForm
         Me.btnAnalyze = New System.Windows.Forms.Button()
         Me.txtOutput = New System.Windows.Forms.RichTextBox()
         Me.lblVerdict = New System.Windows.Forms.Label()
-        Me.lblVersion = New System.Windows.Forms.Label()
         Me.grpPosition = New System.Windows.Forms.GroupBox()
         Me.rbNone = New System.Windows.Forms.RadioButton()
         Me.rbLong = New System.Windows.Forms.RadioButton()
@@ -67,17 +66,6 @@ Partial Class MainForm
         Me.lblVerdict.TabIndex = 2
         Me.lblVerdict.Text = "-- "
         Me.lblVerdict.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
-        '
-        ' lblVersion
-        '
-        Me.lblVersion.AutoSize = True
-        Me.lblVersion.Font = New System.Drawing.Font("Courier New", 8.0!)
-        Me.lblVersion.ForeColor = System.Drawing.Color.Gray
-        Me.lblVersion.Location = New System.Drawing.Point(880, 8)
-        Me.lblVersion.Name = "lblVersion"
-        Me.lblVersion.Size = New System.Drawing.Size(60, 14)
-        Me.lblVersion.TabIndex = 5
-        Me.lblVersion.Text = "v0.12"
         '
         ' grpPosition
         '
@@ -137,7 +125,6 @@ Partial Class MainForm
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.BackColor = System.Drawing.Color.FromArgb(CType(CType(20, Byte), Integer), CType(CType(20, Byte), Integer), CType(CType(20, Byte), Integer))
         Me.ClientSize = New System.Drawing.Size(964, 572)
-        Me.Controls.Add(Me.lblVersion)
         Me.Controls.Add(Me.grpPosition)
         Me.Controls.Add(Me.lblVerdict)
         Me.Controls.Add(Me.txtOutput)
@@ -156,7 +143,6 @@ Partial Class MainForm
     Friend WithEvents btnAnalyze As System.Windows.Forms.Button
     Friend WithEvents txtOutput As System.Windows.Forms.RichTextBox
     Friend WithEvents lblVerdict As System.Windows.Forms.Label
-    Friend WithEvents lblVersion As System.Windows.Forms.Label
     Friend WithEvents grpPosition As System.Windows.Forms.GroupBox
     Friend WithEvents rbNone As System.Windows.Forms.RadioButton
     Friend WithEvents rbLong As System.Windows.Forms.RadioButton
