@@ -1,17 +1,28 @@
-' MainForm.vb
+' MainForm.vb  v0.10
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
 Imports System.Windows.Forms
 
+' Replaces anonymous tuple used in _oiHistory list
+Public Class OiSnapshot
+    Public Property Ts As Long
+    Public Property OI As Double
+    Public Sub New(ts As Long, oi As Double)
+        Me.Ts = ts : Me.OI = oi
+    End Sub
+End Class
+
 Public Class MainForm
+    Inherits Form
 
     ' OI snapshot history (stored in-memory for delta calculation)
-    Private _oiHistory As New List(Of (Ts As Long, OI As Double))()
+    Private _oiHistory As New List(Of OiSnapshot)()
 
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
+        Me.Text = "Deribit Verdict Engine v0.10"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
     End Sub
@@ -141,7 +152,7 @@ Public Class MainForm
         ' Open Interest Delta
         Dim nowTs As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         r.OI_Current = bookSummary.OI
-        _oiHistory.Add((nowTs, bookSummary.OI))
+        _oiHistory.Add(New OiSnapshot(nowTs, bookSummary.OI))
         _oiHistory = _oiHistory.Where(Function(x) nowTs - x.Ts < 70 * 60 * 1000L).ToList()
 
         Dim oi15m = _oiHistory.Where(Function(x) nowTs - x.Ts <= 15 * 60 * 1000L).
@@ -149,8 +160,8 @@ Public Class MainForm
         Dim oi60m = _oiHistory.Where(Function(x) nowTs - x.Ts <= 61 * 60 * 1000L).
                                OrderBy(Function(x) x.Ts).FirstOrDefault()
 
-        r.OIChange15m = If(oi15m.OI > 0, (r.OI_Current - oi15m.OI) / oi15m.OI * 100, 0)
-        r.OIChange60m = If(oi60m.OI > 0, (r.OI_Current - oi60m.OI) / oi60m.OI * 100, 0)
+        r.OIChange15m = If(oi15m IsNot Nothing AndAlso oi15m.OI > 0, (r.OI_Current - oi15m.OI) / oi15m.OI * 100, 0)
+        r.OIChange60m = If(oi60m IsNot Nothing AndAlso oi60m.OI > 0, (r.OI_Current - oi60m.OI) / oi60m.OI * 100, 0)
 
         Dim priceUp As Boolean = r.CurrentPrice > bookSummary.MarkPrice * 0.9999
         If r.OIChange15m > 1 AndAlso priceUp Then
