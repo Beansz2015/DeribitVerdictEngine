@@ -1,147 +1,165 @@
-' MainForm.Designer.vb
-' Designer-compatible layout file -- classic property assignment style.
+' MainForm.Designer.vb  v0.12
 
-Imports System.Drawing
-Imports System.Windows.Forms
-
+<Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
     Inherits System.Windows.Forms.Form
 
+    <System.Diagnostics.DebuggerNonUserCode()>
+    Protected Overrides Sub Dispose(ByVal disposing As Boolean)
+        Try
+            If disposing AndAlso components IsNot Nothing Then
+                components.Dispose()
+            End If
+        Finally
+            MyBase.Dispose(disposing)
+        End Try
+    End Sub
+
     Private components As System.ComponentModel.IContainer
 
-    Friend WithEvents btnAnalyze As Button
-    Friend WithEvents txtOutput As RichTextBox
-    Friend WithEvents lblVerdict As Label
-    Friend WithEvents lblVerdictCaption As Label
-    Friend WithEvents grpPosition As GroupBox
-    Friend WithEvents rbNone As RadioButton
-    Friend WithEvents rbLong As RadioButton
-    Friend WithEvents rbShort As RadioButton
-    Friend WithEvents lblTitle As Label
-    Friend WithEvents lblInstrument As Label
-
+    <System.Diagnostics.DebuggerStepThrough()>
     Private Sub InitializeComponent()
-        Me.components = New System.ComponentModel.Container()
-
-        Me.btnAnalyze = New Button()
-        Me.txtOutput = New RichTextBox()
-        Me.lblVerdict = New Label()
-        Me.lblVerdictCaption = New Label()
-        Me.grpPosition = New GroupBox()
-        Me.rbNone = New RadioButton()
-        Me.rbLong = New RadioButton()
-        Me.rbShort = New RadioButton()
-        Me.lblTitle = New Label()
-        Me.lblInstrument = New Label()
-
+        Me.btnAnalyze = New System.Windows.Forms.Button()
+        Me.txtOutput = New System.Windows.Forms.RichTextBox()
+        Me.lblVerdict = New System.Windows.Forms.Label()
+        Me.lblVersion = New System.Windows.Forms.Label()
+        Me.grpPosition = New System.Windows.Forms.GroupBox()
+        Me.rbNone = New System.Windows.Forms.RadioButton()
+        Me.rbLong = New System.Windows.Forms.RadioButton()
+        Me.rbShort = New System.Windows.Forms.RadioButton()
         Me.grpPosition.SuspendLayout()
         Me.SuspendLayout()
-
-        ' lblTitle
-        Me.lblTitle.Text = "DERIBIT SCALP VERDICT ENGINE"
-        Me.lblTitle.Font = New Font("Consolas", 13.0F, FontStyle.Bold)
-        Me.lblTitle.ForeColor = Color.Cyan
-        Me.lblTitle.AutoSize = True
-        Me.lblTitle.Location = New Point(14, 14)
-
-        ' lblInstrument
-        Me.lblInstrument.Text = "Instrument: BTC-PERPETUAL  |  Style: Momentum Hybrid  |  Timeframes: 1m / 5m"
-        Me.lblInstrument.ForeColor = Color.Silver
-        Me.lblInstrument.AutoSize = True
-        Me.lblInstrument.Location = New Point(14, 42)
-
+        '
+        ' btnAnalyze
+        '
+        Me.btnAnalyze.BackColor = System.Drawing.Color.DodgerBlue
+        Me.btnAnalyze.FlatStyle = System.Windows.Forms.FlatStyle.Flat
+        Me.btnAnalyze.Font = New System.Drawing.Font("Courier New", 12.0!, System.Drawing.FontStyle.Bold)
+        Me.btnAnalyze.ForeColor = System.Drawing.Color.White
+        Me.btnAnalyze.Location = New System.Drawing.Point(370, 36)
+        Me.btnAnalyze.Name = "btnAnalyze"
+        Me.btnAnalyze.Size = New System.Drawing.Size(200, 40)
+        Me.btnAnalyze.TabIndex = 0
+        Me.btnAnalyze.Text = "[ Analyze Now ]"
+        Me.btnAnalyze.UseVisualStyleBackColor = False
+        '
+        ' txtOutput
+        '
+        Me.txtOutput.BackColor = System.Drawing.Color.Black
+        Me.txtOutput.Font = New System.Drawing.Font("Courier New", 9.0!)
+        Me.txtOutput.ForeColor = System.Drawing.Color.LightGreen
+        Me.txtOutput.Location = New System.Drawing.Point(12, 100)
+        Me.txtOutput.Name = "txtOutput"
+        Me.txtOutput.ReadOnly = True
+        Me.txtOutput.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Vertical
+        Me.txtOutput.Size = New System.Drawing.Size(940, 460)
+        Me.txtOutput.TabIndex = 1
+        Me.txtOutput.Text = ""
+        '
+        ' lblVerdict
+        '
+        Me.lblVerdict.BackColor = System.Drawing.Color.Gray
+        Me.lblVerdict.Font = New System.Drawing.Font("Courier New", 14.0!, System.Drawing.FontStyle.Bold)
+        Me.lblVerdict.ForeColor = System.Drawing.Color.White
+        Me.lblVerdict.Location = New System.Drawing.Point(590, 36)
+        Me.lblVerdict.Name = "lblVerdict"
+        Me.lblVerdict.Size = New System.Drawing.Size(360, 40)
+        Me.lblVerdict.TabIndex = 2
+        Me.lblVerdict.Text = "-- "
+        Me.lblVerdict.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
+        '
+        ' lblVersion
+        '
+        Me.lblVersion.AutoSize = True
+        Me.lblVersion.Font = New System.Drawing.Font("Courier New", 8.0!)
+        Me.lblVersion.ForeColor = System.Drawing.Color.Gray
+        Me.lblVersion.Location = New System.Drawing.Point(880, 8)
+        Me.lblVersion.Name = "lblVersion"
+        Me.lblVersion.Size = New System.Drawing.Size(60, 14)
+        Me.lblVersion.TabIndex = 5
+        Me.lblVersion.Text = "v0.12"
+        '
         ' grpPosition
-        Me.grpPosition.Text = "Current Position"
-        Me.grpPosition.ForeColor = Color.Silver
-        Me.grpPosition.Location = New Point(14, 68)
-        Me.grpPosition.Size = New Size(300, 48)
-        Me.grpPosition.Font = New Font("Consolas", 9.0F)
+        '
         Me.grpPosition.Controls.Add(Me.rbNone)
         Me.grpPosition.Controls.Add(Me.rbLong)
         Me.grpPosition.Controls.Add(Me.rbShort)
-
+        Me.grpPosition.Font = New System.Drawing.Font("Courier New", 8.25!)
+        Me.grpPosition.ForeColor = System.Drawing.Color.Silver
+        Me.grpPosition.Location = New System.Drawing.Point(12, 36)
+        Me.grpPosition.Name = "grpPosition"
+        Me.grpPosition.Size = New System.Drawing.Size(340, 50)
+        Me.grpPosition.TabIndex = 3
+        Me.grpPosition.TabStop = False
+        Me.grpPosition.Text = "Current Position"
+        '
         ' rbNone
-        Me.rbNone.Text = "No Position"
-        Me.rbNone.Checked = True
-        Me.rbNone.ForeColor = Color.White
-        Me.rbNone.Location = New Point(8, 18)
+        '
         Me.rbNone.AutoSize = True
-
+        Me.rbNone.Checked = True
+        Me.rbNone.Font = New System.Drawing.Font("Courier New", 8.25!, System.Drawing.FontStyle.Bold)
+        Me.rbNone.ForeColor = System.Drawing.Color.White
+        Me.rbNone.Location = New System.Drawing.Point(10, 20)
+        Me.rbNone.Name = "rbNone"
+        Me.rbNone.Size = New System.Drawing.Size(90, 17)
+        Me.rbNone.TabIndex = 0
+        Me.rbNone.TabStop = True
+        Me.rbNone.Text = "No Position"
+        Me.rbNone.UseVisualStyleBackColor = True
+        '
         ' rbLong
-        Me.rbLong.Text = "In Long"
-        Me.rbLong.ForeColor = Color.LimeGreen
-        Me.rbLong.Location = New Point(110, 18)
+        '
         Me.rbLong.AutoSize = True
-
+        Me.rbLong.Font = New System.Drawing.Font("Courier New", 8.25!, System.Drawing.FontStyle.Bold)
+        Me.rbLong.ForeColor = System.Drawing.Color.Lime
+        Me.rbLong.Location = New System.Drawing.Point(120, 20)
+        Me.rbLong.Name = "rbLong"
+        Me.rbLong.Size = New System.Drawing.Size(70, 17)
+        Me.rbLong.TabIndex = 1
+        Me.rbLong.Text = "In Long"
+        Me.rbLong.UseVisualStyleBackColor = True
+        '
         ' rbShort
-        Me.rbShort.Text = "In Short"
-        Me.rbShort.ForeColor = Color.Tomato
-        Me.rbShort.Location = New Point(200, 18)
+        '
         Me.rbShort.AutoSize = True
-
-        ' btnAnalyze
-        Me.btnAnalyze.Text = "[ Analyze Now ]"
-        Me.btnAnalyze.Font = New Font("Consolas", 11.0F, FontStyle.Bold)
-        Me.btnAnalyze.BackColor = Color.FromArgb(0, 120, 212)
-        Me.btnAnalyze.ForeColor = Color.White
-        Me.btnAnalyze.FlatStyle = FlatStyle.Flat
-        Me.btnAnalyze.Size = New Size(220, 44)
-        Me.btnAnalyze.Location = New Point(330, 60)
-        Me.btnAnalyze.FlatAppearance.BorderSize = 0
-
-        ' lblVerdictCaption
-        Me.lblVerdictCaption.Text = "VERDICT"
-        Me.lblVerdictCaption.ForeColor = Color.Silver
-        Me.lblVerdictCaption.AutoSize = True
-        Me.lblVerdictCaption.Location = New Point(570, 64)
-
-        ' lblVerdict
-        Me.lblVerdict.Text = "--"
-        Me.lblVerdict.Font = New Font("Consolas", 14.0F, FontStyle.Bold)
-        Me.lblVerdict.ForeColor = Color.White
-        Me.lblVerdict.BackColor = Color.Gray
-        Me.lblVerdict.AutoSize = False
-        Me.lblVerdict.Size = New Size(270, 38)
-        Me.lblVerdict.Location = New Point(570, 82)
-        Me.lblVerdict.TextAlign = ContentAlignment.MiddleCenter
-
-        ' txtOutput
-        Me.txtOutput.BackColor = Color.FromArgb(12, 12, 18)
-        Me.txtOutput.ForeColor = Color.FromArgb(200, 200, 200)
-        Me.txtOutput.Font = New Font("Consolas", 9.0F)
-        Me.txtOutput.ReadOnly = True
-        Me.txtOutput.ScrollBars = RichTextBoxScrollBars.Vertical
-        Me.txtOutput.BorderStyle = BorderStyle.None
-        Me.txtOutput.Location = New Point(14, 122)
-        Me.txtOutput.Size = New Size(856, 580)
-        Me.txtOutput.Anchor = AnchorStyles.Top Or AnchorStyles.Bottom Or AnchorStyles.Left Or AnchorStyles.Right
-
-        ' Form
-        Me.Text = "Deribit Scalp Verdict Engine -- BTC-PERPETUAL"
-        Me.Size = New Size(900, 780)
-        Me.MinimumSize = New Size(800, 650)
-        Me.BackColor = Color.FromArgb(18, 18, 24)
-        Me.ForeColor = Color.White
-        Me.Font = New Font("Consolas", 9.5F)
-        Me.StartPosition = FormStartPosition.CenterScreen
-
-        Me.Controls.Add(Me.lblTitle)
-        Me.Controls.Add(Me.lblInstrument)
+        Me.rbShort.Font = New System.Drawing.Font("Courier New", 8.25!, System.Drawing.FontStyle.Bold)
+        Me.rbShort.ForeColor = System.Drawing.Color.OrangeRed
+        Me.rbShort.Location = New System.Drawing.Point(210, 20)
+        Me.rbShort.Name = "rbShort"
+        Me.rbShort.Size = New System.Drawing.Size(75, 17)
+        Me.rbShort.TabIndex = 2
+        Me.rbShort.Text = "In Short"
+        Me.rbShort.UseVisualStyleBackColor = True
+        '
+        ' MainForm
+        '
+        Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
+        Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
+        Me.BackColor = System.Drawing.Color.FromArgb(CType(CType(20, Byte), Integer), CType(CType(20, Byte), Integer), CType(CType(20, Byte), Integer))
+        Me.ClientSize = New System.Drawing.Size(964, 572)
+        Me.Controls.Add(Me.lblVersion)
         Me.Controls.Add(Me.grpPosition)
-        Me.Controls.Add(Me.btnAnalyze)
-        Me.Controls.Add(Me.lblVerdictCaption)
         Me.Controls.Add(Me.lblVerdict)
         Me.Controls.Add(Me.txtOutput)
-
+        Me.Controls.Add(Me.btnAnalyze)
+        Me.Font = New System.Drawing.Font("Courier New", 8.25!)
+        Me.ForeColor = System.Drawing.Color.Cyan
+        Me.MinimumSize = New System.Drawing.Size(700, 500)
+        Me.Name = "MainForm"
+        Me.Text = "Deribit Scalp Verdict Engine -- BTC-PERPETUAL"
         Me.grpPosition.ResumeLayout(False)
         Me.grpPosition.PerformLayout()
         Me.ResumeLayout(False)
         Me.PerformLayout()
     End Sub
 
-    Protected Overrides Sub Dispose(disposing As Boolean)
-        If disposing AndAlso components IsNot Nothing Then components.Dispose()
-        MyBase.Dispose(disposing)
-    End Sub
+    Friend WithEvents btnAnalyze As System.Windows.Forms.Button
+    Friend WithEvents txtOutput As System.Windows.Forms.RichTextBox
+    Friend WithEvents lblVerdict As System.Windows.Forms.Label
+    Friend WithEvents lblVersion As System.Windows.Forms.Label
+    Friend WithEvents grpPosition As System.Windows.Forms.GroupBox
+    Friend WithEvents rbNone As System.Windows.Forms.RadioButton
+    Friend WithEvents rbLong As System.Windows.Forms.RadioButton
+    Friend WithEvents rbShort As System.Windows.Forms.RadioButton
 
 End Class
