@@ -1,20 +1,10 @@
-' MainForm.vb  v0.10
+' MainForm.vb  v0.11
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
 Imports System.Windows.Forms
 
-' Replaces anonymous tuple used in _oiHistory list
-Public Class OiSnapshot
-    Public Property Ts As Long
-    Public Property OI As Double
-    Public Sub New(ts As Long, oi As Double)
-        Me.Ts = ts : Me.OI = oi
-    End Sub
-End Class
-
 Public Class MainForm
-    Inherits Form
 
     ' OI snapshot history (stored in-memory for delta calculation)
     Private _oiHistory As New List(Of OiSnapshot)()
@@ -22,7 +12,7 @@ Public Class MainForm
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.10"
+        Me.Text = "Deribit Verdict Engine v0.11"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
     End Sub
@@ -216,7 +206,6 @@ Public Class MainForm
         Dim sb As New System.Text.StringBuilder()
         Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") & " UTC"
 
-        ' Format USD volume compactly: e.g. $8.5K, $1.2M
         Dim usdStr As String
         If r.CurrentVolumeUSD >= 1_000_000 Then
             usdStr = "$" & (r.CurrentVolumeUSD / 1_000_000).ToString("F2") & "M"
