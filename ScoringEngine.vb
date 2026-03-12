@@ -2,13 +2,24 @@
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + position state. Output: VerdictResult.
 
+' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
+Public Class SignalBreakdownItem
+    Public Property Label As String
+    Public Property LongHit As Boolean
+    Public Property ShortHit As Boolean
+    Public Property Note As String
+    Public Sub New(lbl As String, lng As Boolean, sht As Boolean, nt As String)
+        Label = lbl : LongHit = lng : ShortHit = sht : Note = nt
+    End Sub
+End Class
+
 Public Class VerdictResult
     Public Property LongScore As Integer
     Public Property ShortScore As Integer
     Public Property Verdict As String
     Public Property Confidence As String
     Public Property HoldStatus As String
-    Public Property SignalBreakdown As New List(Of (Label As String, LongHit As Boolean, ShortHit As Boolean, Note As String))
+    Public Property SignalBreakdown As New List(Of SignalBreakdownItem)
 End Class
 
 Public Enum PositionState
@@ -17,7 +28,6 @@ Public Enum PositionState
     InShort
 End Enum
 
-' VB.NET does not support nested type declarations -- moved to module level
 Public Enum SignalCategory
     Momentum
     Volume
@@ -69,7 +79,7 @@ Public Class ScoringEngine
         Dim adxShort As Boolean = r.ADX > 25 AndAlso dmiShort
         AddFull(state, adxLong, adxShort, SignalCategory.Structure)
 
-        ' Volume (Volume) -- direction-neutral, added to both if full
+        ' Volume (Volume) -- direction-neutral
         Dim volSpike As Boolean = r.VolumeRatio >= 3.0
         Dim volPartial As Boolean = r.VolumeRatio >= 2.0 AndAlso r.VolumeRatio < 3.0
         If volSpike Then
@@ -143,7 +153,7 @@ Public Class ScoringEngine
         Dim obvPartialShort As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence = "BULLISH"
         AddFull(state, obvLong, obvShort, SignalCategory.Volume)
 
-        ' Pass 2: upgrade partials that have cross-category full confirmation
+        ' Pass 2: upgrade partials with cross-category full confirmation
         Dim rocLongUpgraded As Boolean = rocPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Momentum)
         Dim rocShortUpgraded As Boolean = rocPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
         If rocLongUpgraded Then state.LongScore += 1
@@ -180,61 +190,61 @@ Public Class ScoringEngine
         If obvShortUpgraded Then state.ShortScore += 1
 
         ' Breakdown (rendered after all scores finalised)
-        breakdown.Add(("ROC(9)", rocLong OrElse rocLongUpgraded, rocShort OrElse rocShortUpgraded,
+        breakdown.Add(New SignalBreakdownItem("ROC(9)", rocLong OrElse rocLongUpgraded, rocShort OrElse rocShortUpgraded,
             BuildNote(String.Format("{0:F3} | Slope: {1}", r.ROC, r.ROCSlope),
                       rocPartialLong AndAlso Not rocLongUpgraded, rocPartialShort AndAlso Not rocShortUpgraded,
                       rocLongUpgraded, rocShortUpgraded)))
 
-        breakdown.Add(("RSI(9)", rsiLong OrElse rsiLongUpgraded, rsiShort OrElse rsiShortUpgraded,
+        breakdown.Add(New SignalBreakdownItem("RSI(9)", rsiLong OrElse rsiLongUpgraded, rsiShort OrElse rsiShortUpgraded,
             BuildNote(String.Format("{0:F1}", r.RSI),
                       rsiPartialLong AndAlso Not rsiLongUpgraded, rsiPartialShort AndAlso Not rsiShortUpgraded,
                       rsiLongUpgraded, rsiShortUpgraded)))
 
-        breakdown.Add(("DMI +/-DI", dmiLong, dmiShort,
+        breakdown.Add(New SignalBreakdownItem("DMI +/-DI", dmiLong, dmiShort,
             String.Format("+DI:{0:F1} -DI:{1:F1}", r.PlusDI, r.MinusDI)))
 
-        breakdown.Add(("ADX>25", adxLong, adxShort,
+        breakdown.Add(New SignalBreakdownItem("ADX>25", adxLong, adxShort,
             String.Format("{0:F1}", r.ADX)))
 
-        breakdown.Add(("Volume >=3xSMA", volSpike OrElse volLongUpgraded, volSpike OrElse volShortUpgraded,
+        breakdown.Add(New SignalBreakdownItem("Volume >=3xSMA", volSpike OrElse volLongUpgraded, volSpike OrElse volShortUpgraded,
             BuildNote(r.VolumeRatio.ToString("F2") & "x",
                       volPartial AndAlso Not volLongUpgraded, volPartial AndAlso Not volShortUpgraded,
                       volLongUpgraded, volShortUpgraded)))
 
-        breakdown.Add(("VWAP", vwapLong OrElse vwapLongUpgraded, vwapShort OrElse vwapShortUpgraded,
+        breakdown.Add(New SignalBreakdownItem("VWAP", vwapLong OrElse vwapLongUpgraded, vwapShort OrElse vwapShortUpgraded,
             BuildNote(String.Format("VWAP:{0:F1} Dev:{1:F2}%", r.VWAP, r.VWAPDevPct),
                       vwapPartialLong AndAlso Not vwapLongUpgraded, vwapPartialShort AndAlso Not vwapShortUpgraded,
                       vwapLongUpgraded, vwapShortUpgraded)))
 
-        breakdown.Add(("BBW Squeeze", bbwFull OrElse bbwLongUpgraded, bbwFull OrElse bbwShortUpgraded,
+        breakdown.Add(New SignalBreakdownItem("BBW Squeeze", bbwFull OrElse bbwLongUpgraded, bbwFull OrElse bbwShortUpgraded,
             BuildNote(String.Format("{0:F3} | {1}", r.BBW, r.SqueezeStatus),
                       bbwPartial AndAlso Not bbwLongUpgraded, bbwPartial AndAlso Not bbwShortUpgraded,
                       bbwLongUpgraded, bbwShortUpgraded)))
 
-        breakdown.Add(("EMA 9/21/50", emaBull, emaBear,
+        breakdown.Add(New SignalBreakdownItem("EMA 9/21/50", emaBull, emaBear,
             String.Format("9:{0:F0} 21:{1:F0} 50:{2:F0} | {3}", r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment)))
 
-        breakdown.Add(("Funding OK", fundOkLong, fundOkShort,
+        breakdown.Add(New SignalBreakdownItem("Funding OK", fundOkLong, fundOkShort,
             String.Format("{0:F4}% | {1}", r.FundingRate * 100, r.FundingBias)))
 
-        breakdown.Add(("OI Delta", oiLong OrElse oiLongUpgraded, oiShort OrElse oiShortUpgraded,
+        breakdown.Add(New SignalBreakdownItem("OI Delta", oiLong OrElse oiLongUpgraded, oiShort OrElse oiShortUpgraded,
             BuildNote(String.Format("15m:{0:F2}% 60m:{1:F2}% | {2}", r.OIChange15m, r.OIChange60m, r.OISignal),
                       oiPartialLong AndAlso Not oiLongUpgraded, oiPartialShort AndAlso Not oiShortUpgraded,
                       oiLongUpgraded, oiShortUpgraded)))
 
-        breakdown.Add(("OFI", ofiBuy, ofiSell,
+        breakdown.Add(New SignalBreakdownItem("OFI", ofiBuy, ofiSell,
             String.Format("Ratio:{0:F2} | {1}", r.OFIRatio, r.OFISignal)))
 
-        breakdown.Add(("No Adverse Liq", noLongLiq, noShortLiq,
+        breakdown.Add(New SignalBreakdownItem("No Adverse Liq", noLongLiq, noShortLiq,
             String.Format("L:{0:F0} S:{1:F0} | {2}", r.LiqLongSize, r.LiqShortSize, r.LiqSignal)))
 
-        breakdown.Add(("5m EMA(200)", ema200Bull, ema200Bear,
+        breakdown.Add(New SignalBreakdownItem("5m EMA(200)", ema200Bull, ema200Bear,
             String.Format("{0:F0} | {1}", r.EMA200_5m, r.PriceVsEMA200)))
 
-        breakdown.Add(("Donchian(20)", donchLong, donchShort,
+        breakdown.Add(New SignalBreakdownItem("Donchian(20)", donchLong, donchShort,
             String.Format("U:{0:F0} L:{1:F0} | {2}", r.DonchianUpper, r.DonchianLower, r.DonchianSignal)))
 
-        breakdown.Add(("OBV", obvLong OrElse obvLongUpgraded, obvShort OrElse obvShortUpgraded,
+        breakdown.Add(New SignalBreakdownItem("OBV", obvLong OrElse obvLongUpgraded, obvShort OrElse obvShortUpgraded,
             BuildNote(String.Format("Trend:{0} Div:{1}", r.OBVTrend, r.OBVDivergence),
                       obvPartialLong AndAlso Not obvLongUpgraded, obvPartialShort AndAlso Not obvShortUpgraded,
                       obvLongUpgraded, obvShortUpgraded)))
