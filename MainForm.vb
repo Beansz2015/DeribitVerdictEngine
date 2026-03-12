@@ -1,4 +1,4 @@
-' MainForm.vb  v0.11
+' MainForm.vb  v0.13
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
@@ -12,7 +12,7 @@ Public Class MainForm
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.11"
+        Me.Text = "Deribit Verdict Engine v0.13"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
     End Sub
