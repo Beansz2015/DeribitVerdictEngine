@@ -1,4 +1,4 @@
-' MainForm.vb  v0.17
+' MainForm.vb  v0.18
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
@@ -12,7 +12,7 @@ Public Class MainForm
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.17"
+        Me.Text = "Deribit Verdict Engine v0.18"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
     End Sub
@@ -216,7 +216,7 @@ Public Class MainForm
             usdStr = "$" & r.CurrentVolumeUSD.ToString("F0")
         End If
 
-        ' Build score line -- denominator is 13 (true directional max after removing 2 padding points)
+        ' Build score line -- denominator is 13 (true directional max)
         Dim maxScore As Integer = ScoringEngine.MaxScore
         Dim scoreLine As String
         If v.RegimePenalty > 0 Then

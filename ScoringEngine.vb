@@ -47,7 +47,7 @@ End Class
 
 Public Class ScoringEngine
 
-    ' Max achievable score after removing 2 non-directional padding points
+    ' Max achievable score after removing non-directional padding points
     Public Const MaxScore As Integer = 13
 
     Public Shared Function Calculate(r As IndicatorResults, posState As PositionState) As VerdictResult
@@ -103,15 +103,38 @@ Public Class ScoringEngine
         Dim vwapPartialShort As Boolean = r.CurrentPrice < r.VWAP AndAlso Math.Abs(r.VWAPDevPct) > 1.5
         AddFull(state, vwapLong, vwapShort, SignalCategory.Microstructure)
 
-        ' BBW (Microstructure) -- direction-neutral
-        Dim bbwFull As Boolean = r.SqueezeStatus = "NONE"
-        Dim bbwPartial As Boolean = r.SqueezeStatus = "RELEASING"
-        If bbwFull Then
-            state.LongScore += 1
-            state.ShortScore += 1
-            state.FullLongCategories.Add(SignalCategory.Microstructure)
-            state.FullShortCategories.Add(SignalCategory.Microstructure)
-        End If
+        ' BBW Squeeze-State Scoring (Option B)
+        ' NONE     = normal conditions, no score change
+        ' ACTIVE   = volatility compressed, reduce confidence both sides
+        ' RELEASING = breakout underway, reward ROC-directional side only
+        Dim bbwLongHit As Boolean = False
+        Dim bbwShortHit As Boolean = False
+        Dim bbwActivePenalty As Boolean = False
+        Dim bbwNote As String
+
+        Select Case r.SqueezeStatus
+            Case "ACTIVE"
+                state.LongScore  = Math.Max(0, state.LongScore  - 1)
+                state.ShortScore = Math.Max(0, state.ShortScore - 1)
+                bbwActivePenalty = True
+                bbwNote = String.Format("{0:F3} | ACTIVE -- penalty -1 both sides", r.BBW)
+            Case "RELEASING"
+                If r.ROC > 0.1 Then
+                    state.LongScore += 1
+                    state.FullLongCategories.Add(SignalCategory.Microstructure)
+                    bbwLongHit = True
+                    bbwNote = String.Format("{0:F3} | RELEASING -- breakout [L] (ROC {1:F3})", r.BBW, r.ROC)
+                ElseIf r.ROC < -0.1 Then
+                    state.ShortScore += 1
+                    state.FullShortCategories.Add(SignalCategory.Microstructure)
+                    bbwShortHit = True
+                    bbwNote = String.Format("{0:F3} | RELEASING -- breakout [S] (ROC {1:F3})", r.BBW, r.ROC)
+                Else
+                    bbwNote = String.Format("{0:F3} | RELEASING -- ROC chop ({1:F3}), no award", r.BBW, r.ROC)
+                End If
+            Case Else ' NONE
+                bbwNote = String.Format("{0:F3} | NONE", r.BBW)
+        End Select
 
         ' EMA Ribbon (MarketStructure)
         Dim emaBull As Boolean = r.EMAAlignment = "BULL"
@@ -134,7 +157,7 @@ Public Class ScoringEngine
         Dim ofiSell As Boolean = r.OFISignal = "SELL DOMINANT"
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
 
-        ' Liquidations -- penalty-only, scaled by size (replaces previous AddFull reward)
+        ' Liquidations -- penalty-only, scaled by size
         ' Calm (NONE): no score change. Adverse: directional penalty only.
         Dim liqLongPenalty As Integer = 0
         Dim liqShortPenalty As Integer = 0
@@ -185,11 +208,6 @@ Public Class ScoringEngine
         If vwapLongUpgraded Then state.LongScore += 1
         If vwapShortUpgraded Then state.ShortScore += 1
 
-        Dim bbwLongUpgraded As Boolean = bbwPartial AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Microstructure)
-        Dim bbwShortUpgraded As Boolean = bbwPartial AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Microstructure)
-        If bbwLongUpgraded Then state.LongScore += 1
-        If bbwShortUpgraded Then state.ShortScore += 1
-
         Dim oiLongUpgraded As Boolean = oiPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Microstructure)
         Dim oiShortUpgraded As Boolean = oiPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Microstructure)
         If oiLongUpgraded Then state.LongScore += 1
@@ -227,10 +245,9 @@ Public Class ScoringEngine
                       vwapPartialLong AndAlso Not vwapLongUpgraded, vwapPartialShort AndAlso Not vwapShortUpgraded,
                       vwapLongUpgraded, vwapShortUpgraded)))
 
-        breakdown.Add(New SignalBreakdownItem("BBW Squeeze", bbwFull OrElse bbwLongUpgraded, bbwFull OrElse bbwShortUpgraded,
-            BuildNote(String.Format("{0:F3} | {1}", r.BBW, r.SqueezeStatus),
-                      bbwPartial AndAlso Not bbwLongUpgraded, bbwPartial AndAlso Not bbwShortUpgraded,
-                      bbwLongUpgraded, bbwShortUpgraded)))
+        ' BBW breakdown row -- [L]/[S] mark only when RELEASING fires directionally
+        ' ACTIVE penalty shown in note with [-L][-S] convention
+        breakdown.Add(New SignalBreakdownItem("BBW Squeeze", bbwLongHit, bbwShortHit, bbwNote))
 
         breakdown.Add(New SignalBreakdownItem("EMA 9/21/50", emaBull, emaBear,
             String.Format("9:{0:F0} 21:{1:F0} 50:{2:F0} | {3}", r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment)))
