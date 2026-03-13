@@ -16,6 +16,9 @@ End Class
 Public Class VerdictResult
     Public Property LongScore As Integer
     Public Property ShortScore As Integer
+    Public Property EffectiveLongScore As Integer
+    Public Property EffectiveShortScore As Integer
+    Public Property RegimePenalty As Integer
     Public Property Verdict As String
     Public Property Confidence As String
     Public Property HoldStatus As String
@@ -268,12 +271,15 @@ Public Class ScoringEngine
         ' -- Step 4: Regime Veto / Override -----------------------------------
         Dim effectiveLS As Integer = ls
         Dim effectiveSS As Integer = ss
+        Dim adxPenalty As Integer = 0
 
         Select Case r.Regime
             Case "TRENDING_UP"
                 If ss > ls Then
                     res.Verdict = "NO TRADE" : res.Confidence = "N/A"
                     res.LongScore = ls : res.ShortScore = ss
+                    res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
+                    res.RegimePenalty = 0
                     res.HoldStatus = CalcHoldStatus(r, posState)
                     Return res
                 End If
@@ -281,17 +287,30 @@ Public Class ScoringEngine
                 If ls > ss Then
                     res.Verdict = "NO TRADE" : res.Confidence = "N/A"
                     res.LongScore = ls : res.ShortScore = ss
+                    res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
+                    res.RegimePenalty = 0
                     res.HoldStatus = CalcHoldStatus(r, posState)
                     Return res
                 End If
             Case "TRANSITIONAL"
-                effectiveLS = Math.Max(0, effectiveLS - 2)
-                effectiveSS = Math.Max(0, effectiveSS - 2)
+                ' ADX-proximity penalty: deeper in TRANSITIONAL = higher penalty
+                If r.ADX >= 20.0 AndAlso r.ADX < 22.5 Then
+                    adxPenalty = 2
+                ElseIf r.ADX >= 22.5 AndAlso r.ADX < 25.0 Then
+                    adxPenalty = 1
+                End If
+
+                ' Apply penalty, capped so score cannot drop below floor of current tier
+                effectiveLS = Math.Max(ls - adxPenalty, TierFloor(ls))
+                effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss))
         End Select
 
         ' -- Step 5: Generate Verdict -----------------------------------------
         res.LongScore = ls
         res.ShortScore = ss
+        res.EffectiveLongScore = effectiveLS
+        res.EffectiveShortScore = effectiveSS
+        res.RegimePenalty = adxPenalty
 
         If effectiveLS >= 12 Then
             res.Verdict = "STRONG LONG" : res.Confidence = "HIGH"
@@ -312,6 +331,15 @@ Public Class ScoringEngine
         ' -- Step 6: Hold / Exit Assessment -----------------------------------
         res.HoldStatus = CalcHoldStatus(r, posState)
         Return res
+    End Function
+
+    ' Returns the bottom boundary of the tier that rawScore currently sits in.
+    ' Prevents a penalty from skipping an entire tier in one step.
+    Private Shared Function TierFloor(rawScore As Integer) As Integer
+        If rawScore >= 12 Then Return 9   ' STRONG tier floor
+        If rawScore >= 9 Then Return 6    ' MEDIUM tier floor
+        If rawScore >= 6 Then Return 3    ' WEAK tier floor (caps at NO TRADE entry)
+        Return 0
     End Function
 
     Private Shared Sub AddFull(state As ScoreState, fullLong As Boolean, fullShort As Boolean, cat As SignalCategory)

@@ -1,4 +1,4 @@
-' MainForm.vb  v0.15
+' MainForm.vb  v0.16
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
@@ -12,7 +12,7 @@ Public Class MainForm
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.15"
+        Me.Text = "Deribit Verdict Engine v0.16"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
     End Sub
@@ -216,10 +216,20 @@ Public Class MainForm
             usdStr = "$" & r.CurrentVolumeUSD.ToString("F0")
         End If
 
+        ' Build score line -- show effective score and penalty if regime is TRANSITIONAL
+        Dim scoreLine As String
+        If v.RegimePenalty > 0 Then
+            scoreLine = String.Format("Long {0}/{2} (eff.{1})  |  Short {3}/{2} (eff.{4})  |  TRANSITIONAL penalty: -{5}",
+                                     v.LongScore, v.EffectiveLongScore, 15,
+                                     v.ShortScore, v.EffectiveShortScore, v.RegimePenalty)
+        Else
+            scoreLine = String.Format("Long {0}/15  |  Short {1}/15", v.LongScore, v.ShortScore)
+        End If
+
         sb.AppendLine("===========================================================")
         sb.AppendLine("  VERDICT:    " & v.Verdict)
         sb.AppendLine("  CONFIDENCE: " & v.Confidence)
-        sb.AppendLine("  SCORE:      Long " & v.LongScore & "/15  |  Short " & v.ShortScore & "/15")
+        sb.AppendLine("  SCORE:      " & scoreLine)
         sb.AppendLine("  TIME:       " & ts)
         sb.AppendLine("===========================================================")
         sb.AppendLine()
