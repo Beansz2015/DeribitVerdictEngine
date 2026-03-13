@@ -47,6 +47,9 @@ End Class
 
 Public Class ScoringEngine
 
+    ' Max achievable score after removing 2 non-directional padding points
+    Public Const MaxScore As Integer = 13
+
     Public Shared Function Calculate(r As IndicatorResults, posState As PositionState) As VerdictResult
         Dim res As New VerdictResult()
         Dim breakdown = res.SignalBreakdown
@@ -115,10 +118,8 @@ Public Class ScoringEngine
         Dim emaBear As Boolean = r.EMAAlignment = "BEAR"
         AddFull(state, emaBull, emaBear, SignalCategory.MarketStructure)
 
-        ' Funding (Microstructure)
-        Dim fundOkLong As Boolean = r.FundingRate <= 0.0005
-        Dim fundOkShort As Boolean = r.FundingRate >= -0.0005
-        AddFull(state, fundOkLong, fundOkShort, SignalCategory.Microstructure)
+        ' Funding OK -- DISPLAY ONLY, removed from Step 2 scoring (handled by Step 3 modifier)
+        ' (no AddFull call here)
 
         ' OI (Microstructure)
         Dim oiLong As Boolean = r.OISignal = "NEW LONGS"
@@ -133,10 +134,17 @@ Public Class ScoringEngine
         Dim ofiSell As Boolean = r.OFISignal = "SELL DOMINANT"
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
 
-        ' Liquidations (Microstructure)
-        Dim noLongLiq As Boolean = r.LiqSignal <> "LONG LIQS"
-        Dim noShortLiq As Boolean = r.LiqSignal <> "SHORT LIQS"
-        AddFull(state, noLongLiq, noShortLiq, SignalCategory.Microstructure)
+        ' Liquidations -- penalty-only, scaled by size (replaces previous AddFull reward)
+        ' Calm (NONE): no score change. Adverse: directional penalty only.
+        Dim liqLongPenalty As Integer = 0
+        Dim liqShortPenalty As Integer = 0
+        If r.LiqSignal = "LONG LIQS" Then
+            liqLongPenalty = If(r.LiqLongSize > 200, 2, 1)
+            state.LongScore = Math.Max(0, state.LongScore - liqLongPenalty)
+        ElseIf r.LiqSignal = "SHORT LIQS" Then
+            liqShortPenalty = If(r.LiqShortSize > 200, 2, 1)
+            state.ShortScore = Math.Max(0, state.ShortScore - liqShortPenalty)
+        End If
 
         ' 5m EMA200 (MarketStructure)
         Dim ema200Bull As Boolean = r.CurrentPrice > r.EMA200_5m AndAlso r.EMA200_5m > 0
@@ -192,7 +200,7 @@ Public Class ScoringEngine
         If obvLongUpgraded Then state.LongScore += 1
         If obvShortUpgraded Then state.ShortScore += 1
 
-        ' Breakdown (rendered after all scores finalised)
+        ' Breakdown
         breakdown.Add(New SignalBreakdownItem("ROC(9)", rocLong OrElse rocLongUpgraded, rocShort OrElse rocShortUpgraded,
             BuildNote(String.Format("{0:F3} | Slope: {1}", r.ROC, r.ROCSlope),
                       rocPartialLong AndAlso Not rocLongUpgraded, rocPartialShort AndAlso Not rocShortUpgraded,
@@ -227,7 +235,8 @@ Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("EMA 9/21/50", emaBull, emaBear,
             String.Format("9:{0:F0} 21:{1:F0} 50:{2:F0} | {3}", r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment)))
 
-        breakdown.Add(New SignalBreakdownItem("Funding OK", fundOkLong, fundOkShort,
+        ' Funding OK -- display only, no [L]/[S] marks, no scoring
+        breakdown.Add(New SignalBreakdownItem("Funding (info)", False, False,
             String.Format("{0:F4}% | {1}", r.FundingRate * 100, r.FundingBias)))
 
         breakdown.Add(New SignalBreakdownItem("OI Delta", oiLong OrElse oiLongUpgraded, oiShort OrElse oiShortUpgraded,
@@ -238,8 +247,11 @@ Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("OFI", ofiBuy, ofiSell,
             String.Format("Ratio:{0:F2} | {1}", r.OFIRatio, r.OFISignal)))
 
-        breakdown.Add(New SignalBreakdownItem("No Adverse Liq", noLongLiq, noShortLiq,
-            String.Format("L:{0:F0} S:{1:F0} | {2}", r.LiqLongSize, r.LiqShortSize, r.LiqSignal)))
+        ' Liq Penalty -- [L] mark means long side was penalised, [S] means short side penalised
+        Dim liqNote As String = String.Format("L:{0:F0} S:{1:F0} | {2}", r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
+        If liqLongPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [L]", liqLongPenalty)
+        If liqShortPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [S]", liqShortPenalty)
+        breakdown.Add(New SignalBreakdownItem("Liq Penalty", liqLongPenalty > 0, liqShortPenalty > 0, liqNote))
 
         breakdown.Add(New SignalBreakdownItem("5m EMA(200)", ema200Bull, ema200Bear,
             String.Format("{0:F0} | {1}", r.EMA200_5m, r.PriceVsEMA200)))
@@ -293,14 +305,11 @@ Public Class ScoringEngine
                     Return res
                 End If
             Case "TRANSITIONAL"
-                ' ADX-proximity penalty: deeper in TRANSITIONAL = higher penalty
                 If r.ADX >= 20.0 AndAlso r.ADX < 22.5 Then
                     adxPenalty = 2
                 ElseIf r.ADX >= 22.5 AndAlso r.ADX < 25.0 Then
                     adxPenalty = 1
                 End If
-
-                ' Apply penalty, capped so score cannot drop below floor of current tier
                 effectiveLS = Math.Max(ls - adxPenalty, TierFloor(ls))
                 effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss))
         End Select
@@ -333,12 +342,10 @@ Public Class ScoringEngine
         Return res
     End Function
 
-    ' Returns the bottom boundary of the tier that rawScore currently sits in.
-    ' Prevents a penalty from skipping an entire tier in one step.
     Private Shared Function TierFloor(rawScore As Integer) As Integer
-        If rawScore >= 12 Then Return 9   ' STRONG tier floor
-        If rawScore >= 9 Then Return 6    ' MEDIUM tier floor
-        If rawScore >= 6 Then Return 3    ' WEAK tier floor (caps at NO TRADE entry)
+        If rawScore >= 12 Then Return 9
+        If rawScore >= 9 Then Return 6
+        If rawScore >= 6 Then Return 3
         Return 0
     End Function
 

@@ -1,4 +1,4 @@
-' MainForm.vb  v0.16
+' MainForm.vb  v0.17
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
@@ -12,7 +12,7 @@ Public Class MainForm
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.16"
+        Me.Text = "Deribit Verdict Engine v0.17"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
     End Sub
@@ -216,14 +216,15 @@ Public Class MainForm
             usdStr = "$" & r.CurrentVolumeUSD.ToString("F0")
         End If
 
-        ' Build score line -- show effective score and penalty if regime is TRANSITIONAL
+        ' Build score line -- denominator is 13 (true directional max after removing 2 padding points)
+        Dim maxScore As Integer = ScoringEngine.MaxScore
         Dim scoreLine As String
         If v.RegimePenalty > 0 Then
             scoreLine = String.Format("Long {0}/{2} (eff.{1})  |  Short {3}/{2} (eff.{4})  |  TRANSITIONAL penalty: -{5}",
-                                     v.LongScore, v.EffectiveLongScore, 15,
+                                     v.LongScore, v.EffectiveLongScore, maxScore,
                                      v.ShortScore, v.EffectiveShortScore, v.RegimePenalty)
         Else
-            scoreLine = String.Format("Long {0}/15  |  Short {1}/15", v.LongScore, v.ShortScore)
+            scoreLine = String.Format("Long {0}/{1}  |  Short {2}/{1}", v.LongScore, maxScore, v.ShortScore)
         End If
 
         sb.AppendLine("===========================================================")
@@ -246,7 +247,7 @@ Public Class MainForm
         sb.AppendLine("  VWAP:         " & r.VWAP.ToString("F1") & "  |  Dev: " & r.VWAPDevPct.ToString("F2") & "%  |  Price: " & r.CurrentPrice.ToString("F1"))
         sb.AppendLine("  BBW:          " & r.BBW.ToString("F4") & "  |  Squeeze: " & r.SqueezeStatus)
         sb.AppendLine("  EMA Ribbon:   9:" & r.EMA9.ToString("F1") & "  21:" & r.EMA21.ToString("F1") & "  50:" & r.EMA50.ToString("F1") & "  |  " & r.EMAAlignment)
-        sb.AppendLine("  Funding:      " & (r.FundingRate * 100).ToString("F5") & "%  |  " & r.FundingBias)
+        sb.AppendLine("  Funding:      " & (r.FundingRate * 100).ToString("F5") & "%  |  " & r.FundingBias & "  (info only)")
         sb.AppendLine("  OI Change:    15m: " & r.OIChange15m.ToString("F2") & "%  |  60m: " & r.OIChange60m.ToString("F2") & "%  |  " & r.OISignal)
         sb.AppendLine()
         sb.AppendLine("TIER 2 SIGNALS:")
