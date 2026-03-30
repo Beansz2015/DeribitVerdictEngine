@@ -1,16 +1,11 @@
 ' MainForm.Designer.vb  v0.23
-' Layout constants:
-'   HDR_H   = 42   -- header row height (grpPosition, btnAnalyze, lblVerdict all same H)
-'   HDR_Y   = 8    -- top margin
-'   HDR_BOT = HDR_Y + HDR_H = 50
-'   TXT_Y   = HDR_BOT + 6 = 56
-'   STATUS_H= 18
-'   FORM_W  = 660  (safe minimum for longest output line at Consolas 10pt)
-'   FORM_H  = 900
-'
-'   grpPosition : X=8,   W=252
-'   btnAnalyze  : X=264  (252+8+4),  W=140,  4px gap from grpPosition
-'   lblVerdict  : X=408  (264+140+4), W=W-416, 4px gap from btn
+' Layout constants (must match MainForm.vb ResizeControls):
+'   HDR_Y=8, HDR_H=42
+'   GRP_W=234  (tighter radio spacing: rbNone@6, rbLong@88, rbShort@158)
+'   BTN_X=246  (234+8+4), BTN_W=140
+'   VRD_X=390  (246+140+4)
+'   TXT_Y=56
+'   FORM_W=660
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
@@ -44,7 +39,7 @@ Partial Class MainForm
         Me.grpPosition.SuspendLayout()
         Me.SuspendLayout()
 
-        ' ── grpPosition ──────────────────────────────────────────────────────
+        ' ── grpPosition: W=234, radio gaps tightened so "In Short" fits ────────
         Me.grpPosition.Controls.Add(Me.rbNone)
         Me.grpPosition.Controls.Add(Me.rbLong)
         Me.grpPosition.Controls.Add(Me.rbShort)
@@ -52,7 +47,7 @@ Partial Class MainForm
         Me.grpPosition.ForeColor = System.Drawing.Color.Silver
         Me.grpPosition.Location = New System.Drawing.Point(8, 8)
         Me.grpPosition.Name = "grpPosition"
-        Me.grpPosition.Size = New System.Drawing.Size(252, 42)
+        Me.grpPosition.Size = New System.Drawing.Size(234, 42)
         Me.grpPosition.TabIndex = 3
         Me.grpPosition.TabStop = False
         Me.grpPosition.Text = "Current Position"
@@ -72,7 +67,7 @@ Partial Class MainForm
         Me.rbLong.AutoSize = True
         Me.rbLong.Font = New System.Drawing.Font("Segoe UI", 8.5!, System.Drawing.FontStyle.Bold)
         Me.rbLong.ForeColor = System.Drawing.Color.Lime
-        Me.rbLong.Location = New System.Drawing.Point(96, 18)
+        Me.rbLong.Location = New System.Drawing.Point(88, 18)  ' was 96
         Me.rbLong.Name = "rbLong"
         Me.rbLong.Size = New System.Drawing.Size(62, 18)
         Me.rbLong.TabIndex = 1
@@ -82,37 +77,37 @@ Partial Class MainForm
         Me.rbShort.AutoSize = True
         Me.rbShort.Font = New System.Drawing.Font("Segoe UI", 8.5!, System.Drawing.FontStyle.Bold)
         Me.rbShort.ForeColor = System.Drawing.Color.OrangeRed
-        Me.rbShort.Location = New System.Drawing.Point(172, 18)
+        Me.rbShort.Location = New System.Drawing.Point(158, 18)  ' was 172
         Me.rbShort.Name = "rbShort"
         Me.rbShort.Size = New System.Drawing.Size(68, 18)
         Me.rbShort.TabIndex = 2
         Me.rbShort.Text = "In Short"
         Me.rbShort.UseVisualStyleBackColor = True
 
-        ' ── btnAnalyze  (4px gap right of grpPosition) ───────────────────────
+        ' ── btnAnalyze: X=246 (4px gap after grpPosition ends at 242) ────────
         Me.btnAnalyze.BackColor = System.Drawing.Color.DodgerBlue
         Me.btnAnalyze.FlatStyle = System.Windows.Forms.FlatStyle.Flat
         Me.btnAnalyze.Font = New System.Drawing.Font("Segoe UI", 10.0!, System.Drawing.FontStyle.Bold)
         Me.btnAnalyze.ForeColor = System.Drawing.Color.White
-        Me.btnAnalyze.Location = New System.Drawing.Point(264, 8)
+        Me.btnAnalyze.Location = New System.Drawing.Point(246, 8)
         Me.btnAnalyze.Name = "btnAnalyze"
         Me.btnAnalyze.Size = New System.Drawing.Size(140, 42)
         Me.btnAnalyze.TabIndex = 0
         Me.btnAnalyze.Text = "Analyze Now"
         Me.btnAnalyze.UseVisualStyleBackColor = False
 
-        ' ── lblVerdict  (4px gap right of btnAnalyze, fills to right edge) ───
+        ' ── lblVerdict: X=390, fills to right edge ───────────────────────────
         Me.lblVerdict.BackColor = System.Drawing.Color.Gray
         Me.lblVerdict.Font = New System.Drawing.Font("Segoe UI", 12.0!, System.Drawing.FontStyle.Bold)
         Me.lblVerdict.ForeColor = System.Drawing.Color.White
-        Me.lblVerdict.Location = New System.Drawing.Point(408, 8)
+        Me.lblVerdict.Location = New System.Drawing.Point(390, 8)
         Me.lblVerdict.Name = "lblVerdict"
-        Me.lblVerdict.Size = New System.Drawing.Size(244, 42)
+        Me.lblVerdict.Size = New System.Drawing.Size(262, 42)
         Me.lblVerdict.TabIndex = 2
         Me.lblVerdict.Text = "--"
         Me.lblVerdict.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
 
-        ' ── txtOutput  (starts 6px below header row) ─────────────────────────
+        ' ── txtOutput ──────────────────────────────────────────────────────
         Me.txtOutput.BackColor = System.Drawing.Color.Black
         Me.txtOutput.Font = New System.Drawing.Font("Consolas", 10.0!)
         Me.txtOutput.ForeColor = System.Drawing.Color.LightGreen

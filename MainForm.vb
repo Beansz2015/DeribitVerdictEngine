@@ -2,36 +2,60 @@
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 '
 ' Header row constants (must match Designer):
-'   HDR_Y = 8, HDR_H = 42
-'   GRP_W = 252
-'   BTN_X = GRP_W + 8 + 4 = 264,  BTN_W = 140
-'   VRD_X = BTN_X + BTN_W + 4 = 408
-'   TXT_Y = HDR_Y + HDR_H + 6 = 56
-'   STATUS_H = 18,  STATUS_GAP = 2
+'   HDR_Y=8, HDR_H=42
+'   GRP_W=234  (tightened radio spacing)
+'   BTN_X=246  (GRP_W + 8 + 4),  BTN_W=140
+'   VRD_X=390  (BTN_X + BTN_W + 4)
+'   TXT_Y=56
+'   STATUS_H=18
+'
+' EM_SETMARGINS (0x00D3): sets internal left/right padding on RichTextBox.
+'   wParam: EC_LEFTMARGIN=1, EC_RIGHTMARGIN=2, EC_USEFONTINFO=&HFFFF
+'   lParam lo-word = left margin px, hi-word = right margin px
 
 Imports System.Drawing
 Imports System.IO
+Imports System.Runtime.InteropServices
 Imports System.Windows.Forms
 
 Public Class MainForm
 
     Private Const HDR_Y As Integer = 8
     Private Const HDR_H As Integer = 42
-    Private Const GRP_W As Integer = 252
-    Private Const BTN_X As Integer = 264    ' GRP_W + 8 + 4
+    Private Const GRP_W As Integer = 234
+    Private Const BTN_X As Integer = 246    ' GRP_W + 8 + 4
     Private Const BTN_W As Integer = 140
-    Private Const VRD_X As Integer = 408    ' BTN_X + BTN_W + 4
-    Private Const TXT_Y As Integer = 56     ' HDR_Y + HDR_H + 6
+    Private Const VRD_X As Integer = 390    ' BTN_X + BTN_W + 4
+    Private Const TXT_Y As Integer = 56
     Private Const STATUS_H As Integer = 18
+
+    ' Win32: EM_SETMARGINS -- sets internal left/right text margin in RichTextBox
+    Private Const EM_SETMARGINS As Integer = &HD3
+    Private Const EC_LEFTMARGIN As Integer = 1
+    Private Const EC_RIGHTMARGIN As Integer = 2
+
+    <DllImport("user32.dll", CharSet:=CharSet.Auto)>
+    Private Shared Function SendMessage(hWnd As IntPtr, msg As Integer, wParam As Integer, lParam As Integer) As IntPtr
+    End Function
 
     Private _oiHistory As New List(Of OiSnapshot)()
 
     Public Sub New()
         InitializeComponent()
         Me.Text = "Deribit Verdict Engine v0.23"
+        ' Apply 6px left + 6px right inner margin to output textbox
+        SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
         UpdateLogInfo()
+    End Sub
+
+    ''' <summary>Sets internal text margins on txtOutput using EM_SETMARGINS.</summary>
+    Private Sub SetOutputMargins(leftPx As Integer, rightPx As Integer)
+        ' wParam: which margins to set (left=1, right=2, both=3)
+        ' lParam: lo-word=left px, hi-word=right px
+        Dim lParam As Integer = (rightPx << 16) Or (leftPx And &HFFFF)
+        SendMessage(txtOutput.Handle, EM_SETMARGINS, EC_LEFTMARGIN Or EC_RIGHTMARGIN, lParam)
     End Sub
 
     Private Sub ResizeControls()
@@ -52,6 +76,9 @@ Public Class MainForm
         Dim statusY As Integer = H - STATUS_H - 2
         txtOutput.Location = New System.Drawing.Point(8, TXT_Y)
         txtOutput.Size = New System.Drawing.Size(W - 16, statusY - TXT_Y - 2)
+
+        ' Reapply margins after resize (handle may have changed)
+        SetOutputMargins(6, 6)
 
         ' Status bar: pinned to bottom-left, links at right
         lblLogInfo.Location = New System.Drawing.Point(8, H - STATUS_H)
