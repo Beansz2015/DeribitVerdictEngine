@@ -7,6 +7,7 @@ Public Class IndicatorResults
     Public Property ROC As Double
     Public Property ROCSlope As String       ' "RISING" / "FALLING" / "FLAT"
     Public Property RSI As Double
+    Public Property RSIDivergence As String  ' NONE / BULLISH / BEARISH
     Public Property ATR As Double
     Public Property ATRAvg20d As Double      ' approximated from fetched 1m history
     Public Property ATRSizeMultiplier As Double
@@ -180,6 +181,54 @@ Public Class IndicatorEngine
         If avgLoss = 0 Then Return 100
         Dim rs As Double = avgGain / avgLoss
         Return 100 - (100 / (1 + rs))
+    End Function
+
+    ' -- RSI Series (for divergence detection) --------------------------------
+    Private Shared Function CalcRSISeries(candles As List(Of Candle), period As Integer) As List(Of Double)
+        Dim result As New List(Of Double)
+        If candles.Count < period + 1 Then Return result
+        Dim gains As New List(Of Double)
+        Dim losses As New List(Of Double)
+        For i As Integer = 1 To candles.Count - 1
+            Dim diff As Double = candles(i).Close - candles(i - 1).Close
+            gains.Add(If(diff > 0, diff, 0))
+            losses.Add(If(diff < 0, Math.Abs(diff), 0))
+        Next
+        Dim avgGain As Double = gains.Take(period).Average()
+        Dim avgLoss As Double = losses.Take(period).Average()
+        ' seed first value
+        Dim rsiVal As Double = If(avgLoss = 0, 100, 100 - (100 / (1 + avgGain / avgLoss)))
+        result.Add(rsiVal)
+        For i As Integer = period To gains.Count - 1
+            avgGain = (avgGain * (period - 1) + gains(i)) / period
+            avgLoss = (avgLoss * (period - 1) + losses(i)) / period
+            rsiVal = If(avgLoss = 0, 100, 100 - (100 / (1 + avgGain / avgLoss)))
+            result.Add(rsiVal)
+        Next
+        Return result
+    End Function
+
+    ' -- RSI Divergence -------------------------------------------------------
+    ' Compares recent 5-bar window vs previous 5-bar window on both price and RSI.
+    ' Same approach as OBV divergence for consistency.
+    ' Bearish: price up, RSI down  --> momentum weakening into a high
+    ' Bullish: price down, RSI up  --> momentum recovering into a low
+    Public Shared Function CalcRSIDivergence(candles As List(Of Candle), period As Integer) As String
+        If candles.Count < period + 12 Then Return "NONE"
+        Dim rsiSeries = CalcRSISeries(candles, period)
+        If rsiSeries.Count < 10 Then Return "NONE"
+
+        Dim recentRSI As Double = rsiSeries.Skip(rsiSeries.Count - 5).Average()
+        Dim prevRSI As Double = rsiSeries.Skip(rsiSeries.Count - 10).Take(5).Average()
+        Dim recentPrice As Double = candles.Skip(candles.Count - 5).Average(Function(c) c.Close)
+        Dim prevPrice As Double = candles.Skip(candles.Count - 10).Take(5).Average(Function(c) c.Close)
+
+        If recentPrice > prevPrice * 1.001 AndAlso recentRSI < prevRSI - 2.0 Then
+            Return "BEARISH"
+        ElseIf recentPrice < prevPrice * 0.999 AndAlso recentRSI > prevRSI + 2.0 Then
+            Return "BULLISH"
+        End If
+        Return "NONE"
     End Function
 
     ' -- ROC ------------------------------------------------------------------

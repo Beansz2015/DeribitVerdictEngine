@@ -216,8 +216,11 @@ Public Class ScoringEngine
                       rocPartialLong AndAlso Not rocLongUpgraded, rocPartialShort AndAlso Not rocShortUpgraded,
                       rocLongUpgraded, rocShortUpgraded)))
 
+        ' RSI row includes divergence status in note
+        Dim rsiNote As String = String.Format("{0:F1}", r.RSI)
+        If r.RSIDivergence <> "NONE" Then rsiNote &= String.Format(" | DIV:{0}", r.RSIDivergence)
         breakdown.Add(New SignalBreakdownItem("RSI(9)", rsiLong OrElse rsiLongUpgraded, rsiShort OrElse rsiShortUpgraded,
-            BuildNote(String.Format("{0:F1}", r.RSI),
+            BuildNote(rsiNote,
                       rsiPartialLong AndAlso Not rsiLongUpgraded, rsiPartialShort AndAlso Not rsiShortUpgraded,
                       rsiLongUpgraded, rsiShortUpgraded)))
 
@@ -392,6 +395,7 @@ Public Class ScoringEngine
             Case PositionState.InLong
                 If r.ROC < 0 Then Return "EXIT -- momentum break (ROC crossed below 0)"
                 If r.OBVDivergence = "BEARISH" Then Return "EXIT -- OBV bearish divergence"
+                If r.RSIDivergence = "BEARISH" Then Return "EVALUATE -- RSI bearish divergence, watch for reversal"
                 If r.ROC > 0.6 Then Return "TAKE PROFIT -- extreme momentum, tighten stops"
                 If r.RSI > 60 Then Return "HOLD -- momentum intact"
                 If r.RSI >= 40 Then Return "EVALUATE -- momentum weakening, consider scaling out"
@@ -399,6 +403,7 @@ Public Class ScoringEngine
             Case PositionState.InShort
                 If r.ROC > 0 Then Return "EXIT -- momentum break (ROC crossed above 0)"
                 If r.OBVDivergence = "BULLISH" Then Return "EXIT -- OBV bullish divergence"
+                If r.RSIDivergence = "BULLISH" Then Return "EVALUATE -- RSI bullish divergence, watch for reversal"
                 If r.ROC < -0.6 Then Return "TAKE PROFIT -- extreme bearish momentum, tighten stops"
                 If r.RSI < 40 Then Return "HOLD -- bearish momentum intact"
                 If r.RSI <= 60 Then Return "EVALUATE -- momentum weakening, consider scaling out"
