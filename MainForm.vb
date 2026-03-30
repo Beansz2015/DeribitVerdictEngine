@@ -1,17 +1,13 @@
 ' MainForm.vb  v0.23
-' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
-'
-' Header row constants (must match Designer):
+' GroupBox replaced with lblPositionTitle + radios directly on form.
+' Header row constants:
 '   HDR_Y=8, HDR_H=42
-'   GRP_W=234  (tightened radio spacing)
-'   BTN_X=246  (GRP_W + 8 + 4),  BTN_W=140
-'   VRD_X=390  (BTN_X + BTN_W + 4)
+'   RADIO_Y=18  (centered in 42px row)
+'   rbNone  X=120, rbLong X=210, rbShort X=278  (ends ~346)
+'   BTN_X=354  (346+8), BTN_W=140
+'   VRD_X=498  (354+140+4)
 '   TXT_Y=56
 '   STATUS_H=18
-'
-' EM_SETMARGINS (0x00D3): sets internal left/right padding on RichTextBox.
-'   wParam: EC_LEFTMARGIN=1, EC_RIGHTMARGIN=2, EC_USEFONTINFO=&HFFFF
-'   lParam lo-word = left margin px, hi-word = right margin px
 
 Imports System.Drawing
 Imports System.IO
@@ -22,14 +18,13 @@ Public Class MainForm
 
     Private Const HDR_Y As Integer = 8
     Private Const HDR_H As Integer = 42
-    Private Const GRP_W As Integer = 234
-    Private Const BTN_X As Integer = 246    ' GRP_W + 8 + 4
+    Private Const RADIO_Y As Integer = 18   ' = HDR_Y + (HDR_H - 18) / 2  (centers 18px radio in 42px row)
+    Private Const BTN_X As Integer = 354
     Private Const BTN_W As Integer = 140
-    Private Const VRD_X As Integer = 390    ' BTN_X + BTN_W + 4
+    Private Const VRD_X As Integer = 498    ' BTN_X + BTN_W + 4
     Private Const TXT_Y As Integer = 56
     Private Const STATUS_H As Integer = 18
 
-    ' Win32: EM_SETMARGINS -- sets internal left/right text margin in RichTextBox
     Private Const EM_SETMARGINS As Integer = &HD3
     Private Const EC_LEFTMARGIN As Integer = 1
     Private Const EC_RIGHTMARGIN As Integer = 2
@@ -43,17 +38,13 @@ Public Class MainForm
     Public Sub New()
         InitializeComponent()
         Me.Text = "Deribit Verdict Engine v0.23"
-        ' Apply 6px left + 6px right inner margin to output textbox
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
         UpdateLogInfo()
     End Sub
 
-    ''' <summary>Sets internal text margins on txtOutput using EM_SETMARGINS.</summary>
     Private Sub SetOutputMargins(leftPx As Integer, rightPx As Integer)
-        ' wParam: which margins to set (left=1, right=2, both=3)
-        ' lParam: lo-word=left px, hi-word=right px
         Dim lParam As Integer = (rightPx << 16) Or (leftPx And &HFFFF)
         SendMessage(txtOutput.Handle, EM_SETMARGINS, EC_LEFTMARGIN Or EC_RIGHTMARGIN, lParam)
     End Sub
@@ -62,9 +53,13 @@ Public Class MainForm
         Dim W As Integer = Me.ClientSize.Width
         Dim H As Integer = Me.ClientSize.Height
 
-        ' Header: grpPosition fixed, btn fixed, verdict fills remainder
-        grpPosition.Location = New System.Drawing.Point(8, HDR_Y)
-        grpPosition.Size = New System.Drawing.Size(GRP_W, HDR_H)
+        ' Header labels and radios: fixed positions
+        lblPositionTitle.Location = New System.Drawing.Point(8, HDR_Y)
+        lblPositionTitle.Size = New System.Drawing.Size(108, HDR_H)
+
+        rbNone.Location = New System.Drawing.Point(120, RADIO_Y)
+        rbLong.Location = New System.Drawing.Point(210, RADIO_Y)
+        rbShort.Location = New System.Drawing.Point(278, RADIO_Y)
 
         btnAnalyze.Location = New System.Drawing.Point(BTN_X, HDR_Y)
         btnAnalyze.Size = New System.Drawing.Size(BTN_W, HDR_H)
@@ -72,15 +67,13 @@ Public Class MainForm
         lblVerdict.Location = New System.Drawing.Point(VRD_X, HDR_Y)
         lblVerdict.Size = New System.Drawing.Size(W - VRD_X - 8, HDR_H)
 
-        ' Output: 8px side margins, 2px gap above status bar
+        ' Output box
         Dim statusY As Integer = H - STATUS_H - 2
         txtOutput.Location = New System.Drawing.Point(8, TXT_Y)
         txtOutput.Size = New System.Drawing.Size(W - 16, statusY - TXT_Y - 2)
-
-        ' Reapply margins after resize (handle may have changed)
         SetOutputMargins(6, 6)
 
-        ' Status bar: pinned to bottom-left, links at right
+        ' Status bar
         lblLogInfo.Location = New System.Drawing.Point(8, H - STATUS_H)
         lblLogInfo.Size = New System.Drawing.Size(W - 280, STATUS_H)
         lnkCalibCheck.Location = New System.Drawing.Point(W - 230, H - STATUS_H)
