@@ -1,4 +1,4 @@
-' MainForm.vb  v0.22
+' MainForm.vb  v0.23
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
@@ -13,7 +13,7 @@ Public Class MainForm
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.22"
+        Me.Text = "Deribit Verdict Engine v0.23"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
         UpdateLogInfo()
@@ -74,14 +74,12 @@ Public Class MainForm
             Return sb.ToString()
         End If
 
-        ' Parse header
         Dim header = lines(0).Split(","c)
         Dim colIdx As New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
         For i = 0 To header.Length - 1
             colIdx(header(i).Trim()) = i
         Next
 
-        ' Counters
         Dim totalRows As Integer = 0
         Dim regimeCounts As New Dictionary(Of String, Integer) From {
             {"TRENDING_UP", 0}, {"TRENDING_DOWN", 0},
@@ -97,55 +95,46 @@ Public Class MainForm
             If parts.Length < header.Length Then Continue For
             totalRows += 1
 
-            ' Session date (YYYY-MM-DD)
             If colIdx.ContainsKey("Timestamp") Then
                 Dim ts = parts(colIdx("Timestamp")).Trim()
                 If ts.Length >= 10 Then sessionDates.Add(ts.Substring(0, 10))
             End If
 
-            ' Regime
             If colIdx.ContainsKey("Regime") Then
                 Dim reg = parts(colIdx("Regime")).Trim().ToUpper()
                 If regimeCounts.ContainsKey(reg) Then regimeCounts(reg) += 1
             End If
 
-            ' Liquidation events
             If colIdx.ContainsKey("LiqSignal") Then
                 Dim liq = parts(colIdx("LiqSignal")).Trim().ToUpper()
                 If liq <> "NONE" Then liqEvents += 1
             End If
 
-            ' OFI ratio values
             If colIdx.ContainsKey("OFIRatio") Then
                 Dim v As Double
                 If Double.TryParse(parts(colIdx("OFIRatio")).Trim(), v) Then ofiValues.Add(v)
             End If
 
-            ' Volume ratio values
             If colIdx.ContainsKey("VolumeRatio") Then
                 Dim v As Double
                 If Double.TryParse(parts(colIdx("VolumeRatio")).Trim(), v) Then volRatioValues.Add(v)
             End If
         Next
 
-        ' Thresholds
         Const MIN_TOTAL As Integer = 300
         Const MIN_PER_REGIME As Integer = 50
         Const MIN_REGIMES_COVERED As Integer = 3
         Const MIN_LIQ_EVENTS As Integer = 2
         Const MIN_SESSIONS As Integer = 3
 
-        ' Regime coverage -- ToList() required; Dictionary.Values.Count() with lambda fails in VB.NET
         Dim regimesCovered As Integer = regimeCounts.Values.ToList().Where(Function(c) c >= MIN_PER_REGIME).Count()
 
-        ' Readiness flags
         Dim okTotal = totalRows >= MIN_TOTAL
         Dim okRegimes = regimesCovered >= MIN_REGIMES_COVERED
         Dim okLiq = liqEvents >= MIN_LIQ_EVENTS
         Dim okSessions = sessionDates.Count >= MIN_SESSIONS
         Dim overallReady = okTotal AndAlso okRegimes AndAlso okLiq AndAlso okSessions
 
-        ' --- Report output ---
         sb.AppendLine("SUMMARY")
         sb.AppendLine("  Total rows logged : " & totalRows & "  (need " & MIN_TOTAL & ")  " & Flag(okTotal))
         sb.AppendLine("  Sessions (days)   : " & sessionDates.Count & "  (need " & MIN_SESSIONS & ")  " & Flag(okSessions))
@@ -187,7 +176,6 @@ Public Class MainForm
             sb.AppendLine("  VERDICT: NOT YET READY -- see flags above")
         End If
         sb.AppendLine("===========================================================")
-
         Return sb.ToString()
     End Function
 
@@ -245,8 +233,12 @@ Public Class MainForm
         ' ATR
         r.ATR = IndicatorEngine.CalcATR(candles1m, 7)
         r.ATRAvg20d = IndicatorEngine.CalcATR(candles5m, 60) * Math.Sqrt(5)
-        r.ATRSizeMultiplier = If(r.ATR > 0, r.ATRAvg20d / r.ATR, 1.0)
-        r.ATRSizeMultiplier = Math.Round(Math.Clamp(r.ATRSizeMultiplier, 0.25, 4.0), 2)
+
+        ' 3. Compute DynamicNorms BEFORE ATRSizeMultiplier (norms provides ATR scale factor)
+        Dim norms As DynamicNorms = DynamicNorms.Compute(candles1m, r.ATR)
+
+        ' ATR size multiplier now uses norm-derived scale factor (Method 3)
+        r.ATRSizeMultiplier = Math.Round(norms.ATRScaleFactor, 2)
 
         ' ROC
         Dim rocSeries = IndicatorEngine.CalcROCSeries(candles1m, 9)
@@ -261,7 +253,7 @@ Public Class MainForm
         ' RSI
         r.RSI = IndicatorEngine.CalcRSI(candles1m, 9)
 
-        ' Volume (BTC from candle, USD from cost field)
+        ' Volume
         r.VolumeSMA9 = IndicatorEngine.CalcVolumeSMA(candles1m, 9)
         r.CurrentVolume = candles1m.Last().Volume
         r.CurrentVolumeUSD = candles1m.Last().VolumUSD
@@ -368,22 +360,22 @@ Public Class MainForm
         ' RSI Divergence
         r.RSIDivergence = IndicatorEngine.CalcRSIDivergence(candles1m, 9)
 
-        ' 3. Scoring engine
+        ' 4. Scoring engine -- pass norms
         Dim posState As PositionState = PositionState.None
         If rbLong.Checked Then posState = PositionState.InLong
         If rbShort.Checked Then posState = PositionState.InShort
 
-        Dim verdict = ScoringEngine.Calculate(r, posState)
+        Dim verdict = ScoringEngine.Calculate(r, posState, norms)
 
-        ' 4. Log run
+        ' 5. Log run
         AnalysisLogger.LogRun(r, verdict)
         UpdateLogInfo()
 
-        ' 5. Render output
-        RenderOutput(r, verdict)
+        ' 6. Render output
+        RenderOutput(r, verdict, norms)
     End Function
 
-    Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult)
+    Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult, norms As DynamicNorms)
         Dim sb As New System.Text.StringBuilder()
         Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") & " UTC"
 
@@ -406,12 +398,23 @@ Public Class MainForm
             scoreLine = String.Format("Long {0}/{1}  |  Short {2}/{1}", v.LongScore, maxScore, v.ShortScore)
         End If
 
+        Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
+
         sb.AppendLine("===========================================================")
         sb.AppendLine("  VERDICT:    " & v.Verdict)
         sb.AppendLine("  CONFIDENCE: " & v.Confidence)
         sb.AppendLine("  SCORE:      " & scoreLine)
         sb.AppendLine("  TIME:       " & ts)
         sb.AppendLine("===========================================================")
+        sb.AppendLine()
+        sb.AppendLine("DYNAMIC NORMS  [" & normMode & "]")
+        sb.AppendLine("  Vol threshold : H:" & norms.VolHighThreshold.ToString("F2") & "x" &
+                      "  M:" & norms.VolMidThreshold.ToString("F2") & "x" &
+                      "  (mean=" & norms.VolMean.ToString("F4") & " BTC" &
+                      "  σ=" & norms.VolStdDev.ToString("F4") & ")")
+        sb.AppendLine("  VWAP dev thr  : ±" & norms.VWAPDevThreshold.ToString("F2") & "%")
+        sb.AppendLine("  ATR scale     : " & norms.ATRScaleFactor.ToString("F2") & "x" &
+                      "  (ATR=" & r.ATR.ToString("F2") & "  ref=" & norms.ATRRef.ToString("F2") & ")")
         sb.AppendLine()
         sb.AppendLine("REGIME (5m): " & r.Regime)
         sb.AppendLine("  ADX: " & r.ADX.ToString("F1") & "  |  +DI: " & r.PlusDI.ToString("F1") & "  |  -DI: " & r.MinusDI.ToString("F1"))
@@ -439,7 +442,8 @@ Public Class MainForm
         sb.AppendLine("  OBV:          Trend:" & r.OBVTrend & "  |  Divergence:" & r.OBVDivergence)
         sb.AppendLine()
         sb.AppendLine("POSITION SIZING:")
-        sb.AppendLine("  ATR(7):       " & r.ATR.ToString("F2") & "  |  20d Avg Proxy: " & r.ATRAvg20d.ToString("F2") & "  |  Multiplier: " & r.ATRSizeMultiplier.ToString("F2") & "x")
+        sb.AppendLine("  ATR(7):       " & r.ATR.ToString("F2") & "  |  Scale: " & norms.ATRScaleFactor.ToString("F2") & "x" &
+                      "  (ref " & norms.ATRRef.ToString("F0") & ")")
         sb.AppendLine()
         sb.AppendLine("HOLD/EXIT STATUS:")
         sb.AppendLine("  " & v.HoldStatus)

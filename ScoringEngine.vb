@@ -1,6 +1,7 @@
-' ScoringEngine.vb
+' ScoringEngine.vb  v0.23
 ' Implements the 6-step verdict engine from the specification.
-' Input: IndicatorResults + position state. Output: VerdictResult.
+' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
+' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -50,15 +51,13 @@ Public Class ScoringEngine
     ' Max achievable score after removing non-directional padding points
     Public Const MaxScore As Integer = 13
 
-    Public Shared Function Calculate(r As IndicatorResults, posState As PositionState) As VerdictResult
+    Public Shared Function Calculate(r As IndicatorResults, posState As PositionState,
+                                     norms As DynamicNorms) As VerdictResult
         Dim res As New VerdictResult()
         Dim breakdown = res.SignalBreakdown
         Dim state As New ScoreState()
 
         ' -- Step 2: Weighted Signal Scoring ----------------------------------
-        ' Pass 1: score full signals, track categories.
-        ' Pass 2: upgrade partials only if a full signal from a DIFFERENT
-        '         category exists in the same direction.
 
         ' CORE
         ' ROC (Momentum)
@@ -85,27 +84,26 @@ Public Class ScoringEngine
         Dim adxShort As Boolean = r.ADX > 25 AndAlso dmiShort
         AddFull(state, adxLong, adxShort, SignalCategory.MarketStructure)
 
-        ' Volume (Volume) -- directional confirmation only (v0.19)
-        ' Full: >= 3x SMA, confirmed by ROC direction AND price vs VWAP
-        ' Partial: 2-3x SMA, display note only, no score
-        ' Removed: dual-side spike reward and partial upgrade logic
-        Dim volLong As Boolean = r.VolumeRatio >= 3.0 AndAlso r.ROC > 0 AndAlso r.CurrentPrice > r.VWAP
-        Dim volShort As Boolean = r.VolumeRatio >= 3.0 AndAlso r.ROC < 0 AndAlso r.CurrentPrice < r.VWAP
-        Dim volPartial As Boolean = r.VolumeRatio >= 2.0 AndAlso r.VolumeRatio < 3.0
+        ' Volume (Volume) -- thresholds from DynamicNorms
+        ' Full: >= VolHighThreshold x SMA, confirmed by ROC direction AND price vs VWAP
+        ' Partial: >= VolMidThreshold x SMA, display note only, no score
+        Dim volHigh As Double = norms.VolHighThreshold
+        Dim volMid As Double = norms.VolMidThreshold
+        Dim volLong As Boolean = r.VolumeRatio >= volHigh AndAlso r.ROC > 0 AndAlso r.CurrentPrice > r.VWAP
+        Dim volShort As Boolean = r.VolumeRatio >= volHigh AndAlso r.ROC < 0 AndAlso r.CurrentPrice < r.VWAP
+        Dim volPartial As Boolean = r.VolumeRatio >= volMid AndAlso r.VolumeRatio < volHigh
         AddFull(state, volLong, volShort, SignalCategory.Volume)
 
         ' TIER 1
-        ' VWAP (Microstructure)
-        Dim vwapLong As Boolean = r.CurrentPrice > r.VWAP AndAlso Math.Abs(r.VWAPDevPct) <= 1.5
-        Dim vwapShort As Boolean = r.CurrentPrice < r.VWAP AndAlso Math.Abs(r.VWAPDevPct) <= 1.5
-        Dim vwapPartialLong As Boolean = r.CurrentPrice > r.VWAP AndAlso Math.Abs(r.VWAPDevPct) > 1.5
-        Dim vwapPartialShort As Boolean = r.CurrentPrice < r.VWAP AndAlso Math.Abs(r.VWAPDevPct) > 1.5
+        ' VWAP (Microstructure) -- deviation boundary from DynamicNorms
+        Dim vwapDev As Double = norms.VWAPDevThreshold
+        Dim vwapLong As Boolean = r.CurrentPrice > r.VWAP AndAlso Math.Abs(r.VWAPDevPct) <= vwapDev
+        Dim vwapShort As Boolean = r.CurrentPrice < r.VWAP AndAlso Math.Abs(r.VWAPDevPct) <= vwapDev
+        Dim vwapPartialLong As Boolean = r.CurrentPrice > r.VWAP AndAlso Math.Abs(r.VWAPDevPct) > vwapDev
+        Dim vwapPartialShort As Boolean = r.CurrentPrice < r.VWAP AndAlso Math.Abs(r.VWAPDevPct) > vwapDev
         AddFull(state, vwapLong, vwapShort, SignalCategory.Microstructure)
 
-        ' BBW Squeeze-State Scoring (Option B)
-        ' NONE     = normal conditions, no score change
-        ' ACTIVE   = volatility compressed, reduce confidence both sides
-        ' RELEASING = breakout underway, reward ROC-directional side only
+        ' BBW Squeeze-State Scoring
         Dim bbwLongHit As Boolean = False
         Dim bbwShortHit As Boolean = False
         Dim bbwNote As String
@@ -129,7 +127,7 @@ Public Class ScoringEngine
                 Else
                     bbwNote = String.Format("{0:F3} | RELEASING -- ROC chop ({1:F3}), no award", r.BBW, r.ROC)
                 End If
-            Case Else ' NONE
+            Case Else
                 bbwNote = String.Format("{0:F3} | NONE", r.BBW)
         End Select
 
@@ -137,9 +135,6 @@ Public Class ScoringEngine
         Dim emaBull As Boolean = r.EMAAlignment = "BULL"
         Dim emaBear As Boolean = r.EMAAlignment = "BEAR"
         AddFull(state, emaBull, emaBear, SignalCategory.MarketStructure)
-
-        ' Funding OK -- DISPLAY ONLY, removed from Step 2 scoring (handled by Step 3 modifier)
-        ' (no AddFull call here)
 
         ' OI (Microstructure)
         Dim oiLong As Boolean = r.OISignal = "NEW LONGS"
@@ -149,7 +144,7 @@ Public Class ScoringEngine
         AddFull(state, oiLong, oiShort, SignalCategory.Microstructure)
 
         ' TIER 2
-        ' OFI (Microstructure)
+        ' OFI (Microstructure) -- static thresholds retained (instantaneous ratio)
         Dim ofiBuy As Boolean = r.OFISignal = "BUY DOMINANT"
         Dim ofiSell As Boolean = r.OFISignal = "SELL DOMINANT"
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
@@ -184,7 +179,6 @@ Public Class ScoringEngine
         AddFull(state, obvLong, obvShort, SignalCategory.Volume)
 
         ' Pass 2: upgrade partials with cross-category full confirmation
-        ' Note: volume partial upgrade removed in v0.19 -- volume is now directional-only
         Dim rocLongUpgraded As Boolean = rocPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Momentum)
         Dim rocShortUpgraded As Boolean = rocPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
         If rocLongUpgraded Then state.LongScore += 1
@@ -210,13 +204,14 @@ Public Class ScoringEngine
         If obvLongUpgraded Then state.LongScore += 1
         If obvShortUpgraded Then state.ShortScore += 1
 
-        ' Breakdown
+        ' Breakdown notes include dynamic threshold values
+        Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC")
+
         breakdown.Add(New SignalBreakdownItem("ROC(9)", rocLong OrElse rocLongUpgraded, rocShort OrElse rocShortUpgraded,
             BuildNote(String.Format("{0:F3} | Slope: {1}", r.ROC, r.ROCSlope),
                       rocPartialLong AndAlso Not rocLongUpgraded, rocPartialShort AndAlso Not rocShortUpgraded,
                       rocLongUpgraded, rocShortUpgraded)))
 
-        ' RSI row includes divergence status in note
         Dim rsiNote As String = String.Format("{0:F1}", r.RSI)
         If r.RSIDivergence <> "NONE" Then rsiNote &= String.Format(" | DIV:{0}", r.RSIDivergence)
         breakdown.Add(New SignalBreakdownItem("RSI(9)", rsiLong OrElse rsiLongUpgraded, rsiShort OrElse rsiShortUpgraded,
@@ -230,15 +225,13 @@ Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("ADX>25", adxLong, adxShort,
             String.Format("{0:F1}", r.ADX)))
 
-        ' Volume row: [L]/[S] only when high-volume breakout is directionally confirmed
-        ' PARTIAL note shown for 2-3x volume but no score awarded
-        breakdown.Add(New SignalBreakdownItem("Volume >=3xSMA", volLong, volShort,
-            BuildNote(r.VolumeRatio.ToString("F2") & "x",
-                      volPartial, volPartial,
-                      False, False)))
+        breakdown.Add(New SignalBreakdownItem("Volume", volLong, volShort,
+            BuildNote(String.Format("{0:F2}x | thr H:{1:F2}x M:{2:F2}x [{3}]",
+                                   r.VolumeRatio, volHigh, volMid, normMode),
+                      volPartial, volPartial, False, False)))
 
         breakdown.Add(New SignalBreakdownItem("VWAP", vwapLong OrElse vwapLongUpgraded, vwapShort OrElse vwapShortUpgraded,
-            BuildNote(String.Format("VWAP:{0:F1} Dev:{1:F2}%", r.VWAP, r.VWAPDevPct),
+            BuildNote(String.Format("Dev:{0:F2}% | thr ±{1:F2}% [{2}]", r.VWAPDevPct, vwapDev, normMode),
                       vwapPartialLong AndAlso Not vwapLongUpgraded, vwapPartialShort AndAlso Not vwapShortUpgraded,
                       vwapLongUpgraded, vwapShortUpgraded)))
 
@@ -247,7 +240,6 @@ Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("EMA 9/21/50", emaBull, emaBear,
             String.Format("9:{0:F0} 21:{1:F0} 50:{2:F0} | {3}", r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment)))
 
-        ' Funding OK -- display only, no [L]/[S] marks, no scoring
         breakdown.Add(New SignalBreakdownItem("Funding (info)", False, False,
             String.Format("{0:F4}% | {1}", r.FundingRate * 100, r.FundingBias)))
 
