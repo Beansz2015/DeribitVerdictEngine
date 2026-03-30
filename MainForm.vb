@@ -7,10 +7,8 @@ Imports System.Windows.Forms
 
 Public Class MainForm
 
-    ' OI snapshot history (stored in-memory for delta calculation)
     Private _oiHistory As New List(Of OiSnapshot)()
 
-    ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
         Me.Text = "Deribit Verdict Engine v0.23"
@@ -20,11 +18,25 @@ Public Class MainForm
     End Sub
 
     Private Sub ResizeControls()
-        txtOutput.Size = New Size(Me.ClientSize.Width - 28, Me.ClientSize.Height - 150)
-        lblVerdict.Size = New Size(Me.ClientSize.Width - 598, 40)
-        lblLogInfo.Location = New System.Drawing.Point(12, Me.ClientSize.Height - 24)
-        lnkCalibCheck.Location = New System.Drawing.Point(Me.ClientSize.Width - 230, Me.ClientSize.Height - 24)
-        lnkResetLog.Location = New System.Drawing.Point(Me.ClientSize.Width - 90, Me.ClientSize.Height - 24)
+        Dim W As Integer = Me.ClientSize.Width
+        Dim H As Integer = Me.ClientSize.Height
+
+        ' Header row: grpPosition fixed width, btnAnalyze fixed, lblVerdict fills remainder
+        grpPosition.Location = New System.Drawing.Point(8, 8)
+        btnAnalyze.Location = New System.Drawing.Point(264, 8)
+        lblVerdict.Location = New System.Drawing.Point(418, 8)
+        lblVerdict.Size = New System.Drawing.Size(W - 426, 42)
+
+        ' Output box: 8px margin all sides, leaves 20px for status bar
+        txtOutput.Location = New System.Drawing.Point(8, 58)
+        txtOutput.Size = New System.Drawing.Size(W - 16, H - 82)
+
+        ' Status bar: pinned to bottom
+        Dim statusY As Integer = H - 20
+        lblLogInfo.Location = New System.Drawing.Point(8, statusY)
+        lblLogInfo.Size = New System.Drawing.Size(W - 280, 16)
+        lnkCalibCheck.Location = New System.Drawing.Point(W - 230, statusY)
+        lnkResetLog.Location = New System.Drawing.Point(W - 80, statusY)
     End Sub
 
     Private Sub UpdateLogInfo()
@@ -33,7 +45,7 @@ Public Class MainForm
         lblLogInfo.Text = String.Format("Log: {0} rows  |  {1}", rows, path)
     End Sub
 
-    ' -- Reset Log link click -------------------------------------------------
+    ' -- Reset Log ------------------------------------------------------------
     Private Sub lnkResetLog_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkResetLog.LinkClicked
         Dim result = MessageBox.Show(
             "Reset the analysis log? This will delete all logged rows and cannot be undone." &
@@ -48,7 +60,7 @@ Public Class MainForm
         End If
     End Sub
 
-    ' -- Calibration Readiness link click -------------------------------------
+    ' -- Calibration Readiness ------------------------------------------------
     Private Sub lnkCalibCheck_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkCalibCheck.LinkClicked
         txtOutput.Text = BuildCalibrationReport()
     End Sub
@@ -128,7 +140,6 @@ Public Class MainForm
         Const MIN_SESSIONS As Integer = 3
 
         Dim regimesCovered As Integer = regimeCounts.Values.ToList().Where(Function(c) c >= MIN_PER_REGIME).Count()
-
         Dim okTotal = totalRows >= MIN_TOTAL
         Dim okRegimes = regimesCovered >= MIN_REGIMES_COVERED
         Dim okLiq = liqEvents >= MIN_LIQ_EVENTS
@@ -183,7 +194,7 @@ Public Class MainForm
         Return If(ok, "[OK]", "[--]")
     End Function
 
-    ' -- Button click: full pipeline ------------------------------------------
+    ' -- Analyze Now ----------------------------------------------------------
     Private Async Sub btnAnalyze_Click(sender As Object, e As EventArgs) Handles btnAnalyze.Click
         btnAnalyze.Enabled = False
         btnAnalyze.Text = "Fetching..."
@@ -204,7 +215,6 @@ Public Class MainForm
     End Sub
 
     Private Async Function RunAnalysisAsync() As Task
-        ' 1. Fetch all data concurrently
         Dim t_1m = DeribitClient.GetCandlesAsync("1", 250)
         Dim t_5m = DeribitClient.GetCandlesAsync("5", 210)
         Dim t_funding = DeribitClient.GetFundingRateAsync()
@@ -226,21 +236,15 @@ Public Class MainForm
             Return
         End If
 
-        ' 2. Calculate indicators
         Dim r As New IndicatorResults()
         r.CurrentPrice = candles1m.Last().Close
 
-        ' ATR
         r.ATR = IndicatorEngine.CalcATR(candles1m, 7)
         r.ATRAvg20d = IndicatorEngine.CalcATR(candles5m, 60) * Math.Sqrt(5)
 
-        ' 3. Compute DynamicNorms BEFORE ATRSizeMultiplier (norms provides ATR scale factor)
         Dim norms As DynamicNorms = DynamicNorms.Compute(candles1m, r.ATR)
-
-        ' ATR size multiplier now uses norm-derived scale factor (Method 3)
         r.ATRSizeMultiplier = Math.Round(norms.ATRScaleFactor, 2)
 
-        ' ROC
         Dim rocSeries = IndicatorEngine.CalcROCSeries(candles1m, 9)
         r.ROC = If(rocSeries.Count > 0, rocSeries.Last(), 0)
         If rocSeries.Count >= 2 Then
@@ -250,16 +254,13 @@ Public Class MainForm
             r.ROCSlope = "FLAT"
         End If
 
-        ' RSI
         r.RSI = IndicatorEngine.CalcRSI(candles1m, 9)
 
-        ' Volume
         r.VolumeSMA9 = IndicatorEngine.CalcVolumeSMA(candles1m, 9)
         r.CurrentVolume = candles1m.Last().Volume
         r.CurrentVolumeUSD = candles1m.Last().VolumUSD
         r.VolumeRatio = If(r.VolumeSMA9 > 0, r.CurrentVolume / r.VolumeSMA9, 1)
 
-        ' DMI + ADX (5m)
         IndicatorEngine.CalcDMI(candles5m, 9, r.PlusDI, r.MinusDI, r.ADX)
         If r.ADX > 25 AndAlso r.PlusDI > r.MinusDI Then
             r.Regime = "TRENDING_UP"
@@ -271,15 +272,12 @@ Public Class MainForm
             r.Regime = "TRANSITIONAL"
         End If
 
-        ' VWAP
         r.VWAP = IndicatorEngine.CalcVWAP(candles1m)
         r.VWAPDevPct = If(r.VWAP > 0, (r.CurrentPrice - r.VWAP) / r.VWAP * 100, 0)
 
-        ' Bollinger Bands Width
         Dim minBBW As Double
         IndicatorEngine.CalcBBW(candles1m, 20, 2.0, r.BBW, minBBW, r.SqueezeStatus)
 
-        ' EMA Ribbon
         r.EMA9 = IndicatorEngine.CalcEMA(candles1m, 9)
         r.EMA21 = IndicatorEngine.CalcEMA(candles1m, 21)
         r.EMA50 = IndicatorEngine.CalcEMA(candles1m, 50)
@@ -291,7 +289,6 @@ Public Class MainForm
             r.EMAAlignment = "MIXED"
         End If
 
-        ' Funding Rate
         r.FundingRate = fundingRate
         If fundingRate > 0.001 Then
             r.FundingBias = "LONGS HEAVILY CROWDED"
@@ -305,7 +302,6 @@ Public Class MainForm
             r.FundingBias = "NEUTRAL"
         End If
 
-        ' Open Interest Delta
         Dim nowTs As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         r.OI_Current = bookSummary.OI
         _oiHistory.Add(New OiSnapshot(nowTs, bookSummary.OI))
@@ -332,19 +328,14 @@ Public Class MainForm
             r.OISignal = "NEUTRAL"
         End If
 
-        ' Order Flow Imbalance
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal)
-
-        ' Liquidations
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
 
-        ' 5m EMA(200)
         r.EMA200_5m = IndicatorEngine.CalcEMA(candles5m, 200)
         r.PriceVsEMA200 = If(r.EMA200_5m > 0,
                               If(r.CurrentPrice > r.EMA200_5m, "ABOVE", "BELOW"),
                               "N/A")
 
-        ' Donchian
         IndicatorEngine.CalcDonchian(candles1m, 20, r.DonchianUpper, r.DonchianLower)
         If r.CurrentPrice > r.DonchianUpper Then
             r.DonchianSignal = "LONG"
@@ -354,24 +345,18 @@ Public Class MainForm
             r.DonchianSignal = "NONE"
         End If
 
-        ' OBV
         IndicatorEngine.CalcOBV(candles1m, r.OBVTrend, r.OBVDivergence)
-
-        ' RSI Divergence
         r.RSIDivergence = IndicatorEngine.CalcRSIDivergence(candles1m, 9)
 
-        ' 4. Scoring engine -- pass norms
         Dim posState As PositionState = PositionState.None
         If rbLong.Checked Then posState = PositionState.InLong
         If rbShort.Checked Then posState = PositionState.InShort
 
         Dim verdict = ScoringEngine.Calculate(r, posState, norms)
 
-        ' 5. Log run
         AnalysisLogger.LogRun(r, verdict)
         UpdateLogInfo()
 
-        ' 6. Render output
         RenderOutput(r, verdict, norms)
     End Function
 
@@ -442,8 +427,9 @@ Public Class MainForm
         sb.AppendLine("  OBV:          Trend:" & r.OBVTrend & "  |  Divergence:" & r.OBVDivergence)
         sb.AppendLine()
         sb.AppendLine("POSITION SIZING:")
+        ' ATR ref now uses F2 for consistency with DYNAMIC NORMS section
         sb.AppendLine("  ATR(7):       " & r.ATR.ToString("F2") & "  |  Scale: " & norms.ATRScaleFactor.ToString("F2") & "x" &
-                      "  (ref " & norms.ATRRef.ToString("F0") & ")")
+                      "  (ref " & norms.ATRRef.ToString("F2") & ")")
         sb.AppendLine()
         sb.AppendLine("HOLD/EXIT STATUS:")
         sb.AppendLine("  " & v.HoldStatus)
