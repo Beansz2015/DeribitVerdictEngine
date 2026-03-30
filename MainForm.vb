@@ -19,11 +19,12 @@ Public Class MainForm
     End Sub
 
     Private Sub ResizeControls()
-        txtOutput.Size = New Size(Me.ClientSize.Width - 28, Me.ClientSize.Height - 138)
+        ' txtOutput fills from Y=100 to 24px above the status bar
+        txtOutput.Size = New Size(Me.ClientSize.Width - 28, Me.ClientSize.Height - 150)
         lblVerdict.Size = New Size(Me.ClientSize.Width - 598, 40)
-        ' Keep status bar pinned to bottom
-        lblLogInfo.Location = New System.Drawing.Point(12, Me.ClientSize.Height - 28)
-        lnkResetLog.Location = New System.Drawing.Point(Me.ClientSize.Width - 90, Me.ClientSize.Height - 28)
+        ' Status bar pinned 24px from the bottom
+        lblLogInfo.Location = New System.Drawing.Point(12, Me.ClientSize.Height - 24)
+        lnkResetLog.Location = New System.Drawing.Point(Me.ClientSize.Width - 90, Me.ClientSize.Height - 24)
     End Sub
 
     Private Sub UpdateLogInfo()

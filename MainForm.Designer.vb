@@ -44,7 +44,7 @@ Partial Class MainForm
         Me.btnAnalyze.Text = "Analyze Now"
         Me.btnAnalyze.UseVisualStyleBackColor = False
         '
-        ' txtOutput  -- bottom trimmed 24px to make room for log status bar
+        ' txtOutput  -- bottom trimmed to leave room for log status bar
         '
         Me.txtOutput.BackColor = System.Drawing.Color.Black
         Me.txtOutput.Font = New System.Drawing.Font("Consolas", 11.0!)
@@ -53,7 +53,7 @@ Partial Class MainForm
         Me.txtOutput.Name = "txtOutput"
         Me.txtOutput.ReadOnly = True
         Me.txtOutput.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Vertical
-        Me.txtOutput.Size = New System.Drawing.Size(1136, 862)
+        Me.txtOutput.Size = New System.Drawing.Size(1136, 880)
         Me.txtOutput.TabIndex = 1
         Me.txtOutput.Text = ""
         '
@@ -126,7 +126,7 @@ Partial Class MainForm
         Me.lblLogInfo.AutoSize = False
         Me.lblLogInfo.Font = New System.Drawing.Font("Segoe UI", 8.0!)
         Me.lblLogInfo.ForeColor = System.Drawing.Color.DimGray
-        Me.lblLogInfo.Location = New System.Drawing.Point(12, 970)
+        Me.lblLogInfo.Location = New System.Drawing.Point(12, 1006)
         Me.lblLogInfo.Name = "lblLogInfo"
         Me.lblLogInfo.Size = New System.Drawing.Size(900, 18)
         Me.lblLogInfo.TabIndex = 5
@@ -140,7 +140,7 @@ Partial Class MainForm
         Me.lnkResetLog.LinkColor = System.Drawing.Color.DimGray
         Me.lnkResetLog.ActiveLinkColor = System.Drawing.Color.OrangeRed
         Me.lnkResetLog.VisitedLinkColor = System.Drawing.Color.DimGray
-        Me.lnkResetLog.Location = New System.Drawing.Point(1080, 970)
+        Me.lnkResetLog.Location = New System.Drawing.Point(1080, 1006)
         Me.lnkResetLog.Name = "lnkResetLog"
         Me.lnkResetLog.Size = New System.Drawing.Size(60, 18)
         Me.lnkResetLog.TabIndex = 4
@@ -152,7 +152,7 @@ Partial Class MainForm
         Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.BackColor = System.Drawing.Color.FromArgb(CType(CType(20, Byte), Integer), CType(CType(20, Byte), Integer), CType(CType(20, Byte), Integer))
-        Me.ClientSize = New System.Drawing.Size(1160, 1000)
+        Me.ClientSize = New System.Drawing.Size(1160, 1030)
         Me.Controls.Add(Me.grpPosition)
         Me.Controls.Add(Me.lblVerdict)
         Me.Controls.Add(Me.txtOutput)
