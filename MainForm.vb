@@ -1,11 +1,12 @@
 ' MainForm.vb  v0.23
-' GroupBox replaced with lblPositionTitle + radios directly on form.
 ' Header row constants:
 '   HDR_Y=8, HDR_H=42
-'   RADIO_Y=18  (centered in 42px row)
-'   rbNone  X=120, rbLong X=210, rbShort X=278  (ends ~346)
-'   BTN_X=354  (346+8), BTN_W=140
-'   VRD_X=498  (354+140+4)
+'   rbNone  : X=120, Y=HDR_Y+12=20  (centred)
+'   rbLong  : X=210, Y=HDR_Y+2=10   (top of stack)
+'   rbShort : X=210, Y=HDR_Y+22=30  (bottom of stack)
+'   BTN_X=286  (stack ends ~278, +8px)
+'   BTN_W=140
+'   VRD_X=430  (286+140+4)
 '   TXT_Y=56
 '   STATUS_H=18
 
@@ -18,10 +19,9 @@ Public Class MainForm
 
     Private Const HDR_Y As Integer = 8
     Private Const HDR_H As Integer = 42
-    Private Const RADIO_Y As Integer = 18   ' = HDR_Y + (HDR_H - 18) / 2  (centers 18px radio in 42px row)
-    Private Const BTN_X As Integer = 354
+    Private Const BTN_X As Integer = 286
     Private Const BTN_W As Integer = 140
-    Private Const VRD_X As Integer = 498    ' BTN_X + BTN_W + 4
+    Private Const VRD_X As Integer = 430    ' BTN_X + BTN_W + 4
     Private Const TXT_Y As Integer = 56
     Private Const STATUS_H As Integer = 18
 
@@ -53,13 +53,14 @@ Public Class MainForm
         Dim W As Integer = Me.ClientSize.Width
         Dim H As Integer = Me.ClientSize.Height
 
-        ' Header labels and radios: fixed positions
+        ' Fixed header controls
         lblPositionTitle.Location = New System.Drawing.Point(8, HDR_Y)
         lblPositionTitle.Size = New System.Drawing.Size(108, HDR_H)
 
-        rbNone.Location = New System.Drawing.Point(120, RADIO_Y)
-        rbLong.Location = New System.Drawing.Point(210, RADIO_Y)
-        rbShort.Location = New System.Drawing.Point(278, RADIO_Y)
+        ' rbNone centred vertically, rbLong/rbShort stacked
+        rbNone.Location = New System.Drawing.Point(120, HDR_Y + (HDR_H - 18) \ 2)   ' =20
+        rbLong.Location = New System.Drawing.Point(210, HDR_Y + 2)                   ' =10
+        rbShort.Location = New System.Drawing.Point(210, HDR_Y + 22)                 ' =30
 
         btnAnalyze.Location = New System.Drawing.Point(BTN_X, HDR_Y)
         btnAnalyze.Size = New System.Drawing.Size(BTN_W, HDR_H)
