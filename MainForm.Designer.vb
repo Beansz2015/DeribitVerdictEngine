@@ -1,4 +1,4 @@
-' MainForm.Designer.vb  v0.15
+' MainForm.Designer.vb  v0.21
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
@@ -26,6 +26,8 @@ Partial Class MainForm
         Me.rbNone = New System.Windows.Forms.RadioButton()
         Me.rbLong = New System.Windows.Forms.RadioButton()
         Me.rbShort = New System.Windows.Forms.RadioButton()
+        Me.lnkResetLog = New System.Windows.Forms.LinkLabel()
+        Me.lblLogInfo = New System.Windows.Forms.Label()
         Me.grpPosition.SuspendLayout()
         Me.SuspendLayout()
         '
@@ -42,7 +44,7 @@ Partial Class MainForm
         Me.btnAnalyze.Text = "Analyze Now"
         Me.btnAnalyze.UseVisualStyleBackColor = False
         '
-        ' txtOutput
+        ' txtOutput  -- bottom trimmed 24px to make room for log status bar
         '
         Me.txtOutput.BackColor = System.Drawing.Color.Black
         Me.txtOutput.Font = New System.Drawing.Font("Consolas", 11.0!)
@@ -51,7 +53,7 @@ Partial Class MainForm
         Me.txtOutput.Name = "txtOutput"
         Me.txtOutput.ReadOnly = True
         Me.txtOutput.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Vertical
-        Me.txtOutput.Size = New System.Drawing.Size(1136, 886)
+        Me.txtOutput.Size = New System.Drawing.Size(1136, 862)
         Me.txtOutput.TabIndex = 1
         Me.txtOutput.Text = ""
         '
@@ -119,6 +121,32 @@ Partial Class MainForm
         Me.rbShort.Text = "In Short"
         Me.rbShort.UseVisualStyleBackColor = True
         '
+        ' lblLogInfo  -- row count + file path, left side of status bar
+        '
+        Me.lblLogInfo.AutoSize = False
+        Me.lblLogInfo.Font = New System.Drawing.Font("Segoe UI", 8.0!)
+        Me.lblLogInfo.ForeColor = System.Drawing.Color.DimGray
+        Me.lblLogInfo.Location = New System.Drawing.Point(12, 970)
+        Me.lblLogInfo.Name = "lblLogInfo"
+        Me.lblLogInfo.Size = New System.Drawing.Size(900, 18)
+        Me.lblLogInfo.TabIndex = 5
+        Me.lblLogInfo.Text = "Log: 0 rows"
+        Me.lblLogInfo.TextAlign = System.Drawing.ContentAlignment.MiddleLeft
+        '
+        ' lnkResetLog  -- text-link on the right side of status bar
+        '
+        Me.lnkResetLog.AutoSize = True
+        Me.lnkResetLog.Font = New System.Drawing.Font("Segoe UI", 8.0!)
+        Me.lnkResetLog.LinkColor = System.Drawing.Color.DimGray
+        Me.lnkResetLog.ActiveLinkColor = System.Drawing.Color.OrangeRed
+        Me.lnkResetLog.VisitedLinkColor = System.Drawing.Color.DimGray
+        Me.lnkResetLog.Location = New System.Drawing.Point(1080, 970)
+        Me.lnkResetLog.Name = "lnkResetLog"
+        Me.lnkResetLog.Size = New System.Drawing.Size(60, 18)
+        Me.lnkResetLog.TabIndex = 4
+        Me.lnkResetLog.Text = "Reset Log"
+        Me.lnkResetLog.TextAlign = System.Drawing.ContentAlignment.MiddleRight
+        '
         ' MainForm
         '
         Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
@@ -129,6 +157,8 @@ Partial Class MainForm
         Me.Controls.Add(Me.lblVerdict)
         Me.Controls.Add(Me.txtOutput)
         Me.Controls.Add(Me.btnAnalyze)
+        Me.Controls.Add(Me.lblLogInfo)
+        Me.Controls.Add(Me.lnkResetLog)
         Me.Font = New System.Drawing.Font("Segoe UI", 9.0!)
         Me.ForeColor = System.Drawing.Color.Cyan
         Me.MinimumSize = New System.Drawing.Size(800, 700)
@@ -147,5 +177,7 @@ Partial Class MainForm
     Friend WithEvents rbNone As System.Windows.Forms.RadioButton
     Friend WithEvents rbLong As System.Windows.Forms.RadioButton
     Friend WithEvents rbShort As System.Windows.Forms.RadioButton
+    Friend WithEvents lnkResetLog As System.Windows.Forms.LinkLabel
+    Friend WithEvents lblLogInfo As System.Windows.Forms.Label
 
 End Class

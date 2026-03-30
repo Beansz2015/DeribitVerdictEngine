@@ -1,4 +1,4 @@
-' MainForm.vb  v0.18
+' MainForm.vb  v0.21
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
@@ -12,14 +12,39 @@ Public Class MainForm
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.18"
+        Me.Text = "Deribit Verdict Engine v0.21"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
+        UpdateLogInfo()
     End Sub
 
     Private Sub ResizeControls()
-        txtOutput.Size = New Size(Me.ClientSize.Width - 28, Me.ClientSize.Height - 114)
+        txtOutput.Size = New Size(Me.ClientSize.Width - 28, Me.ClientSize.Height - 138)
         lblVerdict.Size = New Size(Me.ClientSize.Width - 598, 40)
+        ' Keep status bar pinned to bottom
+        lblLogInfo.Location = New System.Drawing.Point(12, Me.ClientSize.Height - 28)
+        lnkResetLog.Location = New System.Drawing.Point(Me.ClientSize.Width - 90, Me.ClientSize.Height - 28)
+    End Sub
+
+    Private Sub UpdateLogInfo()
+        Dim rows As Integer = AnalysisLogger.GetRowCount()
+        Dim path As String = AnalysisLogger.GetLogPath()
+        lblLogInfo.Text = String.Format("Log: {0} rows  |  {1}", rows, path)
+    End Sub
+
+    ' -- Reset Log link click -------------------------------------------------
+    Private Sub lnkResetLog_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkResetLog.LinkClicked
+        Dim result = MessageBox.Show(
+            "Reset the analysis log? This will delete all logged rows and cannot be undone." &
+            Environment.NewLine & Environment.NewLine &
+            "File: " & AnalysisLogger.GetLogPath(),
+            "Reset Log",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning)
+        If result = DialogResult.Yes Then
+            AnalysisLogger.ResetLog()
+            UpdateLogInfo()
+        End If
     End Sub
 
     ' -- Button click: full pipeline ------------------------------------------
@@ -192,6 +217,9 @@ Public Class MainForm
         ' OBV
         IndicatorEngine.CalcOBV(candles1m, r.OBVTrend, r.OBVDivergence)
 
+        ' RSI Divergence
+        r.RSIDivergence = IndicatorEngine.CalcRSIDivergence(candles1m, 9)
+
         ' 3. Scoring engine
         Dim posState As PositionState = PositionState.None
         If rbLong.Checked Then posState = PositionState.InLong
@@ -199,7 +227,11 @@ Public Class MainForm
 
         Dim verdict = ScoringEngine.Calculate(r, posState)
 
-        ' 4. Render output
+        ' 4. Log run
+        AnalysisLogger.LogRun(r, verdict)
+        UpdateLogInfo()
+
+        ' 5. Render output
         RenderOutput(r, verdict)
     End Function
 
