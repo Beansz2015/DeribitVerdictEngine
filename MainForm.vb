@@ -135,8 +135,8 @@ Public Class MainForm
         Const MIN_LIQ_EVENTS As Integer = 2
         Const MIN_SESSIONS As Integer = 3
 
-        ' Regime coverage
-        Dim regimesCovered As Integer = regimeCounts.Values.Count(Function(c) c >= MIN_PER_REGIME)
+        ' Regime coverage -- ToList() required; Dictionary.Values.Count() with lambda fails in VB.NET
+        Dim regimesCovered As Integer = regimeCounts.Values.ToList().Where(Function(c) c >= MIN_PER_REGIME).Count()
 
         ' Readiness flags
         Dim okTotal = totalRows >= MIN_TOTAL
