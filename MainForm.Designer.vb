@@ -1,12 +1,16 @@
 ' MainForm.Designer.vb  v0.23
-' Compact layout:
-'   - Form width reduced to 780px (tight fit for output text at Consolas 10pt)
-'   - Top margin reduced: all header controls at Y=8, txtOutput starts at Y=64
-'   - grpPosition, btnAnalyze, lblVerdict all on same Y baseline
-'   - Radio buttons tightly packed inside grpPosition
-'   - lblVerdict width fills remaining space after button
-'   - Status bar anchored to bottom
-'   - Form starts at 780 x 900 to show full output without scrolling
+' Layout constants:
+'   HDR_H   = 42   -- header row height (grpPosition, btnAnalyze, lblVerdict all same H)
+'   HDR_Y   = 8    -- top margin
+'   HDR_BOT = HDR_Y + HDR_H = 50
+'   TXT_Y   = HDR_BOT + 6 = 56
+'   STATUS_H= 18
+'   FORM_W  = 660  (safe minimum for longest output line at Consolas 10pt)
+'   FORM_H  = 900
+'
+'   grpPosition : X=8,   W=252
+'   btnAnalyze  : X=264  (252+8+4),  W=140,  4px gap from grpPosition
+'   lblVerdict  : X=408  (264+140+4), W=W-416, 4px gap from btn
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
@@ -40,7 +44,7 @@ Partial Class MainForm
         Me.grpPosition.SuspendLayout()
         Me.SuspendLayout()
 
-        ' -- grpPosition: compact, left-aligned, Y=8 -------------------------
+        ' ── grpPosition ──────────────────────────────────────────────────────
         Me.grpPosition.Controls.Add(Me.rbNone)
         Me.grpPosition.Controls.Add(Me.rbLong)
         Me.grpPosition.Controls.Add(Me.rbShort)
@@ -53,7 +57,6 @@ Partial Class MainForm
         Me.grpPosition.TabStop = False
         Me.grpPosition.Text = "Current Position"
 
-        ' rbNone
         Me.rbNone.AutoSize = True
         Me.rbNone.Checked = True
         Me.rbNone.Font = New System.Drawing.Font("Segoe UI", 8.5!, System.Drawing.FontStyle.Bold)
@@ -66,7 +69,6 @@ Partial Class MainForm
         Me.rbNone.Text = "No Position"
         Me.rbNone.UseVisualStyleBackColor = True
 
-        ' rbLong
         Me.rbLong.AutoSize = True
         Me.rbLong.Font = New System.Drawing.Font("Segoe UI", 8.5!, System.Drawing.FontStyle.Bold)
         Me.rbLong.ForeColor = System.Drawing.Color.Lime
@@ -77,7 +79,6 @@ Partial Class MainForm
         Me.rbLong.Text = "In Long"
         Me.rbLong.UseVisualStyleBackColor = True
 
-        ' rbShort
         Me.rbShort.AutoSize = True
         Me.rbShort.Font = New System.Drawing.Font("Segoe UI", 8.5!, System.Drawing.FontStyle.Bold)
         Me.rbShort.ForeColor = System.Drawing.Color.OrangeRed
@@ -88,48 +89,48 @@ Partial Class MainForm
         Me.rbShort.Text = "In Short"
         Me.rbShort.UseVisualStyleBackColor = True
 
-        ' -- btnAnalyze: immediately right of grpPosition, same Y baseline ---
+        ' ── btnAnalyze  (4px gap right of grpPosition) ───────────────────────
         Me.btnAnalyze.BackColor = System.Drawing.Color.DodgerBlue
         Me.btnAnalyze.FlatStyle = System.Windows.Forms.FlatStyle.Flat
         Me.btnAnalyze.Font = New System.Drawing.Font("Segoe UI", 10.0!, System.Drawing.FontStyle.Bold)
         Me.btnAnalyze.ForeColor = System.Drawing.Color.White
         Me.btnAnalyze.Location = New System.Drawing.Point(264, 8)
         Me.btnAnalyze.Name = "btnAnalyze"
-        Me.btnAnalyze.Size = New System.Drawing.Size(150, 42)
+        Me.btnAnalyze.Size = New System.Drawing.Size(140, 42)
         Me.btnAnalyze.TabIndex = 0
         Me.btnAnalyze.Text = "Analyze Now"
         Me.btnAnalyze.UseVisualStyleBackColor = False
 
-        ' -- lblVerdict: fills remaining width to right edge ------------------
+        ' ── lblVerdict  (4px gap right of btnAnalyze, fills to right edge) ───
         Me.lblVerdict.BackColor = System.Drawing.Color.Gray
         Me.lblVerdict.Font = New System.Drawing.Font("Segoe UI", 12.0!, System.Drawing.FontStyle.Bold)
         Me.lblVerdict.ForeColor = System.Drawing.Color.White
-        Me.lblVerdict.Location = New System.Drawing.Point(418, 8)
+        Me.lblVerdict.Location = New System.Drawing.Point(408, 8)
         Me.lblVerdict.Name = "lblVerdict"
-        Me.lblVerdict.Size = New System.Drawing.Size(354, 42)
+        Me.lblVerdict.Size = New System.Drawing.Size(244, 42)
         Me.lblVerdict.TabIndex = 2
         Me.lblVerdict.Text = "--"
         Me.lblVerdict.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
 
-        ' -- txtOutput: starts at Y=58, Consolas 10pt, fills width/height -----
+        ' ── txtOutput  (starts 6px below header row) ─────────────────────────
         Me.txtOutput.BackColor = System.Drawing.Color.Black
         Me.txtOutput.Font = New System.Drawing.Font("Consolas", 10.0!)
         Me.txtOutput.ForeColor = System.Drawing.Color.LightGreen
-        Me.txtOutput.Location = New System.Drawing.Point(8, 58)
+        Me.txtOutput.Location = New System.Drawing.Point(8, 56)
         Me.txtOutput.Name = "txtOutput"
         Me.txtOutput.ReadOnly = True
         Me.txtOutput.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Vertical
-        Me.txtOutput.Size = New System.Drawing.Size(764, 820)
+        Me.txtOutput.Size = New System.Drawing.Size(644, 822)
         Me.txtOutput.TabIndex = 1
         Me.txtOutput.Text = ""
 
-        ' -- Status bar: lblLogInfo left, lnkCalibCheck + lnkResetLog right --
+        ' ── Status bar ───────────────────────────────────────────────────────
         Me.lblLogInfo.AutoSize = False
         Me.lblLogInfo.Font = New System.Drawing.Font("Segoe UI", 8.0!)
         Me.lblLogInfo.ForeColor = System.Drawing.Color.DimGray
         Me.lblLogInfo.Location = New System.Drawing.Point(8, 882)
         Me.lblLogInfo.Name = "lblLogInfo"
-        Me.lblLogInfo.Size = New System.Drawing.Size(500, 16)
+        Me.lblLogInfo.Size = New System.Drawing.Size(360, 16)
         Me.lblLogInfo.TabIndex = 5
         Me.lblLogInfo.Text = "Log: 0 rows"
         Me.lblLogInfo.TextAlign = System.Drawing.ContentAlignment.MiddleLeft
@@ -139,9 +140,9 @@ Partial Class MainForm
         Me.lnkCalibCheck.LinkColor = System.Drawing.Color.DimGray
         Me.lnkCalibCheck.ActiveLinkColor = System.Drawing.Color.DodgerBlue
         Me.lnkCalibCheck.VisitedLinkColor = System.Drawing.Color.DimGray
-        Me.lnkCalibCheck.Location = New System.Drawing.Point(608, 882)
+        Me.lnkCalibCheck.Location = New System.Drawing.Point(430, 882)
         Me.lnkCalibCheck.Name = "lnkCalibCheck"
-        Me.lnkCalibCheck.Size = New System.Drawing.Size(110, 16)
+        Me.lnkCalibCheck.Size = New System.Drawing.Size(120, 16)
         Me.lnkCalibCheck.TabIndex = 6
         Me.lnkCalibCheck.Text = "Calibration Readiness"
         Me.lnkCalibCheck.TextAlign = System.Drawing.ContentAlignment.MiddleRight
@@ -151,18 +152,18 @@ Partial Class MainForm
         Me.lnkResetLog.LinkColor = System.Drawing.Color.DimGray
         Me.lnkResetLog.ActiveLinkColor = System.Drawing.Color.OrangeRed
         Me.lnkResetLog.VisitedLinkColor = System.Drawing.Color.DimGray
-        Me.lnkResetLog.Location = New System.Drawing.Point(728, 882)
+        Me.lnkResetLog.Location = New System.Drawing.Point(590, 882)
         Me.lnkResetLog.Name = "lnkResetLog"
         Me.lnkResetLog.Size = New System.Drawing.Size(56, 16)
         Me.lnkResetLog.TabIndex = 4
         Me.lnkResetLog.Text = "Reset Log"
         Me.lnkResetLog.TextAlign = System.Drawing.ContentAlignment.MiddleRight
 
-        ' -- MainForm ---------------------------------------------------------
+        ' ── MainForm ─────────────────────────────────────────────────────────
         Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.BackColor = System.Drawing.Color.FromArgb(20, 20, 20)
-        Me.ClientSize = New System.Drawing.Size(780, 902)
+        Me.ClientSize = New System.Drawing.Size(660, 902)
         Me.Controls.Add(Me.grpPosition)
         Me.Controls.Add(Me.lblVerdict)
         Me.Controls.Add(Me.txtOutput)
@@ -172,7 +173,7 @@ Partial Class MainForm
         Me.Controls.Add(Me.lnkResetLog)
         Me.Font = New System.Drawing.Font("Segoe UI", 9.0!)
         Me.ForeColor = System.Drawing.Color.Cyan
-        Me.MinimumSize = New System.Drawing.Size(780, 600)
+        Me.MinimumSize = New System.Drawing.Size(660, 500)
         Me.Name = "MainForm"
         Me.Text = "Deribit Verdict Engine v0.23"
         Me.grpPosition.ResumeLayout(False)

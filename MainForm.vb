@@ -1,11 +1,28 @@
 ' MainForm.vb  v0.23
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
+'
+' Header row constants (must match Designer):
+'   HDR_Y = 8, HDR_H = 42
+'   GRP_W = 252
+'   BTN_X = GRP_W + 8 + 4 = 264,  BTN_W = 140
+'   VRD_X = BTN_X + BTN_W + 4 = 408
+'   TXT_Y = HDR_Y + HDR_H + 6 = 56
+'   STATUS_H = 18,  STATUS_GAP = 2
 
 Imports System.Drawing
 Imports System.IO
 Imports System.Windows.Forms
 
 Public Class MainForm
+
+    Private Const HDR_Y As Integer = 8
+    Private Const HDR_H As Integer = 42
+    Private Const GRP_W As Integer = 252
+    Private Const BTN_X As Integer = 264    ' GRP_W + 8 + 4
+    Private Const BTN_W As Integer = 140
+    Private Const VRD_X As Integer = 408    ' BTN_X + BTN_W + 4
+    Private Const TXT_Y As Integer = 56     ' HDR_Y + HDR_H + 6
+    Private Const STATUS_H As Integer = 18
 
     Private _oiHistory As New List(Of OiSnapshot)()
 
@@ -21,22 +38,26 @@ Public Class MainForm
         Dim W As Integer = Me.ClientSize.Width
         Dim H As Integer = Me.ClientSize.Height
 
-        ' Header row: grpPosition fixed width, btnAnalyze fixed, lblVerdict fills remainder
-        grpPosition.Location = New System.Drawing.Point(8, 8)
-        btnAnalyze.Location = New System.Drawing.Point(264, 8)
-        lblVerdict.Location = New System.Drawing.Point(418, 8)
-        lblVerdict.Size = New System.Drawing.Size(W - 426, 42)
+        ' Header: grpPosition fixed, btn fixed, verdict fills remainder
+        grpPosition.Location = New System.Drawing.Point(8, HDR_Y)
+        grpPosition.Size = New System.Drawing.Size(GRP_W, HDR_H)
 
-        ' Output box: 8px margin all sides, leaves 20px for status bar
-        txtOutput.Location = New System.Drawing.Point(8, 58)
-        txtOutput.Size = New System.Drawing.Size(W - 16, H - 82)
+        btnAnalyze.Location = New System.Drawing.Point(BTN_X, HDR_Y)
+        btnAnalyze.Size = New System.Drawing.Size(BTN_W, HDR_H)
 
-        ' Status bar: pinned to bottom
-        Dim statusY As Integer = H - 20
-        lblLogInfo.Location = New System.Drawing.Point(8, statusY)
-        lblLogInfo.Size = New System.Drawing.Size(W - 280, 16)
-        lnkCalibCheck.Location = New System.Drawing.Point(W - 230, statusY)
-        lnkResetLog.Location = New System.Drawing.Point(W - 80, statusY)
+        lblVerdict.Location = New System.Drawing.Point(VRD_X, HDR_Y)
+        lblVerdict.Size = New System.Drawing.Size(W - VRD_X - 8, HDR_H)
+
+        ' Output: 8px side margins, 2px gap above status bar
+        Dim statusY As Integer = H - STATUS_H - 2
+        txtOutput.Location = New System.Drawing.Point(8, TXT_Y)
+        txtOutput.Size = New System.Drawing.Size(W - 16, statusY - TXT_Y - 2)
+
+        ' Status bar: pinned to bottom-left, links at right
+        lblLogInfo.Location = New System.Drawing.Point(8, H - STATUS_H)
+        lblLogInfo.Size = New System.Drawing.Size(W - 280, STATUS_H)
+        lnkCalibCheck.Location = New System.Drawing.Point(W - 230, H - STATUS_H)
+        lnkResetLog.Location = New System.Drawing.Point(W - 80, H - STATUS_H)
     End Sub
 
     Private Sub UpdateLogInfo()
@@ -427,7 +448,6 @@ Public Class MainForm
         sb.AppendLine("  OBV:          Trend:" & r.OBVTrend & "  |  Divergence:" & r.OBVDivergence)
         sb.AppendLine()
         sb.AppendLine("POSITION SIZING:")
-        ' ATR ref now uses F2 for consistency with DYNAMIC NORMS section
         sb.AppendLine("  ATR(7):       " & r.ATR.ToString("F2") & "  |  Scale: " & norms.ATRScaleFactor.ToString("F2") & "x" &
                       "  (ref " & norms.ATRRef.ToString("F2") & ")")
         sb.AppendLine()
