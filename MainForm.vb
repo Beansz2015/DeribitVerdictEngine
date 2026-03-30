@@ -1,7 +1,8 @@
-' MainForm.vb  v0.21
+' MainForm.vb  v0.22
 ' UI logic -- wires button click to data fetch, indicator calc, scoring, display.
 
 Imports System.Drawing
+Imports System.IO
 Imports System.Windows.Forms
 
 Public Class MainForm
@@ -12,18 +13,17 @@ Public Class MainForm
     ' -- Resize handler -------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.21"
+        Me.Text = "Deribit Verdict Engine v0.22"
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
         UpdateLogInfo()
     End Sub
 
     Private Sub ResizeControls()
-        ' txtOutput fills from Y=100 to 24px above the status bar
         txtOutput.Size = New Size(Me.ClientSize.Width - 28, Me.ClientSize.Height - 150)
         lblVerdict.Size = New Size(Me.ClientSize.Width - 598, 40)
-        ' Status bar pinned 24px from the bottom
         lblLogInfo.Location = New System.Drawing.Point(12, Me.ClientSize.Height - 24)
+        lnkCalibCheck.Location = New System.Drawing.Point(Me.ClientSize.Width - 230, Me.ClientSize.Height - 24)
         lnkResetLog.Location = New System.Drawing.Point(Me.ClientSize.Width - 90, Me.ClientSize.Height - 24)
     End Sub
 
@@ -47,6 +47,153 @@ Public Class MainForm
             UpdateLogInfo()
         End If
     End Sub
+
+    ' -- Calibration Readiness link click -------------------------------------
+    Private Sub lnkCalibCheck_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkCalibCheck.LinkClicked
+        txtOutput.Text = BuildCalibrationReport()
+    End Sub
+
+    Private Function BuildCalibrationReport() As String
+        Dim path As String = AnalysisLogger.GetLogPath()
+        Dim sb As New System.Text.StringBuilder()
+
+        sb.AppendLine("===========================================================")
+        sb.AppendLine("  CALIBRATION READINESS REPORT")
+        sb.AppendLine("  " & DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") & " UTC")
+        sb.AppendLine("===========================================================")
+        sb.AppendLine()
+
+        If Not File.Exists(path) Then
+            sb.AppendLine("  No log file found. Run at least one analysis first.")
+            Return sb.ToString()
+        End If
+
+        Dim lines = File.ReadAllLines(path)
+        If lines.Length <= 1 Then
+            sb.AppendLine("  Log file is empty. Run more analyses to accumulate data.")
+            Return sb.ToString()
+        End If
+
+        ' Parse header
+        Dim header = lines(0).Split(","c)
+        Dim colIdx As New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
+        For i = 0 To header.Length - 1
+            colIdx(header(i).Trim()) = i
+        Next
+
+        ' Counters
+        Dim totalRows As Integer = 0
+        Dim regimeCounts As New Dictionary(Of String, Integer) From {
+            {"TRENDING_UP", 0}, {"TRENDING_DOWN", 0},
+            {"RANGE_BOUND", 0}, {"TRANSITIONAL", 0}
+        }
+        Dim liqEvents As Integer = 0
+        Dim ofiValues As New List(Of Double)()
+        Dim volRatioValues As New List(Of Double)()
+        Dim sessionDates As New HashSet(Of String)()
+
+        For i = 1 To lines.Length - 1
+            Dim parts = lines(i).Split(","c)
+            If parts.Length < header.Length Then Continue For
+            totalRows += 1
+
+            ' Session date (YYYY-MM-DD)
+            If colIdx.ContainsKey("Timestamp") Then
+                Dim ts = parts(colIdx("Timestamp")).Trim()
+                If ts.Length >= 10 Then sessionDates.Add(ts.Substring(0, 10))
+            End If
+
+            ' Regime
+            If colIdx.ContainsKey("Regime") Then
+                Dim reg = parts(colIdx("Regime")).Trim().ToUpper()
+                If regimeCounts.ContainsKey(reg) Then regimeCounts(reg) += 1
+            End If
+
+            ' Liquidation events
+            If colIdx.ContainsKey("LiqSignal") Then
+                Dim liq = parts(colIdx("LiqSignal")).Trim().ToUpper()
+                If liq <> "NONE" Then liqEvents += 1
+            End If
+
+            ' OFI ratio values
+            If colIdx.ContainsKey("OFIRatio") Then
+                Dim v As Double
+                If Double.TryParse(parts(colIdx("OFIRatio")).Trim(), v) Then ofiValues.Add(v)
+            End If
+
+            ' Volume ratio values
+            If colIdx.ContainsKey("VolumeRatio") Then
+                Dim v As Double
+                If Double.TryParse(parts(colIdx("VolumeRatio")).Trim(), v) Then volRatioValues.Add(v)
+            End If
+        Next
+
+        ' Thresholds
+        Const MIN_TOTAL As Integer = 300
+        Const MIN_PER_REGIME As Integer = 50
+        Const MIN_REGIMES_COVERED As Integer = 3
+        Const MIN_LIQ_EVENTS As Integer = 2
+        Const MIN_SESSIONS As Integer = 3
+
+        ' Regime coverage
+        Dim regimesCovered As Integer = regimeCounts.Values.Count(Function(c) c >= MIN_PER_REGIME)
+
+        ' Readiness flags
+        Dim okTotal = totalRows >= MIN_TOTAL
+        Dim okRegimes = regimesCovered >= MIN_REGIMES_COVERED
+        Dim okLiq = liqEvents >= MIN_LIQ_EVENTS
+        Dim okSessions = sessionDates.Count >= MIN_SESSIONS
+        Dim overallReady = okTotal AndAlso okRegimes AndAlso okLiq AndAlso okSessions
+
+        ' --- Report output ---
+        sb.AppendLine("SUMMARY")
+        sb.AppendLine("  Total rows logged : " & totalRows & "  (need " & MIN_TOTAL & ")  " & Flag(okTotal))
+        sb.AppendLine("  Sessions (days)   : " & sessionDates.Count & "  (need " & MIN_SESSIONS & ")  " & Flag(okSessions))
+        sb.AppendLine("  Liq events logged : " & liqEvents & "  (need " & MIN_LIQ_EVENTS & ")  " & Flag(okLiq))
+        sb.AppendLine()
+        sb.AppendLine("REGIME DISTRIBUTION  (need >= " & MIN_PER_REGIME & " rows each, " & MIN_REGIMES_COVERED & "+ regimes)")
+        For Each kvp In regimeCounts
+            Dim ok = kvp.Value >= MIN_PER_REGIME
+            sb.AppendLine("  " & kvp.Key.PadRight(16) & " : " & kvp.Value.ToString().PadLeft(5) & " rows   " & Flag(ok))
+        Next
+        sb.AppendLine("  Regimes ready     : " & regimesCovered & "/" & MIN_REGIMES_COVERED & "  " & Flag(okRegimes))
+        sb.AppendLine()
+        sb.AppendLine("INDICATOR VARIANCE")
+        If ofiValues.Count > 10 Then
+            Dim ofiMin = ofiValues.Min()
+            Dim ofiMax = ofiValues.Max()
+            Dim ofiRange = ofiMax - ofiMin
+            Dim ofiOk = ofiRange > 2.0
+            sb.AppendLine("  OFI Ratio range   : " & ofiMin.ToString("F2") & " to " & ofiMax.ToString("F2") &
+                          "  (spread: " & ofiRange.ToString("F2") & ")  " & Flag(ofiOk))
+        Else
+            sb.AppendLine("  OFI Ratio         : insufficient data")
+        End If
+        If volRatioValues.Count > 10 Then
+            Dim vMin = volRatioValues.Min()
+            Dim vMax = volRatioValues.Max()
+            Dim vRange = vMax - vMin
+            Dim vOk = vRange > 1.0
+            sb.AppendLine("  Volume Ratio range: " & vMin.ToString("F2") & " to " & vMax.ToString("F2") &
+                          "  (spread: " & vRange.ToString("F2") & ")  " & Flag(vOk))
+        Else
+            sb.AppendLine("  Volume Ratio      : insufficient data")
+        End If
+        sb.AppendLine()
+        sb.AppendLine("===========================================================")
+        If overallReady Then
+            sb.AppendLine("  VERDICT: READY FOR RECALIBRATION")
+        Else
+            sb.AppendLine("  VERDICT: NOT YET READY -- see flags above")
+        End If
+        sb.AppendLine("===========================================================")
+
+        Return sb.ToString()
+    End Function
+
+    Private Shared Function Flag(ok As Boolean) As String
+        Return If(ok, "[OK]", "[--]")
+    End Function
 
     ' -- Button click: full pipeline ------------------------------------------
     Private Async Sub btnAnalyze_Click(sender As Object, e As EventArgs) Handles btnAnalyze.Click
@@ -249,7 +396,6 @@ Public Class MainForm
             usdStr = "$" & r.CurrentVolumeUSD.ToString("F0")
         End If
 
-        ' Build score line -- denominator is 13 (true directional max)
         Dim maxScore As Integer = ScoringEngine.MaxScore
         Dim scoreLine As String
         If v.RegimePenalty > 0 Then

@@ -1,4 +1,4 @@
-' MainForm.Designer.vb  v0.21
+' MainForm.Designer.vb  v0.22
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
@@ -27,6 +27,7 @@ Partial Class MainForm
         Me.rbLong = New System.Windows.Forms.RadioButton()
         Me.rbShort = New System.Windows.Forms.RadioButton()
         Me.lnkResetLog = New System.Windows.Forms.LinkLabel()
+        Me.lnkCalibCheck = New System.Windows.Forms.LinkLabel()
         Me.lblLogInfo = New System.Windows.Forms.Label()
         Me.grpPosition.SuspendLayout()
         Me.SuspendLayout()
@@ -44,7 +45,7 @@ Partial Class MainForm
         Me.btnAnalyze.Text = "Analyze Now"
         Me.btnAnalyze.UseVisualStyleBackColor = False
         '
-        ' txtOutput  -- bottom trimmed to leave room for log status bar
+        ' txtOutput
         '
         Me.txtOutput.BackColor = System.Drawing.Color.Black
         Me.txtOutput.Font = New System.Drawing.Font("Consolas", 11.0!)
@@ -128,12 +129,26 @@ Partial Class MainForm
         Me.lblLogInfo.ForeColor = System.Drawing.Color.DimGray
         Me.lblLogInfo.Location = New System.Drawing.Point(12, 1006)
         Me.lblLogInfo.Name = "lblLogInfo"
-        Me.lblLogInfo.Size = New System.Drawing.Size(900, 18)
+        Me.lblLogInfo.Size = New System.Drawing.Size(820, 18)
         Me.lblLogInfo.TabIndex = 5
         Me.lblLogInfo.Text = "Log: 0 rows"
         Me.lblLogInfo.TextAlign = System.Drawing.ContentAlignment.MiddleLeft
         '
-        ' lnkResetLog  -- text-link on the right side of status bar
+        ' lnkCalibCheck  -- calibration readiness, second from right
+        '
+        Me.lnkCalibCheck.AutoSize = True
+        Me.lnkCalibCheck.Font = New System.Drawing.Font("Segoe UI", 8.0!)
+        Me.lnkCalibCheck.LinkColor = System.Drawing.Color.DimGray
+        Me.lnkCalibCheck.ActiveLinkColor = System.Drawing.Color.DodgerBlue
+        Me.lnkCalibCheck.VisitedLinkColor = System.Drawing.Color.DimGray
+        Me.lnkCalibCheck.Location = New System.Drawing.Point(950, 1006)
+        Me.lnkCalibCheck.Name = "lnkCalibCheck"
+        Me.lnkCalibCheck.Size = New System.Drawing.Size(110, 18)
+        Me.lnkCalibCheck.TabIndex = 6
+        Me.lnkCalibCheck.Text = "Calibration Readiness"
+        Me.lnkCalibCheck.TextAlign = System.Drawing.ContentAlignment.MiddleRight
+        '
+        ' lnkResetLog  -- rightmost text-link
         '
         Me.lnkResetLog.AutoSize = True
         Me.lnkResetLog.Font = New System.Drawing.Font("Segoe UI", 8.0!)
@@ -158,6 +173,7 @@ Partial Class MainForm
         Me.Controls.Add(Me.txtOutput)
         Me.Controls.Add(Me.btnAnalyze)
         Me.Controls.Add(Me.lblLogInfo)
+        Me.Controls.Add(Me.lnkCalibCheck)
         Me.Controls.Add(Me.lnkResetLog)
         Me.Font = New System.Drawing.Font("Segoe UI", 9.0!)
         Me.ForeColor = System.Drawing.Color.Cyan
@@ -178,6 +194,7 @@ Partial Class MainForm
     Friend WithEvents rbLong As System.Windows.Forms.RadioButton
     Friend WithEvents rbShort As System.Windows.Forms.RadioButton
     Friend WithEvents lnkResetLog As System.Windows.Forms.LinkLabel
+    Friend WithEvents lnkCalibCheck As System.Windows.Forms.LinkLabel
     Friend WithEvents lblLogInfo As System.Windows.Forms.Label
 
 End Class
