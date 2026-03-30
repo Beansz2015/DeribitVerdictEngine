@@ -85,15 +85,14 @@ Public Class ScoringEngine
         Dim adxShort As Boolean = r.ADX > 25 AndAlso dmiShort
         AddFull(state, adxLong, adxShort, SignalCategory.MarketStructure)
 
-        ' Volume (Volume) -- direction-neutral
-        Dim volSpike As Boolean = r.VolumeRatio >= 3.0
+        ' Volume (Volume) -- directional confirmation only (v0.19)
+        ' Full: >= 3x SMA, confirmed by ROC direction AND price vs VWAP
+        ' Partial: 2-3x SMA, display note only, no score
+        ' Removed: dual-side spike reward and partial upgrade logic
+        Dim volLong As Boolean = r.VolumeRatio >= 3.0 AndAlso r.ROC > 0 AndAlso r.CurrentPrice > r.VWAP
+        Dim volShort As Boolean = r.VolumeRatio >= 3.0 AndAlso r.ROC < 0 AndAlso r.CurrentPrice < r.VWAP
         Dim volPartial As Boolean = r.VolumeRatio >= 2.0 AndAlso r.VolumeRatio < 3.0
-        If volSpike Then
-            state.LongScore += 1
-            state.ShortScore += 1
-            state.FullLongCategories.Add(SignalCategory.Volume)
-            state.FullShortCategories.Add(SignalCategory.Volume)
-        End If
+        AddFull(state, volLong, volShort, SignalCategory.Volume)
 
         ' TIER 1
         ' VWAP (Microstructure)
@@ -109,14 +108,12 @@ Public Class ScoringEngine
         ' RELEASING = breakout underway, reward ROC-directional side only
         Dim bbwLongHit As Boolean = False
         Dim bbwShortHit As Boolean = False
-        Dim bbwActivePenalty As Boolean = False
         Dim bbwNote As String
 
         Select Case r.SqueezeStatus
             Case "ACTIVE"
                 state.LongScore  = Math.Max(0, state.LongScore  - 1)
                 state.ShortScore = Math.Max(0, state.ShortScore - 1)
-                bbwActivePenalty = True
                 bbwNote = String.Format("{0:F3} | ACTIVE -- penalty -1 both sides", r.BBW)
             Case "RELEASING"
                 If r.ROC > 0.1 Then
@@ -158,7 +155,6 @@ Public Class ScoringEngine
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
 
         ' Liquidations -- penalty-only, scaled by size
-        ' Calm (NONE): no score change. Adverse: directional penalty only.
         Dim liqLongPenalty As Integer = 0
         Dim liqShortPenalty As Integer = 0
         If r.LiqSignal = "LONG LIQS" Then
@@ -188,6 +184,7 @@ Public Class ScoringEngine
         AddFull(state, obvLong, obvShort, SignalCategory.Volume)
 
         ' Pass 2: upgrade partials with cross-category full confirmation
+        ' Note: volume partial upgrade removed in v0.19 -- volume is now directional-only
         Dim rocLongUpgraded As Boolean = rocPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Momentum)
         Dim rocShortUpgraded As Boolean = rocPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
         If rocLongUpgraded Then state.LongScore += 1
@@ -197,11 +194,6 @@ Public Class ScoringEngine
         Dim rsiShortUpgraded As Boolean = rsiPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
         If rsiLongUpgraded Then state.LongScore += 1
         If rsiShortUpgraded Then state.ShortScore += 1
-
-        Dim volLongUpgraded As Boolean = volPartial AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Volume)
-        Dim volShortUpgraded As Boolean = volPartial AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Volume)
-        If volLongUpgraded Then state.LongScore += 1
-        If volShortUpgraded Then state.ShortScore += 1
 
         Dim vwapLongUpgraded As Boolean = vwapPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Microstructure)
         Dim vwapShortUpgraded As Boolean = vwapPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Microstructure)
@@ -235,18 +227,18 @@ Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("ADX>25", adxLong, adxShort,
             String.Format("{0:F1}", r.ADX)))
 
-        breakdown.Add(New SignalBreakdownItem("Volume >=3xSMA", volSpike OrElse volLongUpgraded, volSpike OrElse volShortUpgraded,
+        ' Volume row: [L]/[S] only when high-volume breakout is directionally confirmed
+        ' PARTIAL note shown for 2-3x volume but no score awarded
+        breakdown.Add(New SignalBreakdownItem("Volume >=3xSMA", volLong, volShort,
             BuildNote(r.VolumeRatio.ToString("F2") & "x",
-                      volPartial AndAlso Not volLongUpgraded, volPartial AndAlso Not volShortUpgraded,
-                      volLongUpgraded, volShortUpgraded)))
+                      volPartial, volPartial,
+                      False, False)))
 
         breakdown.Add(New SignalBreakdownItem("VWAP", vwapLong OrElse vwapLongUpgraded, vwapShort OrElse vwapShortUpgraded,
             BuildNote(String.Format("VWAP:{0:F1} Dev:{1:F2}%", r.VWAP, r.VWAPDevPct),
                       vwapPartialLong AndAlso Not vwapLongUpgraded, vwapPartialShort AndAlso Not vwapShortUpgraded,
                       vwapLongUpgraded, vwapShortUpgraded)))
 
-        ' BBW breakdown row -- [L]/[S] mark only when RELEASING fires directionally
-        ' ACTIVE penalty shown in note with [-L][-S] convention
         breakdown.Add(New SignalBreakdownItem("BBW Squeeze", bbwLongHit, bbwShortHit, bbwNote))
 
         breakdown.Add(New SignalBreakdownItem("EMA 9/21/50", emaBull, emaBear,
@@ -264,7 +256,6 @@ Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("OFI", ofiBuy, ofiSell,
             String.Format("Ratio:{0:F2} | {1}", r.OFIRatio, r.OFISignal)))
 
-        ' Liq Penalty -- [L] mark means long side was penalised, [S] means short side penalised
         Dim liqNote As String = String.Format("L:{0:F0} S:{1:F0} | {2}", r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         If liqLongPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [L]", liqLongPenalty)
         If liqShortPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [S]", liqShortPenalty)
@@ -400,7 +391,7 @@ Public Class ScoringEngine
         Select Case posState
             Case PositionState.InLong
                 If r.ROC < 0 Then Return "EXIT -- momentum break (ROC crossed below 0)"
-                If r.OBVDivergence = "BEARISH" Then Return "EXIT -- RSI/OBV bearish divergence"
+                If r.OBVDivergence = "BEARISH" Then Return "EXIT -- OBV bearish divergence"
                 If r.ROC > 0.6 Then Return "TAKE PROFIT -- extreme momentum, tighten stops"
                 If r.RSI > 60 Then Return "HOLD -- momentum intact"
                 If r.RSI >= 40 Then Return "EVALUATE -- momentum weakening, consider scaling out"
