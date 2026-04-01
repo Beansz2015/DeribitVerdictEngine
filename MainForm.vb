@@ -1,4 +1,4 @@
-' MainForm.vb  v0.23
+' MainForm.vb  v0.24
 ' Header row constants:
 '   HDR_Y=8, HDR_H=42
 '   rbNone  : X=120, Y=HDR_Y+12=20  (centred)
@@ -37,7 +37,12 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.23"
+        Me.Text = "Deribit Verdict Engine v0.24"
+
+        ' Initialise settings loader — must be first so all engines read correct thresholds
+        Dim settingsPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json")
+        SettingsLoader.Initialise(settingsPath)
+
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
