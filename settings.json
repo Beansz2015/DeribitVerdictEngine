@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "last_modified": "2026-04-01T00:00:00Z",
+  "modified_by": "manual",
+  "change_log": [],
+  "indicators": {
+    "ADX":      { "period": 9,  "trend_threshold": 25.0, "range_threshold": 20.0 },
+    "RSI":      { "period": 9,  "oversold": 40.0, "overbought": 60.0,
+                  "partial_oversold": 50.0, "partial_overbought": 50.0 },
+    "ROC":      { "period": 9,  "slope_sensitivity": 0.1 },
+    "VWAP":     { "dev_threshold_pct": 0.30 },
+    "BBW":      { "period": 20, "std_dev": 2.0, "releasing_roc_threshold": 0.1 },
+    "EMA":      { "fast": 9,   "mid": 21,  "slow": 50 },
+    "EMA200":   { "timeframe_minutes": 5 },
+    "Donchian": { "period": 20 },
+    "OBV":      { "lookback": 10 },
+    "ATR":      { "period": 7,  "ref_period": 20,
+                  "static_ref": 150.0, "scale_min": 0.25, "scale_max": 4.0 },
+    "OFI":      { "book_depth": 5,
+                  "buy_dominant_ratio": 3.0, "sell_dominant_ratio": 0.333 },
+    "Volume":   { "sma_period": 9,
+                  "static_high": 3.0, "static_mid": 2.0,
+                  "dynamic_high_clamp_min": 1.5, "dynamic_high_clamp_max": 6.0,
+                  "dynamic_mid_clamp_min": 1.2, "dynamic_mid_clamp_max": 4.0 },
+    "VWAPDynamic": { "dev_clamp_min": 0.30, "dev_clamp_max": 3.0,
+                     "static_fallback": 1.5 },
+    "Liquidations": { "long_liq_threshold": 50000.0, "short_liq_threshold": 50000.0,
+                       "large_liq_size": 200.0, "dominance_ratio": 2.0 },
+    "OI":       { "neutral_band_pct": 0.05 },
+    "DMI":      { "period": 9 }
+  },
+  "scoring": {
+    "long_threshold": 6,
+    "short_threshold": 6,
+    "strong_long_threshold": 12,
+    "strong_short_threshold": 12,
+    "medium_long_threshold": 9,
+    "medium_short_threshold": 9,
+    "transitional_penalty_enabled": true,
+    "funding_high_positive": 0.001,
+    "funding_low_positive": 0.0005,
+    "funding_high_negative": -0.001,
+    "funding_low_negative": -0.0005,
+    "weights": {
+      "ROC": 1, "RSI": 1, "DMI": 1, "ADX": 1,
+      "Volume": 1, "VWAP": 1, "BBW": 1, "EMA": 1,
+      "OI": 1, "OFI": 1, "LiqPenalty": 1,
+      "EMA200": 1, "Donchian": 1, "OBV": 1
+    }
+  },
+  "regime_gates": {
+    "suppress_long_in_trending_down": true,
+    "suppress_short_in_trending_up": true,
+    "transitional_adx_penalty_low": 20.0,
+    "transitional_adx_penalty_mid": 22.5,
+    "transitional_adx_penalty_high": 25.0,
+    "transitional_penalty_low": 2,
+    "transitional_penalty_mid": 1
+  }
+}
