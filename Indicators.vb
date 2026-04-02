@@ -1,6 +1,9 @@
-' Indicators.vb
+' Indicators.vb  v0.28
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
+'
+' v0.28 -- CalcOFI rewritten: top-3 levels only, volume-weighted (w=3,2,1).
+'          Two new IndicatorResults fields: OFIBidVol, OFIAskVol (weighted sums for display).
 
 Public Class IndicatorResults
     ' Core
@@ -9,7 +12,7 @@ Public Class IndicatorResults
     Public Property RSI As Double
     Public Property RSIDivergence As String  ' NONE / BULLISH / BEARISH
     Public Property ATR As Double
-    Public Property ATRAvg20d As Double      ' approximated from fetched 1m history
+    Public Property ATRAvg20d As Double
     Public Property ATRSizeMultiplier As Double
     Public Property VolumeSMA9 As Double
     Public Property CurrentVolume As Double  ' BTC volume -- used for scoring
@@ -43,6 +46,8 @@ Public Class IndicatorResults
     ' Tier 2
     Public Property OFIRatio As Double
     Public Property OFISignal As String      ' BUY DOMINANT / SELL DOMINANT / BALANCED
+    Public Property OFIBidVol As Double      ' weighted bid volume (top-3, w=3,2,1) -- display only
+    Public Property OFIAskVol As Double      ' weighted ask volume (top-3, w=3,2,1) -- display only
     Public Property LiqLongSize As Double
     Public Property LiqShortSize As Double
     Public Property LiqSignal As String
@@ -63,7 +68,6 @@ End Class
 Public Class IndicatorEngine
 
     ' -- DMI + ADX ------------------------------------------------------------
-    ' period = 9, smoothing = 9 (Wilder smoothing)
     Public Shared Sub CalcDMI(candles As List(Of Candle), period As Integer,
                                ByRef plusDI As Double, ByRef minusDI As Double, ByRef adx As Double)
         If candles.Count < period + 2 Then
@@ -196,7 +200,6 @@ Public Class IndicatorEngine
         Next
         Dim avgGain As Double = gains.Take(period).Average()
         Dim avgLoss As Double = losses.Take(period).Average()
-        ' seed first value
         Dim rsiVal As Double = If(avgLoss = 0, 100, 100 - (100 / (1 + avgGain / avgLoss)))
         result.Add(rsiVal)
         For i As Integer = period To gains.Count - 1
@@ -209,10 +212,6 @@ Public Class IndicatorEngine
     End Function
 
     ' -- RSI Divergence -------------------------------------------------------
-    ' Compares recent 5-bar window vs previous 5-bar window on both price and RSI.
-    ' Same approach as OBV divergence for consistency.
-    ' Bearish: price up, RSI down  --> momentum weakening into a high
-    ' Bullish: price down, RSI up  --> momentum recovering into a low
     Public Shared Function CalcRSIDivergence(candles As List(Of Candle), period As Integer) As String
         If candles.Count < period + 12 Then Return "NONE"
         Dim rsiSeries = CalcRSISeries(candles, period)
@@ -353,15 +352,34 @@ Public Class IndicatorEngine
         End If
     End Sub
 
-    ' -- Order Flow Imbalance -------------------------------------------------
+    ' -- Order Flow Imbalance (top-3 volume-weighted) -------------------------
+    ' Weights: L1=3, L2=2, L3=1  (sum=6 each side).
+    ' Rationale: L1 is the most actively contested level and carries 3x the
+    ' influence of L3.  Full-book OFI is diluted by stale deep resting orders
+    ' that will not be consumed on a 1m scalp move.
+    ' OFIBidVol / OFIAskVol are the raw weighted sums exposed for display.
     Public Shared Sub CalcOFI(book As OrderBookSnapshot,
-                               ByRef ratio As Double, ByRef signal As String)
-        ratio = 1.0 : signal = "BALANCED"
+                               ByRef ratio As Double, ByRef signal As String,
+                               ByRef bidVol As Double, ByRef askVol As Double)
+        ratio = 1.0 : signal = "BALANCED" : bidVol = 0 : askVol = 0
         If book.Bids.Count = 0 OrElse book.Asks.Count = 0 Then Return
-        Dim bidVol As Double = book.Bids.Take(5).Sum(Function(b) b.Size)
-        Dim askVol As Double = book.Asks.Take(5).Sum(Function(a) a.Size)
+
+        ' Linear weights: level 1 = weight 3, level 2 = weight 2, level 3 = weight 1
+        Dim weights() As Double = {3.0, 2.0, 1.0}
+        Dim bidLevels As Integer = Math.Min(3, book.Bids.Count)
+        Dim askLevels As Integer = Math.Min(3, book.Asks.Count)
+
+        For i As Integer = 0 To bidLevels - 1
+            bidVol += book.Bids(i).Size * weights(i)
+        Next
+        For i As Integer = 0 To askLevels - 1
+            askVol += book.Asks(i).Size * weights(i)
+        Next
+
         If askVol = 0 Then Return
         ratio = bidVol / askVol
+
+        ' Thresholds: same as before (3:1 strong imbalance)
         If ratio >= 3.0 Then
             signal = "BUY DOMINANT"
         ElseIf ratio <= 1.0 / 3.0 Then
