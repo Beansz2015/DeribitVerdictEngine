@@ -1,4 +1,4 @@
-' MainForm.vb  v0.24
+' MainForm.vb  v0.25
 ' Header row constants:
 '   HDR_Y=8, HDR_H=42
 '   rbNone  : X=120, Y=HDR_Y+12=20  (centred)
@@ -9,6 +9,9 @@
 '   VRD_X=430  (286+140+4)
 '   TXT_Y=56
 '   STATUS_H=18
+'
+' v0.25 -- SCORE line now shows regime-aware MaxScore (e.g. 6/17 TRENDING, 6/16 RANGE_BOUND, 6/13 TRANSITIONAL)
+'          Title bar updated to v0.25
 
 Imports System.Drawing
 Imports System.IO
@@ -37,12 +40,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.24"
-
-        ' Initialise settings loader — must be first so all engines read correct thresholds
-        Dim settingsPath As String = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json")
-        SettingsLoader.Initialise(settingsPath)
-
+        Me.Text = "Deribit Verdict Engine v0.25"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -420,7 +418,8 @@ Public Class MainForm
             usdStr = "$" & r.CurrentVolumeUSD.ToString("F0")
         End If
 
-        Dim maxScore As Integer = ScoringEngine.MaxScore
+        ' v0.25: use regime-aware MaxScore from VerdictResult (17/16/13)
+        Dim maxScore As Integer = v.MaxScore
         Dim scoreLine As String
         If v.RegimePenalty > 0 Then
             scoreLine = String.Format("Long {0}/{2} (eff.{1})  |  Short {3}/{2} (eff.{4})  |  TRANSITIONAL penalty: -{5}",
