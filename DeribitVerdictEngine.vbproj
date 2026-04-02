@@ -10,12 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Core Settings (Phase 1A/1B) -->
-    <Compile Include="Core\Settings\EngineSettings.vb" />
-    <Compile Include="Core\Settings\SettingsLoader.vb" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Websocket.Client" Version="5.1.2" />
   </ItemGroup>
 
