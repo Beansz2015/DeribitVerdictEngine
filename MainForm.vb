@@ -1,18 +1,7 @@
-' MainForm.vb  v0.27
-' Header row constants:
-'   HDR_Y=8, HDR_H=42
-'   rbNone  : X=120, Y=HDR_Y+12=20  (centred)
-'   rbLong  : X=210, Y=HDR_Y+2=10   (top of stack)
-'   rbShort : X=210, Y=HDR_Y+22=30  (bottom of stack)
-'   BTN_X=286  (stack ends ~278, +8px)
-'   BTN_W=140
-'   VRD_X=430  (286+140+4)
-'   TXT_Y=56
-'   STATUS_H=18
-'
-' v0.25 -- SCORE line now shows regime-aware MaxScore
-' v0.26 -- RSI divergence in CORE SIGNALS; ATR stop/target in POSITION SIZING
-' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS (first thing after header)
+' MainForm.vb  v0.28
+' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
+' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
+'          OFI display line now shows weighted bid/ask volumes.
 
 Imports System.Drawing
 Imports System.IO
@@ -25,7 +14,7 @@ Public Class MainForm
     Private Const HDR_H As Integer = 42
     Private Const BTN_X As Integer = 286
     Private Const BTN_W As Integer = 140
-    Private Const VRD_X As Integer = 430    ' BTN_X + BTN_W + 4
+    Private Const VRD_X As Integer = 430
     Private Const TXT_Y As Integer = 56
     Private Const STATUS_H As Integer = 18
 
@@ -41,7 +30,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.27"
+        Me.Text = "Deribit Verdict Engine v0.28"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -367,7 +356,8 @@ Public Class MainForm
             r.OISignal = "NEUTRAL"
         End If
 
-        IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal)
+        ' v0.28: updated call site -- pass ByRef OFIBidVol and OFIAskVol
+        IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
 
         r.EMA200_5m = IndicatorEngine.CalcEMA(candles5m, 200)
@@ -424,7 +414,6 @@ Public Class MainForm
 
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
 
-        ' ATR-based stop/target levels (1.5x scaled ATR = stop; 3.0x = target; 1:2 R:R)
         Dim atrStop   As Double = r.ATR * norms.ATRScaleFactor * 1.5
         Dim atrTarget As Double = r.ATR * norms.ATRScaleFactor * 3.0
         Dim longStop   As Double = r.CurrentPrice - atrStop
@@ -432,7 +421,6 @@ Public Class MainForm
         Dim shortStop  As Double = r.CurrentPrice + atrStop
         Dim shortTarget As Double = r.CurrentPrice - atrTarget
 
-        ' ── HEADER BLOCK ────────────────────────────────────────────────────
         sb.AppendLine("===========================================================")
         sb.AppendLine("  VERDICT:    " & v.Verdict)
         sb.AppendLine("  CONFIDENCE: " & v.Confidence)
@@ -441,7 +429,6 @@ Public Class MainForm
         sb.AppendLine("===========================================================")
         sb.AppendLine()
 
-        ' ── ATR ENTRY LEVELS (first actionable block) ───────────────────────
         sb.AppendLine("ATR ENTRY LEVELS:  (ATR " & r.ATR.ToString("F2") & " x " & norms.ATRScaleFactor.ToString("F2") & " scale | 1.5x stop / 3.0x target)")
         sb.AppendLine("  Long:   Stop " & longStop.ToString("F1").PadLeft(9) &
                       "  |  Entry " & r.CurrentPrice.ToString("F1").PadLeft(9) &
@@ -453,7 +440,6 @@ Public Class MainForm
                       "    R:R  1:2  (risk " & atrStop.ToString("F1") & " / rwd " & atrTarget.ToString("F1") & ")")
         sb.AppendLine()
 
-        ' ── DYNAMIC NORMS ───────────────────────────────────────────────────
         sb.AppendLine("DYNAMIC NORMS  [" & normMode & "]")
         sb.AppendLine("  Vol threshold : H:" & norms.VolHighThreshold.ToString("F2") & "x" &
                       "  M:" & norms.VolMidThreshold.ToString("F2") & "x" &
@@ -464,12 +450,10 @@ Public Class MainForm
                       "  (ATR=" & r.ATR.ToString("F2") & "  ref=" & norms.ATRRef.ToString("F2") & ")")
         sb.AppendLine()
 
-        ' ── REGIME ──────────────────────────────────────────────────────────
         sb.AppendLine("REGIME (5m): " & r.Regime)
         sb.AppendLine("  ADX: " & r.ADX.ToString("F1") & "  |  +DI: " & r.PlusDI.ToString("F1") & "  |  -DI: " & r.MinusDI.ToString("F1"))
         sb.AppendLine()
 
-        ' ── CORE SIGNALS ────────────────────────────────────────────────────
         sb.AppendLine("CORE SIGNALS (1m):")
         sb.AppendLine("  ROC(9):       " & r.ROC.ToString("F3") & "  |  Slope: " & r.ROCSlope)
         Dim rsiDiv As String = If(String.IsNullOrEmpty(r.RSIDivergence) OrElse r.RSIDivergence = "NONE",
@@ -480,7 +464,6 @@ Public Class MainForm
                       "  |  vs SMA: " & r.VolumeRatio.ToString("F2") & "x  |  SMA: " & r.VolumeSMA9.ToString("F4") & " BTC")
         sb.AppendLine()
 
-        ' ── TIER 1 ──────────────────────────────────────────────────────────
         sb.AppendLine("TIER 1 SIGNALS:")
         sb.AppendLine("  VWAP:         " & r.VWAP.ToString("F1") & "  |  Dev: " & r.VWAPDevPct.ToString("F2") & "%  |  Price: " & r.CurrentPrice.ToString("F1"))
         sb.AppendLine("  BBW:          " & r.BBW.ToString("F4") & "  |  Squeeze: " & r.SqueezeStatus)
@@ -489,31 +472,31 @@ Public Class MainForm
         sb.AppendLine("  OI Change:    15m: " & r.OIChange15m.ToString("F2") & "%  |  60m: " & r.OIChange60m.ToString("F2") & "%  |  " & r.OISignal)
         sb.AppendLine()
 
-        ' ── TIER 2 ──────────────────────────────────────────────────────────
         sb.AppendLine("TIER 2 SIGNALS:")
-        sb.AppendLine("  Order Flow:   " & r.OFISignal & "  |  Bid/Ask Ratio: " & r.OFIRatio.ToString("F2"))
+        ' v0.28: OFI line shows weighted bid/ask volumes (top-3, w=3,2,1) alongside ratio and signal
+        sb.AppendLine("  Order Flow:   " & r.OFISignal &
+                      "  |  Ratio: " & r.OFIRatio.ToString("F2") &
+                      "  |  Bid(w): " & r.OFIBidVol.ToString("F1") &
+                      "  Ask(w): " & r.OFIAskVol.ToString("F1") &
+                      "  [top-3 wtd]")
         sb.AppendLine("  Liquidations: " & r.LiqSignal & "  |  Long Liqs: " & r.LiqLongSize.ToString("F0") & "  Short Liqs: " & r.LiqShortSize.ToString("F0"))
         sb.AppendLine("  5m EMA(200):  " & r.EMA200_5m.ToString("F1") & "  |  " & r.PriceVsEMA200)
         sb.AppendLine()
 
-        ' ── TIER 3 ──────────────────────────────────────────────────────────
         sb.AppendLine("TIER 3 SIGNALS:")
         sb.AppendLine("  Donchian(20): Upper:" & r.DonchianUpper.ToString("F1") & "  Lower:" & r.DonchianLower.ToString("F1") & "  |  " & r.DonchianSignal)
         sb.AppendLine("  OBV:          Trend:" & r.OBVTrend & "  |  Divergence:" & r.OBVDivergence)
         sb.AppendLine()
 
-        ' ── POSITION SIZING (ATR detail row only; levels now above) ─────────
         sb.AppendLine("POSITION SIZING:")
         sb.AppendLine("  ATR(7):       " & r.ATR.ToString("F2") & "  |  Scale: " & norms.ATRScaleFactor.ToString("F2") & "x" &
                       "  (ref " & norms.ATRRef.ToString("F2") & ")")
         sb.AppendLine()
 
-        ' ── HOLD/EXIT ───────────────────────────────────────────────────────
         sb.AppendLine("HOLD/EXIT STATUS:")
         sb.AppendLine("  " & v.HoldStatus)
         sb.AppendLine()
 
-        ' ── SIGNAL BREAKDOWN ────────────────────────────────────────────────
         sb.AppendLine("SIGNAL BREAKDOWN:")
         sb.AppendLine("  " & "Indicator".PadRight(20) & "Long".PadLeft(6) & "Short".PadLeft(7) & "  Note")
         sb.AppendLine("  " & New String("-"c, 65))
