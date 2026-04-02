@@ -99,8 +99,9 @@ Public Class SettingsLoader
     End Sub
 
     Private Shared Sub StartWatcher(path As String)
-        Dim dir As String = Path.GetDirectoryName(path)
-        Dim fileName As String = Path.GetFileName(path)
+        ' Fully-qualified to avoid collision with System.Windows.Shapes.Path in WinForms projects.
+        Dim dir As String = System.IO.Path.GetDirectoryName(path)
+        Dim fileName As String = System.IO.Path.GetFileName(path)
         If String.IsNullOrEmpty(dir) OrElse Not Directory.Exists(dir) Then Return
 
         _watcher = New FileSystemWatcher(dir, fileName) With {
