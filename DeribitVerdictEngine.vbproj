@@ -1,16 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>DeribitVerdictEngine</RootNamespace>
-    <AssemblyName>DeribitVerdictEngine</AssemblyName>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <Nullable>disable</Nullable>
-    <ImplicitUsings>disable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>DeribitVerdictEngine</AssemblyName>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <!-- Core Settings (Phase 1A/1B) -->
+    <Compile Include="Core\Settings\EngineSettings.vb" />
+    <Compile Include="Core\Settings\SettingsLoader.vb" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Websocket.Client" Version="5.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copy settings.json to output directory so the app finds it at runtime -->
+    <None Include="settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

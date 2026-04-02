@@ -1,43 +1,32 @@
-' DynamicNorms.vb  v0.23
+' DynamicNorms.vb  v0.24
 ' Computes live normalization thresholds from candle data fetched each run.
 ' No log dependency -- fully self-contained per Analyze Now click.
-'
-' Method 1: candle-derived mean+stddev for VolumeRatio and VWAPDevPct
-' Method 3: ATR-scaling for ATRSizeMultiplier bounds
-'
-' Falls back to static defaults if candle data is insufficient (<30 rows).
+' v0.24: Static fallback constants now driven by SettingsLoader.Current.
 
 Public Class DynamicNorms
 
-    ' Volume thresholds (VolumeRatio)
-    Public Property VolHighThreshold As Double   ' full signal  (mean + 2σ)
-    Public Property VolMidThreshold As Double    ' partial      (mean + 1σ)
+    Public Property VolHighThreshold As Double
+    Public Property VolMidThreshold As Double
     Public Property VolMean As Double
     Public Property VolStdDev As Double
-
-    ' VWAP deviation threshold (absolute %)
-    Public Property VWAPDevThreshold As Double   ' 1σ of close-vs-VWAP pct over last 50 candles
-
-    ' ATR scaling
-    Public Property ATRScaleFactor As Double     ' ATR_current / ATR_ref
-    Public Property ATRRef As Double             ' rolling mean of last 100 1m ATR values
-
-    ' Whether norms are live (True) or static fallback (False)
+    Public Property VWAPDevThreshold As Double
+    Public Property ATRScaleFactor As Double
+    Public Property ATRRef As Double
     Public Property IsLive As Boolean
 
-    ' Static fallback constants
-    Public Const STATIC_VOL_HIGH As Double = 3.0
-    Public Const STATIC_VOL_MID As Double = 2.0
-    Public Const STATIC_VWAP_DEV As Double = 1.5
-    Public Const ATR_REF_DEFAULT As Double = 150.0
-    Public Const ATR_SCALE_MIN As Double = 0.25
-    Public Const ATR_SCALE_MAX As Double = 4.0
+    ' Convenience accessors to settings (read-only, for callers that want raw constants)
+    Public Shared ReadOnly Property StaticVolHigh As Double
+        Get : Return SettingsLoader.Current.Indicators.Volume.StaticHigh : End Get
+    End Property
+    Public Shared ReadOnly Property StaticVolMid As Double
+        Get : Return SettingsLoader.Current.Indicators.Volume.StaticMid : End Get
+    End Property
+    Public Shared ReadOnly Property StaticVWAPDev As Double
+        Get : Return SettingsLoader.Current.Indicators.VWAPDynamic.StaticFallback : End Get
+    End Property
 
-    ''' <summary>
-    ''' Compute dynamic norms from 1m candle list.
-    ''' Requires at least 30 candles for live mode; otherwise returns static fallback.
-    ''' </summary>
     Public Shared Function Compute(candles1m As List(Of Candle), currentATR As Double) As DynamicNorms
+        Dim cfg = SettingsLoader.Current.Indicators
         Dim n As New DynamicNorms()
 
         If candles1m Is Nothing OrElse candles1m.Count < 30 Then
@@ -45,8 +34,6 @@ Public Class DynamicNorms
         End If
 
         ' -- Method 1a: Volume normalization ----------------------------------
-        ' Use last 100 candles (or all available), exclude current (last) candle
-        ' to avoid self-reference on the candle being scored.
         Dim volWindow = candles1m.Take(Math.Min(100, candles1m.Count - 1)).
                                   Select(Function(c) c.Volume).ToList()
         If volWindow.Count < 10 Then
@@ -60,23 +47,17 @@ Public Class DynamicNorms
         n.VolMean = volMean
         n.VolStdDev = volSD
 
-        ' Guard: if SD is near zero (flat volume), fall back to static
         If volSD < volMean * 0.05 Then
-            n.VolHighThreshold = STATIC_VOL_HIGH
-            n.VolMidThreshold = STATIC_VOL_MID
+            n.VolHighThreshold = cfg.Volume.StaticHigh
+            n.VolMidThreshold  = cfg.Volume.StaticMid
         Else
-            ' Thresholds expressed as multiples of VolMean (VolumeRatio = CurrentVol / VolumeSMA9)
-            ' We normalise by expressing mean+Nσ as a ratio over the SMA9 approximation.
-            ' VolumeSMA9 ≈ volMean for large windows; safe approximation here.
             Dim highRaw As Double = (volMean + 2.0 * volSD) / volMean
-            Dim midRaw As Double = (volMean + 1.0 * volSD) / volMean
-            ' Clamp to sensible range to prevent absurd thresholds on low-vol sessions
-            n.VolHighThreshold = Math.Clamp(highRaw, 1.5, 6.0)
-            n.VolMidThreshold = Math.Clamp(midRaw, 1.2, 4.0)
+            Dim midRaw As Double  = (volMean + 1.0 * volSD) / volMean
+            n.VolHighThreshold = Math.Clamp(highRaw, cfg.Volume.DynamicHighClampMin, cfg.Volume.DynamicHighClampMax)
+            n.VolMidThreshold  = Math.Clamp(midRaw,  cfg.Volume.DynamicMidClampMin,  cfg.Volume.DynamicMidClampMax)
         End If
 
         ' -- Method 1b: VWAP deviation normalization --------------------------
-        ' Compute rolling VWAPDevPct for last 50 candles (excluding current)
         Dim vwapDevSamples As New List(Of Double)()
         Dim vwapWindow = candles1m.Take(Math.Min(50, candles1m.Count - 1)).ToList()
         If vwapWindow.Count >= 10 Then
@@ -95,35 +76,33 @@ Public Class DynamicNorms
             Next
         End If
 
+        Dim vd = cfg.VWAPDynamic
         If vwapDevSamples.Count >= 10 Then
             Dim devMean As Double = vwapDevSamples.Average()
-            Dim devVar As Double = vwapDevSamples.Average(Function(d) (d - devMean) ^ 2)
-            Dim devSD As Double = Math.Sqrt(devVar)
-            ' Use mean + 1σ as the boundary, clamped to [0.3%, 3.0%]
-            n.VWAPDevThreshold = Math.Clamp(devMean + devSD, 0.3, 3.0)
+            Dim devVar As Double  = vwapDevSamples.Average(Function(d) (d - devMean) ^ 2)
+            Dim devSD As Double   = Math.Sqrt(devVar)
+            n.VWAPDevThreshold = Math.Clamp(devMean + devSD, vd.DevClampMin, vd.DevClampMax)
         Else
-            n.VWAPDevThreshold = STATIC_VWAP_DEV
+            n.VWAPDevThreshold = vd.StaticFallback
         End If
 
         ' -- Method 3: ATR scaling --------------------------------------------
         n.ATRRef = ComputeATRRef(candles1m)
+        Dim atrCfg = cfg.ATR
         If n.ATRRef > 0 AndAlso currentATR > 0 Then
-            n.ATRScaleFactor = Math.Clamp(currentATR / n.ATRRef, ATR_SCALE_MIN, ATR_SCALE_MAX)
+            n.ATRScaleFactor = Math.Clamp(currentATR / n.ATRRef, atrCfg.ScaleMin, atrCfg.ScaleMax)
         Else
             n.ATRScaleFactor = 1.0
-            n.ATRRef = ATR_REF_DEFAULT
+            n.ATRRef = atrCfg.StaticRef
         End If
 
         n.IsLive = True
         Return n
     End Function
 
-    ''' <summary>
-    ''' Compute ATR reference as the mean of ATR(7) values across the last 100 candles.
-    ''' </summary>
     Private Shared Function ComputeATRRef(candles As List(Of Candle)) As Double
-        Const period As Integer = 7
-        If candles.Count < period + 10 Then Return ATR_REF_DEFAULT
+        Dim period As Integer = SettingsLoader.Current.Indicators.ATR.Period
+        If candles.Count < period + 10 Then Return SettingsLoader.Current.Indicators.ATR.StaticRef
 
         Dim atrValues As New List(Of Double)()
         Dim sampleCount As Integer = Math.Min(100, candles.Count - period)
@@ -140,19 +119,18 @@ Public Class DynamicNorms
             atrValues.Add(trValues.Average())
         Next
 
-        Return If(atrValues.Count > 0, atrValues.Average(), ATR_REF_DEFAULT)
+        Return If(atrValues.Count > 0, atrValues.Average(), SettingsLoader.Current.Indicators.ATR.StaticRef)
     End Function
 
-    ''' <summary>
-    ''' Static fallback used when candle data is insufficient.
-    ''' </summary>
     Private Shared Function StaticFallback(currentATR As Double) As DynamicNorms
+        Dim cfg = SettingsLoader.Current.Indicators
         Dim n As New DynamicNorms()
-        n.VolHighThreshold = STATIC_VOL_HIGH
-        n.VolMidThreshold = STATIC_VOL_MID
-        n.VWAPDevThreshold = STATIC_VWAP_DEV
-        n.ATRRef = ATR_REF_DEFAULT
-        n.ATRScaleFactor = If(currentATR > 0, Math.Clamp(currentATR / ATR_REF_DEFAULT, ATR_SCALE_MIN, ATR_SCALE_MAX), 1.0)
+        n.VolHighThreshold = cfg.Volume.StaticHigh
+        n.VolMidThreshold  = cfg.Volume.StaticMid
+        n.VWAPDevThreshold = cfg.VWAPDynamic.StaticFallback
+        n.ATRRef           = cfg.ATR.StaticRef
+        n.ATRScaleFactor   = If(currentATR > 0,
+            Math.Clamp(currentATR / cfg.ATR.StaticRef, cfg.ATR.ScaleMin, cfg.ATR.ScaleMax), 1.0)
         n.IsLive = False
         Return n
     End Function

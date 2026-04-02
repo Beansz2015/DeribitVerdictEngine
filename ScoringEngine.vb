@@ -1,7 +1,10 @@
-' ScoringEngine.vb  v0.23
+' ScoringEngine.vb  v0.25
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
+' v0.25: VerdictResult now carries MaxScore (regime-aware: 17 TRENDING / 16 RANGE_BOUND / 13 TRANSITIONAL).
+'        Verdict thresholds scaled proportionally per regime.
+'        ScoringEngine.MaxScore const kept for legacy reference (= 17, the theoretical ceiling).
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -20,6 +23,8 @@ Public Class VerdictResult
     Public Property EffectiveLongScore As Integer
     Public Property EffectiveShortScore As Integer
     Public Property RegimePenalty As Integer
+    ''' <summary>Regime-aware maximum achievable score. 17=TRENDING, 16=RANGE_BOUND, 13=TRANSITIONAL.</summary>
+    Public Property MaxScore As Integer
     Public Property Verdict As String
     Public Property Confidence As String
     Public Property HoldStatus As String
@@ -48,14 +53,45 @@ End Class
 
 Public Class ScoringEngine
 
-    ' Max achievable score after removing non-directional padding points
-    Public Const MaxScore As Integer = 13
+    ' Theoretical max score (TRENDING regime, all signals firing). Legacy reference.
+    Public Const MaxScore As Integer = 17
+
+    ' Regime-specific max achievable scores
+    ' TRENDING:     17  (regime bonus +4 available)
+    ' RANGE_BOUND:  16  (no ADX bonus, one partial upgrade less likely)
+    ' TRANSITIONAL: 13  (ADX penalty applied)
+    Public Shared Function RegimeMaxScore(regime As String) As Integer
+        Select Case regime
+            Case "TRENDING_UP", "TRENDING_DOWN" : Return 17
+            Case "RANGE_BOUND"                  : Return 16
+            Case Else                           : Return 13   ' TRANSITIONAL
+        End Select
+    End Function
+
+    ' Verdict thresholds as % of MaxScore (proportional across regimes)
+    '   STRONG : >= 70%   -> 12 / 12 / 10
+    '   MED    : >= 53%   ->  9 /  9 /  7
+    '   WEAK   : >= 35%   ->  6 /  6 /  5
+    ' Rounded up so thresholds are always whole numbers achievable in practice.
+    Private Shared Function ThresholdStrong(maxScore As Integer) As Integer
+        Return CInt(Math.Ceiling(maxScore * 0.70))
+    End Function
+    Private Shared Function ThresholdMed(maxScore As Integer) As Integer
+        Return CInt(Math.Ceiling(maxScore * 0.53))
+    End Function
+    Private Shared Function ThresholdWeak(maxScore As Integer) As Integer
+        Return CInt(Math.Ceiling(maxScore * 0.35))
+    End Function
 
     Public Shared Function Calculate(r As IndicatorResults, posState As PositionState,
                                      norms As DynamicNorms) As VerdictResult
         Dim res As New VerdictResult()
         Dim breakdown = res.SignalBreakdown
         Dim state As New ScoreState()
+
+        ' Determine regime-aware MaxScore up front so VerdictResult always carries it
+        Dim regimeMax As Integer = RegimeMaxScore(r.Regime)
+        res.MaxScore = regimeMax
 
         ' -- Step 2: Weighted Signal Scoring ----------------------------------
 
@@ -85,8 +121,6 @@ Public Class ScoringEngine
         AddFull(state, adxLong, adxShort, SignalCategory.MarketStructure)
 
         ' Volume (Volume) -- thresholds from DynamicNorms
-        ' Full: >= VolHighThreshold x SMA, confirmed by ROC direction AND price vs VWAP
-        ' Partial: >= VolMidThreshold x SMA, display note only, no score
         Dim volHigh As Double = norms.VolHighThreshold
         Dim volMid As Double = norms.VolMidThreshold
         Dim volLong As Boolean = r.VolumeRatio >= volHigh AndAlso r.ROC > 0 AndAlso r.CurrentPrice > r.VWAP
@@ -144,7 +178,7 @@ Public Class ScoringEngine
         AddFull(state, oiLong, oiShort, SignalCategory.Microstructure)
 
         ' TIER 2
-        ' OFI (Microstructure) -- static thresholds retained (instantaneous ratio)
+        ' OFI (Microstructure)
         Dim ofiBuy As Boolean = r.OFISignal = "BUY DOMINANT"
         Dim ofiSell As Boolean = r.OFISignal = "SELL DOMINANT"
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
@@ -204,7 +238,7 @@ Public Class ScoringEngine
         If obvLongUpgraded Then state.LongScore += 1
         If obvShortUpgraded Then state.ShortScore += 1
 
-        ' Breakdown notes include dynamic threshold values
+        ' Breakdown notes
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC")
 
         breakdown.Add(New SignalBreakdownItem("ROC(9)", rocLong OrElse rocLongUpgraded, rocShort OrElse rocShortUpgraded,
@@ -317,24 +351,29 @@ Public Class ScoringEngine
                 effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss))
         End Select
 
-        ' -- Step 5: Generate Verdict -----------------------------------------
+        ' -- Step 5: Generate Verdict (proportional thresholds) ---------------
         res.LongScore = ls
         res.ShortScore = ss
         res.EffectiveLongScore = effectiveLS
         res.EffectiveShortScore = effectiveSS
         res.RegimePenalty = adxPenalty
+        ' res.MaxScore already set above
 
-        If effectiveLS >= 12 Then
+        Dim tStrong As Integer = ThresholdStrong(regimeMax)  ' 12 / 12 / 10
+        Dim tMed    As Integer = ThresholdMed(regimeMax)     '  9 /  9 /  7
+        Dim tWeak   As Integer = ThresholdWeak(regimeMax)    '  6 /  6 /  5
+
+        If effectiveLS >= tStrong Then
             res.Verdict = "STRONG LONG" : res.Confidence = "HIGH"
-        ElseIf effectiveLS >= 9 Then
+        ElseIf effectiveLS >= tMed Then
             res.Verdict = "LONG" : res.Confidence = "MEDIUM"
-        ElseIf effectiveLS >= 6 Then
+        ElseIf effectiveLS >= tWeak Then
             res.Verdict = "WEAK LONG" : res.Confidence = "LOW"
-        ElseIf effectiveSS >= 12 Then
+        ElseIf effectiveSS >= tStrong Then
             res.Verdict = "STRONG SHORT" : res.Confidence = "HIGH"
-        ElseIf effectiveSS >= 9 Then
+        ElseIf effectiveSS >= tMed Then
             res.Verdict = "SHORT" : res.Confidence = "MEDIUM"
-        ElseIf effectiveSS >= 6 Then
+        ElseIf effectiveSS >= tWeak Then
             res.Verdict = "WEAK SHORT" : res.Confidence = "LOW"
         Else
             res.Verdict = "NO TRADE" : res.Confidence = "N/A"
