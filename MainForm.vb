@@ -1,4 +1,4 @@
-' MainForm.vb  v0.25
+' MainForm.vb  v0.26
 ' Header row constants:
 '   HDR_Y=8, HDR_H=42
 '   rbNone  : X=120, Y=HDR_Y+12=20  (centred)
@@ -12,6 +12,8 @@
 '
 ' v0.25 -- SCORE line now shows regime-aware MaxScore (e.g. 6/17 TRENDING, 6/16 RANGE_BOUND, 6/13 TRANSITIONAL)
 '          Title bar updated to v0.25
+' v0.26 -- RSI divergence surfaced in CORE SIGNALS.
+'          ATR stop/target levels added to POSITION SIZING.
 
 Imports System.Drawing
 Imports System.IO
@@ -40,7 +42,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.25"
+        Me.Text = "Deribit Verdict Engine v0.26"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -431,6 +433,14 @@ Public Class MainForm
 
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
 
+        ' v0.26: ATR stop/target levels (1.5x ATR stop, 3x ATR target = 1:2 R:R)
+        Dim atrStop   As Double = r.ATR * norms.ATRScaleFactor * 1.5
+        Dim atrTarget As Double = r.ATR * norms.ATRScaleFactor * 3.0
+        Dim longStop   As Double = r.CurrentPrice - atrStop
+        Dim longTarget As Double = r.CurrentPrice + atrTarget
+        Dim shortStop  As Double = r.CurrentPrice + atrStop
+        Dim shortTarget As Double = r.CurrentPrice - atrTarget
+
         sb.AppendLine("===========================================================")
         sb.AppendLine("  VERDICT:    " & v.Verdict)
         sb.AppendLine("  CONFIDENCE: " & v.Confidence)
@@ -452,7 +462,11 @@ Public Class MainForm
         sb.AppendLine()
         sb.AppendLine("CORE SIGNALS (1m):")
         sb.AppendLine("  ROC(9):       " & r.ROC.ToString("F3") & "  |  Slope: " & r.ROCSlope)
-        sb.AppendLine("  RSI(9):       " & r.RSI.ToString("F1"))
+        ' v0.26: RSI line now includes divergence if detected
+        Dim rsiDiv As String = If(String.IsNullOrEmpty(r.RSIDivergence) OrElse r.RSIDivergence = "NONE",
+                                  "",
+                                  "  |  Div: " & r.RSIDivergence)
+        sb.AppendLine("  RSI(9):       " & r.RSI.ToString("F1") & rsiDiv)
         sb.AppendLine("  Volume:       " & r.CurrentVolume.ToString("F4") & " BTC (" & usdStr & ")" &
                       "  |  vs SMA: " & r.VolumeRatio.ToString("F2") & "x  |  SMA: " & r.VolumeSMA9.ToString("F4") & " BTC")
         sb.AppendLine()
@@ -475,6 +489,11 @@ Public Class MainForm
         sb.AppendLine("POSITION SIZING:")
         sb.AppendLine("  ATR(7):       " & r.ATR.ToString("F2") & "  |  Scale: " & norms.ATRScaleFactor.ToString("F2") & "x" &
                       "  (ref " & norms.ATRRef.ToString("F2") & ")")
+        ' v0.26: stop = 1.5x scaled ATR, target = 3.0x scaled ATR (1:2 R:R)
+        sb.AppendLine("  Long entry:   Stop " & longStop.ToString("F1") & "  |  Target " & longTarget.ToString("F1") &
+                      "  |  Risk " & atrStop.ToString("F1") & "  Rwd " & atrTarget.ToString("F1"))
+        sb.AppendLine("  Short entry:  Stop " & shortStop.ToString("F1") & "  |  Target " & shortTarget.ToString("F1") &
+                      "  |  Risk " & atrStop.ToString("F1") & "  Rwd " & atrTarget.ToString("F1"))
         sb.AppendLine()
         sb.AppendLine("HOLD/EXIT STATUS:")
         sb.AppendLine("  " & v.HoldStatus)
