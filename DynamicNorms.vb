@@ -1,7 +1,8 @@
-' DynamicNorms.vb  v0.24
+' DynamicNorms.vb  v0.24a
 ' Computes live normalization thresholds from candle data fetched each run.
 ' No log dependency -- fully self-contained per Analyze Now click.
-' v0.24: Static fallback constants now driven by SettingsLoader.Current.
+' v0.24:  Static fallback constants now driven by SettingsLoader.Current.
+' v0.24a: Expanded single-line Get...End Get to multi-line to fix BC30205.
 
 Public Class DynamicNorms
 
@@ -16,13 +17,21 @@ Public Class DynamicNorms
 
     ' Convenience accessors to settings (read-only, for callers that want raw constants)
     Public Shared ReadOnly Property StaticVolHigh As Double
-        Get : Return SettingsLoader.Current.Indicators.Volume.StaticHigh : End Get
+        Get
+            Return SettingsLoader.Current.Indicators.Volume.StaticHigh
+        End Get
     End Property
+
     Public Shared ReadOnly Property StaticVolMid As Double
-        Get : Return SettingsLoader.Current.Indicators.Volume.StaticMid : End Get
+        Get
+            Return SettingsLoader.Current.Indicators.Volume.StaticMid
+        End Get
     End Property
+
     Public Shared ReadOnly Property StaticVWAPDev As Double
-        Get : Return SettingsLoader.Current.Indicators.VWAPDynamic.StaticFallback : End Get
+        Get
+            Return SettingsLoader.Current.Indicators.VWAPDynamic.StaticFallback
+        End Get
     End Property
 
     Public Shared Function Compute(candles1m As List(Of Candle), currentATR As Double) As DynamicNorms
