@@ -1,4 +1,4 @@
-' ScoringEngine.vb  v0.26
+' ScoringEngine.vb  v0.27
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
@@ -7,6 +7,8 @@
 '        ScoringEngine.MaxScore const kept for legacy reference (= 17, the theoretical ceiling).
 ' v0.26: CVD signal block added after OFI, before Liquidations.
 '        CVD divergence penalty applied before liquidation penalty.
+' v0.27: ThresholdStrong/Med/Weak now read from EngineSettings (settings.json) instead of hardcoded pcts.
+'        Calculate() signature updated: accepts EngineSettings as third parameter.
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -70,23 +72,21 @@ Public Class ScoringEngine
         End Select
     End Function
 
-    ' Verdict thresholds as % of MaxScore (proportional across regimes)
-    '   STRONG : >= 70%   -> 12 / 12 / 10
-    '   MED    : >= 53%   ->  9 /  9 /  7
-    '   WEAK   : >= 35%   ->  6 /  6 /  5
+    ' Verdict thresholds derived from settings.json percentages (VerdictStrongPct etc.)
     ' Rounded up so thresholds are always whole numbers achievable in practice.
-    Private Shared Function ThresholdStrong(maxScore As Integer) As Integer
-        Return CInt(Math.Ceiling(maxScore * 0.70))
+    Private Shared Function ThresholdStrong(maxScore As Integer, pct As Double) As Integer
+        Return CInt(Math.Ceiling(maxScore * pct))
     End Function
-    Private Shared Function ThresholdMed(maxScore As Integer) As Integer
-        Return CInt(Math.Ceiling(maxScore * 0.53))
+    Private Shared Function ThresholdMed(maxScore As Integer, pct As Double) As Integer
+        Return CInt(Math.Ceiling(maxScore * pct))
     End Function
-    Private Shared Function ThresholdWeak(maxScore As Integer) As Integer
-        Return CInt(Math.Ceiling(maxScore * 0.35))
+    Private Shared Function ThresholdWeak(maxScore As Integer, pct As Double) As Integer
+        Return CInt(Math.Ceiling(maxScore * pct))
     End Function
 
     Public Shared Function Calculate(r As IndicatorResults, posState As PositionState,
-                                     norms As DynamicNorms) As VerdictResult
+                                     norms As DynamicNorms,
+                                     cfg As EngineSettings) As VerdictResult
         Dim res As New VerdictResult()
         Dim breakdown = res.SignalBreakdown
         Dim state As New ScoreState()
@@ -198,10 +198,10 @@ Public Class ScoringEngine
         Dim liqLongPenalty As Integer = 0
         Dim liqShortPenalty As Integer = 0
         If r.LiqSignal = "LONG LIQS" Then
-            liqLongPenalty = If(r.LiqLongSize > 200, 2, 1)
+            liqLongPenalty = If(r.LiqLongSize > cfg.Indicators.Liquidations.LargeLiqSize, 2, 1)
             state.LongScore = Math.Max(0, state.LongScore - liqLongPenalty)
         ElseIf r.LiqSignal = "SHORT LIQS" Then
-            liqShortPenalty = If(r.LiqShortSize > 200, 2, 1)
+            liqShortPenalty = If(r.LiqShortSize > cfg.Indicators.Liquidations.LargeLiqSize, 2, 1)
             state.ShortScore = Math.Max(0, state.ShortScore - liqShortPenalty)
         End If
 
@@ -321,13 +321,13 @@ Public Class ScoringEngine
         Dim ls As Integer = state.LongScore
         Dim ss As Integer = state.ShortScore
         Dim fr As Double = r.FundingRate
-        If fr > 0.001 Then
+        If fr > cfg.Scoring.FundingHighPositive Then
             ls -= 2 : ss += 1
-        ElseIf fr > 0.0005 Then
+        ElseIf fr > cfg.Scoring.FundingLowPositive Then
             ls -= 1
-        ElseIf fr < -0.001 Then
+        ElseIf fr < cfg.Scoring.FundingHighNegative Then
             ss -= 2 : ls += 1
-        ElseIf fr < -0.0005 Then
+        ElseIf fr < cfg.Scoring.FundingLowNegative Then
             ss -= 1
         End If
         ls = Math.Max(0, ls)
@@ -358,16 +358,18 @@ Public Class ScoringEngine
                     Return res
                 End If
             Case "TRANSITIONAL"
-                If r.ADX >= 20.0 AndAlso r.ADX < 22.5 Then
-                    adxPenalty = 2
-                ElseIf r.ADX >= 22.5 AndAlso r.ADX < 25.0 Then
-                    adxPenalty = 1
+                Dim penLow  As Double = cfg.RegimeGates.TransitionalAdxPenaltyLow
+                Dim penMid  As Double = cfg.RegimeGates.TransitionalAdxPenaltyMid
+                If r.ADX >= penLow AndAlso r.ADX < penMid Then
+                    adxPenalty = cfg.RegimeGates.TransitionalPenaltyLow
+                ElseIf r.ADX >= penMid AndAlso r.ADX < cfg.RegimeGates.TransitionalAdxPenaltyHigh Then
+                    adxPenalty = cfg.RegimeGates.TransitionalPenaltyMid
                 End If
                 effectiveLS = Math.Max(ls - adxPenalty, TierFloor(ls))
                 effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss))
         End Select
 
-        ' -- Step 5: Generate Verdict (proportional thresholds) ---------------
+        ' -- Step 5: Generate Verdict (proportional thresholds from settings) -
         res.LongScore = ls
         res.ShortScore = ss
         res.EffectiveLongScore = effectiveLS
@@ -375,9 +377,9 @@ Public Class ScoringEngine
         res.RegimePenalty = adxPenalty
         ' res.MaxScore already set above
 
-        Dim tStrong As Integer = ThresholdStrong(regimeMax)  ' 12 / 12 / 10
-        Dim tMed    As Integer = ThresholdMed(regimeMax)     '  9 /  9 /  7
-        Dim tWeak   As Integer = ThresholdWeak(regimeMax)    '  6 /  6 /  5
+        Dim tStrong As Integer = ThresholdStrong(regimeMax, cfg.Scoring.VerdictStrongPct)
+        Dim tMed    As Integer = ThresholdMed(regimeMax,    cfg.Scoring.VerdictMedPct)
+        Dim tWeak   As Integer = ThresholdWeak(regimeMax,   cfg.Scoring.VerdictWeakPct)
 
         If effectiveLS >= tStrong Then
             res.Verdict = "STRONG LONG" : res.Confidence = "HIGH"
