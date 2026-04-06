@@ -1,4 +1,4 @@
-' Core/Settings/EngineSettings.vb  v0.30
+' Core/Settings/EngineSettings.vb  v0.32
 ' Typed model that mirrors settings.json.
 ' All hardcoded indicator/scoring thresholds are accessed via this class.
 ' Populated by SettingsLoader.Load() -- do not instantiate directly.
@@ -10,6 +10,10 @@
 '        Added OI.ChangeThresholdPct.
 '        Added ScoringSettings.VerdictStrongPct/MedPct/WeakPct.
 '        Added ScoringWeights.CVD.
+' v0.32: VwapSettings expanded with session timing and warmup threshold.
+'        Session1StartHour/Minute  -- daily session reset (default 00:00 UTC).
+'        Session2StartHour/Minute  -- US session reset (default 13:30 UTC).
+'        WarmupCandles             -- min candles before VWAP score is trusted (default 15).
 
 Imports System.Text.Json.Serialization
 
@@ -83,7 +87,17 @@ Public Class RocSettings
 End Class
 
 Public Class VwapSettings
-    <JsonPropertyName("dev_threshold_pct")> Public Property DevThresholdPct As Double = 0.30
+    <JsonPropertyName("dev_threshold_pct")>      Public Property DevThresholdPct      As Double  = 0.30
+    ''' <summary>Hour (UTC) at which session 1 (daily) resets. Default 0 = midnight.</summary>
+    <JsonPropertyName("session1_start_hour")>    Public Property Session1StartHour    As Integer = 0
+    ''' <summary>Minute (UTC) at which session 1 resets. Default 0.</summary>
+    <JsonPropertyName("session1_start_minute")>  Public Property Session1StartMinute  As Integer = 0
+    ''' <summary>Hour (UTC) at which session 2 (US) resets. Default 13.</summary>
+    <JsonPropertyName("session2_start_hour")>    Public Property Session2StartHour    As Integer = 13
+    ''' <summary>Minute (UTC) at which session 2 resets. Default 30.</summary>
+    <JsonPropertyName("session2_start_minute")>  Public Property Session2StartMinute  As Integer = 30
+    ''' <summary>Minimum session candles before VWAP signal is considered reliable.</summary>
+    <JsonPropertyName("warmup_candles")>         Public Property WarmupCandles        As Integer = 15
 End Class
 
 Public Class BbwSettings

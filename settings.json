@@ -1,8 +1,10 @@
 {
-  "version": 2,
-  "last_modified": "2026-04-06T22:55:00Z",
-  "modified_by": "claude-settings-pass-v0.30",
+  "version": 3,
+  "last_modified": "2026-04-07T00:00:00Z",
+  "modified_by": "claude-settings-pass-v0.32",
   "change_log": [
+    "v3: Added VWAP session timing fields (session1_start_hour/minute, session2_start_hour/minute)",
+    "v3: Added VWAP warmup_candles threshold (was hardcoded 15)",
     "v2: Added CVD indicator settings block",
     "v2: Added CVD to scoring.weights",
     "v2: Exposed RSI divergence gates (divergence_price_gate, divergence_rsi_delta)",
@@ -19,7 +21,14 @@
                   "divergence_price_gate": 0.001,
                   "divergence_rsi_delta": 2.0 },
     "ROC":      { "period": 9,  "slope_sensitivity": 0.1, "series_lookback": 3 },
-    "VWAP":     { "dev_threshold_pct": 0.30 },
+    "VWAP":     {
+                  "dev_threshold_pct": 0.30,
+                  "session1_start_hour": 0,
+                  "session1_start_minute": 0,
+                  "session2_start_hour": 13,
+                  "session2_start_minute": 30,
+                  "warmup_candles": 15
+                },
     "BBW":      { "period": 20, "std_dev": 2.0, "releasing_roc_threshold": 0.1 },
     "EMA":      { "fast": 9,   "mid": 21,  "slow": 50 },
     "EMA200":   { "timeframe_minutes": 5 },

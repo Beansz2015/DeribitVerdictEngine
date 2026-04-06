@@ -1,4 +1,4 @@
-' MainForm.vb  v0.31
+' MainForm.vb  v0.32
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
@@ -11,6 +11,8 @@
 '          CalcVWAPBands called after CalcVWAP to populate sigma1/sigma2 fields.
 '          RenderOutput VWAP line now shows: VWAP value, dev%, session candles,
 '          sigma1 and sigma2 band levels, and [WARMUP] tag if <15 candles.
+' v0.32 -- CalcVWAP and CalcVWAPBands now receive session2Hour/Minute from settings.
+'          Warmup threshold read from cfg.Indicators.VWAP.WarmupCandles instead of hardcoded 15.
 
 Imports System.Drawing
 Imports System.IO
@@ -39,7 +41,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.31"
+        Me.Text = "Deribit Verdict Engine v0.32"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -286,9 +288,9 @@ Public Class MainForm
         Dim norms As DynamicNorms = DynamicNorms.Compute(candles1m, r.ATR)
         r.ATRSizeMultiplier = Math.Round(norms.ATRScaleFactor, 2)
 
-        ' v0.30: CalcROCSeries passes lookback from settings
         Dim rocSeries = IndicatorEngine.CalcROCSeries(candles1m,
-                            cfg.Indicators.ROC.Lookback)
+                            cfg.Indicators.ROC.Period,
+                            cfg.Indicators.ROC.SeriesLookback)
         r.ROC = If(rocSeries.Count > 0, rocSeries.Last(), 0)
         If rocSeries.Count >= 2 Then
             Dim delta As Double = rocSeries.Last() - rocSeries(rocSeries.Count - 2)
@@ -315,12 +317,18 @@ Public Class MainForm
             r.Regime = "TRANSITIONAL"
         End If
 
-        ' v0.31: CalcVWAP captures session candle count; CalcVWAPBands computes sigma bands
-        r.VWAP = IndicatorEngine.CalcVWAP(candles1m, r.VWAPSessionCandles)
+        ' v0.32: session boundary times read from settings
+        Dim vwapS2Hour   As Integer = cfg.Indicators.VWAP.Session2StartHour
+        Dim vwapS2Minute As Integer = cfg.Indicators.VWAP.Session2StartMinute
+        Dim vwapWarmup   As Integer = cfg.Indicators.VWAP.WarmupCandles
+
+        r.VWAP = IndicatorEngine.CalcVWAP(candles1m, r.VWAPSessionCandles,
+                                           vwapS2Hour, vwapS2Minute)
         r.VWAPDevPct = If(r.VWAP > 0, (r.CurrentPrice - r.VWAP) / r.VWAP * 100, 0)
         IndicatorEngine.CalcVWAPBands(candles1m, r.VWAP,
                                       r.VWAPSigma1Upper, r.VWAPSigma1Lower,
-                                      r.VWAPSigma2Upper, r.VWAPSigma2Lower)
+                                      r.VWAPSigma2Upper, r.VWAPSigma2Lower,
+                                      vwapS2Hour, vwapS2Minute)
 
         Dim minBBW As Double
         IndicatorEngine.CalcBBW(candles1m, 20, 2.0, r.BBW, minBBW, r.SqueezeStatus)
@@ -393,7 +401,6 @@ Public Class MainForm
             r.DonchianSignal = "NONE"
         End If
 
-        ' v0.30: CalcOBV and CalcRSIDivergence pass gate params from settings
         IndicatorEngine.CalcOBV(candles1m, r.OBVTrend, r.OBVDivergence,
                                 cfg.Indicators.OBV.TrendGate,
                                 cfg.Indicators.OBV.DivergenceGate)
@@ -406,16 +413,16 @@ Public Class MainForm
         If rbLong.Checked Then posState = PositionState.InLong
         If rbShort.Checked Then posState = PositionState.InShort
 
-        ' v0.30: pass cfg as 4th argument so ScoringEngine reads thresholds from settings
         Dim verdict = ScoringEngine.Calculate(r, posState, norms, cfg)
 
         AnalysisLogger.LogRun(r, verdict)
         UpdateLogInfo()
 
-        RenderOutput(r, verdict, norms)
+        RenderOutput(r, verdict, norms, vwapWarmup)
     End Function
 
-    Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult, norms As DynamicNorms)
+    Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult, norms As DynamicNorms,
+                              vwapWarmup As Integer)
         Dim sb As New System.Text.StringBuilder()
         Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") & " UTC"
 
@@ -490,15 +497,18 @@ Public Class MainForm
                       "  |  vs SMA: " & r.VolumeRatio.ToString("F2") & "x  |  SMA: " & r.VolumeSMA9.ToString("F4") & " BTC")
         sb.AppendLine()
 
-        ' v0.31: VWAP line shows sigma bands, session candle count, and warmup tag
-        Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < 15, "  [WARMUP]", "")
+        ' v0.32: warmup threshold from settings parameter
+        Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < vwapWarmup, "  [WARMUP]", "")
         Dim vwapSessionLabel As String
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        Dim s2h As Integer = cfg.Indicators.VWAP.Session2StartHour
+        Dim s2m As Integer = cfg.Indicators.VWAP.Session2StartMinute
         Dim nowHour As Integer = DateTime.UtcNow.Hour
         Dim nowMin  As Integer = DateTime.UtcNow.Minute
-        If nowHour < 13 OrElse (nowHour = 13 AndAlso nowMin < 30) Then
+        If nowHour < s2h OrElse (nowHour = s2h AndAlso nowMin < s2m) Then
             vwapSessionLabel = "daily(00:00)"
         Else
-            vwapSessionLabel = "US(13:30)"
+            vwapSessionLabel = "US(" & s2h.ToString("D2") & ":" & s2m.ToString("D2") & ")"
         End If
 
         sb.AppendLine("TIER 1 SIGNALS:")

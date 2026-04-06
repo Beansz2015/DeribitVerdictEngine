@@ -1,4 +1,4 @@
-' Indicators.vb  v0.31
+' Indicators.vb  v0.32
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
@@ -20,6 +20,9 @@
 '          New IndicatorResults fields:
 '            VWAPSessionCandles, VWAPSigma1Upper, VWAPSigma1Lower,
 '            VWAPSigma2Upper, VWAPSigma2Lower.
+' v0.32 -- CalcVWAP and CalcVWAPBands: session boundary times now passed as parameters
+'          (session2Hour, session2Minute) instead of hardcoded 13:30 UTC.
+'          Callers read these from cfg.Indicators.VWAP in MainForm.
 
 Public Class IndicatorResults
     ' Core
@@ -236,8 +239,6 @@ Public Class IndicatorEngine
     End Function
 
     ' -- RSI Divergence -------------------------------------------------------
-    ' priceGate:  fractional move required to count as a new high/low (e.g. 0.001 = 0.1%)
-    ' rsiDelta:   minimum RSI point difference to count as divergence (e.g. 2.0)
     Public Shared Function CalcRSIDivergence(candles As List(Of Candle), period As Integer,
                                               priceGate As Double, rsiDelta As Double) As String
         If candles.Count < period + 12 Then Return "NONE"
@@ -258,7 +259,6 @@ Public Class IndicatorEngine
     End Function
 
     ' -- ROC ------------------------------------------------------------------
-    ' lookback: number of recent candles used for slope series (default 3)
     Public Shared Function CalcROCSeries(candles As List(Of Candle), period As Integer,
                                           lookback As Integer) As List(Of Double)
         Dim result As New List(Of Double)
@@ -279,29 +279,28 @@ Public Class IndicatorEngine
         Return candles.Skip(candles.Count - period).Average(Function(c) c.Volume)
     End Function
 
-    ' -- VWAP (auto-session: 00:00 UTC before 13:30 UTC, 13:30 UTC otherwise) -
+    ' -- VWAP (auto-session, parameterised boundary) --------------------------
+    ' session2Hour/session2Minute: UTC time for session 2 reset (e.g. 13, 30 for US open).
+    ' Before session2 time  -> session 1 (daily, resets at midnight UTC).
+    ' At/after session2 time -> session 2 (e.g. US session).
     ' sessionCandleCount: number of 1m candles in the current session (for warmup guard).
-    ' Warmup guard: caller should treat VWAP as unreliable if sessionCandleCount < 15.
     Public Shared Function CalcVWAP(candles As List(Of Candle),
-                                     ByRef sessionCandleCount As Integer) As Double
+                                     ByRef sessionCandleCount As Integer,
+                                     Optional session2Hour As Integer = 13,
+                                     Optional session2Minute As Integer = 30) As Double
         Dim nowUtc As DateTime = DateTime.UtcNow
 
-        ' Determine session reset timestamp
         Dim sessionStart As DateTime
-        If nowUtc.Hour < 13 OrElse (nowUtc.Hour = 13 AndAlso nowUtc.Minute < 30) Then
-            ' Before 13:30 UTC -- use daily session (midnight UTC)
-            sessionStart = nowUtc.Date
+        If nowUtc.Hour < session2Hour OrElse
+           (nowUtc.Hour = session2Hour AndAlso nowUtc.Minute < session2Minute) Then
+            sessionStart = nowUtc.Date  ' midnight UTC
         Else
-            ' At or after 13:30 UTC -- use US session start
-            sessionStart = nowUtc.Date.AddHours(13).AddMinutes(30)
+            sessionStart = nowUtc.Date.AddHours(session2Hour).AddMinutes(session2Minute)
         End If
 
         Dim sessionStartMs As Long = New DateTimeOffset(sessionStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim sessionCandles = candles.Where(Function(c) c.Timestamp >= sessionStartMs).ToList()
-
-        ' Fallback: if no candles in session window (e.g. data gap), use all candles
         If sessionCandles.Count = 0 Then sessionCandles = candles
-
         sessionCandleCount = sessionCandles.Count
 
         Dim cumTPV As Double = 0
@@ -314,34 +313,29 @@ Public Class IndicatorEngine
         Return If(cumVol > 0, cumTPV / cumVol, 0)
     End Function
 
-    ' -- VWAP Sigma Bands -----------------------------------------------------
-    ' Computes 1-sigma and 2-sigma bands from the session's TP deviations around VWAP.
-    ' Requires the same session candles used to compute VWAP.
-    ' sigma1Upper/Lower = VWAP +/- 1 std dev of (TP - VWAP) weighted by volume.
-    ' sigma2Upper/Lower = VWAP +/- 2 std dev.
-    ' If fewer than 2 session candles, bands default to VWAP (no spread).
+    ' -- VWAP Sigma Bands (parameterised boundary) ----------------------------
     Public Shared Sub CalcVWAPBands(candles As List(Of Candle), vwap As Double,
                                      ByRef sigma1Upper As Double, ByRef sigma1Lower As Double,
-                                     ByRef sigma2Upper As Double, ByRef sigma2Lower As Double)
+                                     ByRef sigma2Upper As Double, ByRef sigma2Lower As Double,
+                                     Optional session2Hour As Integer = 13,
+                                     Optional session2Minute As Integer = 30)
         sigma1Upper = vwap : sigma1Lower = vwap
         sigma2Upper = vwap : sigma2Lower = vwap
-
         If vwap = 0 Then Return
 
-        ' Identify session candles using the same auto-session logic
         Dim nowUtc As DateTime = DateTime.UtcNow
         Dim sessionStart As DateTime
-        If nowUtc.Hour < 13 OrElse (nowUtc.Hour = 13 AndAlso nowUtc.Minute < 30) Then
+        If nowUtc.Hour < session2Hour OrElse
+           (nowUtc.Hour = session2Hour AndAlso nowUtc.Minute < session2Minute) Then
             sessionStart = nowUtc.Date
         Else
-            sessionStart = nowUtc.Date.AddHours(13).AddMinutes(30)
+            sessionStart = nowUtc.Date.AddHours(session2Hour).AddMinutes(session2Minute)
         End If
         Dim sessionStartMs As Long = New DateTimeOffset(sessionStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim sessionCandles = candles.Where(Function(c) c.Timestamp >= sessionStartMs).ToList()
         If sessionCandles.Count = 0 Then sessionCandles = candles
         If sessionCandles.Count < 2 Then Return
 
-        ' Volume-weighted standard deviation of TP around VWAP
         Dim cumVol As Double = 0
         Dim cumWeightedSqDev As Double = 0
         For Each c In sessionCandles
@@ -350,7 +344,6 @@ Public Class IndicatorEngine
             cumWeightedSqDev += c.Volume * dev * dev
             cumVol += c.Volume
         Next
-
         If cumVol = 0 Then Return
         Dim sigma As Double = Math.Sqrt(cumWeightedSqDev / cumVol)
 
@@ -458,9 +451,6 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- CVD (Cumulative Volume Delta) ----------------------------------------
-    ' slopeMinUsd:          minimum absolute USD delta to count as slope (e.g. 50000)
-    ' slopePctOfValue:      slope threshold as % of CVD absolute value (e.g. 0.05 = 5%)
-    ' divergencePriceGate:  minimum price move % to trigger divergence check (e.g. 0.002)
     Public Shared Sub CalcCVD(trades As List(Of Trade), candles As List(Of Candle),
                                ByRef cvdValue As Double, ByRef cvdSlope As String,
                                ByRef cvdDivergence As String,
@@ -470,7 +460,6 @@ Public Class IndicatorEngine
         cvdValue = 0 : cvdSlope = "FLAT" : cvdDivergence = "NONE"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
-        ' Split trades into two halves for slope
         Dim half As Integer = trades.Count \ 2
         Dim earlyDelta As Double = 0
         Dim lateDelta As Double = 0
@@ -492,7 +481,6 @@ Public Class IndicatorEngine
             cvdSlope = "FLAT"
         End If
 
-        ' Divergence: price direction vs CVD direction
         If candles.Count < 2 Then Return
         Dim priceChange As Double = (candles.Last().Close - candles(candles.Count - 2).Close) /
                                      candles(candles.Count - 2).Close
@@ -515,8 +503,6 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- OBV ------------------------------------------------------------------
-    ' trendGate:       minimum fractional OBV change to declare RISING/FALLING (e.g. 0.01)
-    ' divergenceGate:  minimum price move % to trigger divergence check (e.g. 0.001)
     Public Shared Sub CalcOBV(candles As List(Of Candle),
                                ByRef obvTrend As String, ByRef obvDivergence As String,
                                Optional trendGate As Double = 0.01,
