@@ -1,19 +1,30 @@
 {
-  "version": 1,
-  "last_modified": "2026-04-01T00:00:00Z",
-  "modified_by": "manual",
-  "change_log": [],
+  "version": 2,
+  "last_modified": "2026-04-06T22:55:00Z",
+  "modified_by": "claude-settings-pass-v0.30",
+  "change_log": [
+    "v2: Added CVD indicator settings block",
+    "v2: Added CVD to scoring.weights",
+    "v2: Exposed RSI divergence gates (divergence_price_gate, divergence_rsi_delta)",
+    "v2: Exposed OBV trend/divergence gates (trend_gate, divergence_gate)",
+    "v2: Exposed ROC series_lookback (was hardcoded 3)",
+    "v2: Exposed OI change_threshold_pct (was hardcoded 1%)",
+    "v2: Exposed verdict % thresholds (strong_pct, med_pct, weak_pct)",
+    "v2: Added scoring.weights.CVD"
+  ],
   "indicators": {
     "ADX":      { "period": 9,  "trend_threshold": 25.0, "range_threshold": 20.0 },
     "RSI":      { "period": 9,  "oversold": 40.0, "overbought": 60.0,
-                  "partial_oversold": 50.0, "partial_overbought": 50.0 },
-    "ROC":      { "period": 9,  "slope_sensitivity": 0.1 },
+                  "partial_oversold": 50.0, "partial_overbought": 50.0,
+                  "divergence_price_gate": 0.001,
+                  "divergence_rsi_delta": 2.0 },
+    "ROC":      { "period": 9,  "slope_sensitivity": 0.1, "series_lookback": 3 },
     "VWAP":     { "dev_threshold_pct": 0.30 },
     "BBW":      { "period": 20, "std_dev": 2.0, "releasing_roc_threshold": 0.1 },
     "EMA":      { "fast": 9,   "mid": 21,  "slow": 50 },
     "EMA200":   { "timeframe_minutes": 5 },
     "Donchian": { "period": 20 },
-    "OBV":      { "lookback": 10 },
+    "OBV":      { "lookback": 10, "trend_gate": 0.001, "divergence_gate": 0.001 },
     "ATR":      { "period": 7,  "ref_period": 20,
                   "static_ref": 150.0, "scale_min": 0.25, "scale_max": 4.0 },
     "OFI":      { "book_depth": 5,
@@ -26,8 +37,12 @@
                      "static_fallback": 1.5 },
     "Liquidations": { "long_liq_threshold": 50000.0, "short_liq_threshold": 50000.0,
                        "large_liq_size": 200.0, "dominance_ratio": 2.0 },
-    "OI":       { "neutral_band_pct": 0.05 },
-    "DMI":      { "period": 9 }
+    "OI":       { "neutral_band_pct": 0.05, "change_threshold_pct": 0.01 },
+    "DMI":      { "period": 9 },
+    "CVD":      { "slope_min_usd": 1000.0,
+                  "slope_pct_of_value": 0.01,
+                  "divergence_price_gate": 0.0005,
+                  "trade_lookback": 100 }
   },
   "scoring": {
     "long_threshold": 6,
@@ -36,6 +51,9 @@
     "strong_short_threshold": 12,
     "medium_long_threshold": 9,
     "medium_short_threshold": 9,
+    "verdict_strong_pct": 0.70,
+    "verdict_med_pct":    0.53,
+    "verdict_weak_pct":   0.35,
     "transitional_penalty_enabled": true,
     "funding_high_positive": 0.001,
     "funding_low_positive": 0.0005,
@@ -44,7 +62,7 @@
     "weights": {
       "ROC": 1, "RSI": 1, "DMI": 1, "ADX": 1,
       "Volume": 1, "VWAP": 1, "BBW": 1, "EMA": 1,
-      "OI": 1, "OFI": 1, "LiqPenalty": 1,
+      "OI": 1, "OFI": 1, "CVD": 1, "LiqPenalty": 1,
       "EMA200": 1, "Donchian": 1, "OBV": 1
     }
   },
