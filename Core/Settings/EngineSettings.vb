@@ -1,7 +1,15 @@
-' Core/Settings/EngineSettings.vb
+' Core/Settings/EngineSettings.vb  v0.30
 ' Typed model that mirrors settings.json.
 ' All hardcoded indicator/scoring thresholds are accessed via this class.
 ' Populated by SettingsLoader.Load() -- do not instantiate directly.
+'
+' v0.30: Added CvdSettings class and CVD property on IndicatorSettings.
+'        Added RSI.DivergencePriceGate, RSI.DivergenceRsiDelta.
+'        Added OBV.TrendGate, OBV.DivergenceGate.
+'        Added ROC.SeriesLookback.
+'        Added OI.ChangeThresholdPct.
+'        Added ScoringSettings.VerdictStrongPct/MedPct/WeakPct.
+'        Added ScoringWeights.CVD.
 
 Imports System.Text.Json.Serialization
 
@@ -49,6 +57,7 @@ Public Class IndicatorSettings
     <JsonPropertyName("Liquidations")> Public Property Liquidations As New LiquidationSettings
     <JsonPropertyName("OI")>       Public Property OI       As New OiSettings
     <JsonPropertyName("DMI")>      Public Property DMI      As New DmiSettings
+    <JsonPropertyName("CVD")>      Public Property CVD      As New CvdSettings
 End Class
 
 Public Class AdxSettings
@@ -58,16 +67,19 @@ Public Class AdxSettings
 End Class
 
 Public Class RsiSettings
-    <JsonPropertyName("period")>             Public Property Period           As Integer = 9
-    <JsonPropertyName("oversold")>           Public Property Oversold         As Double  = 40.0
-    <JsonPropertyName("overbought")>         Public Property Overbought       As Double  = 60.0
-    <JsonPropertyName("partial_oversold")>   Public Property PartialOversold  As Double  = 50.0
-    <JsonPropertyName("partial_overbought")> Public Property PartialOverbought As Double = 50.0
+    <JsonPropertyName("period")>             Public Property Period             As Integer = 9
+    <JsonPropertyName("oversold")>           Public Property Oversold           As Double  = 40.0
+    <JsonPropertyName("overbought")>         Public Property Overbought         As Double  = 60.0
+    <JsonPropertyName("partial_oversold")>   Public Property PartialOversold    As Double  = 50.0
+    <JsonPropertyName("partial_overbought")> Public Property PartialOverbought  As Double  = 50.0
+    <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double = 0.001
+    <JsonPropertyName("divergence_rsi_delta")>  Public Property DivergenceRsiDelta  As Double = 2.0
 End Class
 
 Public Class RocSettings
     <JsonPropertyName("period")>            Public Property Period          As Integer = 9
     <JsonPropertyName("slope_sensitivity")> Public Property SlopeSensitivity As Double = 0.1
+    <JsonPropertyName("series_lookback")>   Public Property SeriesLookback  As Integer = 3
 End Class
 
 Public Class VwapSettings
@@ -95,7 +107,9 @@ Public Class DonchianSettings
 End Class
 
 Public Class ObvSettings
-    <JsonPropertyName("lookback")> Public Property Lookback As Integer = 10
+    <JsonPropertyName("lookback")>        Public Property Lookback       As Integer = 10
+    <JsonPropertyName("trend_gate")>      Public Property TrendGate      As Double  = 0.001
+    <JsonPropertyName("divergence_gate")> Public Property DivergenceGate As Double  = 0.001
 End Class
 
 Public Class AtrSettings
@@ -123,8 +137,8 @@ Public Class VolumeSettings
 End Class
 
 Public Class VwapDynamicSettings
-    <JsonPropertyName("dev_clamp_min")>  Public Property DevClampMin  As Double = 0.30
-    <JsonPropertyName("dev_clamp_max")>  Public Property DevClampMax  As Double = 3.0
+    <JsonPropertyName("dev_clamp_min")>   Public Property DevClampMin    As Double = 0.30
+    <JsonPropertyName("dev_clamp_max")>   Public Property DevClampMax    As Double = 3.0
     <JsonPropertyName("static_fallback")> Public Property StaticFallback As Double = 1.5
 End Class
 
@@ -136,11 +150,23 @@ Public Class LiquidationSettings
 End Class
 
 Public Class OiSettings
-    <JsonPropertyName("neutral_band_pct")> Public Property NeutralBandPct As Double = 0.05
+    <JsonPropertyName("neutral_band_pct")>     Public Property NeutralBandPct     As Double = 0.05
+    <JsonPropertyName("change_threshold_pct")> Public Property ChangeThresholdPct As Double = 0.01
 End Class
 
 Public Class DmiSettings
     <JsonPropertyName("period")> Public Property Period As Integer = 9
+End Class
+
+Public Class CvdSettings
+    ''' <summary>Minimum USD delta required to register a slope direction (absolute floor).</summary>
+    <JsonPropertyName("slope_min_usd")>          Public Property SlopeMinUsd         As Double  = 1000.0
+    ''' <summary>Slope threshold as a fraction of |CVDValue|. Actual threshold = Max(SlopeMinUsd, |CVDValue| * SlopePctOfValue).</summary>
+    <JsonPropertyName("slope_pct_of_value")>      Public Property SlopePctOfValue     As Double  = 0.01
+    ''' <summary>Minimum price move (fraction) to trigger divergence evaluation.</summary>
+    <JsonPropertyName("divergence_price_gate")>   Public Property DivergencePriceGate As Double  = 0.0005
+    ''' <summary>Number of most-recent trades used for CVD calculation.</summary>
+    <JsonPropertyName("trade_lookback")>          Public Property TradeLookback       As Integer = 100
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -154,6 +180,12 @@ Public Class ScoringSettings
     <JsonPropertyName("strong_short_threshold")> Public Property StrongShortThreshold As Integer = 12
     <JsonPropertyName("medium_long_threshold")>  Public Property MediumLongThreshold  As Integer = 9
     <JsonPropertyName("medium_short_threshold")> Public Property MediumShortThreshold As Integer = 9
+    ''' <summary>Score fraction required for STRONG verdict (default 70%).</summary>
+    <JsonPropertyName("verdict_strong_pct")>     Public Property VerdictStrongPct     As Double  = 0.70
+    ''' <summary>Score fraction required for MEDIUM verdict (default 53%).</summary>
+    <JsonPropertyName("verdict_med_pct")>        Public Property VerdictMedPct        As Double  = 0.53
+    ''' <summary>Score fraction required for WEAK verdict (default 35%).</summary>
+    <JsonPropertyName("verdict_weak_pct")>       Public Property VerdictWeakPct       As Double  = 0.35
     <JsonPropertyName("transitional_penalty_enabled")> Public Property TransitionalPenaltyEnabled As Boolean = True
     <JsonPropertyName("funding_high_positive")>  Public Property FundingHighPositive  As Double = 0.001
     <JsonPropertyName("funding_low_positive")>   Public Property FundingLowPositive   As Double = 0.0005
@@ -173,6 +205,7 @@ Public Class ScoringWeights
     <JsonPropertyName("EMA")>        Public Property EMA        As Integer = 1
     <JsonPropertyName("OI")>         Public Property OI         As Integer = 1
     <JsonPropertyName("OFI")>        Public Property OFI        As Integer = 1
+    <JsonPropertyName("CVD")>        Public Property CVD        As Integer = 1
     <JsonPropertyName("LiqPenalty")> Public Property LiqPenalty As Integer = 1
     <JsonPropertyName("EMA200")>     Public Property EMA200     As Integer = 1
     <JsonPropertyName("Donchian")>   Public Property Donchian   As Integer = 1
