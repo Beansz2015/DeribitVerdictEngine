@@ -1,4 +1,4 @@
-' ScoringEngine.vb  v0.27
+' ScoringEngine.vb  v0.28
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
@@ -9,6 +9,11 @@
 '        CVD divergence penalty applied before liquidation penalty.
 ' v0.27: ThresholdStrong/Med/Weak now read from EngineSettings (settings.json) instead of hardcoded pcts.
 '        Calculate() signature updated: accepts EngineSettings as third parameter.
+' v0.28: VWAP scoring block rewritten to use adaptive sigma bands.
+'        Full signal: price between VWAP and sigma1 band (tight mean-reversion zone).
+'        Partial signal: price between sigma1 and sigma2 (extended zone).
+'        No signal: price beyond sigma2 (overextended -- noise territory).
+'        Warmup guard: VWAP scoring skipped entirely if VWAPSessionCandles < 15.
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -131,13 +136,34 @@ Public Class ScoringEngine
         AddFull(state, volLong, volShort, SignalCategory.Volume)
 
         ' TIER 1
-        ' VWAP (Microstructure) -- deviation boundary from DynamicNorms
-        Dim vwapDev As Double = norms.VWAPDevThreshold
-        Dim vwapLong As Boolean = r.CurrentPrice > r.VWAP AndAlso Math.Abs(r.VWAPDevPct) <= vwapDev
-        Dim vwapShort As Boolean = r.CurrentPrice < r.VWAP AndAlso Math.Abs(r.VWAPDevPct) <= vwapDev
-        Dim vwapPartialLong As Boolean = r.CurrentPrice > r.VWAP AndAlso Math.Abs(r.VWAPDevPct) > vwapDev
-        Dim vwapPartialShort As Boolean = r.CurrentPrice < r.VWAP AndAlso Math.Abs(r.VWAPDevPct) > vwapDev
-        AddFull(state, vwapLong, vwapShort, SignalCategory.Microstructure)
+        ' VWAP (Microstructure) -- adaptive sigma bands
+        ' Warmup guard: skip entirely if session has fewer than 15 candles
+        Dim vwapLong As Boolean = False
+        Dim vwapShort As Boolean = False
+        Dim vwapPartialLong As Boolean = False
+        Dim vwapPartialShort As Boolean = False
+        Dim vwapNote As String
+        Dim vwapWarmup As Boolean = r.VWAPSessionCandles < 15
+
+        If vwapWarmup Then
+            vwapNote = String.Format("WARMUP ({0}/15 candles) -- signal suppressed", r.VWAPSessionCandles)
+        Else
+            Dim price As Double = r.CurrentPrice
+            ' Full signal: price is between VWAP and sigma1 (mean-reversion confirmation zone)
+            vwapLong  = price > r.VWAP AndAlso price <= r.VWAPSigma1Upper
+            vwapShort = price < r.VWAP AndAlso price >= r.VWAPSigma1Lower
+            ' Partial signal: price is between sigma1 and sigma2 (extended but not overextended)
+            vwapPartialLong  = price > r.VWAPSigma1Upper AndAlso price <= r.VWAPSigma2Upper
+            vwapPartialShort = price < r.VWAPSigma1Lower AndAlso price >= r.VWAPSigma2Lower
+            ' Beyond sigma2: no signal (overextended, mean-reversion risk too high)
+            AddFull(state, vwapLong, vwapShort, SignalCategory.Microstructure)
+            vwapNote = String.Format(
+                "Price:{0:F0} VWAP:{1:F0} | σ1:[{2:F0},{3:F0}] σ2:[{4:F0},{5:F0}] | {6}candles",
+                price, r.VWAP,
+                r.VWAPSigma1Lower, r.VWAPSigma1Upper,
+                r.VWAPSigma2Lower, r.VWAPSigma2Upper,
+                r.VWAPSessionCandles)
+        End If
 
         ' BBW Squeeze-State Scoring
         Dim bbwLongHit As Boolean = False
@@ -234,10 +260,15 @@ Public Class ScoringEngine
         If rsiLongUpgraded Then state.LongScore += 1
         If rsiShortUpgraded Then state.ShortScore += 1
 
-        Dim vwapLongUpgraded As Boolean = vwapPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Microstructure)
-        Dim vwapShortUpgraded As Boolean = vwapPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Microstructure)
-        If vwapLongUpgraded Then state.LongScore += 1
-        If vwapShortUpgraded Then state.ShortScore += 1
+        ' VWAP partial upgrades (only if not in warmup)
+        Dim vwapLongUpgraded As Boolean = False
+        Dim vwapShortUpgraded As Boolean = False
+        If Not vwapWarmup Then
+            vwapLongUpgraded  = vwapPartialLong  AndAlso HasCrossConfirm(state.FullLongCategories,  SignalCategory.Microstructure)
+            vwapShortUpgraded = vwapPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Microstructure)
+            If vwapLongUpgraded  Then state.LongScore  += 1
+            If vwapShortUpgraded Then state.ShortScore += 1
+        End If
 
         Dim oiLongUpgraded As Boolean = oiPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Microstructure)
         Dim oiShortUpgraded As Boolean = oiPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Microstructure)
@@ -276,9 +307,11 @@ Public Class ScoringEngine
                       volPartial, volPartial, False, False)))
 
         breakdown.Add(New SignalBreakdownItem("VWAP", vwapLong OrElse vwapLongUpgraded, vwapShort OrElse vwapShortUpgraded,
-            BuildNote(String.Format("Dev:{0:F2}% | thr ±{1:F2}% [{2}]", r.VWAPDevPct, vwapDev, normMode),
-                      vwapPartialLong AndAlso Not vwapLongUpgraded, vwapPartialShort AndAlso Not vwapShortUpgraded,
-                      vwapLongUpgraded, vwapShortUpgraded)))
+            If(vwapWarmup, vwapNote,
+               BuildNote(vwapNote,
+                         vwapPartialLong AndAlso Not vwapLongUpgraded,
+                         vwapPartialShort AndAlso Not vwapShortUpgraded,
+                         vwapLongUpgraded, vwapShortUpgraded))))
 
         breakdown.Add(New SignalBreakdownItem("BBW Squeeze", bbwLongHit, bbwShortHit, bbwNote))
 
