@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-06 | Current version: v0.30**
+**Last updated: 2026-04-07 | Current version: v0.32**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 It takes precedence over `indicator-spec.md` wherever the two conflict.
@@ -28,17 +28,17 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 
 | File | Version | Notes |
 |---|---|---|
-| `MainForm.vb` | v0.30 | UI, RunAnalysisAsync, RenderOutput |
-| `Indicators.vb` | v0.30 | All indicator calculations |
+| `MainForm.vb` | v0.32 | UI, RunAnalysisAsync, RenderOutput |
+| `Indicators.vb` | v0.32 | All indicator calculations |
 | `ScoringEngine.vb` | v0.27 | Verdict scoring, reads all thresholds from settings |
 | `DynamicNorms.vb` | current | ATR/Vol/VWAP norm computation |
 | `DeribitClient.vb` | current | All Deribit REST calls |
 | `AnalysisLogger.vb` | current | CSV logging + CalibrationReport |
-| `EngineSettings.vb` | v0.30 | Strongly-typed POCO for settings.json |
+| `Core/Settings/EngineSettings.vb` | v0.32 | Strongly-typed POCO for settings.json |
 | `SettingsLoader.vb` | current | JSON deserialisation, `SettingsLoader.Current` singleton |
 | `OiSnapshot.vb` | current | OI ring-buffer helper |
 | `Program.vb` | current | Entry point |
-| `settings.json` | v2 | All tunable parameters (see Section 6) |
+| `settings.json` | v3 | All tunable parameters (see Section 6) |
 | `docs/DeribitIndicatorProject.md` | this file | Handover |
 | `docs/trader-profile.md` | current | User trading profile |
 
@@ -53,7 +53,8 @@ MainForm.vb
        │                   bookSummary, orderBook(depth10), recentTrades(100)
        ├─ IndicatorEngine → fills IndicatorResults (r)
        │    ├─ CalcATR, CalcROCSeries, CalcRSI, CalcVolumeSMA
-       │    ├─ CalcDMI, CalcVWAP, CalcBBW, CalcEMA
+       │    ├─ CalcDMI, CalcVWAP (session params from cfg), CalcVWAPBands
+       │    ├─ CalcBBW, CalcEMA
        │    ├─ CalcOFI  (top-3 weighted bid/ask)
        │    ├─ CalcLiquidations
        │    ├─ CalcCVD  (cumulative volume delta + slope + divergence)
@@ -71,7 +72,7 @@ MainForm.vb
 ### Core Signals (always scored)
 | Indicator | Method | Notes |
 |---|---|---|
-| ROC(9) | CalcROCSeries | Lookback from cfg.Indicators.ROC.Lookback |
+| ROC(9) | CalcROCSeries | Lookback from cfg.Indicators.ROC.SeriesLookback |
 | RSI(9) | CalcRSI | Period from cfg.Indicators.RSI.Period |
 | DMI/ADX(9) | CalcDMI | 5m candles, period 9 |
 | Volume | CalcVolumeSMA | SMA-9; thresholds from DynamicNorms |
@@ -79,7 +80,8 @@ MainForm.vb
 ### Tier 1
 | Indicator | Method | Notes |
 |---|---|---|
-| VWAP Dev | CalcVWAP | Dev threshold from DynamicNorms |
+| VWAP Dev | CalcVWAP | Session boundary times from cfg.Indicators.VWAP; warmup guard from WarmupCandles |
+| VWAP Bands | CalcVWAPBands | σ1/σ2 bands; session params from cfg |
 | BBW Squeeze | CalcBBW | Period 20, StdDev 2.0; ACTIVE/RELEASING/NONE |
 | EMA Ribbon | CalcEMA | 9/21/50; BULL/BEAR/MIXED |
 | Funding Rate | GetFundingRateAsync | Info-only; modifies score in Step 3 |
@@ -101,7 +103,7 @@ MainForm.vb
 
 ---
 
-## 6. settings.json Structure (v2)
+## 6. settings.json Structure (v3)
 
 All scoring and indicator gate parameters are externalised here.
 `SettingsLoader.Initialise()` is called in `MainForm.New()` and loads
@@ -112,11 +114,16 @@ Key sections:
 ```
 settings.json
   indicators:
-    roc:           { lookback }
     rsi:           { period, divergencePriceGate, divergenceRsiDelta }
+    roc:           { period, seriesLookback }
+    vwap:          { devThresholdPct,
+                     session1StartHour, session1StartMinute,   ← daily session reset (00:00 UTC)
+                     session2StartHour, session2StartMinute,   ← US session reset (13:30 UTC)
+                     warmupCandles }                           ← min candles before VWAP is scored
     obv:           { trendGate, divergenceGate }
     liquidations:  { largeLiqSize }
-    cvd:           { lookbackCandles, divergenceMinSwing }
+    cvd:           { slopeMinUsd, slopePctOfValue,
+                     divergencePriceGate, tradeLookback }
   scoring:
     verdictStrongPct   -- fraction of regimeMax to trigger STRONG (e.g. 0.70)
     verdictMedPct      -- fraction for MED verdict
@@ -191,8 +198,8 @@ Always read the current file SHA before updating (use `get_file_contents`).
 ### e. Version numbering
 - `MainForm.vb`: mirrors the app version shown in `Me.Text`
 - `ScoringEngine.vb`: independent minor version (currently v0.27)
-- `Indicators.vb`: independent minor version (currently v0.30)
-- `EngineSettings.vb`: mirrors Indicators version
+- `Indicators.vb`: independent minor version (currently v0.32)
+- `EngineSettings.vb`: mirrors Indicators version (currently v0.32)
 - When any file changes, bump only that file's version
 
 ---
@@ -205,10 +212,11 @@ Always read the current file SHA before updating (use `get_file_contents`).
 | v0.21–v0.25 | (prior sessions) | DynamicNorms, dual-score engine, regime veto, partial upgrade logic, MaxScore regime-aware |
 | v0.26 | (prior sessions) | OBV + RSI divergence + CVD added to Indicators; CVD scoring block in ScoringEngine |
 | v0.27 (ScoringEngine) | 2026-04-06 | All verdict/penalty thresholds now read from EngineSettings (settings.json) |
-| v0.28 (MainForm) | (prior sessions) | OFI call site updated for top-3 weighted signature; OFI display shows bid/ask weighted volumes |
-| v0.29 (MainForm) | (prior sessions) | CalcCVD call site added; CVD display line in TIER 2; SettingsLoader.Initialise() in constructor |
-| v0.30 (MainForm) | 2026-04-06 | CalcOBV/CalcRSIDivergence/CalcROCSeries pass settings-driven gate params; ScoringEngine.Calculate passes cfg as 4th arg |
-| v0.30 (EngineSettings+Indicators) | (prior sessions) | EngineSettings POCO + SettingsLoader; all Indicators methods accept gate params from settings |
+| v0.28 (MainForm, Indicators) | 2026-04-06 | OFI call site updated for top-3 weighted signature; OFI display shows bid/ask weighted volumes |
+| v0.29 (MainForm) | 2026-04-06 | CalcCVD call site added; CVD display line in TIER 2; SettingsLoader.Initialise() in constructor |
+| v0.30 (MainForm, EngineSettings, Indicators) | 2026-04-06 | CalcOBV/CalcRSIDivergence/CalcROCSeries pass settings-driven gate params; ScoringEngine.Calculate passes cfg as 4th arg; EngineSettings CvdSettings class added |
+| v0.31 (MainForm, Indicators) | 2026-04-06 | CalcVWAP captures sessionCandleCount via ByRef; CalcVWAPBands added (σ1/σ2); VWAP display shows bands, session candle count, warmup tag |
+| v0.32 (MainForm, Indicators, EngineSettings, settings.json) | 2026-04-07 | VWAP session boundary times (session2Hour/Minute) moved from hardcoded 13:30 to settings.json; warmup threshold moved from hardcoded 15 to settings.json; VwapSettings class expanded with Session1/2StartHour/Minute + WarmupCandles; CalcVWAP and CalcVWAPBands accept these as parameters; MainForm reads from cfg.Indicators.VWAP |
 
 ---
 
