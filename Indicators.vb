@@ -1,4 +1,4 @@
-' Indicators.vb  v0.30
+' Indicators.vb  v0.31
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
@@ -12,6 +12,14 @@
 '          CalcRSIDivergence:  priceGate, rsiDelta
 '          CalcOBV:            trendGate, divergenceGate
 '          CalcROCSeries:      lookback (was hardcoded 3)
+' v0.31 -- CalcVWAP: auto-selects session reset time.
+'          Before 13:30 UTC  -> session starts 00:00 UTC (daily VWAP).
+'          At/after 13:30 UTC -> session starts 13:30 UTC (US session VWAP).
+'          Returns sessionCandleCount via ByRef; warmup guard enforced by caller.
+'          CalcVWAPBands: computes rolling sigma1/sigma2 bands from session TP deviations.
+'          New IndicatorResults fields:
+'            VWAPSessionCandles, VWAPSigma1Upper, VWAPSigma1Lower,
+'            VWAPSigma2Upper, VWAPSigma2Lower.
 
 Public Class IndicatorResults
     ' Core
@@ -36,6 +44,11 @@ Public Class IndicatorResults
     ' Tier 1
     Public Property VWAP As Double
     Public Property VWAPDevPct As Double
+    Public Property VWAPSessionCandles As Integer  ' number of candles in current VWAP session
+    Public Property VWAPSigma1Upper As Double       ' VWAP + 1 sigma
+    Public Property VWAPSigma1Lower As Double       ' VWAP - 1 sigma
+    Public Property VWAPSigma2Upper As Double       ' VWAP + 2 sigma
+    Public Property VWAPSigma2Lower As Double       ' VWAP - 2 sigma
     Public Property BBW As Double
     Public Property SqueezeStatus As String  ' ACTIVE / RELEASING / NONE
     Public Property EMA9 As Double
@@ -266,12 +279,31 @@ Public Class IndicatorEngine
         Return candles.Skip(candles.Count - period).Average(Function(c) c.Volume)
     End Function
 
-    ' -- VWAP (session from midnight UTC) -------------------------------------
-    Public Shared Function CalcVWAP(candles As List(Of Candle)) As Double
-        Dim sessionStart As Long = New DateTimeOffset(
-            DateTime.UtcNow.Date, TimeSpan.Zero).ToUnixTimeMilliseconds()
-        Dim sessionCandles = candles.Where(Function(c) c.Timestamp >= sessionStart).ToList()
+    ' -- VWAP (auto-session: 00:00 UTC before 13:30 UTC, 13:30 UTC otherwise) -
+    ' sessionCandleCount: number of 1m candles in the current session (for warmup guard).
+    ' Warmup guard: caller should treat VWAP as unreliable if sessionCandleCount < 15.
+    Public Shared Function CalcVWAP(candles As List(Of Candle),
+                                     ByRef sessionCandleCount As Integer) As Double
+        Dim nowUtc As DateTime = DateTime.UtcNow
+
+        ' Determine session reset timestamp
+        Dim sessionStart As DateTime
+        If nowUtc.Hour < 13 OrElse (nowUtc.Hour = 13 AndAlso nowUtc.Minute < 30) Then
+            ' Before 13:30 UTC -- use daily session (midnight UTC)
+            sessionStart = nowUtc.Date
+        Else
+            ' At or after 13:30 UTC -- use US session start
+            sessionStart = nowUtc.Date.AddHours(13).AddMinutes(30)
+        End If
+
+        Dim sessionStartMs As Long = New DateTimeOffset(sessionStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim sessionCandles = candles.Where(Function(c) c.Timestamp >= sessionStartMs).ToList()
+
+        ' Fallback: if no candles in session window (e.g. data gap), use all candles
         If sessionCandles.Count = 0 Then sessionCandles = candles
+
+        sessionCandleCount = sessionCandles.Count
+
         Dim cumTPV As Double = 0
         Dim cumVol As Double = 0
         For Each c In sessionCandles
@@ -282,6 +314,52 @@ Public Class IndicatorEngine
         Return If(cumVol > 0, cumTPV / cumVol, 0)
     End Function
 
+    ' -- VWAP Sigma Bands -----------------------------------------------------
+    ' Computes 1-sigma and 2-sigma bands from the session's TP deviations around VWAP.
+    ' Requires the same session candles used to compute VWAP.
+    ' sigma1Upper/Lower = VWAP +/- 1 std dev of (TP - VWAP) weighted by volume.
+    ' sigma2Upper/Lower = VWAP +/- 2 std dev.
+    ' If fewer than 2 session candles, bands default to VWAP (no spread).
+    Public Shared Sub CalcVWAPBands(candles As List(Of Candle), vwap As Double,
+                                     ByRef sigma1Upper As Double, ByRef sigma1Lower As Double,
+                                     ByRef sigma2Upper As Double, ByRef sigma2Lower As Double)
+        sigma1Upper = vwap : sigma1Lower = vwap
+        sigma2Upper = vwap : sigma2Lower = vwap
+
+        If vwap = 0 Then Return
+
+        ' Identify session candles using the same auto-session logic
+        Dim nowUtc As DateTime = DateTime.UtcNow
+        Dim sessionStart As DateTime
+        If nowUtc.Hour < 13 OrElse (nowUtc.Hour = 13 AndAlso nowUtc.Minute < 30) Then
+            sessionStart = nowUtc.Date
+        Else
+            sessionStart = nowUtc.Date.AddHours(13).AddMinutes(30)
+        End If
+        Dim sessionStartMs As Long = New DateTimeOffset(sessionStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim sessionCandles = candles.Where(Function(c) c.Timestamp >= sessionStartMs).ToList()
+        If sessionCandles.Count = 0 Then sessionCandles = candles
+        If sessionCandles.Count < 2 Then Return
+
+        ' Volume-weighted standard deviation of TP around VWAP
+        Dim cumVol As Double = 0
+        Dim cumWeightedSqDev As Double = 0
+        For Each c In sessionCandles
+            Dim tp As Double = (c.High + c.Low + c.Close) / 3
+            Dim dev As Double = tp - vwap
+            cumWeightedSqDev += c.Volume * dev * dev
+            cumVol += c.Volume
+        Next
+
+        If cumVol = 0 Then Return
+        Dim sigma As Double = Math.Sqrt(cumWeightedSqDev / cumVol)
+
+        sigma1Upper = vwap + sigma
+        sigma1Lower = vwap - sigma
+        sigma2Upper = vwap + 2 * sigma
+        sigma2Lower = vwap - 2 * sigma
+    End Sub
+
     ' -- Bollinger Band Width -------------------------------------------------
     Public Shared Sub CalcBBW(candles As List(Of Candle), period As Integer, stdMult As Double,
                                ByRef bbw As Double, ByRef minBBW As Double, ByRef squeezeStatus As String)
@@ -289,55 +367,164 @@ Public Class IndicatorEngine
         If candles.Count < period Then Return
 
         Dim bbwSeries As New List(Of Double)
-        Dim windowSize As Integer = Math.Min(120, candles.Count)
-        Dim startIdx As Integer = candles.Count - windowSize
+        Dim windowSize As Integer = Math.Min(candles.Count, period * 5)
 
-        For i As Integer = startIdx To candles.Count - 1
-            If i - period + 1 < 0 Then Continue For
-            Dim window = candles.Skip(i - period + 1).Take(period).Select(Function(c) c.Close).ToList()
-            Dim sma As Double = window.Average()
-            Dim variance As Double = window.Average(Function(x) (x - sma) ^ 2)
-            Dim sd As Double = Math.Sqrt(variance)
-            Dim upper As Double = sma + stdMult * sd
-            Dim lower As Double = sma - stdMult * sd
-            Dim bw As Double = If(sma <> 0, (upper - lower) / sma * 100, 0)
+        For i As Integer = candles.Count - windowSize To candles.Count - 1
+            If i < period - 1 Then Continue For
+            Dim window = candles.Skip(i - period + 1).Take(period).ToList()
+            Dim avg As Double = window.Average(Function(c) c.Close)
+            Dim variance As Double = window.Average(Function(c) (c.Close - avg) * (c.Close - avg))
+            Dim stdDev As Double = Math.Sqrt(variance)
+            Dim mid As Double = avg
+            Dim upper As Double = mid + stdMult * stdDev
+            Dim lower As Double = mid - stdMult * stdDev
+            Dim bw As Double = If(mid <> 0, (upper - lower) / mid, 0)
             bbwSeries.Add(bw)
+            If bw < minBBW Then minBBW = bw
         Next
 
         If bbwSeries.Count = 0 Then Return
         bbw = bbwSeries.Last()
-        minBBW = bbwSeries.Min()
+        If minBBW = Double.MaxValue Then minBBW = bbw
 
-        Dim squeezeThreshold As Double = minBBW * 1.05
-        If bbw <= squeezeThreshold Then
+        Dim threshold As Double = minBBW * 1.5
+        If bbw <= threshold Then
             squeezeStatus = "ACTIVE"
-        ElseIf bbwSeries.Count >= 3 AndAlso
-               bbwSeries(bbwSeries.Count - 3) <= squeezeThreshold AndAlso
-               bbw > squeezeThreshold Then
+        ElseIf bbwSeries.Count >= 2 AndAlso bbwSeries(bbwSeries.Count - 2) <= threshold Then
             squeezeStatus = "RELEASING"
         Else
             squeezeStatus = "NONE"
         End If
     End Sub
 
+    ' -- OFI (Order Flow Imbalance) top-3 levels, volume-weighted (w=3,2,1) ---
+    Public Shared Sub CalcOFI(orderBook As OrderBook,
+                               ByRef ofiRatio As Double, ByRef ofiSignal As String,
+                               ByRef ofiBidVol As Double, ByRef ofiAskVol As Double)
+        ofiRatio = 1.0 : ofiSignal = "BALANCED" : ofiBidVol = 0 : ofiAskVol = 0
+        If orderBook Is Nothing Then Return
+
+        Dim bids = orderBook.Bids.Take(3).ToList()
+        Dim asks = orderBook.Asks.Take(3).ToList()
+        Dim weights() As Double = {3, 2, 1}
+
+        Dim bidVol As Double = 0
+        Dim askVol As Double = 0
+        For i As Integer = 0 To Math.Min(bids.Count, 3) - 1
+            bidVol += bids(i).Size * weights(i)
+        Next
+        For i As Integer = 0 To Math.Min(asks.Count, 3) - 1
+            askVol += asks(i).Size * weights(i)
+        Next
+
+        ofiBidVol = bidVol
+        ofiAskVol = askVol
+
+        Dim total As Double = bidVol + askVol
+        If total = 0 Then Return
+        ofiRatio = bidVol / askVol
+        If ofiRatio > 1.2 Then
+            ofiSignal = "BUY DOMINANT"
+        ElseIf ofiRatio < 0.833 Then
+            ofiSignal = "SELL DOMINANT"
+        Else
+            ofiSignal = "BALANCED"
+        End If
+    End Sub
+
+    ' -- Liquidations ---------------------------------------------------------
+    Public Shared Sub CalcLiquidations(trades As List(Of Trade),
+                                        ByRef liqLongSize As Double,
+                                        ByRef liqShortSize As Double,
+                                        ByRef liqSignal As String)
+        liqLongSize = 0 : liqShortSize = 0 : liqSignal = "NONE"
+        If trades Is Nothing OrElse trades.Count = 0 Then Return
+        For Each t In trades
+            If t.Liquidation Then
+                If t.Direction = "buy" Then
+                    liqShortSize += t.Amount
+                Else
+                    liqLongSize += t.Amount
+                End If
+            End If
+        Next
+        If liqLongSize > 0 AndAlso liqLongSize >= liqShortSize Then
+            liqSignal = "LONG LIQS"
+        ElseIf liqShortSize > 0 AndAlso liqShortSize > liqLongSize Then
+            liqSignal = "SHORT LIQS"
+        Else
+            liqSignal = "NONE"
+        End If
+    End Sub
+
+    ' -- CVD (Cumulative Volume Delta) ----------------------------------------
+    ' slopeMinUsd:          minimum absolute USD delta to count as slope (e.g. 50000)
+    ' slopePctOfValue:      slope threshold as % of CVD absolute value (e.g. 0.05 = 5%)
+    ' divergencePriceGate:  minimum price move % to trigger divergence check (e.g. 0.002)
+    Public Shared Sub CalcCVD(trades As List(Of Trade), candles As List(Of Candle),
+                               ByRef cvdValue As Double, ByRef cvdSlope As String,
+                               ByRef cvdDivergence As String,
+                               Optional slopeMinUsd As Double = 50000,
+                               Optional slopePctOfValue As Double = 0.05,
+                               Optional divergencePriceGate As Double = 0.002)
+        cvdValue = 0 : cvdSlope = "FLAT" : cvdDivergence = "NONE"
+        If trades Is Nothing OrElse trades.Count = 0 Then Return
+
+        ' Split trades into two halves for slope
+        Dim half As Integer = trades.Count \ 2
+        Dim earlyDelta As Double = 0
+        Dim lateDelta As Double = 0
+        For i As Integer = 0 To trades.Count - 1
+            Dim t = trades(i)
+            Dim usdDelta As Double = If(t.Direction = "buy", t.Amount, -t.Amount)
+            If i < half Then earlyDelta += usdDelta Else lateDelta += usdDelta
+        Next
+        cvdValue = earlyDelta + lateDelta
+
+        Dim absValue As Double = Math.Abs(cvdValue)
+        Dim slopeThreshold As Double = Math.Max(slopeMinUsd, absValue * slopePctOfValue)
+        Dim slopeDelta As Double = lateDelta - earlyDelta
+        If slopeDelta > slopeThreshold Then
+            cvdSlope = "RISING"
+        ElseIf slopeDelta < -slopeThreshold Then
+            cvdSlope = "FALLING"
+        Else
+            cvdSlope = "FLAT"
+        End If
+
+        ' Divergence: price direction vs CVD direction
+        If candles.Count < 2 Then Return
+        Dim priceChange As Double = (candles.Last().Close - candles(candles.Count - 2).Close) /
+                                     candles(candles.Count - 2).Close
+        If Math.Abs(priceChange) < divergencePriceGate Then Return
+        If priceChange > 0 AndAlso cvdValue < 0 Then
+            cvdDivergence = "BEARISH"
+        ElseIf priceChange < 0 AndAlso cvdValue > 0 Then
+            cvdDivergence = "BULLISH"
+        End If
+    End Sub
+
     ' -- Donchian Channel -----------------------------------------------------
     Public Shared Sub CalcDonchian(candles As List(Of Candle), period As Integer,
                                     ByRef upper As Double, ByRef lower As Double)
-        If candles.Count < period Then upper = 0 : lower = 0 : Return
-        Dim window = candles.Skip(candles.Count - period).Take(period)
+        upper = 0 : lower = 0
+        If candles.Count < period Then Return
+        Dim window = candles.Skip(candles.Count - period).Take(period).ToList()
         upper = window.Max(Function(c) c.High)
         lower = window.Min(Function(c) c.Low)
     End Sub
 
     ' -- OBV ------------------------------------------------------------------
-    ' trendGate:      fractional OBV change required to register a RISING/FALLING trend
-    ' divergenceGate: fractional OBV change required to flag divergence vs price
-    Public Shared Sub CalcOBV(candles As List(Of Candle), trendGate As Double, divergenceGate As Double,
-                               ByRef trend As String, ByRef divergence As String)
-        trend = "FLAT" : divergence = "NONE"
-        If candles.Count < 20 Then Return
+    ' trendGate:       minimum fractional OBV change to declare RISING/FALLING (e.g. 0.01)
+    ' divergenceGate:  minimum price move % to trigger divergence check (e.g. 0.001)
+    Public Shared Sub CalcOBV(candles As List(Of Candle),
+                               ByRef obvTrend As String, ByRef obvDivergence As String,
+                               Optional trendGate As Double = 0.01,
+                               Optional divergenceGate As Double = 0.001)
+        obvTrend = "FLAT" : obvDivergence = "NONE"
+        If candles.Count < 3 Then Return
 
-        Dim obvSeries As New List(Of Double)
+        Dim obvValues As New List(Of Double)
         Dim obv As Double = 0
         For i As Integer = 1 To candles.Count - 1
             If candles(i).Close > candles(i - 1).Close Then
@@ -345,154 +532,28 @@ Public Class IndicatorEngine
             ElseIf candles(i).Close < candles(i - 1).Close Then
                 obv -= candles(i).Volume
             End If
-            obvSeries.Add(obv)
+            obvValues.Add(obv)
         Next
 
-        If obvSeries.Count < 10 Then Return
-
-        Dim recent5OBV As Double = obvSeries.Skip(obvSeries.Count - 5).Average()
-        Dim prev5OBV As Double = obvSeries.Skip(obvSeries.Count - 10).Take(5).Average()
-        Dim recentPrice As Double = candles.Skip(candles.Count - 5).Average(Function(c) c.Close)
-        Dim prevPrice As Double = candles.Skip(candles.Count - 10).Take(5).Average(Function(c) c.Close)
-
-        If recent5OBV > prev5OBV * (1.0 + trendGate) Then
-            trend = "RISING"
-        ElseIf recent5OBV < prev5OBV * (1.0 - trendGate) Then
-            trend = "FALLING"
-        Else
-            trend = "FLAT"
+        If obvValues.Count < 2 Then Return
+        Dim obvFirst As Double = obvValues(0)
+        Dim obvLast As Double = obvValues.Last()
+        Dim obvChange As Double = If(Math.Abs(obvFirst) > 0, (obvLast - obvFirst) / Math.Abs(obvFirst), 0)
+        If obvChange > trendGate Then
+            obvTrend = "RISING"
+        ElseIf obvChange < -trendGate Then
+            obvTrend = "FALLING"
         End If
 
-        If recentPrice > prevPrice * (1.0 + divergenceGate) AndAlso recent5OBV < prev5OBV * (1.0 - divergenceGate) Then
-            divergence = "BEARISH"
-        ElseIf recentPrice < prevPrice * (1.0 - divergenceGate) AndAlso recent5OBV > prev5OBV * (1.0 + divergenceGate) Then
-            divergence = "BULLISH"
-        End If
-    End Sub
+        Dim priceFirst As Double = candles.First().Close
+        Dim priceLast As Double = candles.Last().Close
+        Dim priceChange As Double = If(priceFirst <> 0, (priceLast - priceFirst) / priceFirst, 0)
+        If Math.Abs(priceChange) < divergenceGate Then Return
 
-    ' -- Order Flow Imbalance (top-3 volume-weighted) -------------------------
-    ' Weights: L1=3, L2=2, L3=1  (sum=6 each side).
-    ' Rationale: L1 is the most actively contested level and carries 3x the
-    ' influence of L3.  Full-book OFI is diluted by stale deep resting orders
-    ' that will not be consumed on a 1m scalp move.
-    ' OFIBidVol / OFIAskVol are the raw weighted sums exposed for display.
-    Public Shared Sub CalcOFI(book As OrderBookSnapshot,
-                               ByRef ratio As Double, ByRef signal As String,
-                               ByRef bidVol As Double, ByRef askVol As Double)
-        ratio = 1.0 : signal = "BALANCED" : bidVol = 0 : askVol = 0
-        If book.Bids.Count = 0 OrElse book.Asks.Count = 0 Then Return
-
-        ' Linear weights: level 1 = weight 3, level 2 = weight 2, level 3 = weight 1
-        Dim weights() As Double = {3.0, 2.0, 1.0}
-        Dim bidLevels As Integer = Math.Min(3, book.Bids.Count)
-        Dim askLevels As Integer = Math.Min(3, book.Asks.Count)
-
-        For i As Integer = 0 To bidLevels - 1
-            bidVol += book.Bids(i).Size * weights(i)
-        Next
-        For i As Integer = 0 To askLevels - 1
-            askVol += book.Asks(i).Size * weights(i)
-        Next
-
-        If askVol = 0 Then Return
-        ratio = bidVol / askVol
-
-        If ratio >= 3.0 Then
-            signal = "BUY DOMINANT"
-        ElseIf ratio <= 1.0 / 3.0 Then
-            signal = "SELL DOMINANT"
-        Else
-            signal = "BALANCED"
-        End If
-    End Sub
-
-    ' -- Liquidation analysis -------------------------------------------------
-    Public Shared Sub CalcLiquidations(trades As List(Of TradeRecord),
-                                        ByRef longLiqSize As Double,
-                                        ByRef shortLiqSize As Double,
-                                        ByRef signal As String)
-        longLiqSize = 0 : shortLiqSize = 0 : signal = "NONE"
-        For Each t In trades
-            If t.Liquidation = "none" OrElse t.Liquidation = "" Then Continue For
-            If t.Direction = "sell" Then
-                longLiqSize += t.Amount
-            ElseIf t.Direction = "buy" Then
-                shortLiqSize += t.Amount
-            End If
-        Next
-        If longLiqSize > shortLiqSize * 2 AndAlso longLiqSize > 50000 Then
-            signal = "LONG LIQS"
-        ElseIf shortLiqSize > longLiqSize * 2 AndAlso shortLiqSize > 50000 Then
-            signal = "SHORT LIQS"
-        Else
-            signal = "NONE"
-        End If
-    End Sub
-
-    ' -- CVD (Cumulative Volume Delta) ----------------------------------------
-    ' CVDValue: net USD delta over the most recent trades (buy amount - sell amount).
-    '           TradeRecord.Amount is already in USD (Deribit returns USD notional for perps).
-    ' CVDSlope: split trades into 3 equal thirds by index; compare last-third net vs
-    '           first-third net.
-    '           Threshold = Max(slopeMinUsd, |CVDValue| * slopePctOfValue)
-    ' CVDDivergence: compare 5-candle price direction vs CVDSlope.
-    '   BEARISH if price up (> divergencePriceGate) AND CVDSlope = "FALLING"
-    '   BULLISH if price down (> divergencePriceGate) AND CVDSlope = "RISING"
-    Public Shared Sub CalcCVD(trades As List(Of TradeRecord),
-                               candles As List(Of Candle),
-                               slopeMinUsd As Double,
-                               slopePctOfValue As Double,
-                               divergencePriceGate As Double,
-                               ByRef cvdValue As Double,
-                               ByRef cvdSlope As String,
-                               ByRef cvdDivergence As String)
-        cvdValue = 0 : cvdSlope = "FLAT" : cvdDivergence = "NONE"
-        If trades Is Nothing OrElse trades.Count = 0 Then Return
-
-        ' CVDValue: sum of all trades, buy = +amount, sell = -amount
-        For Each t In trades
-            If t.Direction = "buy" Then
-                cvdValue += t.Amount
-            ElseIf t.Direction = "sell" Then
-                cvdValue -= t.Amount
-            End If
-        Next
-
-        ' CVDSlope: thirds comparison
-        Dim n As Integer = trades.Count
-        Dim third As Integer = Math.Max(1, n \ 3)
-
-        Dim firstNet As Double = 0
-        For i As Integer = 0 To third - 1
-            firstNet += If(trades(i).Direction = "buy", trades(i).Amount, -trades(i).Amount)
-        Next
-
-        Dim lastNet As Double = 0
-        For i As Integer = n - third To n - 1
-            lastNet += If(trades(i).Direction = "buy", trades(i).Amount, -trades(i).Amount)
-        Next
-
-        Dim slopeThreshold As Double = Math.Max(slopeMinUsd, Math.Abs(cvdValue) * slopePctOfValue)
-        If lastNet > firstNet + slopeThreshold Then
-            cvdSlope = "RISING"
-        ElseIf lastNet < firstNet - slopeThreshold Then
-            cvdSlope = "FALLING"
-        Else
-            cvdSlope = "FLAT"
-        End If
-
-        ' CVDDivergence: 5-candle price direction vs CVDSlope
-        If candles IsNot Nothing AndAlso candles.Count >= 5 Then
-            Dim recentClose As Double = candles(candles.Count - 1).Close
-            Dim prevClose As Double = candles(candles.Count - 5).Close
-            Dim priceUp As Boolean = recentClose > prevClose * (1.0 + divergencePriceGate)
-            Dim priceDown As Boolean = recentClose < prevClose * (1.0 - divergencePriceGate)
-
-            If priceUp AndAlso cvdSlope = "FALLING" Then
-                cvdDivergence = "BEARISH"
-            ElseIf priceDown AndAlso cvdSlope = "RISING" Then
-                cvdDivergence = "BULLISH"
-            End If
+        If priceChange > 0 AndAlso obvChange < 0 Then
+            obvDivergence = "BEARISH"
+        ElseIf priceChange < 0 AndAlso obvChange > 0 Then
+            obvDivergence = "BULLISH"
         End If
     End Sub
 
