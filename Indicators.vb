@@ -1,4 +1,4 @@
-' Indicators.vb  v0.29
+' Indicators.vb  v0.30
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
@@ -6,6 +6,12 @@
 '          Two new IndicatorResults fields: OFIBidVol, OFIAskVol (weighted sums for display).
 ' v0.29 -- Added CVD fields: CVDValue, CVDSlope, CVDDivergence.
 '          Added CalcCVD method.
+' v0.30 -- Settings completeness pass: all hardcoded thresholds now passed as parameters
+'          so every tuneable value is driven from settings.json.
+'          CalcCVD:            slopeMinUsd, slopePctOfValue, divergencePriceGate
+'          CalcRSIDivergence:  priceGate, rsiDelta
+'          CalcOBV:            trendGate, divergenceGate
+'          CalcROCSeries:      lookback (was hardcoded 3)
 
 Public Class IndicatorResults
     ' Core
@@ -55,7 +61,7 @@ Public Class IndicatorResults
     Public Property LiqSignal As String
     Public Property EMA200_5m As Double
     Public Property PriceVsEMA200 As String  ' ABOVE / BELOW
-    Public Property CVDValue As Double       ' net USD delta (buy-sell) over last 100 trades
+    Public Property CVDValue As Double       ' net USD delta (buy-sell) over last N trades
     Public Property CVDSlope As String       ' "RISING" / "FALLING" / "FLAT"
     Public Property CVDDivergence As String  ' "BULLISH" / "BEARISH" / "NONE"
 
@@ -217,7 +223,10 @@ Public Class IndicatorEngine
     End Function
 
     ' -- RSI Divergence -------------------------------------------------------
-    Public Shared Function CalcRSIDivergence(candles As List(Of Candle), period As Integer) As String
+    ' priceGate:  fractional move required to count as a new high/low (e.g. 0.001 = 0.1%)
+    ' rsiDelta:   minimum RSI point difference to count as divergence (e.g. 2.0)
+    Public Shared Function CalcRSIDivergence(candles As List(Of Candle), period As Integer,
+                                              priceGate As Double, rsiDelta As Double) As String
         If candles.Count < period + 12 Then Return "NONE"
         Dim rsiSeries = CalcRSISeries(candles, period)
         If rsiSeries.Count < 10 Then Return "NONE"
@@ -227,19 +236,21 @@ Public Class IndicatorEngine
         Dim recentPrice As Double = candles.Skip(candles.Count - 5).Average(Function(c) c.Close)
         Dim prevPrice As Double = candles.Skip(candles.Count - 10).Take(5).Average(Function(c) c.Close)
 
-        If recentPrice > prevPrice * 1.001 AndAlso recentRSI < prevRSI - 2.0 Then
+        If recentPrice > prevPrice * (1.0 + priceGate) AndAlso recentRSI < prevRSI - rsiDelta Then
             Return "BEARISH"
-        ElseIf recentPrice < prevPrice * 0.999 AndAlso recentRSI > prevRSI + 2.0 Then
+        ElseIf recentPrice < prevPrice * (1.0 - priceGate) AndAlso recentRSI > prevRSI + rsiDelta Then
             Return "BULLISH"
         End If
         Return "NONE"
     End Function
 
     ' -- ROC ------------------------------------------------------------------
-    Public Shared Function CalcROCSeries(candles As List(Of Candle), period As Integer) As List(Of Double)
+    ' lookback: number of recent candles used for slope series (default 3)
+    Public Shared Function CalcROCSeries(candles As List(Of Candle), period As Integer,
+                                          lookback As Integer) As List(Of Double)
         Dim result As New List(Of Double)
-        If candles.Count < period + 3 Then Return result
-        For i As Integer = candles.Count - 3 To candles.Count - 1
+        If candles.Count < period + lookback Then Return result
+        For i As Integer = candles.Count - lookback To candles.Count - 1
             If i - period >= 0 Then
                 Dim roc As Double = ((candles(i).Close - candles(i - period).Close) /
                                      candles(i - period).Close) * 100
@@ -319,7 +330,9 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- OBV ------------------------------------------------------------------
-    Public Shared Sub CalcOBV(candles As List(Of Candle),
+    ' trendGate:      fractional OBV change required to register a RISING/FALLING trend
+    ' divergenceGate: fractional OBV change required to flag divergence vs price
+    Public Shared Sub CalcOBV(candles As List(Of Candle), trendGate As Double, divergenceGate As Double,
                                ByRef trend As String, ByRef divergence As String)
         trend = "FLAT" : divergence = "NONE"
         If candles.Count < 20 Then Return
@@ -342,17 +355,17 @@ Public Class IndicatorEngine
         Dim recentPrice As Double = candles.Skip(candles.Count - 5).Average(Function(c) c.Close)
         Dim prevPrice As Double = candles.Skip(candles.Count - 10).Take(5).Average(Function(c) c.Close)
 
-        If recent5OBV > prev5OBV * 1.001 Then
+        If recent5OBV > prev5OBV * (1.0 + trendGate) Then
             trend = "RISING"
-        ElseIf recent5OBV < prev5OBV * 0.999 Then
+        ElseIf recent5OBV < prev5OBV * (1.0 - trendGate) Then
             trend = "FALLING"
         Else
             trend = "FLAT"
         End If
 
-        If recentPrice > prevPrice * 1.001 AndAlso recent5OBV < prev5OBV * 0.999 Then
+        If recentPrice > prevPrice * (1.0 + divergenceGate) AndAlso recent5OBV < prev5OBV * (1.0 - divergenceGate) Then
             divergence = "BEARISH"
-        ElseIf recentPrice < prevPrice * 0.999 AndAlso recent5OBV > prev5OBV * 1.001 Then
+        ElseIf recentPrice < prevPrice * (1.0 - divergenceGate) AndAlso recent5OBV > prev5OBV * (1.0 + divergenceGate) Then
             divergence = "BULLISH"
         End If
     End Sub
@@ -384,7 +397,6 @@ Public Class IndicatorEngine
         If askVol = 0 Then Return
         ratio = bidVol / askVol
 
-        ' Thresholds: same as before (3:1 strong imbalance)
         If ratio >= 3.0 Then
             signal = "BUY DOMINANT"
         ElseIf ratio <= 1.0 / 3.0 Then
@@ -418,15 +430,19 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- CVD (Cumulative Volume Delta) ----------------------------------------
-    ' CVDValue: net USD delta over the 100 most recent trades (buy amount - sell amount).
+    ' CVDValue: net USD delta over the most recent trades (buy amount - sell amount).
     '           TradeRecord.Amount is already in USD (Deribit returns USD notional for perps).
     ' CVDSlope: split trades into 3 equal thirds by index; compare last-third net vs
-    '           first-third net.  Threshold: 1% of |CVDValue| or $1000 minimum.
+    '           first-third net.
+    '           Threshold = Max(slopeMinUsd, |CVDValue| * slopePctOfValue)
     ' CVDDivergence: compare 5-candle price direction vs CVDSlope.
-    '   BEARISH if price up AND CVDSlope = "FALLING"
-    '   BULLISH if price down AND CVDSlope = "RISING"
+    '   BEARISH if price up (> divergencePriceGate) AND CVDSlope = "FALLING"
+    '   BULLISH if price down (> divergencePriceGate) AND CVDSlope = "RISING"
     Public Shared Sub CalcCVD(trades As List(Of TradeRecord),
                                candles As List(Of Candle),
+                               slopeMinUsd As Double,
+                               slopePctOfValue As Double,
+                               divergencePriceGate As Double,
                                ByRef cvdValue As Double,
                                ByRef cvdSlope As String,
                                ByRef cvdDivergence As String)
@@ -456,7 +472,7 @@ Public Class IndicatorEngine
             lastNet += If(trades(i).Direction = "buy", trades(i).Amount, -trades(i).Amount)
         Next
 
-        Dim slopeThreshold As Double = Math.Max(1000.0, Math.Abs(cvdValue) * 0.01)
+        Dim slopeThreshold As Double = Math.Max(slopeMinUsd, Math.Abs(cvdValue) * slopePctOfValue)
         If lastNet > firstNet + slopeThreshold Then
             cvdSlope = "RISING"
         ElseIf lastNet < firstNet - slopeThreshold Then
@@ -469,8 +485,8 @@ Public Class IndicatorEngine
         If candles IsNot Nothing AndAlso candles.Count >= 5 Then
             Dim recentClose As Double = candles(candles.Count - 1).Close
             Dim prevClose As Double = candles(candles.Count - 5).Close
-            Dim priceUp As Boolean = recentClose > prevClose * 1.0005
-            Dim priceDown As Boolean = recentClose < prevClose * 0.9995
+            Dim priceUp As Boolean = recentClose > prevClose * (1.0 + divergencePriceGate)
+            Dim priceDown As Boolean = recentClose < prevClose * (1.0 - divergencePriceGate)
 
             If priceUp AndAlso cvdSlope = "FALLING" Then
                 cvdDivergence = "BEARISH"
