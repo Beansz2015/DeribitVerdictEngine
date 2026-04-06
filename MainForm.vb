@@ -1,10 +1,12 @@
-' MainForm.vb  v0.29
+' MainForm.vb  v0.30
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
 ' v0.29 -- CalcCVD call added after CalcLiquidations in RunAnalysisAsync.
 '          CVD display line added to TIER 2 block in RenderOutput.
 '          SettingsLoader.Initialise() called from constructor.
+' v0.30 -- CalcOBV / CalcRSIDivergence / CalcROCSeries now pass settings-driven gate params.
+'          ScoringEngine.Calculate now receives EngineSettings as 4th argument.
 
 Imports System.Drawing
 Imports System.IO
@@ -33,7 +35,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.29"
+        Me.Text = "Deribit Verdict Engine v0.30"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -248,6 +250,8 @@ Public Class MainForm
     End Sub
 
     Private Async Function RunAnalysisAsync() As Task
+        Dim cfg As EngineSettings = SettingsLoader.Current
+
         Dim t_1m = DeribitClient.GetCandlesAsync("1", 250)
         Dim t_5m = DeribitClient.GetCandlesAsync("5", 210)
         Dim t_funding = DeribitClient.GetFundingRateAsync()
@@ -278,7 +282,9 @@ Public Class MainForm
         Dim norms As DynamicNorms = DynamicNorms.Compute(candles1m, r.ATR)
         r.ATRSizeMultiplier = Math.Round(norms.ATRScaleFactor, 2)
 
-        Dim rocSeries = IndicatorEngine.CalcROCSeries(candles1m, 9)
+        ' v0.30: CalcROCSeries passes lookback from settings
+        Dim rocSeries = IndicatorEngine.CalcROCSeries(candles1m,
+                            cfg.Indicators.ROC.Lookback)
         r.ROC = If(rocSeries.Count > 0, rocSeries.Last(), 0)
         If rocSeries.Count >= 2 Then
             Dim delta As Double = rocSeries.Last() - rocSeries(rocSeries.Count - 2)
@@ -287,7 +293,7 @@ Public Class MainForm
             r.ROCSlope = "FLAT"
         End If
 
-        r.RSI = IndicatorEngine.CalcRSI(candles1m, 9)
+        r.RSI = IndicatorEngine.CalcRSI(candles1m, cfg.Indicators.RSI.Period)
 
         r.VolumeSMA9 = IndicatorEngine.CalcVolumeSMA(candles1m, 9)
         r.CurrentVolume = candles1m.Last().Volume
@@ -361,13 +367,9 @@ Public Class MainForm
             r.OISignal = "NEUTRAL"
         End If
 
-        ' v0.28: updated call site -- pass ByRef OFIBidVol and OFIAskVol
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
-
-        ' v0.29: CVD call site
-        IndicatorEngine.CalcCVD(recentTrades, candles1m,
-                                 r.CVDValue, r.CVDSlope, r.CVDDivergence)
+        IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
 
         r.EMA200_5m = IndicatorEngine.CalcEMA(candles5m, 200)
         r.PriceVsEMA200 = If(r.EMA200_5m > 0,
@@ -383,14 +385,21 @@ Public Class MainForm
             r.DonchianSignal = "NONE"
         End If
 
-        IndicatorEngine.CalcOBV(candles1m, r.OBVTrend, r.OBVDivergence)
-        r.RSIDivergence = IndicatorEngine.CalcRSIDivergence(candles1m, 9)
+        ' v0.30: CalcOBV and CalcRSIDivergence pass gate params from settings
+        IndicatorEngine.CalcOBV(candles1m, r.OBVTrend, r.OBVDivergence,
+                                cfg.Indicators.OBV.TrendGate,
+                                cfg.Indicators.OBV.DivergenceGate)
+        r.RSIDivergence = IndicatorEngine.CalcRSIDivergence(candles1m,
+                              cfg.Indicators.RSI.Period,
+                              cfg.Indicators.RSI.DivergencePriceGate,
+                              cfg.Indicators.RSI.DivergenceRsiDelta)
 
         Dim posState As PositionState = PositionState.None
         If rbLong.Checked Then posState = PositionState.InLong
         If rbShort.Checked Then posState = PositionState.InShort
 
-        Dim verdict = ScoringEngine.Calculate(r, posState, norms)
+        ' v0.30: pass cfg as 4th argument so ScoringEngine reads thresholds from settings
+        Dim verdict = ScoringEngine.Calculate(r, posState, norms, cfg)
 
         AnalysisLogger.LogRun(r, verdict)
         UpdateLogInfo()
@@ -482,14 +491,12 @@ Public Class MainForm
         sb.AppendLine()
 
         sb.AppendLine("TIER 2 SIGNALS:")
-        ' v0.28: OFI line shows weighted bid/ask volumes (top-3, w=3,2,1) alongside ratio and signal
         sb.AppendLine("  Order Flow:   " & r.OFISignal &
                       "  |  Ratio: " & r.OFIRatio.ToString("F2") &
                       "  |  Bid(w): " & r.OFIBidVol.ToString("F1") &
                       "  Ask(w): " & r.OFIAskVol.ToString("F1") &
                       "  [top-3 wtd]")
         sb.AppendLine("  Liquidations: " & r.LiqSignal & "  |  Long Liqs: " & r.LiqLongSize.ToString("F0") & "  Short Liqs: " & r.LiqShortSize.ToString("F0"))
-        ' v0.29: CVD display line
         sb.AppendLine("  CVD:          Net:" & r.CVDValue.ToString("F0") &
                       "  |  Slope:" & r.CVDSlope &
                       "  |  Div:" & r.CVDDivergence)
