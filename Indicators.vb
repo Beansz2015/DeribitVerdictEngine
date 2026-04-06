@@ -1,9 +1,11 @@
-' Indicators.vb  v0.28
+' Indicators.vb  v0.29
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
 ' v0.28 -- CalcOFI rewritten: top-3 levels only, volume-weighted (w=3,2,1).
 '          Two new IndicatorResults fields: OFIBidVol, OFIAskVol (weighted sums for display).
+' v0.29 -- Added CVD fields: CVDValue, CVDSlope, CVDDivergence.
+'          Added CalcCVD method.
 
 Public Class IndicatorResults
     ' Core
@@ -53,6 +55,9 @@ Public Class IndicatorResults
     Public Property LiqSignal As String
     Public Property EMA200_5m As Double
     Public Property PriceVsEMA200 As String  ' ABOVE / BELOW
+    Public Property CVDValue As Double       ' net USD delta (buy-sell) over last 100 trades
+    Public Property CVDSlope As String       ' "RISING" / "FALLING" / "FLAT"
+    Public Property CVDDivergence As String  ' "BULLISH" / "BEARISH" / "NONE"
 
     ' Tier 3
     Public Property DonchianUpper As Double
@@ -409,6 +414,69 @@ Public Class IndicatorEngine
             signal = "SHORT LIQS"
         Else
             signal = "NONE"
+        End If
+    End Sub
+
+    ' -- CVD (Cumulative Volume Delta) ----------------------------------------
+    ' CVDValue: net USD delta over the 100 most recent trades (buy amount - sell amount).
+    '           TradeRecord.Amount is already in USD (Deribit returns USD notional for perps).
+    ' CVDSlope: split trades into 3 equal thirds by index; compare last-third net vs
+    '           first-third net.  Threshold: 1% of |CVDValue| or $1000 minimum.
+    ' CVDDivergence: compare 5-candle price direction vs CVDSlope.
+    '   BEARISH if price up AND CVDSlope = "FALLING"
+    '   BULLISH if price down AND CVDSlope = "RISING"
+    Public Shared Sub CalcCVD(trades As List(Of TradeRecord),
+                               candles As List(Of Candle),
+                               ByRef cvdValue As Double,
+                               ByRef cvdSlope As String,
+                               ByRef cvdDivergence As String)
+        cvdValue = 0 : cvdSlope = "FLAT" : cvdDivergence = "NONE"
+        If trades Is Nothing OrElse trades.Count = 0 Then Return
+
+        ' CVDValue: sum of all trades, buy = +amount, sell = -amount
+        For Each t In trades
+            If t.Direction = "buy" Then
+                cvdValue += t.Amount
+            ElseIf t.Direction = "sell" Then
+                cvdValue -= t.Amount
+            End If
+        Next
+
+        ' CVDSlope: thirds comparison
+        Dim n As Integer = trades.Count
+        Dim third As Integer = Math.Max(1, n \ 3)
+
+        Dim firstNet As Double = 0
+        For i As Integer = 0 To third - 1
+            firstNet += If(trades(i).Direction = "buy", trades(i).Amount, -trades(i).Amount)
+        Next
+
+        Dim lastNet As Double = 0
+        For i As Integer = n - third To n - 1
+            lastNet += If(trades(i).Direction = "buy", trades(i).Amount, -trades(i).Amount)
+        Next
+
+        Dim slopeThreshold As Double = Math.Max(1000.0, Math.Abs(cvdValue) * 0.01)
+        If lastNet > firstNet + slopeThreshold Then
+            cvdSlope = "RISING"
+        ElseIf lastNet < firstNet - slopeThreshold Then
+            cvdSlope = "FALLING"
+        Else
+            cvdSlope = "FLAT"
+        End If
+
+        ' CVDDivergence: 5-candle price direction vs CVDSlope
+        If candles IsNot Nothing AndAlso candles.Count >= 5 Then
+            Dim recentClose As Double = candles(candles.Count - 1).Close
+            Dim prevClose As Double = candles(candles.Count - 5).Close
+            Dim priceUp As Boolean = recentClose > prevClose * 1.0005
+            Dim priceDown As Boolean = recentClose < prevClose * 0.9995
+
+            If priceUp AndAlso cvdSlope = "FALLING" Then
+                cvdDivergence = "BEARISH"
+            ElseIf priceDown AndAlso cvdSlope = "RISING" Then
+                cvdDivergence = "BULLISH"
+            End If
         End If
     End Sub
 
