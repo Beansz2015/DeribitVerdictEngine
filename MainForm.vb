@@ -1,7 +1,10 @@
-' MainForm.vb  v0.28
+' MainForm.vb  v0.29
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
+' v0.29 -- CalcCVD call added after CalcLiquidations in RunAnalysisAsync.
+'          CVD display line added to TIER 2 block in RenderOutput.
+'          SettingsLoader.Initialise() called from constructor.
 
 Imports System.Drawing
 Imports System.IO
@@ -30,11 +33,13 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.28"
+        Me.Text = "Deribit Verdict Engine v0.29"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
         UpdateLogInfo()
+        SettingsLoader.Initialise(Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
     End Sub
 
     Private Sub SetOutputMargins(leftPx As Integer, rightPx As Integer)
@@ -360,6 +365,10 @@ Public Class MainForm
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
 
+        ' v0.29: CVD call site
+        IndicatorEngine.CalcCVD(recentTrades, candles1m,
+                                 r.CVDValue, r.CVDSlope, r.CVDDivergence)
+
         r.EMA200_5m = IndicatorEngine.CalcEMA(candles5m, 200)
         r.PriceVsEMA200 = If(r.EMA200_5m > 0,
                               If(r.CurrentPrice > r.EMA200_5m, "ABOVE", "BELOW"),
@@ -480,6 +489,10 @@ Public Class MainForm
                       "  Ask(w): " & r.OFIAskVol.ToString("F1") &
                       "  [top-3 wtd]")
         sb.AppendLine("  Liquidations: " & r.LiqSignal & "  |  Long Liqs: " & r.LiqLongSize.ToString("F0") & "  Short Liqs: " & r.LiqShortSize.ToString("F0"))
+        ' v0.29: CVD display line
+        sb.AppendLine("  CVD:          Net:" & r.CVDValue.ToString("F0") &
+                      "  |  Slope:" & r.CVDSlope &
+                      "  |  Div:" & r.CVDDivergence)
         sb.AppendLine("  5m EMA(200):  " & r.EMA200_5m.ToString("F1") & "  |  " & r.PriceVsEMA200)
         sb.AppendLine()
 
