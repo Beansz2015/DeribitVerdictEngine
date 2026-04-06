@@ -1,4 +1,4 @@
-' MainForm.vb  v0.30
+' MainForm.vb  v0.31
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
@@ -7,6 +7,10 @@
 '          SettingsLoader.Initialise() called from constructor.
 ' v0.30 -- CalcOBV / CalcRSIDivergence / CalcROCSeries now pass settings-driven gate params.
 '          ScoringEngine.Calculate now receives EngineSettings as 4th argument.
+' v0.31 -- CalcVWAP call updated: captures r.VWAPSessionCandles via ByRef.
+'          CalcVWAPBands called after CalcVWAP to populate sigma1/sigma2 fields.
+'          RenderOutput VWAP line now shows: VWAP value, dev%, session candles,
+'          sigma1 and sigma2 band levels, and [WARMUP] tag if <15 candles.
 
 Imports System.Drawing
 Imports System.IO
@@ -35,7 +39,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.30"
+        Me.Text = "Deribit Verdict Engine v0.31"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -311,8 +315,12 @@ Public Class MainForm
             r.Regime = "TRANSITIONAL"
         End If
 
-        r.VWAP = IndicatorEngine.CalcVWAP(candles1m)
+        ' v0.31: CalcVWAP captures session candle count; CalcVWAPBands computes sigma bands
+        r.VWAP = IndicatorEngine.CalcVWAP(candles1m, r.VWAPSessionCandles)
         r.VWAPDevPct = If(r.VWAP > 0, (r.CurrentPrice - r.VWAP) / r.VWAP * 100, 0)
+        IndicatorEngine.CalcVWAPBands(candles1m, r.VWAP,
+                                      r.VWAPSigma1Upper, r.VWAPSigma1Lower,
+                                      r.VWAPSigma2Upper, r.VWAPSigma2Lower)
 
         Dim minBBW As Double
         IndicatorEngine.CalcBBW(candles1m, 20, 2.0, r.BBW, minBBW, r.SqueezeStatus)
@@ -463,7 +471,7 @@ Public Class MainForm
                       "  M:" & norms.VolMidThreshold.ToString("F2") & "x" &
                       "  (mean=" & norms.VolMean.ToString("F4") & " BTC" &
                       "  σ=" & norms.VolStdDev.ToString("F4") & ")")
-        sb.AppendLine("  VWAP dev thr  : ±" & norms.VWAPDevThreshold.ToString("F2") & "%")
+        sb.AppendLine("  VWAP dev thr  : ±" & norms.VWAPDevThreshold.ToString("F2") & "% (legacy ref)")
         sb.AppendLine("  ATR scale     : " & norms.ATRScaleFactor.ToString("F2") & "x" &
                       "  (ATR=" & r.ATR.ToString("F2") & "  ref=" & norms.ATRRef.ToString("F2") & ")")
         sb.AppendLine()
@@ -482,8 +490,24 @@ Public Class MainForm
                       "  |  vs SMA: " & r.VolumeRatio.ToString("F2") & "x  |  SMA: " & r.VolumeSMA9.ToString("F4") & " BTC")
         sb.AppendLine()
 
+        ' v0.31: VWAP line shows sigma bands, session candle count, and warmup tag
+        Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < 15, "  [WARMUP]", "")
+        Dim vwapSessionLabel As String
+        Dim nowHour As Integer = DateTime.UtcNow.Hour
+        Dim nowMin  As Integer = DateTime.UtcNow.Minute
+        If nowHour < 13 OrElse (nowHour = 13 AndAlso nowMin < 30) Then
+            vwapSessionLabel = "daily(00:00)"
+        Else
+            vwapSessionLabel = "US(13:30)"
+        End If
+
         sb.AppendLine("TIER 1 SIGNALS:")
-        sb.AppendLine("  VWAP:         " & r.VWAP.ToString("F1") & "  |  Dev: " & r.VWAPDevPct.ToString("F2") & "%  |  Price: " & r.CurrentPrice.ToString("F1"))
+        sb.AppendLine("  VWAP:         " & r.VWAP.ToString("F1") &
+                      "  |  Dev: " & r.VWAPDevPct.ToString("F2") & "%" &
+                      "  |  Price: " & r.CurrentPrice.ToString("F1") &
+                      "  |  Session: " & vwapSessionLabel & " (" & r.VWAPSessionCandles & "c)" & vwapWarmupTag)
+        sb.AppendLine("  VWAP Bands:   σ1[" & r.VWAPSigma1Lower.ToString("F1") & "," & r.VWAPSigma1Upper.ToString("F1") & "]" &
+                      "  σ2[" & r.VWAPSigma2Lower.ToString("F1") & "," & r.VWAPSigma2Upper.ToString("F1") & "]")
         sb.AppendLine("  BBW:          " & r.BBW.ToString("F4") & "  |  Squeeze: " & r.SqueezeStatus)
         sb.AppendLine("  EMA Ribbon:   9:" & r.EMA9.ToString("F1") & "  21:" & r.EMA21.ToString("F1") & "  50:" & r.EMA50.ToString("F1") & "  |  " & r.EMAAlignment)
         sb.AppendLine("  Funding:      " & (r.FundingRate * 100).ToString("F5") & "%  |  " & r.FundingBias & "  (info only)")
