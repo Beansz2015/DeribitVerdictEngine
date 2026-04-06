@@ -1,10 +1,12 @@
-' ScoringEngine.vb  v0.25
+' ScoringEngine.vb  v0.26
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
 ' v0.25: VerdictResult now carries MaxScore (regime-aware: 17 TRENDING / 16 RANGE_BOUND / 13 TRANSITIONAL).
 '        Verdict thresholds scaled proportionally per regime.
 '        ScoringEngine.MaxScore const kept for legacy reference (= 17, the theoretical ceiling).
+' v0.26: CVD signal block added after OFI, before Liquidations.
+'        CVD divergence penalty applied before liquidation penalty.
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -183,6 +185,15 @@ Public Class ScoringEngine
         Dim ofiSell As Boolean = r.OFISignal = "SELL DOMINANT"
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
 
+        ' CVD (Microstructure)
+        ' Full signal: slope aligned with net direction
+        ' Divergence penalty: -1 if CVD contradicts price direction
+        Dim cvdLong  As Boolean = r.CVDSlope = "RISING"  AndAlso r.CVDValue > 0
+        Dim cvdShort As Boolean = r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0
+        AddFull(state, cvdLong, cvdShort, SignalCategory.Microstructure)
+        If r.CVDDivergence = "BEARISH" Then state.LongScore  = Math.Max(0, state.LongScore  - 1)
+        If r.CVDDivergence = "BULLISH" Then state.ShortScore = Math.Max(0, state.ShortScore - 1)
+
         ' Liquidations -- penalty-only, scaled by size
         Dim liqLongPenalty As Integer = 0
         Dim liqShortPenalty As Integer = 0
@@ -284,6 +295,11 @@ Public Class ScoringEngine
 
         breakdown.Add(New SignalBreakdownItem("OFI", ofiBuy, ofiSell,
             String.Format("Ratio:{0:F2} | {1}", r.OFIRatio, r.OFISignal)))
+
+        ' CVD breakdown note: show divergence penalty flag if active
+        Dim cvdNote As String = String.Format("Net:{0:F0} | Slope:{1} | Div:{2}", r.CVDValue, r.CVDSlope, r.CVDDivergence)
+        If r.CVDDivergence <> "NONE" Then cvdNote &= " | PENALTY -1"
+        breakdown.Add(New SignalBreakdownItem("CVD", cvdLong, cvdShort, cvdNote))
 
         Dim liqNote As String = String.Format("L:{0:F0} S:{1:F0} | {2}", r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         If liqLongPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [L]", liqLongPenalty)
