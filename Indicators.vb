@@ -1,4 +1,4 @@
-' Indicators.vb  v0.35
+' Indicators.vb  v0.36
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
@@ -43,6 +43,8 @@
 '          Gate signals: (1) DMI direction, (2) ADX >= adxMin, (3) EMA aligned.
 '          minOf=2 means 2 of those 3 must agree with the proposed direction.
 '          candleLookback controls how many 15m candles to use (default 60 = 15h).
+' v0.36 -- Fix: CalcMTFGate EMA scoring block split into proper multi-line If/ElseIf/End If
+'          (single-line If...ElseIf is invalid VB.NET syntax).
 
 Public Class IndicatorResults
     ' Core
@@ -650,11 +652,25 @@ Public Class IndicatorEngine
         Dim bullScore As Integer = 0
         Dim bearScore As Integer = 0
 
-        If dmiIsBull Then bullScore += 1 Else bearScore += 1
-        If adxStrong Then
-            If dmiIsBull Then bullScore += 1 Else bearScore += 1
+        If dmiIsBull Then
+            bullScore += 1
+        Else
+            bearScore += 1
         End If
-        If emaBull Then bullScore += 1 ElseIf emaBear Then bearScore += 1
+
+        If adxStrong Then
+            If dmiIsBull Then
+                bullScore += 1
+            Else
+                bearScore += 1
+            End If
+        End If
+
+        If emaBull Then
+            bullScore += 1
+        ElseIf emaBear Then
+            bearScore += 1
+        End If
 
         ' Determine MTF trend
         If bullScore >= minOf Then
