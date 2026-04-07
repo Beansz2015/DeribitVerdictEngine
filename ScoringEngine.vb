@@ -1,4 +1,4 @@
-' ScoringEngine.vb  v0.28
+' ScoringEngine.vb  v0.29
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
@@ -14,6 +14,12 @@
 '        Partial signal: price between sigma1 and sigma2 (extended zone).
 '        No signal: price beyond sigma2 (overextended -- noise territory).
 '        Warmup guard: VWAP scoring skipped entirely if VWAPSessionCandles < 15.
+' v0.29: BBW scoring block upgraded to use TTMSignal from CalcTTMSqueeze.
+'        BULL_BUILDING / BEAR_BUILDING: +1 to respective side (squeeze releasing with conviction).
+'        BULL_FADING / BEAR_FADING:     no point awarded (momentum losing steam).
+'        FLAT:                          no point awarded.
+'        ACTIVE squeeze penalty (-1 both sides) retained unchanged.
+'        Breakdown note now shows TTMHistogram, TTMDirection, TTMSignal alongside SqueezeStatus.
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -66,9 +72,6 @@ Public Class ScoringEngine
     Public Const MaxScore As Integer = 17
 
     ' Regime-specific max achievable scores
-    ' TRENDING:     17  (regime bonus +4 available)
-    ' RANGE_BOUND:  16  (no ADX bonus, one partial upgrade less likely)
-    ' TRANSITIONAL: 13  (ADX penalty applied)
     Public Shared Function RegimeMaxScore(regime As String) As Integer
         Select Case regime
             Case "TRENDING_UP", "TRENDING_DOWN" : Return 17
@@ -77,8 +80,6 @@ Public Class ScoringEngine
         End Select
     End Function
 
-    ' Verdict thresholds derived from settings.json percentages (VerdictStrongPct etc.)
-    ' Rounded up so thresholds are always whole numbers achievable in practice.
     Private Shared Function ThresholdStrong(maxScore As Integer, pct As Double) As Integer
         Return CInt(Math.Ceiling(maxScore * pct))
     End Function
@@ -96,13 +97,11 @@ Public Class ScoringEngine
         Dim breakdown = res.SignalBreakdown
         Dim state As New ScoreState()
 
-        ' Determine regime-aware MaxScore up front so VerdictResult always carries it
         Dim regimeMax As Integer = RegimeMaxScore(r.Regime)
         res.MaxScore = regimeMax
 
         ' -- Step 2: Weighted Signal Scoring ----------------------------------
 
-        ' CORE
         ' ROC (Momentum)
         Dim rocLong As Boolean = r.ROC > 0 AndAlso r.ROCSlope = "RISING"
         Dim rocShort As Boolean = r.ROC < 0 AndAlso r.ROCSlope = "FALLING"
@@ -127,7 +126,7 @@ Public Class ScoringEngine
         Dim adxShort As Boolean = r.ADX > 25 AndAlso dmiShort
         AddFull(state, adxLong, adxShort, SignalCategory.MarketStructure)
 
-        ' Volume (Volume) -- thresholds from DynamicNorms
+        ' Volume (Volume)
         Dim volHigh As Double = norms.VolHighThreshold
         Dim volMid As Double = norms.VolMidThreshold
         Dim volLong As Boolean = r.VolumeRatio >= volHigh AndAlso r.ROC > 0 AndAlso r.CurrentPrice > r.VWAP
@@ -135,9 +134,7 @@ Public Class ScoringEngine
         Dim volPartial As Boolean = r.VolumeRatio >= volMid AndAlso r.VolumeRatio < volHigh
         AddFull(state, volLong, volShort, SignalCategory.Volume)
 
-        ' TIER 1
         ' VWAP (Microstructure) -- adaptive sigma bands
-        ' Warmup guard: skip entirely if session has fewer than 15 candles
         Dim vwapLong As Boolean = False
         Dim vwapShort As Boolean = False
         Dim vwapPartialLong As Boolean = False
@@ -149,13 +146,10 @@ Public Class ScoringEngine
             vwapNote = String.Format("WARMUP ({0}/15 candles) -- signal suppressed", r.VWAPSessionCandles)
         Else
             Dim price As Double = r.CurrentPrice
-            ' Full signal: price is between VWAP and sigma1 (mean-reversion confirmation zone)
             vwapLong  = price > r.VWAP AndAlso price <= r.VWAPSigma1Upper
             vwapShort = price < r.VWAP AndAlso price >= r.VWAPSigma1Lower
-            ' Partial signal: price is between sigma1 and sigma2 (extended but not overextended)
             vwapPartialLong  = price > r.VWAPSigma1Upper AndAlso price <= r.VWAPSigma2Upper
             vwapPartialShort = price < r.VWAPSigma1Lower AndAlso price >= r.VWAPSigma2Lower
-            ' Beyond sigma2: no signal (overextended, mean-reversion risk too high)
             AddFull(state, vwapLong, vwapShort, SignalCategory.Microstructure)
             vwapNote = String.Format(
                 "Price:{0:F0} VWAP:{1:F0} | σ1:[{2:F0},{3:F0}] σ2:[{4:F0},{5:F0}] | {6}candles",
@@ -165,7 +159,14 @@ Public Class ScoringEngine
                 r.VWAPSessionCandles)
         End If
 
-        ' BBW Squeeze-State Scoring
+        ' BBW / TTM Squeeze scoring
+        ' ACTIVE squeeze: -1 penalty both sides (unchanged from v0.28).
+        ' RELEASING + TTMSignal drives the award:
+        '   BULL_BUILDING -> +1 long  (momentum building upward out of squeeze)
+        '   BEAR_BUILDING -> +1 short (momentum building downward out of squeeze)
+        '   BULL_FADING / BEAR_FADING / FLAT -> no award (direction ambiguous or fading)
+        ' NONE squeeze: TTMSignal still awards if BULL_BUILDING or BEAR_BUILDING
+        '   (persistent momentum even outside a squeeze is still informative).
         Dim bbwLongHit As Boolean = False
         Dim bbwShortHit As Boolean = False
         Dim bbwNote As String
@@ -174,23 +175,27 @@ Public Class ScoringEngine
             Case "ACTIVE"
                 state.LongScore  = Math.Max(0, state.LongScore  - 1)
                 state.ShortScore = Math.Max(0, state.ShortScore - 1)
-                bbwNote = String.Format("{0:F3} | ACTIVE -- penalty -1 both sides", r.BBW)
-            Case "RELEASING"
-                If r.ROC > 0.1 Then
-                    state.LongScore += 1
-                    state.FullLongCategories.Add(SignalCategory.Microstructure)
-                    bbwLongHit = True
-                    bbwNote = String.Format("{0:F3} | RELEASING -- breakout [L] (ROC {1:F3})", r.BBW, r.ROC)
-                ElseIf r.ROC < -0.1 Then
-                    state.ShortScore += 1
-                    state.FullShortCategories.Add(SignalCategory.Microstructure)
-                    bbwShortHit = True
-                    bbwNote = String.Format("{0:F3} | RELEASING -- breakout [S] (ROC {1:F3})", r.BBW, r.ROC)
-                Else
-                    bbwNote = String.Format("{0:F3} | RELEASING -- ROC chop ({1:F3}), no award", r.BBW, r.ROC)
-                End If
-            Case Else
-                bbwNote = String.Format("{0:F3} | NONE", r.BBW)
+                bbwNote = String.Format("{0:F3} | ACTIVE -- penalty -1 both sides | TTM:{1} {2} H:{3:F1}",
+                                        r.BBW, r.TTMSignal, r.TTMDirection, r.TTMHistogram)
+            Case "RELEASING", "NONE"
+                Select Case r.TTMSignal
+                    Case "BULL_BUILDING"
+                        state.LongScore += 1
+                        state.FullLongCategories.Add(SignalCategory.Microstructure)
+                        bbwLongHit = True
+                        bbwNote = String.Format("{0:F3} | {1} -- BULL_BUILDING [L] H:{2:F1}",
+                                                r.BBW, r.SqueezeStatus, r.TTMHistogram)
+                    Case "BEAR_BUILDING"
+                        state.ShortScore += 1
+                        state.FullShortCategories.Add(SignalCategory.Microstructure)
+                        bbwShortHit = True
+                        bbwNote = String.Format("{0:F3} | {1} -- BEAR_BUILDING [S] H:{2:F1}",
+                                                r.BBW, r.SqueezeStatus, r.TTMHistogram)
+                    Case Else
+                        bbwNote = String.Format("{0:F3} | {1} -- {2} {3} H:{4:F1} -- no award",
+                                                r.BBW, r.SqueezeStatus,
+                                                r.TTMSignal, r.TTMDirection, r.TTMHistogram)
+                End Select
         End Select
 
         ' EMA Ribbon (MarketStructure)
@@ -205,22 +210,19 @@ Public Class ScoringEngine
         Dim oiPartialShort As Boolean = r.OISignal = "CAPITULATION"
         AddFull(state, oiLong, oiShort, SignalCategory.Microstructure)
 
-        ' TIER 2
         ' OFI (Microstructure)
         Dim ofiBuy As Boolean = r.OFISignal = "BUY DOMINANT"
         Dim ofiSell As Boolean = r.OFISignal = "SELL DOMINANT"
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
 
         ' CVD (Microstructure)
-        ' Full signal: slope aligned with net direction
-        ' Divergence penalty: -1 if CVD contradicts price direction
         Dim cvdLong  As Boolean = r.CVDSlope = "RISING"  AndAlso r.CVDValue > 0
         Dim cvdShort As Boolean = r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0
         AddFull(state, cvdLong, cvdShort, SignalCategory.Microstructure)
         If r.CVDDivergence = "BEARISH" Then state.LongScore  = Math.Max(0, state.LongScore  - 1)
         If r.CVDDivergence = "BULLISH" Then state.ShortScore = Math.Max(0, state.ShortScore - 1)
 
-        ' Liquidations -- penalty-only, scaled by size
+        ' Liquidations -- penalty only
         Dim liqLongPenalty As Integer = 0
         Dim liqShortPenalty As Integer = 0
         If r.LiqSignal = "LONG LIQS" Then
@@ -236,7 +238,6 @@ Public Class ScoringEngine
         Dim ema200Bear As Boolean = r.CurrentPrice < r.EMA200_5m AndAlso r.EMA200_5m > 0
         AddFull(state, ema200Bull, ema200Bear, SignalCategory.MarketStructure)
 
-        ' TIER 3
         ' Donchian (MarketStructure)
         Dim donchLong As Boolean = r.DonchianSignal = "LONG"
         Dim donchShort As Boolean = r.DonchianSignal = "SHORT"
@@ -249,7 +250,7 @@ Public Class ScoringEngine
         Dim obvPartialShort As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence = "BULLISH"
         AddFull(state, obvLong, obvShort, SignalCategory.Volume)
 
-        ' Pass 2: upgrade partials with cross-category full confirmation
+        ' Pass 2: partial upgrades
         Dim rocLongUpgraded As Boolean = rocPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Momentum)
         Dim rocShortUpgraded As Boolean = rocPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
         If rocLongUpgraded Then state.LongScore += 1
@@ -260,7 +261,6 @@ Public Class ScoringEngine
         If rsiLongUpgraded Then state.LongScore += 1
         If rsiShortUpgraded Then state.ShortScore += 1
 
-        ' VWAP partial upgrades (only if not in warmup)
         Dim vwapLongUpgraded As Boolean = False
         Dim vwapShortUpgraded As Boolean = False
         If Not vwapWarmup Then
@@ -313,7 +313,7 @@ Public Class ScoringEngine
                          vwapPartialShort AndAlso Not vwapShortUpgraded,
                          vwapLongUpgraded, vwapShortUpgraded))))
 
-        breakdown.Add(New SignalBreakdownItem("BBW Squeeze", bbwLongHit, bbwShortHit, bbwNote))
+        breakdown.Add(New SignalBreakdownItem("BBW/TTM", bbwLongHit, bbwShortHit, bbwNote))
 
         breakdown.Add(New SignalBreakdownItem("EMA 9/21/50", emaBull, emaBear,
             String.Format("9:{0:F0} 21:{1:F0} 50:{2:F0} | {3}", r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment)))
@@ -329,7 +329,6 @@ Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("OFI", ofiBuy, ofiSell,
             String.Format("Ratio:{0:F2} | {1}", r.OFIRatio, r.OFISignal)))
 
-        ' CVD breakdown note: show divergence penalty flag if active
         Dim cvdNote As String = String.Format("Net:{0:F0} | Slope:{1} | Div:{2}", r.CVDValue, r.CVDSlope, r.CVDDivergence)
         If r.CVDDivergence <> "NONE" Then cvdNote &= " | PENALTY -1"
         breakdown.Add(New SignalBreakdownItem("CVD", cvdLong, cvdShort, cvdNote))
@@ -402,13 +401,12 @@ Public Class ScoringEngine
                 effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss))
         End Select
 
-        ' -- Step 5: Generate Verdict (proportional thresholds from settings) -
+        ' -- Step 5: Generate Verdict -----------------------------------------
         res.LongScore = ls
         res.ShortScore = ss
         res.EffectiveLongScore = effectiveLS
         res.EffectiveShortScore = effectiveSS
         res.RegimePenalty = adxPenalty
-        ' res.MaxScore already set above
 
         Dim tStrong As Integer = ThresholdStrong(regimeMax, cfg.Scoring.VerdictStrongPct)
         Dim tMed    As Integer = ThresholdMed(regimeMax,    cfg.Scoring.VerdictMedPct)
