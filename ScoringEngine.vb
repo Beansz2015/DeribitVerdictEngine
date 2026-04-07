@@ -1,4 +1,4 @@
-' ScoringEngine.vb  v0.31
+' ScoringEngine.vb  v0.32
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
@@ -15,9 +15,9 @@
 '        No signal: price beyond sigma2 (overextended -- noise territory).
 '        Warmup guard: VWAP scoring skipped entirely if VWAPSessionCandles < 15.
 ' v0.29: BBW scoring block upgraded to use TTMSignal from CalcTTMSqueeze.
-'        BULL_BUILDING / BEAR_BUILDING: +1 to respective side (squeeze releasing with conviction).
-'        BULL_FADING / BEAR_FADING:     no point awarded (momentum losing steam).
-'        FLAT:                          no point awarded.
+'        BULL_BUILDING / BEAR_BUILDING: +1 to respective side (squeeze releasing with conviction)
+'        BULL_FADING / BEAR_FADING:     no point awarded (momentum losing steam)
+'        FLAT:                          no point awarded
 '        ACTIVE squeeze penalty (-1 both sides) retained unchanged.
 '        Breakdown note now shows TTMHistogram, TTMDirection, TTMSignal alongside SqueezeStatus.
 ' v0.30: MTF gate veto block added after scoring, before verdict generation.
@@ -28,6 +28,14 @@
 '        Soft gate: MTFGatePass is pre-computed in CalcMTFGate (Indicators.vb v0.35).
 ' v0.31: bbwNote initialised to "" to prevent BC42104 unassigned-variable warning.
 '        (SqueezeStatus values outside ACTIVE/RELEASING/NONE left bbwNote unset.)
+' v0.32: OBV scoring fix -- RISING+BULLISH divergence now awards full +1 (was zero).
+'        Logic: any rising OBV that is NOT warning bearishly earns the point.
+'        obvLong  = OBVTrend="RISING"  AndAlso OBVDivergence <> "BEARISH"
+'        obvShort = OBVTrend="FALLING" AndAlso OBVDivergence <> "BULLISH"
+'        Partial conditions (BEARISH on rising / BULLISH on falling) unchanged.
+'        Rationale: BULLISH div on rising OBV (OBV rising, price also rising) is confirmed
+'        agreement -- equal to or stronger than NONE. No double-counting: extra confluence
+'        is already captured by other signals (ROC, VWAP, EMA) firing simultaneously.
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -249,9 +257,16 @@ Public Class ScoringEngine
         AddFull(state, donchLong, donchShort, SignalCategory.MarketStructure)
 
         ' OBV (Volume)
-        Dim obvLong As Boolean = r.OBVTrend = "RISING" AndAlso r.OBVDivergence = "NONE"
-        Dim obvShort As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence = "NONE"
-        Dim obvPartialLong As Boolean = r.OBVTrend = "RISING" AndAlso r.OBVDivergence = "BEARISH"
+        ' v0.32 fix: full signal awarded to any rising OBV not warning bearishly.
+        '   RISING  + NONE    -> full +1 (clean, no anomaly)
+        '   RISING  + BULLISH -> full +1 (OBV and price both rising = confirmed agreement)
+        '   RISING  + BEARISH -> partial only (accumulation warning, upgradeable)
+        '   FALLING + NONE    -> full +1 (clean)
+        '   FALLING + BULLISH -> partial only (OBV falling but price rising = OBV warning vs price)
+        '   FALLING + BEARISH -> full +1 (OBV and price both falling = confirmed agreement)
+        Dim obvLong        As Boolean = r.OBVTrend = "RISING"  AndAlso r.OBVDivergence <> "BEARISH"
+        Dim obvShort       As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence <> "BULLISH"
+        Dim obvPartialLong  As Boolean = r.OBVTrend = "RISING"  AndAlso r.OBVDivergence = "BEARISH"
         Dim obvPartialShort As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence = "BULLISH"
         AddFull(state, obvLong, obvShort, SignalCategory.Volume)
 
