@@ -1,4 +1,4 @@
-' Core/Settings/EngineSettings.vb  v0.32
+' Core/Settings/EngineSettings.vb  v0.33
 ' Typed model that mirrors settings.json.
 ' All hardcoded indicator/scoring thresholds are accessed via this class.
 ' Populated by SettingsLoader.Load() -- do not instantiate directly.
@@ -14,6 +14,8 @@
 '        Session1StartHour/Minute  -- daily session reset (default 00:00 UTC).
 '        Session2StartHour/Minute  -- US session reset (default 13:30 UTC).
 '        WarmupCandles             -- min candles before VWAP score is trusted (default 15).
+' v0.33: Added MTFGateSettings class and MTFGate property on EngineSettings.
+'        Controls the 15m multi-timeframe confluence gate (EMA/DMI/RSI majority vote).
 
 Imports System.Text.Json.Serialization
 
@@ -38,6 +40,9 @@ Public Class EngineSettings
 
     <JsonPropertyName("regime_gates")>
     Public Property RegimeGates As New RegimeGateSettings
+
+    <JsonPropertyName("mtf_gate")>
+    Public Property MTFGate As New MTFGateSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -88,15 +93,10 @@ End Class
 
 Public Class VwapSettings
     <JsonPropertyName("dev_threshold_pct")>      Public Property DevThresholdPct      As Double  = 0.30
-    ''' <summary>Hour (UTC) at which session 1 (daily) resets. Default 0 = midnight.</summary>
     <JsonPropertyName("session1_start_hour")>    Public Property Session1StartHour    As Integer = 0
-    ''' <summary>Minute (UTC) at which session 1 resets. Default 0.</summary>
     <JsonPropertyName("session1_start_minute")>  Public Property Session1StartMinute  As Integer = 0
-    ''' <summary>Hour (UTC) at which session 2 (US) resets. Default 13.</summary>
     <JsonPropertyName("session2_start_hour")>    Public Property Session2StartHour    As Integer = 13
-    ''' <summary>Minute (UTC) at which session 2 resets. Default 30.</summary>
     <JsonPropertyName("session2_start_minute")>  Public Property Session2StartMinute  As Integer = 30
-    ''' <summary>Minimum session candles before VWAP signal is considered reliable.</summary>
     <JsonPropertyName("warmup_candles")>         Public Property WarmupCandles        As Integer = 15
 End Class
 
@@ -173,14 +173,41 @@ Public Class DmiSettings
 End Class
 
 Public Class CvdSettings
-    ''' <summary>Minimum USD delta required to register a slope direction (absolute floor).</summary>
     <JsonPropertyName("slope_min_usd")>          Public Property SlopeMinUsd         As Double  = 1000.0
-    ''' <summary>Slope threshold as a fraction of |CVDValue|. Actual threshold = Max(SlopeMinUsd, |CVDValue| * SlopePctOfValue).</summary>
     <JsonPropertyName("slope_pct_of_value")>      Public Property SlopePctOfValue     As Double  = 0.01
-    ''' <summary>Minimum price move (fraction) to trigger divergence evaluation.</summary>
     <JsonPropertyName("divergence_price_gate")>   Public Property DivergencePriceGate As Double  = 0.0005
-    ''' <summary>Number of most-recent trades used for CVD calculation.</summary>
     <JsonPropertyName("trade_lookback")>          Public Property TradeLookback       As Integer = 100
+End Class
+
+' ---------------------------------------------------------------------------
+' MTF Gate settings
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' Controls the 15m multi-timeframe confluence gate.
+''' 2-of-3 majority vote (EMA/DMI/RSI on 15m series) blocks LONG/SHORT verdicts
+''' by capping effectiveLS or effectiveSS below tWeak when 15m bias conflicts.
+''' Raw score is preserved in the display so building setups remain visible.
+''' Set Enabled=false in settings.json to bypass entirely (hot-reload safe).
+''' </summary>
+Public Class MTFGateSettings
+    <JsonPropertyName("enabled")>            Public Property Enabled          As Boolean = True
+    ''' <summary>Candles to fetch for the 15m series (60 = 15h of history).</summary>
+    <JsonPropertyName("candle_count")>       Public Property CandleCount      As Integer = 60
+    ''' <summary>Fast EMA period on the 15m series.</summary>
+    <JsonPropertyName("ema_period_fast")>    Public Property EmaPeriodFast    As Integer = 9
+    ''' <summary>Slow EMA period on the 15m series.</summary>
+    <JsonPropertyName("ema_period_slow")>    Public Property EmaPeriodSlow    As Integer = 21
+    ''' <summary>DMI period on the 15m series.</summary>
+    <JsonPropertyName("dmi_period")>         Public Property DmiPeriod        As Integer = 9
+    ''' <summary>RSI period on the 15m series.</summary>
+    <JsonPropertyName("rsi_period")>         Public Property RsiPeriod        As Integer = 9
+    ''' <summary>RSI above this level votes bullish on 15m.</summary>
+    <JsonPropertyName("rsi_bull_zone")>      Public Property RsiBullZone      As Double  = 55.0
+    ''' <summary>RSI below this level votes bearish on 15m.</summary>
+    <JsonPropertyName("rsi_bear_zone")>      Public Property RsiBearZone      As Double  = 45.0
+    ''' <summary>Signals that must agree to trigger a block (default 2-of-3).</summary>
+    <JsonPropertyName("required_confirms")>  Public Property RequiredConfirms As Integer = 2
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -194,11 +221,8 @@ Public Class ScoringSettings
     <JsonPropertyName("strong_short_threshold")> Public Property StrongShortThreshold As Integer = 12
     <JsonPropertyName("medium_long_threshold")>  Public Property MediumLongThreshold  As Integer = 9
     <JsonPropertyName("medium_short_threshold")> Public Property MediumShortThreshold As Integer = 9
-    ''' <summary>Score fraction required for STRONG verdict (default 70%).</summary>
     <JsonPropertyName("verdict_strong_pct")>     Public Property VerdictStrongPct     As Double  = 0.70
-    ''' <summary>Score fraction required for MEDIUM verdict (default 53%).</summary>
     <JsonPropertyName("verdict_med_pct")>        Public Property VerdictMedPct        As Double  = 0.53
-    ''' <summary>Score fraction required for WEAK verdict (default 35%).</summary>
     <JsonPropertyName("verdict_weak_pct")>       Public Property VerdictWeakPct       As Double  = 0.35
     <JsonPropertyName("transitional_penalty_enabled")> Public Property TransitionalPenaltyEnabled As Boolean = True
     <JsonPropertyName("funding_high_positive")>  Public Property FundingHighPositive  As Double = 0.001
