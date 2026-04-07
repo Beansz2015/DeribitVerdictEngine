@@ -1,4 +1,4 @@
-' MainForm.vb  v0.32
+' MainForm.vb  v0.33
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
@@ -13,6 +13,10 @@
 '          sigma1 and sigma2 band levels, and [WARMUP] tag if <15 candles.
 ' v0.32 -- CalcVWAP and CalcVWAPBands now receive session2Hour/Minute from settings.
 '          Warmup threshold read from cfg.Indicators.VWAP.WarmupCandles instead of hardcoded 15.
+' v0.33 -- CalcTTMSqueeze call added after CalcBBW in RunAnalysisAsync.
+'          Populates r.TTMHistogram, r.TTMDirection, r.TTMSignal so ScoringEngine
+'          BBW/TTM block can award points correctly (was always defaulting to FLAT).
+'          RenderOutput BBW line extended to show TTM histogram, direction and signal.
 
 Imports System.Drawing
 Imports System.IO
@@ -41,7 +45,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.32"
+        Me.Text = "Deribit Verdict Engine v0.33"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -333,6 +337,10 @@ Public Class MainForm
         Dim minBBW As Double
         IndicatorEngine.CalcBBW(candles1m, 20, 2.0, r.BBW, minBBW, r.SqueezeStatus)
 
+        ' v0.33: CalcTTMSqueeze must be called after CalcBBW so r.TTMHistogram/Direction/Signal
+        ' are populated before ScoringEngine reads them in the BBW/TTM scoring block.
+        IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal)
+
         r.EMA9 = IndicatorEngine.CalcEMA(candles1m, 9)
         r.EMA21 = IndicatorEngine.CalcEMA(candles1m, 21)
         r.EMA50 = IndicatorEngine.CalcEMA(candles1m, 50)
@@ -518,7 +526,8 @@ Public Class MainForm
                       "  |  Session: " & vwapSessionLabel & " (" & r.VWAPSessionCandles & "c)" & vwapWarmupTag)
         sb.AppendLine("  VWAP Bands:   σ1[" & r.VWAPSigma1Lower.ToString("F1") & "," & r.VWAPSigma1Upper.ToString("F1") & "]" &
                       "  σ2[" & r.VWAPSigma2Lower.ToString("F1") & "," & r.VWAPSigma2Upper.ToString("F1") & "]")
-        sb.AppendLine("  BBW:          " & r.BBW.ToString("F4") & "  |  Squeeze: " & r.SqueezeStatus)
+        sb.AppendLine("  BBW:          " & r.BBW.ToString("F4") & "  |  Squeeze: " & r.SqueezeStatus &
+                      "  |  TTM: " & r.TTMSignal & "  Dir: " & r.TTMDirection & "  H: " & r.TTMHistogram.ToString("F2"))
         sb.AppendLine("  EMA Ribbon:   9:" & r.EMA9.ToString("F1") & "  21:" & r.EMA21.ToString("F1") & "  50:" & r.EMA50.ToString("F1") & "  |  " & r.EMAAlignment)
         sb.AppendLine("  Funding:      " & (r.FundingRate * 100).ToString("F5") & "%  |  " & r.FundingBias & "  (info only)")
         sb.AppendLine("  OI Change:    15m: " & r.OIChange15m.ToString("F2") & "%  |  60m: " & r.OIChange60m.ToString("F2") & "%  |  " & r.OISignal)
