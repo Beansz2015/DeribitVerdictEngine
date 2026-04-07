@@ -1,4 +1,4 @@
-' Indicators.vb  v0.33
+' Indicators.vb  v0.34
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
@@ -29,6 +29,13 @@
 '          linear regression of (Close - SMA20) over the last N candles.
 '          Direction classified by comparing last vs prior histogram thirds.
 '          Signal: BULL_BUILDING / BEAR_BUILDING / BULL_FADING / BEAR_FADING / FLAT.
+' v0.34 -- Fix type mismatches that caused build errors:
+'          CalcOFI:          parameter type OrderBook -> OrderBookSnapshot
+'                            (Price As Double, Size As Double) tuple access corrected
+'          CalcLiquidations: parameter type Trade -> TradeRecord
+'                            Liquidation field is String ("M"/"T"/"none"), not Boolean;
+'                            guard changed to: t.Liquidation <> "none"
+'          CalcCVD:          parameter type Trade -> TradeRecord
 
 Public Class IndicatorResults
     ' Core
@@ -485,7 +492,8 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- OFI (Order Flow Imbalance) top-3 levels, volume-weighted (w=3,2,1) ---
-    Public Shared Sub CalcOFI(orderBook As OrderBook,
+    ' v0.34: parameter corrected to OrderBookSnapshot (was OrderBook -- type did not exist)
+    Public Shared Sub CalcOFI(orderBook As OrderBookSnapshot,
                                ByRef ofiRatio As Double, ByRef ofiSignal As String,
                                ByRef ofiBidVol As Double, ByRef ofiAskVol As Double)
         ofiRatio = 1.0 : ofiSignal = "BALANCED" : ofiBidVol = 0 : ofiAskVol = 0
@@ -520,18 +528,21 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- Liquidations ---------------------------------------------------------
-    Public Shared Sub CalcLiquidations(trades As List(Of Trade),
+    ' v0.34: parameter corrected to TradeRecord (was Trade -- type did not exist)
+    '        Liquidation field is a String: "M" or "T" = liquidation, "none" = normal trade
+    Public Shared Sub CalcLiquidations(trades As List(Of TradeRecord),
                                         ByRef liqLongSize As Double,
                                         ByRef liqShortSize As Double,
                                         ByRef liqSignal As String)
         liqLongSize = 0 : liqShortSize = 0 : liqSignal = "NONE"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
         For Each t In trades
-            If t.Liquidation Then
+            ' Deribit liquidation field: "M" = maker liq, "T" = taker liq, "none" = normal
+            If t.Liquidation <> "none" Then
                 If t.Direction = "buy" Then
-                    liqShortSize += t.Amount
+                    liqShortSize += t.Amount  ' buy-side liq = short position liquidated
                 Else
-                    liqLongSize += t.Amount
+                    liqLongSize += t.Amount   ' sell-side liq = long position liquidated
                 End If
             End If
         Next
@@ -545,7 +556,8 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- CVD (Cumulative Volume Delta) ----------------------------------------
-    Public Shared Sub CalcCVD(trades As List(Of Trade), candles As List(Of Candle),
+    ' v0.34: parameter corrected to TradeRecord (was Trade -- type did not exist)
+    Public Shared Sub CalcCVD(trades As List(Of TradeRecord), candles As List(Of Candle),
                                ByRef cvdValue As Double, ByRef cvdSlope As String,
                                ByRef cvdDivergence As String,
                                Optional slopeMinUsd As Double = 50000,
