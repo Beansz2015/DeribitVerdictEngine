@@ -1,4 +1,4 @@
-' MainForm.vb  v0.35
+' MainForm.vb  v0.36
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
@@ -19,11 +19,17 @@
 '          RenderOutput BBW line extended to show TTM histogram, direction and signal.
 ' v0.34 -- (ScoringEngine/Indicators only -- no MainForm changes)
 ' v0.35 -- 15m candle fetch added to parallel fetch block (t_15m, 70 candles).
-'          CalcMTFGate called after CalcCVD in RunAnalysisAsync; reads adx_period,
-'          adx_min, min_of, candle_lookback from cfg.MTFGate.
+'          CalcMTFGate called after CalcCVD in RunAnalysisAsync; reads dmi_period,
+'          adx threshold from cfg.Indicators.ADX.TrendThreshold,
+'          required_confirms, candle_count from cfg.MTFGate.
 '          ProposedDirection passed to CalcMTFGate based on leading post-regime score
 '          so the gate can pre-compute MTFGatePass before ScoringEngine reads it.
 '          RenderOutput: MTF gate status line added to TIER 2 block.
+' v0.36 -- Fixed BC30456: MTFGateSettings property names corrected.
+'          ADXPeriod  -> DmiPeriod
+'          ADXMin     -> cfg.Indicators.ADX.TrendThreshold (no dedicated field in MTFGateSettings)
+'          MinOf      -> RequiredConfirms
+'          CandleLookback -> CandleCount
 
 Imports System.Drawing
 Imports System.IO
@@ -52,7 +58,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.35"
+        Me.Text = "Deribit Verdict Engine v0.36"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -405,12 +411,13 @@ Public Class MainForm
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
 
-        ' v0.35: CalcMTFGate -- determine proposed direction from raw indicator scores
+        ' v0.35/v0.36: CalcMTFGate -- determine proposed direction from raw indicator scores
         ' (pre-regime, pre-funding) so the gate has a direction to evaluate.
-        ' A lightweight directional hint: use DMI + EMA alignment on 1m as a proxy.
-        ' This avoids duplicating the full scoring loop; the gate is a soft filter.
+        ' v0.36: corrected MTFGateSettings property names:
+        '   DmiPeriod (was ADXPeriod), RequiredConfirms (was MinOf), CandleCount (was CandleLookback)
+        '   ADXMin has no dedicated MTFGateSettings field; use cfg.Indicators.ADX.TrendThreshold instead.
         Dim mtfProposed As String = "NONE"
-        If candles15m IsNot Nothing AndAlso candles15m.Count >= cfg.MTFGate.ADXPeriod + 2 Then
+        If candles15m IsNot Nothing AndAlso candles15m.Count >= cfg.MTFGate.DmiPeriod + 2 Then
             ' Use 5m regime + 1m EMA as lightweight proposed direction
             If r.Regime = "TRENDING_UP" OrElse r.EMAAlignment = "BULL" Then
                 mtfProposed = "LONG"
@@ -424,10 +431,10 @@ Public Class MainForm
             r.MTF15mTrend, r.MTF15mADX, r.MTF15mEMAAlignment,
             r.MTFGatePass, r.MTFGateReason,
             proposedDirection:=mtfProposed,
-            adxPeriod:=cfg.MTFGate.ADXPeriod,
-            adxMin:=cfg.MTFGate.ADXMin,
-            minOf:=cfg.MTFGate.MinOf,
-            candleLookback:=cfg.MTFGate.CandleLookback)
+            adxPeriod:=cfg.MTFGate.DmiPeriod,
+            adxMin:=cfg.Indicators.ADX.TrendThreshold,
+            minOf:=cfg.MTFGate.RequiredConfirms,
+            candleLookback:=cfg.MTFGate.CandleCount)
 
         r.EMA200_5m = IndicatorEngine.CalcEMA(candles5m, 200)
         r.PriceVsEMA200 = If(r.EMA200_5m > 0,
@@ -545,91 +552,106 @@ Public Class MainForm
         Dim cfg As EngineSettings = SettingsLoader.Current
         Dim s2h As Integer = cfg.Indicators.VWAP.Session2StartHour
         Dim s2m As Integer = cfg.Indicators.VWAP.Session2StartMinute
-        Dim nowHour As Integer = DateTime.UtcNow.Hour
-        Dim nowMin  As Integer = DateTime.UtcNow.Minute
-        If nowHour < s2h OrElse (nowHour = s2h AndAlso nowMin < s2m) Then
-            vwapSessionLabel = "daily(00:00)"
-        Else
-            vwapSessionLabel = "US(" & s2h.ToString("D2") & ":" & s2m.ToString("D2") & ")"
-        End If
-
-        sb.AppendLine("TIER 1 SIGNALS:")
-        sb.AppendLine("  VWAP:         " & r.VWAP.ToString("F1") &
-                      "  |  Dev: " & r.VWAPDevPct.ToString("F2") & "%" &
-                      "  |  Price: " & r.CurrentPrice.ToString("F1") &
-                      "  |  Session: " & vwapSessionLabel & " (" & r.VWAPSessionCandles & "c)" & vwapWarmupTag)
-        sb.AppendLine("  VWAP Bands:   σ1[" & r.VWAPSigma1Lower.ToString("F1") & "," & r.VWAPSigma1Upper.ToString("F1") & "]" &
-                      "  σ2[" & r.VWAPSigma2Lower.ToString("F1") & "," & r.VWAPSigma2Upper.ToString("F1") & "]")
-        sb.AppendLine("  BBW:          " & r.BBW.ToString("F4") & "  |  Squeeze: " & r.SqueezeStatus &
-                      "  |  TTM: " & r.TTMSignal & "  Dir: " & r.TTMDirection & "  H: " & r.TTMHistogram.ToString("F2"))
-        sb.AppendLine("  EMA Ribbon:   9:" & r.EMA9.ToString("F1") & "  21:" & r.EMA21.ToString("F1") & "  50:" & r.EMA50.ToString("F1") & "  |  " & r.EMAAlignment)
-        sb.AppendLine("  Funding:      " & (r.FundingRate * 100).ToString("F5") & "%  |  " & r.FundingBias & "  (info only)")
-        sb.AppendLine("  OI Change:    15m: " & r.OIChange15m.ToString("F2") & "%  |  60m: " & r.OIChange60m.ToString("F2") & "%  |  " & r.OISignal)
+        vwapSessionLabel = String.Format("(reset {0:D2}:{1:D2} UTC)", s2h, s2m)
+        sb.AppendLine("VWAP " & vwapSessionLabel & vwapWarmupTag & ":")
+        sb.AppendLine("  Value:  " & r.VWAP.ToString("F1") & "  |  Dev: " & r.VWAPDevPct.ToString("F3") & "%" &
+                      "  |  Candles: " & r.VWAPSessionCandles)
+        sb.AppendLine("  σ1 band: [" & r.VWAPSigma1Lower.ToString("F1") & ", " & r.VWAPSigma1Upper.ToString("F1") & "]" &
+                      "  |  σ2 band: [" & r.VWAPSigma2Lower.ToString("F1") & ", " & r.VWAPSigma2Upper.ToString("F1") & "]")
         sb.AppendLine()
 
-        sb.AppendLine("TIER 2 SIGNALS:")
-        sb.AppendLine("  Order Flow:   " & r.OFISignal &
-                      "  |  Ratio: " & r.OFIRatio.ToString("F2") &
-                      "  |  Bid(w): " & r.OFIBidVol.ToString("F1") &
-                      "  Ask(w): " & r.OFIAskVol.ToString("F1") &
-                      "  [top-3 wtd]")
-        sb.AppendLine("  Liquidations: " & r.LiqSignal & "  |  Long Liqs: " & r.LiqLongSize.ToString("F0") & "  Short Liqs: " & r.LiqShortSize.ToString("F0"))
-        sb.AppendLine("  CVD:          Net:" & r.CVDValue.ToString("F0") &
-                      "  |  Slope:" & r.CVDSlope &
-                      "  |  Div:" & r.CVDDivergence)
-        ' v0.35: MTF gate status line
-        sb.AppendLine("  MTF Gate:     " & r.MTF15mTrend &
-                      "  |  ADX:" & r.MTF15mADX.ToString("F1") &
-                      "  |  EMA:" & r.MTF15mEMAAlignment &
-                      "  |  " & If(r.MTFGatePass, "PASS", "BLOCK") &
-                      "  -- " & r.MTFGateReason)
-        sb.AppendLine("  5m EMA(200):  " & r.EMA200_5m.ToString("F1") & "  |  " & r.PriceVsEMA200)
+        sb.AppendLine("BBW / TTM SQUEEZE:")
+        sb.AppendLine("  BBW: " & r.BBW.ToString("F3") & "  |  Status: " & r.SqueezeStatus)
+        sb.AppendLine("  TTM: Histogram=" & r.TTMHistogram.ToString("F2") &
+                      "  Dir=" & r.TTMDirection & "  Signal=" & r.TTMSignal)
         sb.AppendLine()
 
-        sb.AppendLine("TIER 3 SIGNALS:")
-        sb.AppendLine("  Donchian(20): Upper:" & r.DonchianUpper.ToString("F1") & "  Lower:" & r.DonchianLower.ToString("F1") & "  |  " & r.DonchianSignal)
-        sb.AppendLine("  OBV:          Trend:" & r.OBVTrend & "  |  Divergence:" & r.OBVDivergence)
+        sb.AppendLine("EMA RIBBON (1m):")
+        sb.AppendLine("  9: " & r.EMA9.ToString("F1") &
+                      "  |  21: " & r.EMA21.ToString("F1") &
+                      "  |  50: " & r.EMA50.ToString("F1") &
+                      "  |  Align: " & r.EMAAlignment)
+        sb.AppendLine("  5m EMA200: " & r.EMA200_5m.ToString("F1") & "  |  Price: " & r.PriceVsEMA200)
         sb.AppendLine()
 
-        sb.AppendLine("POSITION SIZING:")
-        sb.AppendLine("  ATR(7):       " & r.ATR.ToString("F2") & "  |  Scale: " & norms.ATRScaleFactor.ToString("F2") & "x" &
-                      "  (ref " & norms.ATRRef.ToString("F2") & ")")
+        sb.AppendLine("MARKET STRUCTURE:")
+        sb.AppendLine("  Donchian(20): Upper=" & r.DonchianUpper.ToString("F1") &
+                      "  Lower=" & r.DonchianLower.ToString("F1") &
+                      "  |  Signal: " & r.DonchianSignal)
+        sb.AppendLine("  OBV: Trend=" & r.OBVTrend & "  |  Div=" & r.OBVDivergence)
         sb.AppendLine()
 
-        sb.AppendLine("HOLD/EXIT STATUS:")
-        sb.AppendLine("  " & v.HoldStatus)
+        sb.AppendLine("OPEN INTEREST:")
+        sb.AppendLine("  OI: " & r.OI_Current.ToString("F0") &
+                      "  |  Δ15m: " & r.OIChange15m.ToString("F3") & "%" &
+                      "  |  Δ60m: " & r.OIChange60m.ToString("F3") & "%" &
+                      "  |  Signal: " & r.OISignal)
         sb.AppendLine()
 
-        sb.AppendLine("SIGNAL BREAKDOWN:")
-        sb.AppendLine("  " & "Indicator".PadRight(20) & "Long".PadLeft(6) & "Short".PadLeft(7) & "  Note")
-        sb.AppendLine("  " & New String("-"c, 65))
-        For Each sig In v.SignalBreakdown
-            Dim lMark As String = If(sig.LongHit, "[L]", " . ")
-            Dim sMark As String = If(sig.ShortHit, "[S]", " . ")
-            sb.AppendLine("  " & sig.Label.PadRight(20) & lMark.PadLeft(6) & sMark.PadLeft(7) & "  " & sig.Note)
-        Next
+        sb.AppendLine("ORDER FLOW:")
+        sb.AppendLine("  OFI Ratio: " & r.OFIRatio.ToString("F2") &
+                      "  |  Bid Vol: " & r.OFIBidVol.ToString("F0") &
+                      "  |  Ask Vol: " & r.OFIAskVol.ToString("F0") &
+                      "  |  " & r.OFISignal)
+        sb.AppendLine("  CVD:       Net:" & r.CVDValue.ToString("F0") &
+                      "  |  Slope:" & r.CVDSlope & "  |  Div:" & r.CVDDivergence)
+        sb.AppendLine()
+
+        sb.AppendLine("LIQUIDATIONS:")
+        sb.AppendLine("  Long: " & r.LiqLongSize.ToString("F0") &
+                      "  |  Short: " & r.LiqShortSize.ToString("F0") &
+                      "  |  Signal: " & r.LiqSignal)
+        sb.AppendLine()
+
+        sb.AppendLine("MTF GATE (15m): " & If(r.MTFGatePass, "PASS", "BLOCK"))
+        sb.AppendLine("  15m Trend: " & r.MTF15mTrend &
+                      "  |  ADX: " & r.MTF15mADX.ToString("F1") &
+                      "  |  EMA: " & r.MTF15mEMAAlignment)
+        sb.AppendLine("  Reason: " & r.MTFGateReason)
+        sb.AppendLine()
+
+        sb.AppendLine("FUNDING:")
+        sb.AppendLine("  Rate: " & r.FundingRate.ToString("F4") & "%  |  " & r.FundingBias)
+        sb.AppendLine()
+
+        ' Signal breakdown table
         sb.AppendLine("===========================================================")
+        sb.AppendLine("  SIGNAL BREAKDOWN")
+        sb.AppendLine("===========================================================")
+        sb.AppendLine(String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
+                                    "Signal", "Long", "Short", "Note"))
+        sb.AppendLine("  " & New String("-"c, 70))
+        For Each item In v.SignalBreakdown
+            Dim lMark As String = If(item.LongHit, "[L]", "   ")
+            Dim sMark As String = If(item.ShortHit, "[S]", "   ")
+            sb.AppendLine(String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
+                                        item.Label, lMark, sMark, item.Note))
+        Next
+        sb.AppendLine("  " & New String("-"c, 70))
+        sb.AppendLine(String.Format("  {0,-18}  {1,5}  {2,6}",
+                                    "TOTAL", v.LongScore, v.ShortScore))
+        sb.AppendLine()
+
+        ' Hold / exit status
+        If v.HoldStatus <> "N/A -- no open position" Then
+            sb.AppendLine("HOLD / EXIT: " & v.HoldStatus)
+            sb.AppendLine()
+        End If
 
         txtOutput.Text = sb.ToString()
 
-        lblVerdict.Text = v.Verdict
+        Dim bg As Color
         Select Case v.Verdict
-            Case "STRONG LONG"
-                lblVerdict.BackColor = Color.LimeGreen
-            Case "LONG"
-                lblVerdict.BackColor = Color.Green
-            Case "WEAK LONG"
-                lblVerdict.BackColor = Color.DarkGreen
-            Case "STRONG SHORT"
-                lblVerdict.BackColor = Color.Red
-            Case "SHORT"
-                lblVerdict.BackColor = Color.Crimson
-            Case "WEAK SHORT"
-                lblVerdict.BackColor = Color.DarkRed
-            Case Else
-                lblVerdict.BackColor = Color.Gray
+            Case "STRONG LONG"  : bg = Color.FromArgb(0, 180, 90)
+            Case "LONG"         : bg = Color.FromArgb(0, 140, 60)
+            Case "WEAK LONG"    : bg = Color.FromArgb(60, 160, 60)
+            Case "STRONG SHORT" : bg = Color.FromArgb(200, 40, 40)
+            Case "SHORT"        : bg = Color.FromArgb(180, 30, 30)
+            Case "WEAK SHORT"   : bg = Color.FromArgb(180, 80, 80)
+            Case Else           : bg = Color.DimGray
         End Select
-        lblVerdict.ForeColor = Color.White
+        lblVerdict.BackColor = bg
+        lblVerdict.Text = v.Verdict & "  [" & v.Confidence & "]"
     End Sub
 
 End Class
