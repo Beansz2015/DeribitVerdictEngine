@@ -1,4 +1,4 @@
-' MainForm.vb  v0.33
+' MainForm.vb  v0.35
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
@@ -17,6 +17,13 @@
 '          Populates r.TTMHistogram, r.TTMDirection, r.TTMSignal so ScoringEngine
 '          BBW/TTM block can award points correctly (was always defaulting to FLAT).
 '          RenderOutput BBW line extended to show TTM histogram, direction and signal.
+' v0.34 -- (ScoringEngine/Indicators only -- no MainForm changes)
+' v0.35 -- 15m candle fetch added to parallel fetch block (t_15m, 70 candles).
+'          CalcMTFGate called after CalcCVD in RunAnalysisAsync; reads adx_period,
+'          adx_min, min_of, candle_lookback from cfg.MTFGate.
+'          ProposedDirection passed to CalcMTFGate based on leading post-regime score
+'          so the gate can pre-compute MTFGatePass before ScoringEngine reads it.
+'          RenderOutput: MTF gate status line added to TIER 2 block.
 
 Imports System.Drawing
 Imports System.IO
@@ -45,7 +52,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.33"
+        Me.Text = "Deribit Verdict Engine v0.35"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -262,20 +269,23 @@ Public Class MainForm
     Private Async Function RunAnalysisAsync() As Task
         Dim cfg As EngineSettings = SettingsLoader.Current
 
-        Dim t_1m = DeribitClient.GetCandlesAsync("1", 250)
-        Dim t_5m = DeribitClient.GetCandlesAsync("5", 210)
+        ' v0.35: 15m candles fetched in parallel with other requests
+        Dim t_1m      = DeribitClient.GetCandlesAsync("1", 250)
+        Dim t_5m      = DeribitClient.GetCandlesAsync("5", 210)
+        Dim t_15m     = DeribitClient.GetCandlesAsync("15", 70)
         Dim t_funding = DeribitClient.GetFundingRateAsync()
-        Dim t_book = DeribitClient.GetBookSummaryAsync()
-        Dim t_ob = DeribitClient.GetOrderBookAsync(10)
-        Dim t_trades = DeribitClient.GetRecentTradesAsync(100)
+        Dim t_book    = DeribitClient.GetBookSummaryAsync()
+        Dim t_ob      = DeribitClient.GetOrderBookAsync(10)
+        Dim t_trades  = DeribitClient.GetRecentTradesAsync(100)
 
-        Await Task.WhenAll(t_1m, t_5m, t_funding, t_book, t_ob, t_trades)
+        Await Task.WhenAll(t_1m, t_5m, t_15m, t_funding, t_book, t_ob, t_trades)
 
-        Dim candles1m = Await t_1m
-        Dim candles5m = Await t_5m
+        Dim candles1m   = Await t_1m
+        Dim candles5m   = Await t_5m
+        Dim candles15m  = Await t_15m
         Dim fundingRate = Await t_funding
         Dim bookSummary = Await t_book
-        Dim orderBook = Await t_ob
+        Dim orderBook   = Await t_ob
         Dim recentTrades = Await t_trades
 
         If candles1m.Count < 50 Then
@@ -341,7 +351,7 @@ Public Class MainForm
         ' are populated before ScoringEngine reads them in the BBW/TTM scoring block.
         IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal)
 
-        r.EMA9 = IndicatorEngine.CalcEMA(candles1m, 9)
+        r.EMA9  = IndicatorEngine.CalcEMA(candles1m, 9)
         r.EMA21 = IndicatorEngine.CalcEMA(candles1m, 21)
         r.EMA50 = IndicatorEngine.CalcEMA(candles1m, 50)
         If r.EMA9 > r.EMA21 AndAlso r.EMA21 > r.EMA50 Then
@@ -394,6 +404,30 @@ Public Class MainForm
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
+
+        ' v0.35: CalcMTFGate -- determine proposed direction from raw indicator scores
+        ' (pre-regime, pre-funding) so the gate has a direction to evaluate.
+        ' A lightweight directional hint: use DMI + EMA alignment on 1m as a proxy.
+        ' This avoids duplicating the full scoring loop; the gate is a soft filter.
+        Dim mtfProposed As String = "NONE"
+        If candles15m IsNot Nothing AndAlso candles15m.Count >= cfg.MTFGate.ADXPeriod + 2 Then
+            ' Use 5m regime + 1m EMA as lightweight proposed direction
+            If r.Regime = "TRENDING_UP" OrElse r.EMAAlignment = "BULL" Then
+                mtfProposed = "LONG"
+            ElseIf r.Regime = "TRENDING_DOWN" OrElse r.EMAAlignment = "BEAR" Then
+                mtfProposed = "SHORT"
+            End If
+        End If
+
+        IndicatorEngine.CalcMTFGate(
+            candles15m,
+            r.MTF15mTrend, r.MTF15mADX, r.MTF15mEMAAlignment,
+            r.MTFGatePass, r.MTFGateReason,
+            proposedDirection:=mtfProposed,
+            adxPeriod:=cfg.MTFGate.ADXPeriod,
+            adxMin:=cfg.MTFGate.ADXMin,
+            minOf:=cfg.MTFGate.MinOf,
+            candleLookback:=cfg.MTFGate.CandleLookback)
 
         r.EMA200_5m = IndicatorEngine.CalcEMA(candles5m, 200)
         r.PriceVsEMA200 = If(r.EMA200_5m > 0,
@@ -543,6 +577,12 @@ Public Class MainForm
         sb.AppendLine("  CVD:          Net:" & r.CVDValue.ToString("F0") &
                       "  |  Slope:" & r.CVDSlope &
                       "  |  Div:" & r.CVDDivergence)
+        ' v0.35: MTF gate status line
+        sb.AppendLine("  MTF Gate:     " & r.MTF15mTrend &
+                      "  |  ADX:" & r.MTF15mADX.ToString("F1") &
+                      "  |  EMA:" & r.MTF15mEMAAlignment &
+                      "  |  " & If(r.MTFGatePass, "PASS", "BLOCK") &
+                      "  -- " & r.MTFGateReason)
         sb.AppendLine("  5m EMA(200):  " & r.EMA200_5m.ToString("F1") & "  |  " & r.PriceVsEMA200)
         sb.AppendLine()
 
