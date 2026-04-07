@@ -1,4 +1,4 @@
-' Indicators.vb  v0.34
+' Indicators.vb  v0.35
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
@@ -36,6 +36,13 @@
 '                            Liquidation field is String ("M"/"T"/"none"), not Boolean;
 '                            guard changed to: t.Liquidation <> "none"
 '          CalcCVD:          parameter type Trade -> TradeRecord
+' v0.35 -- MTF (15m) gate fields added to IndicatorResults:
+'            MTF15mTrend, MTF15mADX, MTF15mEMAAlignment, MTFGatePass, MTFGateReason.
+'          New method: CalcMTFGate -- runs DMI+ADX and EMA alignment on 15m candles,
+'          evaluates a configurable soft gate (min N-of-3 signals must agree).
+'          Gate signals: (1) DMI direction, (2) ADX >= adxMin, (3) EMA aligned.
+'          minOf=2 means 2 of those 3 must agree with the proposed direction.
+'          candleLookback controls how many 15m candles to use (default 60 = 15h).
 
 Public Class IndicatorResults
     ' Core
@@ -96,6 +103,13 @@ Public Class IndicatorResults
     Public Property CVDValue As Double       ' net USD delta (buy-sell) over last N trades
     Public Property CVDSlope As String       ' "RISING" / "FALLING" / "FLAT"
     Public Property CVDDivergence As String  ' "BULLISH" / "BEARISH" / "NONE"
+
+    ' MTF Gate (15m timeframe)
+    Public Property MTF15mTrend As String        ' "BULL" / "BEAR" / "FLAT"
+    Public Property MTF15mADX As Double          ' ADX value computed on 15m candles
+    Public Property MTF15mEMAAlignment As String ' "BULL" / "BEAR" / "MIXED"
+    Public Property MTFGatePass As Boolean       ' True = gate passed (or disabled)
+    Public Property MTFGateReason As String      ' human-readable gate result for display
 
     ' Tier 3
     Public Property DonchianUpper As Double
@@ -296,10 +310,6 @@ Public Class IndicatorEngine
     End Function
 
     ' -- VWAP (auto-session, parameterised boundary) --------------------------
-    ' session2Hour/session2Minute: UTC time for session 2 reset (e.g. 13, 30 for US open).
-    ' Before session2 time  -> session 1 (daily, resets at midnight UTC).
-    ' At/after session2 time -> session 2 (e.g. US session).
-    ' sessionCandleCount: number of 1m candles in the current session (for warmup guard).
     Public Shared Function CalcVWAP(candles As List(Of Candle),
                                      ByRef sessionCandleCount As Integer,
                                      Optional session2Hour As Integer = 13,
@@ -309,7 +319,7 @@ Public Class IndicatorEngine
         Dim sessionStart As DateTime
         If nowUtc.Hour < session2Hour OrElse
            (nowUtc.Hour = session2Hour AndAlso nowUtc.Minute < session2Minute) Then
-            sessionStart = nowUtc.Date  ' midnight UTC
+            sessionStart = nowUtc.Date
         Else
             sessionStart = nowUtc.Date.AddHours(session2Hour).AddMinutes(session2Minute)
         End If
@@ -407,28 +417,6 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- TTM Squeeze Momentum -------------------------------------------------
-    ' Computes the momentum histogram used in the TTM Squeeze indicator.
-    ' Methodology: linear regression of (Close - SMA20) over the last
-    ' linRegPeriod candles gives a momentum value anchored to the 20-period mean.
-    ' Positive histogram = bullish momentum building; negative = bearish.
-    '
-    ' Direction: derived by comparing the average of the last third of the
-    ' regression window against the average of the first third.
-    '   delta > flatThreshold  -> RISING
-    '   delta < -flatThreshold -> FALLING
-    '   else                   -> FLAT
-    '
-    ' Signal classification:
-    '   histogram > 0 AND direction = RISING  -> BULL_BUILDING
-    '   histogram > 0 AND direction = FALLING -> BULL_FADING
-    '   histogram < 0 AND direction = FALLING -> BEAR_BUILDING
-    '   histogram < 0 AND direction = RISING  -> BEAR_FADING
-    '   else                                  -> FLAT
-    '
-    ' Parameters:
-    '   smaPeriod     -- SMA period for the mean baseline (default 20, matches BBW)
-    '   linRegPeriod  -- window for linear regression (default 7)
-    '   flatThreshold -- min delta to register direction change (default 0.5)
     Public Shared Sub CalcTTMSqueeze(candles As List(Of Candle),
                                       ByRef histogram As Double,
                                       ByRef direction As String,
@@ -439,7 +427,6 @@ Public Class IndicatorEngine
         histogram = 0 : direction = "FLAT" : signal = "FLAT"
         If candles.Count < smaPeriod + linRegPeriod Then Return
 
-        ' Build delta series: Close(i) - SMA20(i) for the last linRegPeriod candles
         Dim deltas As New List(Of Double)
         For i As Integer = candles.Count - linRegPeriod To candles.Count - 1
             Dim window = candles.Skip(i - smaPeriod + 1).Take(smaPeriod).ToList()
@@ -449,7 +436,6 @@ Public Class IndicatorEngine
 
         If deltas.Count < linRegPeriod Then Return
 
-        ' Linear regression over the deltas -- compute fitted value at the last point
         Dim n As Integer = deltas.Count
         Dim sumX As Double = 0, sumY As Double = 0
         Dim sumXY As Double = 0, sumX2 As Double = 0
@@ -461,9 +447,8 @@ Public Class IndicatorEngine
         If denom = 0 Then Return
         Dim slope As Double = (n * sumXY - sumX * sumY) / denom
         Dim intercept As Double = (sumY - slope * sumX) / n
-        histogram = intercept + slope * (n - 1)  ' fitted value at last index
+        histogram = intercept + slope * (n - 1)
 
-        ' Direction: compare mean of last third vs mean of first third
         Dim third As Integer = Math.Max(1, n \ 3)
         Dim firstMean As Double = deltas.Take(third).Average()
         Dim lastMean As Double = deltas.Skip(n - third).Average()
@@ -477,7 +462,6 @@ Public Class IndicatorEngine
             direction = "FLAT"
         End If
 
-        ' Signal classification
         If histogram > 0 AndAlso direction = "RISING" Then
             signal = "BULL_BUILDING"
         ElseIf histogram > 0 AndAlso direction = "FALLING" Then
@@ -492,7 +476,6 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- OFI (Order Flow Imbalance) top-3 levels, volume-weighted (w=3,2,1) ---
-    ' v0.34: parameter corrected to OrderBookSnapshot (was OrderBook -- type did not exist)
     Public Shared Sub CalcOFI(orderBook As OrderBookSnapshot,
                                ByRef ofiRatio As Double, ByRef ofiSignal As String,
                                ByRef ofiBidVol As Double, ByRef ofiAskVol As Double)
@@ -528,8 +511,6 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- Liquidations ---------------------------------------------------------
-    ' v0.34: parameter corrected to TradeRecord (was Trade -- type did not exist)
-    '        Liquidation field is a String: "M" or "T" = liquidation, "none" = normal trade
     Public Shared Sub CalcLiquidations(trades As List(Of TradeRecord),
                                         ByRef liqLongSize As Double,
                                         ByRef liqShortSize As Double,
@@ -537,12 +518,11 @@ Public Class IndicatorEngine
         liqLongSize = 0 : liqShortSize = 0 : liqSignal = "NONE"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
         For Each t In trades
-            ' Deribit liquidation field: "M" = maker liq, "T" = taker liq, "none" = normal
             If t.Liquidation <> "none" Then
                 If t.Direction = "buy" Then
-                    liqShortSize += t.Amount  ' buy-side liq = short position liquidated
+                    liqShortSize += t.Amount
                 Else
-                    liqLongSize += t.Amount   ' sell-side liq = long position liquidated
+                    liqLongSize += t.Amount
                 End If
             End If
         Next
@@ -556,7 +536,6 @@ Public Class IndicatorEngine
     End Sub
 
     ' -- CVD (Cumulative Volume Delta) ----------------------------------------
-    ' v0.34: parameter corrected to TradeRecord (was Trade -- type did not exist)
     Public Shared Sub CalcCVD(trades As List(Of TradeRecord), candles As List(Of Candle),
                                ByRef cvdValue As Double, ByRef cvdSlope As String,
                                ByRef cvdDivergence As String,
@@ -596,6 +575,115 @@ Public Class IndicatorEngine
         ElseIf priceChange < 0 AndAlso cvdValue > 0 Then
             cvdDivergence = "BULLISH"
         End If
+    End Sub
+
+    ' -- MTF Gate (15m timeframe) ---------------------------------------------
+    ' Evaluates whether the 15m timeframe agrees with a potential 1m trade direction.
+    ' Uses a soft N-of-3 gate: at least minOf of the 3 sub-signals must agree.
+    '
+    ' Sub-signals (each scores 1 point toward BULL or BEAR):
+    '   (1) DMI direction  -- plusDI > minusDI = BULL point, vice versa = BEAR point
+    '   (2) ADX strength   -- ADX >= adxMin scores 1 point for whichever DMI direction won
+    '   (3) EMA alignment  -- EMA9 > EMA21 > EMA50 = BULL point, reverse = BEAR point
+    '
+    ' Gate logic (soft, minOf = 2 by default):
+    '   bullScore >= minOf -> MTF15mTrend = "BULL", gate passes for LONG trades
+    '   bearScore >= minOf -> MTF15mTrend = "BEAR", gate passes for SHORT trades
+    '   neither            -> MTF15mTrend = "FLAT", gate passes for neither
+    '
+    ' MTFGatePass is evaluated here based on proposedDirection.
+    ' proposedDirection is passed by ScoringEngine after scoring is complete.
+    '
+    ' Parameters:
+    '   candles15m      -- list of 15m candles (caller supplies last candleLookback candles)
+    '   proposedDirection -- "LONG" / "SHORT" / "NONE"
+    '   adxPeriod       -- DMI/ADX period (default 9)
+    '   adxMin          -- minimum ADX to count as trending (default 20)
+    '   minOf           -- signals required to agree (default 2)
+    '   candleLookback  -- 15m candles to use (default 60 = 15 hours)
+    Public Shared Sub CalcMTFGate(candles15m As List(Of Candle),
+                                   ByRef mtfTrend As String,
+                                   ByRef mtfADX As Double,
+                                   ByRef mtfEMAAlignment As String,
+                                   ByRef gatePass As Boolean,
+                                   ByRef gateReason As String,
+                                   Optional proposedDirection As String = "NONE",
+                                   Optional adxPeriod As Integer = 9,
+                                   Optional adxMin As Double = 20.0,
+                                   Optional minOf As Integer = 2,
+                                   Optional candleLookback As Integer = 60)
+        mtfTrend = "FLAT" : mtfADX = 0 : mtfEMAAlignment = "MIXED"
+        gatePass = True : gateReason = "MTF gate: no data"
+
+        If candles15m Is Nothing OrElse candles15m.Count < adxPeriod + 2 Then
+            gateReason = "MTF: insufficient 15m candles (" &
+                         If(candles15m Is Nothing, "0", candles15m.Count.ToString()) & ")"
+            Return
+        End If
+
+        ' Trim to lookback window
+        Dim window As List(Of Candle)
+        If candles15m.Count > candleLookback Then
+            window = candles15m.Skip(candles15m.Count - candleLookback).ToList()
+        Else
+            window = candles15m
+        End If
+
+        ' (1) DMI direction
+        Dim plusDI As Double = 0, minusDI As Double = 0, adxVal As Double = 0
+        CalcDMI(window, adxPeriod, plusDI, minusDI, adxVal)
+        mtfADX = adxVal
+        Dim dmiIsBull As Boolean = plusDI > minusDI
+
+        ' (2) ADX strength
+        Dim adxStrong As Boolean = adxVal >= adxMin
+
+        ' (3) EMA alignment
+        Dim ema9  As Double = CalcEMA(window, 9)
+        Dim ema21 As Double = CalcEMA(window, 21)
+        Dim ema50 As Double = CalcEMA(window, 50)
+        Dim emaBull As Boolean = ema9 > ema21 AndAlso ema21 > ema50
+        Dim emaBear As Boolean = ema9 < ema21 AndAlso ema21 < ema50
+        mtfEMAAlignment = If(emaBull, "BULL", If(emaBear, "BEAR", "MIXED"))
+
+        ' Score
+        Dim bullScore As Integer = 0
+        Dim bearScore As Integer = 0
+
+        If dmiIsBull Then bullScore += 1 Else bearScore += 1
+        If adxStrong Then
+            If dmiIsBull Then bullScore += 1 Else bearScore += 1
+        End If
+        If emaBull Then bullScore += 1 ElseIf emaBear Then bearScore += 1
+
+        ' Determine MTF trend
+        If bullScore >= minOf Then
+            mtfTrend = "BULL"
+        ElseIf bearScore >= minOf Then
+            mtfTrend = "BEAR"
+        Else
+            mtfTrend = "FLAT"
+        End If
+
+        Dim details As String = String.Format(
+            "15m +DI:{0:F1} -DI:{1:F1} ADX:{2:F1} EMA:{3} | Bull:{4} Bear:{5} (need {6})",
+            plusDI, minusDI, adxVal, mtfEMAAlignment, bullScore, bearScore, minOf)
+
+        Select Case proposedDirection
+            Case "LONG"
+                gatePass = (mtfTrend = "BULL" OrElse mtfTrend = "FLAT")
+                gateReason = If(gatePass,
+                    "MTF PASS [LONG] " & details,
+                    "MTF BLOCK [LONG vs BEAR] " & details)
+            Case "SHORT"
+                gatePass = (mtfTrend = "BEAR" OrElse mtfTrend = "FLAT")
+                gateReason = If(gatePass,
+                    "MTF PASS [SHORT] " & details,
+                    "MTF BLOCK [SHORT vs BULL] " & details)
+            Case Else
+                gatePass = True
+                gateReason = "MTF state: " & mtfTrend & " | " & details
+        End Select
     End Sub
 
     ' -- Donchian Channel -----------------------------------------------------
