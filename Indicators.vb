@@ -1,4 +1,4 @@
-' Indicators.vb  v0.32
+' Indicators.vb  v0.33
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
@@ -23,6 +23,12 @@
 ' v0.32 -- CalcVWAP and CalcVWAPBands: session boundary times now passed as parameters
 '          (session2Hour, session2Minute) instead of hardcoded 13:30 UTC.
 '          Callers read these from cfg.Indicators.VWAP in MainForm.
+' v0.33 -- TTM Squeeze momentum upgrade for BBW.
+'          New IndicatorResults fields: TTMHistogram, TTMDirection, TTMSignal.
+'          New method: CalcTTMSqueeze -- computes momentum histogram using
+'          linear regression of (Close - SMA20) over the last N candles.
+'          Direction classified by comparing last vs prior histogram thirds.
+'          Signal: BULL_BUILDING / BEAR_BUILDING / BULL_FADING / BEAR_FADING / FLAT.
 
 Public Class IndicatorResults
     ' Core
@@ -54,6 +60,9 @@ Public Class IndicatorResults
     Public Property VWAPSigma2Lower As Double       ' VWAP - 2 sigma
     Public Property BBW As Double
     Public Property SqueezeStatus As String  ' ACTIVE / RELEASING / NONE
+    Public Property TTMHistogram As Double   ' positive = bullish momentum, negative = bearish
+    Public Property TTMDirection As String   ' "RISING" / "FALLING" / "FLAT"
+    Public Property TTMSignal As String      ' "BULL_BUILDING" / "BEAR_BUILDING" / "BULL_FADING" / "BEAR_FADING" / "FLAT"
     Public Property EMA9 As Double
     Public Property EMA21 As Double
     Public Property EMA50 As Double
@@ -387,6 +396,91 @@ Public Class IndicatorEngine
             squeezeStatus = "RELEASING"
         Else
             squeezeStatus = "NONE"
+        End If
+    End Sub
+
+    ' -- TTM Squeeze Momentum -------------------------------------------------
+    ' Computes the momentum histogram used in the TTM Squeeze indicator.
+    ' Methodology: linear regression of (Close - SMA20) over the last
+    ' linRegPeriod candles gives a momentum value anchored to the 20-period mean.
+    ' Positive histogram = bullish momentum building; negative = bearish.
+    '
+    ' Direction: derived by comparing the average of the last third of the
+    ' regression window against the average of the first third.
+    '   delta > flatThreshold  -> RISING
+    '   delta < -flatThreshold -> FALLING
+    '   else                   -> FLAT
+    '
+    ' Signal classification:
+    '   histogram > 0 AND direction = RISING  -> BULL_BUILDING
+    '   histogram > 0 AND direction = FALLING -> BULL_FADING
+    '   histogram < 0 AND direction = FALLING -> BEAR_BUILDING
+    '   histogram < 0 AND direction = RISING  -> BEAR_FADING
+    '   else                                  -> FLAT
+    '
+    ' Parameters:
+    '   smaPeriod     -- SMA period for the mean baseline (default 20, matches BBW)
+    '   linRegPeriod  -- window for linear regression (default 7)
+    '   flatThreshold -- min delta to register direction change (default 0.5)
+    Public Shared Sub CalcTTMSqueeze(candles As List(Of Candle),
+                                      ByRef histogram As Double,
+                                      ByRef direction As String,
+                                      ByRef signal As String,
+                                      Optional smaPeriod As Integer = 20,
+                                      Optional linRegPeriod As Integer = 7,
+                                      Optional flatThreshold As Double = 0.5)
+        histogram = 0 : direction = "FLAT" : signal = "FLAT"
+        If candles.Count < smaPeriod + linRegPeriod Then Return
+
+        ' Build delta series: Close(i) - SMA20(i) for the last linRegPeriod candles
+        Dim deltas As New List(Of Double)
+        For i As Integer = candles.Count - linRegPeriod To candles.Count - 1
+            Dim window = candles.Skip(i - smaPeriod + 1).Take(smaPeriod).ToList()
+            Dim sma As Double = window.Average(Function(c) c.Close)
+            deltas.Add(candles(i).Close - sma)
+        Next
+
+        If deltas.Count < linRegPeriod Then Return
+
+        ' Linear regression over the deltas -- compute fitted value at the last point
+        Dim n As Integer = deltas.Count
+        Dim sumX As Double = 0, sumY As Double = 0
+        Dim sumXY As Double = 0, sumX2 As Double = 0
+        For i As Integer = 0 To n - 1
+            sumX += i : sumY += deltas(i)
+            sumXY += i * deltas(i) : sumX2 += i * i
+        Next
+        Dim denom As Double = n * sumX2 - sumX * sumX
+        If denom = 0 Then Return
+        Dim slope As Double = (n * sumXY - sumX * sumY) / denom
+        Dim intercept As Double = (sumY - slope * sumX) / n
+        histogram = intercept + slope * (n - 1)  ' fitted value at last index
+
+        ' Direction: compare mean of last third vs mean of first third
+        Dim third As Integer = Math.Max(1, n \ 3)
+        Dim firstMean As Double = deltas.Take(third).Average()
+        Dim lastMean As Double = deltas.Skip(n - third).Average()
+        Dim delta As Double = lastMean - firstMean
+
+        If delta > flatThreshold Then
+            direction = "RISING"
+        ElseIf delta < -flatThreshold Then
+            direction = "FALLING"
+        Else
+            direction = "FLAT"
+        End If
+
+        ' Signal classification
+        If histogram > 0 AndAlso direction = "RISING" Then
+            signal = "BULL_BUILDING"
+        ElseIf histogram > 0 AndAlso direction = "FALLING" Then
+            signal = "BULL_FADING"
+        ElseIf histogram < 0 AndAlso direction = "FALLING" Then
+            signal = "BEAR_BUILDING"
+        ElseIf histogram < 0 AndAlso direction = "RISING" Then
+            signal = "BEAR_FADING"
+        Else
+            signal = "FLAT"
         End If
     End Sub
 
