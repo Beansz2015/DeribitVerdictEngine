@@ -1,4 +1,4 @@
-' ScoringEngine.vb  v0.29
+' ScoringEngine.vb  v0.30
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
@@ -20,6 +20,12 @@
 '        FLAT:                          no point awarded.
 '        ACTIVE squeeze penalty (-1 both sides) retained unchanged.
 '        Breakdown note now shows TTMHistogram, TTMDirection, TTMSignal alongside SqueezeStatus.
+' v0.30: MTF gate veto block added after scoring, before verdict generation.
+'        If cfg.MTFGate.Enabled = True and r.MTFGatePass = False:
+'          - Verdict forced to "NO TRADE", Confidence = "N/A"
+'          - MTFGateReason appended to SignalBreakdown as an info row
+'        Gate is evaluated per proposed direction (LONG if longScore > shortScore, else SHORT).
+'        Soft gate: MTFGatePass is pre-computed in CalcMTFGate (Indicators.vb v0.35).
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -160,13 +166,6 @@ Public Class ScoringEngine
         End If
 
         ' BBW / TTM Squeeze scoring
-        ' ACTIVE squeeze: -1 penalty both sides (unchanged from v0.28).
-        ' RELEASING + TTMSignal drives the award:
-        '   BULL_BUILDING -> +1 long  (momentum building upward out of squeeze)
-        '   BEAR_BUILDING -> +1 short (momentum building downward out of squeeze)
-        '   BULL_FADING / BEAR_FADING / FLAT -> no award (direction ambiguous or fading)
-        ' NONE squeeze: TTMSignal still awards if BULL_BUILDING or BEAR_BUILDING
-        '   (persistent momentum even outside a squeeze is still informative).
         Dim bbwLongHit As Boolean = False
         Dim bbwShortHit As Boolean = False
         Dim bbwNote As String
@@ -400,6 +399,38 @@ Public Class ScoringEngine
                 effectiveLS = Math.Max(ls - adxPenalty, TierFloor(ls))
                 effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss))
         End Select
+
+        ' -- Step 4b: MTF Gate Veto -------------------------------------------
+        ' Only applied if MTF gate is enabled in settings.
+        ' ProposedDirection is determined by whichever score is higher post-regime-adjustment.
+        ' If neither score qualifies (both below weak threshold), gate is irrelevant -- skip.
+        Dim tWeakCheck As Integer = ThresholdWeak(regimeMax, cfg.Scoring.VerdictWeakPct)
+        Dim proposedDir As String = "NONE"
+        If effectiveLS >= tWeakCheck AndAlso effectiveLS >= effectiveSS Then
+            proposedDir = "LONG"
+        ElseIf effectiveSS >= tWeakCheck AndAlso effectiveSS > effectiveLS Then
+            proposedDir = "SHORT"
+        End If
+
+        Dim mtfBlocked As Boolean = False
+        If cfg.MTFGate.Enabled AndAlso proposedDir <> "NONE" AndAlso Not r.MTFGatePass Then
+            mtfBlocked = True
+        End If
+
+        ' Always add MTF info row to breakdown regardless of gate result
+        breakdown.Add(New SignalBreakdownItem("MTF Gate (15m)",
+            r.MTFGatePass AndAlso proposedDir = "LONG",
+            r.MTFGatePass AndAlso proposedDir = "SHORT",
+            r.MTFGateReason))
+
+        If mtfBlocked Then
+            res.Verdict = "NO TRADE" : res.Confidence = "N/A"
+            res.LongScore = ls : res.ShortScore = ss
+            res.EffectiveLongScore = effectiveLS : res.EffectiveShortScore = effectiveSS
+            res.RegimePenalty = adxPenalty
+            res.HoldStatus = CalcHoldStatus(r, posState)
+            Return res
+        End If
 
         ' -- Step 5: Generate Verdict -----------------------------------------
         res.LongScore = ls
