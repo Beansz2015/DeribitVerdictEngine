@@ -1,4 +1,4 @@
-' ScoringEngine.vb  v0.30
+' ScoringEngine.vb  v0.31
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
@@ -26,6 +26,8 @@
 '          - MTFGateReason appended to SignalBreakdown as an info row
 '        Gate is evaluated per proposed direction (LONG if longScore > shortScore, else SHORT).
 '        Soft gate: MTFGatePass is pre-computed in CalcMTFGate (Indicators.vb v0.35).
+' v0.31: bbwNote initialised to "" to prevent BC42104 unassigned-variable warning.
+'        (SqueezeStatus values outside ACTIVE/RELEASING/NONE left bbwNote unset.)
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -168,7 +170,8 @@ Public Class ScoringEngine
         ' BBW / TTM Squeeze scoring
         Dim bbwLongHit As Boolean = False
         Dim bbwShortHit As Boolean = False
-        Dim bbwNote As String
+        ' v0.31: initialised to "" to prevent BC42104; overwritten by every Select Case arm.
+        Dim bbwNote As String = ""
 
         Select Case r.SqueezeStatus
             Case "ACTIVE"
@@ -195,6 +198,9 @@ Public Class ScoringEngine
                                                 r.BBW, r.SqueezeStatus,
                                                 r.TTMSignal, r.TTMDirection, r.TTMHistogram)
                 End Select
+            Case Else
+                ' Unexpected SqueezeStatus -- no award, note records the raw value for diagnostics
+                bbwNote = String.Format("{0:F3} | unexpected status:{1} -- no award", r.BBW, r.SqueezeStatus)
         End Select
 
         ' EMA Ribbon (MarketStructure)
