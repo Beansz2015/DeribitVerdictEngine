@@ -1,4 +1,4 @@
-' MainForm.Designer.vb  v0.24
+' MainForm.Designer.vb  v0.24a
 ' Header row layout (HDR_Y=8, HDR_H=42):
 '   lblPositionTitle : X=8,   W=108, Y=8,  H=42  (MiddleLeft)
 '   rbNone           : X=120, Y=20   (vertically centred in 42px row)
@@ -49,7 +49,6 @@ Partial Class MainForm
         Me.lnkResetLog   = New System.Windows.Forms.LinkLabel()
         Me.lnkCalibCheck = New System.Windows.Forms.LinkLabel()
         Me.lblLogInfo    = New System.Windows.Forms.Label()
-        ' Auto-run row controls
         Me.lblAutoRun    = New System.Windows.Forms.Label()
         Me.nudMinutes    = New System.Windows.Forms.NumericUpDown()
         Me.lblMin        = New System.Windows.Forms.Label()
@@ -219,7 +218,7 @@ Partial Class MainForm
         Me.rbRepeat.Text = "Repeat"
         Me.rbRepeat.UseVisualStyleBackColor = True
 
-        ' btnStartStop
+        ' btnStartStop -- use ChrW() for Unicode codepoints > 255
         Me.btnStartStop.BackColor = System.Drawing.Color.FromArgb(0, 140, 60)
         Me.btnStartStop.FlatStyle = System.Windows.Forms.FlatStyle.Flat
         Me.btnStartStop.Font = New System.Drawing.Font("Segoe UI", 8.5!, System.Drawing.FontStyle.Bold)
@@ -228,7 +227,7 @@ Partial Class MainForm
         Me.btnStartStop.Name = "btnStartStop"
         Me.btnStartStop.Size = New System.Drawing.Size(70, 22)
         Me.btnStartStop.TabIndex = 27
-        Me.btnStartStop.Text = Chr(9654) & " Start"
+        Me.btnStartStop.Text = ChrW(9654) & " Start"
         Me.btnStartStop.UseVisualStyleBackColor = False
 
         ' ----------------------------------------------------------------
