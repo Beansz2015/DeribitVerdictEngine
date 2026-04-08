@@ -1,4 +1,4 @@
-' MainForm.vb  v0.36
+' MainForm.vb  v0.37
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
@@ -30,6 +30,8 @@
 '          ADXMin     -> cfg.Indicators.ADX.TrendThreshold (no dedicated field in MTFGateSettings)
 '          MinOf      -> RequiredConfirms
 '          CandleLookback -> CandleCount
+' v0.37 -- Cleanup item 2: Candle.VolumUSD renamed to VolumeUSD.
+'          r.CurrentVolumeUSD assignment updated: candles1m.Last().VolumUSD -> .VolumeUSD
 
 Imports System.Drawing
 Imports System.IO
@@ -58,7 +60,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.36"
+        Me.Text = "Deribit Verdict Engine v0.37"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -323,7 +325,7 @@ Public Class MainForm
 
         r.VolumeSMA9 = IndicatorEngine.CalcVolumeSMA(candles1m, 9)
         r.CurrentVolume = candles1m.Last().Volume
-        r.CurrentVolumeUSD = candles1m.Last().VolumUSD
+        r.CurrentVolumeUSD = candles1m.Last().VolumeUSD
         r.VolumeRatio = If(r.VolumeSMA9 > 0, r.CurrentVolume / r.VolumeSMA9, 1)
 
         IndicatorEngine.CalcDMI(candles5m, 9, r.PlusDI, r.MinusDI, r.ADX)
@@ -583,8 +585,8 @@ Public Class MainForm
 
         sb.AppendLine("OPEN INTEREST:")
         sb.AppendLine("  OI: " & r.OI_Current.ToString("F0") &
-                      "  |  Δ15m: " & r.OIChange15m.ToString("F3") & "%" &
-                      "  |  Δ60m: " & r.OIChange60m.ToString("F3") & "%" &
+                      "  |  δ15m: " & r.OIChange15m.ToString("F3") & "%" &
+                      "  |  δ60m: " & r.OIChange60m.ToString("F3") & "%" &
                       "  |  Signal: " & r.OISignal)
         sb.AppendLine()
 
