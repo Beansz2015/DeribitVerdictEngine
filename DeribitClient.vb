@@ -14,8 +14,8 @@ Public Class DeribitClient
         _http.Timeout = TimeSpan.FromSeconds(10)
     End Sub
 
-    ' ── Candle data ──────────────────────────────────────────────────────────
-    ' resolution: "1" = 1-minute, "5" = 5-minute
+    ' ── Candle data ───────────────────────────────────────────────────────────────────
+    ' resolution: "1" = 1-minute, "5" = 5-minute, "15" = 15-minute
     ' count: number of candles to fetch
     ' Deribit get_tradingview_chart_data returns:
     '   volume = BTC (base currency) volume per candle
@@ -47,11 +47,8 @@ Public Class DeribitClient
         Dim volumes As JsonElement = result.GetProperty("volume")  ' BTC volume
 
         ' cost = USD volume; may not always be present on all resolutions
-        Dim hasCost As Boolean = result.TryGetProperty("cost", Nothing)
         Dim costs As JsonElement = Nothing
-        If hasCost Then
-            costs = result.GetProperty("cost")
-        End If
+        Dim hasCost As Boolean = result.TryGetProperty("cost", costs)
 
         Dim candles As New List(Of Candle)
         For i As Integer = 0 To ticks.GetArrayLength() - 1
@@ -72,20 +69,21 @@ Public Class DeribitClient
         Return candles
     End Function
 
-    ' ── Funding rate ─────────────────────────────────────────────────────────
+    ' ── Funding rate ───────────────────────────────────────────────────────────────────
     ' Returns current 8-hour funding rate as a decimal (e.g. 0.0001 = 0.01%)
     Public Shared Async Function GetFundingRateAsync() As Task(Of Double)
         Dim tickerUrl As String = BaseUrl & "/public/ticker?instrument_name=BTC-PERPETUAL"
         Dim json As String = Await _http.GetStringAsync(tickerUrl)
         Dim doc As JsonDocument = JsonDocument.Parse(json)
         Dim result As JsonElement = doc.RootElement.GetProperty("result")
-        If result.TryGetProperty("current_funding", Nothing) Then
-            Return result.GetProperty("current_funding").GetDouble()
+        Dim fundingEl As JsonElement = Nothing
+        If result.TryGetProperty("current_funding", fundingEl) Then
+            Return fundingEl.GetDouble()
         End If
         Return 0.0
     End Function
 
-    ' ── Open Interest snapshot ────────────────────────────────────────────────
+    ' ── Open Interest snapshot ───────────────────────────────────────────────────────────────
     ' Returns (open_interest, mark_price)
     Public Shared Async Function GetBookSummaryAsync() As Task(Of (OI As Double, MarkPrice As Double))
         Dim url As String = BaseUrl & "/public/get_book_summary_by_instrument" &
@@ -99,7 +97,7 @@ Public Class DeribitClient
         Return (oi, mp)
     End Function
 
-    ' ── L2 Order book snapshot (for OFI) ─────────────────────────────────────
+    ' ── L2 Order book snapshot (for OFI) ───────────────────────────────────────────────
     Public Shared Async Function GetOrderBookAsync(depth As Integer) As Task(Of OrderBookSnapshot)
         Dim url As String = BaseUrl & "/public/get_order_book" &
                             "?instrument_name=BTC-PERPETUAL&depth=" & depth
@@ -120,7 +118,7 @@ Public Class DeribitClient
         Return snap
     End Function
 
-    ' ── Recent trades (for liquidation detection) ────────────────────────────
+    ' ── Recent trades (for liquidation detection) ──────────────────────────────────────────
     Public Shared Async Function GetRecentTradesAsync(count As Integer) As Task(Of List(Of TradeRecord))
         Dim url As String = BaseUrl & "/public/get_last_trades_by_instrument" &
                             "?instrument_name=BTC-PERPETUAL&count=" & count & "&sorting=desc"
@@ -135,8 +133,9 @@ Public Class DeribitClient
             rec.Amount = t.GetProperty("amount").GetDouble()
             rec.Direction = t.GetProperty("direction").GetString()
             rec.Timestamp = t.GetProperty("timestamp").GetInt64()
-            If t.TryGetProperty("liquidation", Nothing) Then
-                rec.Liquidation = t.GetProperty("liquidation").GetString()
+            Dim liqEl As JsonElement = Nothing
+            If t.TryGetProperty("liquidation", liqEl) Then
+                rec.Liquidation = liqEl.GetString()
             Else
                 rec.Liquidation = "none"
             End If
@@ -146,7 +145,7 @@ Public Class DeribitClient
     End Function
 End Class
 
-' ── Data transfer objects ─────────────────────────────────────────────────────
+' ── Data transfer objects ───────────────────────────────────────────────────────────────────────
 
 Public Class Candle
     Public Property Timestamp As Long

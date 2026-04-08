@@ -1,4 +1,4 @@
-' Core/Settings/EngineSettings.vb  v0.33
+' Core/Settings/EngineSettings.vb  v0.34
 ' Typed model that mirrors settings.json.
 ' All hardcoded indicator/scoring thresholds are accessed via this class.
 ' Populated by SettingsLoader.Load() -- do not instantiate directly.
@@ -15,7 +15,10 @@
 '        Session2StartHour/Minute  -- US session reset (default 13:30 UTC).
 '        WarmupCandles             -- min candles before VWAP score is trusted (default 15).
 ' v0.33: Added MTFGateSettings class and MTFGate property on EngineSettings.
-'        Controls the 15m multi-timeframe confluence gate (EMA/DMI/RSI majority vote).
+'        Controls the 15m multi-timeframe confluence gate (DMI/ADX/EMA 2-of-3 majority vote).
+' v0.34: Removed dead RSI fields from MTFGateSettings (RsiPeriod, RsiBullZone, RsiBearZone).
+'        Gate is DMI-direction / ADX-strength / EMA-alignment -- no RSI vote.
+'        Updated MTFGateSettings summary comment to match actual implementation.
 
 Imports System.Text.Json.Serialization
 
@@ -185,8 +188,12 @@ End Class
 
 ''' <summary>
 ''' Controls the 15m multi-timeframe confluence gate.
-''' 2-of-3 majority vote (EMA/DMI/RSI on 15m series) blocks LONG/SHORT verdicts
-''' by capping effectiveLS or effectiveSS below tWeak when 15m bias conflicts.
+''' 2-of-3 majority vote: DMI direction / ADX strength / EMA alignment on 15m series.
+'''   DMI vote  : +DI > -DI  => bullish, -DI > +DI  => bearish
+'''   ADX vote  : ADX >= cfg.Indicators.ADX.TrendThreshold  => trend is strong enough
+'''   EMA vote  : EMA(fast) > EMA(slow)  => bullish, EMA(fast) < EMA(slow)  => bearish
+''' A LONG proposed trade is blocked if 2+ votes disagree (bearish or weak).
+''' A SHORT proposed trade is blocked if 2+ votes disagree (bullish or weak).
 ''' Raw score is preserved in the display so building setups remain visible.
 ''' Set Enabled=false in settings.json to bypass entirely (hot-reload safe).
 ''' </summary>
@@ -200,12 +207,6 @@ Public Class MTFGateSettings
     <JsonPropertyName("ema_period_slow")>    Public Property EmaPeriodSlow    As Integer = 21
     ''' <summary>DMI period on the 15m series.</summary>
     <JsonPropertyName("dmi_period")>         Public Property DmiPeriod        As Integer = 9
-    ''' <summary>RSI period on the 15m series.</summary>
-    <JsonPropertyName("rsi_period")>         Public Property RsiPeriod        As Integer = 9
-    ''' <summary>RSI above this level votes bullish on 15m.</summary>
-    <JsonPropertyName("rsi_bull_zone")>      Public Property RsiBullZone      As Double  = 55.0
-    ''' <summary>RSI below this level votes bearish on 15m.</summary>
-    <JsonPropertyName("rsi_bear_zone")>      Public Property RsiBearZone      As Double  = 45.0
     ''' <summary>Signals that must agree to trigger a block (default 2-of-3).</summary>
     <JsonPropertyName("required_confirms")>  Public Property RequiredConfirms As Integer = 2
 End Class
