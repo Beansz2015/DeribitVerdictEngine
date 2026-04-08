@@ -1,8 +1,9 @@
 {
-  "version": 4,
-  "last_modified": "2026-04-08T00:00:00Z",
-  "modified_by": "claude-settings-pass-v0.35",
+  "version": 5,
+  "last_modified": "2026-04-08T15:53:00Z",
+  "modified_by": "autorun-feature",
   "change_log": [
+    "v5: Added auto_run block (enabled, interval_minutes, interval_seconds)",
     "v4: Added mtf_gate block (soft gate, 2-of-3, 60 candles lookback, adx_min 20)",
     "v3: Added VWAP session timing fields (session1_start_hour/minute, session2_start_hour/minute)",
     "v3: Added VWAP warmup_candles threshold (was hardcoded 15)",
@@ -63,6 +64,11 @@
     "adx_min": 20.0,
     "min_of": 2,
     "block_action": "no_trade"
+  },
+  "auto_run": {
+    "enabled": false,
+    "interval_minutes": 1,
+    "interval_seconds": 0
   },
   "scoring": {
     "long_threshold": 6,
