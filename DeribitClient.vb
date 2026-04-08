@@ -14,7 +14,7 @@ Public Class DeribitClient
         _http.Timeout = TimeSpan.FromSeconds(10)
     End Sub
 
-    ' ── Candle data ───────────────────────────────────────────────────────────────────
+    ' ── Candle data ──────────────────────────────────────────────────────────
     ' resolution: "1" = 1-minute, "5" = 5-minute, "15" = 15-minute
     ' count: number of candles to fetch
     ' Deribit get_tradingview_chart_data returns:
@@ -58,18 +58,18 @@ Public Class DeribitClient
             c.High = highs(i).GetDouble()
             c.Low = lows(i).GetDouble()
             c.Close = closes(i).GetDouble()
-            c.Volume = volumes(i).GetDouble()         ' BTC -- used for scoring
+            c.Volume = volumes(i).GetDouble()          ' BTC -- used for scoring
             If hasCost Then
-                c.VolumUSD = costs(i).GetDouble()     ' USD -- used for display
+                c.VolumeUSD = costs(i).GetDouble()     ' USD -- used for display
             Else
-                c.VolumUSD = c.Volume * c.Close       ' fallback: approximate
+                c.VolumeUSD = c.Volume * c.Close       ' fallback: approximate
             End If
             candles.Add(c)
         Next
         Return candles
     End Function
 
-    ' ── Funding rate ───────────────────────────────────────────────────────────────────
+    ' ── Funding rate ─────────────────────────────────────────────────────────
     ' Returns current 8-hour funding rate as a decimal (e.g. 0.0001 = 0.01%)
     Public Shared Async Function GetFundingRateAsync() As Task(Of Double)
         Dim tickerUrl As String = BaseUrl & "/public/ticker?instrument_name=BTC-PERPETUAL"
@@ -83,7 +83,7 @@ Public Class DeribitClient
         Return 0.0
     End Function
 
-    ' ── Open Interest snapshot ───────────────────────────────────────────────────────────────
+    ' ── Open Interest snapshot ────────────────────────────────────────────────
     ' Returns (open_interest, mark_price)
     Public Shared Async Function GetBookSummaryAsync() As Task(Of (OI As Double, MarkPrice As Double))
         Dim url As String = BaseUrl & "/public/get_book_summary_by_instrument" &
@@ -97,7 +97,7 @@ Public Class DeribitClient
         Return (oi, mp)
     End Function
 
-    ' ── L2 Order book snapshot (for OFI) ───────────────────────────────────────────────
+    ' ── L2 Order book snapshot (for OFI) ─────────────────────────────────────
     Public Shared Async Function GetOrderBookAsync(depth As Integer) As Task(Of OrderBookSnapshot)
         Dim url As String = BaseUrl & "/public/get_order_book" &
                             "?instrument_name=BTC-PERPETUAL&depth=" & depth
@@ -118,7 +118,7 @@ Public Class DeribitClient
         Return snap
     End Function
 
-    ' ── Recent trades (for liquidation detection) ──────────────────────────────────────────
+    ' ── Recent trades (for liquidation detection) ────────────────────────────
     Public Shared Async Function GetRecentTradesAsync(count As Integer) As Task(Of List(Of TradeRecord))
         Dim url As String = BaseUrl & "/public/get_last_trades_by_instrument" &
                             "?instrument_name=BTC-PERPETUAL&count=" & count & "&sorting=desc"
@@ -145,7 +145,7 @@ Public Class DeribitClient
     End Function
 End Class
 
-' ── Data transfer objects ───────────────────────────────────────────────────────────────────────
+' ── Data transfer objects ─────────────────────────────────────────────────────
 
 Public Class Candle
     Public Property Timestamp As Long
@@ -154,7 +154,7 @@ Public Class Candle
     Public Property Low As Double
     Public Property Close As Double
     Public Property Volume As Double      ' BTC volume -- used for all indicator scoring
-    Public Property VolumUSD As Double    ' USD volume -- display only
+    Public Property VolumeUSD As Double   ' USD volume -- display only
 End Class
 
 Public Class OrderBookSnapshot
