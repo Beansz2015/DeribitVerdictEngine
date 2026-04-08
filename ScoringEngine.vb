@@ -1,4 +1,4 @@
-' ScoringEngine.vb  v0.32
+' ScoringEngine.vb  v0.33
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
@@ -36,6 +36,9 @@
 '        Rationale: BULLISH div on rising OBV (OBV rising, price also rising) is confirmed
 '        agreement -- equal to or stronger than NONE. No double-counting: extra confluence
 '        is already captured by other signals (ROC, VWAP, EMA) firing simultaneously.
+' v0.33: Cleanup item 5 -- collapsed ThresholdStrong/ThresholdMed/ThresholdWeak into a
+'        single shared Threshold(maxScore, pct) function. All three were identical bodies.
+'        All call sites updated. No behaviour change.
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -96,13 +99,11 @@ Public Class ScoringEngine
         End Select
     End Function
 
-    Private Shared Function ThresholdStrong(maxScore As Integer, pct As Double) As Integer
-        Return CInt(Math.Ceiling(maxScore * pct))
-    End Function
-    Private Shared Function ThresholdMed(maxScore As Integer, pct As Double) As Integer
-        Return CInt(Math.Ceiling(maxScore * pct))
-    End Function
-    Private Shared Function ThresholdWeak(maxScore As Integer, pct As Double) As Integer
+    ''' <summary>
+    ''' Returns the integer threshold at or above which a score qualifies for the given tier.
+    ''' Replaces the former ThresholdStrong / ThresholdMed / ThresholdWeak trio (identical bodies).
+    ''' </summary>
+    Private Shared Function Threshold(maxScore As Integer, pct As Double) As Integer
         Return CInt(Math.Ceiling(maxScore * pct))
     End Function
 
@@ -422,10 +423,7 @@ Public Class ScoringEngine
         End Select
 
         ' -- Step 4b: MTF Gate Veto -------------------------------------------
-        ' Only applied if MTF gate is enabled in settings.
-        ' ProposedDirection is determined by whichever score is higher post-regime-adjustment.
-        ' If neither score qualifies (both below weak threshold), gate is irrelevant -- skip.
-        Dim tWeakCheck As Integer = ThresholdWeak(regimeMax, cfg.Scoring.VerdictWeakPct)
+        Dim tWeakCheck As Integer = Threshold(regimeMax, cfg.Scoring.VerdictWeakPct)
         Dim proposedDir As String = "NONE"
         If effectiveLS >= tWeakCheck AndAlso effectiveLS >= effectiveSS Then
             proposedDir = "LONG"
@@ -460,9 +458,9 @@ Public Class ScoringEngine
         res.EffectiveShortScore = effectiveSS
         res.RegimePenalty = adxPenalty
 
-        Dim tStrong As Integer = ThresholdStrong(regimeMax, cfg.Scoring.VerdictStrongPct)
-        Dim tMed    As Integer = ThresholdMed(regimeMax,    cfg.Scoring.VerdictMedPct)
-        Dim tWeak   As Integer = ThresholdWeak(regimeMax,   cfg.Scoring.VerdictWeakPct)
+        Dim tStrong As Integer = Threshold(regimeMax, cfg.Scoring.VerdictStrongPct)
+        Dim tMed    As Integer = Threshold(regimeMax, cfg.Scoring.VerdictMedPct)
+        Dim tWeak   As Integer = Threshold(regimeMax, cfg.Scoring.VerdictWeakPct)
 
         If effectiveLS >= tStrong Then
             res.Verdict = "STRONG LONG" : res.Confidence = "HIGH"
