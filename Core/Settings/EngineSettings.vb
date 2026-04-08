@@ -1,4 +1,4 @@
-' Core/Settings/EngineSettings.vb  v0.34
+' Core/Settings/EngineSettings.vb  v0.35
 ' Typed model that mirrors settings.json.
 ' All hardcoded indicator/scoring thresholds are accessed via this class.
 ' Populated by SettingsLoader.Load() -- do not instantiate directly.
@@ -19,6 +19,9 @@
 ' v0.34: Removed dead RSI fields from MTFGateSettings (RsiPeriod, RsiBullZone, RsiBearZone).
 '        Gate is DMI-direction / ADX-strength / EMA-alignment -- no RSI vote.
 '        Updated MTFGateSettings summary comment to match actual implementation.
+' v0.35: Added AutoRunSettings class and AutoRun property on EngineSettings.
+'        Exposes auto_run block from settings.json (enabled, interval_minutes, interval_seconds).
+'        Minimum interval enforced in MainForm (10 seconds); settings stores raw user intent.
 
 Imports System.Text.Json.Serialization
 
@@ -46,6 +49,9 @@ Public Class EngineSettings
 
     <JsonPropertyName("mtf_gate")>
     Public Property MTFGate As New MTFGateSettings
+
+    <JsonPropertyName("auto_run")>
+    Public Property AutoRun As New AutoRunSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -209,6 +215,24 @@ Public Class MTFGateSettings
     <JsonPropertyName("dmi_period")>         Public Property DmiPeriod        As Integer = 9
     ''' <summary>Signals that must agree to trigger a block (default 2-of-3).</summary>
     <JsonPropertyName("required_confirms")>  Public Property RequiredConfirms As Integer = 2
+End Class
+
+' ---------------------------------------------------------------------------
+' Auto-run settings
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' Controls the auto-run timer. Exposed in settings.json so an LLM tuning agent
+''' can enable/adjust the interval without touching the WinForms UI.
+''' Minimum effective interval is 10 seconds (enforced in MainForm, not here).
+''' </summary>
+Public Class AutoRunSettings
+    ''' <summary>Whether auto-run is active on app start. Default False.</summary>
+    <JsonPropertyName("enabled")>            Public Property Enabled          As Boolean = False
+    ''' <summary>Minutes component of the repeat interval (0-60).</summary>
+    <JsonPropertyName("interval_minutes")>   Public Property IntervalMinutes  As Integer = 1
+    ''' <summary>Seconds component of the repeat interval (0-59).</summary>
+    <JsonPropertyName("interval_seconds")>   Public Property IntervalSeconds  As Integer = 0
 End Class
 
 ' ---------------------------------------------------------------------------
