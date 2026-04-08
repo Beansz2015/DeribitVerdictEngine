@@ -1,4 +1,4 @@
-' MainForm.vb  v0.38
+' MainForm.vb  v0.38a
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
@@ -26,20 +26,11 @@
 '          so the gate can pre-compute MTFGatePass before ScoringEngine reads it.
 '          RenderOutput: MTF gate status line added to TIER 2 block.
 ' v0.36 -- Fixed BC30456: MTFGateSettings property names corrected.
-'          ADXPeriod  -> DmiPeriod
-'          ADXMin     -> cfg.Indicators.ADX.TrendThreshold (no dedicated field in MTFGateSettings)
-'          MinOf      -> RequiredConfirms
-'          CandleLookback -> CandleCount
 ' v0.37 -- Cleanup item 2: Candle.VolumUSD renamed to VolumeUSD.
-'          r.CurrentVolumeUSD assignment updated: candles1m.Last().VolumUSD -> .VolumeUSD
-' v0.38 -- Auto-run feature added.
-'          New controls: nudMinutes, nudSeconds (interval), rbSingle/rbRepeat (mode),
-'          btnStartStop (toggle), lblCountdown (status bar countdown).
-'          Uses WinFormsAutoRunTimer (IAutoRunTimer) -- portable to Linux CLI via interface swap.
-'          Interval pre-populated from cfg.AutoRun on load; UI changes written back to
-'          settings.json on Start so LLM-set values are preserved after manual adjustments.
-'          Countdown label ticks every second via a second Threading.Timer.
-'          Guard: if analysis is already running (btnAnalyze disabled), tick is skipped.
+' v0.38 -- Auto-run feature added (WinFormsAutoRunTimer, countdown label, Start/Stop UI).
+' v0.38a -- Fixed BC30455: SettingsLoader.Save() calls updated to pass (cfg, changeNote).
+'           StartAutoRun  -> SettingsLoader.Save(cfg, "auto_run enabled via UI")
+'           StopAutoRun   -> SettingsLoader.Save(cfg, "auto_run disabled via UI")
 
 Imports System.Drawing
 Imports System.IO
@@ -54,9 +45,9 @@ Public Class MainForm
     Private Const BTN_X As Integer = 286
     Private Const BTN_W As Integer = 140
     Private Const VRD_X As Integer = 430
-    Private Const TXT_Y As Integer = 76   ' moved down 20px to make room for auto-run row
+    Private Const TXT_Y As Integer = 76
     Private Const STATUS_H As Integer = 18
-    Private Const AR_Y As Integer = 54    ' auto-run control row Y
+    Private Const AR_Y As Integer = 54
     Private Const AR_H As Integer = 20
 
     Private Const EM_SETMARGINS As Integer = &HD3
@@ -72,10 +63,10 @@ Public Class MainForm
     ' -----------------------------------------------------------------------
     ' Auto-run state
     ' -----------------------------------------------------------------------
-    Private _autoRunTimer    As IAutoRunTimer
-    Private _countdownTimer  As Threading.Timer
-    Private _countdownSecs   As Integer = 0
-    Private _intervalMs      As Integer = 60_000
+    Private _autoRunTimer   As IAutoRunTimer
+    Private _countdownTimer As Threading.Timer
+    Private _countdownSecs  As Integer = 0
+    Private _intervalMs     As Integer = 60_000
 
     Public Sub New()
         InitializeComponent()
@@ -97,7 +88,7 @@ Public Class MainForm
         Dim cfg As EngineSettings = SettingsLoader.Current
         nudMinutes.Value = Math.Max(0, Math.Min(60, cfg.AutoRun.IntervalMinutes))
         nudSeconds.Value = Math.Max(0, Math.Min(59, cfg.AutoRun.IntervalSeconds))
-        rbRepeat.Checked = True   ' default mode is repeat
+        rbRepeat.Checked = True
         UpdateCountdownLabel("Auto-run: OFF")
         If cfg.AutoRun.Enabled Then
             StartAutoRun()
@@ -122,19 +113,17 @@ Public Class MainForm
             Return
         End If
 
-        ' Write current UI interval back to settings so LLM sees it
         Dim cfg As EngineSettings = SettingsLoader.Current
         cfg.AutoRun.Enabled         = True
         cfg.AutoRun.IntervalMinutes = mins
         cfg.AutoRun.IntervalSeconds = secs
-        SettingsLoader.Save()
+        SettingsLoader.Save(cfg, "auto_run enabled via UI")
 
         _countdownSecs = _intervalMs \ 1000
-        btnStartStop.Text = "■ Stop"
+        btnStartStop.Text = "&#9632; Stop"
         nudMinutes.Enabled = False
         nudSeconds.Enabled = False
 
-        ' Start countdown tick (every 1 s, marshalled via WinFormsAutoRunTimer owner)
         _countdownTimer = New Threading.Timer(AddressOf OnCountdownTick, Nothing, 1000, 1000)
 
         If rbSingle.Checked Then
@@ -150,24 +139,20 @@ Public Class MainForm
             _countdownTimer.Dispose()
             _countdownTimer = Nothing
         End If
-        btnStartStop.Text = "▶ Start"
+        btnStartStop.Text = "&#9654; Start"
         nudMinutes.Enabled = True
         nudSeconds.Enabled = True
         UpdateCountdownLabel("Auto-run: OFF")
-        ' Persist disabled state
         Dim cfg As EngineSettings = SettingsLoader.Current
         cfg.AutoRun.Enabled = False
-        SettingsLoader.Save()
+        SettingsLoader.Save(cfg, "auto_run disabled via UI")
     End Sub
 
     Private Sub RunAutoAnalysis()
-        ' Guard: skip if a fetch is already in progress
         If Not btnAnalyze.Enabled Then Return
-        ' Reset countdown
         _countdownSecs = _intervalMs \ 1000
-        ' Single mode: auto-run stops itself in WinFormsAutoRunTimer; sync UI
         If rbSingle.Checked Then
-            btnStartStop.Text = "▶ Start"
+            btnStartStop.Text = "&#9654; Start"
             nudMinutes.Enabled = True
             nudSeconds.Enabled = True
         End If
@@ -207,44 +192,38 @@ Public Class MainForm
         Dim W As Integer = Me.ClientSize.Width
         Dim H As Integer = Me.ClientSize.Height
 
-        ' Row 1: position + analyze + verdict
         lblPositionTitle.Location = New System.Drawing.Point(8, HDR_Y)
         lblPositionTitle.Size = New System.Drawing.Size(108, HDR_H)
-
         rbNone.Location  = New System.Drawing.Point(120, HDR_Y + (HDR_H - 18) \ 2)
         rbLong.Location  = New System.Drawing.Point(210, HDR_Y + 2)
         rbShort.Location = New System.Drawing.Point(210, HDR_Y + 22)
-
         btnAnalyze.Location = New System.Drawing.Point(BTN_X, HDR_Y)
         btnAnalyze.Size     = New System.Drawing.Size(BTN_W, HDR_H)
-
         lblVerdict.Location = New System.Drawing.Point(VRD_X, HDR_Y)
         lblVerdict.Size     = New System.Drawing.Size(W - VRD_X - 8, HDR_H)
 
-        ' Row 2: auto-run controls
         Dim x As Integer = 8
-        lblAutoRun.Location  = New System.Drawing.Point(x, AR_Y + 2) : x += 72
-        nudMinutes.Location  = New System.Drawing.Point(x, AR_Y)     : x += 46
-        lblMin.Location      = New System.Drawing.Point(x, AR_Y + 2) : x += 28
-        nudSeconds.Location  = New System.Drawing.Point(x, AR_Y)     : x += 46
-        lblSec.Location      = New System.Drawing.Point(x, AR_Y + 2) : x += 32
-        rbSingle.Location    = New System.Drawing.Point(x, AR_Y + 2) : x += 62
-        rbRepeat.Location    = New System.Drawing.Point(x, AR_Y + 2) : x += 66
+        lblAutoRun.Location   = New System.Drawing.Point(x, AR_Y + 2) : x += 72
+        nudMinutes.Location   = New System.Drawing.Point(x, AR_Y)     : x += 46
+        lblMin.Location       = New System.Drawing.Point(x, AR_Y + 2) : x += 28
+        nudSeconds.Location   = New System.Drawing.Point(x, AR_Y)     : x += 46
+        lblSec.Location       = New System.Drawing.Point(x, AR_Y + 2) : x += 32
+        rbSingle.Location     = New System.Drawing.Point(x, AR_Y + 2) : x += 62
+        rbRepeat.Location     = New System.Drawing.Point(x, AR_Y + 2) : x += 66
         btnStartStop.Location = New System.Drawing.Point(x, AR_Y - 1)
         btnStartStop.Size     = New System.Drawing.Size(70, AR_H + 2)
 
-        ' Status bar
         Dim statusY As Integer = H - STATUS_H - 2
         txtOutput.Location = New System.Drawing.Point(8, TXT_Y)
         txtOutput.Size     = New System.Drawing.Size(W - 16, statusY - TXT_Y - 2)
         SetOutputMargins(6, 6)
 
-        lblLogInfo.Location     = New System.Drawing.Point(8, H - STATUS_H)
-        lblLogInfo.Size         = New System.Drawing.Size(W - 420, STATUS_H)
-        lblCountdown.Location   = New System.Drawing.Point(W - 410, H - STATUS_H)
-        lblCountdown.Size       = New System.Drawing.Size(200, STATUS_H)
-        lnkCalibCheck.Location  = New System.Drawing.Point(W - 230, H - STATUS_H)
-        lnkResetLog.Location    = New System.Drawing.Point(W - 80, H - STATUS_H)
+        lblLogInfo.Location    = New System.Drawing.Point(8, H - STATUS_H)
+        lblLogInfo.Size        = New System.Drawing.Size(W - 420, STATUS_H)
+        lblCountdown.Location  = New System.Drawing.Point(W - 410, H - STATUS_H)
+        lblCountdown.Size      = New System.Drawing.Size(200, STATUS_H)
+        lnkCalibCheck.Location = New System.Drawing.Point(W - 230, H - STATUS_H)
+        lnkResetLog.Location   = New System.Drawing.Point(W - 80, H - STATUS_H)
     End Sub
 
     ' -----------------------------------------------------------------------
@@ -349,9 +328,9 @@ Public Class MainForm
         Const MIN_SESSIONS As Integer = 3
 
         Dim regimesCovered As Integer = regimeCounts.Values.ToList().Where(Function(c) c >= MIN_PER_REGIME).Count()
-        Dim okTotal   = totalRows >= MIN_TOTAL
-        Dim okRegimes = regimesCovered >= MIN_REGIMES_COVERED
-        Dim okLiq     = liqEvents >= MIN_LIQ_EVENTS
+        Dim okTotal    = totalRows >= MIN_TOTAL
+        Dim okRegimes  = regimesCovered >= MIN_REGIMES_COVERED
+        Dim okLiq      = liqEvents >= MIN_LIQ_EVENTS
         Dim okSessions = sessionDates.Count >= MIN_SESSIONS
         Dim overallReady = okTotal AndAlso okRegimes AndAlso okLiq AndAlso okSessions
 
