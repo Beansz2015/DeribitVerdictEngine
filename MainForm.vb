@@ -1,4 +1,4 @@
-' MainForm.vb  v0.37
+' MainForm.vb  v0.38
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
 '          OFI display line now shows weighted bid/ask volumes.
@@ -32,10 +32,19 @@
 '          CandleLookback -> CandleCount
 ' v0.37 -- Cleanup item 2: Candle.VolumUSD renamed to VolumeUSD.
 '          r.CurrentVolumeUSD assignment updated: candles1m.Last().VolumUSD -> .VolumeUSD
+' v0.38 -- Auto-run feature added.
+'          New controls: nudMinutes, nudSeconds (interval), rbSingle/rbRepeat (mode),
+'          btnStartStop (toggle), lblCountdown (status bar countdown).
+'          Uses WinFormsAutoRunTimer (IAutoRunTimer) -- portable to Linux CLI via interface swap.
+'          Interval pre-populated from cfg.AutoRun on load; UI changes written back to
+'          settings.json on Start so LLM-set values are preserved after manual adjustments.
+'          Countdown label ticks every second via a second Threading.Timer.
+'          Guard: if analysis is already running (btnAnalyze disabled), tick is skipped.
 
 Imports System.Drawing
 Imports System.IO
 Imports System.Runtime.InteropServices
+Imports System.Threading
 Imports System.Windows.Forms
 
 Public Class MainForm
@@ -45,8 +54,10 @@ Public Class MainForm
     Private Const BTN_X As Integer = 286
     Private Const BTN_W As Integer = 140
     Private Const VRD_X As Integer = 430
-    Private Const TXT_Y As Integer = 56
+    Private Const TXT_Y As Integer = 76   ' moved down 20px to make room for auto-run row
     Private Const STATUS_H As Integer = 18
+    Private Const AR_Y As Integer = 54    ' auto-run control row Y
+    Private Const AR_H As Integer = 20
 
     Private Const EM_SETMARGINS As Integer = &HD3
     Private Const EC_LEFTMARGIN As Integer = 1
@@ -58,17 +69,135 @@ Public Class MainForm
 
     Private _oiHistory As New List(Of OiSnapshot)()
 
+    ' -----------------------------------------------------------------------
+    ' Auto-run state
+    ' -----------------------------------------------------------------------
+    Private _autoRunTimer    As IAutoRunTimer
+    Private _countdownTimer  As Threading.Timer
+    Private _countdownSecs   As Integer = 0
+    Private _intervalMs      As Integer = 60_000
+
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.37"
+        Me.Text = "Deribit Verdict Engine v0.38"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
         UpdateLogInfo()
         SettingsLoader.Initialise(Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
+        InitAutoRunControls()
     End Sub
 
+    ' -----------------------------------------------------------------------
+    ' Auto-run: initialise controls from settings and wire events
+    ' -----------------------------------------------------------------------
+    Private Sub InitAutoRunControls()
+        _autoRunTimer = New WinFormsAutoRunTimer(Me)
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        nudMinutes.Value = Math.Max(0, Math.Min(60, cfg.AutoRun.IntervalMinutes))
+        nudSeconds.Value = Math.Max(0, Math.Min(59, cfg.AutoRun.IntervalSeconds))
+        rbRepeat.Checked = True   ' default mode is repeat
+        UpdateCountdownLabel("Auto-run: OFF")
+        If cfg.AutoRun.Enabled Then
+            StartAutoRun()
+        End If
+    End Sub
+
+    Private Sub btnStartStop_Click(sender As Object, e As EventArgs) Handles btnStartStop.Click
+        If _autoRunTimer.IsRunning Then
+            StopAutoRun()
+        Else
+            StartAutoRun()
+        End If
+    End Sub
+
+    Private Sub StartAutoRun()
+        Dim mins As Integer = CInt(nudMinutes.Value)
+        Dim secs As Integer = CInt(nudSeconds.Value)
+        _intervalMs = (mins * 60 + secs) * 1000
+        If _intervalMs < 10_000 Then
+            MessageBox.Show("Minimum interval is 10 seconds.", "Auto-Run",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        ' Write current UI interval back to settings so LLM sees it
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        cfg.AutoRun.Enabled         = True
+        cfg.AutoRun.IntervalMinutes = mins
+        cfg.AutoRun.IntervalSeconds = secs
+        SettingsLoader.Save()
+
+        _countdownSecs = _intervalMs \ 1000
+        btnStartStop.Text = "■ Stop"
+        nudMinutes.Enabled = False
+        nudSeconds.Enabled = False
+
+        ' Start countdown tick (every 1 s, marshalled via WinFormsAutoRunTimer owner)
+        _countdownTimer = New Threading.Timer(AddressOf OnCountdownTick, Nothing, 1000, 1000)
+
+        If rbSingle.Checked Then
+            CType(_autoRunTimer, WinFormsAutoRunTimer).StartOnce(_intervalMs, AddressOf RunAutoAnalysis)
+        Else
+            _autoRunTimer.Start(_intervalMs, AddressOf RunAutoAnalysis)
+        End If
+    End Sub
+
+    Private Sub StopAutoRun()
+        _autoRunTimer.Stop()
+        If _countdownTimer IsNot Nothing Then
+            _countdownTimer.Dispose()
+            _countdownTimer = Nothing
+        End If
+        btnStartStop.Text = "▶ Start"
+        nudMinutes.Enabled = True
+        nudSeconds.Enabled = True
+        UpdateCountdownLabel("Auto-run: OFF")
+        ' Persist disabled state
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        cfg.AutoRun.Enabled = False
+        SettingsLoader.Save()
+    End Sub
+
+    Private Sub RunAutoAnalysis()
+        ' Guard: skip if a fetch is already in progress
+        If Not btnAnalyze.Enabled Then Return
+        ' Reset countdown
+        _countdownSecs = _intervalMs \ 1000
+        ' Single mode: auto-run stops itself in WinFormsAutoRunTimer; sync UI
+        If rbSingle.Checked Then
+            btnStartStop.Text = "▶ Start"
+            nudMinutes.Enabled = True
+            nudSeconds.Enabled = True
+        End If
+        btnAnalyze_Click(Me, EventArgs.Empty)
+    End Sub
+
+    Private Sub OnCountdownTick(state As Object)
+        If Me.IsDisposed OrElse Not Me.IsHandleCreated Then Return
+        Try
+            Me.Invoke(Sub()
+                          If Not _autoRunTimer.IsRunning Then Return
+                          _countdownSecs -= 1
+                          If _countdownSecs < 0 Then _countdownSecs = _intervalMs \ 1000
+                          Dim m As Integer = _countdownSecs \ 60
+                          Dim s As Integer = _countdownSecs Mod 60
+                          UpdateCountdownLabel(String.Format("Next run in: {0}:{1:D2}  [{2}]",
+                                                             m, s,
+                                                             If(rbRepeat.Checked, "REPEAT", "SINGLE")))
+                      End Sub)
+        Catch ex As ObjectDisposedException
+        End Try
+    End Sub
+
+    Private Sub UpdateCountdownLabel(text As String)
+        lblCountdown.Text = text
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Layout
+    ' -----------------------------------------------------------------------
     Private Sub SetOutputMargins(leftPx As Integer, rightPx As Integer)
         Dim lParam As Integer = (rightPx << 16) Or (leftPx And &HFFFF)
         SendMessage(txtOutput.Handle, EM_SETMARGINS, EC_LEFTMARGIN Or EC_RIGHTMARGIN, lParam)
@@ -78,30 +207,49 @@ Public Class MainForm
         Dim W As Integer = Me.ClientSize.Width
         Dim H As Integer = Me.ClientSize.Height
 
+        ' Row 1: position + analyze + verdict
         lblPositionTitle.Location = New System.Drawing.Point(8, HDR_Y)
         lblPositionTitle.Size = New System.Drawing.Size(108, HDR_H)
 
-        rbNone.Location = New System.Drawing.Point(120, HDR_Y + (HDR_H - 18) \ 2)
-        rbLong.Location = New System.Drawing.Point(210, HDR_Y + 2)
+        rbNone.Location  = New System.Drawing.Point(120, HDR_Y + (HDR_H - 18) \ 2)
+        rbLong.Location  = New System.Drawing.Point(210, HDR_Y + 2)
         rbShort.Location = New System.Drawing.Point(210, HDR_Y + 22)
 
         btnAnalyze.Location = New System.Drawing.Point(BTN_X, HDR_Y)
-        btnAnalyze.Size = New System.Drawing.Size(BTN_W, HDR_H)
+        btnAnalyze.Size     = New System.Drawing.Size(BTN_W, HDR_H)
 
         lblVerdict.Location = New System.Drawing.Point(VRD_X, HDR_Y)
-        lblVerdict.Size = New System.Drawing.Size(W - VRD_X - 8, HDR_H)
+        lblVerdict.Size     = New System.Drawing.Size(W - VRD_X - 8, HDR_H)
 
+        ' Row 2: auto-run controls
+        Dim x As Integer = 8
+        lblAutoRun.Location  = New System.Drawing.Point(x, AR_Y + 2) : x += 72
+        nudMinutes.Location  = New System.Drawing.Point(x, AR_Y)     : x += 46
+        lblMin.Location      = New System.Drawing.Point(x, AR_Y + 2) : x += 28
+        nudSeconds.Location  = New System.Drawing.Point(x, AR_Y)     : x += 46
+        lblSec.Location      = New System.Drawing.Point(x, AR_Y + 2) : x += 32
+        rbSingle.Location    = New System.Drawing.Point(x, AR_Y + 2) : x += 62
+        rbRepeat.Location    = New System.Drawing.Point(x, AR_Y + 2) : x += 66
+        btnStartStop.Location = New System.Drawing.Point(x, AR_Y - 1)
+        btnStartStop.Size     = New System.Drawing.Size(70, AR_H + 2)
+
+        ' Status bar
         Dim statusY As Integer = H - STATUS_H - 2
         txtOutput.Location = New System.Drawing.Point(8, TXT_Y)
-        txtOutput.Size = New System.Drawing.Size(W - 16, statusY - TXT_Y - 2)
+        txtOutput.Size     = New System.Drawing.Size(W - 16, statusY - TXT_Y - 2)
         SetOutputMargins(6, 6)
 
-        lblLogInfo.Location = New System.Drawing.Point(8, H - STATUS_H)
-        lblLogInfo.Size = New System.Drawing.Size(W - 280, STATUS_H)
-        lnkCalibCheck.Location = New System.Drawing.Point(W - 230, H - STATUS_H)
-        lnkResetLog.Location = New System.Drawing.Point(W - 80, H - STATUS_H)
+        lblLogInfo.Location     = New System.Drawing.Point(8, H - STATUS_H)
+        lblLogInfo.Size         = New System.Drawing.Size(W - 420, STATUS_H)
+        lblCountdown.Location   = New System.Drawing.Point(W - 410, H - STATUS_H)
+        lblCountdown.Size       = New System.Drawing.Size(200, STATUS_H)
+        lnkCalibCheck.Location  = New System.Drawing.Point(W - 230, H - STATUS_H)
+        lnkResetLog.Location    = New System.Drawing.Point(W - 80, H - STATUS_H)
     End Sub
 
+    ' -----------------------------------------------------------------------
+    ' Log helpers
+    ' -----------------------------------------------------------------------
     Private Sub UpdateLogInfo()
         Dim rows As Integer = AnalysisLogger.GetRowCount()
         Dim path As String = AnalysisLogger.GetLogPath()
@@ -201,9 +349,9 @@ Public Class MainForm
         Const MIN_SESSIONS As Integer = 3
 
         Dim regimesCovered As Integer = regimeCounts.Values.ToList().Where(Function(c) c >= MIN_PER_REGIME).Count()
-        Dim okTotal = totalRows >= MIN_TOTAL
+        Dim okTotal   = totalRows >= MIN_TOTAL
         Dim okRegimes = regimesCovered >= MIN_REGIMES_COVERED
-        Dim okLiq = liqEvents >= MIN_LIQ_EVENTS
+        Dim okLiq     = liqEvents >= MIN_LIQ_EVENTS
         Dim okSessions = sessionDates.Count >= MIN_SESSIONS
         Dim overallReady = okTotal AndAlso okRegimes AndAlso okLiq AndAlso okSessions
 
@@ -255,6 +403,9 @@ Public Class MainForm
         Return If(ok, "[OK]", "[--]")
     End Function
 
+    ' -----------------------------------------------------------------------
+    ' Analysis
+    ' -----------------------------------------------------------------------
     Private Async Sub btnAnalyze_Click(sender As Object, e As EventArgs) Handles btnAnalyze.Click
         btnAnalyze.Enabled = False
         btnAnalyze.Text = "Fetching..."
@@ -277,7 +428,6 @@ Public Class MainForm
     Private Async Function RunAnalysisAsync() As Task
         Dim cfg As EngineSettings = SettingsLoader.Current
 
-        ' v0.35: 15m candles fetched in parallel with other requests
         Dim t_1m      = DeribitClient.GetCandlesAsync("1", 250)
         Dim t_5m      = DeribitClient.GetCandlesAsync("5", 210)
         Dim t_15m     = DeribitClient.GetCandlesAsync("15", 70)
@@ -288,12 +438,12 @@ Public Class MainForm
 
         Await Task.WhenAll(t_1m, t_5m, t_15m, t_funding, t_book, t_ob, t_trades)
 
-        Dim candles1m   = Await t_1m
-        Dim candles5m   = Await t_5m
-        Dim candles15m  = Await t_15m
-        Dim fundingRate = Await t_funding
-        Dim bookSummary = Await t_book
-        Dim orderBook   = Await t_ob
+        Dim candles1m    = Await t_1m
+        Dim candles5m    = Await t_5m
+        Dim candles15m   = Await t_15m
+        Dim fundingRate  = Await t_funding
+        Dim bookSummary  = Await t_book
+        Dim orderBook    = Await t_ob
         Dim recentTrades = Await t_trades
 
         If candles1m.Count < 50 Then
@@ -339,13 +489,11 @@ Public Class MainForm
             r.Regime = "TRANSITIONAL"
         End If
 
-        ' v0.32: session boundary times read from settings
         Dim vwapS2Hour   As Integer = cfg.Indicators.VWAP.Session2StartHour
         Dim vwapS2Minute As Integer = cfg.Indicators.VWAP.Session2StartMinute
         Dim vwapWarmup   As Integer = cfg.Indicators.VWAP.WarmupCandles
 
-        r.VWAP = IndicatorEngine.CalcVWAP(candles1m, r.VWAPSessionCandles,
-                                           vwapS2Hour, vwapS2Minute)
+        r.VWAP = IndicatorEngine.CalcVWAP(candles1m, r.VWAPSessionCandles, vwapS2Hour, vwapS2Minute)
         r.VWAPDevPct = If(r.VWAP > 0, (r.CurrentPrice - r.VWAP) / r.VWAP * 100, 0)
         IndicatorEngine.CalcVWAPBands(candles1m, r.VWAP,
                                       r.VWAPSigma1Upper, r.VWAPSigma1Lower,
@@ -354,9 +502,6 @@ Public Class MainForm
 
         Dim minBBW As Double
         IndicatorEngine.CalcBBW(candles1m, 20, 2.0, r.BBW, minBBW, r.SqueezeStatus)
-
-        ' v0.33: CalcTTMSqueeze must be called after CalcBBW so r.TTMHistogram/Direction/Signal
-        ' are populated before ScoringEngine reads them in the BBW/TTM scoring block.
         IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal)
 
         r.EMA9  = IndicatorEngine.CalcEMA(candles1m, 9)
@@ -413,14 +558,8 @@ Public Class MainForm
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
 
-        ' v0.35/v0.36: CalcMTFGate -- determine proposed direction from raw indicator scores
-        ' (pre-regime, pre-funding) so the gate has a direction to evaluate.
-        ' v0.36: corrected MTFGateSettings property names:
-        '   DmiPeriod (was ADXPeriod), RequiredConfirms (was MinOf), CandleCount (was CandleLookback)
-        '   ADXMin has no dedicated MTFGateSettings field; use cfg.Indicators.ADX.TrendThreshold instead.
         Dim mtfProposed As String = "NONE"
         If candles15m IsNot Nothing AndAlso candles15m.Count >= cfg.MTFGate.DmiPeriod + 2 Then
-            ' Use 5m regime + 1m EMA as lightweight proposed direction
             If r.Regime = "TRENDING_UP" OrElse r.EMAAlignment = "BULL" Then
                 mtfProposed = "LONG"
             ElseIf r.Regime = "TRENDING_DOWN" OrElse r.EMAAlignment = "BEAR" Then
@@ -498,8 +637,8 @@ Public Class MainForm
 
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
 
-        Dim atrStop   As Double = r.ATR * norms.ATRScaleFactor * 1.5
-        Dim atrTarget As Double = r.ATR * norms.ATRScaleFactor * 3.0
+        Dim atrStop    As Double = r.ATR * norms.ATRScaleFactor * 1.5
+        Dim atrTarget  As Double = r.ATR * norms.ATRScaleFactor * 3.0
         Dim longStop   As Double = r.CurrentPrice - atrStop
         Dim longTarget As Double = r.CurrentPrice + atrTarget
         Dim shortStop  As Double = r.CurrentPrice + atrStop
@@ -548,7 +687,6 @@ Public Class MainForm
                       "  |  vs SMA: " & r.VolumeRatio.ToString("F2") & "x  |  SMA: " & r.VolumeSMA9.ToString("F4") & " BTC")
         sb.AppendLine()
 
-        ' v0.32: warmup threshold from settings parameter
         Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < vwapWarmup, "  [WARMUP]", "")
         Dim vwapSessionLabel As String
         Dim cfg As EngineSettings = SettingsLoader.Current
@@ -616,7 +754,6 @@ Public Class MainForm
         sb.AppendLine("  Rate: " & r.FundingRate.ToString("F4") & "%  |  " & r.FundingBias)
         sb.AppendLine()
 
-        ' Signal breakdown table
         sb.AppendLine("===========================================================")
         sb.AppendLine("  SIGNAL BREAKDOWN")
         sb.AppendLine("===========================================================")
@@ -634,7 +771,6 @@ Public Class MainForm
                                     "TOTAL", v.LongScore, v.ShortScore))
         sb.AppendLine()
 
-        ' Hold / exit status
         If v.HoldStatus <> "N/A -- no open position" Then
             sb.AppendLine("HOLD / EXIT: " & v.HoldStatus)
             sb.AppendLine()
