@@ -1,24 +1,19 @@
-' MainForm.Designer.vb  v0.24a
-' Header row layout (HDR_Y=8, HDR_H=42):
-'   lblPositionTitle : X=8,   W=108, Y=8,  H=42  (MiddleLeft)
-'   rbNone           : X=120, Y=20   (vertically centred in 42px row)
-'   rbLong           : X=210, Y=10   (top of stack)
-'   rbShort          : X=210, Y=30   (bottom of stack, 2px gap)
-'   btnAnalyze       : X=286, W=140  (8px gap after stack ends ~278)
-'   lblVerdict       : X=430, fills to right edge => W=222 at 660px form
+' MainForm.Designer.vb  v0.25
+' Layout summary:
+'   Row 1 (HDR): Position label + radio group (No Pos/Long/Short) + Analyze + Verdict
+'   Row 2 (AR):  Auto-run label + nudMinutes + min + nudSeconds + sec + pnlMode (Single/Repeat) + btnStartStop
+'   Gap of 8px between AR row bottom and txtOutput top
+'   txtOutput.Y = AR_Y(54) + AR_H(22) + 8 = 84
+'   ClientSize.Height = 930
 '
-' Auto-run row layout (AR_Y=54, AR_H=20):
-'   lblAutoRun       : X=8,   W=64   label "Auto-run:"
-'   nudMinutes       : X=76,  W=42   0-60
-'   lblMin           : X=122, W=24   "min"
-'   nudSeconds       : X=150, W=42   0-59
-'   lblSec           : X=196, W=28   "sec"
-'   rbSingle         : X=228, W=58   "Single"
-'   rbRepeat         : X=290, W=62   "Repeat"  (default checked)
-'   btnStartStop     : X=356, W=70   "▶ Start" / "■ Stop"
-'
-' txtOutput.Location.Y bumped from 56 -> 76 to accommodate auto-run row.
-' ClientSize.Height bumped by 20 to 922 to preserve output area.
+' Bug fixes vs v0.24a:
+'   1. Chr(9654) -> ChrW(9654) already fixed; btnStartStop initial text uses ChrW.
+'   2. rbSingle/rbRepeat moved into pnlMode (Panel) so they are isolated from
+'      the position radio group (rbNone/rbLong/rbShort live directly on form).
+'   3. rbSingle is now the default (Checked=True), rbRepeat is unchecked.
+'   4. lblAutoRun widened to 78px; nudMinutes shifted right to X=90, no overlap.
+'   5. txtOutput.Y bumped to 84 (8px gap below AR row).
+'   6. btnStartStop.X = 426 = BTN_X(286) + BTN_W(140), right-aligns with Analyze btn.
 
 <Global.Microsoft.VisualBasic.CompilerServices.DesignerGenerated()>
 Partial Class MainForm
@@ -54,12 +49,14 @@ Partial Class MainForm
         Me.lblMin        = New System.Windows.Forms.Label()
         Me.nudSeconds    = New System.Windows.Forms.NumericUpDown()
         Me.lblSec        = New System.Windows.Forms.Label()
+        Me.pnlMode       = New System.Windows.Forms.Panel()
         Me.rbSingle      = New System.Windows.Forms.RadioButton()
         Me.rbRepeat      = New System.Windows.Forms.RadioButton()
         Me.btnStartStop  = New System.Windows.Forms.Button()
         Me.lblCountdown  = New System.Windows.Forms.Label()
         CType(Me.nudMinutes, System.ComponentModel.ISupportInitialize).BeginInit()
         CType(Me.nudSeconds, System.ComponentModel.ISupportInitialize).BeginInit()
+        Me.pnlMode.SuspendLayout()
         Me.SuspendLayout()
 
         ' ----------------------------------------------------------------
@@ -136,124 +133,139 @@ Partial Class MainForm
         Me.lblVerdict.TextAlign = System.Drawing.ContentAlignment.MiddleCenter
 
         ' ----------------------------------------------------------------
-        ' Row 2: auto-run controls  (Y=54, H=20)
+        ' Row 2: auto-run controls  (Y=54, H=22)
+        ' lblAutoRun widened to 78 to avoid overlap with nudMinutes
+        ' nudMinutes starts at X=90
+        ' pnlMode (Panel) isolates rbSingle/rbRepeat from position radio group
+        ' btnStartStop at X=426 = right edge of Analyze button
         ' ----------------------------------------------------------------
 
-        ' lblAutoRun
+        ' lblAutoRun  (widened: 78px)
         Me.lblAutoRun.AutoSize = False
         Me.lblAutoRun.Font = New System.Drawing.Font("Segoe UI", 8.5!)
         Me.lblAutoRun.ForeColor = System.Drawing.Color.Silver
         Me.lblAutoRun.Location = New System.Drawing.Point(8, 54)
         Me.lblAutoRun.Name = "lblAutoRun"
-        Me.lblAutoRun.Size = New System.Drawing.Size(64, 20)
+        Me.lblAutoRun.Size = New System.Drawing.Size(78, 22)
         Me.lblAutoRun.TabIndex = 20
         Me.lblAutoRun.Text = "Auto-run:"
         Me.lblAutoRun.TextAlign = System.Drawing.ContentAlignment.MiddleLeft
 
-        ' nudMinutes  (0-60, default 1)
+        ' nudMinutes  (X=90, 0-60, default 1)
         Me.nudMinutes.Font = New System.Drawing.Font("Segoe UI", 8.5!)
-        Me.nudMinutes.Location = New System.Drawing.Point(76, 54)
+        Me.nudMinutes.Location = New System.Drawing.Point(90, 54)
         Me.nudMinutes.Maximum = 60
         Me.nudMinutes.Minimum = 0
         Me.nudMinutes.Name = "nudMinutes"
-        Me.nudMinutes.Size = New System.Drawing.Size(42, 20)
+        Me.nudMinutes.Size = New System.Drawing.Size(42, 22)
         Me.nudMinutes.TabIndex = 21
         Me.nudMinutes.Value = 1
         Me.nudMinutes.BackColor = System.Drawing.Color.FromArgb(40, 40, 40)
         Me.nudMinutes.ForeColor = System.Drawing.Color.White
 
-        ' lblMin
+        ' lblMin  (X=136)
         Me.lblMin.AutoSize = True
         Me.lblMin.Font = New System.Drawing.Font("Segoe UI", 8.5!)
         Me.lblMin.ForeColor = System.Drawing.Color.Silver
-        Me.lblMin.Location = New System.Drawing.Point(122, 56)
+        Me.lblMin.Location = New System.Drawing.Point(136, 57)
         Me.lblMin.Name = "lblMin"
         Me.lblMin.Size = New System.Drawing.Size(24, 16)
         Me.lblMin.TabIndex = 22
         Me.lblMin.Text = "min"
 
-        ' nudSeconds  (0-59, default 0)
+        ' nudSeconds  (X=164, 0-59, default 0)
         Me.nudSeconds.Font = New System.Drawing.Font("Segoe UI", 8.5!)
-        Me.nudSeconds.Location = New System.Drawing.Point(150, 54)
+        Me.nudSeconds.Location = New System.Drawing.Point(164, 54)
         Me.nudSeconds.Maximum = 59
         Me.nudSeconds.Minimum = 0
         Me.nudSeconds.Name = "nudSeconds"
-        Me.nudSeconds.Size = New System.Drawing.Size(42, 20)
+        Me.nudSeconds.Size = New System.Drawing.Size(42, 22)
         Me.nudSeconds.TabIndex = 23
         Me.nudSeconds.Value = 0
         Me.nudSeconds.BackColor = System.Drawing.Color.FromArgb(40, 40, 40)
         Me.nudSeconds.ForeColor = System.Drawing.Color.White
 
-        ' lblSec
+        ' lblSec  (X=210)
         Me.lblSec.AutoSize = True
         Me.lblSec.Font = New System.Drawing.Font("Segoe UI", 8.5!)
         Me.lblSec.ForeColor = System.Drawing.Color.Silver
-        Me.lblSec.Location = New System.Drawing.Point(196, 56)
+        Me.lblSec.Location = New System.Drawing.Point(210, 57)
         Me.lblSec.Name = "lblSec"
         Me.lblSec.Size = New System.Drawing.Size(28, 16)
         Me.lblSec.TabIndex = 24
         Me.lblSec.Text = "sec"
 
-        ' rbSingle
+        ' pnlMode  -- isolates Single/Repeat radio buttons from position group
+        ' X=242, W=134, H=22; transparent background
+        Me.pnlMode.Location = New System.Drawing.Point(242, 54)
+        Me.pnlMode.Name = "pnlMode"
+        Me.pnlMode.Size = New System.Drawing.Size(134, 22)
+        Me.pnlMode.TabIndex = 29
+        Me.pnlMode.BackColor = System.Drawing.Color.Transparent
+        Me.pnlMode.Controls.Add(Me.rbSingle)
+        Me.pnlMode.Controls.Add(Me.rbRepeat)
+
+        ' rbSingle  (inside pnlMode, X=0; DEFAULT checked)
         Me.rbSingle.AutoSize = True
+        Me.rbSingle.Checked = True
         Me.rbSingle.Font = New System.Drawing.Font("Segoe UI", 8.5!)
         Me.rbSingle.ForeColor = System.Drawing.Color.Silver
-        Me.rbSingle.Location = New System.Drawing.Point(228, 56)
+        Me.rbSingle.Location = New System.Drawing.Point(0, 2)
         Me.rbSingle.Name = "rbSingle"
         Me.rbSingle.Size = New System.Drawing.Size(58, 18)
-        Me.rbSingle.TabIndex = 25
+        Me.rbSingle.TabIndex = 0
+        Me.rbSingle.TabStop = True
         Me.rbSingle.Text = "Single"
         Me.rbSingle.UseVisualStyleBackColor = True
 
-        ' rbRepeat  (default checked)
+        ' rbRepeat  (inside pnlMode, X=62)
         Me.rbRepeat.AutoSize = True
-        Me.rbRepeat.Checked = True
+        Me.rbRepeat.Checked = False
         Me.rbRepeat.Font = New System.Drawing.Font("Segoe UI", 8.5!)
         Me.rbRepeat.ForeColor = System.Drawing.Color.Silver
-        Me.rbRepeat.Location = New System.Drawing.Point(290, 56)
+        Me.rbRepeat.Location = New System.Drawing.Point(62, 2)
         Me.rbRepeat.Name = "rbRepeat"
         Me.rbRepeat.Size = New System.Drawing.Size(62, 18)
-        Me.rbRepeat.TabIndex = 26
-        Me.rbRepeat.TabStop = True
+        Me.rbRepeat.TabIndex = 1
         Me.rbRepeat.Text = "Repeat"
         Me.rbRepeat.UseVisualStyleBackColor = True
 
-        ' btnStartStop -- use ChrW() for Unicode codepoints > 255
+        ' btnStartStop  (X=426 = right edge of Analyze; uses ChrW for Unicode play symbol)
         Me.btnStartStop.BackColor = System.Drawing.Color.FromArgb(0, 140, 60)
         Me.btnStartStop.FlatStyle = System.Windows.Forms.FlatStyle.Flat
         Me.btnStartStop.Font = New System.Drawing.Font("Segoe UI", 8.5!, System.Drawing.FontStyle.Bold)
         Me.btnStartStop.ForeColor = System.Drawing.Color.White
-        Me.btnStartStop.Location = New System.Drawing.Point(356, 53)
+        Me.btnStartStop.Location = New System.Drawing.Point(426, 53)
         Me.btnStartStop.Name = "btnStartStop"
-        Me.btnStartStop.Size = New System.Drawing.Size(70, 22)
+        Me.btnStartStop.Size = New System.Drawing.Size(70, 24)
         Me.btnStartStop.TabIndex = 27
         Me.btnStartStop.Text = ChrW(9654) & " Start"
         Me.btnStartStop.UseVisualStyleBackColor = False
 
         ' ----------------------------------------------------------------
-        ' Output area  (Y=76 -- shifted down 20px for auto-run row)
+        ' Output area  (Y=84 = AR_Y(54) + AR_H(22) + gap(8))
         ' ----------------------------------------------------------------
 
         ' txtOutput
         Me.txtOutput.BackColor = System.Drawing.Color.Black
         Me.txtOutput.Font = New System.Drawing.Font("Consolas", 10.0!)
         Me.txtOutput.ForeColor = System.Drawing.Color.LightGreen
-        Me.txtOutput.Location = New System.Drawing.Point(8, 76)
+        Me.txtOutput.Location = New System.Drawing.Point(8, 84)
         Me.txtOutput.Name = "txtOutput"
         Me.txtOutput.ReadOnly = True
         Me.txtOutput.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.Vertical
-        Me.txtOutput.Size = New System.Drawing.Size(644, 820)
+        Me.txtOutput.Size = New System.Drawing.Size(644, 814)
         Me.txtOutput.TabIndex = 5
         Me.txtOutput.Text = ""
 
         ' ----------------------------------------------------------------
-        ' Status bar  (Y=900)
+        ' Status bar  (Y=902)
         ' ----------------------------------------------------------------
 
         Me.lblLogInfo.AutoSize = False
         Me.lblLogInfo.Font = New System.Drawing.Font("Segoe UI", 8.0!)
         Me.lblLogInfo.ForeColor = System.Drawing.Color.DimGray
-        Me.lblLogInfo.Location = New System.Drawing.Point(8, 902)
+        Me.lblLogInfo.Location = New System.Drawing.Point(8, 910)
         Me.lblLogInfo.Name = "lblLogInfo"
         Me.lblLogInfo.Size = New System.Drawing.Size(240, 16)
         Me.lblLogInfo.TabIndex = 8
@@ -264,7 +276,7 @@ Partial Class MainForm
         Me.lblCountdown.AutoSize = False
         Me.lblCountdown.Font = New System.Drawing.Font("Segoe UI", 8.0!)
         Me.lblCountdown.ForeColor = System.Drawing.Color.DimGray
-        Me.lblCountdown.Location = New System.Drawing.Point(252, 902)
+        Me.lblCountdown.Location = New System.Drawing.Point(252, 910)
         Me.lblCountdown.Name = "lblCountdown"
         Me.lblCountdown.Size = New System.Drawing.Size(180, 16)
         Me.lblCountdown.TabIndex = 28
@@ -276,7 +288,7 @@ Partial Class MainForm
         Me.lnkCalibCheck.LinkColor = System.Drawing.Color.DimGray
         Me.lnkCalibCheck.ActiveLinkColor = System.Drawing.Color.DodgerBlue
         Me.lnkCalibCheck.VisitedLinkColor = System.Drawing.Color.DimGray
-        Me.lnkCalibCheck.Location = New System.Drawing.Point(430, 902)
+        Me.lnkCalibCheck.Location = New System.Drawing.Point(430, 910)
         Me.lnkCalibCheck.Name = "lnkCalibCheck"
         Me.lnkCalibCheck.Size = New System.Drawing.Size(120, 16)
         Me.lnkCalibCheck.TabIndex = 9
@@ -288,7 +300,7 @@ Partial Class MainForm
         Me.lnkResetLog.LinkColor = System.Drawing.Color.DimGray
         Me.lnkResetLog.ActiveLinkColor = System.Drawing.Color.OrangeRed
         Me.lnkResetLog.VisitedLinkColor = System.Drawing.Color.DimGray
-        Me.lnkResetLog.Location = New System.Drawing.Point(590, 902)
+        Me.lnkResetLog.Location = New System.Drawing.Point(590, 910)
         Me.lnkResetLog.Name = "lnkResetLog"
         Me.lnkResetLog.Size = New System.Drawing.Size(56, 16)
         Me.lnkResetLog.TabIndex = 6
@@ -301,7 +313,7 @@ Partial Class MainForm
         Me.AutoScaleDimensions = New System.Drawing.SizeF(6.0!, 13.0!)
         Me.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font
         Me.BackColor = System.Drawing.Color.FromArgb(20, 20, 20)
-        Me.ClientSize = New System.Drawing.Size(660, 922)
+        Me.ClientSize = New System.Drawing.Size(660, 930)
         Me.Controls.Add(Me.lblPositionTitle)
         Me.Controls.Add(Me.rbNone)
         Me.Controls.Add(Me.rbLong)
@@ -313,8 +325,7 @@ Partial Class MainForm
         Me.Controls.Add(Me.lblMin)
         Me.Controls.Add(Me.nudSeconds)
         Me.Controls.Add(Me.lblSec)
-        Me.Controls.Add(Me.rbSingle)
-        Me.Controls.Add(Me.rbRepeat)
+        Me.Controls.Add(Me.pnlMode)
         Me.Controls.Add(Me.btnStartStop)
         Me.Controls.Add(Me.txtOutput)
         Me.Controls.Add(Me.lblLogInfo)
@@ -325,9 +336,11 @@ Partial Class MainForm
         Me.ForeColor = System.Drawing.Color.Cyan
         Me.MinimumSize = New System.Drawing.Size(660, 500)
         Me.Name = "MainForm"
-        Me.Text = "Deribit Verdict Engine v0.24"
+        Me.Text = "Deribit Verdict Engine v0.39"
         Me.ResumeLayout(False)
         Me.PerformLayout()
+        Me.pnlMode.ResumeLayout(False)
+        Me.pnlMode.PerformLayout()
         CType(Me.nudMinutes, System.ComponentModel.ISupportInitialize).EndInit()
         CType(Me.nudSeconds, System.ComponentModel.ISupportInitialize).EndInit()
     End Sub
@@ -341,12 +354,13 @@ Partial Class MainForm
     Friend WithEvents rbShort          As System.Windows.Forms.RadioButton
     Friend WithEvents lnkResetLog      As System.Windows.Forms.LinkLabel
     Friend WithEvents lnkCalibCheck    As System.Windows.Forms.LinkLabel
-    Friend WithEvents lblLogInfo        As System.Windows.Forms.Label
+    Friend WithEvents lblLogInfo       As System.Windows.Forms.Label
     Friend WithEvents lblAutoRun       As System.Windows.Forms.Label
     Friend WithEvents nudMinutes       As System.Windows.Forms.NumericUpDown
     Friend WithEvents lblMin           As System.Windows.Forms.Label
     Friend WithEvents nudSeconds       As System.Windows.Forms.NumericUpDown
     Friend WithEvents lblSec           As System.Windows.Forms.Label
+    Friend WithEvents pnlMode          As System.Windows.Forms.Panel
     Friend WithEvents rbSingle         As System.Windows.Forms.RadioButton
     Friend WithEvents rbRepeat         As System.Windows.Forms.RadioButton
     Friend WithEvents btnStartStop     As System.Windows.Forms.Button

@@ -1,36 +1,27 @@
-' MainForm.vb  v0.38a
+' MainForm.vb  v0.39
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
-' v0.28 -- CalcOFI call updated for new top-3 weighted signature;
-'          OFI display line now shows weighted bid/ask volumes.
-' v0.29 -- CalcCVD call added after CalcLiquidations in RunAnalysisAsync.
-'          CVD display line added to TIER 2 block in RenderOutput.
-'          SettingsLoader.Initialise() called from constructor.
-' v0.30 -- CalcOBV / CalcRSIDivergence / CalcROCSeries now pass settings-driven gate params.
-'          ScoringEngine.Calculate now receives EngineSettings as 4th argument.
-' v0.31 -- CalcVWAP call updated: captures r.VWAPSessionCandles via ByRef.
-'          CalcVWAPBands called after CalcVWAP to populate sigma1/sigma2 fields.
-'          RenderOutput VWAP line now shows: VWAP value, dev%, session candles,
-'          sigma1 and sigma2 band levels, and [WARMUP] tag if <15 candles.
-' v0.32 -- CalcVWAP and CalcVWAPBands now receive session2Hour/Minute from settings.
-'          Warmup threshold read from cfg.Indicators.VWAP.WarmupCandles instead of hardcoded 15.
-' v0.33 -- CalcTTMSqueeze call added after CalcBBW in RunAnalysisAsync.
-'          Populates r.TTMHistogram, r.TTMDirection, r.TTMSignal so ScoringEngine
-'          BBW/TTM block can award points correctly (was always defaulting to FLAT).
-'          RenderOutput BBW line extended to show TTM histogram, direction and signal.
-' v0.34 -- (ScoringEngine/Indicators only -- no MainForm changes)
-' v0.35 -- 15m candle fetch added to parallel fetch block (t_15m, 70 candles).
-'          CalcMTFGate called after CalcCVD in RunAnalysisAsync; reads dmi_period,
-'          adx threshold from cfg.Indicators.ADX.TrendThreshold,
-'          required_confirms, candle_count from cfg.MTFGate.
-'          ProposedDirection passed to CalcMTFGate based on leading post-regime score
-'          so the gate can pre-compute MTFGatePass before ScoringEngine reads it.
-'          RenderOutput: MTF gate status line added to TIER 2 block.
+' v0.28 -- CalcOFI call updated for new top-3 weighted signature.
+' v0.29 -- CalcCVD added; SettingsLoader.Initialise() called from constructor.
+' v0.30 -- CalcOBV / CalcRSIDivergence / CalcROCSeries pass settings-driven gate params.
+' v0.31 -- CalcVWAP ByRef; CalcVWAPBands; RenderOutput VWAP extended.
+' v0.32 -- CalcVWAP/VWAPBands receive session2Hour/Minute; WarmupCandles from settings.
+' v0.33 -- CalcTTMSqueeze added; RenderOutput BBW extended.
+' v0.34 -- (ScoringEngine/Indicators only)
+' v0.35 -- 15m candle fetch; CalcMTFGate; RenderOutput MTF gate line.
 ' v0.36 -- Fixed BC30456: MTFGateSettings property names corrected.
-' v0.37 -- Cleanup item 2: Candle.VolumUSD renamed to VolumeUSD.
-' v0.38 -- Auto-run feature added (WinFormsAutoRunTimer, countdown label, Start/Stop UI).
-' v0.38a -- Fixed BC30455: SettingsLoader.Save() calls updated to pass (cfg, changeNote).
-'           StartAutoRun  -> SettingsLoader.Save(cfg, "auto_run enabled via UI")
-'           StopAutoRun   -> SettingsLoader.Save(cfg, "auto_run disabled via UI")
+' v0.37 -- Candle.VolumUSD renamed to VolumeUSD.
+' v0.38 -- Auto-run feature added.
+' v0.38a -- Fixed BC30455: SettingsLoader.Save() calls pass (cfg, changeNote).
+' v0.39 -- UI bug fixes:
+'          1. ChrW() used for Stop symbol (was broken HTML entity "&#9632;").
+'          2. rbSingle/rbRepeat now live inside pnlMode Panel; isolated from
+'             position radio group so they do not interfere with rbNone/rbLong/rbShort.
+'          3. Single is now the default mode (rbSingle.Checked=True in Designer).
+'          4. lblAutoRun widened; nudMinutes shifted right -- no overlap.
+'          5. txtOutput.Y=84 (8px gap below AR row).
+'          6. btnStartStop.X=426 -- right-aligns with Analyze button right edge.
+'          ResizeControls() updated to match new X positions and Panel usage.
+'          InitAutoRunControls() default changed from rbRepeat to rbSingle.
 
 Imports System.Drawing
 Imports System.IO
@@ -45,10 +36,11 @@ Public Class MainForm
     Private Const BTN_X As Integer = 286
     Private Const BTN_W As Integer = 140
     Private Const VRD_X As Integer = 430
-    Private Const TXT_Y As Integer = 76
+    Private Const TXT_Y As Integer = 84    ' AR_Y(54) + AR_H(22) + gap(8)
     Private Const STATUS_H As Integer = 18
     Private Const AR_Y As Integer = 54
-    Private Const AR_H As Integer = 20
+    Private Const AR_H As Integer = 22
+    Private Const SS_X As Integer = 426   ' right edge of Analyze button
 
     Private Const EM_SETMARGINS As Integer = &HD3
     Private Const EC_LEFTMARGIN As Integer = 1
@@ -68,9 +60,13 @@ Public Class MainForm
     Private _countdownSecs  As Integer = 0
     Private _intervalMs     As Integer = 60_000
 
+    ' Unicode chars defined once -- avoids any ChrW/Chr confusion at call sites
+    Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
+    Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
+
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.38"
+        Me.Text = "Deribit Verdict Engine v0.39"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -88,7 +84,7 @@ Public Class MainForm
         Dim cfg As EngineSettings = SettingsLoader.Current
         nudMinutes.Value = Math.Max(0, Math.Min(60, cfg.AutoRun.IntervalMinutes))
         nudSeconds.Value = Math.Max(0, Math.Min(59, cfg.AutoRun.IntervalSeconds))
-        rbRepeat.Checked = True
+        rbSingle.Checked = True   ' default: Single mode
         UpdateCountdownLabel("Auto-run: OFF")
         If cfg.AutoRun.Enabled Then
             StartAutoRun()
@@ -120,7 +116,7 @@ Public Class MainForm
         SettingsLoader.Save(cfg, "auto_run enabled via UI")
 
         _countdownSecs = _intervalMs \ 1000
-        btnStartStop.Text = "&#9632; Stop"
+        btnStartStop.Text = CHAR_STOP
         nudMinutes.Enabled = False
         nudSeconds.Enabled = False
 
@@ -139,7 +135,7 @@ Public Class MainForm
             _countdownTimer.Dispose()
             _countdownTimer = Nothing
         End If
-        btnStartStop.Text = "&#9654; Start"
+        btnStartStop.Text = CHAR_PLAY
         nudMinutes.Enabled = True
         nudSeconds.Enabled = True
         UpdateCountdownLabel("Auto-run: OFF")
@@ -152,7 +148,7 @@ Public Class MainForm
         If Not btnAnalyze.Enabled Then Return
         _countdownSecs = _intervalMs \ 1000
         If rbSingle.Checked Then
-            btnStartStop.Text = "&#9654; Start"
+            btnStartStop.Text = CHAR_PLAY
             nudMinutes.Enabled = True
             nudSeconds.Enabled = True
         End If
@@ -192,6 +188,7 @@ Public Class MainForm
         Dim W As Integer = Me.ClientSize.Width
         Dim H As Integer = Me.ClientSize.Height
 
+        ' Row 1
         lblPositionTitle.Location = New System.Drawing.Point(8, HDR_Y)
         lblPositionTitle.Size = New System.Drawing.Size(108, HDR_H)
         rbNone.Location  = New System.Drawing.Point(120, HDR_Y + (HDR_H - 18) \ 2)
@@ -202,22 +199,30 @@ Public Class MainForm
         lblVerdict.Location = New System.Drawing.Point(VRD_X, HDR_Y)
         lblVerdict.Size     = New System.Drawing.Size(W - VRD_X - 8, HDR_H)
 
-        Dim x As Integer = 8
-        lblAutoRun.Location   = New System.Drawing.Point(x, AR_Y + 2) : x += 72
-        nudMinutes.Location   = New System.Drawing.Point(x, AR_Y)     : x += 46
-        lblMin.Location       = New System.Drawing.Point(x, AR_Y + 2) : x += 28
-        nudSeconds.Location   = New System.Drawing.Point(x, AR_Y)     : x += 46
-        lblSec.Location       = New System.Drawing.Point(x, AR_Y + 2) : x += 32
-        rbSingle.Location     = New System.Drawing.Point(x, AR_Y + 2) : x += 62
-        rbRepeat.Location     = New System.Drawing.Point(x, AR_Y + 2) : x += 66
-        btnStartStop.Location = New System.Drawing.Point(x, AR_Y - 1)
+        ' Row 2: auto-run
+        lblAutoRun.Location  = New System.Drawing.Point(8, AR_Y)
+        lblAutoRun.Size      = New System.Drawing.Size(78, AR_H)
+        nudMinutes.Location  = New System.Drawing.Point(90, AR_Y)
+        nudMinutes.Size      = New System.Drawing.Size(42, AR_H)
+        lblMin.Location      = New System.Drawing.Point(136, AR_Y + 3)
+        nudSeconds.Location  = New System.Drawing.Point(164, AR_Y)
+        nudSeconds.Size      = New System.Drawing.Size(42, AR_H)
+        lblSec.Location      = New System.Drawing.Point(210, AR_Y + 3)
+        ' pnlMode panel contains rbSingle + rbRepeat
+        pnlMode.Location     = New System.Drawing.Point(242, AR_Y)
+        pnlMode.Size         = New System.Drawing.Size(134, AR_H)
+        rbSingle.Location    = New System.Drawing.Point(0, 2)
+        rbRepeat.Location    = New System.Drawing.Point(68, 2)
+        btnStartStop.Location = New System.Drawing.Point(SS_X, AR_Y - 1)
         btnStartStop.Size     = New System.Drawing.Size(70, AR_H + 2)
 
+        ' Output
         Dim statusY As Integer = H - STATUS_H - 2
         txtOutput.Location = New System.Drawing.Point(8, TXT_Y)
         txtOutput.Size     = New System.Drawing.Size(W - 16, statusY - TXT_Y - 2)
         SetOutputMargins(6, 6)
 
+        ' Status bar
         lblLogInfo.Location    = New System.Drawing.Point(8, H - STATUS_H)
         lblLogInfo.Size        = New System.Drawing.Size(W - 420, STATUS_H)
         lblCountdown.Location  = New System.Drawing.Point(W - 410, H - STATUS_H)
