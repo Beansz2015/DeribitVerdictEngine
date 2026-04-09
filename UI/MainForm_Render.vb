@@ -246,16 +246,11 @@ Partial Public Class MainForm
         AppendRtf(rtb, ts & Environment.NewLine, C_DIM)
         Divider(rtb)
 
-        ' --- Price reference block ---
-        ' LAST TRANSACTED PRICE: most recent tick from GetRecentTradesAsync (index 0, newest-first).
-        ' This is what the ATR Entry lines are now pivoted on.
-        ' 1m Candle Close is shown beneath for context only.
+        ' --- Last Transacted Price (real-time tick reference, display only) ---
         AppendRtf(rtb, "  LAST TRANSACTED PRICE:  ", C_LABEL)
         AppendRtf(rtb, If(lastTradePrice > 0,
                           lastTradePrice.ToString("F1"),
-                          "N/A") & Environment.NewLine, C_VALUE, bold:=True)
-        AppendRtf(rtb, "  1m Candle Close:        ", C_LABEL)
-        AppendRtf(rtb, r.CurrentPrice.ToString("F1") & Environment.NewLine, C_DIM)
+                          "N/A") & Environment.NewLine, C_VALUE)
 
         ' --- Hold / Exit (shown immediately after price for quick-scan visibility) ---
         If v.HoldStatus <> "N/A -- no open position" Then
@@ -264,24 +259,22 @@ Partial Public Class MainForm
         End If
 
         ' --- ATR Entry Levels ---
-        ' entryPrice  = lastTradePrice when available; falls back to 1m candle close.
-        ' Stop/target offsets are ATR-derived and unchanged.
-        Dim entryPrice  As Double = If(lastTradePrice > 0, lastTradePrice, r.CurrentPrice)
+        ' Entry pivot = r.CurrentPrice (1m candle close), consistent with all indicator calculations.
         Dim atrStop     As Double = r.ATR * norms.ATRScaleFactor * 1.5
         Dim atrTarget   As Double = r.ATR * norms.ATRScaleFactor * 3.0
-        Dim longStop    As Double = entryPrice - atrStop
-        Dim longTarget  As Double = entryPrice + atrTarget
-        Dim shortStop   As Double = entryPrice + atrStop
-        Dim shortTarget As Double = entryPrice - atrTarget
+        Dim longStop    As Double = r.CurrentPrice - atrStop
+        Dim longTarget  As Double = r.CurrentPrice + atrTarget
+        Dim shortStop   As Double = r.CurrentPrice + atrStop
+        Dim shortTarget As Double = r.CurrentPrice - atrTarget
 
-        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | 1.5x stop / 3.0x target | Entry = last trade px)",
+        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | 1.5x stop / 3.0x target)",
                                           r.ATR, norms.ATRScaleFactor))
         AppendRtf(rtb, "  Long:   ", C_LABEL)
         AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
-                                      longStop, entryPrice, longTarget, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
+                                      longStop, r.CurrentPrice, longTarget, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
         AppendRtf(rtb, "  Short:  ", C_LABEL)
         AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
-                                      shortStop, entryPrice, shortTarget, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+                                      shortStop, r.CurrentPrice, shortTarget, atrStop, atrTarget) & Environment.NewLine, C_BAD)
 
         ' --- Dynamic Norms ---
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
