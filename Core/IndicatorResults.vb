@@ -62,6 +62,17 @@ Public Class IndicatorResults
     Public Property CVDSlope As String       ' "RISING" / "FALLING" / "FLAT"
     Public Property CVDDivergence As String  ' "BULLISH" / "BEARISH" / "NONE"
 
+    ' TFI (Trade Flow Index) -- rolling window buy/sell pressure ratio
+    Public Property TFIValue As Double       ' normalised [-1, +1]; positive = buy pressure
+    Public Property TFISignal As String      ' "BUY PRESSURE" / "SELL PRESSURE" / "NEUTRAL"
+
+    ' MicroCVD -- intra-window CVD segmentation (early / mid / late thirds)
+    Public Property MicroCVDEarly As Double  ' USD delta, first third of trade window
+    Public Property MicroCVDMid As Double    ' USD delta, middle third
+    Public Property MicroCVDLate As Double   ' USD delta, last third
+    Public Property MicroCVDMomentum As String  ' "ACCELERATING" / "DECELERATING" / "FLAT"
+    Public Property MicroCVDSignal As String    ' "BULL_ACCEL" / "BEAR_ACCEL" / "BULL_DECEL" / "BEAR_DECEL" / "FLAT"
+
     ' MTF Gate (15m timeframe)
     Public Property MTF15mTrend As String        ' "BULL" / "BEAR" / "FLAT"
     Public Property MTF15mADX As Double          ' ADX value computed on 15m candles
