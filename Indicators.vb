@@ -1,4 +1,4 @@
-' Indicators.vb  v0.36
+' Indicators.vb  v0.37
 ' Pure calculation layer -- no I/O, no UI references.
 ' Input: List(Of Candle). Output: typed result objects.
 '
@@ -45,6 +45,15 @@
 '          candleLookback controls how many 15m candles to use (default 60 = 15h).
 ' v0.36 -- Fix: CalcMTFGate EMA scoring block split into proper multi-line If/ElseIf/End If
 '          (single-line If...ElseIf is invalid VB.NET syntax).
+' v0.37 -- VPFR-lite: CalcVPFRLite added.
+'          Uses existing 1m candle list (no extra API calls).
+'          Bins candles by price bucket (bucketSize), finds POC (highest-volume bucket),
+'          identifies whether current price is at/near an HVN or LVN.
+'          New IndicatorResults fields:
+'            VPFRPoc       -- POC mid-price ($)
+'            VPFRHVNearPoc -- True if current price is within hvnProximityPct of POC
+'            VPFRSignal    -- "NEAR_HVN_SUPPORT" / "NEAR_HVN_RESIST" /
+'                             "IN_LVN_BULL" / "IN_LVN_BEAR" / "NEUTRAL"
 
 Public Class IndicatorResults
     ' Core
@@ -119,6 +128,11 @@ Public Class IndicatorResults
     Public Property DonchianSignal As String ' LONG / SHORT / NONE
     Public Property OBVTrend As String       ' RISING / FALLING / FLAT
     Public Property OBVDivergence As String  ' NONE / BEARISH / BULLISH
+
+    ' VPFR-lite (derived from 1m candle volume distribution)
+    Public Property VPFRPoc As Double        ' Point of Control mid-price ($)
+    Public Property VPFRHVNearPoc As Boolean ' True = current price within hvnProximityPct of POC
+    Public Property VPFRSignal As String     ' NEAR_HVN_SUPPORT / NEAR_HVN_RESIST / IN_LVN_BULL / IN_LVN_BEAR / NEUTRAL
 
     ' Current price (latest close of 1m candles)
     Public Property CurrentPrice As Double
@@ -750,6 +764,110 @@ Public Class IndicatorEngine
             obvDivergence = "BEARISH"
         ElseIf priceChange < 0 AndAlso obvChange > 0 Then
             obvDivergence = "BULLISH"
+        End If
+    End Sub
+
+    ' -- VPFR-lite (Volume Profile Fixed Range using existing 1m candles) -----
+    ' Bins the supplied candle list by price bucket to approximate a volume profile.
+    ' No extra API calls -- uses candles1m already fetched in RunAnalysisAsync.
+    '
+    ' Algorithm:
+    '   1. Auto-size bucket: price range / numBuckets (default 50 buckets).
+    '   2. Accumulate (High+Low+Close)/3 typical-price volume into each bucket.
+    '   3. POC = bucket with highest accumulated volume.
+    '   4. HVN threshold = hvnVolPct (default 0.6) of POC volume.
+    '      Buckets >= threshold are High Volume Nodes.
+    '   5. LVN threshold = lvnVolPct (default 0.2) of POC volume.
+    '      Buckets <= threshold are Low Volume Nodes.
+    '   6. Classify current price position vs POC/HVN/LVN.
+    '
+    ' Signal values:
+    '   NEAR_HVN_SUPPORT -- price within hvnProximityPct below POC (long-friendly)
+    '   NEAR_HVN_RESIST  -- price within hvnProximityPct above POC (short-friendly)
+    '   IN_LVN_BULL      -- price in LVN and above POC (breakout-long fuel)
+    '   IN_LVN_BEAR      -- price in LVN and below POC (breakdown-short fuel)
+    '   NEUTRAL          -- price mid-range or no clear structure
+    '
+    ' Parameters:
+    '   candles          -- 1m candles (caller passes candles1m)
+    '   currentPrice     -- latest close price
+    '   poc              -- ByRef: POC mid-price output
+    '   hvnNearPoc       -- ByRef: True if currentPrice within hvnProximityPct of poc
+    '   signal           -- ByRef: signal string (see above)
+    '   numBuckets       -- price range divided into this many buckets (default 50)
+    '   hvnVolPct        -- fraction of POC volume to qualify as HVN (default 0.6)
+    '   lvnVolPct        -- fraction of POC volume to qualify as LVN (default 0.2)
+    '   hvnProximityPct  -- % proximity to POC to trigger NEAR_HVN signals (default 0.002 = 0.2%)
+    Public Shared Sub CalcVPFRLite(candles As List(Of Candle),
+                                    currentPrice As Double,
+                                    ByRef poc As Double,
+                                    ByRef hvnNearPoc As Boolean,
+                                    ByRef signal As String,
+                                    Optional numBuckets As Integer = 50,
+                                    Optional hvnVolPct As Double = 0.6,
+                                    Optional lvnVolPct As Double = 0.2,
+                                    Optional hvnProximityPct As Double = 0.002)
+        poc = 0 : hvnNearPoc = False : signal = "NEUTRAL"
+        If candles Is Nothing OrElse candles.Count < 10 Then Return
+
+        Dim priceHigh As Double = candles.Max(Function(c) c.High)
+        Dim priceLow  As Double = candles.Min(Function(c) c.Low)
+        Dim priceRange As Double = priceHigh - priceLow
+        If priceRange <= 0 Then Return
+
+        Dim bucketSize As Double = priceRange / numBuckets
+        Dim bucketVol(numBuckets - 1) As Double
+
+        For Each c In candles
+            Dim tp As Double = (c.High + c.Low + c.Close) / 3.0
+            Dim idx As Integer = CInt(Math.Floor((tp - priceLow) / bucketSize))
+            If idx < 0 Then idx = 0
+            If idx >= numBuckets Then idx = numBuckets - 1
+            bucketVol(idx) += c.Volume
+        Next
+
+        ' Find POC bucket
+        Dim pocIdx As Integer = 0
+        Dim pocVol As Double = 0
+        For i As Integer = 0 To numBuckets - 1
+            If bucketVol(i) > pocVol Then
+                pocVol = bucketVol(i)
+                pocIdx = i
+            End If
+        Next
+
+        poc = priceLow + (pocIdx + 0.5) * bucketSize
+
+        ' Classify current price bucket
+        Dim curIdx As Integer = CInt(Math.Floor((currentPrice - priceLow) / bucketSize))
+        If curIdx < 0 Then curIdx = 0
+        If curIdx >= numBuckets Then curIdx = numBuckets - 1
+        Dim curBucketVol As Double = bucketVol(curIdx)
+
+        Dim hvnThreshold As Double = pocVol * hvnVolPct
+        Dim lvnThreshold As Double = pocVol * lvnVolPct
+
+        ' Proximity to POC
+        Dim proximityPct As Double = If(poc > 0, Math.Abs(currentPrice - poc) / poc, 1.0)
+        hvnNearPoc = (proximityPct <= hvnProximityPct)
+
+        ' Determine signal
+        If hvnNearPoc Then
+            ' Near POC = near the strongest HVN
+            If currentPrice < poc Then
+                signal = "NEAR_HVN_SUPPORT"  ' approaching from below -- long-friendly bounce zone
+            Else
+                signal = "NEAR_HVN_RESIST"   ' approaching from above -- short-friendly rejection zone
+            End If
+        ElseIf curBucketVol <= lvnThreshold Then
+            ' In a low-volume node -- fast-move territory
+            If currentPrice > poc Then
+                signal = "IN_LVN_BULL"        ' above POC in thin air -- breakout fuel
+            Else
+                signal = "IN_LVN_BEAR"        ' below POC in thin air -- breakdown fuel
+            End If
+        Else
+            signal = "NEUTRAL"
         End If
     End Sub
 
