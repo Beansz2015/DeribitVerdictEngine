@@ -1,4 +1,4 @@
-' MainForm.vb  v0.44
+' MainForm.vb  v0.45
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI updated.
 ' v0.29 -- CalcCVD; SettingsLoader.Initialise.
@@ -29,6 +29,8 @@
 '          VPFR-lite scoring now fully active end-to-end.
 ' v0.44 -- Fix CalcVPFRLite call: unpack ByRef params instead of passing
 '          IndicatorResults object directly (signature mismatch).
+' v0.45 -- Rename OnHandleCreated -> OnFormHandleCreated to suppress BC40003
+'          shadow warning (base Form class has an overridable OnHandleCreated).
 
 Imports System.Drawing
 Imports System.IO
@@ -102,11 +104,11 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.44"
+        Me.Text = "Deribit Verdict Engine v0.45"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
-        ' Fix NUD inner TextBox vertical alignment once the handle exists
-        AddHandler Me.HandleCreated, AddressOf OnHandleCreated
+        ' Fix NUD inner TextBox vertical alignment once the form handle exists
+        AddHandler Me.HandleCreated, AddressOf OnFormHandleCreated
         ResizeControls()
         UpdateLogInfo()
         SettingsLoader.Initialise(Path.Combine(
@@ -120,7 +122,7 @@ Public Class MainForm
     ' overrides the internal formatting rectangle so text renders vertically
     ' centred rather than pinned to the top of the control.
     ' -----------------------------------------------------------------------
-    Private Sub OnHandleCreated(sender As Object, e As EventArgs)
+    Private Sub OnFormHandleCreated(sender As Object, e As EventArgs)
         CentreNudText(nudMinutes)
         CentreNudText(nudSeconds)
     End Sub
