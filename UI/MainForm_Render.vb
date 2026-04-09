@@ -246,11 +246,16 @@ Partial Public Class MainForm
         AppendRtf(rtb, ts & Environment.NewLine, C_DIM)
         Divider(rtb)
 
-        ' --- Last Transacted Price ---
+        ' --- Price reference block ---
+        ' LAST TRANSACTED PRICE: most recent tick from GetRecentTradesAsync (index 0, newest-first).
+        ' This is what the ATR Entry lines are now pivoted on.
+        ' 1m Candle Close is shown beneath for context only.
         AppendRtf(rtb, "  LAST TRANSACTED PRICE:  ", C_LABEL)
         AppendRtf(rtb, If(lastTradePrice > 0,
                           lastTradePrice.ToString("F1"),
-                          "N/A") & Environment.NewLine, C_VALUE)
+                          "N/A") & Environment.NewLine, C_VALUE, bold:=True)
+        AppendRtf(rtb, "  1m Candle Close:        ", C_LABEL)
+        AppendRtf(rtb, r.CurrentPrice.ToString("F1") & Environment.NewLine, C_DIM)
 
         ' --- Hold / Exit (shown immediately after price for quick-scan visibility) ---
         If v.HoldStatus <> "N/A -- no open position" Then
@@ -259,21 +264,24 @@ Partial Public Class MainForm
         End If
 
         ' --- ATR Entry Levels ---
+        ' entryPrice  = lastTradePrice when available; falls back to 1m candle close.
+        ' Stop/target offsets are ATR-derived and unchanged.
+        Dim entryPrice  As Double = If(lastTradePrice > 0, lastTradePrice, r.CurrentPrice)
         Dim atrStop     As Double = r.ATR * norms.ATRScaleFactor * 1.5
         Dim atrTarget   As Double = r.ATR * norms.ATRScaleFactor * 3.0
-        Dim longStop    As Double = r.CurrentPrice - atrStop
-        Dim longTarget  As Double = r.CurrentPrice + atrTarget
-        Dim shortStop   As Double = r.CurrentPrice + atrStop
-        Dim shortTarget As Double = r.CurrentPrice - atrTarget
+        Dim longStop    As Double = entryPrice - atrStop
+        Dim longTarget  As Double = entryPrice + atrTarget
+        Dim shortStop   As Double = entryPrice + atrStop
+        Dim shortTarget As Double = entryPrice - atrTarget
 
-        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | 1.5x stop / 3.0x target)",
+        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | 1.5x stop / 3.0x target | Entry = last trade px)",
                                           r.ATR, norms.ATRScaleFactor))
         AppendRtf(rtb, "  Long:   ", C_LABEL)
         AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
-                                      longStop, r.CurrentPrice, longTarget, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
+                                      longStop, entryPrice, longTarget, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
         AppendRtf(rtb, "  Short:  ", C_LABEL)
         AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
-                                      shortStop, r.CurrentPrice, shortTarget, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+                                      shortStop, entryPrice, shortTarget, atrStop, atrTarget) & Environment.NewLine, C_BAD)
 
         ' --- Dynamic Norms ---
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
@@ -390,7 +398,8 @@ Partial Public Class MainForm
         AppendRtf(rtb, String.Format("{0:F2}  |  Bid Vol: {1:F0}  |  Ask Vol: {2:F0}  |  {3}",
                                       r.OFIRatio, r.OFIBidVol, r.OFIAskVol, r.OFISignal) & Environment.NewLine, ofiColour)
         AppendRtf(rtb, "  CVD:       ", C_LABEL)
-        Dim cvdColour As Color = If(r.CVDSlope = "UP", C_GOOD, If(r.CVDSlope = "DOWN", C_BAD, C_VALUE))
+        ' CVDSlope strings are "RISING" / "FALLING" / "FLAT" (from CalcCVD)
+        Dim cvdColour As Color = If(r.CVDSlope = "RISING", C_GOOD, If(r.CVDSlope = "FALLING", C_BAD, C_VALUE))
         AppendRtf(rtb, String.Format("Net:{0:F0}  |  Slope:{1}  |  Div:{2}",
                                       r.CVDValue, r.CVDSlope, r.CVDDivergence) & Environment.NewLine, cvdColour)
 
