@@ -19,12 +19,19 @@ Public Class VerdictResult
     Public Property EffectiveLongScore As Integer
     Public Property EffectiveShortScore As Integer
     Public Property RegimePenalty As Integer
-    ''' <summary>Regime-aware maximum achievable score. 17=TRENDING, 16=RANGE_BOUND, 13=TRANSITIONAL.</summary>
+    ''' <summary>Regime-aware maximum achievable score. 19=TRENDING, 18=RANGE_BOUND, 15=TRANSITIONAL.</summary>
     Public Property MaxScore As Integer
     Public Property Verdict As String
     Public Property Confidence As String
     Public Property HoldStatus As String
     Public Property SignalBreakdown As New List(Of SignalBreakdownItem)
+
+    ' VPFR-aware target adjustment
+    ' Non-zero when an HVN wall falls between entry and the raw ATR target.
+    ' Zero means no cap was applied -- use the raw ATR target as normal.
+    Public Property AdjustedLongTarget  As Double  ' capped long target ($), 0 = no cap
+    Public Property AdjustedShortTarget As Double  ' capped short target ($), 0 = no cap
+    Public Property TargetCapReason     As String  ' e.g. "HVN_CAPPED @ 72480 (POC wall)" or ""
 End Class
 
 Public Enum PositionState
