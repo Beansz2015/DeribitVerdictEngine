@@ -1,4 +1,4 @@
-' MainForm.vb  v0.43
+' MainForm.vb  v0.44
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI updated.
 ' v0.29 -- CalcCVD; SettingsLoader.Initialise.
@@ -27,6 +27,8 @@
 '          TIME: line changed from UTC to UTC+8.
 ' v0.43 -- CalcVPFRLite wired into RunAnalysisAsync (after CalcOBV).
 '          VPFR-lite scoring now fully active end-to-end.
+' v0.44 -- Fix CalcVPFRLite call: unpack ByRef params instead of passing
+'          IndicatorResults object directly (signature mismatch).
 
 Imports System.Drawing
 Imports System.IO
@@ -100,7 +102,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.43"
+        Me.Text = "Deribit Verdict Engine v0.44"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ' Fix NUD inner TextBox vertical alignment once the handle exists
@@ -701,8 +703,15 @@ Public Class MainForm
                               cfg.Indicators.RSI.DivergencePriceGate,
                               cfg.Indicators.RSI.DivergenceRsiDelta)
 
-        ' VPFR-lite: volume profile POC, HVN/LVN classification, scoring signal
-        IndicatorEngine.CalcVPFRLite(candles1m, r)
+        ' VPFR-lite: unpack ByRef params, call, then assign back to r
+        Dim vpfrPoc       As Double  = 0
+        Dim vpfrHVNearPoc As Boolean = False
+        Dim vpfrSignal    As String  = "NEUTRAL"
+        IndicatorEngine.CalcVPFRLite(candles1m, r.CurrentPrice,
+                                     vpfrPoc, vpfrHVNearPoc, vpfrSignal)
+        r.VPFRPoc      = vpfrPoc
+        r.VPFRHVNearPoc = vpfrHVNearPoc
+        r.VPFRSignal   = vpfrSignal
 
         Dim posState As PositionState = PositionState.None
         If rbLong.Checked  Then posState = PositionState.InLong
