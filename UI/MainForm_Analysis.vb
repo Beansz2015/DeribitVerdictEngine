@@ -1,6 +1,7 @@
 ' UI/MainForm_Analysis.vb
 ' Partial class: Analyze button handler and RunAnalysisAsync pipeline.
 
+Imports System.Drawing
 Imports System.Windows.Forms
 
 Partial Public Class MainForm

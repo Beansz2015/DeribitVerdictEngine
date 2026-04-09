@@ -1,21 +1,20 @@
 ' UI/MainForm_AutoRun.vb
-' Partial class: auto-run timer, Start/Stop logic, countdown tick.
+' Partial class: Auto-run timer controls, start/stop, countdown tick.
 
+Imports System.Drawing
 Imports System.Threading
 Imports System.Windows.Forms
 
 Partial Public Class MainForm
 
-    ' -----------------------------------------------------------------------
-    ' Initialise controls from saved settings and wire the Start/Stop button
-    ' -----------------------------------------------------------------------
     Private Sub InitAutoRunControls()
         _autoRunTimer = New WinFormsAutoRunTimer(Me)
         Dim cfg As EngineSettings = SettingsLoader.Current
         nudMinutes.Value = Math.Max(0, Math.Min(60, cfg.AutoRun.IntervalMinutes))
         nudSeconds.Value = Math.Max(0, Math.Min(59, cfg.AutoRun.IntervalSeconds))
         rbSingle.Checked = True
-        ' Always cold-start in stopped state -- user must click Start each session.
+        ' Always start in stopped state regardless of saved setting.
+        ' User must manually click Start each session.
         btnStartStop.Text      = CHAR_PLAY
         btnStartStop.BackColor = Color.FromArgb(0, 140, 60)
         UpdateCountdownLabel("Auto-run: OFF")
@@ -45,11 +44,11 @@ Partial Public Class MainForm
         cfg.AutoRun.IntervalSeconds = secs
         SettingsLoader.Save(cfg, "auto_run enabled via UI")
 
-        _countdownSecs         = _intervalMs \ 1000
+        _countdownSecs = _intervalMs \ 1000
         btnStartStop.Text      = CHAR_STOP
         btnStartStop.BackColor = Color.FromArgb(160, 40, 40)
-        nudMinutes.Enabled     = False
-        nudSeconds.Enabled     = False
+        nudMinutes.Enabled = False
+        nudSeconds.Enabled = False
 
         _countdownTimer = New Threading.Timer(AddressOf OnCountdownTick, Nothing, 1000, 1000)
 
@@ -68,8 +67,8 @@ Partial Public Class MainForm
         End If
         btnStartStop.Text      = CHAR_PLAY
         btnStartStop.BackColor = Color.FromArgb(0, 140, 60)
-        nudMinutes.Enabled     = True
-        nudSeconds.Enabled     = True
+        nudMinutes.Enabled = True
+        nudSeconds.Enabled = True
         UpdateCountdownLabel("Auto-run: OFF")
         Dim cfg As EngineSettings = SettingsLoader.Current
         cfg.AutoRun.Enabled = False
@@ -82,8 +81,8 @@ Partial Public Class MainForm
         If rbSingle.Checked Then
             btnStartStop.Text      = CHAR_PLAY
             btnStartStop.BackColor = Color.FromArgb(0, 140, 60)
-            nudMinutes.Enabled     = True
-            nudSeconds.Enabled     = True
+            nudMinutes.Enabled = True
+            nudSeconds.Enabled = True
         End If
         btnAnalyze_Click(Me, EventArgs.Empty)
     End Sub
