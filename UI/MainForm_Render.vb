@@ -246,20 +246,23 @@ Partial Public Class MainForm
         AppendRtf(rtb, ts & Environment.NewLine, C_DIM)
         Divider(rtb)
 
-        ' --- Last Transacted Price (real-time tick reference, display only) ---
+        ' --- Last Transacted Price ---
         AppendRtf(rtb, "  LAST TRANSACTED PRICE:  ", C_LABEL)
         AppendRtf(rtb, If(lastTradePrice > 0,
                           lastTradePrice.ToString("F1"),
                           "N/A") & Environment.NewLine, C_VALUE)
 
-        ' --- Hold / Exit (shown immediately after price for quick-scan visibility) ---
+        ' --- Hold / Exit ---
         If v.HoldStatus <> "N/A -- no open position" Then
             AppendRtf(rtb, "  HOLD / EXIT: ", C_LABEL)
             AppendRtf(rtb, v.HoldStatus & Environment.NewLine, C_WARN, bold:=True)
         End If
 
         ' --- ATR Entry Levels ---
-        ' Entry pivot = r.CurrentPrice (1m candle close), consistent with all indicator calculations.
+        ' Entry pivot = r.CurrentPrice (1m candle close).
+        ' If VerdictResult carries an HVN-capped target, the capped level is
+        ' shown in amber with the cap reason.  Raw R:R is always shown so the
+        ' trader sees both the theoretical and the realistic exit.
         Dim atrStop     As Double = r.ATR * norms.ATRScaleFactor * 1.5
         Dim atrTarget   As Double = r.ATR * norms.ATRScaleFactor * 3.0
         Dim longStop    As Double = r.CurrentPrice - atrStop
@@ -269,12 +272,31 @@ Partial Public Class MainForm
 
         SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | 1.5x stop / 3.0x target)",
                                           r.ATR, norms.ATRScaleFactor))
+
+        ' Long row
         AppendRtf(rtb, "  Long:   ", C_LABEL)
-        AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
-                                      longStop, r.CurrentPrice, longTarget, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
+        If v.AdjustedLongTarget > 0 Then
+            ' Show raw target struck-through in dim, then capped target in amber
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
+                                          longStop, r.CurrentPrice, longTarget), C_DIM)
+            AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
+                                          v.AdjustedLongTarget, v.TargetCapReason) & Environment.NewLine, C_WARN, bold:=True)
+        Else
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
+                                          longStop, r.CurrentPrice, longTarget, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
+        End If
+
+        ' Short row
         AppendRtf(rtb, "  Short:  ", C_LABEL)
-        AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
-                                      shortStop, r.CurrentPrice, shortTarget, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+        If v.AdjustedShortTarget > 0 Then
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
+                                          shortStop, r.CurrentPrice, shortTarget), C_DIM)
+            AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
+                                          v.AdjustedShortTarget, v.TargetCapReason) & Environment.NewLine, C_WARN, bold:=True)
+        Else
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
+                                          shortStop, r.CurrentPrice, shortTarget, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+        End If
 
         ' --- Dynamic Norms ---
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
@@ -396,21 +418,19 @@ Partial Public Class MainForm
         AppendRtf(rtb, String.Format("Net:{0:F0}  |  Slope:{1}  |  Div:{2}",
                                       r.CVDValue, r.CVDSlope, r.CVDDivergence) & Environment.NewLine, cvdColour)
 
-        ' TFI -- executed aggressor flow, 50-trade window, normalised [-1,+1]
         AppendRtf(rtb, "  TFI:       ", C_LABEL)
         Dim tfiColour As Color = If(r.TFISignal = "BUY PRESSURE", C_GOOD,
                                     If(r.TFISignal = "SELL PRESSURE", C_BAD, C_VALUE))
         AppendRtf(rtb, String.Format("{0:F3}  |  {1}",
                                       r.TFIValue, r.TFISignal) & Environment.NewLine, tfiColour)
 
-        ' MicroCVD -- intra-window segmentation (early / mid / late)
         AppendRtf(rtb, "  MicroCVD:  ", C_LABEL)
         Dim microColour As Color
         Select Case r.MicroCVDSignal
             Case "BULL_ACCEL" : microColour = C_GOOD
             Case "BEAR_ACCEL" : microColour = C_BAD
-            Case "BULL_DECEL" : microColour = Color.FromArgb(120, 200, 120)  ' muted green
-            Case "BEAR_DECEL" : microColour = Color.FromArgb(220, 130, 130)  ' muted red
+            Case "BULL_DECEL" : microColour = Color.FromArgb(120, 200, 120)
+            Case "BEAR_DECEL" : microColour = Color.FromArgb(220, 130, 130)
             Case Else         : microColour = C_VALUE
         End Select
         AppendRtf(rtb, String.Format("E:{0:F0}  M:{1:F0}  L:{2:F0}  |  {3}  |  {4}",
@@ -460,11 +480,10 @@ Partial Public Class MainForm
                                       "TOTAL", CDbl(v.LongScore), CDbl(v.ShortScore)) & Environment.NewLine,
                   C_VALUE, bold:=True)
 
-        ' --- Scroll to top so verdict is always visible on each new run ---
+        ' --- Scroll to top ---
         rtb.SelectionStart = 0
         rtb.ScrollToCaret()
 
-        ' Update verdict label
         Dim bg As Color
         Select Case v.Verdict
             Case "STRONG LONG"  : bg = Color.FromArgb(0, 180, 90)
