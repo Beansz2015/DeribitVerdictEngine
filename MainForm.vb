@@ -1,4 +1,4 @@
-' MainForm.vb  v0.41
+' MainForm.vb  v0.42
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI updated.
 ' v0.29 -- CalcCVD; SettingsLoader.Initialise.
@@ -23,6 +23,8 @@
 '          Padding does not move the inner TextBox of NumericUpDown.
 '          Use EM_SETMARGINS (SendMessage) on the NUD's child TextBox handle
 '          after the form handle is created to push digits to vertical centre.
+' v0.42 -- Last transacted price display above ATR Entry Levels.
+'          TIME: line changed from UTC to UTC+8.
 
 Imports System.Drawing
 Imports System.IO
@@ -96,7 +98,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.41"
+        Me.Text = "Deribit Verdict Engine v0.42"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ' Fix NUD inner TextBox vertical alignment once the handle exists
@@ -333,7 +335,7 @@ Public Class MainForm
 
         sb.AppendLine("===========================================================")
         sb.AppendLine("  CALIBRATION READINESS REPORT")
-        sb.AppendLine("  " & DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") & " UTC")
+        sb.AppendLine("  " & DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd HH:mm:ss") & " UTC+8")
         sb.AppendLine("===========================================================")
         sb.AppendLine()
 
@@ -545,6 +547,10 @@ Public Class MainForm
             Return
         End If
 
+        ' Last transacted price from most recent trade (Deribit returns newest-first)
+        Dim lastTradePrice As Double = If(recentTrades IsNot Nothing AndAlso recentTrades.Count > 0,
+                                          recentTrades(0).Price, 0)
+
         Dim r As New IndicatorResults()
         r.CurrentPrice = candles1m.Last().Close
 
@@ -702,18 +708,19 @@ Public Class MainForm
         AnalysisLogger.LogRun(r, verdict)
         UpdateLogInfo()
 
-        RenderOutput(r, verdict, norms, vwapWarmup)
+        RenderOutput(r, verdict, norms, vwapWarmup, lastTradePrice)
     End Function
 
     ' -----------------------------------------------------------------------
     ' RenderOutput -- full AppendRtf colour-coded output
     ' -----------------------------------------------------------------------
     Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult,
-                              norms As DynamicNorms, vwapWarmup As Integer)
+                              norms As DynamicNorms, vwapWarmup As Integer,
+                              lastTradePrice As Double)
         Dim rtb As RichTextBox = txtOutput
         rtb.Clear()
 
-        Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") & " UTC"
+        Dim ts As String = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd HH:mm:ss") & " UTC+8"
 
         ' --- Verdict block ---
         Divider(rtb)
@@ -747,6 +754,12 @@ Public Class MainForm
         AppendRtf(rtb, "  TIME:       ", C_LABEL)
         AppendRtf(rtb, ts & Environment.NewLine, C_DIM)
         Divider(rtb)
+
+        ' --- Last Transacted Price ---
+        AppendRtf(rtb, "  LAST TRANSACTED PRICE:  ", C_LABEL)
+        AppendRtf(rtb, If(lastTradePrice > 0,
+                          lastTradePrice.ToString("F1"),
+                          "N/A") & Environment.NewLine, C_VALUE)
 
         ' --- ATR Entry Levels ---
         Dim atrStop    As Double = r.ATR * norms.ATRScaleFactor * 1.5
