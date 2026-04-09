@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-08 | Current version: v0.36**
+**Last updated: 2026-04-09 | Current version: v0.45**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 It takes precedence over `indicator-spec.md` wherever the two conflict.
@@ -26,47 +26,96 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 
 ## 3. File Inventory & Current Versions
 
+### Root files (single-class, unchanged by refactor)
+
 | File | Version | Notes |
 |---|---|---|
-| `MainForm.vb` | v0.36 | UI, RunAnalysisAsync, RenderOutput, MTF gate wiring, ATR display |
-| `Indicators.vb` | v0.36 | All indicator calculations incl. CalcMTFGate |
-| `ScoringEngine.vb` | v0.32 | Verdict scoring, MTF veto, OBV scoring fix |
+| `DeribitClient.vb` | current | All Deribit REST calls incl. 15m candles, recentTrades |
 | `DynamicNorms.vb` | current | ATR/Vol/VWAP norm computation |
-| `DeribitClient.vb` | current | All Deribit REST calls incl. 15m candles |
 | `AnalysisLogger.vb` | current | CSV logging + CalibrationReport |
-| `Core/Settings/EngineSettings.vb` | v0.33 | Strongly-typed POCO for settings.json incl. MTFGateSettings |
-| `SettingsLoader.vb` | current | JSON deserialisation, `SettingsLoader.Current` singleton |
 | `OiSnapshot.vb` | current | OI ring-buffer helper |
+| `AutoRunTimer.vb` | current | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | current | Entry point |
 | `settings.json` | current | All tunable parameters (see Section 6) |
-| `docs/DeribitIndicatorProject.md` | this file | Handover |
-| `docs/trader-profile.md` | current | User trading profile |
+| `MainForm.Designer.vb` | current | Auto-generated WinForms designer file (do not edit manually) |
+| `MainForm.resx` | current | Form resources |
+
+### Core/ — ScoringEngine partial classes
+
+| File | Notes |
+|---|---|
+| `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult, PositionState, SignalCategory, ScoreState |
+| `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore, Threshold, TierFloor, AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus |
+| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline |
+
+### Core/Settings/ — settings POCO
+
+| File | Version | Notes |
+|---|---|---|
+| `Core/Settings/EngineSettings.vb` | v0.33 | Strongly-typed POCO for settings.json incl. MTFGateSettings |
+| `SettingsLoader.vb` | current | JSON deserialisation, SettingsLoader.Current singleton |
+
+### Core/Indicators/ — IndicatorEngine partial classes
+
+| File | Notes |
+|---|---|
+| `Core/Indicators/IndicatorEngine_Types.vb` | IndicatorResults, Candle, BookEntry, TradeEntry, OiSnapshot |
+| `Core/Indicators/IndicatorEngine_Core.vb` | CalcATR, CalcRSI, CalcROCSeries, CalcEMA, CalcVolumeSMA, CalcDMI |
+| `Core/Indicators/IndicatorEngine_VWAP.vb` | CalcVWAP, CalcVWAPBands |
+| `Core/Indicators/IndicatorEngine_OrderFlow.vb` | CalcOFI, CalcCVD, CalcLiquidations |
+| `Core/Indicators/IndicatorEngine_Structure.vb` | CalcDonchian, CalcOBV, CalcRSIDivergence, CalcBBW, CalcTTMSqueeze, CalcMTFGate, CalcVPFRLite |
+
+### UI/ — MainForm partial classes
+
+| File | Version | Notes |
+|---|---|---|
+| `UI/MainForm_Layout.vb` | v0.45 | Constants, DllImport/RECT, New(), ResizeControls(), SetOutputMargins(), OnFormHandleCreated(), CentreNudText(); shared fields: colour palette, _oiHistory, auto-run state vars |
+| `UI/MainForm_AutoRun.vb` | v0.45 | InitAutoRunControls(), btnStartStop_Click, StartAutoRun(), StopAutoRun(), RunAutoAnalysis(), OnCountdownTick(), UpdateCountdownLabel() |
+| `UI/MainForm_Analysis.vb` | v0.45 | btnAnalyze_Click, RunAnalysisAsync() |
+| `UI/MainForm_Render.vb` | v0.45 | RenderOutput(), AppendRtf(), AR(), SectionHeader(), Divider(), BuildCalibrationReport(), Flag(), UpdateLogInfo(), lnkResetLog_LinkClicked, lnkCalibCheck_LinkClicked |
+
+### Docs
+
+| File | Notes |
+|---|---|
+| `docs/DeribitIndicatorProject.md` | This handover document |
+| `docs/architecture.md` | Full codebase structure map |
+| `docs/trader-profile.md` | User trading profile |
+| `docs/bbw-scoring-proposal.md` | Historical proposal |
+| `docs/bbw-scoring-response.md` | Historical response |
+| `docs/dual-scoring-fix-proposal.md` | Historical proposal |
+| `docs/dual-scoring-fix-response.md` | Historical response |
 
 ---
 
 ## 4. Architecture Summary
 
+See `docs/architecture.md` for the full annotated structure map.
+
 ```
-MainForm.vb
-  └─ RunAnalysisAsync()
-       ├─ DeribitClient  → fetches candles1m(250), candles5m(210), candles15m(100),
-       │                   funding, bookSummary, orderBook(depth10), recentTrades(100)
-       ├─ IndicatorEngine → fills IndicatorResults (r)
-       │    ├─ CalcATR, CalcROCSeries, CalcRSI, CalcRSIDivergence, CalcVolumeSMA
-       │    ├─ CalcDMI, CalcVWAP (session params from cfg), CalcVWAPBands
-       │    ├─ CalcBBW (incl. TTM Squeeze momentum direction)
-       │    ├─ CalcEMA (1m ribbon + 5m EMA200)
-       │    ├─ CalcOFI  (top-3 weighted bid/ask imbalance)
-       │    ├─ CalcLiquidations
-       │    ├─ CalcCVD  (cumulative volume delta + slope + divergence)
-       │    ├─ CalcDonchian, CalcOBV
-       │    ├─ CalcMTFGate (15m DMI/ADX + EMA alignment confluence gate)
-       │    └─ DynamicNorms.Compute
-       ├─ ScoringEngine.Calculate(r, posState, norms, cfg) → VerdictResult
-       │    └─ MTF veto: forces NO TRADE if MTFGatePass = False
-       ├─ AnalysisLogger.LogRun
-       └─ RenderOutput → txtOutput + lblVerdict colour
+UI/MainForm_Analysis.vb  →  RunAnalysisAsync()
+  ├─ DeribitClient        fetches candles1m(250), candles5m(210), candles15m(70),
+  │                       funding, bookSummary, orderBook(depth10), recentTrades(100)
+  ├─ IndicatorEngine      fills IndicatorResults (r)
+  │    ├─ CalcATR, CalcROCSeries, CalcRSI, CalcRSIDivergence, CalcVolumeSMA
+  │    ├─ CalcDMI, CalcVWAP (session params from cfg), CalcVWAPBands
+  │    ├─ CalcBBW, CalcTTMSqueeze
+  │    ├─ CalcEMA (1m ribbon 9/21/50 + 5m EMA200)
+  │    ├─ CalcOFI (top-3 weighted bid/ask imbalance)
+  │    ├─ CalcLiquidations, CalcCVD
+  │    ├─ CalcMTFGate (15m DMI/ADX + EMA confluence gate)
+  │    ├─ CalcDonchian, CalcOBV
+  │    ├─ CalcVPFRLite (volume-profile POC + HVN signal)
+  │    └─ DynamicNorms.Compute
+  ├─ ScoringEngine.Calculate(r, posState, norms, cfg)  →  VerdictResult
+  │    └─ MTF veto: forces NO TRADE if MTFGatePass = False
+  ├─ AnalysisLogger.LogRun
+  └─ UI/MainForm_Render.vb  →  RenderOutput()  →  txtOutput + lblVerdict
 ```
+
+### Last Transacted Price
+Fetched from `recentTrades(0).Price` (Deribit returns newest-first). Displayed above the
+ATR Entry Levels block. **Not** used as the ATR entry price — that remains `candles1m.Last().Close`.
 
 ---
 
@@ -77,7 +126,7 @@ MainForm.vb
 |---|---|---|
 | ROC(9) | CalcROCSeries | Lookback from cfg.Indicators.ROC.SeriesLookback |
 | RSI(9) | CalcRSI | Period from cfg.Indicators.RSI.Period |
-| RSI Divergence | CalcRSIDivergence | Price gate + RSI delta gate from settings; displayed in breakdown |
+| RSI Divergence | CalcRSIDivergence | Price gate + RSI delta gate from settings |
 | DMI/ADX | CalcDMI | 5m candles, period from settings |
 | Volume | CalcVolumeSMA | SMA-9; H/M thresholds from DynamicNorms |
 
@@ -86,7 +135,7 @@ MainForm.vb
 |---|---|---|
 | VWAP Dev | CalcVWAP | Session boundary times from cfg.Indicators.VWAP; warmup guard |
 | VWAP σ Bands | CalcVWAPBands | σ1/σ2 bands; PARTIAL→UPGRADED logic when price between bands |
-| BBW / TTM Squeeze | CalcBBW | BBW status (ACTIVE/RELEASING/NONE) + TTM histogram direction (RISING/FALLING) and signal (BULL_BUILDING / BULL_FADING / BEAR_BUILDING / BEAR_FADING) |
+| BBW / TTM Squeeze | CalcBBW + CalcTTMSqueeze | BBW status + TTM histogram direction and signal |
 | EMA Ribbon | CalcEMA | 9/21/50 on 1m → BULL/BEAR/MIXED; 5m EMA(200) as regime anchor |
 | Funding Rate | GetFundingRateAsync | Info-only; modifies long/short scores in Step 3 |
 | OI Change | OiSnapshot ring buffer | 15m + 60m delta → NEW LONGS/SHORTS/COVERING/CAPITULATION/NEUTRAL |
@@ -94,16 +143,17 @@ MainForm.vb
 ### Tier 2
 | Indicator | Method | Notes |
 |---|---|---|
-| OFI | CalcOFI | Top-3 depth levels, bid/ask imbalance, weights 3/2/1; shows weighted bid vol, ask vol, ratio; BUY/SELL/NEUTRAL |
+| OFI | CalcOFI | Top-3 depth levels, bid/ask imbalance, weights 3/2/1 |
 | Liquidations | CalcLiquidations | Penalty-only; large threshold from cfg |
-| CVD | CalcCVD | Net delta + slope (RISING/FALLING/FLAT) + divergence (BULLISH/BEARISH/NONE); −1 penalty on divergence |
+| CVD | CalcCVD | Net delta + slope + divergence; −1 penalty on divergence |
 | 5m EMA(200) | CalcEMA(candles5m,200) | ABOVE/BELOW; short signal if price below |
 
 ### Tier 3
 | Indicator | Method | Notes |
 |---|---|---|
 | Donchian(20) | CalcDonchian | LONG/SHORT/NONE breakout |
-| OBV | CalcOBV | Trend gate + divergence gate from cfg; full score when trend aligned + divergence non-adverse |
+| OBV | CalcOBV | Trend gate + divergence gate from cfg |
+| VPFR-lite | CalcVPFRLite | Volume-profile POC; HVN/LVN proximity signal |
 
 ### Multi-Timeframe Gate
 | Indicator | Method | Notes |
@@ -156,7 +206,7 @@ settings.json
 - Verdict thresholds: `Math.Ceiling(regimeMax * pct)` using `verdictStrong/Med/WeakPct`
 - **Weighted scoring:** each signal category contributes a defined max to the long or short
   score pool. Partial scores are awarded when only one side of a cross-category confirm
-  exists; full score on alignment (e.g. RSI partial + EMA partial → full long point).
+  exists; full score on alignment.
 - **Step 2:** Score each signal into a `ScoreState` (long pts / short pts)
 - **Pass 2:** Upgrade partials when cross-category confirmation exists
 - **Step 3:** Funding modifier adjusts L/S scores
@@ -167,20 +217,19 @@ settings.json
 - **Step 6:** CalcHoldStatus for open position guidance
 - CVD divergence penalty: −1 before liquidation penalty
 - Liquidation penalty: −1 standard, −2 large
-- OBV scoring fix (v0.32): RISING/FALLING trend + non-adverse divergence = full score;
+- OBV scoring (v0.32): RISING/FALLING trend + non-adverse divergence = full score;
   adverse divergence = partial-upgrade only
 
 ---
 
 ## 8. ATR Entry / Stop / Target Display
 
-Displayed at the top of every analysis run output:
 - ATR value (from CalcATR on 1m candles) and current ATR scale factor (vs DynamicNorms ref ATR)
-- Long scenario: Stop = price − (ATR × scale × stopMult), Entry = current price,
-  Target = price + (ATR × scale × targetMult)
-- Short scenario: mirrored
-- R:R ratio and absolute risk/reward in USD displayed
-- All multipliers (stopMult, targetMult) from settings.json
+- **Entry price** = `r.CurrentPrice` = `candles1m.Last().Close` (latest 1m candle close)
+- **Last transacted price** = `recentTrades(0).Price` — shown separately above ATR block
+- Long: Stop = price − (ATR × scale × 1.5), Target = price + (ATR × scale × 3.0)
+- Short: mirrored
+- R:R always 1:2
 
 ---
 
@@ -227,11 +276,13 @@ If `push_files` fails, fall back to `create_or_update_file` one file at a time.
 Always read the current file SHA before updating (use `get_file_contents`).
 
 ### e. Version numbering
-- `MainForm.vb`: mirrors the app version shown in `Me.Text`
-- `ScoringEngine.vb`: independent minor version (currently v0.32)
-- `Indicators.vb`: independent minor version (currently v0.36)
-- `EngineSettings.vb`: currently v0.33
-- When any file changes, bump only that file's version
+The app version is shown in `UI/MainForm_Layout.vb` → `Me.Text = "Deribit Verdict Engine vX.XX"`.
+Partial-class files within the same logical unit share the same version.
+- `UI/MainForm_*.vb` files: all carry the app version (currently v0.45)
+- `Core/ScoringEngine_*.vb` files: independent minor version (currently v0.32 base, no new changes)
+- `Core/Indicators/IndicatorEngine_*.vb` files: independent minor version
+- `Core/Settings/EngineSettings.vb`: currently v0.33
+- When any file changes, bump only that logical unit's version
 
 ---
 
@@ -250,17 +301,28 @@ Always read the current file SHA before updating (use `get_file_contents`).
 |---|---|---|
 | v0.01–v0.20 | (prior sessions) | Initial build: core indicators, DMI, VWAP, EMA ribbon, OI, OFI, Donchian, BBW, calibration log |
 | v0.21–v0.25 | (prior sessions) | DynamicNorms, dual-score engine, regime veto, partial upgrade logic, MaxScore regime-aware |
-| v0.26 | (prior sessions) | OBV + RSI divergence + CVD added to Indicators; CVD scoring block in ScoringEngine |
+| v0.26 | (prior sessions) | OBV + RSI divergence + CVD added |
 | v0.27 (ScoringEngine) | 2026-04-06 | All verdict/penalty thresholds now read from EngineSettings |
-| v0.28 (MainForm, Indicators) | 2026-04-06 | OFI call site updated for top-3 weighted bid/ask imbalance signature; display shows weighted volumes |
-| v0.29 (MainForm) | 2026-04-06 | CalcCVD call site added; CVD display line in TIER 2; SettingsLoader.Initialise() in constructor |
-| v0.30 (MainForm, EngineSettings, Indicators) | 2026-04-06 | CalcOBV/CalcRSIDivergence/CalcROCSeries pass settings-driven gate params; ScoringEngine.Calculate passes cfg as 4th arg; EngineSettings CvdSettings class added |
-| v0.31 (MainForm, Indicators) | 2026-04-06 | CalcVWAP captures sessionCandleCount via ByRef; CalcVWAPBands added (σ1/σ2); VWAP display shows bands, session candle count, warmup tag |
-| v0.32 (MainForm, Indicators, EngineSettings, settings.json) | 2026-04-07 | VWAP session boundary times and warmup threshold moved to settings.json; VwapSettings class expanded; CalcVWAP/CalcVWAPBands parameterised |
-| v0.33 (EngineSettings) | 2026-04-08 | MTFGateSettings class added (Enabled, DmiPeriod, RequiredConfirms, CandleCount); MTFGate property on EngineSettings |
-| v0.34–v0.35 (MainForm, Indicators) | 2026-04-08 | CalcMTFGate implemented (15m DMI/ADX + EMA alignment); MTFGatePass/MTFGateReason fields added to IndicatorResults; MainForm fetches 15m candles, computes proposed direction, calls CalcMTFGate |
-| v0.36 (MainForm, Indicators) | 2026-04-08 | Build fixes: MTFGateSettings property names corrected (DmiPeriod, RequiredConfirms, CandleCount); ADX threshold mapped to cfg.Indicators.ADX.TrendThreshold; EMA scoring block syntax fixed |
-| v0.32 (ScoringEngine) | 2026-04-08 | MTF gate veto block added; OBV scoring fix (aligned trend + non-adverse divergence = full score) |
+| v0.28 (MainForm, Indicators) | 2026-04-06 | OFI call site updated for top-3 weighted bid/ask imbalance |
+| v0.29 (MainForm) | 2026-04-06 | CalcCVD call site added; SettingsLoader.Initialise() in constructor |
+| v0.30 (MainForm, EngineSettings, Indicators) | 2026-04-06 | Settings-driven gate params; CvdSettings class |
+| v0.31 (MainForm, Indicators) | 2026-04-06 | CalcVWAP ByRef sessionCandleCount; CalcVWAPBands σ1/σ2 |
+| v0.32 (MainForm, Indicators, EngineSettings, settings.json) | 2026-04-07 | VWAP session boundary times and warmup to settings.json |
+| v0.33 (EngineSettings) | 2026-04-08 | MTFGateSettings class added |
+| v0.34–v0.35 (MainForm, Indicators) | 2026-04-08 | CalcMTFGate implemented; 15m candles fetched |
+| v0.36 (MainForm, Indicators) | 2026-04-08 | Build fixes: MTFGateSettings property names; ADX threshold mapping |
+| v0.32 (ScoringEngine) | 2026-04-08 | MTF gate veto block; OBV scoring fix |
+| v0.37 (MainForm) | 2026-04-08 | VolumeUSD field rename (was VolumeUSD_approx) |
+| v0.38 (MainForm) | 2026-04-08 | Auto-run feature: interval NUD, Single/Repeat radio, Start/Stop button, countdown label |
+| v0.38a (MainForm) | 2026-04-08 | SettingsLoader.Save signature fix |
+| v0.39 (MainForm) | 2026-04-08 | 6 UI bug fixes (ChrW, Panel grouping, Single default, spacing, alignment) |
+| v0.40 (MainForm) | 2026-04-09 | InitAutoRunControls forced False on load; AR_Y/TXT_Y equal-gap; RenderOutput rewritten to use AppendRtf colour-coded output |
+| v0.41 (MainForm) | 2026-04-09 | NUD digit vertical centering via EM_SETRECT / SendMessage on inner TextBox handle |
+| v0.42 (MainForm) | 2026-04-09 | Last transacted price line (recentTrades(0).Price) displayed above ATR Entry Levels; TIME line changed to UTC+8 |
+| v0.43 (MainForm, Indicators) | 2026-04-09 | CalcVPFRLite implemented and wired into RunAnalysisAsync; VPFR-lite scoring active |
+| v0.44 (MainForm) | 2026-04-09 | Fix CalcVPFRLite call: unpack ByRef params instead of passing IndicatorResults directly |
+| v0.45 (MainForm) | 2026-04-09 | Rename OnHandleCreated → OnFormHandleCreated (suppress BC40003 shadow warning) |
+| v0.45 (refactor) | 2026-04-09 | **Full partial-class refactor:** ScoringEngine.vb split into Core/ScoringEngine_Types/_Helpers/_Calculate; MainForm.vb split into UI/MainForm_Layout/_AutoRun/_Analysis/_Render; root monolithic files deleted; all partials compile clean |
 
 ---
 
@@ -271,4 +333,5 @@ Always read the current file SHA before updating (use `get_file_contents`).
 | CVD divergence penalty | See a live BEARISH or BULLISH divergence and confirm −1 penalty appears in scoring breakdown | WATCHING |
 | Transitional ADX penalty | Run during a TRANSITIONAL regime and confirm tiered penalty applied correctly | WATCHING |
 | Calibration log saturation | Accumulate 300+ rows across 3+ sessions to trigger READY FOR RECALIBRATION | WATCHING |
-| MTF weak-15m pass | Review whether PASS should require stricter confirmation when 15m ADX is below trend-strength threshold (currently passes on absence of bearish evidence, not presence of bullish evidence) | WATCHING |
+| MTF weak-15m pass | Review whether PASS should require stricter confirmation when 15m ADX is below trend-strength threshold | WATCHING |
+| VPFR-lite signal | Observe live NEAR_HVN_SUPPORT / NEAR_HVN_RESIST / IN_LVN_BULL / IN_LVN_BEAR signals and confirm scoring and display correct | WATCHING |
