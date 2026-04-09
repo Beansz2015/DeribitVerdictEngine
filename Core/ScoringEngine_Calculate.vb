@@ -7,7 +7,7 @@
 Partial Public Class ScoringEngine
 
     ' Theoretical max score (TRENDING regime, all signals firing). Legacy reference.
-    Public Const MaxScore As Integer = 17
+    Public Const MaxScore As Integer = 19  ' +2 from TFI and MicroCVD
 
     Public Shared Function Calculate(r As IndicatorResults, posState As PositionState,
                                      norms As DynamicNorms,
@@ -81,7 +81,6 @@ Partial Public Class ScoringEngine
         ' BBW / TTM Squeeze scoring
         Dim bbwLongHit As Boolean = False
         Dim bbwShortHit As Boolean = False
-        ' v0.31: initialised to "" to prevent BC42104; overwritten by every Select Case arm.
         Dim bbwNote As String = ""
 
         Select Case r.SqueezeStatus
@@ -137,6 +136,21 @@ Partial Public Class ScoringEngine
         If r.CVDDivergence = "BEARISH" Then state.LongScore  = Math.Max(0, state.LongScore  - 1)
         If r.CVDDivergence = "BULLISH" Then state.ShortScore = Math.Max(0, state.ShortScore - 1)
 
+        ' TFI (Microstructure) -- executed aggressor flow, 50-trade rolling window
+        ' Full point when TFI agrees with proposed direction.
+        Dim tfiLong  As Boolean = r.TFISignal = "BUY PRESSURE"
+        Dim tfiShort As Boolean = r.TFISignal = "SELL PRESSURE"
+        AddFull(state, tfiLong, tfiShort, SignalCategory.Microstructure)
+
+        ' MicroCVD (Microstructure) -- intra-window momentum segmentation
+        ' BULL_ACCEL / BEAR_ACCEL = full point.
+        ' BULL_DECEL / BEAR_DECEL = no point but acts as mild CVD modifier (-1 to opposing side).
+        Dim microLong  As Boolean = r.MicroCVDSignal = "BULL_ACCEL"
+        Dim microShort As Boolean = r.MicroCVDSignal = "BEAR_ACCEL"
+        AddFull(state, microLong, microShort, SignalCategory.Microstructure)
+        If r.MicroCVDSignal = "BULL_DECEL" Then state.ShortScore = Math.Max(0, state.ShortScore - 1)
+        If r.MicroCVDSignal = "BEAR_DECEL" Then state.LongScore  = Math.Max(0, state.LongScore  - 1)
+
         ' Liquidations -- penalty only
         Dim liqLongPenalty As Integer = 0
         Dim liqShortPenalty As Integer = 0
@@ -159,7 +173,6 @@ Partial Public Class ScoringEngine
         AddFull(state, donchLong, donchShort, SignalCategory.MarketStructure)
 
         ' OBV (Volume)
-        ' v0.32 fix: full signal awarded to any rising OBV not warning bearishly.
         Dim obvLong        As Boolean = r.OBVTrend = "RISING"  AndAlso r.OBVDivergence <> "BEARISH"
         Dim obvShort       As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence <> "BULLISH"
         Dim obvPartialLong  As Boolean = r.OBVTrend = "RISING"  AndAlso r.OBVDivergence = "BEARISH"
@@ -253,6 +266,17 @@ Partial Public Class ScoringEngine
         Dim cvdNote As String = String.Format("Net:{0:F0} | Slope:{1} | Div:{2}", r.CVDValue, r.CVDSlope, r.CVDDivergence)
         If r.CVDDivergence <> "NONE" Then cvdNote &= " | PENALTY -1"
         breakdown.Add(New SignalBreakdownItem("CVD", cvdLong, cvdShort, cvdNote))
+
+        breakdown.Add(New SignalBreakdownItem("TFI", tfiLong, tfiShort,
+            String.Format("{0:F3} | {1}", r.TFIValue, r.TFISignal)))
+
+        Dim microNote As String = String.Format("E:{0:F0} M:{1:F0} L:{2:F0} | {3} | {4}",
+                                                r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
+                                                r.MicroCVDMomentum, r.MicroCVDSignal)
+        If r.MicroCVDSignal = "BULL_DECEL" OrElse r.MicroCVDSignal = "BEAR_DECEL" Then
+            microNote &= " | PENALTY -1 opposing"
+        End If
+        breakdown.Add(New SignalBreakdownItem("MicroCVD", microLong, microShort, microNote))
 
         Dim liqNote As String = String.Format("L:{0:F0} S:{1:F0} | {2}", r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         If liqLongPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [L]", liqLongPenalty)
