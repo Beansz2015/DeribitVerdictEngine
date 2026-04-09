@@ -1,4 +1,4 @@
-' ScoringEngine.vb  v0.33
+' ScoringEngine.vb  v0.34
 ' Implements the 6-step verdict engine from the specification.
 ' Input: IndicatorResults + DynamicNorms + position state. Output: VerdictResult.
 ' v0.23: Volume and VWAPDev thresholds now driven by DynamicNorms instead of static constants.
@@ -39,6 +39,15 @@
 ' v0.33: Cleanup item 5 -- collapsed ThresholdStrong/ThresholdMed/ThresholdWeak into a
 '        single shared Threshold(maxScore, pct) function. All three were identical bodies.
 '        All call sites updated. No behaviour change.
+' v0.34: VPFR-lite scoring block added after OBV, before Step 3 (funding modifier).
+'        Signal source: r.VPFRSignal (computed by CalcVPFRLite in Indicators.vb v0.37).
+'        Scoring rules (MarketStructure category):
+'          NEAR_HVN_SUPPORT -> +1 LONG  (price near POC from below = HVN bounce zone)
+'          NEAR_HVN_RESIST  -> +1 SHORT (price near POC from above = HVN rejection zone)
+'          IN_LVN_BULL      -> +1 LONG  (above POC in thin volume = breakout fuel)
+'          IN_LVN_BEAR      -> +1 SHORT (below POC in thin volume = breakdown fuel)
+'          NEUTRAL          -> no award
+'        POC price appended to breakdown note for display context.
 
 ' Replaces anonymous tuple in List(Of (...)) which confuses the VB.NET parser
 Public Class SignalBreakdownItem
@@ -271,6 +280,17 @@ Public Class ScoringEngine
         Dim obvPartialShort As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence = "BULLISH"
         AddFull(state, obvLong, obvShort, SignalCategory.Volume)
 
+        ' VPFR-lite (MarketStructure)
+        ' Rules:
+        '   NEAR_HVN_SUPPORT -> +1 LONG  (bouncing off high-volume acceptance zone below POC)
+        '   NEAR_HVN_RESIST  -> +1 SHORT (rejecting from high-volume acceptance zone above POC)
+        '   IN_LVN_BULL      -> +1 LONG  (above POC in low-volume gap = fast breakout territory)
+        '   IN_LVN_BEAR      -> +1 SHORT (below POC in low-volume gap = fast breakdown territory)
+        '   NEUTRAL          -> no award
+        Dim vpfrLong  As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
+        Dim vpfrShort As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST"  OrElse r.VPFRSignal = "IN_LVN_BEAR")
+        AddFull(state, vpfrLong, vpfrShort, SignalCategory.MarketStructure)
+
         ' Pass 2: partial upgrades
         Dim rocLongUpgraded As Boolean = rocPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Momentum)
         Dim rocShortUpgraded As Boolean = rocPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
@@ -369,6 +389,10 @@ Public Class ScoringEngine
             BuildNote(String.Format("Trend:{0} Div:{1}", r.OBVTrend, r.OBVDivergence),
                       obvPartialLong AndAlso Not obvLongUpgraded, obvPartialShort AndAlso Not obvShortUpgraded,
                       obvLongUpgraded, obvShortUpgraded)))
+
+        breakdown.Add(New SignalBreakdownItem("VPFR-lite", vpfrLong, vpfrShort,
+            String.Format("POC:{0:F0} | {1} | HVN@POC:{2}",
+                          r.VPFRPoc, r.VPFRSignal, If(r.VPFRHVNearPoc, "YES", "NO"))))
 
         ' -- Step 3: Funding Rate Confidence Modifier -------------------------
         Dim ls As Integer = state.LongScore
