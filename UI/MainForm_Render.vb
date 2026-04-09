@@ -437,6 +437,10 @@ Partial Public Class MainForm
                                       "TOTAL", CDbl(v.LongScore), CDbl(v.ShortScore)) & Environment.NewLine,
                   C_VALUE, bold:=True)
 
+        ' --- Scroll to top so verdict is always visible on each new run ---
+        rtb.SelectionStart = 0
+        rtb.ScrollToCaret()
+
         ' Update verdict label
         Dim bg As Color
         Select Case v.Verdict

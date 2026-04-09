@@ -79,7 +79,13 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.45"
+        Me.Text = "Deribit Verdict Engine v0.46"
+
+        ' Initial window size: wide enough for the output panel, tall enough
+        ' to show all content without scrolling on first open.
+        Me.ClientSize   = New System.Drawing.Size(1000, 900)
+        Me.MinimumSize  = New System.Drawing.Size(820, 600)
+
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         AddHandler Me.HandleCreated, AddressOf OnFormHandleCreated
