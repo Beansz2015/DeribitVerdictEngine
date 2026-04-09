@@ -390,11 +390,32 @@ Partial Public Class MainForm
         Dim ofiColour As Color = If(r.OFIRatio > 1.2, C_GOOD, If(r.OFIRatio < 0.8, C_BAD, C_VALUE))
         AppendRtf(rtb, String.Format("{0:F2}  |  Bid Vol: {1:F0}  |  Ask Vol: {2:F0}  |  {3}",
                                       r.OFIRatio, r.OFIBidVol, r.OFIAskVol, r.OFISignal) & Environment.NewLine, ofiColour)
+
         AppendRtf(rtb, "  CVD:       ", C_LABEL)
-        ' CVDSlope strings are "RISING" / "FALLING" / "FLAT" (from CalcCVD)
         Dim cvdColour As Color = If(r.CVDSlope = "RISING", C_GOOD, If(r.CVDSlope = "FALLING", C_BAD, C_VALUE))
         AppendRtf(rtb, String.Format("Net:{0:F0}  |  Slope:{1}  |  Div:{2}",
                                       r.CVDValue, r.CVDSlope, r.CVDDivergence) & Environment.NewLine, cvdColour)
+
+        ' TFI -- executed aggressor flow, 50-trade window, normalised [-1,+1]
+        AppendRtf(rtb, "  TFI:       ", C_LABEL)
+        Dim tfiColour As Color = If(r.TFISignal = "BUY PRESSURE", C_GOOD,
+                                    If(r.TFISignal = "SELL PRESSURE", C_BAD, C_VALUE))
+        AppendRtf(rtb, String.Format("{0:F3}  |  {1}",
+                                      r.TFIValue, r.TFISignal) & Environment.NewLine, tfiColour)
+
+        ' MicroCVD -- intra-window segmentation (early / mid / late)
+        AppendRtf(rtb, "  MicroCVD:  ", C_LABEL)
+        Dim microColour As Color
+        Select Case r.MicroCVDSignal
+            Case "BULL_ACCEL" : microColour = C_GOOD
+            Case "BEAR_ACCEL" : microColour = C_BAD
+            Case "BULL_DECEL" : microColour = Color.FromArgb(120, 200, 120)  ' muted green
+            Case "BEAR_DECEL" : microColour = Color.FromArgb(220, 130, 130)  ' muted red
+            Case Else         : microColour = C_VALUE
+        End Select
+        AppendRtf(rtb, String.Format("E:{0:F0}  M:{1:F0}  L:{2:F0}  |  {3}  |  {4}",
+                                      r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
+                                      r.MicroCVDMomentum, r.MicroCVDSignal) & Environment.NewLine, microColour)
 
         ' --- Liquidations ---
         SectionHeader(rtb, "LIQUIDATIONS:")
