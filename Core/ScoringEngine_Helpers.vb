@@ -6,11 +6,12 @@
 Partial Public Class ScoringEngine
 
     ' Regime-specific max achievable scores
+    ' +2 vs previous values: TFI (Microstructure) + MicroCVD (Microstructure)
     Public Shared Function RegimeMaxScore(regime As String) As Integer
         Select Case regime
-            Case "TRENDING_UP", "TRENDING_DOWN" : Return 17
-            Case "RANGE_BOUND"                  : Return 16
-            Case Else                           : Return 13   ' TRANSITIONAL
+            Case "TRENDING_UP", "TRENDING_DOWN" : Return 19
+            Case "RANGE_BOUND"                  : Return 18
+            Case Else                           : Return 15   ' TRANSITIONAL
         End Select
     End Function
 
