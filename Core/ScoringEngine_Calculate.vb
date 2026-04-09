@@ -137,14 +137,11 @@ Partial Public Class ScoringEngine
         If r.CVDDivergence = "BULLISH" Then state.ShortScore = Math.Max(0, state.ShortScore - 1)
 
         ' TFI (Microstructure) -- executed aggressor flow, 50-trade rolling window
-        ' Full point when TFI agrees with proposed direction.
         Dim tfiLong  As Boolean = r.TFISignal = "BUY PRESSURE"
         Dim tfiShort As Boolean = r.TFISignal = "SELL PRESSURE"
         AddFull(state, tfiLong, tfiShort, SignalCategory.Microstructure)
 
         ' MicroCVD (Microstructure) -- intra-window momentum segmentation
-        ' BULL_ACCEL / BEAR_ACCEL = full point.
-        ' BULL_DECEL / BEAR_DECEL = no point but acts as mild CVD modifier (-1 to opposing side).
         Dim microLong  As Boolean = r.MicroCVDSignal = "BULL_ACCEL"
         Dim microShort As Boolean = r.MicroCVDSignal = "BEAR_ACCEL"
         AddFull(state, microLong, microShort, SignalCategory.Microstructure)
@@ -364,7 +361,6 @@ Partial Public Class ScoringEngine
             mtfBlocked = True
         End If
 
-        ' Always add MTF info row to breakdown regardless of gate result
         breakdown.Add(New SignalBreakdownItem("MTF Gate (15m)",
             r.MTFGatePass AndAlso proposedDir = "LONG",
             r.MTFGatePass AndAlso proposedDir = "SHORT",
@@ -408,6 +404,40 @@ Partial Public Class ScoringEngine
 
         ' -- Step 6: Hold / Exit Assessment -----------------------------------
         res.HoldStatus = CalcHoldStatus(r, posState)
+
+        ' -- Step 7: VPFR-aware ATR Target Cap --------------------------------
+        ' Reconstruct ATR targets using the same multipliers as MainForm_Render.
+        ' If a confirmed HVN (POC or resistance signal) sits between entry and
+        ' the raw target, cap the target at the HVN level and flag the reason.
+        ' Conditions for cap to trigger:
+        '   Long  : VPFRSignal = NEAR_HVN_RESIST or IN_LVN_BEAR  (wall above price)
+        '             AND VPFRPoc > entry AND VPFRPoc < rawLongTarget
+        '   Short : VPFRSignal = NEAR_HVN_SUPPORT or IN_LVN_BULL (floor below price)
+        '             AND VPFRPoc < entry AND VPFRPoc > rawShortTarget
+        ' Cap level = VPFRPoc (the POC is the highest-volume node and the
+        '             most likely absorption point).
+        Dim atrStop   As Double = r.ATR * norms.ATRScaleFactor * 1.5
+        Dim atrTarget As Double = r.ATR * norms.ATRScaleFactor * 3.0
+        Dim rawLongTarget  As Double = r.CurrentPrice + atrTarget
+        Dim rawShortTarget As Double = r.CurrentPrice - atrTarget
+
+        res.AdjustedLongTarget  = 0
+        res.AdjustedShortTarget = 0
+        res.TargetCapReason     = ""
+
+        Dim hvnAbove As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
+        Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
+
+        If hvnAbove AndAlso r.VPFRPoc > r.CurrentPrice AndAlso r.VPFRPoc < rawLongTarget Then
+            res.AdjustedLongTarget = r.VPFRPoc
+            res.TargetCapReason = String.Format("HVN_CAPPED @ {0:F1} (POC wall -- {1})", r.VPFRPoc, r.VPFRSignal)
+        End If
+
+        If hvnBelow AndAlso r.VPFRPoc < r.CurrentPrice AndAlso r.VPFRPoc > rawShortTarget Then
+            res.AdjustedShortTarget = r.VPFRPoc
+            res.TargetCapReason = String.Format("HVN_CAPPED @ {0:F1} (POC floor -- {1})", r.VPFRPoc, r.VPFRSignal)
+        End If
+
         Return res
     End Function
 
