@@ -1,27 +1,24 @@
-' MainForm.vb  v0.39
+' MainForm.vb  v0.40
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
-' v0.28 -- CalcOFI call updated for new top-3 weighted signature.
-' v0.29 -- CalcCVD added; SettingsLoader.Initialise() called from constructor.
-' v0.30 -- CalcOBV / CalcRSIDivergence / CalcROCSeries pass settings-driven gate params.
-' v0.31 -- CalcVWAP ByRef; CalcVWAPBands; RenderOutput VWAP extended.
-' v0.32 -- CalcVWAP/VWAPBands receive session2Hour/Minute; WarmupCandles from settings.
-' v0.33 -- CalcTTMSqueeze added; RenderOutput BBW extended.
-' v0.34 -- (ScoringEngine/Indicators only)
-' v0.35 -- 15m candle fetch; CalcMTFGate; RenderOutput MTF gate line.
-' v0.36 -- Fixed BC30456: MTFGateSettings property names corrected.
-' v0.37 -- Candle.VolumUSD renamed to VolumeUSD.
-' v0.38 -- Auto-run feature added.
-' v0.38a -- Fixed BC30455: SettingsLoader.Save() calls pass (cfg, changeNote).
-' v0.39 -- UI bug fixes:
-'          1. ChrW() used for Stop symbol (was broken HTML entity "&#9632;").
-'          2. rbSingle/rbRepeat now live inside pnlMode Panel; isolated from
-'             position radio group so they do not interfere with rbNone/rbLong/rbShort.
-'          3. Single is now the default mode (rbSingle.Checked=True in Designer).
-'          4. lblAutoRun widened; nudMinutes shifted right -- no overlap.
-'          5. txtOutput.Y=84 (8px gap below AR row).
-'          6. btnStartStop.X=426 -- right-aligns with Analyze button right edge.
-'          ResizeControls() updated to match new X positions and Panel usage.
-'          InitAutoRunControls() default changed from rbRepeat to rbSingle.
+' v0.28 -- CalcOFI updated.
+' v0.29 -- CalcCVD; SettingsLoader.Initialise.
+' v0.30 -- settings-driven gate params.
+' v0.31 -- CalcVWAP ByRef; CalcVWAPBands.
+' v0.32 -- session2Hour/Minute; WarmupCandles from settings.
+' v0.33 -- CalcTTMSqueeze.
+' v0.34 -- (engine only)
+' v0.35 -- 15m candle fetch; CalcMTFGate.
+' v0.36 -- BC30456 fix.
+' v0.37 -- VolumeUSD rename.
+' v0.38 -- Auto-run feature.
+' v0.38a -- SettingsLoader.Save signature fix.
+' v0.39 -- 6 UI bug fixes (ChrW, Panel grouping, Single default, spacing, alignment).
+' v0.40 -- UI fixes:
+'          1. InitAutoRunControls: cfg.AutoRun.Enabled forced False on load so
+'             btnStartStop always shows Play+Start on cold start.
+'          2. AR_Y=58, TXT_Y=88: equal 8px gaps above and below AR row.
+'          3. NUD Padding.Top=5 in Designer for bottom-aligned digit appearance.
+'          4. RenderOutput fully rewritten to use AppendRtf for colour-coded output.
 
 Imports System.Drawing
 Imports System.IO
@@ -36,14 +33,14 @@ Public Class MainForm
     Private Const BTN_X As Integer = 286
     Private Const BTN_W As Integer = 140
     Private Const VRD_X As Integer = 430
-    Private Const TXT_Y As Integer = 84    ' AR_Y(54) + AR_H(22) + gap(8)
+    Private Const AR_Y  As Integer = 58    ' 8px below HDR bottom (50)
+    Private Const AR_H  As Integer = 22
+    Private Const TXT_Y As Integer = 88    ' 8px below AR bottom (80)
+    Private Const SS_X  As Integer = 426   ' right edge of Analyze button
     Private Const STATUS_H As Integer = 18
-    Private Const AR_Y As Integer = 54
-    Private Const AR_H As Integer = 22
-    Private Const SS_X As Integer = 426   ' right edge of Analyze button
 
-    Private Const EM_SETMARGINS As Integer = &HD3
-    Private Const EC_LEFTMARGIN As Integer = 1
+    Private Const EM_SETMARGINS  As Integer = &HD3
+    Private Const EC_LEFTMARGIN  As Integer = 1
     Private Const EC_RIGHTMARGIN As Integer = 2
 
     <DllImport("user32.dll", CharSet:=CharSet.Auto)>
@@ -60,13 +57,25 @@ Public Class MainForm
     Private _countdownSecs  As Integer = 0
     Private _intervalMs     As Integer = 60_000
 
-    ' Unicode chars defined once -- avoids any ChrW/Chr confusion at call sites
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
 
+    ' -----------------------------------------------------------------------
+    ' Colour palette for RenderOutput
+    ' -----------------------------------------------------------------------
+    Private Shared ReadOnly C_DIVIDER  As Color = Color.FromArgb(80, 80, 80)
+    Private Shared ReadOnly C_HEADER   As Color = Color.FromArgb(255, 220, 80)   ' amber
+    Private Shared ReadOnly C_LABEL    As Color = Color.FromArgb(160, 160, 160)  ' mid-grey
+    Private Shared ReadOnly C_VALUE    As Color = Color.FromArgb(200, 200, 200)  ' light-grey
+    Private Shared ReadOnly C_GOOD     As Color = Color.FromArgb(80, 220, 120)   ' green
+    Private Shared ReadOnly C_WARN     As Color = Color.FromArgb(255, 180, 40)   ' orange
+    Private Shared ReadOnly C_BAD      As Color = Color.FromArgb(255, 80, 80)    ' red
+    Private Shared ReadOnly C_HIT      As Color = Color.FromArgb(100, 200, 255)  ' cyan
+    Private Shared ReadOnly C_DIM      As Color = Color.FromArgb(100, 100, 100)  ' dim
+
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.39"
+        Me.Text = "Deribit Verdict Engine v0.40"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ResizeControls()
@@ -84,11 +93,12 @@ Public Class MainForm
         Dim cfg As EngineSettings = SettingsLoader.Current
         nudMinutes.Value = Math.Max(0, Math.Min(60, cfg.AutoRun.IntervalMinutes))
         nudSeconds.Value = Math.Max(0, Math.Min(59, cfg.AutoRun.IntervalSeconds))
-        rbSingle.Checked = True   ' default: Single mode
+        rbSingle.Checked = True
+        ' Always start in stopped state regardless of saved setting.
+        ' User must manually click Start each session.
+        btnStartStop.Text    = CHAR_PLAY
+        btnStartStop.BackColor = Color.FromArgb(0, 140, 60)
         UpdateCountdownLabel("Auto-run: OFF")
-        If cfg.AutoRun.Enabled Then
-            StartAutoRun()
-        End If
     End Sub
 
     Private Sub btnStartStop_Click(sender As Object, e As EventArgs) Handles btnStartStop.Click
@@ -116,7 +126,8 @@ Public Class MainForm
         SettingsLoader.Save(cfg, "auto_run enabled via UI")
 
         _countdownSecs = _intervalMs \ 1000
-        btnStartStop.Text = CHAR_STOP
+        btnStartStop.Text      = CHAR_STOP
+        btnStartStop.BackColor = Color.FromArgb(160, 40, 40)
         nudMinutes.Enabled = False
         nudSeconds.Enabled = False
 
@@ -135,7 +146,8 @@ Public Class MainForm
             _countdownTimer.Dispose()
             _countdownTimer = Nothing
         End If
-        btnStartStop.Text = CHAR_PLAY
+        btnStartStop.Text      = CHAR_PLAY
+        btnStartStop.BackColor = Color.FromArgb(0, 140, 60)
         nudMinutes.Enabled = True
         nudSeconds.Enabled = True
         UpdateCountdownLabel("Auto-run: OFF")
@@ -148,7 +160,8 @@ Public Class MainForm
         If Not btnAnalyze.Enabled Then Return
         _countdownSecs = _intervalMs \ 1000
         If rbSingle.Checked Then
-            btnStartStop.Text = CHAR_PLAY
+            btnStartStop.Text      = CHAR_PLAY
+            btnStartStop.BackColor = Color.FromArgb(0, 140, 60)
             nudMinutes.Enabled = True
             nudSeconds.Enabled = True
         End If
@@ -190,7 +203,7 @@ Public Class MainForm
 
         ' Row 1
         lblPositionTitle.Location = New System.Drawing.Point(8, HDR_Y)
-        lblPositionTitle.Size = New System.Drawing.Size(108, HDR_H)
+        lblPositionTitle.Size     = New System.Drawing.Size(108, HDR_H)
         rbNone.Location  = New System.Drawing.Point(120, HDR_Y + (HDR_H - 18) \ 2)
         rbLong.Location  = New System.Drawing.Point(210, HDR_Y + 2)
         rbShort.Location = New System.Drawing.Point(210, HDR_Y + 22)
@@ -199,7 +212,7 @@ Public Class MainForm
         lblVerdict.Location = New System.Drawing.Point(VRD_X, HDR_Y)
         lblVerdict.Size     = New System.Drawing.Size(W - VRD_X - 8, HDR_H)
 
-        ' Row 2: auto-run
+        ' Row 2
         lblAutoRun.Location  = New System.Drawing.Point(8, AR_Y)
         lblAutoRun.Size      = New System.Drawing.Size(78, AR_H)
         nudMinutes.Location  = New System.Drawing.Point(90, AR_Y)
@@ -208,7 +221,6 @@ Public Class MainForm
         nudSeconds.Location  = New System.Drawing.Point(164, AR_Y)
         nudSeconds.Size      = New System.Drawing.Size(42, AR_H)
         lblSec.Location      = New System.Drawing.Point(210, AR_Y + 3)
-        ' pnlMode panel contains rbSingle + rbRepeat
         pnlMode.Location     = New System.Drawing.Point(242, AR_Y)
         pnlMode.Size         = New System.Drawing.Size(134, AR_H)
         rbSingle.Location    = New System.Drawing.Point(0, 2)
@@ -236,7 +248,7 @@ Public Class MainForm
     ' -----------------------------------------------------------------------
     Private Sub UpdateLogInfo()
         Dim rows As Integer = AnalysisLogger.GetRowCount()
-        Dim path As String = AnalysisLogger.GetLogPath()
+        Dim path As String  = AnalysisLogger.GetLogPath()
         lblLogInfo.Text = String.Format("Log: {0} rows  |  {1}", rows, path)
     End Sub
 
@@ -255,7 +267,8 @@ Public Class MainForm
     End Sub
 
     Private Sub lnkCalibCheck_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkCalibCheck.LinkClicked
-        txtOutput.Text = BuildCalibrationReport()
+        txtOutput.Clear()
+        AppendRtf(txtOutput, BuildCalibrationReport(), C_VALUE)
     End Sub
 
     Private Function BuildCalibrationReport() As String
@@ -388,24 +401,64 @@ Public Class MainForm
     End Function
 
     ' -----------------------------------------------------------------------
+    ' AppendRtf helper
+    ' -----------------------------------------------------------------------
+    Private Shared Sub AppendRtf(rtb As RichTextBox, text As String,
+                                  colour As Color,
+                                  Optional bold As Boolean = False,
+                                  Optional italic As Boolean = False,
+                                  Optional underline As Boolean = False)
+        Dim style As FontStyle = FontStyle.Regular
+        If bold      Then style = style Or FontStyle.Bold
+        If italic    Then style = style Or FontStyle.Italic
+        If underline Then style = style Or FontStyle.Underline
+        rtb.SelectionStart  = rtb.TextLength
+        rtb.SelectionLength = 0
+        rtb.SelectionColor  = colour
+        rtb.SelectionFont   = New Font(rtb.Font, style)
+        rtb.AppendText(text)
+        rtb.SelectionColor = rtb.ForeColor
+        rtb.SelectionFont  = rtb.Font
+    End Sub
+
+    ' Shorthand for a labelled key:value pair on its own line
+    Private Sub AR(rtb As RichTextBox, label As String, value As String,
+                   Optional valColour As Color = Nothing,
+                   Optional valBold As Boolean = False)
+        If valColour.IsEmpty Then valColour = C_VALUE
+        AppendRtf(rtb, "  " & label, C_LABEL)
+        AppendRtf(rtb, value & Environment.NewLine, valColour, valBold)
+    End Sub
+
+    Private Sub SectionHeader(rtb As RichTextBox, text As String)
+        AppendRtf(rtb, Environment.NewLine & text & Environment.NewLine, C_HEADER, bold:=True)
+    End Sub
+
+    Private Sub Divider(rtb As RichTextBox)
+        AppendRtf(rtb, "===========================================================" & Environment.NewLine, C_DIVIDER)
+    End Sub
+
+    ' -----------------------------------------------------------------------
     ' Analysis
     ' -----------------------------------------------------------------------
     Private Async Sub btnAnalyze_Click(sender As Object, e As EventArgs) Handles btnAnalyze.Click
         btnAnalyze.Enabled = False
-        btnAnalyze.Text = "Fetching..."
-        txtOutput.Text = "Fetching data from Deribit..."
-        lblVerdict.Text = "..."
+        btnAnalyze.Text    = "Fetching..."
+        txtOutput.Clear()
+        AppendRtf(txtOutput, "Fetching data from Deribit..." & Environment.NewLine, C_LABEL)
+        lblVerdict.Text      = "..."
         lblVerdict.BackColor = Color.Gray
 
         Try
             Await RunAnalysisAsync()
         Catch ex As Exception
-            txtOutput.Text = "ERROR: " & ex.Message & Environment.NewLine & ex.StackTrace
-            lblVerdict.Text = "ERROR"
+            txtOutput.Clear()
+            AppendRtf(txtOutput, "ERROR: " & ex.Message & Environment.NewLine & ex.StackTrace, C_BAD)
+            lblVerdict.Text      = "ERROR"
             lblVerdict.BackColor = Color.OrangeRed
         Finally
             btnAnalyze.Enabled = True
-            btnAnalyze.Text = "Analyze Now"
+            btnAnalyze.Text    = "Analyze Now"
         End Try
     End Sub
 
@@ -431,14 +484,15 @@ Public Class MainForm
         Dim recentTrades = Await t_trades
 
         If candles1m.Count < 50 Then
-            txtOutput.Text = "Insufficient 1m candle data returned. Please retry."
+            txtOutput.Clear()
+            AppendRtf(txtOutput, "Insufficient 1m candle data returned. Please retry." & Environment.NewLine, C_WARN)
             Return
         End If
 
         Dim r As New IndicatorResults()
         r.CurrentPrice = candles1m.Last().Close
 
-        r.ATR = IndicatorEngine.CalcATR(candles1m, 7)
+        r.ATR       = IndicatorEngine.CalcATR(candles1m, 7)
         r.ATRAvg20d = IndicatorEngine.CalcATR(candles5m, 60) * Math.Sqrt(5)
 
         Dim norms As DynamicNorms = DynamicNorms.Compute(candles1m, r.ATR)
@@ -457,10 +511,10 @@ Public Class MainForm
 
         r.RSI = IndicatorEngine.CalcRSI(candles1m, cfg.Indicators.RSI.Period)
 
-        r.VolumeSMA9 = IndicatorEngine.CalcVolumeSMA(candles1m, 9)
-        r.CurrentVolume = candles1m.Last().Volume
+        r.VolumeSMA9       = IndicatorEngine.CalcVolumeSMA(candles1m, 9)
+        r.CurrentVolume    = candles1m.Last().Volume
         r.CurrentVolumeUSD = candles1m.Last().VolumeUSD
-        r.VolumeRatio = If(r.VolumeSMA9 > 0, r.CurrentVolume / r.VolumeSMA9, 1)
+        r.VolumeRatio      = If(r.VolumeSMA9 > 0, r.CurrentVolume / r.VolumeSMA9, 1)
 
         IndicatorEngine.CalcDMI(candles5m, 9, r.PlusDI, r.MinusDI, r.ADX)
         If r.ADX > 25 AndAlso r.PlusDI > r.MinusDI Then
@@ -477,7 +531,7 @@ Public Class MainForm
         Dim vwapS2Minute As Integer = cfg.Indicators.VWAP.Session2StartMinute
         Dim vwapWarmup   As Integer = cfg.Indicators.VWAP.WarmupCandles
 
-        r.VWAP = IndicatorEngine.CalcVWAP(candles1m, r.VWAPSessionCandles, vwapS2Hour, vwapS2Minute)
+        r.VWAP       = IndicatorEngine.CalcVWAP(candles1m, r.VWAPSessionCandles, vwapS2Hour, vwapS2Minute)
         r.VWAPDevPct = If(r.VWAP > 0, (r.CurrentPrice - r.VWAP) / r.VWAP * 100, 0)
         IndicatorEngine.CalcVWAPBands(candles1m, r.VWAP,
                                       r.VWAPSigma1Upper, r.VWAPSigma1Lower,
@@ -561,7 +615,7 @@ Public Class MainForm
             minOf:=cfg.MTFGate.RequiredConfirms,
             candleLookback:=cfg.MTFGate.CandleCount)
 
-        r.EMA200_5m = IndicatorEngine.CalcEMA(candles5m, 200)
+        r.EMA200_5m    = IndicatorEngine.CalcEMA(candles5m, 200)
         r.PriceVsEMA200 = If(r.EMA200_5m > 0,
                               If(r.CurrentPrice > r.EMA200_5m, "ABOVE", "BELOW"),
                               "N/A")
@@ -584,7 +638,7 @@ Public Class MainForm
                               cfg.Indicators.RSI.DivergenceRsiDelta)
 
         Dim posState As PositionState = PositionState.None
-        If rbLong.Checked Then posState = PositionState.InLong
+        If rbLong.Checked  Then posState = PositionState.InLong
         If rbShort.Checked Then posState = PositionState.InShort
 
         Dim verdict = ScoringEngine.Calculate(r, posState, norms, cfg)
@@ -595,10 +649,110 @@ Public Class MainForm
         RenderOutput(r, verdict, norms, vwapWarmup)
     End Function
 
-    Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult, norms As DynamicNorms,
-                              vwapWarmup As Integer)
-        Dim sb As New System.Text.StringBuilder()
+    ' -----------------------------------------------------------------------
+    ' RenderOutput -- full AppendRtf colour-coded output
+    ' Colour scheme:
+    '   Dividers / structural lines : C_DIVIDER  (dark grey)
+    '   Section headers             : C_HEADER   (amber, bold)
+    '   Labels / keys               : C_LABEL    (mid-grey)
+    '   Normal values               : C_VALUE    (light-grey)
+    '   Bullish / positive signals  : C_GOOD     (green)
+    '   Caution / neutral signals   : C_WARN     (orange)
+    '   Bearish / negative signals  : C_BAD      (red)
+    '   Signal breakdown hits       : C_HIT      (cyan)
+    '   Dim / secondary info        : C_DIM      (dim grey)
+    ' -----------------------------------------------------------------------
+    Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult,
+                              norms As DynamicNorms, vwapWarmup As Integer)
+        Dim rtb As RichTextBox = txtOutput
+        rtb.Clear()
+
         Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") & " UTC"
+
+        ' --- Verdict block ---
+        Divider(rtb)
+        AppendRtf(rtb, "  VERDICT:    ", C_LABEL)
+        Dim vColour As Color = C_VALUE
+        Select Case v.Verdict
+            Case "STRONG LONG", "LONG"   : vColour = C_GOOD
+            Case "WEAK LONG"             : vColour = Color.FromArgb(120, 200, 120)
+            Case "STRONG SHORT", "SHORT" : vColour = C_BAD
+            Case "WEAK SHORT"            : vColour = Color.FromArgb(220, 130, 130)
+            Case Else                    : vColour = C_WARN
+        End Select
+        AppendRtf(rtb, v.Verdict & Environment.NewLine, vColour, bold:=True)
+
+        AppendRtf(rtb, "  CONFIDENCE: ", C_LABEL)
+        Dim cColour As Color = If(v.Confidence = "HIGH", C_GOOD,
+                                  If(v.Confidence = "MEDIUM", C_WARN, C_BAD))
+        AppendRtf(rtb, v.Confidence & Environment.NewLine, cColour, bold:=True)
+
+        Dim maxScore As Integer = v.MaxScore
+        AppendRtf(rtb, "  SCORE:      ", C_LABEL)
+        If v.RegimePenalty > 0 Then
+            AppendRtf(rtb, String.Format("Long {0}/{2} (eff.{1})  |  Short {3}/{2} (eff.{4})  |  TRANSITIONAL penalty: -{5}",
+                                         v.LongScore, v.EffectiveLongScore, maxScore,
+                                         v.ShortScore, v.EffectiveShortScore, v.RegimePenalty) & Environment.NewLine, C_WARN)
+        Else
+            AppendRtf(rtb, String.Format("Long {0}/{1}  |  Short {2}/{1}",
+                                          v.LongScore, maxScore, v.ShortScore) & Environment.NewLine, C_VALUE)
+        End If
+
+        AppendRtf(rtb, "  TIME:       ", C_LABEL)
+        AppendRtf(rtb, ts & Environment.NewLine, C_DIM)
+        Divider(rtb)
+
+        ' --- ATR Entry Levels ---
+        Dim atrStop    As Double = r.ATR * norms.ATRScaleFactor * 1.5
+        Dim atrTarget  As Double = r.ATR * norms.ATRScaleFactor * 3.0
+        Dim longStop   As Double = r.CurrentPrice - atrStop
+        Dim longTarget As Double = r.CurrentPrice + atrTarget
+        Dim shortStop  As Double = r.CurrentPrice + atrStop
+        Dim shortTarget As Double = r.CurrentPrice - atrTarget
+
+        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | 1.5x stop / 3.0x target)",
+                                          r.ATR, norms.ATRScaleFactor))
+        AppendRtf(rtb, "  Long:   ", C_LABEL)
+        AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
+                                      longStop, r.CurrentPrice, longTarget, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
+        AppendRtf(rtb, "  Short:  ", C_LABEL)
+        AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
+                                      shortStop, r.CurrentPrice, shortTarget, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+
+        ' --- Dynamic Norms ---
+        Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
+        SectionHeader(rtb, "DYNAMIC NORMS  [" & normMode & "]")
+        AR(rtb, "Vol threshold : ",
+           String.Format("H:{0:F2}x  M:{1:F2}x  (mean={2:F4} BTC  s={3:F4})",
+                          norms.VolHighThreshold, norms.VolMidThreshold, norms.VolMean, norms.VolStdDev))
+        AR(rtb, "VWAP dev thr  : ", String.Format("+/-{0:F2}% (legacy ref)", norms.VWAPDevThreshold))
+        AR(rtb, "ATR scale     : ",
+           String.Format("{0:F2}x  (ATR={1:F2}  ref={2:F2})", norms.ATRScaleFactor, r.ATR, norms.ATRRef))
+
+        ' --- Regime ---
+        SectionHeader(rtb, "REGIME (5m): " & r.Regime)
+        Dim regColour As Color = C_VALUE
+        Select Case r.Regime
+            Case "TRENDING_UP"   : regColour = C_GOOD
+            Case "TRENDING_DOWN" : regColour = C_BAD
+            Case "RANGE_BOUND"   : regColour = C_WARN
+            Case Else            : regColour = C_DIM
+        End Select
+        AppendRtf(rtb, "  ", C_LABEL)
+        AppendRtf(rtb, String.Format("ADX: {0:F1}  |  +DI: {1:F1}  |  -DI: {2:F1}",
+                                      r.ADX, r.PlusDI, r.MinusDI) & Environment.NewLine, regColour)
+
+        ' --- Core Signals ---
+        SectionHeader(rtb, "CORE SIGNALS (1m):")
+        AppendRtf(rtb, "  ROC(9):       ", C_LABEL)
+        Dim rocColour As Color = If(r.ROC > 0, C_GOOD, If(r.ROC < 0, C_BAD, C_VALUE))
+        AppendRtf(rtb, String.Format("{0:F3}  |  Slope: {1}", r.ROC, r.ROCSlope) & Environment.NewLine, rocColour)
+
+        AppendRtf(rtb, "  RSI(9):       ", C_LABEL)
+        Dim rsiColour As Color = If(r.RSI > 70, C_BAD, If(r.RSI < 30, C_GOOD, C_VALUE))
+        Dim rsiDiv As String = If(String.IsNullOrEmpty(r.RSIDivergence) OrElse r.RSIDivergence = "NONE",
+                                   "", "  |  Div: " & r.RSIDivergence)
+        AppendRtf(rtb, String.Format("{0:F1}", r.RSI) & rsiDiv & Environment.NewLine, rsiColour)
 
         Dim usdStr As String
         If r.CurrentVolumeUSD >= 1_000_000 Then
@@ -608,160 +762,124 @@ Public Class MainForm
         Else
             usdStr = "$" & r.CurrentVolumeUSD.ToString("F0")
         End If
+        AppendRtf(rtb, "  Volume:       ", C_LABEL)
+        Dim volColour As Color = If(r.VolumeRatio >= 1.5, C_GOOD, If(r.VolumeRatio < 0.7, C_BAD, C_VALUE))
+        AppendRtf(rtb, String.Format("{0:F4} BTC ({1})  |  vs SMA: {2:F2}x  |  SMA: {3:F4} BTC",
+                                      r.CurrentVolume, usdStr, r.VolumeRatio, r.VolumeSMA9) & Environment.NewLine, volColour)
 
-        Dim maxScore As Integer = v.MaxScore
-        Dim scoreLine As String
-        If v.RegimePenalty > 0 Then
-            scoreLine = String.Format("Long {0}/{2} (eff.{1})  |  Short {3}/{2} (eff.{4})  |  TRANSITIONAL penalty: -{5}",
-                                     v.LongScore, v.EffectiveLongScore, maxScore,
-                                     v.ShortScore, v.EffectiveShortScore, v.RegimePenalty)
-        Else
-            scoreLine = String.Format("Long {0}/{1}  |  Short {2}/{1}", v.LongScore, maxScore, v.ShortScore)
-        End If
-
-        Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
-
-        Dim atrStop    As Double = r.ATR * norms.ATRScaleFactor * 1.5
-        Dim atrTarget  As Double = r.ATR * norms.ATRScaleFactor * 3.0
-        Dim longStop   As Double = r.CurrentPrice - atrStop
-        Dim longTarget As Double = r.CurrentPrice + atrTarget
-        Dim shortStop  As Double = r.CurrentPrice + atrStop
-        Dim shortTarget As Double = r.CurrentPrice - atrTarget
-
-        sb.AppendLine("===========================================================")
-        sb.AppendLine("  VERDICT:    " & v.Verdict)
-        sb.AppendLine("  CONFIDENCE: " & v.Confidence)
-        sb.AppendLine("  SCORE:      " & scoreLine)
-        sb.AppendLine("  TIME:       " & ts)
-        sb.AppendLine("===========================================================")
-        sb.AppendLine()
-
-        sb.AppendLine("ATR ENTRY LEVELS:  (ATR " & r.ATR.ToString("F2") & " x " & norms.ATRScaleFactor.ToString("F2") & " scale | 1.5x stop / 3.0x target)")
-        sb.AppendLine("  Long:   Stop " & longStop.ToString("F1").PadLeft(9) &
-                      "  |  Entry " & r.CurrentPrice.ToString("F1").PadLeft(9) &
-                      "  |  Target " & longTarget.ToString("F1").PadLeft(9) &
-                      "    R:R  1:2  (risk " & atrStop.ToString("F1") & " / rwd " & atrTarget.ToString("F1") & ")")
-        sb.AppendLine("  Short:  Stop " & shortStop.ToString("F1").PadLeft(9) &
-                      "  |  Entry " & r.CurrentPrice.ToString("F1").PadLeft(9) &
-                      "  |  Target " & shortTarget.ToString("F1").PadLeft(9) &
-                      "    R:R  1:2  (risk " & atrStop.ToString("F1") & " / rwd " & atrTarget.ToString("F1") & ")")
-        sb.AppendLine()
-
-        sb.AppendLine("DYNAMIC NORMS  [" & normMode & "]")
-        sb.AppendLine("  Vol threshold : H:" & norms.VolHighThreshold.ToString("F2") & "x" &
-                      "  M:" & norms.VolMidThreshold.ToString("F2") & "x" &
-                      "  (mean=" & norms.VolMean.ToString("F4") & " BTC" &
-                      "  σ=" & norms.VolStdDev.ToString("F4") & ")")
-        sb.AppendLine("  VWAP dev thr  : ±" & norms.VWAPDevThreshold.ToString("F2") & "% (legacy ref)")
-        sb.AppendLine("  ATR scale     : " & norms.ATRScaleFactor.ToString("F2") & "x" &
-                      "  (ATR=" & r.ATR.ToString("F2") & "  ref=" & norms.ATRRef.ToString("F2") & ")")
-        sb.AppendLine()
-
-        sb.AppendLine("REGIME (5m): " & r.Regime)
-        sb.AppendLine("  ADX: " & r.ADX.ToString("F1") & "  |  +DI: " & r.PlusDI.ToString("F1") & "  |  -DI: " & r.MinusDI.ToString("F1"))
-        sb.AppendLine()
-
-        sb.AppendLine("CORE SIGNALS (1m):")
-        sb.AppendLine("  ROC(9):       " & r.ROC.ToString("F3") & "  |  Slope: " & r.ROCSlope)
-        Dim rsiDiv As String = If(String.IsNullOrEmpty(r.RSIDivergence) OrElse r.RSIDivergence = "NONE",
-                                  "",
-                                  "  |  Div: " & r.RSIDivergence)
-        sb.AppendLine("  RSI(9):       " & r.RSI.ToString("F1") & rsiDiv)
-        sb.AppendLine("  Volume:       " & r.CurrentVolume.ToString("F4") & " BTC (" & usdStr & ")" &
-                      "  |  vs SMA: " & r.VolumeRatio.ToString("F2") & "x  |  SMA: " & r.VolumeSMA9.ToString("F4") & " BTC")
-        sb.AppendLine()
-
-        Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < vwapWarmup, "  [WARMUP]", "")
-        Dim vwapSessionLabel As String
+        ' --- VWAP ---
         Dim cfg As EngineSettings = SettingsLoader.Current
         Dim s2h As Integer = cfg.Indicators.VWAP.Session2StartHour
         Dim s2m As Integer = cfg.Indicators.VWAP.Session2StartMinute
-        vwapSessionLabel = String.Format("(reset {0:D2}:{1:D2} UTC)", s2h, s2m)
-        sb.AppendLine("VWAP " & vwapSessionLabel & vwapWarmupTag & ":")
-        sb.AppendLine("  Value:  " & r.VWAP.ToString("F1") & "  |  Dev: " & r.VWAPDevPct.ToString("F3") & "%" &
-                      "  |  Candles: " & r.VWAPSessionCandles)
-        sb.AppendLine("  σ1 band: [" & r.VWAPSigma1Lower.ToString("F1") & ", " & r.VWAPSigma1Upper.ToString("F1") & "]" &
-                      "  |  σ2 band: [" & r.VWAPSigma2Lower.ToString("F1") & ", " & r.VWAPSigma2Upper.ToString("F1") & "]")
-        sb.AppendLine()
+        Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < vwapWarmup, "  [WARMUP]", "")
+        SectionHeader(rtb, String.Format("VWAP (reset {0:D2}:{1:D2} UTC){2}:", s2h, s2m, vwapWarmupTag))
+        AppendRtf(rtb, "  Value:  ", C_LABEL)
+        Dim devColour As Color = If(Math.Abs(r.VWAPDevPct) > norms.VWAPDevThreshold, C_WARN, C_VALUE)
+        AppendRtf(rtb, String.Format("{0:F1}  |  Dev: {1:F3}%  |  Candles: {2}",
+                                      r.VWAP, r.VWAPDevPct, r.VWAPSessionCandles) & Environment.NewLine, devColour)
+        AppendRtf(rtb, "  s1 band: ", C_LABEL)
+        AppendRtf(rtb, String.Format("[{0:F1}, {1:F1}]  |  s2 band: [{2:F1}, {3:F1}]",
+                                      r.VWAPSigma1Lower, r.VWAPSigma1Upper,
+                                      r.VWAPSigma2Lower, r.VWAPSigma2Upper) & Environment.NewLine, C_DIM)
 
-        sb.AppendLine("BBW / TTM SQUEEZE:")
-        sb.AppendLine("  BBW: " & r.BBW.ToString("F3") & "  |  Status: " & r.SqueezeStatus)
-        sb.AppendLine("  TTM: Histogram=" & r.TTMHistogram.ToString("F2") &
-                      "  Dir=" & r.TTMDirection & "  Signal=" & r.TTMSignal)
-        sb.AppendLine()
+        ' --- BBW / TTM ---
+        SectionHeader(rtb, "BBW / TTM SQUEEZE:")
+        AppendRtf(rtb, "  BBW: ", C_LABEL)
+        Dim sqColour As Color = If(r.SqueezeStatus = "SQUEEZE", C_WARN, C_VALUE)
+        AppendRtf(rtb, String.Format("{0:F3}  |  Status: {1}", r.BBW, r.SqueezeStatus) & Environment.NewLine, sqColour)
+        AppendRtf(rtb, "  TTM: ", C_LABEL)
+        Dim ttmColour As Color = If(r.TTMDirection = "UP", C_GOOD, If(r.TTMDirection = "DOWN", C_BAD, C_VALUE))
+        AppendRtf(rtb, String.Format("Histogram={0:F2}  Dir={1}  Signal={2}",
+                                      r.TTMHistogram, r.TTMDirection, r.TTMSignal) & Environment.NewLine, ttmColour)
 
-        sb.AppendLine("EMA RIBBON (1m):")
-        sb.AppendLine("  9: " & r.EMA9.ToString("F1") &
-                      "  |  21: " & r.EMA21.ToString("F1") &
-                      "  |  50: " & r.EMA50.ToString("F1") &
-                      "  |  Align: " & r.EMAAlignment)
-        sb.AppendLine("  5m EMA200: " & r.EMA200_5m.ToString("F1") & "  |  Price: " & r.PriceVsEMA200)
-        sb.AppendLine()
+        ' --- EMA Ribbon ---
+        SectionHeader(rtb, "EMA RIBBON (1m):")
+        AppendRtf(rtb, "  ", C_LABEL)
+        Dim emaColour As Color = If(r.EMAAlignment = "BULL", C_GOOD, If(r.EMAAlignment = "BEAR", C_BAD, C_WARN))
+        AppendRtf(rtb, String.Format("9: {0:F1}  |  21: {1:F1}  |  50: {2:F1}  |  Align: {3}",
+                                      r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment) & Environment.NewLine, emaColour)
+        AppendRtf(rtb, "  5m EMA200: ", C_LABEL)
+        Dim ema200Colour As Color = If(r.PriceVsEMA200 = "ABOVE", C_GOOD, C_BAD)
+        AppendRtf(rtb, String.Format("{0:F1}  |  Price: {1}", r.EMA200_5m, r.PriceVsEMA200) & Environment.NewLine, ema200Colour)
 
-        sb.AppendLine("MARKET STRUCTURE:")
-        sb.AppendLine("  Donchian(20): Upper=" & r.DonchianUpper.ToString("F1") &
-                      "  Lower=" & r.DonchianLower.ToString("F1") &
-                      "  |  Signal: " & r.DonchianSignal)
-        sb.AppendLine("  OBV: Trend=" & r.OBVTrend & "  |  Div=" & r.OBVDivergence)
-        sb.AppendLine()
+        ' --- Market Structure ---
+        SectionHeader(rtb, "MARKET STRUCTURE:")
+        AppendRtf(rtb, "  Donchian(20): ", C_LABEL)
+        Dim donchColour As Color = If(r.DonchianSignal = "LONG", C_GOOD, If(r.DonchianSignal = "SHORT", C_BAD, C_VALUE))
+        AppendRtf(rtb, String.Format("Upper={0:F1}  Lower={1:F1}  |  Signal: {2}",
+                                      r.DonchianUpper, r.DonchianLower, r.DonchianSignal) & Environment.NewLine, donchColour)
+        AppendRtf(rtb, "  OBV: ", C_LABEL)
+        AppendRtf(rtb, String.Format("Trend={0}  |  Div={1}", r.OBVTrend, r.OBVDivergence) & Environment.NewLine, C_VALUE)
 
-        sb.AppendLine("OPEN INTEREST:")
-        sb.AppendLine("  OI: " & r.OI_Current.ToString("F0") &
-                      "  |  δ15m: " & r.OIChange15m.ToString("F3") & "%" &
-                      "  |  δ60m: " & r.OIChange60m.ToString("F3") & "%" &
-                      "  |  Signal: " & r.OISignal)
-        sb.AppendLine()
+        ' --- Open Interest ---
+        SectionHeader(rtb, "OPEN INTEREST:")
+        AppendRtf(rtb, "  OI: ", C_LABEL)
+        Dim oiColour As Color = If(r.OISignal = "NEW LONGS" OrElse r.OISignal = "COVERING", C_GOOD,
+                                   If(r.OISignal = "NEW SHORTS" OrElse r.OISignal = "CAPITULATION", C_BAD, C_VALUE))
+        AppendRtf(rtb, String.Format("{0:F0}  |  d15m: {1:F3}%  |  d60m: {2:F3}%  |  Signal: {3}",
+                                      r.OI_Current, r.OIChange15m, r.OIChange60m, r.OISignal) & Environment.NewLine, oiColour)
 
-        sb.AppendLine("ORDER FLOW:")
-        sb.AppendLine("  OFI Ratio: " & r.OFIRatio.ToString("F2") &
-                      "  |  Bid Vol: " & r.OFIBidVol.ToString("F0") &
-                      "  |  Ask Vol: " & r.OFIAskVol.ToString("F0") &
-                      "  |  " & r.OFISignal)
-        sb.AppendLine("  CVD:       Net:" & r.CVDValue.ToString("F0") &
-                      "  |  Slope:" & r.CVDSlope & "  |  Div:" & r.CVDDivergence)
-        sb.AppendLine()
+        ' --- Order Flow ---
+        SectionHeader(rtb, "ORDER FLOW:")
+        AppendRtf(rtb, "  OFI Ratio: ", C_LABEL)
+        Dim ofiColour As Color = If(r.OFIRatio > 1.2, C_GOOD, If(r.OFIRatio < 0.8, C_BAD, C_VALUE))
+        AppendRtf(rtb, String.Format("{0:F2}  |  Bid Vol: {1:F0}  |  Ask Vol: {2:F0}  |  {3}",
+                                      r.OFIRatio, r.OFIBidVol, r.OFIAskVol, r.OFISignal) & Environment.NewLine, ofiColour)
+        AppendRtf(rtb, "  CVD:       ", C_LABEL)
+        Dim cvdColour As Color = If(r.CVDSlope = "UP", C_GOOD, If(r.CVDSlope = "DOWN", C_BAD, C_VALUE))
+        AppendRtf(rtb, String.Format("Net:{0:F0}  |  Slope:{1}  |  Div:{2}",
+                                      r.CVDValue, r.CVDSlope, r.CVDDivergence) & Environment.NewLine, cvdColour)
 
-        sb.AppendLine("LIQUIDATIONS:")
-        sb.AppendLine("  Long: " & r.LiqLongSize.ToString("F0") &
-                      "  |  Short: " & r.LiqShortSize.ToString("F0") &
-                      "  |  Signal: " & r.LiqSignal)
-        sb.AppendLine()
+        ' --- Liquidations ---
+        SectionHeader(rtb, "LIQUIDATIONS:")
+        AppendRtf(rtb, "  ", C_LABEL)
+        Dim liqColour As Color = If(r.LiqSignal <> "NONE", C_WARN, C_DIM)
+        AppendRtf(rtb, String.Format("Long: {0:F0}  |  Short: {1:F0}  |  Signal: {2}",
+                                      r.LiqLongSize, r.LiqShortSize, r.LiqSignal) & Environment.NewLine, liqColour)
 
-        sb.AppendLine("MTF GATE (15m): " & If(r.MTFGatePass, "PASS", "BLOCK"))
-        sb.AppendLine("  15m Trend: " & r.MTF15mTrend &
-                      "  |  ADX: " & r.MTF15mADX.ToString("F1") &
-                      "  |  EMA: " & r.MTF15mEMAAlignment)
-        sb.AppendLine("  Reason: " & r.MTFGateReason)
-        sb.AppendLine()
+        ' --- MTF Gate ---
+        SectionHeader(rtb, "MTF GATE (15m): " & If(r.MTFGatePass, "PASS", "BLOCK"))
+        Dim mtfColour As Color = If(r.MTFGatePass, C_GOOD, C_BAD)
+        AppendRtf(rtb, "  15m Trend: ", C_LABEL)
+        AppendRtf(rtb, String.Format("{0}  |  ADX: {1:F1}  |  EMA: {2}",
+                                      r.MTF15mTrend, r.MTF15mADX, r.MTF15mEMAAlignment) & Environment.NewLine, mtfColour)
+        AppendRtf(rtb, "  Reason: ", C_LABEL)
+        AppendRtf(rtb, r.MTFGateReason & Environment.NewLine, C_DIM)
 
-        sb.AppendLine("FUNDING:")
-        sb.AppendLine("  Rate: " & r.FundingRate.ToString("F4") & "%  |  " & r.FundingBias)
-        sb.AppendLine()
+        ' --- Funding ---
+        SectionHeader(rtb, "FUNDING:")
+        AppendRtf(rtb, "  Rate: ", C_LABEL)
+        Dim fundColour As Color = If(r.FundingBias.Contains("HEAVILY"), C_BAD,
+                                     If(r.FundingBias = "NEUTRAL", C_VALUE, C_WARN))
+        AppendRtf(rtb, String.Format("{0:F4}%  |  {1}", r.FundingRate, r.FundingBias) & Environment.NewLine, fundColour)
 
-        sb.AppendLine("===========================================================")
-        sb.AppendLine("  SIGNAL BREAKDOWN")
-        sb.AppendLine("===========================================================")
-        sb.AppendLine(String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
-                                    "Signal", "Long", "Short", "Note"))
-        sb.AppendLine("  " & New String("-"c, 70))
+        ' --- Signal Breakdown ---
+        AppendRtf(rtb, Environment.NewLine, C_DIVIDER)
+        Divider(rtb)
+        AppendRtf(rtb, "  SIGNAL BREAKDOWN" & Environment.NewLine, C_HEADER, bold:=True)
+        Divider(rtb)
+        AppendRtf(rtb, String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
+                                      "Signal", "Long", "Short", "Note") & Environment.NewLine, C_LABEL)
+        AppendRtf(rtb, "  " & New String("-"c, 70) & Environment.NewLine, C_DIVIDER)
         For Each item In v.SignalBreakdown
-            Dim lMark As String = If(item.LongHit, "[L]", "   ")
+            Dim lMark As String = If(item.LongHit,  "[L]", "   ")
             Dim sMark As String = If(item.ShortHit, "[S]", "   ")
-            sb.AppendLine(String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
-                                        item.Label, lMark, sMark, item.Note))
+            Dim hitColour As Color = If(item.LongHit OrElse item.ShortHit, C_HIT, C_DIM)
+            AppendRtf(rtb, String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
+                                          item.Label, lMark, sMark, item.Note) & Environment.NewLine, hitColour)
         Next
-        sb.AppendLine("  " & New String("-"c, 70))
-        sb.AppendLine(String.Format("  {0,-18}  {1,5}  {2,6}",
-                                    "TOTAL", v.LongScore, v.ShortScore))
-        sb.AppendLine()
+        AppendRtf(rtb, "  " & New String("-"c, 70) & Environment.NewLine, C_DIVIDER)
+        AppendRtf(rtb, String.Format("  {0,-18}  {1,5:F0}  {2,6:F0}",
+                                      "TOTAL", CDbl(v.LongScore), CDbl(v.ShortScore)) & Environment.NewLine,
+                  C_VALUE, bold:=True)
 
+        ' --- Hold / Exit ---
         If v.HoldStatus <> "N/A -- no open position" Then
-            sb.AppendLine("HOLD / EXIT: " & v.HoldStatus)
-            sb.AppendLine()
+            AppendRtf(rtb, Environment.NewLine & "HOLD / EXIT: ", C_LABEL)
+            AppendRtf(rtb, v.HoldStatus & Environment.NewLine, C_WARN, bold:=True)
         End If
 
-        txtOutput.Text = sb.ToString()
-
+        ' Update verdict label
         Dim bg As Color
         Select Case v.Verdict
             Case "STRONG LONG"  : bg = Color.FromArgb(0, 180, 90)
@@ -773,7 +891,7 @@ Public Class MainForm
             Case Else           : bg = Color.DimGray
         End Select
         lblVerdict.BackColor = bg
-        lblVerdict.Text = v.Verdict & "  [" & v.Confidence & "]"
+        lblVerdict.Text      = v.Verdict & "  [" & v.Confidence & "]"
     End Sub
 
 End Class
