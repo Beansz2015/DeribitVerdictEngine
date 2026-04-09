@@ -1,6 +1,6 @@
 ' Core/Indicators_OrderFlow.vb
 ' IndicatorEngine partial: order flow and market microstructure indicators.
-' Covers: OFI, Liquidations, CVD.
+' Covers: OFI, Liquidations, CVD, TFI, MicroCVD.
 
 Partial Public Class IndicatorEngine
 
@@ -103,6 +103,106 @@ Partial Public Class IndicatorEngine
             cvdDivergence = "BEARISH"
         ElseIf priceChange < 0 AndAlso cvdValue > 0 Then
             cvdDivergence = "BULLISH"
+        End If
+    End Sub
+
+    ' -- TFI (Trade Flow Index) -----------------------------------------------
+    ' Rolling-window buy/sell pressure ratio over the last N trades, normalised
+    ' to [-1, +1].  Captures executed aggressor flow (vs OFI which is resting).
+    ' threshold: minimum |TFI| to assign a directional signal (default 0.15).
+    Public Shared Sub CalcTFI(trades As List(Of TradeRecord),
+                               ByRef tfiValue As Double,
+                               ByRef tfiSignal As String,
+                               Optional windowSize As Integer = 50,
+                               Optional threshold As Double = 0.15)
+        tfiValue = 0.0 : tfiSignal = "NEUTRAL"
+        If trades Is Nothing OrElse trades.Count = 0 Then Return
+
+        Dim window = trades.Take(windowSize).ToList()  ' newest-first from Deribit
+        Dim buyFlow  As Double = 0
+        Dim sellFlow As Double = 0
+        For Each t In window
+            If t.Direction = "buy" Then
+                buyFlow += t.Amount
+            Else
+                sellFlow += t.Amount
+            End If
+        Next
+
+        Dim total As Double = buyFlow + sellFlow
+        If total = 0 Then Return
+
+        tfiValue = (buyFlow - sellFlow) / total  ' range [-1, +1]
+
+        If tfiValue > threshold Then
+            tfiSignal = "BUY PRESSURE"
+        ElseIf tfiValue < -threshold Then
+            tfiSignal = "SELL PRESSURE"
+        Else
+            tfiSignal = "NEUTRAL"
+        End If
+    End Sub
+
+    ' -- MicroCVD (Intra-window CVD segmentation) -----------------------------
+    ' Splits the trade window into 3 equal segments (early/mid/late) and
+    ' computes per-segment USD delta.  Detects acceleration vs deceleration of
+    ' buy/sell pressure within the window.
+    ' accelThreshold: minimum USD magnitude difference between segments to
+    '                 classify as ACCELERATING vs DECELERATING (default 5000).
+    Public Shared Sub CalcMicroCVD(trades As List(Of TradeRecord),
+                                    ByRef microEarly As Double,
+                                    ByRef microMid As Double,
+                                    ByRef microLate As Double,
+                                    ByRef microMomentum As String,
+                                    ByRef microSignal As String,
+                                    Optional windowSize As Integer = 50,
+                                    Optional accelThreshold As Double = 5000)
+        microEarly = 0 : microMid = 0 : microLate = 0
+        microMomentum = "FLAT" : microSignal = "FLAT"
+        If trades Is Nothing OrElse trades.Count = 0 Then Return
+
+        Dim window  = trades.Take(windowSize).ToList()
+        Dim segSize As Integer = Math.Max(1, window.Count \ 3)
+
+        For i As Integer = 0 To window.Count - 1
+            Dim delta As Double = If(window(i).Direction = "buy", window(i).Amount, -window(i).Amount)
+            If i < segSize Then
+                microEarly += delta
+            ElseIf i < segSize * 2 Then
+                microMid += delta
+            Else
+                microLate += delta
+            End If
+        Next
+
+        ' Determine net direction from overall sign
+        Dim netDelta As Double = microEarly + microMid + microLate
+        Dim isBull   As Boolean = netDelta > 0
+
+        ' Momentum classification: compare |late| vs |early| magnitude
+        Dim absEarly As Double = Math.Abs(microEarly)
+        Dim absLate  As Double = Math.Abs(microLate)
+        Dim diff     As Double = absLate - absEarly
+
+        If diff > accelThreshold Then
+            microMomentum = "ACCELERATING"
+        ElseIf diff < -accelThreshold Then
+            microMomentum = "DECELERATING"
+        Else
+            microMomentum = "FLAT"
+        End If
+
+        ' Signal: directional + momentum combined
+        If isBull AndAlso microMomentum = "ACCELERATING" Then
+            microSignal = "BULL_ACCEL"
+        ElseIf isBull AndAlso microMomentum = "DECELERATING" Then
+            microSignal = "BULL_DECEL"
+        ElseIf Not isBull AndAlso microMomentum = "ACCELERATING" Then
+            microSignal = "BEAR_ACCEL"
+        ElseIf Not isBull AndAlso microMomentum = "DECELERATING" Then
+            microSignal = "BEAR_DECEL"
+        Else
+            microSignal = "FLAT"
         End If
     End Sub
 
