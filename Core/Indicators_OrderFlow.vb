@@ -147,8 +147,19 @@ Partial Public Class IndicatorEngine
     ' Splits the trade window into 3 equal segments (early/mid/late) and
     ' computes per-segment USD delta.  Detects acceleration vs deceleration of
     ' buy/sell pressure within the window.
-    ' accelThreshold: minimum USD magnitude difference between segments to
-    '                 classify as ACCELERATING vs DECELERATING (default 5000).
+    '
+    ' Momentum rules (sign-aware):
+    '   Bull net (netDelta > 0):
+    '     ACCELERATING : microLate > 0  AND  microLate > microEarly + accelThreshold
+    '     DECELERATING : microLate < 0  OR   microLate < microEarly - accelThreshold
+    '     FLAT         : otherwise
+    '   Bear net (netDelta <= 0):
+    '     ACCELERATING : microLate < 0  AND  microLate < microEarly - accelThreshold
+    '     DECELERATING : microLate > 0  OR   microLate > microEarly + accelThreshold
+    '     FLAT         : otherwise
+    '
+    ' accelThreshold: minimum signed USD difference (late vs early) to classify
+    '                 as ACCELERATING or DECELERATING (default 5000).
     Public Shared Sub CalcMicroCVD(trades As List(Of TradeRecord),
                                     ByRef microEarly As Double,
                                     ByRef microMid As Double,
@@ -175,21 +186,28 @@ Partial Public Class IndicatorEngine
             End If
         Next
 
-        ' Determine net direction from overall sign
         Dim netDelta As Double = microEarly + microMid + microLate
         Dim isBull   As Boolean = netDelta > 0
 
-        ' Momentum classification: compare |late| vs |early| magnitude
-        Dim absEarly As Double = Math.Abs(microEarly)
-        Dim absLate  As Double = Math.Abs(microLate)
-        Dim diff     As Double = absLate - absEarly
-
-        If diff > accelThreshold Then
-            microMomentum = "ACCELERATING"
-        ElseIf diff < -accelThreshold Then
-            microMomentum = "DECELERATING"
+        ' Sign-aware momentum: late segment must be in the same direction as net
+        ' AND sufficiently larger than early to qualify as ACCELERATING.
+        ' A sign reversal in the late segment always = DECELERATING.
+        If isBull Then
+            If microLate > 0 AndAlso microLate > microEarly + accelThreshold Then
+                microMomentum = "ACCELERATING"
+            ElseIf microLate < 0 OrElse microLate < microEarly - accelThreshold Then
+                microMomentum = "DECELERATING"
+            Else
+                microMomentum = "FLAT"
+            End If
         Else
-            microMomentum = "FLAT"
+            If microLate < 0 AndAlso microLate < microEarly - accelThreshold Then
+                microMomentum = "ACCELERATING"
+            ElseIf microLate > 0 OrElse microLate > microEarly + accelThreshold Then
+                microMomentum = "DECELERATING"
+            Else
+                microMomentum = "FLAT"
+            End If
         End If
 
         ' Signal: directional + momentum combined
