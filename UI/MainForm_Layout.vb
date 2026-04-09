@@ -24,6 +24,13 @@ Partial Public Class MainForm
     Private Const SS_X     As Integer = 426    ' right edge of Analyze button
     Private Const STATUS_H As Integer = 18
 
+    ' Longest line in the output (VWAP signal breakdown note row ~133 chars).
+    ' Width and height are computed from the font at startup in SizeToContent().
+    Private Const OUTPUT_CHARS As Integer = 133
+    ' Number of output lines when fully rendered (counted from RenderOutput).
+    ' Includes blank lines between sections.
+    Private Const OUTPUT_LINES As Integer = 115
+
     ' -----------------------------------------------------------------------
     ' P/Invoke: Win32 edit-control messages
     ' -----------------------------------------------------------------------
@@ -79,12 +86,7 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.46"
-
-        ' Initial window size: wide enough for the output panel, tall enough
-        ' to show all content without scrolling on first open.
-        Me.ClientSize   = New System.Drawing.Size(1000, 900)
-        Me.MinimumSize  = New System.Drawing.Size(820, 600)
+        Me.Text = "Deribit Verdict Engine v0.47"
 
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
@@ -94,6 +96,61 @@ Partial Public Class MainForm
         SettingsLoader.Initialise(Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
         InitAutoRunControls()
+
+        ' Size the window to fit content exactly, based on actual font metrics.
+        SizeToContent()
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Compute and apply the ideal window size from font metrics
+    ' -----------------------------------------------------------------------
+    Private Sub SizeToContent()
+        Dim font As Font = txtOutput.Font
+
+        ' Measure a single character width using a reference string.
+        ' RichTextBox uses a monospace font so all chars are the same width.
+        Dim charSize As SizeF
+        Using g As Graphics = txtOutput.CreateGraphics()
+            ' MeasureString adds padding; use MeasureCharacterRanges for accuracy.
+            Dim fmt As New StringFormat()
+            fmt.SetMeasurableCharacterRanges(
+                New CharacterRange() {New CharacterRange(0, 1)})
+            Dim regions = g.MeasureCharacterRanges("W", font, New RectangleF(0, 0, 1000, 1000), fmt)
+            charSize = regions(0).GetBounds(g).Size
+        End Using
+
+        Dim charW As Integer = CInt(Math.Ceiling(charSize.Width))
+        Dim lineH As Integer = CInt(Math.Ceiling(font.GetHeight()))
+
+        ' --- Client width ---
+        ' Left margin(8) + right margin(8) + inner text margins(6+6) +
+        ' scrollbar(17) + chars + 4px safety buffer
+        Const SCROLLBAR_W As Integer = 17
+        Const MARGIN_W    As Integer = 8 + 8 + 6 + 6 + SCROLLBAR_W + 4
+        Dim idealClientW As Integer = charW * OUTPUT_CHARS + MARGIN_W
+
+        ' --- Client height ---
+        ' Header(TXT_Y) + output lines + status bar + 4px safety buffer
+        Const MARGIN_H As Integer = 4
+        Dim idealClientH As Integer = TXT_Y + lineH * OUTPUT_LINES + STATUS_H + MARGIN_H
+
+        ' --- Window (non-client) chrome ---
+        Dim chromeW As Integer = Me.Width  - Me.ClientSize.Width
+        Dim chromeH As Integer = Me.Height - Me.ClientSize.Height
+
+        Dim idealW As Integer = idealClientW + chromeW
+        Dim idealH As Integer = idealClientH + chromeH
+
+        ' --- Cap against working area so we never overflow the screen ---
+        Dim wa As Rectangle = Screen.FromControl(Me).WorkingArea
+        idealW = Math.Min(idealW, wa.Width)
+        idealH = Math.Min(idealH, wa.Height)
+
+        Me.MinimumSize = New System.Drawing.Size(idealW, idealH)
+        Me.Size        = New System.Drawing.Size(idealW, idealH)
+        Me.Location    = New System.Drawing.Point(
+            wa.Left + (wa.Width  - idealW) \ 2,
+            wa.Top  + (wa.Height - idealH) \ 2)
     End Sub
 
     ' -----------------------------------------------------------------------
