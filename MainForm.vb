@@ -1,4 +1,4 @@
-' MainForm.vb  v0.42
+' MainForm.vb  v0.43
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI updated.
 ' v0.29 -- CalcCVD; SettingsLoader.Initialise.
@@ -25,6 +25,8 @@
 '          after the form handle is created to push digits to vertical centre.
 ' v0.42 -- Last transacted price display above ATR Entry Levels.
 '          TIME: line changed from UTC to UTC+8.
+' v0.43 -- CalcVPFRLite wired into RunAnalysisAsync (after CalcOBV).
+'          VPFR-lite scoring now fully active end-to-end.
 
 Imports System.Drawing
 Imports System.IO
@@ -98,7 +100,7 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.42"
+        Me.Text = "Deribit Verdict Engine v0.43"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         ' Fix NUD inner TextBox vertical alignment once the handle exists
@@ -699,6 +701,9 @@ Public Class MainForm
                               cfg.Indicators.RSI.DivergencePriceGate,
                               cfg.Indicators.RSI.DivergenceRsiDelta)
 
+        ' VPFR-lite: volume profile POC, HVN/LVN classification, scoring signal
+        IndicatorEngine.CalcVPFRLite(candles1m, r)
+
         Dim posState As PositionState = PositionState.None
         If rbLong.Checked  Then posState = PositionState.InLong
         If rbShort.Checked Then posState = PositionState.InShort
@@ -869,6 +874,14 @@ Public Class MainForm
                                       r.DonchianUpper, r.DonchianLower, r.DonchianSignal) & Environment.NewLine, donchColour)
         AppendRtf(rtb, "  OBV: ", C_LABEL)
         AppendRtf(rtb, String.Format("Trend={0}  |  Div={1}", r.OBVTrend, r.OBVDivergence) & Environment.NewLine, C_VALUE)
+
+        ' --- VPFR-lite ---
+        Dim vpfrColour As Color = If(r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL", C_GOOD,
+                                     If(r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR", C_BAD, C_DIM))
+        AppendRtf(rtb, "  VPFR-lite: ", C_LABEL)
+        AppendRtf(rtb, String.Format("POC:{0:F1}  |  {1}  |  HVN@POC:{2}",
+                                      r.VPFRPoc, r.VPFRSignal,
+                                      If(r.VPFRHVNearPoc, "YES", "NO")) & Environment.NewLine, vpfrColour)
 
         ' --- Open Interest ---
         SectionHeader(rtb, "OPEN INTEREST:")
