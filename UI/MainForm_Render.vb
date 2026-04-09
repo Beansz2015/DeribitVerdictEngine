@@ -252,6 +252,12 @@ Partial Public Class MainForm
                           lastTradePrice.ToString("F1"),
                           "N/A") & Environment.NewLine, C_VALUE)
 
+        ' --- Hold / Exit (shown immediately after price for quick-scan visibility) ---
+        If v.HoldStatus <> "N/A -- no open position" Then
+            AppendRtf(rtb, "  HOLD / EXIT: ", C_LABEL)
+            AppendRtf(rtb, v.HoldStatus & Environment.NewLine, C_WARN, bold:=True)
+        End If
+
         ' --- ATR Entry Levels ---
         Dim atrStop     As Double = r.ATR * norms.ATRScaleFactor * 1.5
         Dim atrTarget   As Double = r.ATR * norms.ATRScaleFactor * 3.0
@@ -430,12 +436,6 @@ Partial Public Class MainForm
         AppendRtf(rtb, String.Format("  {0,-18}  {1,5:F0}  {2,6:F0}",
                                       "TOTAL", CDbl(v.LongScore), CDbl(v.ShortScore)) & Environment.NewLine,
                   C_VALUE, bold:=True)
-
-        ' --- Hold / Exit ---
-        If v.HoldStatus <> "N/A -- no open position" Then
-            AppendRtf(rtb, Environment.NewLine & "HOLD / EXIT: ", C_LABEL)
-            AppendRtf(rtb, v.HoldStatus & Environment.NewLine, C_WARN, bold:=True)
-        End If
 
         ' Update verdict label
         Dim bg As Color
