@@ -164,6 +164,9 @@ Partial Public Class MainForm
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
+        IndicatorEngine.CalcTFI(recentTrades, r.TFIValue, r.TFISignal)
+        IndicatorEngine.CalcMicroCVD(recentTrades, r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
+                                     r.MicroCVDMomentum, r.MicroCVDSignal)
 
         Dim mtfProposed As String = "NONE"
         If candles15m IsNot Nothing AndAlso candles15m.Count >= cfg.MTFGate.DmiPeriod + 2 Then
