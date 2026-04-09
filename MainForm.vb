@@ -1,4 +1,4 @@
-' MainForm.vb  v0.40
+' MainForm.vb  v0.41
 ' v0.27 -- ATR entry levels block moved above DYNAMIC NORMS
 ' v0.28 -- CalcOFI updated.
 ' v0.29 -- CalcCVD; SettingsLoader.Initialise.
@@ -19,6 +19,10 @@
 '          2. AR_Y=58, TXT_Y=88: equal 8px gaps above and below AR row.
 '          3. NUD Padding.Top=5 in Designer for bottom-aligned digit appearance.
 '          4. RenderOutput fully rewritten to use AppendRtf for colour-coded output.
+' v0.41 -- Fix NUD digit top-alignment:
+'          Padding does not move the inner TextBox of NumericUpDown.
+'          Use EM_SETMARGINS (SendMessage) on the NUD's child TextBox handle
+'          after the form handle is created to push digits to vertical centre.
 
 Imports System.Drawing
 Imports System.IO
@@ -43,9 +47,26 @@ Public Class MainForm
     Private Const EC_LEFTMARGIN  As Integer = 1
     Private Const EC_RIGHTMARGIN As Integer = 2
 
+    ' EM_SETRECT / EM_SETRECTNP to override the internal formatting rect
+    Private Const EM_SETRECT   As Integer = &HB3
+    Private Const EM_SETRECTNP As Integer = &HB4
+
     <DllImport("user32.dll", CharSet:=CharSet.Auto)>
     Private Shared Function SendMessage(hWnd As IntPtr, msg As Integer, wParam As Integer, lParam As Integer) As IntPtr
     End Function
+
+    ' Overload that accepts a RECT structure (needed for EM_SETRECT)
+    <DllImport("user32.dll", CharSet:=CharSet.Auto)>
+    Private Shared Function SendMessage(hWnd As IntPtr, msg As Integer, wParam As Integer, ByRef lParam As RECT) As IntPtr
+    End Function
+
+    <StructLayout(LayoutKind.Sequential)>
+    Private Structure RECT
+        Public Left   As Integer
+        Public Top    As Integer
+        Public Right  As Integer
+        Public Bottom As Integer
+    End Structure
 
     Private _oiHistory As New List(Of OiSnapshot)()
 
@@ -75,14 +96,49 @@ Public Class MainForm
 
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.40"
+        Me.Text = "Deribit Verdict Engine v0.41"
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
+        ' Fix NUD inner TextBox vertical alignment once the handle exists
+        AddHandler Me.HandleCreated, AddressOf OnHandleCreated
         ResizeControls()
         UpdateLogInfo()
         SettingsLoader.Initialise(Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
         InitAutoRunControls()
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' NUD digit vertical centering
+    ' NumericUpDown hosts a child TextBox (Controls(0)).  Setting EM_SETRECT
+    ' overrides the internal formatting rectangle so text renders vertically
+    ' centred rather than pinned to the top of the control.
+    ' -----------------------------------------------------------------------
+    Private Sub OnHandleCreated(sender As Object, e As EventArgs)
+        CentreNudText(nudMinutes)
+        CentreNudText(nudSeconds)
+    End Sub
+
+    Private Shared Sub CentreNudText(nud As NumericUpDown)
+        ' The inner TextBox is Controls(0) on all standard WinForms builds.
+        If nud.Controls.Count = 0 Then Return
+        Dim innerTb As Control = nud.Controls(0)
+        If Not innerTb.IsHandleCreated Then innerTb.CreateControl()
+
+        ' Spinner button width is typically 16px; exclude it from right edge.
+        Const SPIN_W As Integer = 16
+        Dim h As Integer = innerTb.Height
+
+        ' Vertical padding: push text down ~3px so it sits centred, not top-pinned.
+        Const TOP_PAD As Integer = 3
+
+        Dim rc As RECT
+        rc.Left   = 1
+        rc.Top    = TOP_PAD
+        rc.Right  = innerTb.Width - SPIN_W - 2
+        rc.Bottom = h - 1
+
+        SendMessage(innerTb.Handle, EM_SETRECTNP, 0, rc)
     End Sub
 
     ' -----------------------------------------------------------------------
@@ -651,16 +707,6 @@ Public Class MainForm
 
     ' -----------------------------------------------------------------------
     ' RenderOutput -- full AppendRtf colour-coded output
-    ' Colour scheme:
-    '   Dividers / structural lines : C_DIVIDER  (dark grey)
-    '   Section headers             : C_HEADER   (amber, bold)
-    '   Labels / keys               : C_LABEL    (mid-grey)
-    '   Normal values               : C_VALUE    (light-grey)
-    '   Bullish / positive signals  : C_GOOD     (green)
-    '   Caution / neutral signals   : C_WARN     (orange)
-    '   Bearish / negative signals  : C_BAD      (red)
-    '   Signal breakdown hits       : C_HIT      (cyan)
-    '   Dim / secondary info        : C_DIM      (dim grey)
     ' -----------------------------------------------------------------------
     Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult,
                               norms As DynamicNorms, vwapWarmup As Integer)
