@@ -1,4 +1,4 @@
-' Core/Settings/EngineSettings.vb  v0.36
+' Core/Settings/EngineSettings.vb
 ' Typed model that mirrors settings.json.
 ' All hardcoded indicator/scoring thresholds are accessed via this class.
 ' Populated by SettingsLoader.Load() -- do not instantiate directly.
@@ -27,6 +27,16 @@
 '        TFI.WindowSize default 30 (was shared 50 with MicroCVD -- now independent).
 '        MicroCVD.WindowSize default 50.  MicroCVD.AccelThreshold default 5000.
 '        Both settings are hot-reloadable via settings.json.
+' v0.37: [P10/P11/P12] v0.49: Added penalty/multiplier fields to ScoringSettings.
+'        AtrTargetMultiplier  -- ATR target distance multiplier (default 2.0).
+'        AtrStopMultiplier    -- ATR stop distance multiplier (default 1.0).
+'        BbwSqueezePenalty    -- score penalty while BBW squeeze is ACTIVE (default 2).
+'        LiqStandardPenalty   -- standard liquidation penalty (default 1).
+'        LiqLargePenalty      -- large liquidation penalty (default 2).
+'        FundingHighPenalty   -- penalty for extreme funding (default 2).
+'        FundingHighBoost     -- boost for favourable extreme funding (default 1).
+'        FundingLowPenalty    -- penalty for mild adverse funding (default 1).
+'        All nine were previously hardcoded in ScoringEngine_Calculate.vb.
 
 Imports System.Text.Json.Serialization
 
@@ -278,10 +288,28 @@ Public Class ScoringSettings
     <JsonPropertyName("verdict_med_pct")>        Public Property VerdictMedPct        As Double  = 0.53
     <JsonPropertyName("verdict_weak_pct")>       Public Property VerdictWeakPct       As Double  = 0.35
     <JsonPropertyName("transitional_penalty_enabled")> Public Property TransitionalPenaltyEnabled As Boolean = True
-    <JsonPropertyName("funding_high_positive")>  Public Property FundingHighPositive  As Double = 0.001
-    <JsonPropertyName("funding_low_positive")>   Public Property FundingLowPositive   As Double = 0.0005
-    <JsonPropertyName("funding_high_negative")>  Public Property FundingHighNegative  As Double = -0.001
-    <JsonPropertyName("funding_low_negative")>   Public Property FundingLowNegative   As Double = -0.0005
+    <JsonPropertyName("funding_high_positive")>  Public Property FundingHighPositive  As Double  = 0.001
+    <JsonPropertyName("funding_low_positive")>   Public Property FundingLowPositive   As Double  = 0.0005
+    <JsonPropertyName("funding_high_negative")>  Public Property FundingHighNegative  As Double  = -0.001
+    <JsonPropertyName("funding_low_negative")>   Public Property FundingLowNegative   As Double  = -0.0005
+    ' [P12] v0.49: Penalty magnitudes -- previously hardcoded in ScoringEngine_Calculate.vb.
+    ''' <summary>Score penalty while BBW TTM Squeeze is ACTIVE (applied to both sides). Default 2.</summary>
+    <JsonPropertyName("bbw_squeeze_penalty")>    Public Property BbwSqueezePenalty    As Integer = 2
+    ''' <summary>Long/short score penalty for standard-size adverse liquidations. Default 1.</summary>
+    <JsonPropertyName("liq_standard_penalty")>   Public Property LiqStandardPenalty   As Integer = 1
+    ''' <summary>Long/short score penalty for large adverse liquidations (>= LargeLiqSize). Default 2.</summary>
+    <JsonPropertyName("liq_large_penalty")>      Public Property LiqLargePenalty      As Integer = 2
+    ''' <summary>Penalty applied to the adverse side at extreme funding. Default 2.</summary>
+    <JsonPropertyName("funding_high_penalty")>   Public Property FundingHighPenalty   As Integer = 2
+    ''' <summary>Boost applied to the favoured side at extreme funding. Default 1.</summary>
+    <JsonPropertyName("funding_high_boost")>     Public Property FundingHighBoost     As Integer = 1
+    ''' <summary>Penalty applied to the adverse side at mild funding. Default 1.</summary>
+    <JsonPropertyName("funding_low_penalty")>    Public Property FundingLowPenalty    As Integer = 1
+    ' [P11] v0.49: ATR target/stop multipliers -- previously hardcoded 2.0/1.0.
+    ''' <summary>ATR distance multiplier for the raw target price. Default 2.0.</summary>
+    <JsonPropertyName("atr_target_multiplier")>  Public Property AtrTargetMultiplier  As Double  = 2.0
+    ''' <summary>ATR distance multiplier for the stop-loss price. Default 1.0.</summary>
+    <JsonPropertyName("atr_stop_multiplier")>    Public Property AtrStopMultiplier    As Double  = 1.0
     <JsonPropertyName("weights")>                Public Property Weights              As New ScoringWeights
 End Class
 
