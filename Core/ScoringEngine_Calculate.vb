@@ -38,11 +38,34 @@
 '   When DonchianSignal = "NONE" (price in middle two quartiles), the breakdown
 '   note now explicitly states "MID-CHANNEL -- no signal" so the operator can
 '   distinguish a quiet mid-range bar from a missing or error state.
+'
+' [T3]: NO TRADE directional lean label.
+'   When verdict resolves to NO TRADE but effective score >= weak threshold,
+'   the verdict string is appended with the lean direction in brackets:
+'     "NO TRADE [WEAK LONG]" or "NO TRADE [WEAK SHORT]"
+'   Applied at all four NO TRADE exit points:
+'     - TRENDING_UP regime veto (counter-trend short dominant)
+'     - TRENDING_DOWN regime veto (counter-trend long dominant)
+'     - MTF gate blocked
+'     - Final fall-through (score below all thresholds)
+'   Helper: AppendLean(verdict, ls, ss, tWeak) returns the annotated string.
+'   Confidence remains "N/A" -- lean is informational only, not a trade signal.
 
 Partial Public Class ScoringEngine
 
     ' Theoretical max score (TRENDING regime, all signals firing). Legacy reference.
     Public Const MaxScore As Integer = 19  ' +2 from TFI and MicroCVD
+
+    ' [T3] Appends directional lean label to a NO TRADE verdict string.
+    ' Returns "NO TRADE [WEAK LONG]", "NO TRADE [WEAK SHORT]", or "NO TRADE" unchanged.
+    Private Shared Function AppendLean(verdict As String, ls As Integer, ss As Integer, tWeak As Integer) As String
+        If ls >= tWeak AndAlso ls >= ss Then
+            Return verdict & " [WEAK LONG]"
+        ElseIf ss >= tWeak AndAlso ss > ls Then
+            Return verdict & " [WEAK SHORT]"
+        End If
+        Return verdict
+    End Function
 
     Public Shared Function Calculate(r As IndicatorResults, posState As PositionState,
                                      norms As DynamicNorms,
@@ -435,10 +458,14 @@ Partial Public Class ScoringEngine
         Dim effectiveSS As Integer = ss
         Dim adxPenalty  As Integer = 0
 
+        ' [T3] Pre-compute tWeak for lean label on early-return NO TRADE paths
+        Dim tWeakEarly As Integer = Threshold(regimeMax, cfg.Scoring.VerdictWeakPct)
+
         Select Case r.Regime
             Case "TRENDING_UP"
                 If ss > ls Then
-                    res.Verdict = "NO TRADE" : res.Confidence = "N/A"
+                    res.Verdict = AppendLean("NO TRADE", ls, ss, tWeakEarly)
+                    res.Confidence = "N/A"
                     res.LongScore = ls : res.ShortScore = ss
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
@@ -447,7 +474,8 @@ Partial Public Class ScoringEngine
                 End If
             Case "TRENDING_DOWN"
                 If ls > ss Then
-                    res.Verdict = "NO TRADE" : res.Confidence = "N/A"
+                    res.Verdict = AppendLean("NO TRADE", ls, ss, tWeakEarly)
+                    res.Confidence = "N/A"
                     res.LongScore = ls : res.ShortScore = ss
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
@@ -486,7 +514,8 @@ Partial Public Class ScoringEngine
             r.MTFGateReason))
 
         If mtfBlocked Then
-            res.Verdict = "NO TRADE" : res.Confidence = "N/A"
+            res.Verdict = AppendLean("NO TRADE", effectiveLS, effectiveSS, tWeakCheck)
+            res.Confidence = "N/A"
             res.LongScore = ls : res.ShortScore = ss
             res.EffectiveLongScore = effectiveLS : res.EffectiveShortScore = effectiveSS
             res.RegimePenalty = adxPenalty
@@ -518,7 +547,10 @@ Partial Public Class ScoringEngine
         ElseIf effectiveSS >= tWeak Then
             res.Verdict = "WEAK SHORT"    : res.Confidence = "LOW"
         Else
-            res.Verdict = "NO TRADE"      : res.Confidence = "N/A"
+            ' [T3] Final fall-through: use raw ls/ss to surface lean before penalties
+            ' suppressed the effective score below tWeak.
+            res.Verdict = AppendLean("NO TRADE", ls, ss, tWeak)
+            res.Confidence = "N/A"
         End If
 
         ' -- Step 6: Hold / Exit Assessment -----------------------------------
