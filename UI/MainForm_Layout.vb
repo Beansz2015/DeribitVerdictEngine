@@ -67,6 +67,12 @@ Partial Public Class MainForm
     Private _countdownSecs  As Integer = 0
     Private _intervalMs     As Integer = 60_000
 
+    ' MTF 15m candle TTL cache (P1 upgrade v0.47)
+    ' Candles are re-fetched only when the cache is older than MTF_TTL_SECONDS.
+    Private Const MTF_TTL_SECONDS As Integer = 60
+    Private _mtfCandles15m     As List(Of Candle) = Nothing
+    Private _mtfLastFetchTime  As DateTime = DateTime.MinValue
+
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
 
