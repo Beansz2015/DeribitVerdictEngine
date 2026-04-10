@@ -28,6 +28,14 @@
 '   consistently regardless of depth setting.
 '   Call site in RunAnalysisAsync passes cfg.Indicators.OFI.BookDepth.
 '   cfg key already existed (added v0.30, default 3) but was never wired through.
+'
+' fix [T3-D]: CalcLiquidations dominanceRatio now injectable via Optional parameter.
+'   Was: liqLongSize >= liqShortSize (hardcoded equal-or-greater threshold).
+'   Now: Optional dominanceRatio As Double = 1.0
+'        LONG LIQS fires when liqLongSize > 0 AND liqLongSize >= liqShortSize * dominanceRatio.
+'        SHORT LIQS fires when liqShortSize > 0 AND liqShortSize > liqLongSize * dominanceRatio.
+'   Default 1.0 preserves existing behaviour exactly.
+'   Call site passes cfg.Indicators.Liquidations.DominanceRatio.
 
 Partial Public Class IndicatorEngine
 
@@ -80,10 +88,16 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- Liquidations ---------------------------------------------------------
+    ' [T3-D]: dominanceRatio optional param -- replaces hardcoded >= threshold.
+    ' LONG LIQS: liqLongSize >= liqShortSize * dominanceRatio (default 1.0 = equal-or-greater).
+    ' SHORT LIQS: liqShortSize > liqLongSize * dominanceRatio.
+    ' Default 1.0 preserves prior behaviour exactly; tuning above 1.0 requires
+    ' the dominant side to be proportionally larger before signalling.
     Public Shared Sub CalcLiquidations(trades As List(Of TradeRecord),
                                         ByRef liqLongSize As Double,
                                         ByRef liqShortSize As Double,
-                                        ByRef liqSignal As String)
+                                        ByRef liqSignal As String,
+                                        Optional dominanceRatio As Double = 1.0)
         liqLongSize = 0 : liqShortSize = 0 : liqSignal = "NONE"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
         For Each t In trades
@@ -95,9 +109,9 @@ Partial Public Class IndicatorEngine
                 End If
             End If
         Next
-        If liqLongSize > 0 AndAlso liqLongSize >= liqShortSize Then
+        If liqLongSize > 0 AndAlso liqLongSize >= liqShortSize * dominanceRatio Then
             liqSignal = "LONG LIQS"
-        ElseIf liqShortSize > 0 AndAlso liqShortSize > liqLongSize Then
+        ElseIf liqShortSize > 0 AndAlso liqShortSize > liqLongSize * dominanceRatio Then
             liqSignal = "SHORT LIQS"
         Else
             liqSignal = "NONE"
