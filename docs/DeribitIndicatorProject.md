@@ -248,13 +248,61 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 
 ---
 
-## 13. Backlog
+## 13. Future Upgrades
+
+Ranked by expected accuracy / reliability gain. Items marked ✅ are approved for implementation
+when the backlog is clear. Items marked 🔍 require a spec decision before coding begins.
+
+### High-Impact (still meaningful gains — implement next)
+
+| Item | Description | Status |
+|---|---|---|
+| Adaptive scoring weights by regime | `MaxScore` is regime-adjusted but per-indicator weights are fixed. In TRENDING, EMA ribbon + DMI should carry more weight; in RANGE_BOUND, VWAP bands + Donchian should dominate. Static weights over-score weak signals for the current regime context. Requires per-regime weight multipliers in `EngineSettings` and `ScoringEngine_Calculate`. | 🔍 Spec needed |
+| Session-aware volume norms | `VolHighThreshold` / `VolMidThreshold` don't account for time-of-day liquidity cycles. BTC Saturday 04:00 UTC behaves completely differently from London/NY overlap. Segment `DynamicNorms.Compute` by UTC hour bucket to reduce false volume signals during thin sessions. | 🔍 Spec needed |
+| Funding rate momentum | Absolute funding rate used as flat step modifier. Funding momentum (rate increasing vs decreasing) is a higher-quality signal — a rising rate approaching the high threshold signals crowding *before* the penalty fires. Add a `FundingMomentum` field (RISING/FALLING/FLAT) to `IndicatorResults` and incorporate into Step 3 modifier logic. | 🔍 Spec needed |
+| OI × CVD cross-confirm | OI (NEW LONGS/SHORTS) and CVD direction scored independently. Pairing them as a confirming multiplier (NEW LONGS + CVD RISING = full score; NEW LONGS + CVD FALLING = half score) would sharpen Tier 1 without adding new data sources. | 🔍 Spec needed |
+
+### Moderate-Impact (diminishing returns territory)
+
+| Item | Description | Status |
+|---|---|---|
+| Dynamic MicroCVD accelThreshold | Hardcoded 5000 USD default is noise during high-volume sessions. Scale as `accelThreshold = VolumeSMA * 0.03` to self-calibrate. Low-risk change — single field in `DynamicNorms.Compute` or at call site. | 🔍 Spec needed |
+| RSI divergence on 5m candles | Current divergence is 1m only. A confirmed divergence on both 1m and 5m simultaneously would be a stronger penalty signal and reduce false penalties on 1m micro-noise. Requires `CalcRSIDivergence` called on `candles5m` and a combined gate in `ScoringEngine_Calculate`. | 🔍 Spec needed |
+| Donchian × BBW state cross-reference | Wide channel breakout is meaningfully different from a tight-channel breakout. Cross-reference BBW squeeze state (ACTIVE / RELEASING / NONE) when scoring Donchian to up-weight breakouts from compression. | 🔍 Spec needed |
+
+### Fine-Tuning (marginal gains, run after calibration data available)
+
+| Item | Description | Status |
+|---|---|---|
+| Bid-ask spread microstructure signal | `orderBook` depth is already fetched. Spread between best bid and best ask is an unused fast microstructure signal — sudden widening often precedes a flush. Add `SpreadBps` to `IndicatorResults` and a penalty trigger in Tier 2. | 🔍 Spec needed |
+| Auto-tuning from CSV log | Once `CalibrationReport` reaches READY (≥300 rows, ≥3 sessions, ≥3 regimes, ≥2 liq events), build a pass that correlates each signal's vote with subsequent price direction and adjusts `settings.json` weights automatically. | 🔍 Requires calibration data first |
+
+### Accuracy Ceiling Note
+
+The engine is approaching its natural accuracy limit for a **single-instrument 1m scalping system
+using REST polling**. By the time a signal is computed, the 1m candle is closed and partially
+acted on by faster participants. The three risk thresholds to watch before adding more upgrades:
+
+1. **Overfit risk** — ~25+ tunable parameters already exist. Tuning 6+ of them against the same
+   50–100 trade CSV log risks optimising for the past month's regime, not general market behaviour.
+2. **Signal redundancy** — OFI + TFI + CVD + MicroCVD already cover order flow from four angles.
+   More order flow inputs with high correlation add noise to scoring weight, not signal.
+3. **Interpretability** — when a STRONG LONG fires and you can't quickly reason through *why*
+   from the breakdown, the engine becomes a black box and you lose the ability to apply
+   discretionary override on ambiguous setups.
+
+The highest-impact non-code upgrade at this stage is a **Websocket feed** (real-time order book
+and trade stream vs. REST snapshot polling), which would remove the fundamental latency constraint.
+
+---
+
+## 14. Backlog
 
 *(cleared — all Commit 1–5 items shipped)*
 
 ---
 
-## 14. Version History
+## 15. Version History
 
 | Version | Key Changes |
 |---|---|
