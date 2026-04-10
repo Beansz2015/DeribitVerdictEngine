@@ -1,6 +1,20 @@
 ' Core/Indicators_Momentum.vb
 ' IndicatorEngine partial: momentum and trend primitives.
 ' Covers: DMI/ADX, ATR, EMA, RSI, RSI Divergence, ROC, Volume SMA.
+'
+' v0.48 [P3]: CalcRSIDivergence rewritten to use pivot-based peak/trough detection.
+'   Previous implementation compared two rolling 5-bar averages separated by 5 bars.
+'   This approach conflated micro-noise with genuine divergence -- any 5-bar period with
+'   an elevated RSI mean vs the prior 5-bar mean triggered a signal even without a
+'   structural price high/low.  The new implementation:
+'     1. Scans the most recent lookback bars for the highest price pivot (for bearish div)
+'        and lowest price pivot (for bullish div) using a configurable left/right wing.
+'     2. Identifies the RSI value at that structural pivot and compares it to the current
+'        RSI reading.
+'     3. Fires BEARISH if: price made a higher high AND RSI was lower at that pivot than now
+'        AND price moved more than priceGate AND rsi delta exceeds rsiDelta.
+'     4. Fires BULLISH if: price made a lower low AND RSI was higher at that pivot than now.
+'   Default pivotWing=3 matches the 1m scalping timeframe; tunable via optional param.
 
 Partial Public Class IndicatorEngine
 
@@ -148,23 +162,87 @@ Partial Public Class IndicatorEngine
         Return result
     End Function
 
-    ' -- RSI Divergence -------------------------------------------------------
+    ' -- RSI Divergence (pivot-based) -----------------------------------------
+    ' [P3] v0.48: Replaced rolling-average window comparison with pivot scan.
+    '   Bearish: price makes higher high (swing high) but RSI at that pivot was lower
+    '            than current RSI -- weakening momentum into the new high.
+    '   Bullish: price makes lower low (swing low) but RSI at that pivot was higher
+    '            than current RSI -- weakening selling pressure into the new low.
+    '   pivotWing: bars left and right required to confirm a swing point (default 3).
+    '   lookbackBars: window to scan for the structural pivot (default 30).
     Public Shared Function CalcRSIDivergence(candles As List(Of Candle), period As Integer,
-                                              priceGate As Double, rsiDelta As Double) As String
-        If candles.Count < period + 12 Then Return "NONE"
+                                              priceGate As Double, rsiDelta As Double,
+                                              Optional pivotWing As Integer = 3,
+                                              Optional lookbackBars As Integer = 30) As String
+        Dim minNeeded As Integer = period + lookbackBars + pivotWing
+        If candles.Count < minNeeded Then Return "NONE"
+
         Dim rsiSeries = CalcRSISeries(candles, period)
-        If rsiSeries.Count < 10 Then Return "NONE"
+        If rsiSeries.Count < lookbackBars Then Return "NONE"
 
-        Dim recentRSI As Double = rsiSeries.Skip(rsiSeries.Count - 5).Average()
-        Dim prevRSI As Double = rsiSeries.Skip(rsiSeries.Count - 10).Take(5).Average()
-        Dim recentPrice As Double = candles.Skip(candles.Count - 5).Average(Function(c) c.Close)
-        Dim prevPrice As Double = candles.Skip(candles.Count - 10).Take(5).Average(Function(c) c.Close)
+        ' Align: rsiSeries(k) corresponds to candles(k + period).
+        ' Work in the rsiSeries index space for the scan window.
+        Dim scanEnd   As Integer = rsiSeries.Count - 1        ' most recent
+        Dim scanStart As Integer = Math.Max(pivotWing, scanEnd - lookbackBars)
 
-        If recentPrice > prevPrice * (1.0 + priceGate) AndAlso recentRSI < prevRSI - rsiDelta Then
+        Dim currentRSI   As Double = rsiSeries(scanEnd)
+        Dim currentPrice As Double = candles.Last().Close
+
+        ' ---- Bearish divergence: higher-high price pivot, lower RSI at pivot ----
+        Dim bestHighPivotIdx  As Integer = -1
+        Dim bestHighPrice     As Double  = Double.MinValue
+        Dim bestHighRSI       As Double  = 0
+        For i As Integer = scanStart To scanEnd - pivotWing
+            Dim candleIdx As Integer = i + period
+            If candleIdx < pivotWing OrElse candleIdx >= candles.Count - pivotWing Then Continue For
+            Dim iPrice As Double = candles(candleIdx).High
+            ' Confirm swing high: higher than pivotWing bars on each side
+            Dim isSwingHigh As Boolean = True
+            For w As Integer = 1 To pivotWing
+                If candles(candleIdx - w).High >= iPrice OrElse
+                   candles(candleIdx + w).High >= iPrice Then
+                    isSwingHigh = False : Exit For
+                End If
+            Next
+            If isSwingHigh AndAlso iPrice > bestHighPrice Then
+                bestHighPrice    = iPrice
+                bestHighPivotIdx = i
+                bestHighRSI      = rsiSeries(i)
+            End If
+        Next
+        If bestHighPivotIdx >= 0 AndAlso
+           bestHighPrice > currentPrice * (1.0 + priceGate) AndAlso
+           bestHighRSI > currentRSI + rsiDelta Then
             Return "BEARISH"
-        ElseIf recentPrice < prevPrice * (1.0 - priceGate) AndAlso recentRSI > prevRSI + rsiDelta Then
+        End If
+
+        ' ---- Bullish divergence: lower-low price pivot, higher RSI at pivot ----
+        Dim bestLowPivotIdx  As Integer = -1
+        Dim bestLowPrice     As Double  = Double.MaxValue
+        Dim bestLowRSI       As Double  = 0
+        For i As Integer = scanStart To scanEnd - pivotWing
+            Dim candleIdx As Integer = i + period
+            If candleIdx < pivotWing OrElse candleIdx >= candles.Count - pivotWing Then Continue For
+            Dim iPrice As Double = candles(candleIdx).Low
+            Dim isSwingLow As Boolean = True
+            For w As Integer = 1 To pivotWing
+                If candles(candleIdx - w).Low <= iPrice OrElse
+                   candles(candleIdx + w).Low <= iPrice Then
+                    isSwingLow = False : Exit For
+                End If
+            Next
+            If isSwingLow AndAlso iPrice < bestLowPrice Then
+                bestLowPrice    = iPrice
+                bestLowPivotIdx = i
+                bestLowRSI      = rsiSeries(i)
+            End If
+        Next
+        If bestLowPivotIdx >= 0 AndAlso
+           bestLowPrice < currentPrice * (1.0 - priceGate) AndAlso
+           bestLowRSI < currentRSI - rsiDelta Then
             Return "BULLISH"
         End If
+
         Return "NONE"
     End Function
 
