@@ -44,6 +44,22 @@
 '   Rationale: 1m scalping suffers whipsaw regime changes during momentum
 '   consolidations. A single-bar buffer stabilises the regime gate without
 '   introducing meaningful lag on genuine ranging conditions.
+'
+' fix [T3-A]: CalcVPFRLite numBuckets now passed from cfg.Indicators.VPFR.NumBuckets.
+'   Was: method default (50) used silently -- cfg key existed but was not wired.
+'   Now: numBuckets:=cfg.Indicators.VPFR.NumBuckets passed at call site.
+'
+' fix [T3-B]: CalcRSIDivergence pivotWing and lookbackBars now passed from cfg.
+'   Was: method defaults (pivotWing=2, lookbackBars=20) used -- cfg keys existed but ignored.
+'   Now: pivotWing:=cfg.Indicators.RSI.PivotWing, lookbackBars:=cfg.Indicators.RSI.LookbackBars.
+'
+' fix [T3-C]: CalcTTMSqueeze flatThreshold now passed from cfg.Indicators.TTM.FlatThreshold.
+'   Was: method default (0.5) used -- cfg key existed but was not wired at call site.
+'   Now: flatThreshold:=cfg.Indicators.TTM.FlatThreshold passed explicitly.
+'
+' fix [T3-D]: CalcLiquidations dominanceRatio now passed from cfg.Indicators.Liquidations.DominanceRatio.
+'   Was: method default (hardcoded threshold) used -- cfg key existed but not wired.
+'   Now: dominanceRatio:=cfg.Indicators.Liquidations.DominanceRatio passed at call site.
 
 Imports System.Drawing
 Imports System.Windows.Forms
@@ -189,7 +205,10 @@ Partial Public Class MainForm
         ' [P17] BBW period and StdDev from cfg (were hardcoded 20 / 2.0)
         IndicatorEngine.CalcBBW(candles1m, cfg.Indicators.BBW.Period, cfg.Indicators.BBW.StdDev,
                                 r.BBW, r.SqueezeStatus)
-        IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal)
+
+        ' [T3-C] TTM flatThreshold from cfg (was using method default 0.5)
+        IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal,
+                                       flatThreshold:=cfg.Indicators.TTM.FlatThreshold)
 
         ' [B2] EMA ribbon periods from cfg (were literals 9/21/50)
         Dim emaFast As Integer = cfg.Indicators.EMA.Fast
@@ -254,7 +273,10 @@ Partial Public Class MainForm
                                 buyDominantRatio:=cfg.Indicators.OFI.BuyDominantRatio,
                                 sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio,
                                 bookDepth:=cfg.Indicators.OFI.BookDepth)
-        IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
+
+        ' [T3-D] Liquidations dominanceRatio from cfg (was using method default threshold)
+        IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal,
+                                         dominanceRatio:=cfg.Indicators.Liquidations.DominanceRatio)
 
         ' [B3] CVD: all three tunable params now from cfg.
         ' divergencePriceGate: method default was 0.002, cfg default is 0.0005 -- 4x off.
@@ -324,16 +346,22 @@ Partial Public Class MainForm
         IndicatorEngine.CalcOBV(candles1m, r.OBVTrend, r.OBVDivergence,
                                 cfg.Indicators.OBV.TrendGate,
                                 cfg.Indicators.OBV.DivergenceGate)
+
+        ' [T3-B] RSI pivot params from cfg (were using method defaults)
         r.RSIDivergence = IndicatorEngine.CalcRSIDivergence(candles1m,
                               cfg.Indicators.RSI.Period,
                               cfg.Indicators.RSI.DivergencePriceGate,
-                              cfg.Indicators.RSI.DivergenceRsiDelta)
+                              cfg.Indicators.RSI.DivergenceRsiDelta,
+                              pivotWing:=cfg.Indicators.RSI.PivotWing,
+                              lookbackBars:=cfg.Indicators.RSI.LookbackBars)
 
+        ' [T3-A] VPFR numBuckets from cfg (was using method default 50)
         Dim vpfrPoc       As Double  = 0
         Dim vpfrHVNearPoc As Boolean = False
         Dim vpfrSignal    As String  = "NEUTRAL"
         IndicatorEngine.CalcVPFRLite(candles1m, r.CurrentPrice,
-                                     vpfrPoc, vpfrHVNearPoc, vpfrSignal)
+                                     vpfrPoc, vpfrHVNearPoc, vpfrSignal,
+                                     numBuckets:=cfg.Indicators.VPFR.NumBuckets)
         r.VPFRPoc       = vpfrPoc
         r.VPFRHVNearPoc = vpfrHVNearPoc
         r.VPFRSignal    = vpfrSignal
