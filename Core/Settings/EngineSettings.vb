@@ -27,6 +27,18 @@
 ' T1-D: Added 6 HoldStatus exit threshold fields to ScoringSettings.
 '        CalcHoldStatus previously used hardcoded 0.6/-0.6 (ROC) and 60/40 (RSI) literals.
 '        All defaults preserve prior behaviour exactly.
+' fix [T3-B]: Added RsiSettings.PivotWing and RsiSettings.LookbackBars.
+'        CalcRSIDivergence was wired to these cfg keys in MainForm_Analysis.vb [T3-B]
+'        but the properties were missing from RsiSettings -- caused BC30456.
+'        Defaults match the method's previous hardcoded values (PivotWing=2, LookbackBars=20).
+' fix [T3-C]: Added TtmSettings class and IndicatorSettings.TTM property.
+'        CalcTTMSqueeze was wired to cfg.Indicators.TTM.FlatThreshold in MainForm_Analysis.vb
+'        but the class and property were missing -- caused BC30456.
+'        Default FlatThreshold=0.5 matches the method's previous hardcoded default.
+' fix [T3-A]: Added VpfrSettings class and IndicatorSettings.VPFR property.
+'        CalcVPFRLite was wired to cfg.Indicators.VPFR.NumBuckets in MainForm_Analysis.vb
+'        but the class and property were missing -- caused BC30456.
+'        Default NumBuckets=50 matches the method's previous hardcoded default.
 
 Imports System.Text.Json.Serialization
 
@@ -83,6 +95,10 @@ Public Class IndicatorSettings
     <JsonPropertyName("CVD")>      Public Property CVD      As New CvdSettings
     <JsonPropertyName("TFI")>      Public Property TFI      As New TfiSettings
     <JsonPropertyName("MicroCVD")> Public Property MicroCVD As New MicroCvdSettings
+    ''' <summary>[T3-C] TTM Squeeze tuning parameters.</summary>
+    <JsonPropertyName("TTM")>      Public Property TTM      As New TtmSettings
+    ''' <summary>[T3-A] VPFR-lite tuning parameters.</summary>
+    <JsonPropertyName("VPFR")>     Public Property VPFR     As New VpfrSettings
 End Class
 
 Public Class AdxSettings
@@ -103,6 +119,10 @@ Public Class RsiSettings
     <JsonPropertyName("div_penalty_rsi_high")> Public Property DivPenaltyRsiHigh As Double = 65.0
     ''' <summary>[P13] v0.50: RSI level below which BULLISH div triggers short penalty. Default 35.</summary>
     <JsonPropertyName("div_penalty_rsi_low")>  Public Property DivPenaltyRsiLow  As Double = 35.0
+    ''' <summary>[T3-B] Half-width of the pivot detection window for RSI divergence scan. Default 2.</summary>
+    <JsonPropertyName("pivot_wing")>           Public Property PivotWing         As Integer = 2
+    ''' <summary>[T3-B] Number of bars to look back when scanning for RSI pivots. Default 20.</summary>
+    <JsonPropertyName("lookback_bars")>        Public Property LookbackBars      As Integer = 20
 End Class
 
 Public Class RocSettings
@@ -215,6 +235,24 @@ Public Class MicroCvdSettings
     <JsonPropertyName("window_size")>     Public Property WindowSize     As Integer = 50
     <JsonPropertyName("accel_threshold")> Public Property AccelThreshold As Double  = 5000.0
     <JsonPropertyName("decel_penalty")>   Public Property DecelPenalty   As Integer = 1
+End Class
+
+''' <summary>
+''' [T3-C] TTM Squeeze tuning parameters.
+''' FlatThreshold: histogram bars whose absolute value is below this are treated as FLAT momentum.
+''' Default 0.5 matches the method's previous hardcoded behaviour.
+''' </summary>
+Public Class TtmSettings
+    <JsonPropertyName("flat_threshold")> Public Property FlatThreshold As Double = 0.5
+End Class
+
+''' <summary>
+''' [T3-A] VPFR-lite tuning parameters.
+''' NumBuckets: number of price buckets for the volume profile histogram.
+''' Default 50 matches the method's previous hardcoded behaviour.
+''' </summary>
+Public Class VpfrSettings
+    <JsonPropertyName("num_buckets")> Public Property NumBuckets As Integer = 50
 End Class
 
 ' ---------------------------------------------------------------------------
