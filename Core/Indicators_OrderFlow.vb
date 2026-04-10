@@ -65,6 +65,11 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- CVD (Cumulative Volume Delta) ----------------------------------------
+    ' [P3] v0.47: Replace half-split with 3-segment weighted slope.
+    ' Segments: early (first third), mid (second third), late (last third).
+    ' Weighted slope = (lateDelta * 2 - earlyDelta * 1) / weightedDenom.
+    ' Late segment carries 2x weight so a single large trade in early does
+    ' not dominate the slope signal, reducing false RISING/FALLING flips.
     Public Shared Sub CalcCVD(trades As List(Of TradeRecord), candles As List(Of Candle),
                                ByRef cvdValue As Double, ByRef cvdSlope As String,
                                ByRef cvdDivergence As String,
@@ -74,22 +79,37 @@ Partial Public Class IndicatorEngine
         cvdValue = 0 : cvdSlope = "FLAT" : cvdDivergence = "NONE"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
-        Dim half As Integer = trades.Count \ 2
-        Dim earlyDelta As Double = 0
-        Dim lateDelta As Double = 0
-        For i As Integer = 0 To trades.Count - 1
-            Dim t = trades(i)
-            Dim usdDelta As Double = If(t.Direction = "buy", t.Amount, -t.Amount)
-            If i < half Then earlyDelta += usdDelta Else lateDelta += usdDelta
-        Next
-        cvdValue = earlyDelta + lateDelta
+        ' 3-segment split: each segment is count\3; remainder goes to late
+        Dim count   As Integer = trades.Count
+        Dim segSize As Integer = Math.Max(1, count \ 3)
 
+        Dim earlyDelta As Double = 0
+        Dim midDelta   As Double = 0
+        Dim lateDelta  As Double = 0
+
+        For i As Integer = 0 To count - 1
+            Dim usdDelta As Double = If(trades(i).Direction = "buy", trades(i).Amount, -trades(i).Amount)
+            If i < segSize Then
+                earlyDelta += usdDelta
+            ElseIf i < segSize * 2 Then
+                midDelta += usdDelta
+            Else
+                lateDelta += usdDelta
+            End If
+        Next
+
+        cvdValue = earlyDelta + midDelta + lateDelta
+
+        ' Weighted slope: late weight=2, mid weight=1, early weight=1.
+        ' slopeDelta is the weighted directional pressure of recent activity.
+        ' Formula: (late*2 - early*1) gives the net recency-weighted delta.
+        Dim weightedSlope As Double = lateDelta * 2.0 - earlyDelta * 1.0
         Dim absValue As Double = Math.Abs(cvdValue)
         Dim slopeThreshold As Double = Math.Max(slopeMinUsd, absValue * slopePctOfValue)
-        Dim slopeDelta As Double = lateDelta - earlyDelta
-        If slopeDelta > slopeThreshold Then
+
+        If weightedSlope > slopeThreshold Then
             cvdSlope = "RISING"
-        ElseIf slopeDelta < -slopeThreshold Then
+        ElseIf weightedSlope < -slopeThreshold Then
             cvdSlope = "FALLING"
         Else
             cvdSlope = "FLAT"
