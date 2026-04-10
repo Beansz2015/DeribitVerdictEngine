@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-10 | App version: v0.46**
+**Last updated: 2026-04-10 | App version: v0.47**
 
 This document describes the full codebase structure, data flow, and responsibility of every file.
 It is generated from the actual state of the repository and should be updated whenever files are
@@ -34,7 +34,10 @@ DeribitVerdictEngine/
 │   ├── ScoringEngine_Helpers.vb        Pure functions: RegimeMaxScore, Threshold, TierFloor,
 │   │                                   AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus
 │   ├── ScoringEngine_Calculate.vb      Main Calculate() pipeline — assembles verdict;
-│   │                                   includes VPFR HVN cap logic
+│   │                                   includes VPFR HVN cap logic;
+│   │                                   v0.47: P2 RSI divergence penalty, P4 Donchian
+│   │                                   quartile partial upgrade, P5 volMid directional
+│   │                                   partial, P6 OBV adverse divergence gate
 │   │
 │   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
 │   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI,
@@ -42,23 +45,30 @@ DeribitVerdictEngine/
 │   │                                   CalcVolumeSMA
 │   ├── Indicators_Volatility.vb        CalcVWAP (dual-session auto-anchor),
 │   │                                   CalcVWAPBands, CalcBBW, CalcTTMSqueeze
-│   ├── Indicators_OrderFlow.vb         CalcOFI, CalcCVD, CalcMicroCVD, CalcTFI,
-│   │                                   CalcLiquidations
-│   └── Indicators_Structure.vb         CalcDonchian, CalcOBV, CalcVPFRLite, CalcMTFGate
+│   ├── Indicators_OrderFlow.vb         CalcOFI, CalcCVD (v0.47: 3-segment weighted slope),
+│   │                                   CalcMicroCVD, CalcTFI, CalcLiquidations
+│   └── Indicators_Structure.vb         CalcDonchian, CalcOBV,
+│                                       CalcVPFRLite (v0.47: exponential decay weighting),
+│                                       CalcMTFGate
 │
 ├── UI/
 │   ├── MainForm_Layout.vb              Constants, DllImport/RECT, constructor (New()),
 │   │                                   ResizeControls(), SetOutputMargins(),
 │   │                                   OnFormHandleCreated(), CentreNudText();
 │   │                                   shared fields: C_* colour palette, _oiHistory,
-│   │                                   _autoRunTimer, _countdownTimer, CHAR_PLAY/STOP
+│   │                                   _autoRunTimer, _countdownTimer, CHAR_PLAY/STOP;
+│   │                                   v0.47: MTF TTL cache fields — _mtfCandles15m,
+│   │                                   _mtfLastFetchTime, MTF_TTL_SECONDS (const=60)
 │   ├── MainForm_AutoRun.vb             Auto-run timer: InitAutoRunControls(),
 │   │                                   btnStartStop_Click, StartAutoRun(), StopAutoRun(),
 │   │                                   RunAutoAnalysis(), OnCountdownTick(),
 │   │                                   UpdateCountdownLabel()
 │   ├── MainForm_Analysis.vb            btnAnalyze_Click, RunAnalysisAsync() —
 │   │                                   fetches data, calls all indicators + scoring engine,
-│   │                                   logs result, calls RenderOutput
+│   │                                   logs result, calls RenderOutput;
+│   │                                   v0.47: P1 MTF TTL refresh (15m candles cached,
+│   │                                   re-fetched only when >60s stale);
+│   │                                   P4 Donchian quartile signal set here
 │   └── MainForm_Render.vb              RenderOutput(), AppendRtf(), AR(), SectionHeader(),
 │                                       Divider(), BuildCalibrationReport(), Flag(),
 │                                       UpdateLogInfo(), lnkResetLog_LinkClicked,
@@ -87,14 +97,18 @@ DeribitVerdictEngine/
         ▼
 MainForm_Analysis.vb :: RunAnalysisAsync()
         │
+        │  [P1 v0.47] MTF TTL check: if _mtfCandles15m is stale (> MTF_TTL_SECONDS),
+        │  fetch 15m candles and update _mtfLastFetchTime. Otherwise reuse cached list.
+        │
         ├──► DeribitClient.GetCandlesAsync("1", 250)      → List(Of Candle)  candles1m
         ├──► DeribitClient.GetCandlesAsync("5", 210)      → List(Of Candle)  candles5m
-        ├──► DeribitClient.GetCandlesAsync("15", 70)      → List(Of Candle)  candles15m
+        ├──► DeribitClient.GetCandlesAsync("15", 70)      → List(Of Candle)  candles15m  [cached/TTL]
         ├──► DeribitClient.GetFundingRateAsync()          → Double           fundingRate
         ├──► DeribitClient.GetBookSummaryAsync()          → BookSummary      bookSummary
         ├──► DeribitClient.GetOrderBookAsync(10)          → OrderBook        orderBook
         └──► DeribitClient.GetRecentTradesAsync(100)      → List(Of Trade)   recentTrades
-                    │  (all fetched in parallel via Task.WhenAll)
+                    │  (all fetched in parallel via Task.WhenAll;
+                    │   15m only included in WhenAll when cache is stale)
                     ▼
         IndicatorResults  r  (filled field by field)
         ├─ r.CurrentPrice       = candles1m.Last().Close
@@ -102,7 +116,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ DynamicNorms.Compute → norms (ATRScaleFactor, VolThresholds, VWAPDevThreshold)
         ├─ r.ROC / r.ROCSlope   = CalcROCSeries
         ├─ r.RSI                = CalcRSI
-        ├─ r.RSIDivergence      = CalcRSIDivergence  [computed; not yet scored]
+        ├─ r.RSIDivergence      = CalcRSIDivergence
         ├─ r.Volume* / Ratio    = CalcVolumeSMA
         ├─ r.ADX/PlusDI/MinusDI = CalcDMI(candles5m)  → r.Regime
         ├─ r.VWAP / VWAPDevPct  = CalcVWAP  (dual-session: 00:00 UTC or 13:30 UTC)
@@ -115,20 +129,28 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.OI_Current/Changes = bookSummary.OI + _oiHistory ring buffer
         ├─ r.OFI* / OFISignal   = CalcOFI(orderBook)
         ├─ r.Liq* / LiqSignal   = CalcLiquidations(recentTrades)
-        ├─ r.CVD* / CVDSlope    = CalcCVD(recentTrades, candles1m)
+        ├─ r.CVD* / CVDSlope    = CalcCVD(recentTrades, candles1m)   [v0.47: 3-seg weighted slope]
         ├─ r.MicroCVD*          = CalcMicroCVD(recentTrades)  [3-segment; BULL/BEAR_ACCEL/DECEL]
         ├─ r.TFI* / TFISignal   = CalcTFI(recentTrades)  [BUY/SELL PRESSURE]
-        ├─ r.MTFGatePass/Reason = CalcMTFGate(candles15m)
-        ├─ r.Donchian* / Signal = CalcDonchian
+        ├─ r.MTFGatePass/Reason = CalcMTFGate(candles15m)   [cached; refreshed by TTL]
+        ├─ r.DonchianSignal     = CalcDonchian + quartile logic  [v0.47: LONG/SHORT/LONG_PARTIAL/SHORT_PARTIAL]
         ├─ r.OBVTrend/Div       = CalcOBV
-        └─ r.VPFR* / Signal     = CalcVPFRLite
+        └─ r.VPFR* / Signal     = CalcVPFRLite   [v0.47: exponential decay weighting]
                     │
                     ▼
         ScoringEngine.Calculate(r, posState, norms, cfg)
                     │
                     ├─ Step 1: Regime classification → MaxScore (19 TRENDING / 18 RANGE / 15 TRANSITIONAL)
                     ├─ Step 2: Score each signal → ScoreState (LongPts, ShortPts)
+                    │         v0.47 additions:
+                    │           P2: RSI divergence penalty (-1 long if BEARISH+RSI>65;
+                    │               -1 short if BULLISH+RSI<35)
+                    │           P5: volMidLong/volMidShort flags set here (direction-confirmed)
                     ├─ Pass 2: Upgrade cross-category partials
+                    │         v0.47 additions:
+                    │           P4: Donchian LONG_PARTIAL/SHORT_PARTIAL quartile upgrade
+                    │           P5: volMid directional upgrade via cross-category confirm
+                    │           P6: OBV partial upgrade blocked when adverse divergence present
                     ├─ Step 3: Funding modifier
                     ├─ Step 4: Regime veto / TRANSITIONAL penalty
                     ├─ Step 4b: MTF gate veto → NO TRADE if blocked
@@ -156,9 +178,9 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 
 | File | Owns | Depends on |
 |---|---|---|
-| `MainForm_Layout.vb` | All shared fields (`C_*`, `_oiHistory`, `_autoRunTimer`, etc.), constructor, layout/resize | `System.Drawing`, `System.Runtime.InteropServices`, `System.Windows.Forms` |
+| `MainForm_Layout.vb` | All shared fields (`C_*`, `_oiHistory`, `_autoRunTimer`, `_mtfCandles15m`, `_mtfLastFetchTime`, MTF_TTL_SECONDS const), constructor, layout/resize | `System.Drawing`, `System.Runtime.InteropServices`, `System.Windows.Forms` |
 | `MainForm_AutoRun.vb` | Auto-run timer lifecycle | `System.Drawing` (Color.FromArgb), `System.Threading`, `System.Windows.Forms` |
-| `MainForm_Analysis.vb` | Full analysis pipeline | `System.Drawing` (Color.Gray/OrangeRed), `System.Windows.Forms` |
+| `MainForm_Analysis.vb` | Full analysis pipeline; MTF TTL cache check and conditional fetch; Donchian quartile signal | `System.Drawing` (Color.Gray/OrangeRed), `System.Windows.Forms` |
 | `MainForm_Render.vb` | All output rendering and log helpers; ATR HVN cap display | `System.Drawing`, `System.IO`, `System.Windows.Forms` |
 
 ### ScoringEngine partials
@@ -167,7 +189,7 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 |---|---|
 | `ScoringEngine_Types.vb` | All enums and result/state types (incl. VerdictResult HVN cap fields) |
 | `ScoringEngine_Helpers.vb` | All pure helper functions; no UI dependency |
-| `ScoringEngine_Calculate.vb` | MaxScore const + the full Calculate() method incl. HVN cap logic |
+| `ScoringEngine_Calculate.vb` | MaxScore const + the full Calculate() method incl. HVN cap logic, P2/P4/P5/P6 scoring changes |
 
 ### IndicatorEngine partials
 
@@ -176,8 +198,8 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 | `IndicatorResults.vb` | IndicatorResults struct — all output fields |
 | `Indicators_Momentum.vb` | DMI, ATR, EMA, RSI (incl. series + divergence), ROC, VolumeSMA |
 | `Indicators_Volatility.vb` | VWAP (dual-session), VWAPBands, BBW, TTMSqueeze |
-| `Indicators_OrderFlow.vb` | OFI, CVD, MicroCVD, TFI, Liquidations |
-| `Indicators_Structure.vb` | Donchian, OBV, VPFRLite, MTFGate |
+| `Indicators_OrderFlow.vb` | OFI, CVD (3-segment weighted slope), MicroCVD, TFI, Liquidations |
+| `Indicators_Structure.vb` | Donchian, OBV, VPFRLite (exponential decay), MTFGate |
 
 ---
 
@@ -192,5 +214,9 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 | MTF gate is veto-only | Prevents score inflation from a weak gate — it can only block, never add points. |
 | VPFR HVN cap in VerdictResult | Keeps cap logic inside the scoring engine (not render); render is purely presentational. Cap fields are zero/empty when no wall is detected so existing render paths are untouched. |
 | Partial class split | Keeps individual files under ~200 lines; each file has a single clear responsibility; avoids merge conflicts when multiple features are developed in parallel. |
-| RSI divergence not yet scored | CalcRSIDivergence is implemented and populates r.RSIDivergence, but the scoring step is pending. See upgrade backlog in DeribitIndicatorProject.md Section 15. |
-| CVD slope uses half-split | Current implementation. Planned upgrade to 3-segment weighted slope (see Section 15 of handover doc). |
+| MTF 15m candle TTL cache (v0.47) | 15m candles change slowly; re-fetching every 1m auto-run cycle wastes a Deribit API call and adds ~80ms latency. Cache is reused when younger than MTF_TTL_SECONDS (60). Invalidated automatically on next cycle past TTL. Fields live in Layout.vb (shared state) and are read/written only in MainForm_Analysis.vb. |
+| CVD 3-segment weighted slope (v0.47) | Half-split (count/2) was vulnerable to a single large trade early in the window flipping the slope. Weighting late segment 2x (formula: lateDelta*2 - earlyDelta*1) anchors slope signal to recency without discarding early context. |
+| Donchian quartile partial signal (v0.47) | Pure breakout-only fired ~0% of the time on 1m charts (price rarely closes exactly at the channel edge). Upper/lower 25% quartile gives a meaningful partial signal that fires ~15-20% of bars while still requiring cross-category confirmation before scoring. |
+| RSI divergence penalty gated at RSI>65 / <35 (v0.47) | Applying the penalty only in overbought/oversold territory avoids false negatives in mid-range; divergence near RSI 50 is noise. |
+| OBV partial upgrade divergence gate (v0.47) | Upgrading OBV trend when an adverse divergence is present contradicts a known negative signal. The gate blocks the upgrade but does not add a penalty — it simply withholds a point rather than double-counting. |
+| VPFR exponential decay (v0.47) | Uniform weighting anchors POC to early-session high-volume events that are no longer relevant intraday. Decay base 0.985 gives ~22% weight reduction per 15 bars, making POC track current structure without being reactive to single-bar noise. |
