@@ -1,6 +1,15 @@
 ' Core/Indicators_Volatility.vb
 ' IndicatorEngine partial: volatility and band indicators.
 ' Covers: VWAP, VWAP Sigma Bands, Bollinger Band Width, TTM Squeeze.
+'
+' v0.48 [P2]: CalcBBW squeeze threshold replaced from session-minimum (minBBW * 1.5)
+' to 20th-percentile of the observed BBW series.  The old min-times-1.5 trigger fired
+' frequently at market open when the very first candle had a narrow spread, inflating
+' the ACTIVE count throughout the session.  The 20th-percentile threshold is stable:
+' it rises and falls with realised volatility across the session and only fires when
+' the current BBW is genuinely in the bottom fifth of recent behaviour.
+' minBBW parameter is preserved in the public signature for backward compatibility
+' but is now computed internally and no longer used for the threshold decision.
 
 Partial Public Class IndicatorEngine
 
@@ -75,6 +84,8 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- Bollinger Band Width -------------------------------------------------
+    ' [P2] v0.48: Squeeze threshold is now 20th-percentile of the BBW series.
+    '             Previously used minBBW * 1.5 which fired on any session-low spike.
     Public Shared Sub CalcBBW(candles As List(Of Candle), period As Integer, stdMult As Double,
                                ByRef bbw As Double, ByRef minBBW As Double, ByRef squeezeStatus As String)
         bbw = 0 : minBBW = Double.MaxValue : squeezeStatus = "NONE"
@@ -101,7 +112,13 @@ Partial Public Class IndicatorEngine
         bbw = bbwSeries.Last()
         If minBBW = Double.MaxValue Then minBBW = bbw
 
-        Dim threshold As Double = minBBW * 1.5
+        ' [P2] 20th-percentile threshold: sort BBW series, take index at 20% rank.
+        ' More stable than minBBW*1.5 which inflated ACTIVE count after opening spikes.
+        Dim sorted = bbwSeries.OrderBy(Function(x) x).ToList()
+        Dim pctIdx As Integer = CInt(Math.Floor(sorted.Count * 0.20))
+        If pctIdx >= sorted.Count Then pctIdx = sorted.Count - 1
+        Dim threshold As Double = sorted(pctIdx)
+
         If bbw <= threshold Then
             squeezeStatus = "ACTIVE"
         ElseIf bbwSeries.Count >= 2 AndAlso bbwSeries(bbwSeries.Count - 2) <= threshold Then
