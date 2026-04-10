@@ -14,6 +14,14 @@
 '   Now: Dim adxTrend = cfg.Indicators.ADX.TrendThreshold used in both checks.
 '   Also wired in the vwapWarmup guard: now reads cfg.Indicators.VWAP.WarmupCandles
 '   instead of the literal 15 that was still in the scoring path.
+'
+' v0.50 [P13]: RSI divergence penalty triggers now use explicit cfg fields.
+'   Was: rsiDivPenaltyHigh = rsiOB + 5.0  (implicitly coupled to OB zone)
+'        rsiDivPenaltyLow  = rsiOS - 5.0  (implicitly coupled to OS zone)
+'   Now: cfg.Indicators.RSI.DivPenaltyRsiHigh (default 65)
+'        cfg.Indicators.RSI.DivPenaltyRsiLow  (default 35)
+'   CVD divergence penalty magnitude: now cfg.Indicators.CVD.DivergencePenalty (was hardcoded 1).
+'   MicroCVD decel penalty magnitude: now cfg.Indicators.MicroCVD.DecelPenalty  (was hardcoded 1).
 
 Partial Public Class ScoringEngine
 
@@ -55,12 +63,10 @@ Partial Public Class ScoringEngine
         Dim rsiPartialShort As Boolean = r.RSI < rsiPartOS  AndAlso r.RSI >= rsiOS
         AddFull(state, rsiLong, rsiShort, SignalCategory.Momentum)
 
-        ' [P2] RSI Divergence penalty (v0.47)
-        ' BEARISH divergence + overbought RSI = bearish pressure despite price rise; penalise long.
-        ' BULLISH divergence + oversold RSI   = bullish pressure despite price fall; penalise short.
-        ' Penalty trigger levels remain at fixed +5/-5 from the OB/OS zones so they scale with cfg.
-        Dim rsiDivPenaltyHigh As Double = rsiOB  + 5.0   ' default 65 when OB=60
-        Dim rsiDivPenaltyLow  As Double = rsiOS  - 5.0   ' default 35 when OS=40
+        ' [P13] RSI Divergence penalty — explicit trigger thresholds from cfg (v0.50)
+        ' Was: rsiOB+5 / rsiOS-5 (implicit coupling). Now: dedicated fields.
+        Dim rsiDivPenaltyHigh As Double = cfg.Indicators.RSI.DivPenaltyRsiHigh
+        Dim rsiDivPenaltyLow  As Double = cfg.Indicators.RSI.DivPenaltyRsiLow
         Dim rsiDivPenaltyLong  As Boolean = False
         Dim rsiDivPenaltyShort As Boolean = False
         If r.RSIDivergence = "BEARISH" AndAlso r.RSI > rsiDivPenaltyHigh Then
@@ -177,8 +183,9 @@ Partial Public Class ScoringEngine
         Dim cvdLong  As Boolean = r.CVDSlope = "RISING"  AndAlso r.CVDValue > 0
         Dim cvdShort As Boolean = r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0
         AddFull(state, cvdLong, cvdShort, SignalCategory.Microstructure)
-        If r.CVDDivergence = "BEARISH" Then state.LongScore  = Math.Max(0, state.LongScore  - 1)
-        If r.CVDDivergence = "BULLISH" Then state.ShortScore = Math.Max(0, state.ShortScore - 1)
+        ' [P13] CVD divergence penalty magnitude from cfg (was hardcoded 1)
+        If r.CVDDivergence = "BEARISH" Then state.LongScore  = Math.Max(0, state.LongScore  - cfg.Indicators.CVD.DivergencePenalty)
+        If r.CVDDivergence = "BULLISH" Then state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.CVD.DivergencePenalty)
 
         ' TFI (Microstructure) -- executed aggressor flow
         Dim tfiLong  As Boolean = r.TFISignal = "BUY PRESSURE"
@@ -189,8 +196,9 @@ Partial Public Class ScoringEngine
         Dim microLong  As Boolean = r.MicroCVDSignal = "BULL_ACCEL"
         Dim microShort As Boolean = r.MicroCVDSignal = "BEAR_ACCEL"
         AddFull(state, microLong, microShort, SignalCategory.Microstructure)
-        If r.MicroCVDSignal = "BULL_DECEL" Then state.ShortScore = Math.Max(0, state.ShortScore - 1)
-        If r.MicroCVDSignal = "BEAR_DECEL" Then state.LongScore  = Math.Max(0, state.LongScore  - 1)
+        ' [P13] MicroCVD decel penalty magnitude from cfg (was hardcoded 1)
+        If r.MicroCVDSignal = "BULL_DECEL" Then state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.MicroCVD.DecelPenalty)
+        If r.MicroCVDSignal = "BEAR_DECEL" Then state.LongScore  = Math.Max(0, state.LongScore  - cfg.Indicators.MicroCVD.DecelPenalty)
 
         ' [P12] Liquidations -- penalty magnitudes from cfg
         Dim liqLongPenalty  As Integer = 0
@@ -286,8 +294,8 @@ Partial Public Class ScoringEngine
 
         Dim rsiNote As String = String.Format("{0:F1} | zones OB:{1} OS:{2}", r.RSI, rsiOB, rsiOS)
         If r.RSIDivergence <> "NONE" Then rsiNote &= String.Format(" | DIV:{0}", r.RSIDivergence)
-        If rsiDivPenaltyLong  Then rsiNote &= " | PENALTY -1 [L]"
-        If rsiDivPenaltyShort Then rsiNote &= " | PENALTY -1 [S]"
+        If rsiDivPenaltyLong  Then rsiNote &= String.Format(" | PENALTY -1 [L] (RSI>{0})", rsiDivPenaltyHigh)
+        If rsiDivPenaltyShort Then rsiNote &= String.Format(" | PENALTY -1 [S] (RSI<{0})", rsiDivPenaltyLow)
         breakdown.Add(New SignalBreakdownItem("RSI(9)", rsiLong OrElse rsiLongUpgraded, rsiShort OrElse rsiShortUpgraded,
             BuildNote(rsiNote,
                       rsiPartialLong  AndAlso Not rsiLongUpgraded,
@@ -336,7 +344,7 @@ Partial Public Class ScoringEngine
             String.Format("Ratio:{0:F2} | {1}", r.OFIRatio, r.OFISignal)))
 
         Dim cvdNote As String = String.Format("Net:{0:F0} | Slope:{1} | Div:{2}", r.CVDValue, r.CVDSlope, r.CVDDivergence)
-        If r.CVDDivergence <> "NONE" Then cvdNote &= " | PENALTY -1"
+        If r.CVDDivergence <> "NONE" Then cvdNote &= String.Format(" | PENALTY -{0}", cfg.Indicators.CVD.DivergencePenalty)
         breakdown.Add(New SignalBreakdownItem("CVD", cvdLong, cvdShort, cvdNote))
 
         breakdown.Add(New SignalBreakdownItem("TFI", tfiLong, tfiShort,
@@ -346,7 +354,7 @@ Partial Public Class ScoringEngine
                                                 r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
                                                 r.MicroCVDMomentum, r.MicroCVDSignal)
         If r.MicroCVDSignal = "BULL_DECEL" OrElse r.MicroCVDSignal = "BEAR_DECEL" Then
-            microNote &= " | PENALTY -1 opposing"
+            microNote &= String.Format(" | PENALTY -{0} opposing", cfg.Indicators.MicroCVD.DecelPenalty)
         End If
         breakdown.Add(New SignalBreakdownItem("MicroCVD", microLong, microShort, microNote))
 
