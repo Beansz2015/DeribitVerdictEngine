@@ -21,6 +21,17 @@
 '        from Step 3 scoring which already correctly used cfg.
 '   Now: both label and scoring use the same cfg.Scoring.FundingHigh/LowPositive/Negative
 '        values, so label and penalty are always in sync.
+'
+' fix [B1]: Regime classification reads cfg.Indicators.ADX.TrendThreshold / RangeThreshold.
+'   Was: hardcoded 25 / 20 literals -- cfg values silently ignored.
+'
+' fix [B2]: CalcDMI period reads cfg.Indicators.DMI.Period (was literal 9).
+'   EMA ribbon reads cfg.Indicators.EMA.Fast / Mid / Slow (were literals 9/21/50).
+'   ROC slope sensitivity reads cfg.Indicators.ROC.SlopeSensitivity (was literal 0.01).
+'   Volume SMA reads cfg.Indicators.Volume.SmaPeriod (was literal 9).
+'
+' fix [B3]: CalcCVD passes cfg.Indicators.CVD.DivergencePriceGate / SlopeMinUsd / SlopePctOfValue.
+'   Was: method defaults used (divergencePriceGate=0.002 vs cfg default 0.0005 -- 4x off).
 
 Imports System.Drawing
 Imports System.Windows.Forms
@@ -94,8 +105,8 @@ Partial Public Class MainForm
         Dim r As New IndicatorResults()
         r.CurrentPrice = candles1m.Last().Close
 
-        r.ATR       = IndicatorEngine.CalcATR(candles1m, 7)
-        r.ATRAvg20d = IndicatorEngine.CalcATR(candles5m, 60) * Math.Sqrt(5)
+        r.ATR       = IndicatorEngine.CalcATR(candles1m, cfg.Indicators.ATR.Period)
+        r.ATRAvg20d = IndicatorEngine.CalcATR(candles5m, cfg.Indicators.ATR.RefPeriod) * Math.Sqrt(5)
 
         Dim norms As DynamicNorms = DynamicNorms.Compute(candles1m, r.ATR)
         r.ATRSizeMultiplier = Math.Round(norms.ATRScaleFactor, 2)
@@ -106,24 +117,32 @@ Partial Public Class MainForm
         r.ROC = If(rocSeries.Count > 0, rocSeries.Last(), 0)
         If rocSeries.Count >= 2 Then
             Dim delta As Double = rocSeries.Last() - rocSeries(rocSeries.Count - 2)
-            r.ROCSlope = If(delta > 0.01, "RISING", If(delta < -0.01, "FALLING", "FLAT"))
+            ' [B2] ROC slope sensitivity from cfg (was literal 0.01)
+            Dim slopeSens As Double = cfg.Indicators.ROC.SlopeSensitivity
+            r.ROCSlope = If(delta > slopeSens, "RISING", If(delta < -slopeSens, "FALLING", "FLAT"))
         Else
             r.ROCSlope = "FLAT"
         End If
 
         r.RSI = IndicatorEngine.CalcRSI(candles1m, cfg.Indicators.RSI.Period)
 
-        r.VolumeSMA9       = IndicatorEngine.CalcVolumeSMA(candles1m, 9)
+        ' [B2] Volume SMA period from cfg (was literal 9)
+        r.VolumeSMA9       = IndicatorEngine.CalcVolumeSMA(candles1m, cfg.Indicators.Volume.SmaPeriod)
         r.CurrentVolume    = candles1m.Last().Volume
         r.CurrentVolumeUSD = candles1m.Last().VolumeUSD
         r.VolumeRatio      = If(r.VolumeSMA9 > 0, r.CurrentVolume / r.VolumeSMA9, 1)
 
-        IndicatorEngine.CalcDMI(candles5m, 9, r.PlusDI, r.MinusDI, r.ADX)
-        If r.ADX > 25 AndAlso r.PlusDI > r.MinusDI Then
+        ' [B2] DMI period from cfg (was literal 9)
+        IndicatorEngine.CalcDMI(candles5m, cfg.Indicators.DMI.Period, r.PlusDI, r.MinusDI, r.ADX)
+
+        ' [B1] Regime thresholds from cfg (were hardcoded 25 / 20)
+        Dim adxTrendThr As Double = cfg.Indicators.ADX.TrendThreshold
+        Dim adxRangeThr As Double = cfg.Indicators.ADX.RangeThreshold
+        If r.ADX > adxTrendThr AndAlso r.PlusDI > r.MinusDI Then
             r.Regime = "TRENDING_UP"
-        ElseIf r.ADX > 25 AndAlso r.MinusDI > r.PlusDI Then
+        ElseIf r.ADX > adxTrendThr AndAlso r.MinusDI > r.PlusDI Then
             r.Regime = "TRENDING_DOWN"
-        ElseIf r.ADX < 20 Then
+        ElseIf r.ADX < adxRangeThr Then
             r.Regime = "RANGE_BOUND"
         Else
             r.Regime = "TRANSITIONAL"
@@ -146,9 +165,13 @@ Partial Public Class MainForm
                                 r.BBW, minBBW, r.SqueezeStatus)
         IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal)
 
-        r.EMA9  = IndicatorEngine.CalcEMA(candles1m, 9)
-        r.EMA21 = IndicatorEngine.CalcEMA(candles1m, 21)
-        r.EMA50 = IndicatorEngine.CalcEMA(candles1m, 50)
+        ' [B2] EMA ribbon periods from cfg (were literals 9/21/50)
+        Dim emaFast As Integer = cfg.Indicators.EMA.Fast
+        Dim emaMid  As Integer = cfg.Indicators.EMA.Mid
+        Dim emaSlow As Integer = cfg.Indicators.EMA.Slow
+        r.EMA9  = IndicatorEngine.CalcEMA(candles1m, emaFast)
+        r.EMA21 = IndicatorEngine.CalcEMA(candles1m, emaMid)
+        r.EMA50 = IndicatorEngine.CalcEMA(candles1m, emaSlow)
         If r.EMA9 > r.EMA21 AndAlso r.EMA21 > r.EMA50 Then
             r.EMAAlignment = "BULL"
         ElseIf r.EMA9 < r.EMA21 AndAlso r.EMA21 < r.EMA50 Then
@@ -157,8 +180,7 @@ Partial Public Class MainForm
             r.EMAAlignment = "MIXED"
         End If
 
-        ' [P18] FundingBias label thresholds now read from cfg to stay in sync with scoring Step 3.
-        ' Was: hardcoded 0.001 / 0.0005 literals -- decoupled from scoring cfg values.
+        ' [P18] FundingBias label thresholds from cfg (were hardcoded 0.001 / 0.0005 literals)
         r.FundingRate = fundingRate
         If fundingRate > cfg.Scoring.FundingHighPositive Then
             r.FundingBias = "LONGS HEAVILY CROWDED"
@@ -185,9 +207,7 @@ Partial Public Class MainForm
         r.OIChange15m = If(oi15m IsNot Nothing AndAlso oi15m.OI > 0, (r.OI_Current - oi15m.OI) / oi15m.OI * 100, 0)
         r.OIChange60m = If(oi60m IsNot Nothing AndAlso oi60m.OI > 0, (r.OI_Current - oi60m.OI) / oi60m.OI * 100, 0)
 
-        ' [P15] OI signal threshold now from cfg (was hardcoded > 1 / < -1).
-        ' cfg.Indicators.OI.ChangeThresholdPct is stored as decimal (0.01 = 1%).
-        ' Multiply by 100 to convert to the same percentage-point scale as OIChange15m.
+        ' [P15] OI signal threshold from cfg (was hardcoded > 1 / < -1)
         Dim oiThr As Double = cfg.Indicators.OI.ChangeThresholdPct * 100
         Dim priceUp As Boolean = r.CurrentPrice > bookSummary.MarkPrice * 0.9999
         If r.OIChange15m > oiThr AndAlso priceUp Then
@@ -202,14 +222,20 @@ Partial Public Class MainForm
             r.OISignal = "NEUTRAL"
         End If
 
-        ' [P14] v0.51: OFI dominance thresholds now passed from cfg.
+        ' [P14] OFI dominance thresholds from cfg
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol,
                                 buyDominantRatio:=cfg.Indicators.OFI.BuyDominantRatio,
                                 sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
-        IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
 
-        ' [P4] v0.48: TFI and MicroCVD now use independent window sizes from settings.
+        ' [B3] CVD: all three tunable params now from cfg.
+        ' divergencePriceGate: method default was 0.002, cfg default is 0.0005 -- 4x off.
+        IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence,
+                                slopeMinUsd:=cfg.Indicators.CVD.SlopeMinUsd,
+                                slopePctOfValue:=cfg.Indicators.CVD.SlopePctOfValue,
+                                divergencePriceGate:=cfg.Indicators.CVD.DivergencePriceGate)
+
+        ' [P4] TFI and MicroCVD window sizes from settings
         IndicatorEngine.CalcTFI(recentTrades, r.TFIValue, r.TFISignal,
                                 tfiWindowSize:=cfg.Indicators.TFI.WindowSize,
                                 threshold:=cfg.Indicators.TFI.Threshold)
@@ -247,7 +273,7 @@ Partial Public Class MainForm
         IndicatorEngine.CalcDonchian(candles1m, cfg.Indicators.Donchian.Period,
                                      r.DonchianUpper, r.DonchianLower)
 
-        ' [P4] Donchian quartile signal: fires on upper/lower 25% of channel
+        ' [P4] Donchian quartile signal
         Dim channelRange As Double = r.DonchianUpper - r.DonchianLower
         If channelRange > 0 Then
             Dim q1 As Double = r.DonchianLower + channelRange * 0.25
