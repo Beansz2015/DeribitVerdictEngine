@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-09 | App version: v0.45**
+**Last updated: 2026-04-10 | App version: v0.46**
 
 This document describes the full codebase structure, data flow, and responsibility of every file.
 It is generated from the actual state of the repository and should be updated whenever files are
@@ -28,19 +28,23 @@ DeribitVerdictEngine/
 │   │   └── EngineSettings.vb           Strongly-typed POCO for settings.json (v0.33)
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
-│   │                                   VerdictResult, PositionState, SignalCategory, ScoreState
+│   │                                   VerdictResult (incl. AdjustedLongTarget,
+│   │                                   AdjustedShortTarget, TargetCapReason),
+│   │                                   PositionState, SignalCategory, ScoreState
 │   ├── ScoringEngine_Helpers.vb        Pure functions: RegimeMaxScore, Threshold, TierFloor,
 │   │                                   AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus
-│   ├── ScoringEngine_Calculate.vb      Main Calculate() pipeline — assembles verdict
+│   ├── ScoringEngine_Calculate.vb      Main Calculate() pipeline — assembles verdict;
+│   │                                   includes VPFR HVN cap logic
 │   │
-│   └── Indicators/
-│       ├── IndicatorEngine_Types.vb    IndicatorResults, Candle, BookEntry, TradeEntry
-│       ├── IndicatorEngine_Core.vb     CalcATR, CalcRSI, CalcROCSeries, CalcEMA,
-│       │                               CalcVolumeSMA, CalcDMI
-│       ├── IndicatorEngine_VWAP.vb     CalcVWAP, CalcVWAPBands
-│       ├── IndicatorEngine_OrderFlow.vb CalcOFI, CalcCVD, CalcLiquidations
-│       └── IndicatorEngine_Structure.vb CalcDonchian, CalcOBV, CalcRSIDivergence,
-│                                        CalcBBW, CalcTTMSqueeze, CalcMTFGate, CalcVPFRLite
+│   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
+│   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI,
+│   │                                   CalcRSISeries, CalcRSIDivergence, CalcROCSeries,
+│   │                                   CalcVolumeSMA
+│   ├── Indicators_Volatility.vb        CalcVWAP (dual-session auto-anchor),
+│   │                                   CalcVWAPBands, CalcBBW, CalcTTMSqueeze
+│   ├── Indicators_OrderFlow.vb         CalcOFI, CalcCVD, CalcMicroCVD, CalcTFI,
+│   │                                   CalcLiquidations
+│   └── Indicators_Structure.vb         CalcDonchian, CalcOBV, CalcVPFRLite, CalcMTFGate
 │
 ├── UI/
 │   ├── MainForm_Layout.vb              Constants, DllImport/RECT, constructor (New()),
@@ -58,7 +62,10 @@ DeribitVerdictEngine/
 │   └── MainForm_Render.vb              RenderOutput(), AppendRtf(), AR(), SectionHeader(),
 │                                       Divider(), BuildCalibrationReport(), Flag(),
 │                                       UpdateLogInfo(), lnkResetLog_LinkClicked,
-│                                       lnkCalibCheck_LinkClicked
+│                                       lnkCalibCheck_LinkClicked.
+│                                       ATR block: shows HVN-capped target in amber bold
+│                                       when v.AdjustedLongTarget or AdjustedShortTarget > 0;
+│                                       raw target shown dimmed for reference.
 │
 └── docs/
     ├── DeribitIndicatorProject.md      Authoritative handover document (read first)
@@ -92,13 +99,13 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         IndicatorResults  r  (filled field by field)
         ├─ r.CurrentPrice       = candles1m.Last().Close
         ├─ r.ATR                = IndicatorEngine.CalcATR(candles1m, 7)
-        ├─ r.ATRAvg20d          = CalcATR(candles5m, 60) * √5
         ├─ DynamicNorms.Compute → norms (ATRScaleFactor, VolThresholds, VWAPDevThreshold)
         ├─ r.ROC / r.ROCSlope   = CalcROCSeries
         ├─ r.RSI                = CalcRSI
+        ├─ r.RSIDivergence      = CalcRSIDivergence  [computed; not yet scored]
         ├─ r.Volume* / Ratio    = CalcVolumeSMA
         ├─ r.ADX/PlusDI/MinusDI = CalcDMI(candles5m)  → r.Regime
-        ├─ r.VWAP / VWAPDevPct  = CalcVWAP
+        ├─ r.VWAP / VWAPDevPct  = CalcVWAP  (dual-session: 00:00 UTC or 13:30 UTC)
         ├─ r.VWAPSigma1/2       = CalcVWAPBands
         ├─ r.BBW / SqueezeStatus = CalcBBW
         ├─ r.TTMHistogram/Dir   = CalcTTMSqueeze
@@ -109,29 +116,32 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.OFI* / OFISignal   = CalcOFI(orderBook)
         ├─ r.Liq* / LiqSignal   = CalcLiquidations(recentTrades)
         ├─ r.CVD* / CVDSlope    = CalcCVD(recentTrades, candles1m)
+        ├─ r.MicroCVD*          = CalcMicroCVD(recentTrades)  [3-segment; BULL/BEAR_ACCEL/DECEL]
+        ├─ r.TFI* / TFISignal   = CalcTFI(recentTrades)  [BUY/SELL PRESSURE]
         ├─ r.MTFGatePass/Reason = CalcMTFGate(candles15m)
         ├─ r.Donchian* / Signal = CalcDonchian
         ├─ r.OBVTrend/Div       = CalcOBV
-        ├─ r.RSIDivergence       = CalcRSIDivergence
         └─ r.VPFR* / Signal     = CalcVPFRLite
                     │
                     ▼
         ScoringEngine.Calculate(r, posState, norms, cfg)
                     │
-                    ├─ Step 1: Regime classification → MaxScore
+                    ├─ Step 1: Regime classification → MaxScore (19 TRENDING / 18 RANGE / 15 TRANSITIONAL)
                     ├─ Step 2: Score each signal → ScoreState (LongPts, ShortPts)
                     ├─ Pass 2: Upgrade cross-category partials
                     ├─ Step 3: Funding modifier
                     ├─ Step 4: Regime veto / TRANSITIONAL penalty
                     ├─ Step 4b: MTF gate veto → NO TRADE if blocked
-                    ├─ Step 5: Threshold comparison → Verdict + Confidence
-                    └─ Step 6: CalcHoldStatus
-                    │
+                    ├─ Step 4c: VPFR HVN cap → sets AdjustedLongTarget / AdjustedShortTarget
+                    └─ Step 5: Threshold comparison → Verdict + Confidence
+                    │  Step 6: CalcHoldStatus
                     ▼
         VerdictResult  v
                     │
                     ├──► AnalysisLogger.LogRun(r, v)   → analysis_log.csv
                     └──► MainForm_Render.RenderOutput()  → txtOutput (RTF colour) + lblVerdict
+                              └─ ATR block: if v.AdjustedLongTarget > 0 or v.AdjustedShortTarget > 0,
+                                          show raw target dimmed + capped target in amber bold
 ```
 
 ---
@@ -149,25 +159,25 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 | `MainForm_Layout.vb` | All shared fields (`C_*`, `_oiHistory`, `_autoRunTimer`, etc.), constructor, layout/resize | `System.Drawing`, `System.Runtime.InteropServices`, `System.Windows.Forms` |
 | `MainForm_AutoRun.vb` | Auto-run timer lifecycle | `System.Drawing` (Color.FromArgb), `System.Threading`, `System.Windows.Forms` |
 | `MainForm_Analysis.vb` | Full analysis pipeline | `System.Drawing` (Color.Gray/OrangeRed), `System.Windows.Forms` |
-| `MainForm_Render.vb` | All output rendering and log helpers | `System.Drawing`, `System.IO`, `System.Windows.Forms` |
+| `MainForm_Render.vb` | All output rendering and log helpers; ATR HVN cap display | `System.Drawing`, `System.IO`, `System.Windows.Forms` |
 
 ### ScoringEngine partials
 
 | File | Owns |
 |---|---|
-| `ScoringEngine_Types.vb` | All enums and result/state types |
+| `ScoringEngine_Types.vb` | All enums and result/state types (incl. VerdictResult HVN cap fields) |
 | `ScoringEngine_Helpers.vb` | All pure helper functions; no UI dependency |
-| `ScoringEngine_Calculate.vb` | MaxScore const + the full Calculate() method |
+| `ScoringEngine_Calculate.vb` | MaxScore const + the full Calculate() method incl. HVN cap logic |
 
 ### IndicatorEngine partials
 
 | File | Owns |
 |---|---|
-| `IndicatorEngine_Types.vb` | IndicatorResults and all data transfer types |
-| `IndicatorEngine_Core.vb` | Price/volume/momentum indicators |
-| `IndicatorEngine_VWAP.vb` | All VWAP variants |
-| `IndicatorEngine_OrderFlow.vb` | OFI, CVD, Liquidations |
-| `IndicatorEngine_Structure.vb` | Market structure, squeeze, MTF gate, VPFR |
+| `IndicatorResults.vb` | IndicatorResults struct — all output fields |
+| `Indicators_Momentum.vb` | DMI, ATR, EMA, RSI (incl. series + divergence), ROC, VolumeSMA |
+| `Indicators_Volatility.vb` | VWAP (dual-session), VWAPBands, BBW, TTMSqueeze |
+| `Indicators_OrderFlow.vb` | OFI, CVD, MicroCVD, TFI, Liquidations |
+| `Indicators_Structure.vb` | Donchian, OBV, VPFRLite, MTFGate |
 
 ---
 
@@ -180,4 +190,7 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 | DynamicNorms computed per run | Adapts to current volatility regime automatically. |
 | OI ring buffer in MainForm | OI history must persist across runs within the same session; CSV log does not store it. |
 | MTF gate is veto-only | Prevents score inflation from a weak gate — it can only block, never add points. |
+| VPFR HVN cap in VerdictResult | Keeps cap logic inside the scoring engine (not render); render is purely presentational. Cap fields are zero/empty when no wall is detected so existing render paths are untouched. |
 | Partial class split | Keeps individual files under ~200 lines; each file has a single clear responsibility; avoids merge conflicts when multiple features are developed in parallel. |
+| RSI divergence not yet scored | CalcRSIDivergence is implemented and populates r.RSIDivergence, but the scoring step is pending. See upgrade backlog in DeribitIndicatorProject.md Section 15. |
+| CVD slope uses half-split | Current implementation. Planned upgrade to 3-segment weighted slope (see Section 15 of handover doc). |
