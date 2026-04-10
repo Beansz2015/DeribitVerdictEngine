@@ -32,6 +32,9 @@
 '
 ' fix [B3]: CalcCVD passes cfg.Indicators.CVD.DivergencePriceGate / SlopeMinUsd / SlopePctOfValue.
 '   Was: method defaults used (divergencePriceGate=0.002 vs cfg default 0.0005 -- 4x off).
+'
+' fix: Removed Dim minBBW As Double and stale 6th arg from CalcBBW call.
+'   CalcBBW no longer exposes ByRef minBBW after Commit 2 dead-code strip.
 
 Imports System.Drawing
 Imports System.Windows.Forms
@@ -160,9 +163,8 @@ Partial Public Class MainForm
                                       vwapS2Hour, vwapS2Minute)
 
         ' [P17] BBW period and StdDev from cfg (were hardcoded 20 / 2.0)
-        Dim minBBW As Double
         IndicatorEngine.CalcBBW(candles1m, cfg.Indicators.BBW.Period, cfg.Indicators.BBW.StdDev,
-                                r.BBW, minBBW, r.SqueezeStatus)
+                                r.BBW, r.SqueezeStatus)
         IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal)
 
         ' [B2] EMA ribbon periods from cfg (were literals 9/21/50)
