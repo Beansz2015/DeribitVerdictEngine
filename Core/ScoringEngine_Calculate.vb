@@ -33,6 +33,11 @@
 '   Penalty magnitude reuses cfg.Indicators.MicroCVD.DecelPenalty (same semantic: momentum
 '   stall with no accel/decel distinction is a weaker signal than DECEL but shares the
 '   same tuning knob). Breakdown note annotated with STALL flag when active.
+'
+' fix [T2-C]: Donchian NONE mid-channel note in breakdown.
+'   When DonchianSignal = "NONE" (price in middle two quartiles), the breakdown
+'   note now explicitly states "MID-CHANNEL -- no signal" so the operator can
+'   distinguish a quiet mid-range bar from a missing or error state.
 
 Partial Public Class ScoringEngine
 
@@ -75,7 +80,6 @@ Partial Public Class ScoringEngine
         AddFull(state, rsiLong, rsiShort, SignalCategory.Momentum)
 
         ' [P13] RSI Divergence penalty -- explicit trigger thresholds from cfg (v0.50)
-        ' Was: rsiOB+5 / rsiOS-5 (implicit coupling). Now: dedicated fields.
         Dim rsiDivPenaltyHigh As Double = cfg.Indicators.RSI.DivPenaltyRsiHigh
         Dim rsiDivPenaltyLow  As Double = cfg.Indicators.RSI.DivPenaltyRsiLow
         Dim rsiDivPenaltyLong  As Boolean = False
@@ -117,7 +121,6 @@ Partial Public Class ScoringEngine
         Dim vwapPartialLong  As Boolean = False
         Dim vwapPartialShort As Boolean = False
         Dim vwapNote As String
-        ' [P9] VWAP warmup guard reads cfg instead of literal 15
         Dim vwapWarmup As Boolean = r.VWAPSessionCandles < cfg.Indicators.VWAP.WarmupCandles
 
         If vwapWarmup Then
@@ -131,7 +134,7 @@ Partial Public Class ScoringEngine
             vwapPartialShort = price < r.VWAPSigma1Lower AndAlso price >= r.VWAPSigma2Lower
             AddFull(state, vwapLong, vwapShort, SignalCategory.Microstructure)
             vwapNote = String.Format(
-                "Price:{0:F0} VWAP:{1:F0} | σ1:[{2:F0},{3:F0}] σ2:[{4:F0},{5:F0}] | {6}candles",
+                "Price:{0:F0} VWAP:{1:F0} | s1:[{2:F0},{3:F0}] s2:[{4:F0},{5:F0}] | {6}candles",
                 price, r.VWAP,
                 r.VWAPSigma1Lower, r.VWAPSigma1Upper,
                 r.VWAPSigma2Lower, r.VWAPSigma2Upper,
@@ -194,30 +197,22 @@ Partial Public Class ScoringEngine
         Dim cvdLong  As Boolean = r.CVDSlope = "RISING"  AndAlso r.CVDValue > 0
         Dim cvdShort As Boolean = r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0
         AddFull(state, cvdLong, cvdShort, SignalCategory.Microstructure)
-        ' [P13] CVD divergence penalty magnitude from cfg (was hardcoded 1)
         If r.CVDDivergence = "BEARISH" Then state.LongScore  = Math.Max(0, state.LongScore  - cfg.Indicators.CVD.DivergencePenalty)
         If r.CVDDivergence = "BULLISH" Then state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.CVD.DivergencePenalty)
 
-        ' TFI (Microstructure) -- executed aggressor flow
+        ' TFI (Microstructure)
         Dim tfiLong  As Boolean = r.TFISignal = "BUY PRESSURE"
         Dim tfiShort As Boolean = r.TFISignal = "SELL PRESSURE"
         AddFull(state, tfiLong, tfiShort, SignalCategory.Microstructure)
 
-        ' MicroCVD (Microstructure) -- intra-window momentum segmentation
+        ' MicroCVD (Microstructure)
         Dim microLong  As Boolean = r.MicroCVDSignal = "BULL_ACCEL"
         Dim microShort As Boolean = r.MicroCVDSignal = "BEAR_ACCEL"
         AddFull(state, microLong, microShort, SignalCategory.Microstructure)
-        ' [P13] MicroCVD decel penalty magnitude from cfg (was hardcoded 1)
         If r.MicroCVDSignal = "BULL_DECEL" Then state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.MicroCVD.DecelPenalty)
         If r.MicroCVDSignal = "BEAR_DECEL" Then state.LongScore  = Math.Max(0, state.LongScore  - cfg.Indicators.MicroCVD.DecelPenalty)
 
-        ' [T2-A] MicroCVD FLAT stall penalty -- reuses DecelPenalty magnitude.
-        ' A FLAT reading during a session where net CVD contradicts price is a
-        ' momentum stall warning. Penalise the side that price is currently
-        ' suggesting: if price > VWAP but CVD <= 0, longs are stalling; if
-        ' price < VWAP but CVD >= 0, shorts are stalling.
-        ' Only fires when MicroCVDSignal = "FLAT" to avoid double-penalty with
-        ' DECEL which already handles the momentum-fading case.
+        ' [T2-A] MicroCVD FLAT stall penalty
         Dim microFlatStallLong  As Boolean = False
         Dim microFlatStallShort As Boolean = False
         If r.MicroCVDSignal = "FLAT" Then
@@ -230,7 +225,7 @@ Partial Public Class ScoringEngine
             End If
         End If
 
-        ' [P12] Liquidations -- penalty magnitudes from cfg
+        ' [P12] Liquidations
         Dim liqLongPenalty  As Integer = 0
         Dim liqShortPenalty As Integer = 0
         If r.LiqSignal = "LONG LIQS" Then
@@ -248,7 +243,7 @@ Partial Public Class ScoringEngine
         Dim ema200Bear As Boolean = r.CurrentPrice < r.EMA200_5m AndAlso r.EMA200_5m > 0
         AddFull(state, ema200Bull, ema200Bear, SignalCategory.MarketStructure)
 
-        ' [P4] Donchian (MarketStructure) -- full breakout OR upper/lower quartile partial (v0.47)
+        ' [P4] Donchian (MarketStructure)
         Dim donchLong         As Boolean = r.DonchianSignal = "LONG"
         Dim donchShort        As Boolean = r.DonchianSignal = "SHORT"
         Dim donchPartialLong  As Boolean = r.DonchianSignal = "LONG_PARTIAL"
@@ -293,19 +288,16 @@ Partial Public Class ScoringEngine
         If oiLongUpgraded  Then state.LongScore  += 1
         If oiShortUpgraded Then state.ShortScore += 1
 
-        ' [P4] Donchian quartile upgrade
         Dim donchLongUpgraded  As Boolean = donchPartialLong  AndAlso HasCrossConfirm(state.FullLongCategories,  SignalCategory.MarketStructure)
         Dim donchShortUpgraded As Boolean = donchPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.MarketStructure)
         If donchLongUpgraded  Then state.LongScore  += 1
         If donchShortUpgraded Then state.ShortScore += 1
 
-        ' [P5] Volume mid-tier upgrade (direction-confirmed partial)
         Dim volMidLongUpgraded  As Boolean = volMidLong  AndAlso HasCrossConfirm(state.FullLongCategories,  SignalCategory.Volume)
         Dim volMidShortUpgraded As Boolean = volMidShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Volume)
         If volMidLongUpgraded  Then state.LongScore  += 1
         If volMidShortUpgraded Then state.ShortScore += 1
 
-        ' [P6] OBV partial upgrade -- blocked when adverse OBV divergence present
         Dim obvLongUpgraded  As Boolean = obvPartialLong  AndAlso r.OBVDivergence <> "BEARISH" AndAlso
                                           HasCrossConfirm(state.FullLongCategories,  SignalCategory.Volume)
         Dim obvShortUpgraded As Boolean = obvPartialShort AndAlso r.OBVDivergence <> "BULLISH" AndAlso
@@ -338,7 +330,6 @@ Partial Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("ADX>" & adxTrend.ToString("F0"), adxLong, adxShort,
             String.Format("{0:F1} | thr:{1:F0}", r.ADX, adxTrend)))
 
-        ' Volume note: show mid-tier upgrade status
         Dim volNote As String = String.Format("{0:F2}x | thr H:{1:F2}x M:{2:F2}x [{3}]",
                                               r.VolumeRatio, volHigh, volMid, normMode)
         Dim volBreakdownLong  As Boolean = volLong  OrElse volMidLongUpgraded
@@ -380,7 +371,6 @@ Partial Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("TFI", tfiLong, tfiShort,
             String.Format("{0:F3} | {1}", r.TFIValue, r.TFISignal)))
 
-        ' [T2-A] MicroCVD breakdown note includes STALL annotation when flat stall penalty fires
         Dim microNote As String = String.Format("E:{0:F0} M:{1:F0} L:{2:F0} | {3} | {4}",
                                                 r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
                                                 r.MicroCVDMomentum, r.MicroCVDSignal)
@@ -399,11 +389,17 @@ Partial Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("5m EMA(200)", ema200Bull, ema200Bear,
             String.Format("{0:F0} | {1}", r.EMA200_5m, r.PriceVsEMA200)))
 
-        breakdown.Add(New SignalBreakdownItem("Donchian(20)", donchLong OrElse donchLongUpgraded, donchShort OrElse donchShortUpgraded,
-            BuildNote(String.Format("U:{0:F0} L:{1:F0} | {2}", r.DonchianUpper, r.DonchianLower, r.DonchianSignal),
-                      donchPartialLong  AndAlso Not donchLongUpgraded,
-                      donchPartialShort AndAlso Not donchShortUpgraded,
-                      donchLongUpgraded, donchShortUpgraded)))
+        ' [T2-C] Donchian NONE gets explicit mid-channel note
+        Dim donchNote As String
+        If r.DonchianSignal = "NONE" Then
+            donchNote = String.Format("U:{0:F0} L:{1:F0} | MID-CHANNEL -- no signal", r.DonchianUpper, r.DonchianLower)
+        Else
+            donchNote = BuildNote(String.Format("U:{0:F0} L:{1:F0} | {2}", r.DonchianUpper, r.DonchianLower, r.DonchianSignal),
+                                  donchPartialLong  AndAlso Not donchLongUpgraded,
+                                  donchPartialShort AndAlso Not donchShortUpgraded,
+                                  donchLongUpgraded, donchShortUpgraded)
+        End If
+        breakdown.Add(New SignalBreakdownItem("Donchian(20)", donchLong OrElse donchLongUpgraded, donchShort OrElse donchShortUpgraded, donchNote))
 
         breakdown.Add(New SignalBreakdownItem("OBV", obvLong OrElse obvLongUpgraded, obvShort OrElse obvShortUpgraded,
             BuildNote(String.Format("Trend:{0} Div:{1}{2}",
@@ -422,7 +418,6 @@ Partial Public Class ScoringEngine
         Dim ls As Integer = state.LongScore
         Dim ss As Integer = state.ShortScore
         Dim fr As Double = r.FundingRate
-        ' [P12] Funding penalty magnitudes from cfg
         If fr > cfg.Scoring.FundingHighPositive Then
             ls -= cfg.Scoring.FundingHighPenalty : ss += cfg.Scoring.FundingHighBoost
         ElseIf fr > cfg.Scoring.FundingLowPositive Then
@@ -530,7 +525,6 @@ Partial Public Class ScoringEngine
         res.HoldStatus = CalcHoldStatus(r, posState, cfg)
 
         ' -- Step 7: VPFR-aware ATR Target Cap --------------------------------
-        ' [P11] ATR target/stop multipliers now from cfg
         Dim atrTarget     As Double = r.ATR * norms.ATRScaleFactor * cfg.Scoring.AtrTargetMultiplier
         Dim atrStop       As Double = r.ATR * norms.ATRScaleFactor * cfg.Scoring.AtrStopMultiplier
         Dim rawLongTarget  As Double = r.CurrentPrice + atrTarget
