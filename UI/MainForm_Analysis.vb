@@ -30,19 +30,32 @@ Partial Public Class MainForm
     Private Async Function RunAnalysisAsync() As Task
         Dim cfg As EngineSettings = SettingsLoader.Current
 
+        ' [P1] MTF TTL refresh: only fetch 15m candles when cache is stale (> MTF_TTL_SECONDS).
+        ' All other data is always fresh per run.
+        Dim mtfStale As Boolean = _mtfCandles15m Is Nothing OrElse
+                                   (DateTime.UtcNow - _mtfLastFetchTime).TotalSeconds >= MTF_TTL_SECONDS
+
         Dim t_1m      = DeribitClient.GetCandlesAsync("1", 250)
         Dim t_5m      = DeribitClient.GetCandlesAsync("5", 210)
-        Dim t_15m     = DeribitClient.GetCandlesAsync("15", 70)
         Dim t_funding = DeribitClient.GetFundingRateAsync()
         Dim t_book    = DeribitClient.GetBookSummaryAsync()
         Dim t_ob      = DeribitClient.GetOrderBookAsync(10)
         Dim t_trades  = DeribitClient.GetRecentTradesAsync(100)
 
-        Await Task.WhenAll(t_1m, t_5m, t_15m, t_funding, t_book, t_ob, t_trades)
+        ' Conditionally fetch 15m or skip (reuse cache)
+        Dim t_15m As Task(Of List(Of Candle)) = Nothing
+        If mtfStale Then
+            t_15m = DeribitClient.GetCandlesAsync("15", 70)
+            Await Task.WhenAll(t_1m, t_5m, t_15m, t_funding, t_book, t_ob, t_trades)
+            _mtfCandles15m    = Await t_15m
+            _mtfLastFetchTime = DateTime.UtcNow
+        Else
+            Await Task.WhenAll(t_1m, t_5m, t_funding, t_book, t_ob, t_trades)
+        End If
 
         Dim candles1m    = Await t_1m
         Dim candles5m    = Await t_5m
-        Dim candles15m   = Await t_15m
+        Dim candles15m   = _mtfCandles15m   ' always use cached version
         Dim fundingRate  = Await t_funding
         Dim bookSummary  = Await t_book
         Dim orderBook    = Await t_ob
@@ -193,10 +206,24 @@ Partial Public Class MainForm
                               "N/A")
 
         IndicatorEngine.CalcDonchian(candles1m, 20, r.DonchianUpper, r.DonchianLower)
-        If r.CurrentPrice > r.DonchianUpper Then
-            r.DonchianSignal = "LONG"
-        ElseIf r.CurrentPrice < r.DonchianLower Then
-            r.DonchianSignal = "SHORT"
+
+        ' [P4] Donchian quartile signal: fires on upper/lower 25% of channel
+        ' as a partial signal (replaces pure breakout-only which fired ~0%).
+        Dim channelRange As Double = r.DonchianUpper - r.DonchianLower
+        If channelRange > 0 Then
+            Dim q1 As Double = r.DonchianLower  + channelRange * 0.25
+            Dim q3 As Double = r.DonchianUpper  - channelRange * 0.25
+            If r.CurrentPrice >= r.DonchianUpper Then
+                r.DonchianSignal = "LONG"          ' full breakout
+            ElseIf r.CurrentPrice <= r.DonchianLower Then
+                r.DonchianSignal = "SHORT"         ' full breakout
+            ElseIf r.CurrentPrice >= q3 Then
+                r.DonchianSignal = "LONG_PARTIAL"  ' upper quartile
+            ElseIf r.CurrentPrice <= q1 Then
+                r.DonchianSignal = "SHORT_PARTIAL" ' lower quartile
+            Else
+                r.DonchianSignal = "NONE"
+            End If
         Else
             r.DonchianSignal = "NONE"
         End If
