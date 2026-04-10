@@ -35,6 +35,15 @@
 '
 ' fix: Removed Dim minBBW As Double and stale 6th arg from CalcBBW call.
 '   CalcBBW no longer exposes ByRef minBBW after Commit 2 dead-code strip.
+'
+' fix [T1-B]: Regime ADX hysteresis -- 1-bar grace period before RANGING flip.
+'   After the raw ADX/DMI regime is computed, if the new regime is RANGE_BOUND
+'   and the previous run was TRENDING_UP, TRENDING_DOWN, or TRANSITIONAL, hold
+'   the previous regime for this run (grace bar). _prevRegime is then updated to
+'   the raw (unsmoothed) value so a second consecutive RANGING read does flip.
+'   Rationale: 1m scalping suffers whipsaw regime changes during momentum
+'   consolidations. A single-bar buffer stabilises the regime gate without
+'   introducing meaningful lag on genuine ranging conditions.
 
 Imports System.Drawing
 Imports System.Windows.Forms
@@ -141,15 +150,30 @@ Partial Public Class MainForm
         ' [B1] Regime thresholds from cfg (were hardcoded 25 / 20)
         Dim adxTrendThr As Double = cfg.Indicators.ADX.TrendThreshold
         Dim adxRangeThr As Double = cfg.Indicators.ADX.RangeThreshold
+        Dim rawRegime As String
         If r.ADX > adxTrendThr AndAlso r.PlusDI > r.MinusDI Then
-            r.Regime = "TRENDING_UP"
+            rawRegime = "TRENDING_UP"
         ElseIf r.ADX > adxTrendThr AndAlso r.MinusDI > r.PlusDI Then
-            r.Regime = "TRENDING_DOWN"
+            rawRegime = "TRENDING_DOWN"
         ElseIf r.ADX < adxRangeThr Then
-            r.Regime = "RANGE_BOUND"
+            rawRegime = "RANGE_BOUND"
         Else
-            r.Regime = "TRANSITIONAL"
+            rawRegime = "TRANSITIONAL"
         End If
+
+        ' [T1-B] Regime ADX hysteresis: if raw regime is RANGE_BOUND but last bar
+        ' was trending or transitional, hold the previous regime for this run.
+        ' _prevRegime is always updated to rawRegime so a second consecutive
+        ' RANGE_BOUND read does produce a genuine flip.
+        Dim prevWasTrending As Boolean = (_prevRegime = "TRENDING_UP" OrElse
+                                          _prevRegime = "TRENDING_DOWN" OrElse
+                                          _prevRegime = "TRANSITIONAL")
+        If rawRegime = "RANGE_BOUND" AndAlso prevWasTrending Then
+            r.Regime = _prevRegime   ' grace bar: hold previous regime
+        Else
+            r.Regime = rawRegime
+        End If
+        _prevRegime = rawRegime      ' always track raw for next run
 
         Dim vwapS2Hour   As Integer = cfg.Indicators.VWAP.Session2StartHour
         Dim vwapS2Minute As Integer = cfg.Indicators.VWAP.Session2StartMinute
@@ -225,9 +249,11 @@ Partial Public Class MainForm
         End If
 
         ' [P14] OFI dominance thresholds from cfg
+        ' [T2-B] OFI BookDepth from cfg (was hardcoded Take(3) inside CalcOFI)
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol,
                                 buyDominantRatio:=cfg.Indicators.OFI.BuyDominantRatio,
-                                sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio)
+                                sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio,
+                                bookDepth:=cfg.Indicators.OFI.BookDepth)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
 
         ' [B3] CVD: all three tunable params now from cfg.
