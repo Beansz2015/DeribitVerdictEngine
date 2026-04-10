@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-10 | Current version: v0.49**
+**Last updated: 2026-04-11 | Current version: v0.49 (Commit 5 complete)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 It takes precedence over `indicator-spec.md` wherever the two conflict.
@@ -47,26 +47,26 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 |---|---|
 | `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. AdjustedLongTarget, AdjustedShortTarget, TargetCapReason), PositionState, SignalCategory, ScoreState |
 | `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore, Threshold, TierFloor, AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus |
-| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline **(v0.49 — all thresholds read from cfg)** |
+| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline **(Commit 5 — T2-C Donchian NONE mid-channel note added to breakdown)** |
 | `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields |
-| `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
-| `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
-| `Core/Indicators_OrderFlow.vb` | CalcOFI **(OFI dominance thresholds wired to cfg, v0.49)**, CalcCVD, CalcMicroCVD, CalcTFI, CalcLiquidations |
-| `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite (exp decay v0.47), CalcMTFGate |
+| `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI, CalcRSISeries, CalcRSIDivergence (pivotWing + lookbackBars params), CalcROCSeries, CalcVolumeSMA |
+| `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze (flatThreshold param) |
+| `Core/Indicators_OrderFlow.vb` | CalcOFI (dominance thresholds + bookDepth wired to cfg), CalcLiquidations **(dominanceRatio param — T3-D)**, CalcCVD, CalcMicroCVD, CalcTFI |
+| `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite (exp decay, numBuckets param), CalcMTFGate |
 
 ### Core/Settings/
 
 | File | Notes |
 |---|---|
-| `Core/Settings/EngineSettings.vb` | **v0.37** — Added `BbwSqueezePenalty`, `LiqStandardPenalty`, `LiqLargePenalty`, `FundingHighPenalty`, `FundingHighBoost`, `FundingLowPenalty`, `AtrTargetMultiplier`, `AtrStopMultiplier` to `ScoringSettings` (v0.49 P11/P12). TfiSettings + MicroCvdSettings from v0.48. |
+| `Core/Settings/EngineSettings.vb` | **v0.37** — All scoring/indicator tuning fields. Requires `cfg.Indicators.VPFR.NumBuckets`, `cfg.Indicators.RSI.PivotWing`, `cfg.Indicators.RSI.LookbackBars`, `cfg.Indicators.TTM.FlatThreshold`, `cfg.Indicators.Liquidations.DominanceRatio` to be present (added Commit 5). |
 
 ### UI/ — MainForm partial classes
 
 | File | Version | Notes |
 |---|---|---|
-| `UI/MainForm_Layout.vb` | v0.47 | Constants, DllImport/RECT, New(), ResizeControls(), SetOutputMargins(), OnFormHandleCreated(), CentreNudText(); shared fields: colour palette, _oiHistory, auto-run state vars, MTF TTL cache fields |
+| `UI/MainForm_Layout.vb` | v0.47 | Constants, DllImport/RECT, New(), ResizeControls(), SetOutputMargins(), OnFormHandleCreated(), CentreNudText(); shared fields: colour palette, _oiHistory, auto-run state vars, MTF TTL cache fields, `_prevRegime` |
 | `UI/MainForm_AutoRun.vb` | v0.47 | InitAutoRunControls(), btnStartStop_Click, StartAutoRun(), StopAutoRun(), RunAutoAnalysis(), OnCountdownTick(), UpdateCountdownLabel() |
-| `UI/MainForm_Analysis.vb` | v0.48 | btnAnalyze_Click, RunAnalysisAsync() — MTF TTL re-fetch; Donchian quartile call-site; independent TFI/MicroCVD window sizes |
+| `UI/MainForm_Analysis.vb` | **Commit 5** | RunAnalysisAsync() — T3-A VPFR numBuckets, T3-B RSI pivotWing/lookbackBars, T3-C TTM flatThreshold, T3-D Liq dominanceRatio all wired from cfg at call sites |
 | `UI/MainForm_Render.vb` | v0.46 | RenderOutput(), AppendRtf(), AR(), SectionHeader(), Divider(), BuildCalibrationReport(), Flag(), UpdateLogInfo() |
 
 ### Docs
@@ -94,29 +94,32 @@ UI/MainForm_Analysis.vb  →  RunAnalysisAsync()
   │                       candles15m(70) [TTL-gated], funding, bookSummary,
   │                       orderBook(depth10), recentTrades(100)
   ├─ IndicatorEngine      fills IndicatorResults (r)
-  │    ├─ CalcATR, CalcROCSeries, CalcRSI, CalcRSIDivergence, CalcVolumeSMA
-  │    ├─ CalcDMI, CalcVWAP (dual-session from cfg), CalcVWAPBands
-  │    ├─ CalcBBW, CalcTTMSqueeze
+  │    ├─ CalcATR, CalcROCSeries, CalcRSI
+  │    ├─ CalcRSIDivergence (pivotWing + lookbackBars from cfg — T3-B)
+  │    ├─ CalcVolumeSMA, CalcDMI
+  │    ├─ CalcVWAP (dual-session from cfg), CalcVWAPBands
+  │    ├─ CalcBBW, CalcTTMSqueeze (flatThreshold from cfg — T3-C)
   │    ├─ CalcEMA (1m ribbon 9/21/50 + 5m EMA200)
-  │    ├─ CalcOFI (dominance thresholds from cfg, v0.49)
-  │    ├─ CalcLiquidations, CalcCVD (3-seg weighted slope), CalcMicroCVD
-  │    ├─ CalcTFI (tfiWindowSize from cfg, default 30)
+  │    ├─ CalcOFI (dominance thresholds + bookDepth from cfg)
+  │    ├─ CalcLiquidations (dominanceRatio from cfg — T3-D)
+  │    ├─ CalcCVD (3-seg weighted slope), CalcMicroCVD, CalcTFI
   │    ├─ CalcMTFGate (15m DMI/ADX + EMA confluence gate)
-  │    ├─ CalcDonchian → DonchianSignal (LONG/SHORT/LONG_PARTIAL/SHORT_PARTIAL)
+  │    ├─ CalcDonchian → DonchianSignal (LONG/SHORT/LONG_PARTIAL/SHORT_PARTIAL/NONE)
   │    ├─ CalcOBV
-  │    ├─ CalcVPFRLite (exp-decay weighted volume profile)
+  │    ├─ CalcVPFRLite (exp-decay, numBuckets from cfg — T3-A)
   │    └─ DynamicNorms.Compute
   ├─ ScoringEngine.Calculate(r, posState, norms, cfg)  →  VerdictResult
   │    ├─ MTF veto: forces NO TRADE if MTFGatePass = False
   │    ├─ RSI zones read from cfg.Indicators.RSI (Overbought/Oversold/Partial*) [P8]
   │    ├─ ADX threshold read from cfg.Indicators.ADX.TrendThreshold [P9]
   │    ├─ VWAP warmup read from cfg.Indicators.VWAP.WarmupCandles [P9]
-  │    ├─ RSI divergence penalty trigger from cfg.Indicators.RSI.DivPenaltyHigh/Low [P8]
-  │    ├─ ROC partial dead-band from cfg.Indicators.ROC.PartialThreshold [P10]
-  │    ├─ ATR target/stop multipliers from cfg.Scoring.AtrTargetMultiplier/AtrStopMultiplier [P11]
-  │    ├─ BBW squeeze penalty from cfg.Scoring.BbwSqueezePenalty [P12]
-  │    ├─ Liq standard/large penalty from cfg.Scoring.LiqStandardPenalty/LiqLargePenalty [P12]
-  │    ├─ Funding step deltas from cfg.Scoring.FundingHighPenalty/HighBoost/LowPenalty [P12]
+  │    ├─ RSI divergence penalty trigger from cfg.Indicators.RSI.DivPenaltyHigh/Low
+  │    ├─ ROC partial dead-band from cfg.Indicators.ROC.PartialThreshold
+  │    ├─ ATR target/stop multipliers from cfg.Scoring.AtrTargetMultiplier/AtrStopMultiplier
+  │    ├─ BBW squeeze penalty from cfg.Scoring.BbwSqueezePenalty
+  │    ├─ Liq standard/large penalty from cfg.Scoring.LiqStandardPenalty/LiqLargePenalty
+  │    ├─ Funding step deltas from cfg.Scoring.FundingHighPenalty/HighBoost/LowPenalty
+  │    ├─ Donchian NONE mid-channel note in breakdown (T2-C)
   │    ├─ Donchian quartile partial upgrade
   │    ├─ Volume mid-tier directional partial upgrade
   │    ├─ OBV upgrade blocked on adverse divergence
@@ -143,43 +146,43 @@ When no cap fires, the display is identical to the pre-cap behaviour.
 ### Core Signals (always scored)
 | Indicator | Method | Notes |
 |---|---|---|
-| ROC(9) | CalcROCSeries | Lookback from cfg. Partial dead-band from `cfg.Indicators.ROC.PartialThreshold` (default 0.1, v0.49). |
-| RSI(9) | CalcRSI | Full zones: `cfg.Indicators.RSI.Overbought` (60) / `Oversold` (40). Partial zones: `PartialOverbought` (50) / `PartialOversold` (50). **All now read from cfg (v0.49 P8).** |
-| RSI Divergence | CalcRSIDivergence | −1 long when BEARISH + RSI > `cfg.Indicators.RSI.DivPenaltyRsiHigh` (65); −1 short when BULLISH + RSI < `cfg.Indicators.RSI.DivPenaltyRsiLow` (35). **Wired to cfg v0.49 P8.** |
-| DMI/ADX | CalcDMI | 5m candles. ADX threshold reads `cfg.Indicators.ADX.TrendThreshold` in scoring (was hardcoded 25, **fixed v0.49 P9**). |
-| Volume | CalcVolumeSMA | SMA-9; H/M thresholds from DynamicNorms. Mid-tier directional partial via cross-confirm (v0.47). |
+| ROC(9) | CalcROCSeries | Lookback from cfg. Partial dead-band from `cfg.Indicators.ROC.PartialThreshold` (default 0.1). |
+| RSI(9) | CalcRSI | Full zones: `cfg.Indicators.RSI.Overbought` (60) / `Oversold` (40). Partial zones: `PartialOverbought` (50) / `PartialOversold` (50). |
+| RSI Divergence | CalcRSIDivergence | −1 long when BEARISH + RSI > `DivPenaltyRsiHigh` (65); −1 short when BULLISH + RSI < `DivPenaltyRsiLow` (35). `PivotWing` and `LookbackBars` now passed from cfg **(T3-B)**. |
+| DMI/ADX | CalcDMI | 5m candles. ADX threshold reads `cfg.Indicators.ADX.TrendThreshold`. |
+| Volume | CalcVolumeSMA | SMA-9; H/M thresholds from DynamicNorms. Mid-tier directional partial via cross-confirm. |
 
 ### Tier 1
 | Indicator | Method | Notes |
 |---|---|---|
-| VWAP Dev | CalcVWAP | Dual-session. Warmup guard reads `cfg.Indicators.VWAP.WarmupCandles` in scoring (was hardcoded 15, **fixed v0.49 P9**). |
+| VWAP Dev | CalcVWAP | Dual-session. Warmup guard reads `cfg.Indicators.VWAP.WarmupCandles`. |
 | VWAP σ Bands | CalcVWAPBands | σ1/σ2 bands; PARTIAL→UPGRADED logic when price between bands. |
-| BBW / TTM Squeeze | CalcBBW + CalcTTMSqueeze | BBW squeeze penalty reads `cfg.Scoring.BbwSqueezePenalty` (default 1, **v0.49 P12**). |
+| BBW / TTM Squeeze | CalcBBW + CalcTTMSqueeze | BBW squeeze penalty from cfg. TTM `flatThreshold` now passed from `cfg.Indicators.TTM.FlatThreshold` **(T3-C)**. |
 | EMA Ribbon | CalcEMA | 9/21/50 on 1m → BULL/BEAR/MIXED; 5m EMA(200) as regime anchor. |
-| Funding Rate | GetFundingRateAsync | Step 3 deltas: `FundingHighPenalty`=2, `FundingHighBoost`=1, `FundingLowPenalty`=1. **All from cfg (v0.49 P12).** |
+| Funding Rate | GetFundingRateAsync | Step 3 deltas from cfg. |
 | OI Change | OiSnapshot ring buffer | 15m + 60m delta → NEW LONGS/SHORTS/COVERING/CAPITULATION/NEUTRAL. |
 
 ### Tier 2
 | Indicator | Method | Notes |
 |---|---|---|
-| OFI | CalcOFI | Top-3 depth levels, bid/ask imbalance. Dominance thresholds read `cfg.Indicators.OFI.BuyDominantRatio` / `SellDominantRatio` (**wired v0.49 P10**, was hardcoded 1.2/0.833). |
-| Liquidations | CalcLiquidations | Penalty magnitudes: `cfg.Scoring.LiqStandardPenalty` (1) and `LiqLargePenalty` (2) (**v0.49 P12**). |
+| OFI | CalcOFI | Configurable depth via `cfg.Indicators.OFI.BookDepth`. Dominance thresholds from cfg. |
+| Liquidations | CalcLiquidations | `dominanceRatio` now passed from `cfg.Indicators.Liquidations.DominanceRatio` **(T3-D)**. Default 1.0 preserves prior behaviour. Penalty magnitudes from cfg. |
 | CVD | CalcCVD | 3-segment weighted slope (late×2 − early×1). −1 penalty on divergence. |
-| MicroCVD | CalcMicroCVD | BULL/BEAR_ACCEL/DECEL; sign-aware penalty −1 opposing. Window=50 via cfg. |
+| MicroCVD | CalcMicroCVD | BULL/BEAR_ACCEL/DECEL + FLAT stall penalty (T2-A). Window=50 via cfg. |
 | TFI | CalcTFI | BUY/SELL PRESSURE. Window=30 via cfg. |
 | 5m EMA(200) | CalcEMA(candles5m,200) | ABOVE/BELOW; short signal if price below. |
 
 ### Tier 3
 | Indicator | Method | Notes |
 |---|---|---|
-| Donchian(20) | CalcDonchian | Full LONG/SHORT + quartile partial (v0.47). Partial upgrades via cross-confirm. |
-| OBV | CalcOBV | Trend + divergence gate from cfg. Adverse divergence blocks cross-category upgrade (v0.47). |
-| VPFR-lite | CalcVPFRLite | POC proximity; HVN wall triggers target cap. Exp decay weighting (v0.47). |
+| Donchian(20) | CalcDonchian | Full LONG/SHORT + quartile partial + NONE mid-channel note **(T2-C)**. |
+| OBV | CalcOBV | Trend + divergence gate from cfg. Adverse divergence blocks cross-category upgrade. |
+| VPFR-lite | CalcVPFRLite | POC proximity; HVN wall triggers target cap. Exp decay weighting. `numBuckets` now passed from `cfg.Indicators.VPFR.NumBuckets` **(T3-A)**. |
 
 ### Multi-Timeframe Gate
 | Indicator | Method | Notes |
 |---|---|---|
-| MTF Gate (15m) | CalcMTFGate | 15m DMI/ADX + EMA alignment; PASS/BLOCK; forces NO TRADE on BLOCK. TTL cache 60s (v0.47). |
+| MTF Gate (15m) | CalcMTFGate | 15m DMI/ADX + EMA alignment; PASS/BLOCK; forces NO TRADE on BLOCK. TTL cache 60s. Regime hysteresis 1-bar grace period **(T1-B)**. |
 
 ---
 
@@ -196,17 +199,20 @@ settings.json
   indicators:
     rsi:           { period, overbought (60), oversold (40),
                      partial_overbought (50), partial_oversold (50),
-                     div_penalty_rsi_high (65), div_penalty_rsi_low (35),   ← NEW v6
-                     divergencePriceGate, divergenceRsiDelta }
-    roc:           { period, seriesLookback,
-                     partial_threshold (0.1) }                               ← NEW v6
-    adx:           { trendThreshold (25) }                     ← now used in scoring too
-    vwap:          { devThresholdPct, session1/2 times,
-                     warmupCandles (15) }                      ← now used in scoring too
-    ofi:           { bookDepth, buyDominantRatio (1.2),        ← NOW wired into CalcOFI
+                     div_penalty_rsi_high (65), div_penalty_rsi_low (35),
+                     divergencePriceGate, divergenceRsiDelta,
+                     pivot_wing (2),           ← wired T3-B
+                     lookback_bars (20) }      ← wired T3-B
+    roc:           { period, seriesLookback, partial_threshold (0.1) }
+    adx:           { trendThreshold (25), rangeThreshold (20) }
+    vwap:          { devThresholdPct, session1/2 times, warmupCandles (15) }
+    ofi:           { bookDepth (3), buyDominantRatio (1.2),
                      sellDominantRatio (0.833) }
     obv:           { trendGate, divergenceGate }
-    liquidations:  { largeLiqSize }
+    liquidations:  { largeLiqSize,
+                     dominance_ratio (1.0) }   ← wired T3-D
+    vpfr:          { num_buckets (50) }        ← wired T3-A
+    ttm:           { flat_threshold (0.5) }    ← wired T3-C
     cvd:           { slopeMinUsd, slopePctOfValue,
                      divergencePriceGate, tradeLookback }
     tfi:           { window_size (30), threshold (0.15) }
@@ -215,14 +221,14 @@ settings.json
     verdictStrongPct / verdictMedPct / verdictWeakPct
     fundingHighPositive / fundingLowPositive
     fundingHighNegative / fundingLowNegative
-    bbw_squeeze_penalty (1)                                    ← NEW v6
-    liq_standard_penalty (1)                                   ← NEW v6
-    liq_large_penalty (2)                                      ← NEW v6
-    funding_high_penalty (2)                                   ← NEW v6
-    funding_high_boost (1)                                     ← NEW v6
-    funding_low_penalty (1)                                    ← NEW v6
-    atr_target_multiplier (3.0)                                ← NEW v6
-    atr_stop_multiplier (1.5)                                  ← NEW v6
+    bbw_squeeze_penalty (1)
+    liq_standard_penalty (1)
+    liq_large_penalty (2)
+    funding_high_penalty (2)
+    funding_high_boost (1)
+    funding_low_penalty (1)
+    atr_target_multiplier (3.0)
+    atr_stop_multiplier (1.5)
   mtfGate:
     enabled, dmiPeriod, requiredConfirms, candleCount
   regimeGates:
@@ -236,24 +242,23 @@ settings.json
 
 - **MaxScore** = 19 (TRENDING), 18 (RANGE_BOUND), 15 (TRANSITIONAL)
 - Verdict thresholds: `Math.Ceiling(regimeMax * pct)` using `verdictStrong/Med/WeakPct`
-- **All signal thresholds now read from `cfg`** — no hardcoded magic numbers remain in scoring logic as of v0.49.
+- **All signal thresholds now read from `cfg`** — no hardcoded magic numbers remain.
 - **Step 2:** Score each signal into a `ScoreState` (long pts / short pts)
-  - RSI full zones: `cfg.Indicators.RSI.Overbought` / `Oversold` [P8]
-  - RSI partial zones: `cfg.Indicators.RSI.PartialOverbought` / `PartialOversold` [P8]
-  - RSI divergence penalty: fires when RSI > `DivPenaltyRsiHigh` (65) or < `DivPenaltyRsiLow` (35) [P8]
-  - ADX trend gate: `cfg.Indicators.ADX.TrendThreshold` [P9]
-  - VWAP warmup: `cfg.Indicators.VWAP.WarmupCandles` [P9]
-  - ROC partial dead-band: `cfg.Indicators.ROC.PartialThreshold` [P10]
-  - OFI dominance thresholds wired into `CalcOFI` call [P10]
-  - BBW squeeze penalty: `cfg.Scoring.BbwSqueezePenalty` [P12]
-  - Liquidation penalty: `cfg.Scoring.LiqStandardPenalty` / `LiqLargePenalty` [P12]
+  - RSI full/partial zones, divergence penalty — all from cfg
+  - ADX trend gate: `cfg.Indicators.ADX.TrendThreshold`
+  - VWAP warmup: `cfg.Indicators.VWAP.WarmupCandles`
+  - ROC partial dead-band: `cfg.Indicators.ROC.PartialThreshold`
+  - OFI dominance thresholds wired into `CalcOFI` call
+  - BBW squeeze penalty: `cfg.Scoring.BbwSqueezePenalty`
+  - Liquidation penalty: `cfg.Scoring.LiqStandardPenalty` / `LiqLargePenalty`
+  - **Donchian NONE**: mid-channel note annotated in breakdown **(T2-C)**
 - **Pass 2:** Upgrade partials when cross-category confirmation exists
-- **Step 3:** Funding modifier: `cfg.Scoring.FundingHighPenalty` (−2/+1), `FundingLowPenalty` (−1) [P12]
+- **Step 3:** Funding modifier from cfg
 - **Step 4:** Regime veto or TRANSITIONAL ADX penalty
 - **Step 4b:** MTF gate veto → NO TRADE
 - **Step 5:** Verdict thresholds
 - **Step 6:** CalcHoldStatus
-- **Step 7:** ATR target = `ATR × scale × cfg.Scoring.AtrTargetMultiplier` (default 3.0); stop = `× AtrStopMultiplier` (default 1.5) [P11]
+- **Step 7:** ATR target/stop from cfg multipliers
 
 ---
 
@@ -319,17 +324,20 @@ Interval configurable from the UI. Minimum 10 seconds enforced. `AutoRunSettings
 ## 14. WATCHING / Future Work
 
 | Item | Description | Priority |
-|---|---|
+|---|---|---|
 | TFI threshold tuning | After TFI window (30) runs live, evaluate whether threshold=0.15 needs lowering to 0.10 for BTC-PERPETUAL tick size. | Low |
 | MicroCVD accelThreshold calibration | Default 5000 USD. May need dynamic scaling vs ATR or volumeSMA on quiet sessions. | Low |
 | AtrTargetMultiplier live calibration | Now externalised (default 3.0). Review against logged R:R outcomes after 50+ trades. | Low |
 | OFI ratio live calibration | BuyDominantRatio=1.2 / SellDominantRatio=0.833 now hot-reloadable. Review against OFI hit rate in CalibrationReport. | Low |
+| TTM flatThreshold calibration | Now wired from cfg (default 0.5). Review FLAT vs RISING/FALLING classification against 1m candle range distribution. | Low |
+| VPFR numBuckets calibration | Now wired from cfg (default 50). Higher values increase POC resolution at cost of sparse buckets on quiet sessions. | Low |
+| Liq dominanceRatio calibration | Now wired from cfg (default 1.0 = equal-or-greater). Review false LONG/SHORT LIQS signals at default; consider raising to 1.2–1.5. | Low |
 
 ---
 
 ## 15. Backlog
 
-*(cleared — all P1–P12 shipped as of v0.49)*
+*(cleared — all Commit 1–5 items shipped)*
 
 ---
 
@@ -337,7 +345,9 @@ Interval configurable from the UI. Minimum 10 seconds enforced. `AutoRunSettings
 
 | Version | Key Changes |
 |---|---|
-| v0.49 | **[P8]** RSI full/partial zones and divergence penalty triggers wired to cfg. **[P9]** ADX threshold and VWAP warmup wired to cfg in scoring (were reading cfg in analysis but hardcoded 25/15 in scoring). **[P10]** ROC partial dead-band `partial_threshold` added to settings; OFI dominance thresholds wired into `CalcOFI` call. **[P11]** `AtrTargetMultiplier` (3.0) and `AtrStopMultiplier` (1.5) added to `ScoringSettings`; Step 7 reads from cfg. **[P12]** `BbwSqueezePenalty`, `LiqStandardPenalty`, `LiqLargePenalty`, `FundingHighPenalty`, `FundingHighBoost`, `FundingLowPenalty` added to `ScoringSettings`; scoring logic reads all from cfg. `EngineSettings.vb` → v0.37. `settings.json` → v6. |
+| **Commit 5** | **[T2-C]** Donchian NONE mid-channel note added to scoring breakdown. **[T3-A]** CalcVPFRLite `numBuckets` wired from `cfg.Indicators.VPFR.NumBuckets`. **[T3-B]** CalcRSIDivergence `pivotWing` + `lookbackBars` wired from cfg. **[T3-C]** CalcTTMSqueeze `flatThreshold` wired from `cfg.Indicators.TTM.FlatThreshold`. **[T3-D]** CalcLiquidations `dominanceRatio` param added; wired from `cfg.Indicators.Liquidations.DominanceRatio`. |
+| **Commit 4** | **[T1-B]** Regime ADX hysteresis — 1-bar grace period before RANGE_BOUND flip from TRENDING/TRANSITIONAL (`_prevRegime` field). **[T2-A]** MicroCVD FLAT stall penalty (price/CVD contradiction). **[T2-B]** OFI BookDepth injectable via cfg; dynamic descending weight array in CalcOFI. |
+| v0.49 | [P8] RSI zones/div penalty wired to cfg. [P9] ADX threshold + VWAP warmup wired in scoring. [P10] ROC partial dead-band; OFI dominance thresholds wired. [P11] ATR multipliers externalised. [P12] BBW/Liq/Funding penalty magnitudes externalised. EngineSettings v0.37. settings.json v6. |
 | v0.48 | [P4] TFI window separated from MicroCVD. TfiSettings + MicroCvdSettings added to EngineSettings (v0.36). |
 | v0.47 | [P1] MTF TTL cache; [P2] RSI div penalty; [P3] CVD 3-seg slope; [P4] Donchian quartile; [P5] volMid partial; [P6] OBV div block; [P7] VPFR exp decay |
 | v0.46 | RenderOutput refactor; VPFR HVN target cap display; last transacted price block |
