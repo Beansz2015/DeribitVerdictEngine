@@ -37,6 +37,13 @@
 '        FundingHighBoost     -- boost for favourable extreme funding (default 1).
 '        FundingLowPenalty    -- penalty for mild adverse funding (default 1).
 '        All nine were previously hardcoded in ScoringEngine_Calculate.vb.
+' v0.38: [P13] v0.50: Explicit RSI divergence penalty trigger thresholds.
+'        RSI.DivPenaltyRsiHigh -- RSI level above which BEARISH div triggers long penalty (default 65).
+'        RSI.DivPenaltyRsiLow  -- RSI level below which BULLISH div triggers short penalty (default 35).
+'        Previously derived as rsiOB+5 / rsiOS-5 (implicit coupling to OB/OS zones).
+'        CVD.DivergencePenalty     -- magnitude of CVD divergence score penalty (default 1).
+'        MicroCVD.DecelPenalty     -- magnitude of MicroCVD decel opposing-side penalty (default 1).
+'        All three were previously hardcoded literals in ScoringEngine_Calculate.vb.
 
 Imports System.Text.Json.Serialization
 
@@ -109,6 +116,12 @@ Public Class RsiSettings
     <JsonPropertyName("partial_overbought")> Public Property PartialOverbought  As Double  = 50.0
     <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double = 0.001
     <JsonPropertyName("divergence_rsi_delta")>  Public Property DivergenceRsiDelta  As Double = 2.0
+    ''' <summary>[P13] v0.50: Explicit RSI level that must be exceeded for BEARISH divergence to
+    ''' trigger a long-side penalty. Default 65. Previously derived as Overbought+5 (implicit).</summary>
+    <JsonPropertyName("div_penalty_rsi_high")> Public Property DivPenaltyRsiHigh As Double = 65.0
+    ''' <summary>[P13] v0.50: Explicit RSI level that must be breached for BULLISH divergence to
+    ''' trigger a short-side penalty. Default 35. Previously derived as Oversold-5 (implicit).</summary>
+    <JsonPropertyName("div_penalty_rsi_low")>  Public Property DivPenaltyRsiLow  As Double = 35.0
 End Class
 
 Public Class RocSettings
@@ -203,6 +216,9 @@ Public Class CvdSettings
     <JsonPropertyName("slope_pct_of_value")>      Public Property SlopePctOfValue     As Double  = 0.01
     <JsonPropertyName("divergence_price_gate")>   Public Property DivergencePriceGate As Double  = 0.0005
     <JsonPropertyName("trade_lookback")>          Public Property TradeLookback       As Integer = 100
+    ''' <summary>[P13] v0.50: Score penalty magnitude applied when CVD divergence is detected.
+    ''' Default 1. Previously hardcoded literal -1 in ScoringEngine_Calculate.vb.</summary>
+    <JsonPropertyName("divergence_penalty")>      Public Property DivergencePenalty   As Integer = 1
 End Class
 
 ''' <summary>
@@ -220,10 +236,13 @@ End Class
 ''' microWindowSize=50 is the default for meaningful thirds segmentation.
 ''' accelThreshold: minimum signed USD difference (late vs early) to classify
 ''' as ACCELERATING or DECELERATING.
+''' [P13] v0.50: DecelPenalty -- magnitude of opposing-side score penalty when
+''' BULL_DECEL or BEAR_DECEL is detected. Default 1. Previously hardcoded.
 ''' </summary>
 Public Class MicroCvdSettings
     <JsonPropertyName("window_size")>      Public Property WindowSize      As Integer = 50
     <JsonPropertyName("accel_threshold")>  Public Property AccelThreshold  As Double  = 5000.0
+    <JsonPropertyName("decel_penalty")>    Public Property DecelPenalty    As Integer = 1
 End Class
 
 ' ---------------------------------------------------------------------------
