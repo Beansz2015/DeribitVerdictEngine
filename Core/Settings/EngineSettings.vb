@@ -1,4 +1,4 @@
-' Core/Settings/EngineSettings.vb  v0.35
+' Core/Settings/EngineSettings.vb  v0.36
 ' Typed model that mirrors settings.json.
 ' All hardcoded indicator/scoring thresholds are accessed via this class.
 ' Populated by SettingsLoader.Load() -- do not instantiate directly.
@@ -22,6 +22,11 @@
 ' v0.35: Added AutoRunSettings class and AutoRun property on EngineSettings.
 '        Exposes auto_run block from settings.json (enabled, interval_minutes, interval_seconds).
 '        Minimum interval enforced in MainForm (10 seconds); settings stores raw user intent.
+' v0.36: [P4] v0.48: Added TfiSettings class and TFI property on IndicatorSettings.
+'        Added MicroCvdSettings class and MicroCVD property on IndicatorSettings.
+'        TFI.WindowSize default 30 (was shared 50 with MicroCVD -- now independent).
+'        MicroCVD.WindowSize default 50.  MicroCVD.AccelThreshold default 5000.
+'        Both settings are hot-reloadable via settings.json.
 
 Imports System.Text.Json.Serialization
 
@@ -76,6 +81,8 @@ Public Class IndicatorSettings
     <JsonPropertyName("OI")>       Public Property OI       As New OiSettings
     <JsonPropertyName("DMI")>      Public Property DMI      As New DmiSettings
     <JsonPropertyName("CVD")>      Public Property CVD      As New CvdSettings
+    <JsonPropertyName("TFI")>      Public Property TFI      As New TfiSettings
+    <JsonPropertyName("MicroCVD")> Public Property MicroCVD As New MicroCvdSettings
 End Class
 
 Public Class AdxSettings
@@ -186,6 +193,27 @@ Public Class CvdSettings
     <JsonPropertyName("slope_pct_of_value")>      Public Property SlopePctOfValue     As Double  = 0.01
     <JsonPropertyName("divergence_price_gate")>   Public Property DivergencePriceGate As Double  = 0.0005
     <JsonPropertyName("trade_lookback")>          Public Property TradeLookback       As Integer = 100
+End Class
+
+''' <summary>
+''' [P4] v0.48: TFI window is now independent of MicroCVD window.
+''' TFI measures short-burst aggressor pressure; default 30 trades.
+''' threshold: minimum |TFI| to assign a directional signal.
+''' </summary>
+Public Class TfiSettings
+    <JsonPropertyName("window_size")>  Public Property WindowSize  As Integer = 30
+    <JsonPropertyName("threshold")>    Public Property Threshold   As Double  = 0.15
+End Class
+
+''' <summary>
+''' [P4] v0.48: MicroCVD window is now independent of TFI window.
+''' microWindowSize=50 is the default for meaningful thirds segmentation.
+''' accelThreshold: minimum signed USD difference (late vs early) to classify
+''' as ACCELERATING or DECELERATING.
+''' </summary>
+Public Class MicroCvdSettings
+    <JsonPropertyName("window_size")>      Public Property WindowSize      As Integer = 50
+    <JsonPropertyName("accel_threshold")>  Public Property AccelThreshold  As Double  = 5000.0
 End Class
 
 ' ---------------------------------------------------------------------------

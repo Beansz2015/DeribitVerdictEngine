@@ -55,7 +55,7 @@ Partial Public Class MainForm
 
         Dim candles1m    = Await t_1m
         Dim candles5m    = Await t_5m
-        Dim candles15m   = _mtfCandles15m   ' always use cached version
+        Dim candles15m   = _mtfCandles15m
         Dim fundingRate  = Await t_funding
         Dim bookSummary  = Await t_book
         Dim orderBook    = Await t_ob
@@ -67,7 +67,6 @@ Partial Public Class MainForm
             Return
         End If
 
-        ' Last transacted price from most recent trade (Deribit returns newest-first)
         Dim lastTradePrice As Double = If(recentTrades IsNot Nothing AndAlso recentTrades.Count > 0,
                                           recentTrades(0).Price, 0)
 
@@ -177,9 +176,18 @@ Partial Public Class MainForm
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
-        IndicatorEngine.CalcTFI(recentTrades, r.TFIValue, r.TFISignal)
-        IndicatorEngine.CalcMicroCVD(recentTrades, r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
-                                     r.MicroCVDMomentum, r.MicroCVDSignal)
+
+        ' [P4] v0.48: TFI and MicroCVD now use independent window sizes from settings.
+        ' TFI: short burst window (cfg.Indicators.TFI.WindowSize, default 30).
+        ' MicroCVD: wider segmentation window (cfg.Indicators.MicroCVD.WindowSize, default 50).
+        IndicatorEngine.CalcTFI(recentTrades, r.TFIValue, r.TFISignal,
+                                tfiWindowSize:=cfg.Indicators.TFI.WindowSize,
+                                threshold:=cfg.Indicators.TFI.Threshold)
+        IndicatorEngine.CalcMicroCVD(recentTrades,
+                                     r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
+                                     r.MicroCVDMomentum, r.MicroCVDSignal,
+                                     microWindowSize:=cfg.Indicators.MicroCVD.WindowSize,
+                                     accelThreshold:=cfg.Indicators.MicroCVD.AccelThreshold)
 
         Dim mtfProposed As String = "NONE"
         If candles15m IsNot Nothing AndAlso candles15m.Count >= cfg.MTFGate.DmiPeriod + 2 Then
@@ -208,19 +216,18 @@ Partial Public Class MainForm
         IndicatorEngine.CalcDonchian(candles1m, 20, r.DonchianUpper, r.DonchianLower)
 
         ' [P4] Donchian quartile signal: fires on upper/lower 25% of channel
-        ' as a partial signal (replaces pure breakout-only which fired ~0%).
         Dim channelRange As Double = r.DonchianUpper - r.DonchianLower
         If channelRange > 0 Then
             Dim q1 As Double = r.DonchianLower  + channelRange * 0.25
             Dim q3 As Double = r.DonchianUpper  - channelRange * 0.25
             If r.CurrentPrice >= r.DonchianUpper Then
-                r.DonchianSignal = "LONG"          ' full breakout
+                r.DonchianSignal = "LONG"
             ElseIf r.CurrentPrice <= r.DonchianLower Then
-                r.DonchianSignal = "SHORT"         ' full breakout
+                r.DonchianSignal = "SHORT"
             ElseIf r.CurrentPrice >= q3 Then
-                r.DonchianSignal = "LONG_PARTIAL"  ' upper quartile
+                r.DonchianSignal = "LONG_PARTIAL"
             ElseIf r.CurrentPrice <= q1 Then
-                r.DonchianSignal = "SHORT_PARTIAL" ' lower quartile
+                r.DonchianSignal = "SHORT_PARTIAL"
             Else
                 r.DonchianSignal = "NONE"
             End If

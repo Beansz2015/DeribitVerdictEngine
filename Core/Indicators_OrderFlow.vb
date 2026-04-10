@@ -1,6 +1,18 @@
 ' Core/Indicators_OrderFlow.vb
 ' IndicatorEngine partial: order flow and market microstructure indicators.
 ' Covers: OFI, Liquidations, CVD, TFI, MicroCVD.
+'
+' v0.48 [P4]: TFI window size separated from MicroCVD window size.
+'   Previously both CalcTFI and CalcMicroCVD defaulted to windowSize=50 and
+'   shared the same optional parameter name at the call site in RunAnalysisAsync.
+'   TFI measures recent aggressor pressure over a short burst window (optimally
+'   20-30 trades); MicroCVD measures structural segmentation over a wider window
+'   (50 trades default) to detect acceleration vs deceleration across thirds.
+'   Using the same window conflated two distinct measurements.  The fix:
+'     - CalcTFI: Optional tfiWindowSize As Integer = 30  (was 50, renamed)
+'     - CalcMicroCVD: Optional microWindowSize As Integer = 50  (renamed for clarity)
+'     - Call site in RunAnalysisAsync passes cfg.Indicators.TFI.WindowSize and
+'       cfg.Indicators.MicroCVD.WindowSize independently.
 
 Partial Public Class IndicatorEngine
 
@@ -79,7 +91,6 @@ Partial Public Class IndicatorEngine
         cvdValue = 0 : cvdSlope = "FLAT" : cvdDivergence = "NONE"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
-        ' 3-segment split: each segment is count\3; remainder goes to late
         Dim count   As Integer = trades.Count
         Dim segSize As Integer = Math.Max(1, count \ 3)
 
@@ -100,9 +111,6 @@ Partial Public Class IndicatorEngine
 
         cvdValue = earlyDelta + midDelta + lateDelta
 
-        ' Weighted slope: late weight=2, mid weight=1, early weight=1.
-        ' slopeDelta is the weighted directional pressure of recent activity.
-        ' Formula: (late*2 - early*1) gives the net recency-weighted delta.
         Dim weightedSlope As Double = lateDelta * 2.0 - earlyDelta * 1.0
         Dim absValue As Double = Math.Abs(cvdValue)
         Dim slopeThreshold As Double = Math.Max(slopeMinUsd, absValue * slopePctOfValue)
@@ -127,18 +135,20 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- TFI (Trade Flow Index) -----------------------------------------------
-    ' Rolling-window buy/sell pressure ratio over the last N trades, normalised
-    ' to [-1, +1].  Captures executed aggressor flow (vs OFI which is resting).
-    ' threshold: minimum |TFI| to assign a directional signal (default 0.15).
+    ' [P4] v0.48: tfiWindowSize now a dedicated parameter (default 30), separate
+    ' from MicroCVD's microWindowSize (default 50).  TFI measures short-burst
+    ' aggressor pressure; a smaller window (20-30 trades) is more responsive and
+    ' appropriate for 1m scalping.  MicroCVD needs a wider window to segment
+    ' meaningfully into thirds.  Renamed param: windowSize -> tfiWindowSize.
     Public Shared Sub CalcTFI(trades As List(Of TradeRecord),
                                ByRef tfiValue As Double,
                                ByRef tfiSignal As String,
-                               Optional windowSize As Integer = 50,
+                               Optional tfiWindowSize As Integer = 30,
                                Optional threshold As Double = 0.15)
         tfiValue = 0.0 : tfiSignal = "NEUTRAL"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
-        Dim window = trades.Take(windowSize).ToList()  ' newest-first from Deribit
+        Dim window = trades.Take(tfiWindowSize).ToList()
         Dim buyFlow  As Double = 0
         Dim sellFlow As Double = 0
         For Each t In window
@@ -152,7 +162,7 @@ Partial Public Class IndicatorEngine
         Dim total As Double = buyFlow + sellFlow
         If total = 0 Then Return
 
-        tfiValue = (buyFlow - sellFlow) / total  ' range [-1, +1]
+        tfiValue = (buyFlow - sellFlow) / total
 
         If tfiValue > threshold Then
             tfiSignal = "BUY PRESSURE"
@@ -164,35 +174,22 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- MicroCVD (Intra-window CVD segmentation) -----------------------------
-    ' Splits the trade window into 3 equal segments (early/mid/late) and
-    ' computes per-segment USD delta.  Detects acceleration vs deceleration of
-    ' buy/sell pressure within the window.
-    '
-    ' Momentum rules (sign-aware):
-    '   Bull net (netDelta > 0):
-    '     ACCELERATING : microLate > 0  AND  microLate > microEarly + accelThreshold
-    '     DECELERATING : microLate < 0  OR   microLate < microEarly - accelThreshold
-    '     FLAT         : otherwise
-    '   Bear net (netDelta <= 0):
-    '     ACCELERATING : microLate < 0  AND  microLate < microEarly - accelThreshold
-    '     DECELERATING : microLate > 0  OR   microLate > microEarly + accelThreshold
-    '     FLAT         : otherwise
-    '
-    ' accelThreshold: minimum signed USD difference (late vs early) to classify
-    '                 as ACCELERATING or DECELERATING (default 5000).
+    ' [P4] v0.48: Optional param renamed windowSize -> microWindowSize for
+    ' clarity at call sites where both CalcTFI and CalcMicroCVD are invoked.
+    ' Default remains 50 trades -- wide enough for meaningful thirds.
     Public Shared Sub CalcMicroCVD(trades As List(Of TradeRecord),
                                     ByRef microEarly As Double,
                                     ByRef microMid As Double,
                                     ByRef microLate As Double,
                                     ByRef microMomentum As String,
                                     ByRef microSignal As String,
-                                    Optional windowSize As Integer = 50,
+                                    Optional microWindowSize As Integer = 50,
                                     Optional accelThreshold As Double = 5000)
         microEarly = 0 : microMid = 0 : microLate = 0
         microMomentum = "FLAT" : microSignal = "FLAT"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
-        Dim window  = trades.Take(windowSize).ToList()
+        Dim window  = trades.Take(microWindowSize).ToList()
         Dim segSize As Integer = Math.Max(1, window.Count \ 3)
 
         For i As Integer = 0 To window.Count - 1
@@ -209,9 +206,6 @@ Partial Public Class IndicatorEngine
         Dim netDelta As Double = microEarly + microMid + microLate
         Dim isBull   As Boolean = netDelta > 0
 
-        ' Sign-aware momentum: late segment must be in the same direction as net
-        ' AND sufficiently larger than early to qualify as ACCELERATING.
-        ' A sign reversal in the late segment always = DECELERATING.
         If isBull Then
             If microLate > 0 AndAlso microLate > microEarly + accelThreshold Then
                 microMomentum = "ACCELERATING"
@@ -230,7 +224,6 @@ Partial Public Class IndicatorEngine
             End If
         End If
 
-        ' Signal: directional + momentum combined
         If isBull AndAlso microMomentum = "ACCELERATING" Then
             microSignal = "BULL_ACCEL"
         ElseIf isBull AndAlso microMomentum = "DECELERATING" Then
