@@ -4,7 +4,7 @@ This document captures the trader's style, preferences, and strategic context
 for the Deribit Verdict Engine project. Attach this file at the start of any
 new conversation (coding or strategy) to bootstrap full context instantly.
 
-Last updated: 2026-03-14
+Last updated: 2026-04-11
 
 ---
 
@@ -74,61 +74,113 @@ Last updated: 2026-03-14
     RSI(9):          PREFERRED | Hold/exit decisions during trades. Divergence
                                detection for exhaustion. Slower than ROC so used
                                DURING trade management, not at entry.
+                               Divergence penalty: -1 long when BEARISH+RSI>65,
+                               -1 short when BULLISH+RSI<35. PivotWing and
+                               LookbackBars configurable via cfg.
 
     DMI/ADX(9):      PREFERRED | Core regime filter on 5m chart. Determines
                                long-bias vs short-bias vs bidirectional day.
                                ADX < 20 = range, > 25 = trend. Monitored on 5m
-                               NOT on 1m.
+                               NOT on 1m. Threshold configurable via cfg.
 
-    ATR(7):          PREFERRED | Position sizing ONLY. NOT used for stop placement
-                               (swing structure defines stops). Used as
-                               volatility scaler: Position = Base x (AvgATR/CurrATR).
+    ATR(7):          PREFERRED | Position sizing AND reference display block.
+                               NOT used for stop placement in execution (swing
+                               structure defines stops). Used as volatility
+                               scaler: Position = Base x (AvgATR/CurrATR).
 
     Volume SMA(9):   PREFERRED | Volume spike detection. Breakout only counts if
                                volume > 3x SMA(9). Essential for filtering
-                               fakeout breakouts.
+                               fakeout breakouts. Mid-tier directional partial
+                               upgrade via cross-category confirm.
 
     VWAP:            PREFERRED | Institutional fair-value reference. Provides
-                               intraday directional bias independent of VPVR.
-                               Session-reset at 00:00 UTC.
+                               intraday directional bias. Dual-session reset
+                               (configurable UTC times). Warmup guard (default
+                               15 candles) prevents early-session noise.
+                               sigma-1/sigma-2 bands for partial zone scoring.
 
-    Bollinger Bands  PREFERRED | Used via BBW (Bandwidth) for squeeze detection.
-    / BBW:                     Not used for overbought/oversold bands directly.
+    Bollinger/BBW:   PREFERRED | Used via BBW (Bandwidth) for squeeze detection.
+                               Not used for overbought/oversold bands directly.
                                Squeeze = ACTIVE (-1 both), RELEASING = directional
                                via ROC, NONE = no score. (v0.18 design)
+                               Squeeze penalty magnitude configurable via cfg.
+                               TTM flatThreshold configurable via cfg.
 
     EMA Ribbon       PREFERRED | 9/21/50 on 1m for dynamic trend structure.
     (9/21/50):                 Provides price-based support/resistance that DMI
-                               alone cannot. EMA(200) on 5m as macro veto.
+                               alone cannot. EMA(200) on 5m as regime anchor
+                               (ABOVE/BELOW veto).
 
     Funding Rate:    PREFERRED | Contrarian crowd-positioning signal. Used as
                                confidence modifier in Step 3 only (NOT Step 2
                                scoring -- removed in v0.17 to prevent
-                               double-counting).
+                               double-counting). Step deltas configurable via cfg.
+                               NOTE: Funding momentum (rising vs falling rate)
+                               identified as future upgrade -- not yet implemented.
 
     Open Interest:   PREFERRED | OI change direction + price direction = quality
     (OI Delta):                of trend signal. Rising OI + rising price =
                                genuine new longs. Essential for filtering
                                short-covering rallies from real breakouts.
+                               Signals: NEW LONGS/SHORTS/COVERING/CAPITULATION/NEUTRAL.
 
     Order Flow/OFI:  PREFERRED | Real-time buy/sell pressure from L2 order book.
                                Leading indicator -- shows imbalance before price
-                               moves. Via Deribit WebSocket.
+                               moves. BookDepth configurable (default 3); dynamic
+                               descending weight array. Dominance thresholds
+                               configurable via cfg (BuyDominantRatio=1.2,
+                               SellDominantRatio=0.833).
 
     Liquidations:    PREFERRED | Cascade detection. Penalty-only signal (v0.17).
                                -1 for > 50 BTC, -2 for > 200 BTC on affected side.
-                               Thresholds under review after 2-4 weeks of data.
+                               DominanceRatio configurable via cfg (default 1.0).
+                               NOTE: default 1.0 = equal-or-greater threshold;
+                               consider raising to 1.2-1.5 after live calibration.
+
+    CVD:             PREFERRED | Cumulative volume delta. 3-segment weighted slope
+                               (late x2 - early x1). Late segment carries 2x weight
+                               to reduce false RISING/FALLING flips from early
+                               single large trades. Divergence triggers -1 penalty.
+
+    MicroCVD:        PREFERRED | Intra-window segmentation (50-trade window, cfg).
+                               BULL/BEAR_ACCEL/DECEL signals. FLAT stall penalty
+                               when price and CVD direction contradict.
+                               AccelThreshold configurable via cfg (default 5000 USD;
+                               consider dynamic scaling vs VolumeSMA in future).
+
+    TFI:             PREFERRED | Trade flow aggressor pressure (30-trade window, cfg).
+                               BUY PRESSURE / SELL PRESSURE / NEUTRAL.
+                               Threshold configurable via cfg (default 0.15).
+                               Window (30) intentionally smaller than MicroCVD (50)
+                               -- TFI measures short-burst aggressor pressure,
+                               MicroCVD measures structural segmentation.
+
+    MTF Gate (15m):  PREFERRED | Hard veto gate. Forces NO TRADE on BLOCK.
+                               15m DMI/ADX + EMA confluence alignment required.
+                               TTL cache 60s (avoids redundant 15m fetches).
+                               Regime hysteresis: 1-bar grace period before
+                               RANGE_BOUND flip from TRENDING/TRANSITIONAL.
 
     OBV:             NEUTRAL   | Volume trend confirmation. Useful for divergence
                                but slower signal. Tier 3 -- nice to have.
+                               Adverse divergence blocks cross-category upgrade.
 
-    Donchian(20):    NEUTRAL   | Objective breakout level. Complements VPVR with
+    Donchian(20):    NEUTRAL   | Objective breakout level. Complements VPFR with
                                pure price-based breakout detection. Tier 3.
+                               Full LONG/SHORT + quartile partial signals
+                               (LONG_PARTIAL/SHORT_PARTIAL). NONE = mid-channel
+                               note annotated in scoring breakdown.
 
-    VPVR:            PREFERRED | Visual use only on TradingView/Deribit chart.
-    (Visual only)              Cannot be computed from OHLCV via API.
-                               Used to identify swing targets and stops on screen.
-                               NOT in the automated verdict engine.
+    VPFR-lite:       PREFERRED | Volume Profile (Fixed Range) -- fully implemented
+    (Engine):                  in engine as Tier 3. NOT visual-only.
+                               POC proximity scoring. HVN wall triggers ATR
+                               target cap (AdjustedLongTarget/AdjustedShortTarget).
+                               Exponential decay weighting (decayBase=0.985).
+                               numBuckets configurable via cfg (default 50).
+
+    VPVR             VISUAL    | Visual use only on TradingView/Deribit chart.
+    (TradingView):   ONLY      | Used to identify swing targets and stops on screen.
+                               Engine uses VPFR-lite instead (see above).
 
 ---
 
@@ -143,15 +195,18 @@ Last updated: 2026-03-14
                            divergence detection more cleanly. -- Jan 2026
 
     CMF (20)            -- Too slow (20-bar lag). Redundant with Volume SMA
-                           + VPVR for volume context. -- Jan 2026
+                           + VPFR for volume context. -- Jan 2026
 
     Fixed % profit      -- Rejected in favour of structural swing targets
     targets                (previous swing high/low). Fixed % targets
                            misalign with actual market structure. -- Jan 2026
 
-    ATR-based stops     -- Rejected in favour of structural swing lows/highs.
-                           Swing structure defines natural invalidation levels
-                           better than ATR multiples. -- Jan 2026
+    ATR-based stops     -- Rejected in favour of structural swing lows/highs
+    (execution)            for stop placement. Swing structure defines natural
+                           invalidation levels better than ATR multiples.
+                           NOTE: ATR retained for reference display block only
+                           (entry/stop/target levels shown as reference, not
+                           as execution rules). -- Jan 2026
 
     Pure scalping       -- Fixed 0.1-0.5% targets. Too small for swing-to-swing
     (Style A)              volatility, ignores multi-timeframe context. -- Jan 2026
@@ -206,7 +261,9 @@ Last updated: 2026-03-14
 
     ATR thresholds:         Low < 80 | Normal 80-150 | High > 150
                             (calibrated for BTC ~$80k-$100k range, Q1 2026)
-                            Recalibrate if BTC price moves significantly.
+                            Review against CSV log if BTC price moves
+                            significantly -- AvgATR/CurrATR ratio approach
+                            is self-calibrating and preferred long-term.
 
 ---
 
@@ -216,18 +273,19 @@ Last updated: 2026-03-14
                                 overtrade. Selective entry philosophy means
                                 the engine should flag quality over quantity.
 
-    Minimum confidence          MEDIUM or HIGH (score >= 9) to act on verdict.
-    to trade:                   Will not act on WEAK signals (score 6-8) unless
-                                a specific high-conviction setup is visible on chart.
+    Minimum confidence          MEDIUM or HIGH verdict to act on.
+    to trade:                   Will not act on WEAK signals unless a specific
+                                high-conviction setup is visible on chart.
 
     Regime preference:          Both TRENDING and RANGE_BOUND are acceptable.
                                 TRANSITIONAL = reduced size, extra caution.
                                 Will not override regime veto rules.
 
-    Score threshold             Current thresholds (6/9/12) feel correct.
-    intuition:                  Strong signal at 12/13 = all meaningful signals
-                                aligned (92% of max). This is appropriately
-                                demanding.
+    Score thresholds:           Percentage-based against regime MaxScore (19/18/15).
+                                Computed as Math.Ceiling(regimeMax x verdictStrong/Med/WeakPct).
+                                NOT fixed at 6/9/12 -- thresholds vary by regime.
+                                Default pcts produce approx 63%/47%/32% of MaxScore.
+                                All pcts configurable via settings.json.
 
     False positive tolerance:   Low. Prefers engine to say NO TRADE rather
                                 than output a weak directional verdict that
@@ -238,70 +296,109 @@ Last updated: 2026-03-14
                                 Show score breakdown for transparency but
                                 headline verdict should be prominent.
 
+    Config philosophy:          All scoring thresholds and indicator parameters
+                                externalised to settings.json (v6, Commit 5).
+                                No hardcoded magic numbers remain in engine.
+                                Hot-reloadable without recompile.
+
 ---
 
 ## 7. Key Design Decisions Made (Scorecard)
 
-    v0.13  Partial signal upgrade system added -- cross-category confirmation
-           required to prevent single-indicator amplification.
+    v0.13      Partial signal upgrade system added -- cross-category confirmation
+               required to prevent single-indicator amplification.
 
-    v0.15  TRANSITIONAL regime penalty redesigned -- ADX proximity-based
-           (-2 if ADX 20.0-22.4, -1 if ADX 22.5-24.9) plus TierFloor()
-           guard (max drop = 3 points = 1 tier). Replaces flat -2.
-           Ref: docs/transitional-regime-scoring-fix.md
+    v0.15      TRANSITIONAL regime penalty redesigned -- ADX proximity-based
+               (-2 if ADX 20.0-22.4, -1 if ADX 22.5-24.9) plus TierFloor()
+               guard (max drop = 3 points = 1 tier). Replaces flat -2.
 
-    v0.16  TierFloor() guard formalised -- penalty cannot cause score to drop
-           more than one full tier width (3 points) in a single application.
+    v0.16      TierFloor() guard formalised -- penalty cannot cause score to drop
+               more than one full tier width (3 points) in a single application.
 
-    v0.17  Non-directional padding cleanup:
-           - Funding OK removed from Step 2 scoring (double-counting with
-             Step 3 funding modifier). Kept as display-only row.
-           - No Adverse Liq converted to penalty-only. -1 for LiqSize > 50 BTC,
-             -2 for LiqSize > 200 BTC, on affected side only. No reward for calm.
-           - Score denominator updated from /15 to /13.
-           Ref: docs/dual-scoring-fix-proposal.md, docs/dual-scoring-fix-response.md
+    v0.17      Non-directional padding cleanup: Funding OK removed from Step 2;
+               No Adverse Liq converted to penalty-only; denominator /13.
 
-    v0.18  BBW redesign (Option B approved):
-           - ACTIVE squeeze: -1 both sides (confidence reduction).
-           - RELEASING: +1 to ROC-aligned side only (ROC > +0.10 = long,
-             ROC < -0.10 = short, chop zone = no award).
-           - NONE: no score change (calm = not a signal).
-           Ref: docs/bbw-scoring-proposal.md, docs/bbw-scoring-response.md
+    v0.18      BBW redesign (Option B): ACTIVE=-1 both, RELEASING=+1 ROC-aligned,
+               NONE=no change.
+
+    v0.33      MTF Gate added: 15m DMI/ADX hard veto; forces NO TRADE on BLOCK.
+
+    v0.35      Auto-run timer UI added.
+
+    v0.37      CalcRSIDivergence added; divergence penalty wired into scoring.
+
+    v0.38      MicroCVD 3-segment: BULL/BEAR_ACCEL/DECEL signals.
+
+    v0.39      Dual-session VWAP; warmup guard.
+
+    v0.40      DynamicNorms volume thresholds; volMid directional partial scoring.
+
+    v0.42      OBV adverse divergence gate; cross-category upgrade logic.
+
+    v0.43      VPFR-lite added; POC proximity scoring (supersedes visual-only VPVR).
+
+    v0.44      AdjustedLongTarget / AdjustedShortTarget; HVN wall target cap.
+
+    v0.45      MicroCVD sign-aware penalty; CVD divergence penalty fix.
+
+    v0.46      RenderOutput refactor; last transacted price display block.
+
+    v0.47      CVD 3-seg weighted slope (late x2 - early x1); Donchian quartile
+               partial; OBV div block; VPFR exp decay; MTF TTL cache 60s;
+               RSI div penalty wired.
+
+    v0.48      TFI window (30) separated from MicroCVD window (50); dedicated
+               TfiSettings + MicroCvdSettings in EngineSettings.
+
+    v0.49      All scoring thresholds + indicator params externalised to cfg;
+               EngineSettings v0.37; settings.json v6. No hardcoded magic numbers.
+
+    Commit 4   Regime ADX hysteresis (1-bar grace, _prevRegime field);
+               MicroCVD FLAT stall penalty; OFI BookDepth injectable via cfg;
+               dynamic descending weight array in CalcOFI.
+
+    Commit 5   All remaining hardcoded params wired to cfg:
+               [T2-C] Donchian NONE mid-channel breakdown note;
+               [T3-A] VPFR numBuckets from cfg;
+               [T3-B] RSI pivotWing + lookbackBars from cfg;
+               [T3-C] TTM flatThreshold from cfg;
+               [T3-D] CalcLiquidations dominanceRatio from cfg.
 
 ---
 
 ## 8. Open Questions / Known Limitations
 
-    Liq penalty thresholds (50/200 BTC) -- monitoring. Review after 2-4 weeks
-    of live data. Adjust 200 BTC threshold to ~90th percentile of observed
-    LiqLongSize/LiqShortSize values in production.
+    RESOLVED: VPFR-lite implemented (v0.43). POC proximity + HVN cap fully scored.
+    RESOLVED: RSI divergence implemented (v0.37). CalcRSIDivergence with pivot detection.
+    RESOLVED: Donchian + OBV confirmed scored in engine (Tier 3).
+    RESOLVED: ROC thresholds now configurable via settings.json (v0.49 / Commit 5).
+    RESOLVED: All indicator params externalised to cfg (Commit 5).
 
-    ROC thresholds (+-0.15, +-0.40, +-0.70) -- calibrated for BTC at
-    ~$80k-$100k on 1m charts. If BTC price moves significantly (e.g. $150k+),
-    these percentage-of-price thresholds may need recalibration. Consider
-    making them configurable or expressing as % of current price.
+    Liq dominanceRatio (default 1.0) -- now configurable. Review false LONG/SHORT
+    LIQS signals after 2-4 weeks live data. Consider raising to 1.2-1.5 to require
+    the dominant side to be proportionally larger before signalling.
 
-    ATR thresholds (80/150) -- same price-sensitivity caveat as ROC.
-    The AvgATR/CurrATR ratio approach is self-calibrating and preferred.
+    Liq penalty thresholds (50/200 BTC) -- monitoring. Review 200 BTC threshold
+    against ~90th percentile of observed LiqLongSize/LiqShortSize in CSV log.
 
-    20-day ATR average -- currently sourced from a separate daily candle
-    API call (GET /public/get_tradingview_chart_data, resolution=1D, count=30).
-    Verify this endpoint returns consistent daily ATR values.
+    ATR thresholds (80/150) -- calibrated for BTC ~$80k-$100k Q1 2026. Review
+    if BTC price moves significantly. AvgATR/CurrATR ratio approach is
+    self-calibrating but the absolute Low/Normal/High bands may need updating.
 
-    VPVR -- not implemented in engine. Visual use only on chart. Future v2
-    option: build simplified volume profile from tick data via Deribit
-    GET /public/get_last_trades_by_instrument. Deferred.
+    MicroCVD accelThreshold (5000 USD default) -- consider dynamic scaling vs
+    VolumeSMA on quiet sessions where 5K delta is noise.
 
-    Divergence detection (RSI, OBV) -- requires basic swing detection
-    algorithm (5-bar pivot high/low comparison). Complexity vs value
-    not yet assessed. Status: not yet implemented.
+    Funding momentum -- absolute rate currently used. Rising vs falling rate
+    direction identified as higher-quality signal. Not yet implemented.
 
-    Donchian(20) and OBV -- Tier 3 indicators. Implemented in spec but
-    lower priority. Confirm they are included and scoring in engine.
+    OI x CVD cross-confirm -- OI (NEW LONGS/SHORTS) and CVD direction are
+    currently scored independently. A combined multiplier (e.g. NEW LONGS +
+    CVD RISING = full score) identified as a meaningful Tier 1 upgrade.
 
-    BBW display bug (v0.17) -- [S] mark was suppressed during TRENDING_DOWN
-    regime. Likely a UI-layer conditional suppression. Becomes irrelevant
-    after v0.18 BBW redesign but monitor for similar suppression on other rows.
+    Websocket upgrade -- engine currently uses REST polling (snapshot-based).
+    Moving to Deribit websocket API would provide real-time order book and
+    trade stream, removing the fundamental REST latency constraint.
+    Most impactful non-code upgrade available.
 
     AWS London (LD4) deployment -- recommended for minimal latency to
     Deribit API. Not yet confirmed as deployment target.
@@ -350,3 +447,8 @@ Last updated: 2026-03-14
                             Implementation, code review, debugging go to
                             Claude coding conversation.
                             This profile bridges both conversations.
+
+    Session handover:       Start new sessions by reading DeribitIndicatorProject.md
+                            and architecture.md only. Do NOT read entire codebase --
+                            individual .vb files only when a specific edit is needed.
+                            This preserves context budget for actual work.
