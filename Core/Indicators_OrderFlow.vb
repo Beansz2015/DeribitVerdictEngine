@@ -13,13 +13,25 @@
 '     - CalcMicroCVD: Optional microWindowSize As Integer = 50  (renamed for clarity)
 '     - Call site in RunAnalysisAsync passes cfg.Indicators.TFI.WindowSize and
 '       cfg.Indicators.MicroCVD.WindowSize independently.
+'
+' v0.51 [P14]: OFI dominance thresholds now injectable via optional parameters.
+'   Was: hardcoded 1.2 (BUY DOMINANT) and 0.833 (SELL DOMINANT) inside CalcOFI.
+'   Now: Optional buyDominantRatio As Double = 1.2
+'        Optional sellDominantRatio As Double = 0.833
+'   Call site passes cfg.Indicators.OFI.BuyDominantRatio / SellDominantRatio.
+'   cfg keys already existed (added v0.30) but were never wired into CalcOFI.
 
 Partial Public Class IndicatorEngine
 
     ' -- OFI (Order Flow Imbalance) top-3 levels, volume-weighted (w=3,2,1) ---
+    ' [P14] v0.51: buyDominantRatio / sellDominantRatio now optional params
+    ' (default 1.2 / 0.833) so CalcOFI is unit-testable and call site can pass
+    ' cfg values without changing the method signature for existing callers.
     Public Shared Sub CalcOFI(orderBook As OrderBookSnapshot,
                                ByRef ofiRatio As Double, ByRef ofiSignal As String,
-                               ByRef ofiBidVol As Double, ByRef ofiAskVol As Double)
+                               ByRef ofiBidVol As Double, ByRef ofiAskVol As Double,
+                               Optional buyDominantRatio  As Double = 1.2,
+                               Optional sellDominantRatio As Double = 0.833)
         ofiRatio = 1.0 : ofiSignal = "BALANCED" : ofiBidVol = 0 : ofiAskVol = 0
         If orderBook Is Nothing Then Return
 
@@ -42,9 +54,9 @@ Partial Public Class IndicatorEngine
         Dim total As Double = bidVol + askVol
         If total = 0 Then Return
         ofiRatio = bidVol / askVol
-        If ofiRatio > 1.2 Then
+        If ofiRatio > buyDominantRatio Then
             ofiSignal = "BUY DOMINANT"
-        ElseIf ofiRatio < 0.833 Then
+        ElseIf ofiRatio < sellDominantRatio Then
             ofiSignal = "SELL DOMINANT"
         Else
             ofiSignal = "BALANCED"
