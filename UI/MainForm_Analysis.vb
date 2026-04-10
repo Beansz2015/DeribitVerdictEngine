@@ -1,5 +1,26 @@
 ' UI/MainForm_Analysis.vb
 ' Partial class: Analyze button handler and RunAnalysisAsync pipeline.
+'
+' v0.52 [P15]: OI signal change threshold now reads cfg.Indicators.OI.ChangeThresholdPct.
+'   Was: hardcoded > 1 / < -1 (implying 1% fixed).
+'   Now: oiThr = cfg.Indicators.OI.ChangeThresholdPct * 100 (converts pct decimal to pct value).
+'   cfg key already existed (added v0.30, default 0.01 = 1%) but comparison was a literal.
+'
+' v0.52 [P16]: Donchian period now reads cfg.Indicators.Donchian.Period.
+'   Was: CalcDonchian(candles1m, 20, ...) -- literal 20.
+'   Now: CalcDonchian(candles1m, cfg.Indicators.Donchian.Period, ...).
+'   cfg key already existed (default 20) but call site was bypassing it.
+'
+' v0.52 [P17]: BBW period and StdDev now read from cfg.
+'   Was: CalcBBW(candles1m, 20, 2.0, ...) -- both literals.
+'   Now: CalcBBW(candles1m, cfg.Indicators.BBW.Period, cfg.Indicators.BBW.StdDev, ...).
+'   cfg keys already existed (defaults 20 / 2.0) but were not passed through.
+'
+' v0.52 [P18]: FundingBias label thresholds now read from cfg.Scoring funding fields.
+'   Was: hardcoded 0.001 / 0.0005 literals in the label block -- different code path
+'        from Step 3 scoring which already correctly used cfg.
+'   Now: both label and scoring use the same cfg.Scoring.FundingHigh/LowPositive/Negative
+'        values, so label and penalty are always in sync.
 
 Imports System.Drawing
 Imports System.Windows.Forms
@@ -119,8 +140,10 @@ Partial Public Class MainForm
                                       r.VWAPSigma2Upper, r.VWAPSigma2Lower,
                                       vwapS2Hour, vwapS2Minute)
 
+        ' [P17] BBW period and StdDev from cfg (were hardcoded 20 / 2.0)
         Dim minBBW As Double
-        IndicatorEngine.CalcBBW(candles1m, 20, 2.0, r.BBW, minBBW, r.SqueezeStatus)
+        IndicatorEngine.CalcBBW(candles1m, cfg.Indicators.BBW.Period, cfg.Indicators.BBW.StdDev,
+                                r.BBW, minBBW, r.SqueezeStatus)
         IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal)
 
         r.EMA9  = IndicatorEngine.CalcEMA(candles1m, 9)
@@ -134,14 +157,16 @@ Partial Public Class MainForm
             r.EMAAlignment = "MIXED"
         End If
 
+        ' [P18] FundingBias label thresholds now read from cfg to stay in sync with scoring Step 3.
+        ' Was: hardcoded 0.001 / 0.0005 literals -- decoupled from scoring cfg values.
         r.FundingRate = fundingRate
-        If fundingRate > 0.001 Then
+        If fundingRate > cfg.Scoring.FundingHighPositive Then
             r.FundingBias = "LONGS HEAVILY CROWDED"
-        ElseIf fundingRate > 0.0005 Then
+        ElseIf fundingRate > cfg.Scoring.FundingLowPositive Then
             r.FundingBias = "LONGS CROWDED"
-        ElseIf fundingRate < -0.001 Then
+        ElseIf fundingRate < cfg.Scoring.FundingHighNegative Then
             r.FundingBias = "SHORTS HEAVILY CROWDED"
-        ElseIf fundingRate < -0.0005 Then
+        ElseIf fundingRate < cfg.Scoring.FundingLowNegative Then
             r.FundingBias = "SHORTS CROWDED"
         Else
             r.FundingBias = "NEUTRAL"
@@ -160,21 +185,24 @@ Partial Public Class MainForm
         r.OIChange15m = If(oi15m IsNot Nothing AndAlso oi15m.OI > 0, (r.OI_Current - oi15m.OI) / oi15m.OI * 100, 0)
         r.OIChange60m = If(oi60m IsNot Nothing AndAlso oi60m.OI > 0, (r.OI_Current - oi60m.OI) / oi60m.OI * 100, 0)
 
+        ' [P15] OI signal threshold now from cfg (was hardcoded > 1 / < -1).
+        ' cfg.Indicators.OI.ChangeThresholdPct is stored as decimal (0.01 = 1%).
+        ' Multiply by 100 to convert to the same percentage-point scale as OIChange15m.
+        Dim oiThr As Double = cfg.Indicators.OI.ChangeThresholdPct * 100
         Dim priceUp As Boolean = r.CurrentPrice > bookSummary.MarkPrice * 0.9999
-        If r.OIChange15m > 1 AndAlso priceUp Then
+        If r.OIChange15m > oiThr AndAlso priceUp Then
             r.OISignal = "NEW LONGS"
-        ElseIf r.OIChange15m > 1 AndAlso Not priceUp Then
+        ElseIf r.OIChange15m > oiThr AndAlso Not priceUp Then
             r.OISignal = "NEW SHORTS"
-        ElseIf r.OIChange15m < -1 AndAlso priceUp Then
+        ElseIf r.OIChange15m < -oiThr AndAlso priceUp Then
             r.OISignal = "COVERING"
-        ElseIf r.OIChange15m < -1 AndAlso Not priceUp Then
+        ElseIf r.OIChange15m < -oiThr AndAlso Not priceUp Then
             r.OISignal = "CAPITULATION"
         Else
             r.OISignal = "NEUTRAL"
         End If
 
         ' [P14] v0.51: OFI dominance thresholds now passed from cfg.
-        ' Previously CalcOFI used hardcoded 1.2 / 0.833 internally.
         IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol,
                                 buyDominantRatio:=cfg.Indicators.OFI.BuyDominantRatio,
                                 sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio)
@@ -182,8 +210,6 @@ Partial Public Class MainForm
         IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
 
         ' [P4] v0.48: TFI and MicroCVD now use independent window sizes from settings.
-        ' TFI: short burst window (cfg.Indicators.TFI.WindowSize, default 30).
-        ' MicroCVD: wider segmentation window (cfg.Indicators.MicroCVD.WindowSize, default 50).
         IndicatorEngine.CalcTFI(recentTrades, r.TFIValue, r.TFISignal,
                                 tfiWindowSize:=cfg.Indicators.TFI.WindowSize,
                                 threshold:=cfg.Indicators.TFI.Threshold)
@@ -217,13 +243,15 @@ Partial Public Class MainForm
                               If(r.CurrentPrice > r.EMA200_5m, "ABOVE", "BELOW"),
                               "N/A")
 
-        IndicatorEngine.CalcDonchian(candles1m, 20, r.DonchianUpper, r.DonchianLower)
+        ' [P16] Donchian period from cfg (was hardcoded literal 20)
+        IndicatorEngine.CalcDonchian(candles1m, cfg.Indicators.Donchian.Period,
+                                     r.DonchianUpper, r.DonchianLower)
 
         ' [P4] Donchian quartile signal: fires on upper/lower 25% of channel
         Dim channelRange As Double = r.DonchianUpper - r.DonchianLower
         If channelRange > 0 Then
-            Dim q1 As Double = r.DonchianLower  + channelRange * 0.25
-            Dim q3 As Double = r.DonchianUpper  - channelRange * 0.25
+            Dim q1 As Double = r.DonchianLower + channelRange * 0.25
+            Dim q3 As Double = r.DonchianUpper - channelRange * 0.25
             If r.CurrentPrice >= r.DonchianUpper Then
                 r.DonchianSignal = "LONG"
             ElseIf r.CurrentPrice <= r.DonchianLower Then
