@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-10 | Current version: v0.47**
+**Last updated: 2026-04-10 | Current version: v0.48**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 It takes precedence over `indicator-spec.md` wherever the two conflict.
@@ -51,22 +51,22 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 | `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields |
 | `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
 | `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
-| `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcCVD (3-segment weighted slope v0.47), CalcMicroCVD, CalcTFI, CalcLiquidations |
+| `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcCVD (3-segment weighted slope v0.47), CalcMicroCVD, **CalcTFI (dedicated tfiWindowSize=30, v0.48)**, CalcLiquidations |
 | `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite (exp decay v0.47), CalcMTFGate |
 
 ### Core/Settings/
 
 | File | Notes |
 |---|---|
-| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. MTFGateSettings (v0.33) |
+| `Core/Settings/EngineSettings.vb` | v0.36 — Strongly-typed POCO for settings.json; **TfiSettings (WindowSize=30, Threshold=0.15) and MicroCvdSettings (WindowSize=50, AccelThreshold=5000) added (v0.48)** |
 
 ### UI/ — MainForm partial classes
 
 | File | Version | Notes |
 |---|---|---|
-| `UI/MainForm_Layout.vb` | v0.47 | Constants, DllImport/RECT, New(), ResizeControls(), SetOutputMargins(), OnFormHandleCreated(), CentreNudText(); shared fields: colour palette, _oiHistory, auto-run state vars, **MTF TTL cache fields** (_mtfCandles15m, _mtfLastFetchTime, MTF_TTL_SECONDS=60) |
+| `UI/MainForm_Layout.vb` | v0.47 | Constants, DllImport/RECT, New(), ResizeControls(), SetOutputMargins(), OnFormHandleCreated(), CentreNudText(); shared fields: colour palette, _oiHistory, auto-run state vars, MTF TTL cache fields (_mtfCandles15m, _mtfLastFetchTime, MTF_TTL_SECONDS=60) |
 | `UI/MainForm_AutoRun.vb` | v0.47 | InitAutoRunControls(), btnStartStop_Click, StartAutoRun(), StopAutoRun(), RunAutoAnalysis(), OnCountdownTick(), UpdateCountdownLabel() |
-| `UI/MainForm_Analysis.vb` | v0.47 | btnAnalyze_Click, RunAnalysisAsync() — **MTF TTL re-fetch logic**; **Donchian quartile call-site** |
+| `UI/MainForm_Analysis.vb` | v0.48 | btnAnalyze_Click, RunAnalysisAsync() — MTF TTL re-fetch logic; Donchian quartile call-site; **CalcTFI and CalcMicroCVD call sites now pass independent window sizes from cfg (v0.48)** |
 | `UI/MainForm_Render.vb` | v0.46 | RenderOutput(), AppendRtf(), AR(), SectionHeader(), Divider(), BuildCalibrationReport(), Flag(), UpdateLogInfo(), lnkResetLog_LinkClicked, lnkCalibCheck_LinkClicked |
 
 ### Docs
@@ -99,7 +99,8 @@ UI/MainForm_Analysis.vb  →  RunAnalysisAsync()
   │    ├─ CalcBBW, CalcTTMSqueeze
   │    ├─ CalcEMA (1m ribbon 9/21/50 + 5m EMA200)
   │    ├─ CalcOFI (top-3 weighted bid/ask imbalance)
-  │    ├─ CalcLiquidations, CalcCVD (3-seg weighted slope), CalcMicroCVD, CalcTFI
+  │    ├─ CalcLiquidations, CalcCVD (3-seg weighted slope), CalcMicroCVD
+  │    ├─ CalcTFI (tfiWindowSize from cfg.Indicators.TFI.WindowSize, default 30)
   │    ├─ CalcMTFGate (15m DMI/ADX + EMA confluence gate)
   │    ├─ CalcDonchian → DonchianSignal (LONG/SHORT/LONG_PARTIAL/SHORT_PARTIAL)
   │    ├─ CalcOBV
@@ -156,8 +157,8 @@ When no cap fires, the display is identical to the pre-cap behaviour.
 | OFI | CalcOFI | Top-3 depth levels, bid/ask imbalance, weights 3/2/1 |
 | Liquidations | CalcLiquidations | Penalty-only; large threshold from cfg |
 | CVD | CalcCVD | Net delta + **3-segment weighted slope** (late×2 − early×1, v0.47) + divergence; −1 penalty on divergence |
-| MicroCVD | CalcMicroCVD | 3-segment (early/mid/late) CVD; BULL/BEAR_ACCEL/DECEL; sign-aware penalty −1 when opposing verdict direction |
-| TFI | CalcTFI | Trade Flow Imbalance; BUY/SELL PRESSURE signal; scored independently |
+| MicroCVD | CalcMicroCVD | 3-segment (early/mid/late) CVD; BULL/BEAR_ACCEL/DECEL; sign-aware penalty −1 when opposing verdict direction. **Window=50 (cfg.Indicators.MicroCVD.WindowSize, v0.48 — independent of TFI).** |
+| TFI | CalcTFI | Trade Flow Imbalance; BUY/SELL PRESSURE signal; scored independently. **Window=30 (cfg.Indicators.TFI.WindowSize, v0.48 — separate from MicroCVD window).** |
 | 5m EMA(200) | CalcEMA(candles5m,200) | ABOVE/BELOW; short signal if price below |
 
 ### Tier 3
@@ -196,6 +197,8 @@ settings.json
     liquidations:  { largeLiqSize }
     cvd:           { slopeMinUsd, slopePctOfValue,
                      divergencePriceGate, tradeLookback }
+    tfi:           { window_size (default 30), threshold (default 0.15) }   ← NEW v0.48
+    microCvd:      { window_size (default 50), accel_threshold (default 5000) }  ← NEW v0.48
   mtfGate:
     enabled        -- bool; if false the gate is bypassed
     dmiPeriod      -- DMI/ADX period for 15m calc
@@ -230,7 +233,7 @@ settings.json
 - RSI divergence penalty (v0.47): −1 long when BEARISH + RSI > 65; −1 short when BULLISH + RSI < 35
 - CVD divergence penalty: −1 before liquidation penalty
 - MicroCVD sign-aware penalty: −1 applied to the **opposing** direction when BULL/BEAR_DECEL detected
-- TFI: independent full score contributor (BUY/SELL PRESSURE)
+- TFI: independent full score contributor (BUY/SELL PRESSURE). **Window now 30 via cfg (v0.48).**
 - Liquidation penalty: −1 standard, −2 large
 - OBV scoring: RISING/FALLING trend + non-adverse divergence = full score; adverse divergence = partial-upgrade only; **cross-category upgrade also blocked on adverse divergence (v0.47)**
 - Volume mid-tier (v0.47): directional partial (volMidLong/volMidShort) upgrades via Volume cross-confirm
@@ -247,135 +250,90 @@ settings.json
 - Short: mirrored
 - R:R always 1:2
 - **HVN cap:** if `v.AdjustedLongTarget > 0` (or Short), the render dims the raw target and
-  shows the capped target in amber bold with `v.TargetCapReason`. Cap only fires when VPFR-lite
-  detects a POC wall between entry and raw target (NEAR_HVN_RESIST for longs, NEAR_HVN_SUPPORT
-  for shorts). When no cap fires, output is identical to pre-cap behaviour.
+  shows the POC-capped target in amber bold with the `TargetCapReason` string.
 
 ---
 
-## 9. DynamicNorms
+## 9. Verdict Levels
 
-Computed from the last 250 × 1m candles on each analysis run.
-Provides live adaptive thresholds for Volume and VWAP deviation,
-and an ATR scale factor. Falls back to static defaults if insufficient data.
-
----
-
-## 10. AnalysisLogger
-
-Appends one CSV row per `Analyze Now` click to `analysis_log.csv` (next to exe).
-Calibration Readiness Report checks:
-- ≥ 300 total rows
-- ≥ 3 sessions (days)
-- ≥ 3 regimes with ≥ 50 rows each
-- ≥ 2 liquidation events
+| Verdict | Meaning |
+|---|---|
+| STRONG LONG | High-confidence long |
+| LONG | Standard long |
+| WEAK LONG | Low-confidence long |
+| NO TRADE | Insufficient signal or MTF block |
+| WEAK SHORT | Low-confidence short |
+| SHORT | Standard short |
+| STRONG SHORT | High-confidence short |
 
 ---
 
-## 11. Documentation Requirements (for AI continuations)
+## 10. Open Position Guidance (CalcHoldStatus)
 
-When continuing this project in a new conversation, the AI **must** follow these rules:
-
-### a. Always read this file first
-Fetch `docs/DeribitIndicatorProject.md` from GitHub at the start of every session.
-This file overrides `indicator-spec.md` on all points of conflict.
-
-### b. Update this file at the end of every session
-After any code change is pushed to GitHub, update this handover doc with:
-- Bumped version number in the header
-- Updated version in the File Inventory table (Section 3)
-- A summary of what changed and why in a new entry at the bottom (Section 13)
-
-### c. Condition tracking
-For any feature that requires a live condition to be observed before it can be
-called complete, add it to Section 14 (Pending Observations) with status `WATCHING`.
-Mark it `COMPLETE` once confirmed.
-
-### d. GitHub push method
-If `push_files` fails, fall back to `create_or_update_file` one file at a time.
-Always read the current file SHA before updating (use `get_file_contents`).
-
-### e. Version numbering
-The app version is shown in `UI/MainForm_Layout.vb` → `Me.Text = "Deribit Verdict Engine vX.XX"`.
-Partial-class files within the same logical unit share the same version.
-- `UI/MainForm_*.vb` files: all carry the app version (currently v0.47)
-- `Core/ScoringEngine_*.vb` files: independent minor version
-- `Core/Indicators_*.vb` files: independent minor version
-- `Core/Settings/EngineSettings.vb`: currently v0.33
-- When any file changes, bump only that logical unit's version
+When `posState = InLong` or `InShort`, `CalcHoldStatus` computes a hold/exit/flip guidance
+field appended to the breakdown. Logic checks current verdict alignment with open position.
 
 ---
 
-## 12. Known Gaps / Not Yet Built
+## 11. CSV Logging
 
-- Automated backtesting harness (manual log review only for now)
-- Alert/notification system (no audio or push alerts)
-- Multi-instrument support (BTC-PERPETUAL only)
-- Settings UI (edit settings.json manually)
+`AnalysisLogger.LogRun(r, verdict)` appends one row per run to `analysis_log.csv` in the
+exe directory. `CalibrationReport` summarises recent directional accuracy.
 
 ---
 
-## 13. Change Log
+## 12. Auto-Run
 
-| Version | Date | Changes |
-|---|---|---|
-| v0.01–v0.20 | (prior sessions) | Initial build: core indicators, DMI, VWAP, EMA ribbon, OI, OFI, Donchian, BBW, calibration log |
-| v0.21–v0.25 | (prior sessions) | DynamicNorms, dual-score engine, regime veto, partial upgrade logic, MaxScore regime-aware |
-| v0.26 | (prior sessions) | OBV + RSI divergence + CVD added |
-| v0.27 (ScoringEngine) | 2026-04-06 | All verdict/penalty thresholds now read from EngineSettings |
-| v0.28 (MainForm, Indicators) | 2026-04-06 | OFI call site updated for top-3 weighted bid/ask imbalance |
-| v0.29 (MainForm) | 2026-04-06 | CalcCVD call site added; SettingsLoader.Initialise() in constructor |
-| v0.30 (MainForm, EngineSettings, Indicators) | 2026-04-06 | Settings-driven gate params; CvdSettings class |
-| v0.31 (MainForm, Indicators) | 2026-04-06 | CalcVWAP ByRef sessionCandleCount; CalcVWAPBands σ1/σ2 |
-| v0.32 (MainForm, Indicators, EngineSettings, settings.json) | 2026-04-07 | VWAP session boundary times and warmup to settings.json |
-| v0.33 (EngineSettings) | 2026-04-08 | MTFGateSettings class added |
-| v0.34–v0.35 (MainForm, Indicators) | 2026-04-08 | CalcMTFGate implemented; 15m candles fetched |
-| v0.36 (MainForm, Indicators) | 2026-04-08 | Build fixes: MTFGateSettings property names; ADX threshold mapping |
-| v0.32 (ScoringEngine) | 2026-04-08 | MTF gate veto block; OBV scoring fix |
-| v0.37 (MainForm) | 2026-04-08 | VolumeUSD field rename (was VolumeUSD_approx) |
-| v0.38 (MainForm) | 2026-04-08 | Auto-run feature: interval NUD, Single/Repeat radio, Start/Stop button, countdown label |
-| v0.38a (MainForm) | 2026-04-08 | SettingsLoader.Save signature fix |
-| v0.39 (MainForm) | 2026-04-08 | 6 UI bug fixes (ChrW, Panel grouping, Single default, spacing, alignment) |
-| v0.40 (MainForm) | 2026-04-09 | InitAutoRunControls forced False on load; AR_Y/TXT_Y equal-gap; RenderOutput rewritten to use AppendRtf colour-coded output |
-| v0.41 (MainForm) | 2026-04-09 | NUD digit vertical centering via EM_SETRECT / SendMessage on inner TextBox handle |
-| v0.42 (MainForm) | 2026-04-09 | Last transacted price line (recentTrades(0).Price) displayed above ATR Entry Levels; TIME line changed to UTC+8 |
-| v0.43 (MainForm, Indicators) | 2026-04-09 | CalcVPFRLite implemented and wired into RunAnalysisAsync; VPFR-lite scoring active |
-| v0.44 (MainForm) | 2026-04-09 | Fix CalcVPFRLite call: unpack ByRef params instead of passing IndicatorResults directly |
-| v0.45 (MainForm) | 2026-04-09 | Rename OnHandleCreated → OnFormHandleCreated (suppress BC40003 shadow warning) |
-| v0.45 (refactor) | 2026-04-09 | **Full partial-class refactor:** ScoringEngine.vb split into Core/ScoringEngine_Types/_Helpers/_Calculate; MainForm.vb split into UI/MainForm_Layout/_AutoRun/_Analysis/_Render; root monolithic files deleted; all partials compile clean |
-| v0.46 (ScoringEngine, Indicators) | 2026-04-10 | MicroCVD sign-aware penalty: −1 applied to opposing direction only; TFI wired as independent scored signal |
-| v0.46 (ScoringEngine_Types, Render) | 2026-04-10 | VPFR HVN target cap: VerdictResult gains AdjustedLongTarget, AdjustedShortTarget, TargetCapReason; ScoringEngine sets cap when POC wall detected; RenderOutput displays capped target in amber bold |
-| v0.47 (MainForm_Layout) | 2026-04-10 | [P1] MTF TTL cache fields added: _mtfCandles15m, _mtfLastFetchTime, MTF_TTL_SECONDS=60; version string bumped to v0.47 |
-| v0.47 (MainForm_Analysis) | 2026-04-10 | [P1] MTF 15m candles re-fetched only when cache stale (>60s); all other data always fresh. [P4] Donchian call-site now computes LONG_PARTIAL/SHORT_PARTIAL for upper/lower quartile of channel |
-| v0.47 (Indicators_OrderFlow) | 2026-04-10 | [P3] CVD 3-segment weighted slope: early/mid/late split (count\3); weightedSlope = lateDelta×2 − earlyDelta×1; reduces false flips on single large early trades |
-| v0.47 (Indicators_Structure) | 2026-04-10 | [P7] VPFR-lite exponential decay: weight = decayBase^age (default 0.985) applied to each candle's volume before bucketing; POC now tracks intraday structure shifts more responsively |
-| v0.47 (ScoringEngine_Calculate) | 2026-04-10 | [P2] RSI divergence penalty: −1 long when BEARISH+RSI>65, −1 short when BULLISH+RSI<35; shown in breakdown. [P4] Donchian quartile upgrade in Pass 2 (LONG_PARTIAL/SHORT_PARTIAL via MarketStructure cross-confirm). [P5] Volume mid-tier directional partial (volMidLong/volMidShort) upgrades via Volume cross-confirm. [P6] OBV cross-category upgrade now blocked when adverse OBV divergence present; breakdown note annotates "[upgrade blocked]" |
+Timer-driven auto-analysis triggered every N seconds/minutes via `MainForm_AutoRun.vb`.
+Interval configurable from the UI. Minimum 10 seconds enforced. `AutoRunSettings` in
+`settings.json` can pre-set the interval and enable flag.
 
 ---
 
-## 14. Pending Observations / Calibration Watchlist
+## 13. DynamicNorms
 
-| Feature | Condition to observe | Status |
-|---|---|---|
-| CVD divergence penalty | See a live BEARISH or BULLISH divergence and confirm −1 penalty appears in scoring breakdown | WATCHING |
-| Transitional ADX penalty | Run during a TRANSITIONAL regime and confirm tiered penalty applied correctly | WATCHING |
-| Calibration log saturation | Accumulate 300+ rows across 3+ sessions to trigger READY FOR RECALIBRATION | WATCHING |
-| MTF weak-15m pass | Review whether PASS should require stricter confirmation when 15m ADX is below trend-strength threshold | WATCHING |
-| VPFR-lite HVN RESIST signal | Live NEAR_HVN_RESIST observed 2026-04-10: POC 72138 below entry 72169 — cap correctly did NOT fire (POC not between entry and target). Scoring [S] correct. | COMPLETE |
-| VPFR HVN target cap | Cap fires when POC is between entry and raw ATR target on the trade direction. Not yet observed in live run. | WATCHING |
-| MicroCVD sign-aware penalty | BEAR_DECEL observed 2026-04-10 with −1 penalty applied to long score. Render confirmed correct. | COMPLETE |
-| RSI divergence penalty (v0.47) | Observe BEARISH divergence with RSI > 65 and confirm −1 [L] shown in RSI breakdown line | WATCHING |
-| Donchian quartile signal (v0.47) | Observe LONG_PARTIAL or SHORT_PARTIAL signal firing and confirm partial upgrade appears in breakdown | WATCHING |
-| Volume mid-tier partial (v0.47) | Observe volMid <= ratio < volHigh with direction confirm and see upgraded score in breakdown | WATCHING |
-| MTF TTL cache (v0.47) | Confirm 15m fetch is skipped on back-to-back runs within 60s; MTF gate reason unchanged between runs | WATCHING |
+`DynamicNorms.Compute(candles1m, r.ATR)` calculates:
+- `ATRScaleFactor`: current ATR vs reference → scales stop/target distances
+- `VolHighThreshold` / `VolMidThreshold`: regime-adjusted volume thresholds
+- `VWAPDevThreshold`: dynamic VWAP deviation threshold (clamped from settings)
 
 ---
 
-## 15. Upgrade Backlog (Pending Implementation)
+## 14. WATCHING / Future Work
 
-**All 7 items from the v0.47 session have been implemented as of 2026-04-10.**
-The backlog is cleared. New items should be added here as they are identified.
+| Item | Description | Priority |
+|---|---|
+| TFI threshold tuning | After TFI window (30) runs live, evaluate whether threshold=0.15 filters noise correctly or needs lowering to 0.10 for BTC-PERPETUAL tick size. | Low |
+| MicroCVD accelThreshold calibration | Default 5000 USD. May need dynamic scaling vs ATR or volumeSMA to avoid false DECEL on quiet sessions. | Low |
 
-| Priority | Item | Status |
-|---|---|---|
-| — | (backlog clear) | — |
+---
+
+## 15. Backlog
+
+*(cleared — all P1–P4 items shipped as of v0.48)*
+
+---
+
+## 16. Version History
+
+| Version | Key Changes |
+|---|---|
+| v0.48 | **[P4]** TFI window separated from MicroCVD. CalcTFI param renamed `windowSize`→`tfiWindowSize` (default 30). CalcMicroCVD param renamed `windowSize`→`microWindowSize` (default 50). `TfiSettings` and `MicroCvdSettings` added to `EngineSettings` (v0.36). Call sites in `RunAnalysisAsync` now pass `cfg.Indicators.TFI.WindowSize` and `cfg.Indicators.MicroCVD.WindowSize` independently. |
+| v0.47 | [P1] MTF TTL cache (60s); [P2] RSI divergence scoring penalty; [P3] CVD 3-segment weighted slope; [P4] Donchian quartile partial signal; [P5] Volume mid-tier directional partial; [P6] OBV cross-category upgrade blocked on adverse divergence; [P7] VPFR exponential decay |
+| v0.46 | RenderOutput refactor; VPFR HVN target cap display; last transacted price block |
+| v0.45 | MicroCVD sign-aware penalty; CVD divergence penalty fix |
+| v0.44 | VPFR-lite HVN cap in ScoringEngine; AdjustedLongTarget/ShortTarget added to VerdictResult |
+| v0.43 | CalcVPFRLite added; ScoringEngine POC proximity scoring |
+| v0.42 | OBV adverse divergence gate; cross-category upgrade logic |
+| v0.41 | Donchian quartile signal scaffolding (pre-scoring) |
+| v0.40 | DynamicNorms volume thresholds; volMid partial scoring |
+| v0.39 | Dual-session VWAP; VWAP warmup guard |
+| v0.38 | MicroCVD 3-segment; BULL/BEAR_ACCEL/DECEL signals |
+| v0.37 | CalcRSIDivergence added (info-only prior to v0.47) |
+| v0.36 (settings) | AutoRunSettings added to EngineSettings |
+| v0.35 | Auto-run timer UI + AutoRunTimer interface |
+| v0.34 | MTFGate RSI fields removed; DMI/ADX/EMA 2-of-3 gate finalised |
+| v0.33 | MTFGateSettings + CalcMTFGate + 15m TTL fetch |
+| v0.32 | VWAP session timing in settings |
+| v0.31 | CVDSettings in EngineSettings |
+| v0.30 | RSI divergence gate params; OBV gate params; ScoringWeights |
