@@ -22,6 +22,9 @@
 '        cfg.Indicators.RSI.DivPenaltyRsiLow  (default 35)
 '   CVD divergence penalty magnitude: now cfg.Indicators.CVD.DivergencePenalty (was hardcoded 1).
 '   MicroCVD decel penalty magnitude: now cfg.Indicators.MicroCVD.DecelPenalty  (was hardcoded 1).
+'
+' T1-D: CalcHoldStatus now takes cfg as 3rd parameter.
+'   All three call sites (TRENDING_UP veto, MTF veto, Step 6) updated.
 
 Partial Public Class ScoringEngine
 
@@ -414,7 +417,7 @@ Partial Public Class ScoringEngine
                     res.LongScore = ls : res.ShortScore = ss
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
-                    res.HoldStatus = CalcHoldStatus(r, posState)
+                    res.HoldStatus = CalcHoldStatus(r, posState, cfg)
                     Return res
                 End If
             Case "TRENDING_DOWN"
@@ -423,7 +426,7 @@ Partial Public Class ScoringEngine
                     res.LongScore = ls : res.ShortScore = ss
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
-                    res.HoldStatus = CalcHoldStatus(r, posState)
+                    res.HoldStatus = CalcHoldStatus(r, posState, cfg)
                     Return res
                 End If
             Case "TRANSITIONAL"
@@ -462,7 +465,7 @@ Partial Public Class ScoringEngine
             res.LongScore = ls : res.ShortScore = ss
             res.EffectiveLongScore = effectiveLS : res.EffectiveShortScore = effectiveSS
             res.RegimePenalty = adxPenalty
-            res.HoldStatus = CalcHoldStatus(r, posState)
+            res.HoldStatus = CalcHoldStatus(r, posState, cfg)
             Return res
         End If
 
@@ -494,7 +497,7 @@ Partial Public Class ScoringEngine
         End If
 
         ' -- Step 6: Hold / Exit Assessment -----------------------------------
-        res.HoldStatus = CalcHoldStatus(r, posState)
+        res.HoldStatus = CalcHoldStatus(r, posState, cfg)
 
         ' -- Step 7: VPFR-aware ATR Target Cap --------------------------------
         ' [P11] ATR target/stop multipliers now from cfg

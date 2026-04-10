@@ -24,6 +24,9 @@
 '           Removed 6 dead integer threshold fields from ScoringSettings
 '           (LongThreshold, ShortThreshold, Strong/Medium variants) -- superseded by
 '           VerdictStrongPct/MedPct/WeakPct since v0.30.
+' T1-D: Added 6 HoldStatus exit threshold fields to ScoringSettings.
+'        CalcHoldStatus previously used hardcoded 0.6/-0.6 (ROC) and 60/40 (RSI) literals.
+'        All defaults preserve prior behaviour exactly.
 
 Imports System.Text.Json.Serialization
 
@@ -272,6 +275,18 @@ Public Class ScoringSettings
     <JsonPropertyName("atr_target_multiplier")> Public Property AtrTargetMultiplier As Double = 2.0
     ''' <summary>ATR distance multiplier for stop-loss price. Default 1.0.</summary>
     <JsonPropertyName("atr_stop_multiplier")>  Public Property AtrStopMultiplier  As Double  = 1.0
+    ''' <summary>[T1-D] ROC level above which TAKE PROFIT fires for a long. Default 0.6.</summary>
+    <JsonPropertyName("hold_roc_take_profit_long")>  Public Property HoldRocTakeProfitLong  As Double = 0.6
+    ''' <summary>[T1-D] ROC level below which TAKE PROFIT fires for a short. Default -0.6.</summary>
+    <JsonPropertyName("hold_roc_take_profit_short")> Public Property HoldRocTakeProfitShort As Double = -0.6
+    ''' <summary>[T1-D] RSI above this = HOLD (long). Default 60.</summary>
+    <JsonPropertyName("hold_rsi_hold_long")>         Public Property HoldRsiHoldLong        As Double = 60.0
+    ''' <summary>[T1-D] RSI at or above this = EVALUATE, below = EXIT (long). Default 40.</summary>
+    <JsonPropertyName("hold_rsi_evaluate_long")>     Public Property HoldRsiEvaluateLong    As Double = 40.0
+    ''' <summary>[T1-D] RSI below this = HOLD (short). Default 40.</summary>
+    <JsonPropertyName("hold_rsi_hold_short")>        Public Property HoldRsiHoldShort       As Double = 40.0
+    ''' <summary>[T1-D] RSI at or below this = EVALUATE, above = EXIT (short). Default 60.</summary>
+    <JsonPropertyName("hold_rsi_evaluate_short")>    Public Property HoldRsiEvaluateShort   As Double = 60.0
 End Class
 
 ' ---------------------------------------------------------------------------
