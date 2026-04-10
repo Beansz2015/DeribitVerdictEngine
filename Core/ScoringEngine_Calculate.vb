@@ -25,6 +25,14 @@
 '
 ' T1-D: CalcHoldStatus now takes cfg as 3rd parameter.
 '   All three call sites (TRENDING_UP veto, MTF veto, Step 6) updated.
+'
+' fix [T2-A]: MicroCVD FLAT stall penalty.
+'   When MicroCVDSignal = "FLAT" and net CVD direction contradicts price:
+'     - Price above VWAP but CVDValue <= 0: short score penalised (stall warning for longs)
+'     - Price below VWAP but CVDValue >= 0: long score penalised  (stall warning for shorts)
+'   Penalty magnitude reuses cfg.Indicators.MicroCVD.DecelPenalty (same semantic: momentum
+'   stall with no accel/decel distinction is a weaker signal than DECEL but shares the
+'   same tuning knob). Breakdown note annotated with STALL flag when active.
 
 Partial Public Class ScoringEngine
 
@@ -59,14 +67,14 @@ Partial Public Class ScoringEngine
         Dim rocPartialShort As Boolean = r.ROC < -cfg.Indicators.ROC.SlopeSensitivity AndAlso r.ROCSlope <> "FALLING"
         AddFull(state, rocLong, rocShort, SignalCategory.Momentum)
 
-        ' [P8] RSI (Momentum) — thresholds from cfg
+        ' [P8] RSI (Momentum) -- thresholds from cfg
         Dim rsiLong         As Boolean = r.RSI > rsiOB
         Dim rsiShort        As Boolean = r.RSI < rsiOS
         Dim rsiPartialLong  As Boolean = r.RSI > rsiPartOB  AndAlso r.RSI <= rsiOB
         Dim rsiPartialShort As Boolean = r.RSI < rsiPartOS  AndAlso r.RSI >= rsiOS
         AddFull(state, rsiLong, rsiShort, SignalCategory.Momentum)
 
-        ' [P13] RSI Divergence penalty — explicit trigger thresholds from cfg (v0.50)
+        ' [P13] RSI Divergence penalty -- explicit trigger thresholds from cfg (v0.50)
         ' Was: rsiOB+5 / rsiOS-5 (implicit coupling). Now: dedicated fields.
         Dim rsiDivPenaltyHigh As Double = cfg.Indicators.RSI.DivPenaltyRsiHigh
         Dim rsiDivPenaltyLow  As Double = cfg.Indicators.RSI.DivPenaltyRsiLow
@@ -86,7 +94,7 @@ Partial Public Class ScoringEngine
         Dim dmiShort As Boolean = r.MinusDI > r.PlusDI
         AddFull(state, dmiLong, dmiShort, SignalCategory.MarketStructure)
 
-        ' [P9] ADX (MarketStructure) — threshold from cfg
+        ' [P9] ADX (MarketStructure) -- threshold from cfg
         Dim adxLong  As Boolean = r.ADX > adxTrend AndAlso dmiLong
         Dim adxShort As Boolean = r.ADX > adxTrend AndAlso dmiShort
         AddFull(state, adxLong, adxShort, SignalCategory.MarketStructure)
@@ -202,6 +210,25 @@ Partial Public Class ScoringEngine
         ' [P13] MicroCVD decel penalty magnitude from cfg (was hardcoded 1)
         If r.MicroCVDSignal = "BULL_DECEL" Then state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.MicroCVD.DecelPenalty)
         If r.MicroCVDSignal = "BEAR_DECEL" Then state.LongScore  = Math.Max(0, state.LongScore  - cfg.Indicators.MicroCVD.DecelPenalty)
+
+        ' [T2-A] MicroCVD FLAT stall penalty -- reuses DecelPenalty magnitude.
+        ' A FLAT reading during a session where net CVD contradicts price is a
+        ' momentum stall warning. Penalise the side that price is currently
+        ' suggesting: if price > VWAP but CVD <= 0, longs are stalling; if
+        ' price < VWAP but CVD >= 0, shorts are stalling.
+        ' Only fires when MicroCVDSignal = "FLAT" to avoid double-penalty with
+        ' DECEL which already handles the momentum-fading case.
+        Dim microFlatStallLong  As Boolean = False
+        Dim microFlatStallShort As Boolean = False
+        If r.MicroCVDSignal = "FLAT" Then
+            If r.CurrentPrice > r.VWAP AndAlso r.CVDValue <= 0 Then
+                state.LongScore = Math.Max(0, state.LongScore - cfg.Indicators.MicroCVD.DecelPenalty)
+                microFlatStallLong = True
+            ElseIf r.CurrentPrice < r.VWAP AndAlso r.CVDValue >= 0 Then
+                state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.MicroCVD.DecelPenalty)
+                microFlatStallShort = True
+            End If
+        End If
 
         ' [P12] Liquidations -- penalty magnitudes from cfg
         Dim liqLongPenalty  As Integer = 0
@@ -353,12 +380,15 @@ Partial Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("TFI", tfiLong, tfiShort,
             String.Format("{0:F3} | {1}", r.TFIValue, r.TFISignal)))
 
+        ' [T2-A] MicroCVD breakdown note includes STALL annotation when flat stall penalty fires
         Dim microNote As String = String.Format("E:{0:F0} M:{1:F0} L:{2:F0} | {3} | {4}",
                                                 r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
                                                 r.MicroCVDMomentum, r.MicroCVDSignal)
         If r.MicroCVDSignal = "BULL_DECEL" OrElse r.MicroCVDSignal = "BEAR_DECEL" Then
             microNote &= String.Format(" | PENALTY -{0} opposing", cfg.Indicators.MicroCVD.DecelPenalty)
         End If
+        If microFlatStallLong  Then microNote &= String.Format(" | STALL PENALTY -{0} [L] (price>VWAP, CVD<=0)", cfg.Indicators.MicroCVD.DecelPenalty)
+        If microFlatStallShort Then microNote &= String.Format(" | STALL PENALTY -{0} [S] (price<VWAP, CVD>=0)", cfg.Indicators.MicroCVD.DecelPenalty)
         breakdown.Add(New SignalBreakdownItem("MicroCVD", microLong, microShort, microNote))
 
         Dim liqNote As String = String.Format("L:{0:F0} S:{1:F0} | {2}", r.LiqLongSize, r.LiqShortSize, r.LiqSignal)

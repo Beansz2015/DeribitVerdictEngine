@@ -20,31 +20,47 @@
 '        Optional sellDominantRatio As Double = 0.833
 '   Call site passes cfg.Indicators.OFI.BuyDominantRatio / SellDominantRatio.
 '   cfg keys already existed (added v0.30) but were never wired into CalcOFI.
+'
+' fix [T2-B]: OFI BookDepth now injectable via Optional bookDepth As Integer = 3.
+'   Was: Take(3) hardcoded in two places inside CalcOFI; weights array fixed at {3,2,1}.
+'   Now: Take(bookDepth) used for both bids and asks; weights array built dynamically
+'   as descending integers (depth, depth-1, ..., 1), normalising weighting scheme
+'   consistently regardless of depth setting.
+'   Call site in RunAnalysisAsync passes cfg.Indicators.OFI.BookDepth.
+'   cfg key already existed (added v0.30, default 3) but was never wired through.
 
 Partial Public Class IndicatorEngine
 
-    ' -- OFI (Order Flow Imbalance) top-3 levels, volume-weighted (w=3,2,1) ---
-    ' [P14] v0.51: buyDominantRatio / sellDominantRatio now optional params
-    ' (default 1.2 / 0.833) so CalcOFI is unit-testable and call site can pass
-    ' cfg values without changing the method signature for existing callers.
+    ' -- OFI (Order Flow Imbalance) configurable depth, descending weights ----
+    ' [P14] v0.51: buyDominantRatio / sellDominantRatio optional params
+    ' [T2-B]: bookDepth optional param -- replaces hardcoded Take(3) / {3,2,1}.
+    ' Weights are built as {depth, depth-1, ..., 1} so the nearest level always
+    ' carries the highest weight regardless of how many levels are used.
     Public Shared Sub CalcOFI(orderBook As OrderBookSnapshot,
                                ByRef ofiRatio As Double, ByRef ofiSignal As String,
                                ByRef ofiBidVol As Double, ByRef ofiAskVol As Double,
-                               Optional buyDominantRatio  As Double = 1.2,
-                               Optional sellDominantRatio As Double = 0.833)
+                               Optional buyDominantRatio  As Double  = 1.2,
+                               Optional sellDominantRatio As Double  = 0.833,
+                               Optional bookDepth         As Integer = 3)
         ofiRatio = 1.0 : ofiSignal = "BALANCED" : ofiBidVol = 0 : ofiAskVol = 0
         If orderBook Is Nothing Then Return
 
-        Dim bids = orderBook.Bids.Take(3).ToList()
-        Dim asks = orderBook.Asks.Take(3).ToList()
-        Dim weights() As Double = {3, 2, 1}
+        Dim depth As Integer = Math.Max(1, bookDepth)
+        Dim bids = orderBook.Bids.Take(depth).ToList()
+        Dim asks = orderBook.Asks.Take(depth).ToList()
+
+        ' Build descending weight array: {depth, depth-1, ..., 1}
+        Dim weights(depth - 1) As Double
+        For i As Integer = 0 To depth - 1
+            weights(i) = depth - i
+        Next
 
         Dim bidVol As Double = 0
         Dim askVol As Double = 0
-        For i As Integer = 0 To Math.Min(bids.Count, 3) - 1
+        For i As Integer = 0 To Math.Min(bids.Count, depth) - 1
             bidVol += bids(i).Size * weights(i)
         Next
-        For i As Integer = 0 To Math.Min(asks.Count, 3) - 1
+        For i As Integer = 0 To Math.Min(asks.Count, depth) - 1
             askVol += asks(i).Size * weights(i)
         Next
 
