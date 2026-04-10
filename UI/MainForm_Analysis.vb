@@ -173,7 +173,11 @@ Partial Public Class MainForm
             r.OISignal = "NEUTRAL"
         End If
 
-        IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol)
+        ' [P14] v0.51: OFI dominance thresholds now passed from cfg.
+        ' Previously CalcOFI used hardcoded 1.2 / 0.833 internally.
+        IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol,
+                                buyDominantRatio:=cfg.Indicators.OFI.BuyDominantRatio,
+                                sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio)
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence)
 
