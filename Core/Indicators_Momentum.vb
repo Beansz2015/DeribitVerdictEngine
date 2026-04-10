@@ -15,6 +15,8 @@
 '        AND price moved more than priceGate AND rsi delta exceeds rsiDelta.
 '     4. Fires BULLISH if: price made a lower low AND RSI was higher at that pivot than now.
 '   Default pivotWing=3 matches the 1m scalping timeframe; tunable via optional param.
+' refactor: Removed CalcEMAList(values As List(Of Double)) -- never called anywhere.
+'           CalcEMA(candles, period) is the only live EMA entry point.
 
 Partial Public Class IndicatorEngine
 
@@ -107,16 +109,6 @@ Partial Public Class IndicatorEngine
         Return ema
     End Function
 
-    Public Shared Function CalcEMAList(values As List(Of Double), period As Integer) As Double
-        If values.Count < period Then Return 0
-        Dim k As Double = 2.0 / (period + 1)
-        Dim ema As Double = values.Take(period).Average()
-        For i As Integer = period To values.Count - 1
-            ema = values(i) * k + ema * (1 - k)
-        Next
-        Return ema
-    End Function
-
     ' -- RSI (Wilder EMA-smoothed) --------------------------------------------
     Public Shared Function CalcRSI(candles As List(Of Candle), period As Integer) As Double
         If candles.Count < period + 1 Then Return 50
@@ -180,9 +172,7 @@ Partial Public Class IndicatorEngine
         Dim rsiSeries = CalcRSISeries(candles, period)
         If rsiSeries.Count < lookbackBars Then Return "NONE"
 
-        ' Align: rsiSeries(k) corresponds to candles(k + period).
-        ' Work in the rsiSeries index space for the scan window.
-        Dim scanEnd   As Integer = rsiSeries.Count - 1        ' most recent
+        Dim scanEnd   As Integer = rsiSeries.Count - 1
         Dim scanStart As Integer = Math.Max(pivotWing, scanEnd - lookbackBars)
 
         Dim currentRSI   As Double = rsiSeries(scanEnd)
@@ -196,7 +186,6 @@ Partial Public Class IndicatorEngine
             Dim candleIdx As Integer = i + period
             If candleIdx < pivotWing OrElse candleIdx >= candles.Count - pivotWing Then Continue For
             Dim iPrice As Double = candles(candleIdx).High
-            ' Confirm swing high: higher than pivotWing bars on each side
             Dim isSwingHigh As Boolean = True
             For w As Integer = 1 To pivotWing
                 If candles(candleIdx - w).High >= iPrice OrElse

@@ -8,8 +8,8 @@
 ' the ACTIVE count throughout the session.  The 20th-percentile threshold is stable:
 ' it rises and falls with realised volatility across the session and only fires when
 ' the current BBW is genuinely in the bottom fifth of recent behaviour.
-' minBBW parameter is preserved in the public signature for backward compatibility
-' but is now computed internally and no longer used for the threshold decision.
+' refactor: Removed ByRef minBBW parameter from CalcBBW. minBBW is still computed
+' internally but was never read by the caller after the v0.48 [P2] threshold change.
 
 Partial Public Class IndicatorEngine
 
@@ -87,8 +87,8 @@ Partial Public Class IndicatorEngine
     ' [P2] v0.48: Squeeze threshold is now 20th-percentile of the BBW series.
     '             Previously used minBBW * 1.5 which fired on any session-low spike.
     Public Shared Sub CalcBBW(candles As List(Of Candle), period As Integer, stdMult As Double,
-                               ByRef bbw As Double, ByRef minBBW As Double, ByRef squeezeStatus As String)
-        bbw = 0 : minBBW = Double.MaxValue : squeezeStatus = "NONE"
+                               ByRef bbw As Double, ByRef squeezeStatus As String)
+        bbw = 0 : squeezeStatus = "NONE"
         If candles.Count < period Then Return
 
         Dim bbwSeries As New List(Of Double)
@@ -105,15 +105,11 @@ Partial Public Class IndicatorEngine
             Dim lower As Double = mid - stdMult * stdDev
             Dim bw As Double = If(mid <> 0, (upper - lower) / mid, 0)
             bbwSeries.Add(bw)
-            If bw < minBBW Then minBBW = bw
         Next
 
         If bbwSeries.Count = 0 Then Return
         bbw = bbwSeries.Last()
-        If minBBW = Double.MaxValue Then minBBW = bbw
 
-        ' [P2] 20th-percentile threshold: sort BBW series, take index at 20% rank.
-        ' More stable than minBBW*1.5 which inflated ACTIVE count after opening spikes.
         Dim sorted = bbwSeries.OrderBy(Function(x) x).ToList()
         Dim pctIdx As Integer = CInt(Math.Floor(sorted.Count * 0.20))
         If pctIdx >= sorted.Count Then pctIdx = sorted.Count - 1

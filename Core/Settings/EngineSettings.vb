@@ -9,7 +9,6 @@
 '        Added ROC.SeriesLookback.
 '        Added OI.ChangeThresholdPct.
 '        Added ScoringSettings.VerdictStrongPct/MedPct/WeakPct.
-'        Added ScoringWeights.CVD.
 ' v0.32: VwapSettings expanded with session timing and warmup threshold.
 '        Session1StartHour/Minute  -- daily session reset (default 00:00 UTC).
 '        Session2StartHour/Minute  -- US session reset (default 13:30 UTC).
@@ -17,33 +16,14 @@
 ' v0.33: Added MTFGateSettings class and MTFGate property on EngineSettings.
 '        Controls the 15m multi-timeframe confluence gate (DMI/ADX/EMA 2-of-3 majority vote).
 ' v0.34: Removed dead RSI fields from MTFGateSettings (RsiPeriod, RsiBullZone, RsiBearZone).
-'        Gate is DMI-direction / ADX-strength / EMA-alignment -- no RSI vote.
-'        Updated MTFGateSettings summary comment to match actual implementation.
 ' v0.35: Added AutoRunSettings class and AutoRun property on EngineSettings.
-'        Exposes auto_run block from settings.json (enabled, interval_minutes, interval_seconds).
-'        Minimum interval enforced in MainForm (10 seconds); settings stores raw user intent.
-' v0.36: [P4] v0.48: Added TfiSettings class and TFI property on IndicatorSettings.
-'        Added MicroCvdSettings class and MicroCVD property on IndicatorSettings.
-'        TFI.WindowSize default 30 (was shared 50 with MicroCVD -- now independent).
-'        MicroCVD.WindowSize default 50.  MicroCVD.AccelThreshold default 5000.
-'        Both settings are hot-reloadable via settings.json.
+' v0.36: [P4] v0.48: Added TfiSettings and MicroCvdSettings.
 ' v0.37: [P10/P11/P12] v0.49: Added penalty/multiplier fields to ScoringSettings.
-'        AtrTargetMultiplier  -- ATR target distance multiplier (default 2.0).
-'        AtrStopMultiplier    -- ATR stop distance multiplier (default 1.0).
-'        BbwSqueezePenalty    -- score penalty while BBW squeeze is ACTIVE (default 2).
-'        LiqStandardPenalty   -- standard liquidation penalty (default 1).
-'        LiqLargePenalty      -- large liquidation penalty (default 2).
-'        FundingHighPenalty   -- penalty for extreme funding (default 2).
-'        FundingHighBoost     -- boost for favourable extreme funding (default 1).
-'        FundingLowPenalty    -- penalty for mild adverse funding (default 1).
-'        All nine were previously hardcoded in ScoringEngine_Calculate.vb.
-' v0.38: [P13] v0.50: Explicit RSI divergence penalty trigger thresholds.
-'        RSI.DivPenaltyRsiHigh -- RSI level above which BEARISH div triggers long penalty (default 65).
-'        RSI.DivPenaltyRsiLow  -- RSI level below which BULLISH div triggers short penalty (default 35).
-'        Previously derived as rsiOB+5 / rsiOS-5 (implicit coupling to OB/OS zones).
-'        CVD.DivergencePenalty     -- magnitude of CVD divergence score penalty (default 1).
-'        MicroCVD.DecelPenalty     -- magnitude of MicroCVD decel opposing-side penalty (default 1).
-'        All three were previously hardcoded literals in ScoringEngine_Calculate.vb.
+' v0.38: [P13] v0.50: RSI div penalty thresholds, CVD/MicroCVD penalty magnitudes.
+' refactor: Removed ScoringWeights class and Weights property (never consumed by scoring engine).
+'           Removed 6 dead integer threshold fields from ScoringSettings
+'           (LongThreshold, ShortThreshold, Strong/Medium variants) -- superseded by
+'           VerdictStrongPct/MedPct/WeakPct since v0.30.
 
 Imports System.Text.Json.Serialization
 
@@ -116,18 +96,16 @@ Public Class RsiSettings
     <JsonPropertyName("partial_overbought")> Public Property PartialOverbought  As Double  = 50.0
     <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double = 0.001
     <JsonPropertyName("divergence_rsi_delta")>  Public Property DivergenceRsiDelta  As Double = 2.0
-    ''' <summary>[P13] v0.50: Explicit RSI level that must be exceeded for BEARISH divergence to
-    ''' trigger a long-side penalty. Default 65. Previously derived as Overbought+5 (implicit).</summary>
+    ''' <summary>[P13] v0.50: RSI level above which BEARISH div triggers long penalty. Default 65.</summary>
     <JsonPropertyName("div_penalty_rsi_high")> Public Property DivPenaltyRsiHigh As Double = 65.0
-    ''' <summary>[P13] v0.50: Explicit RSI level that must be breached for BULLISH divergence to
-    ''' trigger a short-side penalty. Default 35. Previously derived as Oversold-5 (implicit).</summary>
+    ''' <summary>[P13] v0.50: RSI level below which BULLISH div triggers short penalty. Default 35.</summary>
     <JsonPropertyName("div_penalty_rsi_low")>  Public Property DivPenaltyRsiLow  As Double = 35.0
 End Class
 
 Public Class RocSettings
-    <JsonPropertyName("period")>            Public Property Period          As Integer = 9
-    <JsonPropertyName("slope_sensitivity")> Public Property SlopeSensitivity As Double = 0.1
-    <JsonPropertyName("series_lookback")>   Public Property SeriesLookback  As Integer = 3
+    <JsonPropertyName("period")>            Public Property Period           As Integer = 9
+    <JsonPropertyName("slope_sensitivity")> Public Property SlopeSensitivity As Double  = 0.1
+    <JsonPropertyName("series_lookback")>   Public Property SeriesLookback   As Integer = 3
 End Class
 
 Public Class VwapSettings
@@ -140,9 +118,9 @@ Public Class VwapSettings
 End Class
 
 Public Class BbwSettings
-    <JsonPropertyName("period")>                  Public Property Period               As Integer = 20
-    <JsonPropertyName("std_dev")>                 Public Property StdDev               As Double  = 2.0
-    <JsonPropertyName("releasing_roc_threshold")> Public Property ReleasingRocThreshold As Double = 0.1
+    <JsonPropertyName("period")>                  Public Property Period                As Integer = 20
+    <JsonPropertyName("std_dev")>                 Public Property StdDev                As Double  = 2.0
+    <JsonPropertyName("releasing_roc_threshold")> Public Property ReleasingRocThreshold As Double  = 0.1
 End Class
 
 Public Class EmaSettings
@@ -212,37 +190,28 @@ Public Class DmiSettings
 End Class
 
 Public Class CvdSettings
-    <JsonPropertyName("slope_min_usd")>          Public Property SlopeMinUsd         As Double  = 1000.0
-    <JsonPropertyName("slope_pct_of_value")>      Public Property SlopePctOfValue     As Double  = 0.01
-    <JsonPropertyName("divergence_price_gate")>   Public Property DivergencePriceGate As Double  = 0.0005
-    <JsonPropertyName("trade_lookback")>          Public Property TradeLookback       As Integer = 100
-    ''' <summary>[P13] v0.50: Score penalty magnitude applied when CVD divergence is detected.
-    ''' Default 1. Previously hardcoded literal -1 in ScoringEngine_Calculate.vb.</summary>
-    <JsonPropertyName("divergence_penalty")>      Public Property DivergencePenalty   As Integer = 1
+    <JsonPropertyName("slope_min_usd")>        Public Property SlopeMinUsd         As Double  = 1000.0
+    <JsonPropertyName("slope_pct_of_value")>   Public Property SlopePctOfValue     As Double  = 0.01
+    <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double  = 0.0005
+    <JsonPropertyName("trade_lookback")>        Public Property TradeLookback       As Integer = 100
+    ''' <summary>[P13] v0.50: Score penalty magnitude for CVD divergence. Default 1.</summary>
+    <JsonPropertyName("divergence_penalty")>   Public Property DivergencePenalty   As Integer = 1
 End Class
 
-''' <summary>
-''' [P4] v0.48: TFI window is now independent of MicroCVD window.
-''' TFI measures short-burst aggressor pressure; default 30 trades.
-''' threshold: minimum |TFI| to assign a directional signal.
-''' </summary>
+''' <summary>[P4] v0.48: TFI window independent of MicroCVD. Default 30 trades.</summary>
 Public Class TfiSettings
-    <JsonPropertyName("window_size")>  Public Property WindowSize  As Integer = 30
-    <JsonPropertyName("threshold")>    Public Property Threshold   As Double  = 0.15
+    <JsonPropertyName("window_size")> Public Property WindowSize As Integer = 30
+    <JsonPropertyName("threshold")>   Public Property Threshold  As Double  = 0.15
 End Class
 
 ''' <summary>
-''' [P4] v0.48: MicroCVD window is now independent of TFI window.
-''' microWindowSize=50 is the default for meaningful thirds segmentation.
-''' accelThreshold: minimum signed USD difference (late vs early) to classify
-''' as ACCELERATING or DECELERATING.
-''' [P13] v0.50: DecelPenalty -- magnitude of opposing-side score penalty when
-''' BULL_DECEL or BEAR_DECEL is detected. Default 1. Previously hardcoded.
+''' [P4] v0.48: MicroCVD window independent of TFI. Default 50 trades.
+''' [P13] v0.50: DecelPenalty -- opposing-side penalty magnitude. Default 1.
 ''' </summary>
 Public Class MicroCvdSettings
-    <JsonPropertyName("window_size")>      Public Property WindowSize      As Integer = 50
-    <JsonPropertyName("accel_threshold")>  Public Property AccelThreshold  As Double  = 5000.0
-    <JsonPropertyName("decel_penalty")>    Public Property DecelPenalty    As Integer = 1
+    <JsonPropertyName("window_size")>     Public Property WindowSize     As Integer = 50
+    <JsonPropertyName("accel_threshold")> Public Property AccelThreshold As Double  = 5000.0
+    <JsonPropertyName("decel_penalty")>   Public Property DecelPenalty   As Integer = 1
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -252,44 +221,26 @@ End Class
 ''' <summary>
 ''' Controls the 15m multi-timeframe confluence gate.
 ''' 2-of-3 majority vote: DMI direction / ADX strength / EMA alignment on 15m series.
-'''   DMI vote  : +DI > -DI  => bullish, -DI > +DI  => bearish
-'''   ADX vote  : ADX >= cfg.Indicators.ADX.TrendThreshold  => trend is strong enough
-'''   EMA vote  : EMA(fast) > EMA(slow)  => bullish, EMA(fast) < EMA(slow)  => bearish
-''' A LONG proposed trade is blocked if 2+ votes disagree (bearish or weak).
-''' A SHORT proposed trade is blocked if 2+ votes disagree (bullish or weak).
-''' Raw score is preserved in the display so building setups remain visible.
 ''' Set Enabled=false in settings.json to bypass entirely (hot-reload safe).
 ''' </summary>
 Public Class MTFGateSettings
-    <JsonPropertyName("enabled")>            Public Property Enabled          As Boolean = True
-    ''' <summary>Candles to fetch for the 15m series (60 = 15h of history).</summary>
-    <JsonPropertyName("candle_count")>       Public Property CandleCount      As Integer = 60
-    ''' <summary>Fast EMA period on the 15m series.</summary>
-    <JsonPropertyName("ema_period_fast")>    Public Property EmaPeriodFast    As Integer = 9
-    ''' <summary>Slow EMA period on the 15m series.</summary>
-    <JsonPropertyName("ema_period_slow")>    Public Property EmaPeriodSlow    As Integer = 21
-    ''' <summary>DMI period on the 15m series.</summary>
-    <JsonPropertyName("dmi_period")>         Public Property DmiPeriod        As Integer = 9
-    ''' <summary>Signals that must agree to trigger a block (default 2-of-3).</summary>
-    <JsonPropertyName("required_confirms")>  Public Property RequiredConfirms As Integer = 2
+    <JsonPropertyName("enabled")>           Public Property Enabled         As Boolean = True
+    <JsonPropertyName("candle_count")>      Public Property CandleCount     As Integer = 60
+    <JsonPropertyName("ema_period_fast")>   Public Property EmaPeriodFast   As Integer = 9
+    <JsonPropertyName("ema_period_slow")>   Public Property EmaPeriodSlow   As Integer = 21
+    <JsonPropertyName("dmi_period")>        Public Property DmiPeriod       As Integer = 9
+    <JsonPropertyName("required_confirms")> Public Property RequiredConfirms As Integer = 2
 End Class
 
 ' ---------------------------------------------------------------------------
 ' Auto-run settings
 ' ---------------------------------------------------------------------------
 
-''' <summary>
-''' Controls the auto-run timer. Exposed in settings.json so an LLM tuning agent
-''' can enable/adjust the interval without touching the WinForms UI.
-''' Minimum effective interval is 10 seconds (enforced in MainForm, not here).
-''' </summary>
+''' <summary>Controls the auto-run timer. Minimum effective interval 10s (enforced in MainForm).</summary>
 Public Class AutoRunSettings
-    ''' <summary>Whether auto-run is active on app start. Default False.</summary>
-    <JsonPropertyName("enabled")>            Public Property Enabled          As Boolean = False
-    ''' <summary>Minutes component of the repeat interval (0-60).</summary>
-    <JsonPropertyName("interval_minutes")>   Public Property IntervalMinutes  As Integer = 1
-    ''' <summary>Seconds component of the repeat interval (0-59).</summary>
-    <JsonPropertyName("interval_seconds")>   Public Property IntervalSeconds  As Integer = 0
+    <JsonPropertyName("enabled")>          Public Property Enabled         As Boolean = False
+    <JsonPropertyName("interval_minutes")> Public Property IntervalMinutes As Integer = 1
+    <JsonPropertyName("interval_seconds")> Public Property IntervalSeconds As Integer = 0
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -297,57 +248,30 @@ End Class
 ' ---------------------------------------------------------------------------
 
 Public Class ScoringSettings
-    <JsonPropertyName("long_threshold")>         Public Property LongThreshold        As Integer = 6
-    <JsonPropertyName("short_threshold")>        Public Property ShortThreshold       As Integer = 6
-    <JsonPropertyName("strong_long_threshold")>  Public Property StrongLongThreshold  As Integer = 12
-    <JsonPropertyName("strong_short_threshold")> Public Property StrongShortThreshold As Integer = 12
-    <JsonPropertyName("medium_long_threshold")>  Public Property MediumLongThreshold  As Integer = 9
-    <JsonPropertyName("medium_short_threshold")> Public Property MediumShortThreshold As Integer = 9
-    <JsonPropertyName("verdict_strong_pct")>     Public Property VerdictStrongPct     As Double  = 0.70
-    <JsonPropertyName("verdict_med_pct")>        Public Property VerdictMedPct        As Double  = 0.53
-    <JsonPropertyName("verdict_weak_pct")>       Public Property VerdictWeakPct       As Double  = 0.35
+    <JsonPropertyName("verdict_strong_pct")> Public Property VerdictStrongPct As Double  = 0.70
+    <JsonPropertyName("verdict_med_pct")>    Public Property VerdictMedPct    As Double  = 0.53
+    <JsonPropertyName("verdict_weak_pct")>   Public Property VerdictWeakPct   As Double  = 0.35
     <JsonPropertyName("transitional_penalty_enabled")> Public Property TransitionalPenaltyEnabled As Boolean = True
-    <JsonPropertyName("funding_high_positive")>  Public Property FundingHighPositive  As Double  = 0.001
-    <JsonPropertyName("funding_low_positive")>   Public Property FundingLowPositive   As Double  = 0.0005
-    <JsonPropertyName("funding_high_negative")>  Public Property FundingHighNegative  As Double  = -0.001
-    <JsonPropertyName("funding_low_negative")>   Public Property FundingLowNegative   As Double  = -0.0005
-    ' [P12] v0.49: Penalty magnitudes -- previously hardcoded in ScoringEngine_Calculate.vb.
-    ''' <summary>Score penalty while BBW TTM Squeeze is ACTIVE (applied to both sides). Default 2.</summary>
-    <JsonPropertyName("bbw_squeeze_penalty")>    Public Property BbwSqueezePenalty    As Integer = 2
-    ''' <summary>Long/short score penalty for standard-size adverse liquidations. Default 1.</summary>
-    <JsonPropertyName("liq_standard_penalty")>   Public Property LiqStandardPenalty   As Integer = 1
-    ''' <summary>Long/short score penalty for large adverse liquidations (>= LargeLiqSize). Default 2.</summary>
-    <JsonPropertyName("liq_large_penalty")>      Public Property LiqLargePenalty      As Integer = 2
-    ''' <summary>Penalty applied to the adverse side at extreme funding. Default 2.</summary>
-    <JsonPropertyName("funding_high_penalty")>   Public Property FundingHighPenalty   As Integer = 2
-    ''' <summary>Boost applied to the favoured side at extreme funding. Default 1.</summary>
-    <JsonPropertyName("funding_high_boost")>     Public Property FundingHighBoost     As Integer = 1
-    ''' <summary>Penalty applied to the adverse side at mild funding. Default 1.</summary>
-    <JsonPropertyName("funding_low_penalty")>    Public Property FundingLowPenalty    As Integer = 1
-    ' [P11] v0.49: ATR target/stop multipliers -- previously hardcoded 2.0/1.0.
-    ''' <summary>ATR distance multiplier for the raw target price. Default 2.0.</summary>
-    <JsonPropertyName("atr_target_multiplier")>  Public Property AtrTargetMultiplier  As Double  = 2.0
-    ''' <summary>ATR distance multiplier for the stop-loss price. Default 1.0.</summary>
-    <JsonPropertyName("atr_stop_multiplier")>    Public Property AtrStopMultiplier    As Double  = 1.0
-    <JsonPropertyName("weights")>                Public Property Weights              As New ScoringWeights
-End Class
-
-Public Class ScoringWeights
-    <JsonPropertyName("ROC")>        Public Property ROC        As Integer = 1
-    <JsonPropertyName("RSI")>        Public Property RSI        As Integer = 1
-    <JsonPropertyName("DMI")>        Public Property DMI        As Integer = 1
-    <JsonPropertyName("ADX")>        Public Property ADX        As Integer = 1
-    <JsonPropertyName("Volume")>     Public Property Volume     As Integer = 1
-    <JsonPropertyName("VWAP")>       Public Property VWAP       As Integer = 1
-    <JsonPropertyName("BBW")>        Public Property BBW        As Integer = 1
-    <JsonPropertyName("EMA")>        Public Property EMA        As Integer = 1
-    <JsonPropertyName("OI")>         Public Property OI         As Integer = 1
-    <JsonPropertyName("OFI")>        Public Property OFI        As Integer = 1
-    <JsonPropertyName("CVD")>        Public Property CVD        As Integer = 1
-    <JsonPropertyName("LiqPenalty")> Public Property LiqPenalty As Integer = 1
-    <JsonPropertyName("EMA200")>     Public Property EMA200     As Integer = 1
-    <JsonPropertyName("Donchian")>   Public Property Donchian   As Integer = 1
-    <JsonPropertyName("OBV")>        Public Property OBV        As Integer = 1
+    <JsonPropertyName("funding_high_positive")> Public Property FundingHighPositive As Double = 0.001
+    <JsonPropertyName("funding_low_positive")>  Public Property FundingLowPositive  As Double = 0.0005
+    <JsonPropertyName("funding_high_negative")> Public Property FundingHighNegative As Double = -0.001
+    <JsonPropertyName("funding_low_negative")>  Public Property FundingLowNegative  As Double = -0.0005
+    ''' <summary>Score penalty while BBW TTM Squeeze is ACTIVE (both sides). Default 2.</summary>
+    <JsonPropertyName("bbw_squeeze_penalty")>  Public Property BbwSqueezePenalty  As Integer = 2
+    ''' <summary>Penalty for standard-size adverse liquidations. Default 1.</summary>
+    <JsonPropertyName("liq_standard_penalty")> Public Property LiqStandardPenalty As Integer = 1
+    ''' <summary>Penalty for large adverse liquidations (>= LargeLiqSize). Default 2.</summary>
+    <JsonPropertyName("liq_large_penalty")>    Public Property LiqLargePenalty    As Integer = 2
+    ''' <summary>Penalty applied to adverse side at extreme funding. Default 2.</summary>
+    <JsonPropertyName("funding_high_penalty")> Public Property FundingHighPenalty As Integer = 2
+    ''' <summary>Boost applied to favoured side at extreme funding. Default 1.</summary>
+    <JsonPropertyName("funding_high_boost")>   Public Property FundingHighBoost   As Integer = 1
+    ''' <summary>Penalty applied to adverse side at mild funding. Default 1.</summary>
+    <JsonPropertyName("funding_low_penalty")>  Public Property FundingLowPenalty  As Integer = 1
+    ''' <summary>ATR distance multiplier for raw target price. Default 2.0.</summary>
+    <JsonPropertyName("atr_target_multiplier")> Public Property AtrTargetMultiplier As Double = 2.0
+    ''' <summary>ATR distance multiplier for stop-loss price. Default 1.0.</summary>
+    <JsonPropertyName("atr_stop_multiplier")>  Public Property AtrStopMultiplier  As Double  = 1.0
 End Class
 
 ' ---------------------------------------------------------------------------
