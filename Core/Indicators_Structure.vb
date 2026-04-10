@@ -56,6 +56,11 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- VPFR-lite (Volume Profile Fixed Range using existing 1m candles) -----
+    ' [P7] v0.47: Exponential decay weighting applied to candle volumes before
+    ' bucketing.  Each candle's volume is multiplied by decayBase^(age) where
+    ' age=0 for the most recent candle.  decayBase default 0.985 gives ~22%
+    ' weight reduction per 15 bars, making the POC track intraday structure
+    ' shifts rather than anchoring to high-volume events earlier in the session.
     Public Shared Sub CalcVPFRLite(candles As List(Of Candle),
                                     currentPrice As Double,
                                     ByRef poc As Double,
@@ -64,7 +69,8 @@ Partial Public Class IndicatorEngine
                                     Optional numBuckets As Integer = 50,
                                     Optional hvnVolPct As Double = 0.6,
                                     Optional lvnVolPct As Double = 0.2,
-                                    Optional hvnProximityPct As Double = 0.002)
+                                    Optional hvnProximityPct As Double = 0.002,
+                                    Optional decayBase As Double = 0.985)
         poc = 0 : hvnNearPoc = False : signal = "NEUTRAL"
         If candles Is Nothing OrElse candles.Count < 10 Then Return
 
@@ -76,12 +82,17 @@ Partial Public Class IndicatorEngine
         Dim bucketSize As Double = priceRange / numBuckets
         Dim bucketVol(numBuckets - 1) As Double
 
-        For Each c In candles
+        Dim n As Integer = candles.Count
+        For i As Integer = 0 To n - 1
+            ' age=0 for most recent candle (index n-1), increases toward older bars
+            Dim age    As Integer = n - 1 - i
+            Dim weight As Double  = Math.Pow(decayBase, age)
+            Dim c = candles(i)
             Dim tp As Double = (c.High + c.Low + c.Close) / 3.0
             Dim idx As Integer = CInt(Math.Floor((tp - priceLow) / bucketSize))
             If idx < 0 Then idx = 0
             If idx >= numBuckets Then idx = numBuckets - 1
-            bucketVol(idx) += c.Volume
+            bucketVol(idx) += c.Volume * weight
         Next
 
         Dim pocIdx As Integer = 0
