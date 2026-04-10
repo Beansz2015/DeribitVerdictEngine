@@ -60,24 +60,78 @@ Partial Public Class ScoringEngine
         Return baseNote
     End Function
 
+    ' [P1] v0.48: CalcHoldStatus microstructure fast-exit layer.
+    ' Previous version used only ROC, OBV divergence, RSI divergence, and RSI level.
+    ' During a 2-15 minute hold, OFI, TFI, MicroCVD, and CVD react faster than RSI/ROC
+    ' and are the correct tools to assess whether momentum is intact or deteriorating.
+    '
+    ' Priority order for hold evaluation (highest precedence first):
+    '   1. Microstructure fast exit: adverse MicroCVD signal + confirming OFI or TFI
+    '      -- two independent microstructure signals both adverse = immediate exit.
+    '   2. OBV divergence exit (unchanged from prior version).
+    '   3. RSI divergence evaluate (unchanged).
+    '   4. Microstructure soft warning: single adverse microstructure signal alone.
+    '   5. ROC/RSI-based structural exit (unchanged from prior version).
     Private Shared Function CalcHoldStatus(r As IndicatorResults, posState As PositionState) As String
         Select Case posState
             Case PositionState.InLong
+                ' Layer 1: two adverse microstructure signals = fast exit
+                Dim microAdverse As Boolean = (r.MicroCVDSignal = "BEAR_ACCEL" OrElse r.MicroCVDSignal = "BEAR_DECEL")
+                Dim ofiAdverse   As Boolean = (r.OFISignal = "SELL DOMINANT")
+                Dim tfiAdverse   As Boolean = (r.TFISignal = "SELL PRESSURE")
+                Dim cvdAdverse   As Boolean = (r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0)
+                Dim adverseCount As Integer = (If(microAdverse, 1, 0)) + (If(ofiAdverse, 1, 0)) +
+                                              (If(tfiAdverse, 1, 0)) + (If(cvdAdverse, 1, 0))
+                If adverseCount >= 2 Then
+                    Return "EXIT -- microstructure deterioration (" &
+                           String.Join("+", New List(Of String) From {
+                               If(microAdverse, r.MicroCVDSignal, Nothing),
+                               If(ofiAdverse,   "OFI:SELL",       Nothing),
+                               If(tfiAdverse,   "TFI:SELL",       Nothing),
+                               If(cvdAdverse,   "CVD:FALLING",    Nothing)
+                           }.Where(Function(s) s IsNot Nothing)) & ")"
+                End If
+                ' Layer 2: structural divergence exits (unchanged)
                 If r.ROC < 0 Then Return "EXIT -- momentum break (ROC crossed below 0)"
                 If r.OBVDivergence = "BEARISH" Then Return "EXIT -- OBV bearish divergence"
                 If r.RSIDivergence = "BEARISH" Then Return "EVALUATE -- RSI bearish divergence, watch for reversal"
+                ' Layer 3: single adverse microstructure = soft warning
+                If microAdverse Then Return "EVALUATE -- " & r.MicroCVDSignal & " signal, confirm with price action"
+                ' Layer 4: RSI/ROC structural assessment (unchanged)
                 If r.ROC > 0.6 Then Return "TAKE PROFIT -- extreme momentum, tighten stops"
                 If r.RSI > 60 Then Return "HOLD -- momentum intact"
                 If r.RSI >= 40 Then Return "EVALUATE -- momentum weakening, consider scaling out"
                 Return "EXIT -- retracement too deep (RSI < 40)"
+
             Case PositionState.InShort
+                ' Layer 1: two adverse microstructure signals = fast exit
+                Dim microAdverse As Boolean = (r.MicroCVDSignal = "BULL_ACCEL" OrElse r.MicroCVDSignal = "BULL_DECEL")
+                Dim ofiAdverse   As Boolean = (r.OFISignal = "BUY DOMINANT")
+                Dim tfiAdverse   As Boolean = (r.TFISignal = "BUY PRESSURE")
+                Dim cvdAdverse   As Boolean = (r.CVDSlope = "RISING" AndAlso r.CVDValue > 0)
+                Dim adverseCount As Integer = (If(microAdverse, 1, 0)) + (If(ofiAdverse, 1, 0)) +
+                                              (If(tfiAdverse, 1, 0)) + (If(cvdAdverse, 1, 0))
+                If adverseCount >= 2 Then
+                    Return "EXIT -- microstructure deterioration (" &
+                           String.Join("+", New List(Of String) From {
+                               If(microAdverse, r.MicroCVDSignal, Nothing),
+                               If(ofiAdverse,   "OFI:BUY",        Nothing),
+                               If(tfiAdverse,   "TFI:BUY",        Nothing),
+                               If(cvdAdverse,   "CVD:RISING",     Nothing)
+                           }.Where(Function(s) s IsNot Nothing)) & ")"
+                End If
+                ' Layer 2: structural divergence exits (unchanged)
                 If r.ROC > 0 Then Return "EXIT -- momentum break (ROC crossed above 0)"
                 If r.OBVDivergence = "BULLISH" Then Return "EXIT -- OBV bullish divergence"
                 If r.RSIDivergence = "BULLISH" Then Return "EVALUATE -- RSI bullish divergence, watch for reversal"
+                ' Layer 3: single adverse microstructure = soft warning
+                If microAdverse Then Return "EVALUATE -- " & r.MicroCVDSignal & " signal, confirm with price action"
+                ' Layer 4: RSI/ROC structural assessment (unchanged)
                 If r.ROC < -0.6 Then Return "TAKE PROFIT -- extreme bearish momentum, tighten stops"
                 If r.RSI < 40 Then Return "HOLD -- bearish momentum intact"
                 If r.RSI <= 60 Then Return "EVALUATE -- momentum weakening, consider scaling out"
                 Return "EXIT -- retracement too deep (RSI > 60)"
+
             Case Else
                 Return "N/A -- no open position"
         End Select
