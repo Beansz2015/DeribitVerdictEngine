@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-10 | App version: v0.47**
+**Last updated: 2026-04-10 | App version: Commit 4 (T1-B/T2-A/T2-B)**
 
 This document describes the full codebase structure, data flow, and responsibility of every file.
 It is generated from the actual state of the repository and should be updated whenever files are
@@ -37,15 +37,20 @@ DeribitVerdictEngine/
 │   │                                   includes VPFR HVN cap logic;
 │   │                                   v0.47: P2 RSI divergence penalty, P4 Donchian
 │   │                                   quartile partial upgrade, P5 volMid directional
-│   │                                   partial, P6 OBV adverse divergence gate
+│   │                                   partial, P6 OBV adverse divergence gate;
+│   │                                   T2-A: MicroCVD FLAT stall penalty — when signal=FLAT
+│   │                                   and price/CVD direction conflict, applies
+│   │                                   DecelPenalty to opposing side with STALL breakdown note
 │   │
 │   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
-│   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI,
+│   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcRSI,
 │   │                                   CalcRSISeries, CalcRSIDivergence, CalcROCSeries,
 │   │                                   CalcVolumeSMA
 │   ├── Indicators_Volatility.vb        CalcVWAP (dual-session auto-anchor),
 │   │                                   CalcVWAPBands, CalcBBW, CalcTTMSqueeze
-│   ├── Indicators_OrderFlow.vb         CalcOFI, CalcCVD (v0.47: 3-segment weighted slope),
+│   ├── Indicators_OrderFlow.vb         CalcOFI (T2-B: Optional bookDepth param, dynamic
+│   │                                   descending weights, replaces hardcoded Take(3)),
+│   │                                   CalcCVD (v0.47: 3-segment weighted slope),
 │   │                                   CalcMicroCVD, CalcTFI, CalcLiquidations
 │   └── Indicators_Structure.vb         CalcDonchian, CalcOBV,
 │                                       CalcVPFRLite (v0.47: exponential decay weighting),
@@ -58,7 +63,8 @@ DeribitVerdictEngine/
 │   │                                   shared fields: C_* colour palette, _oiHistory,
 │   │                                   _autoRunTimer, _countdownTimer, CHAR_PLAY/STOP;
 │   │                                   v0.47: MTF TTL cache fields — _mtfCandles15m,
-│   │                                   _mtfLastFetchTime, MTF_TTL_SECONDS (const=60)
+│   │                                   _mtfLastFetchTime, MTF_TTL_SECONDS (const=60);
+│   │                                   T1-B: _prevRegime As String = "" (regime hysteresis)
 │   ├── MainForm_AutoRun.vb             Auto-run timer: InitAutoRunControls(),
 │   │                                   btnStartStop_Click, StartAutoRun(), StopAutoRun(),
 │   │                                   RunAutoAnalysis(), OnCountdownTick(),
@@ -68,7 +74,12 @@ DeribitVerdictEngine/
 │   │                                   logs result, calls RenderOutput;
 │   │                                   v0.47: P1 MTF TTL refresh (15m candles cached,
 │   │                                   re-fetched only when >60s stale);
-│   │                                   P4 Donchian quartile signal set here
+│   │                                   P4 Donchian quartile signal set here;
+│   │                                   T1-B: rawRegime computed, then grace period holds
+│   │                                   _prevRegime when rawRegime=RANGE_BOUND and previous
+│   │                                   was TRENDING_* or TRANSITIONAL; _prevRegime updated
+│   │                                   at end of pipeline;
+│   │                                   T2-B: CalcOFI call passes bookDepth:=cfg.Indicators.OFI.BookDepth
 │   └── MainForm_Render.vb              RenderOutput(), AppendRtf(), AR(), SectionHeader(),
 │                                       Divider(), BuildCalibrationReport(), Flag(),
 │                                       UpdateLogInfo(), lnkResetLog_LinkClicked,
@@ -118,7 +129,9 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.RSI                = CalcRSI
         ├─ r.RSIDivergence      = CalcRSIDivergence
         ├─ r.Volume* / Ratio    = CalcVolumeSMA
-        ├─ r.ADX/PlusDI/MinusDI = CalcDMI(candles5m)  → r.Regime
+        ├─ r.ADX/PlusDI/MinusDI = CalcDMI(candles5m)  → rawRegime → r.Regime
+        │                         [T1-B] rawRegime=RANGE_BOUND + _prevRegime=TRENDING/TRANSITIONAL
+        │                         → hold _prevRegime for 1 bar; update _prevRegime at end of run
         ├─ r.VWAP / VWAPDevPct  = CalcVWAP  (dual-session: 00:00 UTC or 13:30 UTC)
         ├─ r.VWAPSigma1/2       = CalcVWAPBands
         ├─ r.BBW / SqueezeStatus = CalcBBW
@@ -127,10 +140,11 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.EMA200_5m          = CalcEMA(candles5m, 200)
         ├─ r.FundingRate/Bias   = fundingRate
         ├─ r.OI_Current/Changes = bookSummary.OI + _oiHistory ring buffer
-        ├─ r.OFI* / OFISignal   = CalcOFI(orderBook)
+        ├─ r.OFI* / OFISignal   = CalcOFI(orderBook, bookDepth:=cfg.Indicators.OFI.BookDepth)
+        │                         [T2-B] depth is now cfg-driven; weights are dynamic descending
         ├─ r.Liq* / LiqSignal   = CalcLiquidations(recentTrades)
         ├─ r.CVD* / CVDSlope    = CalcCVD(recentTrades, candles1m)   [v0.47: 3-seg weighted slope]
-        ├─ r.MicroCVD*          = CalcMicroCVD(recentTrades)  [3-segment; BULL/BEAR_ACCEL/DECEL]
+        ├─ r.MicroCVD*          = CalcMicroCVD(recentTrades)  [3-segment; BULL/BEAR_ACCEL/DECEL/FLAT]
         ├─ r.TFI* / TFISignal   = CalcTFI(recentTrades)  [BUY/SELL PRESSURE]
         ├─ r.MTFGatePass/Reason = CalcMTFGate(candles15m)   [cached; refreshed by TTL]
         ├─ r.DonchianSignal     = CalcDonchian + quartile logic  [v0.47: LONG/SHORT/LONG_PARTIAL/SHORT_PARTIAL]
@@ -146,6 +160,10 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │           P2: RSI divergence penalty (-1 long if BEARISH+RSI>65;
                     │               -1 short if BULLISH+RSI<35)
                     │           P5: volMidLong/volMidShort flags set here (direction-confirmed)
+                    │         T2-A: MicroCVD FLAT stall penalty — FLAT + price>VWAP + CVD<=0
+                    │               → penalise long; FLAT + price<VWAP + CVD>=0 → penalise short;
+                    │               magnitude = cfg.Indicators.MicroCVD.DecelPenalty;
+                    │               breakdown note annotated with STALL flag
                     ├─ Pass 2: Upgrade cross-category partials
                     │         v0.47 additions:
                     │           P4: Donchian LONG_PARTIAL/SHORT_PARTIAL quartile upgrade
@@ -178,9 +196,9 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 
 | File | Owns | Depends on |
 |---|---|---|
-| `MainForm_Layout.vb` | All shared fields (`C_*`, `_oiHistory`, `_autoRunTimer`, `_mtfCandles15m`, `_mtfLastFetchTime`, MTF_TTL_SECONDS const), constructor, layout/resize | `System.Drawing`, `System.Runtime.InteropServices`, `System.Windows.Forms` |
+| `MainForm_Layout.vb` | All shared fields (`C_*`, `_oiHistory`, `_autoRunTimer`, `_mtfCandles15m`, `_mtfLastFetchTime`, MTF_TTL_SECONDS const, `_prevRegime`), constructor, layout/resize | `System.Drawing`, `System.Runtime.InteropServices`, `System.Windows.Forms` |
 | `MainForm_AutoRun.vb` | Auto-run timer lifecycle | `System.Drawing` (Color.FromArgb), `System.Threading`, `System.Windows.Forms` |
-| `MainForm_Analysis.vb` | Full analysis pipeline; MTF TTL cache check and conditional fetch; Donchian quartile signal | `System.Drawing` (Color.Gray/OrangeRed), `System.Windows.Forms` |
+| `MainForm_Analysis.vb` | Full analysis pipeline; MTF TTL cache check and conditional fetch; Donchian quartile signal; T1-B regime hysteresis; T2-B OFI BookDepth wiring | `System.Drawing` (Color.Gray/OrangeRed), `System.Windows.Forms` |
 | `MainForm_Render.vb` | All output rendering and log helpers; ATR HVN cap display | `System.Drawing`, `System.IO`, `System.Windows.Forms` |
 
 ### ScoringEngine partials
@@ -189,7 +207,7 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 |---|---|
 | `ScoringEngine_Types.vb` | All enums and result/state types (incl. VerdictResult HVN cap fields) |
 | `ScoringEngine_Helpers.vb` | All pure helper functions; no UI dependency |
-| `ScoringEngine_Calculate.vb` | MaxScore const + the full Calculate() method incl. HVN cap logic, P2/P4/P5/P6 scoring changes |
+| `ScoringEngine_Calculate.vb` | MaxScore const + the full Calculate() method incl. HVN cap logic, P2/P4/P5/P6 scoring changes, T2-A MicroCVD FLAT stall penalty |
 
 ### IndicatorEngine partials
 
@@ -198,7 +216,7 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 | `IndicatorResults.vb` | IndicatorResults struct — all output fields |
 | `Indicators_Momentum.vb` | DMI, ATR, EMA, RSI (incl. series + divergence), ROC, VolumeSMA |
 | `Indicators_Volatility.vb` | VWAP (dual-session), VWAPBands, BBW, TTMSqueeze |
-| `Indicators_OrderFlow.vb` | OFI, CVD (3-segment weighted slope), MicroCVD, TFI, Liquidations |
+| `Indicators_OrderFlow.vb` | OFI (T2-B: bookDepth param + dynamic weights), CVD (3-segment weighted slope), MicroCVD, TFI, Liquidations |
 | `Indicators_Structure.vb` | Donchian, OBV, VPFRLite (exponential decay), MTFGate |
 
 ---
@@ -220,3 +238,6 @@ wiring. `Imports` statements are **not** shared; each partial file must declare 
 | RSI divergence penalty gated at RSI>65 / <35 (v0.47) | Applying the penalty only in overbought/oversold territory avoids false negatives in mid-range; divergence near RSI 50 is noise. |
 | OBV partial upgrade divergence gate (v0.47) | Upgrading OBV trend when an adverse divergence is present contradicts a known negative signal. The gate blocks the upgrade but does not add a penalty — it simply withholds a point rather than double-counting. |
 | VPFR exponential decay (v0.47) | Uniform weighting anchors POC to early-session high-volume events that are no longer relevant intraday. Decay base 0.985 gives ~22% weight reduction per 15 bars, making POC track current structure without being reactive to single-bar noise. |
+| Regime ADX hysteresis — 1-bar grace (T1-B) | 1m scalping produces whipsaw TRENDING→RANGING→TRENDING flips during momentum consolidations. A single-bar grace period holds the previous regime when a raw RANGE_BOUND reading follows a TRENDING or TRANSITIONAL regime, absorbing single-candle ADX dips without changing the veto/penalty path. _prevRegime field in Layout.vb; grace logic in MainForm_Analysis.vb. |
+| MicroCVD FLAT stall penalty (T2-A) | FLAT during a trending session (price above VWAP but CVD non-positive, or below VWAP but CVD non-negative) indicates momentum stall rather than neutrality. Reuses DecelPenalty magnitude to avoid a proliferation of config fields; STALL annotated in breakdown so the operator can distinguish it from a genuine DECEL signal. |
+| OFI BookDepth configurable (T2-B) | Hardcoded Take(3) with weights {3,2,1} was insensitive to order book depth configuration. Dynamic descending weight array built at runtime from cfg.Indicators.OFI.BookDepth allows widening to 5-10 levels on deep books without code changes. Default remains 3. |
