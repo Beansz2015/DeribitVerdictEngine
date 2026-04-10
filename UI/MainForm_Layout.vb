@@ -73,6 +73,11 @@ Partial Public Class MainForm
     Private _mtfCandles15m     As List(Of Candle) = Nothing
     Private _mtfLastFetchTime  As DateTime = DateTime.MinValue
 
+    ' [T1-B] Regime ADX hysteresis: stores the regime label from the previous
+    ' run. Used in MainForm_Analysis.vb to apply a 1-bar grace period before
+    ' allowing a RANGING flip away from TRENDING_* or TRANSITIONAL.
+    Private _prevRegime As String = ""
+
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
 
