@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-11 | Current version: v0.49 (Commit 5 complete)**
+**Last updated: 2026-04-13 | Current version: v0.49 (Commit 5 complete)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 It takes precedence over `indicator-spec.md` wherever the two conflict.
@@ -73,6 +73,7 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 | `docs/DeribitIndicatorProject.md` | This handover document |
 | `docs/architecture.md` | Codebase structure, data flow, design decisions |
 | `docs/trader-profile.md` | Trader style, indicator preferences, collaboration preferences |
+| `docs/verdict-context-tag-proposal.md` | Spec: Verdict Sub-Context Tag (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK) |
 | `docs/bbw-scoring-proposal.md` | Historical |
 | `docs/bbw-scoring-response.md` | Historical |
 | `docs/dual-scoring-fix-proposal.md` | Historical |
@@ -171,7 +172,8 @@ settings.json
     bbw_squeeze_penalty (1)
     liq_standard_penalty (1) / liq_large_penalty (2)
     funding_high_penalty (2) / funding_high_boost (1) / funding_low_penalty (1)
-    atr_target_multiplier (3.0) / atr_stop_multiplier (1.5)
+    atr_target_multiplier (2.0) / atr_stop_multiplier (1.2)
+    context_tag_structural_min (3) / context_tag_flow_max (1)
   mtfGate:
     enabled, dmiPeriod, requiredConfirms, candleCount
   regimeGates:
@@ -192,6 +194,7 @@ settings.json
 - **Step 4b:** MTF gate veto → NO TRADE
 - **Step 4c:** VPFR HVN cap → sets AdjustedLongTarget / AdjustedShortTarget
 - **Step 5:** Threshold comparison → verdict
+- **Step 5b:** Verdict sub-context tag → sets VerdictContext (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED). See `docs/verdict-context-tag-proposal.md`.
 - **Step 6:** CalcHoldStatus (hold/exit/flip guidance for open positions)
 - **Step 7:** ATR target/stop from cfg multipliers
 
@@ -204,8 +207,9 @@ For the full annotated Calculate() pipeline with per-step implementation detail,
 - **Entry price** = `candles1m.Last().Close`
 - **Last transacted price** = `recentTrades(0).Price` — displayed above ATR block, not used as entry
 - Long: Stop = price − (ATR × scale × AtrStopMultiplier), Target = price + (ATR × scale × AtrTargetMultiplier)
-- Short: mirrored. R:R = 1:2 at defaults (1.5 stop / 3.0 target)
+- Short: mirrored. R:R = 1:1.7 at current settings (1.2 stop / 2.0 target)
 - **HVN cap:** if `v.AdjustedLongTarget > 0` (or Short), raw target shown dimmed; POC-capped target shown in amber bold with reason
+- **Multipliers read from cfg** — label and R:R display are dynamic, not hardcoded.
 
 ---
 
@@ -240,11 +244,12 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 |---|---|---|
 | TFI threshold | Evaluate threshold=0.15 vs 0.10 for BTC-PERPETUAL tick size after live data | Low |
 | MicroCVD accelThreshold | Default 5000 USD; consider dynamic scaling vs VolumeSMA on quiet sessions | Low |
-| AtrTargetMultiplier | Default 3.0; review against logged R:R after 50+ trades | Low |
+| AtrTargetMultiplier | Currently 2.0; review against logged R:R after 50+ trades | Low |
 | OFI ratio | BuyDominantRatio=1.2 / SellDominantRatio=0.833; review against OFI hit rate in CalibrationReport | Low |
 | TTM flatThreshold | Default 0.5; review FLAT vs RISING/FALLING against 1m candle range distribution | Low |
 | VPFR numBuckets | Default 50; higher = more POC resolution at cost of sparse buckets on quiet sessions | Low |
 | Liq dominanceRatio | Default 1.0; review false signals; consider raising to 1.2–1.5 | Low |
+| ContextTag thresholds | ContextTagStructuralMin (3) / ContextTagFlowMax (1) — review FLOW_UNCONFIRMED hit rate after 50+ trades | Low |
 
 ---
 
@@ -257,6 +262,7 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 
 | Item | Description | Status |
 |---|---|---|
+| **Verdict Sub-Context Tag** | A WEAK LONG currently cannot distinguish between three structurally different causes: (1) FLOW_UNCONFIRMED — structural signals aligned but order flow not yet backing the move; (2) MOMENTUM_FADING — RSI extended, MicroCVD decelerating, TTM fading — late-stage entry; (3) STRUCTURALLY_WEAK — no dominant driver, genuine noise. Add a Step 5b `CalcVerdictContext()` pass that inspects already-computed `ScoreState` + `IndicatorResults` and sets `VerdictResult.VerdictContext`. Displayed as `CONTEXT:` line in the verdict block. No new indicators, no new data fetches. **Spec:** `docs/verdict-context-tag-proposal.md` | 🔍 Spec ready — awaiting open question resolution (Section 9 of spec) |
 | Adaptive scoring weights by regime | `MaxScore` is regime-adjusted but per-indicator weights are fixed. In TRENDING, EMA ribbon + DMI should carry more weight; in RANGE_BOUND, VWAP bands + Donchian should dominate. Static weights over-score weak signals for the current regime context. Requires per-regime weight multipliers in `EngineSettings` and `ScoringEngine_Calculate`. | 🔍 Spec needed |
 | Session-aware volume norms | `VolHighThreshold` / `VolMidThreshold` don't account for time-of-day liquidity cycles. BTC Saturday 04:00 UTC behaves completely differently from London/NY overlap. Segment `DynamicNorms.Compute` by UTC hour bucket to reduce false volume signals during thin sessions. | 🔍 Spec needed |
 | Funding rate momentum | Absolute funding rate used as flat step modifier. Funding momentum (rate increasing vs decreasing) is a higher-quality signal — a rising rate approaching the high threshold signals crowding *before* the penalty fires. Add a `FundingMomentum` field (RISING/FALLING/FLAT) to `IndicatorResults` and incorporate into Step 3 modifier logic. | 🔍 Spec needed |
@@ -306,6 +312,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-13** | ATR label fix: stop/target multipliers read from cfg in RenderOutput (no hardcoded 1.5/3.0). atr_stop_multiplier updated to 1.2, atr_target_multiplier confirmed 2.0. Verdict Sub-Context Tag spec committed (`docs/verdict-context-tag-proposal.md`). |
 | **Commit 5** | [T2-C] Donchian NONE mid-channel note. [T3-A] VPFR numBuckets from cfg. [T3-B] RSI pivotWing + lookbackBars from cfg. [T3-C] TTM flatThreshold from cfg. [T3-D] CalcLiquidations dominanceRatio from cfg. |
 | **Commit 4** | [T1-B] Regime ADX hysteresis 1-bar grace (`_prevRegime`). [T2-A] MicroCVD FLAT stall penalty. [T2-B] OFI BookDepth injectable; dynamic descending weight array. |
 | v0.49 | [P8] RSI zones/div penalty → cfg. [P9] ADX threshold + VWAP warmup → scoring. [P10] ROC dead-band + OFI dominance → cfg. [P11] ATR multipliers externalised. [P12] BBW/Liq/Funding penalties externalised. EngineSettings v0.37. settings.json v6. |
