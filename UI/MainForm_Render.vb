@@ -212,6 +212,7 @@ Partial Public Class MainForm
         rtb.Clear()
 
         Dim ts As String = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd HH:mm:ss") & " UTC+8"
+        Dim cfg As EngineSettings = SettingsLoader.Current
 
         ' --- Verdict block ---
         Divider(rtb)
@@ -260,18 +261,22 @@ Partial Public Class MainForm
 
         ' --- ATR Entry Levels ---
         ' Entry pivot = r.CurrentPrice (1m candle close).
+        ' Multipliers read from cfg so label stays in sync with settings.json.
         ' If VerdictResult carries an HVN-capped target, the capped level is
         ' shown in amber with the cap reason.  Raw R:R is always shown so the
         ' trader sees both the theoretical and the realistic exit.
-        Dim atrStop     As Double = r.ATR * norms.ATRScaleFactor * 1.5
-        Dim atrTarget   As Double = r.ATR * norms.ATRScaleFactor * 3.0
+        Dim stopMult    As Double = cfg.Scoring.AtrStopMultiplier
+        Dim targetMult  As Double = cfg.Scoring.AtrTargetMultiplier
+        Dim atrStop     As Double = r.ATR * norms.ATRScaleFactor * stopMult
+        Dim atrTarget   As Double = r.ATR * norms.ATRScaleFactor * targetMult
         Dim longStop    As Double = r.CurrentPrice - atrStop
         Dim longTarget  As Double = r.CurrentPrice + atrTarget
         Dim shortStop   As Double = r.CurrentPrice + atrStop
         Dim shortTarget As Double = r.CurrentPrice - atrTarget
+        Dim rrRatio     As String = String.Format("1:{0:F1}", targetMult / stopMult)
 
-        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | 1.5x stop / 3.0x target)",
-                                          r.ATR, norms.ATRScaleFactor))
+        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | {2:F1}x stop / {3:F1}x target)",
+                                          r.ATR, norms.ATRScaleFactor, stopMult, targetMult))
 
         ' Long row
         AppendRtf(rtb, "  Long:   ", C_LABEL)
@@ -282,8 +287,8 @@ Partial Public Class MainForm
             AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
                                           v.AdjustedLongTarget, v.TargetCapReason) & Environment.NewLine, C_WARN, bold:=True)
         Else
-            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
-                                          longStop, r.CurrentPrice, longTarget, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
+                                          longStop, r.CurrentPrice, longTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
         End If
 
         ' Short row
@@ -294,8 +299,8 @@ Partial Public Class MainForm
             AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
                                           v.AdjustedShortTarget, v.TargetCapReason) & Environment.NewLine, C_WARN, bold:=True)
         Else
-            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R 1:2  (risk {3:F1} / rwd {4:F1})",
-                                          shortStop, r.CurrentPrice, shortTarget, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
+                                          shortStop, r.CurrentPrice, shortTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_BAD)
         End If
 
         ' --- Dynamic Norms ---
@@ -347,7 +352,6 @@ Partial Public Class MainForm
                                       r.CurrentVolume, usdStr, r.VolumeRatio, r.VolumeSMA9) & Environment.NewLine, volColour)
 
         ' --- VWAP ---
-        Dim cfg As EngineSettings = SettingsLoader.Current
         Dim s2h As Integer = cfg.Indicators.VWAP.Session2StartHour
         Dim s2m As Integer = cfg.Indicators.VWAP.Session2StartMinute
         Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < vwapWarmup, "  [WARMUP]", "")
