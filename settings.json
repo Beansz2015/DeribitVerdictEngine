@@ -95,7 +95,7 @@
     "funding_high_boost": 1,
     "funding_low_penalty": 1,
     "atr_target_multiplier": 2.0,
-    "atr_stop_multiplier": 1.0,
+    "atr_stop_multiplier": 1.2,
     "weights": {
       "ROC": 1, "RSI": 1, "DMI": 1, "ADX": 1,
       "Volume": 1, "VWAP": 1, "BBW": 1, "EMA": 1,
