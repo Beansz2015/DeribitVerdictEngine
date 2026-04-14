@@ -1,6 +1,6 @@
 # Spec: Verdict Sub-Context Tag
 **Proposed:** 2026-04-13  
-**Status:** AWAITING REVIEW  
+**Status:** APPROVED — open questions resolved 2026-04-14  
 **Target file:** `Core/ScoringEngine_Calculate.vb` (Step 5b), `Core/ScoringEngine_Types.vb` (VerdictResult), `UI/MainForm_Render.vb` (display)
 
 ---
@@ -138,22 +138,29 @@ Private Shared Function CalcVerdictContext(
     Dim isLong As Boolean = (v.LongScore >= v.ShortScore)
 
     ' --- Build tier sub-scores from SignalBreakdown ---
-    ' Structural signals: VWAP, BBW/TTM, EMA 9/21/50, DMI, ADX, Donchian, 5m EMA200
-    Dim structuralLabels As New HashSet(Of String) From {
-        "VWAP", "BBW/TTM", "EMA 9/21/50", "DMI +/-DI", "ADX>25", "Donchian(20)", "5m EMA(200)"
-    }
+    ' Structural signals: VWAP, BBW/TTM, EMA 9/21/50, DMI +/-DI, ADX>*, Donchian(20), 5m EMA(200)
     ' Flow signals: OFI, CVD, TFI, MicroCVD, OI Delta, ROC(9), Volume
-    Dim flowLabels As New HashSet(Of String) From {
-        "OFI", "CVD", "TFI", "MicroCVD", "OI Delta", "ROC(9)", "Volume"
-    }
+    ' NOTE: ADX label is dynamic ("ADX>" & adxTrend) -- use StartsWith("ADX>") not exact match.
 
     Dim structScore As Integer = 0
     Dim flowScore   As Integer = 0
     For Each item In v.SignalBreakdown
         Dim hit As Boolean = If(isLong, item.LongHit, item.ShortHit)
         If Not hit Then Continue For
-        If structuralLabels.Contains(item.Label) Then structScore += 1
-        If flowLabels.Contains(item.Label)       Then flowScore   += 1
+        Dim lbl As String = item.Label
+        ' Structural
+        If lbl = "VWAP"         OrElse lbl = "BBW/TTM"     OrElse
+           lbl = "EMA 9/21/50"  OrElse lbl = "DMI +/-DI"   OrElse
+           lbl.StartsWith("ADX>")                           OrElse
+           lbl = "Donchian(20)" OrElse lbl = "5m EMA(200)" Then
+            structScore += 1
+        End If
+        ' Flow
+        If lbl = "OFI"    OrElse lbl = "CVD"      OrElse lbl = "TFI" OrElse
+           lbl = "MicroCVD" OrElse lbl = "OI Delta" OrElse
+           lbl = "ROC(9)"  OrElse lbl = "Volume"   Then
+            flowScore += 1
+        End If
     Next
 
     ' --- Check MOMENTUM_FADING first (highest priority) ---
@@ -174,12 +181,8 @@ Private Shared Function CalcVerdictContext(
     If fadingCount >= 2 Then Return "MOMENTUM_FADING"
 
     ' --- Check FLOW_UNCONFIRMED second ---
-    Dim flowUnconfirmedThresholdStructural As Integer =
-        cfg.Scoring.ContextTagStructuralMin   ' default 3
-    Dim flowUnconfirmedThresholdFlow As Integer =
-        cfg.Scoring.ContextTagFlowMax         ' default 1
-    If structScore >= flowUnconfirmedThresholdStructural AndAlso
-       flowScore   <= flowUnconfirmedThresholdFlow Then
+    If structScore >= cfg.Scoring.ContextTagStructuralMin AndAlso
+       flowScore   <= cfg.Scoring.ContextTagFlowMax Then
         Return "FLOW_UNCONFIRMED"
     End If
 
@@ -281,7 +284,7 @@ No new indicator parameters required.
 
 - Does **not** change any scores or verdict thresholds
 - Does **not** add new indicators or data fetches
-- Does **not** affect CalibrationReport or CSV logging (though `VerdictContext` could be added to CSV in a future pass)
+- Does **not** affect CalibrationReport or CSV logging (deferred — see Section 10)
 - Does **not** override MTF gate or regime veto logic
 
 ---
@@ -298,15 +301,33 @@ If MOMENTUM_FADING misses obvious exhaustion, lower the 2-of-4 requirement to 1-
 
 ---
 
-## 9. Open Questions for Review
+## 9. Open Questions — RESOLVED 2026-04-14
 
-1. **CSV logging** — should `VerdictContext` be added to `analysis_log.csv` now, or deferred until
-   the CalibrationReport can use it for directional accuracy correlation?
-2. **CONFIRMED display** — confirm that CONFIRMED should be silent (no line rendered).
-   Alternative: show `CONTEXT: CONFIRMED` in dim green for completeness.
-3. **SignalBreakdown label matching** — the `CalcVerdictContext` helper matches labels by string
-   against `SignalBreakdown`. Confirm that label strings in `ScoringEngine_Calculate` exactly
-   match the set defined in `structuralLabels` and `flowLabels` above, or adjust the sets.
-4. **MicroCVDEarly sign guard** — the late/early ratio check uses `r.MicroCVDEarly > 0` as a
-   guard for long direction. Confirm `MicroCVDEarly` can be negative (net delta, not absolute)
-   and that the guard is correct.
+1. **CSV logging** — **DEFERRED.** Do not add `VerdictContext` to `analysis_log.csv` now.
+   Pick up when CalibrationReport is approaching READY threshold (≥300 rows).
+   See `DeribitIndicatorProject.md` Section 12 (WATCHING backlog) for the pickup note.
+
+2. **CONFIRMED display** — **SILENT.** Do not render a `CONTEXT:` line when verdict is CONFIRMED.
+   Absence of the line is the signal. Adding it would create noise on the majority of runs.
+
+3. **SignalBreakdown label matching** — **RESOLVED.** Labels verified against source in
+   `ScoringEngine_Calculate.vb`. One fix applied vs. original spec: ADX label is dynamic
+   (`"ADX>" & adxTrend.ToString("F0")`), so matching uses `item.Label.StartsWith("ADX>")`
+   instead of exact `HashSet` lookup. All other labels confirmed exact match.
+
+4. **MicroCVDEarly sign guard** — **CONFIRMED.** `MicroCVDEarly` is a net USD delta and can
+   be negative. The `> 0` guard in the long-direction fading check is correct — it ensures
+   the ratio comparison is directionally meaningful (deceleration of a bullish early segment).
+   Short-direction mirror arithmetic (`MicroCVDEarly < 0 AndAlso MicroCVDLate > MicroCVDEarly * 0.5`)
+   is also correct: both values are negative, so the condition correctly identifies a
+   less-negative late segment (weaker bear pressure).
+
+---
+
+## 10. CSV Logging Pickup Note
+
+When `CalibrationReport` approaches READY (≥300 rows, ≥3 sessions, ≥3 regimes):
+- Add `VerdictContext` as a column to `analysis_log.csv` in `AnalysisLogger.LogRun()`
+- Update `CalibrationReport` to correlate each context tag with subsequent directional accuracy
+- This enables per-tag win rate analysis (e.g. how often does FLOW_UNCONFIRMED resolve
+  to a confirmed long on the next run vs. reversing)
