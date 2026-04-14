@@ -292,9 +292,8 @@ Partial Public Class MainForm
         Dim rrRatio     As String = String.Format("1:{0:F1}", targetMult / stopMult)
 
         ' Populate Kelly fields on VerdictResult (display-only, no scoring impact).
-        ' Pass the directional stop distance: winning side determines which to use.
         ' atrStop is always positive (distance in price points).
-        CalcKellySizing(v, atrStop, cfg)
+        ScoringEngine.CalcKellySizing(v, atrStop, cfg)
 
         SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | {2:F1}x stop / {3:F1}x target)",
                                           r.ATR, norms.ATRScaleFactor, stopMult, targetMult))
