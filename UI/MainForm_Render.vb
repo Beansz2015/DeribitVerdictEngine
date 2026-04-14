@@ -291,6 +291,11 @@ Partial Public Class MainForm
         Dim shortTarget As Double = r.CurrentPrice - atrTarget
         Dim rrRatio     As String = String.Format("1:{0:F1}", targetMult / stopMult)
 
+        ' Populate Kelly fields on VerdictResult (display-only, no scoring impact).
+        ' Pass the directional stop distance: winning side determines which to use.
+        ' atrStop is always positive (distance in price points).
+        CalcKellySizing(v, atrStop, cfg)
+
         SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | {2:F1}x stop / {3:F1}x target)",
                                           r.ATR, norms.ATRScaleFactor, stopMult, targetMult))
 
@@ -317,6 +322,31 @@ Partial Public Class MainForm
         Else
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
                                           shortStop, r.CurrentPrice, shortTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+        End If
+
+        ' --- Kelly Sizing block ---
+        ' Shown only when there is positive edge (KellyF > 0).
+        ' Suppressed on NEUTRAL / no-edge verdicts.
+        If v.KellyF > 0 Then
+            Dim capTag As String = If(v.KellyCapped, "  [CAPPED]", "")
+            AppendRtf(rtb, Environment.NewLine, C_DIVIDER)
+            AppendRtf(rtb, String.Format("KELLY SIZING  [{0}]{1}" & Environment.NewLine,
+                                          v.KellyPMode, capTag), C_HEADER, bold:=True)
+            AppendRtf(rtb, "  p(win):   ", C_LABEL)
+            AppendRtf(rtb, String.Format("{0:P1}" & Environment.NewLine, v.KellyPWin), C_VALUE)
+            AppendRtf(rtb, "  f* / Half-Kelly:  ", C_LABEL)
+            AppendRtf(rtb, String.Format("{0:P2}  /  {1:P2}" & Environment.NewLine,
+                                          v.KellyF, v.KellyFHalf), C_VALUE)
+            AppendRtf(rtb, "  Applied fraction: ", C_LABEL)
+            AppendRtf(rtb, String.Format("{0:P2}" & Environment.NewLine, v.KellyFApplied), C_VALUE)
+            AppendRtf(rtb, "  Risk $:    ", C_LABEL)
+            AppendRtf(rtb, String.Format("${0:F2}" & Environment.NewLine, v.KellyRiskUsd), C_VALUE)
+            AppendRtf(rtb, "  Contracts: ", C_LABEL)
+            Dim contractColour As Color = If(v.KellyContracts >= 1, C_GOOD, C_WARN)
+            Dim contractStr As String = If(v.KellyContracts >= 1,
+                                           v.KellyContracts.ToString() & " contracts",
+                                           "< 1 contract  (stop too wide for min size)")
+            AppendRtf(rtb, contractStr & Environment.NewLine, contractColour, bold:=True)
         End If
 
         ' --- Dynamic Norms ---
