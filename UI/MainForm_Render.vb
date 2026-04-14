@@ -227,17 +227,18 @@ Partial Public Class MainForm
         End Select
         AppendRtf(rtb, v.Verdict & Environment.NewLine, vColour, bold:=True)
 
-        ' Step 5b: Verdict sub-context tag -- rendered when not CONFIRMED.
-        ' CONFIRMED is silent (absence of line = all tiers aligned).
+        ' Step 5b: Verdict sub-context tag -- always rendered when VerdictContext is set.
+        ' CONFIRMED shown in green: positive confirmation all tiers are aligned.
         ' MOMENTUM_FADING = red (C_BAD), FLOW_UNCONFIRMED = amber (C_WARN),
         ' STRUCTURALLY_WEAK = dim (C_DIM).
-        If v.VerdictContext <> "CONFIRMED" AndAlso v.VerdictContext <> "" Then
+        If v.VerdictContext <> "" Then
             AppendRtf(rtb, "  CONTEXT:    ", C_LABEL)
             Dim ctxColour As Color
             Select Case v.VerdictContext
                 Case "MOMENTUM_FADING"   : ctxColour = C_BAD
                 Case "FLOW_UNCONFIRMED"  : ctxColour = C_WARN
                 Case "STRUCTURALLY_WEAK" : ctxColour = C_DIM
+                Case "CONFIRMED"         : ctxColour = C_GOOD
                 Case Else                : ctxColour = C_VALUE
             End Select
             AppendRtf(rtb, v.VerdictContext & Environment.NewLine, ctxColour, bold:=True)
