@@ -39,6 +39,10 @@
 '        CalcVPFRLite was wired to cfg.Indicators.VPFR.NumBuckets in MainForm_Analysis.vb
 '        but the class and property were missing -- caused BC30456.
 '        Default NumBuckets=50 matches the method's previous hardcoded default.
+' Step 5b: Added ContextTagStructuralMin and ContextTagFlowMax to ScoringSettings.
+'        Used by CalcVerdictContext() in ScoringEngine_Calculate to classify weak/ambiguous
+'        verdicts as FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED.
+'        Defaults: ContextTagStructuralMin=3, ContextTagFlowMax=1.
 
 Imports System.Text.Json.Serialization
 
@@ -325,6 +329,17 @@ Public Class ScoringSettings
     <JsonPropertyName("hold_rsi_hold_short")>        Public Property HoldRsiHoldShort       As Double = 40.0
     ''' <summary>[T1-D] RSI at or below this = EVALUATE, above = EXIT (short). Default 60.</summary>
     <JsonPropertyName("hold_rsi_evaluate_short")>    Public Property HoldRsiEvaluateShort   As Double = 60.0
+    ''' <summary>
+    ''' [Step 5b] Min structural signal hits (VWAP/BBW/EMA/DMI/ADX/Donchian/5mEMA200)
+    ''' to classify verdict as FLOW_UNCONFIRMED. Default 3.
+    ''' Review after 50+ trades: if FLOW_UNCONFIRMED fires >40% of WEAK verdicts, raise to 4.
+    ''' </summary>
+    <JsonPropertyName("context_tag_structural_min")> Public Property ContextTagStructuralMin As Integer = 3
+    ''' <summary>
+    ''' [Step 5b] Max flow signal hits (OFI/CVD/TFI/MicroCVD/OI Delta/ROC/Volume)
+    ''' to classify verdict as FLOW_UNCONFIRMED. Default 1.
+    ''' </summary>
+    <JsonPropertyName("context_tag_flow_max")>       Public Property ContextTagFlowMax       As Integer = 1
 End Class
 
 ' ---------------------------------------------------------------------------
