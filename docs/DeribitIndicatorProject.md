@@ -49,9 +49,9 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 
 | File | Purpose |
 |---|---|
-| `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. AdjustedLongTarget, AdjustedShortTarget, TargetCapReason, VerdictContext), PositionState, SignalCategory, ScoreState |
+| `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. AdjustedLongTarget, AdjustedShortTarget, TargetCapReason, VerdictContext, Kelly fields), PositionState, SignalCategory, ScoreState |
 | `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore, Threshold, TierFloor, AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus |
-| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline incl. Step 5b CalcVerdictContext() |
+| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline incl. Step 5b CalcVerdictContext() + CalcKellySizing() |
 | `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields |
 | `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
 | `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
@@ -66,7 +66,7 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 | `UI/MainForm_Layout.vb` | v0.47 | Constants, constructor, resize helpers; shared fields: colour palette, _oiHistory, auto-run state, MTF TTL cache, `_prevRegime` |
 | `UI/MainForm_AutoRun.vb` | v0.47 | Auto-run timer lifecycle |
 | `UI/MainForm_Analysis.vb` | Commit 5 | RunAnalysisAsync() — full data fetch + indicator + scoring pipeline |
-| `UI/MainForm_Render.vb` | v0.46 | RenderOutput(), RTF helpers, CalibrationReport, log helpers; CalcKellySizing() helper (pending) |
+| `UI/MainForm_Render.vb` | v0.49 | RenderOutput(), RTF helpers, CalibrationReport, log helpers; CONTEXT: line always shown (CONFIRMED in green, warnings in amber/red/dim); Kelly Sizing block rendered after ATR levels |
 
 ### Docs
 
@@ -75,8 +75,8 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 | `docs/DeribitIndicatorProject.md` | This handover document |
 | `docs/architecture.md` | Codebase structure, data flow, design decisions |
 | `docs/trader-profile.md` | Trader style, indicator preferences, collaboration preferences |
-| `docs/verdict-context-tag-proposal.md` | Spec: Verdict Sub-Context Tag (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK) — IMPLEMENTED |
-| `docs/kelly-criterion-proposal.md` | Spec: Kelly Criterion position sizing display |
+| `docs/verdict-context-tag-proposal.md` | Spec: Verdict Sub-Context Tag — ✅ IMPLEMENTED |
+| `docs/kelly-criterion-proposal.md` | Spec: Kelly Criterion position sizing — ✅ IMPLEMENTED |
 | `docs/bbw-scoring-proposal.md` | Historical |
 | `docs/bbw-scoring-response.md` | Historical |
 | `docs/dual-scoring-fix-proposal.md` | Historical |
@@ -208,6 +208,7 @@ settings.json
 - **Step 5b:** Verdict sub-context tag → sets VerdictContext (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED). See `docs/verdict-context-tag-proposal.md`.
 - **Step 6:** CalcHoldStatus (hold/exit/flip guidance for open positions)
 - **Step 7:** ATR target/stop from cfg multipliers
+- **CalcKellySizing():** called from RenderOutput after ATR levels are computed; populates Kelly fields on VerdictResult (display-only, zero scoring impact). See `docs/kelly-criterion-proposal.md`.
 
 For the full annotated Calculate() pipeline with per-step implementation detail, see `docs/architecture.md`.
 
@@ -221,7 +222,7 @@ For the full annotated Calculate() pipeline with per-step implementation detail,
 - Short: mirrored. R:R = 1:1.7 at current settings (1.2 stop / 2.0 target)
 - **HVN cap:** if `v.AdjustedLongTarget > 0` (or Short), raw target shown dimmed; POC-capped target shown in amber bold with reason
 - **Multipliers read from cfg** — label and R:R display are dynamic, not hardcoded.
-- **Kelly Sizing block** appended after ATR levels when verdict is actionable. See `docs/kelly-criterion-proposal.md`.
+- **Kelly Sizing block** rendered immediately after ATR levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. [EST] mode pre-calibration, [CAL] mode post. Suppressed when KellyF = 0 (no edge). See `docs/kelly-criterion-proposal.md`.
 
 ---
 
@@ -276,8 +277,8 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 
 | Item | Description | Status |
 |---|---|---|
-| **Verdict Sub-Context Tag** | A WEAK LONG currently cannot distinguish between three structurally different causes: (1) FLOW_UNCONFIRMED — structural signals aligned but order flow not yet backing the move; (2) MOMENTUM_FADING — RSI extended, MicroCVD decelerating, TTM fading — late-stage entry; (3) STRUCTURALLY_WEAK — no dominant driver, genuine noise. Add a Step 5b `CalcVerdictContext()` pass that inspects already-computed `ScoreState` + `IndicatorResults` and sets `VerdictResult.VerdictContext`. Displayed as `CONTEXT:` line in the verdict block. No new indicators, no new data fetches. **Spec:** `docs/verdict-context-tag-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
-| **Kelly Criterion Sizing** | Display-only position sizing advisory block below ATR entry levels. Uses Half-Kelly with hard 5% cap. Win probability (`p`) estimated from score ratio pre-calibration ([EST] mode), switching to per-tier historical win rate post-calibration ([CAL] mode). Account size $1,000. Deribit BTC-PERPETUAL contract face = $10. No scoring or stop/target changes. **Spec:** `docs/kelly-criterion-proposal.md` | 🔍 Spec ready — awaiting open question resolution (Section 11 of spec) |
+| **Verdict Sub-Context Tag** | Adds a Step 5b `CalcVerdictContext()` pass that classifies FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED. Displayed as `CONTEXT:` line — always shown (green for CONFIRMED, amber/red/dim for warnings). No scoring changes. **Spec:** `docs/verdict-context-tag-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
+| **Kelly Criterion Sizing** | Display-only position sizing advisory block below ATR entry levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. [EST] pre-calibration / [CAL] post. No scoring changes. **Spec:** `docs/kelly-criterion-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
 | Adaptive scoring weights by regime | `MaxScore` is regime-adjusted but per-indicator weights are fixed. In TRENDING, EMA ribbon + DMI should carry more weight; in RANGE_BOUND, VWAP bands + Donchian should dominate. Static weights over-score weak signals for the current regime context. Requires per-regime weight multipliers in `EngineSettings` and `ScoringEngine_Calculate`. | 🔍 Spec needed |
 | Session-aware volume norms | `VolHighThreshold` / `VolMidThreshold` don't account for time-of-day liquidity cycles. BTC Saturday 04:00 UTC behaves completely differently from London/NY overlap. Segment `DynamicNorms.Compute` by UTC hour bucket to reduce false volume signals during thin sessions. | 🔍 Spec needed |
 | Funding rate momentum | Absolute funding rate used as flat step modifier. Funding momentum (rate increasing vs decreasing) is a higher-quality signal — a rising rate approaching the high threshold signals crowding *before* the penalty fires. Add a `FundingMomentum` field (RISING/FALLING/FLAT) to `IndicatorResults` and incorporate into Step 3 modifier logic. | 🔍 Spec needed |
@@ -327,7 +328,9 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
-| **2026-04-14** | Verdict Sub-Context Tag implemented: Step 5b CalcVerdictContext() added to ScoringEngine_Calculate.vb; VerdictContext property on VerdictResult; CONTEXT: line rendered in MainForm_Render.vb; settings.json bumped to v7 (context_tag_structural_min, context_tag_flow_max). CSV logging deferred to CalibrationReport READY — see Section 12 backlog. |
+| **2026-04-14** | [UI] CONTEXT: line now always rendered — CONFIRMED shown in green (C_GOOD) instead of being silent. Removes ambiguity between "no tag" and "confirmed aligned". `MainForm_Render.vb` bumped to v0.49. |
+| **2026-04-14** | Kelly Criterion sizing fully implemented: `CalcKellySizing()` in `ScoringEngine_Calculate.vb`; Kelly fields on `VerdictResult`; `KellySettings` in `EngineSettings`; KELLY SIZING block rendered in `MainForm_Render.vb` after ATR levels. [EST] / [CAL] / [CAPPED] tags. Half-Kelly, 5% cap, $1,000 account, $10 contract face. |
+| **2026-04-14** | Verdict Sub-Context Tag implemented: Step 5b `CalcVerdictContext()` added to `ScoringEngine_Calculate.vb`; `VerdictContext` property on `VerdictResult`; `CONTEXT:` line rendered in `MainForm_Render.vb`; settings.json bumped to v7 (`context_tag_structural_min`, `context_tag_flow_max`). CSV logging deferred to CalibrationReport READY — see Section 12 backlog. |
 | **2026-04-14** | Kelly Criterion sizing spec committed (`docs/kelly-criterion-proposal.md`). Section 13 updated with Kelly item. Prohibited skill warning added to session start checklist. |
 | **2026-04-13** | ATR label fix: stop/target multipliers read from cfg in RenderOutput (no hardcoded 1.5/3.0). atr_stop_multiplier updated to 1.2, atr_target_multiplier confirmed 2.0. Verdict Sub-Context Tag spec committed (`docs/verdict-context-tag-proposal.md`). |
 | **Commit 5** | [T2-C] Donchian NONE mid-channel note. [T3-A] VPFR numBuckets from cfg. [T3-B] RSI pivotWing + lookbackBars from cfg. [T3-C] TTM flatThreshold from cfg. [T3-D] CalcLiquidations dominanceRatio from cfg. |
