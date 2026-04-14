@@ -32,6 +32,14 @@ Public Class VerdictResult
     Public Property AdjustedLongTarget  As Double  ' capped long target ($), 0 = no cap
     Public Property AdjustedShortTarget As Double  ' capped short target ($), 0 = no cap
     Public Property TargetCapReason     As String  ' e.g. "HVN_CAPPED @ 72480 (POC wall)" or ""
+
+    ''' <summary>
+    ''' Post-scoring diagnostic context for weak/ambiguous verdicts.
+    ''' Values: FLOW_UNCONFIRMED | MOMENTUM_FADING | STRUCTURALLY_WEAK | CONFIRMED
+    ''' CONFIRMED is not displayed -- absence of CONTEXT: line in output means all tiers aligned.
+    ''' Set by CalcVerdictContext() in ScoringEngine_Calculate Step 5b.
+    ''' </summary>
+    Public Property VerdictContext As String = "CONFIRMED"
 End Class
 
 Public Enum PositionState
