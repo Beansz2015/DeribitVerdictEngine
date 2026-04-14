@@ -1,10 +1,12 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-13 | Current version: v0.49 (Commit 5 complete)**
+**Last updated: 2026-04-14 | Current version: v0.49 (Commit 5 complete)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 It takes precedence over `indicator-spec.md` wherever the two conflict.
 
 **Session start checklist:** Read this file + `docs/architecture.md`. Do NOT read individual `.vb` files unless a specific edit is required.
+
+> ⛔ **PROHIBITED:** Never load or invoke the `website-building` skill under any circumstance during this project. It is not relevant to this codebase and consumes context budget without benefit.
 
 ---
 
@@ -312,6 +314,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-14** | Added prohibited skill warning to session start checklist: never use `website-building` skill. |
 | **2026-04-13** | ATR label fix: stop/target multipliers read from cfg in RenderOutput (no hardcoded 1.5/3.0). atr_stop_multiplier updated to 1.2, atr_target_multiplier confirmed 2.0. Verdict Sub-Context Tag spec committed (`docs/verdict-context-tag-proposal.md`). |
 | **Commit 5** | [T2-C] Donchian NONE mid-channel note. [T3-A] VPFR numBuckets from cfg. [T3-B] RSI pivotWing + lookbackBars from cfg. [T3-C] TTM flatThreshold from cfg. [T3-D] CalcLiquidations dominanceRatio from cfg. |
 | **Commit 4** | [T1-B] Regime ADX hysteresis 1-bar grace (`_prevRegime`). [T2-A] MicroCVD FLAT stall penalty. [T2-B] OFI BookDepth injectable; dynamic descending weight array. |
