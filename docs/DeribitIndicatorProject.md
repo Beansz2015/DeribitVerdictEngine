@@ -41,7 +41,7 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
 | `SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton |
-| `settings.json` | v6 — all tunable parameters (see Section 6) |
+| `settings.json` | v7 — all tunable parameters (see Section 6) |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -49,9 +49,9 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 
 | File | Purpose |
 |---|---|
-| `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. AdjustedLongTarget, AdjustedShortTarget, TargetCapReason, Kelly fields), PositionState, SignalCategory, ScoreState |
+| `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. AdjustedLongTarget, AdjustedShortTarget, TargetCapReason, VerdictContext), PositionState, SignalCategory, ScoreState |
 | `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore, Threshold, TierFloor, AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus |
-| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline (Commit 5 current) |
+| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline incl. Step 5b CalcVerdictContext() |
 | `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields |
 | `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
 | `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
@@ -75,7 +75,7 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 | `docs/DeribitIndicatorProject.md` | This handover document |
 | `docs/architecture.md` | Codebase structure, data flow, design decisions |
 | `docs/trader-profile.md` | Trader style, indicator preferences, collaboration preferences |
-| `docs/verdict-context-tag-proposal.md` | Spec: Verdict Sub-Context Tag (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK) |
+| `docs/verdict-context-tag-proposal.md` | Spec: Verdict Sub-Context Tag (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK) — IMPLEMENTED |
 | `docs/kelly-criterion-proposal.md` | Spec: Kelly Criterion position sizing display |
 | `docs/bbw-scoring-proposal.md` | Historical |
 | `docs/bbw-scoring-response.md` | Historical |
@@ -147,7 +147,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v6**.
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v7**.
 
 ```
 settings.json
@@ -263,6 +263,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 | Liq dominanceRatio | Default 1.0; review false signals; consider raising to 1.2–1.5 | Low |
 | ContextTag thresholds | ContextTagStructuralMin (3) / ContextTagFlowMax (1) — review FLOW_UNCONFIRMED hit rate after 50+ trades | Low |
 | Kelly est_prob_floor/scale | Default 0.45 / 0.20 — review against actual win rates once CalibrationReport reaches READY | Low |
+| VerdictContext CSV logging | When CalibrationReport approaches READY (≥300 rows, ≥3 sessions, ≥3 regimes): add `VerdictContext` column to `analysis_log.csv` in `AnalysisLogger.LogRun()`, and update CalibrationReport to correlate each context tag with subsequent directional accuracy. See `docs/verdict-context-tag-proposal.md` Section 10 for full pickup spec. | Low — deferred until CalibrationReport READY |
 
 ---
 
@@ -275,7 +276,7 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 
 | Item | Description | Status |
 |---|---|---|
-| **Verdict Sub-Context Tag** | A WEAK LONG currently cannot distinguish between three structurally different causes: (1) FLOW_UNCONFIRMED — structural signals aligned but order flow not yet backing the move; (2) MOMENTUM_FADING — RSI extended, MicroCVD decelerating, TTM fading — late-stage entry; (3) STRUCTURALLY_WEAK — no dominant driver, genuine noise. Add a Step 5b `CalcVerdictContext()` pass that inspects already-computed `ScoreState` + `IndicatorResults` and sets `VerdictResult.VerdictContext`. Displayed as `CONTEXT:` line in the verdict block. No new indicators, no new data fetches. **Spec:** `docs/verdict-context-tag-proposal.md` | 🔍 Spec ready — awaiting open question resolution (Section 9 of spec) |
+| **Verdict Sub-Context Tag** | A WEAK LONG currently cannot distinguish between three structurally different causes: (1) FLOW_UNCONFIRMED — structural signals aligned but order flow not yet backing the move; (2) MOMENTUM_FADING — RSI extended, MicroCVD decelerating, TTM fading — late-stage entry; (3) STRUCTURALLY_WEAK — no dominant driver, genuine noise. Add a Step 5b `CalcVerdictContext()` pass that inspects already-computed `ScoreState` + `IndicatorResults` and sets `VerdictResult.VerdictContext`. Displayed as `CONTEXT:` line in the verdict block. No new indicators, no new data fetches. **Spec:** `docs/verdict-context-tag-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
 | **Kelly Criterion Sizing** | Display-only position sizing advisory block below ATR entry levels. Uses Half-Kelly with hard 5% cap. Win probability (`p`) estimated from score ratio pre-calibration ([EST] mode), switching to per-tier historical win rate post-calibration ([CAL] mode). Account size $1,000. Deribit BTC-PERPETUAL contract face = $10. No scoring or stop/target changes. **Spec:** `docs/kelly-criterion-proposal.md` | 🔍 Spec ready — awaiting open question resolution (Section 11 of spec) |
 | Adaptive scoring weights by regime | `MaxScore` is regime-adjusted but per-indicator weights are fixed. In TRENDING, EMA ribbon + DMI should carry more weight; in RANGE_BOUND, VWAP bands + Donchian should dominate. Static weights over-score weak signals for the current regime context. Requires per-regime weight multipliers in `EngineSettings` and `ScoringEngine_Calculate`. | 🔍 Spec needed |
 | Session-aware volume norms | `VolHighThreshold` / `VolMidThreshold` don't account for time-of-day liquidity cycles. BTC Saturday 04:00 UTC behaves completely differently from London/NY overlap. Segment `DynamicNorms.Compute` by UTC hour bucket to reduce false volume signals during thin sessions. | 🔍 Spec needed |
@@ -326,6 +327,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-14** | Verdict Sub-Context Tag implemented: Step 5b CalcVerdictContext() added to ScoringEngine_Calculate.vb; VerdictContext property on VerdictResult; CONTEXT: line rendered in MainForm_Render.vb; settings.json bumped to v7 (context_tag_structural_min, context_tag_flow_max). CSV logging deferred to CalibrationReport READY — see Section 12 backlog. |
 | **2026-04-14** | Kelly Criterion sizing spec committed (`docs/kelly-criterion-proposal.md`). Section 13 updated with Kelly item. Prohibited skill warning added to session start checklist. |
 | **2026-04-13** | ATR label fix: stop/target multipliers read from cfg in RenderOutput (no hardcoded 1.5/3.0). atr_stop_multiplier updated to 1.2, atr_target_multiplier confirmed 2.0. Verdict Sub-Context Tag spec committed (`docs/verdict-context-tag-proposal.md`). |
 | **Commit 5** | [T2-C] Donchian NONE mid-channel note. [T3-A] VPFR numBuckets from cfg. [T3-B] RSI pivotWing + lookbackBars from cfg. [T3-C] TTM flatThreshold from cfg. [T3-D] CalcLiquidations dominanceRatio from cfg. |
