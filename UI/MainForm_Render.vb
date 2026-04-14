@@ -504,11 +504,13 @@ Partial Public Class MainForm
         AppendRtf(rtb, r.MTFGateReason & Environment.NewLine, C_DIM)
 
         ' --- Funding ---
+        ' fix: r.FundingRate is stored as raw rate (e.g. 5.2E-06).
+        ' Multiply by 100 to convert to percentage before F4 formatting.
         SectionHeader(rtb, "FUNDING:")
         AppendRtf(rtb, "  Rate: ", C_LABEL)
         Dim fundColour As Color = If(r.FundingBias.Contains("HEAVILY"), C_BAD,
                                      If(r.FundingBias = "NEUTRAL", C_VALUE, C_WARN))
-        AppendRtf(rtb, String.Format("{0:F4}%  |  {1}", r.FundingRate, r.FundingBias) & Environment.NewLine, fundColour)
+        AppendRtf(rtb, String.Format("{0:F4}%  |  {1}", r.FundingRate * 100, r.FundingBias) & Environment.NewLine, fundColour)
 
         ' --- Signal Breakdown ---
         AppendRtf(rtb, Environment.NewLine, C_DIVIDER)
