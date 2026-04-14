@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-11 | App version: Commit 5**
+**Last updated: 2026-04-14 | App version: v0.49 / Commit 5**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -25,18 +25,22 @@ DeribitVerdictEngine/
 ├── Core/
 │   ├── Settings/
 │   │   └── EngineSettings.vb           Strongly-typed POCO for settings.json (v0.37)
+│   │                                   Includes KellySettings block
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,
-│   │                                   AdjustedShortTarget, TargetCapReason),
+│   │                                   AdjustedShortTarget, TargetCapReason,
+│   │                                   VerdictContext, Kelly fields),
 │   │                                   PositionState, SignalCategory, ScoreState
 │   ├── ScoringEngine_Helpers.vb        Pure functions: RegimeMaxScore, Threshold, TierFloor,
 │   │                                   AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus
 │   ├── ScoringEngine_Calculate.vb      Main Calculate() pipeline — assembles verdict;
+│   │                                   Step 5b CalcVerdictContext();
+│   │                                   CalcKellySizing() (called post-ATR);
 │   │                                   VPFR HVN cap logic; all scoring steps (see Data Flow)
 │   │
 │   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
-│   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcRSI,
+│   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI,
 │   │                                   CalcRSISeries, CalcRSIDivergence, CalcROCSeries,
 │   │                                   CalcVolumeSMA
 │   ├── Indicators_Volatility.vb        CalcVWAP (dual-session auto-anchor),
@@ -66,17 +70,24 @@ DeribitVerdictEngine/
 │   │                                   logs result, calls RenderOutput;
 │   │                                   MTF TTL refresh; Donchian quartile signal;
 │   │                                   regime hysteresis logic; OFI BookDepth wiring
-│   └── MainForm_Render.vb              RenderOutput(), AppendRtf(), AR(), SectionHeader(),
+│   └── MainForm_Render.vb              v0.49
+│                                       RenderOutput(), AppendRtf(), AR(), SectionHeader(),
 │                                       Divider(), BuildCalibrationReport(), Flag(),
 │                                       UpdateLogInfo(), lnkResetLog_LinkClicked,
 │                                       lnkCalibCheck_LinkClicked.
 │                                       ATR block: HVN-capped target in amber bold
-│                                       when AdjustedLongTarget or AdjustedShortTarget > 0
+│                                       when AdjustedLongTarget or AdjustedShortTarget > 0.
+│                                       CONTEXT: line always rendered — CONFIRMED in green
+│                                       (C_GOOD), warnings in amber/red/dim.
+│                                       KELLY SIZING block rendered after ATR levels;
+│                                       suppressed when KellyF = 0.
 │
 └── docs/
     ├── DeribitIndicatorProject.md      Authoritative handover document (read first)
     ├── architecture.md                 This file
     ├── trader-profile.md               Trader style, preferences, collaboration rules
+    ├── verdict-context-tag-proposal.md Spec: Verdict Sub-Context Tag — IMPLEMENTED
+    ├── kelly-criterion-proposal.md     Spec: Kelly Criterion sizing — IMPLEMENTED
     ├── bbw-scoring-proposal.md         Historical
     ├── bbw-scoring-response.md         Historical
     ├── dual-scoring-fix-proposal.md    Historical
@@ -96,13 +107,13 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         │  MTF TTL check: if _mtfCandles15m is stale (> MTF_TTL_SECONDS),
         │  fetch 15m candles and update _mtfLastFetchTime. Otherwise reuse cached list.
         │
-        ├──► DeribitClient.GetCandlesAsync("1", 250)      → candles1m
-        ├──► DeribitClient.GetCandlesAsync("5", 210)      → candles5m
-        ├──► DeribitClient.GetCandlesAsync("15", 70)      → candles15m  [cached/TTL]
-        ├──► DeribitClient.GetFundingRateAsync()          → fundingRate
-        ├──► DeribitClient.GetBookSummaryAsync()          → bookSummary
-        ├──► DeribitClient.GetOrderBookAsync(10)          → orderBook
-        └──► DeribitClient.GetRecentTradesAsync(100)      → recentTrades
+        ├─► DeribitClient.GetCandlesAsync("1", 250)      → candles1m
+        ├─► DeribitClient.GetCandlesAsync("5", 210)      → candles5m
+        ├─► DeribitClient.GetCandlesAsync("15", 70)      → candles15m  [cached/TTL]
+        ├─► DeribitClient.GetFundingRateAsync()          → fundingRate
+        ├─► DeribitClient.GetBookSummaryAsync()          → bookSummary
+        ├─► DeribitClient.GetOrderBookAsync(10)          → orderBook
+        └─► DeribitClient.GetRecentTradesAsync(100)      → recentTrades
                     │  (all fetched in parallel via Task.WhenAll;
                     │   15m only included when cache is stale)
                     ▼
@@ -138,92 +149,67 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     ▼
         ScoringEngine.Calculate(r, posState, norms, cfg)
                     │
-                    ├─ Step 1: Regime classification → MaxScore (19/18/15)
-                    ├─ Step 2: Score each signal → ScoreState
-                    │         All thresholds from cfg. Scoring highlights:
-                    │           RSI full/partial zones + divergence penalty (−1 at RSI>65/σ5)
-                    │           ADX trend gate; VWAP warmup guard
-                    │           ROC partial dead-band; OFI dominance thresholds
-                    │           BBW squeeze penalty; Liq standard/large penalty
-                    │           Funding step deltas
-                    │           MicroCVD FLAT stall penalty (T2-A): FLAT + price/CVD
-                    │           contradiction → DecelPenalty on opposing side + STALL note
-                    │           Donchian NONE → mid-channel note in breakdown (T2-C)
-                    ├─ Pass 2: Upgrade cross-category partials
-                    │           Donchian LONG_PARTIAL/SHORT_PARTIAL quartile upgrade
-                    │           volMid directional upgrade via cross-category confirm
-                    │           OBV upgrade blocked when adverse divergence present
-                    ├─ Step 3: Funding modifier
-                    ├─ Step 4: Regime veto / TRANSITIONAL ADX penalty
-                    ├─ Step 4b: MTF gate veto → NO TRADE if blocked
-                    ├─ Step 4c: VPFR HVN cap → AdjustedLongTarget / AdjustedShortTarget
-                    ├─ Step 5: Threshold comparison → Verdict + Confidence
-                    ├─ Step 6: CalcHoldStatus
-                    └─ Step 7: ATR target/stop
+                    ├─ Step 1:  Regime classification → MaxScore (19/18/15)
+                    ├─ Step 2:  Score each signal → ScoreState
+                    │          All thresholds from cfg. Scoring highlights:
+                    │          ─ BBW squeeze penalty (cfg.Scoring.BbwSqueezePenalty)
+                    │          ─ Liquidation penalty/boost by size + dominance
+                    │          ─ OBV adverse divergence blocks cross-category upgrade
+                    ├─ Pass 2:  Partial upgrade on cross-category confirmation
+                    ├─ Step 3:  Funding rate modifier (penalty/boost from cfg)
+                    ├─ Step 4:  Regime veto + TRANSITIONAL ADX penalty
+                    ├─ Step 4b: MTF gate veto → forces NO TRADE on BLOCK
+                    ├─ Step 4c: VPFR HVN cap → sets AdjustedLongTarget / AdjustedShortTarget
+                    ├─ Step 5:  Threshold comparison → verdict string
+                    ├─ Step 5b: CalcVerdictContext() → VerdictResult.VerdictContext
+                    │          Classifies: FLOW_UNCONFIRMED / MOMENTUM_FADING /
+                    │          STRUCTURALLY_WEAK / CONFIRMED
+                    │          Reads already-computed ScoreState + IndicatorResults only.
+                    │          Zero scoring impact. See docs/verdict-context-tag-proposal.md.
+                    ├─ Step 6:  CalcHoldStatus → hold/exit/flip guidance
+                    ├─ Step 7:  ATR entry/stop/target from cfg multipliers
+                    └─ Post:    CalcKellySizing(v, cfg) → Kelly fields on VerdictResult
+                               Half-Kelly, 5% hard cap, $1,000 account, $10 contract face.
+                               [EST] mode pre-calibration / [CAL] mode post.
+                               Display-only. Zero scoring impact.
+                               See docs/kelly-criterion-proposal.md.
                     │
                     ▼
         VerdictResult  v
                     │
-                    ├──► AnalysisLogger.LogRun(r, v)   → analysis_log.csv
-                    └──► MainForm_Render.RenderOutput() → txtOutput (RTF) + lblVerdict
-                              └─ if v.AdjustedLongTarget > 0 or v.AdjustedShortTarget > 0:
-                                         raw target dimmed + capped target in amber bold
+                    ▼
+        MainForm_Render.vb :: RenderOutput(v, r)
+                    │
+                    ├─ Verdict header + score + breakdown
+                    ├─ CONTEXT: line (always shown)
+                    │          CONFIRMED → C_GOOD (green)
+                    │          FLOW_UNCONFIRMED / MOMENTUM_FADING /
+                    │          STRUCTURALLY_WEAK → amber/red/dim as appropriate
+                    ├─ Hold/position guidance
+                    ├─ ATR entry / stop / target block
+                    │          HVN-capped target in amber bold when adjusted target > 0
+                    ├─ KELLY SIZING block (suppressed when KellyF = 0)
+                    │          Contracts / USD risk / [EST] or [CAL] or [CAPPED] tag
+                    └─ Signal breakdown table + log info
+                    │
+                    ▼
+        AnalysisLogger.LogRun(r, verdict) → analysis_log.csv
 ```
 
 ---
 
-## Partial Class Strategy
-
-VB.NET `Partial Class` splits a single class across multiple `.vb` files. All partials compile
-into the same class — shared fields, methods, and event wiring. `Imports` are **not** shared;
-each file must declare its own.
-
-### MainForm partials
-
-| File | Owns | Depends on |
-|---|---|---|
-| `MainForm_Layout.vb` | All shared fields, constructor, layout/resize | `System.Drawing`, `System.Runtime.InteropServices`, `System.Windows.Forms` |
-| `MainForm_AutoRun.vb` | Auto-run timer lifecycle | `System.Drawing`, `System.Threading`, `System.Windows.Forms` |
-| `MainForm_Analysis.vb` | Full analysis pipeline; MTF TTL; Donchian quartile; regime hysteresis; OFI BookDepth | `System.Drawing`, `System.Windows.Forms` |
-| `MainForm_Render.vb` | All output rendering and log helpers; ATR HVN cap display | `System.Drawing`, `System.IO`, `System.Windows.Forms` |
-
-### ScoringEngine partials
-
-| File | Owns |
-|---|---|
-| `ScoringEngine_Types.vb` | All enums and result/state types |
-| `ScoringEngine_Helpers.vb` | All pure helper functions; no UI dependency |
-| `ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() method |
-
-### IndicatorEngine partials
-
-| File | Owns |
-|---|---|
-| `IndicatorResults.vb` | IndicatorResults struct — all output fields |
-| `Indicators_Momentum.vb` | DMI, ATR, EMA, RSI (series + divergence), ROC, VolumeSMA |
-| `Indicators_Volatility.vb` | VWAP (dual-session), VWAPBands, BBW, TTMSqueeze |
-| `Indicators_OrderFlow.vb` | OFI (bookDepth + dynamic weights), CVD (3-seg slope), MicroCVD, TFI, Liquidations |
-| `Indicators_Structure.vb` | Donchian, OBV, VPFRLite (exp decay), MTFGate |
-
----
-
-## Key Design Decisions
+## Design Decisions
 
 | Decision | Rationale |
 |---|---|
-| ATR entry = candle close, not last trade price | Candle close is stable and reproducible; last trade can be stale or noisy. Last trade shown separately for reference. |
-| All thresholds in settings.json | Zero-recompile tuning during live calibration sessions. |
-| DynamicNorms computed per run | Adapts to current volatility regime automatically. |
-| OI ring buffer in MainForm | OI history must persist across runs within a session; CSV log does not store it. |
-| MTF gate is veto-only | Prevents score inflation — can only block, never add points. |
-| VPFR HVN cap in VerdictResult | Cap logic inside scoring engine, not render. Cap fields are zero/empty when no wall detected. |
-| Partial class split | Keeps files under ~200 lines; single responsibility per file; avoids merge conflicts on parallel features. |
-| MTF 15m candle TTL cache | 15m candles change slowly; re-fetching every 1m auto-run wastes ~80ms. Cache reused when < MTF_TTL_SECONDS (60). Fields in Layout.vb; read/written only in Analysis.vb. |
-| CVD 3-segment weighted slope | Half-split was vulnerable to a single large early trade flipping the slope. Late segment ×2 (lateDelta*2 − earlyDelta*1) anchors slope to recency without discarding early context. |
-| Donchian quartile partial signal | Pure breakout-only fired ~0% of the time on 1m (price rarely closes exactly at channel edge). Upper/lower 25% quartile fires ~15–20% of bars while still requiring cross-category confirmation. |
-| RSI divergence penalty gated at RSI>65 / <35 | Penalty only in overbought/oversold territory; divergence near RSI 50 is noise. |
-| OBV partial upgrade divergence gate | Upgrading OBV trend on adverse divergence contradicts a known negative signal. Gate withholds the point rather than double-counting. |
-| VPFR exponential decay | Uniform weighting anchors POC to early-session events no longer relevant intraday. Decay base 0.985 gives ~22% weight reduction per 15 bars. |
-| Regime ADX hysteresis — 1-bar grace | 1m scalping produces whipsaw TRENDING→RANGING flips during consolidations. Single-bar grace absorbs ADX dips without triggering regime veto path. _prevRegime in Layout.vb; grace logic in Analysis.vb. |
-| MicroCVD FLAT stall penalty | FLAT during trending session (price above VWAP, CVD non-positive) indicates stall, not neutrality. Reuses DecelPenalty to avoid new config field; STALL annotated in breakdown. |
-| OFI BookDepth configurable | Hardcoded Take(3) with static weights was insensitive to book depth. Dynamic descending weight array from cfg.Indicators.OFI.BookDepth allows widening to 5–10 levels without code changes. |
+| REST polling (not WebSocket) | Simpler implementation; adequate for 1m candle resolution. WebSocket is the highest-impact next upgrade. |
+| 15m MTF cached with TTL | 15m candles change slowly; re-fetching every 10s run wastes API quota. TTL=60s balances freshness vs. rate limits. |
+| Dual-session VWAP anchor | BTC perpetual has meaningful session breaks at 00:00 UTC and 13:30 UTC. Single-anchor VWAP deviates badly after Asian/EU handoff. |
+| VerdictContext (Step 5b) | WEAK verdicts have three distinct structural causes that require different discretionary responses. Context tag surfaces the cause without changing the score. Zero new data fetches; reads already-computed state only. |
+| Kelly sizing display-only | Sizing advisory only — no position management integration. Suppressed when no edge (KellyF ≤ 0). [EST] / [CAL] modes enforce honesty about calibration state. |
+| Exponential decay in VPFR | Recent price levels are more relevant than historical. Linear decay overstates old HVNs; exponential decay (base=0.985) self-tunes to recent session structure. |
+| CVD 3-segment slope | Late segment weighted ×2 vs early ×1. Captures momentum *direction change* mid-window (deceleration signal), not just net delta. |
+| OFI descending weight array | Levels deeper in the book are less actionable. Dynamic descending weights (injectable depth) reduce noise from thin deep levels. |
+| Regime hysteresis (1 bar) | Prevents regime flip-flop on RANGE_BOUND→TRENDING boundary. Single bar of grace avoids scoring discontinuity on noisy ADX crossings. |
+| Settings externalised to JSON | All thresholds tunable without recompile. SettingsLoader.Current singleton; EngineSettings v0.37 is the POCO contract. |
+| MicroCVD can be negative | `MicroCVDEarly` and `MicroCVDLate` are net USD deltas over their sub-windows. Negative values are valid and intentional — they indicate net sell pressure in that segment. |
