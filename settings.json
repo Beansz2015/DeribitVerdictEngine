@@ -1,8 +1,9 @@
 {
-  "version": 6,
-  "last_modified": "2026-04-10T09:53:00Z",
-  "modified_by": "v0.49-hardcode-elimination",
+  "version": 7,
+  "last_modified": "2026-04-14T10:17:00Z",
+  "modified_by": "v0.50-verdict-context-tag",
   "change_log": [
+    "v7: [Step 5b] Added context_tag_structural_min (default 3) and context_tag_flow_max (default 1) to scoring block. Used by CalcVerdictContext() to classify FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK.",
     "v6: [P10/P11/P12] v0.49: Added scoring penalty/multiplier keys (atr_target_multiplier, atr_stop_multiplier, bbw_squeeze_penalty, liq_standard_penalty, liq_large_penalty, funding_high_penalty, funding_high_boost, funding_low_penalty)",
     "v5: Added auto_run block (enabled, interval_minutes, interval_seconds)",
     "v4: Added mtf_gate block (soft gate, 2-of-3, 60 candles lookback, adx_min 20)",
@@ -96,6 +97,8 @@
     "funding_low_penalty": 1,
     "atr_target_multiplier": 2.0,
     "atr_stop_multiplier": 1.2,
+    "context_tag_structural_min": 3,
+    "context_tag_flow_max": 1,
     "weights": {
       "ROC": 1, "RSI": 1, "DMI": 1, "ADX": 1,
       "Volume": 1, "VWAP": 1, "BBW": 1, "EMA": 1,
