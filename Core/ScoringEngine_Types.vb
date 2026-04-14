@@ -40,6 +40,29 @@ Public Class VerdictResult
     ''' Set by CalcVerdictContext() in ScoringEngine_Calculate Step 5b.
     ''' </summary>
     Public Property VerdictContext As String = "CONFIRMED"
+
+    ' ---------------------------------------------------------------------------
+    ' Kelly sizing outputs
+    ' Populated by CalcKellySizing() in MainForm_Render -- display-only, no scoring impact.
+    ' All fields at default (0 / "") = Kelly block suppressed (no edge or not computed).
+    ' ---------------------------------------------------------------------------
+
+    ''' <summary>Raw Kelly fraction f* = (b*p - q) / b. May be negative (no edge).</summary>
+    Public Property KellyF        As Double  = 0.0
+    ''' <summary>Half-Kelly fraction (f* / 2). Zero if f* <= 0.</summary>
+    Public Property KellyFHalf    As Double  = 0.0
+    ''' <summary>Applied fraction after hard cap (Min(f_half, MaxRiskFraction)). Zero if f* <= 0.</summary>
+    Public Property KellyFApplied As Double  = 0.0
+    ''' <summary>Win probability p used in the Kelly formula.</summary>
+    Public Property KellyPWin     As Double  = 0.0
+    ''' <summary>Probability estimation mode: "EST" (pre-calibration) or "CAL" (post-calibration).</summary>
+    Public Property KellyPMode    As String  = ""
+    ''' <summary>True when MaxRiskFraction cap was applied (f_half > MaxRiskFraction).</summary>
+    Public Property KellyCapped   As Boolean = False
+    ''' <summary>Recommended whole contracts. 0 = less than 1 contract (stop too wide).</summary>
+    Public Property KellyContracts As Integer = 0
+    ''' <summary>Dollar risk amount = AccountSizeUsd * KellyFApplied.</summary>
+    Public Property KellyRiskUsd  As Double  = 0.0
 End Class
 
 Public Enum PositionState
