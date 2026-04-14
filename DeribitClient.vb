@@ -14,7 +14,7 @@ Public Class DeribitClient
         _http.Timeout = TimeSpan.FromSeconds(10)
     End Sub
 
-    ' ── Candle data ──────────────────────────────────────────────────────────
+    ' ── Candle data ───────────────────────────────────────────────────────────────────────────
     ' resolution: "1" = 1-minute, "5" = 5-minute, "15" = 15-minute
     ' count: number of candles to fetch
     ' Deribit get_tradingview_chart_data returns:
@@ -69,21 +69,29 @@ Public Class DeribitClient
         Return candles
     End Function
 
-    ' ── Funding rate ─────────────────────────────────────────────────────────
-    ' Returns current 8-hour funding rate as a decimal (e.g. 0.0001 = 0.01%)
+    ' ── Funding rate ───────────────────────────────────────────────────────────────────────
+    ' Returns the projected 8-hour funding rate from ticker.funding_8h.
+    ' e.g. 0.00001 = 0.001%/8h (typical BTC-PERPETUAL range: +/-0.01% to +/-0.1%)
+    '
+    ' NOTE: Do NOT use current_funding here. current_funding is the intraperiod
+    ' 1-hour accrual that resets to ~0 after each 8h settlement and accumulates
+    ' toward the next settlement. Its value is time-of-period dependent and will
+    ' read near-zero for most of each cycle, making Step 3 funding modifier inert.
+    ' funding_8h is the time-invariant projected settlement rate -- directly
+    ' comparable across all run times regardless of where we are in the 8h cycle.
     Public Shared Async Function GetFundingRateAsync() As Task(Of Double)
         Dim tickerUrl As String = BaseUrl & "/public/ticker?instrument_name=BTC-PERPETUAL"
         Dim json As String = Await _http.GetStringAsync(tickerUrl)
         Dim doc As JsonDocument = JsonDocument.Parse(json)
         Dim result As JsonElement = doc.RootElement.GetProperty("result")
         Dim fundingEl As JsonElement = Nothing
-        If result.TryGetProperty("current_funding", fundingEl) Then
+        If result.TryGetProperty("funding_8h", fundingEl) Then
             Return fundingEl.GetDouble()
         End If
         Return 0.0
     End Function
 
-    ' ── Open Interest snapshot ────────────────────────────────────────────────
+    ' ── Open Interest snapshot ─────────────────────────────────────────────────────────────
     ' Returns (open_interest, mark_price)
     Public Shared Async Function GetBookSummaryAsync() As Task(Of (OI As Double, MarkPrice As Double))
         Dim url As String = BaseUrl & "/public/get_book_summary_by_instrument" &
@@ -97,7 +105,7 @@ Public Class DeribitClient
         Return (oi, mp)
     End Function
 
-    ' ── L2 Order book snapshot (for OFI) ─────────────────────────────────────
+    ' ── L2 Order book snapshot (for OFI) ─────────────────────────────────────────────
     Public Shared Async Function GetOrderBookAsync(depth As Integer) As Task(Of OrderBookSnapshot)
         Dim url As String = BaseUrl & "/public/get_order_book" &
                             "?instrument_name=BTC-PERPETUAL&depth=" & depth
@@ -118,7 +126,7 @@ Public Class DeribitClient
         Return snap
     End Function
 
-    ' ── Recent trades (for liquidation detection) ────────────────────────────
+    ' ── Recent trades (for liquidation detection) ──────────────────────────────────────────
     Public Shared Async Function GetRecentTradesAsync(count As Integer) As Task(Of List(Of TradeRecord))
         Dim url As String = BaseUrl & "/public/get_last_trades_by_instrument" &
                             "?instrument_name=BTC-PERPETUAL&count=" & count & "&sorting=desc"
@@ -145,7 +153,7 @@ Public Class DeribitClient
     End Function
 End Class
 
-' ── Data transfer objects ─────────────────────────────────────────────────────
+' ── Data transfer objects ─────────────────────────────────────────────────────────────────────────────
 
 Public Class Candle
     Public Property Timestamp As Long
