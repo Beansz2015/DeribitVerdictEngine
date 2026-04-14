@@ -50,6 +50,14 @@
 '     - Final fall-through (score below all thresholds)
 '   Helper: AppendLean(verdict, ls, ss, tWeak) returns the annotated string.
 '   Confidence remains "N/A" -- lean is informational only, not a trade signal.
+'
+' Step 5b: CalcVerdictContext() diagnostic pass.
+'   Runs after Step 5 (verdict set) and before Step 6 (CalcHoldStatus).
+'   Sets VerdictResult.VerdictContext: FLOW_UNCONFIRMED | MOMENTUM_FADING |
+'   STRUCTURALLY_WEAK | CONFIRMED (default, not displayed).
+'   NOTE: ADX label is dynamic ("ADX>" & adxTrend) -- uses StartsWith("ADX>"),
+'   not exact match, to correctly identify ADX structural hits.
+'   See docs/verdict-context-tag-proposal.md for full spec.
 
 Partial Public Class ScoringEngine
 
@@ -65,6 +73,75 @@ Partial Public Class ScoringEngine
             Return verdict & " [WEAK SHORT]"
         End If
         Return verdict
+    End Function
+
+    ' Step 5b: Verdict sub-context diagnostic.
+    ' Inspects already-computed SignalBreakdown, IndicatorResults, and cfg to classify
+    ' the reason behind a weak or unconfirmed verdict.
+    ' Priority: MOMENTUM_FADING > FLOW_UNCONFIRMED > STRUCTURALLY_WEAK > CONFIRMED.
+    ' NOTE: ADX breakdown label is dynamic ("ADX>" & adxTrend) -- use StartsWith("ADX>").
+    Private Shared Function CalcVerdictContext(
+        v       As VerdictResult,
+        r       As IndicatorResults,
+        state   As ScoreState,
+        cfg     As EngineSettings) As String
+
+        ' Determine which direction is dominant for context evaluation
+        Dim isLong As Boolean = (v.LongScore >= v.ShortScore)
+
+        ' --- Build tier sub-scores from SignalBreakdown ---
+        ' Structural signals: VWAP, BBW/TTM, EMA 9/21/50, DMI +/-DI, ADX>*, Donchian(20), 5m EMA(200)
+        ' Flow signals: OFI, CVD, TFI, MicroCVD, OI Delta, ROC(9), Volume
+        Dim structScore As Integer = 0
+        Dim flowScore   As Integer = 0
+        For Each item In v.SignalBreakdown
+            Dim hit As Boolean = If(isLong, item.LongHit, item.ShortHit)
+            If Not hit Then Continue For
+            Dim lbl As String = item.Label
+            ' Structural tier
+            If lbl = "VWAP"         OrElse lbl = "BBW/TTM"     OrElse
+               lbl = "EMA 9/21/50"  OrElse lbl = "DMI +/-DI"   OrElse
+               lbl.StartsWith("ADX>")                           OrElse
+               lbl = "Donchian(20)" OrElse lbl = "5m EMA(200)" Then
+                structScore += 1
+            End If
+            ' Flow tier
+            If lbl = "OFI"      OrElse lbl = "CVD"      OrElse lbl = "TFI"     OrElse
+               lbl = "MicroCVD" OrElse lbl = "OI Delta" OrElse
+               lbl = "ROC(9)"   OrElse lbl = "Volume"   Then
+                flowScore += 1
+            End If
+        Next
+
+        ' --- Check MOMENTUM_FADING first (highest priority) ---
+        Dim fadingCount As Integer = 0
+        If isLong Then
+            If r.MicroCVDSignal = "BULL_DECEL"                                    Then fadingCount += 1
+            If r.TTMSignal = "BULL_FADING"                                         Then fadingCount += 1
+            If r.RSI >= cfg.Indicators.RSI.DivPenaltyRsiHigh                       Then fadingCount += 1
+            If r.MicroCVDEarly > 0 AndAlso
+               r.MicroCVDLate < r.MicroCVDEarly * 0.5                              Then fadingCount += 1
+        Else
+            If r.MicroCVDSignal = "BEAR_DECEL"                                    Then fadingCount += 1
+            If r.TTMSignal = "BEAR_FADING"                                         Then fadingCount += 1
+            If r.RSI <= cfg.Indicators.RSI.DivPenaltyRsiLow                        Then fadingCount += 1
+            If r.MicroCVDEarly < 0 AndAlso
+               r.MicroCVDLate > r.MicroCVDEarly * 0.5                              Then fadingCount += 1
+        End If
+        If fadingCount >= 2 Then Return "MOMENTUM_FADING"
+
+        ' --- Check FLOW_UNCONFIRMED second ---
+        If structScore >= cfg.Scoring.ContextTagStructuralMin AndAlso
+           flowScore   <= cfg.Scoring.ContextTagFlowMax Then
+            Return "FLOW_UNCONFIRMED"
+        End If
+
+        ' --- Check STRUCTURALLY_WEAK (catch-all for no dominant driver) ---
+        If structScore < 2 AndAlso flowScore < 2 Then
+            Return "STRUCTURALLY_WEAK"
+        End If
+
+        Return "CONFIRMED"
     End Function
 
     Public Shared Function Calculate(r As IndicatorResults, posState As PositionState,
@@ -552,6 +629,9 @@ Partial Public Class ScoringEngine
             res.Verdict = AppendLean("NO TRADE", ls, ss, tWeak)
             res.Confidence = "N/A"
         End If
+
+        ' -- Step 5b: Verdict Sub-Context Tag ---------------------------------
+        res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
 
         ' -- Step 6: Hold / Exit Assessment -----------------------------------
         res.HoldStatus = CalcHoldStatus(r, posState, cfg)
