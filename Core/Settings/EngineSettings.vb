@@ -43,6 +43,11 @@
 '        Used by CalcVerdictContext() in ScoringEngine_Calculate to classify weak/ambiguous
 '        verdicts as FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED.
 '        Defaults: ContextTagStructuralMin=3, ContextTagFlowMax=1.
+' Kelly: Added KellySettings class and Kelly property on EngineSettings.
+'        Used by CalcKellySizing() in MainForm_Render for display-only position sizing advisory.
+'        Defaults: AccountSizeUsd=1000, UseHalfKelly=True, MaxRiskFraction=0.05,
+'                  ContractFaceUsd=10, MinCalibrationSamples=30,
+'                  EstProbFloor=0.45, EstProbScale=0.20.
 
 Imports System.Text.Json.Serialization
 
@@ -73,6 +78,9 @@ Public Class EngineSettings
 
     <JsonPropertyName("auto_run")>
     Public Property AutoRun As New AutoRunSettings
+
+    <JsonPropertyName("kelly")>
+    Public Property Kelly As New KellySettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -257,6 +265,32 @@ End Class
 ''' </summary>
 Public Class VpfrSettings
     <JsonPropertyName("num_buckets")> Public Property NumBuckets As Integer = 50
+End Class
+
+' ---------------------------------------------------------------------------
+' Kelly sizing settings
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' Display-only position sizing parameters for the Kelly Criterion block.
+''' All computation happens in MainForm_Render.CalcKellySizing() -- no scoring impact.
+''' EST mode active until CalibrationReport reaches READY; CAL mode deferred.
+''' </summary>
+Public Class KellySettings
+    ''' <summary>Account size in USD. Default $1,000.</summary>
+    <JsonPropertyName("account_size_usd")>         Public Property AccountSizeUsd        As Double  = 1000.0
+    ''' <summary>Use half-Kelly (True) or full Kelly (False). Default True.</summary>
+    <JsonPropertyName("use_half_kelly")>            Public Property UseHalfKelly          As Boolean = True
+    ''' <summary>Hard cap on risk fraction regardless of Kelly output. Default 0.05 = 5%.</summary>
+    <JsonPropertyName("max_risk_fraction")>         Public Property MaxRiskFraction       As Double  = 0.05
+    ''' <summary>Deribit BTC-PERPETUAL contract face value in USD. Default $10.</summary>
+    <JsonPropertyName("contract_face_usd")>         Public Property ContractFaceUsd       As Double  = 10.0
+    ''' <summary>Min logged trades per verdict tier before switching EST->CAL mode. Default 30.</summary>
+    <JsonPropertyName("min_calibration_samples")>   Public Property MinCalibrationSamples As Integer = 30
+    ''' <summary>Score-to-probability band floor (pre-calibration). Default 0.45.</summary>
+    <JsonPropertyName("est_prob_floor")>            Public Property EstProbFloor          As Double  = 0.45
+    ''' <summary>Score-to-probability band scale range (pre-calibration). Default 0.20 -> band [0.45, 0.65].</summary>
+    <JsonPropertyName("est_prob_scale")>            Public Property EstProbScale          As Double  = 0.20
 End Class
 
 ' ---------------------------------------------------------------------------
