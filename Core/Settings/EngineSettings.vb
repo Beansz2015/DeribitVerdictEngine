@@ -52,6 +52,10 @@
 '        Used by CalcFundingMomentum() in Indicators_OrderFlow and Step 3b in
 '        ScoringEngine_Calculate. MomentumEnabled master switch (default True).
 '        MomentumWindow=3, MomentumThreshold=0.0001, MomentumAmplify=1, MomentumSoften=1.
+' OI x CVD cross-confirm (Pass 2b): Added OiCvdSettings class and Indicators.OiCvd property.
+'        Used by Pass 2b gate in ScoringEngine_Calculate_Scoring.
+'        Enabled master switch (default True).
+'        UpgradeBonus=1 (confirmed cross), ConflictPenalty=1 (opposed cross).
 
 Imports System.Text.Json.Serialization
 
@@ -117,6 +121,8 @@ Public Class IndicatorSettings
     <JsonPropertyName("VPFR")>     Public Property VPFR     As New VpfrSettings
     ''' <summary>[funding-momentum] Funding rate momentum signal parameters.</summary>
     <JsonPropertyName("funding")>  Public Property Funding  As New FundingSettings
+    ''' <summary>[OI x CVD cross-confirm] Pass 2b upgrade/conflict gate parameters.</summary>
+    <JsonPropertyName("oi_cvd_cross")> Public Property OiCvd As New OiCvdSettings
 End Class
 
 Public Class AdxSettings
@@ -288,6 +294,20 @@ Public Class FundingSettings
     <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.0001
     <JsonPropertyName("momentum_amplify")>   Public Property MomentumAmplify   As Integer = 1
     <JsonPropertyName("momentum_soften")>    Public Property MomentumSoften    As Integer = 1
+End Class
+
+''' <summary>
+''' [OI x CVD cross-confirm] Pass 2b upgrade/conflict gate parameters.
+''' Controls the OI x CVD cross-confirm gate in ScoringEngine_Calculate_Scoring.
+''' Enabled: master switch -- set false to bypass Pass 2b entirely. Default True.
+''' UpgradeBonus: score added when OI and CVD direction confirm each other. Default 1.
+''' ConflictPenalty: score deducted when OI (full signal only) and CVD directly oppose. Default 1.
+''' Set either to 0 in settings.json to disable that half of the gate without code change.
+''' </summary>
+Public Class OiCvdSettings
+    <JsonPropertyName("enabled")>          Public Property Enabled         As Boolean = True
+    <JsonPropertyName("upgrade_bonus")>    Public Property UpgradeBonus    As Integer = 1
+    <JsonPropertyName("conflict_penalty")> Public Property ConflictPenalty As Integer = 1
 End Class
 
 ' ---------------------------------------------------------------------------
