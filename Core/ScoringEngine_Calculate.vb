@@ -491,6 +491,7 @@ Partial Public Class ScoringEngine
                     res.LongScore = ls : res.ShortScore = ss
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
+                    res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
                     res.HoldStatus = CalcHoldStatus(r, posState, cfg)
                     Return res
                 End If
@@ -501,6 +502,7 @@ Partial Public Class ScoringEngine
                     res.LongScore = ls : res.ShortScore = ss
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
+                    res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
                     res.HoldStatus = CalcHoldStatus(r, posState, cfg)
                     Return res
                 End If
@@ -541,6 +543,7 @@ Partial Public Class ScoringEngine
             res.LongScore = ls : res.ShortScore = ss
             res.EffectiveLongScore = effectiveLS : res.EffectiveShortScore = effectiveSS
             res.RegimePenalty = adxPenalty
+            res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
             res.HoldStatus = CalcHoldStatus(r, posState, cfg)
             Return res
         End If
