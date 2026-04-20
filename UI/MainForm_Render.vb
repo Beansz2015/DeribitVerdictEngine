@@ -214,14 +214,13 @@ Partial Public Class MainForm
         End Select
         AppendRtf(rtb, v.Verdict & Environment.NewLine, vColour, bold:=True)
 
-        If v.VerdictContext <> "" Then
+        If v.VerdictContext <> "" AndAlso v.VerdictContext <> "CONFIRMED" Then
             AppendRtf(rtb, "  CONTEXT:    ", C_LABEL)
             Dim ctxColour As Color
             Select Case v.VerdictContext
                 Case "MOMENTUM_FADING" : ctxColour = C_BAD
                 Case "FLOW_UNCONFIRMED" : ctxColour = C_WARN
                 Case "STRUCTURALLY_WEAK" : ctxColour = C_DIM
-                Case "CONFIRMED" : ctxColour = C_GOOD
                 Case Else : ctxColour = C_VALUE
             End Select
             AppendRtf(rtb, v.VerdictContext & Environment.NewLine, ctxColour, bold:=True)
@@ -294,11 +293,17 @@ Partial Public Class MainForm
                                           shortStop, r.CurrentPrice, shortTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_BAD)
         End If
 
-        If v.KellyF > 0 Then
+        If v.KellyPWin > 0 Then
+            Dim isNoTradeBias As Boolean = v.Verdict.StartsWith("NO TRADE")
             Dim capTag As String = If(v.KellyCapped, "  [CAPPED]", "")
             AppendRtf(rtb, Environment.NewLine, C_DIVIDER)
-            AppendRtf(rtb, String.Format("KELLY SIZING  [{0}]{1}" & Environment.NewLine,
-                                          v.KellyPMode, capTag), C_HEADER, bold:=True)
+            If isNoTradeBias Then
+                AppendRtf(rtb, String.Format("KELLY SIZING  [BIAS ONLY — NO TRADE] [{0}]{1}" & Environment.NewLine,
+                                              v.KellyPMode, capTag), C_HEADER, bold:=True)
+            Else
+                AppendRtf(rtb, String.Format("KELLY SIZING  [{0}]{1}" & Environment.NewLine,
+                                              v.KellyPMode, capTag), C_HEADER, bold:=True)
+            End If
             AppendRtf(rtb, "  p(win):   ", C_LABEL)
             AppendRtf(rtb, String.Format("{0:P1}" & Environment.NewLine, v.KellyPWin), C_VALUE)
             AppendRtf(rtb, "  f* / Half-Kelly:  ", C_LABEL)
@@ -308,11 +313,18 @@ Partial Public Class MainForm
             AppendRtf(rtb, String.Format("{0:P2}" & Environment.NewLine, v.KellyFApplied), C_VALUE)
             AppendRtf(rtb, "  Risk $:    ", C_LABEL)
             AppendRtf(rtb, String.Format("${0:F2}" & Environment.NewLine, v.KellyRiskUsd), C_VALUE)
-            AppendRtf(rtb, "  Contracts: ", C_LABEL)
+            AppendRtf(rtb, If(isNoTradeBias, "  Lean: ", "  Contracts: "), C_LABEL)
             Dim contractColour As Color = If(v.KellyContracts >= 1, C_GOOD, C_WARN)
-            Dim contractStr As String = If(v.KellyContracts >= 1,
-                                           v.KellyContracts.ToString() & " contracts",
-                                           "< 1 contract  (stop too wide for min size)")
+            Dim contractStr As String
+            If isNoTradeBias Then
+                contractStr = If(v.KellyContracts >= 1,
+                                 String.Format("{0} contracts  (not a trade signal)", v.KellyContracts.ToString()),
+                                 "< 1 contract  (bias only; not a trade signal)")
+            Else
+                contractStr = If(v.KellyContracts >= 1,
+                                 v.KellyContracts.ToString() & " contracts",
+                                 "< 1 contract  (stop too wide for min size)")
+            End If
             AppendRtf(rtb, contractStr & Environment.NewLine, contractColour, bold:=True)
         End If
 
