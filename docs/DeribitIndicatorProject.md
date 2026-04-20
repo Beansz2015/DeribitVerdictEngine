@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-20 | Current version: funding-momentum complete (settings v10)**
+**Last updated: 2026-04-21 | Current version: session-volume-norms complete (settings v12)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 It takes precedence over `indicator-spec.md` wherever the two conflict.
@@ -17,9 +17,10 @@ calculates a set of technical indicators on live BTC-PERPETUAL data, scores them
 weighted multi-tier engine, and emits a verdict (STRONG LONG / LONG / WEAK LONG / NO TRADE /
 WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 
-The latest completed feature set adds **funding-rate momentum** as a first-class signal adjunct:
-`FundingMomentum` is now derived from recent funding history, used in Step 3b of scoring,
-and exposed through both config and UI.
+The latest completed feature set adds **session-aware volume norms** as a first-class adaptive
+normalisation layer: `DynamicNorms` now applies time-of-day session volume buckets (ASIA /
+LONDON / NY) so volume thresholds better reflect BTC liquidity regime by UTC hour, and the
+config/UI/docs surface has been updated to support that behaviour.
 
 ---
 
@@ -39,13 +40,13 @@ and exposed through both config and UI.
 | File | Purpose |
 |---|---|
 | `DeribitClient.vb` | All Deribit REST calls incl. 15m candles, recentTrades |
-| `DynamicNorms.vb` | ATR/Vol/VWAP norm computation |
+| `DynamicNorms.vb` | ATR/Vol/VWAP norm computation; now includes session-aware volume threshold adjustment |
 | `AnalysisLogger.vb` | CSV logging + CalibrationReport |
 | `OiSnapshot.vb` | OI ring-buffer helper |
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
 | `SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton |
-| `settings.json` | v10 — all tunable parameters incl. `indicators.funding` block |
+| `settings.json` | v12 — all tunable parameters incl. `indicators.funding` and `session_volume` blocks |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -62,7 +63,7 @@ and exposed through both config and UI.
 | `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
 | `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcLiquidations, CalcCVD, CalcMicroCVD, CalcTFI, CalcFundingMomentum |
 | `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite, CalcMTFGate |
-| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings and FundingSettings |
+| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings, FundingSettings, and SessionVolumeSettings |
 
 ### UI/
 
@@ -101,7 +102,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 | RSI(9) | CalcRSI | `Overbought` (60) / `Oversold` (40) / `PartialOverbought` (50) / `PartialOversold` (50) |
 | RSI Divergence | CalcRSIDivergence | −1 long: BEARISH + RSI > `DivPenaltyRsiHigh` (65); −1 short: BULLISH + RSI < `DivPenaltyRsiLow` (35). `PivotWing` (2), `LookbackBars` (20) from cfg. |
 | DMI/ADX | CalcDMI | 5m candles. `cfg.Indicators.ADX.TrendThreshold` (25) |
-| Volume | CalcVolumeSMA | SMA-9; H/M thresholds from DynamicNorms. Mid-tier directional partial via cross-confirm. |
+| Volume | CalcVolumeSMA | SMA-9; H/M thresholds from DynamicNorms, now session-adjusted via `session_volume` config. Mid-tier directional partial via cross-confirm. |
 
 ### Tier 1
 | Indicator | Method | Config keys |
@@ -154,7 +155,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v10**.
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v12**.
 
 ```
 settings.json
@@ -177,6 +178,12 @@ settings.json
     funding:       { momentum_enabled (true), momentum_window (3),
                      momentum_threshold (0.0001), momentum_amplify (1),
                      momentum_soften (1) }
+  session_volume:
+    enabled: true
+    asia:          { start_hour_utc, end_hour_utc, vol_high_mult, vol_mid_mult }
+    london:        { start_hour_utc, end_hour_utc, vol_high_mult, vol_mid_mult }
+    ny:            { start_hour_utc, end_hour_utc, vol_high_mult, vol_mid_mult }
+    fallback:      { vol_high_mult (1.0), vol_mid_mult (1.0) }
   scoring:
     verdictStrongPct / verdictMedPct / verdictWeakPct
     fundingHighPositive / fundingLowPositive
@@ -195,6 +202,10 @@ settings.json
     est_prob_floor (0.45)
     est_prob_scale (0.20)
 ```
+
+Session volume norms now let the engine scale volume thresholds by UTC session bucket so
+`VolHighThreshold` / `VolMidThreshold` are less likely to over-fire during thin Asian hours or
+under-react during London/NY participation peaks.
 
 ---
 
@@ -255,6 +266,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 - `ATRScaleFactor` — current ATR vs reference; scales stop/target distances
 - `VolHighThreshold` / `VolMidThreshold` — regime-adjusted volume thresholds
 - `VWAPDevThreshold` — dynamic VWAP deviation threshold (clamped from settings)
+- `ApplySessionVolume()` — session-aware post-adjustment that applies ASIA / LONDON / NY bucket multipliers from `SessionVolumeSettings` so volume thresholds better reflect expected liquidity by UTC session
 
 ---
 
@@ -263,6 +275,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 | Item | Description | Priority |
 |---|---|---|
 | Funding momentum thresholds | Review `momentum_threshold=0.0001`, `momentum_window=3`, soften/amplify values after 50+ live runs; especially check whether BTC funding changes are too sticky for 3-sample lookback | Low |
+| Session volume multipliers | Review ASIA / LONDON / NY `vol_high_mult` and `vol_mid_mult` values after 50+ live runs; verify reduced false positives in thin hours without underweighting genuine expansion | Low |
 | TFI threshold | Evaluate threshold=0.15 vs 0.10 for BTC-PERPETUAL tick size after live data | Low |
 | MicroCVD accelThreshold | Default 5000 USD; consider dynamic scaling vs VolumeSMA on quiet sessions | Low |
 | AtrTargetMultiplier | Currently 2.0; review against logged R:R after 50+ trades | Low |
@@ -289,8 +302,8 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 | **Verdict Sub-Context Tag** | Adds a Step 5b `CalcVerdictContext()` pass that classifies FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED. Displayed as `CONTEXT:` line — always shown (green for CONFIRMED, amber/red/dim for warnings). No scoring changes. **Spec:** `docs/verdict-context-tag-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
 | **Kelly Criterion Sizing** | Display-only position sizing advisory block below ATR entry levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. [EST] pre-calibration / [CAL] post. No scoring changes. **Spec:** `docs/kelly-criterion-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
 | **Funding rate momentum** | Funding momentum now implemented end-to-end: `FundingMomentum` field on `IndicatorResults`, `CalcFundingMomentum()` in `Indicators_OrderFlow`, funding history accumulation in `MainForm_Analysis`, config surface in `EngineSettings` and `settings.json`, Step 3b modifier in `ScoringEngine_Calculate_Scoring`, and UI display row in `MainForm_Render_Sections`. | ✅ IMPLEMENTED 2026-04-20 |
+| **Session-aware volume norms** | `DynamicNorms` now applies UTC session buckets (ASIA / LONDON / NY) via `ApplySessionVolume()`, backed by `SessionVolumeSettings` in `EngineSettings` and `session_volume` in `settings.json`, so `VolHighThreshold` / `VolMidThreshold` adapt to time-of-day liquidity instead of using a single global expectation. | ✅ IMPLEMENTED 2026-04-21 |
 | Adaptive scoring weights by regime | `MaxScore` is regime-adjusted but per-indicator weights are fixed. In TRENDING, EMA ribbon + DMI should carry more weight; in RANGE_BOUND, VWAP bands + Donchian should dominate. Static weights over-score weak signals for the current regime context. Requires per-regime weight multipliers in `EngineSettings` and scoring pipeline. | 🔍 Spec needed |
-| Session-aware volume norms | `VolHighThreshold` / `VolMidThreshold` don't account for time-of-day liquidity cycles. BTC Saturday 04:00 UTC behaves completely differently from London/NY overlap. Segment `DynamicNorms.Compute` by UTC hour bucket to reduce false volume signals during thin sessions. | 🔍 Spec needed |
 | OI × CVD cross-confirm | OI (NEW LONGS/SHORTS) and CVD direction scored independently. Pairing them as a confirming multiplier (NEW LONGS + CVD RISING = full score; NEW LONGS + CVD FALLING = half score) would sharpen Tier 1 without adding new data sources. | 🔍 Spec needed |
 
 ### Moderate-Impact (diminishing returns territory)
@@ -314,9 +327,9 @@ The engine is approaching its natural accuracy limit for a **single-instrument 1
 using REST polling**. By the time a signal is computed, the 1m candle is closed and partially
 acted on by faster participants. The three risk thresholds to watch before adding more upgrades:
 
-1. **Overfit risk** — the number of tunable parameters continues to rise, so new funding-momentum tuning should be validated against forward runs, not a tiny historical slice.
-2. **Signal redundancy** — OFI + TFI + CVD + MicroCVD already cover order flow from four angles. Funding momentum should remain an adjunct to crowding logic, not become a duplicate momentum input.
-3. **Interpretability** — Step 3b should remain easy to explain from the breakdown and funding display. If traders cannot quickly reason about when soften/amplify fired, the engine becomes harder to trust.
+1. **Overfit risk** — the number of tunable parameters continues to rise, so session-bucket multipliers should be validated against forward runs, not a tiny historical slice.
+2. **Signal redundancy** — OFI + TFI + CVD + MicroCVD already cover order flow from four angles. Session-aware volume norms should remain a threshold-normalisation layer, not become a hidden directional signal.
+3. **Interpretability** — session volume adjustments should remain easy to reason about from DynamicNorms and settings. If traders cannot quickly tell which bucket is active and why a threshold moved, the engine becomes harder to trust.
 
 The highest-impact non-code upgrade at this stage is a **Websocket feed** (real-time order book
 and trade stream vs. REST snapshot polling), which would remove the fundamental latency constraint.
@@ -325,7 +338,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 ## 14. Backlog
 
-*(cleared — verdict-context, Kelly sizing, and funding-momentum are shipped)*
+*(cleared — verdict-context, Kelly sizing, funding-momentum, and session-volume-norms are shipped)*
 
 ---
 
@@ -333,6 +346,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-21** | Session-volume-norms feature fully documented as shipped. Handover updated to settings v12, `DynamicNorms.ApplySessionVolume()` note added, `SessionVolumeSettings` and `session_volume` config documented, and Section 13 status updated to mark session-aware volume norms as implemented. |
 | **2026-04-20** | Refactor split completed: `Core/ScoringEngine_Calculate.vb` replaced by `ScoringEngine_Calculate_Scoring.vb` + `ScoringEngine_Calculate_Verdict.vb`; `UI/MainForm_Render.vb` replaced by `MainForm_Render_Header.vb` + `MainForm_Render_Sections.vb`. Docs updated to reflect new structure. |
 | **2026-04-20** | Funding-momentum feature fully shipped. Added `FundingMomentum` to `IndicatorResults`; added `CalcFundingMomentum()` in `Indicators_OrderFlow`; added `_fundingHistory` / `FundingHistoryMax` in `MainForm_Layout`; appended funding history + computed momentum in `MainForm_Analysis`; added Step 3b funding-momentum modifier in `ScoringEngine_Calculate_Scoring`; added `FundingSettings` to `EngineSettings`; added `indicators.funding` block to `settings.json` v10; added funding momentum row to `MainForm_Render_Sections`. |
 | **2026-04-20** | `settings.json` updated to v10 with `indicators.funding` block: `momentum_enabled`, `momentum_window`, `momentum_threshold`, `momentum_amplify`, `momentum_soften`. |
