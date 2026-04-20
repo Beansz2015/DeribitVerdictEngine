@@ -19,6 +19,8 @@
 '     - Long crowding + FALLING => restore score via MomentumSoften (de-crowding).
 '     - Short crowding + FALLING => extra short penalty, capped at FundingHighPenalty.
 '     - Short crowding + RISING => restore score via MomentumSoften (de-crowding).
+'     - Neutral positive funding + RISING => pre-emptive long penalty.
+'     - Neutral negative funding + FALLING => pre-emptive short penalty.
 '   Breakdown row "Funding (info)" now appends momentum and Step 3b adjustment note.
 
 Partial Public Class ScoringEngine
@@ -344,7 +346,7 @@ Partial Public Class ScoringEngine
                     ls = Math.Max(0, ls - extraPen)
                     fundingStep3bNote = String.Format("STEP3b: -{0}[L] crowding↑", extraPen)
                 ElseIf r.FundingMomentum = "FALLING" Then
-                    ls += cfg.Indicators.Funding.MomentumSoften
+                    ls = Math.Min(ls + cfg.Indicators.Funding.MomentumSoften, regimeMax)
                     fundingStep3bNote = String.Format("STEP3b: +{0}[L] de-crowding", cfg.Indicators.Funding.MomentumSoften)
                 End If
             ElseIf r.FundingBias = "SHORTS HEAVILY CROWDED" OrElse r.FundingBias = "SHORTS CROWDED" Then
@@ -353,8 +355,17 @@ Partial Public Class ScoringEngine
                     ss = Math.Max(0, ss - extraPen)
                     fundingStep3bNote = String.Format("STEP3b: -{0}[S] crowding↓", extraPen)
                 ElseIf r.FundingMomentum = "RISING" Then
-                    ss += cfg.Indicators.Funding.MomentumSoften
+                    ss = Math.Min(ss + cfg.Indicators.Funding.MomentumSoften, regimeMax)
                     fundingStep3bNote = String.Format("STEP3b: +{0}[S] de-crowding", cfg.Indicators.Funding.MomentumSoften)
+                End If
+            ElseIf r.FundingBias = "NEUTRAL" Then
+                Dim extraPen As Integer = Math.Min(cfg.Indicators.Funding.MomentumAmplify, cfg.Scoring.FundingHighPenalty)
+                If r.FundingMomentum = "RISING" AndAlso fr > 0 Then
+                    ls = Math.Max(0, ls - extraPen)
+                    fundingStep3bNote = String.Format("STEP3b: -{0}[L] neutral→crowding", extraPen)
+                ElseIf r.FundingMomentum = "FALLING" AndAlso fr < 0 Then
+                    ss = Math.Max(0, ss - extraPen)
+                    fundingStep3bNote = String.Format("STEP3b: -{0}[S] neutral→crowding", extraPen)
                 End If
             End If
         End If
