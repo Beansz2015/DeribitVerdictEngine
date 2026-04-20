@@ -1,6 +1,6 @@
 ' Core/Indicators_OrderFlow.vb
 ' IndicatorEngine partial: order flow and market microstructure indicators.
-' Covers: OFI, Liquidations, CVD, TFI, MicroCVD.
+' Covers: OFI, Liquidations, CVD, TFI, MicroCVD, FundingMomentum.
 '
 ' v0.48 [P4]: TFI window size separated from MicroCVD window size.
 '   Previously both CalcTFI and CalcMicroCVD defaulted to windowSize=50 and
@@ -36,6 +36,12 @@
 '        SHORT LIQS fires when liqShortSize > 0 AND liqShortSize > liqLongSize * dominanceRatio.
 '   Default 1.0 preserves existing behaviour exactly.
 '   Call site passes cfg.Indicators.Liquidations.DominanceRatio.
+'
+' funding-momentum: CalcFundingMomentum added.
+'   Derives RISING / FALLING / FLAT from a rolling history of funding rate samples.
+'   Cold start (< 2 samples) returns FLAT.
+'   Window and threshold injectable via cfg.Indicators.Funding.MomentumWindow /
+'   MomentumThreshold. Called from RunAnalysisAsync after GetFundingRateAsync().
 
 Partial Public Class IndicatorEngine
 
@@ -278,5 +284,28 @@ Partial Public Class IndicatorEngine
             microSignal = "FLAT"
         End If
     End Sub
+
+    ' -- FundingMomentum ------------------------------------------------------
+    ' funding-momentum: derives RISING / FALLING / FLAT from a rolling list of
+    ' funding rate samples maintained in MainForm_Layout._fundingHistory.
+    ' Cold start (fewer than 2 samples) returns FLAT -- accepted warm-up behaviour.
+    ' delta = history.Last() - history[Count - 1 - MomentumWindow]
+    ' RISING  if delta >  MomentumThreshold (default 0.0001 = 1 bp)
+    ' FALLING if delta < -MomentumThreshold
+    ' FLAT    otherwise
+    Public Shared Function CalcFundingMomentum(
+        history As List(Of Double),
+        cfg     As EngineSettings) As String
+
+        If history Is Nothing OrElse history.Count < 2 Then Return "FLAT"
+
+        Dim window   As Integer = cfg.Indicators.Funding.MomentumWindow
+        Dim priorIdx As Integer = Math.Max(0, history.Count - 1 - window)
+        Dim delta    As Double  = history(history.Count - 1) - history(priorIdx)
+
+        If delta >  cfg.Indicators.Funding.MomentumThreshold Then Return "RISING"
+        If delta < -cfg.Indicators.Funding.MomentumThreshold Then Return "FALLING"
+        Return "FLAT"
+    End Function
 
 End Class
