@@ -17,6 +17,9 @@
 ' funding-momentum: Append fundingRate to _fundingHistory ring buffer (max FundingHistoryMax).
 '   Call CalcFundingMomentum() after FundingBias is set; result stored in r.FundingMomentum.
 '   Cold start (< 2 samples) returns FLAT -- accepted warm-up behaviour.
+' session-volume-norms: No call-site changes required. DynamicNorms.Compute() internally
+'   applies per-session HighMultiplier/MidMultiplier via ApplySessionVolume() after dynamic
+'   vol thresholds are set. Controlled by cfg.SessionVolume (EngineSettings / settings.json v12).
 
 Imports System.Drawing
 Imports System.Windows.Forms
