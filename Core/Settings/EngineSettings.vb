@@ -56,6 +56,9 @@
 '        Used by Pass 2b gate in ScoringEngine_Calculate_Scoring.
 '        Enabled master switch (default True).
 '        UpgradeBonus=1 (confirmed cross), ConflictPenalty=1 (opposed cross).
+' Session-aware volume norms: Added SessionVolumeSettings class and SessionVolume property on EngineSettings.
+'        Used by DynamicNorms.Compute() to scale volume thresholds by UTC session bucket.
+'        Supports ASIA / LONDON / NY buckets with per-session high/mid multipliers.
 
 Imports System.Text.Json.Serialization
 
@@ -89,6 +92,9 @@ Public Class EngineSettings
 
     <JsonPropertyName("kelly")>
     Public Property Kelly As New KellySettings
+
+    <JsonPropertyName("session_volume")>
+    Public Property SessionVolume As New SessionVolumeSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -308,6 +314,26 @@ Public Class OiCvdSettings
     <JsonPropertyName("enabled")>          Public Property Enabled         As Boolean = True
     <JsonPropertyName("upgrade_bonus")>    Public Property UpgradeBonus    As Integer = 1
     <JsonPropertyName("conflict_penalty")> Public Property ConflictPenalty As Integer = 1
+End Class
+
+''' <summary>
+''' Session-aware volume threshold scaling by UTC trading bucket.
+''' Enabled: master switch -- set false to bypass session scaling entirely. Default True.
+''' Sessions: ordered list of UTC hour buckets with independent high/mid multipliers.
+''' Intended defaults: ASIA 00:00-07:59, LONDON 08:00-13:29, NY 13:30-23:59.
+''' Note: hour-only matching means NY effectively activates from hour 13 onward unless minute support is added later.
+''' </summary>
+Public Class SessionVolumeSettings
+    <JsonPropertyName("enabled")>  Public Property Enabled  As Boolean = True
+    <JsonPropertyName("sessions")> Public Property Sessions As New List(Of SessionBucketSettings)
+End Class
+
+Public Class SessionBucketSettings
+    <JsonPropertyName("name")>            Public Property Name           As String = ""
+    <JsonPropertyName("start_hour")>      Public Property StartHour      As Integer = 0
+    <JsonPropertyName("end_hour")>        Public Property EndHour        As Integer = 23
+    <JsonPropertyName("high_multiplier")> Public Property HighMultiplier As Double = 1.0
+    <JsonPropertyName("mid_multiplier")>  Public Property MidMultiplier  As Double = 1.0
 End Class
 
 ' ---------------------------------------------------------------------------
