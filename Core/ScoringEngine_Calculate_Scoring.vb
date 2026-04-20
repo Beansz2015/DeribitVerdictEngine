@@ -7,6 +7,7 @@
 '   - CalcVerdictContext()
 '   - Signal scoring pass (Step 2)
 '   - Partial upgrade pass (Pass 2)
+'   - OI x CVD cross-confirm gate (Pass 2b)
 '   - Funding modifier (Steps 3 / 3b)
 '   - Breakdown note construction
 
@@ -77,7 +78,7 @@ Partial Public Class ScoringEngine
     End Function
 
     ' Returns a ScoreState and populated breakdown list after running all Step 2
-    ' signal scoring, partial upgrades, Steps 3/3b funding modifiers.
+    ' signal scoring, partial upgrades, Pass 2b OI x CVD gate, Steps 3/3b funding modifiers.
     ' Also outputs ls/ss as ByRef for use by the verdict stage.
     Friend Shared Sub RunScoringPipeline(
         r         As IndicatorResults,
@@ -304,9 +305,35 @@ Partial Public Class ScoringEngine
         If obvLongUpgraded Then state.LongScore += 1
         If obvShortUpgraded Then state.ShortScore += 1
 
-        ' -- Step 3: Funding Rate Confidence Modifier -------------------------
+        ' -- Pass 2b: OI x CVD Cross-Confirm ----------------------------------
+        ' Confirmed: OI full signal and CVD direction + sign agree -> upgrade.
+        ' Conflicted: OI full signal and CVD directly oppose -> penalty.
+        ' Partial OI signals (COVERING/CAPITULATION) are upgrade-only; no penalty on conflict.
+        Dim oiCvdNote As String = ""
+        If cfg.Indicators.OiCvd.Enabled Then
+            Dim cvdBullish As Boolean = (r.CVDSlope = "RISING" AndAlso r.CVDValue > 0)
+            Dim cvdBearish As Boolean = (r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0)
+
+            If (oiLong OrElse oiLongUpgraded) AndAlso cvdBullish Then
+                state.LongScore = Math.Min(state.LongScore + cfg.Indicators.OiCvd.UpgradeBonus, regimeMax)
+                oiCvdNote = String.Format(" | PASS2b: +{0}[L] OI×CVD confirmed", cfg.Indicators.OiCvd.UpgradeBonus)
+            ElseIf (oiShort OrElse oiShortUpgraded) AndAlso cvdBearish Then
+                state.ShortScore = Math.Min(state.ShortScore + cfg.Indicators.OiCvd.UpgradeBonus, regimeMax)
+                oiCvdNote = String.Format(" | PASS2b: +{0}[S] OI×CVD confirmed", cfg.Indicators.OiCvd.UpgradeBonus)
+            ElseIf oiLong AndAlso cvdBearish Then
+                state.LongScore = Math.Max(0, state.LongScore - cfg.Indicators.OiCvd.ConflictPenalty)
+                oiCvdNote = String.Format(" | PASS2b: -{0}[L] OI×CVD conflict", cfg.Indicators.OiCvd.ConflictPenalty)
+            ElseIf oiShort AndAlso cvdBullish Then
+                state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.OiCvd.ConflictPenalty)
+                oiCvdNote = String.Format(" | PASS2b: -{0}[S] OI×CVD conflict", cfg.Indicators.OiCvd.ConflictPenalty)
+            End If
+        End If
+
+        ' Snapshot ls/ss after Pass 2b, before funding modifiers
         ls = state.LongScore
         ss = state.ShortScore
+
+        ' -- Step 3: Funding Rate Confidence Modifier -------------------------
         Dim fr As Double = r.FundingRate
 
         Dim fundingBaseNote As String = ""
@@ -413,11 +440,12 @@ Partial Public Class ScoringEngine
                                                       fundingBaseNote, fundingStep3bNote)
         breakdown.Add(New SignalBreakdownItem("Funding (info)", False, False, fundingInfoNote))
 
+        ' OI Delta note includes Pass 2b result appended as oiCvdNote
         breakdown.Add(New SignalBreakdownItem("OI Delta", oiLong OrElse oiLongUpgraded, oiShort OrElse oiShortUpgraded,
             BuildNote(String.Format("15m:{0:F2}% 60m:{1:F2}% | {2}", r.OIChange15m, r.OIChange60m, r.OISignal),
                       oiPartialLong AndAlso Not oiLongUpgraded,
                       oiPartialShort AndAlso Not oiShortUpgraded,
-                      oiLongUpgraded, oiShortUpgraded)))
+                      oiLongUpgraded, oiShortUpgraded) & oiCvdNote))
 
         breakdown.Add(New SignalBreakdownItem("OFI", ofiBuy, ofiSell,
             String.Format("Ratio:{0:F2} | {1}", r.OFIRatio, r.OFISignal)))
