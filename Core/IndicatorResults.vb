@@ -41,6 +41,7 @@ Public Class IndicatorResults
     Public Property EMAAlignment As String   ' BULL / BEAR / MIXED
     Public Property FundingRate As Double    ' raw 8h decimal e.g. 0.0001
     Public Property FundingBias As String
+    Public Property FundingMomentum As String  ' "RISING" / "FALLING" / "FLAT" -- computed from rolling history in MainForm_Layout
     Public Property OI_Current As Double
     Public Property OI_Prev15m As Double
     Public Property OI_Prev60m As Double
