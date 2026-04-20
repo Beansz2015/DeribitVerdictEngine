@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-20 | App version: funding-momentum complete / settings v10**
+**Last updated: 2026-04-21 | App version: session-volume-norms complete / settings v12**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -15,17 +15,19 @@ DeribitVerdictEngine/
 ├── MainForm.resx                       Form resource file
 │
 ├── DeribitClient.vb                    REST API layer — all Deribit HTTP calls
-├── DynamicNorms.vb                     Live adaptive thresholds (ATR scale, vol, VWAP dev)
+├── DynamicNorms.vb                     Live adaptive thresholds (ATR scale, vol, VWAP dev);
+│                                       now also applies session-aware volume multipliers
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
 ├── SettingsLoader.vb                   JSON loader — SettingsLoader.Current singleton
-├── settings.json                       All tunable parameters v10 (no recompile needed)
+├── settings.json                       All tunable parameters v12 (no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
 │   │   └── EngineSettings.vb           Strongly-typed POCO for settings.json
-│   │                                   Includes KellySettings + FundingSettings blocks
+│   │                                   Includes KellySettings + FundingSettings +
+│   │                                   SessionVolumeSettings blocks
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,
@@ -143,6 +145,8 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.CurrentPrice       = candles1m.Last().Close
         ├─ r.ATR                = CalcATR(candles1m, 7)
         ├─ DynamicNorms.Compute → norms (ATRScaleFactor, VolThresholds, VWAPDevThreshold)
+        │                         → ApplySessionVolume(cfg.SessionVolume, utcHour)
+        │                         → session-adjusted VolHighThreshold / VolMidThreshold
         ├─ r.ROC / r.ROCSlope   = CalcROCSeries
         ├─ r.RSI                = CalcRSI
         ├─ r.RSIDivergence      = CalcRSIDivergence (pivotWing + lookbackBars from cfg)
@@ -241,6 +245,37 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 
 ---
 
+## Settings Data Flow
+
+```
+settings.json (v12)
+    │
+    ▼
+SettingsLoader.Initialise()
+    │
+    ▼
+SettingsLoader.Current As EngineSettings
+    │
+    ├─ Indicators.*        → indicator thresholds / windows
+    ├─ Scoring.*           → verdict %, penalties, ATR multipliers
+    ├─ Kelly.*             → sizing display controls
+    ├─ FundingSettings     → Step 3b momentum behaviour
+    └─ SessionVolumeSettings
+           ├─ enabled
+           ├─ asia    { start/end UTC, vol multipliers }
+           ├─ london  { start/end UTC, vol multipliers }
+           ├─ ny      { start/end UTC, vol multipliers }
+           └─ fallback { default multipliers }
+                    │
+                    ▼
+DynamicNorms.Compute(...)
+    │
+    └─ ApplySessionVolume() adjusts VolHighThreshold / VolMidThreshold
+       by active UTC session bucket before scoring consumes volume signals
+```
+
+---
+
 ## Design Decisions
 
 | Decision | Rationale |
@@ -258,5 +293,6 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 | MicroCVD can be negative | `MicroCVDEarly` and `MicroCVDLate` are net USD deltas over their sub-windows. Negative values are valid and intentional — they indicate net sell pressure in that segment. |
 | Funding momentum as adjunct (Step 3b) | Absolute funding rate alone misses the *direction of crowding*. A rate already at +0.03% but falling is less dangerous than one at +0.02% and rising fast. Step 3b amplifies or softens the Step 3 penalty based on momentum direction, using a short rolling window (default 3 samples) held in `_fundingHistory`. Display-only impact on the funding UI row; scoring impact is bounded by the amplify/soften cfg values. |
 | _fundingHistory capped at FundingHistoryMax | Funding rate changes are slow relative to 1m candles. A window of 10 samples is sufficient to detect sustained crowding direction without accumulating stale history across sessions. |
+| Session-aware volume norms in DynamicNorms | BTC volume has strong time-of-day seasonality. A single global `VolHighThreshold` / `VolMidThreshold` misclassifies quiet Asian-session participation as expansion and underweights genuine London/NY burst volume. Applying UTC session multipliers at the DynamicNorms layer preserves existing scoring logic while adapting thresholds to expected liquidity. |
 | ScoringEngine split into _Scoring + _Verdict | ScoringEngine_Calculate.vb exceeded 35 KB. Split into RunScoringPipeline (Steps 2–3b + breakdown notes) in _Scoring.vb and Calculate() entry point (Steps 4–5b) in _Verdict.vb. CalcVerdictContext kept in _Scoring.vb as it is called from multiple early-return paths in _Verdict.vb. |
 | MainForm_Render split into _Header + _Sections | MainForm_Render.vb exceeded 28 KB. RTF helpers + top render block (verdict/ATR/Kelly) in _Header.vb; RenderOutput() entry point + all indicator sections + breakdown table in _Sections.vb. |
