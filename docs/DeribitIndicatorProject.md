@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-14 | Current version: v0.49 (Commit 5 complete)**
+**Last updated: 2026-04-20 | Current version: funding-momentum complete (settings v10)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 It takes precedence over `indicator-spec.md` wherever the two conflict.
@@ -16,6 +16,10 @@ A Windows Forms (VB.NET / .NET 8) desktop application that connects to the Derib
 calculates a set of technical indicators on live BTC-PERPETUAL data, scores them via a
 weighted multi-tier engine, and emits a verdict (STRONG LONG / LONG / WEAK LONG / NO TRADE /
 WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
+
+The latest completed feature set adds **funding-rate momentum** as a first-class signal adjunct:
+`FundingMomentum` is now derived from recent funding history, used in Step 3b of scoring,
+and exposed through both config and UI.
 
 ---
 
@@ -41,7 +45,7 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
 | `SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton |
-| `settings.json` | v7 — all tunable parameters (see Section 6) |
+| `settings.json` | v10 — all tunable parameters incl. `indicators.funding` block |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -51,22 +55,22 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 |---|---|
 | `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. AdjustedLongTarget, AdjustedShortTarget, TargetCapReason, VerdictContext, Kelly fields), PositionState, SignalCategory, ScoreState |
 | `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore, Threshold, TierFloor, AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus |
-| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline incl. Step 5b CalcVerdictContext() + CalcKellySizing() |
-| `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields |
+| `Core/ScoringEngine_Calculate.vb` | MaxScore const + full Calculate() pipeline incl. Step 3b funding-momentum modifier, Step 5b CalcVerdictContext() + CalcKellySizing() |
+| `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields incl. `FundingMomentum` |
 | `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
 | `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
-| `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcLiquidations, CalcCVD, CalcMicroCVD, CalcTFI |
+| `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcLiquidations, CalcCVD, CalcMicroCVD, CalcTFI, CalcFundingMomentum |
 | `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite, CalcMTFGate |
-| `Core/Settings/EngineSettings.vb` | v0.37 — strongly-typed POCO for settings.json (incl. KellySettings) |
+| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings and FundingSettings |
 
 ### UI/
 
 | File | Version | Purpose |
 |---|---|---|
-| `UI/MainForm_Layout.vb` | v0.47 | Constants, constructor, resize helpers; shared fields: colour palette, _oiHistory, auto-run state, MTF TTL cache, `_prevRegime` |
-| `UI/MainForm_AutoRun.vb` | v0.47 | Auto-run timer lifecycle |
-| `UI/MainForm_Analysis.vb` | Commit 5 | RunAnalysisAsync() — full data fetch + indicator + scoring pipeline |
-| `UI/MainForm_Render.vb` | v0.49 | RenderOutput(), RTF helpers, CalibrationReport, log helpers; CONTEXT: line always shown (CONFIRMED in green, warnings in amber/red/dim); Kelly Sizing block rendered after ATR levels |
+| `UI/MainForm_Layout.vb` | Shared fields, constructor, resize helpers; now also owns `_fundingHistory` and `FundingHistoryMax` |
+| `UI/MainForm_AutoRun.vb` | Auto-run timer lifecycle |
+| `UI/MainForm_Analysis.vb` | RunAnalysisAsync() — full data fetch + indicator + scoring pipeline; appends funding history and computes `FundingMomentum` |
+| `UI/MainForm_Render.vb` | RenderOutput(), RTF helpers, CalibrationReport, log helpers; CONTEXT line always shown; Kelly block rendered after ATR levels; FUNDING section now also shows `Momentum` row |
 
 ### Docs
 
@@ -102,16 +106,17 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 |---|---|---|
 | VWAP Dev | CalcVWAP | Dual-session. `cfg.Indicators.VWAP.WarmupCandles` (15) |
 | VWAP σ Bands | CalcVWAPBands | σ1/σ2 bands; PARTIAL→UPGRADED when price between bands |
-| BBW / TTM Squeeze | CalcBBW + CalcTTMSqueeze | `cfg.Scoring.BbwSqueezePenalty` (1); `cfg.Indicators.TTM.FlatThreshold` (0.5) |
+| BBW / TTM Squeeze | CalcBBW + CalcTTMSqueeze | `cfg.Scoring.BbwSqueezePenalty` (2); `cfg.Indicators.TTM.FlatThreshold` (0.5) |
 | EMA Ribbon | CalcEMA | 9/21/50 on 1m → BULL/BEAR/MIXED; 5m EMA(200) as regime anchor |
-| Funding Rate | GetFundingRateAsync | Step 3 deltas from cfg |
+| Funding Rate | GetFundingRateAsync | Step 3 baseline funding modifier from cfg thresholds |
+| Funding Momentum | CalcFundingMomentum | `cfg.Indicators.Funding.MomentumEnabled`, `MomentumWindow`, `MomentumThreshold`, `MomentumAmplify`, `MomentumSoften` |
 | OI Change | OiSnapshot ring buffer | 15m + 60m delta → NEW LONGS/SHORTS/COVERING/CAPITULATION/NEUTRAL |
 
 ### Tier 2
 | Indicator | Method | Config keys |
 |---|---|---|
-| OFI | CalcOFI | `cfg.Indicators.OFI.BookDepth` (3); dominance thresholds from cfg |
-| Liquidations | CalcLiquidations | `cfg.Indicators.Liquidations.DominanceRatio` (1.0); penalty magnitudes from cfg |
+| OFI | CalcOFI | `cfg.Indicators.OFI.BookDepth` (5); dominance thresholds from cfg |
+| Liquidations | CalcLiquidations | `cfg.Indicators.Liquidations.DominanceRatio` (2.0); penalty magnitudes from cfg |
 | CVD | CalcCVD | 3-segment weighted slope (late×2 − early×1). −1 on divergence. |
 | MicroCVD | CalcMicroCVD | BULL/BEAR_ACCEL/DECEL + FLAT stall penalty. Window=50 via cfg. |
 | TFI | CalcTFI | BUY/SELL PRESSURE. Window=30, threshold=0.15 via cfg. |
@@ -147,32 +152,34 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v7**.
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v10**.
 
 ```
 settings.json
   indicators:
     rsi:           { period, overbought (60), oversold (40),
                      partial_overbought (50), partial_oversold (50),
-                     div_penalty_rsi_high (65), div_penalty_rsi_low (35),
                      divergencePriceGate, divergenceRsiDelta,
                      pivot_wing (2), lookback_bars (20) }
-    roc:           { period, seriesLookback, partial_threshold (0.1) }
+    roc:           { period, seriesLookback }
     adx:           { trendThreshold (25), rangeThreshold (20) }
     vwap:          { devThresholdPct, session1/2 times, warmupCandles (15) }
-    ofi:           { bookDepth (3), buyDominantRatio (1.2), sellDominantRatio (0.833) }
+    ofi:           { bookDepth (5), buyDominantRatio (3.0), sellDominantRatio (0.333) }
     obv:           { trendGate, divergenceGate }
-    liquidations:  { largeLiqSize, dominance_ratio (1.0) }
-    vpfr:          { num_buckets (50) }
-    ttm:           { flat_threshold (0.5) }
+    liquidations:  { long_liq_threshold, short_liq_threshold, largeLiqSize, dominance_ratio (2.0) }
     cvd:           { slopeMinUsd, slopePctOfValue, divergencePriceGate, tradeLookback }
     tfi:           { window_size (30), threshold (0.15) }
     microCvd:      { window_size (50), accel_threshold (5000) }
+    ttm:           { flat_threshold (0.5) }
+    vpfr:          { num_buckets (50) }
+    funding:       { momentum_enabled (true), momentum_window (3),
+                     momentum_threshold (0.0001), momentum_amplify (1),
+                     momentum_soften (1) }
   scoring:
     verdictStrongPct / verdictMedPct / verdictWeakPct
     fundingHighPositive / fundingLowPositive
     fundingHighNegative / fundingLowNegative
-    bbw_squeeze_penalty (1)
+    bbw_squeeze_penalty (2)
     liq_standard_penalty (1) / liq_large_penalty (2)
     funding_high_penalty (2) / funding_high_boost (1) / funding_low_penalty (1)
     atr_target_multiplier (2.0) / atr_stop_multiplier (1.2)
@@ -185,11 +192,6 @@ settings.json
     min_calibration_samples (30)
     est_prob_floor (0.45)
     est_prob_scale (0.20)
-  mtfGate:
-    enabled, dmiPeriod, requiredConfirms, candleCount
-  regimeGates:
-    transitionalAdxPenaltyLow / Mid / High
-    transitionalPenaltyLow / Mid
 ```
 
 ---
@@ -200,7 +202,8 @@ settings.json
 - **Verdict thresholds:** `Math.Ceiling(regimeMax * pct)` — no hardcoded magic numbers
 - **Step 2:** Score signals into ScoreState → all thresholds from cfg
 - **Pass 2:** Upgrade partials on cross-category confirmation; OBV upgrade blocked on adverse divergence
-- **Step 3:** Funding modifier
+- **Step 3:** Baseline funding-rate modifier
+- **Step 3b:** Funding-momentum modifier — can soften crowding penalty when momentum is falling, or amplify it when momentum is rising into crowding
 - **Step 4:** Regime veto / TRANSITIONAL ADX penalty
 - **Step 4b:** MTF gate veto → NO TRADE
 - **Step 4c:** VPFR HVN cap → sets AdjustedLongTarget / AdjustedShortTarget
@@ -222,7 +225,8 @@ For the full annotated Calculate() pipeline with per-step implementation detail,
 - Short: mirrored. R:R = 1:1.7 at current settings (1.2 stop / 2.0 target)
 - **HVN cap:** if `v.AdjustedLongTarget > 0` (or Short), raw target shown dimmed; POC-capped target shown in amber bold with reason
 - **Multipliers read from cfg** — label and R:R display are dynamic, not hardcoded.
-- **Kelly Sizing block** rendered immediately after ATR levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. [EST] mode pre-calibration, [CAL] mode post. Suppressed when KellyF = 0 (no edge). See `docs/kelly-criterion-proposal.md`.
+- **Kelly Sizing block** rendered immediately after ATR levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. [EST] mode pre-calibration, [CAL] mode post. Suppressed when KellyF = 0 (no edge).
+- **Funding display** now includes both the raw rate/bias row and a separate momentum row showing `RISING` / `FALLING` / `FLAT` plus enabled/soften/amplify config values.
 
 ---
 
@@ -239,6 +243,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 - `AnalysisLogger.LogRun(r, verdict)` → `analysis_log.csv` in exe directory
 - `CalibrationReport` summarises recent directional accuracy
 - Auto-run timer driven by `MainForm_AutoRun.vb`; interval configurable from UI (min 10s)
+- Funding-momentum is currently **display/scoring only**; no dedicated CSV column has been added yet.
 
 ---
 
@@ -255,16 +260,18 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 
 | Item | Description | Priority |
 |---|---|---|
+| Funding momentum thresholds | Review `momentum_threshold=0.0001`, `momentum_window=3`, soften/amplify values after 50+ live runs; especially check whether BTC funding changes are too sticky for 3-sample lookback | Low |
 | TFI threshold | Evaluate threshold=0.15 vs 0.10 for BTC-PERPETUAL tick size after live data | Low |
 | MicroCVD accelThreshold | Default 5000 USD; consider dynamic scaling vs VolumeSMA on quiet sessions | Low |
 | AtrTargetMultiplier | Currently 2.0; review against logged R:R after 50+ trades | Low |
-| OFI ratio | BuyDominantRatio=1.2 / SellDominantRatio=0.833; review against OFI hit rate in CalibrationReport | Low |
+| OFI ratio | BuyDominantRatio=3.0 / SellDominantRatio=0.333; review against OFI hit rate in CalibrationReport | Low |
 | TTM flatThreshold | Default 0.5; review FLAT vs RISING/FALLING against 1m candle range distribution | Low |
 | VPFR numBuckets | Default 50; higher = more POC resolution at cost of sparse buckets on quiet sessions | Low |
-| Liq dominanceRatio | Default 1.0; review false signals; consider raising to 1.2–1.5 | Low |
+| Liq dominanceRatio | Default 2.0; review false signals; consider raising/lowering after live observations | Low |
 | ContextTag thresholds | ContextTagStructuralMin (3) / ContextTagFlowMax (1) — review FLOW_UNCONFIRMED hit rate after 50+ trades | Low |
 | Kelly est_prob_floor/scale | Default 0.45 / 0.20 — review against actual win rates once CalibrationReport reaches READY | Low |
-| VerdictContext CSV logging | When CalibrationReport approaches READY (≥300 rows, ≥3 sessions, ≥3 regimes): add `VerdictContext` column to `analysis_log.csv` in `AnalysisLogger.LogRun()`, and update CalibrationReport to correlate each context tag with subsequent directional accuracy. See `docs/verdict-context-tag-proposal.md` Section 10 for full pickup spec. | Low — deferred until CalibrationReport READY |
+| VerdictContext CSV logging | When CalibrationReport approaches READY (≥300 rows, ≥3 sessions, ≥3 regimes): add `VerdictContext` column to `analysis_log.csv` in `AnalysisLogger.LogRun()`, and update CalibrationReport to correlate each context tag with subsequent directional accuracy. | Low — deferred until CalibrationReport READY |
+| FundingMomentum CSV logging | If funding-momentum proves useful, add `FundingMomentum` and maybe raw delta/history depth to CSV for post-run validation of Step 3b effectiveness. | Low |
 
 ---
 
@@ -279,9 +286,9 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 |---|---|---|
 | **Verdict Sub-Context Tag** | Adds a Step 5b `CalcVerdictContext()` pass that classifies FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED. Displayed as `CONTEXT:` line — always shown (green for CONFIRMED, amber/red/dim for warnings). No scoring changes. **Spec:** `docs/verdict-context-tag-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
 | **Kelly Criterion Sizing** | Display-only position sizing advisory block below ATR entry levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. [EST] pre-calibration / [CAL] post. No scoring changes. **Spec:** `docs/kelly-criterion-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
+| **Funding rate momentum** | Funding momentum now implemented end-to-end: `FundingMomentum` field on `IndicatorResults`, `CalcFundingMomentum()` in `Indicators_OrderFlow`, funding history accumulation in `MainForm_Analysis`, config surface in `EngineSettings` and `settings.json`, Step 3b modifier in `ScoringEngine_Calculate`, and UI display row in `MainForm_Render`. | ✅ IMPLEMENTED 2026-04-20 |
 | Adaptive scoring weights by regime | `MaxScore` is regime-adjusted but per-indicator weights are fixed. In TRENDING, EMA ribbon + DMI should carry more weight; in RANGE_BOUND, VWAP bands + Donchian should dominate. Static weights over-score weak signals for the current regime context. Requires per-regime weight multipliers in `EngineSettings` and `ScoringEngine_Calculate`. | 🔍 Spec needed |
 | Session-aware volume norms | `VolHighThreshold` / `VolMidThreshold` don't account for time-of-day liquidity cycles. BTC Saturday 04:00 UTC behaves completely differently from London/NY overlap. Segment `DynamicNorms.Compute` by UTC hour bucket to reduce false volume signals during thin sessions. | 🔍 Spec needed |
-| Funding rate momentum | Absolute funding rate used as flat step modifier. Funding momentum (rate increasing vs decreasing) is a higher-quality signal — a rising rate approaching the high threshold signals crowding *before* the penalty fires. Add a `FundingMomentum` field (RISING/FALLING/FLAT) to `IndicatorResults` and incorporate into Step 3 modifier logic. | 🔍 Spec needed |
 | OI × CVD cross-confirm | OI (NEW LONGS/SHORTS) and CVD direction scored independently. Pairing them as a confirming multiplier (NEW LONGS + CVD RISING = full score; NEW LONGS + CVD FALLING = half score) would sharpen Tier 1 without adding new data sources. | 🔍 Spec needed |
 
 ### Moderate-Impact (diminishing returns territory)
@@ -305,13 +312,9 @@ The engine is approaching its natural accuracy limit for a **single-instrument 1
 using REST polling**. By the time a signal is computed, the 1m candle is closed and partially
 acted on by faster participants. The three risk thresholds to watch before adding more upgrades:
 
-1. **Overfit risk** — ~25+ tunable parameters already exist. Tuning 6+ of them against the same
-   50–100 trade CSV log risks optimising for the past month's regime, not general market behaviour.
-2. **Signal redundancy** — OFI + TFI + CVD + MicroCVD already cover order flow from four angles.
-   More order flow inputs with high correlation add noise to scoring weight, not signal.
-3. **Interpretability** — when a STRONG LONG fires and you can't quickly reason through *why*
-   from the breakdown, the engine becomes a black box and you lose the ability to apply
-   discretionary override on ambiguous setups.
+1. **Overfit risk** — the number of tunable parameters continues to rise, so new funding-momentum tuning should be validated against forward runs, not a tiny historical slice.
+2. **Signal redundancy** — OFI + TFI + CVD + MicroCVD already cover order flow from four angles. Funding momentum should remain an adjunct to crowding logic, not become a duplicate momentum input.
+3. **Interpretability** — Step 3b should remain easy to explain from the breakdown and funding display. If traders cannot quickly reason about when soften/amplify fired, the engine becomes harder to trust.
 
 The highest-impact non-code upgrade at this stage is a **Websocket feed** (real-time order book
 and trade stream vs. REST snapshot polling), which would remove the fundamental latency constraint.
@@ -320,7 +323,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 ## 14. Backlog
 
-*(cleared — all Commit 1–5 items shipped)*
+*(cleared — verdict-context, Kelly sizing, and funding-momentum are shipped)*
 
 ---
 
@@ -328,10 +331,11 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-20** | Funding-momentum feature fully shipped. Added `FundingMomentum` to `IndicatorResults`; added `CalcFundingMomentum()` in `Indicators_OrderFlow`; added `_fundingHistory` / `FundingHistoryMax` in `MainForm_Layout`; appended funding history + computed momentum in `MainForm_Analysis`; added Step 3b funding-momentum modifier in `ScoringEngine_Calculate`; added `FundingSettings` to `EngineSettings`; added `indicators.funding` block to `settings.json` v10; added funding momentum row to `MainForm_Render`. |
+| **2026-04-20** | `settings.json` updated to v10 with `indicators.funding` block: `momentum_enabled`, `momentum_window`, `momentum_threshold`, `momentum_amplify`, `momentum_soften`. |
 | **2026-04-14** | [UI] CONTEXT: line now always rendered — CONFIRMED shown in green (C_GOOD) instead of being silent. Removes ambiguity between "no tag" and "confirmed aligned". `MainForm_Render.vb` bumped to v0.49. |
 | **2026-04-14** | Kelly Criterion sizing fully implemented: `CalcKellySizing()` in `ScoringEngine_Calculate.vb`; Kelly fields on `VerdictResult`; `KellySettings` in `EngineSettings`; KELLY SIZING block rendered in `MainForm_Render.vb` after ATR levels. [EST] / [CAL] / [CAPPED] tags. Half-Kelly, 5% cap, $1,000 account, $10 contract face. |
 | **2026-04-14** | Verdict Sub-Context Tag implemented: Step 5b `CalcVerdictContext()` added to `ScoringEngine_Calculate.vb`; `VerdictContext` property on `VerdictResult`; `CONTEXT:` line rendered in `MainForm_Render.vb`; settings.json bumped to v7 (`context_tag_structural_min`, `context_tag_flow_max`). CSV logging deferred to CalibrationReport READY — see Section 12 backlog. |
-| **2026-04-14** | Kelly Criterion sizing spec committed (`docs/kelly-criterion-proposal.md`). Section 13 updated with Kelly item. Prohibited skill warning added to session start checklist. |
 | **2026-04-13** | ATR label fix: stop/target multipliers read from cfg in RenderOutput (no hardcoded 1.5/3.0). atr_stop_multiplier updated to 1.2, atr_target_multiplier confirmed 2.0. Verdict Sub-Context Tag spec committed (`docs/verdict-context-tag-proposal.md`). |
 | **Commit 5** | [T2-C] Donchian NONE mid-channel note. [T3-A] VPFR numBuckets from cfg. [T3-B] RSI pivotWing + lookbackBars from cfg. [T3-C] TTM flatThreshold from cfg. [T3-D] CalcLiquidations dominanceRatio from cfg. |
 | **Commit 4** | [T1-B] Regime ADX hysteresis 1-bar grace (`_prevRegime`). [T2-A] MicroCVD FLAT stall penalty. [T2-B] OFI BookDepth injectable; dynamic descending weight array. |
