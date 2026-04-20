@@ -61,6 +61,12 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Private _oiHistory As New List(Of OiSnapshot)()
 
+    ' Funding rate history ring buffer -- for FundingMomentum computation in Step 3b.
+    ' Populated in RunAnalysisAsync after GetFundingRateAsync(); max FundingHistoryMax samples.
+    ' Cold start (< 2 samples) returns FLAT from CalcFundingMomentum -- accepted warm-up.
+    Private _fundingHistory As New List(Of Double)
+    Private Const FundingHistoryMax As Integer = 10
+
     ' Auto-run state
     Private _autoRunTimer   As IAutoRunTimer
     Private _countdownTimer As Threading.Timer
