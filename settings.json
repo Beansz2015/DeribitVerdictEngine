@@ -1,8 +1,13 @@
 {
-  "version": 10,
-  "last_modified": "2026-04-20T12:46:00Z",
-  "modified_by": "funding-momentum",
+  "version": 11,
+  "last_modified": "2026-04-21T00:44:00Z",
+  "modified_by": "oi-cvd-cross-confirm",
   "change_log": [
+    "v11: [oi-cvd-cross-confirm] Added 'oi_cvd_cross' block under 'indicators' with 3 keys:",
+    "     enabled: true        -- master switch for Pass 2b gate in ScoringEngine_Calculate_Scoring",
+    "     upgrade_bonus: 1     -- score added when OI full/partial and CVD direction confirm each other",
+    "     conflict_penalty: 1  -- score deducted when OI full signal and CVD directly oppose",
+    "     Set upgrade_bonus or conflict_penalty to 0 to disable that half without code change.",
     "v10: [funding-momentum] Added 'funding' block under 'indicators' with 5 keys:",
     "     momentum_enabled: true  -- master switch for Step 3b / CalcFundingMomentum()",
     "     momentum_window: 3      -- samples back to compare against most recent rate",
@@ -77,6 +82,11 @@
                   "momentum_threshold": 0.0001,
                   "momentum_amplify": 1,
                   "momentum_soften": 1
+                },
+    "oi_cvd_cross": {
+                  "enabled": true,
+                  "upgrade_bonus": 1,
+                  "conflict_penalty": 1
                 }
   },
   "mtf_gate": {
