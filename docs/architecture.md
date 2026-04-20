@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-14 | App version: v0.49 / Commit 5**
+**Last updated: 2026-04-20 | App version: funding-momentum complete / settings v10**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -20,12 +20,12 @@ DeribitVerdictEngine/
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
 ├── SettingsLoader.vb                   JSON loader — SettingsLoader.Current singleton
-├── settings.json                       All tunable parameters (no recompile needed)
+├── settings.json                       All tunable parameters v10 (no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
-│   │   └── EngineSettings.vb           Strongly-typed POCO for settings.json (v0.37)
-│   │                                   Includes KellySettings block
+│   │   └── EngineSettings.vb           Strongly-typed POCO for settings.json
+│   │                                   Includes KellySettings + FundingSettings blocks
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,
@@ -35,11 +35,13 @@ DeribitVerdictEngine/
 │   ├── ScoringEngine_Helpers.vb        Pure functions: RegimeMaxScore, Threshold, TierFloor,
 │   │                                   AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus
 │   ├── ScoringEngine_Calculate.vb      Main Calculate() pipeline — assembles verdict;
+│   │                                   Step 3b funding-momentum modifier;
 │   │                                   Step 5b CalcVerdictContext();
 │   │                                   CalcKellySizing() (called post-ATR);
 │   │                                   VPFR HVN cap logic; all scoring steps (see Data Flow)
 │   │
 │   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
+│   │                                   incl. FundingMomentum (RISING/FALLING/FLAT)
 │   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI,
 │   │                                   CalcRSISeries, CalcRSIDivergence, CalcROCSeries,
 │   │                                   CalcVolumeSMA
@@ -47,7 +49,8 @@ DeribitVerdictEngine/
 │   │                                   CalcVWAPBands, CalcBBW, CalcTTMSqueeze
 │   ├── Indicators_OrderFlow.vb         CalcOFI (bookDepth param, dynamic descending weights),
 │   │                                   CalcCVD (3-segment weighted slope),
-│   │                                   CalcMicroCVD, CalcTFI, CalcLiquidations
+│   │                                   CalcMicroCVD, CalcTFI, CalcLiquidations,
+│   │                                   CalcFundingMomentum (NEW)
 │   └── Indicators_Structure.vb         CalcDonchian, CalcOBV,
 │                                       CalcVPFRLite (exponential decay weighting),
 │                                       CalcMTFGate
@@ -60,7 +63,9 @@ DeribitVerdictEngine/
 │   │                                   _autoRunTimer, _countdownTimer, CHAR_PLAY/STOP;
 │   │                                   MTF TTL: _mtfCandles15m, _mtfLastFetchTime,
 │   │                                   MTF_TTL_SECONDS (const=60);
-│   │                                   _prevRegime (regime hysteresis)
+│   │                                   _prevRegime (regime hysteresis);
+│   │                                   _fundingHistory (List(Of Double)),
+│   │                                   FundingHistoryMax (const=10) [NEW]
 │   ├── MainForm_AutoRun.vb             Auto-run timer: InitAutoRunControls(),
 │   │                                   btnStartStop_Click, StartAutoRun(), StopAutoRun(),
 │   │                                   RunAutoAnalysis(), OnCountdownTick(),
@@ -69,9 +74,10 @@ DeribitVerdictEngine/
 │   │                                   fetches data, calls all indicators + scoring engine,
 │   │                                   logs result, calls RenderOutput;
 │   │                                   MTF TTL refresh; Donchian quartile signal;
-│   │                                   regime hysteresis logic; OFI BookDepth wiring
-│   └── MainForm_Render.vb              v0.49
-│                                       RenderOutput(), AppendRtf(), AR(), SectionHeader(),
+│   │                                   regime hysteresis logic; OFI BookDepth wiring;
+│   │                                   appends fundingRate to _fundingHistory,
+│   │                                   calls CalcFundingMomentum → r.FundingMomentum [NEW]
+│   └── MainForm_Render.vb              RenderOutput(), AppendRtf(), AR(), SectionHeader(),
 │                                       Divider(), BuildCalibrationReport(), Flag(),
 │                                       UpdateLogInfo(), lnkResetLog_LinkClicked,
 │                                       lnkCalibCheck_LinkClicked.
@@ -81,6 +87,7 @@ DeribitVerdictEngine/
 │                                       (C_GOOD), warnings in amber/red/dim.
 │                                       KELLY SIZING block rendered after ATR levels;
 │                                       suppressed when KellyF = 0.
+│                                       FUNDING section: rate/bias row + Momentum row [NEW]
 │
 └── docs/
     ├── DeribitIndicatorProject.md      Authoritative handover document (read first)
@@ -135,6 +142,9 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.EMA9/21/50 + Align = CalcEMA(candles1m)
         ├─ r.EMA200_5m          = CalcEMA(candles5m, 200)
         ├─ r.FundingRate/Bias   = fundingRate
+        ├─ _fundingHistory.Add(fundingRate); trim to FundingHistoryMax        [NEW]
+        ├─ r.FundingMomentum    = CalcFundingMomentum(_fundingHistory, cfg)   [NEW]
+        │                         → RISING / FALLING / FLAT
         ├─ r.OI_Current/Changes = bookSummary.OI + _oiHistory ring buffer
         ├─ r.OFI* / OFISignal   = CalcOFI(orderBook, bookDepth:=cfg.Indicators.OFI.BookDepth)
         ├─ r.Liq* / LiqSignal   = CalcLiquidations(recentTrades, dominanceRatio from cfg)
@@ -156,7 +166,14 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          ─ Liquidation penalty/boost by size + dominance
                     │          ─ OBV adverse divergence blocks cross-category upgrade
                     ├─ Pass 2:  Partial upgrade on cross-category confirmation
-                    ├─ Step 3:  Funding rate modifier (penalty/boost from cfg)
+                    ├─ Step 3:  Baseline funding-rate modifier (penalty/boost from cfg)
+                    ├─ Step 3b: Funding-momentum modifier [NEW]
+                    │          If FundingMomentum=RISING and funding already crowded
+                    │          → amplify penalty by cfg.Indicators.Funding.MomentumAmplify
+                    │          If FundingMomentum=FALLING and funding crowded
+                    │          → soften penalty by cfg.Indicators.Funding.MomentumSoften
+                    │          Controlled by cfg.Indicators.Funding.MomentumEnabled.
+                    │          Zero scoring impact when momentum = FLAT or disabled.
                     ├─ Step 4:  Regime veto + TRANSITIONAL ADX penalty
                     ├─ Step 4b: MTF gate veto → forces NO TRADE on BLOCK
                     ├─ Step 4c: VPFR HVN cap → sets AdjustedLongTarget / AdjustedShortTarget
@@ -190,6 +207,10 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          HVN-capped target in amber bold when adjusted target > 0
                     ├─ KELLY SIZING block (suppressed when KellyF = 0)
                     │          Contracts / USD risk / [EST] or [CAL] or [CAPPED] tag
+                    ├─ FUNDING section                                         [UPDATED]
+                    │          Row 1: rate value + bias label
+                    │          Row 2: Momentum → RISING / FALLING / FLAT
+                    │                 + enabled/amplify/soften config values
                     └─ Signal breakdown table + log info
                     │
                     ▼
@@ -211,5 +232,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 | CVD 3-segment slope | Late segment weighted ×2 vs early ×1. Captures momentum *direction change* mid-window (deceleration signal), not just net delta. |
 | OFI descending weight array | Levels deeper in the book are less actionable. Dynamic descending weights (injectable depth) reduce noise from thin deep levels. |
 | Regime hysteresis (1 bar) | Prevents regime flip-flop on RANGE_BOUND→TRENDING boundary. Single bar of grace avoids scoring discontinuity on noisy ADX crossings. |
-| Settings externalised to JSON | All thresholds tunable without recompile. SettingsLoader.Current singleton; EngineSettings v0.37 is the POCO contract. |
+| Settings externalised to JSON | All thresholds tunable without recompile. SettingsLoader.Current singleton; EngineSettings is the POCO contract. |
 | MicroCVD can be negative | `MicroCVDEarly` and `MicroCVDLate` are net USD deltas over their sub-windows. Negative values are valid and intentional — they indicate net sell pressure in that segment. |
+| Funding momentum as adjunct (Step 3b) | Absolute funding rate alone misses the *direction of crowding*. A rate already at +0.03% but falling is less dangerous than one at +0.02% and rising fast. Step 3b amplifies or softens the Step 3 penalty based on momentum direction, using a short rolling window (default 3 samples) held in `_fundingHistory`. Display-only impact on the funding UI row; scoring impact is bounded by the amplify/soften cfg values. |
+| _fundingHistory capped at FundingHistoryMax | Funding rate changes are slow relative to 1m candles. A window of 10 samples is sufficient to detect sustained crowding direction without accumulating stale history across sessions. |
