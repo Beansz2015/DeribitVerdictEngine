@@ -1,8 +1,15 @@
 {
-  "version": 11,
-  "last_modified": "2026-04-21T00:44:00Z",
-  "modified_by": "oi-cvd-cross-confirm",
+  "version": 12,
+  "last_modified": "2026-04-21T01:09:00Z",
+  "modified_by": "session-volume-norms",
   "change_log": [
+    "v12: [session-volume-norms] Added top-level 'session_volume' block.",
+    "     enabled: true  -- master switch; set false to bypass session scaling entirely.",
+    "     sessions: 3 UTC bucket entries (ASIA 00-07, LONDON 08-12, NY 13-23).",
+    "     Each bucket carries high_multiplier and mid_multiplier applied to",
+    "     DynamicNorms.VolHighThreshold / VolMidThreshold after dynamic computation.",
+    "     ASIA defaults 0.8/0.85 (lower liquidity), LONDON 1.0/1.0 (neutral),",
+    "     NY 1.15/1.1 (elevated liquidity). Tune after 50+ runs per session.",
     "v11: [oi-cvd-cross-confirm] Added 'oi_cvd_cross' block under 'indicators' with 3 keys:",
     "     enabled: true        -- master switch for Pass 2b gate in ScoringEngine_Calculate_Scoring",
     "     upgrade_bonus: 1     -- score added when OI full/partial and CVD direction confirm each other",
@@ -88,6 +95,32 @@
                   "upgrade_bonus": 1,
                   "conflict_penalty": 1
                 }
+  },
+  "session_volume": {
+    "enabled": true,
+    "sessions": [
+      {
+        "name": "ASIA",
+        "start_hour": 0,
+        "end_hour": 7,
+        "high_multiplier": 0.80,
+        "mid_multiplier": 0.85
+      },
+      {
+        "name": "LONDON",
+        "start_hour": 8,
+        "end_hour": 12,
+        "high_multiplier": 1.00,
+        "mid_multiplier": 1.00
+      },
+      {
+        "name": "NY",
+        "start_hour": 13,
+        "end_hour": 23,
+        "high_multiplier": 1.15,
+        "mid_multiplier": 1.10
+      }
+    ]
   },
   "mtf_gate": {
     "enabled": true,
