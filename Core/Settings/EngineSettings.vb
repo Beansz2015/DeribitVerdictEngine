@@ -30,15 +30,15 @@
 ' fix [T3-B]: Added RsiSettings.PivotWing and RsiSettings.LookbackBars.
 '        CalcRSIDivergence was wired to these cfg keys in MainForm_Analysis.vb [T3-B]
 '        but the properties were missing from RsiSettings -- caused BC30456.
-'        Defaults match the method's previous hardcoded values (PivotWing=2, LookbackBars=20).
+'        Defaults match the method''s previous hardcoded values (PivotWing=2, LookbackBars=20).
 ' fix [T3-C]: Added TtmSettings class and IndicatorSettings.TTM property.
 '        CalcTTMSqueeze was wired to cfg.Indicators.TTM.FlatThreshold in MainForm_Analysis.vb
 '        but the class and property were missing -- caused BC30456.
-'        Default FlatThreshold=0.5 matches the method's previous hardcoded default.
+'        Default FlatThreshold=0.5 matches the method''s previous hardcoded default.
 ' fix [T3-A]: Added VpfrSettings class and IndicatorSettings.VPFR property.
 '        CalcVPFRLite was wired to cfg.Indicators.VPFR.NumBuckets in MainForm_Analysis.vb
 '        but the class and property were missing -- caused BC30456.
-'        Default NumBuckets=50 matches the method's previous hardcoded default.
+'        Default NumBuckets=50 matches the method''s previous hardcoded default.
 ' Step 5b: Added ContextTagStructuralMin and ContextTagFlowMax to ScoringSettings.
 '        Used by CalcVerdictContext() in ScoringEngine_Calculate to classify weak/ambiguous
 '        verdicts as FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED.
@@ -48,6 +48,10 @@
 '        Defaults: AccountSizeUsd=1000, UseHalfKelly=True, MaxRiskFraction=0.05,
 '                  ContractFaceUsd=10, MinCalibrationSamples=30,
 '                  EstProbFloor=0.45, EstProbScale=0.20.
+' funding-momentum: Added FundingSettings class and Indicators.Funding property.
+'        Used by CalcFundingMomentum() in Indicators_OrderFlow and Step 3b in
+'        ScoringEngine_Calculate. MomentumEnabled master switch (default True).
+'        MomentumWindow=3, MomentumThreshold=0.0001, MomentumAmplify=1, MomentumSoften=1.
 
 Imports System.Text.Json.Serialization
 
@@ -111,6 +115,8 @@ Public Class IndicatorSettings
     <JsonPropertyName("TTM")>      Public Property TTM      As New TtmSettings
     ''' <summary>[T3-A] VPFR-lite tuning parameters.</summary>
     <JsonPropertyName("VPFR")>     Public Property VPFR     As New VpfrSettings
+    ''' <summary>[funding-momentum] Funding rate momentum signal parameters.</summary>
+    <JsonPropertyName("funding")>  Public Property Funding  As New FundingSettings
 End Class
 
 Public Class AdxSettings
@@ -252,7 +258,7 @@ End Class
 ''' <summary>
 ''' [T3-C] TTM Squeeze tuning parameters.
 ''' FlatThreshold: histogram bars whose absolute value is below this are treated as FLAT momentum.
-''' Default 0.5 matches the method's previous hardcoded behaviour.
+''' Default 0.5 matches the method''s previous hardcoded behaviour.
 ''' </summary>
 Public Class TtmSettings
     <JsonPropertyName("flat_threshold")> Public Property FlatThreshold As Double = 0.5
@@ -261,10 +267,27 @@ End Class
 ''' <summary>
 ''' [T3-A] VPFR-lite tuning parameters.
 ''' NumBuckets: number of price buckets for the volume profile histogram.
-''' Default 50 matches the method's previous hardcoded behaviour.
+''' Default 50 matches the method''s previous hardcoded behaviour.
 ''' </summary>
 Public Class VpfrSettings
     <JsonPropertyName("num_buckets")> Public Property NumBuckets As Integer = 50
+End Class
+
+''' <summary>
+''' [funding-momentum] Funding rate momentum signal parameters.
+''' Controls Step 3b in ScoringEngine_Calculate and CalcFundingMomentum in Indicators_OrderFlow.
+''' MomentumEnabled: master switch -- set false to skip Step 3b entirely. Default True.
+''' MomentumWindow: how many samples back to compare against most recent rate. Default 3.
+''' MomentumThreshold: min absolute delta (in rate units) to classify as RISING/FALLING. Default 0.0001 (1 bp).
+''' MomentumAmplify: additional penalty when momentum confirms crowding. Capped at FundingHighPenalty at call site. Default 1.
+''' MomentumSoften: score restored when momentum signals de-crowding. Default 1.
+''' </summary>
+Public Class FundingSettings
+    <JsonPropertyName("momentum_enabled")>   Public Property MomentumEnabled   As Boolean = True
+    <JsonPropertyName("momentum_window")>    Public Property MomentumWindow    As Integer = 3
+    <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.0001
+    <JsonPropertyName("momentum_amplify")>   Public Property MomentumAmplify   As Integer = 1
+    <JsonPropertyName("momentum_soften")>    Public Property MomentumSoften    As Integer = 1
 End Class
 
 ' ---------------------------------------------------------------------------
