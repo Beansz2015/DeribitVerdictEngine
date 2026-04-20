@@ -34,11 +34,19 @@ DeribitVerdictEngine/
 │   │                                   PositionState, SignalCategory, ScoreState
 │   ├── ScoringEngine_Helpers.vb        Pure functions: RegimeMaxScore, Threshold, TierFloor,
 │   │                                   AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus
-│   ├── ScoringEngine_Calculate.vb      Main Calculate() pipeline — assembles verdict;
-│   │                                   Step 3b funding-momentum modifier;
-│   │                                   Step 5b CalcVerdictContext();
-│   │                                   CalcKellySizing() (called post-ATR);
-│   │                                   VPFR HVN cap logic; all scoring steps (see Data Flow)
+│   ├── ScoringEngine_Calculate_Scoring.vb
+│   │                                   AppendLean(), CalcVerdictContext();
+│   │                                   RunScoringPipeline() — Steps 2/Pass 2/3/3b:
+│   │                                   signal scoring, partial upgrades, funding modifiers,
+│   │                                   all breakdown note rows.
+│   │                                   Split from ScoringEngine_Calculate.vb.
+│   ├── ScoringEngine_Calculate_Verdict.vb
+│   │                                   Calculate() entry point — assembles verdict;
+│   │                                   Step 4: regime veto / TRANSITIONAL ADX penalty;
+│   │                                   Step 4b: MTF gate veto;
+│   │                                   Step 5: threshold comparison → verdict string;
+│   │                                   Step 5b: ATR target cap (VPFR HVN).
+│   │                                   Split from ScoringEngine_Calculate.vb.
 │   │
 │   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
 │   │                                   incl. FundingMomentum (RISING/FALLING/FLAT)
@@ -50,7 +58,7 @@ DeribitVerdictEngine/
 │   ├── Indicators_OrderFlow.vb         CalcOFI (bookDepth param, dynamic descending weights),
 │   │                                   CalcCVD (3-segment weighted slope),
 │   │                                   CalcMicroCVD, CalcTFI, CalcLiquidations,
-│   │                                   CalcFundingMomentum (NEW)
+│   │                                   CalcFundingMomentum
 │   └── Indicators_Structure.vb         CalcDonchian, CalcOBV,
 │                                       CalcVPFRLite (exponential decay weighting),
 │                                       CalcMTFGate
@@ -65,7 +73,7 @@ DeribitVerdictEngine/
 │   │                                   MTF_TTL_SECONDS (const=60);
 │   │                                   _prevRegime (regime hysteresis);
 │   │                                   _fundingHistory (List(Of Double)),
-│   │                                   FundingHistoryMax (const=10) [NEW]
+│   │                                   FundingHistoryMax (const=10)
 │   ├── MainForm_AutoRun.vb             Auto-run timer: InitAutoRunControls(),
 │   │                                   btnStartStop_Click, StartAutoRun(), StopAutoRun(),
 │   │                                   RunAutoAnalysis(), OnCountdownTick(),
@@ -76,18 +84,25 @@ DeribitVerdictEngine/
 │   │                                   MTF TTL refresh; Donchian quartile signal;
 │   │                                   regime hysteresis logic; OFI BookDepth wiring;
 │   │                                   appends fundingRate to _fundingHistory,
-│   │                                   calls CalcFundingMomentum → r.FundingMomentum [NEW]
-│   └── MainForm_Render.vb              RenderOutput(), AppendRtf(), AR(), SectionHeader(),
-│                                       Divider(), BuildCalibrationReport(), Flag(),
-│                                       UpdateLogInfo(), lnkResetLog_LinkClicked,
-│                                       lnkCalibCheck_LinkClicked.
-│                                       ATR block: HVN-capped target in amber bold
-│                                       when AdjustedLongTarget or AdjustedShortTarget > 0.
-│                                       CONTEXT: line always rendered — CONFIRMED in green
-│                                       (C_GOOD), warnings in amber/red/dim.
-│                                       KELLY SIZING block rendered after ATR levels;
-│                                       suppressed when KellyF = 0.
-│                                       FUNDING section: rate/bias row + Momentum row [NEW]
+│   │                                   calls CalcFundingMomentum → r.FundingMomentum
+│   ├── MainForm_Render_Header.vb       RTF helpers: AppendRtf(), AR(), SectionHeader(),
+│   │                                   Divider();
+│   │                                   log/calibration helpers: UpdateLogInfo(),
+│   │                                   BuildCalibrationReport(), Flag(),
+│   │                                   lnkResetLog_LinkClicked, lnkCalibCheck_LinkClicked;
+│   │                                   RenderOutputHeader() — top render block:
+│   │                                   VERDICT / CONTEXT / CONFIDENCE / SCORE / TIME /
+│   │                                   LAST TRANSACTED PRICE / HOLD STATUS /
+│   │                                   ATR ENTRY LEVELS / KELLY SIZING.
+│   │                                   Split from MainForm_Render.vb.
+│   └── MainForm_Render_Sections.vb     RenderOutput() entry point;
+│                                       all indicator sections: DYNAMIC NORMS, REGIME,
+│                                       CORE SIGNALS, VWAP, BBW/TTM, EMA RIBBON,
+│                                       MARKET STRUCTURE, OPEN INTEREST, ORDER FLOW,
+│                                       LIQUIDATIONS, MTF GATE, FUNDING;
+│                                       SIGNAL BREAKDOWN table;
+│                                       verdict label (lblVerdict) colour update.
+│                                       Split from MainForm_Render.vb.
 │
 └── docs/
     ├── DeribitIndicatorProject.md      Authoritative handover document (read first)
@@ -142,8 +157,8 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.EMA9/21/50 + Align = CalcEMA(candles1m)
         ├─ r.EMA200_5m          = CalcEMA(candles5m, 200)
         ├─ r.FundingRate/Bias   = fundingRate
-        ├─ _fundingHistory.Add(fundingRate); trim to FundingHistoryMax        [NEW]
-        ├─ r.FundingMomentum    = CalcFundingMomentum(_fundingHistory, cfg)   [NEW]
+        ├─ _fundingHistory.Add(fundingRate); trim to FundingHistoryMax
+        ├─ r.FundingMomentum    = CalcFundingMomentum(_fundingHistory, cfg)
         │                         → RISING / FALLING / FLAT
         ├─ r.OI_Current/Changes = bookSummary.OI + _oiHistory ring buffer
         ├─ r.OFI* / OFISignal   = CalcOFI(orderBook, bookDepth:=cfg.Indicators.OFI.BookDepth)
@@ -158,6 +173,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │
                     ▼
         ScoringEngine.Calculate(r, posState, norms, cfg)
+        [ScoringEngine_Calculate_Verdict.vb → calls RunScoringPipeline in _Scoring.vb]
                     │
                     ├─ Step 1:  Regime classification → MaxScore (19/18/15)
                     ├─ Step 2:  Score each signal → ScoreState
@@ -167,7 +183,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          ─ OBV adverse divergence blocks cross-category upgrade
                     ├─ Pass 2:  Partial upgrade on cross-category confirmation
                     ├─ Step 3:  Baseline funding-rate modifier (penalty/boost from cfg)
-                    ├─ Step 3b: Funding-momentum modifier [NEW]
+                    ├─ Step 3b: Funding-momentum modifier
                     │          If FundingMomentum=RISING and funding already crowded
                     │          → amplify penalty by cfg.Indicators.Funding.MomentumAmplify
                     │          If FundingMomentum=FALLING and funding crowded
@@ -195,23 +211,29 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         VerdictResult  v
                     │
                     ▼
-        MainForm_Render.vb :: RenderOutput(v, r)
+        MainForm_Render_Sections.vb :: RenderOutput(v, r)
+        [calls RenderOutputHeader() from MainForm_Render_Header.vb for top block]
                     │
-                    ├─ Verdict header + score + breakdown
-                    ├─ CONTEXT: line (always shown)
+                    ├─ Verdict header + score + breakdown  [_Header]
+                    ├─ CONTEXT: line (always shown)        [_Header]
                     │          CONFIRMED → C_GOOD (green)
                     │          FLOW_UNCONFIRMED / MOMENTUM_FADING /
                     │          STRUCTURALLY_WEAK → amber/red/dim as appropriate
-                    ├─ Hold/position guidance
-                    ├─ ATR entry / stop / target block
+                    ├─ Hold/position guidance              [_Header]
+                    ├─ ATR entry / stop / target block     [_Header]
                     │          HVN-capped target in amber bold when adjusted target > 0
-                    ├─ KELLY SIZING block (suppressed when KellyF = 0)
+                    ├─ KELLY SIZING block                  [_Header]
                     │          Contracts / USD risk / [EST] or [CAL] or [CAPPED] tag
-                    ├─ FUNDING section                                         [UPDATED]
+                    │          Suppressed when KellyF = 0
+                    ├─ DYNAMIC NORMS / REGIME / CORE SIGNALS / VWAP /
+                    │  BBW/TTM / EMA RIBBON / MARKET STRUCTURE /
+                    │  OI / ORDER FLOW / LIQUIDATIONS /    [_Sections]
+                    │  MTF GATE / FUNDING sections
+                    ├─ FUNDING section                     [_Sections]
                     │          Row 1: rate value + bias label
                     │          Row 2: Momentum → RISING / FALLING / FLAT
                     │                 + enabled/amplify/soften config values
-                    └─ Signal breakdown table + log info
+                    └─ Signal breakdown table + lblVerdict colour update  [_Sections]
                     │
                     ▼
         AnalysisLogger.LogRun(r, verdict) → analysis_log.csv
@@ -236,3 +258,5 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 | MicroCVD can be negative | `MicroCVDEarly` and `MicroCVDLate` are net USD deltas over their sub-windows. Negative values are valid and intentional — they indicate net sell pressure in that segment. |
 | Funding momentum as adjunct (Step 3b) | Absolute funding rate alone misses the *direction of crowding*. A rate already at +0.03% but falling is less dangerous than one at +0.02% and rising fast. Step 3b amplifies or softens the Step 3 penalty based on momentum direction, using a short rolling window (default 3 samples) held in `_fundingHistory`. Display-only impact on the funding UI row; scoring impact is bounded by the amplify/soften cfg values. |
 | _fundingHistory capped at FundingHistoryMax | Funding rate changes are slow relative to 1m candles. A window of 10 samples is sufficient to detect sustained crowding direction without accumulating stale history across sessions. |
+| ScoringEngine split into _Scoring + _Verdict | ScoringEngine_Calculate.vb exceeded 35 KB. Split into RunScoringPipeline (Steps 2–3b + breakdown notes) in _Scoring.vb and Calculate() entry point (Steps 4–5b) in _Verdict.vb. CalcVerdictContext kept in _Scoring.vb as it is called from multiple early-return paths in _Verdict.vb. |
+| MainForm_Render split into _Header + _Sections | MainForm_Render.vb exceeded 28 KB. RTF helpers + top render block (verdict/ATR/Kelly) in _Header.vb; RenderOutput() entry point + all indicator sections + breakdown table in _Sections.vb. |
