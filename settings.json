@@ -1,8 +1,14 @@
 {
-  "version": 9,
-  "last_modified": "2026-04-14T15:30:00Z",
-  "modified_by": "fix-funding-8h-recalibrate",
+  "version": 10,
+  "last_modified": "2026-04-20T12:46:00Z",
+  "modified_by": "funding-momentum",
   "change_log": [
+    "v10: [funding-momentum] Added 'funding' block under 'indicators' with 5 keys:",
+    "     momentum_enabled: true  -- master switch for Step 3b / CalcFundingMomentum()",
+    "     momentum_window: 3      -- samples back to compare against most recent rate",
+    "     momentum_threshold: 0.0001 -- min abs delta (1 bp) to classify RISING/FALLING",
+    "     momentum_amplify: 1     -- extra penalty when momentum confirms crowding",
+    "     momentum_soften: 1      -- score restored when momentum signals de-crowding",
     "v9: [fix] Funding thresholds recalibrated from current_funding scale to funding_8h scale.",
     "     funding_high_positive:  0.001  -> 0.0001  (0.01%/8h)",
     "     funding_low_positive:   0.0005 -> 0.00005 (0.005%/8h)",
@@ -64,7 +70,14 @@
                   "divergence_price_gate": 0.0005,
                   "trade_lookback": 100 },
     "TFI":      { "window_size": 30, "threshold": 0.15 },
-    "MicroCVD": { "window_size": 50, "accel_threshold": 5000.0 }
+    "MicroCVD": { "window_size": 50, "accel_threshold": 5000.0 },
+    "funding":  {
+                  "momentum_enabled": true,
+                  "momentum_window": 3,
+                  "momentum_threshold": 0.0001,
+                  "momentum_amplify": 1,
+                  "momentum_soften": 1
+                }
   },
   "mtf_gate": {
     "enabled": true,
