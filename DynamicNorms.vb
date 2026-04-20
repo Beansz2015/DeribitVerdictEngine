@@ -1,8 +1,12 @@
-' DynamicNorms.vb  v0.24a
+' DynamicNorms.vb  v0.25
 ' Computes live normalization thresholds from candle data fetched each run.
 ' No log dependency -- fully self-contained per Analyze Now click.
 ' v0.24:  Static fallback constants now driven by SettingsLoader.Current.
 ' v0.24a: Expanded single-line Get...End Get to multi-line to fix BC30205.
+' v0.25:  Session-aware volume threshold scaling by UTC trading bucket.
+'         After dynamic high/mid thresholds are computed, applies per-session
+'         HighMultiplier / MidMultiplier from EngineSettings.SessionVolume.
+'         Bypassed when SessionVolume.Enabled = False or no session matches.
 
 Public Class DynamicNorms
 
@@ -43,7 +47,7 @@ Public Class DynamicNorms
         End If
 
         ' -- Method 1a: Volume normalization ----------------------------------
-        Dim volWindow = candles1m.Take(Math.Min(100, candles1m.Count - 1)).
+        Dim volWindow = candles1m.Take(Math.Min(100, candles1m.Count - 1)).\
                                   Select(Function(c) c.Volume).ToList()
         If volWindow.Count < 10 Then
             Return StaticFallback(currentATR)
@@ -65,6 +69,9 @@ Public Class DynamicNorms
             n.VolHighThreshold = Math.Clamp(highRaw, cfg.Volume.DynamicHighClampMin, cfg.Volume.DynamicHighClampMax)
             n.VolMidThreshold  = Math.Clamp(midRaw,  cfg.Volume.DynamicMidClampMin,  cfg.Volume.DynamicMidClampMax)
         End If
+
+        ' -- Session-aware volume scaling -------------------------------------
+        ApplySessionVolume(n)
 
         ' -- Method 1b: VWAP deviation normalization --------------------------
         Dim vwapDevSamples As New List(Of Double)()
@@ -108,6 +115,26 @@ Public Class DynamicNorms
         n.IsLive = True
         Return n
     End Function
+
+    ''' <summary>
+    ''' Applies per-session high/mid multipliers from EngineSettings.SessionVolume.
+    ''' Matches current UTC hour to the first session bucket whose StartHour..EndHour
+    ''' range contains the current hour.  No-op when Enabled=False or no match found.
+    ''' </summary>
+    Private Shared Sub ApplySessionVolume(n As DynamicNorms)
+        Dim svCfg = SettingsLoader.Current.SessionVolume
+        If svCfg Is Nothing OrElse Not svCfg.Enabled Then Return
+        If svCfg.Sessions Is Nothing OrElse svCfg.Sessions.Count = 0 Then Return
+
+        Dim utcHour As Integer = DateTime.UtcNow.Hour
+        For Each bucket In svCfg.Sessions
+            If utcHour >= bucket.StartHour AndAlso utcHour <= bucket.EndHour Then
+                n.VolHighThreshold *= bucket.HighMultiplier
+                n.VolMidThreshold  *= bucket.MidMultiplier
+                Return
+            End If
+        Next
+    End Sub
 
     Private Shared Function ComputeATRRef(candles As List(Of Candle)) As Double
         Dim period As Integer = SettingsLoader.Current.Indicators.ATR.Period
