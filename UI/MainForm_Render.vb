@@ -7,9 +7,6 @@ Imports System.Windows.Forms
 
 Partial Public Class MainForm
 
-    ' -----------------------------------------------------------------------
-    ' Log helpers
-    ' -----------------------------------------------------------------------
     Private Sub UpdateLogInfo()
         Dim rows As Integer = AnalysisLogger.GetRowCount()
         Dim path As String  = AnalysisLogger.GetLogPath()
@@ -35,9 +32,6 @@ Partial Public Class MainForm
         AppendRtf(txtOutput, BuildCalibrationReport(), C_VALUE)
     End Sub
 
-    ' -----------------------------------------------------------------------
-    ' Calibration readiness report
-    ' -----------------------------------------------------------------------
     Private Function BuildCalibrationReport() As String
         Dim path As String = AnalysisLogger.GetLogPath()
         Dim sb As New System.Text.StringBuilder()
@@ -165,25 +159,22 @@ Partial Public Class MainForm
         Return If(ok, "[OK]", "[--]")
     End Function
 
-    ' -----------------------------------------------------------------------
-    ' RTF helpers
-    ' -----------------------------------------------------------------------
     Private Shared Sub AppendRtf(rtb As RichTextBox, text As String,
                                   colour As Color,
                                   Optional bold As Boolean = False,
                                   Optional italic As Boolean = False,
                                   Optional underline As Boolean = False)
         Dim style As FontStyle = FontStyle.Regular
-        If bold      Then style = style Or FontStyle.Bold
-        If italic    Then style = style Or FontStyle.Italic
+        If bold Then style = style Or FontStyle.Bold
+        If italic Then style = style Or FontStyle.Italic
         If underline Then style = style Or FontStyle.Underline
-        rtb.SelectionStart  = rtb.TextLength
+        rtb.SelectionStart = rtb.TextLength
         rtb.SelectionLength = 0
-        rtb.SelectionColor  = colour
-        rtb.SelectionFont   = New Font(rtb.Font, style)
+        rtb.SelectionColor = colour
+        rtb.SelectionFont = New Font(rtb.Font, style)
         rtb.AppendText(text)
         rtb.SelectionColor = rtb.ForeColor
-        rtb.SelectionFont  = rtb.Font
+        rtb.SelectionFont = rtb.Font
     End Sub
 
     Private Sub AR(rtb As RichTextBox, label As String, value As String,
@@ -202,9 +193,6 @@ Partial Public Class MainForm
         AppendRtf(rtb, "===========================================================" & Environment.NewLine, C_DIVIDER)
     End Sub
 
-    ' -----------------------------------------------------------------------
-    ' RenderOutput
-    ' -----------------------------------------------------------------------
     Private Sub RenderOutput(r As IndicatorResults, v As VerdictResult,
                               norms As DynamicNorms, vwapWarmup As Integer,
                               lastTradePrice As Double)
@@ -214,32 +202,27 @@ Partial Public Class MainForm
         Dim ts As String = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd HH:mm:ss") & " UTC+8"
         Dim cfg As EngineSettings = SettingsLoader.Current
 
-        ' --- Verdict block ---
         Divider(rtb)
         AppendRtf(rtb, "  VERDICT:    ", C_LABEL)
         Dim vColour As Color = C_VALUE
         Select Case v.Verdict
-            Case "STRONG LONG", "LONG"   : vColour = C_GOOD
-            Case "WEAK LONG"             : vColour = Color.FromArgb(120, 200, 120)
+            Case "STRONG LONG", "LONG" : vColour = C_GOOD
+            Case "WEAK LONG" : vColour = Color.FromArgb(120, 200, 120)
             Case "STRONG SHORT", "SHORT" : vColour = C_BAD
-            Case "WEAK SHORT"            : vColour = Color.FromArgb(220, 130, 130)
-            Case Else                    : vColour = C_WARN
+            Case "WEAK SHORT" : vColour = Color.FromArgb(220, 130, 130)
+            Case Else : vColour = C_WARN
         End Select
         AppendRtf(rtb, v.Verdict & Environment.NewLine, vColour, bold:=True)
 
-        ' Step 5b: Verdict sub-context tag -- always rendered when VerdictContext is set.
-        ' CONFIRMED shown in green: positive confirmation all tiers are aligned.
-        ' MOMENTUM_FADING = red (C_BAD), FLOW_UNCONFIRMED = amber (C_WARN),
-        ' STRUCTURALLY_WEAK = dim (C_DIM).
         If v.VerdictContext <> "" Then
             AppendRtf(rtb, "  CONTEXT:    ", C_LABEL)
             Dim ctxColour As Color
             Select Case v.VerdictContext
-                Case "MOMENTUM_FADING"   : ctxColour = C_BAD
-                Case "FLOW_UNCONFIRMED"  : ctxColour = C_WARN
+                Case "MOMENTUM_FADING" : ctxColour = C_BAD
+                Case "FLOW_UNCONFIRMED" : ctxColour = C_WARN
                 Case "STRUCTURALLY_WEAK" : ctxColour = C_DIM
-                Case "CONFIRMED"         : ctxColour = C_GOOD
-                Case Else                : ctxColour = C_VALUE
+                Case "CONFIRMED" : ctxColour = C_GOOD
+                Case Else : ctxColour = C_VALUE
             End Select
             AppendRtf(rtb, v.VerdictContext & Environment.NewLine, ctxColour, bold:=True)
         End If
@@ -264,45 +247,33 @@ Partial Public Class MainForm
         AppendRtf(rtb, ts & Environment.NewLine, C_DIM)
         Divider(rtb)
 
-        ' --- Last Transacted Price ---
         AppendRtf(rtb, "  LAST TRANSACTED PRICE:  ", C_LABEL)
         AppendRtf(rtb, If(lastTradePrice > 0,
                           lastTradePrice.ToString("F1"),
                           "N/A") & Environment.NewLine, C_VALUE)
 
-        ' --- Hold / Exit ---
         If v.HoldStatus <> "N/A -- no open position" Then
             AppendRtf(rtb, "  HOLD / EXIT: ", C_LABEL)
             AppendRtf(rtb, v.HoldStatus & Environment.NewLine, C_WARN, bold:=True)
         End If
 
-        ' --- ATR Entry Levels ---
-        ' Entry pivot = r.CurrentPrice (1m candle close).
-        ' Multipliers read from cfg so label stays in sync with settings.json.
-        ' If VerdictResult carries an HVN-capped target, the capped level is
-        ' shown in amber with the cap reason.  Raw R:R is always shown so the
-        ' trader sees both the theoretical and the realistic exit.
-        Dim stopMult    As Double = cfg.Scoring.AtrStopMultiplier
-        Dim targetMult  As Double = cfg.Scoring.AtrTargetMultiplier
-        Dim atrStop     As Double = r.ATR * norms.ATRScaleFactor * stopMult
-        Dim atrTarget   As Double = r.ATR * norms.ATRScaleFactor * targetMult
-        Dim longStop    As Double = r.CurrentPrice - atrStop
-        Dim longTarget  As Double = r.CurrentPrice + atrTarget
-        Dim shortStop   As Double = r.CurrentPrice + atrStop
+        Dim stopMult As Double = cfg.Scoring.AtrStopMultiplier
+        Dim targetMult As Double = cfg.Scoring.AtrTargetMultiplier
+        Dim atrStop As Double = r.ATR * norms.ATRScaleFactor * stopMult
+        Dim atrTarget As Double = r.ATR * norms.ATRScaleFactor * targetMult
+        Dim longStop As Double = r.CurrentPrice - atrStop
+        Dim longTarget As Double = r.CurrentPrice + atrTarget
+        Dim shortStop As Double = r.CurrentPrice + atrStop
         Dim shortTarget As Double = r.CurrentPrice - atrTarget
-        Dim rrRatio     As String = String.Format("1:{0:F1}", targetMult / stopMult)
+        Dim rrRatio As String = String.Format("1:{0:F1}", targetMult / stopMult)
 
-        ' Populate Kelly fields on VerdictResult (display-only, no scoring impact).
-        ' atrStop is always positive (distance in price points).
         ScoringEngine.CalcKellySizing(v, atrStop, cfg)
 
         SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | {2:F1}x stop / {3:F1}x target)",
                                           r.ATR, norms.ATRScaleFactor, stopMult, targetMult))
 
-        ' Long row
         AppendRtf(rtb, "  Long:   ", C_LABEL)
         If v.AdjustedLongTarget > 0 Then
-            ' Show raw target struck-through in dim, then capped target in amber
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
                                           longStop, r.CurrentPrice, longTarget), C_DIM)
             AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
@@ -312,7 +283,6 @@ Partial Public Class MainForm
                                           longStop, r.CurrentPrice, longTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
         End If
 
-        ' Short row
         AppendRtf(rtb, "  Short:  ", C_LABEL)
         If v.AdjustedShortTarget > 0 Then
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
@@ -324,9 +294,6 @@ Partial Public Class MainForm
                                           shortStop, r.CurrentPrice, shortTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_BAD)
         End If
 
-        ' --- Kelly Sizing block ---
-        ' Shown only when there is positive edge (KellyF > 0).
-        ' Suppressed on NEUTRAL / no-edge verdicts.
         If v.KellyF > 0 Then
             Dim capTag As String = If(v.KellyCapped, "  [CAPPED]", "")
             AppendRtf(rtb, Environment.NewLine, C_DIVIDER)
@@ -349,7 +316,6 @@ Partial Public Class MainForm
             AppendRtf(rtb, contractStr & Environment.NewLine, contractColour, bold:=True)
         End If
 
-        ' --- Dynamic Norms ---
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC FALLBACK")
         SectionHeader(rtb, "DYNAMIC NORMS  [" & normMode & "]")
         AR(rtb, "Vol threshold : ",
@@ -359,20 +325,18 @@ Partial Public Class MainForm
         AR(rtb, "ATR scale     : ",
            String.Format("{0:F2}x  (ATR={1:F2}  ref={2:F2})", norms.ATRScaleFactor, r.ATR, norms.ATRRef))
 
-        ' --- Regime ---
         SectionHeader(rtb, "REGIME (5m): " & r.Regime)
         Dim regColour As Color = C_VALUE
         Select Case r.Regime
-            Case "TRENDING_UP"   : regColour = C_GOOD
+            Case "TRENDING_UP" : regColour = C_GOOD
             Case "TRENDING_DOWN" : regColour = C_BAD
-            Case "RANGE_BOUND"   : regColour = C_WARN
-            Case Else            : regColour = C_DIM
+            Case "RANGE_BOUND" : regColour = C_WARN
+            Case Else : regColour = C_DIM
         End Select
         AppendRtf(rtb, "  ", C_LABEL)
         AppendRtf(rtb, String.Format("ADX: {0:F1}  |  +DI: {1:F1}  |  -DI: {2:F1}",
                                       r.ADX, r.PlusDI, r.MinusDI) & Environment.NewLine, regColour)
 
-        ' --- Core Signals ---
         SectionHeader(rtb, "CORE SIGNALS (1m):")
         AppendRtf(rtb, "  ROC(9):       ", C_LABEL)
         Dim rocColour As Color = If(r.ROC > 0, C_GOOD, If(r.ROC < 0, C_BAD, C_VALUE))
@@ -397,7 +361,6 @@ Partial Public Class MainForm
         AppendRtf(rtb, String.Format("{0:F4} BTC ({1})  |  vs SMA: {2:F2}x  |  SMA: {3:F4} BTC",
                                       r.CurrentVolume, usdStr, r.VolumeRatio, r.VolumeSMA9) & Environment.NewLine, volColour)
 
-        ' --- VWAP ---
         Dim s2h As Integer = cfg.Indicators.VWAP.Session2StartHour
         Dim s2m As Integer = cfg.Indicators.VWAP.Session2StartMinute
         Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < vwapWarmup, "  [WARMUP]", "")
@@ -411,7 +374,6 @@ Partial Public Class MainForm
                                       r.VWAPSigma1Lower, r.VWAPSigma1Upper,
                                       r.VWAPSigma2Lower, r.VWAPSigma2Upper) & Environment.NewLine, C_DIM)
 
-        ' --- BBW / TTM ---
         SectionHeader(rtb, "BBW / TTM SQUEEZE:")
         AppendRtf(rtb, "  BBW: ", C_LABEL)
         Dim sqColour As Color = If(r.SqueezeStatus = "SQUEEZE", C_WARN, C_VALUE)
@@ -421,7 +383,6 @@ Partial Public Class MainForm
         AppendRtf(rtb, String.Format("Histogram={0:F2}  Dir={1}  Signal={2}",
                                       r.TTMHistogram, r.TTMDirection, r.TTMSignal) & Environment.NewLine, ttmColour)
 
-        ' --- EMA Ribbon ---
         SectionHeader(rtb, "EMA RIBBON (1m):")
         AppendRtf(rtb, "  ", C_LABEL)
         Dim emaColour As Color = If(r.EMAAlignment = "BULL", C_GOOD, If(r.EMAAlignment = "BEAR", C_BAD, C_WARN))
@@ -431,7 +392,6 @@ Partial Public Class MainForm
         Dim ema200Colour As Color = If(r.PriceVsEMA200 = "ABOVE", C_GOOD, C_BAD)
         AppendRtf(rtb, String.Format("{0:F1}  |  Price: {1}", r.EMA200_5m, r.PriceVsEMA200) & Environment.NewLine, ema200Colour)
 
-        ' --- Market Structure ---
         SectionHeader(rtb, "MARKET STRUCTURE:")
         AppendRtf(rtb, "  Donchian(20): ", C_LABEL)
         Dim donchColour As Color = If(r.DonchianSignal = "LONG", C_GOOD, If(r.DonchianSignal = "SHORT", C_BAD, C_VALUE))
@@ -440,7 +400,6 @@ Partial Public Class MainForm
         AppendRtf(rtb, "  OBV: ", C_LABEL)
         AppendRtf(rtb, String.Format("Trend={0}  |  Div={1}", r.OBVTrend, r.OBVDivergence) & Environment.NewLine, C_VALUE)
 
-        ' --- VPFR-lite ---
         Dim vpfrColour As Color = If(r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL", C_GOOD,
                                      If(r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR", C_BAD, C_DIM))
         AppendRtf(rtb, "  VPFR-lite: ", C_LABEL)
@@ -448,7 +407,6 @@ Partial Public Class MainForm
                                       r.VPFRPoc, r.VPFRSignal,
                                       If(r.VPFRHVNearPoc, "YES", "NO")) & Environment.NewLine, vpfrColour)
 
-        ' --- Open Interest ---
         SectionHeader(rtb, "OPEN INTEREST:")
         AppendRtf(rtb, "  OI: ", C_LABEL)
         Dim oiColour As Color = If(r.OISignal = "NEW LONGS" OrElse r.OISignal = "COVERING", C_GOOD,
@@ -456,7 +414,6 @@ Partial Public Class MainForm
         AppendRtf(rtb, String.Format("{0:F0}  |  d15m: {1:F3}%  |  d60m: {2:F3}%  |  Signal: {3}",
                                       r.OI_Current, r.OIChange15m, r.OIChange60m, r.OISignal) & Environment.NewLine, oiColour)
 
-        ' --- Order Flow ---
         SectionHeader(rtb, "ORDER FLOW:")
         AppendRtf(rtb, "  OFI Ratio: ", C_LABEL)
         Dim ofiColour As Color = If(r.OFIRatio > 1.2, C_GOOD, If(r.OFIRatio < 0.8, C_BAD, C_VALUE))
@@ -481,20 +438,18 @@ Partial Public Class MainForm
             Case "BEAR_ACCEL" : microColour = C_BAD
             Case "BULL_DECEL" : microColour = Color.FromArgb(120, 200, 120)
             Case "BEAR_DECEL" : microColour = Color.FromArgb(220, 130, 130)
-            Case Else         : microColour = C_VALUE
+            Case Else : microColour = C_VALUE
         End Select
         AppendRtf(rtb, String.Format("E:{0:F0}  M:{1:F0}  L:{2:F0}  |  {3}  |  {4}",
                                       r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
                                       r.MicroCVDMomentum, r.MicroCVDSignal) & Environment.NewLine, microColour)
 
-        ' --- Liquidations ---
         SectionHeader(rtb, "LIQUIDATIONS:")
         AppendRtf(rtb, "  ", C_LABEL)
         Dim liqColour As Color = If(r.LiqSignal <> "NONE", C_WARN, C_DIM)
         AppendRtf(rtb, String.Format("Long: {0:F0}  |  Short: {1:F0}  |  Signal: {2}",
                                       r.LiqLongSize, r.LiqShortSize, r.LiqSignal) & Environment.NewLine, liqColour)
 
-        ' --- MTF Gate ---
         SectionHeader(rtb, "MTF GATE (15m): " & If(r.MTFGatePass, "PASS", "BLOCK"))
         Dim mtfColour As Color = If(r.MTFGatePass, C_GOOD, C_BAD)
         AppendRtf(rtb, "  15m Trend: ", C_LABEL)
@@ -503,16 +458,20 @@ Partial Public Class MainForm
         AppendRtf(rtb, "  Reason: ", C_LABEL)
         AppendRtf(rtb, r.MTFGateReason & Environment.NewLine, C_DIM)
 
-        ' --- Funding ---
-        ' fix: r.FundingRate is stored as raw rate (e.g. 5.2E-06).
-        ' Multiply by 100 to convert to percentage before F4 formatting.
         SectionHeader(rtb, "FUNDING:")
         AppendRtf(rtb, "  Rate: ", C_LABEL)
         Dim fundColour As Color = If(r.FundingBias.Contains("HEAVILY"), C_BAD,
                                      If(r.FundingBias = "NEUTRAL", C_VALUE, C_WARN))
         AppendRtf(rtb, String.Format("{0:F4}%  |  {1}", r.FundingRate * 100, r.FundingBias) & Environment.NewLine, fundColour)
+        AppendRtf(rtb, "  Momentum: ", C_LABEL)
+        Dim fundMomColour As Color = If(r.FundingMomentum = "RISING", C_WARN,
+                                        If(r.FundingMomentum = "FALLING", C_GOOD, C_VALUE))
+        AppendRtf(rtb, String.Format("{0}  |  Enabled: {1}  |  Soften: +{2}  |  Amplify: -{3}",
+                                      r.FundingMomentum,
+                                      If(cfg.Indicators.Funding.MomentumEnabled, "YES", "NO"),
+                                      cfg.Indicators.Funding.MomentumSoften,
+                                      cfg.Indicators.Funding.MomentumAmplify) & Environment.NewLine, fundMomColour)
 
-        ' --- Signal Breakdown ---
         AppendRtf(rtb, Environment.NewLine, C_DIVIDER)
         Divider(rtb)
         AppendRtf(rtb, "  SIGNAL BREAKDOWN" & Environment.NewLine, C_HEADER, bold:=True)
@@ -521,8 +480,8 @@ Partial Public Class MainForm
                                       "Signal", "Long", "Short", "Note") & Environment.NewLine, C_LABEL)
         AppendRtf(rtb, "  " & New String("-"c, 70) & Environment.NewLine, C_DIVIDER)
         For Each item In v.SignalBreakdown
-            Dim lMark    As String = If(item.LongHit,  "[L]", "   ")
-            Dim sMark    As String = If(item.ShortHit, "[S]", "   ")
+            Dim lMark As String = If(item.LongHit, "[L]", "   ")
+            Dim sMark As String = If(item.ShortHit, "[S]", "   ")
             Dim hitColour As Color = If(item.LongHit OrElse item.ShortHit, C_HIT, C_DIM)
             AppendRtf(rtb, String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
                                           item.Label, lMark, sMark, item.Note) & Environment.NewLine, hitColour)
@@ -532,22 +491,21 @@ Partial Public Class MainForm
                                       "TOTAL", CDbl(v.LongScore), CDbl(v.ShortScore)) & Environment.NewLine,
                   C_VALUE, bold:=True)
 
-        ' --- Scroll to top ---
         rtb.SelectionStart = 0
         rtb.ScrollToCaret()
 
         Dim bg As Color
         Select Case v.Verdict
-            Case "STRONG LONG"  : bg = Color.FromArgb(0, 180, 90)
-            Case "LONG"         : bg = Color.FromArgb(0, 140, 60)
-            Case "WEAK LONG"    : bg = Color.FromArgb(60, 160, 60)
+            Case "STRONG LONG" : bg = Color.FromArgb(0, 180, 90)
+            Case "LONG" : bg = Color.FromArgb(0, 140, 60)
+            Case "WEAK LONG" : bg = Color.FromArgb(60, 160, 60)
             Case "STRONG SHORT" : bg = Color.FromArgb(200, 40, 40)
-            Case "SHORT"        : bg = Color.FromArgb(180, 30, 30)
-            Case "WEAK SHORT"   : bg = Color.FromArgb(180, 80, 80)
-            Case Else           : bg = Color.DimGray
+            Case "SHORT" : bg = Color.FromArgb(180, 30, 30)
+            Case "WEAK SHORT" : bg = Color.FromArgb(180, 80, 80)
+            Case Else : bg = Color.DimGray
         End Select
         lblVerdict.BackColor = bg
-        lblVerdict.Text      = v.Verdict & "  [" & v.Confidence & "]"
+        lblVerdict.Text = v.Verdict & "  [" & v.Confidence & "]"
     End Sub
 
 End Class
