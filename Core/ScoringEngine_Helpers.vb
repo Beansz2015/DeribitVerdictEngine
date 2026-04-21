@@ -14,13 +14,22 @@
 
 Partial Public Class ScoringEngine
 
-    ' Regime-specific max achievable scores
-    ' +2 vs previous values: TFI (Microstructure) + MicroCVD (Microstructure)
-    Public Shared Function RegimeMaxScore(regime As String) As Integer
+    ' Regime-specific max achievable scores.
+    ' +2 vs previous values: TFI (Microstructure) + MicroCVD (Microstructure).
+    ' cfg param: when cfg.RegimeWeights.Enabled, adds AlignmentBonus headroom for TRENDING/RANGE_BOUND
+    ' so the Pass 2c bonus fits within the ceiling and verdict % thresholds auto-adjust.
+    Public Shared Function RegimeMaxScore(regime As String, cfg As EngineSettings) As Integer
+        Dim baseMax As Integer
         Select Case regime
-            Case "TRENDING_UP", "TRENDING_DOWN" : Return 19
-            Case "RANGE_BOUND"                  : Return 18
-            Case Else                           : Return 15   ' TRANSITIONAL
+            Case "TRENDING_UP", "TRENDING_DOWN" : baseMax = 19
+            Case "RANGE_BOUND"                  : baseMax = 18
+            Case Else                           : baseMax = 15
+        End Select
+        If Not cfg.RegimeWeights.Enabled Then Return baseMax
+        Select Case regime
+            Case "TRENDING_UP", "TRENDING_DOWN" : Return baseMax + cfg.RegimeWeights.Trending.AlignmentBonus
+            Case "RANGE_BOUND"                  : Return baseMax + cfg.RegimeWeights.RangeBound.AlignmentBonus
+            Case Else                           : Return baseMax
         End Select
     End Function
 

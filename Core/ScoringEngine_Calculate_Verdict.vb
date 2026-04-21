@@ -16,7 +16,7 @@ Partial Public Class ScoringEngine
         Dim res As New VerdictResult()
         Dim state As New ScoreState()
 
-        Dim regimeMax As Integer = RegimeMaxScore(r.Regime)
+        Dim regimeMax As Integer = RegimeMaxScore(r.Regime, cfg)
         res.MaxScore = regimeMax
 
         ' -- Steps 2 / Pass 2 / Steps 3/3b -----------------------------------

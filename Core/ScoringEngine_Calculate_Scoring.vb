@@ -8,6 +8,7 @@
 '   - Signal scoring pass (Step 2)
 '   - Partial upgrade pass (Pass 2)
 '   - OI x CVD cross-confirm gate (Pass 2b)
+'   - Regime alignment gate (Pass 2c)
 '   - Funding modifier (Steps 3 / 3b)
 '   - Breakdown note construction
 
@@ -329,7 +330,94 @@ Partial Public Class ScoringEngine
             End If
         End If
 
-        ' Snapshot ls/ss after Pass 2b, before funding modifiers
+        ' -- Pass 2c: Regime Alignment Gate -----------------------------------
+        ' Bonus when all active regime-key signals align with the dominant direction.
+        ' Penalty when all active regime-key signals conflict with it.
+        ' Suppressed when LongScore = ShortScore (ambiguous direction) or TRANSITIONAL.
+        ' TRENDING: EMA ribbon (1m) / ROC threshold-gated / CVD slope+sign.
+        ' RANGE_BOUND: VWAP dev (active only outside warmup) / RSI(9) vs 50 / Donchian(20).
+        Dim regimeAlignNote     As String  = ""
+        Dim regimeAlignLongHit  As Boolean = False
+        Dim regimeAlignShortHit As Boolean = False
+
+        If cfg.RegimeWeights.Enabled AndAlso state.LongScore <> state.ShortScore Then
+            Dim p2cIsLong    As Boolean = state.LongScore > state.ShortScore
+            Dim isTrending   As Boolean = (r.Regime = "TRENDING_UP" OrElse r.Regime = "TRENDING_DOWN")
+            Dim isRangeBound As Boolean = (r.Regime = "RANGE_BOUND")
+
+            If isTrending Then
+                Dim emaAligned As Boolean = If(p2cIsLong, r.EMAAlignment = "BULL", r.EMAAlignment = "BEAR")
+                Dim rocActive  As Boolean = Math.Abs(r.ROC) >= cfg.Indicators.ROC.SlopeSensitivity
+                Dim rocAligned As Boolean = rocActive AndAlso If(p2cIsLong, r.ROC > 0, r.ROC < 0)
+                Dim cvdAligned As Boolean = If(p2cIsLong,
+                                               r.CVDSlope = "RISING"  AndAlso r.CVDValue > 0,
+                                               r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0)
+
+                Dim activeCount  As Integer = 2 + If(rocActive, 1, 0)
+                Dim alignedCount As Integer = (If(emaAligned, 1, 0)) +
+                                              (If(rocAligned, 1, 0)) +
+                                              (If(cvdAligned, 1, 0))
+                Dim sigLabel     As String  = If(rocActive, "EMA+ROC+CVD", "EMA+CVD")
+                Dim rocSuffix    As String  = If(rocActive, "", " (ROC neutral)")
+
+                If alignedCount = activeCount Then
+                    Dim bonus As Integer = cfg.RegimeWeights.Trending.AlignmentBonus
+                    If p2cIsLong Then
+                        state.LongScore  = Math.Min(state.LongScore  + bonus, regimeMax)
+                        regimeAlignLongHit = True
+                    Else
+                        state.ShortScore = Math.Min(state.ShortScore + bonus, regimeMax)
+                        regimeAlignShortHit = True
+                    End If
+                    regimeAlignNote = String.Format("+{0} REGIME ALIGN [TRENDING: {1} ✓{2}]", bonus, sigLabel, rocSuffix)
+                ElseIf alignedCount = 0 Then
+                    Dim penalty As Integer = cfg.RegimeWeights.Trending.ConflictPenalty
+                    If p2cIsLong Then
+                        state.LongScore  = Math.Max(0, state.LongScore  - penalty)
+                    Else
+                        state.ShortScore = Math.Max(0, state.ShortScore - penalty)
+                    End If
+                    regimeAlignNote = String.Format("-{0} REGIME CONFLICT [TRENDING: {1} ✗{2}]", penalty, sigLabel, rocSuffix)
+                End If
+
+            ElseIf isRangeBound Then
+                Dim vwapActive   As Boolean = Not vwapWarmup
+                Dim vwapAligned  As Boolean = vwapActive AndAlso If(p2cIsLong, r.CurrentPrice > r.VWAP, r.CurrentPrice < r.VWAP)
+                Dim rsiAligned   As Boolean = If(p2cIsLong, r.RSI > 50, r.RSI < 50)
+                Dim donchAligned As Boolean = If(p2cIsLong,
+                                                 r.DonchianSignal = "LONG"  OrElse r.DonchianSignal = "LONG_PARTIAL",
+                                                 r.DonchianSignal = "SHORT" OrElse r.DonchianSignal = "SHORT_PARTIAL")
+
+                Dim activeCount  As Integer = 2 + If(vwapActive, 1, 0)
+                Dim alignedCount As Integer = (If(vwapAligned, 1, 0)) +
+                                              (If(rsiAligned, 1, 0)) +
+                                              (If(donchAligned, 1, 0))
+                Dim sigLabel     As String  = If(vwapActive, "VWAP+RSI+DON", "RSI+DON")
+                Dim vwapSuffix   As String  = If(vwapActive, "", " (VWAP warmup)")
+
+                If alignedCount = activeCount Then
+                    Dim bonus As Integer = cfg.RegimeWeights.RangeBound.AlignmentBonus
+                    If p2cIsLong Then
+                        state.LongScore  = Math.Min(state.LongScore  + bonus, regimeMax)
+                        regimeAlignLongHit = True
+                    Else
+                        state.ShortScore = Math.Min(state.ShortScore + bonus, regimeMax)
+                        regimeAlignShortHit = True
+                    End If
+                    regimeAlignNote = String.Format("+{0} REGIME ALIGN [RANGE: {1} ✓{2}]", bonus, sigLabel, vwapSuffix)
+                ElseIf alignedCount = 0 Then
+                    Dim penalty As Integer = cfg.RegimeWeights.RangeBound.ConflictPenalty
+                    If p2cIsLong Then
+                        state.LongScore  = Math.Max(0, state.LongScore  - penalty)
+                    Else
+                        state.ShortScore = Math.Max(0, state.ShortScore - penalty)
+                    End If
+                    regimeAlignNote = String.Format("-{0} REGIME CONFLICT [RANGE: {1} ✗{2}]", penalty, sigLabel, vwapSuffix)
+                End If
+            End If
+        End If
+
+        ' Snapshot ls/ss after Pass 2c, before funding modifiers
         ls = state.LongScore
         ss = state.ShortScore
 
@@ -496,6 +584,10 @@ Partial Public Class ScoringEngine
 
         breakdown.Add(New SignalBreakdownItem("VPFR-lite", vpfrLong, vpfrShort,
             String.Format("POC:{0:F0} | {1} | HVN@POC:{2}", r.VPFRPoc, r.VPFRSignal, If(r.VPFRHVNearPoc, "YES", "NO"))))
+
+        If regimeAlignNote <> "" Then
+            breakdown.Add(New SignalBreakdownItem("Regime Align (2c)", regimeAlignLongHit, regimeAlignShortHit, regimeAlignNote))
+        End If
 
     End Sub
 

@@ -59,6 +59,12 @@
 ' Session-aware volume norms: Added SessionVolumeSettings class and SessionVolume property on EngineSettings.
 '        Used by DynamicNorms.Compute() to scale volume thresholds by UTC session bucket.
 '        Supports ASIA / LONDON / NY buckets with per-session high/mid multipliers.
+' Pass 2c regime alignment gate: Added RegimeWeightSettings (with nested RegimeAlignSettings) and
+'        RegimeWeights property on EngineSettings. Controls RunRegimeAlignmentPass() in
+'        ScoringEngine_Calculate_Scoring. Enabled (default True).
+'        Trending: EMA ribbon + ROC (threshold-gated) + CVD gate. AlignmentBonus=1, ConflictPenalty=1.
+'        RangeBound: VWAP dev (if not warmup) + RSI(9) vs 50 + Donchian. Same defaults.
+'        RegimeMaxScore() now takes cfg param; MaxScore bumped +AlignmentBonus for TRENDING/RANGE_BOUND.
 
 Imports System.Text.Json.Serialization
 
@@ -95,6 +101,9 @@ Public Class EngineSettings
 
     <JsonPropertyName("session_volume")>
     Public Property SessionVolume As New SessionVolumeSettings
+
+    <JsonPropertyName("regime_weights")>
+    Public Property RegimeWeights As New RegimeWeightSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -443,6 +452,29 @@ Public Class ScoringSettings
     ''' to classify verdict as FLOW_UNCONFIRMED. Default 1.
     ''' </summary>
     <JsonPropertyName("context_tag_flow_max")>       Public Property ContextTagFlowMax       As Integer = 1
+End Class
+
+' ---------------------------------------------------------------------------
+' Regime gate settings
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' [Pass 2c] Regime alignment gate — bonus/penalty when all active regime-key signals agree or conflict.
+''' Enabled: master switch. Default True.
+''' Trending signals: EMA ribbon (1m), ROC(9) threshold-gated, CVD slope+value.
+''' RangeBound signals: VWAP deviation (suppressed in warmup), RSI(9) vs 50, Donchian(20).
+''' TRANSITIONAL: gate is suppressed. Gate also suppressed when LongScore = ShortScore.
+''' RegimeMaxScore() adds AlignmentBonus headroom when Enabled so thresholds auto-adjust.
+''' </summary>
+Public Class RegimeWeightSettings
+    <JsonPropertyName("enabled")>      Public Property Enabled    As Boolean = True
+    <JsonPropertyName("trending")>     Public Property Trending   As New RegimeAlignSettings
+    <JsonPropertyName("range_bound")>  Public Property RangeBound As New RegimeAlignSettings
+End Class
+
+Public Class RegimeAlignSettings
+    <JsonPropertyName("alignment_bonus")>   Public Property AlignmentBonus   As Integer = 1
+    <JsonPropertyName("conflict_penalty")>  Public Property ConflictPenalty  As Integer = 1
 End Class
 
 ' ---------------------------------------------------------------------------

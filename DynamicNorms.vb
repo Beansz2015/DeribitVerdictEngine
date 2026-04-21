@@ -47,8 +47,8 @@ Public Class DynamicNorms
         End If
 
         ' -- Method 1a: Volume normalization ----------------------------------
-        Dim volWindow = candles1m.Take(Math.Min(100, candles1m.Count - 1)).\
-                                  Select(Function(c) c.Volume).ToList()
+        Dim volWindow = candles1m.Take(Math.Min(100, candles1m.Count - 1)) _
+                                  .Select(Function(c) c.Volume).ToList()
         If volWindow.Count < 10 Then
             Return StaticFallback(currentATR)
         End If

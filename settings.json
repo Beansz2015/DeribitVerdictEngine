@@ -1,8 +1,18 @@
 {
-  "version": 12,
-  "last_modified": "2026-04-21T01:09:00Z",
-  "modified_by": "session-volume-norms",
+  "version": 13,
+  "last_modified": "2026-04-21T10:00:00Z",
+  "modified_by": "adaptive-regime-weights",
   "change_log": [
+    "v13: [adaptive-regime-weights] Added 'regime_weights' top-level block (Pass 2c).",
+    "     enabled: true  -- master switch; set false to bypass gate entirely.",
+    "     trending.alignment_bonus: 1   -- added when EMA+ROC(gated)+CVD all align with direction.",
+    "     trending.conflict_penalty: 1  -- deducted when all three conflict.",
+    "     range_bound.alignment_bonus/conflict_penalty: 1/1 for VWAP dev+RSI(9)vs50+Donchian.",
+    "     TRANSITIONAL: gate suppressed. Zero-net-score run: gate suppressed.",
+    "     ROC active only when Abs(ROC) >= indicators.ROC.slope_sensitivity.",
+    "     VWAP active only when VWAP not in warmup (VWAPSessionCandles >= VWAP.warmup_candles).",
+    "     RegimeMaxScore bumped +1 for TRENDING (19→20) and RANGE_BOUND (18→19).",
+    "     Verdict % thresholds auto-adjust via Math.Ceiling(regimeMax * pct).",
     "v12: [session-volume-norms] Added top-level 'session_volume' block.",
     "     enabled: true  -- master switch; set false to bypass session scaling entirely.",
     "     sessions: 3 UTC bucket entries (ASIA 00-07, LONDON 08-12, NY 13-23).",
@@ -186,5 +196,16 @@
     "transitional_adx_penalty_high": 25.0,
     "transitional_penalty_low": 2,
     "transitional_penalty_mid": 1
+  },
+  "regime_weights": {
+    "enabled": true,
+    "trending": {
+      "alignment_bonus": 1,
+      "conflict_penalty": 1
+    },
+    "range_bound": {
+      "alignment_bonus": 1,
+      "conflict_penalty": 1
+    }
   }
 }
