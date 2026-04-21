@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-21 | Current version: session-volume-norms complete + OI×CVD docs sync (settings v12)**
+**Last updated: 2026-04-21 | Current version: adaptive-regime-weights (Pass 2c) shipped (settings v13)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 
@@ -23,6 +23,12 @@ config/UI/docs surface has been updated to support that behaviour. The already-i
 **OI × CVD cross-confirm** feature is also now considered part of the shipped scoring pipeline:
 `RunScoringPipeline()` includes a Pass 2b gate that rewards confirmed OI/CVD alignment and
 penalises direct conflict for full OI signals.
+
+In addition, the scoring pipeline now includes a Pass 2c **regime-alignment gate**:
+when `cfg.RegimeWeights.Enabled` and the dominant side is non-zero, all active
+regime-key signals are checked for alignment (TRENDING: EMA+ROC+CVD;
+RANGE_BOUND: VWAP+RSI+Donchian). Full alignment earns `AlignmentBonus`; full
+conflict incurs `ConflictPenalty`. TRANSITIONAL and tied scores bypass the gate.
 
 ---
 
@@ -48,7 +54,7 @@ penalises direct conflict for full OI signals.
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
 | `SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton |
-| `settings.json` | v12 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, and `session_volume` blocks |
+| `settings.json` | v13 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, and `regime_weights` blocks |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -60,12 +66,13 @@ penalises direct conflict for full OI signals.
 | `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore, Threshold, TierFloor, AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus |
 | `Core/ScoringEngine_Calculate_Scoring.vb` | `AppendLean()`, `CalcVerdictContext()`, `RunScoringPipeline()` — Steps 2 / Pass 2 / Pass 2b / 3 / 3b: signal scoring, partial upgrades, OI×CVD cross-confirm, funding modifiers, breakdown note rows |
 | `Core/ScoringEngine_Calculate_Verdict.vb` | `Calculate()` entry point — Step 4 regime veto / TRANSITIONAL penalty, Step 4b MTF gate veto, Step 5 verdict generation, ATR target cap |
+| `Core/ScoringEngine_Kelly.vb` | `CalcKellySizing()` — display-only Kelly sizing. Called from `MainForm_Render_Header`, not from `ScoringEngine.Calculate()`. Zero scoring impact. See `docs/kelly-criterion-proposal.md`. |
 | `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields incl. `FundingMomentum` |
-| `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
+| `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
 | `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
 | `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcLiquidations, CalcCVD, CalcMicroCVD, CalcTFI, CalcFundingMomentum |
 | `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite, CalcMTFGate |
-| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings, FundingSettings, OiCvdSettings, and SessionVolumeSettings |
+| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings, FundingSettings, OiCvdSettings, SessionVolumeSettings, and RegimeWeightSettings |
 
 ### UI/
 
@@ -100,7 +107,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 ### Core Signals (always scored)
 | Indicator | Method | Config keys |
 |---|---|---|
-| ROC(9) | CalcROCSeries | `cfg.Indicators.ROC.PartialThreshold` (0.1) |
+| ROC(9) | CalcROCSeries | `cfg.Indicators.ROC.SlopeSensitivity` (0.1) — gates partial scoring and Pass 2c ROC-active check |
 | RSI(9) | CalcRSI | `Overbought` (60) / `Oversold` (40) / `PartialOverbought` (50) / `PartialOversold` (50) |
 | RSI Divergence | CalcRSIDivergence | −1 long: BEARISH + RSI > `DivPenaltyRsiHigh` (65); −1 short: BULLISH + RSI < `DivPenaltyRsiLow` (35). `PivotWing` (2), `LookbackBars` (20) from cfg. |
 | DMI/ADX | CalcDMI | 5m candles. `cfg.Indicators.ADX.TrendThreshold` (25) |
@@ -158,7 +165,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v12**.
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v13**.
 
 ```
 settings.json
@@ -184,10 +191,14 @@ settings.json
     oi_cvd_cross:  { enabled (true), upgrade_bonus (1), conflict_penalty (1) }
   session_volume:
     enabled: true
-    asia:          { start_hour_utc, end_hour_utc, vol_high_mult, vol_mid_mult }
-    london:        { start_hour_utc, end_hour_utc, vol_high_mult, vol_mid_mult }
-    ny:            { start_hour_utc, end_hour_utc, vol_high_mult, vol_mid_mult }
-    fallback:      { vol_high_mult (1.0), vol_mid_mult (1.0) }
+    sessions: [                      (ordered list; first hour match wins)
+      { name: "ASIA",   start_hour: 0,  end_hour: 7,
+        high_multiplier: 0.80, mid_multiplier: 0.85 },
+      { name: "LONDON", start_hour: 8,  end_hour: 12,
+        high_multiplier: 1.00, mid_multiplier: 1.00 },
+      { name: "NY",     start_hour: 13, end_hour: 23,
+        high_multiplier: 1.15, mid_multiplier: 1.10 }
+    ]
   scoring:
     verdictStrongPct / verdictMedPct / verdictWeakPct
     fundingHighPositive / fundingLowPositive
@@ -205,6 +216,10 @@ settings.json
     min_calibration_samples (30)
     est_prob_floor (0.45)
     est_prob_scale (0.20)
+  regime_weights:
+    enabled: true
+    trending:    { alignment_bonus (1), conflict_penalty (1) }
+    range_bound: { alignment_bonus (1), conflict_penalty (1) }
 ```
 
 Session volume norms now let the engine scale volume thresholds by UTC session bucket so
@@ -218,11 +233,12 @@ indicator methods.
 
 ## 7. ScoringEngine — Key Behaviours
 
-- **MaxScore:** 19 (TRENDING), 18 (RANGE_BOUND), 15 (TRANSITIONAL)
+- **MaxScore:** base 19 (TRENDING), 18 (RANGE_BOUND), 15 (TRANSITIONAL). With RegimeWeights.Enabled (default), TRENDING → 20 and RANGE_BOUND → 19 (base + Trending/RangeBound AlignmentBonus). TRANSITIONAL unchanged.
 - **Verdict thresholds:** `Math.Ceiling(regimeMax * pct)` — no hardcoded magic numbers
 - **Step 2:** Score signals into ScoreState → all thresholds from cfg
 - **Pass 2:** Upgrade partials on cross-category confirmation; OBV upgrade blocked on adverse divergence
 - **Pass 2b:** OI × CVD cross-confirm gate — if OI full signal (or upgraded partial) and CVD direction+sign agree, apply `UpgradeBonus`; if full OI directly conflicts with CVD, apply `ConflictPenalty`; partial OI conflict is non-penalising
+- **Pass 2c:** Regime alignment gate — suppressed in TRANSITIONAL and when LongScore=ShortScore. TRENDING checks EMA ribbon + ROC (active when Abs(ROC)≥SlopeSensitivity) + CVD slope+sign. RANGE_BOUND checks VWAP dev (active only outside warmup) + RSI(9) vs 50 + Donchian(20). All active aligned → `+AlignmentBonus` (capped at regimeMax). All conflict → `-ConflictPenalty`. RegimeMaxScore() adds the bonus to the ceiling when enabled so verdict % thresholds auto-adjust.
 - **Step 3:** Baseline funding-rate modifier
 - **Step 3b:** Funding-momentum modifier — can soften crowding penalty when momentum is falling, or amplify it when momentum is rising into crowding
 - **Step 4:** Regime veto / TRANSITIONAL ADX penalty
@@ -315,7 +331,7 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 | **Funding rate momentum** | Funding momentum now implemented end-to-end: `FundingMomentum` field on `IndicatorResults`, `CalcFundingMomentum()` in `Indicators_OrderFlow`, funding history accumulation in `MainForm_Analysis`, config surface in `EngineSettings` and `settings.json`, Step 3b modifier in `ScoringEngine_Calculate_Scoring`, and UI display row in `MainForm_Render_Sections`. | ✅ IMPLEMENTED 2026-04-20 |
 | **Session-aware volume norms** | `DynamicNorms` now applies UTC session buckets (ASIA / LONDON / NY) via `ApplySessionVolume()`, backed by `SessionVolumeSettings` in `EngineSettings` and `session_volume` in `settings.json`, so `VolHighThreshold` / `VolMidThreshold` adapt to time-of-day liquidity instead of using a single global expectation. | ✅ IMPLEMENTED 2026-04-21 |
 | **OI × CVD cross-confirm** | `RunScoringPipeline()` now includes Pass 2b after partial upgrades: when OI and CVD direction/sign confirm, the relevant side gets `UpgradeBonus`; when full OI directly conflicts with CVD, the relevant side gets `ConflictPenalty`; upgraded partial OI signals can confirm but partial conflict does not penalise. Backed by `OiCvdSettings` / `indicators.oi_cvd_cross`, and surfaced in the `OI Delta` breakdown note. | ✅ IMPLEMENTED 2026-04-21 (docs sync) |
-| Adaptive scoring weights by regime | `MaxScore` is regime-adjusted but per-indicator weights are fixed. In TRENDING, EMA ribbon + DMI should carry more weight; in RANGE_BOUND, VWAP bands + Donchian should dominate. Static weights over-score weak signals for the current regime context. Requires per-regime weight multipliers in `EngineSettings` and scoring pipeline. | 🔍 Spec needed |
+| Adaptive scoring weights by regime | Regime-aware alignment bonus/penalty implemented as Pass 2c in `RunScoringPipeline()`. Spec: `docs/adaptive-regime-weights-proposal.md`. Per-indicator weight multipliers remain static; only a single alignment/conflict scalar is applied per regime. A full per-indicator weighting scheme would require a further spec. | ✅ IMPLEMENTED 2026-04-21 (Pass 2c) |
 
 ### Moderate-Impact (diminishing returns territory)
 
@@ -357,6 +373,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-21** | [adaptive-regime-weights] Pass 2c regime-alignment gate shipped. Added `RegimeWeightSettings` to `EngineSettings`; added `regime_weights` top-level block to `settings.json` (v13). `RegimeMaxScore()` now takes `cfg` and returns baseMax + AlignmentBonus for TRENDING/RANGE_BOUND when enabled, so TRENDING ceiling goes 19→20 and RANGE_BOUND 18→19 by default. Verdict % thresholds auto-adjust. Spec: `docs/adaptive-regime-weights-proposal.md`. |
 | **2026-04-21** | Documentation sync: OI × CVD cross-confirm marked as shipped after code review. Handover updated to note Pass 2b in `RunScoringPipeline()`, add `OiCvdSettings` / `indicators.oi_cvd_cross` to config surface, update future upgrades/backlog status, and add calibration/logging follow-up notes for the feature. |
 | **2026-04-21** | Session-volume-norms feature fully documented as shipped. Handover updated to settings v12, `DynamicNorms.ApplySessionVolume()` note added, `SessionVolumeSettings` and `session_volume` config documented, and Section 13 status updated to mark session-aware volume norms as implemented. |
 | **2026-04-20** | Refactor split completed: `Core/ScoringEngine_Calculate.vb` replaced by `ScoringEngine_Calculate_Scoring.vb` + `ScoringEngine_Calculate_Verdict.vb`; `UI/MainForm_Render.vb` replaced by `MainForm_Render_Header.vb` + `MainForm_Render_Sections.vb`. Docs updated to reflect new structure. |

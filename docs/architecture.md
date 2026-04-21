@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-21 | App version: session-volume-norms complete + OI×CVD docs sync / settings v12**
+**Last updated: 2026-04-21 | App version: adaptive-regime-weights (Pass 2c) shipped / settings v13**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -21,13 +21,14 @@ DeribitVerdictEngine/
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
 ├── SettingsLoader.vb                   JSON loader — SettingsLoader.Current singleton
-├── settings.json                       All tunable parameters v12 (no recompile needed)
+├── settings.json                       All tunable parameters v13 (no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
 │   │   └── EngineSettings.vb           Strongly-typed POCO for settings.json
 │   │                                   Includes KellySettings + FundingSettings +
-│   │                                   OiCvdSettings + SessionVolumeSettings blocks
+│   │                                   OiCvdSettings + SessionVolumeSettings +
+│   │                                   RegimeWeightSettings blocks
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,
@@ -49,10 +50,13 @@ DeribitVerdictEngine/
 │   │                                   Step 5: threshold comparison → verdict string;
 │   │                                   Step 5b: ATR target cap (VPFR HVN).
 │   │                                   Split from ScoringEngine_Calculate.vb.
+│   ├── ScoringEngine_Kelly.vb          CalcKellySizing() — display-only Kelly Criterion
+│   │                                   sizing. Called from MainForm_Render after ATR levels,
+│   │                                   not from ScoringEngine.Calculate(). Zero scoring impact.
 │   │
 │   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
 │   │                                   incl. FundingMomentum (RISING/FALLING/FLAT)
-│   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI,
+│   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcRSI,
 │   │                                   CalcRSISeries, CalcRSIDivergence, CalcROCSeries,
 │   │                                   CalcVolumeSMA
 │   ├── Indicators_Volatility.vb        CalcVWAP (dual-session auto-anchor),
@@ -179,7 +183,9 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ScoringEngine.Calculate(r, posState, norms, cfg)
         [ScoringEngine_Calculate_Verdict.vb → calls RunScoringPipeline in _Scoring.vb]
                     │
-                    ├─ Step 1:  Regime classification → MaxScore (19/18/15)
+                    ├─ Step 1:  Regime classification → MaxScore.
+                    │          Base 19/18/15; with RegimeWeights.Enabled (default)
+                    │          20/19/15 (base + Trending/RangeBound AlignmentBonus).
                     ├─ Step 2:  Score each signal → ScoreState
                     │          All thresholds from cfg. Scoring highlights:
                     │          ─ BBW squeeze penalty (cfg.Scoring.BbwSqueezePenalty)
@@ -195,6 +201,17 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          Upgraded partial OI signals (COVERING/CAPITULATION)
                     │          can confirm, but partial conflict is not penalised.
                     │          Result is appended to the OI Delta breakdown note.
+                    ├─ Pass 2c: Regime alignment gate
+                    │          Suppressed in TRANSITIONAL or when LongScore=ShortScore.
+                    │          TRENDING: EMA ribbon + ROC (threshold-gated by
+                    │          SlopeSensitivity) + CVD slope+sign.
+                    │          RANGE_BOUND: VWAP dev (suppressed in warmup) +
+                    │          RSI(9) vs 50 + Donchian(20).
+                    │          All active signals aligned → +AlignmentBonus on dominant
+                    │          side (capped at regimeMax). All conflict → -ConflictPenalty.
+                    │          Reads cfg.RegimeWeights.{Trending|RangeBound}.
+                    │          {AlignmentBonus,ConflictPenalty}. ls/ss snapshot taken
+                    │          AFTER this pass, before funding modifiers.
                     ├─ Step 3:  Baseline funding-rate modifier (penalty/boost from cfg)
                     ├─ Step 3b: Funding-momentum modifier
                     │          If FundingMomentum=RISING and funding already crowded
@@ -205,20 +222,18 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          Zero scoring impact when momentum = FLAT or disabled.
                     ├─ Step 4:  Regime veto + TRANSITIONAL ADX penalty
                     ├─ Step 4b: MTF gate veto → forces NO TRADE on BLOCK
-                    ├─ Step 4c: VPFR HVN cap → sets AdjustedLongTarget / AdjustedShortTarget
                     ├─ Step 5:  Threshold comparison → verdict string
-                    ├─ Step 5b: CalcVerdictContext() → VerdictResult.VerdictContext
-                    │          Classifies: FLOW_UNCONFIRMED / MOMENTUM_FADING /
-                    │          STRUCTURALLY_WEAK / CONFIRMED
-                    │          Reads already-computed ScoreState + IndicatorResults only.
-                    │          Zero scoring impact. See docs/verdict-context-tag-proposal.md.
-                    ├─ Step 6:  CalcHoldStatus → hold/exit/flip guidance
-                    ├─ Step 7:  ATR entry/stop/target from cfg multipliers
-                    └─ Post:    CalcKellySizing(v, cfg) → Kelly fields on VerdictResult
-                               Half-Kelly, 5% hard cap, $1,000 account, $10 contract face.
-                               [EST] mode pre-calibration / [CAL] mode post.
-                               Display-only. Zero scoring impact.
-                               See docs/kelly-criterion-proposal.md.
+                    ├─ Step 5 (post): CalcVerdictContext → VerdictResult.VerdictContext
+                    │          (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK /
+                    │          CONFIRMED). Zero scoring impact.
+                    │          See docs/verdict-context-tag-proposal.md.
+                    ├─ Step 5 (post): CalcHoldStatus → hold/exit/flip guidance.
+                    └─ Step 5b: VPFR HVN cap → AdjustedLongTarget / AdjustedShortTarget.
+                               Runs last in ScoringEngine.Calculate().
+
+                    (Kelly sizing is NOT invoked here. CalcKellySizing() is called from
+                     MainForm_Render_Header.RenderOutputHeader() after ATR entry levels
+                     are rendered. See docs/kelly-criterion-proposal.md.)
                     │
                     ▼
         VerdictResult  v
@@ -257,7 +272,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 ## Settings Data Flow
 
 ```
-settings.json (v12)
+settings.json (v13)
     │
     ▼
 SettingsLoader.Initialise()
@@ -273,12 +288,20 @@ SettingsLoader.Current As EngineSettings
     │     ├─ enabled
     │     ├─ upgrade_bonus
     │     └─ conflict_penalty
-    └─ SessionVolumeSettings
+    ├─ SessionVolumeSettings
+    │      ├─ enabled
+    │      └─ sessions[]  — ordered list of UTC buckets, each:
+    │           { name, start_hour, end_hour,
+    │             high_multiplier, mid_multiplier }
+    │         Current settings.json populates ASIA (00–07, 0.80/0.85),
+    │         LONDON (08–12, 1.00/1.00), NY (13–23, 1.15/1.10).
+    │         First bucket whose [start_hour..end_hour] contains UTC hour wins;
+    │         no implicit fallback — if no bucket matches, thresholds stay
+    │         at their DynamicNorms-computed values.
+    └─ RegimeWeightSettings
            ├─ enabled
-           ├─ asia    { start/end UTC, vol multipliers }
-           ├─ london  { start/end UTC, vol multipliers }
-           ├─ ny      { start/end UTC, vol multipliers }
-           └─ fallback { default multipliers }
+           ├─ trending    { alignment_bonus, conflict_penalty }
+           └─ range_bound { alignment_bonus, conflict_penalty }
                     │
                     ▼
 DynamicNorms.Compute(...)
@@ -313,5 +336,6 @@ RunScoringPipeline(...)
 | _fundingHistory capped at FundingHistoryMax | Funding rate changes are slow relative to 1m candles. A window of 10 samples is sufficient to detect sustained crowding direction without accumulating stale history across sessions. |
 | Session-aware volume norms in DynamicNorms | BTC volume has strong time-of-day seasonality. A single global `VolHighThreshold` / `VolMidThreshold` misclassifies quiet Asian-session participation as expansion and underweights genuine London/NY burst volume. Applying UTC session multipliers at the DynamicNorms layer preserves existing scoring logic while adapting thresholds to expected liquidity. |
 | OI × CVD as Pass 2b adjunct | OI and CVD together say more than either alone: rising/opening interest confirmed by supportive CVD is stronger than standalone OI, while a full OI build that directly opposes CVD often reflects weaker participation quality. Implementing this as a post-upgrade Pass 2b preserves existing indicator methods and lets the confirm/conflict effect be tuned independently via `OiCvdSettings`. Partial OI signals can be confirmed, but only full OI conflict is penalised, reducing false negatives on covering/capitulation transitions. |
+| Pass 2c regime alignment gate | Static per-indicator weights over-reward weak signals that disagree with the active regime. Pass 2c rewards runs where the regime-key signals are fully aligned with the dominant side and penalises full conflict, while staying suppressed in TRANSITIONAL and on zero-net scores. RegimeMaxScore() adds the alignment bonus to the ceiling when enabled so verdict % thresholds auto-adjust and the bonus cannot carry the score past saturation. |
 | ScoringEngine split into _Scoring + _Verdict | ScoringEngine_Calculate.vb exceeded 35 KB. Split into RunScoringPipeline (Steps 2–3b + breakdown notes) in _Scoring.vb and Calculate() entry point (Steps 4–5b) in _Verdict.vb. CalcVerdictContext kept in _Scoring.vb as it is called from multiple early-return paths in _Verdict.vb. |
 | MainForm_Render split into _Header + _Sections | MainForm_Render.vb exceeded 28 KB. RTF helpers + top render block (verdict/ATR/Kelly) in _Header.vb; RenderOutput() entry point + all indicator sections + breakdown table in _Sections.vb. |
