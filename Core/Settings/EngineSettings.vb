@@ -46,8 +46,8 @@
 ' Kelly: Added KellySettings class and Kelly property on EngineSettings.
 '        Used by CalcKellySizing() in MainForm_Render for display-only position sizing advisory.
 '        Defaults: AccountSizeUsd=1000, UseHalfKelly=True, MaxRiskFraction=0.05,
-'                  ContractFaceUsd=10, MinCalibrationSamples=30,
-'                  EstProbFloor=0.45, EstProbScale=0.20.
+'                  ContractFaceUsd=10, EstProbFloor=0.45, EstProbScale=0.20.
+'        CAL mode removed — EST mode only until backtesting module ships.
 ' funding-momentum: Added FundingSettings class and Indicators.Funding property.
 '        Used by CalcFundingMomentum() in Indicators_OrderFlow and Step 3b in
 '        ScoringEngine_Calculate. MomentumEnabled master switch (default True).
@@ -352,7 +352,7 @@ End Class
 ''' <summary>
 ''' Display-only position sizing parameters for the Kelly Criterion block.
 ''' All computation happens in MainForm_Render.CalcKellySizing() -- no scoring impact.
-''' EST mode active until CalibrationReport reaches READY; CAL mode deferred.
+''' EST mode only. CAL mode will be reinstated after the backtesting module is built.
 ''' </summary>
 Public Class KellySettings
     ''' <summary>Account size in USD. Default $1,000.</summary>
@@ -363,8 +363,6 @@ Public Class KellySettings
     <JsonPropertyName("max_risk_fraction")>         Public Property MaxRiskFraction       As Double  = 0.05
     ''' <summary>Deribit BTC-PERPETUAL contract face value in USD. Default $10.</summary>
     <JsonPropertyName("contract_face_usd")>         Public Property ContractFaceUsd       As Double  = 10.0
-    ''' <summary>Min logged trades per verdict tier before switching EST->CAL mode. Default 30.</summary>
-    <JsonPropertyName("min_calibration_samples")>   Public Property MinCalibrationSamples As Integer = 30
     ''' <summary>Score-to-probability band floor (pre-calibration). Default 0.45.</summary>
     <JsonPropertyName("est_prob_floor")>            Public Property EstProbFloor          As Double  = 0.45
     ''' <summary>Score-to-probability band scale range (pre-calibration). Default 0.20 -> band [0.45, 0.65].</summary>
@@ -381,12 +379,13 @@ End Class
 ''' Set Enabled=false in settings.json to bypass entirely (hot-reload safe).
 ''' </summary>
 Public Class MTFGateSettings
-    <JsonPropertyName("enabled")>           Public Property Enabled         As Boolean = True
-    <JsonPropertyName("candle_count")>      Public Property CandleCount     As Integer = 60
-    <JsonPropertyName("ema_period_fast")>   Public Property EmaPeriodFast   As Integer = 9
-    <JsonPropertyName("ema_period_slow")>   Public Property EmaPeriodSlow   As Integer = 21
-    <JsonPropertyName("dmi_period")>        Public Property DmiPeriod       As Integer = 9
-    <JsonPropertyName("required_confirms")> Public Property RequiredConfirms As Integer = 2
+    <JsonPropertyName("enabled")>           Public Property Enabled          As Boolean = True
+    <JsonPropertyName("candle_lookback")>   Public Property CandleCount      As Integer = 60
+    <JsonPropertyName("ema_period_fast")>   Public Property EmaPeriodFast    As Integer = 9
+    <JsonPropertyName("ema_period_slow")>   Public Property EmaPeriodSlow    As Integer = 21
+    <JsonPropertyName("adx_period")>        Public Property DmiPeriod        As Integer = 9
+    <JsonPropertyName("adx_min")>           Public Property AdxMin           As Double  = 20.0
+    <JsonPropertyName("min_of")>            Public Property RequiredConfirms As Integer = 2
 End Class
 
 ' ---------------------------------------------------------------------------

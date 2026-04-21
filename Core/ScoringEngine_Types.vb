@@ -55,7 +55,7 @@ Public Class VerdictResult
     Public Property KellyFApplied As Double  = 0.0
     ''' <summary>Win probability p used in the Kelly formula.</summary>
     Public Property KellyPWin     As Double  = 0.0
-    ''' <summary>Probability estimation mode: "EST" (pre-calibration) or "CAL" (post-calibration).</summary>
+    ''' <summary>Probability estimation mode. Always "EST" — CAL mode will be reinstated after the backtesting module is built.</summary>
     Public Property KellyPMode    As String  = ""
     ''' <summary>True when MaxRiskFraction cap was applied (f_half > MaxRiskFraction).</summary>
     Public Property KellyCapped   As Boolean = False

@@ -257,7 +257,7 @@ Partial Public Class MainForm
             r.MTFGatePass, r.MTFGateReason,
             proposedDirection:=mtfProposed,
             adxPeriod:=cfg.MTFGate.DmiPeriod,
-            adxMin:=cfg.Indicators.ADX.TrendThreshold,
+            adxMin:=cfg.MTFGate.AdxMin,
             minOf:=cfg.MTFGate.RequiredConfirms,
             candleLookback:=cfg.MTFGate.CandleCount)
 

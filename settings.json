@@ -37,7 +37,7 @@
     "     funding_high_negative: -0.001  -> -0.0001",
     "     funding_low_negative:  -0.0005 -> -0.00005",
     "     Conservative starting points for BTC-PERPETUAL. Review after 50+ runs.",
-    "v8: [Kelly] Added kelly block (account_size_usd, use_half_kelly, max_risk_fraction, contract_face_usd, min_calibration_samples, est_prob_floor, est_prob_scale).",
+    "v8: [Kelly] Added kelly block (account_size_usd, use_half_kelly, max_risk_fraction, contract_face_usd, est_prob_floor, est_prob_scale). CAL mode removed; EST mode only until backtesting module ships.",
     "v7: [Step 5b] Added context_tag_structural_min (default 3) and context_tag_flow_max (default 1) to scoring block. Used by CalcVerdictContext() to classify FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK.",
     "v6: [P10/P11/P12] v0.49: Added scoring penalty/multiplier keys (atr_target_multiplier, atr_stop_multiplier, bbw_squeeze_penalty, liq_standard_penalty, liq_large_penalty, funding_high_penalty, funding_high_boost, funding_low_penalty)",
     "v5: Added auto_run block (enabled, interval_minutes, interval_seconds)",
@@ -134,13 +134,10 @@
   },
   "mtf_gate": {
     "enabled": true,
-    "mode": "soft",
-    "timeframe_minutes": 15,
     "candle_lookback": 60,
     "adx_period": 9,
     "adx_min": 20.0,
-    "min_of": 2,
-    "block_action": "no_trade"
+    "min_of": 2
   },
   "auto_run": {
     "enabled": false,
@@ -184,7 +181,6 @@
     "use_half_kelly": true,
     "max_risk_fraction": 0.05,
     "contract_face_usd": 10.0,
-    "min_calibration_samples": 30,
     "est_prob_floor": 0.45,
     "est_prob_scale": 0.20
   },

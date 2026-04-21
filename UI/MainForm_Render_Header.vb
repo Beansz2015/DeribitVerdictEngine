@@ -306,12 +306,14 @@ Partial Public Class MainForm
             Dim capTag As String = If(v.KellyCapped, "  [CAPPED]", "")
             AppendRtf(rtb, Environment.NewLine, C_DIVIDER)
             If isNoTradeBias Then
-                AppendRtf(rtb, String.Format("KELLY SIZING  [BIAS ONLY — NO TRADE] [{0}]{1}" & Environment.NewLine,
-                                              v.KellyPMode, capTag), C_HEADER, bold:=True)
+                AppendRtf(rtb, String.Format("KELLY SIZING  [BIAS ONLY — NO TRADE]{0}" & Environment.NewLine,
+                                              capTag), C_HEADER, bold:=True)
             Else
-                AppendRtf(rtb, String.Format("KELLY SIZING  [{0}]{1}" & Environment.NewLine,
-                                              v.KellyPMode, capTag), C_HEADER, bold:=True)
+                AppendRtf(rtb, String.Format("KELLY SIZING{0}" & Environment.NewLine,
+                                              capTag), C_HEADER, bold:=True)
             End If
+            AppendRtf(rtb, "  Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets." & Environment.NewLine, C_DIM)
+            AppendRtf(rtb, "  Treat as directional bias indicator only." & Environment.NewLine, C_DIM)
             AppendRtf(rtb, "  p(win):   ", C_LABEL)
             AppendRtf(rtb, String.Format("{0:P1}" & Environment.NewLine, v.KellyPWin), C_VALUE)
             AppendRtf(rtb, "  f* / Half-Kelly:  ", C_LABEL)
