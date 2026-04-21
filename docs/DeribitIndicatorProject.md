@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-21 | Current version: session-volume-norms complete (settings v12)**
+**Last updated: 2026-04-21 | Current version: session-volume-norms complete + OI×CVD docs sync (settings v12)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 
@@ -19,7 +19,10 @@ WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 The latest completed feature set adds **session-aware volume norms** as a first-class adaptive
 normalisation layer: `DynamicNorms` now applies time-of-day session volume buckets (ASIA /
 LONDON / NY) so volume thresholds better reflect BTC liquidity regime by UTC hour, and the
-config/UI/docs surface has been updated to support that behaviour.
+config/UI/docs surface has been updated to support that behaviour. The already-implemented
+**OI × CVD cross-confirm** feature is also now considered part of the shipped scoring pipeline:
+`RunScoringPipeline()` includes a Pass 2b gate that rewards confirmed OI/CVD alignment and
+penalises direct conflict for full OI signals.
 
 ---
 
@@ -45,7 +48,7 @@ config/UI/docs surface has been updated to support that behaviour.
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
 | `SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton |
-| `settings.json` | v12 — all tunable parameters incl. `indicators.funding` and `session_volume` blocks |
+| `settings.json` | v12 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, and `session_volume` blocks |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -55,14 +58,14 @@ config/UI/docs surface has been updated to support that behaviour.
 |---|---|
 | `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. AdjustedLongTarget, AdjustedShortTarget, TargetCapReason, VerdictContext, Kelly fields), PositionState, SignalCategory, ScoreState |
 | `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore, Threshold, TierFloor, AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus |
-| `Core/ScoringEngine_Calculate_Scoring.vb` | `AppendLean()`, `CalcVerdictContext()`, `RunScoringPipeline()` — Steps 2 / Pass 2 / 3 / 3b: signal scoring, partial upgrades, funding modifiers, breakdown note rows |
+| `Core/ScoringEngine_Calculate_Scoring.vb` | `AppendLean()`, `CalcVerdictContext()`, `RunScoringPipeline()` — Steps 2 / Pass 2 / Pass 2b / 3 / 3b: signal scoring, partial upgrades, OI×CVD cross-confirm, funding modifiers, breakdown note rows |
 | `Core/ScoringEngine_Calculate_Verdict.vb` | `Calculate()` entry point — Step 4 regime veto / TRANSITIONAL penalty, Step 4b MTF gate veto, Step 5 verdict generation, ATR target cap |
 | `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields incl. `FundingMomentum` |
 | `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcEMAList, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
 | `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
 | `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcLiquidations, CalcCVD, CalcMicroCVD, CalcTFI, CalcFundingMomentum |
 | `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite, CalcMTFGate |
-| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings, FundingSettings, and SessionVolumeSettings |
+| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings, FundingSettings, OiCvdSettings, and SessionVolumeSettings |
 
 ### UI/
 
@@ -113,6 +116,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 | Funding Rate | GetFundingRateAsync | Step 3 baseline funding modifier from cfg thresholds |
 | Funding Momentum | CalcFundingMomentum | `cfg.Indicators.Funding.MomentumEnabled`, `MomentumWindow`, `MomentumThreshold`, `MomentumAmplify`, `MomentumSoften` |
 | OI Change | OiSnapshot ring buffer | 15m + 60m delta → NEW LONGS/SHORTS/COVERING/CAPITULATION/NEUTRAL |
+| OI × CVD Cross-Confirm | Pass 2b in `RunScoringPipeline()` | `cfg.Indicators.OiCvd.Enabled`, `UpgradeBonus`, `ConflictPenalty` |
 
 ### Tier 2
 | Indicator | Method | Config keys |
@@ -177,6 +181,7 @@ settings.json
     funding:       { momentum_enabled (true), momentum_window (3),
                      momentum_threshold (0.0001), momentum_amplify (1),
                      momentum_soften (1) }
+    oi_cvd_cross:  { enabled (true), upgrade_bonus (1), conflict_penalty (1) }
   session_volume:
     enabled: true
     asia:          { start_hour_utc, end_hour_utc, vol_high_mult, vol_mid_mult }
@@ -204,7 +209,10 @@ settings.json
 
 Session volume norms now let the engine scale volume thresholds by UTC session bucket so
 `VolHighThreshold` / `VolMidThreshold` are less likely to over-fire during thin Asian hours or
-under-react during London/NY participation peaks.
+under-react during London/NY participation peaks. The OI × CVD cross-confirm block lets Pass 2b
+be tuned independently of base OI/CVD scoring: aligned OI/CVD can earn an extra bonus, while
+full OI signals that directly oppose CVD can be penalised without changing the underlying
+indicator methods.
 
 ---
 
@@ -214,6 +222,7 @@ under-react during London/NY participation peaks.
 - **Verdict thresholds:** `Math.Ceiling(regimeMax * pct)` — no hardcoded magic numbers
 - **Step 2:** Score signals into ScoreState → all thresholds from cfg
 - **Pass 2:** Upgrade partials on cross-category confirmation; OBV upgrade blocked on adverse divergence
+- **Pass 2b:** OI × CVD cross-confirm gate — if OI full signal (or upgraded partial) and CVD direction+sign agree, apply `UpgradeBonus`; if full OI directly conflicts with CVD, apply `ConflictPenalty`; partial OI conflict is non-penalising
 - **Step 3:** Baseline funding-rate modifier
 - **Step 3b:** Funding-momentum modifier — can soften crowding penalty when momentum is falling, or amplify it when momentum is rising into crowding
 - **Step 4:** Regime veto / TRANSITIONAL ADX penalty
@@ -256,6 +265,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 - `CalibrationReport` summarises recent directional accuracy
 - Auto-run timer driven by `MainForm_AutoRun.vb`; interval configurable from UI (min 10s)
 - Funding-momentum is currently **display/scoring only**; no dedicated CSV column has been added yet.
+- OI × CVD Pass 2b is currently reflected in the **`OI Delta` breakdown note** but has no dedicated CSV column yet.
 
 ---
 
@@ -275,6 +285,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 |---|---|---|
 | Funding momentum thresholds | Review `momentum_threshold=0.0001`, `momentum_window=3`, soften/amplify values after 50+ live runs; especially check whether BTC funding changes are too sticky for 3-sample lookback | Low |
 | Session volume multipliers | Review ASIA / LONDON / NY `vol_high_mult` and `vol_mid_mult` values after 50+ live runs; verify reduced false positives in thin hours without underweighting genuine expansion | Low |
+| OI × CVD gate tuning | Review `upgrade_bonus=1` and `conflict_penalty=1` after 50+ live runs; confirm whether full-signal conflict is strong enough and whether upgraded partial OI confirmations improve hit rate without over-rewarding covering/capitulation cases | Low |
 | TFI threshold | Evaluate threshold=0.15 vs 0.10 for BTC-PERPETUAL tick size after live data | Low |
 | MicroCVD accelThreshold | Default 5000 USD; consider dynamic scaling vs VolumeSMA on quiet sessions | Low |
 | AtrTargetMultiplier | Currently 2.0; review against logged R:R after 50+ trades | Low |
@@ -286,6 +297,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 | Kelly est_prob_floor/scale | Default 0.45 / 0.20 — review against actual win rates once CalibrationReport reaches READY | Low |
 | VerdictContext CSV logging | When CalibrationReport approaches READY (≥300 rows, ≥3 sessions, ≥3 regimes): add `VerdictContext` column to `analysis_log.csv` in `AnalysisLogger.LogRun()`, and update CalibrationReport to correlate each context tag with subsequent directional accuracy. | Low — deferred until CalibrationReport READY |
 | FundingMomentum CSV logging | If funding-momentum proves useful, add `FundingMomentum` and maybe raw delta/history depth to CSV for post-run validation of Step 3b effectiveness. | Low |
+| OI×CVD CSV logging | If Pass 2b proves decision-useful, add explicit `OiCvdPass2bOutcome` / bonus / penalty columns so confirmation-vs-conflict effects can be validated directly from `analysis_log.csv` instead of inferred from breakdown text. | Low |
 
 ---
 
@@ -302,8 +314,8 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 | **Kelly Criterion Sizing** | Display-only position sizing advisory block below ATR entry levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. [EST] pre-calibration / [CAL] post. No scoring changes. **Spec:** `docs/kelly-criterion-proposal.md` | ✅ IMPLEMENTED 2026-04-14 |
 | **Funding rate momentum** | Funding momentum now implemented end-to-end: `FundingMomentum` field on `IndicatorResults`, `CalcFundingMomentum()` in `Indicators_OrderFlow`, funding history accumulation in `MainForm_Analysis`, config surface in `EngineSettings` and `settings.json`, Step 3b modifier in `ScoringEngine_Calculate_Scoring`, and UI display row in `MainForm_Render_Sections`. | ✅ IMPLEMENTED 2026-04-20 |
 | **Session-aware volume norms** | `DynamicNorms` now applies UTC session buckets (ASIA / LONDON / NY) via `ApplySessionVolume()`, backed by `SessionVolumeSettings` in `EngineSettings` and `session_volume` in `settings.json`, so `VolHighThreshold` / `VolMidThreshold` adapt to time-of-day liquidity instead of using a single global expectation. | ✅ IMPLEMENTED 2026-04-21 |
+| **OI × CVD cross-confirm** | `RunScoringPipeline()` now includes Pass 2b after partial upgrades: when OI and CVD direction/sign confirm, the relevant side gets `UpgradeBonus`; when full OI directly conflicts with CVD, the relevant side gets `ConflictPenalty`; upgraded partial OI signals can confirm but partial conflict does not penalise. Backed by `OiCvdSettings` / `indicators.oi_cvd_cross`, and surfaced in the `OI Delta` breakdown note. | ✅ IMPLEMENTED 2026-04-21 (docs sync) |
 | Adaptive scoring weights by regime | `MaxScore` is regime-adjusted but per-indicator weights are fixed. In TRENDING, EMA ribbon + DMI should carry more weight; in RANGE_BOUND, VWAP bands + Donchian should dominate. Static weights over-score weak signals for the current regime context. Requires per-regime weight multipliers in `EngineSettings` and scoring pipeline. | 🔍 Spec needed |
-| OI × CVD cross-confirm | OI (NEW LONGS/SHORTS) and CVD direction scored independently. Pairing them as a confirming multiplier (NEW LONGS + CVD RISING = full score; NEW LONGS + CVD FALLING = half score) would sharpen Tier 1 without adding new data sources. | 🔍 Spec needed |
 
 ### Moderate-Impact (diminishing returns territory)
 
@@ -337,7 +349,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 ## 14. Backlog
 
-*(cleared — verdict-context, Kelly sizing, funding-momentum, and session-volume-norms are shipped)*
+*(cleared — verdict-context, Kelly sizing, funding-momentum, session-volume-norms, and OI×CVD cross-confirm are shipped; remaining items are calibration review or future spec work)*
 
 ---
 
@@ -345,6 +357,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-21** | Documentation sync: OI × CVD cross-confirm marked as shipped after code review. Handover updated to note Pass 2b in `RunScoringPipeline()`, add `OiCvdSettings` / `indicators.oi_cvd_cross` to config surface, update future upgrades/backlog status, and add calibration/logging follow-up notes for the feature. |
 | **2026-04-21** | Session-volume-norms feature fully documented as shipped. Handover updated to settings v12, `DynamicNorms.ApplySessionVolume()` note added, `SessionVolumeSettings` and `session_volume` config documented, and Section 13 status updated to mark session-aware volume norms as implemented. |
 | **2026-04-20** | Refactor split completed: `Core/ScoringEngine_Calculate.vb` replaced by `ScoringEngine_Calculate_Scoring.vb` + `ScoringEngine_Calculate_Verdict.vb`; `UI/MainForm_Render.vb` replaced by `MainForm_Render_Header.vb` + `MainForm_Render_Sections.vb`. Docs updated to reflect new structure. |
 | **2026-04-20** | Funding-momentum feature fully shipped. Added `FundingMomentum` to `IndicatorResults`; added `CalcFundingMomentum()` in `Indicators_OrderFlow`; added `_fundingHistory` / `FundingHistoryMax` in `MainForm_Layout`; appended funding history + computed momentum in `MainForm_Analysis`; added Step 3b funding-momentum modifier in `ScoringEngine_Calculate_Scoring`; added `FundingSettings` to `EngineSettings`; added `indicators.funding` block to `settings.json` v10; added funding momentum row to `MainForm_Render_Sections`. |
