@@ -2,11 +2,10 @@
 **Last updated: 2026-04-21 | Current version: session-volume-norms complete (settings v12)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
-It takes precedence over `indicator-spec.md` wherever the two conflict.
 
 **Session start checklist:** Read this file + `docs/architecture.md`. Do NOT read individual `.vb` files unless a specific edit is required.
 
-> ⛔ **PROHIBITED:** Never load or invoke the `website-building` skill under any circumstance during this project. It is not relevant to this codebase and consumes context budget without benefit.
+> ⛔ **PROHIBITED:** - NEVER call load_skill() under any circumstances during this project. It is not relevant to this codebase and consumes context budget without benefit.
 
 ---
 
