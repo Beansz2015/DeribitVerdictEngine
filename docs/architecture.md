@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-21 | App version: adaptive-regime-weights (Pass 2c) shipped / settings v13**
+**Last updated: 2026-04-22 | App version: calibration pass v14 (Batch 1 defect fixes + Batch 2 settings tuning)**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -21,7 +21,7 @@ DeribitVerdictEngine/
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
 ├── SettingsLoader.vb                   JSON loader — SettingsLoader.Current singleton
-├── settings.json                       All tunable parameters v13 (no recompile needed)
+├── settings.json                       All tunable parameters v14 (no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
@@ -251,7 +251,12 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     ├─ ATR entry / stop / target block     [_Header]
                     │          HVN-capped target in amber bold when adjusted target > 0
                     ├─ KELLY SIZING block                  [_Header]
-                    │          Contracts / USD risk / [EST] or [CAL] or [CAPPED] tag
+                    │          Contracts / USD risk / [CAPPED] tag when applicable.
+                    │          Advisory label always rendered below header:
+                    │          "Advisory (ATR-basis) — R:R uses ATR multiples,
+                    │           not structural targets. Treat as directional bias
+                    │           indicator only."
+                    │          EST mode only — CAL mode removed pending backtesting.
                     │          Suppressed when KellyF = 0
                     ├─ DYNAMIC NORMS / REGIME / CORE SIGNALS / VWAP /
                     │  BBW/TTM / EMA RIBBON / MARKET STRUCTURE /
@@ -272,7 +277,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 ## Settings Data Flow
 
 ```
-settings.json (v13)
+settings.json (v14)
     │
     ▼
 SettingsLoader.Initialise()
@@ -325,7 +330,7 @@ RunScoringPipeline(...)
 | 15m MTF cached with TTL | 15m candles change slowly; re-fetching every 10s run wastes API quota. TTL=60s balances freshness vs. rate limits. |
 | Dual-session VWAP anchor | BTC perpetual has meaningful session breaks at 00:00 UTC and 13:30 UTC. Single-anchor VWAP deviates badly after Asian/EU handoff. |
 | VerdictContext (Step 5b) | WEAK verdicts have three distinct structural causes that require different discretionary responses. Context tag surfaces the cause without changing the score. Zero new data fetches; reads already-computed state only. |
-| Kelly sizing display-only | Sizing advisory only — no position management integration. Suppressed when no edge (KellyF ≤ 0). [EST] / [CAL] modes enforce honesty about calibration state. |
+| Kelly sizing display-only | Sizing advisory only — no position management integration. Suppressed when no edge (KellyF ≤ 0). An inline advisory label immediately under the header reminds the reader that the R:R used is ATR-basis (not structural), so the block is a directional-bias sanity check rather than a trade-sizing prescription. EST mode only; CAL mode will be reinstated once a backtesting module supplies empirical per-tier win rates. |
 | Exponential decay in VPFR | Recent price levels are more relevant than historical. Linear decay overstates old HVNs; exponential decay (base=0.985) self-tunes to recent session structure. |
 | CVD 3-segment slope | Late segment weighted ×2 vs early ×1. Captures momentum *direction change* mid-window (deceleration signal), not just net delta. |
 | OFI descending weight array | Levels deeper in the book are less actionable. Dynamic descending weights (injectable depth) reduce noise from thin deep levels. |

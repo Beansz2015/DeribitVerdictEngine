@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-21 | Current version: adaptive-regime-weights (Pass 2c) shipped (settings v13)**
+**Last updated: 2026-04-22 | Current version: calibration pass v14 (Batch 1 defect fixes + Batch 2 settings tuning)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 
@@ -54,7 +54,7 @@ conflict incurs `ConflictPenalty`. TRANSITIONAL and tied scores bypass the gate.
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
 | `SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton |
-| `settings.json` | v13 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, and `regime_weights` blocks |
+| `settings.json` | v14 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, and `regime_weights` blocks. v14 is a value-only calibration pass (no schema changes). |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -108,7 +108,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 | Indicator | Method | Config keys |
 |---|---|---|
 | ROC(9) | CalcROCSeries | `cfg.Indicators.ROC.SlopeSensitivity` (0.1) — gates partial scoring and Pass 2c ROC-active check |
-| RSI(9) | CalcRSI | `Overbought` (60) / `Oversold` (40) / `PartialOverbought` (50) / `PartialOversold` (50) |
+| RSI(9) | CalcRSI | `Overbought` (60) / `Oversold` (40) / `PartialOverbought` (55) / `PartialOversold` (45) — v14 widened the 45–55 neutral dead-band to stop RSI voting on every tick off 50 |
 | RSI Divergence | CalcRSIDivergence | −1 long: BEARISH + RSI > `DivPenaltyRsiHigh` (65); −1 short: BULLISH + RSI < `DivPenaltyRsiLow` (35). `PivotWing` (2), `LookbackBars` (20) from cfg. |
 | DMI/ADX | CalcDMI | 5m candles. `cfg.Indicators.ADX.TrendThreshold` (25) |
 | Volume | CalcVolumeSMA | SMA-9; H/M thresholds from DynamicNorms, now session-adjusted via `session_volume` config. Mid-tier directional partial via cross-confirm. |
@@ -128,10 +128,10 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 ### Tier 2
 | Indicator | Method | Config keys |
 |---|---|---|
-| OFI | CalcOFI | `cfg.Indicators.OFI.BookDepth` (5); dominance thresholds from cfg |
+| OFI | CalcOFI | `cfg.Indicators.OFI.BookDepth` (5); `BuyDominantRatio` (2.0) / `SellDominantRatio` (0.5) — v14 relaxed from 3.0/0.333 |
 | Liquidations | CalcLiquidations | `cfg.Indicators.Liquidations.DominanceRatio` (2.0); penalty magnitudes from cfg |
-| CVD | CalcCVD | 3-segment weighted slope (late×2 − early×1). −1 on divergence. |
-| MicroCVD | CalcMicroCVD | BULL/BEAR_ACCEL/DECEL + FLAT stall penalty. Window=50 via cfg. |
+| CVD | CalcCVD | 3-segment weighted slope (late×2 − early×1). −1 on divergence. `SlopeMinUsd` (12000) v14 — raised from 1000 noise floor. |
+| MicroCVD | CalcMicroCVD | BULL/BEAR_ACCEL/DECEL + FLAT stall penalty. Window=50, `AccelThreshold` (10000) v14 — raised from 5000; dynamic scaling deferred until backtesting ships. |
 | TFI | CalcTFI | BUY/SELL PRESSURE. Window=30, threshold=0.15 via cfg. |
 | 5m EMA(200) | CalcEMA(candles5m,200) | ABOVE/BELOW; short signal if price below |
 
@@ -165,7 +165,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v13**.
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v14** (calibration pass — value-only, no schema changes).
 
 ```
 settings.json
@@ -372,6 +372,8 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-22** | [calibration pass] `settings.json` bumped v13 → v14. Value-only tuning sweep (no schema changes): OFI `buy/sell_dominant_ratio` 3.0/0.333 → 2.0/0.5; RSI `partial_overbought/partial_oversold` 50/50 → 55/45; `funding_high_positive/negative` ±0.0001 → ±0.0003; CVD `slope_min_usd` 1000 → 12000; Volume `dynamic_high_clamp_min`/`dynamic_mid_clamp_min` 1.5/1.2 → 2.0/1.5; ATR `static_ref` 150 → 115; MicroCVD `accel_threshold` 5000 → 10000; Kelly `account_size_usd` confirmed 1000 (placeholder pending trader input). Also added funding-history dedup in `MainForm_Analysis.vb`: `_fundingHistory` now only appends when the funding rate actually changed from the previous sample, so Step 3b momentum is computed over genuinely distinct values rather than 1m snapshots of a rate that only updates every 8h. |
+| **2026-04-22** | [defect fixes — Batch 1] M1: MTF-gate JSON-to-POCO key binding repaired. `EngineSettings.MTFGateSettings` JsonPropertyNames renamed `candle_count` → `candle_lookback`, `dmi_period` → `adx_period`, `required_confirms` → `min_of`, and new `AdxMin` property added (`"adx_min"`, default 20.0). `settings.json` mtf_gate block trimmed to 5 keys (dropped `mode` / `block_action` / `timeframe_minutes` — none had code consumers). `MainForm_Analysis.vb` call site now wires `adxMin:=cfg.MTFGate.AdxMin` (was silently borrowing `cfg.Indicators.ADX.TrendThreshold` = 25, so the 15m soft gate now actually uses the intended 20). M2: Kelly display carries a two-line advisory label immediately below the `KELLY SIZING` header — "Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets. Treat as directional bias indicator only." No suppression logic changed; block still renders at every verdict level where `KellyPWin > 0`. M3: CAL-mode dead code removed. `MinCalibrationSamples` property deleted from `EngineSettings.KellySettings`; `min_calibration_samples` key removed from `settings.json`; `[{0}]` PMode tag removed from both `KELLY SIZING` UI headers (`[CAPPED]` retained). `KellyPMode` still assigned `"EST"` internally and will be reinstated when a backtesting module ships empirical per-tier win rates. |
 | **2026-04-21** | [adaptive-regime-weights] Pass 2c regime-alignment gate shipped. Added `RegimeWeightSettings` to `EngineSettings`; added `regime_weights` top-level block to `settings.json` (v13). `RegimeMaxScore()` now takes `cfg` and returns baseMax + AlignmentBonus for TRENDING/RANGE_BOUND when enabled, so TRENDING ceiling goes 19→20 and RANGE_BOUND 18→19 by default. Verdict % thresholds auto-adjust. Spec: `docs/adaptive-regime-weights-proposal.md`. |
 | **2026-04-21** | Documentation sync: OI × CVD cross-confirm marked as shipped after code review. Handover updated to note Pass 2b in `RunScoringPipeline()`, add `OiCvdSettings` / `indicators.oi_cvd_cross` to config surface, update future upgrades/backlog status, and add calibration/logging follow-up notes for the feature. |
 | **2026-04-21** | Session-volume-norms feature fully documented as shipped. Handover updated to settings v12, `DynamicNorms.ApplySessionVolume()` note added, `SessionVolumeSettings` and `session_volume` config documented, and Section 13 status updated to mark session-aware volume norms as implemented. |
