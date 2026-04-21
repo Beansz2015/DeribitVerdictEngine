@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-21 | App version: session-volume-norms complete / settings v12**
+**Last updated: 2026-04-21 | App version: session-volume-norms complete + OI×CVD docs sync / settings v12**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -27,7 +27,7 @@ DeribitVerdictEngine/
 │   ├── Settings/
 │   │   └── EngineSettings.vb           Strongly-typed POCO for settings.json
 │   │                                   Includes KellySettings + FundingSettings +
-│   │                                   SessionVolumeSettings blocks
+│   │                                   OiCvdSettings + SessionVolumeSettings blocks
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,
@@ -38,9 +38,9 @@ DeribitVerdictEngine/
 │   │                                   AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus
 │   ├── ScoringEngine_Calculate_Scoring.vb
 │   │                                   AppendLean(), CalcVerdictContext();
-│   │                                   RunScoringPipeline() — Steps 2/Pass 2/3/3b:
-│   │                                   signal scoring, partial upgrades, funding modifiers,
-│   │                                   all breakdown note rows.
+│   │                                   RunScoringPipeline() — Steps 2/Pass 2/Pass 2b/3/3b:
+│   │                                   signal scoring, partial upgrades, OI×CVD cross-confirm,
+│   │                                   funding modifiers, all breakdown note rows.
 │   │                                   Split from ScoringEngine_Calculate.vb.
 │   ├── ScoringEngine_Calculate_Verdict.vb
 │   │                                   Calculate() entry point — assembles verdict;
@@ -186,6 +186,15 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          ─ Liquidation penalty/boost by size + dominance
                     │          ─ OBV adverse divergence blocks cross-category upgrade
                     ├─ Pass 2:  Partial upgrade on cross-category confirmation
+                    ├─ Pass 2b: OI × CVD cross-confirm
+                    │          If cfg.Indicators.OiCvd.Enabled and OI direction/sign
+                    │          confirms CVD bullish/bearish direction, apply
+                    │          cfg.Indicators.OiCvd.UpgradeBonus (capped at regimeMax).
+                    │          If full OI directly conflicts with CVD, apply
+                    │          cfg.Indicators.OiCvd.ConflictPenalty.
+                    │          Upgraded partial OI signals (COVERING/CAPITULATION)
+                    │          can confirm, but partial conflict is not penalised.
+                    │          Result is appended to the OI Delta breakdown note.
                     ├─ Step 3:  Baseline funding-rate modifier (penalty/boost from cfg)
                     ├─ Step 3b: Funding-momentum modifier
                     │          If FundingMomentum=RISING and funding already crowded
@@ -260,6 +269,10 @@ SettingsLoader.Current As EngineSettings
     ├─ Scoring.*           → verdict %, penalties, ATR multipliers
     ├─ Kelly.*             → sizing display controls
     ├─ FundingSettings     → Step 3b momentum behaviour
+    ├─ OiCvdSettings       → Pass 2b OI×CVD confirm/conflict behaviour
+    │     ├─ enabled
+    │     ├─ upgrade_bonus
+    │     └─ conflict_penalty
     └─ SessionVolumeSettings
            ├─ enabled
            ├─ asia    { start/end UTC, vol multipliers }
@@ -272,6 +285,11 @@ DynamicNorms.Compute(...)
     │
     └─ ApplySessionVolume() adjusts VolHighThreshold / VolMidThreshold
        by active UTC session bucket before scoring consumes volume signals
+
+RunScoringPipeline(...)
+    │
+    └─ Pass 2b reads cfg.Indicators.OiCvd to decide whether OI/CVD alignment
+       earns a bonus or full-signal conflict earns a penalty
 ```
 
 ---
@@ -294,5 +312,6 @@ DynamicNorms.Compute(...)
 | Funding momentum as adjunct (Step 3b) | Absolute funding rate alone misses the *direction of crowding*. A rate already at +0.03% but falling is less dangerous than one at +0.02% and rising fast. Step 3b amplifies or softens the Step 3 penalty based on momentum direction, using a short rolling window (default 3 samples) held in `_fundingHistory`. Display-only impact on the funding UI row; scoring impact is bounded by the amplify/soften cfg values. |
 | _fundingHistory capped at FundingHistoryMax | Funding rate changes are slow relative to 1m candles. A window of 10 samples is sufficient to detect sustained crowding direction without accumulating stale history across sessions. |
 | Session-aware volume norms in DynamicNorms | BTC volume has strong time-of-day seasonality. A single global `VolHighThreshold` / `VolMidThreshold` misclassifies quiet Asian-session participation as expansion and underweights genuine London/NY burst volume. Applying UTC session multipliers at the DynamicNorms layer preserves existing scoring logic while adapting thresholds to expected liquidity. |
+| OI × CVD as Pass 2b adjunct | OI and CVD together say more than either alone: rising/opening interest confirmed by supportive CVD is stronger than standalone OI, while a full OI build that directly opposes CVD often reflects weaker participation quality. Implementing this as a post-upgrade Pass 2b preserves existing indicator methods and lets the confirm/conflict effect be tuned independently via `OiCvdSettings`. Partial OI signals can be confirmed, but only full OI conflict is penalised, reducing false negatives on covering/capitulation transitions. |
 | ScoringEngine split into _Scoring + _Verdict | ScoringEngine_Calculate.vb exceeded 35 KB. Split into RunScoringPipeline (Steps 2–3b + breakdown notes) in _Scoring.vb and Calculate() entry point (Steps 4–5b) in _Verdict.vb. CalcVerdictContext kept in _Scoring.vb as it is called from multiple early-return paths in _Verdict.vb. |
 | MainForm_Render split into _Header + _Sections | MainForm_Render.vb exceeded 28 KB. RTF helpers + top render block (verdict/ATR/Kelly) in _Header.vb; RenderOutput() entry point + all indicator sections + breakdown table in _Sections.vb. |
