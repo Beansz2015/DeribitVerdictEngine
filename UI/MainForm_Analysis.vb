@@ -187,9 +187,14 @@ Partial Public Class MainForm
 
         ' funding-momentum: maintain ring buffer then compute momentum signal.
         ' Max FundingHistoryMax samples retained; cold start (< 2) yields FLAT.
-        _fundingHistory.Add(fundingRate)
-        If _fundingHistory.Count > FundingHistoryMax Then
-            _fundingHistory.RemoveAt(0)
+        ' [S9] Dedup: Deribit publishes funding ~every 8h; appending every 1m run
+        ' fills the ring with identical values and forces FLAT. Only append when
+        ' the rate actually changed from the previous sample.
+        If _fundingHistory.Count = 0 OrElse _fundingHistory(_fundingHistory.Count - 1) <> fundingRate Then
+            _fundingHistory.Add(fundingRate)
+            If _fundingHistory.Count > FundingHistoryMax Then
+                _fundingHistory.RemoveAt(0)
+            End If
         End If
         r.FundingMomentum = IndicatorEngine.CalcFundingMomentum(_fundingHistory, cfg)
 
