@@ -261,7 +261,10 @@ Last updated: 2026-04-11
 
     False positive tolerance:   Low. Prefers engine to say NO TRADE rather
                                 than output a weak directional verdict that
-                                tempts entry on marginal setups.
+                                tempts entry on marginal setups. However, a
+                                display (that does not affect scoring) showing
+                                this weak directional bias must still be
+                                rendered, to help form a future opinion.
 
     Display preference:         Verdict output should be clean, scannable,
                                 and fast to interpret at a glance. Not cluttered.
