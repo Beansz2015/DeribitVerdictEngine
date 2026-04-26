@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-22 | App version: calibration pass v14 (Batch 1 defect fixes + Batch 2 settings tuning)**
+**Last updated: 2026-04-27 | App version: v15 — dead-code cleanup pass on top of v14 calibration**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -20,15 +20,16 @@ DeribitVerdictEngine/
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
-├── SettingsLoader.vb                   JSON loader — SettingsLoader.Current singleton
-├── settings.json                       All tunable parameters v14 (no recompile needed)
+├── settings.json                       All tunable parameters v15 (no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
-│   │   └── EngineSettings.vb           Strongly-typed POCO for settings.json
-│   │                                   Includes KellySettings + FundingSettings +
-│   │                                   OiCvdSettings + SessionVolumeSettings +
-│   │                                   RegimeWeightSettings blocks
+│   │   ├── EngineSettings.vb           Strongly-typed POCO for settings.json
+│   │   │                               Includes KellySettings + FundingSettings +
+│   │   │                               OiCvdSettings + SessionVolumeSettings +
+│   │   │                               RegimeWeightSettings blocks
+│   │   └── SettingsLoader.vb           JSON loader — SettingsLoader.Current singleton;
+│   │                                   FileSystemWatcher hot-reload
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,
@@ -277,7 +278,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 ## Settings Data Flow
 
 ```
-settings.json (v14)
+settings.json (v15)
     │
     ▼
 SettingsLoader.Initialise()
@@ -344,3 +345,5 @@ RunScoringPipeline(...)
 | Pass 2c regime alignment gate | Static per-indicator weights over-reward weak signals that disagree with the active regime. Pass 2c rewards runs where the regime-key signals are fully aligned with the dominant side and penalises full conflict, while staying suppressed in TRANSITIONAL and on zero-net scores. RegimeMaxScore() adds the alignment bonus to the ceiling when enabled so verdict % thresholds auto-adjust and the bonus cannot carry the score past saturation. |
 | ScoringEngine split into _Scoring + _Verdict | ScoringEngine_Calculate.vb exceeded 35 KB. Split into RunScoringPipeline (Steps 2–3b + breakdown notes) in _Scoring.vb and Calculate() entry point (Steps 4–5b) in _Verdict.vb. CalcVerdictContext kept in _Scoring.vb as it is called from multiple early-return paths in _Verdict.vb. |
 | MainForm_Render split into _Header + _Sections | MainForm_Render.vb exceeded 28 KB. RTF helpers + top render block (verdict/ATR/Kelly) in _Header.vb; RenderOutput() entry point + all indicator sections + breakdown table in _Sections.vb. |
+| GetSessionCandles helper extracted (v15) | `CalcVWAP` and `CalcVWAPBands` both anchored on the session-2 cutoff and re-derived the session window independently. The boundary calculation is now a single private helper in `Indicators_Volatility.vb`; both callers route through it. |
+| v15 cleanup pass | Source of truth audit. Removed dead fields (`OI_Prev15m` / `OI_Prev60m` / `ATRAvg20d`), three unused `DynamicNorms.StaticVol*` properties, an entire `Ema200Settings` class, 13 silently-ignored config properties, the dead `ScoringEngine.MaxScore` const, the unused `SettingsLoader.Reload()`. Aligned remaining default values with v14 calibration (so an absent `settings.json` doesn't seed stale defaults). Two display-only colour bugs fixed in `MainForm_Render_Sections` (BBW status compared against `"SQUEEZE"` instead of `"ACTIVE"`; TTM direction compared against `"UP"` / `"DOWN"` instead of `"RISING"` / `"FALLING"`). Zero scoring impact. |

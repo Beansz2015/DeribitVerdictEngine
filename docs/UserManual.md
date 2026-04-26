@@ -1015,7 +1015,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 
 **Calculation (`CalcCVD`):**
 
-- Trades fetched via `GetRecentTradesAsync(100)`; `trade_lookback=100` (v14 default).
+- Trades fetched via `GetRecentTradesAsync(100)` (count hardcoded in `MainForm_Analysis.RunAnalysisAsync`; the v14 `cvd.trade_lookback` config key was never wired to this fetch and was removed in v15).
 - Each trade: `signedDelta = +amount` if `Direction = buy` else `−amount`. (Amount is in USD notional on Deribit BTC-PERPETUAL.)
 - Split window into 3 equal segments — early, mid, late thirds.
 - `CVDValue = early + mid + late` (total net delta).

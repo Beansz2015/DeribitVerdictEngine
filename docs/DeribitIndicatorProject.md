@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-22 | Current version: calibration pass v14 (Batch 1 defect fixes + Batch 2 settings tuning)**
+**Last updated: 2026-04-27 | Current version: v15 — dead-code cleanup pass on top of v14 calibration**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 
@@ -53,8 +53,7 @@ conflict incurs `ConflictPenalty`. TRANSITIONAL and tied scores bypass the gate.
 | `OiSnapshot.vb` | OI ring-buffer helper |
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
-| `SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton |
-| `settings.json` | v14 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, and `regime_weights` blocks. v14 is a value-only calibration pass (no schema changes). |
+| `settings.json` | v15 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, and `regime_weights` blocks. v15 is a cleanup pass that strips silently-ignored keys (no behavioural change). |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -73,6 +72,7 @@ conflict incurs `ConflictPenalty`. TRANSITIONAL and tied scores bypass the gate.
 | `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcLiquidations, CalcCVD, CalcMicroCVD, CalcTFI, CalcFundingMomentum |
 | `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite, CalcMTFGate |
 | `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings, FundingSettings, OiCvdSettings, SessionVolumeSettings, and RegimeWeightSettings |
+| `Core/Settings/SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton, FileSystemWatcher hot-reload |
 
 ### UI/
 
@@ -165,24 +165,41 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v14** (calibration pass — value-only, no schema changes).
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v15** (cleanup pass — silently-ignored keys removed; no behavioural change vs v14).
 
 ```
 settings.json
   indicators:
-    rsi:           { period, overbought (60), oversold (40),
-                     partial_overbought (50), partial_oversold (50),
-                     divergencePriceGate, divergenceRsiDelta,
+    rsi:           { period (9), overbought (60), oversold (40),
+                     partial_overbought (55), partial_oversold (45),
+                     divergence_price_gate, divergence_rsi_delta,
+                     div_penalty_rsi_high (65), div_penalty_rsi_low (35),
                      pivot_wing (2), lookback_bars (20) }
-    roc:           { period, seriesLookback }
-    adx:           { trendThreshold (25), rangeThreshold (20) }
-    vwap:          { devThresholdPct, session1/2 times, warmupCandles (15) }
-    ofi:           { bookDepth (5), buyDominantRatio (3.0), sellDominantRatio (0.333) }
-    obv:           { trendGate, divergenceGate }
-    liquidations:  { long_liq_threshold, short_liq_threshold, largeLiqSize, dominance_ratio (2.0) }
-    cvd:           { slopeMinUsd, slopePctOfValue, divergencePriceGate, tradeLookback }
+    roc:           { period (9), slope_sensitivity (0.1), series_lookback (3) }
+    adx:           { period (9), trend_threshold (25), range_threshold (20) }
+    vwap:          { session2_start_hour (13), session2_start_minute (30),
+                     warmup_candles (15) }
+    bbw:           { period (20), std_dev (2.0) }
+    ema:           { fast (9), mid (21), slow (50) }
+    donchian:      { period (20) }
+    obv:           { trend_gate (0.001), divergence_gate (0.001) }
+    atr:           { period (7), static_ref (115.0),
+                     scale_min (0.25), scale_max (4.0) }
+    ofi:           { book_depth (5), buy_dominant_ratio (2.0),
+                     sell_dominant_ratio (0.5) }
+    volume:        { sma_period (9), static_high (3.0), static_mid (2.0),
+                     dynamic_high_clamp_min (2.0), dynamic_high_clamp_max (6.0),
+                     dynamic_mid_clamp_min (1.5), dynamic_mid_clamp_max (4.0) }
+    vwapDynamic:   { dev_clamp_min (0.30), dev_clamp_max (3.0),
+                     static_fallback (1.5) }
+    liquidations:  { large_liq_size (200), dominance_ratio (2.0) }
+    oi:            { neutral_band_pct (0.05), change_threshold_pct (0.01) }
+    dmi:           { period (9) }
+    cvd:           { slope_min_usd (12000), slope_pct_of_value (0.01),
+                     divergence_price_gate (0.0005), divergence_penalty (1) }
     tfi:           { window_size (30), threshold (0.15) }
-    microCvd:      { window_size (50), accel_threshold (5000) }
+    microCvd:      { window_size (50), accel_threshold (10000),
+                     decel_penalty (1) }
     ttm:           { flat_threshold (0.5) }
     vpfr:          { num_buckets (50) }
     funding:       { momentum_enabled (true), momentum_window (3),
@@ -199,15 +216,21 @@ settings.json
       { name: "NY",     start_hour: 13, end_hour: 23,
         high_multiplier: 1.15, mid_multiplier: 1.10 }
     ]
+  mtf_gate:        { enabled (true), candle_lookback (60),
+                     adx_period (9), adx_min (20.0), min_of (2) }
+  auto_run:        { enabled (false), interval_minutes (1), interval_seconds (0) }
   scoring:
-    verdictStrongPct / verdictMedPct / verdictWeakPct
-    fundingHighPositive / fundingLowPositive
-    fundingHighNegative / fundingLowNegative
+    verdict_strong_pct (0.70) / verdict_med_pct (0.53) / verdict_weak_pct (0.35)
+    funding_high_positive (0.0003) / funding_low_positive (0.00005)
+    funding_high_negative (-0.0003) / funding_low_negative (-0.00005)
     bbw_squeeze_penalty (2)
     liq_standard_penalty (1) / liq_large_penalty (2)
     funding_high_penalty (2) / funding_high_boost (1) / funding_low_penalty (1)
     atr_target_multiplier (2.0) / atr_stop_multiplier (1.2)
     context_tag_structural_min (3) / context_tag_flow_max (1)
+    hold_roc_take_profit_long/short (±0.6)
+    hold_rsi_hold_long/short (60/40)
+    hold_rsi_evaluate_long/short (40/60)
   kelly:
     account_size_usd (1000.0)
     use_half_kelly (true)
@@ -215,18 +238,26 @@ settings.json
     contract_face_usd (10.0)
     est_prob_floor (0.45)
     est_prob_scale (0.20)
+  regime_gates:
+    transitional_adx_penalty_low (20.0) / mid (22.5) / high (25.0)
+    transitional_penalty_low (2) / mid (1)
   regime_weights:
     enabled: true
     trending:    { alignment_bonus (1), conflict_penalty (1) }
     range_bound: { alignment_bonus (1), conflict_penalty (1) }
 ```
 
-Session volume norms now let the engine scale volume thresholds by UTC session bucket so
-`VolHighThreshold` / `VolMidThreshold` are less likely to over-fire during thin Asian hours or
-under-react during London/NY participation peaks. The OI × CVD cross-confirm block lets Pass 2b
-be tuned independently of base OI/CVD scoring: aligned OI/CVD can earn an extra bonus, while
-full OI signals that directly oppose CVD can be penalised without changing the underlying
-indicator methods.
+**v15 cleanup notes.** The following keys existed in earlier `settings.json` files but had no consumer in the engine (silently ignored by the JSON deserialiser); removed in v15 with no behavioural change:
+
+- `scoring.long_threshold` / `short_threshold` / `strong_long_threshold` / `strong_short_threshold` / `medium_long_threshold` / `medium_short_threshold` (superseded by `verdict_*_pct` since v0.30)
+- `scoring.weights` block (`ScoringWeights` class deleted long ago)
+- `scoring.transitional_penalty_enabled` (TRANSITIONAL ADX penalty applies unconditionally)
+- `regime_gates.suppress_long_in_trending_down` / `suppress_short_in_trending_up` (Step 4 regime veto applies unconditionally)
+- `indicators.EMA200` block (`CalcEMA(candles5m, 200)` is hardcoded)
+- `indicators.OBV.lookback`, `indicators.CVD.trade_lookback`, `indicators.VWAP.dev_threshold_pct`, `indicators.VWAP.session1_start_hour` / `session1_start_minute`, `indicators.BBW.releasing_roc_threshold`, `indicators.Liquidations.long_liq_threshold` / `short_liq_threshold`, `indicators.ATR.ref_period`
+- `mtf_gate.ema_period_fast` / `ema_period_slow` (`CalcMTFGate` hardcodes EMA 9/21/50)
+
+Session volume norms scale volume thresholds by UTC session bucket so `VolHighThreshold` / `VolMidThreshold` are less likely to over-fire during thin Asian hours or under-react during London/NY participation peaks. The OI × CVD cross-confirm block lets Pass 2b be tuned independently of base OI/CVD scoring: aligned OI/CVD can earn an extra bonus, while full OI signals that directly oppose CVD can be penalised without changing the underlying indicator methods.
 
 ---
 
@@ -302,7 +333,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 | Session volume multipliers | Review ASIA / LONDON / NY `vol_high_mult` and `vol_mid_mult` values after 50+ live runs; verify reduced false positives in thin hours without underweighting genuine expansion | Low |
 | OI × CVD gate tuning | Review `upgrade_bonus=1` and `conflict_penalty=1` after 50+ live runs; confirm whether full-signal conflict is strong enough and whether upgraded partial OI confirmations improve hit rate without over-rewarding covering/capitulation cases | Low |
 | TFI threshold | Evaluate threshold=0.15 vs 0.10 for BTC-PERPETUAL tick size after live data | Low |
-| MicroCVD accelThreshold | Default 5000 USD; consider dynamic scaling vs VolumeSMA on quiet sessions | Low |
+| MicroCVD accelThreshold | Default raised to 10000 USD in v14 (was 5000); consider dynamic scaling vs VolumeSMA on quiet sessions | Low |
 | AtrTargetMultiplier | Currently 2.0; review against logged R:R after 50+ trades | Low |
 | OFI ratio | BuyDominantRatio=3.0 / SellDominantRatio=0.333; review against OFI hit rate in CalibrationReport | Low |
 | TTM flatThreshold | Default 0.5; review FLAT vs RISING/FALLING against 1m candle range distribution | Low |
@@ -372,6 +403,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-27** | [cleanup pass] `settings.json` bumped v14 → v15. No behavioural change; strips silently-ignored keys and unused config fields so the file matches the engine's actual surface area. **Code:** removed dead fields `IndicatorResults.OI_Prev15m`/`OI_Prev60m`/`ATRAvg20d`; removed three never-called `DynamicNorms.StaticVol*` properties; deleted `Ema200Settings` (entire class) and dead properties on `VwapSettings` (`DevThresholdPct`, `Session1StartHour`, `Session1StartMinute`), `BbwSettings` (`ReleasingRocThreshold`), `ObvSettings` (`Lookback`), `AtrSettings` (`RefPeriod`), `LiquidationSettings` (`LongLiqThreshold`, `ShortLiqThreshold`), `CvdSettings` (`TradeLookback`), `MTFGateSettings` (`EmaPeriodFast`, `EmaPeriodSlow`), `ScoringSettings` (`TransitionalPenaltyEnabled`), `RegimeGateSettings` (`SuppressLongInTrendingDown`, `SuppressShortInTrendingUp`); removed dead `Public Const ScoringEngine.MaxScore = 19` (replaced by `RegimeMaxScore()` long ago) and unused `SettingsLoader.Reload()`. Aligned remaining default values with v14 calibration so an absent `settings.json` no longer spawns stale defaults. **Streamlining:** extracted `IndicatorEngine.GetSessionCandles()` to dedupe the VWAP session-boundary calculation between `CalcVWAP` and `CalcVWAPBands`; cleaned a meaningless dummy initialiser in `CalcKellySizing`. **Bug fixes:** `MainForm_Render_Sections` BBW status colour compared against `"SQUEEZE"` (indicator emits `"ACTIVE"` / `"RELEASING"` / `"NONE"`) so the warn colour never fired; TTM direction colour compared against `"UP"` / `"DOWN"` (indicator emits `"RISING"` / `"FALLING"` / `"FLAT"`) so the green/red tints never fired. Both display-only — zero scoring impact. |
 | **2026-04-22** | [calibration pass] `settings.json` bumped v13 → v14. Value-only tuning sweep (no schema changes): OFI `buy/sell_dominant_ratio` 3.0/0.333 → 2.0/0.5; RSI `partial_overbought/partial_oversold` 50/50 → 55/45; `funding_high_positive/negative` ±0.0001 → ±0.0003; CVD `slope_min_usd` 1000 → 12000; Volume `dynamic_high_clamp_min`/`dynamic_mid_clamp_min` 1.5/1.2 → 2.0/1.5; ATR `static_ref` 150 → 115; MicroCVD `accel_threshold` 5000 → 10000; Kelly `account_size_usd` confirmed 1000 (placeholder pending trader input). Also added funding-history dedup in `MainForm_Analysis.vb`: `_fundingHistory` now only appends when the funding rate actually changed from the previous sample, so Step 3b momentum is computed over genuinely distinct values rather than 1m snapshots of a rate that only updates every 8h. |
 | **2026-04-22** | [defect fixes — Batch 1] M1: MTF-gate JSON-to-POCO key binding repaired. `EngineSettings.MTFGateSettings` JsonPropertyNames renamed `candle_count` → `candle_lookback`, `dmi_period` → `adx_period`, `required_confirms` → `min_of`, and new `AdxMin` property added (`"adx_min"`, default 20.0). `settings.json` mtf_gate block trimmed to 5 keys (dropped `mode` / `block_action` / `timeframe_minutes` — none had code consumers). `MainForm_Analysis.vb` call site now wires `adxMin:=cfg.MTFGate.AdxMin` (was silently borrowing `cfg.Indicators.ADX.TrendThreshold` = 25, so the 15m soft gate now actually uses the intended 20). M2: Kelly display carries a two-line advisory label immediately below the `KELLY SIZING` header — "Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets. Treat as directional bias indicator only." No suppression logic changed; block still renders at every verdict level where `KellyPWin > 0`. M3: CAL-mode dead code removed. `MinCalibrationSamples` property deleted from `EngineSettings.KellySettings`; `min_calibration_samples` key removed from `settings.json`; `[{0}]` PMode tag removed from both `KELLY SIZING` UI headers (`[CAPPED]` retained). `KellyPMode` still assigned `"EST"` internally and will be reinstated when a backtesting module ships empirical per-tier win rates. |
 | **2026-04-21** | [adaptive-regime-weights] Pass 2c regime-alignment gate shipped. Added `RegimeWeightSettings` to `EngineSettings`; added `regime_weights` top-level block to `settings.json` (v13). `RegimeMaxScore()` now takes `cfg` and returns baseMax + AlignmentBonus for TRENDING/RANGE_BOUND when enabled, so TRENDING ceiling goes 19→20 and RANGE_BOUND 18→19 by default. Verdict % thresholds auto-adjust. Spec: `docs/adaptive-regime-weights-proposal.md`. |
