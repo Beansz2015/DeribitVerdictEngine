@@ -48,13 +48,6 @@ Public Class SettingsLoader
     End Sub
 
     ''' <summary>
-    ''' Force a reload from disk (useful after external edit).
-    ''' </summary>
-    Public Shared Sub Reload()
-        LoadFromDisk()
-    End Sub
-
-    ''' <summary>
     ''' Save the supplied settings object back to settings.json.
     ''' Updates version, last_modified timestamp, and appends to change_log.
     ''' </summary>

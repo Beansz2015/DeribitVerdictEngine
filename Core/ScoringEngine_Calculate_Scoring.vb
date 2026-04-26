@@ -14,8 +14,6 @@
 
 Partial Public Class ScoringEngine
 
-    Public Const MaxScore As Integer = 19
-
     Private Shared Function AppendLean(verdict As String, ls As Integer, ss As Integer, tWeak As Integer) As String
         If ls >= tWeak AndAlso ls >= ss Then
             Return verdict & " [WEAK LONG]"
