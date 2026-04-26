@@ -90,8 +90,7 @@ Partial Public Class MainForm
         Dim r As New IndicatorResults()
         r.CurrentPrice = candles1m.Last().Close
 
-        r.ATR       = IndicatorEngine.CalcATR(candles1m, cfg.Indicators.ATR.Period)
-        r.ATRAvg20d = IndicatorEngine.CalcATR(candles5m, cfg.Indicators.ATR.RefPeriod) * Math.Sqrt(5)
+        r.ATR = IndicatorEngine.CalcATR(candles1m, cfg.Indicators.ATR.Period)
 
         Dim norms As DynamicNorms = DynamicNorms.Compute(candles1m, r.ATR)
         r.ATRSizeMultiplier = Math.Round(norms.ATRScaleFactor, 2)

@@ -117,7 +117,6 @@ Public Class IndicatorSettings
     <JsonPropertyName("VWAP")>     Public Property VWAP     As New VwapSettings
     <JsonPropertyName("BBW")>      Public Property BBW      As New BbwSettings
     <JsonPropertyName("EMA")>      Public Property EMA      As New EmaSettings
-    <JsonPropertyName("EMA200")>   Public Property EMA200   As New Ema200Settings
     <JsonPropertyName("Donchian")> Public Property Donchian As New DonchianSettings
     <JsonPropertyName("OBV")>      Public Property OBV      As New ObvSettings
     <JsonPropertyName("ATR")>      Public Property ATR      As New AtrSettings
@@ -150,8 +149,8 @@ Public Class RsiSettings
     <JsonPropertyName("period")>             Public Property Period             As Integer = 9
     <JsonPropertyName("oversold")>           Public Property Oversold           As Double  = 40.0
     <JsonPropertyName("overbought")>         Public Property Overbought         As Double  = 60.0
-    <JsonPropertyName("partial_oversold")>   Public Property PartialOversold    As Double  = 50.0
-    <JsonPropertyName("partial_overbought")> Public Property PartialOverbought  As Double  = 50.0
+    <JsonPropertyName("partial_oversold")>   Public Property PartialOversold    As Double  = 45.0
+    <JsonPropertyName("partial_overbought")> Public Property PartialOverbought  As Double  = 55.0
     <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double = 0.001
     <JsonPropertyName("divergence_rsi_delta")>  Public Property DivergenceRsiDelta  As Double = 2.0
     ''' <summary>[P13] v0.50: RSI level above which BEARISH div triggers long penalty. Default 65.</summary>
@@ -171,18 +170,14 @@ Public Class RocSettings
 End Class
 
 Public Class VwapSettings
-    <JsonPropertyName("dev_threshold_pct")>      Public Property DevThresholdPct      As Double  = 0.30
-    <JsonPropertyName("session1_start_hour")>    Public Property Session1StartHour    As Integer = 0
-    <JsonPropertyName("session1_start_minute")>  Public Property Session1StartMinute  As Integer = 0
     <JsonPropertyName("session2_start_hour")>    Public Property Session2StartHour    As Integer = 13
     <JsonPropertyName("session2_start_minute")>  Public Property Session2StartMinute  As Integer = 30
     <JsonPropertyName("warmup_candles")>         Public Property WarmupCandles        As Integer = 15
 End Class
 
 Public Class BbwSettings
-    <JsonPropertyName("period")>                  Public Property Period                As Integer = 20
-    <JsonPropertyName("std_dev")>                 Public Property StdDev                As Double  = 2.0
-    <JsonPropertyName("releasing_roc_threshold")> Public Property ReleasingRocThreshold As Double  = 0.1
+    <JsonPropertyName("period")>  Public Property Period As Integer = 20
+    <JsonPropertyName("std_dev")> Public Property StdDev As Double  = 2.0
 End Class
 
 Public Class EmaSettings
@@ -191,41 +186,35 @@ Public Class EmaSettings
     <JsonPropertyName("slow")> Public Property Slow As Integer = 50
 End Class
 
-Public Class Ema200Settings
-    <JsonPropertyName("timeframe_minutes")> Public Property TimeframeMinutes As Integer = 5
-End Class
-
 Public Class DonchianSettings
     <JsonPropertyName("period")> Public Property Period As Integer = 20
 End Class
 
 Public Class ObvSettings
-    <JsonPropertyName("lookback")>        Public Property Lookback       As Integer = 10
-    <JsonPropertyName("trend_gate")>      Public Property TrendGate      As Double  = 0.001
-    <JsonPropertyName("divergence_gate")> Public Property DivergenceGate As Double  = 0.001
+    <JsonPropertyName("trend_gate")>      Public Property TrendGate      As Double = 0.001
+    <JsonPropertyName("divergence_gate")> Public Property DivergenceGate As Double = 0.001
 End Class
 
 Public Class AtrSettings
     <JsonPropertyName("period")>     Public Property Period    As Integer = 7
-    <JsonPropertyName("ref_period")> Public Property RefPeriod As Integer = 20
-    <JsonPropertyName("static_ref")> Public Property StaticRef As Double  = 150.0
+    <JsonPropertyName("static_ref")> Public Property StaticRef As Double  = 115.0
     <JsonPropertyName("scale_min")>  Public Property ScaleMin  As Double  = 0.25
     <JsonPropertyName("scale_max")>  Public Property ScaleMax  As Double  = 4.0
 End Class
 
 Public Class OfiSettings
     <JsonPropertyName("book_depth")>          Public Property BookDepth         As Integer = 5
-    <JsonPropertyName("buy_dominant_ratio")>  Public Property BuyDominantRatio  As Double  = 3.0
-    <JsonPropertyName("sell_dominant_ratio")> Public Property SellDominantRatio As Double  = 0.333
+    <JsonPropertyName("buy_dominant_ratio")>  Public Property BuyDominantRatio  As Double  = 2.0
+    <JsonPropertyName("sell_dominant_ratio")> Public Property SellDominantRatio As Double  = 0.5
 End Class
 
 Public Class VolumeSettings
     <JsonPropertyName("sma_period")>             Public Property SmaPeriod           As Integer = 9
     <JsonPropertyName("static_high")>            Public Property StaticHigh          As Double  = 3.0
     <JsonPropertyName("static_mid")>             Public Property StaticMid           As Double  = 2.0
-    <JsonPropertyName("dynamic_high_clamp_min")> Public Property DynamicHighClampMin As Double  = 1.5
+    <JsonPropertyName("dynamic_high_clamp_min")> Public Property DynamicHighClampMin As Double  = 2.0
     <JsonPropertyName("dynamic_high_clamp_max")> Public Property DynamicHighClampMax As Double  = 6.0
-    <JsonPropertyName("dynamic_mid_clamp_min")>  Public Property DynamicMidClampMin  As Double  = 1.2
+    <JsonPropertyName("dynamic_mid_clamp_min")>  Public Property DynamicMidClampMin  As Double  = 1.5
     <JsonPropertyName("dynamic_mid_clamp_max")>  Public Property DynamicMidClampMax  As Double  = 4.0
 End Class
 
@@ -236,10 +225,8 @@ Public Class VwapDynamicSettings
 End Class
 
 Public Class LiquidationSettings
-    <JsonPropertyName("long_liq_threshold")>  Public Property LongLiqThreshold  As Double = 50000.0
-    <JsonPropertyName("short_liq_threshold")> Public Property ShortLiqThreshold As Double = 50000.0
-    <JsonPropertyName("large_liq_size")>      Public Property LargeLiqSize      As Double = 200.0
-    <JsonPropertyName("dominance_ratio")>     Public Property DominanceRatio    As Double = 2.0
+    <JsonPropertyName("large_liq_size")>  Public Property LargeLiqSize   As Double = 200.0
+    <JsonPropertyName("dominance_ratio")> Public Property DominanceRatio As Double = 2.0
 End Class
 
 Public Class OiSettings
@@ -252,12 +239,11 @@ Public Class DmiSettings
 End Class
 
 Public Class CvdSettings
-    <JsonPropertyName("slope_min_usd")>        Public Property SlopeMinUsd         As Double  = 1000.0
-    <JsonPropertyName("slope_pct_of_value")>   Public Property SlopePctOfValue     As Double  = 0.01
+    <JsonPropertyName("slope_min_usd")>         Public Property SlopeMinUsd         As Double  = 12000.0
+    <JsonPropertyName("slope_pct_of_value")>    Public Property SlopePctOfValue     As Double  = 0.01
     <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double  = 0.0005
-    <JsonPropertyName("trade_lookback")>        Public Property TradeLookback       As Integer = 100
     ''' <summary>[P13] v0.50: Score penalty magnitude for CVD divergence. Default 1.</summary>
-    <JsonPropertyName("divergence_penalty")>   Public Property DivergencePenalty   As Integer = 1
+    <JsonPropertyName("divergence_penalty")>    Public Property DivergencePenalty   As Integer = 1
 End Class
 
 ''' <summary>[P4] v0.48: TFI window independent of MicroCVD. Default 30 trades.</summary>
@@ -272,7 +258,7 @@ End Class
 ''' </summary>
 Public Class MicroCvdSettings
     <JsonPropertyName("window_size")>     Public Property WindowSize     As Integer = 50
-    <JsonPropertyName("accel_threshold")> Public Property AccelThreshold As Double  = 5000.0
+    <JsonPropertyName("accel_threshold")> Public Property AccelThreshold As Double  = 10000.0
     <JsonPropertyName("decel_penalty")>   Public Property DecelPenalty   As Integer = 1
 End Class
 
@@ -379,13 +365,11 @@ End Class
 ''' Set Enabled=false in settings.json to bypass entirely (hot-reload safe).
 ''' </summary>
 Public Class MTFGateSettings
-    <JsonPropertyName("enabled")>           Public Property Enabled          As Boolean = True
-    <JsonPropertyName("candle_lookback")>   Public Property CandleCount      As Integer = 60
-    <JsonPropertyName("ema_period_fast")>   Public Property EmaPeriodFast    As Integer = 9
-    <JsonPropertyName("ema_period_slow")>   Public Property EmaPeriodSlow    As Integer = 21
-    <JsonPropertyName("adx_period")>        Public Property DmiPeriod        As Integer = 9
-    <JsonPropertyName("adx_min")>           Public Property AdxMin           As Double  = 20.0
-    <JsonPropertyName("min_of")>            Public Property RequiredConfirms As Integer = 2
+    <JsonPropertyName("enabled")>         Public Property Enabled          As Boolean = True
+    <JsonPropertyName("candle_lookback")> Public Property CandleCount      As Integer = 60
+    <JsonPropertyName("adx_period")>      Public Property DmiPeriod        As Integer = 9
+    <JsonPropertyName("adx_min")>         Public Property AdxMin           As Double  = 20.0
+    <JsonPropertyName("min_of")>          Public Property RequiredConfirms As Integer = 2
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -404,14 +388,13 @@ End Class
 ' ---------------------------------------------------------------------------
 
 Public Class ScoringSettings
-    <JsonPropertyName("verdict_strong_pct")> Public Property VerdictStrongPct As Double  = 0.70
-    <JsonPropertyName("verdict_med_pct")>    Public Property VerdictMedPct    As Double  = 0.53
-    <JsonPropertyName("verdict_weak_pct")>   Public Property VerdictWeakPct   As Double  = 0.35
-    <JsonPropertyName("transitional_penalty_enabled")> Public Property TransitionalPenaltyEnabled As Boolean = True
-    <JsonPropertyName("funding_high_positive")> Public Property FundingHighPositive As Double = 0.001
-    <JsonPropertyName("funding_low_positive")>  Public Property FundingLowPositive  As Double = 0.0005
-    <JsonPropertyName("funding_high_negative")> Public Property FundingHighNegative As Double = -0.001
-    <JsonPropertyName("funding_low_negative")>  Public Property FundingLowNegative  As Double = -0.0005
+    <JsonPropertyName("verdict_strong_pct")> Public Property VerdictStrongPct As Double = 0.70
+    <JsonPropertyName("verdict_med_pct")>    Public Property VerdictMedPct    As Double = 0.53
+    <JsonPropertyName("verdict_weak_pct")>   Public Property VerdictWeakPct   As Double = 0.35
+    <JsonPropertyName("funding_high_positive")> Public Property FundingHighPositive As Double = 0.0003
+    <JsonPropertyName("funding_low_positive")>  Public Property FundingLowPositive  As Double = 0.00005
+    <JsonPropertyName("funding_high_negative")> Public Property FundingHighNegative As Double = -0.0003
+    <JsonPropertyName("funding_low_negative")>  Public Property FundingLowNegative  As Double = -0.00005
     ''' <summary>Score penalty while BBW TTM Squeeze is ACTIVE (both sides). Default 2.</summary>
     <JsonPropertyName("bbw_squeeze_penalty")>  Public Property BbwSqueezePenalty  As Integer = 2
     ''' <summary>Penalty for standard-size adverse liquidations. Default 1.</summary>
@@ -426,8 +409,8 @@ Public Class ScoringSettings
     <JsonPropertyName("funding_low_penalty")>  Public Property FundingLowPenalty  As Integer = 1
     ''' <summary>ATR distance multiplier for raw target price. Default 2.0.</summary>
     <JsonPropertyName("atr_target_multiplier")> Public Property AtrTargetMultiplier As Double = 2.0
-    ''' <summary>ATR distance multiplier for stop-loss price. Default 1.0.</summary>
-    <JsonPropertyName("atr_stop_multiplier")>  Public Property AtrStopMultiplier  As Double  = 1.0
+    ''' <summary>ATR distance multiplier for stop-loss price. Default 1.2.</summary>
+    <JsonPropertyName("atr_stop_multiplier")>   Public Property AtrStopMultiplier   As Double = 1.2
     ''' <summary>[T1-D] ROC level above which TAKE PROFIT fires for a long. Default 0.6.</summary>
     <JsonPropertyName("hold_roc_take_profit_long")>  Public Property HoldRocTakeProfitLong  As Double = 0.6
     ''' <summary>[T1-D] ROC level below which TAKE PROFIT fires for a short. Default -0.6.</summary>
@@ -481,11 +464,9 @@ End Class
 ' ---------------------------------------------------------------------------
 
 Public Class RegimeGateSettings
-    <JsonPropertyName("suppress_long_in_trending_down")>  Public Property SuppressLongInTrendingDown  As Boolean = True
-    <JsonPropertyName("suppress_short_in_trending_up")>   Public Property SuppressShortInTrendingUp   As Boolean = True
-    <JsonPropertyName("transitional_adx_penalty_low")>    Public Property TransitionalAdxPenaltyLow   As Double  = 20.0
-    <JsonPropertyName("transitional_adx_penalty_mid")>    Public Property TransitionalAdxPenaltyMid   As Double  = 22.5
-    <JsonPropertyName("transitional_adx_penalty_high")>   Public Property TransitionalAdxPenaltyHigh  As Double  = 25.0
-    <JsonPropertyName("transitional_penalty_low")>        Public Property TransitionalPenaltyLow      As Integer = 2
-    <JsonPropertyName("transitional_penalty_mid")>        Public Property TransitionalPenaltyMid      As Integer = 1
+    <JsonPropertyName("transitional_adx_penalty_low")>  Public Property TransitionalAdxPenaltyLow   As Double  = 20.0
+    <JsonPropertyName("transitional_adx_penalty_mid")>  Public Property TransitionalAdxPenaltyMid   As Double  = 22.5
+    <JsonPropertyName("transitional_adx_penalty_high")> Public Property TransitionalAdxPenaltyHigh  As Double  = 25.0
+    <JsonPropertyName("transitional_penalty_low")>      Public Property TransitionalPenaltyLow      As Integer = 2
+    <JsonPropertyName("transitional_penalty_mid")>      Public Property TransitionalPenaltyMid      As Integer = 1
 End Class

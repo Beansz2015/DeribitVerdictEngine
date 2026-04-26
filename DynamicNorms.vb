@@ -19,25 +19,6 @@ Public Class DynamicNorms
     Public Property ATRRef As Double
     Public Property IsLive As Boolean
 
-    ' Convenience accessors to settings (read-only, for callers that want raw constants)
-    Public Shared ReadOnly Property StaticVolHigh As Double
-        Get
-            Return SettingsLoader.Current.Indicators.Volume.StaticHigh
-        End Get
-    End Property
-
-    Public Shared ReadOnly Property StaticVolMid As Double
-        Get
-            Return SettingsLoader.Current.Indicators.Volume.StaticMid
-        End Get
-    End Property
-
-    Public Shared ReadOnly Property StaticVWAPDev As Double
-        Get
-            Return SettingsLoader.Current.Indicators.VWAPDynamic.StaticFallback
-        End Get
-    End Property
-
     Public Shared Function Compute(candles1m As List(Of Candle), currentATR As Double) As DynamicNorms
         Dim cfg = SettingsLoader.Current.Indicators
         Dim n As New DynamicNorms()

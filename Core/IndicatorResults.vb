@@ -9,7 +9,6 @@ Public Class IndicatorResults
     Public Property RSI As Double
     Public Property RSIDivergence As String  ' NONE / BULLISH / BEARISH
     Public Property ATR As Double
-    Public Property ATRAvg20d As Double
     Public Property ATRSizeMultiplier As Double
     Public Property VolumeSMA9 As Double
     Public Property CurrentVolume As Double  ' BTC volume -- used for scoring
@@ -43,8 +42,6 @@ Public Class IndicatorResults
     Public Property FundingBias As String
     Public Property FundingMomentum As String  ' "RISING" / "FALLING" / "FLAT" -- computed from rolling history in MainForm_Layout
     Public Property OI_Current As Double
-    Public Property OI_Prev15m As Double
-    Public Property OI_Prev60m As Double
     Public Property OIChange15m As Double    ' % change
     Public Property OIChange60m As Double
     Public Property OISignal As String       ' NEW LONGS / NEW SHORTS / COVERING / CAPITULATION / NEUTRAL
