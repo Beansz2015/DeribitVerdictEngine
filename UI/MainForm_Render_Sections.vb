@@ -93,10 +93,12 @@ Partial Public Class MainForm
         ' -- BBW / TTM SQUEEZE ------------------------------------------------
         SectionHeader(rtb, "BBW / TTM SQUEEZE:")
         AppendRtf(rtb, "  BBW: ", C_LABEL)
-        Dim sqColour As Color = If(r.SqueezeStatus = "SQUEEZE", C_WARN, C_VALUE)
+        Dim sqColour As Color = If(r.SqueezeStatus = "ACTIVE", C_WARN,
+                                   If(r.SqueezeStatus = "RELEASING", C_GOOD, C_VALUE))
         AppendRtf(rtb, String.Format("{0:F3}  |  Status: {1}", r.BBW, r.SqueezeStatus) & Environment.NewLine, sqColour)
         AppendRtf(rtb, "  TTM: ", C_LABEL)
-        Dim ttmColour As Color = If(r.TTMDirection = "UP", C_GOOD, If(r.TTMDirection = "DOWN", C_BAD, C_VALUE))
+        Dim ttmColour As Color = If(r.TTMDirection = "RISING", C_GOOD,
+                                    If(r.TTMDirection = "FALLING", C_BAD, C_VALUE))
         AppendRtf(rtb, String.Format("Histogram={0:F2}  Dir={1}  Signal={2}",
                                       r.TTMHistogram, r.TTMDirection, r.TTMSignal) & Environment.NewLine, ttmColour)
 
