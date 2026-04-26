@@ -40,7 +40,7 @@ This manual is a field-by-field reference for every variable and display block t
 
 ---
 
-## 1. Verdict Block
+## 1. Verdict Block {#1-verdict-block}
 
 The header panel at the top of each analysis run. Always present.
 
@@ -170,7 +170,7 @@ All RSI/ROC thresholds sourced from `cfg.Scoring.HoldRoc*` and `HoldRsi*`.
 
 ---
 
-## 2. ATR Entry Levels
+## 2. ATR Entry Levels {#2-atr-entry-levels}
 
 ```
 ATR ENTRY LEVELS  (ATR 57.60 x 0.79 scale | 1.2x stop / 2.0x target)
@@ -194,6 +194,7 @@ All four read live from config; the label display is dynamic, not hardcoded. R:R
 **What:** Long-direction trade frame.
 
 **Calculation:**
+
 - `atrStop   = r.ATR × norms.ATRScaleFactor × stopMult`
 - `atrTarget = r.ATR × norms.ATRScaleFactor × targetMult`
 - `longStop   = r.CurrentPrice − atrStop`
@@ -225,7 +226,7 @@ Mirrored: `shortStop = r.CurrentPrice + atrStop`, `shortTarget = r.CurrentPrice 
 
 ---
 
-## 3. Kelly Sizing
+## 3. Kelly Sizing {#3-kelly-sizing}
 
 ```
 KELLY SIZING  [CAPPED]
@@ -243,6 +244,7 @@ KELLY SIZING  [CAPPED]
 ### Section Header
 
 **Format:**
+
 - Normal: `KELLY SIZING` (optionally `  [CAPPED]`)
 - NO TRADE: `KELLY SIZING  [BIAS ONLY — NO TRADE]` (optionally `  [CAPPED]`)
 
@@ -285,6 +287,7 @@ Floor and scale are `cfg.Kelly.EstProbFloor` (0.45) and `cfg.Kelly.EstProbScale`
 **What:** Raw Kelly fraction and its half-Kelly damped variant, as percentages.
 
 **Calculation:**
+
 - `b  = cfg.Scoring.AtrTargetMultiplier / cfg.Scoring.AtrStopMultiplier` — default 2.0 / 1.2 = 1.667.
 - `q  = 1 - p`.
 - `f* = (b × p − q) / b`. Negative means no edge under these priors.
@@ -331,7 +334,7 @@ If `f* ≤ 0`, the entire block exits silently (see gate above).
 
 ---
 
-## 4. Dynamic Norms
+## 4. Dynamic Norms {#4-dynamic-norms}
 
 ```
 DYNAMIC NORMS  [LIVE]
@@ -356,6 +359,7 @@ The adaptive threshold layer (`DynamicNorms.vb`). Computed per run, applied to s
 **What:** Dynamic upper and mid volume ratio thresholds used by the Volume signal in Step 2, and the `mean` / stdev `s` statistics underlying them.
 
 **Calculation:** In `DynamicNorms.Compute`:
+
 - `volMean` — rolling average of the last `min(100, candles - 1)` 1m candle volumes (BTC).
 - `volSD` — population standard deviation over the same window.
 - **Collapsed-variance fallback:** If `volSD < volMean × 0.05`, static values are used: `H = cfg.Indicators.Volume.StaticHigh` (3.0), `M = StaticMid` (2.0). This prevents division-by-noise when volume has flat-lined.
@@ -368,6 +372,7 @@ The adaptive threshold layer (`DynamicNorms.vb`). Computed per run, applied to s
 **Possible ranges:** H: 1.6–6.9x. M: 1.2–4.4x. Extremes imply the session is either dead quiet or extremely expansive.
 
 **Interpretation:**
+
 - `VolumeRatio ≥ H` on a candle with price moving in-direction fires a full Volume signal. Below H, above M, and with cross-confirmation fires a mid-tier partial via Pass 2.
 - A live H value near the clamp floor (2.0x NY-adjusted, ≈2.3x after session mult) in a quiet session is telling you "relative expansion is cheap here — don't over-weight volume spikes". Conversely a high H (>5x) during quiet intervals means only genuine flushes will register.
 - The trader's spec rule is "breakout needs > 3x SMA(9)". The dynamic H replaces the literal 3.0 threshold; when live H drops below 3.0, the engine is relaxing that rule based on session context. Override mentally if you want strict 3x.
@@ -377,6 +382,7 @@ The adaptive threshold layer (`DynamicNorms.vb`). Computed per run, applied to s
 **What:** Dynamic VWAP deviation threshold (as percentage). Displayed with a `(legacy ref)` tag.
 
 **Calculation:**
+
 - Computed by running a rolling cumulative VWAP over the last `min(50, candles - 1)` samples and collecting `|close − vwap| / vwap × 100` per sample.
 - `threshold = clamp(mean(devs) + stdDev(devs), cfg.Indicators.VWAPDynamic.DevClampMin, DevClampMax)` = clamp to `[0.30, 3.0]`.
 - Falls back to `StaticFallback` (1.5) if fewer than 10 samples.
@@ -390,16 +396,19 @@ The adaptive threshold layer (`DynamicNorms.vb`). Computed per run, applied to s
 **What:** The live ATR scale factor used to stretch/compress ATR-based targets and stops, plus the inputs.
 
 **Calculation:**
+
 - `ATRRef` — rolling mean of ATR over the recent window (`min(100, candles - period)` rolling ATR values, default ATR period 7). On cold start or insufficient history falls back to `cfg.Indicators.ATR.StaticRef` (115 v14, midpoint of trader-profile Normal band 80–150).
 - `ATRScaleFactor = clamp(r.ATR / ATRRef, cfg.Indicators.ATR.ScaleMin, ScaleMax)` = clamp to `[0.25, 4.0]`.
 - When `r.ATR = 0` or `ATRRef = 0`, factor defaults to 1.0 and ref falls back to `StaticRef`.
 
 **Displayed:**
+
 - `scale` — the factor (e.g. 0.79x).
 - `ATR` — current raw ATR (price points) from `r.ATR`.
 - `ref` — rolling reference ATR or static fallback.
 
 **Interpretation:**
+
 - `scale > 1.0` → current ATR is above its rolling baseline. The engine widens ATR-based stops and targets proportionally — you're in an expansion regime. Position size down (per trader-profile: low-ATR = larger size, high-ATR = smaller size).
 - `scale < 1.0` → current ATR is below baseline. Stops and targets compress, meaning the ATR frame gets tighter. Position size up within risk limits.
 - `scale = 1.0` exactly on any non-warm-up run means either the raw ATR matched the reference or the clamp bit — check the raw values.
@@ -407,7 +416,7 @@ The adaptive threshold layer (`DynamicNorms.vb`). Computed per run, applied to s
 
 ---
 
-## 5. Regime
+## 5. Regime {#5-regime}
 
 ```
 REGIME (5m): TRANSITIONAL
@@ -456,6 +465,7 @@ Applied with a `TierFloor` guard so the raw score cannot penalty-fall below its 
 **Calculation:** `CalcDMI` in `Indicators_Momentum.vb`. Wilder-smoothed true range and directional movement; `+DI = 100 × smoothedDMPlus / smoothedTR`, `-DI = 100 × smoothedDMMinus / smoothedTR`, `DX = 100 × |+DI − −DI| / (+DI + −DI)`, ADX = Wilder-smoothed DX over `period`.
 
 **Interpretation:**
+
 - The spread `(+DI) − (−DI)` is the directional conviction. In the sample above, 27.5 vs 9.6 is a strong +DI bias — but ADX 24.3 is still sub-trend, so the regime label says `TRANSITIONAL` rather than `TRENDING_UP`. Read this as "direction is clean but the trend hasn't *earned* the label yet".
 - Rising ADX through 25 with +DI dominant is the canonical `TRANSITIONAL → TRENDING_UP` transition; watch for it over a few consecutive runs.
 - `RANGE_BOUND` after a trend (ADX dipping below 20 following a period above 25) is the regime that triggers the 1-bar hysteresis — meaning one tick of "false range" after a trending sequence will display the previous label. Actual `RANGE_BOUND` only appears after two consecutive qualifying reads.
@@ -466,7 +476,7 @@ Regime line colour: `TRENDING_UP` green, `TRENDING_DOWN` red, `RANGE_BOUND` ambe
 
 ---
 
-## 6. Core Signals (1m)
+## 6. Core Signals (1m) {#6-core-signals-1m}
 
 ```
 CORE SIGNALS (1m):
@@ -488,6 +498,7 @@ Three always-scored primitives on the 1m execution timeframe.
 - `FLAT`    — otherwise
 
 **Scoring use:**
+
 - **Full long**: `ROC > 0` AND `ROCSlope = RISING`
 - **Full short**: `ROC < 0` AND `ROCSlope = FALLING`
 - **Partial long**: `ROC > cfg.Indicators.ROC.SlopeSensitivity` (0.1) AND `ROCSlope != RISING` — can upgrade in Pass 2 with any Momentum cross-confirm.
@@ -495,6 +506,7 @@ Three always-scored primitives on the 1m execution timeframe.
 - **Pass 2c TRENDING input**: `active` when `|ROC| ≥ SlopeSensitivity`; then aligned if sign matches dominant side.
 
 **Interpretation:**
+
 - `ROC` value is read as percent; +0.115 means the 1m close is 0.115% above 9 candles prior.
 - `Slope FLAT` with `ROC > 0.1` is the classic "still positive, losing momentum" read — the scoring engine recognises this via the partial path.
 - On 1m BTC scalping, `|ROC| > 0.3` is already a strong single-bar impulse; > 0.6 is extension territory and triggers `TAKE PROFIT` hold status if in-position (default `HoldRocTakeProfitLong = 0.6`, `Short = -0.6`).
@@ -505,12 +517,14 @@ Three always-scored primitives on the 1m execution timeframe.
 **What:** 9-period Wilder RSI plus optional divergence tag.
 
 **Calculation:** `CalcRSI(candles1m, 9)`. Wilder EMA-smoothed gain/loss ratio, standard formula. `RSIDivergence` is calculated separately by `CalcRSIDivergence` using **pivot-based** detection (not rolling averages):
+
 - Scans the last `LookbackBars=20` bars for structural swing pivots with `PivotWing=2` confirmation bars on each side.
 - `BEARISH` fires when price prints a higher high than the pivot AND RSI at that pivot was lower than current RSI — and both deltas clear `DivergencePriceGate=0.001` and `DivergenceRsiDelta=2.0`.
 - `BULLISH` is the mirror for lower-low price pivots.
 - Returns `NONE` otherwise.
 
 **Scoring use:**
+
 - **Full long**: `RSI > overbought (60)`
 - **Full short**: `RSI < oversold (40)`
 - **Partial long**: `RSI > partial_overbought (55)` AND `RSI ≤ 60` — **dead band 45–55** (v14). Can upgrade in Pass 2.
@@ -519,10 +533,12 @@ Three always-scored primitives on the 1m execution timeframe.
 - **Pass 2c RANGE_BOUND input**: `active` always; aligned if `RSI > 50` (for long side) or `RSI < 50` (short).
 
 **Display variants:**
+
 - `Div:` line **appended only** when `RSIDivergence != NONE` and not empty. No line means no structural divergence detected in the lookback window.
 - Colour: red above 70, green below 30, grey between.
 
 **Interpretation:**
+
 - The 45–55 dead band is deliberate — RSI near the neutral line provides no directional edge and used to double-count momentum via the old `50/50` partial thresholds. Post-v14, you'll see RSI rows without `[L*]` / `[S*]` hits for every small drift off 50.
 - A `Div: BEARISH` tag with `RSI < 65` is visible but does **not** penalise scoring — the penalty gate is deliberately set above the overbought line to filter noise. If you see `Div: BEARISH` with RSI 58–64, it's a soft warning to tighten exits, nothing more.
 - RSI is the hold manager, not an entry trigger — per trader profile, act on RSI during trade management (`> 60` hold, `< 40` exit for longs), not for entry.
@@ -532,12 +548,14 @@ Three always-scored primitives on the 1m execution timeframe.
 **What:** Current 1m candle volume (BTC), USD notional, ratio to 9-period SMA, and the SMA value itself.
 
 **Calculation:**
+
 - `CurrentVolume` — `candles1m.Last().Volume` in BTC.
 - `CurrentVolumeUSD` — computed elsewhere in `MainForm_Analysis` from current close × volume. Formatted with `M` / `K` / plain suffix per magnitude.
 - `VolumeSMA9` — `CalcVolumeSMA(candles1m, 9)` over last 9 candles.
 - `VolumeRatio` — `CurrentVolume / VolumeSMA9`.
 
 **Scoring use (with Dynamic Norms thresholds H and M):**
+
 - **Full long**: `VolumeRatio ≥ H` AND `ROC > 0` AND `CurrentPrice > VWAP`
 - **Full short**: `VolumeRatio ≥ H` AND `ROC < 0` AND `CurrentPrice < VWAP`
 - **Partial (mid-tier)**: `VolumeRatio ≥ M` AND `VolumeRatio < H`. Upgrades to full score in Pass 2 only with a Volume-category cross-confirm (OBV).
@@ -546,13 +564,14 @@ Three always-scored primitives on the 1m execution timeframe.
 **Display colour:** green ≥ 1.5x, red < 0.7x, grey otherwise.
 
 **Interpretation:**
+
 - The USD column is a sanity check against the BTC ratio — 0.16x may sound dead but if BTC is trading at $76k, the actual notional still matters. On 1m BTC perp, `> $500K` notional usually means real participation regardless of the ratio.
 - A `VolumeRatio < 0.7x` (red) during price movement is a fade warning — price moving without volume rarely sustains. The engine doesn't penalise low volume directly, but the full/partial volume tiers won't fire, so directional signals lose a line of confirmation.
 - Remember: the trader-profile 3x rule is subsumed by the Dynamic Norms H threshold. A `0.16x` ratio isn't even close to any tier; a `2.5x` ratio in NY session (H ≈ 4x) still won't fire full volume but may qualify mid-tier.
 
 ---
 
-## 7. VWAP
+## 7. VWAP {#7-vwap}
 
 ```
 VWAP (reset 13:30 UTC):
@@ -576,11 +595,13 @@ Dual-session auto-anchored VWAP with volume-weighted sigma bands.
 ### Value / Dev / Candles
 
 **What:**
+
 - `Value` — session VWAP (volume-weighted typical price cumulated since anchor).
 - `Dev` — `(CurrentPrice − VWAP) / VWAP × 100` as percent. Signed (positive = price above VWAP).
 - `Candles` — `VWAPSessionCandles`, count of 1m candles since the session anchor.
 
 **Calculation (`CalcVWAP` in `Indicators_Volatility.vb`):**
+
 - Anchor selection: if `UtcNow` is before `Session2` (default `13:30 UTC`), anchor = start of UTC day (`00:00`). Else anchor = `13:30 UTC` today.
 - Accumulate `typicalPrice × volume` and `volume` from anchor onwards where `typicalPrice = (H + L + C) / 3`.
 - `VWAP = cumTPV / cumVol`.
@@ -588,6 +609,7 @@ Dual-session auto-anchored VWAP with volume-weighted sigma bands.
 **Display colour:** Dev shown amber when `|Dev| > norms.VWAPDevThreshold`; grey otherwise. (As noted in Dynamic Norms, the threshold is a `legacy ref` — scoring uses sigma bands, not Dev%.)
 
 **Interpretation:**
+
 - Dev reads as session "air gap" above/below fair value. On BTC perp, `|Dev| > 0.3%` is meaningful; > 0.5% is extended and often mean-reverts.
 - `Candles` count lets you verify session integrity — after 13:30 UTC reset you should see it drop back to low single digits then climb. A stuck count (e.g. 200+ after what should have been a reset) means something broke in session detection.
 
@@ -596,11 +618,13 @@ Dual-session auto-anchored VWAP with volume-weighted sigma bands.
 **What:** 1-sigma and 2-sigma **volume-weighted** bands around VWAP. Not percentile bands — true weighted standard deviation of `typicalPrice` from VWAP.
 
 **Calculation (`CalcVWAPBands`):**
+
 - Over the same session candles, accumulate `volume × (typicalPrice − VWAP)²` and `volume`.
 - `sigma = sqrt(cumWeightedSqDev / cumVol)`.
 - `s1 = VWAP ± sigma`, `s2 = VWAP ± 2σ`.
 
 **Scoring use:**
+
 - **Full long (Microstructure category)**: `VWAP < Price ≤ s1Upper` — price is above VWAP but still within the first band.
 - **Full short**: `s1Lower ≤ Price < VWAP`.
 - **Partial long** (can upgrade via Pass 2 with any Microstructure cross-confirm): `s1Upper < Price ≤ s2Upper`.
@@ -609,6 +633,7 @@ Dual-session auto-anchored VWAP with volume-weighted sigma bands.
 - **Pass 2c RANGE_BOUND input**: `active` only when not in warmup; then aligned if price above VWAP (long) or below (short).
 
 **Interpretation:**
+
 - Price sitting just above VWAP with `Dev < 0.1%` typically means the s1 band contains it (full long score). This is the "clean mean-reversion long" posture.
 - Between s1 and s2 is "leaning extended" — the engine requires cross-confirmation before awarding the score, hence the partial-upgrade gate.
 - Beyond s2 is where you'd look for **short against** the extension (if you're a mean-reverter) or **cut exposure** (if you're running with the trend). The engine goes silent either way — by design, it doesn't pick a side in stretched tails.
@@ -616,7 +641,7 @@ Dual-session auto-anchored VWAP with volume-weighted sigma bands.
 
 ---
 
-## 8. BBW / TTM Squeeze
+## 8. BBW / TTM Squeeze {#8-bbw--ttm-squeeze}
 
 ```
 BBW / TTM SQUEEZE:
@@ -631,11 +656,13 @@ Bollinger Band Width (compression detector) plus TTM Squeeze Momentum (direction
 **What:** Bollinger Band Width (normalised), and a classified squeeze status.
 
 **Calculation (`CalcBBW` in `Indicators_Volatility.vb`):**
+
 - Rolling 20-period Bollinger Band over the last `period * 5 = 100` candles.
 - `BBW = (upper − lower) / mid`, where bands are `mid ± stdMult × stdDev` and `mid` is the 20-period SMA of closes.
 - `r.BBW` = most recent value in the series.
 
 **Squeeze threshold (v0.48):**
+
 - `threshold = 20th percentile` of the rolling BBW series (not `min × 1.5`).
 - `SqueezeStatus`:
   - `ACTIVE`    — current BBW ≤ threshold (in the bottom 20% of recent volatility)
@@ -649,6 +676,7 @@ Bollinger Band Width (compression detector) plus TTM Squeeze Momentum (direction
 **What:** Linear-regression momentum histogram, its slope direction, and a four-state signal combining the two.
 
 **Calculation (`CalcTTMSqueeze`):**
+
 - For each of the last `linRegPeriod=7` candles, compute `close − SMA20(close)`. This is the histogram input series.
 - Fit a least-squares linear regression through these 7 values; `Histogram = intercept + slope × (n−1)` — the regression's rightmost (latest) projected value.
 - `Direction` classified by comparing first-third-mean vs last-third-mean of the delta series:
@@ -691,7 +719,7 @@ Implemented in `ScoringEngine_Calculate_Scoring.vb` as a single Select on `Squee
 
 ---
 
-## 9. EMA Ribbon
+## 9. EMA Ribbon {#9-ema-ribbon}
 
 ```
 EMA RIBBON (1m):
@@ -716,6 +744,7 @@ Two-layer EMA view: 9/21/50 ribbon on 1m as the dynamic trend structure, plus 5m
 | Anything else           | `MIXED` |
 
 **Scoring use:**
+
 - **Full long (MarketStructure category)**: `EMAAlignment = BULL` → `+1 LongScore`.
 - **Full short**: `EMAAlignment = BEAR` → `+1 ShortScore`.
 - **MIXED**: no score.
@@ -725,6 +754,7 @@ Two-layer EMA view: 9/21/50 ribbon on 1m as the dynamic trend structure, plus 5m
 **Display colour:** green on `BULL`, red on `BEAR`, amber on `MIXED`.
 
 **Interpretation:**
+
 - The ribbon is the most influential single scoring primitive in TRENDING regimes — both a direct +1 and a Pass 2c alignment vote.
 - `MIXED` is a legitimate "standing-aside" signal. The most common cause is EMA9 crossing but EMA21 still ahead of EMA50 (or vice versa) — a ribbon in transition. No vote until the three lines reclaim monotonic order.
 - Ribbon spread (EMA9 − EMA50) implies trend strength. A `BULL` alignment where the three EMAs are within a few dollars of each other is a weak ribbon about to churn into `MIXED`; a wide spread is a mature trend.
@@ -745,6 +775,7 @@ Two-layer EMA view: 9/21/50 ribbon on 1m as the dynamic trend structure, plus 5m
 | `EMA200_5m = 0`                                   | `N/A`   |
 
 **Scoring use:**
+
 - **Full long (MarketStructure)**: `ABOVE` → `+1 LongScore`.
 - **Full short**: `BELOW` → `+1 ShortScore`.
 - **N/A**: no score (cold start).
@@ -752,13 +783,14 @@ Two-layer EMA view: 9/21/50 ribbon on 1m as the dynamic trend structure, plus 5m
 **Display colour:** green `ABOVE`, red `BELOW`.
 
 **Interpretation:**
+
 - This is a one-way regime veto in practice — price below the 5m EMA200 tilts the scoring towards short, above towards long, regardless of short-term 1m structure. The sample output shows the common conflict case: 1m ribbon `BULL` (+1 Long) but 5m EMA200 `BELOW` (+1 Short). That's the engine expressing "local long, higher-TF short" — healthy disagreement that gets resolved by the rest of the scoring stack.
 - A price within a few dollars of EMA200 (like the sample's `76038 vs 76040`) is structurally on the line — a single 1m candle could flip the classification. Treat borderline EMA200 reads as noise; wait for decisive separation.
 - `N/A` appearing after session start usually means the 5m candle fetch didn't return enough history. Engine is flying with one side of the scoring disabled. Re-run once data's caught up.
 
 ---
 
-## 10. Market Structure
+## 10. Market Structure {#10-market-structure}
 
 ```
 MARKET STRUCTURE:
@@ -782,6 +814,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 - Mid-channel (middle half)                          → `NONE`
 
 **Scoring use:**
+
 - **Full long / short (MarketStructure)**: `LONG` / `SHORT` → `+1`.
 - **Partial**: `LONG_PARTIAL` / `SHORT_PARTIAL` — can upgrade in Pass 2 with any MarketStructure cross-confirm.
 - **`NONE`**: no score, no partial. Breakdown row note reads `MID-CHANNEL -- no signal`.
@@ -790,6 +823,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 **Display colour:** green on `LONG`, red on `SHORT`, grey otherwise (partial signals display grey; the `[L]` / `[S]` hit still shows in breakdown).
 
 **Interpretation:**
+
 - Full `LONG` / `SHORT` = price just printed a 20-minute extreme. Genuine breakout that warrants cross-confirm from order flow and volume before acting.
 - `LONG_PARTIAL` (upper quartile) is "pressing the highs" — the right bid environment for a breakout but the level hasn't broken yet. The partial-upgrade path makes this score only when other MarketStructure signals (EMA ribbon, DMI, ADX, 5m EMA200, VPFR) agree.
 - `NONE` in the middle half is silent by design — mid-channel price has no breakout edge. Don't read absence as disconfirmation.
@@ -800,6 +834,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 **What:** On-Balance Volume trend direction plus price/OBV divergence state.
 
 **Calculation (`CalcOBV` in `Indicators_Structure.vb`):**
+
 - OBV accumulated across all supplied candles: `+volume` on up-close, `−volume` on down-close, no change on flat.
 - `obvChange = (obvLast − obvFirst) / |obvFirst|` if non-zero, else 0.
 - `OBVTrend`:
@@ -812,6 +847,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
   - Else / price change below gate → `NONE`
 
 **Scoring use:**
+
 - **Full long (Volume category)**: `OBVTrend = RISING` AND `OBVDivergence != BEARISH` → `+1`.
 - **Full short**: `OBVTrend = FALLING` AND `OBVDivergence != BULLISH` → `+1`.
 - **Partial long**: `OBVTrend = RISING` AND `OBVDivergence = BEARISH` — **adverse divergence blocks cross-category upgrade.** The partial does NOT promote to full in Pass 2 even with a Volume cross-confirm. Breakdown row appends `[upgrade blocked]`.
@@ -820,6 +856,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 **Display colour:** always grey (single colour path — no conditional). Signal state is legible from the `Trend=` and `Div=` strings.
 
 **Interpretation:**
+
 - OBV aligned with its own trend (no divergence) is a clean Volume-category confirm — the +1 is secondary to the Volume indicator itself but still contributes to any Pass 2 upgrade targeting the Volume category.
 - The divergence-blocks-upgrade gate exists for a reason documented in v0.42: OBV disagreeing with its own price trend means volume is not backing the move. Awarding the upgrade would reward a weak signal. Expect to see `Trend:RISING Div:BEARISH | [upgrade blocked]` during late-stage rallies where new highs are printed on fading participation.
 - In the sample, `Trend=RISING Div=BULLISH` — trend and divergence pointing the same direction (bullish tilt). This fires `obvLong` normally and does NOT block upgrades.
@@ -829,6 +866,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 **What:** Volume Profile Fixed Range over the available 1m window, with exponential decay weighting toward recent bars. Reports POC price, HVN-near-POC flag, and a signal classification.
 
 **Calculation (`CalcVPFRLite` in `Indicators_Structure.vb`):**
+
 - Price range: `[min(low), max(high)]` across supplied candles. Split into `numBuckets=50` equal-width buckets.
 - Volume per bucket: each candle contributes `volume × decayBase^age` where `decayBase=0.985` and `age = (candleCount − 1 − candleIndex)`. Most recent candle has weight 1.0; weight falls ~22% per 15 bars.
 - `POC` = midpoint of bucket with the highest accumulated weighted volume.
@@ -847,6 +885,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 | Otherwise | `NEUTRAL` |
 
 **Scoring use:**
+
 - **Full long (MarketStructure)**: `NEAR_HVN_SUPPORT` OR `IN_LVN_BULL` → `+1 LongScore`.
 - **Full short**: `NEAR_HVN_RESIST` OR `IN_LVN_BEAR` → `+1 ShortScore`.
 - **`NEUTRAL`**: no score.
@@ -855,6 +894,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 **Display colour:** green for support / LVN-bull, red for resist / LVN-bear, dim for neutral. `HVN@POC` shows `YES` / `NO`.
 
 **Interpretation:**
+
 - `NEAR_HVN_RESIST` reads as "price is sitting just below a high-volume node acting as resistance" — structurally bearish. If you see it on a breakout attempt, expect rejection. The engine turns this into a short signal + a long-target cap.
 - `IN_LVN_BULL` / `IN_LVN_BEAR` fire when price is through a low-volume node — these are the "price moves fast through empty air" zones. Directional score only fires when price is on the "correct" side of POC relative to the vacuum. A `NEUTRAL` signal can mean either mid-profile price or normal-density bucket; read it as "no structural information" rather than "balanced".
 - POC itself is a useful reference even when the signal is `NEUTRAL` — it's the volume centre of gravity for the current session window. Traders often watch POC cross as a separate context cue.
@@ -862,7 +902,7 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 
 ---
 
-## 11. Open Interest
+## 11. Open Interest {#11-open-interest}
 
 ```
 OPEN INTEREST:
@@ -874,6 +914,7 @@ Aggregate BTC-PERPETUAL open interest plus 15m / 60m percentage changes and a di
 ### OI / d15m / d60m
 
 **What:**
+
 - `OI` — current absolute OI value from Deribit `get_book_summary_by_instrument` (`r.OI_Current`).
 - `d15m` — percentage change of OI vs the snapshot ~15 minutes ago.
 - `d60m` — percentage change vs ~60 minutes ago.
@@ -881,6 +922,7 @@ Aggregate BTC-PERPETUAL open interest plus 15m / 60m percentage changes and a di
 **Calculation:** In `MainForm_Analysis.vb` using an `OiSnapshot` ring buffer keyed by timestamp (`_oiHistory`). Each run appends `(nowTs, OI_Current)`. When computing deltas, looks up the stored snapshot closest to `nowTs − 15m` / `nowTs − 60m`. If no matching snapshot exists (cold start / recent restart), delta reads `0.000%`.
 
 **Interpretation:**
+
 - On a fresh session, d15m and d60m both read `0.000%` for the first ~15 and ~60 minutes respectively — this is warmup, not a real flat OI reading. The signal classifier will hold at `NEUTRAL` during this window.
 - Absolute `OI` value is useful for magnitude context but doesn't directly score — the engine only reads the deltas.
 - BTC-PERPETUAL OI typically swings ±0.1% to ±1.0% over 15 minutes in active sessions. Anything beyond ±1% in 15m is a meaningful positioning event worth eyeballing.
@@ -902,6 +944,7 @@ Aggregate BTC-PERPETUAL open interest plus 15m / 60m percentage changes and a di
 | `NEUTRAL`       | OI change within neutral band OR during warmup | Default / no qualifying move |
 
 **Scoring use:**
+
 - **Full long (Microstructure)**: `NEW LONGS` → `+1 LongScore`.
 - **Full short**: `NEW SHORTS` → `+1 ShortScore`.
 - **Partial long**: `COVERING` — upgradeable in Pass 2 with any Microstructure cross-confirm.
@@ -909,11 +952,13 @@ Aggregate BTC-PERPETUAL open interest plus 15m / 60m percentage changes and a di
 - **Pass 2b OI × CVD cross-confirm**: Full `NEW LONGS` + bullish CVD slope & value → `+UpgradeBonus (1)` long. Full + opposing CVD → `−ConflictPenalty (1)` long. Mirror for `NEW SHORTS`. Upgraded `COVERING` / `CAPITULATION` (after Pass 2 upgrade) can *confirm* but cannot trigger a conflict penalty — by design, to avoid double-penalising short-covering or capitulation transitions.
 
 **Display colour:**
+
 - Green: `NEW LONGS`, `COVERING`
 - Red:   `NEW SHORTS`, `CAPITULATION`
 - Grey:  `NEUTRAL`
 
 **Interpretation:**
+
 - `NEW LONGS` + `CVD RISING` is the highest-quality Pass 2b confirmation — genuine new long participation, confirmed by aggressor flow. `+1` raw score + `+1` Pass 2b bonus.
 - `NEW LONGS` with `CVD FALLING` is the conflict case — OI building but sell-side aggression. Often means leveraged positions being built into selling, which historically unwinds violently. `−1` Pass 2b penalty is deliberate.
 - `COVERING` is mechanically bullish (shorts exiting pushes price up) but tactically weak — the buying is forced, not directional. The partial-only treatment reflects this: it can help but doesn't score standalone.
@@ -922,7 +967,7 @@ Aggregate BTC-PERPETUAL open interest plus 15m / 60m percentage changes and a di
 
 ---
 
-## 12. Order Flow
+## 12. Order Flow {#12-order-flow}
 
 ```
 ORDER FLOW:
@@ -939,6 +984,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 **What:** Book-depth-weighted bid/ask volume imbalance ratio from the L2 snapshot.
 
 **Calculation (`CalcOFI` in `Indicators_OrderFlow.vb`):**
+
 - Take the top `book_depth (5)` bid and ask levels from the order book snapshot.
 - Build descending weights `{5, 4, 3, 2, 1}` — nearest level highest weight.
 - `bidVol = Σ(bid.Size × weight)` over the 5 levels; `askVol = Σ(ask.Size × weight)`.
@@ -949,6 +995,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
   - Else                                    → `BALANCED`
 
 **Scoring use:**
+
 - **Full long (Microstructure)**: `BUY DOMINANT` → `+1 LongScore`.
 - **Full short**: `SELL DOMINANT` → `+1 ShortScore`.
 - **`BALANCED`**: no score.
@@ -956,6 +1003,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 **Display colour:** green when ratio > 1.2, red < 0.8, grey between. (Note: the visual threshold is stricter than the scoring threshold — so you can see a green ratio that hasn't yet cleared `BUY DOMINANT`. The `BUY DOMINANT` label is authoritative for scoring.)
 
 **Interpretation:**
+
 - 5-level depth means OFI is reading the *visible* book — it won't catch hidden / iceberg liquidity, but does catch the visible tilt that most liquidity-taking participants see.
 - A ratio `> 5x` like the sample's `10.08` is extreme — usually the result of one side pulling liquidity (thin ask book, not necessarily heavy bid book). Cross-check the `Bid Vol` and `Ask Vol` absolute values: if the low side is very small (e.g. `57900` vs `583380`), it's more "ask pulled" than "bid stacked".
 - The v14 relaxation from `3.0 / 0.333` to `2.0 / 0.5` means OFI now fires earlier. In practice this makes OFI contribute a signal in more of the "meaningful tilt" range where the old thresholds stayed silent.
@@ -966,6 +1014,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 **What:** Cumulative Volume Delta across recent trades — net signed aggressor notional, a slope classification, and a divergence state against price.
 
 **Calculation (`CalcCVD`):**
+
 - Trades fetched via `GetRecentTradesAsync(100)`; `trade_lookback=100` (v14 default).
 - Each trade: `signedDelta = +amount` if `Direction = buy` else `−amount`. (Amount is in USD notional on Deribit BTC-PERPETUAL.)
 - Split window into 3 equal segments — early, mid, late thirds.
@@ -983,6 +1032,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
   - Else → `NONE`
 
 **Scoring use:**
+
 - **Full long (Microstructure)**: `CVDSlope = RISING` AND `CVDValue > 0` → `+1 LongScore`.
 - **Full short**: `CVDSlope = FALLING` AND `CVDValue < 0` → `+1 ShortScore`.
 - **Divergence penalty**: `BEARISH` → `LongScore −= DivergencePenalty (1)`. `BULLISH` → `ShortScore −= 1`.
@@ -992,6 +1042,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 **Display colour:** green on `RISING`, red on `FALLING`, grey on `FLAT`.
 
 **Interpretation:**
+
 - The 3-segment weighted slope (late × 2 − early × 1) is deliberately late-weighted. A single large trade early in the window can't dominate the classification — you need the back third of the window to be genuinely trending. This reduces false RISING / FALLING flips.
 - v14's `slope_min_usd = 12000` (raised from 1000) means small order flow no longer qualifies as trending. On active BTC perp, net notional over 100 trades can easily reach 100K-500K — 12K is a meaningful floor that filters dead sessions.
 - `Div: BEARISH` with `Slope: RISING` is possible — price rising + CVD rising but slower than price would expect. Penalty fires against LongScore. Read as "the rally is real but buy aggression is slowing".
@@ -1002,6 +1053,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 **What:** Short-burst aggressor pressure ratio over the most recent 30 trades.
 
 **Calculation (`CalcTFI`):**
+
 - Take first `tfi_window_size (30)` trades from the recent-trades list.
 - `buyFlow = Σ(buy amounts)`, `sellFlow = Σ(sell amounts)`.
 - `TFIValue = (buyFlow − sellFlow) / (buyFlow + sellFlow)` — normalised `[-1, +1]`.
@@ -1011,6 +1063,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
   - Else                → `NEUTRAL`
 
 **Scoring use:**
+
 - **Full long (Microstructure)**: `BUY PRESSURE` → `+1 LongScore`.
 - **Full short**: `SELL PRESSURE` → `+1 ShortScore`.
 - `NEUTRAL`: no score.
@@ -1018,6 +1071,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 **Display colour:** green on `BUY PRESSURE`, red on `SELL PRESSURE`, grey on `NEUTRAL`.
 
 **Interpretation:**
+
 - TFI's 30-trade window is deliberately small — it measures very recent (often last 30–120 seconds) aggressor burst, not structural flow. Window was separated from MicroCVD (50) precisely because a burst signal and a structural segmentation signal need different horizons.
 - `|TFIValue| > 0.6` (like the sample's `0.606`) is extreme — 60%+ imbalance across 30 trades means one side is clearly clubbing the other. Pair with MicroCVD direction for conviction.
 - `NEUTRAL` with `|TFIValue|` just below `0.15` means there's a mild aggressive lean that didn't clear the threshold. Watch the direction — if the next run also reads mild-lean same side, the signal is building.
@@ -1027,6 +1081,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 **What:** Intra-window CVD segmentation — splits the 50-trade window into thirds and classifies whether net delta is accelerating or decelerating.
 
 **Calculation (`CalcMicroCVD`):**
+
 - Take first `micro_window_size (50)` trades.
 - Split into 3 equal segments: `MicroCVDEarly` / `Mid` / `Late` — each the net signed amount for that third.
 - `netDelta = Early + Mid + Late`; `isBull = netDelta > 0`.
@@ -1050,6 +1105,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 | any   | FLAT         | `FLAT`       |
 
 **Scoring use:**
+
 - **Full long (Microstructure)**: `BULL_ACCEL` → `+1 LongScore`.
 - **Full short**: `BEAR_ACCEL` → `+1 ShortScore`.
 - **Deceleration penalty** (`DecelPenalty = 1`):
@@ -1062,6 +1118,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 - **Context tag input**: `BULL_DECEL` (if long dominant) or `BEAR_DECEL` (if short) contributes one count toward `MOMENTUM_FADING` classification. Also `MicroCVDLate < 0.5 × MicroCVDEarly` (same-side collapse) counts independently.
 
 **Display fields:**
+
 - `E` — `MicroCVDEarly` (first third's net delta, USD notional, signed)
 - `M` — `MicroCVDMid`
 - `L` — `MicroCVDLate`
@@ -1069,6 +1126,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 - `BULL_ACCEL` / `BULL_DECEL` / `BEAR_ACCEL` / `BEAR_DECEL` / `FLAT` — the Signal
 
 **Display colour:**
+
 - Green — `BULL_ACCEL`
 - Red   — `BEAR_ACCEL`
 - Soft green — `BULL_DECEL`
@@ -1076,6 +1134,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 - Grey — `FLAT`
 
 **Interpretation:**
+
 - **Negative segment values are valid and expected**, explicitly documented in the trader profile. `L: -14720` in the sample means the last third of the window saw net sell-side aggression — which, with a positive net delta overall (`E + M + L = 3370 > 0`), produces `isBull = true` + `L < E − threshold = 2840 − 10000 = −7160` → `DECELERATING` → `BULL_DECEL`.
 - `BULL_DECEL` is visually "bullish but weakening". The scoring engine uses it to penalise *shorts* (not longs) because net bias is still up — but the context tag uses it as evidence that bullish momentum is fading. Both behaviours coexist deliberately.
 - The v14 raise of `accel_threshold` from 5000 to 10000 means DECEL/ACCEL classifications now require larger segment-to-segment moves before firing — quiet sessions produce more `FLAT` signals, active sessions are unaffected. Interim-static fix until dynamic scaling ships.
@@ -1084,7 +1143,7 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 
 ---
 
-## 13. Liquidations
+## 13. Liquidations {#13-liquidations}
 
 ```
 LIQUIDATIONS:
@@ -1096,11 +1155,13 @@ Penalty-only signal derived from forced-liquidation trades in the recent trade s
 ### Long / Short / Signal
 
 **What:**
+
 - `Long` — total BTC size of long liquidations in the recent trades window.
 - `Short` — total BTC size of short liquidations in the recent trades window.
 - `Signal` — classification of which side's liquidations dominate, filtered by `DominanceRatio`.
 
 **Calculation (`CalcLiquidations` in `Indicators_OrderFlow.vb`):**
+
 - Iterate the recent-trades list. For each trade with `Liquidation != "none"`:
   - `Direction = "buy"` (counterparty was buying, forced short closing) → `liqShortSize += amount`.
   - `Direction = "sell"` (counterparty was selling, forced long closing) → `liqLongSize += amount`.
@@ -1110,6 +1171,7 @@ Penalty-only signal derived from forced-liquidation trades in the recent trade s
   - Else → `NONE`
 
 **Scoring use:**
+
 - **`LONG LIQS`**: `LongScore -= LiqLargePenalty (2)` if `liqLongSize > LargeLiqSize (200 BTC)`, else `LongScore -= LiqStandardPenalty (1)`.
 - **`SHORT LIQS`**: mirrored on `ShortScore`.
 - **`NONE`**: no score change.
@@ -1118,6 +1180,7 @@ Penalty-only signal derived from forced-liquidation trades in the recent trade s
 **Display colour:** amber when `Signal != NONE`, dim grey when `NONE`.
 
 **Interpretation:**
+
 - Penalty-only since v0.17 — was previously a two-way reward that fired ~95% of the time as non-directional padding. Now silent in the normal case; only speaks when there's an actual cascade.
 - `DominanceRatio = 2.0` means the dominant side must be ≥ 2× the other before the classification fires. Mixed liquidations (say, 100 BTC long + 80 BTC short) read as `NONE`. Trader profile flagged 1.2–1.5 as a candidate tune; currently held at 2.0 pending backtesting.
 - `LargeLiqSize = 200 BTC` is the threshold between `-1` (standard) and `-2` (large) penalties. At BTC $76k that's ~$15M in a single direction over the recent window — a genuine cascade event. The `-2` penalty punishes the cascade *direction* because forced exits at that magnitude imply the level just printed is a local extreme that's already been hit hard, not a fresh setup.
@@ -1126,7 +1189,7 @@ Penalty-only signal derived from forced-liquidation trades in the recent trade s
 
 ---
 
-## 14. MTF Gate
+## 14. MTF Gate {#14-mtf-gate}
 
 ```
 MTF GATE (15m): PASS
@@ -1141,17 +1204,20 @@ The 15m multi-timeframe confluence gate. A **hard veto** — when it blocks, the
 **Format:** `MTF GATE (15m): <PASS | BLOCK>`
 
 **State:**
+
 - `PASS` — gate did not veto. Either the 15m state aligns with the proposed 1m direction, is flat (neutral), or no direction was proposed.
 - `BLOCK` — gate vetoed. The 1m signal would have been `WEAK/MED/STRONG LONG` or `SHORT`, but 15m state opposed the direction.
 
 ### 15m Trend / ADX / EMA
 
 **What:**
+
 - `15m Trend` — `MTF15mTrend`, one of `BULL` / `BEAR` / `FLAT`.
 - `ADX` — `MTF15mADX`, Wilder-smoothed ADX on the 15m series.
 - `EMA` — `MTF15mEMAAlignment`, one of `BULL` / `BEAR` / `MIXED`.
 
 **Calculation (`CalcMTFGate` in `Indicators_Structure.vb`):**
+
 - 15m candles fetched with a 60-second TTL cache (`MTF_TTL_SECONDS`) — doesn't re-fetch on every 1m run.
 - `candleLookback = cfg.MTFGate.CandleCount (60)` — last 60 × 15m candles = 15 hours of history.
 - Compute `CalcDMI(window, adxPeriod=cfg.MTFGate.DmiPeriod=9)` on the 15m window → `plusDI`, `minusDI`, `mtfADX`.
@@ -1178,11 +1244,13 @@ The 15m multi-timeframe confluence gate. A **hard veto** — when it blocks, the
 | `NONE`  | any              | `PASS` (no direction proposed — gate inactive) |
 
 **Proposed direction logic** (in `MainForm_Analysis.vb`):
+
 - `Regime = TRENDING_UP` OR 1m `EMAAlignment = BULL` → `mtfProposed = LONG`
 - `Regime = TRENDING_DOWN` OR 1m `EMAAlignment = BEAR` → `mtfProposed = SHORT`
 - Else → `NONE`
 
 **Veto trigger (Step 4b):** The gate only actually turns the verdict into `NO TRADE` when:
+
 - `cfg.MTFGate.Enabled = true`, AND
 - A direction cleared `tWeak` on effective score, AND
 - `MTFGatePass = false`.
@@ -1194,6 +1262,7 @@ In that case the verdict becomes `NO TRADE [WEAK LONG]` / `NO TRADE [WEAK SHORT]
 **What:** Verbose description of the gate outcome. Always present.
 
 **Format:** One of:
+
 - `MTF PASS [LONG] 15m +DI:<+DI> -DI:<-DI> ADX:<adx> EMA:<align> | Bull:<b> Bear:<r> (need <n>)`
 - `MTF BLOCK [LONG vs BEAR] 15m ...` (analogous for BLOCK)
 - `MTF PASS [SHORT] ...`
@@ -1205,6 +1274,7 @@ In that case the verdict becomes `NO TRADE [WEAK LONG]` / `NO TRADE [WEAK SHORT]
 ### Breakdown row
 
 Rendered as `MTF Gate (15m)` in the signal breakdown table. `[L]` / `[S]` hit:
+
 - `LongHit = MTFGatePass AND proposedDirection = LONG`
 - `ShortHit = MTFGatePass AND proposedDirection = SHORT`
 
@@ -1222,7 +1292,7 @@ Rendered as `MTF Gate (15m)` in the signal breakdown table. `[L]` / `[S]` hit:
 
 ---
 
-## 15. Funding
+## 15. Funding {#15-funding}
 
 ```
 FUNDING:
@@ -1235,10 +1305,12 @@ Two-row funding block: the raw rate + crowd bias on the first row, and momentum 
 ### Row 1 — Rate / Bias
 
 **What:**
+
 - `Rate` — the funding rate, displayed as percent (`FundingRate × 100`, formatted to 4 decimal places).
 - `Bias` — `r.FundingBias`, one of `NEUTRAL` / `LONGS CROWDED` / `LONGS HEAVILY CROWDED` / `SHORTS CROWDED` / `SHORTS HEAVILY CROWDED`.
 
 **Calculation:**
+
 - `FundingRate` fetched from Deribit via `GetFundingRateAsync` — raw 8h-scale funding value. Published roughly every 8 hours by Deribit; samples between publications return the same value.
 - `FundingBias` classified elsewhere in `MainForm_Analysis` by comparing `FundingRate` to crowd thresholds. `HEAVILY CROWDED` requires a larger magnitude than plain `CROWDED`.
 
@@ -1255,11 +1327,13 @@ Two-row funding block: the raw rate + crowd bias on the first row, and momentum 
 Score is post-clamped to `max(0, ...)`.
 
 **Display colour (Row 1):**
+
 - Red — any `HEAVILY CROWDED` bias.
 - Grey — `NEUTRAL`.
 - Amber — plain `CROWDED` on either side.
 
 **Interpretation:**
+
 - **v14 raised the high-threshold from 0.0001 to 0.0003** — BTC perp routinely sits at ±0.01%/8h (= 0.0001 raw), which previously fired the max penalty every run. Post-v14, only genuinely extreme funding (≥ 0.03%/8h = 0.0003 raw) fires the `FundingHighPenalty (2)` + `FundingHighBoost (1)` contrarian tilt.
 - Contrarian framing: extreme positive funding → longs overcrowded → small nudge *against* longs, *for* shorts. The boost is deliberately smaller than the penalty (1 vs 2) to reflect asymmetric conviction.
 - Funding is adjunct — it never votes in Step 2 scoring (rejected pattern; would double-count). Row 1 breakdown appears as `Funding (info)` with no `[L]` / `[S]` hit marker, carrying the STEP3 + STEP3b notes as informational text only.
@@ -1268,12 +1342,14 @@ Score is post-clamped to `max(0, ...)`.
 ### Row 2 — Momentum / Enabled / Soften / Amplify
 
 **What:**
+
 - `Momentum` — `r.FundingMomentum`, one of `RISING` / `FALLING` / `FLAT`.
 - `Enabled` — `YES` / `NO`, from `cfg.Indicators.Funding.MomentumEnabled`.
 - `Soften` — displayed as `+N`, from `cfg.Indicators.Funding.MomentumSoften` (default 1).
 - `Amplify` — displayed as `-N`, from `cfg.Indicators.Funding.MomentumAmplify` (default 1).
 
 **Calculation (`CalcFundingMomentum` in `Indicators_OrderFlow.vb`):**
+
 - Uses `_fundingHistory` ring buffer (max 10 samples).
 - v14 dedup: only appends `fundingRate` to history when the value has actually changed from the previous sample (Deribit publishes every ~8h, not every 1m).
 - Requires ≥ 2 distinct samples; cold start returns `FLAT`.
@@ -1301,14 +1377,17 @@ Applied on top of Step 3. Behaviour depends on `FundingBias` + `FundingMomentum`
 Enabled gate: entire Step 3b skipped if `cfg.Indicators.Funding.MomentumEnabled = false`. Note: `STEP3b: disabled`.
 
 **Display colour (Row 2):**
+
 - Amber — `RISING` (penalty-amplifying direction).
 - Green — `FALLING` (de-crowding direction).
 - Grey — `FLAT`.
 
 **Display convention for Soften / Amplify:**
+
 - Displayed as `Soften: +N` and `Amplify: -N` even though both are stored as positive magnitudes in config. The sign convention reflects their **effect on score** — soften *adds back*, amplify *deducts further*. This is a readability choice, not a sign error.
 
 **Interpretation:**
+
 - **Dedup matters**: pre-v14, `_fundingHistory` filled with 10 identical 1m snapshots of the same 8h-published rate — `delta` was always 0 → `FLAT` → Step 3b almost never fired. Post-v14, history only grows on genuine rate transitions, so `RISING`/`FALLING` classifications actually correspond to Deribit publishing a changed funding rate. Expect Step 3b to be dark between funding publications and active only at the boundaries.
 - Asymmetric amplify/soften logic: `Amplify` is capped at `FundingHighPenalty (2)` to prevent a compounding penalty (baseline + momentum) from obliterating the score on a mild crowding event. `Soften` has no explicit cap but is subject to the `regimeMax` ceiling.
 - The NEUTRAL + RISING + Rate>0 case catches the *transition into* crowding — funding is still in the neutral band but momentum is building toward positive. Engine pre-penalises the long side before the rate actually crosses the high threshold. This is the one place Step 3b fires in a neutral session.
@@ -1316,7 +1395,7 @@ Enabled gate: entire Step 3b skipped if `cfg.Indicators.Funding.MomentumEnabled 
 
 ---
 
-## 16. Signal Breakdown Table
+## 16. Signal Breakdown Table {#16-signal-breakdown-table}
 
 ```
 ===========================================================
@@ -1336,12 +1415,14 @@ The itemised scoring ledger. Every signal that contributes to (or penalises) the
 ### Layout
 
 **Columns:**
+
 - `Signal` — 18-char left-justified label.
 - `Long` — 5-char field, shows `[L]` if `item.LongHit = true`, else blank.
 - `Short` — 6-char field, shows `[S]` if `item.ShortHit = true`, else blank.
 - `Note` — free text; per-indicator diagnostic string.
 
 **Row colour:**
+
 - `C_HIT` (brighter) — row has a hit (`LongHit` or `ShortHit`).
 - `C_DIM` — no hit (score-neutral or penalty-only row).
 

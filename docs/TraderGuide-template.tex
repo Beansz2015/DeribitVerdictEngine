@@ -1,0 +1,260 @@
+% DeribitVerdictEngine Trader's Guidebook — XeLaTeX template for Pandoc
+\documentclass[a4paper,11pt]{article}
+
+%% ── PACKAGES ──────────────────────────────────────────────────────────────
+\usepackage{geometry}
+\usepackage{fontspec}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{calc}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{mdframed}
+\usepackage{newunicodechar}
+\usepackage{hyperref}
+\usepackage{bookmark}
+
+%% ── GEOMETRY ──────────────────────────────────────────────────────────────
+\geometry{
+  a4paper,
+  top=2.5cm, bottom=2.5cm,
+  left=2.5cm, right=2.5cm,
+  headheight=16pt,
+  includehead, includefoot
+}
+
+%% ── COLORS ────────────────────────────────────────────────────────────────
+\definecolor{tealcolor}{HTML}{01696f}
+\definecolor{darktext}{HTML}{2d2d2d}
+\definecolor{bodytext}{HTML}{28251d}
+\definecolor{mutedgray}{HTML}{999999}
+\definecolor{quotebg}{HTML}{f3f0ec}
+
+%% ── FONTS ─────────────────────────────────────────────────────────────────
+\setmainfont{TeX Gyre Heros}[
+  BoldFont       = {TeX Gyre Heros Bold},
+  ItalicFont     = {TeX Gyre Heros Italic},
+  BoldItalicFont = {TeX Gyre Heros Bold Italic}
+]
+\setmonofont{Consolas}[Scale=0.82]
+
+%% ── GLOBAL TEXT COLOR & SPACING ──────────────────────────────────────────
+\color{bodytext}
+\setstretch{1.5}
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0pt}
+
+%% ── HYPERREF ──────────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks   = true,
+  linkcolor    = tealcolor,
+  urlcolor     = tealcolor,
+  citecolor    = tealcolor,
+  pdfborder    = {0 0 0},
+  pdftitle     = {DeribitVerdictEngine -- Trader's Guidebook},
+  pdfauthor    = {},
+  bookmarksnumbered = false,
+  bookmarksopen     = true
+}
+
+%% ── SECTION NUMBERING: OFF ───────────────────────────────────────────────
+\setcounter{secnumdepth}{-2}
+
+%% ── HEADING STYLES ────────────────────────────────────────────────────────
+\titleformat{\section}
+  {\fontsize{20}{26}\selectfont\bfseries\color{tealcolor}}
+  {}{0em}{}
+  [\vspace{3pt}{\color{tealcolor}\titlerule[1pt]}\vspace{4pt}]
+
+\titleformat{\subsection}
+  {\fontsize{14}{18}\selectfont\bfseries\color{darktext}}
+  {}{0em}{}
+
+\titleformat{\subsubsection}
+  {\fontsize{12}{16}\selectfont\bfseries\itshape\color{darktext}}
+  {}{0em}{}
+
+\titlespacing*{\section}      {0pt}{2.0em}{1.0em}
+\titlespacing*{\subsection}   {0pt}{1.5em}{0.6em}
+\titlespacing*{\subsubsection}{0pt}{1.2em}{0.4em}
+
+%% ── BULLET LIST STYLING — teal markers, comfortable spacing ──────────────
+\setlist[itemize]{
+  label        = {\color{tealcolor}\textbullet},
+  itemsep      = 4pt,
+  topsep       = 6pt,
+  parsep       = 0pt,
+  leftmargin   = 1.5em
+}
+\setlist[enumerate]{
+  itemsep      = 4pt,
+  topsep       = 6pt,
+  parsep       = 0pt,
+  leftmargin   = 1.8em
+}
+
+%% ── BLOCKQUOTE STYLING — teal left border, subtle background ─────────────
+\mdfdefinestyle{quotestyle}{
+  leftmargin       = 0pt,
+  rightmargin      = 0pt,
+  skipabove        = 0.8em,
+  skipbelow        = 0.8em,
+  leftline         = true,
+  topline          = false,
+  bottomline       = false,
+  rightline        = false,
+  linecolor        = tealcolor,
+  linewidth        = 3pt,
+  backgroundcolor  = quotebg,
+  innerleftmargin  = 14pt,
+  innerrightmargin = 10pt,
+  innertopmargin   = 8pt,
+  innerbottommargin= 8pt
+}
+
+\renewenvironment{quote}{%
+  \begin{mdframed}[style=quotestyle]\small\color{darktext}%
+}{%
+  \end{mdframed}%
+}
+
+%% ── TABLE OF CONTENTS STYLE ───────────────────────────────────────────────
+\renewcommand{\contentsname}{\color{tealcolor}Contents}
+\renewcommand{\cftsecfont}       {\bfseries\color{darktext}}
+\renewcommand{\cftsecpagefont}   {\bfseries\color{darktext}}
+\renewcommand{\cftsubsecfont}    {\small\color{darktext}}
+\renewcommand{\cftsubsecpagefont}{\small\color{darktext}}
+\renewcommand{\cftdot}{.}
+\renewcommand{\cftdotsep}{2.5}
+\setlength{\cftbeforesecskip}{5pt}
+\setlength{\cftbeforesubsecskip}{2pt}
+
+%% ── HEADER / FOOTER ───────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\headrule}{%
+  {\color{tealcolor}\hrule width\headwidth height 0.8pt}\vspace{1pt}%
+}
+\fancyhead[L]{\small\color{mutedgray}DeribitVerdictEngine --- Trader's Guidebook}
+\fancyhead[R]{\small\color{mutedgray}\thepage}
+\fancyfoot[C]{\small\color{mutedgray}\thepage}
+\renewcommand{\footrulewidth}{0pt}
+
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\small\color{mutedgray}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+%% ── PANDOC REQUIRED COMMANDS ──────────────────────────────────────────────
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{2pt}\setlength{\parskip}{0pt}%
+}
+
+%% Pandoc longtable "none" counter workaround
+\newcounter{none}
+
+%% Inline code
+\newcommand{\passthrough}[1]{\texttt{\small\color{bodytext}#1}}
+
+%% Fenced code blocks — Pandoc emits \begin{Shaded}\begin{Highlighting}[]...\end{Highlighting}\end{Shaded}
+\usepackage{fancyvrb}
+\newenvironment{Highlighting}{}{}
+\mdfdefinestyle{codeblock}{%
+  linewidth=0pt,
+  backgroundcolor=quotebg,
+  innerleftmargin=8pt,
+  innerrightmargin=8pt,
+  innertopmargin=6pt,
+  innerbottommargin=6pt
+}
+\makeatletter
+\@ifundefined{Shaded}{%
+  \newenvironment{Shaded}{%
+    \begin{mdframed}[style=codeblock]\small\ttfamily\color{bodytext}%
+  }{%
+    \end{mdframed}%
+  }
+}{%
+  \renewenvironment{Shaded}{%
+    \begin{mdframed}[style=codeblock]\small\ttfamily\color{bodytext}%
+  }{%
+    \end{mdframed}%
+  }
+}
+\makeatother
+
+%% ── UNICODE CHARACTER FALLBACKS ───────────────────────────────────────────
+\newunicodechar{—}{---}% em dash U+2014 — fontspec doesn't remap this by default
+\newunicodechar{∈}{\ensuremath{\in}}
+\newunicodechar{∉}{\ensuremath{\notin}}
+\newunicodechar{≥}{\ensuremath{\geq}}
+\newunicodechar{≤}{\ensuremath{\leq}}
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{✓}{\ensuremath{\checkmark}}
+\newunicodechar{✗}{\ensuremath{\times}}
+
+%% ── TABLES ────────────────────────────────────────────────────────────────
+\renewcommand{\arraystretch}{1.35}
+\setlength{\tabcolsep}{8pt}
+
+%% ── DOCUMENT ──────────────────────────────────────────────────────────────
+\begin{document}
+
+%% COVER PAGE ──────────────────────────────────────────────────────────────
+\begin{titlepage}
+\newgeometry{top=0pt, bottom=0pt, left=0pt, right=0pt}
+\thispagestyle{empty}
+\noindent
+\colorbox{tealcolor}{%
+  \begin{minipage}[t][7.5cm]{\paperwidth}%
+    \vspace*{2.4cm}%
+    \hspace{2.5cm}%
+    {\fontsize{24}{30}\selectfont\bfseries\color{white}%
+      DeribitVerdictEngine --- Trader's Guidebook}%
+    \par\vspace{0.5cm}%
+    \hspace{2.5cm}%
+    {\fontsize{14}{18}\selectfont\color{white!85!tealcolor}%
+      Quick Reference for Live Trading}%
+    \vfill%
+  \end{minipage}%
+}%
+\par
+\vspace*{4.5cm}
+\hspace{2.5cm}%
+\begin{minipage}{0.7\paperwidth}
+  {\fontsize{15}{20}\selectfont\color{darktext}%
+    Read top-to-bottom on each engine run.\par
+    Every section answers: \textit{``What does this tell me right now,}\par
+    \textit{and what should I do with it?''}}%
+  \vspace{1.5em}\par
+  {\color{tealcolor}\rule{0.4\paperwidth}{1.5pt}}\par
+  \vspace{0.8em}
+  {\fontsize{11}{15}\selectfont\color{mutedgray}Generated \today}
+\end{minipage}
+\restoregeometry
+\end{titlepage}
+
+%% TABLE OF CONTENTS ───────────────────────────────────────────────────────
+\newpage
+\thispagestyle{plain}
+\setcounter{tocdepth}{2}
+\tableofcontents
+
+%% MAIN CONTENT ────────────────────────────────────────────────────────────
+\newpage
+\setcounter{page}{1}
+
+$body$
+
+\end{document}
