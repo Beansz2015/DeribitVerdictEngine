@@ -94,11 +94,11 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- Liquidations ---------------------------------------------------------
-    ' [T3-D]: dominanceRatio optional param -- replaces hardcoded >= threshold.
-    ' LONG LIQS: liqLongSize >= liqShortSize * dominanceRatio (default 1.0 = equal-or-greater).
+    ' [T3-D]: dominanceRatio optional param.
+    ' LONG LIQS: liqLongSize >= liqShortSize * dominanceRatio.
     ' SHORT LIQS: liqShortSize > liqLongSize * dominanceRatio.
-    ' Default 1.0 preserves prior behaviour exactly; tuning above 1.0 requires
-    ' the dominant side to be proportionally larger before signalling.
+    ' Default 1.0 = equal-or-greater fallback; live config (settings.json) supplies 2.0
+    ' to require the dominant side to be proportionally larger before signalling.
     Public Shared Sub CalcLiquidations(trades As List(Of TradeRecord),
                                         ByRef liqLongSize As Double,
                                         ByRef liqShortSize As Double,

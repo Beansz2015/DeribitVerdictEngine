@@ -51,8 +51,7 @@ Partial Public Class ScoringEngine
         '   MEDIUM -> 0.45 + 0.10 = 0.55
         '   LOW    -> 0.45 + 0.00 = 0.45
         ' ---------------------------------------------------------------
-        Dim p As Double = cfg.Kelly.AccountSizeUsd ' temp init to avoid unassigned warnings in strict modes
-        p = cfg.Kelly.EstProbFloor
+        Dim p As Double = cfg.Kelly.EstProbFloor
         Select Case If(v.Confidence, "").Trim().ToUpperInvariant()
             Case "HIGH"   : p += cfg.Kelly.EstProbScale
             Case "MEDIUM" : p += (cfg.Kelly.EstProbScale / 2.0)
