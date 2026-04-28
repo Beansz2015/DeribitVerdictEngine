@@ -1,6 +1,6 @@
 # Spec: Swing Pivot Structure Detection (5m primary, 15m context)
 **Proposed:** 2026-04-27
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED
 **Target files:** `Core/IndicatorResults.vb`, `Core/Indicators_Structure.vb`, `Core/ScoringEngine_Helpers.vb`, `Core/ScoringEngine_Calculate_Verdict.vb`, `Core/ScoringEngine_Calculate_Scoring.vb`, `Core/Settings/EngineSettings.vb`, `UI/MainForm_Analysis.vb`, `UI/MainForm_Render_Header.vb`, `UI/MainForm_Render_Sections.vb`, `settings.json`
 
 This is the largest of the four planned indicator additions. Three integration points (Step 5b target cap, `CalcHoldStatus`, ATR display block) and one optional 15m context layer.

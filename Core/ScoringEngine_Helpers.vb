@@ -112,6 +112,10 @@ Partial Public Class ScoringEngine
                                If(cvdAdverse,   "CVD:FALLING",    Nothing)
                            }.Where(Function(s) s IsNot Nothing)) & ")"
                 End If
+                ' Layer 1.5: structural break exit -- price closed through prior swing low
+                If r.LastSwingLow5m > 0 AndAlso r.CurrentPrice <= r.LastSwingLow5m Then
+                    Return String.Format("EXIT -- structural break (closed at/below swing low {0:F1})", r.LastSwingLow5m)
+                End If
                 ' Layer 2: structural divergence exits
                 If r.ROC < 0 Then Return "EXIT -- momentum break (ROC crossed below 0)"
                 If r.OBVDivergence = "BEARISH" Then Return "EXIT -- OBV bearish divergence"
@@ -140,6 +144,10 @@ Partial Public Class ScoringEngine
                                If(tfiAdverse,   "TFI:BUY",        Nothing),
                                If(cvdAdverse,   "CVD:RISING",     Nothing)
                            }.Where(Function(s) s IsNot Nothing)) & ")"
+                End If
+                ' Layer 1.5: structural break exit -- price closed through prior swing high
+                If r.LastSwingHigh5m > 0 AndAlso r.CurrentPrice >= r.LastSwingHigh5m Then
+                    Return String.Format("EXIT -- structural break (closed at/above swing high {0:F1})", r.LastSwingHigh5m)
                 End If
                 ' Layer 2: structural divergence exits
                 If r.ROC > 0 Then Return "EXIT -- momentum break (ROC crossed above 0)"

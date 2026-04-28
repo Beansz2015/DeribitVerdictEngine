@@ -290,6 +290,22 @@ Partial Public Class MainForm
                                           longStop, r.CurrentPrice, longTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
         End If
 
+        ' Long structural levels (from swing pivot detection)
+        If r.SwingTargetLong > 0 AndAlso r.SwingStopLong > 0 Then
+            Dim swingRisk   As Double = r.CurrentPrice - r.SwingStopLong
+            Dim swingReward As Double = r.SwingTargetLong - r.CurrentPrice
+            Dim swingRR As String = If(swingRisk > 0, String.Format("1:{0:F1}", swingReward / swingRisk), "—")
+            AppendRtf(rtb, "  Long structural:  ", C_LABEL)
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
+                                          r.SwingStopLong, r.CurrentPrice, r.SwingTargetLong, swingRR, swingRisk, swingReward) & Environment.NewLine, C_HIT)
+        ElseIf r.SwingTargetLong > 0 Then
+            AppendRtf(rtb, "  Long structural:  ", C_LABEL)
+            AppendRtf(rtb, String.Format("Target {0,9:F1}  (no swing low below entry within lookback)", r.SwingTargetLong) & Environment.NewLine, C_DIM)
+        ElseIf r.SwingStopLong > 0 Then
+            AppendRtf(rtb, "  Long structural:  ", C_LABEL)
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  (no swing high above entry within lookback)", r.SwingStopLong) & Environment.NewLine, C_DIM)
+        End If
+
         AppendRtf(rtb, "  Short:  ", C_LABEL)
         If v.AdjustedShortTarget > 0 Then
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
@@ -299,6 +315,22 @@ Partial Public Class MainForm
         Else
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
                                           shortStop, r.CurrentPrice, shortTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+        End If
+
+        ' Short structural levels (from swing pivot detection)
+        If r.SwingTargetShort > 0 AndAlso r.SwingStopShort > 0 Then
+            Dim swingRisk   As Double = r.SwingStopShort - r.CurrentPrice
+            Dim swingReward As Double = r.CurrentPrice - r.SwingTargetShort
+            Dim swingRR As String = If(swingRisk > 0, String.Format("1:{0:F1}", swingReward / swingRisk), "—")
+            AppendRtf(rtb, "  Short structural: ", C_LABEL)
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
+                                          r.SwingStopShort, r.CurrentPrice, r.SwingTargetShort, swingRR, swingRisk, swingReward) & Environment.NewLine, C_HIT)
+        ElseIf r.SwingTargetShort > 0 Then
+            AppendRtf(rtb, "  Short structural: ", C_LABEL)
+            AppendRtf(rtb, String.Format("Target {0,9:F1}  (no swing high above entry within lookback)", r.SwingTargetShort) & Environment.NewLine, C_DIM)
+        ElseIf r.SwingStopShort > 0 Then
+            AppendRtf(rtb, "  Short structural: ", C_LABEL)
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  (no swing low below entry within lookback)", r.SwingStopShort) & Environment.NewLine, C_DIM)
         End If
 
         If v.KellyPWin > 0 Then

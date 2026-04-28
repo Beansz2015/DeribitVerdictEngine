@@ -50,6 +50,20 @@ Partial Public Class ScoringEngine
             End If
         Next
 
+        ' First check: is there a clean structural target in the entry direction?
+        ' Fires only when swing detection has produced at least one level (graceful degradation
+        ' when candle history is too short). Both target AND stop must be present for a clean trade;
+        ' missing target alone (e.g. just made a new high) is structural ambiguity → STRUCTURALLY_WEAK.
+        Dim hasStructuralTarget As Boolean = If(isLong,
+            r.SwingTargetLong > 0 AndAlso r.SwingStopLong > 0,
+            r.SwingTargetShort > 0 AndAlso r.SwingStopShort > 0)
+        If r.LastSwingHigh5m > 0 OrElse r.LastSwingLow5m > 0 Then
+            ' Swing detection has produced at least one level — meaningful evaluation possible
+            If Not hasStructuralTarget Then
+                Return "STRUCTURALLY_WEAK"
+            End If
+        End If
+
         Dim fadingCount As Integer = 0
         If isLong Then
             If r.MicroCVDSignal = "BULL_DECEL" Then fadingCount += 1

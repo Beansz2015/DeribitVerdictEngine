@@ -101,6 +101,17 @@ Public Class IndicatorResults
     Public Property VPFRNearestLvnAbove As Double  ' nearest LVN price above current ($), 0 = none
     Public Property VPFRNearestLvnBelow As Double  ' nearest LVN price below current ($), 0 = none
 
+    ' Swing pivots (5m primary, 15m context)
+    Public Property LastSwingHigh5m  As Double  ' price ($), 0 = no confirmed pivot in lookback
+    Public Property LastSwingLow5m   As Double
+    Public Property LastSwingHigh15m As Double  ' higher-timeframe context (optional, may stay 0)
+    Public Property LastSwingLow15m  As Double
+    ' Convenience computed at scoring time (direction-aware bookkeeping)
+    Public Property SwingTargetLong  As Double  ' = LastSwingHigh5m if > CurrentPrice, else 0
+    Public Property SwingStopLong    As Double  ' = LastSwingLow5m  if < CurrentPrice, else 0
+    Public Property SwingTargetShort As Double  ' = LastSwingLow5m  if < CurrentPrice, else 0
+    Public Property SwingStopShort   As Double  ' = LastSwingHigh5m if > CurrentPrice, else 0
+
     ' Current price (latest close of 1m candles)
     Public Property CurrentPrice As Double
 End Class

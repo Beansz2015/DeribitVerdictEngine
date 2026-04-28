@@ -138,34 +138,67 @@ Partial Public Class ScoringEngine
         Dim hvnAbove As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
         Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
 
-        ' Prefer nearest-HVN-above when present and caps the long target; fall back to POC.
+        ' 3-tier cap arbitration (long): swing target → nearest HVN → POC.
+        ' Fires when any qualifier is closer than the raw ATR target.
+        ' Winner = closest to entry (minimum value above current price).
         Dim capLongTarget As Double = 0
         Dim capLongLabel  As String = ""
-        If r.VPFRNearestHvnAbove > 0 AndAlso r.VPFRNearestHvnAbove > r.CurrentPrice AndAlso r.VPFRNearestHvnAbove < rawLongTarget Then
+
+        ' Tier 1: swing target -- highest priority
+        If r.SwingTargetLong > 0 AndAlso r.SwingTargetLong < rawLongTarget Then
+            capLongTarget = r.SwingTargetLong
+            capLongLabel  = "SWING_HIGH_5M"
+        End If
+
+        ' Tier 2: nearest HVN above (VPFR-lite v2)
+        If r.VPFRNearestHvnAbove > 0 AndAlso r.VPFRNearestHvnAbove > r.CurrentPrice AndAlso
+           r.VPFRNearestHvnAbove < rawLongTarget AndAlso
+           (capLongTarget = 0 OrElse r.VPFRNearestHvnAbove < capLongTarget) Then
             capLongTarget = r.VPFRNearestHvnAbove
             capLongLabel  = "NEAREST_HVN_ABOVE"
-        ElseIf hvnAbove AndAlso r.VPFRPoc > r.CurrentPrice AndAlso r.VPFRPoc < rawLongTarget Then
+        End If
+
+        ' Tier 3: POC fallback
+        If hvnAbove AndAlso r.VPFRPoc > r.CurrentPrice AndAlso r.VPFRPoc < rawLongTarget AndAlso
+           (capLongTarget = 0 OrElse r.VPFRPoc < capLongTarget) Then
             capLongTarget = r.VPFRPoc
             capLongLabel  = "POC"
         End If
+
         If capLongTarget > 0 Then
             res.AdjustedLongTarget = capLongTarget
-            res.TargetCapReason = String.Format("HVN_CAPPED @ {0:F1} ({1})", capLongTarget, capLongLabel)
+            res.TargetCapReason    = String.Format("CAPPED @ {0:F1} ({1})", capLongTarget, capLongLabel)
         End If
 
-        ' Prefer nearest-HVN-below when present and caps the short target; fall back to POC.
+        ' 3-tier cap arbitration (short): swing target → nearest HVN → POC.
+        ' Winner = closest to entry (maximum value below current price).
         Dim capShortTarget As Double = 0
         Dim capShortLabel  As String = ""
-        If r.VPFRNearestHvnBelow > 0 AndAlso r.VPFRNearestHvnBelow < r.CurrentPrice AndAlso r.VPFRNearestHvnBelow > rawShortTarget Then
+
+        ' Tier 1: swing target -- highest priority
+        If r.SwingTargetShort > 0 AndAlso r.SwingTargetShort > rawShortTarget Then
+            capShortTarget = r.SwingTargetShort
+            capShortLabel  = "SWING_LOW_5M"
+        End If
+
+        ' Tier 2: nearest HVN below (VPFR-lite v2)
+        If r.VPFRNearestHvnBelow > 0 AndAlso r.VPFRNearestHvnBelow < r.CurrentPrice AndAlso
+           r.VPFRNearestHvnBelow > rawShortTarget AndAlso
+           (capShortTarget = 0 OrElse r.VPFRNearestHvnBelow > capShortTarget) Then
             capShortTarget = r.VPFRNearestHvnBelow
             capShortLabel  = "NEAREST_HVN_BELOW"
-        ElseIf hvnBelow AndAlso r.VPFRPoc < r.CurrentPrice AndAlso r.VPFRPoc > rawShortTarget Then
+        End If
+
+        ' Tier 3: POC fallback
+        If hvnBelow AndAlso r.VPFRPoc < r.CurrentPrice AndAlso r.VPFRPoc > rawShortTarget AndAlso
+           (capShortTarget = 0 OrElse r.VPFRPoc > capShortTarget) Then
             capShortTarget = r.VPFRPoc
             capShortLabel  = "POC"
         End If
+
         If capShortTarget > 0 Then
             res.AdjustedShortTarget = capShortTarget
-            res.TargetCapReason = String.Format("HVN_CAPPED @ {0:F1} ({1})", capShortTarget, capShortLabel)
+            res.TargetCapReason     = String.Format("CAPPED @ {0:F1} ({1})", capShortTarget, capShortLabel)
         End If
 
         Return res

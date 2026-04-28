@@ -139,6 +139,8 @@ Public Class IndicatorSettings
     <JsonPropertyName("oi_cvd_cross")> Public Property OiCvd As New OiCvdSettings
     ''' <summary>[bid-ask-spread] Bid-ask spread microstructure thresholds.</summary>
     <JsonPropertyName("spread")> Public Property Spread As New SpreadSettings
+    ''' <summary>[swing-pivots] Swing pivot detection parameters for 5m primary and 15m context.</summary>
+    <JsonPropertyName("swing")>  Public Property Swing  As New SwingSettings
 End Class
 
 Public Class AdxSettings
@@ -354,6 +356,25 @@ Public Class SpreadSettings
     <JsonPropertyName("wide_threshold_bps")>  Public Property WideThresholdBps  As Double = 5.0
     ''' <summary>Spread (bps) at or below this is TIGHT -- display-only marker, no score impact. Default 1.5.</summary>
     <JsonPropertyName("tight_threshold_bps")> Public Property TightThresholdBps As Double = 1.5
+End Class
+
+''' <summary>
+''' [swing-pivots] Swing pivot detection parameters for 5m primary and 15m context.
+''' PivotWing5m: half-width of the confirmation window on 5m candles. Default 3.
+'''   Wing 2 catches noise; wing 4 misses fresh swings during fast moves.
+''' LookbackBars5m: how far back to scan for the most recent confirmed swing on 5m. Default 30 (~150 min).
+''' PivotWing15m: half-width on 15m candles. Default 2 (slower TF needs less wing).
+''' LookbackBars15m: lookback on 15m. Default 20 (~5 hours).
+''' </summary>
+Public Class SwingSettings
+    ''' <summary>Pivot wing on 5m (bars left/right confirming a swing). Default 3.</summary>
+    <JsonPropertyName("pivot_wing_5m")>     Public Property PivotWing5m     As Integer = 3
+    ''' <summary>Lookback bars on 5m to scan for the most recent swing. Default 30.</summary>
+    <JsonPropertyName("lookback_bars_5m")>  Public Property LookbackBars5m  As Integer = 30
+    ''' <summary>Pivot wing on 15m. Default 2 (slower timeframe needs less wing).</summary>
+    <JsonPropertyName("pivot_wing_15m")>    Public Property PivotWing15m    As Integer = 2
+    ''' <summary>Lookback bars on 15m. Default 20 (proportionally smaller window).</summary>
+    <JsonPropertyName("lookback_bars_15m")> Public Property LookbackBars15m As Integer = 20
 End Class
 
 ''' <summary>

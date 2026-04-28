@@ -1,8 +1,14 @@
 {
-  "version": 15,
-  "last_modified": "2026-04-27T00:00:00Z",
-  "modified_by": "dead-code-cleanup",
+  "version": 16,
+  "last_modified": "2026-04-29T00:00:00Z",
+  "modified_by": "swing-pivot-proposal",
   "change_log": [
+    "v16: [swing-pivots] Added indicators.swing block (4 keys) for CalcSwingPivots().",
+    "     pivot_wing_5m: 3  -- bars left/right confirming a 5m swing (~15 min each side).",
+    "     lookback_bars_5m: 30  -- scan back ~150 min for most recent confirmed 5m swing.",
+    "     pivot_wing_15m: 2  -- bars left/right on 15m (~30 min each side).",
+    "     lookback_bars_15m: 20  -- scan back ~5 hours on 15m for higher-TF context.",
+    "     No schema changes to other blocks. No scoring impact (display + arbitration + exit only).",
     "v15: [cleanup] Strip silently-ignored keys + drop unused config fields. No behavioural change.",
     "     Removed scoring.long_threshold / short_threshold / strong_long_threshold /",
     "       strong_short_threshold / medium_long_threshold / medium_short_threshold (superseded",
@@ -142,6 +148,12 @@
     "spread": {
                   "wide_threshold_bps": 5.0,
                   "tight_threshold_bps": 1.5
+                },
+    "swing": {
+                  "pivot_wing_5m": 3,
+                  "lookback_bars_5m": 30,
+                  "pivot_wing_15m": 2,
+                  "lookback_bars_15m": 20
                 }
   },
   "session_volume": {

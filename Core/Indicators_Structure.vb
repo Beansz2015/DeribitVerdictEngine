@@ -208,6 +208,61 @@ Partial Public Class IndicatorEngine
         Next
     End Sub
 
+    ' -- Swing Pivot Detection ------------------------------------------------
+    ''' <summary>
+    ''' Scans candle list for the most recent confirmed swing high and swing low pivots.
+    ''' A confirmed pivot has pivotWing bars on each side. Returns 0 for either if
+    ''' no pivot is found within lookbackBars of the latest confirmable index.
+    ''' </summary>
+    Public Shared Sub CalcSwingPivots(candles As List(Of Candle),
+                                       ByRef lastSwingHighPrice As Double,
+                                       ByRef lastSwingLowPrice As Double,
+                                       Optional pivotWing As Integer = 3,
+                                       Optional lookbackBars As Integer = 30)
+        lastSwingHighPrice = 0
+        lastSwingLowPrice  = 0
+        If candles Is Nothing OrElse candles.Count < pivotWing * 2 + 2 Then Return
+
+        Dim scanEnd As Integer = candles.Count - 1 - pivotWing
+        If scanEnd < pivotWing Then Return
+        Dim scanStart As Integer = Math.Max(pivotWing, scanEnd - lookbackBars)
+
+        Dim foundHigh As Boolean = False
+        Dim foundLow  As Boolean = False
+
+        For i As Integer = scanEnd To scanStart Step -1
+            If Not foundHigh Then
+                Dim isHigh As Boolean = True
+                For w As Integer = 1 To pivotWing
+                    If candles(i - w).High >= candles(i).High OrElse
+                       candles(i + w).High >= candles(i).High Then
+                        isHigh = False : Exit For
+                    End If
+                Next
+                If isHigh Then
+                    lastSwingHighPrice = candles(i).High
+                    foundHigh = True
+                End If
+            End If
+
+            If Not foundLow Then
+                Dim isLow As Boolean = True
+                For w As Integer = 1 To pivotWing
+                    If candles(i - w).Low <= candles(i).Low OrElse
+                       candles(i + w).Low <= candles(i).Low Then
+                        isLow = False : Exit For
+                    End If
+                Next
+                If isLow Then
+                    lastSwingLowPrice = candles(i).Low
+                    foundLow = True
+                End If
+            End If
+
+            If foundHigh AndAlso foundLow Then Exit For
+        Next
+    End Sub
+
     ' -- MTF Gate (15m timeframe) ---------------------------------------------
     Public Shared Sub CalcMTFGate(candles15m As List(Of Candle),
                                    ByRef mtfTrend As String,

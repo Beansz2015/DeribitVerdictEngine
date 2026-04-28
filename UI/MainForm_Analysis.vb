@@ -314,6 +314,26 @@ Partial Public Class MainForm
                               pivotWing:=cfg.Indicators.RSI.PivotWing,
                               lookbackBars:=cfg.Indicators.RSI.LookbackBars)
 
+        ' Swing pivots on 5m -- structural reference for target/stop arbitration
+        IndicatorEngine.CalcSwingPivots(candles5m,
+                                         r.LastSwingHigh5m, r.LastSwingLow5m,
+                                         pivotWing:=cfg.Indicators.Swing.PivotWing5m,
+                                         lookbackBars:=cfg.Indicators.Swing.LookbackBars5m)
+
+        ' 15m context (already-cached candles15m)
+        If candles15m IsNot Nothing AndAlso candles15m.Count > 0 Then
+            IndicatorEngine.CalcSwingPivots(candles15m,
+                                             r.LastSwingHigh15m, r.LastSwingLow15m,
+                                             pivotWing:=cfg.Indicators.Swing.PivotWing15m,
+                                             lookbackBars:=cfg.Indicators.Swing.LookbackBars15m)
+        End If
+
+        ' Direction-aware bookkeeping wrappers
+        r.SwingTargetLong  = If(r.LastSwingHigh5m > r.CurrentPrice, r.LastSwingHigh5m, 0)
+        r.SwingStopLong    = If(r.LastSwingLow5m  < r.CurrentPrice AndAlso r.LastSwingLow5m  > 0, r.LastSwingLow5m, 0)
+        r.SwingTargetShort = If(r.LastSwingLow5m  < r.CurrentPrice AndAlso r.LastSwingLow5m  > 0, r.LastSwingLow5m, 0)
+        r.SwingStopShort   = If(r.LastSwingHigh5m > r.CurrentPrice, r.LastSwingHigh5m, 0)
+
         Dim vpfrPoc       As Double  = 0
         Dim vpfrHVNearPoc As Boolean = False
         Dim vpfrSignal    As String  = "NEUTRAL"
