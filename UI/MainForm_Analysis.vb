@@ -151,9 +151,13 @@ Partial Public Class MainForm
                                       vwapS2Hour, vwapS2Minute)
 
         IndicatorEngine.CalcBBW(candles1m, cfg.Indicators.BBW.Period, cfg.Indicators.BBW.StdDev,
-                                r.BBW, r.SqueezeStatus)
+                                r.BBW, r.SqueezeStatus,
+                                seriesWindowMultiplier:=cfg.Indicators.BBW.SeriesWindowMultiplier,
+                                squeezePercentile:=cfg.Indicators.BBW.SqueezePercentile)
 
         IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal,
+                                       smaPeriod:=cfg.Indicators.TTM.SmaPeriod,
+                                       linRegPeriod:=cfg.Indicators.TTM.LinRegPeriod,
                                        flatThreshold:=cfg.Indicators.TTM.FlatThreshold)
 
         Dim emaFast As Integer = cfg.Indicators.EMA.Fast
@@ -244,7 +248,9 @@ Partial Public Class MainForm
         IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence,
                                 slopeMinUsd:=cfg.Indicators.CVD.SlopeMinUsd,
                                 slopePctOfValue:=cfg.Indicators.CVD.SlopePctOfValue,
-                                divergencePriceGate:=cfg.Indicators.CVD.DivergencePriceGate)
+                                divergencePriceGate:=cfg.Indicators.CVD.DivergencePriceGate,
+                                lateSegmentWeight:=cfg.Indicators.CVD.LateSegmentWeight,
+                                earlySegmentWeight:=cfg.Indicators.CVD.EarlySegmentWeight)
 
         IndicatorEngine.CalcTFI(recentTrades, r.TFIValue, r.TFISignal,
                                 tfiWindowSize:=cfg.Indicators.TFI.WindowSize,
@@ -286,8 +292,9 @@ Partial Public Class MainForm
 
         Dim channelRange As Double = r.DonchianUpper - r.DonchianLower
         If channelRange > 0 Then
-            Dim q1 As Double = r.DonchianLower + channelRange * 0.25
-            Dim q3 As Double = r.DonchianUpper - channelRange * 0.25
+            Dim qPct As Double = cfg.Indicators.Donchian.QuartilePct
+            Dim q1 As Double = r.DonchianLower + channelRange * qPct
+            Dim q3 As Double = r.DonchianUpper - channelRange * qPct
             If r.CurrentPrice >= r.DonchianUpper Then
                 r.DonchianSignal = "LONG"
             ElseIf r.CurrentPrice <= r.DonchianLower Then

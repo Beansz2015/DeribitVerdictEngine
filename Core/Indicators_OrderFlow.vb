@@ -135,7 +135,9 @@ Partial Public Class IndicatorEngine
                                ByRef cvdDivergence As String,
                                Optional slopeMinUsd As Double = 50000,
                                Optional slopePctOfValue As Double = 0.05,
-                               Optional divergencePriceGate As Double = 0.002)
+                               Optional divergencePriceGate As Double = 0.002,
+                               Optional lateSegmentWeight As Double = 2.0,
+                               Optional earlySegmentWeight As Double = 1.0)
         cvdValue = 0 : cvdSlope = "FLAT" : cvdDivergence = "NONE"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
@@ -159,7 +161,7 @@ Partial Public Class IndicatorEngine
 
         cvdValue = earlyDelta + midDelta + lateDelta
 
-        Dim weightedSlope As Double = lateDelta * 2.0 - earlyDelta * 1.0
+        Dim weightedSlope As Double = lateDelta * lateSegmentWeight - earlyDelta * earlySegmentWeight
         Dim absValue As Double = Math.Abs(cvdValue)
         Dim slopeThreshold As Double = Math.Max(slopeMinUsd, absValue * slopePctOfValue)
 

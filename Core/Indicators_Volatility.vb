@@ -84,12 +84,14 @@ Partial Public Class IndicatorEngine
     ' [P2] v0.48: Squeeze threshold is now 20th-percentile of the BBW series.
     '             Previously used minBBW * 1.5 which fired on any session-low spike.
     Public Shared Sub CalcBBW(candles As List(Of Candle), period As Integer, stdMult As Double,
-                               ByRef bbw As Double, ByRef squeezeStatus As String)
+                               ByRef bbw As Double, ByRef squeezeStatus As String,
+                               Optional seriesWindowMultiplier As Integer = 5,
+                               Optional squeezePercentile As Double = 0.20)
         bbw = 0 : squeezeStatus = "NONE"
         If candles.Count < period Then Return
 
         Dim bbwSeries As New List(Of Double)
-        Dim windowSize As Integer = Math.Min(candles.Count, period * 5)
+        Dim windowSize As Integer = Math.Min(candles.Count, period * seriesWindowMultiplier)
 
         For i As Integer = candles.Count - windowSize To candles.Count - 1
             If i < period - 1 Then Continue For
@@ -108,7 +110,7 @@ Partial Public Class IndicatorEngine
         bbw = bbwSeries.Last()
 
         Dim sorted = bbwSeries.OrderBy(Function(x) x).ToList()
-        Dim pctIdx As Integer = CInt(Math.Floor(sorted.Count * 0.20))
+        Dim pctIdx As Integer = CInt(Math.Floor(sorted.Count * squeezePercentile))
         If pctIdx >= sorted.Count Then pctIdx = sorted.Count - 1
         Dim threshold As Double = sorted(pctIdx)
 

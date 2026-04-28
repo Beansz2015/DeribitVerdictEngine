@@ -21,9 +21,9 @@ Partial Public Class ScoringEngine
     Public Shared Function RegimeMaxScore(regime As String, cfg As EngineSettings) As Integer
         Dim baseMax As Integer
         Select Case regime
-            Case "TRENDING_UP", "TRENDING_DOWN" : baseMax = 19
-            Case "RANGE_BOUND"                  : baseMax = 18
-            Case Else                           : baseMax = 15
+            Case "TRENDING_UP", "TRENDING_DOWN" : baseMax = cfg.Scoring.RegimeMaxScore.Trending
+            Case "RANGE_BOUND"                  : baseMax = cfg.Scoring.RegimeMaxScore.RangeBound
+            Case Else                           : baseMax = cfg.Scoring.RegimeMaxScore.Transitional
         End Select
         If Not cfg.RegimeWeights.Enabled Then Return baseMax
         Select Case regime
@@ -41,10 +41,11 @@ Partial Public Class ScoringEngine
         Return CInt(Math.Ceiling(maxScore * pct))
     End Function
 
-    Private Shared Function TierFloor(rawScore As Integer) As Integer
-        If rawScore >= 12 Then Return 9
-        If rawScore >= 9 Then Return 6
-        If rawScore >= 6 Then Return 3
+    Private Shared Function TierFloor(rawScore As Integer, cfg As EngineSettings) As Integer
+        Dim tf = cfg.Scoring.TierFloor
+        If rawScore >= tf.HighThreshold Then Return tf.HighFloor
+        If rawScore >= tf.MedThreshold  Then Return tf.MedFloor
+        If rawScore >= tf.LowThreshold  Then Return tf.LowFloor
         Return 0
     End Function
 

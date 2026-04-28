@@ -1,8 +1,19 @@
 {
-  "version": 16,
+  "version": 17,
   "last_modified": "2026-04-29T00:00:00Z",
-  "modified_by": "swing-pivot-proposal",
+  "modified_by": "settings-exposure-pass",
   "change_log": [
+    "v17: [settings-exposure] Lift 19 hardcoded scoring literals to settings.json. Zero behaviour change at defaults.",
+    "     scoring.regime_max_score: {trending:19, range_bound:18, transitional:15} -- RegimeMaxScore() base ceilings.",
+    "     scoring.tier_floor: {high_threshold:12, high_floor:9, med_threshold:9, med_floor:6, low_threshold:6, low_floor:3}",
+    "       -- TRANSITIONAL ADX penalty graceful-degradation caps.",
+    "     scoring.context_tag_thresholds: {momentum_fading_decay_ratio:0.5, momentum_fading_count_min:2,",
+    "       structurally_weak_struct_min:2, structurally_weak_flow_min:2} -- CalcVerdictContext thresholds.",
+    "     indicators.RSI.pass2c_midline: 50.0 -- RSI midline for Pass 2c RANGE_BOUND alignment check.",
+    "     indicators.Donchian.quartile_pct: 0.25 -- Donchian channel quartile for LONG/SHORT_PARTIAL classification.",
+    "     indicators.BBW.series_window_multiplier: 5, squeeze_percentile: 0.20 -- CalcBBW internal parameters.",
+    "     indicators.TTM.sma_period: 20, lin_reg_period: 7 -- CalcTTMSqueeze internal periods.",
+    "     indicators.CVD.late_segment_weight: 2.0, early_segment_weight: 1.0 -- 3-segment CVD slope weights.",
     "v16: [swing-pivots] Added indicators.swing block (4 keys) for CalcSwingPivots().",
     "     pivot_wing_5m: 3  -- bars left/right confirming a 5m swing (~15 min each side).",
     "     lookback_bars_5m: 30  -- scan back ~150 min for most recent confirmed 5m swing.",
@@ -91,16 +102,18 @@
     "RSI":      { "period": 9,  "oversold": 40.0, "overbought": 60.0,
                   "partial_oversold": 45.0, "partial_overbought": 55.0,
                   "divergence_price_gate": 0.001,
-                  "divergence_rsi_delta": 2.0 },
+                  "divergence_rsi_delta": 2.0,
+                  "pass2c_midline": 50.0 },
     "ROC":      { "period": 9,  "slope_sensitivity": 0.1, "series_lookback": 3 },
     "VWAP":     {
                   "session2_start_hour": 13,
                   "session2_start_minute": 30,
                   "warmup_candles": 15
                 },
-    "BBW":      { "period": 20, "std_dev": 2.0 },
+    "BBW":      { "period": 20, "std_dev": 2.0,
+                  "series_window_multiplier": 5, "squeeze_percentile": 0.20 },
     "EMA":      { "fast": 9,   "mid": 21,  "slow": 50 },
-    "Donchian": { "period": 20 },
+    "Donchian": { "period": 20, "quartile_pct": 0.25 },
     "OBV":      { "trend_gate": 0.001, "divergence_gate": 0.001 },
     "ATR":      { "period": 7,
                   "static_ref": 115.0, "scale_min": 0.25, "scale_max": 4.0 },
@@ -121,11 +134,14 @@
     "DMI":      { "period": 9 },
     "CVD":      { "slope_min_usd": 12000.0,
                   "slope_pct_of_value": 0.01,
-                  "divergence_price_gate": 0.0005 },
+                  "divergence_price_gate": 0.0005,
+                  "late_segment_weight": 2.0,
+                  "early_segment_weight": 1.0 },
     "TFI":      { "window_size": 30, "threshold": 0.15 },
     "MicroCVD": { "window_size": 50, "accel_threshold": 10000.0,
                   "accel_threshold_dynamic_pct": 0.03,
                   "accel_threshold_floor_pct": 0.25 },
+    "TTM":      { "flat_threshold": 0.5, "sma_period": 20, "lin_reg_period": 7 },
     "VPFR":     { "num_buckets": 50,
                   "value_area_pct": 0.70,
                   "hvn_vol_pct": 0.60,
@@ -212,7 +228,23 @@
     "atr_stop_multiplier": 1.2,
     "context_tag_structural_min": 3,
     "context_tag_flow_max": 1,
-    "spread_wide_penalty": 1
+    "spread_wide_penalty": 1,
+    "regime_max_score": {
+      "trending": 19,
+      "range_bound": 18,
+      "transitional": 15
+    },
+    "tier_floor": {
+      "high_threshold": 12, "high_floor": 9,
+      "med_threshold":   9, "med_floor":  6,
+      "low_threshold":   6, "low_floor":  3
+    },
+    "context_tag_thresholds": {
+      "momentum_fading_decay_ratio": 0.5,
+      "momentum_fading_count_min": 2,
+      "structurally_weak_struct_min": 2,
+      "structurally_weak_flow_min": 2
+    }
   },
   "kelly": {
     "account_size_usd": 1000.0,

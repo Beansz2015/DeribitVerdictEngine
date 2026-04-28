@@ -1,6 +1,6 @@
 # Spec: Settings Exposure Pass — Lift Hardcoded Scoring Constants to settings.json
 **Proposed:** 2026-04-27
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED
 **Target files:** `Core/ScoringEngine_Helpers.vb`, `Core/ScoringEngine_Calculate_Scoring.vb`, `Core/Indicators_Volatility.vb`, `Core/Indicators_OrderFlow.vb`, `Core/Settings/EngineSettings.vb`, `UI/MainForm_Analysis.vb`, `settings.json`
 
 This is a **mechanical exposure pass**. No new behaviour. Every literal scoring-affecting magic number currently embedded in the engine becomes a `settings.json` key with the **current value preserved as default**. After this pass, an external tweaker (frontier-LLM auto-tuner per `DeribitIndicatorProject.md` Section 16) can adjust any scoring-relevant parameter without code changes.

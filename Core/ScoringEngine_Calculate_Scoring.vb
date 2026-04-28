@@ -64,26 +64,27 @@ Partial Public Class ScoringEngine
             End If
         End If
 
+        Dim ctx = cfg.Scoring.ContextTag
         Dim fadingCount As Integer = 0
         If isLong Then
             If r.MicroCVDSignal = "BULL_DECEL" Then fadingCount += 1
             If r.TTMSignal = "BULL_FADING" Then fadingCount += 1
             If r.RSI >= cfg.Indicators.RSI.DivPenaltyRsiHigh Then fadingCount += 1
-            If r.MicroCVDEarly > 0 AndAlso r.MicroCVDLate < r.MicroCVDEarly * 0.5 Then fadingCount += 1
+            If r.MicroCVDEarly > 0 AndAlso r.MicroCVDLate < r.MicroCVDEarly * ctx.MomentumFadingDecayRatio Then fadingCount += 1
         Else
             If r.MicroCVDSignal = "BEAR_DECEL" Then fadingCount += 1
             If r.TTMSignal = "BEAR_FADING" Then fadingCount += 1
             If r.RSI <= cfg.Indicators.RSI.DivPenaltyRsiLow Then fadingCount += 1
-            If r.MicroCVDEarly < 0 AndAlso r.MicroCVDLate > r.MicroCVDEarly * 0.5 Then fadingCount += 1
+            If r.MicroCVDEarly < 0 AndAlso r.MicroCVDLate > r.MicroCVDEarly * ctx.MomentumFadingDecayRatio Then fadingCount += 1
         End If
-        If fadingCount >= 2 Then Return "MOMENTUM_FADING"
+        If fadingCount >= ctx.MomentumFadingCountMin Then Return "MOMENTUM_FADING"
 
         If structScore >= cfg.Scoring.ContextTagStructuralMin AndAlso
            flowScore <= cfg.Scoring.ContextTagFlowMax Then
             Return "FLOW_UNCONFIRMED"
         End If
 
-        If structScore < 2 AndAlso flowScore < 2 Then
+        If structScore < ctx.StructurallyWeakStructMin AndAlso flowScore < ctx.StructurallyWeakFlowMin Then
             Return "STRUCTURALLY_WEAK"
         End If
 
@@ -464,7 +465,7 @@ Partial Public Class ScoringEngine
             ElseIf isRangeBound Then
                 Dim vwapActive   As Boolean = Not vwapWarmup
                 Dim vwapAligned  As Boolean = vwapActive AndAlso If(p2cIsLong, r.CurrentPrice > r.VWAP, r.CurrentPrice < r.VWAP)
-                Dim rsiAligned   As Boolean = If(p2cIsLong, r.RSI > 50, r.RSI < 50)
+                Dim rsiAligned   As Boolean = If(p2cIsLong, r.RSI > cfg.Indicators.RSI.Pass2cMidline, r.RSI < cfg.Indicators.RSI.Pass2cMidline)
                 Dim donchAligned As Boolean = If(p2cIsLong,
                                                  r.DonchianSignal = "LONG"  OrElse r.DonchianSignal = "LONG_PARTIAL",
                                                  r.DonchianSignal = "SHORT" OrElse r.DonchianSignal = "SHORT_PARTIAL")

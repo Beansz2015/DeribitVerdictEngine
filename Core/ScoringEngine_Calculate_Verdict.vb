@@ -61,8 +61,8 @@ Partial Public Class ScoringEngine
                 ElseIf r.ADX >= penMid AndAlso r.ADX < cfg.RegimeGates.TransitionalAdxPenaltyHigh Then
                     adxPenalty = cfg.RegimeGates.TransitionalPenaltyMid
                 End If
-                effectiveLS = Math.Max(ls - adxPenalty, TierFloor(ls))
-                effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss))
+                effectiveLS = Math.Max(ls - adxPenalty, TierFloor(ls, cfg))
+                effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss, cfg))
         End Select
 
         ' -- Step 4b: MTF Gate Veto -------------------------------------------

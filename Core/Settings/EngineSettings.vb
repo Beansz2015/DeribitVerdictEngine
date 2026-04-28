@@ -165,6 +165,8 @@ Public Class RsiSettings
     <JsonPropertyName("pivot_wing")>           Public Property PivotWing         As Integer = 2
     ''' <summary>[T3-B] Number of bars to look back when scanning for RSI pivots. Default 20.</summary>
     <JsonPropertyName("lookback_bars")>        Public Property LookbackBars      As Integer = 20
+    ''' <summary>[settings-exposure] RSI midline for Pass 2c RANGE_BOUND alignment check. Default 50.</summary>
+    <JsonPropertyName("pass2c_midline")>       Public Property Pass2cMidline     As Double  = 50.0
 End Class
 
 Public Class RocSettings
@@ -182,6 +184,10 @@ End Class
 Public Class BbwSettings
     <JsonPropertyName("period")>  Public Property Period As Integer = 20
     <JsonPropertyName("std_dev")> Public Property StdDev As Double  = 2.0
+    ''' <summary>[settings-exposure] BBW series window = period × multiplier. Default 5 (period 20 × 5 = 100 bars).</summary>
+    <JsonPropertyName("series_window_multiplier")> Public Property SeriesWindowMultiplier As Integer = 5
+    ''' <summary>[settings-exposure] Percentile of BBW series below which SqueezeStatus = ACTIVE. Default 0.20 (bottom 20%).</summary>
+    <JsonPropertyName("squeeze_percentile")>       Public Property SqueezePercentile      As Double  = 0.20
 End Class
 
 Public Class EmaSettings
@@ -191,7 +197,9 @@ Public Class EmaSettings
 End Class
 
 Public Class DonchianSettings
-    <JsonPropertyName("period")> Public Property Period As Integer = 20
+    <JsonPropertyName("period")>       Public Property Period      As Integer = 20
+    ''' <summary>[settings-exposure] Quartile threshold for LONG_PARTIAL / SHORT_PARTIAL (fraction of channel range). Default 0.25.</summary>
+    <JsonPropertyName("quartile_pct")> Public Property QuartilePct As Double  = 0.25
 End Class
 
 Public Class ObvSettings
@@ -256,6 +264,10 @@ Public Class CvdSettings
     <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double  = 0.0005
     ''' <summary>[P13] v0.50: Score penalty magnitude for CVD divergence. Default 1.</summary>
     <JsonPropertyName("divergence_penalty")>    Public Property DivergencePenalty   As Integer = 1
+    ''' <summary>[settings-exposure] Late-segment weight in 3-segment CVD slope formula. Default 2.0.</summary>
+    <JsonPropertyName("late_segment_weight")>   Public Property LateSegmentWeight   As Double  = 2.0
+    ''' <summary>[settings-exposure] Early-segment weight in 3-segment CVD slope formula. Default 1.0.</summary>
+    <JsonPropertyName("early_segment_weight")>  Public Property EarlySegmentWeight  As Double  = 1.0
 End Class
 
 ''' <summary>[P4] v0.48: TFI window independent of MicroCVD. Default 30 trades.</summary>
@@ -291,7 +303,11 @@ End Class
 ''' Default 0.5 matches the method''s previous hardcoded behaviour.
 ''' </summary>
 Public Class TtmSettings
-    <JsonPropertyName("flat_threshold")> Public Property FlatThreshold As Double = 0.5
+    <JsonPropertyName("flat_threshold")> Public Property FlatThreshold As Double  = 0.5
+    ''' <summary>[settings-exposure] SMA period for TTM histogram delta computation. Default 20.</summary>
+    <JsonPropertyName("sma_period")>     Public Property SmaPeriod     As Integer = 20
+    ''' <summary>[settings-exposure] Linear regression period for histogram fit. Default 7.</summary>
+    <JsonPropertyName("lin_reg_period")> Public Property LinRegPeriod  As Integer = 7
 End Class
 
 ''' <summary>
@@ -502,6 +518,56 @@ Public Class ScoringSettings
     <JsonPropertyName("context_tag_flow_max")>       Public Property ContextTagFlowMax       As Integer = 1
     ''' <summary>[bid-ask-spread] Penalty applied to entry side when SpreadStatus = WIDE. Default 1.</summary>
     <JsonPropertyName("spread_wide_penalty")> Public Property SpreadWidePenalty As Integer = 1
+    ''' <summary>[settings-exposure] Per-regime score ceiling base values (before regime_weights bonus).</summary>
+    <JsonPropertyName("regime_max_score")>    Public Property RegimeMaxScore    As New RegimeMaxScoreSettings
+    ''' <summary>[settings-exposure] TRANSITIONAL ADX penalty graceful-degradation floor breakpoints.</summary>
+    <JsonPropertyName("tier_floor")>          Public Property TierFloor         As New TierFloorSettings
+    ''' <summary>[settings-exposure] VerdictContext Step 5b MOMENTUM_FADING / STRUCTURALLY_WEAK thresholds.</summary>
+    <JsonPropertyName("context_tag_thresholds")> Public Property ContextTag     As New ContextTagThresholds
+End Class
+
+' ---------------------------------------------------------------------------
+' Settings-exposure: scoring mechanics
+' ---------------------------------------------------------------------------
+
+''' <summary>Per-regime score ceiling base values (before regime_weights bonus).</summary>
+Public Class RegimeMaxScoreSettings
+    ''' <summary>Base max score for TRENDING_UP / TRENDING_DOWN. Default 19.</summary>
+    <JsonPropertyName("trending")>     Public Property Trending     As Integer = 19
+    ''' <summary>Base max score for RANGE_BOUND. Default 18.</summary>
+    <JsonPropertyName("range_bound")>  Public Property RangeBound   As Integer = 18
+    ''' <summary>Base max score for TRANSITIONAL. Default 15.</summary>
+    <JsonPropertyName("transitional")> Public Property Transitional As Integer = 15
+End Class
+
+''' <summary>
+''' Graceful-degradation floor for TRANSITIONAL ADX penalty.
+''' If raw score >= HighThreshold, post-penalty floor is HighFloor.
+''' Same pattern at Med and Low. Below LowThreshold no floor applies.
+''' </summary>
+Public Class TierFloorSettings
+    <JsonPropertyName("high_threshold")> Public Property HighThreshold As Integer = 12
+    <JsonPropertyName("high_floor")>     Public Property HighFloor     As Integer = 9
+    <JsonPropertyName("med_threshold")>  Public Property MedThreshold  As Integer = 9
+    <JsonPropertyName("med_floor")>      Public Property MedFloor      As Integer = 6
+    <JsonPropertyName("low_threshold")>  Public Property LowThreshold  As Integer = 6
+    <JsonPropertyName("low_floor")>      Public Property LowFloor      As Integer = 3
+End Class
+
+''' <summary>
+''' VerdictContext classifier thresholds (Step 5b).
+''' Distinct from ContextTagStructuralMin / ContextTagFlowMax (those gate FLOW_UNCONFIRMED).
+''' These gate MOMENTUM_FADING and STRUCTURALLY_WEAK.
+''' </summary>
+Public Class ContextTagThresholds
+    ''' <summary>Late vs early MicroCVD ratio threshold for fading detection. Default 0.5.</summary>
+    <JsonPropertyName("momentum_fading_decay_ratio")>  Public Property MomentumFadingDecayRatio  As Double  = 0.5
+    ''' <summary>Min count of fading signals to classify MOMENTUM_FADING. Default 2.</summary>
+    <JsonPropertyName("momentum_fading_count_min")>    Public Property MomentumFadingCountMin    As Integer = 2
+    ''' <summary>Structural hits below this + flow below StructurallyWeakFlowMin → STRUCTURALLY_WEAK. Default 2.</summary>
+    <JsonPropertyName("structurally_weak_struct_min")> Public Property StructurallyWeakStructMin As Integer = 2
+    ''' <summary>Flow hits below this + structural below StructurallyWeakStructMin → STRUCTURALLY_WEAK. Default 2.</summary>
+    <JsonPropertyName("structurally_weak_flow_min")>   Public Property StructurallyWeakFlowMin   As Integer = 2
 End Class
 
 ' ---------------------------------------------------------------------------
