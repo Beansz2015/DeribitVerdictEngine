@@ -143,6 +143,12 @@ Partial Public Class MainForm
         AppendRtf(rtb, String.Format("{0:F2}  |  Bid Vol: {1:F0}  |  Ask Vol: {2:F0}  |  {3}",
                                       r.OFIRatio, r.OFIBidVol, r.OFIAskVol, r.OFISignal) & Environment.NewLine, ofiColour)
 
+        AppendRtf(rtb, "  Spread:    ", C_LABEL)
+        Dim spreadColour As Color = If(r.SpreadStatus = "WIDE", C_BAD,
+                                       If(r.SpreadStatus = "TIGHT", C_GOOD, C_VALUE))
+        AppendRtf(rtb, String.Format("{0:F2} bps  |  {1}",
+                                      r.SpreadBps, r.SpreadStatus) & Environment.NewLine, spreadColour)
+
         AppendRtf(rtb, "  CVD:       ", C_LABEL)
         Dim cvdColour As Color = If(r.CVDSlope = "RISING", C_GOOD, If(r.CVDSlope = "FALLING", C_BAD, C_VALUE))
         AppendRtf(rtb, String.Format("Net:{0:F0}  |  Slope:{1}  |  Div:{2}",

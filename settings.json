@@ -125,6 +125,10 @@
                   "enabled": true,
                   "upgrade_bonus": 1,
                   "conflict_penalty": 1
+                },
+    "spread": {
+                  "wide_threshold_bps": 5.0,
+                  "tight_threshold_bps": 1.5
                 }
   },
   "session_volume": {
@@ -182,7 +186,8 @@
     "atr_target_multiplier": 2.0,
     "atr_stop_multiplier": 1.2,
     "context_tag_structural_min": 3,
-    "context_tag_flow_max": 1
+    "context_tag_flow_max": 1,
+    "spread_wide_penalty": 1
   },
   "kelly": {
     "account_size_usd": 1000.0,

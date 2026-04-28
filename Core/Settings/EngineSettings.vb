@@ -137,6 +137,8 @@ Public Class IndicatorSettings
     <JsonPropertyName("funding")>  Public Property Funding  As New FundingSettings
     ''' <summary>[OI x CVD cross-confirm] Pass 2b upgrade/conflict gate parameters.</summary>
     <JsonPropertyName("oi_cvd_cross")> Public Property OiCvd As New OiCvdSettings
+    ''' <summary>[bid-ask-spread] Bid-ask spread microstructure thresholds.</summary>
+    <JsonPropertyName("spread")> Public Property Spread As New SpreadSettings
 End Class
 
 Public Class AdxSettings
@@ -312,6 +314,18 @@ Public Class OiCvdSettings
 End Class
 
 ''' <summary>
+''' [bid-ask-spread] Bid-ask spread microstructure thresholds.
+''' WideThresholdBps: spread at or above this is WIDE -- triggers entry-side penalty.
+''' TightThresholdBps: spread at or below this is TIGHT -- display-only, no score impact.
+''' </summary>
+Public Class SpreadSettings
+    ''' <summary>Spread (bps) at or above this is WIDE -- triggers entry-side penalty. Default 5.0.</summary>
+    <JsonPropertyName("wide_threshold_bps")>  Public Property WideThresholdBps  As Double = 5.0
+    ''' <summary>Spread (bps) at or below this is TIGHT -- display-only marker, no score impact. Default 1.5.</summary>
+    <JsonPropertyName("tight_threshold_bps")> Public Property TightThresholdBps As Double = 1.5
+End Class
+
+''' <summary>
 ''' Session-aware volume threshold scaling by UTC trading bucket.
 ''' Enabled: master switch -- set false to bypass session scaling entirely. Default True.
 ''' Sessions: ordered list of UTC hour buckets with independent high/mid multipliers.
@@ -434,6 +448,8 @@ Public Class ScoringSettings
     ''' to classify verdict as FLOW_UNCONFIRMED. Default 1.
     ''' </summary>
     <JsonPropertyName("context_tag_flow_max")>       Public Property ContextTagFlowMax       As Integer = 1
+    ''' <summary>[bid-ask-spread] Penalty applied to entry side when SpreadStatus = WIDE. Default 1.</summary>
+    <JsonPropertyName("spread_wide_penalty")> Public Property SpreadWidePenalty As Integer = 1
 End Class
 
 ' ---------------------------------------------------------------------------

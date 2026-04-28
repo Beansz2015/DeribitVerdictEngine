@@ -51,6 +51,8 @@ Public Class IndicatorResults
     Public Property OFISignal As String      ' BUY DOMINANT / SELL DOMINANT / BALANCED
     Public Property OFIBidVol As Double      ' weighted bid volume (top-3, w=3,2,1) -- display only
     Public Property OFIAskVol As Double      ' weighted ask volume (top-3, w=3,2,1) -- display only
+    Public Property SpreadBps    As Double   ' best-bid/ask spread in basis points
+    Public Property SpreadStatus As String  ' "TIGHT" | "NORMAL" | "WIDE"
     Public Property LiqLongSize As Double
     Public Property LiqShortSize As Double
     Public Property LiqSignal As String

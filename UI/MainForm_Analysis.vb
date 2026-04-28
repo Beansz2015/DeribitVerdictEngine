@@ -229,6 +229,10 @@ Partial Public Class MainForm
                                 sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio,
                                 bookDepth:=cfg.Indicators.OFI.BookDepth)
 
+        IndicatorEngine.CalcSpread(orderBook, r.SpreadBps, r.SpreadStatus,
+                                   wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
+                                   tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)
+
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal,
                                          dominanceRatio:=cfg.Indicators.Liquidations.DominanceRatio)
 

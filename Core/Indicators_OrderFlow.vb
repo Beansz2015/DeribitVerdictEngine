@@ -308,4 +308,35 @@ Partial Public Class IndicatorEngine
         Return "FLAT"
     End Function
 
+    ''' <summary>
+    ''' Computes basis-point spread from the best bid/ask of the order book snapshot.
+    ''' Classifies as TIGHT / NORMAL / WIDE against configurable thresholds.
+    ''' </summary>
+    Public Shared Sub CalcSpread(orderBook As OrderBookSnapshot,
+                                  ByRef spreadBps As Double,
+                                  ByRef spreadStatus As String,
+                                  Optional wideThresholdBps  As Double = 5.0,
+                                  Optional tightThresholdBps As Double = 1.5)
+        spreadBps = 0 : spreadStatus = "NORMAL"
+        If orderBook Is Nothing Then Return
+        If orderBook.Bids Is Nothing OrElse orderBook.Bids.Count = 0 Then Return
+        If orderBook.Asks Is Nothing OrElse orderBook.Asks.Count = 0 Then Return
+
+        Dim bestBid As Double = orderBook.Bids(0).Price
+        Dim bestAsk As Double = orderBook.Asks(0).Price
+        If bestBid <= 0 OrElse bestAsk <= 0 Then Return
+        Dim mid As Double = (bestBid + bestAsk) / 2.0
+        If mid <= 0 Then Return
+
+        spreadBps = ((bestAsk - bestBid) / mid) * 10000.0
+
+        If spreadBps >= wideThresholdBps Then
+            spreadStatus = "WIDE"
+        ElseIf spreadBps <= tightThresholdBps Then
+            spreadStatus = "TIGHT"
+        Else
+            spreadStatus = "NORMAL"
+        End If
+    End Sub
+
 End Class

@@ -1,6 +1,6 @@
 # Spec: Bid-Ask Spread Microstructure Signal
 **Proposed:** 2026-04-27
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED 2026-04-28
 **Target files:** `Core/IndicatorResults.vb`, `Core/Indicators_OrderFlow.vb`, `Core/ScoringEngine_Calculate_Scoring.vb`, `Core/Settings/EngineSettings.vb`, `UI/MainForm_Analysis.vb`, `UI/MainForm_Render_Sections.vb`, `settings.json`
 
 ---

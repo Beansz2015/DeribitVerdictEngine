@@ -244,6 +244,29 @@ Partial Public Class ScoringEngine
             state.ShortScore = Math.Max(0, state.ShortScore - liqShortPenalty)
         End If
 
+        ' Spread microstructure penalty -- WIDE spread on entry side reduces signal quality.
+        ' ROC > 0  -> penalise long side (entering long into widening ask)
+        ' ROC < 0  -> penalise short side (entering short into widening bid)
+        ' ROC ~= 0 -> penalise both sides (general execution warning)
+        Dim spreadPenaltyLong  As Integer = 0
+        Dim spreadPenaltyShort As Integer = 0
+        If r.SpreadStatus = "WIDE" Then
+            Dim pen       As Integer = cfg.Scoring.SpreadWidePenalty
+            Dim slopeSens As Double  = cfg.Indicators.ROC.SlopeSensitivity
+            If r.ROC > slopeSens Then
+                spreadPenaltyLong = pen
+                state.LongScore = Math.Max(0, state.LongScore - pen)
+            ElseIf r.ROC < -slopeSens Then
+                spreadPenaltyShort = pen
+                state.ShortScore = Math.Max(0, state.ShortScore - pen)
+            Else
+                spreadPenaltyLong  = pen
+                spreadPenaltyShort = pen
+                state.LongScore  = Math.Max(0, state.LongScore  - pen)
+                state.ShortScore = Math.Max(0, state.ShortScore - pen)
+            End If
+        End If
+
         Dim ema200Bull As Boolean = r.CurrentPrice > r.EMA200_5m AndAlso r.EMA200_5m > 0
         Dim ema200Bear As Boolean = r.CurrentPrice < r.EMA200_5m AndAlso r.EMA200_5m > 0
         AddFull(state, ema200Bull, ema200Bear, SignalCategory.MarketStructure)
@@ -557,6 +580,11 @@ Partial Public Class ScoringEngine
         If liqLongPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [L]", liqLongPenalty)
         If liqShortPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [S]", liqShortPenalty)
         breakdown.Add(New SignalBreakdownItem("Liq Penalty", liqLongPenalty > 0, liqShortPenalty > 0, liqNote))
+
+        Dim spreadNote As String = String.Format("{0:F2} bps | {1}", r.SpreadBps, r.SpreadStatus)
+        If spreadPenaltyLong  > 0 Then spreadNote &= String.Format(" | PENALTY -{0} [L]", spreadPenaltyLong)
+        If spreadPenaltyShort > 0 Then spreadNote &= String.Format(" | PENALTY -{0} [S]", spreadPenaltyShort)
+        breakdown.Add(New SignalBreakdownItem("Spread", spreadPenaltyLong > 0, spreadPenaltyShort > 0, spreadNote))
 
         breakdown.Add(New SignalBreakdownItem("5m EMA(200)", ema200Bull, ema200Bear,
             String.Format("{0:F0} | {1}", r.EMA200_5m, r.PriceVsEMA200)))
