@@ -253,7 +253,9 @@ Partial Public Class MainForm
                                      r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
                                      r.MicroCVDMomentum, r.MicroCVDSignal,
                                      microWindowSize:=cfg.Indicators.MicroCVD.WindowSize,
-                                     accelThreshold:=cfg.Indicators.MicroCVD.AccelThreshold)
+                                     accelThreshold:=cfg.Indicators.MicroCVD.AccelThreshold,
+                                     dynamicPct:=cfg.Indicators.MicroCVD.AccelThresholdDynamicPct,
+                                     floorPct:=cfg.Indicators.MicroCVD.AccelThresholdFloorPct)
 
         Dim mtfProposed As String = "NONE"
         If candles15m IsNot Nothing AndAlso candles15m.Count >= cfg.MTFGate.DmiPeriod + 2 Then

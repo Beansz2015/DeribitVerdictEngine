@@ -1,6 +1,6 @@
 # Spec: Dynamic MicroCVD AccelThreshold (Self-Scaling)
 **Proposed:** 2026-04-27
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED 2026-04-29
 **Target files:** `Core/Indicators_OrderFlow.vb`, `Core/Settings/EngineSettings.vb`, `UI/MainForm_Analysis.vb`, `settings.json`
 
 ---

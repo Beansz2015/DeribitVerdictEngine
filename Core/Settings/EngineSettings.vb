@@ -268,7 +268,18 @@ End Class
 ''' </summary>
 Public Class MicroCvdSettings
     <JsonPropertyName("window_size")>     Public Property WindowSize     As Integer = 50
+    ''' <summary>Static USD acceleration threshold. Used as floor anchor in dynamic mode. Default 10000.</summary>
     <JsonPropertyName("accel_threshold")> Public Property AccelThreshold As Double  = 10000.0
+    ''' <summary>
+    ''' Dynamic acceleration threshold as fraction of total window USD flow. Default 0.03 (3%).
+    ''' Set to 0.0 to disable dynamic mode and use accel_threshold as a literal static value.
+    ''' </summary>
+    <JsonPropertyName("accel_threshold_dynamic_pct")> Public Property AccelThresholdDynamicPct As Double = 0.03
+    ''' <summary>
+    ''' Floor on dynamic threshold as fraction of accel_threshold. Default 0.25 (25%).
+    ''' Prevents dead-flow windows from producing nonsensically small thresholds.
+    ''' </summary>
+    <JsonPropertyName("accel_threshold_floor_pct")>   Public Property AccelThresholdFloorPct   As Double = 0.25
     <JsonPropertyName("decel_penalty")>   Public Property DecelPenalty   As Integer = 1
 End Class
 

@@ -231,8 +231,10 @@ Partial Public Class IndicatorEngine
                                     ByRef microLate As Double,
                                     ByRef microMomentum As String,
                                     ByRef microSignal As String,
-                                    Optional microWindowSize As Integer = 50,
-                                    Optional accelThreshold As Double = 5000)
+                                    Optional microWindowSize  As Integer = 50,
+                                    Optional accelThreshold   As Double  = 10000,
+                                    Optional dynamicPct       As Double  = 0.0,
+                                    Optional floorPct         As Double  = 0.25)
         microEarly = 0 : microMid = 0 : microLate = 0
         microMomentum = "FLAT" : microSignal = "FLAT"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
@@ -251,21 +253,36 @@ Partial Public Class IndicatorEngine
             End If
         Next
 
+        ' Compute effective acceleration threshold.
+        ' When dynamicPct > 0, scale against total window USD flow (same window, same units).
+        ' Floor prevents pathological dead-flow windows from producing nonsensically small thresholds.
+        ' dynamicPct = 0 (function default) preserves the prior static-only behaviour exactly.
+        Dim effThreshold As Double = accelThreshold
+        If dynamicPct > 0.0 Then
+            Dim totalUsd As Double = 0.0
+            For Each t In window
+                totalUsd += t.Amount
+            Next
+            Dim dyn   As Double = totalUsd * dynamicPct
+            Dim floor As Double = accelThreshold * floorPct
+            effThreshold = Math.Max(dyn, floor)
+        End If
+
         Dim netDelta As Double = microEarly + microMid + microLate
         Dim isBull   As Boolean = netDelta > 0
 
         If isBull Then
-            If microLate > 0 AndAlso microLate > microEarly + accelThreshold Then
+            If microLate > 0 AndAlso microLate > microEarly + effThreshold Then
                 microMomentum = "ACCELERATING"
-            ElseIf microLate < 0 OrElse microLate < microEarly - accelThreshold Then
+            ElseIf microLate < 0 OrElse microLate < microEarly - effThreshold Then
                 microMomentum = "DECELERATING"
             Else
                 microMomentum = "FLAT"
             End If
         Else
-            If microLate < 0 AndAlso microLate < microEarly - accelThreshold Then
+            If microLate < 0 AndAlso microLate < microEarly - effThreshold Then
                 microMomentum = "ACCELERATING"
-            ElseIf microLate > 0 OrElse microLate > microEarly + accelThreshold Then
+            ElseIf microLate > 0 OrElse microLate > microEarly + effThreshold Then
                 microMomentum = "DECELERATING"
             Else
                 microMomentum = "FLAT"
