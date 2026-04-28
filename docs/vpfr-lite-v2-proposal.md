@@ -330,12 +330,44 @@ Public Class VpfrSettings
     <JsonPropertyName("hvn_vol_pct")>      Public Property HvnVolPct       As Double  = 0.6
     ''' <summary>Bucket volume / POC volume ratio below which a bucket is LVN. Default 0.2.</summary>
     <JsonPropertyName("lvn_vol_pct")>      Public Property LvnVolPct       As Double  = 0.2
+    ''' <summary>
+    ''' Proximity threshold for VPFRHVNearPoc / VPFRSignal classification.
+    ''' Current price is considered "near POC" when |price - POC| / POC ≤ this value.
+    ''' Default 0.002 (0.2%).
+    ''' Currently hardcoded as a CalcVPFRLite optional default; lifting to cfg as part of v2.
+    ''' </summary>
+    <JsonPropertyName("hvn_proximity_pct")> Public Property HvnProximityPct As Double = 0.002
+    ''' <summary>
+    ''' Exponential decay base for time-weighting candle volumes when building the profile.
+    ''' Each candle's volume is multiplied by decay_base ^ age (age=0 for most recent).
+    ''' Default 0.985 gives ~22% weight reduction per 15 bars.
+    ''' Lower values (e.g. 0.97) make POC track recent structure more aggressively;
+    ''' higher (e.g. 0.995) preserve session-long structure longer.
+    ''' Currently hardcoded as a CalcVPFRLite optional default; lifting to cfg as part of v2.
+    ''' </summary>
+    <JsonPropertyName("decay_base")>       Public Property DecayBase       As Double  = 0.985
     ''' <summary>Enable optional value-area-breakout partial in scoring pipeline. Default False — display + cap only.</summary>
     <JsonPropertyName("value_area_scoring_enabled")> Public Property ValueAreaScoringEnabled As Boolean = False
 End Class
 ```
 
-Note: `HvnVolPct` and `LvnVolPct` already exist as hardcoded optional params on `CalcVPFRLite` (default 0.6 / 0.2). Move them to settings as part of this work — small consistency win.
+Note: `HvnVolPct`, `LvnVolPct`, `HvnProximityPct`, and `DecayBase` already exist as hardcoded optional params on `CalcVPFRLite`. Move all four to settings as part of this work — closes the settings-exposure gap for VPFR. The call site in `MainForm_Analysis.vb` passes them through alongside `NumBuckets`:
+
+```vb
+IndicatorEngine.CalcVPFRLite(candles1m, r.CurrentPrice,
+                             vpfrPoc, vpfrHVNearPoc, vpfrSignal,
+                             ' new ByRef args added in v2:
+                             r.VPFRVah, r.VPFRVal, r.VPFRValueAreaSignal,
+                             r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow,
+                             r.VPFRNearestLvnAbove, r.VPFRNearestLvnBelow,
+                             ' all-cfg pass-through:
+                             numBuckets:=cfg.Indicators.VPFR.NumBuckets,
+                             hvnVolPct:=cfg.Indicators.VPFR.HvnVolPct,
+                             lvnVolPct:=cfg.Indicators.VPFR.LvnVolPct,
+                             hvnProximityPct:=cfg.Indicators.VPFR.HvnProximityPct,
+                             decayBase:=cfg.Indicators.VPFR.DecayBase,
+                             valueAreaPct:=cfg.Indicators.VPFR.ValueAreaPct)
+```
 
 ### `settings.json` — extend `indicators.vpfr`
 
@@ -345,6 +377,8 @@ Note: `HvnVolPct` and `LvnVolPct` already exist as hardcoded optional params on 
   "value_area_pct": 0.70,
   "hvn_vol_pct": 0.60,
   "lvn_vol_pct": 0.20,
+  "hvn_proximity_pct": 0.002,
+  "decay_base": 0.985,
   "value_area_scoring_enabled": false
 }
 ```
@@ -355,6 +389,8 @@ Note: `HvnVolPct` and `LvnVolPct` already exist as hardcoded optional params on 
 | `value_area_pct` | 0.70 | Industry-standard 70% value area |
 | `hvn_vol_pct` | 0.60 | Bucket vol / POC vol threshold for HVN classification |
 | `lvn_vol_pct` | 0.20 | Bucket vol / POC vol threshold for LVN classification |
+| `hvn_proximity_pct` | 0.002 | Price proximity threshold for VPFRHVNearPoc / VPFRSignal (0.2%) |
+| `decay_base` | 0.985 | Time-decay base for volume weighting (per-bar age multiplier) |
 | `value_area_scoring_enabled` | false | Flip to true after 50+ live runs to activate VA breakout partial |
 
 ---

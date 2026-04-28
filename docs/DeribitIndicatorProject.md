@@ -375,8 +375,22 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 
 | Item | Description | Status |
 |---|---|---|
-| Bid-ask spread microstructure signal | `orderBook` depth is already fetched. Spread between best bid and best ask is an unused fast microstructure signal — sudden widening often precedes a flush. Add `SpreadBps` to `IndicatorResults` and a penalty trigger in Tier 2. | 🔍 Spec needed |
-| Auto-tuning from CSV log | Once `CalibrationReport` reaches READY (≥300 rows, ≥3 sessions, ≥3 regimes, ≥2 liq events), build a pass that correlates each signal's vote with subsequent price direction and adjusts `settings.json` weights automatically. | 🔍 Requires calibration data first |
+| Bid-ask spread microstructure signal | `orderBook` depth is already fetched. Spread between best bid and best ask is an unused fast microstructure signal — sudden widening often precedes a flush. Add `SpreadBps` to `IndicatorResults` and a penalty trigger in Tier 2. | ✅ Specced — see `docs/bid-ask-spread-proposal.md` |
+| Auto-tuning from CSV log | Once `CalibrationReport` reaches READY (≥300 rows, ≥3 sessions, ≥3 regimes, ≥2 liq events), build a pass that correlates each signal's vote with subsequent price direction and adjusts `settings.json` weights automatically. | 🔍 Requires calibration data first; see also Section 16 (frontier-LLM auto-tweaking is the longer-arc plan) |
+
+### Active Specs Awaiting Implementation (2026-04-27)
+
+Four indicator specs and one settings-exposure pass were drafted on 2026-04-27. All are **PROPOSED** status pending user approval; flip to `APPROVED` in the file header before implementing.
+
+| Spec | Scope | Implementation Order |
+|---|---|---|
+| `docs/bid-ask-spread-proposal.md` | New SpreadBps + WIDE-spread entry-side penalty. Smallest, validates the workflow | 1 |
+| `docs/ofi-momentum-proposal.md` | OFIMomentum (RISING/FALLING/FLAT) modifier on the existing OFI level signal. Pattern matches FundingMomentum | 2 |
+| `docs/vpfr-lite-v2-proposal.md` | VAH/VAL + nearest HVN/LVN walls. Updates Step 5b cap arbitration. Required by swing-pivot-proposal | 3 |
+| `docs/swing-pivot-proposal.md` | 5m + 15m swing structure. Adds structural row to ATR display, 3-tier Step 5b cap, structural-break exit in CalcHoldStatus, sharper STRUCTURALLY_WEAK | 4 |
+| `docs/settings-exposure-pass-proposal.md` | Lift 19 hardcoded scoring constants to `settings.json` (RegimeMaxScore base values, TierFloor breakpoints, VerdictContext thresholds, BBW/TTM/CVD/Donchian internals, Pass 2c RSI midline). No behavioural change — closes the audit prerequisite for Section 16 auto-tweaking | 5 (after the four indicator specs) |
+
+Deferred items (need WebSocket migration or CalibrationReport READY) are recorded in `docs/post-websocket-post-calibration-backlog.md` so they survive context-window rollovers.
 
 ### Accuracy Ceiling Note
 
@@ -438,3 +452,68 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 | v0.32 | VWAP session timing in settings |
 | v0.31 | CVDSettings in EngineSettings |
 | v0.30 | RSI div gates; OBV gates; ScoringWeights |
+
+---
+
+## 16. Future Direction — Auto-Tweaking & Dual Interface
+
+This section documents the longer-arc plans for the engine. **All items here are KIV** while the team is in the accuracy-optimization phase (the four indicator specs + settings-exposure pass listed in Section 13 ship first). Recording them here so the architectural prerequisites stay visible and groundwork can be laid opportunistically when other work touches relevant code paths.
+
+### 16.1 Auto-Tweaking via Frontier-LLM API
+
+**Purpose.** When the engine's analysis fails to predict outcomes successfully at a defined rate, the engine sends `settings.json` (plus a window of the recent `analysis_log.csv`) to a frontier-LLM API. The model returns a tweaked `settings.json` which replaces the local file; subsequent runs use the new tuning. This is the long-arc replacement for the manual calibration sweeps recorded in `change_log` — automated, data-driven, runs unattended.
+
+**Trigger condition (TBD — needs spec).** Failure rate within a sliding window of analyses. Open questions for that future spec:
+
+- **What counts as "failure"?** Candidates: STRONG verdict followed by adverse 5–15 min price action; NO TRADE that would have been a clean STRONG; WEAK verdict that whipped within hold window. Each definition implies different CSV columns and different trigger thresholds.
+- **Window size.** 50 analyses? 200? Calibration-bound.
+- **Failure-rate threshold.** 25%? 40%? Calibration-bound.
+- **Cooldown.** Minimum interval between auto-tweaks to avoid thrash. Probably tied to CalibrationReport row counts.
+
+**Audit prerequisite.** Every scoring-affecting parameter must be reachable through `settings.json`. This is the explicit gate. The `settings-exposure-pass-proposal.md` spec (Section 13) closes the gap; until it ships, the engine has hardcoded scoring constants the tweaker cannot reach (`RegimeMaxScore`, `TierFloor`, `VerdictContext` thresholds, several indicator internals). Do **not** deploy auto-tweaking until that pass is complete.
+
+**Display-only fields are NOT exposed for tweaking.** The audit explicitly excludes display-only display variables (e.g., colour palettes, render formatting, calibration-report thresholds, MTF cache TTL). The tweaking surface is scoring decisions only.
+
+**Status.** KIV. Not specced. Not scheduled.
+
+### 16.2 Dual Interface — CLI (Linux) + WinForm (Windows)
+
+**Purpose.** Two host targets sharing the same engine code:
+
+- **CLI (Linux server, headless)** — runs on a remote host, drives the auto-tweaking loop unattended. Polls Deribit, writes CSV, runs analysis on a schedule, evaluates failure rate, calls the LLM tweak API when triggered. No UI, no WinForms dependencies.
+- **WinForm (Windows desktop)** — the existing manual-usage interface. User clicks Analyse Now, reads the rendered output, makes discretionary decisions.
+
+**Architecture implications — already partly satisfied.** The codebase has been moving toward host-agnostic core for some time:
+
+- `IAutoRunTimer` interface in `AutoRunTimer.vb` was explicitly designed for this — `WinFormsAutoRunTimer` is the WinForms implementation; a future `LinuxCliAutoRunTimer` would implement the same interface without `Control.Invoke` marshalling. Documented in the file header.
+- Scoring engine (`Core/ScoringEngine_*.vb`), indicators (`Core/Indicators_*.vb`), settings (`Core/Settings/*.vb`), and the `DeribitClient` are **already host-agnostic** — pure functions and HTTP calls, no WinForms dependency.
+- `DynamicNorms`, `AnalysisLogger`, `OiSnapshot` are similarly clean.
+
+**What still needs work for CLI:**
+
+- Output rendering. `MainForm_Render_*.vb` is RTF-based (RichTextBox.AppendText). A CLI host needs a parallel renderer (likely ANSI-coloured plaintext or structured JSON for the auto-tweak feed).
+- State plumbing. `_oiHistory`, `_fundingHistory`, `_ofiHistory` (when OFI momentum ships), MTF cache, `_prevRegime` all live as `Private` fields on `MainForm`. A CLI host needs an equivalent state container — likely a small `EngineState` class shared by both hosts. This is a future refactor, not in scope today.
+- Settings I/O. `SettingsLoader` is already host-agnostic (uses `System.IO`, `System.Text.Json`, `System.Threading`). No change needed.
+- Auto-run scheduling. `WinFormsAutoRunTimer` uses `Control.Invoke`; the CLI variant uses straight `System.Threading.Timer` callbacks. Already designed for this split.
+
+**Status.** KIV. The architectural groundwork (interface separation, host-agnostic core) is **opportunistically maintained** — when any change touches `MainForm_*.vb`, the engineer should resist adding new WinForms-only state into the partial class. State that's needed by both hosts goes into a host-agnostic class. The forthcoming OFI momentum ring buffer is a good test case: its natural location per existing pattern is `MainForm_Layout._ofiHistory`, but if a follow-up CLI port is anticipated, parking it on a shared `EngineState` instead is the more durable choice. Decide per-PR.
+
+### 16.3 KIV Prerequisites
+
+Before either 16.1 or 16.2 should be specced and scheduled:
+
+1. **Accuracy plateau.** The four indicator specs (bid-ask-spread, OFI momentum, VPFR-lite v2, swing pivots) ship and the engine's verdict accuracy stabilises across 100+ live runs. Auto-tweaking before the engine is structurally sound just optimises noise.
+2. **Settings exposure pass complete.** `settings-exposure-pass-proposal.md` shipped. Auto-tweaker has the full surface area to operate on.
+3. **CalibrationReport READY.** ≥300 rows, ≥3 sessions, ≥3 regimes covered, ≥2 liquidation events. Without this, the failure-rate trigger is computed on too small a sample to be trustworthy.
+4. **CSV columns expanded.** `VerdictContext`, `FundingMomentum`, `OiCvdPass2bOutcome` columns added (currently in Section 12 backlog). The auto-tweaker reads these to diagnose failure modes.
+5. **Failure definition specced.** Concrete answer to "what counts as failure" — see Section 16.1 open questions.
+
+Items 1–4 are tracked in active proposals or Section 12 backlog. Item 5 is the gating spec for 16.1 itself.
+
+### 16.4 Long-Arc Architectural Ceiling
+
+`docs/post-websocket-post-calibration-backlog.md` documents the architectural ceiling for the engine: **WebSocket migration** is the single highest-impact non-indicator upgrade, gating an entire class of microstructure improvements (real-time spread, aggressor velocity, order-book absorption, liquidation × OFI flip detection, fine-grained VPFR profile-shape work).
+
+WebSocket itself isn't documented as a future-direction item *here* because it's a foundation rebuild, not a feature addition. It's the binding latency constraint behind several Section A items in the backlog — fix it when (a) the indicator backlog is exhausted and the latency floor becomes the next bottleneck, **or** (b) one of the post-WebSocket items becomes a priority.
+
+The engine should be developed assuming WebSocket arrives eventually. Specifically: avoid hardcoded REST-cadence assumptions in scoring logic. Score thresholds should remain meaningful at higher poll rates. They currently are.
