@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-27 | App version: v15 — dead-code cleanup pass on top of v14 calibration**
+**Last updated: 2026-04-29 | App version: v17 — settings-exposure pass on top of swing-pivot detection (v16)**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -20,14 +20,16 @@ DeribitVerdictEngine/
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
-├── settings.json                       All tunable parameters v15 (no recompile needed)
+├── settings.json                       All tunable parameters v17 (no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
 │   │   ├── EngineSettings.vb           Strongly-typed POCO for settings.json
 │   │   │                               Includes KellySettings + FundingSettings +
 │   │   │                               OiCvdSettings + SessionVolumeSettings +
-│   │   │                               RegimeWeightSettings blocks
+│   │   │                               RegimeWeightSettings + SwingSettings +
+│   │   │                               RegimeMaxScoreSettings + TierFloorSettings +
+│   │   │                               ContextTagThresholds blocks
 │   │   └── SettingsLoader.vb           JSON loader — SettingsLoader.Current singleton;
 │   │                                   FileSystemWatcher hot-reload
 │   │
@@ -36,38 +38,57 @@ DeribitVerdictEngine/
 │   │                                   AdjustedShortTarget, TargetCapReason,
 │   │                                   VerdictContext, Kelly fields),
 │   │                                   PositionState, SignalCategory, ScoreState
-│   ├── ScoringEngine_Helpers.vb        Pure functions: RegimeMaxScore, Threshold, TierFloor,
-│   │                                   AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus
+│   ├── ScoringEngine_Helpers.vb        Pure functions: RegimeMaxScore (reads cfg
+│   │                                   scoring.regime_max_score), Threshold,
+│   │                                   TierFloor (reads cfg scoring.tier_floor),
+│   │                                   AddFull, HasCrossConfirm, BuildNote,
+│   │                                   CalcHoldStatus (Layer 1 microstructure,
+│   │                                   Layer 1.5 structural-break exit,
+│   │                                   Layer 2 OBV div, Layer 3 RSI/ROC)
 │   ├── ScoringEngine_Calculate_Scoring.vb
-│   │                                   AppendLean(), CalcVerdictContext();
-│   │                                   RunScoringPipeline() — Steps 2/Pass 2/Pass 2b/3/3b:
-│   │                                   signal scoring, partial upgrades, OI×CVD cross-confirm,
-│   │                                   funding modifiers, all breakdown note rows.
-│   │                                   Split from ScoringEngine_Calculate.vb.
+│   │                                   AppendLean(), CalcVerdictContext()
+│   │                                   (incl. swing structural-target check);
+│   │                                   RunScoringPipeline() — Steps 2/Pass 2/
+│   │                                   Pass 2b/Pass 2c/3/3b: signal scoring,
+│   │                                   partial upgrades, OI×CVD cross-confirm,
+│   │                                   regime alignment, funding modifiers,
+│   │                                   all breakdown note rows.
 │   ├── ScoringEngine_Calculate_Verdict.vb
 │   │                                   Calculate() entry point — assembles verdict;
 │   │                                   Step 4: regime veto / TRANSITIONAL ADX penalty;
 │   │                                   Step 4b: MTF gate veto;
 │   │                                   Step 5: threshold comparison → verdict string;
-│   │                                   Step 5b: ATR target cap (VPFR HVN).
-│   │                                   Split from ScoringEngine_Calculate.vb.
+│   │                                   Step 5b: 3-tier target cap (swing target →
+│   │                                   nearest HVN → POC) + VerdictContext tag.
 │   ├── ScoringEngine_Kelly.vb          CalcKellySizing() — display-only Kelly Criterion
 │   │                                   sizing. Called from MainForm_Render after ATR levels,
 │   │                                   not from ScoringEngine.Calculate(). Zero scoring impact.
 │   │
 │   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
-│   │                                   incl. FundingMomentum (RISING/FALLING/FLAT)
+│   │                                   incl. FundingMomentum, SpreadBps, OFIMomentum,
+│   │                                   VPFR-v2 fields (VPFRNearestHvnAbove/Below,
+│   │                                   VPFRVAH, VPFRVAL), swing pivot fields
+│   │                                   (LastSwingHigh/Low5m/15m, SwingTargetLong/Short,
+│   │                                   SwingStopLong/Short)
 │   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcRSI,
 │   │                                   CalcRSISeries, CalcRSIDivergence, CalcROCSeries,
 │   │                                   CalcVolumeSMA
 │   ├── Indicators_Volatility.vb        CalcVWAP (dual-session auto-anchor),
-│   │                                   CalcVWAPBands, CalcBBW, CalcTTMSqueeze
+│   │                                   CalcVWAPBands,
+│   │                                   CalcBBW (seriesWindowMultiplier + squeezePercentile
+│   │                                   Optional params, wired from cfg in v17),
+│   │                                   CalcTTMSqueeze (smaPeriod + linRegPeriod Optional
+│   │                                   params, wired from cfg in v17)
 │   ├── Indicators_OrderFlow.vb         CalcOFI (bookDepth param, dynamic descending weights),
-│   │                                   CalcCVD (3-segment weighted slope),
-│   │                                   CalcMicroCVD, CalcTFI, CalcLiquidations,
-│   │                                   CalcFundingMomentum
-│   └── Indicators_Structure.vb         CalcDonchian, CalcOBV,
-│                                       CalcVPFRLite (exponential decay weighting),
+│   │                                   CalcOFIMomentum (RISING/FALLING/FLAT),
+│   │                                   CalcCVD (lateSegmentWeight + earlySegmentWeight from
+│   │                                   cfg), CalcMicroCVD (dynamic accelThreshold),
+│   │                                   CalcTFI, CalcLiquidations, CalcFundingMomentum
+│   └── Indicators_Structure.vb         CalcDonchian (quartilePct from cfg),
+│                                       CalcOBV,
+│                                       CalcVPFRLite v2 (VAH/VAL + nearest HVN/LVN,
+│                                       exponential decay weighting),
+│                                       CalcSwingPivots (5m + 15m confirmed pivot scan),
 │                                       CalcMTFGate
 │
 ├── UI/
@@ -79,8 +100,8 @@ DeribitVerdictEngine/
 │   │                                   MTF TTL: _mtfCandles15m, _mtfLastFetchTime,
 │   │                                   MTF_TTL_SECONDS (const=60);
 │   │                                   _prevRegime (regime hysteresis);
-│   │                                   _fundingHistory (List(Of Double)),
-│   │                                   FundingHistoryMax (const=10)
+│   │                                   _fundingHistory (List(Of Double), FundingHistoryMax=10);
+│   │                                   _ofiHistory (List(Of Double), OFIHistoryMax=10)
 │   ├── MainForm_AutoRun.vb             Auto-run timer: InitAutoRunControls(),
 │   │                                   btnStartStop_Click, StartAutoRun(), StopAutoRun(),
 │   │                                   RunAutoAnalysis(), OnCountdownTick(),
@@ -90,8 +111,13 @@ DeribitVerdictEngine/
 │   │                                   logs result, calls RenderOutput;
 │   │                                   MTF TTL refresh; Donchian quartile signal;
 │   │                                   regime hysteresis logic; OFI BookDepth wiring;
-│   │                                   appends fundingRate to _fundingHistory,
-│   │                                   calls CalcFundingMomentum → r.FundingMomentum
+│   │                                   appends fundingRate to _fundingHistory;
+│   │                                   calls CalcFundingMomentum → r.FundingMomentum;
+│   │                                   appends OFI to _ofiHistory;
+│   │                                   calls CalcOFIMomentum → r.OFIMomentum;
+│   │                                   computes SpreadBps from order book;
+│   │                                   calls CalcSwingPivots (5m + 15m);
+│   │                                   computes SwingTarget/Stop bookkeeping
 │   ├── MainForm_Render_Header.vb       RTF helpers: AppendRtf(), AR(), SectionHeader(),
 │   │                                   Divider();
 │   │                                   log/calibration helpers: UpdateLogInfo(),
@@ -100,8 +126,9 @@ DeribitVerdictEngine/
 │   │                                   RenderOutputHeader() — top render block:
 │   │                                   VERDICT / CONTEXT / CONFIDENCE / SCORE / TIME /
 │   │                                   LAST TRANSACTED PRICE / HOLD STATUS /
-│   │                                   ATR ENTRY LEVELS / KELLY SIZING.
-│   │                                   Split from MainForm_Render.vb.
+│   │                                   ATR ENTRY LEVELS /
+│   │                                   LONG+SHORT STRUCTURAL ROWS (swing pivot R:R) /
+│   │                                   KELLY SIZING.
 │   └── MainForm_Render_Sections.vb     RenderOutput() entry point;
 │                                       all indicator sections: DYNAMIC NORMS, REGIME,
 │                                       CORE SIGNALS, VWAP, BBW/TTM, EMA RIBBON,
@@ -117,6 +144,12 @@ DeribitVerdictEngine/
     ├── trader-profile.md               Trader style, preferences, collaboration rules
     ├── verdict-context-tag-proposal.md Spec: Verdict Sub-Context Tag — IMPLEMENTED
     ├── kelly-criterion-proposal.md     Spec: Kelly Criterion sizing — IMPLEMENTED
+    ├── bid-ask-spread-proposal.md      Spec: Bid-ask spread signal — IMPLEMENTED
+    ├── ofi-momentum-proposal.md        Spec: OFI Momentum — IMPLEMENTED
+    ├── dynamic-microcvd-accel-proposal.md  Spec: Dynamic MicroCVD — IMPLEMENTED
+    ├── vpfr-lite-v2-proposal.md        Spec: VPFR-lite v2 — IMPLEMENTED
+    ├── swing-pivot-proposal.md         Spec: Swing pivot detection — IMPLEMENTED
+    ├── settings-exposure-pass-proposal.md  Spec: Settings exposure pass — IMPLEMENTED
     ├── bbw-scoring-proposal.md         Historical
     ├── bbw-scoring-response.md         Historical
     ├── dual-scoring-fix-proposal.md    Historical
@@ -170,15 +203,28 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.FundingMomentum    = CalcFundingMomentum(_fundingHistory, cfg)
         │                         → RISING / FALLING / FLAT
         ├─ r.OI_Current/Changes = bookSummary.OI + _oiHistory ring buffer
+        ├─ r.SpreadBps          = (orderBook.BestAsk - orderBook.BestBid) / mid × 10000
         ├─ r.OFI* / OFISignal   = CalcOFI(orderBook, bookDepth:=cfg.Indicators.OFI.BookDepth)
+        ├─ _ofiHistory.Add(r.OFISignal); trim to OFIHistoryMax
+        ├─ r.OFIMomentum        = CalcOFIMomentum(_ofiHistory, cfg) → RISING/FALLING/FLAT
         ├─ r.Liq* / LiqSignal   = CalcLiquidations(recentTrades, dominanceRatio from cfg)
-        ├─ r.CVD* / CVDSlope    = CalcCVD(recentTrades, candles1m)  [3-seg weighted slope]
-        ├─ r.MicroCVD*          = CalcMicroCVD(recentTrades)  [BULL/BEAR_ACCEL/DECEL/FLAT]
+        ├─ r.CVD* / CVDSlope    = CalcCVD(recentTrades, candles1m,
+        │                         lateSegmentWeight:=cfg.Indicators.CVD.LateSegmentWeight,
+        │                         earlySegmentWeight:=cfg.Indicators.CVD.EarlySegmentWeight)
+        ├─ r.MicroCVD*          = CalcMicroCVD(recentTrades)
+        │                         [dynamic accelThreshold: max(staticFloor, windowUsd × pct)]
         ├─ r.TFI* / TFISignal   = CalcTFI(recentTrades)
         ├─ r.MTFGatePass/Reason = CalcMTFGate(candles15m)  [cached; refreshed by TTL]
-        ├─ r.DonchianSignal     = CalcDonchian + quartile logic
+        ├─ r.DonchianSignal     = CalcDonchian(candles1m,
+        │                         quartilePct:=cfg.Indicators.Donchian.QuartilePct)
         ├─ r.OBVTrend/Div       = CalcOBV
-        └─ r.VPFR* / Signal     = CalcVPFRLite (exp decay; numBuckets from cfg)
+        ├─ r.VPFR* / Signal     = CalcVPFRLite v2 (exp decay; VAH/VAL; nearest HVN/LVN;
+        │                         numBuckets from cfg)
+        ├─ r.LastSwingHigh/Low5m = CalcSwingPivots(candles5m,
+        │                          pivotWing:=cfg.Indicators.Swing.PivotWing5m,
+        │                          lookbackBars:=cfg.Indicators.Swing.LookbackBars5m)
+        ├─ r.LastSwingHigh/Low15m = CalcSwingPivots(candles15m, ...)  [optional context]
+        └─ r.SwingTarget/StopLong/Short = direction-aware bookkeeping (inline in Analysis)
                     │
                     ▼
         ScoringEngine.Calculate(r, posState, norms, cfg)
@@ -189,6 +235,8 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          20/19/15 (base + Trending/RangeBound AlignmentBonus).
                     ├─ Step 2:  Score each signal → ScoreState
                     │          All thresholds from cfg. Scoring highlights:
+                    │          ─ SpreadBps WIDE penalty (cfg.Indicators.Spread.*)
+                    │          ─ OFIMomentum RISING/FALLING modifier on OFI level score
                     │          ─ BBW squeeze penalty (cfg.Scoring.BbwSqueezePenalty)
                     │          ─ Liquidation penalty/boost by size + dominance
                     │          ─ OBV adverse divergence blocks cross-category upgrade
@@ -207,7 +255,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          TRENDING: EMA ribbon + ROC (threshold-gated by
                     │          SlopeSensitivity) + CVD slope+sign.
                     │          RANGE_BOUND: VWAP dev (suppressed in warmup) +
-                    │          RSI(9) vs 50 + Donchian(20).
+                    │          RSI(9) vs cfg.Indicators.RSI.Pass2cMidline + Donchian(20).
                     │          All active signals aligned → +AlignmentBonus on dominant
                     │          side (capped at regimeMax). All conflict → -ConflictPenalty.
                     │          Reads cfg.RegimeWeights.{Trending|RangeBound}.
@@ -226,11 +274,21 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     ├─ Step 5:  Threshold comparison → verdict string
                     ├─ Step 5 (post): CalcVerdictContext → VerdictResult.VerdictContext
                     │          (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK /
-                    │          CONFIRMED). Zero scoring impact.
+                    │          CONFIRMED). Structural check fires STRUCTURALLY_WEAK when
+                    │          swing data exists but no clean target+stop pair.
+                    │          All thresholds from cfg.Scoring.ContextTagThresholds.
                     │          See docs/verdict-context-tag-proposal.md.
                     ├─ Step 5 (post): CalcHoldStatus → hold/exit/flip guidance.
-                    └─ Step 5b: VPFR HVN cap → AdjustedLongTarget / AdjustedShortTarget.
-                               Runs last in ScoringEngine.Calculate().
+                    │          Layer 1: 2+ adverse microstructure signals → EXIT
+                    │          Layer 1.5: structural break (swing low/high breach) → EXIT
+                    │          Layer 2: OBV divergence → EXIT
+                    │          Layer 3: RSI divergence / single signal / RSI+ROC
+                    └─ Step 5b: 3-tier target cap:
+                               Tier 1 (highest priority): swing target
+                               Tier 2: nearest HVN above/below
+                               Tier 3 (fallback): POC
+                               Winner = closest cap to entry. Sets AdjustedLongTarget /
+                               AdjustedShortTarget and TargetCapReason label.
 
                     (Kelly sizing is NOT invoked here. CalcKellySizing() is called from
                      MainForm_Render_Header.RenderOutputHeader() after ATR entry levels
@@ -250,7 +308,10 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          STRUCTURALLY_WEAK → amber/red/dim as appropriate
                     ├─ Hold/position guidance              [_Header]
                     ├─ ATR entry / stop / target block     [_Header]
-                    │          HVN-capped target in amber bold when adjusted target > 0
+                    │          3-tier-capped target in amber bold with tier label
+                    ├─ Long + Short structural rows        [_Header]
+                    │          Swing pivot stop/entry/target + R:R display
+                    │          (cyan full pair; dim when only one side available)
                     ├─ KELLY SIZING block                  [_Header]
                     │          Contracts / USD risk / [CAPPED] tag when applicable.
                     │          Advisory label always rendered below header:
@@ -278,7 +339,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 ## Settings Data Flow
 
 ```
-settings.json (v15)
+settings.json (v17)
     │
     ▼
 SettingsLoader.Initialise()
@@ -286,8 +347,14 @@ SettingsLoader.Initialise()
     ▼
 SettingsLoader.Current As EngineSettings
     │
-    ├─ Indicators.*        → indicator thresholds / windows
-    ├─ Scoring.*           → verdict %, penalties, ATR multipliers
+    ├─ Indicators.*        → indicator thresholds / windows (incl. new Swing, Spread,
+    │                         and per-indicator Optional params lifted in v17)
+    ├─ Scoring.*           → verdict %, penalties, ATR multipliers;
+    │                         now also: RegimeMaxScore.{Trending/RangeBound/Transitional},
+    │                         TierFloor.{High/Med/Low Threshold+Floor},
+    │                         ContextTagThresholds.{MomentumFadingDecayRatio,
+    │                           MomentumFadingCountMin, StructurallyWeakStructMin,
+    │                           StructurallyWeakFlowMin}
     ├─ Kelly.*             → sizing display controls
     ├─ FundingSettings     → Step 3b momentum behaviour
     ├─ OiCvdSettings       → Pass 2b OI×CVD confirm/conflict behaviour
@@ -304,10 +371,12 @@ SettingsLoader.Current As EngineSettings
     │         First bucket whose [start_hour..end_hour] contains UTC hour wins;
     │         no implicit fallback — if no bucket matches, thresholds stay
     │         at their DynamicNorms-computed values.
-    └─ RegimeWeightSettings
-           ├─ enabled
-           ├─ trending    { alignment_bonus, conflict_penalty }
-           └─ range_bound { alignment_bonus, conflict_penalty }
+    ├─ RegimeWeightSettings
+    │      ├─ enabled
+    │      ├─ trending    { alignment_bonus, conflict_penalty }
+    │      └─ range_bound { alignment_bonus, conflict_penalty }
+    └─ SwingSettings       → pivot_wing_5m, lookback_bars_5m,
+                             pivot_wing_15m, lookback_bars_15m
                     │
                     ▼
 DynamicNorms.Compute(...)
@@ -317,8 +386,11 @@ DynamicNorms.Compute(...)
 
 RunScoringPipeline(...)
     │
-    └─ Pass 2b reads cfg.Indicators.OiCvd to decide whether OI/CVD alignment
-       earns a bonus or full-signal conflict earns a penalty
+    ├─ Pass 2b reads cfg.Indicators.OiCvd to decide whether OI/CVD alignment
+    │  earns a bonus or full-signal conflict earns a penalty
+    └─ Step 5b reads cfg.Scoring.ContextTagThresholds for VerdictContext decay
+       ratios / count thresholds, and CalcHoldStatus / 3-tier cap read
+       cfg.Scoring.{RegimeMaxScore, TierFloor} for all formerly-hardcoded values
 ```
 
 ---
@@ -347,3 +419,12 @@ RunScoringPipeline(...)
 | MainForm_Render split into _Header + _Sections | MainForm_Render.vb exceeded 28 KB. RTF helpers + top render block (verdict/ATR/Kelly) in _Header.vb; RenderOutput() entry point + all indicator sections + breakdown table in _Sections.vb. |
 | GetSessionCandles helper extracted (v15) | `CalcVWAP` and `CalcVWAPBands` both anchored on the session-2 cutoff and re-derived the session window independently. The boundary calculation is now a single private helper in `Indicators_Volatility.vb`; both callers route through it. |
 | v15 cleanup pass | Source of truth audit. Removed dead fields (`OI_Prev15m` / `OI_Prev60m` / `ATRAvg20d`), three unused `DynamicNorms.StaticVol*` properties, an entire `Ema200Settings` class, 13 silently-ignored config properties, the dead `ScoringEngine.MaxScore` const, the unused `SettingsLoader.Reload()`. Aligned remaining default values with v14 calibration (so an absent `settings.json` doesn't seed stale defaults). Two display-only colour bugs fixed in `MainForm_Render_Sections` (BBW status compared against `"SQUEEZE"` instead of `"ACTIVE"`; TTM direction compared against `"UP"` / `"DOWN"` instead of `"RISING"` / `"FALLING"`). Zero scoring impact. |
+| Bid-ask spread as entry-side gate (spec #1) | The order book is already fetched. `SpreadBps` is a near-zero-cost microstructure signal: a WIDE spread during an apparent directional signal often indicates a flush in progress, not a clean breakout. Penalises entries only — no direction signal, no scoring during trending spread expansion. |
+| OFI Momentum mirrors FundingMomentum pattern (spec #2) | OFI level measures current order-flow imbalance; OFI momentum measures whether that imbalance is accelerating or decelerating. A level signal being amplified by rising momentum is structurally stronger than a level signal that is fading. Ring buffer pattern and RISING/FALLING/FLAT enum match the already-shipped FundingMomentum design so the engine is internally consistent. |
+| Dynamic MicroCVD accelThreshold (spec #3) | Static threshold (10000 USD) was too high a bar on quiet sessions (total window USD flow might be only 2× the threshold) and too low on high-volume sessions (normal flow exceeds it continuously). Dynamic `max(static, windowUsd × pct)` self-scales: the static floor prevents it from being trivially crossed on micro-flow sessions; the multiplier raises the ceiling proportionally with actual session activity. |
+| VPFR-lite v2 VAH/VAL + nearest HVN/LVN (spec #4) | Raw POC alone misses the case where price is between two significant nodes. VAH/VAL define the value area (70% of volume) and give a profile-based context for VWAP extensions. `VPFRNearestHvnAbove` / `VPFRNearestHvnBelow` provide the closest resistance/support wall which is more actionable than the POC for target capping — price is more likely to stall at the nearest wall than to reach the POC when structure intervenes. Required by the 3-tier cap in spec #5. |
+| Swing pivot detection — scan and bookkeeping (spec #5) | Confirmed swing pivot requires ALL N bars left and right to be strictly lower/higher than the pivot bar — avoids equal-high false positives that create spurious structure. Walking backward from scanEnd to find the most recent pivot (rather than scanning forward) means the engine always surfaces the freshest actionable level. Direction-aware bookkeeping (SwingTargetLong/Short, SwingStopLong/Short) computed inline in Analysis so CalcSwingPivots stays a pure function. |
+| 3-tier Step 5b target cap (spec #5) | The prior 2-tier cap (HVN wall → POC) ignored swing structure. A confirmed 5m swing high is typically closer to entry and more immediately relevant than a VPFR HVN. The 3-tier priority (swing > nearest HVN > POC) reflects structural significance: swing targets are the first price memory the market has established, HVN walls are the second, and POC is the broadest fallback. Winner = closest to entry ensures the cap is conservative: the tightest available cap is used, not the loosest. |
+| Layer 1.5 structural-break exit in CalcHoldStatus (spec #5) | A confirmed break through the prior swing low (long) or swing high (short) is a discrete structural event — it invalidates the original entry premise faster than gradual RSI/OBV divergence. Sits between Layer 1 (fast microstructure count) and Layer 2 (OBV divergence) to maintain the priority ordering: structural breaks are evaluated only when microstructure hasn't already triggered, but before the slower divergence signals can fire. |
+| CalcVerdictContext structural-target first check (spec #5) | When swing data exists (LastSwingHigh5m or LastSwingLow5m is non-zero), the engine has committed to a structural view. If neither target nor stop can be placed for the current direction, flagging STRUCTURALLY_WEAK is more informative than CONFIRMED even if the score is high — it means the structural picture is ambiguous or the trade doesn't have a defined structural R:R. The graceful-degradation path (check fires only when at least one swing level exists) prevents false STRUCTURALLY_WEAK signals when candle history is too short for pivot detection. |
+| Settings exposure pass (spec #6) | Exposing 19 formerly-hardcoded literals to settings.json completes the auto-tweaking audit prerequisite (Section 16.3 item 2). All defaults are exactly the previously-hardcoded values — zero behaviour change. The new Optional params on CalcBBW, CalcTTMSqueeze, CalcCVD, CalcDonchian match the existing pattern (cfg value passed at call site; default value in method signature for caller convenience). RegimeMaxScore() and TierFloor() now take cfg and read from POCO fields rather than returning hardcoded constants. |

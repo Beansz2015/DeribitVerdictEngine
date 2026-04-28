@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-27 | Current version: v15 — dead-code cleanup pass on top of v14 calibration**
+**Last updated: 2026-04-29 | Current version: v17 — settings-exposure pass on top of swing-pivot detection (v16)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 
@@ -16,19 +16,27 @@ calculates a set of technical indicators on live BTC-PERPETUAL data, scores them
 weighted multi-tier engine, and emits a verdict (STRONG LONG / LONG / WEAK LONG / NO TRADE /
 WEAK SHORT / SHORT / STRONG SHORT) with ATR-based entry/stop/target levels.
 
-The latest completed feature set adds **session-aware volume norms** as a first-class adaptive
-normalisation layer: `DynamicNorms` now applies time-of-day session volume buckets (ASIA /
-LONDON / NY) so volume thresholds better reflect BTC liquidity regime by UTC hour, and the
-config/UI/docs surface has been updated to support that behaviour. The already-implemented
-**OI × CVD cross-confirm** feature is also now considered part of the shipped scoring pipeline:
-`RunScoringPipeline()` includes a Pass 2b gate that rewards confirmed OI/CVD alignment and
-penalises direct conflict for full OI signals.
+The latest completed feature set (v16–v17) adds six indicator and configuration enhancements
+shipped across two sessions:
 
-In addition, the scoring pipeline now includes a Pass 2c **regime-alignment gate**:
-when `cfg.RegimeWeights.Enabled` and the dominant side is non-zero, all active
-regime-key signals are checked for alignment (TRENDING: EMA+ROC+CVD;
-RANGE_BOUND: VWAP+RSI+Donchian). Full alignment earns `AlignmentBonus`; full
-conflict incurs `ConflictPenalty`. TRANSITIONAL and tied scores bypass the gate.
+- **Bid-ask spread microstructure signal** (Spec #1) — `SpreadBps` from the live order book is
+  scored as an entry-side penalty on WIDE spread (Tier 2). Prevents entering during flush events.
+- **OFI Momentum** (Spec #2) — `OFIMomentum` (RISING/FALLING/FLAT) modifier on the existing OFI
+  level signal. Pattern matches FundingMomentum: ring buffer in `MainForm_Layout._ofiHistory`.
+- **Dynamic MicroCVD accelThreshold** (Spec #3) — self-scaling threshold (`totalWindowUsd × pct`
+  with static-anchored floor) closes the noise/quiet-session classification gap.
+- **VPFR-lite v2** (Spec #4) — adds VAH/VAL, nearest HVN/LVN walls, and `VPFRNearestHvnAbove` /
+  `VPFRNearestHvnBelow` fields used by the 3-tier target cap.
+- **Swing pivot detection** (Spec #5) — `CalcSwingPivots()` on 5m (primary) and 15m (context)
+  candles. Adds structural entry/stop/target rows to the ATR display. Layer 1.5 structural-break
+  exit in `CalcHoldStatus`. 3-tier target cap in Step 5b: swing target → nearest HVN → POC.
+  `STRUCTURALLY_WEAK` context tag fires when swing data exists but no clean target+stop pair.
+- **Settings exposure pass** (Spec #6) — lifts 19 hardcoded scoring literals to `settings.json`.
+  Closes the audit prerequisite for Section 16 auto-tweaking. No behaviour change at defaults.
+
+The shipping base also includes **OI × CVD cross-confirm** (Pass 2b), **session-aware volume
+norms** (DynamicNorms + `session_volume` config), and a Pass 2c **regime-alignment gate**. These
+are all part of the scoring pipeline and described in detail below.
 
 ---
 
@@ -53,7 +61,7 @@ conflict incurs `ConflictPenalty`. TRANSITIONAL and tied scores bypass the gate.
 | `OiSnapshot.vb` | OI ring-buffer helper |
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
-| `settings.json` | v15 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, and `regime_weights` blocks. v15 is a cleanup pass that strips silently-ignored keys (no behavioural change). |
+| `settings.json` | v17 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, `regime_weights`, `indicators.swing`, and new scoring sub-blocks (`regime_max_score`, `tier_floor`, `context_tag_thresholds`). v15 was a cleanup pass; v16 added swing pivot config; v17 lifted 19 hardcoded literals to settings. |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -62,26 +70,26 @@ conflict incurs `ConflictPenalty`. TRANSITIONAL and tied scores bypass the gate.
 | File | Purpose |
 |---|---|
 | `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. AdjustedLongTarget, AdjustedShortTarget, TargetCapReason, VerdictContext, Kelly fields), PositionState, SignalCategory, ScoreState |
-| `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore, Threshold, TierFloor, AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus |
-| `Core/ScoringEngine_Calculate_Scoring.vb` | `AppendLean()`, `CalcVerdictContext()`, `RunScoringPipeline()` — Steps 2 / Pass 2 / Pass 2b / 3 / 3b: signal scoring, partial upgrades, OI×CVD cross-confirm, funding modifiers, breakdown note rows |
-| `Core/ScoringEngine_Calculate_Verdict.vb` | `Calculate()` entry point — Step 4 regime veto / TRANSITIONAL penalty, Step 4b MTF gate veto, Step 5 verdict generation, ATR target cap |
+| `Core/ScoringEngine_Helpers.vb` | RegimeMaxScore (reads cfg `scoring.regime_max_score`), Threshold, TierFloor (reads cfg `scoring.tier_floor`), AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus (Layer 1 microstructure, **Layer 1.5 structural-break exit**, Layer 2 OBV divergence, Layer 3 RSI/ROC) |
+| `Core/ScoringEngine_Calculate_Scoring.vb` | `AppendLean()`, `CalcVerdictContext()` (incl. swing-data structural-target check), `RunScoringPipeline()` — Steps 2 / Pass 2 / Pass 2b / Pass 2c / 3 / 3b: signal scoring, partial upgrades, OI×CVD cross-confirm, regime alignment, funding modifiers, breakdown note rows |
+| `Core/ScoringEngine_Calculate_Verdict.vb` | `Calculate()` entry point — Step 4 regime veto / TRANSITIONAL penalty, Step 4b MTF gate veto, Step 5 verdict generation, **Step 5b 3-tier target cap** (swing target → nearest HVN → POC) |
 | `Core/ScoringEngine_Kelly.vb` | `CalcKellySizing()` — display-only Kelly sizing. Called from `MainForm_Render_Header`, not from `ScoringEngine.Calculate()`. Zero scoring impact. See `docs/kelly-criterion-proposal.md`. |
-| `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields incl. `FundingMomentum` |
+| `Core/IndicatorResults.vb` | IndicatorResults struct — all indicator output fields incl. `FundingMomentum`, `SpreadBps`, `OFIMomentum`, VPFR-v2 fields (`VPFRNearestHvnAbove`, `VPFRNearestHvnBelow`, `VPFRVAH`, `VPFRVAL`), and swing pivot fields (`LastSwingHigh5m`, `LastSwingLow5m`, `LastSwingHigh15m`, `LastSwingLow15m`, `SwingTargetLong/Short`, `SwingStopLong/Short`) |
 | `Core/Indicators_Momentum.vb` | CalcDMI, CalcATR, CalcEMA, CalcRSI, CalcRSISeries, CalcRSIDivergence, CalcROCSeries, CalcVolumeSMA |
-| `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW, CalcTTMSqueeze |
-| `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcLiquidations, CalcCVD, CalcMicroCVD, CalcTFI, CalcFundingMomentum |
-| `Core/Indicators_Structure.vb` | CalcDonchian, CalcOBV, CalcVPFRLite, CalcMTFGate |
-| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings, FundingSettings, OiCvdSettings, SessionVolumeSettings, and RegimeWeightSettings |
+| `Core/Indicators_Volatility.vb` | CalcVWAP (dual-session), CalcVWAPBands, CalcBBW (seriesWindowMultiplier + squeezePercentile from cfg), CalcTTMSqueeze (smaPeriod + linRegPeriod from cfg) |
+| `Core/Indicators_OrderFlow.vb` | CalcOFI, CalcOFIMomentum, CalcLiquidations, CalcCVD (lateSegmentWeight + earlySegmentWeight from cfg), CalcMicroCVD (dynamic accelThreshold), CalcTFI, CalcFundingMomentum |
+| `Core/Indicators_Structure.vb` | CalcDonchian (quartilePct from cfg), CalcOBV, CalcVPFRLite v2 (VAH/VAL + nearest HVN/LVN, exp decay), **CalcSwingPivots** (5m + 15m confirmed pivot scan), CalcMTFGate |
+| `Core/Settings/EngineSettings.vb` | Strongly-typed POCO for settings.json incl. KellySettings, FundingSettings, OiCvdSettings, SessionVolumeSettings, RegimeWeightSettings, **SwingSettings**, **RegimeMaxScoreSettings**, **TierFloorSettings**, **ContextTagThresholds** |
 | `Core/Settings/SettingsLoader.vb` | JSON deserialisation, SettingsLoader.Current singleton, FileSystemWatcher hot-reload |
 
 ### UI/
 
 | File | Version | Purpose |
 |---|---|---|
-| `UI/MainForm_Layout.vb` | Shared fields, constructor, resize helpers; now also owns `_fundingHistory` and `FundingHistoryMax` |
+| `UI/MainForm_Layout.vb` | Shared fields, constructor, resize helpers; owns `_fundingHistory` (FundingHistoryMax=10) and **`_ofiHistory`** (OFIHistoryMax=10) |
 | `UI/MainForm_AutoRun.vb` | Auto-run timer lifecycle |
 | `UI/MainForm_Analysis.vb` | RunAnalysisAsync() — full data fetch + indicator + scoring pipeline; appends funding history and computes `FundingMomentum` |
-| `UI/MainForm_Render_Header.vb` | RTF helpers, CalibrationReport/log helpers, and `RenderOutputHeader()` for VERDICT / CONTEXT / CONFIDENCE / SCORE / TIME / LAST PRICE / HOLD STATUS / ATR levels / KELLY block |
+| `UI/MainForm_Render_Header.vb` | RTF helpers, CalibrationReport/log helpers, and `RenderOutputHeader()` for VERDICT / CONTEXT / CONFIDENCE / SCORE / TIME / LAST PRICE / HOLD STATUS / ATR levels / **Long+Short structural rows (swing pivot R:R)** / KELLY block |
 | `UI/MainForm_Render_Sections.vb` | `RenderOutput()` entry point + all indicator sections, funding section, signal breakdown table, verdict label update |
 
 ### Docs
@@ -93,6 +101,12 @@ conflict incurs `ConflictPenalty`. TRANSITIONAL and tied scores bypass the gate.
 | `docs/trader-profile.md` | Trader style, indicator preferences, collaboration preferences |
 | `docs/verdict-context-tag-proposal.md` | Spec: Verdict Sub-Context Tag — ✅ IMPLEMENTED |
 | `docs/kelly-criterion-proposal.md` | Spec: Kelly Criterion position sizing — ✅ IMPLEMENTED |
+| `docs/bid-ask-spread-proposal.md` | Spec: Bid-ask spread microstructure signal — ✅ IMPLEMENTED |
+| `docs/ofi-momentum-proposal.md` | Spec: OFI Momentum modifier — ✅ IMPLEMENTED |
+| `docs/dynamic-microcvd-accel-proposal.md` | Spec: Dynamic MicroCVD accelThreshold — ✅ IMPLEMENTED |
+| `docs/vpfr-lite-v2-proposal.md` | Spec: VPFR-lite v2 (VAH/VAL + nearest HVN/LVN) — ✅ IMPLEMENTED |
+| `docs/swing-pivot-proposal.md` | Spec: Swing pivot detection (5m + 15m) — ✅ IMPLEMENTED |
+| `docs/settings-exposure-pass-proposal.md` | Spec: Settings exposure pass (19 literals → settings.json) — ✅ IMPLEMENTED |
 | `docs/bbw-scoring-proposal.md` | Historical |
 | `docs/bbw-scoring-response.md` | Historical |
 | `docs/dual-scoring-fix-proposal.md` | Historical |
@@ -128,19 +142,22 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 ### Tier 2
 | Indicator | Method | Config keys |
 |---|---|---|
-| OFI | CalcOFI | `cfg.Indicators.OFI.BookDepth` (5); `BuyDominantRatio` (2.0) / `SellDominantRatio` (0.5) — v14 relaxed from 3.0/0.333 |
+| Bid-Ask Spread | order book (best bid/ask) | `cfg.Indicators.Spread.WidePenaltyThresholdBps` — WIDE-spread entry-side penalty when spread exceeds threshold. Uses live `orderBook` already fetched; `SpreadBps` field on `IndicatorResults`. |
+| OFI | CalcOFI | `cfg.Indicators.OFI.BookDepth` (5); `BuyDominantRatio` (2.0) / `SellDominantRatio` (0.5) |
+| OFI Momentum | CalcOFIMomentum | RISING/FALLING/FLAT modifier on the OFI level signal. Ring buffer `_ofiHistory` (OFIHistoryMax=10). `cfg.Indicators.OFI.MomentumWindow`, `MomentumThreshold`. |
 | Liquidations | CalcLiquidations | `cfg.Indicators.Liquidations.DominanceRatio` (2.0); penalty magnitudes from cfg |
-| CVD | CalcCVD | 3-segment weighted slope (late×2 − early×1). −1 on divergence. `SlopeMinUsd` (12000) v14 — raised from 1000 noise floor. |
-| MicroCVD | CalcMicroCVD | BULL/BEAR_ACCEL/DECEL + FLAT stall penalty. Window=50, `AccelThreshold` (10000) v14 — raised from 5000; dynamic scaling deferred until backtesting ships. |
+| CVD | CalcCVD | 3-segment weighted slope. Weights from cfg: `cfg.Indicators.CVD.LateSegmentWeight` (2.0) / `EarlySegmentWeight` (1.0). −1 on divergence. `SlopeMinUsd` (12000). |
+| MicroCVD | CalcMicroCVD | BULL/BEAR_ACCEL/DECEL + FLAT stall penalty. Window=50. Dynamic accelThreshold: `totalWindowUsd × pct` with static-anchored floor (`cfg.Indicators.MicroCVD.AccelThreshold`). |
 | TFI | CalcTFI | BUY/SELL PRESSURE. Window=30, threshold=0.15 via cfg. |
 | 5m EMA(200) | CalcEMA(candles5m,200) | ABOVE/BELOW; short signal if price below |
 
 ### Tier 3
 | Indicator | Method | Config keys |
 |---|---|---|
-| Donchian(20) | CalcDonchian | Full LONG/SHORT + quartile partial + NONE mid-channel note |
+| Donchian(20) | CalcDonchian | Full LONG/SHORT + quartile partial (`cfg.Indicators.Donchian.QuartilePct`=0.25) + NONE mid-channel note |
 | OBV | CalcOBV | Trend + divergence gate from cfg. Adverse divergence blocks cross-category upgrade. |
-| VPFR-lite | CalcVPFRLite | POC proximity; HVN wall triggers target cap. Exp decay (base=0.985). `numBuckets` (50) from cfg. |
+| VPFR-lite v2 | CalcVPFRLite | POC proximity; VAH/VAL; `VPFRNearestHvnAbove` / `VPFRNearestHvnBelow` for 3-tier target cap. Exp decay (base=0.985). `numBuckets` (50) from cfg. |
+| Swing Pivots | CalcSwingPivots | 5m primary (`PivotWing5m`=3, `LookbackBars5m`=30) + 15m context (`PivotWing15m`=2, `LookbackBars15m`=20). Confirmed pivot = N bars left and right all strictly lower/higher. Direction-aware bookkeeping: `SwingTargetLong/Short`, `SwingStopLong/Short`. Config: `cfg.Indicators.Swing.*`. |
 
 ### Multi-Timeframe Gate
 | Indicator | Method | Notes |
@@ -165,28 +182,35 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v15** (cleanup pass — silently-ignored keys removed; no behavioural change vs v14).
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v17** (settings-exposure pass — 19 hardcoded literals externalised; no behavioural change at defaults).
 
 ```
-settings.json
+settings.json (v17)
   indicators:
     rsi:           { period (9), overbought (60), oversold (40),
                      partial_overbought (55), partial_oversold (45),
                      divergence_price_gate, divergence_rsi_delta,
                      div_penalty_rsi_high (65), div_penalty_rsi_low (35),
-                     pivot_wing (2), lookback_bars (20) }
+                     pivot_wing (2), lookback_bars (20),
+                     pass2c_midline (50.0) }            ← v17: was hardcoded 50
     roc:           { period (9), slope_sensitivity (0.1), series_lookback (3) }
     adx:           { period (9), trend_threshold (25), range_threshold (20) }
     vwap:          { session2_start_hour (13), session2_start_minute (30),
                      warmup_candles (15) }
-    bbw:           { period (20), std_dev (2.0) }
+    bbw:           { period (20), std_dev (2.0),
+                     series_window_multiplier (5),     ← v17: was hardcoded period×5
+                     squeeze_percentile (0.20) }        ← v17: was hardcoded 0.20
     ema:           { fast (9), mid (21), slow (50) }
-    donchian:      { period (20) }
+    donchian:      { period (20),
+                     quartile_pct (0.25) }              ← v17: was hardcoded 0.25
     obv:           { trend_gate (0.001), divergence_gate (0.001) }
     atr:           { period (7), static_ref (115.0),
                      scale_min (0.25), scale_max (4.0) }
     ofi:           { book_depth (5), buy_dominant_ratio (2.0),
-                     sell_dominant_ratio (0.5) }
+                     sell_dominant_ratio (0.5),
+                     momentum_window (3),               ← OFI momentum (spec #2)
+                     momentum_threshold (0.1) }
+    spread:        { wide_penalty_threshold_bps (5.0) } ← bid-ask spread (spec #1)
     volume:        { sma_period (9), static_high (3.0), static_mid (2.0),
                      dynamic_high_clamp_min (2.0), dynamic_high_clamp_max (6.0),
                      dynamic_mid_clamp_min (1.5), dynamic_mid_clamp_max (4.0) }
@@ -196,12 +220,19 @@ settings.json
     oi:            { neutral_band_pct (0.05), change_threshold_pct (0.01) }
     dmi:           { period (9) }
     cvd:           { slope_min_usd (12000), slope_pct_of_value (0.01),
-                     divergence_price_gate (0.0005), divergence_penalty (1) }
+                     divergence_price_gate (0.0005), divergence_penalty (1),
+                     late_segment_weight (2.0),         ← v17: was hardcoded 2.0
+                     early_segment_weight (1.0) }       ← v17: was hardcoded 1.0
     tfi:           { window_size (30), threshold (0.15) }
     microCvd:      { window_size (50), accel_threshold (10000),
+                     accel_pct_of_window (0.01),        ← dynamic accel (spec #3)
                      decel_penalty (1) }
-    ttm:           { flat_threshold (0.5) }
+    ttm:           { flat_threshold (0.5),
+                     sma_period (20),                   ← v17: was hardcoded 20
+                     lin_reg_period (7) }               ← v17: was hardcoded 7
     vpfr:          { num_buckets (50) }
+    swing:         { pivot_wing_5m (3), lookback_bars_5m (30),  ← spec #5
+                     pivot_wing_15m (2), lookback_bars_15m (20) }
     funding:       { momentum_enabled (true), momentum_window (3),
                      momentum_threshold (0.0001), momentum_amplify (1),
                      momentum_soften (1) }
@@ -231,6 +262,17 @@ settings.json
     hold_roc_take_profit_long/short (±0.6)
     hold_rsi_hold_long/short (60/40)
     hold_rsi_evaluate_long/short (40/60)
+    regime_max_score:                ← v17: was hardcoded in RegimeMaxScore()
+      { trending (19), range_bound (18), transitional (15) }
+    tier_floor:                      ← v17: was hardcoded in TierFloor()
+      { high_threshold (12), high_floor (9),
+        med_threshold (9),  med_floor (6),
+        low_threshold (6),  low_floor (3) }
+    context_tag_thresholds:          ← v17: was hardcoded in CalcVerdictContext()
+      { momentum_fading_decay_ratio (0.5),
+        momentum_fading_count_min (2),
+        structurally_weak_struct_min (2),
+        structurally_weak_flow_min (2) }
   kelly:
     account_size_usd (1000.0)
     use_half_kelly (true)
@@ -246,6 +288,10 @@ settings.json
     trending:    { alignment_bonus (1), conflict_penalty (1) }
     range_bound: { alignment_bonus (1), conflict_penalty (1) }
 ```
+
+**v17 notes (settings-exposure pass).** All new keys default to exactly the previously-hardcoded values — no behavioural change. Keys added: `rsi.pass2c_midline`, `bbw.series_window_multiplier`, `bbw.squeeze_percentile`, `donchian.quartile_pct`, `cvd.late_segment_weight`, `cvd.early_segment_weight`, `ttm.sma_period`, `ttm.lin_reg_period`, `scoring.regime_max_score`, `scoring.tier_floor`, `scoring.context_tag_thresholds`.
+
+**v16 notes (swing pivot spec).** Added `indicators.swing` block: `pivot_wing_5m`, `lookback_bars_5m`, `pivot_wing_15m`, `lookback_bars_15m`.
 
 **v15 cleanup notes.** The following keys existed in earlier `settings.json` files but had no consumer in the engine (silently ignored by the JSON deserialiser); removed in v15 with no behavioural change:
 
@@ -263,21 +309,26 @@ Session volume norms scale volume thresholds by UTC session bucket so `VolHighTh
 
 ## 7. ScoringEngine — Key Behaviours
 
-- **MaxScore:** base 19 (TRENDING), 18 (RANGE_BOUND), 15 (TRANSITIONAL). With RegimeWeights.Enabled (default), TRENDING → 20 and RANGE_BOUND → 19 (base + Trending/RangeBound AlignmentBonus). TRANSITIONAL unchanged.
+- **MaxScore:** base values read from `cfg.Scoring.RegimeMaxScore.*` — TRENDING (19), RANGE_BOUND (18), TRANSITIONAL (15). With RegimeWeights.Enabled (default), TRENDING → 20 and RANGE_BOUND → 19 (base + AlignmentBonus). TRANSITIONAL unchanged.
 - **Verdict thresholds:** `Math.Ceiling(regimeMax * pct)` — no hardcoded magic numbers
-- **Step 2:** Score signals into ScoreState → all thresholds from cfg
+- **Step 2:** Score signals into ScoreState → all thresholds from cfg. Includes bid-ask spread WIDE-spread penalty and OFI momentum modifier.
 - **Pass 2:** Upgrade partials on cross-category confirmation; OBV upgrade blocked on adverse divergence
 - **Pass 2b:** OI × CVD cross-confirm gate — if OI full signal (or upgraded partial) and CVD direction+sign agree, apply `UpgradeBonus`; if full OI directly conflicts with CVD, apply `ConflictPenalty`; partial OI conflict is non-penalising
-- **Pass 2c:** Regime alignment gate — suppressed in TRANSITIONAL and when LongScore=ShortScore. TRENDING checks EMA ribbon + ROC (active when Abs(ROC)≥SlopeSensitivity) + CVD slope+sign. RANGE_BOUND checks VWAP dev (active only outside warmup) + RSI(9) vs 50 + Donchian(20). All active aligned → `+AlignmentBonus` (capped at regimeMax). All conflict → `-ConflictPenalty`. RegimeMaxScore() adds the bonus to the ceiling when enabled so verdict % thresholds auto-adjust.
+- **Pass 2c:** Regime alignment gate — suppressed in TRANSITIONAL and when LongScore=ShortScore. TRENDING checks EMA ribbon + ROC (active when Abs(ROC)≥SlopeSensitivity) + CVD slope+sign. RANGE_BOUND checks VWAP dev (active only outside warmup) + RSI(9) vs `cfg.Indicators.RSI.Pass2cMidline` (50) + Donchian(20). All active aligned → `+AlignmentBonus` (capped at regimeMax). All conflict → `-ConflictPenalty`.
 - **Step 3:** Baseline funding-rate modifier
 - **Step 3b:** Funding-momentum modifier — can soften crowding penalty when momentum is falling, or amplify it when momentum is rising into crowding
 - **Step 4:** Regime veto / TRANSITIONAL ADX penalty
 - **Step 4b:** MTF gate veto → NO TRADE
-- **Step 4c:** VPFR HVN cap → sets AdjustedLongTarget / AdjustedShortTarget
 - **Step 5:** Threshold comparison → verdict
-- **Step 5b:** Verdict sub-context tag → sets VerdictContext (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED). See `docs/verdict-context-tag-proposal.md`.
-- **Step 6:** CalcHoldStatus (hold/exit/flip guidance for open positions)
-- **Step 7:** ATR target/stop from cfg multipliers
+- **Step 5b (3-tier target cap):** Priority: (1) swing target (`SwingTargetLong/Short` from 5m pivot — closest to entry wins), (2) nearest HVN above/below (`VPFRNearestHvnAbove/Below`), (3) POC fallback. Winner = closest cap below raw ATR target (long) or above raw target (short). Sets `AdjustedLongTarget` / `AdjustedShortTarget` and `TargetCapReason` with tier label.
+- **Step 5b (VerdictContext):** FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED. Structural check fires STRUCTURALLY_WEAK when swing data exists but no clean target+stop pair. Decay ratio, fading count min, struct/flow weak thresholds all from `cfg.Scoring.ContextTagThresholds.*`. See `docs/verdict-context-tag-proposal.md`.
+- **Step 6 (CalcHoldStatus — layered exit):**
+  - Layer 1: 2+ adverse microstructure signals → fast EXIT
+  - **Layer 1.5 (new):** structural break exit — price closed through prior swing low (long) or swing high (short)
+  - Layer 2: OBV divergence exit
+  - Layer 3: RSI divergence evaluate; single adverse microstructure warning; RSI/ROC structural assessment
+- **Step 7:** ATR target/stop from `cfg.Scoring.AtrTargetMultiplier` / `AtrStopMultiplier`. **Structural rows** rendered in UI: long structural stop/entry/target + R:R (shown when SwingTargetLong > 0 or SwingStopLong > 0); mirror for short.
+- **TierFloor():** reads `cfg.Scoring.TierFloor.*` — HighThreshold (12)/HighFloor (9)/MedThreshold (9)/MedFloor (6)/LowThreshold (6)/LowFloor (3). Previously hardcoded.
 - **CalcKellySizing():** called from RenderOutput after ATR levels are computed; populates Kelly fields on VerdictResult (display-only, zero scoring impact). See `docs/kelly-criterion-proposal.md`.
 
 For the full annotated Calculate() pipeline with per-step implementation detail, see `docs/architecture.md`.
@@ -290,8 +341,9 @@ For the full annotated Calculate() pipeline with per-step implementation detail,
 - **Last transacted price** = `recentTrades(0).Price` — displayed above ATR block, not used as entry
 - Long: Stop = price − (ATR × scale × AtrStopMultiplier), Target = price + (ATR × scale × AtrTargetMultiplier)
 - Short: mirrored. R:R = 1:1.7 at current settings (1.2 stop / 2.0 target)
-- **HVN cap:** if `v.AdjustedLongTarget > 0` (or Short), raw target shown dimmed; POC-capped target shown in amber bold with reason
+- **3-tier cap:** if `v.AdjustedLongTarget > 0` (or Short), raw target shown dimmed; capped target shown in amber bold with reason label (e.g. `CAPPED @ 95200.0 (SWING_HIGH_5M)`, `NEAREST_HVN_ABOVE`, or `POC`).
 - **Multipliers read from cfg** — label and R:R display are dynamic, not hardcoded.
+- **Structural rows** (below ATR block): `Long structural: Stop X | Entry X | Target X  R:R 1:N  (risk X / rwd X)` in cyan when both target and stop exist; dim text when only one side is available. Mirror for short.
 - **Kelly Sizing block** rendered immediately after ATR levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. Display carries an advisory label noting the R:R is ATR-basis, not structural. EST mode only — CAL mode will be reinstated after the backtesting module is built. Suppressed when KellyF = 0 (no edge).
 - **Funding display** now includes both the raw rate/bias row and a separate momentum row showing `RISING` / `FALLING` / `FLAT` plus enabled/soften/amplify config values.
 
@@ -299,8 +351,7 @@ For the full annotated Calculate() pipeline with per-step implementation detail,
 
 ## 9. Open Position Guidance (CalcHoldStatus)
 
-Priority order: (1) 2+ adverse microstructure signals → fast EXIT; (2) OBV divergence exit;
-(3) RSI divergence evaluate; (4) single adverse microstructure warning; (5) RSI/ROC structural assessment.
+Priority order: (1) 2+ adverse microstructure signals → fast EXIT; **(1.5) structural break exit — price closed at/below prior swing low (long) or at/above prior swing high (short) → EXIT with level cited;** (2) OBV divergence exit; (3) RSI divergence evaluate; (4) single adverse microstructure warning; (5) RSI/ROC structural assessment.
 All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 
 ---
@@ -344,6 +395,11 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*` fields).
 | VerdictContext CSV logging | When CalibrationReport approaches READY (≥300 rows, ≥3 sessions, ≥3 regimes): add `VerdictContext` column to `analysis_log.csv` in `AnalysisLogger.LogRun()`, and update CalibrationReport to correlate each context tag with subsequent directional accuracy. | Low — deferred until CalibrationReport READY |
 | FundingMomentum CSV logging | If funding-momentum proves useful, add `FundingMomentum` and maybe raw delta/history depth to CSV for post-run validation of Step 3b effectiveness. | Low |
 | OI×CVD CSV logging | If Pass 2b proves decision-useful, add explicit `OiCvdPass2bOutcome` / bonus / penalty columns so confirmation-vs-conflict effects can be validated directly from `analysis_log.csv` instead of inferred from breakdown text. | Low |
+| Bid-ask spread threshold | `wide_penalty_threshold_bps` default TBD from live data. Review after 50+ runs to calibrate the BTC-PERPETUAL normal spread distribution. | Low |
+| OFI momentum thresholds | `ofi.momentum_window` and `ofi.momentum_threshold` — review hit rate after 50+ live runs; confirm whether OFI momentum shift is a leading vs lagging signal for OFI reversals. | Low |
+| Swing pivot wing/lookback | `pivot_wing_5m=3` / `lookback_bars_5m=30` — review false-positive rate for swing detection: are confirmed pivots close enough to relevant structure? May need widening to 4–5 on low-volatility sessions. | Low |
+| Dynamic MicroCVD accel pct | `microCvd.accel_pct_of_window` — review the dynamic floor vs static `accel_threshold` split after 50+ runs across quiet and active sessions. Ensure the dynamic ceiling does not underfire during genuine bursts. | Low |
+| VPFR v2 HVN nearest walls | `VPFRNearestHvnAbove` / `VPFRNearestHvnBelow` — review whether nearest-HVN cap fires more often than POC cap and whether it reduces over-targeting vs prior 2-tier cap. | Low |
 
 ---
 
@@ -367,7 +423,7 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 
 | Item | Description | Status |
 |---|---|---|
-| Dynamic MicroCVD accelThreshold | Static 10000 USD threshold (v14) is noise during high-volume sessions and a too-high bar during quiet hours. Scale dynamically against total window USD flow with a static-anchored floor. | ✅ Specced — see `docs/dynamic-microcvd-accel-proposal.md` |
+| Dynamic MicroCVD accelThreshold | Static 10000 USD threshold (v14) is noise during high-volume sessions and a too-high bar during quiet hours. Scale dynamically against total window USD flow with a static-anchored floor. | ✅ IMPLEMENTED 2026-04-29 (spec #3) |
 | RSI divergence on 5m candles | Current divergence is 1m only. A confirmed divergence on both 1m and 5m simultaneously would be a stronger penalty signal and reduce false penalties on 1m micro-noise. Requires `CalcRSIDivergence` called on `candles5m` and a combined gate in scoring pipeline. | 🔍 Deferred — see `docs/post-websocket-post-calibration-backlog.md` D3 |
 | Donchian × BBW state cross-reference | Wide channel breakout is meaningfully different from a tight-channel breakout. Cross-reference BBW squeeze state (ACTIVE / RELEASING / NONE) when scoring Donchian to up-weight breakouts from compression. | 🔍 Deferred — see `docs/post-websocket-post-calibration-backlog.md` D4 |
 
@@ -375,21 +431,21 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 
 | Item | Description | Status |
 |---|---|---|
-| Bid-ask spread microstructure signal | `orderBook` depth is already fetched. Spread between best bid and best ask is an unused fast microstructure signal — sudden widening often precedes a flush. Add `SpreadBps` to `IndicatorResults` and a penalty trigger in Tier 2. | ✅ Specced — see `docs/bid-ask-spread-proposal.md` |
+| Bid-ask spread microstructure signal | `orderBook` depth is already fetched. Spread between best bid and best ask is an unused fast microstructure signal — sudden widening often precedes a flush. Add `SpreadBps` to `IndicatorResults` and a penalty trigger in Tier 2. | ✅ IMPLEMENTED 2026-04-29 (spec #1) |
 | Auto-tuning from CSV log | Once `CalibrationReport` reaches READY (≥300 rows, ≥3 sessions, ≥3 regimes, ≥2 liq events), build a pass that correlates each signal's vote with subsequent price direction and adjusts `settings.json` weights automatically. | 🔍 Requires calibration data first; see also Section 16 (frontier-LLM auto-tweaking is the longer-arc plan) |
 
-### Active Specs Awaiting Implementation (2026-04-27)
+### Completed Specs (2026-04-29)
 
-Five indicator/feature specs and one settings-exposure pass were drafted on 2026-04-27. All are **PROPOSED** status pending user approval; flip to `APPROVED` in the file header before implementing.
+All six specs drafted on 2026-04-27 are now **IMPLEMENTED**.
 
-| Spec | Scope | Implementation Order |
+| Spec | Scope | Status |
 |---|---|---|
-| `docs/bid-ask-spread-proposal.md` | New SpreadBps + WIDE-spread entry-side penalty. Smallest, validates the workflow | 1 |
-| `docs/ofi-momentum-proposal.md` | OFIMomentum (RISING/FALLING/FLAT) modifier on the existing OFI level signal. Pattern matches FundingMomentum | 2 |
-| `docs/dynamic-microcvd-accel-proposal.md` | Self-scaling MicroCVD acceleration threshold (`totalWindowUsd × pct` with static-anchored floor). Closes the noise/quiet-session classification gap. Small spec, low risk | 3 |
-| `docs/vpfr-lite-v2-proposal.md` | VAH/VAL + nearest HVN/LVN walls. Updates Step 5b cap arbitration. Required by swing-pivot-proposal | 4 |
-| `docs/swing-pivot-proposal.md` | 5m + 15m swing structure. Adds structural row to ATR display, 3-tier Step 5b cap, structural-break exit in CalcHoldStatus, sharper STRUCTURALLY_WEAK | 5 |
-| `docs/settings-exposure-pass-proposal.md` | Lift 19 hardcoded scoring constants to `settings.json` (RegimeMaxScore base values, TierFloor breakpoints, VerdictContext thresholds, BBW/TTM/CVD/Donchian internals, Pass 2c RSI midline). No behavioural change — closes the audit prerequisite for Section 16 auto-tweaking | 6 (after the five indicator/feature specs) |
+| `docs/bid-ask-spread-proposal.md` | SpreadBps + WIDE-spread entry-side penalty | ✅ IMPLEMENTED 2026-04-29 |
+| `docs/ofi-momentum-proposal.md` | OFIMomentum (RISING/FALLING/FLAT) modifier on OFI level signal | ✅ IMPLEMENTED 2026-04-29 |
+| `docs/dynamic-microcvd-accel-proposal.md` | Self-scaling MicroCVD acceleration threshold | ✅ IMPLEMENTED 2026-04-29 |
+| `docs/vpfr-lite-v2-proposal.md` | VAH/VAL + nearest HVN/LVN walls; 3-tier Step 5b cap arbitration | ✅ IMPLEMENTED 2026-04-29 |
+| `docs/swing-pivot-proposal.md` | 5m + 15m swing structure; structural ATR display rows; Layer 1.5 exit; 3-tier cap; sharper STRUCTURALLY_WEAK | ✅ IMPLEMENTED 2026-04-29 |
+| `docs/settings-exposure-pass-proposal.md` | 19 hardcoded scoring literals → `settings.json`; closes auto-tweaking audit prerequisite | ✅ IMPLEMENTED 2026-04-29 |
 
 Deferred items (need WebSocket migration or CalibrationReport READY) are recorded in `docs/post-websocket-post-calibration-backlog.md` so they survive context-window rollovers.
 
@@ -418,6 +474,9 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-29** | [settings-exposure pass] `settings.json` bumped v16 → v17. Spec #6. Lifted 19 hardcoded scoring literals to `settings.json` — zero behaviour change at defaults. New keys: `rsi.pass2c_midline` (50.0), `bbw.series_window_multiplier` (5), `bbw.squeeze_percentile` (0.20), `donchian.quartile_pct` (0.25), `cvd.late_segment_weight` (2.0), `cvd.early_segment_weight` (1.0), `ttm.sma_period` (20), `ttm.lin_reg_period` (7), `scoring.regime_max_score.*`, `scoring.tier_floor.*`, `scoring.context_tag_thresholds.*`. Updated call sites: `CalcBBW`, `CalcTTMSqueeze`, `CalcCVD` all take new Optional params wired from cfg. `RegimeMaxScore()` and `TierFloor()` in `ScoringEngine_Helpers` now read from cfg instead of hardcoded literals. `CalcVerdictContext()` decay ratio, fading count, struct/flow weak thresholds all from `cfg.Scoring.ContextTagThresholds`. Pass 2c RSI midline from `cfg.Indicators.RSI.Pass2cMidline`. Closes the auto-tweaking audit prerequisite (Section 16.3 item 2). |
+| **2026-04-29** | [swing pivot detection] `settings.json` bumped v15 → v16. Spec #5. Added `CalcSwingPivots()` to `Indicators_Structure.vb`: confirmed pivot requires N bars left and right all strictly lower/higher; walks backward from scanEnd to find most recent pair. Added 8 swing pivot fields to `IndicatorResults` (`LastSwingHigh/Low5m/15m`, `SwingTargetLong/Short`, `SwingStopLong/Short`). Called from `MainForm_Analysis` for 5m (primary) and 15m (context) candles; direction-aware bookkeeping computed inline. **Layer 1.5** in `CalcHoldStatus`: structural-break exit when price closes at/below prior swing low (long) or at/above prior swing high (short). **3-tier Step 5b target cap** in `Calculate()`: swing target → nearest HVN → POC (winner = closest to entry). **`CalcVerdictContext` structural check**: fires STRUCTURALLY_WEAK when swing data exists but no clean target+stop pair. **Structural rows** added to `RenderOutputHeader()`: long and short stop/entry/target R:R display (cyan for full pair, dim for partial). Config: `indicators.swing` block. |
+| **2026-04-29** | [specs #1–#4] Spec #1: bid-ask spread microstructure signal. `SpreadBps` added to `IndicatorResults`; WIDE-spread entry-side penalty in Step 2 from `cfg.Indicators.Spread.WidePenaltyThresholdBps`; `indicators.spread` block in `settings.json`. Spec #2: OFI momentum. `OFIMomentum` (RISING/FALLING/FLAT) added to `IndicatorResults`; `CalcOFIMomentum()` added to `Indicators_OrderFlow`; `_ofiHistory` ring buffer (OFIHistoryMax=10) in `MainForm_Layout`; modifier applied in Step 2 alongside OFI level signal; `ofi.momentum_window` / `ofi.momentum_threshold` in `settings.json`. Spec #3: dynamic MicroCVD accelThreshold. `CalcMicroCVD` now computes `totalWindowUsd × accel_pct_of_window` with `accel_threshold` as static-anchored floor; `microCvd.accel_pct_of_window` added to `settings.json`. Spec #4: VPFR-lite v2. `CalcVPFRLite` updated to compute VAH/VAL (70% of total volume within the profile) and nearest HVN/LVN walls; adds `VPFRVAH`, `VPFRVAL`, `VPFRNearestHvnAbove`, `VPFRNearestHvnBelow` to `IndicatorResults`; 2-tier Step 5b cap replaced by 3-tier arbitration (prerequisite for spec #5). |
 | **2026-04-27** | [cleanup pass] `settings.json` bumped v14 → v15. No behavioural change; strips silently-ignored keys and unused config fields so the file matches the engine's actual surface area. **Code:** removed dead fields `IndicatorResults.OI_Prev15m`/`OI_Prev60m`/`ATRAvg20d`; removed three never-called `DynamicNorms.StaticVol*` properties; deleted `Ema200Settings` (entire class) and dead properties on `VwapSettings` (`DevThresholdPct`, `Session1StartHour`, `Session1StartMinute`), `BbwSettings` (`ReleasingRocThreshold`), `ObvSettings` (`Lookback`), `AtrSettings` (`RefPeriod`), `LiquidationSettings` (`LongLiqThreshold`, `ShortLiqThreshold`), `CvdSettings` (`TradeLookback`), `MTFGateSettings` (`EmaPeriodFast`, `EmaPeriodSlow`), `ScoringSettings` (`TransitionalPenaltyEnabled`), `RegimeGateSettings` (`SuppressLongInTrendingDown`, `SuppressShortInTrendingUp`); removed dead `Public Const ScoringEngine.MaxScore = 19` (replaced by `RegimeMaxScore()` long ago) and unused `SettingsLoader.Reload()`. Aligned remaining default values with v14 calibration so an absent `settings.json` no longer spawns stale defaults. **Streamlining:** extracted `IndicatorEngine.GetSessionCandles()` to dedupe the VWAP session-boundary calculation between `CalcVWAP` and `CalcVWAPBands`; cleaned a meaningless dummy initialiser in `CalcKellySizing`. **Bug fixes:** `MainForm_Render_Sections` BBW status colour compared against `"SQUEEZE"` (indicator emits `"ACTIVE"` / `"RELEASING"` / `"NONE"`) so the warn colour never fired; TTM direction colour compared against `"UP"` / `"DOWN"` (indicator emits `"RISING"` / `"FALLING"` / `"FLAT"`) so the green/red tints never fired. Both display-only — zero scoring impact. |
 | **2026-04-22** | [calibration pass] `settings.json` bumped v13 → v14. Value-only tuning sweep (no schema changes): OFI `buy/sell_dominant_ratio` 3.0/0.333 → 2.0/0.5; RSI `partial_overbought/partial_oversold` 50/50 → 55/45; `funding_high_positive/negative` ±0.0001 → ±0.0003; CVD `slope_min_usd` 1000 → 12000; Volume `dynamic_high_clamp_min`/`dynamic_mid_clamp_min` 1.5/1.2 → 2.0/1.5; ATR `static_ref` 150 → 115; MicroCVD `accel_threshold` 5000 → 10000; Kelly `account_size_usd` confirmed 1000 (placeholder pending trader input). Also added funding-history dedup in `MainForm_Analysis.vb`: `_fundingHistory` now only appends when the funding rate actually changed from the previous sample, so Step 3b momentum is computed over genuinely distinct values rather than 1m snapshots of a rate that only updates every 8h. |
 | **2026-04-22** | [defect fixes — Batch 1] M1: MTF-gate JSON-to-POCO key binding repaired. `EngineSettings.MTFGateSettings` JsonPropertyNames renamed `candle_count` → `candle_lookback`, `dmi_period` → `adx_period`, `required_confirms` → `min_of`, and new `AdxMin` property added (`"adx_min"`, default 20.0). `settings.json` mtf_gate block trimmed to 5 keys (dropped `mode` / `block_action` / `timeframe_minutes` — none had code consumers). `MainForm_Analysis.vb` call site now wires `adxMin:=cfg.MTFGate.AdxMin` (was silently borrowing `cfg.Indicators.ADX.TrendThreshold` = 25, so the 15m soft gate now actually uses the intended 20). M2: Kelly display carries a two-line advisory label immediately below the `KELLY SIZING` header — "Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets. Treat as directional bias indicator only." No suppression logic changed; block still renders at every verdict level where `KellyPWin > 0`. M3: CAL-mode dead code removed. `MinCalibrationSamples` property deleted from `EngineSettings.KellySettings`; `min_calibration_samples` key removed from `settings.json`; `[{0}]` PMode tag removed from both `KELLY SIZING` UI headers (`[CAPPED]` retained). `KellyPMode` still assigned `"EST"` internally and will be reinstated when a backtesting module ships empirical per-tier win rates. |
@@ -503,8 +562,8 @@ This section documents the longer-arc plans for the engine. **All items here are
 
 Before either 16.1 or 16.2 should be specced and scheduled:
 
-1. **Accuracy plateau.** The four indicator specs (bid-ask-spread, OFI momentum, VPFR-lite v2, swing pivots) ship and the engine's verdict accuracy stabilises across 100+ live runs. Auto-tweaking before the engine is structurally sound just optimises noise.
-2. **Settings exposure pass complete.** `settings-exposure-pass-proposal.md` shipped. Auto-tweaker has the full surface area to operate on.
+1. **Accuracy plateau.** ✅ All six indicator/feature specs (bid-ask-spread, OFI momentum, dynamic MicroCVD, VPFR-lite v2, swing pivots, settings-exposure) shipped 2026-04-29. Engine verdict accuracy must now stabilise across 100+ live runs before further structural changes.
+2. **Settings exposure pass complete.** ✅ `settings-exposure-pass-proposal.md` shipped 2026-04-29 (v17). All 19 formerly-hardcoded scoring literals now reachable through `settings.json`. Auto-tweaker has the full surface area to operate on.
 3. **CalibrationReport READY.** ≥300 rows, ≥3 sessions, ≥3 regimes covered, ≥2 liquidation events. Without this, the failure-rate trigger is computed on too small a sample to be trustworthy.
 4. **CSV columns expanded.** `VerdictContext`, `FundingMomentum`, `OiCvdPass2bOutcome` columns added (currently in Section 12 backlog). The auto-tweaker reads these to diagnose failure modes.
 5. **Failure definition specced.** Concrete answer to "what counts as failure" — see Section 16.1 open questions.
