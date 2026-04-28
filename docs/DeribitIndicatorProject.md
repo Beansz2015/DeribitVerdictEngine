@@ -367,9 +367,9 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 
 | Item | Description | Status |
 |---|---|---|
-| Dynamic MicroCVD accelThreshold | Hardcoded 5000 USD default is noise during high-volume sessions. Scale as `accelThreshold = VolumeSMA * 0.03` to self-calibrate. Low-risk change — single field in `DynamicNorms.Compute` or at call site. | 🔍 Spec needed |
-| RSI divergence on 5m candles | Current divergence is 1m only. A confirmed divergence on both 1m and 5m simultaneously would be a stronger penalty signal and reduce false penalties on 1m micro-noise. Requires `CalcRSIDivergence` called on `candles5m` and a combined gate in scoring pipeline. | 🔍 Spec needed |
-| Donchian × BBW state cross-reference | Wide channel breakout is meaningfully different from a tight-channel breakout. Cross-reference BBW squeeze state (ACTIVE / RELEASING / NONE) when scoring Donchian to up-weight breakouts from compression. | 🔍 Spec needed |
+| Dynamic MicroCVD accelThreshold | Static 10000 USD threshold (v14) is noise during high-volume sessions and a too-high bar during quiet hours. Scale dynamically against total window USD flow with a static-anchored floor. | ✅ Specced — see `docs/dynamic-microcvd-accel-proposal.md` |
+| RSI divergence on 5m candles | Current divergence is 1m only. A confirmed divergence on both 1m and 5m simultaneously would be a stronger penalty signal and reduce false penalties on 1m micro-noise. Requires `CalcRSIDivergence` called on `candles5m` and a combined gate in scoring pipeline. | 🔍 Deferred — see `docs/post-websocket-post-calibration-backlog.md` D3 |
+| Donchian × BBW state cross-reference | Wide channel breakout is meaningfully different from a tight-channel breakout. Cross-reference BBW squeeze state (ACTIVE / RELEASING / NONE) when scoring Donchian to up-weight breakouts from compression. | 🔍 Deferred — see `docs/post-websocket-post-calibration-backlog.md` D4 |
 
 ### Fine-Tuning (marginal gains, run after calibration data available)
 
@@ -380,15 +380,16 @@ when the backlog is clear. Items marked 🔍 require a spec decision before codi
 
 ### Active Specs Awaiting Implementation (2026-04-27)
 
-Four indicator specs and one settings-exposure pass were drafted on 2026-04-27. All are **PROPOSED** status pending user approval; flip to `APPROVED` in the file header before implementing.
+Five indicator/feature specs and one settings-exposure pass were drafted on 2026-04-27. All are **PROPOSED** status pending user approval; flip to `APPROVED` in the file header before implementing.
 
 | Spec | Scope | Implementation Order |
 |---|---|---|
 | `docs/bid-ask-spread-proposal.md` | New SpreadBps + WIDE-spread entry-side penalty. Smallest, validates the workflow | 1 |
 | `docs/ofi-momentum-proposal.md` | OFIMomentum (RISING/FALLING/FLAT) modifier on the existing OFI level signal. Pattern matches FundingMomentum | 2 |
-| `docs/vpfr-lite-v2-proposal.md` | VAH/VAL + nearest HVN/LVN walls. Updates Step 5b cap arbitration. Required by swing-pivot-proposal | 3 |
-| `docs/swing-pivot-proposal.md` | 5m + 15m swing structure. Adds structural row to ATR display, 3-tier Step 5b cap, structural-break exit in CalcHoldStatus, sharper STRUCTURALLY_WEAK | 4 |
-| `docs/settings-exposure-pass-proposal.md` | Lift 19 hardcoded scoring constants to `settings.json` (RegimeMaxScore base values, TierFloor breakpoints, VerdictContext thresholds, BBW/TTM/CVD/Donchian internals, Pass 2c RSI midline). No behavioural change — closes the audit prerequisite for Section 16 auto-tweaking | 5 (after the four indicator specs) |
+| `docs/dynamic-microcvd-accel-proposal.md` | Self-scaling MicroCVD acceleration threshold (`totalWindowUsd × pct` with static-anchored floor). Closes the noise/quiet-session classification gap. Small spec, low risk | 3 |
+| `docs/vpfr-lite-v2-proposal.md` | VAH/VAL + nearest HVN/LVN walls. Updates Step 5b cap arbitration. Required by swing-pivot-proposal | 4 |
+| `docs/swing-pivot-proposal.md` | 5m + 15m swing structure. Adds structural row to ATR display, 3-tier Step 5b cap, structural-break exit in CalcHoldStatus, sharper STRUCTURALLY_WEAK | 5 |
+| `docs/settings-exposure-pass-proposal.md` | Lift 19 hardcoded scoring constants to `settings.json` (RegimeMaxScore base values, TierFloor breakpoints, VerdictContext thresholds, BBW/TTM/CVD/Donchian internals, Pass 2c RSI midline). No behavioural change — closes the audit prerequisite for Section 16 auto-tweaking | 6 (after the five indicator/feature specs) |
 
 Deferred items (need WebSocket migration or CalibrationReport READY) are recorded in `docs/post-websocket-post-calibration-backlog.md` so they survive context-window rollovers.
 

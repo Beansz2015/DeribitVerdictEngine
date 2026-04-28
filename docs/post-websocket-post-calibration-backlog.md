@@ -84,7 +84,7 @@ Three columns currently noted as deferred in Section 12 of `DeribitIndicatorProj
 Items in Section 12 needing 50+ live runs:
 
 - **TFI threshold** (currently 0.15 vs alternative 0.10)
-- **MicroCVD AccelThreshold** (currently 10000 USD; consider dynamic scaling)
+- **MicroCVD AccelThreshold static value and dynamic_pct** (post-launch of `dynamic-microcvd-accel-proposal.md`: tune `accel_threshold` static floor anchor, `accel_threshold_dynamic_pct` scaling factor, `accel_threshold_floor_pct`)
 - **OFI ratios** (current 2.0 / 0.5 — relaxed in v14; review)
 - **TTM FlatThreshold** (0.5 vs distribution percentile)
 - **VPFR NumBuckets** (50 vs higher resolution)
