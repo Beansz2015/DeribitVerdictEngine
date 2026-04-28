@@ -298,7 +298,19 @@ End Class
 ''' Default 50 matches the method''s previous hardcoded behaviour.
 ''' </summary>
 Public Class VpfrSettings
-    <JsonPropertyName("num_buckets")> Public Property NumBuckets As Integer = 50
+    <JsonPropertyName("num_buckets")>      Public Property NumBuckets      As Integer = 50
+    ''' <summary>Fraction of total volume defining the value area. Default 0.70 (industry standard).</summary>
+    <JsonPropertyName("value_area_pct")>   Public Property ValueAreaPct    As Double  = 0.70
+    ''' <summary>Bucket vol / POC vol ratio above which a bucket is HVN. Default 0.6.</summary>
+    <JsonPropertyName("hvn_vol_pct")>      Public Property HvnVolPct       As Double  = 0.6
+    ''' <summary>Bucket vol / POC vol ratio below which a bucket is LVN. Default 0.2.</summary>
+    <JsonPropertyName("lvn_vol_pct")>      Public Property LvnVolPct       As Double  = 0.2
+    ''' <summary>Price proximity threshold for VPFRHVNearPoc / VPFRSignal classification. Default 0.002 (0.2%).</summary>
+    <JsonPropertyName("hvn_proximity_pct")> Public Property HvnProximityPct As Double = 0.002
+    ''' <summary>Exponential decay base for time-weighting candle volumes. Default 0.985 (~22% per 15 bars).</summary>
+    <JsonPropertyName("decay_base")>       Public Property DecayBase       As Double  = 0.985
+    ''' <summary>Enable optional value-area-breakout partial in scoring pipeline. Default False -- display + cap only.</summary>
+    <JsonPropertyName("value_area_scoring_enabled")> Public Property ValueAreaScoringEnabled As Boolean = False
 End Class
 
 ''' <summary>

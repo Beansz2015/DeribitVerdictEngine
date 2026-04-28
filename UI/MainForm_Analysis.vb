@@ -319,7 +319,15 @@ Partial Public Class MainForm
         Dim vpfrSignal    As String  = "NEUTRAL"
         IndicatorEngine.CalcVPFRLite(candles1m, r.CurrentPrice,
                                      vpfrPoc, vpfrHVNearPoc, vpfrSignal,
-                                     numBuckets:=cfg.Indicators.VPFR.NumBuckets)
+                                     r.VPFRVah, r.VPFRVal, r.VPFRValueAreaSignal,
+                                     r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow,
+                                     r.VPFRNearestLvnAbove, r.VPFRNearestLvnBelow,
+                                     numBuckets:=cfg.Indicators.VPFR.NumBuckets,
+                                     hvnVolPct:=cfg.Indicators.VPFR.HvnVolPct,
+                                     lvnVolPct:=cfg.Indicators.VPFR.LvnVolPct,
+                                     hvnProximityPct:=cfg.Indicators.VPFR.HvnProximityPct,
+                                     decayBase:=cfg.Indicators.VPFR.DecayBase,
+                                     valueAreaPct:=cfg.Indicators.VPFR.ValueAreaPct)
         r.VPFRPoc       = vpfrPoc
         r.VPFRHVNearPoc = vpfrHVNearPoc
         r.VPFRSignal    = vpfrSignal

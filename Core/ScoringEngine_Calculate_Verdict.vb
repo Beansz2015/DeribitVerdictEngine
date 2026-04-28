@@ -138,14 +138,34 @@ Partial Public Class ScoringEngine
         Dim hvnAbove As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
         Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
 
-        If hvnAbove AndAlso r.VPFRPoc > r.CurrentPrice AndAlso r.VPFRPoc < rawLongTarget Then
-            res.AdjustedLongTarget = r.VPFRPoc
-            res.TargetCapReason = String.Format("HVN_CAPPED @ {0:F1} (POC wall -- {1})", r.VPFRPoc, r.VPFRSignal)
+        ' Prefer nearest-HVN-above when present and caps the long target; fall back to POC.
+        Dim capLongTarget As Double = 0
+        Dim capLongLabel  As String = ""
+        If r.VPFRNearestHvnAbove > 0 AndAlso r.VPFRNearestHvnAbove > r.CurrentPrice AndAlso r.VPFRNearestHvnAbove < rawLongTarget Then
+            capLongTarget = r.VPFRNearestHvnAbove
+            capLongLabel  = "NEAREST_HVN_ABOVE"
+        ElseIf hvnAbove AndAlso r.VPFRPoc > r.CurrentPrice AndAlso r.VPFRPoc < rawLongTarget Then
+            capLongTarget = r.VPFRPoc
+            capLongLabel  = "POC"
+        End If
+        If capLongTarget > 0 Then
+            res.AdjustedLongTarget = capLongTarget
+            res.TargetCapReason = String.Format("HVN_CAPPED @ {0:F1} ({1})", capLongTarget, capLongLabel)
         End If
 
-        If hvnBelow AndAlso r.VPFRPoc < r.CurrentPrice AndAlso r.VPFRPoc > rawShortTarget Then
-            res.AdjustedShortTarget = r.VPFRPoc
-            res.TargetCapReason = String.Format("HVN_CAPPED @ {0:F1} (POC floor -- {1})", r.VPFRPoc, r.VPFRSignal)
+        ' Prefer nearest-HVN-below when present and caps the short target; fall back to POC.
+        Dim capShortTarget As Double = 0
+        Dim capShortLabel  As String = ""
+        If r.VPFRNearestHvnBelow > 0 AndAlso r.VPFRNearestHvnBelow < r.CurrentPrice AndAlso r.VPFRNearestHvnBelow > rawShortTarget Then
+            capShortTarget = r.VPFRNearestHvnBelow
+            capShortLabel  = "NEAREST_HVN_BELOW"
+        ElseIf hvnBelow AndAlso r.VPFRPoc < r.CurrentPrice AndAlso r.VPFRPoc > rawShortTarget Then
+            capShortTarget = r.VPFRPoc
+            capShortLabel  = "POC"
+        End If
+        If capShortTarget > 0 Then
+            res.AdjustedShortTarget = capShortTarget
+            res.TargetCapReason = String.Format("HVN_CAPPED @ {0:F1} ({1})", capShortTarget, capShortLabel)
         End If
 
         Return res

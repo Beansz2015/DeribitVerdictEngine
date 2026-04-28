@@ -92,6 +92,14 @@ Public Class IndicatorResults
     Public Property VPFRPoc As Double        ' Point of Control mid-price ($)
     Public Property VPFRHVNearPoc As Boolean ' True = current price within hvnProximityPct of POC
     Public Property VPFRSignal As String     ' NEAR_HVN_SUPPORT / NEAR_HVN_RESIST / IN_LVN_BULL / IN_LVN_BEAR / NEUTRAL
+    ' VPFR-lite v2: value area + nearest walls
+    Public Property VPFRVah             As Double  ' Value Area High ($)
+    Public Property VPFRVal             As Double  ' Value Area Low ($)
+    Public Property VPFRValueAreaSignal As String  ' "INSIDE_VA" | "ABOVE_VAH" | "BELOW_VAL"
+    Public Property VPFRNearestHvnAbove As Double  ' nearest HVN price above current ($), 0 = none
+    Public Property VPFRNearestHvnBelow As Double  ' nearest HVN price below current ($), 0 = none
+    Public Property VPFRNearestLvnAbove As Double  ' nearest LVN price above current ($), 0 = none
+    Public Property VPFRNearestLvnBelow As Double  ' nearest LVN price below current ($), 0 = none
 
     ' Current price (latest close of 1m candles)
     Public Property CurrentPrice As Double

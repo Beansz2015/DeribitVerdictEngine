@@ -315,6 +315,19 @@ Partial Public Class ScoringEngine
         Dim vpfrShort As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
         AddFull(state, vpfrLong, vpfrShort, SignalCategory.MarketStructure)
 
+        ' Value Area breakout partial -- opt-in via cfg; off by default.
+        ' Price outside value area on mid-volume+ expansion = breakout candidate.
+        Dim vaPartialLong  As Boolean = False
+        Dim vaPartialShort As Boolean = False
+        If cfg.Indicators.VPFR.ValueAreaScoringEnabled Then
+            Dim volExpansion As Boolean = r.VolumeRatio >= norms.VolMidThreshold
+            If r.VPFRValueAreaSignal = "ABOVE_VAH" AndAlso r.ROC > 0 AndAlso volExpansion Then
+                vaPartialLong = True
+            ElseIf r.VPFRValueAreaSignal = "BELOW_VAL" AndAlso r.ROC < 0 AndAlso volExpansion Then
+                vaPartialShort = True
+            End If
+        End If
+
         ' -- Pass 2: Partial upgrades -----------------------------------------
         Dim rocLongUpgraded  As Boolean = rocPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Momentum)
         Dim rocShortUpgraded As Boolean = rocPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
@@ -354,6 +367,11 @@ Partial Public Class ScoringEngine
         Dim obvShortUpgraded As Boolean = obvPartialShort AndAlso r.OBVDivergence <> "BULLISH" AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Volume)
         If obvLongUpgraded Then state.LongScore += 1
         If obvShortUpgraded Then state.ShortScore += 1
+
+        Dim vaLongUpgraded  As Boolean = vaPartialLong  AndAlso HasCrossConfirm(state.FullLongCategories,  SignalCategory.MarketStructure)
+        Dim vaShortUpgraded As Boolean = vaPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.MarketStructure)
+        If vaLongUpgraded  Then state.LongScore  += 1
+        If vaShortUpgraded Then state.ShortScore += 1
 
         ' -- Pass 2b: OI x CVD Cross-Confirm ----------------------------------
         ' Confirmed: OI full signal and CVD direction + sign agree -> upgrade.
@@ -637,8 +655,13 @@ Partial Public Class ScoringEngine
                       obvPartialShort AndAlso Not obvShortUpgraded AndAlso r.OBVDivergence <> "BULLISH",
                       obvLongUpgraded, obvShortUpgraded)))
 
-        breakdown.Add(New SignalBreakdownItem("VPFR-lite", vpfrLong, vpfrShort,
-            String.Format("POC:{0:F0} | {1} | HVN@POC:{2}", r.VPFRPoc, r.VPFRSignal, If(r.VPFRHVNearPoc, "YES", "NO"))))
+        Dim vpfrNote As String = String.Format("POC:{0:F0} | VAH:{1:F0} VAL:{2:F0} | {3} | HVN^:{4:F0} HVNv:{5:F0}",
+            r.VPFRPoc, r.VPFRVah, r.VPFRVal, r.VPFRValueAreaSignal,
+            r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
+        breakdown.Add(New SignalBreakdownItem("VPFR-lite",
+            vpfrLong OrElse vaLongUpgraded,
+            vpfrShort OrElse vaShortUpgraded,
+            vpfrNote))
 
         If regimeAlignNote <> "" Then
             breakdown.Add(New SignalBreakdownItem("Regime Align (2c)", regimeAlignLongHit, regimeAlignShortHit, regimeAlignNote))

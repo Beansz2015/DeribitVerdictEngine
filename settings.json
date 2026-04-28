@@ -120,6 +120,13 @@
     "MicroCVD": { "window_size": 50, "accel_threshold": 10000.0,
                   "accel_threshold_dynamic_pct": 0.03,
                   "accel_threshold_floor_pct": 0.25 },
+    "VPFR":     { "num_buckets": 50,
+                  "value_area_pct": 0.70,
+                  "hvn_vol_pct": 0.60,
+                  "lvn_vol_pct": 0.20,
+                  "hvn_proximity_pct": 0.002,
+                  "decay_base": 0.985,
+                  "value_area_scoring_enabled": false },
     "funding":  {
                   "momentum_enabled": true,
                   "momentum_window": 3,

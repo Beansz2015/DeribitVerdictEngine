@@ -66,12 +66,23 @@ Partial Public Class IndicatorEngine
                                     ByRef poc As Double,
                                     ByRef hvnNearPoc As Boolean,
                                     ByRef signal As String,
+                                    ByRef vah As Double,
+                                    ByRef val As Double,
+                                    ByRef valueAreaSignal As String,
+                                    ByRef nearestHvnAbove As Double,
+                                    ByRef nearestHvnBelow As Double,
+                                    ByRef nearestLvnAbove As Double,
+                                    ByRef nearestLvnBelow As Double,
                                     Optional numBuckets As Integer = 50,
                                     Optional hvnVolPct As Double = 0.6,
                                     Optional lvnVolPct As Double = 0.2,
                                     Optional hvnProximityPct As Double = 0.002,
-                                    Optional decayBase As Double = 0.985)
+                                    Optional decayBase As Double = 0.985,
+                                    Optional valueAreaPct As Double = 0.70)
         poc = 0 : hvnNearPoc = False : signal = "NEUTRAL"
+        vah = 0 : val = 0 : valueAreaSignal = "INSIDE_VA"
+        nearestHvnAbove = 0 : nearestHvnBelow = 0
+        nearestLvnAbove = 0 : nearestLvnBelow = 0
         If candles Is Nothing OrElse candles.Count < 10 Then Return
 
         Dim priceHigh As Double = candles.Max(Function(c) c.High)
@@ -132,6 +143,69 @@ Partial Public Class IndicatorEngine
         Else
             signal = "NEUTRAL"
         End If
+
+        ' -- VAH / VAL greedy expansion from POC ----------------------------------
+        ' Expand outward from POC bucket; at each step take the higher-volume neighbour.
+        ' Tie-break: prefer the lower bucket (conservatism -- bias toward tighter VAL).
+        Dim totalVol As Double = 0
+        For i As Integer = 0 To numBuckets - 1
+            totalVol += bucketVol(i)
+        Next
+        Dim targetVol As Double = totalVol * valueAreaPct
+        Dim vahIdx As Integer = pocIdx
+        Dim valIdx As Integer = pocIdx
+        Dim cumVol As Double = bucketVol(pocIdx)
+        Dim hiPtr  As Integer = pocIdx + 1
+        Dim loPtr  As Integer = pocIdx - 1
+        While cumVol < targetVol
+            Dim canGoHi As Boolean = hiPtr < numBuckets
+            Dim canGoLo As Boolean = loPtr >= 0
+            If Not canGoHi AndAlso Not canGoLo Then Exit While
+            Dim hiVol As Double = If(canGoHi, bucketVol(hiPtr), -1.0)
+            Dim loVol As Double = If(canGoLo, bucketVol(loPtr), -1.0)
+            ' Tie-break: prefer lower
+            If loVol >= hiVol Then
+                cumVol += loVol
+                valIdx = loPtr
+                loPtr -= 1
+            Else
+                cumVol += hiVol
+                vahIdx = hiPtr
+                hiPtr += 1
+            End If
+        End While
+        vah = priceLow + (vahIdx + 0.5) * bucketSize
+        val = priceLow + (valIdx + 0.5) * bucketSize
+
+        If currentPrice >= vah Then
+            valueAreaSignal = "ABOVE_VAH"
+        ElseIf currentPrice <= val Then
+            valueAreaSignal = "BELOW_VAL"
+        Else
+            valueAreaSignal = "INSIDE_VA"
+        End If
+
+        ' -- Nearest HVN / LVN above and below current price ---------------------
+        ' Each price = bucket centre: priceLow + (idx + 0.5) * bucketSize.
+        ' 0 = no qualifying bucket exists in that direction.
+        For i As Integer = curIdx + 1 To numBuckets - 1
+            If nearestHvnAbove = 0 AndAlso bucketVol(i) >= hvnThreshold Then
+                nearestHvnAbove = priceLow + (i + 0.5) * bucketSize
+            End If
+            If nearestLvnAbove = 0 AndAlso bucketVol(i) <= lvnThreshold Then
+                nearestLvnAbove = priceLow + (i + 0.5) * bucketSize
+            End If
+            If nearestHvnAbove > 0 AndAlso nearestLvnAbove > 0 Then Exit For
+        Next
+        For i As Integer = curIdx - 1 To 0 Step -1
+            If nearestHvnBelow = 0 AndAlso bucketVol(i) >= hvnThreshold Then
+                nearestHvnBelow = priceLow + (i + 0.5) * bucketSize
+            End If
+            If nearestLvnBelow = 0 AndAlso bucketVol(i) <= lvnThreshold Then
+                nearestLvnBelow = priceLow + (i + 0.5) * bucketSize
+            End If
+            If nearestHvnBelow > 0 AndAlso nearestLvnBelow > 0 Then Exit For
+        Next
     End Sub
 
     ' -- MTF Gate (15m timeframe) ---------------------------------------------

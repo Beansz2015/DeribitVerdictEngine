@@ -1,6 +1,6 @@
 # Spec: VPFR-Lite v2 — Value Area + Nearest HVN/LVN Walls
 **Proposed:** 2026-04-27
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED 2026-04-29
 **Target files:** `Core/IndicatorResults.vb`, `Core/Indicators_Structure.vb`, `Core/ScoringEngine_Calculate_Scoring.vb`, `Core/ScoringEngine_Calculate_Verdict.vb`, `Core/Settings/EngineSettings.vb`, `UI/MainForm_Render_Sections.vb`, `settings.json`
 
 ---

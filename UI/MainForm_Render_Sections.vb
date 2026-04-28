@@ -128,6 +128,20 @@ Partial Public Class MainForm
                                       r.VPFRPoc, r.VPFRSignal,
                                       If(r.VPFRHVNearPoc, "YES", "NO")) & Environment.NewLine, vpfrColour)
 
+        AppendRtf(rtb, "  Value Area: ", C_LABEL)
+        Dim vaColour As Color = If(r.VPFRValueAreaSignal = "INSIDE_VA", C_VALUE,
+                                   If(r.VPFRValueAreaSignal = "ABOVE_VAH", C_GOOD, C_BAD))
+        AppendRtf(rtb, String.Format("VAH:{0:F1}  |  VAL:{1:F1}  |  {2}",
+                                      r.VPFRVah, r.VPFRVal, r.VPFRValueAreaSignal) & Environment.NewLine, vaColour)
+
+        AppendRtf(rtb, "  HVN walls: ", C_LABEL)
+        Dim hvnAboveStr As String = If(r.VPFRNearestHvnAbove > 0, r.VPFRNearestHvnAbove.ToString("F1"), "—")
+        Dim hvnBelowStr As String = If(r.VPFRNearestHvnBelow > 0, r.VPFRNearestHvnBelow.ToString("F1"), "—")
+        Dim lvnAboveStr As String = If(r.VPFRNearestLvnAbove > 0, r.VPFRNearestLvnAbove.ToString("F1"), "—")
+        Dim lvnBelowStr As String = If(r.VPFRNearestLvnBelow > 0, r.VPFRNearestLvnBelow.ToString("F1"), "—")
+        AppendRtf(rtb, String.Format("Above:{0}  Below:{1}  |  LVN: ^{2} v{3}",
+                                      hvnAboveStr, hvnBelowStr, lvnAboveStr, lvnBelowStr) & Environment.NewLine, C_DIM)
+
         ' -- OPEN INTEREST ----------------------------------------------------
         SectionHeader(rtb, "OPEN INTEREST:")
         AppendRtf(rtb, "  OI: ", C_LABEL)
