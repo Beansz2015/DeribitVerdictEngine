@@ -200,9 +200,37 @@ Partial Public Class ScoringEngine
         Dim oiPartialShort As Boolean = r.OISignal = "CAPITULATION"
         AddFull(state, oiLong, oiShort, SignalCategory.Microstructure)
 
+        ' Snapshot Microstructure membership before OFI fires -- used by suppression
+        ' check to determine if OFI was the sole contributor (Q2, ofi-momentum-proposal).
+        Dim ofiLongAloneInMicro  As Boolean = Not state.FullLongCategories.Contains(SignalCategory.Microstructure)
+        Dim ofiShortAloneInMicro As Boolean = Not state.FullShortCategories.Contains(SignalCategory.Microstructure)
         Dim ofiBuy  As Boolean = r.OFISignal = "BUY DOMINANT"
         Dim ofiSell As Boolean = r.OFISignal = "SELL DOMINANT"
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
+
+        ' OFI Momentum Modifier -- confirms or suppresses the base OFI level signal.
+        ' Confirmed:  level fires AND momentum agrees   → +MomentumBonus (capped at regimeMax)
+        ' Suppressed: level fires AND momentum conflicts → cancel the base +1 award
+        ' FLAT or BALANCED: no effect.
+        Dim ofiMomNote As String = ""
+        If cfg.Indicators.OFI.MomentumEnabled AndAlso ofiBuy <> ofiSell Then
+            Dim bonus As Integer = cfg.Indicators.OFI.MomentumBonus
+            If ofiBuy AndAlso r.OFIMomentum = "RISING" Then
+                state.LongScore = Math.Min(state.LongScore + bonus, regimeMax)
+                ofiMomNote = String.Format(" | MOM:RISING +{0}[L] confirmed", bonus)
+            ElseIf ofiSell AndAlso r.OFIMomentum = "FALLING" Then
+                state.ShortScore = Math.Min(state.ShortScore + bonus, regimeMax)
+                ofiMomNote = String.Format(" | MOM:FALLING +{0}[S] confirmed", bonus)
+            ElseIf ofiBuy AndAlso r.OFIMomentum = "FALLING" Then
+                state.LongScore = Math.Max(0, state.LongScore - 1)
+                If ofiLongAloneInMicro Then state.FullLongCategories.Remove(SignalCategory.Microstructure)
+                ofiMomNote = " | MOM:FALLING -1[L] suppressed (unwinding)"
+            ElseIf ofiSell AndAlso r.OFIMomentum = "RISING" Then
+                state.ShortScore = Math.Max(0, state.ShortScore - 1)
+                If ofiShortAloneInMicro Then state.FullShortCategories.Remove(SignalCategory.Microstructure)
+                ofiMomNote = " | MOM:RISING -1[S] suppressed (unwinding)"
+            End If
+        End If
 
         Dim cvdLong  As Boolean = r.CVDSlope = "RISING" AndAlso r.CVDValue > 0
         Dim cvdShort As Boolean = r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0
@@ -557,7 +585,8 @@ Partial Public Class ScoringEngine
                       oiLongUpgraded, oiShortUpgraded) & oiCvdNote))
 
         breakdown.Add(New SignalBreakdownItem("OFI", ofiBuy, ofiSell,
-            String.Format("Ratio:{0:F2} | {1}", r.OFIRatio, r.OFISignal)))
+            String.Format("Ratio:{0:F2} | {1} | MOM:{2}{3}",
+                          r.OFIRatio, r.OFISignal, r.OFIMomentum, ofiMomNote)))
 
         Dim cvdNote As String = String.Format("Net:{0:F0} | Slope:{1} | Div:{2}", r.CVDValue, r.CVDSlope, r.CVDDivergence)
         If r.CVDDivergence <> "NONE" Then cvdNote &= String.Format(" | PENALTY -{0}", cfg.Indicators.CVD.DivergencePenalty)

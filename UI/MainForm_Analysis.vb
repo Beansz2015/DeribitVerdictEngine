@@ -229,6 +229,11 @@ Partial Public Class MainForm
                                 sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio,
                                 bookDepth:=cfg.Indicators.OFI.BookDepth)
 
+        ' OFI momentum: append ratio to ring buffer, then derive momentum signal.
+        _ofiHistory.Add(r.OFIRatio)
+        If _ofiHistory.Count > OFIHistoryMax Then _ofiHistory.RemoveAt(0)
+        r.OFIMomentum = IndicatorEngine.CalcOFIMomentum(_ofiHistory, cfg)
+
         IndicatorEngine.CalcSpread(orderBook, r.SpreadBps, r.SpreadStatus,
                                    wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
                                    tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)

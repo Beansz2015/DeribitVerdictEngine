@@ -208,6 +208,14 @@ Public Class OfiSettings
     <JsonPropertyName("book_depth")>          Public Property BookDepth         As Integer = 5
     <JsonPropertyName("buy_dominant_ratio")>  Public Property BuyDominantRatio  As Double  = 2.0
     <JsonPropertyName("sell_dominant_ratio")> Public Property SellDominantRatio As Double  = 0.5
+    ''' <summary>Master switch for OFI momentum modifier. Default True.</summary>
+    <JsonPropertyName("momentum_enabled")>   Public Property MomentumEnabled   As Boolean = True
+    ''' <summary>Lookback sample count for OFI ratio delta. Default 3.</summary>
+    <JsonPropertyName("momentum_window")>    Public Property MomentumWindow    As Integer = 3
+    ''' <summary>Min absolute delta to classify as RISING/FALLING. Default 0.15.</summary>
+    <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.15
+    ''' <summary>Bonus added when OFI level and momentum confirm. Capped at regimeMax. Default 1.</summary>
+    <JsonPropertyName("momentum_bonus")>     Public Property MomentumBonus     As Integer = 1
 End Class
 
 Public Class VolumeSettings

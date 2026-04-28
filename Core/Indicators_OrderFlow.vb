@@ -309,6 +309,26 @@ Partial Public Class IndicatorEngine
     End Function
 
     ''' <summary>
+    ''' Derives OFI momentum from a rolling history of OFI ratio samples.
+    ''' Returns "RISING", "FALLING", or "FLAT".
+    ''' Cold start (fewer than 2 samples) returns "FLAT".
+    ''' </summary>
+    Public Shared Function CalcOFIMomentum(
+        history As List(Of Double),
+        cfg     As EngineSettings) As String
+
+        If history Is Nothing OrElse history.Count < 2 Then Return "FLAT"
+
+        Dim window   As Integer = cfg.Indicators.OFI.MomentumWindow
+        Dim priorIdx As Integer = Math.Max(0, history.Count - 1 - window)
+        Dim delta    As Double  = history(history.Count - 1) - history(priorIdx)
+
+        If delta >  cfg.Indicators.OFI.MomentumThreshold Then Return "RISING"
+        If delta < -cfg.Indicators.OFI.MomentumThreshold Then Return "FALLING"
+        Return "FLAT"
+    End Function
+
+    ''' <summary>
     ''' Computes basis-point spread from the best bid/ask of the order book snapshot.
     ''' Classifies as TIGHT / NORMAL / WIDE against configurable thresholds.
     ''' </summary>

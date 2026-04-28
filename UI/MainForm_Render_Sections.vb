@@ -140,8 +140,9 @@ Partial Public Class MainForm
         SectionHeader(rtb, "ORDER FLOW:")
         AppendRtf(rtb, "  OFI Ratio: ", C_LABEL)
         Dim ofiColour As Color = If(r.OFIRatio > 1.2, C_GOOD, If(r.OFIRatio < 0.8, C_BAD, C_VALUE))
-        AppendRtf(rtb, String.Format("{0:F2}  |  Bid Vol: {1:F0}  |  Ask Vol: {2:F0}  |  {3}",
-                                      r.OFIRatio, r.OFIBidVol, r.OFIAskVol, r.OFISignal) & Environment.NewLine, ofiColour)
+        AppendRtf(rtb, String.Format("{0:F2}  |  Bid Vol: {1:F0}  |  Ask Vol: {2:F0}  |  {3}  |  Mom: {4}",
+                                      r.OFIRatio, r.OFIBidVol, r.OFIAskVol, r.OFISignal,
+                                      r.OFIMomentum) & Environment.NewLine, ofiColour)
 
         AppendRtf(rtb, "  Spread:    ", C_LABEL)
         Dim spreadColour As Color = If(r.SpreadStatus = "WIDE", C_BAD,

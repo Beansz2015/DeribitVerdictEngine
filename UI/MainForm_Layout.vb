@@ -67,6 +67,12 @@ Partial Public Class MainForm
     Private _fundingHistory As New List(Of Double)
     Private Const FundingHistoryMax As Integer = 10
 
+    ' OFI ratio history ring buffer -- for OFIMomentum computation in scoring.
+    ' Populated in RunAnalysisAsync after CalcOFI(); max OFIHistoryMax samples.
+    ' Cold start (< 2 samples) returns FLAT from CalcOFIMomentum -- accepted warm-up.
+    Private _ofiHistory As New List(Of Double)
+    Private Const OFIHistoryMax As Integer = 10
+
     ' Auto-run state
     Private _autoRunTimer   As IAutoRunTimer
     Private _countdownTimer As Threading.Timer

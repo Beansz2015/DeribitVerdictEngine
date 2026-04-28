@@ -49,6 +49,7 @@ Public Class IndicatorResults
     ' Tier 2
     Public Property OFIRatio As Double
     Public Property OFISignal As String      ' BUY DOMINANT / SELL DOMINANT / BALANCED
+    Public Property OFIMomentum As String    ' "RISING" | "FALLING" | "FLAT"
     Public Property OFIBidVol As Double      ' weighted bid volume (top-3, w=3,2,1) -- display only
     Public Property OFIAskVol As Double      ' weighted ask volume (top-3, w=3,2,1) -- display only
     Public Property SpreadBps    As Double   ' best-bid/ask spread in basis points
