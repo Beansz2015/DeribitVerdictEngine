@@ -400,15 +400,19 @@ Partial Public Class ScoringEngine
             If (oiLong OrElse oiLongUpgraded) AndAlso cvdBullish Then
                 state.LongScore = Math.Min(state.LongScore + cfg.Indicators.OiCvd.UpgradeBonus, regimeMax)
                 oiCvdNote = String.Format(" | PASS2b: +{0}[L] OI×CVD confirmed", cfg.Indicators.OiCvd.UpgradeBonus)
+                res.OiCvdOutcome = "CONFIRMED_LONG"
             ElseIf (oiShort OrElse oiShortUpgraded) AndAlso cvdBearish Then
                 state.ShortScore = Math.Min(state.ShortScore + cfg.Indicators.OiCvd.UpgradeBonus, regimeMax)
                 oiCvdNote = String.Format(" | PASS2b: +{0}[S] OI×CVD confirmed", cfg.Indicators.OiCvd.UpgradeBonus)
+                res.OiCvdOutcome = "CONFIRMED_SHORT"
             ElseIf oiLong AndAlso cvdBearish Then
                 state.LongScore = Math.Max(0, state.LongScore - cfg.Indicators.OiCvd.ConflictPenalty)
                 oiCvdNote = String.Format(" | PASS2b: -{0}[L] OI×CVD conflict", cfg.Indicators.OiCvd.ConflictPenalty)
+                res.OiCvdOutcome = "CONFLICT_LONG"
             ElseIf oiShort AndAlso cvdBullish Then
                 state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.OiCvd.ConflictPenalty)
                 oiCvdNote = String.Format(" | PASS2b: -{0}[S] OI×CVD conflict", cfg.Indicators.OiCvd.ConflictPenalty)
+                res.OiCvdOutcome = "CONFLICT_SHORT"
             End If
         End If
 

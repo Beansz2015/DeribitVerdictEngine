@@ -72,6 +72,17 @@ Partial Public Class MainForm
             {"TRENDING_UP", 0}, {"TRENDING_DOWN", 0},
             {"RANGE_BOUND", 0}, {"TRANSITIONAL", 0}
         }
+        Dim contextCounts As New Dictionary(Of String, Integer) From {
+            {"CONFIRMED", 0}, {"FLOW_UNCONFIRMED", 0},
+            {"MOMENTUM_FADING", 0}, {"STRUCTURALLY_WEAK", 0}
+        }
+        Dim fundingMomCounts As New Dictionary(Of String, Integer) From {
+            {"RISING", 0}, {"FALLING", 0}, {"FLAT", 0}
+        }
+        Dim oiCvdCounts As New Dictionary(Of String, Integer) From {
+            {"NONE", 0}, {"CONFIRMED_LONG", 0}, {"CONFIRMED_SHORT", 0},
+            {"CONFLICT_LONG", 0}, {"CONFLICT_SHORT", 0}
+        }
 
         For i = 1 To lines.Length - 1
             Dim parts = lines(i).Split(","c)
@@ -101,6 +112,19 @@ Partial Public Class MainForm
             If colIdx.ContainsKey("VolumeRatio") Then
                 Dim v As Double
                 If Double.TryParse(parts(colIdx("VolumeRatio")).Trim(), v) Then volRatioValues.Add(v)
+            End If
+
+            If colIdx.ContainsKey("VerdictContext") Then
+                Dim ctx = parts(colIdx("VerdictContext")).Trim().ToUpper()
+                If contextCounts.ContainsKey(ctx) Then contextCounts(ctx) += 1
+            End If
+            If colIdx.ContainsKey("FundingMomentum") Then
+                Dim mom = parts(colIdx("FundingMomentum")).Trim().ToUpper()
+                If fundingMomCounts.ContainsKey(mom) Then fundingMomCounts(mom) += 1
+            End If
+            If colIdx.ContainsKey("OiCvdOutcome") Then
+                Dim oicvd = parts(colIdx("OiCvdOutcome")).Trim().ToUpper()
+                If oiCvdCounts.ContainsKey(oicvd) Then oiCvdCounts(oicvd) += 1
             End If
         Next
 
@@ -150,6 +174,21 @@ Partial Public Class MainForm
         Else
             sb.AppendLine("  Volume Ratio      : insufficient data")
         End If
+        sb.AppendLine()
+        sb.AppendLine("VERDICT CONTEXT DISTRIBUTION")
+        For Each kvp In contextCounts
+            sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
+        Next
+        sb.AppendLine()
+        sb.AppendLine("FUNDING MOMENTUM DISTRIBUTION")
+        For Each kvp In fundingMomCounts
+            sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
+        Next
+        sb.AppendLine()
+        sb.AppendLine("OI x CVD PASS 2b OUTCOMES")
+        For Each kvp In oiCvdCounts
+            sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
+        Next
         sb.AppendLine()
         sb.AppendLine("===========================================================")
         sb.AppendLine(If(overallReady,

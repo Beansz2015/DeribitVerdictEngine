@@ -1,7 +1,12 @@
-' AnalysisLogger.vb  v0.2
+' AnalysisLogger.vb  v0.3
 ' Appends one row per analysis run to a local CSV file.
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
+'
+' v0.3: Header expanded with VerdictContext, FundingMomentum, OiCvdOutcome columns
+'       (closes Section 16.3 prerequisite item 4 — auto-tweaker calibration data).
+'       Existing CSV files written by v0.2 are column-incompatible.
+'       Use ResetLog() (Reset Log link in UI) after deploying this version.
 '
 ' v0.2: Header and data row expanded to include all current IndicatorResults fields:
 '       CVD (Value, Slope, Divergence)
@@ -16,9 +21,6 @@
 '       Donchian (Upper, Lower, Signal)
 '       Scores (MaxScore, EffectiveLongScore, EffectiveShortScore, RegimePenalty)
 '       OFIBidVol, OFIAskVol added to existing OFI columns
-'
-' NOTE: Existing CSV files written by v0.1 are column-incompatible.
-'       Use ResetLog() (the "Reset Log" link in the UI) after deploying this version.
 
 Imports System.IO
 
@@ -45,7 +47,8 @@ Public Class AnalysisLogger
         "DonchianUpper,DonchianLower,DonchianSignal," &
         "OBVTrend,OBVDivergence," &
         "MTFGatePass,MTF15mTrend,MTF15mADX,MTF15mEMAAlignment,MTFGateReason," &
-        "ATR,ATRMultiplier"
+        "ATR,ATRMultiplier," &
+        "VerdictContext,FundingMomentum,OiCvdOutcome"
 
     Public Shared Function GetLogPath() As String
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
@@ -132,7 +135,10 @@ Public Class AnalysisLogger
                     r.MTF15mEMAAlignment,
                     mtfReason,
                     r.ATR.ToString("F4"),
-                    r.ATRSizeMultiplier.ToString("F4")))
+                    r.ATRSizeMultiplier.ToString("F4"),
+                    If(v.VerdictContext, "CONFIRMED"),
+                    If(r.FundingMomentum, "FLAT"),
+                    If(v.OiCvdOutcome, "NONE")))
             End Using
         Catch
             ' Silent fail -- logging must never crash the main pipeline

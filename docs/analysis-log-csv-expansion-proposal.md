@@ -1,6 +1,6 @@
 # Spec: AnalysisLogger CSV Column Expansion
 **Proposed:** 2026-04-29
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED 2026-04-29
 **Target files:** `Core/ScoringEngine_Types.vb`, `Core/ScoringEngine_Calculate_Scoring.vb`, `AnalysisLogger.vb`, `UI/MainForm_Render_Header.vb`
 
 This is a **mechanical schema-expansion pass**. No scoring change. No new indicators. Adds three columns to `analysis_log.csv` so downstream calibration analysis can correlate already-shipped feature outputs with subsequent price action, and updates the `CalibrationReport` to surface basic aggregates over the new columns.

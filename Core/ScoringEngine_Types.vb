@@ -41,6 +41,16 @@ Public Class VerdictResult
     ''' </summary>
     Public Property VerdictContext As String = "CONFIRMED"
 
+    ''' <summary>
+    ''' Pass 2b OI x CVD cross-confirm gate outcome for this run.
+    ''' Values: "NONE" / "CONFIRMED_LONG" / "CONFIRMED_SHORT" / "CONFLICT_LONG" / "CONFLICT_SHORT".
+    ''' "NONE" when the gate is disabled, OI did not fire a level signal, or no qualifying
+    ''' alignment/conflict was detected.
+    ''' Set by RunScoringPipeline at Pass 2b. Display impact already surfaced in the OI Delta
+    ''' breakdown note; this field makes the outcome CSV-loggable for calibration analysis.
+    ''' </summary>
+    Public Property OiCvdOutcome As String = "NONE"
+
     ' ---------------------------------------------------------------------------
     ' Kelly sizing outputs
     ' Populated by CalcKellySizing() in MainForm_Render -- display-only, no scoring impact.
