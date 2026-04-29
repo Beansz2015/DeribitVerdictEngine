@@ -1,8 +1,16 @@
 {
-  "version": 17,
-  "last_modified": "2026-04-29T00:00:00Z",
-  "modified_by": "settings-exposure-pass",
+  "version": 18,
+  "last_modified": "2026-04-30T00:00:00Z",
+  "modified_by": "api-resilience-pass",
   "change_log": [
+    "v18: [api-resilience] Added top-level 'network' block (3 keys). DeribitClient wraps all fetches",
+    "     with ExecuteWithRetry; RunAnalysisAsync validates results and skips cleanly on failure.",
+    "     network.request_timeout_seconds: 15 -- per-call HttpClient timeout (raised from 10s).",
+    "     network.retry_count: 1 -- additional retries on 5xx / timeout / network drop.",
+    "     network.retry_backoff_ms: 1000 -- delay between retries in ms.",
+    "     GetFundingRateAsync: Double -> Double?  |  GetBookSummaryAsync: tuple -> nullable tuple.",
+    "     15m cache preserved on fetch failure (stale data better than no data for MTF gate).",
+    "     Skip counter increments per session; shown in status bar when > 0. No CSV change.",
     "v17: [settings-exposure] Lift 19 hardcoded scoring literals to settings.json. Zero behaviour change at defaults.",
     "     scoring.regime_max_score: {trending:19, range_bound:18, transitional:15} -- RegimeMaxScore() base ceilings.",
     "     scoring.tier_floor: {high_threshold:12, high_floor:9, med_threshold:9, med_floor:6, low_threshold:6, low_floor:3}",
@@ -271,5 +279,10 @@
       "alignment_bonus": 1,
       "conflict_penalty": 1
     }
+  },
+  "network": {
+    "request_timeout_seconds": 15,
+    "retry_count": 1,
+    "retry_backoff_ms": 1000
   }
 }

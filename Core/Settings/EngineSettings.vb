@@ -104,6 +104,9 @@ Public Class EngineSettings
 
     <JsonPropertyName("regime_weights")>
     Public Property RegimeWeights As New RegimeWeightSettings
+
+    <JsonPropertyName("network")>
+    Public Property Network As New NetworkSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -591,6 +594,23 @@ End Class
 Public Class RegimeAlignSettings
     <JsonPropertyName("alignment_bonus")>   Public Property AlignmentBonus   As Integer = 1
     <JsonPropertyName("conflict_penalty")>  Public Property ConflictPenalty  As Integer = 1
+End Class
+
+' ---------------------------------------------------------------------------
+' Network / API resilience settings
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' API resilience parameters for the REST fetch layer.
+''' RequestTimeoutSeconds: HttpClient.Timeout for each fetch.
+''' RetryCount: additional retries on transient failure (5xx, timeout, network drop).
+'''   0 = no retry; 1 = retry once (default); higher values stack but should rarely be needed.
+''' RetryBackoffMs: delay between retries in milliseconds.
+''' </summary>
+Public Class NetworkSettings
+    <JsonPropertyName("request_timeout_seconds")> Public Property RequestTimeoutSeconds As Integer = 15
+    <JsonPropertyName("retry_count")>              Public Property RetryCount            As Integer = 1
+    <JsonPropertyName("retry_backoff_ms")>         Public Property RetryBackoffMs        As Integer = 1000
 End Class
 
 ' ---------------------------------------------------------------------------

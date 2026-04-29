@@ -90,6 +90,9 @@ Partial Public Class MainForm
     ' allowing a RANGING flip away from TRENDING_* or TRANSITIONAL.
     Private _prevRegime As String = ""
 
+    ' Resilience: count of skipped analyses this session (transient API failures).
+    Private _skipCount As Integer = 0
+
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
 

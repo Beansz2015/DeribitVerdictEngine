@@ -14,7 +14,8 @@ Partial Public Class MainForm
     Private Sub UpdateLogInfo()
         Dim rows As Integer = AnalysisLogger.GetRowCount()
         Dim path As String  = AnalysisLogger.GetLogPath()
-        lblLogInfo.Text = String.Format("Log: {0} rows  |  {1}", rows, path)
+        Dim skipSuffix As String = If(_skipCount > 0, String.Format("  |  Skipped: {0}", _skipCount), "")
+        lblLogInfo.Text = String.Format("Log: {0} rows{1}  |  {2}", rows, skipSuffix, path)
     End Sub
 
     Private Sub lnkResetLog_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkResetLog.LinkClicked

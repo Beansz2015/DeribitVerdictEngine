@@ -64,8 +64,13 @@ Partial Public Class MainForm
         If mtfStale Then
             t_15m = DeribitClient.GetCandlesAsync("15", 70)
             Await Task.WhenAll(t_1m, t_5m, t_15m, t_funding, t_book, t_ob, t_trades)
-            _mtfCandles15m    = Await t_15m
-            _mtfLastFetchTime = DateTime.UtcNow
+            Dim freshM15 = Await t_15m
+            If freshM15 IsNot Nothing AndAlso freshM15.Count > 0 Then
+                _mtfCandles15m    = freshM15
+                _mtfLastFetchTime = DateTime.UtcNow
+            End If
+            ' If freshM15 is Nothing, leave the cache as-is. Stale data is better than no data
+            ' for the MTF gate; 15m candles change slowly. Cache retry happens next cycle.
         Else
             Await Task.WhenAll(t_1m, t_5m, t_funding, t_book, t_ob, t_trades)
         End If
@@ -78,9 +83,31 @@ Partial Public Class MainForm
         Dim orderBook    = Await t_ob
         Dim recentTrades = Await t_trades
 
-        If candles1m.Count < 50 Then
+        ' Resilience check: if any required fetch failed, skip cleanly.
+        Dim skipReason As String = Nothing
+        If candles1m Is Nothing OrElse candles1m.Count < 50 Then
+            skipReason = "1m candles unavailable"
+        ElseIf candles5m Is Nothing OrElse candles5m.Count < 30 Then
+            skipReason = "5m candles unavailable"
+        ElseIf Not fundingRate.HasValue Then
+            skipReason = "funding rate unavailable"
+        ElseIf Not bookSummary.HasValue Then
+            skipReason = "book summary unavailable"
+        ElseIf orderBook Is Nothing Then
+            skipReason = "order book unavailable"
+        ElseIf recentTrades Is Nothing OrElse recentTrades.Count = 0 Then
+            skipReason = "recent trades unavailable"
+        End If
+
+        If skipReason IsNot Nothing Then
+            _skipCount += 1
             txtOutput.Clear()
-            AppendRtf(txtOutput, "Insufficient 1m candle data returned. Please retry." & Environment.NewLine, C_WARN)
+            AppendRtf(txtOutput, String.Format("ANALYSIS SKIPPED: {0}" & Environment.NewLine, skipReason), C_WARN, bold:=True)
+            AppendRtf(txtOutput, String.Format("Skip count this session: {0}" & Environment.NewLine, _skipCount), C_DIM)
+            AppendRtf(txtOutput, "Engine continues — next auto-run cycle will retry.", C_DIM)
+            lblVerdict.Text      = "SKIPPED"
+            lblVerdict.BackColor = Color.FromArgb(120, 100, 60)
+            UpdateLogInfo()
             Return
         End If
 
@@ -175,14 +202,15 @@ Partial Public Class MainForm
         End If
 
         ' FundingBias label from cfg thresholds
-        r.FundingRate = fundingRate
-        If fundingRate > cfg.Scoring.FundingHighPositive Then
+        ' fundingRate.Value is safe -- skip-check above guarantees HasValue
+        r.FundingRate = fundingRate.Value
+        If fundingRate.Value > cfg.Scoring.FundingHighPositive Then
             r.FundingBias = "LONGS HEAVILY CROWDED"
-        ElseIf fundingRate > cfg.Scoring.FundingLowPositive Then
+        ElseIf fundingRate.Value > cfg.Scoring.FundingLowPositive Then
             r.FundingBias = "LONGS CROWDED"
-        ElseIf fundingRate < cfg.Scoring.FundingHighNegative Then
+        ElseIf fundingRate.Value < cfg.Scoring.FundingHighNegative Then
             r.FundingBias = "SHORTS HEAVILY CROWDED"
-        ElseIf fundingRate < cfg.Scoring.FundingLowNegative Then
+        ElseIf fundingRate.Value < cfg.Scoring.FundingLowNegative Then
             r.FundingBias = "SHORTS CROWDED"
         Else
             r.FundingBias = "NEUTRAL"
@@ -193,8 +221,8 @@ Partial Public Class MainForm
         ' [S9] Dedup: Deribit publishes funding ~every 8h; appending every 1m run
         ' fills the ring with identical values and forces FLAT. Only append when
         ' the rate actually changed from the previous sample.
-        If _fundingHistory.Count = 0 OrElse _fundingHistory(_fundingHistory.Count - 1) <> fundingRate Then
-            _fundingHistory.Add(fundingRate)
+        If _fundingHistory.Count = 0 OrElse _fundingHistory(_fundingHistory.Count - 1) <> fundingRate.Value Then
+            _fundingHistory.Add(fundingRate.Value)
             If _fundingHistory.Count > FundingHistoryMax Then
                 _fundingHistory.RemoveAt(0)
             End If
@@ -202,8 +230,9 @@ Partial Public Class MainForm
         r.FundingMomentum = IndicatorEngine.CalcFundingMomentum(_fundingHistory, cfg)
 
         Dim nowTs As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        r.OI_Current = bookSummary.OI
-        _oiHistory.Add(New OiSnapshot(nowTs, bookSummary.OI))
+        ' bookSummary.Value is safe -- skip-check above guarantees HasValue
+        r.OI_Current = bookSummary.Value.OI
+        _oiHistory.Add(New OiSnapshot(nowTs, bookSummary.Value.OI))
         _oiHistory = _oiHistory.Where(Function(x) nowTs - x.Ts < 70 * 60 * 1000L).ToList()
 
         Dim oi15m = _oiHistory.Where(Function(x) nowTs - x.Ts <= 15 * 60 * 1000L).
@@ -215,7 +244,7 @@ Partial Public Class MainForm
         r.OIChange60m = If(oi60m IsNot Nothing AndAlso oi60m.OI > 0, (r.OI_Current - oi60m.OI) / oi60m.OI * 100, 0)
 
         Dim oiThr As Double = cfg.Indicators.OI.ChangeThresholdPct * 100
-        Dim priceUp As Boolean = r.CurrentPrice > bookSummary.MarkPrice * 0.9999
+        Dim priceUp As Boolean = r.CurrentPrice > bookSummary.Value.MarkPrice * 0.9999
         If r.OIChange15m > oiThr AndAlso priceUp Then
             r.OISignal = "NEW LONGS"
         ElseIf r.OIChange15m > oiThr AndAlso Not priceUp Then
