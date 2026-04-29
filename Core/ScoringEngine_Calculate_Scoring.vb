@@ -50,20 +50,6 @@ Partial Public Class ScoringEngine
             End If
         Next
 
-        ' First check: is there a clean structural target in the entry direction?
-        ' Fires only when swing detection has produced at least one level (graceful degradation
-        ' when candle history is too short). Both target AND stop must be present for a clean trade;
-        ' missing target alone (e.g. just made a new high) is structural ambiguity → STRUCTURALLY_WEAK.
-        Dim hasStructuralTarget As Boolean = If(isLong,
-            r.SwingTargetLong > 0 AndAlso r.SwingStopLong > 0,
-            r.SwingTargetShort > 0 AndAlso r.SwingStopShort > 0)
-        If r.LastSwingHigh5m > 0 OrElse r.LastSwingLow5m > 0 Then
-            ' Swing detection has produced at least one level — meaningful evaluation possible
-            If Not hasStructuralTarget Then
-                Return "STRUCTURALLY_WEAK"
-            End If
-        End If
-
         Dim ctx = cfg.Scoring.ContextTag
         Dim fadingCount As Integer = 0
         If isLong Then
@@ -78,6 +64,20 @@ Partial Public Class ScoringEngine
             If r.MicroCVDEarly < 0 AndAlso r.MicroCVDLate > r.MicroCVDEarly * ctx.MomentumFadingDecayRatio Then fadingCount += 1
         End If
         If fadingCount >= ctx.MomentumFadingCountMin Then Return "MOMENTUM_FADING"
+
+        ' Structural-target check: fires after MOMENTUM_FADING so the rarer / stronger
+        ' fading signal isn't masked by a frequent / transient structural-target absence.
+        ' Only evaluates when swing detection has produced at least one level (graceful
+        ' degradation when candle history is too short for pivot detection).
+        ' Per v17-followup-fixes-proposal.md.
+        Dim hasStructuralTarget As Boolean = If(isLong,
+            r.SwingTargetLong > 0 AndAlso r.SwingStopLong > 0,
+            r.SwingTargetShort > 0 AndAlso r.SwingStopShort > 0)
+        If r.LastSwingHigh5m > 0 OrElse r.LastSwingLow5m > 0 Then
+            If Not hasStructuralTarget Then
+                Return "STRUCTURALLY_WEAK"
+            End If
+        End If
 
         If structScore >= cfg.Scoring.ContextTagStructuralMin AndAlso
            flowScore <= cfg.Scoring.ContextTagFlowMax Then

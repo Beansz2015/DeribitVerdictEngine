@@ -1,6 +1,6 @@
 # Spec: v17 Follow-up Fixes — VerdictContext Precedence + Section 16.3 Doc Marker
 **Proposed:** 2026-04-29
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED 2026-04-29
 **Target files:** `Core/ScoringEngine_Calculate_Scoring.vb`, `docs/DeribitIndicatorProject.md`
 
 Two small fixes flagged during the v17 code review. Both are low-risk and small-surface. Bundled into one spec because they're related to the same review pass and ship cleanly as a single logical commit.

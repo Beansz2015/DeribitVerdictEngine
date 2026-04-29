@@ -562,7 +562,8 @@ This section documents the longer-arc plans for the engine. **All items here are
 
 Before either 16.1 or 16.2 should be specced and scheduled:
 
-1. **Accuracy plateau.** ✅ All six indicator/feature specs (bid-ask-spread, OFI momentum, dynamic MicroCVD, VPFR-lite v2, swing pivots, settings-exposure) shipped 2026-04-29. Engine verdict accuracy must now stabilise across 100+ live runs before further structural changes.
+1a. **Indicator/feature specs shipped.** ✅ All six (bid-ask-spread, OFI momentum, dynamic MicroCVD, VPFR-lite v2, swing pivots, settings-exposure) shipped 2026-04-29.
+1b. **Accuracy plateau.** ⏳ Engine verdict accuracy must stabilise across 100+ live runs before further structural changes. Calibration accumulation begins after the v0.3 CSV expansion ships (`docs/analysis-log-csv-expansion-proposal.md`).
 2. **Settings exposure pass complete.** ✅ `settings-exposure-pass-proposal.md` shipped 2026-04-29 (v17). All 19 formerly-hardcoded scoring literals now reachable through `settings.json`. Auto-tweaker has the full surface area to operate on.
 3. **CalibrationReport READY.** ≥300 rows, ≥3 sessions, ≥3 regimes covered, ≥2 liquidation events. Without this, the failure-rate trigger is computed on too small a sample to be trustworthy.
 4. **CSV columns expanded.** `VerdictContext`, `FundingMomentum`, `OiCvdPass2bOutcome` columns added (currently in Section 12 backlog). The auto-tweaker reads these to diagnose failure modes.
