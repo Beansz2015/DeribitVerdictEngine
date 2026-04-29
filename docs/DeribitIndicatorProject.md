@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-29 | Current version: v17 — settings-exposure pass on top of swing-pivot detection (v16)**
+**Last updated: 2026-04-30 | Current version: v18 — API resilience pass (retry + skip-on-failure)**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 
@@ -61,7 +61,7 @@ are all part of the scoring pipeline and described in detail below.
 | `OiSnapshot.vb` | OI ring-buffer helper |
 | `AutoRunTimer.vb` | IAutoRunTimer interface + WinFormsAutoRunTimer impl |
 | `Program.vb` | Entry point |
-| `settings.json` | v17 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, `regime_weights`, `indicators.swing`, and new scoring sub-blocks (`regime_max_score`, `tier_floor`, `context_tag_thresholds`). v15 was a cleanup pass; v16 added swing pivot config; v17 lifted 19 hardcoded literals to settings. |
+| `settings.json` | v18 — all tunable parameters incl. `indicators.funding`, `indicators.oi_cvd_cross`, `session_volume`, `regime_weights`, `indicators.swing`, scoring sub-blocks, and new `network` block (v18). v15 was a cleanup pass; v16 added swing pivot config; v17 lifted 19 hardcoded literals to settings; v18 added API resilience config. |
 | `MainForm.Designer.vb` | Auto-generated WinForms designer (do not edit) |
 | `MainForm.resx` | Form resources |
 
@@ -107,6 +107,7 @@ are all part of the scoring pipeline and described in detail below.
 | `docs/vpfr-lite-v2-proposal.md` | Spec: VPFR-lite v2 (VAH/VAL + nearest HVN/LVN) — ✅ IMPLEMENTED |
 | `docs/swing-pivot-proposal.md` | Spec: Swing pivot detection (5m + 15m) — ✅ IMPLEMENTED |
 | `docs/settings-exposure-pass-proposal.md` | Spec: Settings exposure pass (19 literals → settings.json) — ✅ IMPLEMENTED |
+| `docs/api-resilience-pass-proposal.md` | Spec: API resilience pass (retry + skip-on-failure) — ✅ IMPLEMENTED |
 | `docs/bbw-scoring-proposal.md` | Historical |
 | `docs/bbw-scoring-response.md` | Historical |
 | `docs/dual-scoring-fix-proposal.md` | Historical |
@@ -182,10 +183,10 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v17** (settings-exposure pass — 19 hardcoded literals externalised; no behavioural change at defaults).
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v18** (API resilience pass — `network` block added; no scoring/indicator change).
 
 ```
-settings.json (v17)
+settings.json (v18)
   indicators:
     rsi:           { period (9), overbought (60), oversold (40),
                      partial_overbought (55), partial_oversold (45),
@@ -287,7 +288,13 @@ settings.json (v17)
     enabled: true
     trending:    { alignment_bonus (1), conflict_penalty (1) }
     range_bound: { alignment_bonus (1), conflict_penalty (1) }
+  network:                          ← v18: API resilience config
+    request_timeout_seconds (15)    ← per-call HttpClient timeout (was 10s hardcoded)
+    retry_count (1)                 ← additional retries on 5xx / timeout / network drop
+    retry_backoff_ms (1000)         ← delay between retries in ms
 ```
+
+**v18 notes (API resilience pass).** `DeribitClient` wraps all five `GetXxxAsync` methods with `ExecuteWithRetry`: retry-once with 1s backoff on transient failures (5xx, timeout, network drop); return `Nothing` on hard failure (4xx, JSON parse, retries exhausted). `GetFundingRateAsync` return type changed `Double` → `Double?`; `GetBookSummaryAsync` value tuple → nullable value tuple. `RunAnalysisAsync` validates all required fetches after `Task.WhenAll`; if any are `Nothing`, renders `ANALYSIS SKIPPED: <reason>`, increments `_skipCount`, and returns without scoring or writing a CSV row. 15m cache preserved on fetch failure — stale data kept for MTF gate. Skip counter shown in status bar when > 0. No scoring change. No CSV schema change.
 
 **v17 notes (settings-exposure pass).** All new keys default to exactly the previously-hardcoded values — no behavioural change. Keys added: `rsi.pass2c_midline`, `bbw.series_window_multiplier`, `bbw.squeeze_percentile`, `donchian.quartile_pct`, `cvd.late_segment_weight`, `cvd.early_segment_weight`, `ttm.sma_period`, `ttm.lin_reg_period`, `scoring.regime_max_score`, `scoring.tier_floor`, `scoring.context_tag_thresholds`.
 
@@ -474,6 +481,7 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-30** | [API resilience pass] `settings.json` bumped v17 → v18. Spec: `docs/api-resilience-pass-proposal.md`. Added `ExecuteWithRetry` private helper to `DeribitClient`: retry-once with 1s backoff on transient failures (HTTP 5xx, `TaskCanceledException`, network errors); return `Nothing` on hard failure (4xx, JSON parse, retries exhausted). VB.NET `Await`-in-`Catch` restriction handled via `needsDelay` flag set inside catch, awaited after. All 5 public `GetXxxAsync` methods wrapped. `GetFundingRateAsync` return type `Double` → `Double?`; `GetBookSummaryAsync` value tuple → nullable value tuple. `HttpClient.Timeout` now reads `cfg.Network.RequestTimeoutSeconds` (default 15s; was 10s hardcoded). `RunAnalysisAsync`: 15m cache preserved on fetch failure (stale MTF data preferred over cold-start Nothing); skip validation block after `Task.WhenAll` — if any required fetch is `Nothing`, renders `ANALYSIS SKIPPED: <reason>`, increments `_skipCount`, returns without scoring or CSV write; `fundingRate.Value` / `bookSummary.Value.*` unwrapped post-skip-check. `_skipCount` field added to `MainForm_Layout`; `UpdateLogInfo` shows `Skipped: N` suffix when > 0. `NetworkSettings` class + `Network` property added to `EngineSettings`. `network` block added to `settings.json`: `request_timeout_seconds` (15), `retry_count` (1), `retry_backoff_ms` (1000). No scoring change. No CSV schema change. No indicator change. Smoke test passed 2026-04-30. |
 | **2026-04-29** | [settings-exposure pass] `settings.json` bumped v16 → v17. Spec #6. Lifted 19 hardcoded scoring literals to `settings.json` — zero behaviour change at defaults. New keys: `rsi.pass2c_midline` (50.0), `bbw.series_window_multiplier` (5), `bbw.squeeze_percentile` (0.20), `donchian.quartile_pct` (0.25), `cvd.late_segment_weight` (2.0), `cvd.early_segment_weight` (1.0), `ttm.sma_period` (20), `ttm.lin_reg_period` (7), `scoring.regime_max_score.*`, `scoring.tier_floor.*`, `scoring.context_tag_thresholds.*`. Updated call sites: `CalcBBW`, `CalcTTMSqueeze`, `CalcCVD` all take new Optional params wired from cfg. `RegimeMaxScore()` and `TierFloor()` in `ScoringEngine_Helpers` now read from cfg instead of hardcoded literals. `CalcVerdictContext()` decay ratio, fading count, struct/flow weak thresholds all from `cfg.Scoring.ContextTagThresholds`. Pass 2c RSI midline from `cfg.Indicators.RSI.Pass2cMidline`. Closes the auto-tweaking audit prerequisite (Section 16.3 item 2). |
 | **2026-04-29** | [swing pivot detection] `settings.json` bumped v15 → v16. Spec #5. Added `CalcSwingPivots()` to `Indicators_Structure.vb`: confirmed pivot requires N bars left and right all strictly lower/higher; walks backward from scanEnd to find most recent pair. Added 8 swing pivot fields to `IndicatorResults` (`LastSwingHigh/Low5m/15m`, `SwingTargetLong/Short`, `SwingStopLong/Short`). Called from `MainForm_Analysis` for 5m (primary) and 15m (context) candles; direction-aware bookkeeping computed inline. **Layer 1.5** in `CalcHoldStatus`: structural-break exit when price closes at/below prior swing low (long) or at/above prior swing high (short). **3-tier Step 5b target cap** in `Calculate()`: swing target → nearest HVN → POC (winner = closest to entry). **`CalcVerdictContext` structural check**: fires STRUCTURALLY_WEAK when swing data exists but no clean target+stop pair. **Structural rows** added to `RenderOutputHeader()`: long and short stop/entry/target R:R display (cyan for full pair, dim for partial). Config: `indicators.swing` block. |
 | **2026-04-29** | [specs #1–#4] Spec #1: bid-ask spread microstructure signal. `SpreadBps` added to `IndicatorResults`; WIDE-spread entry-side penalty in Step 2 from `cfg.Indicators.Spread.WidePenaltyThresholdBps`; `indicators.spread` block in `settings.json`. Spec #2: OFI momentum. `OFIMomentum` (RISING/FALLING/FLAT) added to `IndicatorResults`; `CalcOFIMomentum()` added to `Indicators_OrderFlow`; `_ofiHistory` ring buffer (OFIHistoryMax=10) in `MainForm_Layout`; modifier applied in Step 2 alongside OFI level signal; `ofi.momentum_window` / `ofi.momentum_threshold` in `settings.json`. Spec #3: dynamic MicroCVD accelThreshold. `CalcMicroCVD` now computes `totalWindowUsd × accel_pct_of_window` with `accel_threshold` as static-anchored floor; `microCvd.accel_pct_of_window` added to `settings.json`. Spec #4: VPFR-lite v2. `CalcVPFRLite` updated to compute VAH/VAL (70% of total volume within the profile) and nearest HVN/LVN walls; adds `VPFRVAH`, `VPFRVAL`, `VPFRNearestHvnAbove`, `VPFRNearestHvnBelow` to `IndicatorResults`; 2-tier Step 5b cap replaced by 3-tier arbitration (prerequisite for spec #5). |

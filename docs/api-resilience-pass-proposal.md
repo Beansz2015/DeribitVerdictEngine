@@ -1,6 +1,6 @@
 # Spec: API Resilience Pass — Retry + Skip-on-Failure
 **Proposed:** 2026-04-29
-**Status:** APPROVED 2026-04-29
+**Status:** ✅ IMPLEMENTED 2026-04-30
 **Target files:** `DeribitClient.vb`, `Core/Settings/EngineSettings.vb`, `UI/MainForm_Analysis.vb`, `UI/MainForm_Layout.vb`, `UI/MainForm_Render_Header.vb`, `settings.json`
 
 This is a **resilience-only pass**. No scoring change. No new indicators. No CSV schema change. Hardens the REST fetch layer so transient Deribit/Cloudflare failures (HTTP 5xx, timeouts, network blips) don't abort the analysis with a stack trace and don't waste calibration data.

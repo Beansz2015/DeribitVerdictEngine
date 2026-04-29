@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-29 | App version: v17 — settings-exposure pass on top of swing-pivot detection (v16)**
+**Last updated: 2026-04-30 | App version: v18 — API resilience pass (retry + skip-on-failure)**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -14,13 +14,16 @@ DeribitVerdictEngine/
 ├── MainForm.Designer.vb                Auto-generated WinForms designer (do not edit)
 ├── MainForm.resx                       Form resource file
 │
-├── DeribitClient.vb                    REST API layer — all Deribit HTTP calls
+├── DeribitClient.vb                    REST API layer — all Deribit HTTP calls;
+│                                       ExecuteWithRetry wrapper: retry-once on 5xx/timeout,
+│                                       return Nothing on hard failure. GetFundingRateAsync →
+│                                       Double?; GetBookSummaryAsync → nullable value tuple.
 ├── DynamicNorms.vb                     Live adaptive thresholds (ATR scale, vol, VWAP dev);
 │                                       now also applies session-aware volume multipliers
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
-├── settings.json                       All tunable parameters v17 (no recompile needed)
+├── settings.json                       All tunable parameters v18 (no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
@@ -169,15 +172,22 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         │  MTF TTL check: if _mtfCandles15m is stale (> MTF_TTL_SECONDS),
         │  fetch 15m candles and update _mtfLastFetchTime. Otherwise reuse cached list.
         │
-        ├─► DeribitClient.GetCandlesAsync("1", 250)      → candles1m
-        ├─► DeribitClient.GetCandlesAsync("5", 210)      → candles5m
-        ├─► DeribitClient.GetCandlesAsync("15", 70)      → candles15m  [cached/TTL]
-        ├─► DeribitClient.GetFundingRateAsync()          → fundingRate
-        ├─► DeribitClient.GetBookSummaryAsync()          → bookSummary
-        ├─► DeribitClient.GetOrderBookAsync(10)          → orderBook
-        └─► DeribitClient.GetRecentTradesAsync(100)      → recentTrades
+        ├─► DeribitClient.GetCandlesAsync("1", 250)      → candles1m      (List or Nothing)
+        ├─► DeribitClient.GetCandlesAsync("5", 210)      → candles5m      (List or Nothing)
+        ├─► DeribitClient.GetCandlesAsync("15", 70)      → candles15m     [cached/TTL]
+        ├─► DeribitClient.GetFundingRateAsync()          → fundingRate    (Double? or Nothing)
+        ├─► DeribitClient.GetBookSummaryAsync()          → bookSummary    (tuple? or Nothing)
+        ├─► DeribitClient.GetOrderBookAsync(10)          → orderBook      (snapshot or Nothing)
+        └─► DeribitClient.GetRecentTradesAsync(100)      → recentTrades   (List or Nothing)
                     │  (all fetched in parallel via Task.WhenAll;
-                    │   15m only included when cache is stale)
+                    │   15m only included when cache is stale;
+                    │   each call wrapped in ExecuteWithRetry — retry-once on 5xx/timeout,
+                    │   return Nothing on hard failure; 15m cache preserved on fetch failure)
+                    │
+                    │  Resilience check after Task.WhenAll:
+                    │  if any required result is Nothing → render ANALYSIS SKIPPED,
+                    │  increment _skipCount, return (no scoring, no CSV row).
+                    │  15m failure alone does not skip — stale cache kept for MTF gate.
                     ▼
         IndicatorResults  r  (filled field by field)
         ├─ r.CurrentPrice       = candles1m.Last().Close
@@ -375,8 +385,10 @@ SettingsLoader.Current As EngineSettings
     │      ├─ enabled
     │      ├─ trending    { alignment_bonus, conflict_penalty }
     │      └─ range_bound { alignment_bonus, conflict_penalty }
-    └─ SwingSettings       → pivot_wing_5m, lookback_bars_5m,
-                             pivot_wing_15m, lookback_bars_15m
+    ├─ SwingSettings       → pivot_wing_5m, lookback_bars_5m,
+    │                        pivot_wing_15m, lookback_bars_15m
+    └─ NetworkSettings     → request_timeout_seconds (HttpClient.Timeout, set once at
+                             DeribitClient static ctor), retry_count, retry_backoff_ms
                     │
                     ▼
 DynamicNorms.Compute(...)
@@ -400,6 +412,7 @@ RunScoringPipeline(...)
 | Decision | Rationale |
 |---|---|
 | REST polling (not WebSocket) | Simpler implementation; adequate for 1m candle resolution. WebSocket is the highest-impact next upgrade. |
+| API resilience — retry + skip (v18) | Transient Deribit/Cloudflare failures (HTTP 525, timeout) observed during AFK auto-run. `ExecuteWithRetry` in `DeribitClient`: retry-once on 5xx/timeout, return `Nothing` on hard failure. `RunAnalysisAsync` skip-on-any-failure rather than degraded-mode — cleaner calibration CSV, simpler code. 15m failure does not skip: stale MTF cache data is better than no data (15m candles change slowly). Retry-once vs exponential backoff: single retry catches the most common transient flakes without risking overlap with the next auto-run cycle. Both layers preserve the same `GetXxxAsync` call-site contract so WebSocket migration can replace the implementation without changing call sites. |
 | 15m MTF cached with TTL | 15m candles change slowly; re-fetching every 10s run wastes API quota. TTL=60s balances freshness vs. rate limits. |
 | Dual-session VWAP anchor | BTC perpetual has meaningful session breaks at 00:00 UTC and 13:30 UTC. Single-anchor VWAP deviates badly after Asian/EU handoff. |
 | VerdictContext (Step 5b) | WEAK verdicts have three distinct structural causes that require different discretionary responses. Context tag surfaces the cause without changing the score. Zero new data fetches; reads already-computed state only. |
