@@ -1,8 +1,12 @@
 {
-  "version": 19,
+  "version": 20,
   "last_modified": "2026-04-30T00:00:00Z",
-  "modified_by": "calibration-tuning-pass",
+  "modified_by": "calibration-tuning-pass-2",
   "change_log": [
+    "v20: [calibration-tuning-2] OI threshold further lowered based on 499-row post-v19 dataset.",
+    "     indicators.OI.change_threshold_pct: 0.003 -> 0.002 (effective 0.3% -> 0.2%).",
+    "     v19 threshold was still above the observed 15m peak of ~0.23% in the new dataset.",
+    "     Funding thresholds unchanged -- BTC is in a near-zero basis regime; thresholds correct.",
     "v19: [calibration-tuning] Empirical threshold recalibration from 618-row CalibrationReport audit.",
     "     Five classifiers were stuck on a single value due to threshold mismatches vs observed BTC scale.",
     "     scoring.funding_high_positive: 0.0003 -> 0.00003 (3 bp -> 0.3 bp).",
@@ -150,7 +154,7 @@
     "VWAPDynamic": { "dev_clamp_min": 0.30, "dev_clamp_max": 3.0,
                      "static_fallback": 1.5 },
     "Liquidations": { "large_liq_size": 200.0, "dominance_ratio": 2.0 },
-    "OI":       { "neutral_band_pct": 0.05, "change_threshold_pct": 0.003 },
+    "OI":       { "neutral_band_pct": 0.05, "change_threshold_pct": 0.002 },
     "DMI":      { "period": 9 },
     "CVD":      { "slope_min_usd": 12000.0,
                   "slope_pct_of_value": 0.01,
