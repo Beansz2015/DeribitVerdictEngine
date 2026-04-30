@@ -128,8 +128,8 @@ Partial Public Class MainForm
         r.ROC = If(rocSeries.Count > 0, rocSeries.Last(), 0)
         If rocSeries.Count >= 2 Then
             Dim delta As Double = rocSeries.Last() - rocSeries(rocSeries.Count - 2)
-            Dim slopeSens As Double = cfg.Indicators.ROC.SlopeSensitivity
-            r.ROCSlope = If(delta > slopeSens, "RISING", If(delta < -slopeSens, "FALLING", "FLAT"))
+            Dim slopeDelta As Double = cfg.Indicators.ROC.SlopeDeltaThreshold
+            r.ROCSlope = If(delta > slopeDelta, "RISING", If(delta < -slopeDelta, "FALLING", "FLAT"))
         Else
             r.ROCSlope = "FLAT"
         End If
@@ -348,7 +348,9 @@ Partial Public Class MainForm
                               cfg.Indicators.RSI.DivergencePriceGate,
                               cfg.Indicators.RSI.DivergenceRsiDelta,
                               pivotWing:=cfg.Indicators.RSI.PivotWing,
-                              lookbackBars:=cfg.Indicators.RSI.LookbackBars)
+                              lookbackBars:=cfg.Indicators.RSI.LookbackBars,
+                              overboughtThreshold:=cfg.Indicators.RSI.DivergenceOverboughtThreshold,
+                              oversoldThreshold:=cfg.Indicators.RSI.DivergenceOversoldThreshold)
 
         ' Swing pivots on 5m -- structural reference for target/stop arbitration
         IndicatorEngine.CalcSwingPivots(candles5m,

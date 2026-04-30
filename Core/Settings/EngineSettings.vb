@@ -159,7 +159,7 @@ Public Class RsiSettings
     <JsonPropertyName("partial_oversold")>   Public Property PartialOversold    As Double  = 45.0
     <JsonPropertyName("partial_overbought")> Public Property PartialOverbought  As Double  = 55.0
     <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double = 0.001
-    <JsonPropertyName("divergence_rsi_delta")>  Public Property DivergenceRsiDelta  As Double = 2.0
+    <JsonPropertyName("divergence_rsi_delta")>  Public Property DivergenceRsiDelta  As Double = 5.0
     ''' <summary>[P13] v0.50: RSI level above which BEARISH div triggers long penalty. Default 65.</summary>
     <JsonPropertyName("div_penalty_rsi_high")> Public Property DivPenaltyRsiHigh As Double = 65.0
     ''' <summary>[P13] v0.50: RSI level below which BULLISH div triggers short penalty. Default 35.</summary>
@@ -170,12 +170,27 @@ Public Class RsiSettings
     <JsonPropertyName("lookback_bars")>        Public Property LookbackBars      As Integer = 20
     ''' <summary>[settings-exposure] RSI midline for Pass 2c RANGE_BOUND alignment check. Default 50.</summary>
     <JsonPropertyName("pass2c_midline")>       Public Property Pass2cMidline     As Double  = 50.0
+    ''' <summary>[v20] Pivot RSI must be at or above this for BEARISH divergence to fire. Default 65.0.</summary>
+    <JsonPropertyName("divergence_overbought_threshold")> Public Property DivergenceOverboughtThreshold As Double = 65.0
+    ''' <summary>[v20] Pivot RSI must be at or below this for BULLISH divergence to fire. Default 35.0.</summary>
+    <JsonPropertyName("divergence_oversold_threshold")>   Public Property DivergenceOversoldThreshold   As Double = 35.0
 End Class
 
 Public Class RocSettings
-    <JsonPropertyName("period")>            Public Property Period           As Integer = 9
-    <JsonPropertyName("slope_sensitivity")> Public Property SlopeSensitivity As Double  = 0.1
-    <JsonPropertyName("series_lookback")>   Public Property SeriesLookback   As Integer = 3
+    <JsonPropertyName("period")>                 Public Property Period               As Integer = 9
+    ''' <summary>
+    ''' [v20] Threshold for ROCSlope delta classification (ROC change between consecutive samples).
+    ''' delta > this → RISING; delta &lt; -this → FALLING; else FLAT. Default 0.05.
+    ''' Was conflated with MagnitudeThreshold under slope_sensitivity in v18/v19.
+    ''' </summary>
+    <JsonPropertyName("slope_delta_threshold")>  Public Property SlopeDeltaThreshold  As Double  = 0.05
+    ''' <summary>
+    ''' [v20] Threshold for ROC magnitude in partial scoring (rocPartialLong/Short),
+    ''' Pass 2c regime-alignment activation, and spread penalty direction. Default 0.1.
+    ''' Was conflated with SlopeDeltaThreshold under slope_sensitivity in v18/v19.
+    ''' </summary>
+    <JsonPropertyName("magnitude_threshold")>    Public Property MagnitudeThreshold   As Double  = 0.1
+    <JsonPropertyName("series_lookback")>        Public Property SeriesLookback       As Integer = 3
 End Class
 
 Public Class VwapSettings
