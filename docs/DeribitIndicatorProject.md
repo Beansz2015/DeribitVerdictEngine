@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-04-30 | Current version: v18 — API resilience pass (retry + skip-on-failure)**
+**Last updated: 2026-04-30 | Current version: v21 — RSI divergence algorithm fix + ROC slope_sensitivity split**
 
 This document is the authoritative handover for any new AI conversation continuing this project.
 
@@ -108,6 +108,8 @@ are all part of the scoring pipeline and described in detail below.
 | `docs/swing-pivot-proposal.md` | Spec: Swing pivot detection (5m + 15m) — ✅ IMPLEMENTED |
 | `docs/settings-exposure-pass-proposal.md` | Spec: Settings exposure pass (19 literals → settings.json) — ✅ IMPLEMENTED |
 | `docs/api-resilience-pass-proposal.md` | Spec: API resilience pass (retry + skip-on-failure) — ✅ IMPLEMENTED |
+| `docs/v19-calibration-tuning-pass-proposal.md` | Spec: v19 calibration tuning — funding/OI/ROC thresholds + liq window — ✅ IMPLEMENTED |
+| `docs/v20-rsi-roc-algorithm-fixes-proposal.md` | Spec: v20/v21 RSI divergence semantic rewrite + ROC slope_sensitivity split — ✅ IMPLEMENTED |
 | `docs/bbw-scoring-proposal.md` | Historical |
 | `docs/bbw-scoring-response.md` | Historical |
 | `docs/dual-scoring-fix-proposal.md` | Historical |
@@ -122,9 +124,9 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 ### Core Signals (always scored)
 | Indicator | Method | Config keys |
 |---|---|---|
-| ROC(9) | CalcROCSeries | `cfg.Indicators.ROC.SlopeSensitivity` (0.1) — gates partial scoring and Pass 2c ROC-active check |
+| ROC(9) | CalcROCSeries | `cfg.Indicators.ROC.SlopeDeltaThreshold` (0.05) — bar-to-bar delta for RISING/FALLING/FLAT classification. `cfg.Indicators.ROC.MagnitudeThreshold` (0.1) — gates partial ROC scoring and Pass 2c ROC-active check. Split in v21 (was single `SlopeSensitivity`). |
 | RSI(9) | CalcRSI | `Overbought` (60) / `Oversold` (40) / `PartialOverbought` (55) / `PartialOversold` (45) — v14 widened the 45–55 neutral dead-band to stop RSI voting on every tick off 50 |
-| RSI Divergence | CalcRSIDivergence | −1 long: BEARISH + RSI > `DivPenaltyRsiHigh` (65); −1 short: BULLISH + RSI < `DivPenaltyRsiLow` (35). `PivotWing` (2), `LookbackBars` (20) from cfg. |
+| RSI Divergence | CalcRSIDivergence | −1 long: BEARISH + RSI > `DivPenaltyRsiHigh` (65); −1 short: BULLISH + RSI < `DivPenaltyRsiLow` (35). `PivotWing` (2), `LookbackBars` (20) from cfg. **v21 semantic rewrite:** fires BEARISH only when current price is AT OR ABOVE prior pivot (canonical higher-high pattern); prior pivot must have been overbought (`DivergenceOverboughtThreshold` ≥ 65); most-recent pivot used rather than highest in lookback. `DivergenceRsiDelta` raised 2.0 → 5.0. Expected NONE rate rises from ~20% to ~80-90%. |
 | DMI/ADX | CalcDMI | 5m candles. `cfg.Indicators.ADX.TrendThreshold` (25) |
 | Volume | CalcVolumeSMA | SMA-9; H/M thresholds from DynamicNorms, now session-adjusted via `session_volume` config. Mid-tier directional partial via cross-confirm. |
 
@@ -183,18 +185,23 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 ## 6. settings.json Structure
 
-`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v18** (API resilience pass — `network` block added; no scoring/indicator change).
+`SettingsLoader.Initialise()` called in `MainForm.New()`. `SettingsLoader.Current` returns the singleton. Current file version: **v21** (RSI divergence algorithm fix + ROC slope_sensitivity split).
 
 ```
-settings.json (v18)
+settings.json (v21)
   indicators:
     rsi:           { period (9), overbought (60), oversold (40),
                      partial_overbought (55), partial_oversold (45),
-                     divergence_price_gate, divergence_rsi_delta,
+                     divergence_price_gate, divergence_rsi_delta (5.0),  ← v21: was 2.0
+                     divergence_overbought_threshold (65.0),             ← v21: new key
+                     divergence_oversold_threshold (35.0),               ← v21: new key
                      div_penalty_rsi_high (65), div_penalty_rsi_low (35),
                      pivot_wing (2), lookback_bars (20),
                      pass2c_midline (50.0) }            ← v17: was hardcoded 50
-    roc:           { period (9), slope_sensitivity (0.1), series_lookback (3) }
+    roc:           { period (9),
+                     slope_delta_threshold (0.05),       ← v21: replaces slope_sensitivity
+                     magnitude_threshold (0.1),          ← v21: new key for partial + Pass 2c
+                     series_lookback (3) }
     adx:           { period (9), trend_threshold (25), range_threshold (20) }
     vwap:          { session2_start_hour (13), session2_start_minute (30),
                      warmup_candles (15) }
@@ -218,7 +225,7 @@ settings.json (v18)
     vwapDynamic:   { dev_clamp_min (0.30), dev_clamp_max (3.0),
                      static_fallback (1.5) }
     liquidations:  { large_liq_size (200), dominance_ratio (2.0) }
-    oi:            { neutral_band_pct (0.05), change_threshold_pct (0.01) }
+    oi:            { neutral_band_pct (0.05), change_threshold_pct (0.002) }  ← v20: was 0.01→0.003 (v19), then 0.002 (v20)
     dmi:           { period (9) }
     cvd:           { slope_min_usd (12000), slope_pct_of_value (0.01),
                      divergence_price_gate (0.0005), divergence_penalty (1),
@@ -235,8 +242,8 @@ settings.json (v18)
     swing:         { pivot_wing_5m (3), lookback_bars_5m (30),  ← spec #5
                      pivot_wing_15m (2), lookback_bars_15m (20) }
     funding:       { momentum_enabled (true), momentum_window (3),
-                     momentum_threshold (0.0001), momentum_amplify (1),
-                     momentum_soften (1) }
+                     momentum_threshold (0.000005),         ← v19: was 0.0001 (10 bp → 0.5 bp)
+                     momentum_amplify (1), momentum_soften (1) }
     oi_cvd_cross:  { enabled (true), upgrade_bonus (1), conflict_penalty (1) }
   session_volume:
     enabled: true
@@ -253,8 +260,8 @@ settings.json (v18)
   auto_run:        { enabled (false), interval_minutes (1), interval_seconds (0) }
   scoring:
     verdict_strong_pct (0.70) / verdict_med_pct (0.53) / verdict_weak_pct (0.35)
-    funding_high_positive (0.0003) / funding_low_positive (0.00005)
-    funding_high_negative (-0.0003) / funding_low_negative (-0.00005)
+    funding_high_positive (0.00003) / funding_low_positive (0.000005)    ← v19: was ±3bp/±0.5bp
+    funding_high_negative (-0.00003) / funding_low_negative (-0.000005)
     bbw_squeeze_penalty (2)
     liq_standard_penalty (1) / liq_large_penalty (2)
     funding_high_penalty (2) / funding_high_boost (1) / funding_low_penalty (1)
@@ -294,6 +301,12 @@ settings.json (v18)
     retry_backoff_ms (1000)         ← delay between retries in ms
 ```
 
+**v21 notes (RSI divergence + ROC split).** `CalcRSIDivergence` semantically rewritten: BEARISH now fires when current price is AT OR ABOVE prior pivot (canonical higher-high pattern), prior pivot's RSI must have been ≥ `DivergenceOverboughtThreshold` (65) to qualify as exhaustion, and the most-recent confirmed pivot is used rather than the highest in the lookback. Mirror fix for BULLISH. `DivergenceRsiDelta` raised 2.0 → 5.0 to require meaningful RSI compression. Expected effect: NONE rate rises from ~20% to ~80–90%. `ROC.slope_sensitivity` split into `slope_delta_threshold` (0.05, for RISING/FALLING/FLAT bar-to-bar classification) and `magnitude_threshold` (0.1, for partial ROC scoring and Pass 2c ROC-active check). Old key removed from `RocSettings` and `settings.json`. `settings.json` bumped v20 → v21.
+
+**v20 notes (OI threshold recalibration).** Post-v19 499-row dataset showed `OISignal` still 100% NEUTRAL: the effective threshold (0.003 × 100 = 0.3%) was above the observed 15m OI peak of ~0.23%. `indicators.OI.change_threshold_pct` lowered 0.003 → 0.002 (effective 0.2%). Quiet-session noise ~0.01–0.015% → 10:1 signal/noise separation. `settings.json` bumped v19 → v20.
+
+**v19 notes (calibration tuning pass).** Six classifiers stuck on a single value across 618 rows due to threshold mismatches vs observed BTC-PERPETUAL scale. Recalibrated: `scoring.funding_high_positive/negative` ±3 bp → ±0.3 bp; `scoring.funding_low_positive/negative` ±0.5 bp → ±0.05 bp; `indicators.funding.momentum_threshold` 10 bp → 0.5 bp; `indicators.OI.change_threshold_pct` 1.0% → 0.3%; `indicators.ROC.slope_sensitivity` 0.1 → 0.05. `GetRecentTradesAsync(100)` → `GetRecentTradesAsync(500)` to widen liquidation detection window from ~60 s to ~5 min. `settings.json` bumped v18 → v19.
+
 **v18 notes (API resilience pass).** `DeribitClient` wraps all five `GetXxxAsync` methods with `ExecuteWithRetry`: retry-once with 1s backoff on transient failures (5xx, timeout, network drop); return `Nothing` on hard failure (4xx, JSON parse, retries exhausted). `GetFundingRateAsync` return type changed `Double` → `Double?`; `GetBookSummaryAsync` value tuple → nullable value tuple. `RunAnalysisAsync` validates all required fetches after `Task.WhenAll`; if any are `Nothing`, renders `ANALYSIS SKIPPED: <reason>`, increments `_skipCount`, and returns without scoring or writing a CSV row. 15m cache preserved on fetch failure — stale data kept for MTF gate. Skip counter shown in status bar when > 0. No scoring change. No CSV schema change.
 
 **v17 notes (settings-exposure pass).** All new keys default to exactly the previously-hardcoded values — no behavioural change. Keys added: `rsi.pass2c_midline`, `bbw.series_window_multiplier`, `bbw.squeeze_percentile`, `donchian.quartile_pct`, `cvd.late_segment_weight`, `cvd.early_segment_weight`, `ttm.sma_period`, `ttm.lin_reg_period`, `scoring.regime_max_score`, `scoring.tier_floor`, `scoring.context_tag_thresholds`.
@@ -321,7 +334,7 @@ Session volume norms scale volume thresholds by UTC session bucket so `VolHighTh
 - **Step 2:** Score signals into ScoreState → all thresholds from cfg. Includes bid-ask spread WIDE-spread penalty and OFI momentum modifier.
 - **Pass 2:** Upgrade partials on cross-category confirmation; OBV upgrade blocked on adverse divergence
 - **Pass 2b:** OI × CVD cross-confirm gate — if OI full signal (or upgraded partial) and CVD direction+sign agree, apply `UpgradeBonus`; if full OI directly conflicts with CVD, apply `ConflictPenalty`; partial OI conflict is non-penalising
-- **Pass 2c:** Regime alignment gate — suppressed in TRANSITIONAL and when LongScore=ShortScore. TRENDING checks EMA ribbon + ROC (active when Abs(ROC)≥SlopeSensitivity) + CVD slope+sign. RANGE_BOUND checks VWAP dev (active only outside warmup) + RSI(9) vs `cfg.Indicators.RSI.Pass2cMidline` (50) + Donchian(20). All active aligned → `+AlignmentBonus` (capped at regimeMax). All conflict → `-ConflictPenalty`.
+- **Pass 2c:** Regime alignment gate — suppressed in TRANSITIONAL and when LongScore=ShortScore. TRENDING checks EMA ribbon + ROC (active when Abs(ROC)≥`MagnitudeThreshold`) + CVD slope+sign. RANGE_BOUND checks VWAP dev (active only outside warmup) + RSI(9) vs `cfg.Indicators.RSI.Pass2cMidline` (50) + Donchian(20). All active aligned → `+AlignmentBonus` (capped at regimeMax). All conflict → `-ConflictPenalty`.
 - **Step 3:** Baseline funding-rate modifier
 - **Step 3b:** Funding-momentum modifier — can soften crowding penalty when momentum is falling, or amplify it when momentum is rising into crowding
 - **Step 4:** Regime veto / TRANSITIONAL ADX penalty
@@ -481,6 +494,9 @@ and trade stream vs. REST snapshot polling), which would remove the fundamental 
 
 | Version | Key Changes |
 |---|---|
+| **2026-04-30** | [RSI divergence + ROC split] `settings.json` bumped v20 → v21. Spec: `docs/v20-rsi-roc-algorithm-fixes-proposal.md`. **Fix 1 — CalcRSIDivergence semantic rewrite.** Three bugs corrected: (a) direction inverted — BEARISH now requires current price AT OR ABOVE prior pivot (higher-high pattern), not below it; (b) overbought/oversold gate added — prior pivot RSI must have been ≥ 65 / ≤ 35; (c) most-recent pivot scan replaces highest/lowest-in-lookback. `DivergenceRsiDelta` raised 2.0 → 5.0. Expected NONE rate rises from ~20% to ~80–90%. New cfg keys: `RSI.divergence_overbought_threshold` (65), `RSI.divergence_oversold_threshold` (35). **Fix 2 — ROC slope_sensitivity split.** `SlopeSensitivity` replaced by `SlopeDeltaThreshold` (0.05, slope classification) and `MagnitudeThreshold` (0.1, partial scoring + Pass 2c activation). Old key removed. |
+| **2026-04-30** | [OI threshold recalibration] `settings.json` bumped v19 → v20. Post-v19 499-row dataset showed `OISignal` 100% NEUTRAL — effective threshold 0.3% was above the observed 15m peak (~0.23%). `indicators.OI.change_threshold_pct` 0.003 → 0.002 (effective 0.3% → 0.2%). Single value change, no spec. |
+| **2026-04-30** | [Calibration tuning pass] `settings.json` bumped v18 → v19. Spec: `docs/v19-calibration-tuning-pass-proposal.md`. Six CSV columns stuck on a single value across 618 rows. Recalibrated all to observed BTC-PERPETUAL scale: funding band thresholds ×10 lower (±3 bp → ±0.3 bp / ±0.5 bp → ±0.05 bp); `funding.momentum_threshold` 10 bp → 0.5 bp; `OI.change_threshold_pct` 1.0% → 0.3%; `ROC.slope_sensitivity` 0.1 → 0.05. `GetRecentTradesAsync(100)` → `(500)` to widen liq detection window. No scoring logic changes. No CSV schema change. |
 | **2026-04-30** | [API resilience pass] `settings.json` bumped v17 → v18. Spec: `docs/api-resilience-pass-proposal.md`. Added `ExecuteWithRetry` private helper to `DeribitClient`: retry-once with 1s backoff on transient failures (HTTP 5xx, `TaskCanceledException`, network errors); return `Nothing` on hard failure (4xx, JSON parse, retries exhausted). VB.NET `Await`-in-`Catch` restriction handled via `needsDelay` flag set inside catch, awaited after. All 5 public `GetXxxAsync` methods wrapped. `GetFundingRateAsync` return type `Double` → `Double?`; `GetBookSummaryAsync` value tuple → nullable value tuple. `HttpClient.Timeout` now reads `cfg.Network.RequestTimeoutSeconds` (default 15s; was 10s hardcoded). `RunAnalysisAsync`: 15m cache preserved on fetch failure (stale MTF data preferred over cold-start Nothing); skip validation block after `Task.WhenAll` — if any required fetch is `Nothing`, renders `ANALYSIS SKIPPED: <reason>`, increments `_skipCount`, returns without scoring or CSV write; `fundingRate.Value` / `bookSummary.Value.*` unwrapped post-skip-check. `_skipCount` field added to `MainForm_Layout`; `UpdateLogInfo` shows `Skipped: N` suffix when > 0. `NetworkSettings` class + `Network` property added to `EngineSettings`. `network` block added to `settings.json`: `request_timeout_seconds` (15), `retry_count` (1), `retry_backoff_ms` (1000). No scoring change. No CSV schema change. No indicator change. Smoke test passed 2026-04-30. |
 | **2026-04-29** | [settings-exposure pass] `settings.json` bumped v16 → v17. Spec #6. Lifted 19 hardcoded scoring literals to `settings.json` — zero behaviour change at defaults. New keys: `rsi.pass2c_midline` (50.0), `bbw.series_window_multiplier` (5), `bbw.squeeze_percentile` (0.20), `donchian.quartile_pct` (0.25), `cvd.late_segment_weight` (2.0), `cvd.early_segment_weight` (1.0), `ttm.sma_period` (20), `ttm.lin_reg_period` (7), `scoring.regime_max_score.*`, `scoring.tier_floor.*`, `scoring.context_tag_thresholds.*`. Updated call sites: `CalcBBW`, `CalcTTMSqueeze`, `CalcCVD` all take new Optional params wired from cfg. `RegimeMaxScore()` and `TierFloor()` in `ScoringEngine_Helpers` now read from cfg instead of hardcoded literals. `CalcVerdictContext()` decay ratio, fading count, struct/flow weak thresholds all from `cfg.Scoring.ContextTagThresholds`. Pass 2c RSI midline from `cfg.Indicators.RSI.Pass2cMidline`. Closes the auto-tweaking audit prerequisite (Section 16.3 item 2). |
 | **2026-04-29** | [swing pivot detection] `settings.json` bumped v15 → v16. Spec #5. Added `CalcSwingPivots()` to `Indicators_Structure.vb`: confirmed pivot requires N bars left and right all strictly lower/higher; walks backward from scanEnd to find most recent pair. Added 8 swing pivot fields to `IndicatorResults` (`LastSwingHigh/Low5m/15m`, `SwingTargetLong/Short`, `SwingStopLong/Short`). Called from `MainForm_Analysis` for 5m (primary) and 15m (context) candles; direction-aware bookkeeping computed inline. **Layer 1.5** in `CalcHoldStatus`: structural-break exit when price closes at/below prior swing low (long) or at/above prior swing high (short). **3-tier Step 5b target cap** in `Calculate()`: swing target → nearest HVN → POC (winner = closest to entry). **`CalcVerdictContext` structural check**: fires STRUCTURALLY_WEAK when swing data exists but no clean target+stop pair. **Structural rows** added to `RenderOutputHeader()`: long and short stop/entry/target R:R display (cyan for full pair, dim for partial). Config: `indicators.swing` block. |

@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-30 | App version: v18 — API resilience pass (retry + skip-on-failure)**
+**Last updated: 2026-04-30 | App version: v21 — RSI divergence algorithm fix + ROC slope_sensitivity split**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -263,7 +263,7 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     ├─ Pass 2c: Regime alignment gate
                     │          Suppressed in TRANSITIONAL or when LongScore=ShortScore.
                     │          TRENDING: EMA ribbon + ROC (threshold-gated by
-                    │          SlopeSensitivity) + CVD slope+sign.
+                    │          MagnitudeThreshold) + CVD slope+sign.
                     │          RANGE_BOUND: VWAP dev (suppressed in warmup) +
                     │          RSI(9) vs cfg.Indicators.RSI.Pass2cMidline + Donchian(20).
                     │          All active signals aligned → +AlignmentBonus on dominant
