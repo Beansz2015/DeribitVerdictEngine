@@ -58,7 +58,7 @@ Partial Public Class MainForm
         Dim t_funding = DeribitClient.GetFundingRateAsync()
         Dim t_book    = DeribitClient.GetBookSummaryAsync()
         Dim t_ob      = DeribitClient.GetOrderBookAsync(10)
-        Dim t_trades  = DeribitClient.GetRecentTradesAsync(100)
+        Dim t_trades  = DeribitClient.GetRecentTradesAsync(500)
 
         Dim t_15m As Task(Of List(Of Candle)) = Nothing
         If mtfStale Then

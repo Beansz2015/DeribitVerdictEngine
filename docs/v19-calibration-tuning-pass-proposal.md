@@ -1,6 +1,6 @@
 # Spec: v19 Calibration Tuning Pass — Empirical Threshold Recalibration + Liq Window
 **Proposed:** 2026-04-30
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED 2026-04-30
 **Target files:** `settings.json`, `UI/MainForm_Analysis.vb`
 
 This is a **calibration adjustment pass** driven by 618 rows of live analysis data accumulated under v18. Five thresholds (settings-only) are recalibrated against observed market scale. One small code change widens the liquidation trade-detection window from 100 to 500 trades.
