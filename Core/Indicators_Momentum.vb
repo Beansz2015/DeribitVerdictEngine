@@ -155,17 +155,18 @@ Partial Public Class IndicatorEngine
     End Function
 
     ' -- RSI Divergence (pivot-based) -----------------------------------------
-    ' [P3] v0.48: Replaced rolling-average window comparison with pivot scan.
-    '   Bearish: price makes higher high (swing high) but RSI at that pivot was lower
-    '            than current RSI -- weakening momentum into the new high.
-    '   Bullish: price makes lower low (swing low) but RSI at that pivot was higher
-    '            than current RSI -- weakening selling pressure into the new low.
-    '   pivotWing: bars left and right required to confirm a swing point (default 3).
-    '   lookbackBars: window to scan for the structural pivot (default 30).
+    ' [v20] Full rewrite: canonical exhaustion divergence with overbought/oversold pivot gates.
+    '   BEARISH: walk backward to most recent confirmed swing high; pivot must have been
+    '            overbought (RSI >= overboughtThreshold); current price must be AT OR ABOVE
+    '            the pivot (testing/breaking the high); RSI must be meaningfully lower.
+    '   BULLISH: mirror — swing low, oversold pivot, current price at or below pivot, RSI higher.
+    '   Replaces v0.48 "highest pivot in lookback" approach which fired on any pullback (~80% rate).
     Public Shared Function CalcRSIDivergence(candles As List(Of Candle), period As Integer,
                                               priceGate As Double, rsiDelta As Double,
                                               Optional pivotWing As Integer = 3,
-                                              Optional lookbackBars As Integer = 30) As String
+                                              Optional lookbackBars As Integer = 30,
+                                              Optional overboughtThreshold As Double = 65.0,
+                                              Optional oversoldThreshold As Double = 35.0) As String
         Dim minNeeded As Integer = period + lookbackBars + pivotWing
         If candles.Count < minNeeded Then Return "NONE"
 
@@ -178,11 +179,12 @@ Partial Public Class IndicatorEngine
         Dim currentRSI   As Double = rsiSeries(scanEnd)
         Dim currentPrice As Double = candles.Last().Close
 
-        ' ---- Bearish divergence: higher-high price pivot, lower RSI at pivot ----
-        Dim bestHighPivotIdx  As Integer = -1
-        Dim bestHighPrice     As Double  = Double.MinValue
-        Dim bestHighRSI       As Double  = 0
-        For i As Integer = scanStart To scanEnd - pivotWing
+        ' ---- BEARISH divergence ----
+        ' Walk backward from most recent confirmable index. First confirmed swing high = most recent pivot.
+        Dim foundHighIdx   As Integer = -1
+        Dim foundHighPrice As Double  = 0
+        Dim foundHighRSI   As Double  = 0
+        For i As Integer = scanEnd - pivotWing To scanStart Step -1
             Dim candleIdx As Integer = i + period
             If candleIdx < pivotWing OrElse candleIdx >= candles.Count - pivotWing Then Continue For
             Dim iPrice As Double = candles(candleIdx).High
@@ -193,23 +195,32 @@ Partial Public Class IndicatorEngine
                     isSwingHigh = False : Exit For
                 End If
             Next
-            If isSwingHigh AndAlso iPrice > bestHighPrice Then
-                bestHighPrice    = iPrice
-                bestHighPivotIdx = i
-                bestHighRSI      = rsiSeries(i)
+            If isSwingHigh Then
+                foundHighIdx   = i
+                foundHighPrice = iPrice
+                foundHighRSI   = rsiSeries(i)
+                Exit For
             End If
         Next
-        If bestHighPivotIdx >= 0 AndAlso
-           bestHighPrice > currentPrice * (1.0 + priceGate) AndAlso
-           bestHighRSI > currentRSI + rsiDelta Then
-            Return "BEARISH"
+
+        If foundHighIdx >= 0 Then
+            ' (1) Pivot must have been in overbought territory
+            If foundHighRSI >= overboughtThreshold Then
+                ' (2) Current price must be at or above pivot (testing the high or breaking it)
+                If currentPrice >= foundHighPrice * (1.0 - priceGate) Then
+                    ' (3) RSI compression: current must be meaningfully lower than pivot's RSI
+                    If foundHighRSI - currentRSI >= rsiDelta Then
+                        Return "BEARISH"
+                    End If
+                End If
+            End If
         End If
 
-        ' ---- Bullish divergence: lower-low price pivot, higher RSI at pivot ----
-        Dim bestLowPivotIdx  As Integer = -1
-        Dim bestLowPrice     As Double  = Double.MaxValue
-        Dim bestLowRSI       As Double  = 0
-        For i As Integer = scanStart To scanEnd - pivotWing
+        ' ---- BULLISH divergence: mirror logic with oversold pivot ----
+        Dim foundLowIdx   As Integer = -1
+        Dim foundLowPrice As Double  = 0
+        Dim foundLowRSI   As Double  = 0
+        For i As Integer = scanEnd - pivotWing To scanStart Step -1
             Dim candleIdx As Integer = i + period
             If candleIdx < pivotWing OrElse candleIdx >= candles.Count - pivotWing Then Continue For
             Dim iPrice As Double = candles(candleIdx).Low
@@ -220,16 +231,25 @@ Partial Public Class IndicatorEngine
                     isSwingLow = False : Exit For
                 End If
             Next
-            If isSwingLow AndAlso iPrice < bestLowPrice Then
-                bestLowPrice    = iPrice
-                bestLowPivotIdx = i
-                bestLowRSI      = rsiSeries(i)
+            If isSwingLow Then
+                foundLowIdx   = i
+                foundLowPrice = iPrice
+                foundLowRSI   = rsiSeries(i)
+                Exit For
             End If
         Next
-        If bestLowPivotIdx >= 0 AndAlso
-           bestLowPrice < currentPrice * (1.0 - priceGate) AndAlso
-           bestLowRSI < currentRSI - rsiDelta Then
-            Return "BULLISH"
+
+        If foundLowIdx >= 0 Then
+            ' (1) Pivot must have been in oversold territory
+            If foundLowRSI <= oversoldThreshold Then
+                ' (2) Current price must be at or below pivot (testing the low or breaking it)
+                If currentPrice <= foundLowPrice * (1.0 + priceGate) Then
+                    ' (3) RSI rise: current must be meaningfully higher than pivot's RSI
+                    If currentRSI - foundLowRSI >= rsiDelta Then
+                        Return "BULLISH"
+                    End If
+                End If
+            End If
         End If
 
         Return "NONE"

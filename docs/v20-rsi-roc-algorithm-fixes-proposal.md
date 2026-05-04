@@ -1,6 +1,6 @@
 # Spec: v20 RSI Divergence + ROC Sensitivity Algorithm Fixes
 **Proposed:** 2026-04-30
-**Status:** PROPOSED — pending user approval
+**Status:** APPROVED 2026-04-30
 **Target files:** `Core/Indicators_Momentum.vb`, `Core/ScoringEngine_Calculate_Scoring.vb`, `Core/Settings/EngineSettings.vb`, `UI/MainForm_Analysis.vb`, `settings.json`
 
 Two related algorithmic fixes flagged in the v18→v19 calibration audit but deferred from the threshold-tuning pass because they require code changes:
