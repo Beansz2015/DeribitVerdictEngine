@@ -96,6 +96,8 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 **Do not re-open settled design decisions** without new data or a concrete technical reason.
 
+**Linux CLI port is the long-term target.** The current WinForms app is the active development surface, but a future port to a headless Linux service is on the roadmap (see `docs/DeribitIndicatorProject.md` Section 16.2). To keep the port tractable, all new code in `analysis/` and `tools/` MUST be host-agnostic — no `System.Windows.Forms` references, no `Control.Invoke`, no `MainForm` coupling. Form-side viewers (e.g., `AnalysisReportForm`) are allowed but must be thin wrappers that call host-agnostic core classes. Any new project (e.g., the auto-tweaker console app) builds against a separate `.csproj` with zero WinForms references.
+
 ---
 
 ## settings.json Version

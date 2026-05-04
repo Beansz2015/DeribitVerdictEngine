@@ -602,3 +602,54 @@ Items 1–4 are tracked in active proposals or Section 12 backlog. Item 5 is the
 WebSocket itself isn't documented as a future-direction item *here* because it's a foundation rebuild, not a feature addition. It's the binding latency constraint behind several Section A items in the backlog — fix it when (a) the indicator backlog is exhausted and the latency floor becomes the next bottleneck, **or** (b) one of the post-WebSocket items becomes a priority.
 
 The engine should be developed assuming WebSocket arrives eventually. Specifically: avoid hardcoded REST-cadence assumptions in scoring logic. Score thresholds should remain meaningful at higher poll rates. They currently are.
+
+### 16.5 Active Spec Bundle (2026-05-05)
+
+CalibrationReport reached threshold-with-caveats on 2026-05-05 (2460 rows, 4 regimes covered; 0 liquidation events — accepted as rare-event blocker, not gating). User authorised proceeding with the full backlog under explicit priority order:
+
+**Bundle 1 (foundation) — first.**
+- `csv-expansion-v0.4-proposal.md` — adds 18 columns (SpreadBps, OFIMomentum, FundingDelta, VPFR-v2 fields, swing fields, TargetCapReason, BestPivotByVolume reservations). Bumps schema. Rotates log.
+- `analysis-script-proposal.md` — VB.NET host-agnostic offline analyser at `analysis/`. Forward-return joiner, failure-rate matrix, funding-momentum diagnostic, OFI outlier audit, OI×CVD asymmetry audit. Reachable from MainForm via `lnkAnalysisReport`.
+
+**Bundle 3 (structural refinements) — second.**
+- `d1-trend-structure-proposal.md` — HH/HL/LH/LL classification, Pass 2c integration via separate `StructureBonus` (default 1).
+- `d2-volume-weighted-pivots-proposal.md` — display-only volume-weighted pivot ranking. v2 cap arbitration parked as observation (see 16.6).
+- `b1-per-indicator-regime-weights-proposal.md` — STUB. Blocked on Bundle 1 output for empirical hit rates.
+
+**Bundle 2 (auto-tweaker) — third.**
+- `failure-definition-proposal.md` — ATR-based forward-return failure, 3 windows × 3 thresholds (STRONG=tight, MEDIUM=loose), Wilson-CI cell-stability picker.
+- `auto-tweaker-pipeline-proposal.md` — VB.NET console app at `tools/AutoTweaker/`, Linux-portable, dry-run mode + manual-apply path, hard rejection list + 3-key scope cap, latest-Opus auto-discovery.
+
+Bundles 4 (small refinements per B4 item) and 5 (multi-session VPFR / anchored VWAP, C1/C2) and 6 (Smart OBV / MFI replacement) deferred until Bundles 1–3 ship and stabilise. Section A (post-WebSocket) and the WebSocket migration itself remain post-Bundle-2 in priority.
+
+### 16.6 Parked Observations (Watch For)
+
+Items not currently scheduled but with concrete promotion conditions to track:
+
+**P1. Promote BestPivotByVolume to cap arbitration (D2 v2).**
+*Condition:* in CalibrationReport `BEST VOLUME PIVOT DISTRIBUTION`, the "best is also most-recent" rate falls below 50% AND auto-tweaker output shows volume-weighted pivots correlate with subsequent target-hit rate. Both required.
+*Action when triggered:* re-spec `d2-volume-weighted-pivots-v2-proposal.md`. Promote to a 4th cap tier above swing: `best-volume-swing > most-recent-swing > HVN > POC`. Same closest-wins rule.
+
+**P2. Funding momentum threshold v23+ tuning.**
+*Condition:* offline analysis FundingMomentumDiagnostic shows FundingDelta percentiles such that a threshold below 1 bp would meaningfully change the RISING/FALLING/FLAT distribution.
+*Action when triggered:* simple settings-only `vNN-funding-calibration-pass-N` follow-up. If percentiles show the 1 bp threshold is genuinely above all observed deltas at REST cadence (not just above current sample), accept it as a polling-cadence ceiling and defer fix to WebSocket migration.
+
+**P3. OI×CVD asymmetry — algorithmic vs regime bias.**
+*Condition:* offline analysis OutlierAudit shows the 24:1 long:short asymmetry (observed in the 2460-row v0.3 audit) survives regime stratification.
+*Action when triggered:* spec a small follow-up reviewing `Pass 2b` symmetry. If asymmetry is confined to specific regime windows, no action — it's regime-period bias.
+
+**P4. STRONG/MEDIUM tier collapse in failure-rate matrix.**
+*Condition:* after 1000+ tier-eligible rows, both STRONG and MEDIUM matrices pick (window, threshold) combinations within 1 cell of each other.
+*Action when triggered:* revise `failure-definition-proposal.md` to a single tier-agnostic matrix. Simpler auto-tweaker, same accuracy.
+
+**P5. Liquidation count window (Section 5c of 2026-05-01 handover).**
+*Condition:* CalibrationReport still shows 0 liquidation events 1000+ rows after Bundle 1 ships.
+*Action when triggered:* small spec re-introducing `cfg.Indicators.Liquidations.TradeCount` removed in v15. Test 1000-trade window.
+
+### 16.7 Portability Constraint Reaffirmed
+
+The Linux CLI port (16.2) is the long-term target. All new code under `analysis/` and `tools/` MUST be host-agnostic — no WinForms references, no `Control.Invoke`, no `MainForm` coupling. Form-side viewers (`AnalysisReportForm`, `TweakSettingsForm`) are allowed but must be thin wrappers around host-agnostic core classes. The auto-tweaker console app (`tools/AutoTweaker/AutoTweaker.csproj`) builds as a separate .NET project with **zero WinForms references** by design — it must run unmodified under `dotnet AutoTweaker.dll` on Linux.
+
+This is enforced in `CLAUDE.md` Collaboration Rules and is a hard PR-review check.
+
+The port itself happens **after** auto-tweaker ships AND analysis accuracy reaches a plateau. WebSocket migration is independent — may or may not happen before the port.
