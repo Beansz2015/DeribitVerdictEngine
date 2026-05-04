@@ -228,6 +228,9 @@ Partial Public Class MainForm
             End If
         End If
         r.FundingMomentum = IndicatorEngine.CalcFundingMomentum(_fundingHistory, cfg)
+        r.FundingDelta    = If(_fundingHistory.Count >= 2,
+                               _fundingHistory(_fundingHistory.Count - 1) - _fundingHistory(_fundingHistory.Count - 2),
+                               0.0)
 
         Dim nowTs As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         ' bookSummary.Value is safe -- skip-check above guarantees HasValue

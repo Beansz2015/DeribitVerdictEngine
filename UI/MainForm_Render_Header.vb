@@ -37,6 +37,42 @@ Partial Public Class MainForm
         AppendRtf(txtOutput, BuildCalibrationReport(), C_VALUE)
     End Sub
 
+    Private Sub lnkAnalysisReport_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkAnalysisReport.LinkClicked
+        Dim csvPath As String = AnalysisLogger.GetLogPath()
+        If Not File.Exists(csvPath) Then
+            MessageBox.Show("No analysis_log.csv found. Run at least one analysis first.",
+                            "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        ' Verify v0.4 schema — SpreadBps is the first new column in v0.4
+        Dim firstLine As String = Nothing
+        Try
+            Using sr As New IO.StreamReader(csvPath)
+                firstLine = sr.ReadLine()
+            End Using
+        Catch
+        End Try
+        If firstLine Is Nothing OrElse Not firstLine.Contains("SpreadBps") Then
+            MessageBox.Show("Log file is not v0.4 schema." & Environment.NewLine &
+                            "Run analyses after the upgrade to accumulate v0.4 rows." & Environment.NewLine &
+                            "(Old file was rotated to analysis_log.csv.v0.3.bak on first run.)",
+                            "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        Dim outputDir As String = AppDomain.CurrentDomain.BaseDirectory
+        Try
+            Dim report As AnalysisReport = AnalysisRunner.Run(csvPath, outputDir, cfg)
+            Dim frm As New AnalysisReportForm(report.MarkdownText, report.MarkdownFilePath)
+            frm.Show()
+        Catch ex As Exception
+            MessageBox.Show("Analysis failed: " & ex.Message,
+                            "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
     Private Function BuildCalibrationReport() As String
         Dim path As String = AnalysisLogger.GetLogPath()
         Dim sb As New System.Text.StringBuilder()
@@ -84,6 +120,16 @@ Partial Public Class MainForm
             {"NONE", 0}, {"CONFIRMED_LONG", 0}, {"CONFIRMED_SHORT", 0},
             {"CONFLICT_LONG", 0}, {"CONFLICT_SHORT", 0}
         }
+        ' v0.4 distribution buckets
+        Dim spreadBuckets As New Dictionary(Of String, Integer) From {
+            {"<=2 bps", 0}, {"2-5 bps", 0}, {"5-10 bps", 0}, {">10 bps", 0}
+        }
+        Dim ofiMomCounts As New Dictionary(Of String, Integer) From {
+            {"RISING", 0}, {"FALLING", 0}, {"FLAT", 0}
+        }
+        Dim capReasonCounts As New Dictionary(Of String, Integer) From {
+            {"swing", 0}, {"hvn", 0}, {"poc", 0}, {"none", 0}
+        }
 
         For i = 1 To lines.Length - 1
             Dim parts = lines(i).Split(","c)
@@ -126,6 +172,32 @@ Partial Public Class MainForm
             If colIdx.ContainsKey("OiCvdOutcome") Then
                 Dim oicvd = parts(colIdx("OiCvdOutcome")).Trim().ToUpper()
                 If oiCvdCounts.ContainsKey(oicvd) Then oiCvdCounts(oicvd) += 1
+            End If
+            If colIdx.ContainsKey("SpreadBps") Then
+                Dim sv As Double
+                If Double.TryParse(parts(colIdx("SpreadBps")).Trim(), sv) Then
+                    If sv <= 2.0 Then
+                        spreadBuckets("<=2 bps") += 1
+                    ElseIf sv <= 5.0 Then
+                        spreadBuckets("2-5 bps") += 1
+                    ElseIf sv <= 10.0 Then
+                        spreadBuckets("5-10 bps") += 1
+                    Else
+                        spreadBuckets(">10 bps") += 1
+                    End If
+                End If
+            End If
+            If colIdx.ContainsKey("OFIMomentum") Then
+                Dim om = parts(colIdx("OFIMomentum")).Trim().ToUpper()
+                If ofiMomCounts.ContainsKey(om) Then ofiMomCounts(om) += 1
+            End If
+            If colIdx.ContainsKey("TargetCapReason") Then
+                Dim cr = parts(colIdx("TargetCapReason")).Trim().ToLower()
+                If capReasonCounts.ContainsKey(cr) Then
+                    capReasonCounts(cr) += 1
+                Else
+                    capReasonCounts("none") += 1
+                End If
             End If
         Next
 
@@ -191,6 +263,27 @@ Partial Public Class MainForm
             sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
         Next
         sb.AppendLine()
+        If colIdx.ContainsKey("SpreadBps") Then
+            sb.AppendLine("SPREAD DISTRIBUTION  (bps)")
+            For Each kvp In spreadBuckets
+                sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
+            Next
+            sb.AppendLine()
+        End If
+        If colIdx.ContainsKey("OFIMomentum") Then
+            sb.AppendLine("OFI MOMENTUM DISTRIBUTION")
+            For Each kvp In ofiMomCounts
+                sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
+            Next
+            sb.AppendLine()
+        End If
+        If colIdx.ContainsKey("TargetCapReason") Then
+            sb.AppendLine("TARGET CAP REASON DISTRIBUTION")
+            For Each kvp In capReasonCounts
+                sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
+            Next
+            sb.AppendLine()
+        End If
         sb.AppendLine("===========================================================")
         sb.AppendLine(If(overallReady,
                          "  VERDICT: READY FOR RECALIBRATION",

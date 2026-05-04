@@ -112,6 +112,14 @@ Public Class IndicatorResults
     Public Property SwingTargetShort As Double  ' = LastSwingLow5m  if < CurrentPrice, else 0
     Public Property SwingStopShort   As Double  ' = LastSwingHigh5m if > CurrentPrice, else 0
 
+    ' Funding delta (period-over-period change from _fundingHistory ring buffer)
+    Public Property FundingDelta As Double   ' raw decimal, 0 when rate stable or first sample
+
+    ' Volume-weighted pivot fields (reserved for d2-volume-weighted-pivots-proposal.md)
+    ' Written as 0 until d2 ships.
+    Public Property BestPivotByVolume5m    As Double  ' price of highest-volume confirmed swing pivot in 5m lookback
+    Public Property BestPivotVolumeRatio5m As Double  ' volume of best pivot / avg pivot volume in lookback
+
     ' Current price (latest close of 1m candles)
     Public Property CurrentPrice As Double
 End Class

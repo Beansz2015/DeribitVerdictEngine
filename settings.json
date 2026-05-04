@@ -1,8 +1,14 @@
 {
-  "version": 22,
-  "last_modified": "2026-05-01T00:00:00Z",
-  "modified_by": "funding-calibration-v22",
+  "version": 23,
+  "last_modified": "2026-05-05T00:00:00Z",
+  "modified_by": "csv-expansion-v0.4",
   "change_log": [
+    "v23 — csv-expansion-v0.4: schema bump from v0.3 to v0.4. Added 18 columns:",
+    "     SpreadBps, OFIMomentum, FundingDelta, VPFRVAH, VPFRVAL, VPFRNearestHvnAbove,",
+    "     VPFRNearestHvnBelow, LastSwingHigh5m, LastSwingLow5m, LastSwingHigh15m,",
+    "     LastSwingLow15m, SwingTargetLong, SwingTargetShort, SwingStopLong,",
+    "     SwingStopShort, TargetCapReason, BestPivotByVolume5m, BestPivotVolumeRatio5m.",
+    "     Old log rotated to analysis_log.csv.v0.3.bak on first startup.",
     "v22: [funding-calibration] Recalibrate funding bands + momentum threshold against broader",
     "     BTC-PERPETUAL funding scale (Deribit 1m/7d/8h chart context, April 2026).",
     "     v19 was tuned for an ultra-quiet 618-row sub-window where rate was stable at -0.0009%.",

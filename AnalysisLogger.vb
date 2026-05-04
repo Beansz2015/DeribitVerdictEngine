@@ -1,26 +1,20 @@
-' AnalysisLogger.vb  v0.3
+' AnalysisLogger.vb  v0.4
 ' Appends one row per analysis run to a local CSV file.
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
 '
-' v0.3: Header expanded with VerdictContext, FundingMomentum, OiCvdOutcome columns
-'       (closes Section 16.3 prerequisite item 4 — auto-tweaker calibration data).
-'       Existing CSV files written by v0.2 are column-incompatible.
-'       Use ResetLog() (Reset Log link in UI) after deploying this version.
+' v0.4: Header expanded with 18 new columns (cols 69-86):
+'       SpreadBps, OFIMomentum, FundingDelta,
+'       VPFRVAH, VPFRVAL, VPFRNearestHvnAbove, VPFRNearestHvnBelow,
+'       LastSwingHigh5m, LastSwingLow5m, LastSwingHigh15m, LastSwingLow15m,
+'       SwingTargetLong, SwingTargetShort, SwingStopLong, SwingStopShort,
+'       TargetCapReason, BestPivotByVolume5m, BestPivotVolumeRatio5m.
+'       Log rotation: on startup, if existing file does not match v0.4 header,
+'       it is renamed to analysis_log.csv.v0.3.bak (timestamped if .bak exists).
 '
-' v0.2: Header and data row expanded to include all current IndicatorResults fields:
-'       CVD (Value, Slope, Divergence)
-'       MTF Gate (Pass, Trend, ADX, EMAAlignment, Reason)
-'       VWAP (DevPct, SessionCandles, Sigma1Upper/Lower, Sigma2Upper/Lower)
-'       TTM Squeeze (Histogram, Direction, Signal)
-'       BBW (Value, SqueezeStatus)
-'       OI (Change15m, Change60m, Signal)
-'       Funding (Rate, Bias)
-'       EMA (9, 21, 50, Alignment, EMA200_5m, PriceVsEMA200)
-'       DMI (PlusDI, MinusDI, ADX)
-'       Donchian (Upper, Lower, Signal)
-'       Scores (MaxScore, EffectiveLongScore, EffectiveShortScore, RegimePenalty)
-'       OFIBidVol, OFIAskVol added to existing OFI columns
+' v0.3: Header expanded with VerdictContext, FundingMomentum, OiCvdOutcome columns.
+'
+' v0.2: Header and data row expanded to include all current IndicatorResults fields.
 
 Imports System.IO
 
@@ -48,7 +42,12 @@ Public Class AnalysisLogger
         "OBVTrend,OBVDivergence," &
         "MTFGatePass,MTF15mTrend,MTF15mADX,MTF15mEMAAlignment,MTFGateReason," &
         "ATR,ATRMultiplier," &
-        "VerdictContext,FundingMomentum,OiCvdOutcome"
+        "VerdictContext,FundingMomentum,OiCvdOutcome," &
+        "SpreadBps,OFIMomentum,FundingDelta," &
+        "VPFRVAH,VPFRVAL,VPFRNearestHvnAbove,VPFRNearestHvnBelow," &
+        "LastSwingHigh5m,LastSwingLow5m,LastSwingHigh15m,LastSwingLow15m," &
+        "SwingTargetLong,SwingTargetShort,SwingStopLong,SwingStopShort," &
+        "TargetCapReason,BestPivotByVolume5m,BestPivotVolumeRatio5m"
 
     Public Shared Function GetLogPath() As String
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
@@ -57,18 +56,56 @@ Public Class AnalysisLogger
     Public Shared Function GetRowCount() As Integer
         Dim path As String = GetLogPath()
         If Not File.Exists(path) Then Return 0
-        ' Subtract 1 for header row
         Return Math.Max(0, File.ReadAllLines(path).Length - 1)
     End Function
 
-    Public Shared Sub LogRun(r As IndicatorResults, v As VerdictResult)
+    ' Called once per LogRun. Handles log rotation: if the existing file has a
+    ' different header (i.e. old schema), it is renamed to .v0.3.bak before a
+    ' fresh v0.4 file is created.
+    Public Shared Sub EnsureLogFile()
         Dim path As String = GetLogPath()
-        Dim writeHeader As Boolean = Not File.Exists(path) OrElse New FileInfo(path).Length = 0
+        If Not File.Exists(path) Then
+            WriteHeader(path)
+            Return
+        End If
+
+        Try
+            Dim firstLine As String = Nothing
+            Using sr As New StreamReader(path)
+                firstLine = sr.ReadLine()
+            End Using
+
+            If firstLine Is Nothing OrElse firstLine.Trim() <> Header Then
+                ' Schema mismatch — rotate old file
+                Dim dir As String = System.IO.Path.GetDirectoryName(path)
+                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.3.bak")
+                If File.Exists(bakPath) Then
+                    Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
+                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.3." & ts & ".bak")
+                End If
+                File.Move(path, bakPath)
+                WriteHeader(path)
+            End If
+        Catch
+            ' Silent fail — if we can't rotate, we'll catch the schema mismatch at read time
+        End Try
+    End Sub
+
+    Private Shared Sub WriteHeader(path As String)
+        Try
+            Using sw As New StreamWriter(path, append:=False)
+                sw.WriteLine(Header)
+            End Using
+        Catch
+        End Try
+    End Sub
+
+    Public Shared Sub LogRun(r As IndicatorResults, v As VerdictResult)
+        EnsureLogFile()
+        Dim path As String = GetLogPath()
         Try
             Using sw As New StreamWriter(path, append:=True)
-                If writeHeader Then sw.WriteLine(Header)
                 Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
-                ' MTFGateReason may contain commas -- strip them to keep CSV clean
                 Dim mtfReason As String = If(r.MTFGateReason, "").Replace(",", ";")
                 sw.WriteLine(String.Join(",",
                     ts,
@@ -138,10 +175,28 @@ Public Class AnalysisLogger
                     r.ATRSizeMultiplier.ToString("F4"),
                     If(v.VerdictContext, "CONFIRMED"),
                     If(r.FundingMomentum, "FLAT"),
-                    If(v.OiCvdOutcome, "NONE")))
+                    If(v.OiCvdOutcome, "NONE"),
+                    r.SpreadBps.ToString("F4"),
+                    If(r.OFIMomentum, "FLAT"),
+                    r.FundingDelta.ToString("F8"),
+                    r.VPFRVah.ToString("F2"),
+                    r.VPFRVal.ToString("F2"),
+                    r.VPFRNearestHvnAbove.ToString("F2"),
+                    r.VPFRNearestHvnBelow.ToString("F2"),
+                    r.LastSwingHigh5m.ToString("F2"),
+                    r.LastSwingLow5m.ToString("F2"),
+                    r.LastSwingHigh15m.ToString("F2"),
+                    r.LastSwingLow15m.ToString("F2"),
+                    r.SwingTargetLong.ToString("F2"),
+                    r.SwingTargetShort.ToString("F2"),
+                    r.SwingStopLong.ToString("F2"),
+                    r.SwingStopShort.ToString("F2"),
+                    If(v.TargetCapReason, "none"),
+                    r.BestPivotByVolume5m.ToString("F2"),
+                    r.BestPivotVolumeRatio5m.ToString("F2")))
             End Using
         Catch
-            ' Silent fail -- logging must never crash the main pipeline
+            ' Silent fail — logging must never crash the main pipeline
         End Try
     End Sub
 

@@ -93,6 +93,9 @@ Partial Public Class MainForm
     ' Resilience: count of skipped analyses this session (transient API failures).
     Private _skipCount As Integer = 0
 
+    ' Analysis report link (created programmatically to avoid touching the auto-generated Designer.vb)
+    Private WithEvents lnkAnalysisReport As System.Windows.Forms.LinkLabel
+
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
 
@@ -122,6 +125,18 @@ Partial Public Class MainForm
         SettingsLoader.Initialise(Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
         InitAutoRunControls()
+
+        ' Analysis report link — created at runtime (avoids Designer.vb edits)
+        lnkAnalysisReport = New System.Windows.Forms.LinkLabel() With {
+            .AutoSize        = True,
+            .Font            = New System.Drawing.Font("Segoe UI", 8.0!),
+            .LinkColor       = System.Drawing.Color.DimGray,
+            .ActiveLinkColor = System.Drawing.Color.DodgerBlue,
+            .VisitedLinkColor = System.Drawing.Color.DimGray,
+            .Text            = "Analysis Report",
+            .TextAlign       = System.Drawing.ContentAlignment.MiddleRight
+        }
+        Me.Controls.Add(lnkAnalysisReport)
 
         ' Size the window to fit content exactly, based on actual font metrics.
         SizeToContent()
@@ -254,8 +269,9 @@ Partial Public Class MainForm
         lblLogInfo.Size        = New System.Drawing.Size(W - 420, STATUS_H)
         lblCountdown.Location  = New System.Drawing.Point(W - 410, H - STATUS_H)
         lblCountdown.Size      = New System.Drawing.Size(200, STATUS_H)
-        lnkCalibCheck.Location = New System.Drawing.Point(W - 230, H - STATUS_H)
-        lnkResetLog.Location   = New System.Drawing.Point(W - 80, H - STATUS_H)
+        lnkAnalysisReport.Location = New System.Drawing.Point(W - 390, H - STATUS_H)
+        lnkCalibCheck.Location     = New System.Drawing.Point(W - 230, H - STATUS_H)
+        lnkResetLog.Location       = New System.Drawing.Point(W - 80, H - STATUS_H)
     End Sub
 
 End Class
