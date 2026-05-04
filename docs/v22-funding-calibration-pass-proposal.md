@@ -1,6 +1,6 @@
 # Spec: v22 Funding Calibration Pass — Regime-Aware Threshold Recalibration
 **Proposed:** 2026-05-01
-**Status:** APPROVED 2026-05-01
+**Status:** IMPLEMENTED 2026-05-01
 **Target files:** `settings.json`
 
 This is a **settings-only calibration pass**. No code change. No new keys. Recalibrates funding band thresholds and the funding momentum threshold against the broader BTC-PERPETUAL funding scale observed in Deribit's 1-month / 7-day / 8-hour funding rate charts (April 2026).
