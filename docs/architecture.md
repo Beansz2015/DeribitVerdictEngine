@@ -141,6 +141,24 @@ DeribitVerdictEngine/
 │                                       verdict label (lblVerdict) colour update.
 │                                       Split from MainForm_Render.vb.
 │
+├── analysis/                          Host-agnostic offline analysis (Bundle 1).
+│                                       NO System.Windows.Forms references except
+│                                       AnalysisReportForm (thin viewer).
+│                                       AnalysisRunner, ForwardReturnJoiner,
+│                                       FailureRateMatrix, FundingMomentumDiagnostic,
+│                                       OutlierAudit, MarkdownReportWriter,
+│                                       AnalysisReport, AnalysisConstants.
+│                                       Reusable from future Linux CLI port.
+│
+├── tools/
+│   └── AutoTweaker/                    Host-agnostic console app (Bundle 2).
+│                                       AutoTweaker.csproj — separate .NET 8 project.
+│                                       Zero WinForms references. Runs unmodified
+│                                       on Linux via `dotnet AutoTweaker.dll`.
+│                                       AutoTweakerProgram, AutoTweakerCore,
+│                                       PromptBuilder, ClaudeApiClient,
+│                                       SettingsDiffApplier, TweakerConfig, TweakerState.
+│
 └── docs/
     ├── DeribitIndicatorProject.md      Authoritative handover document (read first)
     ├── architecture.md                 This file
@@ -441,3 +459,4 @@ RunScoringPipeline(...)
 | Layer 1.5 structural-break exit in CalcHoldStatus (spec #5) | A confirmed break through the prior swing low (long) or swing high (short) is a discrete structural event — it invalidates the original entry premise faster than gradual RSI/OBV divergence. Sits between Layer 1 (fast microstructure count) and Layer 2 (OBV divergence) to maintain the priority ordering: structural breaks are evaluated only when microstructure hasn't already triggered, but before the slower divergence signals can fire. |
 | CalcVerdictContext structural-target first check (spec #5) | When swing data exists (LastSwingHigh5m or LastSwingLow5m is non-zero), the engine has committed to a structural view. If neither target nor stop can be placed for the current direction, flagging STRUCTURALLY_WEAK is more informative than CONFIRMED even if the score is high — it means the structural picture is ambiguous or the trade doesn't have a defined structural R:R. The graceful-degradation path (check fires only when at least one swing level exists) prevents false STRUCTURALLY_WEAK signals when candle history is too short for pivot detection. |
 | Settings exposure pass (spec #6) | Exposing 19 formerly-hardcoded literals to settings.json completes the auto-tweaking audit prerequisite (Section 16.3 item 2). All defaults are exactly the previously-hardcoded values — zero behaviour change. The new Optional params on CalcBBW, CalcTTMSqueeze, CalcCVD, CalcDonchian match the existing pattern (cfg value passed at call site; default value in method signature for caller convenience). RegimeMaxScore() and TierFloor() now take cfg and read from POCO fields rather than returning hardcoded constants. |
+| Linux CLI port as long-term target (2026-05-05) | The WinForms app remains the active surface but a future headless Linux service is on the roadmap (`DeribitIndicatorProject.md` §16.2). All code in `analysis/` and `tools/` must therefore be host-agnostic — no `System.Windows.Forms`, no `Control.Invoke`, no `MainForm` coupling. Form-side viewers like `AnalysisReportForm` and `TweakSettingsForm` are thin wrappers over host-agnostic core. The auto-tweaker console app builds as a separate .NET 8 project with **zero WinForms references** so it runs unmodified under `dotnet AutoTweaker.dll` on Linux. Port itself happens after auto-tweaker ships AND analysis accuracy plateaus. WebSocket migration is independent of the port. |
