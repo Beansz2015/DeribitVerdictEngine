@@ -356,12 +356,16 @@ Partial Public Class MainForm
                               oversoldThreshold:=cfg.Indicators.RSI.DivergenceOversoldThreshold)
 
         ' Swing pivots on 5m -- structural reference for target/stop arbitration
+        ' D2: volume-weighted pivot fields populated via Optional ByRef params
         IndicatorEngine.CalcSwingPivots(candles5m,
                                          r.LastSwingHigh5m, r.LastSwingLow5m,
                                          pivotWing:=cfg.Indicators.Swing.PivotWing5m,
-                                         lookbackBars:=cfg.Indicators.Swing.LookbackBars5m)
+                                         lookbackBars:=cfg.Indicators.Swing.LookbackBars5m,
+                                         bestPivotByVolume:=r.BestPivotByVolume5m,
+                                         bestPivotVolumeRatio:=r.BestPivotVolumeRatio5m,
+                                         bestPivotIsHigh:=r.BestPivotIsHigh5m)
 
-        ' 15m context (already-cached candles15m)
+        ' 15m context (already-cached candles15m) -- no volume-weighted pivots on 15m
         If candles15m IsNot Nothing AndAlso candles15m.Count > 0 Then
             IndicatorEngine.CalcSwingPivots(candles15m,
                                              r.LastSwingHigh15m, r.LastSwingLow15m,
@@ -374,6 +378,17 @@ Partial Public Class MainForm
         r.SwingStopLong    = If(r.LastSwingLow5m  < r.CurrentPrice AndAlso r.LastSwingLow5m  > 0, r.LastSwingLow5m, 0)
         r.SwingTargetShort = If(r.LastSwingLow5m  < r.CurrentPrice AndAlso r.LastSwingLow5m  > 0, r.LastSwingLow5m, 0)
         r.SwingStopShort   = If(r.LastSwingHigh5m > r.CurrentPrice, r.LastSwingHigh5m, 0)
+
+        ' D1: trend structure classification from 5m pivot sequence
+        Dim ts5mHighs As (Older As Double, Newer As Double) = (0.0, 0.0)
+        Dim ts5mLows  As (Older As Double, Newer As Double) = (0.0, 0.0)
+        r.TrendStructure = IndicatorEngine.ClassifyTrendStructure(
+            candles5m,
+            cfg.Indicators.TrendStructure.PivotWing,
+            cfg.Indicators.TrendStructure.PivotCount,
+            ts5mHighs, ts5mLows)
+        r.LastTwoHighs5m = ts5mHighs
+        r.LastTwoLows5m  = ts5mLows
 
         Dim vpfrPoc       As Double  = 0
         Dim vpfrHVNearPoc As Boolean = False

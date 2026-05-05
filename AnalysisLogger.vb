@@ -1,7 +1,12 @@
-' AnalysisLogger.vb  v0.4
+' AnalysisLogger.vb  v0.4.1
 ' Appends one row per analysis run to a local CSV file.
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
+'
+' v0.4.1 (d1+d2): Column 87 added: TrendStructure5m.
+'         BestPivotByVolume5m (col 85) and BestPivotVolumeRatio5m (col 86) now populated.
+'         Log rotation: if existing file does not match v0.4.1 header,
+'         it is renamed to analysis_log.csv.v0.4.bak (timestamped if .bak exists).
 '
 ' v0.4: Header expanded with 18 new columns (cols 69-86):
 '       SpreadBps, OFIMomentum, FundingDelta,
@@ -9,8 +14,6 @@
 '       LastSwingHigh5m, LastSwingLow5m, LastSwingHigh15m, LastSwingLow15m,
 '       SwingTargetLong, SwingTargetShort, SwingStopLong, SwingStopShort,
 '       TargetCapReason, BestPivotByVolume5m, BestPivotVolumeRatio5m.
-'       Log rotation: on startup, if existing file does not match v0.4 header,
-'       it is renamed to analysis_log.csv.v0.3.bak (timestamped if .bak exists).
 '
 ' v0.3: Header expanded with VerdictContext, FundingMomentum, OiCvdOutcome columns.
 '
@@ -47,7 +50,8 @@ Public Class AnalysisLogger
         "VPFRVAH,VPFRVAL,VPFRNearestHvnAbove,VPFRNearestHvnBelow," &
         "LastSwingHigh5m,LastSwingLow5m,LastSwingHigh15m,LastSwingLow15m," &
         "SwingTargetLong,SwingTargetShort,SwingStopLong,SwingStopShort," &
-        "TargetCapReason,BestPivotByVolume5m,BestPivotVolumeRatio5m"
+        "TargetCapReason,BestPivotByVolume5m,BestPivotVolumeRatio5m," &
+        "TrendStructure5m"
 
     Public Shared Function GetLogPath() As String
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
@@ -78,7 +82,7 @@ Public Class AnalysisLogger
             If firstLine Is Nothing OrElse firstLine.Trim() <> Header Then
                 ' Schema mismatch — rotate old file
                 Dim dir As String = System.IO.Path.GetDirectoryName(path)
-                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.3.bak")
+                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.4.bak")
                 If File.Exists(bakPath) Then
                     Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
                     bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.3." & ts & ".bak")
@@ -193,7 +197,8 @@ Public Class AnalysisLogger
                     r.SwingStopShort.ToString("F2"),
                     If(String.IsNullOrEmpty(v.TargetCapReason), "none", v.TargetCapReason),
                     r.BestPivotByVolume5m.ToString("F2"),
-                    r.BestPivotVolumeRatio5m.ToString("F2")))
+                    r.BestPivotVolumeRatio5m.ToString("F2"),
+                    r.TrendStructure.ToString()))
             End Using
         Catch
             ' Silent fail — logging must never crash the main pipeline

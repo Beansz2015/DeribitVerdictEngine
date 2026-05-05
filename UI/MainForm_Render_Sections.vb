@@ -142,6 +142,54 @@ Partial Public Class MainForm
         AppendRtf(rtb, String.Format("Above:{0}  Below:{1}  |  LVN: ^{2} v{3}",
                                       hvnAboveStr, hvnBelowStr, lvnAboveStr, lvnBelowStr) & Environment.NewLine, C_DIM)
 
+        ' -- D1: Trend Structure ----------------------------------------------
+        AppendRtf(rtb, "  Trend Struct: ", C_LABEL)
+        Dim tsColour As Color
+        Select Case r.TrendStructure
+            Case TrendStructure.UPTREND     : tsColour = C_GOOD
+            Case TrendStructure.DOWNTREND   : tsColour = C_BAD
+            Case TrendStructure.EXPANSION   : tsColour = C_WARN
+            Case TrendStructure.CONTRACTION : tsColour = Color.FromArgb(80, 200, 210)
+            Case Else                       : tsColour = C_DIM
+        End Select
+        Dim tsDetail As String
+        If r.LastTwoHighs5m.Newer > 0 AndAlso r.LastTwoLows5m.Newer > 0 Then
+            Select Case r.TrendStructure
+                Case TrendStructure.UPTREND
+                    tsDetail = String.Format("  (HH {0:F1}>{1:F1} | HL {2:F1}>{3:F1})",
+                        r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                        r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                Case TrendStructure.DOWNTREND
+                    tsDetail = String.Format("  (LH {0:F1}<{1:F1} | LL {2:F1}<{3:F1})",
+                        r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                        r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                Case TrendStructure.EXPANSION
+                    tsDetail = String.Format("  (HH {0:F1}>{1:F1} | LL {2:F1}<{3:F1})",
+                        r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                        r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                Case TrendStructure.CONTRACTION
+                    tsDetail = String.Format("  (LH {0:F1}<{1:F1} | HL {2:F1}>{3:F1})",
+                        r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                        r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                Case Else
+                    tsDetail = ""
+            End Select
+        Else
+            tsDetail = "  (insufficient pivot data)"
+        End If
+        AppendRtf(rtb, r.TrendStructure.ToString() & tsDetail & Environment.NewLine, tsColour)
+
+        ' -- D2: Best Volume Pivot --------------------------------------------
+        AppendRtf(rtb, "  Best Vol Pivot 5m: ", C_LABEL)
+        If r.BestPivotByVolume5m > 0 Then
+            AppendRtf(rtb, String.Format("{0} {1:F1}  (vol×{2:F1} vs avg pivot)",
+                If(r.BestPivotIsHigh5m, "HIGH", "LOW"),
+                r.BestPivotByVolume5m, r.BestPivotVolumeRatio5m) & Environment.NewLine,
+                Color.FromArgb(80, 200, 210))
+        Else
+            AppendRtf(rtb, "—  (insufficient pivots)" & Environment.NewLine, C_DIM)
+        End If
+
         ' -- OPEN INTEREST ----------------------------------------------------
         SectionHeader(rtb, "OPEN INTEREST:")
         AppendRtf(rtb, "  OI: ", C_LABEL)

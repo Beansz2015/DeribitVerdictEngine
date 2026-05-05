@@ -45,7 +45,7 @@ Partial Public Class MainForm
             Return
         End If
 
-        ' Verify v0.4 schema — SpreadBps is the first new column in v0.4
+        ' Verify v0.4.1 schema — TrendStructure5m is the column added in v0.4.1
         Dim firstLine As String = Nothing
         Try
             Using sr As New IO.StreamReader(csvPath)
@@ -53,10 +53,10 @@ Partial Public Class MainForm
             End Using
         Catch
         End Try
-        If firstLine Is Nothing OrElse Not firstLine.Contains("SpreadBps") Then
-            MessageBox.Show("Log file is not v0.4 schema." & Environment.NewLine &
-                            "Run analyses after the upgrade to accumulate v0.4 rows." & Environment.NewLine &
-                            "(Old file was rotated to analysis_log.csv.v0.3.bak on first run.)",
+        If firstLine Is Nothing OrElse Not firstLine.Contains("TrendStructure5m") Then
+            MessageBox.Show("Log file is not v0.4.1 schema." & Environment.NewLine &
+                            "Run analyses after the d1/d2 upgrade to accumulate v0.4.1 rows." & Environment.NewLine &
+                            "(Old file was rotated to analysis_log.csv.v0.4.bak on first run.)",
                             "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
@@ -130,6 +130,14 @@ Partial Public Class MainForm
         Dim capReasonCounts As New Dictionary(Of String, Integer) From {
             {"swing", 0}, {"hvn", 0}, {"poc", 0}, {"none", 0}
         }
+        ' v0.4.1 distribution buckets
+        Dim trendStructCounts As New Dictionary(Of String, Integer) From {
+            {"UPTREND", 0}, {"DOWNTREND", 0}, {"EXPANSION", 0},
+            {"CONTRACTION", 0}, {"UNDEFINED", 0}
+        }
+        Dim bvpRatios          As New List(Of Double)()
+        Dim bvpIsMostRecentCount As Integer = 0
+        Dim bvpEligibleCount     As Integer = 0
 
         For i = 1 To lines.Length - 1
             Dim parts = lines(i).Split(","c)
@@ -197,6 +205,36 @@ Partial Public Class MainForm
                     capReasonCounts(cr) += 1
                 Else
                     capReasonCounts("none") += 1
+                End If
+            End If
+            ' v0.4.1: Trend Structure distribution
+            If colIdx.ContainsKey("TrendStructure5m") Then
+                Dim ts = parts(colIdx("TrendStructure5m")).Trim().ToUpper()
+                If trendStructCounts.ContainsKey(ts) Then
+                    trendStructCounts(ts) += 1
+                Else
+                    trendStructCounts("UNDEFINED") += 1
+                End If
+            End If
+            ' v0.4.1: Best Volume Pivot distribution
+            If colIdx.ContainsKey("BestPivotByVolume5m") AndAlso
+               colIdx.ContainsKey("BestPivotVolumeRatio5m") Then
+                Dim bvp As Double, bvpRatio As Double
+                If Double.TryParse(parts(colIdx("BestPivotByVolume5m")).Trim(), bvp) AndAlso
+                   Double.TryParse(parts(colIdx("BestPivotVolumeRatio5m")).Trim(), bvpRatio) AndAlso
+                   bvp > 0 AndAlso bvpRatio > 0 Then
+                    bvpRatios.Add(bvpRatio)
+                    bvpEligibleCount += 1
+                    ' "best is also most-recent" if BestPivot price matches LastSwingHigh5m or LastSwingLow5m
+                    Dim isMostRecent As Boolean = False
+                    If colIdx.ContainsKey("LastSwingHigh5m") AndAlso colIdx.ContainsKey("LastSwingLow5m") Then
+                        Dim sh As Double, sl As Double
+                        If Double.TryParse(parts(colIdx("LastSwingHigh5m")).Trim(), sh) AndAlso
+                           Double.TryParse(parts(colIdx("LastSwingLow5m")).Trim(), sl) Then
+                            isMostRecent = (Math.Abs(bvp - sh) < 1.0) OrElse (Math.Abs(bvp - sl) < 1.0)
+                        End If
+                    End If
+                    If isMostRecent Then bvpIsMostRecentCount += 1
                 End If
             End If
         Next
@@ -282,6 +320,32 @@ Partial Public Class MainForm
             For Each kvp In capReasonCounts
                 sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
             Next
+            sb.AppendLine()
+        End If
+        If colIdx.ContainsKey("TrendStructure5m") Then
+            sb.AppendLine("TREND STRUCTURE DISTRIBUTION")
+            For Each kvp In trendStructCounts
+                sb.AppendLine("  " & kvp.Key.PadRight(20) & " : " & kvp.Value.ToString().PadLeft(5) & " rows")
+            Next
+            sb.AppendLine()
+        End If
+        If colIdx.ContainsKey("BestPivotByVolume5m") AndAlso bvpEligibleCount > 0 Then
+            sb.AppendLine("BEST VOLUME PIVOT DISTRIBUTION  (rows with >= 2 confirmed 5m pivots)")
+            Dim sortedRatios = bvpRatios.OrderBy(Function(x) x).ToList()
+            Dim avgRatio     As Double = sortedRatios.Sum() / sortedRatios.Count
+            Dim p75          As Double = sortedRatios(CInt(Math.Floor(sortedRatios.Count * 0.75)))
+            Dim p90          As Double = sortedRatios(CInt(Math.Floor(sortedRatios.Count * 0.90)))
+            Dim mostRecentPct As Double = If(bvpEligibleCount > 0, bvpIsMostRecentCount / CDbl(bvpEligibleCount) * 100, 0)
+            sb.AppendLine("  Eligible rows         : " & bvpEligibleCount.ToString().PadLeft(5))
+            sb.AppendLine("  Average ratio         : " & avgRatio.ToString("F2"))
+            sb.AppendLine("  75th percentile ratio : " & p75.ToString("F2"))
+            sb.AppendLine("  90th percentile ratio : " & p90.ToString("F2"))
+            sb.AppendLine(String.Format("  Best = most-recent    : {0} ({1:F1}%){2}",
+                bvpIsMostRecentCount, mostRecentPct,
+                If(mostRecentPct < 50, "  [consider v2 cap promotion]", "")))
+            sb.AppendLine()
+        ElseIf colIdx.ContainsKey("BestPivotByVolume5m") Then
+            sb.AppendLine("BEST VOLUME PIVOT DISTRIBUTION  (no eligible rows yet)")
             sb.AppendLine()
         End If
         sb.AppendLine("===========================================================")

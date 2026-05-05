@@ -504,6 +504,51 @@ Partial Public Class ScoringEngine
             End If
         End If
 
+        ' -- Pass 2c-struct: Trend Structure bonus --------------------------------
+        ' Bonus when UPTREND confirms dominant long side, or DOWNTREND confirms dominant short side.
+        ' Suppressed in TRANSITIONAL (consistent with rest of Pass 2c). Capped at regimeMax.
+        Dim structBonusLongHit  As Boolean = False
+        Dim structBonusShortHit As Boolean = False
+        Dim structBonusNote     As String  = ""
+
+        If cfg.RegimeWeights.Enabled AndAlso cfg.Indicators.TrendStructure.Enabled AndAlso
+           r.Regime <> "TRANSITIONAL" Then
+            Dim sBonus As Integer = cfg.Indicators.TrendStructure.StructureBonus
+            Select Case r.TrendStructure
+                Case TrendStructure.UPTREND
+                    If state.LongScore > state.ShortScore Then
+                        state.LongScore = Math.Min(state.LongScore + sBonus, regimeMax)
+                        structBonusLongHit = True
+                        structBonusNote = String.Format(
+                            "+{0} TREND STRUCTURE [UPTREND: HH {1:F0}>{2:F0} | HL {3:F0}>{4:F0}]",
+                            sBonus,
+                            r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                            r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                    End If
+                Case TrendStructure.DOWNTREND
+                    If state.ShortScore > state.LongScore Then
+                        state.ShortScore = Math.Min(state.ShortScore + sBonus, regimeMax)
+                        structBonusShortHit = True
+                        structBonusNote = String.Format(
+                            "+{0} TREND STRUCTURE [DOWNTREND: LH {1:F0}<{2:F0} | LL {3:F0}<{4:F0}]",
+                            sBonus,
+                            r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                            r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                    End If
+                Case TrendStructure.EXPANSION
+                    structBonusNote = String.Format(
+                        "TREND STRUCTURE: EXPANSION HH {0:F0}>{1:F0} | LL {2:F0}<{3:F0} (no score change)",
+                        r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                        r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                Case TrendStructure.CONTRACTION
+                    structBonusNote = String.Format(
+                        "TREND STRUCTURE: CONTRACTION LH {0:F0}<{1:F0} | HL {2:F0}>{3:F0} (no score change)",
+                        r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                        r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                Case Else  ' UNDEFINED — no note
+            End Select
+        End If
+
         ' Snapshot ls/ss after Pass 2c, before funding modifiers
         ls = state.LongScore
         ss = state.ShortScore
@@ -685,6 +730,10 @@ Partial Public Class ScoringEngine
 
         If regimeAlignNote <> "" Then
             breakdown.Add(New SignalBreakdownItem("Regime Align (2c)", regimeAlignLongHit, regimeAlignShortHit, regimeAlignNote))
+        End If
+
+        If structBonusNote <> "" Then
+            breakdown.Add(New SignalBreakdownItem("Trend Structure", structBonusLongHit, structBonusShortHit, structBonusNote))
         End If
 
     End Sub

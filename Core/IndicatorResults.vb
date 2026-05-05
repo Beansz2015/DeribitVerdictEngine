@@ -115,10 +115,15 @@ Public Class IndicatorResults
     ' Funding delta (period-over-period change from _fundingHistory ring buffer)
     Public Property FundingDelta As Double   ' raw decimal, 0 when rate stable or first sample
 
-    ' Volume-weighted pivot fields (reserved for d2-volume-weighted-pivots-proposal.md)
-    ' Written as 0 until d2 ships.
-    Public Property BestPivotByVolume5m    As Double  ' price of highest-volume confirmed swing pivot in 5m lookback
-    Public Property BestPivotVolumeRatio5m As Double  ' volume of best pivot / avg pivot volume in lookback
+    ' Volume-weighted pivot fields (D2 — d2-volume-weighted-pivots-proposal.md)
+    Public Property BestPivotByVolume5m    As Double   ' price of highest-volume confirmed swing pivot in 5m lookback
+    Public Property BestPivotVolumeRatio5m As Double   ' volume of best pivot / avg pivot volume in lookback
+    Public Property BestPivotIsHigh5m      As Boolean  ' True if best-volume pivot is a swing high; False if swing low
+
+    ' Trend structure classification (D1 — d1-trend-structure-proposal.md)
+    Public Property TrendStructure   As TrendStructure  ' UPTREND/DOWNTREND/EXPANSION/CONTRACTION/UNDEFINED
+    Public Property LastTwoHighs5m   As (Older As Double, Newer As Double)  ' display: the two highs that produced the classification
+    Public Property LastTwoLows5m    As (Older As Double, Newer As Double)  ' display: the two lows
 
     ' Current price (latest close of 1m candles)
     Public Property CurrentPrice As Double

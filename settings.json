@@ -1,8 +1,19 @@
 {
-  "version": 23,
+  "version": 24,
   "last_modified": "2026-05-05T00:00:00Z",
-  "modified_by": "csv-expansion-v0.4",
+  "modified_by": "d1-trend-structure",
   "change_log": [
+    "v24 — d1-trend-structure: HH/HL/LH/LL swing-structure classification + Pass 2c structure bonus.",
+    "     New indicators.trend_structure block (4 keys):",
+    "       enabled: true        — master switch for ClassifyTrendStructure and Pass 2c bonus.",
+    "       pivot_wing: 3        — confirmation bars left/right (default matches swing.pivot_wing_5m).",
+    "       pivot_count: 6       — total pivot events to collect before classifying (~3H + 3L).",
+    "       structure_bonus: 1   — score added when UPTREND+LongDominant or DOWNTREND+ShortDominant.",
+    "     Bonus capped at regimeMax; suppressed in TRANSITIONAL regime.",
+    "     EXPANSION/CONTRACTION/UNDEFINED fire no score change.",
+    "     CSV column 87 added: TrendStructure5m (string).",
+    "     CalibrationReport: new TREND STRUCTURE DISTRIBUTION and BEST VOLUME PIVOT DISTRIBUTION sections.",
+    "     D2 (volume-weighted pivots): no settings change. Populates reserved CSV columns 85-86.",
     "v23 — csv-expansion-v0.4: schema bump from v0.3 to v0.4. Added 18 columns:",
     "     SpreadBps, OFIMomentum, FundingDelta, VPFRVAH, VPFRVAL, VPFRNearestHvnAbove,",
     "     VPFRNearestHvnBelow, LastSwingHigh5m, LastSwingLow5m, LastSwingHigh15m,",
@@ -246,6 +257,12 @@
                   "lookback_bars_5m": 30,
                   "pivot_wing_15m": 2,
                   "lookback_bars_15m": 20
+                },
+    "trend_structure": {
+                  "enabled": true,
+                  "pivot_wing": 3,
+                  "pivot_count": 6,
+                  "structure_bonus": 1
                 }
   },
   "session_volume": {

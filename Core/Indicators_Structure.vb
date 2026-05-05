@@ -1,6 +1,19 @@
 ' Core/Indicators_Structure.vb
 ' IndicatorEngine partial: price structure and multi-timeframe indicators.
-' Covers: Donchian Channel, OBV, VPFR-lite, MTF Gate.
+' Covers: Donchian Channel, OBV, VPFR-lite, Swing Pivots, MTF Gate,
+'         TrendStructure classification (D1), volume-weighted pivots (D2).
+
+''' <summary>
+''' Sequence classification of the most recent confirmed swing highs and lows on 5m candles.
+''' UPTREND (HH+HL), DOWNTREND (LH+LL), EXPANSION (HH+LL), CONTRACTION (LH+HL), UNDEFINED.
+''' </summary>
+Public Enum TrendStructure
+    UNDEFINED
+    UPTREND
+    DOWNTREND
+    EXPANSION
+    CONTRACTION
+End Enum
 
 Partial Public Class IndicatorEngine
 
@@ -213,55 +226,168 @@ Partial Public Class IndicatorEngine
     ''' Scans candle list for the most recent confirmed swing high and swing low pivots.
     ''' A confirmed pivot has pivotWing bars on each side. Returns 0 for either if
     ''' no pivot is found within lookbackBars of the latest confirmable index.
+    ''' D2 optional outputs: bestPivotByVolume / bestPivotVolumeRatio / bestPivotIsHigh —
+    ''' price and relative volume of the highest-volume confirmed pivot in the lookback.
     ''' </summary>
     Public Shared Sub CalcSwingPivots(candles As List(Of Candle),
                                        ByRef lastSwingHighPrice As Double,
                                        ByRef lastSwingLowPrice As Double,
                                        Optional pivotWing As Integer = 3,
-                                       Optional lookbackBars As Integer = 30)
+                                       Optional lookbackBars As Integer = 30,
+                                       Optional ByRef bestPivotByVolume As Double = 0.0,
+                                       Optional ByRef bestPivotVolumeRatio As Double = 0.0,
+                                       Optional ByRef bestPivotIsHigh As Boolean = False)
         lastSwingHighPrice = 0
         lastSwingLowPrice  = 0
+        bestPivotByVolume  = 0.0
+        bestPivotVolumeRatio = 0.0
+        bestPivotIsHigh    = False
+
         If candles Is Nothing OrElse candles.Count < pivotWing * 2 + 2 Then Return
 
-        Dim scanEnd As Integer = candles.Count - 1 - pivotWing
+        Dim scanEnd   As Integer = candles.Count - 1 - pivotWing
         If scanEnd < pivotWing Then Return
         Dim scanStart As Integer = Math.Max(pivotWing, scanEnd - lookbackBars)
 
         Dim foundHigh As Boolean = False
         Dim foundLow  As Boolean = False
 
+        ' D2: collect wing-window volumes for all confirmed pivots
+        Dim pivotWingVols As New List(Of Double)
+        Dim bestVol       As Double  = 0
+        Dim bestPrice     As Double  = 0
+        Dim bestIsHigh    As Boolean = False
+
         For i As Integer = scanEnd To scanStart Step -1
-            If Not foundHigh Then
-                Dim isHigh As Boolean = True
-                For w As Integer = 1 To pivotWing
-                    If candles(i - w).High >= candles(i).High OrElse
-                       candles(i + w).High >= candles(i).High Then
-                        isHigh = False : Exit For
-                    End If
-                Next
-                If isHigh Then
-                    lastSwingHighPrice = candles(i).High
-                    foundHigh = True
+            Dim isHigh As Boolean = True
+            For w As Integer = 1 To pivotWing
+                If candles(i - w).High >= candles(i).High OrElse
+                   candles(i + w).High >= candles(i).High Then
+                    isHigh = False : Exit For
                 End If
+            Next
+
+            Dim isLow As Boolean = True
+            For w As Integer = 1 To pivotWing
+                If candles(i - w).Low <= candles(i).Low OrElse
+                   candles(i + w).Low <= candles(i).Low Then
+                    isLow = False : Exit For
+                End If
+            Next
+
+            If isHigh AndAlso Not foundHigh Then
+                lastSwingHighPrice = candles(i).High
+                foundHigh = True
+            End If
+            If isLow AndAlso Not foundLow Then
+                lastSwingLowPrice = candles(i).Low
+                foundLow = True
             End If
 
-            If Not foundLow Then
-                Dim isLow As Boolean = True
-                For w As Integer = 1 To pivotWing
-                    If candles(i - w).Low <= candles(i).Low OrElse
-                       candles(i + w).Low <= candles(i).Low Then
-                        isLow = False : Exit For
-                    End If
+            ' D2: accumulate wing-window volume for each confirmed pivot
+            If isHigh OrElse isLow Then
+                Dim wingStart As Integer = Math.Max(0, i - pivotWing)
+                Dim wingEnd   As Integer = Math.Min(candles.Count - 1, i + pivotWing)
+                Dim wingVol As Double = 0
+                For j As Integer = wingStart To wingEnd
+                    wingVol += candles(j).Volume
                 Next
-                If isLow Then
-                    lastSwingLowPrice = candles(i).Low
-                    foundLow = True
+                pivotWingVols.Add(wingVol)
+                ' Track the pivot type and price separately when both fire on same bar
+                ' (extremely rare — normal markets alternate highs and lows)
+                Dim pivPrice As Double  = If(isHigh, candles(i).High, candles(i).Low)
+                Dim pivIsHigh As Boolean = isHigh
+                If wingVol > bestVol Then
+                    bestVol    = wingVol
+                    bestPrice  = pivPrice
+                    bestIsHigh = pivIsHigh
                 End If
             End If
-
-            If foundHigh AndAlso foundLow Then Exit For
         Next
+
+        ' D2: only populate ratio when 2+ pivots exist (1 pivot = trivially ratio 1.0, no insight)
+        If pivotWingVols.Count >= 2 Then
+            Dim avgVol As Double = pivotWingVols.Sum() / pivotWingVols.Count
+            bestPivotByVolume    = bestPrice
+            bestPivotVolumeRatio = If(avgVol > 0, bestVol / avgVol, 0.0)
+            bestPivotIsHigh      = bestIsHigh
+        End If
     End Sub
+
+    ' -- Trend Structure Classification (D1) ---------------------------------
+    ''' <summary>
+    ''' Classifies 5m swing structure as UPTREND (HH+HL), DOWNTREND (LH+LL),
+    ''' EXPANSION (HH+LL), CONTRACTION (LH+HL), or UNDEFINED (insufficient data).
+    ''' Pure function — no state.
+    ''' </summary>
+    Public Shared Function ClassifyTrendStructure(
+            candles5m       As List(Of Candle),
+            pivotWing       As Integer,
+            pivotCount      As Integer,
+            ByRef lastTwoHighs As (Older As Double, Newer As Double),
+            ByRef lastTwoLows  As (Older As Double, Newer As Double)
+        ) As TrendStructure
+
+        lastTwoHighs = (0.0, 0.0)
+        lastTwoLows  = (0.0, 0.0)
+
+        If candles5m Is Nothing OrElse candles5m.Count < pivotWing * 2 + 2 Then
+            Return TrendStructure.UNDEFINED
+        End If
+
+        Dim scanEnd As Integer = candles5m.Count - 1 - pivotWing
+        If scanEnd < pivotWing Then Return TrendStructure.UNDEFINED
+
+        ' Collect up to pivotCount confirmed pivots, newest first
+        Dim highs As New List(Of Double)
+        Dim lows  As New List(Of Double)
+        Dim total As Integer = 0
+
+        For i As Integer = scanEnd To pivotWing Step -1
+            If total >= pivotCount Then Exit For
+
+            Dim isHigh As Boolean = True
+            For w As Integer = 1 To pivotWing
+                If candles5m(i - w).High >= candles5m(i).High OrElse
+                   candles5m(i + w).High >= candles5m(i).High Then
+                    isHigh = False : Exit For
+                End If
+            Next
+
+            Dim isLow As Boolean = True
+            For w As Integer = 1 To pivotWing
+                If candles5m(i - w).Low <= candles5m(i).Low OrElse
+                   candles5m(i + w).Low <= candles5m(i).Low Then
+                    isLow = False : Exit For
+                End If
+            Next
+
+            If isHigh Then
+                highs.Add(candles5m(i).High)
+                total += 1
+            End If
+            If isLow Then
+                lows.Add(candles5m(i).Low)
+                total += 1
+            End If
+        Next
+
+        If highs.Count < 2 OrElse lows.Count < 2 Then
+            Return TrendStructure.UNDEFINED
+        End If
+
+        ' highs(0) = newest confirmed high, highs(1) = next older
+        lastTwoHighs = (Older:=highs(1), Newer:=highs(0))
+        lastTwoLows  = (Older:=lows(1),  Newer:=lows(0))
+
+        Dim isHH As Boolean = highs(0) > highs(1)  ' newer high > older high
+        Dim isHL As Boolean = lows(0)  > lows(1)   ' newer low  > older low
+
+        If isHH AndAlso isHL     Then Return TrendStructure.UPTREND
+        If Not isHH AndAlso Not isHL Then Return TrendStructure.DOWNTREND
+        If isHH AndAlso Not isHL Then Return TrendStructure.EXPANSION
+        Return TrendStructure.CONTRACTION  ' LH + HL
+    End Function
 
     ' -- MTF Gate (15m timeframe) ---------------------------------------------
     Public Shared Sub CalcMTFGate(candles15m As List(Of Candle),

@@ -144,6 +144,8 @@ Public Class IndicatorSettings
     <JsonPropertyName("spread")> Public Property Spread As New SpreadSettings
     ''' <summary>[swing-pivots] Swing pivot detection parameters for 5m primary and 15m context.</summary>
     <JsonPropertyName("swing")>  Public Property Swing  As New SwingSettings
+    ''' <summary>[d1-trend-structure] HH/HL/LH/LL classification + Pass 2c structure bonus parameters.</summary>
+    <JsonPropertyName("trend_structure")> Public Property TrendStructure As New TrendStructureSettings
 End Class
 
 Public Class AdxSettings
@@ -626,6 +628,25 @@ Public Class NetworkSettings
     <JsonPropertyName("request_timeout_seconds")> Public Property RequestTimeoutSeconds As Integer = 15
     <JsonPropertyName("retry_count")>              Public Property RetryCount            As Integer = 1
     <JsonPropertyName("retry_backoff_ms")>         Public Property RetryBackoffMs        As Integer = 1000
+End Class
+
+' ---------------------------------------------------------------------------
+' D1 — Trend Structure classification settings
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' [d1-trend-structure] HH/HL/LH/LL swing-structure classification + Pass 2c structure bonus.
+''' Enabled: master switch. Default True.
+''' PivotWing: confirmation bars left/right for ClassifyTrendStructure scan. Default 3 (matches swing.pivot_wing_5m).
+''' PivotCount: total pivot events to collect before classifying (mix of highs and lows). Default 6.
+'''   With typical alternation → ~3 highs + 3 lows. Enough to classify; not so many that it lags real regime changes.
+''' StructureBonus: score added when structure agrees with dominant side (capped at regimeMax). Default 1.
+''' </summary>
+Public Class TrendStructureSettings
+    <JsonPropertyName("enabled")>         Public Property Enabled        As Boolean = True
+    <JsonPropertyName("pivot_wing")>      Public Property PivotWing      As Integer = 3
+    <JsonPropertyName("pivot_count")>     Public Property PivotCount     As Integer = 6
+    <JsonPropertyName("structure_bonus")> Public Property StructureBonus As Integer = 1
 End Class
 
 ' ---------------------------------------------------------------------------
