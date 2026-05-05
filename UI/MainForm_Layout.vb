@@ -117,6 +117,18 @@ Partial Public Class MainForm
         InitializeComponent()
         Me.Text = "Deribit Verdict Engine v0.47"
 
+        ' Analysis report link — must be created before the first ResizeControls() call
+        lnkAnalysisReport = New System.Windows.Forms.LinkLabel() With {
+            .AutoSize         = True,
+            .Font             = New System.Drawing.Font("Segoe UI", 8.0!),
+            .LinkColor        = System.Drawing.Color.DimGray,
+            .ActiveLinkColor  = System.Drawing.Color.DodgerBlue,
+            .VisitedLinkColor = System.Drawing.Color.DimGray,
+            .Text             = "Analysis Report",
+            .TextAlign        = System.Drawing.ContentAlignment.MiddleRight
+        }
+        Me.Controls.Add(lnkAnalysisReport)
+
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         AddHandler Me.HandleCreated, AddressOf OnFormHandleCreated
@@ -125,18 +137,6 @@ Partial Public Class MainForm
         SettingsLoader.Initialise(Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
         InitAutoRunControls()
-
-        ' Analysis report link — created at runtime (avoids Designer.vb edits)
-        lnkAnalysisReport = New System.Windows.Forms.LinkLabel() With {
-            .AutoSize        = True,
-            .Font            = New System.Drawing.Font("Segoe UI", 8.0!),
-            .LinkColor       = System.Drawing.Color.DimGray,
-            .ActiveLinkColor = System.Drawing.Color.DodgerBlue,
-            .VisitedLinkColor = System.Drawing.Color.DimGray,
-            .Text            = "Analysis Report",
-            .TextAlign       = System.Drawing.ContentAlignment.MiddleRight
-        }
-        Me.Controls.Add(lnkAnalysisReport)
 
         ' Size the window to fit content exactly, based on actual font metrics.
         SizeToContent()
