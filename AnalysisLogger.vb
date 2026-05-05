@@ -191,7 +191,7 @@ Public Class AnalysisLogger
                     r.SwingTargetShort.ToString("F2"),
                     r.SwingStopLong.ToString("F2"),
                     r.SwingStopShort.ToString("F2"),
-                    If(v.TargetCapReason, "none"),
+                    If(String.IsNullOrEmpty(v.TargetCapReason), "none", v.TargetCapReason),
                     r.BestPivotByVolume5m.ToString("F2"),
                     r.BestPivotVolumeRatio5m.ToString("F2")))
             End Using
