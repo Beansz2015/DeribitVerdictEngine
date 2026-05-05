@@ -27,6 +27,21 @@ Public Class AutoTweakerProgram
     End Function
 
     Private Shared Async Function RunAsync(args As String()) As System.Threading.Tasks.Task(Of Integer)
+        ' ── Set working directory to repo root ────────────────────────────────
+        ' AutoTweaker.exe lives at {repoRoot}/tools/AutoTweaker/bin/Debug/net8.0/
+        ' (4 levels deep). Setting CWD to repo root lets all relative paths in
+        ' tweaker_config.json (csv_path, settings_path, etc.) resolve correctly.
+        Try
+            Dim exeDir   As String = AppDomain.CurrentDomain.BaseDirectory
+            Dim repoRoot As String = Path.GetFullPath(Path.Combine(exeDir, "..", "..", "..", ".."))
+            If Directory.Exists(repoRoot) Then
+                Directory.SetCurrentDirectory(repoRoot)
+                Console.WriteLine("[AutoTweaker] Working directory: " & repoRoot)
+            End If
+        Catch ex As Exception
+            Console.Error.WriteLine("[AutoTweaker] Warning: could not set working directory: " & ex.Message)
+        End Try
+
         ' ── Parse arguments ───────────────────────────────────────────────────
         Dim configPath    As String = "tweaker_config.json"
         Dim manualDiffPath As String = Nothing
