@@ -28,15 +28,22 @@ Public Class AutoTweakerProgram
 
     Private Shared Async Function RunAsync(args As String()) As System.Threading.Tasks.Task(Of Integer)
         ' ── Set working directory to repo root ────────────────────────────────
-        ' AutoTweaker.exe lives at {repoRoot}/tools/AutoTweaker/bin/Debug/net8.0/
-        ' (4 levels deep). Setting CWD to repo root lets all relative paths in
-        ' tweaker_config.json (csv_path, settings_path, etc.) resolve correctly.
+        ' Walk up from the exe directory until we find DeribitVerdictEngine.sln.
+        ' This is robust against Debug/Release/RID variations in the output path.
         Try
-            Dim exeDir   As String = AppDomain.CurrentDomain.BaseDirectory
-            Dim repoRoot As String = Path.GetFullPath(Path.Combine(exeDir, "..", "..", "..", ".."))
-            If Directory.Exists(repoRoot) Then
-                Directory.SetCurrentDirectory(repoRoot)
-                Console.WriteLine("[AutoTweaker] Working directory: " & repoRoot)
+            Dim dir As String = AppDomain.CurrentDomain.BaseDirectory
+            Dim found As Boolean = False
+            For level As Integer = 1 To 8
+                dir = Path.GetFullPath(Path.Combine(dir, ".."))
+                If File.Exists(Path.Combine(dir, "DeribitVerdictEngine.sln")) Then
+                    Directory.SetCurrentDirectory(dir)
+                    Console.WriteLine("[AutoTweaker] Working directory: " & dir)
+                    found = True
+                    Exit For
+                End If
+            Next
+            If Not found Then
+                Console.Error.WriteLine("[AutoTweaker] Warning: could not locate repo root (DeribitVerdictEngine.sln not found).")
             End If
         Catch ex As Exception
             Console.Error.WriteLine("[AutoTweaker] Warning: could not set working directory: " & ex.Message)
