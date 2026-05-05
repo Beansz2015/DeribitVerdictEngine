@@ -108,6 +108,7 @@ Partial Public Class MainForm
             lblVerdict.Text      = "SKIPPED"
             lblVerdict.BackColor = Color.FromArgb(120, 100, 60)
             UpdateLogInfo()
+            RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
             Return
         End If
 
@@ -418,6 +419,8 @@ Partial Public Class MainForm
         UpdateLogInfo()
 
         RenderOutput(r, verdict, norms, vwapWarmup, lastTradePrice)
+
+        RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
     End Function
 
 End Class

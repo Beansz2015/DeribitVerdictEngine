@@ -118,4 +118,26 @@ Public Class FailureRateMatrix
         ciHigh = Min(1.0, centre + margin)
     End Sub
 
+    ' Append one picked-cell entry to analysis/picked_cell_history.csv.
+    ' Called once per auto-tweaker run after the recommended cell is selected.
+    ' Creates the file with header if it doesn't exist yet.
+    Public Shared Sub AppendPickedCell(csvPath As String, tier As String,
+                                       windowMin As Integer, atrThreshold As Double)
+        Try
+            Dim writeHeader As Boolean = Not IO.File.Exists(csvPath)
+            Using sw As New IO.StreamWriter(csvPath, append:=True)
+                If writeHeader Then
+                    sw.WriteLine("Timestamp,Tier,WindowMin,AtrThreshold")
+                End If
+                sw.WriteLine(String.Join(",",
+                    DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
+                    tier,
+                    windowMin.ToString(),
+                    atrThreshold.ToString("F2")))
+            End Using
+        Catch
+            ' Best-effort write — do not abort the auto-tweaker run on CSV I/O failure.
+        End Try
+    End Sub
+
 End Class

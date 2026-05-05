@@ -13,6 +13,19 @@
     <PackageReference Include="Websocket.Client" Version="5.1.2" />
   </ItemGroup>
 
+  <!-- Exclude the AutoTweaker console project from SDK auto-discovery.
+       AutoTweaker has its own .vbproj and must not be compiled into this assembly.
+       TweakerConfig and TweakerState are re-included because TweakSettingsForm uses
+       them directly; they are host-agnostic POCOs with no WinForms references. -->
+  <ItemGroup>
+    <Compile Remove="tools\**\*.vb" />
+    <None Remove="tools\**\*.vb" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="tools\AutoTweaker\TweakerConfig.vb" />
+    <Compile Include="tools\AutoTweaker\TweakerState.vb" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Copy settings.json to output directory so the app finds it at runtime -->
     <None Include="settings.json">

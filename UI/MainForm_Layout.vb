@@ -93,8 +93,18 @@ Partial Public Class MainForm
     ' Resilience: count of skipped analyses this session (transient API failures).
     Private _skipCount As Integer = 0
 
+    ' Raised at the end of every RunAnalysisAsync call (success or skip).
+    ' TweakSettingsForm subscribes to this to refresh its status label reactively.
+    Public Event AnalysisCompleted As EventHandler
+
     ' Analysis report link (created programmatically to avoid touching the auto-generated Designer.vb)
     Private WithEvents lnkAnalysisReport As System.Windows.Forms.LinkLabel
+
+    ' Tweak Settings link (status bar, opens TweakSettingsForm non-modally)
+    Private WithEvents lnkTweakSettings As System.Windows.Forms.LinkLabel
+
+    ' Reference to the open TweakSettingsForm (Nothing when not open)
+    Private _tweakForm As TweakSettingsForm
 
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
@@ -128,6 +138,17 @@ Partial Public Class MainForm
             .TextAlign        = System.Drawing.ContentAlignment.MiddleRight
         }
         Me.Controls.Add(lnkAnalysisReport)
+
+        lnkTweakSettings = New System.Windows.Forms.LinkLabel() With {
+            .AutoSize         = True,
+            .Font             = New System.Drawing.Font("Segoe UI", 8.0!),
+            .LinkColor        = System.Drawing.Color.DimGray,
+            .ActiveLinkColor  = System.Drawing.Color.DodgerBlue,
+            .VisitedLinkColor = System.Drawing.Color.DimGray,
+            .Text             = "Tweak Settings",
+            .TextAlign        = System.Drawing.ContentAlignment.MiddleRight
+        }
+        Me.Controls.Add(lnkTweakSettings)
 
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
@@ -271,7 +292,25 @@ Partial Public Class MainForm
         lblCountdown.Size      = New System.Drawing.Size(200, STATUS_H)
         lnkAnalysisReport.Location = New System.Drawing.Point(W - 390, H - STATUS_H)
         lnkCalibCheck.Location     = New System.Drawing.Point(W - 230, H - STATUS_H)
+        lnkTweakSettings.Location  = New System.Drawing.Point(W - 148, H - STATUS_H)
         lnkResetLog.Location       = New System.Drawing.Point(W - 80, H - STATUS_H)
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Tweak Settings link click
+    ' -----------------------------------------------------------------------
+    Private Sub lnkTweakSettings_LinkClicked(sender As Object,
+            e As System.Windows.Forms.LinkLabelLinkClickedEventArgs) _
+            Handles lnkTweakSettings.LinkClicked
+        If _tweakForm Is Nothing OrElse _tweakForm.IsDisposed Then
+            _tweakForm = New TweakSettingsForm(Me)
+            AddHandler _tweakForm.FormClosed,
+                Sub(s As Object, ev As System.Windows.Forms.FormClosedEventArgs)
+                    _tweakForm = Nothing
+                End Sub
+        End If
+        _tweakForm.Show()
+        _tweakForm.BringToFront()
     End Sub
 
 End Class

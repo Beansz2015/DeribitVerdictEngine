@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- net8.0 (no -windows suffix) ensures Linux portability -->
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>AutoTweaker</AssemblyName>
+    <Nullable>enable</Nullable>
+    <StartupObject>DeribitVerdictEngine.AutoTweakerProgram</StartupObject>
+  </PropertyGroup>
+
+  <!-- Host-agnostic shared files from main project — no WinForms references in any of these -->
+  <ItemGroup>
+    <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\analysis\AnalysisConstants.vb" />
+    <Compile Include="..\..\analysis\AnalysisReport.vb" />
+    <Compile Include="..\..\analysis\ForwardReturnJoiner.vb" />
+    <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
+  </ItemGroup>
+
+</Project>

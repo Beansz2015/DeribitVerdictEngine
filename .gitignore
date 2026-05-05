@@ -363,3 +363,13 @@ MigrationBackup/
 FodyWeavers.xsd
 
 .claude/
+
+# Auto-tweaker runtime files (gitignored per Bundle 2 spec)
+tools/AutoTweaker/tweaker_config.json
+tools/AutoTweaker/state.json
+tools/AutoTweaker/dry_run_payloads/
+tools/AutoTweaker/proposed_diffs/
+tools/AutoTweaker/manual_diffs/
+
+# Picked-cell history (per-run auto-tweaker cell selections)
+analysis/picked_cell_history.csv
