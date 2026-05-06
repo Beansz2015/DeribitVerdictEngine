@@ -339,11 +339,53 @@ Every time the engine runs, it prints its output in this order:
 **What to watch for:**
 
 - **Donchian breakout:** Price breaking above the recent range high = bullish breakout signal. Breaking below the range low = bearish. No break = neutral, no score.
-- **Swing structure (DMI/HH-HL / LH-LL pattern):** A sequence of higher highs and higher lows confirms a bull trend; lower highs and lower lows confirm a bear trend. Mixed signals = choppy, no clear edge.
 - **OBV (On-Balance Volume):** OBV — the running total of volume flowing in and out — should trend in the same direction as price. OBV rising while price rises = healthy trend. OBV diverging from price (one going up, the other down) = warning signal; the engine can flag this as an exit trigger for open positions.
 - Watch for `OBV divergence` in the HOLD/EXIT line if you're already in a trade.
 
 **Example:** Price makes a new high above the Donchian channel but OBV is flat or declining. The engine flags this as a structural divergence. Don't add to longs here — the volume isn't backing the breakout.
+
+---
+
+### Swing Pivots (5m + 15m)
+
+**What it shows:** The most recent confirmed swing high and swing low on both 5m and 15m candles. Drives the structural stop and target lines under the ATR Entry Levels block, and the Layer 1.5 structural-break exit in the HOLD/EXIT line.
+
+**What to watch for:**
+
+- The 5m swing low under your long entry is your structural stop — price breaking it cleanly means the long premise is invalidated. The engine fires `EXIT -- structural break (swing low breach)` when this happens.
+- The 5m swing high above your long entry is your structural target. R:R is the ratio printed in the structural row of the entry block.
+- 15m swings are context only — they don't drive stops/targets but tell you whether the broader structure agrees. A 5m setup against the 15m swing direction is lower-quality.
+- A `STRUCTURALLY_WEAK` context tag fires when swing data exists but no clean target+stop pair can be placed for the verdict direction.
+
+**Example:** `LONG  Stop: 71450  Entry: 71850  Target: 72420  R:R 1.4` reading from the structural row — the 5m swing low at 71450 is your stop, swing high at 72420 is your target. If price drops below 71450 mid-trade, the engine flags `EXIT -- structural break` regardless of what the indicators say.
+
+---
+
+### Trend Structure (HH/HL/LH/LL)
+
+**What it shows:** The classification of the last six confirmed 5m swing pivots into one of five patterns. This is a Pass 2c scoring input — the structure bonus pushes the dominant side of a confirmed-direction setup.
+
+**What to watch for:**
+
+- `UPTREND` (HH+HL — higher high, higher low) — adds +1 to long score when long is dominant. This is the cleanest bull structure read.
+- `DOWNTREND` (LH+LL) — adds +1 to short score when short is dominant.
+- `EXPANSION` (HH+LL — both higher high and lower low) — range-widening, no scoring change. Treat as a caution flag — the market is in directional disagreement at higher and lower extremes simultaneously.
+- `CONTRACTION` (LH+HL — narrowing range) — no scoring change. Often precedes a break; pair with BBW squeeze for breakout posture confirmation.
+- `UNDEFINED` — fewer than 2 highs and 2 lows in the lookback. Insufficient structure to classify.
+
+**Example:** `Trend Structure: UPTREND  (HH 102450.0 > 102100.0 | HL 101800.0 > 101500.0)` — both the most recent high and most recent low are higher than their priors. A `LONG` verdict in this state gets the +1 bonus. A `SHORT` verdict in this state would not — the structure disagrees with the direction.
+
+---
+
+### Best Volume Pivot (Display-Only)
+
+**What it shows:** The pivot in the 5m lookback with the highest total volume across its wing window, plus the volume ratio against the average pivot. Not currently used in scoring or cap arbitration — treat as a chart-reading aid.
+
+**What to watch for:**
+
+- `Best Vol Pivot 5m: HIGH 102450.0  (vol×2.3 vs avg pivot)` — the 102450 swing high was made on 2.3× the average pivot volume. That's a stronger structural reference than a same-price level made on average volume.
+- When the "best" pivot price differs from the most-recent swing being used as your target/stop, eyeball whether it's a stronger structural level worth referencing for partials.
+- Ratios above 2.0× are meaningful; under 1.5× the volume-weighting is barely differentiating from the most-recent pivot.
 
 ---
 
@@ -384,6 +426,34 @@ Every time the engine runs, it prints its output in this order:
 - Two or three of these flipping against your open position simultaneously triggers the `EXIT -- microstructure deterioration` alert in the HOLD/EXIT line — that's a fast exit signal.
 
 **Example:** `OFI: BULL | CVD: BULL | TFI: BEAR` — two of three confirm bulls, but TFI (the most recent window) just flipped bearish. Not enough to exit if you're in a long, but worth watching. If OFI also flips on the next run, you have a microstructure deterioration developing.
+
+---
+
+### OFI Momentum
+
+**What it shows:** Whether the OFI level signal is accelerating or fading over the last few runs. RISING/FALLING/FLAT, computed against a 10-sample ring buffer.
+
+**What to watch for:**
+
+- `OFI: BULL` with `OFI Momentum: RISING` — the bullish flow is intensifying. The engine adds a momentum modifier to the OFI level score.
+- `OFI: BULL` with `OFI Momentum: FALLING` — the bullish read is technically still there but losing force. Lower-quality long signal.
+- `FLAT` momentum on a strong OFI level is normal — it just means the imbalance has been stable. Not negative.
+- A momentum shift (RISING → FALLING in consecutive runs) on a position you're holding is an early warning the flow is rolling over — earlier than waiting for the level signal itself to flip.
+
+**Example:** `OFI: BULL | OFI Momentum: RISING` on the same run as a `LONG` verdict — the buy-side flow is accelerating, not just present. This is the cleanest fresh-entry posture for a long; flow is not just leaning bullish but doing so harder than a few runs ago.
+
+---
+
+### Bid-Ask Spread (WIDE penalty)
+
+**What it shows:** The current bid-ask spread in basis points. When the spread is unusually wide, the engine applies an entry-side penalty — the assumption is that the order book has thinned out, often during a flush or news event, and is not a clean entry environment.
+
+**What to watch for:**
+
+- A `Spread WIDE` flag in the breakdown table means a penalty was applied to the verdict-side score. The verdict may degrade by one tier as a result.
+- Wide spread + apparent directional signal often means the move is already half-finished by the time the next candle prints. The engine is biasing toward "no trade" rather than chasing.
+- During normal market conditions on BTC-PERPETUAL, the spread sits in the 1–3 bps range. Anything above 5 bps is treated as wide.
+- Don't second-guess this penalty — it specifically catches the "looks like a great signal but the book is empty" trap.
 
 ---
 
@@ -441,6 +511,21 @@ Every time the engine runs, it prints its output in this order:
 
 ---
 
+### Funding Momentum
+
+**What it shows:** The direction of the funding rate change over the last 3 samples (≈3 minutes at 60s polling). RISING / FALLING / FLAT. Acts as an adjunct to the absolute funding signal in Step 3b — amplifies or softens the penalty depending on whether the crowding is intensifying or unwinding.
+
+**What to watch for:**
+
+- `Funding: +0.025% (HIGH)` with `Funding Momentum: RISING` — long crowd is still piling in. The engine amplifies the long-side penalty. Avoid late long entries.
+- `Funding: +0.025% (HIGH)` with `Funding Momentum: FALLING` — crowd is unwinding even though the absolute rate is still elevated. Penalty is softened. Short window for a long re-entry if other signals support it.
+- `FLAT` is the most common state at any given minute — funding moves slowly relative to 1m candles.
+- Like the absolute rate, this is a confidence modifier — it does not block a trade, only nudges score weight.
+
+**Example:** `Funding: -0.018% (LOW) | Funding Momentum: FALLING` — shorts are leaning the market and the short-side rate is becoming more negative (i.e., shorts paying more). Combined, this is a contrarian setup for longs: the short crowd is intensifying its position, classic squeeze-fuel posture if a long signal is otherwise present.
+
+---
+
 ## 16. Signal Breakdown Table
 
 **What it shows:** The full itemised score ledger — every indicator that scored, what it scored (`[L]` for long, `[S]` for short, `[L*]` / `[S*]` for partial, or a penalty), and the running total that matches the `SCORE` line in the Verdict Block.
@@ -454,6 +539,69 @@ Every time the engine runs, it prints its output in this order:
 - Use this table to understand **why** the engine called what it called — not just what it called.
 
 **Example:** `VERDICT: LONG | SCORE: Long 11/20` — looking at the breakdown, 7 of those 11 points are from flow signals (CVD, OFI, TFI, OI Delta) and only 4 from structure (VWAP, EMA). This is a flow-heavy long. It can work, but is more vulnerable to a sudden flow reversal than a structure-heavy verdict with the same score. Consider a tighter stop.
+
+---
+
+## 17. Working with the App
+
+These features sit alongside the per-run output above. They affect how the engine adapts over time and how you investigate its accuracy.
+
+---
+
+### Analysis Report Viewer
+
+**What it shows:** A markdown report joining recent verdicts to subsequent price action — failure rate per verdict tier, hold-window stability, funding momentum diagnostic, OFI outlier audit, OI×CVD asymmetry breakdown.
+
+**Where:** Status bar at the bottom of the main window, link labelled `Analysis Report`.
+
+**What to watch for:**
+
+- **"Hold Window Selection Stats"** — answers the practical question: "STRONG LONG verdicts have been most reliable held for how long?" Per-tier table with the empirically chosen window. Use this to set your default scale-out timing per tier.
+- **Failure-rate matrix** — per-tier × window × ATR threshold cells with sample size and 95% confidence interval. Cells with `n < 30` are flagged as insufficient sample; ignore them until more data accumulates.
+- **Funding Momentum Diagnostic** — distribution of raw funding-rate deltas, percentile table. Tells you whether the FLAT-heavy FundingMomentum classification is genuine quiet vs threshold mismatch.
+- **OFI Outlier audit** — flags rows where OFI Ratio exceeded 100 or 1000. If you see a recurring outlier pattern, raise it as a possible calculation issue.
+
+**When to read it:** After ~500 new rows accumulate, or when verdict accuracy seems off. The auto-tweaker reads the same data programmatically, but the markdown report is the human-readable view.
+
+---
+
+### Tweak Settings — The Auto-Tweaker
+
+**What it does:** Periodically reviews recent verdict accuracy (failure rate against tiered ATR-adjusted forward returns), and when accuracy slips below a threshold, asks Claude Opus to propose targeted settings adjustments. Settings get applied either automatically or after your manual approval, depending on the toggle.
+
+**Where:** Status bar link labelled `Tweak Settings` — opens a non-modal dialog.
+
+**What you control:**
+
+- **Auto-commit on apply** — when on, accepted settings diffs are written to `settings.json` directly. When off, the diff is parked at `tools/AutoTweaker/proposed_diffs/` for you to review and apply manually.
+- **Dry-run mode** — when on, the auto-tweaker generates the API call payload as a `.txt` file at `tools/AutoTweaker/dry_run_payloads/` and stops. No API call is made. Useful for testing without burning API credits.
+- **Window size (verdicts)** — number of recent verdicts to evaluate failure rate over. Default 120. Must all fall within the same UTC session.
+- **Failure rate threshold (%)** — if aggregate failure rate exceeds this, a tweak is proposed. Default 40%.
+- **Cooldown rows** — minimum new verdicts between tweak attempts. Default 10.
+
+**Status indicator:**
+
+- `Ready` — all conditions met, "Run Tweaker Now" enabled.
+- `Cooldown: N rows remaining` — too few new rows since last run.
+- `Waiting for session-aligned window: M/120 rows` — current session hasn't accumulated enough rows yet.
+- `Insufficient tier-eligible rows` — too many of the recent verdicts were `NO TRADE` or `WEAK_*`; not enough STRONG/MEDIUM verdicts to compute a reliable failure rate.
+
+**What it will not do:**
+
+- Touch any rejected pattern (fixed-% targets, double-counting setups, dead v15 keys). The applier hard-rejects these regardless of what Claude proposes.
+- Disable the MTF gate or the regime-weights gate. Hard-coded blocks.
+- Change more than 3 keys per proposal. The 3-key cap is the conservative-bias safeguard.
+
+**Reading the "Last Run" line:**
+
+- `[BELOW_THRESHOLD]` — engine is performing fine, no tweak needed. This is the normal happy state.
+- `[INELIGIBLE]` — cooldown / session-not-aligned / insufficient tiers. No action. Not an error.
+- `[DRY_RUN_WRITTEN]` — payload file generated, awaiting your manual handling.
+- `[PROPOSED]` — diff parked, awaiting manual apply.
+- `[APPLIED]` — settings updated, version bumped, change_log appended.
+- `[ERROR]` — API call or validation failure. See the summary line for the reason.
+
+The auto-tweaker is a long-loop optimiser. Don't expect frequent tweaks — most of the time, the verdict accuracy is fine and the run reports `BELOW_THRESHOLD`. When a tweak does fire, treat it as a calibration event worth reviewing rather than a routine update.
 
 ---
 

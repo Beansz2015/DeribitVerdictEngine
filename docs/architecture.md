@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-04-30 | App version: v21 — RSI divergence algorithm fix + ROC slope_sensitivity split**
+**Last updated: 2026-05-06 | App version: settings.json v24 — Bundle 3 (d1 trend structure + d2 volume-weighted pivots) on top of Bundle 1 (csv-expansion-v0.4 + analysis script) and Bundle 2 (auto-tweaker)**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.

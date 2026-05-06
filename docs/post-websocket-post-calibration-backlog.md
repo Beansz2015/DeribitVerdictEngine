@@ -55,12 +55,16 @@ The CalibrationReport gate (`docs/DeribitIndicatorProject.md` Section 12) requir
 
 ### B1. Per-Indicator Regime Weight Tuning
 
+**Status:** STUB SPEC drafted 2026-05-05 as `b1-per-indicator-regime-weights-proposal.md`. Marked `PROPOSED — BLOCKED` until offline analysis (Bundle 1) produces per-indicator hit-rate output. Do NOT implement until that data is available.
+
 **What:** Pass 2c currently uses a single `AlignmentBonus` / `ConflictPenalty` scalar per regime. A more granular system would weight each indicator's contribution differently in TRENDING vs RANGE_BOUND (e.g. EMA worth more in TRENDING, VWAP worth more in RANGE_BOUND).
 **Why deferred:** Tuning per-indicator weights without data is overfitting. The current single-scalar gate is a deliberate simplification specifically to avoid this.
 **Trigger to revisit:** CalibrationReport READY; sufficient per-regime row count to compute per-indicator hit rates.
 **Expected payoff:** Small-to-moderate. Risks overfitting on low sample sizes. Spec-first: write `adaptive-regime-weights-v2-proposal.md` before coding.
 
 ### B2. Auto-Tuning Weights from CSV Log
+
+**Status:** SHIPPED 2026-05-06 as the Auto-Tweaker pipeline (`auto-tweaker-pipeline-proposal.md`). Console app at `tools/AutoTweaker/`, configured via the WinForm `Tweak Settings` dialog. See UserManual §19 for full reference.
 
 **What:** Once enough data exists, programmatically correlate each signal's vote with subsequent N-bar price direction and adjust `settings.json` weights. Currently `scoring.weights` block is gone (removed v15) — would need re-spec for what to weight and how.
 **Why deferred:** Already in Section 13 fine-tuning backlog. Same calibration prerequisite as B1.
@@ -69,7 +73,9 @@ The CalibrationReport gate (`docs/DeribitIndicatorProject.md` Section 12) requir
 
 ### B3. CSV Column Additions
 
-Three columns currently noted as deferred in Section 12 of `DeribitIndicatorProject.md`. Aggregated here:
+**Status:** SHIPPED. v0.3 added `VerdictContext`, `FundingMomentum`, `OiCvdOutcome` (2026-04-29). v0.4 (Bundle 1, 2026-05-05) added 18 more — `SpreadBps`, `OFIMomentum`, `FundingDelta`, VPFR-v2 fields, swing fields, `TargetCapReason`, BestPivotByVolume reservations. Bundle 3 d1 added column 87 `TrendStructure5m`. CSV is now at 87 columns covering all v17+Bundle3 features. See UserManual §17.
+
+Three columns originally noted as deferred in Section 12 of `DeribitIndicatorProject.md`. Aggregated here:
 
 - **`VerdictContext`** — log the FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED tag per run. Enables per-tag accuracy correlation.
 - **`FundingMomentum`** — log RISING / FALLING / FLAT plus raw delta. Enables Step 3b effectiveness validation.
@@ -101,6 +107,8 @@ Items in Section 12 needing 50+ live runs:
 **Expected payoff:** Cumulative small gains. Each item alone is marginal; together they meaningfully refine the engine.
 
 ### B5. Spread WIDE Penalty Validation
+
+**Status:** UNBLOCKED 2026-05-05. `SpreadBps` now logged as CSV column 69. Offline analysis script (Bundle 1) and auto-tweaker (Bundle 2) can both consume it. Validation will surface in the analysis report's failure-rate matrix once 50+ rows with WIDE events accumulate.
 
 **What:** Once `bid-ask-spread-proposal.md` ships, validate that WIDE-spread runs pushed to NO TRADE underperformed when traded anyway.
 **Trigger to revisit:** 50+ runs after spread feature ships, with at least 5 WIDE events.
@@ -134,12 +142,16 @@ These items have no technical gating but are not yet specified. They require a p
 
 ### D1. Higher High / Higher Low / Lower High / Lower Low Trend Structure
 
+**Status:** SHIPPED 2026-05-06 as `d1-trend-structure-proposal.md`. `ClassifyTrendStructure` in `Indicators_Structure.vb`, Pass 2c integration with separate `StructureBonus` (default 1) capped at regimeMax. Logged to CSV column 87 as `TrendStructure5m`. See UserManual §10.
+
 **What:** Building on `swing-pivot-proposal.md`, classify the sequence of recent swings: HH+HL = uptrend structure; LH+LL = downtrend structure; HH+LL = expansion / divergence; LH+HL = contraction.
 **Why deferred from swing-pivot v1:** Adds another layer of structural interpretation. The v1 spec is already large with three integration points; v1 ships with single-pivot detection, v2 builds the pattern recognition on top.
 **Trigger to revisit:** Swing pivots shipped and stable for 30+ runs.
 **Expected payoff:** Moderate. HH/HL structure is the bedrock of price-action trading; engine surfacing it would be aligned with trader-profile but currently the trader does this manually on chart.
 
 ### D2. Volume-Weighted Pivot Ranking
+
+**Status:** SHIPPED 2026-05-06 as `d2-volume-weighted-pivots-proposal.md` (display-only v1). `BestPivotByVolume5m` and `BestPivotVolumeRatio5m` extended on `CalcSwingPivots`, logged to CSV columns 85–86. v2 cap-arbitration promotion parked as observation P1 in `DeribitIndicatorProject.md` §16.6 — promote when "best is also most-recent" rate falls below 50% AND auto-tweaker output shows volume-weighted pivots correlate with subsequent target-hit rate. See UserManual §10.
 
 **What:** Not all swing pivots are equal — a swing high with 3× normal volume is a stronger reference than a swing high on average volume. Rank pivots by volume at the pivot bar (or within the wing window) and prefer high-volume pivots in cap arbitration.
 **Why deferred from swing-pivot v1:** Adds complexity to the pivot scan. v1 ships with equal-weighted pivots; v2 layers volume weighting.

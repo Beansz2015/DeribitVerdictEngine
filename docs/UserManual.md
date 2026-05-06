@@ -15,7 +15,7 @@ This manual is a field-by-field reference for every variable and display block t
 
 **Important on Kelly sizing.** The Kelly block is **advisory only** and uses an **ATR-basis** payoff ratio (`target_mult / stop_mult`, default `1.67`). Per the trader profile, real execution uses **structural** stops and targets (previous swing low/high), not ATR multiples — so the displayed Kelly fraction does not correspond to your actual R:R. Treat Kelly as a directional-bias sanity check, not a position-sizing prescription. The advisory label is rendered inline under the KELLY SIZING header to reinforce this.
 
-**Source of truth.** When this manual and the code disagree, the code wins. Primary source files: `UI/MainForm_Render_Header.vb`, `UI/MainForm_Render_Sections.vb`, `Core/ScoringEngine_*.vb`, `Core/Indicators_*.vb`, and `settings.json` v14.
+**Source of truth.** When this manual and the code disagree, the code wins. Primary source files: `UI/MainForm_Render_Header.vb`, `UI/MainForm_Render_Sections.vb`, `Core/ScoringEngine_*.vb`, `Core/Indicators_*.vb`, `analysis/*.vb`, `tools/AutoTweaker/*.vb`, and `settings.json` v24 (auto-bumped by AutoTweaker after applied tweaks).
 
 ---
 
@@ -37,6 +37,9 @@ This manual is a field-by-field reference for every variable and display block t
 14. [MTF Gate](#14-mtf-gate)
 15. [Funding](#15-funding)
 16. [Signal Breakdown Table](#16-signal-breakdown-table)
+17. [CSV Logging — analysis_log.csv](#17-csv-logging)
+18. [Analysis Report Viewer](#18-analysis-report-viewer)
+19. [Tweak Settings & Auto-Tweaker](#19-tweak-settings-auto-tweaker)
 
 ---
 
@@ -218,9 +221,17 @@ Mirrored: `shortStop = r.CurrentPrice + atrStop`, `shortTarget = r.CurrentPrice 
 - Long cap fires when `v.AdjustedLongTarget > 0`, which is set in `ScoringEngine_Calculate_Verdict.vb` Step 5b when `VPFRSignal ∈ {NEAR_HVN_RESIST, IN_LVN_BEAR}` AND `VPFRPoc > CurrentPrice` AND `VPFRPoc < rawLongTarget`.
 - Short cap fires on the mirror: `VPFRSignal ∈ {NEAR_HVN_SUPPORT, IN_LVN_BULL}` AND `VPFRPoc < CurrentPrice` AND `VPFRPoc > rawShortTarget`.
 
-**Display:** Raw target printed dimmed, followed by `--> <adjusted>  [<reason>]` in amber bold. Reason is e.g. `HVN_CAPPED @ 72480.0 (POC wall -- NEAR_HVN_RESIST)`.
+**Display:** Raw target printed dimmed, followed by `--> <adjusted>  [<reason>]` in amber bold. Reason field is `swing` (highest priority — see below) / `hvn` / `poc` / `none`. Logged as CSV column 84 `TargetCapReason`.
 
-**Interpretation:** The engine is telling you the raw 2×ATR target is probably unreachable because there's a high-volume node sitting between you and it. Use the capped value as the realistic scale-out level, or skip the trade if the capped R:R no longer makes sense. This is an engine convenience, not a scoring input — it does not change the verdict.
+**Step 5b 3-tier cap (v17 swing-pivot spec):** the cap is now closest-wins across three tiers:
+
+1. **Tier 1 — swing target.** `SwingTargetLong` if it sits between entry and the raw long target (or above the raw target by a smaller margin). Mirrored for short.
+2. **Tier 2 — nearest HVN wall.** `VPFRNearestHvnAbove` for long, `VPFRNearestHvnBelow` for short.
+3. **Tier 3 — POC fallback.** `VPFRPOC` when neither tier above qualifies AND VPFR signal indicates resistance / support against the verdict direction.
+
+Closest cap to entry wins. The selected reason is recorded in `v.TargetCapReason` and surfaced in the display.
+
+**Interpretation:** The cap tells you the raw 2×ATR target is probably unreachable because there's structure (a swing high, an HVN wall, or a POC) sitting between entry and target. Use the capped value as the realistic scale-out level, or skip the trade if the capped R:R no longer makes sense. This is an engine convenience, not a scoring input — it does not change the verdict.
 
 **Important divergence from trader-profile.** These ATR levels are **display only** for sanity reference. Per `trader-profile.md` §4–5, live execution uses **structural** stops (previous swing low/high) and **structural** targets (previous swing high/low). The ATR frame is a volatility-context reference and, via the Kelly block, an advisory sizing basis. Do not place the ATR stop or target as your actual working orders.
 
@@ -861,9 +872,13 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 - The divergence-blocks-upgrade gate exists for a reason documented in v0.42: OBV disagreeing with its own price trend means volume is not backing the move. Awarding the upgrade would reward a weak signal. Expect to see `Trend:RISING Div:BEARISH | [upgrade blocked]` during late-stage rallies where new highs are printed on fading participation.
 - In the sample, `Trend=RISING Div=BULLISH` — trend and divergence pointing the same direction (bullish tilt). This fires `obvLong` normally and does NOT block upgrades.
 
-### VPFR-lite
+### VPFR-lite v2 (POC + VAH/VAL + nearest HVN/LVN)
 
-**What:** Volume Profile Fixed Range over the available 1m window, with exponential decay weighting toward recent bars. Reports POC price, HVN-near-POC flag, and a signal classification.
+**What:** Volume Profile Fixed Range over the available 1m window, with exponential decay weighting toward recent bars. Reports POC price, value-area boundaries (VAH / VAL), nearest HVN/LVN walls above and below, HVN-near-POC flag, and a signal classification.
+
+**v2 additions over v1:** value-area boundaries (`VPFRVAH` / `VPFRVAL`) capture the 70%-volume zone; `VPFRNearestHvnAbove` / `VPFRNearestHvnBelow` are the closest high-volume walls in each direction. v2 fields drive the Step 5b 3-tier target cap (swing → nearest HVN → POC).
+
+**v1 (legacy):** Volume Profile Fixed Range over the available 1m window, with exponential decay weighting toward recent bars. Reports POC price, HVN-near-POC flag, and a signal classification.
 
 **Calculation (`CalcVPFRLite` in `Indicators_Structure.vb`):**
 
@@ -899,6 +914,129 @@ Three structural primitives: breakout levels (Donchian), volume-trend confirmati
 - `IN_LVN_BULL` / `IN_LVN_BEAR` fire when price is through a low-volume node — these are the "price moves fast through empty air" zones. Directional score only fires when price is on the "correct" side of POC relative to the vacuum. A `NEUTRAL` signal can mean either mid-profile price or normal-density bucket; read it as "no structural information" rather than "balanced".
 - POC itself is a useful reference even when the signal is `NEUTRAL` — it's the volume centre of gravity for the current session window. Traders often watch POC cross as a separate context cue.
 - Exponential decay means POC will drift with recent participation rather than anchor on early-session high-volume prints. If you see POC shifting alongside price through the session, that's normal; if POC is static while price diverges, older volume is dominating — the signal is lagging actual structure.
+- **VAH/VAL** define the 70%-volume zone. Price inside the value area is "accepted"; price outside is "rejected" or "extended". v2's value-area boundaries don't currently feed scoring directly, but `VPFRVAH` / `VPFRVAL` are logged to CSV columns 72/73 for later auto-tweaker tuning.
+- **Nearest HVN walls** (`VPFRNearestHvnAbove` / `VPFRNearestHvnBelow`) are the closest high-volume nodes in each direction. They feed the Step 5b 3-tier target cap as the second-priority cap (after swing target, before POC).
+
+---
+
+### Swing Pivots (5m + 15m)
+
+**What:** Most recent confirmed swing high and swing low on 5m and 15m candles, plus direction-aware target/stop bookkeeping for the long and short side.
+
+**Calculation (`CalcSwingPivots` in `Indicators_Structure.vb`):**
+
+- Walk backward from `scanEnd = candleCount − pivotWing − 1` to `scanStart = pivotWing` looking for confirmed pivots.
+- A bar at index `i` is a confirmed swing high iff `high[i] > high[i±k]` for all `k ∈ [1, pivotWing]` (strict inequality on both sides — equal-high bars don't count).
+- Mirror logic for swing low.
+- First match wins — emits the most recent confirmed pivot, not the highest/lowest in the window.
+- 5m: `pivotWing = cfg.Indicators.Swing.PivotWing5m` (default 3), `lookback = LookbackBars5m` (default 30).
+- 15m: separate config keys (`PivotWing15m`, `LookbackBars15m`) — narrower wing acceptable due to slower bar pace.
+
+**Direction-aware bookkeeping** (computed inline in `MainForm_Analysis.RunAnalysisAsync`, not in `CalcSwingPivots`):
+
+- `SwingTargetLong = LastSwingHigh5m` if it's above current price, else `0`.
+- `SwingStopLong = LastSwingLow5m` if it's below current price, else `0`.
+- Mirror for short side.
+
+**Scoring use:**
+
+- **Step 5b 3-tier cap (top priority):** when a long verdict has `SwingTargetLong > 0` and `SwingTargetLong < rawLongTarget`, the target is capped to the swing high. Cap is closest-wins across (swing → nearest HVN → POC) — the tightest candidate wins. `TargetCapReason` records which tier won.
+- **CalcHoldStatus Layer 1.5 (structural break exit):** during a long position, if `CurrentPrice < SwingStopLong − 0.5 × cfg.Indicators.Structure.SwingBreachAtrMult × ATR`, fires `EXIT -- structural break (swing low breach)`. Sits between Layer 1 (microstructure exit) and Layer 2 (OBV divergence).
+- **VerdictContext STRUCTURALLY_WEAK:** when `LastSwingHigh5m > 0 OR LastSwingLow5m > 0` AND no clean target+stop pair can be placed for the verdict direction, fires the tag. Catches the "we have structure but the trade doesn't have R:R" case.
+
+**Display:** Renders under `MARKET STRUCTURE` as `Last Swing High 5m: 102450.0  |  Last Swing Low 5m: 101800.0` with corresponding 15m row dim. ATR Entry block includes a structural row showing `LONG  Stop: <swing low>  Entry: <price>  Target: <swing high>  R:R <ratio>` in cyan when both sides exist.
+
+**Interpretation:**
+
+- Confirmed pivots avoid equal-high false positives. A new swing high at the same level as the prior one does not register, which is the right behaviour — true breakout structure requires a strictly higher high.
+- The walk-backward scan picks the most-recent pivot rather than scanning forward from the start. This means the engine always references the freshest actionable level, not the oldest historical reference in the lookback.
+- 15m pivots are display-only context. They are not used for cap arbitration or structural break detection — only the 5m levels drive those.
+- A `STRUCTURALLY_WEAK` tag with `0,0` in `SwingTargetLong/SwingStopLong` is the diagnostic case: enough candle history exists for at least one swing detection, but the geometry doesn't produce a clean R:R for the verdict direction.
+
+---
+
+### Trend Structure (HH/HL/LH/LL)
+
+**What:** Sequence-of-pivots classification on the 5m timeframe — UPTREND / DOWNTREND / EXPANSION / CONTRACTION / UNDEFINED.
+
+**Calculation (`ClassifyTrendStructure` in `Indicators_Structure.vb`):**
+
+- Walk backward through `candles5m` to identify the last `cfg.Indicators.TrendStructure.PivotCount` (default 6) confirmed pivots, each requiring `cfg.Indicators.TrendStructure.PivotWing` (default 3) confirmation bars on each side. Mix of highs and lows.
+- Need at least 2 highs AND 2 lows in the result. If fewer (window too short or chop), return `UNDEFINED`.
+- Compare the most recent two highs: `HH` if newer > older; `LH` otherwise.
+- Compare the most recent two lows: `HL` if newer > older; `LL` otherwise.
+- Map to enum:
+  - `HH + HL` → `UPTREND`
+  - `LH + LL` → `DOWNTREND`
+  - `HH + LL` → `EXPANSION`
+  - `LH + HL` → `CONTRACTION`
+
+Pure function. Returned as `r.TrendStructure`. Two display tuples (`LastTwoHighs5m`, `LastTwoLows5m`) carry the four prices used in the comparison.
+
+**Scoring use (Pass 2c, after TRENDING / RANGE_BOUND alignment scoring, before snapshot for funding modifiers):**
+
+```
+If cfg.RegimeWeights.Enabled AND cfg.Indicators.TrendStructure.Enabled:
+    UPTREND     AND LongScore > ShortScore   → LongScore += structure_bonus  (capped at regimeMax)
+    DOWNTREND   AND ShortScore > LongScore   → ShortScore += structure_bonus (capped at regimeMax)
+    EXPANSION   → no score change (display caution flag)
+    CONTRACTION → no score change (range-narrowing context)
+    UNDEFINED   → no score change
+```
+
+`structure_bonus = cfg.Indicators.TrendStructure.StructureBonus` (default 1). Suppressed in TRANSITIONAL regime (consistent with rest of Pass 2c). Bonus only applies when structure agrees with the dominant side — never both, never opposite.
+
+**Display:** Renders under `MARKET STRUCTURE` as:
+
+```
+Trend Structure : UPTREND  (HH 102450.0 > 102100.0 | HL 101800.0 > 101500.0)
+```
+
+Colours: UPTREND green, DOWNTREND red, EXPANSION amber, CONTRACTION dim cyan, UNDEFINED dim grey.
+
+**CSV column 87:** `TrendStructure5m` — string enum value. Logged per row.
+
+**Interpretation:**
+
+- Trend Structure is structure-on-pivots, distinct from EMA / ROC / CVD which are price-momentum signals. The Pass 2c bonus is deliberately separate from the existing regime-alignment bonus to avoid double-counting.
+- `EXPANSION` is the most informative non-scoring state — both higher highs AND lower lows indicate the market is widening its range. Often precedes a regime shift or volatile rejection of a recent breakout. Treat as a caution flag for fresh entries.
+- `CONTRACTION` is range-narrowing, often paired with low BBW. The next decisive move is usually directional but the structure alone doesn't tell you which way.
+- `UNDEFINED` typically appears in the first ~30 minutes of a session before enough confirmed pivots accumulate, or in deep chop where the wing-strict-inequality test fails. Don't read it as bearish or bullish.
+
+---
+
+### Best Volume Pivot (Display-Only)
+
+**What:** The pivot in the 5m lookback with the highest total wing-window volume, reported alongside its volume ratio against the average pivot in the same lookback. Display-only in v1 — no scoring or cap-arbitration impact.
+
+**Calculation (extension of `CalcSwingPivots`):**
+
+- For each confirmed pivot found in the lookback, sum the volume of all bars in `[pivotIdx − pivotWing, pivotIdx + pivotWing]` — total volume across the wing window.
+- Track the pivot with the highest total wing-window volume (`BestPivotByVolume5m`).
+- Compute average wing-window volume across all pivots in lookback (`avgPivotVolume`).
+- `BestPivotVolumeRatio5m = best / avgPivotVolume`.
+- `BestPivotIsHigh5m` = True if best pivot is a swing high; False if a low.
+- If fewer than 2 confirmed pivots in lookback, all three fields return `0` / `0` / `False`.
+
+**Scoring use:** none in v1. Logged for offline analysis and CalibrationReport `BEST VOLUME PIVOT DISTRIBUTION` section.
+
+**v2 promotion condition** (parked in `DeribitIndicatorProject.md` §16.6 P1): if CalibrationReport shows "best is also most-recent" rate falls below 50% AND auto-tweaker output shows volume-weighted pivots correlate with subsequent target-hit rate, promote to a 4th cap tier (best-volume-swing > most-recent-swing > nearest HVN > POC).
+
+**Display:** Renders under `MARKET STRUCTURE` below the swing pivot rows:
+
+```
+Best Vol Pivot 5m: HIGH 102450.0  (vol×2.3 vs avg pivot)
+```
+
+Colour: dim cyan (informational, not actionable in v1).
+
+**CSV columns 85–86:** `BestPivotByVolume5m` (price) and `BestPivotVolumeRatio5m` (ratio). Reserved in v0.4 schema; populated when D2 ships.
+
+**Interpretation:**
+
+- Ratios above 2.0× indicate a meaningfully stronger reference level than the average pivot. Under 1.5× the volume-weighting is barely differentiating from the most-recent pivot.
+- When `BestPivotByVolume5m` differs from `LastSwingHigh5m` (or low), there's a stronger pivot back in the lookback than the most-recent one. Eyeball whether your structural target/stop should reference it instead.
+- This is a chart-reading aid that exposes the volume-quality of the pivots being used elsewhere — not a fresh trade signal.
 
 ---
 
@@ -971,13 +1109,53 @@ Aggregate BTC-PERPETUAL open interest plus 15m / 60m percentage changes and a di
 
 ```
 ORDER FLOW:
-  OFI Ratio: 10.08  |  Bid Vol: 583380  |  Ask Vol: 57900  |  BUY DOMINANT
+  Spread: 1.4 bps  |  TIGHT
+  OFI Ratio: 10.08  |  Bid Vol: 583380  |  Ask Vol: 57900  |  BUY DOMINANT  |  Momentum: RISING
   CVD:       Net:182100  |  Slope:RISING  |  Div:NONE
   TFI:       0.606  |  BUY PRESSURE
   MicroCVD:  E:2840  M:15250  L:-14720  |  DECELERATING  |  BULL_DECEL
 ```
 
-Four order-flow primitives, each sampling a different depth / aggressor / temporal segment.
+Five order-flow primitives, each sampling a different depth / aggressor / temporal segment.
+
+### Bid-Ask Spread (SpreadBps)
+
+**What:** Bid-ask spread on the L2 order book snapshot, measured in basis points. Acts as an entry-side gate — wide spread fires a verdict-side penalty.
+
+**Calculation (inline in `MainForm_Analysis.RunAnalysisAsync`):**
+
+```
+mid = (bestBid + bestAsk) / 2
+SpreadBps = (bestAsk - bestBid) / mid × 10000
+```
+
+Computed once per run from the same `GetOrderBookAsync` snapshot used by OFI.
+
+**Classification (v17 thresholds):**
+
+| Condition | Class |
+|---|---|
+| `SpreadBps ≤ cfg.Indicators.Spread.TightThresholdBps` (default 3.0) | `TIGHT` |
+| `cfg.Indicators.Spread.TightThresholdBps < SpreadBps ≤ cfg.Indicators.Spread.WideThresholdBps` (default 5.0) | `NORMAL` |
+| `SpreadBps > cfg.Indicators.Spread.WideThresholdBps` | `WIDE` |
+
+**Scoring use:**
+
+- **`WIDE` penalty:** `LongScore −= cfg.Indicators.Spread.WidePenalty (default 1)` if a long verdict is dominant; mirrored for short. Penalty is dominant-side only — it does not penalise both sides nor flip directional bias.
+- **`TIGHT` and `NORMAL`**: no scoring effect.
+
+**Display colour:** green `TIGHT`, dim `NORMAL`, amber bold `WIDE`.
+
+**CSV column 69:** `SpreadBps` — Double, 4dp.
+
+**Interpretation:**
+
+- The order book is already fetched for OFI; SpreadBps is a near-zero-cost microstructure read. The penalty exists to catch the "looks like a great breakout but the book is actually empty" trap during flush events.
+- Normal BTC-PERPETUAL spread on Deribit sits 1–3 bps. Above 5 bps usually indicates an active flush / news event / deep order book withdrawal — not a clean entry environment.
+- The penalty does not block a trade — at most it degrades the verdict tier by one (e.g., STRONG → MEDIUM). If the underlying score is high enough to absorb the penalty, the verdict still fires.
+- During trending spread expansion (the spread widens because volatility is genuinely high but the book is not flushing), expect to see WIDE more often. The penalty is conservative — accept the false-negatives during high-vol regimes.
+
+---
 
 ### OFI (Order Flow Imbalance)
 
@@ -1008,6 +1186,38 @@ Four order-flow primitives, each sampling a different depth / aggressor / tempor
 - A ratio `> 5x` like the sample's `10.08` is extreme — usually the result of one side pulling liquidity (thin ask book, not necessarily heavy bid book). Cross-check the `Bid Vol` and `Ask Vol` absolute values: if the low side is very small (e.g. `57900` vs `583380`), it's more "ask pulled" than "bid stacked".
 - The v14 relaxation from `3.0 / 0.333` to `2.0 / 0.5` means OFI now fires earlier. In practice this makes OFI contribute a signal in more of the "meaningful tilt" range where the old thresholds stayed silent.
 - OFI is a leading indicator — imbalance visible before price moves. But on Deribit with REST polling, you're seeing a snapshot not a stream; during high volatility the snapshot can be stale by the time it arrives.
+
+### OFI Momentum
+
+**What:** Direction of OFI signal change over the last 3 samples. RISING / FALLING / FLAT. Computed against a 10-sample ring buffer (`_ofiHistory` in `MainForm_Layout`).
+
+**Calculation (`CalcOFIMomentum` in `Indicators_OrderFlow.vb`):**
+
+- Buffer holds the last 10 numerical OFI signal codes (BUY_DOMINANT = +2, BUY_LEAN = +1, NEUTRAL = 0, SELL_LEAN = −1, SELL_DOMINANT = −2).
+- Compare mean of last `cfg.Indicators.OFI.MomentumWindow` (default 3) entries against the entry `MomentumWindow + 1` positions back.
+- If `delta ≥ cfg.Indicators.OFI.MomentumThreshold` (default 0.5) → `RISING`.
+- If `delta ≤ −cfg.Indicators.OFI.MomentumThreshold` → `FALLING`.
+- Otherwise → `FLAT`.
+- If buffer has fewer than `2 × MomentumWindow` entries → `FLAT` (warmup).
+
+**Scoring use (in Step 2 OFI block, after the level signal scores):**
+
+- **`OFI level = BULL` AND `Momentum = RISING`** → `LongScore += cfg.Indicators.OFI.MomentumAmplify (default 1)` capped at regimeMax. Breakdown row note: `[+momentum: amplify on rising flow]`.
+- **`OFI level = BULL` AND `Momentum = FALLING`** → `LongScore -= cfg.Indicators.OFI.MomentumSoften (default 1)`. Note: `[-momentum: soften on fading flow]`.
+- Mirror for `SELL_DOMINANT` / `SELL_LEAN`.
+- **`FLAT`** → no modifier. Most common state.
+- Controlled by `cfg.Indicators.OFI.MomentumEnabled`. When false, momentum is computed and displayed but not scored.
+
+**Display:** Inline on the OFI line as `Momentum: RISING` / `FALLING` / `FLAT`. Colour matches OFI level direction when momentum agrees, dim otherwise.
+
+**CSV column 70:** `OFIMomentum` — string enum.
+
+**Interpretation:**
+
+- OFI level measures the current imbalance; OFI momentum measures whether that imbalance is accelerating or decelerating. A level signal being amplified by rising momentum is structurally stronger than a level signal that's fading.
+- The pattern matches `FundingMomentum` (same ring-buffer + windowed-delta design, see Section 15). Internal consistency was the goal — both adjuncts modify their parent score in the same way.
+- A momentum shift (RISING → FALLING in consecutive runs) on a held position is an early warning that the flow is rolling over — fires before the level signal itself flips.
+- During quiet sessions where OFI level rarely leaves NEUTRAL, expect mostly `FLAT`. Don't read it as bearish or bullish.
 
 ### CVD
 
@@ -1492,3 +1702,267 @@ The `Note` field carries cross-cutting annotations that only appear in specific 
 - Any line carrying `PENALTY`, `STALL`, `CONFLICT`, or `PASS2b: -N` is a score deduction — you won't find these in the TOTAL reconciliation as positive hits, but they're part of why TOTAL may be lower than the raw `[L]` count.
 - The `Regime Align (2c)` row is a binary event indicator — **its presence alone is notable**. Most runs don't fire it (needs all active Pass 2c signals to unanimously agree or unanimously conflict). When you see it, the engine is expressing strong regime conviction.
 - When debugging a surprising verdict, the fastest path is: (1) scan the TOTAL row to see the raw score, (2) check the `SCORE` header line for `(eff.N)` delta, (3) look for any `PASS2b`, `REGIME CONFLICT`, `PENALTY` tags in the note column to explain the delta, (4) if everything reconciles and the verdict still surprises you, check the `CONTEXT` line — it may be flagging a quality issue the raw score doesn't capture.
+
+---
+
+## 17. CSV Logging {#17-csv-logging}
+
+The engine appends one row per analysis run to `bin/Debug/net8.0-windows/analysis_log.csv`. Schema is **v0.4 with d1 extension** — 87 columns. Used by the offline analysis script (Section 18) and the auto-tweaker (Section 19).
+
+### Schema versioning and rotation
+
+`AnalysisLogger.EnsureLogFile()` reads the first line of the existing log on startup. If the header doesn't match the current expected v0.4 header, the existing file is renamed to `analysis_log.csv.<schema-tag>.bak` and a fresh file is started with the current header. Idempotent — if no log exists, just writes the header.
+
+Two backups commonly present after Bundle 1 + Bundle 3 shipped:
+
+- `analysis_log.csv.v0.3.bak` — pre-Bundle-1 log with 68 columns
+- `analysis_log.csv.v0.4.bak` — post-Bundle-1 log with 86 columns (rotated when d1 added column 87)
+
+### Schema (87 columns)
+
+```
+1   Timestamp                  ISO 8601 UTC
+2   Price                      Last transacted price at run time
+3   Verdict                    String: STRONG_LONG / LONG / WEAK_LONG / NO_TRADE / etc.
+4   Confidence                 String: HIGH / MEDIUM / LOW / N/A
+5   LongScore                  Raw long score after Pass 2/2b/2c + funding modifiers
+6   ShortScore                 Raw short score (same point in pipeline)
+7   EffectiveLongScore         After Step 4 regime veto + Step 4b MTF veto
+8   EffectiveShortScore        Same
+9   MaxScore                   Regime-adjusted ceiling
+10  RegimePenalty              TRANSITIONAL ADX-proximity penalty (0 elsewhere)
+11  Regime                     TRENDING_UP / TRENDING_DOWN / RANGE_BOUND / TRANSITIONAL
+12-13  ADX, PlusDI, MinusDI    DMI on 5m
+15-16  ROC, ROCSlope           1m rate-of-change
+17-18  RSI, RSIDivergence      1m RSI(9)
+19  VolumeRatio                vs Volume SMA(9)
+20-26  VWAP fields             Value, dev%, candle count, s1/s2 bands
+27-31  BBW + TTM fields        Squeeze status, histogram, direction, signal
+32-37  EMA fields              EMA9/21/50, alignment, 5m EMA200, price-vs-200
+38-39  Funding rate + bias
+40-43  OI fields               Current, 15m delta, 60m delta, signal
+44-47  OFI fields              Ratio, bid vol, ask vol, signal
+48-50  CVD fields              Value, slope, divergence
+51-53  Liquidation fields      Long size, short size, signal
+54-56  Donchian fields         Upper, lower, signal
+57-58  OBV fields              Trend, divergence
+59-63  MTF Gate fields         Pass, 15m trend, 15m ADX, 15m EMA alignment, reason
+64-65  ATR + multiplier
+66  VerdictContext             FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED (v0.3)
+67  FundingMomentum            RISING / FALLING / FLAT (v0.3)
+68  OiCvdOutcome               Pass 2b output (v0.3)
+69  SpreadBps                  Bid-ask spread in basis points (v0.4)
+70  OFIMomentum                RISING / FALLING / FLAT (v0.4)
+71  FundingDelta               Period-over-period funding rate change (v0.4)
+72-73  VPFRVAH, VPFRVAL        Value area boundaries (v0.4)
+74-75  VPFRNearestHvnAbove/Below   Nearest high-volume walls (v0.4)
+76-79  LastSwingHigh/Low 5m + 15m   (v0.4)
+80-83  SwingTargetLong/Short, SwingStopLong/Short    (v0.4)
+84  TargetCapReason            swing / hvn / poc / none — Step 5b 3-tier winner (v0.4)
+85-86  BestPivotByVolume5m, BestPivotVolumeRatio5m   (v0.4 reserved, populated by D2)
+87  TrendStructure5m           UPTREND / DOWNTREND / EXPANSION / CONTRACTION / UNDEFINED (Bundle 3 d1)
+```
+
+**Skipped runs do not write a row.** When `RunAnalysisAsync` aborts due to a missing required result (1m / 5m candles, funding, book summary, order book, recent trades), the CSV is untouched.
+
+### CalibrationReport
+
+Generated on demand from the status bar `Calibration Check` link. Counts coverage along multiple axes against gate thresholds:
+
+- **Total rows** ≥ 300 (gate)
+- **Sessions (UTC days)** ≥ 3 (gate)
+- **Liquidation events** ≥ 2 (gate; rare-event blocker — accepted as deferred 2026-05-05)
+- **Per-regime row counts** ≥ 50 each (gate)
+- Plus distribution sections (informational only): regime, verdict context, funding momentum, OI×CVD outcomes, spread, OFI momentum, target cap reason, trend structure, best volume pivot.
+
+Verdict line at the end reads `READY` or `NOT YET READY`.
+
+---
+
+## 18. Analysis Report Viewer {#18-analysis-report-viewer}
+
+The status bar `Analysis Report` link runs the offline analyser (`analysis/AnalysisRunner.Run`) over the current `analysis_log.csv` and opens a non-modal viewer (`AnalysisReportForm`) with the rendered markdown.
+
+### Output files
+
+Written to the engine's working directory each click:
+
+- `analysis_report_<yyyyMMdd_HHmmss>.md` — full markdown report
+- `analysis_summary_<yyyyMMdd_HHmmss>.csv` — flat failure-rate matrix consumed by the auto-tweaker
+
+### Report sections
+
+1. **Summary** — rows in CSV, rows excluded (forward window incomplete or session boundary), verdict tier counts, headline failure rates.
+2. **Failure-Rate Matrix** — per verdict tier × hold window (5/10/15 min) × ATR threshold (0.3, 0.5, 0.8). Each cell shows `rate% (n=sample) [ci_low - ci_high]` using a 95% Wilson score interval. Highlighted cells = lowest CI width with `n ≥ 30`.
+3. **Recommended (window, threshold) per tier** — auto-pick logic (lowest CI width subject to `n ≥ 30`). Used by the auto-tweaker.
+4. **Verdict Context Tag × Outcome** — failure rate per VerdictContext at the recommended cell.
+5. **Funding Momentum Diagnostic** — empirical FundingDelta distribution, percentile table, recommended threshold or "no change — ceiling is polling cadence" verdict.
+6. **OFI Outlier Audit** — count of `OFIRatio > 100` and `> 1000`. Top 10 outliers with timestamps and raw bid/ask volumes.
+7. **OI×CVD Asymmetry Audit** — confirmed_long vs confirmed_short counts, broken down by Regime and Funding Bias. Verdict: regime-period bias / asymmetric algorithm / inconclusive.
+8. **Hold Window Selection Stats** — per verdict tier, percentage of runs where the recommended window was 5m / 10m / 15m. Direct trader use: "STRONG LONG verdicts are most reliable held for 10m" comes from this section.
+9. **Pending data** — tier × window cells where `n < 30` (insufficient sample). User waits for more rows before treating recommendation as stable.
+
+### Failure definition (constants in `analysis/AnalysisConstants.vb`)
+
+```
+Public Const StrongAtrThresholds As Double() = {0.3, 0.5}
+Public Const MediumAtrThresholds As Double() = {0.5, 0.8}
+Public Const HoldWindowsMinutes As Integer() = {5, 10, 15}
+Public Const MinSamplesPerCell As Integer = 30
+Public Const MinSamplesForAutoTweakerTrigger As Integer = 60
+```
+
+For a row with verdict tier T and forward return `fr_W` at window W:
+
+- LONG failure: `fr_W × Price < −threshold × ATR`
+- SHORT failure: `fr_W × Price > +threshold × ATR`
+- STRONG verdicts use the tighter `{0.3, 0.5}` set; MEDIUM uses the looser `{0.5, 0.8}`.
+- `NO_TRADE` and `WEAK_*` rows are excluded from the failure-rate denominator. Tracked in informational counters only.
+
+### Picked-cell history
+
+`analysis/picked_cell_history.csv` (gitignored): one line per auto-tweaker run with timestamp, tier, window, threshold. Drives the "Hold Window Selection Stats" report section.
+
+### Portability
+
+All classes in `analysis/` are host-agnostic except `AnalysisReportForm.vb` (the viewer). The non-form classes are referenced from both the WinForms app and the auto-tweaker console app. Future Linux CLI port reuses them directly.
+
+---
+
+## 19. Tweak Settings & Auto-Tweaker {#19-tweak-settings-auto-tweaker}
+
+The auto-tweaker is a separate .NET 8 console app (`tools/AutoTweaker/AutoTweaker.dll`, target framework `net8.0` — no Windows dependency) that periodically reviews verdict accuracy and proposes targeted `settings.json` adjustments via the Anthropic API. Configured and triggered via the `Tweak Settings` dialog in the main window.
+
+### Architecture
+
+```
+tools/AutoTweaker/
+├── AutoTweaker.vbproj          .NET 8 console project, zero WinForms refs
+├── AutoTweakerProgram.vb       Entry point. Walks up to find DeribitVerdictEngine.sln
+│                               (sets working dir), loads tweaker_config.json, invokes Core.
+├── AutoTweakerCore.vb          Pipeline. Eligibility → window → failure rate → trigger
+│                               → prompt → API call (or dry-run write) → diff parse → apply.
+├── PromptBuilder.vb            Builds system + user message from settings.json + recent
+│                               CSV slice + failure-rate matrix + picked-cell history +
+│                               trader-profile constraints (rejected approaches inlined).
+├── ClaudeApiClient.vb          /v1/models discovery for latest Opus, /v1/messages call.
+│                               API key from ANTHROPIC_API_KEY env var only.
+├── SettingsDiffApplier.vb      Validate + apply diff. Hard rejection list, 3-key cap,
+│                               stale-value check, version-monotonicity bump.
+├── TweakerConfig.vb            POCO for tweaker_config.json. Hot-read each invocation.
+└── TweakerState.vb             POCO for state.json. Persistent across runs.
+```
+
+### Eligibility checks (run at start of every invocation)
+
+1. **Cooldown:** `(current CSV row count) − (state.last_run_csv_row_count) ≥ tweaker_config.cooldown_rows` (default 10).
+2. **Session-aligned window:** walk back from end of CSV. The last `window_size_verdicts` rows (default 120) must all fall within the same UTC session bucket per `cfg.SessionVolume.Sessions[]`. If a session boundary appears earlier, the run is ineligible until the current session accumulates a full window.
+3. **Tier-eligible row count:** within the window, count STRONG_* + MEDIUM_* verdicts. Must be ≥ `min_tier_eligible_rows` (default 60). Prevents auto-tweaks driven by edge cases where most rows are NO_TRADE.
+
+If any check fails, exit code 2 (INELIGIBLE), no API call, no settings change.
+
+### Trigger logic
+
+After eligibility, compute the failure-rate matrix over the window (reuses `analysis/FailureRateMatrix.vb`). Pick the most stable cell per tier (lowest CI width with `n ≥ 30`). Aggregate failure rate is the weighted mean across picked cells.
+
+If aggregate `< failure_rate_threshold_pct` (default 40%) → exit code 0, outcome `BELOW_THRESHOLD`. Engine is performing fine, no tweak needed. This is the normal happy state.
+
+If above → proceed to prompt build + API call.
+
+### Latest-Opus model resolution
+
+`ClaudeApiClient.ResolveLatestOpusModel()`:
+
+1. `GET /v1/models` with `x-api-key: $ANTHROPIC_API_KEY`.
+2. Filter `data[]` for `id` starting with `claude-opus-`.
+3. Sort by `created_at` descending.
+4. Return `data[0].id`. Cache for the process duration; refetch on next process start.
+5. Fallback sentinel `claude-opus-latest` if API call fails.
+
+Version-agnostic by design — a future `claude-opus-5-0-20271015` is picked up automatically on next run.
+
+### Dry-run mode
+
+When `tweaker_config.dry_run_enabled = true` (default for fresh installs):
+
+- Full prompt + JSON request body written to `tools/AutoTweaker/dry_run_payloads/<yyyyMMdd_HHmmss>.txt`
+- File contains: trigger reason, system message, user message, JSON body, instructions for human
+- No API call made
+- State updated: `last_run_outcome = DRY_RUN_WRITTEN`
+
+User opens a separate Claude conversation, pastes the messages, gets back a JSON diff, saves it at `tools/AutoTweaker/manual_diffs/<timestamp>.json`, then runs `AutoTweaker.exe --apply-manual <path>` to apply.
+
+### SettingsDiffApplier — hard rejection list
+
+Validates the diff before any application. Returns invalid (exit code 1) if any of:
+
+- **3-key scope cap** — proposal touches more than 3 keys
+- **Banned path fragments** — any of: `_fixed_pct_`, `bbw_none_bonus`, `oi_prev15m`, `oi_prev60m`, `atr_avg20d`, `static_vol_high`, `static_vol_mid`, `static_vol_low` (last 6 are dead v15 cleanup keys; first two are explicitly rejected patterns)
+- **Disabling gated paths** — `mtf_gate.enabled = false` or `regime_weights.enabled = false`
+- **Direct version edit** — applier manages version bump; diff must not touch `version`
+- **Stale diff** — proposed `old_value` doesn't match current settings value
+
+### Apply path
+
+When `auto_commit_enabled = true` and the diff passes validation:
+
+- Bump `settings.json.version` by 1
+- Set `modified_by = "auto-tweaker-vN"` where N = new version
+- Append `change_log` entry: timestamp + summary + cited failure rate + Claude reasoning excerpt
+- Write file. `SettingsLoader` FileSystemWatcher hot-reloads the engine on its next run.
+
+When `auto_commit_enabled = false`:
+
+- Diff written to `tools/AutoTweaker/proposed_diffs/<timestamp>.json`
+- State updated with `last_pending_diff_path`
+- User reviews, applies via `AutoTweaker.exe --apply-manual <path>` if accepted.
+
+### TweakSettingsForm controls
+
+Non-modal dialog opened from the `Tweak Settings` link.
+
+| Control | Binds to (in `tweaker_config.json`) |
+|---|---|
+| `chkAutoCommit` (Checkbox) | `auto_commit_enabled` (default false) |
+| `chkDryRun` (Checkbox) | `dry_run_enabled` (default true) |
+| `txtWindowSize` (TextBox, int ≥ 10) | `window_size_verdicts` (default 120) |
+| `txtFailThreshold` (TextBox, int 1–99) | `failure_rate_threshold_pct` (default 40) |
+| `txtCooldownRows` (TextBox, int ≥ 1) | `cooldown_rows` (default 10) |
+| `lblConfigPath` (read-only) | full path to `tweaker_config.json` |
+| `lblCsvPath` (read-only) | full path to `analysis_log.csv` |
+| `lblStatePath` (read-only) | full path to `state.json` |
+| `lblTweakerStatus` (dynamic) | `Ready` / `Cooldown: N rows remaining` / `Waiting for session-aligned window: M/120 rows` / `Insufficient tier-eligible rows: K/60` |
+| `btnRunNow` (Button) | Disabled unless status is `Ready`. On click: `Process.Start(AutoTweaker.exe)` |
+| `btnSave` (Button) | Validates input, writes to `tweaker_config.json`, MessageBox confirmation |
+| `lblLastTweakSummary` (multi-line read-only) | `last_run_at_iso` + `last_run_outcome` + `last_proposal_summary` |
+
+### Status polling
+
+`lblTweakerStatus` updates on:
+
+1. Subscribe to `MainForm.AnalysisCompleted` event (raised by `RunAnalysisAsync` at the end of every analysis whether successful or skipped). Update on event.
+2. 30-second `System.Windows.Forms.Timer` fallback when the dialog is open.
+
+`UpdateStatusLabel()` reads `state.json` and inspects current CSV row count + session alignment + tier-eligible counts. Cheap I/O.
+
+### Outcomes (state.json `last_run_outcome` field)
+
+- `BELOW_THRESHOLD` — engine performing fine, no tweak needed (happy state)
+- `INELIGIBLE` — cooldown / session-not-aligned / insufficient tiers
+- `DRY_RUN_WRITTEN` — payload file generated, awaiting manual handling
+- `PROPOSED` — diff parked, awaiting manual apply (auto_commit off)
+- `APPLIED` — settings updated, version bumped, change_log appended
+- `ERROR` — API call or validation failure
+
+### Linux portability
+
+`tools/AutoTweaker/AutoTweaker.vbproj` targets `net8.0` (no `-windows` suffix). Zero WinForms references — confirmed by build inspection. Runs unmodified under `dotnet AutoTweaker.dll` on Linux. Future port: same codebase, scheduled via cron or systemd timer instead of WinForm Process.Start.
+
+### Constraints from trader-profile
+
+The auto-tweaker is bounded by the same conservative-bias rules as manual tuning:
+
+- No false-positive growth — auto-tweaker should optimise toward maintaining or *raising* the false-positive bar
+- No double-counting reintroduction — the rejected-pattern list catches the obvious cases; reviewer (human if `auto_commit = false`) catches subtler ones
+- 3-key cap is the conservative-bias safeguard at the structural level — small steps, frequent review
+- Latest-Opus auto-discovery means the tuning quality scales with model improvements over time without code change
