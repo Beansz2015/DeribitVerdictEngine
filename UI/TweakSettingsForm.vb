@@ -110,8 +110,17 @@ Public Class TweakSettingsForm
             Return
         End If
 
-        ' 3. Insufficient tier-eligible rows (approximate: just show ready if we have enough rows)
-        '    Full session-alignment check is done inside the exe; here we show a simplified status.
+        ' 3. Tier-eligible rows check — mirrors AutoTweakerCore step 4.
+        '    Count directional verdicts in the last window_size_verdicts CSV rows.
+        Dim tierEligible As Integer = CountTierEligibleInWindow(cfg.WindowSizeVerdicts)
+        If tierEligible < cfg.MinTierEligibleRows Then
+            SetStatus(String.Format("Insufficient tier-eligible rows: {0}/{1}",
+                                    tierEligible, cfg.MinTierEligibleRows), Color.Orange)
+            btnRunNow.Enabled = False
+            UpdateSummaryLabel(state)
+            Return
+        End If
+
         SetStatus("Ready", Color.FromArgb(80, 220, 120))
         btnRunNow.Enabled = True
         UpdateSummaryLabel(state)
@@ -147,6 +156,44 @@ Public Class TweakSettingsForm
             If Not File.Exists(_csvPath) Then Return 0
             Dim lines = File.ReadAllLines(_csvPath)
             Return Math.Max(0, lines.Length - 1)  ' subtract header
+        Catch
+            Return 0
+        End Try
+    End Function
+
+    ' Count rows in the last windowSize data rows of the CSV whose Verdict column
+    ' is a directional tier (STRONG LONG / LONG / SHORT / STRONG SHORT).
+    ' Mirrors the tier-eligible filter in AutoTweakerCore step 4.
+    Private Function CountTierEligibleInWindow(windowSize As Integer) As Integer
+        Try
+            If Not File.Exists(_csvPath) Then Return 0
+            Dim lines As String() = File.ReadAllLines(_csvPath)
+            If lines.Length < 2 Then Return 0  ' header only or empty
+
+            ' Locate "Verdict" column from header
+            Dim headers As String() = lines(0).Split(","c)
+            Dim verdictIdx As Integer = -1
+            For i As Integer = 0 To headers.Length - 1
+                If headers(i).Trim().Equals("Verdict", StringComparison.OrdinalIgnoreCase) Then
+                    verdictIdx = i : Exit For
+                End If
+            Next
+            If verdictIdx < 0 Then Return 0
+
+            ' Scan last windowSize data lines (lines(1) onward)
+            Dim firstLine As Integer = lines.Length - windowSize
+            If firstLine < 1 Then firstLine = 1
+            Dim count As Integer = 0
+            For i As Integer = firstLine To lines.Length - 1
+                Dim parts As String() = lines(i).Split(","c)
+                If parts.Length <= verdictIdx Then Continue For
+                Dim v As String = parts(verdictIdx).Trim().ToUpper()
+                If v = "STRONG LONG" OrElse v = "LONG" OrElse
+                   v = "STRONG SHORT" OrElse v = "SHORT" Then
+                    count += 1
+                End If
+            Next
+            Return count
         Catch
             Return 0
         End Try
