@@ -101,10 +101,13 @@ Public Class TweakSettingsForm
             Return
         End If
 
-        ' 2. Session-aligned window check (quick CSV line count vs window size)
-        If currentRowCount < cfg.WindowSizeVerdicts Then
+        ' 2. Session-aligned window check: count rows in the current UTC session.
+        '    Mirrors AutoTweakerCore step 2 — walks back from end of CSV and stops
+        '    at the first session-boundary crossing.
+        Dim sessionRows As Integer = CountCurrentSessionRows(cfg.WindowSizeVerdicts * 2)
+        If sessionRows < cfg.WindowSizeVerdicts Then
             SetStatus(String.Format("Waiting for session-aligned window: {0}/{1} rows",
-                                    currentRowCount, cfg.WindowSizeVerdicts), Color.Orange)
+                                    sessionRows, cfg.WindowSizeVerdicts), Color.Orange)
             btnRunNow.Enabled = False
             UpdateSummaryLabel(state)
             Return
@@ -159,6 +162,101 @@ Public Class TweakSettingsForm
         Catch
             Return 0
         End Try
+    End Function
+
+    ' Walk back from the end of the CSV and count consecutive rows that fall within
+    ' the current UTC session (i.e. no session-start hour is crossed).
+    ' maxScan caps how many lines we read to keep the poll cheap.
+    ' Mirrors AutoTweakerCore step 2 session logic.
+    Private Function CountCurrentSessionRows(maxScan As Integer) As Integer
+        Try
+            If Not File.Exists(_csvPath) Then Return 0
+            Dim lines As String() = File.ReadAllLines(_csvPath)
+            If lines.Length < 2 Then Return 0
+
+            ' Load session start hours from settings.json
+            Dim sessionStarts As New HashSet(Of Integer)()
+            Try
+                Dim settingsPath As String = Path.Combine(_repoRoot, "settings.json")
+                If File.Exists(settingsPath) Then
+                    Dim doc = JsonDocument.Parse(File.ReadAllText(settingsPath))
+                    Dim svEl As JsonElement
+                    If doc.RootElement.TryGetProperty("session_volume", svEl) Then
+                        Dim sessArr As JsonElement
+                        If svEl.TryGetProperty("sessions", sessArr) Then
+                            For Each s In sessArr.EnumerateArray()
+                                Dim hEl As JsonElement
+                                If s.TryGetProperty("start_hour", hEl) Then
+                                    sessionStarts.Add(hEl.GetInt32())
+                                End If
+                            Next
+                        End If
+                    End If
+                End If
+            Catch
+            End Try
+            If sessionStarts.Count = 0 Then
+                sessionStarts.Add(0)   ' default: midnight UTC
+                sessionStarts.Add(13)  ' default: NY open UTC
+            End If
+
+            ' Find Timestamp column index
+            Dim headers As String() = lines(0).Split(","c)
+            Dim tsIdx As Integer = 0  ' default first column
+            For i As Integer = 0 To headers.Length - 1
+                If headers(i).Trim().Equals("Timestamp", StringComparison.OrdinalIgnoreCase) Then
+                    tsIdx = i : Exit For
+                End If
+            Next
+
+            ' Walk backwards, counting rows until a session boundary is crossed
+            Dim prevTs As DateTime = DateTime.MinValue
+            Dim count As Integer = 0
+            Dim scanStart As Integer = Math.Max(1, lines.Length - maxScan)
+            For i As Integer = lines.Length - 1 To scanStart Step -1
+                Dim parts As String() = lines(i).Split(","c)
+                If parts.Length <= tsIdx Then Continue For
+                Dim ts As DateTime
+                If Not DateTime.TryParse(parts(tsIdx).Trim(),
+                                         Nothing,
+                                         Globalization.DateTimeStyles.AssumeUniversal Or
+                                         Globalization.DateTimeStyles.AdjustToUniversal,
+                                         ts) Then Continue For
+
+                If prevTs = DateTime.MinValue Then
+                    ' First (most-recent) row — anchor the session
+                    prevTs = ts
+                    count += 1
+                    Continue For
+                End If
+
+                If FormCrossesSessionBoundary(ts, prevTs, sessionStarts) Then
+                    Exit For   ' hit a session boundary; stop counting
+                End If
+
+                prevTs = ts
+                count += 1
+            Next
+            Return count
+        Catch
+            Return 0
+        End Try
+    End Function
+
+    ' Returns True if any session-start hour falls inside the open interval (t1, t2).
+    ' Identical logic to AutoTweakerCore.CrossesSessionBoundary.
+    Private Shared Function FormCrossesSessionBoundary(t1 As DateTime, t2 As DateTime,
+                                                        sessionStarts As HashSet(Of Integer)) As Boolean
+        If t1 = DateTime.MinValue OrElse t2 = DateTime.MinValue Then Return True
+        Dim h1 As Integer = t1.Hour
+        Dim h2 As Integer = t2.Hour
+        If h1 = h2 Then Return False
+        Dim h As Integer = h1
+        Do While h <> h2
+            h = (h + 1) Mod 24
+            If sessionStarts.Contains(h) Then Return True
+        Loop
+        Return False
     End Function
 
     ' Count rows in the last windowSize data rows of the CSV whose Verdict column
