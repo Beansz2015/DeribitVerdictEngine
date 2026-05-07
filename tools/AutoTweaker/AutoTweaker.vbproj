@@ -15,7 +15,8 @@
     <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
     <Compile Include="..\..\analysis\AnalysisConstants.vb" />
     <Compile Include="..\..\analysis\AnalysisReport.vb" />
-    <Compile Include="..\..\analysis\ForwardReturnJoiner.vb" />
+    <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
+    <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
     <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
   </ItemGroup>
 

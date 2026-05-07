@@ -1,6 +1,15 @@
 ' tools/AutoTweaker/AutoTweakerCore.vb
 ' Implements the 7-step auto-tweaker pipeline (spec section 3).
 ' Returns an exit code: 0 = clean run, 1 = error, 2 = ineligible.
+'
+' v2 (failure-definition-v2-proposal.md):
+'   - ForwardWindowJoiner replaces ForwardReturnJoiner (no forward-price joining).
+'   - OHLC fetch via DeribitOhlcFetcher runs AFTER eligibility checks pass.
+'   - ForwardBars populated from OHLC map before FailureRateMatrix.Compute.
+'   - FailureRateMatrix.Compute uses barrier-hit logic (v2 semantic).
+'   - AppendPickedCell writes v2 schema header; rotates v1 history on first run.
+'   - Trigger threshold default (40%) unchanged; recalibrate after 200+ v2 rows.
+'
 ' Host-agnostic: no System.Windows.Forms references.
 
 Imports System.Collections.Generic
@@ -27,8 +36,8 @@ Public Class AutoTweakerCore
             Return 1
         End Try
 
-        Dim currentRowCount As Integer = Math.Max(0, csvLines.Length - 1)  ' subtract header
-        Dim rowsSinceLast    As Integer = currentRowCount - state.LastRunCsvRowCount
+        Dim currentRowCount As Integer = Math.Max(0, csvLines.Length - 1)
+        Dim rowsSinceLast   As Integer = currentRowCount - state.LastRunCsvRowCount
 
         If state.LastRunCsvRowCount > 0 AndAlso rowsSinceLast < config.CooldownRows Then
             Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — cooldown: {0}/{1} rows.",
@@ -65,7 +74,8 @@ Public Class AutoTweakerCore
         End If
 
         ' ── 3. Build session-aligned window ──────────────────────────────────
-        Dim allRows = ForwardReturnJoiner.Load(config.CsvPath, sessionStartHours)
+        ' v2: ForwardWindowJoiner.Load only parses rows; no forward-price joining.
+        Dim allRows = ForwardWindowJoiner.Load(config.CsvPath)
         If allRows.Count < config.WindowSizeVerdicts Then
             Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — only {0} rows, need {1}.",
                                             allRows.Count, config.WindowSizeVerdicts))
@@ -75,7 +85,7 @@ Public Class AutoTweakerCore
             Return 2
         End If
 
-        ' Walk back from end of allRows to find window_size_verdicts rows in same session
+        ' Walk back from end of allRows to find window_size_verdicts rows in same session.
         Dim windowRows As New List(Of CsvRow)()
         Dim sessionSet As New HashSet(Of Integer)(sessionStartHours)
         Dim endIdx As Integer = allRows.Count - 1
@@ -83,7 +93,6 @@ Public Class AutoTweakerCore
         For i As Integer = endIdx To Math.Max(0, endIdx - config.WindowSizeVerdicts * 2) Step -1
             If windowRows.Count >= config.WindowSizeVerdicts Then Exit For
             If windowRows.Count > 0 Then
-                ' Check no session boundary between allRows(i) and the most-recently-added row
                 Dim newerRow = windowRows(windowRows.Count - 1)
                 If CrossesSessionBoundary(allRows(i).Timestamp, newerRow.Timestamp, sessionSet) Then
                     Console.WriteLine(String.Format(
@@ -107,7 +116,7 @@ Public Class AutoTweakerCore
             Return 2
         End If
 
-        ' windowRows was built newest-first; reverse for chronological order
+        ' windowRows was built newest-first; reverse for chronological order.
         windowRows.Reverse()
 
         ' ── 4. Count tier-eligible rows ───────────────────────────────────────
@@ -127,11 +136,41 @@ Public Class AutoTweakerCore
             Return 2
         End If
 
-        ' ── 5. Compute failure-rate matrix and pick recommended cells ─────────
-        Dim failureCells = FailureRateMatrix.Compute(windowRows)
+        ' ── 5. Deribit OHLC bulk fetch ────────────────────────────────────────
+        ' Runs AFTER all eligibility checks — no point fetching if we're going to abort.
+        Dim validWindowRows = windowRows.Where(Function(r) r.Timestamp > DateTime.MinValue).ToList()
+        If validWindowRows.Count = 0 Then
+            Console.Error.WriteLine("[AutoTweaker] ERROR — no valid timestamps in window rows.")
+            state.LastRunOutcome   = "ERROR"
+            state.LastErrorMessage = "No valid row timestamps."
+            state.LastRunAtIso     = DateTime.UtcNow.ToString("o")
+            TweakerState.Save(statePath, state)
+            Return 1
+        End If
+        Dim fetchStart As DateTime = validWindowRows.Min(Function(r) r.Timestamp)
+        Dim fetchEnd   As DateTime = validWindowRows.Max(Function(r) r.Timestamp).AddMinutes(16)
+
+        Console.WriteLine("[AutoTweaker] Fetching Deribit OHLC for window rows…")
+        Dim ohlcMap = Await DeribitOhlcFetcher.FetchOhlcRange(fetchStart, fetchEnd)
+        If ohlcMap Is Nothing Then
+            Console.Error.WriteLine("[AutoTweaker] ERROR — Deribit OHLC fetch failed.")
+            state.LastRunOutcome      = "ERROR"
+            state.LastErrorMessage    = "Deribit OHLC fetch failed — auto-tweaker cannot evaluate without forward price data."
+            state.LastProposalSummary = "Deribit OHLC fetch failed — auto-tweaker cannot evaluate without forward price data."
+            state.LastRunAtIso        = DateTime.UtcNow.ToString("o")
+            TweakerState.Save(statePath, state)
+            Return 1
+        End If
+
+        ' ── 5b. Populate ForwardBars ──────────────────────────────────────────
+        ForwardWindowJoiner.PopulateForwardBars(windowRows, ohlcMap)
+
+        ' ── 6. Compute failure-rate matrix and pick recommended cells ─────────
+        Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
+        Dim failureCells = FailureRateMatrix.Compute(windowRows, atrEx, structStop, atrFb)
         Dim recommended  = failureCells.Where(Function(c) c.IsRecommended).ToList()
 
-        ' Append picked cells to history and write to picked_cell_history.csv
+        ' Append picked cells to history.
         Dim pickedCsvPath = Path.Combine(
             If(String.IsNullOrEmpty(Path.GetDirectoryName(config.CsvPath)),
                ".", Path.GetDirectoryName(config.CsvPath)),
@@ -143,11 +182,12 @@ Public Class AutoTweakerCore
                 .WindowMin    = cell.WindowMin,
                 .AtrThreshold = cell.AtrThreshold
             })
-            FailureRateMatrix.AppendPickedCell(pickedCsvPath, cell.VerdictTier,
-                                               cell.WindowMin, cell.AtrThreshold)
+            FailureRateMatrix.AppendPickedCell(pickedCsvPath,
+                cell.VerdictTier, cell.WindowMin, cell.AtrThreshold,
+                cell.FailureRate, cell.SampleSize, cell.CiLow, cell.CiHigh)
         Next
 
-        ' ── 6. Compute aggregate failure rate at recommended cells ─────────────
+        ' ── 7. Compute aggregate failure rate at recommended cells ─────────────
         Dim totalN As Integer = 0
         Dim totalF As Integer = 0
         For Each cell In recommended
@@ -172,7 +212,7 @@ Public Class AutoTweakerCore
             "[AutoTweaker] Failure rate {0:F1}% >= {1:F1}% threshold — building prompt...",
             aggregateRate, config.FailureRateThresholdPct))
 
-        ' Determine session name for trigger line
+        ' Determine session name for trigger line.
         Dim sessionName As String = "unknown session"
         Try
             Dim hour = windowRows.Last().Timestamp.Hour
@@ -192,26 +232,26 @@ Public Class AutoTweakerCore
             "aggregate failure rate {0:F1}% > threshold {1:F1}% over window {2} rows ({3} session)",
             aggregateRate, config.FailureRateThresholdPct, config.WindowSizeVerdicts, sessionName)
 
-        ' ── 7. Build prompt ───────────────────────────────────────────────────
+        ' ── 8. Build prompt ───────────────────────────────────────────────────
         Dim promptResult = PromptBuilder.Build(
             settingsJson, windowRows, failureCells, state.PickedCellHistory, trigger)
         Dim systemMsg As String = promptResult.SystemMsg
         Dim userMsg   As String = promptResult.UserMsg
 
-        ' ── 8. Branch: dry-run or live ────────────────────────────────────────
+        ' ── 9. Branch: dry-run or live ────────────────────────────────────────
         If config.DryRunEnabled Then
             Dim dryPath = ClaudeApiClient.WriteDryRunFile(
                 systemMsg, userMsg, "claude-opus-latest", trigger, config.DryRunOutputDir)
             Console.WriteLine("[AutoTweaker] DRY_RUN_WRITTEN → " & dryPath)
-            state.LastRunOutcome     = "DRY_RUN_WRITTEN"
-            state.LastRunAtIso       = DateTime.UtcNow.ToString("o")
-            state.LastRunCsvRowCount = currentRowCount
+            state.LastRunOutcome      = "DRY_RUN_WRITTEN"
+            state.LastRunAtIso        = DateTime.UtcNow.ToString("o")
+            state.LastRunCsvRowCount  = currentRowCount
             state.LastProposalSummary = "Dry-run file: " & dryPath
             TweakerState.Save(statePath, state)
             Return 0
         End If
 
-        ' Live API call
+        ' Live API call.
         Dim apiKey As String = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
         If String.IsNullOrEmpty(apiKey) Then
             Console.Error.WriteLine("[AutoTweaker] ERROR — ANTHROPIC_API_KEY env var not set.")
@@ -242,13 +282,13 @@ Public Class AutoTweakerCore
             Return 1
         End Try
 
-        ' ── 9. Parse and validate diff ────────────────────────────────────────
+        ' ── 10. Parse and validate diff ───────────────────────────────────────
         Dim parseResult = SettingsDiffApplier.ParseDiff(responseText)
         Dim diffItems   = parseResult.Items
         Dim reasoning   = parseResult.Reasoning
         If diffItems.Count = 0 Then
             Console.WriteLine("[AutoTweaker] Claude returned empty diff — no changes needed.")
-            state.LastRunOutcome     = "BELOW_THRESHOLD"
+            state.LastRunOutcome      = "BELOW_THRESHOLD"
             state.LastProposalSummary = "Claude returned empty diff: " & reasoning
             state.LastRunAtIso        = DateTime.UtcNow.ToString("o")
             state.LastRunCsvRowCount  = currentRowCount
@@ -266,7 +306,7 @@ Public Class AutoTweakerCore
             Return 1
         End If
 
-        ' ── 10. Branch: auto-commit or propose ───────────────────────────────
+        ' ── 11. Branch: auto-commit or propose ───────────────────────────────
         Dim diffSummary As String = String.Join("; ",
             diffItems.Select(Function(d) String.Format("{0}: {1} → {2}",
                                                         d.Path,
@@ -277,7 +317,7 @@ Public Class AutoTweakerCore
             Try
                 Dim newVer = SettingsDiffApplier.Apply(diffItems, config.SettingsPath, reasoning)
                 Console.WriteLine(String.Format("[AutoTweaker] APPLIED settings.json → v{0}", newVer))
-                state.LastRunOutcome     = "APPLIED"
+                state.LastRunOutcome      = "APPLIED"
                 state.LastProposalSummary = diffSummary
             Catch ex As Exception
                 Console.Error.WriteLine("[AutoTweaker] Apply failed: " & ex.Message)
@@ -288,7 +328,6 @@ Public Class AutoTweakerCore
                 Return 1
             End Try
         Else
-            ' Write proposed diff to file
             Dim proposedDir = "tools/AutoTweaker/proposed_diffs/"
             Directory.CreateDirectory(proposedDir)
             Dim ts        As String = DateTime.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss")

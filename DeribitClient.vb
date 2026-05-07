@@ -131,6 +131,54 @@ Public Class DeribitClient
             "GetCandlesAsync")
     End Function
 
+    ' Time-range overload — used by DeribitOhlcFetcher for bulk historical OHLC fetches.
+    ' Explicit start/end epoch milliseconds; no count arithmetic.
+    ' Wrapped in ExecuteWithRetry like the count-based overload above.
+    ' The existing count-based overload (live indicator computation) is unchanged.
+    Public Shared Async Function GetCandlesAsync(
+            resolution As String,
+            startTimestampMs As Long,
+            endTimestampMs As Long) As Task(Of List(Of Candle))
+
+        Return Await ExecuteWithRetry(Of List(Of Candle))(
+            Async Function() As Task(Of List(Of Candle))
+                Dim url As String = BaseUrl & "/public/get_tradingview_chart_data" &
+                                    "?instrument_name=BTC-PERPETUAL" &
+                                    "&resolution=" & resolution &
+                                    "&start_timestamp=" & startTimestampMs &
+                                    "&end_timestamp=" & endTimestampMs
+
+                Dim json As String = Await _http.GetStringAsync(url)
+                Dim doc As JsonDocument = JsonDocument.Parse(json)
+                Dim result As JsonElement = doc.RootElement.GetProperty("result")
+
+                Dim ticks   As JsonElement = result.GetProperty("ticks")
+                Dim opens   As JsonElement = result.GetProperty("open")
+                Dim highs   As JsonElement = result.GetProperty("high")
+                Dim lows    As JsonElement = result.GetProperty("low")
+                Dim closes  As JsonElement = result.GetProperty("close")
+                Dim volumes As JsonElement = result.GetProperty("volume")
+
+                Dim costs   As JsonElement = Nothing
+                Dim hasCost As Boolean = result.TryGetProperty("cost", costs)
+
+                Dim candles As New List(Of Candle)
+                For i As Integer = 0 To ticks.GetArrayLength() - 1
+                    Dim c As New Candle()
+                    c.Timestamp = ticks(i).GetInt64()
+                    c.Open      = opens(i).GetDouble()
+                    c.High      = highs(i).GetDouble()
+                    c.Low       = lows(i).GetDouble()
+                    c.Close     = closes(i).GetDouble()
+                    c.Volume    = volumes(i).GetDouble()
+                    c.VolumeUSD = If(hasCost, costs(i).GetDouble(), c.Volume * c.Close)
+                    candles.Add(c)
+                Next
+                Return candles
+            End Function,
+            "GetCandlesAsync(range)")
+    End Function
+
     ' ── Funding rate ───────────────────────────────────────────────────────────────────────
     ' Returns the projected 8-hour funding rate from ticker.funding_8h.
     ' e.g. 0.00001 = 0.001%/8h (typical BTC-PERPETUAL range: +/-0.01% to +/-0.1%)

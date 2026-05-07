@@ -9,9 +9,12 @@ Public Class AnalysisReport
     ' -------------------------------------------------------------------
     ' Summary
     ' -------------------------------------------------------------------
-    Public Property TotalRows      As Integer
-    Public Property ExcludedRows   As Integer
-    Public Property VerdictCounts  As New Dictionary(Of String, Integer)()
+    Public Property TotalRows           As Integer
+    Public Property ExcludedRows        As Integer   ' rows with no valid OHLC bars for any window
+    Public Property AtrInvalidExcluded  As Integer   ' rows excluded because ATR <= 0
+    Public Property StructuralStopRows  As Integer   ' rows where swing stop was available
+    Public Property AtrFallbackRows     As Integer   ' rows where ATR-multiple fallback was used
+    Public Property VerdictCounts       As New Dictionary(Of String, Integer)()
 
     ' -------------------------------------------------------------------
     ' Failure-rate matrix results (one per tier x window x threshold cell)
@@ -63,6 +66,11 @@ Public Class FailureCellResult
     Public Property CiHigh        As Double   ' 95% Wilson CI upper bound
     Public Property CiWidth       As Double   ' CiHigh - CiLow
     Public Property IsRecommended As Boolean  ' lowest CI width with n >= MinSamplesPerCell
+    ' v2 barrier-hit decomposition (how failures occurred)
+    Public Property Successes         As Integer  ' favourable barrier hit first
+    Public Property AdverseHitFails   As Integer  ' adverse barrier hit first
+    Public Property WindowExpiryFails As Integer  ' window expired without any hit
+    Public Property AmbiguousFails    As Integer  ' both barriers in same 1m bar (conservative = fail)
 
 End Class
 

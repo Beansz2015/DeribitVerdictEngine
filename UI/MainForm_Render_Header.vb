@@ -37,7 +37,7 @@ Partial Public Class MainForm
         AppendRtf(txtOutput, BuildCalibrationReport(), C_VALUE)
     End Sub
 
-    Private Sub lnkAnalysisReport_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkAnalysisReport.LinkClicked
+    Private Async Sub lnkAnalysisReport_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkAnalysisReport.LinkClicked
         Dim csvPath As String = AnalysisLogger.GetLogPath()
         If Not File.Exists(csvPath) Then
             MessageBox.Show("No analysis_log.csv found. Run at least one analysis first.",
@@ -61,15 +61,21 @@ Partial Public Class MainForm
             Return
         End If
 
+        ' Disable link during fetch so the user can't double-click.
+        lnkAnalysisReport.Enabled = False
+        lnkAnalysisReport.Text = "Fetching OHLC…"
         Dim cfg As EngineSettings = SettingsLoader.Current
         Dim outputDir As String = AppDomain.CurrentDomain.BaseDirectory
         Try
-            Dim report As AnalysisReport = AnalysisRunner.Run(csvPath, outputDir, cfg)
+            Dim report As AnalysisReport = Await AnalysisRunner.Run(csvPath, outputDir, cfg)
             Dim frm As New AnalysisReportForm(report.MarkdownText, report.MarkdownFilePath)
             frm.Show()
         Catch ex As Exception
             MessageBox.Show("Analysis failed: " & ex.Message,
                             "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            lnkAnalysisReport.Text = "Analysis Report"
+            lnkAnalysisReport.Enabled = True
         End Try
     End Sub
 

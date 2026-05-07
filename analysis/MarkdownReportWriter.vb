@@ -2,6 +2,9 @@
 ' Renders an AnalysisReport to a markdown string and writes it to disk.
 ' Also writes the summary CSV (failure-rate matrix) consumed by the auto-tweaker.
 '
+' v2 (failure-definition-v2-proposal.md): updated Section 1 summary, interpretation
+' hint at top, Section 4a Barrier-Hit Decomposition.
+'
 ' Host-agnostic: no System.Windows.Forms references.
 
 Imports System.Collections.Generic
@@ -24,17 +27,44 @@ Public Class MarkdownReportWriter
         report.SummaryCsvPath = csvPath
     End Sub
 
+    ' Write a minimal error-banner report when the OHLC fetch fails.
+    ' The caller (AnalysisRunner) has already set report.MarkdownText.
+    Public Shared Sub WriteErrorBanner(report As AnalysisReport, outputDir As String)
+        Try
+            Dim ts      As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
+            Dim mdPath  As String = Path.Combine(outputDir, "analysis_report_" & ts & ".md")
+            File.WriteAllText(mdPath, report.MarkdownText)
+            report.MarkdownFilePath = mdPath
+        Catch
+        End Try
+    End Sub
+
     Private Shared Function BuildMarkdown(r As AnalysisReport, ts As String) As String
         Dim sb As New StringBuilder()
 
         sb.AppendLine("# Analysis Report — " & ts)
         sb.AppendLine()
 
+        ' Interpretation hint (static — describes v2 barrier-hit semantics).
+        sb.AppendLine("> **Failure model: barrier-hit with adverse stop (v2)**")
+        sb.AppendLine("> - **SUCCESS** = price wicked through favourable barrier (entry ± multiplier × ATR)")
+        sb.AppendLine(">   within the hold window, before any adverse hit.")
+        sb.AppendLine("> - **FAILURE** = adverse barrier (structural stop or 1.2×ATR fallback) hit first,")
+        sb.AppendLine(">   OR window expired without favourable hit.")
+        sb.AppendLine("> - Same-bar and next-bar after verdict are excluded (too quick to execute).")
+        sb.AppendLine("> - Ambiguous bars (both barriers touched in same 1m candle) count as failure.")
+        sb.AppendLine()
+
         ' ------------------------------------------------------------------ Section 1: Summary
         sb.AppendLine("## 1. Summary")
         sb.AppendLine()
-        sb.AppendLine(String.Format("- Rows in CSV: **{0}**  |  Excluded (incomplete window or session boundary): **{1}**",
+        sb.AppendLine(String.Format("- Rows in CSV: **{0}**  |  Excluded (no OHLC bars for any window): **{1}**",
                                     r.TotalRows, r.ExcludedRows))
+        sb.AppendLine(String.Format("- ATR-invalid rows excluded: **{0}**", r.AtrInvalidExcluded))
+        sb.AppendLine(String.Format("- Adverse barrier source: structural stop **{0}** rows  /  ATR fallback **{1}** rows  /  row excluded **{2}** rows",
+                                    r.StructuralStopRows, r.AtrFallbackRows, r.AtrInvalidExcluded))
+        sb.AppendLine("- Forward data source: **Deribit OHLC bulk fetch** (replaces v1 CSV-close ±30s lookup)")
+        sb.AppendLine()
         If r.VerdictCounts.Count > 0 Then
             sb.Append("- Verdict counts: ")
             Dim parts As New List(Of String)()
@@ -44,7 +74,7 @@ Public Class MarkdownReportWriter
             sb.AppendLine(String.Join("  |  ", parts))
         End If
         sb.AppendLine()
-        ' Headline failure rates
+        ' Headline failure rates at recommended cells.
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
             Dim best = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsRecommended).FirstOrDefault()
             If best IsNot Nothing AndAlso best.SampleSize >= AnalysisConstants.MinSamplesPerCell Then
@@ -61,10 +91,11 @@ Public Class MarkdownReportWriter
         ' ------------------------------------------------------------------ Section 2: Failure-Rate Matrix
         sb.AppendLine("## 2. Failure-Rate Matrix")
         sb.AppendLine()
+        sb.AppendLine("_Failure = adverse barrier hit first OR window expired without favourable hit._")
+        sb.AppendLine()
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
             sb.AppendLine("### " & tier)
             sb.AppendLine()
-            ' Header row
             Dim thrs = If(tier.StartsWith("STRONG"),
                           AnalysisConstants.StrongAtrThresholds,
                           AnalysisConstants.MediumAtrThresholds)
@@ -115,6 +146,40 @@ Public Class MarkdownReportWriter
             End If
         Next
         sb.AppendLine()
+
+        ' ------------------------------------------------------------------ Section 4a: Barrier-Hit Decomposition
+        sb.AppendLine("## 4a. Barrier-Hit Decomposition")
+        sb.AppendLine()
+        sb.AppendLine("How failures occurred within each cell (counts, not %). Ambiguous = both barriers in same 1m bar (counts as failure).")
+        sb.AppendLine()
+        For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
+            sb.AppendLine("### " & tier)
+            sb.AppendLine()
+            Dim thrs = If(tier.StartsWith("STRONG"),
+                          AnalysisConstants.StrongAtrThresholds,
+                          AnalysisConstants.MediumAtrThresholds)
+            sb.AppendLine("| Window | ATR× | n | Success | Adverse Hit | Window Expiry | Ambiguous |")
+            sb.AppendLine("|--------|------|---|---------|-------------|---------------|-----------|")
+            For Each w In AnalysisConstants.HoldWindowsMinutes
+                For Each thr In thrs
+                    Dim cell = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso
+                                                              c.WindowMin = w AndAlso
+                                                              c.AtrThreshold = thr).FirstOrDefault()
+                    If cell Is Nothing OrElse cell.SampleSize = 0 Then
+                        sb.AppendLine(String.Format("| {0,4}m | {1:F1}× | — | — | — | — | — |", w, thr))
+                    Else
+                        sb.AppendLine(String.Format("| {0,4}m | {1:F1}× | {2} | {3} | {4} | {5} | {6} |",
+                                                     w, thr,
+                                                     cell.SampleSize,
+                                                     cell.Successes,
+                                                     cell.AdverseHitFails,
+                                                     cell.WindowExpiryFails,
+                                                     cell.AmbiguousFails))
+                    End If
+                Next
+            Next
+            sb.AppendLine()
+        Next
 
         ' ------------------------------------------------------------------ Section 4: VerdictContext × Outcome
         sb.AppendLine("## 4. Verdict Context Tag × Outcome")
