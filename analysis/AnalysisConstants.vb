@@ -12,7 +12,8 @@ Public Module AnalysisConstants
     Public ReadOnly StrongAtrThresholds As Double() = {0.3, 0.5}
     Public ReadOnly MediumAtrThresholds As Double() = {0.5, 0.8}
 
-    ' Hold windows in minutes (= rows at 60s auto-run cadence).
+    ' Hold windows in minutes. Forward prices are resolved by timestamp lookup
+    ' (±30 s tolerance) so these are cadence-agnostic — correct at any auto-run interval.
     Public ReadOnly HoldWindowsMinutes As Integer() = {5, 10, 15}
 
     ' Minimum rows in a cell before its failure rate is considered stable.

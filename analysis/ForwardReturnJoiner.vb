@@ -1,6 +1,10 @@
 ' analysis/ForwardReturnJoiner.vb
 ' Loads a v0.4 analysis_log.csv, parses each row, and attaches forward-return
-' values (T+5 / T+10 / T+15) by index-based lookup (60s cadence assumption).
+' values (T+5 / T+10 / T+15) by timestamp-based lookup.
+' Index-based lookup was removed because the auto-run cadence is configurable
+' (minimum 10 s), so "row N+5" is not always 5 minutes ahead.
+' Forward price for window W is the row whose timestamp is closest to
+' row.Timestamp + W minutes, within a ±30-second tolerance.
 ' Rows where the forward window is incomplete or crosses a UTC session boundary
 ' are excluded from the returned enriched set.
 '
@@ -69,16 +73,23 @@ Public Class ForwardReturnJoiner
             raw.Add(row)
         Next
 
-        ' Attach forward prices and mark window validity
+        ' Attach forward prices using timestamp-based lookup (cadence-agnostic).
+        ' For each window W, find the row whose timestamp is closest to
+        ' row.Timestamp + W minutes, within ±30 seconds.
+        Const ToleranceSec As Integer = 30
         Dim sessionStartSet As New HashSet(Of Integer)(sessionStarts)
         For Each w In AnalysisConstants.HoldWindowsMinutes
             For Each row In raw
-                Dim fwdIdx As Integer = row.Index + w
-                If fwdIdx >= raw.Count Then
+                If row.Timestamp = DateTime.MinValue Then
                     row.WindowValid(w) = False
                     Continue For
                 End If
-                Dim fwdRow = raw(fwdIdx)
+                Dim target As DateTime = row.Timestamp.AddMinutes(w)
+                Dim fwdRow As CsvRow = FindClosestRow(raw, target, ToleranceSec)
+                If fwdRow Is Nothing Then
+                    row.WindowValid(w) = False
+                    Continue For
+                End If
                 If CrossesSessionBoundary(row.Timestamp, fwdRow.Timestamp, sessionStartSet) Then
                     row.WindowValid(w) = False
                     Continue For
@@ -89,6 +100,45 @@ Public Class ForwardReturnJoiner
         Next
 
         Return raw
+    End Function
+
+    ' Binary-search the (chronologically sorted) row list for the row whose
+    ' timestamp is closest to `target`.  Returns Nothing if the closest row
+    ' is farther than `toleranceSec` seconds away.
+    Private Shared Function FindClosestRow(rows As List(Of CsvRow),
+                                            target As DateTime,
+                                            toleranceSec As Integer) As CsvRow
+        If rows.Count = 0 Then Return Nothing
+
+        ' Standard lower-bound binary search: find first index where
+        ' rows(lo).Timestamp >= target.
+        Dim lo As Integer = 0
+        Dim hi As Integer = rows.Count - 1
+        Do While lo < hi
+            Dim mid As Integer = (lo + hi) \ 2
+            If rows(mid).Timestamp < target Then
+                lo = mid + 1
+            Else
+                hi = mid
+            End If
+        Loop
+        ' lo is now the first index with Timestamp >= target (or rows.Count if all are before).
+
+        ' Candidate is rows(lo); also check rows(lo-1) which is the last row < target.
+        Dim best As CsvRow = Nothing
+        Dim bestDiff As Double = Double.MaxValue
+
+        If lo < rows.Count Then
+            Dim d As Double = Math.Abs((rows(lo).Timestamp - target).TotalSeconds)
+            If d < bestDiff Then bestDiff = d : best = rows(lo)
+        End If
+        If lo > 0 Then
+            Dim d As Double = Math.Abs((rows(lo - 1).Timestamp - target).TotalSeconds)
+            If d < bestDiff Then bestDiff = d : best = rows(lo - 1)
+        End If
+
+        If bestDiff > toleranceSec Then Return Nothing
+        Return best
     End Function
 
     ' Returns True if any session-start hour falls strictly inside (t1, t2).
