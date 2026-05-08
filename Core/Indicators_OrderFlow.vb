@@ -83,7 +83,23 @@ Partial Public Class IndicatorEngine
 
         Dim total As Double = bidVol + askVol
         If total = 0 Then Return
-        ofiRatio = bidVol / askVol
+
+        ' Sanity-bound the ratio. A near-zero ask side (depth pulled, thin book) sends
+        ' bidVol/askVol to absurd values (observed up to 14000+ in calibration data),
+        ' which pollutes the histogram and the auto-tweaker's outlier audit. Floor
+        ' the divisor at 0.001 BTC and cap the resulting ratio at +/-1000. This
+        ' does not affect classification — buyDominantRatio thresholds are O(1).
+        Const RatioCap     As Double = 1000.0
+        Const VolumeFloor  As Double = 0.001
+
+        Dim safeAsk As Double = Math.Max(askVol, VolumeFloor)
+        ofiRatio = bidVol / safeAsk
+        If ofiRatio > RatioCap Then
+            ofiRatio = RatioCap
+        ElseIf ofiRatio < (1.0 / RatioCap) Then
+            ofiRatio = 1.0 / RatioCap
+        End If
+
         If ofiRatio > buyDominantRatio Then
             ofiSignal = "BUY DOMINANT"
         ElseIf ofiRatio < sellDominantRatio Then
