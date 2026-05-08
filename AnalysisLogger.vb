@@ -195,7 +195,7 @@ Public Class AnalysisLogger
                     r.SwingTargetShort.ToString("F2"),
                     r.SwingStopLong.ToString("F2"),
                     r.SwingStopShort.ToString("F2"),
-                    If(String.IsNullOrEmpty(v.TargetCapReason), "none", v.TargetCapReason),
+                    NormaliseCapReason(v.TargetCapReason),
                     r.BestPivotByVolume5m.ToString("F2"),
                     r.BestPivotVolumeRatio5m.ToString("F2"),
                     r.TrendStructure.ToString()))
@@ -204,6 +204,21 @@ Public Class AnalysisLogger
             ' Silent fail — logging must never crash the main pipeline
         End Try
     End Sub
+
+    ' Normalise the engine's TargetCapReason display string to a canonical
+    ' bucket value matching csv-expansion-v0.4-proposal.md §2a:
+    '   "swing" / "hvn" / "poc" / "none"
+    ' The engine populates TargetCapReason as a rich display string
+    ' (e.g. "CAPPED @ 72480.0 (SWING_HIGH_5M)") suitable for the trader-facing
+    ' header render. The CSV column is categorical, so we project to the bucket.
+    Public Shared Function NormaliseCapReason(reason As String) As String
+        If String.IsNullOrEmpty(reason) Then Return "none"
+        Dim r = reason.ToUpperInvariant()
+        If r.Contains("SWING")   Then Return "swing"
+        If r.Contains("HVN")     Then Return "hvn"
+        If r.Contains("POC")     Then Return "poc"
+        Return "none"
+    End Function
 
     Public Shared Sub ResetLog()
         Dim path As String = GetLogPath()

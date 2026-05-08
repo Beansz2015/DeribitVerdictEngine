@@ -206,7 +206,11 @@ Partial Public Class MainForm
                 If ofiMomCounts.ContainsKey(om) Then ofiMomCounts(om) += 1
             End If
             If colIdx.ContainsKey("TargetCapReason") Then
-                Dim cr = parts(colIdx("TargetCapReason")).Trim().ToLower()
+                ' Normalise both the v0.4 canonical buckets ("swing"/"hvn"/"poc"/"none")
+                ' AND the legacy rich-string form ("CAPPED @ 72480.0 (SWING_HIGH_5M)")
+                ' so historical rows logged before the canonical fix are still
+                ' counted correctly.
+                Dim cr = AnalysisLogger.NormaliseCapReason(parts(colIdx("TargetCapReason")))
                 If capReasonCounts.ContainsKey(cr) Then
                     capReasonCounts(cr) += 1
                 Else
