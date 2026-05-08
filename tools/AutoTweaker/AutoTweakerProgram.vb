@@ -75,6 +75,11 @@ Public Class AutoTweakerProgram
         Dim config = TweakerConfig.Load(configPath)
         Dim state  = TweakerState.Load(config.StatePath)
 
+        ' Initialise SettingsLoader so DeribitClient's static constructor can read
+        ' Network.RequestTimeoutSeconds. SettingsLoader is host-agnostic; the watcher
+        ' it spins up is harmless overhead for a short-lived console process.
+        SettingsLoader.Initialise(config.SettingsPath)
+
         Console.WriteLine(String.Format("[AutoTweaker] Starting run. DryRun={0}, AutoCommit={1}",
                                         config.DryRunEnabled, config.AutoCommitEnabled))
 
