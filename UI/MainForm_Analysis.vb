@@ -248,7 +248,19 @@ Partial Public Class MainForm
         r.OIChange60m = If(oi60m IsNot Nothing AndAlso oi60m.OI > 0, (r.OI_Current - oi60m.OI) / oi60m.OI * 100, 0)
 
         Dim oiThr As Double = cfg.Indicators.OI.ChangeThresholdPct * 100
-        Dim priceUp As Boolean = r.CurrentPrice > bookSummary.Value.MarkPrice * 0.9999
+
+        ' priceUp: did price rise over the same 15m window that OIChange15m measures?
+        ' Earlier implementation compared r.CurrentPrice to bookSummary.MarkPrice * 0.9999.
+        ' Mark price tracks current price within ~1bp at any snapshot, so that comparison
+        ' was True almost always — biasing OISignal toward NEW LONGS / COVERING and
+        ' starving NEW SHORTS / CAPITULATION. The CalibrationReport on 2026-05-08 showed
+        ' a 41:2 long:short asymmetry in OI×CVD CONFIRMED counts as a direct consequence.
+        ' Correct comparison: current 1m close vs the close 15 candles back.
+        Dim priceUp As Boolean = False
+        If candles1m IsNot Nothing AndAlso candles1m.Count >= 16 Then
+            priceUp = r.CurrentPrice > candles1m(candles1m.Count - 16).Close
+        End If
+
         If r.OIChange15m > oiThr AndAlso priceUp Then
             r.OISignal = "NEW LONGS"
         ElseIf r.OIChange15m > oiThr AndAlso Not priceUp Then

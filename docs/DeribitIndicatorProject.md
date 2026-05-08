@@ -639,9 +639,10 @@ Items not currently scheduled but with concrete promotion conditions to track:
 *Condition:* offline analysis FundingMomentumDiagnostic shows FundingDelta percentiles such that a threshold below 1 bp would meaningfully change the RISING/FALLING/FLAT distribution.
 *Action when triggered:* simple settings-only `vNN-funding-calibration-pass-N` follow-up. If percentiles show the 1 bp threshold is genuinely above all observed deltas at REST cadence (not just above current sample), accept it as a polling-cadence ceiling and defer fix to WebSocket migration.
 
-**P3. OI×CVD asymmetry — algorithmic vs regime bias.**
-*Condition:* offline analysis OutlierAudit shows the 24:1 long:short asymmetry (observed in the 2460-row v0.3 audit) survives regime stratification.
-*Action when triggered:* spec a small follow-up reviewing `Pass 2b` symmetry. If asymmetry is confined to specific regime windows, no action — it's regime-period bias.
+**P3. OI×CVD asymmetry — RESOLVED 2026-05-08.**
+*Diagnosis:* the asymmetry was upstream of Pass 2b. `MainForm_Analysis.vb`'s `priceUp` computation compared `r.CurrentPrice > bookSummary.Value.MarkPrice * 0.9999` — but `MarkPrice` is the current snapshot of mid + smoothing, tracking the last-traded within ~1bp at any moment. The `* 0.9999` factor introduced a 1bp bias on the threshold, so `priceUp` was True almost always. The classification branches `NEW SHORTS` (OI rose + price fell) and `CAPITULATION` (OI fell + price fell) almost never fired, starving Pass 2b's CONFIRMED_SHORT path.
+*Fix:* commit `<TBD>` 2026-05-08. `priceUp` now compares `r.CurrentPrice` against `candles1m(count - 16).Close` — the actual close 15 minutes ago, matching the window of `OIChange15m`. Pass 2b downstream logic was already symmetric; no changes needed there.
+*Watch for:* in subsequent CalibrationReports, OI×CVD CONFIRMED_LONG / CONFIRMED_SHORT ratio should normalise toward the regime mix. If TRENDING_DOWN periods now produce more CONFIRMED_SHORT than CONFIRMED_LONG, the fix is validated.
 
 **P4. STRONG/MEDIUM tier collapse in failure-rate matrix.**
 *Condition:* after 1000+ tier-eligible rows, both STRONG and MEDIUM matrices pick (window, threshold) combinations within 1 cell of each other.
