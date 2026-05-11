@@ -252,20 +252,23 @@ Partial Public Class MainForm
         Const MIN_TOTAL           As Integer = 300
         Const MIN_PER_REGIME      As Integer = 50
         Const MIN_REGIMES_COVERED As Integer = 3
-        Const MIN_LIQ_EVENTS      As Integer = 2
         Const MIN_SESSIONS        As Integer = 3
+        ' Liquidation events are tracked informationally but no longer gate the
+        ' READY verdict. They are too rare to require for calibration: at typical
+        ' BTC-PERPETUAL conditions on Deribit, multi-day windows can pass without
+        ' a single liquidation crossing CalcLiquidations's threshold. When liqs
+        ' do happen during auto-run the rows are still logged for offline review.
 
         Dim regimesCovered As Integer = regimeCounts.Values.ToList().Where(Function(c) c >= MIN_PER_REGIME).Count()
         Dim okTotal    = totalRows >= MIN_TOTAL
         Dim okRegimes  = regimesCovered >= MIN_REGIMES_COVERED
-        Dim okLiq      = liqEvents >= MIN_LIQ_EVENTS
         Dim okSessions = sessionDates.Count >= MIN_SESSIONS
-        Dim overallReady = okTotal AndAlso okRegimes AndAlso okLiq AndAlso okSessions
+        Dim overallReady = okTotal AndAlso okRegimes AndAlso okSessions
 
         sb.AppendLine("SUMMARY")
         sb.AppendLine("  Total rows logged : " & totalRows & "  (need " & MIN_TOTAL & ")  " & Flag(okTotal))
         sb.AppendLine("  Sessions (days)   : " & sessionDates.Count & "  (need " & MIN_SESSIONS & ")  " & Flag(okSessions))
-        sb.AppendLine("  Liq events logged : " & liqEvents & "  (need " & MIN_LIQ_EVENTS & ")  " & Flag(okLiq))
+        sb.AppendLine("  Liq events logged : " & liqEvents & "  (informational; not a ready gate)")
         sb.AppendLine()
         sb.AppendLine("REGIME DISTRIBUTION  (need >= " & MIN_PER_REGIME & " rows each, " & MIN_REGIMES_COVERED & "+ regimes)")
         For Each kvp In regimeCounts
