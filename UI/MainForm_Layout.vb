@@ -316,11 +316,11 @@ Partial Public Class MainForm
 
         ' Status bar
         lblLogInfo.Location    = New System.Drawing.Point(8, H - STATUS_H)
-        lblLogInfo.Size        = New System.Drawing.Size(W - 500, STATUS_H)
+        lblLogInfo.Size        = New System.Drawing.Size(W - 570, STATUS_H)
         lblCountdown.Location  = New System.Drawing.Point(W - 410, H - STATUS_H)
         lblCountdown.Size      = New System.Drawing.Size(200, STATUS_H)
-        lnkOutputDump.Location         = New System.Drawing.Point(W - 490, H - STATUS_H)
-        lnkOutputDumpSettings.Location = New System.Drawing.Point(W - 415, H - STATUS_H)
+        lnkOutputDump.Location         = New System.Drawing.Point(W - 560, H - STATUS_H)
+        lnkOutputDumpSettings.Location = New System.Drawing.Point(W - 485, H - STATUS_H)
         lnkAnalysisReport.Location = New System.Drawing.Point(W - 390, H - STATUS_H)
         lnkCalibCheck.Location     = New System.Drawing.Point(W - 230, H - STATUS_H)
         lnkTweakSettings.Location  = New System.Drawing.Point(W - 148, H - STATUS_H)
