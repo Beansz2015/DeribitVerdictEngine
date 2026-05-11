@@ -421,7 +421,10 @@ Partial Public Class MainForm
                                    lastTradePrice As Double,
                                    atrStop As Double,
                                    atrTarget As Double)
-        Dim ts As String = DateTime.UtcNow.AddHours(8).ToString("yyyy-MM-dd HH:mm:ss") & " UTC+8"
+        Dim rawTs As DateTime = If(v.Timestamp <> DateTime.MinValue, v.Timestamp, DateTime.Now)
+        Dim offset As TimeSpan = TimeZoneInfo.Local.GetUtcOffset(rawTs)
+        Dim tzSign As String = If(offset >= TimeSpan.Zero, "+", "-")
+        Dim ts As String = rawTs.ToString("yyyy-MM-dd HH:mm:ss") & " UTC" & tzSign & CInt(Math.Floor(Math.Abs(offset.TotalHours))).ToString()
         Dim stopMult   As Double = cfg.Scoring.AtrStopMultiplier
         Dim targetMult As Double = cfg.Scoring.AtrTargetMultiplier
         Dim longStop   As Double = r.CurrentPrice - atrStop

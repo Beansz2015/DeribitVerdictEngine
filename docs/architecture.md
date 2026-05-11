@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-05-06 | App version: settings.json v24 — Bundle 3 (d1 trend structure + d2 volume-weighted pivots) on top of Bundle 1 (csv-expansion-v0.4 + analysis script) and Bundle 2 (auto-tweaker)**
+**Last updated: 2026-05-11 | App version: settings.json v25 — output-dump feature on top of Bundle 3 (d1 trend structure + d2 volume-weighted pivots), Bundle 1 (csv-expansion-v0.4 + analysis script), and Bundle 2 (auto-tweaker)**
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
@@ -14,6 +14,9 @@ DeribitVerdictEngine/
 ├── MainForm.Designer.vb                Auto-generated WinForms designer (do not edit)
 ├── MainForm.resx                       Form resource file
 │
+├── AnalysisOutputDump.vb               Append-only markdown dump helper (host-agnostic);
+│                                       Append(), Clear(), CountRuns(), TrimToMaxRuns();
+│                                       rolling-trim after each write; never throws.
 ├── DeribitClient.vb                    REST API layer — all Deribit HTTP calls;
 │                                       ExecuteWithRetry wrapper: retry-once on 5xx/timeout,
 │                                       return Nothing on hard failure. GetFundingRateAsync →
@@ -23,7 +26,7 @@ DeribitVerdictEngine/
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
-├── settings.json                       All tunable parameters v18 (no recompile needed)
+├── settings.json                       All tunable parameters v25 (no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
@@ -132,6 +135,9 @@ DeribitVerdictEngine/
 │   │                                   ATR ENTRY LEVELS /
 │   │                                   LONG+SHORT STRUCTURAL ROWS (swing pivot R:R) /
 │   │                                   KELLY SIZING.
+│   ├── OutputDumpSettingsForm.vb       Non-modal dialog: Enabled toggle, max-runs
+│   │                                   textbox, file path + size, Clear + Save + Close.
+│   │                                   Save routes through SettingsLoader.Save.
 │   └── MainForm_Render_Sections.vb     RenderOutput() entry point;
 │                                       all indicator sections: DYNAMIC NORMS, REGIME,
 │                                       CORE SIGNALS, VWAP, BBW/TTM, EMA RIBBON,

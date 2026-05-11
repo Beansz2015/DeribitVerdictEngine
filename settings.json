@@ -1,8 +1,13 @@
 {
-  "version": 24,
-  "last_modified": "2026-05-05T00:00:00Z",
-  "modified_by": "d1-trend-structure",
+  "version": 25,
+  "last_modified": "2026-05-11T00:00:00Z",
+  "modified_by": "output-dump",
   "change_log": [
+    "v25 — output-dump: persistent markdown record of full rendered analysis text per run.",
+    "     New top-level block: analysis_logging (2 keys).",
+    "       output_dump_enabled: true  — master switch; false = no I/O on analysis runs.",
+    "       output_dump_max_runs: 3000 — rolling-trim cap; 0 = unlimited.",
+    "     At 3000 runs / 60s cadence: ~9 MB / ~50 hours of coverage.",
     "v24 — d1-trend-structure: HH/HL/LH/LL swing-structure classification + Pass 2c structure bonus.",
     "     New indicators.trend_structure block (4 keys):",
     "       enabled: true        — master switch for ClassifyTrendStructure and Pass 2c bonus.",
@@ -369,5 +374,9 @@
     "request_timeout_seconds": 15,
     "retry_count": 1,
     "retry_backoff_ms": 1000
+  },
+  "analysis_logging": {
+    "output_dump_enabled": true,
+    "output_dump_max_runs": 3000
   }
 }

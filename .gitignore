@@ -373,3 +373,7 @@ tools/AutoTweaker/manual_diffs/
 
 # Picked-cell history (per-run auto-tweaker cell selections)
 analysis/picked_cell_history.csv
+
+# Output dump file (gitignored per output-dump spec)
+bin/Debug/net8.0-windows/analysis_output_dump.md
+bin/Release/net8.0-windows/analysis_output_dump.md

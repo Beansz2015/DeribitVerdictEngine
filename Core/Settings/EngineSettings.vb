@@ -107,6 +107,9 @@ Public Class EngineSettings
 
     <JsonPropertyName("network")>
     Public Property Network As New NetworkSettings
+
+    <JsonPropertyName("analysis_logging")>
+    Public Property AnalysisLogging As New AnalysisLoggingSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -647,6 +650,22 @@ Public Class TrendStructureSettings
     <JsonPropertyName("pivot_wing")>      Public Property PivotWing      As Integer = 3
     <JsonPropertyName("pivot_count")>     Public Property PivotCount     As Integer = 6
     <JsonPropertyName("structure_bonus")> Public Property StructureBonus As Integer = 1
+End Class
+
+' ---------------------------------------------------------------------------
+' Analysis logging settings
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' Controls the output dump feature (analysis_output_dump.md).
+''' OutputDumpEnabled: master switch — false = no I/O on analysis runs. Default True.
+''' OutputDumpMaxRuns: maximum run blocks to retain (rolling-trim). 0 = unlimited. Default 3000.
+''' </summary>
+Public Class AnalysisLoggingSettings
+    <JsonPropertyName("output_dump_enabled")>
+    Public Property OutputDumpEnabled As Boolean = True
+    <JsonPropertyName("output_dump_max_runs")>
+    Public Property OutputDumpMaxRuns As Integer = 3000
 End Class
 
 ' ---------------------------------------------------------------------------

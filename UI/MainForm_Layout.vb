@@ -106,6 +106,13 @@ Partial Public Class MainForm
     ' Reference to the open TweakSettingsForm (Nothing when not open)
     Private _tweakForm As TweakSettingsForm
 
+    ' Output Dump status-bar links
+    Private WithEvents lnkOutputDump         As System.Windows.Forms.LinkLabel
+    Private WithEvents lnkOutputDumpSettings As System.Windows.Forms.LinkLabel
+
+    ' Reference to the open OutputDumpSettingsForm (Nothing when not open)
+    Private _outputDumpSettingsForm As OutputDumpSettingsForm
+
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
 
@@ -149,6 +156,28 @@ Partial Public Class MainForm
             .TextAlign        = System.Drawing.ContentAlignment.MiddleRight
         }
         Me.Controls.Add(lnkTweakSettings)
+
+        lnkOutputDump = New System.Windows.Forms.LinkLabel() With {
+            .AutoSize         = True,
+            .Font             = New System.Drawing.Font("Segoe UI", 8.0!),
+            .LinkColor        = System.Drawing.Color.DimGray,
+            .ActiveLinkColor  = System.Drawing.Color.DodgerBlue,
+            .VisitedLinkColor = System.Drawing.Color.DimGray,
+            .Text             = "Output Dump",
+            .TextAlign        = System.Drawing.ContentAlignment.MiddleRight
+        }
+        Me.Controls.Add(lnkOutputDump)
+
+        lnkOutputDumpSettings = New System.Windows.Forms.LinkLabel() With {
+            .AutoSize         = True,
+            .Font             = New System.Drawing.Font("Segoe UI", 8.0!),
+            .LinkColor        = System.Drawing.Color.DimGray,
+            .ActiveLinkColor  = System.Drawing.Color.DodgerBlue,
+            .VisitedLinkColor = System.Drawing.Color.DimGray,
+            .Text             = ChrW(&H2699),
+            .TextAlign        = System.Drawing.ContentAlignment.MiddleRight
+        }
+        Me.Controls.Add(lnkOutputDumpSettings)
 
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
@@ -287,9 +316,11 @@ Partial Public Class MainForm
 
         ' Status bar
         lblLogInfo.Location    = New System.Drawing.Point(8, H - STATUS_H)
-        lblLogInfo.Size        = New System.Drawing.Size(W - 420, STATUS_H)
+        lblLogInfo.Size        = New System.Drawing.Size(W - 500, STATUS_H)
         lblCountdown.Location  = New System.Drawing.Point(W - 410, H - STATUS_H)
         lblCountdown.Size      = New System.Drawing.Size(200, STATUS_H)
+        lnkOutputDump.Location         = New System.Drawing.Point(W - 490, H - STATUS_H)
+        lnkOutputDumpSettings.Location = New System.Drawing.Point(W - 415, H - STATUS_H)
         lnkAnalysisReport.Location = New System.Drawing.Point(W - 390, H - STATUS_H)
         lnkCalibCheck.Location     = New System.Drawing.Point(W - 230, H - STATUS_H)
         lnkTweakSettings.Location  = New System.Drawing.Point(W - 148, H - STATUS_H)
@@ -311,6 +342,45 @@ Partial Public Class MainForm
         End If
         _tweakForm.Show()
         _tweakForm.BringToFront()
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Output Dump helpers + link clicks
+    ' -----------------------------------------------------------------------
+    Friend Shared Function GetDumpPath() As String
+        Return IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "analysis_output_dump.md")
+    End Function
+
+    Private Sub lnkOutputDump_LinkClicked(sender As Object,
+            e As System.Windows.Forms.LinkLabelLinkClickedEventArgs) _
+            Handles lnkOutputDump.LinkClicked
+        Dim dumpPath As String = GetDumpPath()
+        If Not IO.File.Exists(dumpPath) OrElse Not SettingsLoader.Current.AnalysisLogging.OutputDumpEnabled Then
+            MessageBox.Show("Output dump is empty or disabled.", "Output Dump",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+        Try
+            Dim psi As New System.Diagnostics.ProcessStartInfo(dumpPath) With {.UseShellExecute = True}
+            System.Diagnostics.Process.Start(psi)
+        Catch ex As Exception
+            MessageBox.Show("Could not open dump file: " & ex.Message, "Output Dump",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Private Sub lnkOutputDumpSettings_LinkClicked(sender As Object,
+            e As System.Windows.Forms.LinkLabelLinkClickedEventArgs) _
+            Handles lnkOutputDumpSettings.LinkClicked
+        If _outputDumpSettingsForm Is Nothing OrElse _outputDumpSettingsForm.IsDisposed Then
+            _outputDumpSettingsForm = New OutputDumpSettingsForm(GetDumpPath())
+            AddHandler _outputDumpSettingsForm.FormClosed,
+                Sub(s As Object, ev As System.Windows.Forms.FormClosedEventArgs)
+                    _outputDumpSettingsForm = Nothing
+                End Sub
+        End If
+        _outputDumpSettingsForm.Show()
+        _outputDumpSettingsForm.BringToFront()
     End Sub
 
 End Class

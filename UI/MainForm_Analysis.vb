@@ -426,6 +426,7 @@ Partial Public Class MainForm
         If rbShort.Checked Then posState = PositionState.InShort
 
         Dim verdict = ScoringEngine.Calculate(r, posState, norms, cfg)
+        verdict.Timestamp = DateTime.Now
 
         AnalysisLogger.LogRun(r, verdict)
         UpdateLogInfo()

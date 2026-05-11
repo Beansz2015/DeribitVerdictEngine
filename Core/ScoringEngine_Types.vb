@@ -73,6 +73,9 @@ Public Class VerdictResult
     Public Property KellyContracts As Integer = 0
     ''' <summary>Dollar risk amount = AccountSizeUsd * KellyFApplied.</summary>
     Public Property KellyRiskUsd  As Double  = 0.0
+
+    ''' <summary>Analysis run timestamp. Set in RunAnalysisAsync; used for TIME: line and dump header.</summary>
+    Public Property Timestamp As DateTime = DateTime.MinValue
 End Class
 
 Public Enum PositionState

@@ -303,6 +303,14 @@ Partial Public Class MainForm
         End Select
         lblVerdict.BackColor = bg
         lblVerdict.Text = v.Verdict & "  [" & v.Confidence & "]"
+
+        ' -- Output dump -------------------------------------------------------
+        AnalysisOutputDump.Append(
+            timestamp:=v.Timestamp,
+            renderedText:=txtOutput.Text,
+            dumpPath:=GetDumpPath(),
+            enabled:=cfg.AnalysisLogging.OutputDumpEnabled,
+            maxRuns:=cfg.AnalysisLogging.OutputDumpMaxRuns)
     End Sub
 
 End Class
