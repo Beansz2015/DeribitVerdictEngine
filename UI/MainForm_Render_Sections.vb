@@ -77,10 +77,21 @@ Partial Public Class MainForm
                                       r.CurrentVolume, usdStr, r.VolumeRatio, r.VolumeSMA9) & Environment.NewLine, volColour)
 
         ' -- VWAP -------------------------------------------------------------
+        ' Active anchor mirrors GetSessionCandles in Indicators_Volatility: pre-s2 cutoff
+        ' anchors at 00:00 UTC; post-cutoff anchors at the s2 boundary (default 13:30 UTC).
+        ' Without this, the label was hardcoded to s2h:s2m regardless of which anchor
+        ' the math was using — display-only mismatch caught by the 2026-05-12 dump audit.
         Dim s2h As Integer = cfg.Indicators.VWAP.Session2StartHour
         Dim s2m As Integer = cfg.Indicators.VWAP.Session2StartMinute
+        Dim nowUtc As DateTime = DateTime.UtcNow
+        Dim activeAnchor As String
+        If nowUtc.Hour < s2h OrElse (nowUtc.Hour = s2h AndAlso nowUtc.Minute < s2m) Then
+            activeAnchor = "00:00"
+        Else
+            activeAnchor = String.Format("{0:D2}:{1:D2}", s2h, s2m)
+        End If
         Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < vwapWarmup, "  [WARMUP]", "")
-        SectionHeader(rtb, String.Format("VWAP (reset {0:D2}:{1:D2} UTC){2}:", s2h, s2m, vwapWarmupTag))
+        SectionHeader(rtb, String.Format("VWAP (reset {0} UTC){1}:", activeAnchor, vwapWarmupTag))
         AppendRtf(rtb, "  Value:  ", C_LABEL)
         Dim devColour As Color = If(Math.Abs(r.VWAPDevPct) > norms.VWAPDevThreshold, C_WARN, C_VALUE)
         AppendRtf(rtb, String.Format("{0:F1}  |  Dev: {1:F3}%  |  Candles: {2}",

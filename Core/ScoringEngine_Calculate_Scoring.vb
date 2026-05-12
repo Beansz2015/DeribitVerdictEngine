@@ -524,6 +524,13 @@ Partial Public Class ScoringEngine
                             sBonus,
                             r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
                             r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                    Else
+                        ' Structure says UPTREND but long isn't dominant — surface the
+                        ' disagreement for trader transparency. No scoring effect.
+                        structBonusNote = String.Format(
+                            "TREND STRUCTURE: UPTREND HH {0:F0}>{1:F0} | HL {2:F0}>{3:F0} (no score change — structure disagrees with dominant side)",
+                            r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                            r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
                     End If
                 Case TrendStructure.DOWNTREND
                     If state.ShortScore > state.LongScore Then
@@ -532,6 +539,13 @@ Partial Public Class ScoringEngine
                         structBonusNote = String.Format(
                             "+{0} TREND STRUCTURE [DOWNTREND: LH {1:F0}<{2:F0} | LL {3:F0}<{4:F0}]",
                             sBonus,
+                            r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
+                            r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
+                    Else
+                        ' Structure says DOWNTREND but short isn't dominant — surface the
+                        ' disagreement for trader transparency. No scoring effect.
+                        structBonusNote = String.Format(
+                            "TREND STRUCTURE: DOWNTREND LH {0:F0}<{1:F0} | LL {2:F0}<{3:F0} (no score change — structure disagrees with dominant side)",
                             r.LastTwoHighs5m.Newer, r.LastTwoHighs5m.Older,
                             r.LastTwoLows5m.Newer,  r.LastTwoLows5m.Older)
                     End If
