@@ -131,9 +131,10 @@ Partial Public Class ScoringEngine
         Dim rawLongTarget  As Double = r.CurrentPrice + atrTarget
         Dim rawShortTarget As Double = r.CurrentPrice - atrTarget
 
-        res.AdjustedLongTarget  = 0
-        res.AdjustedShortTarget = 0
-        res.TargetCapReason = ""
+        res.AdjustedLongTarget   = 0
+        res.AdjustedShortTarget  = 0
+        res.TargetCapReasonLong  = ""
+        res.TargetCapReasonShort = ""
 
         Dim hvnAbove As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
         Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
@@ -166,8 +167,8 @@ Partial Public Class ScoringEngine
         End If
 
         If capLongTarget > 0 Then
-            res.AdjustedLongTarget = capLongTarget
-            res.TargetCapReason    = String.Format("CAPPED @ {0:F1} ({1})", capLongTarget, capLongLabel)
+            res.AdjustedLongTarget  = capLongTarget
+            res.TargetCapReasonLong = String.Format("CAPPED @ {0:F1} ({1})", capLongTarget, capLongLabel)
         End If
 
         ' 3-tier cap arbitration (short): swing target → nearest HVN → POC.
@@ -197,8 +198,8 @@ Partial Public Class ScoringEngine
         End If
 
         If capShortTarget > 0 Then
-            res.AdjustedShortTarget = capShortTarget
-            res.TargetCapReason     = String.Format("CAPPED @ {0:F1} ({1})", capShortTarget, capShortLabel)
+            res.AdjustedShortTarget   = capShortTarget
+            res.TargetCapReasonShort  = String.Format("CAPPED @ {0:F1} ({1})", capShortTarget, capShortLabel)
         End If
 
         Return res

@@ -29,9 +29,10 @@ Public Class VerdictResult
     ' VPFR-aware target adjustment
     ' Non-zero when an HVN wall falls between entry and the raw ATR target.
     ' Zero means no cap was applied -- use the raw ATR target as normal.
-    Public Property AdjustedLongTarget  As Double  ' capped long target ($), 0 = no cap
-    Public Property AdjustedShortTarget As Double  ' capped short target ($), 0 = no cap
-    Public Property TargetCapReason     As String  ' e.g. "HVN_CAPPED @ 72480 (POC wall)" or ""
+    Public Property AdjustedLongTarget   As Double  ' capped long target ($), 0 = no cap
+    Public Property AdjustedShortTarget  As Double  ' capped short target ($), 0 = no cap
+    Public Property TargetCapReasonLong  As String  ' e.g. "CAPPED @ 81382.6 (NEAREST_HVN_ABOVE)" or ""
+    Public Property TargetCapReasonShort As String  ' e.g. "CAPPED @ 81344.8 (NEAREST_HVN_BELOW)" or ""
 
     ''' <summary>
     ''' Post-scoring diagnostic context for weak/ambiguous verdicts.

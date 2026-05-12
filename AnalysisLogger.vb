@@ -111,6 +111,18 @@ Public Class AnalysisLogger
             Using sw As New StreamWriter(path, append:=True)
                 Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
                 Dim mtfReason As String = If(r.MTFGateReason, "").Replace(",", ";")
+                Dim capReasonCsv As String
+                If v.Verdict.Contains("LONG") Then
+                    capReasonCsv = NormaliseCapReason(v.TargetCapReasonLong)
+                ElseIf v.Verdict.Contains("SHORT") Then
+                    capReasonCsv = NormaliseCapReason(v.TargetCapReasonShort)
+                ElseIf Not String.IsNullOrEmpty(v.TargetCapReasonLong) Then
+                    capReasonCsv = NormaliseCapReason(v.TargetCapReasonLong)
+                ElseIf Not String.IsNullOrEmpty(v.TargetCapReasonShort) Then
+                    capReasonCsv = NormaliseCapReason(v.TargetCapReasonShort)
+                Else
+                    capReasonCsv = "none"
+                End If
                 sw.WriteLine(String.Join(",",
                     ts,
                     r.CurrentPrice.ToString("F2"),
@@ -195,7 +207,7 @@ Public Class AnalysisLogger
                     r.SwingTargetShort.ToString("F2"),
                     r.SwingStopLong.ToString("F2"),
                     r.SwingStopShort.ToString("F2"),
-                    NormaliseCapReason(v.TargetCapReason),
+                    capReasonCsv,
                     r.BestPivotByVolume5m.ToString("F2"),
                     r.BestPivotVolumeRatio5m.ToString("F2"),
                     r.TrendStructure.ToString()))

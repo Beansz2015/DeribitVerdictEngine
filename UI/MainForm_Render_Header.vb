@@ -445,7 +445,7 @@ Partial Public Class MainForm
         End Select
         AppendRtf(rtb, v.Verdict & Environment.NewLine, vColour, bold:=True)
 
-        If v.VerdictContext <> "" AndAlso v.VerdictContext <> "CONFIRMED" Then
+        If v.VerdictContext <> "" Then
             AppendRtf(rtb, "  CONTEXT:    ", C_LABEL)
             Dim ctxColour As Color
             Select Case v.VerdictContext
@@ -497,7 +497,7 @@ Partial Public Class MainForm
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
                                           longStop, r.CurrentPrice, longTarget), C_DIM)
             AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
-                                          v.AdjustedLongTarget, v.TargetCapReason) & Environment.NewLine, C_WARN, bold:=True)
+                                          v.AdjustedLongTarget, v.TargetCapReasonLong) & Environment.NewLine, C_WARN, bold:=True)
         Else
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
                                           longStop, r.CurrentPrice, longTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
@@ -524,7 +524,7 @@ Partial Public Class MainForm
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
                                           shortStop, r.CurrentPrice, shortTarget), C_DIM)
             AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
-                                          v.AdjustedShortTarget, v.TargetCapReason) & Environment.NewLine, C_WARN, bold:=True)
+                                          v.AdjustedShortTarget, v.TargetCapReasonShort) & Environment.NewLine, C_WARN, bold:=True)
         Else
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
                                           shortStop, r.CurrentPrice, shortTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_BAD)
