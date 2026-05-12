@@ -6,9 +6,14 @@
 '   - ForwardWindowJoiner replaces ForwardReturnJoiner (no forward-price joining).
 '   - OHLC fetch via DeribitOhlcFetcher runs AFTER eligibility checks pass.
 '   - ForwardBars populated from OHLC map before FailureRateMatrix.Compute.
-'   - FailureRateMatrix.Compute uses barrier-hit logic (v2 semantic).
-'   - AppendPickedCell writes v2 schema header; rotates v1 history on first run.
-'   - Trigger threshold default (40%) unchanged; recalibrate after 200+ v2 rows.
+'
+' settings-snapshot-history-proposal.md additions:
+'   - Round-summary capture for every evaluable round (BELOW_THRESHOLD / APPLIED /
+'     PROPOSED / DRY_RUN_WRITTEN).
+'   - Streak tracking with SnapshotManager Create / AccumulateConditions / Finalise.
+'   - REVERT action support — when Claude returns action="revert", apply via
+'     SettingsDiffApplier.ApplyRevert (bypasses key-cap but still validates content).
+'   - Manifest + current conditions vector handed to PromptBuilder.
 '
 ' Host-agnostic: no System.Windows.Forms references.
 
@@ -51,6 +56,8 @@ Public Class AutoTweakerCore
         ' ── 2. Load settings and session boundaries ──────────────────────────
         Dim settingsJson As String
         Dim sessionStartHours As New List(Of Integer)()
+        Dim tightThresholdBps As Double = 0.0
+        Dim wideThresholdBps  As Double = 0.0
         Try
             settingsJson = File.ReadAllText(config.SettingsPath)
             Dim opts As New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True}
@@ -59,6 +66,10 @@ Public Class AutoTweakerCore
                 For Each s In settings.SessionVolume.Sessions
                     sessionStartHours.Add(s.StartHour)
                 Next
+            End If
+            If settings?.Indicators?.Spread IsNot Nothing Then
+                tightThresholdBps = settings.Indicators.Spread.TightThresholdBps
+                wideThresholdBps  = settings.Indicators.Spread.WideThresholdBps
             End If
         Catch ex As Exception
             Console.Error.WriteLine("[AutoTweaker] Cannot read settings.json: " & ex.Message)
@@ -69,12 +80,11 @@ Public Class AutoTweakerCore
             Return 1
         End Try
         If sessionStartHours.Count = 0 Then
-            sessionStartHours.Add(0)   ' default: midnight UTC
-            sessionStartHours.Add(13)  ' default: NY open UTC
+            sessionStartHours.Add(0)
+            sessionStartHours.Add(13)
         End If
 
         ' ── 3. Build session-aligned window ──────────────────────────────────
-        ' v2: ForwardWindowJoiner.Load only parses rows; no forward-price joining.
         Dim allRows = ForwardWindowJoiner.Load(config.CsvPath)
         If allRows.Count < config.WindowSizeVerdicts Then
             Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — only {0} rows, need {1}.",
@@ -85,7 +95,6 @@ Public Class AutoTweakerCore
             Return 2
         End If
 
-        ' Walk back from end of allRows to find window_size_verdicts rows in same session.
         Dim windowRows As New List(Of CsvRow)()
         Dim sessionSet As New HashSet(Of Integer)(sessionStartHours)
         Dim endIdx As Integer = allRows.Count - 1
@@ -116,8 +125,11 @@ Public Class AutoTweakerCore
             Return 2
         End If
 
-        ' windowRows was built newest-first; reverse for chronological order.
         windowRows.Reverse()
+
+        ' Capture window row span for round history (CSV row indexes, 0-based into allRows).
+        Dim windowStartRow As Integer = windowRows.First().Index
+        Dim windowEndRow   As Integer = windowRows.Last().Index
 
         ' ── 4. Count tier-eligible rows ───────────────────────────────────────
         Dim tierEligible As Integer = windowRows.Where(Function(r)
@@ -137,7 +149,6 @@ Public Class AutoTweakerCore
         End If
 
         ' ── 5. Deribit OHLC bulk fetch ────────────────────────────────────────
-        ' Runs AFTER all eligibility checks — no point fetching if we're going to abort.
         Dim validWindowRows = windowRows.Where(Function(r) r.Timestamp > DateTime.MinValue).ToList()
         If validWindowRows.Count = 0 Then
             Console.Error.WriteLine("[AutoTweaker] ERROR — no valid timestamps in window rows.")
@@ -162,7 +173,6 @@ Public Class AutoTweakerCore
             Return 1
         End If
 
-        ' ── 5b. Populate ForwardBars ──────────────────────────────────────────
         ForwardWindowJoiner.PopulateForwardBars(windowRows, ohlcMap)
 
         ' ── 6. Compute failure-rate matrix and pick recommended cells ─────────
@@ -170,7 +180,6 @@ Public Class AutoTweakerCore
         Dim failureCells = FailureRateMatrix.Compute(windowRows, atrEx, structStop, atrFb)
         Dim recommended  = failureCells.Where(Function(c) c.IsRecommended).ToList()
 
-        ' Append picked cells to history.
         Dim pickedCsvPath = Path.Combine(
             If(String.IsNullOrEmpty(Path.GetDirectoryName(config.CsvPath)),
                ".", Path.GetDirectoryName(config.CsvPath)),
@@ -187,30 +196,50 @@ Public Class AutoTweakerCore
                 cell.FailureRate, cell.SampleSize, cell.CiLow, cell.CiHigh)
         Next
 
-        ' ── 7. Compute aggregate failure rate at recommended cells ─────────────
+        ' ── 7. Aggregate failure rate at recommended cells ─────────────────────
         Dim totalN As Integer = 0
         Dim totalF As Integer = 0
         For Each cell In recommended
             totalN += cell.SampleSize
             totalF += cell.Failures
         Next
+        Dim aggregateRatePct As Double = If(totalN > 0, CDbl(totalF) / totalN * 100, 0)
 
-        Dim aggregateRate As Double = If(totalN > 0, CDbl(totalF) / totalN * 100, 0)
+        ' Build a compact picked-cells JSON for round history persistence.
+        Dim pickedCellsJson As String = BuildPickedCellsJson(recommended)
 
-        If aggregateRate < config.FailureRateThresholdPct Then
+        ' Round summary skeleton — populated per branch below.
+        Dim roundIso As String = DateTime.UtcNow.ToString("o")
+        Dim summary As New RoundSummary() With {
+            .RoundIso                = roundIso,
+            .WindowStartRow          = windowStartRow,
+            .WindowEndRow            = windowEndRow,
+            .AggregateFailureRatePct = aggregateRatePct,
+            .PickedCellsJson         = pickedCellsJson
+        }
+
+        ' ── BELOW_THRESHOLD branch ─────────────────────────────────────────────
+        If aggregateRatePct < config.FailureRateThresholdPct Then
             Console.WriteLine(String.Format(
                 "[AutoTweaker] BELOW_THRESHOLD — aggregate failure rate {0:F1}% < {1:F1}% threshold. No tweak needed.",
-                aggregateRate, config.FailureRateThresholdPct))
+                aggregateRatePct, config.FailureRateThresholdPct))
+            summary.Outcome = "BELOW_THRESHOLD"
             state.LastRunOutcome      = "BELOW_THRESHOLD"
-            state.LastRunAtIso        = DateTime.UtcNow.ToString("o")
+            state.LastRunAtIso        = roundIso
             state.LastRunCsvRowCount  = currentRowCount
+            state.LastSuccessfulRoundIso = roundIso
+
+            ' Streak tracking + snapshot management
+            state.CurrentBelowThresholdStreak += 1
+            HandleStreakAdvance(state, config)
+            state.RoundHistory.Add(summary)
             TweakerState.Save(statePath, state)
             Return 0
         End If
 
         Console.WriteLine(String.Format(
             "[AutoTweaker] Failure rate {0:F1}% >= {1:F1}% threshold — building prompt...",
-            aggregateRate, config.FailureRateThresholdPct))
+            aggregateRatePct, config.FailureRateThresholdPct))
 
         ' Determine session name for trigger line.
         Dim sessionName As String = "unknown session"
@@ -230,11 +259,18 @@ Public Class AutoTweakerCore
 
         Dim trigger As String = String.Format(
             "aggregate failure rate {0:F1}% > threshold {1:F1}% over window {2} rows ({3} session)",
-            aggregateRate, config.FailureRateThresholdPct, config.WindowSizeVerdicts, sessionName)
+            aggregateRatePct, config.FailureRateThresholdPct, config.WindowSizeVerdicts, sessionName)
+
+        ' ── Build conditions vector + manifest snippet for this round ─────────
+        Dim singleRound As New List(Of RoundSummary) From {summary}
+        Dim conditions = ConditionsExtractor.Extract(
+            config.CsvPath, singleRound, tightThresholdBps, wideThresholdBps)
+        Dim manifestActiveRows As String = SnapshotManager.GetActiveRowsCsv(config.ManifestPath)
 
         ' ── 8. Build prompt ───────────────────────────────────────────────────
         Dim promptResult = PromptBuilder.Build(
-            settingsJson, windowRows, failureCells, state.PickedCellHistory, trigger)
+            settingsJson, windowRows, failureCells, state.PickedCellHistory, trigger,
+            manifestActiveRows, conditions, config.MaxKeysPerProposal)
         Dim systemMsg As String = promptResult.SystemMsg
         Dim userMsg   As String = promptResult.UserMsg
 
@@ -243,10 +279,15 @@ Public Class AutoTweakerCore
             Dim dryPath = ClaudeApiClient.WriteDryRunFile(
                 systemMsg, userMsg, "claude-opus-latest", trigger, config.DryRunOutputDir)
             Console.WriteLine("[AutoTweaker] DRY_RUN_WRITTEN → " & dryPath)
+
+            summary.Outcome     = "DRY_RUN_WRITTEN"
+            summary.DiffSummary = "Dry-run payload: " & Path.GetFileName(dryPath)
             state.LastRunOutcome      = "DRY_RUN_WRITTEN"
-            state.LastRunAtIso        = DateTime.UtcNow.ToString("o")
+            state.LastRunAtIso        = roundIso
             state.LastRunCsvRowCount  = currentRowCount
             state.LastProposalSummary = "Dry-run file: " & dryPath
+            HandleStreakInterrupt(state, config, conditions, singleRound)
+            state.RoundHistory.Add(summary)
             TweakerState.Save(statePath, state)
             Return 0
         End If
@@ -257,7 +298,7 @@ Public Class AutoTweakerCore
             Console.Error.WriteLine("[AutoTweaker] ERROR — ANTHROPIC_API_KEY env var not set.")
             state.LastRunOutcome   = "ERROR"
             state.LastErrorMessage = "ANTHROPIC_API_KEY not set."
-            state.LastRunAtIso     = DateTime.UtcNow.ToString("o")
+            state.LastRunAtIso     = roundIso
             TweakerState.Save(statePath, state)
             Return 1
         End If
@@ -277,36 +318,110 @@ Public Class AutoTweakerCore
             Console.Error.WriteLine("[AutoTweaker] API call failed: " & ex.Message)
             state.LastRunOutcome   = "ERROR"
             state.LastErrorMessage = "API call failed: " & ex.Message
-            state.LastRunAtIso     = DateTime.UtcNow.ToString("o")
+            state.LastRunAtIso     = roundIso
             TweakerState.Save(statePath, state)
             Return 1
         End Try
 
-        ' ── 10. Parse and validate diff ───────────────────────────────────────
+        ' ── 10. Parse response ────────────────────────────────────────────────
         Dim parseResult = SettingsDiffApplier.ParseDiff(responseText)
         Dim diffItems   = parseResult.Items
         Dim reasoning   = parseResult.Reasoning
-        If diffItems.Count = 0 Then
-            Console.WriteLine("[AutoTweaker] Claude returned empty diff — no changes needed.")
-            state.LastRunOutcome      = "BELOW_THRESHOLD"
-            state.LastProposalSummary = "Claude returned empty diff: " & reasoning
-            state.LastRunAtIso        = DateTime.UtcNow.ToString("o")
-            state.LastRunCsvRowCount  = currentRowCount
+        Dim action      = parseResult.Action
+        Dim revertTarget = parseResult.RevertTarget
+        summary.Reasoning = reasoning
+
+        ' ── 11a. REVERT branch ───────────────────────────────────────────────
+        If action = "revert" AndAlso Not String.IsNullOrEmpty(revertTarget) Then
+            Dim snapshotPath As String = Path.Combine(config.SnapshotsDir, revertTarget)
+            Dim manifestRows = SnapshotManager.LoadAll(config.ManifestPath)
+            Dim targetRow = manifestRows.FirstOrDefault(
+                Function(r) r.Filename = revertTarget AndAlso r.Status = "ACTIVE")
+            If targetRow Is Nothing OrElse Not File.Exists(snapshotPath) Then
+                Dim reason As String = String.Format(
+                    "Revert target '{0}' not found in ACTIVE manifest or file missing.", revertTarget)
+                Console.Error.WriteLine("[AutoTweaker] " & reason)
+                state.LastRunOutcome   = "ERROR"
+                state.LastErrorMessage = reason
+                state.LastRunAtIso     = roundIso
+                TweakerState.Save(statePath, state)
+                Return 1
+            End If
+
+            If config.AutoCommitEnabled Then
+                Try
+                    Dim newVer = SettingsDiffApplier.ApplyRevert(snapshotPath, config.SettingsPath, reasoning)
+                    Console.WriteLine(String.Format(
+                        "[AutoTweaker] APPLIED revert → settings.json v{0} (from {1})", newVer, revertTarget))
+                    summary.Outcome     = "APPLIED"
+                    summary.DiffSummary = "REVERT to " & revertTarget
+                    state.LastRunOutcome      = "APPLIED"
+                    state.LastProposalSummary = "Reverted to " & revertTarget
+                Catch ex As Exception
+                    Console.Error.WriteLine("[AutoTweaker] Revert failed: " & ex.Message)
+                    state.LastRunOutcome   = "ERROR"
+                    state.LastErrorMessage = "Revert failed: " & ex.Message
+                    state.LastRunAtIso     = roundIso
+                    TweakerState.Save(statePath, state)
+                    Return 1
+                End Try
+            Else
+                Dim proposedDir = "tools/AutoTweaker/proposed_diffs/"
+                Directory.CreateDirectory(proposedDir)
+                Dim ts        As String = DateTime.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss")
+                Dim diffPath  As String = Path.Combine(proposedDir, ts & "_revert.json")
+                File.WriteAllText(diffPath,
+                    JsonSerializer.Serialize(
+                        New With {.action = "revert",
+                                  .revert_target = revertTarget,
+                                  .reasoning = reasoning},
+                        New JsonSerializerOptions With {.WriteIndented = True}))
+                Console.WriteLine("[AutoTweaker] PROPOSED revert → " & diffPath)
+                summary.Outcome     = "PROPOSED"
+                summary.DiffSummary = "REVERT proposal to " & revertTarget
+                state.LastRunOutcome      = "PROPOSED"
+                state.LastPendingDiffPath = diffPath
+                state.LastProposalSummary = "Revert proposal: " & revertTarget
+            End If
+
+            state.LastRunAtIso       = roundIso
+            state.LastRunCsvRowCount = currentRowCount
+            HandleStreakInterrupt(state, config, conditions, singleRound)
+            state.RoundHistory.Add(summary)
             TweakerState.Save(statePath, state)
             Return 0
         End If
 
-        Dim validation = SettingsDiffApplier.Validate(diffItems, settingsJson)
+        ' ── 11b. TWEAK branch ────────────────────────────────────────────────
+        If diffItems.Count = 0 Then
+            Console.WriteLine("[AutoTweaker] Claude returned empty diff — no changes needed.")
+            summary.Outcome     = "BELOW_THRESHOLD"
+            summary.DiffSummary = "Empty diff from Claude"
+            state.LastRunOutcome      = "BELOW_THRESHOLD"
+            state.LastProposalSummary = "Claude returned empty diff: " & reasoning
+            state.LastRunAtIso        = roundIso
+            state.LastRunCsvRowCount  = currentRowCount
+            state.LastSuccessfulRoundIso = roundIso
+
+            ' Treat as a successful round for streak purposes — accuracy is fine.
+            state.CurrentBelowThresholdStreak += 1
+            HandleStreakAdvance(state, config)
+            state.RoundHistory.Add(summary)
+            TweakerState.Save(statePath, state)
+            Return 0
+        End If
+
+        Dim validation = SettingsDiffApplier.Validate(diffItems, settingsJson, config.MaxKeysPerProposal)
         If Not validation.IsValid Then
             Console.Error.WriteLine("[AutoTweaker] Diff rejected: " & validation.ErrorReason)
             state.LastRunOutcome   = "ERROR"
             state.LastErrorMessage = "Diff rejected: " & validation.ErrorReason
-            state.LastRunAtIso     = DateTime.UtcNow.ToString("o")
+            state.LastRunAtIso     = roundIso
             TweakerState.Save(statePath, state)
             Return 1
         End If
 
-        ' ── 11. Branch: auto-commit or propose ───────────────────────────────
+        ' ── 12. Apply or propose ─────────────────────────────────────────────
         Dim diffSummary As String = String.Join("; ",
             diffItems.Select(Function(d) String.Format("{0}: {1} → {2}",
                                                         d.Path,
@@ -317,13 +432,15 @@ Public Class AutoTweakerCore
             Try
                 Dim newVer = SettingsDiffApplier.Apply(diffItems, config.SettingsPath, reasoning)
                 Console.WriteLine(String.Format("[AutoTweaker] APPLIED settings.json → v{0}", newVer))
+                summary.Outcome     = "APPLIED"
+                summary.DiffSummary = diffSummary
                 state.LastRunOutcome      = "APPLIED"
                 state.LastProposalSummary = diffSummary
             Catch ex As Exception
                 Console.Error.WriteLine("[AutoTweaker] Apply failed: " & ex.Message)
                 state.LastRunOutcome   = "ERROR"
                 state.LastErrorMessage = "Apply failed: " & ex.Message
-                state.LastRunAtIso     = DateTime.UtcNow.ToString("o")
+                state.LastRunAtIso     = roundIso
                 TweakerState.Save(statePath, state)
                 Return 1
             End Try
@@ -333,19 +450,115 @@ Public Class AutoTweakerCore
             Dim ts        As String = DateTime.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss")
             Dim diffPath  As String = Path.Combine(proposedDir, ts & ".json")
             File.WriteAllText(diffPath,
-                System.Text.Json.JsonSerializer.Serialize(
+                JsonSerializer.Serialize(
                     New With {.reasoning = reasoning, .diff = diffItems},
                     New JsonSerializerOptions With {.WriteIndented = True}))
             Console.WriteLine("[AutoTweaker] PROPOSED → " & diffPath)
+            summary.Outcome     = "PROPOSED"
+            summary.DiffSummary = diffSummary
             state.LastRunOutcome      = "PROPOSED"
             state.LastPendingDiffPath = diffPath
             state.LastProposalSummary = diffSummary
         End If
 
-        state.LastRunAtIso       = DateTime.UtcNow.ToString("o")
+        state.LastRunAtIso       = roundIso
         state.LastRunCsvRowCount = currentRowCount
+        HandleStreakInterrupt(state, config, conditions, singleRound)
+        state.RoundHistory.Add(summary)
         TweakerState.Save(statePath, state)
         Return 0
+    End Function
+
+    ' Increment-side snapshot management — fires when this round was BELOW_THRESHOLD.
+    Private Shared Sub HandleStreakAdvance(state As TweakerState, config As TweakerConfig)
+        Dim streakRounds As List(Of RoundSummary) =
+            SuccessfulRoundsForCurrentStreak(state)
+
+        If state.CurrentBelowThresholdStreak = config.SnapshotStreakX AndAlso
+           String.IsNullOrEmpty(state.ActiveSnapshotFilename) Then
+            ' Create the snapshot. The just-appended round is added AFTER this routine,
+            ' so synthesise a streak that includes this round.
+            Dim synthetic As New List(Of RoundSummary)(streakRounds)
+            ' The latest BELOW_THRESHOLD summary hasn't been added yet — caller adds it
+            ' after we return. We still pass the count = StreakX rounds. Use a virtual
+            ' round that matches the spec: streak length = X.
+            Dim virtualSummary As New RoundSummary() With {
+                .RoundIso = state.LastSuccessfulRoundIso,
+                .Outcome  = "BELOW_THRESHOLD",
+                .WindowStartRow = 0,
+                .WindowEndRow   = 0,
+                .AggregateFailureRatePct = 0.0,
+                .PickedCellsJson = ""
+            }
+            ' Conditions extraction uses the WindowStart/End rows from prior rounds.
+            ' For the just-completed (not-yet-appended) round we don't have rows here;
+            ' extraction will simply skip rows for that one. The Finalise / Accumulate
+            ' path re-runs extraction once the round IS in history, which corrects this.
+            Dim conditions = ConditionsExtractor.Extract(
+                config.CsvPath, streakRounds, 0.0, 0.0)
+            SnapshotManager.Create(config.SettingsPath,
+                                    config.SnapshotsDir,
+                                    config.ManifestPath,
+                                    state,
+                                    streakRounds,
+                                    conditions)
+        ElseIf state.CurrentBelowThresholdStreak > config.SnapshotStreakX AndAlso
+                Not String.IsNullOrEmpty(state.ActiveSnapshotFilename) Then
+            ' Streak still growing past X — refresh conditions across the full streak.
+            Dim conditions = ConditionsExtractor.Extract(
+                config.CsvPath, streakRounds, 0.0, 0.0)
+            SnapshotManager.AccumulateConditions(config.ManifestPath, state,
+                                                  streakRounds, conditions)
+        End If
+    End Sub
+
+    ' Change-triggering outcome — finalise any active snapshot, reset the streak.
+    Private Shared Sub HandleStreakInterrupt(state As TweakerState,
+                                              config As TweakerConfig,
+                                              currentRoundConditions As ConditionsVector,
+                                              singleRound As List(Of RoundSummary))
+        If Not String.IsNullOrEmpty(state.ActiveSnapshotFilename) Then
+            Dim streakRounds = SuccessfulRoundsForCurrentStreak(state)
+            ' Re-compute conditions across the full successful-streak history (NOT this round).
+            Dim conditions = ConditionsExtractor.Extract(
+                config.CsvPath, streakRounds, 0.0, 0.0)
+            Dim finalisedIso As String = If(streakRounds.Count > 0,
+                streakRounds.Last().RoundIso, state.LastSuccessfulRoundIso)
+            SnapshotManager.Finalise(config.ManifestPath,
+                                      config.SnapshotsDir,
+                                      state,
+                                      streakRounds,
+                                      conditions,
+                                      finalisedIso,
+                                      config.StreakWeight,
+                                      config.StreakLengthClamp)
+        End If
+        state.CurrentBelowThresholdStreak = 0
+    End Sub
+
+    ' Recent BELOW_THRESHOLD rounds in the active streak — bounded by the
+    ' current streak counter (capped to RoundHistory length).
+    Private Shared Function SuccessfulRoundsForCurrentStreak(state As TweakerState) As List(Of RoundSummary)
+        Dim n As Integer = Math.Min(state.CurrentBelowThresholdStreak, state.RoundHistory.Count)
+        If n <= 0 Then Return New List(Of RoundSummary)()
+        Return state.RoundHistory.
+            Skip(state.RoundHistory.Count - n).
+            Where(Function(r) r.Outcome = "BELOW_THRESHOLD").
+            ToList()
+    End Function
+
+    Private Shared Function BuildPickedCellsJson(cells As List(Of FailureCellResult)) As String
+        If cells Is Nothing OrElse cells.Count = 0 Then Return "{}"
+        Dim obj As New Dictionary(Of String, Object)()
+        For Each c In cells
+            obj(c.VerdictTier) = New With {
+                .window = c.WindowMin,
+                .thr    = c.AtrThreshold,
+                .n      = c.SampleSize,
+                .fails  = c.Failures
+            }
+        Next
+        Return JsonSerializer.Serialize(obj)
     End Function
 
     ' Check if any session-start hour falls inside the interval (t1, t2).

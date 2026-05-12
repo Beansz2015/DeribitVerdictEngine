@@ -2,6 +2,11 @@
 ' POCO for tweaker_config.json.
 ' Read fresh on each AutoTweaker run — no caching.
 ' Host-agnostic: no System.Windows.Forms references.
+'
+' settings-snapshot-history-proposal.md additions:
+'   - MaxKeysPerProposal — previously hardcoded to 3 in SettingsDiffApplier
+'   - SnapshotStreakX / StreakWeight / StreakLengthClamp — composite-score knobs
+'   - SnapshotsDir / ManifestPath — derived paths for the snapshot history
 
 Imports System.IO
 Imports System.Text.Json
@@ -30,6 +35,18 @@ Public Class TweakerConfig
     <JsonPropertyName("min_tier_eligible_rows")>
     Public Property MinTierEligibleRows As Integer = 60
 
+    <JsonPropertyName("max_keys_per_proposal")>
+    Public Property MaxKeysPerProposal As Integer = 3
+
+    <JsonPropertyName("snapshot_streak_x")>
+    Public Property SnapshotStreakX As Integer = 3
+
+    <JsonPropertyName("streak_weight")>
+    Public Property StreakWeight As Double = 1.5
+
+    <JsonPropertyName("streak_length_clamp")>
+    Public Property StreakLengthClamp As Integer = 20
+
     <JsonPropertyName("csv_path")>
     Public Property CsvPath As String = "bin/Debug/net8.0-windows/analysis_log.csv"
 
@@ -38,6 +55,12 @@ Public Class TweakerConfig
 
     <JsonPropertyName("state_path")>
     Public Property StatePath As String = "tools/AutoTweaker/state.json"
+
+    <JsonPropertyName("snapshots_dir")>
+    Public Property SnapshotsDir As String = "settings_snapshots"
+
+    <JsonPropertyName("manifest_path")>
+    Public Property ManifestPath As String = "settings_snapshots/manifest.csv"
 
     <JsonPropertyName("dry_run_output_dir")>
     Public Property DryRunOutputDir As String = "tools/AutoTweaker/dry_run_payloads/"

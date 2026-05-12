@@ -605,6 +605,29 @@ The auto-tweaker is a long-loop optimiser. Don't expect frequent tweaks — most
 
 ---
 
+### Settings Snapshots
+
+When the auto-tweaker has run for several consecutive rounds without proposing any settings changes, the engine considers those settings "proven" for the current market conditions and saves a snapshot. If market conditions later revert to a similar pattern, the auto-tweaker may propose reverting to one of these snapshots instead of tweaking fresh keys.
+
+**You can see:**
+
+- **Active snapshot** (if any) and the running streak counter in the Tweak Settings dialog.
+- **Full history of saved snapshots** in `settings_snapshots/manifest.csv`. The directory is gitignored.
+- **Round-level statistics** for the last 5 rounds via the **Show Round Stats** button inside the Tweak Settings dialog. Each round shows the aggregate failure rate plus per-tier accuracy (STRONG / MEDIUM / WEAK on both sides; NO_TRADE rows are informational only).
+- **Open Snapshots Folder** button in the Tweak Settings dialog opens the snapshots directory in your file explorer.
+
+**How snapshots are scored.** Snapshots are bucketed by `regime × volatility tier` (12 buckets total). Only one snapshot is kept active per bucket — when a new finalised snapshot scores higher than the existing one in its bucket, the older one is rotated and its `.json` file is deleted (the manifest row remains as a historical record). Score blends failure rate (weighted heavier — 1 point per percentage point) and streak length (1.5 per round up to 20).
+
+**When a revert proposal fires**, it follows the same `auto-commit` / `dry-run` toggles as a regular tweak. The revert is a wholesale settings replacement, so the per-proposal key cap does not apply — but the snapshot's content is still validated against the rejected-pattern list before any apply.
+
+**Snapshot-related knobs in Tweak Settings:**
+
+- **Snapshot streak X** (default 3) — how many consecutive `BELOW_THRESHOLD` rounds before a snapshot is saved.
+- **Max keys per tweak proposal** (default 3) — previously hard-coded; the conservative-bias cap that limits how aggressive a tweak can be. Reverts are exempt by design.
+- **Streak weight** (default 1.5) — composite-score weight per streak round, capped at 20 rounds.
+
+---
+
 ## Quick Reference — Verdict Action Rules
 
 | Verdict | Confidence | Action |

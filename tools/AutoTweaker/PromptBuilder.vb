@@ -2,16 +2,24 @@
 ' Builds the system + user message pair sent to Claude.
 ' System message inlines trader-profile constraints from Section 4 (rejected approaches)
 ' so Claude never proposes a banned pattern.
+'
+' settings-snapshot-history-proposal.md §3n extension:
+'   - System message exposes the configurable diff-scope cap.
+'   - System message describes the optional REVERT action and the composite-score
+'     formula (identical wording must appear in CompositeScorer.vb and UserManual.md §20e).
+'   - User message carries the ACTIVE snapshot manifest CSV and the current conditions
+'     vector when both are available.
+'
 ' Host-agnostic: no System.Windows.Forms references.
 
 Imports System.Collections.Generic
+Imports System.Globalization
 Imports System.Text
 
 Public Class PromptBuilder
 
-    ' Trader-profile Section 4 constraints inlined as a hard instruction block.
-    ' This list mirrors docs/trader-profile.md Section 4 + scoring design invariants.
-    Private Shared ReadOnly SystemConstraints As String =
+    ' System message template — {0} is the configurable diff-scope cap from tweaker_config.
+    Private Const SystemTemplate As String =
         "You are a settings optimiser for a technical-analysis trading engine." & vbLf &
         "Your job is to propose small, targeted changes to settings.json that reduce the empirical failure rate." & vbLf &
         vbLf &
@@ -32,25 +40,62 @@ Public Class PromptBuilder
         "10. Keys removed in the v15 cleanup (bbw_none_bonus, oi_prev15m, oi_prev60m, atr_avg20d, " &
             "static_vol_high, static_vol_mid, static_vol_low) must never be reintroduced." & vbLf &
         vbLf &
-        "SCOPE CAP: Propose AT MOST 3 key changes in a single diff. Conservative, small steps." & vbLf &
+        "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &
-        "OUTPUT FORMAT: Respond with valid JSON only — no markdown, no preamble:" & vbLf &
+        "RESPONSE ACTIONS — choose ONE per response:" & vbLf &
+        "  1. TWEAK — propose up to {0} key changes to settings.json. Standard rejection list applies." & vbLf &
+        "  2. REVERT — if a past snapshot's conditions strongly match the current conditions AND" & vbLf &
+        "     its composite score is meaningfully higher than the current settings would likely" & vbLf &
+        "     achieve, propose reverting to that snapshot. The snapshot manifest of ACTIVE rows" & vbLf &
+        "     and the current conditions vector are provided in the user message." & vbLf &
+        vbLf &
+        "REVERT scope: a revert is a wholesale replacement, so the SCOPE CAP does NOT apply to" & vbLf &
+        "reverts. The snapshot's provenance — proven successful over a streak of below-threshold" & vbLf &
+        "rounds under bucket-matching conditions — is the validation gate." & vbLf &
+        vbLf &
+        "Composite score formula used for snapshot ranking:" & vbLf &
+        "  StreakLengthClamped = min(StreakLength, StreakLengthClamp)" & vbLf &
+        "  Score = (100 - AvgFailureRatePct) + StreakLengthClamped * StreakWeight" & vbLf &
+        "Defaults: StreakWeight = 1.5, StreakLengthClamp = 20. Failure rate dominates" & vbLf &
+        "(1 point per percentage point); streak adds a secondary nudge." & vbLf &
+        vbLf &
+        "Default to TWEAK unless conditions match a past snapshot strongly AND the score delta is meaningful." & vbLf &
+        vbLf &
+        "OUTPUT FORMAT (TWEAK): valid JSON only, no markdown:" & vbLf &
         "{" & vbLf &
-        "  ""reasoning"": ""<one paragraph explaining why these changes address the failure rate>"", " & vbLf &
+        "  ""action"": ""tweak""," & vbLf &
+        "  ""reasoning"": ""<one paragraph explaining why these changes address the failure rate>""," & vbLf &
         "  ""diff"": [" & vbLf &
         "    {""path"": ""scoring.bbw_squeeze_penalty"", ""old_value"": 1.5, ""new_value"": 1.0, " &
             """justification"": ""<why this specific key at this specific value>""}" & vbLf &
         "  ]" & vbLf &
         "}" & vbLf &
-        "If no change is warranted, return an empty diff array: {""reasoning"": ""..."", ""diff"": []}"
+        vbLf &
+        "OUTPUT FORMAT (REVERT): valid JSON only, no markdown:" & vbLf &
+        "{" & vbLf &
+        "  ""action"": ""revert""," & vbLf &
+        "  ""revert_target"": ""<snapshot filename from manifest>""," & vbLf &
+        "  ""reasoning"": ""<why this snapshot matches and why its score wins>""" & vbLf &
+        "}" & vbLf &
+        vbLf &
+        "If no change is warranted, return an empty diff array: " &
+        "{""action"": ""tweak"", ""reasoning"": ""..."", ""diff"": []}"
 
     ' Build system + user messages for the Claude API call.
     ' trigger: human-readable failure-rate summary line (e.g. "47.2% > 40% threshold over 120 rows")
+    ' maxKeysPerProposal: configurable diff-scope cap (§3j).
+    ' manifestActiveRows: CSV of ACTIVE snapshot rows (may be empty); included in user msg when non-empty.
+    ' conditions: extracted conditions vector for the just-completed window (may be Nothing).
     Public Shared Function Build(settingsJson As String,
                                   csvRows As List(Of CsvRow),
                                   failureCells As List(Of FailureCellResult),
                                   pickedCellHistory As List(Of PickedCellEntry),
-                                  trigger As String) As (SystemMsg As String, UserMsg As String)
+                                  trigger As String,
+                                  manifestActiveRows As String,
+                                  conditions As ConditionsVector,
+                                  maxKeysPerProposal As Integer) As (SystemMsg As String, UserMsg As String)
+
+        Dim systemMsg As String = String.Format(SystemTemplate, maxKeysPerProposal)
 
         Dim user As New StringBuilder()
 
@@ -87,7 +132,7 @@ Public Class PromptBuilder
                     If c Is Nothing OrElse c.SampleSize = 0 Then
                         row.Append(" n/a        |")
                     Else
-                        Dim star As String = If(c.IsRecommended, "★", " ")
+                        Dim star As String = If(c.IsRecommended, "*", " ")
                         row.Append(String.Format(" {4}{0:P0} n={1} [{2:P0}-{3:P0}] |",
                                                  c.FailureRate, c.SampleSize,
                                                  c.CiLow, c.CiHigh, star))
@@ -110,6 +155,47 @@ Public Class PromptBuilder
         Next
         user.AppendLine()
 
+        ' Snapshot manifest (ACTIVE rows only) — empty if no snapshots yet
+        If Not String.IsNullOrWhiteSpace(manifestActiveRows) Then
+            user.AppendLine("## Snapshot Manifest (ACTIVE rows only)")
+            user.AppendLine("```csv")
+            user.Append(manifestActiveRows)
+            If Not manifestActiveRows.EndsWith(vbLf) Then user.AppendLine()
+            user.AppendLine("```")
+            user.AppendLine()
+        End If
+
+        ' Current conditions vector — used for revert evaluation
+        If conditions IsNot Nothing AndAlso Not String.IsNullOrEmpty(conditions.ConditionBucket) Then
+            user.AppendLine("## Current Conditions Vector (this round's window)")
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- ConditionBucket: {0}", conditions.ConditionBucket))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- RegimeMix: {0}", conditions.RegimeMix))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- AtrScaleAvg: {0:F4}  (min {1:F4} / max {2:F4})",
+                conditions.AtrScaleAvg, conditions.AtrScaleMin, conditions.AtrScaleMax))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- Funding range: {0:F8} .. {1:F8}",
+                conditions.FundingMin, conditions.FundingMax))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- NetPriceMovePct: {0:F4}%", conditions.NetPriceMovePct))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- VolumeRatioAvg: {0:F4}", conditions.VolumeRatioAvg))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- VerdictTierMix: {0}", conditions.VerdictTierMix))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- VWAPDevAvg: {0:F4}  (min {1:F4} / max {2:F4})",
+                conditions.VWAPDevAvg, conditions.VWAPDevMin, conditions.VWAPDevMax))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- SpreadRegimeMix: {0}", conditions.SpreadRegimeMix))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- OFIImbalanceMix: {0}", conditions.OFIImbalanceMix))
+            user.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                "- AvgFailureRatePct (current round): {0:F2}%", conditions.AvgFailureRatePct))
+            user.AppendLine()
+        End If
+
         ' Last 50 CSV rows
         user.AppendLine("## Recent CSV rows (last 50, most recent last)")
         user.AppendLine("```")
@@ -126,11 +212,11 @@ Public Class PromptBuilder
         user.AppendLine("```")
         user.AppendLine()
 
-        user.AppendLine("Based on the failure-rate data above, propose changes to settings.json " &
-                        "that would lower the aggregate failure rate at the ★ (recommended) cells. " &
+        user.AppendLine("Based on the failure-rate data above, propose either a TWEAK diff " &
+                        "(<=" & maxKeysPerProposal.ToString() & " keys) or a REVERT to a past snapshot. " &
                         "Respect all constraints in the system message. Output JSON only.")
 
-        Return (SystemConstraints, user.ToString())
+        Return (systemMsg, user.ToString())
     End Function
 
 End Class

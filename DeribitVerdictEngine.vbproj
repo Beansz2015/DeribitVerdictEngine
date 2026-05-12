@@ -24,6 +24,10 @@
   <ItemGroup>
     <Compile Include="tools\AutoTweaker\TweakerConfig.vb" />
     <Compile Include="tools\AutoTweaker\TweakerState.vb" />
+    <Compile Include="tools\AutoTweaker\CompositeScorer.vb" />
+    <Compile Include="tools\AutoTweaker\ConditionsExtractor.vb" />
+    <Compile Include="tools\AutoTweaker\SnapshotManager.vb" />
+    <Compile Include="tools\AutoTweaker\RoundStatsBuilder.vb" />
   </ItemGroup>
 
   <ItemGroup>

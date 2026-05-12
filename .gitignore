@@ -377,3 +377,6 @@ analysis/picked_cell_history.csv
 # Output dump file (gitignored per output-dump spec)
 bin/Debug/net8.0-windows/analysis_output_dump.md
 bin/Release/net8.0-windows/analysis_output_dump.md
+
+# Settings snapshot history (per settings-snapshot-history-proposal.md §3p)
+settings_snapshots/

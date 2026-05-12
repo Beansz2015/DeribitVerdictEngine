@@ -22,4 +22,8 @@
     <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
   </ItemGroup>
 
+  <!-- Snapshot-history additions (settings-snapshot-history-proposal.md):
+       CompositeScorer.vb, ConditionsExtractor.vb, SnapshotManager.vb, RoundStatsBuilder.vb
+       are auto-included by the SDK glob (they live in this directory). -->
+
 </Project>

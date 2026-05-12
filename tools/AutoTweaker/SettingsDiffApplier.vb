@@ -1,7 +1,7 @@
 ' tools/AutoTweaker/SettingsDiffApplier.vb
 ' Validates and applies a Claude-proposed settings diff.
 ' Hard rejection list from spec 7a + trader-profile Section 4.
-' 3-key scope cap per spec 7b.
+' Diff-scope cap is now a parameter (settings-snapshot-history-proposal.md §3j).
 ' Version monotonicity: bumps settings.json version, sets modified_by, appends change_log.
 ' Host-agnostic: no System.Windows.Forms references.
 
@@ -22,10 +22,16 @@ Public Class DiffValidationResult
     Public Property ErrorReason As String = ""
 End Class
 
+Public Class RevertResponse
+    Public Property Action As String = ""              ' "tweak" | "revert"
+    Public Property RevertTarget As String = ""
+    Public Property Reasoning As String = ""
+End Class
+
 Public Class SettingsDiffApplier
 
-    ' Keys and patterns that must NEVER be touched by an auto-tweaker proposal.
-    ' Derived from spec 7a and trader-profile Section 4.
+    ' Keys and patterns that must NEVER be touched by an auto-tweaker proposal
+    ' (or appear in a snapshot we're about to revert to).
     Private Shared ReadOnly RejectedPathFragments As String() = {
         "_fixed_pct_",              ' fixed-% targets — banned
         "bbw_none_bonus",           ' non-directional padding removed in v0.18
@@ -43,16 +49,19 @@ Public Class SettingsDiffApplier
         "regime_weights.enabled"    ' Pass 2c gate — never disable
     }
 
-    ' Validate a proposed diff list. Returns IsValid=False with reason if any constraint violated.
+    ' Validate a proposed diff list.
+    ' maxKeysPerProposal — diff-scope cap; default 3, configurable from tweaker_config.json.
     Public Shared Function Validate(items As List(Of DiffItem),
-                                    currentSettingsJson As String) As DiffValidationResult
+                                    currentSettingsJson As String,
+                                    maxKeysPerProposal As Integer) As DiffValidationResult
         Dim result As New DiffValidationResult()
 
-        ' 3-key scope cap
-        If items.Count > 3 Then
-            result.IsValid   = False
+        ' Diff scope cap (configurable per spec §3j)
+        If items.Count > maxKeysPerProposal Then
+            result.IsValid    = False
             result.ErrorReason = String.Format(
-                "Diff scope cap exceeded: {0} keys proposed, maximum is 3.", items.Count)
+                "Diff scope cap exceeded: {0} keys proposed, maximum is {1}.",
+                items.Count, maxKeysPerProposal)
             Return result
         End If
 
@@ -86,7 +95,6 @@ Public Class SettingsDiffApplier
             ' Reject disabling gated paths
             For Each gatePath In DisabledGatedPaths
                 If path = gatePath.ToLower() Then
-                    ' Check if new value is false/0
                     Dim newValStr As String = item.NewValue.ToString().Trim().ToLower()
                     If newValStr = "false" OrElse newValStr = "0" Then
                         result.IsValid    = False
@@ -113,12 +121,17 @@ Public Class SettingsDiffApplier
                         End If
                     End If
                 Catch
-                    ' If we can't navigate the path, skip the stale check
                 End Try
             End If
         Next
 
         Return result
+    End Function
+
+    ' Backward-compatible overload — defaults to the legacy cap of 3.
+    Public Shared Function Validate(items As List(Of DiffItem),
+                                    currentSettingsJson As String) As DiffValidationResult
+        Return Validate(items, currentSettingsJson, 3)
     End Function
 
     ' Apply validated diff to settings.json in-place.
@@ -130,7 +143,6 @@ Public Class SettingsDiffApplier
         Dim json As String = File.ReadAllText(settingsPath)
         Dim root As JsonNode = JsonNode.Parse(json)
 
-        ' Determine current version
         Dim currentVersion As Integer = 0
         Try
             currentVersion = CInt(root("version").GetValue(Of Integer)())
@@ -138,7 +150,6 @@ Public Class SettingsDiffApplier
         End Try
         Dim newVersion As Integer = currentVersion + 1
 
-        ' Apply each diff item
         For Each item In items
             Dim parts() As String = item.Path.Split("."c)
             Dim parent = TryCast(root, JsonObject)
@@ -149,17 +160,14 @@ Public Class SettingsDiffApplier
             Next
             If parent IsNot Nothing Then
                 Dim key = parts(parts.Length - 1)
-                ' Re-parse the new value as a JsonNode to preserve correct type
                 parent(key) = JsonNode.Parse(item.NewValue.GetRawText())
             End If
         Next
 
-        ' Bump version and metadata
         root("version")       = JsonValue.Create(newVersion)
         root("last_modified") = JsonValue.Create(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))
         root("modified_by")   = JsonValue.Create("auto-tweaker-v" & newVersion)
 
-        ' Append change_log entry
         Dim changeLogNode = TryCast(root("change_log"), JsonArray)
         If changeLogNode Is Nothing Then
             changeLogNode = New JsonArray()
@@ -180,11 +188,125 @@ Public Class SettingsDiffApplier
         Next
         changeLogNode.Add(summary.ToString())
 
-        ' Write back with indentation
         Dim opts As New JsonSerializerOptions With {.WriteIndented = True}
         File.WriteAllText(settingsPath, root.ToJsonString(opts))
         Return newVersion
     End Function
+
+    ' Apply a wholesale revert from a snapshot file. Per spec §3i:
+    '   - Snapshot content runs through the same rejected-pattern / disabled-gate
+    '     validation as a normal diff (we still gate on snapshot integrity).
+    '   - The diff-scope cap is EXEMPT — a revert is many keys by definition;
+    '     the snapshot's provenance (proven-successful streak) is the gate.
+    '   - Bumps settings.json version, sets modified_by="auto-tweaker-revert",
+    '     appends a change_log entry citing the snapshot filename + reasoning.
+    Public Shared Function ApplyRevert(snapshotPath As String,
+                                        settingsPath As String,
+                                        reasoning As String) As Integer
+        If Not File.Exists(snapshotPath) Then
+            Throw New FileNotFoundException("Snapshot file not found: " & snapshotPath)
+        End If
+
+        Dim snapshotJson As String = File.ReadAllText(snapshotPath)
+        Dim snapshotRoot As JsonNode = JsonNode.Parse(snapshotJson)
+
+        ' Snapshot-content validation — reject banned fragments and disabled gates
+        ' even when reverting. Snapshot integrity is not absolute trust.
+        Dim integrity = ValidateSnapshotContent(snapshotRoot)
+        If Not integrity.IsValid Then
+            Throw New InvalidOperationException(
+                "Snapshot rejected by integrity check: " & integrity.ErrorReason)
+        End If
+
+        ' Read current version for bump
+        Dim currentJson As String = File.ReadAllText(settingsPath)
+        Dim currentRoot As JsonNode = JsonNode.Parse(currentJson)
+        Dim currentVersion As Integer = 0
+        Try
+            currentVersion = CInt(currentRoot("version").GetValue(Of Integer)())
+        Catch
+        End Try
+        Dim newVersion As Integer = currentVersion + 1
+
+        ' Take the snapshot wholesale, then patch metadata + change_log
+        snapshotRoot("version")       = JsonValue.Create(newVersion)
+        snapshotRoot("last_modified") = JsonValue.Create(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"))
+        snapshotRoot("modified_by")   = JsonValue.Create("auto-tweaker-revert")
+
+        ' Carry the historical change_log forward but append a new entry.
+        Dim changeLogNode = TryCast(snapshotRoot("change_log"), JsonArray)
+        If changeLogNode Is Nothing Then
+            ' If the snapshot lacked a change_log array, preserve the live one.
+            changeLogNode = TryCast(currentRoot("change_log"), JsonArray)
+            If changeLogNode Is Nothing Then
+                changeLogNode = New JsonArray()
+            Else
+                changeLogNode = JsonNode.Parse(changeLogNode.ToJsonString())
+            End If
+            snapshotRoot("change_log") = changeLogNode
+        End If
+
+        Dim summary As String = String.Format(
+            "v{0} reverted to snapshot {1} | Reasoning: {2}",
+            newVersion,
+            Path.GetFileName(snapshotPath),
+            If(reasoning.Length > 200, reasoning.Substring(0, 200) & "...", reasoning))
+        changeLogNode.Add(summary)
+
+        Dim opts As New JsonSerializerOptions With {.WriteIndented = True}
+        File.WriteAllText(settingsPath, snapshotRoot.ToJsonString(opts))
+        Return newVersion
+    End Function
+
+    ' Walk the snapshot content and reject banned fragments / disabled gates.
+    Private Shared Function ValidateSnapshotContent(root As JsonNode) As DiffValidationResult
+        Dim result As New DiffValidationResult()
+        Dim paths As New List(Of (Path As String, Value As JsonNode))()
+        FlattenPaths(root, "", paths)
+
+        For Each entry In paths
+            Dim path As String = entry.Path.ToLower()
+            For Each frag In RejectedPathFragments
+                If path.Contains(frag.ToLower()) Then
+                    result.IsValid    = False
+                    result.ErrorReason = String.Format(
+                        "Snapshot contains banned fragment '{0}' at path '{1}'.", frag, entry.Path)
+                    Return result
+                End If
+            Next
+            For Each gatePath In DisabledGatedPaths
+                If path = gatePath.ToLower() AndAlso entry.Value IsNot Nothing Then
+                    Dim s As String = entry.Value.ToJsonString().Trim().ToLower()
+                    If s = "false" OrElse s = "0" Then
+                        result.IsValid    = False
+                        result.ErrorReason = String.Format(
+                            "Snapshot disables gated path '{0}'.", entry.Path)
+                        Return result
+                    End If
+                End If
+            Next
+        Next
+        Return result
+    End Function
+
+    Private Shared Sub FlattenPaths(node As JsonNode, prefix As String,
+                                     acc As List(Of (Path As String, Value As JsonNode)))
+        Dim obj = TryCast(node, JsonObject)
+        If obj IsNot Nothing Then
+            For Each kv In obj
+                Dim newPath As String = If(prefix.Length = 0, kv.Key, prefix & "." & kv.Key)
+                acc.Add((newPath, kv.Value))
+                FlattenPaths(kv.Value, newPath, acc)
+            Next
+            Return
+        End If
+        Dim arr = TryCast(node, JsonArray)
+        If arr IsNot Nothing Then
+            For i As Integer = 0 To arr.Count - 1
+                FlattenPaths(arr(i), prefix & "[" & i & "]", acc)
+            Next
+        End If
+    End Sub
 
     ' Navigate a dot-separated path in a JsonNode tree. Returns Nothing if path not found.
     Private Shared Function NavigatePath(root As JsonNode, path As String) As JsonNode
@@ -200,12 +322,16 @@ Public Class SettingsDiffApplier
     End Function
 
     ' Parse a Claude JSON response string into a list of DiffItems.
-    ' Returns an empty list on parse failure.
-    Public Shared Function ParseDiff(responseText As String) As (Items As List(Of DiffItem), Reasoning As String)
+    ' Also returns the parsed "action" / "revert_target" so callers can branch.
+    Public Shared Function ParseDiff(responseText As String) As (Items As List(Of DiffItem),
+                                                                  Reasoning As String,
+                                                                  Action As String,
+                                                                  RevertTarget As String)
         Dim items As New List(Of DiffItem)()
         Dim reasoning As String = ""
+        Dim action As String = "tweak"
+        Dim revertTarget As String = ""
         Try
-            ' Claude may wrap the JSON in markdown fences — strip them
             Dim text = responseText.Trim()
             If text.StartsWith("```") Then
                 Dim firstNl = text.IndexOf(vbLf)
@@ -216,36 +342,38 @@ Public Class SettingsDiffApplier
             Dim doc = JsonDocument.Parse(text)
             Dim root = doc.RootElement
 
-            If root.TryGetProperty("reasoning", Nothing) Then
-                Dim rEl As JsonElement
-                If root.TryGetProperty("reasoning", rEl) Then
-                    reasoning = rEl.GetString()
-                End If
-            End If
+            Dim rEl As JsonElement
+            If root.TryGetProperty("reasoning", rEl) Then reasoning = rEl.GetString()
+
+            Dim aEl As JsonElement
+            If root.TryGetProperty("action", aEl) Then action = aEl.GetString().Trim().ToLower()
+
+            Dim tEl As JsonElement
+            If root.TryGetProperty("revert_target", tEl) Then revertTarget = tEl.GetString()
 
             Dim diffArr As JsonElement
-            If Not root.TryGetProperty("diff", diffArr) Then Return (items, reasoning)
+            If root.TryGetProperty("diff", diffArr) Then
+                For Each entry In diffArr.EnumerateArray()
+                    Dim item As New DiffItem()
+                    Dim pathEl As JsonElement
+                    If entry.TryGetProperty("path", pathEl) Then item.Path = pathEl.GetString()
 
-            For Each entry In diffArr.EnumerateArray()
-                Dim item As New DiffItem()
-                Dim pathEl As JsonElement
-                If entry.TryGetProperty("path", pathEl) Then item.Path = pathEl.GetString()
+                    Dim oldEl As JsonElement
+                    If entry.TryGetProperty("old_value", oldEl) Then item.OldValue = oldEl
 
-                Dim oldEl As JsonElement
-                If entry.TryGetProperty("old_value", oldEl) Then item.OldValue = oldEl
+                    Dim newEl As JsonElement
+                    If entry.TryGetProperty("new_value", newEl) Then item.NewValue = newEl
 
-                Dim newEl As JsonElement
-                If entry.TryGetProperty("new_value", newEl) Then item.NewValue = newEl
+                    Dim justEl As JsonElement
+                    If entry.TryGetProperty("justification", justEl) Then item.Justification = justEl.GetString()
 
-                Dim justEl As JsonElement
-                If entry.TryGetProperty("justification", justEl) Then item.Justification = justEl.GetString()
-
-                If Not String.IsNullOrEmpty(item.Path) Then items.Add(item)
-            Next
+                    If Not String.IsNullOrEmpty(item.Path) Then items.Add(item)
+                Next
+            End If
         Catch ex As Exception
             Console.Error.WriteLine("[SettingsDiffApplier] Parse error: " & ex.Message)
         End Try
-        Return (items, reasoning)
+        Return (items, reasoning, action, revertTarget)
     End Function
 
 End Class

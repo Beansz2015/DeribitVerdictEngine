@@ -24,19 +24,26 @@ Public Class TweakSettingsForm
     Inherits Form
 
     ' ── Controls ────────────────────────────────────────────────────────────
-    Private WithEvents chkAutoCommit     As CheckBox
-    Private WithEvents chkDryRun         As CheckBox
-    Private            txtWindowSize     As TextBox
-    Private            txtFailThreshold  As TextBox
-    Private            txtCooldownRows   As TextBox
-    Private            lblConfigPath     As Label
-    Private            lblCsvPath        As Label
-    Private            lblStatePath      As Label
-    Private            lblTweakerStatus  As Label
-    Private WithEvents btnRunNow         As Button
-    Private WithEvents btnSave           As Button
-    Private            lblLastSummary    As Label
-    Private WithEvents _pollTimer        As Timer
+    Private WithEvents chkAutoCommit         As CheckBox
+    Private WithEvents chkDryRun             As CheckBox
+    Private            txtWindowSize         As TextBox
+    Private            txtFailThreshold      As TextBox
+    Private            txtCooldownRows       As TextBox
+    Private            txtSnapshotStreakX    As TextBox
+    Private            txtMaxKeysPerProposal As TextBox
+    Private            txtStreakWeight       As TextBox
+    Private            lblActiveSnapshot     As Label
+    Private WithEvents btnShowRoundStats     As Button
+    Private WithEvents btnOpenSnapshotsDir   As Button
+    Private            lblConfigPath         As Label
+    Private            lblCsvPath            As Label
+    Private            lblStatePath          As Label
+    Private            lblTweakerStatus      As Label
+    Private WithEvents btnRunNow             As Button
+    Private WithEvents btnSave               As Button
+    Private            lblLastSummary        As Label
+    Private WithEvents _pollTimer            As Timer
+    Private            _roundStatsForm       As RoundStatsForm
 
     ' ── Paths (resolved once at construction) ───────────────────────────────
     Private ReadOnly _repoRoot      As String
@@ -44,6 +51,8 @@ Public Class TweakSettingsForm
     Private ReadOnly _statePath     As String
     Private ReadOnly _csvPath       As String
     Private ReadOnly _tweakerExe    As String
+    Private ReadOnly _snapshotsDir  As String
+    Private ReadOnly _manifestPath  As String
     Private ReadOnly _mainForm      As MainForm
 
     Public Sub New(owner As MainForm)
@@ -52,11 +61,13 @@ Public Class TweakSettingsForm
 
         ' Resolve paths from the running executable's location.
         ' Application.StartupPath = bin/Debug/net8.0-windows/ — go 3 levels up to repo root.
-        _repoRoot   = Path.GetFullPath(Path.Combine(Application.StartupPath, "..", "..", ".."))
-        _configPath = Path.Combine(_repoRoot, "tools", "AutoTweaker", "tweaker_config.json")
-        _statePath  = Path.Combine(_repoRoot, "tools", "AutoTweaker", "state.json")
-        _csvPath    = Path.Combine(Application.StartupPath, "analysis_log.csv")
-        _tweakerExe = Path.Combine(_repoRoot, "tools", "AutoTweaker", "bin", "Debug", "net8.0", "AutoTweaker.exe")
+        _repoRoot     = Path.GetFullPath(Path.Combine(Application.StartupPath, "..", "..", ".."))
+        _configPath   = Path.Combine(_repoRoot, "tools", "AutoTweaker", "tweaker_config.json")
+        _statePath    = Path.Combine(_repoRoot, "tools", "AutoTweaker", "state.json")
+        _csvPath      = Path.Combine(Application.StartupPath, "analysis_log.csv")
+        _tweakerExe   = Path.Combine(_repoRoot, "tools", "AutoTweaker", "bin", "Debug", "net8.0", "AutoTweaker.exe")
+        _snapshotsDir = Path.Combine(_repoRoot, "settings_snapshots")
+        _manifestPath = Path.Combine(_snapshotsDir, "manifest.csv")
 
         ' Populate path labels
         lblConfigPath.Text = _configPath
@@ -143,6 +154,22 @@ Public Class TweakSettingsForm
             Me.Invoke(Sub() UpdateSummaryLabel(state))
             Return
         End If
+
+        ' Active snapshot + streak counter
+        Dim cfg = TweakerConfig.Load(_configPath)
+        Dim snapshotText As String
+        If String.IsNullOrEmpty(state.ActiveSnapshotFilename) Then
+            snapshotText = String.Format("Streak: {0}/{1}  Active snapshot: none",
+                                          state.CurrentBelowThresholdStreak,
+                                          cfg.SnapshotStreakX)
+        Else
+            snapshotText = String.Format("Streak: {0}/{1}  Active snapshot: {2}",
+                                          state.CurrentBelowThresholdStreak,
+                                          cfg.SnapshotStreakX,
+                                          state.ActiveSnapshotFilename)
+        End If
+        lblActiveSnapshot.Text = snapshotText
+
         If String.IsNullOrEmpty(state.LastRunAtIso) Then
             lblLastSummary.Text = "(No prior runs)"
             Return
@@ -332,6 +359,9 @@ Public Class TweakSettingsForm
         Dim windowSize As Integer
         Dim failThreshold As Double
         Dim cooldown As Integer
+        Dim snapshotStreakX As Integer
+        Dim maxKeysPerProposal As Integer
+        Dim streakWeight As Double
 
         If Not Integer.TryParse(txtWindowSize.Text, windowSize) OrElse windowSize < 10 Then
             MessageBox.Show("Window size must be an integer >= 10.", "Invalid input",
@@ -355,6 +385,27 @@ Public Class TweakSettingsForm
             Return
         End If
 
+        If Not Integer.TryParse(txtSnapshotStreakX.Text, snapshotStreakX) OrElse snapshotStreakX < 1 Then
+            MessageBox.Show("Snapshot streak X must be a positive integer.", "Invalid input",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        If Not Integer.TryParse(txtMaxKeysPerProposal.Text, maxKeysPerProposal) OrElse maxKeysPerProposal < 1 Then
+            MessageBox.Show("Max keys per tweak proposal must be a positive integer.", "Invalid input",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        If Not Double.TryParse(txtStreakWeight.Text,
+                               System.Globalization.NumberStyles.Float,
+                               System.Globalization.CultureInfo.InvariantCulture,
+                               streakWeight) OrElse streakWeight < 0 Then
+            MessageBox.Show("Streak weight must be a non-negative number.", "Invalid input",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
         ' Read existing config to preserve other fields, then update
         Dim cfg = TweakerConfig.Load(_configPath)
         cfg.WindowSizeVerdicts       = windowSize
@@ -362,9 +413,14 @@ Public Class TweakSettingsForm
         cfg.CooldownRows             = cooldown
         cfg.AutoCommitEnabled        = chkAutoCommit.Checked
         cfg.DryRunEnabled            = chkDryRun.Checked
+        cfg.SnapshotStreakX          = snapshotStreakX
+        cfg.MaxKeysPerProposal       = maxKeysPerProposal
+        cfg.StreakWeight             = streakWeight
         cfg.CsvPath                  = _csvPath
         cfg.SettingsPath             = Path.Combine(_repoRoot, "settings.json")
         cfg.StatePath                = _statePath
+        cfg.SnapshotsDir             = _snapshotsDir
+        cfg.ManifestPath             = _manifestPath
 
         Try
             TweakerConfig.Save(_configPath, cfg)
@@ -376,14 +432,45 @@ Public Class TweakSettingsForm
         End Try
     End Sub
 
+    Private Sub btnShowRoundStats_Click(sender As Object, e As EventArgs) Handles btnShowRoundStats.Click
+        If _roundStatsForm Is Nothing OrElse _roundStatsForm.IsDisposed Then
+            _roundStatsForm = New RoundStatsForm(_configPath, _statePath, _csvPath,
+                                                  _snapshotsDir, _manifestPath)
+            _roundStatsForm.Show(Me)
+        Else
+            If _roundStatsForm.WindowState = FormWindowState.Minimized Then
+                _roundStatsForm.WindowState = FormWindowState.Normal
+            End If
+            _roundStatsForm.BringToFront()
+            _roundStatsForm.Activate()
+        End If
+    End Sub
+
+    Private Sub btnOpenSnapshotsDir_Click(sender As Object, e As EventArgs) Handles btnOpenSnapshotsDir.Click
+        Try
+            If Not Directory.Exists(_snapshotsDir) Then Directory.CreateDirectory(_snapshotsDir)
+            Process.Start(New ProcessStartInfo() With {
+                .FileName        = _snapshotsDir,
+                .UseShellExecute = True
+            })
+        Catch ex As Exception
+            MessageBox.Show("Could not open snapshots directory: " & ex.Message, "Tweak Settings",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
     ' ── Config loading ────────────────────────────────────────────────────────
     Private Sub LoadConfigIntoControls()
         Dim cfg = TweakerConfig.Load(_configPath)
-        chkAutoCommit.Checked   = cfg.AutoCommitEnabled
-        chkDryRun.Checked       = cfg.DryRunEnabled
-        txtWindowSize.Text      = cfg.WindowSizeVerdicts.ToString()
-        txtFailThreshold.Text   = cfg.FailureRateThresholdPct.ToString("F0")
-        txtCooldownRows.Text    = cfg.CooldownRows.ToString()
+        chkAutoCommit.Checked        = cfg.AutoCommitEnabled
+        chkDryRun.Checked            = cfg.DryRunEnabled
+        txtWindowSize.Text           = cfg.WindowSizeVerdicts.ToString()
+        txtFailThreshold.Text        = cfg.FailureRateThresholdPct.ToString("F0")
+        txtCooldownRows.Text         = cfg.CooldownRows.ToString()
+        txtSnapshotStreakX.Text      = cfg.SnapshotStreakX.ToString()
+        txtMaxKeysPerProposal.Text   = cfg.MaxKeysPerProposal.ToString()
+        txtStreakWeight.Text         = cfg.StreakWeight.ToString("F2",
+            System.Globalization.CultureInfo.InvariantCulture)
     End Sub
 
     ' ── Form close — unsubscribe handlers ────────────────────────────────────
@@ -399,8 +486,8 @@ Public Class TweakSettingsForm
         Me.SuspendLayout()
 
         Me.Text          = "Tweak Settings"
-        Me.Size          = New Size(720, 460)
-        Me.MinimumSize   = New Size(600, 420)
+        Me.Size          = New Size(720, 640)
+        Me.MinimumSize   = New Size(600, 600)
         Me.BackColor     = Color.FromArgb(30, 30, 30)
         Me.ForeColor     = Color.FromArgb(200, 200, 200)
         Me.Font          = New Font("Segoe UI", 9.0!)
@@ -441,6 +528,64 @@ Public Class TweakSettingsForm
 
         ' ── Cooldown rows ────────────────────────────────────────────────────
         AddRow("Cooldown rows (default 10):", LBL_X, CTL_X, y, 60, txtCooldownRows)
+        y += 32
+
+        ' ── Snapshot history section ─────────────────────────────────────────
+        Dim snapHeader As New Label() With {
+            .Text      = "Snapshot history",
+            .Location  = New Point(LBL_X, y),
+            .Size      = New Size(300, 18),
+            .Font      = New Font("Segoe UI", 9.0!, FontStyle.Bold),
+            .ForeColor = Color.FromArgb(180, 180, 180)
+        }
+        Me.Controls.Add(snapHeader)
+        y += 22
+
+        AddRow("Snapshot streak X (default 3):", LBL_X, CTL_X, y, 60, txtSnapshotStreakX)
+        y += 28
+
+        AddRow("Max keys per tweak proposal (default 3):", LBL_X, CTL_X, y, 60, txtMaxKeysPerProposal)
+        y += 28
+
+        AddRow("Streak weight (default 1.5):", LBL_X, CTL_X, y, 60, txtStreakWeight)
+        y += 28
+
+        ' Active snapshot read-only label
+        Dim activeHdr As New Label() With {
+            .Text      = "Active snapshot:",
+            .Location  = New Point(LBL_X, y + 2),
+            .Size      = New Size(CTL_X - LBL_X - 4, 20),
+            .ForeColor = Color.FromArgb(160, 160, 160)
+        }
+        Me.Controls.Add(activeHdr)
+
+        lblActiveSnapshot           = New Label()
+        lblActiveSnapshot.Location  = New Point(CTL_X, y + 2)
+        lblActiveSnapshot.Size      = New Size(W_W - CTL_X + LBL_X, 20)
+        lblActiveSnapshot.ForeColor = Color.FromArgb(140, 160, 140)
+        lblActiveSnapshot.AutoEllipsis = True
+        lblActiveSnapshot.Text      = "(loading…)"
+        Me.Controls.Add(lblActiveSnapshot)
+        y += 26
+
+        ' Round stats + open dir buttons
+        btnShowRoundStats           = New Button()
+        btnShowRoundStats.Text      = "Show Round Stats"
+        btnShowRoundStats.Location  = New Point(LBL_X, y)
+        btnShowRoundStats.Size      = New Size(140, 26)
+        btnShowRoundStats.BackColor = Color.FromArgb(50, 70, 90)
+        btnShowRoundStats.ForeColor = Color.FromArgb(220, 220, 220)
+        btnShowRoundStats.FlatStyle = FlatStyle.Flat
+        Me.Controls.Add(btnShowRoundStats)
+
+        btnOpenSnapshotsDir           = New Button()
+        btnOpenSnapshotsDir.Text      = "Open Snapshots Folder"
+        btnOpenSnapshotsDir.Location  = New Point(LBL_X + 150, y)
+        btnOpenSnapshotsDir.Size      = New Size(160, 26)
+        btnOpenSnapshotsDir.BackColor = Color.FromArgb(50, 70, 90)
+        btnOpenSnapshotsDir.ForeColor = Color.FromArgb(220, 220, 220)
+        btnOpenSnapshotsDir.FlatStyle = FlatStyle.Flat
+        Me.Controls.Add(btnOpenSnapshotsDir)
         y += 36
 
         ' ── Path labels ──────────────────────────────────────────────────────

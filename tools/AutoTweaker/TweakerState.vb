@@ -1,9 +1,16 @@
 ' tools/AutoTweaker/TweakerState.vb
 ' Persistent state across AutoTweaker runs (state.json, gitignored).
 ' Host-agnostic: no System.Windows.Forms references.
+'
+' settings-snapshot-history-proposal.md additions:
+'   - CurrentBelowThresholdStreak / ActiveSnapshotFilename / ActiveSnapshotCreatedIso
+'     track the running BELOW_THRESHOLD streak and an associated ACTIVE snapshot file.
+'   - RoundHistory captures the last 50 evaluable rounds for round-stats display and
+'     conditions extraction.
 
 Imports System.Collections.Generic
 Imports System.IO
+Imports System.Linq
 Imports System.Text.Json
 Imports System.Text.Json.Serialization
 
@@ -19,6 +26,40 @@ Public Class PickedCellEntry
 
     <JsonPropertyName("atr_threshold")>
     Public Property AtrThreshold As Double = 0.0
+End Class
+
+' One evaluable round summary — written after every BELOW_THRESHOLD / APPLIED /
+' PROPOSED / DRY_RUN_WRITTEN outcome. INELIGIBLE / ERROR do NOT produce a summary.
+Public Class RoundSummary
+
+    <JsonPropertyName("round_iso")>
+    Public Property RoundIso As String = ""
+
+    <JsonPropertyName("outcome")>
+    Public Property Outcome As String = ""
+
+    <JsonPropertyName("window_start_row")>
+    Public Property WindowStartRow As Integer = 0
+
+    <JsonPropertyName("window_end_row")>
+    Public Property WindowEndRow As Integer = 0
+
+    <JsonPropertyName("aggregate_failure_rate_pct")>
+    Public Property AggregateFailureRatePct As Double = 0.0
+
+    ' Compact JSON of picked cells: {"STRONG_LONG":{"window":10,"thr":0.5,"n":42,"fails":12}, ...}
+    <JsonPropertyName("picked_cells_json")>
+    Public Property PickedCellsJson As String = ""
+
+    ' Populated for APPLIED / PROPOSED / revert rounds — short human-readable summary
+    ' of the diff or revert that fired.
+    <JsonPropertyName("diff_summary")>
+    Public Property DiffSummary As String = ""
+
+    ' Populated for APPLIED / PROPOSED / revert rounds — Claude reasoning excerpt.
+    <JsonPropertyName("reasoning")>
+    Public Property Reasoning As String = ""
+
 End Class
 
 Public Class TweakerState
@@ -45,6 +86,27 @@ Public Class TweakerState
     <JsonPropertyName("picked_cell_history")>
     Public Property PickedCellHistory As New List(Of PickedCellEntry)()
 
+    ' ── snapshot history additions ─────────────────────────────────────────
+    <JsonPropertyName("current_below_threshold_streak")>
+    Public Property CurrentBelowThresholdStreak As Integer = 0
+
+    <JsonPropertyName("active_snapshot_filename")>
+    Public Property ActiveSnapshotFilename As String = ""
+
+    <JsonPropertyName("active_snapshot_created_iso")>
+    Public Property ActiveSnapshotCreatedIso As String = ""
+
+    ' Last BELOW_THRESHOLD round timestamp — used to populate FinalisedIso when an
+    ' active snapshot is finalised by a change-triggering outcome.
+    <JsonPropertyName("last_successful_round_iso")>
+    Public Property LastSuccessfulRoundIso As String = ""
+
+    ' Capped at 50 rounds; older entries dropped on Save.
+    <JsonPropertyName("round_history")>
+    Public Property RoundHistory As New List(Of RoundSummary)()
+
+    Public Const RoundHistoryCap As Integer = 50
+
     Public Shared Function Load(path As String) As TweakerState
         If Not File.Exists(path) Then Return New TweakerState()
         Try
@@ -58,6 +120,12 @@ Public Class TweakerState
     End Function
 
     Public Shared Sub Save(path As String, state As TweakerState)
+        ' Cap round history before persisting.
+        If state.RoundHistory IsNot Nothing AndAlso state.RoundHistory.Count > RoundHistoryCap Then
+            state.RoundHistory = state.RoundHistory.
+                Skip(state.RoundHistory.Count - RoundHistoryCap).ToList()
+        End If
+
         Dim opts As New JsonSerializerOptions With {.WriteIndented = True}
         Dim dir = IO.Path.GetDirectoryName(path)
         If Not String.IsNullOrEmpty(dir) Then IO.Directory.CreateDirectory(dir)

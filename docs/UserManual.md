@@ -40,6 +40,7 @@ This manual is a field-by-field reference for every variable and display block t
 17. [CSV Logging — analysis_log.csv](#17-csv-logging)
 18. [Analysis Report Viewer](#18-analysis-report-viewer)
 19. [Tweak Settings & Auto-Tweaker](#19-tweak-settings-auto-tweaker)
+20. [Settings Snapshot History](#20-settings-snapshot-history)
 
 ---
 
@@ -1765,6 +1766,8 @@ Two backups commonly present after Bundle 1 + Bundle 3 shipped:
 
 **Skipped runs do not write a row.** When `RunAnalysisAsync` aborts due to a missing required result (1m / 5m candles, funding, book summary, order book, recent trades), the CSV is untouched.
 
+**Companion log.** `settings_snapshots/manifest.csv` is a separate CSV maintained by the auto-tweaker (see §20). It is not part of `analysis_log.csv` — different schema, different cadence — but it lives in the repo alongside the snapshot `.json` files it indexes.
+
 ### CalibrationReport
 
 Generated on demand from the status bar `Calibration Check` link. Counts coverage along multiple axes against gate thresholds:
@@ -1928,6 +1931,12 @@ Non-modal dialog opened from the `Tweak Settings` link.
 | `txtWindowSize` (TextBox, int ≥ 10) | `window_size_verdicts` (default 120) |
 | `txtFailThreshold` (TextBox, int 1–99) | `failure_rate_threshold_pct` (default 40) |
 | `txtCooldownRows` (TextBox, int ≥ 1) | `cooldown_rows` (default 10) |
+| `txtSnapshotStreakX` (TextBox, int ≥ 1) | `snapshot_streak_x` (default 3) |
+| `txtMaxKeysPerProposal` (TextBox, int ≥ 1) | `max_keys_per_proposal` (default 3 — previously hard-coded) |
+| `txtStreakWeight` (TextBox, double ≥ 0) | `streak_weight` (default 1.5) |
+| `lblActiveSnapshot` (read-only) | Live: `Streak: N/X  Active snapshot: <filename | none>` |
+| `btnShowRoundStats` (Button) | Opens `RoundStatsForm` non-modally with the last 5 rounds |
+| `btnOpenSnapshotsDir` (Button) | Opens `settings_snapshots/` via `Process.Start` |
 | `lblConfigPath` (read-only) | full path to `tweaker_config.json` |
 | `lblCsvPath` (read-only) | full path to `analysis_log.csv` |
 | `lblStatePath` (read-only) | full path to `state.json` |
@@ -1935,6 +1944,8 @@ Non-modal dialog opened from the `Tweak Settings` link.
 | `btnRunNow` (Button) | Disabled unless status is `Ready`. On click: `Process.Start(AutoTweaker.exe)` |
 | `btnSave` (Button) | Validates input, writes to `tweaker_config.json`, MessageBox confirmation |
 | `lblLastTweakSummary` (multi-line read-only) | `last_run_at_iso` + `last_run_outcome` + `last_proposal_summary` |
+
+The four new fields (`snapshot_streak_x`, `streak_weight`, `streak_length_clamp`, `max_keys_per_proposal`) live alongside the existing `tweaker_config.json` settings. `max_keys_per_proposal` is the previously-hard-coded `3` lifted to configurable; the conservative-bias safeguard is preserved as a default of 3.
 
 ### Status polling
 
@@ -1964,5 +1975,140 @@ The auto-tweaker is bounded by the same conservative-bias rules as manual tuning
 
 - No false-positive growth — auto-tweaker should optimise toward maintaining or *raising* the false-positive bar
 - No double-counting reintroduction — the rejected-pattern list catches the obvious cases; reviewer (human if `auto_commit = false`) catches subtler ones
-- 3-key cap is the conservative-bias safeguard at the structural level — small steps, frequent review
+- Per-proposal key cap (default 3, configurable via `max_keys_per_proposal`) is the conservative-bias safeguard at the structural level — small steps, frequent review. Reverts bypass the cap because the snapshot's provenance is the validation gate (§20g).
 - Latest-Opus auto-discovery means the tuning quality scales with model improvements over time without code change
+
+---
+
+## 20. Settings Snapshot History {#20-settings-snapshot-history}
+
+When the auto-tweaker has run for several consecutive `BELOW_THRESHOLD` rounds without proposing a change, the engine treats those settings as "proven" under the current market regime and saves a snapshot. Snapshots are bucketed by `regime × volatility tier` (12 buckets) and one is kept active per bucket — the highest-scoring one stays, the rest are rotated out.
+
+### 20a. Concepts
+
+| Term | Meaning |
+|---|---|
+| **Round** | One auto-tweaker invocation that produced an evaluable outcome (`BELOW_THRESHOLD`, `APPLIED`, `PROPOSED`, `DRY_RUN_WRITTEN`). `INELIGIBLE` and `ERROR` are NOT rounds. |
+| **Successful round** | A round whose outcome is `BELOW_THRESHOLD`. |
+| **Streak** | Consecutive successful rounds. Resets to 0 on any change-triggering outcome. Persisted in `state.json`. |
+| **Streak X** | The configurable threshold for snapshot creation (`snapshot_streak_x`, default 3). |
+| **Active snapshot** | The snapshot file representing the current settings during an ongoing streak. Status flips to `ACTIVE` in the manifest on creation, `ROTATED` when superseded by a higher-scoring snapshot in the same bucket. |
+| **Condition bucket** | A categorical key for snapshot retention: `regime × volatility tier`. 12 buckets total. |
+
+### 20b. Streak tracking
+
+`AutoTweakerCore` increments `state.CurrentBelowThresholdStreak` after each evaluable round:
+
+- `BELOW_THRESHOLD`: streak += 1. When `streak == snapshot_streak_x` and no active snapshot exists, `SnapshotManager.Create()` fires. When the streak grows past X, `SnapshotManager.AccumulateConditions()` re-extracts the conditions vector across the full streak window and updates the manifest row in place.
+- `APPLIED` / `PROPOSED` / `DRY_RUN_WRITTEN`: if an active snapshot exists, `SnapshotManager.Finalise()` populates `FinalisedIso` (the **last successful round's timestamp**, not this interrupting round's timestamp) and runs the bucket-rotation check. Streak resets to 0.
+- `INELIGIBLE` / `ERROR`: no-op. Streak unchanged. Engine restart preserves the streak via `state.json`.
+
+### 20c. Snapshot creation trigger
+
+When the streak first hits `snapshot_streak_x`:
+
+1. Copy `settings.json` verbatim to `settings_snapshots/settings_snapshot_<yyyyMMddHHmmss>.json`. No wrapper, no metadata — the file is a directly-applicable `settings.json`.
+2. Compute the initial conditions vector via `ConditionsExtractor.Extract()` over the streak's CSV row range.
+3. Append a manifest row with `Status = ACTIVE` and the full conditions vector. `FinalisedIso` stays empty until the streak is interrupted.
+
+### 20d. Conditions vector
+
+Stored in the manifest CSV (`settings_snapshots/manifest.csv`):
+
+| Field | Source |
+|---|---|
+| `RegimeMix` | Distribution of `Regime` column across the streak (pipe-format e.g. `UP:25|DN:10|RB:60|TR:5`). |
+| `AtrScaleAvg` / `AtrScaleMin` / `AtrScaleMax` | Aggregates of the `ATRMultiplier` column (col 65). |
+| `FundingMin` / `FundingMax` | Range of the `FundingRate` column (col 38). |
+| `NetPriceMovePct` | `(lastPrice - firstPrice) / firstPrice × 100` over the streak window. |
+| `VolumeRatioAvg` | Average of the `VolumeRatio` column (col 19). |
+| `VerdictTierMix` | Distribution of `Verdict` column across the seven tier codes (SL/L/WL/NT/WS/S/SS). |
+| `VWAPDevAvg` / `VWAPDevMin` / `VWAPDevMax` | Aggregates of `|VWAPDevPct|` (col 21). |
+| `SpreadRegimeMix` | `SpreadBps` (col 69) bucketed by `cfg.Indicators.Spread.{Tight,Wide}ThresholdBps` into T / N / W. |
+| `OFIImbalanceMix` | `OFISignal` (col 47) counted into BD / SD / BAL. |
+| `ConditionBucket` | `{Regime}_{VolatilityTier}` where vol tier is `LOW` (<0.85), `NORMAL` (0.85..1.15), `HIGH` (≥1.15) of `AtrScaleAvg`. |
+| `AvgFailureRatePct` | Average of round-level `AggregateFailureRatePct` across the streak. |
+
+The conditions are re-extracted on each accumulation and on finalisation — cleaner than incremental updates, cost is sub-millisecond for typical 360-row streaks.
+
+### 20e. Composite score and bucket rotation
+
+The composite score is used to compare snapshots within a bucket:
+
+```
+StreakLengthClamped = min(StreakLength, StreakLengthClamp)
+Score = (100 - AvgFailureRatePct) + StreakLengthClamped * StreakWeight
+```
+
+Defaults: `StreakWeight = 1.5`, `StreakLengthClamp = 20`. Failure rate dominates (1 point per percentage point); streak adds a secondary nudge (1.5 per round, capped at 20).
+
+Worked examples:
+
+| Snapshot | Fail % | Streak | Score | Notes |
+|---|---|---|---|---|
+| A | 25% | 5 | 82.5 | Moderate both |
+| B | 35% | 10 | 80.0 | Higher fail, long streak |
+| C | 20% | 8 | 92.0 | Low fail, decent streak |
+| D | 15% | 3 | 89.5 | Lowest fail, short streak |
+| E | 40% | 30 (→ 20) | 90.0 | Higher fail, very long streak |
+
+**This exact formula must remain identical in `CompositeScorer.vb`, the `PromptBuilder` system message, and this section.** Any change here requires the same edit in those two locations.
+
+**Rotation rule** (run on each finalisation):
+
+- If no existing `ACTIVE` snapshot in the same bucket, the new snapshot stays `ACTIVE`.
+- Else, compute both scores fresh and compare:
+  - New > existing → existing is marked `ROTATED` (reason = `"superseded by <new.Filename>"`), its `.json` file is deleted (manifest row retained as historical record). The new snapshot stays `ACTIVE`.
+  - Otherwise → the new snapshot is immediately marked `ROTATED` (reason = `"score X <= existing Y"`), its `.json` file is deleted.
+
+### 20f. Manifest schema
+
+Single CSV at `settings_snapshots/manifest.csv` (gitignored). One row per snapshot. Columns:
+
+```
+Filename, CreatedIso, FinalisedIso, StreakLength, AvgFailureRatePct,
+RegimeMix, AtrScaleAvg, AtrScaleMin, AtrScaleMax, FundingMin, FundingMax,
+NetPriceMovePct, VolumeRatioAvg, VerdictTierMix,
+VWAPDevAvg, VWAPDevMin, VWAPDevMax, SpreadRegimeMix, OFIImbalanceMix,
+ConditionBucket, Status, RotationReason
+```
+
+`Status` is `ACTIVE` or `ROTATED`. `RotationReason` is empty unless rotated. Fields with embedded commas are RFC-4180 quoted.
+
+### 20g. Revert mechanism
+
+When a change-triggering round fires, the prompt to Claude is extended with the ACTIVE manifest rows and the current conditions vector. Claude may respond with either:
+
+- `action="tweak"` — a normal diff (subject to the `max_keys_per_proposal` cap).
+- `action="revert"` with a `revert_target` filename — a wholesale replacement from a past snapshot.
+
+For a revert:
+
+1. `SettingsDiffApplier.ApplyRevert()` is invoked. It validates that `revert_target` matches an `ACTIVE` manifest row and the snapshot file exists on disk.
+2. The snapshot content is run through the **same rejected-pattern / disabled-gate validation** as a normal diff (banned fragments like `_fixed_pct_`, disabling `mtf_gate.enabled`, etc.) — snapshot integrity is not absolute trust.
+3. The diff-scope cap is **NOT** applied to reverts — by definition a revert is many keys at once. The snapshot's provenance (a proven-successful streak) is the validation gate.
+4. `settings.json` is replaced with the snapshot content, `version` bumped, `modified_by = "auto-tweaker-revert"`, and a `change_log` entry is appended citing the snapshot filename + reasoning excerpt.
+
+Reverts honour the `auto_commit_enabled` toggle the same way tweaks do — when off, the revert is written to `tools/AutoTweaker/proposed_diffs/<timestamp>_revert.json` for manual review.
+
+### 20h. Round Statistics display
+
+The Tweak Settings dialog exposes a `Show Round Stats` button that opens `RoundStatsForm` (non-modal). The form renders the last 5 rounds in `state.RoundHistory` with:
+
+- Round timestamp + outcome
+- Aggregate failure rate for the window
+- For `APPLIED` / `PROPOSED` / `DRY_RUN_WRITTEN` rounds: the diff summary and a reasoning excerpt
+- For each round, per-tier accuracy using the v2 barrier-hit semantic from `FailureRateMatrix.WalkBars`. This panel covers **all directional verdicts** (STRONG_LONG / LONG / WEAK_LONG / STRONG_SHORT / SHORT / WEAK_SHORT) — not just the tier-eligible subset used by the failure-rate matrix. `NO_TRADE` rows are reported as an informational row-count only.
+
+OHLC bars for the row windows are fetched via `DeribitOhlcFetcher` once per `Refresh`. The build is async; expected cost is well under a second for 5 rounds × 120 rows.
+
+The form also subscribes to the `RoundStatsForm.Refresh` button — re-run any time to pick up newer rounds.
+
+### 20i. State persistence
+
+`state.json` (gitignored, in `tools/AutoTweaker/`) carries the snapshot-related state across runs:
+
+- `current_below_threshold_streak` — running streak counter
+- `active_snapshot_filename` / `active_snapshot_created_iso` — pointer to the current ACTIVE snapshot
+- `last_successful_round_iso` — timestamp of the most recent `BELOW_THRESHOLD` round, used to populate `FinalisedIso`
+- `round_history` — last 50 `RoundSummary` entries (older entries dropped on save)
