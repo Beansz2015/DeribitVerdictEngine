@@ -628,6 +628,39 @@ When the auto-tweaker has run for several consecutive rounds without proposing a
 
 ---
 
+### Live Performance Strip
+
+A compact strip of six labels updates after every analysis run showing how the engine's directional verdicts have been performing over multiple time windows. Use it to gauge whether the current settings are working across the session or if the recent batch of signals has been noise.
+
+**What each label shows:**
+
+| Label | Window |
+|---|---|
+| `Cur.Wk` | Monday 00:00 UTC+8 → now |
+| `3d` | D-2 00:00 UTC+8 → now (last three calendar days) |
+| `Cur.Day` | Today 00:00 UTC+8 → now |
+| `Asia` | Most-recent Asia session block (08:00–15:00 UTC+8) |
+| `London` | Most-recent London session block (16:00–20:00 UTC+8) |
+| `NY` | Most-recent NY session block (21:00–07:00 UTC+8 next day) |
+
+**Reading the colours:**
+
+- **Green** — success rate > 50% in this window. The engine has been calling direction correctly more often than not.
+- **Red** — rate ≤ 50%. Signals have been losing or breaking even; tighten style or reduce size.
+- `--% ` — fewer than 4 evaluated predictions in the window. Not enough data to trust the rate.
+
+**Hover tooltip** on any label shows the exact sample count and time range, e.g. `12 predictions evaluated. 2026-05-12 08:00 → 2026-05-13 10:45 UTC+8.`
+
+**Session "most-recent block" semantics.** Each session label always shows the most-recently active or completed block for that session — not a rolling 24h average. If you look before today's Asia session has started, the label covers yesterday's Asia block (fully completed). Once Asia opens, it switches to today's running block and grows. This means session rates are directly comparable to your own session-level P&L.
+
+**Success metric.** A verdict is counted as SUCCESS if price reached the displayed target before hitting the structural stop (or ATR-multiple fallback stop), evaluated on 1m bars T+3 through T+15. Ties in the same bar count as FAILURE (conservative-bias rule). `NO TRADE` and `NO TRADE [WEAK X]` verdicts are not counted — only directional signals enter the denominator.
+
+**Cold start.** On first launch the strip shows `--% ` while 7 days of OHLC history loads and the eval cache backfills. This takes a few seconds; the status bar shows "Loading performance history..." while it runs. Subsequent launches load from the cached files in under a second.
+
+**Settings knob.** `performance_display.enabled = false` hides the strip and stops writing the two cache files. Use `min_sample_for_render` to raise the threshold before a rate number appears (default 4).
+
+---
+
 ## Quick Reference — Verdict Action Rules
 
 | Verdict | Confidence | Action |

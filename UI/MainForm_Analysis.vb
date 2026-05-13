@@ -433,6 +433,11 @@ Partial Public Class MainForm
 
         RenderOutput(r, verdict, norms, vwapWarmup, lastTradePrice)
 
+        ' Update live performance strip (eval cache + OHLC cache + 6 window aggregates).
+        ' Must come after RenderOutput so AnalysisOutputDump.Append has already run.
+        Await LivePerformanceTracker.UpdateAsync(verdict, r, candles1m, DateTime.UtcNow)
+        UpdatePerformanceLabels()
+
         RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
     End Function
 

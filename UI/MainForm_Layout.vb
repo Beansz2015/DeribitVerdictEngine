@@ -113,6 +113,16 @@ Partial Public Class MainForm
     ' Reference to the open OutputDumpSettingsForm (Nothing when not open)
     Private _outputDumpSettingsForm As OutputDumpSettingsForm
 
+    ' Live performance strip — six labels (Cur.Wk / 3d / Cur.Day / Asia / London / NY)
+    Private lblPerfWeek   As System.Windows.Forms.Label
+    Private lblPerf3d     As System.Windows.Forms.Label
+    Private lblPerfDay    As System.Windows.Forms.Label
+    Private lblPerfAsia   As System.Windows.Forms.Label
+    Private lblPerfLondon As System.Windows.Forms.Label
+    Private lblPerfNy     As System.Windows.Forms.Label
+    ' Shared ToolTip for all six perf labels (created once in constructor).
+    Private _perfTip As System.Windows.Forms.ToolTip
+
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
 
@@ -179,6 +189,21 @@ Partial Public Class MainForm
         }
         Me.Controls.Add(lnkOutputDumpSettings)
 
+        ' Live performance strip labels — created here, positioned in ResizeControls().
+        ' Colour is applied per-run by UpdatePerformanceLabels().
+        lblPerfWeek   = MakePerfLabel("Cur.Wk: --%")
+        lblPerf3d     = MakePerfLabel("3d: --%")
+        lblPerfDay    = MakePerfLabel("Cur.Day: --%")
+        lblPerfAsia   = MakePerfLabel("Asia: --%")
+        lblPerfLondon = MakePerfLabel("London: --%")
+        lblPerfNy     = MakePerfLabel("NY: --%")
+        _perfTip = New System.Windows.Forms.ToolTip()
+        For Each lbl In New System.Windows.Forms.Label() {
+                lblPerfWeek, lblPerf3d, lblPerfDay,
+                lblPerfAsia, lblPerfLondon, lblPerfNy}
+            Me.Controls.Add(lbl)
+        Next
+
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         AddHandler Me.HandleCreated, AddressOf OnFormHandleCreated
@@ -190,6 +215,36 @@ Partial Public Class MainForm
 
         ' Size the window to fit content exactly, based on actual font metrics.
         SizeToContent()
+
+        ' Async fire-and-forget: load/backfill performance caches before first analysis.
+        ' Runs on a background thread; UpdateAsync awaits the init task so there's no race.
+        If SettingsLoader.Current.PerformanceDisplay.Enabled Then
+            lblLogInfo.Text = "Loading performance history..."
+            Dim evalPath As String = IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "analysis_eval_cache.csv")
+            Dim ohlcPath As String = IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ohlc_1m_cache.csv")
+            Dim logPath  As String = AnalysisLogger.GetLogPath()
+            Dim cfg      As EngineSettings = SettingsLoader.Current
+            Task.Run(Async Function()
+                Dim fetcher As Func(Of DateTime, DateTime, Task(Of List(Of OhlcBar))) =
+                    Async Function(startDt As DateTime, endDt As DateTime) As Task(Of List(Of OhlcBar))
+                        Dim startMs As Long = New DateTimeOffset(DateTime.SpecifyKind(startDt, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+                        Dim endMs   As Long = New DateTimeOffset(DateTime.SpecifyKind(endDt,   DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+                        Dim candles = Await DeribitClient.GetCandlesAsync("1", startMs, endMs)
+                        If candles Is Nothing Then Return New List(Of OhlcBar)()
+                        Return candles.Select(Function(c) LivePerformanceTracker.CandleToBar(c)).ToList()
+                    End Function
+                Dim summary As String = Await LivePerformanceTracker.InitialiseAsync(
+                    evalPath, ohlcPath, logPath, cfg,
+                    cfg.PerformanceDisplay.EagerBackfillOnStartup, fetcher)
+                Console.WriteLine("[LivePerformanceTracker] " & summary)
+                If Not IsDisposed Then
+                    Me.Invoke(Sub()
+                        UpdateLogInfo()
+                        UpdatePerformanceLabels()
+                    End Sub)
+                End If
+            End Function)
+        End If
     End Sub
 
     ' -----------------------------------------------------------------------
@@ -308,6 +363,20 @@ Partial Public Class MainForm
         btnStartStop.Location = New System.Drawing.Point(SS_X, AR_Y - 1)
         btnStartStop.Size     = New System.Drawing.Size(70, AR_H + 2)
 
+        ' Row 2 continued -- performance strip (right of Start/Stop button, same row)
+        ' Labels are AutoSize so we cascade X positions based on measured widths.
+        Const PERF_SEP As Integer = 8  ' gap between strip labels
+        Dim perfY As Integer = AR_Y + (AR_H - 14) \ 2  ' vertically centred on row 2
+        Dim perfX As Integer = SS_X + 70 + PERF_SEP     ' start just past btnStartStop
+        Dim perfLabels = New System.Windows.Forms.Label() {
+            lblPerfWeek, lblPerf3d, lblPerfDay, lblPerfAsia, lblPerfLondon, lblPerfNy}
+        For Each lbl In perfLabels
+            If lbl Is Nothing Then Continue For
+            lbl.Location = New System.Drawing.Point(perfX, perfY)
+            lbl.Update()
+            perfX += lbl.Width + PERF_SEP
+        Next
+
         ' Output textbox
         Dim statusY As Integer = H - STATUS_H - 2
         txtOutput.Location = New System.Drawing.Point(8, TXT_Y)
@@ -325,6 +394,76 @@ Partial Public Class MainForm
         lnkCalibCheck.Location     = New System.Drawing.Point(W - 230, H - STATUS_H)
         lnkTweakSettings.Location  = New System.Drawing.Point(W - 148, H - STATUS_H)
         lnkResetLog.Location       = New System.Drawing.Point(W - 80, H - STATUS_H)
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Live performance strip helpers
+    ' -----------------------------------------------------------------------
+
+    ''' <summary>Factory for the six performance strip labels.</summary>
+    Private Shared Function MakePerfLabel(initialText As String) As System.Windows.Forms.Label
+        Return New System.Windows.Forms.Label() With {
+            .AutoSize  = True,
+            .Font      = New System.Drawing.Font("Segoe UI", 8.0!),
+            .ForeColor = C_LABEL,
+            .BackColor = System.Drawing.Color.Transparent,
+            .Text      = initialText
+        }
+    End Function
+
+    ''' <summary>
+    ''' Recompute the six performance windows and update label text + colour.
+    ''' Must be called on the UI thread.
+    ''' </summary>
+    Friend Sub UpdatePerformanceLabels()
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        If Not cfg.PerformanceDisplay.Enabled Then
+            For Each lbl In New System.Windows.Forms.Label() {
+                    lblPerfWeek, lblPerf3d, lblPerfDay,
+                    lblPerfAsia, lblPerfLondon, lblPerfNy}
+                If lbl IsNot Nothing Then lbl.Visible = False
+            Next
+            Return
+        End If
+
+        Dim windows = LivePerformanceTracker.ComputeWindows(DateTime.UtcNow, cfg)
+        Dim prefixes() As String = {"Cur.Wk", "3d", "Cur.Day", "Asia", "London", "NY"}
+        Dim labels() As System.Windows.Forms.Label = {
+            lblPerfWeek, lblPerf3d, lblPerfDay, lblPerfAsia, lblPerfLondon, lblPerfNy}
+        Dim minN As Integer = cfg.PerformanceDisplay.MinSampleForRender
+
+        For i As Integer = 0 To 5
+            Dim lbl = labels(i)
+            If lbl Is Nothing Then Continue For
+            Dim w = If(i < windows.Count, windows(i), Nothing)
+            Dim n   As Integer = If(w IsNot Nothing, w.SuccessCount + w.FailureCount, 0)
+            Dim tip As String  = ""
+            Dim text As String
+            Dim fgColor As System.Drawing.Color
+
+            If w IsNot Nothing AndAlso n >= minN Then
+                Dim rate As Integer = CInt(Math.Round(w.RatePct))
+                text    = prefixes(i) & ": " & rate.ToString() & "%"
+                fgColor = If(rate > 50, C_GOOD, C_BAD)
+                tip     = String.Format("{0} predictions evaluated. {1:yyyy-MM-dd HH:mm} → {2:yyyy-MM-dd HH:mm} UTC+8.",
+                                        n, w.RangeStart, w.RangeEnd)
+            Else
+                text    = prefixes(i) & ": --%"
+                fgColor = C_DIM
+                If w IsNot Nothing Then
+                    tip = String.Format("{0} predictions evaluated (below threshold). {1:yyyy-MM-dd HH:mm} → {2:yyyy-MM-dd HH:mm} UTC+8.",
+                                        n, w.RangeStart, w.RangeEnd)
+                End If
+            End If
+
+            lbl.Text      = text
+            lbl.ForeColor = fgColor
+            lbl.Visible   = True
+            _perfTip.SetToolTip(lbl, tip)
+        Next
+
+        ' Re-run layout so cascaded X positions reflect updated text widths.
+        ResizeControls()
     End Sub
 
     ' -----------------------------------------------------------------------

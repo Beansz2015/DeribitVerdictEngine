@@ -110,6 +110,9 @@ Public Class EngineSettings
 
     <JsonPropertyName("analysis_logging")>
     Public Property AnalysisLogging As New AnalysisLoggingSettings
+
+    <JsonPropertyName("performance_display")>
+    Public Property PerformanceDisplay As New PerformanceDisplaySettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -678,4 +681,29 @@ Public Class RegimeGateSettings
     <JsonPropertyName("transitional_adx_penalty_high")> Public Property TransitionalAdxPenaltyHigh  As Double  = 25.0
     <JsonPropertyName("transitional_penalty_low")>      Public Property TransitionalPenaltyLow      As Integer = 2
     <JsonPropertyName("transitional_penalty_mid")>      Public Property TransitionalPenaltyMid      As Integer = 1
+End Class
+
+' ---------------------------------------------------------------------------
+' Live performance display settings (P7)
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' Controls the six-window live success/fail rate strip shown after each analysis run.
+''' Enabled: master switch — false = strip not rendered, no cache I/O. Default True.
+''' MinSampleForRender: minimum evaluable rows before showing a numeric rate. Default 4.
+''' EagerBackfillOnStartup: fetch 7-day OHLC gap + backfill eval cache on engine start. Default True.
+''' SessionBlockSemantic: "most_recent" only for now; reserved for future "calendar_day" variant.
+''' </summary>
+Public Class PerformanceDisplaySettings
+    <JsonPropertyName("enabled")>
+    Public Property Enabled As Boolean = True
+
+    <JsonPropertyName("min_sample_for_render")>
+    Public Property MinSampleForRender As Integer = 4
+
+    <JsonPropertyName("eager_backfill_on_startup")>
+    Public Property EagerBackfillOnStartup As Boolean = True
+
+    <JsonPropertyName("session_block_semantic")>
+    Public Property SessionBlockSemantic As String = "most_recent"
 End Class

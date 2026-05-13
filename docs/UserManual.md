@@ -41,6 +41,7 @@ This manual is a field-by-field reference for every variable and display block t
 18. [Analysis Report Viewer](#18-analysis-report-viewer)
 19. [Tweak Settings & Auto-Tweaker](#19-tweak-settings-auto-tweaker)
 20. [Settings Snapshot History](#20-settings-snapshot-history)
+21. [Live Performance Display](#21-live-performance-display)
 
 ---
 
@@ -2112,3 +2113,155 @@ The form also subscribes to the `RoundStatsForm.Refresh` button — re-run any t
 - `active_snapshot_filename` / `active_snapshot_created_iso` — pointer to the current ACTIVE snapshot
 - `last_successful_round_iso` — timestamp of the most recent `BELOW_THRESHOLD` round, used to populate `FinalisedIso`
 - `round_history` — last 50 `RoundSummary` entries (older entries dropped on save)
+
+---
+
+## 21. Live Performance Display {#21-live-performance-display}
+
+A compact strip of six labels positioned on the auto-run row (to the right of the Start/Stop button) that shows how the engine's directional verdicts have been performing, updated after every analysis run. The strip is read-only and observational — it does not feed into scoring or auto-tweaker decisions.
+
+### 21a. Concepts
+
+**Six time windows:**
+
+| Label | Window definition |
+|---|---|
+| `Cur.Wk` | Monday 00:00 UTC+8 → now |
+| `3d` | D-2 00:00 UTC+8 → now |
+| `Cur.Day` | Today 00:00 UTC+8 → now |
+| `Asia` | Most-recent Asia block — 08:00–15:00 UTC+8 |
+| `London` | Most-recent London block — 16:00–20:00 UTC+8 |
+| `NY` | Most-recent NY block — 21:00–07:00 UTC+8 (midnight straddle) |
+
+**Success rate** = `SUCCESS_count / (SUCCESS_count + FAILURE_count) × 100`, expressed as an integer percent (e.g. `57%`). PENDING rows and EXCLUDED rows do not enter the denominator.
+
+**Sample-size threshold.** When fewer than `min_sample_for_render` evaluable predictions exist in a window, the label shows `--%` (uncoloured). Default threshold: 4. Configurable via `performance_display.min_sample_for_render`.
+
+### 21b. Most-recent-block algorithm
+
+Each session label covers the most recently active or completed block for that session, regardless of calendar date. There are three states:
+
+| State | Displayed window |
+|---|---|
+| `now` is **inside** the session hours | Session start today → now (partial, growing) |
+| `now` is **after** today's session | Today's full session block (start → end) |
+| `now` is **before** today's session | Yesterday's full session block |
+
+The NY session straddles midnight UTC+8 (21:00–07:00). Three sub-cases:
+
+- **Hour 21:00–23:59 UTC+8** — inside NY head. Block = today 21:00 → now.
+- **Hour 00:00–06:59 UTC+8** — inside NY tail. Block = yesterday 21:00 → now.
+- **Hour 07:00–20:59 UTC+8** — between sessions. Block = yesterday 21:00 → today 07:00 (completed).
+
+**Worked examples** (UTC+8):
+
+- `02:30 UTC+8` — Asia: yesterday 08:00–15:00 (completed). London: yesterday 16:00–20:00 (completed). NY: yesterday 21:00 → 02:30 (running, partial).
+- `10:00 UTC+8` — Asia: today 08:00 → 10:00 (running). London: yesterday 16:00–20:00. NY: yesterday 21:00–07:00 today (completed, 10h block).
+- `17:30 UTC+8` — Asia: today 08:00–15:00 (completed). London: today 16:00 → 17:30 (running). NY: yesterday 21:00–07:00 (completed).
+- `22:00 UTC+8` — Asia: today 08:00–15:00. London: today 16:00–20:00. NY: today 21:00 → 22:00 (running).
+
+The tooltip on each label confirms the exact range and sample size.
+
+### 21c. Success metric — v2 barrier-hit
+
+Reuses `FailureRateMatrix.WalkBars` from the v2 failure-definition spec.
+
+**Eligible verdicts:** `STRONG LONG`, `LONG`, `WEAK LONG`, `STRONG SHORT`, `SHORT`, `WEAK SHORT`. `NO TRADE` and `NO TRADE [WEAK X]` are not counted.
+
+**Excluded rows** (omitted from numerator and denominator):
+- `ATR ≤ 0` — degenerate barriers. Marked `EXCLUDED_ATR_INVALID`.
+- Non-directional verdicts. Marked `EXCLUDED_NO_PREDICTION`.
+
+**Favourable barrier:**
+- LONG direction: `AdjustedLongTarget` if > 0, else `entry + 2.0 × ATR`.
+- SHORT direction: `AdjustedShortTarget` if > 0, else `entry - 2.0 × ATR`.
+
+**Adverse barrier:**
+- LONG: `SwingStopLong` if > 0, else `entry - 1.2 × ATR`.
+- SHORT: `SwingStopShort` if > 0, else `entry + 1.2 × ATR`.
+
+**Eligible bars:** T+3 min through T+15 min (13 bars), skipping T+1 and T+2. Bars are identified by `CloseTime` in the OHLC cache (`CloseTime = openTime + 1 min`).
+
+**Classification:**
+- `SUCCESS` — favourable wick hit before adverse hit.
+- `ADVERSE_HIT` — adverse hit before favourable hit → FAILURE.
+- `AMBIGUOUS` — both barriers hit in the same bar → FAILURE (conservative-bias rule).
+- `WINDOW_EXPIRED` — neither barrier hit by T+15 → FAILURE.
+
+### 21d. Cache architecture
+
+Two sidecar files in the same directory as `analysis_log.csv` (`bin/Debug/net8.0-windows/` or `bin/Release/…`). Both are gitignored.
+
+#### `analysis_eval_cache.csv`
+
+Schema comment: `# schema=v1 (live-performance-display)`
+
+Columns: `Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome`
+
+- One row per analysis run.
+- `EvalOutcome` values: `SUCCESS`, `ADVERSE_HIT`, `AMBIGUOUS`, `WINDOW_EXPIRED`, `EXCLUDED_NO_PREDICTION`, `EXCLUDED_ATR_INVALID`, `PENDING`.
+- `PENDING` rows are resolved in-place when their 15-min window completes. The file is rewritten when any PENDING row resolves (read-all → modify → write-back).
+
+#### `ohlc_1m_cache.csv`
+
+Schema comment: `# schema=v1 (1m ohlc cache)`
+
+Columns: `CloseTime,Open,High,Low,Close,Volume` (Volume = 0 placeholder).
+
+- Rolling 7-day window: cap = 10,080 bars (7 × 24 × 60).
+- Trim fires when the in-memory count exceeds cap × 1.05 (~10,584), batching disk writes to every ~500 bars rather than every bar.
+
+### 21e. Cold-start backfill flow
+
+On engine startup (when `eager_backfill_on_startup = true`):
+
+1. **OHLC cache check.** If `ohlc_1m_cache.csv` exists and its newest bar is within 7 days, load it and fetch only the gap (last bar → now) via `DeribitClient.GetCandlesAsync`. Otherwise fetch the full 7-day range (~10,080 bars). Typical cost: 1–3 seconds.
+
+2. **Eval cache backfill.** Walk `analysis_log.csv`. For each row not already in the eval cache, compute barriers and evaluate or mark PENDING.
+
+3. **Initial display.** Once backfill completes, all 6 labels populate from the in-memory eval cache.
+
+4. **Status.** `lblLogInfo` shows "Loading performance history..." during backfill. Controls remain responsive — backfill runs on a background thread. New analysis runs wait for backfill to complete via an internal init gate (typically < 5 seconds).
+
+On subsequent launches the cached files load in under 1 second and the gap fetch covers only the time since the last save.
+
+### 21f. Per-analysis update flow
+
+After each `RunAnalysisAsync` completes (after `RenderOutput` and `AnalysisOutputDump.Append`):
+
+1. **Append new OHLC bars.** Walk `candles1m` from oldest to newest. Bars with `CloseTime > cache_max` are appended to disk and added to the in-memory dictionary. Typically 1 new bar per analysis run.
+
+2. **Append current verdict as PENDING.** Compute `FavBar` and `AdvBar` from live `VerdictResult` and `IndicatorResults`. Write the row with `EvalOutcome = PENDING`.
+
+3. **Resolve PENDING rows.** Find all eval-cache rows with `EvalOutcome = PENDING` where `Timestamp + 15 min ≤ nowUtc`. For each, call `WalkBars` against the in-memory OHLC cache. At most 1 row resolves per run (the row from ~15 min ago). Rewrite the eval cache file.
+
+4. **Recompute 6 window aggregates.** Pure in-memory scan; no additional I/O. Typical cost: < 5 ms.
+
+5. **Update labels.** `UpdatePerformanceLabels()` applies colours and tooltip text on the UI thread.
+
+### 21g. Render rules and tooltips
+
+**Label text:**
+- Sample size ≥ threshold: `"{prefix}: {rate}%"` — e.g. `Asia: 64%`
+- Sample size < threshold: `"{prefix}: --%"` — e.g. `Asia: --%`
+
+**Colour:**
+- Rate > 50% → `C_GOOD` (green, `#50DC78`)
+- Rate ≤ 50% → `C_BAD` (red, `#FF5050`)
+- `--% ` → `C_DIM` (dim grey, `#646464`)
+
+**Tooltip on hover:** `"{n} predictions evaluated. {start} → {end} UTC+8."`  
+Example: `12 predictions evaluated. 2026-05-13 08:00 → 2026-05-13 10:45 UTC+8.`
+
+### 21h. Settings reference
+
+Block: `performance_display` in `settings.json`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `true` | Master switch. `false` = strip hidden, no cache I/O. |
+| `min_sample_for_render` | int | `4` | Minimum evaluable rows before showing a numeric rate. |
+| `eager_backfill_on_startup` | bool | `true` | Fetch 7-day OHLC gap and backfill eval cache on launch. |
+| `session_block_semantic` | string | `"most_recent"` | Reserved. Currently always most-recent-block (§21b). |
+
+Added in `settings.json` v26 (`modified_by = "live-performance-display"`).

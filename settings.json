@@ -1,8 +1,15 @@
 {
-  "version": 25,
-  "last_modified": "2026-05-11T00:00:00Z",
-  "modified_by": "output-dump",
+  "version": 26,
+  "last_modified": "2026-05-13T00:00:00Z",
+  "modified_by": "live-performance-display",
   "change_log": [
+    "v26 — live-performance-display: six-window success/fail rate strip, updated after every analysis run.",
+    "     New top-level block: performance_display (4 keys).",
+    "       enabled: true                    — master switch; false = no strip rendered, no cache I/O.",
+    "       min_sample_for_render: 4         — below this row count per window, display --% instead of a rate.",
+    "       eager_backfill_on_startup: true  — fetch 7-day OHLC gap and backfill eval cache on startup.",
+    "       session_block_semantic: most_recent — reserved; currently always most-recent-block per §2b.",
+    "     New sidecar files (gitignored): analysis_eval_cache.csv, ohlc_1m_cache.csv.",
     "v25 — output-dump: persistent markdown record of full rendered analysis text per run.",
     "     New top-level block: analysis_logging (2 keys).",
     "       output_dump_enabled: true  — master switch; false = no I/O on analysis runs.",
@@ -378,5 +385,11 @@
   "analysis_logging": {
     "output_dump_enabled": true,
     "output_dump_max_runs": 3000
+  },
+  "performance_display": {
+    "enabled": true,
+    "min_sample_for_render": 4,
+    "eager_backfill_on_startup": true,
+    "session_block_semantic": "most_recent"
   }
 }
