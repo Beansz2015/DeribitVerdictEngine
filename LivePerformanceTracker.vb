@@ -526,14 +526,22 @@ Public Class LivePerformanceTracker
         Try
             Dim p = line.Split(","c)
             If p.Length < 6 Then Return Nothing
+            ' AdjustToUniversal: honour Z suffix and convert to UTC, setting Kind=Utc.
+            ' AssumeUniversal: if a future serialiser ever drops the Z, still treat as UTC.
+            ' Bug fixed 2026-05-13: previously DateTime.Parse without these flags
+            ' returned Kind=Local with a shifted value; SpecifyKind(Utc) re-labelled
+            ' without correcting the shift, leaving cached rows ~8h in the future
+            ' relative to true UTC. All windows therefore showed 0% after restart.
+            Dim ts As DateTime = DateTime.Parse(
+                p(0).Trim(),
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal Or DateTimeStyles.AssumeUniversal)
             Return New EvalCacheEntry() With {
-                .Timestamp  = DateTime.SpecifyKind(
-                    DateTime.Parse(p(0).Trim(), CultureInfo.InvariantCulture),
-                    DateTimeKind.Utc),
-                .Verdict    = p(1).Trim(),
-                .EntryPrice = Double.Parse(p(2), CultureInfo.InvariantCulture),
-                .FavBar     = Double.Parse(p(3), CultureInfo.InvariantCulture),
-                .AdvBar     = Double.Parse(p(4), CultureInfo.InvariantCulture),
+                .Timestamp   = ts,
+                .Verdict     = p(1).Trim(),
+                .EntryPrice  = Double.Parse(p(2), CultureInfo.InvariantCulture),
+                .FavBar      = Double.Parse(p(3), CultureInfo.InvariantCulture),
+                .AdvBar      = Double.Parse(p(4), CultureInfo.InvariantCulture),
                 .EvalOutcome = p(5).Trim()
             }
         Catch
@@ -612,10 +620,14 @@ Public Class LivePerformanceTracker
                 If p.Length < 83 Then Continue For
                 Try
                     Dim row As LogRow
-                    ' Timestamp stored as UTC ("yyyy-MM-dd HH:mm:ss" in AnalysisLogger)
-                    row.Timestamp = DateTime.SpecifyKind(
-                        DateTime.Parse(p(0).Trim(), CultureInfo.InvariantCulture),
-                        DateTimeKind.Utc)
+                    ' Timestamp stored as UTC in AnalysisLogger ("yyyy-MM-dd HH:mm:ss" — no
+                    ' timezone indicator). AssumeUniversal treats unsuffixed strings as UTC;
+                    ' AdjustToUniversal ensures Kind=Utc on output. Defensive against future
+                    ' logger format changes that might add a Z suffix.
+                    row.Timestamp = DateTime.Parse(
+                        p(0).Trim(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal Or DateTimeStyles.AssumeUniversal)
                     row.Verdict       = p(2).Trim()
                     row.EntryPrice    = Double.Parse(p(1), CultureInfo.InvariantCulture)
                     row.ATR           = Double.Parse(p(63), CultureInfo.InvariantCulture)
