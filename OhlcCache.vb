@@ -141,9 +141,17 @@ Public Class OhlcCache
             If lastData Is Nothing Then Return Nothing
             Dim parts = lastData.Split(","c)
             If parts.Length < 1 Then Return Nothing
-            Return DateTime.SpecifyKind(
-                DateTime.Parse(parts(0).Trim(), CultureInfo.InvariantCulture),
-                DateTimeKind.Utc)
+            ' AdjustToUniversal honours the Z suffix and returns Kind=Utc;
+            ' AssumeUniversal treats unsuffixed strings as UTC (defensive).
+            ' Without these flags, DateTime.Parse converted Z-suffixed strings
+            ' to local time and SpecifyKind(Utc) re-labelled the shifted value
+            ' as UTC, leaving every loaded key offset by the local UTC offset.
+            ' Bug fixed 2026-05-15 in lockstep with the same fix on the eval
+            ' cache parsers (commit 4caa0bc).
+            Return DateTime.Parse(
+                parts(0).Trim(),
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal Or DateTimeStyles.AssumeUniversal)
         Catch ex As Exception
             Console.WriteLine("[OhlcCache] NewestBarTime failed: " & ex.Message)
             Return Nothing
@@ -159,9 +167,11 @@ Public Class OhlcCache
             Dim p = line.Split(","c)
             If p.Length < 5 Then Return Nothing
             Dim bar As New OhlcBar()
-            bar.CloseTime = DateTime.SpecifyKind(
-                DateTime.Parse(p(0).Trim(), CultureInfo.InvariantCulture),
-                DateTimeKind.Utc)
+            ' See NewestBarTime for rationale on the parse flags.
+            bar.CloseTime = DateTime.Parse(
+                p(0).Trim(),
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal Or DateTimeStyles.AssumeUniversal)
             bar.Open  = Double.Parse(p(1), CultureInfo.InvariantCulture)
             bar.High  = Double.Parse(p(2), CultureInfo.InvariantCulture)
             bar.Low   = Double.Parse(p(3), CultureInfo.InvariantCulture)
