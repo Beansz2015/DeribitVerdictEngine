@@ -109,6 +109,30 @@ Public Class LivePerformanceTracker
                 If lastBar.HasValue AndAlso lastBar.Value >= sevenDaysAgo Then
                     ' Load existing cache then fill the gap.
                     _ohlcLookup = OhlcCache.Load(ohlcCachePath)
+
+                    ' Self-heal duplicates left over from earlier buggy runs. The
+                    ' on-disk file is allowed to be out of order (Step 1.5 gap-fill
+                    ' appends an older block after newer rows), but earlier versions
+                    ' of NewestBarTime mis-read out-of-order files and triggered
+                    ' redundant trailing fetches that doubled the row count.
+                    ' If the file has more rows than the dict has keys, rewrite it
+                    ' from the dict (already de-duplicated) before the trailing fetch
+                    ' compounds the bloat further.
+                    Dim fileRowCount As Integer = 0
+                    For Each line As String In File.ReadLines(ohlcCachePath)
+                        If Not line.StartsWith("#") AndAlso
+                           Not line.StartsWith("CloseTime") AndAlso
+                           Not String.IsNullOrWhiteSpace(line) Then
+                            fileRowCount += 1
+                        End If
+                    Next
+                    If fileRowCount > _ohlcLookup.Count Then
+                        Console.WriteLine(String.Format(
+                            "[LivePerformanceTracker] OHLC cache had {0} rows vs {1} unique bars; rewriting in canonical order",
+                            fileRowCount, _ohlcLookup.Count))
+                        OhlcCache.WriteAll(ohlcCachePath, _ohlcLookup.Values)
+                    End If
+
                     Dim gapStart As DateTime = lastBar.Value   ' fetch from last bar onward
                     If (nowUtc - gapStart).TotalMinutes >= 1 Then
                         Dim gapBars = Await FetchOhlcBars(ohlcFetcher, gapStart, nowUtc)

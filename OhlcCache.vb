@@ -123,35 +123,48 @@ Public Class OhlcCache
     End Sub
 
     ''' <summary>
-    ''' Return the CloseTime (UTC) of the newest bar in the file.
-    ''' Returns Nothing if the file is missing or has no data rows.
+    ''' Return the CloseTime (UTC) of the newest bar in the file. Scans every
+    ''' data row and returns the maximum CloseTime — the file is allowed to be
+    ''' out of order (Step 1.5 gap-fill appends a block after the trailing-edge
+    ''' block, and the canonicalise pass only fires when gap-fill ran).
+    ''' Returns Nothing if the file is missing, empty, or unparseable.
     ''' Never throws.
+    '''
+    ''' Bug fixed 2026-05-15: previously returned the parsed time of the LAST
+    ''' physical line, which is correct only when the file is chronological.
+    ''' After Step 1.5 left the file in two chunks (older block appended after
+    ''' newer block), the last physical line was mid-range; Step 1 then treated
+    ''' lastBar as days-stale and re-fetched ~5000 already-cached bars on the
+    ''' next restart, doubling the file size.
     ''' </summary>
     Public Shared Function NewestBarTime(path As String) As DateTime?
         If Not File.Exists(path) Then Return Nothing
         Try
-            Dim lastData As String = Nothing
+            Dim newest As DateTime? = Nothing
             For Each line As String In File.ReadLines(path)
-                If Not line.StartsWith("#") AndAlso
-                   Not line.StartsWith("CloseTime") AndAlso
-                   Not String.IsNullOrWhiteSpace(line) Then
-                    lastData = line
-                End If
+                If line.StartsWith("#") OrElse line.StartsWith("CloseTime") OrElse
+                   String.IsNullOrWhiteSpace(line) Then Continue For
+                Dim parts = line.Split(","c)
+                If parts.Length < 1 Then Continue For
+                ' AdjustToUniversal honours the Z suffix and returns Kind=Utc;
+                ' AssumeUniversal treats unsuffixed strings as UTC (defensive).
+                ' Without these flags, DateTime.Parse converted Z-suffixed strings
+                ' to local time and SpecifyKind(Utc) re-labelled the shifted value
+                ' as UTC, leaving every loaded key offset by the local UTC offset.
+                ' UTC-parse fix shipped 2026-05-15 in lockstep with the same fix
+                ' on the eval cache parsers (commit 4caa0bc).
+                Dim t As DateTime
+                Try
+                    t = DateTime.Parse(
+                        parts(0).Trim(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal Or DateTimeStyles.AssumeUniversal)
+                Catch
+                    Continue For
+                End Try
+                If Not newest.HasValue OrElse t > newest.Value Then newest = t
             Next
-            If lastData Is Nothing Then Return Nothing
-            Dim parts = lastData.Split(","c)
-            If parts.Length < 1 Then Return Nothing
-            ' AdjustToUniversal honours the Z suffix and returns Kind=Utc;
-            ' AssumeUniversal treats unsuffixed strings as UTC (defensive).
-            ' Without these flags, DateTime.Parse converted Z-suffixed strings
-            ' to local time and SpecifyKind(Utc) re-labelled the shifted value
-            ' as UTC, leaving every loaded key offset by the local UTC offset.
-            ' Bug fixed 2026-05-15 in lockstep with the same fix on the eval
-            ' cache parsers (commit 4caa0bc).
-            Return DateTime.Parse(
-                parts(0).Trim(),
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AdjustToUniversal Or DateTimeStyles.AssumeUniversal)
+            Return newest
         Catch ex As Exception
             Console.WriteLine("[OhlcCache] NewestBarTime failed: " & ex.Message)
             Return Nothing
