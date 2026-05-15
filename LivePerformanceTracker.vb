@@ -193,9 +193,18 @@ Public Class LivePerformanceTracker
                         gapsFilled += 1
                     Next
 
-                    If _ohlcLookup.Count > _slackCap Then
-                        TrimOhlcLookup()
-                        OhlcCache.RollingTrim(ohlcCachePath, OhlcCache.MAX_BARS)
+                    ' Canonicalise file order: if any gap was filled, the file now has
+                    ' the gap-fill block appended after the trailing-edge block, so it's
+                    ' no longer chronological. OhlcCache.RollingTrim keeps the last N
+                    ' lines by FILE POSITION, not by time — out-of-order file would
+                    ' make trim discard the wrong bars once the slack cap fires. Rewrite
+                    ' the file in CloseTime order from the in-memory dict (de-duplicated
+                    ' by construction). UpdateAsync's per-analysis Append only ever adds
+                    ' bars strictly newer than maxExisting, so order is preserved after
+                    ' this point.
+                    If gapBarsAdded > 0 Then
+                        If _ohlcLookup.Count > _slackCap Then TrimOhlcLookup()
+                        OhlcCache.WriteAll(ohlcCachePath, _ohlcLookup.Values)
                     End If
 
                     Console.WriteLine(String.Format(
