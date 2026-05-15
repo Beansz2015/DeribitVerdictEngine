@@ -1,8 +1,9 @@
 {
-  "version": 26,
-  "last_modified": "2026-05-13T00:00:00Z",
-  "modified_by": "live-performance-display",
+  "version": 27,
+  "last_modified": "2026-05-15T00:00:00Z",
+  "modified_by": "ohlc-gap-backfill",
   "change_log": [
+    "v27 (2026-05-15): OHLC cache gap-fill on startup. InitialiseAsync now detects interior gaps within the 7-day window and back-fills from Deribit. New keys gap_backfill_enabled, max_gap_fill_calls, max_gap_fill_minutes. Addresses the \"engine running but bars missing\" failure mode.",
     "v26 — live-performance-display: six-window success/fail rate strip, updated after every analysis run.",
     "     New top-level block: performance_display (4 keys).",
     "       enabled: true                    — master switch; false = no strip rendered, no cache I/O.",
@@ -390,6 +391,9 @@
     "enabled": true,
     "min_sample_for_render": 4,
     "eager_backfill_on_startup": true,
-    "session_block_semantic": "most_recent"
+    "session_block_semantic": "most_recent",
+    "gap_backfill_enabled": true,
+    "max_gap_fill_calls": 10,
+    "max_gap_fill_minutes": 5000
   }
 }

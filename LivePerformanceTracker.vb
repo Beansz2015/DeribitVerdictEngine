@@ -84,7 +84,8 @@ Public Class LivePerformanceTracker
             analysisLogPath  As String,
             cfg              As EngineSettings,
             eagerBackfill    As Boolean,
-            ohlcFetcher      As Func(Of DateTime, DateTime, Task(Of List(Of OhlcBar)))
+            ohlcFetcher      As Func(Of DateTime, DateTime, Task(Of List(Of OhlcBar))),
+            Optional statusCallback As Action(Of String) = Nothing
         ) As Task(Of String)
 
         _evalCachePath = evalCachePath
@@ -130,6 +131,76 @@ Public Class LivePerformanceTracker
                 If _ohlcLookup.Count > _slackCap Then
                     TrimOhlcLookup()
                     OhlcCache.RollingTrim(ohlcCachePath, OhlcCache.MAX_BARS)
+                End If
+            End If
+
+            ' --- Step 1.5: Detect and fill interior OHLC gaps within the 7-day window ---
+            ' The trailing-gap fetch above only covers (lastBar → nowUtc). Bars from
+            ' earlier hours can be missing if a previous session was interrupted mid-fetch,
+            ' a Deribit response was truncated, or the engine was stopped mid-day. Scan
+            ' the full 7-day window for interior gaps and back-fill each one. Throttled
+            ' by max_gap_fill_calls; chunked by max_gap_fill_minutes.
+            If cfg.PerformanceDisplay.GapBackfillEnabled AndAlso _ohlcLookup.Count > 0 Then
+                Dim rangeStart As DateTime = nowUtc.AddDays(-7)
+                Dim gaps = FindGaps(_ohlcLookup, rangeStart, nowUtc)
+                If gaps.Count > 0 Then
+                    Dim maxCalls   As Integer = cfg.PerformanceDisplay.MaxGapFillCalls
+                    Dim chunkMins  As Integer = cfg.PerformanceDisplay.MaxGapFillMinutes
+                    Dim callsUsed  As Integer = 0
+                    Dim gapsFilled As Integer = 0
+                    Dim gapBarsAdded As Integer = 0
+
+                    For gIdx As Integer = 0 To gaps.Count - 1
+                        If callsUsed >= maxCalls Then
+                            Console.WriteLine(String.Format(
+                                "[LivePerformanceTracker] Gap-fill stopped at safety cap ({0} calls); {1} gap(s) remaining",
+                                maxCalls, gaps.Count - gIdx))
+                            Exit For
+                        End If
+                        Dim gap = gaps(gIdx)
+                        Dim gapMinutes As Integer = CInt((gap.EndUtc - gap.StartUtc).TotalMinutes) + 1
+                        Dim chunksForGap As Integer = CInt(Math.Ceiling(gapMinutes / CDbl(chunkMins)))
+                        Dim callsAvailable As Integer = maxCalls - callsUsed
+                        If chunksForGap > callsAvailable Then
+                            Console.WriteLine(String.Format(
+                                "[LivePerformanceTracker] Gap {0:yyyy-MM-ddTHH:mmZ} → {1:yyyy-MM-ddTHH:mmZ} needs {2} chunks but only {3} call(s) left; deferring",
+                                gap.StartUtc, gap.EndUtc, chunksForGap, callsAvailable))
+                            Exit For
+                        End If
+
+                        If statusCallback IsNot Nothing Then
+                            statusCallback.Invoke(String.Format(
+                                "Loading performance history... (OHLC gap fill: {0} of {1})",
+                                gIdx + 1, gaps.Count))
+                        End If
+                        Console.WriteLine(String.Format(
+                            "[LivePerformanceTracker] Gap-fill call {0} of {1}: {2:yyyy-MM-ddTHH:mmZ} → {3:yyyy-MM-ddTHH:mmZ} ({4} bars expected)",
+                            gIdx + 1, gaps.Count, gap.StartUtc, gap.EndUtc, gapMinutes))
+
+                        Dim gapBars = Await FetchGapChunked(ohlcFetcher, gap.StartUtc, gap.EndUtc, chunkMins)
+                        callsUsed += chunksForGap
+
+                        Dim freshBars = gapBars.Where(Function(b) Not _ohlcLookup.ContainsKey(b.CloseTime)).ToList()
+                        Console.WriteLine(String.Format(
+                            "[LivePerformanceTracker] Gap-fill call {0} received: {1} bar(s) ({2} new, {3} duplicate/already-present)",
+                            gIdx + 1, gapBars.Count, freshBars.Count, gapBars.Count - freshBars.Count))
+
+                        If freshBars.Count > 0 Then
+                            For Each b In freshBars : _ohlcLookup(b.CloseTime) = b : Next
+                            OhlcCache.Append(ohlcCachePath, freshBars)
+                            gapBarsAdded += freshBars.Count
+                        End If
+                        gapsFilled += 1
+                    Next
+
+                    If _ohlcLookup.Count > _slackCap Then
+                        TrimOhlcLookup()
+                        OhlcCache.RollingTrim(ohlcCachePath, OhlcCache.MAX_BARS)
+                    End If
+
+                    Console.WriteLine(String.Format(
+                        "[LivePerformanceTracker] Gap-fill complete: {0} gap(s) filled, {1} bar(s) added across {2} call(s)",
+                        gapsFilled, gapBarsAdded, callsUsed))
                 End If
             End If
 
@@ -660,6 +731,73 @@ Public Class LivePerformanceTracker
             Console.WriteLine("[LivePerformanceTracker] FetchOhlcBars failed: " & ex.Message)
             Return New List(Of OhlcBar)()
         End Try
+    End Function
+
+    ''' <summary>
+    ''' Find contiguous runs of minute timestamps within [rangeStart, rangeEnd]
+    ''' that are NOT present in the OHLC lookup. Returns list of (start, end) tuples
+    ''' inclusive on both ends. Bar CloseTime semantics: a bar covering 14:00–14:01
+    ''' has CloseTime 14:01:00 — the lookup is keyed by CloseTime, so the same
+    ''' convention is used for the cursor here. rangeStart is truncated up to the
+    ''' next whole minute via TruncateToMinute(rangeStart).AddMinutes(1) is NOT
+    ''' applied; gaps start at the truncated minute itself.
+    ''' </summary>
+    Private Shared Function FindGaps(
+            lookup     As Dictionary(Of DateTime, OhlcBar),
+            rangeStart As DateTime,
+            rangeEnd   As DateTime
+        ) As List(Of (StartUtc As DateTime, EndUtc As DateTime))
+
+        Dim gaps As New List(Of (StartUtc As DateTime, EndUtc As DateTime))()
+        Dim cursor As DateTime = TruncateToMinute(rangeStart)
+        Dim endUtc As DateTime = TruncateToMinute(rangeEnd)
+        Dim gapStart As DateTime? = Nothing
+
+        While cursor <= endUtc
+            If Not lookup.ContainsKey(cursor) Then
+                If Not gapStart.HasValue Then gapStart = cursor
+            Else
+                If gapStart.HasValue Then
+                    gaps.Add((gapStart.Value, cursor.AddMinutes(-1)))
+                    gapStart = Nothing
+                End If
+            End If
+            cursor = cursor.AddMinutes(1)
+        End While
+
+        If gapStart.HasValue Then
+            gaps.Add((gapStart.Value, endUtc))
+        End If
+
+        Return gaps
+    End Function
+
+    ''' <summary>Round down to the nearest whole UTC minute (drop seconds + ticks).</summary>
+    Private Shared Function TruncateToMinute(t As DateTime) As DateTime
+        Return New DateTime(t.Year, t.Month, t.Day, t.Hour, t.Minute, 0, DateTimeKind.Utc)
+    End Function
+
+    ''' <summary>
+    ''' Fetch a gap interval from Deribit, chunked so no single request exceeds
+    ''' chunkMinutes (Deribit caps responses at ~5000 bars). Caller is responsible
+    ''' for filtering already-present bars before persisting.
+    ''' </summary>
+    Private Shared Async Function FetchGapChunked(
+            fetcher      As Func(Of DateTime, DateTime, Task(Of List(Of OhlcBar))),
+            gapStart     As DateTime,
+            gapEnd       As DateTime,
+            chunkMinutes As Integer) As Task(Of List(Of OhlcBar))
+
+        Dim result As New List(Of OhlcBar)()
+        Dim cursor As DateTime = gapStart
+        While cursor <= gapEnd
+            Dim chunkEnd As DateTime = cursor.AddMinutes(chunkMinutes - 1)
+            If chunkEnd > gapEnd Then chunkEnd = gapEnd
+            Dim bars = Await FetchOhlcBars(fetcher, cursor, chunkEnd)
+            If bars IsNot Nothing AndAlso bars.Count > 0 Then result.AddRange(bars)
+            cursor = chunkEnd.AddMinutes(1)
+        End While
+        Return result
     End Function
 
     ''' <summary>Drop the oldest bars from _ohlcLookup until count == MAX_BARS.</summary>

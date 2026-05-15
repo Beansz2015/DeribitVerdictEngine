@@ -693,6 +693,9 @@ End Class
 ''' MinSampleForRender: minimum evaluable rows before showing a numeric rate. Default 4.
 ''' EagerBackfillOnStartup: fetch 7-day OHLC gap + backfill eval cache on engine start. Default True.
 ''' SessionBlockSemantic: "most_recent" only for now; reserved for future "calendar_day" variant.
+''' GapBackfillEnabled: detect and fill interior OHLC gaps within the 7-day window on startup.
+''' MaxGapFillCalls: safety cap on the number of Deribit calls per startup gap-fill pass.
+''' MaxGapFillMinutes: chunk size per Deribit call (Deribit limit is 5000 bars per response).
 ''' </summary>
 Public Class PerformanceDisplaySettings
     <JsonPropertyName("enabled")>
@@ -706,4 +709,13 @@ Public Class PerformanceDisplaySettings
 
     <JsonPropertyName("session_block_semantic")>
     Public Property SessionBlockSemantic As String = "most_recent"
+
+    <JsonPropertyName("gap_backfill_enabled")>
+    Public Property GapBackfillEnabled As Boolean = True
+
+    <JsonPropertyName("max_gap_fill_calls")>
+    Public Property MaxGapFillCalls As Integer = 10
+
+    <JsonPropertyName("max_gap_fill_minutes")>
+    Public Property MaxGapFillMinutes As Integer = 5000
 End Class

@@ -233,9 +233,19 @@ Partial Public Class MainForm
                         If candles Is Nothing Then Return New List(Of OhlcBar)()
                         Return candles.Select(Function(c) LivePerformanceTracker.CandleToBar(c)).ToList()
                     End Function
+                Dim statusCb As Action(Of String) =
+                    Sub(msg As String)
+                        If IsDisposed Then Return
+                        Try
+                            Me.Invoke(Sub() lblLogInfo.Text = msg)
+                        Catch
+                            ' Form disposed mid-update; ignore.
+                        End Try
+                    End Sub
                 Dim summary As String = Await LivePerformanceTracker.InitialiseAsync(
                     evalPath, ohlcPath, logPath, cfg,
-                    cfg.PerformanceDisplay.EagerBackfillOnStartup, fetcher)
+                    cfg.PerformanceDisplay.EagerBackfillOnStartup, fetcher,
+                    statusCb)
                 Console.WriteLine("[LivePerformanceTracker] " & summary)
                 If Not IsDisposed Then
                     Me.Invoke(Sub()
@@ -383,17 +393,54 @@ Partial Public Class MainForm
         txtOutput.Size     = New System.Drawing.Size(W - 16, statusY - TXT_Y - 2)
         SetOutputMargins(6, 6)
 
-        ' Status bar
-        lblLogInfo.Location    = New System.Drawing.Point(8, H - STATUS_H)
-        lblLogInfo.Size        = New System.Drawing.Size(W - 570, STATUS_H)
-        lblCountdown.Location  = New System.Drawing.Point(W - 410, H - STATUS_H)
-        lblCountdown.Size      = New System.Drawing.Size(200, STATUS_H)
-        lnkOutputDump.Location         = New System.Drawing.Point(W - 560, H - STATUS_H)
-        lnkOutputDumpSettings.Location = New System.Drawing.Point(W - 485, H - STATUS_H)
-        lnkAnalysisReport.Location = New System.Drawing.Point(W - 390, H - STATUS_H)
-        lnkCalibCheck.Location     = New System.Drawing.Point(W - 230, H - STATUS_H)
-        lnkTweakSettings.Location  = New System.Drawing.Point(W - 148, H - STATUS_H)
-        lnkResetLog.Location       = New System.Drawing.Point(W - 80, H - STATUS_H)
+        ' Status bar — cascade right-to-left using measured AutoSize widths so
+        ' nothing overlaps. Previous fixed W-N offsets put lnkAnalysisReport entirely
+        ' inside lblCountdown's span (invisible) and chained other link overlaps.
+        Const STATUS_GAP    As Integer = 12
+        Const COUNTDOWN_W   As Integer = 170
+        Const RIGHT_MARGIN  As Integer = 8
+        Const LEFT_MARGIN   As Integer = 8
+        Dim   sbY           As Integer = H - STATUS_H   ' status-bar Y (top edge)
+
+        ' Force AutoSize labels to remeasure (defensive — text may have changed).
+        For Each lnk In New System.Windows.Forms.LinkLabel() {
+                lnkResetLog, lnkTweakSettings, lnkCalibCheck, lnkAnalysisReport,
+                lnkOutputDumpSettings, lnkOutputDump}
+            If lnk IsNot Nothing Then lnk.PerformLayout()
+        Next
+
+        Dim rightX As Integer = W - RIGHT_MARGIN
+
+        ' Right-side links (rightmost first): Reset Log, Tweak Settings,
+        ' Calibration Readiness, Analysis Report
+        rightX -= lnkResetLog.Width
+        lnkResetLog.Location = New System.Drawing.Point(rightX, sbY)
+
+        rightX -= STATUS_GAP + lnkTweakSettings.Width
+        lnkTweakSettings.Location = New System.Drawing.Point(rightX, sbY)
+
+        rightX -= STATUS_GAP + lnkCalibCheck.Width
+        lnkCalibCheck.Location = New System.Drawing.Point(rightX, sbY)
+
+        rightX -= STATUS_GAP + lnkAnalysisReport.Width
+        lnkAnalysisReport.Location = New System.Drawing.Point(rightX, sbY)
+
+        ' Middle: countdown / auto-run status (fixed width)
+        rightX -= STATUS_GAP + COUNTDOWN_W
+        lblCountdown.Location = New System.Drawing.Point(rightX, sbY)
+        lblCountdown.Size     = New System.Drawing.Size(COUNTDOWN_W, STATUS_H)
+
+        ' Left-of-countdown links: Output Dump Settings (gear), then Output Dump text
+        rightX -= STATUS_GAP + lnkOutputDumpSettings.Width
+        lnkOutputDumpSettings.Location = New System.Drawing.Point(rightX, sbY)
+
+        rightX -= 4 + lnkOutputDump.Width   ' tight gap between text and icon
+        lnkOutputDump.Location = New System.Drawing.Point(rightX, sbY)
+
+        ' Log info fills the remaining left-side space
+        lblLogInfo.Location = New System.Drawing.Point(LEFT_MARGIN, sbY)
+        lblLogInfo.Size     = New System.Drawing.Size(
+            Math.Max(0, rightX - LEFT_MARGIN - STATUS_GAP), STATUS_H)
     End Sub
 
     ' -----------------------------------------------------------------------
