@@ -101,11 +101,18 @@ Public Class TweakerState
     <JsonPropertyName("last_successful_round_iso")>
     Public Property LastSuccessfulRoundIso As String = ""
 
-    ' Capped at 50 rounds; older entries dropped on Save.
+    ' Fixed-window mode (v29): highest 1-based "row count consumed" already
+    ' evaluated by a completed (or skipped) round. -1 = uninitialised; on first
+    ' v29 run it is set to currentRowCount so historical sliding-era data is
+    ' preserved in the CSV but not re-evaluated under fixed mode.
+    <JsonPropertyName("last_evaluated_row_index")>
+    Public Property LastEvaluatedRowIndex As Integer = -1
+
+    ' Capped at RoundHistoryCap rounds; older entries dropped on Save.
     <JsonPropertyName("round_history")>
     Public Property RoundHistory As New List(Of RoundSummary)()
 
-    Public Const RoundHistoryCap As Integer = 50
+    Public Const RoundHistoryCap As Integer = 1000
 
     Public Shared Function Load(path As String) As TweakerState
         If Not File.Exists(path) Then Return New TweakerState()

@@ -26,12 +26,18 @@ Public Class TweakSettingsForm
     ' ── Controls ────────────────────────────────────────────────────────────
     Private WithEvents chkAutoCommit         As CheckBox
     Private WithEvents chkDryRun             As CheckBox
-    Private            txtWindowSize         As TextBox
+    Private WithEvents txtWindowSize         As TextBox
     Private            txtFailThreshold      As TextBox
     Private            txtCooldownRows       As TextBox
+    Private WithEvents txtMinTierRows        As TextBox
     Private            txtSnapshotStreakX    As TextBox
     Private            txtMaxKeysPerProposal As TextBox
     Private            txtStreakWeight       As TextBox
+
+    ' True while the MinTier textbox is showing the computed default. Cleared when the
+    ' user manually edits the value, so changes to WindowSize stop auto-updating it.
+    Private _minTierIsAuto As Boolean = True
+    Private _suppressMinTierEdit As Boolean = False
     Private            lblActiveSnapshot     As Label
     Private WithEvents btnShowRoundStats     As Button
     Private WithEvents btnOpenSnapshotsDir   As Button
@@ -100,9 +106,51 @@ Public Class TweakSettingsForm
     Private Sub UpdateStatusLabel()
         Dim cfg   = TweakerConfig.Load(_configPath)
         Dim state = TweakerState.Load(_statePath)
-
-        ' 1. Cooldown check
+        Dim isFixedMode As Boolean = String.Equals(cfg.WindowMode,
+            TweakerConfig.WindowModeFixed, StringComparison.OrdinalIgnoreCase)
+        Dim minTierThreshold As Integer = cfg.EffectiveMinTier(cfg.WindowSizeVerdicts)
         Dim currentRowCount As Integer = CountCsvRows()
+
+        If isFixedMode Then
+            ' First-run path — index is uninitialised; first run will seed it to
+            ' currentRowCount and the next disjoint batch is then awaited.
+            If state.LastEvaluatedRowIndex < 0 Then
+                SetStatus(String.Format("Awaiting first-run seed (rows so far: {0})", currentRowCount),
+                          Color.Orange)
+                btnRunNow.Enabled = True
+                UpdateSummaryLabel(state)
+                Return
+            End If
+
+            Dim accumulated As Integer = currentRowCount - state.LastEvaluatedRowIndex
+            If accumulated < cfg.WindowSizeVerdicts Then
+                Dim startRow As Integer = state.LastEvaluatedRowIndex + 1
+                Dim endRow   As Integer = state.LastEvaluatedRowIndex + cfg.WindowSizeVerdicts
+                SetStatus(String.Format("Next round: {0}/{1} rows accumulating (rows {2}..{3})",
+                                        accumulated, cfg.WindowSizeVerdicts, startRow, endRow),
+                          Color.Orange)
+                btnRunNow.Enabled = False
+                UpdateSummaryLabel(state)
+                Return
+            End If
+
+            ' MinTier preview against the prospective window.
+            Dim tierEligible As Integer = CountTierEligibleInWindow(cfg.WindowSizeVerdicts)
+            If tierEligible < minTierThreshold Then
+                SetStatus(String.Format("Window full but tier-eligible {0}/{1} — round will SKIP",
+                                        tierEligible, minTierThreshold), Color.Orange)
+                btnRunNow.Enabled = True
+                UpdateSummaryLabel(state)
+                Return
+            End If
+
+            SetStatus("Ready", Color.FromArgb(80, 220, 120))
+            btnRunNow.Enabled = True
+            UpdateSummaryLabel(state)
+            Return
+        End If
+
+        ' ── Sliding (legacy) mode status flow ────────────────────────────────
         Dim rowsSinceLast As Integer = currentRowCount - state.LastRunCsvRowCount
         If state.LastRunCsvRowCount > 0 AndAlso rowsSinceLast < cfg.CooldownRows Then
             Dim remaining = cfg.CooldownRows - rowsSinceLast
@@ -112,9 +160,6 @@ Public Class TweakSettingsForm
             Return
         End If
 
-        ' 2. Session-aligned window check: count rows in the current UTC session.
-        '    Mirrors AutoTweakerCore step 2 — walks back from end of CSV and stops
-        '    at the first session-boundary crossing.
         Dim sessionRows As Integer = CountCurrentSessionRows(cfg.WindowSizeVerdicts * 2)
         If sessionRows < cfg.WindowSizeVerdicts Then
             SetStatus(String.Format("Waiting for session-aligned window: {0}/{1} rows",
@@ -124,12 +169,10 @@ Public Class TweakSettingsForm
             Return
         End If
 
-        ' 3. Tier-eligible rows check — mirrors AutoTweakerCore step 4.
-        '    Count directional verdicts in the last window_size_verdicts CSV rows.
-        Dim tierEligible As Integer = CountTierEligibleInWindow(cfg.WindowSizeVerdicts)
-        If tierEligible < cfg.MinTierEligibleRows Then
+        Dim tierEligibleS As Integer = CountTierEligibleInWindow(cfg.WindowSizeVerdicts)
+        If tierEligibleS < minTierThreshold Then
             SetStatus(String.Format("Insufficient tier-eligible rows: {0}/{1}",
-                                    tierEligible, cfg.MinTierEligibleRows), Color.Orange)
+                                    tierEligibleS, minTierThreshold), Color.Orange)
             btnRunNow.Enabled = False
             UpdateSummaryLabel(state)
             Return
@@ -385,6 +428,34 @@ Public Class TweakSettingsForm
             Return
         End If
 
+        ' ── MinTier validation (auto-tweaker-fixed-window-proposal §4) ───────
+        Dim minTier As Integer = 0
+        Dim minTierIsBlank As Boolean = String.IsNullOrWhiteSpace(txtMinTierRows.Text)
+        If Not minTierIsBlank Then
+            If Not Integer.TryParse(txtMinTierRows.Text, minTier) OrElse minTier < 0 Then
+                MessageBox.Show("Min tier-eligible rows must be a non-negative integer (or blank for auto).",
+                                "Invalid input", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+            If minTier < 5 Then
+                MessageBox.Show("Min ≥ 5 required for any statistical meaning.", "Invalid input",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+            If minTier > windowSize Then
+                MessageBox.Show("Cannot exceed Window Size — gate would be unreachable.", "Invalid input",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+            If minTier > CInt(Math.Floor(windowSize * 0.7)) Then
+                Dim res = MessageBox.Show(
+                    "MinTier exceeds 70% of WindowSize. Many rounds may be skipped if NO_TRADE density is high. Proceed?",
+                    "MinTier high",
+                    MessageBoxButtons.OKCancel, MessageBoxIcon.Warning)
+                If res <> DialogResult.OK Then Return
+            End If
+        End If
+
         If Not Integer.TryParse(txtSnapshotStreakX.Text, snapshotStreakX) OrElse snapshotStreakX < 1 Then
             MessageBox.Show("Snapshot streak X must be a positive integer.", "Invalid input",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning)
@@ -411,6 +482,14 @@ Public Class TweakSettingsForm
         cfg.WindowSizeVerdicts       = windowSize
         cfg.FailureRateThresholdPct  = failThreshold
         cfg.CooldownRows             = cooldown
+        ' Blank textbox OR value matching the auto-tracking flag → store null so the
+        ' formula recomputes against future WindowSize changes. Otherwise honour the
+        ' explicit user value.
+        If minTierIsBlank OrElse _minTierIsAuto Then
+            cfg.MinTierEligibleRows  = Nothing
+        Else
+            cfg.MinTierEligibleRows  = minTier
+        End If
         cfg.AutoCommitEnabled        = chkAutoCommit.Checked
         cfg.DryRunEnabled            = chkDryRun.Checked
         cfg.SnapshotStreakX          = snapshotStreakX
@@ -471,6 +550,27 @@ Public Class TweakSettingsForm
         txtMaxKeysPerProposal.Text   = cfg.MaxKeysPerProposal.ToString()
         txtStreakWeight.Text         = cfg.StreakWeight.ToString("F2",
             System.Globalization.CultureInfo.InvariantCulture)
+
+        ' MinTier: null in JSON → auto-track WindowSize via formula. Otherwise the
+        ' user has fixed it explicitly, so honour the stored value and disable tracking.
+        _suppressMinTierEdit = True
+        _minTierIsAuto = Not cfg.MinTierEligibleRows.HasValue
+        txtMinTierRows.Text = cfg.EffectiveMinTier(cfg.WindowSizeVerdicts).ToString()
+        _suppressMinTierEdit = False
+    End Sub
+
+    Private Sub txtWindowSize_TextChanged(sender As Object, e As EventArgs) Handles txtWindowSize.TextChanged
+        If Not _minTierIsAuto Then Return
+        Dim ws As Integer
+        If Not Integer.TryParse(txtWindowSize.Text, ws) OrElse ws < 1 Then Return
+        _suppressMinTierEdit = True
+        txtMinTierRows.Text = TweakerConfig.ComputeDefaultMinTier(ws).ToString()
+        _suppressMinTierEdit = False
+    End Sub
+
+    Private Sub txtMinTierRows_TextChanged(sender As Object, e As EventArgs) Handles txtMinTierRows.TextChanged
+        If _suppressMinTierEdit Then Return
+        _minTierIsAuto = False
     End Sub
 
     ' ── Form close — unsubscribe handlers ────────────────────────────────────
@@ -528,6 +628,15 @@ Public Class TweakSettingsForm
 
         ' ── Cooldown rows ────────────────────────────────────────────────────
         AddRow("Cooldown rows (default 10):", LBL_X, CTL_X, y, 60, txtCooldownRows)
+        y += 28
+
+        ' ── Min tier-eligible rows ───────────────────────────────────────────
+        AddRow("Min tier-eligible rows:", LBL_X, CTL_X, y, 60, txtMinTierRows)
+        Dim minTierTip As New ToolTip()
+        minTierTip.SetToolTip(txtMinTierRows,
+            "Minimum STRONG/MEDIUM directional rows that must exist within a window for " &
+            "the round to evaluate. Rounds with fewer are skipped (don't tick the streak). " &
+            "Default scales with Window Size as max(15, ceil(WindowSize × 0.5)).")
         y += 32
 
         ' ── Snapshot history section ─────────────────────────────────────────

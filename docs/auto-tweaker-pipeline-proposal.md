@@ -122,6 +122,8 @@ Gitignored. Tracks runtime info.
 
 ## 3. Pipeline Flow
 
+> **v29 update (fixed-window mode, default).** `tweaker_config.window_mode` selects between disjoint (`fixed`) and overlapping (`sliding`) windows. Steps 1–3 below describe the new fixed-mode flow; the original sliding-mode logic is retained under the `Else` arm of `AutoTweakerCore.RunAsync` for legacy comparison. In fixed mode `cooldown_rows` is a no-op (the natural cooldown is "wait for the next disjoint batch to fill"); on the first v29 run `state.last_evaluated_row_index` is seeded to `currentRowCount` so historical sliding-era CSV rows are preserved on disk but not re-evaluated.
+
 ```
 [AutoTweakerProgram.Main]
         │
@@ -129,19 +131,29 @@ Gitignored. Tracks runtime info.
         ├── Read state.json (or initialise if missing)
         │
         ▼
-[AutoTweakerCore.Run]
+[AutoTweakerCore.RunAsync]  (fixed mode — default)
         │
-        ├─── 1. CSV row count ── if (current - last_run_csv_row_count) < cooldown_rows
-        │                        → outcome = INELIGIBLE (cooldown), exit 2
+        ├─── 1. First-run init: if state.last_evaluated_row_index == -1
+        │       → set to currentRowCount, write INELIGIBLE, exit 2 (next run
+        │       will wait for WindowSize fresh rows to accumulate).
         │
-        ├─── 2. Find session-aligned window of `window_size_verdicts` most recent rows
-        │       Walk back from end of CSV. All rows must be in the same UTC session
-        │       bucket per cfg.SessionVolume.Sessions. If session boundary encountered
-        │       before reaching window_size, → outcome = INELIGIBLE (waiting for
-        │       session-aligned window), exit 2.
+        ├─── 2. Window-full check: if currentRowCount - last_evaluated_row_index
+        │       < window_size_verdicts → INELIGIBLE, exit 2.
         │
-        ├─── 3. Within the window, count tier-eligible rows (STRONG_* + MEDIUM_*).
-        │       If < min_tier_eligible_rows → INELIGIBLE, exit 2.
+        ├─── 3. Build disjoint window: allRows[last_evaluated_row_index ..
+        │       last_evaluated_row_index + WindowSize - 1].
+        │
+        │       3a. Session-boundary scan within the disjoint slice. If a
+        │           session-start hour falls between any two consecutive rows
+        │           → outcome = SKIPPED_SESSION_BOUNDARY (RoundSummary written;
+        │           streak NOT ticked; last_evaluated_row_index += WindowSize),
+        │           exit 2.
+        │
+        │       3b. Tier-eligible check using TweakerConfig.EffectiveMinTier
+        │           (null in config → max(15, ceil(WindowSize × 0.5))). If
+        │           tier_eligible < threshold → outcome = SKIPPED_INSUFFICIENT_TIER
+        │           (RoundSummary written; streak NOT ticked;
+        │           last_evaluated_row_index += WindowSize), exit 2.
         │
         ├─── 4. Compute FailureRateMatrix over the window
         │       (reuses analysis/FailureRateMatrix.vb from Bundle 1).

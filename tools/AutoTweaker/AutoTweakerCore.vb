@@ -42,15 +42,23 @@ Public Class AutoTweakerCore
         End Try
 
         Dim currentRowCount As Integer = Math.Max(0, csvLines.Length - 1)
-        Dim rowsSinceLast   As Integer = currentRowCount - state.LastRunCsvRowCount
+        Dim isFixedMode As Boolean = String.Equals(config.WindowMode,
+            TweakerConfig.WindowModeFixed, StringComparison.OrdinalIgnoreCase)
 
-        If state.LastRunCsvRowCount > 0 AndAlso rowsSinceLast < config.CooldownRows Then
-            Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — cooldown: {0}/{1} rows.",
-                                            rowsSinceLast, config.CooldownRows))
-            state.LastRunOutcome = "INELIGIBLE"
-            state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
-            TweakerState.Save(statePath, state)
-            Return 2
+        If isFixedMode Then
+            ' cooldown_rows is a no-op in fixed mode — natural cooldown is
+            ' "wait for the next disjoint batch to fill".
+            Console.WriteLine("[AutoTweaker] INFO — window_mode=fixed; cooldown_rows ignored.")
+        Else
+            Dim rowsSinceLast As Integer = currentRowCount - state.LastRunCsvRowCount
+            If state.LastRunCsvRowCount > 0 AndAlso rowsSinceLast < config.CooldownRows Then
+                Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — cooldown: {0}/{1} rows.",
+                                                rowsSinceLast, config.CooldownRows))
+                state.LastRunOutcome = "INELIGIBLE"
+                state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
         End If
 
         ' ── 2. Load settings and session boundaries ──────────────────────────
@@ -84,68 +92,180 @@ Public Class AutoTweakerCore
             sessionStartHours.Add(13)
         End If
 
-        ' ── 3. Build session-aligned window ──────────────────────────────────
+        ' ── 3. Build window ──────────────────────────────────────────────────
         Dim allRows = ForwardWindowJoiner.Load(config.CsvPath)
-        If allRows.Count < config.WindowSizeVerdicts Then
-            Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — only {0} rows, need {1}.",
-                                            allRows.Count, config.WindowSizeVerdicts))
-            state.LastRunOutcome = "INELIGIBLE"
-            state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
-            TweakerState.Save(statePath, state)
-            Return 2
-        End If
-
-        Dim windowRows As New List(Of CsvRow)()
         Dim sessionSet As New HashSet(Of Integer)(sessionStartHours)
-        Dim endIdx As Integer = allRows.Count - 1
+        Dim windowRows As New List(Of CsvRow)()
+        Dim windowStartRow As Integer = 0
+        Dim windowEndRow   As Integer = 0
+        Dim minTierThreshold As Integer = config.EffectiveMinTier(config.WindowSizeVerdicts)
 
-        For i As Integer = endIdx To Math.Max(0, endIdx - config.WindowSizeVerdicts * 2) Step -1
-            If windowRows.Count >= config.WindowSizeVerdicts Then Exit For
-            If windowRows.Count > 0 Then
-                Dim newerRow = windowRows(windowRows.Count - 1)
-                If CrossesSessionBoundary(allRows(i).Timestamp, newerRow.Timestamp, sessionSet) Then
+        If isFixedMode Then
+            ' Fixed (non-overlapping) windows — disjoint round semantics.
+            ' First-run init: LastEvaluatedRowIndex == -1 ⇒ preserve historical CSV
+            ' rows by setting the index to currentRowCount so the next round only
+            ' covers data accumulated after v29 ships.
+            If state.LastEvaluatedRowIndex < 0 Then
+                Console.WriteLine(String.Format(
+                    "[AutoTweaker] INFO — first v29 run — LastEvaluatedRowIndex initialised to currentRowCount={0}. " &
+                    "Historical rows preserved but not re-evaluated.", currentRowCount))
+                state.LastEvaluatedRowIndex = currentRowCount
+                state.LastRunOutcome = "INELIGIBLE"
+                state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
+
+            If currentRowCount - state.LastEvaluatedRowIndex < config.WindowSizeVerdicts Then
+                Console.WriteLine(String.Format(
+                    "[AutoTweaker] INELIGIBLE — fixed-mode window not full: {0}/{1} new rows since row {2}.",
+                    currentRowCount - state.LastEvaluatedRowIndex,
+                    config.WindowSizeVerdicts,
+                    state.LastEvaluatedRowIndex))
+                state.LastRunOutcome = "INELIGIBLE"
+                state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
+
+            ' Slice rows [LastEvaluatedRowIndex .. LastEvaluatedRowIndex + WindowSize - 1].
+            Dim startIdx As Integer = state.LastEvaluatedRowIndex
+            Dim endIdxFx As Integer = startIdx + config.WindowSizeVerdicts - 1
+            If endIdxFx >= allRows.Count Then endIdxFx = allRows.Count - 1
+            For idx As Integer = startIdx To endIdxFx
+                windowRows.Add(allRows(idx))
+            Next
+
+            If windowRows.Count < config.WindowSizeVerdicts Then
+                Console.WriteLine(String.Format(
+                    "[AutoTweaker] INELIGIBLE — fixed-mode window only {0}/{1} rows after slice.",
+                    windowRows.Count, config.WindowSizeVerdicts))
+                state.LastRunOutcome = "INELIGIBLE"
+                state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
+
+            windowStartRow = windowRows.First().Index
+            windowEndRow   = windowRows.Last().Index
+
+            ' Session-boundary check within the disjoint window.
+            For i As Integer = 1 To windowRows.Count - 1
+                If CrossesSessionBoundary(windowRows(i - 1).Timestamp,
+                                            windowRows(i).Timestamp, sessionSet) Then
                     Console.WriteLine(String.Format(
-                        "[AutoTweaker] INELIGIBLE — session boundary at row {0}. Window has {1}/{2} rows.",
-                        i, windowRows.Count, config.WindowSizeVerdicts))
-                    state.LastRunOutcome = "INELIGIBLE"
-                    state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                        "[AutoTweaker] SKIPPED_SESSION_BOUNDARY — fixed-mode round rows {0}..{1} crosses session at row {2}.",
+                        windowStartRow, windowEndRow, windowRows(i).Index))
+                    Dim skipIso As String = DateTime.UtcNow.ToString("o")
+                    Dim skipSummary As New RoundSummary() With {
+                        .RoundIso                = skipIso,
+                        .Outcome                 = "SKIPPED_SESSION_BOUNDARY",
+                        .WindowStartRow          = windowStartRow,
+                        .WindowEndRow            = windowEndRow,
+                        .AggregateFailureRatePct = 0.0,
+                        .PickedCellsJson         = "{}"
+                    }
+                    state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
+                    state.LastRunOutcome        = "SKIPPED_SESSION_BOUNDARY"
+                    state.LastRunAtIso          = skipIso
+                    state.LastRunCsvRowCount    = currentRowCount
+                    ' Streak counter does NOT tick — skipped rounds are not failures.
+                    state.RoundHistory.Add(skipSummary)
                     TweakerState.Save(statePath, state)
                     Return 2
                 End If
+            Next
+
+            ' ── 4. Tier-eligible check (fixed mode) ─────────────────────────────
+            Dim tierEligibleFx As Integer = windowRows.Where(Function(r)
+                Dim v = r.Verdict.Trim().ToUpper()
+                Return v = "STRONG LONG" OrElse v = "LONG" OrElse
+                       v = "STRONG SHORT" OrElse v = "SHORT"
+            End Function).Count()
+
+            If tierEligibleFx < minTierThreshold Then
+                Console.WriteLine(String.Format(
+                    "[AutoTweaker] SKIPPED_INSUFFICIENT_TIER — only {0}/{1} tier-eligible rows in window rows {2}..{3}.",
+                    tierEligibleFx, minTierThreshold, windowStartRow, windowEndRow))
+                Dim skipIso As String = DateTime.UtcNow.ToString("o")
+                Dim skipSummary As New RoundSummary() With {
+                    .RoundIso                = skipIso,
+                    .Outcome                 = "SKIPPED_INSUFFICIENT_TIER",
+                    .WindowStartRow          = windowStartRow,
+                    .WindowEndRow            = windowEndRow,
+                    .AggregateFailureRatePct = 0.0,
+                    .PickedCellsJson         = "{}"
+                }
+                state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
+                state.LastRunOutcome        = "SKIPPED_INSUFFICIENT_TIER"
+                state.LastRunAtIso          = skipIso
+                state.LastRunCsvRowCount    = currentRowCount
+                ' Streak counter does NOT tick — skipped rounds are not failures.
+                state.RoundHistory.Add(skipSummary)
+                TweakerState.Save(statePath, state)
+                Return 2
             End If
-            windowRows.Add(allRows(i))
-        Next
+        Else
+            ' Sliding (legacy) — session-aligned reverse walk. Deprecated; retained
+            ' for backward-compat experimentation.
+            If allRows.Count < config.WindowSizeVerdicts Then
+                Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — only {0} rows, need {1}.",
+                                                allRows.Count, config.WindowSizeVerdicts))
+                state.LastRunOutcome = "INELIGIBLE"
+                state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
 
-        If windowRows.Count < config.WindowSizeVerdicts Then
-            Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — session-aligned window only {0}/{1} rows.",
-                                            windowRows.Count, config.WindowSizeVerdicts))
-            state.LastRunOutcome = "INELIGIBLE"
-            state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
-            TweakerState.Save(statePath, state)
-            Return 2
-        End If
+            Dim endIdx As Integer = allRows.Count - 1
 
-        windowRows.Reverse()
+            For i As Integer = endIdx To Math.Max(0, endIdx - config.WindowSizeVerdicts * 2) Step -1
+                If windowRows.Count >= config.WindowSizeVerdicts Then Exit For
+                If windowRows.Count > 0 Then
+                    Dim newerRow = windowRows(windowRows.Count - 1)
+                    If CrossesSessionBoundary(allRows(i).Timestamp, newerRow.Timestamp, sessionSet) Then
+                        Console.WriteLine(String.Format(
+                            "[AutoTweaker] INELIGIBLE — session boundary at row {0}. Window has {1}/{2} rows.",
+                            i, windowRows.Count, config.WindowSizeVerdicts))
+                        state.LastRunOutcome = "INELIGIBLE"
+                        state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                        TweakerState.Save(statePath, state)
+                        Return 2
+                    End If
+                End If
+                windowRows.Add(allRows(i))
+            Next
 
-        ' Capture window row span for round history (CSV row indexes, 0-based into allRows).
-        Dim windowStartRow As Integer = windowRows.First().Index
-        Dim windowEndRow   As Integer = windowRows.Last().Index
+            If windowRows.Count < config.WindowSizeVerdicts Then
+                Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — session-aligned window only {0}/{1} rows.",
+                                                windowRows.Count, config.WindowSizeVerdicts))
+                state.LastRunOutcome = "INELIGIBLE"
+                state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
 
-        ' ── 4. Count tier-eligible rows ───────────────────────────────────────
-        Dim tierEligible As Integer = windowRows.Where(Function(r)
-            Dim v = r.Verdict.Trim().ToUpper()
-            Return v = "STRONG LONG" OrElse v = "LONG" OrElse
-                   v = "STRONG SHORT" OrElse v = "SHORT"
-        End Function).Count()
+            windowRows.Reverse()
 
-        If tierEligible < config.MinTierEligibleRows Then
-            Console.WriteLine(String.Format(
-                "[AutoTweaker] INELIGIBLE — only {0}/{1} tier-eligible rows.",
-                tierEligible, config.MinTierEligibleRows))
-            state.LastRunOutcome = "INELIGIBLE"
-            state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
-            TweakerState.Save(statePath, state)
-            Return 2
+            windowStartRow = windowRows.First().Index
+            windowEndRow   = windowRows.Last().Index
+
+            ' ── 4. Count tier-eligible rows (sliding) ───────────────────────────
+            Dim tierEligible As Integer = windowRows.Where(Function(r)
+                Dim v = r.Verdict.Trim().ToUpper()
+                Return v = "STRONG LONG" OrElse v = "LONG" OrElse
+                       v = "STRONG SHORT" OrElse v = "SHORT"
+            End Function).Count()
+
+            If tierEligible < minTierThreshold Then
+                Console.WriteLine(String.Format(
+                    "[AutoTweaker] INELIGIBLE — only {0}/{1} tier-eligible rows.",
+                    tierEligible, minTierThreshold))
+                state.LastRunOutcome = "INELIGIBLE"
+                state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
         End If
 
         ' ── 5. Deribit OHLC bulk fetch ────────────────────────────────────────
@@ -228,6 +348,7 @@ Public Class AutoTweakerCore
             state.LastRunAtIso        = roundIso
             state.LastRunCsvRowCount  = currentRowCount
             state.LastSuccessfulRoundIso = roundIso
+            If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
 
             ' Streak tracking + snapshot management
             state.CurrentBelowThresholdStreak += 1
@@ -286,6 +407,7 @@ Public Class AutoTweakerCore
             state.LastRunAtIso        = roundIso
             state.LastRunCsvRowCount  = currentRowCount
             state.LastProposalSummary = "Dry-run file: " & dryPath
+            If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
             HandleStreakInterrupt(state, config, conditions, singleRound)
             state.RoundHistory.Add(summary)
             TweakerState.Save(statePath, state)
@@ -386,6 +508,7 @@ Public Class AutoTweakerCore
 
             state.LastRunAtIso       = roundIso
             state.LastRunCsvRowCount = currentRowCount
+            If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
             HandleStreakInterrupt(state, config, conditions, singleRound)
             state.RoundHistory.Add(summary)
             TweakerState.Save(statePath, state)
@@ -402,6 +525,7 @@ Public Class AutoTweakerCore
             state.LastRunAtIso        = roundIso
             state.LastRunCsvRowCount  = currentRowCount
             state.LastSuccessfulRoundIso = roundIso
+            If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
 
             ' Treat as a successful round for streak purposes — accuracy is fine.
             state.CurrentBelowThresholdStreak += 1
@@ -463,6 +587,7 @@ Public Class AutoTweakerCore
 
         state.LastRunAtIso       = roundIso
         state.LastRunCsvRowCount = currentRowCount
+        If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
         HandleStreakInterrupt(state, config, conditions, singleRound)
         state.RoundHistory.Add(summary)
         TweakerState.Save(statePath, state)

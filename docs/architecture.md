@@ -1,5 +1,7 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-05-11 | App version: settings.json v25 — output-dump feature on top of Bundle 3 (d1 trend structure + d2 volume-weighted pivots), Bundle 1 (csv-expansion-v0.4 + analysis script), and Bundle 2 (auto-tweaker)**
+**Last updated: 2026-05-17 | App version: settings.json v29 — auto-tweaker fixed-window mode + MinTier rework on top of target-hit metric toggle (v28), OHLC gap-backfill (v27), live-performance-display (v26), output-dump (v25), Bundle 3 (d1 trend structure + d2 volume-weighted pivots), Bundle 1 (csv-expansion-v0.4 + analysis script), and Bundle 2 (auto-tweaker)**
+
+> **Auto-tweaker windowing (v29).** `tools/AutoTweaker/AutoTweakerCore.RunAsync` reads `TweakerConfig.WindowMode`. In `fixed` mode (default), a "round" is a disjoint slice `allRows[LastEvaluatedRowIndex .. +WindowSize-1]`; the index advances by exactly `WindowSize` after every completed terminal branch (including the new `SKIPPED_INSUFFICIENT_TIER` / `SKIPPED_SESSION_BOUNDARY` outcomes — which do **not** tick the BELOW_THRESHOLD streak). `cooldown_rows` is a no-op in fixed mode. MinTier resolves through `TweakerConfig.EffectiveMinTier(windowSize)` — null in JSON auto-scales as `max(15, ceil(WindowSize × 0.5))`. Sliding mode is retained behind the `Else` arm for legacy comparison and is documented as deprecated.
 
 This document describes the full codebase structure, data flow, and design rationale.
 Update whenever files are added, moved, or significantly changed.
