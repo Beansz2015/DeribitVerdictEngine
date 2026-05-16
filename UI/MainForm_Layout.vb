@@ -114,6 +114,8 @@ Partial Public Class MainForm
     Private _outputDumpSettingsForm As OutputDumpSettingsForm
 
     ' Live performance strip — six labels (Cur.Wk / 3d / Cur.Day / Asia / London / NY)
+    ' plus a mode indicator (lblPerfMode) showing [B]/[T] for current metric mode.
+    Private lblPerfMode   As System.Windows.Forms.Label
     Private lblPerfWeek   As System.Windows.Forms.Label
     Private lblPerf3d     As System.Windows.Forms.Label
     Private lblPerfDay    As System.Windows.Forms.Label
@@ -122,6 +124,13 @@ Partial Public Class MainForm
     Private lblPerfNy     As System.Windows.Forms.Label
     ' Shared ToolTip for all six perf labels (created once in constructor).
     Private _perfTip As System.Windows.Forms.ToolTip
+
+    ' [target-hit-toggle] In-memory metric mode for the perf strip. Initialised from
+    ' settings.json at startup; left-click on any perf label flips it ephemerally
+    ' (no settings.json write). Right-click opens a context menu that persists via
+    ' SettingsLoader.Save.
+    Private _metricMode As String = "barrier"
+    Private _perfContextMenu As System.Windows.Forms.ContextMenuStrip
 
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
@@ -191,6 +200,7 @@ Partial Public Class MainForm
 
         ' Live performance strip labels — created here, positioned in ResizeControls().
         ' Colour is applied per-run by UpdatePerformanceLabels().
+        lblPerfMode   = MakePerfLabel("[B]")
         lblPerfWeek   = MakePerfLabel("Cur.Wk: --%")
         lblPerf3d     = MakePerfLabel("3d: --%")
         lblPerfDay    = MakePerfLabel("Cur.Day: --%")
@@ -198,10 +208,25 @@ Partial Public Class MainForm
         lblPerfLondon = MakePerfLabel("London: --%")
         lblPerfNy     = MakePerfLabel("NY: --%")
         _perfTip = New System.Windows.Forms.ToolTip()
+        Me.Controls.Add(lblPerfMode)
         For Each lbl In New System.Windows.Forms.Label() {
                 lblPerfWeek, lblPerf3d, lblPerfDay,
                 lblPerfAsia, lblPerfLondon, lblPerfNy}
             Me.Controls.Add(lbl)
+        Next
+
+        ' [target-hit-toggle] Wire left-click (ephemeral toggle) + right-click (persist
+        ' via context menu) onto each of the six rate labels. _metricMode is finalised
+        ' from settings.json below, after SettingsLoader.Initialise.
+        _perfContextMenu = New System.Windows.Forms.ContextMenuStrip()
+        Dim miBarrier = _perfContextMenu.Items.Add("Use barrier metric")
+        Dim miTarget  = _perfContextMenu.Items.Add("Use target metric")
+        AddHandler miBarrier.Click, Sub(s, ev) PersistMetricMode("barrier")
+        AddHandler miTarget.Click,  Sub(s, ev) PersistMetricMode("target")
+        For Each lbl In New System.Windows.Forms.Label() {
+                lblPerfWeek, lblPerf3d, lblPerfDay,
+                lblPerfAsia, lblPerfLondon, lblPerfNy}
+            AddHandler lbl.MouseDown, AddressOf PerfLabel_MouseDown
         Next
 
         SetOutputMargins(6, 6)
@@ -211,6 +236,8 @@ Partial Public Class MainForm
         UpdateLogInfo()
         SettingsLoader.Initialise(Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
+        ' [target-hit-toggle] Now that settings.json has been read, pick up its metric_mode.
+        _metricMode = NormaliseMode(SettingsLoader.Current.PerformanceDisplay.MetricMode)
         InitAutoRunControls()
 
         ' Size the window to fit content exactly, based on actual font metrics.
@@ -379,7 +406,7 @@ Partial Public Class MainForm
         Dim perfY As Integer = AR_Y + (AR_H - 14) \ 2  ' vertically centred on row 2
         Dim perfX As Integer = SS_X + 70 + PERF_SEP     ' start just past btnStartStop
         Dim perfLabels = New System.Windows.Forms.Label() {
-            lblPerfWeek, lblPerf3d, lblPerfDay, lblPerfAsia, lblPerfLondon, lblPerfNy}
+            lblPerfMode, lblPerfWeek, lblPerf3d, lblPerfDay, lblPerfAsia, lblPerfLondon, lblPerfNy}
         For Each lbl In perfLabels
             If lbl Is Nothing Then Continue For
             lbl.Location = New System.Drawing.Point(perfX, perfY)
@@ -460,17 +487,29 @@ Partial Public Class MainForm
 
     ''' <summary>
     ''' Recompute the six performance windows and update label text + colour.
-    ''' Must be called on the UI thread.
+    ''' Honours _metricMode ("barrier" | "target") for which numerator to show.
+    ''' Tooltip carries the other metric's rate on a second line so both are
+    ''' visible without toggling. Must be called on the UI thread.
     ''' </summary>
     Friend Sub UpdatePerformanceLabels()
         Dim cfg As EngineSettings = SettingsLoader.Current
         If Not cfg.PerformanceDisplay.Enabled Then
             For Each lbl In New System.Windows.Forms.Label() {
-                    lblPerfWeek, lblPerf3d, lblPerfDay,
+                    lblPerfMode, lblPerfWeek, lblPerf3d, lblPerfDay,
                     lblPerfAsia, lblPerfLondon, lblPerfNy}
                 If lbl IsNot Nothing Then lbl.Visible = False
             Next
             Return
+        End If
+
+        Dim isTarget As Boolean = (_metricMode = "target")
+        Dim defaultMode As String = NormaliseMode(cfg.PerformanceDisplay.MetricMode)
+
+        ' Mode indicator: dim when ephemeral mode matches settings.json default; amber otherwise.
+        If lblPerfMode IsNot Nothing Then
+            lblPerfMode.Text      = If(isTarget, "[T]", "[B]")
+            lblPerfMode.ForeColor = If(_metricMode = defaultMode, C_DIM, C_WARN)
+            lblPerfMode.Visible   = True
         End If
 
         Dim windows = LivePerformanceTracker.ComputeWindows(DateTime.UtcNow, cfg)
@@ -489,11 +528,20 @@ Partial Public Class MainForm
             Dim fgColor As System.Drawing.Color
 
             If w IsNot Nothing AndAlso n >= minN Then
-                Dim rate As Integer = CInt(Math.Round(w.RatePct))
+                Dim activePct As Double = If(isTarget, w.TargetRatePct, w.BarrierRatePct)
+                Dim rate As Integer = CInt(Math.Round(activePct))
                 text    = prefixes(i) & ": " & rate.ToString() & "%"
                 fgColor = If(rate > 50, C_GOOD, C_BAD)
-                tip     = String.Format("{0} predictions evaluated. {1:yyyy-MM-dd HH:mm} → {2:yyyy-MM-dd HH:mm} UTC+8.",
-                                        n, w.RangeStart, w.RangeEnd)
+
+                ' Tooltip line 1: sample summary; line 2: the other metric's rate.
+                Dim otherLabel As String = If(isTarget, "Barrier-hit", "Target-hit")
+                Dim otherHits  As Integer = If(isTarget, w.SuccessCount, w.TargetHitCount)
+                Dim otherPct   As Double  = If(isTarget, w.BarrierRatePct, w.TargetRatePct)
+                tip = String.Format("{0} predictions evaluated. {1:yyyy-MM-dd HH:mm} → {2:yyyy-MM-dd HH:mm} UTC+8." &
+                                    Environment.NewLine &
+                                    "{3}: {4}% ({5}/{6})",
+                                    n, w.RangeStart, w.RangeEnd,
+                                    otherLabel, CInt(Math.Round(otherPct)), otherHits, n)
             Else
                 text    = prefixes(i) & ": --%"
                 fgColor = C_DIM
@@ -511,6 +559,46 @@ Partial Public Class MainForm
 
         ' Re-run layout so cascaded X positions reflect updated text widths.
         ResizeControls()
+    End Sub
+
+    ''' <summary>
+    ''' [target-hit-toggle] Coerce arbitrary settings.json values to a known mode
+    ''' string. Anything other than "target" is treated as "barrier".
+    ''' </summary>
+    Private Shared Function NormaliseMode(raw As String) As String
+        If raw IsNot Nothing AndAlso raw.Trim().Equals("target", StringComparison.OrdinalIgnoreCase) Then
+            Return "target"
+        End If
+        Return "barrier"
+    End Function
+
+    ''' <summary>
+    ''' [target-hit-toggle] Left-click flips mode ephemerally (no settings.json write).
+    ''' Right-click opens a context menu that persists via SettingsLoader.Save.
+    ''' </summary>
+    Private Sub PerfLabel_MouseDown(sender As Object, e As System.Windows.Forms.MouseEventArgs)
+        If e.Button = System.Windows.Forms.MouseButtons.Left Then
+            _metricMode = If(_metricMode = "target", "barrier", "target")
+            UpdatePerformanceLabels()
+            lblLogInfo.Text = String.Format("Metric mode → {0} (right-click any label to persist)", _metricMode)
+        ElseIf e.Button = System.Windows.Forms.MouseButtons.Right Then
+            Dim lbl = TryCast(sender, System.Windows.Forms.Label)
+            If lbl IsNot Nothing Then _perfContextMenu.Show(lbl, e.Location)
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' [target-hit-toggle] Write the new metric mode to settings.json. Also updates
+    ''' the in-memory ephemeral state so the mode indicator returns to dim (matches default).
+    ''' </summary>
+    Private Sub PersistMetricMode(mode As String)
+        mode = NormaliseMode(mode)
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        cfg.PerformanceDisplay.MetricMode = mode
+        SettingsLoader.Save(cfg, "performance_display.metric_mode → " & mode)
+        _metricMode = mode
+        UpdatePerformanceLabels()
+        lblLogInfo.Text = "Metric mode persisted → " & mode
     End Sub
 
     ' -----------------------------------------------------------------------

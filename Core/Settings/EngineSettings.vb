@@ -718,4 +718,15 @@ Public Class PerformanceDisplaySettings
 
     <JsonPropertyName("max_gap_fill_minutes")>
     Public Property MaxGapFillMinutes As Integer = 5000
+
+    ''' <summary>
+    ''' [target-hit-toggle] Metric mode for the live performance strip.
+    ''' "barrier" = SuccessCount/(Success+Failure) — barrier-hit before adverse stop.
+    ''' "target"  = TargetHitCount/(Success+Failure) — favourable barrier touched at
+    '''             any point within the window (ignores stop hit). Same denominator.
+    ''' Default "barrier". Toggled at runtime via left-click (ephemeral) or right-click
+    ''' (persisted via SettingsLoader.Save).
+    ''' </summary>
+    <JsonPropertyName("metric_mode")>
+    Public Property MetricMode As String = "barrier"
 End Class

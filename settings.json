@@ -1,8 +1,9 @@
 {
-  "version": 27,
-  "last_modified": "2026-05-15T00:00:00Z",
-  "modified_by": "ohlc-gap-backfill",
+  "version": 28,
+  "last_modified": "2026-05-17T00:00:00Z",
+  "modified_by": "target-hit-metric-toggle",
   "change_log": [
+    "v28 (2026-05-17): target-hit metric toggle for the live performance strip. Decouples direction-prediction quality (target-hit) from stop-placement quality (barrier-hit). Eval cache schema bumped v1 → v2 with new TargetEverHit column; first load detects v1 and back-fills the column from in-memory OHLC via new FailureRateMatrix.TargetHitWalk helper, rewriting the file with the v2 schema comment. Same denominator for both rates — rows where TargetEverHit is Nothing are excluded from BOTH numerator and denominator. New top-level key performance_display.metric_mode (\"barrier\" | \"target\", default \"barrier\"). Live UI: small [B]/[T] mode indicator just before lblPerfWeek (dim when matches default, amber when ephemerally overridden); left-click on any perf label toggles mode in memory (no settings.json write); right-click opens a 2-item context menu that persists via SettingsLoader.Save. Tooltip second line carries the other metric's rate so both are visible without toggling.",
     "v27 (2026-05-15): OHLC cache gap-fill on startup. InitialiseAsync now detects interior gaps within the 7-day window and back-fills from Deribit. New keys gap_backfill_enabled, max_gap_fill_calls, max_gap_fill_minutes. Addresses the \"engine running but bars missing\" failure mode.",
     "v26 — live-performance-display: six-window success/fail rate strip, updated after every analysis run.",
     "     New top-level block: performance_display (4 keys).",
@@ -394,6 +395,7 @@
     "session_block_semantic": "most_recent",
     "gap_backfill_enabled": true,
     "max_gap_fill_calls": 10,
-    "max_gap_fill_minutes": 5000
+    "max_gap_fill_minutes": 5000,
+    "metric_mode": "barrier"
   }
 }

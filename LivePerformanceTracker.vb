@@ -32,19 +32,36 @@ Public Class LivePerformanceTracker
         Public Property FavBar      As Double    ' 0 if no valid barrier
         Public Property AdvBar      As Double    ' 0 if no valid barrier
         Public Property EvalOutcome As String    ' SUCCESS / ADVERSE_HIT / AMBIGUOUS /
-    End Class                                    ' WINDOW_EXPIRED / EXCLUDED_* / PENDING
+                                                 ' WINDOW_EXPIRED / EXCLUDED_* / PENDING
+        ' [target-hit-toggle] True iff favourable barrier was touched within T+3..T+15
+        ' regardless of adverse outcome. Nothing = not yet evaluated (e.g. insufficient
+        ' OHLC coverage during v1→v2 migration). Written as empty string in CSV.
+        Public Property TargetEverHit As Boolean?
+    End Class
 
     Public Class WindowAggregate
-        Public Property RangeStart    As DateTime  ' UTC+8 (display)
-        Public Property RangeEnd      As DateTime  ' UTC+8 (display)
-        Public Property SuccessCount  As Integer
-        Public Property FailureCount  As Integer
-        Public Property TotalRange    As Integer   ' all rows in range (incl. PENDING/EXCLUDED) — for tooltip
-        Public ReadOnly Property RatePct As Double
+        Public Property RangeStart      As DateTime  ' UTC+8 (display)
+        Public Property RangeEnd        As DateTime  ' UTC+8 (display)
+        Public Property SuccessCount    As Integer   ' barrier metric numerator
+        Public Property FailureCount    As Integer
+        Public Property TargetHitCount  As Integer   ' [target-hit-toggle] target metric numerator
+        Public Property TotalRange      As Integer   ' all rows in range (incl. PENDING/EXCLUDED) — for tooltip
+
+        ''' <summary>Barrier-hit rate. Denominator excludes rows where TargetEverHit is Nothing.</summary>
+        Public ReadOnly Property BarrierRatePct As Double
             Get
                 Dim n = SuccessCount + FailureCount
                 If n = 0 Then Return -1.0
                 Return CDbl(SuccessCount) / n * 100.0
+            End Get
+        End Property
+
+        ''' <summary>Target-hit rate. Same denominator as BarrierRatePct.</summary>
+        Public ReadOnly Property TargetRatePct As Double
+            Get
+                Dim n = SuccessCount + FailureCount
+                If n = 0 Then Return -1.0
+                Return CDbl(TargetHitCount) / n * 100.0
             End Get
         End Property
     End Class
@@ -62,8 +79,8 @@ Public Class LivePerformanceTracker
     ' Slack cap: trim fires only when in-memory bar count exceeds this.
     Private Shared ReadOnly _slackCap As Integer = CInt(OhlcCache.MAX_BARS * 1.05)
 
-    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v1 (live-performance-display)"
-    Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome"
+    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v2 (target-hit-toggle)"
+    Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit"
     Private Const FAV_ATR_MULT        As Double = 2.0   ' fallback favourable barrier
     Private Const ADV_ATR_MULT        As Double = 1.2   ' fallback adverse barrier
 
@@ -238,8 +255,17 @@ Public Class LivePerformanceTracker
             End If
 
             ' --- Step 2: Load existing eval cache ---
+            Dim needsMigration As Boolean = IsV1Schema(evalCachePath)
             _evalCache = LoadEvalCache(evalCachePath)
             Dim existingTs As New HashSet(Of DateTime)(_evalCache.Select(Function(e) e.Timestamp))
+
+            ' --- Step 2.5: One-time v1→v2 schema migration (target-hit-toggle) ---
+            ' Detect by absence of "TargetEverHit" in the v1 header line. Walks every
+            ' non-EXCLUDED, non-PENDING row against _ohlcLookup to populate TargetEverHit.
+            ' Rows with no OHLC coverage stay Nothing (written as empty string).
+            ' Rewrites the file with the v2 schema comment + header. Idempotent on subsequent
+            ' restarts (header now contains "TargetEverHit", so this block is skipped).
+            If needsMigration Then MigrateV1ToV2(nowUtc)
 
             ' --- Step 3: Backfill from analysis_log.csv ---
             If eagerBackfill AndAlso File.Exists(analysisLogPath) Then
@@ -255,7 +281,9 @@ Public Class LivePerformanceTracker
                     ' If window complete, evaluate; otherwise leave as PENDING.
                     If entry.EvalOutcome = "PENDING" AndAlso
                        row.Timestamp.AddMinutes(15) <= nowUtc Then
-                        entry.EvalOutcome = EvaluateEntry(entry, row.Timestamp, nowUtc)
+                        Dim ev = EvaluateEntry(entry, row.Timestamp, nowUtc)
+                        entry.EvalOutcome   = ev.outcome
+                        entry.TargetEverHit = ev.targetHit
                     End If
                     newEntries.Add(entry)
                 Next
@@ -494,8 +522,11 @@ Public Class LivePerformanceTracker
             Select Case e.EvalOutcome
                 Case "SUCCESS"
                     agg.SuccessCount += 1
+                    ' SUCCESS always implies TargetEverHit=True by construction.
+                    If e.TargetEverHit.HasValue AndAlso e.TargetEverHit.Value Then agg.TargetHitCount += 1
                 Case "ADVERSE_HIT", "AMBIGUOUS", "WINDOW_EXPIRED"
                     agg.FailureCount += 1
+                    If e.TargetEverHit.HasValue AndAlso e.TargetEverHit.Value Then agg.TargetHitCount += 1
             End Select
         Next
         Return agg
@@ -512,21 +543,93 @@ Public Class LivePerformanceTracker
             If e.EvalOutcome <> "PENDING" Then Continue For
             If e.Timestamp.AddMinutes(15) > nowUtc Then Continue For
             ' Window complete — evaluate.
-            e.EvalOutcome = EvaluateEntry(e, e.Timestamp, nowUtc)
+            Dim ev = EvaluateEntry(e, e.Timestamp, nowUtc)
+            e.EvalOutcome   = ev.outcome
+            e.TargetEverHit = ev.targetHit
             dirty = True
         Next
         If dirty Then WriteEvalCache(_evalCachePath)
     End Sub
 
-    ''' <summary>Walk OHLC bars T+3..T+15 and return WalkBars outcome string.</summary>
+    ''' <summary>
+    ''' Walk OHLC bars T+3..T+15 and return both the barrier-hit outcome and the
+    ''' target-hit boolean in a single pass.
+    ''' targetHit = Nothing when no OHLC bars are available (WINDOW_EXPIRED with no walk).
+    ''' SUCCESS always implies targetHit=True by construction.
+    ''' </summary>
     Private Shared Function EvaluateEntry(e         As EvalCacheEntry,
                                            ts        As DateTime,
-                                           nowUtc    As DateTime) As String
-        If e.FavBar = 0 OrElse e.AdvBar = 0 Then Return "WINDOW_EXPIRED"
+                                           nowUtc    As DateTime) As (outcome As String, targetHit As Boolean?)
+        If e.FavBar = 0 OrElse e.AdvBar = 0 Then Return ("WINDOW_EXPIRED", Nothing)
         Dim bars = GetEligibleBars(ts, nowUtc)
-        If bars.Count = 0 Then Return "WINDOW_EXPIRED"
+        If bars.Count = 0 Then Return ("WINDOW_EXPIRED", Nothing)
         Dim isLong As Boolean = IsLongVerdict(e.Verdict)
-        Return FailureRateMatrix.WalkBars(bars, e.FavBar, e.AdvBar, isLong)
+        Dim barrierOutcome As String  = FailureRateMatrix.WalkBars(bars, e.FavBar, e.AdvBar, isLong)
+        Dim targetHit      As Boolean = FailureRateMatrix.TargetHitWalk(bars, e.FavBar, isLong)
+        Return (barrierOutcome, targetHit)
+    End Function
+
+    ''' <summary>
+    ''' One-time v1→v2 schema migration. Walks every non-EXCLUDED, non-PENDING row
+    ''' in _evalCache against _ohlcLookup, populating TargetEverHit where bars are
+    ''' available. Rows with no OHLC coverage stay Nothing. Rewrites the cache file
+    ''' with the v2 schema comment + header so subsequent restarts skip this block.
+    ''' </summary>
+    Private Shared Sub MigrateV1ToV2(nowUtc As DateTime)
+        Try
+            Dim backfilled As Integer = 0
+            Dim blank      As Integer = 0
+            For Each e In _evalCache
+                If e.EvalOutcome = "PENDING" Then Continue For
+                If e.EvalOutcome IsNot Nothing AndAlso e.EvalOutcome.StartsWith("EXCLUDED") Then Continue For
+                ' SUCCESS always implies TargetEverHit=True (favourable barrier hit, by definition).
+                If e.EvalOutcome = "SUCCESS" Then
+                    e.TargetEverHit = True
+                    backfilled += 1
+                    Continue For
+                End If
+                If e.FavBar = 0 Then
+                    blank += 1
+                    Continue For
+                End If
+                Dim bars = GetEligibleBars(e.Timestamp, nowUtc)
+                If bars.Count = 0 Then
+                    blank += 1
+                    Continue For
+                End If
+                Dim isLong As Boolean = IsLongVerdict(e.Verdict)
+                e.TargetEverHit = FailureRateMatrix.TargetHitWalk(bars, e.FavBar, isLong)
+                backfilled += 1
+            Next
+            WriteEvalCache(_evalCachePath)
+            Console.WriteLine(String.Format(
+                "[LivePerformanceTracker] v1→v2 migration: {0} rows backfilled, {1} blank (no OHLC)",
+                backfilled, blank))
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] MigrateV1ToV2 error: " & ex.Message)
+        End Try
+    End Sub
+
+    ''' <summary>
+    ''' Detect v1 schema by reading the header (first non-comment line) and checking
+    ''' for the absence of "TargetEverHit". Returns False if the file does not exist
+    ''' (fresh installs start as v2).
+    ''' </summary>
+    Private Shared Function IsV1Schema(path As String) As Boolean
+        If Not File.Exists(path) Then Return False
+        Try
+            For Each line As String In File.ReadLines(path)
+                If line.StartsWith("#") OrElse String.IsNullOrWhiteSpace(line) Then Continue For
+                If line.StartsWith("Timestamp") Then
+                    Return Not line.Contains("TargetEverHit")
+                End If
+                ' First non-comment, non-header data row — no header present, treat as v1.
+                Return True
+            Next
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] IsV1Schema error: " & ex.Message)
+        End Try
+        Return False
     End Function
 
     ''' <summary>
@@ -640,7 +743,7 @@ Public Class LivePerformanceTracker
                 p(0).Trim(),
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AdjustToUniversal Or DateTimeStyles.AssumeUniversal)
-            Return New EvalCacheEntry() With {
+            Dim entry As New EvalCacheEntry() With {
                 .Timestamp   = ts,
                 .Verdict     = p(1).Trim(),
                 .EntryPrice  = Double.Parse(p(2), CultureInfo.InvariantCulture),
@@ -648,6 +751,16 @@ Public Class LivePerformanceTracker
                 .AdvBar      = Double.Parse(p(4), CultureInfo.InvariantCulture),
                 .EvalOutcome = p(5).Trim()
             }
+            ' [target-hit-toggle] v2 7th column. Empty string = Nothing (not yet evaluated).
+            If p.Length >= 7 Then
+                Dim raw As String = p(6).Trim()
+                If raw = "1" Then
+                    entry.TargetEverHit = True
+                ElseIf raw = "0" Then
+                    entry.TargetEverHit = False
+                End If
+            End If
+            Return entry
         Catch
             Return Nothing
         End Try
@@ -687,9 +800,13 @@ Public Class LivePerformanceTracker
     End Sub
 
     Private Shared Function FormatEvalEntry(e As EvalCacheEntry) As String
+        Dim targetCol As String = ""
+        If e.TargetEverHit.HasValue Then
+            targetCol = If(e.TargetEverHit.Value, "1", "0")
+        End If
         Return String.Format(CultureInfo.InvariantCulture,
-            "{0:o},{1},{2:F2},{3:F2},{4:F2},{5}",
-            e.Timestamp, e.Verdict, e.EntryPrice, e.FavBar, e.AdvBar, e.EvalOutcome)
+            "{0:o},{1},{2:F2},{3:F2},{4:F2},{5},{6}",
+            e.Timestamp, e.Verdict, e.EntryPrice, e.FavBar, e.AdvBar, e.EvalOutcome, targetCol)
     End Function
 
     ' -----------------------------------------------------------------------

@@ -61,6 +61,23 @@ Public Class FailureRateMatrix
         Return "WINDOW_EXPIRED"
     End Function
 
+    ' Walk eligible bars and return True iff the favourable barrier was touched
+    ' at any point within the window, regardless of whether the adverse barrier
+    ' hit first. Used by the target-hit metric — decouples "direction was right"
+    ' from "stop placement survived noise".
+    Public Shared Function TargetHitWalk(bars   As List(Of OhlcBar),
+                                         favBar As Double,
+                                         isLong As Boolean) As Boolean
+        For Each b In bars
+            If isLong Then
+                If b.High >= favBar Then Return True
+            Else
+                If b.Low <= favBar Then Return True
+            End If
+        Next
+        Return False
+    End Function
+
     ' Compute the full failure-rate matrix.
     ' ByRef counters are informational: atrInvalidExcluded counts rows excluded because
     ' ATR <= 0; structuralStopRows / atrFallbackRows count rows where the adverse barrier
