@@ -636,7 +636,9 @@ Public Class TweakSettingsForm
         minTierTip.SetToolTip(txtMinTierRows,
             "Minimum STRONG/MEDIUM directional rows that must exist within a window for " &
             "the round to evaluate. Rounds with fewer are skipped (don't tick the streak). " &
-            "Default scales with Window Size as max(15, ceil(WindowSize × 0.5)).")
+            "Must be ≤ Window Size — the tier-eligible count is a subset of the window's " &
+            "rows, so a larger value can never be reached. Default scales with Window Size " &
+            "as max(15, ceil(WindowSize × 0.5)).")
         y += 32
 
         ' ── Snapshot history section ─────────────────────────────────────────
