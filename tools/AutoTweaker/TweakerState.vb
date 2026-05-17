@@ -136,7 +136,24 @@ Public Class TweakerState
         Dim opts As New JsonSerializerOptions With {.WriteIndented = True}
         Dim dir = IO.Path.GetDirectoryName(path)
         If Not String.IsNullOrEmpty(dir) Then IO.Directory.CreateDirectory(dir)
-        File.WriteAllText(path, JsonSerializer.Serialize(state, opts))
+
+        ' Atomic write: persist to .tmp, then rename. NTFS rename is atomic at the
+        ' filesystem level — a mid-write crash either leaves the original file
+        ' intact (rename never happened) or the new file in place (rename completed).
+        ' Avoids the failure mode where File.WriteAllText is killed mid-write and
+        ' leaves a partial state.json that triggers a defaults reset on Load.
+        Dim tmpPath As String = path & ".tmp"
+        Try
+            File.WriteAllText(tmpPath, JsonSerializer.Serialize(state, opts))
+            If File.Exists(path) Then
+                File.Replace(tmpPath, path, Nothing)
+            Else
+                File.Move(tmpPath, path)
+            End If
+        Catch
+            Try : File.Delete(tmpPath) : Catch : End Try
+            Throw
+        End Try
     End Sub
 
 End Class

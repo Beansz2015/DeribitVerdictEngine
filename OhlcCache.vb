@@ -80,16 +80,29 @@ Public Class OhlcCache
     ''' Never throws.
     ''' </summary>
     Public Shared Sub WriteAll(path As String, bars As IEnumerable(Of OhlcBar))
+        ' Atomic write: build the new content in .tmp, then rename. NTFS rename is
+        ' atomic at the filesystem level — a mid-write crash either leaves the
+        ' original file intact (rename never happened) or the new file in place
+        ' (rename completed). Avoids the truncate-mid-write wipe scenario where a
+        ' killed process leaves an empty/partial cache that forces a full 7-day
+        ' re-fetch on next startup.
+        Dim tmpPath As String = path & ".tmp"
         Try
-            Using sw As New StreamWriter(path, append:=False)
+            Using sw As New StreamWriter(tmpPath, append:=False)
                 sw.WriteLine(SCHEMA_COMMENT)
                 sw.WriteLine(COL_HEADER)
                 For Each bar In bars.OrderBy(Function(b) b.CloseTime)
                     sw.WriteLine(FormatBar(bar))
                 Next
             End Using
+            If File.Exists(path) Then
+                File.Replace(tmpPath, path, Nothing)
+            Else
+                File.Move(tmpPath, path)
+            End If
         Catch ex As Exception
             Console.WriteLine("[OhlcCache] WriteAll failed: " & ex.Message)
+            Try : File.Delete(tmpPath) : Catch : End Try
         End Try
     End Sub
 
@@ -116,7 +129,16 @@ Public Class OhlcCache
             Dim result As New List(Of String)()
             result.AddRange(header)
             result.AddRange(kept)
-            File.WriteAllLines(path, result)
+
+            ' Atomic write — see WriteAll comment.
+            Dim tmpPath As String = path & ".tmp"
+            Try
+                File.WriteAllLines(tmpPath, result)
+                File.Replace(tmpPath, path, Nothing)
+            Catch
+                Try : File.Delete(tmpPath) : Catch : End Try
+                Throw
+            End Try
         Catch ex As Exception
             Console.WriteLine("[OhlcCache] RollingTrim failed: " & ex.Message)
         End Try

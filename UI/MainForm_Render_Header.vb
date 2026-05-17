@@ -115,9 +115,13 @@ Partial Public Class MainForm
             {"TRENDING_UP", 0}, {"TRENDING_DOWN", 0},
             {"RANGE_BOUND", 0}, {"TRANSITIONAL", 0}
         }
+        ' "ALIGNED" added 2026-05-17 (audit cleanup pass): post-v30 NO TRADE rows
+        ' carry VerdictContext="ALIGNED" instead of "CONFIRMED". Without this key,
+        ' the ContainsKey guard silently dropped those rows from the distribution.
         Dim contextCounts As New Dictionary(Of String, Integer) From {
-            {"CONFIRMED", 0}, {"FLOW_UNCONFIRMED", 0},
-            {"MOMENTUM_FADING", 0}, {"STRUCTURALLY_WEAK", 0}
+            {"CONFIRMED", 0}, {"ALIGNED", 0},
+            {"FLOW_UNCONFIRMED", 0}, {"MOMENTUM_FADING", 0},
+            {"STRUCTURALLY_WEAK", 0}
         }
         Dim fundingMomCounts As New Dictionary(Of String, Integer) From {
             {"RISING", 0}, {"FALLING", 0}, {"FLAT", 0}

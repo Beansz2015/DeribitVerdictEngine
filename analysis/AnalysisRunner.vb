@@ -85,7 +85,11 @@ Public Class AnalysisRunner
         ' Use the recommended cell for each tier (picks the most stable window/threshold).
         ' Failure classification uses v2 barrier-hit logic (same as FailureRateMatrix).
         Dim recCells = report.FailureCells.Where(Function(c) c.IsRecommended).ToList()
-        For Each ctx In {"CONFIRMED", "FLOW_UNCONFIRMED", "MOMENTUM_FADING", "STRUCTURALLY_WEAK"}
+        ' "ALIGNED" added 2026-05-17 (audit cleanup pass): post-v30 NO TRADE rows
+        ' carry VerdictContext="ALIGNED". Currently masked by the inner "NO TRADE"
+        ' filter so the row renders as n=0, but the addition removes enum/filter
+        ' divergence if a future change writes ALIGNED on directional verdicts.
+        For Each ctx In {"CONFIRMED", "ALIGNED", "FLOW_UNCONFIRMED", "MOMENTUM_FADING", "STRUCTURALLY_WEAK"}
             Dim ctxRows = rows.Where(Function(r)
                 Return String.Equals(r.VerdictContext, ctx, StringComparison.OrdinalIgnoreCase) AndAlso
                        r.ATR > 0 AndAlso
