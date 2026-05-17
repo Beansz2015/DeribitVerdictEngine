@@ -4,9 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Session Start Protocol
 
-**Read `docs/DeribitIndicatorProject.md`, `docs/architecture.md` and `docs/trader-profile.md first.** Do not read individual `.vb` files at session start — only open them when a specific edit is required. This preserves context budget for actual work.
+1. **Read `docs/DeribitIndicatorProject.md`** in full (~10K tokens after the 2026-05-17 trim; historical content moved to `docs/history-archive.md`). Touch the archive doc only if you need pre-v27 settings rationale or full version history.
+2. **Read `docs/architecture.md`** in full.
+3. **Load the `crypto-trading-context` skill** — it carries the trader profile and writing style. Do not separately read `docs/trader-profile.md`; the skill loads it.
+4. **Do not read individual `.vb` files at session start** — only open them when a specific edit is required.
 
-**PROHIBITED:** Never call `load_skill()` at any point in this project. It is not relevant to this codebase.
+This preserves context budget for actual work.
+
+## Shell / Path Tips (Windows)
+
+- **Do not `cd`** in shell commands — the harness manages the working directory. Use absolute paths in `Read`/`Write`/`Edit`/`Bash` calls.
+- **Bash + Windows paths**: backslashes get consumed as escape characters. Use forward-slash form (`/c/Dev/DeribitVerdictEngine/...`) or quote the path (`"C:\Dev\DeribitVerdictEngine"`).
+- **Build verification**: run `dotnet build` against the absolute solution path (`dotnet build /c/Dev/DeribitVerdictEngine/DeribitVerdictEngine.sln` or use the harness `Bash` working dir).
 
 ---
 
@@ -102,4 +111,6 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 ## settings.json Version
 
-Current: **v12**. Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`. When adding new config keys, increment `version` and add an entry to `change_log`.
+Current: **v28**. Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`, `network`, `performance_display`, `analysis_logging`. When adding new config keys, increment `version` and append an entry to `change_log` (newest first inside the array).
+
+The exact current version is the source of truth — read `settings.json` line 1 (`"version": N`) before assuming. Always bump from whatever is current, not from the number quoted here (this header drifts).
