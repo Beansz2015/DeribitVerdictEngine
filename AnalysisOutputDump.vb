@@ -16,11 +16,15 @@ Public Class AnalysisOutputDump
     ''' </summary>
     Public Shared Sub Append(timestamp As DateTime, renderedText As String,
                               dumpPath As String, enabled As Boolean,
-                              maxRuns As Integer)
+                              maxRuns As Integer,
+                              Optional perfStripLine As String = Nothing)
         If Not enabled Then Return
         Try
             Using sw As New StreamWriter(dumpPath, append:=True)
                 sw.WriteLine("## Run " & timestamp.ToString("yyyy-MM-dd HH:mm:ss") & " " & GetTzSuffix())
+                If Not String.IsNullOrEmpty(perfStripLine) Then
+                    sw.WriteLine(perfStripLine)
+                End If
                 sw.WriteLine(renderedText.TrimEnd())
                 sw.WriteLine()
                 sw.WriteLine("---")

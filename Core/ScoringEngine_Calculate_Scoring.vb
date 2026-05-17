@@ -88,6 +88,12 @@ Partial Public Class ScoringEngine
             Return "STRUCTURALLY_WEAK"
         End If
 
+        ' On NO TRADE the verdict didn't cross threshold — "CONFIRMED" reads as a
+        ' contradiction. ALIGNED = "sub-threshold bias has cross-category support."
+        If v.Verdict IsNot Nothing AndAlso v.Verdict.StartsWith("NO TRADE") Then
+            Return "ALIGNED"
+        End If
+
         Return "CONFIRMED"
     End Function
 
@@ -669,14 +675,15 @@ Partial Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("EMA 9/21/50", emaBull, emaBear,
             String.Format("9:{0:F0} 21:{1:F0} 50:{2:F0} | {3}", r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment)))
 
+        Dim fundDisplayRate As Double = If(Math.Abs(r.FundingRate) < 0.00000001, 0.0, r.FundingRate)
         Dim fundingInfoNote As String = String.Format("{0:F4}% | {1} | MOM:{2} | {3} | {4}",
-                                                      r.FundingRate * 100, r.FundingBias, r.FundingMomentum,
+                                                      fundDisplayRate * 100, r.FundingBias, r.FundingMomentum,
                                                       fundingBaseNote, fundingStep3bNote)
         breakdown.Add(New SignalBreakdownItem("Funding (info)", False, False, fundingInfoNote))
 
         ' OI Delta note includes Pass 2b result appended as oiCvdNote
         breakdown.Add(New SignalBreakdownItem("OI Delta", oiLong OrElse oiLongUpgraded, oiShort OrElse oiShortUpgraded,
-            BuildNote(String.Format("15m:{0:F2}% 60m:{1:F2}% | {2}", r.OIChange15m, r.OIChange60m, r.OISignal),
+            BuildNote(String.Format("15m:{0:F3}% 60m:{1:F3}% | {2}", r.OIChange15m, r.OIChange60m, r.OISignal),
                       oiPartialLong AndAlso Not oiLongUpgraded,
                       oiPartialShort AndAlso Not oiShortUpgraded,
                       oiLongUpgraded, oiShortUpgraded) & oiCvdNote))

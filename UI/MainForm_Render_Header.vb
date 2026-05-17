@@ -373,6 +373,16 @@ Partial Public Class MainForm
         Return If(ok, "[OK]", "[--]")
     End Function
 
+    ' Two-tier R:R precision: "0.0" when ratio is zero (genuine missing target),
+    ' "< 0.1" when ratio rounds to zero at 1dp but is non-zero, else 1dp.
+    Private Shared Function FormatRR(reward As Double, risk As Double) As String
+        If risk <= 0 Then Return "—"
+        Dim ratio As Double = reward / risk
+        If ratio = 0.0 Then Return "1:0.0"
+        If ratio < 0.1 Then Return "1:< 0.1"
+        Return String.Format("1:{0:F1}", ratio)
+    End Function
+
     Private Shared Sub AppendRtf(rtb As RichTextBox, text As String,
                                   colour As Color,
                                   Optional bold As Boolean = False,
@@ -492,12 +502,23 @@ Partial Public Class MainForm
         SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | {2:F1}x stop / {3:F1}x target)",
                                           r.ATR, norms.ATRScaleFactor, stopMult, targetMult))
 
+        ' Sub-tick cap adjustments are visual noise; suppress amber-bold CAPPED
+        ' annotation when adjustment is below max(0.5, ATR × 0.02). TargetCapReason
+        ' still populated on VerdictResult for CSV logging.
+        Dim capNoiseFloor As Double = Math.Max(0.5, r.ATR * 0.02)
+
         AppendRtf(rtb, "  Long:   ", C_LABEL)
         If v.AdjustedLongTarget > 0 Then
-            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
-                                          longStop, r.CurrentPrice, longTarget), C_DIM)
-            AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
-                                          v.AdjustedLongTarget, v.TargetCapReasonLong) & Environment.NewLine, C_WARN, bold:=True)
+            Dim longCapAdjustment As Double = Math.Abs(longTarget - v.AdjustedLongTarget)
+            If longCapAdjustment < capNoiseFloor Then
+                AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
+                                              longStop, r.CurrentPrice, v.AdjustedLongTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
+            Else
+                AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
+                                              longStop, r.CurrentPrice, longTarget), C_DIM)
+                AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
+                                              v.AdjustedLongTarget, v.TargetCapReasonLong) & Environment.NewLine, C_WARN, bold:=True)
+            End If
         Else
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
                                           longStop, r.CurrentPrice, longTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_GOOD)
@@ -507,24 +528,30 @@ Partial Public Class MainForm
         If r.SwingTargetLong > 0 AndAlso r.SwingStopLong > 0 Then
             Dim swingRisk   As Double = r.CurrentPrice - r.SwingStopLong
             Dim swingReward As Double = r.SwingTargetLong - r.CurrentPrice
-            Dim swingRR As String = If(swingRisk > 0, String.Format("1:{0:F1}", swingReward / swingRisk), "—")
+            Dim swingRR As String = FormatRR(swingReward, swingRisk)
             AppendRtf(rtb, "  Long structural:  ", C_LABEL)
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
                                           r.SwingStopLong, r.CurrentPrice, r.SwingTargetLong, swingRR, swingRisk, swingReward) & Environment.NewLine, C_HIT)
         ElseIf r.SwingTargetLong > 0 Then
             AppendRtf(rtb, "  Long structural:  ", C_LABEL)
-            AppendRtf(rtb, String.Format("Target {0,9:F1}  (no swing low below entry within lookback)", r.SwingTargetLong) & Environment.NewLine, C_DIM)
+            AppendRtf(rtb, String.Format("Target {0,9:F1}  (stop unset: no swing low below entry within lookback)", r.SwingTargetLong) & Environment.NewLine, C_DIM)
         ElseIf r.SwingStopLong > 0 Then
             AppendRtf(rtb, "  Long structural:  ", C_LABEL)
-            AppendRtf(rtb, String.Format("Stop {0,9:F1}  (no swing high above entry within lookback)", r.SwingStopLong) & Environment.NewLine, C_DIM)
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  (target unset: no swing high above entry within lookback)", r.SwingStopLong) & Environment.NewLine, C_DIM)
         End If
 
         AppendRtf(rtb, "  Short:  ", C_LABEL)
         If v.AdjustedShortTarget > 0 Then
-            AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
-                                          shortStop, r.CurrentPrice, shortTarget), C_DIM)
-            AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
-                                          v.AdjustedShortTarget, v.TargetCapReasonShort) & Environment.NewLine, C_WARN, bold:=True)
+            Dim shortCapAdjustment As Double = Math.Abs(shortTarget - v.AdjustedShortTarget)
+            If shortCapAdjustment < capNoiseFloor Then
+                AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
+                                              shortStop, r.CurrentPrice, v.AdjustedShortTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_BAD)
+            Else
+                AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1} ",
+                                              shortStop, r.CurrentPrice, shortTarget), C_DIM)
+                AppendRtf(rtb, String.Format("--> {0:F1}  [{1}]",
+                                              v.AdjustedShortTarget, v.TargetCapReasonShort) & Environment.NewLine, C_WARN, bold:=True)
+            End If
         Else
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
                                           shortStop, r.CurrentPrice, shortTarget, rrRatio, atrStop, atrTarget) & Environment.NewLine, C_BAD)
@@ -534,16 +561,16 @@ Partial Public Class MainForm
         If r.SwingTargetShort > 0 AndAlso r.SwingStopShort > 0 Then
             Dim swingRisk   As Double = r.SwingStopShort - r.CurrentPrice
             Dim swingReward As Double = r.CurrentPrice - r.SwingTargetShort
-            Dim swingRR As String = If(swingRisk > 0, String.Format("1:{0:F1}", swingReward / swingRisk), "—")
+            Dim swingRR As String = FormatRR(swingReward, swingRisk)
             AppendRtf(rtb, "  Short structural: ", C_LABEL)
             AppendRtf(rtb, String.Format("Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
                                           r.SwingStopShort, r.CurrentPrice, r.SwingTargetShort, swingRR, swingRisk, swingReward) & Environment.NewLine, C_HIT)
         ElseIf r.SwingTargetShort > 0 Then
             AppendRtf(rtb, "  Short structural: ", C_LABEL)
-            AppendRtf(rtb, String.Format("Target {0,9:F1}  (no swing high above entry within lookback)", r.SwingTargetShort) & Environment.NewLine, C_DIM)
+            AppendRtf(rtb, String.Format("Target {0,9:F1}  (stop unset: no swing high above entry within lookback)", r.SwingTargetShort) & Environment.NewLine, C_DIM)
         ElseIf r.SwingStopShort > 0 Then
             AppendRtf(rtb, "  Short structural: ", C_LABEL)
-            AppendRtf(rtb, String.Format("Stop {0,9:F1}  (no swing low below entry within lookback)", r.SwingStopShort) & Environment.NewLine, C_DIM)
+            AppendRtf(rtb, String.Format("Stop {0,9:F1}  (target unset: no swing low below entry within lookback)", r.SwingStopShort) & Environment.NewLine, C_DIM)
         End If
 
         If v.KellyPWin > 0 Then
@@ -573,11 +600,11 @@ Partial Public Class MainForm
             Dim contractStr As String
             If isNoTradeBias Then
                 contractStr = If(v.KellyContracts >= 1,
-                                 String.Format("{0} contracts  (not a trade signal)", v.KellyContracts.ToString()),
+                                 String.Format("{0} {1}  (not a trade signal)", v.KellyContracts.ToString(), If(v.KellyContracts = 1, "contract", "contracts")),
                                  "< 1 contract  (bias only; not a trade signal)")
             Else
                 contractStr = If(v.KellyContracts >= 1,
-                                 v.KellyContracts.ToString() & " contracts",
+                                 v.KellyContracts.ToString() & " " & If(v.KellyContracts = 1, "contract", "contracts"),
                                  "< 1 contract  (stop too wide for min size)")
             End If
             AppendRtf(rtb, contractStr & Environment.NewLine, contractColour, bold:=True)

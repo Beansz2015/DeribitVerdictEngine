@@ -268,7 +268,8 @@ Partial Public Class MainForm
         AppendRtf(rtb, "  Rate: ", C_LABEL)
         Dim fundColour As Color = If(r.FundingBias.Contains("HEAVILY"), C_BAD,
                                      If(r.FundingBias = "NEUTRAL", C_VALUE, C_WARN))
-        AppendRtf(rtb, String.Format("{0:F4}%  |  {1}", r.FundingRate * 100, r.FundingBias) & Environment.NewLine, fundColour)
+        Dim fundDisplayRate As Double = If(Math.Abs(r.FundingRate) < 0.00000001, 0.0, r.FundingRate)
+        AppendRtf(rtb, String.Format("{0:F4}%  |  {1}", fundDisplayRate * 100, r.FundingBias) & Environment.NewLine, fundColour)
         AppendRtf(rtb, "  Momentum: ", C_LABEL)
         Dim fundMomColour As Color = If(r.FundingMomentum = "RISING", C_WARN,
                                         If(r.FundingMomentum = "FALLING", C_GOOD, C_VALUE))
@@ -316,12 +317,22 @@ Partial Public Class MainForm
         lblVerdict.Text = v.Verdict & "  [" & v.Confidence & "]"
 
         ' -- Output dump -------------------------------------------------------
+        Dim modeTag As String = If(_metricMode = "target", "[T]", "[B]")
+        Dim perfStripLine As String = String.Format("PERF STRIP {0} {1} | {2} | {3} | {4} | {5} | {6}",
+                                                    modeTag,
+                                                    lblPerfWeek.Text,
+                                                    lblPerf3d.Text,
+                                                    lblPerfDay.Text,
+                                                    lblPerfAsia.Text,
+                                                    lblPerfLondon.Text,
+                                                    lblPerfNy.Text)
         AnalysisOutputDump.Append(
             timestamp:=v.Timestamp,
             renderedText:=txtOutput.Text,
             dumpPath:=GetDumpPath(),
             enabled:=cfg.AnalysisLogging.OutputDumpEnabled,
-            maxRuns:=cfg.AnalysisLogging.OutputDumpMaxRuns)
+            maxRuns:=cfg.AnalysisLogging.OutputDumpMaxRuns,
+            perfStripLine:=perfStripLine)
     End Sub
 
 End Class
