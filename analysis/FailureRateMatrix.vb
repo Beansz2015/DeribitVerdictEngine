@@ -167,10 +167,22 @@ Public Class FailureRateMatrix
         Next
 
         ' Build result list and mark recommended cell per tier.
+        ' Two flags per tier:
+        '   IsRecommended    — lowest CI width (most-precise estimate; auto-tweaker view)
+        '                      Picks cells with extreme p more often because Wilson CI is narrower
+        '                      at p near 0/1. Good for "how trustworthy is this number" but can pick
+        '                      the WORST-performing cell when failure rates are high.
+        '   IsMostProfitable — lowest failure rate (trader view)
+        '                      Picks the cell with the best actual trade outcome. The cell a human
+        '                      should look at when deciding whether the verdict is worth taking.
+        ' Both require n >= MinSamplesPerCell. They CAN point at the same cell (common when failure
+        ' rate is near the extremes); the markdown writer renders ★◆ for that case.
         Dim results As New List(Of FailureCellResult)()
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
             Dim bestCiWidth As Double  = Double.MaxValue
-            Dim bestIdx     As Integer = -1
+            Dim bestCiIdx   As Integer = -1
+            Dim bestFailRate As Double  = Double.MaxValue
+            Dim bestFailIdx  As Integer = -1
             Dim tierResults As New List(Of FailureCellResult)()
             For Each w In AnalysisConstants.HoldWindowsMinutes
                 For Each thr In ThresholdsFor(tier)
@@ -192,13 +204,20 @@ Public Class FailureRateMatrix
                         cell.CiWidth = cell.CiHigh - cell.CiLow
                     End If
                     tierResults.Add(cell)
-                    If c.N >= AnalysisConstants.MinSamplesPerCell AndAlso cell.CiWidth < bestCiWidth Then
-                        bestCiWidth = cell.CiWidth
-                        bestIdx = tierResults.Count - 1
+                    If c.N >= AnalysisConstants.MinSamplesPerCell Then
+                        If cell.CiWidth < bestCiWidth Then
+                            bestCiWidth = cell.CiWidth
+                            bestCiIdx = tierResults.Count - 1
+                        End If
+                        If cell.FailureRate < bestFailRate Then
+                            bestFailRate = cell.FailureRate
+                            bestFailIdx = tierResults.Count - 1
+                        End If
                     End If
                 Next
             Next
-            If bestIdx >= 0 Then tierResults(bestIdx).IsRecommended = True
+            If bestCiIdx >= 0 Then tierResults(bestCiIdx).IsRecommended = True
+            If bestFailIdx >= 0 Then tierResults(bestFailIdx).IsMostProfitable = True
             results.AddRange(tierResults)
         Next
 

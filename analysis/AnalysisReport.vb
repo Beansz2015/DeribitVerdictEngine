@@ -65,7 +65,8 @@ Public Class FailureCellResult
     Public Property CiLow         As Double   ' 95% Wilson CI lower bound
     Public Property CiHigh        As Double   ' 95% Wilson CI upper bound
     Public Property CiWidth       As Double   ' CiHigh - CiLow
-    Public Property IsRecommended As Boolean  ' lowest CI width with n >= MinSamplesPerCell
+    Public Property IsRecommended    As Boolean  ' lowest CI width with n >= MinSamplesPerCell
+    Public Property IsMostProfitable As Boolean  ' lowest failure rate with n >= MinSamplesPerCell (trader view)
     ' v2 barrier-hit decomposition (how failures occurred)
     Public Property Successes         As Integer  ' favourable barrier hit first
     Public Property AdverseHitFails   As Integer  ' adverse barrier hit first

@@ -74,16 +74,26 @@ Public Class MarkdownReportWriter
             sb.AppendLine(String.Join("  |  ", parts))
         End If
         sb.AppendLine()
-        ' Headline failure rates at recommended cells.
+        ' Headline failure rates per tier. Dual recommendation:
+        '   ★ most-precise estimate (lowest CI width — auto-tweaker view)
+        '   ◆ lowest failure rate (trader view — best actual trade outcome)
+        ' Same cell can satisfy both; in that case rendered as ★◆.
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
-            Dim best = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsRecommended).FirstOrDefault()
-            If best IsNot Nothing AndAlso best.SampleSize >= AnalysisConstants.MinSamplesPerCell Then
-                sb.AppendLine(String.Format("- **{0}** best cell: {1}m window / {2:F1}× ATR  →  {3:P1} failure (n={4})",
-                                            tier, best.WindowMin, best.AtrThreshold,
-                                            best.FailureRate, best.SampleSize))
-            Else
+            Dim precise = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsRecommended).FirstOrDefault()
+            Dim profit  = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsMostProfitable).FirstOrDefault()
+            If precise Is Nothing OrElse precise.SampleSize < AnalysisConstants.MinSamplesPerCell Then
                 sb.AppendLine(String.Format("- **{0}**: insufficient sample (< {1} rows in any cell)",
                                             tier, AnalysisConstants.MinSamplesPerCell))
+            ElseIf profit IsNot Nothing AndAlso
+                   (precise.WindowMin <> profit.WindowMin OrElse precise.AtrThreshold <> profit.AtrThreshold) Then
+                sb.AppendLine(String.Format("- **{0}**: ★ {1}m / {2:F1}× ATR = {3:P0} (n={4})  |  ◆ {5}m / {6:F1}× ATR = {7:P0} (n={8})",
+                                            tier,
+                                            precise.WindowMin, precise.AtrThreshold, precise.FailureRate, precise.SampleSize,
+                                            profit.WindowMin,  profit.AtrThreshold,  profit.FailureRate,  profit.SampleSize))
+            Else
+                sb.AppendLine(String.Format("- **{0}**: ★◆ {1}m / {2:F1}× ATR = {3:P1} failure (n={4})",
+                                            tier, precise.WindowMin, precise.AtrThreshold,
+                                            precise.FailureRate, precise.SampleSize))
             End If
         Next
         sb.AppendLine()
@@ -118,7 +128,16 @@ Public Class MarkdownReportWriter
                     If cell Is Nothing OrElse cell.SampleSize = 0 Then
                         row.Append(" n/a        |")
                     Else
-                        Dim tag As String = If(cell.IsRecommended, "★ ", "  ")
+                        Dim tag As String
+                        If cell.IsRecommended AndAlso cell.IsMostProfitable Then
+                            tag = "★◆"
+                        ElseIf cell.IsRecommended Then
+                            tag = "★ "
+                        ElseIf cell.IsMostProfitable Then
+                            tag = "◆ "
+                        Else
+                            tag = "  "
+                        End If
                         row.Append(String.Format(" {4}{0:P0} n={1} [{2:P0}-{3:P0}] |",
                                                  cell.FailureRate, cell.SampleSize,
                                                  cell.CiLow, cell.CiHigh, tag))
@@ -132,17 +151,29 @@ Public Class MarkdownReportWriter
         ' ------------------------------------------------------------------ Section 3: Recommended cells
         sb.AppendLine("## 3. Recommended (window, threshold) per tier")
         sb.AppendLine()
-        sb.AppendLine("★ = lowest CI width with n ≥ " & AnalysisConstants.MinSamplesPerCell)
+        sb.AppendLine("Two views per tier, both require n ≥ " & AnalysisConstants.MinSamplesPerCell & ":")
+        sb.AppendLine("- ★ **Most-precise estimate** — lowest CI width. Used by the auto-tweaker to decide if the current settings are failing. Wilson CI narrows at extreme p, so this can pick the WORST cell when failure rates are high — that's working as designed.")
+        sb.AppendLine("- ◆ **Lowest failure rate** — best actual trade outcome. The cell to look at when deciding whether the verdict is worth taking discretionarily.")
         sb.AppendLine()
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
-            Dim best = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsRecommended).FirstOrDefault()
-            If best IsNot Nothing Then
-                sb.AppendLine(String.Format("- **{0}**: {1}m window, {2:F1}× ATR  →  {3:P1} failure  CI [{4:P0}–{5:P0}]  n={6}",
-                                            tier, best.WindowMin, best.AtrThreshold,
-                                            best.FailureRate, best.CiLow, best.CiHigh, best.SampleSize))
-            Else
+            Dim precise = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsRecommended).FirstOrDefault()
+            Dim profit  = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsMostProfitable).FirstOrDefault()
+            If precise Is Nothing Then
                 sb.AppendLine(String.Format("- **{0}**: no stable cell yet (need ≥ {1} rows per cell)",
                                             tier, AnalysisConstants.MinSamplesPerCell))
+            ElseIf profit IsNot Nothing AndAlso
+                   (precise.WindowMin <> profit.WindowMin OrElse precise.AtrThreshold <> profit.AtrThreshold) Then
+                sb.AppendLine(String.Format("- **{0}**:", tier))
+                sb.AppendLine(String.Format("    - ★ {0}m, {1:F1}× ATR  →  {2:P1} failure  CI [{3:P0}–{4:P0}]  n={5}",
+                                            precise.WindowMin, precise.AtrThreshold,
+                                            precise.FailureRate, precise.CiLow, precise.CiHigh, precise.SampleSize))
+                sb.AppendLine(String.Format("    - ◆ {0}m, {1:F1}× ATR  →  {2:P1} failure  CI [{3:P0}–{4:P0}]  n={5}",
+                                            profit.WindowMin, profit.AtrThreshold,
+                                            profit.FailureRate, profit.CiLow, profit.CiHigh, profit.SampleSize))
+            Else
+                sb.AppendLine(String.Format("- **{0}** (both views agree): ★◆ {1}m, {2:F1}× ATR  →  {3:P1} failure  CI [{4:P0}–{5:P0}]  n={6}",
+                                            tier, precise.WindowMin, precise.AtrThreshold,
+                                            precise.FailureRate, precise.CiLow, precise.CiHigh, precise.SampleSize))
             End If
         Next
         sb.AppendLine()
@@ -283,12 +314,17 @@ Public Class MarkdownReportWriter
         sb.AppendLine("## 8. Hold Window Selection Stats")
         sb.AppendLine()
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
-            Dim best = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsRecommended).FirstOrDefault()
-            If best IsNot Nothing Then
-                sb.AppendLine(String.Format("- **{0}**: recommended hold window = **{1}m**  (threshold {2:F1}× ATR)",
-                                            tier, best.WindowMin, best.AtrThreshold))
-            Else
+            Dim precise = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsRecommended).FirstOrDefault()
+            Dim profit  = r.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso c.IsMostProfitable).FirstOrDefault()
+            If precise Is Nothing Then
                 sb.AppendLine(String.Format("- **{0}**: no recommendation yet", tier))
+            ElseIf profit IsNot Nothing AndAlso precise.WindowMin <> profit.WindowMin Then
+                sb.AppendLine(String.Format("- **{0}**: ★ hold = **{1}m** ({2:F1}× ATR)  |  ◆ hold = **{3}m** ({4:F1}× ATR)",
+                                            tier, precise.WindowMin, precise.AtrThreshold,
+                                            profit.WindowMin, profit.AtrThreshold))
+            Else
+                sb.AppendLine(String.Format("- **{0}**: ★◆ hold = **{1}m** (threshold {2:F1}× ATR)",
+                                            tier, precise.WindowMin, precise.AtrThreshold))
             End If
         Next
         sb.AppendLine()
@@ -314,7 +350,7 @@ Public Class MarkdownReportWriter
     Private Shared Sub BuildSummaryCsv(cells As List(Of FailureCellResult), path As String)
         Try
             Using sw As New StreamWriter(path, append:=False)
-                sw.WriteLine("VerdictTier,WindowMin,AtrThreshold,FailureRate,SampleSize,CiLow,CiHigh,IsRecommended")
+                sw.WriteLine("VerdictTier,WindowMin,AtrThreshold,FailureRate,SampleSize,CiLow,CiHigh,IsRecommended,IsMostProfitable")
                 For Each c In cells
                     sw.WriteLine(String.Join(",",
                         c.VerdictTier,
@@ -324,7 +360,8 @@ Public Class MarkdownReportWriter
                         c.SampleSize.ToString(),
                         c.CiLow.ToString("F6"),
                         c.CiHigh.ToString("F6"),
-                        c.IsRecommended.ToString()))
+                        c.IsRecommended.ToString(),
+                        c.IsMostProfitable.ToString()))
                 Next
             End Using
         Catch
