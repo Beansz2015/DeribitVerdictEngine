@@ -476,6 +476,32 @@ Partial Public Class MainForm
                                   If(v.Confidence = "MEDIUM", C_WARN, C_BAD))
         AppendRtf(rtb, v.Confidence & Environment.NewLine, cColour, bold:=True)
 
+        ' Regime-anchor warning: surface "verdict fighting the dominant short-term trend"
+        ' caveat. Display-only — zero scoring impact. Fires only on STRONG verdicts when
+        ' price is significantly displaced from the 5m EMA(200) anchor in the opposite
+        ' direction. Threshold 3.0× ATR is a starting heuristic; tune to 2.0× (more
+        ' warnings) or 5.0× (only extreme cases) if the default proves off in live use.
+        '
+        ' Honest labelling: 5m EMA(200) is ~3.3 hours of data — INTERMEDIATE trend, not
+        ' macro. For true macro context (daily timeframe), separate spec needed to add
+        ' Deribit daily candle fetch + indicator.
+        Const REGIME_ANCHOR_ATR_THRESHOLD As Double = 3.0
+        If r.ATR > 0 AndAlso r.EMA200_5m > 0 Then
+            Dim atrUnits As Double = (r.CurrentPrice - r.EMA200_5m) / r.ATR
+            Dim warning  As String = ""
+            If v.Verdict.StartsWith("STRONG LONG") AndAlso atrUnits < -REGIME_ANCHOR_ATR_THRESHOLD Then
+                warning = String.Format("price {0:F1}× ATR below 5m EMA(200) — STRONG LONG fighting intermediate bear",
+                                        Math.Abs(atrUnits))
+            ElseIf v.Verdict.StartsWith("STRONG SHORT") AndAlso atrUnits > REGIME_ANCHOR_ATR_THRESHOLD Then
+                warning = String.Format("price {0:F1}× ATR above 5m EMA(200) — STRONG SHORT fighting intermediate bull",
+                                        atrUnits)
+            End If
+            If warning <> "" Then
+                AppendRtf(rtb, "  REGIME ANCHOR:  ", C_LABEL)
+                AppendRtf(rtb, ChrW(&H26A0) & " " & warning & Environment.NewLine, C_WARN, bold:=True)
+            End If
+        End If
+
         Dim maxScore As Integer = v.MaxScore
         AppendRtf(rtb, "  SCORE:      ", C_LABEL)
         If v.RegimePenalty > 0 Then
