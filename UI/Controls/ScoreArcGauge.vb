@@ -39,7 +39,8 @@ Public Class ScoreArcGauge
         SetStyle(ControlStyles.OptimizedDoubleBuffer Or
                  ControlStyles.AllPaintingInWmPaint Or
                  ControlStyles.UserPaint Or
-                 ControlStyles.ResizeRedraw, True)
+                 ControlStyles.ResizeRedraw Or
+                 ControlStyles.SupportsTransparentBackColor, True)
         MyBase.BackColor = Color.Transparent
 
         _animTimer = New Timer() With {.Interval = TICK_MS}
