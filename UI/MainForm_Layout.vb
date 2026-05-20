@@ -143,7 +143,7 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.47 [P2]"
+        Me.Text = "Deribit Verdict Engine v0.47 [P3]"
 
         ' P1: switch txtOutput to bundled Geist Mono (10pt preserves layout).
         txtOutput.Font = Theme.FontMono(10.0F)
