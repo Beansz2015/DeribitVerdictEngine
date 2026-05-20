@@ -282,7 +282,7 @@ Partial Public Class MainForm
         ' -- SIGNAL BREAKDOWN -------------------------------------------------
         AppendRtf(rtb, Environment.NewLine, Theme.BORDER_CARD)
         Divider(rtb)
-        AppendRtf(rtb, "  SIGNAL BREAKDOWN" & Environment.NewLine, Theme.ACC_HEADER, bold:=True)
+        AppendRtf(rtb, "  SIGNAL BREAKDOWN" & Environment.NewLine, Theme.FG_SECONDARY, bold:=True)
         Divider(rtb)
         AppendRtf(rtb, String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
                                       "Signal", "Long", "Short", "Note") & Environment.NewLine, Theme.FG_TERTIARY)

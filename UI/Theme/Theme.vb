@@ -1,9 +1,14 @@
 ' UI/Theme/Theme.vb
-' UI reskin P1 — palette tokens + bundled-font factory.
+' UI reskin P2 — palette tokens (design system hex values) +
+' bundled-font factory.
 '
-' All callers reference Theme.X. P1 holds the same hex values as the old C_*
-' palette so visual output stays pixel-identical; P2 swaps the hex values
-' to the design palette without touching call sites.
+' Hex values updated to the design palette per docs/ui-reskin-proposal.md §3.
+' Token names are stable from P1 — call sites in MainForm_Render_*.vb and
+' MainForm_Layout.vb continue to reference Theme.X unchanged.
+'
+' P1 carried a transitional ACC_HEADER token (legacy yellow) so the migration
+' could be pixel-identical. P2 retires it: section headers move to
+' FG_SECONDARY, CAPPED labels move to ACC_WARN.
 
 Imports System.Drawing
 Imports System.Drawing.Text
@@ -16,39 +21,35 @@ Public NotInheritable Class Theme
     Private Sub New()
     End Sub
 
-    ' ----- Palette tokens (P1 hex values mirror the previous C_* palette) -----
+    ' ----- Palette tokens (P2 hex values from the design system; see
+    '       docs/ui-reskin-proposal.md §3 for the rationale) -----
 
-    Public Shared ReadOnly BG_BASE            As Color = Color.FromArgb(20, 20, 20)
-    Public Shared ReadOnly BG_CARD            As Color = Color.FromArgb(20, 20, 20)
-    Public Shared ReadOnly BG_CARD_RAISED     As Color = Color.FromArgb(30, 30, 30)
-    Public Shared ReadOnly BORDER_CARD        As Color = Color.FromArgb(80, 80, 80)     ' was C_DIVIDER
-    Public Shared ReadOnly BORDER_INNER       As Color = Color.FromArgb(60, 60, 60)
+    Public Shared ReadOnly BG_BASE            As Color = Color.FromArgb(13, 17, 23)
+    Public Shared ReadOnly BG_CARD            As Color = Color.FromArgb(22, 22, 27)
+    Public Shared ReadOnly BG_CARD_RAISED     As Color = Color.FromArgb(28, 28, 34)
+    Public Shared ReadOnly BORDER_CARD        As Color = Color.FromArgb(43, 43, 51)
+    Public Shared ReadOnly BORDER_INNER       As Color = Color.FromArgb(31, 31, 37)
     Public Shared ReadOnly BORDER_DASHED_INFO As Color = Color.FromArgb(45, 93, 107)
 
-    Public Shared ReadOnly FG_PRIMARY    As Color = Color.FromArgb(200, 200, 200)       ' was C_VALUE
-    Public Shared ReadOnly FG_SECONDARY  As Color = Color.FromArgb(180, 180, 180)
-    Public Shared ReadOnly FG_TERTIARY   As Color = Color.FromArgb(160, 160, 160)       ' was C_LABEL
-    Public Shared ReadOnly FG_QUATERNARY As Color = Color.FromArgb(100, 100, 100)       ' was C_DIM
-    Public Shared ReadOnly FG_DIM        As Color = Color.FromArgb(80, 80, 80)
-    Public Shared ReadOnly FG_INK        As Color = Color.FromArgb(20, 20, 20)
+    Public Shared ReadOnly FG_PRIMARY    As Color = Color.FromArgb(234, 234, 238)
+    Public Shared ReadOnly FG_SECONDARY  As Color = Color.FromArgb(186, 186, 191)
+    Public Shared ReadOnly FG_TERTIARY   As Color = Color.FromArgb(139, 139, 146)
+    Public Shared ReadOnly FG_QUATERNARY As Color = Color.FromArgb(94, 94, 101)
+    Public Shared ReadOnly FG_DIM        As Color = Color.FromArgb(63, 63, 71)
+    Public Shared ReadOnly FG_INK        As Color = Color.FromArgb(13, 17, 23)
 
-    Public Shared ReadOnly ACC_STRONG_LONG  As Color = Color.FromArgb(80, 220, 120)     ' was C_GOOD
-    Public Shared ReadOnly ACC_LONG         As Color = Color.FromArgb(80, 220, 120)
-    Public Shared ReadOnly ACC_WEAK_LONG    As Color = Color.FromArgb(80, 220, 120)
-    Public Shared ReadOnly ACC_NO_TRADE     As Color = Color.FromArgb(160, 160, 160)
-    Public Shared ReadOnly ACC_WEAK_SHORT   As Color = Color.FromArgb(255, 80, 80)
-    Public Shared ReadOnly ACC_SHORT        As Color = Color.FromArgb(255, 80, 80)      ' was C_BAD
-    Public Shared ReadOnly ACC_STRONG_SHORT As Color = Color.FromArgb(255, 80, 80)
-    Public Shared ReadOnly ACC_WARN         As Color = Color.FromArgb(255, 180, 40)     ' was C_WARN
+    Public Shared ReadOnly ACC_STRONG_LONG  As Color = Color.FromArgb(74, 222, 128)
+    Public Shared ReadOnly ACC_LONG         As Color = Color.FromArgb(134, 239, 172)
+    Public Shared ReadOnly ACC_WEAK_LONG    As Color = Color.FromArgb(187, 247, 208)
+    Public Shared ReadOnly ACC_NO_TRADE     As Color = Color.FromArgb(148, 163, 184)
+    Public Shared ReadOnly ACC_WEAK_SHORT   As Color = Color.FromArgb(252, 165, 165)
+    Public Shared ReadOnly ACC_SHORT        As Color = Color.FromArgb(248, 113, 113)
+    Public Shared ReadOnly ACC_STRONG_SHORT As Color = Color.FromArgb(239, 68, 68)
+    Public Shared ReadOnly ACC_WARN         As Color = Color.FromArgb(251, 191, 36)
     Public Shared ReadOnly ACC_CTA          As Color = Color.FromArgb(245, 158, 11)
     Public Shared ReadOnly ACC_AMBER_DEEP   As Color = Color.FromArgb(217, 119, 6)
-    Public Shared ReadOnly ACC_INFO         As Color = Color.FromArgb(100, 200, 255)    ' was C_HIT
+    Public Shared ReadOnly ACC_INFO         As Color = Color.FromArgb(103, 232, 249)
     Public Shared ReadOnly ACC_NEUTRAL      As Color = Color.FromArgb(100, 116, 139)
-
-    ' Section / capped-label yellow. Kept distinct from ACC_WARN so P1 stays
-    ' pixel-identical. P2 will likely split this between FG_SECONDARY (section
-    ' headers) and ACC_WARN (CAPPED labels) — see ui-reskin-proposal §3.4.
-    Public Shared ReadOnly ACC_HEADER As Color = Color.FromArgb(255, 220, 80)           ' was C_HEADER
 
     ' ----- Bundled-font loading -----
 

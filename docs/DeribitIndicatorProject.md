@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-05-19 | Current version: settings.json v30 — display polish pass on top of v29 (auto-tweaker fixed window), v28 (target-hit metric toggle), v27 (OHLC gap-backfill).**
+**Last updated: 2026-05-20 | Current version: settings.json v30 — display polish pass on top of v29 (auto-tweaker fixed window), v28 (target-hit metric toggle), v27 (OHLC gap-backfill).**
 
 Operational reference for any AI conversation continuing this project. Historical content — pre-v27 settings change rationale, full version history back to v0.33, completed spec bundles, resolved parked observations — lives in `docs/history-archive.md`.
 
@@ -17,6 +17,7 @@ Windows Forms (VB.NET / .NET 8) desktop app. Polls Deribit REST for BTC-PERPETUA
 **Current state (v30, 2026-05-17):** scoring pipeline stable, calibration complete on six initial spec bundles, four major v27-v30 features shipped in May 2026, fresh data accumulation under new metrics in progress. The engine is approaching its accuracy ceiling for a single-instrument 1m scalping system using REST polling — see §13 *Accuracy Ceiling Note* and §16.4 for the WebSocket migration discussion.
 
 Recent major shipments (full detail in §15):
+- **UI reskin P2** (2026-05-20): Visual repaint — palette hex values swapped to design system (`#0D1117` base, 7-tier verdict colour ramp, amber CTA on ANALYZE). `ACC_HEADER` token retired; section headers now neutral grey, CAPPED labels stay amber. Layout unchanged.
 - **UI reskin P1** (2026-05-19): Theme infrastructure — Geist Mono bundled as embedded resource, palette token layer (`UI/Theme/Theme.vb`) replacing the inline `C_*` constants. Zero visual change. Prepares for P2 visual repaint.
 - **v30** (2026-05-17): Display polish pass — output dump captures perf-strip, R:R rendering, CAPPED suppression, NO TRADE relabelled CONFIRMED→ALIGNED, 5 other display fixes
 - **v29** (2026-05-17): Auto-tweaker fixed-window mode + MinTier statistical-floor rework

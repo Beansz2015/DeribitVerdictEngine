@@ -414,7 +414,7 @@ Partial Public Class MainForm
     End Sub
 
     Private Sub SectionHeader(rtb As RichTextBox, text As String)
-        AppendRtf(rtb, Environment.NewLine & text & Environment.NewLine, Theme.ACC_HEADER, bold:=True)
+        AppendRtf(rtb, Environment.NewLine & text & Environment.NewLine, Theme.FG_SECONDARY, bold:=True)
     End Sub
 
     Private Sub Divider(rtb As RichTextBox)
@@ -609,10 +609,10 @@ Partial Public Class MainForm
             AppendRtf(rtb, Environment.NewLine, Theme.BORDER_CARD)
             If isNoTradeBias Then
                 AppendRtf(rtb, String.Format("KELLY SIZING  [BIAS ONLY — NO TRADE]{0}" & Environment.NewLine,
-                                              capTag), Theme.ACC_HEADER, bold:=True)
+                                              capTag), Theme.FG_SECONDARY, bold:=True)
             Else
                 AppendRtf(rtb, String.Format("KELLY SIZING{0}" & Environment.NewLine,
-                                              capTag), Theme.ACC_HEADER, bold:=True)
+                                              capTag), Theme.FG_SECONDARY, bold:=True)
             End If
             AppendRtf(rtb, "  Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets." & Environment.NewLine, Theme.FG_QUATERNARY)
             AppendRtf(rtb, "  Treat as directional bias indicator only." & Environment.NewLine, Theme.FG_QUATERNARY)

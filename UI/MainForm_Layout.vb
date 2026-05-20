@@ -143,11 +143,9 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.47 [P1]"
+        Me.Text = "Deribit Verdict Engine v0.47 [P2]"
 
-        ' P1 marker: switch txtOutput to Geist Mono so the bundled font is
-        ' visibly in use. Confirms P1 build is the one running. Preserves
-        ' the existing 10pt size and monospace metric, so layout is unchanged.
+        ' P1: switch txtOutput to bundled Geist Mono (10pt preserves layout).
         txtOutput.Font = Theme.FontMono(10.0F)
 
         ' Analysis report link — must be created before the first ResizeControls() call
@@ -226,6 +224,12 @@ Partial Public Class MainForm
             AddHandler lbl.MouseDown, AddressOf PerfLabel_MouseDown
         Next
 
+        ' P2: paint over Designer-set colours/fonts with the design-system palette.
+        ' Called here (not immediately after InitializeComponent) because the four
+        ' code-created LinkLabels above must exist before ApplyDesignerOverrides
+        ' can theme them.
+        ApplyDesignerOverrides()
+
         SetOutputMargins(6, 6)
         AddHandler Me.Resize, Sub(s As Object, ev As EventArgs) ResizeControls()
         AddHandler Me.HandleCreated, AddressOf OnFormHandleCreated
@@ -279,6 +283,71 @@ Partial Public Class MainForm
                 End If
             End Function)
         End If
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' P2: ApplyDesignerOverrides — paints over Designer-set colours and fonts
+    ' with the design-system palette. Called once from MainForm.New() after
+    ' all code-created controls (link labels, perf labels) exist. The Designer
+    ' itself is not edited — every theme-relevant property gets re-applied
+    ' programmatically here so the .Designer.vb file stays auto-generated.
+    ' -----------------------------------------------------------------------
+    Private Sub ApplyDesignerOverrides()
+        ' --- Form & main output ---
+        Me.BackColor         = Theme.BG_BASE
+        txtOutput.BackColor  = Theme.BG_BASE
+        txtOutput.ForeColor  = Theme.FG_PRIMARY
+
+        ' --- Row 1: position selector + analyze + verdict ---
+        lblPositionTitle.ForeColor = Theme.FG_TERTIARY
+        rbNone.ForeColor  = Theme.FG_PRIMARY
+        rbLong.ForeColor  = Theme.ACC_STRONG_LONG
+        rbShort.ForeColor = Theme.ACC_SHORT
+
+        btnAnalyze.BackColor = Theme.ACC_CTA
+        btnAnalyze.ForeColor = Theme.FG_INK
+        btnAnalyze.Font      = Theme.FontMono(11.0F, FontStyle.Bold)
+        btnAnalyze.FlatAppearance.BorderColor = Theme.ACC_CTA
+
+        lblVerdict.BackColor = Theme.BG_CARD
+        lblVerdict.ForeColor = Theme.FG_PRIMARY   ' render code overrides per-verdict
+        lblVerdict.Font      = Theme.FontMono(16.0F, FontStyle.Bold)
+
+        ' --- Row 2: auto-run controls ---
+        lblAutoRun.ForeColor   = Theme.FG_TERTIARY
+        nudMinutes.BackColor   = Theme.BG_CARD_RAISED
+        nudMinutes.ForeColor   = Theme.FG_PRIMARY
+        lblMin.ForeColor       = Theme.FG_TERTIARY
+        nudSeconds.BackColor   = Theme.BG_CARD_RAISED
+        nudSeconds.ForeColor   = Theme.FG_PRIMARY
+        lblSec.ForeColor       = Theme.FG_TERTIARY
+        rbSingle.ForeColor     = Theme.FG_TERTIARY
+        rbRepeat.ForeColor     = Theme.FG_TERTIARY
+        btnStartStop.BackColor = Theme.ACC_STRONG_LONG
+        btnStartStop.ForeColor = Theme.FG_INK
+        btnStartStop.FlatAppearance.BorderColor = Theme.ACC_STRONG_LONG
+
+        ' --- Status bar (existing flat row) ---
+        lblLogInfo.ForeColor   = Theme.FG_TERTIARY
+        lblCountdown.ForeColor = Theme.FG_TERTIARY
+
+        Dim links() As System.Windows.Forms.LinkLabel = {
+            lnkResetLog, lnkCalibCheck, lnkAnalysisReport,
+            lnkTweakSettings, lnkOutputDump, lnkOutputDumpSettings}
+        For Each lnk In links
+            If lnk Is Nothing Then Continue For
+            lnk.LinkColor        = Theme.FG_TERTIARY
+            lnk.ActiveLinkColor  = Theme.ACC_INFO        ' mouse-down flash
+            lnk.VisitedLinkColor = Theme.FG_TERTIARY
+            ' WinForms LinkLabel has no built-in hover colour — ActiveLinkColor
+            ' only fires on mouse-down. Wire MouseEnter/Leave to swap LinkColor
+            ' so hover actually responds. lnkResetLog gets the destructive-red
+            ' hover; the rest get cyan.
+            Dim hoverColour As Color = If(lnk Is lnkResetLog, Theme.ACC_SHORT, Theme.ACC_INFO)
+            Dim captured = lnk
+            AddHandler captured.MouseEnter, Sub(s, ev) captured.LinkColor = hoverColour
+            AddHandler captured.MouseLeave, Sub(s, ev) captured.LinkColor = Theme.FG_TERTIARY
+        Next
     End Sub
 
     ' -----------------------------------------------------------------------
