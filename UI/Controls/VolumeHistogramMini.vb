@@ -22,7 +22,8 @@ Public Class VolumeHistogramMini
         SetStyle(ControlStyles.OptimizedDoubleBuffer Or
                  ControlStyles.AllPaintingInWmPaint Or
                  ControlStyles.UserPaint Or
-                 ControlStyles.ResizeRedraw, True)
+                 ControlStyles.ResizeRedraw Or
+                 ControlStyles.SupportsTransparentBackColor, True)
         MyBase.BackColor = Color.Transparent
     End Sub
 
