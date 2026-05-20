@@ -433,6 +433,15 @@ Partial Public Class MainForm
 
         RenderOutput(r, verdict, norms, vwapWarmup, lastTradePrice)
 
+        ' P4b: bind the new card grid alongside the legacy txtOutput render.
+        ' Both paths run until P5 deletes txtOutput.
+        BindCardScore(verdict)
+        BindCardVerdict(verdict, r)
+        BindCardLastPrice(r)
+        BindCardAtrLevels(verdict, r)
+        BindCardStructural(r, isLong:=True)
+        BindCardStructural(r, isLong:=False)
+
         ' Update live performance strip (eval cache + OHLC cache + 6 window aggregates).
         ' Must come after RenderOutput so AnalysisOutputDump.Append has already run.
         Await LivePerformanceTracker.UpdateAsync(verdict, r, candles1m, DateTime.UtcNow)

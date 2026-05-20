@@ -363,10 +363,9 @@ Partial Public Class MainForm
         heroRow.Controls.Add(_cardLastPrice, 2, 0)
         AddRow(heroRow, 160)
 
-        ' Row 4: ATR ENTRY LEVELS
+        ' Row 4: ATR ENTRY LEVELS (P4b binds contents)
         _cardAtrLevels = NewCard()
         AddRow(_cardAtrLevels, 110)
-        AddPlaceholderHeader(_cardAtrLevels, "ATR ENTRY LEVELS")
 
         ' Row 5: STRUCTURAL LONG + STRUCTURAL SHORT side by side
         Dim structRow = New TableLayoutPanel() With {
@@ -430,6 +429,11 @@ Partial Public Class MainForm
         _cardSettingsTools = NewCard()
         AddRow(_cardSettingsTools, 200)
         ReparentSettingsToolsControls()
+
+        ' Populate the bindable cards from rows 3-5 with their static child
+        ' controls (custom-paint controls + labels). Per-run binding methods
+        ' live in UI/MainForm_Render_Cards.vb and only update values.
+        InitBoundCardContents()
 
         Me.Controls.Add(_gridRoot)
     End Sub
