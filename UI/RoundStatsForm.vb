@@ -98,7 +98,7 @@ Public Class RoundStatsForm
                                   AnchorStyles.Right Or AnchorStyles.Bottom
         txtReport.BackColor     = Color.FromArgb(20, 20, 20)
         txtReport.ForeColor     = Color.FromArgb(220, 220, 220)
-        txtReport.Font          = New Font("Consolas", 9.0!)
+        txtReport.Font          = Theme.FontMono(9.0F)
         txtReport.ReadOnly      = True
         txtReport.BorderStyle   = BorderStyle.FixedSingle
         txtReport.WordWrap      = False

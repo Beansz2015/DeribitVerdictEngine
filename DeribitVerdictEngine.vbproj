@@ -37,4 +37,16 @@
     </None>
   </ItemGroup>
 
+  <!-- UI reskin P1: bundle Geist Mono as embedded resources. OFL.txt ships
+       as Content next to the .exe so the SIL OFL 1.1 licence travels with
+       the font, satisfying the redistribution requirement. -->
+  <ItemGroup>
+    <EmbeddedResource Include="fonts\GeistMono-Regular.ttf" />
+    <EmbeddedResource Include="fonts\GeistMono-Bold.ttf" />
+    <EmbeddedResource Include="fonts\GeistMono-SemiBold.ttf" />
+    <Content Include="fonts\OFL.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

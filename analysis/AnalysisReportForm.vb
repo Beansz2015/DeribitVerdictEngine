@@ -24,7 +24,7 @@ Public Class AnalysisReportForm
             .ReadOnly      = True,
             .BackColor     = Color.FromArgb(20, 20, 20),
             .ForeColor     = Color.FromArgb(200, 200, 200),
-            .Font          = New Font("Consolas", 9.5!),
+            .Font          = Theme.FontMono(9.5F),
             .ScrollBars    = RichTextBoxScrollBars.Vertical,
             .WordWrap      = False,
             .BorderStyle   = BorderStyle.None,

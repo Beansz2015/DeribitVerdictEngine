@@ -34,6 +34,11 @@ dotnet run
 dotnet build -c Release
 ```
 
+**Bundled fonts.** The app embeds Geist Mono (`fonts/*.ttf`) as resources and
+ships `fonts/OFL.txt` alongside the .exe (SIL OFL 1.1 licence). Any installer
+or xcopy deployment must include the contents of `fonts/`. The .ttf files travel
+inside the .exe via `EmbeddedResource`; the OFL licence travels as `Content`.
+
 Open in **Visual Studio 2022** for the full WinForms designer experience. `MainForm.Designer.vb` is auto-generated — never edit it manually.
 
 There is no automated test suite. Verification is done via live runs with the auto-run timer and the CSV calibration report (`analysis_log.csv`).

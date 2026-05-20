@@ -135,23 +135,20 @@ Partial Public Class MainForm
     Private Shared ReadOnly CHAR_PLAY As String = ChrW(9654) & " Start"
     Private Shared ReadOnly CHAR_STOP As String = ChrW(9632) & " Stop"
 
-    ' Colour palette (used by Render partial)
-    Private Shared ReadOnly C_DIVIDER As Color = Color.FromArgb(80, 80, 80)
-    Private Shared ReadOnly C_HEADER  As Color = Color.FromArgb(255, 220, 80)   ' amber
-    Private Shared ReadOnly C_LABEL   As Color = Color.FromArgb(160, 160, 160)  ' mid-grey
-    Private Shared ReadOnly C_VALUE   As Color = Color.FromArgb(200, 200, 200)  ' light-grey
-    Private Shared ReadOnly C_GOOD    As Color = Color.FromArgb(80, 220, 120)   ' green
-    Private Shared ReadOnly C_WARN    As Color = Color.FromArgb(255, 180, 40)   ' orange
-    Private Shared ReadOnly C_BAD     As Color = Color.FromArgb(255, 80, 80)    ' red
-    Private Shared ReadOnly C_HIT     As Color = Color.FromArgb(100, 200, 255)  ' cyan
-    Private Shared ReadOnly C_DIM     As Color = Color.FromArgb(100, 100, 100)  ' dim
+    ' Colour palette moved to UI/Theme/Theme.vb (P1 of UI reskin).
+    ' Use Theme.* tokens directly; P1 keeps hex values pixel-identical.
 
     ' -----------------------------------------------------------------------
     ' Constructor
     ' -----------------------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.47"
+        Me.Text = "Deribit Verdict Engine v0.47 [P1]"
+
+        ' P1 marker: switch txtOutput to Geist Mono so the bundled font is
+        ' visibly in use. Confirms P1 build is the one running. Preserves
+        ' the existing 10pt size and monospace metric, so layout is unchanged.
+        txtOutput.Font = Theme.FontMono(10.0F)
 
         ' Analysis report link — must be created before the first ResizeControls() call
         lnkAnalysisReport = New System.Windows.Forms.LinkLabel() With {
@@ -479,7 +476,7 @@ Partial Public Class MainForm
         Return New System.Windows.Forms.Label() With {
             .AutoSize  = True,
             .Font      = New System.Drawing.Font("Segoe UI", 8.0!),
-            .ForeColor = C_LABEL,
+            .ForeColor = Theme.FG_TERTIARY,
             .BackColor = System.Drawing.Color.Transparent,
             .Text      = initialText
         }
@@ -508,7 +505,7 @@ Partial Public Class MainForm
         ' Mode indicator: dim when ephemeral mode matches settings.json default; amber otherwise.
         If lblPerfMode IsNot Nothing Then
             lblPerfMode.Text      = If(isTarget, "[T]", "[B]")
-            lblPerfMode.ForeColor = If(_metricMode = defaultMode, C_DIM, C_WARN)
+            lblPerfMode.ForeColor = If(_metricMode = defaultMode, Theme.FG_QUATERNARY, Theme.ACC_WARN)
             lblPerfMode.Visible   = True
         End If
 
@@ -531,7 +528,7 @@ Partial Public Class MainForm
                 Dim activePct As Double = If(isTarget, w.TargetRatePct, w.BarrierRatePct)
                 Dim rate As Integer = CInt(Math.Round(activePct))
                 text    = prefixes(i) & ": " & rate.ToString() & "%"
-                fgColor = If(rate > 50, C_GOOD, C_BAD)
+                fgColor = If(rate > 50, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
 
                 ' Tooltip line 1: sample summary; line 2: the other metric's rate.
                 Dim otherLabel As String = If(isTarget, "Barrier-hit", "Target-hit")
@@ -544,7 +541,7 @@ Partial Public Class MainForm
                                     otherLabel, CInt(Math.Round(otherPct)), otherHits, n)
             Else
                 text    = prefixes(i) & ": --%"
-                fgColor = C_DIM
+                fgColor = Theme.FG_QUATERNARY
                 If w IsNot Nothing Then
                     tip = String.Format("{0} predictions evaluated (below threshold). {1:yyyy-MM-dd HH:mm} → {2:yyyy-MM-dd HH:mm} UTC+8.",
                                         n, w.RangeStart, w.RangeEnd)

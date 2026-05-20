@@ -30,7 +30,7 @@ Partial Public Class MainForm
         btnAnalyze.Enabled = False
         btnAnalyze.Text    = "Fetching..."
         txtOutput.Clear()
-        AppendRtf(txtOutput, "Fetching data from Deribit..." & Environment.NewLine, C_LABEL)
+        AppendRtf(txtOutput, "Fetching data from Deribit..." & Environment.NewLine, Theme.FG_TERTIARY)
         lblVerdict.Text      = "..."
         lblVerdict.BackColor = Color.Gray
 
@@ -38,7 +38,7 @@ Partial Public Class MainForm
             Await RunAnalysisAsync()
         Catch ex As Exception
             txtOutput.Clear()
-            AppendRtf(txtOutput, "ERROR: " & ex.Message & Environment.NewLine & ex.StackTrace, C_BAD)
+            AppendRtf(txtOutput, "ERROR: " & ex.Message & Environment.NewLine & ex.StackTrace, Theme.ACC_SHORT)
             lblVerdict.Text      = "ERROR"
             lblVerdict.BackColor = Color.OrangeRed
         Finally
@@ -102,9 +102,9 @@ Partial Public Class MainForm
         If skipReason IsNot Nothing Then
             _skipCount += 1
             txtOutput.Clear()
-            AppendRtf(txtOutput, String.Format("ANALYSIS SKIPPED: {0}" & Environment.NewLine, skipReason), C_WARN, bold:=True)
-            AppendRtf(txtOutput, String.Format("Skip count this session: {0}" & Environment.NewLine, _skipCount), C_DIM)
-            AppendRtf(txtOutput, "Engine continues — next auto-run cycle will retry.", C_DIM)
+            AppendRtf(txtOutput, String.Format("ANALYSIS SKIPPED: {0}" & Environment.NewLine, skipReason), Theme.ACC_WARN, bold:=True)
+            AppendRtf(txtOutput, String.Format("Skip count this session: {0}" & Environment.NewLine, _skipCount), Theme.FG_QUATERNARY)
+            AppendRtf(txtOutput, "Engine continues — next auto-run cycle will retry.", Theme.FG_QUATERNARY)
             lblVerdict.Text      = "SKIPPED"
             lblVerdict.BackColor = Color.FromArgb(120, 100, 60)
             UpdateLogInfo()

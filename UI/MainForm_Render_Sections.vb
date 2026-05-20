@@ -40,25 +40,25 @@ Partial Public Class MainForm
 
         ' -- REGIME -----------------------------------------------------------
         SectionHeader(rtb, "REGIME (5m): " & r.Regime)
-        Dim regColour As Color = C_VALUE
+        Dim regColour As Color = Theme.FG_PRIMARY
         Select Case r.Regime
-            Case "TRENDING_UP"   : regColour = C_GOOD
-            Case "TRENDING_DOWN" : regColour = C_BAD
-            Case "RANGE_BOUND"   : regColour = C_WARN
-            Case Else            : regColour = C_DIM
+            Case "TRENDING_UP"   : regColour = Theme.ACC_STRONG_LONG
+            Case "TRENDING_DOWN" : regColour = Theme.ACC_SHORT
+            Case "RANGE_BOUND"   : regColour = Theme.ACC_WARN
+            Case Else            : regColour = Theme.FG_QUATERNARY
         End Select
-        AppendRtf(rtb, "  ", C_LABEL)
+        AppendRtf(rtb, "  ", Theme.FG_TERTIARY)
         AppendRtf(rtb, String.Format("ADX: {0:F1}  |  +DI: {1:F1}  |  -DI: {2:F1}",
                                       r.ADX, r.PlusDI, r.MinusDI) & Environment.NewLine, regColour)
 
         ' -- CORE SIGNALS (1m) ------------------------------------------------
         SectionHeader(rtb, "CORE SIGNALS (1m):")
-        AppendRtf(rtb, "  ROC(9):       ", C_LABEL)
-        Dim rocColour As Color = If(r.ROC > 0, C_GOOD, If(r.ROC < 0, C_BAD, C_VALUE))
+        AppendRtf(rtb, "  ROC(9):       ", Theme.FG_TERTIARY)
+        Dim rocColour As Color = If(r.ROC > 0, Theme.ACC_STRONG_LONG, If(r.ROC < 0, Theme.ACC_SHORT, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("{0:F3}  |  Slope: {1}", r.ROC, r.ROCSlope) & Environment.NewLine, rocColour)
 
-        AppendRtf(rtb, "  RSI(9):       ", C_LABEL)
-        Dim rsiColour As Color = If(r.RSI > 70, C_BAD, If(r.RSI < 30, C_GOOD, C_VALUE))
+        AppendRtf(rtb, "  RSI(9):       ", Theme.FG_TERTIARY)
+        Dim rsiColour As Color = If(r.RSI > 70, Theme.ACC_SHORT, If(r.RSI < 30, Theme.ACC_STRONG_LONG, Theme.FG_PRIMARY))
         Dim rsiDiv As String = If(String.IsNullOrEmpty(r.RSIDivergence) OrElse r.RSIDivergence = "NONE",
                                    "", "  |  Div: " & r.RSIDivergence)
         AppendRtf(rtb, String.Format("{0:F1}", r.RSI) & rsiDiv & Environment.NewLine, rsiColour)
@@ -71,8 +71,8 @@ Partial Public Class MainForm
         Else
             usdStr = "$" & r.CurrentVolumeUSD.ToString("F0")
         End If
-        AppendRtf(rtb, "  Volume:       ", C_LABEL)
-        Dim volColour As Color = If(r.VolumeRatio >= 1.5, C_GOOD, If(r.VolumeRatio < 0.7, C_BAD, C_VALUE))
+        AppendRtf(rtb, "  Volume:       ", Theme.FG_TERTIARY)
+        Dim volColour As Color = If(r.VolumeRatio >= 1.5, Theme.ACC_STRONG_LONG, If(r.VolumeRatio < 0.7, Theme.ACC_SHORT, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("{0:F4} BTC ({1})  |  vs SMA: {2:F2}x  |  SMA: {3:F4} BTC",
                                       r.CurrentVolume, usdStr, r.VolumeRatio, r.VolumeSMA9) & Environment.NewLine, volColour)
 
@@ -92,76 +92,76 @@ Partial Public Class MainForm
         End If
         Dim vwapWarmupTag As String = If(r.VWAPSessionCandles < vwapWarmup, "  [WARMUP]", "")
         SectionHeader(rtb, String.Format("VWAP (reset {0} UTC){1}:", activeAnchor, vwapWarmupTag))
-        AppendRtf(rtb, "  Value:  ", C_LABEL)
-        Dim devColour As Color = If(Math.Abs(r.VWAPDevPct) > norms.VWAPDevThreshold, C_WARN, C_VALUE)
+        AppendRtf(rtb, "  Value:  ", Theme.FG_TERTIARY)
+        Dim devColour As Color = If(Math.Abs(r.VWAPDevPct) > norms.VWAPDevThreshold, Theme.ACC_WARN, Theme.FG_PRIMARY)
         AppendRtf(rtb, String.Format("{0:F1}  |  Dev: {1:F3}%  |  Candles: {2}",
                                       r.VWAP, r.VWAPDevPct, r.VWAPSessionCandles) & Environment.NewLine, devColour)
-        AppendRtf(rtb, "  s1 band: ", C_LABEL)
+        AppendRtf(rtb, "  s1 band: ", Theme.FG_TERTIARY)
         AppendRtf(rtb, String.Format("[{0:F1}, {1:F1}]  |  s2 band: [{2:F1}, {3:F1}]",
                                       r.VWAPSigma1Lower, r.VWAPSigma1Upper,
-                                      r.VWAPSigma2Lower, r.VWAPSigma2Upper) & Environment.NewLine, C_DIM)
+                                      r.VWAPSigma2Lower, r.VWAPSigma2Upper) & Environment.NewLine, Theme.FG_QUATERNARY)
 
         ' -- BBW / TTM SQUEEZE ------------------------------------------------
         SectionHeader(rtb, "BBW / TTM SQUEEZE:")
-        AppendRtf(rtb, "  BBW: ", C_LABEL)
-        Dim sqColour As Color = If(r.SqueezeStatus = "ACTIVE", C_WARN,
-                                   If(r.SqueezeStatus = "RELEASING", C_GOOD, C_VALUE))
+        AppendRtf(rtb, "  BBW: ", Theme.FG_TERTIARY)
+        Dim sqColour As Color = If(r.SqueezeStatus = "ACTIVE", Theme.ACC_WARN,
+                                   If(r.SqueezeStatus = "RELEASING", Theme.ACC_STRONG_LONG, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("{0:F3}  |  Status: {1}", r.BBW, r.SqueezeStatus) & Environment.NewLine, sqColour)
-        AppendRtf(rtb, "  TTM: ", C_LABEL)
-        Dim ttmColour As Color = If(r.TTMDirection = "RISING", C_GOOD,
-                                    If(r.TTMDirection = "FALLING", C_BAD, C_VALUE))
+        AppendRtf(rtb, "  TTM: ", Theme.FG_TERTIARY)
+        Dim ttmColour As Color = If(r.TTMDirection = "RISING", Theme.ACC_STRONG_LONG,
+                                    If(r.TTMDirection = "FALLING", Theme.ACC_SHORT, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("Histogram={0:F2}  Dir={1}  Signal={2}",
                                       r.TTMHistogram, r.TTMDirection, r.TTMSignal) & Environment.NewLine, ttmColour)
 
         ' -- EMA RIBBON -------------------------------------------------------
         SectionHeader(rtb, "EMA RIBBON (1m):")
-        AppendRtf(rtb, "  ", C_LABEL)
-        Dim emaColour As Color = If(r.EMAAlignment = "BULL", C_GOOD, If(r.EMAAlignment = "BEAR", C_BAD, C_WARN))
+        AppendRtf(rtb, "  ", Theme.FG_TERTIARY)
+        Dim emaColour As Color = If(r.EMAAlignment = "BULL", Theme.ACC_STRONG_LONG, If(r.EMAAlignment = "BEAR", Theme.ACC_SHORT, Theme.ACC_WARN))
         AppendRtf(rtb, String.Format("9: {0:F1}  |  21: {1:F1}  |  50: {2:F1}  |  Align: {3}",
                                       r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment) & Environment.NewLine, emaColour)
-        AppendRtf(rtb, "  5m EMA200: ", C_LABEL)
-        Dim ema200Colour As Color = If(r.PriceVsEMA200 = "ABOVE", C_GOOD, C_BAD)
+        AppendRtf(rtb, "  5m EMA200: ", Theme.FG_TERTIARY)
+        Dim ema200Colour As Color = If(r.PriceVsEMA200 = "ABOVE", Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
         AppendRtf(rtb, String.Format("{0:F1}  |  Price: {1}", r.EMA200_5m, r.PriceVsEMA200) & Environment.NewLine, ema200Colour)
 
         ' -- MARKET STRUCTURE -------------------------------------------------
         SectionHeader(rtb, "MARKET STRUCTURE:")
-        AppendRtf(rtb, "  Donchian(20): ", C_LABEL)
-        Dim donchColour As Color = If(r.DonchianSignal = "LONG", C_GOOD, If(r.DonchianSignal = "SHORT", C_BAD, C_VALUE))
+        AppendRtf(rtb, "  Donchian(20): ", Theme.FG_TERTIARY)
+        Dim donchColour As Color = If(r.DonchianSignal = "LONG", Theme.ACC_STRONG_LONG, If(r.DonchianSignal = "SHORT", Theme.ACC_SHORT, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("Upper={0:F1}  Lower={1:F1}  |  Signal: {2}",
                                       r.DonchianUpper, r.DonchianLower, r.DonchianSignal) & Environment.NewLine, donchColour)
-        AppendRtf(rtb, "  OBV: ", C_LABEL)
-        AppendRtf(rtb, String.Format("Trend={0}  |  Div={1}", r.OBVTrend, r.OBVDivergence) & Environment.NewLine, C_VALUE)
+        AppendRtf(rtb, "  OBV: ", Theme.FG_TERTIARY)
+        AppendRtf(rtb, String.Format("Trend={0}  |  Div={1}", r.OBVTrend, r.OBVDivergence) & Environment.NewLine, Theme.FG_PRIMARY)
 
-        Dim vpfrColour As Color = If(r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL", C_GOOD,
-                                     If(r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR", C_BAD, C_DIM))
-        AppendRtf(rtb, "  VPFR-lite: ", C_LABEL)
+        Dim vpfrColour As Color = If(r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL", Theme.ACC_STRONG_LONG,
+                                     If(r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR", Theme.ACC_SHORT, Theme.FG_QUATERNARY))
+        AppendRtf(rtb, "  VPFR-lite: ", Theme.FG_TERTIARY)
         AppendRtf(rtb, String.Format("POC:{0:F1}  |  {1}  |  HVN@POC:{2}",
                                       r.VPFRPoc, r.VPFRSignal,
                                       If(r.VPFRHVNearPoc, "YES", "NO")) & Environment.NewLine, vpfrColour)
 
-        AppendRtf(rtb, "  Value Area: ", C_LABEL)
-        Dim vaColour As Color = If(r.VPFRValueAreaSignal = "INSIDE_VA", C_VALUE,
-                                   If(r.VPFRValueAreaSignal = "ABOVE_VAH", C_GOOD, C_BAD))
+        AppendRtf(rtb, "  Value Area: ", Theme.FG_TERTIARY)
+        Dim vaColour As Color = If(r.VPFRValueAreaSignal = "INSIDE_VA", Theme.FG_PRIMARY,
+                                   If(r.VPFRValueAreaSignal = "ABOVE_VAH", Theme.ACC_STRONG_LONG, Theme.ACC_SHORT))
         AppendRtf(rtb, String.Format("VAH:{0:F1}  |  VAL:{1:F1}  |  {2}",
                                       r.VPFRVah, r.VPFRVal, r.VPFRValueAreaSignal) & Environment.NewLine, vaColour)
 
-        AppendRtf(rtb, "  HVN walls: ", C_LABEL)
+        AppendRtf(rtb, "  HVN walls: ", Theme.FG_TERTIARY)
         Dim hvnAboveStr As String = If(r.VPFRNearestHvnAbove > 0, r.VPFRNearestHvnAbove.ToString("F1"), "—")
         Dim hvnBelowStr As String = If(r.VPFRNearestHvnBelow > 0, r.VPFRNearestHvnBelow.ToString("F1"), "—")
         Dim lvnAboveStr As String = If(r.VPFRNearestLvnAbove > 0, r.VPFRNearestLvnAbove.ToString("F1"), "—")
         Dim lvnBelowStr As String = If(r.VPFRNearestLvnBelow > 0, r.VPFRNearestLvnBelow.ToString("F1"), "—")
         AppendRtf(rtb, String.Format("Above:{0}  Below:{1}  |  LVN: ^{2} v{3}",
-                                      hvnAboveStr, hvnBelowStr, lvnAboveStr, lvnBelowStr) & Environment.NewLine, C_DIM)
+                                      hvnAboveStr, hvnBelowStr, lvnAboveStr, lvnBelowStr) & Environment.NewLine, Theme.FG_QUATERNARY)
 
         ' -- D1: Trend Structure ----------------------------------------------
-        AppendRtf(rtb, "  Trend Struct: ", C_LABEL)
+        AppendRtf(rtb, "  Trend Struct: ", Theme.FG_TERTIARY)
         Dim tsColour As Color
         Select Case r.TrendStructure
-            Case TrendStructure.UPTREND     : tsColour = C_GOOD
-            Case TrendStructure.DOWNTREND   : tsColour = C_BAD
-            Case TrendStructure.EXPANSION   : tsColour = C_WARN
+            Case TrendStructure.UPTREND     : tsColour = Theme.ACC_STRONG_LONG
+            Case TrendStructure.DOWNTREND   : tsColour = Theme.ACC_SHORT
+            Case TrendStructure.EXPANSION   : tsColour = Theme.ACC_WARN
             Case TrendStructure.CONTRACTION : tsColour = Color.FromArgb(80, 200, 210)
-            Case Else                       : tsColour = C_DIM
+            Case Else                       : tsColour = Theme.FG_QUATERNARY
         End Select
         Dim tsDetail As String
         If r.LastTwoHighs5m.Newer > 0 AndAlso r.LastTwoLows5m.Newer > 0 Then
@@ -191,57 +191,57 @@ Partial Public Class MainForm
         AppendRtf(rtb, r.TrendStructure.ToString() & tsDetail & Environment.NewLine, tsColour)
 
         ' -- D2: Best Volume Pivot --------------------------------------------
-        AppendRtf(rtb, "  Best Vol Pivot 5m: ", C_LABEL)
+        AppendRtf(rtb, "  Best Vol Pivot 5m: ", Theme.FG_TERTIARY)
         If r.BestPivotByVolume5m > 0 Then
             AppendRtf(rtb, String.Format("{0} {1:F1}  (vol×{2:F1} vs avg pivot)",
                 If(r.BestPivotIsHigh5m, "HIGH", "LOW"),
                 r.BestPivotByVolume5m, r.BestPivotVolumeRatio5m) & Environment.NewLine,
                 Color.FromArgb(80, 200, 210))
         Else
-            AppendRtf(rtb, "—  (insufficient pivots)" & Environment.NewLine, C_DIM)
+            AppendRtf(rtb, "—  (insufficient pivots)" & Environment.NewLine, Theme.FG_QUATERNARY)
         End If
 
         ' -- OPEN INTEREST ----------------------------------------------------
         SectionHeader(rtb, "OPEN INTEREST:")
-        AppendRtf(rtb, "  OI: ", C_LABEL)
-        Dim oiColour As Color = If(r.OISignal = "NEW LONGS" OrElse r.OISignal = "COVERING", C_GOOD,
-                                   If(r.OISignal = "NEW SHORTS" OrElse r.OISignal = "CAPITULATION", C_BAD, C_VALUE))
+        AppendRtf(rtb, "  OI: ", Theme.FG_TERTIARY)
+        Dim oiColour As Color = If(r.OISignal = "NEW LONGS" OrElse r.OISignal = "COVERING", Theme.ACC_STRONG_LONG,
+                                   If(r.OISignal = "NEW SHORTS" OrElse r.OISignal = "CAPITULATION", Theme.ACC_SHORT, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("{0:F0}  |  d15m: {1:F3}%  |  d60m: {2:F3}%  |  Signal: {3}",
                                       r.OI_Current, r.OIChange15m, r.OIChange60m, r.OISignal) & Environment.NewLine, oiColour)
 
         ' -- ORDER FLOW -------------------------------------------------------
         SectionHeader(rtb, "ORDER FLOW:")
-        AppendRtf(rtb, "  OFI Ratio: ", C_LABEL)
-        Dim ofiColour As Color = If(r.OFIRatio > 1.2, C_GOOD, If(r.OFIRatio < 0.8, C_BAD, C_VALUE))
+        AppendRtf(rtb, "  OFI Ratio: ", Theme.FG_TERTIARY)
+        Dim ofiColour As Color = If(r.OFIRatio > 1.2, Theme.ACC_STRONG_LONG, If(r.OFIRatio < 0.8, Theme.ACC_SHORT, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("{0:F2}  |  Bid Vol: {1:F0}  |  Ask Vol: {2:F0}  |  {3}  |  Mom: {4}",
                                       r.OFIRatio, r.OFIBidVol, r.OFIAskVol, r.OFISignal,
                                       r.OFIMomentum) & Environment.NewLine, ofiColour)
 
-        AppendRtf(rtb, "  Spread:    ", C_LABEL)
-        Dim spreadColour As Color = If(r.SpreadStatus = "WIDE", C_BAD,
-                                       If(r.SpreadStatus = "TIGHT", C_GOOD, C_VALUE))
+        AppendRtf(rtb, "  Spread:    ", Theme.FG_TERTIARY)
+        Dim spreadColour As Color = If(r.SpreadStatus = "WIDE", Theme.ACC_SHORT,
+                                       If(r.SpreadStatus = "TIGHT", Theme.ACC_STRONG_LONG, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("{0:F2} bps  |  {1}",
                                       r.SpreadBps, r.SpreadStatus) & Environment.NewLine, spreadColour)
 
-        AppendRtf(rtb, "  CVD:       ", C_LABEL)
-        Dim cvdColour As Color = If(r.CVDSlope = "RISING", C_GOOD, If(r.CVDSlope = "FALLING", C_BAD, C_VALUE))
+        AppendRtf(rtb, "  CVD:       ", Theme.FG_TERTIARY)
+        Dim cvdColour As Color = If(r.CVDSlope = "RISING", Theme.ACC_STRONG_LONG, If(r.CVDSlope = "FALLING", Theme.ACC_SHORT, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("Net:{0:F0}  |  Slope:{1}  |  Div:{2}",
                                       r.CVDValue, r.CVDSlope, r.CVDDivergence) & Environment.NewLine, cvdColour)
 
-        AppendRtf(rtb, "  TFI:       ", C_LABEL)
-        Dim tfiColour As Color = If(r.TFISignal = "BUY PRESSURE", C_GOOD,
-                                    If(r.TFISignal = "SELL PRESSURE", C_BAD, C_VALUE))
+        AppendRtf(rtb, "  TFI:       ", Theme.FG_TERTIARY)
+        Dim tfiColour As Color = If(r.TFISignal = "BUY PRESSURE", Theme.ACC_STRONG_LONG,
+                                    If(r.TFISignal = "SELL PRESSURE", Theme.ACC_SHORT, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("{0:F3}  |  {1}",
                                       r.TFIValue, r.TFISignal) & Environment.NewLine, tfiColour)
 
-        AppendRtf(rtb, "  MicroCVD:  ", C_LABEL)
+        AppendRtf(rtb, "  MicroCVD:  ", Theme.FG_TERTIARY)
         Dim microColour As Color
         Select Case r.MicroCVDSignal
-            Case "BULL_ACCEL" : microColour = C_GOOD
-            Case "BEAR_ACCEL" : microColour = C_BAD
+            Case "BULL_ACCEL" : microColour = Theme.ACC_STRONG_LONG
+            Case "BEAR_ACCEL" : microColour = Theme.ACC_SHORT
             Case "BULL_DECEL" : microColour = Color.FromArgb(120, 200, 120)
             Case "BEAR_DECEL" : microColour = Color.FromArgb(220, 130, 130)
-            Case Else         : microColour = C_VALUE
+            Case Else         : microColour = Theme.FG_PRIMARY
         End Select
         AppendRtf(rtb, String.Format("E:{0:F0}  M:{1:F0}  L:{2:F0}  |  {3}  |  {4}",
                                       r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
@@ -249,30 +249,30 @@ Partial Public Class MainForm
 
         ' -- LIQUIDATIONS -----------------------------------------------------
         SectionHeader(rtb, "LIQUIDATIONS:")
-        AppendRtf(rtb, "  ", C_LABEL)
-        Dim liqColour As Color = If(r.LiqSignal <> "NONE", C_WARN, C_DIM)
+        AppendRtf(rtb, "  ", Theme.FG_TERTIARY)
+        Dim liqColour As Color = If(r.LiqSignal <> "NONE", Theme.ACC_WARN, Theme.FG_QUATERNARY)
         AppendRtf(rtb, String.Format("Long: {0:F0}  |  Short: {1:F0}  |  Signal: {2}",
                                       r.LiqLongSize, r.LiqShortSize, r.LiqSignal) & Environment.NewLine, liqColour)
 
         ' -- MTF GATE (15m) ---------------------------------------------------
         SectionHeader(rtb, "MTF GATE (15m): " & If(r.MTFGatePass, "PASS", "BLOCK"))
-        Dim mtfColour As Color = If(r.MTFGatePass, C_GOOD, C_BAD)
-        AppendRtf(rtb, "  15m Trend: ", C_LABEL)
+        Dim mtfColour As Color = If(r.MTFGatePass, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
+        AppendRtf(rtb, "  15m Trend: ", Theme.FG_TERTIARY)
         AppendRtf(rtb, String.Format("{0}  |  ADX: {1:F1}  |  EMA: {2}",
                                       r.MTF15mTrend, r.MTF15mADX, r.MTF15mEMAAlignment) & Environment.NewLine, mtfColour)
-        AppendRtf(rtb, "  Reason: ", C_LABEL)
-        AppendRtf(rtb, r.MTFGateReason & Environment.NewLine, C_DIM)
+        AppendRtf(rtb, "  Reason: ", Theme.FG_TERTIARY)
+        AppendRtf(rtb, r.MTFGateReason & Environment.NewLine, Theme.FG_QUATERNARY)
 
         ' -- FUNDING ----------------------------------------------------------
         SectionHeader(rtb, "FUNDING:")
-        AppendRtf(rtb, "  Rate: ", C_LABEL)
-        Dim fundColour As Color = If(r.FundingBias.Contains("HEAVILY"), C_BAD,
-                                     If(r.FundingBias = "NEUTRAL", C_VALUE, C_WARN))
+        AppendRtf(rtb, "  Rate: ", Theme.FG_TERTIARY)
+        Dim fundColour As Color = If(r.FundingBias.Contains("HEAVILY"), Theme.ACC_SHORT,
+                                     If(r.FundingBias = "NEUTRAL", Theme.FG_PRIMARY, Theme.ACC_WARN))
         Dim fundDisplayRate As Double = If(Math.Abs(r.FundingRate) < 0.00000001, 0.0, r.FundingRate)
         AppendRtf(rtb, String.Format("{0:F4}%  |  {1}", fundDisplayRate * 100, r.FundingBias) & Environment.NewLine, fundColour)
-        AppendRtf(rtb, "  Momentum: ", C_LABEL)
-        Dim fundMomColour As Color = If(r.FundingMomentum = "RISING", C_WARN,
-                                        If(r.FundingMomentum = "FALLING", C_GOOD, C_VALUE))
+        AppendRtf(rtb, "  Momentum: ", Theme.FG_TERTIARY)
+        Dim fundMomColour As Color = If(r.FundingMomentum = "RISING", Theme.ACC_WARN,
+                                        If(r.FundingMomentum = "FALLING", Theme.ACC_STRONG_LONG, Theme.FG_PRIMARY))
         AppendRtf(rtb, String.Format("{0}  |  Enabled: {1}  |  Soften: +{2}  |  Amplify: -{3}",
                                       r.FundingMomentum,
                                       If(cfg.Indicators.Funding.MomentumEnabled, "YES", "NO"),
@@ -280,24 +280,24 @@ Partial Public Class MainForm
                                       cfg.Indicators.Funding.MomentumAmplify) & Environment.NewLine, fundMomColour)
 
         ' -- SIGNAL BREAKDOWN -------------------------------------------------
-        AppendRtf(rtb, Environment.NewLine, C_DIVIDER)
+        AppendRtf(rtb, Environment.NewLine, Theme.BORDER_CARD)
         Divider(rtb)
-        AppendRtf(rtb, "  SIGNAL BREAKDOWN" & Environment.NewLine, C_HEADER, bold:=True)
+        AppendRtf(rtb, "  SIGNAL BREAKDOWN" & Environment.NewLine, Theme.ACC_HEADER, bold:=True)
         Divider(rtb)
         AppendRtf(rtb, String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
-                                      "Signal", "Long", "Short", "Note") & Environment.NewLine, C_LABEL)
-        AppendRtf(rtb, "  " & New String("-"c, 70) & Environment.NewLine, C_DIVIDER)
+                                      "Signal", "Long", "Short", "Note") & Environment.NewLine, Theme.FG_TERTIARY)
+        AppendRtf(rtb, "  " & New String("-"c, 70) & Environment.NewLine, Theme.BORDER_CARD)
         For Each item In v.SignalBreakdown
             Dim lMark As String = If(item.LongHit, "[L]", "   ")
             Dim sMark As String = If(item.ShortHit, "[S]", "   ")
-            Dim hitColour As Color = If(item.LongHit OrElse item.ShortHit, C_HIT, C_DIM)
+            Dim hitColour As Color = If(item.LongHit OrElse item.ShortHit, Theme.ACC_INFO, Theme.FG_QUATERNARY)
             AppendRtf(rtb, String.Format("  {0,-18}  {1,5}  {2,6}  {3}",
                                           item.Label, lMark, sMark, item.Note) & Environment.NewLine, hitColour)
         Next
-        AppendRtf(rtb, "  " & New String("-"c, 70) & Environment.NewLine, C_DIVIDER)
+        AppendRtf(rtb, "  " & New String("-"c, 70) & Environment.NewLine, Theme.BORDER_CARD)
         AppendRtf(rtb, String.Format("  {0,-18}  {1,5:F0}  {2,6:F0}",
                                       "TOTAL", CDbl(v.LongScore), CDbl(v.ShortScore)) & Environment.NewLine,
-                  C_VALUE, bold:=True)
+                  Theme.FG_PRIMARY, bold:=True)
 
         rtb.SelectionStart = 0
         rtb.ScrollToCaret()
