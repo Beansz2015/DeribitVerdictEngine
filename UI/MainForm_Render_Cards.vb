@@ -855,4 +855,805 @@ Partial Public Class MainForm
         Return "NY"
     End Function
 
+    ' =======================================================================
+    ' SIGNAL BREAKDOWN card (P4c). Clear-and-rebuild on each bind — 23 rows
+    ' + tier separators + footer aggregates + TOTAL row.
+    '
+    ' Row layout: [label 110px] [state pill 64px] [note flex] [sc 30px]
+    ' Each row mono-formatted; state-derivation rules come from the gap
+    ' checklist B-architecture (Note column enrichment).
+    ' =======================================================================
+
+    Private Const SIGROW_HEIGHT As Integer = 18
+    Private Const SIGROW_SUBNOTE_HEIGHT As Integer = 14
+
+    Public Sub BindCardSignalBreakdown(v As VerdictResult, r As IndicatorResults)
+        If _cardSignalBreakdown Is Nothing Then Return
+
+        _cardSignalBreakdown.SuspendLayout()
+        _cardSignalBreakdown.Controls.Clear()
+
+        Dim items = If(v.SignalBreakdown, New List(Of SignalBreakdownItem)())
+
+        Dim outer = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 1, .RowCount = 5,
+            .BackColor = Color.Transparent
+        }
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))   ' section header
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 16))   ' column headers
+        outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' two-col grid (flex)
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 72))   ' footer + dividers
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 22))   ' TOTAL row
+        outer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+
+        outer.Controls.Add(MakeSectionHeader("SIGNAL BREAKDOWN"), 0, 0)
+
+        ' Column headers (repeated for both halves).
+        Dim colHdr = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 2, .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        }
+        colHdr.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
+        colHdr.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
+        colHdr.Controls.Add(MakeBreakdownColumnHeader(), 0, 0)
+        colHdr.Controls.Add(MakeBreakdownColumnHeader(), 1, 0)
+        outer.Controls.Add(colHdr, 0, 1)
+
+        ' Two-column main content. Each side is a vertical stack: tier
+        ' label, then rows, then next tier label, then rows.
+        Dim grid = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 2, .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        }
+        grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
+        grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
+        grid.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+
+        Dim leftCol  = NewBreakdownColumn(rightSide:=False)
+        Dim rightCol = NewBreakdownColumn(rightSide:=True)
+        grid.Controls.Add(leftCol,  0, 0)
+        grid.Controls.Add(rightCol, 1, 0)
+        outer.Controls.Add(grid, 0, 2)
+
+        ' --- Left column: CORE + TIER 1 ---
+        leftCol.Controls.Add(MakeTierLabel("CORE"))
+        leftCol.Controls.Add(BuildRowRoc(r, items))
+        leftCol.Controls.Add(BuildRowRsi(r, items))
+        leftCol.Controls.Add(BuildRowRsiDiv(r, items))
+        leftCol.Controls.Add(BuildRowDmiAdx(r, items))
+        leftCol.Controls.Add(BuildRowVolume(r, items))
+
+        leftCol.Controls.Add(MakeTierLabel("TIER 1"))
+        leftCol.Controls.Add(BuildRowVwapDev(r, items))
+        leftCol.Controls.Add(BuildRowVwapBands(r, items))
+        leftCol.Controls.Add(BuildRowBbwTtm(r, items))
+        leftCol.Controls.Add(BuildRowEmaRibbon(r, items))
+        leftCol.Controls.Add(BuildRowTrendStr(r, items))
+        leftCol.Controls.Add(BuildRowFunding(r, items))
+        leftCol.Controls.Add(BuildRowFundingMom(r, items))
+        leftCol.Controls.Add(BuildRowOiChange(r, items))
+
+        ' --- Right column: TIER 2 + TIER 3 ---
+        rightCol.Controls.Add(MakeTierLabel("TIER 2"))
+        rightCol.Controls.Add(BuildRowSpread(r, items))
+        rightCol.Controls.Add(BuildRowOfi(r, items))
+        rightCol.Controls.Add(BuildRowOfiMom(r, items))
+        rightCol.Controls.Add(BuildRowLiq(r, items))
+        rightCol.Controls.Add(BuildRowCvd(r, items))
+        rightCol.Controls.Add(BuildRowMicroCvd(r, items))
+        rightCol.Controls.Add(BuildRowTfi(r, items))
+        rightCol.Controls.Add(BuildRowEma200(r, items))
+
+        rightCol.Controls.Add(MakeTierLabel("TIER 3"))
+        rightCol.Controls.Add(BuildRowDonchian(r, items))
+        rightCol.Controls.Add(BuildRowObv(r, items))
+        rightCol.Controls.Add(BuildRowVpfr(r, items))
+        rightCol.Controls.Add(BuildRowSwingPivots(r, items))
+
+        ' --- Footer aggregates ---
+        outer.Controls.Add(BuildBreakdownFooter(v, r, items), 0, 3)
+
+        ' --- TOTAL row ---
+        Dim shownMax As Integer = If(v.MaxScore > 0, v.MaxScore, 20)
+        Dim total = New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = $"TOTAL          Long {v.LongScore}/{shownMax}  |  Short {v.ShortScore}/{shownMax}",
+            .Font = Theme.FontMono(12.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_PRIMARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Padding = New Padding(8, 0, 0, 0),
+            .Margin = New Padding(0)
+        }
+        outer.Controls.Add(total, 0, 4)
+
+        _cardSignalBreakdown.Controls.Add(outer)
+        _cardSignalBreakdown.ResumeLayout(True)
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Layout helpers
+    ' -----------------------------------------------------------------------
+
+    Private Shared Function MakeBreakdownColumnHeader() As Label
+        Dim text As String = String.Format("{0,-14}  {1,-6}  {2}   {3}",
+                                            "INDICATOR", "STATE", "NOTE", "SC")
+        Return New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = text,
+            .Font = Theme.FontMono(8.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(4, 0, 4, 0)
+        }
+    End Function
+
+    Private Shared Function NewBreakdownColumn(rightSide As Boolean) As FlowLayoutPanel
+        Return New FlowLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .FlowDirection = FlowDirection.TopDown,
+            .WrapContents = False,
+            .AutoScroll = False,
+            .BackColor = Color.Transparent,
+            .Margin = If(rightSide, New Padding(4, 0, 0, 0), New Padding(0, 0, 4, 0)),
+            .Padding = New Padding(0)
+        }
+    End Function
+
+    Private Shared Function MakeTierLabel(text As String) As Label
+        ' Left-accented tier separator: small uppercase bold label, vertical
+        ' breathing room. Width is the flow column width; the FlowLayoutPanel
+        ' sets Width automatically once it lays out.
+        Return New Label() With {
+            .AutoSize = False,
+            .Width = 500,
+            .Height = 16,
+            .Text = "  " & text,
+            .Font = Theme.FontMono(9.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(0, 5, 0, 3)
+        }
+    End Function
+
+    ''' <summary>
+    ''' Build one inline signal row. Composite mono-formatted Label with
+    ''' fixed-width columns; full row colour follows state. If subNote is
+    ''' provided, the row's height grows and a second indented line renders.
+    ''' </summary>
+    Private Shared Function MakeSignalRow(label As String,
+                                          state As String,
+                                          stateColour As Color,
+                                          note As String,
+                                          sc As Integer,
+                                          Optional subNote As String = Nothing,
+                                          Optional subNoteColour As Color = Nothing) As Control
+        Dim trimLabel As String = If(label, "")
+        If trimLabel.Length > 14 Then trimLabel = trimLabel.Substring(0, 14)
+        Dim trimState As String = If(state, "")
+        If trimState.Length > 8 Then trimState = trimState.Substring(0, 8)
+        Dim scText As String
+        If sc > 0 Then
+            scText = "+" & sc.ToString()
+        ElseIf sc < 0 Then
+            scText = sc.ToString()
+        Else
+            scText = " 0"
+        End If
+        Dim noteText As String = If(note, "")
+
+        Dim text As String = String.Format("{0,-14}  {1,-6}  {2,-32} {3,3}",
+                                            trimLabel, trimState, noteText, scText)
+
+        Dim rowH As Integer = SIGROW_HEIGHT
+        If Not String.IsNullOrEmpty(subNote) Then rowH = SIGROW_HEIGHT + SIGROW_SUBNOTE_HEIGHT
+
+        Dim row = New Panel() With {
+            .Width = 500,
+            .Height = rowH,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        }
+
+        Dim mainLbl = New Label() With {
+            .AutoSize = False,
+            .Location = New Point(2, 0),
+            .Size = New Size(496, SIGROW_HEIGHT),
+            .Text = text,
+            .Font = Theme.FontMono(9.5F, FontStyle.Regular),
+            .ForeColor = stateColour,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .AutoEllipsis = True
+        }
+        row.Controls.Add(mainLbl)
+
+        If Not String.IsNullOrEmpty(subNote) Then
+            Dim subLbl = New Label() With {
+                .AutoSize = False,
+                .Location = New Point(20, SIGROW_HEIGHT),
+                .Size = New Size(478, SIGROW_SUBNOTE_HEIGHT),
+                .Text = "↳ " & subNote,
+                .Font = Theme.FontMono(8.5F, FontStyle.Regular),
+                .ForeColor = If(subNoteColour.IsEmpty, Theme.FG_QUATERNARY, subNoteColour),
+                .BackColor = Color.Transparent,
+                .TextAlign = ContentAlignment.MiddleLeft,
+                .AutoEllipsis = True
+            }
+            row.Controls.Add(subLbl)
+        End If
+
+        Return row
+    End Function
+
+    ' -----------------------------------------------------------------------
+    ' Per-indicator row builders.  Each derives state + colour + note from
+    ' the IndicatorResults fields (B-architecture per gap checklist).
+    ' SC comes from finding the matching SignalBreakdownItem and computing
+    ' signed total from LongHit / ShortHit.
+    ' -----------------------------------------------------------------------
+
+    Private Shared Function ScForItem(items As List(Of SignalBreakdownItem), label As String) As Integer
+        For Each it In items
+            If it Is Nothing OrElse it.Label Is Nothing Then Continue For
+            If String.Equals(it.Label, label, StringComparison.OrdinalIgnoreCase) Then
+                If it.LongHit AndAlso Not it.ShortHit Then Return 1
+                If it.ShortHit AndAlso Not it.LongHit Then Return -1
+                Return 0
+            End If
+        Next
+        Return 0
+    End Function
+
+    ''' <summary>
+    ''' Like ScForItem but matches "ADX>{N}" labels which carry a numeric
+    ''' threshold suffix (so case-equality misses them).
+    ''' </summary>
+    Private Shared Function ScForItemPrefix(items As List(Of SignalBreakdownItem), prefix As String) As Integer
+        For Each it In items
+            If it Is Nothing OrElse it.Label Is Nothing Then Continue For
+            If it.Label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) Then
+                If it.LongHit AndAlso Not it.ShortHit Then Return 1
+                If it.ShortHit AndAlso Not it.LongHit Then Return -1
+                Return 0
+            End If
+        Next
+        Return 0
+    End Function
+
+    Private Shared Function FindItem(items As List(Of SignalBreakdownItem), label As String) As SignalBreakdownItem
+        For Each it In items
+            If it Is Nothing OrElse it.Label Is Nothing Then Continue For
+            If String.Equals(it.Label, label, StringComparison.OrdinalIgnoreCase) Then Return it
+        Next
+        Return Nothing
+    End Function
+
+    Private Shared Function FormatUsdShort(usd As Double) As String
+        If usd >= 1_000_000.0 Then Return "$" & (usd / 1_000_000.0).ToString("F1") & "M"
+        If usd >= 1_000.0 Then Return "$" & (usd / 1_000.0).ToString("F1") & "K"
+        Return "$" & usd.ToString("F0")
+    End Function
+
+    ' --- CORE tier ---
+
+    Private Shared Function BuildRowRoc(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        If r.ROC > 0 Then
+            state = "BULL"
+            colour = Theme.ACC_STRONG_LONG
+        ElseIf r.ROC < 0 Then
+            state = "BEAR"
+            colour = Theme.ACC_SHORT
+        Else
+            state = "NEUT"
+            colour = Theme.FG_TERTIARY
+        End If
+        Dim note As String = String.Format("{0:+0.000;-0.000;0.000}% {1}", r.ROC, If(r.ROCSlope, "").ToLower())
+        Return MakeSignalRow("ROC(9)", state, colour, note, ScForItem(items, "ROC(9)"))
+    End Function
+
+    Private Shared Function BuildRowRsi(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        If r.RSI > 70 Then
+            state = "BEAR"
+            colour = Theme.ACC_SHORT
+        ElseIf r.RSI < 30 Then
+            state = "BULL"
+            colour = Theme.ACC_STRONG_LONG
+        Else
+            state = "NEUT"
+            colour = Theme.FG_TERTIARY
+        End If
+        Dim note As String = r.RSI.ToString("F1")
+        If Not String.IsNullOrEmpty(r.RSIDivergence) AndAlso r.RSIDivergence <> "NONE" Then
+            note &= "  div:" & r.RSIDivergence.ToLower()
+        End If
+        Return MakeSignalRow("RSI(9)", state, colour, note, ScForItem(items, "RSI(9)"))
+    End Function
+
+    Private Shared Function BuildRowRsiDiv(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim div As String = If(r.RSIDivergence, "NONE")
+        Dim state As String, colour As Color
+        If div.Contains("BULL") Then
+            state = "BULL"
+            colour = Theme.ACC_STRONG_LONG
+        ElseIf div.Contains("BEAR") Then
+            state = "BEAR"
+            colour = Theme.ACC_SHORT
+        Else
+            state = "—"
+            colour = Theme.FG_TERTIARY
+        End If
+        ' RSI divergence isn't a separate scoring item — SC = 0 (display only).
+        Return MakeSignalRow("RSI Div", state, colour, div.ToLower(), 0)
+    End Function
+
+    Private Shared Function BuildRowDmiAdx(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        If r.ADX < 20 Then
+            state = "NEUT" : colour = Theme.FG_TERTIARY
+        ElseIf r.PlusDI > r.MinusDI AndAlso r.ADX >= 25 Then
+            state = "BULL" : colour = Theme.ACC_STRONG_LONG
+        ElseIf r.MinusDI > r.PlusDI AndAlso r.ADX >= 25 Then
+            state = "BEAR" : colour = Theme.ACC_SHORT
+        Else
+            state = "MIXED" : colour = Theme.ACC_WARN
+        End If
+        Dim note As String = $"ADX {r.ADX:F0}"
+        ' Engine emits two items ("DMI +/-DI" and "ADX>{N}") — sum their SCs.
+        Dim sc As Integer = ScForItem(items, "DMI +/-DI") + ScForItemPrefix(items, "ADX>")
+        If sc > 1 Then sc = 1
+        If sc < -1 Then sc = -1
+        Return MakeSignalRow("DMI/ADX", state, colour, note, sc)
+    End Function
+
+    Private Shared Function BuildRowVolume(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        If r.VolumeRatio >= 1.5 Then
+            state = "HIGH"
+            colour = Theme.ACC_STRONG_LONG
+        ElseIf r.VolumeRatio < 0.7 Then
+            state = "LOW"
+            colour = Theme.ACC_SHORT
+        Else
+            state = "NORM"
+            colour = Theme.FG_TERTIARY
+        End If
+        Dim note As String = $"{r.VolumeRatio:F1}× {FormatUsdShort(r.CurrentVolumeUSD)}"
+        Return MakeSignalRow("Volume", state, colour, note, ScForItem(items, "Volume"))
+    End Function
+
+    ' --- TIER 1 ---
+
+    Private Shared Function BuildRowVwapDev(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        If r.VWAPDevPct > 0 Then
+            state = "LONG"
+            colour = Theme.ACC_STRONG_LONG
+        ElseIf r.VWAPDevPct < 0 Then
+            state = "SHORT"
+            colour = Theme.ACC_SHORT
+        Else
+            state = "NEUT"
+            colour = Theme.FG_TERTIARY
+        End If
+        Dim note As String = String.Format("{0:+0.00;-0.00;0.00}%", r.VWAPDevPct)
+        ' VWAP scoring fires as a single "VWAP" breakdown item — split between
+        ' VWAP Dev and VWAP Bands rows. Attribute the SC to VWAP Dev (primary).
+        Return MakeSignalRow("VWAP Dev", state, colour, note, ScForItem(items, "VWAP"))
+    End Function
+
+    Private Shared Function BuildRowVwapBands(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        ' Band zone from current price vs σ1/σ2 bounds. SC=0 here — the VWAP
+        ' breakdown item's SC already counted on the Dev row above.
+        Dim p As Double = r.CurrentPrice
+        Dim state As String, colour As Color, note As String
+        If p > r.VWAPSigma2Upper Then
+            state = "OB σ2" : colour = Theme.ACC_SHORT : note = "above σ2 upper"
+        ElseIf p > r.VWAPSigma1Upper Then
+            state = "σ1 up" : colour = Theme.ACC_WARN : note = "σ1–σ2 upper"
+        ElseIf p < r.VWAPSigma2Lower Then
+            state = "OS σ2" : colour = Theme.ACC_STRONG_LONG : note = "below σ2 lower"
+        ElseIf p < r.VWAPSigma1Lower Then
+            state = "σ1 dn" : colour = Theme.ACC_WARN : note = "σ1–σ2 lower"
+        Else
+            state = "inside" : colour = Theme.FG_TERTIARY : note = "within σ1"
+        End If
+        Return MakeSignalRow("VWAP Bands", state, colour, note, 0)
+    End Function
+
+    Private Shared Function BuildRowBbwTtm(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.SqueezeStatus, "")
+            Case "RELEASING" : state = "RELEASE" : colour = Theme.ACC_STRONG_LONG
+            Case "ACTIVE"    : state = "ACTIVE"  : colour = Theme.ACC_WARN
+            Case Else        : state = "NEUT"    : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String = If(r.SqueezeStatus, "—").ToLower()
+        Return MakeSignalRow("BBW/TTM", state, colour, note, ScForItem(items, "BBW/TTM"))
+    End Function
+
+    Private Shared Function BuildRowEmaRibbon(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color, note As String
+        Select Case If(r.EMAAlignment, "")
+            Case "BULL" : state = "BULL"  : colour = Theme.ACC_STRONG_LONG : note = "9>21>50"
+            Case "BEAR" : state = "BEAR"  : colour = Theme.ACC_SHORT       : note = "50>21>9"
+            Case Else   : state = "MIXED" : colour = Theme.ACC_WARN        : note = "mixed"
+        End Select
+        Return MakeSignalRow("EMA Ribbon", state, colour, note, ScForItem(items, "EMA 9/21/50"))
+    End Function
+
+    Private Shared Function BuildRowTrendStr(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color, note As String
+        Select Case r.TrendStructure
+            Case TrendStructure.UPTREND     : state = "UP"      : colour = Theme.ACC_STRONG_LONG       : note = "HH/HL"
+            Case TrendStructure.DOWNTREND   : state = "DOWN"    : colour = Theme.ACC_SHORT             : note = "LH/LL"
+            Case TrendStructure.EXPANSION   : state = "EXPAND"  : colour = Theme.ACC_WARN              : note = "HH/LL"
+            Case TrendStructure.CONTRACTION : state = "CONTR"   : colour = Color.FromArgb(80, 200, 210) : note = "LH/HL"
+            Case Else                       : state = "—"       : colour = Theme.FG_QUATERNARY        : note = "insuff."
+        End Select
+        Return MakeSignalRow("Trend Str", state, colour, note, ScForItem(items, "Trend Structure"))
+    End Function
+
+    Private Shared Function BuildRowFunding(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim bias As String = If(r.FundingBias, "")
+        Dim state As String, colour As Color
+        If bias.Contains("HEAVILY") Then
+            state = "HEAVY"
+            colour = Theme.ACC_WARN
+        ElseIf bias = "NEUTRAL" OrElse bias = "" Then
+            state = "NEUT"
+            colour = Theme.FG_TERTIARY
+        Else
+            state = "CROWD"
+            colour = Theme.FG_TERTIARY
+        End If
+        Dim clamped As Double = If(Math.Abs(r.FundingRate) < 1.0E-8, 0.0, r.FundingRate)
+        Dim note As String = String.Format("{0:+0.0000;-0.0000;0.0000}%", clamped * 100.0)
+        Return MakeSignalRow("Funding", state, colour, note, ScForItem(items, "Funding (info)"))
+    End Function
+
+    Private Shared Function BuildRowFundingMom(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.FundingMomentum, "")
+            Case "RISING"  : state = "RISE"  : colour = Theme.ACC_WARN
+            Case "FALLING" : state = "FALL"  : colour = Theme.ACC_STRONG_LONG
+            Case Else      : state = "FLAT"  : colour = Theme.FG_TERTIARY
+        End Select
+        ' Funding momentum isn't a SignalBreakdownItem — SC = 0 (Step 3b
+        ' acts as an adjunct to the Funding score, not a standalone vote).
+        Return MakeSignalRow("Funding Mom", state, colour, "step 3b", 0)
+    End Function
+
+    Private Shared Function BuildRowOiChange(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.OISignal, "")
+            Case "NEW LONGS"   : state = "NEW LO" : colour = Theme.ACC_STRONG_LONG
+            Case "COVERING"    : state = "COVER"  : colour = Theme.ACC_STRONG_LONG
+            Case "NEW SHORTS"  : state = "NEW SH" : colour = Theme.ACC_SHORT
+            Case "CAPITULATION": state = "CAPIT"  : colour = Theme.ACC_SHORT
+            Case Else          : state = "NEUT"   : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String = String.Format("{0:+0.0;-0.0;0.0}%", r.OIChange15m)
+        Return MakeSignalRow("OI Change", state, colour, note, ScForItem(items, "OI Delta"))
+    End Function
+
+    ' --- TIER 2 ---
+
+    Private Shared Function BuildRowSpread(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.SpreadStatus, "")
+            Case "TIGHT"  : state = "TIGHT"  : colour = Theme.ACC_STRONG_LONG
+            Case "WIDE"   : state = "WIDE"   : colour = Theme.ACC_SHORT
+            Case Else     : state = "NORM"   : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String = $"{r.SpreadBps:F1} bps"
+        Return MakeSignalRow("Spread", state, colour, note, ScForItem(items, "Spread"))
+    End Function
+
+    Private Shared Function BuildRowOfi(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.OFISignal, "")
+            Case "BUY DOMINANT"  : state = "BULL" : colour = Theme.ACC_STRONG_LONG
+            Case "SELL DOMINANT" : state = "BEAR" : colour = Theme.ACC_SHORT
+            Case Else            : state = "BAL"  : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String = $"ratio {r.OFIRatio:F2}"
+        Return MakeSignalRow("OFI", state, colour, note, ScForItem(items, "OFI"))
+    End Function
+
+    Private Shared Function BuildRowOfiMom(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.OFIMomentum, "")
+            Case "RISING"  : state = "RISE" : colour = Theme.ACC_STRONG_LONG
+            Case "FALLING" : state = "FALL" : colour = Theme.ACC_SHORT
+            Case Else      : state = "FLAT" : colour = Theme.FG_TERTIARY
+        End Select
+        Return MakeSignalRow("OFI Mom", state, colour, "", 0)
+    End Function
+
+    Private Shared Function BuildRowLiq(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim sig As String = If(r.LiqSignal, "NONE")
+        Dim state As String, colour As Color
+        Select Case sig
+            Case "LONG LIQS"  : state = "L LIQ" : colour = Theme.ACC_SHORT     ' longs liquidating = bearish
+            Case "SHORT LIQS" : state = "S LIQ" : colour = Theme.ACC_STRONG_LONG ' shorts liquidating = bullish
+            Case Else         : state = "NONE"  : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String = sig.ToLower()
+        Return MakeSignalRow("Liq", state, colour, note, ScForItem(items, "Liq Penalty"))
+    End Function
+
+    Private Shared Function BuildRowCvd(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.CVDSlope, "")
+            Case "RISING"  : state = "BULL" : colour = Theme.ACC_STRONG_LONG
+            Case "FALLING" : state = "BEAR" : colour = Theme.ACC_SHORT
+            Case Else      : state = "FLAT" : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String = String.Format("{0:+0.0;-0.0;0.0}k", r.CVDValue / 1000.0)
+        If Not String.IsNullOrEmpty(r.CVDDivergence) AndAlso r.CVDDivergence <> "NONE" Then
+            note &= "  div:" & r.CVDDivergence.ToLower()
+        End If
+        Return MakeSignalRow("CVD", state, colour, note, ScForItem(items, "CVD"))
+    End Function
+
+    Private Shared Function BuildRowMicroCvd(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        ' GAP-82 — restore 4-state colour distinction. BULL_DECEL gets a pale-
+        ' green tint so a fading bull momentum reads visibly different from
+        ' BULL_ACCEL (bright green). Mirror for BEAR.
+        Dim state As String, colour As Color
+        Select Case If(r.MicroCVDSignal, "")
+            Case "BULL_ACCEL" : state = "BULL+"  : colour = Theme.ACC_STRONG_LONG
+            Case "BEAR_ACCEL" : state = "BEAR+"  : colour = Theme.ACC_SHORT
+            Case "BULL_DECEL" : state = "BULL-"  : colour = Color.FromArgb(120, 200, 120)
+            Case "BEAR_DECEL" : state = "BEAR-"  : colour = Color.FromArgb(220, 130, 130)
+            Case Else         : state = "FLAT"   : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String = If(r.MicroCVDMomentum, "").ToLower()
+        Return MakeSignalRow("MicroCVD", state, colour, note, ScForItem(items, "MicroCVD"))
+    End Function
+
+    Private Shared Function BuildRowTfi(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.TFISignal, "")
+            Case "BUY PRESSURE"  : state = "BUY"  : colour = Theme.ACC_STRONG_LONG
+            Case "SELL PRESSURE" : state = "SELL" : colour = Theme.ACC_SHORT
+            Case Else            : state = "NEUT" : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String = r.TFIValue.ToString("F2")
+        Return MakeSignalRow("TFI", state, colour, note, ScForItem(items, "TFI"))
+    End Function
+
+    Private Shared Function BuildRowEma200(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.PriceVsEMA200, "")
+            Case "ABOVE" : state = "ABOVE" : colour = Theme.ACC_STRONG_LONG
+            Case "BELOW" : state = "BELOW" : colour = Theme.ACC_SHORT
+            Case Else    : state = "—"     : colour = Theme.FG_TERTIARY
+        End Select
+        Return MakeSignalRow("EMA200 5m", state, colour, "", ScForItem(items, "5m EMA(200)"))
+    End Function
+
+    ' --- TIER 3 ---
+
+    Private Shared Function BuildRowDonchian(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.DonchianSignal, "")
+            Case "LONG", "LONG_PARTIAL"   : state = "LONG"  : colour = Theme.ACC_STRONG_LONG
+            Case "SHORT", "SHORT_PARTIAL" : state = "SHORT" : colour = Theme.ACC_SHORT
+            Case Else                     : state = "NEUT"  : colour = Theme.FG_TERTIARY
+        End Select
+        ' Quartile derived inline from price position.
+        Dim note As String
+        Dim range As Double = r.DonchianUpper - r.DonchianLower
+        If range <= 0 Then
+            note = "no range"
+        Else
+            Dim posPct As Double = (r.CurrentPrice - r.DonchianLower) / range
+            If posPct >= 0.75 Then
+                note = "upper qtr"
+            ElseIf posPct <= 0.25 Then
+                note = "lower qtr"
+            Else
+                note = "mid"
+            End If
+        End If
+        Return MakeSignalRow("Donchian", state, colour, note, ScForItem(items, "Donchian(20)"))
+    End Function
+
+    Private Shared Function BuildRowObv(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String, colour As Color
+        Select Case If(r.OBVTrend, "")
+            Case "RISING"  : state = "BULL" : colour = Theme.ACC_STRONG_LONG
+            Case "FALLING" : state = "BEAR" : colour = Theme.ACC_SHORT
+            Case Else      : state = "FLAT" : colour = Theme.FG_TERTIARY
+        End Select
+        Dim note As String
+        If Not String.IsNullOrEmpty(r.OBVDivergence) AndAlso r.OBVDivergence <> "NONE" Then
+            note = "div:" & r.OBVDivergence.ToLower()
+        Else
+            note = "no div"
+        End If
+        Return MakeSignalRow("OBV", state, colour, note, ScForItem(items, "OBV"))
+    End Function
+
+    Private Shared Function BuildRowVpfr(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim sig As String = If(r.VPFRSignal, "")
+        Dim state As String, colour As Color
+        If sig = "NEAR_HVN_SUPPORT" OrElse sig = "IN_LVN_BULL" Then
+            state = "BULL" : colour = Theme.ACC_STRONG_LONG
+        ElseIf sig = "NEAR_HVN_RESIST" OrElse sig = "IN_LVN_BEAR" Then
+            state = "BEAR" : colour = Theme.ACC_SHORT
+        Else
+            state = "NEUT" : colour = Theme.FG_TERTIARY
+        End If
+        Dim note As String = If(r.VPFRValueAreaSignal, "").ToLower().Replace("_", " ")
+        Return MakeSignalRow("VPFR", state, colour, note, ScForItem(items, "VPFR-lite"))
+    End Function
+
+    Private Shared Function BuildRowSwingPivots(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        Dim has5m  As Boolean = r.LastSwingHigh5m  > 0 OrElse r.LastSwingLow5m  > 0
+        Dim has15m As Boolean = r.LastSwingHigh15m > 0 OrElse r.LastSwingLow15m > 0
+        Dim state As String, colour As Color, note As String
+        If has5m AndAlso has15m Then
+            state = "BOTH" : colour = Theme.ACC_STRONG_LONG : note = "5m+15m"
+        ElseIf has5m Then
+            state = "5m"   : colour = Theme.ACC_WARN        : note = "5m only"
+        ElseIf has15m Then
+            state = "15m"  : colour = Theme.ACC_WARN        : note = "15m only"
+        Else
+            state = "NONE" : colour = Theme.FG_TERTIARY     : note = "no pivots"
+        End If
+
+        Dim subNote As String = Nothing
+        If r.BestPivotByVolume5m > 0 Then
+            subNote = String.Format("best vol: {0} @ {1:F0} ({2:F1}×)",
+                                    If(r.BestPivotIsHigh5m, "HIGH", "LOW"),
+                                    r.BestPivotByVolume5m, r.BestPivotVolumeRatio5m)
+        End If
+        ' Swing Pivots aren't a SignalBreakdownItem — SC = 0 (display only).
+        Return MakeSignalRow("Swing Pivots", state, colour, note, 0,
+                             subNote:=subNote,
+                             subNoteColour:=Theme.ACC_INFO)
+    End Function
+
+    ' -----------------------------------------------------------------------
+    ' Footer aggregates (OI × CVD, Pass 2c, Funding Mom)
+    ' -----------------------------------------------------------------------
+
+    Private Shared Function BuildBreakdownFooter(v As VerdictResult,
+                                                 r As IndicatorResults,
+                                                 items As List(Of SignalBreakdownItem)) As Control
+        Dim panel = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 1, .RowCount = 5,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 4, 0, 0)
+        }
+        panel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 1))    ' divider
+        panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 20))   ' OI × CVD
+        panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 20))   ' Pass 2c
+        panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 20))   ' Funding Mom
+        panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 1))    ' divider
+
+        panel.Controls.Add(NewDivider(), 0, 0)
+
+        ' OI × CVD
+        Dim oiOutcome As String = If(v.OiCvdOutcome, "NONE").ToUpper()
+        Dim oiState As String, oiColour As Color, oiTag As String
+        Select Case oiOutcome
+            Case "CONFIRMED_LONG"  : oiState = "● CONFIRMED LONG"  : oiColour = Theme.ACC_STRONG_LONG : oiTag = "+1 bonus"
+            Case "CONFIRMED_SHORT" : oiState = "● CONFIRMED SHORT" : oiColour = Theme.ACC_SHORT       : oiTag = "+1 bonus"
+            Case "CONFLICT_LONG", "CONFLICT_SHORT", "CONFLICT"
+                                    oiState = "⚠ CONFLICT"          : oiColour = Theme.ACC_WARN        : oiTag = "−1 penalty"
+            Case Else              : oiState = "○ NEUTRAL"          : oiColour = Theme.ACC_NEUTRAL     : oiTag = "no signal"
+        End Select
+        panel.Controls.Add(MakeFooterAggregate("OI × CVD", oiState, oiColour, oiTag), 0, 1)
+
+        ' Pass 2c — derive from "Regime Align (2c)" item (no Pass2cOutcome field exists).
+        Dim p2cItem = FindItem(items, "Regime Align (2c)")
+        Dim p2cState As String, p2cColour As Color, p2cTag As String
+        If p2cItem Is Nothing Then
+            p2cState = "SUPPRESSED"
+            p2cColour = Theme.ACC_NEUTRAL
+            p2cTag = ""
+        ElseIf p2cItem.LongHit AndAlso p2cItem.ShortHit Then
+            p2cState = "CONFLICT ↓"
+            p2cColour = Theme.ACC_SHORT
+            p2cTag = "−1 regime"
+        ElseIf p2cItem.LongHit OrElse p2cItem.ShortHit Then
+            p2cState = "ALIGNED ↑"
+            p2cColour = Theme.ACC_STRONG_LONG
+            p2cTag = "+1 regime"
+        Else
+            p2cState = "SUPPRESSED"
+            p2cColour = Theme.ACC_NEUTRAL
+            p2cTag = ""
+        End If
+        panel.Controls.Add(MakeFooterAggregate("Pass 2c", p2cState, p2cColour, p2cTag), 0, 2)
+
+        ' Funding Mom
+        Dim fmDir As String = If(r.FundingMomentum, "FLAT").ToUpper()
+        Dim fmState As String, fmColour As Color
+        Select Case fmDir
+            Case "RISING"  : fmState = "↑ RISING"  : fmColour = Theme.ACC_WARN
+            Case "FALLING" : fmState = "↓ FALLING" : fmColour = Theme.ACC_STRONG_LONG
+            Case Else      : fmState = "— FLAT"    : fmColour = Theme.FG_TERTIARY
+        End Select
+        panel.Controls.Add(MakeFooterAggregate("Funding Mom", fmState, fmColour, "step 3b"), 0, 3)
+
+        panel.Controls.Add(NewDivider(), 0, 4)
+        Return panel
+    End Function
+
+    Private Shared Function MakeFooterAggregate(label As String, stateText As String,
+                                                stateColour As Color, tag As String) As Control
+        Dim row = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 3, .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        }
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 130))
+        row.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+
+        row.Controls.Add(New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = label,
+            .Font = Theme.FontMono(9.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(8, 0, 0, 0)
+        }, 0, 0)
+
+        row.Controls.Add(New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = stateText,
+            .Font = Theme.FontMono(10.0F, FontStyle.Bold),
+            .ForeColor = stateColour,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(0)
+        }, 1, 0)
+
+        row.Controls.Add(New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = If(tag, ""),
+            .Font = Theme.FontMono(9.0F, FontStyle.Regular),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleRight,
+            .Margin = New Padding(0, 0, 8, 0)
+        }, 2, 0)
+
+        Return row
+    End Function
+
+    Private Shared Function NewDivider() As Panel
+        Return New Panel() With {
+            .Dock = DockStyle.Fill,
+            .BackColor = Theme.BORDER_INNER,
+            .Height = 1,
+            .Margin = New Padding(8, 2, 8, 2)
+        }
+    End Function
+
 End Class

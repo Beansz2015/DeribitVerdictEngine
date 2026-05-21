@@ -406,10 +406,11 @@ Partial Public Class MainForm
         structRow.Controls.Add(_cardStructShort, 1, 0)
         AddRow(structRow, 110)
 
-        ' Row 6: SIGNAL BREAKDOWN (placeholder — P4c)
+        ' Row 6: SIGNAL BREAKDOWN (P4c binds). 500 px to accommodate 8 rows
+        ' in the longest tier (TIER 1) plus header / column headers / 3
+        ' footer rows / TOTAL.
         _cardSignalBreakdown = NewCard()
-        AddRow(_cardSignalBreakdown, 440)
-        AddPlaceholderHeader(_cardSignalBreakdown, "SIGNAL BREAKDOWN")
+        AddRow(_cardSignalBreakdown, 500)
 
         ' Row 7: OI × CVD CROSS + VOLUME PROFILE side by side (placeholders — P4d)
         Dim row7 = New TableLayoutPanel() With {

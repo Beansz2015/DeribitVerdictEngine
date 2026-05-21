@@ -441,6 +441,7 @@ Partial Public Class MainForm
         BindCardAtrLevels(verdict, r)
         BindCardStructural(r, isLong:=True)
         BindCardStructural(r, isLong:=False)
+        BindCardSignalBreakdown(verdict, r)
 
         ' Update live performance strip (eval cache + OHLC cache + 6 window aggregates).
         ' Must come after RenderOutput so AnalysisOutputDump.Append has already run.
