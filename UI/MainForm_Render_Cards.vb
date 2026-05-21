@@ -61,17 +61,20 @@ Partial Public Class MainForm
     ' SCORE card
     ' -----------------------------------------------------------------------
     Private Sub InitScoreCard()
+        ' Layout: header / arc (flex) / confidence / raw scores.
+        ' Eff. scores + TRANSITIONAL penalty moved to VERDICT card so the
+        ' arc gauge keeps full vertical room (160 px hero / -24 padding /
+        ' -50 px stacked labels = ~86 px for the arc → enough for the
+        ' default 22pt LabelFont).
         Dim inner = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 6,
+            .ColumnCount = 1, .RowCount = 4,
             .BackColor = Color.Transparent
         }
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))   ' SCORE header
         inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' arc gauge (flex)
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 16))   ' confidence
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 16))   ' GAP-01 raw scores
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))   ' GAP-02 eff scores (conditional)
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))   ' GAP-03 penalty   (conditional)
         inner.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
         inner.Controls.Add(MakeSectionHeader("SCORE"), 0, 0)
@@ -98,22 +101,6 @@ Partial Public Class MainForm
         _lblScoreRaw.Text = "—"
         inner.Controls.Add(_lblScoreRaw, 0, 3)
 
-        ' GAP-02 effective scores (visible only on RegimePenalty > 0).
-        _lblScoreEff = MakeValueLabel(Theme.FontMono(8.0F, FontStyle.Regular), Theme.ACC_WARN)
-        _lblScoreEff.Dock = DockStyle.Fill
-        _lblScoreEff.TextAlign = ContentAlignment.MiddleCenter
-        _lblScoreEff.Text = ""
-        _lblScoreEff.Visible = False
-        inner.Controls.Add(_lblScoreEff, 0, 4)
-
-        ' GAP-03 penalty tag (same visibility gate).
-        _lblScorePenalty = MakeValueLabel(Theme.FontMono(8.0F, FontStyle.Bold), Theme.ACC_WARN)
-        _lblScorePenalty.Dock = DockStyle.Fill
-        _lblScorePenalty.TextAlign = ContentAlignment.MiddleCenter
-        _lblScorePenalty.Text = ""
-        _lblScorePenalty.Visible = False
-        inner.Controls.Add(_lblScorePenalty, 0, 5)
-
         _cardScore.Controls.Add(inner)
     End Sub
 
@@ -123,13 +110,14 @@ Partial Public Class MainForm
     Private Sub InitVerdictCard()
         Dim inner = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 4,
+            .ColumnCount = 1, .RowCount = 5,
             .BackColor = Color.Transparent
         }
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 50))
-        inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        inner.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))    ' section header
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 50))    ' verdict text
+        inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' 2×2 grid (flex)
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 16))    ' eff/penalty sub-row (conditional)
+        inner.RowStyles.Add(New RowStyle(SizeType.AutoSize))         ' regime anchor warn
         inner.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
         inner.Controls.Add(MakeSectionHeader("VERDICT"), 0, 0)
@@ -179,12 +167,24 @@ Partial Public Class MainForm
 
         inner.Controls.Add(grid, 0, 2)
 
+        ' GAP-02 + GAP-03 (relocated from SCORE card): effective scores +
+        ' TRANSITIONAL penalty rendered as a single conditional sub-line
+        ' beneath the REGIME / MTF grid. Hidden when RegimePenalty = 0.
+        _lblVerdictEffPenalty = MakeValueLabel(Theme.FontMono(9.0F, FontStyle.Bold), Theme.ACC_WARN)
+        _lblVerdictEffPenalty.Dock = DockStyle.Top
+        _lblVerdictEffPenalty.TextAlign = ContentAlignment.MiddleLeft
+        _lblVerdictEffPenalty.Margin = New Padding(0, 2, 0, 0)
+        _lblVerdictEffPenalty.Text = ""
+        _lblVerdictEffPenalty.Visible = False
+        inner.Controls.Add(_lblVerdictEffPenalty, 0, 3)
+
         _regimeAnchorWarn = New RegimeAnchorWarn() With {
             .Dock = DockStyle.Top,
             .Margin = New Padding(0, 4, 0, 0),
             .WarningText = ""
         }
-        inner.Controls.Add(_regimeAnchorWarn, 0, 3)
+        ' RegimeAnchorWarn moves into a new bottom row since EffPenalty took row 3.
+        inner.Controls.Add(_regimeAnchorWarn, 0, 4)
 
         _cardVerdict.Controls.Add(inner)
     End Sub
@@ -326,7 +326,9 @@ Partial Public Class MainForm
             .BackColor = Color.Transparent,
             .Margin = New Padding(0)
         }
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 50))
+        ' Col 0 widened to 70 px (was 50) — "SHORT" at 11pt Bold Geist Mono
+        ' was wrapping to "SHO / RT" at 50.
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 70))
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 12.0F))
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
@@ -453,21 +455,8 @@ Partial Public Class MainForm
         If _lblScoreRaw IsNot Nothing Then
             _lblScoreRaw.Text = $"Long {v.LongScore}/{shownMax}  |  Short {v.ShortScore}/{shownMax}"
         End If
-
-        ' GAP-02 + GAP-03 effective + penalty (visible only on TRANSITIONAL penalty).
-        Dim hasPenalty As Boolean = v.RegimePenalty > 0
-        If _lblScoreEff IsNot Nothing Then
-            _lblScoreEff.Visible = hasPenalty
-            If hasPenalty Then
-                _lblScoreEff.Text = $"(eff. {v.EffectiveLongScore}/{shownMax}  |  eff. {v.EffectiveShortScore}/{shownMax})"
-            End If
-        End If
-        If _lblScorePenalty IsNot Nothing Then
-            _lblScorePenalty.Visible = hasPenalty
-            If hasPenalty Then
-                _lblScorePenalty.Text = $"TRANSITIONAL penalty: −{v.RegimePenalty}"
-            End If
-        End If
+        ' GAP-02 + GAP-03 (eff scores + TRANSITIONAL penalty) render
+        ' inside the VERDICT card via BindCardVerdict — see _lblVerdictEffPenalty.
     End Sub
 
     Public Sub BindCardVerdict(v As VerdictResult, r As IndicatorResults)
@@ -515,6 +504,19 @@ Partial Public Class MainForm
         If _regimeAnchorWarn IsNot Nothing Then
             _regimeAnchorWarn.WarningText = ComputeRegimeAnchorWarning(v, r)
         End If
+
+        ' GAP-02 + GAP-03 — eff scores + TRANSITIONAL penalty under the
+        ' REGIME grid. Visible only when the engine actually applied a
+        ' transitional regime penalty.
+        If _lblVerdictEffPenalty IsNot Nothing Then
+            Dim hasPenalty As Boolean = v.RegimePenalty > 0
+            _lblVerdictEffPenalty.Visible = hasPenalty
+            If hasPenalty Then
+                Dim mx As Integer = If(v.MaxScore > 0, v.MaxScore, 20)
+                _lblVerdictEffPenalty.Text =
+                    $"eff. L {v.EffectiveLongScore}/{mx}  |  S {v.EffectiveShortScore}/{mx}   ·   penalty −{v.RegimePenalty}"
+            End If
+        End If
     End Sub
 
     Public Sub BindCardLastPrice(r As IndicatorResults, lastTradePrice As Double)
@@ -542,17 +544,21 @@ Partial Public Class MainForm
         End If
     End Sub
 
-    Public Sub BindCardAtrLevels(v As VerdictResult, r As IndicatorResults)
+    Public Sub BindCardAtrLevels(v As VerdictResult, r As IndicatorResults, norms As DynamicNorms)
         Dim cfg As EngineSettings = SettingsLoader.Current
         Dim stopMult   As Double = cfg.Scoring.AtrStopMultiplier
         Dim targetMult As Double = cfg.Scoring.AtrTargetMultiplier
-        Dim atrUnit    As Double = r.ATR * r.ATRSizeMultiplier
+        ' Legacy parity: math uses the unrounded norms.ATRScaleFactor so
+        ' stop/target prices match the legacy txtOutput render exactly.
+        ' Sub-header still displays the rounded r.ATRSizeMultiplier (e.g.,
+        ' "× 0.71 scale") since that's what the trader is used to seeing.
+        Dim atrUnit    As Double = r.ATR * norms.ATRScaleFactor
         Dim atrStop    As Double = atrUnit * stopMult
         Dim atrTarget  As Double = atrUnit * targetMult
         Dim entryPx    As Double = r.CurrentPrice
 
-        ' GAP-05 sub-header: current ATR config params at full resolution so the
-        ' trader sees which multipliers + dynamic scale are in effect.
+        ' GAP-05 sub-header: current ATR config params (rounded scale per
+        ' r.ATRSizeMultiplier for display continuity with the legacy line).
         If _atrSubHeader IsNot Nothing Then
             _atrSubHeader.Text = $"ATR {r.ATR:F2} × {r.ATRSizeMultiplier:F2} scale  |  {stopMult:F1}× stop / {targetMult:F1}× target"
         End If
@@ -867,6 +873,60 @@ Partial Public Class MainForm
     Private Const SIGROW_HEIGHT As Integer = 18
     Private Const SIGROW_SUBNOTE_HEIGHT As Integer = 14
 
+    ' -----------------------------------------------------------------------
+    ' Engine-label → display-label mapping for SIGNAL BREAKDOWN.
+    ' Anchored here so the binding shape survives context churn — without
+    ' this table the next maintainer has to re-derive it from the scoring
+    ' source.
+    '
+    ' Engine emits these breakdown items (from Core/ScoringEngine_Calculate
+    ' _Scoring.vb + _Verdict.vb):
+    '
+    '   Engine label          → Display row label    Notes
+    '   ----------------------  -------------------   --------------------------------
+    '   ROC(9)                  ROC(9)                direct
+    '   RSI(9)                  RSI(9)                direct
+    '   (none)                  RSI Div               derived from r.RSIDivergence
+    '                                                  → non-voting (SC "—")
+    '   DMI +/-DI               DMI/ADX (component)   SC = sum of these two,
+    '   ADX>{N}                  DMI/ADX (component)   clamped to ±1
+    '   Volume                  Volume                direct
+    '   VWAP                    VWAP Dev              SC attributed to Dev row
+    '                           VWAP Bands            non-voting (SC "—")
+    '   BBW/TTM                 BBW/TTM               direct
+    '   EMA 9/21/50             EMA Ribbon            relabel
+    '   Trend Structure         Trend Str             relabel
+    '   Funding (info)          Funding               always SC=0 in breakdown —
+    '                                                  Step 3 modifier surfaces
+    '                                                  through VERDICT card's
+    '                                                  eff. L/M sub-row.
+    '                                                  Rendered non-voting (SC "—").
+    '   (none)                  Funding Mom           Step 3b adjunct, non-voting
+    '   OI Delta                OI Change             relabel
+    '   Spread                  Spread                direct
+    '   OFI                     OFI                   direct
+    '   (none)                  OFI Mom               momentum derivative, non-voting
+    '   Liq Penalty             Liq                   relabel
+    '   CVD                     CVD                   direct
+    '   MicroCVD                MicroCVD              direct
+    '   TFI                     TFI                   direct
+    '   5m EMA(200)             EMA200 5m             relabel
+    '   Donchian(20)            Donchian              relabel
+    '   OBV                     OBV                   direct
+    '   VPFR-lite               VPFR                  relabel
+    '   (none)                  Swing Pivots          derived from r.LastSwingHigh*
+    '                                                  / Low* + r.BestPivot*,
+    '                                                  non-voting (SC "—")
+    '
+    ' Emitted by engine but NOT rendered as a per-tier row here:
+    '   Regime Align (2c)  → drives Pass 2c badge in the footer
+    '   MTF Gate (15m)     → drives MtfRow in the VERDICT card
+    '
+    ' SC cell display convention:
+    '   sc.HasValue = True,  sc.Value <> 0   → "+1" / "-1"
+    '   sc.HasValue = True,  sc.Value = 0    → " 0"
+    '   sc.HasValue = False                  → "—" (this row didn't vote)
+    ' -----------------------------------------------------------------------
     Public Sub BindCardSignalBreakdown(v As VerdictResult, r As IndicatorResults)
         If _cardSignalBreakdown Is Nothing Then Return
 
@@ -1034,25 +1094,44 @@ Partial Public Class MainForm
                                           state As String,
                                           stateColour As Color,
                                           note As String,
-                                          sc As Integer,
+                                          sc As Integer?,
                                           Optional subNote As String = Nothing,
                                           Optional subNoteColour As Color = Nothing) As Control
         Dim trimLabel As String = If(label, "")
         If trimLabel.Length > 14 Then trimLabel = trimLabel.Substring(0, 14)
         Dim trimState As String = If(state, "")
         If trimState.Length > 8 Then trimState = trimState.Substring(0, 8)
+
+        ' SC cell encodes three states:
+        '   sc Is Nothing     → "—"  (this row didn't vote — display-only)
+        '   sc.Value <> 0     → "+1" / "-1"  (signed vote)
+        '   sc.Value = 0      → " 0" (vote measured zero)
+        ' "—" is rendered in FG_DIM via a separate label overlay so the rest
+        ' of the row keeps its state-driven colour.
+        Dim hasVote As Boolean = sc.HasValue
         Dim scText As String
-        If sc > 0 Then
-            scText = "+" & sc.ToString()
-        ElseIf sc < 0 Then
-            scText = sc.ToString()
+        If Not hasVote Then
+            scText = " —"
+        ElseIf sc.Value > 0 Then
+            scText = "+" & sc.Value.ToString()
+        ElseIf sc.Value < 0 Then
+            scText = sc.Value.ToString()
         Else
             scText = " 0"
         End If
         Dim noteText As String = If(note, "")
 
-        Dim text As String = String.Format("{0,-14}  {1,-6}  {2,-32} {3,3}",
-                                            trimLabel, trimState, noteText, scText)
+        ' Composite text omits the SC for non-voting rows; that cell is drawn
+        ' as a separate overlay label in FG_DIM so the dim "—" reads as
+        ' explicitly not-a-score rather than a faded number.
+        Dim text As String
+        If hasVote Then
+            text = String.Format("{0,-14}  {1,-6}  {2,-32} {3,3}",
+                                 trimLabel, trimState, noteText, scText)
+        Else
+            text = String.Format("{0,-14}  {1,-6}  {2,-32}    ",
+                                 trimLabel, trimState, noteText)
+        End If
 
         Dim rowH As Integer = SIGROW_HEIGHT
         If Not String.IsNullOrEmpty(subNote) Then rowH = SIGROW_HEIGHT + SIGROW_SUBNOTE_HEIGHT
@@ -1076,6 +1155,23 @@ Partial Public Class MainForm
             .AutoEllipsis = True
         }
         row.Controls.Add(mainLbl)
+
+        ' Em-dash overlay for non-voting rows. Positioned over the SC slot
+        ' (right edge of the row) in FG_DIM to read as "no vote here."
+        If Not hasVote Then
+            Dim dashLbl = New Label() With {
+                .AutoSize = False,
+                .Location = New Point(470, 0),
+                .Size = New Size(28, SIGROW_HEIGHT),
+                .Text = "—",
+                .Font = Theme.FontMono(9.5F, FontStyle.Regular),
+                .ForeColor = Theme.FG_DIM,
+                .BackColor = Color.Transparent,
+                .TextAlign = ContentAlignment.MiddleRight
+            }
+            row.Controls.Add(dashLbl)
+            dashLbl.BringToFront()
+        End If
 
         If Not String.IsNullOrEmpty(subNote) Then
             Dim subLbl = New Label() With {
@@ -1194,8 +1290,8 @@ Partial Public Class MainForm
             state = "—"
             colour = Theme.FG_TERTIARY
         End If
-        ' RSI divergence isn't a separate scoring item — SC = 0 (display only).
-        Return MakeSignalRow("RSI Div", state, colour, div.ToLower(), 0)
+        ' RSI Div isn't a separate scoring item — non-voting row (SC "—").
+        Return MakeSignalRow("RSI Div", state, colour, div.ToLower(), CType(Nothing, Integer?))
     End Function
 
     Private Shared Function BuildRowDmiAdx(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
@@ -1269,7 +1365,9 @@ Partial Public Class MainForm
         Else
             state = "inside" : colour = Theme.FG_TERTIARY : note = "within σ1"
         End If
-        Return MakeSignalRow("VWAP Bands", state, colour, note, 0)
+        ' VWAP Bands is state-only — the engine's single "VWAP" item's SC
+        ' is attributed to the VWAP Dev row above.
+        Return MakeSignalRow("VWAP Bands", state, colour, note, CType(Nothing, Integer?))
     End Function
 
     Private Shared Function BuildRowBbwTtm(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
@@ -1320,7 +1418,10 @@ Partial Public Class MainForm
         End If
         Dim clamped As Double = If(Math.Abs(r.FundingRate) < 1.0E-8, 0.0, r.FundingRate)
         Dim note As String = String.Format("{0:+0.0000;-0.0000;0.0000}%", clamped * 100.0)
-        Return MakeSignalRow("Funding", state, colour, note, ScForItem(items, "Funding (info)"))
+        ' Funding is not a Step 2 vote — the engine's Step 3 modifier
+        ' surfaces through the VERDICT card's eff. L/M sub-row. Non-voting
+        ' display row (SC "—").
+        Return MakeSignalRow("Funding", state, colour, note, CType(Nothing, Integer?))
     End Function
 
     Private Shared Function BuildRowFundingMom(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
@@ -1330,9 +1431,9 @@ Partial Public Class MainForm
             Case "FALLING" : state = "FALL"  : colour = Theme.ACC_STRONG_LONG
             Case Else      : state = "FLAT"  : colour = Theme.FG_TERTIARY
         End Select
-        ' Funding momentum isn't a SignalBreakdownItem — SC = 0 (Step 3b
-        ' acts as an adjunct to the Funding score, not a standalone vote).
-        Return MakeSignalRow("Funding Mom", state, colour, "step 3b", 0)
+        ' Funding Mom is a Step 3b adjunct, not a standalone vote — non-
+        ' voting display row (SC "—").
+        Return MakeSignalRow("Funding Mom", state, colour, "step 3b", CType(Nothing, Integer?))
     End Function
 
     Private Shared Function BuildRowOiChange(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
@@ -1379,7 +1480,8 @@ Partial Public Class MainForm
             Case "FALLING" : state = "FALL" : colour = Theme.ACC_SHORT
             Case Else      : state = "FLAT" : colour = Theme.FG_TERTIARY
         End Select
-        Return MakeSignalRow("OFI Mom", state, colour, "", 0)
+        ' OFI Mom is a momentum derivative — non-voting display row (SC "—").
+        Return MakeSignalRow("OFI Mom", state, colour, "", CType(Nothing, Integer?))
     End Function
 
     Private Shared Function BuildRowLiq(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
@@ -1522,8 +1624,8 @@ Partial Public Class MainForm
                                     If(r.BestPivotIsHigh5m, "HIGH", "LOW"),
                                     r.BestPivotByVolume5m, r.BestPivotVolumeRatio5m)
         End If
-        ' Swing Pivots aren't a SignalBreakdownItem — SC = 0 (display only).
-        Return MakeSignalRow("Swing Pivots", state, colour, note, 0,
+        ' Swing Pivots aren't a SignalBreakdownItem — non-voting display row.
+        Return MakeSignalRow("Swing Pivots", state, colour, note, CType(Nothing, Integer?),
                              subNote:=subNote,
                              subNoteColour:=Theme.ACC_INFO)
     End Function
@@ -1562,27 +1664,41 @@ Partial Public Class MainForm
         End Select
         panel.Controls.Add(MakeFooterAggregate("OI × CVD", oiState, oiColour, oiTag), 0, 1)
 
-        ' Pass 2c — derive from "Regime Align (2c)" item (no Pass2cOutcome field exists).
+        ' Pass 2c — derive from "Regime Align (2c)" item (no Pass2cOutcome
+        ' field on VerdictResult). The 3-state Pass2cBadge can't encode
+        ' direction, so emit a separate ↑/↓ arrow next to the badge when
+        ' ALIGNED on a specific side.
         Dim p2cItem = FindItem(items, "Regime Align (2c)")
         Dim p2cState As String, p2cColour As Color, p2cTag As String
+        Dim p2cArrow As String = "", p2cArrowColour As Color = Color.Empty
         If p2cItem Is Nothing Then
             p2cState = "SUPPRESSED"
             p2cColour = Theme.ACC_NEUTRAL
             p2cTag = ""
         ElseIf p2cItem.LongHit AndAlso p2cItem.ShortHit Then
-            p2cState = "CONFLICT ↓"
+            p2cState = "CONFLICT"
             p2cColour = Theme.ACC_SHORT
             p2cTag = "−1 regime"
-        ElseIf p2cItem.LongHit OrElse p2cItem.ShortHit Then
-            p2cState = "ALIGNED ↑"
+        ElseIf p2cItem.LongHit Then
+            p2cState = "ALIGNED"
             p2cColour = Theme.ACC_STRONG_LONG
             p2cTag = "+1 regime"
+            p2cArrow = "↑"
+            p2cArrowColour = Theme.ACC_STRONG_LONG
+        ElseIf p2cItem.ShortHit Then
+            p2cState = "ALIGNED"
+            p2cColour = Theme.ACC_STRONG_LONG
+            p2cTag = "+1 regime"
+            p2cArrow = "↓"
+            p2cArrowColour = Theme.ACC_SHORT
         Else
             p2cState = "SUPPRESSED"
             p2cColour = Theme.ACC_NEUTRAL
             p2cTag = ""
         End If
-        panel.Controls.Add(MakeFooterAggregate("Pass 2c", p2cState, p2cColour, p2cTag), 0, 2)
+        panel.Controls.Add(MakeFooterAggregate("Pass 2c", p2cState, p2cColour, p2cTag,
+                                               arrow:=p2cArrow,
+                                               arrowColour:=p2cArrowColour), 0, 2)
 
         ' Funding Mom
         Dim fmDir As String = If(r.FundingMomentum, "FLAT").ToUpper()
@@ -1599,16 +1715,19 @@ Partial Public Class MainForm
     End Function
 
     Private Shared Function MakeFooterAggregate(label As String, stateText As String,
-                                                stateColour As Color, tag As String) As Control
+                                                stateColour As Color, tag As String,
+                                                Optional arrow As String = "",
+                                                Optional arrowColour As Color = Nothing) As Control
         Dim row = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 3, .RowCount = 1,
+            .ColumnCount = 4, .RowCount = 1,
             .BackColor = Color.Transparent,
             .Margin = New Padding(0)
         }
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 130))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))   ' label
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 140))   ' state
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F)) ' arrow + spacer
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 130))   ' tag
         row.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
 
         row.Controls.Add(New Label() With {
@@ -1633,6 +1752,20 @@ Partial Public Class MainForm
             .Margin = New Padding(0)
         }, 1, 0)
 
+        ' Arrow column — independent colour so e.g. ALIGNED-SHORT renders
+        ' the badge text green but the arrow red.
+        Dim arrowText As String = If(arrow, "")
+        row.Controls.Add(New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = arrowText,
+            .Font = Theme.FontMono(11.0F, FontStyle.Bold),
+            .ForeColor = If(arrowColour.IsEmpty, Theme.FG_TERTIARY, arrowColour),
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(0)
+        }, 2, 0)
+
         row.Controls.Add(New Label() With {
             .AutoSize = False,
             .Dock = DockStyle.Fill,
@@ -1642,7 +1775,7 @@ Partial Public Class MainForm
             .BackColor = Color.Transparent,
             .TextAlign = ContentAlignment.MiddleRight,
             .Margin = New Padding(0, 0, 8, 0)
-        }, 2, 0)
+        }, 3, 0)
 
         Return row
     End Function

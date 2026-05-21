@@ -438,7 +438,7 @@ Partial Public Class MainForm
         BindCardScore(verdict)
         BindCardVerdict(verdict, r)
         BindCardLastPrice(r, lastTradePrice)
-        BindCardAtrLevels(verdict, r)
+        BindCardAtrLevels(verdict, r, norms)
         BindCardStructural(r, isLong:=True)
         BindCardStructural(r, isLong:=False)
         BindCardSignalBreakdown(verdict, r)

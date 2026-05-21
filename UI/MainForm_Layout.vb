@@ -106,8 +106,10 @@ Partial Public Class MainForm
     Friend _scoreArc          As ScoreArcGauge
     Friend _lblScoreConfidence As Label
     Friend _lblScoreRaw       As Label   ' GAP-01: "Long N/M | Short N/M"
-    Friend _lblScoreEff       As Label   ' GAP-02: "(eff. L/M | eff. S/M)", visible only on RegimePenalty > 0
-    Friend _lblScorePenalty   As Label   ' GAP-03: "TRANSITIONAL penalty: −N", same visibility gate
+    ' GAP-02 + GAP-03 moved to VERDICT card per stabilisation decision —
+    ' eff scores + TRANSITIONAL penalty render beneath the REGIME line so
+    ' the SCORE card keeps full vertical room for the arc gauge.
+    Friend _lblVerdictEffPenalty As Label
     Friend _lblVerdictText    As Label
     Friend _contextBadge      As ContextBadge
     Friend _lblRegime         As Label
