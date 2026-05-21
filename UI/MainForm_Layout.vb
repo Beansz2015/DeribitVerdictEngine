@@ -639,8 +639,13 @@ Partial Public Class MainForm
     ' Hard width ceiling 1280 px per parent spec §3.6.
     ' -----------------------------------------------------------------------
     Private Sub ApplyInitialFormSize()
-        Const TARGET_CLIENT_W As Integer = 1200
-        Const HARD_CEILING_W  As Integer = 1280
+        ' Logical pixels. Under 150% DPI scaling these physically render as
+        ' 1.5×, so 1000 logical ≈ 1500 physical, which still leaves the rest
+        ' of a 3840-physical 4K screen for charts. Spec §3.6 hard ceiling of
+        ' "1280 px" assumed 100% DPI; on Windows that constraint must apply
+        ' to logical pixels because Me.Size is a logical measurement.
+        Const TARGET_CLIENT_W As Integer = 1000
+        Const HARD_CEILING_W  As Integer = 1080
 
         Dim chromeW As Integer = Me.Width  - Me.ClientSize.Width
         Dim chromeH As Integer = Me.Height - Me.ClientSize.Height
@@ -656,7 +661,7 @@ Partial Public Class MainForm
         Dim finalW As Integer = Math.Min(TARGET_CLIENT_W + chromeW, HARD_CEILING_W)
         Dim finalH As Integer = Math.Min(targetClientH + chromeH, wa.Height - 40)
 
-        Me.MinimumSize = New Size(1100 + chromeW, 700)
+        Me.MinimumSize = New Size(950 + chromeW, 700)
         Me.Size        = New Size(finalW, finalH)
         Me.Location    = New Point(
             wa.Left + (wa.Width  - finalW) \ 2,

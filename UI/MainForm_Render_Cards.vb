@@ -610,23 +610,33 @@ Partial Public Class MainForm
     End Function
 
     Private Shared Sub ApplyMtfRow(row As MtfRow, gatePass As Boolean, reason As String)
-        ' MTFGateReason format varies (set in IndicatorEngine.CalcMTFGate).
-        ' Heuristic parse: look for direction tokens [LONG] / [SHORT] in the
-        ' bracketed segment, and treat the boolean as the kind oracle.
-        Dim reasonText As String = If(reason, "")
-        Dim direction As String  = ExtractDirection(reasonText)
-        Dim blockedAgainst As String = ExtractBlockedAgainst(reasonText)
+        ' MTFGateReason format from IndicatorEngine.CalcMTFGate:
+        '   "MTF PASS [LONG] 15m +DI:39.8"           — passing direction
+        '   "MTF BLOCK [LONG vs SHORT] ADX 18 < 20"  — proposed vs blocking
+        '   "MTF state: BULLISH"                     — no proposed direction
+        ' Strip the literal "MTF " prefix before the keyword test so the
+        ' control's own "MTF " prefix doesn't end up doubled in the display.
+        Dim reasonText As String = If(reason, "").Trim()
+        Dim stripped As String = reasonText
+        If stripped.StartsWith("MTF ", StringComparison.OrdinalIgnoreCase) Then
+            stripped = stripped.Substring(4).TrimStart()
+        End If
+        Dim direction As String  = ExtractDirection(stripped)
+        Dim blockedAgainst As String = ExtractBlockedAgainst(stripped)
 
-        If reasonText.StartsWith("PASS", StringComparison.OrdinalIgnoreCase) Then
+        If stripped.StartsWith("PASS", StringComparison.OrdinalIgnoreCase) Then
             row.Kind = MtfRow.MtfKind.PASS
             row.Direction = If(String.IsNullOrEmpty(direction), "—", direction)
-        ElseIf reasonText.StartsWith("BLOCK", StringComparison.OrdinalIgnoreCase) Then
+        ElseIf stripped.StartsWith("BLOCK", StringComparison.OrdinalIgnoreCase) Then
             row.Kind = MtfRow.MtfKind.BLOCK
             row.Direction = If(String.IsNullOrEmpty(direction), "?", direction)
             row.BlockedAgainst = If(String.IsNullOrEmpty(blockedAgainst), "?", blockedAgainst)
+        ElseIf stripped.StartsWith("state:", StringComparison.OrdinalIgnoreCase) Then
+            row.Kind = MtfRow.MtfKind.STATE_ONLY
+            row.Direction = stripped.Substring(6).Trim()
         Else
             row.Kind = MtfRow.MtfKind.STATE_ONLY
-            row.Direction = If(String.IsNullOrEmpty(reasonText), "—", reasonText)
+            row.Direction = If(String.IsNullOrEmpty(stripped), "—", stripped)
         End If
     End Sub
 
