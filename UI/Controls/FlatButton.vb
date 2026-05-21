@@ -134,6 +134,7 @@ Public Class FlatButton
     End Sub
 
     Protected Overrides Sub OnPaint(pevent As PaintEventArgs)
+        If Me.ClientRectangle.Width <= 0 OrElse Me.ClientRectangle.Height <= 0 Then Return
         Dim g = pevent.Graphics
         g.SmoothingMode = SmoothingMode.AntiAlias
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit

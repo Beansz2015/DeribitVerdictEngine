@@ -40,6 +40,7 @@ Public Class AnalysisReportButton
     End Property
 
     Protected Overrides Sub OnPaint(pevent As PaintEventArgs)
+        If Me.ClientRectangle.Width <= 0 OrElse Me.ClientRectangle.Height <= 0 Then Return
         ' Paint glow halo into the parent-relative client rect before the
         ' button body so the body sits on top of the halo.
         Dim g = pevent.Graphics

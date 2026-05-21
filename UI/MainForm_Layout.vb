@@ -336,9 +336,13 @@ Partial Public Class MainForm
         AddRow(_cardHeaderStrip, 60)
         ReparentHeaderStripControls()
 
-        ' Row 2: live performance strip
+        ' Row 2: live performance strip. 40 px wasn't tall enough for the
+        ' AutoSize labels + flow padding + card padding (totalled ~30 px
+        ' vertical demand against 16 px of inner content room); labels
+        ' were clipping to zero. Bumped to 52 with tighter card padding.
         _cardPerfStrip = NewCard()
-        AddRow(_cardPerfStrip, 40)
+        _cardPerfStrip.Padding = New Padding(10, 6, 10, 6)
+        AddRow(_cardPerfStrip, 52)
         ReparentPerfStripControls()
 
         ' Row 3: hero — SCORE / VERDICT / LAST PRICE side by side
@@ -491,14 +495,10 @@ Partial Public Class MainForm
         rbLong.Location  = New Point(190, Y_TOP + 2)
         rbShort.Location = New Point(190, Y_TOP + 22)
 
-        ' lblVerdict floats next to the radios as the "current verdict" mini
-        ' echo (the big verdict text lives in _cardVerdict). Keep it small,
-        ' centred between the radios and ANALYZE so it stays useful as a
-        ' compact echo until P5 deletes it.
-        lblVerdict.Location = New Point(290, Y_TOP + 4)
-        lblVerdict.Size     = New Size(280, 30)
-        lblVerdict.TextAlign = ContentAlignment.MiddleLeft
-        lblVerdict.Font      = Theme.FontMono(11.0F, FontStyle.Bold)
+        ' lblVerdict is superseded by the new VERDICT card — hide it so it
+        ' stops competing for header-strip real estate. Text updates from
+        ' RenderOutput() still write to it; P5 deletes the field entirely.
+        lblVerdict.Visible = False
 
         ' AUTO EVERY {m} {s} chip cluster
         lblAutoRun.Text     = "AUTO EVERY"
@@ -558,7 +558,7 @@ Partial Public Class MainForm
             .FlowDirection = FlowDirection.LeftToRight,
             .WrapContents = False,
             .BackColor = Color.Transparent,
-            .Padding = New Padding(2, 4, 2, 4)
+            .Padding = New Padding(2, 2, 2, 2)
         }
         Dim allLabels = New Label() {
             lblPerfMode, lblPerfWeek, lblPerf3d, lblPerfDay,

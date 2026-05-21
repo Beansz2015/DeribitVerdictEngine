@@ -92,6 +92,7 @@ Public Class RoundedCardPanel
     End Property
 
     Protected Overrides Sub OnPaint(e As PaintEventArgs)
+        If Me.ClientRectangle.Width <= 0 OrElse Me.ClientRectangle.Height <= 0 Then Return
         Dim g = e.Graphics
         g.SmoothingMode = SmoothingMode.AntiAlias
         g.PixelOffsetMode = PixelOffsetMode.HighQuality

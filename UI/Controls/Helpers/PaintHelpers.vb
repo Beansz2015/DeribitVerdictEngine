@@ -19,15 +19,32 @@ Public Module PaintHelpers
 
     Public Function RoundedRect(bounds As RectangleF, radius As Single) As GraphicsPath
         Dim path As New GraphicsPath()
+
+        ' Bail on zero-area bounds — happens during layout when a control is
+        ' momentarily sized to zero. Returning an empty path is safe; the
+        ' caller's FillPath/DrawPath is a no-op.
+        If bounds.Width <= 0 OrElse bounds.Height <= 0 Then
+            Return path
+        End If
+
         Dim d = radius * 2.0F
         If d <= 0 Then
             path.AddRectangle(bounds)
             Return path
         End If
+
         ' Clamp diameter to the shorter side so we never get a path that
         ' folds in on itself for narrow rectangles.
         If d > bounds.Width Then d = bounds.Width
         If d > bounds.Height Then d = bounds.Height
+
+        ' Belt-and-braces: if the clamp drove d to zero (bounds had one
+        ' near-zero dimension that the early-return didn't catch), fall
+        ' back to a plain rectangle.
+        If d <= 0 Then
+            path.AddRectangle(bounds)
+            Return path
+        End If
 
         path.AddArc(bounds.X, bounds.Y, d, d, 180, 90)
         path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90)

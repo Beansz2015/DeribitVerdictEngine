@@ -24,7 +24,10 @@ Public Class ScoreArcGauge
     Private _value As Integer = 0
     Private _max As Integer = 20
     Private _arcColor As Color = Theme.ACC_STRONG_LONG
-    Private _backArcColor As Color = Theme.BG_CARD_RAISED
+    ' Light alpha-on-base track — Theme.BG_CARD_RAISED was only ~6 RGB
+    ' steps brighter than BG_CARD, so the backtrack barely showed. Spec
+    ' stabilisation pass §Fix 5: use ~18% white instead.
+    Private _backArcColor As Color = Color.FromArgb(45, 255, 255, 255)
     Private _labelFont As Font = Theme.FontMono(22.0F, FontStyle.Bold)
     Private _denomFont As Font = Theme.FontMono(11.0F, FontStyle.Regular)
     Private _animationEnabled As Boolean = True
@@ -190,6 +193,7 @@ Public Class ScoreArcGauge
     End Sub
 
     Protected Overrides Sub OnPaint(e As PaintEventArgs)
+        If Me.ClientRectangle.Width <= 0 OrElse Me.ClientRectangle.Height <= 0 Then Return
         Dim g = e.Graphics
         g.SmoothingMode = SmoothingMode.AntiAlias
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit
