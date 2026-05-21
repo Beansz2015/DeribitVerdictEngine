@@ -644,8 +644,8 @@ Partial Public Class MainForm
         ' of a 3840-physical 4K screen for charts. Spec §3.6 hard ceiling of
         ' "1280 px" assumed 100% DPI; on Windows that constraint must apply
         ' to logical pixels because Me.Size is a logical measurement.
-        Const TARGET_CLIENT_W As Integer = 1000
-        Const HARD_CEILING_W  As Integer = 1080
+        Const TARGET_CLIENT_W As Integer = 1100
+        Const HARD_CEILING_W  As Integer = 1180
 
         Dim chromeW As Integer = Me.Width  - Me.ClientSize.Width
         Dim chromeH As Integer = Me.Height - Me.ClientSize.Height
