@@ -47,6 +47,18 @@ Public Class LivePerformanceTracker
         Public Property TargetHitCount  As Integer   ' [target-hit-toggle] target metric numerator
         Public Property TotalRange      As Integer   ' all rows in range (incl. PENDING/EXCLUDED) — for tooltip
 
+        ''' <summary>
+        ''' True when this aggregate's range terminates at "now" (i.e., the
+        ''' block is currently running or partially-running). False when the
+        ''' range is fully in the past (a completed historical block —
+        ''' yesterday's NY, an earlier Asia, etc.).
+        ''' Cur.Wk / 3d / Cur.Day always set this to True since they're
+        ''' rolling windows anchored at "now." Session windows set it
+        ''' per-block based on whether nowUtc8 falls inside the block.
+        ''' Drives the perf-strip "dim inactive sessions" rendering.
+        ''' </summary>
+        Public Property IsActive As Boolean = True
+
         ''' <summary>Barrier-hit rate. Denominator excludes rows where TargetEverHit is Nothing.</summary>
         Public ReadOnly Property BarrierRatePct As Double
             Get
@@ -463,6 +475,7 @@ Public Class LivePerformanceTracker
         Dim blockStartUtc8 As DateTime
         Dim blockEndUtc8   As DateTime
         Dim displayEndUtc8 As DateTime
+        Dim isActive       As Boolean
 
         If isStraddle Then
             Dim h As Integer = nowUtc8.Hour
@@ -471,26 +484,31 @@ Public Class LivePerformanceTracker
                 blockStartUtc8 = todayUtc8.AddDays(-1).AddHours(startH)
                 blockEndUtc8   = todayUtc8.AddHours(endH)
                 displayEndUtc8 = nowUtc8                     ' partial, running
+                isActive       = True
             ElseIf h >= startH Then
                 ' In the head of the session (e.g. 21:00+ for NY → today's block started)
                 blockStartUtc8 = todayUtc8.AddHours(startH)
                 blockEndUtc8   = todayUtc8.AddDays(1).AddHours(endH)
                 displayEndUtc8 = nowUtc8                     ' partial, running
+                isActive       = True
             Else
                 ' Between sessions (e.g. 07:00–20:59 for NY → yesterday's block completed)
                 blockStartUtc8 = todayUtc8.AddDays(-1).AddHours(startH)
                 blockEndUtc8   = todayUtc8.AddHours(endH)
                 displayEndUtc8 = blockEndUtc8                ' fully completed
+                isActive       = False
             End If
         Else
             If nowUtc8.Hour < startH Then
                 ' Before today's session — use yesterday's completed block.
                 blockStartUtc8 = todayUtc8.AddDays(-1).AddHours(startH)
                 blockEndUtc8   = todayUtc8.AddDays(-1).AddHours(endH)
+                isActive       = False
             Else
                 ' Today's session (may be active or already ended).
                 blockStartUtc8 = todayUtc8.AddHours(startH)
                 blockEndUtc8   = todayUtc8.AddHours(endH)
+                isActive       = (nowUtc8.Hour < endH)        ' running iff before end-of-block
             End If
             displayEndUtc8 = If(blockEndUtc8 < nowUtc8, blockEndUtc8, nowUtc8)
         End If
@@ -499,7 +517,9 @@ Public Class LivePerformanceTracker
         Dim rangeStartUtc As DateTime = blockStartUtc8.Subtract(utc8Shift)
         Dim rangeEndUtc   As DateTime = displayEndUtc8.Subtract(utc8Shift)
 
-        Return BuildAggregate(rangeStartUtc, rangeEndUtc, blockStartUtc8, displayEndUtc8)
+        Dim agg = BuildAggregate(rangeStartUtc, rangeEndUtc, blockStartUtc8, displayEndUtc8)
+        agg.IsActive = isActive
+        Return agg
     End Function
 
     ' -----------------------------------------------------------------------

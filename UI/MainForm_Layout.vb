@@ -722,6 +722,15 @@ Partial Public Class MainForm
                 text    = prefixes(i) & ": " & rate.ToString() & "%"
                 fgColor = If(rate > 50, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
 
+                ' Dim inactive session cells (Asia/London/NY when not currently
+                ' running). The labels array indices 3-5 are the session cells;
+                ' indices 0-2 are Cur.Wk/3d/Cur.Day rolling windows which are
+                ' always inherently active. --% cells (the Else branch below)
+                ' keep FG_QUATERNARY without double-dimming.
+                If i >= 3 AndAlso Not w.IsActive Then
+                    fgColor = DimColour(fgColor, 0.6F)
+                End If
+
                 Dim otherLabel As String = If(isTarget, "Barrier-hit", "Target-hit")
                 Dim otherHits  As Integer = If(isTarget, w.SuccessCount, w.TargetHitCount)
                 Dim otherPct   As Double  = If(isTarget, w.BarrierRatePct, w.TargetRatePct)
@@ -749,6 +758,21 @@ Partial Public Class MainForm
         ' widths change. No ResizeControls() call required.
         _cardPerfStrip?.PerformLayout()
     End Sub
+
+    ''' <summary>
+    ''' Returns a darker variant of <paramref name="c"/> by multiplying each
+    ''' channel by <paramref name="factor"/>. Used to dim inactive perf-strip
+    ''' session cells so the currently-active session stands out by brightness.
+    ''' Alpha-blending on Label.ForeColor doesn't work in WinForms (alpha is
+    ''' ignored), so we compute an actual darker RGB value.
+    ''' </summary>
+    Private Shared Function DimColour(c As Color, factor As Single) As Color
+        Return Color.FromArgb(
+            c.A,
+            CInt(Math.Round(c.R * factor)),
+            CInt(Math.Round(c.G * factor)),
+            CInt(Math.Round(c.B * factor)))
+    End Function
 
     Private Shared Function NormaliseMode(raw As String) As String
         If raw IsNot Nothing AndAlso raw.Trim().Equals("target", StringComparison.OrdinalIgnoreCase) Then
