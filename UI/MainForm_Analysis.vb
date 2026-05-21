@@ -437,7 +437,7 @@ Partial Public Class MainForm
         ' Both paths run until P5 deletes txtOutput.
         BindCardScore(verdict)
         BindCardVerdict(verdict, r)
-        BindCardLastPrice(r)
+        BindCardLastPrice(r, lastTradePrice)
         BindCardAtrLevels(verdict, r)
         BindCardStructural(r, isLong:=True)
         BindCardStructural(r, isLong:=False)

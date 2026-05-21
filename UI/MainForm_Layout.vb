@@ -105,6 +105,9 @@ Partial Public Class MainForm
     ' a second declaration site.
     Friend _scoreArc          As ScoreArcGauge
     Friend _lblScoreConfidence As Label
+    Friend _lblScoreRaw       As Label   ' GAP-01: "Long N/M | Short N/M"
+    Friend _lblScoreEff       As Label   ' GAP-02: "(eff. L/M | eff. S/M)", visible only on RegimePenalty > 0
+    Friend _lblScorePenalty   As Label   ' GAP-03: "TRANSITIONAL penalty: −N", same visibility gate
     Friend _lblVerdictText    As Label
     Friend _contextBadge      As ContextBadge
     Friend _lblRegime         As Label
@@ -115,12 +118,24 @@ Partial Public Class MainForm
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
     Friend _lblLastPriceSession As Label
-    Friend _atrStopValue      As Label
-    Friend _atrRRValue        As Label
-    Friend _atrEntryValue     As Label
-    Friend _atrCappedValue    As Label
-    Friend _atrTargetValue    As Label
+    ' ATR card: sub-header + dual (long / short) zone rows + cap reason.
+    Friend _atrSubHeader      As Label
+    Friend _atrLongRow        As AtrRowControls
+    Friend _atrShortRow       As AtrRowControls
     Friend _atrCapReason      As Label
+
+    ''' <summary>
+    ''' Five-zone labels for one direction of the ATR ENTRY LEVELS card.
+    ''' Mirrors StructuralCardControls but for the ATR row layout.
+    ''' </summary>
+    Friend Class AtrRowControls
+        Public Property DirLabel    As Label   ' "LONG" / "SHORT" prefix
+        Public Property StopValue   As Label
+        Public Property RRValue     As Label
+        Public Property EntryValue  As Label
+        Public Property CappedValue As Label
+        Public Property TargetValue As Label
+    End Class
     Friend _structLongCtrls   As StructuralCardControls
     Friend _structShortCtrls  As StructuralCardControls
     Friend _analyzeButton     As FlatButton
@@ -367,9 +382,11 @@ Partial Public Class MainForm
         heroRow.Controls.Add(_cardLastPrice, 2, 0)
         AddRow(heroRow, 160)
 
-        ' Row 4: ATR ENTRY LEVELS (P4b binds contents)
+        ' Row 4: ATR ENTRY LEVELS. Bumped from 110 to 150 in P4 retro-fix
+        ' for GAP-06 dual long+short rendering (section header + ATR sub-
+        ' header + two zone rows + cap reason).
         _cardAtrLevels = NewCard()
-        AddRow(_cardAtrLevels, 110)
+        AddRow(_cardAtrLevels, 150)
 
         ' Row 5: STRUCTURAL LONG + STRUCTURAL SHORT side by side
         Dim structRow = New TableLayoutPanel() With {

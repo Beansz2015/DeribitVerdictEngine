@@ -63,12 +63,15 @@ Partial Public Class MainForm
     Private Sub InitScoreCard()
         Dim inner = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 3,
+            .ColumnCount = 1, .RowCount = 6,
             .BackColor = Color.Transparent
         }
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))
-        inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))   ' SCORE header
+        inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' arc gauge (flex)
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 16))   ' confidence
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 16))   ' GAP-01 raw scores
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))   ' GAP-02 eff scores (conditional)
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))   ' GAP-03 penalty   (conditional)
         inner.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
         inner.Controls.Add(MakeSectionHeader("SCORE"), 0, 0)
@@ -87,6 +90,29 @@ Partial Public Class MainForm
         _lblScoreConfidence.TextAlign = ContentAlignment.MiddleCenter
         _lblScoreConfidence.Text = "Confidence --"
         inner.Controls.Add(_lblScoreConfidence, 0, 2)
+
+        ' GAP-01 raw scores side-by-side.
+        _lblScoreRaw = MakeValueLabel(Theme.FontMono(9.0F, FontStyle.Regular), Theme.FG_SECONDARY)
+        _lblScoreRaw.Dock = DockStyle.Fill
+        _lblScoreRaw.TextAlign = ContentAlignment.MiddleCenter
+        _lblScoreRaw.Text = "—"
+        inner.Controls.Add(_lblScoreRaw, 0, 3)
+
+        ' GAP-02 effective scores (visible only on RegimePenalty > 0).
+        _lblScoreEff = MakeValueLabel(Theme.FontMono(8.0F, FontStyle.Regular), Theme.ACC_WARN)
+        _lblScoreEff.Dock = DockStyle.Fill
+        _lblScoreEff.TextAlign = ContentAlignment.MiddleCenter
+        _lblScoreEff.Text = ""
+        _lblScoreEff.Visible = False
+        inner.Controls.Add(_lblScoreEff, 0, 4)
+
+        ' GAP-03 penalty tag (same visibility gate).
+        _lblScorePenalty = MakeValueLabel(Theme.FontMono(8.0F, FontStyle.Bold), Theme.ACC_WARN)
+        _lblScorePenalty.Dock = DockStyle.Fill
+        _lblScorePenalty.TextAlign = ContentAlignment.MiddleCenter
+        _lblScorePenalty.Text = ""
+        _lblScorePenalty.Visible = False
+        inner.Controls.Add(_lblScorePenalty, 0, 5)
 
         _cardScore.Controls.Add(inner)
     End Sub
@@ -255,51 +281,85 @@ Partial Public Class MainForm
     Private Sub InitAtrLevelsCard()
         Dim inner = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 3,
+            .ColumnCount = 1, .RowCount = 5,
             .BackColor = Color.Transparent
         }
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))
-        inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))   ' section header
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))   ' GAP-05 sub-header
+        inner.RowStyles.Add(New RowStyle(SizeType.Percent, 50.0F)) ' LONG zone row
+        inner.RowStyles.Add(New RowStyle(SizeType.Percent, 50.0F)) ' SHORT zone row
+        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))   ' cap reason
         inner.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
         inner.Controls.Add(MakeSectionHeader("ATR ENTRY LEVELS"), 0, 0)
 
-        Dim zones = New TableLayoutPanel() With {
-            .Dock = DockStyle.Fill,
-            .ColumnCount = 5, .RowCount = 1,
-            .BackColor = Color.Transparent,
-            .Margin = New Padding(0)
-        }
-        zones.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
-        zones.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 12.0F))
-        zones.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
-        zones.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
-        zones.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
-        zones.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        ' GAP-05 ATR config sub-header.
+        _atrSubHeader = MakeValueLabel(Theme.FontMono(8.5F, FontStyle.Regular), Theme.FG_QUATERNARY)
+        _atrSubHeader.Dock = DockStyle.Fill
+        _atrSubHeader.TextAlign = ContentAlignment.MiddleLeft
+        _atrSubHeader.Text = ""
+        inner.Controls.Add(_atrSubHeader, 0, 1)
 
-        _atrStopValue   = MakeZoneLabel("STOP",   Theme.ACC_SHORT)
-        _atrRRValue     = MakeZoneLabel("R:R",    Theme.FG_QUATERNARY)
-        _atrEntryValue  = MakeZoneLabel("ENTRY",  Theme.FG_PRIMARY)
-        _atrCappedValue = MakeZoneLabel("CAPPED", Theme.ACC_WARN)
-        _atrTargetValue = MakeZoneLabel("TARGET", Theme.ACC_STRONG_LONG)
-
-        zones.Controls.Add(_atrStopValue,   0, 0)
-        zones.Controls.Add(_atrRRValue,     1, 0)
-        zones.Controls.Add(_atrEntryValue,  2, 0)
-        zones.Controls.Add(_atrCappedValue, 3, 0)
-        zones.Controls.Add(_atrTargetValue, 4, 0)
-
-        inner.Controls.Add(zones, 0, 1)
+        _atrLongRow  = BuildAtrZoneRow("LONG",  Theme.ACC_STRONG_LONG)
+        _atrShortRow = BuildAtrZoneRow("SHORT", Theme.ACC_SHORT)
+        inner.Controls.Add(_atrLongRow.DirLabel.Parent,  0, 2)
+        inner.Controls.Add(_atrShortRow.DirLabel.Parent, 0, 3)
 
         _atrCapReason = MakeValueLabel(Theme.FontMono(8.0F, FontStyle.Regular), Theme.ACC_WARN)
         _atrCapReason.Dock = DockStyle.Fill
         _atrCapReason.TextAlign = ContentAlignment.MiddleCenter
         _atrCapReason.Text = ""
-        inner.Controls.Add(_atrCapReason, 0, 2)
+        inner.Controls.Add(_atrCapReason, 0, 4)
 
         _cardAtrLevels.Controls.Add(inner)
     End Sub
+
+    ''' <summary>
+    ''' Build one direction's 5-zone row (DirLabel + STOP / R:R / ENTRY /
+    ''' CAPPED / TARGET). Returned struct carries the labels; the row
+    ''' Panel is reachable via DirLabel.Parent.
+    ''' </summary>
+    Private Function BuildAtrZoneRow(dirText As String, targetColour As Color) As AtrRowControls
+        Dim row = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 6, .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        }
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 50))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 12.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
+        row.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+
+        Dim r As New AtrRowControls()
+        r.DirLabel = New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = dirText,
+            .Font = Theme.FontMono(11.0F, FontStyle.Bold),
+            .ForeColor = targetColour,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(0)
+        }
+        r.StopValue   = MakeZoneLabel("STOP",   Theme.ACC_SHORT)
+        r.RRValue     = MakeZoneLabel("R:R",    Theme.FG_QUATERNARY)
+        r.EntryValue  = MakeZoneLabel("ENTRY",  Theme.FG_PRIMARY)
+        r.CappedValue = MakeZoneLabel("CAPPED", Theme.ACC_WARN)
+        r.TargetValue = MakeZoneLabel("TARGET", targetColour)
+
+        row.Controls.Add(r.DirLabel,    0, 0)
+        row.Controls.Add(r.StopValue,   1, 0)
+        row.Controls.Add(r.RRValue,     2, 0)
+        row.Controls.Add(r.EntryValue,  3, 0)
+        row.Controls.Add(r.CappedValue, 4, 0)
+        row.Controls.Add(r.TargetValue, 5, 0)
+
+        Return r
+    End Function
 
     Private Shared Function MakeZoneLabel(headerText As String, valueColour As Color) As Label
         ' Tag stores the header text; we render header + value in the same
@@ -388,6 +448,26 @@ Partial Public Class MainForm
         If _lblScoreConfidence IsNot Nothing Then
             _lblScoreConfidence.Text = $"Confidence {If(String.IsNullOrEmpty(v.Confidence), "—", v.Confidence)}"
         End If
+
+        ' GAP-01 raw scores side-by-side.
+        If _lblScoreRaw IsNot Nothing Then
+            _lblScoreRaw.Text = $"Long {v.LongScore}/{shownMax}  |  Short {v.ShortScore}/{shownMax}"
+        End If
+
+        ' GAP-02 + GAP-03 effective + penalty (visible only on TRANSITIONAL penalty).
+        Dim hasPenalty As Boolean = v.RegimePenalty > 0
+        If _lblScoreEff IsNot Nothing Then
+            _lblScoreEff.Visible = hasPenalty
+            If hasPenalty Then
+                _lblScoreEff.Text = $"(eff. {v.EffectiveLongScore}/{shownMax}  |  eff. {v.EffectiveShortScore}/{shownMax})"
+            End If
+        End If
+        If _lblScorePenalty IsNot Nothing Then
+            _lblScorePenalty.Visible = hasPenalty
+            If hasPenalty Then
+                _lblScorePenalty.Text = $"TRANSITIONAL penalty: −{v.RegimePenalty}"
+            End If
+        End If
     End Sub
 
     Public Sub BindCardVerdict(v As VerdictResult, r As IndicatorResults)
@@ -437,9 +517,13 @@ Partial Public Class MainForm
         End If
     End Sub
 
-    Public Sub BindCardLastPrice(r As IndicatorResults)
+    Public Sub BindCardLastPrice(r As IndicatorResults, lastTradePrice As Double)
+        ' GAP-04: prefer the recent-trades price (closer to live than the
+        ' 1m candle close). Fall back to the candle close if recent-trades
+        ' wasn't populated this run.
+        Dim displayPrice As Double = If(lastTradePrice > 0, lastTradePrice, r.CurrentPrice)
         If _lblLastPrice IsNot Nothing Then
-            _lblLastPrice.Text = If(r.CurrentPrice > 0, $"${r.CurrentPrice:N0}", "—")
+            _lblLastPrice.Text = If(displayPrice > 0, $"${displayPrice:N0}", "—")
         End If
         If _lblLastPriceAtr IsNot Nothing Then
             _lblLastPriceAtr.Text = $"ATR {r.ATR:F1}"
@@ -462,60 +546,144 @@ Partial Public Class MainForm
         Dim cfg As EngineSettings = SettingsLoader.Current
         Dim stopMult   As Double = cfg.Scoring.AtrStopMultiplier
         Dim targetMult As Double = cfg.Scoring.AtrTargetMultiplier
+        Dim atrUnit    As Double = r.ATR * r.ATRSizeMultiplier
+        Dim atrStop    As Double = atrUnit * stopMult
+        Dim atrTarget  As Double = atrUnit * targetMult
+        Dim entryPx    As Double = r.CurrentPrice
 
-        ' DynamicNorms recompute would require re-fetching candles; reuse the
-        ' simpler ratio-of-multipliers approach for R:R, which matches the
-        ' legacy RTF render.
-        Dim isLong As Boolean = v.LongScore > v.ShortScore
-        Dim isShort As Boolean = v.ShortScore > v.LongScore
-        Dim atrUnit As Double = r.ATR * r.ATRSizeMultiplier
-        Dim atrStop   As Double = atrUnit * stopMult
-        Dim atrTarget As Double = atrUnit * targetMult
-
-        Dim stopPx As Double
-        Dim entryPx As Double = r.CurrentPrice
-        Dim rawTargetPx As Double
-        Dim adjustedTargetPx As Double
-        Dim capReason As String = ""
-
-        If isShort Then
-            stopPx           = entryPx + atrStop
-            rawTargetPx      = entryPx - atrTarget
-            adjustedTargetPx = If(v.AdjustedShortTarget > 0, v.AdjustedShortTarget, rawTargetPx)
-            capReason        = If(v.TargetCapReasonShort, "")
-            _atrTargetValue.ForeColor = Theme.ACC_SHORT
-        Else
-            ' Default to long-side rendering when scores are tied (entry-only
-            ' visual is still useful — Stop/Target both populated for display).
-            stopPx           = entryPx - atrStop
-            rawTargetPx      = entryPx + atrTarget
-            adjustedTargetPx = If(v.AdjustedLongTarget > 0, v.AdjustedLongTarget, rawTargetPx)
-            capReason        = If(v.TargetCapReasonLong, "")
-            _atrTargetValue.ForeColor = Theme.ACC_STRONG_LONG
+        ' GAP-05 sub-header: current ATR config params at full resolution so the
+        ' trader sees which multipliers + dynamic scale are in effect.
+        If _atrSubHeader IsNot Nothing Then
+            _atrSubHeader.Text = $"ATR {r.ATR:F2} × {r.ATRSizeMultiplier:F2} scale  |  {stopMult:F1}× stop / {targetMult:F1}× target"
         End If
 
-        Dim showCapped As Boolean = False
-        If (isLong AndAlso v.AdjustedLongTarget > 0) OrElse
-           (isShort AndAlso v.AdjustedShortTarget > 0) Then
-            Dim noiseFloor As Double = Math.Max(0.5, r.ATR * 0.02)
-            showCapped = Math.Abs(rawTargetPx - adjustedTargetPx) >= noiseFloor
-        End If
+        ' GAP-06: render BOTH long and short rows. Verdict direction gets
+        ' primary weight; the contrary side dims. NO TRADE renders both rows
+        ' at equal weight, FG_PRIMARY.
+        Dim verdict As String = If(v.Verdict, "")
+        Dim isLongVerdict  As Boolean = verdict.StartsWith("LONG") OrElse verdict.StartsWith("STRONG LONG") OrElse verdict.StartsWith("WEAK LONG")
+        Dim isShortVerdict As Boolean = verdict.StartsWith("SHORT") OrElse verdict.StartsWith("STRONG SHORT") OrElse verdict.StartsWith("WEAK SHORT")
+        Dim isNoTrade      As Boolean = verdict.StartsWith("NO TRADE")
 
-        SetZoneValue(_atrStopValue,   "STOP",   $"{stopPx:F1}")
-        SetZoneValue(_atrEntryValue,  "ENTRY",  $"{entryPx:F1}")
-        SetZoneValue(_atrTargetValue, "TARGET", $"{adjustedTargetPx:F1}")
-        SetZoneValue(_atrRRValue,     "R:R",    FormatRR(atrTarget, atrStop))
+        Dim longCapReason  As String = BindAtrRow(
+            row:=_atrLongRow,
+            isLong:=True,
+            entryPx:=entryPx,
+            stopPx:=entryPx - atrStop,
+            rawTargetPx:=entryPx + atrTarget,
+            adjustedTarget:=v.AdjustedLongTarget,
+            cfgCapReason:=If(v.TargetCapReasonLong, ""),
+            atrStop:=atrStop,
+            atrTarget:=atrTarget,
+            atrForFloor:=r.ATR,
+            primary:=isLongVerdict OrElse isNoTrade,
+            verdictColour:=ResolveVerdictColour(v.Verdict))
 
-        If showCapped Then
-            SetZoneValue(_atrCappedValue, "CAPPED", $"→ {adjustedTargetPx:F1}")
-            _atrCappedValue.ForeColor = Theme.ACC_WARN
-            _atrCapReason.Text = capReason
+        Dim shortCapReason As String = BindAtrRow(
+            row:=_atrShortRow,
+            isLong:=False,
+            entryPx:=entryPx,
+            stopPx:=entryPx + atrStop,
+            rawTargetPx:=entryPx - atrTarget,
+            adjustedTarget:=v.AdjustedShortTarget,
+            cfgCapReason:=If(v.TargetCapReasonShort, ""),
+            atrStop:=atrStop,
+            atrTarget:=atrTarget,
+            atrForFloor:=r.ATR,
+            primary:=isShortVerdict OrElse isNoTrade,
+            verdictColour:=ResolveVerdictColour(v.Verdict))
+
+        ' Show the cap reason from whichever side has one. If both sides
+        ' have a cap, the verdict-direction wins; on NO TRADE, long wins
+        ' arbitrarily (rare to have both anyway).
+        Dim shownReason As String = ""
+        If isShortVerdict Then
+            shownReason = shortCapReason
+            If shownReason = "" Then shownReason = longCapReason
         Else
-            SetZoneValue(_atrCappedValue, "·", "")
-            _atrCappedValue.ForeColor = Theme.BORDER_INNER
-            _atrCapReason.Text = ""
+            shownReason = longCapReason
+            If shownReason = "" Then shownReason = shortCapReason
+        End If
+        If _atrCapReason IsNot Nothing Then
+            _atrCapReason.Text = shownReason
         End If
     End Sub
+
+    ''' <summary>
+    ''' Bind one direction's ATR row. Returns the cap-reason string (empty
+    ''' when CAPPED divider is suppressed). primary=True renders at full
+    ''' verdict colour + bold; primary=False dims to FG_TERTIARY at smaller
+    ''' font weight so the contrary direction reads as secondary detail.
+    ''' </summary>
+    Private Function BindAtrRow(row As AtrRowControls,
+                                isLong As Boolean,
+                                entryPx As Double,
+                                stopPx As Double,
+                                rawTargetPx As Double,
+                                adjustedTarget As Double,
+                                cfgCapReason As String,
+                                atrStop As Double,
+                                atrTarget As Double,
+                                atrForFloor As Double,
+                                primary As Boolean,
+                                verdictColour As Color) As String
+
+        If row Is Nothing Then Return ""
+
+        Dim adjustedTargetPx As Double = If(adjustedTarget > 0, adjustedTarget, rawTargetPx)
+
+        ' Sub-tick CAPPED suppression (v30 F1): only show CAPPED when the
+        ' adjustment exceeds max(0.5, ATR × 0.02).
+        Dim showCapped As Boolean = False
+        Dim capReasonReturn As String = ""
+        If adjustedTarget > 0 Then
+            Dim noiseFloor As Double = Math.Max(0.5, atrForFloor * 0.02)
+            showCapped = Math.Abs(rawTargetPx - adjustedTargetPx) >= noiseFloor
+            If showCapped Then capReasonReturn = cfgCapReason
+        End If
+
+        SetZoneValue(row.StopValue,   "STOP",   $"{stopPx:F1}")
+        SetZoneValue(row.EntryValue,  "ENTRY",  $"{entryPx:F1}")
+        SetZoneValue(row.TargetValue, "TARGET", $"{adjustedTargetPx:F1}")
+        SetZoneValue(row.RRValue,     "R:R",    FormatRR(atrTarget, atrStop))
+
+        If showCapped Then
+            SetZoneValue(row.CappedValue, "CAPPED", $"→ {adjustedTargetPx:F1}")
+            row.CappedValue.ForeColor = Theme.ACC_WARN
+        Else
+            SetZoneValue(row.CappedValue, "·", "")
+            row.CappedValue.ForeColor = Theme.BORDER_INNER
+        End If
+
+        ' Apply primary/secondary type weight.
+        Dim directionColour As Color = If(isLong, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
+        Dim labelColour     As Color = If(primary, directionColour, Theme.FG_TERTIARY)
+        Dim valueFont       As Font  = If(primary, Theme.FontMono(11.5F, FontStyle.Bold), Theme.FontMono(9.5F, FontStyle.Regular))
+
+        row.DirLabel.ForeColor = labelColour
+        row.DirLabel.Font      = Theme.FontMono(If(primary, 11.0F, 9.0F), FontStyle.Bold)
+
+        For Each lbl In New Label() {row.StopValue, row.RRValue, row.EntryValue, row.CappedValue, row.TargetValue}
+            lbl.Font = valueFont
+        Next
+
+        ' Per-side target colour: primary direction in its accent; secondary
+        ' dimmed to FG_TERTIARY so the dominant row reads first.
+        If primary Then
+            row.TargetValue.ForeColor = directionColour
+            row.StopValue.ForeColor   = Theme.ACC_SHORT
+            row.RRValue.ForeColor     = Theme.FG_QUATERNARY
+            row.EntryValue.ForeColor  = Theme.FG_PRIMARY
+        Else
+            row.TargetValue.ForeColor = Theme.FG_TERTIARY
+            row.StopValue.ForeColor   = Theme.FG_TERTIARY
+            row.RRValue.ForeColor     = Theme.FG_DIM
+            row.EntryValue.ForeColor  = Theme.FG_TERTIARY
+            If Not showCapped Then row.CappedValue.ForeColor = Theme.BORDER_INNER
+        End If
+
+        Return capReasonReturn
+    End Function
 
     Public Sub BindCardStructural(r As IndicatorResults, isLong As Boolean)
         Dim ctrls = If(isLong, _structLongCtrls, _structShortCtrls)
