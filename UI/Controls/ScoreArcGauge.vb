@@ -27,7 +27,7 @@ Public Class ScoreArcGauge
     ' Light alpha-on-base track — Theme.BG_CARD_RAISED was only ~6 RGB
     ' steps brighter than BG_CARD, so the backtrack barely showed. Spec
     ' stabilisation pass §Fix 5: use ~18% white instead.
-    Private _backArcColor As Color = Color.FromArgb(45, 255, 255, 255)
+    Private _backArcColor As Color = Color.FromArgb(30, 255, 255, 255)
     Private _labelFont As Font = Theme.FontMono(22.0F, FontStyle.Bold)
     Private _denomFont As Font = Theme.FontMono(11.0F, FontStyle.Regular)
     Private _animationEnabled As Boolean = True
