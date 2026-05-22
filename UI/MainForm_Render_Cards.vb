@@ -116,7 +116,7 @@ Partial Public Class MainForm
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))    ' section header
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 50))    ' verdict text
         inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' 2×2 grid (flex)
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 16))    ' eff/penalty sub-row (conditional)
+        inner.RowStyles.Add(New RowStyle(SizeType.AutoSize))         ' eff/penalty sub-row (collapses to 0 when label hidden)
         inner.RowStyles.Add(New RowStyle(SizeType.AutoSize))         ' regime anchor warn
         inner.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
