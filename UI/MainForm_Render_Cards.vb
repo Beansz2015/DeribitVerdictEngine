@@ -525,10 +525,13 @@ Partial Public Class MainForm
         ' wasn't populated this run.
         Dim displayPrice As Double = If(lastTradePrice > 0, lastTradePrice, r.CurrentPrice)
         If _lblLastPrice IsNot Nothing Then
-            _lblLastPrice.Text = If(displayPrice > 0, $"${displayPrice:N0}", "—")
+            ' N1 to preserve the ".5" tick precision the legacy renders (e.g.
+            ' "$76,888.5"). N0 was rounding to "$76,888" — info loss.
+            _lblLastPrice.Text = If(displayPrice > 0, $"${displayPrice:N1}", "—")
         End If
         If _lblLastPriceAtr IsNot Nothing Then
-            _lblLastPriceAtr.Text = $"ATR {r.ATR:F1}"
+            ' Legacy renders ATR at F2 (e.g. "11.58"). F1 was rounding to "11.6".
+            _lblLastPriceAtr.Text = $"ATR {r.ATR:F2}"
         End If
 
         Dim utcNow As DateTime = DateTime.UtcNow
@@ -1305,7 +1308,8 @@ Partial Public Class MainForm
         Else
             state = "MIXED" : colour = Theme.ACC_WARN
         End If
-        Dim note As String = $"ADX {r.ADX:F0}"
+        ' Legacy renders ADX at F1 (e.g. "ADX: 24.7"). F0 was rounding to "25".
+        Dim note As String = $"ADX {r.ADX:F1}"
         ' Engine emits two items ("DMI +/-DI" and "ADX>{N}") — sum their SCs.
         Dim sc As Integer = ScForItem(items, "DMI +/-DI") + ScForItemPrefix(items, "ADX>")
         If sc > 1 Then sc = 1
@@ -1325,7 +1329,8 @@ Partial Public Class MainForm
             state = "NORM"
             colour = Theme.FG_TERTIARY
         End If
-        Dim note As String = $"{r.VolumeRatio:F1}× {FormatUsdShort(r.CurrentVolumeUSD)}"
+        ' Legacy renders the SMA-relative volume ratio at F2 (e.g. "1.58x").
+        Dim note As String = $"{r.VolumeRatio:F2}× {FormatUsdShort(r.CurrentVolumeUSD)}"
         Return MakeSignalRow("Volume", state, colour, note, ScForItem(items, "Volume"))
     End Function
 
@@ -1343,7 +1348,8 @@ Partial Public Class MainForm
             state = "NEUT"
             colour = Theme.FG_TERTIARY
         End If
-        Dim note As String = String.Format("{0:+0.00;-0.00;0.00}%", r.VWAPDevPct)
+        ' Legacy renders VWAP Dev at F3 (e.g. "-0.080%"). F2 was rounding to "-0.08%".
+        Dim note As String = String.Format("{0:+0.000;-0.000;0.000}%", r.VWAPDevPct)
         ' VWAP scoring fires as a single "VWAP" breakdown item — split between
         ' VWAP Dev and VWAP Bands rows. Attribute the SC to VWAP Dev (primary).
         Return MakeSignalRow("VWAP Dev", state, colour, note, ScForItem(items, "VWAP"))
@@ -1445,7 +1451,10 @@ Partial Public Class MainForm
             Case "CAPITULATION": state = "CAPIT"  : colour = Theme.ACC_SHORT
             Case Else          : state = "NEUT"   : colour = Theme.FG_TERTIARY
         End Select
-        Dim note As String = String.Format("{0:+0.0;-0.0;0.0}%", r.OIChange15m)
+        ' Legacy renders OI 15m delta at F3 (e.g. "0.003%"). F1 was rounding sub-percent
+        ' deltas to "0.0%" — the percent change in OI is typically small and rounding
+        ' it away destroys the directional signal.
+        Dim note As String = String.Format("{0:+0.000;-0.000;0.000}%", r.OIChange15m)
         Return MakeSignalRow("OI Change", state, colour, note, ScForItem(items, "OI Delta"))
     End Function
 
@@ -1458,7 +1467,9 @@ Partial Public Class MainForm
             Case "WIDE"   : state = "WIDE"   : colour = Theme.ACC_SHORT
             Case Else     : state = "NORM"   : colour = Theme.FG_TERTIARY
         End Select
-        Dim note As String = $"{r.SpreadBps:F1} bps"
+        ' Legacy renders spread at F2 (e.g. "0.06 bps"). F1 rounded sub-decimal
+        ' spreads to "0.1 bps" — losing the trader's tight-spread signal.
+        Dim note As String = $"{r.SpreadBps:F2} bps"
         Return MakeSignalRow("Spread", state, colour, note, ScForItem(items, "Spread"))
     End Function
 
@@ -1503,7 +1514,12 @@ Partial Public Class MainForm
             Case "FALLING" : state = "BEAR" : colour = Theme.ACC_SHORT
             Case Else      : state = "FLAT" : colour = Theme.FG_TERTIARY
         End Select
-        Dim note As String = String.Format("{0:+0.0;-0.0;0.0}k", r.CVDValue / 1000.0)
+        ' Legacy renders CVD net at F0 raw (e.g. "Net:2133890"). Compressing
+        ' to "/1000 k" with F1 lost the last 3 digits of precision. Switched
+        ' to N0 with thousand separators — keeps full precision, readable.
+        Dim note As String = If(r.CVDValue >= 0,
+                                "+" & r.CVDValue.ToString("N0"),
+                                r.CVDValue.ToString("N0"))
         If Not String.IsNullOrEmpty(r.CVDDivergence) AndAlso r.CVDDivergence <> "NONE" Then
             note &= "  div:" & r.CVDDivergence.ToLower()
         End If
@@ -1533,7 +1549,8 @@ Partial Public Class MainForm
             Case "SELL PRESSURE" : state = "SELL" : colour = Theme.ACC_SHORT
             Case Else            : state = "NEUT" : colour = Theme.FG_TERTIARY
         End Select
-        Dim note As String = r.TFIValue.ToString("F2")
+        ' Legacy renders TFI at F3 (e.g. "0.969"). F2 was rounding to "0.97".
+        Dim note As String = r.TFIValue.ToString("F3")
         Return MakeSignalRow("TFI", state, colour, note, ScForItem(items, "TFI"))
     End Function
 
@@ -1620,7 +1637,9 @@ Partial Public Class MainForm
 
         Dim subNote As String = Nothing
         If r.BestPivotByVolume5m > 0 Then
-            subNote = String.Format("best vol: {0} @ {1:F0} ({2:F1}×)",
+            ' Legacy renders the best-volume pivot price at F1 (e.g. "77998.5").
+            ' F0 was rounding away the half-tick.
+            subNote = String.Format("best vol: {0} @ {1:F1} ({2:F1}×)",
                                     If(r.BestPivotIsHigh5m, "HIGH", "LOW"),
                                     r.BestPivotByVolume5m, r.BestPivotVolumeRatio5m)
         End If
