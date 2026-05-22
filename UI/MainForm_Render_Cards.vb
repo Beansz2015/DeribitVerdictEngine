@@ -1229,6 +1229,22 @@ Partial Public Class MainForm
         Return 0
     End Function
 
+    ''' <summary>
+    ''' Derive STATE pill text + colour from a SignalBreakdownItem's
+    ''' LongHit / ShortHit booleans so STATE always agrees with SC. Used by
+    ''' rows where raw-field thresholds disagree with the engine's actual
+    ''' vote logic (RSI, DMI/ADX, BBW/TTM) — the spec-supplied thresholds
+    ''' would otherwise show NEUT next to a +1 / -1 SC, which reads as a
+    ''' contradiction to the trader.
+    ''' </summary>
+    Private Shared Function StateFromHits(item As SignalBreakdownItem) As (state As String, colour As Color)
+        If item Is Nothing Then Return ("—", Theme.FG_TERTIARY)
+        If item.LongHit AndAlso item.ShortHit Then Return ("MIXED", Theme.ACC_WARN)
+        If item.LongHit Then Return ("BULL", Theme.ACC_STRONG_LONG)
+        If item.ShortHit Then Return ("BEAR", Theme.ACC_SHORT)
+        Return ("NEUT", Theme.FG_TERTIARY)
+    End Function
+
     Private Shared Function FindItem(items As List(Of SignalBreakdownItem), label As String) As SignalBreakdownItem
         For Each it In items
             If it Is Nothing OrElse it.Label Is Nothing Then Continue For
@@ -1262,22 +1278,16 @@ Partial Public Class MainForm
     End Function
 
     Private Shared Function BuildRowRsi(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
-        Dim state As String, colour As Color
-        If r.RSI > 70 Then
-            state = "BEAR"
-            colour = Theme.ACC_SHORT
-        ElseIf r.RSI < 30 Then
-            state = "BULL"
-            colour = Theme.ACC_STRONG_LONG
-        Else
-            state = "NEUT"
-            colour = Theme.FG_TERTIARY
-        End If
+        ' STATE derived from breakdown hits so it stays in lock-step with SC.
+        ' The engine's RSI vote uses PARTIAL→UPGRADED logic beyond simple
+        ' 30/70 overbought-oversold cuts, so raw thresholds disagree with
+        ' the actual vote on a meaningful share of runs.
+        Dim sd = StateFromHits(FindItem(items, "RSI(9)"))
         Dim note As String = r.RSI.ToString("F1")
         If Not String.IsNullOrEmpty(r.RSIDivergence) AndAlso r.RSIDivergence <> "NONE" Then
             note &= "  div:" & r.RSIDivergence.ToLower()
         End If
-        Return MakeSignalRow("RSI(9)", state, colour, note, ScForItem(items, "RSI(9)"))
+        Return MakeSignalRow("RSI(9)", sd.state, sd.colour, note, ScForItem(items, "RSI(9)"))
     End Function
 
     Private Shared Function BuildRowRsiDiv(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
@@ -1298,23 +1308,18 @@ Partial Public Class MainForm
     End Function
 
     Private Shared Function BuildRowDmiAdx(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
-        Dim state As String, colour As Color
-        If r.ADX < 20 Then
-            state = "NEUT" : colour = Theme.FG_TERTIARY
-        ElseIf r.PlusDI > r.MinusDI AndAlso r.ADX >= 25 Then
-            state = "BULL" : colour = Theme.ACC_STRONG_LONG
-        ElseIf r.MinusDI > r.PlusDI AndAlso r.ADX >= 25 Then
-            state = "BEAR" : colour = Theme.ACC_SHORT
-        Else
-            state = "MIXED" : colour = Theme.ACC_WARN
-        End If
+        ' STATE derived from the "DMI +/-DI" breakdown item's hits so it
+        ' agrees with SC. The ADX threshold gate is separate and lives in
+        ' the SC sum below; trying to recreate the directional decision
+        ' from raw ADX / +DI / -DI fields produced NEUT-with-+1 contradictions.
+        Dim sd = StateFromHits(FindItem(items, "DMI +/-DI"))
         ' Legacy renders ADX at F1 (e.g. "ADX: 24.7"). F0 was rounding to "25".
         Dim note As String = $"ADX {r.ADX:F1}"
         ' Engine emits two items ("DMI +/-DI" and "ADX>{N}") — sum their SCs.
         Dim sc As Integer = ScForItem(items, "DMI +/-DI") + ScForItemPrefix(items, "ADX>")
         If sc > 1 Then sc = 1
         If sc < -1 Then sc = -1
-        Return MakeSignalRow("DMI/ADX", state, colour, note, sc)
+        Return MakeSignalRow("DMI/ADX", sd.state, sd.colour, note, sc)
     End Function
 
     Private Shared Function BuildRowVolume(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
@@ -1377,14 +1382,12 @@ Partial Public Class MainForm
     End Function
 
     Private Shared Function BuildRowBbwTtm(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
-        Dim state As String, colour As Color
-        Select Case If(r.SqueezeStatus, "")
-            Case "RELEASING" : state = "RELEASE" : colour = Theme.ACC_STRONG_LONG
-            Case "ACTIVE"    : state = "ACTIVE"  : colour = Theme.ACC_WARN
-            Case Else        : state = "NEUT"    : colour = Theme.FG_TERTIARY
-        End Select
+        ' STATE derived from breakdown hits so it stays in lock-step with SC.
+        ' r.SqueezeStatus alone misses the TTM histogram + directional gating
+        ' the engine layers on top, producing NEUT-with-+1 contradictions.
+        Dim sd = StateFromHits(FindItem(items, "BBW/TTM"))
         Dim note As String = If(r.SqueezeStatus, "—").ToLower()
-        Return MakeSignalRow("BBW/TTM", state, colour, note, ScForItem(items, "BBW/TTM"))
+        Return MakeSignalRow("BBW/TTM", sd.state, sd.colour, note, ScForItem(items, "BBW/TTM"))
     End Function
 
     Private Shared Function BuildRowEmaRibbon(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
