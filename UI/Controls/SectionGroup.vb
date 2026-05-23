@@ -70,18 +70,23 @@ Public Class SectionGroup
         g.SmoothingMode = SmoothingMode.AntiAlias
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit
 
-        ' Title text (top-left, small uppercase, dim)
-        Dim titleFont = Theme.FontMono(9.0F, FontStyle.Bold)
+        ' Title text — 11pt + FG_SECONDARY to match the card section headers
+        ' rendered by MakeSectionHeader / BuildPlainSectionHeader. Was 9pt +
+        ' FG_QUATERNARY; bumped so the LOG / AUTO-RUN / TOOLS sub-box titles
+        ' read at the same weight as the rest of the layout.
+        Dim titleFont = Theme.FontMono(11.0F, FontStyle.Bold)
         Try
-            Using brush As New SolidBrush(Theme.FG_QUATERNARY)
+            Using brush As New SolidBrush(Theme.FG_SECONDARY)
                 g.DrawString(_title.ToUpperInvariant(), titleFont, brush, 2.0F, 2.0F)
             End Using
         Finally
             titleFont.Dispose()
         End Try
 
-        ' Border rect starts just below the title.
-        Dim rect = New RectangleF(0.5F, 18.5F, Me.Width - 1.0F, Me.Height - 19.0F)
+        ' Border rect starts just below the title. Bumped Y 18.5 → 20.5 after
+        ' the title size bump so the 11pt glyphs have ~3 px clearance instead
+        ' of touching the top border line.
+        Dim rect = New RectangleF(0.5F, 20.5F, Me.Width - 1.0F, Me.Height - 21.0F)
         Using path = PaintHelpers.RoundedRect(rect, 4.0F)
             Using pen As New Pen(_accentColor, 1.0F)
                 If _borderStyle = GroupBorderStyle.Dashed Then
