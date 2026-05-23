@@ -468,9 +468,11 @@ Partial Public Class MainForm
         AddRow(_cardVerificationDump, 400)
         ReparentVerificationDumpControls()
 
-        ' Row 11: SETTINGS & TOOLS (placeholder — P4e)
+        ' Row 11: SETTINGS & TOOLS — grouped layout (P4e commit 1).
+        ' Height = placeholder header (~28) + LOG/AUTO-RUN row (90)
+        '          + CTA row (56) + TOOLS row (~110) + padding (~16).
         _cardSettingsTools = NewCard()
-        AddRow(_cardSettingsTools, 200)
+        AddRow(_cardSettingsTools, 300)
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
@@ -636,41 +638,173 @@ Partial Public Class MainForm
 
     ' -----------------------------------------------------------------------
     ' Reparent: status-bar links / lblLogInfo / lblCountdown → SETTINGS & TOOLS
-    ' (P4a placeholder — final layout in P4e)
+    ' (P4e commit 1 — grouped layout: LOG / AUTO-RUN / ANALYSIS REPORT / TOOLS)
+    '
+    ' Layout:
+    '   Row 1 (TLP 2×1): LOG (solid) | AUTO-RUN (dashed cyan)
+    '   Row 2 (full):    AnalysisReportButton CTA
+    '   Row 3 (full):    TOOLS — three LinkRows (Calibration / Tweak / Dump)
+    '                    plus cog LinkLabel positioned at right of dump row
+    '
+    ' Old Designer/programmatic LinkLabels are hidden but kept alive so the
+    ' Handles … LinkClicked partial-class wiring stays satisfied. The new
+    ' P3 controls forward clicks via shim lambdas to the existing handlers.
     ' -----------------------------------------------------------------------
     Private Sub ReparentSettingsToolsControls()
         AddPlaceholderHeader(_cardSettingsTools, "SETTINGS & TOOLS")
+        _cardSettingsTools.TabStop = False
 
-        Dim flow = New FlowLayoutPanel() With {
-            .Dock = DockStyle.Bottom,
-            .FlowDirection = FlowDirection.LeftToRight,
-            .WrapContents = True,
+        ' Outer 3-row TLP — sits below the placeholder header.
+        Dim outer = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 1, .RowCount = 3,
             .BackColor = Color.Transparent,
-            .Height = 140,
-            .Padding = New Padding(8, 8, 8, 8),
-            .AutoScroll = False
+            .Padding = New Padding(0, 30, 0, 0),
+            .Margin = New Padding(0),
+            .TabStop = False
+        }
+        outer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 92))    ' LOG/AUTO-RUN
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))    ' CTA
+        outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS
+
+        ' ---------------- Row 1: LOG / AUTO-RUN (2 cols) ----------------
+        Dim row1 = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 2, .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 0, 0, 8),
+            .TabStop = False
+        }
+        row1.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
+        row1.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
+
+        Dim grpLog = New SectionGroup() With {
+            .Title = "LOG",
+            .Dock = DockStyle.Fill,
+            .Margin = New Padding(0, 0, 4, 0),
+            .BorderStyle2 = SectionGroup.GroupBorderStyle.Solid,
+            .AccentColor = Theme.BORDER_CARD,
+            .TabStop = False
+        }
+        Me.Controls.Remove(lblLogInfo)
+        lblLogInfo.Anchor = AnchorStyles.None
+        lblLogInfo.Dock = DockStyle.None
+        lblLogInfo.AutoSize = True
+        lblLogInfo.Location = New Point(10, 26)
+        grpLog.Controls.Add(lblLogInfo)
+
+        Me.Controls.Remove(lnkResetLog)
+        lnkResetLog.Anchor = AnchorStyles.None
+        lnkResetLog.Dock = DockStyle.None
+        lnkResetLog.AutoSize = True
+        lnkResetLog.Location = New Point(10, 48)
+        grpLog.Controls.Add(lnkResetLog)
+
+        Dim grpAutoRun = New SectionGroup() With {
+            .Title = "AUTO-RUN",
+            .Dock = DockStyle.Fill,
+            .Margin = New Padding(4, 0, 0, 0),
+            .BorderStyle2 = SectionGroup.GroupBorderStyle.Dashed,
+            .AccentColor = Theme.BORDER_DASHED_INFO,
+            .TabStop = False
+        }
+        Me.Controls.Remove(lblCountdown)
+        lblCountdown.Anchor = AnchorStyles.None
+        lblCountdown.Dock = DockStyle.None
+        lblCountdown.AutoSize = True
+        lblCountdown.Location = New Point(10, 26)
+        grpAutoRun.Controls.Add(lblCountdown)
+
+        row1.Controls.Add(grpLog,     0, 0)
+        row1.Controls.Add(grpAutoRun, 1, 0)
+        outer.Controls.Add(row1, 0, 0)
+
+        ' ---------------- Row 2: ANALYSIS REPORT CTA ----------------
+        ' P3 AnalysisReportButton — Solid amber FlatButton with 📊 icon, →
+        ' arrow, and a persistent glow halo. Click shim forwards into the
+        ' existing async LinkLabel handler so we don't duplicate its body.
+        Dim btnReport = New AnalysisReportButton() With {
+            .Text = "ANALYSIS REPORT",
+            .Dock = DockStyle.Fill,
+            .Margin = New Padding(0, 0, 0, 8),
+            .Height = 44
+        }
+        AddHandler btnReport.Click, Sub(s, ev) lnkAnalysisReport_LinkClicked(s, Nothing)
+        outer.Controls.Add(btnReport, 0, 1)
+
+        ' Hide the original Analysis Report LinkLabel — the FlatButton owns
+        ' the visual surface now. The LinkLabel stays alive (Handles clause
+        ' is still bound) but invisible; the shim above bypasses it.
+        Me.Controls.Remove(lnkAnalysisReport)
+        lnkAnalysisReport.Visible = False
+        _cardSettingsTools.Controls.Add(lnkAnalysisReport)
+
+        ' ---------------- Row 3: TOOLS ----------------
+        Dim grpTools = New SectionGroup() With {
+            .Title = "TOOLS",
+            .Dock = DockStyle.Fill,
+            .BorderStyle2 = SectionGroup.GroupBorderStyle.Solid,
+            .AccentColor = Theme.BORDER_CARD,
+            .TabStop = False
         }
 
-        Dim controlsToMove As Control() = {
-            lblLogInfo, lblCountdown,
-            lnkResetLog, lnkCalibCheck, lnkAnalysisReport,
-            lnkTweakSettings, lnkOutputDump, lnkOutputDumpSettings}
-        For Each c In controlsToMove
-            If c Is Nothing Then Continue For
-            Me.Controls.Remove(c)
-            c.Margin = New Padding(0, 4, 16, 4)
-            ' lblLogInfo was Designer-sized; give it a sensible flow width.
-            If c Is lblLogInfo Then
-                lblLogInfo.AutoSize = True
-                lblLogInfo.Size     = New Size(700, 18)
-            End If
-            If c Is lblCountdown Then
-                lblCountdown.AutoSize = True
-            End If
-            flow.Controls.Add(c)
+        Dim rowCalib = New LinkRow() With {
+            .LinkText = "Calibration Readiness",
+            .Location = New Point(10, 26),
+            .Size = New Size(320, 22),
+            .TabStop = False
+        }
+        AddHandler rowCalib.LinkClicked, Sub(s, ev) lnkCalibCheck_LinkClicked(s, Nothing)
+        grpTools.Controls.Add(rowCalib)
+
+        Dim rowTweak = New LinkRow() With {
+            .LinkText = "Tweak Settings",
+            .Location = New Point(10, 52),
+            .Size = New Size(320, 22),
+            .TabStop = False
+        }
+        AddHandler rowTweak.LinkClicked, Sub(s, ev) lnkTweakSettings_LinkClicked(s, Nothing)
+        grpTools.Controls.Add(rowTweak)
+
+        Dim rowDump = New LinkRow() With {
+            .LinkText = "Output Dump",
+            .Location = New Point(10, 78),
+            .Size = New Size(320, 22),
+            .TabStop = False
+        }
+        AddHandler rowDump.LinkClicked, Sub(s, ev) lnkOutputDump_LinkClicked(s, Nothing)
+        grpTools.Controls.Add(rowDump)
+
+        ' Cog (settings) — reuse the existing programmatic LinkLabel so its
+        ' Handles … LinkClicked partial-class binding stays intact. Placed
+        ' right-anchored inside the TOOLS box, level with the Output Dump row.
+        Me.Controls.Remove(lnkOutputDumpSettings)
+        lnkOutputDumpSettings.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        lnkOutputDumpSettings.Dock = DockStyle.None
+        lnkOutputDumpSettings.AutoSize = True
+        lnkOutputDumpSettings.Font = Theme.FontMono(11.0F, FontStyle.Regular)
+        grpTools.Controls.Add(lnkOutputDumpSettings)
+        AddHandler grpTools.SizeChanged,
+            Sub(s, ev)
+                If grpTools.ClientSize.Width <= 0 Then Return
+                lnkOutputDumpSettings.Location = New Point(
+                    grpTools.ClientSize.Width - lnkOutputDumpSettings.Width - 14, 80)
+            End Sub
+
+        ' The three replaced LinkLabels (Calib / Tweak / Output Dump) stay
+        ' alive but hidden — their Handles clauses are still bound, but the
+        ' new LinkRows forward clicks via the shims above.
+        For Each lnk As LinkLabel In {lnkCalibCheck, lnkTweakSettings, lnkOutputDump}
+            Me.Controls.Remove(lnk)
+            lnk.Visible = False
+            _cardSettingsTools.Controls.Add(lnk)
         Next
 
-        _cardSettingsTools.Controls.Add(flow)
+        outer.Controls.Add(grpTools, 0, 2)
+
+        _cardSettingsTools.Controls.Add(outer)
+        outer.BringToFront()
     End Sub
 
     ' -----------------------------------------------------------------------
