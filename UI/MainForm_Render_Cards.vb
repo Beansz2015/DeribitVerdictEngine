@@ -22,11 +22,15 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Private Shared Function MakeSectionHeader(text As String,
                                               Optional colour As Color = Nothing) As Label
-        Dim c As Color = If(colour.IsEmpty, Theme.FG_QUATERNARY, colour)
+        ' Unified card section-header style. 11pt + FG_SECONDARY matches
+        ' BuildPlainSectionHeader so SCORE / VERDICT / LAST PRICE / ATR /
+        ' STRUCTURAL / SIGNAL BREAKDOWN read at the same weight as OI × CVD
+        ' CROSS / VOLUME PROFILE / KELLY SIZING / INDICATOR DETAILS.
+        Dim c As Color = If(colour.IsEmpty, Theme.FG_SECONDARY, colour)
         Return New Label() With {
             .AutoSize = True,
             .Text = text,
-            .Font = Theme.FontMono(9.0F, FontStyle.Bold),
+            .Font = Theme.FontMono(11.0F, FontStyle.Bold),
             .ForeColor = c,
             .BackColor = Color.Transparent,
             .Margin = New Padding(0, 0, 0, 4)
@@ -1759,7 +1763,10 @@ Partial Public Class MainForm
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 22))   ' TOTAL row
         outer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
-        outer.Controls.Add(MakeSectionHeader("SIGNAL BREAKDOWN"), 0, 0)
+        ' SIGNAL BREAKDOWN tinted cyan to mirror the STRUCTURAL row convention
+        ' — both are the engine's "primary data" sections and deserve a colour
+        ' distinct from the default FG_SECONDARY of the other card headers.
+        outer.Controls.Add(MakeSectionHeader("SIGNAL BREAKDOWN", Theme.ACC_INFO), 0, 0)
 
         ' Column headers (repeated for both halves).
         Dim colHdr = New TableLayoutPanel() With {
