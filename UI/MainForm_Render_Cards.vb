@@ -961,8 +961,8 @@ Partial Public Class MainForm
         }
         colHdr.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
         colHdr.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
-        colHdr.Controls.Add(MakeBreakdownColumnHeader(), 0, 0)
-        colHdr.Controls.Add(MakeBreakdownColumnHeader(), 1, 0)
+        colHdr.Controls.Add(MakeBreakdownColumnHeader(rightSide:=False), 0, 0)
+        colHdr.Controls.Add(MakeBreakdownColumnHeader(rightSide:=True),  1, 0)
         outer.Controls.Add(colHdr, 0, 1)
 
         ' Two-column main content. Each side is a vertical stack: tier
@@ -1044,9 +1044,38 @@ Partial Public Class MainForm
     ' Layout helpers
     ' -----------------------------------------------------------------------
 
-    Private Shared Function MakeBreakdownColumnHeader() As Label
-        Dim text As String = String.Format("{0,-14}  {1,-6}  {2}   {3}",
-                                            "INDICATOR", "STATE", "NOTE", "SC")
+    ''' <summary>
+    ''' Column-header row matching MakeSignalRow's TableLayoutPanel column
+    ''' widths (110 / 75 / flex / 30). Each header cell sits in its own
+    ''' fixed-width column so the labels align under their data cells.
+    ''' </summary>
+    Private Shared Function MakeBreakdownColumnHeader(Optional rightSide As Boolean = False) As Control
+        ' Same 500 px width as MakeSignalRow so the data cells line up under
+        ' the header cells. Margin mirrors NewBreakdownColumn so the two
+        ' halves' offsets agree.
+        Dim hdr As New TableLayoutPanel() With {
+            .Width = 500,
+            .Height = 14,
+            .ColumnCount = 4, .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = If(rightSide, New Padding(4, 2, 0, 0), New Padding(0, 2, 4, 0)),
+            .Padding = New Padding(0)
+        }
+        hdr.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))
+        hdr.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 75))
+        hdr.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        hdr.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 30))
+        hdr.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+
+        hdr.Controls.Add(MakeColHeaderCell("INDICATOR"), 0, 0)
+        hdr.Controls.Add(MakeColHeaderCell("STATE"),     1, 0)
+        hdr.Controls.Add(MakeColHeaderCell("NOTE"),      2, 0)
+        hdr.Controls.Add(MakeColHeaderCell("SC", alignRight:=True), 3, 0)
+        Return hdr
+    End Function
+
+    Private Shared Function MakeColHeaderCell(text As String,
+                                              Optional alignRight As Boolean = False) As Label
         Return New Label() With {
             .AutoSize = False,
             .Dock = DockStyle.Fill,
@@ -1054,8 +1083,9 @@ Partial Public Class MainForm
             .Font = Theme.FontMono(8.0F, FontStyle.Bold),
             .ForeColor = Theme.FG_QUATERNARY,
             .BackColor = Color.Transparent,
-            .TextAlign = ContentAlignment.MiddleLeft,
-            .Margin = New Padding(4, 0, 4, 0)
+            .TextAlign = If(alignRight, ContentAlignment.MiddleRight, ContentAlignment.MiddleLeft),
+            .Margin = New Padding(0),
+            .Padding = New Padding(0)
         }
     End Function
 
@@ -1089,9 +1119,23 @@ Partial Public Class MainForm
     End Function
 
     ''' <summary>
-    ''' Build one inline signal row. Composite mono-formatted Label with
-    ''' fixed-width columns; full row colour follows state. If subNote is
-    ''' provided, the row's height grows and a second indented line renders.
+    ''' Build one inline signal row as a TableLayoutPanel with four columns
+    ''' pinned to the header positions: INDICATOR 110 / STATE 75 / NOTE
+    ''' flex / SC 30 (right-aligned). Previous flow-positioned implementation
+    ''' rendered the row as a single composite mono-formatted Label, which
+    ''' left columns to float by natural width — state pills on rows with
+    ''' shorter indicator labels ended up at different x-positions than rows
+    ''' with longer labels (e.g., ROC(9) vs Funding Mom). TableLayoutPanel
+    ''' pins the columns under their headers.
+    '''
+    ''' SC cell encodes three states (preserved from previous impl):
+    '''   sc Is Nothing     → "—" in FG_DIM (this row didn't vote)
+    '''   sc.Value &gt; 0     → "+N" in ACC_STRONG_LONG
+    '''   sc.Value &lt; 0     → "-N" in ACC_SHORT
+    '''   sc.Value = 0      → "0"  in FG_TERTIARY
+    ''' If subNote is supplied, a second row spans NOTE+SC cells with an
+    ''' indented "↳ {text}" sub-line (used by Swing Pivots for the D2
+    ''' best-volume sub-note).
     ''' </summary>
     Private Shared Function MakeSignalRow(label As String,
                                           state As String,
@@ -1100,98 +1144,80 @@ Partial Public Class MainForm
                                           sc As Integer?,
                                           Optional subNote As String = Nothing,
                                           Optional subNoteColour As Color = Nothing) As Control
-        Dim trimLabel As String = If(label, "")
-        If trimLabel.Length > 14 Then trimLabel = trimLabel.Substring(0, 14)
-        Dim trimState As String = If(state, "")
-        If trimState.Length > 8 Then trimState = trimState.Substring(0, 8)
+        Dim hasSubNote As Boolean = Not String.IsNullOrEmpty(subNote)
 
-        ' SC cell encodes three states:
-        '   sc Is Nothing     → "—"  (this row didn't vote — display-only)
-        '   sc.Value <> 0     → "+1" / "-1"  (signed vote)
-        '   sc.Value = 0      → " 0" (vote measured zero)
-        ' "—" is rendered in FG_DIM via a separate label overlay so the rest
-        ' of the row keeps its state-driven colour.
-        Dim hasVote As Boolean = sc.HasValue
+        ' Hosted inside a FlowLayoutPanel column — Width is explicit (matches
+        ' the column-header sub-grid width), Dock is unset (FlowLayoutPanel
+        ' ignores it). The 500 px matches the existing tier-separator width.
+        Dim row As New TableLayoutPanel() With {
+            .Width = 500,
+            .Height = If(hasSubNote, SIGROW_HEIGHT + SIGROW_SUBNOTE_HEIGHT, SIGROW_HEIGHT),
+            .ColumnCount = 4,
+            .RowCount = If(hasSubNote, 2, 1),
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0),
+            .Padding = New Padding(0)
+        }
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))   ' INDICATOR
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 75))    ' STATE
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F)) ' NOTE (flex)
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 30))    ' SC
+        row.RowStyles.Add(New RowStyle(SizeType.Absolute, SIGROW_HEIGHT))
+        If hasSubNote Then row.RowStyles.Add(New RowStyle(SizeType.Absolute, SIGROW_SUBNOTE_HEIGHT))
+
+        row.Controls.Add(MakeBreakdownCell(If(label, ""), Theme.FG_SECONDARY),  0, 0)
+        row.Controls.Add(MakeBreakdownCell(If(state, ""), stateColour),         1, 0)
+        row.Controls.Add(MakeBreakdownCell(If(note, ""),  Theme.FG_QUATERNARY), 2, 0)
+
+        ' SC cell — sign-coloured for votes, dim em-dash for non-voting rows.
         Dim scText As String
-        If Not hasVote Then
-            scText = " —"
+        Dim scColour As Color
+        If Not sc.HasValue Then
+            scText = "—"
+            scColour = Theme.FG_DIM
         ElseIf sc.Value > 0 Then
             scText = "+" & sc.Value.ToString()
+            scColour = Theme.ACC_STRONG_LONG
         ElseIf sc.Value < 0 Then
             scText = sc.Value.ToString()
+            scColour = Theme.ACC_SHORT
         Else
-            scText = " 0"
+            scText = "0"
+            scColour = Theme.FG_TERTIARY
         End If
-        Dim noteText As String = If(note, "")
+        row.Controls.Add(MakeBreakdownCell(scText, scColour, alignRight:=True), 3, 0)
 
-        ' Composite text omits the SC for non-voting rows; that cell is drawn
-        ' as a separate overlay label in FG_DIM so the dim "—" reads as
-        ' explicitly not-a-score rather than a faded number.
-        Dim text As String
-        If hasVote Then
-            text = String.Format("{0,-14}  {1,-6}  {2,-32} {3,3}",
-                                 trimLabel, trimState, noteText, scText)
-        Else
-            text = String.Format("{0,-14}  {1,-6}  {2,-32}    ",
-                                 trimLabel, trimState, noteText)
-        End If
-
-        Dim rowH As Integer = SIGROW_HEIGHT
-        If Not String.IsNullOrEmpty(subNote) Then rowH = SIGROW_HEIGHT + SIGROW_SUBNOTE_HEIGHT
-
-        Dim row = New Panel() With {
-            .Width = 500,
-            .Height = rowH,
-            .BackColor = Color.Transparent,
-            .Margin = New Padding(0)
-        }
-
-        Dim mainLbl = New Label() With {
-            .AutoSize = False,
-            .Location = New Point(2, 0),
-            .Size = New Size(496, SIGROW_HEIGHT),
-            .Text = text,
-            .Font = Theme.FontMono(9.5F, FontStyle.Regular),
-            .ForeColor = stateColour,
-            .BackColor = Color.Transparent,
-            .TextAlign = ContentAlignment.MiddleLeft,
-            .AutoEllipsis = True
-        }
-        row.Controls.Add(mainLbl)
-
-        ' Em-dash overlay for non-voting rows. Positioned over the SC slot
-        ' (right edge of the row) in FG_DIM to read as "no vote here."
-        If Not hasVote Then
-            Dim dashLbl = New Label() With {
-                .AutoSize = False,
-                .Location = New Point(470, 0),
-                .Size = New Size(28, SIGROW_HEIGHT),
-                .Text = "—",
-                .Font = Theme.FontMono(9.5F, FontStyle.Regular),
-                .ForeColor = Theme.FG_DIM,
-                .BackColor = Color.Transparent,
-                .TextAlign = ContentAlignment.MiddleRight
-            }
-            row.Controls.Add(dashLbl)
-            dashLbl.BringToFront()
-        End If
-
-        If Not String.IsNullOrEmpty(subNote) Then
-            Dim subLbl = New Label() With {
-                .AutoSize = False,
-                .Location = New Point(20, SIGROW_HEIGHT),
-                .Size = New Size(478, SIGROW_SUBNOTE_HEIGHT),
-                .Text = "↳ " & subNote,
-                .Font = Theme.FontMono(8.5F, FontStyle.Regular),
-                .ForeColor = If(subNoteColour.IsEmpty, Theme.FG_QUATERNARY, subNoteColour),
-                .BackColor = Color.Transparent,
-                .TextAlign = ContentAlignment.MiddleLeft,
-                .AutoEllipsis = True
-            }
-            row.Controls.Add(subLbl)
+        If hasSubNote Then
+            Dim subLbl = MakeBreakdownCell("↳ " & subNote,
+                                           If(subNoteColour.IsEmpty, Theme.FG_QUATERNARY, subNoteColour))
+            subLbl.Font = Theme.FontMono(8.5F, FontStyle.Regular)
+            row.Controls.Add(subLbl, 2, 1)
+            row.SetColumnSpan(subLbl, 2)
         End If
 
         Return row
+    End Function
+
+    ''' <summary>
+    ''' Single cell factory for the SIGNAL BREAKDOWN row layout. AutoSize
+    ''' False + Dock Fill so the TableLayoutPanel column widths drive
+    ''' positioning (the whole point of the alignment fix).
+    ''' </summary>
+    Private Shared Function MakeBreakdownCell(text As String,
+                                              colour As Color,
+                                              Optional alignRight As Boolean = False) As Label
+        Return New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = text,
+            .Font = Theme.FontMono(9.5F, FontStyle.Regular),
+            .ForeColor = colour,
+            .BackColor = Color.Transparent,
+            .TextAlign = If(alignRight, ContentAlignment.MiddleRight, ContentAlignment.MiddleLeft),
+            .AutoEllipsis = True,
+            .Margin = New Padding(0),
+            .Padding = New Padding(0)
+        }
     End Function
 
     ' -----------------------------------------------------------------------
