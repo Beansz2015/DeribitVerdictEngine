@@ -430,7 +430,10 @@ Partial Public Class MainForm
         _cardVolumeProfile.Margin = New Padding(0)
         row7.Controls.Add(_cardOiCvdCross, 0, 0)
         row7.Controls.Add(_cardVolumeProfile, 1, 0)
-        AddRow(row7, 140)
+        ' Height grown from 140 → 210 in P4d commit 3 to fit VOLUME PROFILE's
+        ' 7-row level stack (VAH/HVN↑/LVN↑/POC/LVN↓/HVN↓/VAL) + two sub-
+        ' labels, and OI × CVD's badge row + two MiniMeters.
+        AddRow(row7, 210)
         AddPlaceholderHeader(_cardOiCvdCross,    "OI × CVD CROSS")
         AddPlaceholderHeader(_cardVolumeProfile, "VOLUME PROFILE")
 

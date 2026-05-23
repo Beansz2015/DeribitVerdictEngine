@@ -1076,6 +1076,272 @@ Partial Public Class MainForm
     End Function
 
     ' =======================================================================
+    ' VOLUME PROFILE card (P4d commit 3). Gaps GAP-62..66.
+    ' Renders the VPFR price-level stack (VAH → HVN↑ → LVN↑ → POC → LVN↓ →
+    ' HVN↓ → VAL) with conditional LVN rows when present. Two sub-labels
+    ' below the stack: VPFR signal text and value-area signal.
+    ' =======================================================================
+    Public Sub BindCardVolumeProfile(r As IndicatorResults)
+        If _cardVolumeProfile Is Nothing Then Return
+
+        _cardVolumeProfile.SuspendLayout()
+        _cardVolumeProfile.Controls.Clear()
+
+        Dim stack As New FlowLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .FlowDirection = FlowDirection.TopDown,
+            .WrapContents = False,
+            .AutoScroll = False,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0),
+            .Padding = New Padding(0)
+        }
+
+        stack.Controls.Add(BuildPlainSectionHeader("VOLUME PROFILE"))
+
+        ' Price-level rows, top-to-bottom: VAH → HVN↑ → LVN↑ → POC → LVN↓ →
+        ' HVN↓ → VAL. LVN/HVN rows only render when their value > 0.
+        AddLevelRow(stack, "VAH",  r.VPFRVah,             Theme.ACC_WARN, bold:=False)
+        If r.VPFRNearestHvnAbove > 0 Then AddLevelRow(stack, "HVN↑", r.VPFRNearestHvnAbove, Theme.ACC_INFO, bold:=False)
+        If r.VPFRNearestLvnAbove > 0 Then AddLevelRow(stack, "LVN↑", r.VPFRNearestLvnAbove, Theme.FG_TERTIARY, bold:=False)
+        AddLevelRow(stack, "POC", r.VPFRPoc, Theme.ACC_WARN, bold:=True,
+                    suffix:=If(r.VPFRHVNearPoc, "  (HVN@POC)", ""))
+        If r.VPFRNearestLvnBelow > 0 Then AddLevelRow(stack, "LVN↓", r.VPFRNearestLvnBelow, Theme.FG_TERTIARY, bold:=False)
+        If r.VPFRNearestHvnBelow > 0 Then AddLevelRow(stack, "HVN↓", r.VPFRNearestHvnBelow, Theme.ACC_INFO, bold:=False)
+        AddLevelRow(stack, "VAL",  r.VPFRVal,             Theme.ACC_WARN, bold:=False)
+
+        ' GAP-62: VPFR signal sub-label.
+        Dim vpfrSig As String = If(r.VPFRSignal, "")
+        If vpfrSig.Length > 0 Then
+            stack.Controls.Add(BuildSubLabel(vpfrSig.Replace("_"c, " "c).ToLowerInvariant(), Theme.FG_TERTIARY))
+        End If
+
+        ' GAP-64: value-area signal sub-label with semantic colour.
+        Dim vaSig As String = If(r.VPFRValueAreaSignal, "")
+        If vaSig.Length > 0 Then
+            Dim vaColour As Color = Theme.FG_TERTIARY
+            Select Case vaSig.ToUpperInvariant()
+                Case "ABOVE_VAH" : vaColour = Theme.ACC_STRONG_LONG
+                Case "BELOW_VAL" : vaColour = Theme.ACC_SHORT
+                Case Else        : vaColour = Theme.FG_TERTIARY
+            End Select
+            stack.Controls.Add(BuildSubLabel(vaSig.Replace("_"c, " "c).ToLowerInvariant(), vaColour))
+        End If
+
+        _cardVolumeProfile.Controls.Add(stack)
+        _cardVolumeProfile.ResumeLayout(True)
+    End Sub
+
+    ''' <summary>Add one VOLUME PROFILE price-level row to the stack.</summary>
+    Private Shared Sub AddLevelRow(parent As FlowLayoutPanel,
+                                   label As String,
+                                   value As Double,
+                                   colour As Color,
+                                   bold As Boolean,
+                                   Optional suffix As String = "")
+        Dim row As New TableLayoutPanel() With {
+            .AutoSize = True,
+            .AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            .ColumnCount = 3,
+            .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 0, 0, 1),
+            .Padding = New Padding(0)
+        }
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 50))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 90))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
+        row.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+
+        Dim style As FontStyle = If(bold, FontStyle.Bold, FontStyle.Regular)
+        row.Controls.Add(New Label() With {
+            .AutoSize = False, .Width = 50, .Height = 16,
+            .Text = label, .Font = Theme.FontMono(9.5F, style),
+            .ForeColor = colour, .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft, .Margin = New Padding(0)
+        }, 0, 0)
+        row.Controls.Add(New Label() With {
+            .AutoSize = False, .Width = 90, .Height = 16,
+            .Text = If(value > 0, value.ToString("F1"), "—"),
+            .Font = Theme.FontMono(9.5F, style),
+            .ForeColor = If(value > 0, colour, Theme.FG_DIM),
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleRight, .Margin = New Padding(0)
+        }, 1, 0)
+        If Not String.IsNullOrEmpty(suffix) Then
+            row.Controls.Add(New Label() With {
+                .AutoSize = True, .Text = suffix,
+                .Font = Theme.FontMono(8.5F, FontStyle.Regular),
+                .ForeColor = Theme.FG_QUATERNARY,
+                .BackColor = Color.Transparent,
+                .Margin = New Padding(0)
+            }, 2, 0)
+        End If
+        parent.Controls.Add(row)
+    End Sub
+
+    ''' <summary>Small dim sub-label, used below VOLUME PROFILE levels.</summary>
+    Private Shared Function BuildSubLabel(text As String, colour As Color) As Label
+        Return New Label() With {
+            .AutoSize = True,
+            .Text = text,
+            .Font = Theme.FontMono(9.0F, FontStyle.Regular),
+            .ForeColor = colour,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 4, 0, 0)
+        }
+    End Function
+
+    ''' <summary>Section header for cards built by P4d binders (KELLY,
+    ''' VOLUME PROFILE, OI × CVD CROSS, INDICATOR DETAILS). Matches the
+    ''' MakeSectionHeader style used by the bound row 3-5 cards.</summary>
+    Private Shared Function BuildPlainSectionHeader(text As String) As Label
+        Return New Label() With {
+            .AutoSize = True,
+            .Text = text,
+            .Font = Theme.FontMono(11.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_SECONDARY,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 0, 0, 6)
+        }
+    End Function
+
+    ' =======================================================================
+    ' OI × CVD CROSS card (P4d commit 3). Was an empty placeholder.
+    ' Outcome badge (OiCvdBadge 4-state) + Funding Mom MiniMeter + Spread
+    ' MiniMeter. v.OiCvdOutcome drives the badge; r.FundingMomentum +
+    ' r.SpreadBps/SpreadStatus drive the meters.
+    ' =======================================================================
+    Public Sub BindCardOiCvdCross(r As IndicatorResults, v As VerdictResult)
+        If _cardOiCvdCross Is Nothing Then Return
+
+        _cardOiCvdCross.SuspendLayout()
+        _cardOiCvdCross.Controls.Clear()
+
+        Dim stack As New FlowLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .FlowDirection = FlowDirection.TopDown,
+            .WrapContents = False,
+            .AutoScroll = False,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0),
+            .Padding = New Padding(0)
+        }
+
+        stack.Controls.Add(BuildPlainSectionHeader("OI × CVD CROSS"))
+
+        ' Outcome badge + note tag side-by-side.
+        Dim outcomeKey As String = If(v.OiCvdOutcome, "NONE").ToUpperInvariant()
+        Dim badge As New OiCvdBadge() With {
+            .Outcome = MapOiCvdOutcome(outcomeKey),
+            .Margin = New Padding(0)
+        }
+        stack.Controls.Add(BuildBadgeRow(badge, ResolveOiCvdNote(outcomeKey)))
+
+        ' Funding Mom MiniMeter.
+        Dim fm As String = If(r.FundingMomentum, "FLAT")
+        stack.Controls.Add(BuildMiniMeter("Funding Mom", fm,
+                                          ResolveFundMomMagnitude(fm),
+                                          ResolveFundMomColour(fm)))
+
+        ' Spread MiniMeter — pct = bps / wide-threshold, clamped to 100.
+        Dim wideThresh As Double = SettingsLoader.Current.Indicators.Spread.WideThresholdBps
+        Dim spreadPct As Single = 0.0F
+        If wideThresh > 0 Then
+            spreadPct = CSng(Math.Min(100.0, (r.SpreadBps / wideThresh) * 100.0))
+        End If
+        stack.Controls.Add(BuildMiniMeter("Spread", $"{r.SpreadBps:F2} bps",
+                                          spreadPct,
+                                          ResolveSpreadColour(If(r.SpreadStatus, ""))))
+
+        _cardOiCvdCross.Controls.Add(stack)
+        _cardOiCvdCross.ResumeLayout(True)
+    End Sub
+
+    ''' <summary>Map v.OiCvdOutcome string → OiCvdBadge enum value.</summary>
+    Private Shared Function MapOiCvdOutcome(s As String) As OiCvdBadge.OiCvdOutcomeKind
+        Select Case s.ToUpperInvariant()
+            Case "CONFIRMED_LONG"  : Return OiCvdBadge.OiCvdOutcomeKind.CONFIRMED_LONG
+            Case "CONFIRMED_SHORT" : Return OiCvdBadge.OiCvdOutcomeKind.CONFIRMED_SHORT
+            Case "CONFLICT", "CONFLICT_LONG", "CONFLICT_SHORT" : Return OiCvdBadge.OiCvdOutcomeKind.CONFLICT
+            Case Else              : Return OiCvdBadge.OiCvdOutcomeKind.NEUTRAL
+        End Select
+    End Function
+
+    Private Shared Function ResolveOiCvdNote(s As String) As String
+        Select Case s.ToUpperInvariant()
+            Case "CONFIRMED_LONG", "CONFIRMED_SHORT" : Return "+1 bonus"
+            Case "CONFLICT", "CONFLICT_LONG", "CONFLICT_SHORT" : Return "−1 penalty"
+            Case Else : Return "no signal"
+        End Select
+    End Function
+
+    Private Shared Function ResolveFundMomColour(m As String) As Color
+        Select Case If(m, "").ToUpperInvariant()
+            Case "RISING"  : Return Theme.ACC_WARN          ' rising into crowded → caution
+            Case "FALLING" : Return Theme.ACC_STRONG_LONG   ' de-crowding
+            Case Else      : Return Theme.FG_TERTIARY
+        End Select
+    End Function
+
+    ''' <summary>No numeric magnitude field on IndicatorResults for funding
+    ''' momentum — heuristic 70% on RISING/FALLING, 20% on FLAT.</summary>
+    Private Shared Function ResolveFundMomMagnitude(m As String) As Single
+        Select Case If(m, "").ToUpperInvariant()
+            Case "RISING", "FALLING" : Return 70.0F
+            Case Else                : Return 20.0F
+        End Select
+    End Function
+
+    Private Shared Function ResolveSpreadColour(status As String) As Color
+        Select Case If(status, "").ToUpperInvariant()
+            Case "TIGHT" : Return Theme.ACC_STRONG_LONG
+            Case "WIDE"  : Return Theme.ACC_SHORT
+            Case Else    : Return Theme.FG_TERTIARY
+        End Select
+    End Function
+
+    ''' <summary>OI × CVD badge + note tag row.</summary>
+    Private Shared Function BuildBadgeRow(badge As Control, noteText As String) As Control
+        Dim row As New FlowLayoutPanel() With {
+            .AutoSize = True,
+            .AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            .FlowDirection = FlowDirection.LeftToRight,
+            .WrapContents = False,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 0, 0, 8),
+            .Padding = New Padding(0)
+        }
+        row.Controls.Add(badge)
+        row.Controls.Add(New Label() With {
+            .AutoSize = True,
+            .Text = noteText,
+            .Font = Theme.FontMono(9.0F, FontStyle.Regular),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(12, 5, 0, 0)
+        })
+        Return row
+    End Function
+
+    ''' <summary>Build a MiniMeter and return it wrapped in a fixed-height
+    ''' panel so the FlowLayoutPanel stack respects its size.</summary>
+    Private Shared Function BuildMiniMeter(label As String,
+                                           valueText As String,
+                                           pct As Single,
+                                           barColour As Color) As Control
+        Dim meter As New MiniMeter() With {
+            .LabelText = label,
+            .ValueText = valueText,
+            .Pct = pct,
+            .BarColor = barColour,
+            .Size = New Size(260, 24),
+            .Margin = New Padding(0, 0, 0, 6)
+        }
+        Return meter
+    End Function
+
+    ' =======================================================================
     ' SIGNAL BREAKDOWN card (P4c). Clear-and-rebuild on each bind — 23 rows
     ' + tier separators + footer aggregates + TOTAL row.
     '

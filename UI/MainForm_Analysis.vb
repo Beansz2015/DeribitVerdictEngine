@@ -442,6 +442,8 @@ Partial Public Class MainForm
         BindCardStructural(r, isLong:=True)
         BindCardStructural(r, isLong:=False)
         BindCardSignalBreakdown(verdict, r)
+        BindCardOiCvdCross(r, verdict)
+        BindCardVolumeProfile(r)
         BindCardKelly(verdict)
 
         ' Update live performance strip (eval cache + OHLC cache + 6 window aggregates).
