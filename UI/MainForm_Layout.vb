@@ -96,7 +96,7 @@ Partial Public Class MainForm
     Private _cardOiCvdCross        As RoundedCardPanel
     Private _cardVolumeProfile     As RoundedCardPanel
     Private _cardKelly             As RoundedCardPanel
-    Private _cardDynamicNorms      As RoundedCardPanel
+    Private _cardIndicatorDetails      As RoundedCardPanel
     Private _cardVerificationDump  As RoundedCardPanel    ' P5 deletes
     Private _cardSettingsTools     As RoundedCardPanel    ' P4e binds
 
@@ -445,10 +445,14 @@ Partial Public Class MainForm
         AddRow(_cardKelly, 180)
         AddPlaceholderHeader(_cardKelly, "KELLY SIZING")
 
-        ' Row 9: DYNAMIC NORMS (placeholder — P4d)
-        _cardDynamicNorms = NewCard()
-        AddRow(_cardDynamicNorms, 90)
-        AddPlaceholderHeader(_cardDynamicNorms, "DYNAMIC NORMS")
+        ' Row 9: INDICATOR DETAILS (P4d commit 4 binds). Renamed from
+        ' _cardDynamicNorms — holds the verbose absolute-value detail
+        ' (NORMS + 11 other diagnostic sub-groups) that didn't fit in the
+        ' SIGNAL BREAKDOWN NOTE column. Height tall enough for 6 SectionGroup
+        ' equivalents per column on the 4K-monitor scrolling form; if rows
+        ' overflow, the top-level _gridRoot will scroll vertically.
+        _cardIndicatorDetails = NewCard()
+        AddRow(_cardIndicatorDetails, 480)
 
         ' Row 10: legacy txtOutput verification dump (P5 deletes)
         _cardVerificationDump = NewCard()

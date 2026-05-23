@@ -445,6 +445,7 @@ Partial Public Class MainForm
         BindCardOiCvdCross(r, verdict)
         BindCardVolumeProfile(r)
         BindCardKelly(verdict)
+        BindCardIndicatorDetails(verdict, r, norms, SettingsLoader.Current)
 
         ' Update live performance strip (eval cache + OHLC cache + 6 window aggregates).
         ' Must come after RenderOutput so AnalysisOutputDump.Append has already run.
