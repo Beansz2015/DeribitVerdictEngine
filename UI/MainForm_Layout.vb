@@ -442,7 +442,12 @@ Partial Public Class MainForm
         ' Card hides itself entirely (Visible=False) when v.KellyPWin = 0,
         ' so the row collapses visually but the AddRow slot remains reserved.
         _cardKelly = NewCard()
-        AddRow(_cardKelly, 180)
+        ' Bumped 180 → 220 after live-run verification — 180 clipped the
+        ' Lean/Contracts row mid-line. NewCard adds 12 px padding top+bottom
+        ' (24 total), leaving usable interior. Header (~22) + 2 advisory
+        ' lines (~32) + 5 KV rows × 22 (~110) ≈ 164; row margins push to
+        ' ~180 actual content, so 220 gives breathing room.
+        AddRow(_cardKelly, 220)
         AddPlaceholderHeader(_cardKelly, "KELLY SIZING")
 
         ' Row 9: INDICATOR DETAILS (P4d commit 4 binds). Renamed from

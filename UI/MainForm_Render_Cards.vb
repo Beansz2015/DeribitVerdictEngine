@@ -2517,10 +2517,22 @@ Partial Public Class MainForm
         End Select
         panel.Controls.Add(MakeFooterAggregate("OI × CVD", oiState, oiColour, oiTag), 0, 1)
 
-        ' Pass 2c — derive from "Regime Align (2c)" item (no Pass2cOutcome
-        ' field on VerdictResult). The 3-state Pass2cBadge can't encode
-        ' direction, so emit a separate ↑/↓ arrow next to the badge when
-        ' ALIGNED on a specific side.
+        ' Pass 2c — derive from "Regime Align (2c)" breakdown item (no
+        ' Pass2cOutcome field on VerdictResult).
+        '
+        ' Engine emission permutations (from ScoringEngine_Calculate_Scoring.vb
+        ' lines 433-510, 753):
+        '   SUPPRESSED      → item not emitted (TRANSITIONAL or zero-net scores)
+        '   ALIGNED LONG    → item with LongHit=True,  ShortHit=False, note "+N REGIME ALIGN [...]"
+        '   ALIGNED SHORT   → item with LongHit=False, ShortHit=True,  note "+N REGIME ALIGN [...]"
+        '   CONFLICT        → item with BOTH hits False, note "-N REGIME CONFLICT [...]"
+        '                     (penalty applied to dominant side, but neither
+        '                     hit flag is set — only the note carries the
+        '                     conflict marker).
+        '
+        ' Prior code missed the CONFLICT case (item present + both False fell
+        ' through to "SUPPRESSED"). The Both-True branch was dead code —
+        ' kept removed since the engine never emits that shape.
         Dim p2cItem = FindItem(items, "Regime Align (2c)")
         Dim p2cState As String, p2cColour As Color, p2cTag As String
         Dim p2cArrow As String = "", p2cArrowColour As Color = Color.Empty
@@ -2528,26 +2540,24 @@ Partial Public Class MainForm
             p2cState = "SUPPRESSED"
             p2cColour = Theme.ACC_NEUTRAL
             p2cTag = ""
-        ElseIf p2cItem.LongHit AndAlso p2cItem.ShortHit Then
-            p2cState = "CONFLICT"
-            p2cColour = Theme.ACC_SHORT
-            p2cTag = "−1 regime"
-        ElseIf p2cItem.LongHit Then
+        ElseIf p2cItem.LongHit AndAlso Not p2cItem.ShortHit Then
             p2cState = "ALIGNED"
             p2cColour = Theme.ACC_STRONG_LONG
-            p2cTag = "+1 regime"
+            p2cTag = ExtractPass2cTag(p2cItem.Note)
             p2cArrow = "↑"
             p2cArrowColour = Theme.ACC_STRONG_LONG
-        ElseIf p2cItem.ShortHit Then
+        ElseIf p2cItem.ShortHit AndAlso Not p2cItem.LongHit Then
             p2cState = "ALIGNED"
             p2cColour = Theme.ACC_STRONG_LONG
-            p2cTag = "+1 regime"
+            p2cTag = ExtractPass2cTag(p2cItem.Note)
             p2cArrow = "↓"
             p2cArrowColour = Theme.ACC_SHORT
         Else
-            p2cState = "SUPPRESSED"
-            p2cColour = Theme.ACC_NEUTRAL
-            p2cTag = ""
+            ' Item present + both hits false (or — defensively — both true).
+            ' Engine emits this for CONFLICT (bidirectional penalty).
+            p2cState = "CONFLICT"
+            p2cColour = Theme.ACC_SHORT
+            p2cTag = ExtractPass2cTag(p2cItem.Note)
         End If
         panel.Controls.Add(MakeFooterAggregate("Pass 2c", p2cState, p2cColour, p2cTag,
                                                arrow:=p2cArrow,
@@ -2631,6 +2641,36 @@ Partial Public Class MainForm
         }, 3, 0)
 
         Return row
+    End Function
+
+    ''' <summary>
+    ''' Parse the "Regime Align (2c)" breakdown note for its leading ±N
+    ''' magnitude and produce a footer tag like "+1 regime" or "−1 regime".
+    ''' Note shape is always "[+|−]N REGIME (ALIGN|CONFLICT) [...]" — engine
+    ''' uses ASCII "-" for the conflict prefix; we render as "−" (U+2212)
+    ''' for typographic consistency with the rest of the UI.
+    ''' Falls back to "+1 regime" / "−1 regime" if parsing fails so the
+    ''' badge always carries some context.
+    ''' </summary>
+    Private Shared Function ExtractPass2cTag(note As String) As String
+        Dim text As String = If(note, "").TrimStart()
+        If text.Length = 0 Then Return ""
+        Dim isPenalty As Boolean = text.StartsWith("-"c) OrElse text.StartsWith("−"c)
+        Dim sign As String = If(isPenalty, "−", "+")
+        Dim defaultMag As String = "1"
+        ' Skip the leading +/- and read consecutive digits.
+        Dim startIdx As Integer = 0
+        If text(0) = "+"c OrElse text(0) = "-"c OrElse text(0) = "−"c Then startIdx = 1
+        Dim digits As String = ""
+        For i As Integer = startIdx To text.Length - 1
+            If Char.IsDigit(text(i)) Then
+                digits &= text(i)
+            Else
+                Exit For
+            End If
+        Next
+        Dim mag As String = If(digits.Length > 0, digits, defaultMag)
+        Return $"{sign}{mag} regime"
     End Function
 
     Private Shared Function NewDivider() As Panel
