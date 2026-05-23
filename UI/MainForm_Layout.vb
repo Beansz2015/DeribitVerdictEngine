@@ -395,7 +395,12 @@ Partial Public Class MainForm
         heroRow.Controls.Add(_cardScore, 0, 0)
         heroRow.Controls.Add(_cardVerdict, 1, 0)
         heroRow.Controls.Add(_cardLastPrice, 2, 0)
-        AddRow(heroRow, 160)
+        ' Bumped 160 → 180 px after the 11pt section-header bump tightened
+        ' the VERDICT card's 2×2 grid (CONTEXT / REGIME / MTF / HOLD) to the
+        ' point where eff/penalty + grid items overlapped on long verdict
+        ' strings. Extra 20 px feeds the grid; SCORE arc + LAST PRICE block
+        ' had headroom to spare so they don't suffer.
+        AddRow(heroRow, 180)
 
         ' Row 4: ATR ENTRY LEVELS. Bumped from 110 to 150 in P4 retro-fix
         ' for GAP-06 dual long+short rendering (section header + ATR sub-

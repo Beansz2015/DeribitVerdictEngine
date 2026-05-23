@@ -126,11 +126,15 @@ Partial Public Class MainForm
 
         inner.Controls.Add(MakeSectionHeader("VERDICT"), 0, 0)
 
+        ' Verdict text was 22pt; reduced to 18pt to keep the headline
+        ' prominent without overlapping the 2×2 sub-grid below when the
+        ' verdict string runs long (e.g. "NO TRADE [WEAK LONG]" under
+        ' MTF-blocked weak signals).
         _lblVerdictText = New Label() With {
             .AutoSize = False,
             .Dock = DockStyle.Fill,
             .Text = "—",
-            .Font = Theme.FontMono(22.0F, FontStyle.Bold),
+            .Font = Theme.FontMono(18.0F, FontStyle.Bold),
             .ForeColor = Theme.FG_PRIMARY,
             .BackColor = Color.Transparent,
             .TextAlign = ContentAlignment.MiddleLeft,
@@ -398,8 +402,7 @@ Partial Public Class MainForm
         inner.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
         Dim header = MakeSectionHeader(
-            If(isLong, "STRUCTURAL (LONG) · 5M PIVOTS", "STRUCTURAL (SHORT) · 5M PIVOTS"),
-            Theme.ACC_INFO)
+            If(isLong, "STRUCTURAL (LONG) · 5M PIVOTS", "STRUCTURAL (SHORT) · 5M PIVOTS"))
         inner.Controls.Add(header, 0, 0)
 
         Dim grid = New TableLayoutPanel() With {
@@ -1763,10 +1766,7 @@ Partial Public Class MainForm
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 22))   ' TOTAL row
         outer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
-        ' SIGNAL BREAKDOWN tinted cyan to mirror the STRUCTURAL row convention
-        ' — both are the engine's "primary data" sections and deserve a colour
-        ' distinct from the default FG_SECONDARY of the other card headers.
-        outer.Controls.Add(MakeSectionHeader("SIGNAL BREAKDOWN", Theme.ACC_INFO), 0, 0)
+        outer.Controls.Add(MakeSectionHeader("SIGNAL BREAKDOWN"), 0, 0)
 
         ' Column headers (repeated for both halves).
         Dim colHdr = New TableLayoutPanel() With {
@@ -1839,11 +1839,14 @@ Partial Public Class MainForm
 
         ' --- TOTAL row ---
         Dim shownMax As Integer = If(v.MaxScore > 0, v.MaxScore, 20)
+        ' TOTAL row at 10.5pt — sits between the 11pt header above and the
+        ' 9.5pt signal-row content, so it reads as a summary line without
+        ' out-shouting the section header.
         Dim total = New Label() With {
             .AutoSize = False,
             .Dock = DockStyle.Fill,
             .Text = $"TOTAL          Long {v.LongScore}/{shownMax}  |  Short {v.ShortScore}/{shownMax}",
-            .Font = Theme.FontMono(12.0F, FontStyle.Bold),
+            .Font = Theme.FontMono(10.5F, FontStyle.Bold),
             .ForeColor = Theme.FG_PRIMARY,
             .BackColor = Color.Transparent,
             .TextAlign = ContentAlignment.MiddleLeft,
