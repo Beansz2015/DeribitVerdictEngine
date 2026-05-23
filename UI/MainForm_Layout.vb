@@ -145,7 +145,6 @@ Partial Public Class MainForm
     End Class
     Friend _structLongCtrls   As StructuralCardControls
     Friend _structShortCtrls  As StructuralCardControls
-    Friend _analyzeButton     As FlatButton
 
     ''' <summary>
     ''' Holds the controls inside a STRUCTURAL card so P4b binding code can

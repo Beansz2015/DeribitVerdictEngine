@@ -21,7 +21,12 @@ Public Class AnalysisReportButton
         Me.Variant = FlatButton.ButtonVariant.Solid
         Me.AccentColor = Theme.ACC_CTA
         Me.InkColor = Theme.FG_INK
-        Me.IconText = Char.ConvertFromUtf32(&H1F4CA)   ' 📊
+        ' Geist Mono has no glyph for U+1F4CA (📊, supplementary plane) and
+        ' GDI+ Label.DrawString does not fall back to Segoe UI Emoji, so the
+        ' previous codepoint rendered as tofu in the SETTINGS & TOOLS CTA.
+        ' U+25A4 SQUARE WITH HORIZONTAL FILL keeps a bar-chart silhouette
+        ' inside Geist Mono's BMP coverage. Fallback list: ≡ (U+2261) / ▦.
+        Me.IconText = "▤"   ' U+25A4 SQUARE WITH HORIZONTAL FILL
         Me.Font = Theme.FontMono(12.0F, FontStyle.Bold)
         Me.CornerRadius = 4.0F
         Me.Height = 44
