@@ -175,7 +175,7 @@ These have been settled across earlier conversations and **must not be re-litiga
 | Vertical unconstrained, scrolling acceptable | rev 2.1 §3.6 | implicit |
 | Geist Mono bundled + fallback chain | P1 kickoff | locked |
 | Palette tokens at design hex values | P2 kickoff | locked |
-| 16 custom controls in `UI/Controls/`, no further modifications | P3 kickoff | hard rule |
+| 14 custom controls in `UI/Controls/`. **No new controls and no API surface changes.** *Paint carve-out*: pure paint-style tweaks (font size, `ForeColor`, border placement) inside an existing control are allowed when card-grid consistency demands it — e.g. `SectionGroup` title bumped 9pt `FG_QUATERNARY` → 11pt `FG_SECONDARY` in `bb7cd57` to match the global `MakeSectionHeader` change. No consumer code touched, no constructor/property surface changes. | P3 kickoff + P3 maintenance pass + paint carve-out `bb7cd57` | hard rule (paint carve-out) |
 | Card-based grid replaces `RichTextBox` rendering | P4a kickoff | locked |
 | Legacy `txtOutput` stays parked until user explicitly green-lights P5 | rev 2 §10 R1 + user Q2 follow-up | locked |
 | Hybrid A + selective B — DIAGNOSTICS card for verbose data, NOTE column for single-value enrichments | gap audit | locked |
@@ -191,7 +191,7 @@ These have been settled across earlier conversations and **must not be re-litiga
 | `lblVerdict` hidden in P4, deleted in P5 | stabilisation | locked |
 | Designer NumericUpDown spinner arrows visible — accepted | P4a review | accept |
 | Hybrid A architecture name: "INDICATOR DETAILS" card with 12 inline groups | gap audit + P4d | locked |
-| `SectionGroup` not modified — title-colour requires inline composition | P4d spec-back §2.3 | locked |
+| `SectionGroup` — **per-instance** title colour/font overrides still require inline composition, not new properties on the control. Global default style changes (e.g. the 2026-05-24 `bb7cd57` 9pt→11pt bump) are allowed under the §4 paint carve-out. | P4d spec-back §2.3 + carve-out 2026-05-24 | locked (scoped) |
 | `BuildGroupInline` helper local to `MainForm_Render_Cards.vb`, not promoted to P3 control | P4d spec-back §2.3 | locked |
 | Pass 2c CONFLICT case = `LongHit=False AND ShortHit=False AND note prefix matches CONFLICT` | P4d spec-back §5.1 | locked (fixed) |
 | Form width: **1100 px** (P4a settled at the floor of the rev 2.1 range) | P4a fix `3298ccf` | accept |
