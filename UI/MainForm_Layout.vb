@@ -63,6 +63,11 @@ Partial Public Class MainForm
     Private _tweakForm              As TweakSettingsForm
     Private _outputDumpSettingsForm As OutputDumpSettingsForm
 
+    ' P4e commit 2 — REPEAT/SINGLE chip inside the AUTO-RUN sub-box; tooltip
+    ' carries the full log path now that the LOG line shows row count only.
+    Friend _autoRunChip   As Pill
+    Friend _logInfoTooltip As ToolTip
+
     ' Live performance strip labels.
     Private lblPerfMode   As System.Windows.Forms.Label
     Private lblPerfWeek   As System.Windows.Forms.Label
@@ -176,6 +181,15 @@ Partial Public Class MainForm
         lblPerfLondon = MakePerfLabel("London: --%")
         lblPerfNy     = MakePerfLabel("NY: --%")
         _perfTip = New System.Windows.Forms.ToolTip()
+
+        ' Tooltip for lblLogInfo — full CSV path moves here per P4e proposal §4.9
+        ' so the LOG line stays clean ("Log: N rows · skipped M").
+        _logInfoTooltip = New System.Windows.Forms.ToolTip() With {
+            .InitialDelay = 400,
+            .AutoPopDelay = 8000,
+            .ReshowDelay  = 200,
+            .IsBalloon    = False
+        }
 
         ' Right-click context menu + left-click ephemeral toggle wiring.
         _perfContextMenu = New System.Windows.Forms.ContextMenuStrip()
@@ -716,6 +730,21 @@ Partial Public Class MainForm
         lblCountdown.Location = New Point(10, 26)
         grpAutoRun.Controls.Add(lblCountdown)
 
+        ' REPEAT / SINGLE chip — mirrors the rbRepeat/rbSingle radios that
+        ' still live in the header strip. Source of truth = radios; the chip
+        ' is updated via UpdateAutoRunChip on their CheckedChanged events.
+        _autoRunChip = New Pill() With {
+            .Size = New Size(96, 22),
+            .Location = New Point(10, 52),
+            .CornerRadius = 10.0F,
+            .Text = "▶ SINGLE",
+            .TabStop = False
+        }
+        grpAutoRun.Controls.Add(_autoRunChip)
+        AddHandler rbRepeat.CheckedChanged, AddressOf UpdateAutoRunChip
+        AddHandler rbSingle.CheckedChanged, AddressOf UpdateAutoRunChip
+        UpdateAutoRunChip(Nothing, EventArgs.Empty)
+
         row1.Controls.Add(grpLog,     0, 0)
         row1.Controls.Add(grpAutoRun, 1, 0)
         outer.Controls.Add(row1, 0, 0)
@@ -1015,6 +1044,25 @@ Partial Public Class MainForm
             MessageBox.Show("Could not open dump file: " & ex.Message, "Output Dump",
                             MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' REPEAT / SINGLE chip update (P4e commit 2)
+    ' Wired to rbRepeat.CheckedChanged and rbSingle.CheckedChanged.
+    ' -----------------------------------------------------------------------
+    Friend Sub UpdateAutoRunChip(sender As Object, e As EventArgs)
+        If _autoRunChip Is Nothing Then Return
+        If rbRepeat IsNot Nothing AndAlso rbRepeat.Checked Then
+            _autoRunChip.Text        = "▶ REPEAT"
+            _autoRunChip.BgColor     = Theme.BG_CARD_RAISED
+            _autoRunChip.FgColor     = Theme.ACC_INFO
+            _autoRunChip.BorderColor = Theme.ACC_INFO
+        Else
+            _autoRunChip.Text        = "▶ SINGLE"
+            _autoRunChip.BgColor     = Theme.BG_CARD_RAISED
+            _autoRunChip.FgColor     = Theme.FG_SECONDARY
+            _autoRunChip.BorderColor = Theme.BORDER_CARD
+        End If
     End Sub
 
     Private Sub lnkOutputDumpSettings_LinkClicked(sender As Object,

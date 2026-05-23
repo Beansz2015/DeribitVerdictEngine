@@ -14,8 +14,13 @@ Partial Public Class MainForm
     Private Sub UpdateLogInfo()
         Dim rows As Integer = AnalysisLogger.GetRowCount()
         Dim path As String  = AnalysisLogger.GetLogPath()
-        Dim skipSuffix As String = If(_skipCount > 0, String.Format("  |  Skipped: {0}", _skipCount), "")
-        lblLogInfo.Text = String.Format("Log: {0} rows{1}  |  {2}", rows, skipSuffix, path)
+        ' P4e commit 2: "Log: {N} rows[ · skipped {M}]". Full path moves to a
+        ' tooltip so the LOG sub-box stays scannable at a glance.
+        Dim skipSuffix As String = If(_skipCount > 0, String.Format(" · skipped {0}", _skipCount), "")
+        lblLogInfo.Text = String.Format("Log: {0} rows{1}", rows, skipSuffix)
+        If _logInfoTooltip IsNot Nothing Then
+            _logInfoTooltip.SetToolTip(lblLogInfo, path)
+        End If
     End Sub
 
     Private Sub lnkResetLog_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkResetLog.LinkClicked
