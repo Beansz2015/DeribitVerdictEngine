@@ -1250,9 +1250,13 @@ Partial Public Class MainForm
         If wideThresh > 0 Then
             spreadPct = CSng(Math.Min(100.0, (r.SpreadBps / wideThresh) * 100.0))
         End If
-        stack.Controls.Add(BuildMiniMeter("Spread", $"{r.SpreadBps:F2} bps",
+        Dim spreadStatus As String = If(r.SpreadStatus, "").ToUpperInvariant()
+        Dim spreadValue As String = If(String.IsNullOrEmpty(spreadStatus),
+                                       $"{r.SpreadBps:F2} bps",
+                                       $"{r.SpreadBps:F2} bps · {spreadStatus}")
+        stack.Controls.Add(BuildMiniMeter("Spread", spreadValue,
                                           spreadPct,
-                                          ResolveSpreadColour(If(r.SpreadStatus, ""))))
+                                          ResolveSpreadColour(spreadStatus)))
 
         _cardOiCvdCross.Controls.Add(stack)
         _cardOiCvdCross.ResumeLayout(True)
@@ -2314,7 +2318,7 @@ Partial Public Class MainForm
             Case "SELL DOMINANT" : state = "BEAR" : colour = Theme.ACC_SHORT
             Case Else            : state = "BAL"  : colour = Theme.FG_TERTIARY
         End Select
-        Dim note As String = $"ratio {r.OFIRatio:F2}"
+        Dim note As String = $"ratio {r.OFIRatio:F2} · bid {FormatUsdShort(r.OFIBidVol)} ask {FormatUsdShort(r.OFIAskVol)}"
         Return MakeSignalRow("OFI", state, colour, note, ScForItem(items, "OFI"))
     End Function
 
