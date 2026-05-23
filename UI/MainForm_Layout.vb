@@ -483,10 +483,12 @@ Partial Public Class MainForm
         ReparentVerificationDumpControls()
 
         ' Row 11: SETTINGS & TOOLS — grouped layout (P4e commit 1).
-        ' Height = placeholder header (~28) + LOG/AUTO-RUN row (90)
-        '          + CTA row (56) + TOOLS row (~110) + padding (~16).
+        ' 300 px clipped the Output Dump LinkRow + cog after live-run check
+        ' (TOOLS sub-box got ~98 px of the 246 px content area after
+        ' placeholder header + LOG/AUTO-RUN + CTA). Bumped to 340 px per
+        ' P4e kickoff §4 "bump the row height by 40 px" guidance.
         _cardSettingsTools = NewCard()
-        AddRow(_cardSettingsTools, 300)
+        AddRow(_cardSettingsTools, 340)
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
