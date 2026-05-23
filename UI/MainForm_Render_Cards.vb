@@ -865,6 +865,217 @@ Partial Public Class MainForm
     End Function
 
     ' =======================================================================
+    ' KELLY SIZING card (P4d commit 2). Gaps GAP-07..16.
+    ' Hidden entirely when v.KellyPWin <= 0. Otherwise renders header (with
+    ' optional [BIAS ONLY] / [CAPPED] tags) + 2-line ATR-basis advisory +
+    ' six KV rows ending in Contracts/Lean with singular/plural handling.
+    ' =======================================================================
+    Public Sub BindCardKelly(v As VerdictResult)
+        If _cardKelly Is Nothing Then Return
+
+        _cardKelly.SuspendLayout()
+        _cardKelly.Controls.Clear()
+
+        ' GAP-15: hide entire card when there's no Kelly result.
+        If v.KellyPWin <= 0 Then
+            _cardKelly.Visible = False
+            _cardKelly.ResumeLayout(True)
+            Return
+        End If
+        _cardKelly.Visible = True
+
+        Dim verdict As String = If(v.Verdict, "")
+        Dim isNoTradeBias As Boolean = verdict.StartsWith("NO TRADE", StringComparison.OrdinalIgnoreCase)
+
+        ' Vertical stack — header / advisory / KV rows.
+        Dim stack As New FlowLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .FlowDirection = FlowDirection.TopDown,
+            .WrapContents = False,
+            .AutoScroll = False,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0),
+            .Padding = New Padding(0)
+        }
+
+        ' GAP-11, GAP-12: section header with optional bias / capped tags.
+        Dim biasTag As String = If(isNoTradeBias, "  [BIAS ONLY — NO TRADE]", "")
+        Dim capTag  As String = If(v.KellyCapped, "  [CAPPED]", "")
+        stack.Controls.Add(BuildCardHeaderWithTags("KELLY SIZING", biasTag, capTag))
+
+        ' GAP-10: 2-line ATR-basis advisory.
+        stack.Controls.Add(BuildCardAdvisory(
+            "Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.",
+            "Treat as directional bias indicator only."))
+
+        ' KV rows: p(win), f*/Half-Kelly, Applied fraction, Risk $, Contracts/Lean.
+        stack.Controls.Add(BuildCardKvRow("p(win):",          v.KellyPWin.ToString("P1")))
+        stack.Controls.Add(BuildCardKvRow("f* / Half-Kelly:", $"{v.KellyF:P2}  /  {v.KellyFHalf:P2}"))
+        stack.Controls.Add(BuildCardKvRow("Applied fraction:", v.KellyFApplied.ToString("P2")))
+        stack.Controls.Add(BuildCardKvRow("Risk $:",          $"${v.KellyRiskUsd:F2}"))
+
+        ' GAP-13, GAP-14, GAP-16: Lean/Contracts label switch, <1-contract
+        ' fallback, singular/plural agreement.
+        Dim leanOrContracts As String = If(isNoTradeBias, "Lean:", "Contracts:")
+        Dim contractStr As String
+        Dim contractColour As Color = If(v.KellyContracts >= 1, Theme.ACC_STRONG_LONG, Theme.ACC_WARN)
+        If isNoTradeBias Then
+            If v.KellyContracts >= 1 Then
+                Dim unit As String = If(v.KellyContracts = 1, "contract", "contracts")
+                contractStr = $"{v.KellyContracts} {unit}  (not a trade signal)"
+            Else
+                contractStr = "< 1 contract  (bias only; not a trade signal)"
+            End If
+        Else
+            If v.KellyContracts >= 1 Then
+                Dim unit As String = If(v.KellyContracts = 1, "contract", "contracts")
+                contractStr = $"{v.KellyContracts} {unit}"
+            Else
+                contractStr = "< 1 contract  (stop too wide for min size)"
+            End If
+        End If
+        stack.Controls.Add(BuildCardKvRow(leanOrContracts, contractStr, contractColour))
+
+        _cardKelly.Controls.Add(stack)
+        _cardKelly.ResumeLayout(True)
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Card composition helpers — reused by KELLY card (commit 2) and the
+    ' INDICATOR DETAILS sub-groups (commit 4).
+    ' -----------------------------------------------------------------------
+
+    ''' <summary>
+    ''' Header line "MAIN  [BIAS TAG]  [CAP TAG]" — bold mono, ACC_WARN tags.
+    ''' Each tag string is rendered verbatim (caller includes its own leading
+    ''' spaces); empty tag strings are omitted.
+    ''' </summary>
+    Private Shared Function BuildCardHeaderWithTags(mainText As String,
+                                                    biasTag As String,
+                                                    capTag As String) As Control
+        Dim row As New FlowLayoutPanel() With {
+            .AutoSize = True,
+            .AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            .FlowDirection = FlowDirection.LeftToRight,
+            .WrapContents = False,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 0, 0, 4),
+            .Padding = New Padding(0)
+        }
+        row.Controls.Add(New Label() With {
+            .AutoSize = True,
+            .Text = mainText,
+            .Font = Theme.FontMono(11.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_SECONDARY,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        })
+        If Not String.IsNullOrEmpty(biasTag) Then
+            row.Controls.Add(New Label() With {
+                .AutoSize = True,
+                .Text = biasTag,
+                .Font = Theme.FontMono(10.0F, FontStyle.Bold),
+                .ForeColor = Theme.ACC_WARN,
+                .BackColor = Color.Transparent,
+                .Margin = New Padding(0, 2, 0, 0)
+            })
+        End If
+        If Not String.IsNullOrEmpty(capTag) Then
+            row.Controls.Add(New Label() With {
+                .AutoSize = True,
+                .Text = capTag,
+                .Font = Theme.FontMono(10.0F, FontStyle.Bold),
+                .ForeColor = Theme.ACC_WARN,
+                .BackColor = Color.Transparent,
+                .Margin = New Padding(0, 2, 0, 0)
+            })
+        End If
+        Return row
+    End Function
+
+    ''' <summary>Two-line dim advisory text in FG_QUATERNARY at 9pt.</summary>
+    Private Shared Function BuildCardAdvisory(line1 As String, line2 As String) As Control
+        Dim panel As New FlowLayoutPanel() With {
+            .AutoSize = True,
+            .AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            .FlowDirection = FlowDirection.TopDown,
+            .WrapContents = False,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 0, 0, 6),
+            .Padding = New Padding(0)
+        }
+        For Each line In {line1, line2}
+            If String.IsNullOrEmpty(line) Then Continue For
+            panel.Controls.Add(New Label() With {
+                .AutoSize = True,
+                .Text = line,
+                .Font = Theme.FontMono(9.0F, FontStyle.Regular),
+                .ForeColor = Theme.FG_QUATERNARY,
+                .BackColor = Color.Transparent,
+                .Margin = New Padding(0)
+            })
+        Next
+        Return panel
+    End Function
+
+    ''' <summary>
+    ''' Key-value row: 130 px right-aligned FG_TERTIARY label + flex value
+    ''' label. Default value colour FG_PRIMARY; per-row override via the
+    ''' optional valueColour. Used by KELLY card and INDICATOR DETAILS
+    ''' sub-groups.
+    ''' </summary>
+    Private Shared Function BuildCardKvRow(label As String,
+                                           value As String,
+                                           Optional valueColour As Color = Nothing,
+                                           Optional indent As Boolean = False,
+                                           Optional wrap As Boolean = False) As Control
+        Dim row As New TableLayoutPanel() With {
+            .AutoSize = True,
+            .AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            .ColumnCount = 2,
+            .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 0, 0, 2),
+            .Padding = New Padding(0)
+        }
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 130))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
+        row.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+
+        Dim labelText As String = If(indent, "", If(label, ""))
+        row.Controls.Add(New Label() With {
+            .AutoSize = False,
+            .Width = 130,
+            .Height = 18,
+            .Text = labelText,
+            .Font = Theme.FontMono(9.5F, FontStyle.Regular),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleRight,
+            .Margin = New Padding(0, 0, 6, 0),
+            .Padding = New Padding(0)
+        }, 0, 0)
+
+        Dim vCol As Color = If(valueColour.IsEmpty, Theme.FG_PRIMARY, valueColour)
+        Dim valLabel As New Label() With {
+            .AutoSize = True,
+            .Text = If(value, ""),
+            .Font = Theme.FontMono(9.5F, FontStyle.Regular),
+            .ForeColor = vCol,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(If(indent, 12, 0), 0, 0, 0),
+            .Padding = New Padding(0)
+        }
+        If wrap Then
+            valLabel.AutoSize = True
+            valLabel.MaximumSize = New Size(360, 0)
+        End If
+        row.Controls.Add(valLabel, 1, 0)
+        Return row
+    End Function
+
+    ' =======================================================================
     ' SIGNAL BREAKDOWN card (P4c). Clear-and-rebuild on each bind — 23 rows
     ' + tier separators + footer aggregates + TOTAL row.
     '

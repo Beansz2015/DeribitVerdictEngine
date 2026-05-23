@@ -434,9 +434,12 @@ Partial Public Class MainForm
         AddPlaceholderHeader(_cardOiCvdCross,    "OI × CVD CROSS")
         AddPlaceholderHeader(_cardVolumeProfile, "VOLUME PROFILE")
 
-        ' Row 8: KELLY SIZING (placeholder — P4d)
+        ' Row 8: KELLY SIZING (P4d commit 2 binds). Height fits header + bias
+        ' / capped tags + 2-line advisory + 5 KV rows ending in contracts row.
+        ' Card hides itself entirely (Visible=False) when v.KellyPWin = 0,
+        ' so the row collapses visually but the AddRow slot remains reserved.
         _cardKelly = NewCard()
-        AddRow(_cardKelly, 80)
+        AddRow(_cardKelly, 180)
         AddPlaceholderHeader(_cardKelly, "KELLY SIZING")
 
         ' Row 9: DYNAMIC NORMS (placeholder — P4d)
