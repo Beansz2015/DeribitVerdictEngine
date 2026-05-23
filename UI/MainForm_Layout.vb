@@ -452,7 +452,11 @@ Partial Public Class MainForm
         ' equivalents per column on the 4K-monitor scrolling form; if rows
         ' overflow, the top-level _gridRoot will scroll vertically.
         _cardIndicatorDetails = NewCard()
-        AddRow(_cardIndicatorDetails, 480)
+        ' Bumped 480 → 760 after live-run verification — 480 clipped the
+        ' lower groups (VOLUME / TREND STRUCTURE left; OI / MICROCVD /
+        ' LIQUIDATIONS right). Six groups per column at ~100-130 px each
+        ' plus header / padding lands ~720; 760 gives breathing room.
+        AddRow(_cardIndicatorDetails, 760)
 
         ' Row 10: legacy txtOutput verification dump (P5 deletes)
         _cardVerificationDump = NewCard()
