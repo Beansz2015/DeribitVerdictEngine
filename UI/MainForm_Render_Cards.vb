@@ -1141,18 +1141,19 @@ Partial Public Class MainForm
         ' before binding. Length=0 guard suppresses the histogram on the
         ' candles<10 / priceRange<=0 early-return paths in CalcVPFRLite.
         '
-        ' VolumeHistogramMini is designed for ~8 bars (see its header comment:
-        ' "8-bar horizontal mini volume profile"). Passing the full 50-bucket
-        ' engine array drives barH down to 1 px and produces a venetian-blind
-        ' look. Downsample to VISUAL_BUCKETS visual bars by summing the
-        ' normalised engine buckets within each group; POC index = the highest
-        ' aggregated group so the amber bar is always the longest visually.
-        ' Follow-up flagged in spec B kickoff §4 / §5.
+        ' VolumeHistogramMini's header comment specs "8-bar" but the paint
+        ' code accepts any bucket count and rescales (barH = usableH/n − 1).
+        ' Passing the full 50-bucket engine array drives barH to 1 px → reads
+        ' as a venetian blind. 8 visual bars reads thick; 16 lands between
+        ' resolution and bar-thickness (90 px / 16 ≈ 4.6 px per bar).
+        ' Aggregate the normalised engine buckets within each group; POC
+        ' index = the highest aggregated group so the amber bar is always
+        ' the longest visually.
         If r.VPFRBucketVolumes IsNot Nothing _
            AndAlso r.VPFRBucketVolumes.Length > 0 _
            AndAlso r.VPFRBucketSize > 0 Then
 
-            Const VISUAL_BUCKETS As Integer = 8
+            Const VISUAL_BUCKETS As Integer = 16
             Dim n As Integer = r.VPFRBucketVolumes.Length
 
             Dim maxVol As Double = r.VPFRBucketVolumes.Max()
