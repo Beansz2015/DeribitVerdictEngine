@@ -1140,10 +1140,19 @@ Partial Public Class MainForm
         ' renders index 0 at top, so reverse both the array and the POC index
         ' before binding. Length=0 guard suppresses the histogram on the
         ' candles<10 / priceRange<=0 early-return paths in CalcVPFRLite.
+        '
+        ' VolumeHistogramMini is designed for ~8 bars (see its header comment:
+        ' "8-bar horizontal mini volume profile"). Passing the full 50-bucket
+        ' engine array drives barH down to 1 px and produces a venetian-blind
+        ' look. Downsample to VISUAL_BUCKETS visual bars by summing the
+        ' normalised engine buckets within each group; POC index = the highest
+        ' aggregated group so the amber bar is always the longest visually.
+        ' Follow-up flagged in spec B kickoff §4 / §5.
         If r.VPFRBucketVolumes IsNot Nothing _
            AndAlso r.VPFRBucketVolumes.Length > 0 _
            AndAlso r.VPFRBucketSize > 0 Then
 
+            Const VISUAL_BUCKETS As Integer = 8
             Dim n As Integer = r.VPFRBucketVolumes.Length
 
             Dim maxVol As Double = r.VPFRBucketVolumes.Max()
@@ -1153,11 +1162,44 @@ Partial Public Class MainForm
                 normalised(i) = CSng(r.VPFRBucketVolumes(n - 1 - i) / maxVol)
             Next
 
-            Dim enginePocIdx As Integer = CInt(Math.Floor(
-                (r.VPFRPoc - r.VPFRBucketPriceLow) / r.VPFRBucketSize))
-            If enginePocIdx < 0 Then enginePocIdx = 0
-            If enginePocIdx >= n Then enginePocIdx = n - 1
-            Dim pocReversed As Integer = (n - 1) - enginePocIdx
+            ' Downsample to VISUAL_BUCKETS visual bars when the engine emits
+            ' more granular buckets than the control can render at small sizes.
+            ' Skip when n is already at or below the visual target.
+            Dim visualBars As Single()
+            Dim visualPocIdx As Integer = 0
+            If n > VISUAL_BUCKETS Then
+                Dim agg(VISUAL_BUCKETS - 1) As Single
+                For vb As Integer = 0 To VISUAL_BUCKETS - 1
+                    Dim startIdx As Integer = CInt(Math.Floor(CDbl(vb) * n / VISUAL_BUCKETS))
+                    Dim endIdx   As Integer = CInt(Math.Floor(CDbl(vb + 1) * n / VISUAL_BUCKETS))
+                    If endIdx > n Then endIdx = n
+                    If startIdx < 0 Then startIdx = 0
+                    Dim sum As Single = 0
+                    For j As Integer = startIdx To endIdx - 1
+                        sum += normalised(j)
+                    Next
+                    agg(vb) = sum
+                Next
+                Dim aggMax As Single = agg.Max()
+                If aggMax <= 0 Then aggMax = 1.0F
+                Dim pocMaxVal As Single = -1.0F
+                For vb As Integer = 0 To VISUAL_BUCKETS - 1
+                    agg(vb) = agg(vb) / aggMax
+                    If agg(vb) > pocMaxVal Then
+                        pocMaxVal = agg(vb)
+                        visualPocIdx = vb
+                    End If
+                Next
+                visualBars = agg
+            Else
+                ' Engine bucket count already fits the control; pass through.
+                visualBars = normalised
+                Dim enginePocIdx As Integer = CInt(Math.Floor(
+                    (r.VPFRPoc - r.VPFRBucketPriceLow) / r.VPFRBucketSize))
+                If enginePocIdx < 0 Then enginePocIdx = 0
+                If enginePocIdx >= n Then enginePocIdx = n - 1
+                visualPocIdx = (n - 1) - enginePocIdx
+            End If
 
             Dim totalRange As Double = r.VPFRBucketSize * n
             Dim cpFrac As Single = 0.5F
@@ -1169,8 +1211,8 @@ Partial Public Class MainForm
             Dim histo As New VolumeHistogramMini() With {
                 .Size = New Size(500, 90),
                 .Margin = New Padding(4, 8, 4, 0),
-                .Buckets = normalised,
-                .PocIndex = pocReversed,
+                .Buckets = visualBars,
+                .PocIndex = visualPocIdx,
                 .CurrentPriceFraction = cpFrac,
                 .BarColor = Theme.FG_DIM,
                 .PocColor = Theme.ACC_WARN,
