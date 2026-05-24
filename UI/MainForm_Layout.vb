@@ -50,6 +50,30 @@ Partial Public Class MainForm
     ' Resilience: count of skipped analyses this session.
     Private _skipCount As Integer = 0
 
+    ' P4f — last-successful capture for the ANALYSIS SKIPPED degraded render.
+    ' Refs default to Nothing; render-time defaults to MinValue (the LOG
+    ' "last HH:mm:ss" line stays hidden until the first success).
+    Friend _lastSuccessfulVerdict     As VerdictResult
+    Friend _lastSuccessfulIndicators  As IndicatorResults
+    Friend _lastSuccessfulNorms       As DynamicNorms
+    Friend _lastSuccessfulCfg         As EngineSettings
+    Friend _lastSuccessfulRenderTime  As DateTime = DateTime.MinValue
+    Friend _lastSkipReason            As String
+
+    ' P4f — overlay panels tracked per card for opacity-dim during the
+    ' skipped state. Created lazily in commit 2; commit 1 leaves this list
+    ' empty but defines the field so ClearStaleOverlays compiles.
+    Friend _staleOverlays As New List(Of Control)()
+
+    ' P4f — VERDICT card has two stacked inner panels. Normal layout is
+    ' built by InitVerdictCard; the SKIPPED panel is built once next to it
+    ' and toggled via Visible. Avoids tearing down/rebuilding controls on
+    ' every skip cycle and keeps existing label refs (_lblVerdictText etc.)
+    ' valid across skip transitions.
+    Friend _verdictNormalPanel  As TableLayoutPanel
+    Friend _verdictSkippedPanel As TableLayoutPanel
+    Friend _lblSkippedReason    As Label
+
     ' Raised at the end of every RunAnalysisAsync call (success or skip).
     Public Event AnalysisCompleted As EventHandler
 
@@ -67,6 +91,10 @@ Partial Public Class MainForm
     ' carries the full log path now that the LOG line shows row count only.
     Friend _autoRunChip   As Pill
     Friend _logInfoTooltip As ToolTip
+
+    ' P4f — "last HH:mm:ss" timestamp label inside the LOG sub-box. Hidden
+    ' until the first successful render (_lastSuccessfulRenderTime > MinValue).
+    Friend lblLastSuccess As Label
 
     ' Live performance strip labels.
     Private lblPerfMode   As System.Windows.Forms.Label
@@ -685,7 +713,7 @@ Partial Public Class MainForm
             .TabStop = False
         }
         outer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 92))    ' LOG/AUTO-RUN
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 110))   ' LOG/AUTO-RUN (P4f +18px for "last HH:mm:ss" line)
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))    ' CTA
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS
 
@@ -715,11 +743,27 @@ Partial Public Class MainForm
         lblLogInfo.Location = New Point(10, 26)
         grpLog.Controls.Add(lblLogInfo)
 
+        ' P4f — last-successful render timestamp. Hidden until UpdateLogInfo
+        ' first sees _lastSuccessfulRenderTime > DateTime.MinValue.
+        lblLastSuccess = New Label() With {
+            .AutoSize = True,
+            .Anchor = AnchorStyles.None,
+            .Dock = DockStyle.None,
+            .Location = New Point(10, 46),
+            .Text = "",
+            .Font = lblLogInfo.Font,
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .Visible = False,
+            .TabStop = False
+        }
+        grpLog.Controls.Add(lblLastSuccess)
+
         Me.Controls.Remove(lnkResetLog)
         lnkResetLog.Anchor = AnchorStyles.None
         lnkResetLog.Dock = DockStyle.None
         lnkResetLog.AutoSize = True
-        lnkResetLog.Location = New Point(10, 48)
+        lnkResetLog.Location = New Point(10, 66)
         grpLog.Controls.Add(lnkResetLog)
 
         Dim grpAutoRun = New SectionGroup() With {

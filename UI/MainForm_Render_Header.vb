@@ -21,6 +21,16 @@ Partial Public Class MainForm
         If _logInfoTooltip IsNot Nothing Then
             _logInfoTooltip.SetToolTip(lblLogInfo, path)
         End If
+        ' P4f — last-successful render timestamp. Hidden until the first
+        ' successful run captures _lastSuccessfulRenderTime.
+        If lblLastSuccess IsNot Nothing Then
+            If _lastSuccessfulRenderTime > DateTime.MinValue Then
+                lblLastSuccess.Text    = "last " & _lastSuccessfulRenderTime.ToString("HH:mm:ss")
+                lblLastSuccess.Visible = True
+            Else
+                lblLastSuccess.Visible = False
+            End If
+        End If
     End Sub
 
     Private Sub lnkResetLog_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkResetLog.LinkClicked

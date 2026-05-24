@@ -101,13 +101,17 @@ Partial Public Class MainForm
 
         If skipReason IsNot Nothing Then
             _skipCount += 1
+            _lastSkipReason = skipReason
+            ' Keep the legacy txtOutput write for P5-pre parity (the verification
+            ' dump card still reads from it). P5 deletes both the txtOutput
+            ' write and the legacy RTF helpers. lblVerdict is hidden per the
+            ' UI reskin handover §4 lock, so the SKIPPED background swap drops.
             txtOutput.Clear()
             AppendRtf(txtOutput, String.Format("ANALYSIS SKIPPED: {0}" & Environment.NewLine, skipReason), Theme.ACC_WARN, bold:=True)
             AppendRtf(txtOutput, String.Format("Skip count this session: {0}" & Environment.NewLine, _skipCount), Theme.FG_QUATERNARY)
             AppendRtf(txtOutput, "Engine continues — next auto-run cycle will retry.", Theme.FG_QUATERNARY)
-            lblVerdict.Text      = "SKIPPED"
-            lblVerdict.BackColor = Color.FromArgb(120, 100, 60)
             UpdateLogInfo()
+            RenderSkippedDashboard(skipReason)
             RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
             Return
         End If
@@ -458,6 +462,20 @@ Partial Public Class MainForm
         ' Must come after RenderOutput so AnalysisOutputDump.Append has already run.
         Await LivePerformanceTracker.UpdateAsync(verdict, r, candles1m, DateTime.UtcNow)
         UpdatePerformanceLabels()
+
+        ' P4f — capture last-successful state for the SKIPPED-render fallback.
+        ' Must be the last thing before the AnalysisCompleted event so the
+        ' captured state always reflects a card-grid that successfully painted.
+        _lastSuccessfulVerdict    = verdict
+        _lastSuccessfulIndicators = r
+        _lastSuccessfulNorms      = norms
+        _lastSuccessfulCfg        = cfg
+        _lastSuccessfulRenderTime = DateTime.Now
+        ' Swap the VERDICT card back to the normal panel if the previous run
+        ' was skipped. UpdateLogInfo also re-runs so the "last HH:mm:ss" line
+        ' reflects this successful render.
+        ClearStaleOverlays()
+        UpdateLogInfo()
 
         RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
     End Function

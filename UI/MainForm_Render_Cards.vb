@@ -112,11 +112,12 @@ Partial Public Class MainForm
     ' VERDICT card
     ' -----------------------------------------------------------------------
     Private Sub InitVerdictCard()
-        Dim inner = New TableLayoutPanel() With {
+        _verdictNormalPanel = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
             .ColumnCount = 1, .RowCount = 5,
             .BackColor = Color.Transparent
         }
+        Dim inner = _verdictNormalPanel
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))    ' section header
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 50))    ' verdict text
         inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' 2×2 grid (flex)
@@ -194,7 +195,137 @@ Partial Public Class MainForm
         ' RegimeAnchorWarn moves into a new bottom row since EffPenalty took row 3.
         inner.Controls.Add(_regimeAnchorWarn, 0, 4)
 
-        _cardVerdict.Controls.Add(inner)
+        ' P4f — build the SKIPPED sibling panel and stack it behind the normal
+        ' panel. Both Dock = Fill; Visible toggles which one paints.
+        _verdictSkippedPanel = BuildVerdictSkippedPanel()
+        _verdictSkippedPanel.Visible = False
+
+        _cardVerdict.Controls.Add(_verdictSkippedPanel)
+        _cardVerdict.Controls.Add(_verdictNormalPanel)
+        _verdictNormalPanel.BringToFront()
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' P4f — VERDICT card SKIPPED-state inner panel
+    '
+    ' Layout (top→bottom):
+    '   row 0 — VERDICT section header (matches normal panel for continuity)
+    '   row 1 — "ANALYSIS SKIPPED" hero (28pt bold, ACC_AMBER_DEEP)
+    '   row 2 — reason sub-line (10pt, ACC_WARN)
+    '   row 3 — hint sub-line (9pt, FG_TERTIARY)
+    '   row 4 — spacer (flex; pushes content to the top)
+    '
+    ' Verdict text size — exception to the UI reskin handover §4 lock at 18pt:
+    ' the locked size existed because the 2×2 sub-grid (CONTEXT / REGIME / MTF
+    ' / HOLD) crowded under long verdict strings at 22-28pt. In SKIPPED state
+    ' the 2×2 sub-grid is replaced with two static sub-lines, so the crowding
+    ' concern doesn't apply and the proposal §5.1 28pt + amber hero is honoured.
+    ' -----------------------------------------------------------------------
+    Private Function BuildVerdictSkippedPanel() As TableLayoutPanel
+        Dim panel = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 1, .RowCount = 5,
+            .BackColor = Color.Transparent
+        }
+        panel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))    ' section header
+        panel.RowStyles.Add(New RowStyle(SizeType.Absolute, 52))    ' hero (28pt)
+        panel.RowStyles.Add(New RowStyle(SizeType.AutoSize))         ' reason
+        panel.RowStyles.Add(New RowStyle(SizeType.AutoSize))         ' hint
+        panel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' spacer
+
+        panel.Controls.Add(MakeSectionHeader("VERDICT"), 0, 0)
+
+        Dim hero = New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = "ANALYSIS SKIPPED",
+            .Font = Theme.FontMono(28.0F, FontStyle.Bold),
+            .ForeColor = Theme.ACC_AMBER_DEEP,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(0, 4, 0, 4)
+        }
+        panel.Controls.Add(hero, 0, 1)
+
+        _lblSkippedReason = New Label() With {
+            .AutoSize = True,
+            .Text = "Deribit REST fetch failed — —",
+            .Font = Theme.FontMono(10.0F, FontStyle.Regular),
+            .ForeColor = Theme.ACC_WARN,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 4, 0, 0),
+            .MaximumSize = New Size(520, 0)
+        }
+        panel.Controls.Add(_lblSkippedReason, 0, 2)
+
+        Dim hint = New Label() With {
+            .AutoSize = True,
+            .Text = "Engine retains last-known indicator values. Skipping verdict" &
+                    Environment.NewLine &
+                    "generation until next successful fetch (auto-run continues).",
+            .Font = Theme.FontMono(9.0F, FontStyle.Regular),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0, 6, 0, 0),
+            .MaximumSize = New Size(520, 0)
+        }
+        panel.Controls.Add(hint, 0, 3)
+
+        Return panel
+    End Function
+
+    ' -----------------------------------------------------------------------
+    ' P4f — invoked from RunAnalysisAsync skip branch. Updates the reason
+    ' line and flips the VERDICT card to the SKIPPED panel. Other cards keep
+    ' their last-painted content. Idempotent across consecutive skips.
+    ' -----------------------------------------------------------------------
+    Public Sub RenderSkippedDashboard(reason As String)
+        If _verdictSkippedPanel Is Nothing OrElse _verdictNormalPanel Is Nothing Then Return
+
+        Dim safeReason As String = If(String.IsNullOrEmpty(reason), "(no reason captured)", reason)
+        If _lblSkippedReason IsNot Nothing Then
+            _lblSkippedReason.Text = "Deribit REST fetch failed — " & safeReason
+        End If
+
+        _cardVerdict.SuspendLayout()
+        Try
+            _verdictNormalPanel.Visible  = False
+            _verdictSkippedPanel.Visible = True
+            _verdictSkippedPanel.BringToFront()
+        Finally
+            _cardVerdict.ResumeLayout(True)
+        End Try
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' P4f — invoked at the end of every successful render (just before
+    ' AnalysisCompleted fires). Commit 1: swap the VERDICT card back to the
+    ' normal panel. Commit 2 will also remove the semi-transparent overlays
+    ' from non-VERDICT cards and dispose any (stale) pills.
+    ' -----------------------------------------------------------------------
+    Public Sub ClearStaleOverlays()
+        If _verdictSkippedPanel IsNot Nothing AndAlso _verdictNormalPanel IsNot Nothing Then
+            If _verdictSkippedPanel.Visible OrElse Not _verdictNormalPanel.Visible Then
+                _cardVerdict.SuspendLayout()
+                Try
+                    _verdictSkippedPanel.Visible = False
+                    _verdictNormalPanel.Visible  = True
+                    _verdictNormalPanel.BringToFront()
+                Finally
+                    _cardVerdict.ResumeLayout(True)
+                End Try
+            End If
+        End If
+
+        ' Overlay panels (commit 2). Currently empty in commit 1.
+        For Each overlay In _staleOverlays
+            If overlay Is Nothing Then Continue For
+            Dim parent = overlay.Parent
+            If parent IsNot Nothing Then parent.Controls.Remove(overlay)
+            overlay.Dispose()
+        Next
+        _staleOverlays.Clear()
     End Sub
 
     Private Shared Function MakePairCell(headerText As String, valueControl As Control) As Control
