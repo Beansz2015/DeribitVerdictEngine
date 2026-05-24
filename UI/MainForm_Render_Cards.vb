@@ -277,11 +277,17 @@ Partial Public Class MainForm
 
     ' -----------------------------------------------------------------------
     ' P4f — invoked from RunAnalysisAsync skip branch. Updates the reason
-    ' line and flips the VERDICT card to the SKIPPED panel. Other cards keep
-    ' their last-painted content. Idempotent across consecutive skips.
+    ' line, flips the VERDICT card to the SKIPPED panel, and applies dim
+    ' overlays + (stale) pills to every non-VERDICT bound card. Other cards
+    ' keep their last-painted content underneath the dim tint. Idempotent
+    ' across consecutive skips — re-entering refreshes the age label.
     ' -----------------------------------------------------------------------
     Public Sub RenderSkippedDashboard(reason As String)
         If _verdictSkippedPanel Is Nothing OrElse _verdictNormalPanel Is Nothing Then Return
+
+        ' Clear any previous overlay/pill before re-applying so consecutive
+        ' skips repaint with the up-to-date "N min stale" age value.
+        RemoveStaleOverlayControls()
 
         Dim safeReason As String = If(String.IsNullOrEmpty(reason), "(no reason captured)", reason)
         If _lblSkippedReason IsNot Nothing Then
@@ -296,13 +302,15 @@ Partial Public Class MainForm
         Finally
             _cardVerdict.ResumeLayout(True)
         End Try
+
+        ApplyStaleOverlayToCards()
     End Sub
 
     ' -----------------------------------------------------------------------
     ' P4f — invoked at the end of every successful render (just before
-    ' AnalysisCompleted fires). Commit 1: swap the VERDICT card back to the
-    ' normal panel. Commit 2 will also remove the semi-transparent overlays
-    ' from non-VERDICT cards and dispose any (stale) pills.
+    ' AnalysisCompleted fires). Swaps the VERDICT card back to the normal
+    ' panel and removes any dim overlays + (stale) pills from other cards.
+    ' Idempotent: no-op when called after a clean run.
     ' -----------------------------------------------------------------------
     Public Sub ClearStaleOverlays()
         If _verdictSkippedPanel IsNot Nothing AndAlso _verdictNormalPanel IsNot Nothing Then
@@ -318,15 +326,115 @@ Partial Public Class MainForm
             End If
         End If
 
-        ' Overlay panels (commit 2). Currently empty in commit 1.
-        For Each overlay In _staleOverlays
-            If overlay Is Nothing Then Continue For
-            Dim parent = overlay.Parent
-            If parent IsNot Nothing Then parent.Controls.Remove(overlay)
-            overlay.Dispose()
+        RemoveStaleOverlayControls()
+    End Sub
+
+    ' Pure overlay/pill teardown — used by both ClearStaleOverlays (success
+    ' path) and RenderSkippedDashboard (consecutive-skip refresh).
+    Private Sub RemoveStaleOverlayControls()
+        For Each c In _staleOverlays
+            If c Is Nothing Then Continue For
+            Dim parent = c.Parent
+            If parent IsNot Nothing Then parent.Controls.Remove(c)
+            c.Dispose()
         Next
         _staleOverlays.Clear()
     End Sub
+
+    ' -----------------------------------------------------------------------
+    ' P4f commit 2 — paint a semi-transparent tint over every non-VERDICT
+    ' bound card and inject a (stale) pill at top-right. Alpha 153 ≈ 60%
+    ' opaque BG_BASE on top of the card content reads at ~40% effective
+    ' brightness. Tune by adjusting OVERLAY_ALPHA if the dim feels wrong.
+    '
+    ' Cards intentionally left undimmed:
+    '   - _cardVerdict          → already swapped to ANALYSIS SKIPPED hero
+    '   - _cardHeaderStrip      → controls (radios / NUDs / ANALYZE) stay live
+    '   - _cardPerfStrip        → perf-strip rates stay live
+    '   - _cardSettingsTools    → links / log info / countdown stay live
+    '   - _cardVerificationDump → legacy txtOutput still shows SKIPPED text
+    ' -----------------------------------------------------------------------
+    Private Const OVERLAY_ALPHA As Integer = 153
+
+    ' Panel subclass that paints an alpha-aware semi-transparent fill.
+    ' WinForms strips the alpha channel from a standard Panel.BackColor unless
+    ' SupportsTransparentBackColor is enabled, which is why a naïve
+    ' `New Panel With { .BackColor = Color.FromArgb(153, BG_BASE) }` ends up
+    ' fully opaque. SolidBrush via GDI+ honours alpha — that's what we use.
+    Private Class StaleOverlayPanel
+        Inherits Panel
+
+        Private ReadOnly _tint As Color
+
+        Public Sub New(tint As Color)
+            _tint = tint
+            SetStyle(ControlStyles.SupportsTransparentBackColor Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.UserPaint, True)
+            MyBase.BackColor = Color.Transparent
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            Using b As New SolidBrush(_tint)
+                e.Graphics.FillRectangle(b, ClientRectangle)
+            End Using
+        End Sub
+    End Class
+
+    Private Sub ApplyStaleOverlayToCards()
+        Dim cardsToDim As RoundedCardPanel() = {
+            _cardScore, _cardLastPrice,
+            _cardAtrLevels, _cardStructLong, _cardStructShort,
+            _cardSignalBreakdown,
+            _cardOiCvdCross, _cardVolumeProfile,
+            _cardKelly, _cardIndicatorDetails
+        }
+
+        Dim pillText As String = ComposeStalePillText()
+
+        For Each card In cardsToDim
+            If card Is Nothing Then Continue For
+
+            Dim tint As Color = Color.FromArgb(OVERLAY_ALPHA, Theme.BG_BASE)
+            Dim overlay = New StaleOverlayPanel(tint) With {
+                .Dock = DockStyle.Fill,
+                .Margin = New Padding(0),
+                .Enabled = False,
+                .TabStop = False
+            }
+            card.Controls.Add(overlay)
+            overlay.BringToFront()
+            _staleOverlays.Add(overlay)
+
+            Dim pill = New Pill() With {
+                .Text = pillText,
+                .AutoSize = False,
+                .Size = New Size(86, 18),
+                .CornerRadius = 7.0F,
+                .BgColor = Theme.BG_CARD_RAISED,
+                .FgColor = Theme.ACC_WARN,
+                .BorderColor = Theme.ACC_WARN,
+                .Anchor = AnchorStyles.Top Or AnchorStyles.Right,
+                .Location = New Point(Math.Max(0, card.ClientSize.Width - 86 - 12), 10),
+                .TabStop = False
+            }
+            card.Controls.Add(pill)
+            pill.BringToFront()
+            _staleOverlays.Add(pill)
+        Next
+    End Sub
+
+    ' Pill text: "(stale)" while fresh, "{N} min stale" once 1+ minute old.
+    ' Reads _lastSuccessfulRenderTime; returns "(stale)" when no successful
+    ' render has happened yet (defensive — RenderSkippedDashboard normally
+    ' isn't called before any successful capture).
+    Private Function ComposeStalePillText() As String
+        If _lastSuccessfulRenderTime <= DateTime.MinValue Then Return "(stale)"
+        Dim minutes As Integer = CInt(Math.Floor((DateTime.Now - _lastSuccessfulRenderTime).TotalMinutes))
+        If minutes < 1 Then Return "(stale)"
+        Return minutes & " min stale"
+    End Function
 
     Private Shared Function MakePairCell(headerText As String, valueControl As Control) As Control
         Dim panel = New TableLayoutPanel() With {
