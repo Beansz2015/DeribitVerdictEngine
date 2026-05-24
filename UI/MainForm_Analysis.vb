@@ -403,23 +403,30 @@ Partial Public Class MainForm
         r.LastTwoHighs5m = ts5mHighs
         r.LastTwoLows5m  = ts5mLows
 
-        Dim vpfrPoc       As Double  = 0
-        Dim vpfrHVNearPoc As Boolean = False
-        Dim vpfrSignal    As String  = "NEUTRAL"
+        Dim vpfrPoc          As Double   = 0
+        Dim vpfrHVNearPoc    As Boolean  = False
+        Dim vpfrSignal       As String   = "NEUTRAL"
+        Dim vpfrBucketVols() As Double   = Array.Empty(Of Double)()
+        Dim vpfrBucketLow    As Double   = 0
+        Dim vpfrBucketSize   As Double   = 0
         IndicatorEngine.CalcVPFRLite(candles1m, r.CurrentPrice,
                                      vpfrPoc, vpfrHVNearPoc, vpfrSignal,
                                      r.VPFRVah, r.VPFRVal, r.VPFRValueAreaSignal,
                                      r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow,
                                      r.VPFRNearestLvnAbove, r.VPFRNearestLvnBelow,
+                                     vpfrBucketVols, vpfrBucketLow, vpfrBucketSize,
                                      numBuckets:=cfg.Indicators.VPFR.NumBuckets,
                                      hvnVolPct:=cfg.Indicators.VPFR.HvnVolPct,
                                      lvnVolPct:=cfg.Indicators.VPFR.LvnVolPct,
                                      hvnProximityPct:=cfg.Indicators.VPFR.HvnProximityPct,
                                      decayBase:=cfg.Indicators.VPFR.DecayBase,
                                      valueAreaPct:=cfg.Indicators.VPFR.ValueAreaPct)
-        r.VPFRPoc       = vpfrPoc
-        r.VPFRHVNearPoc = vpfrHVNearPoc
-        r.VPFRSignal    = vpfrSignal
+        r.VPFRPoc            = vpfrPoc
+        r.VPFRHVNearPoc      = vpfrHVNearPoc
+        r.VPFRSignal         = vpfrSignal
+        r.VPFRBucketVolumes  = vpfrBucketVols
+        r.VPFRBucketPriceLow = vpfrBucketLow
+        r.VPFRBucketSize     = vpfrBucketSize
 
         Dim posState As PositionState = PositionState.None
         If rbLong.Checked  Then posState = PositionState.InLong

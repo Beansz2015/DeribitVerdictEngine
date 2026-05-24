@@ -86,6 +86,9 @@ Partial Public Class IndicatorEngine
                                     ByRef nearestHvnBelow As Double,
                                     ByRef nearestLvnAbove As Double,
                                     ByRef nearestLvnBelow As Double,
+                                    ByRef bucketVolumesOut As Double(),
+                                    ByRef bucketPriceLowOut As Double,
+                                    ByRef bucketSizeOut As Double,
                                     Optional numBuckets As Integer = 50,
                                     Optional hvnVolPct As Double = 0.6,
                                     Optional lvnVolPct As Double = 0.2,
@@ -96,6 +99,11 @@ Partial Public Class IndicatorEngine
         vah = 0 : val = 0 : valueAreaSignal = "INSIDE_VA"
         nearestHvnAbove = 0 : nearestHvnBelow = 0
         nearestLvnAbove = 0 : nearestLvnBelow = 0
+        ' Spec B histogram outputs — seed defaults so UI's Length > 0 gate
+        ' suppresses the histogram cleanly when either early-return fires.
+        bucketVolumesOut  = Array.Empty(Of Double)()
+        bucketPriceLowOut = 0
+        bucketSizeOut     = 0
         If candles Is Nothing OrElse candles.Count < 10 Then Return
 
         Dim priceHigh As Double = candles.Max(Function(c) c.High)
@@ -219,6 +227,13 @@ Partial Public Class IndicatorEngine
             End If
             If nearestHvnBelow > 0 AndAlso nearestLvnBelow > 0 Then Exit For
         Next
+
+        ' Spec B histogram outputs — happy-path assignment. bucketVol is the
+        ' fully-populated weighted-volume array (index 0 = priceLow bucket).
+        ' UI reverses both the array and the POC index for top-down render.
+        bucketVolumesOut  = bucketVol
+        bucketPriceLowOut = priceLow
+        bucketSizeOut     = bucketSize
     End Sub
 
     ' -- Swing Pivot Detection ------------------------------------------------

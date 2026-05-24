@@ -1135,6 +1135,50 @@ Partial Public Class MainForm
             stack.Controls.Add(BuildSubLabel(vaSig.Replace("_"c, " "c).ToLowerInvariant(), vaColour))
         End If
 
+        ' --- VPFR mini histogram (Spec B — VolumeHistogramMini P3 control) -----
+        ' Engine emits bucket 0 = priceLow (bottom of price range). Control
+        ' renders index 0 at top, so reverse both the array and the POC index
+        ' before binding. Length=0 guard suppresses the histogram on the
+        ' candles<10 / priceRange<=0 early-return paths in CalcVPFRLite.
+        If r.VPFRBucketVolumes IsNot Nothing _
+           AndAlso r.VPFRBucketVolumes.Length > 0 _
+           AndAlso r.VPFRBucketSize > 0 Then
+
+            Dim n As Integer = r.VPFRBucketVolumes.Length
+
+            Dim maxVol As Double = r.VPFRBucketVolumes.Max()
+            If maxVol <= 0 Then maxVol = 1.0   ' defensive against all-zero
+            Dim normalised(n - 1) As Single
+            For i As Integer = 0 To n - 1
+                normalised(i) = CSng(r.VPFRBucketVolumes(n - 1 - i) / maxVol)
+            Next
+
+            Dim enginePocIdx As Integer = CInt(Math.Floor(
+                (r.VPFRPoc - r.VPFRBucketPriceLow) / r.VPFRBucketSize))
+            If enginePocIdx < 0 Then enginePocIdx = 0
+            If enginePocIdx >= n Then enginePocIdx = n - 1
+            Dim pocReversed As Integer = (n - 1) - enginePocIdx
+
+            Dim totalRange As Double = r.VPFRBucketSize * n
+            Dim cpFrac As Single = 0.5F
+            If totalRange > 0 Then
+                cpFrac = CSng(Math.Max(0.0, Math.Min(1.0,
+                             (r.CurrentPrice - r.VPFRBucketPriceLow) / totalRange)))
+            End If
+
+            Dim histo As New VolumeHistogramMini() With {
+                .Size = New Size(500, 90),
+                .Margin = New Padding(4, 8, 4, 0),
+                .Buckets = normalised,
+                .PocIndex = pocReversed,
+                .CurrentPriceFraction = cpFrac,
+                .BarColor = Theme.FG_DIM,
+                .PocColor = Theme.ACC_WARN,
+                .PriceLineColor = Theme.ACC_STRONG_LONG
+            }
+            stack.Controls.Add(histo)
+        End If
+
         _cardVolumeProfile.Controls.Add(stack)
         _cardVolumeProfile.ResumeLayout(True)
     End Sub

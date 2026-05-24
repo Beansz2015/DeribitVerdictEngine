@@ -100,6 +100,11 @@ Public Class IndicatorResults
     Public Property VPFRNearestHvnBelow As Double  ' nearest HVN price below current ($), 0 = none
     Public Property VPFRNearestLvnAbove As Double  ' nearest LVN price above current ($), 0 = none
     Public Property VPFRNearestLvnBelow As Double  ' nearest LVN price below current ($), 0 = none
+    ' VPFR-lite histogram buckets (Spec B — display only, populated alongside the v2 fields above).
+    ' Engine-side ordering: index 0 = lowest-price bucket. UI reverses for top-down render.
+    Public Property VPFRBucketVolumes  As Double() = Array.Empty(Of Double)()
+    Public Property VPFRBucketPriceLow As Double
+    Public Property VPFRBucketSize     As Double
 
     ' Swing pivots (5m primary, 15m context)
     Public Property LastSwingHigh5m  As Double  ' price ($), 0 = no confirmed pivot in lookback
