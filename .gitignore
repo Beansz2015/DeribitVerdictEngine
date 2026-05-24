@@ -386,3 +386,6 @@ bin/Debug/net8.0-windows/analysis_eval_cache.csv
 bin/Debug/net8.0-windows/ohlc_1m_cache.csv
 bin/Release/net8.0-windows/analysis_eval_cache.csv
 bin/Release/net8.0-windows/ohlc_1m_cache.csv
+
+# Dev verification captures from tools/screenshot-mainform.ps1
+verify/
