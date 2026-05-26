@@ -1298,35 +1298,60 @@ Partial Public Class MainForm
     End Function
 
     Friend Sub SaveFullFormScreenshot(outPath As String)
-        Dim originalSize = Me.Size
-        Dim originalMax  = Me.MaximumSize
+        ' Capture _gridRoot directly rather than Me. The form's outer Size is
+        ' clamped by Windows' SystemMaximumSize (~screen working area) even
+        ' with MaximumSize = Empty, so growing Me to the natural row-sum
+        ' extent silently fails on any layout taller than the monitor and
+        ' DrawToBitmap clips at the screen height (≈2171 logical on the
+        ' test machine vs. ≈3170 needed for all 11 card rows).
+        '
+        ' Temporarily undocking _gridRoot lets us resize the inner panel past
+        ' the form's client area and draw the whole grid. The form itself
+        ' never changes size, so there's no on-screen flash and no restore
+        ' artefact.
+        Dim originalDock       = _gridRoot.Dock
+        Dim originalAnchor     = _gridRoot.Anchor
+        Dim originalAutoScroll = _gridRoot.AutoScroll
+        Dim originalSize       = _gridRoot.Size
+        Dim originalLoc        = _gridRoot.Location
         Try
-            Me.MaximumSize = Size.Empty
-            Me.Size        = New Size(Me.Width, ComputeNaturalFormHeight())
-            Me.PerformLayout()
+            _gridRoot.Dock       = DockStyle.None
+            _gridRoot.Anchor     = AnchorStyles.Top Or AnchorStyles.Left
+            _gridRoot.AutoScroll = False
+            _gridRoot.Location   = New Point(0, 0)
+            _gridRoot.Size       = New Size(originalSize.Width, ComputeGridNaturalHeight())
+            _gridRoot.PerformLayout()
             Application.DoEvents()
+
             Dim dir = Path.GetDirectoryName(outPath)
             If Not String.IsNullOrEmpty(dir) AndAlso Not Directory.Exists(dir) Then
                 Directory.CreateDirectory(dir)
             End If
-            Using bmp As New Bitmap(Me.Width, Me.Height)
-                Me.DrawToBitmap(bmp, New Rectangle(0, 0, Me.Width, Me.Height))
+            Using bmp As New Bitmap(_gridRoot.Width, _gridRoot.Height)
+                _gridRoot.DrawToBitmap(bmp, New Rectangle(0, 0, _gridRoot.Width, _gridRoot.Height))
                 bmp.Save(outPath, Imaging.ImageFormat.Png)
             End Using
         Finally
-            Me.Size        = originalSize
-            Me.MaximumSize = originalMax
-            Me.PerformLayout()
+            _gridRoot.AutoScroll = originalAutoScroll
+            _gridRoot.Size       = originalSize
+            _gridRoot.Location   = originalLoc
+            _gridRoot.Anchor     = originalAnchor
+            _gridRoot.Dock       = originalDock
+            _gridRoot.PerformLayout()
+            Application.DoEvents()
         End Try
     End Sub
 
-    Private Function ComputeNaturalFormHeight() As Integer
-        Dim chromeH As Integer = Me.Height - Me.ClientSize.Height
+    ' Sum of runtime-resolved row heights (via TableLayoutPanel.GetRowHeights,
+    ' which covers Absolute / Percent / AutoSize uniformly) plus the grid's
+    ' own outer padding and a 16 px slack. No form chrome — we draw the grid
+    ' itself, not the whole form.
+    Private Function ComputeGridNaturalHeight() As Integer
         Dim totalRowH As Integer = 0
-        For Each rs As RowStyle In _gridRoot.RowStyles
-            If rs.SizeType = SizeType.Absolute Then totalRowH += CInt(rs.Height)
+        For Each h As Integer In _gridRoot.GetRowHeights()
+            totalRowH += h
         Next
-        Return totalRowH + _gridRoot.Padding.Top + _gridRoot.Padding.Bottom + chromeH + 16
+        Return totalRowH + _gridRoot.Padding.Top + _gridRoot.Padding.Bottom + 16
     End Function
 
 End Class

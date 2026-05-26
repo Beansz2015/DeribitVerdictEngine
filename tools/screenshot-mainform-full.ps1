@@ -59,10 +59,29 @@ using System;
 using System.Runtime.InteropServices;
 public class WFG {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr pid);
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
 }
 "@
-[WFG]::SetForegroundWindow([IntPtr]$form.Current.NativeWindowHandle) | Out-Null
-Start-Sleep -Milliseconds 200
+
+# Windows 11 blocks SetForegroundWindow under foreground-steal restrictions.
+# Attaching to the current foreground's input queue bypasses the lockout, so
+# the subsequent SetForegroundWindow actually transfers focus and SendKeys
+# reaches MainForm instead of disappearing into the calling terminal.
+$hwnd      = [IntPtr]$form.Current.NativeWindowHandle
+$fgHwnd    = [WFG]::GetForegroundWindow()
+$fgThread  = [WFG]::GetWindowThreadProcessId($fgHwnd, [IntPtr]::Zero)
+$curThread = [WFG]::GetCurrentThreadId()
+[WFG]::AttachThreadInput($curThread, $fgThread, $true) | Out-Null
+[WFG]::ShowWindow($hwnd, 9) | Out-Null    # SW_RESTORE — undo any minimize
+[WFG]::BringWindowToTop($hwnd) | Out-Null
+[WFG]::SetForegroundWindow($hwnd) | Out-Null
+[WFG]::AttachThreadInput($curThread, $fgThread, $false) | Out-Null
+Start-Sleep -Milliseconds 500
 
 # Send Ctrl+Shift+S.
 [System.Windows.Forms.SendKeys]::SendWait("^+s")
