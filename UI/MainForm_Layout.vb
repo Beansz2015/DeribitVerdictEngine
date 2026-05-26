@@ -193,6 +193,10 @@ Partial Public Class MainForm
         Me.Text = "Deribit Verdict Engine v0.47 [P4]"
         Me.BackColor = Theme.BG_BASE
 
+        ' Enable form-level key preview so the Ctrl+Shift+S full-form screenshot
+        ' hotkey reaches OnFormKeyDown before child controls consume it.
+        Me.KeyPreview = True
+
         ' Force the form's own background to the design base; the card grid
         ' fills the client area but the underlying form colour shows briefly
         ' during paint and any 1px gap.
@@ -1261,5 +1265,68 @@ Partial Public Class MainForm
             lnkAnalysisReport.Enabled = True
         End Try
     End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Full-form screenshot (Ctrl+Shift+S) — dev tooling for the verification
+    ' harness. Renders the entire form via DrawToBitmap so cards beyond the
+    ' on-screen working area still appear in the PNG. PowerShell helper
+    ' (tools/screenshot-mainform-full.ps1) writes the target path to
+    ' verify/.screenshot-target, presses Ctrl+Shift+S, then polls for the
+    ' PNG to appear. No-op when no marker file is present.
+    ' -----------------------------------------------------------------------
+    Private Sub OnFormKeyDown(sender As Object, e As KeyEventArgs) Handles MyBase.KeyDown
+        If e.Control AndAlso e.Shift AndAlso e.KeyCode = Keys.S Then
+            Dim targetPath As String = ReadScreenshotTargetPath()
+            If Not String.IsNullOrEmpty(targetPath) Then
+                SaveFullFormScreenshot(targetPath)
+                e.Handled = True
+            End If
+        End If
+    End Sub
+
+    Private Function ReadScreenshotTargetPath() As String
+        Dim markerPath As String = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "verify", ".screenshot-target")
+        If Not File.Exists(markerPath) Then Return Nothing
+        Try
+            Dim p As String = File.ReadAllText(markerPath).Trim()
+            File.Delete(markerPath)
+            Return p
+        Catch
+            Return Nothing
+        End Try
+    End Function
+
+    Friend Sub SaveFullFormScreenshot(outPath As String)
+        Dim originalSize = Me.Size
+        Dim originalMax  = Me.MaximumSize
+        Try
+            Me.MaximumSize = Size.Empty
+            Me.Size        = New Size(Me.Width, ComputeNaturalFormHeight())
+            Me.PerformLayout()
+            Application.DoEvents()
+            Dim dir = Path.GetDirectoryName(outPath)
+            If Not String.IsNullOrEmpty(dir) AndAlso Not Directory.Exists(dir) Then
+                Directory.CreateDirectory(dir)
+            End If
+            Using bmp As New Bitmap(Me.Width, Me.Height)
+                Me.DrawToBitmap(bmp, New Rectangle(0, 0, Me.Width, Me.Height))
+                bmp.Save(outPath, Imaging.ImageFormat.Png)
+            End Using
+        Finally
+            Me.Size        = originalSize
+            Me.MaximumSize = originalMax
+            Me.PerformLayout()
+        End Try
+    End Sub
+
+    Private Function ComputeNaturalFormHeight() As Integer
+        Dim chromeH As Integer = Me.Height - Me.ClientSize.Height
+        Dim totalRowH As Integer = 0
+        For Each rs As RowStyle In _gridRoot.RowStyles
+            If rs.SizeType = SizeType.Absolute Then totalRowH += CInt(rs.Height)
+        Next
+        Return totalRowH + _gridRoot.Padding.Top + _gridRoot.Padding.Bottom + chromeH + 16
+    End Function
 
 End Class
