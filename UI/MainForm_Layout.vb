@@ -1079,6 +1079,23 @@ Partial Public Class MainForm
         Return IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "analysis_output_dump.md")
     End Function
 
+    ' Composes the optional PERF STRIP line that AnalysisOutputDump.Append
+    ' renders directly under the "## Run …" header for each dump block.
+    ' Reads instance label text + _metricMode, so lives on the partial that
+    ' owns the perf-strip controls. Called from RunAnalysisAsync after
+    ' UpdatePerformanceLabels has refreshed the label values.
+    Friend Function ComposePerfStripLine() As String
+        Dim modeTag As String = If(_metricMode = "target", "[T]", "[B]")
+        Return String.Format("PERF STRIP {0} {1} | {2} | {3} | {4} | {5} | {6}",
+                              modeTag,
+                              lblPerfWeek.Text,
+                              lblPerf3d.Text,
+                              lblPerfDay.Text,
+                              lblPerfAsia.Text,
+                              lblPerfLondon.Text,
+                              lblPerfNy.Text)
+    End Function
+
     Private Sub lnkOutputDump_LinkClicked(sender As Object,
             e As System.Windows.Forms.LinkLabelLinkClickedEventArgs) _
             Handles lnkOutputDump.LinkClicked
@@ -1128,6 +1145,100 @@ Partial Public Class MainForm
         End If
         _outputDumpSettingsForm.Show()
         _outputDumpSettingsForm.BringToFront()
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Log / calibration / analysis-report link clicks (P5a migration target).
+    ' These three handlers + UpdateLogInfo moved here from MainForm_Render_Header.vb
+    ' so that Header.vb deletes cleanly in P5b. UpdateLogInfo touches only Label
+    ' controls and ToolTip — no RTF dependency. The calibration handler still
+    ' writes to txtOutput in P5a commit 1; commit 2 switches it to AnalysisReportForm.
+    ' -----------------------------------------------------------------------
+    Private Sub UpdateLogInfo()
+        Dim rows As Integer = AnalysisLogger.GetRowCount()
+        Dim path As String  = AnalysisLogger.GetLogPath()
+        ' "Log: {N} rows[ · skipped {M}]". Full path moves to a tooltip so the
+        ' LOG sub-box stays scannable at a glance.
+        Dim skipSuffix As String = If(_skipCount > 0, String.Format(" · skipped {0}", _skipCount), "")
+        lblLogInfo.Text = String.Format("Log: {0} rows{1}", rows, skipSuffix)
+        If _logInfoTooltip IsNot Nothing Then
+            _logInfoTooltip.SetToolTip(lblLogInfo, path)
+        End If
+        ' P4f — last-successful render timestamp. Hidden until the first
+        ' successful run captures _lastSuccessfulRenderTime.
+        If lblLastSuccess IsNot Nothing Then
+            If _lastSuccessfulRenderTime > DateTime.MinValue Then
+                lblLastSuccess.Text    = "last " & _lastSuccessfulRenderTime.ToString("HH:mm:ss")
+                lblLastSuccess.Visible = True
+            Else
+                lblLastSuccess.Visible = False
+            End If
+        End If
+    End Sub
+
+    Private Sub lnkResetLog_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkResetLog.LinkClicked
+        Dim result = MessageBox.Show(
+            "Reset the analysis log? This will delete all logged rows and cannot be undone." &
+            Environment.NewLine & Environment.NewLine &
+            "File: " & AnalysisLogger.GetLogPath(),
+            "Reset Log",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning)
+        If result = DialogResult.Yes Then
+            AnalysisLogger.ResetLog()
+            UpdateLogInfo()
+        End If
+    End Sub
+
+    Private Sub lnkCalibCheck_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkCalibCheck.LinkClicked
+        ' P5a commit 1 — keep the legacy txtOutput render path alive so the
+        ' verification dump card still shows the calibration report during the
+        ' trader-side parity window. P5a commit 2 switches this body to
+        ' construct an AnalysisReportForm and call .Show() instead.
+        txtOutput.Clear()
+        AppendRtf(txtOutput, BuildCalibrationReport(), Theme.FG_PRIMARY)
+    End Sub
+
+    Private Async Sub lnkAnalysisReport_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkAnalysisReport.LinkClicked
+        Dim csvPath As String = AnalysisLogger.GetLogPath()
+        If Not IO.File.Exists(csvPath) Then
+            MessageBox.Show("No analysis_log.csv found. Run at least one analysis first.",
+                            "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        ' Verify v0.4.1 schema — TrendStructure5m is the column added in v0.4.1
+        Dim firstLine As String = Nothing
+        Try
+            Using sr As New IO.StreamReader(csvPath)
+                firstLine = sr.ReadLine()
+            End Using
+        Catch
+        End Try
+        If firstLine Is Nothing OrElse Not firstLine.Contains("TrendStructure5m") Then
+            MessageBox.Show("Log file is not v0.4.1 schema." & Environment.NewLine &
+                            "Run analyses after the d1/d2 upgrade to accumulate v0.4.1 rows." & Environment.NewLine &
+                            "(Old file was rotated to analysis_log.csv.v0.4.bak on first run.)",
+                            "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        ' Disable link during fetch so the user can't double-click.
+        lnkAnalysisReport.Enabled = False
+        lnkAnalysisReport.Text = "Fetching OHLC…"
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        Dim outputDir As String = AppDomain.CurrentDomain.BaseDirectory
+        Try
+            Dim report As AnalysisReport = Await AnalysisRunner.Run(csvPath, outputDir, cfg)
+            Dim frm As New AnalysisReportForm(report.MarkdownText, report.MarkdownFilePath)
+            frm.Show()
+        Catch ex As Exception
+            MessageBox.Show("Analysis failed: " & ex.Message,
+                            "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            lnkAnalysisReport.Text = "Analysis Report"
+            lnkAnalysisReport.Enabled = True
+        End Try
     End Sub
 
 End Class

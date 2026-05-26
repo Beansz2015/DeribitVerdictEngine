@@ -459,9 +459,22 @@ Partial Public Class MainForm
         BindCardIndicatorDetails(verdict, r, norms, SettingsLoader.Current)
 
         ' Update live performance strip (eval cache + OHLC cache + 6 window aggregates).
-        ' Must come after RenderOutput so AnalysisOutputDump.Append has already run.
         Await LivePerformanceTracker.UpdateAsync(verdict, r, candles1m, DateTime.UtcNow)
         UpdatePerformanceLabels()
+
+        ' P5a — append a fresh markdown-style snapshot to the output dump.
+        ' Migrated from MainForm_Render_Sections.vb:329 so the dump is fed by
+        ' BuildPlaintextSnapshot (the new card-grid-independent renderer)
+        ' instead of txtOutput.Text. RunAnalysisAsync now owns the dump call;
+        ' RenderOutput (still alive in P5a) writes only to txtOutput.
+        Dim snapshot As String = BuildPlaintextSnapshot(verdict, r, norms, cfg, vwapWarmup, lastTradePrice)
+        AnalysisOutputDump.Append(
+            timestamp:=verdict.Timestamp,
+            renderedText:=snapshot,
+            dumpPath:=GetDumpPath(),
+            enabled:=cfg.AnalysisLogging.OutputDumpEnabled,
+            maxRuns:=cfg.AnalysisLogging.OutputDumpMaxRuns,
+            perfStripLine:=ComposePerfStripLine())
 
         ' P4f — capture last-successful state for the SKIPPED-render fallback.
         ' Must be the last thing before the AnalysisCompleted event so the

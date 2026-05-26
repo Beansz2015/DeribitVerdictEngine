@@ -17,6 +17,19 @@ Imports System.Windows.Forms
 
 Partial Public Class MainForm
 
+    ' Two-tier R:R precision: "0.0" when ratio is zero (genuine missing target),
+    ' "< 0.1" when ratio rounds to zero at 1dp but is non-zero, else 1dp.
+    ' Migrated from MainForm_Render_Header.vb in P5a so Header.vb can be deleted
+    ' in P5b without losing the helper. Callers: legacy RenderOutputHeader (still
+    ' alive in P5a), BindCardAtrLevels, BindCardStructural, BuildPlaintextSnapshot.
+    Friend Shared Function FormatRR(reward As Double, risk As Double) As String
+        If risk <= 0 Then Return "—"
+        Dim ratio As Double = reward / risk
+        If ratio = 0.0 Then Return "1:0.0"
+        If ratio < 0.1 Then Return "1:< 0.1"
+        Return String.Format("1:{0:F1}", ratio)
+    End Function
+
     ' -----------------------------------------------------------------------
     ' Static section-header label factory (used by every bound card)
     ' -----------------------------------------------------------------------

@@ -316,23 +316,11 @@ Partial Public Class MainForm
         lblVerdict.BackColor = bg
         lblVerdict.Text = v.Verdict & "  [" & v.Confidence & "]"
 
-        ' -- Output dump -------------------------------------------------------
-        Dim modeTag As String = If(_metricMode = "target", "[T]", "[B]")
-        Dim perfStripLine As String = String.Format("PERF STRIP {0} {1} | {2} | {3} | {4} | {5} | {6}",
-                                                    modeTag,
-                                                    lblPerfWeek.Text,
-                                                    lblPerf3d.Text,
-                                                    lblPerfDay.Text,
-                                                    lblPerfAsia.Text,
-                                                    lblPerfLondon.Text,
-                                                    lblPerfNy.Text)
-        AnalysisOutputDump.Append(
-            timestamp:=v.Timestamp,
-            renderedText:=txtOutput.Text,
-            dumpPath:=GetDumpPath(),
-            enabled:=cfg.AnalysisLogging.OutputDumpEnabled,
-            maxRuns:=cfg.AnalysisLogging.OutputDumpMaxRuns,
-            perfStripLine:=perfStripLine)
+        ' P5a — AnalysisOutputDump.Append moved to RunAnalysisAsync (driven by
+        ' BuildPlaintextSnapshot, not txtOutput.Text). This RenderOutput method
+        ' still runs in P5a so the verification dump card (txtOutput) keeps
+        ' receiving the legacy RTF output for the trader-side parity window.
+        ' P5b deletes this whole method plus MainForm_Render_Header.vb.
     End Sub
 
 End Class
