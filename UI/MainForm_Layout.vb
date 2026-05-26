@@ -1191,12 +1191,14 @@ Partial Public Class MainForm
     End Sub
 
     Private Sub lnkCalibCheck_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkCalibCheck.LinkClicked
-        ' P5a commit 1 — keep the legacy txtOutput render path alive so the
-        ' verification dump card still shows the calibration report during the
-        ' trader-side parity window. P5a commit 2 switches this body to
-        ' construct an AnalysisReportForm and call .Show() instead.
-        txtOutput.Clear()
-        AppendRtf(txtOutput, BuildCalibrationReport(), Theme.FG_PRIMARY)
+        ' P5a commit 2 — calibration report now opens in AnalysisReportForm
+        ' (non-modal, same viewer the ANALYSIS REPORT button uses). Removes
+        ' the txtOutput dependency so this handler survives the P5b deletion
+        ' sweep. The form's filePath param identifies the underlying log file
+        ' because BuildCalibrationReport derives its content from there.
+        Dim md As String = BuildCalibrationReport()
+        Dim frm As New AnalysisReportForm(md, AnalysisLogger.GetLogPath())
+        frm.Show()
     End Sub
 
     Private Async Sub lnkAnalysisReport_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkAnalysisReport.LinkClicked
