@@ -391,7 +391,7 @@ Public Class TweakSettingsForm
                 End Sub
             End If
         Catch ex As Exception
-            MessageBox.Show("Failed to start AutoTweaker: " & ex.Message,
+            MessageBox.Show(Me, "Failed to start AutoTweaker: " & ex.Message,
                             "Tweak Settings", MessageBoxButtons.OK, MessageBoxIcon.Error)
             UpdateStatusLabel()
         End Try
@@ -407,7 +407,7 @@ Public Class TweakSettingsForm
         Dim streakWeight As Double
 
         If Not Integer.TryParse(txtWindowSize.Text, windowSize) OrElse windowSize < 10 Then
-            MessageBox.Show("Window size must be an integer >= 10.", "Invalid input",
+            MessageBox.Show(Me, "Window size must be an integer >= 10.", "Invalid input",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
@@ -417,13 +417,13 @@ Public Class TweakSettingsForm
                                System.Globalization.CultureInfo.InvariantCulture,
                                failThreshold) OrElse
                failThreshold < 1 OrElse failThreshold > 99 Then
-            MessageBox.Show("Failure threshold must be between 1 and 99.", "Invalid input",
+            MessageBox.Show(Me, "Failure threshold must be between 1 and 99.", "Invalid input",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
 
         If Not Integer.TryParse(txtCooldownRows.Text, cooldown) OrElse cooldown < 1 Then
-            MessageBox.Show("Cooldown rows must be a positive integer.", "Invalid input",
+            MessageBox.Show(Me, "Cooldown rows must be a positive integer.", "Invalid input",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
@@ -433,22 +433,22 @@ Public Class TweakSettingsForm
         Dim minTierIsBlank As Boolean = String.IsNullOrWhiteSpace(txtMinTierRows.Text)
         If Not minTierIsBlank Then
             If Not Integer.TryParse(txtMinTierRows.Text, minTier) OrElse minTier < 0 Then
-                MessageBox.Show("Min tier-eligible rows must be a non-negative integer (or blank for auto).",
+                MessageBox.Show(Me, "Min tier-eligible rows must be a non-negative integer (or blank for auto).",
                                 "Invalid input", MessageBoxButtons.OK, MessageBoxIcon.Warning)
                 Return
             End If
             If minTier < 5 Then
-                MessageBox.Show("Min ≥ 5 required for any statistical meaning.", "Invalid input",
+                MessageBox.Show(Me, "Min ≥ 5 required for any statistical meaning.", "Invalid input",
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning)
                 Return
             End If
             If minTier > windowSize Then
-                MessageBox.Show("Cannot exceed Window Size — gate would be unreachable.", "Invalid input",
+                MessageBox.Show(Me, "Cannot exceed Window Size — gate would be unreachable.", "Invalid input",
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning)
                 Return
             End If
             If minTier > CInt(Math.Floor(windowSize * 0.7)) Then
-                Dim res = MessageBox.Show(
+                Dim res = MessageBox.Show(Me,
                     "MinTier exceeds 70% of WindowSize. Many rounds may be skipped if NO_TRADE density is high. Proceed?",
                     "MinTier high",
                     MessageBoxButtons.OKCancel, MessageBoxIcon.Warning)
@@ -457,13 +457,13 @@ Public Class TweakSettingsForm
         End If
 
         If Not Integer.TryParse(txtSnapshotStreakX.Text, snapshotStreakX) OrElse snapshotStreakX < 1 Then
-            MessageBox.Show("Snapshot streak X must be a positive integer.", "Invalid input",
+            MessageBox.Show(Me, "Snapshot streak X must be a positive integer.", "Invalid input",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
 
         If Not Integer.TryParse(txtMaxKeysPerProposal.Text, maxKeysPerProposal) OrElse maxKeysPerProposal < 1 Then
-            MessageBox.Show("Max keys per tweak proposal must be a positive integer.", "Invalid input",
+            MessageBox.Show(Me, "Max keys per tweak proposal must be a positive integer.", "Invalid input",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
@@ -472,7 +472,7 @@ Public Class TweakSettingsForm
                                System.Globalization.NumberStyles.Float,
                                System.Globalization.CultureInfo.InvariantCulture,
                                streakWeight) OrElse streakWeight < 0 Then
-            MessageBox.Show("Streak weight must be a non-negative number.", "Invalid input",
+            MessageBox.Show(Me, "Streak weight must be a non-negative number.", "Invalid input",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
@@ -503,10 +503,10 @@ Public Class TweakSettingsForm
 
         Try
             TweakerConfig.Save(_configPath, cfg)
-            MessageBox.Show("tweaker_config.json saved successfully.", "Tweak Settings",
+            MessageBox.Show(Me, "tweaker_config.json saved successfully.", "Tweak Settings",
                             MessageBoxButtons.OK, MessageBoxIcon.Information)
         Catch ex As Exception
-            MessageBox.Show("Save failed: " & ex.Message, "Tweak Settings",
+            MessageBox.Show(Me, "Save failed: " & ex.Message, "Tweak Settings",
                             MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
@@ -515,6 +515,7 @@ Public Class TweakSettingsForm
         If _roundStatsForm Is Nothing OrElse _roundStatsForm.IsDisposed Then
             _roundStatsForm = New RoundStatsForm(_configPath, _statePath, _csvPath,
                                                   _snapshotsDir, _manifestPath)
+            MainForm.PositionOnParentScreen(_roundStatsForm, Me)
             _roundStatsForm.Show(Me)
         Else
             If _roundStatsForm.WindowState = FormWindowState.Minimized Then
@@ -533,7 +534,7 @@ Public Class TweakSettingsForm
                 .UseShellExecute = True
             })
         Catch ex As Exception
-            MessageBox.Show("Could not open snapshots directory: " & ex.Message, "Tweak Settings",
+            MessageBox.Show(Me, "Could not open snapshots directory: " & ex.Message, "Tweak Settings",
                             MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub

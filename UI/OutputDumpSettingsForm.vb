@@ -57,7 +57,7 @@ Public Class OutputDumpSettingsForm
 
     ' ── Button handlers ─────────────────────────────────────────────────────
     Private Sub btnClear_Click(sender As Object, e As EventArgs) Handles btnClear.Click
-        Dim result = MessageBox.Show(
+        Dim result = MessageBox.Show(Me,
             "Clear analysis_output_dump.md? This cannot be undone.",
             "Clear Output Dump",
             MessageBoxButtons.YesNo,
@@ -71,7 +71,7 @@ Public Class OutputDumpSettingsForm
     Private Sub btnSave_Click(sender As Object, e As EventArgs) Handles btnSave.Click
         Dim maxRuns As Integer
         If Not Integer.TryParse(txtMaxRuns.Text, maxRuns) OrElse maxRuns < 0 Then
-            MessageBox.Show("Keep last N runs must be a non-negative integer (0 = unlimited).",
+            MessageBox.Show(Me, "Keep last N runs must be a non-negative integer (0 = unlimited).",
                             "Invalid input", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
@@ -84,10 +84,10 @@ Public Class OutputDumpSettingsForm
             SettingsLoader.Save(cfg, String.Format("output-dump: enabled={0}, max_runs={1}",
                                                     chkEnabled.Checked, maxRuns))
             RefreshFileSize()
-            MessageBox.Show("Output dump settings saved.", "Output Dump Settings",
+            MessageBox.Show(Me, "Output dump settings saved.", "Output Dump Settings",
                             MessageBoxButtons.OK, MessageBoxIcon.Information)
         Catch ex As Exception
-            MessageBox.Show("Save failed: " & ex.Message, "Output Dump Settings",
+            MessageBox.Show(Me, "Save failed: " & ex.Message, "Output Dump Settings",
                             MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub

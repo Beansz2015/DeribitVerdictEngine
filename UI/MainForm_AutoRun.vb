@@ -33,7 +33,7 @@ Partial Public Class MainForm
         Dim secs As Integer = CInt(nudSeconds.Value)
         _intervalMs = (mins * 60 + secs) * 1000
         If _intervalMs < 10_000 Then
-            MessageBox.Show("Minimum interval is 10 seconds.", "Auto-Run",
+            MessageBox.Show(Me, "Minimum interval is 10 seconds.", "Auto-Run",
                             MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If

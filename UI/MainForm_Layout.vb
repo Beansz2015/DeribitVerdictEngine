@@ -1056,6 +1056,21 @@ Partial Public Class MainForm
     End Sub
 
     ' -----------------------------------------------------------------------
+    ' Position a child form centered on whichever monitor the parent occupies.
+    ' Survives multi-monitor layouts. Sets StartPosition=Manual so any
+    ' subsequent layout code doesn't override. Call after constructing the
+    ' child but before .Show().
+    ' -----------------------------------------------------------------------
+    Friend Shared Sub PositionOnParentScreen(child As Form, parent As Form)
+        If child Is Nothing OrElse parent Is Nothing Then Return
+        Dim host = Screen.FromControl(parent)
+        child.StartPosition = FormStartPosition.Manual
+        child.Location = New Point(
+            host.WorkingArea.X + (host.WorkingArea.Width - child.Width) \ 2,
+            host.WorkingArea.Y + (host.WorkingArea.Height - child.Height) \ 2)
+    End Sub
+
+    ' -----------------------------------------------------------------------
     ' Tweak Settings link click
     ' -----------------------------------------------------------------------
     Private Sub lnkTweakSettings_LinkClicked(sender As Object,
@@ -1068,6 +1083,7 @@ Partial Public Class MainForm
                     _tweakForm = Nothing
                 End Sub
         End If
+        PositionOnParentScreen(_tweakForm, Me)
         _tweakForm.Show()
         _tweakForm.BringToFront()
     End Sub
@@ -1101,7 +1117,7 @@ Partial Public Class MainForm
             Handles lnkOutputDump.LinkClicked
         Dim dumpPath As String = GetDumpPath()
         If Not IO.File.Exists(dumpPath) OrElse Not SettingsLoader.Current.AnalysisLogging.OutputDumpEnabled Then
-            MessageBox.Show("Output dump is empty or disabled.", "Output Dump",
+            MessageBox.Show(Me, "Output dump is empty or disabled.", "Output Dump",
                             MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
@@ -1109,7 +1125,7 @@ Partial Public Class MainForm
             Dim psi As New System.Diagnostics.ProcessStartInfo(dumpPath) With {.UseShellExecute = True}
             System.Diagnostics.Process.Start(psi)
         Catch ex As Exception
-            MessageBox.Show("Could not open dump file: " & ex.Message, "Output Dump",
+            MessageBox.Show(Me, "Could not open dump file: " & ex.Message, "Output Dump",
                             MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
@@ -1143,6 +1159,7 @@ Partial Public Class MainForm
                     _outputDumpSettingsForm = Nothing
                 End Sub
         End If
+        PositionOnParentScreen(_outputDumpSettingsForm, Me)
         _outputDumpSettingsForm.Show()
         _outputDumpSettingsForm.BringToFront()
     End Sub
@@ -1177,7 +1194,7 @@ Partial Public Class MainForm
     End Sub
 
     Private Sub lnkResetLog_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkResetLog.LinkClicked
-        Dim result = MessageBox.Show(
+        Dim result = MessageBox.Show(Me,
             "Reset the analysis log? This will delete all logged rows and cannot be undone." &
             Environment.NewLine & Environment.NewLine &
             "File: " & AnalysisLogger.GetLogPath(),
@@ -1198,13 +1215,14 @@ Partial Public Class MainForm
         ' because BuildCalibrationReport derives its content from there.
         Dim md As String = BuildCalibrationReport()
         Dim frm As New AnalysisReportForm(md, AnalysisLogger.GetLogPath())
+        PositionOnParentScreen(frm, Me)
         frm.Show()
     End Sub
 
     Private Async Sub lnkAnalysisReport_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkAnalysisReport.LinkClicked
         Dim csvPath As String = AnalysisLogger.GetLogPath()
         If Not IO.File.Exists(csvPath) Then
-            MessageBox.Show("No analysis_log.csv found. Run at least one analysis first.",
+            MessageBox.Show(Me, "No analysis_log.csv found. Run at least one analysis first.",
                             "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
@@ -1218,7 +1236,7 @@ Partial Public Class MainForm
         Catch
         End Try
         If firstLine Is Nothing OrElse Not firstLine.Contains("TrendStructure5m") Then
-            MessageBox.Show("Log file is not v0.4.1 schema." & Environment.NewLine &
+            MessageBox.Show(Me, "Log file is not v0.4.1 schema." & Environment.NewLine &
                             "Run analyses after the d1/d2 upgrade to accumulate v0.4.1 rows." & Environment.NewLine &
                             "(Old file was rotated to analysis_log.csv.v0.4.bak on first run.)",
                             "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Information)
@@ -1233,9 +1251,10 @@ Partial Public Class MainForm
         Try
             Dim report As AnalysisReport = Await AnalysisRunner.Run(csvPath, outputDir, cfg)
             Dim frm As New AnalysisReportForm(report.MarkdownText, report.MarkdownFilePath)
+            PositionOnParentScreen(frm, Me)
             frm.Show()
         Catch ex As Exception
-            MessageBox.Show("Analysis failed: " & ex.Message,
+            MessageBox.Show(Me, "Analysis failed: " & ex.Message,
                             "Analysis Report", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             lnkAnalysisReport.Text = "Analysis Report"
