@@ -190,43 +190,154 @@ Partial Public Class MainForm
         Dim out As New List(Of TestCase)
 
         ' 1. STRONG LONG in a trending market.
+        ' Modelled on a confluence breakout (BTC ~50k mid-2026 archetype): every
+        ' bullish signal firing in TRENDING_UP regime, MTF PASS, OFI/CVD/TFI
+        ' aligned, EMA ribbon + 5m EMA(200) bull, OI accumulating. Score 15/19.
         out.Add(TestCaseBuilder.NeutralCase("01_strong_long_trending", cfg) _
             .WithDescription("STRONG LONG in TRENDING_UP — sentinel for hero tier + confirmed context.") _
             .WithVerdict("STRONG LONG", "HIGH", longScore:=15, shortScore:=2, maxScore:=19) _
             .WithRegime("TRENDING_UP", adx:=32.5, plusDi:=28.0, minusDi:=14.0) _
             .WithMtfPass() _
+            .WithBreakdownItem("ROC(9)",         longHit:=True,  shortHit:=False, note:="+1 BULL ROC rising") _
+            .WithBreakdownItem("RSI(9)",         longHit:=True,  shortHit:=False, note:="+1 RSI 64 > 50") _
+            .WithBreakdownItem("DMI +/-DI",      longHit:=True,  shortHit:=False, note:="+1 +DI 28 > -DI 14") _
+            .WithBreakdownItem("ADX>22",         longHit:=True,  shortHit:=False, note:="+1 trend strength") _
+            .WithBreakdownItem("Volume",         longHit:=True,  shortHit:=False, note:="+1 vol 1.6x SMA") _
+            .WithBreakdownItem("VWAP",           longHit:=True,  shortHit:=False, note:="+1 above VWAP") _
+            .WithBreakdownItem("BBW/TTM",        longHit:=True,  shortHit:=False, note:="+1 BULL_BUILDING") _
+            .WithBreakdownItem("EMA 9/21/50",    longHit:=True,  shortHit:=False, note:="+1 BULL alignment") _
+            .WithBreakdownItem("Funding (info)", longHit:=False, shortHit:=False, note:="info: rate 0.010% NEUTRAL") _
+            .WithBreakdownItem("OI Delta",       longHit:=True,  shortHit:=False, note:="+1 NEW LONGS") _
+            .WithBreakdownItem("OFI",            longHit:=True,  shortHit:=False, note:="+1 BUY DOMINANT") _
+            .WithBreakdownItem("CVD",            longHit:=True,  shortHit:=False, note:="+1 RISING") _
+            .WithBreakdownItem("TFI",            longHit:=True,  shortHit:=False, note:="+1 BUY PRESSURE") _
+            .WithBreakdownItem("MicroCVD",       longHit:=True,  shortHit:=False, note:="+1 BULL_ACCEL") _
+            .WithBreakdownItem("Liq Penalty",    longHit:=False, shortHit:=False, note:="—") _
+            .WithBreakdownItem("Spread",         longHit:=False, shortHit:=False, note:="NORMAL 1.0 bps") _
+            .WithBreakdownItem("5m EMA(200)",    longHit:=True,  shortHit:=False, note:="+1 price ABOVE") _
+            .WithBreakdownItem("Donchian(20)",   longHit:=True,  shortHit:=False, note:="+1 breakout up") _
+            .WithBreakdownItem("OBV",            longHit:=True,  shortHit:=False, note:="+1 RISING") _
+            .WithBreakdownItem("VPFR-lite",      longHit:=False, shortHit:=False, note:="NEUTRAL") _
+            .WithBreakdownItem("MTF Gate (15m)", longHit:=True,  shortHit:=False, note:="PASS [LONG] vs BULL trend") _
             .Build())
 
-        ' 2. LONG (one tier down).
+        ' 2. LONG (one tier down) — confluence partial, MTF PASS, score 11/19.
         out.Add(TestCaseBuilder.NeutralCase("02_long_trending", cfg) _
             .WithDescription("LONG in TRENDING_UP — sentinel for mid-strength directional verdict.") _
             .WithVerdict("LONG", "MEDIUM", longScore:=11, shortScore:=4, maxScore:=19) _
             .WithRegime("TRENDING_UP", adx:=24.0, plusDi:=24.0, minusDi:=16.0) _
             .WithMtfPass() _
+            .WithBreakdownItem("ROC(9)",         longHit:=True,  shortHit:=False, note:="+1 BULL ROC") _
+            .WithBreakdownItem("RSI(9)",         longHit:=True,  shortHit:=False, note:="+1 RSI 58") _
+            .WithBreakdownItem("DMI +/-DI",      longHit:=True,  shortHit:=False, note:="+1 +DI > -DI") _
+            .WithBreakdownItem("ADX>22",         longHit:=True,  shortHit:=False, note:="+1 trend") _
+            .WithBreakdownItem("Volume",         longHit:=False, shortHit:=False, note:="mid 1.2x") _
+            .WithBreakdownItem("VWAP",           longHit:=True,  shortHit:=False, note:="+1 above VWAP") _
+            .WithBreakdownItem("BBW/TTM",        longHit:=False, shortHit:=False, note:="FLAT") _
+            .WithBreakdownItem("EMA 9/21/50",    longHit:=True,  shortHit:=False, note:="+1 BULL") _
+            .WithBreakdownItem("Funding (info)", longHit:=False, shortHit:=False, note:="info: 0.012%") _
+            .WithBreakdownItem("OI Delta",       longHit:=True,  shortHit:=False, note:="+1 NEW LONGS") _
+            .WithBreakdownItem("OFI",            longHit:=False, shortHit:=True,  note:="-1 SELL DOMINANT") _
+            .WithBreakdownItem("CVD",            longHit:=True,  shortHit:=False, note:="+1 RISING") _
+            .WithBreakdownItem("TFI",            longHit:=False, shortHit:=False, note:="NEUTRAL") _
+            .WithBreakdownItem("MicroCVD",       longHit:=False, shortHit:=True,  note:="-1 BULL_DECEL late fade") _
+            .WithBreakdownItem("Liq Penalty",    longHit:=False, shortHit:=False, note:="—") _
+            .WithBreakdownItem("Spread",         longHit:=False, shortHit:=False, note:="NORMAL") _
+            .WithBreakdownItem("5m EMA(200)",    longHit:=True,  shortHit:=False, note:="+1 ABOVE") _
+            .WithBreakdownItem("Donchian(20)",   longHit:=False, shortHit:=False, note:="NONE") _
+            .WithBreakdownItem("OBV",            longHit:=False, shortHit:=True,  note:="-1 divergence") _
+            .WithBreakdownItem("VPFR-lite",      longHit:=False, shortHit:=False, note:="INSIDE_VA") _
+            .WithBreakdownItem("MTF Gate (15m)", longHit:=True,  shortHit:=False, note:="PASS [LONG]") _
             .Build())
 
-        ' 3. NO TRADE — neutral baseline.
+        ' 3. NO TRADE — RANGE_BOUND with balanced 7/7. Per spec author's
+        ' explicit guidance: "NO_TRADE sentinel may still be largely blank —
+        ' that's fine (no hits is a valid production state)." A handful of
+        ' mixed rows so the section isn't trivially empty.
         out.Add(TestCaseBuilder.NeutralCase("03_no_trade_neutral", cfg) _
             .WithDescription("NO TRADE in RANGE_BOUND — sentinel for indecision baseline.") _
             .WithVerdict("NO TRADE", "LOW", longScore:=7, shortScore:=7, maxScore:=18) _
             .WithRegime("RANGE_BOUND", adx:=14.0, plusDi:=18.0, minusDi:=18.0) _
             .WithMtfPass() _
+            .WithBreakdownItem("ROC(9)",         longHit:=False, shortHit:=False, note:="FLAT") _
+            .WithBreakdownItem("RSI(9)",         longHit:=False, shortHit:=False, note:="RSI 50") _
+            .WithBreakdownItem("DMI +/-DI",      longHit:=False, shortHit:=False, note:="balanced") _
+            .WithBreakdownItem("ADX>22",         longHit:=False, shortHit:=False, note:="ADX 14 below thr") _
+            .WithBreakdownItem("Volume",         longHit:=False, shortHit:=False, note:="1.0x SMA") _
+            .WithBreakdownItem("VWAP",           longHit:=True,  shortHit:=True,  note:="±0 at VWAP") _
+            .WithBreakdownItem("BBW/TTM",        longHit:=False, shortHit:=False, note:="FLAT") _
+            .WithBreakdownItem("EMA 9/21/50",    longHit:=False, shortHit:=False, note:="MIXED") _
+            .WithBreakdownItem("Funding (info)", longHit:=False, shortHit:=False, note:="info: 0.010%") _
+            .WithBreakdownItem("OI Delta",       longHit:=False, shortHit:=False, note:="NEUTRAL") _
+            .WithBreakdownItem("OFI",            longHit:=False, shortHit:=False, note:="BALANCED") _
+            .WithBreakdownItem("CVD",            longHit:=False, shortHit:=False, note:="FLAT") _
+            .WithBreakdownItem("TFI",            longHit:=False, shortHit:=False, note:="NEUTRAL") _
+            .WithBreakdownItem("MicroCVD",       longHit:=False, shortHit:=False, note:="FLAT") _
+            .WithBreakdownItem("Liq Penalty",    longHit:=False, shortHit:=False, note:="—") _
+            .WithBreakdownItem("Spread",         longHit:=False, shortHit:=False, note:="NORMAL") _
+            .WithBreakdownItem("5m EMA(200)",    longHit:=True,  shortHit:=False, note:="+1 ABOVE") _
+            .WithBreakdownItem("Donchian(20)",   longHit:=False, shortHit:=False, note:="NONE") _
+            .WithBreakdownItem("OBV",            longHit:=False, shortHit:=False, note:="FLAT") _
+            .WithBreakdownItem("VPFR-lite",      longHit:=False, shortHit:=False, note:="INSIDE_VA NEUTRAL") _
+            .WithBreakdownItem("MTF Gate (15m)", longHit:=False, shortHit:=False, note:="state: FLAT") _
             .Build())
 
-        ' 4. SHORT.
+        ' 4. SHORT — mirror of case 2.
         out.Add(TestCaseBuilder.NeutralCase("04_short_trending", cfg) _
             .WithDescription("SHORT in TRENDING_DOWN — sentinel for short-side directional verdict.") _
             .WithVerdict("SHORT", "MEDIUM", longScore:=4, shortScore:=11, maxScore:=19) _
             .WithRegime("TRENDING_DOWN", adx:=24.0, plusDi:=16.0, minusDi:=24.0) _
             .WithMtfPass() _
+            .WithBreakdownItem("ROC(9)",         longHit:=False, shortHit:=True,  note:="-1 BEAR ROC") _
+            .WithBreakdownItem("RSI(9)",         longHit:=False, shortHit:=True,  note:="-1 RSI 42") _
+            .WithBreakdownItem("DMI +/-DI",      longHit:=False, shortHit:=True,  note:="-1 -DI > +DI") _
+            .WithBreakdownItem("ADX>22",         longHit:=False, shortHit:=True,  note:="-1 trend") _
+            .WithBreakdownItem("Volume",         longHit:=False, shortHit:=False, note:="mid 1.2x") _
+            .WithBreakdownItem("VWAP",           longHit:=False, shortHit:=True,  note:="-1 below VWAP") _
+            .WithBreakdownItem("BBW/TTM",        longHit:=False, shortHit:=False, note:="FLAT") _
+            .WithBreakdownItem("EMA 9/21/50",    longHit:=False, shortHit:=True,  note:="-1 BEAR") _
+            .WithBreakdownItem("Funding (info)", longHit:=False, shortHit:=False, note:="info: 0.008%") _
+            .WithBreakdownItem("OI Delta",       longHit:=False, shortHit:=True,  note:="-1 NEW SHORTS") _
+            .WithBreakdownItem("OFI",            longHit:=True,  shortHit:=False, note:="+1 BUY DOMINANT (snap)") _
+            .WithBreakdownItem("CVD",            longHit:=False, shortHit:=True,  note:="-1 FALLING") _
+            .WithBreakdownItem("TFI",            longHit:=False, shortHit:=False, note:="NEUTRAL") _
+            .WithBreakdownItem("MicroCVD",       longHit:=True,  shortHit:=False, note:="+1 BEAR_DECEL late bounce") _
+            .WithBreakdownItem("Liq Penalty",    longHit:=False, shortHit:=False, note:="—") _
+            .WithBreakdownItem("Spread",         longHit:=False, shortHit:=False, note:="NORMAL") _
+            .WithBreakdownItem("5m EMA(200)",    longHit:=False, shortHit:=True,  note:="-1 BELOW") _
+            .WithBreakdownItem("Donchian(20)",   longHit:=False, shortHit:=False, note:="NONE") _
+            .WithBreakdownItem("OBV",            longHit:=True,  shortHit:=False, note:="+1 bull divergence") _
+            .WithBreakdownItem("VPFR-lite",      longHit:=False, shortHit:=False, note:="INSIDE_VA") _
+            .WithBreakdownItem("MTF Gate (15m)", longHit:=False, shortHit:=True,  note:="PASS [SHORT]") _
             .Build())
 
-        ' 5. STRONG SHORT.
+        ' 5. STRONG SHORT — mirror of case 1.
         out.Add(TestCaseBuilder.NeutralCase("05_strong_short_trending", cfg) _
             .WithDescription("STRONG SHORT in TRENDING_DOWN — sentinel for hero tier (negative).") _
             .WithVerdict("STRONG SHORT", "HIGH", longScore:=2, shortScore:=15, maxScore:=19) _
             .WithRegime("TRENDING_DOWN", adx:=32.5, plusDi:=14.0, minusDi:=28.0) _
             .WithMtfPass() _
+            .WithBreakdownItem("ROC(9)",         longHit:=False, shortHit:=True,  note:="-1 BEAR ROC falling") _
+            .WithBreakdownItem("RSI(9)",         longHit:=False, shortHit:=True,  note:="-1 RSI 36 < 50") _
+            .WithBreakdownItem("DMI +/-DI",      longHit:=False, shortHit:=True,  note:="-1 -DI 28 > +DI 14") _
+            .WithBreakdownItem("ADX>22",         longHit:=False, shortHit:=True,  note:="-1 trend strength") _
+            .WithBreakdownItem("Volume",         longHit:=False, shortHit:=True,  note:="-1 vol 1.6x SMA") _
+            .WithBreakdownItem("VWAP",           longHit:=False, shortHit:=True,  note:="-1 below VWAP") _
+            .WithBreakdownItem("BBW/TTM",        longHit:=False, shortHit:=True,  note:="-1 BEAR_BUILDING") _
+            .WithBreakdownItem("EMA 9/21/50",    longHit:=False, shortHit:=True,  note:="-1 BEAR alignment") _
+            .WithBreakdownItem("Funding (info)", longHit:=False, shortHit:=False, note:="info: 0.005% NEUTRAL") _
+            .WithBreakdownItem("OI Delta",       longHit:=False, shortHit:=True,  note:="-1 NEW SHORTS") _
+            .WithBreakdownItem("OFI",            longHit:=False, shortHit:=True,  note:="-1 SELL DOMINANT") _
+            .WithBreakdownItem("CVD",            longHit:=False, shortHit:=True,  note:="-1 FALLING") _
+            .WithBreakdownItem("TFI",            longHit:=False, shortHit:=True,  note:="-1 SELL PRESSURE") _
+            .WithBreakdownItem("MicroCVD",       longHit:=False, shortHit:=True,  note:="-1 BEAR_ACCEL") _
+            .WithBreakdownItem("Liq Penalty",    longHit:=False, shortHit:=False, note:="—") _
+            .WithBreakdownItem("Spread",         longHit:=False, shortHit:=False, note:="NORMAL 1.0 bps") _
+            .WithBreakdownItem("5m EMA(200)",    longHit:=False, shortHit:=True,  note:="-1 price BELOW") _
+            .WithBreakdownItem("Donchian(20)",   longHit:=False, shortHit:=True,  note:="-1 breakdown") _
+            .WithBreakdownItem("OBV",            longHit:=False, shortHit:=True,  note:="-1 FALLING") _
+            .WithBreakdownItem("VPFR-lite",      longHit:=False, shortHit:=False, note:="NEUTRAL") _
+            .WithBreakdownItem("MTF Gate (15m)", longHit:=False, shortHit:=True,  note:="PASS [SHORT] vs BEAR trend") _
             .Build())
 
         Return out
@@ -345,6 +456,29 @@ Public Class TestCaseBuilder
     Public Function WithMtfBlock(reason As String) As TestCaseBuilder
         _tc.Indicators.MTFGatePass = False
         _tc.Indicators.MTFGateReason = reason
+        Return Me
+    End Function
+
+    ' Appends one row to v.SignalBreakdown. Use this to build up the
+    ' per-case breakdown table that the renderer iterates. Hit booleans
+    ' reflect which side(s) the signal scored for; the note column
+    ' carries the engine's per-row scoring rationale ("+1 BULL ROC",
+    ' "above VWAP", etc.). Label must match the canonical roster the
+    ' renderer's label-match lookup expects (see
+    ' Core/ScoringEngine_Calculate_Scoring.vb lines 637-757 +
+    ' ScoringEngine_Calculate_Verdict.vb:82).
+    Public Function WithBreakdownItem(label As String,
+                                      longHit As Boolean,
+                                      shortHit As Boolean,
+                                      Optional note As String = "") As TestCaseBuilder
+        _tc.Verdict.SignalBreakdown.Add(New SignalBreakdownItem(label, longHit, shortHit, note))
+        Return Me
+    End Function
+
+    ' Replaces the entire breakdown list with the supplied items. For cases
+    ' that pre-build the full row set or want to clone production CSV state.
+    Public Function WithBreakdown(items As IEnumerable(Of SignalBreakdownItem)) As TestCaseBuilder
+        _tc.Verdict.SignalBreakdown = items.ToList()
         Return Me
     End Function
 
@@ -517,44 +651,14 @@ Public Class TestCaseBuilder
         v.KellyRiskUsd = 0.0
         v.Timestamp = New DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc)
 
-        ' Populate SignalBreakdown with the canonical label set the scoring
-        ' engine emits per run. Without this, the section header + footer
-        ' render but zero data rows do — parity passes vacuously and the
-        ' For Each item loop in both renderers is never exercised. Labels
-        ' and emission order mirror Core/ScoringEngine_Calculate_Scoring.vb
-        ' (lines 637-757) and the MTF Gate row appended by
-        ' ScoringEngine_Calculate_Verdict.vb:82. Hit booleans default to
-        ' False — sentinel cases override via WithSignalRow() when they
-        ' want a specific signal to fire. Note text defaults to "—" so
-        ' the column lays out identically to a production run.
-        AppendNeutralSignalRow(v, "ROC(9)")
-        AppendNeutralSignalRow(v, "RSI(9)")
-        AppendNeutralSignalRow(v, "DMI +/-DI")
-        AppendNeutralSignalRow(v, "ADX>22")
-        AppendNeutralSignalRow(v, "Volume")
-        AppendNeutralSignalRow(v, "VWAP")
-        AppendNeutralSignalRow(v, "BBW/TTM")
-        AppendNeutralSignalRow(v, "EMA 9/21/50")
-        AppendNeutralSignalRow(v, "Funding (info)")
-        AppendNeutralSignalRow(v, "OI Delta")
-        AppendNeutralSignalRow(v, "OFI")
-        AppendNeutralSignalRow(v, "CVD")
-        AppendNeutralSignalRow(v, "TFI")
-        AppendNeutralSignalRow(v, "MicroCVD")
-        AppendNeutralSignalRow(v, "Liq Penalty")
-        AppendNeutralSignalRow(v, "Spread")
-        AppendNeutralSignalRow(v, "5m EMA(200)")
-        AppendNeutralSignalRow(v, "Donchian(20)")
-        AppendNeutralSignalRow(v, "OBV")
-        AppendNeutralSignalRow(v, "VPFR-lite")
-        AppendNeutralSignalRow(v, "MTF Gate (15m)")
-
+        ' SignalBreakdown intentionally left empty — each case populates
+        ' explicitly via WithBreakdownItem so the harness exercises the
+        ' For Each item loop in both renderers with realistic hit/miss
+        ' patterns reflecting the case's scenario (per spec-author
+        ' guidance, follow-on to commit 1). NO_TRADE-style cases may
+        ' legitimately leave the list empty if no signals fired.
         Return v
     End Function
-
-    Private Shared Sub AppendNeutralSignalRow(v As VerdictResult, label As String)
-        v.SignalBreakdown.Add(New SignalBreakdownItem(label, False, False, "—"))
-    End Sub
 
     Public Shared Function NeutralNorms() As DynamicNorms
         Dim n As New DynamicNorms()
