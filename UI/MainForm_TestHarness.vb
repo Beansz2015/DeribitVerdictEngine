@@ -35,7 +35,7 @@ Partial Public Class MainForm
 
         _testHarnessMode = True
         Try
-            Dim cases As List(Of TestCase) = BuildSentinelCases()
+            Dim cases As List(Of TestCase) = TestHarnessCases.BuildAll(SettingsLoader.Current)
 
             Dim outDir As String = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "verify", "p5-test")
@@ -479,6 +479,277 @@ Public Class TestCaseBuilder
     ' that pre-build the full row set or want to clone production CSV state.
     Public Function WithBreakdown(items As IEnumerable(Of SignalBreakdownItem)) As TestCaseBuilder
         _tc.Verdict.SignalBreakdown = items.ToList()
+        Return Me
+    End Function
+
+    ' Replaces a specific row in the breakdown (by label match). Useful for
+    ' tweaking a preset roster — e.g. WithBreakdown(StrongLong()) then
+    ' .OverrideBreakdownItem("MTF Gate (15m)", ...) for an MTF BLOCK variant.
+    Public Function OverrideBreakdownItem(label As String,
+                                          longHit As Boolean,
+                                          shortHit As Boolean,
+                                          Optional note As String = "") As TestCaseBuilder
+        For i As Integer = 0 To _tc.Verdict.SignalBreakdown.Count - 1
+            If _tc.Verdict.SignalBreakdown(i).Label = label Then
+                _tc.Verdict.SignalBreakdown(i) =
+                    New SignalBreakdownItem(label, longHit, shortHit, note)
+                Return Me
+            End If
+        Next
+        _tc.Verdict.SignalBreakdown.Add(New SignalBreakdownItem(label, longHit, shortHit, note))
+        Return Me
+    End Function
+
+    ' ===================================================================
+    ' Verdict-side setters (commit 2 additions)
+    ' ===================================================================
+
+    Public Function WithContext(context As String) As TestCaseBuilder
+        _tc.Verdict.VerdictContext = context
+        Return Me
+    End Function
+
+    Public Function WithHoldStatus(status As String) As TestCaseBuilder
+        _tc.Verdict.HoldStatus = status
+        Return Me
+    End Function
+
+    Public Function WithOiCvdOutcome(outcome As String) As TestCaseBuilder
+        _tc.Verdict.OiCvdOutcome = outcome
+        Return Me
+    End Function
+
+    ' TRANSITIONAL regime emits "TRANSITIONAL penalty: -N" in the SCORE line.
+    ' Effective scores are post-penalty; raw scores are pre-penalty.
+    Public Function WithRegimePenalty(penalty As Integer,
+                                       effLong As Integer,
+                                       effShort As Integer) As TestCaseBuilder
+        _tc.Verdict.RegimePenalty = penalty
+        _tc.Verdict.EffectiveLongScore = effLong
+        _tc.Verdict.EffectiveShortScore = effShort
+        Return Me
+    End Function
+
+    Public Function WithAtrCapLong(adjustedTarget As Double, reason As String) As TestCaseBuilder
+        _tc.Verdict.AdjustedLongTarget = adjustedTarget
+        _tc.Verdict.TargetCapReasonLong = reason
+        Return Me
+    End Function
+
+    Public Function WithAtrCapShort(adjustedTarget As Double, reason As String) As TestCaseBuilder
+        _tc.Verdict.AdjustedShortTarget = adjustedTarget
+        _tc.Verdict.TargetCapReasonShort = reason
+        Return Me
+    End Function
+
+    ' ===================================================================
+    ' Indicator-side setters (commit 2 additions)
+    ' ===================================================================
+
+    Public Function WithCurrentPrice(price As Double) As TestCaseBuilder
+        _tc.Indicators.CurrentPrice = price
+        _tc.LastTradePrice = price
+        Return Me
+    End Function
+
+    Public Function WithLastTradePrice(price As Double) As TestCaseBuilder
+        _tc.LastTradePrice = price
+        Return Me
+    End Function
+
+    Public Function WithAtr(atr As Double, Optional scaleFactor As Double = 1.0) As TestCaseBuilder
+        _tc.Indicators.ATR = atr
+        _tc.Norms.ATRScaleFactor = scaleFactor
+        _tc.Norms.ATRRef = atr
+        Return Me
+    End Function
+
+    Public Function WithSwings(longTarget As Double, longStop As Double,
+                                shortTarget As Double, shortStop As Double) As TestCaseBuilder
+        _tc.Indicators.SwingTargetLong = longTarget
+        _tc.Indicators.SwingStopLong = longStop
+        _tc.Indicators.SwingTargetShort = shortTarget
+        _tc.Indicators.SwingStopShort = shortStop
+        _tc.Indicators.LastSwingHigh5m = If(longTarget > 0, longTarget, shortStop)
+        _tc.Indicators.LastSwingLow5m  = If(longStop > 0, longStop, shortTarget)
+        Return Me
+    End Function
+
+    Public Function WithCoreSignals(roc As Double, rocSlope As String,
+                                     rsi As Double, rsiDiv As String,
+                                     volumeRatio As Double) As TestCaseBuilder
+        _tc.Indicators.ROC = roc
+        _tc.Indicators.ROCSlope = rocSlope
+        _tc.Indicators.RSI = rsi
+        _tc.Indicators.RSIDivergence = rsiDiv
+        _tc.Indicators.VolumeRatio = volumeRatio
+        Return Me
+    End Function
+
+    Public Function WithVolumeUsd(usd As Double) As TestCaseBuilder
+        _tc.Indicators.CurrentVolumeUSD = usd
+        Return Me
+    End Function
+
+    Public Function WithVwap(vwap As Double, devPct As Double, candles As Integer) As TestCaseBuilder
+        _tc.Indicators.VWAP = vwap
+        _tc.Indicators.VWAPDevPct = devPct
+        _tc.Indicators.VWAPSessionCandles = candles
+        _tc.Indicators.VWAPSigma1Upper = vwap + 100
+        _tc.Indicators.VWAPSigma1Lower = vwap - 100
+        _tc.Indicators.VWAPSigma2Upper = vwap + 200
+        _tc.Indicators.VWAPSigma2Lower = vwap - 200
+        Return Me
+    End Function
+
+    Public Function WithBbw(bbw As Double, squeezeStatus As String,
+                             ttmHist As Double, ttmDir As String,
+                             ttmSignal As String) As TestCaseBuilder
+        _tc.Indicators.BBW = bbw
+        _tc.Indicators.SqueezeStatus = squeezeStatus
+        _tc.Indicators.TTMHistogram = ttmHist
+        _tc.Indicators.TTMDirection = ttmDir
+        _tc.Indicators.TTMSignal = ttmSignal
+        Return Me
+    End Function
+
+    Public Function WithEmaRibbon(ema9 As Double, ema21 As Double, ema50 As Double,
+                                   alignment As String,
+                                   ema200 As Double, priceVs As String) As TestCaseBuilder
+        _tc.Indicators.EMA9 = ema9
+        _tc.Indicators.EMA21 = ema21
+        _tc.Indicators.EMA50 = ema50
+        _tc.Indicators.EMAAlignment = alignment
+        _tc.Indicators.EMA200_5m = ema200
+        _tc.Indicators.PriceVsEMA200 = priceVs
+        Return Me
+    End Function
+
+    Public Function WithDonchian(upper As Double, lower As Double, signal As String) As TestCaseBuilder
+        _tc.Indicators.DonchianUpper = upper
+        _tc.Indicators.DonchianLower = lower
+        _tc.Indicators.DonchianSignal = signal
+        Return Me
+    End Function
+
+    Public Function WithObv(trend As String, divergence As String) As TestCaseBuilder
+        _tc.Indicators.OBVTrend = trend
+        _tc.Indicators.OBVDivergence = divergence
+        Return Me
+    End Function
+
+    Public Function WithVpfr(poc As Double, signal As String,
+                              hvnNearPoc As Boolean,
+                              vah As Double, vaLow As Double, areaSignal As String) As TestCaseBuilder
+        _tc.Indicators.VPFRPoc = poc
+        _tc.Indicators.VPFRSignal = signal
+        _tc.Indicators.VPFRHVNearPoc = hvnNearPoc
+        _tc.Indicators.VPFRVah = vah
+        _tc.Indicators.VPFRVal = vaLow
+        _tc.Indicators.VPFRValueAreaSignal = areaSignal
+        Return Me
+    End Function
+
+    Public Function WithVpfrWalls(hvnAbove As Double, hvnBelow As Double,
+                                   lvnAbove As Double, lvnBelow As Double) As TestCaseBuilder
+        _tc.Indicators.VPFRNearestHvnAbove = hvnAbove
+        _tc.Indicators.VPFRNearestHvnBelow = hvnBelow
+        _tc.Indicators.VPFRNearestLvnAbove = lvnAbove
+        _tc.Indicators.VPFRNearestLvnBelow = lvnBelow
+        Return Me
+    End Function
+
+    Public Function WithTrendStructure(tsKind As TrendStructure,
+                                        olderHigh As Double, newerHigh As Double,
+                                        olderLow As Double, newerLow As Double) As TestCaseBuilder
+        _tc.Indicators.TrendStructure = tsKind
+        _tc.Indicators.LastTwoHighs5m = (olderHigh, newerHigh)
+        _tc.Indicators.LastTwoLows5m  = (olderLow, newerLow)
+        Return Me
+    End Function
+
+    Public Function WithBestPivot(price As Double, ratio As Double, isHigh As Boolean) As TestCaseBuilder
+        _tc.Indicators.BestPivotByVolume5m = price
+        _tc.Indicators.BestPivotVolumeRatio5m = ratio
+        _tc.Indicators.BestPivotIsHigh5m = isHigh
+        Return Me
+    End Function
+
+    Public Function WithOpenInterest(oi As Double, d15m As Double, d60m As Double, signal As String) As TestCaseBuilder
+        _tc.Indicators.OI_Current = oi
+        _tc.Indicators.OIChange15m = d15m
+        _tc.Indicators.OIChange60m = d60m
+        _tc.Indicators.OISignal = signal
+        Return Me
+    End Function
+
+    Public Function WithOfi(ratio As Double, signal As String, momentum As String,
+                             bidVol As Double, askVol As Double) As TestCaseBuilder
+        _tc.Indicators.OFIRatio = ratio
+        _tc.Indicators.OFISignal = signal
+        _tc.Indicators.OFIMomentum = momentum
+        _tc.Indicators.OFIBidVol = bidVol
+        _tc.Indicators.OFIAskVol = askVol
+        Return Me
+    End Function
+
+    Public Function WithSpread(bps As Double, status As String) As TestCaseBuilder
+        _tc.Indicators.SpreadBps = bps
+        _tc.Indicators.SpreadStatus = status
+        Return Me
+    End Function
+
+    Public Function WithCvd(value As Double, slope As String, divergence As String) As TestCaseBuilder
+        _tc.Indicators.CVDValue = value
+        _tc.Indicators.CVDSlope = slope
+        _tc.Indicators.CVDDivergence = divergence
+        Return Me
+    End Function
+
+    Public Function WithTfi(value As Double, signal As String) As TestCaseBuilder
+        _tc.Indicators.TFIValue = value
+        _tc.Indicators.TFISignal = signal
+        Return Me
+    End Function
+
+    Public Function WithMicroCvd(early As Double, mid As Double, late As Double,
+                                  momentum As String, signal As String) As TestCaseBuilder
+        _tc.Indicators.MicroCVDEarly = early
+        _tc.Indicators.MicroCVDMid = mid
+        _tc.Indicators.MicroCVDLate = late
+        _tc.Indicators.MicroCVDMomentum = momentum
+        _tc.Indicators.MicroCVDSignal = signal
+        Return Me
+    End Function
+
+    Public Function WithLiquidations(longSize As Double, shortSize As Double, signal As String) As TestCaseBuilder
+        _tc.Indicators.LiqLongSize = longSize
+        _tc.Indicators.LiqShortSize = shortSize
+        _tc.Indicators.LiqSignal = signal
+        Return Me
+    End Function
+
+    Public Function WithMtfDetail(trend As String, adx As Double, emaAlign As String) As TestCaseBuilder
+        _tc.Indicators.MTF15mTrend = trend
+        _tc.Indicators.MTF15mADX = adx
+        _tc.Indicators.MTF15mEMAAlignment = emaAlign
+        Return Me
+    End Function
+
+    Public Function WithFunding(rate As Double, bias As String, momentum As String) As TestCaseBuilder
+        _tc.Indicators.FundingRate = rate
+        _tc.Indicators.FundingBias = bias
+        _tc.Indicators.FundingMomentum = momentum
+        Return Me
+    End Function
+
+    Public Function WithNormsLive(isLive As Boolean) As TestCaseBuilder
+        _tc.Norms.IsLive = isLive
+        Return Me
+    End Function
+
+    Public Function WithVwapWarmup(warmupCandles As Integer) As TestCaseBuilder
+        _tc.VwapWarmup = warmupCandles
         Return Me
     End Function
 
