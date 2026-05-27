@@ -516,8 +516,45 @@ Public Class TestCaseBuilder
         v.KellyContracts = 0
         v.KellyRiskUsd = 0.0
         v.Timestamp = New DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc)
+
+        ' Populate SignalBreakdown with the canonical label set the scoring
+        ' engine emits per run. Without this, the section header + footer
+        ' render but zero data rows do — parity passes vacuously and the
+        ' For Each item loop in both renderers is never exercised. Labels
+        ' and emission order mirror Core/ScoringEngine_Calculate_Scoring.vb
+        ' (lines 637-757) and the MTF Gate row appended by
+        ' ScoringEngine_Calculate_Verdict.vb:82. Hit booleans default to
+        ' False — sentinel cases override via WithSignalRow() when they
+        ' want a specific signal to fire. Note text defaults to "—" so
+        ' the column lays out identically to a production run.
+        AppendNeutralSignalRow(v, "ROC(9)")
+        AppendNeutralSignalRow(v, "RSI(9)")
+        AppendNeutralSignalRow(v, "DMI +/-DI")
+        AppendNeutralSignalRow(v, "ADX>22")
+        AppendNeutralSignalRow(v, "Volume")
+        AppendNeutralSignalRow(v, "VWAP")
+        AppendNeutralSignalRow(v, "BBW/TTM")
+        AppendNeutralSignalRow(v, "EMA 9/21/50")
+        AppendNeutralSignalRow(v, "Funding (info)")
+        AppendNeutralSignalRow(v, "OI Delta")
+        AppendNeutralSignalRow(v, "OFI")
+        AppendNeutralSignalRow(v, "CVD")
+        AppendNeutralSignalRow(v, "TFI")
+        AppendNeutralSignalRow(v, "MicroCVD")
+        AppendNeutralSignalRow(v, "Liq Penalty")
+        AppendNeutralSignalRow(v, "Spread")
+        AppendNeutralSignalRow(v, "5m EMA(200)")
+        AppendNeutralSignalRow(v, "Donchian(20)")
+        AppendNeutralSignalRow(v, "OBV")
+        AppendNeutralSignalRow(v, "VPFR-lite")
+        AppendNeutralSignalRow(v, "MTF Gate (15m)")
+
         Return v
     End Function
+
+    Private Shared Sub AppendNeutralSignalRow(v As VerdictResult, label As String)
+        v.SignalBreakdown.Add(New SignalBreakdownItem(label, False, False, "—"))
+    End Sub
 
     Public Shared Function NeutralNorms() As DynamicNorms
         Dim n As New DynamicNorms()
