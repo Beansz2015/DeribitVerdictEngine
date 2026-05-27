@@ -905,7 +905,11 @@ Public Class TestCaseBuilder
         v.MaxScore = 18
         v.Verdict = "NO TRADE"
         v.Confidence = "LOW"
-        v.HoldStatus = ""
+        ' HoldStatus default matches the production "no open position" sentinel
+        ' so RenderOutputHeader's gate (line 153) suppresses the HOLD / EXIT
+        ' line by default. Only cases that explicitly call WithHoldStatus(...)
+        ' emit the line. Spec-author B6 directive — see report-back §3.1.
+        v.HoldStatus = "N/A -- no open position"
         v.VerdictContext = "CONFIRMED"
         v.OiCvdOutcome = "NONE"
         v.AdjustedLongTarget = 0.0
