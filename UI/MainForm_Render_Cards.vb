@@ -1493,23 +1493,47 @@ Partial Public Class MainForm
         stack.Controls.Add(BuildPlainSectionHeader("VOLUME PROFILE"))
 
         ' Price-level rows, top-to-bottom: VAH → HVN↑ → LVN↑ → POC → LVN↓ →
-        ' HVN↓ → VAL. LVN/HVN rows only render when their value > 0.
-        AddLevelRow(stack, "VAH",  r.VPFRVah,             Theme.ACC_WARN, bold:=False)
-        If r.VPFRNearestHvnAbove > 0 Then AddLevelRow(stack, "HVN↑", r.VPFRNearestHvnAbove, Theme.ACC_INFO, bold:=False)
-        If r.VPFRNearestLvnAbove > 0 Then AddLevelRow(stack, "LVN↑", r.VPFRNearestLvnAbove, Theme.FG_TERTIARY, bold:=False)
-        AddLevelRow(stack, "POC", r.VPFRPoc, Theme.ACC_WARN, bold:=True,
+        ' HVN↓ → VAL. All 7 rows render unconditionally — AddLevelRow shows
+        ' "—" for value ≤ 0.
+        ' Q4b (P5-test gap-fix): removed the >0 guards on HVN↑/LVN↑/LVN↓/HVN↓
+        ' so the wall rows render in consistent vertical positions even when
+        ' the level is absent. Mirrors the snapshot's "HVN walls: Above:X
+        ' Below:Y | LVN: ^— v—" semantic (always two HVN + two LVN walls,
+        ' with placeholder when missing) and gives the trader a steady scan
+        ' rhythm across cases.
+        ' Q4a (P5-test gap-fix): HVN@POC=NO is intentionally omitted from the
+        ' POC suffix (the "(HVN@POC)" tag only renders when r.VPFRHVNearPoc
+        ' is true). Rationale: the NEAR_HVN_SUPPORT / NEAR_HVN_RESIST sub-
+        ' label below already encodes the HVN-proximity signal; an explicit
+        ' "NO" tag on POC adds noise without information. Documented per
+        ' spec §8.1 decision.
+        AddLevelRow(stack, "VAH",  r.VPFRVah,             Theme.ACC_WARN,    bold:=False)
+        AddLevelRow(stack, "HVN↑", r.VPFRNearestHvnAbove, Theme.ACC_INFO,    bold:=False)
+        AddLevelRow(stack, "LVN↑", r.VPFRNearestLvnAbove, Theme.FG_TERTIARY, bold:=False)
+        AddLevelRow(stack, "POC",  r.VPFRPoc,             Theme.ACC_WARN,    bold:=True,
                     suffix:=If(r.VPFRHVNearPoc, "  (HVN@POC)", ""))
-        If r.VPFRNearestLvnBelow > 0 Then AddLevelRow(stack, "LVN↓", r.VPFRNearestLvnBelow, Theme.FG_TERTIARY, bold:=False)
-        If r.VPFRNearestHvnBelow > 0 Then AddLevelRow(stack, "HVN↓", r.VPFRNearestHvnBelow, Theme.ACC_INFO, bold:=False)
-        AddLevelRow(stack, "VAL",  r.VPFRVal,             Theme.ACC_WARN, bold:=False)
+        AddLevelRow(stack, "LVN↓", r.VPFRNearestLvnBelow, Theme.FG_TERTIARY, bold:=False)
+        AddLevelRow(stack, "HVN↓", r.VPFRNearestHvnBelow, Theme.ACC_INFO,    bold:=False)
+        AddLevelRow(stack, "VAL",  r.VPFRVal,             Theme.ACC_WARN,    bold:=False)
 
-        ' GAP-62: VPFR signal sub-label.
+        ' GAP-62 + C5a (P5-test gap-fix): VPFR signal sub-label with
+        ' G7-capitalised text ("near hvn support" → "Near HVN support") and
+        ' directional colouring (HVN_SUPPORT / LVN_BULL → green;
+        ' HVN_RESIST / LVN_BEAR → red; neutral → FG_PRIMARY).
         Dim vpfrSig As String = If(r.VPFRSignal, "")
         If vpfrSig.Length > 0 Then
-            stack.Controls.Add(BuildSubLabel(vpfrSig.Replace("_"c, " "c).ToLowerInvariant(), Theme.FG_TERTIARY))
+            Dim vpfrColour As Color = Theme.FG_PRIMARY
+            Select Case vpfrSig.ToUpperInvariant()
+                Case "NEAR_HVN_SUPPORT", "IN_LVN_BULL" : vpfrColour = Theme.ACC_STRONG_LONG
+                Case "NEAR_HVN_RESIST",  "IN_LVN_BEAR" : vpfrColour = Theme.ACC_SHORT
+                Case Else                              : vpfrColour = Theme.FG_PRIMARY
+            End Select
+            stack.Controls.Add(BuildSubLabel(CapitalizeVpfrLabel(vpfrSig), vpfrColour))
         End If
 
-        ' GAP-64: value-area signal sub-label with semantic colour.
+        ' GAP-64 + C5b (P5-test gap-fix): value-area signal sub-label.
+        ' G7-capitalised text ("inside va" → "Inside VA"). No colour change
+        ' from the existing semantic mapping (ABOVE_VAH green, BELOW_VAL red).
         Dim vaSig As String = If(r.VPFRValueAreaSignal, "")
         If vaSig.Length > 0 Then
             Dim vaColour As Color = Theme.FG_TERTIARY
@@ -1518,7 +1542,7 @@ Partial Public Class MainForm
                 Case "BELOW_VAL" : vaColour = Theme.ACC_SHORT
                 Case Else        : vaColour = Theme.FG_TERTIARY
             End Select
-            stack.Controls.Add(BuildSubLabel(vaSig.Replace("_"c, " "c).ToLowerInvariant(), vaColour))
+            stack.Controls.Add(BuildSubLabel(CapitalizeVpfrLabel(vaSig), vaColour))
         End If
 
         ' --- VPFR mini histogram (Spec B — VolumeHistogramMini P3 control) -----
@@ -1659,6 +1683,34 @@ Partial Public Class MainForm
         End If
         parent.Controls.Add(row)
     End Sub
+
+    ''' <summary>
+    ''' C5a / C5b (P5-test gap-fix): convert an engine VPFR signal token
+    ''' ("NEAR_HVN_SUPPORT", "INSIDE_VA", ...) into a G7-capitalised display
+    ''' string ("Near HVN support", "Inside VA"). Acronyms (HVN, LVN, VA,
+    ''' VAH, VAL, POC) stay all-caps regardless of position; the first
+    ''' non-acronym word gets its leading char capitalised; other non-
+    ''' acronym words stay lowercase.
+    ''' </summary>
+    Private Shared Function CapitalizeVpfrLabel(raw As String) As String
+        If String.IsNullOrEmpty(raw) Then Return ""
+        Dim words = raw.Replace("_"c, " "c).Split(" "c)
+        For i As Integer = 0 To words.Length - 1
+            Dim w As String = words(i)
+            If w.Length = 0 Then Continue For
+            Select Case w.ToUpperInvariant()
+                Case "HVN", "LVN", "VA", "VAH", "VAL", "POC"
+                    words(i) = w.ToUpperInvariant()
+                Case Else
+                    If i = 0 Then
+                        words(i) = Char.ToUpper(w(0)) & w.Substring(1).ToLowerInvariant()
+                    Else
+                        words(i) = w.ToLowerInvariant()
+                    End If
+            End Select
+        Next
+        Return String.Join(" ", words)
+    End Function
 
     ''' <summary>Small dim sub-label, used below VOLUME PROFILE levels.</summary>
     Private Shared Function BuildSubLabel(text As String, colour As Color) As Label
