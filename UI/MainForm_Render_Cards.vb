@@ -1857,53 +1857,48 @@ Partial Public Class MainForm
 
         outer.Controls.Add(BuildPlainSectionHeader("INDICATOR DETAILS"), 0, 0)
 
+        ' C3a + C3b (P5-test gap-fix commit 2): paired-row TLP layout.
+        ' Each grid row holds the LEFT sub-section in col 0 and the matching
+        ' RIGHT sub-section in col 1. RowStyle.AutoSize sets the row height to
+        ' max(left, right) preferred height — equal widths within each column
+        ' (col 0 and col 1 are 50/50), header L/R alignment per row, and a
+        ' gap below the shorter sub-section per trader's "right follows left
+        ' as priority" rule.
         Dim grid As New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 2, .RowCount = 1,
+            .ColumnCount = 2, .RowCount = 6,
             .BackColor = Color.Transparent,
             .Margin = New Padding(0, 4, 0, 0), .Padding = New Padding(0)
         }
         grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
         grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
-        grid.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        For i = 0 To 5
+            grid.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        Next
 
-        Dim leftCol  As FlowLayoutPanel = NewIndicatorDetailsColumn(rightSide:=False)
-        Dim rightCol As FlowLayoutPanel = NewIndicatorDetailsColumn(rightSide:=True)
-        grid.Controls.Add(leftCol,  0, 0)
-        grid.Controls.Add(rightCol, 1, 0)
-
-        ' Left column.
-        BuildGroupNorms(leftCol, norms, r)
-        BuildGroupVwap(leftCol, r, cfg)
-        BuildGroupEmaRibbon(leftCol, r)
-        BuildGroupBbwTtm(leftCol, r)
-        BuildGroupVolume(leftCol, r)
-        BuildGroupTrendStructure(leftCol, r)
-
-        ' Right column.
-        BuildGroupRegime5m(rightCol, r)
-        BuildGroupMtfGate(rightCol, r)
-        BuildGroupFunding(rightCol, r, cfg)
-        BuildGroupOpenInterest(rightCol, r)
-        BuildGroupMicroCvd(rightCol, r)
-        BuildGroupLiquidations(rightCol, r)
+        ' Row 0: NORMS    | REGIME 5m
+        BuildGroupNorms(grid, 0, 0, norms, r)
+        BuildGroupRegime5m(grid, 0, 1, r)
+        ' Row 1: VWAP     | MTF GATE
+        BuildGroupVwap(grid, 1, 0, r, cfg)
+        BuildGroupMtfGate(grid, 1, 1, r)
+        ' Row 2: EMA RIBBON | FUNDING
+        BuildGroupEmaRibbon(grid, 2, 0, r)
+        BuildGroupFunding(grid, 2, 1, r, cfg)
+        ' Row 3: BBW/TTM  | OPEN INTEREST
+        BuildGroupBbwTtm(grid, 3, 0, r)
+        BuildGroupOpenInterest(grid, 3, 1, r)
+        ' Row 4: VOLUME   | MICROCVD
+        BuildGroupVolume(grid, 4, 0, r)
+        BuildGroupMicroCvd(grid, 4, 1, r)
+        ' Row 5: TREND STR | LIQUIDATIONS
+        BuildGroupTrendStructure(grid, 5, 0, r)
+        BuildGroupLiquidations(grid, 5, 1, r)
 
         outer.Controls.Add(grid, 0, 1)
         _cardIndicatorDetails.Controls.Add(outer)
         _cardIndicatorDetails.ResumeLayout(True)
     End Sub
-
-    Private Shared Function NewIndicatorDetailsColumn(rightSide As Boolean) As FlowLayoutPanel
-        Return New FlowLayoutPanel() With {
-            .Dock = DockStyle.Fill,
-            .FlowDirection = FlowDirection.TopDown,
-            .WrapContents = False,
-            .AutoScroll = False,
-            .BackColor = Color.Transparent,
-            .Margin = If(rightSide, New Padding(4, 0, 0, 0), New Padding(0, 0, 4, 0)),
-            .Padding = New Padding(0)
-        }
-    End Function
 
     ''' <summary>
     ''' Inline replacement for SectionGroup — coloured title label above a
@@ -1911,18 +1906,26 @@ Partial Public Class MainForm
     ''' doesn't expose a coloured-title API; this composition lets the
     ''' regime / MTF / OI / MicroCVD / Liq groups tint their title text to
     ''' match the regime tag.
+    ''' Host is a TableLayoutPanel docked Top with AutoSize so the body's
+    ''' bordered box stretches to the parent column's full width (C3a equal
+    ''' widths) and the host's height grows from content (C3b: row height
+    ''' becomes max(left, right)).
     ''' </summary>
     Private Shared Function BuildGroupInline(title As String,
-                                             titleColour As Color) As (host As FlowLayoutPanel, body As FlowLayoutPanel)
-        Dim host As New FlowLayoutPanel() With {
+                                             titleColour As Color) As (host As TableLayoutPanel, body As FlowLayoutPanel)
+        Dim host As New TableLayoutPanel() With {
+            .Dock = DockStyle.Top,
             .AutoSize = True,
             .AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            .FlowDirection = FlowDirection.TopDown,
-            .WrapContents = False,
+            .ColumnCount = 1, .RowCount = 2,
             .BackColor = Color.Transparent,
             .Margin = New Padding(0, 0, 0, 6),
             .Padding = New Padding(0)
         }
+        host.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        host.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        host.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+
         Dim titleLbl = New Label() With {
             .AutoSize = True,
             .Text = title,
@@ -1931,9 +1934,10 @@ Partial Public Class MainForm
             .BackColor = Color.Transparent,
             .Margin = New Padding(2, 0, 0, 2)
         }
-        host.Controls.Add(titleLbl)
+        host.Controls.Add(titleLbl, 0, 0)
 
         Dim body As New FlowLayoutPanel() With {
+            .Dock = DockStyle.Fill,
             .AutoSize = True,
             .AutoSizeMode = AutoSizeMode.GrowAndShrink,
             .FlowDirection = FlowDirection.TopDown,
@@ -1943,7 +1947,7 @@ Partial Public Class MainForm
             .Margin = New Padding(0),
             .Padding = New Padding(8, 6, 8, 6)
         }
-        host.Controls.Add(body)
+        host.Controls.Add(body, 0, 1)
         Return (host, body)
     End Function
 
@@ -1976,19 +1980,23 @@ Partial Public Class MainForm
 
     ' --- LEFT COLUMN groups ---
 
-    Private Shared Sub BuildGroupNorms(parent As FlowLayoutPanel, norms As DynamicNorms, r As IndicatorResults)
+    Private Shared Sub BuildGroupNorms(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                       norms As DynamicNorms, r As IndicatorResults)
         Dim modeTag As String = If(norms.IsLive, "[LIVE]", "[STATIC FALLBACK]")
         Dim modeColour As Color = If(norms.IsLive, Theme.ACC_STRONG_LONG, Theme.ACC_WARN)
-        Dim g = BuildGroupInline($"NORMS  {modeTag}", modeColour)
-        AddKv(g.body, "ATR scale:",   $"{norms.ATRScaleFactor:F2}×")
-        AddKv(g.body, "",             $"(ATR {r.ATR:F2}  ref {norms.ATRRef:F2})", indent:=True)
-        AddKv(g.body, "Vol H/M:",     $"{norms.VolHighThreshold:F2}×  /  {norms.VolMidThreshold:F2}×")
-        AddKv(g.body, "Vol mean/σ:",  $"{norms.VolMean:F4} BTC  /  σ {norms.VolStdDev:F4}")
+        ' C3c.i: section header "NORMS" → "DYNAMIC NORMS" per G5 (full name from legacy).
+        Dim g = BuildGroupInline($"DYNAMIC NORMS  {modeTag}", modeColour)
+        ' C3c.iii: ATR scale collapsed to single labelled row per G3 ("=" pairs, "|" between).
+        AddKv(g.body, "ATR scale:",    $"{norms.ATRScaleFactor:F2}x  (ATR={r.ATR:F2} | ref={norms.ATRRef:F2})")
+        ' C3c.ii: Vol H/M reformatted per G3.
+        AddKv(g.body, "Vol threshold:", $"H={norms.VolHighThreshold:F2}x | M={norms.VolMidThreshold:F2}x")
+        AddKv(g.body, "Vol mean/σ:",   $"{norms.VolMean:F4} BTC  /  σ {norms.VolStdDev:F4}")
         AddKv(g.body, "VWAP dev thr:", $"±{norms.VWAPDevThreshold:F2}%")
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupVwap(parent As FlowLayoutPanel, r As IndicatorResults, cfg As EngineSettings)
+    Private Shared Sub BuildGroupVwap(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                      r As IndicatorResults, cfg As EngineSettings)
         Dim warmupTag As String = ""
         If r.VWAPSessionCandles < cfg.Indicators.VWAP.WarmupCandles Then warmupTag = "  [WARMUP]"
 
@@ -2009,10 +2017,11 @@ Partial Public Class MainForm
         AddKv(g.body, "Candles:", r.VWAPSessionCandles.ToString())
         AddKv(g.body, "σ1 band:", $"[{r.VWAPSigma1Lower:F1},  {r.VWAPSigma1Upper:F1}]")
         AddKv(g.body, "σ2 band:", $"[{r.VWAPSigma2Lower:F1},  {r.VWAPSigma2Upper:F1}]")
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupEmaRibbon(parent As FlowLayoutPanel, r As IndicatorResults)
+    Private Shared Sub BuildGroupEmaRibbon(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                           r As IndicatorResults)
         Dim alignColour As Color
         Select Case If(r.EMAAlignment, "")
             Case "BULL"  : alignColour = Theme.ACC_STRONG_LONG
@@ -2020,7 +2029,8 @@ Partial Public Class MainForm
             Case "MIXED" : alignColour = Theme.ACC_WARN
             Case Else    : alignColour = Theme.FG_TERTIARY
         End Select
-        Dim g = BuildGroupInline($"EMA RIBBON  ·  {r.EMAAlignment}", alignColour)
+        ' C3f: bracket the (1m) timeframe per G4.
+        Dim g = BuildGroupInline($"EMA RIBBON (1m)  ·  {r.EMAAlignment}", alignColour)
         AddKv(g.body, "9:",        $"{r.EMA9:F1}")
         AddKv(g.body, "21:",       $"{r.EMA21:F1}")
         AddKv(g.body, "50:",       $"{r.EMA50:F1}")
@@ -2028,28 +2038,32 @@ Partial Public Class MainForm
         Dim priceColour As Color = If(r.PriceVsEMA200 = "ABOVE", Theme.ACC_STRONG_LONG,
                                    If(r.PriceVsEMA200 = "BELOW", Theme.ACC_SHORT, Theme.FG_TERTIARY))
         AddKv(g.body, "200 (5m):", $"{r.EMA200_5m:F1}" & priceTag, valueColour:=priceColour)
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupBbwTtm(parent As FlowLayoutPanel, r As IndicatorResults)
-        Dim g = BuildGroupInline("BBW / TTM", Theme.FG_TERTIARY)
+    Private Shared Sub BuildGroupBbwTtm(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                        r As IndicatorResults)
+        ' C3e: "BBW / TTM" → "BBW / TTM SQUEEZE" per G5 (full name from legacy).
+        Dim g = BuildGroupInline("BBW / TTM SQUEEZE", Theme.FG_TERTIARY)
         AddKv(g.body, "BBW:",        $"{r.BBW:F3}")
         AddKv(g.body, "Squeeze:",    If(r.SqueezeStatus, "—"))
         AddKv(g.body, "TTM hist:",   String.Format("{0:+0.0;-0.0;0.0}", r.TTMHistogram))
         AddKv(g.body, "TTM dir:",    If(r.TTMDirection, "—"))
         AddKv(g.body, "TTM signal:", If(r.TTMSignal, "—"))
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupVolume(parent As FlowLayoutPanel, r As IndicatorResults)
+    Private Shared Sub BuildGroupVolume(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                        r As IndicatorResults)
         Dim g = BuildGroupInline("VOLUME", Theme.FG_TERTIARY)
         AddKv(g.body, "Current:", $"{r.CurrentVolume:F4} BTC  =  {FormatUsd(r.CurrentVolumeUSD)}")
         AddKv(g.body, "vs SMA9:", $"{r.VolumeRatio:F2}×")
         AddKv(g.body, "SMA9:",    $"{r.VolumeSMA9:F4} BTC")
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupTrendStructure(parent As FlowLayoutPanel, r As IndicatorResults)
+    Private Shared Sub BuildGroupTrendStructure(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                                r As IndicatorResults)
         Dim tsLabel As String = r.TrendStructure.ToString()
         Dim tsColour As Color
         Select Case r.TrendStructure
@@ -2070,33 +2084,38 @@ Partial Public Class MainForm
         Else
             AddKv(g.body, "Status:", "insufficient pivot data", valueColour:=Theme.FG_QUATERNARY)
         End If
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
     ' --- RIGHT COLUMN groups ---
 
-    Private Shared Sub BuildGroupRegime5m(parent As FlowLayoutPanel, r As IndicatorResults)
+    Private Shared Sub BuildGroupRegime5m(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                          r As IndicatorResults)
         Dim regColour As Color = ResolveRegimeColour(r.Regime)
-        Dim g = BuildGroupInline($"REGIME 5m  ·  {If(r.Regime, "—")}", regColour)
+        ' C3d: bracket the (5m) timeframe per G4.
+        Dim g = BuildGroupInline($"REGIME (5m)  ·  {If(r.Regime, "—")}", regColour)
         AddKv(g.body, "ADX:", $"{r.ADX:F1}")
         AddKv(g.body, "+DI:", $"{r.PlusDI:F1}")
         AddKv(g.body, "−DI:", $"{r.MinusDI:F1}")
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupMtfGate(parent As FlowLayoutPanel, r As IndicatorResults)
+    Private Shared Sub BuildGroupMtfGate(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                         r As IndicatorResults)
         Dim gateLabel As String = If(r.MTFGatePass, "PASS", "BLOCK")
         Dim gateColour As Color = If(r.MTFGatePass, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
-        Dim g = BuildGroupInline($"MTF GATE 15m  ·  {gateLabel}", gateColour)
+        ' C3g: bracket the (15m) timeframe per G4 + lowercase 'm'.
+        Dim g = BuildGroupInline($"MTF GATE (15m)  ·  {gateLabel}", gateColour)
         AddKv(g.body, "15m Trend:", If(r.MTF15mTrend, "—"))
         AddKv(g.body, "15m ADX:",   $"{r.MTF15mADX:F1}")
         AddKv(g.body, "15m EMA:",   If(r.MTF15mEMAAlignment, "—"))
         ' Reason text — wrap if long so it doesn't overflow the column.
         AddKv(g.body, "Reason:",    If(r.MTFGateReason, "—"), wrap:=True)
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupFunding(parent As FlowLayoutPanel, r As IndicatorResults, cfg As EngineSettings)
+    Private Shared Sub BuildGroupFunding(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                         r As IndicatorResults, cfg As EngineSettings)
         Dim g = BuildGroupInline("FUNDING", Theme.FG_TERTIARY)
         ' GAP-30: v30 negative-zero clamp at display.
         Dim ratePct As Double = If(Math.Abs(r.FundingRate) < 0.00000001, 0.0, r.FundingRate * 100.0)
@@ -2104,12 +2123,14 @@ Partial Public Class MainForm
         AddKv(g.body, "Momentum:", If(r.FundingMomentum, "—"))
         Dim cfgFm = cfg.Indicators.Funding
         Dim enFlag As String = If(cfgFm.MomentumEnabled, "Y", "N")
-        Dim cfgStr As String = $"en:{enFlag}  soft:+{cfgFm.MomentumSoften}  amp:−{cfgFm.MomentumAmplify}"
+        ' C3h.i: reformat per G3 ("=" pairs, "|" between) + G5 (full names "Enabled" / "Soften" / "Amplify").
+        Dim cfgStr As String = $"Enabled={enFlag} | Soften=+{cfgFm.MomentumSoften} | Amplify=-{cfgFm.MomentumAmplify}"
         AddKv(g.body, "Config:",   cfgStr, valueColour:=Theme.FG_QUATERNARY)
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupOpenInterest(parent As FlowLayoutPanel, r As IndicatorResults)
+    Private Shared Sub BuildGroupOpenInterest(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                              r As IndicatorResults)
         Dim oiColour As Color
         Select Case If(r.OISignal, "").ToUpperInvariant()
             Case "NEW LONGS", "COVERING"     : oiColour = Theme.ACC_STRONG_LONG
@@ -2120,10 +2141,11 @@ Partial Public Class MainForm
         AddKv(g.body, "OI:",     $"{r.OI_Current:N0}")
         AddKv(g.body, "Δ 15m:",  String.Format("{0:+0.000;-0.000;0.000}%", r.OIChange15m))
         AddKv(g.body, "Δ 60m:",  String.Format("{0:+0.000;-0.000;0.000}%", r.OIChange60m))
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupMicroCvd(parent As FlowLayoutPanel, r As IndicatorResults)
+    Private Shared Sub BuildGroupMicroCvd(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                          r As IndicatorResults)
         Dim sig As String = If(r.MicroCVDSignal, "")
         Dim sigColour As Color
         Select Case sig.ToUpperInvariant()
@@ -2138,10 +2160,11 @@ Partial Public Class MainForm
         AddKv(g.body, "Mid:",      String.Format("{0:+0;-0;0}", r.MicroCVDMid))
         AddKv(g.body, "Late:",     String.Format("{0:+0;-0;0}", r.MicroCVDLate))
         AddKv(g.body, "Momentum:", If(r.MicroCVDMomentum, "—"))
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
-    Private Shared Sub BuildGroupLiquidations(parent As FlowLayoutPanel, r As IndicatorResults)
+    Private Shared Sub BuildGroupLiquidations(parent As TableLayoutPanel, row As Integer, col As Integer,
+                                              r As IndicatorResults)
         Dim liqColour As Color
         Select Case If(r.LiqSignal, "").ToUpperInvariant()
             Case "LONG LIQS"  : liqColour = Theme.ACC_SHORT      ' longs liquidating = bearish
@@ -2151,7 +2174,7 @@ Partial Public Class MainForm
         Dim g = BuildGroupInline($"LIQUIDATIONS  ·  {If(r.LiqSignal, "—")}", liqColour)
         AddKv(g.body, "Long size:",  $"{r.LiqLongSize:F0}")
         AddKv(g.body, "Short size:", $"{r.LiqShortSize:F0}")
-        parent.Controls.Add(g.host)
+        parent.Controls.Add(g.host, col, row)
     End Sub
 
     ' =======================================================================
