@@ -2295,6 +2295,13 @@ Partial Public Class MainForm
         grid.Controls.Add(rightCol, 1, 0)
         outer.Controls.Add(grid, 0, 2)
 
+        ' DESIGN NOTE (Q3l, P5-test gap-fix): MTF Gate (15m) is intentionally
+        ' absent from this card's SIGNAL BREAKDOWN table. MTF is a hard veto
+        ' (CLAUDE.md invariant) that forces NO TRADE on BLOCK; it does NOT
+        ' emit +1/-1 scoring hits. The snapshot retains an MTF breakdown row
+        ' for legacy parity, but the row's SC is always 0 ("—") by engine
+        ' design. MTF state is surfaced in the INDICATOR DETAILS card's own
+        ' MTF GATE (15m) sub-section instead.
         ' --- Left column: CORE + TIER 1 ---
         leftCol.Controls.Add(MakeTierLabel("CORE"))
         leftCol.Controls.Add(BuildRowRoc(r, items))
@@ -2505,7 +2512,10 @@ Partial Public Class MainForm
         If hasSubNote Then
             Dim subLbl = MakeBreakdownCell("↳ " & subNote,
                                            If(subNoteColour.IsEmpty, Theme.FG_QUATERNARY, subNoteColour))
-            subLbl.Font = Theme.FontMono(8.5F, FontStyle.Regular)
+            ' Q3m (P5-test gap-fix): bold so the sub-note reads as data, not
+            ' decoration (paired with the ACC_INFO → FG_SECONDARY colour bump
+            ' in the only caller, BuildRowSwingPivots).
+            subLbl.Font = Theme.FontMono(8.5F, FontStyle.Bold)
             row.Controls.Add(subLbl, 2, 1)
             row.SetColumnSpan(subLbl, 2)
         End If
@@ -2624,9 +2634,12 @@ Partial Public Class MainForm
         ' 30/70 overbought-oversold cuts, so raw thresholds disagree with
         ' the actual vote on a meaningful share of runs.
         Dim sd = StateFromHits(FindItem(items, "RSI(9)"))
-        Dim note As String = r.RSI.ToString("F1")
+        ' Q3f (P5-test gap-fix): label numbers per G2 — surface the comparison
+        ' against the 50 midline so the trader doesn't have to mentally compute it.
+        Dim midOp As String = If(r.RSI >= 50.0, ">", "<")
+        Dim note As String = $"{r.RSI:F1} {midOp} 50.0"
         If Not String.IsNullOrEmpty(r.RSIDivergence) AndAlso r.RSIDivergence <> "NONE" Then
-            note &= "  div:" & r.RSIDivergence.ToLower()
+            note &= " | div: " & r.RSIDivergence.ToLower()
         End If
         Return MakeSignalRow("RSI(9)", sd.state, sd.colour, note, ScForItem(items, "RSI(9)"))
     End Function
@@ -2654,9 +2667,14 @@ Partial Public Class MainForm
         ' the SC sum below; trying to recreate the directional decision
         ' from raw ADX / +DI / -DI fields produced NEUT-with-+1 contradictions.
         Dim sd = StateFromHits(FindItem(items, "DMI +/-DI"))
-        ' Legacy renders ADX at F1 (e.g. "ADX: 24.7"). F0 was rounding to "25".
-        Dim note As String = $"ADX {r.ADX:F1}"
+        ' C6 (P5-test gap-fix): expand NOTE to surface ADX + ±DI values per
+        ' G3 (= pairs, | between). Legacy renders all three at F1.
+        Dim note As String = $"ADX={r.ADX:F1} | +DI={r.PlusDI:F1} | -DI={r.MinusDI:F1}"
         ' Engine emits two items ("DMI +/-DI" and "ADX>{N}") — sum their SCs.
+        ' Q3g / Spec C: the clamp under-reports the true contribution when both
+        ' DMI and ADX fire (engine LongScore gets +2; card shows +1). The
+        ' per-item LongPoints/ShortPoints migration in Spec C is the
+        ' architectural fix; this row keeps the clamp until that ships.
         Dim sc As Integer = ScForItem(items, "DMI +/-DI") + ScForItemPrefix(items, "ADX>")
         If sc > 1 Then sc = 1
         If sc < -1 Then sc = -1
@@ -2675,8 +2693,9 @@ Partial Public Class MainForm
             state = "NORM"
             colour = Theme.FG_TERTIARY
         End If
-        ' Legacy renders the SMA-relative volume ratio at F2 (e.g. "1.58x").
-        Dim note As String = $"{r.VolumeRatio:F2}× {FormatUsdShort(r.CurrentVolumeUSD)}"
+        ' Q3a (P5-test gap-fix): three-segment NOTE per G3 (| between sets) +
+        ' explicit SMA label and BTC volume per trader request.
+        Dim note As String = $"{r.VolumeRatio:F2}x SMA | {FormatUsdShort(r.CurrentVolumeUSD)} | {r.CurrentVolume:F4} BTC"
         Return MakeSignalRow("Volume", state, colour, note, ScForItem(items, "Volume"))
     End Function
 
@@ -2727,29 +2746,52 @@ Partial Public Class MainForm
         ' r.SqueezeStatus alone misses the TTM histogram + directional gating
         ' the engine layers on top, producing NEUT-with-+1 contradictions.
         Dim sd = StateFromHits(FindItem(items, "BBW/TTM"))
-        Dim note As String = If(r.SqueezeStatus, "—").ToLower()
+        ' Q3i (P5-test gap-fix): surface squeeze + TTM signal per G6 (retain
+        ' label info from legacy).
+        Dim squeezeText As String = If(r.SqueezeStatus, "—").ToLower()
+        Dim ttmText As String = If(r.TTMSignal, "—")
+        Dim note As String = $"{squeezeText} | TTM={ttmText}"
         Return MakeSignalRow("BBW/TTM", sd.state, sd.colour, note, ScForItem(items, "BBW/TTM"))
     End Function
 
     Private Shared Function BuildRowEmaRibbon(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
         Dim state As String, colour As Color, note As String
+        ' Q3j (P5-test gap-fix): append "= {ALIGNMENT} alignment" so the
+        ' ribbon order's semantic meaning reads alongside the raw order
+        ' (per trader request + G6 retain legacy label info).
         Select Case If(r.EMAAlignment, "")
-            Case "BULL" : state = "BULL"  : colour = Theme.ACC_STRONG_LONG : note = "9>21>50"
-            Case "BEAR" : state = "BEAR"  : colour = Theme.ACC_SHORT       : note = "50>21>9"
-            Case Else   : state = "MIXED" : colour = Theme.ACC_WARN        : note = "mixed"
+            Case "BULL" : state = "BULL"  : colour = Theme.ACC_STRONG_LONG : note = "9>21>50 = BULL alignment"
+            Case "BEAR" : state = "BEAR"  : colour = Theme.ACC_SHORT       : note = "50>21>9 = BEAR alignment"
+            Case Else   : state = "MIXED" : colour = Theme.ACC_WARN        : note = "mixed alignment"
         End Select
         Return MakeSignalRow("EMA Ribbon", state, colour, note, ScForItem(items, "EMA 9/21/50"))
     End Function
 
     Private Shared Function BuildRowTrendStr(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
-        Dim state As String, colour As Color, note As String
+        Dim state As String, colour As Color
         Select Case r.TrendStructure
-            Case TrendStructure.UPTREND     : state = "UP"      : colour = Theme.ACC_STRONG_LONG       : note = "HH/HL"
-            Case TrendStructure.DOWNTREND   : state = "DOWN"    : colour = Theme.ACC_SHORT             : note = "LH/LL"
-            Case TrendStructure.EXPANSION   : state = "EXPAND"  : colour = Theme.ACC_WARN              : note = "HH/LL"
-            Case TrendStructure.CONTRACTION : state = "CONTR"   : colour = Color.FromArgb(80, 200, 210) : note = "LH/HL"
-            Case Else                       : state = "—"       : colour = Theme.FG_QUATERNARY        : note = "insuff."
+            Case TrendStructure.UPTREND     : state = "UP"      : colour = Theme.ACC_STRONG_LONG
+            Case TrendStructure.DOWNTREND   : state = "DOWN"    : colour = Theme.ACC_SHORT
+            Case TrendStructure.EXPANSION   : state = "EXPAND"  : colour = Theme.ACC_WARN
+            Case TrendStructure.CONTRACTION : state = "CONTR"   : colour = Color.FromArgb(80, 200, 210)
+            Case Else                       : state = "—"       : colour = Theme.FG_QUATERNARY
         End Select
+        ' Q3d (P5-test gap-fix): expand NOTE to surface raw pivot prices per
+        ' G6 (retain label info from legacy). Labels HH/HL/LH/LL derive from
+        ' the newer-vs-older comparison so they stay consistent with the
+        ' TrendStructure state above without hard-coding per-case strings.
+        Dim h = r.LastTwoHighs5m
+        Dim l = r.LastTwoLows5m
+        Dim note As String
+        If h.Newer > 0 AndAlso h.Older > 0 AndAlso l.Newer > 0 AndAlso l.Older > 0 Then
+            Dim hLabel As String = If(h.Newer > h.Older, "HH", "LH")
+            Dim hOp    As String = If(h.Newer > h.Older, ">",  "<")
+            Dim lLabel As String = If(l.Newer > l.Older, "HL", "LL")
+            Dim lOp    As String = If(l.Newer > l.Older, ">",  "<")
+            note = $"{hLabel} {h.Newer:F1}{hOp}{h.Older:F1} | {lLabel} {l.Newer:F1}{lOp}{l.Older:F1}"
+        Else
+            note = "insuff."
+        End If
         Return MakeSignalRow("Trend Str", state, colour, note, ScForItem(items, "Trend Structure"))
     End Function
 
@@ -2788,12 +2830,16 @@ Partial Public Class MainForm
 
     Private Shared Function BuildRowOiChange(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
         Dim state As String, colour As Color
+        ' C4c.i (P5-test gap-fix): NEW LO/SH → NW LNGS/SHRTS per trader
+        ' request + G8 symmetric (both long/short permutations updated together).
+        ' COVER and CAPIT stay as-is — they're distinct engine states, not part
+        ' of the "NEW xxx" family this rename touches.
         Select Case If(r.OISignal, "")
-            Case "NEW LONGS"   : state = "NEW LO" : colour = Theme.ACC_STRONG_LONG
-            Case "COVERING"    : state = "COVER"  : colour = Theme.ACC_STRONG_LONG
-            Case "NEW SHORTS"  : state = "NEW SH" : colour = Theme.ACC_SHORT
-            Case "CAPITULATION": state = "CAPIT"  : colour = Theme.ACC_SHORT
-            Case Else          : state = "NEUT"   : colour = Theme.FG_TERTIARY
+            Case "NEW LONGS"   : state = "NW LNGS"  : colour = Theme.ACC_STRONG_LONG
+            Case "COVERING"    : state = "COVER"    : colour = Theme.ACC_STRONG_LONG
+            Case "NEW SHORTS"  : state = "NW SHRTS" : colour = Theme.ACC_SHORT
+            Case "CAPITULATION": state = "CAPIT"    : colour = Theme.ACC_SHORT
+            Case Else          : state = "NEUT"     : colour = Theme.FG_TERTIARY
         End Select
         ' Legacy renders OI 15m delta at F3 (e.g. "0.003%"). F1 was rounding sub-percent
         ' deltas to "0.0%" — the percent change in OI is typically small and rounding
@@ -2861,12 +2907,14 @@ Partial Public Class MainForm
         ' Legacy renders CVD net at F0 raw (e.g. "Net:2133890"). Compressing
         ' to "/1000 k" with F1 lost the last 3 digits of precision. Switched
         ' to N0 with thousand separators — keeps full precision, readable.
-        Dim note As String = If(r.CVDValue >= 0,
-                                "+" & r.CVDValue.ToString("N0"),
-                                r.CVDValue.ToString("N0"))
-        If Not String.IsNullOrEmpty(r.CVDDivergence) AndAlso r.CVDDivergence <> "NONE" Then
-            note &= "  div:" & r.CVDDivergence.ToLower()
-        End If
+        Dim netText As String = If(r.CVDValue >= 0,
+                                   "+" & r.CVDValue.ToString("N0"),
+                                   r.CVDValue.ToString("N0"))
+        ' Q3e (P5-test gap-fix): always surface divergence symmetric with OBV
+        ' row above (previously suppressed when NONE — trader couldn't tell
+        ' whether the row "had no div" vs "the engine wasn't tracking div").
+        Dim divText As String = If(String.IsNullOrEmpty(r.CVDDivergence), "NONE", r.CVDDivergence)
+        Dim note As String = $"{netText} | div: {divText}"
         Return MakeSignalRow("CVD", state, colour, note, ScForItem(items, "CVD"))
     End Function
 
@@ -2905,7 +2953,9 @@ Partial Public Class MainForm
             Case "BELOW" : state = "BELOW" : colour = Theme.ACC_SHORT
             Case Else    : state = "—"     : colour = Theme.FG_TERTIARY
         End Select
-        Return MakeSignalRow("EMA200 5m", state, colour, "", ScForItem(items, "5m EMA(200)"))
+        ' C4d (P5-test gap-fix): label "EMA200 5m" → "EMA200 (5m)" per G4
+        ' (bracket timeframes).
+        Return MakeSignalRow("EMA200 (5m)", state, colour, "", ScForItem(items, "5m EMA(200)"))
     End Function
 
     ' --- TIER 3 ---
@@ -2918,21 +2968,27 @@ Partial Public Class MainForm
             Case Else                     : state = "NEUT"  : colour = Theme.FG_TERTIARY
         End Select
         ' Quartile derived inline from price position.
+        ' Q3b (P5-test gap-fix): append raw Upper/Lower prices per G6 (retain
+        ' label info from legacy).
+        ' C4a (P5-test gap-fix): row label "Donchian" → "Donchian(20)" per G4
+        ' (bracket parameters/timeframes).
         Dim note As String
         Dim range As Double = r.DonchianUpper - r.DonchianLower
         If range <= 0 Then
             note = "no range"
         Else
             Dim posPct As Double = (r.CurrentPrice - r.DonchianLower) / range
+            Dim zone As String
             If posPct >= 0.75 Then
-                note = "upper qtr"
+                zone = "upper qtr"
             ElseIf posPct <= 0.25 Then
-                note = "lower qtr"
+                zone = "lower qtr"
             Else
-                note = "mid"
+                zone = "mid"
             End If
+            note = $"{zone} | U={r.DonchianUpper:F1} | L={r.DonchianLower:F1}"
         End If
-        Return MakeSignalRow("Donchian", state, colour, note, ScForItem(items, "Donchian(20)"))
+        Return MakeSignalRow("Donchian(20)", state, colour, note, ScForItem(items, "Donchian(20)"))
     End Function
 
     Private Shared Function BuildRowObv(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
@@ -2942,16 +2998,23 @@ Partial Public Class MainForm
             Case "FALLING" : state = "BEAR" : colour = Theme.ACC_SHORT
             Case Else      : state = "FLAT" : colour = Theme.FG_TERTIARY
         End Select
-        Dim note As String
-        If Not String.IsNullOrEmpty(r.OBVDivergence) AndAlso r.OBVDivergence <> "NONE" Then
-            note = "div:" & r.OBVDivergence.ToLower()
-        Else
-            note = "no div"
-        End If
+        ' Q3c (P5-test gap-fix): surface slope (full name per G5) + divergence
+        ' always (symmetric with CVD row below). Format per G3 (| between sets).
+        Dim slopeText As String = If(String.IsNullOrEmpty(r.OBVTrend), "FLAT", r.OBVTrend)
+        Dim divText   As String = If(String.IsNullOrEmpty(r.OBVDivergence), "NONE", r.OBVDivergence)
+        Dim note As String = $"{slopeText} | div: {divText}"
         Return MakeSignalRow("OBV", state, colour, note, ScForItem(items, "OBV"))
     End Function
 
     Private Shared Function BuildRowVpfr(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        ' DESIGN NOTE (Q3k, P5-test gap-fix): the STATE pill encodes VPFR
+        ' indicator state (NEAR_HVN_SUPPORT → BULL pill etc.), NOT scoring
+        ' contribution. The SC column displays the scoring hit (±1/0); these
+        ' can disagree (pill = BULL, SC = 0/NEUTRAL) when the VPFR indicator
+        ' state is informational but didn't trigger the engine's +1/-1
+        ' emission. Both are correct. Spec C's per-item LongPoints/
+        ' ShortPoints migration makes SC more granular but does not change
+        ' the pill-vs-SC distinction.
         Dim sig As String = If(r.VPFRSignal, "")
         Dim state As String, colour As Color
         If sig = "NEAR_HVN_SUPPORT" OrElse sig = "IN_LVN_BULL" Then
@@ -2983,14 +3046,18 @@ Partial Public Class MainForm
         If r.BestPivotByVolume5m > 0 Then
             ' Legacy renders the best-volume pivot price at F1 (e.g. "77998.5").
             ' F0 was rounding away the half-tick.
-            subNote = String.Format("best vol: {0} @ {1:F1} ({2:F1}×)",
+            ' C4b (P5-test gap-fix): expand to full legacy form per G4 + G5.
+            subNote = String.Format("Best vol. pivot (5m): {0} @ {1:F1} (vol × {2:F1} vs avg. pivot)",
                                     If(r.BestPivotIsHigh5m, "HIGH", "LOW"),
                                     r.BestPivotByVolume5m, r.BestPivotVolumeRatio5m)
         End If
         ' Swing Pivots aren't a SignalBreakdownItem — non-voting display row.
+        ' Q3m (P5-test gap-fix): sub-note ForeColor ACC_INFO → FG_SECONDARY
+        ' so it reads as data rather than decoration. Font weight bump in
+        ' MakeSignalRow (Regular → Bold) for the same reason.
         Return MakeSignalRow("Swing Pivots", state, colour, note, CType(Nothing, Integer?),
                              subNote:=subNote,
-                             subNoteColour:=Theme.ACC_INFO)
+                             subNoteColour:=Theme.FG_SECONDARY)
     End Function
 
     ' -----------------------------------------------------------------------
