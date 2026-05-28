@@ -153,23 +153,26 @@ Partial Public Class MainForm
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
     Friend _lblLastPriceSession As Label
-    ' ATR card: sub-header + dual (long / short) zone rows + cap reason.
+    ' ATR card: sub-header + dual (long / short) zone rows. Bottom cap-reason
+    ' label removed in P5-test gap-fix commit 1 (C1b dedup) — the (label)
+    ' parenthetical is now appended inline to each row's CAPPED cell.
     Friend _atrSubHeader      As Label
     Friend _atrLongRow        As AtrRowControls
     Friend _atrShortRow       As AtrRowControls
-    Friend _atrCapReason      As Label
 
     ''' <summary>
     ''' Five-zone labels for one direction of the ATR ENTRY LEVELS card.
     ''' Mirrors StructuralCardControls but for the ATR row layout.
     ''' </summary>
     Friend Class AtrRowControls
-        Public Property DirLabel    As Label   ' "LONG" / "SHORT" prefix
-        Public Property StopValue   As Label
-        Public Property RRValue     As Label
-        Public Property EntryValue  As Label
-        Public Property CappedValue As Label
-        Public Property TargetValue As Label
+        Public Property DirLabel         As Label   ' "LONG" / "SHORT" prefix
+        Public Property StopValue        As Label   ' ATR stop price cell
+        Public Property StructStopValue  As Label   ' C1c: deeper structural stop (hidden when struct == atr or missing)
+        Public Property StopCellLayout   As TableLayoutPanel  ' C1c: holds StructStopValue + StopValue; width-ratio mutated at bind time
+        Public Property RRValue          As Label
+        Public Property EntryValue       As Label
+        Public Property CappedValue      As Label
+        Public Property TargetValue      As Label
     End Class
     Friend _structLongCtrls   As StructuralCardControls
     Friend _structShortCtrls  As StructuralCardControls

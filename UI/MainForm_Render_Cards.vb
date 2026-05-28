@@ -539,16 +539,19 @@ Partial Public Class MainForm
     ' ATR ENTRY LEVELS card — five horizontal zones
     ' -----------------------------------------------------------------------
     Private Sub InitAtrLevelsCard()
+        ' C1b (P5-test gap-fix): removed the separate bottom cap-reason row.
+        ' The (label) parenthetical is now appended inline to the CAPPED cell
+        ' within each direction's zone row, so the bottom label was always a
+        ' price + label duplicate of what the row already showed.
         Dim inner = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 5,
+            .ColumnCount = 1, .RowCount = 4,
             .BackColor = Color.Transparent
         }
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 18))   ' section header
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))   ' GAP-05 sub-header
         inner.RowStyles.Add(New RowStyle(SizeType.Percent, 50.0F)) ' LONG zone row
         inner.RowStyles.Add(New RowStyle(SizeType.Percent, 50.0F)) ' SHORT zone row
-        inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 14))   ' cap reason
         inner.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
         inner.Controls.Add(MakeSectionHeader("ATR ENTRY LEVELS"), 0, 0)
@@ -564,12 +567,6 @@ Partial Public Class MainForm
         _atrShortRow = BuildAtrZoneRow("SHORT", Theme.ACC_SHORT)
         inner.Controls.Add(_atrLongRow.DirLabel.Parent,  0, 2)
         inner.Controls.Add(_atrShortRow.DirLabel.Parent, 0, 3)
-
-        _atrCapReason = MakeValueLabel(Theme.FontMono(8.0F, FontStyle.Regular), Theme.ACC_WARN)
-        _atrCapReason.Dock = DockStyle.Fill
-        _atrCapReason.TextAlign = ContentAlignment.MiddleCenter
-        _atrCapReason.Text = ""
-        inner.Controls.Add(_atrCapReason, 0, 4)
 
         _cardAtrLevels.Controls.Add(inner)
     End Sub
@@ -588,11 +585,17 @@ Partial Public Class MainForm
         }
         ' Col 0 widened to 70 px (was 50) — "SHORT" at 11pt Bold Geist Mono
         ' was wrapping to "SHO / RT" at 50.
+        ' Column widths rebalanced for P5-test gap-fix commit 1:
+        '   STOP   widened from 22% → 24% (room for C1c side-by-side STRUCT|STOP)
+        '   R:R    widened from 12% → 16% (room for Q2 "(risk N / rwd N)" line)
+        '   ENTRY  trimmed   from 22% → 18%
+        '   CAPPED trimmed   from 22% → 20% (still fits "→ price (label)")
+        '   TARGET unchanged 22%
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 70))
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 12.0F))
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 24.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 16.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 18.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 20.0F))
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
         row.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
 
@@ -607,18 +610,39 @@ Partial Public Class MainForm
             .TextAlign = ContentAlignment.MiddleLeft,
             .Margin = New Padding(0)
         }
+
+        ' C1c: STOP cell is a 2-column sub-layout holding STRUCT + STOP side-by-side.
+        ' When struct is missing or equals atr, BindAtrRow collapses col 0 to 0%
+        ' so STOP renders full-width (visually identical to legacy single-cell).
+        ' When struct is deeper, BindAtrRow shows col 0 with STRUCT at the row's
+        ' value font and col 1 with STOP at a smaller font (per trader request).
+        r.StopCellLayout = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 2, .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        }
+        r.StopCellLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 0))
+        r.StopCellLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+
+        r.StructStopValue = MakeZoneLabel("STRUCT", Theme.ACC_SHORT)
+        r.StructStopValue.Visible = False
         r.StopValue   = MakeZoneLabel("STOP",   Theme.ACC_SHORT)
+        r.StopCellLayout.Controls.Add(r.StructStopValue, 0, 0)
+        r.StopCellLayout.Controls.Add(r.StopValue,       1, 0)
+
         r.RRValue     = MakeZoneLabel("R:R",    Theme.FG_QUATERNARY)
         r.EntryValue  = MakeZoneLabel("ENTRY",  Theme.FG_PRIMARY)
         r.CappedValue = MakeZoneLabel("CAPPED", Theme.ACC_WARN)
         r.TargetValue = MakeZoneLabel("TARGET", targetColour)
 
-        row.Controls.Add(r.DirLabel,    0, 0)
-        row.Controls.Add(r.StopValue,   1, 0)
-        row.Controls.Add(r.RRValue,     2, 0)
-        row.Controls.Add(r.EntryValue,  3, 0)
-        row.Controls.Add(r.CappedValue, 4, 0)
-        row.Controls.Add(r.TargetValue, 5, 0)
+        row.Controls.Add(r.DirLabel,        0, 0)
+        row.Controls.Add(r.StopCellLayout,  1, 0)
+        row.Controls.Add(r.RRValue,         2, 0)
+        row.Controls.Add(r.EntryValue,      3, 0)
+        row.Controls.Add(r.CappedValue,     4, 0)
+        row.Controls.Add(r.TargetValue,     5, 0)
 
         Return r
     End Function
@@ -672,13 +696,17 @@ Partial Public Class MainForm
         Dim targetColour As Color = Theme.ACC_INFO
         Dim ctrls As New StructuralCardControls()
         ctrls.StopValue   = MakeZoneLabel("STRUCT STOP",   stopColour)
-        ctrls.TargetValue = MakeZoneLabel("STRUCT TARGET", targetColour)
         ctrls.EntryValue  = MakeZoneLabel("ENTRY",         Theme.FG_PRIMARY)
+        ctrls.TargetValue = MakeZoneLabel("STRUCT TARGET", targetColour)
         ctrls.RRValue     = MakeZoneLabel("R:R",           Theme.FG_QUATERNARY)
 
+        ' C2a (P5-test gap-fix): column order is STOP | ENTRY | TARGET | R:R
+        ' to mirror the ATR row's STOP | ENTRY | TARGET layout. Previously the
+        ' order was STOP | TARGET | ENTRY | R:R which broke trader's scan
+        ' rhythm between the ATR row and the structural row beneath.
         grid.Controls.Add(ctrls.StopValue,   0, 0)
-        grid.Controls.Add(ctrls.TargetValue, 1, 0)
-        grid.Controls.Add(ctrls.EntryValue,  2, 0)
+        grid.Controls.Add(ctrls.EntryValue,  1, 0)
+        grid.Controls.Add(ctrls.TargetValue, 2, 0)
         grid.Controls.Add(ctrls.RRValue,     3, 0)
 
         inner.Controls.Add(grid, 0, 1)
@@ -844,6 +872,7 @@ Partial Public Class MainForm
             atrStop:=atrStop,
             atrTarget:=atrTarget,
             atrForFloor:=r.ATR,
+            structuralStopPx:=r.SwingStopLong,
             primary:=isLongVerdict OrElse isNoTrade,
             verdictColour:=ResolveVerdictColour(v.Verdict))
 
@@ -858,23 +887,12 @@ Partial Public Class MainForm
             atrStop:=atrStop,
             atrTarget:=atrTarget,
             atrForFloor:=r.ATR,
+            structuralStopPx:=r.SwingStopShort,
             primary:=isShortVerdict OrElse isNoTrade,
             verdictColour:=ResolveVerdictColour(v.Verdict))
 
-        ' Show the cap reason from whichever side has one. If both sides
-        ' have a cap, the verdict-direction wins; on NO TRADE, long wins
-        ' arbitrarily (rare to have both anyway).
-        Dim shownReason As String = ""
-        If isShortVerdict Then
-            shownReason = shortCapReason
-            If shownReason = "" Then shownReason = longCapReason
-        Else
-            shownReason = longCapReason
-            If shownReason = "" Then shownReason = shortCapReason
-        End If
-        If _atrCapReason IsNot Nothing Then
-            _atrCapReason.Text = shownReason
-        End If
+        ' C1b: cap-reason is now appended inline to each row's CAPPED cell
+        ' (longCapReason / shortCapReason are returned as "" — see BindAtrRow).
     End Sub
 
     ''' <summary>
@@ -883,6 +901,16 @@ Partial Public Class MainForm
     ''' verdict colour + bold; primary=False dims to FG_TERTIARY at smaller
     ''' font weight so the contrary direction reads as secondary detail.
     ''' </summary>
+    ' DESIGN NOTE (C1a, P5-test gap-fix commit 1): ATR stops are deliberately
+    ' uncapped (no CAPPED indicator on the STOP cell). Targets are capped at
+    ' HVN/POC via AdjustedLongTarget / AdjustedShortTarget; stops are not.
+    ' Rationale: capping the ATR stop would (a) break position-sizing
+    ' decoupling (Base × AvgATR/CurrATR reads atrStop as the volatility
+    ' reference), (b) duplicate information already shown in the structural
+    ' row beneath, (c) mislead the ATR row's R:R reading. Trader uses the
+    ' dual-row display + the C1c "STRUCT|STOP" worse-of prefix on this row
+    ' to pick which stop to execute against. Future adaptive-stop work
+    ' tracked in docs/adaptive-stop-invalidation-proposal.md (post-Spec-C).
     Private Function BindAtrRow(row As AtrRowControls,
                                 isLong As Boolean,
                                 entryPx As Double,
@@ -893,6 +921,7 @@ Partial Public Class MainForm
                                 atrStop As Double,
                                 atrTarget As Double,
                                 atrForFloor As Double,
+                                structuralStopPx As Double,
                                 primary As Boolean,
                                 verdictColour As Color) As String
 
@@ -903,20 +932,42 @@ Partial Public Class MainForm
         ' Sub-tick CAPPED suppression (v30 F1): only show CAPPED when the
         ' adjustment exceeds max(0.5, ATR × 0.02).
         Dim showCapped As Boolean = False
-        Dim capReasonReturn As String = ""
+        Dim capLabel As String = ""
         If adjustedTarget > 0 Then
             Dim noiseFloor As Double = Math.Max(0.5, atrForFloor * 0.02)
             showCapped = Math.Abs(rawTargetPx - adjustedTargetPx) >= noiseFloor
-            If showCapped Then capReasonReturn = cfgCapReason
+            ' C1b: cfgCapReason from engine is "CAPPED @ {price:F1} ({label})".
+            ' The inline CAPPED cell already shows the price ("→ {price:F1}"),
+            ' so render only the parenthetical label here and DON'T duplicate
+            ' the full reason in the bottom _atrCapReason label.
+            If showCapped Then capLabel = ExtractCapLabel(cfgCapReason)
         End If
 
-        SetZoneValue(row.StopValue,   "STOP",   $"{stopPx:F1}")
+        ' Q2: surface risk / rwd USD amounts inline on the R:R cell so the
+        ' trader doesn't have to compute |entry-stop| and |target-entry| in
+        ' their head. The R:R column was widened from 12% → 16% to fit.
+        Dim riskUsd As Double = Math.Abs(entryPx - stopPx)
+        Dim rwdUsd  As Double = Math.Abs(adjustedTargetPx - entryPx)
+        Dim rrText  As String = FormatRR(atrTarget, atrStop) & Environment.NewLine &
+                                $"(risk {riskUsd:F1} / rwd {rwdUsd:F1})"
+        SetZoneValue(row.RRValue, "R:R", rrText)
+
+        ' C1c: structural stop side-by-side with ATR stop when structural is
+        ' deeper (further from entry). Symmetric long/short.
+        Dim structDeeper As Boolean = IsStructuralStopDeeper(structuralStopPx, stopPx, isLong)
+        BindAtrStopCell(row, stopPx, structuralStopPx, structDeeper, primary, isLong)
+
         SetZoneValue(row.EntryValue,  "ENTRY",  $"{entryPx:F1}")
         SetZoneValue(row.TargetValue, "TARGET", $"{adjustedTargetPx:F1}")
-        SetZoneValue(row.RRValue,     "R:R",    FormatRR(atrTarget, atrStop))
 
         If showCapped Then
-            SetZoneValue(row.CappedValue, "CAPPED", $"→ {adjustedTargetPx:F1}")
+            ' C1b: inline cell now carries both the arrow-price AND the label.
+            ' Multi-line within the cell — "CAPPED\n→ price\n(label)".
+            Dim cappedValueText As String = $"→ {adjustedTargetPx:F1}"
+            If Not String.IsNullOrEmpty(capLabel) Then
+                cappedValueText &= Environment.NewLine & $"({capLabel})"
+            End If
+            SetZoneValue(row.CappedValue, "CAPPED", cappedValueText)
             row.CappedValue.ForeColor = Theme.ACC_WARN
         Else
             SetZoneValue(row.CappedValue, "·", "")
@@ -931,26 +982,106 @@ Partial Public Class MainForm
         row.DirLabel.ForeColor = labelColour
         row.DirLabel.Font      = Theme.FontMono(If(primary, 11.0F, 9.0F), FontStyle.Bold)
 
-        For Each lbl In New Label() {row.StopValue, row.RRValue, row.EntryValue, row.CappedValue, row.TargetValue}
+        ' StructStopValue + StopValue get their fonts set inside BindAtrStopCell
+        ' (STOP shrinks when STRUCT shows). Other cells follow the row's valueFont.
+        For Each lbl In New Label() {row.RRValue, row.EntryValue, row.CappedValue, row.TargetValue}
             lbl.Font = valueFont
         Next
 
         ' Per-side target colour: primary direction in its accent; secondary
         ' dimmed to FG_TERTIARY so the dominant row reads first.
         If primary Then
-            row.TargetValue.ForeColor = directionColour
-            row.StopValue.ForeColor   = Theme.ACC_SHORT
-            row.RRValue.ForeColor     = Theme.FG_QUATERNARY
-            row.EntryValue.ForeColor  = Theme.FG_PRIMARY
+            row.TargetValue.ForeColor      = directionColour
+            row.StopValue.ForeColor        = Theme.ACC_SHORT
+            row.StructStopValue.ForeColor  = Theme.ACC_SHORT
+            row.RRValue.ForeColor          = Theme.FG_QUATERNARY
+            row.EntryValue.ForeColor       = Theme.FG_PRIMARY
         Else
-            row.TargetValue.ForeColor = Theme.FG_TERTIARY
-            row.StopValue.ForeColor   = Theme.FG_TERTIARY
-            row.RRValue.ForeColor     = Theme.FG_DIM
-            row.EntryValue.ForeColor  = Theme.FG_TERTIARY
+            row.TargetValue.ForeColor      = Theme.FG_TERTIARY
+            row.StopValue.ForeColor        = Theme.FG_TERTIARY
+            row.StructStopValue.ForeColor  = Theme.FG_TERTIARY
+            row.RRValue.ForeColor          = Theme.FG_DIM
+            row.EntryValue.ForeColor       = Theme.FG_TERTIARY
             If Not showCapped Then row.CappedValue.ForeColor = Theme.BORDER_INNER
         End If
 
-        Return capReasonReturn
+        ' C1b: bottom-of-card cap-reason label is now redundant — return ""
+        ' to suppress it. The (label) parenthetical is rendered inline above.
+        Return ""
+    End Function
+
+    ''' <summary>
+    ''' C1c: True when the structural stop is further from entry than the ATR
+    ''' stop (the typical case). Returns False when struct is unset (≤0),
+    ''' equal to atr, or on the same side as entry (data inconsistency).
+    ''' </summary>
+    Private Shared Function IsStructuralStopDeeper(structuralStopPx As Double,
+                                                   atrStopPx As Double,
+                                                   isLong As Boolean) As Boolean
+        If structuralStopPx <= 0 Then Return False
+        If isLong Then
+            ' Both stops sit below entry for long; "deeper" = lower price.
+            Return structuralStopPx < atrStopPx
+        Else
+            ' Both stops sit above entry for short; "deeper" = higher price.
+            Return structuralStopPx > atrStopPx
+        End If
+    End Function
+
+    ''' <summary>
+    ''' C1c: render the STOP cell as either a single ATR-only label (legacy
+    ''' behaviour) or a STRUCT|STOP side-by-side pair when structural is
+    ''' deeper. STRUCT takes prominence (full value-font); STOP shrinks to
+    ''' ~80% so the visual hierarchy mirrors which stop the trader is more
+    ''' likely to execute against.
+    ''' </summary>
+    Private Shared Sub BindAtrStopCell(row As AtrRowControls,
+                                       atrStopPx As Double,
+                                       structuralStopPx As Double,
+                                       structDeeper As Boolean,
+                                       primary As Boolean,
+                                       isLong As Boolean)
+        Dim valueFont   As Font = If(primary, Theme.FontMono(11.5F, FontStyle.Bold), Theme.FontMono(9.5F, FontStyle.Regular))
+        Dim shrinkSize  As Single = If(primary, 9.5F, 7.5F)
+        Dim shrinkStyle As FontStyle = If(primary, FontStyle.Bold, FontStyle.Regular)
+        Dim shrinkFont  As Font = Theme.FontMono(shrinkSize, shrinkStyle)
+
+        If structDeeper Then
+            ' Two-cell layout: STRUCT (full font) | STOP (smaller font).
+            row.StopCellLayout.ColumnStyles(0) = New ColumnStyle(SizeType.Percent, 55.0F)
+            row.StopCellLayout.ColumnStyles(1) = New ColumnStyle(SizeType.Percent, 45.0F)
+
+            row.StructStopValue.Visible = True
+            SetZoneValue(row.StructStopValue, "STRUCT", $"{structuralStopPx:F1}")
+            row.StructStopValue.Font = valueFont
+
+            SetZoneValue(row.StopValue, "STOP", $"{atrStopPx:F1}")
+            row.StopValue.Font = shrinkFont
+        Else
+            ' Single-cell layout: STOP only, full width (legacy behaviour).
+            row.StopCellLayout.ColumnStyles(0) = New ColumnStyle(SizeType.Absolute, 0)
+            row.StopCellLayout.ColumnStyles(1) = New ColumnStyle(SizeType.Percent, 100.0F)
+
+            row.StructStopValue.Visible = False
+            SetZoneValue(row.StopValue, "STOP", $"{atrStopPx:F1}")
+            row.StopValue.Font = valueFont
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' C1b: strip "CAPPED @ {price:F1} " prefix from the engine-emitted reason
+    ''' string and return only the bracketed label (e.g., "NEAREST_HVN_ABOVE")
+    ''' so the card can append it as a parenthetical to the inline CAPPED cell
+    ''' without duplicating the price.
+    ''' Input format:  "CAPPED @ 72952.2 (NEAREST_HVN_ABOVE)"
+    ''' Output:        "NEAREST_HVN_ABOVE"
+    ''' </summary>
+    Private Shared Function ExtractCapLabel(reason As String) As String
+        If String.IsNullOrEmpty(reason) Then Return ""
+        Dim openIdx  As Integer = reason.LastIndexOf("("c)
+        Dim closeIdx As Integer = reason.LastIndexOf(")"c)
+        If openIdx < 0 OrElse closeIdx <= openIdx Then Return ""
+        Return reason.Substring(openIdx + 1, closeIdx - openIdx - 1).Trim()
     End Function
 
     Public Sub BindCardStructural(r As IndicatorResults, isLong As Boolean)
@@ -978,7 +1109,10 @@ Partial Public Class MainForm
                 risk   = stopPx - entryPx
                 reward = entryPx - targetPx
             End If
-            SetZoneValue(ctrls.RRValue, "R:R", FormatRR(reward, risk))
+            ' Q2 (P5-test gap-fix): surface risk / rwd USD inline below the ratio.
+            SetZoneValue(ctrls.RRValue, "R:R",
+                         FormatRR(reward, risk) & Environment.NewLine &
+                         $"(risk {Math.Abs(risk):F1} / rwd {Math.Abs(reward):F1})")
             ctrls.TargetValue.ForeColor = Theme.ACC_INFO
             ctrls.StopValue.ForeColor   = Theme.ACC_SHORT
         ElseIf hasStop Then
