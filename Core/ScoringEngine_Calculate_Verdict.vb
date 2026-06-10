@@ -38,6 +38,10 @@ Partial Public Class ScoringEngine
                     res.LongScore = ls : res.ShortScore = ss
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
+                    ' Regime veto pre-empts the MTF check — keep the breakdown
+                    ' row present on this path too (no-direction format).
+                    res.MTFGateReason = "MTF state: " & r.MTF15mTrend & " | " & r.MTFGateDetails
+                    res.SignalBreakdown.Add(New SignalBreakdownItem("MTF Gate (15m)", False, False, res.MTFGateReason))
                     res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
                     res.HoldStatus = CalcHoldStatus(r, posState, cfg)
                     Return res
@@ -49,6 +53,8 @@ Partial Public Class ScoringEngine
                     res.LongScore = ls : res.ShortScore = ss
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
+                    res.MTFGateReason = "MTF state: " & r.MTF15mTrend & " | " & r.MTFGateDetails
+                    res.SignalBreakdown.Add(New SignalBreakdownItem("MTF Gate (15m)", False, False, res.MTFGateReason))
                     res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
                     res.HoldStatus = CalcHoldStatus(r, posState, cfg)
                     Return res
@@ -65,24 +71,50 @@ Partial Public Class ScoringEngine
                 effectiveSS = Math.Max(ss - adxPenalty, TierFloor(ss, cfg))
         End Select
 
-        ' -- Step 4b: MTF Gate Veto -------------------------------------------
-        Dim tWeakCheck  As Integer = Threshold(regimeMax, cfg.Scoring.VerdictWeakPct)
-        Dim proposedDir As String = "NONE"
-        If effectiveLS >= tWeakCheck AndAlso effectiveLS >= effectiveSS Then
-            proposedDir = "LONG"
-        ElseIf effectiveSS >= tWeakCheck AndAlso effectiveSS > effectiveLS Then
-            proposedDir = "SHORT"
+        ' -- Dominant side (shared by Step 4b and Step 5) ----------------------
+        ' Determined once from the effective scores. A tie carries no
+        ' directional information → dominant NONE → NO TRADE at Step 5.
+        Dim dominant As String = "NONE"
+        If effectiveLS > effectiveSS Then
+            dominant = "LONG"
+        ElseIf effectiveSS > effectiveLS Then
+            dominant = "SHORT"
         End If
 
-        Dim mtfBlocked As Boolean = False
-        If cfg.MTFGate.Enabled AndAlso proposedDir <> "NONE" AndAlso Not r.MTFGatePass Then
-            mtfBlocked = True
+        Dim tWeakCheck    As Integer = Threshold(regimeMax, cfg.Scoring.VerdictWeakPct)
+        Dim dominantScore As Integer = If(dominant = "LONG", effectiveLS, If(dominant = "SHORT", effectiveSS, 0))
+        Dim directional   As Boolean = dominant <> "NONE" AndAlso dominantScore >= tWeakCheck
+
+        ' -- Step 4b: MTF Gate Veto (direction-aware) ---------------------------
+        ' Hard-veto invariant: the 15m trend must align with the VERDICT
+        ' direction. The per-side flags from CalcMTFGate are consulted against
+        ' the dominant side. The final reason is composed here — the single
+        ' string every consumer (MTF card, snapshot, CSV, breakdown row) renders.
+        Dim gatePassDominant As Boolean = True
+        If dominant = "LONG" Then
+            gatePassDominant = r.MTFGatePassLong
+        ElseIf dominant = "SHORT" Then
+            gatePassDominant = r.MTFGatePassShort
         End If
+
+        Dim gateFails  As Boolean = directional AndAlso Not gatePassDominant
+        Dim mtfBlocked As Boolean = cfg.MTFGate.Enabled AndAlso gateFails
+
+        If directional Then
+            If gateFails Then
+                res.MTFGateReason = String.Format("MTF BLOCK [{0} vs {1}] {2}", dominant, r.MTF15mTrend, r.MTFGateDetails)
+            Else
+                res.MTFGateReason = String.Format("MTF PASS [{0}] {1}", dominant, r.MTFGateDetails)
+            End If
+        Else
+            res.MTFGateReason = "MTF state: " & r.MTF15mTrend & " | " & r.MTFGateDetails
+        End If
+        res.MTFGateBlocked = mtfBlocked
 
         res.SignalBreakdown.Add(New SignalBreakdownItem("MTF Gate (15m)",
-            r.MTFGatePass AndAlso proposedDir = "LONG",
-            r.MTFGatePass AndAlso proposedDir = "SHORT",
-            r.MTFGateReason))
+            directional AndAlso dominant = "LONG" AndAlso gatePassDominant,
+            directional AndAlso dominant = "SHORT" AndAlso gatePassDominant,
+            res.MTFGateReason))
 
         If mtfBlocked Then
             res.Verdict = AppendLean("NO TRADE", effectiveLS, effectiveSS, tWeakCheck)
@@ -95,7 +127,9 @@ Partial Public Class ScoringEngine
             Return res
         End If
 
-        ' -- Step 5: Generate Verdict -----------------------------------------
+        ' -- Step 5: Generate Verdict (dominant side only) ----------------------
+        ' Only the dominant side's tiers are walked; the dominated side cannot
+        ' produce a verdict even if it clears a tier the dominant side misses.
         res.LongScore = ls
         res.ShortScore = ss
         res.EffectiveLongScore = effectiveLS
@@ -106,22 +140,33 @@ Partial Public Class ScoringEngine
         Dim tMed    As Integer = Threshold(regimeMax, cfg.Scoring.VerdictMedPct)
         Dim tWeak   As Integer = Threshold(regimeMax, cfg.Scoring.VerdictWeakPct)
 
-        If effectiveLS >= tStrong Then
-            res.Verdict = "STRONG LONG"  : res.Confidence = "HIGH"
-        ElseIf effectiveLS >= tMed Then
-            res.Verdict = "LONG"          : res.Confidence = "MEDIUM"
-        ElseIf effectiveLS >= tWeak Then
-            res.Verdict = "WEAK LONG"     : res.Confidence = "LOW"
-        ElseIf effectiveSS >= tStrong Then
-            res.Verdict = "STRONG SHORT"  : res.Confidence = "HIGH"
-        ElseIf effectiveSS >= tMed Then
-            res.Verdict = "SHORT"         : res.Confidence = "MEDIUM"
-        ElseIf effectiveSS >= tWeak Then
-            res.Verdict = "WEAK SHORT"    : res.Confidence = "LOW"
-        Else
-            res.Verdict = AppendLean("NO TRADE", ls, ss, tWeak)
-            res.Confidence = "N/A"
-        End If
+        Select Case dominant
+            Case "LONG"
+                If effectiveLS >= tStrong Then
+                    res.Verdict = "STRONG LONG"  : res.Confidence = "HIGH"
+                ElseIf effectiveLS >= tMed Then
+                    res.Verdict = "LONG"          : res.Confidence = "MEDIUM"
+                ElseIf effectiveLS >= tWeak Then
+                    res.Verdict = "WEAK LONG"     : res.Confidence = "LOW"
+                Else
+                    res.Verdict = AppendLean("NO TRADE", ls, ss, tWeak)
+                    res.Confidence = "N/A"
+                End If
+            Case "SHORT"
+                If effectiveSS >= tStrong Then
+                    res.Verdict = "STRONG SHORT"  : res.Confidence = "HIGH"
+                ElseIf effectiveSS >= tMed Then
+                    res.Verdict = "SHORT"         : res.Confidence = "MEDIUM"
+                ElseIf effectiveSS >= tWeak Then
+                    res.Verdict = "WEAK SHORT"    : res.Confidence = "LOW"
+                Else
+                    res.Verdict = AppendLean("NO TRADE", ls, ss, tWeak)
+                    res.Confidence = "N/A"
+                End If
+            Case Else
+                res.Verdict = AppendLean("NO TRADE", ls, ss, tWeak)
+                res.Confidence = "N/A"
+        End Select
 
         res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
         res.HoldStatus = CalcHoldStatus(r, posState, cfg)

@@ -78,8 +78,9 @@ Public Class IndicatorResults
     Public Property MTF15mTrend As String        ' "BULL" / "BEAR" / "FLAT"
     Public Property MTF15mADX As Double          ' ADX value computed on 15m candles
     Public Property MTF15mEMAAlignment As String ' "BULL" / "BEAR" / "MIXED"
-    Public Property MTFGatePass As Boolean       ' True = gate passed (or disabled)
-    Public Property MTFGateReason As String      ' human-readable gate result for display
+    Public Property MTFGatePassLong As Boolean   ' True = 15m trend does not oppose a long (BULL/FLAT, or no data)
+    Public Property MTFGatePassShort As Boolean  ' True = 15m trend does not oppose a short (BEAR/FLAT, or no data)
+    Public Property MTFGateDetails As String     ' direction-free 15m metrics; final reason composed at Step 4b (VerdictResult.MTFGateReason)
 
     ' Tier 3
     Public Property DonchianUpper As Double

@@ -314,20 +314,12 @@ Partial Public Class MainForm
                                      dynamicPct:=cfg.Indicators.MicroCVD.AccelThresholdDynamicPct,
                                      floorPct:=cfg.Indicators.MicroCVD.AccelThresholdFloorPct)
 
-        Dim mtfProposed As String = "NONE"
-        If candles15m IsNot Nothing AndAlso candles15m.Count >= cfg.MTFGate.DmiPeriod + 2 Then
-            If r.Regime = "TRENDING_UP" OrElse r.EMAAlignment = "BULL" Then
-                mtfProposed = "LONG"
-            ElseIf r.Regime = "TRENDING_DOWN" OrElse r.EMAAlignment = "BEAR" Then
-                mtfProposed = "SHORT"
-            End If
-        End If
-
+        ' Direction-independent 15m gate state; Step 4b consults the per-side
+        ' flag matching the verdict's dominant side (no pre-scoring proposal).
         IndicatorEngine.CalcMTFGate(
             candles15m,
             r.MTF15mTrend, r.MTF15mADX, r.MTF15mEMAAlignment,
-            r.MTFGatePass, r.MTFGateReason,
-            proposedDirection:=mtfProposed,
+            r.MTFGatePassLong, r.MTFGatePassShort, r.MTFGateDetails,
             adxPeriod:=cfg.MTFGate.DmiPeriod,
             adxMin:=cfg.MTFGate.AdxMin,
             minOf:=cfg.MTFGate.RequiredConfirms,

@@ -448,14 +448,18 @@ Public Class TestCaseBuilder
     End Function
 
     Public Function WithMtfPass() As TestCaseBuilder
-        _tc.Indicators.MTFGatePass = True
-        _tc.Indicators.MTFGateReason = "MTF PASS"
+        _tc.Indicators.MTFGatePassLong = True
+        _tc.Indicators.MTFGatePassShort = True
+        _tc.Verdict.MTFGateBlocked = False
+        _tc.Verdict.MTFGateReason = "MTF PASS"
         Return Me
     End Function
 
     Public Function WithMtfBlock(reason As String) As TestCaseBuilder
-        _tc.Indicators.MTFGatePass = False
-        _tc.Indicators.MTFGateReason = reason
+        _tc.Indicators.MTFGatePassLong = False
+        _tc.Indicators.MTFGatePassShort = False
+        _tc.Verdict.MTFGateBlocked = True
+        _tc.Verdict.MTFGateReason = reason
         Return Me
     End Function
 
@@ -851,8 +855,9 @@ Public Class TestCaseBuilder
         r.MTF15mTrend = "FLAT"
         r.MTF15mADX = 18.0
         r.MTF15mEMAAlignment = "MIXED"
-        r.MTFGatePass = True
-        r.MTFGateReason = "MTF PASS"
+        r.MTFGatePassLong = True
+        r.MTFGatePassShort = True
+        r.MTFGateDetails = "15m +DI:20.0 -DI:20.0 ADX:18.0 EMA:MIXED | Bull:0 Bear:0 (need 2)"
 
         r.DonchianUpper = 50500.0
         r.DonchianLower = 49500.0

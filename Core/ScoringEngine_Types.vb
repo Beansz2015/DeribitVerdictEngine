@@ -77,6 +77,18 @@ Public Class VerdictResult
 
     ''' <summary>Analysis run timestamp. Set in RunAnalysisAsync; used for TIME: line and dump header.</summary>
     Public Property Timestamp As DateTime = DateTime.MinValue
+
+    ''' <summary>
+    ''' Final composed MTF gate reason, set at Step 4b against the dominant side.
+    ''' Three locked formats: "MTF PASS [LONG] &lt;details&gt;" /
+    ''' "MTF BLOCK [LONG vs BEAR] &lt;details&gt;" (mirror for SHORT) /
+    ''' "MTF state: &lt;TREND&gt; | &lt;details&gt;" when no directional verdict is in play.
+    ''' Every consumer (MTF card, plaintext snapshot, CSV, breakdown row) renders
+    ''' this exact string.
+    ''' </summary>
+    Public Property MTFGateReason As String = ""
+    ''' <summary>True when Step 4b enforced the MTF hard veto (verdict forced to NO TRADE).</summary>
+    Public Property MTFGateBlocked As Boolean = False
 End Class
 
 Public Enum PositionState

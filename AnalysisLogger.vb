@@ -111,7 +111,7 @@ Public Class AnalysisLogger
         Try
             Using sw As New StreamWriter(path, append:=True)
                 Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
-                Dim mtfReason As String = If(r.MTFGateReason, "").Replace(",", ";")
+                Dim mtfReason As String = If(v.MTFGateReason, "").Replace(",", ";")
                 Dim capReasonCsv As String
                 If v.Verdict.Contains("LONG") Then
                     capReasonCsv = NormaliseCapReason(v.TargetCapReasonLong)
@@ -183,7 +183,7 @@ Public Class AnalysisLogger
                     r.DonchianSignal,
                     r.OBVTrend,
                     r.OBVDivergence,
-                    r.MTFGatePass.ToString(),
+                    (Not v.MTFGateBlocked).ToString(),
                     r.MTF15mTrend,
                     Inv(r.MTF15mADX, "F2"),
                     r.MTF15mEMAAlignment,

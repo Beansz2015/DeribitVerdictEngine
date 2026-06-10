@@ -405,23 +405,29 @@ Partial Public Class IndicatorEngine
     End Function
 
     ' -- MTF Gate (15m timeframe) ---------------------------------------------
+    ' Direction-independent: computes the 15m trend state (BULL/BEAR/FLAT,
+    ' 2-of-3 over DMI direction / ADX strength / EMA stack) and exposes
+    ' per-side pass flags. FLAT passes both sides; no-data paths fail open
+    ' (both flags True). The comparison against the verdict direction — and
+    ' the composition of the final display reason — happens at scoring
+    ' Step 4b against the actual dominant side, not here.
     Public Shared Sub CalcMTFGate(candles15m As List(Of Candle),
                                    ByRef mtfTrend As String,
                                    ByRef mtfADX As Double,
                                    ByRef mtfEMAAlignment As String,
-                                   ByRef gatePass As Boolean,
-                                   ByRef gateReason As String,
-                                   Optional proposedDirection As String = "NONE",
+                                   ByRef gatePassLong As Boolean,
+                                   ByRef gatePassShort As Boolean,
+                                   ByRef gateDetails As String,
                                    Optional adxPeriod As Integer = 9,
                                    Optional adxMin As Double = 20.0,
                                    Optional minOf As Integer = 2,
                                    Optional candleLookback As Integer = 60)
         mtfTrend = "FLAT" : mtfADX = 0 : mtfEMAAlignment = "MIXED"
-        gatePass = True : gateReason = "MTF gate: no data"
+        gatePassLong = True : gatePassShort = True : gateDetails = "MTF gate: no data"
 
         If candles15m Is Nothing OrElse candles15m.Count < adxPeriod + 2 Then
-            gateReason = "MTF: insufficient 15m candles (" &
-                         If(candles15m Is Nothing, "0", candles15m.Count.ToString()) & ")"
+            gateDetails = "MTF: insufficient 15m candles (" &
+                          If(candles15m Is Nothing, "0", candles15m.Count.ToString()) & ")"
             Return
         End If
 
@@ -477,25 +483,14 @@ Partial Public Class IndicatorEngine
             mtfTrend = "FLAT"
         End If
 
-        Dim details As String = String.Format(
+        gateDetails = String.Format(
             "15m +DI:{0:F1} -DI:{1:F1} ADX:{2:F1} EMA:{3} | Bull:{4} Bear:{5} (need {6})",
             plusDI, minusDI, adxVal, mtfEMAAlignment, bullScore, bearScore, minOf)
 
-        Select Case proposedDirection
-            Case "LONG"
-                gatePass = (mtfTrend = "BULL" OrElse mtfTrend = "FLAT")
-                gateReason = If(gatePass,
-                    "MTF PASS [LONG] " & details,
-                    "MTF BLOCK [LONG vs BEAR] " & details)
-            Case "SHORT"
-                gatePass = (mtfTrend = "BEAR" OrElse mtfTrend = "FLAT")
-                gateReason = If(gatePass,
-                    "MTF PASS [SHORT] " & details,
-                    "MTF BLOCK [SHORT vs BULL] " & details)
-            Case Else
-                gatePass = True
-                gateReason = "MTF state: " & mtfTrend & " | " & details
-        End Select
+        ' BULL or FLAT passes a long; BEAR or FLAT passes a short — preserving
+        ' the original pass semantics, now exposed per side.
+        gatePassLong  = (mtfTrend <> "BEAR")
+        gatePassShort = (mtfTrend <> "BULL")
     End Sub
 
 End Class

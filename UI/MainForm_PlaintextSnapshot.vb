@@ -57,7 +57,7 @@ Partial Public Class MainForm
         AppendOpenInterest(sb, r)
         AppendOrderFlow(sb, r)
         AppendLiquidations(sb, r)
-        AppendMtfGate(sb, r)
+        AppendMtfGate(sb, r, v)
         AppendFunding(sb, r, cfg)
         AppendSignalBreakdown(sb, v)
 
@@ -407,12 +407,12 @@ Partial Public Class MainForm
                                      r.LiqLongSize, r.LiqShortSize, r.LiqSignal))
     End Sub
 
-    Private Sub AppendMtfGate(sb As StringBuilder, r As IndicatorResults)
+    Private Sub AppendMtfGate(sb As StringBuilder, r As IndicatorResults, v As VerdictResult)
         sb.AppendLine()
-        sb.AppendLine("MTF GATE (15m): " & If(r.MTFGatePass, "PASS", "BLOCK"))
+        sb.AppendLine("MTF GATE (15m): " & If(v.MTFGateBlocked, "BLOCK", "PASS"))
         sb.AppendLine(String.Format("  15m Trend: {0}  |  ADX: {1:F1}  |  EMA: {2}",
                                      r.MTF15mTrend, r.MTF15mADX, r.MTF15mEMAAlignment))
-        sb.AppendLine("  Reason: " & r.MTFGateReason)
+        sb.AppendLine("  Reason: " & v.MTFGateReason)
     End Sub
 
     Private Sub AppendFunding(sb As StringBuilder, r As IndicatorResults, cfg As EngineSettings)

@@ -15,10 +15,13 @@
 Partial Public Class ScoringEngine
 
     Private Shared Function AppendLean(verdict As String, ls As Integer, ss As Integer, tWeak As Integer) As String
-        If ls >= tWeak AndAlso ls >= ss Then
+        If ls >= tWeak AndAlso ls > ss Then
             Return verdict & " [WEAK LONG]"
         ElseIf ss >= tWeak AndAlso ss > ls Then
             Return verdict & " [WEAK SHORT]"
+        ElseIf ls = ss AndAlso ls >= tWeak Then
+            ' Equal qualifying scores carry no directional lean.
+            Return verdict & " [TIE]"
         End If
         Return verdict
     End Function

@@ -255,13 +255,15 @@ Partial Public Class MainForm
                                       r.LiqLongSize, r.LiqShortSize, r.LiqSignal) & Environment.NewLine, liqColour)
 
         ' -- MTF GATE (15m) ---------------------------------------------------
-        SectionHeader(rtb, "MTF GATE (15m): " & If(r.MTFGatePass, "PASS", "BLOCK"))
-        Dim mtfColour As Color = If(r.MTFGatePass, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
+        ' PASS/BLOCK and the reason read the final Step 4b composition on the
+        ' VerdictResult — same string as the snapshot, CSV, and breakdown row.
+        SectionHeader(rtb, "MTF GATE (15m): " & If(v.MTFGateBlocked, "BLOCK", "PASS"))
+        Dim mtfColour As Color = If(Not v.MTFGateBlocked, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
         AppendRtf(rtb, "  15m Trend: ", Theme.FG_TERTIARY)
         AppendRtf(rtb, String.Format("{0}  |  ADX: {1:F1}  |  EMA: {2}",
                                       r.MTF15mTrend, r.MTF15mADX, r.MTF15mEMAAlignment) & Environment.NewLine, mtfColour)
         AppendRtf(rtb, "  Reason: ", Theme.FG_TERTIARY)
-        AppendRtf(rtb, r.MTFGateReason & Environment.NewLine, Theme.FG_QUATERNARY)
+        AppendRtf(rtb, v.MTFGateReason & Environment.NewLine, Theme.FG_QUATERNARY)
 
         ' -- FUNDING ----------------------------------------------------------
         SectionHeader(rtb, "FUNDING:")

@@ -772,7 +772,7 @@ Partial Public Class MainForm
         End If
 
         If _mtfRow IsNot Nothing Then
-            ApplyMtfRow(_mtfRow, r.MTFGatePass, r.MTFGateReason)
+            ApplyMtfRow(_mtfRow, v.MTFGateReason)
         End If
 
         If _lblHold IsNot Nothing Then
@@ -1179,11 +1179,12 @@ Partial Public Class MainForm
         Return ContextBadge.ContextKind.CONFIRMED
     End Function
 
-    Private Shared Sub ApplyMtfRow(row As MtfRow, gatePass As Boolean, reason As String)
-        ' MTFGateReason format from IndicatorEngine.CalcMTFGate:
+    Private Shared Sub ApplyMtfRow(row As MtfRow, reason As String)
+        ' VerdictResult.MTFGateReason format, composed at scoring Step 4b
+        ' against the dominant side (three locked formats):
         '   "MTF PASS [LONG] 15m +DI:39.8"           — passing direction
-        '   "MTF BLOCK [LONG vs SHORT] ADX 18 < 20"  — proposed vs blocking
-        '   "MTF state: BULLISH"                     — no proposed direction
+        '   "MTF BLOCK [LONG vs BEAR] 15m ..."        — dominant vs 15m trend
+        '   "MTF state: FLAT | 15m ..."               — no directional verdict
         ' Strip the literal "MTF " prefix before the keyword test so the
         ' control's own "MTF " prefix doesn't end up doubled in the display.
         Dim reasonText As String = If(reason, "").Trim()
@@ -1933,7 +1934,7 @@ Partial Public Class MainForm
         BuildGroupRegime5m(grid, 0, 1, r)
         ' Row 1: VWAP     | MTF GATE
         BuildGroupVwap(grid, 1, 0, r, cfg)
-        BuildGroupMtfGate(grid, 1, 1, r)
+        BuildGroupMtfGate(grid, 1, 1, r, v)
         ' Row 2: EMA RIBBON | FUNDING
         BuildGroupEmaRibbon(grid, 2, 0, r)
         BuildGroupFunding(grid, 2, 1, r, cfg)
@@ -2153,16 +2154,16 @@ Partial Public Class MainForm
     End Sub
 
     Private Shared Sub BuildGroupMtfGate(parent As TableLayoutPanel, row As Integer, col As Integer,
-                                         r As IndicatorResults)
-        Dim gateLabel As String = If(r.MTFGatePass, "PASS", "BLOCK")
-        Dim gateColour As Color = If(r.MTFGatePass, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
+                                         r As IndicatorResults, v As VerdictResult)
+        Dim gateLabel As String = If(v.MTFGateBlocked, "BLOCK", "PASS")
+        Dim gateColour As Color = If(Not v.MTFGateBlocked, Theme.ACC_STRONG_LONG, Theme.ACC_SHORT)
         ' C3g: bracket the (15m) timeframe per G4 + lowercase 'm'.
         Dim g = BuildGroupInline($"MTF GATE (15m)  ·  {gateLabel}", gateColour)
         AddKv(g.body, "15m Trend:", If(r.MTF15mTrend, "—"))
         AddKv(g.body, "15m ADX:",   $"{r.MTF15mADX:F1}")
         AddKv(g.body, "15m EMA:",   If(r.MTF15mEMAAlignment, "—"))
         ' Reason text — wrap if long so it doesn't overflow the column.
-        AddKv(g.body, "Reason:",    If(r.MTFGateReason, "—"), wrap:=True)
+        AddKv(g.body, "Reason:",    If(v.MTFGateReason, "—"), wrap:=True)
         parent.Controls.Add(g.host, col, row)
     End Sub
 
