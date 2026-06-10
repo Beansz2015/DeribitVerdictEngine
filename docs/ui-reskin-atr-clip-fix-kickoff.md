@@ -3,6 +3,7 @@
 **Date:** 2026-06-10
 **Implementer model:** Opus (mechanical layout fix with a prescribed verification loop)
 **Track:** UI reskin (track A). This is the one bug blocking the trader's visual sign-off on the P5-test gap-fix work. It does not touch scoring, bindings, or formats.
+**Status (2026-06-10, later): ON HOLD — do not route yet.** A systematic Fable review of the 55-case p5-test snapshot set runs first (`docs/p5-test-snapshot-review-brief.md`); its findings get consolidated with this fix into one Opus kickoff so the build → fix → regenerate → re-review cycle runs once. If the review finds nothing new, this kickoff routes as-is.
 
 ## The bug
 
