@@ -277,7 +277,8 @@ End Class
 
 Public Class OiSettings
     <JsonPropertyName("neutral_band_pct")>     Public Property NeutralBandPct     As Double = 0.05
-    <JsonPropertyName("change_threshold_pct")> Public Property ChangeThresholdPct As Double = 0.01
+    ' Aligned to live v30 (was 0.01; lowered to 0.003 in v19, 0.002 in v20).
+    <JsonPropertyName("change_threshold_pct")> Public Property ChangeThresholdPct As Double = 0.002
 End Class
 
 Public Class DmiSettings
@@ -362,14 +363,15 @@ End Class
 ''' Controls Step 3b in ScoringEngine_Calculate and CalcFundingMomentum in Indicators_OrderFlow.
 ''' MomentumEnabled: master switch -- set false to skip Step 3b entirely. Default True.
 ''' MomentumWindow: how many samples back to compare against most recent rate. Default 3.
-''' MomentumThreshold: min absolute delta (in rate units) to classify as RISING/FALLING. Default 0.0001 (1 bp).
+''' MomentumThreshold: min absolute delta (in rate units) to classify as RISING/FALLING. Default 0.00001 (0.001%).
 ''' MomentumAmplify: additional penalty when momentum confirms crowding. Capped at FundingHighPenalty at call site. Default 1.
 ''' MomentumSoften: score restored when momentum signals de-crowding. Default 1.
 ''' </summary>
 Public Class FundingSettings
     <JsonPropertyName("momentum_enabled")>   Public Property MomentumEnabled   As Boolean = True
     <JsonPropertyName("momentum_window")>    Public Property MomentumWindow    As Integer = 3
-    <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.0001
+    ' Aligned to live v30 (was 0.0001; recalibrated 0.000005 in v19, 0.00001 in v22).
+    <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.00001
     <JsonPropertyName("momentum_amplify")>   Public Property MomentumAmplify   As Integer = 1
     <JsonPropertyName("momentum_soften")>    Public Property MomentumSoften    As Integer = 1
 End Class
@@ -428,7 +430,14 @@ End Class
 ''' </summary>
 Public Class SessionVolumeSettings
     <JsonPropertyName("enabled")>  Public Property Enabled  As Boolean = True
-    <JsonPropertyName("sessions")> Public Property Sessions As New List(Of SessionBucketSettings)
+    ' Default buckets aligned to live v30 (ASIA/LONDON/NY). An empty default would
+    ' silently skip all session scaling on the code-defaults path; a settable List
+    ' property is fully replaced by settings.json on a successful load.
+    <JsonPropertyName("sessions")> Public Property Sessions As New List(Of SessionBucketSettings) From {
+        New SessionBucketSettings With {.Name = "ASIA",   .StartHour = 0,  .EndHour = 7,  .HighMultiplier = 0.8,  .MidMultiplier = 0.85},
+        New SessionBucketSettings With {.Name = "LONDON", .StartHour = 8,  .EndHour = 12, .HighMultiplier = 1.0,  .MidMultiplier = 1.0},
+        New SessionBucketSettings With {.Name = "NY",     .StartHour = 13, .EndHour = 23, .HighMultiplier = 1.15, .MidMultiplier = 1.1}
+    }
 End Class
 
 Public Class SessionBucketSettings
@@ -499,10 +508,11 @@ Public Class ScoringSettings
     <JsonPropertyName("verdict_strong_pct")> Public Property VerdictStrongPct As Double = 0.70
     <JsonPropertyName("verdict_med_pct")>    Public Property VerdictMedPct    As Double = 0.53
     <JsonPropertyName("verdict_weak_pct")>   Public Property VerdictWeakPct   As Double = 0.35
-    <JsonPropertyName("funding_high_positive")> Public Property FundingHighPositive As Double = 0.0003
-    <JsonPropertyName("funding_low_positive")>  Public Property FundingLowPositive  As Double = 0.00005
-    <JsonPropertyName("funding_high_negative")> Public Property FundingHighNegative As Double = -0.0003
-    <JsonPropertyName("funding_low_negative")>  Public Property FundingLowNegative  As Double = -0.00005
+    ' Funding bands aligned to live v30 (v22 recalibration: high ±0.00008, low ±0.00001).
+    <JsonPropertyName("funding_high_positive")> Public Property FundingHighPositive As Double = 0.00008
+    <JsonPropertyName("funding_low_positive")>  Public Property FundingLowPositive  As Double = 0.00001
+    <JsonPropertyName("funding_high_negative")> Public Property FundingHighNegative As Double = -0.00008
+    <JsonPropertyName("funding_low_negative")>  Public Property FundingLowNegative  As Double = -0.00001
     ''' <summary>Score penalty while BBW TTM Squeeze is ACTIVE (both sides). Default 2.</summary>
     <JsonPropertyName("bbw_squeeze_penalty")>  Public Property BbwSqueezePenalty  As Integer = 2
     ''' <summary>Penalty for standard-size adverse liquidations. Default 1.</summary>
