@@ -18,19 +18,30 @@ End Enum
 Partial Public Class IndicatorEngine
 
     ' -- Donchian Channel -----------------------------------------------------
+    ' Textbook Donchian: the channel spans the PRIOR `period` bars, excluding
+    ' the current bar. With the current bar included, a full breakout required
+    ' the close to equal the window max exactly — a knife-edge event that never
+    ' fired. Excluding it makes "close beyond the prior channel" a genuine,
+    ' close-confirmed breakout.
     Public Shared Sub CalcDonchian(candles As List(Of Candle), period As Integer,
                                     ByRef upper As Double, ByRef lower As Double)
         upper = 0 : lower = 0
-        If candles.Count < period Then Return
-        Dim window = candles.Skip(candles.Count - period).Take(period).ToList()
+        If candles.Count < period + 1 Then Return
+        Dim window = candles.Skip(candles.Count - period - 1).Take(period).ToList()
         upper = window.Max(Function(c) c.High)
         lower = window.Min(Function(c) c.Low)
     End Sub
 
     ' -- OBV ------------------------------------------------------------------
+    ' obvChange is normalised by the MEAN per-bar volume of the bars that
+    ' contribute to OBV, so its units are "net OBV drift in average-bar-volumes
+    ' over the window" (pure-noise drift over ~250 bars scales ≈ √249 ≈ 16).
+    ' First-bar normalisation was degenerate: zero when the first two closes
+    ' were equal (OBV dead for the whole run) and effectively sign() otherwise.
+    ' trendGate is in the same average-bar-volume units (settings v31: 10.0).
     Public Shared Sub CalcOBV(candles As List(Of Candle),
                                ByRef obvTrend As String, ByRef obvDivergence As String,
-                               Optional trendGate As Double = 0.01,
+                               Optional trendGate As Double = 10.0,
                                Optional divergenceGate As Double = 0.001)
         obvTrend = "FLAT" : obvDivergence = "NONE"
         If candles.Count < 3 Then Return
@@ -49,7 +60,8 @@ Partial Public Class IndicatorEngine
         If obvValues.Count < 2 Then Return
         Dim obvFirst As Double = obvValues(0)
         Dim obvLast As Double = obvValues.Last()
-        Dim obvChange As Double = If(Math.Abs(obvFirst) > 0, (obvLast - obvFirst) / Math.Abs(obvFirst), 0)
+        Dim meanVol As Double = candles.Skip(1).Average(Function(c) c.Volume)   ' bars 1..N-1 — the bars that contribute to OBV
+        Dim obvChange As Double = If(meanVol > 0, (obvLast - obvFirst) / meanVol, 0)
         If obvChange > trendGate Then
             obvTrend = "RISING"
         ElseIf obvChange < -trendGate Then
