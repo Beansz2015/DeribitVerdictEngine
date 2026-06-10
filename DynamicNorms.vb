@@ -28,7 +28,12 @@ Public Class DynamicNorms
         End If
 
         ' -- Method 1a: Volume normalization ----------------------------------
-        Dim volWindow = candles1m.Take(Math.Min(100, candles1m.Count - 1)) _
+        ' Window = the most recent 100 COMPLETED bars (the final candle is in
+        ' progress and excluded), mirroring ComputeATRRef. The baseline must
+        ' describe current conditions — session multipliers stack on top of it.
+        Dim volLen   As Integer = Math.Min(100, candles1m.Count - 1)
+        Dim volStart As Integer = candles1m.Count - 1 - volLen
+        Dim volWindow = candles1m.Skip(volStart).Take(volLen) _
                                   .Select(Function(c) c.Volume).ToList()
         If volWindow.Count < 10 Then
             Return StaticFallback(currentATR)
@@ -55,8 +60,13 @@ Public Class DynamicNorms
         ApplySessionVolume(n)
 
         ' -- Method 1b: VWAP deviation normalization --------------------------
+        ' Same recent-completed-bars window shape as the volume baseline above.
+        ' The cumulative VWAP built across this window is a rolling last-~50-min
+        ' deviation stat — the intended adaptive behaviour.
         Dim vwapDevSamples As New List(Of Double)()
-        Dim vwapWindow = candles1m.Take(Math.Min(50, candles1m.Count - 1)).ToList()
+        Dim vwapLen   As Integer = Math.Min(50, candles1m.Count - 1)
+        Dim vwapStart As Integer = candles1m.Count - 1 - vwapLen
+        Dim vwapWindow = candles1m.Skip(vwapStart).Take(vwapLen).ToList()
         If vwapWindow.Count >= 10 Then
             Dim cumTPV As Double = 0
             Dim cumVol As Double = 0
