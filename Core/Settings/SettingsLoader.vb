@@ -62,7 +62,7 @@ Public Class SettingsLoader
         Dim json As String = JsonSerializer.Serialize(settings, opts)
         _lock.EnterWriteLock()
         Try
-            File.WriteAllText(_settingsPath, json)
+            AtomicWriteAllText(_settingsPath, json)
             _current = settings
         Finally
             _lock.ExitWriteLock()
@@ -70,6 +70,27 @@ Public Class SettingsLoader
     End Sub
 
     ' -- Private helpers -----------------------------------------------------
+
+    ''' <summary>
+    ''' Write text to a file atomically: persist to a sibling .tmp then rename.
+    ''' NTFS rename is atomic — a mid-write crash leaves either the original file
+    ''' intact (rename never happened) or the new file in place (rename completed),
+    ''' never a truncated settings.json. Mirrors TweakerState.Save.
+    ''' </summary>
+    Private Shared Sub AtomicWriteAllText(path As String, content As String)
+        Dim tmpPath As String = path & ".tmp"
+        Try
+            File.WriteAllText(tmpPath, content)
+            If File.Exists(path) Then
+                File.Replace(tmpPath, path, Nothing)
+            Else
+                File.Move(tmpPath, path)
+            End If
+        Catch
+            Try : File.Delete(tmpPath) : Catch : End Try
+            Throw
+        End Try
+    End Sub
 
     Private Shared Sub LoadFromDisk()
         If String.IsNullOrEmpty(_settingsPath) OrElse Not File.Exists(_settingsPath) Then Return

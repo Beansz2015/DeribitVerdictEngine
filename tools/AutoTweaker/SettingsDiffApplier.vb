@@ -189,9 +189,28 @@ Public Class SettingsDiffApplier
         changeLogNode.Add(summary.ToString())
 
         Dim opts As New JsonSerializerOptions With {.WriteIndented = True}
-        File.WriteAllText(settingsPath, root.ToJsonString(opts))
+        AtomicWriteAllText(settingsPath, root.ToJsonString(opts))
         Return newVersion
     End Function
+
+    ' Atomic write: persist to a sibling .tmp then rename so a mid-write crash
+    ' can't truncate settings.json. NTFS rename is atomic at the filesystem level.
+    ' Mirrors TweakerState.Save — duplicated here rather than coupling the
+    ' AutoTweaker project to the engine assembly (host-agnostic constraint).
+    Private Shared Sub AtomicWriteAllText(path As String, content As String)
+        Dim tmpPath As String = path & ".tmp"
+        Try
+            File.WriteAllText(tmpPath, content)
+            If File.Exists(path) Then
+                File.Replace(tmpPath, path, Nothing)
+            Else
+                File.Move(tmpPath, path)
+            End If
+        Catch
+            Try : File.Delete(tmpPath) : Catch : End Try
+            Throw
+        End Try
+    End Sub
 
     ' Apply a wholesale revert from a snapshot file. Per spec §3i:
     '   - Snapshot content runs through the same rejected-pattern / disabled-gate
@@ -254,7 +273,7 @@ Public Class SettingsDiffApplier
         changeLogNode.Add(summary)
 
         Dim opts As New JsonSerializerOptions With {.WriteIndented = True}
-        File.WriteAllText(settingsPath, snapshotRoot.ToJsonString(opts))
+        AtomicWriteAllText(settingsPath, snapshotRoot.ToJsonString(opts))
         Return newVersion
     End Function
 
