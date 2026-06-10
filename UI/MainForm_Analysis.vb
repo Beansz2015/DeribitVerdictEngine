@@ -116,8 +116,10 @@ Partial Public Class MainForm
             Return
         End If
 
+        ' recentTrades is chronological ascending — the last element is the most
+        ' recent trade (see GetRecentTradesAsync contract).
         Dim lastTradePrice As Double = If(recentTrades IsNot Nothing AndAlso recentTrades.Count > 0,
-                                          recentTrades(0).Price, 0)
+                                          recentTrades(recentTrades.Count - 1).Price, 0)
 
         Dim r As New IndicatorResults()
         r.CurrentPrice = candles1m.Last().Close

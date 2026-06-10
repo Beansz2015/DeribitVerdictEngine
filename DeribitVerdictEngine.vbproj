@@ -21,6 +21,14 @@
     <Compile Remove="tools\**\*.vb" />
     <None Remove="tools\**\*.vb" />
   </ItemGroup>
+
+  <!-- Exclude the verify/ acceptance harness (verify/ordercheck/, gitignored,
+       own .vbproj that links these sources) from SDK auto-discovery so a nested
+       harness project can never break the solution build. -->
+  <ItemGroup>
+    <Compile Remove="verify\**\*.vb" />
+    <None Remove="verify\**\*.vb" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Include="tools\AutoTweaker\TweakerConfig.vb" />
     <Compile Include="tools\AutoTweaker\TweakerState.vb" />

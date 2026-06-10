@@ -42,8 +42,23 @@
 '   Cold start (< 2 samples) returns FLAT.
 '   Window and threshold injectable via cfg.Indicators.Funding.MomentumWindow /
 '   MomentumThreshold. Called from RunAnalysisAsync after GetFundingRateAsync().
+'
+' fix [orderfix F1]: trade lists are CHRONOLOGICAL ASCENDING (oldest first).
+'   GetRecentTradesAsync reverses the API's newest-first order before returning
+'   (see its doc comment). Window-consuming indicators (TFI, MicroCVD) take the
+'   most recent n trades from the END of the list via LastN — Take(n) would
+'   select the OLDEST n. Positional segment labels (early/mid/late) in CalcCVD
+'   and CalcMicroCVD are chronologically truthful under this contract.
 
 Partial Public Class IndicatorEngine
+
+    ' -- Recent-trade window helper --------------------------------------------
+    ' Input lists are chronological ascending, so the most recent n trades are
+    ' the LAST n elements. n >= Count returns the whole list, preserving the
+    ' short-list behaviour of the previous Take(n) call sites.
+    Private Shared Function LastN(trades As List(Of TradeRecord), n As Integer) As List(Of TradeRecord)
+        Return trades.Skip(Math.Max(0, trades.Count - n)).ToList()
+    End Function
 
     ' -- OFI (Order Flow Imbalance) configurable depth, descending weights ----
     ' [P14] v0.51: buyDominantRatio / sellDominantRatio optional params
@@ -142,10 +157,13 @@ Partial Public Class IndicatorEngine
 
     ' -- CVD (Cumulative Volume Delta) ----------------------------------------
     ' [P3] v0.47: Replace half-split with 3-segment weighted slope.
-    ' Segments: early (first third), mid (second third), late (last third).
+    ' Input contract: trades chronological ascending (oldest first), so the
+    ' positional thirds are chronologically truthful — early (oldest third),
+    ' mid, late (most recent third).
     ' Weighted slope = (lateDelta * 2 - earlyDelta * 1) / weightedDenom.
-    ' Late segment carries 2x weight so a single large trade in early does
-    ' not dominate the slope signal, reducing false RISING/FALLING flips.
+    ' Late segment carries 2x weight so the slope emphasises the most recent
+    ' flow and a single large trade in early does not dominate the signal,
+    ' reducing false RISING/FALLING flips.
     Public Shared Sub CalcCVD(trades As List(Of TradeRecord), candles As List(Of Candle),
                                ByRef cvdValue As Double, ByRef cvdSlope As String,
                                ByRef cvdDivergence As String,
@@ -214,7 +232,7 @@ Partial Public Class IndicatorEngine
         tfiValue = 0.0 : tfiSignal = "NEUTRAL"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
-        Dim window = trades.Take(tfiWindowSize).ToList()
+        Dim window = LastN(trades, tfiWindowSize)   ' most recent trades (list is ascending)
         Dim buyFlow  As Double = 0
         Dim sellFlow As Double = 0
         For Each t In window
@@ -243,6 +261,11 @@ Partial Public Class IndicatorEngine
     ' [P4] v0.48: Optional param renamed windowSize -> microWindowSize for
     ' clarity at call sites where both CalcTFI and CalcMicroCVD are invoked.
     ' Default remains 50 trades -- wide enough for meaningful thirds.
+    ' Window = most recent microWindowSize trades (LastN on the ascending list);
+    ' within the window, early/mid/late thirds are chronological — index 0 is
+    ' the oldest trade of the window, so microLate vs microEarly compares the
+    ' newest flow against the oldest. Early/Mid/Late are net USD deltas;
+    ' negative values are valid (net sell pressure in that segment).
     Public Shared Sub CalcMicroCVD(trades As List(Of TradeRecord),
                                     ByRef microEarly As Double,
                                     ByRef microMid As Double,
@@ -257,7 +280,7 @@ Partial Public Class IndicatorEngine
         microMomentum = "FLAT" : microSignal = "FLAT"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
-        Dim window  = trades.Take(microWindowSize).ToList()
+        Dim window  = LastN(trades, microWindowSize)   ' most recent trades (list is ascending)
         Dim segSize As Integer = Math.Max(1, window.Count \ 3)
 
         For i As Integer = 0 To window.Count - 1

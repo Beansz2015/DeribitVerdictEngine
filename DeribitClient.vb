@@ -248,7 +248,16 @@ Public Class DeribitClient
             "GetOrderBookAsync")
     End Function
 
-    ' ── Recent trades (for liquidation detection) ──────────────────────────────────────────
+    ' ── Recent trades (order-flow indicators + liquidation detection) ──────────────────────
+    ''' <summary>
+    ''' Fetches the most recent <paramref name="count"/> trades and returns them in
+    ''' CHRONOLOGICAL ASCENDING order: oldest first, most recent last. The HTTP request
+    ''' keeps sorting=desc — that is what guarantees the API returns the latest trades —
+    ''' and the parsed list is reversed before return. Reverse() is the exact inverse of
+    ''' the API's documented order and preserves intra-millisecond trade ordering, which
+    ''' a stable sort by Timestamp would scramble. Window-consuming indicators take their
+    ''' window from the END of the list (see Indicators_OrderFlow.LastN).
+    ''' </summary>
     Public Shared Async Function GetRecentTradesAsync(count As Integer) As Task(Of List(Of TradeRecord))
         Return Await ExecuteWithRetry(Of List(Of TradeRecord))(
             Async Function() As Task(Of List(Of TradeRecord))
@@ -273,6 +282,7 @@ Public Class DeribitClient
                     End If
                     list.Add(rec)
                 Next
+                list.Reverse()   ' API order is newest-first; contract is ascending
                 Return list
             End Function,
             "GetRecentTradesAsync")
