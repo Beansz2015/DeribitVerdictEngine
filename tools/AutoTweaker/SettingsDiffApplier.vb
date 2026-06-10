@@ -105,20 +105,35 @@ Public Class SettingsDiffApplier
                 End If
             Next
 
-            ' Stale-value check: old_value must match current settings value
+            ' Path-resolution + stale-value check (both need parsed current settings).
             If currentRoot IsNot Nothing Then
+                Dim current As JsonNode = Nothing
                 Try
-                    Dim current = NavigatePath(currentRoot, item.Path)
-                    If current IsNot Nothing Then
-                        Dim currentStr = current.ToJsonString()
-                        Dim oldStr     = item.OldValue.GetRawText()
-                        If currentStr <> oldStr Then
-                            result.IsValid    = False
-                            result.ErrorReason = String.Format(
-                                "Stale diff: path '{0}' has current value {1} but diff expects {2}.",
-                                item.Path, currentStr, oldStr)
-                            Return result
-                        End If
+                    current = NavigatePath(currentRoot, item.Path)
+                Catch
+                End Try
+                ' Reject any path that does not resolve in the current settings tree.
+                ' Previously an unresolved path skipped the stale check and passed;
+                ' Apply then CREATED the unknown key, so a typo'd path from the model
+                ' (e.g. "indicators.RSI.overbough") validated, applied, bumped the
+                ' version, and was recorded APPLIED as a silent no-op the engine
+                ' never reads — corrupting failure-rate evaluation of the "tweak".
+                If current Is Nothing Then
+                    result.IsValid    = False
+                    result.ErrorReason = String.Format(
+                        "Rejected: path '{0}' does not resolve in current settings (no key creation).", item.Path)
+                    Return result
+                End If
+                ' Stale-value check: old_value must match current settings value.
+                Try
+                    Dim currentStr = current.ToJsonString()
+                    Dim oldStr     = item.OldValue.GetRawText()
+                    If currentStr <> oldStr Then
+                        result.IsValid    = False
+                        result.ErrorReason = String.Format(
+                            "Stale diff: path '{0}' has current value {1} but diff expects {2}.",
+                            item.Path, currentStr, oldStr)
+                        Return result
                     End If
                 Catch
                 End Try
@@ -160,7 +175,15 @@ Public Class SettingsDiffApplier
             Next
             If parent IsNot Nothing Then
                 Dim key = parts(parts.Length - 1)
-                parent(key) = JsonNode.Parse(item.NewValue.GetRawText())
+                ' Never create keys — only overwrite an existing leaf. Unknown paths
+                ' are rejected by Validate; this is defence in depth so a typo'd path
+                ' can't be silently materialised into settings.json here.
+                If parent.ContainsKey(key) Then
+                    parent(key) = JsonNode.Parse(item.NewValue.GetRawText())
+                Else
+                    Console.Error.WriteLine(String.Format(
+                        "[SettingsDiffApplier] Skipped unknown path '{0}' in Apply — key not created.", item.Path))
+                End If
             End If
         Next
 
