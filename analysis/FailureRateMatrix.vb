@@ -18,6 +18,7 @@
 ' Host-agnostic: no System.Windows.Forms references.
 
 Imports System.Collections.Generic
+Imports System.Globalization
 Imports System.Math
 
 Public Class FailureRateMatrix
@@ -258,16 +259,23 @@ Public Class FailureRateMatrix
                     DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
                     tier,
                     windowMin.ToString(),
-                    atrThreshold.ToString("F2"),
-                    failureRate.ToString("F6"),
+                    Inv(atrThreshold, "F2"),
+                    Inv(failureRate, "F6"),
                     sampleSize.ToString(),
-                    ciLow.ToString("F6"),
-                    ciHigh.ToString("F6")))
+                    Inv(ciLow, "F6"),
+                    Inv(ciHigh, "F6")))
             End Using
         Catch
             ' Best-effort write — do not abort the auto-tweaker run on CSV I/O failure.
         End Try
     End Sub
+
+    ' Format a numeric field with InvariantCulture so a comma-decimal host locale
+    ' can't split a value across CSV columns. Mirrors AnalysisLogger.Inv; byte-
+    ' identical to the prior culture-sensitive ToString on a dot-decimal host.
+    Private Shared Function Inv(value As Double, fmt As String) As String
+        Return value.ToString(fmt, CultureInfo.InvariantCulture)
+    End Function
 
     ' Rename an existing v1 picked-cell history file to .v1.bak.
     ' Detection: first line of the file does NOT start with "# schema=v2".
