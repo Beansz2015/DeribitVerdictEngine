@@ -709,17 +709,23 @@ Public Class AutoTweakerCore
         Return JsonSerializer.Serialize(obj)
     End Function
 
-    ' Check if any session-start hour falls inside the interval (t1, t2).
+    ' Returns True if any session-start hour falls inside the half-open interval
+    ' (earlier, later] of the two timestamps — date-aware: a span of a full day
+    ' or more always crosses, and the hour walk advances real DateTimes so two
+    ' timestamps in the same clock-hour on different days are no longer treated as
+    ' boundary-clean. Keep identical to TweakSettingsForm.FormCrossesSessionBoundary.
     Private Shared Function CrossesSessionBoundary(t1 As DateTime, t2 As DateTime,
                                                     sessionStarts As HashSet(Of Integer)) As Boolean
         If t1 = DateTime.MinValue OrElse t2 = DateTime.MinValue Then Return True
-        Dim h1 = t1.Hour
-        Dim h2 = t2.Hour
-        If h1 = h2 Then Return False
-        Dim h = h1
-        Do While h <> h2
-            h = (h + 1) Mod 24
-            If sessionStarts.Contains(h) Then Return True
+        Dim earlier As DateTime = If(t1 <= t2, t1, t2)
+        Dim later   As DateTime = If(t1 <= t2, t2, t1)
+        ' A span of a full day or more crosses every session-start hour.
+        If (later - earlier).TotalHours >= 24.0 Then Return True
+        ' Walk each top-of-hour boundary in (earlier, later] and test its hour.
+        Dim boundary As DateTime = earlier.Date.AddHours(earlier.Hour + 1)
+        Do While boundary <= later
+            If sessionStarts.Contains(boundary.Hour) Then Return True
+            boundary = boundary.AddHours(1)
         Loop
         Return False
     End Function
