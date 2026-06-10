@@ -60,11 +60,15 @@ Partial Public Class ScoringEngine
                     Return res
                 End If
             Case "TRANSITIONAL"
-                Dim penLow As Double = cfg.RegimeGates.TransitionalAdxPenaltyLow
+                ' ADX-proximity scale: the further below the trend threshold,
+                ' the heavier the penalty. The first arm covers everything
+                ' below the mid boundary — ADX under 20 (reachable on the
+                ' regime-hysteresis grace bar) is the WEAKEST reading and must
+                ' get the full penalty, not fall through to zero.
                 Dim penMid As Double = cfg.RegimeGates.TransitionalAdxPenaltyMid
-                If r.ADX >= penLow AndAlso r.ADX < penMid Then
+                If r.ADX < penMid Then
                     adxPenalty = cfg.RegimeGates.TransitionalPenaltyLow
-                ElseIf r.ADX >= penMid AndAlso r.ADX < cfg.RegimeGates.TransitionalAdxPenaltyHigh Then
+                ElseIf r.ADX < cfg.RegimeGates.TransitionalAdxPenaltyHigh Then
                     adxPenalty = cfg.RegimeGates.TransitionalPenaltyMid
                 End If
                 effectiveLS = Math.Max(ls - adxPenalty, TierFloor(ls, cfg))

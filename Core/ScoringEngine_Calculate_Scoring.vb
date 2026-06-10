@@ -581,13 +581,14 @@ Partial Public Class ScoringEngine
 
         Dim fundingBaseNote As String = ""
         If fr > cfg.Scoring.FundingHighPositive Then
-            ls -= cfg.Scoring.FundingHighPenalty : ss += cfg.Scoring.FundingHighBoost
+            ' Boost capped at regimeMax like every other bonus site (Step 3b, Pass 2b/2c).
+            ls -= cfg.Scoring.FundingHighPenalty : ss = Math.Min(ss + cfg.Scoring.FundingHighBoost, regimeMax)
             fundingBaseNote = String.Format("STEP3: -{0}[L] +{1}[S]", cfg.Scoring.FundingHighPenalty, cfg.Scoring.FundingHighBoost)
         ElseIf fr > cfg.Scoring.FundingLowPositive Then
             ls -= cfg.Scoring.FundingLowPenalty
             fundingBaseNote = String.Format("STEP3: -{0}[L]", cfg.Scoring.FundingLowPenalty)
         ElseIf fr < cfg.Scoring.FundingHighNegative Then
-            ss -= cfg.Scoring.FundingHighPenalty : ls += cfg.Scoring.FundingHighBoost
+            ss -= cfg.Scoring.FundingHighPenalty : ls = Math.Min(ls + cfg.Scoring.FundingHighBoost, regimeMax)
             fundingBaseNote = String.Format("STEP3: -{0}[S] +{1}[L]", cfg.Scoring.FundingHighPenalty, cfg.Scoring.FundingHighBoost)
         ElseIf fr < cfg.Scoring.FundingLowNegative Then
             ss -= cfg.Scoring.FundingLowPenalty

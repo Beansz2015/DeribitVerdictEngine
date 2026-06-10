@@ -84,7 +84,8 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 - **All thresholds in `settings.json`** — no magic numbers in `.vb` files. `SettingsLoader.Current` is the singleton accessor.
 - **Scoring pipeline is additive** — signals vote +1/0/−1 into `ScoreState`; regime MaxScore (19/18/15) sets the ceiling; verdict thresholds are `Math.Ceiling(regimeMax × pct)`.
-- **MTF Gate (15m) is a hard veto** — BLOCK forces NO TRADE regardless of score.
+- **MTF Gate (15m) is a hard veto** — BLOCK forces NO TRADE regardless of score. Direction-aware since v31: `CalcMTFGate` emits per-side flags; Step 4b consults the flag matching the verdict's dominant side and composes the final reason (`VerdictResult.MTFGateReason`).
+- **Trade lists are chronological ascending** (v31) — `GetRecentTradesAsync` reverses the API's newest-first order before returning. Window consumers take the most recent n trades from the END of the list (`IndicatorEngine.LastN`); `Take(n)` on a trade list selects the OLDEST n and is a bug.
 - **VerdictContext is display-only** (Step 5b) — CONFIRMED / FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK. Zero scoring impact.
 - **Kelly sizing is display-only** — suppressed when KellyF ≤ 0. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face.
 - **Funding modifier is adjunct** (Step 3 + 3b) — never in Step 2 to avoid double-counting.
@@ -116,6 +117,6 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 ## settings.json Version
 
-Current: **v30**. Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`, `regime_weights`, `network`, `performance_display`, `analysis_logging`. When adding new config keys, increment `version` and append an entry to `change_log` (newest first inside the array).
+Current: **v31**. Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`, `regime_weights`, `network`, `performance_display`, `analysis_logging`. When adding new config keys, increment `version` and append an entry to `change_log` (newest first inside the array).
 
 The exact current version is the source of truth — read `settings.json` line 1 (`"version": N`) before assuming. Always bump from whatever is current, not from the number quoted here (this header drifts).

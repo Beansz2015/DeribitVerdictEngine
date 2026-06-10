@@ -843,22 +843,33 @@ Public Class LivePerformanceTracker
     End Structure
 
     ''' <summary>
-    ''' Parse the analysis_log.csv (v0.4.1 schema) for the columns needed by backfill.
-    ''' Columns: 0=Timestamp, 1=Price, 2=Verdict, 63=ATR, 81=SwingStopLong, 82=SwingStopShort.
-    ''' Rows with parse errors are silently skipped.
+    ''' Parse analysis_log.csv for the columns needed by backfill. Columns are
+    ''' resolved by HEADER NAME (same approach as ForwardWindowJoiner), never by
+    ''' fixed index — schema bumps that shift column positions cannot silently
+    ''' corrupt the eval cache. Rows with parse errors are silently skipped;
+    ''' a header missing any required column yields an empty result.
     ''' </summary>
     Private Shared Function ParseAnalysisLog(path As String) As List(Of LogRow)
         Dim result As New List(Of LogRow)()
         Try
-            Dim first As Boolean = True
+            Dim colIdx As Dictionary(Of String, Integer) = Nothing
             For Each line As String In File.ReadLines(path)
-                If first Then
-                    first = False
-                    Continue For  ' skip header row
+                If colIdx Is Nothing Then
+                    colIdx = New Dictionary(Of String, Integer)(StringComparer.OrdinalIgnoreCase)
+                    Dim header = line.Split(","c)
+                    For i As Integer = 0 To header.Length - 1
+                        colIdx(header(i).Trim()) = i
+                    Next
+                    For Each required As String In {"Timestamp", "Price", "Verdict", "ATR", "SwingStopLong", "SwingStopShort"}
+                        If Not colIdx.ContainsKey(required) Then
+                            Console.WriteLine("[LivePerformanceTracker] ParseAnalysisLog: column '" & required & "' missing from header — no rows parsed")
+                            Return result
+                        End If
+                    Next
+                    Continue For
                 End If
                 If String.IsNullOrWhiteSpace(line) Then Continue For
                 Dim p = line.Split(","c)
-                If p.Length < 83 Then Continue For
                 Try
                     Dim row As LogRow
                     ' Timestamp stored as UTC in AnalysisLogger ("yyyy-MM-dd HH:mm:ss" — no
@@ -866,14 +877,14 @@ Public Class LivePerformanceTracker
                     ' AdjustToUniversal ensures Kind=Utc on output. Defensive against future
                     ' logger format changes that might add a Z suffix.
                     row.Timestamp = DateTime.Parse(
-                        p(0).Trim(),
+                        p(colIdx("Timestamp")).Trim(),
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.AdjustToUniversal Or DateTimeStyles.AssumeUniversal)
-                    row.Verdict       = p(2).Trim()
-                    row.EntryPrice    = Double.Parse(p(1), CultureInfo.InvariantCulture)
-                    row.ATR           = Double.Parse(p(63), CultureInfo.InvariantCulture)
-                    row.SwingStopLong  = Double.Parse(p(81), CultureInfo.InvariantCulture)
-                    row.SwingStopShort = Double.Parse(p(82), CultureInfo.InvariantCulture)
+                    row.Verdict       = p(colIdx("Verdict")).Trim()
+                    row.EntryPrice    = Double.Parse(p(colIdx("Price")), CultureInfo.InvariantCulture)
+                    row.ATR           = Double.Parse(p(colIdx("ATR")), CultureInfo.InvariantCulture)
+                    row.SwingStopLong  = Double.Parse(p(colIdx("SwingStopLong")), CultureInfo.InvariantCulture)
+                    row.SwingStopShort = Double.Parse(p(colIdx("SwingStopShort")), CultureInfo.InvariantCulture)
                     result.Add(row)
                 Catch
                     ' Skip malformed row

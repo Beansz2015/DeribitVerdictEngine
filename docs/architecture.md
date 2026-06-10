@@ -1,5 +1,7 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-06-10 | App version: settings.json v30 — display polish pass on top of auto-tweaker fixed-window mode + MinTier rework (v29), target-hit metric toggle (v28), OHLC gap-backfill (v27), live-performance-display (v26), output-dump (v25), Bundle 3 (d1 trend structure + d2 volume-weighted pivots), Bundle 1 (csv-expansion-v0.4 + analysis script), and Bundle 2 (auto-tweaker). `settings.json` line 1 is the version source of truth.**
+**Last updated: 2026-06-11 | App version: settings.json v31 — engine correctness pass (trade-stream ascending contract, recent-window norms, direction-aware MTF gate, dominant-side cascade, OBV/Donchian fixes, CSV v0.5) on top of v30 display polish, auto-tweaker fixed-window mode (v29), target-hit metric toggle (v28), OHLC gap-backfill (v27). `settings.json` line 1 is the version source of truth.**
+
+> **Trade-stream contract (v31).** `DeribitClient.GetRecentTradesAsync` returns trades in **chronological ascending** order (oldest first, most recent last) — the HTTP request keeps `sorting=desc` to guarantee the latest trades, and the parsed list is reversed before return. Window-consuming indicators (TFI, MicroCVD) take their window from the **end** of the list via `IndicatorEngine.LastN`; `Take(n)` on a trade list selects the OLDEST n and is a bug. CalcCVD's positional thirds (early/mid/late) are chronologically truthful under this contract.
 
 > **Auto-tweaker windowing (v29).** `tools/AutoTweaker/AutoTweakerCore.RunAsync` reads `TweakerConfig.WindowMode`. In `fixed` mode (default), a "round" is a disjoint slice `allRows[LastEvaluatedRowIndex .. +WindowSize-1]`; the index advances by exactly `WindowSize` after every completed terminal branch (including the new `SKIPPED_INSUFFICIENT_TIER` / `SKIPPED_SESSION_BOUNDARY` outcomes — which do **not** tick the BELOW_THRESHOLD streak). `cooldown_rows` is a no-op in fixed mode. MinTier resolves through `TweakerConfig.EffectiveMinTier(windowSize)` — null in JSON auto-scales as `max(15, ceil(WindowSize × 0.5))`. Sliding mode is retained behind the `Else` arm for legacy comparison and is documented as deprecated.
 
@@ -204,7 +206,8 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─► DeribitClient.GetFundingRateAsync()          → fundingRate    (Double? or Nothing)
         ├─► DeribitClient.GetBookSummaryAsync()          → bookSummary    (tuple? or Nothing)
         ├─► DeribitClient.GetOrderBookAsync(10)          → orderBook      (snapshot or Nothing)
-        └─► DeribitClient.GetRecentTradesAsync(100)      → recentTrades   (List or Nothing)
+        └─► DeribitClient.GetRecentTradesAsync(500)      → recentTrades   (List or Nothing,
+                                                            chronological ASCENDING — see contract note above)
                     │  (all fetched in parallel via Task.WhenAll;
                     │   15m only included when cache is stale;
                     │   each call wrapped in ExecuteWithRetry — retry-once on 5xx/timeout,
@@ -250,7 +253,10 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.MicroCVD*          = CalcMicroCVD(recentTrades)
         │                         [dynamic accelThreshold: max(staticFloor, windowUsd × pct)]
         ├─ r.TFI* / TFISignal   = CalcTFI(recentTrades)
-        ├─ r.MTFGatePass/Reason = CalcMTFGate(candles15m)  [cached; refreshed by TTL]
+        ├─ r.MTFGatePassLong/Short/Details = CalcMTFGate(candles15m)  [cached; refreshed by TTL]
+        │                         direction-independent per-side flags; the final
+        │                         display reason is composed at scoring Step 4b
+        │                         (VerdictResult.MTFGateReason / MTFGateBlocked)
         ├─ r.DonchianSignal     = CalcDonchian(candles1m,
         │                         quartilePct:=cfg.Indicators.Donchian.QuartilePct)
         ├─ r.OBVTrend/Div       = CalcOBV
@@ -306,8 +312,15 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          Controlled by cfg.Indicators.Funding.MomentumEnabled.
                     │          Zero scoring impact when momentum = FLAT or disabled.
                     ├─ Step 4:  Regime veto + TRANSITIONAL ADX penalty
-                    ├─ Step 4b: MTF gate veto → forces NO TRADE on BLOCK
-                    ├─ Step 5:  Threshold comparison → verdict string
+                    │          (penalty arms cover [0, mid) and [mid, high) —
+                    │           the grace-bar ADX < 20 case gets the full penalty)
+                    ├─ Step 4b: MTF gate veto (direction-aware) — dominant side
+                    │          determined once from effective scores (tie → NONE);
+                    │          the matching per-side flag is consulted; BLOCK
+                    │          forces NO TRADE; final reason composed here
+                    ├─ Step 5:  Dominant-side tier walk → verdict string
+                    │          (only the dominant side's tiers are checked;
+                    │           ties and below-weak dominants → NO TRADE)
                     ├─ Step 5 (post): CalcVerdictContext → VerdictResult.VerdictContext
                     │          (FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK /
                     │          CONFIRMED). Structural check fires STRUCTURALLY_WEAK when
@@ -480,6 +493,6 @@ Notes on rendering behaviours that have surfaced in audits as potentially-buggy 
 | `HOLD \ EXIT:` row absent from rendered output and output dump when no position is held | By design | `MainForm_Render_Header.RenderOutputHeader` guards on `If v.HoldStatus <> "N/A -- no open position" Then`. `CalcHoldStatus` returns the `"N/A -- no open position"` sentinel when `posState.IsNone`. The whole hold-guidance block (label + value) is suppressed in that case — there's no position to guide. The architecture handover lists `HOLD STATUS` in the standard render order; the actual rendered label is `HOLD \ EXIT` and only when a position has been declared via the radio buttons. |
 | POC tier 3 of the target cap never fires in practice | By design + geometry | The Step 5b cap arbitration considers POC only when `hvnAbove` / `hvnBelow` is True (VPFR signal flags the engine is in HVN proximity). When the gate is open, POC must additionally be closer to entry than both the swing target AND the nearest HVN. The combined conditions are narrow enough that POC almost never wins by geometry alone. The branch is reachable, not dead code. POC tier is a **refinement** of the HVN tier, not a general fallback for the "no swing, no HVN" case. |
 | `STRONG LONG` / `STRONG SHORT` co-existing with `STRUCTURALLY_WEAK` / `MOMENTUM_FADING` context tags | Intentional | `VerdictContext` is display-only (Step 5b post). It surfaces structural caveats the score didn't fold in. A STRONG-tier score with a warning tag legitimately means "score qualifies for the strong tier, but the structural picture is thin / momentum is fading." This is informative, not contradictory — the trader should read the context tag before sizing. Suppressing warnings on STRONG verdicts would remove the very signal the tag was added to surface. |
-| MTF Reason rendered in three formats (`MTF PASS [DIR]`, `MTF BLOCK [DIR vs TREND]`, `MTF state: TREND`) | By design | Three scenarios, three formats. `MTF PASS [DIR]` when a direction is proposed and the gate clears. `MTF BLOCK [DIR vs TREND]` when blocked. `MTF state: TREND` when no direction has been proposed yet (typically the `posState=None` path). Documented in UserManual §1482. The leading-keyword inconsistency is a deliberate signal of the no-direction case — unifying would lose that distinction. |
+| MTF Reason rendered in three formats (`MTF PASS [DIR]`, `MTF BLOCK [DIR vs TREND]`, `MTF state: TREND \| details`) | By design | Three scenarios, three formats. Since v31 the string is composed at scoring Step 4b against the **dominant side** and stored on `VerdictResult.MTFGateReason` — every consumer (MTF card, plaintext snapshot, CSV, breakdown row) renders that one string. `MTF PASS [DIR]` when a directional verdict is in play and the gate clears; `MTF BLOCK [DIR vs TREND]` when it fails; `MTF state: TREND \| details` when no directional verdict is in play. The leading-keyword inconsistency is a deliberate signal of the no-direction case — unifying would lose that distinction. |
 | `[B]` / `[T]` mode indicator absent from rendered output dump (pre-v30) | Was a spec gap (fixed v30) | `AnalysisOutputDump.Append` originally captured only `txtOutput.Text` (the RTF content). The perf-strip is separate WinForms `Label` controls outside the RTF, so the mode indicator and the six rate labels weren't captured. v30's display-polish pass adds a `PERF STRIP` header line to each dump block. Dumps from pre-v30 won't have this line. |
 

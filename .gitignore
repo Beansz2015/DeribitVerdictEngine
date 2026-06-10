@@ -388,4 +388,8 @@ bin/Release/net8.0-windows/analysis_eval_cache.csv
 bin/Release/net8.0-windows/ohlc_1m_cache.csv
 
 # Dev verification captures from tools/screenshot-mainform.ps1
+# (also the verify/ordercheck acceptance harness — linked sources, own .vbproj)
 verify/
+
+# Archived pre-correctness-pass calibration data (engine-correctness-pass-proposal.md §9)
+data-archive/

@@ -1,12 +1,20 @@
-' AnalysisLogger.vb  v0.4.1
+' AnalysisLogger.vb  v0.5
 ' Appends one row per analysis run to a local CSV file.
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
 '
+' v0.5 (engine correctness pass, 2026-06): MTF gate columns replaced —
+'       MTFGatePass → MTFGatePassLong + MTFGatePassShort (both sides logged
+'       for gate-disagreement analytics); MTFGateReason now carries the final
+'       Step 4b composed string. The header change is the schema marker for
+'       the pass: rows logged under this header have post-fix semantics for
+'       CVDSlope, MicroCVD*, VolumeRatio (recent-window norms), OBVTrend/
+'       OBVDivergence (mean-volume units), DonchianSignal (prior-bar channel),
+'       and the verdict/confidence distributions. Old-header files rotate to
+'       .bak as usual.
+'
 ' v0.4.1 (d1+d2): Column 87 added: TrendStructure5m.
 '         BestPivotByVolume5m (col 85) and BestPivotVolumeRatio5m (col 86) now populated.
-'         Log rotation: if existing file does not match v0.4.1 header,
-'         it is renamed to analysis_log.csv.v0.4.bak (timestamped if .bak exists).
 '
 ' v0.4: Header expanded with 18 new columns (cols 69-86):
 '       SpreadBps, OFIMomentum, FundingDelta,
@@ -44,7 +52,7 @@ Public Class AnalysisLogger
         "LiqLongSize,LiqShortSize,LiqSignal," &
         "DonchianUpper,DonchianLower,DonchianSignal," &
         "OBVTrend,OBVDivergence," &
-        "MTFGatePass,MTF15mTrend,MTF15mADX,MTF15mEMAAlignment,MTFGateReason," &
+        "MTFGatePassLong,MTFGatePassShort,MTF15mTrend,MTF15mADX,MTF15mEMAAlignment,MTFGateReason," &
         "ATR,ATRMultiplier," &
         "VerdictContext,FundingMomentum,OiCvdOutcome," &
         "SpreadBps,OFIMomentum,FundingDelta," &
@@ -81,12 +89,12 @@ Public Class AnalysisLogger
             End Using
 
             If firstLine Is Nothing OrElse firstLine.Trim() <> Header Then
-                ' Schema mismatch — rotate old file
+                ' Schema mismatch — rotate old file (named for the superseded schema)
                 Dim dir As String = System.IO.Path.GetDirectoryName(path)
                 Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.4.bak")
                 If File.Exists(bakPath) Then
                     Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
-                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.3." & ts & ".bak")
+                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.4." & ts & ".bak")
                 End If
                 File.Move(path, bakPath)
                 WriteHeader(path)
@@ -183,7 +191,8 @@ Public Class AnalysisLogger
                     r.DonchianSignal,
                     r.OBVTrend,
                     r.OBVDivergence,
-                    (Not v.MTFGateBlocked).ToString(),
+                    r.MTFGatePassLong.ToString(),
+                    r.MTFGatePassShort.ToString(),
                     r.MTF15mTrend,
                     Inv(r.MTF15mADX, "F2"),
                     r.MTF15mEMAAlignment,

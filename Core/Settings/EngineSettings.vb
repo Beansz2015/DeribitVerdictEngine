@@ -229,7 +229,8 @@ Public Class DonchianSettings
 End Class
 
 Public Class ObvSettings
-    <JsonPropertyName("trend_gate")>      Public Property TrendGate      As Double = 0.001
+    ''' <summary>Units since v31: net OBV drift in average-bar-volumes over the window (F5 normalisation). Seeded, not calibrated.</summary>
+    <JsonPropertyName("trend_gate")>      Public Property TrendGate      As Double = 10.0
     <JsonPropertyName("divergence_gate")> Public Property DivergenceGate As Double = 0.001
 End Class
 
