@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-10
 **Author:** Fable 5 (spec-author seat)
-**Status:** DRAFT — awaiting user approval. Scoring changes are approval-gated; nothing here ships without explicit sign-off.
+**Status:** ✅ IMPLEMENTED 2026-06-11 (approved 2026-06-10, commit `cf415cd`). Five local commits `704b4aa` → `73d8088`; harness A1–A9 pass; data reset executed (`data-archive/pre-orderfix-20260611/`). Awaiting the user's live smoke test before push.
 **Implementer:** Fable 5 (the warm audit conversation that produced `docs/fable5-audit-report.md`, if still open; otherwise a fresh Fable conversation given this doc). NOT Opus — window-semantics judgement is required (see §12).
 **Settings:** v30 → **v31**. CSV schema: v0.4 → **v0.5**. Includes the pre-authorised **data reset** (§7).
 
