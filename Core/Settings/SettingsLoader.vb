@@ -16,6 +16,19 @@ Public Class SettingsLoader
     Private Shared _lock As New ReaderWriterLockSlim()
     Private Shared _watcher As FileSystemWatcher
     Private Shared _settingsPath As String = ""
+    Private Shared _lastLoadError As String = ""
+
+    ''' <summary>
+    ''' Non-empty when the most recent load from disk failed to parse — the engine
+    ''' is then running on the in-memory POCO defaults rather than calibrated values.
+    ''' Cleared on a successful load. Surfaced by MainForm in the status bar at
+    ''' startup; also logged to the console for the future headless CLI host.
+    ''' </summary>
+    Public Shared ReadOnly Property LastLoadError As String
+        Get
+            Return _lastLoadError
+        End Get
+    End Property
 
     ''' <summary>
     ''' Returns the currently active settings. Always thread-safe.
@@ -105,9 +118,13 @@ Public Class SettingsLoader
                 Finally
                     _lock.ExitWriteLock()
                 End Try
+                _lastLoadError = ""
             End If
         Catch ex As Exception
             ' On parse error, keep the last good settings rather than crashing.
+            ' At startup "last good" is the POCO defaults, so the engine is then
+            ' running on uncalibrated values — record it so MainForm can surface it.
+            _lastLoadError = ex.Message
             Console.WriteLine("[SettingsLoader] Parse error: " & ex.Message)
         End Try
     End Sub

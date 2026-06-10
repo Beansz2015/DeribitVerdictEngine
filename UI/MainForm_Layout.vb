@@ -1184,7 +1184,13 @@ Partial Public Class MainForm
         ' "Log: {N} rows[ · skipped {M}]". Full path moves to a tooltip so the
         ' LOG sub-box stays scannable at a glance.
         Dim skipSuffix As String = If(_skipCount > 0, String.Format(" · skipped {0}", _skipCount), "")
-        lblLogInfo.Text = String.Format("Log: {0} rows{1}", rows, skipSuffix)
+        ' Persistent calibration-integrity warning: if settings.json failed to
+        ' parse at load, the engine is running on uncalibrated POCO defaults.
+        ' Recomputed every call (like skipSuffix) so it stays visible across
+        ' renders and self-clears once a valid settings.json successfully loads.
+        Dim cfgWarn As String = If(Not String.IsNullOrEmpty(SettingsLoader.LastLoadError),
+                                   "settings.json parse failed — running on code defaults · ", "")
+        lblLogInfo.Text = String.Format("{0}Log: {1} rows{2}", cfgWarn, rows, skipSuffix)
         If _logInfoTooltip IsNot Nothing Then
             _logInfoTooltip.SetToolTip(lblLogInfo, path)
         End If
