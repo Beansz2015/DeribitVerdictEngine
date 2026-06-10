@@ -110,12 +110,12 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 **Do not re-open settled design decisions** without new data or a concrete technical reason.
 
-**Linux CLI port is the long-term target.** The current WinForms app is the active development surface, but a future port to a headless Linux service is on the roadmap (see `docs/DeribitIndicatorProject.md` Section 16.2). To keep the port tractable, all new code in `analysis/` and `tools/` MUST be host-agnostic — no `System.Windows.Forms` references, no `Control.Invoke`, no `MainForm` coupling. Form-side viewers (e.g., `AnalysisReportForm`) are allowed but must be thin wrappers that call host-agnostic core classes. Any new project (e.g., the auto-tweaker console app) builds against a separate `.csproj` with zero WinForms references.
+**Linux CLI port is the long-term target.** The current WinForms app is the active development surface, but a future port to a headless Linux service is on the roadmap (see `docs/DeribitIndicatorProject.md` Section 16.2). To keep the port tractable, all new code in `analysis/` and `tools/` MUST be host-agnostic — no `System.Windows.Forms` references, no `Control.Invoke`, no `MainForm` coupling. Form-side viewers (e.g., `AnalysisReportForm`) are allowed but must be thin wrappers that call host-agnostic core classes. Any new project (e.g., the auto-tweaker console app, which builds against its own `AutoTweaker.vbproj`) gets a separate project file with zero WinForms references.
 
 ---
 
 ## settings.json Version
 
-Current: **v28**. Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`, `network`, `performance_display`, `analysis_logging`. When adding new config keys, increment `version` and append an entry to `change_log` (newest first inside the array).
+Current: **v30**. Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`, `regime_weights`, `network`, `performance_display`, `analysis_logging`. When adding new config keys, increment `version` and append an entry to `change_log` (newest first inside the array).
 
 The exact current version is the source of truth — read `settings.json` line 1 (`"version": N`) before assuming. Always bump from whatever is current, not from the number quoted here (this header drifts).

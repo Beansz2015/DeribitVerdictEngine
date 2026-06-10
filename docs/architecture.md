@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-05-17 | App version: settings.json v29 — auto-tweaker fixed-window mode + MinTier rework on top of target-hit metric toggle (v28), OHLC gap-backfill (v27), live-performance-display (v26), output-dump (v25), Bundle 3 (d1 trend structure + d2 volume-weighted pivots), Bundle 1 (csv-expansion-v0.4 + analysis script), and Bundle 2 (auto-tweaker)**
+**Last updated: 2026-06-10 | App version: settings.json v30 — display polish pass on top of auto-tweaker fixed-window mode + MinTier rework (v29), target-hit metric toggle (v28), OHLC gap-backfill (v27), live-performance-display (v26), output-dump (v25), Bundle 3 (d1 trend structure + d2 volume-weighted pivots), Bundle 1 (csv-expansion-v0.4 + analysis script), and Bundle 2 (auto-tweaker). `settings.json` line 1 is the version source of truth.**
 
 > **Auto-tweaker windowing (v29).** `tools/AutoTweaker/AutoTweakerCore.RunAsync` reads `TweakerConfig.WindowMode`. In `fixed` mode (default), a "round" is a disjoint slice `allRows[LastEvaluatedRowIndex .. +WindowSize-1]`; the index advances by exactly `WindowSize` after every completed terminal branch (including the new `SKIPPED_INSUFFICIENT_TIER` / `SKIPPED_SESSION_BOUNDARY` outcomes — which do **not** tick the BELOW_THRESHOLD streak). `cooldown_rows` is a no-op in fixed mode. MinTier resolves through `TweakerConfig.EffectiveMinTier(windowSize)` — null in JSON auto-scales as `max(15, ceil(WindowSize × 0.5))`. Sliding mode is retained behind the `Else` arm for legacy comparison and is documented as deprecated.
 
@@ -28,7 +28,7 @@ DeribitVerdictEngine/
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
-├── settings.json                       All tunable parameters v25 (no recompile needed)
+├── settings.json                       All tunable parameters (version: see line 1 of the file; no recompile needed)
 │
 ├── Core/
 │   ├── Settings/
@@ -160,7 +160,7 @@ DeribitVerdictEngine/
 │
 ├── tools/
 │   └── AutoTweaker/                    Host-agnostic console app (Bundle 2).
-│                                       AutoTweaker.csproj — separate .NET 8 project.
+│                                       AutoTweaker.vbproj — separate .NET 8 project.
 │                                       Zero WinForms references. Runs unmodified
 │                                       on Linux via `dotnet AutoTweaker.dll`.
 │                                       AutoTweakerProgram, AutoTweakerCore,
