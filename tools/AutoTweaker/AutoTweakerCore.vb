@@ -116,6 +116,29 @@ Public Class AutoTweakerCore
                 Return 2
             End If
 
+            ' CSV shrink guard: LastEvaluatedRowIndex is an absolute row index, but
+            ' the CSV can shrink below it — schema-mismatch rotation (has happened
+            ' twice), the UI Reset Log link, or a deliberate data reset. Without
+            ' this guard, currentRowCount < LastEvaluatedRowIndex makes the
+            ' window-full check below compute a negative new-row count, which is
+            ' always < WindowSize, so every run exits INELIGIBLE forever and the
+            ' first-fire silently never happens. Re-seed to the new row count so
+            ' evaluation resumes on the fresh data. This is a reset, not a round —
+            ' do NOT tick the BELOW_THRESHOLD streak and write no RoundSummary.
+            If currentRowCount < state.LastEvaluatedRowIndex Then
+                Console.WriteLine(String.Format(
+                    "[AutoTweaker] WARNING — CSV shrank below LastEvaluatedRowIndex " &
+                    "(rows={0} < index={1}); re-seeding index to {0}. Likely a log " &
+                    "rotation, Reset Log, or data reset. Streak not ticked.",
+                    currentRowCount, state.LastEvaluatedRowIndex))
+                state.LastEvaluatedRowIndex = currentRowCount
+                state.LastRunOutcome     = "INELIGIBLE"
+                state.LastRunAtIso       = DateTime.UtcNow.ToString("o")
+                state.LastRunCsvRowCount = currentRowCount
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
+
             If currentRowCount - state.LastEvaluatedRowIndex < config.WindowSizeVerdicts Then
                 Console.WriteLine(String.Format(
                     "[AutoTweaker] INELIGIBLE — fixed-mode window not full: {0}/{1} new rows since row {2}.",
