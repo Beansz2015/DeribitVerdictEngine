@@ -1,7 +1,13 @@
-' AnalysisLogger.vb  v0.5
+' AnalysisLogger.vb  v0.6
 ' Appends one row per analysis run to a local CSV file.
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
+'
+' v0.6 (2026-06-11): Columns 89-93 added: MicroCVDEarly, MicroCVDMid,
+'       MicroCVDLate (net USD deltas — negative values valid), MicroCVDMomentum,
+'       MicroCVDSignal. MicroCVD was never logged before; added immediately
+'       post-reset (file was ~5 rows) so the accel-threshold re-baseline can
+'       sweep from CSV instead of the output dump.
 '
 ' v0.5 (engine correctness pass, 2026-06): MTF gate columns replaced —
 '       MTFGatePass → MTFGatePassLong + MTFGatePassShort (both sides logged
@@ -60,7 +66,8 @@ Public Class AnalysisLogger
         "LastSwingHigh5m,LastSwingLow5m,LastSwingHigh15m,LastSwingLow15m," &
         "SwingTargetLong,SwingTargetShort,SwingStopLong,SwingStopShort," &
         "TargetCapReason,BestPivotByVolume5m,BestPivotVolumeRatio5m," &
-        "TrendStructure5m"
+        "TrendStructure5m," &
+        "MicroCVDEarly,MicroCVDMid,MicroCVDLate,MicroCVDMomentum,MicroCVDSignal"
 
     Public Shared Function GetLogPath() As String
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
@@ -73,8 +80,8 @@ Public Class AnalysisLogger
     End Function
 
     ' Called once per LogRun. Handles log rotation: if the existing file has a
-    ' different header (i.e. old schema), it is renamed to .v0.3.bak before a
-    ' fresh v0.4 file is created.
+    ' different header (i.e. a superseded schema), it is renamed to .bak before
+    ' a fresh current-schema file is created.
     Public Shared Sub EnsureLogFile()
         Dim path As String = GetLogPath()
         If Not File.Exists(path) Then
@@ -91,10 +98,10 @@ Public Class AnalysisLogger
             If firstLine Is Nothing OrElse firstLine.Trim() <> Header Then
                 ' Schema mismatch — rotate old file (named for the superseded schema)
                 Dim dir As String = System.IO.Path.GetDirectoryName(path)
-                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.4.bak")
+                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.5.bak")
                 If File.Exists(bakPath) Then
                     Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
-                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.4." & ts & ".bak")
+                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.5." & ts & ".bak")
                 End If
                 File.Move(path, bakPath)
                 WriteHeader(path)
@@ -220,7 +227,12 @@ Public Class AnalysisLogger
                     capReasonCsv,
                     Inv(r.BestPivotByVolume5m, "F2"),
                     Inv(r.BestPivotVolumeRatio5m, "F2"),
-                    r.TrendStructure.ToString()))
+                    r.TrendStructure.ToString(),
+                    Inv(r.MicroCVDEarly, "F0"),
+                    Inv(r.MicroCVDMid, "F0"),
+                    Inv(r.MicroCVDLate, "F0"),
+                    If(r.MicroCVDMomentum, "FLAT"),
+                    If(r.MicroCVDSignal, "FLAT")))
             End Using
         Catch
             ' Silent fail — logging must never crash the main pipeline
