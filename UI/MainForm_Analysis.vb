@@ -97,6 +97,12 @@ Partial Public Class MainForm
             skipReason = "order book unavailable"
         ElseIf recentTrades Is Nothing OrElse recentTrades.Count = 0 Then
             skipReason = "recent trades unavailable"
+        ElseIf Not IndicatorEngine.IsFresh(candles1m, 1, DateTime.UtcNow) Then
+            ' D5 (S-6): stale tape scores hours-old data as current → row pollution.
+            ' Gate 1m + 5m only; the 15m cache deliberately tolerates staleness.
+            skipReason = "1m candles stale"
+        ElseIf Not IndicatorEngine.IsFresh(candles5m, 5, DateTime.UtcNow) Then
+            skipReason = "5m candles stale"
         End If
 
         If skipReason IsNot Nothing Then

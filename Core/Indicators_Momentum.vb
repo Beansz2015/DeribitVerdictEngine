@@ -20,6 +20,20 @@
 
 Partial Public Class IndicatorEngine
 
+    ' -- Candle freshness guard (D5/S-6) --------------------------------------
+    ' Host-agnostic (no WinForms coupling). Returns False when the most recent
+    ' bar is older than 2× the resolution → the tape is stale and the run should
+    ' be skipped rather than scoring hours-old data as current.
+    ' Candle.Timestamp is ms epoch (bar open). Empty/invalid input → not fresh.
+    Public Shared Function IsFresh(candles As List(Of Candle), resolutionMinutes As Integer,
+                                   nowUtc As DateTime) As Boolean
+        If candles Is Nothing OrElse candles.Count = 0 OrElse resolutionMinutes <= 0 Then Return False
+        Dim lastOpen As DateTime = DateTimeOffset.FromUnixTimeMilliseconds(
+            candles(candles.Count - 1).Timestamp).UtcDateTime
+        Dim ageMinutes As Double = (nowUtc - lastOpen).TotalMinutes
+        Return ageMinutes <= resolutionMinutes * 2
+    End Function
+
     ' -- DMI + ADX ------------------------------------------------------------
     Public Shared Sub CalcDMI(candles As List(Of Candle), period As Integer,
                                ByRef plusDI As Double, ByRef minusDI As Double, ByRef adx As Double)

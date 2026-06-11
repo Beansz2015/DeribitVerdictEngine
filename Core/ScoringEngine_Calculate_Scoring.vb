@@ -43,7 +43,8 @@ Partial Public Class ScoringEngine
             If lbl = "VWAP"         OrElse lbl = "BBW/TTM"     OrElse
                lbl = "EMA 9/21/50"  OrElse lbl = "DMI +/-DI"   OrElse
                lbl.StartsWith("ADX>")                           OrElse
-               lbl = "Donchian(20)" OrElse lbl = "5m EMA(200)" Then
+               lbl = "Donchian(20)" OrElse lbl = "5m EMA(200)" OrElse
+               lbl = "VPFR-lite" Then        ' D3 (S-2): VPFR is structural reference
                 structScore += 1
             End If
             If lbl = "OFI"      OrElse lbl = "CVD"      OrElse lbl = "TFI"     OrElse
