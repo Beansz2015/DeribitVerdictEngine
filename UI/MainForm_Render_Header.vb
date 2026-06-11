@@ -157,8 +157,12 @@ Partial Public Class MainForm
 
         ScoringEngine.CalcKellySizing(v, atrStop, cfg)
 
-        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | {2:F1}x stop / {3:F1}x target)",
-                                          r.ATR, norms.ATRScaleFactor, stopMult, targetMult))
+        ' D2 (S-1): show the trader-profile sizing factor AvgATR/CurrATR
+        ' (= ATRRef/ATR) instead of the old "× scale" (CurrATR/AvgATR) — the
+        ' displayed number is now directly usable in the profile's sizing rule.
+        Dim sizeMult As Double = If(r.ATR > 0, norms.ATRRef / r.ATR, 1.0)
+        SectionHeader(rtb, String.Format("ATR ENTRY LEVELS  (ATR {0:F2}  size ×{1:F2} | {2:F1}x stop / {3:F1}x target)",
+                                          r.ATR, sizeMult, stopMult, targetMult))
 
         ' Sub-tick cap adjustments are visual noise; suppress amber-bold CAPPED
         ' annotation when adjustment is below max(0.5, ATR × 0.02). TargetCapReason

@@ -176,7 +176,10 @@ Partial Public Class ScoringEngine
         res.HoldStatus = CalcHoldStatus(r, posState, cfg)
 
         ' -- Step 5b: ATR Target Cap (VPFR HVN) --------------------------------
-        Dim atrTarget As Double = r.ATR * norms.ATRScaleFactor * cfg.Scoring.AtrTargetMultiplier
+        ' D2 (S-1): levels are LINEAR in ATR — distance = ATR × multiplier. The
+        ' old quadratic form (× norms.ATRScaleFactor) was dropped so the cap base
+        ' matches the linear display and the eval pipeline's raw-ATR barriers.
+        Dim atrTarget As Double = r.ATR * cfg.Scoring.AtrTargetMultiplier
         Dim rawLongTarget  As Double = r.CurrentPrice + atrTarget
         Dim rawShortTarget As Double = r.CurrentPrice - atrTarget
 

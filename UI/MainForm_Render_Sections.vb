@@ -22,8 +22,9 @@ Partial Public Class MainForm
         Dim cfg As EngineSettings = SettingsLoader.Current
         Dim stopMult   As Double = cfg.Scoring.AtrStopMultiplier
         Dim targetMult As Double = cfg.Scoring.AtrTargetMultiplier
-        Dim atrStop    As Double = r.ATR * norms.ATRScaleFactor * stopMult
-        Dim atrTarget  As Double = r.ATR * norms.ATRScaleFactor * targetMult
+        ' D2 (S-1): linear ATR distances (no ATRScaleFactor) — see RenderOutputHeader.
+        Dim atrStop    As Double = r.ATR * stopMult
+        Dim atrTarget  As Double = r.ATR * targetMult
 
         ' -- Header block (verdict / ATR levels / Kelly) ----------------------
         RenderOutputHeader(rtb, r, v, norms, cfg, lastTradePrice, atrStop, atrTarget)
@@ -35,7 +36,7 @@ Partial Public Class MainForm
            String.Format("H:{0:F2}x  M:{1:F2}x  (mean={2:F4} BTC  s={3:F4})",
                           norms.VolHighThreshold, norms.VolMidThreshold, norms.VolMean, norms.VolStdDev))
         AR(rtb, "VWAP dev thr  : ", String.Format("+/-{0:F2}% (legacy ref)", norms.VWAPDevThreshold))
-        AR(rtb, "ATR scale     : ",
+        AR(rtb, "ATR ratio     : ",
            String.Format("{0:F2}x  (ATR={1:F2}  ref={2:F2})", norms.ATRScaleFactor, r.ATR, norms.ATRRef))
 
         ' -- REGIME -----------------------------------------------------------

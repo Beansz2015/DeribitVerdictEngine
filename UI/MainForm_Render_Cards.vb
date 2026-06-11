@@ -838,19 +838,19 @@ Partial Public Class MainForm
         Dim cfg As EngineSettings = SettingsLoader.Current
         Dim stopMult   As Double = cfg.Scoring.AtrStopMultiplier
         Dim targetMult As Double = cfg.Scoring.AtrTargetMultiplier
-        ' Legacy parity: math uses the unrounded norms.ATRScaleFactor so
-        ' stop/target prices match the legacy txtOutput render exactly.
-        ' Sub-header still displays the rounded r.ATRSizeMultiplier (e.g.,
-        ' "× 0.71 scale") since that's what the trader is used to seeing.
-        Dim atrUnit    As Double = r.ATR * norms.ATRScaleFactor
+        ' D2 (S-1): linear ATR distances — distance = ATR × multiplier, no
+        ' ATRScaleFactor. Matches the legacy txtOutput render (also linearised).
+        Dim atrUnit    As Double = r.ATR
         Dim atrStop    As Double = atrUnit * stopMult
         Dim atrTarget  As Double = atrUnit * targetMult
         Dim entryPx    As Double = r.CurrentPrice
 
-        ' GAP-05 sub-header: current ATR config params (rounded scale per
-        ' r.ATRSizeMultiplier for display continuity with the legacy line).
+        ' D2 sub-header: the displayed multiplier is now the trader-profile sizing
+        ' factor AvgATR/CurrATR (= ATRRef/ATR, reciprocal of the old "× scale"
+        ' display). r.ATRSizeMultiplier keeps its CurrATR/ATRRef meaning for the CSV.
+        Dim sizeMult As Double = If(r.ATR > 0, norms.ATRRef / r.ATR, 1.0)
         If _atrSubHeader IsNot Nothing Then
-            _atrSubHeader.Text = $"ATR {r.ATR:F2} × {r.ATRSizeMultiplier:F2} scale  |  {stopMult:F1}× stop / {targetMult:F1}× target"
+            _atrSubHeader.Text = $"ATR {r.ATR:F2}  size ×{sizeMult:F2}  |  {stopMult:F1}× stop / {targetMult:F1}× target"
         End If
 
         ' GAP-06: render BOTH long and short rows. Verdict direction gets

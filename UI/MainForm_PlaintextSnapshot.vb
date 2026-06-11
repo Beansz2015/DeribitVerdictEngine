@@ -43,8 +43,9 @@ Partial Public Class MainForm
 
         Dim stopMult   As Double = cfg.Scoring.AtrStopMultiplier
         Dim targetMult As Double = cfg.Scoring.AtrTargetMultiplier
-        Dim atrStop    As Double = r.ATR * norms.ATRScaleFactor * stopMult
-        Dim atrTarget  As Double = r.ATR * norms.ATRScaleFactor * targetMult
+        ' D2 (S-1): linear ATR distances (no ATRScaleFactor) — mirrors RenderOutputHeader.
+        Dim atrStop    As Double = r.ATR * stopMult
+        Dim atrTarget  As Double = r.ATR * targetMult
 
         AppendHeaderBlock(sb, v, r, norms, cfg, lastTradePrice, atrStop, atrTarget)
         AppendDynamicNorms(sb, r, norms)
@@ -143,9 +144,11 @@ Partial Public Class MainForm
         ScoringEngine.CalcKellySizing(v, atrStop, cfg)
 
         ' ATR ENTRY LEVELS header (SectionHeader emits a leading blank line).
+        ' D2 (S-1): displays AvgATR/CurrATR sizing factor — mirrors RenderOutputHeader.
+        Dim sizeMult As Double = If(r.ATR > 0, norms.ATRRef / r.ATR, 1.0)
         sb.AppendLine()
-        sb.AppendLine(String.Format("ATR ENTRY LEVELS  (ATR {0:F2} x {1:F2} scale | {2:F1}x stop / {3:F1}x target)",
-                                     r.ATR, norms.ATRScaleFactor, stopMult, targetMult))
+        sb.AppendLine(String.Format("ATR ENTRY LEVELS  (ATR {0:F2}  size ×{1:F2} | {2:F1}x stop / {3:F1}x target)",
+                                     r.ATR, sizeMult, stopMult, targetMult))
 
         Dim capNoiseFloor As Double = Math.Max(0.5, r.ATR * 0.02)
 
@@ -250,7 +253,7 @@ Partial Public Class MainForm
                                      norms.VolHighThreshold, norms.VolMidThreshold,
                                      norms.VolMean, norms.VolStdDev))
         sb.AppendLine(String.Format("  VWAP dev thr  : +/-{0:F2}% (legacy ref)", norms.VWAPDevThreshold))
-        sb.AppendLine(String.Format("  ATR scale     : {0:F2}x  (ATR={1:F2}  ref={2:F2})",
+        sb.AppendLine(String.Format("  ATR ratio     : {0:F2}x  (ATR={1:F2}  ref={2:F2})",
                                      norms.ATRScaleFactor, r.ATR, norms.ATRRef))
     End Sub
 
