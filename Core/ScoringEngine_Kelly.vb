@@ -12,20 +12,24 @@ Partial Public Class ScoringEngine
     ' Inputs:
     '   v               = VerdictResult to populate
     '   stopDistanceUsd = ATR-derived stop distance in price points (always > 0)
+    '   entryPriceUsd   = current price (denominator for inverse-contract risk)
     '   cfg             = Engine settings (kelly block)
     '
     ' Outputs written into v:
     '   KellyF, KellyFHalf, KellyFApplied, KellyPWin, KellyPMode,
-    '   KellyCapped, KellyContracts, KellyRiskUsd
+    '   KellyCapped, KellyContracts, KellyRiskUsd, KellyLevCapped
     '
     ' Notes:
     ' - Uses EST mode only for now (pre-calibration).
-    ' - Silent / zeroed if no directional edge or invalid stop distance.
-    ' - Contract risk uses Deribit inverse-style approximation from the spec:
-    '     riskPerContractUsd = contract_face_usd * stopDistanceUsd
-    '   (exactly as approved in proposal assumptions).
+    ' - Silent / zeroed if no directional edge or invalid stop distance/price.
+    ' - Deribit BTC-PERPETUAL is an INVERSE contract: the USD loss on a
+    '   $face contract over a $Δ price move is face × Δ / price, not face × Δ
+    '   (D1/H4 fix — the old form was off by the entry price, ~1e4×, so contracts
+    '   were always 0). At correct sizing the $ risk cap is rarely binding, so a
+    '   leverage cap (kelly.max_leverage) is applied and surfaced via KellyLevCapped.
     Public Shared Sub CalcKellySizing(v As VerdictResult,
                                       stopDistanceUsd As Double,
+                                      entryPriceUsd As Double,
                                       cfg As EngineSettings)
 
         ' Reset all outputs first so suppression is deterministic.
@@ -37,12 +41,18 @@ Partial Public Class ScoringEngine
         v.KellyCapped = False
         v.KellyContracts = 0
         v.KellyRiskUsd = 0.0
+        v.KellyLevCapped = False
 
         If v Is Nothing OrElse cfg Is Nothing Then Exit Sub
         If stopDistanceUsd <= 0 Then Exit Sub
+        If entryPriceUsd <= 0 Then Exit Sub
 
+        ' Empty verdict → no directional edge to size. (The old guard also tested
+        ' "NEUTRAL"/"WAIT" — verdict strings retired ~20 versions ago; dead, removed.
+        ' v30 intentionally renders the lean Kelly on NO TRADE, so NO TRADE is NOT
+        ' suppressed here.)
         Dim verdict As String = If(v.Verdict, "").Trim().ToUpperInvariant()
-        If verdict = "NEUTRAL" OrElse verdict = "WAIT" OrElse verdict = "" Then Exit Sub
+        If verdict = "" Then Exit Sub
 
         ' ---------------------------------------------------------------
         ' Step 1: Estimate p(win) from confidence tier (EST mode only).
@@ -87,15 +97,29 @@ Partial Public Class ScoringEngine
         v.KellyRiskUsd = cfg.Kelly.AccountSizeUsd * fApplied
 
         ' ---------------------------------------------------------------
-        ' Step 3: Contract sizing
-        ' Risk per contract = contract face * stop distance
-        ' Whole contracts only; 0 means stop too wide for minimum size.
+        ' Step 3: Contract sizing (inverse contract)
+        ' Risk per contract = face × stopDistance / entryPrice  (USD).
+        ' Final contracts = min(risk-derived, leverage-derived); whole only.
         ' ---------------------------------------------------------------
-        Dim riskPerContractUsd As Double = cfg.Kelly.ContractFaceUsd * stopDistanceUsd
+        Dim riskPerContractUsd As Double = cfg.Kelly.ContractFaceUsd * stopDistanceUsd / entryPriceUsd
         If riskPerContractUsd <= 0 Then Exit Sub
 
-        v.KellyContracts = CInt(Math.Floor(v.KellyRiskUsd / riskPerContractUsd))
-        If v.KellyContracts < 0 Then v.KellyContracts = 0
+        Dim contractsByRisk As Integer = CInt(Math.Floor(v.KellyRiskUsd / riskPerContractUsd))
+        If contractsByRisk < 0 Then contractsByRisk = 0
+
+        ' Leverage cap: max contracts before notional exceeds account × max_leverage.
+        Dim maxContractsByLeverage As Integer = 0
+        If cfg.Kelly.ContractFaceUsd > 0 Then
+            maxContractsByLeverage = CInt(Math.Floor(
+                cfg.Kelly.AccountSizeUsd * cfg.Kelly.MaxLeverage / cfg.Kelly.ContractFaceUsd))
+        End If
+
+        If maxContractsByLeverage > 0 AndAlso maxContractsByLeverage < contractsByRisk Then
+            v.KellyContracts = maxContractsByLeverage
+            v.KellyLevCapped = True
+        Else
+            v.KellyContracts = contractsByRisk
+        End If
     End Sub
 
 End Class

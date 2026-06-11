@@ -74,6 +74,8 @@ Public Class VerdictResult
     Public Property KellyContracts As Integer = 0
     ''' <summary>Dollar risk amount = AccountSizeUsd * KellyFApplied.</summary>
     Public Property KellyRiskUsd  As Double  = 0.0
+    ''' <summary>True when the kelly.max_leverage cap (not the $ risk cap) set KellyContracts.</summary>
+    Public Property KellyLevCapped As Boolean = False
 
     ''' <summary>Analysis run timestamp. Set in RunAnalysisAsync; used for TIME: line and dump header.</summary>
     Public Property Timestamp As DateTime = DateTime.MinValue

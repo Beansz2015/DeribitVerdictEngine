@@ -1,8 +1,9 @@
 {
-  "version": 31,
+  "version": 32,
   "last_modified": "2026-06-11T00:00:00Z",
-  "modified_by": "engine-correctness-pass",
+  "modified_by": "engine-tier-d-hygiene",
   "change_log": [
+    "v32 (2026-06-11): engine Tier D display & hygiene pass (docs/engine-tier-d-hygiene-proposal.md). Added kelly.max_leverage (5.0) — D1/H4 fixes the inverse-contract Kelly sizing (risk per contract = face x stopDistance / entryPrice, was face x stopDistance, so contracts were always 0) and adds a leverage cap that binds before the $ risk cap; new KellyLevCapped surfaces it. Removed dead auto_run.enabled key (D4 - never read; auto-run always starts stopped). Display-only D2 linearises ATR stop/target distances (drop ATRScaleFactor; distance = ATR x multiplier) and relabels the sizing display to AvgATR/CurrATR; D3 adds VPFR-lite to the context-tag structural set; D5 adds a 1m/5m candle-freshness skip gate. No scoring votes, thresholds, or vetoes changed. CSV stays v0.6.",
     "v31 (2026-06-11): engine correctness pass (docs/engine-correctness-pass-proposal.md). One value changed: indicators.OBV.trend_gate 0.001 → 10.0 — the OBV normalisation basis moved from first-bar volume to mean per-bar volume (F5), so the gate's units are now 'net OBV drift in average-bar-volumes over the window' (~0.6σ of 250-bar random-walk noise). SEEDED GUESS, not calibrated — re-baseline with the §8 WATCHING table at ≥300 clean v0.5 rows. No keys added/removed. Ships with the fix bundle F1–F9 (trade-stream ascending normalisation, recent-window norms, direction-aware MTF gate, dominant-side cascade, OBV/Donchian fixes, funding-boost cap, TRANSITIONAL penalty arm, header-map CSV backfill), CSV schema v0.4→v0.5, and the pre-authorised calibration-data reset (data-archive/pre-orderfix-20260611).",
     "v30 (2026-05-17): display polish pass — output dump now captures perf-strip values (PERF STRIP header line after each '## Run'), R:R rendering uses '< 0.1' for sub-1dp ratios, sub-noise CAPPED labels suppressed (threshold = max(0.5, ATR × 0.02)), negative-zero funding clamped, OI delta precision unified at 3dp in SIGNAL BREAKDOWN to match OPEN INTEREST section, NO TRADE + CONFIRMED relabelled to ALIGNED (new VerdictContext value), per-side missing-target/stop wording in structural rows. No new config keys; thresholds hardcoded.",
     "v29 (2026-05-17): auto_tweaker switched from sliding to fixed (non-overlapping) windows. New tweaker_config.json key window_mode (\"fixed\" | \"sliding\", default \"fixed\"). min_tier_eligible_rows is now nullable — null auto-scales to max(15, ceil(WindowSize × 0.5)). cooldown_rows retained but is a no-op when window_mode=fixed; logged once per process. state.json gains last_evaluated_row_index (default -1 = uninitialised; seeded to currentRowCount on first v29 run so historical sliding-era CSV data is preserved but not re-evaluated). RoundHistory entries gain window_start_row / window_end_row (already present) plus a new outcome value SKIPPED_INSUFFICIENT_TIER — skipped rounds advance the row index but do NOT tick the BELOW_THRESHOLD streak. RoundHistory cap raised 50 → 1000. Tweak Settings dialog exposes the Min tier-eligible rows row with save-time validation: reject < 5, reject > WindowSize, warning > WindowSize × 0.7.",
@@ -362,7 +363,8 @@
     "max_risk_fraction": 0.05,
     "contract_face_usd": 10.0,
     "est_prob_floor": 0.45,
-    "est_prob_scale": 0.20
+    "est_prob_scale": 0.20,
+    "max_leverage": 5.0
   },
   "regime_gates": {
     "transitional_adx_penalty_low": 20.0,

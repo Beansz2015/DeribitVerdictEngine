@@ -155,7 +155,7 @@ Partial Public Class MainForm
             AppendRtf(rtb, v.HoldStatus & Environment.NewLine, Theme.ACC_WARN, bold:=True)
         End If
 
-        ScoringEngine.CalcKellySizing(v, atrStop, cfg)
+        ScoringEngine.CalcKellySizing(v, atrStop, r.CurrentPrice, cfg)
 
         ' D2 (S-1): show the trader-profile sizing factor AvgATR/CurrATR
         ' (= ATRRef/ATR) instead of the old "× scale" (CurrATR/AvgATR) — the
@@ -270,6 +270,17 @@ Partial Public Class MainForm
                                  "< 1 contract  (stop too wide for min size)")
             End If
             AppendRtf(rtb, contractStr & Environment.NewLine, contractColour, bold:=True)
+
+            ' D1: notional + implied leverage sanity line; [LEV CAPPED] when the
+            ' kelly.max_leverage cap (not the $ risk cap) set the contract count.
+            If v.KellyContracts >= 1 Then
+                Dim notional As Double = v.KellyContracts * cfg.Kelly.ContractFaceUsd
+                Dim lev As Double = If(cfg.Kelly.AccountSizeUsd > 0, notional / cfg.Kelly.AccountSizeUsd, 0.0)
+                Dim levTag As String = If(v.KellyLevCapped, "  [LEV CAPPED]", "")
+                AppendRtf(rtb, "  Notional:  ", Theme.FG_TERTIARY)
+                AppendRtf(rtb, String.Format("≈ ${0:N0} · {1:F1}× lev{2}", notional, lev, levTag) & Environment.NewLine,
+                          If(v.KellyLevCapped, Theme.ACC_WARN, Theme.FG_PRIMARY), bold:=v.KellyLevCapped)
+            End If
         End If
     End Sub
 

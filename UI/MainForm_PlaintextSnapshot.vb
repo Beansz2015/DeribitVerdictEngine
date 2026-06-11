@@ -141,7 +141,7 @@ Partial Public Class MainForm
         ' the new flow it's already populated by the time we render, because
         ' the legacy RenderOutput is still called alongside. Re-invoking here
         ' is idempotent on v.Kelly* fields, so safe.
-        ScoringEngine.CalcKellySizing(v, atrStop, cfg)
+        ScoringEngine.CalcKellySizing(v, atrStop, r.CurrentPrice, cfg)
 
         ' ATR ENTRY LEVELS header (SectionHeader emits a leading blank line).
         ' D2 (S-1): displays AvgATR/CurrATR sizing factor — mirrors RenderOutputHeader.
@@ -241,6 +241,14 @@ Partial Public Class MainForm
                                  v.KellyContracts.ToString() & " " & If(v.KellyContracts = 1, "contract", "contracts"),
                                  "< 1 contract  (stop too wide for min size)")
                 sb.AppendLine("  Contracts: " & contractStr)
+            End If
+
+            ' D1: notional + implied leverage sanity line (mirrors RenderOutputHeader).
+            If v.KellyContracts >= 1 Then
+                Dim notional As Double = v.KellyContracts * cfg.Kelly.ContractFaceUsd
+                Dim lev As Double = If(cfg.Kelly.AccountSizeUsd > 0, notional / cfg.Kelly.AccountSizeUsd, 0.0)
+                Dim levTag As String = If(v.KellyLevCapped, "  [LEV CAPPED]", "")
+                sb.AppendLine(String.Format("  Notional:  ≈ ${0:N0} · {1:F1}× lev{2}", notional, lev, levTag))
             End If
         End If
     End Sub

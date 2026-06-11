@@ -471,6 +471,8 @@ Public Class KellySettings
     <JsonPropertyName("est_prob_floor")>            Public Property EstProbFloor          As Double  = 0.45
     ''' <summary>Score-to-probability band scale range (pre-calibration). Default 0.20 -> band [0.45, 0.65].</summary>
     <JsonPropertyName("est_prob_scale")>            Public Property EstProbScale          As Double  = 0.20
+    ''' <summary>[D1/H4] Max leverage on notional (contracts × face / account). Binds before the $ risk cap at correct inverse-contract sizing. Default 5.0 — conservative; the trader tunes (Deribit BTC perp allows far more).</summary>
+    <JsonPropertyName("max_leverage")>              Public Property MaxLeverage           As Double  = 5.0
 End Class
 
 ' ---------------------------------------------------------------------------
