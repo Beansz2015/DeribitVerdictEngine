@@ -38,11 +38,16 @@ Partial Public Class MainForm
             Return
         End If
 
+        ' D4 (S-4): persist the interval ONLY when it actually changed. The
+        ' interval is the one AutoRun value with a reader (InitAutoRunControls
+        ' restores it next session). A plain start no longer bumps version /
+        ' litters change_log — only a genuine interval edit writes.
         Dim cfg As EngineSettings = SettingsLoader.Current
-        cfg.AutoRun.Enabled         = True
-        cfg.AutoRun.IntervalMinutes = mins
-        cfg.AutoRun.IntervalSeconds = secs
-        SettingsLoader.Save(cfg, "auto_run enabled via UI")
+        If cfg.AutoRun.IntervalMinutes <> mins OrElse cfg.AutoRun.IntervalSeconds <> secs Then
+            cfg.AutoRun.IntervalMinutes = mins
+            cfg.AutoRun.IntervalSeconds = secs
+            SettingsLoader.Save(cfg, "auto_run interval changed via UI")
+        End If
 
         _countdownSecs = _intervalMs \ 1000
         btnStartStop.Text      = CHAR_STOP
@@ -70,9 +75,8 @@ Partial Public Class MainForm
         nudMinutes.Enabled = True
         nudSeconds.Enabled = True
         UpdateCountdownLabel("Auto-run: OFF")
-        Dim cfg As EngineSettings = SettingsLoader.Current
-        cfg.AutoRun.Enabled = False
-        SettingsLoader.Save(cfg, "auto_run disabled via UI")
+        ' D4 (S-4): no Save on stop — Enabled is never read and persisting it
+        ' bought nothing but settings.json churn.
     End Sub
 
     Private Sub RunAutoAnalysis()

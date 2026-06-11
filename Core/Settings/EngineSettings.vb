@@ -498,7 +498,8 @@ End Class
 
 ''' <summary>Controls the auto-run timer. Minimum effective interval 10s (enforced in MainForm).</summary>
 Public Class AutoRunSettings
-    <JsonPropertyName("enabled")>          Public Property Enabled         As Boolean = False
+    ' D4 (S-4): the former 'enabled' key was dead — InitAutoRunControls always
+    ' starts stopped and nothing read it. Removed in v32.
     <JsonPropertyName("interval_minutes")> Public Property IntervalMinutes As Integer = 1
     <JsonPropertyName("interval_seconds")> Public Property IntervalSeconds As Integer = 0
 End Class

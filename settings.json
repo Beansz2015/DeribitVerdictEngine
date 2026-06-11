@@ -317,7 +317,6 @@
     "min_of": 2
   },
   "auto_run": {
-    "enabled": false,
     "interval_minutes": 1,
     "interval_seconds": 0
   },
