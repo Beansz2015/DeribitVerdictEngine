@@ -2,7 +2,9 @@
 
 **Date:** 2026-06-11
 **Author:** Fable 5 (spec-author seat)
-**Status:** **APPROVED 2026-06-11** — user confirmed: D2 goes linear (§2), D1 takes option (a) fix-the-math + leverage cap with `kelly.max_leverage` default 5.0 (§1), D4 as specced (§4). Implementation may begin per §8 routing. Touches `settings.json` (v32) and display/logging behaviour; zero changes to Step 2–5 scoring votes, thresholds, or vetoes.
+**Status:** **IMPLEMENTED 2026-06-11** (commits `482c9bb` D2, `0bd1b63` D1+v32, `d5bf209` D4, `d3a0168` D3+D5; §15 entry added). All five items shipped as specced — D2 linear, D1 option (a) fix-the-math + leverage cap with `kelly.max_leverage` 5.0, D4 as specced. `settings.json` bumped to v32 (added `kelly.max_leverage`, removed dead `auto_run.enabled`). Local acceptance harness A10/A11/A12 added (verify/ordercheck, gitignored); all 16 checks pass; `dotnet build` clean. Zero changes to Step 2–5 scoring votes, thresholds, or vetoes. Local commits only — pending user smoke test, then push.
+
+**Status (original):** **APPROVED 2026-06-11** — user confirmed: D2 goes linear (§2), D1 takes option (a) fix-the-math + leverage cap with `kelly.max_leverage` default 5.0 (§1), D4 as specced (§4). Implementation may begin per §8 routing. Touches `settings.json` (v32) and display/logging behaviour; zero changes to Step 2–5 scoring votes, thresholds, or vetoes.
 **Implementer:** Opus, fresh conversation — all items are mechanical once the decisions below are approved. Verify every file:line against the tree before commit 1 (anchors drift).
 **Why now:** this is the last engine work gating the clean-data collection restart. D2 (level geometry) and D3 (context-tag distribution) change what gets logged; D5 protects row quality. Ship before serious auto-run accumulation begins.
 
