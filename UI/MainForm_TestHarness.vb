@@ -171,11 +171,14 @@ Partial Public Class MainForm
         BindCardAtrLevels(tc.Verdict, tc.Indicators, tc.Norms)
         BindCardStructural(tc.Indicators, isLong:=True)
         BindCardStructural(tc.Indicators, isLong:=False)
-        BindCardSignalBreakdown(tc.Verdict, tc.Indicators)
+        ' F-10: pass the case's VwapWarmup threshold — the same value the text
+        ' renderers get — so card vs legacy [WARMUP] tags can't diverge in the
+        ' harness (review case 48 found exactly that divergence).
+        BindCardSignalBreakdown(tc.Verdict, tc.Indicators, tc.VwapWarmup)
         BindCardOiCvdCross(tc.Indicators, tc.Verdict)
         BindCardVolumeProfile(tc.Indicators)
         BindCardKelly(tc.Verdict)
-        BindCardIndicatorDetails(tc.Verdict, tc.Indicators, tc.Norms, tc.Cfg)
+        BindCardIndicatorDetails(tc.Verdict, tc.Indicators, tc.Norms, tc.Cfg, tc.VwapWarmup)
     End Sub
 
     ' -----------------------------------------------------------------------
@@ -916,6 +919,13 @@ Public Class TestCaseBuilder
         ' emit the line. Spec-author B6 directive — see report-back §3.1.
         v.HoldStatus = "N/A -- no open position"
         v.VerdictContext = "CONFIRMED"
+        ' v31 F3 (ccdd652) changed VerdictResult.MTFGateReason's field default
+        ' from "MTF PASS" to "" (production always composes it in Step 4b).
+        ' The 55 cases were authored against the old default — most rely on it
+        ' rather than calling WithMtfPass() — so regenerated artifacts were
+        ' printing an empty "Reason:" line and the verdict-card chip degraded
+        ' to "MTF state: —". Restore the authored-against default here.
+        v.MTFGateReason = "MTF PASS"
         v.OiCvdOutcome = "NONE"
         v.AdjustedLongTarget = 0.0
         v.AdjustedShortTarget = 0.0

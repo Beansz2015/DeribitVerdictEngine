@@ -148,7 +148,17 @@ Partial Public Class MainForm
     Friend _lblRegime         As Label
     Friend _mtfRow            As MtfRow
     Friend _lblHold           As Label
+    ' F-09 (consolidated fix): full-width wrapping HOLD/EXIT reason line under
+    ' the 2×2 grid. The HOLD chip clips long CalcHoldStatus strings (Layer 1.5
+    ' lost the structural-break prices entirely); this row carries the full
+    ' string. After P5b deletes the legacy block it is the only site that does.
+    Friend _lblHoldReason     As Label
     Friend _regimeAnchorWarn  As RegimeAnchorWarn
+    ' F-08/F-09: hero row height is re-computed per bind — base height plus
+    ' room for whichever conditional rows (eff/penalty, hold reason, anchor
+    ' banner) are visible this run. Index captured at AddRow time.
+    Friend _heroRowIndex      As Integer = -1
+    Friend Const HERO_ROW_BASE As Integer = 180
     Friend _lblLastPrice      As Label
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
@@ -170,6 +180,7 @@ Partial Public Class MainForm
         Public Property StructStopValue  As Label   ' C1c: deeper structural stop (hidden when struct == atr or missing)
         Public Property StopCellLayout   As TableLayoutPanel  ' C1c: holds StructStopValue + StopValue; width-ratio mutated at bind time
         Public Property RRValue          As Label
+        Public Property RRSubValue       As Label   ' KNOWN-0 fix: "(risk N / rwd N)" on its own smaller-font label so the line can't clip inside RRValue
         Public Property EntryValue       As Label
         Public Property CappedValue      As Label
         Public Property TargetValue      As Label
@@ -186,6 +197,7 @@ Partial Public Class MainForm
         Public Property TargetValue As Label
         Public Property EntryValue  As Label
         Public Property RRValue     As Label
+        Public Property RRSubValue  As Label   ' F-01 fix: risk/rwd line on its own smaller-font label (was wrapping + clipping inside RRValue)
     End Class
 
     ' -----------------------------------------------------------------------
@@ -435,13 +447,24 @@ Partial Public Class MainForm
         ' point where eff/penalty + grid items overlapped on long verdict
         ' strings. Extra 20 px feeds the grid; SCORE arc + LAST PRICE block
         ' had headroom to spare so they don't suffer.
-        AddRow(heroRow, 180)
+        ' F-08/F-09 (consolidated fix): 180 is the BASE height. BindCardVerdict
+        ' grows this row per run when the conditional rows beneath the 2×2 grid
+        ' are visible (eff/penalty, hold reason, regime-anchor banner) so they
+        ' get their own pixels instead of compressing the grid / occluding the
+        ' HOLD slot (review finding F-08 on cases 41/42).
+        AddRow(heroRow, HERO_ROW_BASE)
+        _heroRowIndex = _gridRoot.RowStyles.Count - 1
 
         ' Row 4: ATR ENTRY LEVELS. Bumped from 110 to 150 in P4 retro-fix
         ' for GAP-06 dual long+short rendering (section header + ATR sub-
         ' header + two zone rows + cap reason).
+        ' KNOWN-0 (consolidated fix): 150 → 200. At 150 each zone row got
+        ' ~43 px against ~60 px of three-line content at the active-side
+        ' 11.5pt bold font — the third line (risk/rwd under R:R, the CAPPED
+        ' cell's reason label) clipped on every case; both rows clipped on
+        ' NO TRADE where both render large. 200 gives each zone row ~68 px.
         _cardAtrLevels = NewCard()
-        AddRow(_cardAtrLevels, 150)
+        AddRow(_cardAtrLevels, 200)
 
         ' Row 5: STRUCTURAL LONG + STRUCTURAL SHORT side by side
         Dim structRow = New TableLayoutPanel() With {
@@ -459,7 +482,12 @@ Partial Public Class MainForm
         _cardStructShort.Margin = New Padding(0)
         structRow.Controls.Add(_cardStructLong, 0, 0)
         structRow.Controls.Add(_cardStructShort, 1, 0)
-        AddRow(structRow, 110)
+        ' F-01 (consolidated fix): 110 → 130. At 110 the cells got ~60 px;
+        ' the R:R cell's "(risk N / rwd N)" line wrapped at the 25% column
+        ' width and the wrapped tail clipped (losing the rwd value), and the
+        ' per-side missing-leg notes ("— no swing target above") lost their
+        ' wrapped second line (review OBS-F). 130 gives cells ~80 px.
+        AddRow(structRow, 130)
 
         ' Row 6: SIGNAL BREAKDOWN (P4c binds). 500 px to accommodate 8 rows
         ' in the longest tier (TIER 1) plus header / column headers / 3

@@ -452,11 +452,13 @@ Partial Public Class MainForm
         BindCardAtrLevels(verdict, r, norms)
         BindCardStructural(r, isLong:=True)
         BindCardStructural(r, isLong:=False)
-        BindCardSignalBreakdown(verdict, r)
+        ' F-10: thread vwapWarmup so the card's [WARMUP] tag uses the same
+        ' threshold the text renderers compare against (line 445 / 470).
+        BindCardSignalBreakdown(verdict, r, vwapWarmup)
         BindCardOiCvdCross(r, verdict)
         BindCardVolumeProfile(r)
         BindCardKelly(verdict)
-        BindCardIndicatorDetails(verdict, r, norms, SettingsLoader.Current)
+        BindCardIndicatorDetails(verdict, r, norms, SettingsLoader.Current, vwapWarmup)
 
         ' Update live performance strip (eval cache + OHLC cache + 6 window aggregates).
         Await LivePerformanceTracker.UpdateAsync(verdict, r, candles1m, DateTime.UtcNow)

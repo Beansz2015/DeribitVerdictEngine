@@ -127,7 +127,7 @@ Partial Public Class MainForm
     Private Sub InitVerdictCard()
         _verdictNormalPanel = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 5,
+            .ColumnCount = 1, .RowCount = 6,
             .BackColor = Color.Transparent
         }
         Dim inner = _verdictNormalPanel
@@ -135,6 +135,7 @@ Partial Public Class MainForm
         inner.RowStyles.Add(New RowStyle(SizeType.Absolute, 50))    ' verdict text
         inner.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' 2×2 grid (flex)
         inner.RowStyles.Add(New RowStyle(SizeType.AutoSize))         ' eff/penalty sub-row (collapses to 0 when label hidden)
+        inner.RowStyles.Add(New RowStyle(SizeType.AutoSize))         ' F-09: full hold/exit reason (collapses when no position)
         inner.RowStyles.Add(New RowStyle(SizeType.AutoSize))         ' regime anchor warn
         inner.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
 
@@ -200,13 +201,32 @@ Partial Public Class MainForm
         _lblVerdictEffPenalty.Visible = False
         inner.Controls.Add(_lblVerdictEffPenalty, 0, 3)
 
+        ' F-09 (consolidated fix): full-width HOLD/EXIT reason line. The HOLD
+        ' chip in the 2×2 grid clips long CalcHoldStatus strings (Layer 1.5
+        ' dropped the structural-break prices entirely); the chip now shows
+        ' the action part and this row carries the complete string. Wraps to
+        ' two lines (AutoSize=False Label word-wraps; 30 px fits 2 × 8.5pt).
+        _lblHoldReason = New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Top,
+            .Height = 30,
+            .Text = "",
+            .Font = Theme.FontMono(8.5F, FontStyle.Bold),
+            .ForeColor = Theme.ACC_WARN,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.TopLeft,
+            .Margin = New Padding(0, 2, 0, 0),
+            .Visible = False
+        }
+        inner.Controls.Add(_lblHoldReason, 0, 4)
+
         _regimeAnchorWarn = New RegimeAnchorWarn() With {
             .Dock = DockStyle.Top,
             .Margin = New Padding(0, 4, 0, 0),
             .WarningText = ""
         }
-        ' RegimeAnchorWarn moves into a new bottom row since EffPenalty took row 3.
-        inner.Controls.Add(_regimeAnchorWarn, 0, 4)
+        ' RegimeAnchorWarn sits in the bottom row beneath eff/penalty + hold reason.
+        inner.Controls.Add(_regimeAnchorWarn, 0, 5)
 
         ' P4f — build the SKIPPED sibling panel and stack it behind the normal
         ' panel. Both Dock = Fill; Visible toggles which one paints.
@@ -588,14 +608,16 @@ Partial Public Class MainForm
         ' Column widths rebalanced for P5-test gap-fix commit 1:
         '   STOP   widened from 22% → 24% (room for C1c side-by-side STRUCT|STOP)
         '   R:R    widened from 12% → 16% (room for Q2 "(risk N / rwd N)" line)
-        '   ENTRY  trimmed   from 22% → 18%
-        '   CAPPED trimmed   from 22% → 20% (still fits "→ price (label)")
         '   TARGET unchanged 22%
+        ' Consolidated fix (KNOWN-0 1a): ENTRY 18% → 15%, CAPPED 20% → 23% —
+        ' the longest cap-reason label "(NEAREST_HVN_ABOVE)" was ~2 chars over
+        ' the 20% column at the primary 11.5pt bold font (verified truncating
+        ' on cases 12/13 + a live HVN-capped run); ENTRY had ~80 px of slack.
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 70))
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 24.0F))
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 16.0F))
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 18.0F))
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 20.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 15.0F))
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 23.0F))
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))
         row.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
 
@@ -632,14 +654,42 @@ Partial Public Class MainForm
         r.StopCellLayout.Controls.Add(r.StructStopValue, 0, 0)
         r.StopCellLayout.Controls.Add(r.StopValue,       1, 0)
 
-        r.RRValue     = MakeZoneLabel("R:R",    Theme.FG_QUATERNARY)
+        ' KNOWN-0 fix: the R:R cell is a 2-row sub-layout — ratio label on top
+        ' (header + value, follows the row's value font) and the risk/rwd line
+        ' on its own smaller-font label beneath. As a single 3-line label the
+        ' third line clipped at the active-side font on every case, and at
+        ' 11.5pt bold the risk/rwd string could never fit the column anyway.
+        Dim rrCell = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 1, .RowCount = 2,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        }
+        rrCell.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        rrCell.RowStyles.Add(New RowStyle(SizeType.Percent, 68.0F))
+        rrCell.RowStyles.Add(New RowStyle(SizeType.Percent, 32.0F))
+
+        r.RRValue    = MakeZoneLabel("R:R", Theme.FG_QUATERNARY)
+        r.RRSubValue = New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = "",
+            .Font = Theme.FontMono(8.0F, FontStyle.Regular),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.TopCenter,
+            .Margin = New Padding(0)
+        }
+        rrCell.Controls.Add(r.RRValue,    0, 0)
+        rrCell.Controls.Add(r.RRSubValue, 0, 1)
+
         r.EntryValue  = MakeZoneLabel("ENTRY",  Theme.FG_PRIMARY)
         r.CappedValue = MakeZoneLabel("CAPPED", Theme.ACC_WARN)
         r.TargetValue = MakeZoneLabel("TARGET", targetColour)
 
         row.Controls.Add(r.DirLabel,        0, 0)
         row.Controls.Add(r.StopCellLayout,  1, 0)
-        row.Controls.Add(r.RRValue,         2, 0)
+        row.Controls.Add(rrCell,            2, 0)
         row.Controls.Add(r.EntryValue,      3, 0)
         row.Controls.Add(r.CappedValue,     4, 0)
         row.Controls.Add(r.TargetValue,     5, 0)
@@ -687,9 +737,15 @@ Partial Public Class MainForm
             .BackColor = Color.Transparent,
             .Margin = New Padding(0)
         }
-        For i = 0 To 3
-            grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25.0F))
-        Next
+        ' F-01 (consolidated fix): columns were 4 × 25%. The R:R cell's
+        ' "(risk N / rwd N)" line wrapped at 25% (~126 px) and the wrapped
+        ' tail clipped — the rwd value was lost on every structural card.
+        ' R:R takes 34% and the risk/rwd line moves to its own small-font
+        ' sub-label below the ratio (same treatment as the ATR row's R:R).
+        grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 22.0F))   ' STRUCT STOP
+        grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 20.0F))   ' ENTRY
+        grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 24.0F))   ' STRUCT TARGET
+        grid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 34.0F))   ' R:R (+ risk/rwd sub-label)
         grid.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
 
         Dim stopColour   As Color = Theme.ACC_SHORT
@@ -700,6 +756,28 @@ Partial Public Class MainForm
         ctrls.TargetValue = MakeZoneLabel("STRUCT TARGET", targetColour)
         ctrls.RRValue     = MakeZoneLabel("R:R",           Theme.FG_QUATERNARY)
 
+        Dim rrCell = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 1, .RowCount = 2,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(0)
+        }
+        rrCell.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        rrCell.RowStyles.Add(New RowStyle(SizeType.Percent, 68.0F))
+        rrCell.RowStyles.Add(New RowStyle(SizeType.Percent, 32.0F))
+        ctrls.RRSubValue = New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = "",
+            .Font = Theme.FontMono(8.0F, FontStyle.Regular),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.TopCenter,
+            .Margin = New Padding(0)
+        }
+        rrCell.Controls.Add(ctrls.RRValue,    0, 0)
+        rrCell.Controls.Add(ctrls.RRSubValue, 0, 1)
+
         ' C2a (P5-test gap-fix): column order is STOP | ENTRY | TARGET | R:R
         ' to mirror the ATR row's STOP | ENTRY | TARGET layout. Previously the
         ' order was STOP | TARGET | ENTRY | R:R which broke trader's scan
@@ -707,7 +785,7 @@ Partial Public Class MainForm
         grid.Controls.Add(ctrls.StopValue,   0, 0)
         grid.Controls.Add(ctrls.EntryValue,  1, 0)
         grid.Controls.Add(ctrls.TargetValue, 2, 0)
-        grid.Controls.Add(ctrls.RRValue,     3, 0)
+        grid.Controls.Add(rrCell,            3, 0)
 
         inner.Controls.Add(grid, 0, 1)
         card.Controls.Add(inner)
@@ -775,17 +853,26 @@ Partial Public Class MainForm
             ApplyMtfRow(_mtfRow, v.MTFGateReason)
         End If
 
+        ' F-09 (consolidated fix): the chip shows the compact action part
+        ' ("EXIT LONG (Layer 1.5)"); the full CalcHoldStatus string renders
+        ' on the wrapping _lblHoldReason row beneath the grid. The chip alone
+        ' clipped the reason — Layer 1.5 lost the break prices entirely, and
+        ' after P5b deletes the legacy block no other site carries them.
+        Dim holdActive As Boolean =
+            Not (String.IsNullOrEmpty(v.HoldStatus) OrElse v.HoldStatus = "N/A -- no open position")
         If _lblHold IsNot Nothing Then
-            ' Designer convention: scoring engine emits "N/A -- no open position"
-            ' when posState = None. Hide the label in that case to match the
-            ' legacy RTF render (which only printed HOLD/EXIT when meaningful).
-            If String.IsNullOrEmpty(v.HoldStatus) OrElse v.HoldStatus = "N/A -- no open position" Then
+            If holdActive Then
+                Dim sepIdx As Integer = v.HoldStatus.IndexOf(" -- ", StringComparison.Ordinal)
+                _lblHold.Text      = If(sepIdx > 0, v.HoldStatus.Substring(0, sepIdx), v.HoldStatus)
+                _lblHold.ForeColor = Theme.ACC_WARN
+            Else
                 _lblHold.Text    = "—"
                 _lblHold.ForeColor = Theme.FG_QUATERNARY
-            Else
-                _lblHold.Text      = v.HoldStatus
-                _lblHold.ForeColor = Theme.ACC_WARN
             End If
+        End If
+        If _lblHoldReason IsNot Nothing Then
+            _lblHoldReason.Visible = holdActive
+            _lblHoldReason.Text    = If(holdActive, "HOLD/EXIT: " & v.HoldStatus, "")
         End If
 
         If _regimeAnchorWarn IsNot Nothing Then
@@ -795,14 +882,29 @@ Partial Public Class MainForm
         ' GAP-02 + GAP-03 — eff scores + TRANSITIONAL penalty under the
         ' REGIME grid. Visible only when the engine actually applied a
         ' transitional regime penalty.
+        Dim hasPenalty As Boolean = v.RegimePenalty > 0
         If _lblVerdictEffPenalty IsNot Nothing Then
-            Dim hasPenalty As Boolean = v.RegimePenalty > 0
             _lblVerdictEffPenalty.Visible = hasPenalty
             If hasPenalty Then
                 Dim mx As Integer = If(v.MaxScore > 0, v.MaxScore, 20)
                 _lblVerdictEffPenalty.Text =
                     $"eff. L {v.EffectiveLongScore}/{mx}  |  S {v.EffectiveShortScore}/{mx}   ·   penalty −{v.RegimePenalty}"
             End If
+        End If
+
+        ' F-08/F-09 (consolidated fix): grow the hero row for whichever
+        ' conditional rows are visible this run so they get their own pixels
+        ' instead of compressing the 2×2 grid / occluding the HOLD slot
+        ' (cases 41/42 showed the banner painting over the chip row at the
+        ' fixed 180 px). The banner reports its own wrapped height.
+        If _heroRowIndex >= 0 AndAlso _gridRoot IsNot Nothing Then
+            Dim extra As Integer = 0
+            If hasPenalty Then extra += 18
+            If _lblHoldReason IsNot Nothing AndAlso _lblHoldReason.Visible Then extra += 32
+            If _regimeAnchorWarn IsNot Nothing AndAlso _regimeAnchorWarn.Visible Then
+                extra += _regimeAnchorWarn.Height + 4
+            End If
+            _gridRoot.RowStyles(_heroRowIndex) = New RowStyle(SizeType.Absolute, HERO_ROW_BASE + extra)
         End If
     End Sub
 
@@ -945,12 +1047,20 @@ Partial Public Class MainForm
 
         ' Q2: surface risk / rwd USD amounts inline on the R:R cell so the
         ' trader doesn't have to compute |entry-stop| and |target-entry| in
-        ' their head. The R:R column was widened from 12% → 16% to fit.
+        ' their head. Risk/rwd renders on its own smaller-font sub-label
+        ' (KNOWN-0 fix) so the line can't clip or overflow the column.
+        ' F-07 (consolidated fix): the ratio is computed from the EFFECTIVE
+        ' (capped) target, matching the risk/rwd amounts below it. The old
+        ' FormatRR(atrTarget, atrStop) showed the raw-ATR 1:1.7 next to a
+        ' capped TARGET cell — legacy deliberately omits R:R on capped rows
+        ' precisely because that pairing misleads. Uncapped rows are
+        ' unchanged (rwdUsd = atrTarget, riskUsd = atrStop).
         Dim riskUsd As Double = Math.Abs(entryPx - stopPx)
         Dim rwdUsd  As Double = Math.Abs(adjustedTargetPx - entryPx)
-        Dim rrText  As String = FormatRR(atrTarget, atrStop) & Environment.NewLine &
-                                $"(risk {riskUsd:F1} / rwd {rwdUsd:F1})"
-        SetZoneValue(row.RRValue, "R:R", rrText)
+        SetZoneValue(row.RRValue, "R:R", FormatRR(rwdUsd, riskUsd))
+        If row.RRSubValue IsNot Nothing Then
+            row.RRSubValue.Text = $"(risk {riskUsd:F1} / rwd {rwdUsd:F1})"
+        End If
 
         ' C1c: structural stop side-by-side with ATR stop when structural is
         ' deeper (further from entry). Symmetric long/short.
@@ -961,9 +1071,12 @@ Partial Public Class MainForm
         SetZoneValue(row.TargetValue, "TARGET", $"{adjustedTargetPx:F1}")
 
         If showCapped Then
-            ' C1b: inline cell now carries both the arrow-price AND the label.
-            ' Multi-line within the cell — "CAPPED\n→ price\n(label)".
-            Dim cappedValueText As String = $"→ {adjustedTargetPx:F1}"
+            ' C1b: inline cell carries the arrow-price AND the label.
+            ' F-07 (consolidated fix): the raw ATR target is restored ahead of
+            ' the arrow ("raw → capped", legacy parity with "50160.0 -->
+            ' 50080.0") — the card previously dropped the raw value entirely.
+            ' Multi-line within the cell — "CAPPED\nraw → capped\n(label)".
+            Dim cappedValueText As String = $"{rawTargetPx:F1} → {adjustedTargetPx:F1}"
             If Not String.IsNullOrEmpty(capLabel) Then
                 cappedValueText &= Environment.NewLine & $"({capLabel})"
             End If
@@ -987,6 +1100,11 @@ Partial Public Class MainForm
         For Each lbl In New Label() {row.RRValue, row.EntryValue, row.CappedValue, row.TargetValue}
             lbl.Font = valueFont
         Next
+        ' Risk/rwd sub-label stays small in both weights — it must fit the
+        ' column even at case-20-scale numbers (risk 6000.0 / rwd 10000.0).
+        If row.RRSubValue IsNot Nothing Then
+            row.RRSubValue.Font = Theme.FontMono(If(primary, 8.0F, 7.0F), FontStyle.Regular)
+        End If
 
         ' Per-side target colour: primary direction in its accent; secondary
         ' dimmed to FG_TERTIARY so the dominant row reads first.
@@ -995,12 +1113,14 @@ Partial Public Class MainForm
             row.StopValue.ForeColor        = Theme.ACC_SHORT
             row.StructStopValue.ForeColor  = Theme.ACC_SHORT
             row.RRValue.ForeColor          = Theme.FG_QUATERNARY
+            If row.RRSubValue IsNot Nothing Then row.RRSubValue.ForeColor = Theme.FG_QUATERNARY
             row.EntryValue.ForeColor       = Theme.FG_PRIMARY
         Else
             row.TargetValue.ForeColor      = Theme.FG_TERTIARY
             row.StopValue.ForeColor        = Theme.FG_TERTIARY
             row.StructStopValue.ForeColor  = Theme.FG_TERTIARY
             row.RRValue.ForeColor          = Theme.FG_DIM
+            If row.RRSubValue IsNot Nothing Then row.RRSubValue.ForeColor = Theme.FG_DIM
             row.EntryValue.ForeColor       = Theme.FG_TERTIARY
             If Not showCapped Then row.CappedValue.ForeColor = Theme.BORDER_INNER
         End If
@@ -1109,10 +1229,13 @@ Partial Public Class MainForm
                 risk   = stopPx - entryPx
                 reward = entryPx - targetPx
             End If
-            ' Q2 (P5-test gap-fix): surface risk / rwd USD inline below the ratio.
-            SetZoneValue(ctrls.RRValue, "R:R",
-                         FormatRR(reward, risk) & Environment.NewLine &
-                         $"(risk {Math.Abs(risk):F1} / rwd {Math.Abs(reward):F1})")
+            ' Q2 (P5-test gap-fix): surface risk / rwd USD below the ratio.
+            ' F-01 (consolidated fix): the line lives on its own small-font
+            ' sub-label so it can't wrap-and-clip inside the ratio label.
+            SetZoneValue(ctrls.RRValue, "R:R", FormatRR(reward, risk))
+            If ctrls.RRSubValue IsNot Nothing Then
+                ctrls.RRSubValue.Text = $"(risk {Math.Abs(risk):F1} / rwd {Math.Abs(reward):F1})"
+            End If
             ctrls.TargetValue.ForeColor = Theme.ACC_INFO
             ctrls.StopValue.ForeColor   = Theme.ACC_SHORT
         ElseIf hasStop Then
@@ -1123,6 +1246,7 @@ Partial Public Class MainForm
             ctrls.TargetValue.ForeColor = Theme.FG_DIM
             SetZoneValue(ctrls.EntryValue, "ENTRY", $"{entryPx:F1}")
             SetZoneValue(ctrls.RRValue,    "R:R",   "—")
+            If ctrls.RRSubValue IsNot Nothing Then ctrls.RRSubValue.Text = ""
             ctrls.StopValue.ForeColor   = Theme.ACC_SHORT
         ElseIf hasTarget Then
             ' TARGET ONLY
@@ -1132,6 +1256,7 @@ Partial Public Class MainForm
             SetZoneValue(ctrls.TargetValue, "STRUCT TARGET", $"{targetPx:F1}")
             SetZoneValue(ctrls.EntryValue,  "ENTRY",         $"{entryPx:F1}")
             SetZoneValue(ctrls.RRValue,     "R:R",           "—")
+            If ctrls.RRSubValue IsNot Nothing Then ctrls.RRSubValue.Text = ""
             ctrls.TargetValue.ForeColor = Theme.ACC_INFO
         Else
             ' Neither stop nor target — nothing structural to show.
@@ -1139,6 +1264,7 @@ Partial Public Class MainForm
             ctrls.TargetValue.Text = "STRUCT TARGET" & Environment.NewLine & "—"
             ctrls.EntryValue.Text  = "ENTRY" & Environment.NewLine & $"{entryPx:F1}"
             ctrls.RRValue.Text     = "R:R" & Environment.NewLine & "—"
+            If ctrls.RRSubValue IsNot Nothing Then ctrls.RRSubValue.Text = ""
             ctrls.StopValue.ForeColor   = Theme.FG_DIM
             ctrls.TargetValue.ForeColor = Theme.FG_DIM
         End If
@@ -1889,10 +2015,16 @@ Partial Public Class MainForm
     ' title API, so the per-group "regime tag" colour is rendered as a
     ' header Label over a bordered Panel.
     ' =======================================================================
+    ''' <param name="vwapWarmup">F-10: the warmup-candles threshold the text
+    ''' renderers were handed (RenderOutput / BuildPlaintextSnapshot take the
+    ''' same parameter). −1 falls back to cfg's threshold. Threading the
+    ''' parameter instead of re-reading live cfg keeps the card's [WARMUP]
+    ''' tag in lock-step with the legacy/snapshot text on every host.</param>
     Public Sub BindCardIndicatorDetails(v As VerdictResult,
                                         r As IndicatorResults,
                                         norms As DynamicNorms,
-                                        cfg As EngineSettings)
+                                        cfg As EngineSettings,
+                                        Optional vwapWarmup As Integer = -1)
         If _cardIndicatorDetails Is Nothing Then Return
 
         _cardIndicatorDetails.SuspendLayout()
@@ -1933,7 +2065,7 @@ Partial Public Class MainForm
         BuildGroupNorms(grid, 0, 0, norms, r)
         BuildGroupRegime5m(grid, 0, 1, r)
         ' Row 1: VWAP     | MTF GATE
-        BuildGroupVwap(grid, 1, 0, r, cfg)
+        BuildGroupVwap(grid, 1, 0, r, cfg, vwapWarmup)
         BuildGroupMtfGate(grid, 1, 1, r, v)
         ' Row 2: EMA RIBBON | FUNDING
         BuildGroupEmaRibbon(grid, 2, 0, r)
@@ -2049,9 +2181,15 @@ Partial Public Class MainForm
     End Sub
 
     Private Shared Sub BuildGroupVwap(parent As TableLayoutPanel, row As Integer, col As Integer,
-                                      r As IndicatorResults, cfg As EngineSettings)
+                                      r As IndicatorResults, cfg As EngineSettings,
+                                      Optional vwapWarmupThreshold As Integer = -1)
+        ' F-10 (consolidated fix): use the threaded threshold (same value the
+        ' text renderers compare against) rather than re-reading live cfg —
+        ' the two sources can diverge (review case 48 rendered [WARMUP] in
+        ' legacy text but not on the card).
+        Dim threshold As Integer = If(vwapWarmupThreshold >= 0, vwapWarmupThreshold, cfg.Indicators.VWAP.WarmupCandles)
         Dim warmupTag As String = ""
-        If r.VWAPSessionCandles < cfg.Indicators.VWAP.WarmupCandles Then warmupTag = "  [WARMUP]"
+        If r.VWAPSessionCandles < threshold Then warmupTag = "  [WARMUP]"
 
         Dim s2h As Integer = cfg.Indicators.VWAP.Session2StartHour
         Dim s2m As Integer = cfg.Indicators.VWAP.Session2StartMinute
@@ -2295,7 +2433,11 @@ Partial Public Class MainForm
     '   sc.HasValue = True,  sc.Value = 0    → " 0"
     '   sc.HasValue = False                  → "—" (this row didn't vote)
     ' -----------------------------------------------------------------------
-    Public Sub BindCardSignalBreakdown(v As VerdictResult, r As IndicatorResults)
+    ''' <param name="vwapWarmup">F-10: warmup-candles threshold threaded from
+    ''' the analysis run (−1 → fall back to live cfg). See BindCardIndicatorDetails.</param>
+    Public Sub BindCardSignalBreakdown(v As VerdictResult, r As IndicatorResults,
+                                       Optional vwapWarmup As Integer = -1)
+        If vwapWarmup < 0 Then vwapWarmup = SettingsLoader.Current.Indicators.VWAP.WarmupCandles
         If _cardSignalBreakdown Is Nothing Then Return
 
         _cardSignalBreakdown.SuspendLayout()
@@ -2364,7 +2506,7 @@ Partial Public Class MainForm
         leftCol.Controls.Add(BuildRowVolume(r, items))
 
         leftCol.Controls.Add(MakeTierLabel("TIER 1"))
-        leftCol.Controls.Add(BuildRowVwapDev(r, items))
+        leftCol.Controls.Add(BuildRowVwapDev(r, items, isWarmup:=r.VWAPSessionCandles < vwapWarmup))
         leftCol.Controls.Add(BuildRowVwapBands(r, items))
         leftCol.Controls.Add(BuildRowBbwTtm(r, items))
         leftCol.Controls.Add(BuildRowEmaRibbon(r, items))
@@ -2534,7 +2676,11 @@ Partial Public Class MainForm
             .Padding = New Padding(0)
         }
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))   ' INDICATOR
-        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 75))    ' STATE
+        ' F-05 (consolidated fix): 75 → 85. "NW SHRTS" (8 chars) needed ~76 px
+        ' at 9.5pt Geist Mono and ellipsis-truncated to "NW SHR…" while the
+        ' long-side "NW LNGS" (7 chars) fit — an asymmetric short-side clip
+        ' (G8). 85 px fits all current pills (max 8 chars) with margin.
+        row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 85))    ' STATE
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F)) ' NOTE (flex)
         row.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 30))    ' SC
         row.RowStyles.Add(New RowStyle(SizeType.Absolute, SIGROW_HEIGHT))
@@ -2569,8 +2715,11 @@ Partial Public Class MainForm
             ' decoration (paired with the ACC_INFO → FG_SECONDARY colour bump
             ' in the only caller, BuildRowSwingPivots).
             subLbl.Font = Theme.FontMono(8.5F, FontStyle.Bold)
-            row.Controls.Add(subLbl, 2, 1)
-            row.SetColumnSpan(subLbl, 2)
+            ' F-03 (consolidated fix): span the FULL row (cols 0-3, ~500 px)
+            ' instead of NOTE+SC (~305 px) — the C4b-expanded best-pivot text
+            ' ellipsis-truncated at "…vs av…" in the narrower span.
+            row.Controls.Add(subLbl, 0, 1)
+            row.SetColumnSpan(subLbl, 4)
         End If
 
         Return row
@@ -2689,7 +2838,9 @@ Partial Public Class MainForm
         Dim sd = StateFromHits(FindItem(items, "RSI(9)"))
         ' Q3f (P5-test gap-fix): label numbers per G2 — surface the comparison
         ' against the 50 midline so the trader doesn't have to mentally compute it.
-        Dim midOp As String = If(r.RSI >= 50.0, ">", "<")
+        ' F-04 (consolidated fix): render "=" at exactly 50.0 — the >= test
+        ' produced the literally-false "50.0 > 50.0" on midline ties.
+        Dim midOp As String = If(r.RSI > 50.0, ">", If(r.RSI < 50.0, "<", "="))
         Dim note As String = $"{r.RSI:F1} {midOp} 50.0"
         If Not String.IsNullOrEmpty(r.RSIDivergence) AndAlso r.RSIDivergence <> "NONE" Then
             note &= " | div: " & r.RSIDivergence.ToLower()
@@ -2754,7 +2905,8 @@ Partial Public Class MainForm
 
     ' --- TIER 1 ---
 
-    Private Shared Function BuildRowVwapDev(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+    Private Shared Function BuildRowVwapDev(r As IndicatorResults, items As List(Of SignalBreakdownItem),
+                                            Optional isWarmup As Boolean = False) As Control
         Dim state As String, colour As Color
         If r.VWAPDevPct > 0 Then
             state = "LONG"
@@ -2768,6 +2920,10 @@ Partial Public Class MainForm
         End If
         ' Legacy renders VWAP Dev at F3 (e.g. "-0.080%"). F2 was rounding to "-0.08%".
         Dim note As String = String.Format("{0:+0.000;-0.000;0.000}%", r.VWAPDevPct)
+        ' F-10 (consolidated fix): surface warmup on the scoring row too —
+        ' during warmup the dev value is unreliable and the VWAP vote is
+        ' gated, so the trader needs the flag next to the number.
+        If isWarmup Then note &= " | warmup"
         ' VWAP scoring fires as a single "VWAP" breakdown item — split between
         ' VWAP Dev and VWAP Bands rows. Attribute the SC to VWAP Dev (primary).
         Return MakeSignalRow("VWAP Dev", state, colour, note, ScForItem(items, "VWAP"))
@@ -2939,12 +3095,26 @@ Partial Public Class MainForm
     End Function
 
     Private Shared Function BuildRowLiq(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
+        ' F-11 (consolidated fix): the pill whitelisted the engine's
+        ' "LONG LIQS" / "SHORT LIQS" strings and defaulted anything else to
+        ' NONE — review case 51 (harness LiqSignal = "LONG_CASCADE") rendered
+        ' a NONE pill next to a "long_cascade" note and SC −1. CalcLiquidations
+        ' only emits LONG LIQS / SHORT LIQS / NONE today, but the pill now
+        ' also maps the CASCADE vocabulary and falls back to deriving the
+        ' side from the string so a future rename can't silently de-pill it.
         Dim sig As String = If(r.LiqSignal, "NONE")
         Dim state As String, colour As Color
         Select Case sig
-            Case "LONG LIQS"  : state = "L LIQ" : colour = Theme.ACC_SHORT     ' longs liquidating = bearish
-            Case "SHORT LIQS" : state = "S LIQ" : colour = Theme.ACC_STRONG_LONG ' shorts liquidating = bullish
-            Case Else         : state = "NONE"  : colour = Theme.FG_TERTIARY
+            Case "LONG LIQS", "LONG_CASCADE"   : state = "L LIQ" : colour = Theme.ACC_SHORT       ' longs liquidating = bearish
+            Case "SHORT LIQS", "SHORT_CASCADE" : state = "S LIQ" : colour = Theme.ACC_STRONG_LONG ' shorts liquidating = bullish
+            Case Else
+                If sig.IndexOf("LONG", StringComparison.OrdinalIgnoreCase) >= 0 Then
+                    state = "L LIQ" : colour = Theme.ACC_SHORT
+                ElseIf sig.IndexOf("SHORT", StringComparison.OrdinalIgnoreCase) >= 0 Then
+                    state = "S LIQ" : colour = Theme.ACC_STRONG_LONG
+                Else
+                    state = "NONE"  : colour = Theme.FG_TERTIARY
+                End If
         End Select
         Dim note As String = sig.ToLower()
         Return MakeSignalRow("Liq", state, colour, note, ScForItem(items, "Liq Penalty"))
@@ -3100,7 +3270,9 @@ Partial Public Class MainForm
             ' Legacy renders the best-volume pivot price at F1 (e.g. "77998.5").
             ' F0 was rounding away the half-tick.
             ' C4b (P5-test gap-fix): expand to full legacy form per G4 + G5.
-            subNote = String.Format("Best vol. pivot (5m): {0} @ {1:F1} (vol × {2:F1} vs avg. pivot)",
+            ' F-03 (consolidated fix): tail "vs avg. pivot" → "vs avg" so the
+            ' string fits the full-row span (kickoff §3 ruling).
+            subNote = String.Format("Best vol. pivot (5m): {0} @ {1:F1} (vol ×{2:F1} vs avg)",
                                     If(r.BestPivotIsHigh5m, "HIGH", "LOW"),
                                     r.BestPivotByVolume5m, r.BestPivotVolumeRatio5m)
         End If
