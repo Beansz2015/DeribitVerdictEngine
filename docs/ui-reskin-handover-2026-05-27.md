@@ -257,6 +257,18 @@ The C1a decision (stops uncapped, dual-row display preserved) was load-bearing b
 
 **Process rule:** for any engine-policy question, the spec-author's response includes (a) cited research, (b) explicit mapping to the engine's current architecture, (c) a recommendation backed by the research, not by intuition. The trader makes the call from the research, not from the spec-author's confidence.
 
+### 5.14 Engine display-string parity rule — HARD RULE (lesson from the consolidated fix 2026-06-12)
+
+The text-parity harness diffs legacy↔snapshot, which regenerate from the same build and therefore move together. **The card grid is the unchecked third surface.** Any engine commit that adds, removes, renames, or re-formats a line emitted by the text renderers — including `VerdictResult`/`IndicatorResults` field-default changes that alter rendered output — MUST update the corresponding binding in `UI/MainForm_Render_Cards.vb` in the same commit, or state in the commit message why no card surface is affected. After P5b deletes the legacy renderer, the rule applies to snapshot↔card.
+
+Evidence base — three drift instances in one cycle, all found by review/trader rather than any gate:
+
+1. v31 `ccdd652` changed `MTFGateReason`'s field default `"MTF PASS"` → `""` → regenerated harness artifacts printed an empty `Reason:` line and the verdict-card chip degraded to `MTF state: —`.
+2. Tier D `0bd1b63` (D1) added the `Notional: ≈ $N · N.N× lev [LEV CAPPED]` line to both text renderers → KELLY card silently lacked it (trader's catch).
+3. Tier D `482c9bb` (D2) relabelled `ATR scale` → `ATR ratio` → details card kept the stale label.
+
+Also installed in `CLAUDE.md` Collaboration Rules (engine-side sessions don't read this handover). Full account: `docs/ui-reskin-consolidated-fix-spec-back.md` §2–§3.
+
 ---
 
 ## 6. Outstanding decisions (none critical)
