@@ -1318,10 +1318,6 @@ Partial Public Class MainForm
                 SaveFullFormScreenshot(targetPath)
                 e.Handled = True
             End If
-        ElseIf e.Control AndAlso e.Shift AndAlso e.KeyCode = Keys.T Then
-            ' P5-test render-parity harness — temporary, deleted in commit 3.
-            RunRenderParityHarness()
-            e.Handled = True
         End If
     End Sub
 
