@@ -1456,6 +1456,24 @@ Partial Public Class MainForm
         End If
         stack.Controls.Add(BuildCardKvRow(leanOrContracts, contractStr, contractColour))
 
+        ' D1 (Tier D, v32) parity: notional + implied leverage sanity line,
+        ' [LEV CAPPED] when kelly.max_leverage (not the $ risk cap) set the
+        ' contract count. Mirrors RenderOutputHeader / BuildPlaintextSnapshot
+        ' — rendered only when the contract count is at least 1, amber when
+        ' the leverage cap bit. Surfaced by the trader's post-fix review:
+        ' the line shipped to both text renderers after the card binder was
+        ' written, so the card silently lacked it.
+        If v.KellyContracts >= 1 Then
+            Dim cfgKelly = SettingsLoader.Current.Kelly
+            Dim notional As Double = v.KellyContracts * cfgKelly.ContractFaceUsd
+            Dim lev As Double = If(cfgKelly.AccountSizeUsd > 0, notional / cfgKelly.AccountSizeUsd, 0.0)
+            Dim levTag As String = If(v.KellyLevCapped, "  [LEV CAPPED]", "")
+            Dim notionalColour As Color = If(v.KellyLevCapped, Theme.ACC_WARN, Theme.FG_PRIMARY)
+            stack.Controls.Add(BuildCardKvRow("Notional:",
+                                              String.Format("≈ ${0:N0} · {1:F1}× lev{2}", notional, lev, levTag),
+                                              notionalColour))
+        End If
+
         _cardKelly.Controls.Add(stack)
         _cardKelly.ResumeLayout(True)
     End Sub
@@ -2172,7 +2190,10 @@ Partial Public Class MainForm
         ' C3c.i: section header "NORMS" → "DYNAMIC NORMS" per G5 (full name from legacy).
         Dim g = BuildGroupInline($"DYNAMIC NORMS  {modeTag}", modeColour)
         ' C3c.iii: ATR scale collapsed to single labelled row per G3 ("=" pairs, "|" between).
-        AddKv(g.body, "ATR scale:",    $"{norms.ATRScaleFactor:F2}x  (ATR={r.ATR:F2} | ref={norms.ATRRef:F2})")
+        ' D2 (Tier D, v32) relabelled the legacy row "ATR scale" → "ATR ratio"
+        ' (the displayed value is CurrATR/RefATR, distinct from the sizing
+        ' multiplier shown in the ATR card sub-header). Card follows per G5.
+        AddKv(g.body, "ATR ratio:",    $"{norms.ATRScaleFactor:F2}x  (ATR={r.ATR:F2} | ref={norms.ATRRef:F2})")
         ' C3c.ii: Vol H/M reformatted per G3.
         AddKv(g.body, "Vol threshold:", $"H={norms.VolHighThreshold:F2}x | M={norms.VolMidThreshold:F2}x")
         AddKv(g.body, "Vol mean/σ:",   $"{norms.VolMean:F4} BTC  /  σ {norms.VolStdDev:F4}")
@@ -3185,10 +3206,14 @@ Partial Public Class MainForm
 
     Private Shared Function BuildRowDonchian(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
         Dim state As String, colour As Color
+        ' Pill text follows the legacy signal vocabulary per G5: the engine's
+        ' no-breakout state is "NONE" (legacy prints "Signal: NONE"), so the
+        ' pill says NONE — not the generic NEUT — matching the Liq pill's
+        ' treatment of its NONE state. Trader query 2026-06-12.
         Select Case If(r.DonchianSignal, "")
             Case "LONG", "LONG_PARTIAL"   : state = "LONG"  : colour = Theme.ACC_STRONG_LONG
             Case "SHORT", "SHORT_PARTIAL" : state = "SHORT" : colour = Theme.ACC_SHORT
-            Case Else                     : state = "NEUT"  : colour = Theme.FG_TERTIARY
+            Case Else                     : state = "NONE"  : colour = Theme.FG_TERTIARY
         End Select
         ' Quartile derived inline from price position.
         ' Q3b (P5-test gap-fix): append raw Upper/Lower prices per G6 (retain
