@@ -21,7 +21,6 @@
 '   applies per-session HighMultiplier/MidMultiplier via ApplySessionVolume() after dynamic
 '   vol thresholds are set. Controlled by cfg.SessionVolume (EngineSettings / settings.json v12).
 
-Imports System.Drawing
 Imports System.Windows.Forms
 
 Partial Public Class MainForm
@@ -29,18 +28,20 @@ Partial Public Class MainForm
     Private Async Sub btnAnalyze_Click(sender As Object, e As EventArgs) Handles btnAnalyze.Click
         btnAnalyze.Enabled = False
         btnAnalyze.Text    = "Fetching..."
-        txtOutput.Clear()
-        AppendRtf(txtOutput, "Fetching data from Deribit..." & Environment.NewLine, Theme.FG_TERTIARY)
-        lblVerdict.Text      = "..."
-        lblVerdict.BackColor = Color.Gray
 
         Try
             Await RunAnalysisAsync()
         Catch ex As Exception
-            txtOutput.Clear()
-            AppendRtf(txtOutput, "ERROR: " & ex.Message & Environment.NewLine & ex.StackTrace, Theme.ACC_SHORT)
-            lblVerdict.Text      = "ERROR"
-            lblVerdict.BackColor = Color.OrangeRed
+            ' P5b — errors surface via MessageBox now that the legacy txtOutput
+            ' writer is gone. Briefly blocks the auto-run timer; acceptable per
+            ' the P5b kickoff §3.2.1 trade-off (errors are rare, trader wants
+            ' to see them). Swap to a transient header Pill if disruptive.
+            MessageBox.Show(
+                "Analysis failed:" & Environment.NewLine & Environment.NewLine &
+                ex.Message,
+                "Analysis Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error)
         Finally
             btnAnalyze.Enabled = True
             btnAnalyze.Text    = "Analyze Now"
@@ -108,14 +109,9 @@ Partial Public Class MainForm
         If skipReason IsNot Nothing Then
             _skipCount += 1
             _lastSkipReason = skipReason
-            ' Keep the legacy txtOutput write for P5-pre parity (the verification
-            ' dump card still reads from it). P5 deletes both the txtOutput
-            ' write and the legacy RTF helpers. lblVerdict is hidden per the
-            ' UI reskin handover §4 lock, so the SKIPPED background swap drops.
-            txtOutput.Clear()
-            AppendRtf(txtOutput, String.Format("ANALYSIS SKIPPED: {0}" & Environment.NewLine, skipReason), Theme.ACC_WARN, bold:=True)
-            AppendRtf(txtOutput, String.Format("Skip count this session: {0}" & Environment.NewLine, _skipCount), Theme.FG_QUATERNARY)
-            AppendRtf(txtOutput, "Engine continues — next auto-run cycle will retry.", Theme.FG_QUATERNARY)
+            ' Skip state surfaces in the SKIPPED verdict panel (P4f) and the
+            ' LOG sub-box skip counter (P4e); the legacy txtOutput write was
+            ' deleted in P5b.
             UpdateLogInfo()
             RenderSkippedDashboard(skipReason)
             RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
@@ -442,10 +438,14 @@ Partial Public Class MainForm
         AnalysisLogger.LogRun(r, verdict)
         UpdateLogInfo()
 
-        RenderOutput(r, verdict, norms, vwapWarmup, lastTradePrice)
+        ' P5b — BuildPlaintextSnapshot is the engine's only text renderer.
+        ' It MUST run before the card binds: its inline CalcKellySizing call
+        ' (the sole surviving invocation) populates verdict.Kelly* fields that
+        ' BindCardKelly reads below — the side effect the deleted legacy
+        ' RenderOutputHeader used to provide. The string feeds the output dump
+        ' after the perf-strip update further down.
+        Dim snapshot As String = BuildPlaintextSnapshot(verdict, r, norms, cfg, vwapWarmup, lastTradePrice)
 
-        ' P4b: bind the new card grid alongside the legacy txtOutput render.
-        ' Both paths run until P5 deletes txtOutput.
         BindCardScore(verdict)
         BindCardVerdict(verdict, r)
         BindCardLastPrice(r, lastTradePrice)
@@ -464,12 +464,9 @@ Partial Public Class MainForm
         Await LivePerformanceTracker.UpdateAsync(verdict, r, candles1m, DateTime.UtcNow)
         UpdatePerformanceLabels()
 
-        ' P5a — append a fresh markdown-style snapshot to the output dump.
-        ' Migrated from MainForm_Render_Sections.vb:329 so the dump is fed by
-        ' BuildPlaintextSnapshot (the new card-grid-independent renderer)
-        ' instead of txtOutput.Text. RunAnalysisAsync now owns the dump call;
-        ' RenderOutput (still alive in P5a) writes only to txtOutput.
-        Dim snapshot As String = BuildPlaintextSnapshot(verdict, r, norms, cfg, vwapWarmup, lastTradePrice)
+        ' Append the snapshot (built above, pre-bind) to the output dump.
+        ' Kept after UpdatePerformanceLabels so ComposePerfStripLine reflects
+        ' this run's perf-strip state.
         AnalysisOutputDump.Append(
             timestamp:=verdict.Timestamp,
             renderedText:=snapshot,

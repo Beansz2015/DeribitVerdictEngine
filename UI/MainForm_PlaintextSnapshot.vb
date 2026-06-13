@@ -6,12 +6,13 @@
 ' existing dump-readers (auto-tweaker / future log consumers) continue
 ' to parse.
 '
-' Walks every block emitted by the legacy render path in this order:
-'   1. RenderOutputHeader   (MainForm_Render_Header.vb)
+' Walks every block the legacy render path emitted (verified 55/55 by the
+' P5-test parity harness before both were deleted in P5b), in this order:
+'   1. Header block (was RenderOutputHeader)
 '      VERDICT / CONTEXT / CONFIDENCE / REGIME ANCHOR / SCORE / TIME /
 '      LAST TRANSACTED PRICE / HOLD / EXIT / ATR ENTRY LEVELS / structural
 '      rows / KELLY SIZING
-'   2. RenderOutput section blocks (MainForm_Render_Sections.vb)
+'   2. Section blocks (was RenderOutput)
 '      DYNAMIC NORMS / REGIME / CORE SIGNALS / VWAP / BBW/TTM /
 '      EMA RIBBON / MARKET STRUCTURE / OI / ORDER FLOW / LIQUIDATIONS /
 '      MTF GATE / FUNDING / SIGNAL BREAKDOWN
@@ -19,10 +20,10 @@
 ' Colour is dropped (plaintext). Spacing, formatters, conditional gates,
 ' and sub-tick CAPPED suppression are reproduced 1:1.
 '
-' Called from MainForm_Analysis.RunAnalysisAsync after UpdatePerformanceLabels
-' and passed as `renderedText` to AnalysisOutputDump.Append. Friend (not
-' Shared) because it reads instance fields (_metricMode etc. via perf-strip
-' composer, though that lives separately in ComposePerfStripLine).
+' Called from MainForm_Analysis.RunAnalysisAsync BEFORE the card binds (the
+' inline CalcKellySizing populates v.Kelly* for BindCardKelly); the returned
+' string is passed as `renderedText` to AnalysisOutputDump.Append after
+' UpdatePerformanceLabels so the perf-strip line reflects the current run.
 
 Imports System.Text
 
@@ -136,11 +137,10 @@ Partial Public Class MainForm
             sb.AppendLine("  HOLD / EXIT: " & v.HoldStatus)
         End If
 
-        ' Kelly sizing is computed here in the legacy path (RenderOutputHeader
-        ' invokes ScoringEngine.CalcKellySizing after the HOLD line) — but in
-        ' the new flow it's already populated by the time we render, because
-        ' the legacy RenderOutput is still called alongside. Re-invoking here
-        ' is idempotent on v.Kelly* fields, so safe.
+        ' P5b: the engine's ONLY CalcKellySizing call site. RunAnalysisAsync
+        ' builds this snapshot BEFORE the card binds precisely so this call
+        ' populates v.Kelly* for BindCardKelly — preserve that ordering when
+        ' refactoring, or the KELLY card renders zeros.
         ScoringEngine.CalcKellySizing(v, atrStop, r.CurrentPrice, cfg)
 
         ' ATR ENTRY LEVELS header (SectionHeader emits a leading blank line).

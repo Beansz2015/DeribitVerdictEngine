@@ -2,10 +2,10 @@
 ' UI reskin P4b — binding methods that populate the new card-grid layout
 ' from VerdictResult / IndicatorResults. Companion to MainForm_Layout.vb.
 '
-' Called from RunAnalysisAsync after legacy RenderOutput() completes —
-' both render paths coexist until P5 deletes txtOutput. The legacy
-' txtOutput continues to live inside the verification dump card (row 10)
-' so side-by-side parity can be eyeballed during P4 development.
+' Called from RunAnalysisAsync after BuildPlaintextSnapshot (which populates
+' verdict.Kelly* via its inline CalcKellySizing call — BindCardKelly depends
+' on that ordering). The card grid is the primary display surface; the
+' legacy RTF pipeline was deleted in P5b.
 '
 ' Card contents for rows 3-5 (SCORE / VERDICT / LAST PRICE / ATR LEVELS /
 ' STRUCTURAL × 2) are built once by InitBoundCardContents() which is
@@ -19,9 +19,8 @@ Partial Public Class MainForm
 
     ' Two-tier R:R precision: "0.0" when ratio is zero (genuine missing target),
     ' "< 0.1" when ratio rounds to zero at 1dp but is non-zero, else 1dp.
-    ' Migrated from MainForm_Render_Header.vb in P5a so Header.vb can be deleted
-    ' in P5b without losing the helper. Callers: legacy RenderOutputHeader (still
-    ' alive in P5a), BindCardAtrLevels, BindCardStructural, BuildPlaintextSnapshot.
+    ' Migrated from MainForm_Render_Header.vb in P5a (file deleted in P5b).
+    ' Callers: BindCardAtrLevels, BindCardStructural, BuildPlaintextSnapshot.
     Friend Shared Function FormatRR(reward As Double, risk As Double) As String
         If risk <= 0 Then Return "—"
         Dim ratio As Double = reward / risk
@@ -35,10 +34,9 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Private Shared Function MakeSectionHeader(text As String,
                                               Optional colour As Color = Nothing) As Label
-        ' Unified card section-header style. 11pt + FG_SECONDARY matches
-        ' BuildPlainSectionHeader so SCORE / VERDICT / LAST PRICE / ATR /
-        ' STRUCTURAL / SIGNAL BREAKDOWN read at the same weight as OI × CVD
-        ' CROSS / VOLUME PROFILE / KELLY SIZING / INDICATOR DETAILS.
+        ' Unified card section-header style (11pt + FG_SECONDARY) — every
+        ' card header goes through this factory since the P5b consolidation
+        ' absorbed BuildPlainSectionHeader.
         Dim c As Color = If(colour.IsEmpty, Theme.FG_SECONDARY, colour)
         Return New Label() With {
             .AutoSize = True,
@@ -385,7 +383,6 @@ Partial Public Class MainForm
     '   - _cardHeaderStrip      → controls (radios / NUDs / ANALYZE) stay live
     '   - _cardPerfStrip        → perf-strip rates stay live
     '   - _cardSettingsTools    → links / log info / countdown stay live
-    '   - _cardVerificationDump → legacy txtOutput still shows SKIPPED text
     ' -----------------------------------------------------------------------
     Private Const OVERLAY_ALPHA As Integer = 153
 
@@ -1458,7 +1455,7 @@ Partial Public Class MainForm
 
         ' D1 (Tier D, v32) parity: notional + implied leverage sanity line,
         ' [LEV CAPPED] when kelly.max_leverage (not the $ risk cap) set the
-        ' contract count. Mirrors RenderOutputHeader / BuildPlaintextSnapshot
+        ' contract count. Mirrors BuildPlaintextSnapshot
         ' — rendered only when the contract count is at least 1, amber when
         ' the leverage cap bit. Surfaced by the trader's post-fix review:
         ' the line shipped to both text renderers after the card binder was
@@ -1635,7 +1632,7 @@ Partial Public Class MainForm
             .Padding = New Padding(0)
         }
 
-        stack.Controls.Add(BuildPlainSectionHeader("VOLUME PROFILE"))
+        stack.Controls.Add(MakeSectionHeader("VOLUME PROFILE"))
 
         ' Price-level rows, top-to-bottom: VAH → HVN↑ → LVN↑ → POC → LVN↓ →
         ' HVN↓ → VAL. All 7 rows render unconditionally — AddLevelRow shows
@@ -1869,20 +1866,6 @@ Partial Public Class MainForm
         }
     End Function
 
-    ''' <summary>Section header for cards built by P4d binders (KELLY,
-    ''' VOLUME PROFILE, OI × CVD CROSS, INDICATOR DETAILS). Matches the
-    ''' MakeSectionHeader style used by the bound row 3-5 cards.</summary>
-    Private Shared Function BuildPlainSectionHeader(text As String) As Label
-        Return New Label() With {
-            .AutoSize = True,
-            .Text = text,
-            .Font = Theme.FontMono(11.0F, FontStyle.Bold),
-            .ForeColor = Theme.FG_SECONDARY,
-            .BackColor = Color.Transparent,
-            .Margin = New Padding(0, 0, 0, 6)
-        }
-    End Function
-
     ' =======================================================================
     ' OI × CVD CROSS card (P4d commit 3). Was an empty placeholder.
     ' Outcome badge (OiCvdBadge 4-state) + Funding Mom MiniMeter + Spread
@@ -1905,7 +1888,7 @@ Partial Public Class MainForm
             .Padding = New Padding(0)
         }
 
-        stack.Controls.Add(BuildPlainSectionHeader("OI × CVD CROSS"))
+        stack.Controls.Add(MakeSectionHeader("OI × CVD CROSS"))
 
         ' Outcome badge + note tag side-by-side.
         Dim outcomeKey As String = If(v.OiCvdOutcome, "NONE").ToUpperInvariant()
@@ -2034,10 +2017,10 @@ Partial Public Class MainForm
     ' header Label over a bordered Panel.
     ' =======================================================================
     ''' <param name="vwapWarmup">F-10: the warmup-candles threshold the text
-    ''' renderers were handed (RenderOutput / BuildPlaintextSnapshot take the
-    ''' same parameter). −1 falls back to cfg's threshold. Threading the
-    ''' parameter instead of re-reading live cfg keeps the card's [WARMUP]
-    ''' tag in lock-step with the legacy/snapshot text on every host.</param>
+    ''' renderer was handed (BuildPlaintextSnapshot takes the same parameter).
+    ''' −1 falls back to cfg's threshold. Threading the parameter instead of
+    ''' re-reading live cfg keeps the card's [WARMUP] tag in lock-step with
+    ''' the snapshot text on every host.</param>
     Public Sub BindCardIndicatorDetails(v As VerdictResult,
                                         r As IndicatorResults,
                                         norms As DynamicNorms,
@@ -2058,7 +2041,7 @@ Partial Public Class MainForm
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 22))
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
 
-        outer.Controls.Add(BuildPlainSectionHeader("INDICATOR DETAILS"), 0, 0)
+        outer.Controls.Add(MakeSectionHeader("INDICATOR DETAILS"), 0, 0)
 
         ' C3a + C3b (P5-test gap-fix commit 2): paired-row TLP layout.
         ' Each grid row holds the LEFT sub-section in col 0 and the matching

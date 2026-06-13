@@ -4,14 +4,14 @@
 ' Replaces the pixel-positioned ResizeControls() / SizeToContent() approach
 ' with a TableLayoutPanel hosting RoundedCardPanel rows. Existing Designer
 ' controls (position radios, ANALYZE button, NUDs, perf labels, status-bar
-' links, txtOutput) are reparented from Me.Controls into their new card
-' homes; per-control styling that previously lived in ApplyDesignerOverrides
+' links) are reparented from Me.Controls into their new card homes;
+' per-control styling that previously lived in ApplyDesignerOverrides
 ' is folded into BuildCardGridLayout at reparent time.
 '
-' Rows 1-5 + 10 are populated in P4a; rows 6-9 and 11 are empty placeholders
-' bound in P4c/P4d/P4e. Row 10 (verification dump) houses the legacy
-' txtOutput so side-by-side parity can be eyeballed against the new bound
-' cards above. P5 deletes txtOutput and row 10 entirely.
+' P5b deleted the legacy RTF pipeline: the verification dump card (old row
+' 10) is gone, and txtOutput survives only as a hidden Designer-locked
+' zombie field (declared in MainForm.Designer.vb; zero writers, zero
+' readers — see the locked carve-out in the P5b kickoff §3.6).
 
 Imports System.Drawing
 Imports System.IO
@@ -130,7 +130,6 @@ Partial Public Class MainForm
     Private _cardVolumeProfile     As RoundedCardPanel
     Private _cardKelly             As RoundedCardPanel
     Private _cardIndicatorDetails      As RoundedCardPanel
-    Private _cardVerificationDump  As RoundedCardPanel    ' P5 deletes
     Private _cardSettingsTools     As RoundedCardPanel    ' P4e binds
 
     ' Custom-control fields populated by the P4b binding methods.
@@ -211,11 +210,6 @@ Partial Public Class MainForm
         ' Enable form-level key preview so the Ctrl+Shift+S full-form screenshot
         ' hotkey reaches OnFormKeyDown before child controls consume it.
         Me.KeyPreview = True
-
-        ' Force the form's own background to the design base; the card grid
-        ' fills the client area but the underlying form colour shows briefly
-        ' during paint and any 1px gap.
-        txtOutput.Font = Theme.FontMono(10.0F)
 
         ' Performance-strip labels — created here (added into the card grid
         ' inside BuildLivePerformanceStrip during P4b binding).
@@ -321,9 +315,10 @@ Partial Public Class MainForm
     ' (replaces the old ApplyDesignerOverrides pass; runs before reparent)
     ' -----------------------------------------------------------------------
     Private Sub ApplyControlThemes()
-        txtOutput.BackColor  = Theme.BG_BASE
-        txtOutput.ForeColor  = Theme.FG_PRIMARY
-        txtOutput.BorderStyle = BorderStyle.None
+        ' P5b — txtOutput is a Designer-locked zombie (no writers, no readers,
+        ' not parented to any card). InitializeComponent still creates it at a
+        ' visible position, so hide it here to keep it off the card grid.
+        txtOutput.Visible = False
 
         lblPositionTitle.ForeColor = Theme.FG_TERTIARY
         lblPositionTitle.BackColor = Color.Transparent
@@ -545,11 +540,6 @@ Partial Public Class MainForm
         ' plus header / padding lands ~720; 760 gives breathing room.
         AddRow(_cardIndicatorDetails, 760)
 
-        ' Row 10: legacy txtOutput verification dump (P5 deletes)
-        _cardVerificationDump = NewCard()
-        AddRow(_cardVerificationDump, 400)
-        ReparentVerificationDumpControls()
-
         ' Row 11: SETTINGS & TOOLS — grouped layout (P4e commit 1).
         ' 300 px clipped the Output Dump LinkRow + cog after live-run check
         ' (TOOLS sub-box got ~98 px of the 246 px content area after
@@ -620,9 +610,9 @@ Partial Public Class MainForm
         rbLong.Location  = New Point(190, Y_TOP + 2)
         rbShort.Location = New Point(190, Y_TOP + 22)
 
-        ' lblVerdict is superseded by the new VERDICT card — hide it so it
-        ' stops competing for header-strip real estate. Text updates from
-        ' RenderOutput() still write to it; P5 deletes the field entirely.
+        ' lblVerdict is superseded by the VERDICT card. P5b removed its last
+        ' writer (legacy RenderOutput); the Designer declaration stays per the
+        ' locked carve-out, so it lives on here as a hidden zombie control.
         lblVerdict.Visible = False
 
         ' AUTO EVERY {m} {s} chip cluster
@@ -694,30 +684,6 @@ Partial Public Class MainForm
             flow.Controls.Add(lbl)
         Next
         _cardPerfStrip.Controls.Add(flow)
-    End Sub
-
-    ' -----------------------------------------------------------------------
-    ' Reparent: legacy txtOutput → row 10 verification dump card
-    ' -----------------------------------------------------------------------
-    Private Sub ReparentVerificationDumpControls()
-        Dim header = New Label() With {
-            .AutoSize = True,
-            .Text = "LEGACY OUTPUT (verification — removed in P5)",
-            .Font = Theme.FontMono(9.0F, FontStyle.Regular),
-            .ForeColor = Theme.FG_QUATERNARY,
-            .BackColor = Color.Transparent,
-            .Dock = DockStyle.Top,
-            .Padding = New Padding(0, 0, 0, 4)
-        }
-        _cardVerificationDump.Controls.Add(header)
-
-        Me.Controls.Remove(txtOutput)
-        txtOutput.Dock = DockStyle.Fill
-        txtOutput.Margin = New Padding(0)
-        txtOutput.ScrollBars = RichTextBoxScrollBars.Vertical
-        _cardVerificationDump.Controls.Add(txtOutput)
-        txtOutput.BringToFront()
-        ' Header label is Dock=Top so it stays on top; txtOutput fills the rest.
     End Sub
 
     ' -----------------------------------------------------------------------
