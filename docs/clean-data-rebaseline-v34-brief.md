@@ -44,3 +44,20 @@ Tabulate the ~930 rows by session bucket / regime / verdict tier / days before t
 
 ## After v34 lands — auto-tweaker sequencing decision
 The supervised auto-tweaker first fire is still pending (held since the correctness pass). **Recommendation: manual v34 first, then hand maintenance to the supervised tweaker.** The findings above (Asia settings-vs-accept philosophy, funding "fix-but-low-value," spread "accept REST-dead") need human calibration judgement the auto-tweaker can't supply — it tunes the failure-rate matrix, it doesn't reason about regime structure. Set the v34 baseline by hand, *then* let the supervised first fire (dry-run, trader watching, diff reviewed against v34 rationale) validate the loop and take over ongoing maintenance. Don't let an unproven first-fire debut on the foundational re-baseline.
+
+## Post-v34 finding (2026-06-13): the success metric is ATR-confounded — act before the first fire
+
+Investigating the trader's "Asia performed poorly" report (perf strip [T], <40% one afternoon at ATR <20) against the full eval cache (1078 joined trades) found the opposite, plus a measurement problem:
+
+- **Full-sample success by session** (target==barrier per v33 §3.9): ASIA **74.1%** (n=294, avgATR 13.5) > NY 61.3% (n=584, avgATR 67.9) > LONDON 54.0% (n=200, avgATR 16.8). Asia is the *highest*; the <40% was a transient small window (strip later 61%).
+- **Within Asia, success inversely tracks ATR:** <12 → 86.8% (n=136), 12–16 → 84.6% (n=52), 16+ → 52.8% (n=106). Controlling for session, lower ATR = higher "success."
+- **Mechanism:** favourable barrier = k×ATR. Lower ATR → smaller absolute target (~26pt / 0.04% at ATR 13) → tagged by noise/drift before the 15m window expires. The metric measures its own shrinking yardstick, not tradeable edge. Failures are reach-failures (EXPIRED 24–44%/session), not stop-outs (ADVERSE 2–3.6%) — re-confirms v33/v34.
+
+**Consequences:**
+1. Cross-ATR / cross-session success comparison off this metric is **invalid**. The trader's instinct is right; a 0.04% "success" isn't edge after costs. Empirically vindicates v34 call 1 (ATR-confound → selectivity); the 1.10/1.05 Asia raise stands.
+2. **Auto-tweaker first-fire caution (hard, new):** the tweaker optimizes this metric. A fire on a low-ATR window sees inflated success → may LOOSEN thresholds (more chop trades), backwards. First fire MUST (a) run on a higher-ATR NY/weekday window, and (b) reject any proposal that loosens on low-ATR data — on top of the existing dry-run gate.
+
+**Candidate follow-ups (trader decides; none actioned):**
+- **Measurement de-confound (analysis-code, NOT scoring) — highest value:** favourable/adverse barriers = `max(k×ATR, absolute floor)` where the floor is a tradeable move (~0.1% ≈ 62pt at $62k — trader sets it), so "success" means a move worth taking. De-confounds the metric the tweaker AND the trader read. Touches `analysis/AnalysisConstants.vb` + `FailureRateMatrix` + `LivePerformanceTracker`. Spec-light (eval definition, no engine votes), but it re-bases every logged outcome → run before the first fire or the tweaker inherits the confound.
+- **Absolute-ATR trade gate (scoring, spec-first, approval-gated):** suppress/downgrade verdicts when ATR is below a tradeable floor — what the instinct reaches for; a momentum scalper shouldn't take sub-noise moves. Needs a spec + the trader's floor value. Note: regime (ADX) ≠ magnitude (ATR) — a low-ATR high-ADX drift currently passes the regime filter, so this gate fills a real gap.
+- **Recalibrate the profile's ATR bands** (Low<80 / Normal 80–150 / High>150) for ~$62k BTC — set for $80–100k, now stale (live ATR 13–68); the trader-profile itself flags this drift. Display + feeds the gate above if specced.
