@@ -496,6 +496,14 @@ Items not currently scheduled but with concrete promotion conditions.
 *Condition:* if 1000+ runs with `CAPPED @` events show 0 POC selections AND the `hvnAbove`/`hvnBelow` gate on POC is the bottleneck (rather than POC just being geometrically dominated by HVN). Investigation 2026-05-17 showed code path is reachable but conditions are narrow.
 *Action:* consider removing the HVN gate so POC fires as a true "no swing + no HVN" fallback. Re-spec if pursued.
 
+**P11. ATR-band recalibration for the current price regime.**
+*Condition:* trader-profile §5 ATR bands (Low<80 / Normal 80–150 / High>150) were calibrated for BTC ~$80k–$100k (Q1 2026). BTC is now ~$62k with ATR running 13–68 — everything reads "Low" by the old bands. Surfaced by the 2026-06-13 ATR-confound finding. **Low impact:** the engine's live ATR reference (`DynamicNorms.ComputeATRRef`) is a recent-average, self-calibrating; only the cold-start fallback `indicators.ATR.static_ref = 115` (set as the old Normal-band midpoint, v14) and the profile's reference bands are stale. Mostly profile-doc + fallback-anchor housekeeping, not a scoring knob.
+*Action:* update profile §5 bands + `static_ref` to the current regime; ~10-min settings/doc edit. Backlogged 2026-06-14.
+
+**P12. Reduced size in TRANSITIONAL / low-vol (sizing-advisory).**
+*Condition:* trader-profile §6 says "Transitional = reduced size, extra caution." The engine honors the caution via the Step-4 ADX-proximity *score* penalty (fewer/weaker verdicts) but applies no *size* haircut — a transitional trade that passes is Kelly-sized like a clean trend. Display-only (Kelly is advisory). **Design tension to resolve first:** competes with the profile's vol-normalization (`Base × AvgATR/CurrATR` → low ATR = *bigger* size); a transitional/low-vol caution multiplier would layer *on top* and the interaction must be specified (which signal wins when). Backlogged 2026-06-14.
+*Action:* if transitional trades that pass still size too aggressively in practice, spec a regime/vol caution multiplier on the Kelly advisory. Display-only; low priority.
+
 ### 16.7 Portability Constraint Reaffirmed
 
 The Linux CLI port (16.2) is the long-term target. All new code under `analysis/` and `tools/` MUST be host-agnostic — no WinForms references, no `Control.Invoke`, no `MainForm` coupling. Form-side viewers are allowed but must be thin wrappers around host-agnostic core classes.
