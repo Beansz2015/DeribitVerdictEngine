@@ -176,7 +176,7 @@ All three changes increase selectivity (mild score deflation, slightly more NO T
 
 1. **ASIA trade-rate / NO-TRADE (weekend-confounded — judge against weekday rows):** expect ASIA trade-rate to drop and NO-TRADE to tick up. The 233-row ASIA baseline is 100% Saturday, so evaluate the post-change rate against *weekday* ASIA rows as they arrive — not against this weekend baseline. If weekday-ASIA NO-TRADE jumps > 15pp, 1.10/1.05 overshot — fall back toward 1.00.
 2. **FundingMomentum:** expect RISING/FALLING to appear on ~2–4% of rows (was 0%). If still 0% after 100 rows, the live `_fundingHistory` window timing is suppressing it — investigate (don't lower further; the ceiling is funding stickiness).
-3. **CVDSlope FLAT share:** expect 8–14% (was 5.5%), driven mostly by NY rising off 2.7%. If > 20%, revert `slope_pct_of_value` to 0.07. If still < 10%, raise `slope_min_usd` next pass.
+3. **CVDSlope FLAT share (two-sided guard, per review):** **target window 8–18%** (was 5.5%), driven mostly by NY rising off 2.7%. If FLAT lands **< 8%**, 0.10 under-delivered → go **0.12**; if **> 20%**, revert to **0.07**. Both are pct-arm moves; `slope_min_usd` stays 12k.
 4. **No regression in MicroCVD FLAT (~20%), OBV regime ordering, or adverse-hit (<5%)** — these are KEEPs; watch they don't drift.
 
 ---
