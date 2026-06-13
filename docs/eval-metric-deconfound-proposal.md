@@ -9,6 +9,15 @@
 
 > **2026-06-14 amendment:** this proposal pairs with `min-tradeable-move-gate-proposal.md` (the scoring gate that stops *emitting* sub-floor-target trades). Same 0.08% floor, one shared editable key. Read §5 of that doc for the interaction; everywhere this proposal says `FavBarAbsFloorPct` / `FAV_BAR_ABS_FLOOR_PCT`, read `cfg.Scoring.MinTradeableMovePct`. Implement the pair together (one v35 bump); both must land before the auto-tweaker first fire.
 
+> **2026-06-14 design refinement (trader) — EXCLUDE gate-killed trades, don't re-score them as failures. This supersedes the "floor → low-ATR trades fail" mechanism for the gate-killed subset (§3, §5).**
+>
+> Re-scoring low-ATR trades as failures keeps them in the denominator, making the historical metric *pessimistic* vs the future gated regime (where the gate makes them NO TRADE, fully excluded). Closer fit: **the eval mirrors the gate** — a directional trade whose effective TP < floor (one the v35 gate would NO-TRADE) is reclassified `EXCLUDED_BELOW_MIN_MOVE` and removed from success/fail counts, exactly like a NO TRADE row. It is **not** a prediction failure — it's a trade the engine won't take. Net changes:
+> - **Re-evaluation (§3):** for each historical *directional* entry, join `analysis_log.csv` (ATR + Price — the eval cache lacks ATR) and apply the gate condition `AtrTargetMultiplier × ATR < MinTradeableMovePct × Price` (the dominant low-ATR case; refine with the logged `SwingTarget`/`TargetCapReason` for the near-swing case where cheap — the log records the cap *reason* but not always the adjusted *value*, so HVN/POC-capped near-swing exclusions may be approximated; this affects only the historical re-base, future rows gate exactly). Gated → `EXCLUDED_BELOW_MIN_MOVE` (new NO-TRADE-equivalent outcome, out of counts). **Survivors** (TP ≥ floor) are still scored *with* the favourable-barrier floor (their "success" still requires a tradeable move).
+> - **One-time forensic:** the migration reports how many historical directional trades get excluded and how many were `SUCCESS` under the old confounded barrier (the inflation the confound created) — capture once, then it's gone from the live metric.
+> - **Acceptance (§5):** Asia <12 ATR trades should now mostly **EXCLUDE** (not appear as failures); the evaluated population becomes tradeable-ATR only, and its success rate is the **forward-comparable baseline** (matches what the gated engine will produce). High-ATR NY largely unchanged.
+>
+> Why: (a) historical and future rates measured identically (the trader's goal); (b) conceptually honest; (c) cleaner for the auto-tweaker — it optimizes only the book the engine will actually trade, instead of "fixing" failures the gate already removed. One floor condition drives both the gate and the eval exclusion.
+
 ---
 
 ## 0. Goal
