@@ -5,7 +5,9 @@
 **Status:** **APPROVED in principle** — trader set the floor value (0.08% of price, ≈ $50 at $62k, sized to clear slippage). Analysis-layer only; **no scoring votes/thresholds/vetoes change** (not under the scoring-approval gate), but it re-bases every logged outcome and the metric the auto-tweaker optimizes, so it gets full spec + acceptance rigor.
 **Implementer:** Opus, fresh conversation (cheap context). Verify anchors before editing.
 **Origin:** the 2026-06-13 ATR-confound finding (`clean-data-rebaseline-v34-brief.md` post-v34 section): success rate inversely tracks ATR because the favourable barrier is `k×ATR`, so low-ATR targets are sub-tradeable moves tagged by noise (Asia <12 ATR = 86.8% "success" on ~26-point/0.04% targets).
-**Settings:** none (measurement constant in `AnalysisConstants`, deliberately off the tweaker surface). **Eval cache schema v2 → v3.**
+**Settings:** the floor is now a shared, UI-editable key `scoring.min_tradeable_move_pct` (0.0008) defined in `min-tradeable-move-gate-proposal.md` — **AMENDED 2026-06-14**: source the floor from `cfg.Scoring.MinTradeableMovePct`, not the `AnalysisConstants.FavBarAbsFloorPct` const named below (keep that const only as the POCO-default mirror if convenient). Eval cache re-evaluates when the key changes (store the floor it was computed with; on load, if the live value differs, re-walk — self-healing, same pattern as the v2→v3 migration). Off the auto-tweaker surface. **Eval cache schema v2 → v3.**
+
+> **2026-06-14 amendment:** this proposal pairs with `min-tradeable-move-gate-proposal.md` (the scoring gate that stops *emitting* sub-floor-target trades). Same 0.08% floor, one shared editable key. Read §5 of that doc for the interaction; everywhere this proposal says `FavBarAbsFloorPct` / `FAV_BAR_ABS_FLOOR_PCT`, read `cfg.Scoring.MinTradeableMovePct`. Implement the pair together (one v35 bump); both must land before the auto-tweaker first fire.
 
 ---
 
