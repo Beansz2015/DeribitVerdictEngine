@@ -83,14 +83,25 @@ Public Class FailureRateMatrix
     ' ByRef counters are informational: atrInvalidExcluded counts rows excluded because
     ' ATR <= 0; structuralStopRows / atrFallbackRows count rows where the adverse barrier
     ' was structural vs ATR-multiple (counted once per row regardless of window count).
+    ' v35 de-confound (eval-metric-deconfound-proposal.md): the favourable barrier
+    ' per cell is floored at max(thr × ATR, floorPct × entry) so "success" always
+    ' means a tradeable move, and rows the live min-tradeable-move gate would
+    ' NO-TRADE (engineTargetMult × ATR < floorPct × entry) are EXCLUDED from the
+    ' denominator rather than counted as failures. floorPct / engineTargetMult default
+    ' to the AnalysisConstants POCO mirrors; call sites pass the live
+    ' cfg.Scoring.MinTradeableMovePct / .AtrTargetMultiplier.
     Public Shared Function Compute(rows As List(Of CsvRow),
                                    ByRef atrInvalidExcluded As Integer,
                                    ByRef structuralStopRows  As Integer,
-                                   ByRef atrFallbackRows     As Integer) As List(Of FailureCellResult)
+                                   ByRef atrFallbackRows     As Integer,
+                                   ByRef belowMinMoveExcluded As Integer,
+                                   Optional floorPct As Double = AnalysisConstants.FavBarAbsFloorPct,
+                                   Optional engineTargetMult As Double = AnalysisConstants.EngineTargetAtrMultiplier) As List(Of FailureCellResult)
 
         atrInvalidExcluded = 0
         structuralStopRows  = 0
         atrFallbackRows     = 0
+        belowMinMoveExcluded = 0
 
         ' counts(tier)(window)(threshold) = (N, Failures, Successes, AdverseHits, Expiries, Ambiguous)
         Dim counts As New Dictionary(Of String, Dictionary(Of Integer, Dictionary(Of Double,
@@ -122,6 +133,18 @@ Public Class FailureRateMatrix
             Dim entry     As Double  = row.Price
             Dim atr       As Double  = row.ATR
 
+            ' [v35 de-confound] EXCLUDE gate-killed rows: a directional trade whose
+            ' engine target (engineTargetMult × ATR) can't clear the min-tradeable-move
+            ' floor is one the live v35 gate would NO-TRADE — remove it from the
+            ' denominator (not a prediction failure). The low-ATR case dominates;
+            ' near-swing-cap exclusions are approximated (the CSV lacks the adjusted
+            ' target value) per eval-metric-deconfound-proposal.md §3.
+            Dim floorDist As Double = floorPct * entry
+            If engineTargetMult * atr < floorDist Then
+                belowMinMoveExcluded += 1
+                Continue For
+            End If
+
             ' Adverse barrier: structural stop first, ATR-multiple fallback.
             Dim advBar As Double
             If isLongRow Then
@@ -149,8 +172,14 @@ Public Class FailureRateMatrix
                 End If
 
                 For Each thr In ThresholdsFor(tier)
-                    ' Favourable barrier per cell (varies by threshold).
-                    Dim favBar As Double = If(isLongRow, entry + thr * atr, entry - thr * atr)
+                    ' Favourable barrier per cell (varies by threshold), floored at the
+                    ' min-tradeable-move distance so "success" always means a tradeable
+                    ' move (v35 de-confound §1). Survivors of the row-level EXCLUDE can
+                    ' still have small-k cells below the floor (e.g. 0.3×ATR), which the
+                    ' floor pushes out; sub-floor k cells therefore collapse onto the
+                    ' same floored barrier (matrix differentiates on the window dim).
+                    Dim favDist As Double = Max(thr * atr, floorDist)
+                    Dim favBar  As Double = If(isLongRow, entry + favDist, entry - favDist)
 
                     Dim outcome As String = WalkBars(bars, favBar, advBar, isLongRow)
                     Dim failed  As Boolean = (outcome <> "SUCCESS")

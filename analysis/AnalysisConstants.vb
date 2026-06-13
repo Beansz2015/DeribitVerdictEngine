@@ -27,6 +27,22 @@ Public Module AnalysisConstants
     ' the engine default ever changes.
     Public Const AdverseFallbackAtrMultiplier As Double = 1.2
 
+    ' [v35 eval-metric de-confound] Minimum favourable-barrier distance as a
+    ' fraction of entry price. POCO-DEFAULT MIRROR ONLY — the live value is
+    ' cfg.Scoring.MinTradeableMovePct, passed in at the call sites (FailureRateMatrix
+    ' floors the favourable barrier at max(k×ATR, this×price); LivePerformanceTracker
+    ' uses it to EXCLUDE gate-killed rows). Kept here so host-agnostic callers without
+    ' a cfg fall back to the same 0.0008 the engine ships. Spec: docs/eval-metric-deconfound-proposal.md.
+    Public Const FavBarAbsFloorPct As Double = 0.0008
+
+    ' Engine's take-profit ATR multiplier — mirror of cfg.Scoring.AtrTargetMultiplier
+    ' default (2.0). Used by the de-confound EXCLUDE test: a historical directional
+    ' trade whose engine target (this × ATR) can't clear the min-tradeable-move floor
+    ' is a trade the live v35 gate would NO-TRADE, so it is EXCLUDED from the
+    ' failure-rate denominator rather than scored as a failure. POCO-default mirror;
+    ' the live value is passed in at the call sites.
+    Public Const EngineTargetAtrMultiplier As Double = 2.0
+
     ' Hold windows in minutes. Eligible bars: closes at row.Timestamp + 3 min
     ' through row.Timestamp + W min (bars closing at T+1 and T+2 excluded for
     ' realistic execution latency — see spec §2b).

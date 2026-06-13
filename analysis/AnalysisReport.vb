@@ -12,6 +12,7 @@ Public Class AnalysisReport
     Public Property TotalRows           As Integer
     Public Property ExcludedRows        As Integer   ' rows with no valid OHLC bars for any window
     Public Property AtrInvalidExcluded  As Integer   ' rows excluded because ATR <= 0
+    Public Property BelowMinMoveExcluded As Integer  ' v35: rows excluded — engine target < min-tradeable-move floor (gate-killed)
     Public Property StructuralStopRows  As Integer   ' rows where swing stop was available
     Public Property AtrFallbackRows     As Integer   ' rows where ATR-multiple fallback was used
     Public Property VerdictCounts       As New Dictionary(Of String, Integer)()

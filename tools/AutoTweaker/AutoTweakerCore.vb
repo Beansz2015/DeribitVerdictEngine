@@ -66,6 +66,13 @@ Public Class AutoTweakerCore
         Dim sessionStartHours As New List(Of Integer)()
         Dim tightThresholdBps As Double = 0.0
         Dim wideThresholdBps  As Double = 0.0
+        ' v35 de-confound: live shared min-tradeable-move floor + engine target
+        ' multiplier, read from settings.json (fall back to the AnalysisConstants
+        ' mirror if absent). Passed to FailureRateMatrix.Compute so the tweaker
+        ' optimises the gate-filtered book. min_tradeable_move_pct is OFF the tweaker's
+        ' tunable surface (PromptBuilder HARD CONSTRAINT 11) — read-only here.
+        Dim minTradeableMovePct As Double = AnalysisConstants.FavBarAbsFloorPct
+        Dim atrTargetMult       As Double = AnalysisConstants.EngineTargetAtrMultiplier
         Try
             settingsJson = File.ReadAllText(config.SettingsPath)
             Dim opts As New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True}
@@ -78,6 +85,10 @@ Public Class AutoTweakerCore
             If settings?.Indicators?.Spread IsNot Nothing Then
                 tightThresholdBps = settings.Indicators.Spread.TightThresholdBps
                 wideThresholdBps  = settings.Indicators.Spread.WideThresholdBps
+            End If
+            If settings?.Scoring IsNot Nothing Then
+                minTradeableMovePct = settings.Scoring.MinTradeableMovePct
+                atrTargetMult       = settings.Scoring.AtrTargetMultiplier
             End If
         Catch ex As Exception
             Console.Error.WriteLine("[AutoTweaker] Cannot read settings.json: " & ex.Message)
@@ -320,7 +331,15 @@ Public Class AutoTweakerCore
 
         ' ── 6. Compute failure-rate matrix and pick recommended cells ─────────
         Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
-        Dim failureCells = FailureRateMatrix.Compute(windowRows, atrEx, structStop, atrFb)
+        Dim belowMin As Integer = 0
+        ' v35 de-confound: floor the favourable barrier + EXCLUDE gate-killed rows so the
+        ' tweaker optimises only the book the engine will actually trade.
+        Dim failureCells = FailureRateMatrix.Compute(windowRows, atrEx, structStop, atrFb, belowMin,
+                                                     minTradeableMovePct, atrTargetMult)
+        If belowMin > 0 Then
+            Console.WriteLine(String.Format(
+                "[AutoTweaker] {0} window row(s) EXCLUDED below min-tradeable-move floor (gate-killed; not failures).", belowMin))
+        End If
         Dim recommended  = failureCells.Where(Function(c) c.IsRecommended).ToList()
 
         Dim pickedCsvPath = Path.Combine(

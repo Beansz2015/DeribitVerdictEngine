@@ -76,10 +76,16 @@ Public Class AnalysisRunner
 
         ' ── 5. Failure-rate matrix ───────────────────────────────────────────────────
         Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
-        report.FailureCells = FailureRateMatrix.Compute(rows, atrEx, structStop, atrFb)
+        Dim belowMin As Integer = 0
+        ' v35 de-confound: pass the live shared floor + engine target multiplier so the
+        ' matrix floors the favourable barrier and EXCLUDES gate-killed rows.
+        report.FailureCells = FailureRateMatrix.Compute(rows, atrEx, structStop, atrFb, belowMin,
+                                                        cfg.Scoring.MinTradeableMovePct,
+                                                        cfg.Scoring.AtrTargetMultiplier)
         report.AtrInvalidExcluded = atrEx
         report.StructuralStopRows = structStop
         report.AtrFallbackRows    = atrFb
+        report.BelowMinMoveExcluded = belowMin
 
         ' ── 6. VerdictContext cross-tab ──────────────────────────────────────────────
         ' Use the recommended cell for each tier (picks the most stable window/threshold).

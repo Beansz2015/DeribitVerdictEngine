@@ -91,10 +91,18 @@ Public Class LivePerformanceTracker
     ' Slack cap: trim fires only when in-memory bar count exceeds this.
     Private Shared ReadOnly _slackCap As Integer = CInt(OhlcCache.MAX_BARS * 1.05)
 
-    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v2 (target-hit-toggle)"
+    ' v35 de-confound: schema v2 → v3. The comment line also carries floor_pct=<value>
+    ' (the min-tradeable-move floor the cache was last computed with) so a later floor
+    ' change is detected on load and triggers a self-healing re-evaluation.
+    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v3 (min-tradeable-move floor)"
     Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit"
-    Private Const FAV_ATR_MULT        As Double = 2.0   ' fallback favourable barrier
+    Private Const FAV_ATR_MULT        As Double = 2.0   ' fallback favourable barrier (= engine AtrTargetMultiplier)
     Private Const ADV_ATR_MULT        As Double = 1.2   ' fallback adverse barrier
+
+    ' The min-tradeable-move floor the eval cache was last written with. Set from
+    ' cfg.Scoring.MinTradeableMovePct at the start of Initialise/Update; embedded in
+    ' the schema comment by SchemaCommentLine().
+    Private Shared _floorPctInEffect As Double = 0.0008
 
     ' -----------------------------------------------------------------------
     ' Public: initialise from disk (eager backfill)
@@ -268,6 +276,12 @@ Public Class LivePerformanceTracker
 
             ' --- Step 2: Load existing eval cache ---
             Dim needsMigration As Boolean = IsV1Schema(evalCachePath)
+            ' v35: capture the floor re-eval need BEFORE any rewrite (the migrations below
+            ' re-stamp the file with the v3 comment). preV3 → one-time v2→v3 forensic
+            ' re-eval; a changed stored floor → self-healing re-walk on later startups.
+            Dim preV3Schema As Boolean  = IsPreV3Schema(evalCachePath)
+            Dim storedFloor As Double?  = ReadSchemaFloorPct(evalCachePath)
+            _floorPctInEffect = cfg.Scoring.MinTradeableMovePct
             _evalCache = LoadEvalCache(evalCachePath)
             Dim existingTs As New HashSet(Of DateTime)(_evalCache.Select(Function(e) e.Timestamp))
 
@@ -279,6 +293,19 @@ Public Class LivePerformanceTracker
             ' restarts (header now contains "TargetEverHit", so this block is skipped).
             If needsMigration Then MigrateV1ToV2(nowUtc)
 
+            ' --- Step 2.6: v35 min-tradeable-move floor re-evaluation (de-confound) ---
+            ' Re-base the historical cache (loaded above) against the shared floor:
+            ' gate-killed directional trades become EXCLUDED_BELOW_MIN_MOVE (out of the
+            ' success/fail counts, not failures); survivors keep their barrier outcome.
+            ' Runs when the cache predates v3 (one-time, with the forensic SUCCESS-inflation
+            ' count) or when the trader changed the floor since it was last written. New rows
+            ' added by the Step 3 backfill below are floored at birth via BuildEntry.
+            Dim floorChanged As Boolean = storedFloor.HasValue AndAlso
+                                          Math.Abs(storedFloor.Value - _floorPctInEffect) > 0.0000001
+            If preV3Schema OrElse floorChanged Then
+                ReevaluateForFloor(_floorPctInEffect, nowUtc, logForensic:=preV3Schema)
+            End If
+
             ' --- Step 3: Backfill from analysis_log.csv ---
             If eagerBackfill AndAlso File.Exists(analysisLogPath) Then
                 Dim newEntries As New List(Of EvalCacheEntry)()
@@ -289,7 +316,8 @@ Public Class LivePerformanceTracker
                                                              row.EntryPrice, row.ATR,
                                                              row.SwingStopLong, row.SwingStopShort,
                                                              adjLongTarget:=0.0,
-                                                             adjShortTarget:=0.0)
+                                                             adjShortTarget:=0.0,
+                                                             minMovePct:=cfg.Scoring.MinTradeableMovePct)
                     ' If window complete, evaluate; otherwise leave as PENDING.
                     If entry.EvalOutcome = "PENDING" AndAlso
                        row.Timestamp.AddMinutes(15) <= nowUtc Then
@@ -343,6 +371,10 @@ Public Class LivePerformanceTracker
         If Not cfg.PerformanceDisplay.Enabled Then Return
         If String.IsNullOrEmpty(_evalCachePath) Then Return
 
+        ' Keep the schema-comment floor in sync (stamped when AppendEvalRows / WriteEvalCache
+        ' write a fresh header) so a mid-session settings.json floor edit is reflected.
+        _floorPctInEffect = cfg.Scoring.MinTradeableMovePct
+
         Try
             ' --- Step 1: Append new OHLC bars from this analysis run ---
             Dim maxExisting As DateTime = If(_ohlcLookup.Count > 0,
@@ -370,7 +402,8 @@ Public Class LivePerformanceTracker
             Dim entry As EvalCacheEntry = BuildEntry(
                 nowUtc, v.Verdict, r.CurrentPrice, r.ATR,
                 r.SwingStopLong, r.SwingStopShort,
-                v.AdjustedLongTarget, v.AdjustedShortTarget)
+                v.AdjustedLongTarget, v.AdjustedShortTarget,
+                cfg.Scoring.MinTradeableMovePct)
             _evalCache.Add(entry)
             AppendEvalRows(_evalCachePath, New List(Of EvalCacheEntry) From {entry})
 
@@ -652,6 +685,113 @@ Public Class LivePerformanceTracker
         Return False
     End Function
 
+    ' -----------------------------------------------------------------------
+    ' Private: v35 min-tradeable-move floor (de-confound)
+    ' -----------------------------------------------------------------------
+
+    ''' <summary>Schema comment line with the floor the cache was last computed with embedded.</summary>
+    Private Shared Function SchemaCommentLine() As String
+        Return EVAL_SCHEMA_COMMENT & " floor_pct=" & _floorPctInEffect.ToString("R", CultureInfo.InvariantCulture)
+    End Function
+
+    ''' <summary>
+    ''' True when the eval cache file exists but its schema comment predates v3 (the
+    ''' min-tradeable-move floor). Triggers the one-time v2→v3 re-evaluation. Returns
+    ''' False when the file does not exist (fresh installs start at v3).
+    ''' </summary>
+    Private Shared Function IsPreV3Schema(path As String) As Boolean
+        If Not File.Exists(path) Then Return False
+        Try
+            For Each line As String In File.ReadLines(path)
+                If line.StartsWith("#") Then Return Not line.Contains("min-tradeable-move")
+                ' First non-comment line with no schema comment above it → pre-v3.
+                Return True
+            Next
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] IsPreV3Schema error: " & ex.Message)
+        End Try
+        Return False
+    End Function
+
+    ''' <summary>Parse "floor_pct=&lt;x&gt;" from the schema comment; Nothing if absent (pre-v3).</summary>
+    Private Shared Function ReadSchemaFloorPct(path As String) As Double?
+        If Not File.Exists(path) Then Return Nothing
+        Try
+            For Each line As String In File.ReadLines(path)
+                If Not line.StartsWith("#") Then Return Nothing   ' past the comment block
+                Dim idx As Integer = line.IndexOf("floor_pct=", StringComparison.OrdinalIgnoreCase)
+                If idx >= 0 Then
+                    Dim raw As String = line.Substring(idx + "floor_pct=".Length).Trim()
+                    Dim v As Double
+                    If Double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, v) Then Return v
+                    Return Nothing
+                End If
+            Next
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] ReadSchemaFloorPct error: " & ex.Message)
+        End Try
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' v35 de-confound (eval-metric-deconfound-proposal.md §3). Re-evaluate every matured
+    ''' directional entry against the min-tradeable-move floor:
+    '''   - effective target distance |FavBar − EntryPrice| &lt; floor  → EXCLUDED_BELOW_MIN_MOVE
+    '''     (a trade the live v35 gate would NO-TRADE — out of the success/fail counts, NOT
+    '''     re-scored as a failure). Mirrors the gate exactly.
+    '''   - survivors (&gt;= floor) are re-walked against OHLC, so rows previously excluded at a
+    '''     higher floor are recovered when the floor is lowered (self-healing). FavBar/AdvBar
+    '''     are unchanged, so a survivor's outcome is identical to its pre-floor value.
+    ''' Non-directional / ATR-invalid exclusions and PENDING rows are left untouched.
+    ''' When logForensic (the one-time v2→v3 migration), reports how many directional trades
+    ''' were excluded and how many of those were SUCCESS under the old confounded barrier.
+    ''' Rewrites the cache file with the v3 comment + the floor it was computed with.
+    ''' </summary>
+    Private Shared Sub ReevaluateForFloor(floorPct As Double, nowUtc As DateTime, logForensic As Boolean)
+        Try
+            Dim excluded            As Integer = 0
+            Dim excludedWereSuccess As Integer = 0
+            Dim recovered           As Integer = 0
+            For Each e In _evalCache
+                If e.EvalOutcome = "PENDING" Then Continue For
+                ' Only directional rows with a real barrier are gate-relevant; leave
+                ' EXCLUDED_NO_PREDICTION / EXCLUDED_ATR_INVALID as-is.
+                If Not IsEligibleVerdict(e.Verdict) Then Continue For
+                If e.FavBar = 0 Then Continue For
+
+                Dim floorDist As Double = floorPct * e.EntryPrice
+                If Math.Abs(e.FavBar - e.EntryPrice) < floorDist Then
+                    ' Gate-killed: reclassify as EXCLUDED (mirror the live gate).
+                    If e.EvalOutcome <> "EXCLUDED_BELOW_MIN_MOVE" Then
+                        excluded += 1
+                        If e.EvalOutcome = "SUCCESS" Then excludedWereSuccess += 1
+                    End If
+                    e.EvalOutcome = "EXCLUDED_BELOW_MIN_MOVE"
+                Else
+                    ' Survivor — re-walk so rows previously excluded at a higher floor
+                    ' are recovered. FavBar/AdvBar unchanged → identical outcome on first pass.
+                    If e.EvalOutcome = "EXCLUDED_BELOW_MIN_MOVE" Then recovered += 1
+                    Dim ev = EvaluateEntry(e, e.Timestamp, nowUtc)
+                    e.EvalOutcome   = ev.outcome
+                    e.TargetEverHit = ev.targetHit
+                End If
+            Next
+            WriteEvalCache(_evalCachePath)
+            If logForensic Then
+                Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
+                    "[LivePerformanceTracker] v2→v3 min-tradeable-move floor ({0:P3} of price): " &
+                    "{1} directional trade(s) EXCLUDED as below-min-move; {2} of those were SUCCESS under the old confounded barrier (forensic — inflation now removed).",
+                    floorPct, excluded, excludedWereSuccess))
+            Else
+                Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
+                    "[LivePerformanceTracker] min-tradeable-move floor re-eval ({0:P3}): {1} excluded, {2} recovered.",
+                    floorPct, excluded, recovered))
+            End If
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] ReevaluateForFloor error: " & ex.Message)
+        End Try
+    End Sub
+
     ''' <summary>
     ''' Returns the 13 eligible bars (T+3 min through T+15 min, using CloseTime).
     ''' Bar CloseTime is open_time + 1 min, so CloseTime in (ts+2min, ts+15min].
@@ -681,7 +821,8 @@ Public Class LivePerformanceTracker
             swingStopLong   As Double,
             swingStopShort  As Double,
             adjLongTarget   As Double,
-            adjShortTarget  As Double) As EvalCacheEntry
+            adjShortTarget  As Double,
+            minMovePct      As Double) As EvalCacheEntry
 
         Dim e As New EvalCacheEntry() With {
             .Timestamp  = ts,
@@ -709,6 +850,18 @@ Public Class LivePerformanceTracker
             e.FavBar = If(adjShortTarget > 0, adjShortTarget, entryPrice - FAV_ATR_MULT * atr)
             e.AdvBar = If(swingStopShort > 0, swingStopShort, entryPrice + ADV_ATR_MULT * atr)
         End If
+
+        ' v35 de-confound backstop: mirror the live min-tradeable-move gate. A directional
+        ' entry whose favourable barrier (the effective target) can't clear the minimum
+        ' tradeable move is EXCLUDED — a trade the engine won't take, not a prediction
+        ' failure. Post-gate this rarely fires (the engine already NO-TRADEs these, so the
+        ' verdict arrives non-directional); it backstops historical / edge rows. Survivors
+        ' (>= floor) keep the engine target, so the §1 favourable-barrier floor is a no-op.
+        If minMovePct > 0 AndAlso Math.Abs(e.FavBar - entryPrice) < minMovePct * entryPrice Then
+            e.EvalOutcome = "EXCLUDED_BELOW_MIN_MOVE"
+            Return e
+        End If
+
         e.EvalOutcome = "PENDING"
         Return e
     End Function
@@ -792,7 +945,7 @@ Public Class LivePerformanceTracker
                                          New FileInfo(path).Length = 0
             Using sw As New StreamWriter(path, append:=True)
                 If needsHeader Then
-                    sw.WriteLine(EVAL_SCHEMA_COMMENT)
+                    sw.WriteLine(SchemaCommentLine())
                     sw.WriteLine(EVAL_COL_HEADER)
                 End If
                 For Each e In entries
@@ -808,7 +961,7 @@ Public Class LivePerformanceTracker
     Private Shared Sub WriteEvalCache(path As String)
         Try
             Using sw As New StreamWriter(path, append:=False)
-                sw.WriteLine(EVAL_SCHEMA_COMMENT)
+                sw.WriteLine(SchemaCommentLine())
                 sw.WriteLine(EVAL_COL_HEADER)
                 For Each e In _evalCache
                     sw.WriteLine(FormatEvalEntry(e))

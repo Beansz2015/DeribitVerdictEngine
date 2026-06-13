@@ -61,6 +61,7 @@ Public Class MarkdownReportWriter
         sb.AppendLine(String.Format("- Rows in CSV: **{0}**  |  Excluded (no OHLC bars for any window): **{1}**",
                                     r.TotalRows, r.ExcludedRows))
         sb.AppendLine(String.Format("- ATR-invalid rows excluded: **{0}**", r.AtrInvalidExcluded))
+        sb.AppendLine(String.Format("- Below-min-tradeable-move rows excluded (v35 gate-killed; engine target < floor): **{0}**", r.BelowMinMoveExcluded))
         sb.AppendLine(String.Format("- Adverse barrier source: structural stop **{0}** rows  /  ATR fallback **{1}** rows  /  row excluded **{2}** rows",
                                     r.StructuralStopRows, r.AtrFallbackRows, r.AtrInvalidExcluded))
         sb.AppendLine("- Forward data source: **Deribit OHLC bulk fetch** (replaces v1 CSV-close ±30s lookup)")
