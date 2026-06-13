@@ -8,6 +8,8 @@
 '   FLOW_UNCONFIRMED   ⚠  ACC_WARN
 '   MOMENTUM_FADING    ⚠  ACC_WARN
 '   STRUCTURALLY_WEAK  ⚠  ACC_SHORT
+'   BELOW_MIN_MOVE     ⚠  ACC_AMBER_DEEP   (v35 min-tradeable-move gate: NO TRADE,
+'                                            realistic target can't clear the floor)
 
 Imports System.ComponentModel
 Imports System.Drawing
@@ -22,6 +24,7 @@ Public Class ContextBadge
         FLOW_UNCONFIRMED
         MOMENTUM_FADING
         STRUCTURALLY_WEAK
+        BELOW_MIN_MOVE
     End Enum
 
     Private _kind As ContextKind = ContextKind.CONFIRMED
@@ -71,6 +74,10 @@ Public Class ContextBadge
                 icon = "⚠"
                 displayName = "STRUCTURALLY WEAK"
                 colour = Theme.ACC_SHORT
+            Case ContextKind.BELOW_MIN_MOVE
+                icon = "⚠"
+                displayName = "BELOW MIN MOVE"
+                colour = Theme.ACC_AMBER_DEEP
             Case Else
                 icon = ""
                 displayName = ""

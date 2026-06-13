@@ -533,6 +533,20 @@ Public Class ScoringSettings
     <JsonPropertyName("atr_target_multiplier")> Public Property AtrTargetMultiplier As Double = 2.0
     ''' <summary>ATR distance multiplier for stop-loss price. Default 1.2.</summary>
     <JsonPropertyName("atr_stop_multiplier")>   Public Property AtrStopMultiplier   As Double = 1.2
+    ''' <summary>
+    ''' [v35 min-tradeable-move gate + eval de-confound] Minimum take-profit distance as a
+    ''' fraction of entry price. Shared editable floor consumed by BOTH:
+    '''   (a) the scoring gate — a directional verdict whose realistic (post-cap) target sits
+    '''       closer than this is overridden to NO TRADE (VerdictContext = BELOW_MIN_MOVE);
+    '''   (b) the eval-metric de-confound — the favourable barrier is floored at this distance,
+    '''       and historical directional trades whose ATR target can't clear it are EXCLUDED
+    '''       from the success/fail counts (not scored as failures).
+    ''' Price-relative so it tracks BTC with no recalibration (≈ $50 at $62k, sized to clear
+    ''' slippage). Trader-owned risk preference — NEVER auto-tuned (off the auto-tweaker
+    ''' surface, same exclusion class as the kelly.* keys). Hot-reloadable. Default 0.0008 (0.08%).
+    ''' Specs: docs/min-tradeable-move-gate-proposal.md, docs/eval-metric-deconfound-proposal.md.
+    ''' </summary>
+    <JsonPropertyName("min_tradeable_move_pct")> Public Property MinTradeableMovePct As Double = 0.0008
     ''' <summary>[T1-D] ROC level above which TAKE PROFIT fires for a long. Default 0.6.</summary>
     <JsonPropertyName("hold_roc_take_profit_long")>  Public Property HoldRocTakeProfitLong  As Double = 0.6
     ''' <summary>[T1-D] ROC level below which TAKE PROFIT fires for a short. Default -0.6.</summary>

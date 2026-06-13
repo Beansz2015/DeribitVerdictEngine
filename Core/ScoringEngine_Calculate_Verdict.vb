@@ -254,6 +254,32 @@ Partial Public Class ScoringEngine
             res.TargetCapReasonShort  = String.Format("CAPPED @ {0:F1} ({1})", capShortTarget, capShortLabel)
         End If
 
+        ' -- Step 5c: Minimum-Tradeable-Move Gate (v35) -------------------------
+        ' A directional verdict whose realistic take-profit can't clear the
+        ' minimum tradeable move (cfg.Scoring.MinTradeableMovePct of entry — sized
+        ' to clear slippage) is overridden to NO TRADE. The check uses the
+        ' EFFECTIVE (post-cap) target so it catches BOTH causes: a small raw ATR
+        ' target (low vol) AND a near structural swing that the Step 5b cap pulled
+        ' below the floor. Scores, breakdown and the computed levels are preserved
+        ' for display — only the verdict flips, and BELOW_MIN_MOVE records why.
+        ' Mirrors the MTF veto: compute everything, then override, then return.
+        ' Shared floor with the eval-metric de-confound; off the auto-tweaker
+        ' surface (trader risk preference, never auto-tuned). See
+        ' docs/min-tradeable-move-gate-proposal.md.
+        If dominant <> "NONE" AndAlso res.Verdict IsNot Nothing AndAlso
+           Not res.Verdict.StartsWith("NO TRADE") Then
+            Dim floorDist As Double = cfg.Scoring.MinTradeableMovePct * r.CurrentPrice
+            Dim effTarget As Double = If(dominant = "LONG",
+                                         If(res.AdjustedLongTarget > 0, res.AdjustedLongTarget, rawLongTarget),
+                                         If(res.AdjustedShortTarget > 0, res.AdjustedShortTarget, rawShortTarget))
+            Dim effDist As Double = Math.Abs(effTarget - r.CurrentPrice)
+            If floorDist > 0 AndAlso effDist < floorDist Then
+                res.Verdict = "NO TRADE"
+                res.Confidence = "N/A"
+                res.VerdictContext = "BELOW_MIN_MOVE"
+            End If
+        End If
+
         Return res
     End Function
 

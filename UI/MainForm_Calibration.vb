@@ -51,10 +51,12 @@ Partial Public Class MainForm
         ' "ALIGNED" added 2026-05-17 (audit cleanup pass): post-v30 NO TRADE rows
         ' carry VerdictContext="ALIGNED" instead of "CONFIRMED". Without this key,
         ' the ContainsKey guard silently dropped those rows from the distribution.
+        ' "BELOW_MIN_MOVE" added 2026-06-14 (v35 min-tradeable-move gate): NO TRADE
+        ' rows the gate suppressed carry this context — same drop-trap as ALIGNED.
         Dim contextCounts As New Dictionary(Of String, Integer) From {
             {"CONFIRMED", 0}, {"ALIGNED", 0},
             {"FLOW_UNCONFIRMED", 0}, {"MOMENTUM_FADING", 0},
-            {"STRUCTURALLY_WEAK", 0}
+            {"STRUCTURALLY_WEAK", 0}, {"BELOW_MIN_MOVE", 0}
         }
         Dim fundingMomCounts As New Dictionary(Of String, Integer) From {
             {"RISING", 0}, {"FALLING", 0}, {"FLAT", 0}

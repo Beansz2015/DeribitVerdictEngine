@@ -1298,6 +1298,7 @@ Partial Public Class MainForm
             Case "FLOW_UNCONFIRMED" : Return ContextBadge.ContextKind.FLOW_UNCONFIRMED
             Case "MOMENTUM_FADING"  : Return ContextBadge.ContextKind.MOMENTUM_FADING
             Case "STRUCTURALLY_WEAK": Return ContextBadge.ContextKind.STRUCTURALLY_WEAK
+            Case "BELOW_MIN_MOVE"   : Return ContextBadge.ContextKind.BELOW_MIN_MOVE
         End Select
         Return ContextBadge.ContextKind.CONFIRMED
     End Function

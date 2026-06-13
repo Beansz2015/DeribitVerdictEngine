@@ -39,6 +39,10 @@ Public Class PromptBuilder
         "9. Do not modify the 'version' key — the applier manages version bumping automatically." & vbLf &
         "10. Keys removed in the v15 cleanup (bbw_none_bonus, oi_prev15m, oi_prev60m, atr_avg20d, " &
             "static_vol_high, static_vol_mid, static_vol_low) must never be reintroduced." & vbLf &
+        "11. Trader-owned risk-preference keys are NEVER auto-tuned. Do not propose changing " &
+            "'scoring.min_tradeable_move_pct' (the minimum-tradeable-move floor — the trader's slippage " &
+            "threshold, shared with the eval de-confound) or any 'kelly.*' key. These are set by the " &
+            "trader, not failure-rate levers." & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &
