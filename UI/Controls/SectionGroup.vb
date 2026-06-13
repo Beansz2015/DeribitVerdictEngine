@@ -71,9 +71,9 @@ Public Class SectionGroup
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit
 
         ' Title text — 11pt + FG_SECONDARY to match the card section headers
-        ' rendered by MakeSectionHeader / BuildPlainSectionHeader. Was 9pt +
-        ' FG_QUATERNARY; bumped so the LOG / AUTO-RUN / TOOLS sub-box titles
-        ' read at the same weight as the rest of the layout.
+        ' rendered by MakeSectionHeader. Was 9pt + FG_QUATERNARY; bumped so the
+        ' LOG / AUTO-RUN / TOOLS sub-box titles read at the same weight as the
+        ' rest of the layout.
         Dim titleFont = Theme.FontMono(11.0F, FontStyle.Bold)
         Try
             Using brush As New SolidBrush(Theme.FG_SECONDARY)
