@@ -69,6 +69,8 @@ The key is hot-reloadable, but **execution resolution is a calibration-regime se
 
 ## 4. Threshold profiles (Phase 1 seed → Phase 2 re-baseline)
 
+> **Correction (2026-06-15, spec-writer):** the magnitude-scale list below narrowed from **4 keys to 2** after code review. Only the two ROC keys scale; CVD `slope_min_usd` and MicroCVD `accel_threshold` gate the **fixed trade stream** (`GetRecentTradesAsync(500)` / a 50-trade window), not candles, so they are resolution-independent and stay at 1-min. See the finalized profile in [`session-timeframe-resolution-implementer-handoff.md`](session-timeframe-resolution-implementer-handoff.md) §1 (trader-confirmed 2.1× ROC seed). The hand-off is authoritative where it disagrees with this section.
+
 A `resolution_profiles` block keyed by resolution (`"1"`, `"3"`, `"5"`). `"1"` = the current global values (no change). `"3"`/`"5"` populate **only the timeframe-sensitive keys**; everything unlisted inherits the 1-min global.
 
 **Phase-1 seeding (principled first guess, not calibrated):**
