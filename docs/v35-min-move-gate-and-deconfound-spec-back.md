@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-14
 **Implementer:** Opus 4.8 (fresh conversation)
-**Status:** **IMPLEMENTED, local commits only.** `dotnet build` clean (solution + AutoTweaker, 0 warnings / 0 errors). Acceptance harness `verify/ordercheck` A1–A13 **ALL PASS**. Trader tests live + pushes.
+**Status:** **ACCEPTED — trader tested 2026-06-15; gate + de-confound confirmed working** (local-unpushed: `3705d92` gate + `db050a5` eval/this doc; awaiting trader push). `dotnet build` clean (solution + AutoTweaker, 0/0); `verify/ordercheck` A1–A13 **ALL PASS**. The live test surfaced the 1-min Asia/London tradeability finding now addressed by the **v36 session-timeframe feature** — see §7 + [`session-timeframe-resolution-proposal.md`](session-timeframe-resolution-proposal.md).
 **Specs:** [`min-tradeable-move-gate-proposal.md`](min-tradeable-move-gate-proposal.md) (scoring gate + shared key + UI), [`eval-metric-deconfound-proposal.md`](eval-metric-deconfound-proposal.md) (eval-layer fix + history re-evaluation, incl. the two 2026-06-14 notes).
 **Settings:** v34 → **v35**, one bump, one new key `scoring.min_tradeable_move_pct = 0.0008`.
 
@@ -155,8 +155,20 @@ The matrix path logs its own per-run excluded count (`[AutoTweaker] … EXCLUDED
 - [x] `dotnet run --project verify/ordercheck` — A1–A13 **ALL PASS** (A13a/b/c gate fixtures + A13d editability; A1–A12 unregressed).
 - [x] Gate surfacing renders in card (`ContextBadge`) + plaintext snapshot (`CONTEXT:` line); calibration distribution counts the new value.
 - [x] `min_tradeable_move_pct` off the auto-tweaker tunable surface (HARD CONSTRAINT 11); both `Compute` callers pass the live floor.
-- [ ] **Trader, on first v35 launch:** confirm the console forensic line (N excluded / K were-SUCCESS); confirm the analysis report's Asia <12 ATR cell collapses to ~EXCLUDED and the surviving population's rate is the new forward baseline; sanity-check that recent low-ATR rows now resolve NO TRADE (`BELOW_MIN_MOVE`).
+- [x] **Trader tested 2026-06-15** — gate confirmed working: Asia/London 1-min verdicts resolve NO TRADE / `BELOW_MIN_MOVE` and the eval EXCLUDES them (those perf-strip windows read `--%`), exactly as designed. The runtime forensic N/K line + the Asia-cell before/after table were **not separately captured** (post-reset sample is thin, and the gate now suppresses the low-ATR population so few eval rows accrue in those sessions) — re-confirmable from the console on any fresh launch once history accumulates. Not a blocker: the observed `--%` / "0 predictions" *is* the EXCLUDE behaviour working.
 
 ## 6. Sequencing
 
 Both halves land **before** the supervised auto-tweaker first fire (the de-confound so the tweaker's metric is clean; the gate so the post-fire collection is already filtered). The v34-brief "must precede first fire" caution is satisfied. Local commits only — trader tests + pushes.
+
+**Update 2026-06-15:** v35 tested + accepted (still local-unpushed). The next step is the supervised auto-tweaker **first fire on a NY weekday (1-min) window** — and per the v36 study NY stays 1-min, so the first fire is *unaffected* by v36 and can proceed independently. v36 adds the requirement that the tweaker never **pool** 3-min Asia/London rows once they exist (resolution-aware filtering) — that's a v36 precondition, not a v35 first-fire blocker.
+
+## 7. Post-implementation outcome (trader test, 2026-06-15)
+
+The pair works as specified — trader: *"the fixes work."* The notable observation, all **intended behaviour**:
+
+- With the 0.08% floor, **~0 predictions evaluate in Asia/London** — 1-min `2×ATR` targets there can't clear the floor, so those verdicts become NO TRADE / `BELOW_MIN_MOVE` and the eval EXCLUDES them. The Asia/London perf-strip windows correctly read `--%`; the evaluated population is thin and NY-weighted. This is the gate telling the truth about 1-min low-vol sessions, not a regression.
+
+- That left Asia/London without engine coverage, which **spawned the v36 session-timeframe feature**: move Asia/London *execution* to 3-min (where `2×ATR` clears the floor) and keep NY on 1-min. A 28-day ATR/price study confirmed the picks (**ASIA=3 / LONDON=3 / NY=1**) and showed the "0 predictions" was largely a **weekday/weekend artifact** — weekday Asia/London 1-min is already ~50–56% tradeable (median target sitting on the floor); weekend is the truly-dead case (~28–30%). Same weekday/weekend confound that bit the v34 ASIA `session_volume` change. Trader signed off 3/3/1 (weekend overlay out) on 2026-06-15. Docs: [`session-timeframe-resolution-proposal.md`](session-timeframe-resolution-proposal.md) + [`session-timeframe-resolution-spec-writer-brief.md`](session-timeframe-resolution-spec-writer-brief.md) (committed `b8a46eb`).
+
+- **Net:** v35 is correct and stays as-is. v36 restores Asia/London coverage on the *appropriate timeframe* rather than weakening the floor — the floor and the timeframe are the two halves of "a tradeable move," and v35 proved the floor half by making the timeframe gap visible.
