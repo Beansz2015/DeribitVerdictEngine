@@ -99,7 +99,11 @@ Public Class PromptBuilder
                                   conditions As ConditionsVector,
                                   maxKeysPerProposal As Integer) As (SystemMsg As String, UserMsg As String)
 
-        Dim systemMsg As String = String.Format(SystemTemplate, maxKeysPerProposal)
+        ' NOTE: SystemTemplate embeds literal JSON braces ({ } in the OUTPUT FORMAT
+        ' blocks), so String.Format would mis-read them as format items and throw
+        ' ("Expected an ASCII digit"). The only substitution is {0} (the scope cap),
+        ' so a plain replace is correct and brace-safe.
+        Dim systemMsg As String = SystemTemplate.Replace("{0}", maxKeysPerProposal.ToString())
 
         Dim user As New StringBuilder()
 
