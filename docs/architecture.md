@@ -41,7 +41,14 @@ DeribitVerdictEngine/
 │   │   │                               RegimeMaxScoreSettings + TierFloorSettings +
 │   │   │                               ContextTagThresholds blocks
 │   │   └── SettingsLoader.vb           JSON loader — SettingsLoader.Current singleton;
-│   │                                   FileSystemWatcher hot-reload
+│   │                                   FileSystemWatcher hot-reload; Save(... bumpVersion)
+│   │                                   — operational/UI saves pass False (v36 §10a)
+│   │
+│   ├── ExecutionResolution.vb          [v36] Host-agnostic session-conditional execution
+│   │                                   resolver. MatchSessionBucket (shared by
+│   │                                   DynamicNorms.ApplySessionVolume + the display
+│   │                                   ResolveSessionLabel), ResolveResolution,
+│   │                                   ResolveRocMagnitude / ResolveRocSlopeDelta.
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,

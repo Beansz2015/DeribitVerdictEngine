@@ -102,6 +102,16 @@ Public Class EngineSettings
     <JsonPropertyName("session_volume")>
     Public Property SessionVolume As New SessionVolumeSettings
 
+    ''' <summary>
+    ''' [v36 session-timeframe-resolution] Per-resolution override map keyed by the
+    ''' resolution string ("1"/"3"/"5"). "1" is empty (everything inherits the global
+    ''' values); "3" carries only the overridden ROC keys. A pure override-map: any key
+    ''' absent from the active profile falls back to the global value. Default-empty dict
+    ''' so an absent block = pure 1-min behaviour. Spec §2.2.
+    ''' </summary>
+    <JsonPropertyName("resolution_profiles")>
+    Public Property ResolutionProfiles As Dictionary(Of String, ResolutionProfile) = New Dictionary(Of String, ResolutionProfile)
+
     <JsonPropertyName("regime_weights")>
     Public Property RegimeWeights As New RegimeWeightSettings
 
@@ -447,6 +457,30 @@ Public Class SessionBucketSettings
     <JsonPropertyName("end_hour")>        Public Property EndHour        As Integer = 23
     <JsonPropertyName("high_multiplier")> Public Property HighMultiplier As Double = 1.0
     <JsonPropertyName("mid_multiplier")>  Public Property MidMultiplier  As Double = 1.0
+    ''' <summary>
+    ''' [v36 session-timeframe-resolution] Execution-indicator-stack resolution in
+    ''' minutes (1/3/5) for this session. Default 1 = current 1-min behaviour, zero
+    ''' change. The engine fetches + computes the execution stack (incl. ATR) at this
+    ''' resolution; the 5m regime + 15m MTF gate + 5m/15m swing pivots stay fixed.
+    ''' OFF the auto-tweaker surface (strategy/regime lever — PromptBuilder HARD
+    ''' CONSTRAINT 11). Spec: docs/session-timeframe-resolution-implementer-handoff.md.
+    ''' </summary>
+    <JsonPropertyName("execution_resolution")> Public Property ExecutionResolution As Integer = 1
+End Class
+
+''' <summary>
+''' [v36 session-timeframe-resolution] Per-resolution override of the timeframe-sensitive
+''' threshold keys. Keyed in EngineSettings.ResolutionProfiles by the resolution string
+''' ("1"/"3"/"5"). Override fields are nullable so "absent ⇒ inherit the global 1-min
+''' value" is unambiguous (a 0.0 default would be a real override). Only the two ROC keys
+''' are candle-magnitude-gated and scale with resolution; CVD/MicroCVD read the fixed
+''' 500/50-trade stream and stay 1-min. Spec §1.
+''' </summary>
+Public Class ResolutionProfile
+    ''' <summary>ROC magnitude threshold override (3-min seed 0.21 = 1-min 0.1 ×2.1). Nothing ⇒ inherit global.</summary>
+    <JsonPropertyName("roc_magnitude_threshold")>   Public Property RocMagnitudeThreshold   As Double? = Nothing
+    ''' <summary>ROC slope-delta threshold override (3-min seed 0.105 = 1-min 0.05 ×2.1). Nothing ⇒ inherit global.</summary>
+    <JsonPropertyName("roc_slope_delta_threshold")> Public Property RocSlopeDeltaThreshold  As Double? = Nothing
 End Class
 
 ' ---------------------------------------------------------------------------

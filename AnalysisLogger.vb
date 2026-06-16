@@ -1,7 +1,15 @@
-' AnalysisLogger.vb  v0.6
+' AnalysisLogger.vb  v0.7
 ' Appends one row per analysis run to a local CSV file.
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
+'
+' v0.7 (v36 session-timeframe-resolution): Columns 94-95 appended: ExecResolution
+'       (execution resolution in minutes this row was computed on — 1/3/5; legacy
+'       rows predate the column and are treated as 1 by header-name readers) and
+'       CVDWeightedSlope (CalcCVD's internal weighted slope, surfaced for CVD
+'       threshold calibration). Appended at the end so header-name-based readers
+'       (all readers since F9) tolerate them transparently. Superseded v0.6 files
+'       rotate to analysis_log.csv.v0.6.bak.
 '
 ' v0.6 (2026-06-11): Columns 89-93 added: MicroCVDEarly, MicroCVDMid,
 '       MicroCVDLate (net USD deltas — negative values valid), MicroCVDMomentum,
@@ -67,7 +75,8 @@ Public Class AnalysisLogger
         "SwingTargetLong,SwingTargetShort,SwingStopLong,SwingStopShort," &
         "TargetCapReason,BestPivotByVolume5m,BestPivotVolumeRatio5m," &
         "TrendStructure5m," &
-        "MicroCVDEarly,MicroCVDMid,MicroCVDLate,MicroCVDMomentum,MicroCVDSignal"
+        "MicroCVDEarly,MicroCVDMid,MicroCVDLate,MicroCVDMomentum,MicroCVDSignal," &
+        "ExecResolution,CVDWeightedSlope"
 
     Public Shared Function GetLogPath() As String
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
@@ -98,10 +107,10 @@ Public Class AnalysisLogger
             If firstLine Is Nothing OrElse firstLine.Trim() <> Header Then
                 ' Schema mismatch — rotate old file (named for the superseded schema)
                 Dim dir As String = System.IO.Path.GetDirectoryName(path)
-                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.5.bak")
+                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.6.bak")
                 If File.Exists(bakPath) Then
                     Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
-                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.5." & ts & ".bak")
+                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.6." & ts & ".bak")
                 End If
                 File.Move(path, bakPath)
                 WriteHeader(path)
@@ -232,7 +241,9 @@ Public Class AnalysisLogger
                     Inv(r.MicroCVDMid, "F0"),
                     Inv(r.MicroCVDLate, "F0"),
                     If(r.MicroCVDMomentum, "FLAT"),
-                    If(r.MicroCVDSignal, "FLAT")))
+                    If(r.MicroCVDSignal, "FLAT"),
+                    r.ExecResolution.ToString(),
+                    Inv(r.CVDWeightedSlope, "F0")))
             End Using
         Catch
             ' Silent fail — logging must never crash the main pipeline

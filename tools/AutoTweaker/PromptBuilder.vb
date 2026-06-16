@@ -41,8 +41,10 @@ Public Class PromptBuilder
             "static_vol_high, static_vol_mid, static_vol_low) must never be reintroduced." & vbLf &
         "11. Trader-owned risk-preference keys are NEVER auto-tuned. Do not propose changing " &
             "'scoring.min_tradeable_move_pct' (the minimum-tradeable-move floor — the trader's slippage " &
-            "threshold, shared with the eval de-confound) or any 'kelly.*' key. These are set by the " &
-            "trader, not failure-rate levers." & vbLf &
+            "threshold, shared with the eval de-confound), any 'kelly.*' key, or any " &
+            "'session_volume.sessions[].execution_resolution' (the per-session execution timeframe — a " &
+            "strategy/regime selector that defines a calibration-regime boundary, not a failure-rate lever). " &
+            "These are set by the trader, not failure-rate levers." & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

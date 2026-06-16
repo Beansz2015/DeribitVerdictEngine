@@ -37,6 +37,11 @@ Public Class LivePerformanceTracker
         ' regardless of adverse outcome. Nothing = not yet evaluated (e.g. insufficient
         ' OHLC coverage during v1→v2 migration). Written as empty string in CSV.
         Public Property TargetEverHit As Boolean?
+        ' [v36] Execution resolution (minutes) the originating run was computed on.
+        ' Default 1 so legacy (pre-v4) rows and any unstamped path are 1-min. Drives
+        ' the (session × resolution) aggregation filter so 3-min Asia/London rows are
+        ' never blended with 1-min NY (or pre-v36 1-min Asia) rows in a session rate.
+        Public Property ExecResolution As Integer = 1
     End Class
 
     Public Class WindowAggregate
@@ -91,11 +96,12 @@ Public Class LivePerformanceTracker
     ' Slack cap: trim fires only when in-memory bar count exceeds this.
     Private Shared ReadOnly _slackCap As Integer = CInt(OhlcCache.MAX_BARS * 1.05)
 
-    ' v35 de-confound: schema v2 → v3. The comment line also carries floor_pct=<value>
-    ' (the min-tradeable-move floor the cache was last computed with) so a later floor
-    ' change is detected on load and triggers a self-healing re-evaluation.
-    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v3 (min-tradeable-move floor)"
-    Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit"
+    ' v35 de-confound: schema v2 → v3 (min-tradeable-move floor). v36: v3 → v4 appends
+    ' the ExecResolution column. The comment retains the "min-tradeable-move" substring
+    ' (so IsPreV3Schema still classifies a v4 file as ≥v3) and the floor_pct=<value> tail
+    ' (so a later floor change is still detected and triggers a self-healing re-eval).
+    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v4 (min-tradeable-move floor; exec resolution)"
+    Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution"
     Private Const FAV_ATR_MULT        As Double = 2.0   ' fallback favourable barrier (= engine AtrTargetMultiplier)
     Private Const ADV_ATR_MULT        As Double = 1.2   ' fallback adverse barrier
 
@@ -280,6 +286,8 @@ Public Class LivePerformanceTracker
             ' re-stamp the file with the v3 comment). preV3 → one-time v2→v3 forensic
             ' re-eval; a changed stored floor → self-healing re-walk on later startups.
             Dim preV3Schema As Boolean  = IsPreV3Schema(evalCachePath)
+            ' [v36] capture the v3→v4 need BEFORE any rewrite below re-stamps the header.
+            Dim preV4Schema As Boolean  = IsPreV4Schema(evalCachePath)
             Dim storedFloor As Double?  = ReadSchemaFloorPct(evalCachePath)
             _floorPctInEffect = cfg.Scoring.MinTradeableMovePct
             _evalCache = LoadEvalCache(evalCachePath)
@@ -306,6 +314,14 @@ Public Class LivePerformanceTracker
                 ReevaluateForFloor(_floorPctInEffect, nowUtc, logForensic:=preV3Schema)
             End If
 
+            ' --- Step 2.7: v3→v4 ExecResolution column (v36) ---
+            ' Legacy (v3) rows have no ExecResolution and were all 1-min; LoadEvalCache
+            ' defaulted them to 1. Rewrite once to re-stamp the file with the v4 header +
+            ' explicit ExecResolution column so the resolution-filtered aggregation reads
+            ' a clean schema. Idempotent: if an earlier migration already rewrote (any
+            ' WriteEvalCache emits the v4 header now), this is one harmless redundant pass.
+            If preV4Schema Then WriteEvalCache(_evalCachePath)
+
             ' --- Step 3: Backfill from analysis_log.csv ---
             If eagerBackfill AndAlso File.Exists(analysisLogPath) Then
                 Dim newEntries As New List(Of EvalCacheEntry)()
@@ -317,7 +333,8 @@ Public Class LivePerformanceTracker
                                                              row.SwingStopLong, row.SwingStopShort,
                                                              adjLongTarget:=0.0,
                                                              adjShortTarget:=0.0,
-                                                             minMovePct:=cfg.Scoring.MinTradeableMovePct)
+                                                             minMovePct:=cfg.Scoring.MinTradeableMovePct,
+                                                             execResolution:=row.ExecResolution)
                     ' If window complete, evaluate; otherwise leave as PENDING.
                     If entry.EvalOutcome = "PENDING" AndAlso
                        row.Timestamp.AddMinutes(15) <= nowUtc Then
@@ -403,7 +420,8 @@ Public Class LivePerformanceTracker
                 nowUtc, v.Verdict, r.CurrentPrice, r.ATR,
                 r.SwingStopLong, r.SwingStopShort,
                 v.AdjustedLongTarget, v.AdjustedShortTarget,
-                cfg.Scoring.MinTradeableMovePct)
+                cfg.Scoring.MinTradeableMovePct,
+                r.ExecResolution)
             _evalCache.Add(entry)
             AppendEvalRows(_evalCachePath, New List(Of EvalCacheEntry) From {entry})
 
@@ -463,7 +481,8 @@ Public Class LivePerformanceTracker
                 ' Convert UTC hours to UTC+8
                 Dim startH As Integer = (sess.StartHour + 8) Mod 24
                 Dim endH   As Integer = (sess.EndHour   + 8) Mod 24
-                Dim agg = ComputeSessionWindow(startH, endH, nowUtc8, utc8Shift)
+                ' [v36] Filter to this session's configured execution resolution.
+                Dim agg = ComputeSessionWindow(startH, endH, nowUtc8, utc8Shift, sess.ExecutionResolution)
                 result.Add(agg)
             Next
         Catch ex As Exception
@@ -500,7 +519,8 @@ Public Class LivePerformanceTracker
             startH    As Integer,
             endH      As Integer,
             nowUtc8   As DateTime,
-            utc8Shift As TimeSpan) As WindowAggregate
+            utc8Shift As TimeSpan,
+            resolutionFilter As Integer) As WindowAggregate
 
         Dim todayUtc8   As DateTime = nowUtc8.Date
         Dim isStraddle  As Boolean  = (endH <= startH)   ' true for NY (21→07)
@@ -550,7 +570,9 @@ Public Class LivePerformanceTracker
         Dim rangeStartUtc As DateTime = blockStartUtc8.Subtract(utc8Shift)
         Dim rangeEndUtc   As DateTime = displayEndUtc8.Subtract(utc8Shift)
 
-        Dim agg = BuildAggregate(rangeStartUtc, rangeEndUtc, blockStartUtc8, displayEndUtc8)
+        ' [v36] Filter the session rate to its configured resolution so a session's
+        ' rate never blends two resolutions (e.g. legacy 1-min Asia + new 3-min Asia).
+        Dim agg = BuildAggregate(rangeStartUtc, rangeEndUtc, blockStartUtc8, displayEndUtc8, resolutionFilter)
         agg.IsActive = isActive
         Return agg
     End Function
@@ -563,14 +585,35 @@ Public Class LivePerformanceTracker
             rangeStartUtc  As DateTime,
             rangeEndUtc    As DateTime,
             displayStartUtc8 As DateTime,
-            displayEndUtc8   As DateTime) As WindowAggregate
+            displayEndUtc8   As DateTime,
+            Optional resolutionFilter As Integer = 0) As WindowAggregate
 
-        Dim agg As New WindowAggregate() With {
-            .RangeStart = displayStartUtc8,
-            .RangeEnd   = displayEndUtc8
-        }
-        For Each e In _evalCache
+        Dim agg As WindowAggregate = AggregateRange(_evalCache, rangeStartUtc, rangeEndUtc, resolutionFilter)
+        agg.RangeStart = displayStartUtc8
+        agg.RangeEnd   = displayEndUtc8
+        Return agg
+    End Function
+
+    ''' <summary>
+    ''' [v36] Pure aggregation over an entry list (no module state) so the
+    ''' resolution-filtered counting is unit-testable (A14f). resolutionFilter &gt; 0
+    ''' includes ONLY rows whose ExecResolution matches it — the (session × resolution)
+    ''' safety net that stops a session rate from silently blending two resolutions
+    ''' (e.g. pre-v36 1-min Asia rows with post-v36 3-min Asia rows). resolutionFilter = 0
+    ''' applies no filter (the cross-session week/3d/today windows are mixed-resolution
+    ''' by nature). RangeStart/RangeEnd are set by the caller (display fields).
+    ''' </summary>
+    Friend Shared Function AggregateRange(
+            entries          As List(Of EvalCacheEntry),
+            rangeStartUtc    As DateTime,
+            rangeEndUtc      As DateTime,
+            resolutionFilter As Integer) As WindowAggregate
+
+        Dim agg As New WindowAggregate()
+        If entries Is Nothing Then Return agg
+        For Each e In entries
             If e.Timestamp < rangeStartUtc OrElse e.Timestamp > rangeEndUtc Then Continue For
+            If resolutionFilter > 0 AndAlso e.ExecResolution <> resolutionFilter Then Continue For
             agg.TotalRange += 1
             Select Case e.EvalOutcome
                 Case "SUCCESS"
@@ -713,6 +756,26 @@ Public Class LivePerformanceTracker
         Return False
     End Function
 
+    ''' <summary>
+    ''' [v36] True when the eval cache exists but its column header lacks "ExecResolution"
+    ''' (a pre-v4 file). Triggers the one-time v3→v4 re-stamp (Step 2.7). False when the
+    ''' file does not exist (fresh installs start at v4).
+    ''' </summary>
+    Private Shared Function IsPreV4Schema(path As String) As Boolean
+        If Not File.Exists(path) Then Return False
+        Try
+            For Each line As String In File.ReadLines(path)
+                If line.StartsWith("#") OrElse String.IsNullOrWhiteSpace(line) Then Continue For
+                If line.StartsWith("Timestamp") Then Return Not line.Contains("ExecResolution")
+                ' First non-comment data row with no header above it → pre-v4.
+                Return True
+            Next
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] IsPreV4Schema error: " & ex.Message)
+        End Try
+        Return False
+    End Function
+
     ''' <summary>Parse "floor_pct=&lt;x&gt;" from the schema comment; Nothing if absent (pre-v3).</summary>
     Private Shared Function ReadSchemaFloorPct(path As String) As Double?
         If Not File.Exists(path) Then Return Nothing
@@ -822,12 +885,14 @@ Public Class LivePerformanceTracker
             swingStopShort  As Double,
             adjLongTarget   As Double,
             adjShortTarget  As Double,
-            minMovePct      As Double) As EvalCacheEntry
+            minMovePct      As Double,
+            execResolution  As Integer) As EvalCacheEntry
 
         Dim e As New EvalCacheEntry() With {
-            .Timestamp  = ts,
-            .Verdict    = verdict,
-            .EntryPrice = entryPrice
+            .Timestamp      = ts,
+            .Verdict        = verdict,
+            .EntryPrice     = entryPrice,
+            .ExecResolution = execResolution
         }
 
         ' Excluded: non-directional verdicts
@@ -933,6 +998,14 @@ Public Class LivePerformanceTracker
                     entry.TargetEverHit = False
                 End If
             End If
+            ' [v36] v4 8th column ExecResolution. Absent (v3 row) ⇒ keep the default 1
+            ' (1-min legacy). Re-stamped to v4 explicitly by the Step 2.7 rewrite.
+            If p.Length >= 8 Then
+                Dim parsedRes As Integer
+                If Integer.TryParse(p(7).Trim(), parsedRes) AndAlso parsedRes > 0 Then
+                    entry.ExecResolution = parsedRes
+                End If
+            End If
             Return entry
         Catch
             Return Nothing
@@ -978,8 +1051,8 @@ Public Class LivePerformanceTracker
             targetCol = If(e.TargetEverHit.Value, "1", "0")
         End If
         Return String.Format(CultureInfo.InvariantCulture,
-            "{0:o},{1},{2:F2},{3:F2},{4:F2},{5},{6}",
-            e.Timestamp, e.Verdict, e.EntryPrice, e.FavBar, e.AdvBar, e.EvalOutcome, targetCol)
+            "{0:o},{1},{2:F2},{3:F2},{4:F2},{5},{6},{7}",
+            e.Timestamp, e.Verdict, e.EntryPrice, e.FavBar, e.AdvBar, e.EvalOutcome, targetCol, e.ExecResolution)
     End Function
 
     ' -----------------------------------------------------------------------
@@ -993,6 +1066,7 @@ Public Class LivePerformanceTracker
         Public ATR          As Double
         Public SwingStopLong  As Double
         Public SwingStopShort As Double
+        Public ExecResolution As Integer   ' [v36] 1 when absent (pre-v0.7 CSV)
     End Structure
 
     ''' <summary>
@@ -1038,6 +1112,16 @@ Public Class LivePerformanceTracker
                     row.ATR           = Double.Parse(p(colIdx("ATR")), CultureInfo.InvariantCulture)
                     row.SwingStopLong  = Double.Parse(p(colIdx("SwingStopLong")), CultureInfo.InvariantCulture)
                     row.SwingStopShort = Double.Parse(p(colIdx("SwingStopShort")), CultureInfo.InvariantCulture)
+                    ' [v36] ExecResolution is OPTIONAL (not in the required set) — legacy
+                    ' (pre-v0.7) CSV rows lack it and were all 1-min, so default to 1.
+                    Dim execResIdx As Integer
+                    Dim parsedRes  As Integer
+                    If colIdx.TryGetValue("ExecResolution", execResIdx) AndAlso execResIdx < p.Length AndAlso
+                       Integer.TryParse(p(execResIdx).Trim(), parsedRes) AndAlso parsedRes > 0 Then
+                        row.ExecResolution = parsedRes
+                    Else
+                        row.ExecResolution = 1
+                    End If
                     result.Add(row)
                 Catch
                     ' Skip malformed row

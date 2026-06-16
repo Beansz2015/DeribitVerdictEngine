@@ -42,11 +42,13 @@ Partial Public Class MainForm
         ' interval is the one AutoRun value with a reader (InitAutoRunControls
         ' restores it next session). A plain start no longer bumps version /
         ' litters change_log — only a genuine interval edit writes.
+        ' [v36 §10a] bumpVersion:=False — an operational interval change must not
+        ' churn the feature version or the change_log (it's not a scoring/feature edit).
         Dim cfg As EngineSettings = SettingsLoader.Current
         If cfg.AutoRun.IntervalMinutes <> mins OrElse cfg.AutoRun.IntervalSeconds <> secs Then
             cfg.AutoRun.IntervalMinutes = mins
             cfg.AutoRun.IntervalSeconds = secs
-            SettingsLoader.Save(cfg, "auto_run interval changed via UI")
+            SettingsLoader.Save(cfg, "auto_run interval changed via UI", bumpVersion:=False)
         End If
 
         _countdownSecs = _intervalMs \ 1000

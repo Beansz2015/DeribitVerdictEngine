@@ -62,14 +62,20 @@ Public Class SettingsLoader
 
     ''' <summary>
     ''' Save the supplied settings object back to settings.json.
-    ''' Updates version, last_modified timestamp, and appends to change_log.
+    ''' Updates last_modified always. When bumpVersion is True (scoring/feature saves)
+    ''' it also increments version and appends a change_log entry. Operational/UI-only
+    ''' saves (auto_run interval, perf metric_mode, output-dump settings) pass
+    ''' bumpVersion:=False so they don't churn the feature version or the change_log
+    ''' (§10a — D4 closed start/stop churn; this closes interval-change version bumps).
     ''' </summary>
-    Public Shared Sub Save(settings As EngineSettings, changeNote As String)
+    Public Shared Sub Save(settings As EngineSettings, changeNote As String, Optional bumpVersion As Boolean = True)
         If String.IsNullOrEmpty(_settingsPath) Then Return
-        settings.Version += 1
         settings.LastModified = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-        If Not String.IsNullOrEmpty(changeNote) Then
-            settings.ChangeLog.Add(String.Format("v{0} [{1}]: {2}", settings.Version, settings.LastModified, changeNote))
+        If bumpVersion Then
+            settings.Version += 1
+            If Not String.IsNullOrEmpty(changeNote) Then
+                settings.ChangeLog.Add(String.Format("v{0} [{1}]: {2}", settings.Version, settings.LastModified, changeNote))
+            End If
         End If
         Dim opts As New JsonSerializerOptions With {.WriteIndented = True}
         Dim json As String = JsonSerializer.Serialize(settings, opts)

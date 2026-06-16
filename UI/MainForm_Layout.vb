@@ -1050,7 +1050,8 @@ Partial Public Class MainForm
         mode = NormaliseMode(mode)
         Dim cfg As EngineSettings = SettingsLoader.Current
         cfg.PerformanceDisplay.MetricMode = mode
-        SettingsLoader.Save(cfg, "performance_display.metric_mode → " & mode)
+        ' [v36 §10a] operational perf-strip toggle — no feature version bump / change_log.
+        SettingsLoader.Save(cfg, "performance_display.metric_mode → " & mode, bumpVersion:=False)
         _metricMode = mode
         UpdatePerformanceLabels()
         lblLogInfo.Text = "Metric mode persisted → " & mode

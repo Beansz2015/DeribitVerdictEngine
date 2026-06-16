@@ -51,6 +51,12 @@ Partial Public Class MainForm
     Private Async Function RunAnalysisAsync() As Task
         Dim cfg As EngineSettings = SettingsLoader.Current
 
+        ' [v36] Resolve the active session's execution resolution (1/3/5 min) from the
+        ' UTC hour. ASIA/LONDON → 3-min, NY → 1-min (config-driven). The execution stack
+        ' (incl. ATR) is computed on this resolution below; regime (5m) / MTF (15m) /
+        ' swing pivots (5m/15m) are unchanged. At res=1 the run is byte-identical to v35.
+        Dim execRes As Integer = ExecutionResolution.ResolveResolution(cfg, DateTime.UtcNow.Hour)
+
         Dim mtfStale As Boolean = _mtfCandles15m Is Nothing OrElse
                                    (DateTime.UtcNow - _mtfLastFetchTime).TotalSeconds >= MTF_TTL_SECONDS
 
@@ -84,12 +90,24 @@ Partial Public Class MainForm
         Dim orderBook    = Await t_ob
         Dim recentTrades = Await t_trades
 
+        ' [v36] Execution-stack candles at the session resolution. Keep the 1m fetch in
+        ' ALL sessions (it feeds the 1m OHLC cache, the eval barrier walk, and last-trade
+        ' price). When execRes = 1 (NY), candlesExec IS candles1m — no extra call, byte-
+        ' identical. Otherwise fetch the 3/5-min stack (250 bars = 12.5h at 3m; ample for
+        ' the 100-bar ATR-ref / volume baseline).
+        Dim candlesExec As List(Of Candle) =
+            If(execRes = 1, candles1m, Await DeribitClient.GetCandlesAsync(execRes.ToString(), 250))
+
         ' Resilience check: if any required fetch failed, skip cleanly.
         Dim skipReason As String = Nothing
         If candles1m Is Nothing OrElse candles1m.Count < 50 Then
             skipReason = "1m candles unavailable"
         ElseIf candles5m Is Nothing OrElse candles5m.Count < 30 Then
             skipReason = "5m candles unavailable"
+        ElseIf execRes <> 1 AndAlso (candlesExec Is Nothing OrElse candlesExec.Count < 50) Then
+            ' [v36] Exec-stack fetch failed for a 3/5-min session (1m fetch above is
+            ' separate — it feeds the cache/eval walk regardless).
+            skipReason = execRes & "m candles unavailable"
         ElseIf Not fundingRate.HasValue Then
             skipReason = "funding rate unavailable"
         ElseIf Not bookSummary.HasValue Then
@@ -98,10 +116,13 @@ Partial Public Class MainForm
             skipReason = "order book unavailable"
         ElseIf recentTrades Is Nothing OrElse recentTrades.Count = 0 Then
             skipReason = "recent trades unavailable"
-        ElseIf Not IndicatorEngine.IsFresh(candles1m, 1, DateTime.UtcNow) Then
+        ElseIf Not IndicatorEngine.IsFresh(candlesExec, execRes, DateTime.UtcNow) Then
             ' D5 (S-6): stale tape scores hours-old data as current → row pollution.
-            ' Gate 1m + 5m only; the 15m cache deliberately tolerates staleness.
-            skipReason = "1m candles stale"
+            ' [v36] Freshness honours the execution resolution — a 3-min bar is fresh up
+            ' to ~6 min, not 2. At execRes=1 candlesExec IS candles1m, so this is the
+            ' original 1m gate exactly. Gate exec-stack + 5m only; the 15m cache
+            ' deliberately tolerates staleness.
+            skipReason = execRes & "m candles stale"
         ElseIf Not IndicatorEngine.IsFresh(candles5m, 5, DateTime.UtcNow) Then
             skipReason = "5m candles stale"
         End If
@@ -124,30 +145,37 @@ Partial Public Class MainForm
                                           recentTrades(recentTrades.Count - 1).Price, 0)
 
         Dim r As New IndicatorResults()
-        r.CurrentPrice = candles1m.Last().Close
+        ' [v36] Stamp the resolution BEFORE scoring so the ROC magnitude override
+        ' resolves via r.ExecResolution at its scoring read sites (no new Calculate param).
+        r.ExecResolution = execRes
+        r.CurrentPrice = candlesExec.Last().Close
 
-        r.ATR = IndicatorEngine.CalcATR(candles1m, cfg.Indicators.ATR.Period)
+        ' [v36] ATR (and the whole execution stack below) computed on candlesExec.
+        ' The gate, ATR levels, eval barriers, and Kelly inherit the resolution
+        ' automatically because they all derive from r.ATR.
+        r.ATR = IndicatorEngine.CalcATR(candlesExec, cfg.Indicators.ATR.Period)
 
-        Dim norms As DynamicNorms = DynamicNorms.Compute(candles1m, r.ATR)
+        Dim norms As DynamicNorms = DynamicNorms.Compute(candlesExec, r.ATR)
         r.ATRSizeMultiplier = Math.Round(norms.ATRScaleFactor, 2)
 
-        Dim rocSeries = IndicatorEngine.CalcROCSeries(candles1m,
+        Dim rocSeries = IndicatorEngine.CalcROCSeries(candlesExec,
                             cfg.Indicators.ROC.Period,
                             cfg.Indicators.ROC.SeriesLookback)
         r.ROC = If(rocSeries.Count > 0, rocSeries.Last(), 0)
         If rocSeries.Count >= 2 Then
             Dim delta As Double = rocSeries.Last() - rocSeries(rocSeries.Count - 2)
-            Dim slopeDelta As Double = cfg.Indicators.ROC.SlopeDeltaThreshold
+            ' [v36] Resolution-aware slope-delta gate (3-min ROC delta runs ~2.1× larger).
+            Dim slopeDelta As Double = ExecutionResolution.ResolveRocSlopeDelta(cfg, execRes)
             r.ROCSlope = If(delta > slopeDelta, "RISING", If(delta < -slopeDelta, "FALLING", "FLAT"))
         Else
             r.ROCSlope = "FLAT"
         End If
 
-        r.RSI = IndicatorEngine.CalcRSI(candles1m, cfg.Indicators.RSI.Period)
+        r.RSI = IndicatorEngine.CalcRSI(candlesExec, cfg.Indicators.RSI.Period)
 
-        r.VolumeSMA9       = IndicatorEngine.CalcVolumeSMA(candles1m, cfg.Indicators.Volume.SmaPeriod)
-        r.CurrentVolume    = candles1m.Last().Volume
-        r.CurrentVolumeUSD = candles1m.Last().VolumeUSD
+        r.VolumeSMA9       = IndicatorEngine.CalcVolumeSMA(candlesExec, cfg.Indicators.Volume.SmaPeriod)
+        r.CurrentVolume    = candlesExec.Last().Volume
+        r.CurrentVolumeUSD = candlesExec.Last().VolumeUSD
         r.VolumeRatio      = If(r.VolumeSMA9 > 0, r.CurrentVolume / r.VolumeSMA9, 1)
 
         IndicatorEngine.CalcDMI(candles5m, cfg.Indicators.DMI.Period, r.PlusDI, r.MinusDI, r.ADX)
@@ -179,19 +207,19 @@ Partial Public Class MainForm
         Dim vwapS2Minute As Integer = cfg.Indicators.VWAP.Session2StartMinute
         Dim vwapWarmup   As Integer = cfg.Indicators.VWAP.WarmupCandles
 
-        r.VWAP       = IndicatorEngine.CalcVWAP(candles1m, r.VWAPSessionCandles, vwapS2Hour, vwapS2Minute)
+        r.VWAP       = IndicatorEngine.CalcVWAP(candlesExec, r.VWAPSessionCandles, vwapS2Hour, vwapS2Minute)
         r.VWAPDevPct = If(r.VWAP > 0, (r.CurrentPrice - r.VWAP) / r.VWAP * 100, 0)
-        IndicatorEngine.CalcVWAPBands(candles1m, r.VWAP,
+        IndicatorEngine.CalcVWAPBands(candlesExec, r.VWAP,
                                       r.VWAPSigma1Upper, r.VWAPSigma1Lower,
                                       r.VWAPSigma2Upper, r.VWAPSigma2Lower,
                                       vwapS2Hour, vwapS2Minute)
 
-        IndicatorEngine.CalcBBW(candles1m, cfg.Indicators.BBW.Period, cfg.Indicators.BBW.StdDev,
+        IndicatorEngine.CalcBBW(candlesExec, cfg.Indicators.BBW.Period, cfg.Indicators.BBW.StdDev,
                                 r.BBW, r.SqueezeStatus,
                                 seriesWindowMultiplier:=cfg.Indicators.BBW.SeriesWindowMultiplier,
                                 squeezePercentile:=cfg.Indicators.BBW.SqueezePercentile)
 
-        IndicatorEngine.CalcTTMSqueeze(candles1m, r.TTMHistogram, r.TTMDirection, r.TTMSignal,
+        IndicatorEngine.CalcTTMSqueeze(candlesExec, r.TTMHistogram, r.TTMDirection, r.TTMSignal,
                                        smaPeriod:=cfg.Indicators.TTM.SmaPeriod,
                                        linRegPeriod:=cfg.Indicators.TTM.LinRegPeriod,
                                        flatThreshold:=cfg.Indicators.TTM.FlatThreshold)
@@ -199,9 +227,9 @@ Partial Public Class MainForm
         Dim emaFast As Integer = cfg.Indicators.EMA.Fast
         Dim emaMid  As Integer = cfg.Indicators.EMA.Mid
         Dim emaSlow As Integer = cfg.Indicators.EMA.Slow
-        r.EMA9  = IndicatorEngine.CalcEMA(candles1m, emaFast)
-        r.EMA21 = IndicatorEngine.CalcEMA(candles1m, emaMid)
-        r.EMA50 = IndicatorEngine.CalcEMA(candles1m, emaSlow)
+        r.EMA9  = IndicatorEngine.CalcEMA(candlesExec, emaFast)
+        r.EMA21 = IndicatorEngine.CalcEMA(candlesExec, emaMid)
+        r.EMA50 = IndicatorEngine.CalcEMA(candlesExec, emaSlow)
         If r.EMA9 > r.EMA21 AndAlso r.EMA21 > r.EMA50 Then
             r.EMAAlignment = "BULL"
         ElseIf r.EMA9 < r.EMA21 AndAlso r.EMA21 < r.EMA50 Then
@@ -264,6 +292,11 @@ Partial Public Class MainForm
         ' starving NEW SHORTS / CAPITULATION. The CalibrationReport on 2026-05-08 showed
         ' a 41:2 long:short asymmetry in OI×CVD CONFIRMED counts as a direct consequence.
         ' Correct comparison: current 1m close vs the close 15 candles back.
+        ' [v36] Deliberately stays on candles1m (NOT candlesExec). OIChange15m is a
+        ' wall-clock 15-minute delta from the _oiHistory ring buffer (resolution-
+        ' independent), so the paired price direction must span the same 15 wall-clock
+        ' minutes — 15 × 1m bars. On candlesExec a 15-bar lookback would be 45 min at
+        ' 3m, mismatching the OI window. Proposal §4 lists OI as resolution-stable ("slow").
         Dim priceUp As Boolean = False
         If candles1m IsNot Nothing AndAlso candles1m.Count >= 16 Then
             priceUp = r.CurrentPrice > candles1m(candles1m.Count - 16).Close
@@ -298,12 +331,16 @@ Partial Public Class MainForm
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal,
                                          dominanceRatio:=cfg.Indicators.Liquidations.DominanceRatio)
 
-        IndicatorEngine.CalcCVD(recentTrades, candles1m, r.CVDValue, r.CVDSlope, r.CVDDivergence,
+        ' [v36] CVD's USD slope/value gates the FIXED 500-trade stream (resolution-
+        ' independent — slope_min_usd stays at 1-min). Only the divergence price-gate
+        ' touches candles, so pass candlesExec so the price-change is on the execution bar.
+        IndicatorEngine.CalcCVD(recentTrades, candlesExec, r.CVDValue, r.CVDSlope, r.CVDDivergence,
                                 slopeMinUsd:=cfg.Indicators.CVD.SlopeMinUsd,
                                 slopePctOfValue:=cfg.Indicators.CVD.SlopePctOfValue,
                                 divergencePriceGate:=cfg.Indicators.CVD.DivergencePriceGate,
                                 lateSegmentWeight:=cfg.Indicators.CVD.LateSegmentWeight,
-                                earlySegmentWeight:=cfg.Indicators.CVD.EarlySegmentWeight)
+                                earlySegmentWeight:=cfg.Indicators.CVD.EarlySegmentWeight,
+                                weightedSlopeOut:=r.CVDWeightedSlope)
 
         IndicatorEngine.CalcTFI(recentTrades, r.TFIValue, r.TFISignal,
                                 tfiWindowSize:=cfg.Indicators.TFI.WindowSize,
@@ -332,7 +369,7 @@ Partial Public Class MainForm
                               If(r.CurrentPrice > r.EMA200_5m, "ABOVE", "BELOW"),
                               "N/A")
 
-        IndicatorEngine.CalcDonchian(candles1m, cfg.Indicators.Donchian.Period,
+        IndicatorEngine.CalcDonchian(candlesExec, cfg.Indicators.Donchian.Period,
                                      r.DonchianUpper, r.DonchianLower)
 
         Dim channelRange As Double = r.DonchianUpper - r.DonchianLower
@@ -355,11 +392,11 @@ Partial Public Class MainForm
             r.DonchianSignal = "NONE"
         End If
 
-        IndicatorEngine.CalcOBV(candles1m, r.OBVTrend, r.OBVDivergence,
+        IndicatorEngine.CalcOBV(candlesExec, r.OBVTrend, r.OBVDivergence,
                                 cfg.Indicators.OBV.TrendGate,
                                 cfg.Indicators.OBV.DivergenceGate)
 
-        r.RSIDivergence = IndicatorEngine.CalcRSIDivergence(candles1m,
+        r.RSIDivergence = IndicatorEngine.CalcRSIDivergence(candlesExec,
                               cfg.Indicators.RSI.Period,
                               cfg.Indicators.RSI.DivergencePriceGate,
                               cfg.Indicators.RSI.DivergenceRsiDelta,
@@ -409,7 +446,7 @@ Partial Public Class MainForm
         Dim vpfrBucketVols() As Double   = Array.Empty(Of Double)()
         Dim vpfrBucketLow    As Double   = 0
         Dim vpfrBucketSize   As Double   = 0
-        IndicatorEngine.CalcVPFRLite(candles1m, r.CurrentPrice,
+        IndicatorEngine.CalcVPFRLite(candlesExec, r.CurrentPrice,
                                      vpfrPoc, vpfrHVNearPoc, vpfrSignal,
                                      r.VPFRVah, r.VPFRVal, r.VPFRValueAreaSignal,
                                      r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow,

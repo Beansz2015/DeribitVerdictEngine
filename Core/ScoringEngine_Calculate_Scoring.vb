@@ -125,7 +125,10 @@ Partial Public Class ScoringEngine
         ' -- Step 2: Weighted Signal Scoring ----------------------------------
         Dim rocLong         As Boolean = r.ROC > 0 AndAlso r.ROCSlope = "RISING"
         Dim rocShort        As Boolean = r.ROC < 0 AndAlso r.ROCSlope = "FALLING"
-        Dim rocMagnitude As Double = cfg.Indicators.ROC.MagnitudeThreshold
+        ' [v36] Resolution-aware ROC magnitude: 3-min ROC(9) runs ~2.1× larger, so its
+        ' gate scales with the execution resolution (r.ExecResolution, stamped pre-Calculate).
+        ' At res=1 this returns the global value exactly — NY byte-identical.
+        Dim rocMagnitude As Double = ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution)
         Dim rocPartialLong  As Boolean = r.ROC > rocMagnitude AndAlso r.ROCSlope <> "RISING"
         Dim rocPartialShort As Boolean = r.ROC < -rocMagnitude AndAlso r.ROCSlope <> "FALLING"
         AddFull(state, rocLong, rocShort, SignalCategory.Momentum)
@@ -306,7 +309,7 @@ Partial Public Class ScoringEngine
         Dim spreadPenaltyShort As Integer = 0
         If r.SpreadStatus = "WIDE" Then
             Dim pen       As Integer = cfg.Scoring.SpreadWidePenalty
-            Dim slopeSens As Double  = cfg.Indicators.ROC.MagnitudeThreshold
+            Dim slopeSens As Double  = ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution)
             If r.ROC > slopeSens Then
                 spreadPenaltyLong = pen
                 state.LongScore = Math.Max(0, state.LongScore - pen)
@@ -444,7 +447,7 @@ Partial Public Class ScoringEngine
 
             If isTrending Then
                 Dim emaAligned As Boolean = If(p2cIsLong, r.EMAAlignment = "BULL", r.EMAAlignment = "BEAR")
-                Dim rocActive  As Boolean = Math.Abs(r.ROC) >= cfg.Indicators.ROC.MagnitudeThreshold
+                Dim rocActive  As Boolean = Math.Abs(r.ROC) >= ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution)
                 Dim rocAligned As Boolean = rocActive AndAlso If(p2cIsLong, r.ROC > 0, r.ROC < 0)
                 Dim cvdAligned As Boolean = If(p2cIsLong,
                                                r.CVDSlope = "RISING"  AndAlso r.CVDValue > 0,

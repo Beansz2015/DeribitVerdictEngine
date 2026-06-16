@@ -147,8 +147,10 @@ Partial Public Class MainForm
         ' D2 (S-1): displays AvgATR/CurrATR sizing factor — mirrors RenderOutputHeader.
         Dim sizeMult As Double = If(r.ATR > 0, norms.ATRRef / r.ATR, 1.0)
         sb.AppendLine()
-        sb.AppendLine(String.Format("ATR ENTRY LEVELS  (ATR {0:F2}  size ×{1:F2} | {2:F1}x stop / {3:F1}x target)",
-                                     r.ATR, sizeMult, stopMult, targetMult))
+        ' [v36] EXEC {res}m surfaces the execution resolution (display-parity with the
+        ' card's _atrSubHeader). At res=1 reads "EXEC 1m" — NY unchanged in content.
+        sb.AppendLine(String.Format("ATR ENTRY LEVELS  (ATR {0:F2}  size ×{1:F2} | {2:F1}x stop / {3:F1}x target | EXEC {4}m)",
+                                     r.ATR, sizeMult, stopMult, targetMult, r.ExecResolution))
 
         Dim capNoiseFloor As Double = Math.Max(0.5, r.ATR * 0.02)
 

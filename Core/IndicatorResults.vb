@@ -131,6 +131,17 @@ Public Class IndicatorResults
     Public Property LastTwoHighs5m   As (Older As Double, Newer As Double)  ' display: the two highs that produced the classification
     Public Property LastTwoLows5m    As (Older As Double, Newer As Double)  ' display: the two lows
 
-    ' Current price (latest close of 1m candles)
+    ' Current price (latest close of the execution candles)
     Public Property CurrentPrice As Double
+
+    ' [v36 session-timeframe-resolution] Execution resolution (minutes) this run was
+    ' computed on. Stamped in RunAnalysisAsync right after the session is resolved.
+    ' Default 1 so any path that doesn't set it (and every legacy row) is 1-min.
+    ' Threads into ScoringEngine via r so the ROC magnitude override resolves at its
+    ' read sites with no new Calculate parameter; logged to CSV v0.7 + eval cache v4.
+    Public Property ExecResolution As Integer = 1
+
+    ' [v36 batch-along, v34 follow-up] CalcCVD's internal weighted slope, surfaced for
+    ' precise CVD threshold calibration (was an unlogged local). USD units. CSV v0.7.
+    Public Property CVDWeightedSlope As Double
 End Class

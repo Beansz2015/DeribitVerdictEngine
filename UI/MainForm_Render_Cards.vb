@@ -929,7 +929,9 @@ Partial Public Class MainForm
             _lblLastPriceTime.Text = $"{localNow:HH:mm:ss} UTC{sign}{hrs}"
         End If
         If _lblLastPriceSession IsNot Nothing Then
-            _lblLastPriceSession.Text = ResolveSessionLabel(utcNow.Hour) & " session"
+            ' [v36] Surface the active execution resolution (EXEC 1m/3m) so an Asia/London
+            ' verdict's timeframe is visible at a glance and a misconfiguration isn't silent.
+            _lblLastPriceSession.Text = ResolveSessionLabel(utcNow.Hour) & " session · EXEC " & r.ExecResolution & "m"
         End If
     End Sub
 
@@ -949,7 +951,9 @@ Partial Public Class MainForm
         ' display). r.ATRSizeMultiplier keeps its CurrATR/ATRRef meaning for the CSV.
         Dim sizeMult As Double = If(r.ATR > 0, norms.ATRRef / r.ATR, 1.0)
         If _atrSubHeader IsNot Nothing Then
-            _atrSubHeader.Text = $"ATR {r.ATR:F2}  size ×{sizeMult:F2}  |  {stopMult:F1}× stop / {targetMult:F1}× target"
+            ' [v36] EXEC tag mirrors the BuildPlaintextSnapshot ATR ENTRY LEVELS header
+            ' (display-parity hard rule — the tag lands on both surfaces this commit).
+            _atrSubHeader.Text = $"ATR {r.ATR:F2}  size ×{sizeMult:F2}  |  {stopMult:F1}× stop / {targetMult:F1}× target  |  EXEC {r.ExecResolution}m"
         End If
 
         ' GAP-06: render BOTH long and short rows. Verdict direction gets
@@ -1373,13 +1377,13 @@ Partial Public Class MainForm
     End Function
 
     Private Shared Function ResolveSessionLabel(utcHour As Integer) As String
-        ' Mirrors DynamicNorms.ApplySessionVolume() bucket boundaries.
-        '   00-06 UTC  → ASIA
-        '   07-12 UTC  → LONDON
-        '   13-23 UTC  → NY
-        If utcHour < 7 Then Return "ASIA"
-        If utcHour < 13 Then Return "LONDON"
-        Return "NY"
+        ' [v36] Route through the engine's shared bucket-matcher so the displayed
+        ' session label ALWAYS agrees with the gate / eval / resolution session boundary
+        ' (one source of truth). Fixes the v34 hour-7 off-by-one: the old "<7" mislabelled
+        ' UTC hour 7 as LONDON while the engine bucket is ASIA 0-7 inclusive. Returns the
+        ' bucket Name (currently ASIA/LONDON/NY) or "—" if no bucket matches.
+        Dim b = ExecutionResolution.MatchSessionBucket(SettingsLoader.Current, utcHour)
+        Return If(b IsNot Nothing, b.Name, "—")
     End Function
 
     ' =======================================================================

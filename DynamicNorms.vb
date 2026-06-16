@@ -113,18 +113,19 @@ Public Class DynamicNorms
     ''' range contains the current hour.  No-op when Enabled=False or no match found.
     ''' </summary>
     Private Shared Sub ApplySessionVolume(n As DynamicNorms)
-        Dim svCfg = SettingsLoader.Current.SessionVolume
+        Dim cfg = SettingsLoader.Current
+        Dim svCfg = cfg.SessionVolume
         If svCfg Is Nothing OrElse Not svCfg.Enabled Then Return
-        If svCfg.Sessions Is Nothing OrElse svCfg.Sessions.Count = 0 Then Return
 
-        Dim utcHour As Integer = DateTime.UtcNow.Hour
-        For Each bucket In svCfg.Sessions
-            If utcHour >= bucket.StartHour AndAlso utcHour <= bucket.EndHour Then
-                n.VolHighThreshold *= bucket.HighMultiplier
-                n.VolMidThreshold  *= bucket.MidMultiplier
-                Return
-            End If
-        Next
+        ' Route the bucket lookup through the shared matcher (ExecutionResolution) so the
+        ' volume-scaling boundary is identical to the resolution / display-label boundary
+        ' — one definition of "which session is this UTC hour" (DRY; fixes the class of
+        ' off-by-one drift). The Enabled gate above is preserved: it controls ONLY the
+        ' volume multiplier, NOT resolution selection (which never consults Enabled).
+        Dim bucket = ExecutionResolution.MatchSessionBucket(cfg, DateTime.UtcNow.Hour)
+        If bucket Is Nothing Then Return
+        n.VolHighThreshold *= bucket.HighMultiplier
+        n.VolMidThreshold  *= bucket.MidMultiplier
     End Sub
 
     Private Shared Function ComputeATRRef(candles As List(Of Candle)) As Double

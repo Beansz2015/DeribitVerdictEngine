@@ -81,8 +81,9 @@ Public Class OutputDumpSettingsForm
         cfg.AnalysisLogging.OutputDumpMaxRuns = maxRuns
 
         Try
+            ' [v36 §10a] operational output-dump settings — no feature version bump / change_log.
             SettingsLoader.Save(cfg, String.Format("output-dump: enabled={0}, max_runs={1}",
-                                                    chkEnabled.Checked, maxRuns))
+                                                    chkEnabled.Checked, maxRuns), bumpVersion:=False)
             RefreshFileSize()
             MessageBox.Show(Me, "Output dump settings saved.", "Output Dump Settings",
                             MessageBoxButtons.OK, MessageBoxIcon.Information)
