@@ -233,8 +233,13 @@ Last updated: 2026-04-11
     Leverage preference:    Not formally specified. Implied moderate given
                             selective trade frequency and structural stop usage.
 
-    ATR thresholds:         Low < 80 | Normal 80-150 | High > 150
-                            (calibrated for BTC ~$80k-$100k range, Q1 2026)
+    ATR thresholds:         1-min (NY):            Low < 20 | Normal 20-55  | High > 55
+                            3-min (Asia/London):   Low < 42 | Normal 42-115 | High > 115
+                            (recalibrated 2026-06-17 / settings v37 from live ATR p25/p75
+                            at BTC ~$62k-$67k; bands are RESOLUTION-DEPENDENT since v36 --
+                            3-min ATR runs ~2.1x the 1-min. Was Low<80/Normal 80-150/High>150,
+                            BTC ~$80k-$100k Q1 2026. AvgATR/CurrATR ratio self-calibrates;
+                            these are display / cold-start reference bands only.)
                             Review against CSV log if BTC price moves
                             significantly.
 
@@ -287,7 +292,8 @@ Last updated: 2026-04-11
     Liq penalty thresholds (50/200 BTC) -- monitoring. Review 200 BTC threshold
     against ~90th percentile of observed LiqLongSize/LiqShortSize in CSV log.
 
-    ATR thresholds (80/150) -- calibrated for BTC ~$80k-$100k Q1 2026. Review
+    ATR thresholds recalibrated v37 (2026-06-17): 1-min 20/55, 3-min ~42/115
+    (resolution-dependent since v36; was 80/150 for BTC ~$80k-$100k Q1 2026). Review
     if BTC price moves significantly. AvgATR/CurrATR ratio approach is
     self-calibrating but the absolute Low/Normal/High bands may need updating.
 
