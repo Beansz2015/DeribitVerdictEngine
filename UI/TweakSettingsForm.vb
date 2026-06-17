@@ -112,22 +112,49 @@ Public Class TweakSettingsForm
         Dim currentRowCount As Integer = CountCsvRows()
 
         If isFixedMode Then
-            ' First-run path — index is uninitialised; first run will seed it to
-            ' currentRowCount and the next disjoint batch is then awaited.
+            ' [v36 Phase-2a] Status mirrors the population filter the core applies:
+            ' count only the (session × resolution) population, and surface a pending
+            ' re-seed (filter change OR a CSV shrink such as the v0.6->v0.7 migration)
+            ' instead of a negative count. Mirrors AutoTweakerCore re-seed-on-change +
+            ' shrink guard; LastEvaluatedRowIndex indexes the FILTERED sequence.
+            Dim pop = cfg.PopulationFilter
+            Dim popRowCount As Integer = If(pop Is Nothing, currentRowCount, CountPopulationRows(pop))
+            Dim popKey As String = If(pop Is Nothing, "none",
+                String.Format("{0}|{1}", pop.Session,
+                    If(pop.ExecutionResolution.HasValue, pop.ExecutionResolution.Value.ToString(), "")))
+            Dim popLabel As String = If(pop Is Nothing, "all rows",
+                String.Format("{0}×{1}m", If(pop.Session, "any"),
+                    If(pop.ExecutionResolution.HasValue, pop.ExecutionResolution.Value.ToString(), "any")))
+
+            ' First-run path — index is uninitialised; first run seeds it.
             If state.LastEvaluatedRowIndex < 0 Then
-                SetStatus(String.Format("Awaiting first-run seed (rows so far: {0})", currentRowCount),
+                SetStatus(String.Format("Awaiting first-run seed (rows so far: {0})", popRowCount),
                           Color.Orange)
                 btnRunNow.Enabled = True
                 UpdateSummaryLabel(state)
                 Return
             End If
 
-            Dim accumulated As Integer = currentRowCount - state.LastEvaluatedRowIndex
+            ' Re-seed pending: a population-filter change or a CSV shrink (e.g. the
+            ' v0.6->v0.7 migration rotating the book) leaves LastEvaluatedRowIndex
+            ' stale; the next tweaker run re-seeds it. Mirror that here so the status
+            ' shows the pending re-seed instead of a negative accumulation.
+            If pop IsNot Nothing AndAlso
+               (state.PopulationFilterKey <> popKey OrElse state.LastEvaluatedRowIndex > popRowCount) Then
+                SetStatus(String.Format(
+                    "Re-seed pending (book rotated or population filter changed) — next run re-seeds. {0} rows: {1}",
+                    popLabel, popRowCount), Color.Orange)
+                btnRunNow.Enabled = True
+                UpdateSummaryLabel(state)
+                Return
+            End If
+
+            Dim accumulated As Integer = popRowCount - state.LastEvaluatedRowIndex
             If accumulated < cfg.WindowSizeVerdicts Then
                 Dim startRow As Integer = state.LastEvaluatedRowIndex + 1
                 Dim endRow   As Integer = state.LastEvaluatedRowIndex + cfg.WindowSizeVerdicts
-                SetStatus(String.Format("Next round: {0}/{1} rows accumulating (rows {2}..{3})",
-                                        accumulated, cfg.WindowSizeVerdicts, startRow, endRow),
+                SetStatus(String.Format("Next round ({4}): {0}/{1} rows accumulating (population rows {2}..{3})",
+                                        accumulated, cfg.WindowSizeVerdicts, startRow, endRow, popLabel),
                           Color.Orange)
                 btnRunNow.Enabled = False
                 UpdateSummaryLabel(state)
@@ -231,6 +258,64 @@ Public Class TweakSettingsForm
             Return Math.Max(0, lines.Length - 1)  ' subtract header
         Catch
             Return 0
+        End Try
+    End Function
+
+    ' [v36 Phase-2a] Count CSV data rows in the given (session × resolution)
+    ' population — the form-side mirror of AutoTweakerCore.MatchesPopulation so the
+    ' status line reflects the population the tweaker actually evaluates, not raw
+    ' rows. Resolution from the ExecResolution column (v0.7; absent/legacy ⇒ 1);
+    ' session from the shared engine bucket (ExecutionResolution.MatchSessionBucket,
+    ' inclusive <=). Falls back to the raw count on any parse trouble.
+    Private Function CountPopulationRows(pop As PopulationFilter) As Integer
+        If pop Is Nothing Then Return CountCsvRows()
+        Try
+            If Not File.Exists(_csvPath) Then Return 0
+            Dim lines As String() = File.ReadAllLines(_csvPath)
+            If lines.Length < 2 Then Return 0
+
+            Dim headers As String() = lines(0).Split(","c)
+            Dim tsIdx As Integer = -1, resIdx As Integer = -1
+            For i As Integer = 0 To headers.Length - 1
+                Dim h As String = headers(i).Trim()
+                If h.Equals("Timestamp", StringComparison.OrdinalIgnoreCase) Then tsIdx = i
+                If h.Equals("ExecResolution", StringComparison.OrdinalIgnoreCase) Then resIdx = i
+            Next
+
+            Dim needSession As Boolean = Not String.IsNullOrEmpty(pop.Session)
+            Dim settings = SettingsLoader.Current
+            ' Can't derive session without timestamps or settings → fall back to raw.
+            If needSession AndAlso (tsIdx < 0 OrElse settings Is Nothing) Then Return CountCsvRows()
+
+            Dim count As Integer = 0
+            For i As Integer = 1 To lines.Length - 1
+                Dim parts As String() = lines(i).Split(","c)
+
+                ' Resolution (default 1 when the column is absent/unparseable — legacy v0.6).
+                Dim execRes As Integer = 1
+                If resIdx >= 0 AndAlso parts.Length > resIdx Then
+                    Dim rv As Integer
+                    If Integer.TryParse(parts(resIdx).Trim(), rv) Then execRes = rv
+                End If
+                If pop.ExecutionResolution.HasValue AndAlso execRes <> pop.ExecutionResolution.Value Then Continue For
+
+                ' Session via the shared engine bucket (only when the filter pins a session).
+                If needSession Then
+                    If parts.Length <= tsIdx Then Continue For
+                    Dim ts As DateTime
+                    If Not DateTime.TryParse(parts(tsIdx).Trim(), Nothing,
+                            Globalization.DateTimeStyles.AssumeUniversal Or
+                            Globalization.DateTimeStyles.AdjustToUniversal, ts) Then Continue For
+                    Dim b = ExecutionResolution.MatchSessionBucket(settings, ts.Hour)
+                    If b Is Nothing OrElse
+                       Not String.Equals(b.Name, pop.Session, StringComparison.OrdinalIgnoreCase) Then Continue For
+                End If
+
+                count += 1
+            Next
+            Return count
+        Catch
+            Return CountCsvRows()
         End Try
     End Function
 
