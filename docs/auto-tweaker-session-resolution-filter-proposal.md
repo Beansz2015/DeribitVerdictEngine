@@ -111,6 +111,8 @@ This is the honest, pragmatic contract: the tweaker tunes the engine's primary r
 
 ## 5. Design decisions needing trader sign-off
 
+> **Trader sign-off 2026-06-17 — AGREED to all three defaults below** (Q1 NY×1, Q2 global-apply + `resolution_profiles.*` off-surface, Q3 defer the auto-tweaker's per-population *auto-tuning* to Phase-2b). **Caveat raised + accepted:** Asia/London accuracy must not stay provisional indefinitely. Resolved by the §6 clarification — the Asia/London **accuracy** fix is the *manual* `resolution_profiles["3"]` re-baseline (data-gated, near-term, **not** the auto-tweaker); auto-tweaker Phase-2b only *automates* tuning and is the optional layer on top. Cleared to implement.
+
 1. **Initial population = NY × 1-min?** *(Recommend YES.)* It is the engine's clean primary regime, the bulk of post-reset data, and the exact target of the already-validated v35 supervised first-fire. The interim `window_size_verdicts=75` / `min_tier_eligible_rows=15` pairing was set for precisely this population (≈17 eligible per 75 at NY's ~23% actionable rate).
 2. **Accept GLOBAL-apply scoping (§3) + `resolution_profiles.*` off-surface (§4)?** *(Recommend YES.)* Matches the global tunable surface and the provisional-Asia/London design; the alternative (per-session tunable targets) is a larger calibration-design change deferred to Phase-2b.
 3. **Defer Asia/London tuning + per-population windowing/MinTier + history-segregation to Phase-2b?** *(Recommend YES.)* Gated on ≥50 weekday-3-min rows/session (the WATCHING re-verify) and on deciding where session-specific tuned values live. Out of scope here.
@@ -119,7 +121,15 @@ If any answer is "no," that is a genuine design change → it routes back to a r
 
 ---
 
-## 6. Out of scope (Phase-2b — separate spec)
+## 6. Out of scope — and the three-way split (do not conflate)
+
+Asia/London accuracy is a real concern (trader, 2026-06-17), but the fix for it is **not** in this spec and **not** the auto-tweaker. Three distinct workstreams have been riding under one "Phase-2b" label; separating them is what makes the sequencing forced rather than arbitrary:
+
+- **(A) This filter (Phase-2a — here).** A *tweaker* safety change. Lets clean, separable 3-min data accumulate.
+- **(B) The Asia/London ACCURACY fix — the manual `resolution_profiles["3"]` re-baseline.** Settle the 2.1× ROC proxy with measured 3-min values + **extend the profile to the other candle-magnitude keys** (`TTM.flat_threshold`, the CVD/RSI `divergence_price_gate`s — already flagged in `DeribitIndicatorProject.md` §12 "Phase-2 threshold carry-forward"; each needs its read site routed through a `Resolve…(cfg, execRes)` resolver, same pattern as the two ROC keys). This is a **settings-led manual pass, v33/v34 method — NOT the auto-tweaker** (§12 already says "manual, like v33/v34; the auto-tweaker is resolution-blind until its own Phase-2 fix"). **Gated only on ≥50 weekday-3-min rows/session.** This is the near-term Asia/London accuracy fix; it does not wait on (C).
+- **(C) Auto-tweaker Phase-2b — *auto-tuning* per population.** The convenience layer that lets the tweaker tune Asia/London itself. Needs (A) + data + the **schema-home decision** below. Lowest priority; (B) does the accuracy work without it.
+
+Deferred to (C) — auto-tweaker Phase-2b, separate spec:
 
 - **Per-population windowing** (a `LastEvaluatedRowIndex` per `(session×resolution)` so populations resume independently and round-robin) — fixes the last of the P9 waste; not needed while we tune one population at a time.
 - **Per-population `WindowSize` / `MinTier` / `failure_rate_threshold`** — Asia/London will want their own (likely smaller windows; lower actionable rates). Dovetails with the §12 MinTier-floor recalibration.
@@ -160,4 +170,6 @@ Integration (mirror the 2026-06-15 mechanics replay): throwaway config+state, `d
 
 ## 9. Sequencing
 
-v36 push (trader) → **implement + isolated-replay-validate this filter** → supervised **NY × 1-min** first fire **under the filter** (dry-run, coordinator reviews the diff) → accumulate ≥50 weekday-3-min rows/session → **Phase-2b** (Asia/London tuning + per-population windowing/thresholds/history). The filter is the gate: **the auto-tweaker must not fire on any `analysis_log.csv` containing 3-min rows until this lands and is replay-validated.**
+v36 push (trader) → **(A) implement + isolated-replay-validate this filter** → supervised **NY × 1-min** first fire **under the filter** (dry-run, coordinator reviews the diff). In parallel, 3-min Asia/London data accumulates. Once **≥50 weekday-3-min rows/session** exist → **(B) the manual `resolution_profiles["3"]` re-baseline** (ROC measured + TTM/divergence gates added) — *this is the Asia/London accuracy fix, and it is the priority once data lands; it does not wait on the tweaker.* Then, optionally → **(C) auto-tweaker Phase-2b** (per-population auto-tuning + the schema-home decision + per-population windowing/history).
+
+Two independent gates, do not conflate: **(A) is the gate on the tweaker** — it must not fire on any `analysis_log.csv` containing 3-min rows until this lands and is replay-validated. **Data (≥50 weekday-3-min/session) is the gate on (B)** — the accuracy fix; calibrating sooner repeats the v34 weekend-confound. (A) protects the data that (B) needs; neither blocks the other in *content*.
