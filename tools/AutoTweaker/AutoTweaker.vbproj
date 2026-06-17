@@ -14,6 +14,9 @@
   <ItemGroup>
     <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
     <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
+    <!-- v36 Phase-2a: shared session-bucket matcher (engine-identical boundary)
+         for the (session × resolution) population filter. -->
+    <Compile Include="..\..\Core\ExecutionResolution.vb" />
     <Compile Include="..\..\DeribitClient.vb" />
     <Compile Include="..\..\analysis\AnalysisConstants.vb" />
     <Compile Include="..\..\analysis\AnalysisReport.vb" />

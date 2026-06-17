@@ -73,10 +73,14 @@ Public Class AutoTweakerCore
         ' tunable surface (PromptBuilder HARD CONSTRAINT 11) — read-only here.
         Dim minTradeableMovePct As Double = AnalysisConstants.FavBarAbsFloorPct
         Dim atrTargetMult       As Double = AnalysisConstants.EngineTargetAtrMultiplier
+        ' v36 Phase-2a: hoisted to method scope so the population filter (load time)
+        ' and the trigger session-name both reuse the one deserialise — no second
+        ' parse, and MatchSessionBucket sees the exact same session boundaries.
+        Dim settings As EngineSettings = Nothing
         Try
             settingsJson = File.ReadAllText(config.SettingsPath)
             Dim opts As New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True}
-            Dim settings = JsonSerializer.Deserialize(Of EngineSettings)(settingsJson, opts)
+            settings = JsonSerializer.Deserialize(Of EngineSettings)(settingsJson, opts)
             If settings?.SessionVolume?.Sessions IsNot Nothing Then
                 For Each s In settings.SessionVolume.Sessions
                     sessionStartHours.Add(s.StartHour)
@@ -105,6 +109,29 @@ Public Class AutoTweakerCore
 
         ' ── 3. Build window ──────────────────────────────────────────────────
         Dim allRows = ForwardWindowJoiner.Load(config.CsvPath)
+
+        ' ── 3a. v36 Phase-2a population filter (load-time) ────────────────────
+        ' Restrict the working set to one (session × execution_resolution)
+        ' population BEFORE windowing. Everything downstream (the fixed-window
+        ' slice, the session-boundary skip, the tier check, the matrix, the
+        ' prompt) becomes single-population because it only ever sees `filtered`.
+        ' Absent filter ⇒ filtered = allRows ⇒ exactly today's behaviour.
+        Dim pop = config.PopulationFilter
+        Dim filtered As List(Of CsvRow) =
+            If(pop Is Nothing, allRows,
+               allRows.Where(Function(r) MatchesPopulation(r, pop, settings)).ToList())
+        If pop IsNot Nothing Then
+            Console.WriteLine(String.Format(
+                "[AutoTweaker] population filter {0}×{1}m — {2}/{3} rows in population.",
+                If(pop.Session, "any"),
+                If(pop.ExecutionResolution.HasValue, pop.ExecutionResolution.Value.ToString(), "any"),
+                filtered.Count, allRows.Count))
+        End If
+        ' Informational row count persisted to state.LastRunCsvRowCount: the filtered
+        ' population size in fixed mode (§4.3), the raw CSV count in sliding mode
+        ' (where the cooldown still consumes it and filtered === allRows anyway).
+        Dim effectiveRowCount As Integer = If(isFixedMode, filtered.Count, currentRowCount)
+
         Dim sessionSet As New HashSet(Of Integer)(sessionStartHours)
         Dim windowRows As New List(Of CsvRow)()
         Dim windowStartRow As Integer = 0
@@ -113,14 +140,42 @@ Public Class AutoTweakerCore
 
         If isFixedMode Then
             ' Fixed (non-overlapping) windows — disjoint round semantics.
+
+            ' v36 Phase-2a re-seed on population-filter change: LastEvaluatedRowIndex
+            ' indexes the FILTERED sequence under a filter, so a persisted value from
+            ' a different population (or the unfiltered era) is wrong for this view.
+            ' On first introduction OR when the trader switches populations, re-seed to
+            ' filtered.Count — identical to the v29 first-run init — and skip this round.
+            Dim populationKey As String =
+                If(pop Is Nothing, "none",
+                   String.Format("{0}|{1}", pop.Session,
+                                 If(pop.ExecutionResolution.HasValue,
+                                    pop.ExecutionResolution.Value.ToString(), "")))
+            If populationKey <> state.PopulationFilterKey Then
+                Console.WriteLine(String.Format(
+                    "[AutoTweaker] INFO — population filter changed ('{0}' → '{1}'); " &
+                    "re-seeding LastEvaluatedRowIndex to filtered.Count={2}. " &
+                    "Filtered rows preserved but not re-evaluated this round.",
+                    state.PopulationFilterKey, populationKey, filtered.Count))
+                state.LastEvaluatedRowIndex = filtered.Count
+                state.PopulationFilterKey   = populationKey
+                state.LastRunOutcome        = "INELIGIBLE"
+                state.LastRunAtIso          = DateTime.UtcNow.ToString("o")
+                state.LastRunCsvRowCount    = filtered.Count
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
+
             ' First-run init: LastEvaluatedRowIndex == -1 ⇒ preserve historical CSV
-            ' rows by setting the index to currentRowCount so the next round only
-            ' covers data accumulated after v29 ships.
+            ' rows by setting the index to filtered.Count so the next round only
+            ' covers data accumulated after v29 ships. (Normally subsumed by the
+            ' re-seed gate above on a fresh filtered state; retained for the
+            ' no-filter path where the key matched but the index is uninitialised.)
             If state.LastEvaluatedRowIndex < 0 Then
                 Console.WriteLine(String.Format(
-                    "[AutoTweaker] INFO — first v29 run — LastEvaluatedRowIndex initialised to currentRowCount={0}. " &
-                    "Historical rows preserved but not re-evaluated.", currentRowCount))
-                state.LastEvaluatedRowIndex = currentRowCount
+                    "[AutoTweaker] INFO — first v29 run — LastEvaluatedRowIndex initialised to filtered.Count={0}. " &
+                    "Historical rows preserved but not re-evaluated.", filtered.Count))
+                state.LastEvaluatedRowIndex = filtered.Count
                 state.LastRunOutcome = "INELIGIBLE"
                 state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
                 TweakerState.Save(statePath, state)
@@ -136,24 +191,24 @@ Public Class AutoTweakerCore
             ' first-fire silently never happens. Re-seed to the new row count so
             ' evaluation resumes on the fresh data. This is a reset, not a round —
             ' do NOT tick the BELOW_THRESHOLD streak and write no RoundSummary.
-            If currentRowCount < state.LastEvaluatedRowIndex Then
+            If filtered.Count < state.LastEvaluatedRowIndex Then
                 Console.WriteLine(String.Format(
-                    "[AutoTweaker] WARNING — CSV shrank below LastEvaluatedRowIndex " &
+                    "[AutoTweaker] WARNING — filtered population shrank below LastEvaluatedRowIndex " &
                     "(rows={0} < index={1}); re-seeding index to {0}. Likely a log " &
                     "rotation, Reset Log, or data reset. Streak not ticked.",
-                    currentRowCount, state.LastEvaluatedRowIndex))
-                state.LastEvaluatedRowIndex = currentRowCount
+                    filtered.Count, state.LastEvaluatedRowIndex))
+                state.LastEvaluatedRowIndex = filtered.Count
                 state.LastRunOutcome     = "INELIGIBLE"
                 state.LastRunAtIso       = DateTime.UtcNow.ToString("o")
-                state.LastRunCsvRowCount = currentRowCount
+                state.LastRunCsvRowCount = filtered.Count
                 TweakerState.Save(statePath, state)
                 Return 2
             End If
 
-            If currentRowCount - state.LastEvaluatedRowIndex < config.WindowSizeVerdicts Then
+            If filtered.Count - state.LastEvaluatedRowIndex < config.WindowSizeVerdicts Then
                 Console.WriteLine(String.Format(
                     "[AutoTweaker] INELIGIBLE — fixed-mode window not full: {0}/{1} new rows since row {2}.",
-                    currentRowCount - state.LastEvaluatedRowIndex,
+                    filtered.Count - state.LastEvaluatedRowIndex,
                     config.WindowSizeVerdicts,
                     state.LastEvaluatedRowIndex))
                 state.LastRunOutcome = "INELIGIBLE"
@@ -162,12 +217,14 @@ Public Class AutoTweakerCore
                 Return 2
             End If
 
-            ' Slice rows [LastEvaluatedRowIndex .. LastEvaluatedRowIndex + WindowSize - 1].
+            ' Slice rows [LastEvaluatedRowIndex .. LastEvaluatedRowIndex + WindowSize - 1]
+            ' of the FILTERED sequence (LastEvaluatedRowIndex indexes `filtered`).
+            ' CsvRow.Index retains the absolute CSV index for ForwardBars / logging.
             Dim startIdx As Integer = state.LastEvaluatedRowIndex
             Dim endIdxFx As Integer = startIdx + config.WindowSizeVerdicts - 1
-            If endIdxFx >= allRows.Count Then endIdxFx = allRows.Count - 1
+            If endIdxFx >= filtered.Count Then endIdxFx = filtered.Count - 1
             For idx As Integer = startIdx To endIdxFx
-                windowRows.Add(allRows(idx))
+                windowRows.Add(filtered(idx))
             Next
 
             If windowRows.Count < config.WindowSizeVerdicts Then
@@ -202,7 +259,7 @@ Public Class AutoTweakerCore
                     state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
                     state.LastRunOutcome        = "SKIPPED_SESSION_BOUNDARY"
                     state.LastRunAtIso          = skipIso
-                    state.LastRunCsvRowCount    = currentRowCount
+                    state.LastRunCsvRowCount    = filtered.Count
                     ' Streak counter does NOT tick — skipped rounds are not failures.
                     state.RoundHistory.Add(skipSummary)
                     TweakerState.Save(statePath, state)
@@ -233,7 +290,7 @@ Public Class AutoTweakerCore
                 state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
                 state.LastRunOutcome        = "SKIPPED_INSUFFICIENT_TIER"
                 state.LastRunAtIso          = skipIso
-                state.LastRunCsvRowCount    = currentRowCount
+                state.LastRunCsvRowCount    = filtered.Count
                 ' Streak counter does NOT tick — skipped rounds are not failures.
                 state.RoundHistory.Add(skipSummary)
                 TweakerState.Save(statePath, state)
@@ -242,6 +299,20 @@ Public Class AutoTweakerCore
         Else
             ' Sliding (legacy) — session-aligned reverse walk. Deprecated; retained
             ' for backward-compat experimentation.
+
+            ' v36 Phase-2a: the population filter is defined for fixed mode only —
+            ' population windowing under the sliding reverse-walk is undefined. If a
+            ' filter is configured while sliding, refuse rather than silently pool.
+            If pop IsNot Nothing Then
+                Console.Error.WriteLine(
+                    "[AutoTweaker] INELIGIBLE — population_filter is set but window_mode=sliding; " &
+                    "the filter is supported in fixed mode only. Switch to window_mode=fixed.")
+                state.LastRunOutcome = "INELIGIBLE"
+                state.LastRunAtIso   = DateTime.UtcNow.ToString("o")
+                TweakerState.Save(statePath, state)
+                Return 2
+            End If
+
             If allRows.Count < config.WindowSizeVerdicts Then
                 Console.WriteLine(String.Format("[AutoTweaker] INELIGIBLE — only {0} rows, need {1}.",
                                                 allRows.Count, config.WindowSizeVerdicts))
@@ -388,7 +459,7 @@ Public Class AutoTweakerCore
             summary.Outcome = "BELOW_THRESHOLD"
             state.LastRunOutcome      = "BELOW_THRESHOLD"
             state.LastRunAtIso        = roundIso
-            state.LastRunCsvRowCount  = currentRowCount
+            state.LastRunCsvRowCount  = effectiveRowCount
             state.LastSuccessfulRoundIso = roundIso
             If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
 
@@ -404,21 +475,14 @@ Public Class AutoTweakerCore
             "[AutoTweaker] Failure rate {0:F1}% >= {1:F1}% threshold — building prompt...",
             aggregateRatePct, config.FailureRateThresholdPct))
 
-        ' Determine session name for trigger line.
-        Dim sessionName As String = "unknown session"
-        Try
-            Dim hour = windowRows.Last().Timestamp.Hour
-            Dim opts2 As New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True}
-            Dim settings2 = JsonSerializer.Deserialize(Of EngineSettings)(settingsJson, opts2)
-            If settings2?.SessionVolume?.Sessions IsNot Nothing Then
-                For Each s In settings2.SessionVolume.Sessions
-                    If hour >= s.StartHour AndAlso hour < s.EndHour Then
-                        sessionName = s.Name : Exit For
-                    End If
-                Next
-            End If
-        Catch
-        End Try
+        ' Determine session name for the trigger line via the shared engine bucket
+        ' (inclusive [StartHour..EndHour]) — same boundary the population filter uses,
+        ' so the trigger label and the filter can never disagree. Fixes the v34
+        ' hour-7 off-by-one of the old `hour < EndHour` form. Reuses the hoisted
+        ' `settings` deserialise — no second parse.
+        Dim sessionName As String =
+            If(ExecutionResolution.MatchSessionBucket(settings, windowRows.Last().Timestamp.Hour)?.Name,
+               "unknown session")
 
         Dim trigger As String = String.Format(
             "aggregate failure rate {0:F1}% > threshold {1:F1}% over window {2} rows ({3} session)",
@@ -447,7 +511,7 @@ Public Class AutoTweakerCore
             summary.DiffSummary = "Dry-run payload: " & Path.GetFileName(dryPath)
             state.LastRunOutcome      = "DRY_RUN_WRITTEN"
             state.LastRunAtIso        = roundIso
-            state.LastRunCsvRowCount  = currentRowCount
+            state.LastRunCsvRowCount  = effectiveRowCount
             state.LastProposalSummary = "Dry-run file: " & dryPath
             If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
             HandleStreakInterrupt(state, config, conditions, singleRound)
@@ -549,7 +613,7 @@ Public Class AutoTweakerCore
             End If
 
             state.LastRunAtIso       = roundIso
-            state.LastRunCsvRowCount = currentRowCount
+            state.LastRunCsvRowCount = effectiveRowCount
             If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
             HandleStreakInterrupt(state, config, conditions, singleRound)
             state.RoundHistory.Add(summary)
@@ -565,7 +629,7 @@ Public Class AutoTweakerCore
             state.LastRunOutcome      = "BELOW_THRESHOLD"
             state.LastProposalSummary = "Claude returned empty diff: " & reasoning
             state.LastRunAtIso        = roundIso
-            state.LastRunCsvRowCount  = currentRowCount
+            state.LastRunCsvRowCount  = effectiveRowCount
             state.LastSuccessfulRoundIso = roundIso
             If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
 
@@ -628,7 +692,7 @@ Public Class AutoTweakerCore
         End If
 
         state.LastRunAtIso       = roundIso
-        state.LastRunCsvRowCount = currentRowCount
+        state.LastRunCsvRowCount = effectiveRowCount
         If isFixedMode Then state.LastEvaluatedRowIndex += config.WindowSizeVerdicts
         HandleStreakInterrupt(state, config, conditions, singleRound)
         state.RoundHistory.Add(summary)
@@ -726,6 +790,24 @@ Public Class AutoTweakerCore
             }
         Next
         Return JsonSerializer.Serialize(obj)
+    End Function
+
+    ' v36 Phase-2a: does this CSV row belong to the configured (session × resolution)
+    ' population? Resolution is matched against the authoritative ExecResolution stamp
+    ' the engine ran (never re-derived). Session is derived from the timestamp via the
+    ' shared engine bucket (inclusive boundary), so the filter and the engine agree.
+    ' A null pop field means "any" for that axis. Friend so the acceptance harness can
+    ' exercise it directly.
+    Friend Shared Function MatchesPopulation(r As CsvRow, pop As PopulationFilter,
+                                             settings As EngineSettings) As Boolean
+        If pop.ExecutionResolution.HasValue AndAlso
+           r.ExecResolution <> pop.ExecutionResolution.Value Then Return False
+        If Not String.IsNullOrEmpty(pop.Session) Then
+            Dim b = ExecutionResolution.MatchSessionBucket(settings, r.Timestamp.Hour)
+            If b Is Nothing OrElse
+               Not String.Equals(b.Name, pop.Session, StringComparison.OrdinalIgnoreCase) Then Return False
+        End If
+        Return True
     End Function
 
     ' Returns True if any session-start hour falls inside the half-open interval

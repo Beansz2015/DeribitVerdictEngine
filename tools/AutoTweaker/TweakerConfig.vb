@@ -18,6 +18,19 @@ Imports System.IO
 Imports System.Text.Json
 Imports System.Text.Json.Serialization
 
+' v36 Phase-2a — auto-tweaker population filter. Restricts the tweaker's working
+' set to one (session × execution_resolution) population at load time, so it can
+' never pool 3-min Asia/London rows with 1-min NY rows. Both fields nullable
+' (null = "any"). An absent population_filter block ⇒ no filter ⇒ exactly today's
+' behaviour. Spec: docs/auto-tweaker-session-resolution-filter-implementer-handoff.md.
+Public Class PopulationFilter
+    <JsonPropertyName("session")>
+    Public Property Session As String = Nothing
+
+    <JsonPropertyName("execution_resolution")>
+    Public Property ExecutionResolution As Integer? = Nothing
+End Class
+
 Public Class TweakerConfig
 
     Public Const WindowModeFixed   As String = "fixed"
@@ -80,6 +93,10 @@ Public Class TweakerConfig
 
     <JsonPropertyName("anthropic_model_alias")>
     Public Property AnthropicModelAlias As String = "latest-opus"
+
+    ' v36 Phase-2a — (session × resolution) population filter. Nothing ⇒ no filter.
+    <JsonPropertyName("population_filter")>
+    Public Property PopulationFilter As PopulationFilter = Nothing
 
     ' Compute the active MinTier threshold for the supplied WindowSize.
     ' User-specified value (non-null) wins. Otherwise: max(15, ceil(size × 0.5)).

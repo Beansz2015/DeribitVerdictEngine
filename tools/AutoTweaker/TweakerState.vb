@@ -108,6 +108,14 @@ Public Class TweakerState
     <JsonPropertyName("last_evaluated_row_index")>
     Public Property LastEvaluatedRowIndex As Integer = -1
 
+    ' v36 Phase-2a — the (session × resolution) population this state's
+    ' LastEvaluatedRowIndex was advanced against. Under a population filter the
+    ' index counts the FILTERED sequence, so a key change (first introduction, or
+    ' the trader switching populations) must re-seed the index to filtered.Count.
+    ' "" = never filtered; "none" = filter explicitly absent.
+    <JsonPropertyName("population_filter_key")>
+    Public Property PopulationFilterKey As String = ""
+
     ' Capped at RoundHistoryCap rounds; older entries dropped on Save.
     <JsonPropertyName("round_history")>
     Public Property RoundHistory As New List(Of RoundSummary)()

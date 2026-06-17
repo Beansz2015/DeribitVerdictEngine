@@ -49,6 +49,20 @@ Public Class SettingsDiffApplier
         "regime_weights.enabled"    ' Pass 2c gate — never disable
     }
 
+    ' v36 Phase-2a — trader-owned / off-tweaker-surface key subtrees that must
+    ' NEVER appear in a proposed diff (HARD CONSTRAINT 11). Prefix semantics (not
+    ' the substring match RejectedPathFragments uses) so they reject the whole
+    ' subtree without over-matching unrelated keys. This hardens the previously
+    ' prompt-only 'kelly.*' convention and covers the new 'resolution_profiles.*'
+    ' surface. 'scoring.min_tradeable_move_pct' is handled as an exact match below
+    ' (a prefix would also catch sibling 'scoring.*' tunables). Applied only on
+    ' proposed CHANGES (Validate) — NOT ValidateSnapshotContent, where a wholesale
+    ' revert legitimately restores these keys unchanged.
+    Private Shared ReadOnly RejectedPathPrefixes As String() = {
+        "kelly.",                   ' trader-owned risk sizing
+        "resolution_profiles."      ' provisional per-resolution ROC overrides — manual re-baseline only
+    }
+
     ' Validate a proposed diff list.
     ' maxKeysPerProposal — diff-scope cap; default 3, configurable from tweaker_config.json.
     Public Shared Function Validate(items As List(Of DiffItem),
@@ -84,6 +98,21 @@ Public Class SettingsDiffApplier
                     Return result
                 End If
             Next
+
+            ' Reject trader-owned / off-tweaker-surface subtrees (HARD CONSTRAINT 11).
+            For Each pre In RejectedPathPrefixes
+                If path.StartsWith(pre) Then
+                    result.IsValid    = False
+                    result.ErrorReason = String.Format(
+                        "Rejected: '{0}' is a trader-owned / off-tweaker-surface key (HARD CONSTRAINT 11).", item.Path)
+                    Return result
+                End If
+            Next
+            If path = "scoring.min_tradeable_move_pct" Then
+                result.IsValid    = False
+                result.ErrorReason = "Rejected: 'scoring.min_tradeable_move_pct' is the trader's slippage floor (HARD CONSTRAINT 11)."
+                Return result
+            End If
 
             ' Reject version key (applier manages this)
             If path = "version" Then

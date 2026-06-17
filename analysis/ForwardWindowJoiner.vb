@@ -47,6 +47,12 @@ Public Class CsvRow
     Public Property SwingStopLong   As Double   ' 0 when no swing data logged
     Public Property SwingStopShort  As Double   ' 0 when no swing data logged
 
+    ' v36 Phase-2a (auto-tweaker population filter): the execution resolution the
+    ' engine actually ran for this row (CSV v0.7 ExecResolution column). Defaults
+    ' to 1 for legacy v0.6 rows that lack the column — authoritative for the
+    ' (session × resolution) population filter; never re-derived from the timestamp.
+    Public Property ExecResolution  As Integer = 1
+
     ' v2: per-window OHLC bar list populated by PopulateForwardBars after OHLC fetch.
     ' Key = window minutes (5, 10, 15). Empty list → row excluded from that window.
     Public Property ForwardBars As New Dictionary(Of Integer, List(Of OhlcBar))()
@@ -95,6 +101,8 @@ Public Class ForwardWindowJoiner
             TryParseD(parts, colIdx, "FundingDelta",   row.FundingDelta)
             TryParseD(parts, colIdx, "SwingStopLong",  row.SwingStopLong)
             TryParseD(parts, colIdx, "SwingStopShort", row.SwingStopShort)
+            ' v0.7 ExecResolution — absent in legacy v0.6 rows ⇒ default 1.
+            row.ExecResolution = ParseIntOr(GetStr(parts, colIdx, "ExecResolution"), 1)
             raw.Add(row)
         Next
 
@@ -147,6 +155,15 @@ Public Class ForwardWindowJoiner
         If Not colIdx.TryGetValue(key, idx) Then Return ""
         If idx >= parts.Length Then Return ""
         Return parts(idx).Trim()
+    End Function
+
+    ' Integer read with a fallback — returns the fallback when the string is empty
+    ' or unparseable (e.g. a legacy v0.6 row missing the ExecResolution column).
+    Private Shared Function ParseIntOr(s As String, fallback As Integer) As Integer
+        Dim v As Integer
+        If String.IsNullOrEmpty(s) Then Return fallback
+        Return If(Integer.TryParse(s.Trim(), NumberStyles.Integer,
+                                   CultureInfo.InvariantCulture, v), v, fallback)
     End Function
 
 End Class
