@@ -472,6 +472,11 @@ Partial Public Class MainForm
         Dim verdict = ScoringEngine.Calculate(r, posState, norms, cfg)
         verdict.Timestamp = DateTime.Now
 
+        ' Spec C — surface a ledger-guard mismatch on the LOG line (engine already
+        ' wrote the detailed [LEDGER_MISMATCH] line to the console). Recomputed
+        ' every run so it self-clears once the guard is quiet again.
+        _ledgerWarn = If(verdict.LedgerMismatch, "SC LEDGER MISMATCH — see console · ", "")
+
         AnalysisLogger.LogRun(r, verdict)
         UpdateLogInfo()
 
@@ -482,6 +487,15 @@ Partial Public Class MainForm
         ' RenderOutputHeader used to provide. The string feeds the output dump
         ' after the perf-strip update further down.
         Dim snapshot As String = BuildPlaintextSnapshot(verdict, r, norms, cfg, vwapWarmup, lastTradePrice)
+
+        ' Spec C — append the ledger-guard warning to the dump block when the SC
+        ' breakdown points fail to sum to the scores. Only ever present on a real
+        ' mis-attribution; the SC column itself is card-only (no snapshot column).
+        If verdict.LedgerMismatch Then
+            snapshot &= Environment.NewLine &
+                String.Format("  [LEDGER_MISMATCH] SC breakdown points do not sum to TOTAL (Long {0} / Short {1}) — see console.",
+                              verdict.LongScore, verdict.ShortScore)
+        End If
 
         BindCardScore(verdict)
         BindCardVerdict(verdict, r)

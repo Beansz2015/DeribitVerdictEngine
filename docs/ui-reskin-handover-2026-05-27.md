@@ -148,6 +148,7 @@ These have been settled across earlier conversations and **must not be re-litiga
 | **No `[L]/[S]` columns in cards** — STATE pill + SC encode direction | gap audit GAP-86 | user choice |
 | **MicroCVD restored to 4-state colour distinction** (BULL_ACCEL / BULL_DECEL / BEAR_ACCEL / BEAR_DECEL / FLAT) | gap audit GAP-82 | user choice |
 | STATE derivation for RSI(9), DMI/ADX, BBW/TTM uses `SignalBreakdownItem.LongHit/ShortHit` | P4c state-fix | locked |
+| **SC column = signed actual contribution** — `ScForItem`/`ScForItemPrefix` return `it.LongPoints − it.ShortPoints` (each emission captures its real cap-aware `state` delta). Parity invariant: `Σ items.LongPoints = v.LongScore` and `Σ items.ShortPoints = v.ShortScore` (raw, through Step 3b — not effective). Enforced permanently by `ScoringEngine.CheckLedger` (sets `v.LedgerMismatch` + console/LOG/dump on violation). STATE derivation + Pass 2c CONFLICT still read `LongHit/ShortHit` (unchanged). This **resolves the DMI/ADX SC under-reporting deferral** below (DMI and ADX are separate rows, each carrying its own +1). | Spec C `sc-column-total-parity-spec-back.md` 2026-06-18 | locked |
 | Score arc value = `max(EffectiveLongScore, EffectiveShortScore)` | P4c review §1 | locked |
 | ATR card renders BOTH directions (Long + Short) | P4b retro-fix GAP-06 | user Q1 |
 | KELLY card eff/penalty rows live in VERDICT card, not SCORE card | P4c review §4a | locked |

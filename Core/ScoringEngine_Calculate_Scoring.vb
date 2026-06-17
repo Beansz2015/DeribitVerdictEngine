@@ -116,6 +116,39 @@ Partial Public Class ScoringEngine
         Dim breakdown = res.SignalBreakdown
         Dim regimeMax As Integer = res.MaxScore
 
+        ' -- SC/TOTAL parity (Spec C) ----------------------------------------
+        ' Per-row signed point accumulators. Captured from the actual before/after
+        ' state delta at every mutation site (cap- and floor-aware — never an
+        ' assumed magnitude). The breakdown.Add calls at the bottom of this Sub
+        ' read these. Σ(all non-funding rows) = state.LongScore at the funding
+        ' snapshot; the Funding row carries the ls/ss delta on top, so the full
+        ' sum equals the final ls/ss the verdict stage reads. pL/pS are a reusable
+        ' snapshot pair — set immediately before a mutation, read immediately
+        ' after, with no intervening state change.
+        Dim pL As Integer, pS As Integer
+        Dim rocLP As Integer = 0,    rocSP As Integer = 0
+        Dim rsiLP As Integer = 0,    rsiSP As Integer = 0
+        Dim dmiLP As Integer = 0,    dmiSP As Integer = 0
+        Dim adxLP As Integer = 0,    adxSP As Integer = 0
+        Dim volLP As Integer = 0,    volSP As Integer = 0
+        Dim vwapLP As Integer = 0,   vwapSP As Integer = 0
+        Dim bbwLP As Integer = 0,    bbwSP As Integer = 0
+        Dim emaLP As Integer = 0,    emaSP As Integer = 0
+        Dim oiLP As Integer = 0,     oiSP As Integer = 0
+        Dim ofiLP As Integer = 0,    ofiSP As Integer = 0
+        Dim cvdLP As Integer = 0,    cvdSP As Integer = 0
+        Dim tfiLP As Integer = 0,    tfiSP As Integer = 0
+        Dim microLP As Integer = 0,  microSP As Integer = 0
+        Dim liqLP As Integer = 0,    liqSP As Integer = 0
+        Dim sprLP As Integer = 0,    sprSP As Integer = 0
+        Dim ema200LP As Integer = 0, ema200SP As Integer = 0
+        Dim donchLP As Integer = 0,  donchSP As Integer = 0
+        Dim obvLP As Integer = 0,    obvSP As Integer = 0
+        Dim vpfrLP As Integer = 0,   vpfrSP As Integer = 0
+        Dim raLP As Integer = 0,     raSP As Integer = 0
+        Dim tsLP As Integer = 0,     tsSP As Integer = 0
+        Dim fundLP As Integer = 0,   fundSP As Integer = 0
+
         Dim adxTrend As Double = cfg.Indicators.ADX.TrendThreshold
         Dim rsiOB      As Double = cfg.Indicators.RSI.Overbought
         Dim rsiOS      As Double = cfg.Indicators.RSI.Oversold
@@ -131,12 +164,15 @@ Partial Public Class ScoringEngine
         Dim rocMagnitude As Double = ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution)
         Dim rocPartialLong  As Boolean = r.ROC > rocMagnitude AndAlso r.ROCSlope <> "RISING"
         Dim rocPartialShort As Boolean = r.ROC < -rocMagnitude AndAlso r.ROCSlope <> "FALLING"
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, rocLong, rocShort, SignalCategory.Momentum)
+        rocLP += state.LongScore - pL : rocSP += state.ShortScore - pS
 
         Dim rsiLong         As Boolean = r.RSI > rsiOB
         Dim rsiShort        As Boolean = r.RSI < rsiOS
         Dim rsiPartialLong  As Boolean = r.RSI > rsiPartOB AndAlso r.RSI <= rsiOB
         Dim rsiPartialShort As Boolean = r.RSI < rsiPartOS AndAlso r.RSI >= rsiOS
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, rsiLong, rsiShort, SignalCategory.Momentum)
 
         Dim rsiDivPenaltyHigh As Double = cfg.Indicators.RSI.DivPenaltyRsiHigh
@@ -151,21 +187,28 @@ Partial Public Class ScoringEngine
             state.ShortScore = Math.Max(0, state.ShortScore - 1)
             rsiDivPenaltyShort = True
         End If
+        rsiLP += state.LongScore - pL : rsiSP += state.ShortScore - pS
 
         Dim dmiLong  As Boolean = r.PlusDI > r.MinusDI
         Dim dmiShort As Boolean = r.MinusDI > r.PlusDI
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, dmiLong, dmiShort, SignalCategory.MarketStructure)
+        dmiLP += state.LongScore - pL : dmiSP += state.ShortScore - pS
 
         Dim adxLong  As Boolean = r.ADX > adxTrend AndAlso dmiLong
         Dim adxShort As Boolean = r.ADX > adxTrend AndAlso dmiShort
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, adxLong, adxShort, SignalCategory.MarketStructure)
+        adxLP += state.LongScore - pL : adxSP += state.ShortScore - pS
 
         Dim volHigh As Double = norms.VolHighThreshold
         Dim volMid  As Double = norms.VolMidThreshold
         Dim volLong    As Boolean = r.VolumeRatio >= volHigh AndAlso r.ROC > 0 AndAlso r.CurrentPrice > r.VWAP
         Dim volShort   As Boolean = r.VolumeRatio >= volHigh AndAlso r.ROC < 0 AndAlso r.CurrentPrice < r.VWAP
         Dim volPartial As Boolean = r.VolumeRatio >= volMid AndAlso r.VolumeRatio < volHigh
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, volLong, volShort, SignalCategory.Volume)
+        volLP += state.LongScore - pL : volSP += state.ShortScore - pS
 
         Dim volMidLong  As Boolean = volPartial AndAlso r.ROC > 0 AndAlso r.CurrentPrice > r.VWAP
         Dim volMidShort As Boolean = volPartial AndAlso r.ROC < 0 AndAlso r.CurrentPrice < r.VWAP
@@ -185,7 +228,9 @@ Partial Public Class ScoringEngine
             vwapShort = price < r.VWAP AndAlso price >= r.VWAPSigma1Lower
             vwapPartialLong = price > r.VWAPSigma1Upper AndAlso price <= r.VWAPSigma2Upper
             vwapPartialShort = price < r.VWAPSigma1Lower AndAlso price >= r.VWAPSigma2Lower
+            pL = state.LongScore : pS = state.ShortScore
             AddFull(state, vwapLong, vwapShort, SignalCategory.Microstructure)
+            vwapLP += state.LongScore - pL : vwapSP += state.ShortScore - pS
             vwapNote = String.Format("Price:{0:F0} VWAP:{1:F0} | s1:[{2:F0},{3:F0}] s2:[{4:F0},{5:F0}] | {6}candles",
                                      price, r.VWAP, r.VWAPSigma1Lower, r.VWAPSigma1Upper,
                                      r.VWAPSigma2Lower, r.VWAPSigma2Upper, r.VWAPSessionCandles)
@@ -194,6 +239,7 @@ Partial Public Class ScoringEngine
         Dim bbwLongHit  As Boolean = False
         Dim bbwShortHit As Boolean = False
         Dim bbwNote As String = ""
+        pL = state.LongScore : pS = state.ShortScore
         Select Case r.SqueezeStatus
             Case "ACTIVE"
                 state.LongScore = Math.Max(0, state.LongScore - cfg.Scoring.BbwSqueezePenalty)
@@ -218,16 +264,21 @@ Partial Public Class ScoringEngine
                                                 r.BBW, r.SqueezeStatus, r.TTMSignal, r.TTMDirection, r.TTMHistogram)
                 End Select
         End Select
+        bbwLP += state.LongScore - pL : bbwSP += state.ShortScore - pS
 
         Dim emaBull As Boolean = r.EMAAlignment = "BULL"
         Dim emaBear As Boolean = r.EMAAlignment = "BEAR"
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, emaBull, emaBear, SignalCategory.MarketStructure)
+        emaLP += state.LongScore - pL : emaSP += state.ShortScore - pS
 
         Dim oiLong         As Boolean = r.OISignal = "NEW LONGS"
         Dim oiShort        As Boolean = r.OISignal = "NEW SHORTS"
         Dim oiPartialLong  As Boolean = r.OISignal = "COVERING"
         Dim oiPartialShort As Boolean = r.OISignal = "CAPITULATION"
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, oiLong, oiShort, SignalCategory.Microstructure)
+        oiLP += state.LongScore - pL : oiSP += state.ShortScore - pS
 
         ' Snapshot Microstructure membership before OFI fires -- used by suppression
         ' check to determine if OFI was the sole contributor (Q2, ofi-momentum-proposal).
@@ -235,6 +286,7 @@ Partial Public Class ScoringEngine
         Dim ofiShortAloneInMicro As Boolean = Not state.FullShortCategories.Contains(SignalCategory.Microstructure)
         Dim ofiBuy  As Boolean = r.OFISignal = "BUY DOMINANT"
         Dim ofiSell As Boolean = r.OFISignal = "SELL DOMINANT"
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, ofiBuy, ofiSell, SignalCategory.Microstructure)
 
         ' OFI Momentum Modifier -- confirms or suppresses the base OFI level signal.
@@ -260,19 +312,25 @@ Partial Public Class ScoringEngine
                 ofiMomNote = " | MOM:RISING -1[S] suppressed (unwinding)"
             End If
         End If
+        ofiLP += state.LongScore - pL : ofiSP += state.ShortScore - pS
 
         Dim cvdLong  As Boolean = r.CVDSlope = "RISING" AndAlso r.CVDValue > 0
         Dim cvdShort As Boolean = r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, cvdLong, cvdShort, SignalCategory.Microstructure)
         If r.CVDDivergence = "BEARISH" Then state.LongScore = Math.Max(0, state.LongScore - cfg.Indicators.CVD.DivergencePenalty)
         If r.CVDDivergence = "BULLISH" Then state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.CVD.DivergencePenalty)
+        cvdLP += state.LongScore - pL : cvdSP += state.ShortScore - pS
 
         Dim tfiLong  As Boolean = r.TFISignal = "BUY PRESSURE"
         Dim tfiShort As Boolean = r.TFISignal = "SELL PRESSURE"
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, tfiLong, tfiShort, SignalCategory.Microstructure)
+        tfiLP += state.LongScore - pL : tfiSP += state.ShortScore - pS
 
         Dim microLong  As Boolean = r.MicroCVDSignal = "BULL_ACCEL"
         Dim microShort As Boolean = r.MicroCVDSignal = "BEAR_ACCEL"
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, microLong, microShort, SignalCategory.Microstructure)
         If r.MicroCVDSignal = "BULL_DECEL" Then state.ShortScore = Math.Max(0, state.ShortScore - cfg.Indicators.MicroCVD.DecelPenalty)
         If r.MicroCVDSignal = "BEAR_DECEL" Then state.LongScore = Math.Max(0, state.LongScore - cfg.Indicators.MicroCVD.DecelPenalty)
@@ -288,9 +346,11 @@ Partial Public Class ScoringEngine
                 microFlatStallShort = True
             End If
         End If
+        microLP += state.LongScore - pL : microSP += state.ShortScore - pS
 
         Dim liqLongPenalty  As Integer = 0
         Dim liqShortPenalty As Integer = 0
+        pL = state.LongScore : pS = state.ShortScore
         If r.LiqSignal = "LONG LIQS" Then
             liqLongPenalty = If(r.LiqLongSize > cfg.Indicators.Liquidations.LargeLiqSize,
                                 cfg.Scoring.LiqLargePenalty, cfg.Scoring.LiqStandardPenalty)
@@ -300,6 +360,7 @@ Partial Public Class ScoringEngine
                                  cfg.Scoring.LiqLargePenalty, cfg.Scoring.LiqStandardPenalty)
             state.ShortScore = Math.Max(0, state.ShortScore - liqShortPenalty)
         End If
+        liqLP += state.LongScore - pL : liqSP += state.ShortScore - pS
 
         ' Spread microstructure penalty -- WIDE spread on entry side reduces signal quality.
         ' ROC > 0  -> penalise long side (entering long into widening ask)
@@ -307,6 +368,7 @@ Partial Public Class ScoringEngine
         ' ROC ~= 0 -> penalise both sides (general execution warning)
         Dim spreadPenaltyLong  As Integer = 0
         Dim spreadPenaltyShort As Integer = 0
+        pL = state.LongScore : pS = state.ShortScore
         If r.SpreadStatus = "WIDE" Then
             Dim pen       As Integer = cfg.Scoring.SpreadWidePenalty
             Dim slopeSens As Double  = ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution)
@@ -323,26 +385,35 @@ Partial Public Class ScoringEngine
                 state.ShortScore = Math.Max(0, state.ShortScore - pen)
             End If
         End If
+        sprLP += state.LongScore - pL : sprSP += state.ShortScore - pS
 
         Dim ema200Bull As Boolean = r.CurrentPrice > r.EMA200_5m AndAlso r.EMA200_5m > 0
         Dim ema200Bear As Boolean = r.CurrentPrice < r.EMA200_5m AndAlso r.EMA200_5m > 0
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, ema200Bull, ema200Bear, SignalCategory.MarketStructure)
+        ema200LP += state.LongScore - pL : ema200SP += state.ShortScore - pS
 
         Dim donchLong         As Boolean = r.DonchianSignal = "LONG"
         Dim donchShort        As Boolean = r.DonchianSignal = "SHORT"
         Dim donchPartialLong  As Boolean = r.DonchianSignal = "LONG_PARTIAL"
         Dim donchPartialShort As Boolean = r.DonchianSignal = "SHORT_PARTIAL"
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, donchLong, donchShort, SignalCategory.MarketStructure)
+        donchLP += state.LongScore - pL : donchSP += state.ShortScore - pS
 
         Dim obvLong         As Boolean = r.OBVTrend = "RISING" AndAlso r.OBVDivergence <> "BEARISH"
         Dim obvShort        As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence <> "BULLISH"
         Dim obvPartialLong  As Boolean = r.OBVTrend = "RISING" AndAlso r.OBVDivergence = "BEARISH"
         Dim obvPartialShort As Boolean = r.OBVTrend = "FALLING" AndAlso r.OBVDivergence = "BULLISH"
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, obvLong, obvShort, SignalCategory.Volume)
+        obvLP += state.LongScore - pL : obvSP += state.ShortScore - pS
 
         Dim vpfrLong  As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
         Dim vpfrShort As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
+        pL = state.LongScore : pS = state.ShortScore
         AddFull(state, vpfrLong, vpfrShort, SignalCategory.MarketStructure)
+        vpfrLP += state.LongScore - pL : vpfrSP += state.ShortScore - pS
 
         ' Value Area breakout partial -- opt-in via cfg; off by default.
         ' Price outside value area on mid-volume+ expansion = breakout candidate.
@@ -360,53 +431,54 @@ Partial Public Class ScoringEngine
         ' -- Pass 2: Partial upgrades -----------------------------------------
         Dim rocLongUpgraded  As Boolean = rocPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Momentum)
         Dim rocShortUpgraded As Boolean = rocPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
-        If rocLongUpgraded Then state.LongScore += 1
-        If rocShortUpgraded Then state.ShortScore += 1
+        If rocLongUpgraded Then state.LongScore += 1 : rocLP += 1
+        If rocShortUpgraded Then state.ShortScore += 1 : rocSP += 1
 
         Dim rsiLongUpgraded  As Boolean = rsiPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Momentum)
         Dim rsiShortUpgraded As Boolean = rsiPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Momentum)
-        If rsiLongUpgraded Then state.LongScore += 1
-        If rsiShortUpgraded Then state.ShortScore += 1
+        If rsiLongUpgraded Then state.LongScore += 1 : rsiLP += 1
+        If rsiShortUpgraded Then state.ShortScore += 1 : rsiSP += 1
 
         Dim vwapLongUpgraded  As Boolean = False
         Dim vwapShortUpgraded As Boolean = False
         If Not vwapWarmup Then
             vwapLongUpgraded = vwapPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Microstructure)
             vwapShortUpgraded = vwapPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Microstructure)
-            If vwapLongUpgraded Then state.LongScore += 1
-            If vwapShortUpgraded Then state.ShortScore += 1
+            If vwapLongUpgraded Then state.LongScore += 1 : vwapLP += 1
+            If vwapShortUpgraded Then state.ShortScore += 1 : vwapSP += 1
         End If
 
         Dim oiLongUpgraded  As Boolean = oiPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Microstructure)
         Dim oiShortUpgraded As Boolean = oiPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Microstructure)
-        If oiLongUpgraded Then state.LongScore += 1
-        If oiShortUpgraded Then state.ShortScore += 1
+        If oiLongUpgraded Then state.LongScore += 1 : oiLP += 1
+        If oiShortUpgraded Then state.ShortScore += 1 : oiSP += 1
 
         Dim donchLongUpgraded  As Boolean = donchPartialLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.MarketStructure)
         Dim donchShortUpgraded As Boolean = donchPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.MarketStructure)
-        If donchLongUpgraded Then state.LongScore += 1
-        If donchShortUpgraded Then state.ShortScore += 1
+        If donchLongUpgraded Then state.LongScore += 1 : donchLP += 1
+        If donchShortUpgraded Then state.ShortScore += 1 : donchSP += 1
 
         Dim volMidLongUpgraded  As Boolean = volMidLong AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Volume)
         Dim volMidShortUpgraded As Boolean = volMidShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Volume)
-        If volMidLongUpgraded Then state.LongScore += 1
-        If volMidShortUpgraded Then state.ShortScore += 1
+        If volMidLongUpgraded Then state.LongScore += 1 : volLP += 1
+        If volMidShortUpgraded Then state.ShortScore += 1 : volSP += 1
 
         Dim obvLongUpgraded  As Boolean = obvPartialLong AndAlso r.OBVDivergence <> "BEARISH" AndAlso HasCrossConfirm(state.FullLongCategories, SignalCategory.Volume)
         Dim obvShortUpgraded As Boolean = obvPartialShort AndAlso r.OBVDivergence <> "BULLISH" AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.Volume)
-        If obvLongUpgraded Then state.LongScore += 1
-        If obvShortUpgraded Then state.ShortScore += 1
+        If obvLongUpgraded Then state.LongScore += 1 : obvLP += 1
+        If obvShortUpgraded Then state.ShortScore += 1 : obvSP += 1
 
         Dim vaLongUpgraded  As Boolean = vaPartialLong  AndAlso HasCrossConfirm(state.FullLongCategories,  SignalCategory.MarketStructure)
         Dim vaShortUpgraded As Boolean = vaPartialShort AndAlso HasCrossConfirm(state.FullShortCategories, SignalCategory.MarketStructure)
-        If vaLongUpgraded  Then state.LongScore  += 1
-        If vaShortUpgraded Then state.ShortScore += 1
+        If vaLongUpgraded  Then state.LongScore  += 1 : vpfrLP += 1
+        If vaShortUpgraded Then state.ShortScore += 1 : vpfrSP += 1
 
         ' -- Pass 2b: OI x CVD Cross-Confirm ----------------------------------
         ' Confirmed: OI full signal and CVD direction + sign agree -> upgrade.
         ' Conflicted: OI full signal and CVD directly oppose -> penalty.
         ' Partial OI signals (COVERING/CAPITULATION) are upgrade-only; no penalty on conflict.
         Dim oiCvdNote As String = ""
+        pL = state.LongScore : pS = state.ShortScore
         If cfg.Indicators.OiCvd.Enabled Then
             Dim cvdBullish As Boolean = (r.CVDSlope = "RISING" AndAlso r.CVDValue > 0)
             Dim cvdBearish As Boolean = (r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0)
@@ -429,6 +501,7 @@ Partial Public Class ScoringEngine
                 res.OiCvdOutcome = "CONFLICT_SHORT"
             End If
         End If
+        oiLP += state.LongScore - pL : oiSP += state.ShortScore - pS
 
         ' -- Pass 2c: Regime Alignment Gate -----------------------------------
         ' Bonus when all active regime-key signals align with the dominant direction.
@@ -440,6 +513,7 @@ Partial Public Class ScoringEngine
         Dim regimeAlignLongHit  As Boolean = False
         Dim regimeAlignShortHit As Boolean = False
 
+        pL = state.LongScore : pS = state.ShortScore
         If cfg.RegimeWeights.Enabled AndAlso state.LongScore <> state.ShortScore Then
             Dim p2cIsLong    As Boolean = state.LongScore > state.ShortScore
             Dim isTrending   As Boolean = (r.Regime = "TRENDING_UP" OrElse r.Regime = "TRENDING_DOWN")
@@ -516,6 +590,7 @@ Partial Public Class ScoringEngine
                 End If
             End If
         End If
+        raLP += state.LongScore - pL : raSP += state.ShortScore - pS
 
         ' -- Pass 2c-struct: Trend Structure bonus --------------------------------
         ' Bonus when UPTREND confirms dominant long side, or DOWNTREND confirms dominant short side.
@@ -524,6 +599,7 @@ Partial Public Class ScoringEngine
         Dim structBonusShortHit As Boolean = False
         Dim structBonusNote     As String  = ""
 
+        pL = state.LongScore : pS = state.ShortScore
         If cfg.RegimeWeights.Enabled AndAlso cfg.Indicators.TrendStructure.Enabled AndAlso
            r.Regime <> "TRANSITIONAL" Then
             Dim sBonus As Integer = cfg.Indicators.TrendStructure.StructureBonus
@@ -575,10 +651,16 @@ Partial Public Class ScoringEngine
                 Case Else  ' UNDEFINED — no note
             End Select
         End If
+        tsLP += state.LongScore - pL : tsSP += state.ShortScore - pS
 
         ' Snapshot ls/ss after Pass 2c, before funding modifiers
         ls = state.LongScore
         ss = state.ShortScore
+
+        ' Funding (Steps 3/3b) operates on ls/ss, which start equal to state here.
+        ' The Funding row carries the full ls/ss delta these steps apply.
+        Dim fundBaseL As Integer = ls
+        Dim fundBaseS As Integer = ss
 
         ' -- Step 3: Funding Rate Confidence Modifier -------------------------
         Dim fr As Double = r.FundingRate
@@ -638,6 +720,7 @@ Partial Public Class ScoringEngine
         End If
         ls = Math.Max(0, ls)
         ss = Math.Max(0, ss)
+        fundLP = ls - fundBaseL : fundSP = ss - fundBaseS
 
         ' -- Breakdown notes --------------------------------------------------
         Dim normMode As String = If(norms.IsLive, "LIVE", "STATIC")
@@ -646,7 +729,7 @@ Partial Public Class ScoringEngine
             BuildNote(String.Format("{0:F3} | Slope: {1}", r.ROC, r.ROCSlope),
                       rocPartialLong AndAlso Not rocLongUpgraded,
                       rocPartialShort AndAlso Not rocShortUpgraded,
-                      rocLongUpgraded, rocShortUpgraded)))
+                      rocLongUpgraded, rocShortUpgraded), rocLP, rocSP))
 
         Dim rsiNote As String = String.Format("{0:F1} | zones OB:{1} OS:{2}", r.RSI, rsiOB, rsiOS)
         If r.RSIDivergence <> "NONE" Then rsiNote &= String.Format(" | DIV:{0}", r.RSIDivergence)
@@ -656,56 +739,56 @@ Partial Public Class ScoringEngine
             BuildNote(rsiNote,
                       rsiPartialLong AndAlso Not rsiLongUpgraded,
                       rsiPartialShort AndAlso Not rsiShortUpgraded,
-                      rsiLongUpgraded, rsiShortUpgraded)))
+                      rsiLongUpgraded, rsiShortUpgraded), rsiLP, rsiSP))
 
         breakdown.Add(New SignalBreakdownItem("DMI +/-DI", dmiLong, dmiShort,
-            String.Format("+DI:{0:F1} -DI:{1:F1}", r.PlusDI, r.MinusDI)))
+            String.Format("+DI:{0:F1} -DI:{1:F1}", r.PlusDI, r.MinusDI), dmiLP, dmiSP))
 
         breakdown.Add(New SignalBreakdownItem("ADX>" & adxTrend.ToString("F0"), adxLong, adxShort,
-            String.Format("{0:F1} | thr:{1:F0}", r.ADX, adxTrend)))
+            String.Format("{0:F1} | thr:{1:F0}", r.ADX, adxTrend), adxLP, adxSP))
 
         Dim volNote As String = String.Format("{0:F2}x | thr H:{1:F2}x M:{2:F2}x [{3}]", r.VolumeRatio, volHigh, volMid, normMode)
         breakdown.Add(New SignalBreakdownItem("Volume", volLong OrElse volMidLongUpgraded, volShort OrElse volMidShortUpgraded,
             BuildNote(volNote,
                       volMidLong AndAlso Not volMidLongUpgraded,
                       volMidShort AndAlso Not volMidShortUpgraded,
-                      volMidLongUpgraded, volMidShortUpgraded)))
+                      volMidLongUpgraded, volMidShortUpgraded), volLP, volSP))
 
         breakdown.Add(New SignalBreakdownItem("VWAP", vwapLong OrElse vwapLongUpgraded, vwapShort OrElse vwapShortUpgraded,
             If(vwapWarmup, vwapNote,
                BuildNote(vwapNote,
                          vwapPartialLong AndAlso Not vwapLongUpgraded,
                          vwapPartialShort AndAlso Not vwapShortUpgraded,
-                         vwapLongUpgraded, vwapShortUpgraded))))
+                         vwapLongUpgraded, vwapShortUpgraded)), vwapLP, vwapSP))
 
-        breakdown.Add(New SignalBreakdownItem("BBW/TTM", bbwLongHit, bbwShortHit, bbwNote))
+        breakdown.Add(New SignalBreakdownItem("BBW/TTM", bbwLongHit, bbwShortHit, bbwNote, bbwLP, bbwSP))
 
         breakdown.Add(New SignalBreakdownItem("EMA 9/21/50", emaBull, emaBear,
-            String.Format("9:{0:F0} 21:{1:F0} 50:{2:F0} | {3}", r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment)))
+            String.Format("9:{0:F0} 21:{1:F0} 50:{2:F0} | {3}", r.EMA9, r.EMA21, r.EMA50, r.EMAAlignment), emaLP, emaSP))
 
         Dim fundDisplayRate As Double = If(Math.Abs(r.FundingRate) < 0.00000001, 0.0, r.FundingRate)
         Dim fundingInfoNote As String = String.Format("{0:F4}% | {1} | MOM:{2} | {3} | {4}",
                                                       fundDisplayRate * 100, r.FundingBias, r.FundingMomentum,
                                                       fundingBaseNote, fundingStep3bNote)
-        breakdown.Add(New SignalBreakdownItem("Funding (info)", False, False, fundingInfoNote))
+        breakdown.Add(New SignalBreakdownItem("Funding (info)", False, False, fundingInfoNote, fundLP, fundSP))
 
         ' OI Delta note includes Pass 2b result appended as oiCvdNote
         breakdown.Add(New SignalBreakdownItem("OI Delta", oiLong OrElse oiLongUpgraded, oiShort OrElse oiShortUpgraded,
             BuildNote(String.Format("15m:{0:F3}% 60m:{1:F3}% | {2}", r.OIChange15m, r.OIChange60m, r.OISignal),
                       oiPartialLong AndAlso Not oiLongUpgraded,
                       oiPartialShort AndAlso Not oiShortUpgraded,
-                      oiLongUpgraded, oiShortUpgraded) & oiCvdNote))
+                      oiLongUpgraded, oiShortUpgraded) & oiCvdNote, oiLP, oiSP))
 
         breakdown.Add(New SignalBreakdownItem("OFI", ofiBuy, ofiSell,
             String.Format("Ratio:{0:F2} | {1} | MOM:{2}{3}",
-                          r.OFIRatio, r.OFISignal, r.OFIMomentum, ofiMomNote)))
+                          r.OFIRatio, r.OFISignal, r.OFIMomentum, ofiMomNote), ofiLP, ofiSP))
 
         Dim cvdNote As String = String.Format("Net:{0:F0} | Slope:{1} | Div:{2}", r.CVDValue, r.CVDSlope, r.CVDDivergence)
         If r.CVDDivergence <> "NONE" Then cvdNote &= String.Format(" | PENALTY -{0}", cfg.Indicators.CVD.DivergencePenalty)
-        breakdown.Add(New SignalBreakdownItem("CVD", cvdLong, cvdShort, cvdNote))
+        breakdown.Add(New SignalBreakdownItem("CVD", cvdLong, cvdShort, cvdNote, cvdLP, cvdSP))
 
         breakdown.Add(New SignalBreakdownItem("TFI", tfiLong, tfiShort,
-            String.Format("{0:F3} | {1}", r.TFIValue, r.TFISignal)))
+            String.Format("{0:F3} | {1}", r.TFIValue, r.TFISignal), tfiLP, tfiSP))
 
         Dim microNote As String = String.Format("E:{0:F0} M:{1:F0} L:{2:F0} | {3} | {4}",
                                                 r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
@@ -715,20 +798,20 @@ Partial Public Class ScoringEngine
         End If
         If microFlatStallLong Then microNote &= String.Format(" | STALL PENALTY -{0} [L] (price>VWAP, CVD<=0)", cfg.Indicators.MicroCVD.DecelPenalty)
         If microFlatStallShort Then microNote &= String.Format(" | STALL PENALTY -{0} [S] (price<VWAP, CVD>=0)", cfg.Indicators.MicroCVD.DecelPenalty)
-        breakdown.Add(New SignalBreakdownItem("MicroCVD", microLong, microShort, microNote))
+        breakdown.Add(New SignalBreakdownItem("MicroCVD", microLong, microShort, microNote, microLP, microSP))
 
         Dim liqNote As String = String.Format("L:{0:F0} S:{1:F0} | {2}", r.LiqLongSize, r.LiqShortSize, r.LiqSignal)
         If liqLongPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [L]", liqLongPenalty)
         If liqShortPenalty > 0 Then liqNote &= String.Format(" | PENALTY -{0} [S]", liqShortPenalty)
-        breakdown.Add(New SignalBreakdownItem("Liq Penalty", liqLongPenalty > 0, liqShortPenalty > 0, liqNote))
+        breakdown.Add(New SignalBreakdownItem("Liq Penalty", liqLongPenalty > 0, liqShortPenalty > 0, liqNote, liqLP, liqSP))
 
         Dim spreadNote As String = String.Format("{0:F2} bps | {1}", r.SpreadBps, r.SpreadStatus)
         If spreadPenaltyLong  > 0 Then spreadNote &= String.Format(" | PENALTY -{0} [L]", spreadPenaltyLong)
         If spreadPenaltyShort > 0 Then spreadNote &= String.Format(" | PENALTY -{0} [S]", spreadPenaltyShort)
-        breakdown.Add(New SignalBreakdownItem("Spread", spreadPenaltyLong > 0, spreadPenaltyShort > 0, spreadNote))
+        breakdown.Add(New SignalBreakdownItem("Spread", spreadPenaltyLong > 0, spreadPenaltyShort > 0, spreadNote, sprLP, sprSP))
 
         breakdown.Add(New SignalBreakdownItem("5m EMA(200)", ema200Bull, ema200Bear,
-            String.Format("{0:F0} | {1}", r.EMA200_5m, r.PriceVsEMA200)))
+            String.Format("{0:F0} | {1}", r.EMA200_5m, r.PriceVsEMA200), ema200LP, ema200SP))
 
         Dim donchNote As String
         If r.DonchianSignal = "NONE" Then
@@ -739,7 +822,7 @@ Partial Public Class ScoringEngine
                                   donchPartialShort AndAlso Not donchShortUpgraded,
                                   donchLongUpgraded, donchShortUpgraded)
         End If
-        breakdown.Add(New SignalBreakdownItem("Donchian(20)", donchLong OrElse donchLongUpgraded, donchShort OrElse donchShortUpgraded, donchNote))
+        breakdown.Add(New SignalBreakdownItem("Donchian(20)", donchLong OrElse donchLongUpgraded, donchShort OrElse donchShortUpgraded, donchNote, donchLP, donchSP))
 
         breakdown.Add(New SignalBreakdownItem("OBV", obvLong OrElse obvLongUpgraded, obvShort OrElse obvShortUpgraded,
             BuildNote(String.Format("Trend:{0} Div:{1}{2}",
@@ -747,7 +830,7 @@ Partial Public Class ScoringEngine
                                    If(obvPartialLong AndAlso Not obvLongUpgraded AndAlso r.OBVDivergence = "BEARISH", " [upgrade blocked]", "")),
                       obvPartialLong AndAlso Not obvLongUpgraded AndAlso r.OBVDivergence <> "BEARISH",
                       obvPartialShort AndAlso Not obvShortUpgraded AndAlso r.OBVDivergence <> "BULLISH",
-                      obvLongUpgraded, obvShortUpgraded)))
+                      obvLongUpgraded, obvShortUpgraded), obvLP, obvSP))
 
         Dim vpfrNote As String = String.Format("POC:{0:F0} | VAH:{1:F0} VAL:{2:F0} | {3} | HVN^:{4:F0} HVNv:{5:F0}",
             r.VPFRPoc, r.VPFRVah, r.VPFRVal, r.VPFRValueAreaSignal,
@@ -755,14 +838,14 @@ Partial Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("VPFR-lite",
             vpfrLong OrElse vaLongUpgraded,
             vpfrShort OrElse vaShortUpgraded,
-            vpfrNote))
+            vpfrNote, vpfrLP, vpfrSP))
 
         If regimeAlignNote <> "" Then
-            breakdown.Add(New SignalBreakdownItem("Regime Align (2c)", regimeAlignLongHit, regimeAlignShortHit, regimeAlignNote))
+            breakdown.Add(New SignalBreakdownItem("Regime Align (2c)", regimeAlignLongHit, regimeAlignShortHit, regimeAlignNote, raLP, raSP))
         End If
 
         If structBonusNote <> "" Then
-            breakdown.Add(New SignalBreakdownItem("Trend Structure", structBonusLongHit, structBonusShortHit, structBonusNote))
+            breakdown.Add(New SignalBreakdownItem("Trend Structure", structBonusLongHit, structBonusShortHit, structBonusNote, tsLP, tsSP))
         End If
 
     End Sub

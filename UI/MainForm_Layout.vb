@@ -50,6 +50,12 @@ Partial Public Class MainForm
     ' Resilience: count of skipped analyses this session.
     Private _skipCount As Integer = 0
 
+    ' Spec C — SC ledger guard. Non-empty when the most recent run's signed
+    ' breakdown points failed to sum to the scores (a mis-attributed scoring
+    ' contribution). Prepended to the LOG line by UpdateLogInfo, same pattern as
+    ' SettingsLoader.LastLoadError. Set after each ScoringEngine.Calculate.
+    Private _ledgerWarn As String = ""
+
     ' P4f — last-successful capture for the ANALYSIS SKIPPED degraded render.
     ' Refs default to Nothing; render-time defaults to MinValue (the LOG
     ' "last HH:mm:ss" line stays hidden until the first success).
@@ -1185,7 +1191,7 @@ Partial Public Class MainForm
         ' renders and self-clears once a valid settings.json successfully loads.
         Dim cfgWarn As String = If(Not String.IsNullOrEmpty(SettingsLoader.LastLoadError),
                                    "settings.json parse failed — running on code defaults · ", "")
-        lblLogInfo.Text = String.Format("{0}Log: {1} rows{2}", cfgWarn, rows, skipSuffix)
+        lblLogInfo.Text = String.Format("{0}{1}Log: {2} rows{3}", _ledgerWarn, cfgWarn, rows, skipSuffix)
         If _logInfoTooltip IsNot Nothing Then
             _logInfoTooltip.SetToolTip(lblLogInfo, path)
         End If

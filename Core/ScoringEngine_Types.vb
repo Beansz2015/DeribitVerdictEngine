@@ -8,8 +8,27 @@ Public Class SignalBreakdownItem
     Public Property LongHit As Boolean
     Public Property ShortHit As Boolean
     Public Property Note As String
+    ''' <summary>Actual signed contribution to v.LongScore from this emission.
+    ''' Positive when this row added to Long, negative on penalties. The sum
+    ''' across all items equals v.LongScore (raw, through Step 3b). Captured
+    ''' from the before/after state delta at the emission site, so caps and
+    ''' floors are respected automatically. (Spec C — SC/TOTAL parity.)</summary>
+    Public Property LongPoints As Integer
+    ''' <summary>Actual signed contribution to v.ShortScore from this emission.
+    ''' Positive when this row added to Short, negative on penalties. The sum
+    ''' across all items equals v.ShortScore (raw, through Step 3b).</summary>
+    Public Property ShortPoints As Integer
+
+    ' Original 4-arg constructor preserved — new points default to 0. Used by the
+    ' informational MTF Gate rows in _Verdict.vb (vetoes, not scoring contributors).
     Public Sub New(lbl As String, lng As Boolean, sht As Boolean, nt As String)
         Label = lbl : LongHit = lng : ShortHit = sht : Note = nt
+    End Sub
+    ' 6-arg constructor for emission sites that carry an actual scoring delta.
+    Public Sub New(lbl As String, lng As Boolean, sht As Boolean, nt As String,
+                   lngPts As Integer, shtPts As Integer)
+        Label = lbl : LongHit = lng : ShortHit = sht : Note = nt
+        LongPoints = lngPts : ShortPoints = shtPts
     End Sub
 End Class
 
@@ -91,6 +110,17 @@ Public Class VerdictResult
     Public Property MTFGateReason As String = ""
     ''' <summary>True when Step 4b enforced the MTF hard veto (verdict forced to NO TRADE).</summary>
     Public Property MTFGateBlocked As Boolean = False
+
+    ''' <summary>
+    ''' Display-only ledger guard flag (Spec C). True when the signed
+    ''' SignalBreakdown points do NOT sum to LongScore/ShortScore — i.e. a
+    ''' scoring contribution was mis-attributed (the #1 banned pattern,
+    ''' double-counting, would trip this). Set by CheckLedger() before every
+    ''' Return in Calculate(). Surfaced via console, the status-bar LOG line,
+    ''' and the output-dump block. Never in production output when quiet; no
+    ''' CSV column. Zero scoring impact.
+    ''' </summary>
+    Public Property LedgerMismatch As Boolean = False
 End Class
 
 Public Enum PositionState

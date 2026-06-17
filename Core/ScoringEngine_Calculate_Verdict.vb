@@ -41,9 +41,10 @@ Partial Public Class ScoringEngine
                     ' Regime veto pre-empts the MTF check — keep the breakdown
                     ' row present on this path too (no-direction format).
                     res.MTFGateReason = "MTF state: " & r.MTF15mTrend & " | " & r.MTFGateDetails
-                    res.SignalBreakdown.Add(New SignalBreakdownItem("MTF Gate (15m)", False, False, res.MTFGateReason))
+                    res.SignalBreakdown.Add(New SignalBreakdownItem("MTF Gate (15m)", False, False, res.MTFGateReason, 0, 0))
                     res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
                     res.HoldStatus = CalcHoldStatus(r, posState, cfg)
+                    CheckLedger(res)
                     Return res
                 End If
             Case "TRENDING_DOWN"
@@ -54,9 +55,10 @@ Partial Public Class ScoringEngine
                     res.EffectiveLongScore = ls : res.EffectiveShortScore = ss
                     res.RegimePenalty = 0
                     res.MTFGateReason = "MTF state: " & r.MTF15mTrend & " | " & r.MTFGateDetails
-                    res.SignalBreakdown.Add(New SignalBreakdownItem("MTF Gate (15m)", False, False, res.MTFGateReason))
+                    res.SignalBreakdown.Add(New SignalBreakdownItem("MTF Gate (15m)", False, False, res.MTFGateReason, 0, 0))
                     res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
                     res.HoldStatus = CalcHoldStatus(r, posState, cfg)
+                    CheckLedger(res)
                     Return res
                 End If
             Case "TRANSITIONAL"
@@ -118,7 +120,7 @@ Partial Public Class ScoringEngine
         res.SignalBreakdown.Add(New SignalBreakdownItem("MTF Gate (15m)",
             directional AndAlso dominant = "LONG" AndAlso gatePassDominant,
             directional AndAlso dominant = "SHORT" AndAlso gatePassDominant,
-            res.MTFGateReason))
+            res.MTFGateReason, 0, 0))
 
         If mtfBlocked Then
             res.Verdict = AppendLean("NO TRADE", effectiveLS, effectiveSS, tWeakCheck)
@@ -128,6 +130,7 @@ Partial Public Class ScoringEngine
             res.RegimePenalty = adxPenalty
             res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
             res.HoldStatus = CalcHoldStatus(r, posState, cfg)
+            CheckLedger(res)
             Return res
         End If
 
@@ -280,7 +283,30 @@ Partial Public Class ScoringEngine
             End If
         End If
 
+        CheckLedger(res)
         Return res
     End Function
+
+    ' -- Permanent SC/TOTAL ledger guard (Spec C, S5 amendment) --------------
+    ' The signed SignalBreakdown points must sum to the raw scores (through
+    ' Step 3b — NOT the Step-4 effective scores). A mismatch means a scoring
+    ' contribution was mis-attributed at an emission site — the checked property
+    ' that makes a silent double-count (the trader profile's #1 banned pattern)
+    ' impossible to ship. Runs in all builds before every Return in Calculate();
+    ' host-agnostic (survives the CLI port). Cost: one integer sum over ~25 items.
+    Private Shared Sub CheckLedger(res As VerdictResult)
+        Dim sumLng As Integer = 0, sumSht As Integer = 0
+        For Each it In res.SignalBreakdown
+            If it Is Nothing Then Continue For
+            sumLng += it.LongPoints
+            sumSht += it.ShortPoints
+        Next
+        If sumLng <> res.LongScore OrElse sumSht <> res.ShortScore Then
+            res.LedgerMismatch = True
+            Console.WriteLine(String.Format(
+                "[LEDGER_MISMATCH] ΣLong={0} LongScore={1} | ΣShort={2} ShortScore={3} (verdict={4})",
+                sumLng, res.LongScore, sumSht, res.ShortScore, res.Verdict))
+        End If
+    End Sub
 
 End Class

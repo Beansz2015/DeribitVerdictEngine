@@ -2767,9 +2767,11 @@ Partial Public Class MainForm
         For Each it In items
             If it Is Nothing OrElse it.Label Is Nothing Then Continue For
             If String.Equals(it.Label, label, StringComparison.OrdinalIgnoreCase) Then
-                If it.LongHit AndAlso Not it.ShortHit Then Return 1
-                If it.ShortHit AndAlso Not it.LongHit Then Return -1
-                Return 0
+                ' Spec C: net signed contribution = LongPoints − ShortPoints. Magnitude
+                ' reflects the actual cap-applied state delta (±2 on BBW squeeze, Pass 2c
+                ' alignment, etc.), so the SC column sums to the TOTAL row. Dual-side rows
+                ' (Funding) yield the net effect. Replaces the old hit-derived ±1.
+                Return it.LongPoints - it.ShortPoints
             End If
         Next
         Return 0
@@ -2783,9 +2785,8 @@ Partial Public Class MainForm
         For Each it In items
             If it Is Nothing OrElse it.Label Is Nothing Then Continue For
             If it.Label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) Then
-                If it.LongHit AndAlso Not it.ShortHit Then Return 1
-                If it.ShortHit AndAlso Not it.LongHit Then Return -1
-                Return 0
+                ' Spec C: net signed contribution = LongPoints − ShortPoints (see ScForItem).
+                Return it.LongPoints - it.ShortPoints
             End If
         Next
         Return 0
@@ -2884,13 +2885,11 @@ Partial Public Class MainForm
         ' G3 (= pairs, | between). Legacy renders all three at F1.
         Dim note As String = $"ADX={r.ADX:F1} | +DI={r.PlusDI:F1} | -DI={r.MinusDI:F1}"
         ' Engine emits two items ("DMI +/-DI" and "ADX>{N}") — sum their SCs.
-        ' Q3g / Spec C: the clamp under-reports the true contribution when both
-        ' DMI and ADX fire (engine LongScore gets +2; card shows +1). The
-        ' per-item LongPoints/ShortPoints migration in Spec C is the
-        ' architectural fix; this row keeps the clamp until that ships.
+        ' Spec C: the old [-1,+1] clamp under-reported the true contribution when
+        ' both DMI and ADX fired (engine LongScore gets +2; card showed +1). With
+        ' the LongPoints/ShortPoints migration the combined row now carries the
+        ' real +2/-2, so the SC column sums to TOTAL — the clamp is removed.
         Dim sc As Integer = ScForItem(items, "DMI +/-DI") + ScForItemPrefix(items, "ADX>")
-        If sc > 1 Then sc = 1
-        If sc < -1 Then sc = -1
         Return MakeSignalRow("DMI/ADX", sd.state, sd.colour, note, sc)
     End Function
 
