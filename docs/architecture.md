@@ -166,6 +166,12 @@ DeribitVerdictEngine/
 │                                       OutlierAudit, MarkdownReportWriter,
 │                                       AnalysisReport, AnalysisConstants.
 │                                       Reusable from future Linux CLI port.
+│                                       Report is segmented per (session ×
+│                                       resolution) — AnalysisRunner partitions rows
+│                                       into NY×1 / LONDON×3 / ASIA×3 populations and
+│                                       runs FailureRateMatrix.Compute (byte-unchanged)
+│                                       once each; MarkdownReportWriter renders
+│                                       tier-major (offline-analysis-report-audit-proposal.md).
 │
 ├── tools/
 │   └── AutoTweaker/                    Host-agnostic console app (Bundle 2).

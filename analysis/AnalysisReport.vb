@@ -7,26 +7,18 @@ Imports System.Collections.Generic
 Public Class AnalysisReport
 
     ' -------------------------------------------------------------------
-    ' Summary
+    ' Summary (GLOBAL — counts span all populations)
     ' -------------------------------------------------------------------
     Public Property TotalRows           As Integer
-    Public Property ExcludedRows        As Integer   ' rows with no valid OHLC bars for any window
-    Public Property AtrInvalidExcluded  As Integer   ' rows excluded because ATR <= 0
-    Public Property BelowMinMoveExcluded As Integer  ' v35: rows excluded — engine target < min-tradeable-move floor (gate-killed)
-    Public Property StructuralStopRows  As Integer   ' rows where swing stop was available
-    Public Property AtrFallbackRows     As Integer   ' rows where ATR-multiple fallback was used
     Public Property VerdictCounts       As New Dictionary(Of String, Integer)()
 
     ' -------------------------------------------------------------------
-    ' Failure-rate matrix results (one per tier x window x threshold cell)
+    ' Per-(session × resolution) populations (offline-analysis-report-audit-proposal.md).
+    ' The failure-rate matrix, barrier diagnostics, and VerdictContext cross-tab are
+    ' computed once PER population (NY×1, LONDON×3, ASIA×3, …) — never pooled across
+    ' execution regimes. Display order is highest-data-first (see AnalysisRunner).
     ' -------------------------------------------------------------------
-    Public Property FailureCells As New List(Of FailureCellResult)()
-
-    ' -------------------------------------------------------------------
-    ' Verdict context × outcome cross-tab
-    ' Key: VerdictContext string. Value: FailureCellResult for recommended cell.
-    ' -------------------------------------------------------------------
-    Public Property ContextOutcomes As New Dictionary(Of String, FailureCellResult)()
+    Public Property Populations As New List(Of PopulationReport)()
 
     ' -------------------------------------------------------------------
     ' Funding momentum diagnostic
@@ -49,6 +41,38 @@ Public Class AnalysisReport
     Public Property MarkdownText     As String
     Public Property MarkdownFilePath As String
     Public Property SummaryCsvPath   As String
+
+End Class
+
+' -----------------------------------------------------------------------
+' PopulationReport — all per-(session × resolution) sections for one population.
+' One per NY×1 / LONDON×3 / ASIA×3 / (phantom UNKNOWN). The failure-rate matrix
+' and the barrier-based diagnostics below are computed over THIS population's rows
+' only — pooling two execution regimes (1-min NY vs 3-min Asia/London) into one
+' failure cell was the bug this proposal fixes. See offline-analysis-report-audit-proposal.md.
+' -----------------------------------------------------------------------
+Public Class PopulationReport
+
+    Public Property PopulationKey       As String        ' "NY|1"
+    Public Property SessionName         As String        ' "NY"
+    Public Property Resolution          As Integer       ' 1 | 3
+    Public Property RowCount            As Integer       ' all rows in this population
+    Public Property FailureCells        As New List(Of FailureCellResult)()
+    Public Property ContextOutcomes     As New Dictionary(Of String, FailureCellResult)()
+    Public Property ExcludedRows         As Integer       ' rows with no valid OHLC bars for any window
+    Public Property AtrInvalidExcluded   As Integer       ' rows excluded because ATR <= 0
+    Public Property BelowMinMoveExcluded As Integer       ' v35 gate-killed: engine target < min-tradeable-move floor
+    Public Property StructuralStopRows   As Integer       ' rows where swing stop was available
+    Public Property AtrFallbackRows      As Integer       ' rows where ATR-multiple fallback was used
+    ' Caption stats for the per-session sub-table headers (proposal §2.4 req 3): ATR
+    ' distribution of this population's DIRECTIONAL rows (the rows that feed the tier
+    ' matrices) + the $ move-floor. Lets "0.5× ATR" translate to dollars at a glance
+    ' and makes the floor-collapse legible per session.
+    Public Property DirAtrN      As Integer  ' directional-row count in this population
+    Public Property DirAtrP25    As Double
+    Public Property DirAtrP50    As Double
+    Public Property DirAtrP75    As Double
+    Public Property MoveFloorUsd As Double   ' cfg.Scoring.MinTradeableMovePct × representative price
 
 End Class
 

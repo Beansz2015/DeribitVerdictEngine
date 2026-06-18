@@ -11,7 +11,11 @@ Imports System.Math
 
 Public Class FundingMomentumDiagnostic
 
-    Public Shared Function Compute(rows As List(Of CsvRow)) As FundingMomentumDiagnosticResult
+    ' cfg is threaded in (offline-analysis-report-audit-proposal.md §4.2) so the
+    ' "current threshold" reported in the recommendation reflects the LIVE
+    ' cfg.Indicators.Funding.MomentumThreshold, not the pre-v22 hardcoded 0.001.
+    Public Shared Function Compute(rows As List(Of CsvRow),
+                                   cfg As EngineSettings) As FundingMomentumDiagnosticResult
         Dim result As New FundingMomentumDiagnosticResult()
         result.TotalRows = rows.Count
 
@@ -45,8 +49,12 @@ Public Class FundingMomentumDiagnostic
         ' Equivalent to the 70th percentile of the non-zero distribution.
         result.ImpliedThreshold30Pct = Percentile(absVals, 0.70)
 
-        Dim currentThresholdBp As Double = 0.001 * 10000  ' 0.001% = 1 bp (v22 default in decimal * 10000)
-        Dim pct95Bp As Double = result.Pct95 * 10000
+        ' Live funding momentum threshold (rate units → bp). Reads the current setting
+        ' instead of the pre-v22 hardcoded 0.001 (§4.2).
+        Dim currentThresholdRate As Double = If(cfg IsNot Nothing, cfg.Indicators.Funding.MomentumThreshold, 0.00001)
+        Dim currentThresholdBp   As Double = currentThresholdRate * 10000
+        Dim impliedBp            As Double = result.ImpliedThreshold30Pct * 10000
+        Dim pct95Bp              As Double = result.Pct95 * 10000
 
         If pct95Bp < 0.5 Then
             result.Recommendation =
@@ -54,18 +62,18 @@ Public Class FundingMomentumDiagnostic
                 "This is a genuine REST-cadence ceiling: the funding rate does not move " &
                 "meaningfully within a 60s poll window. " &
                 "No change recommended — defer to WebSocket migration."
-        ElseIf result.ImpliedThreshold30Pct * 10000 < 0.5 Then
-            result.Recommendation =
-                "Implied 30%-firing threshold is below 0.5 bp. " &
-                "Consider lowering momentum_threshold to 0.0005 (0.05 bp) for v24+, " &
-                "but validate against RISING/FALLING false-positive rate first."
+        ElseIf impliedBp < 0.5 Then
+            result.Recommendation = String.Format(
+                "Implied 30%-firing threshold is below 0.5 bp ({0:F4} bp) vs the live " &
+                "momentum_threshold {1:F4} bp. The implied value is in the REST-noise floor; " &
+                "validate against RISING/FALLING false-positive rate before lowering further.",
+                impliedBp, currentThresholdBp)
         Else
             result.Recommendation = String.Format(
                 "Implied threshold for ~30% non-FLAT rate: {0:F4} bp. " &
-                "Current threshold: {1:F4} bp. " &
-                "If non-FLAT rate is below 5%, consider halving the threshold.",
-                result.ImpliedThreshold30Pct * 10000,
-                currentThresholdBp)
+                "Live momentum_threshold: {1:F4} bp. " &
+                "If non-FLAT rate is below 5%, consider moving the live threshold toward the implied value.",
+                impliedBp, currentThresholdBp)
         End If
 
         Return result

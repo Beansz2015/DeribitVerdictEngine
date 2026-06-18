@@ -69,34 +69,138 @@ Public Class AnalysisRunner
         ' ── 4. Populate ForwardBars ──────────────────────────────────────────────────
         ForwardWindowJoiner.PopulateForwardBars(rows, ohlcMap)
 
-        ' Count rows excluded from ALL windows (engine was off / large Deribit gap).
-        report.ExcludedRows = rows.Where(
-            Function(r) Not AnalysisConstants.HoldWindowsMinutes.Any(
-                Function(w) r.ForwardBars.ContainsKey(w) AndAlso r.ForwardBars(w).Count > 0)).Count()
+        ' ── 5. Partition rows by (session × resolution) ──────────────────────────────
+        ' Offline twin of the Phase-2a tweaker filter: the matrix is resolution-blind,
+        ' so a pooled cell blends 1-min NY rows with 3-min Asia/London rows (different ATR
+        ' scales, provisional-by-design 3-min ROC thresholds). Segment here; the matrix
+        ' engine (FailureRateMatrix.Compute) is byte-unchanged and runs once per population.
+        ' Session is DERIVED from the timestamp via the shared engine bucket (inclusive);
+        ' resolution is the logged authoritative ExecResolution stamp (never re-derived).
+        Dim popOrder    As New List(Of String)()
+        Dim popRowsMap  As New Dictionary(Of String, List(Of CsvRow))()
+        Dim popSession  As New Dictionary(Of String, String)()
+        Dim popRes      As New Dictionary(Of String, Integer)()
+        For Each row In rows
+            Dim bucket As SessionBucketSettings = ExecutionResolution.MatchSessionBucket(cfg, row.Timestamp.Hour)
+            Dim sessionName As String = If(bucket IsNot Nothing, bucket.Name, "UNKNOWN")
+            Dim popKey      As String = sessionName & "|" & row.ExecResolution.ToString()
+            If Not popRowsMap.ContainsKey(popKey) Then
+                popRowsMap(popKey) = New List(Of CsvRow)()
+                popSession(popKey) = sessionName
+                popRes(popKey)     = row.ExecResolution
+                popOrder.Add(popKey)
+            End If
+            popRowsMap(popKey).Add(row)
+        Next
+        ' Highest-data-first display order: NY×1, LONDON×3, ASIA×3, then UNKNOWN/phantom.
+        popOrder = popOrder.OrderBy(Function(k) PopulationRank(popSession(k))).
+                            ThenBy(Function(k) k).ToList()
 
-        ' ── 5. Failure-rate matrix ───────────────────────────────────────────────────
-        Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
-        Dim belowMin As Integer = 0
-        ' v35 de-confound: pass the live shared floor + engine target multiplier so the
-        ' matrix floors the favourable barrier and EXCLUDES gate-killed rows.
-        report.FailureCells = FailureRateMatrix.Compute(rows, atrEx, structStop, atrFb, belowMin,
+        For Each popKey In popOrder
+            Dim popRows As List(Of CsvRow) = popRowsMap(popKey)
+            Dim pr As New PopulationReport() With {
+                .PopulationKey = popKey,
+                .SessionName   = popSession(popKey),
+                .Resolution    = popRes(popKey),
+                .RowCount      = popRows.Count
+            }
+
+            ' Rows excluded from ALL windows (engine was off / large Deribit gap).
+            pr.ExcludedRows = popRows.Where(
+                Function(r) Not AnalysisConstants.HoldWindowsMinutes.Any(
+                    Function(w) r.ForwardBars.ContainsKey(w) AndAlso r.ForwardBars(w).Count > 0)).Count()
+
+            ' ── 5a. Failure-rate matrix (this population only) ────────────────────────
+            ' v35 de-confound: pass the live shared floor + engine target multiplier so the
+            ' matrix floors the favourable barrier and EXCLUDES gate-killed rows.
+            Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
+            Dim belowMin As Integer = 0
+            pr.FailureCells = FailureRateMatrix.Compute(popRows, atrEx, structStop, atrFb, belowMin,
                                                         cfg.Scoring.MinTradeableMovePct,
                                                         cfg.Scoring.AtrTargetMultiplier)
-        report.AtrInvalidExcluded = atrEx
-        report.StructuralStopRows = structStop
-        report.AtrFallbackRows    = atrFb
-        report.BelowMinMoveExcluded = belowMin
+            pr.AtrInvalidExcluded   = atrEx
+            pr.StructuralStopRows   = structStop
+            pr.AtrFallbackRows      = atrFb
+            pr.BelowMinMoveExcluded = belowMin
 
-        ' ── 6. VerdictContext cross-tab ──────────────────────────────────────────────
-        ' Use the recommended cell for each tier (picks the most stable window/threshold).
-        ' Failure classification uses v2 barrier-hit logic (same as FailureRateMatrix).
-        Dim recCells = report.FailureCells.Where(Function(c) c.IsRecommended).ToList()
+            ' ── 5b. VerdictContext cross-tab (this population only) ───────────────────
+            pr.ContextOutcomes = ComputeContextOutcomes(popRows, pr.FailureCells)
+
+            ' ── 5c. ATR caption stats (proposal §2.4 req 3) ───────────────────────────
+            ' Directional rows = the rows that feed the tier matrices (tier-classified,
+            ' ATR > 0). Their ATR p25/p50/p75 + the $ move-floor caption each sub-table.
+            Dim dirRows = popRows.Where(Function(r) r.ATR > 0 AndAlso IsDirectionalVerdict(r.Verdict)).ToList()
+            pr.DirAtrN = dirRows.Count
+            If dirRows.Count > 0 Then
+                Dim dirAtrs As List(Of Double) = dirRows.Select(Function(r) r.ATR).ToList()
+                dirAtrs.Sort()
+                pr.DirAtrP25 = Percentile(dirAtrs, 0.25)
+                pr.DirAtrP50 = Percentile(dirAtrs, 0.50)
+                pr.DirAtrP75 = Percentile(dirAtrs, 0.75)
+                ' Representative price = median entry of this population's directional rows.
+                Dim dirPrices As List(Of Double) = dirRows.Select(Function(r) r.Price).ToList()
+                dirPrices.Sort()
+                pr.MoveFloorUsd = cfg.Scoring.MinTradeableMovePct * Percentile(dirPrices, 0.50)
+            End If
+
+            report.Populations.Add(pr)
+        Next
+
+        ' ── 7. Diagnostics (GLOBAL — proposal D2: not segmented) ──────────────────────
+        report.FundingDiagnostic = FundingMomentumDiagnostic.Compute(rows, cfg)
+        report.OfiAudit          = OutlierAudit.ComputeOfi(rows)
+        report.OiCvdAudit        = OutlierAudit.ComputeOiCvdAsymmetry(rows)
+
+        ' ── 8. Render and write ─────────────────────────────────────────────────────
+        MarkdownReportWriter.Write(report, outputDir)
+
+        Return report
+    End Function
+
+    ' Display priority for the population ordering (highest-data-first, then phantom).
+    Private Shared Function PopulationRank(session As String) As Integer
+        Select Case session
+            Case "NY"     : Return 0
+            Case "LONDON" : Return 1
+            Case "ASIA"   : Return 2
+            Case Else     : Return 9   ' UNKNOWN / phantom populations last
+        End Select
+    End Function
+
+    ' Directional = a tier-eligible verdict (STRONG/MEDIUM LONG/SHORT). Mirrors
+    ' FailureRateMatrix.ToTier's positive set without coupling to that private member.
+    Private Shared Function IsDirectionalVerdict(verdict As String) As Boolean
+        If verdict Is Nothing Then Return False
+        Select Case verdict.Trim().ToUpper()
+            Case "STRONG LONG", "LONG", "STRONG SHORT", "SHORT" : Return True
+            Case Else : Return False
+        End Select
+    End Function
+
+    ' Linear-interpolated percentile over a pre-sorted ascending list.
+    Private Shared Function Percentile(sorted As List(Of Double), p As Double) As Double
+        If sorted Is Nothing OrElse sorted.Count = 0 Then Return 0
+        Dim idx  As Double  = p * (sorted.Count - 1)
+        Dim lo   As Integer = CInt(Math.Floor(idx))
+        Dim hi   As Integer = Math.Min(lo + 1, sorted.Count - 1)
+        Dim frac As Double  = idx - lo
+        Return sorted(lo) * (1 - frac) + sorted(hi) * frac
+    End Function
+
+    ' VerdictContext × outcome cross-tab for ONE population's rows, using that
+    ' population's recommended cell (window/threshold) as the barrier geometry.
+    ' Failure classification uses v2 barrier-hit logic (same as FailureRateMatrix).
+    Private Shared Function ComputeContextOutcomes(popRows As List(Of CsvRow),
+                                                   failureCells As List(Of FailureCellResult)) _
+                                                   As Dictionary(Of String, FailureCellResult)
+        Dim outcomes As New Dictionary(Of String, FailureCellResult)()
+        Dim recCell = failureCells.Where(Function(c) c.IsRecommended).FirstOrDefault()
         ' "ALIGNED" added 2026-05-17 (audit cleanup pass): post-v30 NO TRADE rows
         ' carry VerdictContext="ALIGNED". Currently masked by the inner "NO TRADE"
         ' filter so the row renders as n=0, but the addition removes enum/filter
         ' divergence if a future change writes ALIGNED on directional verdicts.
         For Each ctx In {"CONFIRMED", "ALIGNED", "FLOW_UNCONFIRMED", "MOMENTUM_FADING", "STRUCTURALLY_WEAK"}
-            Dim ctxRows = rows.Where(Function(r)
+            Dim ctxRows = popRows.Where(Function(r)
                 Return String.Equals(r.VerdictContext, ctx, StringComparison.OrdinalIgnoreCase) AndAlso
                        r.ATR > 0 AndAlso
                        r.Verdict <> "" AndAlso
@@ -108,7 +212,6 @@ Public Class AnalysisRunner
             Dim cell As New FailureCellResult() With {.VerdictTier = ctx}
             Dim w   As Integer = 10
             Dim thr As Double  = 0.5
-            Dim recCell = recCells.FirstOrDefault()
             If recCell IsNot Nothing Then w = recCell.WindowMin : thr = recCell.AtrThreshold
 
             Dim n As Integer = 0, f As Integer = 0
@@ -117,8 +220,7 @@ Public Class AnalysisRunner
                 If Not row.ForwardBars.TryGetValue(w, bars) OrElse bars Is Nothing OrElse bars.Count = 0 Then
                     Continue For
                 End If
-                Dim tierStr  As String  = If(row.Verdict.ToUpper().Contains("LONG"), "LONG", "SHORT")
-                Dim isLong   As Boolean = (tierStr = "LONG")
+                Dim isLong   As Boolean = row.Verdict.ToUpper().Contains("LONG")
                 Dim entry    As Double  = row.Price
                 Dim atr      As Double  = row.ATR
                 Dim favBar   As Double  = If(isLong, entry + thr * atr, entry - thr * atr)
@@ -130,27 +232,17 @@ Public Class AnalysisRunner
                     advBar = If(row.SwingStopShort > 0, row.SwingStopShort,
                                 entry + AnalysisConstants.AdverseFallbackAtrMultiplier * atr)
                 End If
-                Dim outcome    As String  = FailureRateMatrix.WalkBars(bars, favBar, advBar, isLong)
-                Dim isFailure  As Boolean = (outcome <> "SUCCESS")
+                Dim outcome   As String  = FailureRateMatrix.WalkBars(bars, favBar, advBar, isLong)
                 n += 1
-                If isFailure Then f += 1
+                If outcome <> "SUCCESS" Then f += 1
             Next
             cell.SampleSize  = n
             cell.Failures    = f
             cell.FailureRate = If(n > 0, CDbl(f) / n, 0)
             If n > 0 Then FailureRateMatrix.WilsonCI(f, n, cell.CiLow, cell.CiHigh)
-            report.ContextOutcomes(ctx) = cell
+            outcomes(ctx) = cell
         Next
-
-        ' ── 7. Diagnostics ──────────────────────────────────────────────────────────
-        report.FundingDiagnostic = FundingMomentumDiagnostic.Compute(rows)
-        report.OfiAudit          = OutlierAudit.ComputeOfi(rows)
-        report.OiCvdAudit        = OutlierAudit.ComputeOiCvdAsymmetry(rows)
-
-        ' ── 8. Render and write ─────────────────────────────────────────────────────
-        MarkdownReportWriter.Write(report, outputDir)
-
-        Return report
+        Return outcomes
     End Function
 
 End Class

@@ -1792,36 +1792,37 @@ The status bar `Analysis Report` link runs the offline analyser (`analysis/Analy
 Written to the engine's working directory each click:
 
 - `analysis_report_<yyyyMMdd_HHmmss>.md` — full markdown report
-- `analysis_summary_<yyyyMMdd_HHmmss>.csv` — flat failure-rate matrix consumed by the auto-tweaker
+- `analysis_summary_<yyyyMMdd_HHmmss>.csv` — flat failure-rate matrix (one row per **population × tier × window × threshold**; leading `Population` column). Artifact only — the auto-tweaker computes its own matrix via `FailureRateMatrix.Compute` over its filtered rows and does **not** read this file.
 
 ### Report sections
 
-1. **Summary** — rows in CSV, rows excluded (forward window incomplete or session boundary), verdict tier counts, headline failure rates.
-2. **Failure-Rate Matrix** — per verdict tier × hold window (5/10/15 min) × ATR threshold (0.3, 0.5, 0.8). Each cell shows `rate% (n=sample) [ci_low - ci_high]` using a 95% Wilson score interval. Highlighted cells = lowest CI width with `n ≥ 30`.
-3. **Recommended (window, threshold) per tier** — auto-pick logic (lowest CI width subject to `n ≥ 30`). Used by the auto-tweaker.
-4. **Verdict Context Tag × Outcome** — failure rate per VerdictContext at the recommended cell.
-5. **Funding Momentum Diagnostic** — empirical FundingDelta distribution, percentile table, recommended threshold or "no change — ceiling is polling cadence" verdict.
-6. **OFI Outlier Audit** — count of `OFIRatio > 100` and `> 1000`. Top 10 outliers with timestamps and raw bid/ask volumes.
-7. **OI×CVD Asymmetry Audit** — confirmed_long vs confirmed_short counts, broken down by Regime and Funding Bias. Verdict: regime-period bias / asymmetric algorithm / inconclusive.
-8. **Hold Window Selection Stats** — per verdict tier, percentage of runs where the recommended window was 5m / 10m / 15m. Direct trader use: "STRONG LONG verdicts are most reliable held for 10m" comes from this section.
-9. **Pending data** — tier × window cells where `n < 30` (insufficient sample). User waits for more rows before treating recommendation as stable.
+Since the resolution-segmentation fix (`offline-analysis-report-audit-proposal.md`) the matrix and every barrier-based section are computed **per `(session × resolution)` population** — NY×1, LONDON×3, ASIA×3 — never pooled across execution regimes (1-min NY blended with 3-min Asia/London was a confounded mix of two ATR scales). Layout is **tier-major**: each verdict tier shows one sub-table per session.
+
+- **Global Summary** — rows in CSV, global verdict counts, a "Populations detected" line, and a per-population barrier-diagnostics table (rows / no-OHLC-excluded / ATR-invalid / below-min-move / adverse-source). `below-min-move = 0` is expected on an all-post-v35 book — the live gate already NO-TRADE'd sub-floor signals before they were logged.
+- **2. Failure-Rate Matrix** — per tier, one sub-table per session: hold window (5/10/15 min) × ATR threshold. Each cell shows `rate% n=sample [ci_low–ci_high]` (95% Wilson). Each sub-table is headed with that session's resolution + directional-row ATR caption (`p50`, `p25–p75`) + the `$` move-floor, so `× ATR` reads in dollars. `★` = lowest CI width, `◆` = lowest failure rate (both need `n ≥ 30`), picked **within** each sub-table.
+- **3. Recommended (window, threshold)** — per tier × session: `★` most-precise + `◆` lowest-failure picks.
+- **4a. Barrier-Hit Decomposition** — per tier × session: success / adverse-hit / window-expiry / ambiguous counts.
+- **4. Verdict Context Tag × Outcome** — per session: failure rate per VerdictContext at that session's recommended cell.
+- **8. Hold Window Selection Stats** — per tier × session: the `★`/`◆` recommended hold window.
+- **9. Pending data** — per tier × session: cells with `n < 30` (insufficient sample).
+- **Global Diagnostics** (not segmented — book-wide, resolution-independent): **5. Funding Momentum** (empirical FundingDelta distribution + percentiles; the "current threshold" now reads the live `momentum_threshold`), **6. OFI Outlier Audit** (`OFIRatio > 100` / `> 1000` + top-10), **7. OI×CVD Asymmetry Audit** (confirmed-long vs -short by Regime and Funding Bias).
 
 ### Failure definition (constants in `analysis/AnalysisConstants.vb`)
 
 ```
-Public Const StrongAtrThresholds As Double() = {0.3, 0.5}
-Public Const MediumAtrThresholds As Double() = {0.5, 0.8}
-Public Const HoldWindowsMinutes As Integer() = {5, 10, 15}
-Public Const MinSamplesPerCell As Integer = 30
-Public Const MinSamplesForAutoTweakerTrigger As Integer = 60
+Public ReadOnly StrongAtrThresholds As Double() = {0.5, 0.8}
+Public ReadOnly MediumAtrThresholds As Double() = {0.3, 0.5}
+Public ReadOnly HoldWindowsMinutes  As Integer() = {5, 10, 15}
+Public Const    MinSamplesPerCell              As Integer = 30
+Public Const    MinSamplesForAutoTweakerTrigger As Integer = 60
 ```
 
-For a row with verdict tier T and forward return `fr_W` at window W:
+**Barrier-hit with adverse stop (v2, `failure-definition-v2-proposal.md`).** Walk the 1-min OHLC bars across the hold window (the verdict bar and the next two minutes are excluded for execution latency — the first eligible bar closes at T+3 min):
 
-- LONG failure: `fr_W × Price < −threshold × ATR`
-- SHORT failure: `fr_W × Price > +threshold × ATR`
-- STRONG verdicts use the tighter `{0.3, 0.5}` set; MEDIUM uses the looser `{0.5, 0.8}`.
-- `NO_TRADE` and `WEAK_*` rows are excluded from the failure-rate denominator. Tracked in informational counters only.
+- **SUCCESS** = price wicks through the **favourable** barrier (`entry ± max(threshold × ATR, min-tradeable-move floor)`) before any adverse hit.
+- **FAILURE** = the **adverse** barrier (structural swing stop, or `1.2 × ATR` fallback when none is logged) is hit first, OR the window expires without a favourable hit, OR both barriers are touched in the same 1-min bar (conservative ambiguous-bar rule).
+- Under barrier-hit semantics a **smaller** multiplier is **easier** (a closer target), so STRONG uses the **larger** `{0.5, 0.8}` set (a higher bar) and MEDIUM the smaller `{0.3, 0.5}` set. (v1 had these swapped; the swap shipped with the v2 barrier model.)
+- `NO_TRADE` and `WEAK_*` rows are excluded from the denominator (informational counters only); directional rows the v35 min-move gate would kill are excluded as gate-killed, not scored as failures.
 
 ### Picked-cell history
 
