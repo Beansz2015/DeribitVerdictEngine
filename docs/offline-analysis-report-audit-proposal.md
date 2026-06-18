@@ -1,6 +1,6 @@
 # Offline Analysis Report — Resolution-Segmentation Fix + Staleness Audit (Proposal)
 
-**Status:** DRAFT — coordinator audit + spec. Awaiting trader sign-off on §5 design decisions, then routes to a fresh Opus implementer.
+**Status:** READY FOR IMPLEMENTER — coordinator audit + spec; **§5 D1–D3 approved by trader 2026-06-18** (incl. the tier-major per-session layout, §2.4). Routes to a fresh Opus implementer; spec-back → coordinator review → local commit.
 **Layer:** `analysis/` (offline, host-agnostic, **zero scoring votes / thresholds / vetoes**) → safe, non-approval-gated for the *code change itself*; the §5 decisions are presentation choices the trader should pick.
 **Trigger:** trader ran the Analysis Report (`analysis_report_20260618_090018.md`, 893 rows) and flagged *"the ATRs reported in the failure-rate matrix and pending data might be wrong"* + *"check for anything else stale since this function was implemented — we've done many updates since"* (v31 → v37, incl. the v36 resolution split).
 **Sibling:** this is the **offline analogue of Phase-2a** (`auto-tweaker-session-resolution-filter-proposal.md`). The auto-tweaker got a `(session × resolution)` population filter on 2026-06-17; the offline report never did.
@@ -101,11 +101,21 @@ Public Class PopulationReport
     Public Property BelowMinMoveExcluded As Integer
     Public Property StructuralStopRows   As Integer
     Public Property AtrFallbackRows      As Integer
+    ' Caption stats for the per-session table headers (§2.4 requirement 3): ATR
+    ' distribution of this population's DIRECTIONAL rows (the rows that feed the
+    ' tier matrices) + the $ move-floor. AnalysisRunner computes these from popRows.
+    Public Property DirAtrN      As Integer  ' directional-row count in this population
+    Public Property DirAtrP25    As Double
+    Public Property DirAtrP50    As Double
+    Public Property DirAtrP75    As Double
+    Public Property MoveFloorUsd As Double   ' cfg.Scoring.MinTradeableMovePct × representative price
 End Class
 ```
 `AnalysisReport` keeps `TotalRows`, `VerdictCounts` (global), the three global diagnostics (`FundingDiagnostic`, `OfiAudit`, `OiCvdAudit`), `MarkdownText`/`MarkdownFilePath`/`SummaryCsvPath`, and gains `Public Property Populations As New List(Of PopulationReport)()`. The old top-level barrier fields are removed (only `MarkdownReportWriter` reads them; the auto-tweaker does **not** read `AnalysisReport`, and `AnalysisReportForm` only renders `MarkdownText`).
 
-### 2.4 Markdown layout (`MarkdownReportWriter`)
+### 2.4 Markdown layout (`MarkdownReportWriter`) — TIER-MAJOR (trader call 2026-06-18)
+Group **verdict-tier first, sessions nested** — so each tier shows NY / ASIA / LONDON side by side, which is the comparison the trader actually makes ("I have tier X — which session is it reliable in"). The writer's outer loop is tier; the inner loop is population. (The underlying segmentation is identical to a population-major layout — only the render order differs.)
+
 ```
 # Analysis Report — <ts>
 > failure-model note (unchanged)
@@ -114,30 +124,44 @@ End Class
 - Rows in CSV, verdict counts (global)
 - Populations detected:  NY×1 n=586  |  LONDON×3 n=…  |  ASIA×3 n=…
 
-## Population: NY × 1-min        (one block per population)
-  ### 1. Summary  (per-pop counters: excluded / ATR-invalid / below-min-move / adverse-source)
-  ### 2. Failure-Rate Matrix
-  ### 3. Recommended (window, threshold)
-  ### 4a. Barrier-Hit Decomposition
-  ### 4. Verdict Context × Outcome
-  ### 8. Hold Window Selection
-  ### 9. Pending data (n < 30)
-## Population: LONDON × 3-min     (same sub-sections)
-## Population: ASIA × 3-min       (same sub-sections)
+## 2. Failure-Rate Matrix
+### STRONG_LONG
+#### NY · 1-min   · ATR p50=64 (p25–p75 47–110) · move-floor $52
+| Window | 0.5× ATR | 0.8× ATR |        ← full grid; ★◆ picked WITHIN this sub-table
+#### ASIA · 3-min · ATR p50=50 (p25–p75 44–54) · move-floor $52
+| Window | 0.5× ATR | 0.8× ATR |        ← rendered even at n<30 (watch it fill)
+#### LONDON · 3-min · (no STRONG_LONG rows yet)
+### STRONG_SHORT   (same three sub-tables)
+### MEDIUM_LONG    (same)
+### MEDIUM_SHORT   (same)
+
+## 3. Recommended (window, threshold)   — per (tier × session)
+## 4a. Barrier-Hit Decomposition         — per (tier × session)
+## 4. Verdict Context × Outcome          — per session (context-tag rows; barrier-based, so segment)
+## 8. Hold Window Selection              — per (tier × session)
+## 9. Pending data (n < 30)              — per (tier × session)
 
 ## Global Diagnostics
-  ### 5. Funding Momentum Diagnostic   (global — see §4.2)
-  ### 6. OFI Outlier Audit             (global)
-  ### 7. OI×CVD Asymmetry Audit        (global)
+### 5. Funding Momentum Diagnostic   (global — see §4.2)
+### 6. OFI Outlier Audit             (global)
+### 7. OI×CVD Asymmetry Audit        (global)
 ```
-The §5/§6/§7 diagnostics stay **global** (single set) — they are funding/order-flow distribution audits, not barrier/ATR-based, so resolution is not a confounder and segmenting them would only thin the data without insight. The summary CSV (`BuildSummaryCsv`) gains a leading `Population` column.
+
+**Per-session sub-table requirements (all confirmed by the trader 2026-06-18):**
+1. **Full grid kept** — do NOT collapse the 0.3/0.5/0.8× ATR threshold columns or the 5/10/15-min window rows. The trader reads individual cells to decide (§4.3).
+2. **Resolution label on every sub-table** (`NY · 1-min`, `ASIA · 3-min`, `LONDON · 3-min`) — surfaces the ATR-scale context that pooling hid.
+3. **ATR caption per sub-table** — that session's directional-row ATR (`p25–p50–p75` from `PopulationReport.DirAtr*`) + the `$` move-floor (`MoveFloorUsd`). Lets `0.5× ATR` translate to dollars at a glance and makes the floor-collapse legible per session (NY's columns differ where ATR beats the floor; Asia/London's are identical = all floored). This is the direct answer to "I need to see the individual ATR used."
+4. **★◆ recommended / most-profitable cell picked WITHIN each (tier × session) sub-table** — not once across the pooled mix. (`FailureRateMatrix.Compute` already marks ★◆ per its row set, so this falls out for free once it is called per population.)
+5. **Render the sub-table even when n < 30** (cells show their actual small n) so Asia/London visibly accumulate; a (tier × session) with zero rows renders a one-line "(no rows yet)".
+
+The §5/§6/§7 diagnostics stay **global** (D2). The §3/§4a/§8/§9 sections follow the same tier→session nesting; §4 (context × outcome) segments per session (it is barrier-based) using that session's representative recommended cell. The summary CSV (`BuildSummaryCsv`) gains a leading `Population` column (one row per population × tier × window × threshold).
 
 **Honest consequence to expect:** after segmentation, fewer cells clear the `n ≥ 30` gate. NY×1 MEDIUM_LONG stays n=44 (≥30 ✓); Asia/London split to ~34 and ~0 → mostly "insufficient sample." That is the correct picture and exactly *why* 3-min data is still accumulating — it is not a regression.
 
 ---
 
-## 3. Granularity note (ties to §5 D1)
-With the current settings every session maps 1:1 to a resolution (NY=1, ASIA=3, LONDON=3), so `(session × resolution)` yields three populations: **NY×1, ASIA×3, LONDON×3**. `(resolution only)` would merge ASIA+LONDON into one `res=3` cell. Recommend `(session × resolution)` (consistency with the tweaker; ASIA and LONDON are distinct volatility/liquidity regimes per trader-profile + the v34 weekday-confound work). See §5 D1.
+## 3. Granularity — RESOLVED (D1 approved 2026-06-18: session × resolution)
+Every session maps 1:1 to a resolution (NY=1, ASIA=3, LONDON=3), so `(session × resolution)` yields three populations: **NY×1, ASIA×3, LONDON×3**. Approved over `(resolution only)` — consistency with the Phase-2a tweaker filter; ASIA and LONDON are distinct volatility/liquidity regimes (trader-profile + the v34 weekday-confound work).
 
 ---
 
@@ -153,8 +177,8 @@ Dim currentThresholdBp As Double = 0.001 * 10000   ' = 10 ; pre-v22 value, NOT t
 ```
 The live `cfg.Indicators.Funding.MomentumThreshold` is **5e-8** since v34 (was 0.0001 at v22). `Compute` does not even take `cfg`, and its recommendation ladder (the `0.5 bp` cutoffs, "lower to 0.0005") is pre-v34 reasoning. **Severity: low** — the 893-row report took the first branch ("p95 < 0.5 bp → genuine REST ceiling, defer to WebSocket"), which is still correct advice and never prints the stale number; the staleness only surfaces in the `Else` branch. **Fix:** thread `cfg` into `Compute(rows, cfg)`, set `currentThresholdBp = cfg.Indicators.Funding.MomentumThreshold * 10000`, and reword the `Else`-branch recommendation to compare the implied threshold against the *live* value. `AnalysisRunner.vb:146` is the single call site.
 
-### 4.3 Threshold-axis degeneracy (0.3× ≡ 0.5× ≡ 0.8×) — **document; optional cosmetic**
-In the flagged report every threshold column within a tier is identical (e.g. MEDIUM_LONG 15m: both 0.3× and 0.5× show 54 success / 2 adverse / 22 expiry). Cause: at current low ATR the `$52` floor dominates *both* multipliers (`thr × ATR < floor` for ≥96% of rows), so all threshold cells collapse onto the same floored barrier — the matrix differentiates only on the window dimension. This is the floor **working as designed**, but it means the "recommended threshold" pick is arbitrary among ties and the threshold sweep currently carries ~zero information. **Action:** document in the report (a one-line note when a tier's cells are floor-collapsed). Optionally the writer could tag floor-dominated cells (e.g. a `†floored` marker). Not required; the columns re-activate when vol rises. No logic change.
+### 4.3 Threshold-axis degeneracy (0.3× ≡ 0.5× ≡ 0.8×) — **kept + made visible (not collapsed)**
+In the flagged report every threshold column within a tier is identical (e.g. MEDIUM_LONG 15m: both 0.3× and 0.5× show 54 success / 2 adverse / 22 expiry). Cause: at current low ATR the `$52` floor dominates *both* multipliers (`thr × ATR < floor` for ≥96% of rows), so all threshold cells collapse onto the same floored barrier — the matrix differentiates only on the window dimension. This is the floor **working as designed**. **Decision (trader, 2026-06-18): keep the full threshold grid** — the trader reads individual cells and the columns re-activate as vol rises. The §2.4 per-session **ATR caption + move-floor** makes the collapse *legible* (the reader can see the floor is binding, and that NY's columns differ only where ATR beats the floor) instead of mysterious — resolving the concern by exposure, not by removing columns. No collapsing, no logic change.
 
 ### 4.4 `AdverseFallbackAtrMultiplier = 1.2` hardcoded — **latent drift, low priority**
 `AnalysisConstants.AdverseFallbackAtrMultiplier` (1.2) mirrors `cfg.Scoring.AtrStopMultiplier` by hand. It currently matches (v37 left the stop multiplier at 1.2), but it is not read from cfg the way `MinTradeableMovePct` / `AtrTargetMultiplier` now are. Moot for this book (all 120 directional rows used structural stops, fallback=0), so no observable effect. **Action (optional):** while in `Compute`'s neighbourhood, accept it as an optional param defaulting to the constant and pass `cfg.Scoring.AtrStopMultiplier` from `AnalysisRunner`, for parity with the other two live-cfg pass-throughs. Skip if it widens the diff.
@@ -167,11 +191,11 @@ OISignal is ~95% NEUTRAL (standing v34 WATCHING item), so confirmed-LONG/SHORT c
 
 ---
 
-## 5. Design decisions needing trader sign-off
+## 5. Design decisions — ALL APPROVED (trader, 2026-06-18)
 
-- **D1 — Segmentation granularity.** Recommend **`(session × resolution)`** → NY×1, ASIA×3, LONDON×3 (consistency with the Phase-2a tweaker filter; ASIA≠LONDON regimes). Alternative: `(resolution only)` → res1, res3 (merges Asia+London; coarser but fewer thin cells). *Recommend D1 = session × resolution.*
-- **D2 — Diagnostics scope.** Keep §5 funding / §6 OFI / §7 OI×CVD **global** (one set), segment only the barrier/ATR-based sections (matrix, decomposition, recommended, context-tag, hold-window, pending). *Recommend D2 = yes (global diagnostics).*
-- **D3 — Pooled view.** **Drop** the old pooled matrix entirely (it is the bug); keep only the global verdict-count summary + global diagnostics. Alternative: also render a clearly-labelled "ALL (pooled — diagnostic only)" block for continuity. *Recommend D3 = drop the pooled matrix.*
+- **D1 — Segmentation granularity: `(session × resolution)`** ✓ → NY×1, ASIA×3, LONDON×3.
+- **D2 — Diagnostics scope: global** ✓ → §5 funding / §6 OFI / §7 OI×CVD stay one global set; only the barrier/ATR-based sections segment (matrix, recommended, decomposition, context-tag, hold-window, pending).
+- **D3 — Pooled view: DROP the single pooled matrix** ✓, **replaced with a tier-major per-session expansion** (trader refinement). Each tier renders three per-session sub-tables (NY / ASIA / LONDON), full 5/10/15 × ATR-threshold grid each, resolution-labelled, ATR-captioned, ★◆ picked within each sub-table, rendered even at n<30 — see §2.4. The old all-rows-mixed number is gone; the per-population→pooled sum (e.g. 44+34=78) is verified once at acceptance (§7), not shown in every report.
 
 ---
 
@@ -188,13 +212,13 @@ OISignal is ~95% NEUTRAL (standing v34 WATCHING item), so confirmed-LONG/SHORT c
 - Spot-check one population's matrix by hand against a few CSV rows (barrier walk on 1-min OHLC) to confirm per-population numbers match the old pooled math restricted to that population.
 - Implementer writes a `…-spec-back.md`; **coordinator** (this seat) re-runs the builds + harness, audits the diff, records a `> Coordinator review` callout, local-commits. **Local-first — never push; the trader tests + pushes.**
 
-## 8. Commit checklist (after §5 sign-off)
-1. `AnalysisReport.vb` — add `PopulationReport` class + `Populations` list; remove the migrated top-level barrier fields.
-2. `AnalysisRunner.vb` — partition rows by `popKey`; loop `FailureRateMatrix.Compute` + the context cross-tab per population; populate `Populations`; keep global verdict counts + diagnostics.
-3. `MarkdownReportWriter.vb` — per-population sections + Global Summary + Global Diagnostics; `Population` column in `BuildSummaryCsv`.
+## 8. Commit checklist (§5 approved — ready to build)
+1. `AnalysisReport.vb` — add `PopulationReport` class (incl. `DirAtr*` / `MoveFloorUsd` caption fields) + `Populations` list; remove the migrated top-level barrier fields.
+2. `AnalysisRunner.vb` — partition rows by `popKey`; per population, call `FailureRateMatrix.Compute` + the context cross-tab, and compute the directional-row ATR caption stats (`DirAtr*`, `MoveFloorUsd = cfg.Scoring.MinTradeableMovePct × representative price`); populate `Populations`; keep global verdict counts + diagnostics.
+3. `MarkdownReportWriter.vb` — **tier-major** render: outer loop tier, inner loop population; per-session sub-tables with resolution label + ATR caption + ★◆ + render-at-n<30 (§2.4); Global Summary + Global Diagnostics; leading `Population` column in `BuildSummaryCsv`.
 4. `FundingMomentumDiagnostic.vb` + its `AnalysisRunner` call site — thread `cfg`, read live `MomentumThreshold` (§4.2).
-5. (Optional) §4.1 summary-line clarification; §4.3 floor-collapse note; §4.4 cfg-pass-through.
-6. `architecture.md` / `DeribitIndicatorProject.md` Display-Behaviour or §15 note that the offline report is per-population since this change. **No `settings.json` bump.**
+5. (Optional) §4.1 summary-line clarification; §4.4 `AdverseFallbackAtrMultiplier` cfg-pass-through.
+6. `architecture.md` / `DeribitIndicatorProject.md` Display-Behaviour or §15 note that the offline report is per-`(session × resolution)`, tier-major, since this change. **No `settings.json` bump.**
 
 ---
 
