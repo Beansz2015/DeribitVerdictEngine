@@ -5,6 +5,14 @@
 
 Authoritative inputs: `sc-column-total-parity-implementer-handoff.md` (the *how* — inventory + anchors) + `sc-column-total-parity-proposal.md` (the *why* + capture idioms + S5 amendment). Where they differed, the hand-off won.
 
+> **Coordinator review (2026-06-18, sanity-check seat) — APPROVED; cleared for the trader's live gate + push.** Independent verification:
+> - **Re-ran builds + harness:** solution + harness **0/0**; **39 checks (A1–A15g) ALL PASS**, unregressed.
+> - **Scoring bit-identical — statically PROVEN (stronger than the 5-run diff).** Audited every removed line in `_Scoring.vb`/`_Verdict.vb`: the only changes are (a) additive `pL`/`pS` snapshots + per-row accumulators, (b) the 4-arg→6-arg `breakdown.Add` swaps, and (c) the Pass 2 upgrade lines — each `state.X += 1` is **preserved identically**, only `: accumLP += 1` appended (verified all 9 pairs). **No `Math.Min(…, regimeMax)` cap and no `ls`/`ss` mutation was altered** (none appear in the diff — funding is captured via read-only snapshots). So no scoring line's behaviour changes in *any* regime.
+> - **The clamp removal (trader-flagged): intended, authorized, required — NOT a scoring change.** It's a 2-line **display** clamp (`If sc > 1 Then sc = 1 / If sc < -1 Then sc = -1`) in the card helper `BuildRowDmiAdx`, on the SC-cell display value only. The engine emits DMI +/-DI (+1) **and** ADX> (+1) = **+2** to the real score; the clamp forced the displayed cell to ±1, under-reporting by 1 — the exact discrepancy Spec C exists to fix. Handover §4 rows 77/151/171 explicitly deferred this clamp's removal to Spec C as "the architectural fix." Mandatory for SC=TOTAL parity; the scoring `regimeMax` caps are untouched.
+> - **§5.1 caveat acknowledged (correct, not a bug):** with a single *net* SC column, the proposal §6.2 split hand-tally can't be exact for dual-side rows (BBW net 0; funding) or dominant-side penalties. The authoritative check is what `CheckLedger` enforces — `Σ LongPoints = LongScore` / `Σ ShortPoints = ShortScore` summed **separately** — or the net `Σ SC = TOTAL Long − TOTAL Short`. The proposal's §6.2 was the imprecise part, not the implementation.
+> - **Confirmed:** §15 post-v37 row + the handover §4 locked decision (row 151) both landed.
+> - **Remaining (trader gate, as designed):** the live 5-run CSV bit-identical diff + the ledger-quiet watch over 10+ cycles across ≥2 regimes. Given the static proof + the permanent `CheckLedger`, these are belt-and-suspenders. Then push.
+
 ---
 
 ## 0. What shipped
