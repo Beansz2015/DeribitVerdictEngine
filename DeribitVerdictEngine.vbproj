@@ -9,9 +9,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Websocket.Client" Version="5.1.2" />
-  </ItemGroup>
+  <!-- WebSocket transport (migration P1, v38) uses the framework's
+       System.Net.WebSockets.ClientWebSocket directly — no NuGet package.
+       The unused Websocket.Client 5.1.2 reference (added 2026-04-01, never
+       referenced) was removed here; if P2 adopts a managed-reconnect library,
+       re-add the LATEST version then. -->
 
   <!-- Exclude the AutoTweaker console project from SDK auto-discovery.
        AutoTweaker has its own .vbproj and must not be compiled into this assembly.
