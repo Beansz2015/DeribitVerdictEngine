@@ -109,3 +109,18 @@ Reads the feed's plain health fields on the UI thread (no `Control.Invoke`). **S
 - **[coordinator]** Confirm the §5.1 book-tolerance deviation (5 ticks vs the handoff's literal 1 tick), the §5.2 trades-staleness finding (a P3 design call), and the `IsDegraded()` any-vs-all nuance (§5.2). Re-run builds + harness; audit the routing diff + the comparer. Add at commit (handoff §10.5, mirrors P1): `DeribitIndicatorProject.md` §15 v39 row + §6 version pointer → v39; `architecture.md` data-flow note (RunAnalysisAsync routes through `IMarketDataSource`; `ShadowParityComparer` in the directory layout).
 - **[trader]** Run the ≥50-consecutive shadow-parity gate during an **active** session (`shadow_parity=true`, `transport=rest`, auto-run; watch `parity NN/50` + `ws_parity_log.txt`). Then the live 24h soak + a `transport=ws` per-run-fallback smoke. Then push.
 - **[P3]** Cutover (`transport` default → `"ws"`) + the 15m-TTL collapse on the WS path, **gated on the data-gated re-baselines** (the first recalibration closes on a single-transport dataset). Fold in the §5.2 trades-staleness decision before flipping the default.
+
+---
+
+> ## Coordinator review — APPROVED (2026-06-19)
+>
+> **Builds (0/0):** main **Release** + AutoTweaker + OrderCheck. **Harness:** A1–A15g unregressed + the new **A15h — ALL PASS (39)**. The 6 P2 commits (`3431a26`→`debec5a`) are in; working tree clean except the 3 pre-existing dirty docs (unrelated, excluded — same as P1).
+> **Source-verified the load-bearing claims (not just doc-checked):**
+> - **Routing null-at-rest (§3):** `ResolveSource()` returns `_restSource` (the verified `DeribitClient` pass-through) at `transport≠"ws"`; all **8** fetch sites route through `src`; the parity hook is `_parityComparer IsNot Nothing`-guarded; the status segment returns `""` when the feed is `Nothing`. With the P2 defaults the feed never starts → behaviorally identical to v38. ✓
+> - **Parity isolation (§4):** `ShadowParityComparer` writes only `ws_parity_log.txt` + `Console` — **zero** `analysis_log`/`LogRun`/`.csv`/scoring touch (grep-confirmed). ✓
+> - **Hardening (§7):** `"network."` is in `SettingsDiffApplier.Validate`'s `RejectedPathPrefixes` (alongside `kelly.`/`resolution_profiles.`), in `Validate` not `ValidateSnapshotContent`; A15h proves `network.transport`/`ws_url` reject while a scoring key passes. ✓
+> **Deviations — both accepted:**
+> - **§5.1 book tolerance 1→5 ticks:** agreed. REST-snapshot-vs-in-memory-WS non-simultaneity legitimately moves top-of-book a few ticks over the HTTP round-trip; a real desync is orders-of-magnitude off, and the raw gap is still logged so it surfaces. Data-backed, conservative.
+> - **§5.2 trades-staleness / `IsDegraded()` any-vs-all:** correctly a **P3** call, **no P2 change** (transport stays rest → observational). Coordinator recommendation recorded: option **(b)** — gate the trades stream on connection-health, not last-trade-age (a complete-but-quiet buffer is valid data, unlike a stale quote). Must be resolved before the P3 default flip so a quiet market can't cost a row (proposal §3).
+> **Coordinator added at commit:** `DeribitIndicatorProject.md` §15 v39 row + §6 → v39; `architecture.md` `ShadowParityComparer` directory entry + the routing note.
+> **Verdict: APPROVED — local commit.** Remaining (trader): the ≥50-consecutive shadow gate during an active session + the 24h soak + a `transport=ws` fallback smoke, then **push**. P3 stays gated on the re-baselines.

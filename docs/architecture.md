@@ -39,6 +39,12 @@ DeribitVerdictEngine/
 │                                       ticker + depth-limited book → receive loop → backoff
 │                                       reconnect. Answers heartbeat test_request. DORMANT
 │                                       (only the standalone soak constructs it). Host-agnostic.
+├── ShadowParityComparer.vb             [WS-P2] When network.shadow_parity=true, compares the
+│                                       WS source vs the authoritative REST results each run and
+│                                       logs a field diff to ws_parity_log.txt + console — NEVER
+│                                       the CSV/scoring. The proposal §7 acceptance instrument.
+│                                       Host-agnostic. (RunAnalysisAsync routes the 8 live fetches
+│                                       through IMarketDataSource via ResolveSource() since P2.)
 ├── DynamicNorms.vb                     Live adaptive thresholds (ATR scale, vol, VWAP dev);
 │                                       now also applies session-aware volume multipliers
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport
