@@ -46,6 +46,16 @@ Public NotInheritable Class DeribitWsFeed
     Private _runTask As Task
     Private _id As Integer = 0
 
+    ' ── Health surface (P2) — written on the background supervisor/receive task, read on
+    ' the analysis thread for the per-run fallback gate + the WS-health status line. Plain
+    ' fields: torn reads of a bool/int/DateTime are harmless for a per-run gate / display
+    ' (MarketState carries the real locked state). No Control.Invoke — CLI-port aligned.
+    Private _connected As Boolean = False
+    Private _reconnectCount As Integer = 0
+    Private _lastFrameUtc As DateTime = DateTime.MinValue
+    Private _coolingDown As Boolean = False
+    Private _currentBackoffMs As Integer = 1000
+
     Public Sub New(state As MarketState)
         Me.New(state, Nothing)
     End Sub
@@ -90,12 +100,16 @@ Public NotInheritable Class DeribitWsFeed
                     Await SubscribeAsync(ws, ct)
                     Log("subscribed to " & Channels.Length & " channels")
                     backoffMs = 1000   ' healthy connection → reset backoff
+                    _currentBackoffMs = backoffMs
+                    _connected = True
                     Await ReceiveLoopAsync(ws, ct)
                 End Using
             Catch ex As OperationCanceledException
                 Exit While
             Catch ex As Exception
                 Log("connection error: " & ex.Message)
+            Finally
+                _connected = False
             End Try
 
             If ct.IsCancellationRequested Then Exit While
@@ -103,6 +117,7 @@ Public NotInheritable Class DeribitWsFeed
             ' Storm guard: >5 reconnects / 10 min → hold the feed down for the cooldown.
             Dim nowUtc As DateTime = DateTime.UtcNow
             reconnects.Enqueue(nowUtc)
+            _reconnectCount += 1
             While reconnects.Count > 0 AndAlso (nowUtc - reconnects.Peek()).TotalMinutes > 10
                 reconnects.Dequeue()
             End While
@@ -111,9 +126,12 @@ Public NotInheritable Class DeribitWsFeed
             If reconnects.Count > 5 Then
                 Log("reconnect storm (" & reconnects.Count & "/10min) — cooling down " & _cooldownSec & "s")
                 delayMs = _cooldownSec * 1000
+                _currentBackoffMs = delayMs
+                _coolingDown = True
                 reconnects.Clear()
             Else
                 delayMs = backoffMs
+                _currentBackoffMs = backoffMs
                 Log("reconnecting in " & (backoffMs \ 1000) & "s")
                 backoffMs = Math.Min(backoffMs * 2, 60000)
             End If
@@ -123,7 +141,9 @@ Public NotInheritable Class DeribitWsFeed
             Catch ex As OperationCanceledException
                 Exit While
             End Try
+            _coolingDown = False
         End While
+        _connected = False
         Log("feed stopped")
     End Function
 
@@ -202,6 +222,7 @@ Public NotInheritable Class DeribitWsFeed
                 End If
                 sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count))
             Loop While Not result.EndOfMessage
+            _lastFrameUtc = DateTime.UtcNow   ' liveness stamp for the WS-health status line
             Await HandleMessageAsync(ws, sb.ToString(), ct)
         End While
     End Function
@@ -316,6 +337,61 @@ Public NotInheritable Class DeribitWsFeed
         c.VolumeUSD = If(data.TryGetProperty("cost", costEl), costEl.GetDouble(), c.Volume * c.Close)
         _state.ApplyChartTick(resolution, c, nowUtc)
     End Sub
+
+    ' ── Health surface (P2: per-run fallback gate + WS-health status line) ───────────────
+
+    ''' <summary>The per-run health gate (handoff §2.2). Degraded when not connected, in
+    ''' the reconnect-storm cooldown, or ALL primary streams (book/trades/ticker) are stale
+    ''' past ws_stale_after_sec. When ws_fallback_to_rest is on and this is true at run time,
+    ''' RunAnalysisAsync serves that run from REST and surfaces DEGRADED. A single transiently
+    ''' stale stream on an otherwise-live connection is NOT degraded — the WsMarketDataSource
+    ''' staleness gate returns Nothing for that one shape and the existing skip-gate handles
+    ''' it like a REST failure (no row lost).</summary>
+    Public Function IsDegraded() As Boolean
+        If Not _connected Then Return True
+        If _coolingDown Then Return True
+        Dim staleSec As Integer = SettingsLoader.Current.Network.WsStaleAfterSec
+        Dim nowUtc As DateTime = DateTime.UtcNow
+        Dim bookStale As Boolean = (nowUtc - _state.BookLastUpdate).TotalSeconds > staleSec
+        Dim tradesStale As Boolean = (nowUtc - _state.TradesLastUpdate).TotalSeconds > staleSec
+        Dim tickerStale As Boolean = (nowUtc - _state.TickerLastUpdate).TotalSeconds > staleSec
+        Return bookStale AndAlso tradesStale AndAlso tickerStale
+    End Function
+
+    ''' <summary>True while the receive loop is running on a subscribed connection.</summary>
+    Public ReadOnly Property IsConnected As Boolean
+        Get
+            Return _connected
+        End Get
+    End Property
+
+    ''' <summary>Total reconnect attempts since StartAsync (the "R reconnects" status counter).</summary>
+    Public ReadOnly Property ReconnectCount As Integer
+        Get
+            Return _reconnectCount
+        End Get
+    End Property
+
+    ''' <summary>UTC of the last received frame (receive-loop liveness).</summary>
+    Public ReadOnly Property LastFrameUtc As DateTime
+        Get
+            Return _lastFrameUtc
+        End Get
+    End Property
+
+    ''' <summary>True during the reconnect-storm cooldown hold.</summary>
+    Public ReadOnly Property IsCoolingDown As Boolean
+        Get
+            Return _coolingDown
+        End Get
+    End Property
+
+    ''' <summary>Current reconnect delay in seconds (the "Xs backoff" status value).</summary>
+    Public ReadOnly Property CurrentBackoffSec As Integer
+        Get
+            Return _currentBackoffMs \ 1000
+        End Get
+    End Property
 
     Private Shared Sub Log(msg As String)
         Console.WriteLine("[WS] " & msg)

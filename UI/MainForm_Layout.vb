@@ -44,6 +44,19 @@ Partial Public Class MainForm
     Private _mtfCandles15m     As List(Of Candle) = Nothing
     Private _mtfLastFetchTime  As DateTime = DateTime.MinValue
 
+    ' WebSocket transport (P2 — consumer routing + shadow parity). The per-run source is
+    ' resolved in RunAnalysisAsync.ResolveSource(); this is the ONLY host glue — the feed,
+    ' the sources, and the parity comparer are all host-agnostic. On the pure-REST path
+    ' (transport="rest" AND shadow_parity=false) the feed is never started, so _wsFeed /
+    ' _wsSource / _marketState stay Nothing and ResolveSource always returns _restSource —
+    ' byte-identical to v38. _wsDegradedThisRun is reset at the top of each run and set by
+    ' ResolveSource when the per-run REST fallback fires (status line reads it).
+    Private _restSource       As IMarketDataSource
+    Private _wsSource         As IMarketDataSource
+    Private _marketState      As MarketState
+    Private _wsFeed           As DeribitWsFeed
+    Private _wsDegradedThisRun As Boolean = False
+
     ' [T1-B] Regime ADX hysteresis state.
     Private _prevRegime As String = ""
 
@@ -271,6 +284,7 @@ Partial Public Class MainForm
         SettingsLoader.Initialise(Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
         _metricMode = NormaliseMode(SettingsLoader.Current.PerformanceDisplay.MetricMode)
+        InitMarketDataSources()
         InitAutoRunControls()
 
         UpdateLogInfo()
@@ -314,6 +328,37 @@ Partial Public Class MainForm
                 End If
             End Function)
         End If
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Market-data sources + WS feed lifecycle (P2)
+    '
+    ' RestMarketDataSource is always available (the pass-through fallback). The WS feed +
+    ' WsMarketDataSource are started only when transport="ws" OR shadow_parity is on — pure
+    ' REST otherwise (zero WS overhead, today's behaviour). The feed reads settings once at
+    ' start; a transport change needs an app restart (hot-swap is out of scope, proposal §5).
+    ' Called from the constructor after SettingsLoader.Initialise.
+    ' -----------------------------------------------------------------------
+    Private Sub InitMarketDataSources()
+        _restSource = New RestMarketDataSource()
+        Dim net = SettingsLoader.Current.Network
+        Dim wantWs As Boolean =
+            String.Equals(net.Transport, "ws", StringComparison.OrdinalIgnoreCase) OrElse net.ShadowParity
+        If wantWs Then
+            _marketState = New MarketState()
+            _wsSource = New WsMarketDataSource(_marketState)
+            _wsFeed = New DeribitWsFeed(_marketState)
+            _wsFeed.StartAsync()   ' returns immediately; the connect/receive/reconnect loop runs on a background task
+        End If
+    End Sub
+
+    ' Stop the WS feed (if running) on form close so the background socket unwinds cleanly.
+    Protected Overrides Sub OnFormClosing(e As System.Windows.Forms.FormClosingEventArgs)
+        Try
+            _wsFeed?.Stop()
+        Catch
+        End Try
+        MyBase.OnFormClosing(e)
     End Sub
 
     ' -----------------------------------------------------------------------

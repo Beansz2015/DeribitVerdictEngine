@@ -713,6 +713,11 @@ Public Class NetworkSettings
     <JsonPropertyName("ws_cooldown_sec")>     Public Property WsCooldownSec    As Integer = 300
     ' WsFallbackToRest: P2 routing — fall back to REST when the WS source is stale/down.
     <JsonPropertyName("ws_fallback_to_rest")> Public Property WsFallbackToRest As Boolean = True
+    ' ShadowParity: when True (with transport="rest"), run the WS feed alongside and log a
+    ' per-run WS-vs-REST field comparison to the side log (never the CSV, never scoring). The
+    ' ≥50-consecutive-pass result is the proposal §7 cutover gate. Dev/validation mode; default
+    ' off = zero WS overhead. Off the auto-tweaker surface (rides the network.* exclusion). (v39, P2)
+    <JsonPropertyName("shadow_parity")>       Public Property ShadowParity     As Boolean = False
 End Class
 
 ' ---------------------------------------------------------------------------

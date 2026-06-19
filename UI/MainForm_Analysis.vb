@@ -57,19 +57,28 @@ Partial Public Class MainForm
         ' swing pivots (5m/15m) are unchanged. At res=1 the run is byte-identical to v35.
         Dim execRes As Integer = ExecutionResolution.ResolveResolution(cfg, DateTime.UtcNow.Hour)
 
+        ' [WS-P2] Resolve the per-run market-data source by network.transport. At
+        ' transport="rest" (the P2 default) this is always _restSource — a verified
+        ' pass-through to DeribitClient, so the run is byte-identical to v38. The 7 live
+        ' fetches below (1m/5m/15m + funding/book/orderbook/trades + the exec-resolution
+        ' candles) route through src; backfill (OhlcCache / FetchGapChunked / time-range
+        ' GetCandlesAsync) stays direct-REST and is not touched here.
+        _wsDegradedThisRun = False
+        Dim src As IMarketDataSource = ResolveSource()
+
         Dim mtfStale As Boolean = _mtfCandles15m Is Nothing OrElse
                                    (DateTime.UtcNow - _mtfLastFetchTime).TotalSeconds >= MTF_TTL_SECONDS
 
-        Dim t_1m      = DeribitClient.GetCandlesAsync("1", 250)
-        Dim t_5m      = DeribitClient.GetCandlesAsync("5", 210)
-        Dim t_funding = DeribitClient.GetFundingRateAsync()
-        Dim t_book    = DeribitClient.GetBookSummaryAsync()
-        Dim t_ob      = DeribitClient.GetOrderBookAsync(10)
-        Dim t_trades  = DeribitClient.GetRecentTradesAsync(500)
+        Dim t_1m      = src.GetCandlesAsync("1", 250)
+        Dim t_5m      = src.GetCandlesAsync("5", 210)
+        Dim t_funding = src.GetFundingRateAsync()
+        Dim t_book    = src.GetBookSummaryAsync()
+        Dim t_ob      = src.GetOrderBookAsync(10)
+        Dim t_trades  = src.GetRecentTradesAsync(500)
 
         Dim t_15m As Task(Of List(Of Candle)) = Nothing
         If mtfStale Then
-            t_15m = DeribitClient.GetCandlesAsync("15", 70)
+            t_15m = src.GetCandlesAsync("15", 70)
             Await Task.WhenAll(t_1m, t_5m, t_15m, t_funding, t_book, t_ob, t_trades)
             Dim freshM15 = Await t_15m
             If freshM15 IsNot Nothing AndAlso freshM15.Count > 0 Then
@@ -96,7 +105,7 @@ Partial Public Class MainForm
         ' identical. Otherwise fetch the 3/5-min stack (250 bars = 12.5h at 3m; ample for
         ' the 100-bar ATR-ref / volume baseline).
         Dim candlesExec As List(Of Candle) =
-            If(execRes = 1, candles1m, Await DeribitClient.GetCandlesAsync(execRes.ToString(), 250))
+            If(execRes = 1, candles1m, Await src.GetCandlesAsync(execRes.ToString(), 250))
 
         ' Resilience check: if any required fetch failed, skip cleanly.
         Dim skipReason As String = Nothing
@@ -541,6 +550,27 @@ Partial Public Class MainForm
         UpdateLogInfo()
 
         RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
+    End Function
+
+    ' [WS-P2] Choose this run's market-data source by network.transport (handoff §2.2).
+    ' transport="rest" (default) → the pass-through RestMarketDataSource → behaviour
+    ' identical to v38. transport="ws" → the WS source, with a per-run REST fallback when
+    ' ws_fallback_to_rest is on and the feed is unhealthy/stale (DeribitWsFeed.IsDegraded);
+    ' the fallback sets _wsDegradedThisRun so the status line shows DEGRADED. The cutover
+    ' (transport default → "ws") is P3 — transport STAYS "rest" in P2.
+    Private Function ResolveSource() As IMarketDataSource
+        Dim net = SettingsLoader.Current.Network
+        If Not String.Equals(net.Transport, "ws", StringComparison.OrdinalIgnoreCase) Then
+            Return _restSource
+        End If
+        If net.WsFallbackToRest AndAlso _wsFeed IsNot Nothing AndAlso _wsFeed.IsDegraded() Then
+            _wsDegradedThisRun = True
+            Return _restSource
+        End If
+        ' transport="ws" but the feed was never constructed (shouldn't happen — the feed
+        ' starts whenever transport="ws") → fall back to REST rather than NRE.
+        If _wsSource Is Nothing Then Return _restSource
+        Return _wsSource
     End Function
 
 End Class
