@@ -49,18 +49,21 @@ Public Class SettingsDiffApplier
         "regime_weights.enabled"    ' Pass 2c gate — never disable
     }
 
-    ' v36 Phase-2a — trader-owned / off-tweaker-surface key subtrees that must
-    ' NEVER appear in a proposed diff (HARD CONSTRAINT 11). Prefix semantics (not
+    ' v36 Phase-2a / WS-P2 — trader-owned / off-tweaker-surface key subtrees that must
+    ' NEVER appear in a proposed diff (HARD CONSTRAINT 11/12). Prefix semantics (not
     ' the substring match RejectedPathFragments uses) so they reject the whole
     ' subtree without over-matching unrelated keys. This hardens the previously
-    ' prompt-only 'kelly.*' convention and covers the new 'resolution_profiles.*'
-    ' surface. 'scoring.min_tradeable_move_pct' is handled as an exact match below
-    ' (a prefix would also catch sibling 'scoring.*' tunables). Applied only on
-    ' proposed CHANGES (Validate) — NOT ValidateSnapshotContent, where a wholesale
+    ' prompt-only 'kelly.*' convention, covers the 'resolution_profiles.*' surface,
+    ' and (WS-P2, HARD CONSTRAINT 12) the whole 'network.*' transport-plumbing block
+    ' (the 3 REST keys + the WS keys + shadow_parity — no failure-rate linkage, no
+    ' rational tweak proposal). 'scoring.min_tradeable_move_pct' is handled as an exact
+    ' match below (a prefix would also catch sibling 'scoring.*' tunables). Applied only
+    ' on proposed CHANGES (Validate) — NOT ValidateSnapshotContent, where a wholesale
     ' revert legitimately restores these keys unchanged.
     Private Shared ReadOnly RejectedPathPrefixes As String() = {
         "kelly.",                   ' trader-owned risk sizing
-        "resolution_profiles."      ' provisional per-resolution ROC overrides — manual re-baseline only
+        "resolution_profiles.",     ' provisional per-resolution ROC overrides — manual re-baseline only
+        "network."                  ' transport plumbing (REST/WS/shadow_parity) — not a failure-rate lever (HARD CONSTRAINT 12)
     }
 
     ' Validate a proposed diff list.
@@ -99,12 +102,12 @@ Public Class SettingsDiffApplier
                 End If
             Next
 
-            ' Reject trader-owned / off-tweaker-surface subtrees (HARD CONSTRAINT 11).
+            ' Reject trader-owned / off-tweaker-surface subtrees (HARD CONSTRAINT 11/12).
             For Each pre In RejectedPathPrefixes
                 If path.StartsWith(pre) Then
                     result.IsValid    = False
                     result.ErrorReason = String.Format(
-                        "Rejected: '{0}' is a trader-owned / off-tweaker-surface key (HARD CONSTRAINT 11).", item.Path)
+                        "Rejected: '{0}' is a trader-owned / off-tweaker-surface key (HARD CONSTRAINT 11/12).", item.Path)
                     Return result
                 End If
             Next

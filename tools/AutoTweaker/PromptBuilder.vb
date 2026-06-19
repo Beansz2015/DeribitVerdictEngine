@@ -47,6 +47,11 @@ Public Class PromptBuilder
             "or any 'resolution_profiles.*' key (the per-resolution 3-min ROC overrides — a provisional " &
             "seed re-baselined manually, not a failure-rate lever). " &
             "These are set by the trader, not failure-rate levers." & vbLf &
+        "12. Never propose any 'network.*' key. The entire network block is transport plumbing — " &
+            "REST timeout/retry, the WebSocket transport/url/heartbeat/staleness/cooldown/fallback flags, " &
+            "and shadow_parity (a dev/validation toggle). None of it has any failure-rate linkage; the " &
+            "transport is chosen by the trader, not optimised. (Enforced in code: SettingsDiffApplier " &
+            "rejects 'network.' as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &
