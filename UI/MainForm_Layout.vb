@@ -1249,7 +1249,10 @@ Partial Public Class MainForm
         ' renders and self-clears once a valid settings.json successfully loads.
         Dim cfgWarn As String = If(Not String.IsNullOrEmpty(SettingsLoader.LastLoadError),
                                    "settings.json parse failed — running on code defaults · ", "")
-        lblLogInfo.Text = String.Format("{0}{1}Log: {2} rows{3}", _ledgerWarn, cfgWarn, rows, skipSuffix)
+        ' [WS-P2] WS-health segment — empty on the pure-REST path (feed never started), so the
+        ' LOG line is byte-identical to v38 unless transport="ws" or shadow_parity is on.
+        Dim wsSeg As String = BuildWsStatusSegment()
+        lblLogInfo.Text = String.Format("{0}{1}{2}Log: {3} rows{4}", _ledgerWarn, cfgWarn, wsSeg, rows, skipSuffix)
         If _logInfoTooltip IsNot Nothing Then
             _logInfoTooltip.SetToolTip(lblLogInfo, path)
         End If
@@ -1264,6 +1267,42 @@ Partial Public Class MainForm
             End If
         End If
     End Sub
+
+    ' -----------------------------------------------------------------------
+    ' WS-health status segment (P2). Empty unless the feed is active (transport="ws"
+    ' or shadow_parity, i.e. _wsFeed was started). Mirrors the _ledgerWarn / cfgWarn /
+    ' skip-counter cascade — a trailing " · "-separated prefix on the LOG line. Reads the
+    ' feed's plain health fields on the UI thread (no Control.Invoke in the feed).
+    '   WS OK · 1/3/5/15 fresh · trades N        — connected, streams fresh
+    '   WS DEGRADED — REST fallback (stream stale) — per-run fallback fired this run
+    '   WS DOWN — reconnecting (Xs backoff, R reconnects) — disconnected
+    ' Shadow mode appends · parity NN/50.
+    ' -----------------------------------------------------------------------
+    Private Function BuildWsStatusSegment() As String
+        If _wsFeed Is Nothing Then Return ""
+        Dim net = SettingsLoader.Current.Network
+
+        Dim seg As String
+        If _wsDegradedThisRun Then
+            seg = "WS DEGRADED — REST fallback (stream stale)"
+        ElseIf Not _wsFeed.IsConnected Then
+            seg = String.Format("WS DOWN — reconnecting ({0}s backoff, {1} reconnects)",
+                                _wsFeed.CurrentBackoffSec, _wsFeed.ReconnectCount)
+        Else
+            Dim n As Integer = If(_marketState IsNot Nothing, _marketState.TradeCount, 0)
+            Dim ageSec As Integer = CInt(Math.Max(0, (DateTime.UtcNow - _wsFeed.LastFrameUtc).TotalSeconds))
+            If ageSec <= net.WsStaleAfterSec Then
+                seg = String.Format("WS OK · 1/3/5/15 fresh · trades {0}", n)
+            Else
+                seg = String.Format("WS OK · streams {0}s stale · trades {1}", ageSec, n)
+            End If
+        End If
+
+        If net.ShadowParity AndAlso _parityComparer IsNot Nothing Then
+            seg &= String.Format(" · parity {0}/50", _parityComparer.ConsecutivePasses)
+        End If
+        Return seg & " · "
+    End Function
 
     Private Sub lnkResetLog_LinkClicked(sender As Object, e As LinkLabelLinkClickedEventArgs) Handles lnkResetLog.LinkClicked
         Dim result = MessageBox.Show(Me,
