@@ -4,7 +4,9 @@
 **Author:** Fable 5 (spec-author seat)
 **Status:** **APPROVED 2026-06-12** — user confirmed go, with the expectation of amendments during testing (additions land as edits to this doc + change_log notes, not as silent scope growth). §11 added at approval: the post-migration feature catalogue.
 **Implementer:** Opus, fresh conversation per phase (§8). Designed to be implemented past the Fable window — every judgement call is made in this spec; remaining unknowns are explicitly marked as implementation-time verification steps.
-**Settings:** v33 at implementation (new `network` keys, §6). **No CSV schema change.**
+**Settings:** ~~v33~~ → **v38** at implementation (new `network` keys, §6). **No CSV schema change.**
+
+> **Coordinator reconciliation 2026-06-18 (P1 hand-off written: `websocket-migration-p1-implementer-handoff.md`).** Proposal predates v33→v37; three deltas folded into the P1 hand-off, none changing the approved design: (1) settings v33 → **v38** (the `network` block never churned; the 6 `ws_*` keys add cleanly); (2) **v36 3-min execution resolution** — subscriptions add **`chart.trades.…3`** + a 3-min `MarketState` series (the engine now runs Asia/London on 3-min), so §2 streams `1/3/5/15` not `1/5/15`; (3) funding maps **`funding_8h`** (what the REST path uses), **not** `current_funding` as §2 says — a semantics-neutrality fix. P1 is scoped **additive-only** (new files + settings; `RunAnalysisAsync` untouched) so it can't regress the live app or the in-flight data collection; consumer routing is P2, cutover P3 (still gated on the data-gated re-baselines).
 
 ---
 
