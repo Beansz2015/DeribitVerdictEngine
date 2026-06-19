@@ -25,6 +25,20 @@ DeribitVerdictEngine/
 │                                       ExecuteWithRetry wrapper: retry-once on 5xx/timeout,
 │                                       return Nothing on hard failure. GetFundingRateAsync →
 │                                       Double?; GetBookSummaryAsync → nullable value tuple.
+├── IMarketDataSource.vb                [WS-P1] Transport contract mirroring DeribitClient's 5
+│                                       live call shapes. DORMANT until P2 routes RunAnalysisAsync
+│                                       through it by network.transport. Host-agnostic.
+├── RestMarketDataSource.vb             [WS-P1] Pass-through to DeribitClient (the fallback path).
+├── WsMarketDataSource.vb               [WS-P1] Serves the 5 shapes from MarketState; staleness-
+│                                       gated (book/trades/ticker); candles defer to IsFresh.
+├── MarketState.vb                      [WS-P1] Thread-safe snapshot store (1 SyncLock, copy-on-
+│                                       read): 4 candle series 1/3/5/15, 5000 ascending trade
+│                                       ring, top-10 ladder, ticker (funding_8h/OI/mark).
+├── DeribitWsFeed.vb                    [WS-P1] One public ClientWebSocket — REST-seed →
+│                                       set_heartbeat → subscribe 1/3/5/15 chart + trades +
+│                                       ticker + depth-limited book → receive loop → backoff
+│                                       reconnect. Answers heartbeat test_request. DORMANT
+│                                       (only the standalone soak constructs it). Host-agnostic.
 ├── DynamicNorms.vb                     Live adaptive thresholds (ATR scale, vol, VWAP dev);
 │                                       now also applies session-aware volume multipliers
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport

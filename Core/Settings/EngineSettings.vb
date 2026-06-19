@@ -696,6 +696,23 @@ Public Class NetworkSettings
     <JsonPropertyName("request_timeout_seconds")> Public Property RequestTimeoutSeconds As Integer = 15
     <JsonPropertyName("retry_count")>              Public Property RetryCount            As Integer = 1
     <JsonPropertyName("retry_backoff_ms")>         Public Property RetryBackoffMs        As Integer = 1000
+
+    ' ── WebSocket transport (v38, migration P1) ──────────────────────────────────────────
+    ' Additive-only foundation; the live path stays pure REST until P2 wires the source in
+    ' and P3 flips the cutover. See docs/websocket-migration-p1-implementer-handoff.md.
+    ' Transport: "rest" | "ws" — cutover flag; P3 flips the default. Stays "rest" in P1/P2.
+    <JsonPropertyName("transport")>           Public Property Transport        As String  = "rest"
+    ' WsUrl: Deribit public JSON-RPC v2 WebSocket endpoint (public channels only, no auth).
+    <JsonPropertyName("ws_url")>              Public Property WsUrl            As String  = "wss://www.deribit.com/ws/api/v2"
+    ' WsHeartbeatSec: public/set_heartbeat interval (Deribit minimum 10s).
+    <JsonPropertyName("ws_heartbeat_sec")>    Public Property WsHeartbeatSec   As Integer = 30
+    ' WsStaleAfterSec: book/trades/ticker getters return Nothing past this age → consumer
+    ' fallback handles it like a REST failure (candle series defer to IndicatorEngine.IsFresh).
+    <JsonPropertyName("ws_stale_after_sec")>  Public Property WsStaleAfterSec  As Integer = 10
+    ' WsCooldownSec: reconnect-storm hold (>5 reconnects / 10 min).
+    <JsonPropertyName("ws_cooldown_sec")>     Public Property WsCooldownSec    As Integer = 300
+    ' WsFallbackToRest: P2 routing — fall back to REST when the WS source is stale/down.
+    <JsonPropertyName("ws_fallback_to_rest")> Public Property WsFallbackToRest As Boolean = True
 End Class
 
 ' ---------------------------------------------------------------------------

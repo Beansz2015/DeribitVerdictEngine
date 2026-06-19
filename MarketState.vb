@@ -1,0 +1,244 @@
+' MarketState.vb
+' WebSocket migration P1 (foundation, additive-only — docs/websocket-migration-p1-implementer-handoff.md).
+'
+' Thread-safe latest-snapshot store fed by DeribitWsFeed's single receive loop
+' (single-writer) and read by future analysis runs (multi-reader). All mutation and
+' reads are guarded by one lock; readers receive COPIES so an external caller can never
+' mutate live state or race the writer. Host-agnostic — no WinForms, no UI types.
+'
+' Holdings (each carries a LastUpdateUtc):
+'   - 4 rolling candle series keyed by resolution: "1"(250) "3"(250) "5"(210) "15"(70).
+'     Caps match the live fetch counts (MainForm_Analysis.vb 1m=250/5m=210/15m=70, exec 3m=250).
+'   - Trade ring buffer, cap 5000, CHRONOLOGICAL ASCENDING (oldest first — the F1 contract).
+'   - Top-of-book ladder: latest depth-limited OrderBookSnapshot (top-10).
+'   - Ticker fields: Funding8h, OpenInterest, MarkPrice, IndexPrice.
+'
+' Dormant in P1 (only the §9 standalone soak constructs it).
+Public NotInheritable Class MarketState
+
+    ' Per-resolution rolling-buffer caps. Match the live REST fetch counts so a WS-served
+    ' window is the same depth the indicator stack sees today.
+    Public Shared ReadOnly Caps As New Dictionary(Of String, Integer) From {
+        {"1", 250}, {"3", 250}, {"5", 210}, {"15", 70}}
+
+    Private Const TradeCap As Integer = 5000
+
+    Private ReadOnly _lock As New Object()
+
+    ' Candle series + per-series last-update stamp.
+    Private ReadOnly _series As New Dictionary(Of String, List(Of Candle))()
+    Private ReadOnly _seriesUpdate As New Dictionary(Of String, DateTime)()
+
+    ' Trade ring buffer (ascending).
+    Private ReadOnly _trades As New List(Of TradeRecord)()
+    Private _tradesUpdate As DateTime = DateTime.MinValue
+
+    ' Top-of-book ladder.
+    Private _book As OrderBookSnapshot = Nothing
+    Private _bookUpdate As DateTime = DateTime.MinValue
+
+    ' Ticker fields.
+    Private _funding8h As Double? = Nothing
+    Private _openInterest As Double = 0.0
+    Private _markPrice As Double = 0.0
+    Private _indexPrice As Double = 0.0
+    Private _tickerUpdate As DateTime = DateTime.MinValue
+
+    ' ── Writers (receive loop / seeding) ───────────────────────────────────────────────
+
+    ''' <summary>Replace a candle series wholesale from a REST seed burst (startup / reconnect).
+    ''' The incoming list is chronological ascending (DeribitClient order); trim to the
+    ''' series cap keeping the most recent.</summary>
+    Public Sub SeedCandles(resolution As String, candles As List(Of Candle), nowUtc As DateTime)
+        If candles Is Nothing Then Return
+        SyncLock _lock
+            Dim cap As Integer = CapFor(resolution)
+            Dim copy As New List(Of Candle)(candles)
+            If copy.Count > cap Then copy.RemoveRange(0, copy.Count - cap)
+            _series(resolution) = copy
+            _seriesUpdate(resolution) = nowUtc
+        End SyncLock
+    End Sub
+
+    ''' <summary>Apply one chart.trades notification for a resolution. The forming bar
+    ''' (tick == latest bar's Timestamp) updates in place; a newer tick appends and trims
+    ''' to cap. Out-of-order (older) ticks are ignored.</summary>
+    Public Sub ApplyChartTick(resolution As String, c As Candle, nowUtc As DateTime)
+        If c Is Nothing Then Return
+        SyncLock _lock
+            Dim s As List(Of Candle) = Nothing
+            If Not _series.TryGetValue(resolution, s) Then
+                s = New List(Of Candle)()
+                _series(resolution) = s
+            End If
+            If s.Count = 0 Then
+                s.Add(c)
+            Else
+                Dim last As Candle = s(s.Count - 1)
+                If c.Timestamp = last.Timestamp Then
+                    s(s.Count - 1) = c                 ' forming bar update
+                ElseIf c.Timestamp > last.Timestamp Then
+                    s.Add(c)                           ' bar roll
+                    Dim cap As Integer = CapFor(resolution)
+                    If s.Count > cap Then s.RemoveRange(0, s.Count - cap)
+                End If
+                ' c.Timestamp < last.Timestamp → stale/out-of-order; ignore.
+            End If
+            _seriesUpdate(resolution) = nowUtc
+        End SyncLock
+    End Sub
+
+    ''' <summary>Replace the trade buffer wholesale from a REST seed (ascending).</summary>
+    Public Sub SeedTrades(trades As List(Of TradeRecord), nowUtc As DateTime)
+        If trades Is Nothing Then Return
+        SyncLock _lock
+            _trades.Clear()
+            _trades.AddRange(trades)
+            If _trades.Count > TradeCap Then _trades.RemoveRange(0, _trades.Count - TradeCap)
+            _tradesUpdate = nowUtc
+        End SyncLock
+    End Sub
+
+    ''' <summary>Append one streamed trade (newest at the end); trim oldest beyond cap.</summary>
+    Public Sub AppendTrade(rec As TradeRecord, nowUtc As DateTime)
+        If rec Is Nothing Then Return
+        SyncLock _lock
+            _trades.Add(rec)
+            If _trades.Count > TradeCap Then _trades.RemoveRange(0, _trades.Count - TradeCap)
+            _tradesUpdate = nowUtc
+        End SyncLock
+    End Sub
+
+    ''' <summary>Replace the top-of-book ladder with the latest depth-limited snapshot.</summary>
+    Public Sub UpdateBook(snap As OrderBookSnapshot, nowUtc As DateTime)
+        If snap Is Nothing Then Return
+        SyncLock _lock
+            _book = snap
+            _bookUpdate = nowUtc
+        End SyncLock
+    End Sub
+
+    ''' <summary>Update the ticker fields. Funding8h serves GetFundingRateAsync — it is
+    ''' funding_8h, NOT current_funding (parity with DeribitClient.GetFundingRateAsync).</summary>
+    Public Sub UpdateTicker(funding8h As Double?, openInterest As Double,
+                            markPrice As Double, indexPrice As Double, nowUtc As DateTime)
+        SyncLock _lock
+            If funding8h.HasValue Then _funding8h = funding8h
+            _openInterest = openInterest
+            _markPrice = markPrice
+            _indexPrice = indexPrice
+            _tickerUpdate = nowUtc
+        End SyncLock
+    End Sub
+
+    ' ── Readers (return copies under lock) ──────────────────────────────────────────────
+
+    ''' <summary>Copy of the resolution's series, or Nothing if never seeded/empty.</summary>
+    Public Function GetCandles(resolution As String) As List(Of Candle)
+        SyncLock _lock
+            Dim s As List(Of Candle) = Nothing
+            If Not _series.TryGetValue(resolution, s) OrElse s.Count = 0 Then Return Nothing
+            Return New List(Of Candle)(s)
+        End SyncLock
+    End Function
+
+    Public Function GetTrades() As List(Of TradeRecord)
+        SyncLock _lock
+            Return New List(Of TradeRecord)(_trades)
+        End SyncLock
+    End Function
+
+    Public Function GetBook() As OrderBookSnapshot
+        SyncLock _lock
+            Return _book
+        End SyncLock
+    End Function
+
+    Public ReadOnly Property Funding8h As Double?
+        Get
+            SyncLock _lock
+                Return _funding8h
+            End SyncLock
+        End Get
+    End Property
+
+    Public ReadOnly Property OpenInterest As Double
+        Get
+            SyncLock _lock
+                Return _openInterest
+            End SyncLock
+        End Get
+    End Property
+
+    Public ReadOnly Property MarkPrice As Double
+        Get
+            SyncLock _lock
+                Return _markPrice
+            End SyncLock
+        End Get
+    End Property
+
+    Public ReadOnly Property IndexPrice As Double
+        Get
+            SyncLock _lock
+                Return _indexPrice
+            End SyncLock
+        End Get
+    End Property
+
+    ' ── Last-update stamps (for the WsMarketDataSource staleness gate + soak diagnostics) ──
+
+    Public Function CandleLastUpdate(resolution As String) As DateTime
+        SyncLock _lock
+            Dim t As DateTime
+            If _seriesUpdate.TryGetValue(resolution, t) Then Return t
+            Return DateTime.MinValue
+        End SyncLock
+    End Function
+
+    Public ReadOnly Property TradesLastUpdate As DateTime
+        Get
+            SyncLock _lock
+                Return _tradesUpdate
+            End SyncLock
+        End Get
+    End Property
+
+    Public ReadOnly Property BookLastUpdate As DateTime
+        Get
+            SyncLock _lock
+                Return _bookUpdate
+            End SyncLock
+        End Get
+    End Property
+
+    Public ReadOnly Property TickerLastUpdate As DateTime
+        Get
+            SyncLock _lock
+                Return _tickerUpdate
+            End SyncLock
+        End Get
+    End Property
+
+    Public Function CandleCount(resolution As String) As Integer
+        SyncLock _lock
+            Dim s As List(Of Candle) = Nothing
+            If _series.TryGetValue(resolution, s) Then Return s.Count
+            Return 0
+        End SyncLock
+    End Function
+
+    Public ReadOnly Property TradeCount As Integer
+        Get
+            SyncLock _lock
+                Return _trades.Count
+            End SyncLock
+        End Get
+    End Property
+
+    Private Shared Function CapFor(resolution As String) As Integer
+        Dim cap As Integer
+        If Caps.TryGetValue(resolution, cap) Then Return cap
+        Return 250
+    End Function
+End Class
