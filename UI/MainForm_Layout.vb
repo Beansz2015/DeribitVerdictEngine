@@ -57,6 +57,11 @@ Partial Public Class MainForm
     Private _wsFeed           As DeribitWsFeed
     Private _wsDegradedThisRun As Boolean = False
 
+    ' Shadow-parity comparer (P2). Non-Nothing only when network.shadow_parity is on; holds
+    ' the running consecutive-pass counter the WS-health status line reads. Host-agnostic
+    ' (logs to a side file, never the CSV/scoring).
+    Private _parityComparer   As ShadowParityComparer
+
     ' [T1-B] Regime ADX hysteresis state.
     Private _prevRegime As String = ""
 
@@ -349,8 +354,16 @@ Partial Public Class MainForm
             _wsSource = New WsMarketDataSource(_marketState)
             _wsFeed = New DeribitWsFeed(_marketState)
             _wsFeed.StartAsync()   ' returns immediately; the connect/receive/reconnect loop runs on a background task
+            If net.ShadowParity Then
+                _parityComparer = New ShadowParityComparer(GetParityLogPath())
+            End If
         End If
     End Sub
+
+    ' Side-log path for the shadow-parity comparison (exe dir; never the CSV).
+    Friend Shared Function GetParityLogPath() As String
+        Return IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ws_parity_log.txt")
+    End Function
 
     ' Stop the WS feed (if running) on form close so the background socket unwinds cleanly.
     Protected Overrides Sub OnFormClosing(e As System.Windows.Forms.FormClosingEventArgs)

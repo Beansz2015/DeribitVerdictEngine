@@ -148,6 +148,29 @@ Partial Public Class MainForm
             Return
         End If
 
+        ' [WS-P2] Shadow parity: with shadow_parity on and transport="rest" (REST
+        ' authoritative), compare this run's REST data against the live WS source and log a
+        ' field-level diff to the side log + console. Pure observation — never the CSV, never
+        ' scoring; the verdict below still runs on the REST data. Runs after the skip-gate so
+        ' the REST data is known-valid; before scoring so the consecutive-pass counter is
+        ' fresh when UpdateLogInfo renders the status line. Skipped entirely on the pure-REST
+        ' path (zero overhead) and on transport="ws" (nothing to compare authoritatively).
+        If _parityComparer IsNot Nothing AndAlso _wsSource IsNot Nothing AndAlso
+           cfg.Network.ShadowParity AndAlso
+           Not String.Equals(cfg.Network.Transport, "ws", StringComparison.OrdinalIgnoreCase) Then
+            Dim restCandles As New Dictionary(Of String, List(Of Candle)) From {
+                {"1", candles1m}, {"5", candles5m}, {"15", candles15m}}
+            If execRes <> 1 AndAlso candlesExec IsNot Nothing Then
+                restCandles(execRes.ToString()) = candlesExec
+            End If
+            Try
+                Await _parityComparer.CompareAsync(restCandles, orderBook, bookSummary,
+                                                   fundingRate, recentTrades, _wsSource, DateTime.UtcNow)
+            Catch
+                ' Parity is observational — never disrupt the run.
+            End Try
+        End If
+
         ' recentTrades is chronological ascending — the last element is the most
         ' recent trade (see GetRecentTradesAsync contract).
         Dim lastTradePrice As Double = If(recentTrades IsNot Nothing AndAlso recentTrades.Count > 0,
