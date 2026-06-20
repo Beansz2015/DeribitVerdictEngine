@@ -44,6 +44,8 @@ Public Class PromptBuilder
             "threshold, shared with the eval de-confound), any 'kelly.*' key, any " &
             "'session_volume.sessions[].execution_resolution' (the per-session execution timeframe — a " &
             "strategy/regime selector that defines a calibration-regime boundary, not a failure-rate lever), " &
+            "any 'session_volume.sessions[].roc_magnitude_threshold' (the per-session 3-min ROC magnitude " &
+            "override — a provisional value re-baselined manually, not a failure-rate lever), " &
             "or any 'resolution_profiles.*' key (the per-resolution 3-min ROC overrides — a provisional " &
             "seed re-baselined manually, not a failure-rate lever). " &
             "These are set by the trader, not failure-rate levers." & vbLf &

@@ -141,6 +141,12 @@ Public Class IndicatorResults
     ' read sites with no new Calculate parameter; logged to CSV v0.7 + eval cache v4.
     Public Property ExecResolution As Integer = 1
 
+    ' [B re-baseline 2026-06-20] Per-session-resolved ROC magnitude threshold, stamped in
+    ' RunAnalysisAsync from the run's UTC hour (ResolveRocMagnitudeForHour). 0 = "unset" ⇒
+    ' scoring falls back to ResolveRocMagnitude(cfg, ExecResolution) — so harness fixtures
+    ' that leave it 0 behave exactly as before. Asia/London get a per-session value, NY base.
+    Public Property RocMagnitudeThreshold As Double = 0
+
     ' [v36 batch-along, v34 follow-up] CalcCVD's internal weighted slope, surfaced for
     ' precise CVD threshold calibration (was an unlogged local). USD units. CSV v0.7.
     Public Property CVDWeightedSlope As Double

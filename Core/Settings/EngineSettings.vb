@@ -466,6 +466,17 @@ Public Class SessionBucketSettings
     ''' CONSTRAINT 11). Spec: docs/session-timeframe-resolution-implementer-handoff.md.
     ''' </summary>
     <JsonPropertyName("execution_resolution")> Public Property ExecutionResolution As Integer = 1
+    ''' <summary>
+    ''' [B re-baseline 2026-06-20] Per-session ROC magnitude threshold (|ROC| "active"
+    ''' gate). Nullable ⇒ inherit (resolution_profiles → global base). Asia/London 3-min
+    ''' ROC *levels* diverge (Asia ~1.8× hotter), so a single resolution_profiles["3"]
+    ''' magnitude cannot serve both — this per-session override does (ASIA 0.20 / LONDON
+    ''' 0.11). Slope stays shared in resolution_profiles["3"]. MANUAL re-baseline only —
+    ''' OFF the auto-tweaker surface (PromptBuilder HARD CONSTRAINT 11). Default buckets
+    ''' leave it Nothing (silent-defaults path inherits base, like execution_resolution).
+    ''' Spec: docs/asia-london-roc-rebaseline-proposal.md.
+    ''' </summary>
+    <JsonPropertyName("roc_magnitude_threshold")> Public Property RocMagnitudeThreshold As Double? = Nothing
 End Class
 
 ''' <summary>

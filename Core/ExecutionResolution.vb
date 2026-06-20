@@ -21,9 +21,12 @@
 '   - MatchSessionBucket does NOT consult SessionVolume.Enabled. That flag gates the
 '     VOLUME MULTIPLIER only; resolution selection is independent (disabling session
 '     volume scaling must NOT silently revert Asia/London to 1-min — A14i).
-'   - ResolveRocMagnitude / ResolveRocSlopeDelta apply the resolution_profiles
-'     override map. Only the two ROC keys scale on 3-min (×2.1 seed); CVD/MicroCVD
-'     read the fixed 500/50-trade stream and are resolution-independent (§1).
+'   - ResolveRocSlopeDelta applies the resolution_profiles override map (a shared 3-min
+'     value across Asia/London). ResolveRocMagnitudeForHour adds a per-session override on
+'     top: Asia/London 3-min ROC *levels* diverge (Asia ~1.8× hotter), so magnitude is
+'     per-session (session_volume.sessions[].roc_magnitude_threshold) while slope stays
+'     shared. CVD/MicroCVD read the fixed 500/50-trade stream, resolution-independent (§1).
+'     Re-baseline: docs/asia-london-roc-rebaseline-proposal.md.
 
 Public Class ExecutionResolution
 
@@ -63,6 +66,20 @@ Public Class ExecutionResolution
         Dim p As ResolutionProfile = ProfileFor(cfg, execRes)
         Return If(p IsNot Nothing AndAlso p.RocMagnitudeThreshold.HasValue,
                   p.RocMagnitudeThreshold.Value, cfg.Indicators.ROC.MagnitudeThreshold)
+    End Function
+
+    ''' <summary>
+    ''' [B re-baseline] Per-session ROC magnitude threshold for the given UTC hour.
+    ''' Checks the session bucket's roc_magnitude_threshold override first (ASIA 0.20 /
+    ''' LONDON 0.11); falls back to the resolution_profiles → global base chain via the
+    ''' execRes-keyed ResolveRocMagnitude. NY (no bucket override) resolves to the base
+    ''' 1-min value — byte-identical. The single resolution-aware magnitude entry point for
+    ''' the live engine (stamped onto IndicatorResults.RocMagnitudeThreshold at run time).
+    ''' </summary>
+    Public Shared Function ResolveRocMagnitudeForHour(cfg As EngineSettings, utcHour As Integer) As Double
+        Dim b = MatchSessionBucket(cfg, utcHour)
+        If b IsNot Nothing AndAlso b.RocMagnitudeThreshold.HasValue Then Return b.RocMagnitudeThreshold.Value
+        Return ResolveRocMagnitude(cfg, ResolveResolution(cfg, utcHour))
     End Function
 
     ''' <summary>

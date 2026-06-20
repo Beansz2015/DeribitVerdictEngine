@@ -68,7 +68,10 @@ DeribitVerdictEngine/
 │   │                                   resolver. MatchSessionBucket (shared by
 │   │                                   DynamicNorms.ApplySessionVolume + the display
 │   │                                   ResolveSessionLabel), ResolveResolution,
-│   │                                   ResolveRocMagnitude / ResolveRocSlopeDelta.
+│   │                                   ResolveRocMagnitude / ResolveRocSlopeDelta, +
+│   │                                   ResolveRocMagnitudeForHour (v40 (B) re-baseline —
+│   │                                   per-session 3-min ROC magnitude ASIA 0.20 / LONDON
+│   │                                   0.11; slope shared in resolution_profiles).
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,

@@ -55,7 +55,8 @@ Partial Public Class MainForm
         ' UTC hour. ASIA/LONDON → 3-min, NY → 1-min (config-driven). The execution stack
         ' (incl. ATR) is computed on this resolution below; regime (5m) / MTF (15m) /
         ' swing pivots (5m/15m) are unchanged. At res=1 the run is byte-identical to v35.
-        Dim execRes As Integer = ExecutionResolution.ResolveResolution(cfg, DateTime.UtcNow.Hour)
+        Dim utcHour As Integer = DateTime.UtcNow.Hour
+        Dim execRes As Integer = ExecutionResolution.ResolveResolution(cfg, utcHour)
 
         ' [WS-P2] Resolve the per-run market-data source by network.transport. At
         ' transport="rest" (the P2 default) this is always _restSource — a verified
@@ -180,6 +181,9 @@ Partial Public Class MainForm
         ' [v36] Stamp the resolution BEFORE scoring so the ROC magnitude override
         ' resolves via r.ExecResolution at its scoring read sites (no new Calculate param).
         r.ExecResolution = execRes
+        ' [B re-baseline] Per-session ROC magnitude (ASIA 0.20 / LONDON 0.11; NY base),
+        ' stamped from the SAME utcHour as execRes so scoring reads it via EffRocMag.
+        r.RocMagnitudeThreshold = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, utcHour)
         r.CurrentPrice = candlesExec.Last().Close
 
         ' [v36] ATR (and the whole execution stack below) computed on candlesExec.

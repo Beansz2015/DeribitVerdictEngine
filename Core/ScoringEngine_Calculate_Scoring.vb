@@ -26,6 +26,17 @@ Partial Public Class ScoringEngine
         Return verdict
     End Function
 
+    ' [B re-baseline 2026-06-20] Effective ROC magnitude threshold at the scoring read
+    ' sites. Prefers the per-session value stamped on r (Asia 0.20 / London 0.11, set in
+    ' RunAnalysisAsync); when unset (0 — e.g. harness fixtures or any non-live path) falls
+    ' back to the resolution_profiles → base chain via ExecResolution, so behaviour is
+    ' identical to pre-re-baseline for any r that doesn't carry the per-session value.
+    Private Shared Function EffRocMag(r As IndicatorResults, cfg As EngineSettings) As Double
+        Return If(r.RocMagnitudeThreshold > 0,
+                  r.RocMagnitudeThreshold,
+                  ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution))
+    End Function
+
     Private Shared Function CalcVerdictContext(
         v       As VerdictResult,
         r       As IndicatorResults,
@@ -158,10 +169,10 @@ Partial Public Class ScoringEngine
         ' -- Step 2: Weighted Signal Scoring ----------------------------------
         Dim rocLong         As Boolean = r.ROC > 0 AndAlso r.ROCSlope = "RISING"
         Dim rocShort        As Boolean = r.ROC < 0 AndAlso r.ROCSlope = "FALLING"
-        ' [v36] Resolution-aware ROC magnitude: 3-min ROC(9) runs ~2.1× larger, so its
-        ' gate scales with the execution resolution (r.ExecResolution, stamped pre-Calculate).
-        ' At res=1 this returns the global value exactly — NY byte-identical.
-        Dim rocMagnitude As Double = ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution)
+        ' [v36 + B re-baseline] Effective ROC magnitude: per-session for 3-min (ASIA 0.20 /
+        ' LONDON 0.11, stamped on r pre-Calculate), else resolution_profiles → base via
+        ' r.ExecResolution. At NY/res=1 this is the global value exactly — byte-identical.
+        Dim rocMagnitude As Double = EffRocMag(r, cfg)
         Dim rocPartialLong  As Boolean = r.ROC > rocMagnitude AndAlso r.ROCSlope <> "RISING"
         Dim rocPartialShort As Boolean = r.ROC < -rocMagnitude AndAlso r.ROCSlope <> "FALLING"
         pL = state.LongScore : pS = state.ShortScore
@@ -371,7 +382,7 @@ Partial Public Class ScoringEngine
         pL = state.LongScore : pS = state.ShortScore
         If r.SpreadStatus = "WIDE" Then
             Dim pen       As Integer = cfg.Scoring.SpreadWidePenalty
-            Dim slopeSens As Double  = ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution)
+            Dim slopeSens As Double  = EffRocMag(r, cfg)
             If r.ROC > slopeSens Then
                 spreadPenaltyLong = pen
                 state.LongScore = Math.Max(0, state.LongScore - pen)
@@ -521,7 +532,7 @@ Partial Public Class ScoringEngine
 
             If isTrending Then
                 Dim emaAligned As Boolean = If(p2cIsLong, r.EMAAlignment = "BULL", r.EMAAlignment = "BEAR")
-                Dim rocActive  As Boolean = Math.Abs(r.ROC) >= ExecutionResolution.ResolveRocMagnitude(cfg, r.ExecResolution)
+                Dim rocActive  As Boolean = Math.Abs(r.ROC) >= EffRocMag(r, cfg)
                 Dim rocAligned As Boolean = rocActive AndAlso If(p2cIsLong, r.ROC > 0, r.ROC < 0)
                 Dim cvdAligned As Boolean = If(p2cIsLong,
                                                r.CVDSlope = "RISING"  AndAlso r.CVDValue > 0,
