@@ -90,6 +90,9 @@ Public NotInheritable Class DeribitWsFeed
         Dim reconnects As New Queue(Of DateTime)()
 
         While Not ct.IsCancellationRequested
+            ' Did THIS cycle actually establish a connection? Only a connect-then-drop counts
+            ' as a "flap" for the storm guard — still-down retries during one outage do not.
+            Dim connectedThisCycle As Boolean = False
             Try
                 Using ws As New ClientWebSocket()
                     Log("connecting to " & _wsUrl)
@@ -102,6 +105,7 @@ Public NotInheritable Class DeribitWsFeed
                     backoffMs = 1000   ' healthy connection → reset backoff
                     _currentBackoffMs = backoffMs
                     _connected = True
+                    connectedThisCycle = True
                     Await ReceiveLoopAsync(ws, ct)
                 End Using
             Catch ex As OperationCanceledException
@@ -114,13 +118,20 @@ Public NotInheritable Class DeribitWsFeed
 
             If ct.IsCancellationRequested Then Exit While
 
-            ' Storm guard: >5 reconnects / 10 min → hold the feed down for the cooldown.
+            ' Storm guard: >5 FLAPS / 10 min → hold the feed down for the cooldown. Only a
+            ' connect-then-drop (connectedThisCycle) counts as a flap; a still-down retry loop
+            ' during a single outage does NOT — otherwise exponential backoff racks up ~6
+            ' attempts in the first 60s and a brief blip trips the cooldown, leaving the feed
+            ' down ~5 min even after the network returns. With this, a single outage (however
+            ' long) recovers within one ≤60s backoff cycle; only genuine flapping cools down.
             Dim nowUtc As DateTime = DateTime.UtcNow
-            reconnects.Enqueue(nowUtc)
-            _reconnectCount += 1
-            While reconnects.Count > 0 AndAlso (nowUtc - reconnects.Peek()).TotalMinutes > 10
-                reconnects.Dequeue()
-            End While
+            _reconnectCount += 1   ' status counter — every attempt (display only)
+            If connectedThisCycle Then
+                reconnects.Enqueue(nowUtc)
+                While reconnects.Count > 0 AndAlso (nowUtc - reconnects.Peek()).TotalMinutes > 10
+                    reconnects.Dequeue()
+                End While
+            End If
 
             Dim delayMs As Integer
             If reconnects.Count > 5 Then
