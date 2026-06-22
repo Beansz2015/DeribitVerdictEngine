@@ -351,8 +351,12 @@ Partial Public Class MainForm
             String.Equals(net.Transport, "ws", StringComparison.OrdinalIgnoreCase) OrElse net.ShadowParity
         If wantWs Then
             _marketState = New MarketState()
-            _wsSource = New WsMarketDataSource(_marketState)
             _wsFeed = New DeribitWsFeed(_marketState)
+            ' [P3 §3] Gate the WS trades stream on connection-health, not last-trade-age — a
+            ' complete-but-quiet buffer is valid (matches REST). The lambda is late-bound, so
+            ' _wsFeed is set by the time a run invokes it (feed constructed just above).
+            _wsSource = New WsMarketDataSource(_marketState,
+                            Function() _wsFeed.IsConnected AndAlso Not _wsFeed.IsCoolingDown)
             _wsFeed.StartAsync()   ' returns immediately; the connect/receive/reconnect loop runs on a background task
             If net.ShadowParity Then
                 _parityComparer = New ShadowParityComparer(GetParityLogPath())
