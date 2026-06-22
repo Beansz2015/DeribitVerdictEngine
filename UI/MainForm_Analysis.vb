@@ -181,7 +181,7 @@ Partial Public Class MainForm
         ' [v36] Stamp the resolution BEFORE scoring so the ROC magnitude override
         ' resolves via r.ExecResolution at its scoring read sites (no new Calculate param).
         r.ExecResolution = execRes
-        ' [B re-baseline] Per-session ROC magnitude (ASIA 0.20 / LONDON 0.11; NY base),
+        ' [B re-baseline] Per-session ROC magnitude (ASIA 0.17 / LONDON 0.11; NY base),
         ' stamped from the SAME utcHour as execRes so scoring reads it via EffRocMag.
         r.RocMagnitudeThreshold = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, utcHour)
         r.CurrentPrice = candlesExec.Last().Close

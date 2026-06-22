@@ -27,7 +27,7 @@ Partial Public Class ScoringEngine
     End Function
 
     ' [B re-baseline 2026-06-20] Effective ROC magnitude threshold at the scoring read
-    ' sites. Prefers the per-session value stamped on r (Asia 0.20 / London 0.11, set in
+    ' sites. Prefers the per-session value stamped on r (Asia 0.17 / London 0.11, set in
     ' RunAnalysisAsync); when unset (0 — e.g. harness fixtures or any non-live path) falls
     ' back to the resolution_profiles → base chain via ExecResolution, so behaviour is
     ' identical to pre-re-baseline for any r that doesn't carry the per-session value.
@@ -169,7 +169,7 @@ Partial Public Class ScoringEngine
         ' -- Step 2: Weighted Signal Scoring ----------------------------------
         Dim rocLong         As Boolean = r.ROC > 0 AndAlso r.ROCSlope = "RISING"
         Dim rocShort        As Boolean = r.ROC < 0 AndAlso r.ROCSlope = "FALLING"
-        ' [v36 + B re-baseline] Effective ROC magnitude: per-session for 3-min (ASIA 0.20 /
+        ' [v36 + B re-baseline] Effective ROC magnitude: per-session for 3-min (ASIA 0.17 /
         ' LONDON 0.11, stamped on r pre-Calculate), else resolution_profiles → base via
         ' r.ExecResolution. At NY/res=1 this is the global value exactly — byte-identical.
         Dim rocMagnitude As Double = EffRocMag(r, cfg)

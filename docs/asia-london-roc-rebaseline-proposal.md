@@ -1,6 +1,6 @@
 # Asia/London ROC Re-baseline — `resolution_profiles["3"]` settled with measured 3-min values
 
-**Status: APPROVED (trader, 2026-06-20) — values + schema move signed off. Provisional pending a 3rd weekday session.**
+**Status: APPROVED (trader, 2026-06-20) — values + schema move signed off. Implemented v40 (`53d896f`).** **RECALIBRATED v41 (2026-06-22, 3rd weekday session): ASIA 0.20 → 0.17; LONDON 0.11 + slope 0.06 confirmed — see §8.**
 **Workstream (B)** of the v36 session-timeframe split (see `project-v36-session-timeframe`): the manual Asia/London accuracy fix. NOT the auto-tweaker (workstream A, NY×1 only) and NOT Phase-2b automation (C).
 
 ---
@@ -86,3 +86,22 @@ session_volume.sessions[LONDON].roc_magnitude_threshold: + 0.11        // halves
 - settings v39 → v40 + `change_log` entry; `DeribitIndicatorProject.md` §15 row + §6 pointer.
 
 Local-first — coordinator commits locally; the trader tests + pushes.
+
+## 8. Update — 2026-06-22: Monday recalibration (v41)
+
+The v40 values were provisional on 2 weekday days (Thu+Fri). Monday 06-22 added the 3rd weekday Asia/London session, re-measured on the live book (frozen snapshot) + a fresh 3-day slope re-derivation (same throwaway, `CalcROCSeries` reused; NY fidelity re-validated: re-derived active@0.05 = 46.5% vs logged 47.6%). Firing-rate-matched to NY-1m's stable ~53.7% @0.10.
+
+| Key | Population | v40 | 3-day matched | v41 |
+|---|---|---|---|---|
+| Magnitude | ASIA hr6-7 (n=575) | 0.20 | **0.170** (per-day 0.21 / 0.16 / 0.15) | **0.17** |
+| Magnitude | LONDON hr8-12 (n=1180) | 0.11 | 0.106 (stable all 3 days) | 0.11 (unchanged) |
+| Slope (shared) | ASIA hr6-7 \|delta\| | 0.06 | 0.061 | 0.06 (unchanged) |
+| Slope (shared) | LONDON hr8-12 \|delta\| | 0.06 | 0.062 | 0.06 (unchanged) |
+
+- **ASIA magnitude 0.20 → 0.17.** The v40 0.20 was anchored on a *hot Thursday* (matched 0.21); Fri+Mon ran calmer (0.16 / 0.15). 3-day pooled matched is 0.170; at 0.20 ASIA fired only 49% (mild ~5pp over-suppression vs the 54% target). ASIA remains the noisier session — genuine day-to-day vol variance (0.15–0.21) — so it is inherently less precise than LONDON; revisit if it keeps compressing.
+- **LONDON 0.11 confirmed** (pooled 0.106, fires 52%, stable Thu/Fri/Mon) — no change.
+- **Slope 0.06 confirmed** — ASIA pooled |delta| matched 0.061 / LONDON 0.062, still shared + near-identical, both fire ~48% vs the 46.5% target — no change.
+- **Data-hygiene note:** Monday also logged hr5 (early/dead Asia, outside the trader's hr6-7) — excluded from the measurement; those rows are noise accumulating in the live book.
+
+Settings-only delta from v40 (one value: ASIA 0.20 → 0.17). No code change; no CSV/eval-cache/render change. Harness A14j updated to assert 0.17.
+

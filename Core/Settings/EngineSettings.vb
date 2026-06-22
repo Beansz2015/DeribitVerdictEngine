@@ -470,7 +470,7 @@ Public Class SessionBucketSettings
     ''' [B re-baseline 2026-06-20] Per-session ROC magnitude threshold (|ROC| "active"
     ''' gate). Nullable ⇒ inherit (resolution_profiles → global base). Asia/London 3-min
     ''' ROC *levels* diverge (Asia ~1.8× hotter), so a single resolution_profiles["3"]
-    ''' magnitude cannot serve both — this per-session override does (ASIA 0.20 / LONDON
+    ''' magnitude cannot serve both — this per-session override does (ASIA 0.17 / LONDON
     ''' 0.11). Slope stays shared in resolution_profiles["3"]. MANUAL re-baseline only —
     ''' OFF the auto-tweaker surface (PromptBuilder HARD CONSTRAINT 11). Default buckets
     ''' leave it Nothing (silent-defaults path inherits base, like execution_resolution).

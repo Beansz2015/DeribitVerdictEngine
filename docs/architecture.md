@@ -70,7 +70,7 @@ DeribitVerdictEngine/
 │   │                                   ResolveSessionLabel), ResolveResolution,
 │   │                                   ResolveRocMagnitude / ResolveRocSlopeDelta, +
 │   │                                   ResolveRocMagnitudeForHour (v40 (B) re-baseline —
-│   │                                   per-session 3-min ROC magnitude ASIA 0.20 / LONDON
+│   │                                   per-session 3-min ROC magnitude ASIA 0.17 / LONDON
 │   │                                   0.11; slope shared in resolution_profiles).
 │   │
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,

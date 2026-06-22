@@ -70,7 +70,7 @@ Public Class ExecutionResolution
 
     ''' <summary>
     ''' [B re-baseline] Per-session ROC magnitude threshold for the given UTC hour.
-    ''' Checks the session bucket's roc_magnitude_threshold override first (ASIA 0.20 /
+    ''' Checks the session bucket's roc_magnitude_threshold override first (ASIA 0.17 /
     ''' LONDON 0.11); falls back to the resolution_profiles → global base chain via the
     ''' execRes-keyed ResolveRocMagnitude. NY (no bucket override) resolves to the base
     ''' 1-min value — byte-identical. The single resolution-aware magnitude entry point for
