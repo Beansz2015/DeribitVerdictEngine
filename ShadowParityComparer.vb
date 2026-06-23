@@ -44,6 +44,17 @@ Public NotInheritable Class ShadowParityComparer
     Private Const FundingEpsilon As Double = 0.0000000001
     ' OHLCV "exact" on a closed bar, with a float-repr epsilon so identical values never false-fail.
     Private Const PriceEpsilon As Double = 0.000001
+    ' Closed-bar VOLUME relative tolerance. OHLC stays "exact" (PriceEpsilon); volume gets a
+    ' wider RELATIVE band because the WS chart.trades 3-min closed bar systematically
+    ' undercounts Deribit's server-side REST candle by ~2.5% — a benign first/last-tick
+    ' boundary-bucketing gap, not a desync (12h soak 2026-06-23/24: 78/78 non-equal cases
+    ' ws-low, OHLC matched exactly). 5% clears the ~2.5% drift with margin so it stops resetting
+    ' the parity-gate streak, while a REAL volume desync (orders of magnitude) still trips. The
+    ' ~2.5% is immaterial to scoring in normal flow; the one standing watch is a volume spike at
+    ' the 3×-SMA-9 breakout-confirm boundary (P3 spec §7 decision (a) / DeribitIndicatorProject.md
+    ' §12). Mirrors the BookJitterTolUsd / MarkTolUsd const mechanism — parity-instrument only,
+    ' zero scoring/dataset impact (this comparer never touches the CSV or the verdict).
+    Private Const ClosedBarVolumeRelTol As Double = 0.05
     ' Ticker one-update tolerances: OI moves in small increments vs ~1B; mark moves a few ticks
     ' between the REST snapshot and the WS ticker read.
     Private Const OiRelTolerance As Double = 0.001   ' 0.1%
@@ -248,7 +259,7 @@ Public NotInheritable Class ShadowParityComparer
                Math.Abs(a.High - b.High) <= PriceEpsilon AndAlso
                Math.Abs(a.Low - b.Low) <= PriceEpsilon AndAlso
                Math.Abs(a.Close - b.Close) <= PriceEpsilon AndAlso
-               Math.Abs(a.Volume - b.Volume) <= Math.Max(PriceEpsilon, Math.Abs(a.Volume) * 0.0001)
+               Math.Abs(a.Volume - b.Volume) <= Math.Max(PriceEpsilon, Math.Abs(a.Volume) * ClosedBarVolumeRelTol)
     End Function
 
     Private Shared Function TradeKey(t As TradeRecord) As String
