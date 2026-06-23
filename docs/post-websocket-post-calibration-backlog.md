@@ -188,7 +188,18 @@ These items have no technical gating but are not yet specified. They require a p
 
 ### D7. CONFIRMED Context-Tag Quality (CONFIRMED underperforming ALIGNED)
 
-**Status:** OBSERVED 2026-06-24, per-(session×resolution) report `20260623_192312`. Needs a proposal `.md` before any change.
+**Status:** INVESTIGATED + RESOLVED 2026-06-24 — **not a tag defect; no pre-cutover escalation.** Original observation below; result here.
+
+**INVESTIGATION RESULT (2026-06-24).** Setup-profile (CSV columns by `VerdictContext`) + reach-target cross-check (eval cache by `ExecResolution`):
+- CONFIRMED's ~60% failure (NY, n=30) ≈ the engine's **baseline NY directional reach-target rate: 57% (n=2354, clean res=1)** — within the n=30 CI. CONFIRMED is the *only* 100%-directional context tag (271 CSV rows). The report §4 made it look uniquely bad by juxtaposing it against ALIGNED (0%-directional leans, 16% "failure") and the partly-no-trade tags (FLOW_UNCONFIRMED 15% dir / MOMENTUM_FADING 46% / STRUCTURALLY_WEAK 52%) — apples-to-oranges (committed-directional-barrier outcome vs lean-drift).
+- CONFIRMED's setup is NOT extended (|ROC| 0.149, |RSI-50| 9.0, ADX 30.6 — *lower* than the tags that fail less) → "buying exhaustion" ruled out.
+- The real signal is the engine's directional reach-target calibration: NY directional = **43% reach target / 53% window-expiry / 4% adverse**. Directional calls almost never stop out (4%); they "fail" by not travelling the full 2×ATR favourable barrier within the window — the same window-expiry family as the hold-window recal, and partly an eval-proxy artifact (the 2×ATR barrier is more demanding than the trader's structural targets).
+
+**Disposition:** no CONFIRMED-tag change warranted (it labels directional calls accurately). **No pre-cutover escalation** — there is no scoring-gating fix here. Two non-urgent, transport-invariant spin-offs: (1) **directional reach-target / barrier-vs-window calibration** — its own spec; overlaps the hold-window recal, the v35 eval-deconfound, and §12's `AtrTargetMultiplier` watch; post-cutover-OK; (2) minor **report §4 clarity fix** — separate directional-verdict tags from no-trade-lean tags (or annotate that their failure rates aren't comparable) so the juxtaposition stops misleading. Analysis/display-layer, not scoring.
+
+---
+
+_Original observation (2026-06-24, superseded by the result above):_
 
 **What:** The `VerdictContext` **CONFIRMED** tag — "directional verdict with cross-category support", nominally the strongest tag — shows *higher* barrier-failure than the weaker **ALIGNED** tag: NY×1 CONFIRMED **60%** (n=30) vs ALIGNED 16% (n=239); LONDON×3 CONFIRMED **47%** (n=15) vs ALIGNED 13% (n=109). (ASIA CONFIRMED 0% n=12 — too small.) So in NY/London the tag meant to mark the best directional calls is selecting the *worst* outcomes. Investigate whether CONFIRMED's cross-category-confirmation definition is mis-calibrated (confirming on lagging/correlated signals?) and whether its thresholds need re-tuning — or whether the tag should be demoted/redefined.
 
