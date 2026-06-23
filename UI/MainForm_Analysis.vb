@@ -67,8 +67,18 @@ Partial Public Class MainForm
         _wsDegradedThisRun = False
         Dim src As IMarketDataSource = ResolveSource()
 
-        Dim mtfStale As Boolean = _mtfCandles15m Is Nothing OrElse
-                                   (DateTime.UtcNow - _mtfLastFetchTime).TotalSeconds >= MTF_TTL_SECONDS
+        ' [WS-P3 §4] 15m-TTL collapse on the WS path. When transport="ws", 15m streams in-
+        ' memory from MarketState (zero API cost, current forming bar) so the 60s TTL — which
+        ' exists only to spare the REST HTTP call — buys nothing: read every run for the
+        ' freshest gate. When transport="rest" the predicate is the identical TTL expression,
+        ' so the REST path is byte-identical. Policy is host-agnostic + harness-tested (A16d/e);
+        ' the fetch + cache update below stay host-side (the _mtfCandles15m/_mtfLastFetchTime
+        ' state is host state).
+        Dim mtfStale As Boolean = MtfRefreshPolicy.ShouldRefresh(
+                                      cfg.Network.Transport,
+                                      _mtfCandles15m IsNot Nothing,
+                                      (DateTime.UtcNow - _mtfLastFetchTime).TotalSeconds,
+                                      MTF_TTL_SECONDS)
 
         Dim t_1m      = src.GetCandlesAsync("1", 250)
         Dim t_5m      = src.GetCandlesAsync("5", 210)
