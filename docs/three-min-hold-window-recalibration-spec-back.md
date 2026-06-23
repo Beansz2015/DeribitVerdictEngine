@@ -1,8 +1,10 @@
 # 3-min Hold-Window Recalibration — implementer spec-back
 
-**Status: IMPLEMENTED (offline layer) + local-committed, NOT pushed. 2026-06-23.**
+**Status: IMPLEMENTED (offline matrix + live tracker) + local-committed, NOT pushed. 2026-06-23.**
 Authoritative spec: `three-min-hold-window-recalibration-proposal.md`. Routed to the
-coordinator seat for review. One open decision flagged below (§5 live tracker).
+coordinator seat for review. The §5 live-tracker scaling was trader-approved 2026-06-23 and
+is now implemented (was flagged as the one open decision; see §5). One optional future item
+flagged for the coordinator: early-resolution-on-confirmed-hit (§5, end).
 
 ---
 
@@ -82,37 +84,73 @@ So the **live perf-strip Asia/London 3-min rates carry the same window-too-short
 the offline report just fixed: a 3-min trade gets only ~5 three-minute bars to hit target
 before it's force-classified (mostly as `WINDOW_EXPIRED` → FAILURE).
 
-**Recommendation (per spec §5 "if there is, scale it by resolution too"):** scale all three
-sites by the row's `ExecResolution` (which the eval cache already carries since v36):
-- maturity gates → `e.Timestamp.AddMinutes(15 * e.ExecResolution) <= / > nowUtc`
-- `GetEligibleBars` → `t15 = ts.AddMinutes(15 * res)` (thread the row's resolution in).
-Net effect: a 3-min PENDING row matures at T+45 and walks T+3..T+45. No eval-cache schema
-change (the column already exists); the T+3 floor stays absolute, mirroring the offline fix.
+**TRADER-APPROVED 2026-06-23 + IMPLEMENTED** (per spec §5 "if there is, scale it by
+resolution too"). All three sites now scale by the row's `ExecResolution` (carried by the
+eval cache since v36) via one shared helper:
 
-**Why deferred, not implemented in this commit:**
-1. It is a **behavioural change to a live-facing surface** (the perf strip the trader watches
-   in real time), whereas the offline report is a read-only batch. The coordinator's prior
-   expectation was "no change" here, so the magnitude of this surprise warrants explicit
-   sign-off before touching the live runtime state machine.
-2. A 3-min row would now stay PENDING for 45 min instead of 15 — the most-recent 3-min
-   outcomes lag more on the strip. That's a UX change the trader should be aware of.
-3. Spec-first / flag-before-implement discipline: the offline fix is the approved primary
-   scope; this is a clearly-specified ~3-line follow-up the coordinator can green-light.
-4. Zero risk to the running soak either way (Release build only; no schema change).
+```
+EvalHorizonMinutes(execResolution) = AnalysisConstants.HoldWindowsForResolution(res).Max()
+  res=1 → 15   res=3 → 45
+```
 
-If approved, it's a small, isolated follow-up commit. Harness impact: none — A14f drives
-`AggregateRange` with pre-built outcomes and does not exercise `GetEligibleBars` /
-`ResolvePendingRows`, so no existing fixture regresses (a new fixture could assert the
-scaled maturity gate if wanted).
+Routing it through `AnalysisConstants.HoldWindowsForResolution(...).Max()` (rather than a
+local `15 * res`) ties the live horizon to the **same source of truth** as the offline
+matrix's largest window — the two surfaces can never silently diverge.
+
+| Site | Change |
+|---|---|
+| `GetEligibleBars` | New `execResolution` param; walks T+3..`T+EvalHorizonMinutes(res)` instead of T+3..T+15. |
+| `EvaluateEntry` (line ~660) | Passes `e.ExecResolution` to `GetEligibleBars`. |
+| `MigrateV1ToV2` (line ~691) | Passes `e.ExecResolution` to `GetEligibleBars`. |
+| `ResolvePendingRows` maturity gate (line ~640) | `e.Timestamp.AddMinutes(EvalHorizonMinutes(e.ExecResolution)) > nowUtc` — a PENDING row matures only after its scaled horizon. |
+| `InitialiseAsync` Step-1.5 backfill gate (line ~340) | `row.Timestamp.AddMinutes(EvalHorizonMinutes(entry.ExecResolution)) <= nowUtc`. |
+
+Net effect: a 3-min PENDING row matures at **T+45** and walks T+3..T+45 (= 15 three-minute
+bars); NY/1-min unchanged at T+15. **No eval-cache schema change** (the `ExecResolution`
+column already exists); the T+3 floor stays absolute, mirroring the offline fix. Two stale
+docstrings ("15-min windows" / "T+3..T+15") corrected for accuracy.
+
+Behavioural note for the trader: the live perf strip's 3-min Asia/London outcomes now lag
+~45 min (vs 15) because a 3-min trade's outcome genuinely can't be known until its full
+window fills — slower but correct, replacing fresher-but-wrong. NY/1-min cadence is identical.
+
+### Future consideration (NOT in this pass) — early-resolution-on-confirmed-hit
+
+The tracker waits for the **full** window before recording *any* outcome — it does not
+early-resolve the instant a barrier is hit. So a 3-min trade that wins at T+9 still won't
+show as a win on the strip until T+45. This was already true at 1-min (a win at T+6 waited
+until T+15); the resolution scaling just makes the latency more visible at 3-min.
+
+A refinement would let a PENDING row resolve early once a favourable/adverse barrier is
+*confirmed* hit in the bars available so far (peek each tick rather than wait for window
+completion), cutting the display lag for fast 3-min trades. It's more involved — it changes
+the resolve loop from a single window-complete check to an incremental walk, and needs care
+that an early favourable hit isn't later "un-won" by an adverse bar (the barrier-hit
+semantic already resolves on the *first* hit chronologically, so a confirmed first hit is
+final — but the implementation must walk only the bars that exist *and* stop at the first
+hit, not re-evaluate). **Flagged for the coordinator** as a separate, optional spec; left
+out here to keep the live tracker's window math identical to the offline matrix.
+
+Harness impact of the implemented change: **none** — A14f drives `AggregateRange` with
+pre-built outcomes and does not exercise `GetEligibleBars` / `ResolvePendingRows`, so no
+existing fixture regresses. (A future fixture could assert the scaled maturity gate.)
 
 ## 6. Acceptance
 
-- Builds **0/0**: solution (Release), `AutoTweaker.vbproj` (Release),
+Two local commits (offline matrix, then the trader-approved live-tracker scaling):
+
+- Builds **0/0** after each: solution (Release), `AutoTweaker.vbproj` (Release),
   `verify/ordercheck/OrderCheck.vbproj` (Release).
-- OrderCheck harness **A1–A15h (38 checks) ALL PASS** (Release run).
-- `git diff --stat` = only `analysis/AnalysisConstants.vb`, `AnalysisRunner.vb`,
-  `FailureRateMatrix.vb`, `ForwardWindowJoiner.vb`, `MarkdownReportWriter.vb`
-  (+ the doc/changelog edits). `tools/AutoTweaker/` byte-unchanged.
+- OrderCheck harness **A1–A15h (38 checks) ALL PASS** (Release run) after each commit.
+- Offline-matrix commit `git diff --stat` = only the 5 `analysis/*.vb`
+  (`AnalysisConstants`, `AnalysisRunner`, `FailureRateMatrix`, `ForwardWindowJoiner`,
+  `MarkdownReportWriter`) + the doc/changelog edits. `tools/AutoTweaker/` byte-unchanged.
+- Live-tracker commit changes only `LivePerformanceTracker.vb` (+ this spec-back +
+  changelog). `analysis/` and `tools/AutoTweaker/` byte-unchanged; eval-cache schema
+  unchanged (the `ExecResolution` column already existed since v36).
+- All builds done **Release-only** (bin/Release) so the live 12h soak + B-test running in
+  bin/Debug (transport=rest, shadow_parity=true) is never touched — no Debug rebuild, no
+  relaunch.
 - **DEFERRED (spec §7 acceptance, behind the running soak):** regenerate the
   per-`(session × resolution)` report on the current book and confirm the 3-min Asia/London
   failure rate **plateaus within `{15,30,45}`** (ASIA in particular should stop declining).
@@ -123,7 +161,10 @@ scaled maturity gate if wanted).
 
 ## 7. Open items for the coordinator
 
-1. **Approve / decline the §5 live-tracker resolution-scaling** (the one behavioural
-   follow-up). Recommended: approve — otherwise the live perf strip keeps the exact
-   artifact the offline report just removed, and the two surfaces disagree for 3-min sessions.
-2. Confirm the offline-report regen plan (run after the soak ends).
+1. **§5 live-tracker resolution-scaling — DONE** (trader-approved + implemented 2026-06-23).
+   No further decision needed; noted here for the review trail.
+2. **Early-resolution-on-confirmed-hit** (§5, end) — optional future refinement to cut the
+   live-strip display lag for fast 3-min trades. Flagged for the coordinator; the trader
+   will raise it. Not specced or built here.
+3. Confirm the offline-report regen plan (run after the soak ends) — the spec §7 acceptance
+   that the 3-min Asia/London failure rate plateaus within `{15,30,45}`.

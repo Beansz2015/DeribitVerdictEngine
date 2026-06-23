@@ -335,9 +335,11 @@ Public Class LivePerformanceTracker
                                                              adjShortTarget:=0.0,
                                                              minMovePct:=cfg.Scoring.MinTradeableMovePct,
                                                              execResolution:=row.ExecResolution)
-                    ' If window complete, evaluate; otherwise leave as PENDING.
+                    ' If window complete, evaluate; otherwise leave as PENDING. The
+                    ' horizon is resolution-scaled (15 min 1-min / 45 min 3-min) so a
+                    ' 3-min row isn't judged before its window fills — three-min-hold-window-recal §5.
                     If entry.EvalOutcome = "PENDING" AndAlso
-                       row.Timestamp.AddMinutes(15) <= nowUtc Then
+                       row.Timestamp.AddMinutes(EvalHorizonMinutes(entry.ExecResolution)) <= nowUtc Then
                         Dim ev = EvaluateEntry(entry, row.Timestamp, nowUtc)
                         entry.EvalOutcome   = ev.outcome
                         entry.TargetEverHit = ev.targetHit
@@ -370,7 +372,8 @@ Public Class LivePerformanceTracker
 
     ''' <summary>
     ''' Append new OHLC bars, record the current verdict as PENDING, resolve any
-    ''' PENDING rows whose 15-min windows have completed, recompute window aggregates.
+    ''' PENDING rows whose resolution-scaled windows have completed (15 min for 1-min
+    ''' rows, 45 min for 3-min rows), recompute window aggregates.
     ''' Awaits initialisation to complete before doing any work.
     ''' Never throws.
     ''' </summary>
@@ -637,7 +640,9 @@ Public Class LivePerformanceTracker
         For i As Integer = 0 To _evalCache.Count - 1
             Dim e = _evalCache(i)
             If e.EvalOutcome <> "PENDING" Then Continue For
-            If e.Timestamp.AddMinutes(15) > nowUtc Then Continue For
+            ' Window complete only once the resolution-scaled horizon has elapsed
+            ' (15 min for 1-min rows, 45 min for 3-min rows) — three-min-hold-window-recal §5.
+            If e.Timestamp.AddMinutes(EvalHorizonMinutes(e.ExecResolution)) > nowUtc Then Continue For
             ' Window complete — evaluate.
             Dim ev = EvaluateEntry(e, e.Timestamp, nowUtc)
             e.EvalOutcome   = ev.outcome
@@ -648,8 +653,9 @@ Public Class LivePerformanceTracker
     End Sub
 
     ''' <summary>
-    ''' Walk OHLC bars T+3..T+15 and return both the barrier-hit outcome and the
-    ''' target-hit boolean in a single pass.
+    ''' Walk OHLC bars T+3..T+horizon (horizon = EvalHorizonMinutes(res): 15 min 1-min /
+    ''' 45 min 3-min) and return both the barrier-hit outcome and the target-hit boolean
+    ''' in a single pass.
     ''' targetHit = Nothing when no OHLC bars are available (WINDOW_EXPIRED with no walk).
     ''' SUCCESS always implies targetHit=True by construction.
     ''' </summary>
@@ -657,7 +663,7 @@ Public Class LivePerformanceTracker
                                            ts        As DateTime,
                                            nowUtc    As DateTime) As (outcome As String, targetHit As Boolean?)
         If e.FavBar = 0 OrElse e.AdvBar = 0 Then Return ("WINDOW_EXPIRED", Nothing)
-        Dim bars = GetEligibleBars(ts, nowUtc)
+        Dim bars = GetEligibleBars(ts, nowUtc, e.ExecResolution)
         If bars.Count = 0 Then Return ("WINDOW_EXPIRED", Nothing)
         Dim isLong As Boolean = IsLongVerdict(e.Verdict)
         Dim barrierOutcome As String  = FailureRateMatrix.WalkBars(bars, e.FavBar, e.AdvBar, isLong)
@@ -688,7 +694,7 @@ Public Class LivePerformanceTracker
                     blank += 1
                     Continue For
                 End If
-                Dim bars = GetEligibleBars(e.Timestamp, nowUtc)
+                Dim bars = GetEligibleBars(e.Timestamp, nowUtc, e.ExecResolution)
                 If bars.Count = 0 Then
                     blank += 1
                     Continue For
@@ -856,14 +862,26 @@ Public Class LivePerformanceTracker
     End Sub
 
     ''' <summary>
-    ''' Returns the 13 eligible bars (T+3 min through T+15 min, using CloseTime).
-    ''' Bar CloseTime is open_time + 1 min, so CloseTime in (ts+2min, ts+15min].
+    ''' The live eval horizon in minutes for a row's execution resolution — the largest
+    ''' offline hold window (AnalysisConstants.HoldWindowsForResolution(res).Max()), so the
+    ''' live perf strip and the offline failure matrix judge a trade over the SAME window
+    ''' length. res=1 → 15, res=3 → 45 (three-min-hold-window-recalibration-proposal.md §5).
     ''' </summary>
-    Private Shared Function GetEligibleBars(ts As DateTime, nowUtc As DateTime) As List(Of OhlcBar)
-        Dim t3  As DateTime = ts.AddMinutes(2)   ' CloseTime > t3  means ≥ T+3
-        Dim t15 As DateTime = ts.AddMinutes(15)  ' CloseTime ≤ t15 means ≤ T+15
+    Private Shared Function EvalHorizonMinutes(execResolution As Integer) As Integer
+        Return AnalysisConstants.HoldWindowsForResolution(execResolution).Max()
+    End Function
+
+    ''' <summary>
+    ''' Returns the eligible bars (T+3 min through T+horizon min, using CloseTime), where
+    ''' horizon = EvalHorizonMinutes(execResolution) — 15 min for 1-min rows (13 bars),
+    ''' 45 min for 3-min rows. Bar CloseTime is open_time + 1 min, so CloseTime in
+    ''' (ts+2min, ts+horizon].
+    ''' </summary>
+    Private Shared Function GetEligibleBars(ts As DateTime, nowUtc As DateTime, execResolution As Integer) As List(Of OhlcBar)
+        Dim t3   As DateTime = ts.AddMinutes(2)                                  ' CloseTime > t3 means ≥ T+3
+        Dim tEnd As DateTime = ts.AddMinutes(EvalHorizonMinutes(execResolution)) ' CloseTime ≤ tEnd means ≤ T+horizon
         Return _ohlcLookup.Values.
-               Where(Function(b) b.CloseTime > t3 AndAlso b.CloseTime <= t15).
+               Where(Function(b) b.CloseTime > t3 AndAlso b.CloseTime <= tEnd).
                OrderBy(Function(b) b.CloseTime).
                ToList()
     End Function
