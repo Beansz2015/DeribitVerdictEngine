@@ -168,3 +168,21 @@ Two local commits (offline matrix, then the trader-approved live-tracker scaling
    will raise it. Not specced or built here.
 3. Confirm the offline-report regen plan (run after the soak ends) — the spec §7 acceptance
    that the 3-min Asia/London failure rate plateaus within `{15,30,45}`.
+
+---
+
+> **Coordinator review — APPROVED (2026-06-23, sanity-check seat).**
+>
+> Re-ran the acceptance independently:
+> - **Builds 0/0** — solution, `AutoTweaker`, `OrderCheck`, all **Release** (`-c Release` → bin/Release; the live 12h soak + B-test in bin/Debug untouched, no Debug rebuild).
+> - **OrderCheck A1–A15h (38) ALL PASS** (Release) — incl. the A14/A15 resolution + NY×1-filter + Validate chain.
+> - **Diff audited line-by-line vs spec §4/§5.** Offline matrix: all 5 sites scaled correctly (`AnalysisConstants` lookup; `ForwardWindowJoiner` per-row keys; `FailureRateMatrix.Compute(resolution)` driving all 3 window loops; `AnalysisRunner` fetch-span + ExcludedRows + per-pop Compute; `MarkdownReportWriter` grid + decomposition). Live tracker: all **three** functional horizon sites scaled (`InitialiseAsync` maturity gate, `ResolvePendingRows` maturity gate, `GetEligibleBars` endpoint) via `EvalHorizonMinutes = HoldWindowsForResolution(res).Max()`; the T+3 floor is correctly absolute (L881), and the `AddMinutes(1)` sites are bar-stepping, not horizons.
+> - **NY×1 byte-identical CONFIRMED** — diffstat shows `tools/AutoTweaker/` untouched; the tweaker's `Compute` omits the resolution arg → default 1 → `HoldWindowsForResolution(1) = {5,10,15}`, value-identical to the old `HoldWindowsMinutes`. The `execRes<=0→1` guard cleanly handles legacy/v1 rows (`EvalHorizonMinutes(0) → 15`).
+> - **Design strength:** routing the live horizon through the SAME `HoldWindowsForResolution(...).Max()` as the offline matrix (not a local `15*res`) ties both surfaces to one source of truth — they can't silently diverge. Right call.
+>
+> **Minor / non-blocking (none gate acceptance):**
+> 1. **Stale comment** — `LivePerformanceTracker.vb:36` still reads `T+3..T+15` (the §5 docstring sweep missed it). Cosmetic.
+> 2. **Historical cached 3-min rows are NOT re-walked under the new horizon.** The maturity/resolve paths only re-evaluate PENDING rows, and the v35 floor self-heal (`ApplyMinMoveFloorReeval`) fires only on a *floor* change — not a horizon change. So 3-min rows already resolved at T+15 by the running (old-code) app stay `WINDOW_EXPIRED` after rebuild; the live perf-strip 3-min rates self-heal only as those rows age out of the rolling cache. **Display-only, self-healing; the offline report (authoritative) recomputes fresh and is unaffected.** If the trader wants the strip corrected immediately, a one-time horizon-re-eval on load (mirror the v35 floor self-heal, gated on a stored horizon marker) is the clean fix — optional, not built. Set expectations on rebuild: the strip's 3-min rates won't jump instantly.
+> 3. **No harness fixture** asserts the scaled live maturity gate (A14f drives `AggregateRange` with pre-built outcomes, doesn't reach `GetEligibleBars`/`ResolvePendingRows`). Acceptable for a display-only path; a future fixture could close it.
+>
+> **Remaining (unchanged):** the offline-report regen plateau validation stays **deferred behind the running soak** (avoids OHLC/eval-cache contention); run it once the soak ends. Local-first — trader tests + pushes.
