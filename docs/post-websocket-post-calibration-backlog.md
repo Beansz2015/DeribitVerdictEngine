@@ -186,6 +186,20 @@ These items have no technical gating but are not yet specified. They require a p
 **Trigger to revisit:** Specifically when RSI divergence false-positives are observed AND there's appetite for re-tuning.
 **Expected payoff:** Net unclear. Could be neutral or slightly positive.
 
+### D7. CONFIRMED Context-Tag Quality (CONFIRMED underperforming ALIGNED)
+
+**Status:** OBSERVED 2026-06-24, per-(session×resolution) report `20260623_192312`. Needs a proposal `.md` before any change.
+
+**What:** The `VerdictContext` **CONFIRMED** tag — "directional verdict with cross-category support", nominally the strongest tag — shows *higher* barrier-failure than the weaker **ALIGNED** tag: NY×1 CONFIRMED **60%** (n=30) vs ALIGNED 16% (n=239); LONDON×3 CONFIRMED **47%** (n=15) vs ALIGNED 13% (n=109). (ASIA CONFIRMED 0% n=12 — too small.) So in NY/London the tag meant to mark the best directional calls is selecting the *worst* outcomes. Investigate whether CONFIRMED's cross-category-confirmation definition is mis-calibrated (confirming on lagging/correlated signals?) and whether its thresholds need re-tuning — or whether the tag should be demoted/redefined.
+
+**Why deferred — sequence = AFTER P3 cutover.** Three reasons it is neither a P3 blocker nor a recalibration event: (1) `VerdictContext` is **display-only** (zero scoring impact, `architecture.md`), so it does not touch the semantics-neutral cutover; (2) both the tag (computed from scoring state) and its barrier outcome (price-based) are **transport-invariant**, so unlike the G2 calibration items it does **not** need the single-transport pre-cutover window; (3) P3 is the priority milestone and should not absorb unrelated scoring-quality work. The investigation is analysis-only and can be written up spec-first **anytime** (the data is already in the book); only the FIX waits for the post-cutover scoring-quality wave.
+
+**Escalation condition (moves it BEFORE cutover):** if the investigation concludes CONFIRMED should *gate scoring* (not merely relabel), it becomes a scoring change → approval-gated **and** a recalibration event → then pull it into the pre-cutover single-transport (REST) window instead of after.
+
+**Trigger to revisit:** after P3 cutover lands; or sooner if the mis-selection is judged to be actively misleading discretionary entries (it's display-only, so the risk is a human acting on a bad tag). Spec-first either way.
+
+**Expected payoff:** Moderate. CONFIRMED is the most prominent context cue on the header; making it actually mark high-quality calls (or demoting it) sharpens what the trader reads at a glance. Low implementation risk if kept display-only.
+
 ---
 
 ## Section E — Rejected (Do Not Re-Propose Without New Evidence)
