@@ -45,6 +45,11 @@ DeribitVerdictEngine/
 │                                       the CSV/scoring. The proposal §7 acceptance instrument.
 │                                       Host-agnostic. (RunAnalysisAsync routes the 8 live fetches
 │                                       through IMarketDataSource via ResolveSource() since P2.)
+├── MtfRefreshPolicy.vb                 [WS-P3] Pure host-agnostic predicate — whether to (re)fetch
+│                                       15m this run. transport="ws" → always (15m is in-memory; the
+│                                       60s TTL only spares the REST HTTP call, so it's moot);
+│                                       "rest" → the original TTL gate, byte-identical. §4 15m-TTL
+│                                       collapse; harness-tested A16d/e.
 ├── DynamicNorms.vb                     Live adaptive thresholds (ATR scale, vol, VWAP dev);
 │                                       now also applies session-aware volume multipliers
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport

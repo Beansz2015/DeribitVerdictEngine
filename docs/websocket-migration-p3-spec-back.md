@@ -4,6 +4,17 @@
 **Parent:** `docs/websocket-migration-proposal.md` §7/§8. **Build spec:** `docs/websocket-migration-p3-cutover-spec.md` (READY FOR IMPLEMENTER; G1+G2 MET 2026-06-24). **Predecessors:** P1 (`9cde370`, pushed), P2 (`docs/websocket-migration-p2-spec-back.md`, local), P3 §3 trades-gate (`808f510`, shipped early as the G1 prerequisite).
 **Status:** BUILT + harness-green (A1–A16e), three Release builds 0/0, **NOT pushed.**
 
+> **Coordinator review — APPROVED (2026-06-24, sanity-check seat).** Independently re-verified:
+> - **Builds 0/0** — solution + AutoTweaker + OrderCheck, all Release.
+> - **Harness A1–A15h unregressed + A16a–A16e new — ALL PASS (43 fixtures).** A16e is the byte-identical-at-rest proof (REST 15m retains the TTL); A16a/b/c lock the §3 connection-health trades gate (served-when-quiet / withheld-when-down / legacy age-gate preserved).
+> - **Diff audited line-by-line.** Scope contained to `MtfRefreshPolicy.vb` (new) + `ShadowParityComparer.vb` + `MainForm_Analysis.vb` — **Core / AutoTweaker / analysis / settings.json all untouched** (`git diff --name-only` confirmed). §4's REST arm reduces *exactly* to the pre-P3 inline gate (`(Not (x IsNot Nothing)) OrElse s>=ttl` ≡ `x Is Nothing OrElse s>=ttl`); `ResolveSource()` untouched → null-at-rest guard intact. §1#5 widens only the **Volume** term's tolerance (`0.0001`→`ClosedBarVolumeRelTol` 0.05 const); OHLC stays `PriceEpsilon`-exact, so a real desync still trips; the comparer is `shadow_parity`-only, off the CSV/scoring path.
+> - **Accepted the §4 harness-linking reconciliation** — my "WS classes aren't harness-compiled" constraint scoped the *feed + integrated path*; §6(a)'s stub `healthCheck` test legitimately requires compiling `WsMarketDataSource` (+ `MarketState`), which the §3 `Func(Of Boolean)` delegate was added precisely to enable. The feed (`DeribitWsFeed`) correctly stays out (live-gate-validated). Sound.
+> - **No §15 version entry** — agreed: the live `transport=rest` path is byte-identical, so there is no engine behaviour to version; the dated §15 marker is the trader's, on the flip. Added the `MtfRefreshPolicy.vb` line to `architecture.md`'s directory map at this review.
+> - **Display-string parity rule:** no rendered line changed (`mtfStale` is control flow; the comparer logs to a side file). Satisfied.
+> - **Edge case (transport=ws but feed not started)** documented in §2 is benign and correct — `ResolveSource()` returns `_restSource`, so 15m is fetched from REST every run (a few extra HTTP calls, same data) until the §5 restart. No concern.
+>
+> **Remaining (trader, live):** re-run the ≥50-run §7 parity gate (now with the §3 trades fix + the 5% volume tolerance — the 3-min volume resets should be gone), reconnect/fallback re-confirm if desired, then the dated `transport=ws` flip (§5). Local-first — not pushed.
+
 ---
 
 ## 1. Scope built (final — §3 already shipped via `808f510`)
