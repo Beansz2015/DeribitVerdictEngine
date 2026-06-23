@@ -46,7 +46,28 @@ Public Module AnalysisConstants
     ' Hold windows in minutes. Eligible bars: closes at row.Timestamp + 3 min
     ' through row.Timestamp + W min (bars closing at T+1 and T+2 excluded for
     ' realistic execution latency — see spec §2b).
+    ' This is the res=1 (1-min execution) base case. Resolution-aware callers route
+    ' through HoldWindowsForResolution; HoldWindowsForResolution(1) is value-identical
+    ' to this array, so the NY×1 matrix and the NY×1-filtered auto-tweaker stay
+    ' byte-unchanged. Kept as a field because the auto-tweaker's PromptBuilder (always
+    ' res=1) reads it directly.
     Public ReadOnly HoldWindowsMinutes As Integer() = {5, 10, 15}
+
+    ' Resolution-scaled hold windows (three-min-hold-window-recalibration-proposal.md).
+    ' Each execution resolution gets the same BAR-COUNT budget — {5,10,15} bars:
+    '   res=1 (NY)        → {5, 10, 15}   (= HoldWindowsMinutes; byte-identical)
+    '   res=3 (ASIA/LON)  → {15, 30, 45}  (= 5/10/15 three-minute bars)
+    ' Rationale: HoldWindowsMinutes measures wall-clock minutes, but a trade develops
+    ' in bars. A 3-min trade reaches 5/10/15 bars only at 15/30/45 min; the unscaled
+    ' array gave it a third of the bar-budget, so 3-min tiers "failed" by spurious
+    ' window-expiry. Barrier detection still walks 1m OHLC WITHIN the window (finer
+    ' granularity = more accurate wick detection); only the window LENGTH scales. The
+    ' T+3 execution-latency floor is absolute (not scaled) — see
+    ' ForwardWindowJoiner.PopulateForwardBars.
+    Public Function HoldWindowsForResolution(execRes As Integer) As Integer()
+        Dim res As Integer = If(execRes <= 0, 1, execRes)
+        Return New Integer() {5 * res, 10 * res, 15 * res}
+    End Function
 
     ' Minimum rows in a cell before its failure rate is considered stable.
     Public Const MinSamplesPerCell As Integer = 30

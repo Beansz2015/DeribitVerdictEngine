@@ -114,6 +114,11 @@ Public Class ForwardWindowJoiner
     ' where rowMin = row.Timestamp floored to the UTC minute boundary.
     ' Missing bars (Deribit gap) are silently skipped — an empty list means
     ' the row is excluded from that window's failure-rate denominator.
+    ' The window set is resolution-scaled per row (three-min-hold-window-recalibration
+    ' -proposal.md): a 3-min row keys ForwardBars {15,30,45}, a 1-min row {5,10,15}.
+    ' FailureRateMatrix.Compute(resolution) then looks up the matching keys. The T+3
+    ' execution-latency floor is absolute (not scaled) — 3 min of latency is 3 min
+    ' regardless of execution resolution; only the window length scales.
     Public Shared Sub PopulateForwardBars(rows As List(Of CsvRow),
                                           ohlcMap As Dictionary(Of DateTime, OhlcBar))
         For Each row In rows
@@ -122,7 +127,7 @@ Public Class ForwardWindowJoiner
             Dim rowMin As New DateTime(row.Timestamp.Year, row.Timestamp.Month,
                                        row.Timestamp.Day,  row.Timestamp.Hour,
                                        row.Timestamp.Minute, 0, DateTimeKind.Utc)
-            For Each w In AnalysisConstants.HoldWindowsMinutes
+            For Each w In AnalysisConstants.HoldWindowsForResolution(row.ExecResolution)
                 Dim bars As New List(Of OhlcBar)()
                 ' Bars closing at T+3, T+4, ..., T+W (bars at T+1 and T+2 excluded
                 ' per spec §2b — too quick to execute after a verdict fires).

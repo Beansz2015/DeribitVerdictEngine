@@ -90,18 +90,25 @@ Public Class FailureRateMatrix
     ' denominator rather than counted as failures. floorPct / engineTargetMult default
     ' to the AnalysisConstants POCO mirrors; call sites pass the live
     ' cfg.Scoring.MinTradeableMovePct / .AtrTargetMultiplier.
+    ' resolution scales the hold windows (three-min-hold-window-recalibration-proposal.md):
+    ' res=1 → {5,10,15}, res=3 → {15,30,45}. Defaults to 1 so the NY×1-filtered
+    ' auto-tweaker call (which omits this arg) stays byte-identical; the offline report
+    ' passes the population's resolution per (session × resolution) segment.
     Public Shared Function Compute(rows As List(Of CsvRow),
                                    ByRef atrInvalidExcluded As Integer,
                                    ByRef structuralStopRows  As Integer,
                                    ByRef atrFallbackRows     As Integer,
                                    ByRef belowMinMoveExcluded As Integer,
                                    Optional floorPct As Double = AnalysisConstants.FavBarAbsFloorPct,
-                                   Optional engineTargetMult As Double = AnalysisConstants.EngineTargetAtrMultiplier) As List(Of FailureCellResult)
+                                   Optional engineTargetMult As Double = AnalysisConstants.EngineTargetAtrMultiplier,
+                                   Optional resolution As Integer = 1) As List(Of FailureCellResult)
 
         atrInvalidExcluded = 0
         structuralStopRows  = 0
         atrFallbackRows     = 0
         belowMinMoveExcluded = 0
+
+        Dim windows As Integer() = AnalysisConstants.HoldWindowsForResolution(resolution)
 
         ' counts(tier)(window)(threshold) = (N, Failures, Successes, AdverseHits, Expiries, Ambiguous)
         Dim counts As New Dictionary(Of String, Dictionary(Of Integer, Dictionary(Of Double,
@@ -110,7 +117,7 @@ Public Class FailureRateMatrix
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
             counts(tier) = New Dictionary(Of Integer, Dictionary(Of Double,
                 (Integer, Integer, Integer, Integer, Integer, Integer)))()
-            For Each w In AnalysisConstants.HoldWindowsMinutes
+            For Each w In windows
                 counts(tier)(w) = New Dictionary(Of Double,
                     (Integer, Integer, Integer, Integer, Integer, Integer))()
                 For Each thr In ThresholdsFor(tier)
@@ -165,7 +172,7 @@ Public Class FailureRateMatrix
                 End If
             End If
 
-            For Each w In AnalysisConstants.HoldWindowsMinutes
+            For Each w In windows
                 Dim bars As List(Of OhlcBar) = Nothing
                 If Not row.ForwardBars.TryGetValue(w, bars) OrElse bars Is Nothing OrElse bars.Count = 0 Then
                     Continue For   ' no data for this window — exclude from denominator
@@ -214,7 +221,7 @@ Public Class FailureRateMatrix
             Dim bestFailRate As Double  = Double.MaxValue
             Dim bestFailIdx  As Integer = -1
             Dim tierResults As New List(Of FailureCellResult)()
-            For Each w In AnalysisConstants.HoldWindowsMinutes
+            For Each w In windows
                 For Each thr In ThresholdsFor(tier)
                     Dim c = counts(tier)(w)(thr)
                     Dim cell As New FailureCellResult() With {

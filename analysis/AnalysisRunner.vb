@@ -50,10 +50,16 @@ Public Class AnalysisRunner
             report.MarkdownText = "Analysis report: no valid timestamps in CSV."
             Return report
         End If
-        ' Fetch from the earliest row timestamp to max + 16 min to cover
-        ' all eligible bars (bars closing at T+15 open at T+14, plus buffer).
+        ' Fetch from the earliest row timestamp to max + (largest hold window + 1) min
+        ' to cover all eligible bars. The hold windows are resolution-scaled, so a book
+        ' containing 3-min rows needs forward OHLC out to T+45 (not T+15) — derive the
+        ' span from the resolution-scaled windows actually present in the book
+        ' (three-min-hold-window-recalibration-proposal.md §4).
         Dim startUtc As DateTime = validRows.Min(Function(r) r.Timestamp)
-        Dim endUtc   As DateTime = validRows.Max(Function(r) r.Timestamp).AddMinutes(16)
+        Dim maxWindowMin As Integer = validRows.
+            Select(Function(r) AnalysisConstants.HoldWindowsForResolution(r.ExecResolution).Max()).
+            DefaultIfEmpty(15).Max()
+        Dim endUtc   As DateTime = validRows.Max(Function(r) r.Timestamp).AddMinutes(maxWindowMin + 1)
 
         ' ── 3. Deribit OHLC bulk fetch ───────────────────────────────────────────────
         Dim ohlcMap As Dictionary(Of DateTime, OhlcBar) =
@@ -106,18 +112,24 @@ Public Class AnalysisRunner
             }
 
             ' Rows excluded from ALL windows (engine was off / large Deribit gap).
+            ' Use THIS population's resolution-scaled windows so a 3-min population's
+            ' exclusion test checks {15,30,45}, matching its ForwardBars keys.
+            Dim popWindows As Integer() = AnalysisConstants.HoldWindowsForResolution(popRes(popKey))
             pr.ExcludedRows = popRows.Where(
-                Function(r) Not AnalysisConstants.HoldWindowsMinutes.Any(
+                Function(r) Not popWindows.Any(
                     Function(w) r.ForwardBars.ContainsKey(w) AndAlso r.ForwardBars(w).Count > 0)).Count()
 
             ' ── 5a. Failure-rate matrix (this population only) ────────────────────────
             ' v35 de-confound: pass the live shared floor + engine target multiplier so the
             ' matrix floors the favourable barrier and EXCLUDES gate-killed rows.
+            ' Pass the population's resolution so each matrix uses its own hold windows
+            ' (NY×1 → {5,10,15}; ASIA/LONDON×3 → {15,30,45}) — three-min-hold-window-recal.
             Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
             Dim belowMin As Integer = 0
             pr.FailureCells = FailureRateMatrix.Compute(popRows, atrEx, structStop, atrFb, belowMin,
                                                         cfg.Scoring.MinTradeableMovePct,
-                                                        cfg.Scoring.AtrTargetMultiplier)
+                                                        cfg.Scoring.AtrTargetMultiplier,
+                                                        popRes(popKey))
             pr.AtrInvalidExcluded   = atrEx
             pr.StructuralStopRows   = structStop
             pr.AtrFallbackRows      = atrFb

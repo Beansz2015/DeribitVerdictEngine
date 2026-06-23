@@ -128,6 +128,9 @@ Public Class MarkdownReportWriter
         sb.AppendLine("_Failure = adverse barrier hit first OR window expired without favourable hit. " &
                       "Segmented per (tier × session); ★◆ picked WITHIN each sub-table._")
         sb.AppendLine()
+        sb.AppendLine("_Hold windows are resolution-scaled for bar-count parity: NY×1 = 5/10/15m, " &
+                      "3-min Asia/London = 15/30/45m (= 5/10/15 three-minute bars)._")
+        sb.AppendLine()
         For Each tier In Tiers
             sb.AppendLine("### " & tier)
             sb.AppendLine()
@@ -135,14 +138,16 @@ Public Class MarkdownReportWriter
                 sb.AppendLine(SubTableHeader(pop, tier))
                 sb.AppendLine()
                 If TierHasRows(pop.FailureCells, tier) Then
-                    AppendMatrixGrid(sb, pop.FailureCells, tier)
+                    AppendMatrixGrid(sb, pop.FailureCells, tier, pop.Resolution)
                     sb.AppendLine()
                 End If
             Next
         Next
     End Sub
 
-    Private Shared Sub AppendMatrixGrid(sb As StringBuilder, cells As List(Of FailureCellResult), tier As String)
+    ' resolution scales the Window-column rows: NY×1 shows 5/10/15m, the 3-min tables
+    ' show 15/30/45m (three-min-hold-window-recalibration-proposal.md §4).
+    Private Shared Sub AppendMatrixGrid(sb As StringBuilder, cells As List(Of FailureCellResult), tier As String, resolution As Integer)
         Dim thrs = If(tier.StartsWith("STRONG"),
                       AnalysisConstants.StrongAtrThresholds,
                       AnalysisConstants.MediumAtrThresholds)
@@ -156,7 +161,7 @@ Public Class MarkdownReportWriter
             sep.Append("------------|")
         Next
         sb.AppendLine(sep.ToString())
-        For Each w In AnalysisConstants.HoldWindowsMinutes
+        For Each w In AnalysisConstants.HoldWindowsForResolution(resolution)
             Dim row As New StringBuilder(String.Format("| {0,4}m  |", w))
             For Each thr In thrs
                 Dim cell = cells.Where(Function(c) c.VerdictTier = tier AndAlso
@@ -239,7 +244,7 @@ Public Class MarkdownReportWriter
                               AnalysisConstants.MediumAtrThresholds)
                 sb.AppendLine("| Window | ATR× | n | Success | Adverse Hit | Window Expiry | Ambiguous |")
                 sb.AppendLine("|--------|------|---|---------|-------------|---------------|-----------|")
-                For Each w In AnalysisConstants.HoldWindowsMinutes
+                For Each w In AnalysisConstants.HoldWindowsForResolution(pop.Resolution)
                     For Each thr In thrs
                         Dim cell = pop.FailureCells.Where(Function(c) c.VerdictTier = tier AndAlso
                                                                       c.WindowMin = w AndAlso
