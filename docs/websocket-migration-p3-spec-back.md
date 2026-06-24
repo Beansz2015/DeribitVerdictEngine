@@ -14,6 +14,8 @@
 > - **Edge case (transport=ws but feed not started)** documented in §2 is benign and correct — `ResolveSource()` returns `_restSource`, so 15m is fetched from REST every run (a few extra HTTP calls, same data) until the §5 restart. No concern.
 >
 > **Remaining (trader, live):** re-run the ≥50-run §7 parity gate (now with the §3 trades fix + the 5% volume tolerance — the 3-min volume resets should be gone), reconnect/fallback re-confirm if desired, then the dated `transport=ws` flip (§5). Local-first — not pushed.
+>
+> **Gate trial + tolerance follow-up (2026-06-24, this seat).** Trader ran the staged parity gate (`transport=rest` + `shadow_parity=true`) + a live `transport=ws` smoke-test, then reverted. **Volume fix CONFIRMED** — **zero closed-bar mismatches across 214 runs** (the soak had 72); the live WS path ran clean (WS OK, all 4 series fresh, 214 CSV rows no skips, no ws-specific desync). But the **≥50 streak peaked at 37**, held down by benign jitter — **9 funding + 4 book** resets, zero real desyncs. The funding trips are the same too-tight-tolerance class as the volume fix (`FundingEpsilon` 1e-10 vs ~1e-8 float-rounding on a near-zero ~6e-7 rate). **Widened both** (`ShadowParityComparer`-only, zero engine impact, builds 0/0): funding → combined `Math.Max(FundingAbsTol 5e-8, |rate|·FundingRelTol 5%)` (mirrors the volume idiom); book 5→8 ticks (2.5→4.0 USD). **Trader rebuilds Debug + re-runs the gate → expect the streak to clear 50**, then the dated `transport=ws` flip + push.
 
 ---
 
