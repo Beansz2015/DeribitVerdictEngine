@@ -123,6 +123,10 @@ Public Class EngineSettings
 
     <JsonPropertyName("performance_display")>
     Public Property PerformanceDisplay As New PerformanceDisplaySettings
+
+    ''' <summary>[P4 #1 realtime-exit-guard] Display/alert-only exit-guard overlay parameters.</summary>
+    <JsonPropertyName("exit_guard")>
+    Public Property ExitGuard As New ExitGuardSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -824,4 +828,27 @@ Public Class PerformanceDisplaySettings
     ''' </summary>
     <JsonPropertyName("metric_mode")>
     Public Property MetricMode As String = "barrier"
+End Class
+
+' ---------------------------------------------------------------------------
+' Realtime Exit Guard settings (P4 #1)
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' [P4 #1 realtime-exit-guard] Display/alert-only overlay that re-runs the fast microstructure
+''' exit checks against the live WS MarketState every interval_sec while a position is declared.
+''' Zero scoring impact — never calls Calculate, never writes the CSV. OFF the auto-tweaker
+''' surface (trader-risk/display preference, same exclusion class as kelly.* — SettingsDiffApplier
+''' rejects "exit_guard." and PromptBuilder HARD CONSTRAINT 13). Hot-reloadable.
+''' Spec: docs/realtime-exit-guard-proposal.md §5 / §9.
+''' </summary>
+Public Class ExitGuardSettings
+    ''' <summary>Master switch. Active only when a position is declared; dormant when flat. Default True.</summary>
+    <JsonPropertyName("enabled")>        Public Property Enabled       As Boolean = True
+    ''' <summary>Guard re-evaluation cadence in seconds (range 2–5). In-memory recompute is cheap. Default 3.</summary>
+    <JsonPropertyName("interval_sec")>   Public Property IntervalSec   As Integer = 3
+    ''' <summary>Consecutive EXIT ticks required before the strip latches EXIT + the alarm fires (anti-jitter). Default 2.</summary>
+    <JsonPropertyName("debounce_evals")> Public Property DebounceEvals As Integer = 2
+    ''' <summary>Play an audible cue on the EXIT-latch transition. Default True.</summary>
+    <JsonPropertyName("sound_enabled")>  Public Property SoundEnabled  As Boolean = True
 End Class

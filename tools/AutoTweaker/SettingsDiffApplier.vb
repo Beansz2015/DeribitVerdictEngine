@@ -63,7 +63,8 @@ Public Class SettingsDiffApplier
     Private Shared ReadOnly RejectedPathPrefixes As String() = {
         "kelly.",                   ' trader-owned risk sizing
         "resolution_profiles.",     ' provisional per-resolution ROC overrides — manual re-baseline only
-        "network."                  ' transport plumbing (REST/WS/shadow_parity) — not a failure-rate lever (HARD CONSTRAINT 12)
+        "network.",                 ' transport plumbing (REST/WS/shadow_parity) — not a failure-rate lever (HARD CONSTRAINT 12)
+        "exit_guard."               ' realtime exit-guard overlay — trader-risk/display preference, display-only (HARD CONSTRAINT 13)
     }
 
     ' Validate a proposed diff list.

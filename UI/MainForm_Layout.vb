@@ -375,6 +375,10 @@ Partial Public Class MainForm
             _wsFeed?.Stop()
         Catch
         End Try
+        Try
+            StopExitGuard()   ' [P4 #1] dispose the exit-guard tick on close
+        Catch
+        End Try
         MyBase.OnFormClosing(e)
     End Sub
 
@@ -614,7 +618,9 @@ Partial Public Class MainForm
         ' placeholder header + LOG/AUTO-RUN + CTA). Bumped to 340 px per
         ' P4e kickoff §4 "bump the row height by 40 px" guidance.
         _cardSettingsTools = NewCard()
-        AddRow(_cardSettingsTools, 340)
+        ' P4 #1: +24px over the P4e 340 to keep the TOOLS (percent) row whole after the
+        ' LOG/AUTO-RUN row grew for the EXIT GUARD strip.
+        AddRow(_cardSettingsTools, 364)
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
@@ -782,7 +788,7 @@ Partial Public Class MainForm
             .TabStop = False
         }
         outer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 110))   ' LOG/AUTO-RUN (P4f +18px for "last HH:mm:ss" line)
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 134))   ' LOG/AUTO-RUN (P4f +18px "last HH:mm:ss"; P4#1 +24px EXIT GUARD strip)
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))    ' CTA
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS
 
@@ -834,6 +840,26 @@ Partial Public Class MainForm
         lnkResetLog.AutoSize = True
         lnkResetLog.Location = New Point(10, 66)
         grpLog.Controls.Add(lnkResetLog)
+
+        ' [P4 #1 realtime-exit-guard] EXIT GUARD strip — a live status-bar element in the LOG
+        ' cascade (sibling of the WS-health line / perf strip), visible only when a position is
+        ' declared. Driven by the guard timer (MainForm_ExitGuard.vb), not by UpdateLogInfo. Full
+        ' detail (the adverse-signal list / break level) rides the tooltip so the inline line stays
+        ' short. NOT an RTF/snapshot/card surface → no card-binding obligation (spec §6).
+        lblExitGuard = New Label() With {
+            .AutoSize = True,
+            .Anchor = AnchorStyles.None,
+            .Dock = DockStyle.None,
+            .Location = New Point(10, 88),
+            .Text = "",
+            .Font = Theme.FontMono(8.5F, FontStyle.Bold),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .Visible = False,
+            .TabStop = False
+        }
+        grpLog.Controls.Add(lblExitGuard)
+        _exitGuardTip = New ToolTip() With {.InitialDelay = 300, .AutoPopDelay = 8000, .ReshowDelay = 150}
 
         Dim grpAutoRun = New SectionGroup() With {
             .Title = "AUTO-RUN",

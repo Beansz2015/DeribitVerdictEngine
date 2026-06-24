@@ -12,6 +12,29 @@
 '   Signature change: CalcHoldStatus(r, posState, cfg) -- cfg added as 3rd param.
 '   All three call sites in ScoringEngine_Calculate.vb updated accordingly.
 
+''' <summary>
+''' [P4 #1 realtime-exit-guard] Shared fast-exit primitives — the SINGLE source of truth for
+''' "what counts as an adverse microstructure signal" during a hold. Consumed by BOTH
+''' <see cref="ScoringEngine.CalcHoldStatus"/> (Layers 1 / 1.5 / 3) and ExitGuardEvaluator, so the
+''' full-run hold logic and the realtime exit-guard overlay can never drift on the adverse
+''' definitions. Pure data; no logic. (docs/realtime-exit-guard-proposal.md §4.3.)
+'''
+''' AdverseSignals carries the TERSE CalcHoldStatus fragments (e.g. "BEAR_ACCEL", "OFI:SELL") in
+''' [micro, ofi, tfi, cvd] order, already filtered — so CalcHoldStatus's Layer-1 string stays
+''' byte-identical via String.Join. The four booleans let the exit guard build its own readable
+''' strip labels from the same source without re-deriving the adverse definitions.
+''' </summary>
+Public NotInheritable Class FastExitPrimitives
+    Public Property AdverseCount    As Integer
+    Public Property MicroAdverse    As Boolean
+    Public Property OfiAdverse      As Boolean
+    Public Property TfiAdverse      As Boolean
+    Public Property CvdAdverse      As Boolean
+    Public Property AdverseSignals  As String() = Array.Empty(Of String)()
+    Public Property StructuralBreak As Boolean
+    Public Property BreakLevel      As Double
+End Class
+
 Partial Public Class ScoringEngine
 
     ' Regime-specific max achievable scores.
@@ -79,6 +102,49 @@ Partial Public Class ScoringEngine
         Return baseNote
     End Function
 
+    ''' <summary>
+    ''' [P4 #1 realtime-exit-guard] Computes the shared fast-exit primitives from an
+    ''' IndicatorResults snapshot for the given side — the single source of truth for the
+    ''' adverse-signal definitions + structural-break test used by BOTH CalcHoldStatus (Layers
+    ''' 1 / 1.5 / 3) and ExitGuardEvaluator. Pure; reads only the streaming-driven fields
+    ''' (MicroCVDSignal / OFISignal / TFISignal / CVDSlope / CVDValue) plus r.CurrentPrice and the
+    ''' carried 5m swing levels for the structural break. (docs/realtime-exit-guard-proposal.md §4.2–§4.3.)
+    ''' </summary>
+    Friend Shared Function ComputeFastExitPrimitives(r As IndicatorResults, posState As PositionState) As FastExitPrimitives
+        Dim p As New FastExitPrimitives()
+        Select Case posState
+            Case PositionState.InLong
+                p.MicroAdverse = (r.MicroCVDSignal = "BEAR_ACCEL" OrElse r.MicroCVDSignal = "BEAR_DECEL")
+                p.OfiAdverse   = (r.OFISignal = "SELL DOMINANT")
+                p.TfiAdverse   = (r.TFISignal = "SELL PRESSURE")
+                p.CvdAdverse   = (r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0)
+                p.AdverseSignals = New List(Of String) From {
+                    If(p.MicroAdverse, r.MicroCVDSignal, Nothing),
+                    If(p.OfiAdverse,   "OFI:SELL",       Nothing),
+                    If(p.TfiAdverse,   "TFI:SELL",       Nothing),
+                    If(p.CvdAdverse,   "CVD:FALLING",    Nothing)
+                }.Where(Function(s) s IsNot Nothing).ToArray()
+                p.StructuralBreak = (r.LastSwingLow5m > 0 AndAlso r.CurrentPrice <= r.LastSwingLow5m)
+                p.BreakLevel = r.LastSwingLow5m
+            Case PositionState.InShort
+                p.MicroAdverse = (r.MicroCVDSignal = "BULL_ACCEL" OrElse r.MicroCVDSignal = "BULL_DECEL")
+                p.OfiAdverse   = (r.OFISignal = "BUY DOMINANT")
+                p.TfiAdverse   = (r.TFISignal = "BUY PRESSURE")
+                p.CvdAdverse   = (r.CVDSlope = "RISING" AndAlso r.CVDValue > 0)
+                p.AdverseSignals = New List(Of String) From {
+                    If(p.MicroAdverse, r.MicroCVDSignal, Nothing),
+                    If(p.OfiAdverse,   "OFI:BUY",        Nothing),
+                    If(p.TfiAdverse,   "TFI:BUY",        Nothing),
+                    If(p.CvdAdverse,   "CVD:RISING",     Nothing)
+                }.Where(Function(s) s IsNot Nothing).ToArray()
+                p.StructuralBreak = (r.LastSwingHigh5m > 0 AndAlso r.CurrentPrice >= r.LastSwingHigh5m)
+                p.BreakLevel = r.LastSwingHigh5m
+        End Select
+        p.AdverseCount = (If(p.MicroAdverse, 1, 0)) + (If(p.OfiAdverse, 1, 0)) +
+                         (If(p.TfiAdverse, 1, 0)) + (If(p.CvdAdverse, 1, 0))
+        Return p
+    End Function
+
     ' [P1] v0.48: CalcHoldStatus microstructure fast-exit layer.
     ' Previous version used only ROC, OBV divergence, RSI divergence, and RSI level.
     ' During a 2-15 minute hold, OFI, TFI, MicroCVD, and CVD react faster than RSI/ROC
@@ -97,32 +163,24 @@ Partial Public Class ScoringEngine
                                             cfg As EngineSettings) As String
         Select Case posState
             Case PositionState.InLong
+                ' [P4 #1 realtime-exit-guard] Layers 1 / 1.5 / 3 read the SHARED primitive
+                ' (ComputeFastExitPrimitives) the exit guard also consumes — one definition of
+                ' "adverse," no drift. Output byte-identical to the prior inline computation.
+                Dim p = ComputeFastExitPrimitives(r, posState)
                 ' Layer 1: two adverse microstructure signals = fast exit
-                Dim microAdverse As Boolean = (r.MicroCVDSignal = "BEAR_ACCEL" OrElse r.MicroCVDSignal = "BEAR_DECEL")
-                Dim ofiAdverse   As Boolean = (r.OFISignal = "SELL DOMINANT")
-                Dim tfiAdverse   As Boolean = (r.TFISignal = "SELL PRESSURE")
-                Dim cvdAdverse   As Boolean = (r.CVDSlope = "FALLING" AndAlso r.CVDValue < 0)
-                Dim adverseCount As Integer = (If(microAdverse, 1, 0)) + (If(ofiAdverse, 1, 0)) +
-                                              (If(tfiAdverse, 1, 0)) + (If(cvdAdverse, 1, 0))
-                If adverseCount >= 2 Then
-                    Return "EXIT -- microstructure deterioration (" &
-                           String.Join("+", New List(Of String) From {
-                               If(microAdverse, r.MicroCVDSignal, Nothing),
-                               If(ofiAdverse,   "OFI:SELL",       Nothing),
-                               If(tfiAdverse,   "TFI:SELL",       Nothing),
-                               If(cvdAdverse,   "CVD:FALLING",    Nothing)
-                           }.Where(Function(s) s IsNot Nothing)) & ")"
+                If p.AdverseCount >= 2 Then
+                    Return "EXIT -- microstructure deterioration (" & String.Join("+", p.AdverseSignals) & ")"
                 End If
                 ' Layer 1.5: structural break exit -- price closed through prior swing low
-                If r.LastSwingLow5m > 0 AndAlso r.CurrentPrice <= r.LastSwingLow5m Then
-                    Return String.Format("EXIT -- structural break (closed at/below swing low {0:F1})", r.LastSwingLow5m)
+                If p.StructuralBreak Then
+                    Return String.Format("EXIT -- structural break (closed at/below swing low {0:F1})", p.BreakLevel)
                 End If
                 ' Layer 2: structural divergence exits
                 If r.ROC < 0 Then Return "EXIT -- momentum break (ROC crossed below 0)"
                 If r.OBVDivergence = "BEARISH" Then Return "EXIT -- OBV bearish divergence"
                 If r.RSIDivergence = "BEARISH" Then Return "EVALUATE -- RSI bearish divergence, watch for reversal"
                 ' Layer 3: single adverse microstructure = soft warning
-                If microAdverse Then Return "EVALUATE -- " & r.MicroCVDSignal & " signal, confirm with price action"
+                If p.MicroAdverse Then Return "EVALUATE -- " & r.MicroCVDSignal & " signal, confirm with price action"
                 ' Layer 4: RSI/ROC structural assessment -- [T1-D] thresholds from cfg
                 If r.ROC > cfg.Scoring.HoldRocTakeProfitLong Then Return "TAKE PROFIT -- extreme momentum, tighten stops"
                 If r.RSI > cfg.Scoring.HoldRsiHoldLong       Then Return "HOLD -- momentum intact"
@@ -130,32 +188,22 @@ Partial Public Class ScoringEngine
                 Return "EXIT -- retracement too deep (RSI < " & cfg.Scoring.HoldRsiEvaluateLong.ToString("F0") & ")"
 
             Case PositionState.InShort
+                ' [P4 #1 realtime-exit-guard] Shared primitive (mirror of the long side).
+                Dim p = ComputeFastExitPrimitives(r, posState)
                 ' Layer 1: two adverse microstructure signals = fast exit
-                Dim microAdverse As Boolean = (r.MicroCVDSignal = "BULL_ACCEL" OrElse r.MicroCVDSignal = "BULL_DECEL")
-                Dim ofiAdverse   As Boolean = (r.OFISignal = "BUY DOMINANT")
-                Dim tfiAdverse   As Boolean = (r.TFISignal = "BUY PRESSURE")
-                Dim cvdAdverse   As Boolean = (r.CVDSlope = "RISING" AndAlso r.CVDValue > 0)
-                Dim adverseCount As Integer = (If(microAdverse, 1, 0)) + (If(ofiAdverse, 1, 0)) +
-                                              (If(tfiAdverse, 1, 0)) + (If(cvdAdverse, 1, 0))
-                If adverseCount >= 2 Then
-                    Return "EXIT -- microstructure deterioration (" &
-                           String.Join("+", New List(Of String) From {
-                               If(microAdverse, r.MicroCVDSignal, Nothing),
-                               If(ofiAdverse,   "OFI:BUY",        Nothing),
-                               If(tfiAdverse,   "TFI:BUY",        Nothing),
-                               If(cvdAdverse,   "CVD:RISING",     Nothing)
-                           }.Where(Function(s) s IsNot Nothing)) & ")"
+                If p.AdverseCount >= 2 Then
+                    Return "EXIT -- microstructure deterioration (" & String.Join("+", p.AdverseSignals) & ")"
                 End If
                 ' Layer 1.5: structural break exit -- price closed through prior swing high
-                If r.LastSwingHigh5m > 0 AndAlso r.CurrentPrice >= r.LastSwingHigh5m Then
-                    Return String.Format("EXIT -- structural break (closed at/above swing high {0:F1})", r.LastSwingHigh5m)
+                If p.StructuralBreak Then
+                    Return String.Format("EXIT -- structural break (closed at/above swing high {0:F1})", p.BreakLevel)
                 End If
                 ' Layer 2: structural divergence exits
                 If r.ROC > 0 Then Return "EXIT -- momentum break (ROC crossed above 0)"
                 If r.OBVDivergence = "BULLISH" Then Return "EXIT -- OBV bullish divergence"
                 If r.RSIDivergence = "BULLISH" Then Return "EVALUATE -- RSI bullish divergence, watch for reversal"
                 ' Layer 3: single adverse microstructure = soft warning
-                If microAdverse Then Return "EVALUATE -- " & r.MicroCVDSignal & " signal, confirm with price action"
+                If p.MicroAdverse Then Return "EVALUATE -- " & r.MicroCVDSignal & " signal, confirm with price action"
                 ' Layer 4: RSI/ROC structural assessment -- [T1-D] thresholds from cfg
                 If r.ROC < cfg.Scoring.HoldRocTakeProfitShort Then Return "TAKE PROFIT -- extreme bearish momentum, tighten stops"
                 If r.RSI < cfg.Scoring.HoldRsiHoldShort        Then Return "HOLD -- bearish momentum intact"

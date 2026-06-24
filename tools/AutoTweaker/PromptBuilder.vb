@@ -54,6 +54,10 @@ Public Class PromptBuilder
             "and shadow_parity (a dev/validation toggle). None of it has any failure-rate linkage; the " &
             "transport is chosen by the trader, not optimised. (Enforced in code: SettingsDiffApplier " &
             "rejects 'network.' as well.)" & vbLf &
+        "13. Never propose any 'exit_guard.*' key. The exit_guard block is a display/alert-only " &
+            "overlay (a realtime exit cue with a debounce + audible alarm) — a trader risk/display " &
+            "preference with zero scoring impact and no failure-rate linkage. (Enforced in code: " &
+            "SettingsDiffApplier rejects 'exit_guard.' as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &
