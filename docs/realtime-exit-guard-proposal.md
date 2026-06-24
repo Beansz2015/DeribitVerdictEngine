@@ -1,6 +1,6 @@
 # Realtime Exit Guard — Proposal (P4 #1)
 
-**Status:** PROPOSED — awaiting trader sign-off (2026-06-24)
+**Status:** APPROVED — ready for implementer (trader sign-off 2026-06-24; all §9 decisions confirmed as recommended). Build only this approved spec; do not invent design decisions mid-code (CLAUDE.md / trader-profile §7). Local-first — commit as you go, never push (the trader tests + pushes).
 **Target:** settings **v42 → v43** (one new `exit_guard` block, off the auto-tweaker surface)
 **Scoring impact:** **none** — display/alert only. Never calls `Calculate()`, never writes the CSV, never changes the verdict. Item 1 in `websocket-migration-proposal.md` §11 (unmarked = no re-baseline flag).
 **Gate to build:** safe to build *during* early-WS monitoring (zero dataset impact). The first P4 feature per §11/§8 sequencing.
@@ -180,14 +180,16 @@ Per the CLAUDE.md engine display-string parity rule (card ↔ `BuildPlaintextSna
 
 ---
 
-## 9. Open decisions for trader sign-off
+## 9. Settled decisions (trader-approved 2026-06-24)
 
-1. **Default `enabled`** — recommend **true** (harmless when flat; the value is automatic once a position is declared). Alternative: false until explicitly toggled.
-2. **`interval_sec`** — recommend **3** (range 2–5). Faster = more responsive; recompute is cheap (in-memory `MarketState`).
-3. **`debounce_evals`** — recommend **2** (~6 s confirmation at 3 s). Set 1 for immediate-fire if you'd rather not wait; higher to further suppress jitter.
-4. **`sound_enabled` default** — recommend **true** (the point is an audible cue when you're not watching the screen), with a UI toggle.
-5. **Surface the single-adverse Warn state?** — recommend **yes** (informational, no sound) as the "watch" precursor. Say so if you want EXIT-only.
-6. **Latch behaviour** — recommend auto-clear after the condition resolves for `debounce_evals` ticks (self-healing) + immediate clear on position-flat. Alternative: require a manual ack.
+All six confirmed **as recommended** — the §5 config defaults are final. Rationale retained for the implementer:
+
+1. **`enabled` = true** — active whenever a position is declared; dormant (and harmless) when flat.
+2. **`interval_sec` = 3** (range 2–5) — recompute is cheap (in-memory `MarketState`).
+3. **`debounce_evals` = 2** — ~6 s confirmation at the 3 s interval; anti-jitter (profile §6 false-positive aversion).
+4. **`sound_enabled` = true** — audible cue when not watching the screen; expose a UI toggle.
+5. **Single-adverse Warn state surfaced** — informational, no sound; the "watch" precursor below EXIT.
+6. **Latch = auto-clear** after the condition resolves for `debounce_evals` consecutive ticks, plus immediate clear on position-flat (no manual ack).
 
 ---
 
@@ -195,3 +197,14 @@ Per the CLAUDE.md engine display-string parity rule (card ↔ `BuildPlaintextSna
 
 - **#2 On-close analysis mode** and **#3 LIVE microstructure strip** (`websocket-migration-proposal.md` §11) reuse the same streaming-consume-`MarketState` pattern this spec establishes — each its own spec.
 - This spec deliberately does **not** add latency/health metrics — item #10 (connection-quality strip) already ships as `BuildWsStatusSegment` (v39).
+
+---
+
+## 11. Implementation map (files)
+
+- **New, host-agnostic — `ExitGuardEvaluator.vb` (root):** `Evaluate(state As MarketState, posState, lastSwingLow5m, lastSwingHigh5m, cfg) As ExitGuardResult`. Recomputes MicroCVD/TFI/OFI/CVD from `state` via the existing pure indicator functions, calls the shared primitive, maps to `{Clear, Warn, Exit}`. No WinForms. Reused by the Linux port.
+- **`Core/ScoringEngine_Helpers.vb`:** extract `ComputeFastExitPrimitives(r, posState) → (AdverseCount, AdverseSignals, StructuralBreak, BreakLevel)`; refactor `CalcHoldStatus` Layers 1 / 1.5 / 3 to consume it — **output byte-identical** (regression-proven).
+- **`Core/Settings/EngineSettings.vb` + `settings.json`:** new `ExitGuardSettings` POCO (`enabled`/`interval_sec`/`debounce_evals`/`sound_enabled`) + the `exit_guard` block; bump **v42 → v43** + `change_log` entry + `DeribitIndicatorProject.md` §15 row.
+- **`tools/AutoTweaker/` — `SettingsDiffApplier` + `PromptBuilder`:** add `"exit_guard."` to `RejectedPathPrefixes` + a new HARD CONSTRAINT (off the tweaker surface, same class as `kelly.*` / `min_tradeable_move_pct`).
+- **`UI/MainForm_*`:** a `System.Windows.Forms.Timer` started/stopped with the auto-run lifecycle; the §4.1 gating; the status strip in the LOG-cascade region (visible only when `posState ≠ None`); `System.Media` on the EXIT transition; carry the last full-run swing levels (`LastSwingLow5m`/`LastSwingHigh5m`) for the structural-break check.
+- **`verify/ordercheck/` (gitignored harness):** the §8 evaluator fixtures (2-adverse → Exit, structural break → Exit, 1-adverse → Warn, 0 → Clear, mirror short, feed-stale → Paused, empty buffer → Clear) + the `CalcHoldStatus` byte-identical regression.
