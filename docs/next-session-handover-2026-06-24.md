@@ -23,8 +23,8 @@ P3 cutover (`docs/websocket-migration-p3-cutover-spec.md`, status READY/promoted
 
 **Cutover mechanics (P3 §5):** natural path = run with `shadow_parity=true` (feed live) → hot-flip `transport=ws` (takes effect next run, no restart) → it STAYS ws. Rollback = hot edit back to `rest`. POCO default stays `rest` (fail-safe). No CSV transport column.
 
-## 3. ⚠ Live app / bin state at handover
-The app may still be running with the bin `bin/Debug/net8.0-windows/settings.json` at **`transport=rest` + `shadow_parity=true`** (mid-trial). **If not cutting over now, revert `shadow_parity=false`** (gitignored bin file, safe to edit; a Debug rebuild also resets it to the tracked root). Parity log `ws_parity_log.txt` is the gate instrument.
+## 3. ⚠ Live app / bin state — SOFT-FLIPPED TO WS (trader cutting over here)
+The bin `bin/Debug/net8.0-windows/settings.json` is now **`transport=ws`** + `shadow_parity=true` — the running app is **live on WS** (soft/live cutover, the trader-requested "flip it", 2026-06-24). **The trader is completing the FORMAL cutover in this conversation.** Formal cutover (P3 §5, the trader's deliberate action): edit the **tracked-root** `settings.json` `transport: "ws"` + add the dated §15 / `change_log` **dataset-boundary marker** + push the WS stack (~12 commits). **The bin flip alone is ephemeral — a Debug rebuild resets the bin to the tracked root (`rest`), so the tracked-root edit is what makes the cutover survive a rebuild.** Set `shadow_parity=false` for the clean final state once early-WS monitoring is done. Rollback = `transport` back to `rest` (hot, next run). Parity log `ws_parity_log.txt` is the instrument.
 
 ## 4. Backlog (after the cutover)
 - **P4 post-WS features** — each its own re-baseline-flagged spec; recommended first = realtime exit guard / on-close analysis (zero scoring impact), then time-averaged OFI (first re-baseline upgrade). Also the early-resolution-on-confirmed-hit stub (WS proposal §11 item 11) + the comparer-skew reduction (optional instrument polish).
