@@ -64,17 +64,13 @@ Partial Public Class MainForm
         Else
             _autoRunTimer.Start(_intervalMs, AddressOf RunAutoAnalysis)
         End If
-
-        ' [P4 #1 realtime-exit-guard] Start the exit-guard tick alongside the auto-run lifecycle
-        ' (spec §4.5 / §11). Each tick self-gates on posState + WS-feed health, so it is dormant
-        ' and zero-overhead while flat.
-        StartExitGuard()
+        ' [P4 #1] The exit-guard tick is NOT tied to auto-run (D6) — it runs from form load and
+        ' self-gates on posState + feed health, so a declared position is watched even when auto-run
+        ' is paused.
     End Sub
 
     Private Sub StopAutoRun()
         _autoRunTimer.Stop()
-        ' [P4 #1 realtime-exit-guard] Stop the exit-guard tick with the auto-run lifecycle.
-        StopExitGuard()
         If _countdownTimer IsNot Nothing Then
             _countdownTimer.Dispose()
             _countdownTimer = Nothing

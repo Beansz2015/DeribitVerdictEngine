@@ -291,6 +291,10 @@ Partial Public Class MainForm
         _metricMode = NormaliseMode(SettingsLoader.Current.PerformanceDisplay.MetricMode)
         InitMarketDataSources()
         InitAutoRunControls()
+        ' [P4 #1] Start the exit-guard tick at form load (D6: decoupled from auto-run — MarketState
+        ' streams whenever transport=ws regardless of auto-run). Each tick self-gates on posState +
+        ' feed health; disposed in OnFormClosing.
+        StartExitGuard()
 
         UpdateLogInfo()
 
@@ -618,9 +622,9 @@ Partial Public Class MainForm
         ' placeholder header + LOG/AUTO-RUN + CTA). Bumped to 340 px per
         ' P4e kickoff §4 "bump the row height by 40 px" guidance.
         _cardSettingsTools = NewCard()
-        ' P4 #1: +24px over the P4e 340 to keep the TOOLS (percent) row whole after the
-        ' LOG/AUTO-RUN row grew for the EXIT GUARD strip.
-        AddRow(_cardSettingsTools, 364)
+        ' P4 #1: +26px over the P4e 340 for the full-width EXIT GUARD strip's own row, so the
+        ' TOOLS (percent) row stays whole.
+        AddRow(_cardSettingsTools, 366)
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
@@ -781,14 +785,15 @@ Partial Public Class MainForm
         ' Outer 3-row TLP — sits below the placeholder header.
         Dim outer = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 3,
+            .ColumnCount = 1, .RowCount = 4,
             .BackColor = Color.Transparent,
             .Padding = New Padding(0, 30, 0, 0),
             .Margin = New Padding(0),
             .TabStop = False
         }
         outer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 134))   ' LOG/AUTO-RUN (P4f +18px "last HH:mm:ss"; P4#1 +24px EXIT GUARD strip)
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 110))   ' LOG/AUTO-RUN (P4f +18px "last HH:mm:ss" line)
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 26))    ' P4#1 EXIT GUARD strip (full-width)
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))    ' CTA
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS
 
@@ -841,26 +846,6 @@ Partial Public Class MainForm
         lnkResetLog.Location = New Point(10, 66)
         grpLog.Controls.Add(lnkResetLog)
 
-        ' [P4 #1 realtime-exit-guard] EXIT GUARD strip — a live status-bar element in the LOG
-        ' cascade (sibling of the WS-health line / perf strip), visible only when a position is
-        ' declared. Driven by the guard timer (MainForm_ExitGuard.vb), not by UpdateLogInfo. Full
-        ' detail (the adverse-signal list / break level) rides the tooltip so the inline line stays
-        ' short. NOT an RTF/snapshot/card surface → no card-binding obligation (spec §6).
-        lblExitGuard = New Label() With {
-            .AutoSize = True,
-            .Anchor = AnchorStyles.None,
-            .Dock = DockStyle.None,
-            .Location = New Point(10, 88),
-            .Text = "",
-            .Font = Theme.FontMono(8.5F, FontStyle.Bold),
-            .ForeColor = Theme.FG_QUATERNARY,
-            .BackColor = Color.Transparent,
-            .Visible = False,
-            .TabStop = False
-        }
-        grpLog.Controls.Add(lblExitGuard)
-        _exitGuardTip = New ToolTip() With {.InitialDelay = 300, .AutoPopDelay = 8000, .ReshowDelay = 150}
-
         Dim grpAutoRun = New SectionGroup() With {
             .Title = "AUTO-RUN",
             .Dock = DockStyle.Fill,
@@ -895,7 +880,26 @@ Partial Public Class MainForm
         row1.Controls.Add(grpAutoRun, 1, 0)
         outer.Controls.Add(row1, 0, 0)
 
-        ' ---------------- Row 2: ANALYSIS REPORT CTA ----------------
+        ' ---------------- Row 2: EXIT GUARD strip (full-width, P4 #1) ----------------
+        ' Live status-bar element (sibling of the WS-health line), its own full-width row so the full
+        ' line renders inline — EXIT GUARD · ⚠ EXIT — 2 adverse (MicroCVD BEAR_ACCEL, TFI SELL) /
+        ' the swing-break level — no tooltip (D4). Driven by the guard timer (MainForm_ExitGuard.vb),
+        ' visible only when a position is declared. NOT an RTF/snapshot/card surface → no card-binding
+        ' obligation (spec §6).
+        lblExitGuard = New Label() With {
+            .Dock = DockStyle.Fill,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Text = "",
+            .Font = Theme.FontMono(9.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(2, 0, 2, 4),
+            .Visible = False,
+            .TabStop = False
+        }
+        outer.Controls.Add(lblExitGuard, 0, 1)
+
+        ' ---------------- Row 3: ANALYSIS REPORT CTA ----------------
         ' P3 AnalysisReportButton — Solid amber FlatButton with 📊 icon, →
         ' arrow, and a persistent glow halo. Click shim forwards into the
         ' existing async LinkLabel handler so we don't duplicate its body.
@@ -906,7 +910,7 @@ Partial Public Class MainForm
             .Height = 44
         }
         AddHandler btnReport.Click, Sub(s, ev) lnkAnalysisReport_LinkClicked(s, Nothing)
-        outer.Controls.Add(btnReport, 0, 1)
+        outer.Controls.Add(btnReport, 0, 2)
 
         ' Hide the original Analysis Report LinkLabel — the FlatButton owns
         ' the visual surface now. The LinkLabel stays alive (Handles clause
@@ -915,7 +919,7 @@ Partial Public Class MainForm
         lnkAnalysisReport.Visible = False
         _cardSettingsTools.Controls.Add(lnkAnalysisReport)
 
-        ' ---------------- Row 3: TOOLS ----------------
+        ' ---------------- Row 4: TOOLS ----------------
         Dim grpTools = New SectionGroup() With {
             .Title = "TOOLS",
             .Dock = DockStyle.Fill,
@@ -976,7 +980,7 @@ Partial Public Class MainForm
             _cardSettingsTools.Controls.Add(lnk)
         Next
 
-        outer.Controls.Add(grpTools, 0, 2)
+        outer.Controls.Add(grpTools, 0, 3)
 
         _cardSettingsTools.Controls.Add(outer)
         outer.BringToFront()

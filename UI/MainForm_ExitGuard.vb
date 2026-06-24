@@ -1,21 +1,24 @@
 ' UI/MainForm_ExitGuard.vb
 ' Realtime Exit Guard (P4 #1, docs/realtime-exit-guard-proposal.md) — thin WinForms host.
 '
-' A System.Windows.Forms.Timer (UI-thread) ticks every exit_guard.interval_sec, started/stopped
-' with the auto-run lifecycle (MainForm_AutoRun.vb). Each tick self-gates (§4.1): it does work only
-' when exit_guard is enabled, a position is declared, and the WS feed is healthy + fresh. It then
-' calls the host-agnostic ExitGuardEvaluator against the live MarketState and renders the EXIT GUARD
-' strip in the LOG cascade (built in MainForm_Layout.ReparentSettingsToolsControls), with a debounce
-' before latching EXIT + the audible alarm. DISPLAY/ALERT ONLY — no scoring, no CSV, no orders.
+' A System.Windows.Forms.Timer (UI-thread) ticks every exit_guard.interval_sec. It is started ONCE
+' at form load (the constructor) and disposed on form close — DECOUPLED from auto-run (D6 coordinator
+' ruling): MarketState streams whenever transport=ws regardless of auto-run, so the guard must keep
+' watching a declared position even when auto-run is paused. Each tick self-gates (§4.1): it does work
+' only when exit_guard is enabled, a position is declared, and the WS feed is healthy + fresh (no-ops
+' when flat or at transport=rest — the 3s tick is negligible). It then calls the host-agnostic
+' ExitGuardEvaluator against the live MarketState and renders the full-width EXIT GUARD strip (built in
+' MainForm_Layout.ReparentSettingsToolsControls), with a debounce before latching EXIT + the audible
+' alarm. DISPLAY/ALERT ONLY — no scoring, no CSV, no orders.
 
 Imports System.Drawing
 Imports System.Windows.Forms
 
 Partial Public Class MainForm
 
-    ' Strip + tooltip are created/parented in MainForm_Layout (they need the grpLog SectionGroup).
+    ' The full-width strip label is created/parented in MainForm_Layout (its own row in the
+    ' SETTINGS & TOOLS outer TLP). No tooltip (D4): the full line renders inline.
     Friend lblExitGuard As Label
-    Private _exitGuardTip As ToolTip
 
     Private _exitGuardTimer       As System.Windows.Forms.Timer
     Private _exitGuardConsecExit  As Integer = 0   ' consecutive EXIT-condition ticks (debounce build-up)
@@ -23,8 +26,8 @@ Partial Public Class MainForm
     Private _exitGuardLatched     As Boolean = False
 
     ' -----------------------------------------------------------------------
-    ' Lifecycle — called from StartAutoRun / StopAutoRun (and OnFormClosing).
-    ' Idempotent: a re-start (e.g. single-mode re-arm) disposes the prior timer first.
+    ' Lifecycle — StartExitGuard from the constructor (form load); StopExitGuard on form close
+    ' (D6: decoupled from auto-run). Idempotent: a re-start disposes the prior timer first.
     ' -----------------------------------------------------------------------
     Private Sub StartExitGuard()
         Dim cfg As EngineSettings = SettingsLoader.Current
@@ -69,7 +72,7 @@ Partial Public Class MainForm
         ' Hot-reload: enabled flips off → hide + no-op (timer keeps running so it re-enables
         ' instantly); interval edit re-applies live.
         If Not cfg.ExitGuard.Enabled Then
-            SetExitGuardStrip(Nothing, Nothing, Nothing, visible:=False)
+            SetExitGuardStrip(Nothing, Nothing, visible:=False)
             Return
         End If
         Dim desiredMs As Integer = ExitGuardIntervalMs(cfg)
@@ -83,14 +86,14 @@ Partial Public Class MainForm
         If rbShort.Checked Then posState = PositionState.InShort
         If posState = PositionState.None Then
             ResetExitGuardLatch()
-            SetExitGuardStrip(Nothing, Nothing, Nothing, visible:=False)
+            SetExitGuardStrip(Nothing, Nothing, visible:=False)
             Return
         End If
 
         ' WS-mode feature by nature: no feed (transport=rest, no shadow) → "WS only".
         If _wsFeed Is Nothing OrElse _marketState Is Nothing Then
             ResetExitGuardLatch()
-            SetExitGuardStrip("WS only", Theme.FG_QUATERNARY, Nothing, visible:=True)
+            SetExitGuardStrip("WS only", Theme.FG_QUATERNARY, visible:=True)
             Return
         End If
 
@@ -98,7 +101,7 @@ Partial Public Class MainForm
         Dim pausedReason As String = ExitGuardPausedReason(cfg)
         If pausedReason IsNot Nothing Then
             ResetExitGuardLatch()
-            SetExitGuardStrip("paused (" & pausedReason & ")", Theme.FG_QUATERNARY, Nothing, visible:=True)
+            SetExitGuardStrip("paused (" & pausedReason & ")", Theme.FG_QUATERNARY, visible:=True)
             Return
         End If
 
@@ -148,44 +151,37 @@ Partial Public Class MainForm
         _exitGuardLatched     = False
     End Sub
 
-    ' Compose the inline strip text + colour from the evaluation + latch state. Full detail
-    ' (the adverse-signal list / break level) rides the tooltip so the line stays glanceable.
+    ' Compose the strip from the evaluation + latch state. The strip is full-width (D4), so the full
+    ' detail (the adverse-signal list / break level — already in res.Reason) renders inline; no tooltip.
+    ' Three states only (D3: Warn dropped): clear → confirming n/d → latched EXIT.
     Private Sub RenderExitGuard(res As ExitGuardResult, debounce As Integer)
-        Dim inlineText As String
+        Dim body As String
         Dim colour As Color
-        Dim tip As String = res.Reason
 
         If _exitGuardLatched Then
-            inlineText = "⚠ EXIT — " & If(res.StructuralBreak, "structural break", res.AdverseCount & " adverse")
+            body = "⚠ EXIT — " & res.Reason
             colour = Theme.ACC_SHORT
         ElseIf res.Kind = ExitGuardKind.[Exit] Then
-            ' Condition present but not yet confirmed — building toward the latch.
-            inlineText = "⚠ EXIT? confirming " & _exitGuardConsecExit & "/" & debounce
-            colour = Theme.ACC_WARN
-        ElseIf res.Kind = ExitGuardKind.Warn Then
-            inlineText = res.AdverseCount & " adverse"
+            ' Condition present but not yet confirmed — building toward the latch (D5).
+            body = "⚠ EXIT? confirming " & _exitGuardConsecExit & "/" & debounce
             colour = Theme.ACC_WARN
         Else
-            inlineText = "clear"
+            body = "clear"
             colour = Theme.FG_QUATERNARY
-            tip = Nothing
         End If
 
-        SetExitGuardStrip(inlineText, colour, tip, visible:=True)
+        SetExitGuardStrip(body, colour, visible:=True)
     End Sub
 
-    Private Sub SetExitGuardStrip(inlineText As String, colour As Color?, tip As String, visible As Boolean)
+    Private Sub SetExitGuardStrip(body As String, colour As Color?, visible As Boolean)
         If lblExitGuard Is Nothing Then Return
         If Not visible Then
             lblExitGuard.Visible = False
             Return
         End If
-        lblExitGuard.Text = "EXIT GUARD: " & inlineText
+        lblExitGuard.Text = "EXIT GUARD · " & body
         If colour.HasValue Then lblExitGuard.ForeColor = colour.Value
         lblExitGuard.Visible = True
-        If _exitGuardTip IsNot Nothing Then
-            _exitGuardTip.SetToolTip(lblExitGuard, If(String.IsNullOrEmpty(tip), "", tip))
-        End If
     End Sub
 
     Private Shared Sub PlayExitAlarm()

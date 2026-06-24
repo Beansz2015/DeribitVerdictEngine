@@ -12,10 +12,11 @@
 '
 ' Host-agnostic: no System.Windows.Forms, no Control.Invoke, no MainForm. Reused by the Linux port.
 
-''' <summary>Exit-guard verdict. The host maps Paused/hidden itself (feed-health + posState gate).</summary>
+''' <summary>Exit-guard verdict. The host maps Paused/hidden itself (feed-health + posState gate).
+''' Two states by design (D3 coordinator ruling): a single adverse signal is Clear, not a third
+''' "Warn" tier — only a confirmed 2+-adverse / structural break is EXIT-worthy.</summary>
 Public Enum ExitGuardKind
     Clear
-    Warn
     [Exit]
 End Enum
 
@@ -40,7 +41,7 @@ Public NotInheritable Class ExitGuardEvaluator
 
     ''' <summary>
     ''' Recompute the four streaming-driven signals (MicroCVD/TFI/OFI/CVD) from the live MarketState,
-    ''' run them through the shared fast-exit primitive, and map to {Clear, Warn, Exit}. The host
+    ''' run them through the shared fast-exit primitive, and map to {Clear, Exit} (D3: no Warn tier). The host
     ''' decides Paused/hidden (feed-health + posState gating) BEFORE calling this. An empty or
     ''' degenerate buffer maps to Clear (never a false EXIT — §7). Never throws into the caller.
     ''' </summary>
@@ -111,8 +112,8 @@ Public NotInheritable Class ExitGuardEvaluator
             result.StructuralBreak = p.StructuralBreak
             result.BreakLevel      = p.BreakLevel
 
-            ' Mirror CalcHoldStatus precedence: 2+-adverse fast exit, then structural break, then the
-            ' single-adverse soft warning. Both EXIT branches map to the same Kind.
+            ' Mirror CalcHoldStatus's EXIT precedence: 2+-adverse fast exit, then structural break.
+            ' Both map to the same Kind.
             If p.AdverseCount >= 2 Then
                 result.Kind   = ExitGuardKind.[Exit]
                 result.Reason = p.AdverseCount & " adverse (" & ReadableSignals(p, r, posState) & ")"
@@ -120,10 +121,12 @@ Public NotInheritable Class ExitGuardEvaluator
                 result.Kind   = ExitGuardKind.[Exit]
                 result.Reason = String.Format("structural break (swing {0} {1:F1})",
                                               If(posState = PositionState.InLong, "low", "high"), p.BreakLevel)
-            ElseIf p.AdverseCount >= 1 Then
-                result.Kind   = ExitGuardKind.Warn
-                result.Reason = "1 adverse (" & ReadableSignals(p, r, posState) & ")"
             Else
+                ' D3 (coordinator ruling): a SINGLE adverse signal maps to Clear, not a "Warn" tier.
+                ' Single-micro-adverse is already surfaced on the HOLD\EXIT row (CalcHoldStatus
+                ' Layer 3); single OFI/TFI/CVD alone is noise; a frequently-amber strip would
+                ' desensitize the trader to the real EXIT. AdverseCount is still computed (Layer 3
+                ' needs it → CalcHoldStatus byte-identical) — only this mapping changed.
                 result.Kind   = ExitGuardKind.Clear
                 result.Reason = "clear"
             End If
