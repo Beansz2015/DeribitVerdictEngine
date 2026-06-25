@@ -157,3 +157,19 @@ The mode toggle is a WinForms control; `lblCountdown` is an existing status labe
 
 - **#3 LIVE microstructure strip** (`websocket-migration-proposal.md` §11) is the natural next display feature; it and on-close share the streaming-`MarketState` read pattern.
 - After #3, the first ⚠ re-baseline upgrade is **#4 time-averaged OFI** — that one *does* change what an indicator sees and carries a re-baseline flag, so it's sequenced after the display items.
+
+---
+
+## 12. Relationship to the §8 sub-minute cadence item
+
+On-close and sub-minute full-run cadence are **opposite ends of the trigger spectrum**, not dependencies:
+
+| mode | runs per exec-bar | bar phase | autocorrelation |
+|---|---|---|---|
+| **`on_close`** | 1 (at close) | bar-aligned | lowest (rows ~1 bar apart) |
+| `interval` 30s | ~2 (NY 1-min) | arbitrary | high (heavy forward-window overlap) |
+| **sub-minute** (future §8) | many | forming-bar | highest |
+
+- **No conflict, no rework.** `trigger_mode` extends to a sub-minute mode (or simply a denser interval) without touching the on-close path — building on-close now is forward-compatible with the §8 item.
+- **On-close does not need or benefit from sub-minute.** For a bar-close-decision style, on-close is the *more* aligned cadence; sub-minute delivers noisier forming-bar verdicts. Intra-bar responsiveness is better served by the lightweight **LIVE microstructure strip (#3)** — no full re-run, no calibration impact — than by full sub-minute runs.
+- **Calibration note — cadence is a dataset dimension** (cf. session×resolution, v36). On-close logs *fewer but more independent* rows (1/exec-bar, minimal forward-window overlap); the 30s interval and especially a sub-minute cadence are heavily autocorrelated — inflating apparent N while the *effective* N (honest failure-rate CIs) stays low. So on-close is the **cleaner cadence to calibrate on**, just slower to accumulate. On-close itself is **no-re-baseline** (per-run computation + CSV schema unchanged), but it does shift the sampling *cadence* — so the eventual §8 cadence/scoring re-baseline should calibrate on whatever cadence the engine actually runs. If on-close becomes the primary mode, it may be the better calibration cadence outright, **deprioritizing the sub-minute item.**
