@@ -1,6 +1,6 @@
 # On-Close Analysis Mode — Proposal (P4 #2)
 
-**Status:** PROPOSED — awaiting trader sign-off (2026-06-25)
+**Status:** APPROVED — ready for implementer (trader sign-off 2026-06-25; all §9 decisions confirmed as recommended). Build only this approved spec; do not invent design decisions mid-code (CLAUDE.md / trader-profile §7). Local-first — commit as you go, never push (the trader tests + pushes).
 **Target:** settings **v43 → v44** (one new `auto_run.trigger_mode` key)
 **Scoring impact:** **none** — pure run-*trigger* change. `RunAnalysisAsync` / `Calculate()` are byte-identical; only *when* a run fires changes. No CSV-schema change, **no re-baseline**.
 **Item:** #2 in `websocket-migration-proposal.md` §11 (unmarked = display/trigger-only).
@@ -132,13 +132,15 @@ The mode toggle is a WinForms control; `lblCountdown` is an existing status labe
 
 ---
 
-## 9. Open decisions for trader sign-off
+## 9. Settled decisions (trader-approved 2026-06-25)
 
-1. **Fire at exec-resolution close vs always 1-min** — recommend **exec-resolution close** (resolution-consistent: NY fires on the 1-min close the §11 text describes; Asia/London fire on the 3-min bar the engine actually evaluates, not a forming-bar mid-point). Always-1-min would fire NY identically but evaluate Asia/London on a 1/3-formed 3-min bar — provisional/noisy. 
-2. **Interval backstop** — recommend **on** (the engine must never go silent on a feed stall; reuses the interval as the ceiling).
-3. **Default `trigger_mode`** — recommend **`interval`** (preserves today's behaviour; on-close is opt-in).
-4. **SINGLE/REPEAT in on-close** — recommend mirror the existing radios (REPEAT = every close; SINGLE = next close then stop).
-5. **Countdown in on-close** — recommend time-to-next-bar-boundary (`Next close: M:SS`).
+All five confirmed **as recommended** — final:
+
+1. **Fire at exec-resolution close** — NY on the 1-min close (the §11 text); Asia/London on the 3-min bar the engine actually evaluates (not a 1/3-formed forming bar).
+2. **Interval backstop = on** — the engine never goes silent on a feed stall; the configured interval is the ceiling.
+3. **Default `trigger_mode` = `interval`** — preserves today's behaviour; on-close is opt-in.
+4. **SINGLE/REPEAT honoured in on-close** — REPEAT = every close; SINGLE = next close then stop.
+5. **Countdown = time-to-next-bar-boundary** (`Next close: M:SS`).
 
 ---
 
