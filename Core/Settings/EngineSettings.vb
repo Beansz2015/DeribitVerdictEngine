@@ -551,6 +551,13 @@ Public Class AutoRunSettings
     ' starts stopped and nothing read it. Removed in v32.
     <JsonPropertyName("interval_minutes")> Public Property IntervalMinutes As Integer = 1
     <JsonPropertyName("interval_seconds")> Public Property IntervalSeconds As Integer = 0
+    ' P4 #2 (on-close analysis mode, v44): run-TRIGGER selector — "interval" (default,
+    ' today's fixed-timer behaviour) | "on_close" (fire on each execution-resolution bar
+    ' close). Pure trigger change — RunAnalysisAsync / Calculate() are byte-identical; only
+    ' WHEN a run fires changes. Off the auto-tweaker surface (operational preference). The
+    ' interval_* keys double as the on-close interval BACKSTOP ceiling. Default "interval"
+    ' preserves v43 behaviour exactly. (docs/on-close-analysis-mode-proposal.md)
+    <JsonPropertyName("trigger_mode")> Public Property TriggerMode As String = "interval"
 End Class
 
 ' ---------------------------------------------------------------------------

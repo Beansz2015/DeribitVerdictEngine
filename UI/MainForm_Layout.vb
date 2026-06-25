@@ -39,6 +39,31 @@ Partial Public Class MainForm
     Private _countdownSecs  As Integer = 0
     Private _intervalMs     As Integer = 60_000
 
+    ' [P4 #2] On-close analysis-mode watcher (docs/on-close-analysis-mode-proposal.md). A ~1s
+    ' Threading.Timer engaged in StartAutoRun's on_close branch (in place of the interval timer);
+    ' each tick reads the live MarketState and fires RunAutoAnalysis when the exec-resolution bar
+    ' rolls OR the interval BACKSTOP elapses (never silent on a feed stall). Disposed in
+    ' StopAutoRun + OnFormClosing. _onCloseActive is the "engaged" flag (the interval _autoRunTimer
+    ' is NOT running in on-close mode, so AutoRunEngaged() ORs the two). LastSeenOpen carries the
+    ' forming-bar open-time between ticks; LastFireUtc anchors the backstop + double-fire guard.
+    Private _onCloseWatcher       As Threading.Timer
+    Private _onCloseActive        As Boolean = False
+    Private _onCloseLastSeenOpen  As Long = BarCloseDetector.Unseen
+    Private _onCloseLastRes       As Integer = 0
+    Private _onCloseLastFireUtc   As DateTime = DateTime.MinValue
+    ' True when trigger_mode=on_close was requested but no WS feed is present (transport=rest /
+    ' feed Nothing) → the session ran interval mode instead (§4.4). Surfaces a status-line note.
+    Private _onCloseFellBackToInterval As Boolean = False
+
+    ' [P4 #2] Trigger-mode radios (INTERVAL | ON-CLOSE), created programmatically in
+    ' ReparentHeaderStripControls beside the SINGLE/REPEAT pnlMode (no Designer edit — same
+    ' programmatic pattern as the exit-guard strip). Mutual exclusion via the shared pnlTrigger
+    ' parent. Source of truth = auto_run.trigger_mode; CheckedChanged persists it (bumpVersion:=False)
+    ' and relabels lblAutoRun "AUTO EVERY" ↔ "BACKSTOP". Disabled while a run is engaged (like nudMinutes).
+    Private pnlTrigger      As Panel
+    Private rbModeInterval  As RadioButton
+    Private rbModeOnClose   As RadioButton
+
     ' MTF 15m candle TTL cache (P1 upgrade v0.47)
     Private Const MTF_TTL_SECONDS As Integer = 60
     Private _mtfCandles15m     As List(Of Candle) = Nothing
@@ -714,6 +739,12 @@ Partial Public Class MainForm
         rbSingle.Location = New Point(0, 2)
         rbRepeat.Location = New Point(68, 2)
 
+        ' [P4 #2] Trigger-mode segmented (INTERVAL | ON-CLOSE) — built programmatically (no
+        ' Designer edit). Sits left of the AUTO EVERY cluster; the SizeChanged handler below
+        ' keeps it flowing right-to-left with the rest of the auto-run controls.
+        BuildTriggerModeToggle()
+        pnlTrigger.Location = New Point(460, Y_TOP + 12)
+
         btnStartStop.Location = New Point(940, Y_TOP + 10)
         btnStartStop.Size     = New Size(70, 26)
 
@@ -739,7 +770,43 @@ Partial Public Class MainForm
                 lblMin.Left       = nudSeconds.Left - lblMin.Width - 4
                 nudMinutes.Left   = lblMin.Left - nudMinutes.Width - 2
                 lblAutoRun.Left   = nudMinutes.Left - lblAutoRun.Width - 6
+                ' [P4 #2] trigger-mode toggle sits left of the AUTO EVERY label.
+                If pnlTrigger IsNot Nothing Then pnlTrigger.Left = lblAutoRun.Left - pnlTrigger.Width - 10
             End Sub
+    End Sub
+
+    ' [P4 #2] Build the INTERVAL | ON-CLOSE segmented toggle (mirrors the SINGLE/REPEAT pnlMode
+    ' pattern, created in code rather than the Designer). The radios share pnlTrigger as their
+    ' parent so WinForms mutually excludes them. CheckedChanged → persist trigger_mode + relabel.
+    ' Initial Checked state is set later in InitAutoRunControls (after SettingsLoader.Initialise).
+    Private Sub BuildTriggerModeToggle()
+        pnlTrigger = New Panel() With {
+            .Size = New Size(146, 22),
+            .BackColor = Color.Transparent,
+            .TabStop = False
+        }
+        rbModeInterval = New RadioButton() With {
+            .AutoSize = True,
+            .Text = "Interval",
+            .Font = New Font("Segoe UI", 8.5!),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .Location = New Point(0, 2),
+            .Checked = True
+        }
+        rbModeOnClose = New RadioButton() With {
+            .AutoSize = True,
+            .Text = "On-close",
+            .Font = New Font("Segoe UI", 8.5!),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .Location = New Point(66, 2)
+        }
+        pnlTrigger.Controls.Add(rbModeInterval)
+        pnlTrigger.Controls.Add(rbModeOnClose)
+        _cardHeaderStrip.Controls.Add(pnlTrigger)
+        AddHandler rbModeInterval.CheckedChanged, AddressOf OnTriggerModeChanged
+        AddHandler rbModeOnClose.CheckedChanged, AddressOf OnTriggerModeChanged
     End Sub
 
     ' -----------------------------------------------------------------------

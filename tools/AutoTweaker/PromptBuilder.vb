@@ -58,6 +58,11 @@ Public Class PromptBuilder
             "overlay (a realtime exit cue with a debounce + audible alarm) — a trader risk/display " &
             "preference with zero scoring impact and no failure-rate linkage. (Enforced in code: " &
             "SettingsDiffApplier rejects 'exit_guard.' as well.)" & vbLf &
+        "14. Never propose any 'auto_run.*' key. The auto_run block is the run cadence/trigger — the " &
+            "interval and the trigger_mode (interval vs on-close bar-close firing). It is an operational " &
+            "preference set by the trader with no failure-rate linkage (and on-close logs the SAME " &
+            "observations, just at bar-close moments). (Enforced in code: SettingsDiffApplier rejects " &
+            "'auto_run.' as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &
