@@ -119,6 +119,14 @@ Public Class SettingsDiffApplier
                 result.ErrorReason = "Rejected: 'scoring.min_tradeable_move_pct' is the trader's slippage floor (HARD CONSTRAINT 11)."
                 Return result
             End If
+            ' [P4 #4] OFI time-averaging FEATURE FLAG — off the tweaker surface (a structural
+            ' on/off toggle, not a failure-rate threshold). Exact-match, NOT a prefix: the sibling
+            ' OFI keys (avg_window_sec, buy/sell_dominant_ratio, book_depth) STAY tunable.
+            If path = "indicators.ofi.averaging_enabled" Then
+                result.IsValid    = False
+                result.ErrorReason = "Rejected: 'indicators.OFI.averaging_enabled' is the OFI time-averaging feature flag, not a threshold (off tweaker surface — HARD CONSTRAINT 16)."
+                Return result
+            End If
 
             ' Reject version key (applier manages this)
             If path = "version" Then

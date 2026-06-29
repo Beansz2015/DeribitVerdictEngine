@@ -67,6 +67,13 @@ Public Class PromptBuilder
             "strip (a between-runs microstructure readout — deliberately NOT a verdict, zero scoring " &
             "impact, never writes the CSV). It is a display preference with no failure-rate linkage. " &
             "(Enforced in code: SettingsDiffApplier rejects 'live_strip.' as well.)" & vbLf &
+        "16. Never propose 'indicators.OFI.averaging_enabled'. It is the on/off feature flag for " &
+            "time-averaged OFI (a structural toggle, not a failure-rate threshold). UNLIKE the block-wide " &
+            "constraints above, this is a SINGLE-key exclusion — the sibling OFI keys REMAIN tunable: " &
+            "'indicators.OFI.avg_window_sec' (the averaging / EMA window — it shapes the OFI signal, a " &
+            "genuine failure-rate lever), 'indicators.OFI.buy_dominant_ratio', " &
+            "'indicators.OFI.sell_dominant_ratio', and 'indicators.OFI.book_depth' are all on-surface. " &
+            "(Enforced in code: SettingsDiffApplier exact-match rejects 'indicators.ofi.averaging_enabled'.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

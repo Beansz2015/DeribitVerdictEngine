@@ -1,6 +1,6 @@
 # Time-Averaged OFI — Proposal (P4 #4)
 
-**Status:** APPROVED — ready for implementer (trader sign-off 2026-06-29; §10 all-recommended + the tweaker-exposure directive). Build only this approved spec; do not invent design decisions mid-code (CLAUDE.md / trader-profile §7). Local-first — commit as you go, never push (trader tests + pushes). ⚠ Scoring re-baseline — the build (v46) lands behind a dated OFIRatio dataset boundary; the threshold re-derivation is a later, data-gated pass (v47-ish) with its own trader sign-off.
+**Status:** **BUILD IMPLEMENTED 2026-06-30 (settings v46) — see `time-averaged-ofi-spec-back.md`.** Build 0/0 (solution Release + AutoTweaker + OrderCheck); harness A1–A19e unregressed + new A20a–h. Local commit only — trader tests + pushes. The ⚠ dominance-threshold **re-baseline remains OPEN** (the later, data-gated v47-ish pass with its own trader sign-off). Original approval: trader sign-off 2026-06-29; §10 all-recommended + the tweaker-exposure directive.
 **Target:** settings **v45 → v46** (averaging keys) + a **scoring re-baseline** of the OFI dominance thresholds.
 **Scoring impact:** ⚠ **YES — this is the first P4 re-baseline upgrade.** It changes the value of `OFIRatio` (the input to the OFI vote + the OFI-momentum ring), so the OFI thresholds must be re-derived and a dataset boundary marked. **Not** a display-only feature like #1–#3.
 **Item:** #4 in `websocket-migration-proposal.md` §11 (⚠ re-baseline-flagged).

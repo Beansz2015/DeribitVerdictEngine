@@ -44,6 +44,11 @@ Public NotInheritable Class MarketState
     Private _indexPrice As Double = 0.0
     Private _tickerUpdate As DateTime = DateTime.MinValue
 
+    ' [P4 #4] Time-averaged OFI accumulator (docs/time-averaged-ofi-proposal.md §4.1).
+    ' Folded once per streaming book update, read once per analysis run, reset on
+    ' (re)connect — all under _lock (the accumulator is not internally locked).
+    Private ReadOnly _ofiAcc As New OfiAccumulator()
+
     ' ── Writers (receive loop / seeding) ───────────────────────────────────────────────
 
     ''' <summary>Replace a candle series wholesale from a REST seed burst (startup / reconnect).
@@ -118,6 +123,23 @@ Public NotInheritable Class MarketState
         End SyncLock
     End Sub
 
+    ''' <summary>[P4 #4] Fold one book-update OFI imbalance sample into the time-averaged
+    ''' accumulator (proposal §4.1). Called by the feed right after UpdateBook with the
+    ''' weighted bid/ask volumes + sanity-bounded ratio from IndicatorEngine.ComputeOfiImbalance.</summary>
+    Public Sub FoldOfi(bidVol As Double, askVol As Double, ratio As Double, tsMs As Long, tauSec As Double)
+        SyncLock _lock
+            _ofiAcc.Fold(bidVol, askVol, ratio, tsMs, tauSec)
+        End SyncLock
+    End Sub
+
+    ''' <summary>[P4 #4] Clear the OFI accumulator on (re)connect so a stale pre-disconnect
+    ''' average can't bleed across a gap; the warmup fallback re-arms after each reconnect.</summary>
+    Public Sub ResetOfiAccumulator()
+        SyncLock _lock
+            _ofiAcc.Reset()
+        End SyncLock
+    End Sub
+
     ''' <summary>Update the ticker fields. Funding8h serves GetFundingRateAsync — it is
     ''' funding_8h, NOT current_funding (parity with DeribitClient.GetFundingRateAsync).</summary>
     Public Sub UpdateTicker(funding8h As Double?, openInterest As Double,
@@ -151,6 +173,15 @@ Public NotInheritable Class MarketState
     Public Function GetBook() As OrderBookSnapshot
         SyncLock _lock
             Return _book
+        End SyncLock
+    End Function
+
+    ''' <summary>[P4 #4] A consistent read of the time-averaged OFI state + the warmup verdict
+    ''' for the given window (proposal §4.2). The caller uses the averaged Ratio/Bid/Ask only
+    ''' when HasWarmup is True; otherwise it falls back to the snapshot CalcOFI.</summary>
+    Public Function GetOfiAverage(minCoverageSec As Double) As OfiAverageSnapshot
+        SyncLock _lock
+            Return _ofiAcc.Snapshot(minCoverageSec)
         End SyncLock
     End Function
 

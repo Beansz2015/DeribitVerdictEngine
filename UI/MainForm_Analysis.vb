@@ -360,12 +360,39 @@ Partial Public Class MainForm
             r.OISignal = "NEUTRAL"
         End If
 
-        IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol,
-                                buyDominantRatio:=cfg.Indicators.OFI.BuyDominantRatio,
-                                sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio,
-                                bookDepth:=cfg.Indicators.OFI.BookDepth)
+        ' [P4 #4 v46] Time-averaged OFI on the live WS path (docs/time-averaged-ofi-proposal.md).
+        ' When this run is served by the WS source (NOT a REST-fallback run) AND averaging is
+        ' enabled AND the feed-side accumulator has >= avg_window_sec of coverage, source the OFI
+        ' fields from the time-weighted average — a transient sweep/spoof can't flip a sustained
+        ' imbalance. Otherwise (transport=rest, REST-fallback this run, averaging off, or pre-warmup)
+        ' use the snapshot CalcOFI exactly as v45. The downstream OFISignal classification, the
+        ' _ofiHistory momentum ring, and the breakdown/card render are unchanged in mechanism —
+        ' only the value of r.OFIRatio changes (averaged vs snapshot), which is the ⚠ re-baseline
+        ' (proposal §5, a later data-gated pass). averaging_enabled=false ⇒ snapshot path always ⇒
+        ' byte-identical to v45 (the rollback proof).
+        Dim ofiCfg = cfg.Indicators.OFI
+        Dim usedAvgOfi As Boolean = False
+        If ofiCfg.AveragingEnabled AndAlso (src Is _wsSource) AndAlso _marketState IsNot Nothing Then
+            Dim ofiAvg = _marketState.GetOfiAverage(ofiCfg.AvgWindowSec)
+            If ofiAvg.HasWarmup Then
+                r.OFIBidVol = ofiAvg.BidVol
+                r.OFIAskVol = ofiAvg.AskVol
+                r.OFIRatio  = ofiAvg.Ratio
+                r.OFISignal = IndicatorEngine.ClassifyOfiRatio(ofiAvg.Ratio,
+                                  ofiCfg.BuyDominantRatio, ofiCfg.SellDominantRatio)
+                usedAvgOfi = True
+            End If
+        End If
+        If Not usedAvgOfi Then
+            IndicatorEngine.CalcOFI(orderBook, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol,
+                                    buyDominantRatio:=ofiCfg.BuyDominantRatio,
+                                    sellDominantRatio:=ofiCfg.SellDominantRatio,
+                                    bookDepth:=ofiCfg.BookDepth)
+        End If
 
         ' OFI momentum: append ratio to ring buffer, then derive momentum signal.
+        ' (On the WS-averaged path the ring now holds averaged ratios — less jumpy; the
+        '  Momentum* thresholds are re-confirmed in the later re-baseline, proposal §5.)
         _ofiHistory.Add(r.OFIRatio)
         If _ofiHistory.Count > OFIHistoryMax Then _ofiHistory.RemoveAt(0)
         r.OFIMomentum = IndicatorEngine.CalcOFIMomentum(_ofiHistory, cfg)

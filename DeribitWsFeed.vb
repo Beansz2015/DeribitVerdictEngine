@@ -164,6 +164,10 @@ Public NotInheritable Class DeribitWsFeed
     ' seed→subscribe window); shadow parity in P2 is the real proof.
     Private Async Function SeedAsync(ct As CancellationToken) As Task
         Dim nowUtc As DateTime = DateTime.UtcNow
+        ' [P4 #4] Fresh connection → clear the OFI accumulator so a stale pre-disconnect
+        ' average can't bleed across the gap; the warmup fallback re-arms (proposal §4.1/§8).
+        ' Runs before SubscribeAsync, so no book-update fold for this connection precedes it.
+        _state.ResetOfiAccumulator()
         For Each res As String In SeedResolutions
             ct.ThrowIfCancellationRequested()
             Dim cap As Integer = 250
@@ -332,6 +336,23 @@ Public NotInheritable Class DeribitWsFeed
             Next
         End If
         _state.UpdateBook(snap, nowUtc)
+        FoldOfiAverage(snap, nowUtc)
+    End Sub
+
+    ' [P4 #4] Fold this book update's top-book imbalance into the time-averaged OFI accumulator
+    ' (docs/time-averaged-ofi-proposal.md §4.1). Uses the SAME weighted-imbalance math as the
+    ' snapshot CalcOFI (IndicatorEngine.ComputeOfiImbalance) so the averaged OFIRatio is a
+    ' cleaner version of the same quantity. tau = avg_window_sec; the receive time is the fold
+    ' stamp (dt basis). Reading SettingsLoader.Current each fold honours hot-reload of
+    ' averaging_enabled / avg_window_sec (avg_window_sec is on the tweaker surface). When
+    ' averaging is off the feed does no extra work; the run path stays on snapshot OFI.
+    Private Sub FoldOfiAverage(snap As OrderBookSnapshot, nowUtc As DateTime)
+        Dim ofi = SettingsLoader.Current.Indicators.OFI
+        If Not ofi.AveragingEnabled Then Return
+        Dim bidVol, askVol, ratio As Double
+        If Not IndicatorEngine.ComputeOfiImbalance(snap, ofi.BookDepth, bidVol, askVol, ratio) Then Return
+        Dim tsMs As Long = New DateTimeOffset(nowUtc).ToUnixTimeMilliseconds()
+        _state.FoldOfi(bidVol, askVol, ratio, tsMs, ofi.AvgWindowSec)
     End Sub
 
     ' chart.trades OHLCV: tick/open/high/low/close/volume/cost. Map cost → VolumeUSD exactly

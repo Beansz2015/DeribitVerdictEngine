@@ -65,6 +65,10 @@ Partial Public Class IndicatorEngine
     ' [T2-B]: bookDepth optional param -- replaces hardcoded Take(3) / {3,2,1}.
     ' Weights are built as {depth, depth-1, ..., 1} so the nearest level always
     ' carries the highest weight regardless of how many levels are used.
+    ' [P4 #4 v46]: the weighted-imbalance math + the dominance classification are now
+    ' two pure helpers (ComputeOfiImbalance / ClassifyOfiRatio) shared with the
+    ' time-averaged OFI accumulator (OfiAccumulator), so the snapshot and the WS-averaged
+    ' paths run the SAME cap/floor/weight logic. CalcOFI is byte-identical to v45.
     Public Shared Sub CalcOFI(orderBook As OrderBookSnapshot,
                                ByRef ofiRatio As Double, ByRef ofiSignal As String,
                                ByRef ofiBidVol As Double, ByRef ofiAskVol As Double,
@@ -72,7 +76,36 @@ Partial Public Class IndicatorEngine
                                Optional sellDominantRatio As Double  = 0.833,
                                Optional bookDepth         As Integer = 3)
         ofiRatio = 1.0 : ofiSignal = "BALANCED" : ofiBidVol = 0 : ofiAskVol = 0
-        If orderBook Is Nothing Then Return
+
+        Dim bidVol, askVol, ratio As Double
+        Dim ok As Boolean = ComputeOfiImbalance(orderBook, bookDepth, bidVol, askVol, ratio)
+        ' Surface the weighted volumes whether or not the ratio is usable — matches the
+        ' pre-refactor ordering (ofiBidVol/ofiAskVol were assigned before the total check).
+        ofiBidVol = bidVol
+        ofiAskVol = askVol
+        If Not ok Then Return   ' book Nothing or zero total → BALANCED, ratio 1.0 (byte-identical)
+
+        ofiRatio  = ratio
+        ofiSignal = ClassifyOfiRatio(ratio, buyDominantRatio, sellDominantRatio)
+    End Sub
+
+    ''' <summary>
+    ''' Pure top-book weighted imbalance — the shared math behind CalcOFI and the
+    ''' time-averaged OFI accumulator (OfiAccumulator). Computes the descending-weighted
+    ''' bid/ask volumes over bookDepth levels and the sanity-bounded bid/ask ratio.
+    ''' NO classification. Returns False when the book is unusable (Nothing, or zero total
+    ''' weighted volume) — the caller leaves OFI defaults / skips the accumulator fold.
+    ''' The ratio is floored/capped to [1/1000, 1000] exactly as CalcOFI did before the
+    ''' extraction (a near-zero ask side on a pulled/thin book otherwise blows the ratio up
+    ''' and pollutes the histogram + the auto-tweaker outlier audit).
+    ''' </summary>
+    Public Shared Function ComputeOfiImbalance(orderBook As OrderBookSnapshot,
+                                                bookDepth As Integer,
+                                                ByRef bidVol As Double,
+                                                ByRef askVol As Double,
+                                                ByRef ratio As Double) As Boolean
+        bidVol = 0 : askVol = 0 : ratio = 1.0
+        If orderBook Is Nothing Then Return False
 
         Dim depth As Integer = Math.Max(1, bookDepth)
         Dim bids = orderBook.Bids.Take(depth).ToList()
@@ -84,8 +117,6 @@ Partial Public Class IndicatorEngine
             weights(i) = depth - i
         Next
 
-        Dim bidVol As Double = 0
-        Dim askVol As Double = 0
         For i As Integer = 0 To Math.Min(bids.Count, depth) - 1
             bidVol += bids(i).Size * weights(i)
         Next
@@ -93,36 +124,38 @@ Partial Public Class IndicatorEngine
             askVol += asks(i).Size * weights(i)
         Next
 
-        ofiBidVol = bidVol
-        ofiAskVol = askVol
-
         Dim total As Double = bidVol + askVol
-        If total = 0 Then Return
+        If total = 0 Then Return False   ' ratio stays 1.0; caller treats as BALANCED / no fold
 
-        ' Sanity-bound the ratio. A near-zero ask side (depth pulled, thin book) sends
-        ' bidVol/askVol to absurd values (observed up to 14000+ in calibration data),
-        ' which pollutes the histogram and the auto-tweaker's outlier audit. Floor
-        ' the divisor at 0.001 BTC and cap the resulting ratio at +/-1000. This
-        ' does not affect classification — buyDominantRatio thresholds are O(1).
         Const RatioCap     As Double = 1000.0
         Const VolumeFloor  As Double = 0.001
 
         Dim safeAsk As Double = Math.Max(askVol, VolumeFloor)
-        ofiRatio = bidVol / safeAsk
-        If ofiRatio > RatioCap Then
-            ofiRatio = RatioCap
-        ElseIf ofiRatio < (1.0 / RatioCap) Then
-            ofiRatio = 1.0 / RatioCap
+        ratio = bidVol / safeAsk
+        If ratio > RatioCap Then
+            ratio = RatioCap
+        ElseIf ratio < (1.0 / RatioCap) Then
+            ratio = 1.0 / RatioCap
         End If
+        Return True
+    End Function
 
-        If ofiRatio > buyDominantRatio Then
-            ofiSignal = "BUY DOMINANT"
-        ElseIf ofiRatio < sellDominantRatio Then
-            ofiSignal = "SELL DOMINANT"
+    ''' <summary>
+    ''' Classify a (sanity-bounded) OFI bid/ask ratio into BUY DOMINANT / SELL DOMINANT /
+    ''' BALANCED against the dominance thresholds. Shared by CalcOFI and the WS-averaged
+    ''' path so both classify identically. [P4 #4 v46]
+    ''' </summary>
+    Public Shared Function ClassifyOfiRatio(ratio As Double,
+                                             buyDominantRatio As Double,
+                                             sellDominantRatio As Double) As String
+        If ratio > buyDominantRatio Then
+            Return "BUY DOMINANT"
+        ElseIf ratio < sellDominantRatio Then
+            Return "SELL DOMINANT"
         Else
-            ofiSignal = "BALANCED"
+            Return "BALANCED"
         End If
-    End Sub
+    End Function
 
     ' -- Liquidations ---------------------------------------------------------
     ' [T3-D]: dominanceRatio optional param.

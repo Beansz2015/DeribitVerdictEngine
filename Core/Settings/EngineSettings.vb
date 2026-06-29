@@ -271,6 +271,16 @@ Public Class OfiSettings
     <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.15
     ''' <summary>Bonus added when OFI level and momentum confirm. Capped at regimeMax. Default 1.</summary>
     <JsonPropertyName("momentum_bonus")>     Public Property MomentumBonus     As Integer = 1
+    ''' <summary>[P4 #4 v46] Master switch for time-averaged OFI on the WS path. Default True.
+    ''' A feature flag, NOT a threshold → OFF the auto-tweaker surface (exact-match rejected in
+    ''' SettingsDiffApplier + PromptBuilder HARD CONSTRAINT 16). Exposed + hand-toggleable.
+    ''' False reverts to the snapshot OFI hot (the rollback path).</summary>
+    <JsonPropertyName("averaging_enabled")>  Public Property AveragingEnabled  As Boolean = True
+    ''' <summary>[P4 #4 v46] Time-averaging window / time-aware EMA horizon, seconds. Default 10.
+    ''' ON the tweaker surface — it shapes the OFI signal (a genuine failure-rate lever); changing
+    ''' it shifts the OFIRatio distribution, so a manual change should be followed by a dominance-
+    ''' ratio re-check (proposal §5 coupling caveat).</summary>
+    <JsonPropertyName("avg_window_sec")>     Public Property AvgWindowSec      As Integer = 10
 End Class
 
 Public Class VolumeSettings
