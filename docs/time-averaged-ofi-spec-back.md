@@ -90,3 +90,21 @@ The canonical `settings.json` `change_log` (v37) and `docs/trader-profile.md` §
 - **Live verification** — the feed-side fold path (`FoldOfiAverage`), the per-connect reset, and the run-path WS routing are host/feed glue validated by a live WS session (as with the A16/A17 WS work, `DeribitWsFeed` + the WinForms run path aren't harness-compiled; the harness proves the host-agnostic core — accumulator math + the CalcOFI refactor + the tweaker surface). On a live WS run the trader should see the OFI breakdown `Ratio:` value read **steadier** than the old snapshot (transient spikes damped) once ~10s of book coverage has accrued; at `transport=rest` it stays the snapshot value.
 - **The re-baseline (v47-ish)** — §5 above; data-gated, its own spec-back + trader sign-off.
 - **Follow-on P4 ⚠ items:** #5 aggressor velocity / tape burst (SCORING) and #6 book absorption — the remaining re-baseline upgrades, each its own spec (proposal §12).
+
+---
+
+## 8. Coordinator review — APPROVED (2026-06-30)
+
+Independently re-ran all three Release builds (solution + AutoTweaker + OrderCheck = **0/0**), the OrderCheck harness (**A1–A20h ALL PASS**), and a full diff + card-binding-parity audit. **APPROVED — faithful, host-agnostic, rollback byte-identical.**
+
+Verified:
+- **`averaging_enabled=false` byte-identical to v45** — by construction (the `AveragingEnabled AndAlso src Is _wsSource AndAlso … HasWarmup` gate ⇒ `CalcOFI` is the only path with v45 args) **and** A20a (CalcOFI byte-identical to the pre-refactor math).
+- **Time-aware EMA / warmup / reset built as specified** — `alpha = 1 − exp(−dt/tau)`, first-fold seed, `dt` floored, **fold-stamp** coverage (a stalled feed can't fake warmup), `Reset()` on every `SeedAsync` (re)connect; accumulator touched only under `MarketState._lock`; no WinForms. Proven by A20c–f.
+- **Tweaker surface** — only `indicators.ofi.averaging_enabled` excluded (exact-match, not prefix); `avg_window_sec` + dominance ratios + `book_depth` stay tunable (A20g/A20h, HARD CONSTRAINT 16).
+- **Spec §6 clarification held** — the two keys were *added* to the OFI block; `momentum_*` intact. §6/§15 doc bookkeeping correct, no stale change_log sub-lines.
+
+The five §3 deviations are accepted as faithful. Two carry forward:
+- **D2 — arithmetic-mean-of-ratios buy-lean (the v47 item to settle).** The averaged `OFIRatio` is an arithmetic EMA of a multiplicatively-symmetric ratio, so a symmetrically-oscillating book averages to ~1.25 not 1.0 (Jensen: arithmetic ≥ geometric; bias grows with per-frame ratio variance). Firing-rate-match restores the overall *rate*, but the **BD/SD symmetry** is the watch — if the split won't land symmetric, switch the accumulator to a **log-ratio / geometric-mean EMA** (implementer pre-registered this). **Recommendation: settle arithmetic-vs-log-ratio *before* serious data collection** — calibrating v47 on a construction we might then change wastes the multi-day collection. Coordinator owns this in the v47 spec.
+- **D1 — cosmetic, flag to the trader before live test.** The OFI card (`MainForm_Render_Cards.vb:3090`) renders `ratio {OFIRatio:F2} · bid … ask …`; on the averaged path `OFIRatio` is average-of-ratios while bid/ask are averaged *volumes*, so the displayed ratio won't equal bid/ask. Faithful and harmless, but it looks wrong to anyone cross-checking — not a bug.
+
+Re-baseline (v47-ish) stays data-gated; coordinator drives it. Local only — trader tests + pushes.
