@@ -44,8 +44,10 @@ The catch, and why this is a re-baseline: averaging **tightens the `OFIRatio` di
 
 The top-book imbalance (the `CalcOFI` weighted bid/ask ratio over `OFI.BookDepth` levels) sampled **repeatedly across the run window** and averaged, rather than once. Two mechanism options — **§10 decision**:
 
-- **(a) Feed-side rolling accumulator (recommended).** As each WS book update arrives (~100ms), the feed folds the current top-book imbalance into a time-decayed/windowed running average held on `MarketState` (e.g. an EMA over `ofi_avg_window_sec`, or a simple mean of the last *N* updates). At run time, `RunAnalysisAsync` reads the **averaged** imbalance instead of computing a one-shot `CalcOFI`. True time-weighting over every update; O(1) per update; one new accumulator field. Keeps the *imbalance math* host-agnostic (a small `OfiAccumulator` the feed feeds; the feed stays dumb about scoring).
+- **(a) Feed-side rolling accumulator (recommended).** As each WS book update arrives (~100ms), the feed folds the current top-book imbalance into a time-decayed/windowed running average held on `MarketState` (e.g. an EMA over `avg_window_sec`, or a simple mean of the last *N* updates). At run time, `RunAnalysisAsync` reads the **averaged** imbalance instead of computing a one-shot `CalcOFI`. True time-weighting over every update; O(1) per update; one new accumulator field. Keeps the *imbalance math* host-agnostic (a small `OfiAccumulator` the feed feeds; the feed stays dumb about scoring).
 - **(b) Sampled ring + average-at-run.** `MarketState` retains a short ring of recent book-imbalance samples (sampled every ~Xs); the run averages the window. Simpler state, coarser (samples, not every update).
+
+**Settled formula (§10.1 + §10.2 — build to this):** mechanism **(a)**, with a **time-aware EMA** so the window means what it says under irregular arrivals. On each book update fold the current top-book imbalance `x` into the running average with `alpha = 1 - exp(-dt / tau)`, where `dt` = seconds since the previous update and `tau = avg_window_sec`. (A fixed-alpha EMA would let the effective horizon drift with the update rate — avoid it.) **Warmup / cold-start:** until the accumulator has seen at least `avg_window_sec` of wall-clock coverage (or a small minimum update count), emit the latest single-snapshot `CalcOFI` — the §8 fallback — rather than a half-filled average. State lives on `MarketState` under its existing SyncLock and **resets on (re)connect** so a stale pre-disconnect average can't bleed across a gap. State exactly this `dt`/warmup/reset handling in the spec-back: it fixes the `OFIRatio` distribution the v47 re-baseline calibrates against (§5).
 
 Either way the **output is still an `OFIRatio`** consumed exactly as today — so `CalcOFI`'s signal/threshold logic, the Step-2 vote, and the momentum ring are untouched in mechanism.
 
@@ -79,13 +81,19 @@ The averaging accumulator (`OfiAccumulator` or equivalent) is host-agnostic (fed
 
 ## 6. Config — `indicators.ofi` additions (settings v46)
 
+**Add the two NEW keys to the existing `indicators.OFI` block — do not replace the block.** `book_depth` and the four `momentum_*` keys (live block at `settings.json:238`) stay exactly as they are; only `averaging_enabled` + `avg_window_sec` are added. The full block after the edit:
+
 ```json
 "OFI": {
   "book_depth": 5,
-  "buy_dominant_ratio": 2.0,     // re-baselined post-build (§5)
-  "sell_dominant_ratio": 0.5,    // re-baselined post-build
+  "buy_dominant_ratio": 2.0,     // EXISTING — re-baselined post-build (§5); unchanged in v46
+  "sell_dominant_ratio": 0.5,    // EXISTING — re-baselined post-build; unchanged in v46
+  "momentum_enabled": true,      // EXISTING — unchanged
+  "momentum_window": 3,          // EXISTING — unchanged
+  "momentum_threshold": 0.15,    // EXISTING — unchanged
+  "momentum_bonus": 1,           // EXISTING — unchanged
   "averaging_enabled": true,     // NEW — time-average on the WS path
-  "avg_window_sec": 10           // NEW — averaging window / EMA horizon
+  "avg_window_sec": 10           // NEW — averaging window / EMA horizon (seconds)
 }
 ```
 
@@ -103,7 +111,7 @@ The OFI **SIGNAL BREAKDOWN row** (`Ratio:{OFIRatio} | {OFISignal} | MOM:{OFIMome
 ## 8. Edge cases & safety
 
 - **transport=rest / REST-fallback run →** snapshot `CalcOFI` (today's path); never blocks.
-- **Cold feed / thin book history (just-connected) →** until the window fills, fall back to the latest snapshot (don't emit a half-window average that misreads).
+- **Cold feed / thin book history (just-connected) →** until warmup completes (≥ `avg_window_sec` wall-clock coverage, or the minimum update count — §4.1), fall back to the latest snapshot (don't emit a half-window average that misreads). The accumulator resets on (re)connect, so this fallback re-arms after every reconnect.
 - **No semantic change to the vote** — averaging only changes the ratio's *value*; STRONG/false-positive behaviour is governed by the re-baselined thresholds.
 - **Reversibility:** `averaging_enabled=false` reverts to snapshot OFI (hot) — the rollback if the re-baseline surfaces a problem.
 
@@ -124,7 +132,7 @@ The OFI **SIGNAL BREAKDOWN row** (`Ratio:{OFIRatio} | {OFISignal} | MOM:{OFIMome
 All five confirmed **as recommended** below. **Plus a trader directive:** expose the new params in `settings.json` (no hardcoding) and keep them **tweaker-tunable** — `avg_window_sec` goes **on** the auto-tweaker surface (it shapes the OFI signal → real failure-rate linkage) alongside the dominance ratios + `book_depth`, so a future tweak can optimise it; only `averaging_enabled` (a feature on/off switch) stays off-surface (exposed + hand-toggleable). Reflected in §5/§6/§11. The chosen options:
 
 1. **Averaging mechanism** — recommend **(a) feed-side rolling accumulator** (true per-update time-weighting, O(1)). Alt: (b) sampled ring (simpler, coarser).
-2. **Window / weighting** — recommend an **EMA over `avg_window_sec` = 10s** (smooth, recency-weighted) vs a flat mean of the window. (10s ≈ a third of the old 30s cadence / aligns with the tape-window in #3.)
+2. **Window / weighting** — recommend an **EMA over `avg_window_sec` = 10s** (smooth, recency-weighted) vs a flat mean of the window. (10s ≈ a third of the old 30s cadence / aligns with the tape-window in #3.) **Build it time-aware** — `alpha = 1 - exp(-dt / tau)`, `tau = avg_window_sec` — not fixed-alpha; see §4.1 for the settled formula + warmup/reset gate.
 3. **Re-baseline method** — recommend **firing-rate-match to snapshot-OFI history** (v40/v41 precedent) vs a distribution-percentile anchor.
 4. **REST-fallback OFI** — recommend **keep snapshot OFI** on fallback runs (never silent) + accept the minor cadence heterogeneity (calibrate on the WS-averaged majority). Alt: skip OFI scoring on fallback runs.
 5. **Build/re-baseline split** — recommend **two versions** (v46 build behind the boundary → collect → v47 re-baselined thresholds), mirroring v36→v40. Confirm you want the build to land first (data starts accumulating immediately) vs waiting.
