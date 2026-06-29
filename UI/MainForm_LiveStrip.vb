@@ -4,46 +4,43 @@
 ' A System.Windows.Forms.Timer (UI-thread) ticks every live_strip.refresh_sec. Started ONCE at form load
 ' (the constructor) and disposed on form close — independent of the auto-run timer, the exit-guard timer,
 ' and the on-close watcher. Each tick self-gates (§4.1): it renders the live readout only when live_strip
-' is enabled AND the WS feed is healthy + fresh; otherwise it shows a minimal token ("WS only" /
-' "off"). It then calls the host-agnostic LiveMicrostructureEvaluator against the live MarketState and
-' renders the full-width TAPE strip (built in MainForm_Layout.BuildCardGridLayout, directly under the
-' verdict-header hero row). DISPLAY/AWARENESS ONLY — deliberately NOT a verdict: no scoring, no CSV,
-' no direction call.
+' is enabled AND the WS feed is healthy + fresh; otherwise it shows "WS only" (no usable feed) or hides
+' the data (disabled). It then calls the host-agnostic LiveMicrostructureEvaluator against the live
+' MarketState and renders the full-width TAPE strip (built in MainForm_Layout.BuildCardGridLayout,
+' directly under the verdict-header hero row). DISPLAY/AWARENESS ONLY — deliberately NOT a verdict:
+' no scoring, no CSV, no direction call.
 '
 ' Lifecycle note (UI thread): the timer runs on the UI thread, so MarketState reads (lock-guarded), the
 ' feed's plain health fields, and the label update are all safe without Control.Invoke (pure display,
 ' light windowed compute, no async trigger — simpler than the on-close Threading.Timer).
 '
-' Toggle: the strip is always present as a thin line. When disabled it shows "TAPE · off · right-click
-' to enable" carrying a context-menu toggle for live_strip.enabled, so the trader can turn it on (e.g.
-' for the §9 #1 post-build visual checkpoint) without editing settings.json. The strip's live DATA is
-' suppressed when off (it never recomputes / never reads MarketState while disabled); only the dim
-' off-token + toggle remain. This consciously resolves the §7 ("disabled → hidden") vs §10 ("a toggle")
-' tension — flagged for the visual checkpoint.
+' Toggle: a visible "TAPE" CheckBox on the strip row (mirrors the SINGLE/REPEAT + INTERVAL/ON-CLOSE
+' radio toggles) switches live_strip.enabled. The checkbox is always visible; the data label hides when
+' the strip is off — so "disabled → hidden" holds for the readout (spec §7) while the toggle stays
+' reachable (spec §10). The checkbox is kept in sync with the setting each tick (covers hot-reload).
 
 Imports System.Drawing
 Imports System.Windows.Forms
 
 Partial Public Class MainForm
 
-    ' Thin full-width TAPE strip — created/parented in MainForm_Layout.BuildCardGridLayout (its own grid
-    ' row directly under the verdict-header hero row). NOT an RTF/snapshot/card surface (spec §6).
+    ' The "TAPE" toggle checkbox + the data label — created/parented in
+    ' MainForm_Layout.BuildCardGridLayout (their own grid row directly under the verdict-header hero
+    ' row). NOT an RTF/snapshot/card surface (spec §6).
+    Friend chkLiveStrip As CheckBox
     Friend lblLiveStrip As Label
 
     Private _liveStripTimer    As System.Windows.Forms.Timer
-    Private _liveStripMenu     As System.Windows.Forms.ContextMenuStrip
-    Private _liveStripMenuItem As System.Windows.Forms.ToolStripMenuItem
     Private _liveStripLastText As String = Nothing
+    Private _liveStripSyncing  As Boolean = False   ' guards the checkbox→setting handler during sync
 
     ' -----------------------------------------------------------------------
     ' Lifecycle — StartLiveStrip from the constructor (form load); StopLiveStrip on form close.
     ' Idempotent: a re-start disposes the prior timer first. The timer keeps running even when
-    ' live_strip is disabled, so a hot-reload/toggle re-enables instantly (mirrors the exit guard).
+    ' live_strip is disabled, so a toggle/hot-reload re-enables instantly (mirrors the exit guard).
     ' -----------------------------------------------------------------------
     Private Sub StartLiveStrip()
         StopLiveStrip()
-
-        EnsureLiveStripMenu()
 
         Dim cfg As EngineSettings = SettingsLoader.Current
         _liveStripTimer = New System.Windows.Forms.Timer() With {
@@ -52,7 +49,7 @@ Partial Public Class MainForm
         AddHandler _liveStripTimer.Tick, AddressOf OnLiveStripTick
         _liveStripTimer.Start()
 
-        ' Paint once immediately so the strip isn't blank for the first refresh_sec.
+        ' Paint once immediately so the strip + checkbox reflect the saved state from form load.
         OnLiveStripTick(Nothing, EventArgs.Empty)
     End Sub
 
@@ -78,15 +75,23 @@ Partial Public Class MainForm
         If IsDisposed OrElse lblLiveStrip Is Nothing Then Return
         Dim cfg As EngineSettings = SettingsLoader.Current
 
+        ' Keep the checkbox in sync with the setting (covers a settings.json hot-reload). Guarded so the
+        ' programmatic Checked change doesn't loop back through OnLiveStripCheckChanged + re-save.
+        If chkLiveStrip IsNot Nothing AndAlso chkLiveStrip.Checked <> cfg.LiveStrip.Enabled Then
+            _liveStripSyncing = True
+            chkLiveStrip.Checked = cfg.LiveStrip.Enabled
+            _liveStripSyncing = False
+        End If
+
         ' refresh_sec hot-reload.
         Dim desiredMs As Integer = LiveStripIntervalMs(cfg)
         If _liveStripTimer IsNot Nothing AndAlso _liveStripTimer.Interval <> desiredMs Then
             _liveStripTimer.Interval = desiredMs
         End If
 
-        ' Disabled → off-token (carries the right-click toggle). No recompute, no MarketState read.
+        ' Disabled → hide the data (the checkbox stays visible as the toggle). No recompute, no read.
         If Not cfg.LiveStrip.Enabled Then
-            SetLiveStrip("off · right-click to enable", Theme.FG_QUATERNARY)
+            SetLiveStrip(Nothing, Theme.FG_QUATERNARY)
             Return
         End If
 
@@ -115,21 +120,25 @@ Partial Public Class MainForm
     End Function
 
     ' -----------------------------------------------------------------------
-    ' Render — compose the '·'-separated line; set text only when changed (no flicker, §4.4).
+    ' Render — set text only when changed (no flicker, §4.4). body = Nothing hides the data label.
     ' -----------------------------------------------------------------------
     Private Sub SetLiveStrip(body As String, colour As Color)
         If lblLiveStrip Is Nothing Then Return
-        Dim text As String = "TAPE · " & body
-        If text <> _liveStripLastText Then
-            lblLiveStrip.Text = text
-            _liveStripLastText = text
+        If body Is Nothing Then
+            lblLiveStrip.Visible = False
+            _liveStripLastText = Nothing
+            Return
+        End If
+        If body <> _liveStripLastText Then
+            lblLiveStrip.Text = body
+            _liveStripLastText = body
         End If
         If Not lblLiveStrip.ForeColor.Equals(colour) Then lblLiveStrip.ForeColor = colour
         If Not lblLiveStrip.Visible Then lblLiveStrip.Visible = True
     End Sub
 
-    ' Visually distinct from the verdict (label "TAPE", neutral/dim — never the verdict colour ramp), so
-    ' it reads as a readout, not a call (§4.4). "--" for any field with no data yet.
+    ' Visually distinct from the verdict (the "TAPE" checkbox labels it, neutral/dim — never the verdict
+    ' colour ramp), so it reads as a readout, not a call (§4.4). "--" for any field with no data yet.
     Private Shared Function ComposeLiveStrip(s As MicrostructureSnapshot) As String
         Dim parts As New List(Of String)()
         parts.Add(If(s.HasPrice, s.LastPrice.ToString("0"), "--"))
@@ -141,7 +150,7 @@ Partial Public Class MainForm
         Return String.Join(" · ", parts)
     End Function
 
-    ' Bracket the price between its floor and ceiling: "SL 62425 (−25) | SH 62468 (+18)".
+    ' Bracket the price between its floor and ceiling: "SL 59860 (+56) | SH 60103 (+299)".
     Private Shared Function ComposeLevels(s As MicrostructureSnapshot) As String
         Dim below As String = If(s.Below.Has, FormatLevel(s.Below), "")
         Dim above As String = If(s.Above.Has, FormatLevel(s.Above), "")
@@ -190,25 +199,12 @@ Partial Public Class MainForm
     End Function
 
     ' -----------------------------------------------------------------------
-    ' Toggle — right-click context menu on the strip for live_strip.enabled.
+    ' Toggle — the visible "TAPE" checkbox writes live_strip.enabled.
     ' -----------------------------------------------------------------------
-    Private Sub EnsureLiveStripMenu()
-        If _liveStripMenu IsNot Nothing Then Return
-        _liveStripMenu = New System.Windows.Forms.ContextMenuStrip()
-        _liveStripMenuItem = New System.Windows.Forms.ToolStripMenuItem("Live tape strip")
-        AddHandler _liveStripMenuItem.Click, AddressOf OnLiveStripToggle
-        _liveStripMenu.Items.Add(_liveStripMenuItem)
-        ' Sync the check mark with the live setting each time the menu opens (covers hot-reload).
-        AddHandler _liveStripMenu.Opening,
-            Sub(s As Object, ev As System.ComponentModel.CancelEventArgs)
-                _liveStripMenuItem.Checked = SettingsLoader.Current.LiveStrip.Enabled
-            End Sub
-        If lblLiveStrip IsNot Nothing Then lblLiveStrip.ContextMenuStrip = _liveStripMenu
-    End Sub
-
-    Private Sub OnLiveStripToggle(sender As Object, e As EventArgs)
+    Private Sub OnLiveStripCheckChanged(sender As Object, e As EventArgs)
+        If _liveStripSyncing Then Return   ' programmatic sync from the tick — not a user action
         Dim cfg As EngineSettings = SettingsLoader.Current
-        cfg.LiveStrip.Enabled = Not cfg.LiveStrip.Enabled
+        cfg.LiveStrip.Enabled = chkLiveStrip.Checked
         ' Operational/UI toggle — bumpVersion:=False (no version/change_log churn; v36 §10a precedent).
         SettingsLoader.Save(cfg, "live_strip enabled toggled via UI", bumpVersion:=False)
         OnLiveStripTick(Nothing, EventArgs.Empty)   ' repaint immediately

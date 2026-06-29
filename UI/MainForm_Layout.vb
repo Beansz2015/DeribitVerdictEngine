@@ -561,20 +561,45 @@ Partial Public Class MainForm
         ' Row 3b: LIVE microstructure TAPE strip (P4 #3) — a thin full-width line directly under the
         ' verdict header so "deliberate verdict + live tape" read together. Display/awareness only,
         ' deliberately NOT a verdict (neutral/dim, never the verdict colour ramp). Driven by the ~2s
-        ' timer in MainForm_LiveStrip.vb; right-click toggles live_strip.enabled. NOT an RTF/snapshot/
-        ' card surface → no card-binding obligation (spec §6). Inserted AFTER _heroRowIndex is captured,
-        ' so the hero-row grow logic (BindCardVerdict) is unaffected.
+        ' timer in MainForm_LiveStrip.vb. A visible "TAPE" checkbox (mirrors the SINGLE/REPEAT +
+        ' INTERVAL/ON-CLOSE radio toggles) on the left switches live_strip.enabled; the data label
+        ' fills the rest and hides when the strip is off. NOT an RTF/snapshot/card surface → no
+        ' card-binding obligation (spec §6). Inserted AFTER _heroRowIndex is captured, so the hero-row
+        ' grow logic (BindCardVerdict) is unaffected.
+        Dim stripRow = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .BackColor = Color.Transparent, .Margin = New Padding(0), .TabStop = False
+        }
+        stripRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 76))
+        stripRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+
+        chkLiveStrip = New CheckBox() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = "TAPE",
+            .Font = New Font("Segoe UI", 8.5!),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(8, 0, 0, 0),
+            .TabStop = False
+        }
+        AddHandler chkLiveStrip.CheckedChanged, AddressOf OnLiveStripCheckChanged
+
         lblLiveStrip = New Label() With {
             .Dock = DockStyle.Fill,
             .TextAlign = ContentAlignment.MiddleLeft,
-            .Text = "TAPE · off · right-click to enable",
+            .Text = "",
             .Font = Theme.FontMono(9.0F, FontStyle.Bold),
-            .ForeColor = Theme.FG_QUATERNARY,
+            .ForeColor = Theme.FG_TERTIARY,
             .BackColor = Color.Transparent,
-            .Margin = New Padding(8, 0, 8, 4),
+            .Margin = New Padding(0, 0, 8, 4),
             .TabStop = False
         }
-        AddRow(lblLiveStrip, 24)
+
+        stripRow.Controls.Add(chkLiveStrip, 0, 0)
+        stripRow.Controls.Add(lblLiveStrip, 1, 0)
+        AddRow(stripRow, 24)
 
         ' Row 4: ATR ENTRY LEVELS. Bumped from 110 to 150 in P4 retro-fix
         ' for GAP-06 dual long+short rendering (section header + ATR sub-

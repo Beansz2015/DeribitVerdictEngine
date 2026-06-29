@@ -875,8 +875,8 @@ End Class
 ''' imbalance depth (no duplicate key). Spec: docs/live-microstructure-strip-proposal.md §5.
 ''' </summary>
 Public Class LiveStripSettings
-    ''' <summary>Master switch. Opt-in — default False (the trader confirms the look post-build, §9 #1).</summary>
-    <JsonPropertyName("enabled")>         Public Property Enabled       As Boolean = False
+    ''' <summary>Master switch. Default True (trader confirmed the look at the §9 #1 checkpoint 2026-06-29). Toggled live via the TAPE checkbox.</summary>
+    <JsonPropertyName("enabled")>         Public Property Enabled       As Boolean = True
     ''' <summary>Strip recompute + repaint cadence in seconds. In-memory recompute is cheap. Default 2.</summary>
     <JsonPropertyName("refresh_sec")>     Public Property RefreshSec     As Integer = 2
     ''' <summary>Tape-speed measurement window in seconds (trades/sec + USD/sec over this lookback). Default 10.</summary>
