@@ -1,6 +1,6 @@
 # Time-Averaged OFI — Proposal (P4 #4)
 
-**Status:** PROPOSED — awaiting trader sign-off (2026-06-29)
+**Status:** APPROVED — ready for implementer (trader sign-off 2026-06-29; §10 all-recommended + the tweaker-exposure directive). Build only this approved spec; do not invent design decisions mid-code (CLAUDE.md / trader-profile §7). Local-first — commit as you go, never push (trader tests + pushes). ⚠ Scoring re-baseline — the build (v46) lands behind a dated OFIRatio dataset boundary; the threshold re-derivation is a later, data-gated pass (v47-ish) with its own trader sign-off.
 **Target:** settings **v45 → v46** (averaging keys) + a **scoring re-baseline** of the OFI dominance thresholds.
 **Scoring impact:** ⚠ **YES — this is the first P4 re-baseline upgrade.** It changes the value of `OFIRatio` (the input to the OFI vote + the OFI-momentum ring), so the OFI thresholds must be re-derived and a dataset boundary marked. **Not** a display-only feature like #1–#3.
 **Item:** #4 in `websocket-migration-proposal.md` §11 (⚠ re-baseline-flagged).
@@ -71,7 +71,7 @@ The averaging accumulator (`OfiAccumulator` or equivalent) is host-agnostic (fed
 4. **Review the momentum threshold** — `_ofiHistory` now holds averaged ratios (less jumpy), so RISING/FALLING may fire differently; re-confirm or adjust `OFI.Momentum*`.
 5. **Ship the re-baselined thresholds** as a settings bump with the measured values + rationale (v40/v41-style change_log).
 
-**The thresholds stay on the auto-tweaker surface** (they're scoring thresholds — the tweaker tunes `OFI.*` legitimately). The re-baseline sets the new anchor; the tweaker can refine later. The averaging *window* key is OFF the tweaker surface (a feed-mechanism config, not a failure-rate threshold).
+**The OFI scoring params are on the auto-tweaker surface** — the dominance ratios **and** `avg_window_sec` (trader directive 2026-06-29: expose the new function's params so a future tweak can optimise them; the window shapes the OFI signal → a genuine failure-rate linkage, unlike pure-mechanism configs). The re-baseline sets the initial anchors; the tweaker refines later. **Coupling caveat:** the dominance ratios are re-derived *for* a given window, so changing the window shifts the ratio distribution — the iterative tweaker (one validated change per round) re-tunes the ratios over subsequent rounds, but a *manual* window change should be followed by a ratio re-check. Only `averaging_enabled` (the feature on/off switch) stays OFF the tweaker surface — exposed + hand-toggleable, but a structural feature flag isn't something the numeric tweaker should flip.
 
 **Sequence:** build + boundary marker → trader runs/collects → coordinator re-derives on the post-build book → trader signs the new thresholds → ship. The build and the re-baseline are **two commits/versions** (v46 build, then v47-ish re-baseline), mirroring v36→v40.
 
@@ -89,7 +89,7 @@ The averaging accumulator (`OfiAccumulator` or equivalent) is host-agnostic (fed
 }
 ```
 
-- `averaging_enabled` + `avg_window_sec` are new (feed-mechanism; OFF the tweaker surface — add `"OFI.averaging"`/`"OFI.avg_window"` handling or a targeted exclusion so the tweaker can't toggle the mechanism, only tune the dominance ratios). `book_depth` + the dominance ratios stay tweaker-tunable.
+- `averaging_enabled` + `avg_window_sec` are new and **both exposed in `settings.json`** (no hardcoded magic numbers — project principle). `avg_window_sec` is **on** the tweaker surface (tunable — it shapes the OFI signal), alongside `book_depth` + the dominance ratios. Only `averaging_enabled` (a feature on/off switch, not a threshold) is excluded from the tweaker surface — exposed + hand-toggleable, but not tweaker-flippable.
 - Bump v45→v46 + change_log + §15 (the build); the re-baseline is a later bump.
 
 ---
@@ -119,7 +119,9 @@ The OFI **SIGNAL BREAKDOWN row** (`Ratio:{OFIRatio} | {OFISignal} | MOM:{OFIMome
 
 ---
 
-## 10. Open decisions for trader sign-off
+## 10. Settled decisions (trader-approved 2026-06-29)
+
+All five confirmed **as recommended** below. **Plus a trader directive:** expose the new params in `settings.json` (no hardcoding) and keep them **tweaker-tunable** — `avg_window_sec` goes **on** the auto-tweaker surface (it shapes the OFI signal → real failure-rate linkage) alongside the dominance ratios + `book_depth`, so a future tweak can optimise it; only `averaging_enabled` (a feature on/off switch) stays off-surface (exposed + hand-toggleable). Reflected in §5/§6/§11. The chosen options:
 
 1. **Averaging mechanism** — recommend **(a) feed-side rolling accumulator** (true per-update time-weighting, O(1)). Alt: (b) sampled ring (simpler, coarser).
 2. **Window / weighting** — recommend an **EMA over `avg_window_sec` = 10s** (smooth, recency-weighted) vs a flat mean of the window. (10s ≈ a third of the old 30s cadence / aligns with the tape-window in #3.)
@@ -135,7 +137,7 @@ The OFI **SIGNAL BREAKDOWN row** (`Ratio:{OFIRatio} | {OFISignal} | MOM:{OFIMome
 - **`DeribitWsFeed.vb` / `MarketState.vb`** — wire the accumulator into the book-update path; expose the current averaged imbalance.
 - **`UI/MainForm_Analysis.vb`** (~line 363) — on the WS path, source `r.OFIRatio`/`OFISignal`/`OFIBidVol`/`OFIAskVol` from the averaged imbalance; snapshot `CalcOFI` on REST-fallback. `_ofiHistory`/momentum unchanged.
 - **`Core/Settings/EngineSettings.vb` + `settings.json`** — `averaging_enabled` + `avg_window_sec` under `indicators.OFI`; bump v45→v46 + change_log + §15 dataset-boundary marker.
-- **`tools/AutoTweaker/`** — ensure the tweaker can't flip the averaging mechanism (exclude `OFI.averaging_enabled`/`OFI.avg_window_sec`) while still tuning `OFI.buy/sell_dominant_ratio` + `book_depth`.
+- **`tools/AutoTweaker/`** — exclude **only** `OFI.averaging_enabled` (the feature switch) from the tweaker surface; keep `OFI.avg_window_sec` + the dominance ratios + `book_depth` tweaker-tunable (trader directive — the window is a scoring-affecting threshold). Confirm `avg_window_sec` is reachable by the tweaker's `OFI.*` numeric path and appears in the `PromptBuilder` exposure.
 - **`Core/IndicatorResults.vb`** — no new fields (OFIRatio etc. exist); a comment noting the WS-path semantics.
 - **`verify/ordercheck/`** — accumulator/averaging fixtures + the `averaging_enabled=false` byte-identical regression.
 - **(Later) re-baseline spec-back** — the measured threshold re-derivation, v40/v41 format.
