@@ -65,7 +65,8 @@ Public Class SettingsDiffApplier
         "resolution_profiles.",     ' provisional per-resolution ROC overrides — manual re-baseline only
         "network.",                 ' transport plumbing (REST/WS/shadow_parity) — not a failure-rate lever (HARD CONSTRAINT 12)
         "exit_guard.",              ' realtime exit-guard overlay — trader-risk/display preference, display-only (HARD CONSTRAINT 13)
-        "auto_run."                 ' run cadence/trigger (interval + on-close trigger_mode) — operational preference, no failure-rate linkage (HARD CONSTRAINT 14)
+        "auto_run.",                ' run cadence/trigger (interval + on-close trigger_mode) — operational preference, no failure-rate linkage (HARD CONSTRAINT 14)
+        "live_strip."               ' live microstructure TAPE strip — display preference, display-only, no failure-rate linkage (HARD CONSTRAINT 15)
     }
 
     ' Validate a proposed diff list.

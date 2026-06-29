@@ -63,6 +63,10 @@ Public Class PromptBuilder
             "preference set by the trader with no failure-rate linkage (and on-close logs the SAME " &
             "observations, just at bar-close moments). (Enforced in code: SettingsDiffApplier rejects " &
             "'auto_run.' as well.)" & vbLf &
+        "15. Never propose any 'live_strip.*' key. The live_strip block drives a display-only live TAPE " &
+            "strip (a between-runs microstructure readout — deliberately NOT a verdict, zero scoring " &
+            "impact, never writes the CSV). It is a display preference with no failure-rate linkage. " &
+            "(Enforced in code: SettingsDiffApplier rejects 'live_strip.' as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

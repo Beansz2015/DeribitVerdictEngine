@@ -320,6 +320,9 @@ Partial Public Class MainForm
         ' streams whenever transport=ws regardless of auto-run). Each tick self-gates on posState +
         ' feed health; disposed in OnFormClosing.
         StartExitGuard()
+        ' [P4 #3] Start the live TAPE strip tick at form load (independent of auto-run + the exit-guard
+        ' timer). Each tick self-gates on live_strip.enabled + feed health; disposed in OnFormClosing.
+        StartLiveStrip()
 
         UpdateLogInfo()
 
@@ -406,6 +409,10 @@ Partial Public Class MainForm
         End Try
         Try
             StopExitGuard()   ' [P4 #1] dispose the exit-guard tick on close
+        Catch
+        End Try
+        Try
+            StopLiveStrip()   ' [P4 #3] dispose the live TAPE strip tick on close
         Catch
         End Try
         MyBase.OnFormClosing(e)
@@ -550,6 +557,24 @@ Partial Public Class MainForm
         ' HOLD slot (review finding F-08 on cases 41/42).
         AddRow(heroRow, HERO_ROW_BASE)
         _heroRowIndex = _gridRoot.RowStyles.Count - 1
+
+        ' Row 3b: LIVE microstructure TAPE strip (P4 #3) — a thin full-width line directly under the
+        ' verdict header so "deliberate verdict + live tape" read together. Display/awareness only,
+        ' deliberately NOT a verdict (neutral/dim, never the verdict colour ramp). Driven by the ~2s
+        ' timer in MainForm_LiveStrip.vb; right-click toggles live_strip.enabled. NOT an RTF/snapshot/
+        ' card surface → no card-binding obligation (spec §6). Inserted AFTER _heroRowIndex is captured,
+        ' so the hero-row grow logic (BindCardVerdict) is unaffected.
+        lblLiveStrip = New Label() With {
+            .Dock = DockStyle.Fill,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Text = "TAPE · off · right-click to enable",
+            .Font = Theme.FontMono(9.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(8, 0, 8, 4),
+            .TabStop = False
+        }
+        AddRow(lblLiveStrip, 24)
 
         ' Row 4: ATR ENTRY LEVELS. Bumped from 110 to 150 in P4 retro-fix
         ' for GAP-06 dual long+short rendering (section header + ATR sub-

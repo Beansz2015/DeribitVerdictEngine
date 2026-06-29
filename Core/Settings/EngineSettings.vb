@@ -127,6 +127,10 @@ Public Class EngineSettings
     ''' <summary>[P4 #1 realtime-exit-guard] Display/alert-only exit-guard overlay parameters.</summary>
     <JsonPropertyName("exit_guard")>
     Public Property ExitGuard As New ExitGuardSettings
+
+    ''' <summary>[P4 #3 live-microstructure-strip] Display-only live TAPE strip parameters.</summary>
+    <JsonPropertyName("live_strip")>
+    Public Property LiveStrip As New LiveStripSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -858,4 +862,23 @@ Public Class ExitGuardSettings
     <JsonPropertyName("debounce_evals")> Public Property DebounceEvals As Integer = 2
     ''' <summary>Play an audible cue on the EXIT-latch transition. Default True.</summary>
     <JsonPropertyName("sound_enabled")>  Public Property SoundEnabled  As Boolean = True
+End Class
+
+''' <summary>
+''' [P4 #3 live-microstructure-strip] Display-only one-line TAPE strip that recomputes the fast
+''' streaming microstructure (price vs nearest structural levels, TFI, spread, book imbalance, tape
+''' speed) from the live WS MarketState every refresh_sec between full runs. Deliberately NOT a verdict
+''' (no score / no direction) — zero scoring impact, never calls Calculate, never writes the CSV, no
+''' re-baseline. OFF the auto-tweaker surface (display preference, no failure-rate linkage — same
+''' exclusion class as kelly.* / exit_guard.* / auto_run.*: SettingsDiffApplier rejects "live_strip."
+''' and PromptBuilder HARD CONSTRAINT 15). Hot-reloadable. Reuses cfg.Indicators.OFI.BookDepth for the
+''' imbalance depth (no duplicate key). Spec: docs/live-microstructure-strip-proposal.md §5.
+''' </summary>
+Public Class LiveStripSettings
+    ''' <summary>Master switch. Opt-in — default False (the trader confirms the look post-build, §9 #1).</summary>
+    <JsonPropertyName("enabled")>         Public Property Enabled       As Boolean = False
+    ''' <summary>Strip recompute + repaint cadence in seconds. In-memory recompute is cheap. Default 2.</summary>
+    <JsonPropertyName("refresh_sec")>     Public Property RefreshSec     As Integer = 2
+    ''' <summary>Tape-speed measurement window in seconds (trades/sec + USD/sec over this lookback). Default 10.</summary>
+    <JsonPropertyName("tape_window_sec")> Public Property TapeWindowSec As Integer = 10
 End Class
