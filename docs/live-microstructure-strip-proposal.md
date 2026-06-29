@@ -1,6 +1,6 @@
 # LIVE Microstructure Strip — Proposal (P4 #3)
 
-**Status:** PROPOSED — awaiting trader sign-off (2026-06-25)
+**Status:** APPROVED — ready for implementer (trader sign-off 2026-06-25; §9 settled). Build only this approved spec; do not invent design decisions mid-code (CLAUDE.md / trader-profile §7). Local-first — commit as you go, never push (trader tests + pushes). **Two post-build VISUAL checkpoints** (§9 #1, #4): the strip's overall look and the both-levels (above+below) rendering — build per spec, then the trader reviews the rendered strip and may request a small display tweak before final confirmation.
 **Target:** settings **v44 → v45** (one new `live_strip` block)
 **Scoring impact:** **none** — display-only. Never calls `Calculate()`, never writes the CSV, never emits a verdict. No re-baseline.
 **Item:** #3 in `websocket-migration-proposal.md` §11 (unmarked = display-only).
@@ -54,7 +54,7 @@ A ~2s `System.Windows.Forms.Timer` (UI thread — pure display, light windowed c
 | Field | Source |
 |---|---|
 | **Last price** | `MarketState.GetTrades().Last().Price` (streaming tail) |
-| **Nearest level + Δ** | from the last full run's carried `_lastSuccessfulIndicators`: `LastSwingHigh5m` / `LastSwingLow5m` / `VPFRNearestHvnAbove` / `VPFRNearestHvnBelow` (0 = none). Pick the nearest to the live price; label `SH`/`SL`/`HVN↑`/`HVN↓`; show signed Δ. |
+| **Nearest levels + Δ (above & below)** | from the last full run's carried `_lastSuccessfulIndicators`: `LastSwingHigh5m` / `LastSwingLow5m` / `VPFRNearestHvnAbove` / `VPFRNearestHvnBelow` (0 = none). Show **both** the nearest level *above* the live price (min of the >price candidates) and the nearest *below* (max of the <price candidates), each labelled `SH`/`SL`/`HVN↑`/`HVN↓` with signed Δ — the strip brackets price between its floor and ceiling. (Trader chose both over single-nearest; §9 #4.) |
 | **TFI** | `CalcTFI(MarketState.GetTrades())` → `TFISignal` + `TFIValue` (the same pure fn the full run + exit guard use) |
 | **Spread** | `MarketState.GetBook()` top-of-book → `(ask−bid)/mid × 10000` bps (the `SpreadBps` formula) |
 | **Top-book imbalance** | `MarketState.GetBook()` L1 (or top-N) bid vs ask size → ratio + dominant side (the `CalcOFI` basis / `OFISignal` vocabulary) |
@@ -69,14 +69,14 @@ Levels are **carried, not recomputed** (5m swing / VPFR HVN are slow; they refre
 Public Shared Function Evaluate(state As MarketState, lastRun As IndicatorResults, cfg As EngineSettings) As MicrostructureSnapshot
 ```
 
-`MicrostructureSnapshot` carries the §4.2 fields (LastPrice, NearestLevelPrice/Label/Delta, TfiSignal/TfiValue, SpreadBps, ImbalanceRatio/Side, TradesPerSec, UsdPerSec). Reads a `MarketState` snapshot (copy-on-read) + 4 level fields off `lastRun`; never throws; degenerate/empty buffer → safe blanks (`--`). The Linux port reuses it as-is.
+`MicrostructureSnapshot` carries the §4.2 fields (LastPrice; the nearest level **above** and the nearest **below**, each as Price/Label/Delta; TfiSignal/TfiValue, SpreadBps, ImbalanceRatio/Side, TradesPerSec, UsdPerSec). Reads a `MarketState` snapshot (copy-on-read) + 4 level fields off `lastRun`; never throws; degenerate/empty buffer → safe blanks (`--`). The Linux port reuses it as-is.
 
 ### 4.4 Strip render
 
 A compact `·`-separated line, e.g.:
 
 ```
-TAPE · 62450 · +18 → SH 62468 · TFI BUY +0.42 · 1.3 bps · book 1.8× bid · 22 tr/s ($0.9M/s)
+TAPE · 62450 · SL 62425 (−25) | SH 62468 (+18) · TFI BUY +0.42 · 1.3 bps · book 1.8× bid · 22 tr/s ($0.9M/s)
 ```
 
 - Visually distinct from the verdict (label `TAPE`, neutral/dim styling — never the verdict colour ramp), so it reads as a readout, not a call.
@@ -132,14 +132,16 @@ The strip is a live status-bar element like `BuildWsStatusSegment` / the exit-gu
 
 ---
 
-## 9. Open decisions for trader sign-off
+## 9. Settled decisions (trader-approved 2026-06-25)
 
-1. **Default `enabled`** — recommend **false** (opt-in). Unlike the exit guard (position-gated → invisible when flat), this strip is *always visible* when on; defaulting off keeps the UI clean until you flip it. (The exit guard defaulting on was safe precisely because it self-hides.)
-2. **Placement** — recommend a thin full-width line **under the verdict header** (verdict + live tape read together). Alt: beside the exit-guard row in the SETTINGS & TOOLS card.
-3. **Field set / order** — recommend the §4.4 set (price · Δ-to-nearest-level · TFI · spread · book imbalance · tape speed). Drop/reorder any.
-4. **Nearest level: single nearest vs above+below** — recommend **single nearest** (compact). Alt: show both nearest-above and nearest-below.
-5. **Tape speed metric** — recommend show **both** `tr/s` and `$/s` (both cheap; `$/s` is the richer flow read). Or pick one.
-6. **`refresh_sec` / `tape_window_sec`** — recommend 2s / 10s.
+Confirmed — final, except two items carry a **post-build visual checkpoint** (⟳): build per spec, then the trader reviews the rendered strip and may ask for a small display tweak before final confirmation (no re-spec).
+
+1. **`enabled` default = false** (opt-in) ⟳ — settled value; trader confirms the strip's overall look after implementation.
+2. **Placement** = a thin full-width line **under the verdict header** (verdict + live tape read together).
+3. **Field set / order** = price · Δ-to-levels · TFI · spread · book imbalance · tape speed.
+4. **Nearest levels = BOTH above & below** ⟳ — show the bracketing nearest-above and nearest-below (not the single nearest); trader confirms the two-level rendering after implementation.
+5. **Tape speed = both** `tr/s` and `$/s`.
+6. **`refresh_sec` / `tape_window_sec` = 2s / 10s**.
 
 ---
 
