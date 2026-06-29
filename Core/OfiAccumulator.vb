@@ -37,6 +37,7 @@ Public NotInheritable Class OfiAccumulator
 
     Private _hasState       As Boolean = False
     Private _emaRatio       As Double  = 0.0   ' the OFIRatio of record (averaged)
+    Private _emaLnRatio     As Double  = 0.0   ' [DIAG] geometric track: EMA of ln(ratio); GeoRatio = Exp(this). Throwaway — OFI AM/GM gap test.
     Private _emaBid         As Double  = 0.0   ' averaged weighted bid volume (display/CSV)
     Private _emaAsk         As Double  = 0.0   ' averaged weighted ask volume (display/CSV)
     Private _lastFoldMs     As Long    = 0      ' epoch-ms of the previous fold (dt basis)
@@ -48,6 +49,7 @@ Public NotInheritable Class OfiAccumulator
     Public Sub Reset()
         _hasState        = False
         _emaRatio        = 0.0
+        _emaLnRatio      = 0.0   ' [DIAG]
         _emaBid          = 0.0
         _emaAsk          = 0.0
         _lastFoldMs      = 0
@@ -62,6 +64,7 @@ Public NotInheritable Class OfiAccumulator
     Public Sub Fold(bidVol As Double, askVol As Double, ratio As Double, tsMs As Long, tauSec As Double)
         If Not _hasState Then
             _emaRatio        = ratio
+            _emaLnRatio      = Math.Log(Math.Max(ratio, 0.000001))   ' [DIAG] geo seed
             _emaBid          = bidVol
             _emaAsk          = askVol
             _lastFoldMs      = tsMs
@@ -82,6 +85,7 @@ Public NotInheritable Class OfiAccumulator
         End If
 
         _emaRatio += alpha * (ratio - _emaRatio)
+        _emaLnRatio += alpha * (Math.Log(Math.Max(ratio, 0.000001)) - _emaLnRatio)   ' [DIAG] geo track (same alpha/dt as the arith EMA)
         _emaBid   += alpha * (bidVol - _emaBid)
         _emaAsk   += alpha * (askVol - _emaAsk)
         _lastFoldMs  = tsMs
@@ -116,6 +120,7 @@ Public NotInheritable Class OfiAccumulator
         Return New OfiAverageSnapshot With {
             .HasWarmup   = HasWarmup(minCoverageSec),
             .Ratio       = _emaRatio,
+            .GeoRatio    = Math.Exp(_emaLnRatio),
             .BidVol      = _emaBid,
             .AskVol      = _emaAsk,
             .UpdateCount = _updateCount,
@@ -129,6 +134,7 @@ End Class
 Public Structure OfiAverageSnapshot
     Public Property HasWarmup   As Boolean
     Public Property Ratio       As Double
+    Public Property GeoRatio    As Double   ' [DIAG] geometric-mean ratio for the AM/GM gap test
     Public Property BidVol      As Double
     Public Property AskVol      As Double
     Public Property UpdateCount As Integer
