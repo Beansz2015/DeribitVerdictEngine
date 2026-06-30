@@ -1,0 +1,26 @@
+name: verify
+
+# Pure dotnet + git verification gate — no AI, no secrets, no Anthropic spend.
+# windows-latest is required for the WinForms solution build (Decision F; the repo is
+# public, so Actions minutes are free). Runs the same tools/checks/verify-gate.ps1 the
+# local pre-push hook + Stop hook use, so all surfaces share one source of truth.
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history so the heuristic diff range resolves
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Verification gate (build + AutoTweaker + harness + heuristics)
+        shell: pwsh
+        run: ./tools/checks/verify-gate.ps1 -Mode ci -BaseRef $env:BEFORE
+        env:
+          BEFORE: ${{ github.event.before }}

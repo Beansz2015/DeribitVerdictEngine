@@ -1,0 +1,9 @@
+#!/bin/sh
+# DeribitVerdictEngine pre-push gate.
+# Installed into .git/hooks/pre-push by tools/checks/install-hooks.{ps1,sh}
+# (.git/hooks is not version-controlled, so this tracked template is the source).
+# Runs the shared verification gate in prepush mode; a non-zero exit aborts the push.
+# stdin (the pushed refs) is ignored — the gate compares origin/master..HEAD.
+root="$(git rev-parse --show-toplevel)"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$root/tools/checks/verify-gate.ps1" -Mode prepush
+exit $?
