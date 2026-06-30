@@ -1,0 +1,1560 @@
+' verify/ordercheck/Program.vb
+' Acceptance fixtures for the engine correctness pass
+' (docs/engine-correctness-pass-proposal.md §11, tests A1–A9).
+'
+' The .vbproj links the REAL shipped sources, so these fixtures run exactly the
+' code the app ships. All trade-list fixtures are CHRONOLOGICAL ASCENDING
+' (oldest first) — the contract GetRecentTradesAsync guarantees post-F1. Truth
+' labels are chronological ground truth, not pre-fix outputs.
+'
+' Run: dotnet run --project verify/ordercheck
+' Exit code 0 = all pass, 1 = failures.
+
+Imports System
+
+Module Program
+
+    Private _failures As Integer = 0
+
+    Sub Main()
+        Console.WriteLine("OrderCheck — engine correctness pass acceptance fixtures")
+        Console.WriteLine()
+
+        A1_CvdSlopeRising()
+        A2_MicroCvdBullAccel()
+        A3_MicroCvdWindowFromEnd()
+        A4_TfiWindowFromEnd()
+        A5_NormsRecentWindow()
+        A6_ObvNormalisation()
+        A7_DonchianPriorWindow()
+        A8_DominantSideCascade()
+        A9_MtfPerSideFlags()
+        A10_KellyInverseLeverage()
+        A11_CandleFreshness()
+        A12_LinearLevels()
+        A13_MinTradeableMoveGate()
+        A14a_ResolutionSelection()
+        A14b_RocOverrideResolves()
+        A14c_AtrOn3MinGateFlip()
+        A14d_NyByteIdentical()
+        A14e_PerRowStamp()
+        A14f_ResolutionFilteredAggregation()
+        A14g_FreshnessHonoursResolution()
+        A14h_RegimeMtfUnchanged()
+        A14i_ResolutionSurvivesSessionVolumeDisabled()
+        A14j_PerSessionRocMagnitude()
+
+        ' v36 Phase-2a — auto-tweaker (session × resolution) population filter.
+        A15a_FilterExcludesNonMatching()
+        A15b_ResolutionHomogeneity()
+        A15c_LegacyRowDefaultsRes1()
+        A15d_SessionDerivationEqualsEngineBucket()
+        A15e_ReseedOnFilterChange()
+        A15f_ValidateRejectsOffSurfaceKeys()
+        A15g_ValidatePassesNormalSessionVolumeKey()
+
+        ' WS-P2 — auto-tweaker network.* hardening (HARD CONSTRAINT 12).
+        A15h_ValidateRejectsNetworkKeys()
+
+        ' WS-P3 — cutover: §3 trades connection-health gate + §4 15m-refresh policy.
+        A16a_TradesServedWhenConnectedButQuiet()
+        A16b_TradesWithheldWhenConnectionDown()
+        A16c_LegacyAgeGateWithoutHealthCheck()
+        A16d_Mtf15mWsReadsEveryRun()
+        A16e_Mtf15mRestRetainsTtl()
+
+        ' P4 #1 — realtime exit guard: shared primitive, evaluator, CalcHoldStatus byte-identical.
+        A17a_PrimitiveTwoAdverseLong()
+        A17b_PrimitiveStructuralBreakLong()
+        A17c_PrimitiveSingleAdverseLong()
+        A17d_PrimitiveClearLong()
+        A17e_PrimitiveTwoAdverseShort()
+        A17f_EvaluatorEndToEnd()
+        A17g_CalcHoldStatusByteIdentical()
+        A17h_EvaluatorSingleAdverseIsClear()
+
+        ' P4 #2 — on-close analysis mode: bar-roll detection + backstop arithmetic.
+        A18a_NoRollSameOpen()
+        A18b_RollFiresOnce()
+        A18c_MultiBarGapSingleFire()
+        A18d_ResolutionSwitchCleanFirstRoll()
+        A18e_BackstopArithmetic()
+
+        ' P4 #3 — live microstructure strip: evaluator (TFI / spread / imbalance, nearest-level
+        ' bracketing, tape-speed window + lull, empty-buffer blanks).
+        A19a_TfiSpreadImbalance()
+        A19b_NearestLevelsBracketPrice()
+        A19c_TapeSpeedWindow()
+        A19d_TapeSpeedLull()
+        A19e_EmptyBufferBlanks()
+
+        ' P4 #4 — time-averaged OFI: CalcOFI refactor byte-identical, accumulator EMA
+        ' (steady-state + time-aware step), warmup gate, reset re-arm, tweaker surface.
+        A20a_CalcOfiRefactorEquivalence()
+        A20b_CalcOfiEdgeCasesUnchanged()
+        A20c_AccumulatorSteadyState()
+        A20d_AccumulatorTimeAwareStep()
+        A20e_WarmupGate()
+        A20f_ResetReArmsWarmup()
+        A20g_TweakerRejectsAveragingFlag()
+        A20h_TweakerAcceptsAvgWindow()
+
+        Console.WriteLine()
+        If _failures = 0 Then
+            Console.WriteLine("ALL PASS")
+        Else
+            Console.WriteLine(_failures & " FAILURE(S)")
+            Environment.ExitCode = 1
+        End If
+    End Sub
+
+    ' -- Fixture helpers ------------------------------------------------------
+
+    Private Sub Check(name As String, cond As Boolean, detail As String)
+        If cond Then
+            Console.WriteLine("PASS  " & name)
+        Else
+            _failures += 1
+            Console.WriteLine("FAIL  " & name & " — " & detail)
+        End If
+    End Sub
+
+    Private Function Trade(direction As String, amount As Double, ts As Long) As TradeRecord
+        Return New TradeRecord With {
+            .Price = 100000, .Amount = amount, .Direction = direction,
+            .Liquidation = "none", .Timestamp = ts}
+    End Function
+
+    ''' <summary>Two flat candles — keeps the CVD divergence path quiet (price change below gate).</summary>
+    Private Function FlatCandles() As List(Of Candle)
+        Return New List(Of Candle) From {
+            New Candle With {.Open = 100000, .High = 100001, .Low = 99999, .Close = 100000, .Volume = 10},
+            New Candle With {.Open = 100000, .High = 100001, .Low = 99999, .Close = 100000, .Volume = 10}}
+    End Function
+
+    ' -- A1: CVD slope — old sells, recent buys → RISING ----------------------
+    ' Ascending list of 90 trades: oldest third all sells, middle third net-flat,
+    ' newest third all buys. Chronological truth: flow shifted from selling to
+    ' buying → slope RISING. (Pre-fix, the desc input made "early" the newest
+    ' trades, inverting this.)
+    Private Sub A1_CvdSlopeRising()
+        Dim trades As New List(Of TradeRecord)
+        Dim ts As Long = 1
+        For i As Integer = 1 To 30
+            trades.Add(Trade("sell", 20000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 15
+            trades.Add(Trade("buy", 1000, ts)) : ts += 1
+            trades.Add(Trade("sell", 1000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 30
+            trades.Add(Trade("buy", 20000, ts)) : ts += 1
+        Next
+
+        Dim cvdValue As Double, cvdSlope As String = "", cvdDiv As String = ""
+        IndicatorEngine.CalcCVD(trades, FlatCandles(), cvdValue, cvdSlope, cvdDiv)
+
+        Check("A1 CVD slope (old sells → recent buys)",
+              cvdSlope = "RISING",
+              "expected RISING, got " & cvdSlope)
+    End Sub
+
+    ' -- A2: MicroCVD polarity — accelerating bull burst in the tail ----------
+    ' 60 ascending buys with sharply growing size toward the end. Window = last
+    ' 50; within it, late third USD flow far exceeds early third → chronological
+    ' truth is BULL_ACCEL. (Pre-fix the early/late labels were inverted →
+    ' BULL_DECEL.)
+    Private Sub A2_MicroCvdBullAccel()
+        Dim trades As New List(Of TradeRecord)
+        Dim ts As Long = 1
+        For i As Integer = 1 To 10                      ' outside the 50-trade window
+            trades.Add(Trade("buy", 500, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 16                      ' window early third
+            trades.Add(Trade("buy", 1000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 16                      ' window mid third
+            trades.Add(Trade("buy", 2000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 18                      ' window late third — the burst
+            trades.Add(Trade("buy", 5000, ts)) : ts += 1
+        Next
+
+        Dim e As Double, m As Double, l As Double
+        Dim momentum As String = "", signal As String = ""
+        IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal)
+
+        Check("A2 MicroCVD polarity (bull burst in tail)",
+              signal = "BULL_ACCEL",
+              String.Format("expected BULL_ACCEL, got {0} (E={1:F0} M={2:F0} L={3:F0})", signal, e, m, l))
+    End Sub
+
+    ' -- A3: MicroCVD window selection — oldest trades excluded ---------------
+    ' 60 ascending trades, first 10 are huge sells. LastN(50) must exclude them:
+    ' the window is the 50 newest (all small buys), so microEarly is exactly the
+    ' first 16 buys of the window and net delta is positive.
+    Private Sub A3_MicroCvdWindowFromEnd()
+        Dim trades As New List(Of TradeRecord)
+        Dim ts As Long = 1
+        For i As Integer = 1 To 10
+            trades.Add(Trade("sell", 1000000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 50
+            trades.Add(Trade("buy", 1000, ts)) : ts += 1
+        Next
+
+        Dim e As Double, m As Double, l As Double
+        Dim momentum As String = "", signal As String = ""
+        IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal)
+
+        Check("A3 MicroCVD window (huge old sells excluded)",
+              e = 16000 AndAlso (e + m + l) = 50000,
+              String.Format("expected E=16000 net=50000, got E={0:F0} net={1:F0} signal={2}", e, e + m + l, signal))
+    End Sub
+
+    ' -- A4: TFI window selection — newest trades only -------------------------
+    ' 60 ascending trades: first 30 sells, last 30 buys. The 30-trade TFI window
+    ' must be the newest 30 (all buys) → BUY PRESSURE with tfiValue = +1.
+    ' (Pre-fix, Take(30) on a desc list happened to be correct; on the ascending
+    ' contract Take(30) would select the 30 sells → SELL PRESSURE.)
+    Private Sub A4_TfiWindowFromEnd()
+        Dim trades As New List(Of TradeRecord)
+        Dim ts As Long = 1
+        For i As Integer = 1 To 30
+            trades.Add(Trade("sell", 1000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 30
+            trades.Add(Trade("buy", 1000, ts)) : ts += 1
+        Next
+
+        Dim tfiValue As Double, tfiSignal As String = ""
+        IndicatorEngine.CalcTFI(trades, tfiValue, tfiSignal)
+
+        Check("A4 TFI window (first 30 sells excluded)",
+              tfiSignal = "BUY PRESSURE" AndAlso Math.Abs(tfiValue - 1.0) < 0.000001,
+              String.Format("expected BUY PRESSURE / +1.0, got {0} / {1:F4}", tfiSignal, tfiValue))
+    End Sub
+
+    ' -- A5: DynamicNorms volume baseline samples the RECENT window ------------
+    ' 250 ascending candles: oldest 100 have volume 10, newest 150 volume 1000.
+    ' The baseline must describe current conditions → VolMean = 1000 (last 100
+    ' completed bars, in-progress final bar excluded). Pre-fix, Take(100)
+    ' sampled the OLDEST 100 → VolMean = 10.
+    Private Sub A5_NormsRecentWindow()
+        Dim candles As New List(Of Candle)
+        For i As Integer = 0 To 249
+            Dim vol As Double = If(i < 100, 10, 1000)
+            candles.Add(New Candle With {
+                .Open = 100000, .High = 100050, .Low = 99950, .Close = 100000,
+                .Volume = vol, .Timestamp = i})
+        Next
+
+        Dim n As DynamicNorms = DynamicNorms.Compute(candles, currentATR:=50)
+
+        Check("A5 DynamicNorms volume baseline (recent window)",
+              Math.Abs(n.VolMean - 1000) < 0.001,
+              String.Format("expected VolMean=1000, got {0:F1}", n.VolMean))
+    End Sub
+
+    ' -- A6: OBV normalisation — no first-bar dead state ------------------------
+    ' Two identical 50-bar rises (volume 10/bar), differing only in whether the
+    ' FIRST close pair is equal. Pre-fix, the equal first pair made
+    ' obvValues(0) = 0 → obvChange forced 0 → OBV FLAT-dead for the run.
+    ' Post-fix (mean-volume normalisation) both classify identically.
+    Private Function ObvRiseCandles(firstPairEqual As Boolean) As List(Of Candle)
+        Dim candles As New List(Of Candle)
+        Dim close As Double = 100000
+        For i As Integer = 0 To 49
+            If i > 0 AndAlso Not (i = 1 AndAlso firstPairEqual) Then close += 10
+            candles.Add(New Candle With {
+                .Timestamp = i, .Open = close - 5, .High = close + 5,
+                .Low = close - 10, .Close = close, .Volume = 10})
+        Next
+        Return candles
+    End Function
+
+    Private Sub A6_ObvNormalisation()
+        Dim trendA As String = "", divA As String = ""
+        Dim trendB As String = "", divB As String = ""
+        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=True), trendA, divA, trendGate:=10.0)
+        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=False), trendB, divB, trendGate:=10.0)
+
+        Check("A6 OBV normalisation (first-pair-equal not dead)",
+              trendA = "RISING" AndAlso trendA = trendB,
+              String.Format("expected RISING both ways, got equal-pair={0} distinct-pair={1}", trendA, trendB))
+    End Sub
+
+    ' -- A7: Donchian prior-bar channel ----------------------------------------
+    ' 25 candles: bars 0–23 cap at high 105; the current bar closes at 110.
+    ' The 20-bar channel must span the PRIOR bars (4..23) → upper = 105, so the
+    ' call-site full-LONG check (close ≥ upper) genuinely fires. Pre-fix the
+    ' window included the current bar → upper = 112 → full signal unreachable.
+    Private Sub A7_DonchianPriorWindow()
+        Dim candles As New List(Of Candle)
+        For i As Integer = 0 To 23
+            candles.Add(New Candle With {
+                .Timestamp = i, .Open = 100, .High = 105, .Low = 95, .Close = 100, .Volume = 10})
+        Next
+        candles.Add(New Candle With {
+            .Timestamp = 24, .Open = 100, .High = 112, .Low = 99, .Close = 110, .Volume = 10})
+
+        Dim upper As Double, lower As Double
+        IndicatorEngine.CalcDonchian(candles, 20, upper, lower)
+
+        Check("A7 Donchian prior-window channel",
+              upper = 105 AndAlso lower = 95 AndAlso candles.Last().Close >= upper,
+              String.Format("expected upper=105 lower=95 (close 110 breaks out), got upper={0:F0} lower={1:F0}", upper, lower))
+    End Sub
+
+    ' -- A8: Step 5 dominant-side cascade --------------------------------------
+    ' Drives the real Calculate() with contrived RANGE_BOUND inputs.
+    ' POCO-default tiers at regimeMax 18 (RegimeWeights disabled):
+    ' strong 13 / med 10 / weak 7.
+    ' The fixture produces exactly 11 short votes and 4 long votes; a Step 3
+    ' funding boost (penalty zeroed) lifts the long side to the target:
+    '   boost 3 → ls 7 / ss 11 → must emit SHORT (MEDIUM), not WEAK LONG
+    '   boost 7 → ls 11 / ss 11 → tie carries no direction → NO TRADE [TIE]
+
+    Private Function BuildA8Cfg(fundingBoost As Integer) As EngineSettings
+        Dim cfg As New EngineSettings()
+        cfg.RegimeWeights.Enabled = False              ' suppress Pass 2c
+        cfg.MTFGate.Enabled = False                    ' isolate the cascade from the gate (A9 covers it)
+        cfg.Indicators.OiCvd.Enabled = False           ' suppress Pass 2b
+        cfg.Indicators.OFI.MomentumEnabled = False     ' suppress OFI momentum modifier
+        cfg.Indicators.Funding.MomentumEnabled = False ' suppress Step 3b
+        cfg.Scoring.FundingHighPenalty = 0             ' boost-only Step 3 arm
+        cfg.Scoring.FundingHighBoost = fundingBoost
+        Return cfg
+    End Function
+
+    Private Function BuildA8Indicators() As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.Regime = "RANGE_BOUND"
+        r.CurrentPrice = 100000
+        ' v35 min-tradeable-move gate: give the cascade a tradeable ATR (raw target
+        ' 50×2.0=100 > floor 0.0008×100000=80) so the Step 5c gate doesn't veto the
+        ' directional verdict this fixture asserts. Mirrors how this fixture disables
+        ' MTF/Pass2b/2c to isolate the dominant-side cascade. (A12 already sets 50.)
+        r.ATR = 50
+
+        ' 11 short votes: ROC, RSI, DMI, Volume, VWAP, EMA ribbon, OI, OFI,
+        ' CVD, TFI, MicroCVD.
+        r.ROC = -0.5 : r.ROCSlope = "FALLING"
+        r.RSI = 30 : r.RSIDivergence = "NONE"
+        r.PlusDI = 10 : r.MinusDI = 25 : r.ADX = 15        ' DMI short; ADX below trend threshold
+        r.VolumeRatio = 5                                   ' ≥ VolHighThreshold (3) below
+        r.VWAP = 100100 : r.VWAPSigma1Lower = 99000 : r.VWAPSigma1Upper = 101000
+        r.VWAPSigma2Lower = 98000 : r.VWAPSigma2Upper = 102000
+        r.VWAPSessionCandles = 30                           ' past warmup
+        r.EMAAlignment = "BEAR"
+        r.OISignal = "NEW SHORTS"
+        r.OFISignal = "SELL DOMINANT" : r.OFIMomentum = "FLAT"
+        r.CVDSlope = "FALLING" : r.CVDValue = -50000 : r.CVDDivergence = "NONE"
+        r.TFISignal = "SELL PRESSURE"
+        r.MicroCVDSignal = "BEAR_ACCEL" : r.MicroCVDMomentum = "ACCELERATING"
+
+        ' 4 long votes: BBW/TTM building, Donchian full LONG, OBV rising,
+        ' price above the 5m EMA(200) anchor.
+        r.SqueezeStatus = "NONE" : r.TTMSignal = "BULL_BUILDING" : r.TTMDirection = "RISING"
+        r.DonchianSignal = "LONG"
+        r.OBVTrend = "RISING" : r.OBVDivergence = "NONE"
+        r.EMA200_5m = 90000
+
+        ' Step 3 trigger: heavy negative funding → boost-only long lift.
+        r.FundingRate = -0.0002 : r.FundingBias = "SHORTS HEAVILY CROWDED"
+        r.FundingMomentum = "FLAT"
+
+        ' Quiet everything else.
+        r.SpreadStatus = "NORMAL"
+        r.LiqSignal = "NONE"
+        r.VPFRSignal = "NEUTRAL" : r.VPFRValueAreaSignal = "INSIDE_VA"
+        r.MTF15mTrend = "FLAT" : r.MTFGatePassLong = True : r.MTFGatePassShort = True
+        r.MTFGateDetails = "fixture"
+        Return r
+    End Function
+
+    Private Function BuildA8Norms() As DynamicNorms
+        Return New DynamicNorms With {
+            .VolHighThreshold = 3, .VolMidThreshold = 1.5,
+            .VolMean = 100, .VolStdDev = 50,
+            .VWAPDevThreshold = 1, .ATRScaleFactor = 1, .ATRRef = 50, .IsLive = True}
+    End Function
+
+    Private Sub A8_DominantSideCascade()
+        Dim v = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.None,
+                                        BuildA8Norms(), BuildA8Cfg(fundingBoost:=3))
+        Check("A8 dominant-side cascade (ls7/ss11 → SHORT)",
+              v.Verdict = "SHORT" AndAlso v.EffectiveLongScore = 7 AndAlso v.EffectiveShortScore = 11,
+              String.Format("expected SHORT with eff 7/11, got '{0}' with eff {1}/{2}",
+                            v.Verdict, v.EffectiveLongScore, v.EffectiveShortScore))
+
+        Dim vTie = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.None,
+                                           BuildA8Norms(), BuildA8Cfg(fundingBoost:=7))
+        Check("A8 tie (11/11 above weak → NO TRADE [TIE])",
+              vTie.Verdict = "NO TRADE [TIE]" AndAlso vTie.EffectiveLongScore = 11 AndAlso vTie.EffectiveShortScore = 11,
+              String.Format("expected NO TRADE [TIE] with eff 11/11, got '{0}' with eff {1}/{2}",
+                            vTie.Verdict, vTie.EffectiveLongScore, vTie.EffectiveShortScore))
+    End Sub
+
+    ' -- A9: MTF per-side flags on a 15m BEAR fixture ---------------------------
+    ' 70 steadily falling 15m candles → DMI bearish, ADX strong, EMA stack
+    ' bearish → mtfTrend BEAR → long blocked, short passes.
+    Private Sub A9_MtfPerSideFlags()
+        Dim candles As New List(Of Candle)
+        Dim p As Double = 110000
+        For i As Integer = 0 To 69
+            Dim c As New Candle With {
+                .Timestamp = i, .Open = p, .High = p + 20,
+                .Close = p - 100, .Low = p - 120, .Volume = 10}
+            candles.Add(c)
+            p = c.Close
+        Next
+
+        Dim trend As String = "", emaAlign As String = "", details As String = ""
+        Dim adx As Double
+        Dim passLong As Boolean, passShort As Boolean
+        IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign,
+                                    passLong, passShort, details)
+
+        Check("A9 MTF per-side flags (15m BEAR)",
+              trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
+              String.Format("expected BEAR/blockL/passS, got {0}/passL={1}/passS={2} ({3})",
+                            trend, passLong, passShort, details))
+    End Sub
+
+    ' -- A10: Kelly inverse-contract sizing + leverage cap (D1/H4) --------------
+    ' STRONG LONG / HIGH / stop distance 60 / entry 62,900 / POCO defaults.
+    ' p=0.65, q=0.35, b=2.0/1.2=1.6667 → f*=0.44, half=0.22, applied=min(0.22,0.05)=0.05
+    '   → KellyRiskUsd = 1000 × 0.05 = $50.
+    ' riskPerContract = face×stop/entry = 10×60/62900 ≈ 0.009539 USD
+    '   → risk-derived = floor(50 / 0.009539) = 5241 contracts.
+    ' leverage cap = floor(account × maxLev / face) = floor(1000×5.0/10) = 500.
+    ' min(5241, 500) = 500, leverage-bound → notional $5,000, 5.0× lev, LEV CAPPED.
+    Private Sub A10_KellyInverseLeverage()
+        Dim cfg As New EngineSettings()
+        Dim v As New VerdictResult With {.Verdict = "STRONG LONG", .Confidence = "HIGH"}
+        ScoringEngine.CalcKellySizing(v, stopDistanceUsd:=60, entryPriceUsd:=62900, cfg:=cfg)
+
+        Check("A10 Kelly leverage-capped (inverse contract)",
+              v.KellyContracts = 500 AndAlso v.KellyLevCapped = True AndAlso
+              Math.Abs(v.KellyRiskUsd - 50.0) < 0.001,
+              String.Format("expected 500 contracts / LEV CAPPED / risk $50, got {0} contracts / levCapped={1} / risk ${2:F2}",
+                            v.KellyContracts, v.KellyLevCapped, v.KellyRiskUsd))
+    End Sub
+
+    ' -- A11: candle freshness guard (D5/S-6) ----------------------------------
+    ' Last bar 30s old (within the 2×1min threshold) → fresh; 3min old (3× the
+    ' 1m resolution, beyond 2×) → stale; empty list → not fresh.
+    Private Function CandleAt(msEpoch As Long) As List(Of Candle)
+        Return New List(Of Candle) From {
+            New Candle With {.Open = 100000, .High = 100001, .Low = 99999,
+                             .Close = 100000, .Volume = 10, .Timestamp = msEpoch}}
+    End Function
+
+    Private Sub A11_CandleFreshness()
+        Dim nowDto As DateTimeOffset = DateTimeOffset.UtcNow
+        Dim nowUtc As DateTime = nowDto.UtcDateTime
+        Dim nowMs As Long = nowDto.ToUnixTimeMilliseconds()
+        Dim freshMs As Long = nowMs - 30L * 1000          ' 30s old
+        Dim staleMs As Long = nowMs - 3L * 60 * 1000      ' 3 minutes old = 3× the 1m resolution
+
+        Check("A11 freshness (30s-old 1m bar → fresh)",
+              IndicatorEngine.IsFresh(CandleAt(freshMs), 1, nowUtc) = True,
+              "expected fresh for a 30s-old 1m bar")
+
+        Check("A11 staleness (3min-old 1m bar → stale)",
+              IndicatorEngine.IsFresh(CandleAt(staleMs), 1, nowUtc) = False,
+              "expected stale for a 3min-old 1m bar (2× threshold = 2min)")
+
+        Check("A11 empty list → not fresh",
+              IndicatorEngine.IsFresh(New List(Of Candle)(), 1, nowUtc) = False,
+              "expected not-fresh for an empty candle list")
+    End Sub
+
+    ' -- A12: linear ATR levels — Step 5b raw target carries no scale factor ----
+    ' D2 (S-1): the Step 5b cap base is price + ATR × targetMult, with NO
+    ' norms.ATRScaleFactor. price=100000, ATR=50, targetMult=2.0 (default),
+    ' norms.ATRScaleFactor=2.0 (deliberately ≠ 1 to expose the old bug). The
+    ' linear raw long target = 100000 + 50×2.0 = 100100; the old quadratic form
+    ' would have been 100000 + 50×2.0×2.0 = 100200. A Tier-1 swing-high cap fires
+    ' only when SwingTargetLong < rawLongTarget, so the cap boundary pins the raw
+    ' target exactly:
+    '   swing 100099 (< 100100) → caps → AdjustedLongTarget = 100099
+    '   swing 100101 (> 100100) → no cap → AdjustedLongTarget = 0
+    ' Under the old quadratic geometry the boundary would sit at 100200 and BOTH
+    ' would cap; the bracket proves the scale factor is absent.
+    Private Function BuildA12Indicators(swingTargetLong As Double) As IndicatorResults
+        Dim r = BuildA8Indicators()
+        r.ATR = 50
+        r.CurrentPrice = 100000
+        r.SwingTargetLong = swingTargetLong
+        Return r
+    End Function
+
+    Private Function BuildA12Norms() As DynamicNorms
+        Dim n = BuildA8Norms()
+        n.ATRScaleFactor = 2.0                 ' ≠ 1 — a no-op under linear geometry
+        Return n
+    End Function
+
+    Private Sub A12_LinearLevels()
+        Dim cfg = BuildA8Cfg(fundingBoost:=0)
+
+        Dim vIn = ScoringEngine.Calculate(BuildA12Indicators(100099), PositionState.None,
+                                          BuildA12Norms(), cfg)
+        Check("A12 linear levels (swing 100099 inside linear target → capped)",
+              Math.Abs(vIn.AdjustedLongTarget - 100099) < 0.001,
+              String.Format("expected AdjustedLongTarget=100099 (raw target 100100), got {0:F1}",
+                            vIn.AdjustedLongTarget))
+
+        Dim vOut = ScoringEngine.Calculate(BuildA12Indicators(100101), PositionState.None,
+                                           BuildA12Norms(), cfg)
+        Check("A12 linear levels (swing 100101 beyond linear target → uncapped)",
+              vOut.AdjustedLongTarget = 0,
+              String.Format("expected AdjustedLongTarget=0 (raw target 100100, scale absent), got {0:F1} — old quadratic geometry would cap here",
+                            vOut.AdjustedLongTarget))
+    End Sub
+
+    ' -- A13: minimum-tradeable-move gate (v35) --------------------------------
+    ' Reuses the A8 RANGE_BOUND fixture (11 short / 4 long → SHORT MEDIUM at
+    ' regimeMax 18 with RegimeWeights/MTF/OiCvd off) but re-anchors the
+    ' price-relative reference levels around a configurable entry price so the
+    ' SHORT-dominant structure is preserved at $62k. The gate (Step 5c, end of
+    ' Calculate()) fires purely on (directional verdict, dominant side, ATR,
+    ' price, EFFECTIVE post-cap target). At the POCO-default floor:
+    '   floor = MinTradeableMovePct(0.0008) × 62000 = 49.6
+    Private Function BuildGateIndicators(atr As Double, price As Double) As IndicatorResults
+        Dim r = BuildA8Indicators()
+        r.CurrentPrice = price
+        r.ATR = atr
+        ' Re-anchor around the new price (A8 placed these around 100k). Preserves
+        ' price < VWAP (short vote), inside-σ1, and price > 5m EMA(200) (the lone
+        ' long vote) so the cascade still resolves SHORT MEDIUM.
+        r.VWAP = price + 100
+        r.VWAPSigma1Lower = price - 1000 : r.VWAPSigma1Upper = price + 1000
+        r.VWAPSigma2Lower = price - 2000 : r.VWAPSigma2Upper = price + 2000
+        r.EMA200_5m = price - 10000
+        Return r
+    End Function
+
+    Private Sub A13_MinTradeableMoveGate()
+        Dim cfg = BuildA8Cfg(fundingBoost:=0)   ' SHORT dominant; floor = POCO default 0.0008
+
+        ' A13a — low ATR: raw short target 13×2.0=26 < floor 49.6 → gate fires.
+        Dim vLow = ScoringEngine.Calculate(BuildGateIndicators(atr:=13, price:=62000),
+                                           PositionState.None, BuildA8Norms(), cfg)
+        Check("A13a low-ATR veto (target 26 < floor 49.6 → NO TRADE)",
+              vLow.Verdict = "NO TRADE" AndAlso vLow.VerdictContext = "BELOW_MIN_MOVE",
+              String.Format("expected NO TRADE / BELOW_MIN_MOVE, got '{0}' / {1}", vLow.Verdict, vLow.VerdictContext))
+
+        ' A13b — tradeable ATR: raw short target 30×2.0=60 > floor 49.6 → stands.
+        Dim vOk = ScoringEngine.Calculate(BuildGateIndicators(atr:=30, price:=62000),
+                                          PositionState.None, BuildA8Norms(), cfg)
+        Check("A13b tradeable-ATR (target 60 > floor 49.6 → directional stands)",
+              Not vOk.Verdict.StartsWith("NO TRADE") AndAlso vOk.VerdictContext <> "BELOW_MIN_MOVE",
+              String.Format("expected directional SHORT, got '{0}' / {1}", vOk.Verdict, vOk.VerdictContext))
+
+        ' A13c — near-swing cap (validates the EFFECTIVE-target choice A): high ATR
+        ' so the raw target (100×2.0=200) clears the floor, but a swing cap pulls
+        ' the short target to 30 points from entry (< floor) → gate still fires.
+        Dim rNear = BuildGateIndicators(atr:=100, price:=62000)
+        rNear.SwingTargetShort = 61970          ' 30 below entry; > rawShortTarget 61800 → caps
+        Dim vNear = ScoringEngine.Calculate(rNear, PositionState.None, BuildA8Norms(), cfg)
+        Check("A13c near-swing cap veto (capped target 30 < floor 49.6 → NO TRADE)",
+              vNear.Verdict = "NO TRADE" AndAlso vNear.VerdictContext = "BELOW_MIN_MOVE" AndAlso
+              Math.Abs(vNear.AdjustedShortTarget - 61970) < 0.001,
+              String.Format("expected NO TRADE / BELOW_MIN_MOVE / cap 61970, got '{0}' / {1} / cap {2:F1}",
+                            vNear.Verdict, vNear.VerdictContext, vNear.AdjustedShortTarget))
+
+        ' A13d — editability: lower the floor to 0.0004 (24.8); A13a's 26-pt target
+        ' now clears → the shared key drives the gate (hot-reloadable in-app).
+        Dim cfgLow = BuildA8Cfg(fundingBoost:=0)
+        cfgLow.Scoring.MinTradeableMovePct = 0.0004
+        Dim vEdit = ScoringEngine.Calculate(BuildGateIndicators(atr:=13, price:=62000),
+                                            PositionState.None, BuildA8Norms(), cfgLow)
+        Check("A13d editability (floor 24.8 < target 26 → directional stands)",
+              Not vEdit.Verdict.StartsWith("NO TRADE") AndAlso vEdit.VerdictContext <> "BELOW_MIN_MOVE",
+              String.Format("expected directional SHORT at lowered floor, got '{0}' / {1}", vEdit.Verdict, vEdit.VerdictContext))
+    End Sub
+
+    ' =======================================================================
+    ' A14 — session-conditional execution timeframe (v36 Phase 1)
+    ' docs/session-timeframe-resolution-implementer-handoff.md §8.
+    ' =======================================================================
+
+    ''' <summary>cfg with ASIA/LONDON = 3-min, NY = 1-min, and the "3" ROC profile.</summary>
+    Private Function BuildResolutionCfg() As EngineSettings
+        Dim cfg As New EngineSettings()
+        cfg.SessionVolume.Enabled = True
+        cfg.SessionVolume.Sessions = New List(Of SessionBucketSettings) From {
+            New SessionBucketSettings With {.Name = "ASIA",   .StartHour = 0,  .EndHour = 7,  .ExecutionResolution = 3},
+            New SessionBucketSettings With {.Name = "LONDON", .StartHour = 8,  .EndHour = 12, .ExecutionResolution = 3},
+            New SessionBucketSettings With {.Name = "NY",     .StartHour = 13, .EndHour = 23, .ExecutionResolution = 1}}
+        cfg.ResolutionProfiles = New Dictionary(Of String, ResolutionProfile) From {
+            {"1", New ResolutionProfile()},
+            {"3", New ResolutionProfile With {.RocMagnitudeThreshold = 0.21, .RocSlopeDeltaThreshold = 0.105}}}
+        Return cfg
+    End Function
+
+    ''' <summary>Candles whose per-bar true range = rangePts (flat closes), so ATR(7) ≈ rangePts.</summary>
+    Private Function FlatRangeCandles(count As Integer, center As Double, rangePts As Double) As List(Of Candle)
+        Dim cs As New List(Of Candle)
+        For i As Integer = 0 To count - 1
+            cs.Add(New Candle With {
+                .Timestamp = i, .Open = center, .Close = center,
+                .High = center + rangePts / 2, .Low = center - rangePts / 2, .Volume = 10})
+        Next
+        Return cs
+    End Function
+
+    ' -- A14a: resolution selection on the engine bucket (incl. hour-7 ASIA inclusive) --
+    Private Sub A14a_ResolutionSelection()
+        Dim cfg = BuildResolutionCfg()
+        Check("A14a resolution selection (ASIA hr3/hr7→3, LONDON hr10→3, NY hr13/hr23→1)",
+              ExecutionResolution.ResolveResolution(cfg, 3) = 3 AndAlso
+              ExecutionResolution.ResolveResolution(cfg, 7) = 3 AndAlso
+              ExecutionResolution.ResolveResolution(cfg, 10) = 3 AndAlso
+              ExecutionResolution.ResolveResolution(cfg, 13) = 1 AndAlso
+              ExecutionResolution.ResolveResolution(cfg, 23) = 1,
+              String.Format("got hr3={0} hr7={1} hr10={2} hr13={3} hr23={4}",
+                            ExecutionResolution.ResolveResolution(cfg, 3),
+                            ExecutionResolution.ResolveResolution(cfg, 7),
+                            ExecutionResolution.ResolveResolution(cfg, 10),
+                            ExecutionResolution.ResolveResolution(cfg, 13),
+                            ExecutionResolution.ResolveResolution(cfg, 23)))
+    End Sub
+
+    ' -- A14b: ROC override resolves through the profile map -------------------
+    Private Sub A14b_RocOverrideResolves()
+        Dim cfg = BuildResolutionCfg()
+        Check("A14b ROC override (mag 3→0.21 / 1→0.1; slope 3→0.105 / 1→0.05)",
+              Math.Abs(ExecutionResolution.ResolveRocMagnitude(cfg, 3) - 0.21) < 0.0000001 AndAlso
+              Math.Abs(ExecutionResolution.ResolveRocMagnitude(cfg, 1) - 0.1) < 0.0000001 AndAlso
+              Math.Abs(ExecutionResolution.ResolveRocSlopeDelta(cfg, 3) - 0.105) < 0.0000001 AndAlso
+              Math.Abs(ExecutionResolution.ResolveRocSlopeDelta(cfg, 1) - 0.05) < 0.0000001,
+              String.Format("got mag3={0} mag1={1} slope3={2} slope1={3}",
+                            ExecutionResolution.ResolveRocMagnitude(cfg, 3),
+                            ExecutionResolution.ResolveRocMagnitude(cfg, 1),
+                            ExecutionResolution.ResolveRocSlopeDelta(cfg, 3),
+                            ExecutionResolution.ResolveRocSlopeDelta(cfg, 1)))
+    End Sub
+
+    ' -- A14c: ATR computed on 3-min candles clears the gate 1-min ATR can't ---
+    Private Sub A14c_AtrOn3MinGateFlip()
+        Dim atr1m As Double = IndicatorEngine.CalcATR(FlatRangeCandles(30, 62000, 13), 7)
+        Dim atr3m As Double = IndicatorEngine.CalcATR(FlatRangeCandles(30, 62000, 27), 7)
+
+        Dim cfg = BuildA8Cfg(fundingBoost:=0)
+        Dim vLow = ScoringEngine.Calculate(BuildGateIndicators(atr1m, 62000),
+                                           PositionState.None, BuildA8Norms(), cfg)
+        Dim vHigh = ScoringEngine.Calculate(BuildGateIndicators(atr3m, 62000),
+                                            PositionState.None, BuildA8Norms(), cfg)
+
+        Check("A14c ATR on 3-min clears the gate the 1-min ATR can't",
+              Math.Abs(atr1m - 13) < 1.0 AndAlso Math.Abs(atr3m - 27) < 1.0 AndAlso
+              vLow.Verdict = "NO TRADE" AndAlso vLow.VerdictContext = "BELOW_MIN_MOVE" AndAlso
+              Not vHigh.Verdict.StartsWith("NO TRADE"),
+              String.Format("atr1m={0:F1}(→{1}) atr3m={2:F1}(→{3})", atr1m, vLow.Verdict, atr3m, vHigh.Verdict))
+    End Sub
+
+    ' -- A14d: NY byte-identical guard (res=1 ⇒ ROC overrides == globals) ------
+    Private Sub A14d_NyByteIdentical()
+        Dim cfg = BuildResolutionCfg()
+        Check("A14d NY byte-identical guard (res=1; ROC overrides == globals)",
+              ExecutionResolution.ResolveResolution(cfg, 15) = 1 AndAlso
+              ExecutionResolution.ResolveRocMagnitude(cfg, 1) = cfg.Indicators.ROC.MagnitudeThreshold AndAlso
+              ExecutionResolution.ResolveRocSlopeDelta(cfg, 1) = cfg.Indicators.ROC.SlopeDeltaThreshold,
+              "expected res=1 + ROC overrides equal to the global ROC thresholds at NY")
+    End Sub
+
+    ' -- A14j: per-session ROC magnitude override (B re-baseline 2026-06-20) ---
+    Private Sub A14j_PerSessionRocMagnitude()
+        Dim cfg = BuildResolutionCfg()
+        ' Per-session magnitude overrides on the buckets (ASIA 0.17 / LONDON 0.11; NY none).
+        cfg.SessionVolume.Sessions(0).RocMagnitudeThreshold = 0.17   ' ASIA  hr 0-7 (v41 Monday recal)
+        cfg.SessionVolume.Sessions(1).RocMagnitudeThreshold = 0.11   ' LONDON hr 8-12
+        ' NY (index 2) left Nothing → ResolveRocMagnitudeForHour falls back to base.
+        Dim asia   As Double = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, 6)
+        Dim london As Double = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, 10)
+        Dim ny     As Double = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, 15)
+        Check("A14j per-session ROC magnitude (ASIA 6→0.17 / LONDON 10→0.11 / NY 15→base)",
+              Math.Abs(asia - 0.17) < 0.0000001 AndAlso
+              Math.Abs(london - 0.11) < 0.0000001 AndAlso
+              Math.Abs(ny - cfg.Indicators.ROC.MagnitudeThreshold) < 0.0000001,
+              String.Format("got asia={0} london={1} ny={2} (base={3})",
+                            asia, london, ny, cfg.Indicators.ROC.MagnitudeThreshold))
+    End Sub
+
+    ' -- A14e: per-row stamp value (ASIA→3, NY→1) + legacy-safe defaults -------
+    Private Sub A14e_PerRowStamp()
+        Dim cfg = BuildResolutionCfg()
+        Dim freshR As New IndicatorResults()
+        Dim freshE As New LivePerformanceTracker.EvalCacheEntry()
+        Check("A14e per-row stamp (ASIA→3, NY→1; container defaults 1)",
+              ExecutionResolution.ResolveResolution(cfg, 3) = 3 AndAlso
+              ExecutionResolution.ResolveResolution(cfg, 15) = 1 AndAlso
+              freshR.ExecResolution = 1 AndAlso freshE.ExecResolution = 1,
+              String.Format("got asia={0} ny={1} rDefault={2} eDefault={3}",
+                            ExecutionResolution.ResolveResolution(cfg, 3),
+                            ExecutionResolution.ResolveResolution(cfg, 15),
+                            freshR.ExecResolution, freshE.ExecResolution))
+    End Sub
+
+    Private Function EvalRow(tsHour As Integer, outcome As String, res As Integer) As LivePerformanceTracker.EvalCacheEntry
+        Return New LivePerformanceTracker.EvalCacheEntry With {
+            .Timestamp = New DateTime(2026, 1, 1, tsHour, 0, 0, DateTimeKind.Utc),
+            .Verdict = "LONG", .EvalOutcome = outcome, .ExecResolution = res}
+    End Function
+
+    ' -- A14f: one session window, two resolutions → two sub-populations -------
+    Private Sub A14f_ResolutionFilteredAggregation()
+        Dim entries As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            EvalRow(1, "SUCCESS", 3), EvalRow(2, "SUCCESS", 3), EvalRow(3, "ADVERSE_HIT", 3),
+            EvalRow(4, "SUCCESS", 1), EvalRow(5, "ADVERSE_HIT", 1)}
+        Dim lo As DateTime = New DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        Dim hi As DateTime = New DateTime(2026, 1, 1, 23, 0, 0, DateTimeKind.Utc)
+
+        Dim a3 = LivePerformanceTracker.AggregateRange(entries, lo, hi, 3)
+        Dim a1 = LivePerformanceTracker.AggregateRange(entries, lo, hi, 1)
+        Dim aAll = LivePerformanceTracker.AggregateRange(entries, lo, hi, 0)
+
+        Check("A14f resolution-filtered aggregation (3-min 2/1, 1-min 1/1, never blended)",
+              a3.SuccessCount = 2 AndAlso a3.FailureCount = 1 AndAlso a3.TotalRange = 3 AndAlso
+              a1.SuccessCount = 1 AndAlso a1.FailureCount = 1 AndAlso a1.TotalRange = 2 AndAlso
+              aAll.SuccessCount = 3 AndAlso aAll.FailureCount = 2 AndAlso aAll.TotalRange = 5,
+              String.Format("res3={0}/{1}/{2} res1={3}/{4}/{5} all={6}/{7}/{8}",
+                            a3.SuccessCount, a3.FailureCount, a3.TotalRange,
+                            a1.SuccessCount, a1.FailureCount, a1.TotalRange,
+                            aAll.SuccessCount, aAll.FailureCount, aAll.TotalRange))
+    End Sub
+
+    ' -- A14g: freshness honours the execution resolution ---------------------
+    Private Sub A14g_FreshnessHonoursResolution()
+        Dim nowDto As DateTimeOffset = DateTimeOffset.UtcNow
+        Dim nowUtc As DateTime = nowDto.UtcDateTime
+        Dim nowMs As Long = nowDto.ToUnixTimeMilliseconds()
+        Dim fiveMinMs  As Long = nowMs - 5L * 60 * 1000
+        Dim sevenMinMs As Long = nowMs - 7L * 60 * 1000
+        Dim threeMinMs As Long = nowMs - 3L * 60 * 1000
+
+        Check("A14g freshness honours resolution (3m 5-min fresh / 7-min stale; 1m 3-min stale)",
+              IndicatorEngine.IsFresh(CandleAt(fiveMinMs), 3, nowUtc) = True AndAlso
+              IndicatorEngine.IsFresh(CandleAt(sevenMinMs), 3, nowUtc) = False AndAlso
+              IndicatorEngine.IsFresh(CandleAt(threeMinMs), 1, nowUtc) = False,
+              "expected 3m 5-min fresh / 7-min stale, and 1m 3-min stale (unchanged)")
+    End Sub
+
+    ' -- A14h: 5m regime + 15m MTF resolution-independent (unchanged) ----------
+    Private Sub A14h_RegimeMtfUnchanged()
+        Dim candles As New List(Of Candle)
+        Dim p As Double = 110000
+        For i As Integer = 0 To 69
+            Dim c As New Candle With {
+                .Timestamp = i, .Open = p, .High = p + 20,
+                .Close = p - 100, .Low = p - 120, .Volume = 10}
+            candles.Add(c)
+            p = c.Close
+        Next
+        Dim trend As String = "", emaAlign As String = "", details As String = ""
+        Dim adx As Double
+        Dim passLong As Boolean, passShort As Boolean
+        IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign, passLong, passShort, details)
+
+        Check("A14h regime/MTF unchanged (15m gate resolution-independent)",
+              trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
+              String.Format("expected BEAR/blockL/passS, got {0}/passL={1}/passS={2}", trend, passLong, passShort))
+    End Sub
+
+    ' -- A14i: resolution selection independent of session_volume.enabled ------
+    Private Sub A14i_ResolutionSurvivesSessionVolumeDisabled()
+        Dim cfg = BuildResolutionCfg()
+        cfg.SessionVolume.Enabled = False
+        Check("A14i resolution survives session_volume disabled (ASIA still 3)",
+              ExecutionResolution.ResolveResolution(cfg, 3) = 3,
+              String.Format("expected 3 with session_volume disabled, got {0}",
+                            ExecutionResolution.ResolveResolution(cfg, 3)))
+    End Sub
+
+    ' =======================================================================
+    ' A15 — auto-tweaker (session × resolution) population filter (v36 Phase-2a)
+    ' docs/auto-tweaker-session-resolution-filter-implementer-handoff.md §7.
+    ' =======================================================================
+
+    ''' <summary>A CsvRow at the given UTC hour with the given execution resolution.</summary>
+    Private Function PopRow(hour As Integer, res As Integer) As CsvRow
+        Return New CsvRow With {
+            .Timestamp = New DateTime(2026, 1, 1, hour, 0, 0, DateTimeKind.Utc),
+            .Verdict = "LONG", .ExecResolution = res}
+    End Function
+
+    ''' <summary>Interleaved NY(res 1, hours 13-23) + ASIA(res 3, hours 0-7) rows.</summary>
+    Private Function InterleavedPopRows() As List(Of CsvRow)
+        Return New List(Of CsvRow) From {
+            PopRow(13, 1), PopRow(3, 3), PopRow(20, 1),
+            PopRow(7, 3), PopRow(23, 1), PopRow(0, 3)}
+    End Function
+
+    ' -- A15a: filter keeps only the NY res-1 rows -----------------------------
+    Private Sub A15a_FilterExcludesNonMatching()
+        Dim settings = BuildResolutionCfg()
+        Dim pop As New PopulationFilter With {.Session = "NY", .ExecutionResolution = 1}
+        Dim kept = InterleavedPopRows().
+            Where(Function(r) AutoTweakerCore.MatchesPopulation(r, pop, settings)).ToList()
+
+        Check("A15a filter excludes non-matching (NY×1 keeps 3, no res-3 survives)",
+              kept.Count = 3 AndAlso Not kept.Any(Function(r) r.ExecResolution = 3),
+              String.Format("kept {0} rows; res-3 survivors={1}",
+                            kept.Count, kept.Where(Function(r) r.ExecResolution = 3).Count))
+    End Sub
+
+    ' -- A15b: every surviving row is resolution-homogeneous (res 1) -----------
+    Private Sub A15b_ResolutionHomogeneity()
+        Dim settings = BuildResolutionCfg()
+        Dim pop As New PopulationFilter With {.Session = "NY", .ExecutionResolution = 1}
+        Dim kept = InterleavedPopRows().
+            Where(Function(r) AutoTweakerCore.MatchesPopulation(r, pop, settings)).ToList()
+
+        Check("A15b resolution homogeneity (all NY×1 survivors have ExecResolution=1)",
+              kept.Count > 0 AndAlso kept.All(Function(r) r.ExecResolution = 1),
+              "expected every surviving row to have ExecResolution=1")
+    End Sub
+
+    ' -- A15c: a legacy v0.6 row (no ExecResolution column) defaults to res 1 --
+    Private Sub A15c_LegacyRowDefaultsRes1()
+        Dim path As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a15c_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            ' v0.6 header — no ExecResolution column. NY-hour timestamp (15:00 UTC).
+            System.IO.File.WriteAllText(path,
+                "Timestamp,Price,Verdict" & vbCrLf &
+                "2026-01-01 15:00:00,100000,LONG" & vbCrLf)
+            Dim rows = ForwardWindowJoiner.Load(path)
+            Dim settings = BuildResolutionCfg()
+            Dim pop As New PopulationFilter With {.Session = "NY", .ExecutionResolution = 1}
+
+            Check("A15c legacy v0.6 row defaults ExecResolution=1 and passes NY×1",
+                  rows.Count = 1 AndAlso rows(0).ExecResolution = 1 AndAlso
+                  AutoTweakerCore.MatchesPopulation(rows(0), pop, settings),
+                  String.Format("rows={0} res={1}", rows.Count,
+                                If(rows.Count > 0, rows(0).ExecResolution, -1)))
+        Finally
+            Try : System.IO.File.Delete(path) : Catch : End Try
+        End Try
+    End Sub
+
+    ' -- A15d: session derivation == engine bucket (guards the hour-7 off-by-one) --
+    Private Sub A15d_SessionDerivationEqualsEngineBucket()
+        Dim cfg = BuildResolutionCfg()
+        Dim h7 = ExecutionResolution.MatchSessionBucket(cfg, 7)?.Name
+        Dim h12 = ExecutionResolution.MatchSessionBucket(cfg, 12)?.Name
+        Dim h13 = ExecutionResolution.MatchSessionBucket(cfg, 13)?.Name
+
+        Check("A15d session derivation (hr7→ASIA, hr12→LONDON, hr13→NY)",
+              h7 = "ASIA" AndAlso h12 = "LONDON" AndAlso h13 = "NY",
+              String.Format("got hr7={0} hr12={1} hr13={2}", h7, h12, h13))
+    End Sub
+
+    ' -- A15e: re-seed on filter change (ASIA|3 → NY×1) ------------------------
+    ' Drives the real RunAsync: with a stale PopulationFilterKey, the key-mismatch
+    ' path re-seeds LastEvaluatedRowIndex to filtered.Count and returns INELIGIBLE
+    ' before any windowing/fetch. Throwaway temp config+state+CSV+settings.
+    Private Sub A15e_ReseedOnFilterChange()
+        Dim dir As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a15e_" & Guid.NewGuid().ToString("N"))
+        System.IO.Directory.CreateDirectory(dir)
+        Try
+            Dim csvPath   As String = System.IO.Path.Combine(dir, "analysis_log.csv")
+            Dim setPath   As String = System.IO.Path.Combine(dir, "settings.json")
+            Dim statePath As String = System.IO.Path.Combine(dir, "state.json")
+
+            ' 3 NY res-1 rows + 2 ASIA res-3 rows → filtered (NY×1).Count = 3.
+            System.IO.File.WriteAllText(csvPath,
+                "Timestamp,Price,Verdict,ExecResolution" & vbCrLf &
+                "2026-01-01 14:00:00,100000,LONG,1" & vbCrLf &
+                "2026-01-01 03:00:00,100000,LONG,3" & vbCrLf &
+                "2026-01-01 15:00:00,100000,LONG,1" & vbCrLf &
+                "2026-01-01 04:00:00,100000,LONG,3" & vbCrLf &
+                "2026-01-01 16:00:00,100000,LONG,1" & vbCrLf)
+
+            System.IO.File.WriteAllText(setPath,
+                "{""version"":1,""session_volume"":{""sessions"":[" &
+                "{""name"":""ASIA"",""start_hour"":0,""end_hour"":7,""execution_resolution"":3}," &
+                "{""name"":""LONDON"",""start_hour"":8,""end_hour"":12,""execution_resolution"":3}," &
+                "{""name"":""NY"",""start_hour"":13,""end_hour"":23,""execution_resolution"":1}]}}")
+
+            Dim cfg As New TweakerConfig With {
+                .WindowMode = TweakerConfig.WindowModeFixed,
+                .CsvPath = csvPath, .SettingsPath = setPath, .StatePath = statePath,
+                .DryRunEnabled = True,
+                .PopulationFilter = New PopulationFilter With {.Session = "NY", .ExecutionResolution = 1}}
+            Dim st As New TweakerState With {
+                .PopulationFilterKey = "ASIA|3", .LastEvaluatedRowIndex = 999}
+
+            Dim rc As Integer = AutoTweakerCore.RunAsync(cfg, st, statePath).GetAwaiter().GetResult()
+
+            Check("A15e re-seed on filter change (ASIA|3 → NY|1: index→3, INELIGIBLE, nothing evaluated)",
+                  rc = 2 AndAlso st.LastEvaluatedRowIndex = 3 AndAlso
+                  st.PopulationFilterKey = "NY|1" AndAlso st.LastRunOutcome = "INELIGIBLE",
+                  String.Format("rc={0} idx={1} key={2} outcome={3}",
+                                rc, st.LastEvaluatedRowIndex, st.PopulationFilterKey, st.LastRunOutcome))
+        Finally
+            Try : System.IO.Directory.Delete(dir, True) : Catch : End Try
+        End Try
+    End Sub
+
+    ''' <summary>Parse a single-key TWEAK diff into DiffItems via the real ParseDiff.</summary>
+    Private Function OneDiff(path As String, oldV As String, newV As String) As List(Of DiffItem)
+        Dim resp As String =
+            "{""action"":""tweak"",""reasoning"":""t"",""diff"":[{""path"":""" & path &
+            """,""old_value"":" & oldV & ",""new_value"":" & newV & ",""justification"":""j""}]}"
+        Return SettingsDiffApplier.ParseDiff(resp).Items
+    End Function
+
+    ' -- A15f: Validate rejects off-surface keys, passes a normal tunable ------
+    Private Sub A15f_ValidateRejectsOffSurfaceKeys()
+        ' settings tree carrying the control key (indicators.OBV.trend_gate=10).
+        Dim s As String = "{""version"":1,""indicators"":{""OBV"":{""trend_gate"":10}}}"
+
+        Dim rRes = SettingsDiffApplier.Validate(OneDiff("resolution_profiles.3.roc_magnitude_threshold", "0.21", "0.25"), s, 3)
+        Dim rKel = SettingsDiffApplier.Validate(OneDiff("kelly.max_leverage", "5.0", "6.0"), s, 3)
+        Dim rMin = SettingsDiffApplier.Validate(OneDiff("scoring.min_tradeable_move_pct", "0.0008", "0.0010"), s, 3)
+        Dim rCtl = SettingsDiffApplier.Validate(OneDiff("indicators.OBV.trend_gate", "10", "12"), s, 3)
+
+        Check("A15f Validate rejects resolution_profiles.* / kelly.* / min_tradeable_move_pct, passes OBV.trend_gate",
+              Not rRes.IsValid AndAlso Not rKel.IsValid AndAlso Not rMin.IsValid AndAlso rCtl.IsValid,
+              String.Format("res={0} kel={1} min={2} ctl={3}",
+                            rRes.IsValid, rKel.IsValid, rMin.IsValid, rCtl.IsValid))
+    End Sub
+
+    ' -- A15g: the new guard does not over-match session_volume keys -----------
+    Private Sub A15g_ValidatePassesNormalSessionVolumeKey()
+        Dim s As String = "{""version"":1,""session_volume"":{""enabled"":true,""sessions"":[{""name"":""NY"",""high_multiplier"":1.15}]}}"
+
+        ' A resolvable, non-guarded session_volume key passes Validate cleanly.
+        Dim rEn = SettingsDiffApplier.Validate(OneDiff("session_volume.enabled", "true", "false"), s, 3)
+        ' An array-path session_volume multiplier is rejected only as UNRESOLVED
+        ' (NavigatePath can't traverse the sessions array) — NOT by the new
+        ' HARD CONSTRAINT 11 guard. Confirms no over-match onto session_volume.
+        Dim rArr = SettingsDiffApplier.Validate(OneDiff("session_volume.sessions.0.high_multiplier", "1.15", "1.2"), s, 3)
+
+        Check("A15g over-match guard (session_volume.enabled passes; array multiplier not guard-rejected)",
+              rEn.IsValid AndAlso (Not rArr.IsValid) AndAlso
+              Not rArr.ErrorReason.Contains("HARD CONSTRAINT 11"),
+              String.Format("enabled={0} arrValid={1} arrReason='{2}'",
+                            rEn.IsValid, rArr.IsValid, rArr.ErrorReason))
+    End Sub
+
+    ' -- A15h: Validate rejects network.* (HARD CONSTRAINT 12), passes a scoring key --
+    ' WS-P2 §6. The whole network block (REST timeout/retry + the WS/transport/shadow_parity
+    ' keys) is transport plumbing with no failure-rate linkage; SettingsDiffApplier must
+    ' reject any 'network.' diff via the prefix guard while a legitimate tunable still passes.
+    Private Sub A15h_ValidateRejectsNetworkKeys()
+        Dim s As String = "{""version"":1,""network"":{""transport"":""rest"",""ws_url"":""wss://x""}," &
+                          """indicators"":{""OBV"":{""trend_gate"":10}}}"
+
+        Dim rTr  = SettingsDiffApplier.Validate(OneDiff("network.transport", """rest""", """ws"""), s, 3)
+        Dim rUrl = SettingsDiffApplier.Validate(OneDiff("network.ws_url", """wss://x""", """wss://y"""), s, 3)
+        Dim rCtl = SettingsDiffApplier.Validate(OneDiff("indicators.OBV.trend_gate", "10", "12"), s, 3)
+
+        Check("A15h Validate rejects network.transport / network.ws_url (HARD CONSTRAINT 12), passes OBV.trend_gate",
+              (Not rTr.IsValid) AndAlso (Not rUrl.IsValid) AndAlso rCtl.IsValid AndAlso
+              rTr.ErrorReason.Contains("HARD CONSTRAINT") AndAlso rUrl.ErrorReason.Contains("HARD CONSTRAINT"),
+              String.Format("tr={0} url={1} ctl={2} trReason='{3}'",
+                            rTr.IsValid, rUrl.IsValid, rCtl.IsValid, rTr.ErrorReason))
+    End Sub
+
+    ' =======================================================================
+    ' A16 — WebSocket migration P3 cutover
+    ' docs/websocket-migration-p3-cutover-spec.md §6.
+    '   (a) §3 trades connection-health gate: served when connected-but-quiet,
+    '       withheld when the connection is down (+ the legacy no-delegate age-gate).
+    '   (b) §4 15m-refresh policy: WS reads every run; REST retains the TTL.
+    ' The stub-testable WsMarketDataSource + MarketState run as the real shipped
+    ' code (OrderCheck.vbproj links them); the feed + live path are validated by
+    ' the live shadow-parity gate, not here.
+    ' =======================================================================
+
+    ''' <summary>A WS source over a freshly-seeded MarketState. healthCheck stubs the feed's
+    ''' connection-health; staleAfterSec is set tight so the age-gate WOULD trip if consulted,
+    ''' isolating the connection-health gate from the age-gate.</summary>
+    Private Function SeededWsSource(healthCheck As Func(Of Boolean),
+                                    tradesAgeSeconds As Double) As WsMarketDataSource
+        Dim state As New MarketState()
+        Dim trades As New List(Of TradeRecord) From {
+            Trade("buy", 1000, 1), Trade("sell", 1000, 2), Trade("buy", 1000, 3)}
+        ' Stamp TradesLastUpdate `tradesAgeSeconds` in the past.
+        state.SeedTrades(trades, DateTime.UtcNow.AddSeconds(-tradesAgeSeconds))
+        Return New WsMarketDataSource(state, healthCheck, staleAfterSec:=10)
+    End Function
+
+    ' -- A16a: trades served when connected-but-quiet --------------------------
+    ' Old buffer (300s, past the 10s age-gate) but a healthy connection → the
+    ' connection-health gate (P3 §3) returns the complete-but-quiet buffer rather
+    ' than mistaking "no new trades" for "stream broken". This is the case that
+    ' reset the live parity streak before the §3 fix.
+    Private Sub A16a_TradesServedWhenConnectedButQuiet()
+        Dim src = SeededWsSource(Function() True, tradesAgeSeconds:=300)
+        Dim got = src.GetRecentTradesAsync(500).GetAwaiter().GetResult()
+        Check("A16a trades served when connected-but-quiet (300s-old buffer, healthCheck=True → returned)",
+              got IsNot Nothing AndAlso got.Count = 3,
+              String.Format("expected 3 trades back despite the stale age, got {0}",
+                            If(got Is Nothing, "Nothing", got.Count.ToString())))
+    End Sub
+
+    ' -- A16b: trades withheld when the connection is down ----------------------
+    ' Even a FRESH buffer (0s old, well inside the age-gate) is withheld when the
+    ' connection is unhealthy → the whole-run REST fallback (IsDegraded upstream)
+    ' takes over. Proves connection-health, not age, governs the WS trades stream.
+    Private Sub A16b_TradesWithheldWhenConnectionDown()
+        Dim src = SeededWsSource(Function() False, tradesAgeSeconds:=0)
+        Dim got = src.GetRecentTradesAsync(500).GetAwaiter().GetResult()
+        Check("A16b trades withheld when connection down (fresh buffer, healthCheck=False → Nothing)",
+              got Is Nothing,
+              String.Format("expected Nothing, got {0}",
+                            If(got Is Nothing, "Nothing", got.Count.ToString())))
+    End Sub
+
+    ' -- A16c: legacy age-gate when no health delegate is wired -----------------
+    ' Without a healthCheck (Nothing) the trades getter falls back to the original
+    ' last-trade-age gate, byte-identical to the pre-§3 path: old → Nothing, fresh
+    ' → served. Guards the legacy/test path the §3 fix deliberately preserved.
+    Private Sub A16c_LegacyAgeGateWithoutHealthCheck()
+        Dim srcStale = SeededWsSource(healthCheck:=Nothing, tradesAgeSeconds:=300)
+        Dim gotStale = srcStale.GetRecentTradesAsync(500).GetAwaiter().GetResult()
+        Dim srcFresh = SeededWsSource(healthCheck:=Nothing, tradesAgeSeconds:=0)
+        Dim gotFresh = srcFresh.GetRecentTradesAsync(500).GetAwaiter().GetResult()
+        Check("A16c legacy age-gate without healthCheck (300s→Nothing, fresh→served)",
+              gotStale Is Nothing AndAlso gotFresh IsNot Nothing AndAlso gotFresh.Count = 3,
+              String.Format("expected stale=Nothing fresh=3, got stale={0} fresh={1}",
+                            If(gotStale Is Nothing, "Nothing", "served"),
+                            If(gotFresh Is Nothing, "Nothing", gotFresh.Count.ToString())))
+    End Sub
+
+    ' -- A16d: WS-path 15m reads every run -------------------------------------
+    ' transport="ws" ⇒ ShouldRefresh is always True, even with a 0s-old present
+    ' cache — the §4 collapse (15m is in-memory, the TTL buys nothing). Case-
+    ' insensitive on the transport string.
+    Private Sub A16d_Mtf15mWsReadsEveryRun()
+        Check("A16d WS-path 15m reads every run (fresh present cache still refreshes; case-insensitive)",
+              MtfRefreshPolicy.ShouldRefresh("ws", haveCached:=True, secondsSinceLastFetch:=0, ttlSeconds:=60) = True AndAlso
+              MtfRefreshPolicy.ShouldRefresh("WS", haveCached:=True, secondsSinceLastFetch:=1, ttlSeconds:=60) = True,
+              "expected ShouldRefresh=True on the WS path even with a 0s-old cache")
+    End Sub
+
+    ' -- A16e: REST-path 15m retains the TTL (byte-identical-at-rest proof) -----
+    ' transport="rest" ⇒ the original TTL gate exactly: a fresh cache (<TTL) skips
+    ' the fetch; an at/over-TTL cache refreshes; an absent cache refreshes. This is
+    ' the predicate's REST arm proving the §4 change is WS-path-only.
+    Private Sub A16e_Mtf15mRestRetainsTtl()
+        Check("A16e REST-path 15m retains TTL (<TTL skips; >=TTL refreshes; no-cache refreshes)",
+              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=30, ttlSeconds:=60) = False AndAlso
+              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=60, ttlSeconds:=60) = True AndAlso
+              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=90, ttlSeconds:=60) = True AndAlso
+              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=False, secondsSinceLastFetch:=0, ttlSeconds:=60) = True,
+              "expected REST TTL semantics: <TTL skips, >=TTL refreshes, no-cache refreshes")
+    End Sub
+
+    ' =======================================================================
+    ' A17 — realtime exit guard (P4 #1)
+    ' docs/realtime-exit-guard-proposal.md §8.
+    ' Covers the SHARED ScoringEngine.ComputeFastExitPrimitives, the host-agnostic
+    ' ExitGuardEvaluator (end-to-end over a MarketState), and the CalcHoldStatus
+    ' byte-identical refactor (asserted through the public Calculate() with InLong).
+    ' =======================================================================
+
+    ''' <summary>A bare IndicatorResults carrying only the streaming-driven fields the
+    ''' shared primitive reads, for the given adverse profile.</summary>
+    Private Function ExitGuardR(micro As String, ofi As String, tfi As String,
+                                cvdSlope As String, cvdValue As Double,
+                                price As Double, swingLow As Double, swingHigh As Double) As IndicatorResults
+        Return New IndicatorResults With {
+            .MicroCVDSignal = micro, .OFISignal = ofi, .TFISignal = tfi,
+            .CVDSlope = cvdSlope, .CVDValue = cvdValue,
+            .CurrentPrice = price, .LastSwingLow5m = swingLow, .LastSwingHigh5m = swingHigh}
+    End Function
+
+    ' -- A17a: 2 adverse on a long → AdverseCount 2, no structural break --------
+    ' TFI SELL + CVD FALLING(<0) are adverse for a long; MicroCVD FLAT / OFI BALANCED
+    ' are not. Count = 2 → the fast-exit branch. AdverseSignals carries the terse
+    ' CalcHoldStatus fragments in [micro, ofi, tfi, cvd] order.
+    Private Sub A17a_PrimitiveTwoAdverseLong()
+        Dim r = ExitGuardR("FLAT", "BALANCED", "SELL PRESSURE", "FALLING", -50000, 100000, 0, 0)
+        Dim p = ScoringEngine.ComputeFastExitPrimitives(r, PositionState.InLong)
+        Check("A17a primitive 2-adverse long (TFI+CVD → count 2, no break)",
+              p.AdverseCount = 2 AndAlso Not p.StructuralBreak AndAlso
+              p.TfiAdverse AndAlso p.CvdAdverse AndAlso Not p.MicroAdverse AndAlso Not p.OfiAdverse AndAlso
+              p.AdverseSignals.Length = 2 AndAlso String.Join("+", p.AdverseSignals) = "TFI:SELL+CVD:FALLING",
+              String.Format("count={0} break={1} signals={2}", p.AdverseCount, p.StructuralBreak,
+                            String.Join("+", p.AdverseSignals)))
+    End Sub
+
+    ' -- A17b: structural break on a long (price <= swing low) -----------------
+    ' Single adverse (TFI) but a confirmed break of the carried 5m swing low → the
+    ' structural-break flag fires independently of the adverse count.
+    Private Sub A17b_PrimitiveStructuralBreakLong()
+        Dim r = ExitGuardR("FLAT", "BALANCED", "SELL PRESSURE", "FLAT", 0, 64200, 64210, 0)
+        Dim p = ScoringEngine.ComputeFastExitPrimitives(r, PositionState.InLong)
+        Check("A17b primitive structural break long (price 64200 <= swing low 64210)",
+              p.StructuralBreak AndAlso Math.Abs(p.BreakLevel - 64210) < 0.001 AndAlso p.AdverseCount = 1,
+              String.Format("break={0} level={1:F1} count={2}", p.StructuralBreak, p.BreakLevel, p.AdverseCount))
+    End Sub
+
+    ' -- A17c: a single adverse signal on a long → count 1, no break -----------
+    Private Sub A17c_PrimitiveSingleAdverseLong()
+        Dim r = ExitGuardR("BEAR_ACCEL", "BALANCED", "NEUTRAL", "FLAT", 0, 100000, 0, 0)
+        Dim p = ScoringEngine.ComputeFastExitPrimitives(r, PositionState.InLong)
+        Check("A17c primitive single-adverse long (MicroCVD only → count 1)",
+              p.AdverseCount = 1 AndAlso p.MicroAdverse AndAlso Not p.StructuralBreak,
+              String.Format("count={0} micro={1} break={2}", p.AdverseCount, p.MicroAdverse, p.StructuralBreak))
+    End Sub
+
+    ' -- A17d: nothing adverse on a long → count 0, no break -------------------
+    Private Sub A17d_PrimitiveClearLong()
+        Dim r = ExitGuardR("BULL_ACCEL", "BUY DOMINANT", "BUY PRESSURE", "RISING", 50000, 100000, 90000, 0)
+        Dim p = ScoringEngine.ComputeFastExitPrimitives(r, PositionState.InLong)
+        Check("A17d primitive clear long (bullish flow → count 0, no break)",
+              p.AdverseCount = 0 AndAlso Not p.StructuralBreak AndAlso p.AdverseSignals.Length = 0,
+              String.Format("count={0} break={1} signals={2}", p.AdverseCount, p.StructuralBreak, p.AdverseSignals.Length))
+    End Sub
+
+    ' -- A17e: mirror — 2 adverse on a short ----------------------------------
+    ' For a short, BUY-side flow is adverse: OFI BUY + TFI BUY → count 2.
+    Private Sub A17e_PrimitiveTwoAdverseShort()
+        Dim r = ExitGuardR("FLAT", "BUY DOMINANT", "BUY PRESSURE", "FLAT", 0, 100000, 0, 0)
+        Dim p = ScoringEngine.ComputeFastExitPrimitives(r, PositionState.InShort)
+        Check("A17e primitive 2-adverse short (OFI+TFI buy → count 2)",
+              p.AdverseCount = 2 AndAlso p.OfiAdverse AndAlso p.TfiAdverse AndAlso
+              String.Join("+", p.AdverseSignals) = "OFI:BUY+TFI:BUY",
+              String.Format("count={0} signals={1}", p.AdverseCount, String.Join("+", p.AdverseSignals)))
+    End Sub
+
+    ' -- A17f: ExitGuardEvaluator end-to-end over a live MarketState -----------
+    ' A buffer of heavy recent sells drives TFI SELL PRESSURE + CVD FALLING(<0) → 2
+    ' adverse for a long → Exit. An empty MarketState → Clear (never a false EXIT, §7).
+    Private Sub A17f_EvaluatorEndToEnd()
+        Dim heavy As New MarketState()
+        Dim trades As New List(Of TradeRecord)
+        For i As Integer = 1 To 120
+            trades.Add(Trade("sell", 20000, i))
+        Next
+        heavy.SeedTrades(trades, DateTime.UtcNow)
+        Dim cfg As New EngineSettings()
+        Dim res = ExitGuardEvaluator.Evaluate(heavy, PositionState.InLong, 0, 0, cfg)
+
+        Dim empty As New MarketState()
+        Dim resEmpty = ExitGuardEvaluator.Evaluate(empty, PositionState.InLong, 0, 0, cfg)
+
+        Check("A17f evaluator end-to-end (heavy sells → Exit; empty buffer → Clear)",
+              res.Kind = ExitGuardKind.[Exit] AndAlso res.AdverseCount >= 2 AndAlso
+              resEmpty.Kind = ExitGuardKind.Clear,
+              String.Format("heavy={0}/cnt{1} empty={2}", res.Kind, res.AdverseCount, resEmpty.Kind))
+    End Sub
+
+    ' -- A17g: CalcHoldStatus byte-identical after the primitive extraction -----
+    ' Asserted through the public Calculate() (Step 6 sets res.HoldStatus) with a
+    ' declared LONG position. The A8 indicators carry all four adverse signals
+    ' (MicroCVD BEAR_ACCEL / OFI SELL / TFI SELL / CVD FALLING<0), so Layer 1 fires
+    ' and the exact terse string must match the pre-refactor output.
+    Private Sub A17g_CalcHoldStatusByteIdentical()
+        Dim v = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.InLong,
+                                        BuildA8Norms(), BuildA8Cfg(fundingBoost:=0))
+        Const expected As String = "EXIT -- microstructure deterioration (BEAR_ACCEL+OFI:SELL+TFI:SELL+CVD:FALLING)"
+        Check("A17g CalcHoldStatus byte-identical (Layer 1 exact string via Calculate/InLong)",
+              v.HoldStatus = expected,
+              "expected '" & expected & "', got '" & v.HoldStatus & "'")
+    End Sub
+
+    ' -- A17h: D3 ruling — a SINGLE adverse signal maps to Clear, not a Warn tier --------------
+    ' 450 buys then 50 sells (no book → OFI BALANCED): the last-30 TFI window is all sells →
+    ' SELL PRESSURE (the lone adverse), while the 500-trade CVD stays net-positive (value > 0 →
+    ' not adverse) and the last-50 MicroCVD window is all uniform sells → FLAT (not adverse). So
+    ' AdverseCount == 1, and the evaluator must return Clear (the Warn tier is retired).
+    Private Sub A17h_EvaluatorSingleAdverseIsClear()
+        Dim state As New MarketState()
+        Dim trades As New List(Of TradeRecord)
+        Dim ts As Long = 1
+        For i As Integer = 1 To 450
+            trades.Add(Trade("buy", 1000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 50
+            trades.Add(Trade("sell", 1000, ts)) : ts += 1
+        Next
+        state.SeedTrades(trades, DateTime.UtcNow)
+        Dim cfg As New EngineSettings()
+        Dim res = ExitGuardEvaluator.Evaluate(state, PositionState.InLong, 0, 0, cfg)
+
+        Check("A17h evaluator single-adverse → Clear (D3: Warn tier dropped)",
+              res.Kind = ExitGuardKind.Clear AndAlso res.AdverseCount = 1,
+              String.Format("expected Clear/cnt1, got {0}/cnt{1}", res.Kind, res.AdverseCount))
+    End Sub
+
+    ' =======================================================================
+    ' A18 — On-close analysis mode (P4 #2)
+    ' docs/on-close-analysis-mode-proposal.md §8.
+    '   BarCloseDetector.DetectBarRoll runs as the REAL shipped code (OrderCheck.vbproj
+    '   links Core/BarCloseDetector.vb + MarketState.vb). The WinForms watcher Threading.Timer
+    '   + the marshal-to-RunAutoAnalysis wiring are host glue (validated live), as with A17's timer.
+    '   Candle.Timestamp is epoch-ms (Long) — the detector compares forming-bar OPEN-times.
+    ' =======================================================================
+
+    Private Const OneMinMs As Long = 60_000   ' 1-min in epoch-ms
+
+    Private Function BarCandle(tsMs As Long, close As Double) As Candle
+        Return New Candle With {.Timestamp = tsMs, .Open = close, .High = close + 1,
+                                .Low = close - 1, .Close = close, .Volume = 10}
+    End Function
+
+    ' -- A18a: same forming-bar open-time → no fire ---------------------------
+    ' First look adopts the forming open WITHOUT firing (no run on start, mirroring the
+    ' interval timer); a second look at the unchanged open-time stays quiet.
+    Private Sub A18a_NoRollSameOpen()
+        Dim state As New MarketState()
+        Dim t0 As Long = 1_700_000_000_000L
+        state.ApplyChartTick("1", BarCandle(t0, 100), DateTime.UtcNow)
+        Dim first = BarCloseDetector.DetectBarRoll(state, 1, BarCloseDetector.Unseen)
+        Dim second = BarCloseDetector.DetectBarRoll(state, 1, first.FormingOpen)
+        Check("A18a no roll on unchanged forming open (first adopts no-fire, second no-fire)",
+              first.Fired = False AndAlso first.FormingOpen = t0 AndAlso
+              second.Fired = False AndAlso second.FormingOpen = t0,
+              String.Format("first=({0},{1}) second=({2},{3})",
+                            first.Fired, first.FormingOpen, second.Fired, second.FormingOpen))
+    End Sub
+
+    ' -- A18b: forming bar advanced one interval → fire exactly once ----------
+    Private Sub A18b_RollFiresOnce()
+        Dim state As New MarketState()
+        Dim t0 As Long = 1_700_000_000_000L
+        state.ApplyChartTick("1", BarCandle(t0, 100), DateTime.UtcNow)
+        Dim seen = BarCloseDetector.DetectBarRoll(state, 1, BarCloseDetector.Unseen)   ' adopt t0
+        state.ApplyChartTick("1", BarCandle(t0 + OneMinMs, 101), DateTime.UtcNow)      ' bar rolls
+        Dim rolled = BarCloseDetector.DetectBarRoll(state, 1, seen.FormingOpen)
+        Dim afterRoll = BarCloseDetector.DetectBarRoll(state, 1, rolled.FormingOpen)
+        Check("A18b roll fires once on +1 interval, then quiesces",
+              rolled.Fired = True AndAlso rolled.FormingOpen = t0 + OneMinMs AndAlso afterRoll.Fired = False,
+              String.Format("rolled=({0},{1}) afterRoll.Fired={2}", rolled.Fired, rolled.FormingOpen, afterRoll.Fired))
+    End Sub
+
+    ' -- A18c: multi-bar reconnect gap → single catch-up fire (no burst) ------
+    Private Sub A18c_MultiBarGapSingleFire()
+        Dim state As New MarketState()
+        Dim t0 As Long = 1_700_000_000_000L
+        state.ApplyChartTick("1", BarCandle(t0, 100), DateTime.UtcNow)
+        Dim seen = BarCloseDetector.DetectBarRoll(state, 1, BarCloseDetector.Unseen)   ' adopt t0
+        ' Feed gap: five bars elapsed; the forming open jumps to t0 + 5 min.
+        state.ApplyChartTick("1", BarCandle(t0 + 5 * OneMinMs, 105), DateTime.UtcNow)
+        Dim rolled = BarCloseDetector.DetectBarRoll(state, 1, seen.FormingOpen)
+        Dim afterRoll = BarCloseDetector.DetectBarRoll(state, 1, rolled.FormingOpen)
+        Check("A18c multi-bar gap fires exactly once (catch-up, not burst), adopts newest open",
+              rolled.Fired = True AndAlso rolled.FormingOpen = t0 + 5 * OneMinMs AndAlso afterRoll.Fired = False,
+              String.Format("rolled=({0},{1}) afterRoll.Fired={2}", rolled.Fired, rolled.FormingOpen, afterRoll.Fired))
+    End Sub
+
+    ' -- A18d: resolution switch → first roll on the new resolution fires -----
+    ' Each resolution is tracked by its OWN series. On a session boundary the host resets the
+    ' last-seen open to Unseen (re-adopt → no immediate fire); the new resolution's next roll
+    ' fires normally. Proves the per-resolution independence DetectBarRoll relies on.
+    Private Sub A18d_ResolutionSwitchCleanFirstRoll()
+        Dim state As New MarketState()
+        Dim t0 As Long = 1_700_000_000_000L
+        state.ApplyChartTick("1", BarCandle(t0, 100), DateTime.UtcNow)   ' NY 1-min series
+        state.ApplyChartTick("3", BarCandle(t0, 100), DateTime.UtcNow)   ' Asia/London 3-min series
+        Dim ny = BarCloseDetector.DetectBarRoll(state, 1, BarCloseDetector.Unseen)        ' tracking 1-min
+        ' Session flips to 3-min: host resets last-seen → re-adopt the 3-min forming bar (no fire).
+        Dim asiaAdopt = BarCloseDetector.DetectBarRoll(state, 3, BarCloseDetector.Unseen)
+        state.ApplyChartTick("3", BarCandle(t0 + 3 * OneMinMs, 103), DateTime.UtcNow)     ' first 3-min roll
+        Dim asiaRoll = BarCloseDetector.DetectBarRoll(state, 3, asiaAdopt.FormingOpen)
+        Check("A18d resolution switch: 3-min re-adopts no-fire, first new-resolution roll fires",
+              asiaAdopt.Fired = False AndAlso asiaAdopt.FormingOpen = t0 AndAlso
+              asiaRoll.Fired = True AndAlso asiaRoll.FormingOpen = t0 + 3 * OneMinMs,
+              String.Format("ny.FormingOpen={0} adopt=({1},{2}) roll=({3},{4})",
+                            ny.FormingOpen, asiaAdopt.Fired, asiaAdopt.FormingOpen, asiaRoll.Fired, asiaRoll.FormingOpen))
+    End Sub
+
+    ' -- A18e: interval backstop arithmetic (now − lastFire ≥ interval) -------
+    ' The watcher fires a backstop run when no roll has been seen for a full interval, so the
+    ' engine never goes silent on a WS feed stall. Pure ms-delta check (host uses DateTime deltas).
+    Private Sub A18e_BackstopArithmetic()
+        Dim intervalMs As Long = 30_000
+        Dim lastFire As Long = 1_000_000
+        Dim justBefore As Long = lastFire + intervalMs - 1     ' 29.999s later → no backstop
+        Dim atCeiling As Long = lastFire + intervalMs          ' exactly interval later → backstop fires
+        Check("A18e backstop fires at (now − lastFire ≥ interval), not before",
+              (justBefore - lastFire >= intervalMs) = False AndAlso
+              (atCeiling - lastFire >= intervalMs) = True,
+              String.Format("justBefore Δ={0} atCeiling Δ={1} interval={2}",
+                            justBefore - lastFire, atCeiling - lastFire, intervalMs))
+    End Sub
+
+    ' =======================================================================
+    ' A19 — LIVE microstructure strip (P4 #3)
+    ' docs/live-microstructure-strip-proposal.md §8. The evaluator is display/awareness only — it never
+    ' calls Calculate, never writes the CSV. These fixtures assert it reuses the engine's pure fns
+    ' correctly (TFI/spread/imbalance), brackets the live price between the nearest carried levels, scans
+    ' the tape-speed window (recent counted / older excluded / lull → 0), and degrades empty → blanks.
+    ' =======================================================================
+
+    ' Build a top-of-book snapshot with descending bid prices and ascending ask prices.
+    Private Function MakeBook(bestBid As Double, bestAsk As Double,
+                              bidSize As Double, askSize As Double) As OrderBookSnapshot
+        Dim book As New OrderBookSnapshot()
+        For i As Integer = 0 To 4
+            book.Bids.Add((bestBid - i, bidSize))
+            book.Asks.Add((bestAsk + i, askSize))
+        Next
+        Return book
+    End Function
+
+    ' -- A19a: TFI / spread / imbalance computed via the reused pure fns -------
+    ' 30 sells then 30 buys → the last-30 TFI window is all buys → BUY PRESSURE. Book bestBid 99990 /
+    ' bestAsk 100010 (mid 100000) → spread = 20/100000 × 10000 = 2.0 bps. Bids 10× the ask size →
+    ' OFI ratio > 1 → imbalance side "bid".
+    Private Sub A19a_TfiSpreadImbalance()
+        Dim state As New MarketState()
+        Dim trades As New List(Of TradeRecord)
+        Dim ts As Long = 1
+        For i As Integer = 1 To 30
+            trades.Add(Trade("sell", 1000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 30
+            trades.Add(Trade("buy", 1000, ts)) : ts += 1
+        Next
+        state.SeedTrades(trades, DateTime.UtcNow)
+        state.UpdateBook(MakeBook(99990, 100010, 10, 1), DateTime.UtcNow)
+
+        Dim cfg As New EngineSettings()
+        Dim snap = LiveMicrostructureEvaluator.Evaluate(state, Nothing, cfg)
+
+        Check("A19a TFI/spread/imbalance (BUY PRESSURE, 2.0 bps, bid-heavy)",
+              snap.HasTfi AndAlso snap.TfiSignal = "BUY PRESSURE" AndAlso
+              snap.HasSpread AndAlso Math.Abs(snap.SpreadBps - 2.0) < 0.01 AndAlso
+              snap.HasImbalance AndAlso snap.ImbalanceSide = "bid" AndAlso snap.ImbalanceRatio > 1.0,
+              String.Format("tfi={0} spread={1:F3} side={2} ratio={3:F2}",
+                            snap.TfiSignal, snap.SpreadBps, snap.ImbalanceSide, snap.ImbalanceRatio))
+    End Sub
+
+    ' -- A19b: nearest carried levels bracket the live price -------------------
+    ' Tail price 100000 (Trade helper sets every price to 100000). Carried levels: two above
+    ' (SH 100050 / HVN↑ 100020) and two below (SL 99970 / HVN↓ 99990). Nearest-wins → Above = HVN↑
+    ' (100020, +20), Below = HVN↓ (99990, −10).
+    Private Sub A19b_NearestLevelsBracketPrice()
+        Dim state As New MarketState()
+        Dim trades As New List(Of TradeRecord)
+        For i As Integer = 1 To 10
+            trades.Add(Trade("buy", 1000, i))
+        Next
+        state.SeedTrades(trades, DateTime.UtcNow)
+
+        Dim lastRun As New IndicatorResults() With {
+            .LastSwingHigh5m = 100050, .VPFRNearestHvnAbove = 100020,
+            .LastSwingLow5m = 99970, .VPFRNearestHvnBelow = 99990}
+
+        Dim cfg As New EngineSettings()
+        Dim snap = LiveMicrostructureEvaluator.Evaluate(state, lastRun, cfg)
+
+        Check("A19b nearest levels bracket price (above=HVN↑ +20, below=HVN↓ −10)",
+              snap.HasPrice AndAlso
+              snap.Above.Has AndAlso snap.Above.Label = "HVN↑" AndAlso snap.Above.Price = 100020 AndAlso snap.Above.Delta = 20 AndAlso
+              snap.Below.Has AndAlso snap.Below.Label = "HVN↓" AndAlso snap.Below.Price = 99990 AndAlso snap.Below.Delta = -10,
+              String.Format("above=({0},{1},{2}) below=({3},{4},{5})",
+                            snap.Above.Label, snap.Above.Price, snap.Above.Delta,
+                            snap.Below.Label, snap.Below.Price, snap.Below.Delta))
+    End Sub
+
+    ' -- A19c: tape-speed window — recent counted, older excluded --------------
+    ' Fixed now = 100000 ms, window 10 s → cutoff 90000. Five old trades (ts ≤ 84000) excluded; five
+    ' recent trades (ts > 90000, 20000 USD each) counted → 5/10 = 0.5 tr/s, 100000/10 = 10000 USD/s.
+    Private Sub A19c_TapeSpeedWindow()
+        Dim state As New MarketState()
+        Dim trades As New List(Of TradeRecord)
+        For i As Integer = 0 To 4
+            trades.Add(Trade("buy", 999999, 80000 + i * 1000))   ' old — outside the 10s window
+        Next
+        For Each ts As Long In New Long() {91000, 93000, 95000, 97000, 99000}
+            trades.Add(Trade("buy", 20000, ts))                  ' recent — inside the window
+        Next
+        state.SeedTrades(trades, DateTime.UtcNow)
+
+        Dim cfg As New EngineSettings()
+        Dim snap = LiveMicrostructureEvaluator.Evaluate(state, Nothing, cfg, nowUtcMs:=100000)
+
+        Check("A19c tape-speed window (5 recent counted, 5 old excluded → 0.5 tr/s, $10000/s)",
+              Math.Abs(snap.TradesPerSec - 0.5) < 0.000001 AndAlso
+              Math.Abs(snap.UsdPerSec - 10000.0) < 0.001,
+              String.Format("tr/s={0:F3} usd/s={1:F1}", snap.TradesPerSec, snap.UsdPerSec))
+    End Sub
+
+    ' -- A19d: tape-speed lull → 0 --------------------------------------------
+    ' All trades older than the window (ts ≤ 50000, now 100000) → empty window → 0 tr/s, 0 USD/s.
+    ' Price still resolves (tail trade) — only the speed reads ~0.
+    Private Sub A19d_TapeSpeedLull()
+        Dim state As New MarketState()
+        Dim trades As New List(Of TradeRecord)
+        For i As Integer = 0 To 9
+            trades.Add(Trade("buy", 50000, 40000 + i * 1000))
+        Next
+        state.SeedTrades(trades, DateTime.UtcNow)
+
+        Dim cfg As New EngineSettings()
+        Dim snap = LiveMicrostructureEvaluator.Evaluate(state, Nothing, cfg, nowUtcMs:=100000)
+
+        Check("A19d tape-speed lull (all trades older than window → 0)",
+              snap.HasPrice AndAlso snap.TradesPerSec = 0 AndAlso snap.UsdPerSec = 0,
+              String.Format("hasPrice={0} tr/s={1:F3} usd/s={2:F1}", snap.HasPrice, snap.TradesPerSec, snap.UsdPerSec))
+    End Sub
+
+    ' -- A19e: empty buffer → safe blanks, no throw ---------------------------
+    ' Empty MarketState + no carried levels: every field blank (Has* = False), tape speed 0, no throw.
+    Private Sub A19e_EmptyBufferBlanks()
+        Dim empty As New MarketState()
+        Dim cfg As New EngineSettings()
+        Dim snap = LiveMicrostructureEvaluator.Evaluate(empty, Nothing, cfg)
+
+        Check("A19e empty buffer → blanks (no price/levels/TFI/spread/imbalance), no throw",
+              Not snap.HasPrice AndAlso Not snap.Above.Has AndAlso Not snap.Below.Has AndAlso
+              Not snap.HasTfi AndAlso Not snap.HasSpread AndAlso Not snap.HasImbalance AndAlso
+              snap.TradesPerSec = 0,
+              String.Format("price={0} tfi={1} spread={2} imb={3}",
+                            snap.HasPrice, snap.HasTfi, snap.HasSpread, snap.HasImbalance))
+    End Sub
+
+    ' ====================================================================
+    ' P4 #4 — time-averaged OFI (docs/time-averaged-ofi-proposal.md)
+    ' ====================================================================
+
+    ' -- A20a: CalcOFI refactor is byte-identical + equals the shared helpers ---
+    ' Book bestBid 99990 / bestAsk 100010, bid size 10 vs ask size 1, depth 5 (weights
+    ' {5,4,3,2,1} sum 15) → bidVol 150, askVol 15, ratio 10.0 → BUY DOMINANT (>2.0). CalcOFI
+    ' must produce exactly those values (byte-identical to the pre-extraction math) AND match
+    ' ComputeOfiImbalance + ClassifyOfiRatio (the helpers the accumulator also folds through).
+    Private Sub A20a_CalcOfiRefactorEquivalence()
+        Dim book = MakeBook(99990, 100010, 10, 1)
+
+        Dim cRatio, cBid, cAsk As Double, cSig As String = Nothing
+        IndicatorEngine.CalcOFI(book, cRatio, cSig, cBid, cAsk,
+                                buyDominantRatio:=2.0, sellDominantRatio:=0.5, bookDepth:=5)
+
+        Dim hBid, hAsk, hRatio As Double
+        Dim ok = IndicatorEngine.ComputeOfiImbalance(book, 5, hBid, hAsk, hRatio)
+        Dim hSig = IndicatorEngine.ClassifyOfiRatio(hRatio, 2.0, 0.5)
+
+        Check("A20a CalcOFI byte-identical (150/15/10.0/BUY DOMINANT) + equals shared helpers",
+              ok AndAlso
+              Math.Abs(cRatio - 10.0) < 1.0E-9 AndAlso Math.Abs(cBid - 150.0) < 1.0E-9 AndAlso
+              Math.Abs(cAsk - 15.0) < 1.0E-9 AndAlso cSig = "BUY DOMINANT" AndAlso
+              cRatio = hRatio AndAlso cBid = hBid AndAlso cAsk = hAsk AndAlso cSig = hSig,
+              String.Format("ratio={0:F3} bid={1:F1} ask={2:F1} sig={3} | h:{4:F3}/{5:F1}/{6:F1}/{7}",
+                            cRatio, cBid, cAsk, cSig, hRatio, hBid, hAsk, hSig))
+    End Sub
+
+    ' -- A20b: CalcOFI edge cases unchanged (Nothing book / zero-total book) ----
+    ' Nothing → ratio 1.0, BALANCED, bid=ask=0; ComputeOfiImbalance returns False.
+    ' Zero-size book → total 0 → same defaults, helper returns False (no fold).
+    Private Sub A20b_CalcOfiEdgeCasesUnchanged()
+        Dim nRatio, nBid, nAsk As Double, nSig As String = Nothing
+        IndicatorEngine.CalcOFI(Nothing, nRatio, nSig, nBid, nAsk,
+                                buyDominantRatio:=2.0, sellDominantRatio:=0.5, bookDepth:=5)
+        Dim xBid, xAsk, xRatio As Double
+        Dim nOk = IndicatorEngine.ComputeOfiImbalance(Nothing, 5, xBid, xAsk, xRatio)
+
+        Dim zeroBook = MakeBook(99990, 100010, 0, 0)
+        Dim zRatio, zBid, zAsk As Double, zSig As String = Nothing
+        IndicatorEngine.CalcOFI(zeroBook, zRatio, zSig, zBid, zAsk,
+                                buyDominantRatio:=2.0, sellDominantRatio:=0.5, bookDepth:=5)
+        Dim zOkBid, zOkAsk, zOkRatio As Double
+        Dim zOk = IndicatorEngine.ComputeOfiImbalance(zeroBook, 5, zOkBid, zOkAsk, zOkRatio)
+
+        Check("A20b CalcOFI edge cases (Nothing + zero-total → 1.0/BALANCED/0/0, helper False)",
+              nRatio = 1.0 AndAlso nSig = "BALANCED" AndAlso nBid = 0 AndAlso nAsk = 0 AndAlso Not nOk AndAlso
+              zRatio = 1.0 AndAlso zSig = "BALANCED" AndAlso zBid = 0 AndAlso zAsk = 0 AndAlso Not zOk,
+              String.Format("nothing={0}/{1} helperOk={2} | zero={3}/{4} helperOk={5}",
+                            nRatio, nSig, nOk, zRatio, zSig, zOk))
+    End Sub
+
+    ' -- A20c: accumulator steady state — constant ratio averages to itself -----
+    ' 13 folds of ratio 2.0 (bid 2 / ask 1) at 1s steps, tau 10 → EMA stays 2.0 (alpha·0 each
+    ' fold) and warmup arms (coverage 12s ≥ 10, 13 folds ≥ the min).
+    Private Sub A20c_AccumulatorSteadyState()
+        Dim acc As New OfiAccumulator()
+        For i As Integer = 0 To 12
+            acc.Fold(2.0, 1.0, 2.0, CLng(i) * 1000L, 10.0)
+        Next
+        Dim snap = acc.Snapshot(10.0)
+        Check("A20c accumulator steady state (constant 2.0 → avg 2.0, warmup armed)",
+              Math.Abs(snap.Ratio - 2.0) < 1.0E-9 AndAlso Math.Abs(snap.BidVol - 2.0) < 1.0E-9 AndAlso
+              Math.Abs(snap.AskVol - 1.0) < 1.0E-9 AndAlso snap.HasWarmup AndAlso snap.UpdateCount = 13,
+              String.Format("ratio={0:F6} bid={1:F3} ask={2:F3} warm={3} n={4}",
+                            snap.Ratio, snap.BidVol, snap.AskVol, snap.HasWarmup, snap.UpdateCount))
+    End Sub
+
+    ' -- A20d: accumulator time-aware EMA — one dt=tau step -------------------
+    ' Seed ratio 1.0 at t=0, then ratio 2.0 at t=10s with tau=10 → dt=tau → alpha = 1-e^-1 =
+    ' 0.6321 → EMA = 1.0 + 0.6321·(2.0-1.0) = 1.6321. Proves the alpha = 1-exp(-dt/tau) formula
+    ' (NOT a fixed-alpha EMA, which would ignore the elapsed time).
+    Private Sub A20d_AccumulatorTimeAwareStep()
+        Dim acc As New OfiAccumulator()
+        acc.Fold(1.0, 1.0, 1.0, 0L, 10.0)
+        acc.Fold(2.0, 1.0, 2.0, 10000L, 10.0)
+        Dim snap = acc.Snapshot(0.0)
+        Dim expected As Double = 1.0 + (1.0 - Math.Exp(-1.0)) * 1.0
+        Check("A20d accumulator time-aware step (dt=tau → EMA 1.6321)",
+              Math.Abs(snap.Ratio - expected) < 0.0005,
+              String.Format("ratio={0:F6} expected={1:F6}", snap.Ratio, expected))
+    End Sub
+
+    ' -- A20e: warmup gate — under-window False, full-window True --------------
+    ' 6 folds over 5s (< window 10) → not warmed (snapshot fallback). 11 folds over 10s → warmed.
+    Private Sub A20e_WarmupGate()
+        Dim under As New OfiAccumulator()
+        For i As Integer = 0 To 5
+            under.Fold(1.5, 1.0, 1.5, CLng(i) * 1000L, 10.0)
+        Next
+
+        Dim over As New OfiAccumulator()
+        For i As Integer = 0 To 10
+            over.Fold(1.5, 1.0, 1.5, CLng(i) * 1000L, 10.0)
+        Next
+
+        Check("A20e warmup gate (5s coverage → not warm; 10s coverage → warm)",
+              Not under.Snapshot(10.0).HasWarmup AndAlso over.Snapshot(10.0).HasWarmup,
+              String.Format("underCov={0:F1} underWarm={1} overCov={2:F1} overWarm={3}",
+                            under.CoverageSeconds, under.Snapshot(10.0).HasWarmup,
+                            over.CoverageSeconds, over.Snapshot(10.0).HasWarmup))
+    End Sub
+
+    ' -- A20f: Reset re-arms the warmup fallback (reconnect semantics) ----------
+    ' A warmed accumulator, after Reset(), reports not-warmed + zeroed state — so a fresh
+    ' connection re-collects a full window before the average is used again.
+    Private Sub A20f_ResetReArmsWarmup()
+        Dim acc As New OfiAccumulator()
+        For i As Integer = 0 To 10
+            acc.Fold(1.5, 1.0, 1.5, CLng(i) * 1000L, 10.0)
+        Next
+        Dim warmedBefore As Boolean = acc.Snapshot(10.0).HasWarmup
+        acc.Reset()
+        Dim afterSnap = acc.Snapshot(10.0)
+        Check("A20f Reset re-arms warmup (warm → reset → not warm, n=0, coverage=0)",
+              warmedBefore AndAlso Not afterSnap.HasWarmup AndAlso
+              afterSnap.UpdateCount = 0 AndAlso acc.CoverageSeconds = 0.0,
+              String.Format("before={0} afterWarm={1} n={2} cov={3:F1}",
+                            warmedBefore, afterSnap.HasWarmup, afterSnap.UpdateCount, acc.CoverageSeconds))
+    End Sub
+
+    ' -- A20g: tweaker rejects the OFI averaging feature flag (HARD CONSTRAINT 16) --
+    Private Sub A20g_TweakerRejectsAveragingFlag()
+        Dim s As String = "{""version"":1,""indicators"":{""OFI"":{""averaging_enabled"":true,""avg_window_sec"":10}}}"
+        Dim r = SettingsDiffApplier.Validate(OneDiff("indicators.OFI.averaging_enabled", "true", "false"), s, 3)
+        Check("A20g Validate rejects indicators.OFI.averaging_enabled (HARD CONSTRAINT 16)",
+              Not r.IsValid AndAlso r.ErrorReason.Contains("HARD CONSTRAINT 16"),
+              String.Format("valid={0} reason='{1}'", r.IsValid, r.ErrorReason))
+    End Sub
+
+    ' -- A20h: tweaker ACCEPTS avg_window_sec (it stays on the surface) ---------
+    Private Sub A20h_TweakerAcceptsAvgWindow()
+        Dim s As String = "{""version"":1,""indicators"":{""OFI"":{""averaging_enabled"":true,""avg_window_sec"":10}}}"
+        Dim r = SettingsDiffApplier.Validate(OneDiff("indicators.OFI.avg_window_sec", "10", "12"), s, 3)
+        Check("A20h Validate accepts indicators.OFI.avg_window_sec (on the tweaker surface)",
+              r.IsValid,
+              String.Format("valid={0} reason='{1}'", r.IsValid, r.ErrorReason))
+    End Sub
+
+End Module

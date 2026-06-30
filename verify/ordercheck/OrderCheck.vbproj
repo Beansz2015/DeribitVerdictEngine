@@ -1,0 +1,82 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Acceptance harness for the engine correctness pass
+       (docs/engine-correctness-pass-proposal.md §11).
+       Links the REAL shipped sources via Compile Include — no copies — so the
+       fixtures exercise exactly the code the app runs. Gitignored (verify/);
+       the root DeribitVerdictEngine.vbproj carries a Compile Remove for
+       verify/** so this nested project cannot break the solution build.
+       Run: dotnet run (from verify/ordercheck, or pass the project path). -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>OrderCheck</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\DeribitClient.vb" />
+    <Compile Include="..\..\DynamicNorms.vb" />
+    <Compile Include="..\..\Core\ExecutionResolution.vb" />
+    <Compile Include="..\..\Core\IndicatorResults.vb" />
+    <Compile Include="..\..\Core\Indicators_Momentum.vb" />
+    <Compile Include="..\..\Core\Indicators_OrderFlow.vb" />
+    <Compile Include="..\..\Core\Indicators_Structure.vb" />
+    <Compile Include="..\..\Core\Indicators_Volatility.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Types.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Helpers.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Calculate_Scoring.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Calculate_Verdict.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Kelly.vb" />
+    <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
+    <!-- WS-P3 (A16): the stub-testable, host-agnostic WS source classes so the §3
+         connection-health trades gate runs as the REAL shipped code, plus the §4
+         15m-refresh policy. The feed (DeribitWsFeed) + the integrated live path stay
+         OUT — they need a live socket and are validated by the live shadow-parity gate
+         (P3 spec hard constraint). WsMarketDataSource is decoupled from the feed via a
+         Func(Of Boolean) delegate, so it compiles + stub-tests without it. -->
+    <Compile Include="..\..\IMarketDataSource.vb" />
+    <Compile Include="..\..\MarketState.vb" />
+    <Compile Include="..\..\WsMarketDataSource.vb" />
+    <Compile Include="..\..\MtfRefreshPolicy.vb" />
+    <!-- P4 #4 time-averaged OFI (A20): the host-agnostic accumulator (owned by MarketState,
+         above) + the extracted IndicatorEngine.ComputeOfiImbalance/ClassifyOfiRatio helpers
+         (in Indicators_OrderFlow, already linked). The feed-side fold + the run-path routing
+         stay OUT (they need the live socket / WinForms host — same boundary as A16/A17). -->
+    <Compile Include="..\..\Core\OfiAccumulator.vb" />
+    <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
+         exercised against a real MarketState (already linked above). -->
+    <Compile Include="..\..\Core\BarCloseDetector.vb" />
+    <!-- P4 #1 realtime-exit-guard (A17): the host-agnostic evaluator + the shared
+         ComputeFastExitPrimitives (in ScoringEngine_Helpers, already linked above). -->
+    <Compile Include="..\..\ExitGuardEvaluator.vb" />
+    <!-- P4 #3 live-microstructure-strip (A19): the host-agnostic evaluator, exercised against a
+         real MarketState (already linked) + the existing pure indicator fns. -->
+    <Compile Include="..\..\LiveMicrostructureEvaluator.vb" />
+    <!-- v36 A14e/A14f: the live perf tracker + its compile-time deps so the
+         resolution-filtered AggregateRange is exercised directly. -->
+    <Compile Include="..\..\LivePerformanceTracker.vb" />
+    <Compile Include="..\..\OhlcCache.vb" />
+    <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
+    <Compile Include="..\..\analysis\AnalysisConstants.vb" />
+    <Compile Include="..\..\analysis\AnalysisReport.vb" />
+    <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
+    <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
+    <!-- v36 Phase-2a (A15a–A15g): the AutoTweaker chain so MatchesPopulation,
+         the re-seed path (RunAsync), and SettingsDiffApplier.Validate run as the
+         real shipped code. AutoTweakerProgram.vb is excluded — it carries its own
+         Main, which would collide with the harness's Module Program. -->
+    <Compile Include="..\..\tools\AutoTweaker\TweakerConfig.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\TweakerState.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\SettingsDiffApplier.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\PromptBuilder.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\ClaudeApiClient.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\ConditionsExtractor.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\CompositeScorer.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\RoundStatsBuilder.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\SnapshotManager.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\AutoTweakerCore.vb" />
+  </ItemGroup>
+
+</Project>

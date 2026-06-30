@@ -362,7 +362,12 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-.claude/
+.claude/*
+# Dev-workflow automation (Decision C): share the Stop-hook gate (+ future named
+# subagents); settings.local.json (machine-specific permissions) stays ignored.
+!.claude/settings.json
+!.claude/agents/
+!.claude/agents/**
 
 # Auto-tweaker runtime files (gitignored per Bundle 2 spec)
 tools/AutoTweaker/tweaker_config.json
@@ -387,9 +392,14 @@ bin/Debug/net8.0-windows/ohlc_1m_cache.csv
 bin/Release/net8.0-windows/analysis_eval_cache.csv
 bin/Release/net8.0-windows/ohlc_1m_cache.csv
 
-# Dev verification captures from tools/screenshot-mainform.ps1
-# (also the verify/ordercheck acceptance harness — linked sources, own .vbproj)
-verify/
+# Dev verification captures from tools/screenshot-mainform.ps1 (screenshots stay ignored)
+verify/*
+# Dev-workflow automation (Decision A): commit the verify/ordercheck acceptance harness
+# source so CI + any seat can run it; keep its build artefacts ignored.
+!verify/ordercheck/
+!verify/ordercheck/**
+verify/ordercheck/bin/
+verify/ordercheck/obj/
 
 # Archived pre-correctness-pass calibration data (engine-correctness-pass-proposal.md §9)
 data-archive/
