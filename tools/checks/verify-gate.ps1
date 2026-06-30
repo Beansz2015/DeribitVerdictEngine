@@ -1,11 +1,11 @@
 #requires -Version 5.1
 <#
-  tools/checks/verify-gate.ps1 — single source of truth for the build + harness
+  tools/checks/verify-gate.ps1 -- single source of truth for the build + harness
   verification gate (dev-workflow-automation-proposal.md, Items 1 + 3).
 
   Modes:
     local-fast : build AutoTweaker + OrderCheck (Release) + run the harness;
-                 parity/version heuristics = WARN; ALWAYS exits 0 (advisory — the
+                 parity/version heuristics = WARN; ALWAYS exits 0 (advisory -- the
                  Claude Code Stop hook uses this so it never blocks ending a turn).
     prepush    : + solution build (Release); parity = FAIL-without-token; version =
                  WARN; exits 1 on any build/harness/parity failure (git pre-push hook).
@@ -14,14 +14,14 @@
   Display-parity (reconciled to post-P5b state 2026-06-30): the legacy text renderers
   (MainForm_Render_Header/Sections) were retired in the reskin. The live parity pair is
   the plaintext snapshot <-> the card binding. If the snapshot changed but the card did
-  NOT (and no [no-card-surface] token in the range's commit messages), flag it — the card
+  NOT (and no [no-card-surface] token in the range's commit messages), flag it -- the card
   is the historically-unchecked third surface (CLAUDE.md display-string parity rule).
 
   Settings-version nudge: an engine-behaviour path changed but settings.json's "version"
   line did not (and no [no-engine-change] token) -> WARN only (the "is this a behaviour
   change?" call is too soft to hard-block).
 
-  No AI, no network, no Anthropic spend — pure dotnet + git. Exit 0 = pass (warnings
+  No AI, no network, no Anthropic spend -- pure dotnet + git. Exit 0 = pass (warnings
   allowed) or advisory mode; exit 1 = build/harness/parity failure (prepush/ci only).
 #>
 [CmdletBinding()]
@@ -32,7 +32,7 @@ param(
 )
 
 # Continue (not Stop): native dotnet/git non-zero exits are handled via $LASTEXITCODE,
-# not exceptions — avoids the PS 5.1 NativeCommandError-on-stderr foot-gun.
+# not exceptions -- avoids the PS 5.1 NativeCommandError-on-stderr foot-gun.
 $ErrorActionPreference = 'Continue'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $repo
@@ -102,7 +102,7 @@ if (($changed -contains $snap) -and -not ($changed -contains $card)) {
     if ($msgs -match '\[no-card-surface\]') {
         Ok 'snapshot changed without card, but [no-card-surface] token present'
     } elseif ($Mode -eq 'local-fast') {
-        Warn 'snapshot changed but card did not (advisory — update the card or add [no-card-surface])'
+        Warn 'snapshot changed but card did not (advisory -- update the card or add [no-card-surface])'
     } else {
         Fail 'snapshot changed but card did not, and no [no-card-surface] token in range'
     }

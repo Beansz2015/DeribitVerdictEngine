@@ -1,6 +1,6 @@
 name: verify
 
-# Pure dotnet + git verification gate — no AI, no secrets, no Anthropic spend.
+# Pure dotnet + git verification gate -- no AI, no secrets, no Anthropic spend.
 # windows-latest is required for the WinForms solution build (Decision F; the repo is
 # public, so Actions minutes are free). Runs the same tools/checks/verify-gate.ps1 the
 # local pre-push hook + Stop hook use, so all surfaces share one source of truth.
