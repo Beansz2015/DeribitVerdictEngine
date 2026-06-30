@@ -3,7 +3,13 @@
 **Date:** 2026-06-30
 **From:** implementer seat (Opus 4.8), at the trader's request after a workflow-efficiency discussion.
 **To:** orchestrator / coordinator seat — **for review**.
-**Status:** **PROPOSED — not built.** Tooling-only: **no engine, scoring, `settings.json`, or CSV-schema change.** Host-agnostic (aligns with the Linux-CLI-port goal — the gate script + harness become the portable acceptance surface). Spec-first per CLAUDE.md; nothing here is built until this is signed off.
+**Status:** **IMPLEMENTED 2026-06-30 — Items 1–3 built; Item 4 (subagents) skipped (budget).** Tooling-only: **no engine, scoring, `settings.json`, or CSV-schema change.** Host-agnostic (the gate script + harness are the portable acceptance surface).
+
+**Decisions taken (trader, 2026-06-30):** A — commit `verify/ordercheck` (yes). B — Stop hook advisory-only. C — un-ignore `.claude/settings.json` + `agents/`. D — parity fail-without-token (prepush/ci), version warn-only. E — coordinator-review/implementer subagents **not built** (budget). F — CI windows-latest only (repo is public → Actions free).
+
+**Local commits:** `1ae65b8` (A+C: harness tracked + `.claude`/`verify` un-ignore, `dir/*` form so re-includes descend), `4d2390a` (Items 1+3: `tools/checks/verify-gate.ps1` + pre-push hook + installer + `.github/workflows/verify.yml`), `c6c89fe` (Item 2: `.claude/settings.json` Stop hook), `4987b6a` (ASCII-cleaned the gate scripts). Validated: harness **A1–A20h ALL PASS**; gate **local-fast + prepush = GATE PASSED**; pre-push hook installed locally (run `tools/checks/install-hooks.{ps1,sh}` on other clones). Local commits only — trader tests + pushes; CI proves itself on the first push.
+
+**Reconciliation (per §0):** the §3a parity surfaces were stale — the legacy `MainForm_Render_Header/Sections.vb` were retired in the P5b reskin, so the live parity pair is `UI/MainForm_PlaintextSnapshot.vb` ↔ `UI/MainForm_Render_Cards.vb`; the heuristic watches the current pair (snapshot changed without card + no `[no-card-surface]` token → fail).
 
 **Scope in one paragraph.** Turn four recurring *manual* steps in the current workflow into *automated* ones: (1) a single verification gate — build the solution + AutoTweaker + the `verify/ordercheck` harness and assert `ALL PASS` — wired into both a local git pre-push hook **and** GitHub Actions CI; (2) a Claude Code `Stop` hook that runs the fast slice of that gate after each working session; (3) two heuristic guard checks folded into the gate — the **display-parity hard rule** and the **`settings.json` version-bump rule** — operationalising two rules CLAUDE.md currently enforces by memory; (4) named Claude Code subagents (`.claude/agents/*.md`) for the repeated **coordinator-review** (and optionally **implementer**) seats. All four share **one** check script so the hook, CI, and humans run identical logic.
 
