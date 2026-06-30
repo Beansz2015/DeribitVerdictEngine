@@ -360,7 +360,7 @@ If `f* ≤ 0`, the entire block exits silently (see gate above).
 At the corrected sizing, leverage can bind before the dollar risk cap does. A new `kelly.max_leverage` setting (default 5.0×) caps contracts at `floor(AccountSizeUsd × max_leverage / ContractFaceUsd)`; the engine applies `min(risk-derived contracts, leverage-derived contracts)`.
 
 ```
-  Notional:  ≈ $30 · 3.0x lev
+  Notional:  ≈ $5,000 · 5.0× lev  [LEV CAPPED]
 ```
 
 - `Notional` — `KellyContracts × ContractFaceUsd`.
@@ -2378,7 +2378,7 @@ Shipped v44 (`auto_run.trigger_mode`). A pure run-**trigger** change — `RunAna
 
 - A radio toggle (`INTERVAL` / `ON-CLOSE`) sits beside the SINGLE/REPEAT cluster.
 - In on-close mode, the interval NUD's label relabels `AUTO EVERY` → `BACKSTOP` — the interval value still applies, but only as a feed-stall safety net (`now − lastFire ≥ interval` triggers a run even if no bar-close was detected, so a stalled WS feed never goes silent).
-- `Next close: M:SS` — countdown to the next execution-resolution bar boundary.
+- `Next close: M:SS  [SINGLE <res>m]` / `[REPEAT <res>m]` — countdown to the next execution-resolution bar boundary; the bracket echoes the SINGLE/REPEAT run mode and the resolution (`1` NY, `3` Asia/London) the countdown is timed against.
 - A multi-bar gap (e.g. after a reconnect) produces a single catch-up fire, not a burst of backlogged runs.
 - Session boundary changes (execution resolution 3↔1 switching between Asia/London and NY) are re-resolved on every tick, so the watcher adopts the new resolution and fires cleanly on the first roll under it.
 
@@ -2421,7 +2421,7 @@ A visible **TAPE** checkbox (mirrors the SINGLE/REPEAT and INTERVAL/ON-CLOSE tog
 
 ### REST fallback
 
-Requires the live WS feed (`MarketState`). At `transport=rest`, or with no feed, the strip shows `TAPE · WS only` instead of stale data.
+Requires the live WS feed (`MarketState`) to be enabled, connected, and fresh. The checkbox is labelled `TAPE`; the data label beside it reads `WS only` (not stale numbers) whenever the feed isn't usable — `transport=rest`, no feed, or the feed present but not yet connected/fresh. Confirmed live: in a sandboxed/no-network environment the strip correctly shows `WS only` rather than rendering anything stale.
 
 ### Interpretation
 

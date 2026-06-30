@@ -154,7 +154,7 @@ Every time the engine runs, it prints its output in this order:
 - Watch for a capped target line (`--> <price>  [<reason>]`) — this means structure (a swing level, an HVN wall, or POC) sits between entry and the raw target, making the raw target likely unreachable. The reason tag tells you which.
 - The R:R shown is theoretical at ATR multiples; your real R:R using structural levels will differ.
 
-**Example:** `ATR ENTRY LEVELS (ATR 38.40  size ×1.27 | 1.2x stop / 2.0x target | EXEC 1m)` — current ATR is below its rolling reference, so `size ×1.27` says you can run slightly larger size within your risk rules. The stop/target distances themselves are flat at 1.2×/2.0× ATR regardless. If the target line shows `--> 72480.0  [swing]`, don't plan to hold to the raw target — scale out at 72480 or reconsider the trade if the capped R:R no longer makes sense.
+**Example:** `ATR ENTRY LEVELS  (ATR 24.60  size ×1.89  |  1.2x stop / 2.0x target  |  EXEC 3m)` — current ATR is well below its rolling reference, so `size ×1.89` says you can run nearly double size within your risk rules. The stop/target distances themselves are flat at 1.2×/2.0× ATR regardless. If the target line shows `--> 59333.4  [CAPPED @ 59333.4 (NEAREST_HVN_ABOVE)]`, don't plan to hold to the raw target — scale out near there or reconsider the trade if the capped R:R no longer makes sense. (Reason labels: `SWING_HIGH_5M`/`SWING_LOW_5M`, `NEAREST_HVN_ABOVE`/`NEAREST_HVN_BELOW`, or `POC`.)
 
 ---
 
@@ -172,9 +172,9 @@ Every time the engine runs, it prints its output in this order:
 - `[BIAS ONLY — NO TRADE]` means the engine computed a size but the verdict is `NO TRADE`. The number is directional colour only — do not trade it.
 - `< 1 contract (stop too wide for min size)` means the current volatility is so high that your full risk budget doesn't cover the minimum contract at this stop distance. The trade is impractical at current sizing.
 - The `p(win)` displayed (45–65%) is a rough prior based on confidence tier, not a backtested statistic. Treat it with appropriate scepticism.
-- A `Notional: ≈ $N · N.Nx lev` line follows the contract count — this is the dollar size and implied leverage the suggested contracts represent on a Deribit inverse contract. `[LEV CAPPED]` means leverage, not the dollar risk cap, was the binding constraint (`kelly.max_leverage`, default 5.0×) — the engine would otherwise have sized more contracts than the leverage ceiling allows.
+- A `Notional: ≈ $N · N.N× lev` line follows the contract count — this is the dollar size and implied leverage the suggested contracts represent on a Deribit inverse contract. `[LEV CAPPED]` means leverage, not the dollar risk cap, was the binding constraint (`kelly.max_leverage`, default 5.0×) — the engine would otherwise have sized more contracts than the leverage ceiling allows.
 
-**Example:** `CONFIDENCE: HIGH` → `p(win): 65%` → `Applied fraction: 5.00% [CAPPED]` → `Contracts: 3` → `Notional: ≈ $30 · 3.0x lev`. The engine is at its maximum conviction. The `[CAPPED]` tag means it would suggest more if it could. Scale the `Risk $` to your real account size (displayed value assumes a placeholder account).
+**Example:** `CONFIDENCE: HIGH` → `p(win): 65%` → `Applied fraction: 5.00% [CAPPED]` → `Contracts: 3` → `Notional: ≈ $30 · 3.0× lev`. The engine is at its maximum conviction. The `[CAPPED]` tag means it would suggest more if it could. Scale the `Risk $` to your real account size (displayed value assumes a placeholder account).
 
 ---
 
@@ -692,7 +692,7 @@ It's display/alert only — it never changes the verdict, never writes the CSV, 
 By default the engine fires on a fixed interval timer. An alternative **ON-CLOSE** mode (toggle next to SINGLE/REPEAT) fires the analysis the instant the execution-resolution bar closes instead — NY's 1-minute bar, or Asia/London's 3-minute bar — so you get the verdict right at the structural decision point (bar close) rather than waiting up to a full interval for the next poll.
 
 - The interval control relabels to `BACKSTOP` in this mode — it still fires if the bar-close watcher hasn't fired in that long (covers a stalled feed), but it's not the primary trigger.
-- `Next close: M:SS` counts down to the next bar boundary.
+- `Next close: M:SS  [SINGLE/REPEAT <res>m]` counts down to the next bar boundary — the bracket echoes your SINGLE/REPEAT setting and the active resolution (1m NY, 3m Asia/London).
 - Falls back to interval mode automatically if running on REST (`transport=rest`) — on-close detection needs the live WS bar stream.
 - This only changes *when* a run fires, not what it computes — same verdict you'd get from a timer fire at that instant.
 
