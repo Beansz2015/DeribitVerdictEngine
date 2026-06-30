@@ -57,6 +57,7 @@ Every time the engine runs, it prints its output in this order:
 - `MOMENTUM_FADING` — price is still moving in the verdict direction, but the driving force is rolling over. Tighten your profit target and don't chase entries.
 - `FLOW_UNCONFIRMED` — the technical structure looks right but real buying/selling pressure hasn't shown up yet. High fakeout risk; wait for flow to confirm.
 - `STRUCTURALLY_WEAK` — neither price structure nor order flow has enough evidence. The verdict is a weak lean at best; skip or size tiny.
+- `BELOW_MIN_MOVE` (v35) — the verdict had a real lean but the realistic move (after target capping) is too small to be worth trading — under ~0.08% of price, roughly $50 at $62k BTC. Displays as `NO TRADE` regardless of how the raw score looked. Most common in low-ATR Asia/London conditions. Not a bug — the engine is refusing to call a trade it can't size meaningfully.
 - **No CONTEXT line** — the setup is balanced and confirmed on both axes. This is the cleanest version of the verdict.
 
 **Example:** `WEAK LONG` with `MOMENTUM_FADING` shown = borderline, lean toward skipping. `WEAK LONG` with no CONTEXT line = cleaner setup, cautious entry is more justifiable.
@@ -142,16 +143,18 @@ Every time the engine runs, it prints its output in this order:
 
 ### ATR Entry Levels
 
-**What it shows:** A volatility-adjusted trade frame showing where a stop, entry, and target would sit based on current market volatility — useful for sizing context, not for actual order placement.
+**What it shows:** A trade frame showing where a stop, entry, and target would sit at fixed ATR multiples — useful for sizing context, not for actual order placement.
 
 **What to watch for:**
 
-- The `ATR` value tells you how much BTC moves per minute on average right now. A higher ATR = wider, more volatile market.
-- The `scale` factor shows whether current volatility is above or below its recent baseline. Above 1.0x = expanding volatility; below 1.0x = compressing.
-- Watch for the `HVN_CAPPED` warning on the target line — this means a high-volume price level is sitting between your entry and the theoretical target, making the raw target likely unreachable.
+- The `ATR` value tells you how much BTC moves per bar on average right now. A higher ATR = wider, more volatile market.
+- Stop/target distances are flat `ATR × multiplier` (1.2x stop / 2.0x target by default) — **not** stretched or compressed by current volatility. Volatility context lives separately in the `size ×N` figure (see below) and in Dynamic Norms' `ATR ratio`.
+- `size ×N` is the trader's own sizing formula (`Base × AvgATR / CurrATR`) rendered inline — above 1.0x means current ATR is *below* its rolling average (size up within risk limits); below 1.0x means current ATR is elevated (size down).
+- `EXEC <N>m` tags the execution resolution this run used — `EXEC 1m` for NY, `EXEC 3m` for Asia/London (since v36, NY trades faster so it stays on 1-minute bars; Asia/London's typically lower volatility runs on 3-minute bars to keep moves tradeable). ATR, stop/target distances, and the levels below are all computed at that resolution — don't compare a 3m-session ATR reading directly against a 1m-session one.
+- Watch for a capped target line (`--> <price>  [<reason>]`) — this means structure (a swing level, an HVN wall, or POC) sits between entry and the raw target, making the raw target likely unreachable. The reason tag tells you which.
 - The R:R shown is theoretical at ATR multiples; your real R:R using structural levels will differ.
 
-**Example:** `ATR ENTRY LEVELS (ATR 57.60 x 0.79 scale)` — current volatility is 21% below its recent average. The engine has compressed the stop and target distances accordingly. This is a relatively tight market; your structural stops can likely be tighter too. If the target shows `→ HVN_CAPPED @ 72480`, don't plan to hold to the raw target — scale out at 72480 or reconsider the trade if the capped R:R no longer makes sense.
+**Example:** `ATR ENTRY LEVELS (ATR 38.40  size ×1.27 | 1.2x stop / 2.0x target | EXEC 1m)` — current ATR is below its rolling reference, so `size ×1.27` says you can run slightly larger size within your risk rules. The stop/target distances themselves are flat at 1.2×/2.0× ATR regardless. If the target line shows `--> 72480.0  [swing]`, don't plan to hold to the raw target — scale out at 72480 or reconsider the trade if the capped R:R no longer makes sense.
 
 ---
 
@@ -169,8 +172,9 @@ Every time the engine runs, it prints its output in this order:
 - `[BIAS ONLY — NO TRADE]` means the engine computed a size but the verdict is `NO TRADE`. The number is directional colour only — do not trade it.
 - `< 1 contract (stop too wide for min size)` means the current volatility is so high that your full risk budget doesn't cover the minimum contract at this stop distance. The trade is impractical at current sizing.
 - The `p(win)` displayed (45–65%) is a rough prior based on confidence tier, not a backtested statistic. Treat it with appropriate scepticism.
+- A `Notional: ≈ $N · N.Nx lev` line follows the contract count — this is the dollar size and implied leverage the suggested contracts represent on a Deribit inverse contract. `[LEV CAPPED]` means leverage, not the dollar risk cap, was the binding constraint (`kelly.max_leverage`, default 5.0×) — the engine would otherwise have sized more contracts than the leverage ceiling allows.
 
-**Example:** `CONFIDENCE: HIGH` → `p(win): 65%` → `Applied fraction: 5.00% [CAPPED]` → `Contracts: 3`. The engine is at its maximum conviction. The `[CAPPED]` tag means it would suggest more if it could. Scale the `Risk $` to your real account size (displayed value assumes a placeholder account).
+**Example:** `CONFIDENCE: HIGH` → `p(win): 65%` → `Applied fraction: 5.00% [CAPPED]` → `Contracts: 3` → `Notional: ≈ $30 · 3.0x lev`. The engine is at its maximum conviction. The `[CAPPED]` tag means it would suggest more if it could. Scale the `Risk $` to your real account size (displayed value assumes a placeholder account).
 
 ---
 
@@ -185,9 +189,10 @@ Every time the engine runs, it prints its output in this order:
 - `[LIVE]` tag = the engine is using fresh, adaptive thresholds. Normal operating state.
 - `[STATIC FALLBACK]` tag = the engine couldn't compute fresh thresholds — likely a data issue. Treat the verdict with suspicion until the next run returns `[LIVE]`.
 - **Vol threshold H and M:** H is the "high volume" bar; a candle must hit this ratio to fire a full volume signal. If H is low (near 2x), even modest volume spikes register — don't over-weight them. If H is high (4–5x), only genuine institutional-scale moves fire.
-- **ATR scale:** Below 1.0x = tight market, stops and targets are compressed. Above 1.0x = expanding volatility, stops and targets are wider. Use this to calibrate your manual position sizing: low ATR scale = larger size viable; high ATR scale = size down.
+- **ATR ratio** (relabelled from "ATR scale"): current ATR vs its rolling reference. Below 1.0x = quiet relative to baseline; above 1.0x = expanding. This is now a **sizing-context figure only** — it no longer stretches or compresses the ATR stop/target distances in the entry block (those are a flat `ATR × multiplier` since the v32 display pass). Use it the same way as the ATR Entry Levels `size ×N` figure: low ratio = size up viable, high ratio = size down.
+- ATR is resolution-dependent since v36 (1-min on NY, 3-min on Asia/London) — current reference bands: **1-min** Low<20 / Normal 20–55 / High>55; **3-min** Low<42 / Normal 42–115 / High>115. These move with BTC's price regime — treat as a current read, not a permanent constant.
 
-**Example:** `ATR scale: 0.79x` with `ATR=57.60, ref=72.58` — current volatility is 21% below the rolling average. The engine has tightened the ATR trade frame. You can afford slightly tighter structural stops and larger relative size, within your risk rules.
+**Example:** `ATR ratio: 0.79x` with `ATR=57.60, ref=72.58` — current volatility is 21% below the rolling average. Stop/target distances in the entry block are unaffected by this number; it's purely a "how hot is the market right now" read for your own sizing.
 
 ---
 
@@ -221,6 +226,7 @@ Every time the engine runs, it prints its output in this order:
 - Positive ROC + `FLAT` slope = still positive but losing steam; partial score only — watch for confirmation from other signals.
 - `|ROC| > 0.3%` on a 1-minute candle is a strong single-bar impulse. `|ROC| > 0.6%` is extension territory.
 - ROC crossing zero while you're in a position is a structural exit trigger — the engine will flag this in the HOLD/EXIT line.
+- On Asia/London (3-min execution since v36), the magnitude and slope thresholds that gate a full ROC signal are re-baselined per session (v40/v41): ASIA fires at 0.17, LONDON at 0.11 — Asia genuinely runs hotter on 3-min bars, so the same raw ROC reading means something different by session. NY (1-min) is unaffected.
 
 **Example:** `ROC(9): 0.115 | Slope: FLAT` — price is marginally positive but momentum is stalling. The engine gives this a partial long score only. Paired with `MOMENTUM_FADING` context, this is a signal to stay out rather than buy.
 
@@ -419,7 +425,7 @@ Every time the engine runs, it prints its output in this order:
 
 **What to watch for:**
 
-- **OFI (Order Flow Imbalance):** Measures the imbalance between buy and sell orders hitting the bid vs ask right now. Positive = buyers dominating. This is the fastest, most current of the three.
+- **OFI (Order Flow Imbalance):** Measures the imbalance between buy and sell orders sitting on the bid vs ask. Positive = buyers dominating. Since v46, on the live WebSocket path the ratio is a **time-weighted average** over the run window (not a single snapshot) — a brief sweep or spoof can no longer flip it; what you're reading is sustained imbalance, not an instant. (Falls back to a single snapshot when running on REST.) **Cosmetic note:** because it's an average-of-ratios rather than a ratio-of-averages, the displayed `Bid Vol` / `Ask Vol` won't always divide out to exactly the displayed ratio — that's expected, not a bug.
 - **CVD (Cumulative Volume Delta):** Running tally of buy volume minus sell volume over the session. Positive and rising = sustained buying pressure. Pay attention to the `MicroCVD` sub-reading — if it shows `BULL_DECEL`, the recent buying is slowing down even if the cumulative total is still positive.
 - **TFI (Trade Flow Imbalance):** Similar to CVD but measured over a shorter, more recent window. Useful for catching rapid flow reversals.
 - All three agreeing (e.g., `OFI: BULL, CVD: BULL, TFI: BULL`) = the engine's cleanest order flow confirmation.
@@ -661,6 +667,51 @@ A compact strip of six labels updates after every analysis run showing how the e
 
 ---
 
+### WebSocket Health
+
+The engine has run live on a WebSocket feed since v42 (replacing REST polling as the primary data path). The status bar carries a health line so you can tell at a glance whether you're looking at fresh data:
+
+- `WS OK · 1/3/5/15 fresh · trades N` — all candle series fresh, normal operating state.
+- `WS DEGRADED — REST fallback (stream stale)` — the WS stream went stale for this run; the engine fell back to REST for that single run rather than skip it. Occasional flickers are normal; persistent DEGRADED means the feed is struggling.
+- `WS DOWN — reconnecting (Xs backoff, R reconnects)` — disconnected, retrying with exponential backoff. The app keeps functioning on REST fallback while down.
+
+This is a live, in-memory status line, not part of the rendered verdict — it doesn't get logged to CSV or the output dump. Check it if a run looks suspiciously stale or a verdict seems out of step with the tape.
+
+### Exit Guard
+
+While you have a position declared (via the position radio buttons), a separate fast-cadence check runs every few seconds against the live WebSocket feed — independent of your normal auto-run interval — watching for the same fast-exit conditions as the HOLD/EXIT line's microstructure layer (2+ adverse flow signals flipping at once, or a structural swing-level breach).
+
+- **`EXIT GUARD · clear`** — no adverse condition present.
+- **`EXIT GUARD · ⚠ EXIT? confirming n/d`** — an adverse condition is present but hasn't held for the debounce window yet (default 2 consecutive checks). Building toward a latch, not yet a signal.
+- **`EXIT GUARD · ⚠ EXIT — <reason>`** — latched. An optional alarm sound fires on this transition. This is the same urgency as a HOLD/EXIT fast-exit line, just at tick freshness between full runs.
+
+It's display/alert only — it never changes the verdict, never writes the CSV, and is paused (not silently stale) if the WS feed itself is down or cooling down. Requires `transport=ws`; shows "WS only" on REST.
+
+### On-Close Trigger Mode
+
+By default the engine fires on a fixed interval timer. An alternative **ON-CLOSE** mode (toggle next to SINGLE/REPEAT) fires the analysis the instant the execution-resolution bar closes instead — NY's 1-minute bar, or Asia/London's 3-minute bar — so you get the verdict right at the structural decision point (bar close) rather than waiting up to a full interval for the next poll.
+
+- The interval control relabels to `BACKSTOP` in this mode — it still fires if the bar-close watcher hasn't fired in that long (covers a stalled feed), but it's not the primary trigger.
+- `Next close: M:SS` counts down to the next bar boundary.
+- Falls back to interval mode automatically if running on REST (`transport=rest`) — on-close detection needs the live WS bar stream.
+- This only changes *when* a run fires, not what it computes — same verdict you'd get from a timer fire at that instant.
+
+### Live Microstructure Strip (TAPE)
+
+A continuously-updating one-line strip (toggle: the **TAPE** checkbox) showing fast streaming microstructure *between* full analysis runs, refreshed every couple of seconds:
+
+```
+76038 · SL 75920 (-118) | SH 76210 (+172) · TFI BUY +0.42 · 1.8 bps · book 2.3× bid · 4.1 tr/s ($312k/s)
+```
+
+- Last price, bracketed by the nearest structural level above and below (carried from the last full run's swing/VPFR levels — not recomputed live).
+- TFI, spread, and top-book imbalance, refreshed live.
+- Tape speed — trades/sec and $/sec over a short rolling window.
+
+**This is deliberately not a signal.** It's the same raw microstructure inputs the verdict pipeline uses, shown faster and rawer. The full verdict is still the considered, multi-indicator product — don't treat a TAPE reading as a trade trigger on its own; it's there so you're not flying blind on flow between full runs (e.g. while watching a level for entry, or managing a hold).
+
+---
+
 ## Quick Reference — Verdict Action Rules
 
 | Verdict | Confidence | Action |
@@ -679,6 +730,7 @@ A compact strip of six labels updates after every analysis run showing how the e
 | `MOMENTUM_FADING` | Tighten target, don't add size |
 | `FLOW_UNCONFIRMED` | Wait for flow confirmation before entering |
 | `STRUCTURALLY_WEAK` | Skip the trade |
+| `BELOW_MIN_MOVE` | Stand aside — realistic move is too small to trade |
 
 ## Quick Reference — Regime and Sizing
 

@@ -2,9 +2,9 @@
 
 ## Introduction
 
-DeribitVerdictEngine is a VB.NET / .NET 8 Windows Forms desktop application that polls the Deribit REST API on BTC-PERPETUAL, runs a multi-tier technical indicator pipeline on the live data, and emits a directional verdict with supporting diagnostics. It is an analysis and decision-support tool, not an execution system — it does not send orders.
+DeribitVerdictEngine is a VB.NET / .NET 8 Windows Forms desktop application on BTC-PERPETUAL that runs a multi-tier technical indicator pipeline on live market data and emits a directional verdict with supporting diagnostics. It is an analysis and decision-support tool, not an execution system — it does not send orders. Since v42 it runs live on a WebSocket feed (`network.transport = "ws"`) with per-run REST fallback; REST polling was the sole transport pre-v38.
 
-This manual is a field-by-field reference for every variable and display block the engine writes to its RTF output pane. It assumes familiarity with BTC perpetual scalping, order flow, volume profile, and the trader profile in `docs/trader-profile.md`. For pipeline architecture and scoring steps, see `docs/architecture.md` and `docs/DeribitIndicatorProject.md`.
+This manual is a field-by-field reference for every variable and display block the engine renders — the **card layout** in the live UI, kept in parity with the **plaintext snapshot** (`BuildPlaintextSnapshot`) used for the output dump and quoted in this manual's example blocks. It assumes familiarity with BTC perpetual scalping, order flow, volume profile, and the trader profile in `docs/trader-profile.md`. For pipeline architecture and scoring steps, see `docs/architecture.md` and `docs/DeribitIndicatorProject.md`.
 
 **How to read the output (top to bottom):**
 
@@ -15,7 +15,9 @@ This manual is a field-by-field reference for every variable and display block t
 
 **Important on Kelly sizing.** The Kelly block is **advisory only** and uses an **ATR-basis** payoff ratio (`target_mult / stop_mult`, default `1.67`). Per the trader profile, real execution uses **structural** stops and targets (previous swing low/high), not ATR multiples — so the displayed Kelly fraction does not correspond to your actual R:R. Treat Kelly as a directional-bias sanity check, not a position-sizing prescription. The advisory label is rendered inline under the KELLY SIZING header to reinforce this.
 
-**Source of truth.** When this manual and the code disagree, the code wins. Primary source files: `UI/MainForm_Render_Header.vb`, `UI/MainForm_Render_Sections.vb`, `Core/ScoringEngine_*.vb`, `Core/Indicators_*.vb`, `analysis/*.vb`, `tools/AutoTweaker/*.vb`, and `settings.json` v24 (auto-bumped by AutoTweaker after applied tweaks).
+**Source of truth.** When this manual and the code disagree, the code wins. Primary source files: `UI/MainForm_Render_Cards.vb` (the live card layer — the P5b reskin retired the old `MainForm_Render_Header.vb` / `MainForm_Render_Sections.vb` RTF renderers), `UI/MainForm_PlaintextSnapshot.vb` (`BuildPlaintextSnapshot` — the canonical text surface kept in parity with the cards; this manual's field-by-field reference is anchored on it), `Core/ScoringEngine_*.vb`, `Core/Indicators_*.vb`, `analysis/*.vb`, `tools/AutoTweaker/*.vb`, and `settings.json` v46 (auto-bumped by AutoTweaker after applied tweaks).
+
+**Display surface note.** The app's output is rendered two ways that stay in parity: a **card layout** (`MainForm_Render_Cards.vb`) in the live UI, and a **plaintext snapshot** (`BuildPlaintextSnapshot`) used for the output dump, CSV-adjacent text records, and as the reference this manual quotes example blocks from. A few live elements — the WS-health status line, the EXIT GUARD strip, the ON-CLOSE countdown, and the TAPE microstructure strip — are status-bar elements outside this card/snapshot parity (by design, per the engine display-string parity rule in `CLAUDE.md`); they're documented separately in §22–§25.
 
 ---
 
@@ -42,6 +44,10 @@ This manual is a field-by-field reference for every variable and display block t
 19. [Tweak Settings & Auto-Tweaker](#19-tweak-settings-auto-tweaker)
 20. [Settings Snapshot History](#20-settings-snapshot-history)
 21. [Live Performance Display](#21-live-performance-display)
+22. [WebSocket Health Status Line](#22-websocket-health-status-line)
+23. [Realtime Exit Guard](#23-realtime-exit-guard)
+24. [On-Close Trigger Mode](#24-on-close-trigger-mode)
+25. [Live Microstructure Strip (TAPE)](#25-live-microstructure-strip-tape)
 
 ---
 
@@ -106,6 +112,7 @@ Long side is evaluated first; if long passes no tier, short is evaluated.
 | `MOMENTUM_FADING`    | Dominant side's momentum primitives are rolling over. Price can still print the verdict direction but the driving force is weakening. |
 | `FLOW_UNCONFIRMED`   | Clean structural setup with no order-flow backing. Often the precursor to a stall or fakeout. |
 | `STRUCTURALLY_WEAK`  | Neither structure nor flow has enough signal density. The verdict exists but rests on very little. |
+| `BELOW_MIN_MOVE` (v35) | The directional verdict's realistic move (post-cap, post-Step-5b) is smaller than `cfg.Scoring.min_tradeable_move_pct` (0.08% of price, ≈$50 at $62k). Overrides the verdict to `NO TRADE` even though scores/levels/breakdown still render for diagnostics. Computed at the **end** of `Calculate()`, after the regime veto and MTF gate — same pattern as those vetoes. Most common on low-ATR Asia/London runs by design. |
 | `CONFIRMED` *(hidden)* | Balanced hits on both axes; no fading flags. |
 
 **Interpretation:** This is a *veto layer for human judgement*, not for the engine — it does not alter the score. A `WEAK LONG` with `MOMENTUM_FADING` is borderline; the same verdict with line absent is cleaner. Use it to choose between "pass" and "enter cautious".
@@ -178,21 +185,24 @@ All RSI/ROC thresholds sourced from `cfg.Scoring.HoldRoc*` and `HoldRsi*`.
 ## 2. ATR Entry Levels {#2-atr-entry-levels}
 
 ```
-ATR ENTRY LEVELS  (ATR 57.60 x 0.79 scale | 1.2x stop / 2.0x target)
+ATR ENTRY LEVELS  (ATR 38.40  size ×1.27 | 1.2x stop / 2.0x target | EXEC 1m)
   Long:   Stop   75983.1  |  Entry   76038.0  |  Target   76129.4    R:R 1:1.7  (risk 54.9 / rwd 91.4)
   Short:  Stop   76092.9  |  Entry   76038.0  |  Target   75946.6    R:R 1:1.7  (risk 54.9 / rwd 91.4)
 ```
 
 ### Section Header
 
-**Format:** `ATR ENTRY LEVELS  (ATR <atr> x <scale> scale | <stopMult>x stop / <targetMult>x target)`
+**Format:** `ATR ENTRY LEVELS  (ATR <atr>  size ×<sizeMult> | <stopMult>x stop / <targetMult>x target | EXEC <execRes>m)`
 
-- `atr` — `r.ATR`, raw 7-period ATR on 1m candles.
-- `scale` — `norms.ATRScaleFactor`, clamped ratio of current ATR to rolling reference (see Dynamic Norms below).
+- `atr` — `r.ATR`, raw ATR(7) at the run's execution resolution.
+- `sizeMult` — `norms.ATRRef / r.ATR` (note: inverted from the underlying `ATRScaleFactor` — see Dynamic Norms below). Mirrors the trader's own `Base × AvgATR/CurrATR` sizing formula. **Display/sizing-context only since v32** — it is no longer applied to the stop/target distances below (see Calculation).
 - `stopMult` — `cfg.Scoring.AtrStopMultiplier`, default 1.2.
 - `targetMult` — `cfg.Scoring.AtrTargetMultiplier`, default 2.0.
+- `execRes` — `r.ExecResolution` (v36): `1` on NY, `3` on Asia/London. The whole execution-indicator stack (ATR, ROC, RSI, volume, etc.) runs at this resolution for the session; only the 5m regime classifier, 15m MTF gate, and 5m/15m swing pivots stay fixed. Don't compare an `EXEC 3m` ATR/level reading directly against an `EXEC 1m` one — they're different bar sizes.
 
-All four read live from config; the label display is dynamic, not hardcoded. R:R implied is `targetMult / stopMult` (default 1:1.67 → rounded `1:1.7`).
+All read live from config; the label display is dynamic, not hardcoded. R:R implied is `targetMult / stopMult` (default 1:1.67 → rounded `1:1.7`).
+
+**v32 D2 (S-1) note.** Pre-v32, stop/target distances were `r.ATR × ATRScaleFactor × mult` — quadratic in volatility (the live ATR was already volatility-relative, then re-scaled again by the same ratio). This double-counted volatility and didn't match the eval pipeline, which measures barriers on raw ATR. Distances are now linear (`r.ATR × mult` only); the former scale factor survives purely as the `size ×N` sizing-context display.
 
 ### Stop / Entry / Target (Long)
 
@@ -200,11 +210,11 @@ All four read live from config; the label display is dynamic, not hardcoded. R:R
 
 **Calculation:**
 
-- `atrStop   = r.ATR × norms.ATRScaleFactor × stopMult`
-- `atrTarget = r.ATR × norms.ATRScaleFactor × targetMult`
+- `atrStop   = r.ATR × stopMult`
+- `atrTarget = r.ATR × targetMult`
 - `longStop   = r.CurrentPrice − atrStop`
 - `longTarget = r.CurrentPrice + atrTarget`
-- Entry = `r.CurrentPrice` (close of the last 1m candle, not the live tape).
+- Entry = `r.CurrentPrice` (close of the last execution-resolution candle, not the live tape).
 
 ### Stop / Entry / Target (Short)
 
@@ -343,7 +353,19 @@ If `f* ≤ 0`, the entire block exits silently (see gate above).
 
 **Interpretation:** `< 1 contract` on a normal verdict means the ATR stop distance is wide enough that even your full risk budget doesn't buy a single minimum contract — the trade is impractical at this volatility unless you widen the risk limit. In `BIAS ONLY` mode, any contract count is directional colour only; don't work the order.
 
-**Known formula limitation.** Contract sizing uses `ContractFaceUsd × stopDistance` for risk-per-contract. For a true Deribit BTC-PERPETUAL (inverse), the correct risk formula includes the entry price in the denominator. This is a known simplification matching the approved spec and will drift from real contract PnL at extreme stops. Treat the contract count as ±1–2 rough.
+**Risk-per-contract formula (fixed v32 D1).** `riskPerContract = ContractFaceUsd × stopDistanceUsd / entryPriceUsd` — correctly dimensioned for the Deribit inverse contract. (Pre-v32 the formula omitted `entryPriceUsd` in the denominator, which made `riskPerContract` ~1e4× too large and `Contracts` always rounded to 0 — every run showed `< 1 contract`. Fixed; this is no longer a known limitation.)
+
+### Notional / leverage (v32 D1)
+
+At the corrected sizing, leverage can bind before the dollar risk cap does. A new `kelly.max_leverage` setting (default 5.0×) caps contracts at `floor(AccountSizeUsd × max_leverage / ContractFaceUsd)`; the engine applies `min(risk-derived contracts, leverage-derived contracts)`.
+
+```
+  Notional:  ≈ $30 · 3.0x lev
+```
+
+- `Notional` — `KellyContracts × ContractFaceUsd`.
+- `lev` — `Notional / AccountSizeUsd`, the implied leverage at the suggested contract count.
+- `[LEV CAPPED]` tag — appears (`VerdictResult.KellyLevCapped`) when the leverage ceiling, not the 5% dollar risk cap, was the binding constraint. Rendered only when `KellyContracts ≥ 1`.
 
 ---
 
@@ -353,8 +375,10 @@ If `f* ≤ 0`, the entire block exits silently (see gate above).
 DYNAMIC NORMS  [LIVE]
   Vol threshold : H:3.96x  M:2.44x  (mean=6.2898 BTC  s=7.6716)
   VWAP dev thr  : +/-0.30% (legacy ref)
-  ATR scale     : 0.79x  (ATR=57.60  ref=72.58)
+  ATR ratio     : 0.79x  (ATR=57.60  ref=72.58)
 ```
+
+**Label note (v32):** this row was `ATR scale` before v32; relabelled `ATR ratio` because — since the v32 D2 linear-distance fix (see §2 ATR Entry Levels) — this value no longer scales the ATR stop/target distances. It is now purely a display read of current-vs-reference volatility; the `size ×N` figure in the ATR Entry Levels header is the same underlying ratio (inverted) presented as a sizing multiplier.
 
 The adaptive threshold layer (`DynamicNorms.vb`). Computed per run, applied to scoring thresholds downstream (Volume classifier, ATR-scaled targets/stops).
 
@@ -404,28 +428,30 @@ The adaptive threshold layer (`DynamicNorms.vb`). Computed per run, applied to s
 
 **Interpretation:** Marked `(legacy ref)` because the live VWAP scoring uses sigma bands (σ1/σ2) around the dual-session VWAP — this single-dev-% threshold is retained for display/historical compatibility but does not gate the VWAP scoring signal. Read it as a rough intraday volatility-around-VWAP indicator: values near the floor imply tight mean-reversion behaviour; values > 1% imply meaningful one-sided pressure. Not a trading input — use the sigma-band VWAP rows in the scoring breakdown instead.
 
-### ATR scale
+### ATR ratio (relabelled from "ATR scale" in v32)
 
-**What:** The live ATR scale factor used to stretch/compress ATR-based targets and stops, plus the inputs.
+**What:** The live ATR ratio — current ATR vs its rolling reference — plus the inputs. **Display/sizing-context only since v32**; it no longer feeds the ATR Entry Levels stop/target distances (see §2).
 
 **Calculation:**
 
-- `ATRRef` — rolling mean of ATR over the recent window (`min(100, candles - period)` rolling ATR values, default ATR period 7). On cold start or insufficient history falls back to `cfg.Indicators.ATR.StaticRef` (115 v14, midpoint of trader-profile Normal band 80–150).
+- `ATRRef` — rolling mean of ATR over the recent window (`min(100, candles - period)` rolling ATR values at the run's execution resolution, default ATR period 7). On cold start or insufficient history falls back to `cfg.Indicators.ATR.StaticRef` (38.0 since v37 — see the note below; was 115 pre-v37).
 - `ATRScaleFactor = clamp(r.ATR / ATRRef, cfg.Indicators.ATR.ScaleMin, ScaleMax)` = clamp to `[0.25, 4.0]`.
 - When `r.ATR = 0` or `ATRRef = 0`, factor defaults to 1.0 and ref falls back to `StaticRef`.
 
 **Displayed:**
 
-- `scale` — the factor (e.g. 0.79x).
-- `ATR` — current raw ATR (price points) from `r.ATR`.
+- `ratio` — the factor (e.g. 0.79x).
+- `ATR` — current raw ATR (price points) from `r.ATR`, at the run's execution resolution.
 - `ref` — rolling reference ATR or static fallback.
+
+**v37 ATR-band recalibration (2026-06-17).** `cfg.Indicators.ATR.StaticRef` moved 115.0 → 38.0 — the old cold-start anchor was calibrated for BTC ~$80–100k and ran ~3× the live 1-min ATR mean once price settled around $62–67k. This only affects the cold-start fallback (the live ref self-calibrates from a recent rolling average once the window fills); it's not a scoring knob. Current reference bands, resolution-dependent since v36: **1-min (NY)** Low<20 / Normal 20–55 / High>55; **3-min (Asia/London)** Low<42 / Normal 42–115 / High>115 (~2.1× the 1-min bands). These track BTC's price regime and may drift — flag if you notice the live ATR distribution moving away from them.
 
 **Interpretation:**
 
-- `scale > 1.0` → current ATR is above its rolling baseline. The engine widens ATR-based stops and targets proportionally — you're in an expansion regime. Position size down (per trader-profile: low-ATR = larger size, high-ATR = smaller size).
-- `scale < 1.0` → current ATR is below baseline. Stops and targets compress, meaning the ATR frame gets tighter. Position size up within risk limits.
-- `scale = 1.0` exactly on any non-warm-up run means either the raw ATR matched the reference or the clamp bit — check the raw values.
-- Static-fallback `ref = 115.0` vs live `ref = <computed>` is a useful freshness cross-check: if static ref is quoted while `[LIVE]` tag is shown, the live-ref path computed `0` and fell back inside an otherwise-live run (rare, usually means a data gap).
+- `ratio > 1.0` → current ATR is above its rolling baseline — expansion regime. Per trader-profile sizing, scale down: low-ATR = larger size, high-ATR = smaller size. This is purely informational for your own position sizing now — it does not touch the ATR Entry Levels stop/target distances.
+- `ratio < 1.0` → current ATR is below baseline — compressed. Size up within risk limits.
+- `ratio = 1.0` exactly on any non-warm-up run means either the raw ATR matched the reference or the clamp bit — check the raw values.
+- Static-fallback `ref = 38.0` vs live `ref = <computed>` is a useful freshness cross-check: if static ref is quoted while `[LIVE]` tag is shown, the live-ref path computed `0` and fell back inside an otherwise-live run (rare, usually means a data gap).
 
 ---
 
@@ -524,6 +550,7 @@ Three always-scored primitives on the 1m execution timeframe.
 - `Slope FLAT` with `ROC > 0.1` is the classic "still positive, losing momentum" read — the scoring engine recognises this via the partial path.
 - On 1m BTC scalping, `|ROC| > 0.3` is already a strong single-bar impulse; > 0.6 is extension territory and triggers `TAKE PROFIT` hold status if in-position (default `HoldRocTakeProfitLong = 0.6`, `Short = -0.6`).
 - ROC crossing zero is a structural exit trigger for open positions (Hold Layer 2).
+- **Resolution/session-dependent thresholds (v36/v40/v41).** `MagnitudeThreshold` and the slope-classification delta are no longer single global constants. On NY (1-min execution) they stay at the base values (0.1 / 0.05). On Asia/London (3-min execution since v36), `roc_magnitude_threshold` is now **per-session**: ASIA 0.17, LONDON 0.11 (re-baselined v40→v41 by firing-rate-matching to NY's selectivity — ASIA's 3-min ROC genuinely runs hotter than LONDON's). The slope delta is one shared 3-min value, 0.06. Resolved via `ExecutionResolution.ResolveRocMagnitudeForHour` / `resolution_profiles["3"]`. Read: the same raw `ROC(9)` number means a different thing depending which session/resolution produced it.
 
 ### RSI(9)
 
@@ -1187,7 +1214,18 @@ Computed once per run from the same `GetOrderBookAsync` snapshot used by OFI.
 - 5-level depth means OFI is reading the *visible* book — it won't catch hidden / iceberg liquidity, but does catch the visible tilt that most liquidity-taking participants see.
 - A ratio `> 5x` like the sample's `10.08` is extreme — usually the result of one side pulling liquidity (thin ask book, not necessarily heavy bid book). Cross-check the `Bid Vol` and `Ask Vol` absolute values: if the low side is very small (e.g. `57900` vs `583380`), it's more "ask pulled" than "bid stacked".
 - The v14 relaxation from `3.0 / 0.333` to `2.0 / 0.5` means OFI now fires earlier. In practice this makes OFI contribute a signal in more of the "meaningful tilt" range where the old thresholds stayed silent.
-- OFI is a leading indicator — imbalance visible before price moves. But on Deribit with REST polling, you're seeing a snapshot not a stream; during high volatility the snapshot can be stale by the time it arrives.
+- OFI is a leading indicator — imbalance visible before price moves. Since the v42 WebSocket cutover the engine reads a live book stream rather than REST snapshots, so this concern is largely retired; REST fallback still applies on a degraded WS connection.
+
+### Time-averaged OFI (v46)
+
+**What changed:** On the live WS path, `r.OFIRatio` is no longer a single book snapshot — it's a **time-weighted average** of the top-book imbalance over the run window (`indicators.OFI.avg_window_sec`, default 10s), folded continuously by a feed-side accumulator (`Core/OfiAccumulator.vb`, a time-aware EMA with `alpha = 1 − exp(−dt/tau)`). A transient sweep or spoof can no longer flip the ratio for a whole run — the signal now reflects *sustained* imbalance.
+
+- Controlled by `indicators.OFI.averaging_enabled` (default true). `false` reverts to snapshot OFI (the v45 behaviour), byte-identical by construction.
+- Falls back to a single REST/WS snapshot automatically until the accumulator has warmed up (≥ `avg_window_sec` of fold coverage), and on every reconnect (the accumulator resets so a stale pre-gap average can't bleed across).
+- At `network.transport=rest`, or on any per-run REST fallback, OFI is always the snapshot calculation — averaging is WS-only.
+- The classification thresholds (`BuyDominantRatio` 2.0 / `SellDominantRatio` 0.5) and the OFI Momentum ring buffer are unchanged in mechanism — only the value feeding them shifted from snapshot to average.
+- **Cosmetic note:** the OFI row shows `ratio · bid · ask`. Because the ratio is now an *average of ratios* rather than a ratio computed from *averaged* bid/ask volumes, the displayed `Bid Vol` / `Ask Vol` (still single-snapshot) won't always divide out to exactly the displayed `Ratio`. This is by design, not a data error.
+- The dominance-ratio thresholds (2.0 / 0.5) themselves are tuned for the old snapshot signal and have **not yet been re-baselined** for the averaged signal — that's a flagged future data-gated pass (mirrors the v36→v40 ROC re-baseline sequence).
 
 ### OFI Momentum
 
@@ -2266,3 +2304,125 @@ Block: `performance_display` in `settings.json`.
 | `session_block_semantic` | string | `"most_recent"` | Reserved. Currently always most-recent-block (§21b). |
 
 Added in `settings.json` v26 (`modified_by = "live-performance-display"`).
+
+---
+
+## 22. WebSocket Health Status Line {#22-websocket-health-status-line}
+
+The engine cut over from REST polling to a live WebSocket feed in v42 (`network.transport = "ws"`). A health segment in the status-bar log line (`lblLogInfo`, built by `BuildWsStatusSegment` in `UI/MainForm_Layout.vb`) reports feed state on every run.
+
+**Not a card or snapshot surface** — this is a live in-memory status-bar element, like the perf strip. It is not part of the RTF/card verdict output, is not emitted by `BuildPlaintextSnapshot`, and is not logged to CSV or the output dump (per the CLAUDE.md engine display-string parity rule — no card-binding obligation).
+
+### States
+
+| Format | Meaning |
+|---|---|
+| `WS OK · 1/3/5/15 fresh · trades N` | Connected; all candle series (1m/3m/5m/15m) fresh within `network.ws_stale_after_sec`; `N` recent trades buffered. Normal operating state. |
+| `WS OK · streams Xs stale · trades N` | Connected but the last frame is older than the freshness threshold — typically a quiet market, not a fault. |
+| `WS DEGRADED — REST fallback (stream stale)` | The WS stream was stale at run time; `RunAnalysisAsync` used `RestMarketDataSource` for that one run rather than skip it. The CSV row for that run is REST-sourced but otherwise normal. |
+| `WS DOWN — reconnecting (Xs backoff, R reconnects)` | Disconnected. Reconnect loop running 1→60s exponential backoff; `R` is the cumulative reconnect attempt count. The app keeps functioning via per-run REST fallback while down. |
+
+### Calculation
+
+`WsMarketDataSource` / `DeribitWsFeed` expose `IsConnected`, `IsCoolingDown`, `ReconnectCount`, `CurrentBackoffSec`, and per-series freshness (`IsFresh`, gated on `network.ws_stale_after_sec`). `BuildWsStatusSegment` composes the line from these each time the log info cascade renders; it returns an empty string when no WS feed is active (`transport=rest` and `shadow_parity=false`), so the segment disappears cleanly on a pure-REST configuration.
+
+### Interpretation
+
+- A flicker into `DEGRADED` once in a while is normal network jitter — the per-run fallback means it never costs you a row or a skipped analysis.
+- Persistent `DOWN` with a climbing reconnect count means something is actually wrong with connectivity (or Deribit's WS endpoint) — the engine is still running on REST fallback, but you're not getting the latency benefit of the live feed, and the Exit Guard / TAPE strip (both WS-only) will show "WS only" / be inert until it recovers.
+- This line is the fastest way to sanity-check feed health before trusting a run that looks unusual.
+
+---
+
+## 23. Realtime Exit Guard {#23-realtime-exit-guard}
+
+Shipped v43 (`exit_guard` settings block). While a position is declared (`posState ≠ None`), a WinForms timer re-evaluates the **fast** microstructure exit conditions every `exit_guard.interval_sec` (default 3s) against the live WS `MarketState` — independent of, and faster than, the normal auto-run cadence.
+
+**Display/alert only.** It never calls `Calculate()`, never writes a CSV row, never changes the verdict. **No card-binding obligation** — like the WS-health line, it's a status-bar element, not part of the RTF/card/snapshot surface.
+
+### Mechanism
+
+The same fast-exit logic `CalcHoldStatus` uses for its Layer 1 (2+ adverse microstructure signals) and Layer 1.5 (structural swing breach) checks is shared via `ScoringEngine.ComputeFastExitPrimitives` — extracted so the guard and the full pipeline can never drift on "what counts as adverse." `ExitGuardEvaluator.vb` recomputes MicroCVD/TFI/OFI/CVD straight from `MarketState` using the same indicator functions, config params, and 500-trade window as a full run — just fresher.
+
+**Gate (must all be true to render/evaluate):** `exit_guard.enabled`, a position is declared, and the WS feed is connected, not cooling down, and not stale. The strip is paused — not silently stale — when the feed is down.
+
+### States (three only — no "Warn" tier)
+
+| Display | Meaning |
+|---|---|
+| `EXIT GUARD · clear` | No adverse condition present. |
+| `EXIT GUARD · ⚠ EXIT? confirming n/d` | An adverse condition is present but hasn't held for `exit_guard.debounce_evals` consecutive checks yet (default 2). A single adverse signal alone maps here, not to a separate warn state — by design (coordinator ruling D3, 2026-06-25). |
+| `EXIT GUARD · ⚠ EXIT — <reason>` | Latched. `<reason>` is the same adverse-signal list / break-level text `CalcHoldStatus` would produce. An alarm sound (`System.Media.SystemSounds.Exclamation`) fires on this transition if `exit_guard.sound_enabled`. Auto-clears and re-arms once the condition clears for `debounce_evals` consecutive checks. |
+
+### Interpretation
+
+- Read it the same way as a HOLD/EXIT fast-exit line — it's the identical condition, just checked every few seconds instead of once per analysis run.
+- `confirming n/d` is informational, not actionable yet — wait for the latch or for it to clear.
+- A latched `EXIT` with an alarm means act; this is the fastest exit cue the engine produces.
+- WS-only (`transport=ws`) — shows "WS only" / hidden at `transport=rest`, since the guard reads `MarketState` directly rather than fetching its own snapshot.
+
+---
+
+## 24. On-Close Trigger Mode {#24-on-close-trigger-mode}
+
+Shipped v44 (`auto_run.trigger_mode`). A pure run-**trigger** change — `RunAnalysisAsync` / `Calculate()` are byte-identical; only *when* a run fires moves.
+
+### Modes
+
+- `interval` (default) — the existing fixed-interval timer.
+- `on_close` — the full analysis run fires the instant the execution-resolution bar closes (`Core/BarCloseDetector.DetectBarRoll`, watching `MarketState`'s forming-bar open-time at ~1s granularity) — NY's 1-minute bar, Asia/London's 3-minute bar (v36 resolution). Eliminates up-to-one-interval poll lag at the bar-close decision moment a structural-breakout trader actually acts on.
+
+**On-close does not drop the forming bar.** The verdict at an on-close fire is exactly what an interval-timer fire at that same instant would have produced — same pipeline, same data, different trigger timing only.
+
+### UI
+
+- A radio toggle (`INTERVAL` / `ON-CLOSE`) sits beside the SINGLE/REPEAT cluster.
+- In on-close mode, the interval NUD's label relabels `AUTO EVERY` → `BACKSTOP` — the interval value still applies, but only as a feed-stall safety net (`now − lastFire ≥ interval` triggers a run even if no bar-close was detected, so a stalled WS feed never goes silent).
+- `Next close: M:SS` — countdown to the next execution-resolution bar boundary.
+- A multi-bar gap (e.g. after a reconnect) produces a single catch-up fire, not a burst of backlogged runs.
+- Session boundary changes (execution resolution 3↔1 switching between Asia/London and NY) are re-resolved on every tick, so the watcher adopts the new resolution and fires cleanly on the first roll under it.
+
+### REST fallback
+
+`on_close` mode requires the live WS bar stream for roll detection. At `transport=rest`, or with no `MarketState`, the engine falls back to interval mode for the session (status note `[on-close: WS only]`) rather than going silent.
+
+### Interpretation
+
+On-close mode is the cleaner choice if you trade off bar closes (the structural-breakout style this engine is built for) — it removes the "verdict is already a few seconds stale relative to the close" lag that a 10–60s interval timer carries. Interval mode remains useful for a steady, predictable polling cadence (e.g. for calibration/data-collection runs where a fixed cadence is easier to reason about statistically — see §12 in the project handover on cadence as a calibration dimension).
+
+---
+
+## 25. Live Microstructure Strip (TAPE) {#25-live-microstructure-strip-tape}
+
+Shipped v45 (`live_strip` settings block). A continuously-updating one-line strip showing fast streaming microstructure *between* full analysis runs, refreshed every `live_strip.refresh_sec` (default 2s).
+
+**Deliberately not a verdict.** It never calls `Calculate()`, writes the CSV, or emits a direction/score. Visually distinct from the verdict colour ramp (neutral/dim) so it reads as a raw readout, not a call. **No card-binding obligation** — same class as the WS-health line and Exit Guard strip.
+
+### Format
+
+```
+76038 · SL 75920 (-118) | SH 76210 (+172) · TFI BUY +0.42 · 1.8 bps · book 2.3× bid · 4.1 tr/s ($312k/s)
+```
+
+Composed by `ComposeLiveStrip` in `UI/MainForm_LiveStrip.vb`:
+
+- **Last price.**
+- **Nearest structural levels** above and below price (`SL`/`SH`/`HVN↑`/`HVN↓`, with signed delta to current price) — **carried, not recomputed**, from the last full run's swing-pivot and VPFR-HVN levels (those are slow-moving; refreshing them every 2s would be noise). If price has broken through all carried levels on one side, only the nearest-above (or nearest-below) renders and the other bracket is genuinely empty until the next full run maps a level there — not a bug.
+- **TFI** — recomputed live from the streaming trade buffer (`BUY` / `SELL` / `NEUT` + signed value).
+- **Spread (bps)** — recomputed live.
+- **Top-book imbalance** — `N.N× bid` or `N.N× ask`, recomputed live.
+- **Tape speed** — trades/sec and $/sec over a short rolling window (`live_strip.tape_window_sec`, default 10s).
+
+Any field with no data yet renders `--` rather than a stale or zero value.
+
+### Toggle
+
+A visible **TAPE** checkbox (mirrors the SINGLE/REPEAT and INTERVAL/ON-CLOSE toggles) writes `live_strip.enabled` live. The strip is **always-on when enabled** — not gated on having a position declared, since it's equally useful flat (watching a level for entry) or in a hold.
+
+### REST fallback
+
+Requires the live WS feed (`MarketState`). At `transport=rest`, or with no feed, the strip shows `TAPE · WS only` instead of stale data.
+
+### Interpretation
+
+Read this as the same raw inputs the verdict pipeline consumes, just faster and unfiltered — useful for watching a level develop between runs, but it is explicitly **not** a substitute for the full verdict. The multi-indicator pipeline exists precisely because single-glance microstructure reads (a TFI flicker, a one-sided book) are noisy in isolation; don't let the TAPE strip tempt a marginal entry the full run wouldn't support.
