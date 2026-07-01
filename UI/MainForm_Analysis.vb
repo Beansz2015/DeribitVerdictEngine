@@ -381,10 +381,6 @@ Partial Public Class MainForm
                 r.OFISignal = IndicatorEngine.ClassifyOfiRatio(ofiAvg.Ratio,
                                   ofiCfg.BuyDominantRatio, ofiCfg.SellDominantRatio)
                 usedAvgOfi = True
-                ' [DIAG — throwaway] OFI arith-vs-geo gap sample (env DVE_OFI_GAP_DIAG gates the side-log; off the CSV/scoring).
-                OfiGapDiagnostic.WriteSample(DateTime.UtcNow, DateTime.UtcNow.Hour, r.CurrentPrice,
-                                             r.OFIRatio, ofiAvg.GeoRatio, ofiAvg.UpdateCount,
-                                             ofiAvg.CoverageSec, r.OFISignal)
             End If
         End If
         If Not usedAvgOfi Then
