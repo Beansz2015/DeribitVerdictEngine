@@ -12,6 +12,13 @@
 '   - Time-AWARE EMA: alpha = 1 - exp(-dt / tau), dt = seconds since the previous fold,
 '     tau = avg_window_sec. A fixed-alpha EMA would let the effective horizon drift with
 '     the (irregular) update rate — this keeps the window meaning what it says.
+'   - The ratio EMA is GEOMETRIC (log-ratio): folds ln(ratio), reads back Exp(emaLn).
+'     Decided empirically by the NY DIAG test (2026-06-30, commit eee6e4b, reverted) —
+'     arithmetic averaging of a multiplicatively-symmetric bid/ask ratio gave a 12:1
+'     buy-dominant skew on a net-flat 5.1h session vs 1.4:1 for the geometric mean
+'     (AM >= GM bias; distribution-shape, not level, so firing-rate-match can't fix it).
+'     See docs/ofi-geometric-construction-spec.md. The weighted bid/ask volumes stay
+'     arithmetic (display context only, not ratio-shaped).
 '   - The folded scalar `ratio` is the SAME sanity-bounded weighted bid/ask imbalance
 '     CalcOFI computes (IndicatorEngine.ComputeOfiImbalance), so the downstream vote /
 '     classification / momentum ring are untouched in mechanism — only the value of
@@ -36,7 +43,7 @@ Public NotInheritable Class OfiAccumulator
     Private Const MinWarmupUpdates As Integer = 5
 
     Private _hasState       As Boolean = False
-    Private _emaRatio       As Double  = 0.0   ' the OFIRatio of record (averaged)
+    Private _emaLnRatio     As Double  = 0.0   ' EMA of ln(ratio); OFIRatio of record = Exp(this) (geometric mean)
     Private _emaBid         As Double  = 0.0   ' averaged weighted bid volume (display/CSV)
     Private _emaAsk         As Double  = 0.0   ' averaged weighted ask volume (display/CSV)
     Private _lastFoldMs     As Long    = 0      ' epoch-ms of the previous fold (dt basis)
@@ -47,7 +54,7 @@ Public NotInheritable Class OfiAccumulator
     ''' stale average can't survive a feed gap and the warmup fallback re-arms.</summary>
     Public Sub Reset()
         _hasState        = False
-        _emaRatio        = 0.0
+        _emaLnRatio      = 0.0
         _emaBid          = 0.0
         _emaAsk          = 0.0
         _lastFoldMs      = 0
@@ -61,7 +68,7 @@ Public NotInheritable Class OfiAccumulator
     ''' after a reset SEEDS the EMA at the sample (no decay); thereafter the time-aware alpha applies.</summary>
     Public Sub Fold(bidVol As Double, askVol As Double, ratio As Double, tsMs As Long, tauSec As Double)
         If Not _hasState Then
-            _emaRatio        = ratio
+            _emaLnRatio      = Math.Log(Math.Max(ratio, 0.000001))
             _emaBid          = bidVol
             _emaAsk          = askVol
             _lastFoldMs      = tsMs
@@ -81,7 +88,7 @@ Public NotInheritable Class OfiAccumulator
             alpha = 1.0 - Math.Exp(-dt / tauSec)
         End If
 
-        _emaRatio += alpha * (ratio - _emaRatio)
+        _emaLnRatio += alpha * (Math.Log(Math.Max(ratio, 0.000001)) - _emaLnRatio)
         _emaBid   += alpha * (bidVol - _emaBid)
         _emaAsk   += alpha * (askVol - _emaAsk)
         _lastFoldMs  = tsMs
@@ -115,7 +122,7 @@ Public NotInheritable Class OfiAccumulator
     Public Function Snapshot(minCoverageSec As Double) As OfiAverageSnapshot
         Return New OfiAverageSnapshot With {
             .HasWarmup   = HasWarmup(minCoverageSec),
-            .Ratio       = _emaRatio,
+            .Ratio       = Math.Exp(_emaLnRatio),
             .BidVol      = _emaBid,
             .AskVol      = _emaAsk,
             .UpdateCount = _updateCount,

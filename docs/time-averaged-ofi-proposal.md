@@ -51,6 +51,8 @@ The top-book imbalance (the `CalcOFI` weighted bid/ask ratio over `OFI.BookDepth
 
 Either way the **output is still an `OFIRatio`** consumed exactly as today — so `CalcOFI`'s signal/threshold logic, the Step-2 vote, and the momentum ring are untouched in mechanism.
 
+**AMENDMENT (2026-07-01) — averaging space is geometric, not arithmetic.** The paragraph above describes an arithmetic EMA fold of the raw ratio; that construction shipped in the v46 build (`ab97f40`) but was superseded before push. A throwaway NY DIAG instrument (2026-06-30, commit `eee6e4b`, reverted) measured both constructions in lockstep over a 616-row / 5.1h net-flat session and found the arithmetic mean of the multiplicatively-symmetric bid/ask ratio manufactures a severe buy-bias (AM≥GM / Jensen) that firing-rate-matching cannot correct (it's distribution *shape*, not level) — 12:1 buy-dominant arithmetic vs 1.4:1 geometric on the same book. The **settled construction is geometric (log-ratio)**: fold `ln(ratio)` with the same time-aware `alpha`, read back `Ratio = exp(emaLn)` at snapshot time. Same alpha/dt/tau formula, applied in log space — everything else in this section (mechanism (a), warmup/reset, host-agnostic accumulator) is unchanged. See `docs/ofi-geometric-construction-spec.md` for the full decision record.
+
 ### 4.2 Integration
 
 - `RunAnalysisAsync` (`MainForm_Analysis.vb:363`): when on the WS path, source `r.OFIRatio`/`r.OFISignal`/`r.OFIBidVol`/`r.OFIAskVol` from the time-averaged imbalance (the accumulator → the same dominance-ratio classification into BUY/SELL DOMINANT/BALANCED). The `_ofiHistory` ring then holds **averaged** ratios; `CalcOFIMomentum` is unchanged.

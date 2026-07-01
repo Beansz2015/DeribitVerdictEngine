@@ -98,6 +98,7 @@ Module Program
         A20f_ResetReArmsWarmup()
         A20g_TweakerRejectsAveragingFlag()
         A20h_TweakerAcceptsAvgWindow()
+        A20i_GeometricSymmetryConvergence()
 
         Console.WriteLine()
         If _failures = 0 Then
@@ -1486,19 +1487,42 @@ Module Program
                             snap.Ratio, snap.BidVol, snap.AskVol, snap.HasWarmup, snap.UpdateCount))
     End Sub
 
-    ' -- A20d: accumulator time-aware EMA — one dt=tau step -------------------
-    ' Seed ratio 1.0 at t=0, then ratio 2.0 at t=10s with tau=10 → dt=tau → alpha = 1-e^-1 =
-    ' 0.6321 → EMA = 1.0 + 0.6321·(2.0-1.0) = 1.6321. Proves the alpha = 1-exp(-dt/tau) formula
-    ' (NOT a fixed-alpha EMA, which would ignore the elapsed time).
+    ' -- A20d: accumulator time-aware GEOMETRIC EMA — one dt=tau step ----------
+    ' Seed ratio 1.0 at t=0 (lnSeed=0), then ratio 2.0 at t=10s with tau=10 → dt=tau →
+    ' alpha = 1-e^-1 = 0.63212 → emaLn = 0.63212·ln(2) = 0.43817 → Ratio = exp(0.43817) =
+    ' 1.5500 (geometric mean). Proves both the alpha = 1-exp(-dt/tau) time-aware formula
+    ' AND the geometric (log-ratio) construction (arithmetic would give 1.6321 — see
+    ' docs/ofi-geometric-construction-spec.md).
     Private Sub A20d_AccumulatorTimeAwareStep()
         Dim acc As New OfiAccumulator()
         acc.Fold(1.0, 1.0, 1.0, 0L, 10.0)
         acc.Fold(2.0, 1.0, 2.0, 10000L, 10.0)
         Dim snap = acc.Snapshot(0.0)
-        Dim expected As Double = 1.0 + (1.0 - Math.Exp(-1.0)) * 1.0
-        Check("A20d accumulator time-aware step (dt=tau → EMA 1.6321)",
-              Math.Abs(snap.Ratio - expected) < 0.0005,
+        Dim expected As Double = Math.Exp((1.0 - Math.Exp(-1.0)) * Math.Log(2.0))
+        Check("A20d accumulator time-aware geometric step (dt=tau → EMA 1.5500)",
+              Math.Abs(snap.Ratio - expected) < 0.001,
               String.Format("ratio={0:F6} expected={1:F6}", snap.Ratio, expected))
+    End Sub
+
+    ' -- A20i: geometric symmetry — alternating 2.0/0.5 converges to ~1.0 ------
+    ' Alternating ratio 2.0/0.5 at equal 1s dt steps settles into a symmetric two-cycle in
+    ' log space around 0 (i.e. Ratio oscillates evenly either side of 1.0) — the
+    ' multiplicatively-symmetric midpoint; an arithmetic mean of the same series would drift
+    ' to ~1.25. tau=8 keeps the steady-state oscillation amplitude inside the assert window
+    ' (a smaller tau/dt ratio widens the oscillation, since each fold's alpha weight is
+    ' larger relative to the alternation period). Locks in the AM/GM fix that motivated the
+    ' switch (NY DIAG test, docs/ofi-geometric-construction-spec.md).
+    Private Sub A20i_GeometricSymmetryConvergence()
+        Dim acc As New OfiAccumulator()
+        Dim tau As Double = 8.0
+        For i As Integer = 0 To 399
+            Dim r As Double = If(i Mod 2 = 0, 2.0, 0.5)
+            acc.Fold(1.0, 1.0, r, CLng(i) * 1000L, tau)
+        Next
+        Dim snap = acc.Snapshot(0.0)
+        Check("A20i geometric symmetry (alternating 2.0/0.5 → Ratio in [0.95, 1.05])",
+              snap.Ratio >= 0.95 AndAlso snap.Ratio <= 1.05,
+              String.Format("ratio={0:F6}", snap.Ratio))
     End Sub
 
     ' -- A20e: warmup gate — under-window False, full-window True --------------
