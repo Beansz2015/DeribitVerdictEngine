@@ -105,3 +105,21 @@ in different spaces either way). No edit made, per the spec's "likely no edit" e
 The v47 dominance-threshold re-baseline (data-gated, multi-session) and the `OFI.Momentum*`
 review remain open, now scoped to run against the geometric distribution instead of the
 arithmetic one. Not started here.
+
+---
+
+## 8. Coordinator review — APPROVED (2026-07-01)
+
+Re-ran the full gate (`verify-gate.ps1 -Mode prepush`): 3 Release builds **0/0** + harness **A1–A20i ALL PASS** + diff audit. **APPROVED.**
+
+Verified:
+- **`OfiAccumulator` cleanly geometric** — `_emaLnRatio` folds `ln(ratio)`, `Snapshot.Ratio = Exp(_emaLnRatio)`, bid/ask stay arithmetic, warmup/reset/dt-floor untouched. Straight conversion, no dual-track residue.
+- **DIAG fully reverted** — `OfiGapDiagnostic.vb` deleted, `MainForm_Analysis` −4 (WriteSample gone), zero residual `OfiGapDiagnostic`/`GeoRatio`/`DVE_OFI_GAP_DIAG` refs.
+- **`averaging_enabled=false` byte-identical** — A20a/A20b (snapshot `CalcOFI` path unchanged) + grep; geometric only touches the warmed WS-averaged read.
+- **A20d self-computes** `Exp((1−e⁻¹)·ln2)` from the formula (not a hardcoded literal) — proves the time-aware alpha *and* the log-space construction. **A20i is a real discriminator** (an arithmetic regression → ~1.25, outside [0.95,1.05], would fail).
+- **Docs** — change_log v46 amended **in place, no version bump** (folds into unpushed v46); §15 mirrored; proposal §4.1 + spec-back §3.2 annotated (supersession, decision trail preserved); user docs construction-agnostic, no edit needed.
+- **No rendered-line change** — `OFIRatio` value shifts, same field; parity heuristic clean.
+
+The A20i `tau` deviation is well-reasoned and the shipped fixture + inline comment are correct. Non-blocking nit: §3's post-mortem quotes `alpha=0.1813` for "tau=10/dt=1", but that combo gives `alpha≈0.095` (the 0.1813 / ratio=0.933 figures correspond to `dt/tau=0.2`) — narrative slip only; the shipped `tau=8/dt=1` fixture is right.
+
+**v46 is now geometric — the dataset boundary lands on the final construction.** The v47 dominance-threshold re-baseline + `OFI.Momentum*` review run on the geometric distribution (data-gated, coordinator-driven). Local only — trader tests + pushes.
