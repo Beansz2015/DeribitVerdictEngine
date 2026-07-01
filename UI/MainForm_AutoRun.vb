@@ -203,6 +203,14 @@ Partial Public Class MainForm
         _onCloseLastRes      = 0
     End Sub
 
+    ''' <summary>The effective on-close feed-stall backstop (ms): the NUD interval floored to one
+    ''' bar + 1 minute, so a backstop shorter than the exec resolution can't pre-empt the bar-close
+    ''' trigger — a 1m NUD on 3m bars would otherwise fire every minute. The backstop is a stall
+    ''' net, never the cadence (the bar close is the primary trigger).</summary>
+    Private Function EffectiveBackstopMs(execRes As Integer) As Double
+        Return Math.Max(_intervalMs, (Math.Max(execRes, 1) + 1) * 60000.0)
+    End Function
+
     ' Runs on a threadpool thread (Threading.Timer). MarketState reads are lock-guarded, so the
     ' detection is safe off-UI-thread; the fire is marshalled onto the UI thread (RunAutoAnalysis
     ' touches controls + kicks off the async run, exactly like the WinFormsAutoRunTimer path).
@@ -227,7 +235,9 @@ Partial Public Class MainForm
             Dim fire As Boolean = roll.Fired
             ' Backstop: never go silent if the WS-fed series stops rolling (feed stall). A real roll
             ' resets _onCloseLastFireUtc, so the backstop only fires after a full silent interval.
-            If Not fire AndAlso (nowUtc - _onCloseLastFireUtc).TotalMilliseconds >= _intervalMs Then
+            ' EffectiveBackstopMs floors it to one bar + 1 min so a too-short NUD can't pre-empt the
+            ' bar-close trigger (the stall net must never become the cadence).
+            If Not fire AndAlso (nowUtc - _onCloseLastFireUtc).TotalMilliseconds >= EffectiveBackstopMs(execRes) Then
                 fire = True
             End If
 
@@ -254,8 +264,12 @@ Partial Public Class MainForm
         If secsLeft > periodSec Then secsLeft = periodSec
         Dim m As Integer = secsLeft \ 60
         Dim s As Integer = secsLeft Mod 60
-        Return String.Format("Next close: {0}:{1:D2}  [{2} {3}m]",
-                             m, s, If(rbRepeat.Checked, "REPEAT", "SINGLE"), execRes)
+        ' Surface the effective backstop when the NUD was floored above the bar, so the trader sees
+        ' the real stall-net value rather than a too-short NUD (e.g. a 1m NUD on 3m bars -> 4m).
+        Dim eff As Double = EffectiveBackstopMs(execRes)
+        Dim bkstp As String = If(eff > _intervalMs, String.Format(" - backstop {0}m", CInt(eff / 60000)), "")
+        Return String.Format("Next close: {0}:{1:D2}  [{2} {3}m{4}]",
+                             m, s, If(rbRepeat.Checked, "REPEAT", "SINGLE"), execRes, bkstp)
     End Function
 
     ' =======================================================================
