@@ -147,8 +147,8 @@ New block (parallel to `indicators.OFI`), with a shared **default** plus **per-s
   "gross_floor_usd_per_sec": 50, // dead-tape guard on the norm — ON surface
   "upgrade_bonus": 1,            // modifier magnitude once scoring is on — ON surface
   "contra_penalty": 1,           // contra-burst soften magnitude — ON surface
-  "default":  { "norm_window_sec": 120, "burst_ratio_threshold": 2.5 },
-  "sessions": {                  // per-session overrides (null → inherit default) — ON surface
+  "default":  { "norm_window_sec": 120, "burst_ratio_threshold": 2.5 },  // OFF tweaker surface — hand-tuned (HC11)
+  "sessions": {                  // per-session overrides (null → inherit default) — hand-tuned, OFF tweaker surface (HC11)
     "NY":     { "norm_window_sec": 60 },   // dense 1-min tape → shorter baseline
     "LONDON": { },                          // inherits 120 / 2.5 until §5 splits it
     "ASIA":   { }
@@ -156,7 +156,11 @@ New block (parallel to `indicators.OFI`), with a shared **default** plus **per-s
 }
 ```
 
-- **Tweaker surface:** the numeric shape params (`fast_window_sec`, per-session `norm_window_sec` + `burst_ratio_threshold`, `direction_lean_floor`, `gross_floor_usd_per_sec`, `upgrade_bonus`, `contra_penalty`) are **on** the surface — they shape the signal → real failure-rate linkage, same rationale as `avg_window_sec`. The two **feature switches** (`enabled`, `scoring_enabled`) are **off** the surface (exposed + hand-toggleable, but not tweaker-flippable) — exact-match rejects in `SettingsDiffApplier` + a HARD CONSTRAINT line in `PromptBuilder`, mirroring `OFI.averaging_enabled` (HARD CONSTRAINT 16). No hardcoded magic numbers (profile §6).
+- **Tweaker surface — three tiers, grounded in the applier's actual reach + HARD CONSTRAINT 11:**
+  - **On the surface (tweaker-reachable):** the flat top-level params — `upgrade_bonus`, `contra_penalty` (the scoring magnitudes), `fast_window_sec`, `direction_lean_floor`, `gross_floor_usd_per_sec`. Simple dotted paths the applier resolves exactly like `indicators.ofi.avg_window_sec` (`SettingsDiffApplier` `Split(".")`s the path and overwrites the leaf). **These include the knobs that move the score** — once scoring is on, the tweaker can optimise the modifier strength on failure-rate feedback.
+  - **Off the surface, hand-tuned:** the **per-session** `norm_window_sec` / `burst_ratio_threshold`. Two reasons, either sufficient: they're array-nested (`SettingsDiffApplier` can't resolve `sessions[].` paths — it rejects unresolved paths), **and** by established policy a per-session re-baseline override is trader-set, not a failure-rate lever — HARD CONSTRAINT 11 already excludes the exact precedent (`session_volume.sessions[].roc_magnitude_threshold`) as "re-baselined manually." Exposed in `settings.json` for the §5 per-session calibration; a new HC-11-style `PromptBuilder` line names the `aggressor_velocity.sessions[].*` keys. (The unbuilt Phase-2b per-population autotuning layer is what would ever tune these — not the current tweaker.)
+  - **Off the surface, hand-toggle only:** the feature switches `enabled` + `scoring_enabled` — exact-match rejects in `SettingsDiffApplier` + a HARD CONSTRAINT line in `PromptBuilder`, mirroring `OFI.averaging_enabled` (HARD CONSTRAINT 16).
+  No hardcoded magic numbers (profile §6) — everything is in `settings.json`; the tiers are about *who* changes each key, not whether it's exposed.
 - Bump version + `change_log` + §15 at the build; the scoring wire-in is a later bump with the calibrated per-session values.
 
 ---
@@ -198,7 +202,7 @@ New block (parallel to `indicators.OFI`), with a shared **default** plus **per-s
 1. **Integration shape** — ✅ **Modifier on TFI** (upgrade same-side burst, soften contra; §4.5). Standalone-vote fallback dropped unless §5 surprises us.
 2. **Correlation gate** — ✅ Proposed thresholds accepted as the **working rule** (`|Spearman(lean,TFI)| > 0.7` **and** fire-overlap `> 80%` ⇒ display-only). **Final scoring go/no-go reserved for when the numbers are in** — and that is a *separate, later* collection after #5's build lands, **not** the current v47 collection (§5.1).
 3. **Horizons** — ✅ `fast_window_sec = 5` (up from 3 — less single-print noise); norm **per-resolution** (~60s NY×1 / ~120s 3-min) rather than flat 90. Decoupled from hold duration (§3 clarification).
-4. **Per-session thresholds** — ✅ **Yes, per-session** (+ per-resolution norm). 1-min vs 3-min tape dynamics differ; mirror the v40 per-session ROC override machinery (§5.2, §6).
+4. **Per-session thresholds** — ✅ **Yes, per-session** (+ per-resolution norm). 1-min vs 3-min tape dynamics differ; mirror the v40 per-session ROC override machinery (§5.2, §6) — **including its hand-tuned status**: per-session re-baseline overrides are trader-set, not auto-tuned (HC11). The flat scoring magnitudes (`upgrade_bonus`/`contra_penalty`) stay tweaker-reachable so the modifier strength IS auto-tunable once scoring is on (§6).
 5. **CSV path** — ✅ **Fold columns into `analysis_log.csv` at the build** (rotates the log, clean post-v47). Side-channel option dropped (§7).
 6. **Build/scoring split** — ✅ **Two sub-versions** (display/CSV build → collect + correlation → data-gated scoring), mirroring #4.
 
@@ -214,7 +218,7 @@ New block (parallel to `indicators.OFI`), with a shared **default** plus **per-s
 - **`Core/IndicatorResults.vb`** — new fields `AggrVelBurstRatio`, `AggrVelNet`, `AggrVelSignal`.
 - **`AnalysisLogger.vb`** — three new CSV columns (schema bump / rotation — §7, fold at build).
 - **`Core/Settings/EngineSettings.vb` + `settings.json`** — the `indicators.aggressor_velocity` block (default + per-session overrides); version bump + change_log + §15.
-- **`tools/AutoTweaker/`** — exact-match reject `aggressor_velocity.enabled` + `aggressor_velocity.scoring_enabled`; a HARD CONSTRAINT line in `PromptBuilder`; keep the numeric shape params (incl. the per-session `norm_window_sec` / `burst_ratio_threshold`) tweaker-tunable.
+- **`tools/AutoTweaker/`** — exact-match reject `aggressor_velocity.enabled` + `aggressor_velocity.scoring_enabled`, **plus** an HC-11-style `PromptBuilder` line excluding the per-session `aggressor_velocity.sessions[].*` (`norm_window_sec`/`burst_ratio_threshold`) as manually-re-baselined (same class as the v40 per-session ROC key). Keep the **flat** params (`upgrade_bonus`, `contra_penalty`, `fast_window_sec`, `direction_lean_floor`, `gross_floor_usd_per_sec`) tweaker-reachable (dotted-path, like `ofi.avg_window_sec`) — the score magnitudes are here.
 - **`verify/ordercheck/`** — accumulator math + `ClassifyAggressorBurst` fixtures + the `enabled=false` byte-identical regression.
 - **(Scoring sub-version)** — `Core/ScoringEngine_Calculate_Scoring.vb` TFI-modifier wire-in; per-session correlation + firing-rate-match spec-back.
 
