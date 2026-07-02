@@ -201,7 +201,9 @@ Partial Public Class MainForm
         ' automatically because they all derive from r.ATR.
         r.ATR = IndicatorEngine.CalcATR(candlesExec, cfg.Indicators.ATR.Period)
 
-        Dim norms As DynamicNorms = DynamicNorms.Compute(candlesExec, r.ATR)
+        ' [v47 N1] Pass the run's captured utcHour so the session-volume bucket and execRes
+        ' can never resolve from different hours at an hour rollover.
+        Dim norms As DynamicNorms = DynamicNorms.Compute(candlesExec, r.ATR, utcHour)
         r.ATRSizeMultiplier = Math.Round(norms.ATRScaleFactor, 2)
 
         Dim rocSeries = IndicatorEngine.CalcROCSeries(candlesExec,
