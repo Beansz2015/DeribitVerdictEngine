@@ -163,28 +163,30 @@ DeribitVerdictEngine/
 │   │                                   computes SpreadBps from order book;
 │   │                                   calls CalcSwingPivots (5m + 15m);
 │   │                                   computes SwingTarget/Stop bookkeeping
-│   ├── MainForm_Render_Header.vb       RTF helpers: AppendRtf(), AR(), SectionHeader(),
-│   │                                   Divider();
-│   │                                   log/calibration helpers: UpdateLogInfo(),
-│   │                                   BuildCalibrationReport(), Flag(),
-│   │                                   lnkResetLog_LinkClicked, lnkCalibCheck_LinkClicked;
-│   │                                   RenderOutputHeader() — top render block:
-│   │                                   VERDICT / CONTEXT / CONFIDENCE / SCORE / TIME /
-│   │                                   LAST TRANSACTED PRICE / HOLD STATUS /
-│   │                                   ATR ENTRY LEVELS /
-│   │                                   LONG+SHORT STRUCTURAL ROWS (swing pivot R:R) /
-│   │                                   KELLY SIZING.
+│   ├── MainForm_PlaintextSnapshot.vb   [P5b] BuildPlaintextSnapshot() — the engine's
+│   │                                   ONLY text renderer (replaced the deleted
+│   │                                   MainForm_Render_Header.vb /
+│   │                                   MainForm_Render_Sections.vb): verdict header
+│   │                                   block (VERDICT / CONTEXT / SCORE / TIME /
+│   │                                   LAST TRANSACTED PRICE / HOLD \ EXIT /
+│   │                                   ATR ENTRY LEVELS / structural rows / KELLY
+│   │                                   SIZING) + all indicator sections + signal
+│   │                                   breakdown. Feeds the output dump; its inline
+│   │                                   CalcKellySizing call (the sole surviving
+│   │                                   invocation) populates v.Kelly* BEFORE the
+│   │                                   card binds.
+│   ├── MainForm_Render_Cards.vb        [P5b] card-based UI render — BindCard*
+│   │                                   bindings (score, verdict, last price, ATR
+│   │                                   levels, structural, breakdown, OI×CVD, MTF,
+│   │                                   Kelly, …). The card is the SECOND rendered
+│   │                                   surface; the display-string parity rule holds
+│   │                                   it in lockstep with the plaintext snapshot.
 │   ├── OutputDumpSettingsForm.vb       Non-modal dialog: Enabled toggle, max-runs
 │   │                                   textbox, file path + size, Clear + Save + Close.
 │   │                                   Save routes through SettingsLoader.Save.
-│   └── MainForm_Render_Sections.vb     RenderOutput() entry point;
-│                                       all indicator sections: DYNAMIC NORMS, REGIME,
-│                                       CORE SIGNALS, VWAP, BBW/TTM, EMA RIBBON,
-│                                       MARKET STRUCTURE, OPEN INTEREST, ORDER FLOW,
-│                                       LIQUIDATIONS, MTF GATE, FUNDING;
-│                                       SIGNAL BREAKDOWN table;
-│                                       verdict label (lblVerdict) colour update.
-│                                       Split from MainForm_Render.vb.
+│   └── MainForm_Calibration.vb         BuildCalibrationReport() + calibration link
+│                                       handlers (UpdateLogInfo lives in
+│                                       MainForm_Layout.vb).
 │
 ├── analysis/                          Host-agnostic offline analysis (Bundle 1).
 │                                       NO System.Windows.Forms references except
@@ -380,48 +382,43 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                                Winner = closest cap to entry. Sets AdjustedLongTarget /
                                AdjustedShortTarget and TargetCapReason label.
 
-                    (Kelly sizing is NOT invoked here. CalcKellySizing() is called from
-                     MainForm_Render_Header.RenderOutputHeader() after ATR entry levels
-                     are rendered. See docs/kelly-criterion-proposal.md.)
+                    (Kelly sizing is NOT invoked here. CalcKellySizing() is called
+                     inline from BuildPlaintextSnapshot() — the sole surviving
+                     invocation, which must run BEFORE the card binds so
+                     BindCardKelly reads populated v.Kelly* fields.
+                     See docs/kelly-criterion-proposal.md.)
                     │
                     ▼
         VerdictResult  v
                     │
                     ▼
-        MainForm_Render_Sections.vb :: RenderOutput(v, r)
-        [calls RenderOutputHeader() from MainForm_Render_Header.vb for top block]
-                    │
-                    ├─ Verdict header + score + breakdown  [_Header]
-                    ├─ CONTEXT: line (always shown)        [_Header]
-                    │          CONFIRMED → C_GOOD (green)
-                    │          FLOW_UNCONFIRMED / MOMENTUM_FADING /
-                    │          STRUCTURALLY_WEAK → amber/red/dim as appropriate
-                    ├─ Hold/position guidance              [_Header]
-                    ├─ ATR entry / stop / target block     [_Header]
-                    │          3-tier-capped target in amber bold with tier label
-                    ├─ Long + Short structural rows        [_Header]
-                    │          Swing pivot stop/entry/target + R:R display
-                    │          (cyan full pair; dim when only one side available)
-                    ├─ KELLY SIZING block                  [_Header]
-                    │          Contracts / USD risk / [CAPPED] tag when applicable.
-                    │          Advisory label always rendered below header:
-                    │          "Advisory (ATR-basis) — R:R uses ATR multiples,
-                    │           not structural targets. Treat as directional bias
-                    │           indicator only."
-                    │          EST mode only — CAL mode removed pending backtesting.
-                    │          Suppressed when KellyF = 0
+        [P5b render — two surfaces held in lockstep by the display-string parity rule]
+
+        UI/MainForm_PlaintextSnapshot.vb :: BuildPlaintextSnapshot(v, r, norms, cfg, …)
+                    │  (the ONLY text renderer; runs FIRST — its inline
+                    │   CalcKellySizing call populates v.Kelly*)
+                    ├─ Verdict header + CONTEXT + score
+                    ├─ HOLD \ EXIT guidance (suppressed when posState = None)
+                    ├─ ATR entry / stop / target block
+                    │          3-tier-capped target with tier label
+                    ├─ Long + Short structural rows (swing pivot R:R)
+                    ├─ KELLY SIZING block
+                    │          Contracts / USD risk / [LEV CAPPED] tag.
+                    │          EST mode only; suppressed when KellyF ≤ 0
                     ├─ DYNAMIC NORMS / REGIME / CORE SIGNALS / VWAP /
                     │  BBW/TTM / EMA RIBBON / MARKET STRUCTURE /
-                    │  OI / ORDER FLOW / LIQUIDATIONS /    [_Sections]
-                    │  MTF GATE / FUNDING sections
-                    ├─ FUNDING section                     [_Sections]
-                    │          Row 1: rate value + bias label
-                    │          Row 2: Momentum → RISING / FALLING / FLAT
-                    │                 + enabled/amplify/soften config values
-                    └─ Signal breakdown table + lblVerdict colour update  [_Sections]
-                    │
+                    │  OI / ORDER FLOW / LIQUIDATIONS / MTF GATE / FUNDING
+                    └─ Signal breakdown table
+                    │  (string feeds the output dump)
+                    ▼
+        UI/MainForm_Render_Cards.vb :: BindCard*(…)
+                    │  (BindCardScore / Verdict / LastPrice / AtrLevels /
+                    │   Structural×2 / SignalBreakdown / OiCvdCross / MTF /
+                    │   Kelly / … — every snapshot line has a card binding)
                     ▼
         AnalysisLogger.LogRun(r, verdict) → analysis_log.csv
+        (in code LogRun runs just BEFORE the snapshot build — shown last here
+         for readability; the CSV row does not depend on either render surface)
 ```
 
 ---
@@ -531,9 +528,10 @@ Notes on rendering behaviours that have surfaced in audits as potentially-buggy 
 
 | Behaviour | Status | Rationale |
 |---|---|---|
-| `HOLD \ EXIT:` row absent from rendered output and output dump when no position is held | By design | `MainForm_Render_Header.RenderOutputHeader` guards on `If v.HoldStatus <> "N/A -- no open position" Then`. `CalcHoldStatus` returns the `"N/A -- no open position"` sentinel when `posState.IsNone`. The whole hold-guidance block (label + value) is suppressed in that case — there's no position to guide. The architecture handover lists `HOLD STATUS` in the standard render order; the actual rendered label is `HOLD \ EXIT` and only when a position has been declared via the radio buttons. |
+| `HOLD \ EXIT:` row absent from rendered output and output dump when no position is held | By design | `BuildPlaintextSnapshot` (`UI/MainForm_PlaintextSnapshot.vb:136`) guards on `If v.HoldStatus <> "N/A -- no open position" Then` (the card binding mirrors the same sentinel check). `CalcHoldStatus` returns the `"N/A -- no open position"` sentinel when `posState.IsNone`. The whole hold-guidance block (label + value) is suppressed in that case — there's no position to guide. The rendered label is `HOLD \ EXIT` and only when a position has been declared via the radio buttons. |
 | POC tier 3 of the target cap never fires in practice | By design + geometry | The Step 5b cap arbitration considers POC only when `hvnAbove` / `hvnBelow` is True (VPFR signal flags the engine is in HVN proximity). When the gate is open, POC must additionally be closer to entry than both the swing target AND the nearest HVN. The combined conditions are narrow enough that POC almost never wins by geometry alone. The branch is reachable, not dead code. POC tier is a **refinement** of the HVN tier, not a general fallback for the "no swing, no HVN" case. |
 | `STRONG LONG` / `STRONG SHORT` co-existing with `STRUCTURALLY_WEAK` / `MOMENTUM_FADING` context tags | Intentional | `VerdictContext` is display-only (Step 5b post). It surfaces structural caveats the score didn't fold in. A STRONG-tier score with a warning tag legitimately means "score qualifies for the strong tier, but the structural picture is thin / momentum is fading." This is informative, not contradictory — the trader should read the context tag before sizing. Suppressing warnings on STRONG verdicts would remove the very signal the tag was added to surface. |
 | MTF Reason rendered in three formats (`MTF PASS [DIR]`, `MTF BLOCK [DIR vs TREND]`, `MTF state: TREND \| details`) | By design | Three scenarios, three formats. Since v31 the string is composed at scoring Step 4b against the **dominant side** and stored on `VerdictResult.MTFGateReason` — every consumer (MTF card, plaintext snapshot, CSV, breakdown row) renders that one string. `MTF PASS [DIR]` when a directional verdict is in play and the gate clears; `MTF BLOCK [DIR vs TREND]` when it fails; `MTF state: TREND \| details` when no directional verdict is in play. The leading-keyword inconsistency is a deliberate signal of the no-direction case — unifying would lose that distinction. |
+| `MTF BLOCK [...]` reason string still composed when `mtf_gate.enabled: false` while no block occurs | By design (config-edge display quirk, v47 N3) | With `mtf_gate.enabled: false` (non-default), a failing gate still composes its reason as `MTF BLOCK [DIR vs TREND]` — Step 4b (`ScoringEngine_Calculate_Verdict.vb` ~:110) doesn't consult `Enabled` when formatting, only when deciding whether to veto. So the display can read BLOCK while the verdict proceeds. Unreachable at current config (`enabled: true`), and the auto-tweaker can never create the state (`mtf_gate.enabled` is in `DisabledGatedPaths`). The three MTF reason formats are locked by design — do not change the code. |
 | `[B]` / `[T]` mode indicator absent from rendered output dump (pre-v30) | Was a spec gap (fixed v30) | `AnalysisOutputDump.Append` originally captured only `txtOutput.Text` (the RTF content). The perf-strip is separate WinForms `Label` controls outside the RTF, so the mode indicator and the six rate labels weren't captured. v30's display-polish pass adds a `PERF STRIP` header line to each dump block. Dumps from pre-v30 won't have this line. |
 

@@ -152,13 +152,17 @@ Partial Public Class ScoringEngine
     '
     ' [T1-D]: All RSI/ROC threshold literals replaced with cfg.Scoring.Hold* fields.
     '
-    ' Priority order for hold evaluation (highest precedence first):
-    '   1. Microstructure fast exit: adverse MicroCVD signal + confirming OFI or TFI
-    '      -- two independent microstructure signals both adverse = immediate exit.
-    '   2. OBV divergence exit (unchanged from prior version).
-    '   3. RSI divergence evaluate (unchanged).
-    '   4. Microstructure soft warning: single adverse microstructure signal alone.
-    '   5. ROC/RSI-based structural exit (unchanged from prior version).
+    ' Priority order for hold evaluation (highest precedence first) — [v47 N2] list
+    ' corrected to match the code (A17g pins this order as canonical):
+    '   1.   Microstructure fast exit: adverse MicroCVD signal + confirming OFI or TFI
+    '        -- two independent microstructure signals both adverse = immediate exit.
+    '   1.5  Structural break exit: price closed through the prior swing level.
+    '   2.   Momentum-break exit: ROC crosses zero against the position (checked
+    '        BEFORE OBV divergence).
+    '   3.   OBV divergence exit.
+    '   4.   RSI divergence evaluate.
+    '   5.   Microstructure soft warning: single adverse microstructure signal alone.
+    '   6.   ROC/RSI-based structural assessment (take-profit / hold / evaluate / exit).
     Private Shared Function CalcHoldStatus(r As IndicatorResults, posState As PositionState,
                                             cfg As EngineSettings) As String
         Select Case posState

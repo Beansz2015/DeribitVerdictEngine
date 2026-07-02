@@ -63,7 +63,7 @@ Earlier feature waves (Spec #1-#6 in 2026-04-29, Bundles 1-3 in 2026-05-05..2026
 | File | Purpose |
 |---|---|
 | `Core/ScoringEngine_Types.vb` | SignalBreakdownItem, VerdictResult (incl. `AdjustedLongTarget`/`AdjustedShortTarget`, `TargetCapReasonLong/Short` split — B1 fix 2026-05-12, `VerdictContext`, Kelly fields, `Timestamp`, `OiCvdOutcome`), PositionState, SignalCategory, ScoreState. |
-| `Core/ScoringEngine_Helpers.vb` | `RegimeMaxScore` (cfg `scoring.regime_max_score`), `Threshold`, `TierFloor` (cfg `scoring.tier_floor`), `AddFull`, `HasCrossConfirm`, `BuildNote`, `CalcHoldStatus` (Layer 1 microstructure / **Layer 1.5 structural-break exit** / Layer 2 OBV divergence / Layer 3 RSI/ROC). |
+| `Core/ScoringEngine_Helpers.vb` | `RegimeMaxScore` (cfg `scoring.regime_max_score`), `Threshold`, `TierFloor` (cfg `scoring.tier_floor`), `AddFull`, `HasCrossConfirm`, `BuildNote`, `CalcHoldStatus` (Layer 1 microstructure / **Layer 1.5 structural-break exit** / Layer 2 momentum break (ROC crosses 0) then OBV divergence / Layer 3 RSI/ROC). |
 | `Core/ScoringEngine_Calculate_Scoring.vb` | `AppendLean()`, `CalcVerdictContext()` (returns ALIGNED on NO TRADE per v30 F11; FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED / ALIGNED), `RunScoringPipeline()` Steps 2 / Pass 2 / Pass 2b / Pass 2c / 3 / 3b. |
 | `Core/ScoringEngine_Calculate_Verdict.vb` | `Calculate()` entry point. Step 4 regime veto + TRANSITIONAL ADX penalty. Step 4b MTF gate veto. Step 5 verdict. **Step 5b 3-tier target cap** (swing → nearest HVN → POC). |
 | `Core/ScoringEngine_Kelly.vb` | `CalcKellySizing()` — display-only, called from `MainForm_Render_Header` not from `Calculate()`. Zero scoring impact. |
@@ -250,7 +250,7 @@ Pre-v22 settings change rationale and earlier audit-trail commentary lives in `d
 - **Step 5:** Threshold comparison → verdict.
 - **Step 5b (3-tier target cap):** Priority swing target → nearest HVN → POC. Winner = closest cap to entry. Sets `AdjustedLongTarget`/`AdjustedShortTarget` and `TargetCapReasonLong`/`TargetCapReasonShort` (split B1 2026-05-12). POC tier is HVN-gated; rarely fires in practice (see `architecture.md` *Display Behaviour Clarifications*).
 - **Step 5b (VerdictContext):** FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED. **NO TRADE special case (v30):** CONFIRMED relabels to ALIGNED. Decay ratios + count thresholds from `cfg.Scoring.ContextTagThresholds.*`.
-- **Step 6 (CalcHoldStatus — layered exit):** Layer 1 microstructure (2+ adverse → fast EXIT) → Layer 1.5 structural break (prior swing breached) → Layer 2 OBV divergence → Layer 3 RSI divergence / single adverse / RSI+ROC structural. Only renders when `posState ≠ None`.
+- **Step 6 (CalcHoldStatus — layered exit):** Layer 1 microstructure (2+ adverse → fast EXIT) → Layer 1.5 structural break (prior swing breached) → Layer 2 momentum break (ROC crosses 0) then OBV divergence → Layer 3 RSI divergence / single adverse / RSI+ROC structural. Only renders when `posState ≠ None`.
 - **Step 7:** ATR target/stop from `cfg.Scoring.AtrTargetMultiplier`/`AtrStopMultiplier`. **Structural rows** rendered in UI alongside (cyan when both target+stop exist, dim when partial). v30 `FormatRR` uses `< 0.1` literal for sub-1dp ratios.
 - **CalcKellySizing():** called from `RenderOutputHeader` after ATR levels. Display-only, zero scoring impact.
 
@@ -274,7 +274,7 @@ For full annotated `Calculate()` pipeline detail, see `docs/architecture.md`.
 
 ## 9. Open Position Guidance (CalcHoldStatus)
 
-Priority order: (1) 2+ adverse microstructure signals → fast EXIT → (1.5) structural break exit (price closed at/below prior swing low for long; at/above prior swing high for short) → (2) OBV divergence exit → (3) RSI divergence evaluate → (4) single adverse microstructure warning → (5) RSI/ROC structural assessment.
+Priority order (v47 N2 — corrected to match the code, pinned by harness A17g): (1) 2+ adverse microstructure signals → fast EXIT → (1.5) structural break exit (price closed at/below prior swing low for long; at/above prior swing high for short) → (2) momentum-break exit (ROC crosses zero against the position) → (3) OBV divergence exit → (4) RSI divergence evaluate → (5) single adverse microstructure warning → (6) RSI/ROC structural assessment.
 
 All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*`).
 

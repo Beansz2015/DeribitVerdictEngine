@@ -58,7 +58,7 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 | **Indicators** | `Core/Indicators_*.vb` | Pure functions; no state. Four files: Momentum, Volatility, OrderFlow, Structure |
 | **Scoring** | `Core/ScoringEngine_*.vb` | Signal scoring pipeline → VerdictResult. Split across Types, Helpers, _Scoring (Steps 2–3b), _Verdict (Steps 4–5b+) |
 | **Settings** | `SettingsLoader.vb` + `Core/Settings/EngineSettings.vb` + `settings.json` | JSON singleton; all thresholds externalised, no hardcoded magic numbers |
-| **UI** | `UI/MainForm_*.vb` | WinForms shell. Four partial-class files: Layout (fields/constants), AutoRun, Analysis (orchestrator), Render_Header, Render_Sections |
+| **UI** | `UI/MainForm_*.vb` | WinForms shell. Partial-class files: Layout (fields/constants), AutoRun, Analysis (orchestrator), PlaintextSnapshot (`BuildPlaintextSnapshot` — the only text renderer; feeds the output dump), Render_Cards (card bindings — the second rendered surface), Calibration, ExitGuard, LiveStrip. (`Render_Header`/`Render_Sections` were deleted in P5b.) |
 | **Logging** | `AnalysisLogger.vb` | CSV run logger + CalibrationReport |
 
 ### Data flow (single analysis run)
@@ -76,8 +76,10 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
                    4 regime veto | 4b MTF gate veto | 4c VPFR HVN cap
                    5 threshold → verdict | 5b VerdictContext | 6 HoldStatus
                    7 ATR levels | Post: CalcKellySizing
-      → RenderOutput(v, r) → RTF display
       → AnalysisLogger.LogRun() → analysis_log.csv
+      → BuildPlaintextSnapshot(v, r, …) → plaintext surface + output dump
+        (runs BEFORE the card binds — its inline CalcKellySizing populates v.Kelly*)
+      → BindCard*(…) in MainForm_Render_Cards.vb → card UI
 ```
 
 ### Key design invariants
@@ -109,7 +111,7 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 **Every commit that changes engine behaviour** gets a version history entry in `docs/DeribitIndicatorProject.md` Section 15 and a `settings.json` version bump if any config keys were added or changed.
 
-**Engine display-string parity rule (hard rule).** Any commit that adds, removes, renames, or re-formats a line emitted by the text renderers (`UI/MainForm_Render_Header.vb` / `UI/MainForm_Render_Sections.vb` until P5b; `BuildPlaintextSnapshot` always) — including `VerdictResult` / `IndicatorResults` field-default changes that alter rendered output — MUST update the corresponding card binding in `UI/MainForm_Render_Cards.vb` in the same commit, or state in the commit message why no card surface is affected. The P5-test text-parity harness cannot catch this drift (it diffs legacy↔snapshot, which move together; the card is the unchecked third surface). Evidence: three drift instances in one cycle — v31 `ccdd652` (MTFGateReason default), Tier D `0bd1b63` (Kelly Notional line), Tier D `482c9bb` (ATR ratio relabel). See `docs/ui-reskin-consolidated-fix-spec-back.md` §2–§3.
+**Engine display-string parity rule (hard rule).** Any commit that adds, removes, renames, or re-formats a line emitted by the text renderer (`BuildPlaintextSnapshot` in `UI/MainForm_PlaintextSnapshot.vb` — the only text surface since P5b deleted `MainForm_Render_Header.vb`/`MainForm_Render_Sections.vb`) — including `VerdictResult` / `IndicatorResults` field-default changes that alter rendered output — MUST update the corresponding card binding in `UI/MainForm_Render_Cards.vb` in the same commit, or state in the commit message why no card surface is affected. The P5-test text-parity harness cannot catch this drift (it diffs legacy↔snapshot, which move together; the card is the unchecked third surface). Evidence: three drift instances in one cycle — v31 `ccdd652` (MTFGateReason default), Tier D `0bd1b63` (Kelly Notional line), Tier D `482c9bb` (ATR ratio relabel). See `docs/ui-reskin-consolidated-fix-spec-back.md` §2–§3.
 
 **Do not re-open settled design decisions** without new data or a concrete technical reason.
 
