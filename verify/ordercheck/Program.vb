@@ -100,6 +100,11 @@ Module Program
         A20h_TweakerAcceptsAvgWindow()
         A20i_GeometricSymmetryConvergence()
 
+        ' v47 audit fixes — F1 dead-key removal closes the tweaker no-op path;
+        ' D4 fences the scoring.hold_ prefix (HARD CONSTRAINT 17).
+        A21a_TweakerRejectsRemovedDeadKey()
+        A21b_TweakerRejectsHoldPrefix()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -1579,6 +1584,31 @@ Module Program
         Check("A20h Validate accepts indicators.OFI.avg_window_sec (on the tweaker surface)",
               r.IsValid,
               String.Format("valid={0} reason='{1}'", r.IsValid, r.ErrorReason))
+    End Sub
+
+    ' -- A21a: v47 F1 — removed dead key is unresolvable; sibling stays tunable -
+    ' Settings tree mirrors the post-v47 regime_gates block (transitional_adx_penalty_low
+    ' deleted). A diff against the removed key must reject as an unresolvable path
+    ' (the C-6 no-key-creation rule); the live sibling stays proposable.
+    Private Sub A21a_TweakerRejectsRemovedDeadKey()
+        Dim s As String = "{""version"":47,""regime_gates"":{""transitional_adx_penalty_mid"":22.5,""transitional_adx_penalty_high"":25.0,""transitional_penalty_low"":2,""transitional_penalty_mid"":1}}"
+        Dim rDead = SettingsDiffApplier.Validate(OneDiff("regime_gates.transitional_adx_penalty_low", "20.0", "15.0"), s, 3)
+        Dim rLive = SettingsDiffApplier.Validate(OneDiff("regime_gates.transitional_penalty_mid", "1", "2"), s, 3)
+        Check("A21a Validate rejects removed regime_gates.transitional_adx_penalty_low (unresolvable) + accepts live sibling",
+              Not rDead.IsValid AndAlso rDead.ErrorReason.Contains("does not resolve") AndAlso rLive.IsValid,
+              String.Format("dead: valid={0} reason='{1}' | sibling: valid={2} reason='{3}'",
+                            rDead.IsValid, rDead.ErrorReason, rLive.IsValid, rLive.ErrorReason))
+    End Sub
+
+    ' -- A21b: v47 D4 — scoring.hold_ prefix fenced (HC17); sibling scoring.* tunable -
+    Private Sub A21b_TweakerRejectsHoldPrefix()
+        Dim s As String = "{""version"":47,""scoring"":{""verdict_med_pct"":0.53,""hold_rsi_hold_long"":60}}"
+        Dim rHold = SettingsDiffApplier.Validate(OneDiff("scoring.hold_rsi_hold_long", "60", "55"), s, 3)
+        Dim rSib  = SettingsDiffApplier.Validate(OneDiff("scoring.verdict_med_pct", "0.53", "0.55"), s, 3)
+        Check("A21b Validate rejects scoring.hold_rsi_hold_long (HARD CONSTRAINT 17 fence) + accepts scoring.verdict_med_pct",
+              Not rHold.IsValid AndAlso rHold.ErrorReason.Contains("off-tweaker-surface") AndAlso rSib.IsValid,
+              String.Format("hold: valid={0} reason='{1}' | sibling: valid={2} reason='{3}'",
+                            rHold.IsValid, rHold.ErrorReason, rSib.IsValid, rSib.ErrorReason))
     End Sub
 
 End Module

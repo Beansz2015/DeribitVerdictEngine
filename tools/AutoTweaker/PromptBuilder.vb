@@ -74,6 +74,13 @@ Public Class PromptBuilder
             "genuine failure-rate lever), 'indicators.OFI.buy_dominant_ratio', " &
             "'indicators.OFI.sell_dominant_ratio', and 'indicators.OFI.book_depth' are all on-surface. " &
             "(Enforced in code: SettingsDiffApplier exact-match rejects 'indicators.ofi.averaging_enabled'.)" & vbLf &
+        "17. Never propose any 'scoring.hold_*' key. The six CalcHoldStatus hold/exit thresholds " &
+            "(hold_roc_take_profit_long/short, hold_rsi_hold_long/short, hold_rsi_evaluate_long/short) " &
+            "are the trader's hand-tuned hold/exit discipline. HoldStatus is advisory during a declared " &
+            "position and never feeds the failure-rate matrix, so these keys have no failure-rate " &
+            "linkage — same class as 'kelly.*'. The sibling 'scoring.*' tunables (verdict percentages, " &
+            "penalties, etc.) REMAIN on the tweaker surface. (Enforced in code: SettingsDiffApplier " &
+            "rejects the 'scoring.hold_' prefix as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

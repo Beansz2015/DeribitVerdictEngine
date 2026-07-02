@@ -66,7 +66,8 @@ Public Class SettingsDiffApplier
         "network.",                 ' transport plumbing (REST/WS/shadow_parity) — not a failure-rate lever (HARD CONSTRAINT 12)
         "exit_guard.",              ' realtime exit-guard overlay — trader-risk/display preference, display-only (HARD CONSTRAINT 13)
         "auto_run.",                ' run cadence/trigger (interval + on-close trigger_mode) — operational preference, no failure-rate linkage (HARD CONSTRAINT 14)
-        "live_strip."               ' live microstructure TAPE strip — display preference, display-only, no failure-rate linkage (HARD CONSTRAINT 15)
+        "live_strip.",              ' live microstructure TAPE strip — display preference, display-only, no failure-rate linkage (HARD CONSTRAINT 15)
+        "scoring.hold_"             ' CalcHoldStatus hold/exit thresholds — trader hold-discipline preference, no failure-rate linkage (HoldStatus never feeds the failure matrix); same class as kelly.* (HARD CONSTRAINT 17). Prefix-safe: sibling scoring.* tunables stay proposable
     }
 
     ' Validate a proposed diff list.

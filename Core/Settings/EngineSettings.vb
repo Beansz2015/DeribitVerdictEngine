@@ -796,7 +796,8 @@ End Class
 ' ---------------------------------------------------------------------------
 
 Public Class RegimeGateSettings
-    <JsonPropertyName("transitional_adx_penalty_low")>  Public Property TransitionalAdxPenaltyLow   As Double  = 20.0
+    ' transitional_adx_penalty_low removed in v47 (dead since the v31 F8 fix — the first
+    ' TRANSITIONAL penalty arm covers [0, penalty_mid); only Mid/High are read).
     <JsonPropertyName("transitional_adx_penalty_mid")>  Public Property TransitionalAdxPenaltyMid   As Double  = 22.5
     <JsonPropertyName("transitional_adx_penalty_high")> Public Property TransitionalAdxPenaltyHigh  As Double  = 25.0
     <JsonPropertyName("transitional_penalty_low")>      Public Property TransitionalPenaltyLow      As Integer = 2
