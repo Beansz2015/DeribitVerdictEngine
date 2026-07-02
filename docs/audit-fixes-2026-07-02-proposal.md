@@ -1,6 +1,8 @@
 # Audit Fixes — F1/F2/F3 + Nits (spec for implementer)
 
-**Status:** PROPOSED — trader signs off §7 decisions, then hand to a fresh implementer conversation.
+**Status:** ✅ **APPROVED 2026-07-02** — trader signed off all four §7 decisions **as recommended** (D1 remove, D2 take the next version now, D3 keep snapshot + document, D4 fence `scoring.hold_`). For D3/F3 the trader will additionally run the observational watch: during live holds, watch for EXIT GUARD strip latches the next run's HOLD\EXIT row does not corroborate; if they read as alarm fatigue, flip to the §4 align-branch as a contained follow-up. **Implementer-ready — no open decisions.**
+
+**Live-collection caution (added at sign-off):** the v47 geometric OFI data collection is running from 2026-07-02 through ~end of the NY session on the standalone Debug exe. Do not disturb it: Release builds only (§0 already requires this — never build Debug), and the commit-1 edit to `bin\...\settings.json` is hot-reload-safe by construction (the dead-key removal changes no value the engine reads; the 8 F2 keys are already present in the bin copy — effective behaviour is unchanged, so the FileSystemWatcher reload is a behavioural no-op mid-collection). Sync the bin copy's `version` field to the new number in the same edit so tracked and bin agree.
 **Source:** `docs/fable5-audit-2026-07-02.md` (the 2026-07-02 full audit; read it first — it carries the evidence for every item here).
 **Recommended implementer:** Opus 4.8, standard/medium effort, single conversation. Everything here is mechanical with exact anchors — no novel design, no scoring-math changes. Fable is not needed.
 **Baseline:** origin/master `a00ac35` + the two local docs commits (`b758edc` handover, `0804308` audit report). settings.json currently **v46** — read line 1 before bumping; bump from whatever is current.
@@ -84,11 +86,11 @@
 
 Global acceptance: gate green after every commit; A1–A20i unregressed + new A21a/A21b (and the D3=align fixture if applicable); **no rendered-line change anywhere** (say so in commits 2–3); CSV v0.7 / eval cache v4 untouched; scoring path byte-identical except nothing (F1/F2 values equal current effective behaviour; N1 changes only the hour source within the same hour).
 
-## 7. Sign-off decisions (trader)
+## 7. Sign-off decisions — ✅ ALL APPROVED AS RECOMMENDED (trader, 2026-07-02)
 
-| # | Decision | Recommendation |
+| # | Decision | Ruling |
 |---|---|---|
-| D1 | F1: remove key+POCO vs fence-only | **Remove** (v15 dead-key precedent; C-6 then closes the tweaker path automatically) |
-| D2 | Version numbering: this pass takes the next version (making the OFI threshold re-baseline the one after), or fold F1/F2 into the re-baseline commit | **Take the next version now** — the re-baseline was always "v47-ish", versions are cheap, and F1 should not wait on a data-gated pass |
-| D3 | F3: exit guard keeps snapshot OFI vs aligns to averaged | **Keep snapshot + document** (rationale + observational fallback in §4) |
-| D4 | Fence `scoring.hold_*` from the tweaker (HC17) | **Yes** (no failure-rate linkage; trader-owned hold discipline). `decel_penalty`/`divergence_penalty` stay tunable — real Step-2 levers |
+| D1 | F1: remove key+POCO vs fence-only | ✅ **Remove** (v15 dead-key precedent; C-6 then closes the tweaker path automatically; no RejectedPathFragments entry — §1 step 3) |
+| D2 | Version numbering | ✅ **This pass takes the next version** (read settings.json line 1 and bump from current); the OFI threshold re-baseline slides to the number after |
+| D3 | F3: exit guard OFI input | ✅ **Keep snapshot + document** (§4 doc/comment path). Trader runs the live observational watch — strip-vs-row corroboration during holds; the §4 align-branch is the ready-made fallback if alarm fatigue shows |
+| D4 | Fence `scoring.hold_*` from the tweaker (HC17) | ✅ **Yes.** `decel_penalty`/`divergence_penalty` stay tunable — real Step-2 levers |
