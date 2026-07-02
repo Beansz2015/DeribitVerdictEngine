@@ -1,6 +1,6 @@
 # Book Absorption at Structural Levels — Proposal (P4 #6)
 
-**Status:** PROPOSED — spec-first; trader signs off §10, then the build is Opus-tier at its sequenced slot.
+**Status:** APPROVED — trader ticked §10 D1–D7, 2026-07-03, all as recommended. Build is Opus-tier at its sequenced slot (after #5 calibrates); **D4 is immediately binding on the #5 build** (the 4 absorption CSV columns are reserved in #5's v0.7→v0.8 rotation). Activation remains evidence-gated per §5 regardless of this approval.
 **Target:** two sub-versions, mirroring #5/#4: a display/CSV **build** (zero scoring, behavior-neutral) → a **data-gated scoring activation** (its own ⚠ dataset boundary + version bump).
 **Scoring impact:** ⚠ **eventually** — activation is **evidence-gated twice** (§5): independence vs the existing flow stack AND a measured adverse outcome gradient on the collected episodes. No gradient ⇒ stays display-only, honestly.
 **Item:** #6 in `websocket-migration-proposal.md` §11: *"resting-size depletion at the active swing high/low without price progress: breakout-quality vs fakeout filter, directly serving structural-breakout entries."*
@@ -128,7 +128,7 @@ All values above are PROVISIONAL anchors (§5 calibrates). Version bump + change
 **Build:** 3 Release builds 0/0; `enabled=false` byte-identical regression; harness fixtures — episode lifecycle (approach→ACTIVE→absorb / break-through→NONE / leave-proximity→reset), `ClassifyAbsorption` threshold edges, dual-fold under lock, reconnect reset, REST-inactive; strip tag renders only when active; CSV columns populate (or stay null pre-build if reserved at #5).
 **Activation (data-gated, later):** §5.1 + §5.2 numbers reported with the go/no-go recorded either way; if proceeding — target-engagement table (per session), penalty regression through `Calculate()`, breakdown-row parity fixtures, §12 watch row added.
 
-## 10. Sign-off decisions (trader)
+## 10. Sign-off decisions — ALL TICKED by the trader 2026-07-03
 
 | # | Decision | Recommendation |
 |---|---|---|

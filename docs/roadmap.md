@@ -42,7 +42,7 @@
 | Item | State | Sequence |
 |---|---|---|
 | #5 Aggressor velocity ⚠ | Spec approved | Build **after v48 lands** (rule 1), then collect → calibrate |
-| #6 Book absorption ⚠ | ✅ Spec PROPOSED 2026-07-03 (`book-absorption-proposal.md`, `741a1fb`) — level-scoped episode tracker on snapshot feed; penalty-only; activation evidence-gated twice (independence + ≥10pp outcome gradient); **D1–D7 await trader**; CSV columns proposed for reservation at #5's v0.8 (D4) | Build after #5 calibrates |
+| #6 Book absorption ⚠ | ✅ Spec **APPROVED 2026-07-03** (`book-absorption-proposal.md`, D1–D7 all as recommended) — level-scoped episode tracker on snapshot feed; penalty-only; activation evidence-gated twice (independence + ≥10pp outcome gradient); D4 binds the #5 build (4 columns reserved at v0.8) | Build after #5 calibrates; activation = own ⚠ boundary |
 | A4 Liquidation × OFI flip ⚠ | Spec: month item (backlog Section A; high payoff; not in the original §11 list — added here). **Gated on liq-feed live validation** (audit F9 2026-07-03: zero liq-marked trades in 8,025 runs, plumbing verified — #7 must carry a first-liq-seen diagnostic and see one real cascade first) | After #6 + liq validation |
 | Deferred: A5 VPFR shape (30-day data gate), D3/D4/D5/D6, B1 per-indicator weights (overfit-gated), C1/C2 multi-session VPFR/anchored VWAP (state-plumbing-gated) | Unchanged | Per their backlog triggers |
 
@@ -98,7 +98,7 @@ Protected if trimming is forced: v48 derivation, signal-bridge spec, handover do
 
 1. v48 settings pass (if not landed in-window) → **push boundary**.
 2. Signal-bridge v1 implementation (engine emit + order-app consume) → supervised parallel run (autotrade in log-only/dry mode first).
-3. #5 aggressor velocity build → collect → calibrate (own boundary). **The build carries the APPROVED retune bundle** (`signal-health-retune-proposal.md` §4, ticked 2026-07-03): R1 `OFI.momentum_enabled=false` + the `indicators.OFI.momentum_` tweaker fence, R2 `funding.momentum_threshold` 5e-8→2e-7, C1 `TFIValue`/`TFISignal` CSV columns (v0.7→v0.8, one rotation), C2 `FundingRate` F6→F8 — one commit event, settings v48→v49.
+3. #5 aggressor velocity build → collect → calibrate (own boundary). **The build carries the APPROVED retune bundle** (`signal-health-retune-proposal.md` §4, ticked 2026-07-03): R1 `OFI.momentum_enabled=false` + the `indicators.OFI.momentum_` tweaker fence, R2 `funding.momentum_threshold` 5e-8→2e-7, C1 `TFIValue`/`TFISignal` CSV columns (v0.7→v0.8, one rotation), C2 `FundingRate` F6→F8, **+ the 4 reserved absorption columns** (`AbsorptionSignal/Level/Ratio/AggrUsd`, null until #6 builds — `book-absorption-proposal.md` D4, ticked 2026-07-03) — one commit event, settings v48→v49.
 4. Signal-health-audit retune/retire pass (spread thresholds, FundingMomentum, any retirements) — settings-mostly.
 5. #6 book absorption build → collect → calibrate.
 6. CLI-port state extraction (behaviour-neutral, any gap).
