@@ -64,7 +64,7 @@ Emitter must **never throw into the run** (try/catch + console log — `Analysis
 
 **Pinned enums (exact strings, closed sets):**
 - `signal_state`: `"OK" | "SKIPPED"`
-- `direction`: `"LONG" | "SHORT" | "NONE"` — **NONE on ALL `NO TRADE*` verdicts** (leans live in `verdict` for logging, never actionable)
+- `direction`: `"LONG" | "SHORT" | "NONE"` — **NONE on ALL `NO TRADE*` verdicts** (leans live in `verdict` for logging, never actionable). **WEAK verdicts DO carry their direction** (`WEAK LONG` ⇒ `LONG` + `confidence:"LOW"`) — actionability is the confidence-tier gate's job (default HIGH+MEDIUM refuses LOW, logged `refused: tier`), not the direction field's. WEAK is an output band of the finished score, not a scoring input (trader-confirmed 2026-07-03)
 - `confidence`: `"HIGH" | "MEDIUM" | "LOW" | "N/A"` (verified verbatim against 8,025 live rows) — the R1 action key
 - `health.ws`: `"OK" | "DEGRADED" | "DOWN" | "REST"` — REST = engine deliberately on `network.transport=rest` (WS feed not running); consumer gates block **DOWN only** (REST is the proven fallback transport, treat as OK)
 - `trigger_mode`: `"interval" | "on_close"`
