@@ -34,6 +34,8 @@
 | Post-WS signal-health audit — fire rates, pairwise agreement, conditional outcomes for OFI/TFI/CVD/MicroCVD + FundingMomentum/RSI-div/OISignal | Fable runs it in-window | Post-v42 book (exists) |
 | Spread revival re-baseline (WIDE/TIGHT thresholds on 100ms-fresh book; A1 spread-momentum rides along) | Folds into audit output spec | Audit results |
 | Directional reach-target calibration (D7 spin-off — 43% reach / 53% window-expiry vs `AtrTargetMultiplier` 2.0; **elevated by O2**: autotrade places these targets) | Spec in-window if time, else month item #1 | Analysis-layer; data exists |
+| 3-min weekday-ASIA `session_volume` re-verify (§12 — v34's 1.10/1.05 was Saturday-set; recompute on weekday 3-min Asia rows, dial toward neutral if calmer; bundles the OBV `\|obvChange\|` re-anchor) | **Opus + coordinator, by hand** (never the tweaker) | ≥50 weekday-Asia 3-min rows (likely already met — verify at execution) |
+| v36 Phase-2 carry-forward (§12 — 3-min scaling of `TTM.flat_threshold` + CVD/RSI `divergence_price_gate`s [currently 1-min-calibrated → over-eager on 3-min]; LONDON session-scoped DynamicNorms baseline check) | **Opus + coordinator**; measure-not-proxy, v40/v41 method | Rides the signal-health audit's data pass |
 
 ### W2 — Indicator queue (O1)
 | Item | State | Sequence |
@@ -41,7 +43,13 @@
 | #5 Aggressor velocity ⚠ | Spec approved | Build **after v48 lands** (rule 1), then collect → calibrate |
 | #6 Book absorption ⚠ | Spec: Fable, ~Jul 4–5 (snapshot-feed v1 — public data, no auth, no incremental-book plumbing) | Build after #5 calibrates |
 | A4 Liquidation × OFI flip ⚠ | Spec: month item (backlog Section A; high payoff; not in the original §11 list — added here) | After #6 |
-| Deferred: A5 VPFR shape (30-day data gate), D3/D4/D5/D6, B1 per-indicator weights (overfit-gated) | Unchanged | Per their backlog triggers |
+| Deferred: A5 VPFR shape (30-day data gate), D3/D4/D5/D6, B1 per-indicator weights (overfit-gated), C1/C2 multi-session VPFR/anchored VWAP (state-plumbing-gated) | Unchanged | Per their backlog triggers |
+
+**Display/ops tier — the §11 catalogue leftovers** (from `websocket-migration-proposal.md` §11, the 2026-06-12 post-WS list; items 1/2/3/4/10 shipped v39–v46, 5/6 are the ⚠ rows above). All **Opus-tier, display-only, no re-baseline, no Fable involvement** — gap-fillers on trader demand, sequenced after the W3 bridge v1:
+- **#7 Liquidation cascade alarm** — banner/sound when liq-flagged trades stream in a cascade (the scoring penalty already exists; this is timeliness). Small; reuses the exit-guard strip pattern.
+- **#8 Level-approach alerts** — notify within N ticks of the active swing/HVN/POC level. Small; pairs naturally with #7 in one spec.
+- **#11 Early-resolution-on-confirmed-hit** — live perf-strip posts a 3-min winner at the hit instead of T+45. Lowest value in the catalogue; **must carry the contiguous-bars guard** (§11's stated caveat) or a feed gap can resolve on an incomplete prefix.
+- **#9 Provisional forming-bar verdict** — **held, not scheduled**: tension with the conservative-bias profile (§6) and now doubly suspect with an autotrader consuming output (a PROVISIONAL score must never reach the signal file). Only on explicit trader ask, with the bridge explicitly excluded from it.
 
 ### W3 — Signal bridge → DeribitOrderPlacementApp (O2, NEW)
 **Trader rulings (2026-07-02, binding on the spec):**
@@ -60,7 +68,17 @@
 | **Authenticated API / raw interval: NOT pursued** (decision 2026-07-02) | Verified vs current Deribit docs: auth unlocks only sub-100ms `raw` feeds — below the noise floor for 2–15 min holds; the material upgrade (full-depth incremental book) is public at 100ms. Auth also means key custody on an unattended box. Revisit trigger: order-management-in-engine ever enters scope (it is currently excluded), or a specced consumer needs event-time sequencing that 100ms provably blurs |
 
 ### W5 — Auto-tweaker ops
-First live fire stays data-gated (>40%-failure NY×1 window) and supervised; P13 UserManual tier documentation = doc pass during month; Phase-2b per-population autotune stays parked (may never be built).
+First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry-run first); **window/MinTier recalibration** against the real post-v35 directional rate (~23% NY actionable — §12 MinTier-mismatch row; the interim `window_size_verdicts` 75 holds until then) rides the first-fire follow-up — **Opus + coordinator**. P13 UserManual tier documentation = doc pass during month (Opus). Phase-2b per-population autotune stays parked (may never be built).
+
+## 5b. Explicitly not scheduled (decisions of record — do not re-propose without new evidence)
+
+| Item | Why | Revisit trigger |
+|---|---|---|
+| Sub-minute full-run cadence (old §8 baseline) | Conflicts with on-close bar discipline (v44); worst calibration cadence (autocorrelated rows) | Only if a specced consumer needs intra-bar full verdicts |
+| §11 #9 provisional forming-bar verdict | Conservative-bias tension; autotrade contamination risk | Explicit trader ask, bridge-excluded |
+| Authenticated / `raw` Deribit feeds | W4 ruling 2026-07-02 | Order-management-in-engine, or a proven 100ms-blur case |
+| Tweaker Phase-2b per-population autotune | Manual (B)-style re-baselines are cheap enough so far | Manual cadence becomes a real burden (spec §1 gates) |
+| Bundle 5 (C1/C2), Bundle 6 (D5/D6), D3/D4, A5, B1 | Backlog-gated per their entries; Bundle 4 dissolved into W1 | Their documented triggers |
 
 ## 4. Fable window — Jul 2–7
 

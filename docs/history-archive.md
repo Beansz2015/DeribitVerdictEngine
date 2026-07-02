@@ -143,3 +143,11 @@ The following spec files in `/docs` are kept for historical reference. They do N
 - `failure-definition-proposal.md` — original ATR forward-return failure definition. **Superseded** by `failure-definition-v2-proposal.md` (2026-05-07 barrier-hit semantics).
 
 For all currently-shipped specs, see `docs/DeribitIndicatorProject.md` §3 Docs table.
+
+---
+
+## G. Resolved WATCHING / Calibration Items (moved from §12, 2026-07-02 housekeeping)
+
+- **Post-correctness-pass re-baseline (OBV/CVD/MicroCVD/session-volume seed)** — RESOLVED by v33 (partial, NY-only) + v34 (full, CalibrationReport READY at 975 rows). OBV `trend_gate` 10→18, CVD `slope_pct_of_value` 0.01→0.05→0.10, MicroCVD `accel_threshold_dynamic_pct` 0.03→0.30, `session_volume` ASIA 0.80/0.85→1.10/1.05; volume clamps + Donchian quartile re-confirmed. Specs: `clean-data-rebaseline-v33-proposal.md` / `-v34-proposal.md`. (Residual weekday-ASIA re-verify stayed in §12.)
+- **v36 Phase-2 ROC re-baseline (the 2.1× proxy)** — RESOLVED by v40 + v41 (workstream B, 2026-06-20/22): firing-rate-matched to NY-1m on the weekday 3-min book. Magnitude went per-session (`session_volume.sessions[].roc_magnitude_threshold` — ASIA 0.17, LONDON 0.11; `resolution_profiles["3"]` keeps 0.21 as fallback); slope stayed shared (`resolution_profiles["3"].roc_slope_delta_threshold` 0.105→0.06). Spec: `asia-london-roc-rebaseline-proposal.md`.
+- **3-min hold-window recalibration (offline matrix + eval horizon)** — IMPLEMENTED + VALIDATED + CLOSED 2026-06-24: resolution-scaled windows `{5,10,15}×execRes` → 3-min `{15,30,45}` (`3d473a1`), `LivePerformanceTracker` horizon scaled via `EvalHorizonMinutes(res)` (`1825fad`); plateau confirmed on the 5,275-row post-soak book (failure flattens at 30m; 45m adds zero new successes). Specs: `three-min-hold-window-recalibration-proposal.md` / `-spec-back.md`.
