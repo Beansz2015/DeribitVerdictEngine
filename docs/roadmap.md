@@ -42,7 +42,7 @@
 | Item | State | Sequence |
 |---|---|---|
 | #5 Aggressor velocity ⚠ | Spec approved | Build **after v48 lands** (rule 1), then collect → calibrate |
-| #6 Book absorption ⚠ | Spec: Fable, ~Jul 4–5 (snapshot-feed v1 — public data, no auth, no incremental-book plumbing) | Build after #5 calibrates |
+| #6 Book absorption ⚠ | ✅ Spec PROPOSED 2026-07-03 (`book-absorption-proposal.md`, `741a1fb`) — level-scoped episode tracker on snapshot feed; penalty-only; activation evidence-gated twice (independence + ≥10pp outcome gradient); **D1–D7 await trader**; CSV columns proposed for reservation at #5's v0.8 (D4) | Build after #5 calibrates |
 | A4 Liquidation × OFI flip ⚠ | Spec: month item (backlog Section A; high payoff; not in the original §11 list — added here). **Gated on liq-feed live validation** (audit F9 2026-07-03: zero liq-marked trades in 8,025 runs, plumbing verified — #7 must carry a first-liq-seen diagnostic and see one real cascade first) | After #6 + liq validation |
 | Deferred: A5 VPFR shape (30-day data gate), D3/D4/D5/D6, B1 per-indicator weights (overfit-gated), C1/C2 multi-session VPFR/anchored VWAP (state-plumbing-gated) | Unchanged | Per their backlog triggers |
 
@@ -87,8 +87,8 @@ First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry
 |---|---|
 | **Jul 2** ✅ | Audit + fixes (v47) + this roadmap |
 | **Jul 3** ✅ | Ran ahead of plan: **v48 SHIPPED + LIVE** (`a86b4f1`); **signal-health audit DONE** + retune/retire spec PROPOSED (`21d1b7f`, was the Jul-5 item); **bridge schema v1 RECONCILED + FROZEN** (D1–D10 ticked; ack paste-ready) |
-| **Jul 4** | **#6 absorption spec** (pulled forward from Jul 5; audit found no redundancy blocking it) |
-| **Jul 5** | Buffer / retune-spec D1–D6 follow-ups; reach-target spec if time |
+| **Jul 4** | Buffer — #6 spec ✅ landed Jul 3 (`741a1fb`, D1–D7 pending) and retune D1–D6 ✅ ticked Jul 3; pull CLI-port spec forward if the day is clear |
+| **Jul 5** | Buffer / reach-target spec if time |
 | **Jul 6** | **CLI-port state-extraction spec**; buffer (slipped gates, coordinator review of any in-flight Opus work) |
 | **Jul 7** | **Month handover doc** (Opus execution order + gates + review checklists + sign-off points); memory closeout |
 
