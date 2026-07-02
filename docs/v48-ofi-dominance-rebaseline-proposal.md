@@ -1,6 +1,6 @@
 # v48 — OFI Dominance Re-baseline on the Geometric Distribution (proposal)
 
-**Status:** PROPOSED (spec-first; the derivation itself is data-gated — see §2). Trader signs off §7, then the derivation runs the §4 recipe and produces a settings-only diff for approval.
+**Status:** ✅ **APPROVED 2026-07-03 — trader signed off §7 D1–D4 all as recommended**, with one addition folded in at sign-off: the **D3 post-ship divergence watch** (§4a) answering "how do we monitor if per-session fits diverge *after* shipping a global pair". The derivation runs the §4 recipe once §2 clears and produces a settings-only diff for approval.
 **Owner:** derivation = Fable seat if the data gate clears by ~Jul 5–6; otherwise any coordinator/Opus seat can execute §4 mechanically — the judgment calls are pre-made in §7.
 **Parent:** `time-averaged-ofi-proposal.md` (v46) + `time-averaged-ofi-spec-back.md` §5 (the re-baseline recipe this spec formalises) + `ofi-geometric-construction-spec.md` (why geometric). Roadmap W1 item 1.
 **Class:** ⚠ settings-only calibration pass (one version bump, own dataset boundary — roadmap rule 1; P4 #5 builds only after this lands).
@@ -38,6 +38,17 @@ On the geometric book, per population and pooled:
 5. **Output:** a settings diff — `buy_dominant_ratio` / `sell_dominant_ratio` (+ `momentum_threshold` retune, or the retire change) — version bump to the next number, change_log entry, §15 row, dated dataset-boundary marker (v42/v46 precedent, no CSV rotation). Fire-rate table (reference vs new, per population) goes in the spec-back.
 
 **Script:** the derivation is a single PowerShell pass over `analysis_log.csv` (Import-Csv; percentile fits). The seat running it writes it as a throwaway in the session scratchpad — no repo tooling needed (v40/v41 precedent).
+
+## 4a. D3 divergence — how it is monitored after shipping (added at sign-off, 2026-07-03)
+
+The §4.3 check is one-shot (derivation-time). Divergence can also *emerge* later — session book character drifts, or the initial per-population samples were thin. The standing watch:
+
+1. **Instrument:** `OFISignal` is CSV-logged per row, so the check is a one-pass query — per population (NY×1 / LONDON×3 / ASIA×3), the BUY/SELL/combined dominance fire rates at the shipped pair. The **spec-back ships the exact recipe** (a ~10-line script block) so any seat can re-run it identically; the W1 **signal-health audit re-runs report the same numbers automatically** (it is a per-population fire-rate instrument by design).
+2. **§12 WATCHING row:** the v48 spec-back adds one — *"v48 OFI per-session fire-rate watch"*: after **≥2 further weekday session-days** on the shipped pair, recompute per-population rates. **Trigger:** any population's combined dominance rate outside **[0.6×, 1.5×] of its fitted target** across **two consecutive weekday sessions** (one hot session is variance; two is structure — the v40→v41 ASIA lesson).
+3. **Response ladder (evidence-gated — each step only if the previous doesn't explain/absorb it):**
+   - **(a) Check verdict-level impact first.** OFI is one vote of ~20 under a regime ceiling; a modest per-session misfit dilutes. If the affected population's failure-rate matrix and OFI-conditional outcomes don't move, accept and keep watching (no knob added).
+   - **(b) Pooled retune.** Re-run §4 on the enlarged pooled book (settings-only, cheap, no new keys) — right answer when *all* sessions drifted together (regime change, not session structure).
+   - **(c) Per-session overrides — last resort.** New nullable `session_volume.sessions[].ofi_buy_dominant_ratio`/`ofi_sell_dominant_ratio` bucket keys mirroring the `roc_magnitude_threshold` pattern (v40), own small spec, **hand-tuned / off-tweaker by construction** (array-nested = unreachable by the `Split(".")` resolver, HC11 class). This adds knobs — the Accuracy Ceiling's #1 risk — so it needs the (a)/(b) evidence trail first.
 
 ## 5. What this pass does NOT touch
 
