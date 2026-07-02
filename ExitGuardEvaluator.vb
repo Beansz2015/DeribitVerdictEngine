@@ -85,6 +85,13 @@ Public NotInheritable Class ExitGuardEvaluator
                 tfiWindowSize:=cfg.Indicators.TFI.WindowSize,
                 threshold:=cfg.Indicators.TFI.Threshold)
 
+            ' RULED 2026-07-02 (audit F3, D3 = keep snapshot): the guard deliberately stays on
+            ' snapshot CalcOFI while the full run (v46+) uses the geometric time-averaged ratio.
+            ' Raw-tape reaction between runs is the guard's purpose — the averaged ratio is
+            ' ~avg_window_sec-lagged by construction. Bounded twitchiness: a single OFI-adverse
+            ' can never fire EXIT alone (needs 2+ adverse or a structural break).
+            ' See time-averaged-ofi-spec-back.md §3; align-branch (fallback if alarm fatigue
+            ' shows in the live watch): audit-fixes-2026-07-02-proposal.md §4.
             If book IsNot Nothing Then
                 IndicatorEngine.CalcOFI(book, r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol,
                     buyDominantRatio:=cfg.Indicators.OFI.BuyDominantRatio,
