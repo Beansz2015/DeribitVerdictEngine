@@ -98,7 +98,7 @@ Protected if trimming is forced: v48 derivation, signal-bridge spec, handover do
 
 1. v48 settings pass (if not landed in-window) → **push boundary**.
 2. Signal-bridge v1 implementation (engine emit + order-app consume) → supervised parallel run (autotrade in log-only/dry mode first).
-3. #5 aggressor velocity build → collect → calibrate (own boundary).
+3. #5 aggressor velocity build → collect → calibrate (own boundary). **The build carries the APPROVED retune bundle** (`signal-health-retune-proposal.md` §4, ticked 2026-07-03): R1 `OFI.momentum_enabled=false` + the `indicators.OFI.momentum_` tweaker fence, R2 `funding.momentum_threshold` 5e-8→2e-7, C1 `TFIValue`/`TFISignal` CSV columns (v0.7→v0.8, one rotation), C2 `FundingRate` F6→F8 — one commit event, settings v48→v49.
 4. Signal-health-audit retune/retire pass (spread thresholds, FundingMomentum, any retirements) — settings-mostly.
 5. #6 book absorption build → collect → calibrate.
 6. CLI-port state extraction (behaviour-neutral, any gap).

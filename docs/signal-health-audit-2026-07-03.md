@@ -1,6 +1,6 @@
 # Post-WS Signal-Health Audit — Evidence Report
 
-**Date:** 2026-07-03 (Fable seat). **Status:** COMPLETE — evidence base for `signal-health-retune-proposal.md` (PROPOSED, awaiting trader sign-off).
+**Date:** 2026-07-03 (Fable seat). **Status:** COMPLETE — evidence base for `signal-health-retune-proposal.md` (APPROVED 2026-07-03, D1–D6 all as recommended; ships at the #5 boundary).
 **Scope:** roadmap W1 signal-health audit — per-signal fire rates, pairwise agreement, conditional barrier outcomes for OFI/TFI/CVD/MicroCVD + FundingMomentum/RSI-div/OISignal/spread, on the post-v42 (WebSocket) book. Absorbs the §12 threshold-sweep rows per the 2026-07-02 roadmap note.
 
 ---

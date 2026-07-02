@@ -1,6 +1,6 @@
 # Signal-Health Retune/Retire Pass — Proposal
 
-**Status:** PROPOSED — spec-first, awaiting trader sign-off (§6). Nothing here ships until approved, and the scoring-affecting items ship only at the next dataset boundary (§4).
+**Status:** APPROVED — trader ticked §6 D1–D6, 2026-07-03, all as recommended. The scoring items (R1 OFIMomentum retire, R2 funding 2e-7) + riders (momentum_ tweaker fence, C1 TFI columns, C2 FundingRate F8) ship **bundled at the #5 aggressor-velocity build boundary** as settings v48→v49 (§4); nothing ships before that boundary. The #5 implementer's brief must carry this spec's §2 R1/R2 + §3 + §5 as build cargo.
 **Date:** 2026-07-03 (Fable seat). **Evidence:** `signal-health-audit-2026-07-03.md` (the W1 audit — read it first; this doc only decides).
 **Class:** R1+R2 are ⚠ scoring-affecting (settings-only). R3–R8 are no-change rulings or coverage/hygiene riders.
 
@@ -74,7 +74,7 @@ The v48 collection window is OPEN (§4a per-session fire-rate watch needs ≥2 f
 - Post-ship watch: FundingMomentum FLAT% ≈ 60–70% and 3b engagement ≈ 15–25% over the first 2 weekday sessions (recipe: audit §7 table row); OFI row renders MOM:state with no modifier suffix.
 - §12/§15 updates: version entry; audit-discharged rows move per audit §9.
 
-## 6. Sign-off decisions
+## 6. Sign-off decisions — ALL TICKED by the trader 2026-07-03
 
 | # | Decision | Recommendation |
 |---|---|---|
