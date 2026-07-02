@@ -339,6 +339,8 @@ Earlier ✅ Done items moved to `history-archive.md`.
 
 ## 13. Future Upgrades
 
+> **Sequencing authority: `docs/roadmap.md`** (2026-07-02) — the cross-project strategic roadmap (workstreams, execution order, the DeribitOrderPlacementApp signal bridge, Linux port). §13/§16 remain the engine-local backlog detail; when they disagree with the roadmap on *order*, the roadmap wins.
+
 Ranked by expected accuracy / reliability gain. Items marked 🔍 require a spec decision before coding begins.
 
 ### High-Impact (deferred until post-WebSocket or post-calibration)
@@ -426,6 +428,8 @@ For full version history including v0.33 onward, see `docs/history-archive.md` �
 ---
 
 ## 16. Future Direction — Auto-Tweaking & Dual Interface
+
+> **Sequencing authority: `docs/roadmap.md`** — adds a third strategic objective alongside the CLI port (16.2): the **signal bridge to DeribitOrderPlacementApp** (verdict/score/direction/ATR feeding its autotrade function; human display stays the primary output, the machine contract is additive).
 
 Longer-arc plans. **All items here are KIV** while the team is in the live-data accumulation phase post-v30. Recorded so architectural prerequisites stay visible and groundwork can be laid opportunistically.
 

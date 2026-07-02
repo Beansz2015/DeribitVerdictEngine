@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. **Read `docs/architecture.md`** in full.
 3. **Load the `crypto-trading-context` skill** — it carries the trader profile and writing style. Do not separately read `docs/trader-profile.md`; the skill loads it.
 4. **Do not read individual `.vb` files at session start** — only open them when a specific edit is required.
+5. **When the task involves prioritisation, sequencing, or selecting new features**, also read `docs/roadmap.md` — the cross-project strategic roadmap (calibration queue, indicator queue, the DeribitOrderPlacementApp signal bridge, Linux port). Skip it for routine implementation of an already-specced item.
 
 This preserves context budget for actual work.
 
