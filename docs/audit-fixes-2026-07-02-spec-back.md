@@ -51,7 +51,21 @@ Doc/comment path exactly as §4 specified: (a) a comment block at the `ExitGuard
 - Both fixtures are self-contained inline-JSON mirrors (the A20g/h pattern) rather than reads of the live settings.json — deliberate: the harness stays working-directory-independent, and the mirror documents the post-change shape it guards.
 - A1–A20i all unregressed on every run; display-parity check clean; CSV v0.7 / eval cache v4 untouched; scoring path behaviour-identical (F1/F2 values equal prior effective behaviour; N1 changes only the hour *source* within any given hour).
 
-## §7. Open items handed back
+## §7. Coordinator review — ✅ APPROVED (2026-07-02, spec-author seat)
+
+Independent verification, not a read-through: **re-ran the gate myself — GATE PASSED** (3 Release builds 0/0; A1–A20i unregressed + A21a/A21b PASS; display-parity clean; the version-bump guard correctly paired the engine-path change with the v47 bump). Diff-audited all four commits against the spec:
+
+- **F1** — dead key absent from tracked + bin + POCO (removal comment cites v31 F8); repo-wide grep: zero live reads; correctly NOT in `RejectedPathFragments` (snapshot-poisoning rationale recorded in the v47 change_log, which I read in full — accurate on every claim); A21a proves the C-6 reject.
+- **F2** — all 8 keys present in tracked at POCO-default values (`0.6/-0.6`, `60/40`, `40/60`, `1`, `1`), bin `version` synced 47, dead key gone from bin (verified on disk — the bin copy is untracked so no diff shows it). The integer `hold_rsi_*` serialisation deviation is accepted — it matches the bin copy, which is the point.
+- **D4** — `"scoring.hold_"` prefix in the applier + PromptBuilder HC17 (names all six keys, siblings-stay-proposable, code-enforcement cross-ref); A21b proves it.
+- **F3** — comment-only diff at the guard's CalcOFI call (ruling + bounded-twitchiness rationale + align-branch pointer); zero functional change.
+- **N1** — diff reviewed line-by-line: `Optional utcHour = -1` with the `DateTime.UtcNow.Hour` fallback (existing callers/fixtures byte-identical), threaded to `ApplySessionVolume`, `RunAnalysisAsync` passes the captured hour, `candles1m`→`candles` rename clean.
+- **N2** — comment-only; the corrected priority list matches the code as source-verified in the audit (and now includes the 1.5 structural-break layer the old comment omitted entirely — better than the spec asked).
+- Scope-adjacent fixes (N2's two extra drifted mentions, N4's adjacent doc-rot) are the same defects the spec targeted — accepted. The §3 note (generic reject message still enumerates "11/12") is accepted as the pre-existing shared string; A21b correctly asserts the stable fragment.
+
+No nits. Trader's test+push is the remaining gate.
+
+## §7b. Open items handed back
 
 1. **Trader:** live-test + push the 4 commits (`688127b`, `8cb5053`, `5a77f27`, `552965b`).
 2. **Trader:** the F3 observational watch during holds; flip to the proposal §4 align-branch if alarm fatigue shows (contained follow-up, fixture recipe already in the spec).
