@@ -1,6 +1,6 @@
 # Book Absorption at Structural Levels — Proposal (P4 #6)
 
-**Status:** APPROVED — trader ticked §10 D1–D7, 2026-07-03, all as recommended. Build is Opus-tier at its sequenced slot (after #5 calibrates); **D4 is immediately binding on the #5 build** (the 4 absorption CSV columns are reserved in #5's v0.7→v0.8 rotation). Activation remains evidence-gated per §5 regardless of this approval.
+**Status:** APPROVED — trader ticked §10 D1–D7, 2026-07-03, all as recommended; **D8 (pull-fraction spoof guard) added and ticked the same day**. Build is Opus-tier at its sequenced slot (after #5 calibrates); **D4 is immediately binding on the #5 build** (the **5** absorption CSV columns are reserved in #5's v0.7→v0.8 rotation). Activation remains evidence-gated per §5 regardless of this approval.
 **Target:** two sub-versions, mirroring #5/#4: a display/CSV **build** (zero scoring, behavior-neutral) → a **data-gated scoring activation** (its own ⚠ dataset boundary + version bump).
 **Scoring impact:** ⚠ **eventually** — activation is **evidence-gated twice** (§5): independence vs the existing flow stack AND a measured adverse outcome gradient on the collected episodes. No gradient ⇒ stays display-only, honestly.
 **Item:** #6 in `websocket-migration-proposal.md` §11: *"resting-size depletion at the active swing high/low without price progress: breakout-quality vs fakeout filter, directly serving structural-breakout entries."*
@@ -49,14 +49,16 @@ Per active side (ABOVE case; BELOW mirrors), an **episode** runs from proximity-
 - **Pressing volume** `aggrUsd`: rolling `window_sec` sum of aggressive BUY USD printed at prices ≥ `level − band_ticks` (from the trades stream; amounts are USD-notional on the inverse contract, so trades and book sizes share units).
 - **Band size trajectory**: resting ask USD in `[level, level + band_ticks]` per snapshot → `sizeStart` (at episode start), `sizeMin`, `sizeNow`. Replenishment shows as `sizeNow` recovering after prints.
 - **Progress test**: trade/touch price > `level + break_tol_ticks` ⇒ the level gave way — episode ends, state → NONE immediately (a broken level must never carry a stale ABSORB reading).
+- **Pull accounting (D8 spoof guard)**: fills are unfakeable ground truth, so per snapshot interval the band size obeys the conservation identity `ΔSize = Posts − Pulls − Fills`, with ΔSize (snapshots) and Fills (trades at band prices) both observed. Accumulate per episode: `pullLB = Σ max(0, −(ΔSize + Fills))` — a **hard lower bound on volume pulled without being filled** (the spoof signature) — and `postLB = Σ max(0, ΔSize + Fills)`. `pullFrac = pullLB / max(postLB, depletion_floor_usd)`. A sitting defender ⇒ `pullFrac ≈ 0`; cycling paint ⇒ it grows with the churn. **Visibility mask (implementer note):** ΔSize is computed only over the band portion visible in *both* consecutive top-10 snapshots, so a shifting ladder window cannot fake size deltas; fills are assigned to intervals by timestamp (episode-aggregated bounds tolerate the 100 ms jitter).
 
-**The metric:** `absorbRatio = aggrUsd / max(sizeStart − sizeMin, depletion_floor_usd)` — USD traded into the band per USD of net band depletion. High ratio = the band is eating flow without dying (depletion is small or replenished) = absorption.
+**The metric:** `absorbRatio = aggrUsd / max(sizeStart − sizeMin, depletion_floor_usd)` — USD traded into the band per USD of net band depletion. High ratio = the band is eating flow without dying (depletion is small or replenished) = absorption. The D8 guard then asks *who* kept it alive: replenishment with provable pulls above `max_pull_frac` is treated as painted defense and vetoed.
 
 **State classification** (a pure `ClassifyAbsorption(...)` helper, harness-testable, parallel to `ClassifyOfiRatio` / `ClassifyAggressorBurst`):
 
 ```
 ACTIVE side ABOVE, no progress, aggrUsd >= min_aggr_usd, absorbRatio >= absorb_ratio  →  ABSORB_ABOVE
 ACTIVE side BELOW, no progress, sellUsd >= min_aggr_usd, absorbRatio >= absorb_ratio  →  ABSORB_BELOW
+either candidate with pullFrac > max_pull_frac                                        →  NONE  (D8 veto — painted defense)
 otherwise                                                                              →  NONE
 ```
 
@@ -100,6 +102,7 @@ Three-tier surface exactly per #5 §6 (who changes each key, not whether it's ex
   "break_tol_ticks": 2,            // progress tolerance beyond the level — ON surface
   "absorb_ratio": 3.0,             // pressing USD per USD net depletion — ON surface
   "depletion_floor_usd": 25000,    // divide-by-nothing guard — ON surface
+  "max_pull_frac": 0.5,            // D8 spoof-guard veto: provable pulls / provable posts — ON surface
   "penalty": 1,                    // scoring magnitude once activated — ON surface
   "default":  { "min_aggr_usd": 150000 },          // hand-tuned re-baseline tier (HC11 class)
   "sessions": { "NY": {}, "LONDON": {}, "ASIA": {} } // nullable per-session overrides — hand-tuned, OFF surface
@@ -110,13 +113,13 @@ All values above are PROVISIONAL anchors (§5 calibrates). Version bump + change
 
 ## 7. Display-parity + CSV
 
-- **Build sub-version:** the TAPE strip gains a compact `ABS↑ 60510 (3.4x)` / `ABS↓ …` tag while a state is active (D6) — live status-bar element like the rest of the strip, NOT an RTF/snapshot/card surface ⇒ no card-binding obligation (the #3 precedent, stated per the parity rule). CSV columns: `AbsorptionSignal`, `AbsorptionLevel`, `AbsorptionRatio`, `AbsorptionAggrUsd`.
-- **Column reservation (D4):** the four columns are **reserved in #5's v0.7→v0.8 rotation** (which already adds the burst + TFI + retune-C1 columns) and stay null until #6's build populates them — one rotation for the whole wave instead of a v0.9 split of the book. If the trader declines, #6's build rotates to v0.9 (acceptable, just costlier).
+- **Build sub-version:** the TAPE strip gains a compact `ABS↑ 60510 (3.4x)` / `ABS↓ …` tag while a state is active (D6) — live status-bar element like the rest of the strip, NOT an RTF/snapshot/card surface ⇒ no card-binding obligation (the #3 precedent, stated per the parity rule). CSV columns (**5**): `AbsorptionSignal`, `AbsorptionLevel`, `AbsorptionRatio`, `AbsorptionAggrUsd`, `AbsorptionPullFrac` (D8 — logged even on vetoed episodes; it is also the W4 fidelity-binds evidence, §12).
+- **Column reservation (D4):** the five columns are **reserved in #5's v0.7→v0.8 rotation** (which already adds the burst + TFI + retune-C1 columns) and stay null until #6's build populates them — one rotation for the whole wave instead of a v0.9 split of the book. If the trader declines, #6's build rotates to v0.9 (acceptable, just costlier).
 - **Scoring sub-version:** the conditional `Absorption` breakdown row ⇒ snapshot + card in the same commit (parity rule).
 
 ## 8. Edge cases & safety
 
-- **Spoof/churn caveat (honest v1 limit):** 100 ms snapshots read pull-and-repost churn as replenishment. Partially true absorption (the flow WAS absorbed), but a determined spoofer can inflate `sizeNow` between prints. v1 accepts this, stated; the W4 incremental book (change_id fidelity) is the fix and triggers only if §5 proves the class while snapshot fidelity binds.
+- **Spoof/churn — mitigated by D8, residual stated honestly:** the pull-fraction veto catches repost cycling at interval resolution and above (hundreds of ms to seconds — the common case). A pull+repost round trip completed *inside* one 100 ms interval nets to ΔSize=0 with no fills and evades the bound — but sub-100 ms flicker is invisible to every consumer of Deribit's public feed, and where evasion succeeds the signal degrades exactly to the pre-D8 baseline, never below it. Damage direction is conservative either way: a false ABSORB suppresses an entry (a missed trade, profile-tolerated); false-negatives are unspoofable because they would require faking fills. The W4 incremental book (change_id fidelity) remains the full fix and triggers only if §5 proves the class while the logged `pullFrac` evidence shows snapshot fidelity binding.
 - **Level >10 ticks away** ⇒ ladder can't even see it ⇒ IDLE by the proximity gate anyway (the gate distance must stay ≤ the visible ladder span; `proximity_ticks` 12 vs top-10 ladder ≈ enforce `min(proximity, visible)` in the tracker).
 - **Reconnect / gap** ⇒ episode reset in `SeedAsync`; re-arms on the next approach.
 - **Break-through** ⇒ state cleared instantly (no stale ABSORB after the level gives way).
@@ -125,7 +128,7 @@ All values above are PROVISIONAL anchors (§5 calibrates). Version bump + change
 
 ## 9. Acceptance
 
-**Build:** 3 Release builds 0/0; `enabled=false` byte-identical regression; harness fixtures — episode lifecycle (approach→ACTIVE→absorb / break-through→NONE / leave-proximity→reset), `ClassifyAbsorption` threshold edges, dual-fold under lock, reconnect reset, REST-inactive; strip tag renders only when active; CSV columns populate (or stay null pre-build if reserved at #5).
+**Build:** 3 Release builds 0/0; `enabled=false` byte-identical regression; harness fixtures — episode lifecycle (approach→ACTIVE→absorb / break-through→NONE / leave-proximity→reset), `ClassifyAbsorption` threshold edges incl. the D8 veto (a churn sequence with fills-absent size drops → pullFrac above threshold → NONE; a sitting-defender sequence → pullFrac ≈ 0 → state fires), conservation accounting (fed ΔSize/fill sequences → expected pullLB/postLB), dual-fold under lock, reconnect reset, REST-inactive; strip tag renders only when active; CSV columns populate (or stay null pre-build if reserved at #5).
 **Activation (data-gated, later):** §5.1 + §5.2 numbers reported with the go/no-go recorded either way; if proceeding — target-engagement table (per session), penalty regression through `Calculate()`, breakdown-row parity fixtures, §12 watch row added.
 
 ## 10. Sign-off decisions — ALL TICKED by the trader 2026-07-03
@@ -139,17 +142,18 @@ All values above are PROVISIONAL anchors (§5 calibrates). Version bump + change
 | D5 | Watched levels v1 = nearest carried above + below from the strip's candidate set (swing + HVN) | **Yes** — reuses the carried-level pattern; no new level machinery |
 | D6 | TAPE-strip ABS tag at build | **Yes** — cheap, awareness-only, strip discipline |
 | D7 | Config three-tier surface per #5 §6 (flat ON; `sessions[]` hand-tuned OFF; switches exact-match OFF + HC lines) | **Yes** |
+| D8 | Pull-fraction spoof guard (added + ticked 2026-07-03): `pullLB`/`postLB` conservation accounting, `max_pull_frac` veto (0.5 provisional, ON surface), `AbsorptionPullFrac` as the 5th reserved column, per-interval visibility mask | **Yes** — snapshot-only, additive, catches interval-resolution churn; residual flicker degrades to the pre-D8 baseline, never below |
 
 ## 11. Implementation map (files)
 
-- **New `Core/LevelAbsorptionTracker.vb`** — episode state machine + rolling sums + `Snapshot()`; host-agnostic, no WinForms.
+- **New `Core/LevelAbsorptionTracker.vb`** — episode state machine + rolling sums + the D8 conservation accumulators (`pullLB`/`postLB` with the visibility mask) + `Snapshot()`; host-agnostic, no WinForms.
 - **`Core/Indicators_OrderFlow.vb`** — pure `ClassifyAbsorption(snapshot, cfg)`.
 - **`MarketState.vb`** — owns the tracker under its lock; fold hooks in `UpdateBook` + `AppendTrade`; reset on seed; carried-levels setter (from the run's `_lastSuccessfulIndicators`, the strip's existing carry).
 - **`DeribitWsFeed.vb`** — calls the two folds (analogue of `FoldOfi` post-`UpdateBook`).
 - **`UI/MainForm_Analysis.vb`** — read snapshot → new `IndicatorResults` fields; REST path → NONE.
-- **`Core/IndicatorResults.vb`** — `AbsorptionSignal/Level/Ratio/AggrUsd`.
+- **`Core/IndicatorResults.vb`** — `AbsorptionSignal/Level/Ratio/AggrUsd/PullFrac`.
 - **`LiveMicrostructureEvaluator.vb`** — ABS tag.
-- **`AnalysisLogger.vb`** — 4 columns (reserved at #5's rotation per D4, else v0.9 here).
+- **`AnalysisLogger.vb`** — 5 columns (reserved at #5's rotation per D4, else v0.9 here).
 - **`EngineSettings.vb` + `settings.json`** — the block; version bump + change_log + §15.
 - **`tools/AutoTweaker/`** — exact-match rejects `absorption.enabled`/`absorption.scoring_enabled` + HC line for `absorption.sessions[].*`/`absorption.default.*` (hand-tuned tier); flat params stay reachable.
 - **`verify/ordercheck/`** — §9 fixtures.
@@ -158,4 +162,4 @@ All values above are PROVISIONAL anchors (§5 calibrates). Version bump + change
 ## 12. Sequencing / out of scope
 
 - Spec approval this window → **columns reserved at #5's v0.8 build** (D4) → **#6 build after #5 calibrates** (roadmap W2 order; the build itself is behavior-neutral with `scoring_enabled:false` and, with D4, rotation-free) → multi-session episode collection → §5 gates → **activation as its own ⚠ boundary**.
-- Out of scope: fade-side bonus (D2), multi-level simultaneous tracking beyond the nearest pair, deeper-than-visible-ladder levels, the incremental full-depth book (W4 trigger unchanged), any change to VPFR/swing level *derivation* (this consumes carried levels, never recomputes them).
+- Out of scope: fade-side bonus (D2), multi-level simultaneous tracking beyond the nearest pair, deeper-than-visible-ladder levels, the incremental full-depth book (W4 trigger unchanged — and now *measured*: the logged episode `pullFrac` distribution is the fidelity-binds evidence), any change to VPFR/swing level *derivation* (this consumes carried levels, never recomputes them).
