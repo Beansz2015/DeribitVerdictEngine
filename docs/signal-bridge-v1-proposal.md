@@ -1,6 +1,6 @@
 # Signal Bridge v1 — verdict_signal.json contract
 
-**Status:** RECONCILED with the order-app side (their field-diff `DeribitOrderPlacementApp/docs/signal-bridge-reply-orderapp.md`, 2026-07-03; reconciliation §9) — **awaiting one trader tick of §8 D1–D10, then schema v1 is FROZEN** and both implementation lanes open (Opus: emitter in this repo, consumer in `DeribitOrderPlacementApp`). Paste-ready ack for the other side: `signal-bridge-ack-to-orderapp.md`.
+**Status:** APPROVED — **schema v1 FROZEN** (trader ticked §8 D1–D10, 2026-07-03; reconciled against `DeribitOrderPlacementApp/docs/signal-bridge-reply-orderapp.md`, record §9). Both implementation lanes are open (Opus: emitter in this repo per §4/§7; consumer in `DeribitOrderPlacementApp` per §5 + their canonical doc). Deliver `signal-bridge-ack-to-orderapp.md` to the order-app orchestrator so they freeze the canonical copy. Any schema change from here bumps `schema_version` + updates both docs in one coordinated pass. WEAK actionability note: the trader confirmed the config-gate design (no hard floor) — WEAK carries direction + LOW and is refused by the default tier gate.
 **Canonical-location rule (§9 item 8):** the frozen contract lives in `DeribitOrderPlacementApp/docs/integration-contract-verdictengine.md` (canonical for **consumer behavior** — the executing party); §3 below is the **verbatim schema mirror** and canonical for **emission + display parity**. Drift guard = `schema_version` (consumer refuses on mismatch) + any change updates both docs in one coordinated pass.
 **Objective:** roadmap **O2/W3**. Binding trader rulings **R1/R2** (roadmap W3, 2026-07-02) — accepted verbatim by the consumer side, with R1's execution-policy clause made explicit: operational gates (arming interlock, connection, rate-limit, flat-only, cooloff, circuit breaker, session window) may refuse an entry; they never re-gate signal *logic*.
 **Design invariants:** the human display stays the engine's primary output — this contract is the **third parity surface** (snapshot ↔ cards ↔ signal file). The engine **never places orders**. The engine never suppresses information for the bridge (it emits regardless of arming; the consumer owns the decision to act).
@@ -22,7 +22,7 @@ Emitted after **every** completed `RunAnalysisAsync`, on both paths:
 
 Emitter must **never throw into the run** (try/catch + console log — `AnalysisOutputDump` discipline).
 
-## 3. Schema v1 — FROZEN on trader tick (verbatim mirror of the canonical)
+## 3. Schema v1 — FROZEN 2026-07-03 (verbatim mirror of the canonical)
 
 ```json
 {
@@ -108,7 +108,7 @@ Position-state feedback to the engine (**v2**, gated on 1–2 supervised weeks o
 
 Engine side: 3 Release builds 0/0; A1-series unregressed + A22a–f; live smoke — enable on the bin copy, confirm the file updates every run (OK + forced-skip), values eyeball-match the rendered card, ARM toggle flips `autotrade_armed` in the next payload. Consumer side (their repo): mock-file unit path + the log-only session. Trader tests + pushes; the `enabled` flip is a dated, deliberate action after the consumer's log-only validation.
 
-## 8. Sign-off decisions (trader — one tick freezes schema v1)
+## 8. Sign-off decisions — ALL TICKED by the trader 2026-07-03 (schema v1 frozen)
 
 | # | Decision | Recommendation |
 |---|---|---|

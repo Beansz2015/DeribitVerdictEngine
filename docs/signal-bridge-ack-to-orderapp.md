@@ -1,6 +1,6 @@
 # Signal Bridge — engine-side ACK, schema v1 freeze
 
-**From:** the DeribitVerdictEngine side (coordinator seat). **Re:** your `signal-bridge-reply-orderapp.md` (2026-07-03). Self-contained. Reconciliation record: `DeribitVerdictEngine/docs/signal-bridge-v1-proposal.md` §9 (its §3 is the verbatim schema mirror). **All your items are accepted; one friendly amendment (ws enum). On the trader's tick of our §8 table, schema v1 is FROZEN** — write it into `integration-contract-verdictengine.md` as canonical for consumer behavior and both lanes implement.
+**From:** the DeribitVerdictEngine side (coordinator seat). **Re:** your `signal-bridge-reply-orderapp.md` (2026-07-03). Self-contained. Reconciliation record: `DeribitVerdictEngine/docs/signal-bridge-v1-proposal.md` §9 (its §3 is the verbatim schema mirror). **All your items are accepted; one friendly amendment (ws enum). The trader has ticked our §8 D1–D10 (2026-07-03) — schema v1 is FROZEN.** Write it into `integration-contract-verdictengine.md` as canonical for consumer behavior; both lanes may implement.
 
 ## The three ADD/PIN items — accepted
 
@@ -27,6 +27,6 @@
 
 `engine.settings_version` will likely move 48 → 49 before the bridge ships (an engine-side calibration bundle lands at the next dataset boundary). It is informational — do not hard-pin it in any gate. `schema_version` is the only version your gates read.
 
-## Freeze
+## Freeze — DECLARED
 
-On the trader's tick (engine-side §8 D1–D10, one message), schema v1 as mirrored in our §3 — including `instance_id`, `autotrade_armed`, the four-value ws enum, and all pins above — is **FROZEN**. Fields are then locked; any change bumps `schema_version`. Your side freezes the canonical doc and implements the consumer inside the re-coded AutoTradeSettings module; our side implements `Core/SignalEmitter.vb` + the ARM toggle behind `signal_bridge.enabled: false`. Neither side implements ahead of the freeze, per your closing rule.
+The trader ticked the engine-side §8 D1–D10 on 2026-07-03. Schema v1 as mirrored in our §3 — including `instance_id`, `autotrade_armed`, the four-value ws enum, the WEAK-carries-direction clarification, and all pins above — is **FROZEN**. Fields are locked; any change bumps `schema_version` and updates both canonical docs in one coordinated pass. Your side freezes `integration-contract-verdictengine.md` and implements the consumer inside the re-coded AutoTradeSettings module; our side implements `Core/SignalEmitter.vb` + the ARM toggle behind `signal_bridge.enabled: false`. Rollout stays per your ladder: off → log-only → live at minimum size → normal.
