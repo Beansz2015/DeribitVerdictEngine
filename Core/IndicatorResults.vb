@@ -73,6 +73,15 @@ Public Class IndicatorResults
     Public Property TFIValue As Double       ' normalised [-1, +1]; positive = buy pressure
     Public Property TFISignal As String      ' "BUY PRESSURE" / "SELL PRESSURE" / "NEUTRAL"
 
+    ' [P4 #5 v50] Aggressor velocity / tape burst (docs/aggressor-velocity-proposal.md).
+    ' Display/CSV-only at the build (scoring_enabled=false; the TFI-modifier wire-in is a
+    ' later data-gated sub-version). Populated ONLY on the WS-live warmed-up path; at
+    ' transport=rest / REST-fallback / cold feed / disabled the numerics stay Nothing and
+    ' the signal stays NORMAL (§8 — null CSV, never blocks, never guesses).
+    Public Property AggrVelBurstRatio As Double?         ' grossFast / max(grossNorm, floor); Nothing = unavailable
+    Public Property AggrVelNet As Double?                ' net taker USD/sec on the burst horizon; Nothing = unavailable
+    Public Property AggrVelSignal As String = "NORMAL"   ' "BURST_BUY" / "BURST_SELL" / "NORMAL"
+
     ' MicroCVD -- intra-window CVD segmentation (early / mid / late thirds)
     Public Property MicroCVDEarly As Double  ' USD delta, first third of trade window
     Public Property MicroCVDMid As Double    ' USD delta, middle third

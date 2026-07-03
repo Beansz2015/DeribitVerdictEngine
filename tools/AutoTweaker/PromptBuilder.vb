@@ -86,6 +86,18 @@ Public Class PromptBuilder
             "already-computed verdict) — transport plumbing with zero scoring impact and no " &
             "failure-rate linkage; same class as 'network.*'. (Enforced in code: SettingsDiffApplier " &
             "rejects 'signal_bridge.' as well.)" & vbLf &
+        "19. Aggressor velocity (indicators.aggressor_velocity) is a THREE-TIER surface. " &
+            "Never propose 'indicators.aggressor_velocity.enabled' or " &
+            "'indicators.aggressor_velocity.scoring_enabled' (feature switches — the latter is the " &
+            "data-gated scoring gate, flipped only after the correlation gate clears). Never propose " &
+            "any 'indicators.aggressor_velocity.default.*' or 'indicators.aggressor_velocity.sessions.*' " &
+            "key (the per-session norm_window_sec / burst_ratio_threshold re-baseline tier — " &
+            "hand-tuned by the trader like session_volume.sessions[].roc_magnitude_threshold, " &
+            "HARD CONSTRAINT 11 class). The FLAT keys REMAIN tunable: " &
+            "'indicators.aggressor_velocity.fast_window_sec', '...direction_lean_floor', " &
+            "'...gross_floor_usd_per_sec', '...upgrade_bonus', '...contra_penalty'. " &
+            "(Enforced in code: SettingsDiffApplier exact-match rejects the two switches and " &
+            "rejects the 'default.'/'sessions.' prefixes.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

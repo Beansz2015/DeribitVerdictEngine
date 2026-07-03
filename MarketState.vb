@@ -49,6 +49,11 @@ Public NotInheritable Class MarketState
     ' (re)connect — all under _lock (the accumulator is not internally locked).
     Private ReadOnly _ofiAcc As New OfiAccumulator()
 
+    ' [P4 #5] Aggressor-velocity accumulator (docs/aggressor-velocity-proposal.md §4.1).
+    ' Folded once per streamed trade (the trade analogue of the OFI book fold), read once
+    ' per analysis run / live-strip tick, reset on (re)connect — all under _lock.
+    Private ReadOnly _aggrVelAcc As New AggressorVelocityAccumulator()
+
     ' ── Writers (receive loop / seeding) ───────────────────────────────────────────────
 
     ''' <summary>Replace a candle series wholesale from a REST seed burst (startup / reconnect).
@@ -140,6 +145,24 @@ Public NotInheritable Class MarketState
         End SyncLock
     End Sub
 
+    ''' <summary>[P4 #5] Fold one streamed trade into the aggressor-velocity accumulator
+    ''' (proposal §4.1). Called by the feed right after AppendTrade with the trade's own
+    ''' exchange timestamp; taus = fast_window_sec + the session-resolved norm_window_sec.</summary>
+    Public Sub FoldAggressorVelocity(amountUsd As Double, isBuy As Boolean, tsMs As Long,
+                                     tauFastSec As Double, tauNormSec As Double)
+        SyncLock _lock
+            _aggrVelAcc.Fold(amountUsd, isBuy, tsMs, tauFastSec, tauNormSec)
+        End SyncLock
+    End Sub
+
+    ''' <summary>[P4 #5] Clear the aggressor-velocity accumulator on (re)connect so no
+    ''' pre-disconnect flow bleeds across a gap; the warmup suppression re-arms.</summary>
+    Public Sub ResetAggressorVelocity()
+        SyncLock _lock
+            _aggrVelAcc.Reset()
+        End SyncLock
+    End Sub
+
     ''' <summary>Update the ticker fields. Funding8h serves GetFundingRateAsync — it is
     ''' funding_8h, NOT current_funding (parity with DeribitClient.GetFundingRateAsync).</summary>
     Public Sub UpdateTicker(funding8h As Double?, openInterest As Double,
@@ -182,6 +205,15 @@ Public NotInheritable Class MarketState
     Public Function GetOfiAverage(minCoverageSec As Double) As OfiAverageSnapshot
         SyncLock _lock
             Return _ofiAcc.Snapshot(minCoverageSec)
+        End SyncLock
+    End Function
+
+    ''' <summary>[P4 #5] A consistent read of the aggressor-velocity burst state + the
+    ''' warmup verdict for the session's norm window (proposal §4.2). The caller uses the
+    ''' burst fields only when HasWarmup is True (else NORMAL / null — §8 suppression).</summary>
+    Public Function GetAggressorVelocity(grossFloorUsdPerSec As Double, minCoverageSec As Double) As AggressorVelocitySnapshot
+        SyncLock _lock
+            Return _aggrVelAcc.Snapshot(grossFloorUsdPerSec, minCoverageSec)
         End SyncLock
     End Function
 

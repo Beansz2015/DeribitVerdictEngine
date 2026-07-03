@@ -53,6 +53,14 @@ Public NotInheritable Class MicrostructureSnapshot
     ''' <summary>Tape speed always renders (0 on a lull) — never blanked.</summary>
     Public Property TradesPerSec   As Double
     Public Property UsdPerSec      As Double
+
+    ''' <summary>[P4 #5] Aggressor-velocity burst enrichment of the tape-speed field
+    ''' (proposal §7 — strip-only surface, the #3 precedent). HasBurst is True only when
+    ''' the feature is enabled AND the feed-side accumulator is warmed up; the fields stay
+    ''' blank/NORMAL otherwise (never a fake reading).</summary>
+    Public Property HasBurst       As Boolean
+    Public Property BurstRatio     As Double
+    Public Property BurstSignal    As String = "NORMAL"    ' BURST_BUY / BURST_SELL / NORMAL
 End Class
 
 Public NotInheritable Class LiveMicrostructureEvaluator
@@ -125,6 +133,26 @@ Public NotInheritable Class LiveMicrostructureEvaluator
 
             ' Tape speed — count + USD notional of trades in the last tape_window_sec (lull → ~0).
             FillTapeSpeed(snap, trades, cfg.LiveStrip.TapeWindowSec, nowUtcMs)
+
+            ' [P4 #5] Aggressor-velocity burst — the same feed-side accumulator snapshot the
+            ' full run reads, classified with the same pure fn + session-resolved thresholds
+            ' (identical methodology, only fresher — the strip discipline). Warmup-gated.
+            Dim av = cfg.Indicators.AggressorVelocity
+            If av IsNot Nothing AndAlso av.Enabled Then
+                Dim hourUtc As Integer = If(nowUtcMs >= 0,
+                    DateTimeOffset.FromUnixTimeMilliseconds(nowUtcMs).UtcDateTime.Hour,
+                    DateTime.UtcNow.Hour)
+                Dim avNormWin As Double = ExecutionResolution.ResolveAggrVelNormWindow(cfg, hourUtc)
+                Dim avSnap = state.GetAggressorVelocity(av.GrossFloorUsdPerSec, avNormWin)
+                If avSnap.HasWarmup Then
+                    snap.HasBurst    = True
+                    snap.BurstRatio  = avSnap.BurstRatio
+                    snap.BurstSignal = IndicatorEngine.ClassifyAggressorBurst(
+                                           avSnap.BurstRatio, avSnap.Lean,
+                                           ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, hourUtc),
+                                           av.DirectionLeanFloor)
+                End If
+            End If
         Catch
             ' Advisory overlay — never surface an exception into the host tick. Degenerate state → blanks.
         End Try

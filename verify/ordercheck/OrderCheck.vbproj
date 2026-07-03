@@ -45,6 +45,12 @@
          (in Indicators_OrderFlow, already linked). The feed-side fold + the run-path routing
          stay OUT (they need the live socket / WinForms host — same boundary as A16/A17). -->
     <Compile Include="..\..\Core\OfiAccumulator.vb" />
+    <!-- P4 #5 aggressor velocity (A23): the host-agnostic two-horizon accumulator
+         (owned by MarketState, above) + ClassifyAggressorBurst (in Indicators_OrderFlow,
+         already linked) + the per-session resolution helpers (in ExecutionResolution,
+         already linked). The feed-side fold + run-path routing stay OUT — same live-
+         socket/WinForms boundary as A16-A22. -->
+    <Compile Include="..\..\Core\AggressorVelocityAccumulator.vb" />
     <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
          exercised against a real MarketState (already linked above). -->
     <Compile Include="..\..\Core\BarCloseDetector.vb" />

@@ -168,6 +168,11 @@ Public NotInheritable Class DeribitWsFeed
         ' average can't bleed across the gap; the warmup fallback re-arms (proposal §4.1/§8).
         ' Runs before SubscribeAsync, so no book-update fold for this connection precedes it.
         _state.ResetOfiAccumulator()
+        ' [P4 #5] Same discipline for the aggressor-velocity accumulator — reset on every
+        ' (re)connect so pre-disconnect flow can't bleed across the gap; the cold-start
+        ' suppression re-arms. Seed trades are deliberately NOT folded (only live prints
+        ' carry the burst signal; the warmup gate covers the cold window).
+        _state.ResetAggressorVelocity()
         For Each res As String In SeedResolutions
             ct.ThrowIfCancellationRequested()
             Dim cap As Integer = 250
@@ -306,8 +311,23 @@ Public NotInheritable Class DeribitWsFeed
     End Sub
 
     ' data is an array of trade objects (mapped 1:1 to DeribitClient.GetRecentTradesAsync).
+    ' [P4 #5] Each streamed trade also folds into the aggressor-velocity accumulator
+    ' (the trade analogue of FoldOfiAverage in ApplyBook). Config is read once per
+    ' notification batch; SettingsLoader.Current each call honours hot-reload of
+    ' enabled / fast_window_sec / the per-session norm (avg-window keys are read-time
+    ' resolved). When the feature is off the feed does no extra work.
     Private Sub ApplyTrades(data As JsonElement, nowUtc As DateTime)
         If data.ValueKind <> JsonValueKind.Array Then Return
+        Dim cfg = SettingsLoader.Current
+        Dim av = cfg.Indicators.AggressorVelocity
+        Dim foldAggr As Boolean = av IsNot Nothing AndAlso av.Enabled
+        Dim tauNorm As Double = 0.0
+        If foldAggr Then
+            ' The trade's own exchange stamp is the fold dt basis; the SESSION is resolved
+            ' from the receive hour (a boundary-straddling batch shifts the norm tau one
+            ' trade early/late — immaterial at a 60/120s horizon).
+            tauNorm = ExecutionResolution.ResolveAggrVelNormWindow(cfg, nowUtc.Hour)
+        End If
         For Each t As JsonElement In data.EnumerateArray()
             Dim rec As New TradeRecord()
             rec.Price = t.GetProperty("price").GetDouble()
@@ -317,6 +337,10 @@ Public NotInheritable Class DeribitWsFeed
             Dim liqEl As JsonElement = Nothing
             rec.Liquidation = If(t.TryGetProperty("liquidation", liqEl), liqEl.GetString(), "none")
             _state.AppendTrade(rec, nowUtc)
+            If foldAggr Then
+                _state.FoldAggressorVelocity(rec.Amount, rec.Direction = "buy", rec.Timestamp,
+                                             av.FastWindowSec, tauNorm)
+            End If
         Next
     End Sub
 

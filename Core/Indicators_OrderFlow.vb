@@ -157,6 +157,26 @@ Partial Public Class IndicatorEngine
         End If
     End Function
 
+    ''' <summary>
+    ''' [P4 #5] Classify an aggressor-velocity burst snapshot into BURST_BUY / BURST_SELL /
+    ''' NORMAL (docs/aggressor-velocity-proposal.md §4.3). Pure — parallels ClassifyOfiRatio.
+    ''' Fires ONLY when the tape is bursting (burstRatio >= threshold) AND the burst is
+    ''' directional (|lean| >= floor): a balanced firehose and a one-sided trickle are both
+    ''' NORMAL — the proposal's non-directional-reward guard (§2.1) made concrete.
+    ''' burstRatioThreshold is the session-resolved value
+    ''' (ExecutionResolution.ResolveAggrVelBurstThreshold).
+    ''' </summary>
+    Public Shared Function ClassifyAggressorBurst(burstRatio As Double,
+                                                   lean As Double,
+                                                   burstRatioThreshold As Double,
+                                                   directionLeanFloor As Double) As String
+        If burstRatio >= burstRatioThreshold Then
+            If lean >= directionLeanFloor Then Return "BURST_BUY"
+            If lean <= -directionLeanFloor Then Return "BURST_SELL"
+        End If
+        Return "NORMAL"
+    End Function
+
     ' -- Liquidations ---------------------------------------------------------
     ' [T3-D]: dominanceRatio optional param.
     ' LONG LIQS: liqLongSize >= liqShortSize * dominanceRatio.

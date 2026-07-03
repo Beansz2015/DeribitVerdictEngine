@@ -68,7 +68,9 @@ Public Class SettingsDiffApplier
         "auto_run.",                ' run cadence/trigger (interval + on-close trigger_mode) — operational preference, no failure-rate linkage (HARD CONSTRAINT 14)
         "live_strip.",              ' live microstructure TAPE strip — display preference, display-only, no failure-rate linkage (HARD CONSTRAINT 15)
         "scoring.hold_",            ' CalcHoldStatus hold/exit thresholds — trader hold-discipline preference, no failure-rate linkage (HoldStatus never feeds the failure matrix); same class as kelly.* (HARD CONSTRAINT 17). Prefix-safe: sibling scoring.* tunables stay proposable
-        "signal_bridge."            ' order-app signal-file emission (verdict_signal.json) — transport plumbing, zero scoring impact, no failure-rate linkage; same class as network.* (HARD CONSTRAINT 18)
+        "signal_bridge.",           ' order-app signal-file emission (verdict_signal.json) — transport plumbing, zero scoring impact, no failure-rate linkage; same class as network.* (HARD CONSTRAINT 18)
+        "indicators.aggressor_velocity.default.",   ' [P4 #5] shared re-baseline tier (norm window + burst threshold) — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19). Prefix-safe: the flat aggressor_velocity params stay proposable
+        "indicators.aggressor_velocity.sessions."   ' [P4 #5] per-session overrides — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19)
     }
 
     ' Validate a proposed diff list.
@@ -127,6 +129,17 @@ Public Class SettingsDiffApplier
             If path = "indicators.ofi.averaging_enabled" Then
                 result.IsValid    = False
                 result.ErrorReason = "Rejected: 'indicators.OFI.averaging_enabled' is the OFI time-averaging feature flag, not a threshold (off tweaker surface — HARD CONSTRAINT 16)."
+                Return result
+            End If
+            ' [P4 #5] Aggressor-velocity FEATURE SWITCHES — off the tweaker surface (structural
+            ' on/off toggles, not thresholds; scoring_enabled is the data-gated ⚠ scoring gate).
+            ' Exact-match, NOT a prefix: the flat siblings (fast_window_sec, direction_lean_floor,
+            ' gross_floor_usd_per_sec, upgrade_bonus, contra_penalty) STAY tunable.
+            If path = "indicators.aggressor_velocity.enabled" OrElse
+               path = "indicators.aggressor_velocity.scoring_enabled" Then
+                result.IsValid    = False
+                result.ErrorReason = String.Format(
+                    "Rejected: '{0}' is an aggressor-velocity feature switch, not a threshold (off tweaker surface — HARD CONSTRAINT 19).", item.Path)
                 Return result
             End If
 

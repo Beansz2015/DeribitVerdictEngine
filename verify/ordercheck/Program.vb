@@ -120,6 +120,18 @@ Module Program
         A22f_InvariantCultureSerialization()
         A22g_TweakerRejectsSignalBridge()
 
+        ' P4 #5 — aggressor velocity (build sub-version): accumulator decay/rate math,
+        ' two-horizon burst detection, cold-start suppression, reset re-arm,
+        ' ClassifyAggressorBurst edges, per-session norm/threshold resolution,
+        ' three-tier tweaker surface (HARD CONSTRAINT 19).
+        A23a_AggrVelSteadyRate()
+        A23b_AggrVelBurstDetection()
+        A23c_AggrVelColdStartSuppression()
+        A23d_AggrVelResetReArms()
+        A23e_ClassifyAggressorBurstEdges()
+        A23f_AggrVelSessionResolution()
+        A23g_AggrVelTweakerSurface()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -1922,6 +1934,170 @@ Module Program
               Not rBridge.IsValid AndAlso rBridge.ErrorReason.Contains("off-tweaker-surface") AndAlso rSib.IsValid,
               String.Format("bridge: valid={0} reason='{1}' | sibling: valid={2} reason='{3}'",
                             rBridge.IsValid, rBridge.ErrorReason, rSib.IsValid, rSib.ErrorReason))
+    End Sub
+
+    ' =======================================================================
+    ' A23 — P4 #5 aggressor velocity (docs/aggressor-velocity-proposal.md §9,
+    ' build sub-version). Deterministic folds against the host-agnostic
+    ' accumulator; classification via the shipped pure fn; session resolution
+    ' via ExecutionResolution; tweaker surface via SettingsDiffApplier.
+    ' =======================================================================
+
+    ' -- A23a: steady tape → rate ≈ the analytic fixed point --------------------
+    ' 100 USD buys at exactly 1 trade/sec, tauFast=5 / tauNorm=120. Fast-horizon
+    ' fixed point A* = a/(1-e^(-dt/tau)) = 551.67 → grossFast = A*/tau = 110.33
+    ' USD/s (the ~10% discrete-arrival bias over the true 100/s is inherent to the
+    ' EMA-sum construction and calibrated through by §5). Norm horizon at 400 s is
+    ' 96.4% converged → grossNorm ≈ 96.8. All-buy tape → lean ≈ +1.
+    Private Sub A23a_AggrVelSteadyRate()
+        Dim acc As New AggressorVelocityAccumulator()
+        Dim ts As Long = 1_000_000
+        For i As Integer = 1 To 400
+            acc.Fold(100.0, isBuy:=True, tsMs:=ts, tauFastSec:=5.0, tauNormSec:=120.0)
+            ts += 1000
+        Next
+        Dim s = acc.Snapshot(grossFloorUsdPerSec:=50.0, minCoverageSec:=120.0)
+        Check("A23a steady tape rate math (grossFast≈110, grossNorm≈97, lean≈+1, warm)",
+              s.HasWarmup AndAlso
+              s.GrossFastUsdPerSec > 109.0 AndAlso s.GrossFastUsdPerSec < 112.0 AndAlso
+              s.GrossNormUsdPerSec > 95.0 AndAlso s.GrossNormUsdPerSec < 99.0 AndAlso
+              s.BurstRatio > 1.05 AndAlso s.BurstRatio < 1.25 AndAlso
+              s.Lean > 0.99,
+              String.Format(CultureInfo.InvariantCulture,
+                            "warm={0} fast={1:F2} norm={2:F2} ratio={3:F3} lean={4:F3}",
+                            s.HasWarmup, s.GrossFastUsdPerSec, s.GrossNormUsdPerSec, s.BurstRatio, s.Lean))
+    End Sub
+
+    ' -- A23b: two-horizon burst — balanced baseline, then a one-sided firehose -
+    ' 600 s of balanced 50-USD buy/sell alternation at 2 trades/sec (≈100 USD/s both
+    ' horizons, lean ≈ 0), then 20 × 1000 USD BUY prints at 100 ms spacing (a 2 s
+    ' 10k USD/s buy burst). The fast horizon jumps far above the slow norm →
+    ' burstRatio ≫ 2.5 with a strong positive lean → BURST_BUY.
+    Private Sub A23b_AggrVelBurstDetection()
+        Dim acc As New AggressorVelocityAccumulator()
+        Dim ts As Long = 1_000_000
+        Dim buy As Boolean = True
+        For i As Integer = 1 To 1200                       ' 600 s balanced baseline
+            acc.Fold(50.0, buy, ts, 5.0, 120.0)
+            buy = Not buy
+            ts += 500
+        Next
+        Dim preBurst = acc.Snapshot(50.0, 120.0)
+        For i As Integer = 1 To 20                          ' the burst
+            acc.Fold(1000.0, isBuy:=True, tsMs:=ts, tauFastSec:=5.0, tauNormSec:=120.0)
+            ts += 100
+        Next
+        Dim s = acc.Snapshot(50.0, 120.0)
+        Dim sig As String = IndicatorEngine.ClassifyAggressorBurst(s.BurstRatio, s.Lean, 2.5, 0.2)
+        Dim preSig As String = IndicatorEngine.ClassifyAggressorBurst(preBurst.BurstRatio, preBurst.Lean, 2.5, 0.2)
+        Check("A23b burst detection (balanced baseline NORMAL → one-sided burst BURST_BUY)",
+              preSig = "NORMAL" AndAlso Math.Abs(preBurst.Lean) < 0.2 AndAlso
+              s.HasWarmup AndAlso s.BurstRatio > 2.5 AndAlso s.Lean > 0.2 AndAlso sig = "BURST_BUY",
+              String.Format(CultureInfo.InvariantCulture,
+                            "pre: sig={0} lean={1:F3} | post: ratio={2:F2} lean={3:F3} sig={4}",
+                            preSig, preBurst.Lean, s.BurstRatio, s.Lean, sig))
+    End Sub
+
+    ' -- A23c: cold-start suppression — no warmup before a full norm window -----
+    Private Sub A23c_AggrVelColdStartSuppression()
+        Dim acc As New AggressorVelocityAccumulator()
+        Dim ts As Long = 1_000_000
+        For i As Integer = 1 To 3                           ' 3 trades over 10 s
+            acc.Fold(100.0, True, ts, 5.0, 120.0) : ts += 5000
+        Next
+        Dim few = acc.Snapshot(50.0, 120.0)
+        For i As Integer = 1 To 10                          ' more trades, still < 120 s coverage
+            acc.Fold(100.0, True, ts, 5.0, 120.0) : ts += 5000
+        Next
+        Dim short120 = acc.Snapshot(50.0, 120.0)            ' coverage 60 s < 120
+        For i As Integer = 1 To 16                          ' push coverage past 120 s
+            acc.Fold(100.0, True, ts, 5.0, 120.0) : ts += 5000
+        Next
+        Dim warm = acc.Snapshot(50.0, 120.0)
+        Check("A23c cold-start suppression (3 trades → cold; 60s coverage → cold; ≥120s → warm)",
+              Not few.HasWarmup AndAlso Not short120.HasWarmup AndAlso warm.HasWarmup,
+              String.Format("few={0} short={1} (cov {2:F0}s) warm={3} (cov {4:F0}s)",
+                            few.HasWarmup, short120.HasWarmup, short120.CoverageSec,
+                            warm.HasWarmup, warm.CoverageSec))
+    End Sub
+
+    ' -- A23d: Reset re-arms the cold-start suppression (reconnect semantics) ---
+    Private Sub A23d_AggrVelResetReArms()
+        Dim acc As New AggressorVelocityAccumulator()
+        Dim ts As Long = 1_000_000
+        For i As Integer = 1 To 200
+            acc.Fold(100.0, True, ts, 5.0, 120.0) : ts += 1000
+        Next
+        Dim warm As Boolean = acc.Snapshot(50.0, 120.0).HasWarmup
+        acc.Reset()
+        Dim s = acc.Snapshot(50.0, 120.0)
+        Check("A23d Reset re-arms warmup (warm → reset → cold, n=0, coverage=0)",
+              warm AndAlso Not s.HasWarmup AndAlso s.TradeCount = 0 AndAlso s.CoverageSec = 0.0,
+              String.Format("preWarm={0} postWarm={1} n={2} cov={3:F0}",
+                            warm, s.HasWarmup, s.TradeCount, s.CoverageSec))
+    End Sub
+
+    ' -- A23e: ClassifyAggressorBurst threshold / lean-floor edges ---------------
+    Private Sub A23e_ClassifyAggressorBurstEdges()
+        Dim buyBurst      = IndicatorEngine.ClassifyAggressorBurst(3.0, 0.5, 2.5, 0.2)
+        Dim sellBurst     = IndicatorEngine.ClassifyAggressorBurst(3.0, -0.5, 2.5, 0.2)
+        Dim balancedHose  = IndicatorEngine.ClassifyAggressorBurst(4.0, 0.1, 2.5, 0.2)   ' §2.1 guard
+        Dim oneSideTrickle = IndicatorEngine.ClassifyAggressorBurst(1.5, 0.9, 2.5, 0.2)  ' quiet tape
+        Dim atThreshold   = IndicatorEngine.ClassifyAggressorBurst(2.5, 0.2, 2.5, 0.2)   ' >= fires
+        Dim justUnder     = IndicatorEngine.ClassifyAggressorBurst(2.4999, 1.0, 2.5, 0.2)
+        Check("A23e ClassifyAggressorBurst edges (buy/sell fire; balanced firehose + trickle NORMAL; >= boundary)",
+              buyBurst = "BURST_BUY" AndAlso sellBurst = "BURST_SELL" AndAlso
+              balancedHose = "NORMAL" AndAlso oneSideTrickle = "NORMAL" AndAlso
+              atThreshold = "BURST_BUY" AndAlso justUnder = "NORMAL",
+              String.Format("buy={0} sell={1} hose={2} trickle={3} at={4} under={5}",
+                            buyBurst, sellBurst, balancedHose, oneSideTrickle, atThreshold, justUnder))
+    End Sub
+
+    ' -- A23f: per-session norm/threshold resolution (v40 override pattern) -----
+    ' POCO defaults: NY bucket (hour 13-23) carries norm_window_sec 60; LONDON/ASIA
+    ' inherit the shared default 120 / 2.5. An explicit per-session threshold
+    ' override resolves ahead of the default.
+    Private Sub A23f_AggrVelSessionResolution()
+        Dim cfg As New EngineSettings()
+        Dim nyNorm     = ExecutionResolution.ResolveAggrVelNormWindow(cfg, 14)
+        Dim londonNorm = ExecutionResolution.ResolveAggrVelNormWindow(cfg, 9)
+        Dim asiaNorm   = ExecutionResolution.ResolveAggrVelNormWindow(cfg, 3)
+        Dim nyThr      = ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, 14)
+        cfg.Indicators.AggressorVelocity.Sessions("ASIA").BurstRatioThreshold = 3.1
+        Dim asiaThr    = ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, 3)
+        Check("A23f per-session resolution (NY norm 60; LONDON/ASIA inherit 120/2.5; explicit override wins)",
+              nyNorm = 60.0 AndAlso londonNorm = 120.0 AndAlso asiaNorm = 120.0 AndAlso
+              nyThr = 2.5 AndAlso asiaThr = 3.1,
+              String.Format(CultureInfo.InvariantCulture,
+                            "nyNorm={0} lonNorm={1} asiaNorm={2} nyThr={3} asiaThr={4}",
+                            nyNorm, londonNorm, asiaNorm, nyThr, asiaThr))
+    End Sub
+
+    ' -- A23g: three-tier tweaker surface (HARD CONSTRAINT 19) -------------------
+    ' Switches exact-match rejected; default./sessions. prefix rejected (hand-tuned
+    ' tier); the flat params stay proposable.
+    Private Sub A23g_AggrVelTweakerSurface()
+        Dim s As String = "{""version"":49,""indicators"":{""aggressor_velocity"":{" &
+                          """enabled"":true,""scoring_enabled"":false,""fast_window_sec"":5," &
+                          """direction_lean_floor"":0.2,""gross_floor_usd_per_sec"":50," &
+                          """upgrade_bonus"":1,""contra_penalty"":1," &
+                          """default"":{""norm_window_sec"":120,""burst_ratio_threshold"":2.5}," &
+                          """sessions"":{""NY"":{""norm_window_sec"":60},""LONDON"":{},""ASIA"":{}}}}}"
+        Dim rEnabled = SettingsDiffApplier.Validate(OneDiff("indicators.aggressor_velocity.enabled", "true", "false"), s, 3)
+        Dim rScoring = SettingsDiffApplier.Validate(OneDiff("indicators.aggressor_velocity.scoring_enabled", "false", "true"), s, 3)
+        Dim rSession = SettingsDiffApplier.Validate(OneDiff("indicators.aggressor_velocity.sessions.NY.norm_window_sec", "60", "45"), s, 3)
+        Dim rDefault = SettingsDiffApplier.Validate(OneDiff("indicators.aggressor_velocity.default.burst_ratio_threshold", "2.5", "2.0"), s, 3)
+        Dim rFast    = SettingsDiffApplier.Validate(OneDiff("indicators.aggressor_velocity.fast_window_sec", "5", "7"), s, 3)
+        Dim rBonus   = SettingsDiffApplier.Validate(OneDiff("indicators.aggressor_velocity.upgrade_bonus", "1", "2"), s, 3)
+        Check("A23g aggressor_velocity three-tier surface (switches + default./sessions. fenced; flat params tunable)",
+              Not rEnabled.IsValid AndAlso rEnabled.ErrorReason.Contains("HARD CONSTRAINT 19") AndAlso
+              Not rScoring.IsValid AndAlso rScoring.ErrorReason.Contains("HARD CONSTRAINT 19") AndAlso
+              Not rSession.IsValid AndAlso rSession.ErrorReason.Contains("off-tweaker-surface") AndAlso
+              Not rDefault.IsValid AndAlso rDefault.ErrorReason.Contains("off-tweaker-surface") AndAlso
+              rFast.IsValid AndAlso rBonus.IsValid,
+              String.Format("enabled={0}'{1}' scoring={2} session={3} default={4} fast={5}'{6}' bonus={7}",
+                            rEnabled.IsValid, rEnabled.ErrorReason, rScoring.IsValid,
+                            rSession.IsValid, rDefault.IsValid, rFast.IsValid, rFast.ErrorReason, rBonus.IsValid))
     End Sub
 
 End Module

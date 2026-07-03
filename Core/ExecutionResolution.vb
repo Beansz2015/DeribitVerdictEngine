@@ -92,6 +92,45 @@ Public Class ExecutionResolution
                   p.RocSlopeDeltaThreshold.Value, cfg.Indicators.ROC.SlopeDeltaThreshold)
     End Function
 
+    ''' <summary>
+    ''' [P4 #5 aggressor velocity] Per-session norm-horizon window (seconds) for the given
+    ''' UTC hour (docs/aggressor-velocity-proposal.md §6). Session override (NY 60 — dense
+    ''' 1-min tape) → shared default (120). Mirrors the v40 per-session ROC override chain:
+    ''' nullable per-session value on a shared fallback, hand-tuned tier (HC11 class).
+    ''' </summary>
+    Public Shared Function ResolveAggrVelNormWindow(cfg As EngineSettings, utcHour As Integer) As Double
+        Dim o = AggrVelSessionOverrideFor(cfg, utcHour)
+        If o IsNot Nothing AndAlso o.NormWindowSec.HasValue Then Return o.NormWindowSec.Value
+        Return cfg.Indicators.AggressorVelocity.Defaults.NormWindowSec
+    End Function
+
+    ''' <summary>
+    ''' [P4 #5 aggressor velocity] Per-session burst-ratio threshold for the given UTC
+    ''' hour. Session override → shared default (2.5). Same inheritance contract as
+    ''' ResolveAggrVelNormWindow; the §5.2 per-session re-baseline sets the overrides.
+    ''' </summary>
+    Public Shared Function ResolveAggrVelBurstThreshold(cfg As EngineSettings, utcHour As Integer) As Double
+        Dim o = AggrVelSessionOverrideFor(cfg, utcHour)
+        If o IsNot Nothing AndAlso o.BurstRatioThreshold.HasValue Then Return o.BurstRatioThreshold.Value
+        Return cfg.Indicators.AggressorVelocity.Defaults.BurstRatioThreshold
+    End Function
+
+    ''' <summary>The aggressor_velocity.sessions{} override for the UTC hour's session
+    ''' bucket (matched by bucket NAME, case-insensitive), or Nothing when there is no
+    ''' matching bucket / no override entry.</summary>
+    Private Shared Function AggrVelSessionOverrideFor(cfg As EngineSettings, utcHour As Integer) As AggressorVelocitySessionOverride
+        If cfg Is Nothing OrElse cfg.Indicators Is Nothing OrElse
+           cfg.Indicators.AggressorVelocity Is Nothing Then Return Nothing
+        Dim b = MatchSessionBucket(cfg, utcHour)
+        If b Is Nothing OrElse String.IsNullOrEmpty(b.Name) Then Return Nothing
+        Dim sessions = cfg.Indicators.AggressorVelocity.Sessions
+        If sessions Is Nothing Then Return Nothing
+        For Each kv In sessions
+            If String.Equals(kv.Key, b.Name, StringComparison.OrdinalIgnoreCase) Then Return kv.Value
+        Next
+        Return Nothing
+    End Function
+
     ''' <summary>Resolution_profiles lookup keyed by the resolution as a string. Nothing if absent.</summary>
     Private Shared Function ProfileFor(cfg As EngineSettings, execRes As Integer) As ResolutionProfile
         If cfg Is Nothing OrElse cfg.ResolutionProfiles Is Nothing Then Return Nothing

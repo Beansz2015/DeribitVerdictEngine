@@ -302,6 +302,21 @@
                   "pivot_wing": 3,
                   "pivot_count": 6,
                   "structure_bonus": 1
+                },
+    "aggressor_velocity": {
+                  "enabled": true,
+                  "scoring_enabled": false,
+                  "fast_window_sec": 5,
+                  "direction_lean_floor": 0.2,
+                  "gross_floor_usd_per_sec": 50,
+                  "upgrade_bonus": 1,
+                  "contra_penalty": 1,
+                  "default":  { "norm_window_sec": 120, "burst_ratio_threshold": 2.5 },
+                  "sessions": {
+                    "NY":     { "norm_window_sec": 60 },
+                    "LONDON": { },
+                    "ASIA":   { }
+                  }
                 }
   },
   "session_volume": {

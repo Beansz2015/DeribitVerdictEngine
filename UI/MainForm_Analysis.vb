@@ -426,6 +426,27 @@ Partial Public Class MainForm
         IndicatorEngine.CalcTFI(recentTrades, r.TFIValue, r.TFISignal,
                                 tfiWindowSize:=cfg.Indicators.TFI.WindowSize,
                                 threshold:=cfg.Indicators.TFI.Threshold)
+
+        ' [P4 #5 v50] Aggressor velocity — read the feed-side two-horizon burst snapshot on
+        ' the WS-live path only (the accumulator needs the live trade stream to time-weight;
+        ' a REST/fallback run has no equivalent). Warmup-gated: until the accumulator has a
+        ' full norm window of coverage the fields stay NORMAL / Nothing rather than dividing
+        ' by a half-filled baseline (§8). Display/CSV-only at the build — nothing downstream
+        ' of r.AggrVel* touches scoring while scoring_enabled=false (the wire-in is a later
+        ' data-gated sub-version, proposal §5).
+        Dim avCfg = cfg.Indicators.AggressorVelocity
+        If avCfg.Enabled AndAlso (src Is _wsSource) AndAlso _marketState IsNot Nothing Then
+            Dim avNormWin As Double = ExecutionResolution.ResolveAggrVelNormWindow(cfg, utcHour)
+            Dim avSnap = _marketState.GetAggressorVelocity(avCfg.GrossFloorUsdPerSec, avNormWin)
+            If avSnap.HasWarmup Then
+                r.AggrVelBurstRatio = avSnap.BurstRatio
+                r.AggrVelNet        = avSnap.NetUsdPerSec
+                r.AggrVelSignal     = IndicatorEngine.ClassifyAggressorBurst(
+                                          avSnap.BurstRatio, avSnap.Lean,
+                                          ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, utcHour),
+                                          avCfg.DirectionLeanFloor)
+            End If
+        End If
         IndicatorEngine.CalcMicroCVD(recentTrades,
                                      r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
                                      r.MicroCVDMomentum, r.MicroCVDSignal,

@@ -176,6 +176,8 @@ Public Class IndicatorSettings
     <JsonPropertyName("swing")>  Public Property Swing  As New SwingSettings
     ''' <summary>[d1-trend-structure] HH/HL/LH/LL classification + Pass 2c structure bonus parameters.</summary>
     <JsonPropertyName("trend_structure")> Public Property TrendStructure As New TrendStructureSettings
+    ''' <summary>[P4 #5] Aggressor velocity / tape burst parameters (docs/aggressor-velocity-proposal.md §6).</summary>
+    <JsonPropertyName("aggressor_velocity")> Public Property AggressorVelocity As New AggressorVelocitySettings
 End Class
 
 Public Class AdxSettings
@@ -391,6 +393,66 @@ Public Class VpfrSettings
     <JsonPropertyName("decay_base")>       Public Property DecayBase       As Double  = 0.985
     ''' <summary>Enable optional value-area-breakout partial in scoring pipeline. Default False -- display + cap only.</summary>
     <JsonPropertyName("value_area_scoring_enabled")> Public Property ValueAreaScoringEnabled As Boolean = False
+End Class
+
+''' <summary>
+''' [P4 #5 aggressor velocity] Tape-burst parameters (docs/aggressor-velocity-proposal.md §6).
+''' Two time-decayed taker-USD horizons (fast burst vs rolling norm) → burstRatio + lean →
+''' BURST_BUY / BURST_SELL / NORMAL. Build sub-version is display/CSV-only: ScoringEnabled
+''' stays False until the §5.1 correlation gate clears on post-build data.
+''' Three-tier tweaker surface (§6 — who changes each key, not whether it's exposed):
+'''   ON the surface  — FastWindowSec, DirectionLeanFloor, GrossFloorUsdPerSec,
+'''                     UpgradeBonus, ContraPenalty (flat dotted paths; the scoring
+'''                     magnitudes become live levers once scoring is on).
+'''   OFF, hand-tuned — Defaults + Sessions (per-session norm_window_sec /
+'''                     burst_ratio_threshold — §5.2 re-baseline tier, HC11 class;
+'''                     SettingsDiffApplier rejects the default./sessions. prefixes).
+'''   OFF, hand-toggle — Enabled + ScoringEnabled (exact-match rejects + PromptBuilder
+'''                     HARD CONSTRAINT 19, mirroring OFI.averaging_enabled / HC16).
+''' </summary>
+Public Class AggressorVelocitySettings
+    ''' <summary>Feature switch — accumulator folds + reads stop entirely when False. Default True.</summary>
+    <JsonPropertyName("enabled")>                 Public Property Enabled             As Boolean = True
+    ''' <summary>The ⚠ scoring gate — the TFI-modifier wire-in is a LATER data-gated sub-version;
+    ''' stays False at the build (proposal §5.1 correlation gate decides). Default False.</summary>
+    <JsonPropertyName("scoring_enabled")>         Public Property ScoringEnabled      As Boolean = False
+    ''' <summary>Burst horizon tau (seconds). 5s — sub-bar and leading, but long enough that a
+    ''' single block doesn't dominate the rate (§10.3). Default 5.</summary>
+    <JsonPropertyName("fast_window_sec")>         Public Property FastWindowSec       As Double = 5.0
+    ''' <summary>Min |lean| to assign a direction — a balanced firehose stays NORMAL. Default 0.2.</summary>
+    <JsonPropertyName("direction_lean_floor")>    Public Property DirectionLeanFloor  As Double = 0.2
+    ''' <summary>Dead-tape guard on the norm (USD/sec) — stops a single print on a dead tape
+    ''' reading as an infinite burst. Default 50.</summary>
+    <JsonPropertyName("gross_floor_usd_per_sec")> Public Property GrossFloorUsdPerSec As Double = 50.0
+    ''' <summary>TFI-modifier upgrade magnitude once scoring is on (inert at the build). Default 1.</summary>
+    <JsonPropertyName("upgrade_bonus")>           Public Property UpgradeBonus        As Integer = 1
+    ''' <summary>Contra-burst soften magnitude once scoring is on (inert at the build). Default 1.</summary>
+    <JsonPropertyName("contra_penalty")>          Public Property ContraPenalty       As Integer = 1
+    ''' <summary>Shared fallback for the per-session tier (norm window + burst threshold).</summary>
+    <JsonPropertyName("default")>                 Public Property Defaults            As New AggressorVelocityDefaults
+    ''' <summary>Per-session overrides keyed by session bucket name (null field ⇒ inherit
+    ''' Defaults). Hand-tuned tier — OFF the tweaker surface. Seeded with NY 60s (dense 1-min
+    ''' tape → shorter baseline) so the code-defaults path matches settings.json.</summary>
+    <JsonPropertyName("sessions")>                Public Property Sessions            As Dictionary(Of String, AggressorVelocitySessionOverride) =
+        New Dictionary(Of String, AggressorVelocitySessionOverride) From {
+            {"NY",     New AggressorVelocitySessionOverride With {.NormWindowSec = 60.0}},
+            {"LONDON", New AggressorVelocitySessionOverride()},
+            {"ASIA",   New AggressorVelocitySessionOverride()}
+        }
+End Class
+
+''' <summary>[P4 #5] The shared default tier: norm horizon 120s (a 3-min-session baseline;
+''' NY overrides to 60) + burst_ratio_threshold 2.5. Pre-calibration anchors — §5 refines.</summary>
+Public Class AggressorVelocityDefaults
+    <JsonPropertyName("norm_window_sec")>       Public Property NormWindowSec       As Double = 120.0
+    <JsonPropertyName("burst_ratio_threshold")> Public Property BurstRatioThreshold As Double = 2.5
+End Class
+
+''' <summary>[P4 #5] Nullable per-session override — Nothing ⇒ inherit AggressorVelocityDefaults
+''' (the v40 per-session ROC override pattern). Hand-tuned, off the tweaker surface (HC11 class).</summary>
+Public Class AggressorVelocitySessionOverride
+    <JsonPropertyName("norm_window_sec")>       Public Property NormWindowSec       As Double? = Nothing
+    <JsonPropertyName("burst_ratio_threshold")> Public Property BurstRatioThreshold As Double? = Nothing
 End Class
 
 ''' <summary>

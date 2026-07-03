@@ -174,8 +174,19 @@ Partial Public Class MainForm
         End If
     End Function
 
+    ' [P4 #5] Tape-speed field enriched with the directional burst ratio + BURST state
+    ' (aggressor-velocity proposal §7). Strip-only surface — no card/snapshot obligation
+    ' (the #3 precedent). Pre-warmup / disabled / REST → the plain v45 tape field.
     Private Shared Function ComposeTape(s As MicrostructureSnapshot) As String
-        Return s.TradesPerSec.ToString("0.#") & " tr/s (" & FormatUsdPerSec(s.UsdPerSec) & ")"
+        Dim tape As String = s.TradesPerSec.ToString("0.#") & " tr/s (" & FormatUsdPerSec(s.UsdPerSec) & ")"
+        If Not s.HasBurst Then Return tape
+        Dim burst As String = s.BurstRatio.ToString("0.0") & "×"
+        If s.BurstSignal = "BURST_BUY" Then
+            burst &= " BURST↑"
+        ElseIf s.BurstSignal = "BURST_SELL" Then
+            burst &= " BURST↓"
+        End If
+        Return tape & " " & burst
     End Function
 
     Private Shared Function FormatUsdPerSec(v As Double) As String
