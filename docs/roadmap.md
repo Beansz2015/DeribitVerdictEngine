@@ -34,7 +34,7 @@
 | v48 OFI dominance re-baseline (+ `OFI.Momentum*` retire-or-keep) | ✅ v48 SHIPPED 2026-07-03 (`a86b4f1`); Momentum* answered by the audit → **retire** (retune spec R1, lands at the #5 boundary) | closed (§4a fire-rate watch stays open) |
 | Post-WS signal-health audit — fire rates, pairwise agreement, conditional outcomes for OFI/TFI/CVD/MicroCVD + FundingMomentum/RSI-div/OISignal | ✅ DONE 2026-07-03 (`21d1b7f`): `signal-health-audit-2026-07-03.md` + `signal-health-retune-proposal.md` (PROPOSED, D1–D6; TFI found unlogged → columns ride #5's v0.8) | closed |
 | Spread revival re-baseline (WIDE/TIGHT thresholds on 100ms-fresh book; A1 spread-momentum rides along) | ✅ RESOLVED 2026-07-03 by the audit — premise refuted (one-tick book; >5bps on 0.1% of WS runs); keep 5.0 as inert tail-guard; **A1 REJECTED with evidence** | closed |
-| Directional reach-target calibration (D7 spin-off — 43% reach / 53% window-expiry vs `AtrTargetMultiplier` 2.0; **elevated by O2**: autotrade places these targets) | Spec in-window if time, else month item #1 | Analysis-layer; data exists |
+| Directional reach-target calibration (D7 spin-off — 43% reach / 53% window-expiry vs `AtrTargetMultiplier` 2.0; **elevated by O2**) | **ABSORBED 2026-07-03 → `placed-geometry-structural-first-proposal.md`** (PROPOSED, D1–D8 pending): structural-first target ladder + structural stops (placed stops are pure ATR today — profile-rejected for execution, exposed by the bridge); reach-target becomes the fallback-multiplier derivation. ⚠ **D5 time-sensitive: 4 `Placed*` columns want reserving at #5's v0.8 before the build freezes the header**; ships before autotrade live mode (its D7) | Derivation on existing book; boundary per its §8 |
 | 3-min weekday-ASIA `session_volume` re-verify (§12 — v34's 1.10/1.05 was Saturday-set; recompute on weekday 3-min Asia rows, dial toward neutral if calmer; bundles the OBV `\|obvChange\|` re-anchor) | **Opus + coordinator, by hand** (never the tweaker) | ≥50 weekday-Asia 3-min rows (likely already met — verify at execution) |
 | v36 Phase-2 carry-forward (§12 — 3-min scaling of `TTM.flat_threshold` + CVD/RSI `divergence_price_gate`s; LONDON session-scoped DynamicNorms baseline check). **Audit F15 measurement (2026-07-03) reverses the prior expectation:** RSI-div is NOT over-eager on 3-min (9.8% vs 10.2%) and CVD-div UNDER-fires 8× (1.3% vs 10.3%) — re-measure the mechanism, do not blind-scale ×2.1 | **Opus + coordinator**; measure-not-proxy, v40/v41 method | Rides the next audit re-run's data pass |
 
@@ -102,7 +102,7 @@ Protected if trimming is forced: v48 derivation, signal-bridge spec, handover do
 4. Signal-health-audit retune/retire pass (spread thresholds, FundingMomentum, any retirements) — settings-mostly.
 5. #6 book absorption build → collect → calibrate.
 6. CLI-port state extraction (behaviour-neutral, any gap).
-7. Reach-target calibration spec execution; A4 spec+build; bridge v2 (position feedback) once v1 has 1–2 supervised weeks.
+7. Placed-geometry structural-first execution (`placed-geometry-structural-first-proposal.md`: derivation → trader reviews values → ships per its §8 vehicle; **hard rule: before autotrade live-at-minimum-size**); A4 spec+build (liq-validation-gated); bridge v2 (position feedback) once v1 has 1–2 supervised weeks.
 8. Continuous: tweaker first-fire when its window appears; F3 watch; WS-health persistence.
 
 ## 6. Sequencing rules (binding)
