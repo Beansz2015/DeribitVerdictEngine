@@ -586,7 +586,9 @@ Partial Public Class MainForm
         ' every run so it self-clears once the guard is quiet again.
         _ledgerWarn = If(verdict.LedgerMismatch, "SC LEDGER MISMATCH — see console · ", "")
 
-        AnalysisLogger.LogRun(r, verdict)
+        ' v0.8: cfg rides along for the shared placed-level arbitration (the Placed*
+        ' columns must equal this run's bridge payload levels — same function).
+        AnalysisLogger.LogRun(r, verdict, cfg)
         UpdateLogInfo()
 
         ' P5b — BuildPlaintextSnapshot is the engine's only text renderer.

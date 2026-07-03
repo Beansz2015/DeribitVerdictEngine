@@ -132,6 +132,11 @@ Module Program
         A23f_AggrVelSessionResolution()
         A23g_AggrVelTweakerSurface()
 
+        ' CSV v0.8 rotation — the shared placed-level arbitration
+        ' (SignalEmitter.ComputeSideLevels) IS the payload's levels source, so the
+        ' Placed* CSV columns equal the bridge levels by construction; pin it.
+        A24a_PlacedLevelsEqualPayloadLevels()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -2098,6 +2103,57 @@ Module Program
               String.Format("enabled={0}'{1}' scoring={2} session={3} default={4} fast={5}'{6}' bonus={7}",
                             rEnabled.IsValid, rEnabled.ErrorReason, rScoring.IsValid,
                             rSession.IsValid, rDefault.IsValid, rFast.IsValid, rFast.ErrorReason, rBonus.IsValid))
+    End Sub
+
+    ' =======================================================================
+    ' A24 — CSV v0.8 Placed* ≡ payload levels (one shared arbitration)
+    ' =======================================================================
+
+    ' -- A24a: ComputeSideLevels output = the emitted payload levels, across the
+    ' three cap cases A22a pins (uncapped / capped / cap-noise-suppressed). The
+    ' CSV Placed* columns and the payload levels block both read ComputeSideLevels,
+    ' so this pin holds the parity for both surfaces.
+    Private Sub A24a_PlacedLevelsEqualPayloadLevels()
+        Dim cfg = BuildBridgeCfg()
+        Dim r = BuildBridgeIndicators()
+
+        Dim ok As Boolean = True
+        Dim detail As String = ""
+        ' (adjustedLong, reasonLong) per case: uncapped / capped / noise-suppressed.
+        Dim cases = New List(Of (Name As String, Adj As Double, Reason As String)) From {
+            ("uncapped", 0.0, Nothing),
+            ("capped", 59060.0, "CAPPED @ 59060.0 (SWING_HIGH_5M)"),
+            ("noise", 59095.0, "CAPPED @ 59095.0 (SWING_HIGH_5M)")}   ' |raw−adj| = 0.1 < floor
+        For Each c In cases
+            Dim v = BuildBridgeVerdict()
+            v.AdjustedLongTarget = c.Adj
+            v.TargetCapReasonLong = c.Reason
+            Dim lvLong = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
+            Dim lvShort = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
+            Dim levels = BridgeOkJson(v, r).RootElement.GetProperty("levels")
+            Dim pl = levels.GetProperty("long")
+            Dim ps = levels.GetProperty("short")
+            If JNum(pl, "target") <> lvLong.Target OrElse JNum(pl, "stop") <> lvLong.StopPx OrElse
+               JNum(pl, "raw_target") <> lvLong.RawTarget OrElse
+               pl.GetProperty("target_capped").GetBoolean() <> lvLong.Capped OrElse
+               JNum(ps, "target") <> lvShort.Target OrElse JNum(ps, "stop") <> lvShort.StopPx Then
+                ok = False
+                detail &= c.Name & " diverged; "
+            End If
+        Next
+        ' Sanity-pin the capped case's absolute values (raw target 59095.1, adjusted wins).
+        Dim vPin = BuildBridgeVerdict()
+        vPin.AdjustedLongTarget = 59060.0
+        vPin.TargetCapReasonLong = "CAPPED @ 59060.0 (SWING_HIGH_5M)"
+        Dim pin = SignalEmitter.ComputeSideLevels(vPin, r, cfg, isLong:=True)
+        If Not (pin.Capped AndAlso pin.Target = 59060.0 AndAlso
+                Math.Abs(pin.StopPx - (59012.5 - 41.3 * 1.2)) < 0.0001) Then
+            ok = False
+            detail &= String.Format(CultureInfo.InvariantCulture,
+                                    "pin mismatch: capped={0} target={1} stop={2}; ",
+                                    pin.Capped, pin.Target, pin.StopPx)
+        End If
+        Check("A24a Placed* levels ≡ payload levels (shared ComputeSideLevels, 3 cap cases + pin)", ok, detail)
     End Sub
 
 End Module

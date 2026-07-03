@@ -32,6 +32,17 @@ Imports System.IO
 Imports System.Text.Json
 Imports System.Text.Json.Nodes
 
+''' <summary>One side's placed levels — the shared arbitration result consumed by the
+''' payload levels block AND the CSV v0.8 Placed* columns (parity by construction).</summary>
+Public Structure SideLevels
+    Public Property Entry     As Double
+    Public Property StopPx    As Double
+    Public Property RawTarget As Double
+    Public Property Target    As Double
+    Public Property Capped    As Boolean
+    Public Property Reason    As String
+End Structure
+
 Public NotInheritable Class SignalEmitter
 
     Private Sub New()
@@ -110,14 +121,13 @@ Public NotInheritable Class SignalEmitter
         o("trigger_mode") = cfg.AutoRun.TriggerMode
         o("atr") = r.ATR
 
-        ' Same linear ATR distances the snapshot header computes (v32 D2).
-        Dim atrStop As Double = r.ATR * cfg.Scoring.AtrStopMultiplier
-        Dim atrTarget As Double = r.ATR * cfg.Scoring.AtrTargetMultiplier
+        ' Same linear ATR distances the snapshot header computes (v32 D2). Routed
+        ' through the SHARED per-side arbitration (ComputeSideLevels) — the same
+        ' function the CSV v0.8 Placed* columns read, so payload and CSV levels
+        ' cannot drift (aggressor-velocity boundary commit, placed-geometry D5).
         o("levels") = New JsonObject From {
-            {"long", BuildSideLevels(r.CurrentPrice, atrStop, atrTarget, r.ATR,
-                                     v.AdjustedLongTarget, v.TargetCapReasonLong, isLong:=True)},
-            {"short", BuildSideLevels(r.CurrentPrice, atrStop, atrTarget, r.ATR,
-                                      v.AdjustedShortTarget, v.TargetCapReasonShort, isLong:=False)}
+            {"long", BuildSideLevels(ComputeSideLevels(v, r, cfg, isLong:=True))},
+            {"short", BuildSideLevels(ComputeSideLevels(v, r, cfg, isLong:=False))}
         }
 
         ' Structural zeros = unset (§3 serialization pins) — emitted verbatim from
@@ -192,44 +202,59 @@ Public NotInheritable Class SignalEmitter
         Return o
     End Function
 
-    ' One side of the levels block. Mirrors the snapshot ATR-block arbitration:
-    '   adjusted = 0            → raw ATR target, uncapped.
-    '   adjusted > 0, |raw−adj| < max(0.5, ATR×0.02)
-    '                           → adjusted value but reported UNCAPPED (the v30
-    '                             sub-tick cap-noise suppression the display uses).
-    '   adjusted > 0 otherwise  → adjusted value, capped, reason verbatim
-    '                             (informational free string — presence only).
-    ' entry = the signal reference price (the close the pipeline scored against);
-    ' stop = the exit-trigger level (§9 items 3/4 — consumer mechanics beyond it).
-    Private Shared Function BuildSideLevels(entry As Double,
-                                            atrStop As Double,
-                                            atrTarget As Double,
-                                            atr As Double,
-                                            adjustedTarget As Double,
-                                            capReason As String,
-                                            isLong As Boolean) As JsonObject
-        Dim stopPx As Double = If(isLong, entry - atrStop, entry + atrStop)
-        Dim rawTarget As Double = If(isLong, entry + atrTarget, entry - atrTarget)
+    ''' <summary>
+    ''' SHARED per-side placed-level arbitration — the ONE definition of "the effective
+    ''' stop/target the engine would place for this run", consumed by BOTH the payload
+    ''' levels block (BuildOk) and the CSV v0.8 PlacedTarget/PlacedStop columns
+    ''' (AnalysisLogger.LogRun), so the two surfaces are equal by construction.
+    ''' Mirrors the snapshot ATR-block arbitration:
+    '''   adjusted = 0            → raw ATR target, uncapped.
+    '''   adjusted > 0, |raw−adj| &lt; max(0.5, ATR×0.02)
+    '''                           → adjusted value but reported UNCAPPED (the v30
+    '''                             sub-tick cap-noise suppression the display uses).
+    '''   adjusted > 0 otherwise  → adjusted value, capped, reason verbatim.
+    ''' entry = the signal reference price (the close the pipeline scored against);
+    ''' stop = the exit-trigger level. Today's geometry: stop = pure k×ATR, target =
+    ''' min(k×ATR, structural cap) — the placed-geometry structural-first pass (B4b)
+    ''' replaces the INPUTS to this arbitration later; the sharing survives it.
+    ''' </summary>
+    Public Shared Function ComputeSideLevels(v As VerdictResult,
+                                             r As IndicatorResults,
+                                             cfg As EngineSettings,
+                                             isLong As Boolean) As SideLevels
+        Dim entry As Double = r.CurrentPrice
+        Dim atrStop As Double = r.ATR * cfg.Scoring.AtrStopMultiplier
+        Dim atrTarget As Double = r.ATR * cfg.Scoring.AtrTargetMultiplier
+        Dim adjustedTarget As Double = If(isLong, v.AdjustedLongTarget, v.AdjustedShortTarget)
+        Dim capReason As String = If(isLong, v.TargetCapReasonLong, v.TargetCapReasonShort)
 
-        Dim target As Double = rawTarget
-        Dim capped As Boolean = False
-        Dim reason As String = Nothing
+        Dim lv As New SideLevels
+        lv.Entry = entry
+        lv.StopPx = If(isLong, entry - atrStop, entry + atrStop)
+        lv.RawTarget = If(isLong, entry + atrTarget, entry - atrTarget)
+        lv.Target = lv.RawTarget
+        lv.Capped = False
+        lv.Reason = Nothing
         If adjustedTarget > 0 Then
-            target = adjustedTarget
-            Dim capNoiseFloor As Double = Math.Max(0.5, atr * 0.02)
-            If Math.Abs(rawTarget - adjustedTarget) >= capNoiseFloor Then
-                capped = True
-                reason = capReason
+            lv.Target = adjustedTarget
+            Dim capNoiseFloor As Double = Math.Max(0.5, r.ATR * 0.02)
+            If Math.Abs(lv.RawTarget - adjustedTarget) >= capNoiseFloor Then
+                lv.Capped = True
+                lv.Reason = capReason
             End If
         End If
+        Return lv
+    End Function
 
+    ' One side of the levels block — a thin JSON wrapper over the shared arbitration.
+    Private Shared Function BuildSideLevels(lv As SideLevels) As JsonObject
         Return New JsonObject From {
-            {"entry", entry},
-            {"stop", stopPx},
-            {"target", target},
-            {"target_capped", capped},
-            {"cap_reason", JStr(reason)},
-            {"raw_target", rawTarget}
+            {"entry", lv.Entry},
+            {"stop", lv.StopPx},
+            {"target", lv.Target},
+            {"target_capped", lv.Capped},
+            {"cap_reason", JStr(lv.Reason)},
+            {"raw_target", lv.RawTarget}
         }
     End Function
 

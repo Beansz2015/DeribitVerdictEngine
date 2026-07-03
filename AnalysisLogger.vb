@@ -1,7 +1,31 @@
-' AnalysisLogger.vb  v0.7
+' AnalysisLogger.vb  v0.8
 ' Appends one row per analysis run to a local CSV file.
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
+'
+' v0.8 (#5 aggressor-velocity boundary, ONE rotation for the whole wave —
+'       roadmap §5 item 3 manifest): 16 columns appended (96-111):
+'       - 3 native #5:  AggrVelBurstRatio, AggrVelNet (net taker USD/sec, burst
+'         horizon), AggrVelSignal (BURST_BUY/BURST_SELL/NORMAL). Numerics empty
+'         on REST/fallback/cold-feed runs (§8 — null, never guessed).
+'       - 2 retune C1:  TFIValue, TFISignal (closes the F11 audit blindness).
+'       - 5 absorption (reserved per book-absorption-proposal.md D4/D8; EMPTY
+'         until the #6 build populates them): AbsorptionSignal, AbsorptionLevel,
+'         AbsorptionRatio, AbsorptionAggrUsd, AbsorptionPullFrac.
+'       - 4 placed-geometry (placed-geometry-structural-first D5; populated from
+'         day one with the CURRENT effective levels): PlacedTargetLong,
+'         PlacedStopLong, PlacedTargetShort, PlacedStopShort — sourced from
+'         SignalEmitter.ComputeSideLevels, the SAME shared arbitration the bridge
+'         payload's levels.<side>.stop/target use, so CSV ≡ payload by construction.
+'       - 2 attribution: InstanceId, SignalId (Core/ProcessIdentity — the id is
+'         ticked in RunAnalysisAsync BEFORE LogRun, so CSV SignalId ≡ payload
+'         signal_id per run; SKIPPED runs burn an id with no CSV row — expected).
+'       Same pass (retune C2): FundingRate format F6→F8 (same column, no header
+'       change — the WS funding feed's finer deltas were rounding away).
+'       Superseded v0.7 files rotate to analysis_log.csv.v0.7.bak (kept — the
+'       v48 §4a fire-rate watch reads it; NEVER delete).
+'       LogRun now takes cfg (the run's EngineSettings) for the placed-level
+'       arbitration multipliers.
 '
 ' v0.7 (v36 session-timeframe-resolution): Columns 94-95 appended: ExecResolution
 '       (execution resolution in minutes this row was computed on — 1/3/5; legacy
@@ -76,7 +100,12 @@ Public Class AnalysisLogger
         "TargetCapReason,BestPivotByVolume5m,BestPivotVolumeRatio5m," &
         "TrendStructure5m," &
         "MicroCVDEarly,MicroCVDMid,MicroCVDLate,MicroCVDMomentum,MicroCVDSignal," &
-        "ExecResolution,CVDWeightedSlope"
+        "ExecResolution,CVDWeightedSlope," &
+        "AggrVelBurstRatio,AggrVelNet,AggrVelSignal," &
+        "TFIValue,TFISignal," &
+        "AbsorptionSignal,AbsorptionLevel,AbsorptionRatio,AbsorptionAggrUsd,AbsorptionPullFrac," &
+        "PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort," &
+        "InstanceId,SignalId"
 
     Public Shared Function GetLogPath() As String
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
@@ -105,12 +134,14 @@ Public Class AnalysisLogger
             End Using
 
             If firstLine Is Nothing OrElse firstLine.Trim() <> Header Then
-                ' Schema mismatch — rotate old file (named for the superseded schema)
+                ' Schema mismatch — rotate old file (named for the superseded schema).
+                ' The .bak is NEVER deleted: the v48 §4a per-session fire-rate watch
+                ' reads the rotated v0.7 book.
                 Dim dir As String = System.IO.Path.GetDirectoryName(path)
-                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.6.bak")
+                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.7.bak")
                 If File.Exists(bakPath) Then
                     Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
-                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.6." & ts & ".bak")
+                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.7." & ts & ".bak")
                 End If
                 File.Move(path, bakPath)
                 WriteHeader(path)
@@ -129,10 +160,19 @@ Public Class AnalysisLogger
         End Try
     End Sub
 
-    Public Shared Sub LogRun(r As IndicatorResults, v As VerdictResult)
+    ' cfg (v0.8): the run's EngineSettings — feeds the shared placed-level arbitration
+    ' (SignalEmitter.ComputeSideLevels) so the Placed* columns equal the bridge payload's
+    ' levels for the same run by construction.
+    Public Shared Sub LogRun(r As IndicatorResults, v As VerdictResult, cfg As EngineSettings)
         EnsureLogFile()
         Dim path As String = GetLogPath()
         Try
+            ' v0.8 placed-geometry columns — the SAME per-side arbitration the bridge
+            ' payload emits (current geometry: pure-ATR stop, capped-ATR target; the
+            ' placed-geometry structural-first pass later changes the INPUTS, not this
+            ' sharing).
+            Dim placedLong = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
+            Dim placedShort = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
             Using sw As New StreamWriter(path, append:=True)
                 Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
                 Dim mtfReason As String = If(v.MTFGateReason, "").Replace(",", ";")
@@ -186,7 +226,7 @@ Public Class AnalysisLogger
                     r.EMAAlignment,
                     Inv(r.EMA200_5m, "F2"),
                     r.PriceVsEMA200,
-                    Inv(r.FundingRate, "F6"),
+                    Inv(r.FundingRate, "F8"),
                     r.FundingBias,
                     Inv(r.OI_Current, "F0"),
                     Inv(r.OIChange15m, "F4"),
@@ -243,7 +283,19 @@ Public Class AnalysisLogger
                     If(r.MicroCVDMomentum, "FLAT"),
                     If(r.MicroCVDSignal, "FLAT"),
                     r.ExecResolution.ToString(),
-                    Inv(r.CVDWeightedSlope, "F0")))
+                    Inv(r.CVDWeightedSlope, "F0"),
+                    InvOpt(r.AggrVelBurstRatio, "F4"),
+                    InvOpt(r.AggrVelNet, "F0"),
+                    If(r.AggrVelSignal, "NORMAL"),
+                    Inv(r.TFIValue, "F4"),
+                    If(r.TFISignal, "NEUTRAL"),
+                    "", "", "", "", "",
+                    Inv(placedLong.Target, "F2"),
+                    Inv(placedLong.StopPx, "F2"),
+                    Inv(placedShort.Target, "F2"),
+                    Inv(placedShort.StopPx, "F2"),
+                    ProcessIdentity.InstanceId,
+                    ProcessIdentity.CurrentSignalId.ToString()))
             End Using
         Catch
             ' Silent fail — logging must never crash the main pipeline
@@ -257,6 +309,13 @@ Public Class AnalysisLogger
     ' culture-sensitive ToString — the change only bites a comma-decimal locale.
     Private Shared Function Inv(value As Double, fmt As String) As String
         Return value.ToString(fmt, CultureInfo.InvariantCulture)
+    End Function
+
+    ' v0.8: nullable numeric — Nothing writes an EMPTY field (data unavailable this
+    ' run, e.g. aggressor velocity on a REST-fallback/cold-feed run), distinct from 0.
+    Private Shared Function InvOpt(value As Double?, fmt As String) As String
+        If Not value.HasValue Then Return ""
+        Return Inv(value.Value, fmt)
     End Function
 
     ' Normalise the engine's TargetCapReason display string to a canonical
