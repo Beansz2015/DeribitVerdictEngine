@@ -11,6 +11,9 @@
 ' Exit code 0 = all pass, 1 = failures.
 
 Imports System
+Imports System.Globalization
+Imports System.Text.Json
+Imports System.Threading
 
 Module Program
 
@@ -104,6 +107,18 @@ Module Program
         ' D4 fences the scoring.hold_ prefix (HARD CONSTRAINT 17).
         A21a_TweakerRejectsRemovedDeadKey()
         A21b_TweakerRejectsHoldPrefix()
+
+        ' Signal Bridge v1 — emitter payload (schema v1 FROZEN 2026-07-03):
+        ' field-by-field serialisation incl. the three target-cap cases, SKIPPED
+        ' shape, NO TRADE* leans ⇒ direction NONE, enum pins, ARM flag + process
+        ' identity, invariant-culture pins, tweaker fence (HARD CONSTRAINT 18).
+        A22a_PayloadFieldByField()
+        A22b_SkippedPayloadShape()
+        A22c_NoTradeLeansDirectionNone()
+        A22d_EnumPins()
+        A22e_ArmedFlagAndIdentity()
+        A22f_InvariantCultureSerialization()
+        A22g_TweakerRejectsSignalBridge()
 
         Console.WriteLine()
         If _failures = 0 Then
@@ -1609,6 +1624,304 @@ Module Program
               Not rHold.IsValid AndAlso rHold.ErrorReason.Contains("off-tweaker-surface") AndAlso rSib.IsValid,
               String.Format("hold: valid={0} reason='{1}' | sibling: valid={2} reason='{3}'",
                             rHold.IsValid, rHold.ErrorReason, rSib.IsValid, rSib.ErrorReason))
+    End Sub
+
+    ' =======================================================================
+    ' A22 — Signal Bridge v1 emitter (docs/signal-bridge-v1-proposal.md §4,
+    ' schema v1 FROZEN 2026-07-03). Pure Build/Serialize against fixed
+    ' fixtures; every assertion runs on the PARSED JSON (JsonDocument) so the
+    ' serialization pins (§9 item 6: numbers as numbers, invariant culture,
+    ' ISO-8601 Z) are exercised, not just the in-memory object.
+    ' =======================================================================
+
+    Private Function BuildBridgeCfg() As EngineSettings
+        ' POCO defaults carry the live multipliers: stop ×1.2 / target ×2.0,
+        ' trigger_mode "interval". Version pinned so the pass-through is visible.
+        Dim cfg As New EngineSettings()
+        cfg.Version = 49
+        Return cfg
+    End Function
+
+    Private Function BuildBridgeVerdict() As VerdictResult
+        Return New VerdictResult With {
+            .Verdict = "STRONG SHORT", .Confidence = "HIGH", .VerdictContext = "CONFIRMED",
+            .LongScore = 4, .ShortScore = 13,
+            .EffectiveLongScore = 4, .EffectiveShortScore = 13, .MaxScore = 20,
+            .MTFGateBlocked = False, .HoldStatus = "N/A -- no open position",
+            .KellyContracts = 2, .KellyRiskUsd = 32.5, .KellyLevCapped = False}
+    End Function
+
+    Private Function BuildBridgeIndicators() As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = 59012.5
+        r.ATR = 41.3
+        r.ExecResolution = 1
+        r.SwingTargetLong = 59095.0 : r.SwingStopLong = 58860.0
+        r.SwingTargetShort = 58860.0 : r.SwingStopShort = 59095.0
+        Return r
+    End Function
+
+    Private Function BridgeOkJson(v As VerdictResult, r As IndicatorResults,
+                                  Optional armed As Boolean = False) As JsonDocument
+        Dim payload = SignalEmitter.BuildOk(v, r, BuildBridgeCfg(),
+                                            "fixture-instance", 7, armed,
+                                            "OK", False,
+                                            New DateTime(2026, 7, 3, 14, 31, 2, DateTimeKind.Utc))
+        Return JsonDocument.Parse(SignalEmitter.Serialize(payload))
+    End Function
+
+    Private Function JNum(el As JsonElement, name As String) As Double
+        Return el.GetProperty(name).GetDouble()
+    End Function
+
+    ' -- A22a: full payload serialises field-by-field; three target-cap cases --
+    Private Sub A22a_PayloadFieldByField()
+        ' Case 1 — uncapped (Adjusted*Target = 0). ATR distances: stop 49.56 / target 82.6.
+        Dim root = BridgeOkJson(BuildBridgeVerdict(), BuildBridgeIndicators()).RootElement
+
+        Check("A22a head (schema_version/signal_id/generated_at_utc/instrument/signal_state/skip_reason)",
+              root.GetProperty("schema_version").GetInt32() = 1 AndAlso
+              root.GetProperty("signal_id").GetInt64() = 7 AndAlso
+              root.GetProperty("generated_at_utc").GetString() = "2026-07-03T14:31:02Z" AndAlso
+              root.GetProperty("instrument").GetString() = "BTC-PERPETUAL" AndAlso
+              root.GetProperty("signal_state").GetString() = "OK" AndAlso
+              root.GetProperty("skip_reason").ValueKind = JsonValueKind.Null,
+              "head fields mismatch: " & root.GetRawText())
+
+        Dim eng = root.GetProperty("engine")
+        Check("A22a engine block (app/settings_version/instance_id/autotrade_armed)",
+              eng.GetProperty("app").GetString() = "DeribitVerdictEngine" AndAlso
+              eng.GetProperty("settings_version").GetInt32() = 49 AndAlso
+              eng.GetProperty("instance_id").GetString() = "fixture-instance" AndAlso
+              eng.GetProperty("autotrade_armed").GetBoolean() = False,
+              "engine block mismatch: " & eng.GetRawText())
+
+        Dim sc = root.GetProperty("scores")
+        Check("A22a verdict/confidence/direction/context/mtf/scores",
+              root.GetProperty("verdict").GetString() = "STRONG SHORT" AndAlso
+              root.GetProperty("confidence").GetString() = "HIGH" AndAlso
+              root.GetProperty("direction").GetString() = "SHORT" AndAlso
+              root.GetProperty("verdict_context").GetString() = "CONFIRMED" AndAlso
+              Not root.GetProperty("mtf_blocked").GetBoolean() AndAlso
+              sc.GetProperty("long").GetInt32() = 4 AndAlso sc.GetProperty("short").GetInt32() = 13 AndAlso
+              sc.GetProperty("eff_long").GetInt32() = 4 AndAlso sc.GetProperty("eff_short").GetInt32() = 13 AndAlso
+              sc.GetProperty("max").GetInt32() = 20,
+              "verdict/scores mismatch: " & root.GetRawText())
+
+        Check("A22a price/exec_resolution_min/trigger_mode/atr",
+              Math.Abs(JNum(root, "price") - 59012.5) < 0.0001 AndAlso
+              root.GetProperty("exec_resolution_min").GetInt32() = 1 AndAlso
+              root.GetProperty("trigger_mode").GetString() = "interval" AndAlso
+              Math.Abs(JNum(root, "atr") - 41.3) < 0.0001,
+              "price/atr block mismatch")
+
+        Dim lng = root.GetProperty("levels").GetProperty("long")
+        Dim sht = root.GetProperty("levels").GetProperty("short")
+        Check("A22a uncapped levels (linear ATR distances, capped=false, cap_reason=null, raw=target)",
+              Math.Abs(JNum(lng, "entry") - 59012.5) < 0.0001 AndAlso
+              Math.Abs(JNum(lng, "stop") - (59012.5 - 49.56)) < 0.0001 AndAlso
+              Math.Abs(JNum(lng, "target") - (59012.5 + 82.6)) < 0.0001 AndAlso
+              Not lng.GetProperty("target_capped").GetBoolean() AndAlso
+              lng.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
+              Math.Abs(JNum(lng, "raw_target") - JNum(lng, "target")) < 0.0001 AndAlso
+              Math.Abs(JNum(sht, "stop") - (59012.5 + 49.56)) < 0.0001 AndAlso
+              Math.Abs(JNum(sht, "target") - (59012.5 - 82.6)) < 0.0001 AndAlso
+              Not sht.GetProperty("target_capped").GetBoolean(),
+              String.Format("levels mismatch: long={0} short={1}", lng.GetRawText(), sht.GetRawText()))
+
+        Dim st = root.GetProperty("structural")
+        Check("A22a structural verbatim (zeros = unset semantics ride the raw values)",
+              Math.Abs(JNum(st, "swing_target_long") - 59095.0) < 0.0001 AndAlso
+              Math.Abs(JNum(st, "swing_stop_long") - 58860.0) < 0.0001 AndAlso
+              Math.Abs(JNum(st, "swing_target_short") - 58860.0) < 0.0001 AndAlso
+              Math.Abs(JNum(st, "swing_stop_short") - 59095.0) < 0.0001,
+              "structural mismatch: " & st.GetRawText())
+
+        Dim kel = root.GetProperty("kelly")
+        Check("A22a hold_status null (no-position sentinel) + kelly + health",
+              root.GetProperty("hold_status").ValueKind = JsonValueKind.Null AndAlso
+              kel.GetProperty("contracts").GetInt32() = 2 AndAlso
+              Math.Abs(JNum(kel, "risk_usd") - 32.5) < 0.0001 AndAlso
+              Not kel.GetProperty("lev_capped").GetBoolean() AndAlso
+              root.GetProperty("health").GetProperty("ws").GetString() = "OK" AndAlso
+              Not root.GetProperty("health").GetProperty("degraded_this_run").GetBoolean() AndAlso
+              Not root.GetProperty("health").GetProperty("ledger_mismatch").GetBoolean(),
+              "hold/kelly/health mismatch: " & root.GetRawText())
+
+        ' Case 2 — genuinely capped long target (adjustment 35.1 >= noise floor 0.826).
+        Dim vCap = BuildBridgeVerdict()
+        vCap.AdjustedLongTarget = 59060.0
+        vCap.TargetCapReasonLong = "CAPPED @ 59060.0 (SWING_HIGH_5M)"
+        Dim lngCap = BridgeOkJson(vCap, BuildBridgeIndicators()).RootElement _
+                         .GetProperty("levels").GetProperty("long")
+        Check("A22a capped long (target=adjusted, capped=true, reason verbatim, raw preserved)",
+              Math.Abs(JNum(lngCap, "target") - 59060.0) < 0.0001 AndAlso
+              lngCap.GetProperty("target_capped").GetBoolean() AndAlso
+              lngCap.GetProperty("cap_reason").GetString() = "CAPPED @ 59060.0 (SWING_HIGH_5M)" AndAlso
+              Math.Abs(JNum(lngCap, "raw_target") - (59012.5 + 82.6)) < 0.0001,
+              "capped long mismatch: " & lngCap.GetRawText())
+
+        ' Case 3 — sub-tick cap-noise suppression (adjustment 0.3 < floor
+        ' max(0.5, ATR×0.02)=0.826): the display renders UNCAPPED, so the file
+        ' reports target_capped=false with the adjusted value (§3 field sourcing).
+        Dim vNoise = BuildBridgeVerdict()
+        vNoise.AdjustedLongTarget = 59094.8
+        vNoise.TargetCapReasonLong = "CAPPED @ 59094.8 (POC)"
+        Dim lngNoise = BridgeOkJson(vNoise, BuildBridgeIndicators()).RootElement _
+                           .GetProperty("levels").GetProperty("long")
+        Check("A22a cap-noise-suppressed long (target=adjusted, capped=FALSE, cap_reason null)",
+              Math.Abs(JNum(lngNoise, "target") - 59094.8) < 0.0001 AndAlso
+              Not lngNoise.GetProperty("target_capped").GetBoolean() AndAlso
+              lngNoise.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
+              Math.Abs(JNum(lngNoise, "raw_target") - (59012.5 + 82.6)) < 0.0001,
+              "noise-suppressed long mismatch: " & lngNoise.GetRawText())
+
+        ' Held position: hold_status rides verbatim (informational free string).
+        Dim vHold = BuildBridgeVerdict()
+        vHold.HoldStatus = "HOLD -- momentum intact"
+        Check("A22a hold_status verbatim when a position is declared",
+              BridgeOkJson(vHold, BuildBridgeIndicators()).RootElement _
+                  .GetProperty("hold_status").GetString() = "HOLD -- momentum intact",
+              "hold_status pass-through failed")
+    End Sub
+
+    ' -- A22b: SKIPPED payload — reduced shape, no verdict/levels fields -------
+    Private Sub A22b_SkippedPayloadShape()
+        Dim payload = SignalEmitter.BuildSkipped("1m candles unavailable", BuildBridgeCfg(),
+                                                 "fixture-instance", 8, False,
+                                                 "REST", False,
+                                                 New DateTime(2026, 7, 3, 14, 32, 0, DateTimeKind.Utc))
+        Dim root = JsonDocument.Parse(SignalEmitter.Serialize(payload)).RootElement
+        Dim unused As JsonElement
+        Check("A22b SKIPPED shape (state/reason/engine/health present; verdict/levels/price absent)",
+              root.GetProperty("signal_state").GetString() = "SKIPPED" AndAlso
+              root.GetProperty("skip_reason").GetString() = "1m candles unavailable" AndAlso
+              root.GetProperty("signal_id").GetInt64() = 8 AndAlso
+              root.GetProperty("engine").GetProperty("instance_id").GetString() = "fixture-instance" AndAlso
+              root.GetProperty("health").GetProperty("ws").GetString() = "REST" AndAlso
+              Not root.TryGetProperty("verdict", unused) AndAlso
+              Not root.TryGetProperty("levels", unused) AndAlso
+              Not root.TryGetProperty("price", unused) AndAlso
+              Not root.TryGetProperty("kelly", unused),
+              "SKIPPED shape mismatch: " & root.GetRawText())
+    End Sub
+
+    ' -- A22c: every NO TRADE* lean fixture ⇒ direction NONE; WEAK carries it --
+    Private Sub A22c_NoTradeLeansDirectionNone()
+        ' The AppendLean output space: bare + the three lean tags (§8 D2 — leans
+        ' live in `verdict` for logging, never actionable).
+        Dim noTrades As String() = {"NO TRADE", "NO TRADE [WEAK LONG]",
+                                    "NO TRADE [WEAK SHORT]", "NO TRADE [TIE]"}
+        Dim allNone As Boolean = True
+        Dim detail As String = ""
+        For Each nt In noTrades
+            Dim d = SignalEmitter.DeriveDirection(nt)
+            If d <> "NONE" Then allNone = False : detail &= String.Format("'{0}'→{1} ", nt, d)
+        Next
+        Check("A22c all NO TRADE* verdicts (incl. lean tags) ⇒ direction NONE", allNone, detail)
+
+        Check("A22c directional verdicts carry direction (WEAK included — tier gate is consumer-side)",
+              SignalEmitter.DeriveDirection("WEAK LONG") = "LONG" AndAlso
+              SignalEmitter.DeriveDirection("WEAK SHORT") = "SHORT" AndAlso
+              SignalEmitter.DeriveDirection("LONG") = "LONG" AndAlso
+              SignalEmitter.DeriveDirection("STRONG LONG") = "LONG" AndAlso
+              SignalEmitter.DeriveDirection("SHORT") = "SHORT" AndAlso
+              SignalEmitter.DeriveDirection("STRONG SHORT") = "SHORT",
+              "directional derivation mismatch")
+
+        ' End-to-end: the full payload keeps the lean text in `verdict` while
+        ' direction reads NONE.
+        Dim vLean = BuildBridgeVerdict()
+        vLean.Verdict = "NO TRADE [WEAK LONG]"
+        vLean.Confidence = "N/A"
+        Dim root = BridgeOkJson(vLean, BuildBridgeIndicators()).RootElement
+        Check("A22c payload: verdict keeps the lean text, direction NONE, confidence N/A",
+              root.GetProperty("verdict").GetString() = "NO TRADE [WEAK LONG]" AndAlso
+              root.GetProperty("direction").GetString() = "NONE" AndAlso
+              root.GetProperty("confidence").GetString() = "N/A",
+              "lean payload mismatch: " & root.GetRawText())
+    End Sub
+
+    ' -- A22d: enum pins — health.ws all four states + precedence --------------
+    Private Sub A22d_EnumPins()
+        Check("A22d DeriveWsHealth pins (REST wins at transport=rest; DEGRADED > DOWN > OK on ws)",
+              SignalEmitter.DeriveWsHealth(False, True, True, True) = "REST" AndAlso
+              SignalEmitter.DeriveWsHealth(False, False, False, False) = "REST" AndAlso
+              SignalEmitter.DeriveWsHealth(True, True, True, True) = "DEGRADED" AndAlso
+              SignalEmitter.DeriveWsHealth(True, False, False, False) = "DOWN" AndAlso
+              SignalEmitter.DeriveWsHealth(True, False, True, False) = "DOWN" AndAlso
+              SignalEmitter.DeriveWsHealth(True, False, True, True) = "OK",
+              "ws-health derivation mismatch")
+
+        ' signal_state is pinned by construction (BuildOk/BuildSkipped are the
+        ' only producers); confidence rides VerdictResult verbatim — assert the
+        ' pass-through for the four pinned values.
+        Dim ok As Boolean = True
+        Dim detail As String = ""
+        For Each conf In {"HIGH", "MEDIUM", "LOW", "N/A"}
+            Dim v = BuildBridgeVerdict()
+            v.Confidence = conf
+            Dim got = BridgeOkJson(v, BuildBridgeIndicators()).RootElement _
+                          .GetProperty("confidence").GetString()
+            If got <> conf Then ok = False : detail &= String.Format("{0}→{1} ", conf, got)
+        Next
+        Check("A22d confidence pin pass-through (HIGH/MEDIUM/LOW/N-A)", ok, detail)
+    End Sub
+
+    ' -- A22e: ARM flag rides the payload; process identity stable + monotonic -
+    Private Sub A22e_ArmedFlagAndIdentity()
+        Dim armedTrue = BridgeOkJson(BuildBridgeVerdict(), BuildBridgeIndicators(), armed:=True) _
+                            .RootElement.GetProperty("engine").GetProperty("autotrade_armed").GetBoolean()
+        Dim armedFalse = BridgeOkJson(BuildBridgeVerdict(), BuildBridgeIndicators(), armed:=False) _
+                             .RootElement.GetProperty("engine").GetProperty("autotrade_armed").GetBoolean()
+        Check("A22e autotrade_armed reflects the toggle in every payload", armedTrue AndAlso Not armedFalse,
+              String.Format("armed:=True→{0}, armed:=False→{1}", armedTrue, armedFalse))
+
+        Dim id1 As String = ProcessIdentity.InstanceId
+        Dim id2 As String = ProcessIdentity.InstanceId
+        Dim s1 As Long = ProcessIdentity.NextSignalId()
+        Dim s2 As Long = ProcessIdentity.NextSignalId()
+        Check("A22e instance_id stable across reads; signal_id strictly monotonic",
+              id1 = id2 AndAlso id1.Length > 0 AndAlso s2 = s1 + 1 AndAlso
+              ProcessIdentity.CurrentSignalId = s2,
+              String.Format("id1={0} id2={1} s1={2} s2={3} current={4}",
+                            id1, id2, s1, s2, ProcessIdentity.CurrentSignalId))
+    End Sub
+
+    ' -- A22f: serialization pins survive a hostile thread culture -------------
+    Private Sub A22f_InvariantCultureSerialization()
+        Dim savedCulture = Thread.CurrentThread.CurrentCulture
+        Dim savedUi = Thread.CurrentThread.CurrentUICulture
+        Try
+            Thread.CurrentThread.CurrentCulture = New CultureInfo("de-DE")
+            Thread.CurrentThread.CurrentUICulture = New CultureInfo("de-DE")
+            Dim json As String = SignalEmitter.Serialize(
+                SignalEmitter.BuildOk(BuildBridgeVerdict(), BuildBridgeIndicators(), BuildBridgeCfg(),
+                                      "fixture-instance", 7, False, "OK", False,
+                                      New DateTime(2026, 7, 3, 14, 31, 2, DateTimeKind.Utc)))
+            Dim root = JsonDocument.Parse(json).RootElement
+            Check("A22f invariant culture under de-DE (dot decimals, numbers as JSON numbers, ISO-8601 Z)",
+                  json.Contains("59012.5") AndAlso Not json.Contains("59012,5") AndAlso
+                  root.GetProperty("price").ValueKind = JsonValueKind.Number AndAlso
+                  root.GetProperty("atr").ValueKind = JsonValueKind.Number AndAlso
+                  root.GetProperty("generated_at_utc").GetString() = "2026-07-03T14:31:02Z",
+                  "culture-sensitive serialization detected")
+        Finally
+            Thread.CurrentThread.CurrentCulture = savedCulture
+            Thread.CurrentThread.CurrentUICulture = savedUi
+        End Try
+    End Sub
+
+    ' -- A22g: HARD CONSTRAINT 18 — signal_bridge.* fenced; sibling tunable ----
+    Private Sub A22g_TweakerRejectsSignalBridge()
+        Dim s As String = "{""version"":49,""scoring"":{""verdict_med_pct"":0.53}," &
+                          """signal_bridge"":{""enabled"":false,""output_path"":""C:\\Dev\\DeribitBridge\\verdict_signal.json""}}"
+        Dim rBridge = SettingsDiffApplier.Validate(OneDiff("signal_bridge.enabled", "false", "true"), s, 3)
+        Dim rSib = SettingsDiffApplier.Validate(OneDiff("scoring.verdict_med_pct", "0.53", "0.55"), s, 3)
+        Check("A22g Validate rejects signal_bridge.enabled (HARD CONSTRAINT 18 fence) + accepts scoring.verdict_med_pct",
+              Not rBridge.IsValid AndAlso rBridge.ErrorReason.Contains("off-tweaker-surface") AndAlso rSib.IsValid,
+              String.Format("bridge: valid={0} reason='{1}' | sibling: valid={2} reason='{3}'",
+                            rBridge.IsValid, rBridge.ErrorReason, rSib.IsValid, rSib.ErrorReason))
     End Sub
 
 End Module

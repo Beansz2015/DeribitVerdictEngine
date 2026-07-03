@@ -51,6 +51,11 @@
     <!-- P4 #1 realtime-exit-guard (A17): the host-agnostic evaluator + the shared
          ComputeFastExitPrimitives (in ScoringEngine_Helpers, already linked above). -->
     <Compile Include="..\..\ExitGuardEvaluator.vb" />
+    <!-- Signal Bridge v1 (A22): the host-agnostic emitter (pure Build/Serialize +
+         the pinned enum derivations) + the shared process-identity primitive. The
+         WinForms glue (MainForm_SignalBridge) stays OUT — same boundary as A16–A19. -->
+    <Compile Include="..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\Core\SignalEmitter.vb" />
     <!-- P4 #3 live-microstructure-strip (A19): the host-agnostic evaluator, exercised against a
          real MarketState (already linked) + the existing pure indicator fns. -->
     <Compile Include="..\..\LiveMicrostructureEvaluator.vb" />

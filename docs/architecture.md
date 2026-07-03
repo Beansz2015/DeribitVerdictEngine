@@ -78,6 +78,23 @@ DeribitVerdictEngine/
 │   │                                   per-session 3-min ROC magnitude ASIA 0.17 / LONDON
 │   │                                   0.11; slope shared in resolution_profiles).
 │   │
+│   ├── ProcessIdentity.vb              [Signal Bridge v1] Shared process-identity
+│   │                                   primitive: instance_id GUID per process start +
+│   │                                   signal_id ticked once per completed run (skips
+│   │                                   included) in RunAnalysisAsync, BEFORE the CSV
+│   │                                   write. Consumed by SignalEmitter now and by the
+│   │                                   CSV InstanceId/SignalId attribution columns at
+│   │                                   the #5 v0.8 rotation. Host-agnostic.
+│   ├── SignalEmitter.vb                [Signal Bridge v1] verdict_signal.json emitter
+│   │                                   (signal-bridge-v1-proposal.md §3 — schema v1
+│   │                                   FROZEN 2026-07-03). Pure BuildOk/BuildSkipped map
+│   │                                   the SAME VerdictResult/IndicatorResults fields
+│   │                                   the snapshot renders (incl. sub-tick cap-noise
+│   │                                   suppression) — the THIRD parity surface. Pinned
+│   │                                   DeriveDirection (NONE on all NO TRADE*) +
+│   │                                   DeriveWsHealth (OK/DEGRADED/DOWN/REST). Atomic
+│   │                                   TryWrite (tmp + File.Replace, create-dir,
+│   │                                   never-throws). Host-agnostic; harness A22.
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,
 │   │                                   AdjustedShortTarget, TargetCapReason,
@@ -181,6 +198,16 @@ DeribitVerdictEngine/
 │   │                                   Kelly, …). The card is the SECOND rendered
 │   │                                   surface; the display-string parity rule holds
 │   │                                   it in lockstep with the plaintext snapshot.
+│   ├── MainForm_SignalBridge.vb        [Signal Bridge v1] Thin WinForms glue: the two
+│   │                                   RunAnalysisAsync emission call sites (success →
+│   │                                   full payload AFTER snapshot + card binds; skip →
+│   │                                   reduced SKIPPED payload), both try/catch-hardened
+│   │                                   (never throw into the run), gated on
+│   │                                   signal_bridge.enabled. Owns the ARM AUTOTRADE
+│   │                                   checkbox state (runtime-only, default OFF every
+│   │                                   start, never persisted — dual-arm interlock D7;
+│   │                                   emitted as engine.autotrade_armed, emission
+│   │                                   unconditional on arming).
 │   ├── OutputDumpSettingsForm.vb       Non-modal dialog: Enabled toggle, max-runs
 │   │                                   textbox, file path + size, Clear + Save + Close.
 │   │                                   Save routes through SettingsLoader.Save.

@@ -567,11 +567,12 @@ Partial Public Class MainForm
         ' card-binding obligation (spec §6). Inserted AFTER _heroRowIndex is captured, so the hero-row
         ' grow logic (BindCardVerdict) is unaffected.
         Dim stripRow = New TableLayoutPanel() With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
             .BackColor = Color.Transparent, .Margin = New Padding(0), .TabStop = False
         }
         stripRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 76))
         stripRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        stripRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 130))
 
         chkLiveStrip = New CheckBox() With {
             .AutoSize = False,
@@ -597,8 +598,28 @@ Partial Public Class MainForm
             .TabStop = False
         }
 
+        ' [Signal Bridge v1] ARM AUTOTRADE — engine half of the dual-arm interlock
+        ' (§8 D7). TAPE-checkbox pattern, right edge of the strip row. RUNTIME-ONLY:
+        ' default OFF (unchecked) every start, never persisted; visible only while
+        ' signal_bridge.enabled (re-synced per run in MainForm_SignalBridge.vb).
+        chkArmAutotrade = New CheckBox() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = "ARM AUTOTRADE",
+            .Font = New Font("Segoe UI", 8.5!),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Margin = New Padding(0, 0, 8, 0),
+            .TabStop = False,
+            .Checked = False,
+            .Visible = SettingsLoader.Current.SignalBridge.Enabled
+        }
+        AddHandler chkArmAutotrade.CheckedChanged, AddressOf OnArmAutotradeCheckChanged
+
         stripRow.Controls.Add(chkLiveStrip, 0, 0)
         stripRow.Controls.Add(lblLiveStrip, 1, 0)
+        stripRow.Controls.Add(chkArmAutotrade, 2, 0)
         AddRow(stripRow, 24)
 
         ' Row 4: ATR ENTRY LEVELS. Bumped from 110 to 150 in P4 retro-fix

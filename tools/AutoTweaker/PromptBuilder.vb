@@ -81,6 +81,11 @@ Public Class PromptBuilder
             "linkage — same class as 'kelly.*'. The sibling 'scoring.*' tunables (verdict percentages, " &
             "penalties, etc.) REMAIN on the tweaker surface. (Enforced in code: SettingsDiffApplier " &
             "rejects the 'scoring.hold_' prefix as well.)" & vbLf &
+        "18. Never propose any 'signal_bridge.*' key. The signal_bridge block configures the " &
+            "order-app signal-file emission (an atomic-write verdict_signal.json mirror of the " &
+            "already-computed verdict) — transport plumbing with zero scoring impact and no " &
+            "failure-rate linkage; same class as 'network.*'. (Enforced in code: SettingsDiffApplier " &
+            "rejects 'signal_bridge.' as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

@@ -131,6 +131,12 @@ Public Class EngineSettings
     ''' <summary>[P4 #3 live-microstructure-strip] Display-only live TAPE strip parameters.</summary>
     <JsonPropertyName("live_strip")>
     Public Property LiveStrip As New LiveStripSettings
+
+    ''' <summary>[Signal Bridge v1] verdict_signal.json emission to the order app
+    ''' (docs/signal-bridge-v1-proposal.md — schema v1 FROZEN 2026-07-03). Transport
+    ''' plumbing, zero scoring impact; OFF the auto-tweaker surface (HARD CONSTRAINT 18).</summary>
+    <JsonPropertyName("signal_bridge")>
+    Public Property SignalBridge As New SignalBridgeSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -892,4 +898,20 @@ Public Class LiveStripSettings
     <JsonPropertyName("refresh_sec")>     Public Property RefreshSec     As Integer = 2
     ''' <summary>Tape-speed measurement window in seconds (trades/sec + USD/sec over this lookback). Default 10.</summary>
     <JsonPropertyName("tape_window_sec")> Public Property TapeWindowSec As Integer = 10
+End Class
+
+''' <summary>
+''' [Signal Bridge v1] Per-run atomic-write emission of verdict_signal.json — the machine-readable
+''' mirror of the rendered verdict, consumed by DeribitOrderPlacementApp (docs/signal-bridge-v1-proposal.md,
+''' schema v1 FROZEN 2026-07-03). The engine NEVER places orders; the human display stays primary — the
+''' payload is the third parity surface (snapshot ↔ cards ↔ signal file). Zero scoring/CSV impact.
+''' OFF the auto-tweaker surface (transport plumbing, network.* class: SettingsDiffApplier rejects
+''' "signal_bridge." + PromptBuilder HARD CONSTRAINT 18). NOTE: the ARM AUTOTRADE toggle is deliberately
+''' NOT here — it is runtime-only state (default OFF every start, never persisted; interlock rule §8 D7).
+''' </summary>
+Public Class SignalBridgeSettings
+    ''' <summary>Master switch. Default False (§8 D3) — flipping it on is the trader's dated action after the consumer's log-only validation.</summary>
+    <JsonPropertyName("enabled")>     Public Property Enabled    As Boolean = False
+    ''' <summary>Atomic-write target. Default = the agreed neutral folder outside both repos (§8 D9); the emitter creates the directory if missing. Empty ⇒ beside the exe (fallback semantic).</summary>
+    <JsonPropertyName("output_path")> Public Property OutputPath As String = "C:\Dev\DeribitBridge\verdict_signal.json"
 End Class

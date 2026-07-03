@@ -155,6 +155,12 @@ Partial Public Class MainForm
             ' deleted in P5b.
             UpdateLogInfo()
             RenderSkippedDashboard(skipReason)
+            ' [Signal Bridge v1 §2] A skip is a COMPLETED run: tick the per-run
+            ' signal id (the shared process-identity primitive — ticks regardless
+            ' of signal_bridge.enabled) and emit the reduced SKIPPED payload
+            ' (= stand down, previous signal now stale). No CSV row is written on
+            ' a skip, so the CSV→payload join stays total by construction.
+            EmitBridgeSkipped(skipReason, cfg, ProcessIdentity.NextSignalId())
             RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
             Return
         End If
@@ -547,6 +553,13 @@ Partial Public Class MainForm
         Dim verdict = ScoringEngine.Calculate(r, posState, norms, cfg)
         verdict.Timestamp = DateTime.Now
 
+        ' [Signal Bridge v1 §4] Tick the per-run signal id BEFORE the CSV write:
+        ' the #5 v0.8 header rotation adds InstanceId/SignalId attribution columns
+        ' that read ProcessIdentity.CurrentSignalId at LogRun time, and CSV
+        ' SignalId must equal this run's payload signal_id by construction. The
+        ' emission itself happens AFTER the snapshot + card binds (below).
+        Dim runSignalId As Long = ProcessIdentity.NextSignalId()
+
         ' Spec C — surface a ledger-guard mismatch on the LOG line (engine already
         ' wrote the detailed [LEDGER_MISMATCH] line to the console). Recomputed
         ' every run so it self-clears once the guard is quiet again.
@@ -609,6 +622,12 @@ Partial Public Class MainForm
         _lastSuccessfulNorms      = norms
         _lastSuccessfulCfg        = cfg
         _lastSuccessfulRenderTime = DateTime.Now
+
+        ' [Signal Bridge v1 §2] Emit verdict_signal.json — after the snapshot +
+        ' card binds so payload values = rendered values (the snapshot's inline
+        ' CalcKellySizing has populated verdict.Kelly*; the file is the third
+        ' parity surface). Try/catch-hardened inside — never throws into the run.
+        EmitBridgeSignal(verdict, r, cfg, runSignalId)
         ' Swap the VERDICT card back to the normal panel if the previous run
         ' was skipped. UpdateLogInfo also re-runs so the "last HH:mm:ss" line
         ' reflects this successful render.
