@@ -1,6 +1,6 @@
 # Placed Geometry — Structural-First Levels (target + stop) — Proposal
 
-**Status:** PROPOSED — trader signs off §9; the multiplier/bound values ship only after the §6 derivation runs (data exists — analysis-layer, no new collection).
+**Status:** APPROVED — trader ticked §9 D1–D8, 2026-07-03 (D3 = **(a) clamp**). The multiplier/bound values remain PROVISIONAL until the §6 derivation runs (next Fable session; data exists) and the trader reviews the derived table; the implementation may be authored against this spec in parallel but ships only with reviewed values, at the §8 vehicle.
 **Supersedes/absorbs:** the roadmap W1 "directional reach-target calibration" item (D7 spin-off) — that calibration becomes this spec's fallback-parameter derivation. Trader directive (2026-07-03): **structural first is priority; the design problem is the looseness fallback.**
 **Scoring impact:** ⚠ YES — the placed/effective levels change, which shifts BELOW_MIN_MOVE outcomes and therefore the verdict population. Lands at a dataset boundary (§8). Display + bridge payload values change (schema untouched — prices are prices).
 **Origin:** the O2 bridge made the emitted levels *executed* values (R2: placed as-is). The current geometry has two defects the bridge exposes: the ATR fallback **target** (2.0×) reaches only ~43% (D7; window-expiry-dominated), and the placed **stop** is pure ATR (1.2×) — the profile explicitly **rejects ATR stops for execution** (§4: "swing structure defines natural invalidation better than ATR multiples"). That rejection was harmless while levels were display-only; autotrading them mechanically reintroduces the rejected pattern. This spec closes both.
@@ -91,7 +91,7 @@ Per session×resolution on WS-era directional rows (the audit's slicing), walkin
 - **Vehicle (D7):** bundle at the #5 boundary commit if its build has not yet landed (one boundary event; precedent v31/v35 bundles); else its own boundary immediately after. **Hard rule either way: ships before autotrade steps to live-at-minimum-size** — the geometry defect is tolerable in log-only, not with resting orders. The bridge log-only soak does not wait for this.
 - Rule 1 respected: one boundary event; the eval migration (D6 follow-up) is analysis-layer and boundary-free.
 
-## 9. Sign-off decisions (trader)
+## 9. Sign-off decisions — ALL TICKED by the trader 2026-07-03 (D3 = clamp)
 
 | # | Decision | Recommendation |
 |---|---|---|
