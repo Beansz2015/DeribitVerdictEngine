@@ -269,10 +269,18 @@ End Class
 
 Public Class OfiSettings
     <JsonPropertyName("book_depth")>          Public Property BookDepth         As Integer = 5
-    <JsonPropertyName("buy_dominant_ratio")>  Public Property BuyDominantRatio  As Double  = 2.0
-    <JsonPropertyName("sell_dominant_ratio")> Public Property SellDominantRatio As Double  = 0.5
-    ''' <summary>Master switch for OFI momentum modifier. Default True.</summary>
-    <JsonPropertyName("momentum_enabled")>   Public Property MomentumEnabled   As Boolean = True
+    ' Aligned to live v48 (geometric-distribution re-baseline 1.60/0.625 — the defaults
+    ' deliberately rode "the next code commit" per that entry; this is it).
+    <JsonPropertyName("buy_dominant_ratio")>  Public Property BuyDominantRatio  As Double  = 1.60
+    <JsonPropertyName("sell_dominant_ratio")> Public Property SellDominantRatio As Double  = 0.625
+    ''' <summary>Master switch for the OFI momentum SCORING modifier. Default False —
+    ''' RETIRED v50 (signal-health-retune R1: active ~90% of runs in every era = no
+    ''' discrimination; unfixable by threshold; conditional outcomes adverse). The
+    ''' CalcOFIMomentum computation, r.OFIMomentum, the CSV column, and the MOM:state
+    ''' note segment all still populate (free diagnostics); only the score modifier is
+    ''' off. Fenced off the tweaker surface with its momentum_ siblings (HC 20) —
+    ''' reversal = flip this flag + drop the fence in one commit.</summary>
+    <JsonPropertyName("momentum_enabled")>   Public Property MomentumEnabled   As Boolean = False
     ''' <summary>Lookback sample count for OFI ratio delta. Default 3.</summary>
     <JsonPropertyName("momentum_window")>    Public Property MomentumWindow    As Integer = 3
     ''' <summary>Min absolute delta to classify as RISING/FALLING. Default 0.15.</summary>
@@ -467,8 +475,11 @@ End Class
 Public Class FundingSettings
     <JsonPropertyName("momentum_enabled")>   Public Property MomentumEnabled   As Boolean = True
     <JsonPropertyName("momentum_window")>    Public Property MomentumWindow    As Integer = 3
-    ' Aligned to live v30 (was 0.0001; recalibrated 0.000005 in v19, 0.00001 in v22).
-    <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.00001
+    ' Re-derived for the WS funding feed (v50 retune R2): funding_8h changes on 96.5% of
+    ' WS runs, so the v34 5e-8 threshold had Step 3b moving scores on 36.8% of runs vs
+    ' the REST-era 16% adjunct profile. 2e-7 on the reconstructed WS window-delta
+    ' distribution restores FLAT-modal (~67%) / 3b engagement ~19%.
+    <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.0000002
     <JsonPropertyName("momentum_amplify")>   Public Property MomentumAmplify   As Integer = 1
     <JsonPropertyName("momentum_soften")>    Public Property MomentumSoften    As Integer = 1
 End Class

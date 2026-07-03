@@ -98,6 +98,15 @@ Public Class PromptBuilder
             "'...gross_floor_usd_per_sec', '...upgrade_bonus', '...contra_penalty'. " &
             "(Enforced in code: SettingsDiffApplier exact-match rejects the two switches and " &
             "rejects the 'default.'/'sessions.' prefixes.)" & vbLf &
+        "20. Never propose any 'indicators.OFI.momentum_*' key (momentum_enabled, momentum_window, " &
+            "momentum_threshold, momentum_bonus). The OFI momentum SCORING modifier was RETIRED in " &
+            "v50 (signal-health-retune R1: the modifier state was active on ~90% of runs in every " &
+            "era — no discrimination, unfixable by threshold), so these keys are inert; proposing " &
+            "them would be a recorded-APPLIED no-op. The OFI level signal and its siblings " &
+            "('indicators.OFI.book_depth', 'indicators.OFI.buy_dominant_ratio', " &
+            "'indicators.OFI.sell_dominant_ratio', 'indicators.OFI.avg_window_sec') REMAIN on the " &
+            "surface. (Enforced in code: SettingsDiffApplier rejects the 'indicators.OFI.momentum_' " &
+            "prefix as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

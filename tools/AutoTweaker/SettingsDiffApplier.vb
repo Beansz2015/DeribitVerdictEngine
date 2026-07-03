@@ -70,7 +70,8 @@ Public Class SettingsDiffApplier
         "scoring.hold_",            ' CalcHoldStatus hold/exit thresholds — trader hold-discipline preference, no failure-rate linkage (HoldStatus never feeds the failure matrix); same class as kelly.* (HARD CONSTRAINT 17). Prefix-safe: sibling scoring.* tunables stay proposable
         "signal_bridge.",           ' order-app signal-file emission (verdict_signal.json) — transport plumbing, zero scoring impact, no failure-rate linkage; same class as network.* (HARD CONSTRAINT 18)
         "indicators.aggressor_velocity.default.",   ' [P4 #5] shared re-baseline tier (norm window + burst threshold) — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19). Prefix-safe: the flat aggressor_velocity params stay proposable
-        "indicators.aggressor_velocity.sessions."   ' [P4 #5] per-session overrides — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19)
+        "indicators.aggressor_velocity.sessions.",  ' [P4 #5] per-session overrides — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19)
+        "indicators.ofi.momentum_"                  ' [v50 retune R1] OFI momentum modifier RETIRED (momentum_enabled=false) — the momentum_window/threshold/bonus keys are inert; leaving them proposable recreates the recorded-APPLIED-no-op class v47 F1 closed (HARD CONSTRAINT 20). Prefix-safe: book_depth, buy/sell_dominant_ratio, averaging_enabled, avg_window_sec are NOT momentum_-prefixed
     }
 
     ' Validate a proposed diff list.

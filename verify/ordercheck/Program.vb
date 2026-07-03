@@ -137,6 +137,13 @@ Module Program
         ' Placed* CSV columns equal the bridge levels by construction; pin it.
         A24a_PlacedLevelsEqualPayloadLevels()
 
+        ' v50 retune cargo (signal-health-retune-proposal.md §5): R1 OFIMomentum
+        ' modifier retirement is byte-identical to the no-modifier path + the flag
+        ' still gates; the momentum_ prefix is fenced (HARD CONSTRAINT 20) while
+        ' the OFI siblings stay on the surface.
+        A25a_OfiMomentumRetireByteIdentical()
+        A25b_TweakerRejectsOfiMomentumPrefix()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -2154,6 +2161,75 @@ Module Program
                                     pin.Capped, pin.Target, pin.StopPx)
         End If
         Check("A24a Placed* levels ≡ payload levels (shared ComputeSideLevels, 3 cap cases + pin)", ok, detail)
+    End Sub
+
+    ' =======================================================================
+    ' A25 — v50 retune cargo (signal-health-retune-proposal.md §2 R1 + §5)
+    ' =======================================================================
+
+    ' -- A25a: R1 — momentum_enabled=false leaves the OFI level award byte-identical
+    ' to the no-modifier path. Reuses the A8 harness: OFI SELL DOMINANT fixture with
+    '   (a) enabled=False + OFIMomentum FALLING (a would-be +1[S] confirm)
+    '   (b) enabled=True  + OFIMomentum FLAT   (modifier inert by state)
+    ' → identical scores; note renders MOM:state with NO modifier suffix.
+    '   (c) enabled=True  + OFIMomentum FALLING → +1 short — the flag still gates.
+    Private Function OfiNote(v As VerdictResult) As String
+        For Each item In v.SignalBreakdown
+            If item.Label = "OFI" Then Return item.Note
+        Next
+        Return "(no OFI row)"
+    End Function
+
+    Private Sub A25a_OfiMomentumRetireByteIdentical()
+        Dim rA = BuildA8Indicators() : rA.OFIMomentum = "FALLING"
+        Dim cfgA = BuildA8Cfg(fundingBoost:=3)            ' MomentumEnabled=False already
+        Dim vA = ScoringEngine.Calculate(rA, PositionState.None, BuildA8Norms(), cfgA)
+
+        Dim rB = BuildA8Indicators()                       ' OFIMomentum FLAT
+        Dim cfgB = BuildA8Cfg(fundingBoost:=3)
+        cfgB.Indicators.OFI.MomentumEnabled = True
+        Dim vB = ScoringEngine.Calculate(rB, PositionState.None, BuildA8Norms(), cfgB)
+
+        Check("A25a R1 retire — disabled modifier ≡ no-modifier path (scores + verdict), MOM:state kept, no suffix",
+              vA.Verdict = vB.Verdict AndAlso
+              vA.LongScore = vB.LongScore AndAlso vA.ShortScore = vB.ShortScore AndAlso
+              vA.EffectiveLongScore = vB.EffectiveLongScore AndAlso
+              vA.EffectiveShortScore = vB.EffectiveShortScore AndAlso
+              OfiNote(vA).Contains("MOM:FALLING") AndAlso
+              Not OfiNote(vA).Contains("confirmed") AndAlso Not OfiNote(vA).Contains("suppressed"),
+              String.Format("A: '{0}' {1}/{2} note='{3}' | B: '{4}' {5}/{6}",
+                            vA.Verdict, vA.EffectiveLongScore, vA.EffectiveShortScore, OfiNote(vA),
+                            vB.Verdict, vB.EffectiveLongScore, vB.EffectiveShortScore))
+
+        Dim rC = BuildA8Indicators() : rC.OFIMomentum = "FALLING"
+        Dim cfgC = BuildA8Cfg(fundingBoost:=3)
+        cfgC.Indicators.OFI.MomentumEnabled = True
+        Dim vC = ScoringEngine.Calculate(rC, PositionState.None, BuildA8Norms(), cfgC)
+        Check("A25a flag still gates (enabled + FALLING on SELL DOMINANT → +1[S] confirm)",
+              vC.ShortScore = vA.ShortScore + 1 AndAlso OfiNote(vC).Contains("confirmed"),
+              String.Format("expected short {0}, got {1}; note='{2}'",
+                            vA.ShortScore + 1, vC.ShortScore, OfiNote(vC)))
+    End Sub
+
+    ' -- A25b: HC20 — indicators.OFI.momentum_ prefix fenced; siblings tunable ---
+    Private Sub A25b_TweakerRejectsOfiMomentumPrefix()
+        Dim s As String = "{""version"":49,""indicators"":{""OFI"":{""book_depth"":5," &
+                          """buy_dominant_ratio"":1.60,""sell_dominant_ratio"":0.625," &
+                          """momentum_enabled"":false,""momentum_window"":3," &
+                          """momentum_threshold"":0.15,""momentum_bonus"":1," &
+                          """averaging_enabled"":true,""avg_window_sec"":10}}}"
+        Dim rBonus = SettingsDiffApplier.Validate(OneDiff("indicators.OFI.momentum_bonus", "1", "2"), s, 3)
+        Dim rThr   = SettingsDiffApplier.Validate(OneDiff("indicators.OFI.momentum_threshold", "0.15", "0.10"), s, 3)
+        Dim rDepth = SettingsDiffApplier.Validate(OneDiff("indicators.OFI.book_depth", "5", "4"), s, 3)
+        Dim rDom   = SettingsDiffApplier.Validate(OneDiff("indicators.OFI.buy_dominant_ratio", "1.60", "1.5"), s, 3)
+        Dim rWin   = SettingsDiffApplier.Validate(OneDiff("indicators.OFI.avg_window_sec", "10", "12"), s, 3)
+        Check("A25b Validate rejects indicators.OFI.momentum_* (HC20 fence) + accepts book_depth/dominance/avg_window_sec",
+              Not rBonus.IsValid AndAlso rBonus.ErrorReason.Contains("off-tweaker-surface") AndAlso
+              Not rThr.IsValid AndAlso
+              rDepth.IsValid AndAlso rDom.IsValid AndAlso rWin.IsValid,
+              String.Format("bonus={0}'{1}' thr={2} depth={3} dom={4} win={5}",
+                            rBonus.IsValid, rBonus.ErrorReason, rThr.IsValid,
+                            rDepth.IsValid, rDom.IsValid, rWin.IsValid))
     End Sub
 
 End Module

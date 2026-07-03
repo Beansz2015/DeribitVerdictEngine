@@ -241,7 +241,7 @@
                   "static_ref": 38.0, "scale_min": 0.25, "scale_max": 4.0 },
     "OFI":      { "book_depth": 5,
                   "buy_dominant_ratio": 1.60, "sell_dominant_ratio": 0.625,
-                  "momentum_enabled": true,
+                  "momentum_enabled": false,
                   "momentum_window": 3,
                   "momentum_threshold": 0.15,
                   "momentum_bonus": 1,
@@ -278,7 +278,7 @@
     "funding":  {
                   "momentum_enabled": true,
                   "momentum_window": 3,
-                  "momentum_threshold": 0.00000005,
+                  "momentum_threshold": 0.0000002,
                   "momentum_amplify": 1,
                   "momentum_soften": 1
                 },
