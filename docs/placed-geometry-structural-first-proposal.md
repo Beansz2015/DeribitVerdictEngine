@@ -85,6 +85,8 @@ Per session×resolution on WS-era directional rows (the audit's slicing), walkin
 
 `enabled:false` ⇒ byte-identical to current geometry (the rollback; prove in harness).
 
+**§7 values SUPERSEDED 2026-07-06:** the derived + trader-approved values live in `placed-geometry-derivation-2026-07-06.md` §4 (DG1–DG5 ticked — notably DG1 amends the D2 stop shape to `min(structural, stop_max×ATR)` for v1, with `stop_max = fallback stop = 1.6`; un-clamping is a later pass gated on consumer sizing-by-stop-distance, derivation §6b). B4b implements against THAT table.
+
 ## 8. Sequencing (binding)
 
 - **D5 is time-sensitive:** reserve 4 CSV columns — `PlacedTargetLong`, `PlacedStopLong`, `PlacedTargetShort`, `PlacedStopShort` — **in #5's v0.7→v0.8 rotation** (the placed levels are not logged today at all; the eval migration and the derivation validation both need them). Decide before the #5 build freezes the header.

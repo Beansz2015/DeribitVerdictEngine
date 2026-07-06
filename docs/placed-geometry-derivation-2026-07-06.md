@@ -1,6 +1,6 @@
 # Placed Geometry §6 Derivation — Results & Proposed Values
 
-**Date:** 2026-07-06 (Fable seat). **Status:** DERIVED — awaiting trader review of §4 (values) + §5 (decisions DG1–DG5). B4b ships only after this tick.
+**Date:** 2026-07-06 (Fable seat). **Status:** APPROVED — trader ticked DG1–DG5, 2026-07-06, all recommended values (target 1.75/LON 2.0/ASIA 1.25, bound 3.5, stop 1.6 = stop_max, floor 4, clamp). **B4b is clear to implement with these values.** Sizing-by-stop-distance routing recorded in §6b.
 **Parent:** `placed-geometry-structural-first-proposal.md` (APPROVED D1–D8, D3=clamp; §7 values were PROVISIONAL pending this pass).
 
 ## 1. Method & data
@@ -54,6 +54,13 @@ Display consequence to expect: the fallback ATR block reads R:R ≈ 1:1.1 instea
 | DG3 | Fallback target 2.0 → **1.75** global + LONDON 2.0 + ASIA 1.25 session overrides | **Yes** |
 | DG4 | `target_max_atr_mult` 3.5 confirmed + **LONDON structural-target §12 watch** (trigger in F3) | **Yes** |
 | DG5 | Re-derive on a calmer regime window before UN-bounding anything further (this fortnight was one-regime); the D6 eval migration inherits F4 | **Yes** (recorded, no action now) |
+
+## 6b. Where sizing-by-stop-distance lives (trader Q, 2026-07-06)
+
+No single existing spec delivers it — it decomposes into three pieces, and the first needs **no engine change and no schema change**:
+1. **Consumer-side risk sizing** (order-app repo, own small spec): size = riskBudget / riskPerContract with `riskPerContract = face × |entry − stop| / entry` (inverse-contract math, the v32 D1 form) — every input is already in the v1 payload (`levels.<dir>.stop/entry`). Sensible slot: after the live-at-minimum-size phase stabilises (the ladder's "normal" step) — the supervised soak should hold few variables.
+2. **Bridge v2 feedback file** (agreed direction, unwritten spec, gated on 1–2 supervised weeks of v1): needed for engine-side exit actionability — related but NOT a prerequisite for (1).
+3. **Engine un-clamp pass** (placed-geometry follow-up, settings-mostly): once (1) exists, raise `stop_max_atr_mult` so genuine structural stops place again — ideally after the DG5 calmer-regime re-derivation.
 
 ## 6. Next steps on tick
 
