@@ -86,7 +86,12 @@ t=50s | candles 1m=250 3m=250 5m=210 15m=70 | trades=558 (+) | book=10x10 | tick
 === SOAK PASSED ===
 ```
 
-- **Forced-reconnect drill — NOT run in this session.** An automated headless session can't sever the OS network for ~60s. The reconnect path (exponential backoff 1→60s, >5/10min storm cooldown, resubscribe + re-seed) is implemented and visible in `DeribitWsFeed.RunLoopAsync`, but the live network-kill drill should be run by the **trader** (toggle WiFi mid-soak) — and P2 explicitly owns the full reconnect/fallback drills. **This is the one §9 acceptance item left open.**
+- **Forced-reconnect drill — PASSED (trader-run live, Ethernet pull, 2026-06-19).** Two back-to-back pull/restore cycles in one ~4.5-min run, both fully recovered. Evidence (condensed):
+  - **Detection:** the live socket surfaced the drop within ~1–3s — `[WS] connection error: The remote party closed the WebSocket connection without completing the close handshake.` Subsequent retries (cable still out) logged `Unable to connect to the remote server`.
+  - **Backoff + storm guard:** exponential `reconnecting in 1s→2s→4s→8s→16s→32s`; the `>5 reconnects / 10 min` guard fired correctly (`reconnect storm (6/10min) — cooling down 30s`) on both outages (the rolling 10-min queue accumulated across both pulls).
+  - **Staleness gate:** `tickerAge` climbed and the state flipped `FRESH→STALE` right at the 10s boundary (`9.3s` FRESH → `12.3s` STALE); `trades` froze; `mark`/`f8h` held their last values.
+  - **Recovery (both cycles):** on cable restore → `connecting / connected; seeding via REST… / subscribed to 7 channels` → state back `FRESH`, `tickerAge`→~0, trades re-seeded to 500 then resumed growing, heartbeats resumed.
+  - *Expected-not-a-bug:* trade count resets to 500 on each reconnect (REST re-seed replaces the buffer with the latest 500 — the window consumers need is always complete, REST covers the outage gap). The 24h soak + full fallback drills remain **P2**. **All §9 acceptance items now closed.**
 
 ---
 
@@ -103,7 +108,7 @@ t=50s | candles 1m=250 3m=250 5m=210 15m=70 | trades=558 (+) | book=10x10 | tick
 ## 6. Open items for coordinator / P2
 
 - **[coordinator]** Confirm the raw-`ClientWebSocket` vs `Websocket.Client` decision (§3.1); confirm the `PromptBuilder` exclusion is a separate commit (§3.2); run the harness with the app closed; add §15/§6/architecture notes at commit.
-- **[trader]** Run the forced-reconnect network-kill drill live (§4).
+- **[trader]** ~~Run the forced-reconnect network-kill drill live (§4).~~ ✅ DONE 2026-06-19 — PASSED, two cycles (§4).
 - **[P2]** Shadow-parity (≥50 runs) — especially the chart bar roll/tick semantics (forming-bar vs roll vs REST snapshot) and ticker-OI vs book-summary-OI equality (§2 nuance 3); the seed→subscribe boundary gap (`DeribitWsFeed.SeedAsync` comment); 24h soak; consumer routing (`_marketSource`) + status-bar surface + reconnect/fallback drills.
 - **[P3]** Cutover (`transport` default → `ws`) + 15m-TTL collapse, gated on the data-gated re-baselines.
 

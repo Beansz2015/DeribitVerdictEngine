@@ -54,19 +54,11 @@ Me.IconText = Char.ConvertFromUtf32(&H1F4CA)   ' 📊
 Me.IconText = "▤"   ' U+25A4 SQUARE WITH HORIZONTAL FILL — bar-chart silhouette in monospace
 ```
 
-#### 3.1.1 Glyph fallback policy
+#### 3.1.1 Glyph choice — resolved
 
-`▤` lives in Geist Mono's BMP coverage but at 12pt bold may render as a thin three-bar stack rather than reading as a chart icon. **First verification screenshot decides.** If `▤` reads poorly, swap in the same commit to:
+**`▤` (U+25A4) is the canonical icon as of `ba52994`.** It held first try at 12pt bold in Geist Mono — no fallback needed during the P3 maintenance pass implementation. The original verification gate from this spec served its purpose; this section is preserved as a historical footnote rather than an active fallback table.
 
-| Priority | Codepoint | Glyph | Why |
-|---|---|---|---|
-| Initial | U+25A4 | `▤` | Closest bar-chart silhouette. Try first. |
-| **First fallback** | **U+2261** | **`≡`** | Triple horizontal bar — Geist Mono hints it cleanly at small sizes; widely used in menu/list/report affordances. **Use this if `▤` looks thin.** |
-| Second fallback | U+25A6 | `▦` | Square with grid — denser, reads as "table" |
-| Last resort | U+25B0 | `▰` | Black parallelogram — closer to "tile" than "chart" |
-| Escape hatch | (drop) | — | The `→` trailing arrow already signals action. Cheapest. |
-
-No structural code change between options — only the string literal at line 24. The implementation conversation pre-commits to nothing; the kickoff verification gate (§8 step 2) is the decision point.
+> **Footnote (deprecated fallback policy).** If a future change to the font, sizing, or button surface causes `▤` to render thin again, the deprecated fallback order was: `≡` (U+2261, triple horizontal bar — hints cleanly), then `▦` (U+25A6, square with grid), then `▰` (U+25B0, black parallelogram), with "drop the icon entirely" as the escape hatch. Single-string-literal change at [AnalysisReportButton.vb:28](UI/Controls/AnalysisReportButton.vb:28). Not currently in scope.
 
 ### 3.2 Rejected approaches (already considered)
 

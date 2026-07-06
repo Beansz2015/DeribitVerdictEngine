@@ -118,9 +118,28 @@ Read in order:
 
 Recommend option 1 in the kickoff. Surface choice to the user.
 
-### P5 — Final cleanup + `BuildPlaintextSnapshot`
+### P5 — Final cleanup, SPLIT into P5a + P5b
 
-**Source spec:** `ui-reskin-proposal.md` §8 P5 + §10 R1.
+**Split rationale.** Trader requested keeping `txtOutput` and the verification dump card alive through P5a so the legacy RTF output can be displayed side-by-side with the card grid during a parity-verification window. P5b ships only after the trader explicitly signs off that every item visible in the legacy display is represented in the cards. Captures the conservative bias used throughout the reskin.
+
+**P5a — `BuildPlaintextSnapshot` + dump rewire + calibration migration.** Two commits. Snapshot builder + helper migrations + AnalysisReportForm rewire for the calibration viewer. Legacy `RenderOutput` keeps running so `txtOutput` keeps receiving RTF output for parity inspection. Kickoff: `docs/ui-reskin-p5a-kickoff.md`. **Opus 4.7 High** recommended.
+
+**Verification window between P5a and P5b — structured via P5-test harness.** Compressed from "wait for live data" (weeks) to "force every state via harness" (minutes) per user decision 2026-05-25. Sequence:
+
+0. **Screenshot reliability spec** (kickoff: `docs/screenshot-reliability-kickoff.md`) ships first so the harness's 50-case loop runs on reliable plumbing. Fixes popup-windows-land-off-screen-on-multi-monitor (P5a spec-back §4 finding) + adds full-form `DrawToBitmap` capture so screenshots work regardless of display height + adds UIA helpers the harness needs (radio button selection, popup-window close). Two-commit spec, ~330 LoC. **Opus 4.7 Medium.** Independent of P5b. **Shipped as `4a9781e` (commit 1) + `65dd6e7` (commit 2).** Spec-back §3.3 noted that commit 2 was untested in-session; subsequent spec-author testing surfaced three runtime defects (Windows 11 foreground-steal blocking, `ComputeNaturalFormHeight` under-counting, Finally-block restore not sticking). Follow-up patch kickoff: `docs/screenshot-reliability-fixes-kickoff.md` — single commit, ~30-50 LoC. **Must ship before P5-test** since the harness depends on these fixes working end-to-end.
+1. **P5-test** ships a temporary render-parity harness (kickoff: `docs/ui-reskin-p5-test-harness-kickoff.md`). ~40-60 hand-crafted test cases covering every visual branch in the legacy display. Bypasses `RunAnalysisAsync`; drives legacy + snapshot renderers directly with synthesised state. Produces text artifacts + screenshots + a discrepancy report. **Opus 4.7 High** recommended for the case library synthesis.
+2. **Discrepancy fix spec** (drafted by spec author after harness's first run) — small card-binding additions / snapshot tweaks for each gap the harness surfaced. Title pattern: `ui-reskin-p5-test-gap-fixes-proposal.md`.
+3. **Fix spec implementation** ships the changes.
+4. **Re-run harness.** If zero discrepancies, ship commit 3 of P5-test (cleanup: delete the harness scaffolding).
+5. **P5b ships** the deletion sweep.
+
+The harness is throwaway: it exists to **find** problems, fixes ship separately, harness deletes after parity confirmed.
+
+**P5b — Deletion sweep.** One commit (or split as two if diff balloons). Deletes render files, removes `txtOutput` writers, removes `RenderOutput` call, deletes P/Invoke surface + constants, removes verification dump card, consolidates `BuildPlainSectionHeader → MakeSectionHeader`. **Gated on trader's explicit "P5b ready" signal.** Kickoff: `docs/ui-reskin-p5b-kickoff.md` (skeleton; re-flow against P5a spec-back when ready). **Opus 4.7 Medium** — mechanical.
+
+**Final state after P5b.** Card grid is the only render surface. `analysis_output_dump.md` is the only text artifact (sourced from `BuildPlaintextSnapshot`). `txtOutput` is a zombie field (declared in Designer.vb but never instantiated visually, never written, never read) — Designer file stays untouched per the locked carve-out.
+
+**Source spec:** `ui-reskin-proposal.md` §8 P5 + §10 R1. (The original spec assumed one P5 phase; the trader's verification-window request split it into P5a + P5b at the P4f sign-off conversation 2026-05-25.)
 
 **Scope (high-risk phase):**
 
@@ -196,6 +215,25 @@ These have been settled across earlier conversations and **must not be re-litiga
 | Pass 2c CONFLICT case = `LongHit=False AND ShortHit=False AND note prefix matches CONFLICT` | P4d spec-back §5.1 | locked (fixed) |
 | Form width: **1100 px** (P4a settled at the floor of the rev 2.1 range) | P4a fix `3298ccf` | accept |
 | REPEAT/SINGLE mode display: `Pill` chip mirroring `rbRepeat`/`rbSingle` radios (radios stay the source of truth). `SegmentedToggle` wrapper retired. | P4e + P3 maintenance pass | locked |
+| **VERDICT hero text 18pt bold (not 22pt/28pt).** `ui-reskin-proposal.md` §3.5 originally specced 28pt for the full-size verdict and 22pt was the P4a landing. Both crowded the 2×2 sub-grid (CONTEXT / REGIME / MTF / HOLD) under long verdict strings (e.g. `NO TRADE [WEAK LONG]` when MTF blocks a weak signal). 18pt is the user-verified size that fits without compression. Hero row 160 → 180 px in the same change. The proposal §3.5 typography table is stale on this row; do not re-propose 22-28pt without new evidence. | P3 maintenance pass spec-back §4.3 + `12dd54f` | locked |
+| **ANALYSIS SKIPPED hero exception — 28pt bold + glow.** The 18pt lock above applies to the normal-render VERDICT card (which has a 2×2 sub-grid below). The SKIPPED panel replaces that sub-grid with two static sub-lines (reason + hint), so the crowding constraint doesn't apply. Original proposal §5.1 spec'd 28pt; P4f honoured that for the SKIPPED state only. | P4f kickoff §3.1 + P4f commit `c8ebac6` | locked exception |
+| **Stale-card overlays occlude, not dim.** WinForms doesn't composite sibling child controls — a Panel-overlay alpha-tints the parent card background but doesn't dim sibling labels through. Visible result during ANALYSIS SKIPPED: each non-VERDICT card paints as a uniform dark rectangle with a `(stale)` Pill at top-right. The pill is the primary staleness signal; the dark fill reinforces it. User accepted this outcome (post-P4f spec-back review) — do not re-propose label-ForeColor dimming without new evidence (trader workflow during skipped state has been validated against the current visual). | P4f spec-back §1.1 + user accept 2026-05-25 | locked (occlusion is the design) |
+| **Self-screenshot is the default verification path.** Both implementation conversations and spec-author audit conversations run `tools/screenshot-mainform.ps1` + the companion helpers (`click-mainform-button.ps1`, `resize-mainform.ps1`, `inspect-mainform-tree.ps1`) before reporting any visual-finding back to the user. The user is the second-pass reviewer for substance + mental-model match; first-pass discovery of clipping / overlap / artifact / tofu issues belongs to the conversation that wrote or audited the code. Sessions without GUI access fall back to the legacy user-screenshot pattern (graceful failure; no harm). | P4f spec-back §1.3 + user request 2026-05-25 | locked workflow |
+
+---
+
+## 4.1 P3-touching specs — required tick-box gate
+
+The §4 paint carve-out (the `UI/Controls/` row) is narrow on purpose. Any future spec that proposes changes to `UI/Controls/*.vb` MUST satisfy all four checks in the kickoff before invoking the carve-out:
+
+- [ ] **Cites the §4 carve-out language verbatim.** Don't just reference "the carve-out" — quote the allowed-vs-not-allowed boundary.
+- [ ] **Confirms paint-only.** No new public properties, no new events, no constructor / method signature changes. Allowed: font size, `ForeColor`, border placement, corner radius, internal padding values.
+- [ ] **Confirms no consumer code changes.** If anything outside `UI/Controls/` needs to update to consume the change, it's an API change, not paint.
+- [ ] **Confirms no new or deleted controls.** New controls and deletions are structural; both require a separate maintenance-pass spec (the P3 maintenance pass at `ba52994` is the precedent).
+
+If any check is "no," the spec is a **structural P3 change** and needs a fresh locked-decision discussion in this §4 table, not just the carve-out invocation. The carve-out exists to allow card-grid visual consistency tweaks (the `bb7cd57` SectionGroup title bump is the canonical example); it does not exist to soften the P3 freeze.
+
+The implementation conversation has standing authority to refuse a kickoff that invokes the carve-out without satisfying all four checks.
 
 ---
 
@@ -230,6 +268,9 @@ Minor pending items the user hasn't formally locked. None block P4e — but if n
 | AUTO-RUN box minute/second NUDs — keep current Designer NUDs (P4c carry-forward) | yes, keep | already locked |
 | Calibration Report viewer post-P5 — reuse `AnalysisReportForm` | yes | flag in P5 kickoff |
 | LiveQuant scripts that read `analysis_output_dump.md` — pre/post P5 diff check | yes | flag in P5 kickoff |
+| **`MakeSectionHeader` / `BuildPlainSectionHeader` consolidation.** After the `be7f64b` unification both helpers produce identical output (11pt + `FG_SECONDARY` default, optional colour override on `MakeSectionHeader`). `BuildPlainSectionHeader` is redundant — replace its 4 call sites with no-arg `MakeSectionHeader` calls, delete the helper. Pure cleanup. | yes, defer to P5 | **bundle into P5 cleanup commit** |
+| **Kickoff template: worst-case-string-length budget.** Verdict 22pt → 18pt regression cost an iteration because the P4a pixel budget assumed median-case content ("LONG"/"WEAK LONG"), not the longer MTF-blocked strings ("NO TRADE [WEAK LONG]"). Future card kickoffs should add a one-line check: "What's the longest plausible string for the dominant headline label?" — and size from there. | yes, fold into next kickoff template | flag at the top of the next kickoff doc, no separate spec needed |
+| **SC column / TOTAL parity (Spec C).** Drafted in `docs/sc-column-total-parity-proposal.md`. Engine emits direction-only via `LongHit`/`ShortHit`; SC column displays direction, TOTAL accumulates magnitudes. Hand-tallying SC doesn't sum to TOTAL when BBW / MicroCVD / Pass 2c / funding penalties fire. **Deferred to post-P5 as Phase 6.** Legacy text dump (P4f window) and `BuildPlaintextSnapshot` output (P5 onward) preserve penalty magnitudes in the NOTE column, so trader workflow has a workaround for the duration. Engine + downstream consumers (CSV, auto-tweaker, verdict, calibration) are already correct. Sequence: P4f → P5 → Spec C → cleanup specs. | post-P5 (Phase 6) | scheduled |
 
 ---
 
@@ -377,8 +418,9 @@ Carried forward from `crypto-trading-context` skill + project handover:
 4. **Spec-first.** Novel features get a proposal doc before coding.
 5. **Settings.json version is strictly monotonic.** No reskin work touches settings.json — engine config stays at v30.
 6. **Fresh Opus 4.7 Medium conversation per phase kickoff.** Spec author (you) stays continuous across phases via handover docs like this one. Implementation conversations are one-shot per kickoff.
-7. **High effort reserved for synthesis-heavy work.** P3 was High. P4a/b/c/d/e were Medium. P4f Medium. **P5 may need High** for the `BuildPlaintextSnapshot` work — surface the choice to the user when drafting the P5 kickoff.
+7. **High effort reserved for synthesis-heavy work.** P3 was High. P4a/b/c/d/e were Medium. P4f Medium. **P5 needs High** for the `BuildPlaintextSnapshot` work.
 8. **Push gate is user-side.** User tests the running app, then pushes.
+9. **Self-screenshot is the default verification path** (per §4 locked workflow row). Both implementation conversations AND spec-author audit conversations run the `tools/` helpers before reporting any visual finding back. Workflow: `dotnet run` (background) → `screenshot-mainform.ps1` for initial state → `click-mainform-button.ps1 ANALYZE` to populate cards → second screenshot → `inspect-mainform-tree.ps1 -Pattern <regex>` for off-screen elements when the form exceeds display working area → `resize-mainform.ps1 -Y -<N>` to bring lower cards into capture range → kill process when done. The `verify/` output directory is gitignored. Sessions without GUI access fall back to the user-screenshot pattern (graceful failure). See `tools/README.md` for the full workflow.
 
 ---
 
