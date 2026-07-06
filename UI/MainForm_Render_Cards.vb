@@ -938,13 +938,15 @@ Partial Public Class MainForm
     Public Sub BindCardAtrLevels(v As VerdictResult, r As IndicatorResults, norms As DynamicNorms)
         Dim cfg As EngineSettings = SettingsLoader.Current
         Dim stopMult   As Double = cfg.Scoring.AtrStopMultiplier
-        Dim targetMult As Double = cfg.Scoring.AtrTargetMultiplier
-        ' D2 (S-1): linear ATR distances — distance = ATR × multiplier, no
-        ' ATRScaleFactor. Matches the legacy txtOutput render (also linearised).
-        Dim atrUnit    As Double = r.ATR
-        Dim atrStop    As Double = atrUnit * stopMult
-        Dim atrTarget  As Double = atrUnit * targetMult
-        Dim entryPx    As Double = r.CurrentPrice
+        ' [B4b placed-geometry] The rendered levels come from the ONE shared arbitration
+        ' (SignalEmitter.ComputeSideLevels — the same function the snapshot, the bridge
+        ' payload, and the CSV Placed* columns read). structural_levels.enabled=false ⇒
+        ' the legacy v50 values ride through (StopReason Nothing ⇒ no labels rendered).
+        Dim lvLong  As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
+        Dim lvShort As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
+        ' Session-resolved fallback-target multiplier for the sub-header (DG3 overrides;
+        ' == cfg.Scoring.AtrTargetMultiplier when disabled / no override).
+        Dim headerTargetMult As Double = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, r.SessionUtcHour)
 
         ' D2 sub-header: the displayed multiplier is now the trader-profile sizing
         ' factor AvgATR/CurrATR (= ATRRef/ATR, reciprocal of the old "× scale"
@@ -953,7 +955,8 @@ Partial Public Class MainForm
         If _atrSubHeader IsNot Nothing Then
             ' [v36] EXEC tag mirrors the BuildPlaintextSnapshot ATR ENTRY LEVELS header
             ' (display-parity hard rule — the tag lands on both surfaces this commit).
-            _atrSubHeader.Text = $"ATR {r.ATR:F2}  size ×{sizeMult:F2}  |  {stopMult:F1}× stop / {targetMult:F1}× target  |  EXEC {r.ExecResolution}m"
+            ' [B4b] target mult renders F2 (1.75 must not round to 1.8); stop stays F1.
+            _atrSubHeader.Text = $"ATR {r.ATR:F2}  size ×{sizeMult:F2}  |  {stopMult:F1}× stop / {headerTargetMult:F2}× target  |  EXEC {r.ExecResolution}m"
         End If
 
         ' GAP-06: render BOTH long and short rows. Verdict direction gets
@@ -964,87 +967,62 @@ Partial Public Class MainForm
         Dim isShortVerdict As Boolean = verdict.StartsWith("SHORT") OrElse verdict.StartsWith("STRONG SHORT") OrElse verdict.StartsWith("WEAK SHORT")
         Dim isNoTrade      As Boolean = verdict.StartsWith("NO TRADE")
 
-        Dim longCapReason  As String = BindAtrRow(
+        BindAtrRow(
             row:=_atrLongRow,
             isLong:=True,
-            entryPx:=entryPx,
-            stopPx:=entryPx - atrStop,
-            rawTargetPx:=entryPx + atrTarget,
-            adjustedTarget:=v.AdjustedLongTarget,
-            cfgCapReason:=If(v.TargetCapReasonLong, ""),
-            atrStop:=atrStop,
-            atrTarget:=atrTarget,
-            atrForFloor:=r.ATR,
+            lv:=lvLong,
             structuralStopPx:=r.SwingStopLong,
             primary:=isLongVerdict OrElse isNoTrade,
             verdictColour:=ResolveVerdictColour(v.Verdict))
 
-        Dim shortCapReason As String = BindAtrRow(
+        BindAtrRow(
             row:=_atrShortRow,
             isLong:=False,
-            entryPx:=entryPx,
-            stopPx:=entryPx + atrStop,
-            rawTargetPx:=entryPx - atrTarget,
-            adjustedTarget:=v.AdjustedShortTarget,
-            cfgCapReason:=If(v.TargetCapReasonShort, ""),
-            atrStop:=atrStop,
-            atrTarget:=atrTarget,
-            atrForFloor:=r.ATR,
+            lv:=lvShort,
             structuralStopPx:=r.SwingStopShort,
             primary:=isShortVerdict OrElse isNoTrade,
             verdictColour:=ResolveVerdictColour(v.Verdict))
 
-        ' C1b: cap-reason is now appended inline to each row's CAPPED cell
-        ' (longCapReason / shortCapReason are returned as "" — see BindAtrRow).
+        ' C1b: cap-reason is appended inline to each row's CAPPED cell (see BindAtrRow).
     End Sub
 
     ''' <summary>
-    ''' Bind one direction's ATR row. Returns the cap-reason string (empty
-    ''' when CAPPED divider is suppressed). primary=True renders at full
-    ''' verdict colour + bold; primary=False dims to FG_TERTIARY at smaller
-    ''' font weight so the contrary direction reads as secondary detail.
+    ''' Bind one direction's ATR row from the shared arbitration result (B4b: the
+    ''' SAME SideLevels the snapshot / payload / CSV read — parity by construction).
+    ''' primary=True renders at full verdict colour + bold; primary=False dims to
+    ''' FG_TERTIARY at smaller font weight so the contrary direction reads as
+    ''' secondary detail. On the legacy path (lv.StopReason Is Nothing) the rendered
+    ''' output is byte-identical to the pre-B4b binding.
     ''' </summary>
-    ' DESIGN NOTE (C1a, P5-test gap-fix commit 1): ATR stops are deliberately
-    ' uncapped (no CAPPED indicator on the STOP cell). Targets are capped at
-    ' HVN/POC via AdjustedLongTarget / AdjustedShortTarget; stops are not.
-    ' Rationale: capping the ATR stop would (a) break position-sizing
-    ' decoupling (Base × AvgATR/CurrATR reads atrStop as the volatility
-    ' reference), (b) duplicate information already shown in the structural
-    ' row beneath, (c) mislead the ATR row's R:R reading. Trader uses the
-    ' dual-row display + the C1c "STRUCT|STOP" worse-of prefix on this row
-    ' to pick which stop to execute against. Future adaptive-stop work
-    ' tracked in docs/adaptive-stop-invalidation-proposal.md (post-Spec-C).
-    Private Function BindAtrRow(row As AtrRowControls,
-                                isLong As Boolean,
-                                entryPx As Double,
-                                stopPx As Double,
-                                rawTargetPx As Double,
-                                adjustedTarget As Double,
-                                cfgCapReason As String,
-                                atrStop As Double,
-                                atrTarget As Double,
-                                atrForFloor As Double,
-                                structuralStopPx As Double,
-                                primary As Boolean,
-                                verdictColour As Color) As String
+    ' DESIGN NOTE (C1a, P5-test gap-fix commit 1; B4b-amended): the STOP cell shows
+    ' the PLACED stop. Legacy geometry places pure k×ATR (no cap indicator);
+    ' structural-first places min(swing stop, bound) and labels the source
+    ' (SWING_STOP / STOP_CLAMPED / FALLBACK_ATR). The C1c "STRUCT|STOP" dual cell
+    ' still shows the raw structural stop beside the placed one when it is deeper —
+    ' under DG1-clamp that is exactly the STOP_CLAMPED case, so the trader sees the
+    ' true invalidation level next to the bounded resting stop.
+    Private Sub BindAtrRow(row As AtrRowControls,
+                           isLong As Boolean,
+                           lv As SideLevels,
+                           structuralStopPx As Double,
+                           primary As Boolean,
+                           verdictColour As Color)
 
-        If row Is Nothing Then Return ""
+        If row Is Nothing Then Return
 
-        Dim adjustedTargetPx As Double = If(adjustedTarget > 0, adjustedTarget, rawTargetPx)
+        Dim entryPx As Double = lv.Entry
+        Dim stopPx As Double = lv.StopPx
+        Dim rawTargetPx As Double = lv.RawTarget
+        Dim adjustedTargetPx As Double = lv.Target
 
-        ' Sub-tick CAPPED suppression (v30 F1): only show CAPPED when the
-        ' adjustment exceeds max(0.5, ATR × 0.02).
-        Dim showCapped As Boolean = False
+        ' The arbitration already applied the v30 sub-tick CAPPED suppression:
+        ' lv.Capped is the post-suppression flag, lv.Reason the full reason string.
+        ' C1b: the inline CAPPED cell already shows the price ("→ {price:F1}"),
+        ' so render only the parenthetical label here and DON'T duplicate
+        ' the full reason in the bottom _atrCapReason label.
+        Dim showCapped As Boolean = lv.Capped
         Dim capLabel As String = ""
-        If adjustedTarget > 0 Then
-            Dim noiseFloor As Double = Math.Max(0.5, atrForFloor * 0.02)
-            showCapped = Math.Abs(rawTargetPx - adjustedTargetPx) >= noiseFloor
-            ' C1b: cfgCapReason from engine is "CAPPED @ {price:F1} ({label})".
-            ' The inline CAPPED cell already shows the price ("→ {price:F1}"),
-            ' so render only the parenthetical label here and DON'T duplicate
-            ' the full reason in the bottom _atrCapReason label.
-            If showCapped Then capLabel = ExtractCapLabel(cfgCapReason)
-        End If
+        If showCapped Then capLabel = ExtractCapLabel(If(lv.Reason, ""))
 
         ' Q2: surface risk / rwd USD amounts inline on the R:R cell so the
         ' trader doesn't have to compute |entry-stop| and |target-entry| in
@@ -1063,13 +1041,21 @@ Partial Public Class MainForm
             row.RRSubValue.Text = $"(risk {riskUsd:F1} / rwd {rwdUsd:F1})"
         End If
 
-        ' C1c: structural stop side-by-side with ATR stop when structural is
-        ' deeper (further from entry). Symmetric long/short.
+        ' C1c: structural stop side-by-side with the placed stop when structural is
+        ' deeper (further from entry). Symmetric long/short. B4b: the placed stop's
+        ' source label rides into the cell (Nothing on the legacy path = no label).
         Dim structDeeper As Boolean = IsStructuralStopDeeper(structuralStopPx, stopPx, isLong)
-        BindAtrStopCell(row, stopPx, structuralStopPx, structDeeper, primary, isLong)
+        BindAtrStopCell(row, stopPx, structuralStopPx, structDeeper, primary, isLong, lv.StopReason)
 
         SetZoneValue(row.EntryValue,  "ENTRY",  $"{entryPx:F1}")
-        SetZoneValue(row.TargetValue, "TARGET", $"{adjustedTargetPx:F1}")
+        ' B4b: on non-capped structural-first rows the target cell carries its source
+        ' label ((FALLBACK_ATR) etc. — capped rows show the label in the CAPPED cell).
+        If Not showCapped AndAlso lv.TargetReason IsNot Nothing Then
+            SetZoneValue(row.TargetValue, "TARGET",
+                         $"{adjustedTargetPx:F1}" & Environment.NewLine & $"({lv.TargetReason})")
+        Else
+            SetZoneValue(row.TargetValue, "TARGET", $"{adjustedTargetPx:F1}")
+        End If
 
         If showCapped Then
             ' C1b: inline cell carries the arrow-price AND the label.
@@ -1126,10 +1112,9 @@ Partial Public Class MainForm
             If Not showCapped Then row.CappedValue.ForeColor = Theme.BORDER_INNER
         End If
 
-        ' C1b: bottom-of-card cap-reason label is now redundant — return ""
-        ' to suppress it. The (label) parenthetical is rendered inline above.
-        Return ""
-    End Function
+        ' C1b: the bottom-of-card cap-reason label stays suppressed — the (label)
+        ' parenthetical is rendered inline above.
+    End Sub
 
     ''' <summary>
     ''' C1c: True when the structural stop is further from entry than the ATR
@@ -1161,11 +1146,20 @@ Partial Public Class MainForm
                                        structuralStopPx As Double,
                                        structDeeper As Boolean,
                                        primary As Boolean,
-                                       isLong As Boolean)
+                                       isLong As Boolean,
+                                       stopReason As String)
         Dim valueFont   As Font = If(primary, Theme.FontMono(11.5F, FontStyle.Bold), Theme.FontMono(9.5F, FontStyle.Regular))
         Dim shrinkSize  As Single = If(primary, 9.5F, 7.5F)
         Dim shrinkStyle As FontStyle = If(primary, FontStyle.Bold, FontStyle.Regular)
         Dim shrinkFont  As Font = Theme.FontMono(shrinkSize, shrinkStyle)
+
+        ' B4b: the placed stop carries its source label on a second line
+        ' (SWING_STOP / STOP_CLAMPED / FALLBACK_ATR — the snapshot row's [label]
+        ' equivalent). stopReason is Nothing on the legacy path → value only.
+        Dim stopValueText As String = $"{atrStopPx:F1}"
+        If stopReason IsNot Nothing Then
+            stopValueText &= Environment.NewLine & $"({stopReason})"
+        End If
 
         If structDeeper Then
             ' Two-cell layout: STRUCT (full font) | STOP (smaller font).
@@ -1176,7 +1170,7 @@ Partial Public Class MainForm
             SetZoneValue(row.StructStopValue, "STRUCT", $"{structuralStopPx:F1}")
             row.StructStopValue.Font = valueFont
 
-            SetZoneValue(row.StopValue, "STOP", $"{atrStopPx:F1}")
+            SetZoneValue(row.StopValue, "STOP", stopValueText)
             row.StopValue.Font = shrinkFont
         Else
             ' Single-cell layout: STOP only, full width (legacy behaviour).
@@ -1184,7 +1178,7 @@ Partial Public Class MainForm
             row.StopCellLayout.ColumnStyles(1) = New ColumnStyle(SizeType.Percent, 100.0F)
 
             row.StructStopValue.Visible = False
-            SetZoneValue(row.StopValue, "STOP", $"{atrStopPx:F1}")
+            SetZoneValue(row.StopValue, "STOP", stopValueText)
             row.StopValue.Font = valueFont
         End If
     End Sub

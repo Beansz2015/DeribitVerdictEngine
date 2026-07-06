@@ -262,7 +262,10 @@ End Class
 
 Public Class AtrSettings
     <JsonPropertyName("period")>     Public Property Period    As Integer = 7
-    <JsonPropertyName("static_ref")> Public Property StaticRef As Double  = 115.0
+    ''' <summary>Cold-start fallback for DynamicNorms.ComputeATRRef only (live ATR ref
+    ''' self-calibrates). Aligned to live v37 (38.0 — the 1-min ATR mean at BTC ~$62-67k;
+    ''' the settings-only v37 flip deliberately rode "the next code commit" — this is it, B4b).</summary>
+    <JsonPropertyName("static_ref")> Public Property StaticRef As Double  = 38.0
     <JsonPropertyName("scale_min")>  Public Property ScaleMin  As Double  = 0.25
     <JsonPropertyName("scale_max")>  Public Property ScaleMax  As Double  = 4.0
 End Class
@@ -678,10 +681,17 @@ Public Class ScoringSettings
     <JsonPropertyName("funding_high_boost")>   Public Property FundingHighBoost   As Integer = 1
     ''' <summary>Penalty applied to adverse side at mild funding. Default 1.</summary>
     <JsonPropertyName("funding_low_penalty")>  Public Property FundingLowPenalty  As Integer = 1
-    ''' <summary>ATR distance multiplier for raw target price. Default 2.0.</summary>
-    <JsonPropertyName("atr_target_multiplier")> Public Property AtrTargetMultiplier As Double = 2.0
-    ''' <summary>ATR distance multiplier for stop-loss price. Default 1.2.</summary>
-    <JsonPropertyName("atr_stop_multiplier")>   Public Property AtrStopMultiplier   As Double = 1.2
+    ''' <summary>ATR multiplier for the FALLBACK target (placed-geometry B4b: structure is
+    ''' the primary target source; this places only when no structural tier survives the
+    ''' looseness bound — or everywhere when structural_levels.enabled=false, the legacy
+    ''' geometry). Re-derived v51: 2.0 → 1.75 (NY reach 56.8%, the DG3 55–60% design point;
+    ''' LONDON/ASIA session overrides live in structural_levels.sessions).</summary>
+    <JsonPropertyName("atr_target_multiplier")> Public Property AtrTargetMultiplier As Double = 1.75
+    ''' <summary>ATR multiplier for the FALLBACK stop (placed-geometry B4b; also the DG1
+    ''' clamp level via structural_levels.stop_max_atr_mult = same value). Re-derived v51:
+    ''' 1.2 → 1.6 (survives ~80–85% of winners pooled; covers LONDON's winners-MAE p75 1.63 —
+    ''' the old 1.2 stopped ~30% of eventual London winners before their target, DG2).</summary>
+    <JsonPropertyName("atr_stop_multiplier")>   Public Property AtrStopMultiplier   As Double = 1.6
     ''' <summary>
     ''' [v35 min-tradeable-move gate + eval de-confound] Minimum take-profit distance as a
     ''' fraction of entry price. Shared editable floor consumed by BOTH:
@@ -727,6 +737,66 @@ Public Class ScoringSettings
     <JsonPropertyName("tier_floor")>          Public Property TierFloor         As New TierFloorSettings
     ''' <summary>[settings-exposure] VerdictContext Step 5b MOMENTUM_FADING / STRUCTURALLY_WEAK thresholds.</summary>
     <JsonPropertyName("context_tag_thresholds")> Public Property ContextTag     As New ContextTagThresholds
+    ''' <summary>[placed-geometry B4b] Structural-first placed levels — see StructuralLevelsSettings.</summary>
+    <JsonPropertyName("structural_levels")>      Public Property StructuralLevels As New StructuralLevelsSettings
+End Class
+
+' ---------------------------------------------------------------------------
+' Placed geometry — structural-first levels (B4b)
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' [placed-geometry B4b] Structural-first placed-level arbitration
+''' (docs/placed-geometry-structural-first-proposal.md §3/§7, values from
+''' docs/placed-geometry-derivation-2026-07-06.md §4 — DG1–DG5 ticked 2026-07-06).
+''' Consumed ONLY by SignalEmitter.ComputeSideLevels (the one shared arbitration seam).
+''' Three-tier tweaker surface (HARD CONSTRAINT 21):
+'''   ON  (flat numerics)  — target_max_atr_mult, stop_max_atr_mult, stop_min_floor_ticks.
+'''   OFF (hand-toggle)    — enabled (rollback switch: false ⇒ byte-identical v50 geometry)
+'''                          + stop_too_loose_mode (the D3 decision record; exact-match rejects).
+'''   OFF (hand-tuned)     — sessions.* (the DG3 per-session fallback-target tier, HC11 class;
+'''                          SettingsDiffApplier rejects the sessions. prefix).
+''' </summary>
+Public Class StructuralLevelsSettings
+    ''' <summary>Master switch. False ⇒ legacy v50 geometry byte-identical (pure-ATR stop,
+    ''' closest-wins target cap) — the rollback. Default True.</summary>
+    <JsonPropertyName("enabled")>              Public Property Enabled           As Boolean = True
+    ''' <summary>Target looseness bound (× ATR): a structural target tier places only when
+    ''' 0 &lt; dist ≤ this × ATR; none survives ⇒ ATR fallback. DG4: 3.5 confirmed
+    ''' (in-bound structural reach 66.7% pooled ≥ fallback).</summary>
+    <JsonPropertyName("target_max_atr_mult")>  Public Property TargetMaxAtrMult  As Double = 3.5
+    ''' <summary>Stop bound / D3 clamp level (× ATR). DG1 amends the D2 stop shape for v1:
+    ''' placed stop = min(structural swing stop, this × ATR) — structure places only when
+    ''' TIGHTER (5m swing stops run p50 4–9× ATR; at fixed sizing a true structural stop is
+    ''' inoperative until consumer sizing-by-stop-distance exists, derivation §6b).
+    ''' Deliberately = the fallback stop multiplier (1.6) per DG2.</summary>
+    <JsonPropertyName("stop_max_atr_mult")>    Public Property StopMaxAtrMult    As Double = 1.6
+    ''' <summary>Degenerate-tightness floor in ticks (BTC-PERPETUAL tick = $0.5): a structural
+    ''' stop closer than this falls back to ATR. Near-moot (struct stops are almost never
+    ''' tight) — DG confirmed 4.</summary>
+    <JsonPropertyName("stop_min_floor_ticks")> Public Property StopMinFloorTicks As Integer = 4
+    ''' <summary>D3 decision record: "clamp" (shipped — too-loose structural stop clamps to
+    ''' stop_max_atr_mult × ATR, labeled STOP_CLAMPED) | "skip" (the D3-b alternative, a
+    ''' new no-trade gate — NOT built; unrecognised values behave as clamp). Hand-toggle,
+    ''' off the tweaker surface.</summary>
+    <JsonPropertyName("stop_too_loose_mode")>  Public Property StopTooLooseMode  As String = "clamp"
+    ''' <summary>Per-session nullable overrides keyed by session bucket name (v40 pattern;
+    ''' null field ⇒ inherit the global scoring.atr_target_multiplier). DG3 hand-tuned tier:
+    ''' LONDON 2.0 (already at the design reach), ASIA 1.25 (never reaches far targets).
+    ''' Seeded so the code-defaults path matches settings.json.</summary>
+    <JsonPropertyName("sessions")>             Public Property Sessions          As Dictionary(Of String, StructuralLevelsSessionOverride) =
+        New Dictionary(Of String, StructuralLevelsSessionOverride) From {
+            {"NY",     New StructuralLevelsSessionOverride()},
+            {"LONDON", New StructuralLevelsSessionOverride With {.FallbackTargetAtrMult = 2.0}},
+            {"ASIA",   New StructuralLevelsSessionOverride With {.FallbackTargetAtrMult = 1.25}}
+        }
+End Class
+
+''' <summary>[placed-geometry B4b] Nullable per-session override — Nothing ⇒ inherit the
+''' global fallback multipliers (the v40/aggressor-velocity override pattern). Hand-tuned,
+''' off the tweaker surface (HC11 class).</summary>
+Public Class StructuralLevelsSessionOverride
+    <JsonPropertyName("fallback_target_atr_mult")> Public Property FallbackTargetAtrMult As Double? = Nothing
 End Class
 
 ' ---------------------------------------------------------------------------

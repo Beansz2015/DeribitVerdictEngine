@@ -33,7 +33,10 @@ Imports System.Text.Json
 Imports System.Text.Json.Nodes
 
 ''' <summary>One side's placed levels — the shared arbitration result consumed by the
-''' payload levels block AND the CSV v0.8 Placed* columns (parity by construction).</summary>
+''' payload levels block, the CSV v0.8 Placed* columns, AND (since B4b) the snapshot +
+''' card ATR rows and the Step 5b copy-out (parity by construction across all surfaces).
+''' StopReason/TargetReason are the B4b source labels — Nothing on the legacy
+''' (structural_levels.enabled=false) path, which renders/serialises exactly as v50.</summary>
 Public Structure SideLevels
     Public Property Entry     As Double
     Public Property StopPx    As Double
@@ -41,6 +44,13 @@ Public Structure SideLevels
     Public Property Target    As Double
     Public Property Capped    As Boolean
     Public Property Reason    As String
+    ''' <summary>[B4b] Placed-stop source: SWING_STOP | STOP_CLAMPED | FALLBACK_ATR.
+    ''' Nothing on the legacy path (stop is pure k×ATR there).</summary>
+    Public Property StopReason   As String
+    ''' <summary>[B4b] Placed-target source: SWING_HIGH_5M | SWING_LOW_5M |
+    ''' NEAREST_HVN_ABOVE | NEAREST_HVN_BELOW | POC | FALLBACK_ATR. Always set on the
+    ''' structural-first path (including noise-suppressed rows); Nothing on legacy.</summary>
+    Public Property TargetReason As String
 End Structure
 
 Public NotInheritable Class SignalEmitter
@@ -202,26 +212,49 @@ Public NotInheritable Class SignalEmitter
         Return o
     End Function
 
+    ''' <summary>BTC-PERPETUAL price tick (USD). v1 is single-instrument (§6); the same
+    ''' $0.5 anchors the v30 cap-noise floor. Basis for stop_min_floor_ticks.</summary>
+    Public Const TickSize As Double = 0.5
+
     ''' <summary>
     ''' SHARED per-side placed-level arbitration — the ONE definition of "the effective
-    ''' stop/target the engine would place for this run", consumed by BOTH the payload
-    ''' levels block (BuildOk) and the CSV v0.8 PlacedTarget/PlacedStop columns
-    ''' (AnalysisLogger.LogRun), so the two surfaces are equal by construction.
-    ''' Mirrors the snapshot ATR-block arbitration:
-    '''   adjusted = 0            → raw ATR target, uncapped.
-    '''   adjusted > 0, |raw−adj| &lt; max(0.5, ATR×0.02)
-    '''                           → adjusted value but reported UNCAPPED (the v30
-    '''                             sub-tick cap-noise suppression the display uses).
-    '''   adjusted > 0 otherwise  → adjusted value, capped, reason verbatim.
-    ''' entry = the signal reference price (the close the pipeline scored against);
-    ''' stop = the exit-trigger level. Today's geometry: stop = pure k×ATR, target =
-    ''' min(k×ATR, structural cap) — the placed-geometry structural-first pass (B4b)
-    ''' replaces the INPUTS to this arbitration later; the sharing survives it.
+    ''' stop/target the engine would place for this run", consumed by the payload levels
+    ''' block (BuildOk), the CSV v0.8 PlacedTarget/PlacedStop columns
+    ''' (AnalysisLogger.LogRun), the snapshot + card ATR rows, and ScoringEngine Step 5b
+    ''' (which copies the outputs onto v.Adjusted*/TargetCapReason* so the v35 min-move
+    ''' gate evaluates the PLACED target) — all surfaces equal by construction.
+    '''
+    ''' [B4b] structural_levels.enabled=true → structural-first (proposal §3 amended by
+    ''' DG1); reads ONLY r + cfg (never v — Step 5b calls it before v.Adjusted* exist):
+    '''   TARGET ladder (priority, first tier with 0 &lt; dist ≤ target_max_atr_mult×ATR):
+    '''     swing target → nearest HVN → POC (HVN-gated, as the legacy cap) →
+    '''     fallback = entry ± fallbackMult×ATR, where fallbackMult is the session-resolved
+    '''     scoring.atr_target_multiplier (structural_levels.sessions via r.SessionUtcHour).
+    '''     Structure wins even when FARTHER than the ATR level, up to the bound.
+    '''     Capped/Reason keep the v30 sub-tick noise suppression vs the fallback price;
+    '''     reason format "PLACED @ p (LABEL)".
+    '''   STOP (DG1): min(structural swing stop, stop_max_atr_mult×ATR) — structure places
+    '''     only when tighter and ≥ stop_min_floor_ticks×tick. SWING_STOP when structural;
+    '''     STOP_CLAMPED when the bound binds on an existing-but-wider structural stop
+    '''     (D3 clamp; "skip" is the unbuilt D3-b alternative — unrecognised modes clamp);
+    '''     FALLBACK_ATR when no structural stop exists or it is sub-floor.
+    '''
+    ''' structural_levels.enabled=false → the v50 legacy geometry BYTE-IDENTICAL (pure
+    ''' k×ATR stop; target = v.Adjusted* when the Step 5b closest-wins cap fired, with the
+    ''' v30 noise suppression; StopReason/TargetReason = Nothing so renderers take their
+    ''' legacy branches). entry = the signal reference price (the close the pipeline
+    ''' scored against); stop = the exit-trigger level.
     ''' </summary>
     Public Shared Function ComputeSideLevels(v As VerdictResult,
                                              r As IndicatorResults,
                                              cfg As EngineSettings,
                                              isLong As Boolean) As SideLevels
+        Dim sl = cfg.Scoring.StructuralLevels
+        If sl IsNot Nothing AndAlso sl.Enabled Then
+            Return ComputeStructuralSideLevels(r, cfg, sl, isLong)
+        End If
+
+        ' ---- legacy path (v50 geometry, byte-identical — the enabled:false rollback) ----
         Dim entry As Double = r.CurrentPrice
         Dim atrStop As Double = r.ATR * cfg.Scoring.AtrStopMultiplier
         Dim atrTarget As Double = r.ATR * cfg.Scoring.AtrTargetMultiplier
@@ -243,6 +276,100 @@ Public NotInheritable Class SignalEmitter
                 lv.Reason = capReason
             End If
         End If
+        Return lv
+    End Function
+
+    ' [B4b] The structural-first arbitration proper (one side). Pure in r + cfg —
+    ' verdict-independent (both sides are always computable, exactly as the legacy
+    ' levels block emitted both sides on every run including NO TRADE).
+    Private Shared Function ComputeStructuralSideLevels(r As IndicatorResults,
+                                                        cfg As EngineSettings,
+                                                        sl As StructuralLevelsSettings,
+                                                        isLong As Boolean) As SideLevels
+        Dim entry As Double = r.CurrentPrice
+        Dim dirSign As Double = If(isLong, 1.0, -1.0)
+
+        Dim lv As New SideLevels
+        lv.Entry = entry
+
+        ' ---- TARGET ladder: swing → nearest HVN → POC (HVN-gated) → ATR fallback ----
+        Dim fallbackMult As Double = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, r.SessionUtcHour)
+        Dim fallbackTarget As Double = entry + dirSign * (r.ATR * fallbackMult)
+        Dim targetBound As Double = sl.TargetMaxAtrMult * r.ATR
+
+        Dim placedTarget As Double = 0
+        Dim targetLabel As String = Nothing
+
+        Dim swingTarget As Double = If(isLong, r.SwingTargetLong, r.SwingTargetShort)
+        Dim nearestHvn As Double = If(isLong, r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
+        ' POC tier keeps the legacy HVN-proximity gate (VPFRSignal flags the side).
+        Dim pocGated As Boolean = If(isLong,
+            (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR"),
+            (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL"))
+
+        ' Tier 1: swing target (5m structural memory — highest priority).
+        Dim dist As Double = dirSign * (swingTarget - entry)
+        If swingTarget > 0 AndAlso dist > 0 AndAlso dist <= targetBound Then
+            placedTarget = swingTarget
+            targetLabel = If(isLong, "SWING_HIGH_5M", "SWING_LOW_5M")
+        End If
+
+        ' Tier 2: nearest HVN wall on the trade side.
+        If placedTarget = 0 Then
+            dist = dirSign * (nearestHvn - entry)
+            If nearestHvn > 0 AndAlso dist > 0 AndAlso dist <= targetBound Then
+                placedTarget = nearestHvn
+                targetLabel = If(isLong, "NEAREST_HVN_ABOVE", "NEAREST_HVN_BELOW")
+            End If
+        End If
+
+        ' Tier 3: POC, only when the VPFR signal gates it open (as the legacy cap did).
+        If placedTarget = 0 AndAlso pocGated Then
+            dist = dirSign * (r.VPFRPoc - entry)
+            If r.VPFRPoc > 0 AndAlso dist > 0 AndAlso dist <= targetBound Then
+                placedTarget = r.VPFRPoc
+                targetLabel = "POC"
+            End If
+        End If
+
+        If placedTarget > 0 Then
+            lv.Target = placedTarget
+            lv.TargetReason = targetLabel
+            ' v30 sub-tick noise suppression, measured against the fallback ATR price:
+            ' a structural target within the floor renders/reports as uncapped.
+            Dim capNoiseFloor As Double = Math.Max(TickSize, r.ATR * 0.02)
+            If Math.Abs(fallbackTarget - placedTarget) >= capNoiseFloor Then
+                lv.Capped = True
+                lv.Reason = String.Format(CultureInfo.InvariantCulture,
+                                          "PLACED @ {0:F1} ({1})", placedTarget, targetLabel)
+            End If
+        Else
+            lv.Target = fallbackTarget
+            lv.TargetReason = "FALLBACK_ATR"
+        End If
+        lv.RawTarget = fallbackTarget
+
+        ' ---- STOP (DG1): min(structural, stop_max×ATR); structure only when tighter ----
+        Dim stopBound As Double = sl.StopMaxAtrMult * r.ATR
+        Dim stopFloor As Double = sl.StopMinFloorTicks * TickSize
+        Dim fallbackStopDist As Double = r.ATR * cfg.Scoring.AtrStopMultiplier
+        Dim swingStop As Double = If(isLong, r.SwingStopLong, r.SwingStopShort)
+        Dim stopDist As Double = dirSign * (entry - swingStop)   ' >0 = protective side
+
+        If swingStop > 0 AndAlso stopDist > 0 AndAlso stopDist >= stopFloor AndAlso stopDist <= stopBound Then
+            lv.StopPx = swingStop
+            lv.StopReason = "SWING_STOP"
+        ElseIf swingStop > 0 AndAlso stopDist > stopBound Then
+            ' D3 clamp (the only built mode; "skip" is D3-b, not implemented — any
+            ' unrecognised stop_too_loose_mode value lands here identically).
+            lv.StopPx = entry - dirSign * stopBound
+            lv.StopReason = "STOP_CLAMPED"
+        Else
+            ' No structural stop, wrong-side data, or sub-floor tightness.
+            lv.StopPx = entry - dirSign * fallbackStopDist
+            lv.StopReason = "FALLBACK_ATR"
+        End If
+
         Return lv
     End Function
 

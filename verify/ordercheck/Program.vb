@@ -144,6 +144,20 @@ Module Program
         A25a_OfiMomentumRetireByteIdentical()
         A25b_TweakerRejectsOfiMomentumPrefix()
 
+        ' B4b placed-geometry structural-first levels (v51 — placed-geometry
+        ' proposal §10 acceptance): target ladder tier selection (incl. the
+        ' farther-than-ATR structural win), too-loose → next tier → fallback,
+        ' stop SWING/CLAMPED/floored/fallback (DG1 min-shape), min-move gate on
+        ' PLACED values through the real Calculate(), session fallback-multiplier
+        ' resolution, enabled:false byte-identical rollback, HC21 tweaker fences.
+        A26a_StructuralTargetPlacesEvenWhenFarther()
+        A26b_TargetLadderTooLooseWalksTiers()
+        A26c_StopShapes()
+        A26d_MinMoveGateReadsPlacedTarget()
+        A26e_SessionFallbackMultiplier()
+        A26f_DisabledIsByteIdenticalLegacy()
+        A26g_TweakerStructuralLevelsSurface()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -376,10 +390,11 @@ Module Program
         Dim r As New IndicatorResults()
         r.Regime = "RANGE_BOUND"
         r.CurrentPrice = 100000
-        ' v35 min-tradeable-move gate: give the cascade a tradeable ATR (raw target
-        ' 50×2.0=100 > floor 0.0008×100000=80) so the Step 5c gate doesn't veto the
-        ' directional verdict this fixture asserts. Mirrors how this fixture disables
-        ' MTF/Pass2b/2c to isolate the dominant-side cascade. (A12 already sets 50.)
+        ' v35 min-tradeable-move gate: give the cascade a tradeable ATR (placed
+        ' fallback target 50×1.75=87.5 > floor 0.0008×100000=80; was 50×2.0=100
+        ' pre-B4b) so the Step 5c gate doesn't veto the directional verdict this
+        ' fixture asserts. Mirrors how this fixture disables MTF/Pass2b/2c to
+        ' isolate the dominant-side cascade. (A12 already sets 50.)
         r.ATR = 50
 
         ' 11 short votes: ROC, RSI, DMI, Volume, VWAP, EMA ribbon, OI, OFI,
@@ -518,7 +533,7 @@ Module Program
 
     ' -- A12: linear ATR levels — Step 5b raw target carries no scale factor ----
     ' D2 (S-1): the Step 5b cap base is price + ATR × targetMult, with NO
-    ' norms.ATRScaleFactor. price=100000, ATR=50, targetMult=2.0 (default),
+    ' norms.ATRScaleFactor. price=100000, ATR=50, targetMult=2.0 (pinned),
     ' norms.ATRScaleFactor=2.0 (deliberately ≠ 1 to expose the old bug). The
     ' linear raw long target = 100000 + 50×2.0 = 100100; the old quadratic form
     ' would have been 100000 + 50×2.0×2.0 = 100200. A Tier-1 swing-high cap fires
@@ -528,6 +543,11 @@ Module Program
     '   swing 100101 (> 100100) → no cap → AdjustedLongTarget = 0
     ' Under the old quadratic geometry the boundary would sit at 100200 and BOTH
     ' would cap; the bracket proves the scale factor is absent.
+    ' [B4b] This fixture pins the LEGACY closest-wins cap, so it runs with
+    ' structural_levels.enabled=false + the pre-B4b multipliers pinned explicitly —
+    ' doubling as part of the enabled:false rollback (byte-identical) proof. The
+    ' structural-first behaviour (swing 100101 would PLACE, not stay uncapped) is
+    ' pinned by A26a.
     Private Function BuildA12Indicators(swingTargetLong As Double) As IndicatorResults
         Dim r = BuildA8Indicators()
         r.ATR = 50
@@ -544,6 +564,9 @@ Module Program
 
     Private Sub A12_LinearLevels()
         Dim cfg = BuildA8Cfg(fundingBoost:=0)
+        cfg.Scoring.StructuralLevels.Enabled = False   ' legacy-geometry pin (B4b rollback path)
+        cfg.Scoring.AtrTargetMultiplier = 2.0          ' pre-B4b multipliers, pinned
+        cfg.Scoring.AtrStopMultiplier = 1.2
 
         Dim vIn = ScoringEngine.Calculate(BuildA12Indicators(100099), PositionState.None,
                                           BuildA12Norms(), cfg)
@@ -583,41 +606,44 @@ Module Program
     End Function
 
     Private Sub A13_MinTradeableMoveGate()
+        ' [B4b] Runs on the live geometry (structural-first enabled, fallback ×1.75 —
+        ' the fixtures carry no swing/HVN levels except A13c, so the placed target is
+        ' the ATR fallback). The gate now evaluates the PLACED target from Step 5b.
         Dim cfg = BuildA8Cfg(fundingBoost:=0)   ' SHORT dominant; floor = POCO default 0.0008
 
-        ' A13a — low ATR: raw short target 13×2.0=26 < floor 49.6 → gate fires.
+        ' A13a — low ATR: fallback short target 13×1.75=22.75 < floor 49.6 → gate fires.
         Dim vLow = ScoringEngine.Calculate(BuildGateIndicators(atr:=13, price:=62000),
                                            PositionState.None, BuildA8Norms(), cfg)
-        Check("A13a low-ATR veto (target 26 < floor 49.6 → NO TRADE)",
+        Check("A13a low-ATR veto (placed target 22.75 < floor 49.6 → NO TRADE)",
               vLow.Verdict = "NO TRADE" AndAlso vLow.VerdictContext = "BELOW_MIN_MOVE",
               String.Format("expected NO TRADE / BELOW_MIN_MOVE, got '{0}' / {1}", vLow.Verdict, vLow.VerdictContext))
 
-        ' A13b — tradeable ATR: raw short target 30×2.0=60 > floor 49.6 → stands.
+        ' A13b — tradeable ATR: fallback short target 30×1.75=52.5 > floor 49.6 → stands.
         Dim vOk = ScoringEngine.Calculate(BuildGateIndicators(atr:=30, price:=62000),
                                           PositionState.None, BuildA8Norms(), cfg)
-        Check("A13b tradeable-ATR (target 60 > floor 49.6 → directional stands)",
+        Check("A13b tradeable-ATR (placed target 52.5 > floor 49.6 → directional stands)",
               Not vOk.Verdict.StartsWith("NO TRADE") AndAlso vOk.VerdictContext <> "BELOW_MIN_MOVE",
               String.Format("expected directional SHORT, got '{0}' / {1}", vOk.Verdict, vOk.VerdictContext))
 
-        ' A13c — near-swing cap (validates the EFFECTIVE-target choice A): high ATR
-        ' so the raw target (100×2.0=200) clears the floor, but a swing cap pulls
-        ' the short target to 30 points from entry (< floor) → gate still fires.
+        ' A13c — near structural target (validates the PLACED-target choice): high ATR
+        ' so the fallback (100×1.75=175) clears the floor, but the arbitration places
+        ' the swing target 30 points from entry (within the 3.5×ATR bound) → gate fires.
         Dim rNear = BuildGateIndicators(atr:=100, price:=62000)
-        rNear.SwingTargetShort = 61970          ' 30 below entry; > rawShortTarget 61800 → caps
+        rNear.SwingTargetShort = 61970          ' 30 below entry; dist ≤ 350 bound → placed
         Dim vNear = ScoringEngine.Calculate(rNear, PositionState.None, BuildA8Norms(), cfg)
-        Check("A13c near-swing cap veto (capped target 30 < floor 49.6 → NO TRADE)",
+        Check("A13c near-swing placed veto (placed target 30 < floor 49.6 → NO TRADE)",
               vNear.Verdict = "NO TRADE" AndAlso vNear.VerdictContext = "BELOW_MIN_MOVE" AndAlso
               Math.Abs(vNear.AdjustedShortTarget - 61970) < 0.001,
-              String.Format("expected NO TRADE / BELOW_MIN_MOVE / cap 61970, got '{0}' / {1} / cap {2:F1}",
+              String.Format("expected NO TRADE / BELOW_MIN_MOVE / placed 61970, got '{0}' / {1} / placed {2:F1}",
                             vNear.Verdict, vNear.VerdictContext, vNear.AdjustedShortTarget))
 
-        ' A13d — editability: lower the floor to 0.0004 (24.8); A13a's 26-pt target
+        ' A13d — editability: lower the floor to 0.0003 (18.6); A13a's 22.75-pt target
         ' now clears → the shared key drives the gate (hot-reloadable in-app).
         Dim cfgLow = BuildA8Cfg(fundingBoost:=0)
-        cfgLow.Scoring.MinTradeableMovePct = 0.0004
+        cfgLow.Scoring.MinTradeableMovePct = 0.0003
         Dim vEdit = ScoringEngine.Calculate(BuildGateIndicators(atr:=13, price:=62000),
                                             PositionState.None, BuildA8Norms(), cfgLow)
-        Check("A13d editability (floor 24.8 < target 26 → directional stands)",
+        Check("A13d editability (floor 18.6 < target 22.75 → directional stands)",
               Not vEdit.Verdict.StartsWith("NO TRADE") AndAlso vEdit.VerdictContext <> "BELOW_MIN_MOVE",
               String.Format("expected directional SHORT at lowered floor, got '{0}' / {1}", vEdit.Verdict, vEdit.VerdictContext))
     End Sub
@@ -685,9 +711,14 @@ Module Program
     End Sub
 
     ' -- A14c: ATR computed on 3-min candles clears the gate 1-min ATR can't ---
+    ' [B4b refit] The placed fallback target is now ATR×1.75 (was ×2.0), so the
+    ' 3-min bar range moves 27 → 32 to stay above the gate floor (32×1.75 = 56 >
+    ' 49.6; the old 27×1.75 = 47.25 would gate). The point under test is unchanged:
+    ' the SAME session at 3-min resolution carries a tradeable ATR the 1-min
+    ' chart can't (13×1.75 = 22.75 < 49.6).
     Private Sub A14c_AtrOn3MinGateFlip()
         Dim atr1m As Double = IndicatorEngine.CalcATR(FlatRangeCandles(30, 62000, 13), 7)
-        Dim atr3m As Double = IndicatorEngine.CalcATR(FlatRangeCandles(30, 62000, 27), 7)
+        Dim atr3m As Double = IndicatorEngine.CalcATR(FlatRangeCandles(30, 62000, 32), 7)
 
         Dim cfg = BuildA8Cfg(fundingBoost:=0)
         Dim vLow = ScoringEngine.Calculate(BuildGateIndicators(atr1m, 62000),
@@ -696,7 +727,7 @@ Module Program
                                             PositionState.None, BuildA8Norms(), cfg)
 
         Check("A14c ATR on 3-min clears the gate the 1-min ATR can't",
-              Math.Abs(atr1m - 13) < 1.0 AndAlso Math.Abs(atr3m - 27) < 1.0 AndAlso
+              Math.Abs(atr1m - 13) < 1.0 AndAlso Math.Abs(atr3m - 32) < 1.0 AndAlso
               vLow.Verdict = "NO TRADE" AndAlso vLow.VerdictContext = "BELOW_MIN_MOVE" AndAlso
               Not vHigh.Verdict.StartsWith("NO TRADE"),
               String.Format("atr1m={0:F1}(→{1}) atr3m={2:F1}(→{3})", atr1m, vLow.Verdict, atr3m, vHigh.Verdict))
@@ -1659,10 +1690,11 @@ Module Program
     ' =======================================================================
 
     Private Function BuildBridgeCfg() As EngineSettings
-        ' POCO defaults carry the live multipliers: stop ×1.2 / target ×2.0,
+        ' POCO defaults carry the live geometry (B4b): structural_levels enabled,
+        ' fallback stop ×1.6 / target ×1.75, target bound 3.5×ATR, stop bound 1.6×ATR,
         ' trigger_mode "interval". Version pinned so the pass-through is visible.
         Dim cfg As New EngineSettings()
-        cfg.Version = 49
+        cfg.Version = 51
         Return cfg
     End Function
 
@@ -1698,9 +1730,14 @@ Module Program
         Return el.GetProperty(name).GetDouble()
     End Function
 
-    ' -- A22a: full payload serialises field-by-field; three target-cap cases --
+    ' -- A22a: full payload serialises field-by-field; three target-placement cases --
+    ' [B4b re-pin] The levels come from the structural-first arbitration (r-driven —
+    ' the manual v.Adjusted* injection the pre-B4b cases used is ignored on this path):
+    '   Case 1 (default fixture): LONG swing target 59095 (dist 82.5 ≤ 3.5×ATR=144.55)
+    '     PLACES (capped=true, reason "PLACED @ …"); SHORT swing target 58860
+    '     (dist 152.5 > bound) falls back to entry − 1.75×ATR (capped=false). BOTH swing
+    '     stops (dist 152.5 / 82.5 > 1.6×ATR=66.08) CLAMP to entry ∓ 1.6×ATR.
     Private Sub A22a_PayloadFieldByField()
-        ' Case 1 — uncapped (Adjusted*Target = 0). ATR distances: stop 49.56 / target 82.6.
         Dim root = BridgeOkJson(BuildBridgeVerdict(), BuildBridgeIndicators()).RootElement
 
         Check("A22a head (schema_version/signal_id/generated_at_utc/instrument/signal_state/skip_reason)",
@@ -1715,7 +1752,7 @@ Module Program
         Dim eng = root.GetProperty("engine")
         Check("A22a engine block (app/settings_version/instance_id/autotrade_armed)",
               eng.GetProperty("app").GetString() = "DeribitVerdictEngine" AndAlso
-              eng.GetProperty("settings_version").GetInt32() = 49 AndAlso
+              eng.GetProperty("settings_version").GetInt32() = 51 AndAlso
               eng.GetProperty("instance_id").GetString() = "fixture-instance" AndAlso
               eng.GetProperty("autotrade_armed").GetBoolean() = False,
               "engine block mismatch: " & eng.GetRawText())
@@ -1741,16 +1778,18 @@ Module Program
 
         Dim lng = root.GetProperty("levels").GetProperty("long")
         Dim sht = root.GetProperty("levels").GetProperty("short")
-        Check("A22a uncapped levels (linear ATR distances, capped=false, cap_reason=null, raw=target)",
+        Check("A22a structural-first levels (long swing PLACED + clamp; short fallback + clamp)",
               Math.Abs(JNum(lng, "entry") - 59012.5) < 0.0001 AndAlso
-              Math.Abs(JNum(lng, "stop") - (59012.5 - 49.56)) < 0.0001 AndAlso
-              Math.Abs(JNum(lng, "target") - (59012.5 + 82.6)) < 0.0001 AndAlso
-              Not lng.GetProperty("target_capped").GetBoolean() AndAlso
-              lng.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
-              Math.Abs(JNum(lng, "raw_target") - JNum(lng, "target")) < 0.0001 AndAlso
-              Math.Abs(JNum(sht, "stop") - (59012.5 + 49.56)) < 0.0001 AndAlso
-              Math.Abs(JNum(sht, "target") - (59012.5 - 82.6)) < 0.0001 AndAlso
-              Not sht.GetProperty("target_capped").GetBoolean(),
+              Math.Abs(JNum(lng, "stop") - (59012.5 - 41.3 * 1.6)) < 0.0001 AndAlso
+              Math.Abs(JNum(lng, "target") - 59095.0) < 0.0001 AndAlso
+              lng.GetProperty("target_capped").GetBoolean() AndAlso
+              lng.GetProperty("cap_reason").GetString() = "PLACED @ 59095.0 (SWING_HIGH_5M)" AndAlso
+              Math.Abs(JNum(lng, "raw_target") - (59012.5 + 41.3 * 1.75)) < 0.0001 AndAlso
+              Math.Abs(JNum(sht, "stop") - (59012.5 + 41.3 * 1.6)) < 0.0001 AndAlso
+              Math.Abs(JNum(sht, "target") - (59012.5 - 41.3 * 1.75)) < 0.0001 AndAlso
+              Not sht.GetProperty("target_capped").GetBoolean() AndAlso
+              sht.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
+              Math.Abs(JNum(sht, "raw_target") - JNum(sht, "target")) < 0.0001,
               String.Format("levels mismatch: long={0} short={1}", lng.GetRawText(), sht.GetRawText()))
 
         Dim st = root.GetProperty("structural")
@@ -1772,32 +1811,38 @@ Module Program
               Not root.GetProperty("health").GetProperty("ledger_mismatch").GetBoolean(),
               "hold/kelly/health mismatch: " & root.GetRawText())
 
-        ' Case 2 — genuinely capped long target (adjustment 35.1 >= noise floor 0.826).
-        Dim vCap = BuildBridgeVerdict()
-        vCap.AdjustedLongTarget = 59060.0
-        vCap.TargetCapReasonLong = "CAPPED @ 59060.0 (SWING_HIGH_5M)"
-        Dim lngCap = BridgeOkJson(vCap, BuildBridgeIndicators()).RootElement _
-                         .GetProperty("levels").GetProperty("long")
-        Check("A22a capped long (target=adjusted, capped=true, reason verbatim, raw preserved)",
-              Math.Abs(JNum(lngCap, "target") - 59060.0) < 0.0001 AndAlso
-              lngCap.GetProperty("target_capped").GetBoolean() AndAlso
-              lngCap.GetProperty("cap_reason").GetString() = "CAPPED @ 59060.0 (SWING_HIGH_5M)" AndAlso
-              Math.Abs(JNum(lngCap, "raw_target") - (59012.5 + 82.6)) < 0.0001,
-              "capped long mismatch: " & lngCap.GetRawText())
+        ' Case 2 — no structure at all (fresh r): both sides fall back to the ATR
+        ' geometry — uncapped targets, cap_reason null, stops at the fallback distance.
+        Dim rBare As New IndicatorResults()
+        rBare.CurrentPrice = 59012.5
+        rBare.ATR = 41.3
+        rBare.ExecResolution = 1
+        Dim lvlBare = BridgeOkJson(BuildBridgeVerdict(), rBare).RootElement.GetProperty("levels")
+        Dim lngBare = lvlBare.GetProperty("long")
+        Dim shtBare = lvlBare.GetProperty("short")
+        Check("A22a fallback levels when no structure (capped=false, cap_reason=null, raw=target)",
+              Math.Abs(JNum(lngBare, "stop") - (59012.5 - 41.3 * 1.6)) < 0.0001 AndAlso
+              Math.Abs(JNum(lngBare, "target") - (59012.5 + 41.3 * 1.75)) < 0.0001 AndAlso
+              Not lngBare.GetProperty("target_capped").GetBoolean() AndAlso
+              lngBare.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
+              Math.Abs(JNum(lngBare, "raw_target") - JNum(lngBare, "target")) < 0.0001 AndAlso
+              Math.Abs(JNum(shtBare, "target") - (59012.5 - 41.3 * 1.75)) < 0.0001 AndAlso
+              Not shtBare.GetProperty("target_capped").GetBoolean(),
+              String.Format("fallback levels mismatch: long={0} short={1}", lngBare.GetRawText(), shtBare.GetRawText()))
 
-        ' Case 3 — sub-tick cap-noise suppression (adjustment 0.3 < floor
-        ' max(0.5, ATR×0.02)=0.826): the display renders UNCAPPED, so the file
-        ' reports target_capped=false with the adjusted value (§3 field sourcing).
-        Dim vNoise = BuildBridgeVerdict()
-        vNoise.AdjustedLongTarget = 59094.8
-        vNoise.TargetCapReasonLong = "CAPPED @ 59094.8 (POC)"
-        Dim lngNoise = BridgeOkJson(vNoise, BuildBridgeIndicators()).RootElement _
+        ' Case 3 — sub-tick noise suppression survives the arbitration: a structural
+        ' swing target 0.225 from the fallback price (< floor max(0.5, ATR×0.02)=0.826)
+        ' PLACES the value but reports target_capped=false / cap_reason null (§3 field
+        ' sourcing — the display renders it uncapped too).
+        Dim rNoise = BuildBridgeIndicators()
+        rNoise.SwingTargetLong = 59085.0          ' fallback = 59012.5 + 72.275 = 59084.775
+        Dim lngNoise = BridgeOkJson(BuildBridgeVerdict(), rNoise).RootElement _
                            .GetProperty("levels").GetProperty("long")
-        Check("A22a cap-noise-suppressed long (target=adjusted, capped=FALSE, cap_reason null)",
-              Math.Abs(JNum(lngNoise, "target") - 59094.8) < 0.0001 AndAlso
+        Check("A22a cap-noise-suppressed long (target=placed swing, capped=FALSE, cap_reason null)",
+              Math.Abs(JNum(lngNoise, "target") - 59085.0) < 0.0001 AndAlso
               Not lngNoise.GetProperty("target_capped").GetBoolean() AndAlso
               lngNoise.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
-              Math.Abs(JNum(lngNoise, "raw_target") - (59012.5 + 82.6)) < 0.0001,
+              Math.Abs(JNum(lngNoise, "raw_target") - (59012.5 + 41.3 * 1.75)) < 0.0001,
               "noise-suppressed long mismatch: " & lngNoise.GetRawText())
 
         ' Held position: hold_status rides verbatim (informational free string).
@@ -2117,27 +2162,30 @@ Module Program
     ' =======================================================================
 
     ' -- A24a: ComputeSideLevels output = the emitted payload levels, across the
-    ' three cap cases A22a pins (uncapped / capped / cap-noise-suppressed). The
-    ' CSV Placed* columns and the payload levels block both read ComputeSideLevels,
-    ' so this pin holds the parity for both surfaces.
+    ' three placement cases A22a pins (structural-placed / no-structure fallback /
+    ' cap-noise-suppressed — B4b: the cases are r-driven, the arbitration ignores
+    ' v.Adjusted* on the structural-first path). The CSV Placed* columns and the
+    ' payload levels block both read ComputeSideLevels, so this pin holds the
+    ' parity for both surfaces.
     Private Sub A24a_PlacedLevelsEqualPayloadLevels()
         Dim cfg = BuildBridgeCfg()
-        Dim r = BuildBridgeIndicators()
+
+        ' Case fixtures: (name, r) — placed / bare-fallback / noise-suppressed.
+        Dim rPlaced = BuildBridgeIndicators()
+        Dim rBare As New IndicatorResults()
+        rBare.CurrentPrice = 59012.5 : rBare.ATR = 41.3 : rBare.ExecResolution = 1
+        Dim rNoise = BuildBridgeIndicators()
+        rNoise.SwingTargetLong = 59085.0
+        Dim cases = New List(Of (Name As String, R As IndicatorResults)) From {
+            ("placed", rPlaced), ("fallback", rBare), ("noise", rNoise)}
 
         Dim ok As Boolean = True
         Dim detail As String = ""
-        ' (adjustedLong, reasonLong) per case: uncapped / capped / noise-suppressed.
-        Dim cases = New List(Of (Name As String, Adj As Double, Reason As String)) From {
-            ("uncapped", 0.0, Nothing),
-            ("capped", 59060.0, "CAPPED @ 59060.0 (SWING_HIGH_5M)"),
-            ("noise", 59095.0, "CAPPED @ 59095.0 (SWING_HIGH_5M)")}   ' |raw−adj| = 0.1 < floor
         For Each c In cases
             Dim v = BuildBridgeVerdict()
-            v.AdjustedLongTarget = c.Adj
-            v.TargetCapReasonLong = c.Reason
-            Dim lvLong = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
-            Dim lvShort = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
-            Dim levels = BridgeOkJson(v, r).RootElement.GetProperty("levels")
+            Dim lvLong = SignalEmitter.ComputeSideLevels(v, c.R, cfg, isLong:=True)
+            Dim lvShort = SignalEmitter.ComputeSideLevels(v, c.R, cfg, isLong:=False)
+            Dim levels = BridgeOkJson(v, c.R).RootElement.GetProperty("levels")
             Dim pl = levels.GetProperty("long")
             Dim ps = levels.GetProperty("short")
             If JNum(pl, "target") <> lvLong.Target OrElse JNum(pl, "stop") <> lvLong.StopPx OrElse
@@ -2148,19 +2196,22 @@ Module Program
                 detail &= c.Name & " diverged; "
             End If
         Next
-        ' Sanity-pin the capped case's absolute values (raw target 59095.1, adjusted wins).
-        Dim vPin = BuildBridgeVerdict()
-        vPin.AdjustedLongTarget = 59060.0
-        vPin.TargetCapReasonLong = "CAPPED @ 59060.0 (SWING_HIGH_5M)"
-        Dim pin = SignalEmitter.ComputeSideLevels(vPin, r, cfg, isLong:=True)
-        If Not (pin.Capped AndAlso pin.Target = 59060.0 AndAlso
-                Math.Abs(pin.StopPx - (59012.5 - 41.3 * 1.2)) < 0.0001) Then
+
+        ' Sanity-pin the placed case's absolute values: swing target 59095 placed
+        ' (farther than the 1.75×ATR fallback — the B4b behavioural delta), swing
+        ' stop 152.5 away → DG1 clamp at entry − 1.6×ATR, labeled STOP_CLAMPED.
+        Dim pin = SignalEmitter.ComputeSideLevels(BuildBridgeVerdict(), rPlaced, cfg, isLong:=True)
+        If Not (pin.Capped AndAlso pin.Target = 59095.0 AndAlso
+                pin.Reason = "PLACED @ 59095.0 (SWING_HIGH_5M)" AndAlso
+                pin.TargetReason = "SWING_HIGH_5M" AndAlso
+                pin.StopReason = "STOP_CLAMPED" AndAlso
+                Math.Abs(pin.StopPx - (59012.5 - 41.3 * 1.6)) < 0.0001) Then
             ok = False
             detail &= String.Format(CultureInfo.InvariantCulture,
-                                    "pin mismatch: capped={0} target={1} stop={2}; ",
-                                    pin.Capped, pin.Target, pin.StopPx)
+                                    "pin mismatch: capped={0} target={1} reason='{2}' stopReason={3} stop={4}; ",
+                                    pin.Capped, pin.Target, pin.Reason, pin.StopReason, pin.StopPx)
         End If
-        Check("A24a Placed* levels ≡ payload levels (shared ComputeSideLevels, 3 cap cases + pin)", ok, detail)
+        Check("A24a Placed* levels ≡ payload levels (shared ComputeSideLevels, 3 placement cases + pin)", ok, detail)
     End Sub
 
     ' =======================================================================
@@ -2230,6 +2281,256 @@ Module Program
               String.Format("bonus={0}'{1}' thr={2} depth={3} dom={4} win={5}",
                             rBonus.IsValid, rBonus.ErrorReason, rThr.IsValid,
                             rDepth.IsValid, rDom.IsValid, rWin.IsValid))
+    End Sub
+
+    ' =======================================================================
+    ' A26 — B4b placed-geometry structural-first levels (v51).
+    ' docs/placed-geometry-structural-first-proposal.md §3/§10, values per
+    ' docs/placed-geometry-derivation-2026-07-06.md §4 (DG1–DG5).
+    ' Arbitration fixtures run the shipped SignalEmitter.ComputeSideLevels
+    ' directly (POCO-default cfg: enabled, fallback 1.75/1.6, bound 3.5×ATR,
+    ' stop bound 1.6×ATR, floor 4 ticks = $2). Gate fixtures run the real
+    ' ScoringEngine.Calculate(). ATR 40 / entry 62000 ⇒ fallback target dist 70,
+    ' target bound 140, stop bound/fallback dist 64, stop floor 2.0.
+    ' =======================================================================
+
+    Private Function BuildPgCfg() As EngineSettings
+        Return New EngineSettings()          ' POCO defaults = shipped v51 values
+    End Function
+
+    Private Function BuildPgIndicators() As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = 62000.0
+        r.ATR = 40.0
+        Return r
+    End Function
+
+    ' The arbitration ignores v on the structural-first path — a bare result is fine.
+    Private Function PgLevels(r As IndicatorResults, isLong As Boolean) As SideLevels
+        Return SignalEmitter.ComputeSideLevels(New VerdictResult(), r, BuildPgCfg(), isLong)
+    End Function
+
+    ' -- A26a: structural target PLACES even when FARTHER than the ATR fallback --
+    ' The key behavioural delta vs the legacy closest-wins cap (A12 pins that path):
+    ' swing dist 100 > fallback dist 70, but ≤ the 140 bound → structure wins.
+    Private Sub A26a_StructuralTargetPlacesEvenWhenFarther()
+        Dim rL = BuildPgIndicators() : rL.SwingTargetLong = 62100.0
+        Dim lvL = PgLevels(rL, isLong:=True)
+        Check("A26a long swing target farther than fallback still PLACES (62100, dist 100 ≤ bound 140)",
+              lvL.Target = 62100.0 AndAlso lvL.Capped AndAlso
+              lvL.Reason = "PLACED @ 62100.0 (SWING_HIGH_5M)" AndAlso
+              lvL.TargetReason = "SWING_HIGH_5M" AndAlso
+              Math.Abs(lvL.RawTarget - 62070.0) < 0.0001,
+              String.Format(CultureInfo.InvariantCulture,
+                            "target={0} capped={1} reason='{2}' raw={3}",
+                            lvL.Target, lvL.Capped, lvL.Reason, lvL.RawTarget))
+
+        Dim rS = BuildPgIndicators() : rS.SwingTargetShort = 61900.0
+        Dim lvS = PgLevels(rS, isLong:=False)
+        Check("A26a short mirror (swing 61900 places, label SWING_LOW_5M, raw 61930)",
+              lvS.Target = 61900.0 AndAlso lvS.Capped AndAlso
+              lvS.Reason = "PLACED @ 61900.0 (SWING_LOW_5M)" AndAlso
+              lvS.TargetReason = "SWING_LOW_5M" AndAlso
+              Math.Abs(lvS.RawTarget - 61930.0) < 0.0001,
+              String.Format(CultureInfo.InvariantCulture,
+                            "target={0} capped={1} reason='{2}' raw={3}",
+                            lvS.Target, lvS.Capped, lvS.Reason, lvS.RawTarget))
+    End Sub
+
+    ' -- A26b: too-loose structural target walks the ladder → HVN → POC → fallback --
+    Private Sub A26b_TargetLadderTooLooseWalksTiers()
+        ' Swing too loose (150 > 140) → the HVN tier places (120 ≤ 140).
+        Dim rHvn = BuildPgIndicators()
+        rHvn.SwingTargetLong = 62150.0
+        rHvn.VPFRNearestHvnAbove = 62120.0
+        Dim lvHvn = PgLevels(rHvn, isLong:=True)
+        Check("A26b swing too loose → NEAREST_HVN_ABOVE places (62120)",
+              lvHvn.Target = 62120.0 AndAlso lvHvn.Capped AndAlso
+              lvHvn.TargetReason = "NEAREST_HVN_ABOVE" AndAlso
+              lvHvn.Reason = "PLACED @ 62120.0 (NEAREST_HVN_ABOVE)",
+              String.Format(CultureInfo.InvariantCulture, "target={0} reason='{1}'", lvHvn.Target, lvHvn.Reason))
+
+        ' Swing + HVN too loose, POC gated open (NEAR_HVN_RESIST) → POC places.
+        Dim rPoc = BuildPgIndicators()
+        rPoc.SwingTargetLong = 62150.0
+        rPoc.VPFRNearestHvnAbove = 62200.0
+        rPoc.VPFRSignal = "NEAR_HVN_RESIST"
+        rPoc.VPFRPoc = 62050.0
+        Dim lvPoc = PgLevels(rPoc, isLong:=True)
+        Check("A26b swing+HVN too loose → HVN-gated POC places (62050)",
+              lvPoc.Target = 62050.0 AndAlso lvPoc.Capped AndAlso lvPoc.TargetReason = "POC",
+              String.Format(CultureInfo.InvariantCulture, "target={0} reason='{1}'", lvPoc.Target, lvPoc.Reason))
+
+        ' No tier survives (POC gate closed) → ATR fallback, uncapped, labeled.
+        Dim rFb = BuildPgIndicators()
+        rFb.SwingTargetLong = 62150.0
+        rFb.VPFRNearestHvnAbove = 62200.0
+        rFb.VPFRPoc = 62050.0                      ' present but NOT gated (VPFRSignal neutral)
+        Dim lvFb = PgLevels(rFb, isLong:=True)
+        Check("A26b no tier survives → FALLBACK_ATR (62070, capped=false, reason=Nothing)",
+              lvFb.Target = 62070.0 AndAlso Not lvFb.Capped AndAlso lvFb.Reason Is Nothing AndAlso
+              lvFb.TargetReason = "FALLBACK_ATR",
+              String.Format(CultureInfo.InvariantCulture, "target={0} capped={1} label={2}",
+                            lvFb.Target, lvFb.Capped, lvFb.TargetReason))
+    End Sub
+
+    ' -- A26c: DG1 stop shapes — min(structural, 1.6×ATR), floor-guarded ----------
+    Private Sub A26c_StopShapes()
+        ' Structural stop within [floor, bound] → SWING_STOP at the swing price.
+        Dim rSwing = BuildPgIndicators() : rSwing.SwingStopLong = 61950.0   ' dist 50 ∈ [2, 64]
+        Dim lvSwing = PgLevels(rSwing, isLong:=True)
+        Check("A26c structural stop within bound → SWING_STOP (61950)",
+              lvSwing.StopPx = 61950.0 AndAlso lvSwing.StopReason = "SWING_STOP",
+              String.Format(CultureInfo.InvariantCulture, "stop={0} label={1}", lvSwing.StopPx, lvSwing.StopReason))
+
+        ' Structural stop wider than the bound → D3 clamp at entry − 1.6×ATR.
+        Dim rClamp = BuildPgIndicators() : rClamp.SwingStopLong = 61900.0   ' dist 100 > 64
+        Dim lvClamp = PgLevels(rClamp, isLong:=True)
+        Check("A26c structural stop too loose → STOP_CLAMPED (61936 = entry − 64)",
+              Math.Abs(lvClamp.StopPx - 61936.0) < 0.0001 AndAlso lvClamp.StopReason = "STOP_CLAMPED",
+              String.Format(CultureInfo.InvariantCulture, "stop={0} label={1}", lvClamp.StopPx, lvClamp.StopReason))
+
+        ' No structural stop → FALLBACK_ATR at the same distance (stop_max = fallback).
+        Dim lvNone = PgLevels(BuildPgIndicators(), isLong:=True)
+        Check("A26c no structural stop → FALLBACK_ATR (61936)",
+              Math.Abs(lvNone.StopPx - 61936.0) < 0.0001 AndAlso lvNone.StopReason = "FALLBACK_ATR",
+              String.Format(CultureInfo.InvariantCulture, "stop={0} label={1}", lvNone.StopPx, lvNone.StopReason))
+
+        ' Structural stop under the 4-tick ($2) floor → FALLBACK_ATR, not the swing.
+        Dim rFloor = BuildPgIndicators() : rFloor.SwingStopLong = 61999.0   ' dist 1.0 < 2.0
+        Dim lvFloor = PgLevels(rFloor, isLong:=True)
+        Check("A26c sub-floor structural stop → FALLBACK_ATR (61936, not 61999)",
+              Math.Abs(lvFloor.StopPx - 61936.0) < 0.0001 AndAlso lvFloor.StopReason = "FALLBACK_ATR",
+              String.Format(CultureInfo.InvariantCulture, "stop={0} label={1}", lvFloor.StopPx, lvFloor.StopReason))
+
+        ' Short mirror: structural stop above entry within bound → SWING_STOP.
+        Dim rShort = BuildPgIndicators() : rShort.SwingStopShort = 62050.0  ' dist 50
+        Dim lvShort = PgLevels(rShort, isLong:=False)
+        Check("A26c short mirror structural stop → SWING_STOP (62050)",
+              lvShort.StopPx = 62050.0 AndAlso lvShort.StopReason = "SWING_STOP",
+              String.Format(CultureInfo.InvariantCulture, "stop={0} label={1}", lvShort.StopPx, lvShort.StopReason))
+    End Sub
+
+    ' -- A26d: the v35 min-move gate evaluates the PLACED target (real Calculate) --
+    ' ATR 20 ⇒ fallback dist 35 < floor 49.6 (would gate), but a swing target at
+    ' dist 60 (≤ bound 70) PLACES → the directional verdict STANDS. Same r with
+    ' structural levels disabled gates — the difference is placed geometry, and
+    ' Step 5b's copy-out (Adjusted*/TargetCapReason*) carries the placed values.
+    Private Sub A26d_MinMoveGateReadsPlacedTarget()
+        Dim cfg = BuildA8Cfg(fundingBoost:=0)              ' SHORT dominant; floor 0.0008
+        Dim rGate = BuildGateIndicators(atr:=20, price:=62000)
+        rGate.SwingTargetShort = 61940.0                   ' dist 60 ≤ 3.5×20=70 → places
+        Dim vStand = ScoringEngine.Calculate(rGate, PositionState.None, BuildA8Norms(), cfg)
+        Check("A26d placed structural target 60 > floor 49.6 → directional stands (fallback 35 would gate)",
+              Not vStand.Verdict.StartsWith("NO TRADE") AndAlso
+              vStand.VerdictContext <> "BELOW_MIN_MOVE" AndAlso
+              Math.Abs(vStand.AdjustedShortTarget - 61940.0) < 0.001 AndAlso
+              vStand.TargetCapReasonShort = "PLACED @ 61940.0 (SWING_LOW_5M)",
+              String.Format("verdict='{0}' ctx={1} adj={2:F1} reason='{3}'",
+                            vStand.Verdict, vStand.VerdictContext,
+                            vStand.AdjustedShortTarget, vStand.TargetCapReasonShort))
+
+        Dim cfgOff = BuildA8Cfg(fundingBoost:=0)
+        cfgOff.Scoring.StructuralLevels.Enabled = False
+        Dim rGate2 = BuildGateIndicators(atr:=20, price:=62000)
+        rGate2.SwingTargetShort = 61940.0                  ' legacy cap can't fire (beyond raw 61965)
+        Dim vGated = ScoringEngine.Calculate(rGate2, PositionState.None, BuildA8Norms(), cfgOff)
+        Check("A26d same r, structural disabled → legacy effective target 35 < floor → NO TRADE",
+              vGated.Verdict = "NO TRADE" AndAlso vGated.VerdictContext = "BELOW_MIN_MOVE",
+              String.Format("verdict='{0}' ctx={1}", vGated.Verdict, vGated.VerdictContext))
+    End Sub
+
+    ' -- A26e: DG3 session fallback-target multiplier resolution -------------------
+    Private Sub A26e_SessionFallbackMultiplier()
+        Dim cfg = BuildPgCfg()                             ' POCO: LONDON 2.0 / ASIA 1.25 / NY inherit
+        Dim mLon = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, 10)
+        Dim mAsia = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, 3)
+        Dim mNy = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, 15)
+        Dim mUnset = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, -1)
+        Dim cfgOff = BuildPgCfg()
+        cfgOff.Scoring.StructuralLevels.Enabled = False
+        Dim mOff = ExecutionResolution.ResolveFallbackTargetMultiplier(cfgOff, 10)
+        Check("A26e session multiplier (LONDON 2.0 / ASIA 1.25 / NY 1.75 / unstamped 1.75 / disabled 1.75)",
+              mLon = 2.0 AndAlso mAsia = 1.25 AndAlso mNy = 1.75 AndAlso
+              mUnset = 1.75 AndAlso mOff = 1.75,
+              String.Format(CultureInfo.InvariantCulture,
+                            "lon={0} asia={1} ny={2} unset={3} off={4}", mLon, mAsia, mNy, mUnset, mOff))
+
+        ' End-to-end: an ASIA-stamped run's fallback target uses 1.25×ATR.
+        Dim rAsia = BuildPgIndicators()
+        rAsia.SessionUtcHour = 3
+        Dim lvAsia = PgLevels(rAsia, isLong:=True)
+        Check("A26e ASIA-stamped fallback target = entry + 1.25×ATR (62050)",
+              Math.Abs(lvAsia.Target - 62050.0) < 0.0001 AndAlso lvAsia.TargetReason = "FALLBACK_ATR",
+              String.Format(CultureInfo.InvariantCulture, "target={0} label={1}", lvAsia.Target, lvAsia.TargetReason))
+    End Sub
+
+    ' -- A26f: enabled:false ⇒ byte-identical v50 legacy geometry ------------------
+    ' Replicates the pre-B4b A22a/A24a level semantics exactly (pure 1.2×ATR stop,
+    ' v.Adjusted*-driven target with the v30 noise suppression, no source labels).
+    ' A12 pins the Calculate()-side legacy cap under the same flag.
+    Private Sub A26f_DisabledIsByteIdenticalLegacy()
+        Dim cfg As New EngineSettings()
+        cfg.Scoring.StructuralLevels.Enabled = False
+        cfg.Scoring.AtrTargetMultiplier = 2.0              ' the v50 values
+        cfg.Scoring.AtrStopMultiplier = 1.2
+        Dim r = BuildBridgeIndicators()                    ' swing data present — must be IGNORED
+
+        Dim vPlain = BuildBridgeVerdict()
+        Dim lvPlain = SignalEmitter.ComputeSideLevels(vPlain, r, cfg, isLong:=True)
+        Dim lvPlainS = SignalEmitter.ComputeSideLevels(vPlain, r, cfg, isLong:=False)
+        Dim okPlain As Boolean =
+            Math.Abs(lvPlain.StopPx - (59012.5 - 41.3 * 1.2)) < 0.0001 AndAlso
+            Math.Abs(lvPlain.Target - (59012.5 + 41.3 * 2.0)) < 0.0001 AndAlso
+            Not lvPlain.Capped AndAlso lvPlain.Reason Is Nothing AndAlso
+            lvPlain.StopReason Is Nothing AndAlso lvPlain.TargetReason Is Nothing AndAlso
+            Math.Abs(lvPlainS.StopPx - (59012.5 + 41.3 * 1.2)) < 0.0001 AndAlso
+            lvPlainS.StopReason Is Nothing
+
+        Dim vCap = BuildBridgeVerdict()
+        vCap.AdjustedLongTarget = 59060.0
+        vCap.TargetCapReasonLong = "CAPPED @ 59060.0 (SWING_HIGH_5M)"
+        Dim lvCap = SignalEmitter.ComputeSideLevels(vCap, r, cfg, isLong:=True)
+        Dim okCap As Boolean =
+            lvCap.Target = 59060.0 AndAlso lvCap.Capped AndAlso
+            lvCap.Reason = "CAPPED @ 59060.0 (SWING_HIGH_5M)" AndAlso
+            Math.Abs(lvCap.RawTarget - (59012.5 + 41.3 * 2.0)) < 0.0001
+
+        Dim vNoise = BuildBridgeVerdict()
+        vNoise.AdjustedLongTarget = 59095.0                ' raw 59095.1 → |0.1| < floor 0.826
+        vNoise.TargetCapReasonLong = "CAPPED @ 59095.0 (SWING_HIGH_5M)"
+        Dim lvNoise = SignalEmitter.ComputeSideLevels(vNoise, r, cfg, isLong:=True)
+        Dim okNoise As Boolean =
+            lvNoise.Target = 59095.0 AndAlso Not lvNoise.Capped AndAlso lvNoise.Reason Is Nothing
+
+        Check("A26f enabled:false byte-identical legacy trio (uncapped / capped / noise-suppressed, no labels)",
+              okPlain AndAlso okCap AndAlso okNoise,
+              String.Format("plain={0} cap={1} noise={2}", okPlain, okCap, okNoise))
+    End Sub
+
+    ' -- A26g: HC21 — structural_levels three-tier tweaker surface ------------------
+    Private Sub A26g_TweakerStructuralLevelsSurface()
+        Dim s As String = "{""version"":51,""scoring"":{""atr_target_multiplier"":1.75," &
+                          """atr_stop_multiplier"":1.6,""structural_levels"":{""enabled"":true," &
+                          """target_max_atr_mult"":3.5,""stop_max_atr_mult"":1.6," &
+                          """stop_min_floor_ticks"":4,""stop_too_loose_mode"":""clamp""," &
+                          """sessions"":{""LONDON"":{""fallback_target_atr_mult"":2.0}}}}}"
+        Dim rEnabled = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.enabled", "true", "false"), s, 3)
+        Dim rMode = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.stop_too_loose_mode", """clamp""", """skip"""), s, 3)
+        Dim rSession = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.sessions.LONDON.fallback_target_atr_mult", "2.0", "1.5"), s, 3)
+        Dim rBound = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.target_max_atr_mult", "3.5", "3.0"), s, 3)
+        Dim rStopMax = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.stop_max_atr_mult", "1.6", "1.8"), s, 3)
+        Dim rFloor = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.stop_min_floor_ticks", "4", "6"), s, 3)
+        Dim rFallback = SettingsDiffApplier.Validate(OneDiff("scoring.atr_target_multiplier", "1.75", "1.9"), s, 3)
+        Check("A26g structural_levels three-tier surface (switches + sessions. fenced; flat numerics + fallback mult tunable)",
+              Not rEnabled.IsValid AndAlso rEnabled.ErrorReason.Contains("HARD CONSTRAINT 21") AndAlso
+              Not rMode.IsValid AndAlso
+              Not rSession.IsValid AndAlso rSession.ErrorReason.Contains("off-tweaker-surface") AndAlso
+              rBound.IsValid AndAlso rStopMax.IsValid AndAlso rFloor.IsValid AndAlso rFallback.IsValid,
+              String.Format("enabled={0}'{1}' mode={2} session={3}'{4}' bound={5} stopMax={6} floor={7} fallback={8}",
+                            rEnabled.IsValid, rEnabled.ErrorReason, rMode.IsValid,
+                            rSession.IsValid, rSession.ErrorReason,
+                            rBound.IsValid, rStopMax.IsValid, rFloor.IsValid, rFallback.IsValid))
     End Sub
 
 End Module

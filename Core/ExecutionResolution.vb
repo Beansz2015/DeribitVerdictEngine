@@ -115,6 +115,33 @@ Public Class ExecutionResolution
         Return cfg.Indicators.AggressorVelocity.Defaults.BurstRatioThreshold
     End Function
 
+    ''' <summary>
+    ''' [placed-geometry B4b] The fallback-target ATR multiplier in effect for the given
+    ''' UTC hour. Session override (structural_levels.sessions{}, matched by bucket name —
+    ''' DG3: LONDON 2.0 / ASIA 1.25) → the global scoring.atr_target_multiplier. The
+    ''' override tier is a structural_levels feature: when structural_levels.enabled=false
+    ''' (legacy geometry) this returns the global multiplier unconditionally, so legacy
+    ''' callers can consume it without a guard. utcHour = -1 (unstamped fixture/replay)
+    ''' matches no bucket → global. Same inheritance contract as ResolveAggrVelNormWindow.
+    ''' </summary>
+    Public Shared Function ResolveFallbackTargetMultiplier(cfg As EngineSettings, utcHour As Integer) As Double
+        If cfg Is Nothing Then Return 0
+        Dim baseMult As Double = cfg.Scoring.AtrTargetMultiplier
+        Dim sl = cfg.Scoring.StructuralLevels
+        If sl Is Nothing OrElse Not sl.Enabled OrElse sl.Sessions Is Nothing Then Return baseMult
+        Dim b = MatchSessionBucket(cfg, utcHour)
+        If b Is Nothing OrElse String.IsNullOrEmpty(b.Name) Then Return baseMult
+        For Each kv In sl.Sessions
+            If String.Equals(kv.Key, b.Name, StringComparison.OrdinalIgnoreCase) Then
+                If kv.Value IsNot Nothing AndAlso kv.Value.FallbackTargetAtrMult.HasValue Then
+                    Return kv.Value.FallbackTargetAtrMult.Value
+                End If
+                Return baseMult
+            End If
+        Next
+        Return baseMult
+    End Function
+
     ''' <summary>The aggressor_velocity.sessions{} override for the UTC hour's session
     ''' bucket (matched by bucket NAME, case-insensitive), or Nothing when there is no
     ''' matching bucket / no override entry.</summary>

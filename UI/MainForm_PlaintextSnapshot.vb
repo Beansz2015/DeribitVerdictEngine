@@ -147,15 +147,30 @@ Partial Public Class MainForm
         ' D2 (S-1): displays AvgATR/CurrATR sizing factor — mirrors RenderOutputHeader.
         Dim sizeMult As Double = If(r.ATR > 0, norms.ATRRef / r.ATR, 1.0)
         sb.AppendLine()
+
+        ' [B4b placed-geometry] The rendered levels come from the ONE shared arbitration
+        ' (SignalEmitter.ComputeSideLevels — the same function the bridge payload, the
+        ' CSV Placed* columns, and the card read). structural_levels.enabled=false ⇒
+        ' StopReason is Nothing ⇒ the legacy branches below render byte-identical v50.
+        Dim lvLong As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
+        Dim lvShort As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
+        Dim structuralMode As Boolean = lvLong.StopReason IsNot Nothing
+        ' Session-resolved fallback-target multiplier (DG3: LONDON 2.0 / ASIA 1.25) —
+        ' returns the plain cfg multiplier when structural levels are disabled.
+        Dim headerTargetMult As Double = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, r.SessionUtcHour)
+
         ' [v36] EXEC {res}m surfaces the execution resolution (display-parity with the
         ' card's _atrSubHeader). At res=1 reads "EXEC 1m" — NY unchanged in content.
-        sb.AppendLine(String.Format("ATR ENTRY LEVELS  (ATR {0:F2}  size ×{1:F2} | {2:F1}x stop / {3:F1}x target | EXEC {4}m)",
-                                     r.ATR, sizeMult, stopMult, targetMult, r.ExecResolution))
+        ' [B4b] target mult renders F2 (1.75 must not round to 1.8); stop stays F1.
+        sb.AppendLine(String.Format("ATR ENTRY LEVELS  (ATR {0:F2}  size ×{1:F2} | {2:F1}x stop / {3:F2}x target | EXEC {4}m)",
+                                     r.ATR, sizeMult, stopMult, headerTargetMult, r.ExecResolution))
 
         Dim capNoiseFloor As Double = Math.Max(0.5, r.ATR * 0.02)
 
         ' Long row
-        If v.AdjustedLongTarget > 0 Then
+        If structuralMode Then
+            AppendPlacedAtrRow(sb, "Long:   ", lvLong)
+        ElseIf v.AdjustedLongTarget > 0 Then
             Dim longCapAdjustment As Double = Math.Abs(longTarget - v.AdjustedLongTarget)
             If longCapAdjustment < capNoiseFloor Then
                 sb.AppendLine(String.Format("  Long:   Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
@@ -185,7 +200,9 @@ Partial Public Class MainForm
         End If
 
         ' Short row
-        If v.AdjustedShortTarget > 0 Then
+        If structuralMode Then
+            AppendPlacedAtrRow(sb, "Short:  ", lvShort)
+        ElseIf v.AdjustedShortTarget > 0 Then
             Dim shortCapAdjustment As Double = Math.Abs(shortTarget - v.AdjustedShortTarget)
             If shortCapAdjustment < capNoiseFloor Then
                 sb.AppendLine(String.Format("  Short:  Stop {0,9:F1}  |  Entry {1,9:F1}  |  Target {2,9:F1}    R:R {3}  (risk {4:F1} / rwd {5:F1})",
@@ -252,6 +269,25 @@ Partial Public Class MainForm
                 Dim levTag As String = If(v.KellyLevCapped, "  [LEV CAPPED]", "")
                 sb.AppendLine(String.Format("  Notional:  ≈ ${0:N0} · {1:F1}× lev{2}", notional, lev, levTag))
             End If
+        End If
+    End Sub
+
+    ' [B4b placed-geometry] One structural-first ATR row. Placed stop always carries its
+    ' source label (SWING_STOP / STOP_CLAMPED / FALLBACK_ATR). A structural-placed target
+    ' (post-noise-suppression) renders the legacy arrow form "fallback --> placed [reason]";
+    ' fallback / noise-suppressed rows carry the target source label plus the TRUE placed
+    ' R:R (computed from the placed stop/target distances, not the multiplier ratio —
+    ' the placed stop may be structural). label is the padded "Long:   " / "Short:  ".
+    Private Sub AppendPlacedAtrRow(sb As StringBuilder, label As String, lv As SideLevels)
+        Dim risk As Double = Math.Abs(lv.Entry - lv.StopPx)
+        If lv.Capped Then
+            sb.AppendLine(String.Format("  {0}Stop {1,9:F1} [{2}]  |  Entry {3,9:F1}  |  Target {4,9:F1} --> {5:F1}  [{6}]",
+                                         label, lv.StopPx, lv.StopReason, lv.Entry, lv.RawTarget, lv.Target, lv.Reason))
+        Else
+            Dim rwd As Double = Math.Abs(lv.Target - lv.Entry)
+            sb.AppendLine(String.Format("  {0}Stop {1,9:F1} [{2}]  |  Entry {3,9:F1}  |  Target {4,9:F1} [{5}]    R:R {6}  (risk {7:F1} / rwd {8:F1})",
+                                         label, lv.StopPx, lv.StopReason, lv.Entry, lv.Target, lv.TargetReason,
+                                         FormatRR(rwd, risk), risk, rwd))
         End If
     End Sub
 

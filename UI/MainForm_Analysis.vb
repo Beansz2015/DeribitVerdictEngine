@@ -200,6 +200,11 @@ Partial Public Class MainForm
         ' [B re-baseline] Per-session ROC magnitude (ASIA 0.17 / LONDON 0.11; NY base),
         ' stamped from the SAME utcHour as execRes so scoring reads it via EffRocMag.
         r.RocMagnitudeThreshold = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, utcHour)
+        ' [B4b placed-geometry] The run's session key for the structural_levels
+        ' fallback-target override — stamped ONCE from the same utcHour so Step 5b,
+        ' snapshot, card, payload and CSV Placed* all resolve the identical session
+        ' even if the run straddles a session boundary.
+        r.SessionUtcHour = utcHour
         r.CurrentPrice = candlesExec.Last().Close
 
         ' [v36] ATR (and the whole execution stack below) computed on candlesExec.

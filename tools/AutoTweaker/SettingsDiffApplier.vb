@@ -71,7 +71,8 @@ Public Class SettingsDiffApplier
         "signal_bridge.",           ' order-app signal-file emission (verdict_signal.json) — transport plumbing, zero scoring impact, no failure-rate linkage; same class as network.* (HARD CONSTRAINT 18)
         "indicators.aggressor_velocity.default.",   ' [P4 #5] shared re-baseline tier (norm window + burst threshold) — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19). Prefix-safe: the flat aggressor_velocity params stay proposable
         "indicators.aggressor_velocity.sessions.",  ' [P4 #5] per-session overrides — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19)
-        "indicators.ofi.momentum_"                  ' [v50 retune R1] OFI momentum modifier RETIRED (momentum_enabled=false) — the momentum_window/threshold/bonus keys are inert; leaving them proposable recreates the recorded-APPLIED-no-op class v47 F1 closed (HARD CONSTRAINT 20). Prefix-safe: book_depth, buy/sell_dominant_ratio, averaging_enabled, avg_window_sec are NOT momentum_-prefixed
+        "indicators.ofi.momentum_",                 ' [v50 retune R1] OFI momentum modifier RETIRED (momentum_enabled=false) — the momentum_window/threshold/bonus keys are inert; leaving them proposable recreates the recorded-APPLIED-no-op class v47 F1 closed (HARD CONSTRAINT 20). Prefix-safe: book_depth, buy/sell_dominant_ratio, averaging_enabled, avg_window_sec are NOT momentum_-prefixed
+        "scoring.structural_levels.sessions."       ' [B4b placed-geometry] per-session fallback-target overrides (DG3: LONDON 2.0 / ASIA 1.25) — hand-tuned re-baseline tier, HC11 class (HARD CONSTRAINT 21). Prefix-safe: the flat structural_levels numerics stay proposable
     }
 
     ' Validate a proposed diff list.
@@ -141,6 +142,17 @@ Public Class SettingsDiffApplier
                 result.IsValid    = False
                 result.ErrorReason = String.Format(
                     "Rejected: '{0}' is an aggressor-velocity feature switch, not a threshold (off tweaker surface — HARD CONSTRAINT 19).", item.Path)
+                Return result
+            End If
+            ' [B4b placed-geometry] Structural-levels HAND-TOGGLES — off the tweaker surface
+            ' (enabled is the geometry rollback switch; stop_too_loose_mode is the D3 decision
+            ' record, not a threshold). Exact-match, NOT a prefix: the flat siblings
+            ' (target_max_atr_mult, stop_max_atr_mult, stop_min_floor_ticks) STAY tunable.
+            If path = "scoring.structural_levels.enabled" OrElse
+               path = "scoring.structural_levels.stop_too_loose_mode" Then
+                result.IsValid    = False
+                result.ErrorReason = String.Format(
+                    "Rejected: '{0}' is a structural-levels hand-toggle, not a threshold (off tweaker surface — HARD CONSTRAINT 21).", item.Path)
                 Return result
             End If
 

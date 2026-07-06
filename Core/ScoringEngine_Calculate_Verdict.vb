@@ -178,7 +178,7 @@ Partial Public Class ScoringEngine
         res.VerdictContext = CalcVerdictContext(res, r, state, cfg)
         res.HoldStatus = CalcHoldStatus(r, posState, cfg)
 
-        ' -- Step 5b: ATR Target Cap (VPFR HVN) --------------------------------
+        ' -- Step 5b: placed-level arbitration ---------------------------------
         ' D2 (S-1): levels are LINEAR in ATR — distance = ATR × multiplier. The
         ' old quadratic form (× norms.ATRScaleFactor) was dropped so the cap base
         ' matches the linear display and the eval pipeline's raw-ATR barriers.
@@ -191,80 +191,115 @@ Partial Public Class ScoringEngine
         res.TargetCapReasonLong  = ""
         res.TargetCapReasonShort = ""
 
-        Dim hvnAbove As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
-        Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
+        ' The per-side PLACED target — what Step 5c gates on. Under legacy geometry
+        ' this is the post-cap effective target (byte-identical to the pre-B4b
+        ' expression); under structural-first it is the arbitration's placed value.
+        Dim placedLongTarget  As Double
+        Dim placedShortTarget As Double
 
-        ' 3-tier cap arbitration (long): swing target → nearest HVN → POC.
-        ' Fires when any qualifier is closer than the raw ATR target.
-        ' Winner = closest to entry (minimum value above current price).
-        Dim capLongTarget As Double = 0
-        Dim capLongLabel  As String = ""
+        If cfg.Scoring.StructuralLevels IsNot Nothing AndAlso cfg.Scoring.StructuralLevels.Enabled Then
+            ' [B4b] Structural-first: delegate to the ONE shared arbitration
+            ' (SignalEmitter.ComputeSideLevels — the same function the bridge payload,
+            ' the CSV Placed* columns, and both render surfaces read), then copy the
+            ' outputs onto the Step 5b fields every downstream consumer already reads.
+            ' Adjusted*/Reason* follow the arbitration's post-noise-suppression view:
+            ' set when a structural tier placed the target (Capped), 0/"" on fallback —
+            ' so the CSV TargetCapReason buckets keep their swing/hvn/poc/none meaning.
+            Dim placedL = SignalEmitter.ComputeSideLevels(res, r, cfg, isLong:=True)
+            Dim placedS = SignalEmitter.ComputeSideLevels(res, r, cfg, isLong:=False)
+            If placedL.Capped Then
+                res.AdjustedLongTarget  = placedL.Target
+                res.TargetCapReasonLong = placedL.Reason
+            End If
+            If placedS.Capped Then
+                res.AdjustedShortTarget  = placedS.Target
+                res.TargetCapReasonShort = placedS.Reason
+            End If
+            placedLongTarget  = placedL.Target
+            placedShortTarget = placedS.Target
+        Else
+            ' Legacy 3-tier closest-wins TARGET CAP (VPFR HVN) — the enabled:false
+            ' rollback path, byte-identical to v50.
+            Dim hvnAbove As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
+            Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
 
-        ' Tier 1: swing target -- highest priority
-        If r.SwingTargetLong > 0 AndAlso r.SwingTargetLong < rawLongTarget Then
-            capLongTarget = r.SwingTargetLong
-            capLongLabel  = "SWING_HIGH_5M"
-        End If
+            ' 3-tier cap arbitration (long): swing target → nearest HVN → POC.
+            ' Fires when any qualifier is closer than the raw ATR target.
+            ' Winner = closest to entry (minimum value above current price).
+            Dim capLongTarget As Double = 0
+            Dim capLongLabel  As String = ""
 
-        ' Tier 2: nearest HVN above (VPFR-lite v2)
-        If r.VPFRNearestHvnAbove > 0 AndAlso r.VPFRNearestHvnAbove > r.CurrentPrice AndAlso
-           r.VPFRNearestHvnAbove < rawLongTarget AndAlso
-           (capLongTarget = 0 OrElse r.VPFRNearestHvnAbove < capLongTarget) Then
-            capLongTarget = r.VPFRNearestHvnAbove
-            capLongLabel  = "NEAREST_HVN_ABOVE"
-        End If
+            ' Tier 1: swing target -- highest priority
+            If r.SwingTargetLong > 0 AndAlso r.SwingTargetLong < rawLongTarget Then
+                capLongTarget = r.SwingTargetLong
+                capLongLabel  = "SWING_HIGH_5M"
+            End If
 
-        ' Tier 3: POC fallback
-        If hvnAbove AndAlso r.VPFRPoc > r.CurrentPrice AndAlso r.VPFRPoc < rawLongTarget AndAlso
-           (capLongTarget = 0 OrElse r.VPFRPoc < capLongTarget) Then
-            capLongTarget = r.VPFRPoc
-            capLongLabel  = "POC"
-        End If
+            ' Tier 2: nearest HVN above (VPFR-lite v2)
+            If r.VPFRNearestHvnAbove > 0 AndAlso r.VPFRNearestHvnAbove > r.CurrentPrice AndAlso
+               r.VPFRNearestHvnAbove < rawLongTarget AndAlso
+               (capLongTarget = 0 OrElse r.VPFRNearestHvnAbove < capLongTarget) Then
+                capLongTarget = r.VPFRNearestHvnAbove
+                capLongLabel  = "NEAREST_HVN_ABOVE"
+            End If
 
-        If capLongTarget > 0 Then
-            res.AdjustedLongTarget  = capLongTarget
-            res.TargetCapReasonLong = String.Format("CAPPED @ {0:F1} ({1})", capLongTarget, capLongLabel)
-        End If
+            ' Tier 3: POC fallback
+            If hvnAbove AndAlso r.VPFRPoc > r.CurrentPrice AndAlso r.VPFRPoc < rawLongTarget AndAlso
+               (capLongTarget = 0 OrElse r.VPFRPoc < capLongTarget) Then
+                capLongTarget = r.VPFRPoc
+                capLongLabel  = "POC"
+            End If
 
-        ' 3-tier cap arbitration (short): swing target → nearest HVN → POC.
-        ' Winner = closest to entry (maximum value below current price).
-        Dim capShortTarget As Double = 0
-        Dim capShortLabel  As String = ""
+            If capLongTarget > 0 Then
+                res.AdjustedLongTarget  = capLongTarget
+                res.TargetCapReasonLong = String.Format("CAPPED @ {0:F1} ({1})", capLongTarget, capLongLabel)
+            End If
 
-        ' Tier 1: swing target -- highest priority
-        If r.SwingTargetShort > 0 AndAlso r.SwingTargetShort > rawShortTarget Then
-            capShortTarget = r.SwingTargetShort
-            capShortLabel  = "SWING_LOW_5M"
-        End If
+            ' 3-tier cap arbitration (short): swing target → nearest HVN → POC.
+            ' Winner = closest to entry (maximum value below current price).
+            Dim capShortTarget As Double = 0
+            Dim capShortLabel  As String = ""
 
-        ' Tier 2: nearest HVN below (VPFR-lite v2)
-        If r.VPFRNearestHvnBelow > 0 AndAlso r.VPFRNearestHvnBelow < r.CurrentPrice AndAlso
-           r.VPFRNearestHvnBelow > rawShortTarget AndAlso
-           (capShortTarget = 0 OrElse r.VPFRNearestHvnBelow > capShortTarget) Then
-            capShortTarget = r.VPFRNearestHvnBelow
-            capShortLabel  = "NEAREST_HVN_BELOW"
-        End If
+            ' Tier 1: swing target -- highest priority
+            If r.SwingTargetShort > 0 AndAlso r.SwingTargetShort > rawShortTarget Then
+                capShortTarget = r.SwingTargetShort
+                capShortLabel  = "SWING_LOW_5M"
+            End If
 
-        ' Tier 3: POC fallback
-        If hvnBelow AndAlso r.VPFRPoc < r.CurrentPrice AndAlso r.VPFRPoc > rawShortTarget AndAlso
-           (capShortTarget = 0 OrElse r.VPFRPoc > capShortTarget) Then
-            capShortTarget = r.VPFRPoc
-            capShortLabel  = "POC"
-        End If
+            ' Tier 2: nearest HVN below (VPFR-lite v2)
+            If r.VPFRNearestHvnBelow > 0 AndAlso r.VPFRNearestHvnBelow < r.CurrentPrice AndAlso
+               r.VPFRNearestHvnBelow > rawShortTarget AndAlso
+               (capShortTarget = 0 OrElse r.VPFRNearestHvnBelow > capShortTarget) Then
+                capShortTarget = r.VPFRNearestHvnBelow
+                capShortLabel  = "NEAREST_HVN_BELOW"
+            End If
 
-        If capShortTarget > 0 Then
-            res.AdjustedShortTarget   = capShortTarget
-            res.TargetCapReasonShort  = String.Format("CAPPED @ {0:F1} ({1})", capShortTarget, capShortLabel)
+            ' Tier 3: POC fallback
+            If hvnBelow AndAlso r.VPFRPoc < r.CurrentPrice AndAlso r.VPFRPoc > rawShortTarget AndAlso
+               (capShortTarget = 0 OrElse r.VPFRPoc > capShortTarget) Then
+                capShortTarget = r.VPFRPoc
+                capShortLabel  = "POC"
+            End If
+
+            If capShortTarget > 0 Then
+                res.AdjustedShortTarget   = capShortTarget
+                res.TargetCapReasonShort  = String.Format("CAPPED @ {0:F1} ({1})", capShortTarget, capShortLabel)
+            End If
+
+            placedLongTarget  = If(res.AdjustedLongTarget > 0, res.AdjustedLongTarget, rawLongTarget)
+            placedShortTarget = If(res.AdjustedShortTarget > 0, res.AdjustedShortTarget, rawShortTarget)
         End If
 
         ' -- Step 5c: Minimum-Tradeable-Move Gate (v35) -------------------------
         ' A directional verdict whose realistic take-profit can't clear the
         ' minimum tradeable move (cfg.Scoring.MinTradeableMovePct of entry — sized
-        ' to clear slippage) is overridden to NO TRADE. The check uses the
-        ' EFFECTIVE (post-cap) target so it catches BOTH causes: a small raw ATR
-        ' target (low vol) AND a near structural swing that the Step 5b cap pulled
-        ' below the floor. Scores, breakdown and the computed levels are preserved
-        ' for display — only the verdict flips, and BELOW_MIN_MOVE records why.
+        ' to clear slippage) is overridden to NO TRADE. The check uses the PLACED
+        ' target from Step 5b (B4b: the structural-first arbitration output when
+        ' enabled; the post-cap effective target on the legacy path — the same
+        ' values as the pre-B4b expression) so it catches BOTH causes: a small
+        ' fallback ATR target (low vol) AND a near structural level the arbitration
+        ' placed below the floor. Scores, breakdown and the computed levels are
+        ' preserved for display — only the verdict flips, BELOW_MIN_MOVE records why.
         ' Mirrors the MTF veto: compute everything, then override, then return.
         ' Shared floor with the eval-metric de-confound; off the auto-tweaker
         ' surface (trader risk preference, never auto-tuned). See
@@ -272,9 +307,7 @@ Partial Public Class ScoringEngine
         If dominant <> "NONE" AndAlso res.Verdict IsNot Nothing AndAlso
            Not res.Verdict.StartsWith("NO TRADE") Then
             Dim floorDist As Double = cfg.Scoring.MinTradeableMovePct * r.CurrentPrice
-            Dim effTarget As Double = If(dominant = "LONG",
-                                         If(res.AdjustedLongTarget > 0, res.AdjustedLongTarget, rawLongTarget),
-                                         If(res.AdjustedShortTarget > 0, res.AdjustedShortTarget, rawShortTarget))
+            Dim effTarget As Double = If(dominant = "LONG", placedLongTarget, placedShortTarget)
             Dim effDist As Double = Math.Abs(effTarget - r.CurrentPrice)
             If floorDist > 0 AndAlso effDist < floorDist Then
                 res.Verdict = "NO TRADE"

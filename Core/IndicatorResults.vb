@@ -165,4 +165,14 @@ Public Class IndicatorResults
     ' [v36 batch-along, v34 follow-up] CalcCVD's internal weighted slope, surfaced for
     ' precise CVD threshold calibration (was an unlogged local). USD units. CSV v0.7.
     Public Property CVDWeightedSlope As Double
+
+    ' [placed-geometry B4b] The run's UTC hour, stamped in RunAnalysisAsync beside the
+    ' ExecResolution stamp. The ONE session key every placed-level consumer (Step 5b,
+    ' snapshot, card, payload, CSV Placed*) resolves the structural_levels fallback-target
+    ' session override from — stamping it once per run makes the four surfaces
+    ' session-consistent by construction (no per-surface UtcNow.Hour reads that could
+    ' straddle a session boundary mid-run). Default -1 = "unstamped" ⇒ no bucket matches ⇒
+    ' the global scoring.atr_target_multiplier — so harness fixtures and any path that
+    ' doesn't set it behave session-neutrally.
+    Public Property SessionUtcHour As Integer = -1
 End Class

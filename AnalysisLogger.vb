@@ -168,9 +168,10 @@ Public Class AnalysisLogger
         Dim path As String = GetLogPath()
         Try
             ' v0.8 placed-geometry columns — the SAME per-side arbitration the bridge
-            ' payload emits (current geometry: pure-ATR stop, capped-ATR target; the
-            ' placed-geometry structural-first pass later changes the INPUTS, not this
-            ' sharing).
+            ' payload emits. Since v51 (B4b) that arbitration is structural-first
+            ' (swing/HVN/POC target ladder + DG1 min(structural, 1.6×ATR) stop); the
+            ' column VALUES changed semantics at that boundary, the names did not
+            ' (v31/v36 precedent — see the v51 change_log entry).
             Dim placedLong = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
             Dim placedShort = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
             Using sw As New StreamWriter(path, append:=True)

@@ -107,6 +107,20 @@ Public Class PromptBuilder
             "'indicators.OFI.sell_dominant_ratio', 'indicators.OFI.avg_window_sec') REMAIN on the " &
             "surface. (Enforced in code: SettingsDiffApplier rejects the 'indicators.OFI.momentum_' " &
             "prefix as well.)" & vbLf &
+        "21. Placed geometry (scoring.structural_levels) is a THREE-TIER surface. " &
+            "Never propose 'scoring.structural_levels.enabled' (the structural-first geometry " &
+            "rollback switch — false reverts to the legacy pure-ATR-stop/capped-target geometry, " &
+            "a dataset-boundary event, never an optimisation) or " &
+            "'scoring.structural_levels.stop_too_loose_mode' (the trader's D3 clamp-vs-skip " &
+            "decision record). Never propose any 'scoring.structural_levels.sessions.*' key " &
+            "(the per-session fallback-target tier, LONDON 2.0 / ASIA 1.25 — hand-tuned from " &
+            "MFE/MAE derivations like session_volume.sessions[].roc_magnitude_threshold, " &
+            "HARD CONSTRAINT 11 class). The FLAT keys REMAIN tunable: " &
+            "'scoring.structural_levels.target_max_atr_mult', '...stop_max_atr_mult', " &
+            "'...stop_min_floor_ticks', and the fallback multipliers " &
+            "'scoring.atr_target_multiplier' / 'scoring.atr_stop_multiplier' stay on the " &
+            "surface as before. (Enforced in code: SettingsDiffApplier exact-match rejects " &
+            "the two hand-toggles and rejects the 'sessions.' prefix.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &
