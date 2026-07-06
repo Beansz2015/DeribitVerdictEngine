@@ -38,23 +38,29 @@ Replace the count-indexed ring with a **timestamped ring**; classify on the delt
 - **W = 5 minutes (proposed):** ≥ 1 full bar at every execution resolution (1 m and 3 m), spans ≥ 2 samples at every cadence the engine has ever run, and sits at the front edge of the 2–15 min hold horizon — "is crowding building *now*, at trade-decision timescale."
 - Step 3b itself is untouched — same amplify/soften, same crowding gate. Only the momentum state's input window changes meaning: **funding moved more than T per ≥ W minutes**, identical at every cadence.
 
-## 4. Threshold derivation (provisional value + re-fit gate)
+## 4. Threshold derivation — **T = 2e-7 at W = 5 min** (pooled 9-day fit, 2026-07-06)
 
-Method: firing-rate-match, same as R2 — fit T so the profile lands in the retune §5 bands (FLAT 60–70%, 3b engagement 15–25%). Fit run 2026-07-06 on the v0.8 book (exact F8 funding path; n=305 anchored 5-min windows, >30-min gaps segmented):
+Method: firing-rate-match, same as R2 — fit T so the profile lands in the retune §5 bands (FLAT 60–70%, 3b engagement 15–25%). Two fit populations, both run 2026-07-06:
 
-| T | FLAT% | 3b-engaged% |
+1. **v0.8 book** (exact F8 funding path; n=305 anchored windows, 07-03→07-06): a HOT-funding stretch — \|Δ5min\| p50 3.9e-7; in-band T would be ~5–6e-7 here alone.
+2. **`.bak` WS-era book** (06-25→07-03, n=1,689 windows): funding path **reconstructed from the `FundingDelta` (F8) change-step stream** (the audit §7 method — F6 `FundingRate` seeds each >30-min segment, steps accumulate when the delta value or the F6 rate moves; ~95%-fidelity class). A QUIET-funding period — \|Δ5min\| p50 3.0e-8, 13× smaller than the v0.8 stretch.
+
+The 5-min funding-move distribution is **regime-dependent week to week** (quiet weeks vs crowding builds). A single T therefore holds the band only on a multi-regime book — and once the window is time-anchored, above-band engagement during a genuine crowding build is *honest signal*, not the cadence artifact R2 chased. Pooled fit (n=1,994 windows, ~9 days, both regimes):
+
+| T | pooled FLAT% | pooled 3b-engaged% |
 |---|---|---|
-| 3e-7 | 45.6 | 34.4 |
-| 5e-7 | 61.3 | 28.2 |
-| **6e-7 (provisional)** | **~70** | **~24–25** |
-| 8e-7 | 80.0 | 20.0 |
-| 1e-6 | 84.6 | 15.4 |
+| 1.5e-7 | 65.1 | 18.2 |
+| **2e-7 (recommended)** | **68.7** | **17.1** |
+| 2.5e-7 | 72.4 | 15.4 |
+| 3e-7 | 75.7 | 13.9 |
+| 5e-7 | 81.9 | 10.9 |
 
-\|Δ5min\| percentiles: p50 3.9e-7 · p65 5.3e-7 · p70 6.2e-7 · p80 8.0e-7 · p90 1.17e-6.
+**T = 2e-7** sits mid-band on both metrics — numerically the same value R2 shipped, now attached to a cadence-independent construction (coincidence of scale, not of meaning: the count-window at the 30s derivation cadence spanned ~90s; the anchored window spans 5–6 min at every cadence).
 
 **Caveats, honestly stated:**
-- This book is crowding-skewed (48% of rows CROWDED — a heavy LONGS-CROWDED stretch), so FLAT% and engagement% cannot both sit mid-band at one T here; on a normal-crowding book they reconcile. **Engagement (15–25%) is the primary band** — it *is* the adjunct invariant; FLAT% is the proxy.
-- n=305 windows over 2 partial sessions is a thin fit. **Re-fit gate (binding): re-run this fit on ≥ 5 weekday session-days of v0.8 rows before the value ships**; the recipe is the one-liner in this section (anchored 5-min deltas, segment on >30-min gaps, tabulate FLAT/engagement vs T). The `.bak` book cannot back-fill this fit: its `FundingRate` is F6-quantized (1e-6 floor — the reason C2 moved to F8), which floors sub-1e-6 anchored deltas.
+- The `.bak` segment rides the reconstruction (~95% fidelity; F6 seeds; possible slight undercount of movement → FLAT% marginally overstated there). The v0.8 segment is exact.
+- Expect engagement **above** band on hot-funding weeks and **below** on quiet weeks (10–34% across the two segments) — by design; the bands are calibration targets for the *average* book, and the bounded ±amplify/soften modifier caps the verdict impact either way.
+- The original "re-fit on ≥5 weekday sessions" gate is **substantially discharged** by the pooled fit; what remains is the standard post-ship §5-style watch re-run (per-resolution, §7) — no further pre-ship data gate.
 
 ## 5. Sequencing (boundary discipline)
 
@@ -81,4 +87,4 @@ Method: firing-rate-match, same as R2 — fit T so the profile lands in the retu
 | D2 | W = 5 minutes | **Yes** (rationale §3; T is fit *given* W, so W is a design choice, not a calibration) |
 | D3 | `FundingDelta` column = per-run step (dedup retired) | **Keep column, document semantics** (§6) |
 | D4 | Boundary: bundle at B4b vs own boundary post-#5-gate | **Own boundary post-#5-gate** — B4b is geometry-only and already reviewed as such; keep its diff clean. Bundle only if B4b slips past the #5 gate anyway |
-| D5 | Provisional T = 6e-7, **re-fit on ≥5 weekday sessions before ship** (§4, binding) | **Yes** |
+| D5 | T = **2e-7** at W = 5 min (pooled 9-day / 2-regime fit, n=1,994 — §4 as amended 2026-07-06; the pre-ship re-fit gate is discharged, the post-ship per-resolution watch is the confirmation) | **Yes** |
