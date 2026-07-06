@@ -1,6 +1,6 @@
 # Funding Momentum — Time-Anchored Window (mini-spec)
 
-**Status:** PROPOSED 2026-07-06 (Fable seat). Sign-off decisions in §8.
+**Status:** **APPROVED 2026-07-07 — trader ticked D1–D5, all as recommended** (proposed 2026-07-06, Fable seat; §4 amended same day with the pooled two-book fit → T=2e-7 final). Implementation = Opus, own ⚠ boundary after the #5 correlation-gate verdict (D4).
 **Trigger:** the retune §5 post-ship watch (first pass, 2026-07-06) — see §1. This is the "time-anchored window" code fix the signal-health audit deferred (`signal-health-audit-2026-07-03.md` §7; `signal-health-retune-proposal.md` §7). The deferral trigger has fired: the cadence-dependence is no longer a corner case, it is the operating mode.
 **Class:** ⚠ scoring-behaviour change (Step 3b input state becomes cadence-independent). Boundary rules apply (§5).
 
@@ -80,7 +80,7 @@ The 5-min funding-move distribution is **regime-dependent week to week** (quiet 
 - New fixtures: anchored classification (RISING/FALLING/FLAT at synthetic timestamped rings); cold-start + post-eviction → FLAT; anchor picks the *newest* ≥W sample (not the oldest); 30-min eviction; cadence-invariance (same funding path sampled at 30 s vs 180 s → same states at the same wall-clock instants — the fixture that pins the whole point).
 - Post-ship watch: same §5 bands, re-checked per-resolution — **both res-1 and res-3 must sit in-band**, that's the success criterion the count-window could never meet.
 
-## 8. Sign-off decisions
+## 8. Sign-off decisions — ALL TICKED by the trader 2026-07-07 (as recommended)
 
 | # | Decision | Recommendation |
 |---|---|---|
