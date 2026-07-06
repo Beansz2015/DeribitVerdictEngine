@@ -25,6 +25,7 @@
 - F3 observational watch open (EXIT GUARD strip vs HOLD\EXIT row corroboration during holds).
 - Fable available through **Jul 7**; Opus on Max-5x for the month after. Fable = specs/derivations/rulings; Opus = implementation.
 - **2026-07-03 update:** engine **v48 SHIPPED + LIVE** (`a86b4f1` — rule-1 window closed; the NEXT boundary opens when #5 builds). **W1 signal-health audit DONE** (`21d1b7f`) → `signal-health-retune-proposal.md` PROPOSED (D1–D6: OFIMomentum retire + funding `momentum_threshold` 2e-7, bundled at the #5 boundary; spread kept inert + A1 rejected; A4 gated on liq-feed validation; TFI columns + FundingRate F8 ride #5's v0.8 rotation). **Signal-bridge schema v1 FROZEN** (order-app field-diff reconciled, trader ticked D1–D10; `engine.instance_id` + `engine.autotrade_armed` dual-arm interlock + enum pins folded in; ack paste-ready in `signal-bridge-ack-to-orderapp.md`) — both Opus implementation lanes open. All local, unpushed (trader tests + pushes).
+- **2026-07-07 update:** engine **v51 B4b placed-geometry SHIPPED + coordinator-APPROVED** (own ⚠ boundary; autotrade live-at-min-size unlocks on trader push). v50 live since 07-03; #5 collection window open (gate ~Jul 8–9). Funding time-anchored window spec PROPOSED with final values (T=2e-7 @ 5-min, pooled 9-day fit — `funding-momentum-time-anchored-window-proposal.md`; builds at its own boundary post-#5-gate). **NEW §W6 accuracy-ceiling programme added** (trader-directed) + cross-venue lead-lag spec candidate authored.
 
 ## 3. Workstreams
 
@@ -71,6 +72,21 @@
 ### W5 — Auto-tweaker ops
 First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry-run first); **window/MinTier recalibration** against the real post-v35 directional rate (~23% NY actionable — §12 MinTier-mismatch row; the interim `window_size_verdicts` 75 holds until then) rides the first-fire follow-up — **Opus + coordinator**. P13 UserManual tier documentation = doc pass during month (Opus). Phase-2b per-population autotune stays parked (may never be built).
 
+### W6 — Accuracy-ceiling programme (O1 terminal phase; added 2026-07-07, trader-directed)
+
+**The ruling this section encodes (Fable coordinator assessment, 2026-07-06, trader-accepted):** the indicator set is essentially COMPLETE once #6 ships — NY×1 runs ~55% SUCC with adverse-stop failures at 0.3% (losses are geometry/horizon, which B4b attacked), and a selective public-data system at this horizon tops out ~60%. **The remaining accuracy is NOT in new indicators; it is in calibration (LONDON), combination (B1), and loop closure (outcomes/fills).** Future orchestrators: work this table top-down, tick items as they land, and refuse new-indicator proposals that don't clear the W6-7 bar (orthogonal signal CLASS, not another angle on flow — the audit measured max pairwise flow agreement at 69%; there is no room for a sixth flow indicator that isn't marginal).
+
+| # | Item | Class | Gate / recipe | State |
+|---|---|---|---|---|
+| W6-1 | **LONDON×3 calibration debt** — the single largest measured deficit (SUCC 34.5% vs NY 54.9%; ADVERSE 24.1%; structural-target reach INVERTED 33% vs 61%). Covers: v36 Phase-2 carry-forward (3-min scaling of `TTM.flat_threshold` + divergence gates — F15: re-measure, don't blind-scale), session-scoped DynamicNorms baseline check, the B4b LONDON struct-target watch (F3/DG4), the F13 adverse-cluster question | Calibration | Rides audit re-runs + the B4b §5 watch; ≥3 more LONDON session-days for the F3 trigger | OPEN |
+| W6-2 | **Outcome-loop closure (a):** auto-tweaker first live fire (= W5) + failure-matrix-driven threshold moves thereafter | Loop | Data-gated (>40%-failure NY×1 window), supervised dry-run first | OPEN (W5) |
+| W6-3 | **Outcome-loop closure (b):** per-tier empirical win rates → Kelly CAL mode (the long-promised EST→CAL upgrade) | Loop | Eval book depth per (tier × session × resolution) — size the gate when picked up; CSV v0.8 attribution makes the join clean | OPEN |
+| W6-4 | **Offline ceiling audit (NEW):** one-off regularized-model audit (e.g. logistic on the CSV feature book vs outcomes) — an INSTRUMENT, never a live scorer (interpretability principle intact). Quantifies how much the additive +1/−1 pipeline leaves unharvested. Model ≈ pipeline ⇒ declare the system ceiling reached and STOP spending on combination; model ≫ pipeline ⇒ that delta is the B1 prize, measured | Measurement | ≥3–4 weeks of v0.8 rows (placed geometry + TFI logged); deliverable = a report doc | OPEN — **run BEFORE W6-5 and before any Tier-C cross-venue decision** |
+| W6-5 | **B1 regime-conditional per-indicator weights** — same indicators, better combination; the audit's conditional-outcome tables are the first evidence base | Combination | Gated on W6-4's measured prize + a materially bigger evaluated book (overfit risk is the binding constraint) | OPEN (was parked in §5b — its trigger is now defined here) |
+| W6-6 | **Bridge v2 realized-outcome calibration** — fills/slippage/actual exits replace mid-price touch labels (= W3 v2 position-state feedback + the disposition log joins) | Loop | v1 supervised 1–2 weeks | OPEN (W3) |
+| W6-7 | **Cross-venue lead-lag + external context** — the ONE remaining non-marginal indicator class (where is price discovery happening). Spec candidate AUTHORED: `cross-venue-lead-lag-proposal.md` (Tier A = free real-time Coinbase/Binance spot WS; Tier B = free slow-cadence CME-gap/ETF-flow context; Tier C = paid CME/ETF real-time, deferred) | New signal class | After the current queue (#5 gate → funding → #6) AND W6-4; #5-style correlation gate + #6-style outcome gradient bind its activation | SPEC CANDIDATE |
+| W6-8 | Already-scheduled indicator completions: #6 absorption (W2), A4 liq×OFI + the #7 liq-feed validation (W2), full-depth incremental book (W4, gated behind #6-v1) | — | Per their existing entries — cross-referenced here so the programme view is complete | OPEN (W2/W4) |
+
 ## 5b. Explicitly not scheduled (decisions of record — do not re-propose without new evidence)
 
 | Item | Why | Revisit trigger |
@@ -79,7 +95,8 @@ First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry
 | §11 #9 provisional forming-bar verdict | Conservative-bias tension; autotrade contamination risk | Explicit trader ask, bridge-excluded |
 | Authenticated / `raw` Deribit feeds | W4 ruling 2026-07-02 | Order-management-in-engine, or a proven 100ms-blur case |
 | Tweaker Phase-2b per-population autotune | Manual (B)-style re-baselines are cheap enough so far | Manual cadence becomes a real burden (spec §1 gates) |
-| Bundle 5 (C1/C2), Bundle 6 (D5/D6), D3/D4, A5, B1 | Backlog-gated per their entries; Bundle 4 dissolved into W1 | Their documented triggers |
+| Bundle 5 (C1/C2), Bundle 6 (D5/D6), D3/D4, A5 | Backlog-gated per their entries; Bundle 4 dissolved into W1 | Their documented triggers |
+| ~~B1 per-indicator weights~~ | **Moved to W6-5 (2026-07-07)** — its trigger is now defined (post-W6-4 ceiling audit + book size) | — |
 
 ## 4. Fable window — Jul 2–7
 
@@ -105,6 +122,7 @@ Protected if trimming is forced: v48 derivation, signal-bridge spec, handover do
 6. CLI-port state extraction (behaviour-neutral, any gap).
 7. A4 spec+build (liq-validation-gated); bridge v2 (position feedback) once v1 has 1–2 supervised weeks. *(Placed-geometry moved up to 3b, 2026-07-03.)*
 8. Continuous: tweaker first-fire when its window appears; F3 watch; WS-health persistence.
+9. **W6 accuracy-ceiling programme** (added 2026-07-07): work the W6 table top-down as gates clear — LONDON calibration debt (W6-1) is pickable at any audit re-run; the offline ceiling audit (W6-4) unlocks at ~3–4 weeks of v0.8 rows and gates B1 (W6-5) + any cross-venue Tier-C spend (W6-7).
 
 ## 6. Sequencing rules (binding)
 
