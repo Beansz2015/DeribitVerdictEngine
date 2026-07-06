@@ -4,6 +4,10 @@
 **Roadmap:** W4 / O3 (month execution order item 6 — "behaviour-neutral, any gap"). After this ships, the Linux port becomes "write a renderer + a runner" — and the renderer moves *in this spec*, so the residual port is the runner + packaging.
 **Class:** ZERO behaviour change. Not a ⚠ item, no dataset boundary, no settings change (no version bump). Pure code motion, pinned byte-identical by the existing harness + parity fixtures. Opus implements; coordinator reviews per stage.
 
+**Scope clarification (trader question, 2026-07-07 — recorded with the D-ticks):** the end product is a **separate console app** (`tools/HeadlessRunner`, own `.vbproj`, `dotnet` on the Linux server) and the WinForms app remains the Windows surface, **behaving byte-identically at every stage** (the pinned proof obligation). What the WinForms *codebase* does undergo is internal restructuring — Stages 1–3 move the run state, the text renderer, and the run sequence into `Core/` classes the form then calls — deliberately, because a runner that *duplicated* the run sequence instead of sharing it would fork the pipeline into two drift-prone copies (the anti-pattern the `ComputeSideLevels` one-seam rule exists to prevent). One engine, two hosts. Stage 4 is the skeleton (compile-proof + a working `--once`/`--interval` loop); systemd/packaging/ops polish belongs to the later port spec (O3).
+
+**D1–D7 ALL TICKED 2026-07-07** (trader; conditioned on the clarification above, which is exactly the design). Implementation may be scheduled any gap per §6.
+
 ---
 
 ## 1. Problem

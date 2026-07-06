@@ -36,6 +36,7 @@ Replace the count-indexed ring with a **timestamped ring**; classify on the delt
 - Cold start / post-gap: no sample ≥ W old (fresh start, or the 30-min eviction just cleared the ring) → **FLAT** — same warm-up posture as today.
 - The pure function moves to the host-agnostic pattern: `CalcFundingMomentum(history As List(Of (Long, Double)), nowUtcMs, cfg)` — stays in `IndicatorEngine`, ring stays host-side (and is named in the W4 run-state extraction inventory; the two specs compose).
 - **W = 5 minutes (proposed):** ≥ 1 full bar at every execution resolution (1 m and 3 m), spans ≥ 2 samples at every cadence the engine has ever run, and sits at the front edge of the 2–15 min hold horizon — "is crowding building *now*, at trade-decision timescale."
+  **Empirical support added 2026-07-06 (from the §4 two-book fit):** on the same WS-era book, 5-min anchored deltas run *smaller* than the audit's ~90s count-window deltas (p50 3.0e-8 vs 8.0e-8) — the funding premium oscillates at short horizons and partially cancels over 5 minutes, so the anchored 5-min delta measures *sustained* drift rather than wiggle. A shorter W would re-import the oscillation noise the count window was inadvertently measuring; a longer W lags the hold-decision timescale. 5 minutes is the knee.
 - Step 3b itself is untouched — same amplify/soften, same crowding gate. Only the momentum state's input window changes meaning: **funding moved more than T per ≥ W minutes**, identical at every cadence.
 
 ## 4. Threshold derivation — **T = 2e-7 at W = 5 min** (pooled 9-day fit, 2026-07-06)
@@ -84,7 +85,7 @@ The 5-min funding-move distribution is **regime-dependent week to week** (quiet 
 | # | Decision | Recommendation |
 |---|---|---|
 | D1 | Adopt the time-anchored window (mechanism, §3) | **Yes** — pre-agreed direction (audit §7), trigger fired |
-| D2 | W = 5 minutes | **Yes** (rationale §3; T is fit *given* W, so W is a design choice, not a calibration) |
+| D2 | W = 5 minutes | **Yes** (rationale §3, now incl. the empirical mean-reversion argument from the 2026-07-06 two-book fit — 5-min anchored deltas < 90s-window deltas ⇒ the anchor reads sustained drift, not oscillation; T is fit *given* W) |
 | D3 | `FundingDelta` column = per-run step (dedup retired) | **Keep column, document semantics** (§6) |
 | D4 | Boundary: bundle at B4b vs own boundary post-#5-gate | **Own boundary post-#5-gate** — B4b is geometry-only and already reviewed as such; keep its diff clean. Bundle only if B4b slips past the #5 gate anyway |
 | D5 | T = **2e-7** at W = 5 min (pooled 9-day / 2-regime fit, n=1,994 — §4 as amended 2026-07-06; the pre-ship re-fit gate is discharged, the post-ship per-resolution watch is the confirmation) | **Yes** |
