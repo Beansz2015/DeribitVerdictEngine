@@ -14,7 +14,7 @@ Per CLAUDE.md: `docs/DeribitIndicatorProject.md` + `docs/architecture.md` in ful
 
 ## 1. State at window close (verify with `git status -sb` — never assume push state)
 
-- **Engine v51 (B4b placed-geometry) BUILT + COORDINATOR-APPROVED, local, UNPUSHED** (`e8dd64a`+`9ab3f04` + docs commits on top). Trader tests + pushes. **On that push:** autotrade live-at-minimum-size unlocks (order-app side), and CLI-port Stage 3 unblocks.
+- **Engine v51 (B4b placed-geometry) LIVE — trader test gate PASSED + PUSHED 2026-07-07** (origin `e7f8199`, ahead 0). **Autotrade live-at-minimum-size is UNLOCKED** (order-app side proceeds on its ladder) and CLI-port Stage 3 is unblocked. The §12 v51 post-ship watch is collecting.
 - **v50 LIVE + collecting** since 07-03 (on-close cadence; CSV v0.8; collector runs the Debug exe from `bin\Debug` — **Release-only builds while it runs**; `analysis_log.csv.v0.7.bak` is NEVER deleted, two watches read it).
 - **Signal bridge v1:** schema FROZEN; engine emitter shipped (v49) behind `signal_bridge.enabled:false`; **consumer lane (order-app) still open** — A2 go-ahead delivered.
 - **Specs decision-complete and ready to build:** funding time-anchored window (D1–D5 ticked 07-07), CLI-port run-state extraction (D1–D7 ticked 07-07). **Spec candidates parked with defined gates:** cross-venue lead-lag (W6-7; D1–D6 tick at scheduling), #6 absorption activation decisions (later, evidence-gated).
@@ -33,8 +33,8 @@ Per CLAUDE.md: `docs/DeribitIndicatorProject.md` + `docs/architecture.md` in ful
 
 Work top-down; data-gated items interleave as their gates clear. **[T] = trader action, [O] = Opus implement, [C] = coordinator review (Opus seat wearing the review hat, or Fable if reachable).**
 
-### Q1. v51 push [T] — the unlock event
-Trader tests B4b live, pushes. Confirms: ATR rows show placed labels (`SWING_STOP`/`STOP_CLAMPED`/`FALLBACK_ATR`, `PLACED @`), fallback R:R reads ~1:1.1, BELOW_MIN_MOVE modestly up on NY. Post-push, tick roadmap 3b.
+### Q1. v51 push [T] — ✅ DONE 2026-07-07
+Trader ran the live test gate with the implementer (placed labels, session-resolved multipliers, four-surface eyeball, R:R shift) and pushed — origin `e7f8199`, ahead 0. Roadmap 3b ticked. The unlocks are live: order-app ladder may proceed to live-at-minimum-size (after the log-only soak review, Q4), CLI Stage 3 is unblocked (Q6), and the B4b §12 watch is collecting (§4).
 
 ### Q2. #5 correlation gate [O+C] — data-ready ~Jul 8–9
 **Gate:** 2–3 weekday session-days of post-v50 burst columns (Fri 07-03 partial + Mon 07-06 exist; Tue/Wed complete it).
