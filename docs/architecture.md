@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-06-11 | App version: settings.json v31 — engine correctness pass (trade-stream ascending contract, recent-window norms, direction-aware MTF gate, dominant-side cascade, OBV/Donchian fixes, CSV v0.5) on top of v30 display polish, auto-tweaker fixed-window mode (v29), target-hit metric toggle (v28), OHLC gap-backfill (v27). `settings.json` line 1 is the version source of truth.**
+**Last updated: 2026-07-07 | App version: settings.json v51 — B4b placed-geometry structural-first levels (ONE arbitration seam `SignalEmitter.ComputeSideLevels`; Step 5b delegates; FOUR parity surfaces: snapshot ↔ cards ↔ `verdict_signal.json` ↔ CSV `Placed*`) on top of v50 #5 aggressor-velocity + retune bundle (CSV v0.8), v49 signal-bridge emitter, v48 OFI dominance re-baseline, v42 WebSocket cutover, v31 correctness pass. `settings.json` line 1 is the version source of truth.**
 
 > **Trade-stream contract (v31).** `DeribitClient.GetRecentTradesAsync` returns trades in **chronological ascending** order (oldest first, most recent last) — the HTTP request keeps `sorting=desc` to guarantee the latest trades, and the parsed list is reversed before return. Window-consuming indicators (TFI, MicroCVD) take their window from the **end** of the list via `IndicatorEngine.LastN`; `Take(n)` on a trade list selects the OLDEST n and is a bug. CalcCVD's positional thirds (early/mid/late) are chronologically truthful under this contract.
 
@@ -95,6 +95,15 @@ DeribitVerdictEngine/
 │   │                                   DeriveWsHealth (OK/DEGRADED/DOWN/REST). Atomic
 │   │                                   TryWrite (tmp + File.Replace, create-dir,
 │   │                                   never-throws). Host-agnostic; harness A22.
+│   │                                   [v51 B4b] ComputeSideLevels IS the structural-
+│   │                                   first arbitration (target ladder swing→HVN→
+│   │                                   POC→session-resolved ATR fallback, bound 3.5×;
+│   │                                   stop min(structural, 1.6×ATR) ≥ 4-tick floor;
+│   │                                   labels SWING_STOP/STOP_CLAMPED/FALLBACK_ATR,
+│   │                                   reason "PLACED @ p (LABEL)"). Consumed by
+│   │                                   Step 5b + snapshot + card + payload + CSV
+│   │                                   Placed* — FOUR parity surfaces, one seam.
+│   │                                   enabled:false ⇒ v50 legacy geometry verbatim.
 │   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
 │   │                                   VerdictResult (incl. AdjustedLongTarget,
 │   │                                   AdjustedShortTarget, TargetCapReason,
@@ -120,8 +129,14 @@ DeribitVerdictEngine/
 │   │                                   Step 4: regime veto / TRANSITIONAL ADX penalty;
 │   │                                   Step 4b: MTF gate veto;
 │   │                                   Step 5: threshold comparison → verdict string;
-│   │                                   Step 5b: 3-tier target cap (swing target →
-│   │                                   nearest HVN → POC) + VerdictContext tag.
+│   │                                   Step 5b [v51 B4b]: placed-level arbitration —
+│   │                                   with structural_levels.enabled DELEGATES to
+│   │                                   SignalEmitter.ComputeSideLevels (structural-
+│   │                                   first target ladder + DG1 stop) and copies onto
+│   │                                   Adjusted*/TargetCapReason*; enabled:false =
+│   │                                   the legacy 3-tier closest-wins cap verbatim.
+│   │                                   Step 5c (v35 min-move gate) evaluates the
+│   │                                   PLACED target. + VerdictContext tag.
 │   ├── ScoringEngine_Kelly.vb          CalcKellySizing() — display-only Kelly Criterion
 │   │                                   sizing. Called from MainForm_Render after ATR levels,
 │   │                                   not from ScoringEngine.Calculate(). Zero scoring impact.
@@ -402,12 +417,21 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     │          Layer 1.5: structural break (swing low/high breach) → EXIT
                     │          Layer 2: OBV divergence → EXIT
                     │          Layer 3: RSI divergence / single signal / RSI+ROC
-                    └─ Step 5b: 3-tier target cap:
-                               Tier 1 (highest priority): swing target
-                               Tier 2: nearest HVN above/below
-                               Tier 3 (fallback): POC
-                               Winner = closest cap to entry. Sets AdjustedLongTarget /
-                               AdjustedShortTarget and TargetCapReason label.
+                    └─ Step 5b [v51 B4b]: placed-level arbitration.
+                               structural_levels.enabled (default) → delegates to
+                               SignalEmitter.ComputeSideLevels: target ladder
+                               swing → nearest HVN → POC (HVN-gated) → session-
+                               resolved ATR fallback (first tier with
+                               0 < dist ≤ 3.5×ATR places — structure wins even
+                               when FARTHER than the ATR level); stop =
+                               min(structural swing stop, 1.6×ATR) ≥ 4-tick floor
+                               (SWING_STOP / STOP_CLAMPED / FALLBACK_ATR).
+                               Outputs copied onto AdjustedLongTarget /
+                               AdjustedShortTarget + TargetCapReason*
+                               ("PLACED @ p (LABEL)"); Step 5c (the v35 min-move
+                               gate) evaluates the PLACED target.
+                               enabled:false → the legacy 3-tier closest-wins cap,
+                               byte-identical v50 (the rollback).
 
                     (Kelly sizing is NOT invoked here. CalcKellySizing() is called
                      inline from BuildPlaintextSnapshot() — the sole surviving
