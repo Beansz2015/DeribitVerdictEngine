@@ -58,7 +58,8 @@ Order-app side finishes the consumer (their repo); trader runs the **log-only so
 **Spec:** `book-absorption-proposal.md` (D1–D8 ticked incl. the pull-fraction spoof guard). Rotation-free (its 5 CSV columns shipped reserved in v0.8). Build sub-version `scoring_enabled:false`; **activation is its own ⚠ boundary, evidence-gated TWICE** (independence per the #5 rule AND ≥10pp conditional-outcome gradient on n≥30 flagged evaluated rows).
 **Model:** Opus, **high** — dual-fed (book+trades) episode tracker under the MarketState lock; the hardest remaining build. Budget a careful coordinator review.
 
-### Q6. CLI-port run-state extraction, Stages 1–4 [O+C] — any gap after Q1
+### Q6. CLI-port run-state extraction, Stages 1–4 [O+C] — DEFERRED TO LAST (trader direction 2026-07-08)
+**Deferral rationale:** the trader moved this to last in the queue — hold the `MainForm_Analysis.vb` restructure until the app is at/near its WebSocket accuracy ceiling. It's behaviour-neutral, but it's churn + regression surface on the hot path the calibration work keeps editing, and the Linux port was always the post-completion project (roadmap O3). Pick it up after the W6 ceiling programme, or if the trader reverses. Everything below still applies when it runs.
 **Spec:** `cli-port-run-state-extraction-proposal.md` — **D1–D7 ticked** (scope clarification recorded in its §0: WinForms behaviour byte-identical, internals restructured; the Linux artifact is `tools/HeadlessRunner`). Four commits, gate + review per stage; Stage-1 fixtures pin current semantics EXACTLY (bugs move, filed separately, never fixed in-flight). Zero behaviour change ⇒ no boundary; but it rewrites `MainForm_Analysis.vb`, so **serialize against anything else touching that file**.
 **Model:** Opus, medium, one conversation per stage.
 
