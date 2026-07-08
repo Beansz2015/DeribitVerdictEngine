@@ -185,10 +185,12 @@ All RSI/ROC thresholds sourced from `cfg.Scoring.HoldRoc*` and `HoldRsi*`.
 ## 2. ATR Entry Levels {#2-atr-entry-levels}
 
 ```
-ATR ENTRY LEVELS  (ATR 38.40  size ×1.27 | 1.2x stop / 2.0x target | EXEC 1m)
-  Long:   Stop   75983.1  |  Entry   76038.0  |  Target   76129.4    R:R 1:1.7  (risk 54.9 / rwd 91.4)
-  Short:  Stop   76092.9  |  Entry   76038.0  |  Target   75946.6    R:R 1:1.7  (risk 54.9 / rwd 91.4)
+ATR ENTRY LEVELS  (ATR 38.40  size ×1.27 | 1.6x stop / 1.75x target | EXEC 1m)
+  Long:   Stop   75976.6  |  Entry   76038.0  |  Target   76129.4  [PLACED @ 76129.4 (SWING_HIGH_5M)]   R:R 1:1.5  (risk 61.4 / rwd 91.4)
+  Short:  Stop   76099.4  |  Entry   76038.0  |  Target   75946.6  [PLACED @ 75946.6 (SWING_LOW_5M)]   R:R 1:1.5  (risk 61.4 / rwd 91.4)
 ```
+
+**Structural-first since v51 (B4b).** These are no longer a pure ATR frame — the engine places the **target and stop from market structure first**, and falls back to ATR multiples only when no structural level qualifies. The multipliers below are the **fallback**, not the default path. One shared routine, `SignalEmitter.ComputeSideLevels`, computes the placed levels for all four surfaces (this snapshot, the card, the `verdict_signal.json` bridge payload, and the CSV `Placed*` columns) so they can never disagree. `scoring.structural_levels.enabled = false` reverts byte-identically to the legacy v50 geometry (pure ATR stop + closest-wins `CAPPED @` target).
 
 ### Section Header
 
@@ -196,11 +198,11 @@ ATR ENTRY LEVELS  (ATR 38.40  size ×1.27 | 1.2x stop / 2.0x target | EXEC 1m)
 
 - `atr` — `r.ATR`, raw ATR(7) at the run's execution resolution.
 - `sizeMult` — `norms.ATRRef / r.ATR` (note: inverted from the underlying `ATRScaleFactor` — see Dynamic Norms below). Mirrors the trader's own `Base × AvgATR/CurrATR` sizing formula. **Display/sizing-context only since v32** — it is no longer applied to the stop/target distances below (see Calculation).
-- `stopMult` — `cfg.Scoring.AtrStopMultiplier`, default 1.2.
-- `targetMult` — `cfg.Scoring.AtrTargetMultiplier`, default 2.0.
+- `stopMult` — `cfg.Scoring.AtrStopMultiplier`, default **1.6** (v51; was 1.2). The **fallback** stop multiplier, and the clamp ceiling that structural stops are held under (see Stop placement).
+- `targetMult` — `cfg.Scoring.AtrTargetMultiplier`, default **1.75** global (v51; was 2.0), with **LONDON 2.0 / ASIA 1.25** per-session overrides (`scoring.structural_levels.sessions`, v40 pattern). The **fallback** target multiplier — used only when no structural target places.
 - `execRes` — `r.ExecResolution` (v36): `1` on NY, `3` on Asia/London. The whole execution-indicator stack (ATR, ROC, RSI, volume, etc.) runs at this resolution for the session; only the 5m regime classifier, 15m MTF gate, and 5m/15m swing pivots stay fixed. Don't compare an `EXEC 3m` ATR/level reading directly against an `EXEC 1m` one — they're different bar sizes.
 
-All read live from config; the label display is dynamic, not hardcoded. R:R implied is `targetMult / stopMult` (default 1:1.67 → rounded `1:1.7`).
+All read live from config; the label display is dynamic, not hardcoded. The **fallback** R:R is `targetMult / stopMult` — 1.75/1.6 ≈ **1:1.1** global (LONDON ≈ 1:1.25, ASIA ≈ 1:0.8). When a **structural** target places, the displayed R:R reflects that placed target — often better than the fallback (the 1:1.5 in the example above), which is the whole point of B4b.
 
 **v32 D2 (S-1) note.** Pre-v32, stop/target distances were `r.ATR × ATRScaleFactor × mult` — quadratic in volatility (the live ATR was already volatility-relative, then re-scaled again by the same ratio). This double-counted volatility and didn't match the eval pipeline, which measures barriers on raw ATR. Distances are now linear (`r.ATR × mult` only); the former scale factor survives purely as the `size ×N` sizing-context display.
 
@@ -226,26 +228,28 @@ Mirrored: `shortStop = r.CurrentPrice + atrStop`, `shortTarget = r.CurrentPrice 
 - `risk` — `atrStop` (distance in price points to stop).
 - `rwd` — `atrTarget` (distance in price points to target).
 
-### VPFR HVN-capped target (conditional)
+### Target placement ladder (structural-first, v51)
 
-**Triggered when:** A VPFR POC sits between entry and the raw ATR target AND the VPFR signal is classifying that POC as a relevant wall for the direction.
+The `atrStop` / `atrTarget` in the calculation above are the **fallback**. Before using them, `SignalEmitter.ComputeSideLevels` walks four target tiers and places the target at the **first** one that sits a workable distance from entry (`0 < dist ≤ scoring.structural_levels.target_max_atr_mult × ATR`, default bound **3.5×ATR**). Structure wins **even when it is farther than the ATR fallback would be** — that is the key v51 behavioural change (the old cap only ever pulled the target *closer*):
 
-- Long cap fires when `v.AdjustedLongTarget > 0`, which is set in `ScoringEngine_Calculate_Verdict.vb` Step 5b when `VPFRSignal ∈ {NEAR_HVN_RESIST, IN_LVN_BEAR}` AND `VPFRPoc > CurrentPrice` AND `VPFRPoc < rawLongTarget`.
-- Short cap fires on the mirror: `VPFRSignal ∈ {NEAR_HVN_SUPPORT, IN_LVN_BULL}` AND `VPFRPoc < CurrentPrice` AND `VPFRPoc > rawShortTarget`.
+1. **Swing** — confirmed 5m swing high (long) / low (short). Label `SWING_HIGH_5M` / `SWING_LOW_5M`.
+2. **Nearest HVN wall** — `VPFRNearestHvnAbove` (long) / `VPFRNearestHvnBelow` (short). Label `NEAREST_HVN_ABOVE` / `NEAREST_HVN_BELOW`.
+3. **POC** — the VPFR point of control, only when the HVN gate is open. Label `POC`.
+4. **ATR fallback** — `entry ± targetMult × ATR` when no structural level qualifies within the bound. Label `FALLBACK_ATR`.
 
-**Display:** Raw target printed dimmed, followed by `--> <adjusted>  [<reason>]` in amber bold. Reason field is `swing` (highest priority — see below) / `hvn` / `poc` / `none`. Logged as CSV column 84 `TargetCapReason`.
+### Stop placement (DG1)
 
-**Step 5b 3-tier cap (v17 swing-pivot spec):** the cap is now closest-wins across three tiers:
+Stop = `min(structural swing stop, stopMult × ATR)`, floored at `scoring.structural_levels.stop_min_floor_ticks` (default 4 ticks). Structure is used **only when it is tighter** than the `1.6×ATR` ceiling — 5m swing stops run p50 4–9×ATR, usually too wide at v1 fixed sizing, so the clamp binds on most rows. Stop-row labels:
 
-1. **Tier 1 — swing target.** `SwingTargetLong` if it sits between entry and the raw long target (or above the raw target by a smaller margin). Mirrored for short.
-2. **Tier 2 — nearest HVN wall.** `VPFRNearestHvnAbove` for long, `VPFRNearestHvnBelow` for short.
-3. **Tier 3 — POC fallback.** `VPFRPOC` when neither tier above qualifies AND VPFR signal indicates resistance / support against the verdict direction.
+- `SWING_STOP` — the structural swing stop was tighter and used as-is.
+- `STOP_CLAMPED` — a structural stop existed but was wider than `1.6×ATR`, so the ATR ceiling bound. **Expected on most structural-stop rows** at v1 fixed sizing; the un-clamp waits on the order-app's sizing-by-stop-distance (placed-geometry derivation §6b).
+- `FALLBACK_ATR` — no usable structural stop, so the pure `1.6×ATR` stop was used.
 
-Closest cap to entry wins. The selected reason is recorded in `v.TargetCapReason` and surfaced in the display.
+### Display / labels
 
-**Interpretation:** The cap tells you the raw 2×ATR target is probably unreachable because there's structure (a swing high, an HVN wall, or a POC) sitting between entry and target. Use the capped value as the realistic scale-out level, or skip the trade if the capped R:R no longer makes sense. This is an engine convenience, not a scoring input — it does not change the verdict.
+The placed target renders as `<raw> [PLACED @ <price> (<LABEL>)]` — raw ATR-fallback value dimmed, placed value in amber with its reason label; the stop row carries its source label. Legacy geometry (`structural_levels.enabled:false`) renders `CAPPED @ …` instead of `PLACED @ …`. **Sub-tick suppression (v30):** when `|fallback − placed| < max(0.5, ATR × 0.02)` the label is hidden and the target renders as a plain value (the CSV reason field still records it). Full reason string logged to CSV `TargetCapReasonLong` / `TargetCapReasonShort`.
 
-**Important divergence from trader-profile.** These ATR levels are **display only** for sanity reference. Per `trader-profile.md` §4–5, live execution uses **structural** stops (previous swing low/high) and **structural** targets (previous swing high/low). The ATR frame is a volatility-context reference and, via the Kelly block, an advisory sizing basis. Do not place the ATR stop or target as your actual working orders.
+**Alignment with trader-profile (updated v51).** These levels are now **structure-first**, much closer to your actual method (`trader-profile.md` §2/§4–5: structural swing targets and stops). They remain **display/advisory** — the engine does not place orders — but the gap between what the engine shows and how you trade narrowed sharply at v51. The surviving caveat: most structural **stops** are clamped to `1.6×ATR` at v1 fixed sizing (`STOP_CLAMPED`), so the shown stop is often tighter than your true swing-invalidation level until stop-distance sizing lands on the order-app side.
 
 ---
 
@@ -1862,6 +1866,8 @@ Public Const    MinSamplesForAutoTweakerTrigger As Integer = 60
 - Under barrier-hit semantics a **smaller** multiplier is **easier** (a closer target), so STRONG uses the **larger** `{0.5, 0.8}` set (a higher bar) and MEDIUM the smaller `{0.3, 0.5}` set. (v1 had these swapped; the swap shipped with the v2 barrier model.)
 - `NO_TRADE` and `WEAK_*` rows are excluded from the denominator (informational counters only); directional rows the v35 min-move gate would kill are excluded as gate-killed, not scored as failures.
 
+**v51 divergence.** The offline eval constants (`EngineTargetAtrMultiplier` 2.0, `AdverseFallbackAtrMultiplier` 1.2) were intentionally *not* updated when v51 moved placement to 1.75×/1.6× — the eval keeps the old yardstick so failure rates stay comparable across the boundary. See §21c for the full divergence; the migration onto the logged `Placed*` columns is a scheduled follow-up (D6).
+
 ### Picked-cell history
 
 `analysis/picked_cell_history.csv` (gitignored): one line per auto-tweaker run with timestamp, tier, window, threshold. Drives the "Hold Window Selection Stats" report section.
@@ -1939,11 +1945,27 @@ User opens a separate Claude conversation, pastes the messages, gets back a JSON
 
 Validates the diff before any application. Returns invalid (exit code 1) if any of:
 
-- **3-key scope cap** — proposal touches more than 3 keys
+- **3-key scope cap** — proposal touches more than 3 keys (`max_keys_per_proposal`, default 3)
 - **Banned path fragments** — any of: `_fixed_pct_`, `bbw_none_bonus`, `oi_prev15m`, `oi_prev60m`, `atr_avg20d`, `static_vol_high`, `static_vol_mid`, `static_vol_low` (last 6 are dead v15 cleanup keys; first two are explicitly rejected patterns)
 - **Disabling gated paths** — `mtf_gate.enabled = false` or `regime_weights.enabled = false`
+- **Off-surface subtree prefixes** — any key under `kelly.`, `resolution_profiles.`, `network.`, `exit_guard.`, `auto_run.`, `live_strip.`, `scoring.hold_`, `signal_bridge.`, `indicators.aggressor_velocity.default.`, `indicators.aggressor_velocity.sessions.`, `indicators.ofi.momentum_`, or `scoring.structural_levels.sessions.` (HARD CONSTRAINTs 11–21 — trader-owned re-baseline / display / plumbing keys with no failure-rate linkage)
+- **Off-surface exact keys** — `scoring.min_tradeable_move_pct` (slippage floor), `indicators.ofi.averaging_enabled`, `indicators.aggressor_velocity.enabled` / `.scoring_enabled`, `scoring.structural_levels.enabled` / `.stop_too_loose_mode` (feature switches, not thresholds)
 - **Direct version edit** — applier manages version bump; diff must not touch `version`
 - **Stale diff** — proposed `old_value` doesn't match current settings value
+
+The PromptBuilder HARD CONSTRAINT prose (1–21) and the `SettingsDiffApplier` reject lists are two halves of the same fence — the prose tells the model, the applier enforces it in code.
+
+### Settings ownership tiers (P13 — who tunes what)
+
+Every `settings.json` key falls into one of three ownership tiers. Only Tier 1 is auto-tuned; Tiers 2 and 3 are the trader's, enforced by the reject lists above.
+
+| Tier | Who owns it | What it is | Representative keys |
+|---|---|---|---|
+| **1 — Auto-tweaker-tunable** | The tweaker (failure-rate levers) | Thresholds the optimiser may propose to cut the empirical failure rate | `scoring.verdict_*_pct`, `scoring.regime_max_score.*`, `scoring.tier_floor.*`, `scoring.context_tag_thresholds.*`, `scoring.bbw_squeeze_penalty`, `scoring.atr_target_multiplier` / `atr_stop_multiplier`, `scoring.structural_levels.target_max_atr_mult` / `stop_max_atr_mult` / `stop_min_floor_ticks`, `regime_gates.*`, `regime_weights.{trending,range_bound}.*`, and most `indicators.*` thresholds (RSI, ROC magnitude/slope FLAT keys, ADX, `OFI.book_depth` / `buy_dominant_ratio` / `sell_dominant_ratio` / `avg_window_sec`, Donchian, TTM `flat_threshold`, VPFR, Liq, CVD, MicroCVD, `funding.momentum_threshold`, OI×CVD, Spread, Swing, the flat `aggressor_velocity.*` params) |
+| **2 — Hand-tuned re-baseline** | Trader / coordinator, by manual firing-rate-match — **never** the tweaker | Per-session / per-resolution overrides set from measured distributions, not from failure rate | `resolution_profiles.*`, `session_volume.sessions[].*` (volume multipliers, `execution_resolution`, `roc_magnitude_threshold`), `indicators.aggressor_velocity.default.*` + `.sessions.*`, `scoring.structural_levels.sessions.*` (LONDON 2.0 / ASIA 1.25) |
+| **3 — Hand-toggle switch** | Trader, deliberate on/off | Feature switches, risk sizing, display/ops preferences — no failure-rate meaning | `kelly.*`, `network.*`, `exit_guard.*`, `auto_run.*`, `live_strip.*`, `signal_bridge.*`, `scoring.hold_*`, `scoring.min_tradeable_move_pct`, `mtf_gate.enabled` (never disable), `regime_weights.enabled` (never disable), `indicators.OFI.averaging_enabled`, `indicators.OFI.momentum_*` (retired v50), `indicators.aggressor_velocity.enabled` / `scoring_enabled`, `scoring.structural_levels.enabled` / `stop_too_loose_mode` |
+
+**Rule of thumb:** if a key answers *"does this reduce the failure rate?"* it's Tier 1. If it answers *"what does this session / resolution look like?"* it's Tier 2 (measured, not optimised). If it answers *"do I want this feature on, and how much risk?"* it's Tier 3.
 
 ### Apply path
 
@@ -2218,6 +2240,8 @@ Reuses `FailureRateMatrix.WalkBars` from the v2 failure-definition spec.
 **Adverse barrier:**
 - LONG: `SwingStopLong` if > 0, else `entry - 1.2 × ATR`.
 - SHORT: `SwingStopShort` if > 0, else `entry + 1.2 × ATR`.
+
+**v51 note — eval yardstick vs displayed levels (D6).** These fallback multipliers (favourable `2.0×`, adverse `1.2×` — `FAV_ATR_MULT` / `ADV_ATR_MULT`) were deliberately **left unchanged** when v51 moved *placement* to `1.75×` target / `1.6×` stop, so post-v51 failure rates stay comparable to the historical book. Two consequences: (1) on a fallback row the eval's favourable barrier (`2.0×`) is wider than the displayed target (`1.75×`); (2) the adverse barrier uses the **raw** swing stop, not the clamped `min(swing, 1.6×ATR)` stop the app shows. So don't read the perf-strip win/loss as measured against the exact levels displayed on a fallback row. Known bounded gap; migrating the eval onto the logged `Placed*` columns is a scheduled follow-up (roadmap Q8 / D6).
 
 **Eligible bars:** T+3 min through T+15 min (13 bars), skipping T+1 and T+2. Bars are identified by `CloseTime` in the OHLC cache (`CloseTime = openTime + 1 min`).
 

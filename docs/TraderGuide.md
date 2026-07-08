@@ -139,22 +139,23 @@ Every time the engine runs, it prints its output in this order:
 
 ## 2. ATR Entry Levels
 
-> **Important:** These levels are a **reference frame only**. For actual trade execution, use structural stops (previous swing low/high) and structural targets (previous swing high/low) per your trading rules. Do not place the ATR stop or target as live working orders.
+> **Now structure-first (v51).** These levels are placed from **market structure first** — a confirmed swing, an HVN wall, or the POC — and only fall back to ATR multiples when no structural level fits. That makes them much closer to how you actually trade, but they're still **advisory**: the engine shows them, it doesn't place orders. The one gap that remains is the stop — see `STOP_CLAMPED` below.
 
 ### ATR Entry Levels
 
-**What it shows:** A trade frame showing where a stop, entry, and target would sit at fixed ATR multiples — useful for sizing context, not for actual order placement.
+**What it shows:** A structure-first trade frame — where the stop, entry, and target sit, with the target placed from the nearest relevant structure (falling back to an ATR multiple only when none fits).
 
 **What to watch for:**
 
 - The `ATR` value tells you how much BTC moves per bar on average right now. A higher ATR = wider, more volatile market.
-- Stop/target distances are flat `ATR × multiplier` (1.2x stop / 2.0x target by default) — **not** stretched or compressed by current volatility. Volatility context lives separately in the `size ×N` figure (see below) and in Dynamic Norms' `ATR ratio`.
-- `size ×N` is the trader's own sizing formula (`Base × AvgATR / CurrATR`) rendered inline — above 1.0x means current ATR is *below* its rolling average (size up within risk limits); below 1.0x means current ATR is elevated (size down).
-- `EXEC <N>m` tags the execution resolution this run used — `EXEC 1m` for NY, `EXEC 3m` for Asia/London (since v36, NY trades faster so it stays on 1-minute bars; Asia/London's typically lower volatility runs on 3-minute bars to keep moves tradeable). ATR, stop/target distances, and the levels below are all computed at that resolution — don't compare a 3m-session ATR reading directly against a 1m-session one.
-- Watch for a capped target line (`--> <price>  [<reason>]`) — this means structure (a swing level, an HVN wall, or POC) sits between entry and the raw target, making the raw target likely unreachable. The reason tag tells you which.
-- The R:R shown is theoretical at ATR multiples; your real R:R using structural levels will differ.
+- The header shows `1.6x stop / 1.75x target` — these are the **fallback** multipliers (v51; LONDON uses 2.0x target, Asia 1.25x). They only apply when structure doesn't place the level.
+- `size ×N` is your own sizing formula (`Base × AvgATR / CurrATR`) rendered inline — above 1.0x means current ATR is *below* its rolling average (size up within risk limits); below 1.0x means current ATR is elevated (size down).
+- `EXEC <N>m` tags the execution resolution — `EXEC 1m` for NY, `EXEC 3m` for Asia/London (v36, NY trades faster so it stays on 1-minute bars; Asia/London's typically lower volatility runs on 3-minute bars to keep moves tradeable). ATR and the levels are computed at that resolution — don't compare a 3m reading directly against a 1m one.
+- **The placed-target line** shows `[PLACED @ <price> (<LABEL>)]`. The label says what the target is: `SWING_HIGH_5M` / `SWING_LOW_5M` (a swing), `NEAREST_HVN_ABOVE` / `NEAREST_HVN_BELOW` (a volume wall), `POC`, or `FALLBACK_ATR` (no structure fit — pure ATR). A structural target can sit *farther* than the ATR fallback, not just closer — that's the v51 change.
+- **The stop label** matters for risk: `SWING_STOP` = your real structural invalidation is being shown; `STOP_CLAMPED` = the structural stop was wider than 1.6×ATR so the engine tightened it to that ceiling (**common at current fixed sizing** — the shown stop is *tighter* than your true swing stop, so size accordingly); `FALLBACK_ATR` = no swing stop available, pure ATR.
+- The R:R shown is at the **placed** levels — realistic, not a fixed config ratio. Fallback-only rows run ~1:1.1; structural rows are usually better.
 
-**Example:** `ATR ENTRY LEVELS  (ATR 24.60  size ×1.89  |  1.2x stop / 2.0x target  |  EXEC 3m)` — current ATR is well below its rolling reference, so `size ×1.89` says you can run nearly double size within your risk rules. The stop/target distances themselves are flat at 1.2×/2.0× ATR regardless. If the target line shows `--> 59333.4  [CAPPED @ 59333.4 (NEAREST_HVN_ABOVE)]`, don't plan to hold to the raw target — scale out near there or reconsider the trade if the capped R:R no longer makes sense. (Reason labels: `SWING_HIGH_5M`/`SWING_LOW_5M`, `NEAREST_HVN_ABOVE`/`NEAREST_HVN_BELOW`, or `POC`.)
+**Example:** `ATR ENTRY LEVELS  (ATR 24.60  size ×1.89  |  1.6x stop / 1.75x target  |  EXEC 3m)` — current ATR is well below its rolling reference, so `size ×1.89` says you can run nearly double size within your risk rules. If the target line shows `Target 59333.4  [PLACED @ 59333.4 (NEAREST_HVN_ABOVE)]`, the engine has placed the target at the nearest HVN wall above. If the stop row reads `STOP_CLAMPED`, your true swing invalidation is wider than the 1.6×ATR the engine is showing — don't mistake the tighter displayed stop for your real risk.
 
 ---
 
@@ -597,6 +598,9 @@ These features sit alongside the per-run output above. They affect how the engin
 - Touch any rejected pattern (fixed-% targets, double-counting setups, dead v15 keys). The applier hard-rejects these regardless of what Claude proposes.
 - Disable the MTF gate or the regime-weights gate. Hard-coded blocks.
 - Change more than 3 keys per proposal. The 3-key cap is the conservative-bias safeguard.
+- Touch anything you own — your risk sizing (`kelly.*`), the per-session / per-resolution re-baseline keys (`resolution_profiles.*`, `session_volume.sessions[].*`, the `aggressor_velocity` and `structural_levels` session overrides), or the feature switches and display/ops blocks. The applier hard-rejects them.
+
+**Which knobs are yours vs the tweaker's.** Every `settings.json` key sits in one of three ownership tiers — auto-tweaker-tunable, hand-tuned re-baseline, or hand-toggle switch. The full per-key table is in **User Manual §19** ("Settings ownership tiers"). Short version: the tweaker only moves failure-rate thresholds; anything session-specific, or any on/off switch, is yours.
 
 **Reading the "Last Run" line:**
 
@@ -659,7 +663,9 @@ A compact strip of six labels updates after every analysis run showing how the e
 
 **Session "most-recent block" semantics.** Each session label always shows the most-recently active or completed block for that session — not a rolling 24h average. If you look before today's Asia session has started, the label covers yesterday's Asia block (fully completed). Once Asia opens, it switches to today's running block and grows. This means session rates are directly comparable to your own session-level P&L.
 
-**Success metric.** A verdict is counted as SUCCESS if price reached the displayed target before hitting the structural stop (or ATR-multiple fallback stop), evaluated on 1m bars T+3 through T+15. Ties in the same bar count as FAILURE (conservative-bias rule). `NO TRADE` and `NO TRADE [WEAK X]` verdicts are not counted — only directional signals enter the denominator.
+**Success metric.** A verdict is counted as SUCCESS if price reached the target barrier before hitting the stop barrier, evaluated on 1m bars T+3 through T+15. Ties in the same bar count as FAILURE (conservative-bias rule). `NO TRADE` and `NO TRADE [WEAK X]` verdicts are not counted — only directional signals enter the denominator.
+
+> **v51 caveat.** The strip's barriers use the placed target when one exists, else a `2.0×ATR` fallback, and the *raw* swing stop else `1.2×ATR`. These eval multipliers were kept on the old yardstick when v51 moved the *displayed* levels to 1.75×/1.6×, so failure rates stay comparable across the change — but on a fallback row the strip scores against slightly wider barriers than the levels shown on screen. Bounded and known; a migration onto the logged placed levels is queued (D6).
 
 **Cold start.** On first launch the strip shows `--% ` while 7 days of OHLC history loads and the eval cache backfills. This takes a few seconds; the status bar shows "Loading performance history..." while it runs. Subsequent launches load from the cached files in under a second.
 
