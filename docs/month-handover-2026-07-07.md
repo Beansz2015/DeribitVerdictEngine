@@ -84,10 +84,10 @@ Order-app side finishes the consumer (their repo); trader runs the **log-only so
 
 | Watch | Trigger / band | Recipe |
 |---|---|---|
-| B4b post-ship (§12) | reach-rate vs fallback; STOP_CLAMPED freq (expected high at fixed size); BELOW_MIN_MOVE +4–6pp NY | `placed-geometry-spec-back.md` §5 |
+| B4b post-ship (§12) | reach-rate vs fallback; STOP_CLAMPED freq (expected high at fixed size); BELOW_MIN_MOVE +4–6pp NY. **First read 07-13:** STOP_CLAMPED binds 96.4% of v51 directional rows (as designed); BELOW_MIN_MOVE 11–29%/day vs v50-baseline 38% — the +4–6pp projection is swamped by day-ATR variance, unalarming; reach-rate needs the OHLC walk (rides D4 of the D6 migration) | `placed-geometry-spec-back.md` §5 |
 | LONDON struct-target (F3/DG4) | in-bound structural reach still <45% after ≥3 more LON session-days ⇒ London override or bound tightening | derivation §4 F3 |
 | Retune §5 re-check | AFTER the funding build ships: FLAT 60–70% + 3b engagement 15–25%, **per-resolution — both res-1 AND res-3 in-band** is the success criterion | funding proposal §7 |
-| v48 §4a OFI fire rates | any population outside 0.6×–1.5× of DOM 63.2% for 2 consecutive weekday sessions | `v48-ofi-dominance-rebaseline-spec-back.md` §3–4 (reads the `.bak` + new rows) |
+| v48 §4a OFI fire rates | any population outside 0.6×–1.5× of DOM 63.2% for 2 consecutive weekday sessions. **First check 07-13 (4 weekday days): PASS — all (day×session) cells in-band** (NY 57.6–69.9%, LONDON 68–70%, ASIA one day 84.9%/n=73 — hot but inside 94.8%; keep an eye on ASIA) | `v48-ofi-dominance-rebaseline-spec-back.md` §3–4 (reads the `.bak` + new rows) |
 | F3 exit-guard observational | EXIT GUARD strip vs HOLD\EXIT row corroboration during holds | `time-averaged-ofi-spec-back.md` §3 |
 | WS 3-min volume undercount | a vol-spike (>3× SMA-9) signal that REST would clear and WS misses | P3 cutover spec §7 |
 
