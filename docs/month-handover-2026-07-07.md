@@ -36,7 +36,10 @@ Work top-down; data-gated items interleave as their gates clear. **[T] = trader 
 ### Q1. v51 push [T] — ✅ DONE 2026-07-07
 Trader ran the live test gate with the implementer (placed labels, session-resolved multipliers, four-surface eyeball, R:R shift) and pushed — origin `e7f8199`, ahead 0. Roadmap 3b ticked. The unlocks are live: order-app ladder may proceed to live-at-minimum-size (after the log-only soak review, Q4), CLI Stage 3 is unblocked (Q6), and the B4b §12 watch is collecting (§4).
 
-### Q2. #5 correlation gate [O+C] — data-ready ~Jul 8–9
+### Q2. #5 correlation gate — ✅ RUN 2026-07-13 (Fable seat): **NOT REDUNDANT**
+Verdict doc: `aggressor-velocity-correlation-gate-verdict-2026-07-13.md`. ρ(Net,TFI)=0.61 pooled / 0.53–0.68 on all 5 NY days (never reaches the 0.7 line); same-side overlap 86% (>80%, but the §10.2 rule is AND) — the "likely display-only" expectation below did NOT materialize. Next: §5.2 NY-first per-session re-baseline (derivation; NY data-ready at 400 fires, res-3 not at 36), then the TFI-modifier wire-in as its own ⚠ boundary with trader D-table sign-off; Q3 funding lands after it. Original entry kept below for the recipe record.
+
+### ~~Q2. #5 correlation gate [O+C] — data-ready ~Jul 8–9~~
 **Gate:** 2–3 weekday session-days of post-v50 burst columns (Fri 07-03 partial + Mon 07-06 exist; Tue/Wed complete it).
 **Recipe:** `aggressor-velocity-proposal.md` §5.1 on post-v50 rows — Spearman(lean, TFI) + fire-overlap vs TFI/MicroCVD/VolumeRatio. AggrVel numerics are EMPTY (not zero) when unavailable — exclude, don't coerce.
 **Verdict rule:** correlation >0.7 AND overlap >80% ⇒ redundant ⇒ **#5 closes honestly as display-only** (likely outcome; TAPE strip keeps the burst field). Else ⇒ `§5.2` per-session firing-rate re-baseline + the scoring sub-version (TFI-modifier wire-in) as its own ⚠ boundary with trader sign-off.
