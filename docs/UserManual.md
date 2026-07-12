@@ -13,9 +13,9 @@ This manual is a field-by-field reference for every variable and display block t
 3. **Indicator sections** — each primitive's raw values and classification, ordered by tier (core → structural → microstructure → gates).
 4. **Signal breakdown table** — the itemised scoring ledger. Reconciles every `[L]` / `[S]` hit and penalty against the TOTAL row, which matches the header's `SCORE`.
 
-**Important on Kelly sizing.** The Kelly block is **advisory only** and uses an **ATR-basis** payoff ratio (`target_mult / stop_mult`, default `1.67`). Per the trader profile, real execution uses **structural** stops and targets (previous swing low/high), not ATR multiples — so the displayed Kelly fraction does not correspond to your actual R:R. Treat Kelly as a directional-bias sanity check, not a position-sizing prescription. The advisory label is rendered inline under the KELLY SIZING header to reinforce this.
+**Important on Kelly sizing.** The Kelly block is **advisory only** and uses an **ATR-basis** payoff ratio (`target_mult / stop_mult` — 1.75/1.6 ≈ `1.09` since v51; was 1.67 pre-v51). Per the trader profile, real execution uses **structural** stops and targets (previous swing low/high), not ATR multiples — so the displayed Kelly fraction does not correspond to your actual R:R. Treat Kelly as a directional-bias sanity check, not a position-sizing prescription. The advisory label is rendered inline under the KELLY SIZING header to reinforce this.
 
-**Source of truth.** When this manual and the code disagree, the code wins. Primary source files: `UI/MainForm_Render_Cards.vb` (the live card layer — the P5b reskin retired the old `MainForm_Render_Header.vb` / `MainForm_Render_Sections.vb` RTF renderers), `UI/MainForm_PlaintextSnapshot.vb` (`BuildPlaintextSnapshot` — the canonical text surface kept in parity with the cards; this manual's field-by-field reference is anchored on it), `Core/ScoringEngine_*.vb`, `Core/Indicators_*.vb`, `analysis/*.vb`, `tools/AutoTweaker/*.vb`, and `settings.json` v46 (auto-bumped by AutoTweaker after applied tweaks).
+**Source of truth.** When this manual and the code disagree, the code wins. Primary source files: `UI/MainForm_Render_Cards.vb` (the live card layer — the P5b reskin retired the old `MainForm_Render_Header.vb` / `MainForm_Render_Sections.vb` RTF renderers), `UI/MainForm_PlaintextSnapshot.vb` (`BuildPlaintextSnapshot` — the canonical text surface kept in parity with the cards; this manual's field-by-field reference is anchored on it), `Core/ScoringEngine_*.vb`, `Core/Indicators_*.vb`, `analysis/*.vb`, `tools/AutoTweaker/*.vb`, and `settings.json` (version at line 1 of the file is the source of truth — v51 at this writing; auto-bumped by AutoTweaker after applied tweaks).
 
 **Display surface note.** The app's output is rendered two ways that stay in parity: a **card layout** (`MainForm_Render_Cards.vb`) in the live UI, and a **plaintext snapshot** (`BuildPlaintextSnapshot`) used for the output dump, CSV-adjacent text records, and as the reference this manual quotes example blocks from. A few live elements — the WS-health status line, the EXIT GUARD strip, the ON-CLOSE countdown, and the TAPE microstructure strip — are status-bar elements outside this card/snapshot parity (by design, per the engine display-string parity rule in `CLAUDE.md`); they're documented separately in §22–§25.
 
@@ -186,9 +186,11 @@ All RSI/ROC thresholds sourced from `cfg.Scoring.HoldRoc*` and `HoldRsi*`.
 
 ```
 ATR ENTRY LEVELS  (ATR 38.40  size ×1.27 | 1.6x stop / 1.75x target | EXEC 1m)
-  Long:   Stop   75976.6  |  Entry   76038.0  |  Target   76129.4  [PLACED @ 76129.4 (SWING_HIGH_5M)]   R:R 1:1.5  (risk 61.4 / rwd 91.4)
-  Short:  Stop   76099.4  |  Entry   76038.0  |  Target   75946.6  [PLACED @ 75946.6 (SWING_LOW_5M)]   R:R 1:1.5  (risk 61.4 / rwd 91.4)
+  Long:   Stop   75976.6 [STOP_CLAMPED]  |  Entry   76038.0  |  Target   76105.2 --> 76129.4  [PLACED @ 76129.4 (SWING_HIGH_5M)]
+  Short:  Stop   76099.4 [FALLBACK_ATR]  |  Entry   76038.0  |  Target   75970.8 [FALLBACK_ATR]    R:R 1:1.1  (risk 61.4 / rwd 67.2)
 ```
+
+Row anatomy (v51): the stop **always** carries its source label. A **structural-placed** target renders in the arrow form — fallback value, arrow, placed value, `[PLACED @ …]` — and prints **no inline R:R** (the Long row above). A **fallback or noise-suppressed** target prints its label plus the TRUE placed R:R and risk/rwd distances (the Short row above).
 
 **Structural-first since v51 (B4b).** These are no longer a pure ATR frame — the engine places the **target and stop from market structure first**, and falls back to ATR multiples only when no structural level qualifies. The multipliers below are the **fallback**, not the default path. One shared routine, `SignalEmitter.ComputeSideLevels`, computes the placed levels for all four surfaces (this snapshot, the card, the `verdict_signal.json` bridge payload, and the CSV `Placed*` columns) so they can never disagree. `scoring.structural_levels.enabled = false` reverts byte-identically to the legacy v50 geometry (pure ATR stop + closest-wins `CAPPED @` target).
 
@@ -202,18 +204,16 @@ ATR ENTRY LEVELS  (ATR 38.40  size ×1.27 | 1.6x stop / 1.75x target | EXEC 1m)
 - `targetMult` — `cfg.Scoring.AtrTargetMultiplier`, default **1.75** global (v51; was 2.0), with **LONDON 2.0 / ASIA 1.25** per-session overrides (`scoring.structural_levels.sessions`, v40 pattern). The **fallback** target multiplier — used only when no structural target places.
 - `execRes` — `r.ExecResolution` (v36): `1` on NY, `3` on Asia/London. The whole execution-indicator stack (ATR, ROC, RSI, volume, etc.) runs at this resolution for the session; only the 5m regime classifier, 15m MTF gate, and 5m/15m swing pivots stay fixed. Don't compare an `EXEC 3m` ATR/level reading directly against an `EXEC 1m` one — they're different bar sizes.
 
-All read live from config; the label display is dynamic, not hardcoded. The **fallback** R:R is `targetMult / stopMult` — 1.75/1.6 ≈ **1:1.1** global (LONDON ≈ 1:1.25, ASIA ≈ 1:0.8). When a **structural** target places, the displayed R:R reflects that placed target — often better than the fallback (the 1:1.5 in the example above), which is the whole point of B4b.
+All read live from config; the label display is dynamic, not hardcoded — the header target multiplier is **session-resolved** (`ExecutionResolution.ResolveFallbackTargetMultiplier`): 1.75x on NY, 2.00x on LONDON, 1.25x on ASIA. The **fallback** R:R is `targetMult / stopMult` — 1.75/1.6 ≈ **1:1.1** global (LONDON ≈ 1:1.25, ASIA ≈ 1:0.8). When a structural target places, the row switches to the arrow form and prints no inline R:R — read the structural rows beneath the ATR block for the swing R:R, or compute from the placed values. Fallback/suppressed rows print the **TRUE placed R:R** inline, computed from the placed stop/target distances (not the multiplier ratio — the placed stop may be structural).
 
 **v32 D2 (S-1) note.** Pre-v32, stop/target distances were `r.ATR × ATRScaleFactor × mult` — quadratic in volatility (the live ATR was already volatility-relative, then re-scaled again by the same ratio). This double-counted volatility and didn't match the eval pipeline, which measures barriers on raw ATR. Distances are now linear (`r.ATR × mult` only); the former scale factor survives purely as the `size ×N` sizing-context display.
 
-### Stop / Entry / Target (Long)
+### Stop / Entry / Target (Long) — fallback calculation
 
-**What:** Long-direction trade frame.
+**What:** Long-direction trade frame. The formulas below are the **ATR fallback path**; the placement ladder and DG1 stop (next sections) override them whenever structure qualifies.
 
-**Calculation:**
-
-- `atrStop   = r.ATR × stopMult`
-- `atrTarget = r.ATR × targetMult`
+- `atrStop   = r.ATR × stopMult` (also the DG1 clamp ceiling)
+- `atrTarget = r.ATR × targetMult` (session-resolved multiplier)
 - `longStop   = r.CurrentPrice − atrStop`
 - `longTarget = r.CurrentPrice + atrTarget`
 - Entry = `r.CurrentPrice` (close of the last execution-resolution candle, not the live tape).
@@ -222,11 +222,11 @@ All read live from config; the label display is dynamic, not hardcoded. The **fa
 
 Mirrored: `shortStop = r.CurrentPrice + atrStop`, `shortTarget = r.CurrentPrice − atrTarget`.
 
-### R:R / risk / rwd
+### R:R / risk / rwd (v51: true placed geometry)
 
-- `R:R` — literal `targetMult / stopMult` string. Static for a given config; does not reflect realised outcomes.
-- `risk` — `atrStop` (distance in price points to stop).
-- `rwd` — `atrTarget` (distance in price points to target).
+- `R:R` — `FormatRR(rwd, risk)` computed from the **placed** distances, not the multiplier ratio. Printed only on fallback/noise-suppressed rows (structural-placed rows use the arrow form with no inline R:R). Pure-fallback rows come out ≈ the multiplier ratio (1:1.1 NY); a row whose stop is structural (`SWING_STOP`) prints a genuinely different figure.
+- `risk` — `|entry − placed stop|` in price points.
+- `rwd` — `|placed target − entry|` in price points.
 
 ### Target placement ladder (structural-first, v51)
 
@@ -247,7 +247,9 @@ Stop = `min(structural swing stop, stopMult × ATR)`, floored at `scoring.struct
 
 ### Display / labels
 
-The placed target renders as `<raw> [PLACED @ <price> (<LABEL>)]` — raw ATR-fallback value dimmed, placed value in amber with its reason label; the stop row carries its source label. Legacy geometry (`structural_levels.enabled:false`) renders `CAPPED @ …` instead of `PLACED @ …`. **Sub-tick suppression (v30):** when `|fallback − placed| < max(0.5, ATR × 0.02)` the label is hidden and the target renders as a plain value (the CSV reason field still records it). Full reason string logged to CSV `TargetCapReasonLong` / `TargetCapReasonShort`.
+A structural-placed target renders in the **arrow form** `Target <fallback> --> <placed>  [PLACED @ <placed> (<LABEL>)]` — the raw ATR-fallback value first (dimmed), the placed value and reason in amber — with **no inline R:R** on that row. The stop always carries its source label (`[SWING_STOP]` / `[STOP_CLAMPED]` / `[FALLBACK_ATR]`). Legacy geometry (`structural_levels.enabled:false`) renders `CAPPED @ …` instead of `PLACED @ …`.
+
+**Sub-tick suppression (v30 rule, moved into the arbitration at v51):** when `|fallback − placed| < max(0.5, ATR × 0.02)` (0.5 = one tick) the placement is treated as noise inside `ComputeSideLevels`: the row renders in the fallback form but keeps the structural target label (e.g. `[SWING_HIGH_5M]` with inline R:R), and — a v51 semantic change — the suppression propagates to Step 5b, so `AdjustedTarget` stays 0 and the **CSV `TargetCapReason` logs `none`** (pre-v51 the suppression was renderer-only and the CSV still recorded the cap). Unsuppressed placements log the full `PLACED @ …` string to CSV `TargetCapReasonLong` / `TargetCapReasonShort`.
 
 **Alignment with trader-profile (updated v51).** These levels are now **structure-first**, much closer to your actual method (`trader-profile.md` §2/§4–5: structural swing targets and stops). They remain **display/advisory** — the engine does not place orders — but the gap between what the engine shows and how you trade narrowed sharply at v51. The surviving caveat: most structural **stops** are clamped to `1.6×ATR` at v1 fixed sizing (`STOP_CLAMPED`), so the shown stop is often tighter than your true swing-invalidation level until stop-distance sizing lands on the order-app side.
 
@@ -291,7 +293,7 @@ Treat as directional bias indicator only.
 
 Fixed literal text. Rendered unconditionally whenever the Kelly block renders.
 
-**Interpretation:** A deliberate reminder that the Kelly fraction is computed off the ATR R:R ratio (default 1.67), not the structural R:R the trader actually uses. Read the block as "the engine's directional conviction, translated into a sizing hint" rather than a prescription.
+**Interpretation:** A deliberate reminder that the Kelly fraction is computed off the ATR R:R ratio (1.75/1.6 ≈ 1.09 since v51; 1.67 pre-v51), not the structural R:R the trader actually uses. Read the block as "the engine's directional conviction, translated into a sizing hint" rather than a prescription.
 
 ### p(win)
 
@@ -1751,7 +1753,9 @@ The `Note` field carries cross-cutting annotations that only appear in specific 
 
 ## 17. CSV Logging {#17-csv-logging}
 
-The engine appends one row per analysis run to `bin/Debug/net8.0-windows/analysis_log.csv`. Schema is **v0.4 with d1 extension** — 87 columns. Used by the offline analysis script (Section 18) and the auto-tweaker (Section 19).
+The engine appends one row per analysis run to `bin/Debug/net8.0-windows/analysis_log.csv`. Current schema is **v0.8 — 111 columns** (rotated at the v50 boundary, 2026-07-03; the prior book survives as `analysis_log.csv.v0.7.bak`, never deleted — two standing watches read it). Used by the offline analysis script (Section 18) and the auto-tweaker (Section 19).
+
+The table below documents the **v0.4 core (87 columns)**. The v0.5–v0.8 additions (24 columns) are catalogued per rotation in the settings `change_log` and project-doc §15 — the v0.8 rotation alone added 16: `AggrVelBurstRatio/Net/Signal`, `TFIValue`/`TFISignal`, five reserved `Absorption*` columns (null until #6 builds), `PlacedTargetLong`/`PlacedStopLong`/`PlacedTargetShort`/`PlacedStopShort` (the four-surface placed geometry), and `InstanceId`/`SignalId` (bridge attribution).
 
 ### Schema versioning and rotation
 
@@ -1762,7 +1766,7 @@ Two backups commonly present after Bundle 1 + Bundle 3 shipped:
 - `analysis_log.csv.v0.3.bak` — pre-Bundle-1 log with 68 columns
 - `analysis_log.csv.v0.4.bak` — post-Bundle-1 log with 86 columns (rotated when d1 added column 87)
 
-### Schema (87 columns)
+### Schema (v0.4 core — 87 columns; v0.5–v0.8 additions per the note above)
 
 ```
 1   Timestamp                  ISO 8601 UTC
@@ -1966,6 +1970,8 @@ Every `settings.json` key falls into one of three ownership tiers. Only Tier 1 i
 | **3 — Hand-toggle switch** | Trader, deliberate on/off | Feature switches, risk sizing, display/ops preferences — no failure-rate meaning | `kelly.*`, `network.*`, `exit_guard.*`, `auto_run.*`, `live_strip.*`, `signal_bridge.*`, `scoring.hold_*`, `scoring.min_tradeable_move_pct`, `mtf_gate.enabled` (never disable), `regime_weights.enabled` (never disable), `indicators.OFI.averaging_enabled`, `indicators.OFI.momentum_*` (retired v50), `indicators.aggressor_velocity.enabled` / `scoring_enabled`, `scoring.structural_levels.enabled` / `stop_too_loose_mode` |
 
 **Rule of thumb:** if a key answers *"does this reduce the failure rate?"* it's Tier 1. If it answers *"what does this session / resolution look like?"* it's Tier 2 (measured, not optimised). If it answers *"do I want this feature on, and how much risk?"* it's Tier 3.
+
+**Enforcement note (2026-07-13).** The tier fences are code-level (the reject lists above) with three nuances: (1) the two `session_volume.sessions[].*` strategy keys (`execution_resolution`, `roc_magnitude_threshold`) are fenced at prompt level only (HC 11); (2) in practice **every** array-path `session_volume.sessions[].*` key is additionally un-applyable because the diff applier cannot resolve array paths — harness fixture A15g pins this de-facto block; (3) `session_volume.enabled` is a scalar and **currently passes validation** — an unfenced feature switch (HC16 class); flagged as a candidate for an exact-match fence, trader's call.
 
 ### Apply path
 
@@ -2243,7 +2249,7 @@ Reuses `FailureRateMatrix.WalkBars` from the v2 failure-definition spec.
 
 **v51 note — eval yardstick vs displayed levels (D6).** These fallback multipliers (favourable `2.0×`, adverse `1.2×` — `FAV_ATR_MULT` / `ADV_ATR_MULT`) were deliberately **left unchanged** when v51 moved *placement* to `1.75×` target / `1.6×` stop, so post-v51 failure rates stay comparable to the historical book. Two consequences: (1) on a fallback row the eval's favourable barrier (`2.0×`) is wider than the displayed target (`1.75×`); (2) the adverse barrier uses the **raw** swing stop, not the clamped `min(swing, 1.6×ATR)` stop the app shows. So don't read the perf-strip win/loss as measured against the exact levels displayed on a fallback row. Known bounded gap; migrating the eval onto the logged `Placed*` columns is a scheduled follow-up (roadmap Q8 / D6).
 
-**Eligible bars:** T+3 min through T+15 min (13 bars), skipping T+1 and T+2. Bars are identified by `CloseTime` in the OHLC cache (`CloseTime = openTime + 1 min`).
+**Eligible bars:** T+3 min through T+15 min (13 bars) on 1-min rows, skipping T+1 and T+2; **3-min-session rows walk T+3 through T+45** (the same 5/10/15-bar windows scaled — post-v41 recalibration, `EvalHorizonMinutes(execResolution)`), so their outcomes display ~45 min after the verdict. Bars are identified by `CloseTime` in the OHLC cache (`CloseTime = openTime + 1 min`); barrier detection always walks 1-min bars — only the window length scales.
 
 **Classification:**
 - `SUCCESS` — favourable wick hit before adverse hit.

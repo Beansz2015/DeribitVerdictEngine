@@ -102,3 +102,30 @@ Net: **trust post-v51 SUCCESS rates as a target-reach signal, but do not read th
 ## Appendix — reproduction
 
 Corpus: `bin/Debug/net8.0-windows/analysis_log.csv` (v0.8). Directional filter: `Verdict ~ /LONG|SHORT/ && !/NO TRADE/`. Per-row emit (side-selected cols) → distances in ATR → percentiles via `sort -n`. Full command set in the 2026-07-08 session transcript. Raw swing = cols 83/84; placed stop = 107/109; placed target = 106/108; entry = col 2; ATR = col 65; ExecResolution = col 94.
+
+---
+
+## Addendum — coordinator re-verification, 2026-07-13 (Fable seat)
+
+Independent re-run on a **frozen copy** of the corpus (now 2,246 data rows, 07-03 → 07-10 20:35 UTC; the CSV has no quoted fields, so the comma-split parse is safe). Three slices:
+
+| Slice | n (directional) | raw swing p50 (×ATR) | placed stop p50 (×ATR) | swing >3×ATR |
+|---|---|---|---|---|
+| **A — rows ≤ 07-08 13:47 (the original window)** | 264 | 9.33 | 1.60 | 93% |
+| **B — full corpus (through 07-10)** | 530 | 8.32 | 1.60 | 93% |
+| **C — STRONG+standard only (the offline matrix's population)** | 178 | 8.79 | 1.60 | **98%** |
+
+**Verdict: the finding REPRODUCES and STRENGTHENS.** Slice A matches the committed figures (the n=266/264 delta is live-file drift — the original ran against an appending collector; stats are identical). Slice B doubles the sample and holds. Slice C matters most: the offline `FailureRateMatrix` excludes WEAK rows, and on *its* population the adverse barrier is >3×ATR away on 98% of rows — the divergence conclusion holds for **both** eval surfaces' populations.
+
+**Corrections to the 07-08 body (cosmetic, none change the conclusion):**
+1. "925 rows" → the file had 920 data rows at the 07-08 13:47 stamp (live-file drift; all stats re-pinned on the frozen copy above). **Discipline note for future passes: freeze the CSV before computing stats — the collector appends mid-analysis.**
+2. "100% of directional rows have a swing stop" → **99.4%** on the fuller book (3 of 530 rows lack one) — the 1.2×ATR eval fallback *can* fire, rarely. Immaterial.
+3. Placed-target p90 moves 2.42 → 2.87×ATR on the full corpus (more structural placements landing); p50 stays 1.75.
+
+**Offline adverse-barrier sites — now pinned exactly** (replacing §5's "pin at build time"):
+- `analysis/FailureRateMatrix.vb:158-170` — the Compute walk's `advBar` (raw `SwingStopLong/Short`, else `AdverseFallbackAtrMultiplier`).
+- `analysis/AnalysisRunner.vb:241-245` — the runner's own `advBar` derivation (same convention).
+- `analysis/AnalysisConstants.vb:28` — `AdverseFallbackAtrMultiplier = 1.2` (+ `EngineTargetAtrMultiplier = 2.0` at `:44`).
+- Live tracker: `LivePerformanceTracker.vb:929-935` (as per the body), constants at `:105-106`.
+
+§5's migration recommendation and the two trader decisions stand unchanged.
