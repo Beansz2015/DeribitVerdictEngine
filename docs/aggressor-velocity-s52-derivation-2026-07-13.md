@@ -65,6 +65,8 @@ TFI is directional on 91.4% of NY rows; the modifier touches the ~10% of rows wh
 
 Post-ship watch (named now per rule 6): NY burst fire rate 8–12% band over the first 2 weekday sessions; same-side share ≥85%; §5.2 re-run per session when res-3 samples mature.
 
+**07-13-evening confirmation (6th NY day, partial 12:45–16:43 UTC, n=225):** fires@2.5 = 17.3%, **fires@4.5 = 8.9%** — inside the recommended band out-of-sample; gate stability ρ(Net,TFI) = 0.635 (6th consecutive day < 0.7). Res-3 fires still 36 (Monday Asia/London barely collected — 2 + 15 rows; the collector ran ~04:22 UTC briefly, then from ~12:45). Recommendation unchanged.
+
 ## Appendix — reproduction
 
 Population: `ExecResolution==1 ∧ AggrVelBurstRatio ≠ ""` on the frozen corpus. Fire-rate-at-T: `Signal=BURST_* ∧ BurstRatio ≥ T`. Same-side/contra vs `TFISignal`. Percentiles via sort. Columns per the gate-verdict appendix. Full command set in the 2026-07-13 transcript.
