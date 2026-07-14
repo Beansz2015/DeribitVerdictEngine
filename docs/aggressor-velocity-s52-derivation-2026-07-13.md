@@ -53,7 +53,7 @@ NY 60s / default 120s stand. Warmup health: only ~19 of 2,246 rows carry empty A
 
 TFI is directional on 91.4% of NY rows; the modifier touches the ~10% of rows where a qualifying burst fires: **~35 upgrades + ~2 softens per NY session-day**, i.e. the modifier re-weights ~7% of TFI's directional votes and leaves 93% untouched. Net Microstructure fire count unchanged by construction (a modifier, not a vote — §4.5); the before/after fire-rate table for the spec-back reduces to this row-share statement plus the score-shift count (±`upgrade_bonus`/`contra_penalty` = ±1 on ~37 rows/day).
 
-## 7. S-table — **S2–S5 TICKED 2026-07-14** (S2 = option (a)); **S1 pending** (trader requested the plain-terms explanation of the burst ratio first — delivered same day; the wire-in builds once S1 lands)
+## 7. S-table — **ALL TICKED 2026-07-14: S1 = 4.5** (after the plain-terms explanation), S2 = option (a), S3–S5 as recommended. **The wire-in is build-authorized** — implementer brief: `aggr-vel-wirein-implementer-brief.md`.
 
 | # | Decision | Recommendation |
 |---|---|---|
