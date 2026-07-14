@@ -1,6 +1,6 @@
 # D6 — Eval Barrier Migration onto Placed Levels (Proposal)
 
-**Date:** 2026-07-13 · **Seat:** Fable coordinator · **Status:** PROPOSED — D-table awaits trader
+**Date:** 2026-07-13 · **Seat:** Fable coordinator · **Status:** **APPROVED 2026-07-14 — trader ticked D1–D5 (D1 = Replace; D2–D5 as recommended).** Raw-book safety confirmed at sign-off: only the derived eval sidecar rotates; `analysis_log.csv` + `.bak`s untouched. Implementation handoff: `d6-migration-implementer-brief.md`.
 **Evidence:** `d6-eval-yardstick-divergence-2026-07-08.md` (+ its 07-13 re-verification addendum). **Scope:** eval/measurement code only — **zero scoring impact, no ⚠ dataset boundary** (the verdict pipeline is untouched); it IS an eval-semantics boundary (every stored outcome re-bases).
 **Problem being fixed:** both eval surfaces score the adverse barrier against the raw 5m swing stop (median ~9×ATR away; >3×ATR on 93% of directional rows, 98% on the offline matrix's STRONG+standard population) while the engine places — and the autotrader executes — a stop clamped to 1.6×ATR. "Failure" has collapsed to window-expiry; SUCCESS rates say nothing about executed stop-out risk now that the bridge acts on the placed levels.
 
