@@ -633,10 +633,13 @@ Partial Public Class MainForm
         ' C1c + B4b (2026-07-14 fix): STOP cell is a 2-col × 2-row sub-layout.
         ' Row 0 holds STRUCT | STOP prices side-by-side (col 0 collapses to 0 width
         ' when the structural stop isn't deeper, so STOP renders full-width — visually
-        ' identical to the legacy single-cell). Row 1 holds the placed-stop source
-        ' label (SWING_STOP / STOP_CLAMPED / FALLBACK_ATR) on its OWN small-font line,
-        ' column-spanned full width: the label used to be appended inline to the STOP
-        ' price and wrapped inside the ~45%-wide STOP sub-cell (STOP_CLAMPED is 12 chars).
+        ' identical to the legacy single-cell). The placed-stop source label
+        ' (SWING_STOP / STOP_CLAMPED / FALLBACK_ATR) renders on row 1 UNDER the STOP
+        ' value (col 1) on its own small-font line — tied to the value it qualifies,
+        ' the way TARGET shows (FALLBACK_ATR) under the target. It used to be appended
+        ' inline to the STOP price and wrapped in the narrow STOP sub-cell (STOP_CLAMPED
+        ' is 12 chars). BindAtrStopCell bottom-aligns the price row and top-aligns the
+        ' label so the two sit together (no gap); with no label it centres the price.
         r.StopCellLayout = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
             .ColumnCount = 2, .RowCount = 2,
@@ -645,8 +648,8 @@ Partial Public Class MainForm
         }
         r.StopCellLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 0))
         r.StopCellLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 66.0F))
-        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 34.0F))
+        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 62.0F))
+        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 38.0F))
 
         r.StructStopValue = MakeZoneLabel("STRUCT", Theme.ACC_SHORT)
         r.StructStopValue.Visible = False
@@ -658,13 +661,12 @@ Partial Public Class MainForm
             .Font = Theme.FontMono(7.0F, FontStyle.Regular),
             .ForeColor = Theme.FG_QUATERNARY,
             .BackColor = Color.Transparent,
-            .TextAlign = ContentAlignment.MiddleCenter,
+            .TextAlign = ContentAlignment.TopCenter,   ' sits directly under the STOP value
             .Margin = New Padding(0)
         }
         r.StopCellLayout.Controls.Add(r.StructStopValue, 0, 0)
         r.StopCellLayout.Controls.Add(r.StopValue,       1, 0)
-        r.StopCellLayout.Controls.Add(r.StopReasonSub,   0, 1)
-        r.StopCellLayout.SetColumnSpan(r.StopReasonSub, 2)
+        r.StopCellLayout.Controls.Add(r.StopReasonSub,   1, 1)   ' col 1, row 1 — under STOP
 
         ' KNOWN-0 fix: the R:R cell is a 2-row sub-layout — ratio label on top
         ' (header + value, follows the row's value font) and the risk/rwd line
@@ -1176,16 +1178,25 @@ Partial Public Class MainForm
 
         ' B4b: the placed stop carries its source label (SWING_STOP / STOP_CLAMPED /
         ' FALLBACK_ATR — the snapshot row's [label] equivalent). 2026-07-14 fix: it
-        ' renders on its OWN full-width small-font sub-line (StopReasonSub, row 1 of the
-        ' cell) instead of being appended to the STOP price, so a 12-char label like
-        ' STOP_CLAMPED can't wrap inside the narrow STOP price sub-cell. stopReason is
-        ' Nothing on the legacy path → the sub-line is blank.
+        ' renders UNDER the STOP value on its own small-font line (StopReasonSub) instead
+        ' of appended inline, so a 12-char label like STOP_CLAMPED can't wrap in the narrow
+        ' STOP sub-cell. stopReason is Nothing on the legacy path → the sub-line is blank.
         Dim stopValueText As String = $"{atrStopPx:F1}"
+        Dim hasReason As Boolean = Not String.IsNullOrEmpty(stopReason)
         If row.StopReasonSub IsNot Nothing Then
-            row.StopReasonSub.Text = If(stopReason IsNot Nothing, $"({stopReason})", "")
+            row.StopReasonSub.Text = If(hasReason, $"({stopReason})", "")
             row.StopReasonSub.Font = Theme.FontMono(If(primary, 7.0F, 6.5F), FontStyle.Regular)
             row.StopReasonSub.ForeColor = If(primary, Theme.FG_QUATERNARY, Theme.FG_DIM)
         End If
+
+        ' Vertical: with a label, the price row bottom-aligns and the label top-aligns so
+        ' the two read as one tight group (fixes the "prices pushed up" gap). With no label
+        ' the price takes the whole cell, centred (legacy look).
+        Dim priceAlign As ContentAlignment = If(hasReason, ContentAlignment.BottomCenter, ContentAlignment.MiddleCenter)
+        row.StopCellLayout.RowStyles(0) = New RowStyle(SizeType.Percent, If(hasReason, 62.0F, 100.0F))
+        row.StopCellLayout.RowStyles(1) = New RowStyle(SizeType.Percent, If(hasReason, 38.0F, 0.0F))
+        row.StructStopValue.TextAlign = priceAlign
+        row.StopValue.TextAlign = priceAlign
 
         If structDeeper Then
             ' Two-cell price row: STRUCT (full font) | STOP (smaller font).
