@@ -232,7 +232,9 @@ Partial Public Class MainForm
         Public Property RRSubValue       As Label   ' KNOWN-0 fix: "(risk N / rwd N)" on its own smaller-font label so the line can't clip inside RRValue
         Public Property EntryValue       As Label
         Public Property CappedValue      As Label
+        Public Property CappedSubValue   As Label   ' 2026-07-14: PLACED source label ((SWING_HIGH_5M) etc.) on its own top-aligned sub-line so all cells share the value/sub baselines
         Public Property TargetValue      As Label
+        Public Property TargetSubValue   As Label   ' 2026-07-14: TARGET source label ((FALLBACK_ATR) etc.) on its own top-aligned sub-line
     End Class
     Friend _structLongCtrls   As StructuralCardControls
     Friend _structShortCtrls  As StructuralCardControls

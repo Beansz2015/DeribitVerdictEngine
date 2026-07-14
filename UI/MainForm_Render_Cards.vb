@@ -593,6 +593,36 @@ Partial Public Class MainForm
     ''' CAPPED / TARGET). Returned struct carries the labels; the row
     ''' Panel is reachable via DirLabel.Parent.
     ''' </summary>
+    ' Shared vertical baseline for every ATR cell (row 0 = value band, row 1 = sub-label
+    ' band). Values bottom-align to the row0/row1 boundary and sub-labels top-align just
+    ' below it, so ALL values land on one horizontal line and ALL sub-labels on the line
+    ' below — alignment by construction, not per-cell tuning. Nudge this one number to
+    ' shift the whole value line up/down (higher % = lower on the card).
+    Private Const ATR_VALUE_BAND As Single = 58.0F
+
+    ''' <summary>Wrap a value label in the shared 2-row ATR cell: valueLbl bottom-aligned to
+    ''' the common baseline (row 0), a fresh top-aligned sub-label returned via subLbl (row 1).
+    ''' Every cell uses this so values align across the row and sub-labels align beneath.</summary>
+    Private Shared Function WrapAtrCell(valueLbl As Label, valueAlign As ContentAlignment, ByRef subLbl As Label) As TableLayoutPanel
+        valueLbl.TextAlign = valueAlign
+        subLbl = New Label() With {
+            .AutoSize = False, .Dock = DockStyle.Fill, .Text = "",
+            .Font = Theme.FontMono(7.0F, FontStyle.Regular),
+            .ForeColor = Theme.FG_QUATERNARY, .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.TopCenter, .Margin = New Padding(0)
+        }
+        Dim panel = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
+            .BackColor = Color.Transparent, .Margin = New Padding(0)
+        }
+        panel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        panel.RowStyles.Add(New RowStyle(SizeType.Percent, ATR_VALUE_BAND))
+        panel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F - ATR_VALUE_BAND))
+        panel.Controls.Add(valueLbl, 0, 0)
+        panel.Controls.Add(subLbl, 0, 1)
+        Return panel
+    End Function
+
     Private Function BuildAtrZoneRow(dirText As String, targetColour As Color) As AtrRowControls
         Dim row = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
@@ -648,8 +678,8 @@ Partial Public Class MainForm
         }
         r.StopCellLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 0))
         r.StopCellLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 62.0F))
-        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 38.0F))
+        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, ATR_VALUE_BAND))
+        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F - ATR_VALUE_BAND))
 
         r.StructStopValue = MakeZoneLabel("STRUCT", Theme.ACC_SHORT)
         r.StructStopValue.Visible = False
@@ -680,10 +710,11 @@ Partial Public Class MainForm
             .Margin = New Padding(0)
         }
         rrCell.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        rrCell.RowStyles.Add(New RowStyle(SizeType.Percent, 68.0F))
-        rrCell.RowStyles.Add(New RowStyle(SizeType.Percent, 32.0F))
+        rrCell.RowStyles.Add(New RowStyle(SizeType.Percent, ATR_VALUE_BAND))
+        rrCell.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F - ATR_VALUE_BAND))
 
         r.RRValue    = MakeZoneLabel("R:R", Theme.FG_QUATERNARY)
+        r.RRValue.TextAlign = ContentAlignment.BottomCenter   ' bottom-align to the shared value baseline
         r.RRSubValue = New Label() With {
             .AutoSize = False,
             .Dock = DockStyle.Fill,
@@ -702,12 +733,27 @@ Partial Public Class MainForm
         r.CappedValue = MakeZoneLabel("PLACED", Theme.ACC_WARN)
         r.TargetValue = MakeZoneLabel("TARGET", targetColour)
 
+        ' Every value cell shares the 2-row scheme (value bottom-aligned to the baseline,
+        ' sub-label top-aligned below) so all prices align on one line and all sub-labels
+        ' on the next. ENTRY has no sub (throwaway). PLACED/TARGET keep theirs. The STOP
+        ' cell already carries this structure (STRUCT|STOP + reason) and shares the band.
+        Dim entrySubThrow As Label = Nothing
+        Dim entryCell  = WrapAtrCell(r.EntryValue,  ContentAlignment.BottomCenter, entrySubThrow)
+        Dim placedCell = WrapAtrCell(r.CappedValue, ContentAlignment.BottomCenter, r.CappedSubValue)
+        Dim targetCell = WrapAtrCell(r.TargetValue, ContentAlignment.BottomCenter, r.TargetSubValue)
+
+        ' DirLabel is added directly (NOT wrapped): a nested panel inside the 70px absolute
+        ' col 0 collapses the whole row. A bottom Padding of ~the sub-label-band height lifts
+        ' the bottom-aligned text up onto the value line (row 0 baseline) so "LONG"/"SHORT"
+        ' aligns with the STRUCT value beside it.
+        r.DirLabel.TextAlign = ContentAlignment.BottomLeft
+        r.DirLabel.Padding = New Padding(0, 0, 0, 26)
         row.Controls.Add(r.DirLabel,        0, 0)
         row.Controls.Add(r.StopCellLayout,  1, 0)
         row.Controls.Add(rrCell,            2, 0)
-        row.Controls.Add(r.EntryValue,      3, 0)
-        row.Controls.Add(r.CappedValue,     4, 0)
-        row.Controls.Add(r.TargetValue,     5, 0)
+        row.Controls.Add(entryCell,         3, 0)
+        row.Controls.Add(placedCell,        4, 0)
+        row.Controls.Add(targetCell,        5, 0)
 
         Return r
     End Function
@@ -1072,29 +1118,27 @@ Partial Public Class MainForm
 
         SetZoneValue(row.EntryValue,  "ENTRY",  $"{entryPx:F1}")
         ' B4b: on non-capped structural-first rows the target cell carries its source
-        ' label ((FALLBACK_ATR) etc. — capped rows show the label in the CAPPED cell).
-        If Not showCapped AndAlso lv.TargetReason IsNot Nothing Then
-            SetZoneValue(row.TargetValue, "TARGET",
-                         $"{adjustedTargetPx:F1}" & Environment.NewLine & $"({lv.TargetReason})")
-        Else
-            SetZoneValue(row.TargetValue, "TARGET", $"{adjustedTargetPx:F1}")
+        ' label ((FALLBACK_ATR) etc.) — now on its OWN top-aligned sub-line (parity with
+        ' the STOP cell) so the TARGET value stays on the shared value baseline. Capped
+        ' rows show the label in the PLACED cell instead.
+        SetZoneValue(row.TargetValue, "TARGET", $"{adjustedTargetPx:F1}")
+        If row.TargetSubValue IsNot Nothing Then
+            row.TargetSubValue.Text = If(Not showCapped AndAlso lv.TargetReason IsNot Nothing, $"({lv.TargetReason})", "")
         End If
 
         If showCapped Then
-            ' C1b: inline cell carries the arrow-price AND the label.
-            ' F-07 (consolidated fix): the raw ATR target is restored ahead of
-            ' the arrow ("raw → capped", legacy parity with "50160.0 -->
-            ' 50080.0") — the card previously dropped the raw value entirely.
-            ' Multi-line within the cell — "CAPPED\nraw → capped\n(label)".
-            Dim cappedValueText As String = $"{rawTargetPx:F1} → {adjustedTargetPx:F1}"
-            If Not String.IsNullOrEmpty(capLabel) Then
-                cappedValueText &= Environment.NewLine & $"({capLabel})"
-            End If
-            SetZoneValue(row.CappedValue, placedCaption, cappedValueText)
+            ' F-07: the cell shows "raw → placed" on the value line (legacy parity with
+            ' "50160.0 --> 50080.0"); the (label) rides its own top-aligned sub-line so the
+            ' placed value stays on the shared baseline.
+            SetZoneValue(row.CappedValue, placedCaption, $"{rawTargetPx:F1} → {adjustedTargetPx:F1}")
             row.CappedValue.ForeColor = Theme.ACC_WARN
+            If row.CappedSubValue IsNot Nothing Then
+                row.CappedSubValue.Text = If(Not String.IsNullOrEmpty(capLabel), $"({capLabel})", "")
+            End If
         Else
             SetZoneValue(row.CappedValue, "·", "")
             row.CappedValue.ForeColor = Theme.BORDER_INNER
+            If row.CappedSubValue IsNot Nothing Then row.CappedSubValue.Text = ""
         End If
 
         ' Apply primary/secondary type weight.
@@ -1114,6 +1158,17 @@ Partial Public Class MainForm
         ' column even at case-20-scale numbers (risk 6000.0 / rwd 10000.0).
         If row.RRSubValue IsNot Nothing Then
             row.RRSubValue.Font = Theme.FontMono(If(primary, 8.0F, 7.0F), FontStyle.Regular)
+        End If
+        ' PLACED / TARGET sub-labels: small font both weights. PLACED sub tracks its cell's
+        ' warn accent; TARGET sub stays dim (both dim further on the secondary side).
+        Dim atrSubFont As Font = Theme.FontMono(If(primary, 7.0F, 6.5F), FontStyle.Regular)
+        If row.CappedSubValue IsNot Nothing Then
+            row.CappedSubValue.Font = atrSubFont
+            row.CappedSubValue.ForeColor = If(showCapped, Theme.ACC_WARN, Theme.BORDER_INNER)
+        End If
+        If row.TargetSubValue IsNot Nothing Then
+            row.TargetSubValue.Font = atrSubFont
+            row.TargetSubValue.ForeColor = If(primary, Theme.FG_QUATERNARY, Theme.FG_DIM)
         End If
 
         ' Per-side target colour: primary direction in its accent; secondary
@@ -1193,8 +1248,8 @@ Partial Public Class MainForm
         ' the two read as one tight group (fixes the "prices pushed up" gap). With no label
         ' the price takes the whole cell, centred (legacy look).
         Dim priceAlign As ContentAlignment = If(hasReason, ContentAlignment.BottomCenter, ContentAlignment.MiddleCenter)
-        row.StopCellLayout.RowStyles(0) = New RowStyle(SizeType.Percent, If(hasReason, 62.0F, 100.0F))
-        row.StopCellLayout.RowStyles(1) = New RowStyle(SizeType.Percent, If(hasReason, 38.0F, 0.0F))
+        row.StopCellLayout.RowStyles(0) = New RowStyle(SizeType.Percent, If(hasReason, ATR_VALUE_BAND, 100.0F))
+        row.StopCellLayout.RowStyles(1) = New RowStyle(SizeType.Percent, If(hasReason, 100.0F - ATR_VALUE_BAND, 0.0F))
         row.StructStopValue.TextAlign = priceAlign
         row.StopValue.TextAlign = priceAlign
 
