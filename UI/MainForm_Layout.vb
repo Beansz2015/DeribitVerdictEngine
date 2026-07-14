@@ -590,7 +590,9 @@ Partial Public Class MainForm
         }
         AddHandler chkLiveStrip.CheckedChanged, AddressOf OnLiveStripCheckChanged
 
-        lblLiveStrip = New Label() With {
+        ' TapeStripLabel owner-draws the line so the trailing BURST↑/↓ segment renders in
+        ' the amber attention accent while the rest stays dim (a plain Label is one colour).
+        lblLiveStrip = New TapeStripLabel() With {
             .Dock = DockStyle.Fill,
             .TextAlign = ContentAlignment.MiddleLeft,
             .Text = "",

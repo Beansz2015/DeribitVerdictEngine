@@ -89,6 +89,16 @@ Folded in at the trader's request (unrelated to the scoring wire-in; card-only, 
 
 ---
 
+## 4c. Display rider — TAPE-strip burst highlight (2026-07-14)
+
+Folded in at the trader's request. On the LIVE TAPE strip, the aggressor-velocity segment (`… N× BURST↑/↓`) now renders the **BURST word in the amber attention accent** (`Theme.ACC_WARN`) while the rest of the strip stays dim. A plain `Label` has a single `ForeColor`, so a new `UI/Controls/TapeStripLabel.vb` owner-draws the line as two runs — dim prefix + accent burst tail (it self-detects the trailing `"BURST"` run and defaults its own colour, so the only wiring is swapping `lblLiveStrip`'s type; the field stays typed `Label` and dispatches to the override virtually).
+
+**Non-directional by design.** The strip is deliberately never the verdict green/red ramp — it reads as a readout, not a call (`live-microstructure-strip-proposal.md` §4.4). So the highlight is the amber *attention* accent (the `CAPPED`-class colour), not a buy/sell colour; the `↑`/`↓` arrow still carries direction. Only the burst word is recoloured — the rest of the strip is untouched.
+
+**Verified (rendering) + trader watch pending.** The owner-draw was confirmed by temporarily forcing a burst string into `ComposeTape`, launching the app, and screenshotting → `BURST↓` in amber against the dim strip with a tight seam; the force was then reverted and the non-burst strip confirmed unchanged. That proves the two-run render (colour + seam) and the non-burst regression case. The highlight *trigger* keys on the same trailing `"BURST"` run that live `ComposeTape` emits on a real `BURST_BUY`/`BURST_SELL`, so the **real-burst appearance is the trader's pending visual check** — watch: confirm the amber `BURST↑/↓` when a burst fires live (expected on ~8–12% of NY rows per the §12 wire-in watch; the trader is watching for it). The strip is not an RTF/snapshot/card surface (spec §6), so no parity obligation. The burst suffix in the TFI signal-breakdown note (output-dump text, not an on-screen card surface) is unaffected — the card already reflects the modifier via the TFI row's SC delta.
+
+---
+
 ## 5. Out of scope (unchanged)
 
 Accumulator (`AggressorVelocityAccumulator`), classifier (`ClassifyAggressorBurst`), CSV columns, the LIVE TAPE strip — all shipped at v50 and untouched. TFI/MicroCVD/CVD mechanisms untouched. Res-3 (Asia/London) scoring stays inert pending their own §5.2 samples. The funding time-anchored window build is the next ⚠ boundary (handover Q3/D4), after this.
