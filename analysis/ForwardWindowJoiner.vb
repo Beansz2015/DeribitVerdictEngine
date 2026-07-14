@@ -47,6 +47,17 @@ Public Class CsvRow
     Public Property SwingStopLong   As Double   ' 0 when no swing data logged
     Public Property SwingStopShort  As Double   ' 0 when no swing data logged
 
+    ' [D6] v0.8 placed levels (cols 106-109) — the barriers the engine actually emitted
+    ' for this row (SignalEmitter.ComputeSideLevels at log time). The adverse eval barrier
+    ' migrates onto PlacedStop{Long,Short} when HasPlaced; pre-v0.8 rows (HasPlaced=False)
+    ' keep the legacy swing-else-ATR adverse formula and are labelled LEGACY_YARDSTICK.
+    ' d6-eval-placed-stop-migration-proposal.md.
+    Public Property PlacedTargetLong  As Double
+    Public Property PlacedStopLong    As Double
+    Public Property PlacedTargetShort As Double
+    Public Property PlacedStopShort   As Double
+    Public Property HasPlaced         As Boolean
+
     ' v36 Phase-2a (auto-tweaker population filter): the execution resolution the
     ' engine actually ran for this row (CSV v0.7 ExecResolution column). Defaults
     ' to 1 for legacy v0.6 rows that lack the column — authoritative for the
@@ -76,6 +87,12 @@ Public Class ForwardWindowJoiner
             colIdx(header(i).Trim()) = i
         Next
 
+        ' [D6] The four placed-level columns arrive together at the v0.8 rotation; a row
+        ' is "placed" iff the header carries all four (else it keeps the legacy adverse).
+        Dim hasPlacedSchema As Boolean =
+            colIdx.ContainsKey("PlacedTargetLong") AndAlso colIdx.ContainsKey("PlacedStopLong") AndAlso
+            colIdx.ContainsKey("PlacedTargetShort") AndAlso colIdx.ContainsKey("PlacedStopShort")
+
         Dim raw As New List(Of CsvRow)()
         For i = 1 To lines.Length - 1
             Dim parts = lines(i).Split(","c)
@@ -103,6 +120,14 @@ Public Class ForwardWindowJoiner
             TryParseD(parts, colIdx, "SwingStopShort", row.SwingStopShort)
             ' v0.7 ExecResolution — absent in legacy v0.6 rows ⇒ default 1.
             row.ExecResolution = ParseIntOr(GetStr(parts, colIdx, "ExecResolution"), 1)
+            ' [D6] v0.8 placed levels — parsed only when the schema carries them.
+            row.HasPlaced = hasPlacedSchema
+            If hasPlacedSchema Then
+                TryParseD(parts, colIdx, "PlacedTargetLong",  row.PlacedTargetLong)
+                TryParseD(parts, colIdx, "PlacedStopLong",    row.PlacedStopLong)
+                TryParseD(parts, colIdx, "PlacedTargetShort", row.PlacedTargetShort)
+                TryParseD(parts, colIdx, "PlacedStopShort",   row.PlacedStopShort)
+            End If
             raw.Add(row)
         Next
 

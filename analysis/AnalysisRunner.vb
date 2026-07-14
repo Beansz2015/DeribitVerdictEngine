@@ -86,14 +86,22 @@ Public Class AnalysisRunner
         Dim popRowsMap  As New Dictionary(Of String, List(Of CsvRow))()
         Dim popSession  As New Dictionary(Of String, String)()
         Dim popRes      As New Dictionary(Of String, Integer)()
+        Dim popBarrier  As New Dictionary(Of String, String)()
         For Each row In rows
             Dim bucket As SessionBucketSettings = ExecutionResolution.MatchSessionBucket(cfg, row.Timestamp.Hour)
             Dim sessionName As String = If(bucket IsNot Nothing, bucket.Name, "UNKNOWN")
-            Dim popKey      As String = sessionName & "|" & row.ExecResolution.ToString()
+            ' [D6] Split placed-barrier rows from legacy (pre-v0.8) rows so the two adverse
+            ' bases are never mixed in one cell (no silent mixing). Placed populations keep
+            ' the "NY|1" key unchanged; legacy rows get a "|LEGACY_YARDSTICK" suffix + label.
+            ' The live corpus is all-v0.8, so the legacy split is empty in practice.
+            Dim barrierLabel As String = If(row.HasPlaced, "PLACED", "LEGACY_YARDSTICK")
+            Dim popKey      As String = sessionName & "|" & row.ExecResolution.ToString() &
+                                        If(row.HasPlaced, "", "|LEGACY_YARDSTICK")
             If Not popRowsMap.ContainsKey(popKey) Then
                 popRowsMap(popKey) = New List(Of CsvRow)()
                 popSession(popKey) = sessionName
                 popRes(popKey)     = row.ExecResolution
+                popBarrier(popKey) = barrierLabel
                 popOrder.Add(popKey)
             End If
             popRowsMap(popKey).Add(row)
@@ -108,6 +116,7 @@ Public Class AnalysisRunner
                 .PopulationKey = popKey,
                 .SessionName   = popSession(popKey),
                 .Resolution    = popRes(popKey),
+                .BarrierLabel  = popBarrier(popKey),
                 .RowCount      = popRows.Count
             }
 
@@ -126,14 +135,28 @@ Public Class AnalysisRunner
             ' (NY×1 → {5,10,15}; ASIA/LONDON×3 → {15,30,45}) — three-min-hold-window-recal.
             Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
             Dim belowMin As Integer = 0
+            ' [D6] Main matrix uses this population's adverse mode: PLACED populations score
+            ' against the placed stop (the executed geometry); LEGACY_YARDSTICK populations
+            ' against the raw swing. structStop now counts placed-stop rows for a PLACED pop.
+            Dim popMode As AdverseBarrierMode = If(pr.BarrierLabel = "LEGACY_YARDSTICK",
+                                                   AdverseBarrierMode.Legacy, AdverseBarrierMode.Placed)
             pr.FailureCells = FailureRateMatrix.Compute(popRows, atrEx, structStop, atrFb, belowMin,
                                                         cfg.Scoring.MinTradeableMovePct,
                                                         cfg.Scoring.AtrTargetMultiplier,
-                                                        popRes(popKey))
+                                                        popRes(popKey), popMode)
             pr.AtrInvalidExcluded   = atrEx
             pr.StructuralStopRows   = structStop
             pr.AtrFallbackRows      = atrFb
             pr.BelowMinMoveExcluded = belowMin
+
+            ' [D6] D4 before/after: re-walk the SAME rows under the LEGACY raw-swing adverse
+            ' barrier so the report can show the placed-vs-legacy failure-rate delta (the
+            ' continuity bridge). Throwaway counters — the diagnostics above are the main pass.
+            Dim lAtrEx As Integer = 0, lStruct As Integer = 0, lAtrFb As Integer = 0, lBelow As Integer = 0
+            pr.LegacyFailureCells = FailureRateMatrix.Compute(popRows, lAtrEx, lStruct, lAtrFb, lBelow,
+                                                              cfg.Scoring.MinTradeableMovePct,
+                                                              cfg.Scoring.AtrTargetMultiplier,
+                                                              popRes(popKey), AdverseBarrierMode.Legacy)
 
             ' ── 5b. VerdictContext cross-tab (this population only) ───────────────────
             pr.ContextOutcomes = ComputeContextOutcomes(popRows, pr.FailureCells)
@@ -236,14 +259,10 @@ Public Class AnalysisRunner
                 Dim entry    As Double  = row.Price
                 Dim atr      As Double  = row.ATR
                 Dim favBar   As Double  = If(isLong, entry + thr * atr, entry - thr * atr)
-                Dim advBar   As Double
-                If isLong Then
-                    advBar = If(row.SwingStopLong > 0, row.SwingStopLong,
-                                entry - AnalysisConstants.AdverseFallbackAtrMultiplier * atr)
-                Else
-                    advBar = If(row.SwingStopShort > 0, row.SwingStopShort,
-                                entry + AnalysisConstants.AdverseFallbackAtrMultiplier * atr)
-                End If
+                ' [D6] Adverse = placed stop when the row carries it, else legacy swing/ATR.
+                Dim ctxStruct As Integer = 0, ctxFb As Integer = 0
+                Dim advBar    As Double  = FailureRateMatrix.ResolveAdverseBarrier(
+                    row, isLong, entry, atr, AdverseBarrierMode.Placed, ctxStruct, ctxFb)
                 Dim outcome   As String  = FailureRateMatrix.WalkBars(bars, favBar, advBar, isLong)
                 n += 1
                 If outcome <> "SUCCESS" Then f += 1

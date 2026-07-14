@@ -100,10 +100,22 @@ Public Class LivePerformanceTracker
     ' the ExecResolution column. The comment retains the "min-tradeable-move" substring
     ' (so IsPreV3Schema still classifies a v4 file as ≥v3) and the floor_pct=<value> tail
     ' (so a later floor change is still detected and triggers a self-healing re-eval).
-    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v4 (min-tradeable-move floor; exec resolution)"
+    ' [D6] schema v4 → v5: the eval barriers (FavBar/AdvBar) now come from the PLACED
+    ' levels — SignalEmitter.ComputeSideLevels for live rows, the logged CSV Placed*
+    ' columns for backfill — instead of the raw swing stop / ATR-fallback constants.
+    ' The adverse barrier was the raw 5m swing stop (median ~9×ATR away, essentially
+    ' unreachable intrabar), so "failure" had collapsed to window-expiry; scoring
+    ' against the executed clamped stop makes stop-outs recordable
+    ' (d6-eval-placed-stop-migration-proposal.md; d6-eval-yardstick-divergence-2026-07-08.md).
+    ' Every stored outcome re-bases, so a pre-v5 cache is ROTATED to .bak and rebuilt
+    ' via the cold-start backfill (D2) — it is NOT re-stamped in place. The comment
+    ' keeps the "min-tradeable-move" substring (so IsPreV3Schema still classifies v5
+    ' as ≥v3) and adds the "placed-level" marker (the IsPreV5Schema gate); the column
+    ' header is UNCHANGED — FavBar/AdvBar change MEANING, not shape (no new column), so
+    ' IsPreV4Schema stays False on a v5 file. The old FAV_ATR_MULT/ADV_ATR_MULT fallback
+    ' constants are gone: ComputeSideLevels owns the fallback geometry now.
+    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v5 (placed-level barriers; min-tradeable-move floor; exec resolution)"
     Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution"
-    Private Const FAV_ATR_MULT        As Double = 2.0   ' fallback favourable barrier (= engine AtrTargetMultiplier)
-    Private Const ADV_ATR_MULT        As Double = 1.2   ' fallback adverse barrier
 
     ' The min-tradeable-move floor the eval cache was last written with. Set from
     ' cfg.Scoring.MinTradeableMovePct at the start of Initialise/Update; embedded in
@@ -280,6 +292,15 @@ Public Class LivePerformanceTracker
                 End If
             End If
 
+            ' --- Step 2.0: [D6] pre-v5 → placed-level barrier rotation (D2) ---
+            ' The eval barriers migrated from the raw swing stop / ATR-fallback constants
+            ' onto the placed levels, so every stored FavBar/AdvBar (and its outcome) is
+            ' now stale. A pre-v5 cache can't be re-stamped in place — rotate it to .bak
+            ' and let the cold-start backfill below rebuild it fresh on placed barriers.
+            ' After the move the file is gone, so the v1→v4 migration probes and the load
+            ' all see a fresh install; the perf-strip history resets (documented, D2).
+            If IsPreV5Schema(evalCachePath) Then RotatePreV5Cache(evalCachePath)
+
             ' --- Step 2: Load existing eval cache ---
             Dim needsMigration As Boolean = IsV1Schema(evalCachePath)
             ' v35: capture the floor re-eval need BEFORE any rewrite (the migrations below
@@ -328,13 +349,15 @@ Public Class LivePerformanceTracker
                 Dim logRows = ParseAnalysisLog(analysisLogPath)
                 For Each row In logRows
                     If existingTs.Contains(row.Timestamp) Then Continue For
+                    ' [D6] Barriers from the row's logged Placed* columns (v0.8) or the
+                    ' legacy swing-else-ATR formula (pre-v0.8, D3) — see ResolveBackfillBarriers.
+                    Dim favLong, advLong, favShort, advShort As Double
+                    ResolveBackfillBarriers(row, cfg, favLong, advLong, favShort, advShort)
                     Dim entry As EvalCacheEntry = BuildEntry(row.Timestamp, row.Verdict,
                                                              row.EntryPrice, row.ATR,
-                                                             row.SwingStopLong, row.SwingStopShort,
-                                                             adjLongTarget:=0.0,
-                                                             adjShortTarget:=0.0,
-                                                             minMovePct:=cfg.Scoring.MinTradeableMovePct,
-                                                             execResolution:=row.ExecResolution)
+                                                             favLong, advLong, favShort, advShort,
+                                                             cfg.Scoring.MinTradeableMovePct,
+                                                             row.ExecResolution)
                     ' If window complete, evaluate; otherwise leave as PENDING. The
                     ' horizon is resolution-scaled (15 min 1-min / 45 min 3-min) so a
                     ' 3-min row isn't judged before its window fills — three-min-hold-window-recal §5.
@@ -419,12 +442,11 @@ Public Class LivePerformanceTracker
             End If
 
             ' --- Step 2: Append current verdict to eval cache as PENDING ---
-            Dim entry As EvalCacheEntry = BuildEntry(
-                nowUtc, v.Verdict, r.CurrentPrice, r.ATR,
-                r.SwingStopLong, r.SwingStopShort,
-                v.AdjustedLongTarget, v.AdjustedShortTarget,
-                cfg.Scoring.MinTradeableMovePct,
-                r.ExecResolution)
+            ' [D6] Barriers = the PLACED levels emitted this run (BuildLiveEntry →
+            ' SignalEmitter.ComputeSideLevels — the same target/stop the CSV Placed*
+            ' columns and the bridge payload carry), so the perf strip scores the
+            ' geometry the autotrader executes, not the raw ~9×ATR swing stop.
+            Dim entry As EvalCacheEntry = BuildLiveEntry(v, r, cfg, nowUtc)
             _evalCache.Add(entry)
             AppendEvalRows(_evalCachePath, New List(Of EvalCacheEntry) From {entry})
 
@@ -782,6 +804,49 @@ Public Class LivePerformanceTracker
         Return False
     End Function
 
+    ''' <summary>
+    ''' [D6] True when the eval cache exists but its schema comment predates v5 (the
+    ''' placed-level barrier migration) — i.e. the comment lacks the "placed-level"
+    ''' marker. Triggers the one-time rotate-and-rebuild (Step 2.0). Detection is on the
+    ''' COMMENT line (not the column header, which is unchanged v4→v5). Returns False when
+    ''' the file does not exist (fresh installs start at v5). Friend for harness A27d.
+    ''' </summary>
+    Friend Shared Function IsPreV5Schema(path As String) As Boolean
+        If Not File.Exists(path) Then Return False
+        Try
+            For Each line As String In File.ReadLines(path)
+                If line.StartsWith("#") Then Return Not line.Contains("placed-level")
+                ' First non-comment line with no schema comment above it → pre-v5.
+                Return True
+            Next
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] IsPreV5Schema error: " & ex.Message)
+        End Try
+        Return False
+    End Function
+
+    ''' <summary>
+    ''' [D6] Rotate a pre-v5 eval cache to a ".v4.bak" sidecar (timestamp-suffixed if one
+    ''' already exists) so the cold-start backfill rebuilds it fresh on placed barriers.
+    ''' The raw analysis_log.csv + its own .bak history are untouched — only this derived
+    ''' eval sidecar rotates (D2 raw-book safety). Friend for harness A27d.
+    ''' </summary>
+    Friend Shared Sub RotatePreV5Cache(path As String)
+        Try
+            If Not File.Exists(path) Then Return
+            Dim bakPath As String = path & ".v4.bak"
+            If File.Exists(bakPath) Then
+                Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
+                bakPath = path & ".v4." & ts & ".bak"
+            End If
+            File.Move(path, bakPath)
+            Console.WriteLine("[LivePerformanceTracker] D6 eval-barrier migration: rotated pre-v5 eval cache → " &
+                              bakPath & " (rebuilding on placed-level barriers; perf-strip history resets)")
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] RotatePreV5Cache error: " & ex.Message)
+        End Try
+    End Sub
+
     ''' <summary>Parse "floor_pct=&lt;x&gt;" from the schema comment; Nothing if absent (pre-v3).</summary>
     Private Shared Function ReadSchemaFloorPct(path As String) As Double?
         If Not File.Exists(path) Then Return Nothing
@@ -891,18 +956,39 @@ Public Class LivePerformanceTracker
     ' -----------------------------------------------------------------------
 
     ''' <summary>
-    ''' Build an EvalCacheEntry. adjLongTarget/adjShortTarget = 0 during backfill
-    ''' (not in analysis_log CSV), meaning the ATR fallback is always used then.
+    ''' [D6] Build the eval entry for a LIVE run from the run's placed levels — the SAME
+    ''' SignalEmitter.ComputeSideLevels arbitration the CSV Placed* columns and the bridge
+    ''' payload read, so the perf strip scores the geometry the autotrader executes (placed
+    ''' target as the favourable barrier, placed stop as the adverse), not the raw ~9×ATR
+    ''' swing stop. Friend so harness A27a can pin barriers ≡ ComputeSideLevels outputs.
+    ''' </summary>
+    Friend Shared Function BuildLiveEntry(v As VerdictResult,
+                                          r As IndicatorResults,
+                                          cfg As EngineSettings,
+                                          nowUtc As DateTime) As EvalCacheEntry
+        Dim plLong  As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
+        Dim plShort As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
+        Return BuildEntry(nowUtc, v.Verdict, r.CurrentPrice, r.ATR,
+                          plLong.Target, plLong.StopPx, plShort.Target, plShort.StopPx,
+                          cfg.Scoring.MinTradeableMovePct, r.ExecResolution)
+    End Function
+
+    ''' <summary>
+    ''' [D6] Build an EvalCacheEntry from PRE-RESOLVED per-side barriers. Callers supply the
+    ''' placed target (favourable) and placed stop (adverse) for each side: BuildLiveEntry
+    ''' sources them from ComputeSideLevels; the backfill sources them from the CSV Placed*
+    ''' columns (v0.8) or the legacy swing-else-ATR formula (pre-v0.8, D3). BuildEntry owns
+    ''' the side selection + exclusion rules; it no longer computes any fallback geometry.
     ''' </summary>
     Private Shared Function BuildEntry(
             ts              As DateTime,
             verdict         As String,
             entryPrice      As Double,
             atr             As Double,
-            swingStopLong   As Double,
-            swingStopShort  As Double,
-            adjLongTarget   As Double,
-            adjShortTarget  As Double,
+            favBarLong      As Double,
+            advBarLong      As Double,
+            favBarShort     As Double,
+            advBarShort     As Double,
             minMovePct      As Double,
             execResolution  As Integer) As EvalCacheEntry
 
@@ -927,19 +1013,19 @@ Public Class LivePerformanceTracker
         Dim isLong As Boolean = IsLongVerdict(verdict)
 
         If isLong Then
-            e.FavBar = If(adjLongTarget > 0, adjLongTarget, entryPrice + FAV_ATR_MULT * atr)
-            e.AdvBar = If(swingStopLong > 0, swingStopLong, entryPrice - ADV_ATR_MULT * atr)
+            e.FavBar = favBarLong
+            e.AdvBar = advBarLong
         Else
-            e.FavBar = If(adjShortTarget > 0, adjShortTarget, entryPrice - FAV_ATR_MULT * atr)
-            e.AdvBar = If(swingStopShort > 0, swingStopShort, entryPrice + ADV_ATR_MULT * atr)
+            e.FavBar = favBarShort
+            e.AdvBar = advBarShort
         End If
 
         ' v35 de-confound backstop: mirror the live min-tradeable-move gate. A directional
-        ' entry whose favourable barrier (the effective target) can't clear the minimum
+        ' entry whose favourable barrier (the placed target) can't clear the minimum
         ' tradeable move is EXCLUDED — a trade the engine won't take, not a prediction
-        ' failure. Post-gate this rarely fires (the engine already NO-TRADEs these, so the
-        ' verdict arrives non-directional); it backstops historical / edge rows. Survivors
-        ' (>= floor) keep the engine target, so the §1 favourable-barrier floor is a no-op.
+        ' failure. Post-D6 FavBar IS the placed target, so this measures exactly the value
+        ' the live Step 5c gate checks. Post-gate it rarely fires (the engine already
+        ' NO-TRADEs these); it backstops historical / edge rows.
         If minMovePct > 0 AndAlso Math.Abs(e.FavBar - entryPrice) < minMovePct * entryPrice Then
             e.EvalOutcome = "EXCLUDED_BELOW_MIN_MOVE"
             Return e
@@ -1085,7 +1171,43 @@ Public Class LivePerformanceTracker
         Public SwingStopLong  As Double
         Public SwingStopShort As Double
         Public ExecResolution As Integer   ' [v36] 1 when absent (pre-v0.7 CSV)
+        ' [D6] v0.8 placed levels — the barriers the engine emitted for this row
+        ' (SignalEmitter.ComputeSideLevels at log time). HasPlaced is False for pre-v0.8
+        ' rows that lack the columns; those fall back to the legacy formula.
+        Public PlacedTargetLong  As Double
+        Public PlacedStopLong    As Double
+        Public PlacedTargetShort As Double
+        Public PlacedStopShort   As Double
+        Public HasPlaced         As Boolean
     End Structure
+
+    ''' <summary>
+    ''' [D6] Resolve the placed favourable/adverse barriers for a backfilled analysis_log
+    ''' row. v0.8 rows carry the logged Placed* columns (computed at log time by the SAME
+    ''' ComputeSideLevels arbitration) — use them directly. Pre-v0.8 rows have no logged
+    ''' placed levels, so keep the legacy swing-else-ATR-fallback formula (D3: no
+    ''' fabrication), sourcing the fallback multipliers from cfg (the deleted local
+    ''' FAV/ADV consts were stale duplicates of these). In practice the live
+    ''' analysis_log.csv is entirely v0.8 (yardstick §1), so the legacy branch is
+    ''' defensive — it never fires on the live corpus.
+    ''' </summary>
+    Private Shared Sub ResolveBackfillBarriers(row As LogRow, cfg As EngineSettings,
+                                               ByRef favLong As Double, ByRef advLong As Double,
+                                               ByRef favShort As Double, ByRef advShort As Double)
+        If row.HasPlaced Then
+            favLong  = row.PlacedTargetLong
+            advLong  = row.PlacedStopLong
+            favShort = row.PlacedTargetShort
+            advShort = row.PlacedStopShort
+        Else
+            Dim favMult  As Double = cfg.Scoring.AtrTargetMultiplier
+            Dim stopMult As Double = cfg.Scoring.AtrStopMultiplier
+            favLong  = row.EntryPrice + favMult * row.ATR
+            advLong  = If(row.SwingStopLong > 0, row.SwingStopLong, row.EntryPrice - stopMult * row.ATR)
+            favShort = row.EntryPrice - favMult * row.ATR
+            advShort = If(row.SwingStopShort > 0, row.SwingStopShort, row.EntryPrice + stopMult * row.ATR)
+        End If
+    End Sub
 
     ''' <summary>
     ''' Parse analysis_log.csv for the columns needed by backfill. Columns are
@@ -1096,6 +1218,7 @@ Public Class LivePerformanceTracker
     ''' </summary>
     Private Shared Function ParseAnalysisLog(path As String) As List(Of LogRow)
         Dim result As New List(Of LogRow)()
+        Dim hasPlacedSchema As Boolean = False   ' [D6] v0.8 Placed* columns present in the header
         Try
             Dim colIdx As Dictionary(Of String, Integer) = Nothing
             For Each line As String In File.ReadLines(path)
@@ -1111,6 +1234,11 @@ Public Class LivePerformanceTracker
                             Return result
                         End If
                     Next
+                    ' [D6] The four placed-level columns arrive together at the v0.8 rotation.
+                    hasPlacedSchema = colIdx.ContainsKey("PlacedTargetLong") AndAlso
+                                      colIdx.ContainsKey("PlacedStopLong") AndAlso
+                                      colIdx.ContainsKey("PlacedTargetShort") AndAlso
+                                      colIdx.ContainsKey("PlacedStopShort")
                     Continue For
                 End If
                 If String.IsNullOrWhiteSpace(line) Then Continue For
@@ -1140,6 +1268,14 @@ Public Class LivePerformanceTracker
                     Else
                         row.ExecResolution = 1
                     End If
+                    ' [D6] v0.8 placed levels — parsed only when the schema carries them.
+                    row.HasPlaced = hasPlacedSchema
+                    If hasPlacedSchema Then
+                        row.PlacedTargetLong  = ParseColD(p, colIdx, "PlacedTargetLong")
+                        row.PlacedStopLong    = ParseColD(p, colIdx, "PlacedStopLong")
+                        row.PlacedTargetShort = ParseColD(p, colIdx, "PlacedTargetShort")
+                        row.PlacedStopShort   = ParseColD(p, colIdx, "PlacedStopShort")
+                    End If
                     result.Add(row)
                 Catch
                     ' Skip malformed row
@@ -1149,6 +1285,16 @@ Public Class LivePerformanceTracker
             Console.WriteLine("[LivePerformanceTracker] ParseAnalysisLog failed: " & ex.Message)
         End Try
         Return result
+    End Function
+
+    ''' <summary>[D6] Parse one double column by header name; 0.0 when absent/unparseable.</summary>
+    Private Shared Function ParseColD(p As String(), colIdx As Dictionary(Of String, Integer), key As String) As Double
+        Dim idx As Integer
+        If Not colIdx.TryGetValue(key, idx) Then Return 0.0
+        If idx >= p.Length Then Return 0.0
+        Dim v As Double
+        If Double.TryParse(p(idx).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, v) Then Return v
+        Return 0.0
     End Function
 
     ' -----------------------------------------------------------------------

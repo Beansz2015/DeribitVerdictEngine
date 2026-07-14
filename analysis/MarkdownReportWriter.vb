@@ -57,12 +57,16 @@ Public Class MarkdownReportWriter
         sb.AppendLine("# Analysis Report — " & ts)
         sb.AppendLine()
 
-        ' Interpretation hint (static — describes v2 barrier-hit semantics).
+        ' Interpretation hint (static — describes v2 barrier-hit semantics + the D6 adverse).
         sb.AppendLine("> **Failure model: barrier-hit with adverse stop (v2)**")
         sb.AppendLine("> - **SUCCESS** = price wicked through favourable barrier (entry ± multiplier × ATR)")
         sb.AppendLine(">   within the hold window, before any adverse hit.")
-        sb.AppendLine("> - **FAILURE** = adverse barrier (structural stop or 1.2×ATR fallback) hit first,")
-        sb.AppendLine(">   OR window expired without favourable hit.")
+        sb.AppendLine("> - **FAILURE** = adverse barrier hit first, OR window expired without favourable hit.")
+        sb.AppendLine("> - **[D6] Adverse barrier = the logged PLACED stop** (PlacedStop{Long,Short}, the geometry")
+        sb.AppendLine(">   the autotrader executes) when the row carries it; pre-v0.8 rows keep the legacy")
+        sb.AppendLine(">   swing-else-1.2×ATR yardstick and are labelled **[LEGACY_YARDSTICK]**. The stop side")
+        sb.AppendLine(">   moved from the raw ~9×ATR swing to the executed 1.6×ATR clamp, so failure rates")
+        sb.AppendLine(">   rise materially vs the pre-D6 book — see the **D6 before/after** section.")
         sb.AppendLine("> - Same-bar and next-bar after verdict are excluded (too quick to execute).")
         sb.AppendLine("> - Ambiguous bars (both barriers touched in same 1m candle) count as failure.")
         sb.AppendLine(">")
@@ -74,6 +78,7 @@ Public Class MarkdownReportWriter
 
         AppendGlobalSummary(sb, r)
         AppendFailureMatrix(sb, r)
+        AppendD4Comparison(sb, r)
         AppendRecommended(sb, r)
         AppendDecomposition(sb, r)
         AppendContextOutcomes(sb, r)
@@ -100,7 +105,7 @@ Public Class MarkdownReportWriter
         If r.Populations.Count > 0 Then
             Dim popParts As New List(Of String)()
             For Each pop In r.Populations
-                popParts.Add(String.Format("{0}×{1} n={2}", pop.SessionName, pop.Resolution, pop.RowCount))
+                popParts.Add(String.Format("{0} n={1}", PopLabel(pop), pop.RowCount))
             Next
             sb.AppendLine("- Populations detected:  " & String.Join("  |  ", popParts))
         End If
@@ -108,13 +113,14 @@ Public Class MarkdownReportWriter
         ' Per-population barrier diagnostics. below-min-move=0 is expected for an
         ' all-post-v35 book (the live gate already NO-TRADE'd sub-floor directional
         ' signals before logging) — see audit §4.1, not a regression.
-        sb.AppendLine("Per-population barrier diagnostics (below-min-move=0 is expected for an all-post-v35 book — audit §4.1):")
+        sb.AppendLine("Per-population barrier diagnostics (below-min-move=0 is expected for an all-post-v35 book — audit §4.1).")
+        sb.AppendLine("[D6] For PLACED populations, ""Adverse: structural"" counts the logged placed stop; ""fallback"" the swing-else-ATR path.")
         sb.AppendLine()
         sb.AppendLine("| Population | Rows | No-OHLC excl. | ATR-invalid | Below-min-move | Adverse: structural / fallback |")
         sb.AppendLine("|-----------|------|---------------|-------------|----------------|--------------------------------|")
         For Each pop In r.Populations
-            sb.AppendLine(String.Format("| {0}×{1} | {2} | {3} | {4} | {5} | {6} / {7} |",
-                                        pop.SessionName, pop.Resolution, pop.RowCount,
+            sb.AppendLine(String.Format("| {0} | {1} | {2} | {3} | {4} | {5} / {6} |",
+                                        PopLabel(pop), pop.RowCount,
                                         pop.ExcludedRows, pop.AtrInvalidExcluded, pop.BelowMinMoveExcluded,
                                         pop.StructuralStopRows, pop.AtrFallbackRows))
         Next
@@ -188,6 +194,87 @@ Public Class MarkdownReportWriter
             sb.AppendLine(row.ToString())
         Next
     End Sub
+
+    ' ------------------------------------------------------------------ D6: Placed-Stop Migration before/after
+    ' [D6/D4] Public wrapper so the harness (A27c) can assert the section renders both
+    ' the legacy and the placed failure numbers for the same rows.
+    Public Shared Function BuildD4Section(r As AnalysisReport) As String
+        Dim sb As New StringBuilder()
+        AppendD4Comparison(sb, r)
+        Return sb.ToString()
+    End Function
+
+    ' The D4 continuity bridge: the SAME post-v51 rows re-walked under the legacy raw-swing
+    ' adverse barrier (before) and the placed stop (after), per session×resolution×tier.
+    Private Shared Sub AppendD4Comparison(sb As StringBuilder, r As AnalysisReport)
+        sb.AppendLine("## D6. Placed-Stop Migration — before/after failure rates")
+        sb.AppendLine()
+        sb.AppendLine("_The SAME rows walked twice. **before** = legacy raw-swing adverse barrier " &
+                      "(median ~9×ATR, the pre-D6 yardstick — essentially unreachable intrabar, so " &
+                      "'failure' collapsed to window-expiry); **after** = the placed stop the engine " &
+                      "emits and the autotrader executes (~1.6×ATR clamp). Each cell shows " &
+                      "`before% → after% (Δ)` at the population's own hold windows. Rising failure " &
+                      "rates are the honest re-base — stop-outs become recordable._")
+        sb.AppendLine()
+        For Each tier In Tiers
+            sb.AppendLine("### " & tier)
+            sb.AppendLine()
+            For Each pop In r.Populations
+                Dim hasRows As Boolean = TierHasRows(pop.FailureCells, tier) OrElse
+                                         TierHasRows(pop.LegacyFailureCells, tier)
+                If Not hasRows Then
+                    sb.AppendLine(String.Format("#### {0} · {1}-min · (no {2} rows yet)",
+                                                PopLabel(pop), pop.Resolution, tier))
+                    sb.AppendLine()
+                    Continue For
+                End If
+                sb.AppendLine(String.Format("#### {0} · {1}-min", PopLabel(pop), pop.Resolution))
+                sb.AppendLine()
+                AppendD4Grid(sb, pop, tier)
+                sb.AppendLine()
+            Next
+        Next
+    End Sub
+
+    ' before% → after% (Δ) per window × threshold, mirroring the main matrix grid shape.
+    Private Shared Sub AppendD4Grid(sb As StringBuilder, pop As PopulationReport, tier As String)
+        Dim thrs = If(tier.StartsWith("STRONG"),
+                      AnalysisConstants.StrongAtrThresholds,
+                      AnalysisConstants.MediumAtrThresholds)
+        Dim hdr As New StringBuilder("| Window |")
+        Dim sep As New StringBuilder("|--------|")
+        For Each thr In thrs
+            hdr.Append(String.Format(" {0:F1}× ATR (before→after Δ) |", thr))
+            sep.Append("--------------------------|")
+        Next
+        sb.AppendLine(hdr.ToString())
+        sb.AppendLine(sep.ToString())
+        For Each w In AnalysisConstants.HoldWindowsForResolution(pop.Resolution)
+            Dim rowSb As New StringBuilder(String.Format("| {0,4}m  |", w))
+            For Each thr In thrs
+                Dim before = FindCell(pop.LegacyFailureCells, tier, w, thr)
+                Dim after  = FindCell(pop.FailureCells, tier, w, thr)
+                If after Is Nothing OrElse after.SampleSize = 0 Then
+                    rowSb.Append(" n/a                      |")
+                Else
+                    Dim beforeRate As Double = If(before IsNot Nothing AndAlso before.SampleSize > 0,
+                                                  before.FailureRate, after.FailureRate)
+                    Dim delta As Double = after.FailureRate - beforeRate
+                    rowSb.Append(String.Format(" {0:P0} → {1:P0} ({2:+0%;-0%;0%}) n={3} |",
+                                               beforeRate, after.FailureRate, delta, after.SampleSize))
+                End If
+            Next
+            sb.AppendLine(rowSb.ToString())
+        Next
+    End Sub
+
+    Private Shared Function FindCell(cells As List(Of FailureCellResult),
+                                     tier As String, w As Integer, thr As Double) As FailureCellResult
+        If cells Is Nothing Then Return Nothing
+        Return cells.Where(Function(c) c.VerdictTier = tier AndAlso
+                                       c.WindowMin = w AndAlso
+                                       c.AtrThreshold = thr).FirstOrDefault()
+    End Function
 
     ' ------------------------------------------------------------------ Section 3: Recommended cells
     Private Shared Sub AppendRecommended(sb As StringBuilder, r As AnalysisReport)
@@ -428,7 +515,11 @@ Public Class MarkdownReportWriter
 
     ' ------------------------------------------------------------------ shared render helpers
     Private Shared Function PopLabel(pop As PopulationReport) As String
-        Return pop.SessionName & "×" & pop.Resolution.ToString()
+        Dim base As String = pop.SessionName & "×" & pop.Resolution.ToString()
+        ' [D6] Tag legacy-adverse populations so the placed and legacy barrier bases
+        ' are never read as one number (no silent mixing).
+        If pop.BarrierLabel = "LEGACY_YARDSTICK" Then Return base & " [LEGACY_YARDSTICK]"
+        Return base
     End Function
 
     Private Shared Function TierHasRows(cells As List(Of FailureCellResult), tier As String) As Boolean
@@ -440,11 +531,13 @@ Public Class MarkdownReportWriter
     ' has no rows in this population.
     Private Shared Function SubTableHeader(pop As PopulationReport, tier As String) As String
         Dim res As String = pop.Resolution.ToString() & "-min"
+        Dim sess As String = If(pop.BarrierLabel = "LEGACY_YARDSTICK",
+                                pop.SessionName & " [LEGACY_YARDSTICK]", pop.SessionName)
         If Not TierHasRows(pop.FailureCells, tier) Then
-            Return String.Format("#### {0} · {1} · (no {2} rows yet)", pop.SessionName, res, tier)
+            Return String.Format("#### {0} · {1} · (no {2} rows yet)", sess, res, tier)
         End If
         Return String.Format("#### {0} · {1} · ATR p50={2:F0} (p25–p75 {3:F0}–{4:F0}) · move-floor ${5:F0}",
-                             pop.SessionName, res, pop.DirAtrP50, pop.DirAtrP25, pop.DirAtrP75, pop.MoveFloorUsd)
+                             sess, res, pop.DirAtrP50, pop.DirAtrP25, pop.DirAtrP75, pop.MoveFloorUsd)
     End Function
 
     Private Shared Sub BuildSummaryCsv(report As AnalysisReport, path As String)

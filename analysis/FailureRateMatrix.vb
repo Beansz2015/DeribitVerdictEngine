@@ -21,6 +21,20 @@ Imports System.Collections.Generic
 Imports System.Globalization
 Imports System.Math
 
+''' <summary>
+''' [D6] Which adverse (stop) barrier the failure walk scores against.
+'''   Placed — the logged placed stop (PlacedStop{Long,Short}) when the row carries it,
+'''            else the legacy swing-else-ATR fallback. The migrated default: outcomes
+'''            score against the geometry the autotrader executes.
+'''   Legacy — always the raw 5m swing stop, else the ATR-multiple fallback. The pre-D6
+'''            yardstick (median ~9×ATR away). Used for the D4 before/after re-walk.
+''' d6-eval-placed-stop-migration-proposal.md.
+''' </summary>
+Public Enum AdverseBarrierMode
+    Placed
+    Legacy
+End Enum
+
 Public Class FailureRateMatrix
 
     ' Maps engine verdict strings → canonical tier names.
@@ -41,6 +55,43 @@ Public Class FailureRateMatrix
 
     Private Shared Function IsLong(tier As String) As Boolean
         Return tier.EndsWith("LONG")
+    End Function
+
+    ' [D6] Resolve the adverse (stop) barrier for one directional row under the chosen mode.
+    ' Placed mode uses the logged placed stop (PlacedStop{Long,Short}) when the row carries
+    ' it — the geometry the autotrader executes — else the legacy swing-else-ATR fallback.
+    ' Legacy mode forces the raw 5m swing stop on every row (the pre-D6 yardstick), so the
+    ' D4 report can re-walk the same rows both ways. structuralStopRows counts rows whose
+    ' adverse came from a real stop level (placed or swing); atrFallbackRows counts the
+    ' ATR-multiple fallback. Public for harness A27b (Placed-vs-legacy routing).
+    Public Shared Function ResolveAdverseBarrier(row As CsvRow, isLong As Boolean,
+                                                 entry As Double, atr As Double,
+                                                 mode As AdverseBarrierMode,
+                                                 ByRef structuralStopRows As Integer,
+                                                 ByRef atrFallbackRows As Integer) As Double
+        If mode = AdverseBarrierMode.Placed AndAlso row.HasPlaced Then
+            Dim placedStop As Double = If(isLong, row.PlacedStopLong, row.PlacedStopShort)
+            If placedStop > 0 Then
+                structuralStopRows += 1
+                Return placedStop
+            End If
+        End If
+        ' Legacy yardstick: raw swing stop, else ATR-multiple fallback.
+        If isLong Then
+            If row.SwingStopLong > 0 Then
+                structuralStopRows += 1
+                Return row.SwingStopLong
+            End If
+            atrFallbackRows += 1
+            Return entry - AnalysisConstants.AdverseFallbackAtrMultiplier * atr
+        Else
+            If row.SwingStopShort > 0 Then
+                structuralStopRows += 1
+                Return row.SwingStopShort
+            End If
+            atrFallbackRows += 1
+            Return entry + AnalysisConstants.AdverseFallbackAtrMultiplier * atr
+        End If
     End Function
 
     ' Walk eligible bars chronologically and classify outcome.
@@ -101,7 +152,8 @@ Public Class FailureRateMatrix
                                    ByRef belowMinMoveExcluded As Integer,
                                    Optional floorPct As Double = AnalysisConstants.FavBarAbsFloorPct,
                                    Optional engineTargetMult As Double = AnalysisConstants.EngineTargetAtrMultiplier,
-                                   Optional resolution As Integer = 1) As List(Of FailureCellResult)
+                                   Optional resolution As Integer = 1,
+                                   Optional adverseMode As AdverseBarrierMode = AdverseBarrierMode.Placed) As List(Of FailureCellResult)
 
         atrInvalidExcluded = 0
         structuralStopRows  = 0
@@ -152,25 +204,12 @@ Public Class FailureRateMatrix
                 Continue For
             End If
 
-            ' Adverse barrier: structural stop first, ATR-multiple fallback.
-            Dim advBar As Double
-            If isLongRow Then
-                If row.SwingStopLong > 0 Then
-                    advBar = row.SwingStopLong
-                    structuralStopRows += 1
-                Else
-                    advBar = entry - AnalysisConstants.AdverseFallbackAtrMultiplier * atr
-                    atrFallbackRows += 1
-                End If
-            Else
-                If row.SwingStopShort > 0 Then
-                    advBar = row.SwingStopShort
-                    structuralStopRows += 1
-                Else
-                    advBar = entry + AnalysisConstants.AdverseFallbackAtrMultiplier * atr
-                    atrFallbackRows += 1
-                End If
-            End If
+            ' [D6] Adverse barrier: the placed stop when the row carries it (Placed mode —
+            ' the geometry the autotrader executes), else the legacy swing-else-ATR
+            ' yardstick. Legacy mode forces the raw swing on every row (the D4 "before"
+            ' walk). structuralStopRows / atrFallbackRows track which fallback fired.
+            Dim advBar As Double = ResolveAdverseBarrier(row, isLongRow, entry, atr, adverseMode,
+                                                         structuralStopRows, atrFallbackRows)
 
             For Each w In windows
                 Dim bars As List(Of OhlcBar) = Nothing

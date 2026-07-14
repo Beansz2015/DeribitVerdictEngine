@@ -12,6 +12,7 @@
 
 Imports System
 Imports System.Globalization
+Imports System.IO
 Imports System.Text.Json
 Imports System.Threading
 
@@ -157,6 +158,16 @@ Module Program
         A26e_SessionFallbackMultiplier()
         A26f_DisabledIsByteIdenticalLegacy()
         A26g_TweakerStructuralLevelsSurface()
+
+        ' D6 eval-barrier migration onto placed levels (d6-eval-placed-stop-migration
+        ' -proposal.md): (a) the live tracker's barriers ≡ ComputeSideLevels across
+        ' capped/fallback/noise-suppressed cases; (b) offline Placed*-vs-legacy adverse
+        ' routing; (c) the D4 before/after report renders both barrier bases; (d) the
+        ' eval-cache v4→v5 rotate-and-rebuild path.
+        A27a_TrackerBarriersEqualComputeSideLevels()
+        A27b_OfflineAdverseRoutingPlacedVsLegacy()
+        A27c_D4ReportRendersBothPopulations()
+        A27d_EvalCacheV5RotationRebuild()
 
         Console.WriteLine()
         If _failures = 0 Then
@@ -2531,6 +2542,146 @@ Module Program
                             rEnabled.IsValid, rEnabled.ErrorReason, rMode.IsValid,
                             rSession.IsValid, rSession.ErrorReason,
                             rBound.IsValid, rStopMax.IsValid, rFloor.IsValid, rFallback.IsValid))
+    End Sub
+
+    ' =======================================================================
+    ' A27 — D6 eval-barrier migration onto placed levels.
+    ' docs/d6-eval-placed-stop-migration-proposal.md (APPROVED 2026-07-14).
+    ' The eval adverse barrier moves from the raw ~9×ATR swing stop onto the
+    ' placed stop the engine emits and the autotrader executes, so stop-outs
+    ' become recordable. Live tracker sources barriers from ComputeSideLevels;
+    ' offline sources them from the logged Placed* columns.
+    ' =======================================================================
+
+    Private Function BuildD6Indicators() As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = 62000.0
+        r.ATR = 40.0
+        r.SessionUtcHour = 15          ' NY → fallback target multiplier = base 1.75
+        Return r
+    End Function
+
+    ' -- A27a: live tracker barriers ≡ ComputeSideLevels (3 arbitration cases) -----
+    ' fallback target dist 70 (=1.75×40), target bound 140 (=3.5×40), stop dist 64
+    ' (=1.6×40), sub-tick noise floor max(0.5, 0.8)=0.8; min-move floor 49.6.
+    Private Sub A27a_TrackerBarriersEqualComputeSideLevels()
+        Dim cfg As New EngineSettings()                  ' POCO defaults = shipped v51
+        Dim vLong As New VerdictResult With {.Verdict = "LONG"}
+        Dim nowUtc As DateTime = DateTime.UtcNow
+
+        ' Case 1 — fallback (no structural levels): FavBar = ATR-fallback target 62070,
+        ' AdvBar = fallback stop 61936. The tracker stores exactly ComputeSideLevels'.
+        Dim rFb = BuildD6Indicators()
+        Dim eFb = LivePerformanceTracker.BuildLiveEntry(vLong, rFb, cfg, nowUtc)
+        Dim expFb = SignalEmitter.ComputeSideLevels(vLong, rFb, cfg, isLong:=True)
+        Check("A27a tracker barriers = ComputeSideLevels (fallback)",
+              eFb.EvalOutcome = "PENDING" AndAlso
+              eFb.FavBar = expFb.Target AndAlso eFb.AdvBar = expFb.StopPx AndAlso
+              expFb.TargetReason = "FALLBACK_ATR" AndAlso
+              Math.Abs(eFb.FavBar - 62070.0) < 0.0001 AndAlso Math.Abs(eFb.AdvBar - 61936.0) < 0.0001,
+              String.Format(CultureInfo.InvariantCulture, "fav={0} adv={1} tReason={2} outcome={3}",
+                            eFb.FavBar, eFb.AdvBar, expFb.TargetReason, eFb.EvalOutcome))
+
+        ' Case 2 — structural placed: swing target 62100 (dist 100 ≤ 140) + swing stop
+        ' 61950 (dist 50 ∈ [floor, 64] → SWING_STOP). Barriers track the placed levels.
+        Dim rSt = BuildD6Indicators()
+        rSt.SwingTargetLong = 62100.0
+        rSt.SwingStopLong = 61950.0
+        Dim eSt = LivePerformanceTracker.BuildLiveEntry(vLong, rSt, cfg, nowUtc)
+        Dim expSt = SignalEmitter.ComputeSideLevels(vLong, rSt, cfg, isLong:=True)
+        Check("A27a tracker barriers = ComputeSideLevels (structural placed)",
+              eSt.FavBar = expSt.Target AndAlso eSt.AdvBar = expSt.StopPx AndAlso
+              eSt.FavBar = 62100.0 AndAlso eSt.AdvBar = 61950.0 AndAlso
+              expSt.TargetReason = "SWING_HIGH_5M" AndAlso expSt.StopReason = "SWING_STOP",
+              String.Format(CultureInfo.InvariantCulture, "fav={0} adv={1} t={2} s={3}",
+                            eSt.FavBar, eSt.AdvBar, expSt.TargetReason, expSt.StopReason))
+
+        ' Case 3 — noise-suppressed: structural target 62070.3 within the 0.8 sub-tick
+        ' floor of the fallback 62070 → Capped=false, but Target is still the structural
+        ' price; the tracker stores that exact placed value (not the raw fallback).
+        Dim rNs = BuildD6Indicators()
+        rNs.SwingTargetLong = 62070.3
+        Dim eNs = LivePerformanceTracker.BuildLiveEntry(vLong, rNs, cfg, nowUtc)
+        Dim expNs = SignalEmitter.ComputeSideLevels(vLong, rNs, cfg, isLong:=True)
+        Check("A27a tracker barriers = ComputeSideLevels (noise-suppressed structural)",
+              eNs.FavBar = expNs.Target AndAlso eNs.AdvBar = expNs.StopPx AndAlso
+              Not expNs.Capped AndAlso Math.Abs(eNs.FavBar - 62070.3) < 0.0001,
+              String.Format(CultureInfo.InvariantCulture, "fav={0} capped={1}", eNs.FavBar, expNs.Capped))
+    End Sub
+
+    ' -- A27b: offline adverse-barrier routing (Placed* present vs legacy) ---------
+    Private Sub A27b_OfflineAdverseRoutingPlacedVsLegacy()
+        Dim s As Integer = 0, f As Integer = 0
+        ' Placed row: Placed mode uses the logged placed stop 99000, NOT the swing 95000.
+        Dim rowP As New CsvRow With {.HasPlaced = True, .PlacedStopLong = 99000.0, .SwingStopLong = 95000.0}
+        Dim advP = FailureRateMatrix.ResolveAdverseBarrier(rowP, True, 100000.0, 50.0, AdverseBarrierMode.Placed, s, f)
+        ' Legacy row (no Placed*): falls back to the raw swing 95000.
+        Dim rowL As New CsvRow With {.HasPlaced = False, .SwingStopLong = 95000.0}
+        Dim advL = FailureRateMatrix.ResolveAdverseBarrier(rowL, True, 100000.0, 50.0, AdverseBarrierMode.Placed, s, f)
+        ' Legacy MODE forces the raw swing even on a placed row (the D4 "before" walk).
+        Dim advForce = FailureRateMatrix.ResolveAdverseBarrier(rowP, True, 100000.0, 50.0, AdverseBarrierMode.Legacy, s, f)
+        ' No swing, no placed → ATR fallback (100000 − 1.2×50 = 99940).
+        Dim rowN As New CsvRow With {.HasPlaced = False, .SwingStopLong = 0.0}
+        Dim advN = FailureRateMatrix.ResolveAdverseBarrier(rowN, True, 100000.0, 50.0, AdverseBarrierMode.Placed, s, f)
+        Check("A27b offline adverse routing (placed / legacy-fallback / forced-legacy / ATR)",
+              advP = 99000.0 AndAlso advL = 95000.0 AndAlso advForce = 95000.0 AndAlso
+              Math.Abs(advN - 99940.0) < 0.0001,
+              String.Format(CultureInfo.InvariantCulture, "placed={0} legacyRow={1} forced={2} atr={3}",
+                            advP, advL, advForce, advN))
+    End Sub
+
+    ' -- A27c: D4 before/after report renders both barrier bases -------------------
+    Private Sub A27c_D4ReportRendersBothPopulations()
+        Dim rep As New AnalysisReport()
+        Dim pop As New PopulationReport With {
+            .PopulationKey = "NY|1", .SessionName = "NY", .Resolution = 1,
+            .BarrierLabel = "PLACED", .RowCount = 40}
+        ' Placed (after) 60% failure vs legacy (before) 20% failure on the same cell.
+        pop.FailureCells.Add(New FailureCellResult With {
+            .VerdictTier = "STRONG_LONG", .WindowMin = 5, .AtrThreshold = 0.5,
+            .SampleSize = 40, .Failures = 24, .FailureRate = 0.6})
+        pop.LegacyFailureCells.Add(New FailureCellResult With {
+            .VerdictTier = "STRONG_LONG", .WindowMin = 5, .AtrThreshold = 0.5,
+            .SampleSize = 40, .Failures = 8, .FailureRate = 0.2})
+        rep.Populations.Add(pop)
+
+        Dim md As String = MarkdownReportWriter.BuildD4Section(rep)
+        Check("A27c D4 report renders before→after (both barrier bases)",
+              md.Contains("D6. Placed-Stop Migration") AndAlso md.Contains("STRONG_LONG") AndAlso
+              md.Contains("→") AndAlso md.Contains("+40%") AndAlso md.Contains("n=40"),
+              "expected the D6 section with a before→after cell (+40% delta, n=40); got:" & vbLf & md)
+    End Sub
+
+    ' -- A27d: eval-cache v4→v5 rotate-and-rebuild path ----------------------------
+    Private Sub A27d_EvalCacheV5RotationRebuild()
+        Dim tmp As String = Path.Combine(Path.GetTempPath(), "d6_eval_" & Guid.NewGuid().ToString("N") & ".csv")
+        Dim bak As String = tmp & ".v4.bak"
+        Try
+            ' A v4 cache is pre-v5 → rotation fires; the original is moved to .v4.bak so
+            ' the cold-start backfill rebuilds it fresh on placed barriers.
+            File.WriteAllLines(tmp, New String() {
+                "# schema=v4 (min-tradeable-move floor; exec resolution)",
+                "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution",
+                "2026-07-10T00:00:00.0000000Z,LONG,62000,62070,61936,PENDING,,1"})
+            Dim wasPreV5 As Boolean = LivePerformanceTracker.IsPreV5Schema(tmp)
+            LivePerformanceTracker.RotatePreV5Cache(tmp)
+            Dim rotated As Boolean = (Not File.Exists(tmp)) AndAlso File.Exists(bak)
+
+            ' A v5 cache is current → no rotation (rebuild does not re-fire on restart).
+            File.WriteAllLines(tmp, New String() {
+                "# schema=v5 (placed-level barriers; min-tradeable-move floor; exec resolution) floor_pct=0.0008",
+                "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution",
+                "2026-07-10T00:00:00.0000000Z,LONG,62000,62070,61936,PENDING,,1"})
+            Dim v5Current As Boolean = Not LivePerformanceTracker.IsPreV5Schema(tmp)
+
+            Check("A27d eval-cache v4→v5 rotate-and-rebuild",
+                  wasPreV5 AndAlso rotated AndAlso v5Current,
+                  String.Format("wasPreV5={0} rotated(orig-gone + .v4.bak)={1} v5Current={2}",
+                                wasPreV5, rotated, v5Current))
+        Finally
+            Try : File.Delete(tmp) : Catch : End Try
+            Try : File.Delete(bak) : Catch : End Try
+        End Try
     End Sub
 
 End Module

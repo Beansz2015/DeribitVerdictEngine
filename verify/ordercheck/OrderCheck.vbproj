@@ -72,6 +72,10 @@
     <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
     <Compile Include="..\..\analysis\AnalysisConstants.vb" />
     <Compile Include="..\..\analysis\AnalysisReport.vb" />
+    <!-- D6 A27c: the offline report writer's D4 before/after section (BuildD4Section).
+         Host-agnostic (StringBuilder only); AnalysisRunner stays OUT — it needs a live
+         Deribit OHLC fetch. -->
+    <Compile Include="..\..\analysis\MarkdownReportWriter.vb" />
     <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
     <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
     <!-- v36 Phase-2a (A15a–A15g): the AutoTweaker chain so MatchesPopulation,

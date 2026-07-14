@@ -57,7 +57,15 @@ Public Class PopulationReport
     Public Property SessionName         As String        ' "NY"
     Public Property Resolution          As Integer       ' 1 | 3
     Public Property RowCount            As Integer       ' all rows in this population
+    ' [D6] "PLACED" (rows carry v0.8 Placed* → adverse = placed stop) or "LEGACY_YARDSTICK"
+    ' (pre-v0.8 rows, no Placed* → legacy swing-else-ATR adverse). Populations are split on
+    ' this dimension so the two barrier bases are never silently mixed in one cell.
+    Public Property BarrierLabel        As String = "PLACED"
     Public Property FailureCells        As New List(Of FailureCellResult)()
+    ' [D6] D4 before/after: the SAME rows re-walked under the legacy raw-swing adverse
+    ' barrier (FailureCells above use the migrated placed adverse). The delta between the
+    ' two is the continuity bridge — the first honest read of executed stop-out risk.
+    Public Property LegacyFailureCells  As New List(Of FailureCellResult)()
     Public Property ContextOutcomes     As New Dictionary(Of String, FailureCellResult)()
     Public Property ExcludedRows         As Integer       ' rows with no valid OHLC bars for any window
     Public Property AtrInvalidExcluded   As Integer       ' rows excluded because ATR <= 0
