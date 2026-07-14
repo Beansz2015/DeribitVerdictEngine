@@ -169,6 +169,14 @@ Module Program
         A27c_D4ReportRendersBothPopulations()
         A27d_EvalCacheV5RotationRebuild()
 
+        ' P4 #5 wire-in (v52) — aggressor-velocity TFI-modifier scoring (proposal §4.5):
+        ' upgrade/soften/no-op through the real Calculate(), regimeMax cap, S2a session
+        ' scoping (res-3 inert) + scoring_enabled:false byte-identical, HC22 tweaker fence.
+        A28a_TfiBurstModifierUpgradeSoftenNoop()
+        A28b_TfiBurstUpgradeCapsAtRegimeMax()
+        A28c_ScopingAndDisableInert()
+        A28d_Hc22SessionVolumeEnabledFence()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -1013,22 +1021,26 @@ Module Program
                             rRes.IsValid, rKel.IsValid, rMin.IsValid, rCtl.IsValid))
     End Sub
 
-    ' -- A15g: the new guard does not over-match session_volume keys -----------
+    ' -- A15g: HC11 prefix guard does not over-match session_volume; enabled is HC22-fenced --
+    ' [v52 S5 rider] session_volume.enabled is now an exact-match HARD CONSTRAINT 22 reject
+    ' (this fixture originally documented it PASSING — the unfenced switch the S5 rider closes).
+    ' The array-path multiplier is still rejected only as UNRESOLVED — NOT by the HC11 prefix
+    ' guard — which remains the over-match proof this fixture was written for.
     Private Sub A15g_ValidatePassesNormalSessionVolumeKey()
         Dim s As String = "{""version"":1,""session_volume"":{""enabled"":true,""sessions"":[{""name"":""NY"",""high_multiplier"":1.15}]}}"
 
-        ' A resolvable, non-guarded session_volume key passes Validate cleanly.
+        ' session_volume.enabled → exact-match HARD CONSTRAINT 22 reject (S5 rider).
         Dim rEn = SettingsDiffApplier.Validate(OneDiff("session_volume.enabled", "true", "false"), s, 3)
         ' An array-path session_volume multiplier is rejected only as UNRESOLVED
-        ' (NavigatePath can't traverse the sessions array) — NOT by the new
+        ' (NavigatePath can't traverse the sessions array) — NOT by the
         ' HARD CONSTRAINT 11 guard. Confirms no over-match onto session_volume.
         Dim rArr = SettingsDiffApplier.Validate(OneDiff("session_volume.sessions.0.high_multiplier", "1.15", "1.2"), s, 3)
 
-        Check("A15g over-match guard (session_volume.enabled passes; array multiplier not guard-rejected)",
-              rEn.IsValid AndAlso (Not rArr.IsValid) AndAlso
-              Not rArr.ErrorReason.Contains("HARD CONSTRAINT 11"),
-              String.Format("enabled={0} arrValid={1} arrReason='{2}'",
-                            rEn.IsValid, rArr.IsValid, rArr.ErrorReason))
+        Check("A15g session_volume.enabled HC22-fenced; array multiplier UNRESOLVED (not HC11-guarded)",
+              Not rEn.IsValid AndAlso rEn.ErrorReason.Contains("HARD CONSTRAINT 22") AndAlso
+              (Not rArr.IsValid) AndAlso Not rArr.ErrorReason.Contains("HARD CONSTRAINT 11"),
+              String.Format("enValid={0} enReason='{1}' arrValid={2} arrReason='{3}'",
+                            rEn.IsValid, rEn.ErrorReason, rArr.IsValid, rArr.ErrorReason))
     End Sub
 
     ' -- A15h: Validate rejects network.* (HARD CONSTRAINT 12), passes a scoring key --
@@ -2133,9 +2145,11 @@ Module Program
         Dim nyThr      = ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, 14)
         cfg.Indicators.AggressorVelocity.Sessions("ASIA").BurstRatioThreshold = 3.1
         Dim asiaThr    = ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, 3)
-        Check("A23f per-session resolution (NY norm 60; LONDON/ASIA inherit 120/2.5; explicit override wins)",
+        ' [v52 wire-in] NY now carries an EXPLICIT burst_ratio_threshold 4.5 (the §5.2 value,
+        ' also the S2a scoping key); LONDON/ASIA still inherit the 2.5 default until their own pass.
+        Check("A23f per-session resolution (NY norm 60 / thr 4.5; LONDON/ASIA inherit 120/2.5; explicit override wins)",
               nyNorm = 60.0 AndAlso londonNorm = 120.0 AndAlso asiaNorm = 120.0 AndAlso
-              nyThr = 2.5 AndAlso asiaThr = 3.1,
+              nyThr = 4.5 AndAlso asiaThr = 3.1,
               String.Format(CultureInfo.InvariantCulture,
                             "nyNorm={0} lonNorm={1} asiaNorm={2} nyThr={3} asiaThr={4}",
                             nyNorm, londonNorm, asiaNorm, nyThr, asiaThr))
@@ -2682,6 +2696,111 @@ Module Program
             Try : File.Delete(tmp) : Catch : End Try
             Try : File.Delete(bak) : Catch : End Try
         End Try
+    End Sub
+
+    ' =======================================================================
+    ' A28 — aggressor-velocity TFI-modifier scoring wire-in (v52).
+    ' docs/aggressor-velocity-proposal.md §4.5 + docs/aggr-vel-wirein-implementer-brief.md.
+    ' Reuses the A8 RANGE_BOUND cascade (11 short / 4 long, TFI SELL PRESSURE, regimeMax 18
+    ' with RegimeWeights/MTF/Pass2b off). r.ATR=50 + no swing short target ⇒ the placed
+    ' fallback short target clears the min-move floor at NY (1.75×) / LONDON (2.0×), so the
+    ' directional SHORT verdict stands and EffectiveShortScore isolates the modifier's ±1.
+    ' =======================================================================
+
+    ''' <summary>A8 cascade cfg with the aggressor-velocity modifier armed (scoring on).</summary>
+    Private Function BuildBurstCfg(Optional upgradeBonus As Integer = 1,
+                                   Optional contraPenalty As Integer = 1) As EngineSettings
+        Dim cfg = BuildA8Cfg(fundingBoost:=0)   ' RangeBound cascade; Pass2b/2c/MTF/OFImom/Step3b off
+        cfg.Indicators.AggressorVelocity.ScoringEnabled = True   ' explicit (POCO default is also True)
+        cfg.Indicators.AggressorVelocity.UpgradeBonus  = upgradeBonus
+        cfg.Indicators.AggressorVelocity.ContraPenalty = contraPenalty
+        Return cfg
+    End Function
+
+    ''' <summary>A8 SELL-dominant indicators + a burst signal + a session UTC hour (the S2a key).</summary>
+    Private Function BuildBurstIndicators(aggrVelSignal As String, utcHour As Integer) As IndicatorResults
+        Dim r = BuildA8Indicators()   ' 11 short / 4 long; TFI SELL PRESSURE
+        r.AggrVelSignal  = aggrVelSignal
+        r.SessionUtcHour = utcHour     ' NY 13-23 has an explicit burst_ratio_threshold; res-3 does not
+        Return r
+    End Function
+
+    ' -- A28a: upgrade (same-side) / soften (contra) / no-op (NORMAL) through Calculate() --
+    Private Sub A28a_TfiBurstModifierUpgradeSoftenNoop()
+        Dim cfg = BuildBurstCfg()   ' bonus 1 / penalty 1
+        ' NORMAL tape → modifier no-op → the plain SELL cascade ss = 11.
+        Dim vNorm = ScoringEngine.Calculate(BuildBurstIndicators("NORMAL", 15),
+                                            PositionState.None, BuildA8Norms(), cfg)
+        ' TFI SELL + BURST_SELL (same side) → +1[S] → ss = 12.
+        Dim vUp = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 15),
+                                          PositionState.None, BuildA8Norms(), cfg)
+        ' TFI SELL + BURST_BUY (contra) → −1[S] soften → ss = 10.
+        Dim vDown = ScoringEngine.Calculate(BuildBurstIndicators("BURST_BUY", 15),
+                                            PositionState.None, BuildA8Norms(), cfg)
+
+        Check("A28a TFI burst modifier (NORMAL ss=11 / same-side +1 ss=12 / contra −1 ss=10; all SHORT)",
+              vNorm.EffectiveShortScore = 11 AndAlso vNorm.Verdict = "SHORT" AndAlso
+              vUp.EffectiveShortScore = 12 AndAlso vUp.Verdict = "SHORT" AndAlso
+              vDown.EffectiveShortScore = 10 AndAlso vDown.Verdict = "SHORT",
+              String.Format("normal={0}/{1} up={2}/{3} down={4}/{5}",
+                            vNorm.EffectiveShortScore, vNorm.Verdict,
+                            vUp.EffectiveShortScore, vUp.Verdict,
+                            vDown.EffectiveShortScore, vDown.Verdict))
+    End Sub
+
+    ' -- A28b: same-side upgrade caps at regimeMax (Math.Min site) ------------------
+    Private Sub A28b_TfiBurstUpgradeCapsAtRegimeMax()
+        Dim cfg = BuildBurstCfg(upgradeBonus:=20)   ' absurd bonus to force the cap
+        ' Neutralise the post-TFI MicroCVD short vote so EffectiveShortScore isolates the
+        ' capped Step-2 value: short = 10 at the TFI site, +20 → min(30, regimeMax 18) = 18.
+        Dim r = BuildBurstIndicators("BURST_SELL", 15)
+        r.MicroCVDSignal = "NEUTRAL"
+        Dim v = ScoringEngine.Calculate(r, PositionState.None, BuildA8Norms(), cfg)
+        Check("A28b burst upgrade caps at regimeMax (short 10 +20 → 18, not 30)",
+              v.EffectiveShortScore = 18,
+              String.Format("expected EffectiveShortScore=18 (capped at regimeMax), got {0}",
+                            v.EffectiveShortScore))
+    End Sub
+
+    ' -- A28c: S2a session scoping + scoring_enabled:false byte-identical -----------
+    Private Sub A28c_ScopingAndDisableInert()
+        Dim cfg = BuildBurstCfg()   ' scoring on, bonus/penalty 1
+        ' (1) S2a scoping: a LONDON-hour run (res-3, no explicit burst_ratio_threshold)
+        '     leaves the modifier inert even with a same-side BURST_SELL present.
+        '     (LONDON fallback ×2.0 clears the min-move floor, so the SHORT stands and
+        '     EffectiveShortScore reflects the plain cascade — no gate confound.)
+        Dim vLondon = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 10),
+                                              PositionState.None, BuildA8Norms(), cfg)
+        ' (2) scoring_enabled:false → inert at NY too (the hot rollback).
+        Dim cfgOff = BuildBurstCfg()
+        cfgOff.Indicators.AggressorVelocity.ScoringEnabled = False
+        Dim vOff = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 15),
+                                           PositionState.None, BuildA8Norms(), cfgOff)
+        ' Baseline NORMAL at NY (modifier eligible but tape calm) for the identity anchor.
+        Dim vNorm = ScoringEngine.Calculate(BuildBurstIndicators("NORMAL", 15),
+                                            PositionState.None, BuildA8Norms(), cfg)
+
+        Check("A28c S2a scoping + disable inert (LONDON burst ss=11; scoring_enabled:false ss=11 == NORMAL)",
+              vLondon.EffectiveShortScore = 11 AndAlso
+              vOff.EffectiveShortScore = 11 AndAlso
+              vNorm.EffectiveShortScore = 11,
+              String.Format("london={0} off={1} norm={2} (all must be 11 — modifier inert)",
+                            vLondon.EffectiveShortScore, vOff.EffectiveShortScore, vNorm.EffectiveShortScore))
+    End Sub
+
+    ' -- A28d: S5 rider — HC22 exact-match fences session_volume.enabled -----------
+    Private Sub A28d_Hc22SessionVolumeEnabledFence()
+        Dim s As String = "{""version"":52,""session_volume"":{""enabled"":true}," &
+                          """indicators"":{""OBV"":{""trend_gate"":10}}}"
+        ' The feature switch is exact-match rejected with HARD CONSTRAINT 22.
+        Dim rEn = SettingsDiffApplier.Validate(OneDiff("session_volume.enabled", "true", "false"), s, 3)
+        ' A sibling tunable (unrelated resolvable key) still passes — proves exact-match, no over-reach.
+        Dim rSib = SettingsDiffApplier.Validate(OneDiff("indicators.OBV.trend_gate", "10", "12"), s, 3)
+        Check("A28d HC22 fence (session_volume.enabled rejected; sibling OBV.trend_gate accepted)",
+              Not rEn.IsValid AndAlso rEn.ErrorReason.Contains("HARD CONSTRAINT 22") AndAlso
+              rSib.IsValid,
+              String.Format("enValid={0} enReason='{1}' sibValid={2}",
+                            rEn.IsValid, rEn.ErrorReason, rSib.IsValid))
     End Sub
 
 End Module

@@ -142,6 +142,21 @@ Public Class ExecutionResolution
         Return baseMult
     End Function
 
+    ''' <summary>
+    ''' [P4 #5 wire-in / S2a scoping] True when the run's session (by UTC hour) carries an
+    ''' EXPLICIT burst_ratio_threshold in its aggressor_velocity.sessions{} override. This is
+    ''' the scoping gate for the TFI burst modifier: the §5.2 derivation was only run for the
+    ''' sessions whose fire rate is data-ready (NY today), so the modifier fires ONLY where a
+    ''' per-session threshold has been derived and set. Res-3 sessions (Asia/London) inherit the
+    ''' exploratory default for classifier/display/CSV but keep the scoring modifier inert until
+    ''' their own §5.2 pass populates a threshold here. Presence of the override value IS the
+    ''' signal — no separate flag needed.
+    ''' </summary>
+    Public Shared Function HasExplicitAggrVelBurstThreshold(cfg As EngineSettings, utcHour As Integer) As Boolean
+        Dim o = AggrVelSessionOverrideFor(cfg, utcHour)
+        Return o IsNot Nothing AndAlso o.BurstRatioThreshold.HasValue
+    End Function
+
     ''' <summary>The aggressor_velocity.sessions{} override for the UTC hour's session
     ''' bucket (matched by bucket NAME, case-insensitive), or Nothing when there is no
     ''' matching bucket / no override entry.</summary>

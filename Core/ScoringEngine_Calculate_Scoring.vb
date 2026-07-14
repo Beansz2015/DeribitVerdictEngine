@@ -337,6 +337,40 @@ Partial Public Class ScoringEngine
         Dim tfiShort As Boolean = r.TFISignal = "SELL PRESSURE"
         pL = state.LongScore : pS = state.ShortScore
         AddFull(state, tfiLong, tfiShort, SignalCategory.Microstructure)
+
+        ' Aggressor-Velocity burst modifier on the TFI vote (P4 #5 §4.5, wired v52).
+        ' A MODIFIER on TFI's existing vote — appears exactly ONCE, never a parallel
+        ' vote, so it cannot double-count or add a correlated signal (the §5.1 gate
+        ' cleared: burst carries information TFI doesn't). Mirrors the OFI-momentum /
+        ' funding-momentum modifier shape.
+        '   TFI directional + BURST_* SAME side  → +UpgradeBonus  (tick-resolution
+        '                                           break confirmation; cap at regimeMax)
+        '   BURST_* CONTRA the TFI lean          → -ContraPenalty (a contra firehose is
+        '                                           a genuine warning; MicroCVD-stall shape)
+        '   NORMAL / no directional TFI          → no-op (a calm TFI is still valid)
+        ' S2(a) scoping: fires ONLY when the run's session carries an explicit derived
+        ' burst_ratio_threshold (NY today); res-3 keeps display/CSV but no scoring until
+        ' its own §5.2 pass. scoring_enabled:false ⇒ inert (byte-identical rollback).
+        Dim tfiBurstNote As String = ""
+        Dim av = cfg.Indicators.AggressorVelocity
+        If av IsNot Nothing AndAlso av.ScoringEnabled AndAlso (tfiLong Xor tfiShort) AndAlso
+           ExecutionResolution.HasExplicitAggrVelBurstThreshold(cfg, r.SessionUtcHour) Then
+            Dim burstBuy  As Boolean = r.AggrVelSignal = "BURST_BUY"
+            Dim burstSell As Boolean = r.AggrVelSignal = "BURST_SELL"
+            If tfiLong AndAlso burstBuy Then
+                state.LongScore = Math.Min(state.LongScore + av.UpgradeBonus, regimeMax)
+                tfiBurstNote = String.Format(" | BURST_BUY +{0}[L] confirmed", av.UpgradeBonus)
+            ElseIf tfiShort AndAlso burstSell Then
+                state.ShortScore = Math.Min(state.ShortScore + av.UpgradeBonus, regimeMax)
+                tfiBurstNote = String.Format(" | BURST_SELL +{0}[S] confirmed", av.UpgradeBonus)
+            ElseIf tfiLong AndAlso burstSell Then
+                state.LongScore = Math.Max(0, state.LongScore - av.ContraPenalty)
+                tfiBurstNote = String.Format(" | BURST_SELL -{0}[L] contra", av.ContraPenalty)
+            ElseIf tfiShort AndAlso burstBuy Then
+                state.ShortScore = Math.Max(0, state.ShortScore - av.ContraPenalty)
+                tfiBurstNote = String.Format(" | BURST_BUY -{0}[S] contra", av.ContraPenalty)
+            End If
+        End If
         tfiLP += state.LongScore - pL : tfiSP += state.ShortScore - pS
 
         Dim microLong  As Boolean = r.MicroCVDSignal = "BULL_ACCEL"
@@ -799,7 +833,7 @@ Partial Public Class ScoringEngine
         breakdown.Add(New SignalBreakdownItem("CVD", cvdLong, cvdShort, cvdNote, cvdLP, cvdSP))
 
         breakdown.Add(New SignalBreakdownItem("TFI", tfiLong, tfiShort,
-            String.Format("{0:F3} | {1}", r.TFIValue, r.TFISignal), tfiLP, tfiSP))
+            String.Format("{0:F3} | {1}", r.TFIValue, r.TFISignal) & tfiBurstNote, tfiLP, tfiSP))
 
         Dim microNote As String = String.Format("E:{0:F0} M:{1:F0} L:{2:F0} | {3} | {4}",
                                                 r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,

@@ -121,6 +121,14 @@ Public Class PromptBuilder
             "'scoring.atr_target_multiplier' / 'scoring.atr_stop_multiplier' stay on the " &
             "surface as before. (Enforced in code: SettingsDiffApplier exact-match rejects " &
             "the two hand-toggles and rejects the 'sessions.' prefix.)" & vbLf &
+        "22. Never propose 'session_volume.enabled'. It is the on/off switch for the session " &
+            "volume-multiplier + execution-resolution machinery (trader-owned session structure, " &
+            "not a failure-rate threshold — disabling it drops the session-adjusted volume norms " &
+            "and reslices execution resolution, a structural change, never an optimisation). " &
+            "SINGLE-key exclusion like HARD CONSTRAINT 16: the per-session 'session_volume.sessions[].*' " &
+            "keys are trader-owned re-baseline values (already unreachable — array-nested) and every " &
+            "other tunable stays proposable. (Enforced in code: SettingsDiffApplier exact-match " &
+            "rejects 'session_volume.enabled'.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

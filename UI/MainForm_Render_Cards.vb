@@ -630,26 +630,41 @@ Partial Public Class MainForm
             .Margin = New Padding(0)
         }
 
-        ' C1c: STOP cell is a 2-column sub-layout holding STRUCT + STOP side-by-side.
-        ' When struct is missing or equals atr, BindAtrRow collapses col 0 to 0%
-        ' so STOP renders full-width (visually identical to legacy single-cell).
-        ' When struct is deeper, BindAtrRow shows col 0 with STRUCT at the row's
-        ' value font and col 1 with STOP at a smaller font (per trader request).
+        ' C1c + B4b (2026-07-14 fix): STOP cell is a 2-col × 2-row sub-layout.
+        ' Row 0 holds STRUCT | STOP prices side-by-side (col 0 collapses to 0 width
+        ' when the structural stop isn't deeper, so STOP renders full-width — visually
+        ' identical to the legacy single-cell). Row 1 holds the placed-stop source
+        ' label (SWING_STOP / STOP_CLAMPED / FALLBACK_ATR) on its OWN small-font line,
+        ' column-spanned full width: the label used to be appended inline to the STOP
+        ' price and wrapped inside the ~45%-wide STOP sub-cell (STOP_CLAMPED is 12 chars).
         r.StopCellLayout = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 2, .RowCount = 1,
+            .ColumnCount = 2, .RowCount = 2,
             .BackColor = Color.Transparent,
             .Margin = New Padding(0)
         }
         r.StopCellLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 0))
         r.StopCellLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 66.0F))
+        r.StopCellLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 34.0F))
 
         r.StructStopValue = MakeZoneLabel("STRUCT", Theme.ACC_SHORT)
         r.StructStopValue.Visible = False
         r.StopValue   = MakeZoneLabel("STOP",   Theme.ACC_SHORT)
+        r.StopReasonSub = New Label() With {
+            .AutoSize = False,
+            .Dock = DockStyle.Fill,
+            .Text = "",
+            .Font = Theme.FontMono(7.0F, FontStyle.Regular),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .TextAlign = ContentAlignment.MiddleCenter,
+            .Margin = New Padding(0)
+        }
         r.StopCellLayout.Controls.Add(r.StructStopValue, 0, 0)
         r.StopCellLayout.Controls.Add(r.StopValue,       1, 0)
+        r.StopCellLayout.Controls.Add(r.StopReasonSub,   0, 1)
+        r.StopCellLayout.SetColumnSpan(r.StopReasonSub, 2)
 
         ' KNOWN-0 fix: the R:R cell is a 2-row sub-layout — ratio label on top
         ' (header + value, follows the row's value font) and the risk/rwd line
@@ -681,7 +696,8 @@ Partial Public Class MainForm
         rrCell.Controls.Add(r.RRSubValue, 0, 1)
 
         r.EntryValue  = MakeZoneLabel("ENTRY",  Theme.FG_PRIMARY)
-        r.CappedValue = MakeZoneLabel("CAPPED", Theme.ACC_WARN)
+        ' Caption set per-bind to PLACED (structural, default) / CAPPED (legacy rollback).
+        r.CappedValue = MakeZoneLabel("PLACED", Theme.ACC_WARN)
         r.TargetValue = MakeZoneLabel("TARGET", targetColour)
 
         row.Controls.Add(r.DirLabel,        0, 0)
@@ -1023,6 +1039,11 @@ Partial Public Class MainForm
         Dim showCapped As Boolean = lv.Capped
         Dim capLabel As String = ""
         If showCapped Then capLabel = ExtractCapLabel(If(lv.Reason, ""))
+        ' [2026-07-14] v51 B4b relabeled the vocabulary "CAPPED @" → "PLACED @" for the
+        ' structural-first path (the default). The zone caption follows: "PLACED" when the
+        ' arbitration ran structural-first (lv.StopReason set), "CAPPED" only on the legacy
+        ' enabled:false rollback — matching the snapshot's lv.Reason wording (parity).
+        Dim placedCaption As String = If(lv.StopReason IsNot Nothing, "PLACED", "CAPPED")
 
         ' Q2: surface risk / rwd USD amounts inline on the R:R cell so the
         ' trader doesn't have to compute |entry-stop| and |target-entry| in
@@ -1067,7 +1088,7 @@ Partial Public Class MainForm
             If Not String.IsNullOrEmpty(capLabel) Then
                 cappedValueText &= Environment.NewLine & $"({capLabel})"
             End If
-            SetZoneValue(row.CappedValue, "CAPPED", cappedValueText)
+            SetZoneValue(row.CappedValue, placedCaption, cappedValueText)
             row.CappedValue.ForeColor = Theme.ACC_WARN
         Else
             SetZoneValue(row.CappedValue, "·", "")
@@ -1153,16 +1174,21 @@ Partial Public Class MainForm
         Dim shrinkStyle As FontStyle = If(primary, FontStyle.Bold, FontStyle.Regular)
         Dim shrinkFont  As Font = Theme.FontMono(shrinkSize, shrinkStyle)
 
-        ' B4b: the placed stop carries its source label on a second line
-        ' (SWING_STOP / STOP_CLAMPED / FALLBACK_ATR — the snapshot row's [label]
-        ' equivalent). stopReason is Nothing on the legacy path → value only.
+        ' B4b: the placed stop carries its source label (SWING_STOP / STOP_CLAMPED /
+        ' FALLBACK_ATR — the snapshot row's [label] equivalent). 2026-07-14 fix: it
+        ' renders on its OWN full-width small-font sub-line (StopReasonSub, row 1 of the
+        ' cell) instead of being appended to the STOP price, so a 12-char label like
+        ' STOP_CLAMPED can't wrap inside the narrow STOP price sub-cell. stopReason is
+        ' Nothing on the legacy path → the sub-line is blank.
         Dim stopValueText As String = $"{atrStopPx:F1}"
-        If stopReason IsNot Nothing Then
-            stopValueText &= Environment.NewLine & $"({stopReason})"
+        If row.StopReasonSub IsNot Nothing Then
+            row.StopReasonSub.Text = If(stopReason IsNot Nothing, $"({stopReason})", "")
+            row.StopReasonSub.Font = Theme.FontMono(If(primary, 7.0F, 6.5F), FontStyle.Regular)
+            row.StopReasonSub.ForeColor = If(primary, Theme.FG_QUATERNARY, Theme.FG_DIM)
         End If
 
         If structDeeper Then
-            ' Two-cell layout: STRUCT (full font) | STOP (smaller font).
+            ' Two-cell price row: STRUCT (full font) | STOP (smaller font).
             row.StopCellLayout.ColumnStyles(0) = New ColumnStyle(SizeType.Percent, 55.0F)
             row.StopCellLayout.ColumnStyles(1) = New ColumnStyle(SizeType.Percent, 45.0F)
 
@@ -1173,7 +1199,7 @@ Partial Public Class MainForm
             SetZoneValue(row.StopValue, "STOP", stopValueText)
             row.StopValue.Font = shrinkFont
         Else
-            ' Single-cell layout: STOP only, full width (legacy behaviour).
+            ' Single price: STOP only, full width (legacy behaviour).
             row.StopCellLayout.ColumnStyles(0) = New ColumnStyle(SizeType.Absolute, 0)
             row.StopCellLayout.ColumnStyles(1) = New ColumnStyle(SizeType.Percent, 100.0F)
 

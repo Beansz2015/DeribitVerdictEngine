@@ -409,8 +409,9 @@ End Class
 ''' <summary>
 ''' [P4 #5 aggressor velocity] Tape-burst parameters (docs/aggressor-velocity-proposal.md §6).
 ''' Two time-decayed taker-USD horizons (fast burst vs rolling norm) → burstRatio + lean →
-''' BURST_BUY / BURST_SELL / NORMAL. Build sub-version is display/CSV-only: ScoringEnabled
-''' stays False until the §5.1 correlation gate clears on post-build data.
+''' BURST_BUY / BURST_SELL / NORMAL. The v50 build sub-version was display/CSV-only; the v52
+''' wire-in flipped ScoringEnabled True after the §5.1 correlation gate cleared (NOT redundant)
+''' and the §5.2 per-session derivation set NY burst_ratio_threshold 4.5.
 ''' Three-tier tweaker surface (§6 — who changes each key, not whether it's exposed):
 '''   ON the surface  — FastWindowSec, DirectionLeanFloor, GrossFloorUsdPerSec,
 '''                     UpgradeBonus, ContraPenalty (flat dotted paths; the scoring
@@ -424,9 +425,11 @@ End Class
 Public Class AggressorVelocitySettings
     ''' <summary>Feature switch — accumulator folds + reads stop entirely when False. Default True.</summary>
     <JsonPropertyName("enabled")>                 Public Property Enabled             As Boolean = True
-    ''' <summary>The ⚠ scoring gate — the TFI-modifier wire-in is a LATER data-gated sub-version;
-    ''' stays False at the build (proposal §5.1 correlation gate decides). Default False.</summary>
-    <JsonPropertyName("scoring_enabled")>         Public Property ScoringEnabled      As Boolean = False
+    ''' <summary>The ⚠ scoring gate — armed at the v52 wire-in after the §5.1 correlation gate
+    ''' cleared. When True the TFI burst modifier (§4.5) fires, but ONLY for sessions carrying an
+    ''' explicit sessions[s].burst_ratio_threshold (S2a scoping — NY today). Default True (POCO rides
+    ''' the v52 commit); False is the hot rollback to byte-identical no-modifier behaviour.</summary>
+    <JsonPropertyName("scoring_enabled")>         Public Property ScoringEnabled      As Boolean = True
     ''' <summary>Burst horizon tau (seconds). 5s — sub-bar and leading, but long enough that a
     ''' single block doesn't dominate the rate (§10.3). Default 5.</summary>
     <JsonPropertyName("fast_window_sec")>         Public Property FastWindowSec       As Double = 5.0
@@ -443,10 +446,12 @@ Public Class AggressorVelocitySettings
     <JsonPropertyName("default")>                 Public Property Defaults            As New AggressorVelocityDefaults
     ''' <summary>Per-session overrides keyed by session bucket name (null field ⇒ inherit
     ''' Defaults). Hand-tuned tier — OFF the tweaker surface. Seeded with NY 60s (dense 1-min
-    ''' tape → shorter baseline) so the code-defaults path matches settings.json.</summary>
+    ''' tape → shorter baseline) + the v52 §5.2 NY burst_ratio_threshold 4.5 so the code-defaults
+    ''' path matches settings.json (S2a: the explicit NY threshold is ALSO the scoping key — its
+    ''' presence is what arms the TFI modifier for NY, and its absence keeps res-3 inert).</summary>
     <JsonPropertyName("sessions")>                Public Property Sessions            As Dictionary(Of String, AggressorVelocitySessionOverride) =
         New Dictionary(Of String, AggressorVelocitySessionOverride) From {
-            {"NY",     New AggressorVelocitySessionOverride With {.NormWindowSec = 60.0}},
+            {"NY",     New AggressorVelocitySessionOverride With {.NormWindowSec = 60.0, .BurstRatioThreshold = 4.5}},
             {"LONDON", New AggressorVelocitySessionOverride()},
             {"ASIA",   New AggressorVelocitySessionOverride()}
         }

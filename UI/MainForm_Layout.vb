@@ -226,7 +226,8 @@ Partial Public Class MainForm
         Public Property DirLabel         As Label   ' "LONG" / "SHORT" prefix
         Public Property StopValue        As Label   ' ATR stop price cell
         Public Property StructStopValue  As Label   ' C1c: deeper structural stop (hidden when struct == atr or missing)
-        Public Property StopCellLayout   As TableLayoutPanel  ' C1c: holds StructStopValue + StopValue; width-ratio mutated at bind time
+        Public Property StopReasonSub    As Label   ' B4b (2026-07-14 fix): placed-stop source label (SWING_STOP/STOP_CLAMPED/FALLBACK_ATR) on its own full-width small-font sub-line so it can't wrap inside the narrow STOP price sub-cell
+        Public Property StopCellLayout   As TableLayoutPanel  ' C1c: row0 = STRUCT|STOP prices, row1 = StopReasonSub (spanned); width-ratio mutated at bind time
         Public Property RRValue          As Label
         Public Property RRSubValue       As Label   ' KNOWN-0 fix: "(risk N / rwd N)" on its own smaller-font label so the line can't clip inside RRValue
         Public Property EntryValue       As Label

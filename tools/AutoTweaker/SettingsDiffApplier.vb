@@ -144,6 +144,18 @@ Public Class SettingsDiffApplier
                     "Rejected: '{0}' is an aggressor-velocity feature switch, not a threshold (off tweaker surface — HARD CONSTRAINT 19).", item.Path)
                 Return result
             End If
+            ' [P4 #5 wire-in / S5 rider] session_volume FEATURE SWITCH — off the tweaker surface.
+            ' The volume-multiplier / execution-resolution machinery is trader-owned session
+            ' structure, not a failure-rate threshold, and disabling it silently would drop the
+            ' session-adjusted volume norms + reslice execution resolution — never an optimisation.
+            ' Exact-match, NOT a prefix: the array-nested session_volume.sessions[] keys are already
+            ' rejected as UNRESOLVED (NavigatePath can't traverse arrays), so this only closes the
+            ' one flat switch. Mirrors OFI.averaging_enabled / structural_levels.enabled (HC16/21 class).
+            If path = "session_volume.enabled" Then
+                result.IsValid    = False
+                result.ErrorReason = "Rejected: 'session_volume.enabled' is a session-structure feature switch, not a threshold (off tweaker surface — HARD CONSTRAINT 22)."
+                Return result
+            End If
             ' [B4b placed-geometry] Structural-levels HAND-TOGGLES — off the tweaker surface
             ' (enabled is the geometry rollback switch; stop_too_loose_mode is the D3 decision
             ' record, not a threshold). Exact-match, NOT a prefix: the flat siblings
