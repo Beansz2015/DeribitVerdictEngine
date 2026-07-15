@@ -213,11 +213,14 @@ Partial Public Class MainForm
     ' content; KELLY sits beneath it in the freed space. VOLUME PROFILE row-spans both,
     ' so its bottom tracks KELLY's automatically.
     ' Sized from a live pixel-scan: OI × CVD content measures ~100 px (header / NEUTRAL /
-    ' Funding Mom / Spread) + NewCard's 24 px padding + 8 px margin. KELLY measures ~150 px
-    ' in the bias-only state, but its MAX state adds the "Notional ≈ $X · N× lev" line
-    ' (rendered only when KellyContracts >= 1), so it is sized ~170 + 24 padding.
+    ' Funding Mom / Spread) + NewCard's 24 px padding + 8 px margin.
+    ' KELLY: header + 2-line advisory + up to SIX KV rows — p(win) / f* / Applied / Risk $ /
+    ' Contracts|Lean / and the "Notional ≈ $X · N× lev" row that renders ONLY when
+    ' KellyContracts >= 1. 196 was measured off a bias-only run (5 rows) and clipped that 6th
+    ' row on a real signal; 220 carries it. VOLUME PROFILE row-spans this pair, so it grows
+    ' with KELLY automatically and the bottoms stay aligned.
     Friend Const OICVD_CARD_H As Integer = 132
-    Friend Const KELLY_CARD_H As Integer = 196
+    Friend Const KELLY_CARD_H As Integer = 220
 
     ' [2026-07-15] X of the Output-Dump settings cog inside the TOOLS box — sits just right
     ' of the "Output Dump" LinkRow's text (the row itself is a fixed 320 px hit area, wider
@@ -745,12 +748,12 @@ Partial Public Class MainForm
         ' P4e kickoff §4 "bump the row height by 40 px" guidance.
         _cardSettingsTools = NewCard()
         ' P4 #1: +26px over the P4e 340 for the full-width EXIT GUARD strip's own row, so the
-        ' TOOLS (percent) row stays whole. [2026-07-15 space pass] 366 → 344 → 278: first the
-        ' LOG/AUTO-RUN row lost its dead space (110 → 88), then the 56 px full-width CTA row
-        ' went away entirely (the button moved inside TOOLS) and the outer top pad dropped
-        ' 30 → 20. TOOLS is Percent, so it must still be left ~120 px for its 3 LinkRows +
-        ' the CTA: 278 − 24 card padding − 20 outer top pad − (88 + 26) = 120.
-        AddRow(_cardSettingsTools, 278)
+        ' TOOLS (percent) row stays whole. [2026-07-15 space pass] 366 → 288: the LOG/AUTO-RUN
+        ' row lost its dead space (110 → 98, floored by LOG's bottom border) and the 56 px
+        ' full-width CTA row went away entirely (the button moved inside TOOLS), with the
+        ' outer top pad 30 → 14. TOOLS is Percent, so it must still be left ~120 px for its
+        ' 3 LinkRows + the CTA: 282 − 24 card padding − 14 outer top pad − (98 + 26) = 120.
+        AddRow(_cardSettingsTools, 282)
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
@@ -951,15 +954,18 @@ Partial Public Class MainForm
         _cardSettingsTools.TabStop = False
 
         ' Outer TLP — sits below the placeholder header.
-        ' [2026-07-15] Top padding 30 → 20: it only exists to clear the absolutely-placed
-        ' "SETTINGS & TOOLS" placeholder header (Location 12,12, ~16 px tall → ends ~28 in
-        ' card coords; outer starts at the card's 12 px padding, so 20 puts content at 32 —
-        ' still 4 px clear of the header). Pulls LOG up toward the section top.
+        ' [2026-07-15] Top padding 30 → 14: it only exists to clear the absolutely-placed
+        ' "SETTINGS & TOOLS" placeholder header (Location 12,12). Pixel-scan of the live card:
+        ' header ink ends 10 px below the card's 12 px padding, LOG's ink starts 12 px after
+        ' that — but most of that 12 is the two labels' own box heights (font descent + the
+        ' SectionGroup title's inset), NOT padding. 14 puts outer's content at card y=26, which
+        ' overlaps the header's AutoSize label box by ~3 px while leaving ~7 px of clear INK
+        ' between "SETTINGS TOOLS" and "LOG" — the boxes are transparent, so only ink matters.
         Dim outer = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
             .ColumnCount = 1, .RowCount = 3,
             .BackColor = Color.Transparent,
-            .Padding = New Padding(0, 20, 0, 0),
+            .Padding = New Padding(0, 14, 0, 0),
             .Margin = New Padding(0),
             .TabStop = False
         }
@@ -973,7 +979,11 @@ Partial Public Class MainForm
         ' [2026-07-15] The 56 px full-width CTA row is GONE — the ANALYSIS REPORT button now
         ' lives inside the TOOLS box (half width, right side), so TOOLS moves straight up
         ' under LOG/AUTO-RUN and the card loses the whole row.
-        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 88))    ' LOG/AUTO-RUN
+        ' FLOOR (found by the missing bottom borders): each box gets (row − row1's 8 px bottom
+        ' margin), and LOG's content runs to y≈84 (lnkResetLog at y=66 + ~18 tall). At 88 the
+        ' box was only 80, so its BOTTOM BORDER fell outside the box and vanished. 98 → box 90,
+        ' which clears the content and draws the border. (AUTO-RUN is shorter: chip ends y≈74.)
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 98))    ' LOG/AUTO-RUN
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 26))    ' P4#1 EXIT GUARD strip (full-width)
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS (now holds the CTA)
 
@@ -1151,7 +1161,9 @@ Partial Public Class MainForm
         lnkOutputDumpSettings.Dock = DockStyle.None
         lnkOutputDumpSettings.AutoSize = True
         lnkOutputDumpSettings.Font = Theme.FontMono(11.0F, FontStyle.Regular)
-        lnkOutputDumpSettings.Location = New Point(OUTPUT_DUMP_COG_X, 76)
+        ' y=82 (not 76): sits the glyph's BOTTOM flush with the "Output Dump" label's bottom
+        ' rather than floating above it (rowDump spans y 78..100 with its text centred).
+        lnkOutputDumpSettings.Location = New Point(OUTPUT_DUMP_COG_X, 82)
         grpTools.Controls.Add(lnkOutputDumpSettings)
         lnkOutputDumpSettings.BringToFront()
 
