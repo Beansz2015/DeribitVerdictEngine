@@ -226,6 +226,11 @@ Partial Public Class MainForm
     ' of the "Output Dump" LinkRow's text (the row itself is a fixed 320 px hit area, wider
     ' than its label, so this is a measured text-edge offset, not the row's edge).
     Friend Const OUTPUT_DUMP_COG_X As Integer = 140
+
+    ' [2026-07-15] SETTINGS & TOOLS special-cases its top padding (NewCard's standard is 12)
+    ' to pull the header + LOG toward the section top. The card's absolutely-placed
+    ' placeholder header is positioned from this same value.
+    Friend Const SETTINGS_CARD_PAD_TOP As Integer = 6
     Friend _lblLastPrice      As Label
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
@@ -751,9 +756,10 @@ Partial Public Class MainForm
         ' TOOLS (percent) row stays whole. [2026-07-15 space pass] 366 → 288: the LOG/AUTO-RUN
         ' row lost its dead space (110 → 98, floored by LOG's bottom border) and the 56 px
         ' full-width CTA row went away entirely (the button moved inside TOOLS), with the
-        ' outer top pad 30 → 14. TOOLS is Percent, so it must still be left ~120 px for its
-        ' 3 LinkRows + the CTA: 282 − 24 card padding − 14 outer top pad − (98 + 26) = 120.
-        AddRow(_cardSettingsTools, 282)
+        ' outer top pad 30 → 14, and the card's own top padding special-cased 12 → 6. TOOLS is
+        ' Percent, so it must still be left ~120 px for its 3 LinkRows + the CTA:
+        ' 276 − (6 top + 12 bottom) card padding − 14 outer top pad − (98 + 26) = 120.
+        AddRow(_cardSettingsTools, 276)
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
@@ -781,14 +787,18 @@ Partial Public Class MainForm
         _gridRoot.Controls.Add(c, 0, _gridRoot.RowCount - 1)
     End Sub
 
-    Private Shared Sub AddPlaceholderHeader(card As Control, text As String)
+    ''' <param name="topY">Y of the header inside the card. Defaults to 12 (matching NewCard's
+    ''' padding). It is an ABSOLUTE position, so it does NOT follow a card's Padding — a card
+    ''' that special-cases its top padding must pass a matching topY.</param>
+    Private Shared Sub AddPlaceholderHeader(card As Control, text As String,
+                                            Optional topY As Integer = 12)
         Dim lbl = New Label() With {
             .AutoSize = True,
             .Text = text,
             .Font = Theme.FontMono(11.0F, FontStyle.Bold),
             .ForeColor = Theme.FG_QUATERNARY,
             .BackColor = Color.Transparent,
-            .Location = New Point(12, 12)
+            .Location = New Point(12, topY)
         }
         card.Controls.Add(lbl)
     End Sub
@@ -950,7 +960,12 @@ Partial Public Class MainForm
     ' P3 controls forward clicks via shim lambdas to the existing handlers.
     ' -----------------------------------------------------------------------
     Private Sub ReparentSettingsToolsControls()
-        AddPlaceholderHeader(_cardSettingsTools, "SETTINGS & TOOLS")
+        ' [2026-07-15] SPECIAL-CASED padding for this card (trader request): top 12 → 6 so the
+        ' header + LOG sit closer to the section's top edge. Left/right/bottom keep NewCard's
+        ' standard 12. The placeholder header is absolutely positioned and does NOT follow
+        ' Padding, so it is moved to match — otherwise it would not gain anything.
+        _cardSettingsTools.Padding = New Padding(12, SETTINGS_CARD_PAD_TOP, 12, 12)
+        AddPlaceholderHeader(_cardSettingsTools, "SETTINGS & TOOLS", topY:=SETTINGS_CARD_PAD_TOP)
         _cardSettingsTools.TabStop = False
 
         ' Outer TLP — sits below the placeholder header.
@@ -997,6 +1012,13 @@ Partial Public Class MainForm
         }
         row1.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
         row1.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
+        ' [2026-07-15] THE missing-bottom-border fix. row1 had ColumnStyles but NO RowStyles,
+        ' so its single row fell back to AutoSize and took the SectionGroup Panel's ~100 px
+        ' PREFERRED height regardless of the row height above. At the old 110 the box happened
+        ' to fit; once the row shrank, the box stayed ~100 while its cell was smaller, so the
+        ' border SectionGroup paints at (Height − 0.5) was clipped away. An explicit Percent
+        ' row makes the box exactly as tall as its cell, so the border always lands inside.
+        row1.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
 
         Dim grpLog = New SectionGroup() With {
             .Title = "LOG",
