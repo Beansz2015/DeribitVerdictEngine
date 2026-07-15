@@ -160,7 +160,9 @@ DeribitVerdictEngine/
 │   │                                   CalcOFIMomentum (RISING/FALLING/FLAT),
 │   │                                   CalcCVD (lateSegmentWeight + earlySegmentWeight from
 │   │                                   cfg), CalcMicroCVD (dynamic accelThreshold),
-│   │                                   CalcTFI, CalcLiquidations, CalcFundingMomentum
+│   │                                   CalcTFI, CalcLiquidations,
+│   │                                   CalcFundingMomentum + AppendFundingSample
+│   │                                   (v53 time-anchored window + ring eviction)
 │   └── Indicators_Structure.vb         CalcDonchian (quartilePct from cfg),
 │                                       CalcOBV,
 │                                       CalcVPFRLite v2 (VAH/VAL + nearest HVN/LVN,
@@ -177,7 +179,8 @@ DeribitVerdictEngine/
 │   │                                   MTF TTL: _mtfCandles15m, _mtfLastFetchTime,
 │   │                                   MTF_TTL_SECONDS (const=60);
 │   │                                   _prevRegime (regime hysteresis);
-│   │                                   _fundingHistory (List(Of Double), FundingHistoryMax=10);
+│   │                                   _fundingHistory (List(Of (UtcMs, Rate)) — v53
+│   │                                   timestamped ring, age-evicted at 30 min, no count cap);
 │   │                                   _ofiHistory (List(Of Double), OFIHistoryMax=10)
 │   ├── MainForm_AutoRun.vb             Auto-run timer: InitAutoRunControls(),
 │   │                                   btnStartStop_Click, StartAutoRun(), StopAutoRun(),
@@ -188,7 +191,7 @@ DeribitVerdictEngine/
 │   │                                   logs result, calls RenderOutput;
 │   │                                   MTF TTL refresh; Donchian quartile signal;
 │   │                                   regime hysteresis logic; OFI BookDepth wiring;
-│   │                                   appends fundingRate to _fundingHistory;
+│   │                                   AppendFundingSample(_fundingHistory, nowTs, rate);
 │   │                                   calls CalcFundingMomentum → r.FundingMomentum;
 │   │                                   appends OFI to _ofiHistory;
 │   │                                   calls CalcOFIMomentum → r.OFIMomentum;
@@ -323,9 +326,12 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.EMA9/21/50 + Align = CalcEMA(candles1m)
         ├─ r.EMA200_5m          = CalcEMA(candles5m, 200)
         ├─ r.FundingRate/Bias   = fundingRate
-        ├─ _fundingHistory.Add(fundingRate); trim to FundingHistoryMax
-        ├─ r.FundingMomentum    = CalcFundingMomentum(_fundingHistory, cfg)
-        │                         → RISING / FALLING / FLAT
+        ├─ IndicatorEngine.AppendFundingSample(_fundingHistory, nowTs, fundingRate)
+        │                         [v53] every run, no dedup; evict age > 30 min
+        ├─ r.FundingMomentum    = CalcFundingMomentum(_fundingHistory, nowTs, cfg)
+        │                         → RISING / FALLING / FLAT (delta vs the newest
+        │                           sample ≥ momentum_window_minutes old; no
+        │                           anchor ⇒ FLAT)
         ├─ r.OI_Current/Changes = bookSummary.OI + _oiHistory ring buffer
         ├─ r.SpreadBps          = (orderBook.BestAsk - orderBook.BestBid) / mid × 10000
         ├─ r.OFI* / OFISignal   = CalcOFI(orderBook, bookDepth:=cfg.Indicators.OFI.BookDepth)
@@ -551,8 +557,9 @@ RunScoringPipeline(...)
 | Regime hysteresis (1 bar) | Prevents regime flip-flop on RANGE_BOUND→TRENDING boundary. Single bar of grace avoids scoring discontinuity on noisy ADX crossings. |
 | Settings externalised to JSON | All thresholds tunable without recompile. SettingsLoader.Current singleton; EngineSettings is the POCO contract. |
 | MicroCVD can be negative | `MicroCVDEarly` and `MicroCVDLate` are net USD deltas over their sub-windows. Negative values are valid and intentional — they indicate net sell pressure in that segment. |
-| Funding momentum as adjunct (Step 3b) | Absolute funding rate alone misses the *direction of crowding*. A rate already at +0.03% but falling is less dangerous than one at +0.02% and rising fast. Step 3b amplifies or softens the Step 3 penalty based on momentum direction, using a short rolling window (default 3 samples) held in `_fundingHistory`. Display-only impact on the funding UI row; scoring impact is bounded by the amplify/soften cfg values. |
-| _fundingHistory capped at FundingHistoryMax | Funding rate changes are slow relative to 1m candles. A window of 10 samples is sufficient to detect sustained crowding direction without accumulating stale history across sessions. |
+| Funding momentum as adjunct (Step 3b) | Absolute funding rate alone misses the *direction of crowding*. A rate already at +0.03% but falling is less dangerous than one at +0.02% and rising fast. Step 3b amplifies or softens the Step 3 penalty based on momentum direction, reading the momentum state off the time-anchored window held in `_fundingHistory`. Display-only impact on the funding UI row; scoring impact is bounded by the amplify/soften cfg values. |
+| Funding momentum window anchored in **time**, not sample count (v53) | The original window was 3 funding *changes*. On the WS feed funding changes on ~96.5% of runs, so the window's wall-clock span was ≈ 3 × run cadence — the same funding path produced different states at different cadences. At the collector's on-close cadence this stopped being a corner case and became the operating mode: 60s NY runs gave FLAT 52.1% / Step-3b engagement 27.6% (bands: 60–70% / 15–25%), and on 180s Asia/London runs a *single* 3-min step (p50 6.5e-7) already exceeded the whole-window threshold — Step 3b moved scores on 95.8% of London rows, making res-3 `FundingMomentum` uninformative and violating the adjunct invariant by arithmetic. No per-cadence threshold could fix it: the backstop timer, feed gaps and session hand-offs all move the effective cadence *within* a session. The anchored window means "funding moved more than T over ≥ W minutes" — identical at every cadence. **Anchor = the newest sample ≥ W old, not the oldest in the ring**: the oldest would re-import cadence dependence through the ring's span. W=5 min is the knee (≥ 1 full bar at both execution resolutions, ≥ 2 samples at every cadence the engine has run, front edge of the 2–15 min hold horizon); 5-min anchored deltas run *smaller* than the old ~90s count-window deltas (p50 3.0e-8 vs 8.0e-8) because the funding premium oscillates at short horizons and partially cancels, so the anchor reads sustained drift rather than wiggle. See `docs/funding-momentum-time-anchored-window-proposal.md`. |
+| _fundingHistory age-evicted at 30 min, no count cap (v53) | Eviction horizon = the audit's segment-reset horizon; ≤ 60 entries at the fastest cadence the engine has run, so the ring stays small without a count cap. The retired `FundingHistoryMax=10` cap is not merely unnecessary but actively wrong under age-anchoring: at a 30s cadence 10 samples span only 5 minutes, so the cap would evict the very samples the W=5min anchor needs and pin the state at FLAT. The pre-v53 `[S9]` append-on-change dedup went the same way — it existed because identical samples filled a *count*-indexed ring and forced FLAT; an age-anchored ring wants them, since "funding hasn't moved in W minutes" genuinely *is* FLAT. |
 | Session-aware volume norms in DynamicNorms | BTC volume has strong time-of-day seasonality. A single global `VolHighThreshold` / `VolMidThreshold` misclassifies quiet Asian-session participation as expansion and underweights genuine London/NY burst volume. Applying UTC session multipliers at the DynamicNorms layer preserves existing scoring logic while adapting thresholds to expected liquidity. |
 | OI × CVD as Pass 2b adjunct | OI and CVD together say more than either alone: rising/opening interest confirmed by supportive CVD is stronger than standalone OI, while a full OI build that directly opposes CVD often reflects weaker participation quality. Implementing this as a post-upgrade Pass 2b preserves existing indicator methods and lets the confirm/conflict effect be tuned independently via `OiCvdSettings`. Partial OI signals can be confirmed, but only full OI conflict is penalised, reducing false negatives on covering/capitulation transitions. |
 | Pass 2c regime alignment gate | Static per-indicator weights over-reward weak signals that disagree with the active regime. Pass 2c rewards runs where the regime-key signals are fully aligned with the dominant side and penalises full conflict, while staying suppressed in TRANSITIONAL and on zero-net scores. RegimeMaxScore() adds the alignment bonus to the ceiling when enabled so verdict % thresholds auto-adjust and the bonus cannot carry the score past saturation. |

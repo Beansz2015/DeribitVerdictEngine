@@ -475,18 +475,29 @@ End Class
 ''' [funding-momentum] Funding rate momentum signal parameters.
 ''' Controls Step 3b in ScoringEngine_Calculate and CalcFundingMomentum in Indicators_OrderFlow.
 ''' MomentumEnabled: master switch -- set false to skip Step 3b entirely. Default True.
-''' MomentumWindow: how many samples back to compare against most recent rate. Default 3.
+''' MomentumWindowMinutes: [v53] age (minutes) of the anchor sample the current rate is
+''' compared against -- the newest sample at least this old. Default 5. Replaced the
+''' count-indexed MomentumWindow, whose span was 3 x run cadence and therefore scored the
+''' same funding path differently at every cadence.
 ''' MomentumThreshold: min absolute delta (in rate units) to classify as RISING/FALLING. Default 0.00001 (0.001%).
 ''' MomentumAmplify: additional penalty when momentum confirms crowding. Capped at FundingHighPenalty at call site. Default 1.
 ''' MomentumSoften: score restored when momentum signals de-crowding. Default 1.
 ''' </summary>
 Public Class FundingSettings
     <JsonPropertyName("momentum_enabled")>   Public Property MomentumEnabled   As Boolean = True
-    <JsonPropertyName("momentum_window")>    Public Property MomentumWindow    As Integer = 3
-    ' Re-derived for the WS funding feed (v50 retune R2): funding_8h changes on 96.5% of
-    ' WS runs, so the v34 5e-8 threshold had Step 3b moving scores on 36.8% of runs vs
-    ' the REST-era 16% adjunct profile. 2e-7 on the reconstructed WS window-delta
-    ' distribution restores FLAT-modal (~67%) / 3b engagement ~19%.
+    ' [v53] W = 5 min (proposal §3 D2): >= 1 full bar at both execution resolutions (1m/3m),
+    ' >= 2 samples at every cadence the engine has run, and at the front edge of the 2-15 min
+    ' hold horizon. Empirically 5-min anchored deltas run SMALLER than the old ~90s count-window
+    ' deltas (p50 3.0e-8 vs 8.0e-8) — the funding premium oscillates at short horizons and
+    ' partially cancels over 5 min, so the anchor reads sustained drift, not wiggle. Shorter W
+    ' re-imports that oscillation noise; longer W lags the hold decision. Coupled to
+    ' MomentumThreshold (T is fit GIVEN W) — re-fit T if this moves.
+    <JsonPropertyName("momentum_window_minutes")> Public Property MomentumWindowMinutes As Double = 5
+    ' [v53] Re-derived at W=5min on a pooled 9-day / 2-regime fit (proposal §4, n=1,994
+    ' anchored windows): FLAT 68.7% / Step-3b engagement 17.1%, mid-band on both. Numerically
+    ' the same value v50 R2 shipped, but attached to a cadence-independent construction —
+    ' a coincidence of scale, not of meaning (the count window spanned ~90s at its 30s
+    ' derivation cadence; the anchored window spans 5-6 min at EVERY cadence).
     <JsonPropertyName("momentum_threshold")> Public Property MomentumThreshold As Double  = 0.0000002
     <JsonPropertyName("momentum_amplify")>   Public Property MomentumAmplify   As Integer = 1
     <JsonPropertyName("momentum_soften")>    Public Property MomentumSoften    As Integer = 1

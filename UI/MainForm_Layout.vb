@@ -25,9 +25,12 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Private _oiHistory As New List(Of OiSnapshot)()
 
-    ' Funding rate history ring buffer -- for FundingMomentum computation in Step 3b.
-    Private _fundingHistory As New List(Of Double)
-    Private Const FundingHistoryMax As Integer = 10
+    ' [v53] Funding rate ring -- TIMESTAMPED samples for the time-anchored FundingMomentum
+    ' window (Step 3b input). Appended every run and age-evicted by
+    ' IndicatorEngine.AppendFundingSample (30-min horizon, no count cap): the anchor is
+    ' selected by age, so the old FundingHistoryMax=10 count cap is gone — at a 30s cadence
+    ' it would have evicted samples younger than W and starved the anchor.
+    Private _fundingHistory As New List(Of (UtcMs As Long, Rate As Double))
 
     ' OFI ratio history ring buffer -- for OFIMomentum computation in scoring.
     Private _ofiHistory As New List(Of Double)
@@ -290,8 +293,9 @@ Partial Public Class MainForm
     ' -----------------------------------------------------------------------
     Public Sub New()
         InitializeComponent()
-        Me.Text = "Deribit Verdict Engine v0.47 [P4]"
         Me.BackColor = Theme.BG_BASE
+        ' Me.Text is set below, once SettingsLoader.Initialise has run — the caption
+        ' carries the live settings version rather than a hand-maintained literal.
 
         ' Enable form-level key preview so the Ctrl+Shift+S full-form screenshot
         ' hotkey reaches OnFormKeyDown before child controls consume it.
@@ -350,6 +354,15 @@ Partial Public Class MainForm
 
         SettingsLoader.Initialise(Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "settings.json"))
+
+        ' Title-bar version (trader request 2026-07-15): the caption was a hardcoded
+        ' "Deribit Verdict Engine v0.47 [P4]" that had drifted 5 settings versions behind.
+        ' Derive it from the live config instead so it can never drift again. Load-time
+        ' only (the brief permits this over a hot-reload hook). The "Deribit Verdict
+        ' Engine" prefix is load-bearing — tools/screenshot-mainform.ps1 finds the window
+        ' by substring on it.
+        Me.Text = $"Deribit Verdict Engine — settings v{SettingsLoader.Current.Version}"
+
         _metricMode = NormaliseMode(SettingsLoader.Current.PerformanceDisplay.MetricMode)
         InitMarketDataSources()
         InitAutoRunControls()

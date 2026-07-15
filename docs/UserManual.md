@@ -1604,17 +1604,18 @@ Score is post-clamped to `max(0, ...)`.
 - `Soften` — displayed as `+N`, from `cfg.Indicators.Funding.MomentumSoften` (default 1).
 - `Amplify` — displayed as `-N`, from `cfg.Indicators.Funding.MomentumAmplify` (default 1).
 
-**Calculation (`CalcFundingMomentum` in `Indicators_OrderFlow.vb`):**
+**Calculation (`CalcFundingMomentum` in `Indicators_OrderFlow.vb`) — time-anchored since v53:**
 
-- Uses `_fundingHistory` ring buffer (max 10 samples).
-- v14 dedup: only appends `fundingRate` to history when the value has actually changed from the previous sample (Deribit publishes every ~8h, not every 1m).
-- Requires ≥ 2 distinct samples; cold start returns `FLAT`.
-- `window = cfg.Indicators.Funding.MomentumWindow (3)`, `threshold = MomentumThreshold (0.0001)`.
-- `delta = history[last] − history[max(0, count − 1 − window)]`.
+- Uses the `_fundingHistory` ring of **timestamped** samples. A sample is appended on **every** run and evicted once it is older than **30 minutes** — no count cap, and no dedup (the pre-v53 "only append on change" rule went away with the count window it existed to protect).
+- `W = cfg.Indicators.Funding.MomentumWindowMinutes (5)`, `T = MomentumThreshold (0.0000002)`.
+- The **anchor** is the *newest* sample at least `W` minutes old. `delta = current rate − anchor rate`.
+- Cold start, or a gap long enough that eviction emptied the ring (engine restarted, feed outage), leaves nothing old enough to anchor → `FLAT`.
 - Classification:
-  - `delta > +0.0001` → `RISING`
-  - `delta < −0.0001` → `FALLING`
+  - `delta > +0.0000002` → `RISING`
+  - `delta < −0.0000002` → `FALLING`
   - Else → `FLAT`
+
+**Why the window is measured in minutes:** before v53 it was measured in funding *changes* (3 of them). On the WebSocket feed funding changes almost every run, so that window's real span was about three times the run cadence — the same funding path read `RISING` on a 3-minute session and `FLAT` on a 1-minute one. Reading `FundingMomentum` now means *"funding moved more than T over at least 5 minutes"*, and that means the same thing at every cadence. Rows logged before this build are not comparable to rows after it.
 
 **Scoring use (Step 3b — funding momentum modifier):**
 

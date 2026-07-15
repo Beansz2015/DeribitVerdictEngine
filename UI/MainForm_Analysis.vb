@@ -14,9 +14,10 @@
 ' fix [T3-B]: CalcRSIDivergence pivotWing and lookbackBars from cfg.
 ' fix [T3-C]: CalcTTMSqueeze flatThreshold from cfg.
 ' fix [T3-D]: CalcLiquidations dominanceRatio from cfg.
-' funding-momentum: Append fundingRate to _fundingHistory ring buffer (max FundingHistoryMax).
-'   Call CalcFundingMomentum() after FundingBias is set; result stored in r.FundingMomentum.
-'   Cold start (< 2 samples) returns FLAT -- accepted warm-up behaviour.
+' funding-momentum [v53]: AppendFundingSample(_fundingHistory, nowTs, rate) every run
+'   (timestamped ring, 30-min age eviction, no dedup / no count cap), then
+'   CalcFundingMomentum(_fundingHistory, nowTs, cfg) after FundingBias is set;
+'   result stored in r.FundingMomentum. Cold start / post-gap returns FLAT.
 ' session-volume-norms: No call-site changes required. DynamicNorms.Compute() internally
 '   applies per-session HighMultiplier/MidMultiplier via ApplySessionVolume() after dynamic
 '   vol thresholds are set. Controlled by cfg.SessionVolume (EngineSettings / settings.json v12).
@@ -312,23 +313,21 @@ Partial Public Class MainForm
             r.FundingBias = "NEUTRAL"
         End If
 
-        ' funding-momentum: maintain ring buffer then compute momentum signal.
-        ' Max FundingHistoryMax samples retained; cold start (< 2) yields FLAT.
-        ' [S9] Dedup: Deribit publishes funding ~every 8h; appending every 1m run
-        ' fills the ring with identical values and forces FLAT. Only append when
-        ' the rate actually changed from the previous sample.
-        If _fundingHistory.Count = 0 OrElse _fundingHistory(_fundingHistory.Count - 1) <> fundingRate.Value Then
-            _fundingHistory.Add(fundingRate.Value)
-            If _fundingHistory.Count > FundingHistoryMax Then
-                _fundingHistory.RemoveAt(0)
-            End If
-        End If
-        r.FundingMomentum = IndicatorEngine.CalcFundingMomentum(_fundingHistory, cfg)
+        Dim nowTs As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+
+        ' [v53] funding-momentum: time-anchored window. Append EVERY completed run and
+        ' evict at 30 min — the [S9] value-change dedup is retired with the count window
+        ' it existed to protect (it kept identical samples out of a count-indexed ring;
+        ' an age-anchored ring wants them, since "unchanged for W minutes" IS FLAT).
+        IndicatorEngine.AppendFundingSample(_fundingHistory, nowTs, fundingRate.Value)
+        r.FundingMomentum = IndicatorEngine.CalcFundingMomentum(_fundingHistory, nowTs, cfg)
+        ' [D3] With the dedup gone this is the per-RUN step (0 on unchanged runs), not the
+        ' per-change step. Column kept, semantics documented — the audit's funding-path
+        ' reconstruction still works (it segments on resets and sums steps).
         r.FundingDelta    = If(_fundingHistory.Count >= 2,
-                               _fundingHistory(_fundingHistory.Count - 1) - _fundingHistory(_fundingHistory.Count - 2),
+                               _fundingHistory(_fundingHistory.Count - 1).Rate - _fundingHistory(_fundingHistory.Count - 2).Rate,
                                0.0)
 
-        Dim nowTs As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         ' bookSummary.Value is safe -- skip-check above guarantees HasValue
         r.OI_Current = bookSummary.Value.OI
         _oiHistory.Add(New OiSnapshot(nowTs, bookSummary.Value.OI))

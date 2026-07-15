@@ -37,10 +37,12 @@
 '   Default 1.0 preserves existing behaviour exactly.
 '   Call site passes cfg.Indicators.Liquidations.DominanceRatio.
 '
-' funding-momentum: CalcFundingMomentum added.
-'   Derives RISING / FALLING / FLAT from a rolling history of funding rate samples.
-'   Cold start (< 2 samples) returns FLAT.
-'   Window and threshold injectable via cfg.Indicators.Funding.MomentumWindow /
+' funding-momentum: CalcFundingMomentum + AppendFundingSample.
+'   Derives RISING / FALLING / FLAT from a TIME-ANCHORED window over a ring of
+'   timestamped funding rate samples (v53 — was a count-indexed window, which made
+'   the state cadence-dependent; see the block comment on CalcFundingMomentum).
+'   Cold start / post-gap (no sample >= W old) returns FLAT.
+'   Window and threshold injectable via cfg.Indicators.Funding.MomentumWindowMinutes /
 '   MomentumThreshold. Called from RunAnalysisAsync after GetFundingRateAsync().
 '
 ' fix [orderfix F1]: trade lists are CHRONOLOGICAL ASCENDING (oldest first).
@@ -399,27 +401,70 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- FundingMomentum ------------------------------------------------------
-    ' funding-momentum: derives RISING / FALLING / FLAT from a rolling list of
-    ' funding rate samples maintained in MainForm_Layout._fundingHistory.
-    ' Cold start (fewer than 2 samples) returns FLAT -- accepted warm-up behaviour.
-    ' delta = history.Last() - history[Count - 1 - MomentumWindow]
-    ' RISING  if delta >  MomentumThreshold (default 0.0001 = 1 bp)
-    ' FALLING if delta < -MomentumThreshold
-    ' FLAT    otherwise
+    ' [v53] TIME-ANCHORED WINDOW (funding-momentum-time-anchored-window-proposal.md).
+    ' Replaces the count-indexed window, which measured "funding moved more than T
+    ' per 3 *changes*" -- a span of 3 x run cadence, so the same funding path scored
+    ' differently at 30s / 60s / 180s cadence (FLAT 52% on on-close NY vs 0% on
+    ' on-close London, where a single 3-min step already cleared the whole-window
+    ' threshold). The anchored window measures "funding moved more than T per >= W
+    ' minutes" -- identical at every cadence.
+    '
+    ' history: ascending timestamped samples, host-owned, appended every run via
+    '          AppendFundingSample (no dedup -- anchoring is by age).
+    ' anchor : the NEWEST sample with age >= MomentumWindowMinutes (W). Newest, not
+    '          oldest-in-window: the oldest would re-import cadence dependence via
+    '          the ring's total span.
+    ' delta  = current - anchor.Rate; > T RISING, < -T FALLING, else FLAT.
+    ' Cold start / post-gap (no sample >= W old) returns FLAT -- the same warm-up
+    ' posture the count window had.
     Public Shared Function CalcFundingMomentum(
-        history As List(Of Double),
-        cfg     As EngineSettings) As String
+        history  As List(Of (UtcMs As Long, Rate As Double)),
+        nowUtcMs As Long,
+        cfg      As EngineSettings) As String
 
         If history Is Nothing OrElse history.Count < 2 Then Return "FLAT"
 
-        Dim window   As Integer = cfg.Indicators.Funding.MomentumWindow
-        Dim priorIdx As Integer = Math.Max(0, history.Count - 1 - window)
-        Dim delta    As Double  = history(history.Count - 1) - history(priorIdx)
+        Dim windowMs As Long   = CLng(cfg.Indicators.Funding.MomentumWindowMinutes * 60_000.0)
+        Dim current  As Double = history(history.Count - 1).Rate
+
+        ' Walk back from the newest sample; the first one old enough IS the newest >= W.
+        Dim anchorIdx As Integer = -1
+        For i As Integer = history.Count - 1 To 0 Step -1
+            If nowUtcMs - history(i).UtcMs >= windowMs Then
+                anchorIdx = i
+                Exit For
+            End If
+        Next
+        If anchorIdx < 0 Then Return "FLAT"
+
+        Dim delta As Double = current - history(anchorIdx).Rate
 
         If delta >  cfg.Indicators.Funding.MomentumThreshold Then Return "RISING"
         If delta < -cfg.Indicators.Funding.MomentumThreshold Then Return "FALLING"
         Return "FLAT"
     End Function
+
+    ' [v53] Funding sample ring maintenance -- append-every-run + age eviction.
+    ' Host-agnostic and pure over the passed list so the shipped eviction rule is what
+    ' the acceptance fixtures exercise (the ring itself stays host-owned; it moves with
+    ' the rest of the run state at the W4 extraction).
+    ' No dedup: the count window deduped on value change ([S9]) because identical samples
+    ' filled the ring and forced FLAT. Anchoring by age makes repeats harmless -- and
+    ' informative, since "funding hasn't moved in W minutes" IS FLAT.
+    ' maxAgeMs default 30 min = the audit's segment-reset horizon (<= 60 entries at the
+    ' fastest cadence the engine has ever run).
+    Public Const FundingRingMaxAgeMs As Long = 30L * 60L * 1000L
+
+    Public Shared Sub AppendFundingSample(
+        history  As List(Of (UtcMs As Long, Rate As Double)),
+        nowUtcMs As Long,
+        rate     As Double,
+        Optional maxAgeMs As Long = FundingRingMaxAgeMs)
+
+        If history Is Nothing Then Return
+        history.Add((nowUtcMs, rate))
+        history.RemoveAll(Function(s) nowUtcMs - s.UtcMs > maxAgeMs)
+    End Sub
 
     ''' <summary>
     ''' Derives OFI momentum from a rolling history of OFI ratio samples.

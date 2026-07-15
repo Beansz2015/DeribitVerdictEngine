@@ -177,6 +177,18 @@ Module Program
         A28c_ScopingAndDisableInert()
         A28d_Hc22SessionVolumeEnabledFence()
 
+        ' Funding momentum TIME-ANCHORED window (v53 — funding-momentum-time-anchored
+        ' -window-proposal.md §7 acceptance): anchored RISING/FALLING/FLAT, the newest-≥W
+        ' anchor rule (NOT oldest-in-window), cold-start + post-gap FLAT, 30-min eviction
+        ' with no count cap, and the cadence-invariance pin — the same funding path sampled
+        ' at 30s vs 180s yielding the same states at the same instants, which is the whole
+        ' point of the change.
+        A29a_AnchoredClassification()
+        A29b_AnchorIsNewestAtLeastW()
+        A29c_ColdStartAndPostGapFlat()
+        A29d_ThirtyMinuteEviction()
+        A29e_CadenceInvariance()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -2801,6 +2813,212 @@ Module Program
               rSib.IsValid,
               String.Format("enValid={0} enReason='{1}' sibValid={2}",
                             rEn.IsValid, rEn.ErrorReason, rSib.IsValid))
+    End Sub
+
+    ' =======================================================================
+    ' A29 — funding momentum TIME-ANCHORED window (v53).
+    ' Spec: docs/funding-momentum-time-anchored-window-proposal.md §3/§7.
+    ' POCO-default cfg = the shipped v53 values (W = 5 min, T = 2e-7).
+    ' All rings are built at synthetic wall-clock offsets from T0; the shipped
+    ' AppendFundingSample does the appending + eviction, so the fixtures pin the
+    ' real path rather than a harness copy of it.
+    ' =======================================================================
+
+    Private ReadOnly FundT0 As Long = 1_760_000_000_000L      ' arbitrary fixed epoch — no wall-clock dependence
+
+    Private Function FundCfg() As EngineSettings
+        Return New EngineSettings()          ' W=5min, T=2e-7
+    End Function
+
+    Private Function MinsMs(m As Double) As Long
+        Return CLng(m * 60_000.0)
+    End Function
+
+    ''' <summary>Ring built directly (no eviction) from (ageMinutes, rate) pairs, oldest first.</summary>
+    Private Function FundRing(ParamArray samples As (AgeMin As Double, Rate As Double)()) _
+            As List(Of (UtcMs As Long, Rate As Double))
+        Dim ring As New List(Of (UtcMs As Long, Rate As Double))
+        For Each s In samples
+            ring.Add((FundT0 - MinsMs(s.AgeMin), s.Rate))
+        Next
+        Return ring
+    End Function
+
+    ' -- A29a: anchored classification — RISING / FALLING / FLAT ---------------
+    ' Anchor is the 6-min-old sample (age ≥ W=5). Deltas are chosen either side of T=2e-7.
+    Private Sub A29a_AnchoredClassification()
+        Dim cfg = FundCfg()
+
+        ' +5e-7 over the anchor → RISING.
+        Dim up   = FundRing((6.0, 0.0000010), (0.0, 0.0000015))
+        ' −5e-7 → FALLING.
+        Dim down = FundRing((6.0, 0.0000015), (0.0, 0.0000010))
+        ' +1e-7 < T → FLAT (moved, but not enough).
+        Dim flat = FundRing((6.0, 0.0000010), (0.0, 0.0000011))
+
+        Check("A29a anchored classification (+5e-7 RISING / −5e-7 FALLING / +1e-7 below T → FLAT)",
+              IndicatorEngine.CalcFundingMomentum(up,   FundT0, cfg) = "RISING"  AndAlso
+              IndicatorEngine.CalcFundingMomentum(down, FundT0, cfg) = "FALLING" AndAlso
+              IndicatorEngine.CalcFundingMomentum(flat, FundT0, cfg) = "FLAT",
+              String.Format("up={0} down={1} flat={2}",
+                            IndicatorEngine.CalcFundingMomentum(up,   FundT0, cfg),
+                            IndicatorEngine.CalcFundingMomentum(down, FundT0, cfg),
+                            IndicatorEngine.CalcFundingMomentum(flat, FundT0, cfg)))
+
+        ' Threshold is strict (> T, not ≥ T): exactly T → FLAT.
+        Dim exact = FundRing((6.0, 0.0000010), (0.0, 0.0000010 + 0.0000002))
+        Check("A29a threshold is strict (delta exactly T → FLAT)",
+              IndicatorEngine.CalcFundingMomentum(exact, FundT0, cfg) = "FLAT",
+              String.Format("got {0}", IndicatorEngine.CalcFundingMomentum(exact, FundT0, cfg)))
+    End Sub
+
+    ' -- A29b: the anchor is the NEWEST sample ≥ W old, not the oldest in the ring --
+    ' THE tier-selection pin. Ring spans 20 min. Newest-≥5min anchor = the 5-min sample
+    ' (rate 1.0e-6) → delta +1e-7 → FLAT. Oldest-in-ring (20-min, rate 5.0e-7) would give
+    ' delta +6e-7 → RISING. Picking the oldest is what re-imports cadence dependence
+    ' (the ring span grows with cadence), so this must read FLAT.
+    Private Sub A29b_AnchorIsNewestAtLeastW()
+        Dim cfg = FundCfg()
+        Dim ring = FundRing((20.0, 0.0000005),      ' oldest — the wrong anchor
+                            (12.0, 0.0000007),
+                            (5.0,  0.0000010),      ' newest ≥ W — the right anchor
+                            (2.0,  0.0000010),      ' younger than W — ineligible
+                            (0.0,  0.0000011))      ' current
+        Dim got = IndicatorEngine.CalcFundingMomentum(ring, FundT0, cfg)
+        Check("A29b anchor = newest ≥W (5-min sample → FLAT; oldest-in-ring would read RISING)",
+              got = "FLAT",
+              String.Format("got {0} — RISING means the anchor walked to the oldest sample", got))
+
+        ' Mirror: make the newest-≥W anchor the one that DOES clear T, and prove the
+        ' younger-than-W samples are never selected (they'd read FLAT).
+        Dim ring2 = FundRing((20.0, 0.0000010),
+                             (5.5,  0.0000010),     ' newest ≥ W
+                             (1.0,  0.0000016),     ' younger than W — ineligible
+                             (0.0,  0.0000016))
+        Check("A29b younger-than-W samples ineligible (anchor 5.5-min → RISING, not FLAT)",
+              IndicatorEngine.CalcFundingMomentum(ring2, FundT0, cfg) = "RISING",
+              String.Format("got {0}", IndicatorEngine.CalcFundingMomentum(ring2, FundT0, cfg)))
+    End Sub
+
+    ' -- A29c: cold start + post-gap → FLAT -----------------------------------
+    Private Sub A29c_ColdStartAndPostGapFlat()
+        Dim cfg = FundCfg()
+
+        ' Cold start: ring exists but nothing is old enough to anchor, despite a big move.
+        Dim cold = FundRing((2.0, 0.0000010), (1.0, 0.0000030), (0.0, 0.0000050))
+        Check("A29c cold start (no sample ≥W old → FLAT even on a +4e-6 move)",
+              IndicatorEngine.CalcFundingMomentum(cold, FundT0, cfg) = "FLAT",
+              String.Format("got {0}", IndicatorEngine.CalcFundingMomentum(cold, FundT0, cfg)))
+
+        ' Degenerate rings.
+        Check("A29c empty / single-sample / Nothing rings → FLAT",
+              IndicatorEngine.CalcFundingMomentum(FundRing(), FundT0, cfg) = "FLAT" AndAlso
+              IndicatorEngine.CalcFundingMomentum(FundRing((9.0, 0.0000010)), FundT0, cfg) = "FLAT" AndAlso
+              IndicatorEngine.CalcFundingMomentum(Nothing, FundT0, cfg) = "FLAT",
+              "one of the degenerate rings did not return FLAT")
+
+        ' Post-gap: the engine was down ~40 min. The first run back appends through the
+        ' shipped path — eviction clears the whole pre-gap ring, so there is no anchor → FLAT.
+        Dim gapped = FundRing((41.0, 0.0000010), (40.0, 0.0000010))
+        IndicatorEngine.AppendFundingSample(gapped, FundT0, 0.0000090)
+        Check("A29c post-gap (40-min outage → pre-gap ring evicted, no anchor → FLAT, count=1)",
+              gapped.Count = 1 AndAlso
+              IndicatorEngine.CalcFundingMomentum(gapped, FundT0, cfg) = "FLAT",
+              String.Format("count={0} state={1}", gapped.Count,
+                            IndicatorEngine.CalcFundingMomentum(gapped, FundT0, cfg)))
+    End Sub
+
+    ' -- A29d: 30-min eviction (and no count cap) ------------------------------
+    Private Sub A29d_ThirtyMinuteEviction()
+        ' Boundary: > maxAge evicts, exactly maxAge survives.
+        Dim ring = FundRing((31.0, 0.0000010),      ' older than 30 min → evicted
+                            (30.0, 0.0000011),      ' exactly 30 min → KEPT (strict >)
+                            (10.0, 0.0000012))
+        IndicatorEngine.AppendFundingSample(ring, FundT0, 0.0000013)
+        Dim ages = ring.Select(Function(s) (FundT0 - s.UtcMs) / 60_000.0).ToList()
+        Check("A29d eviction at 30 min (31-min dropped, exactly-30 kept, count 4→3)",
+              ring.Count = 3 AndAlso
+              Not ages.Any(Function(a) a > 30.0) AndAlso
+              ages.Contains(30.0),
+              String.Format("count={0} ages=[{1}]", ring.Count, String.Join(", ", ages)))
+
+        ' No count cap: 120 appends at a 15s cadence (30 min of history) all survive on age
+        ' alone. The retired FundingHistoryMax=10 would have left a 2.5-min span here — too
+        ' short to ever anchor a W=5min window, i.e. permanently FLAT.
+        Dim dense As New List(Of (UtcMs As Long, Rate As Double))
+        For i As Integer = 0 To 119
+            IndicatorEngine.AppendFundingSample(dense, FundT0 - MinsMs(29.75) + CLng(i * 15_000L), 0.0000010)
+        Next
+        Dim spanMin As Double = (dense(dense.Count - 1).UtcMs - dense(0).UtcMs) / 60_000.0
+        Check("A29d no count cap (120 samples @15s all retained by age; span 29.75 min > W)",
+              dense.Count = 120 AndAlso Math.Abs(spanMin - 29.75) < 0.01,
+              String.Format("count={0} spanMin={1}", dense.Count, spanMin))
+    End Sub
+
+    ' -- A29e: CADENCE INVARIANCE — the fixture that pins the whole point -------
+    ' One funding path, defined as a continuous function of wall-clock time, sampled at
+    ' 30s and at 180s. At every instant BOTH cadences have a sample, the anchored state
+    ' must agree. The retired count window could not do this: its span was 3 × cadence,
+    ' so the 180s ring looked 6× further back than the 30s ring at the same instant.
+    Private Function FundingPathAt(tMs As Long) As Double
+        ' Piecewise: flat at 1.0e-6 for 15 min, then a steady crowding build of +2e-7/min.
+        ' Rates chosen so every probe's delta sits far from T=2e-7 — the invariance claim is
+        ' about STATE agreement, and a probe parked on the threshold would decide by float noise.
+        Dim minsIn As Double = (tMs - FundT0) / 60_000.0
+        If minsIn <= 15.0 Then Return 0.0000010
+        Return 0.0000010 + (minsIn - 15.0) * 0.0000002
+    End Function
+
+    ''' <summary>Replays the path through the shipped append+classify path at a given cadence.</summary>
+    Private Function ReplayCadence(cadenceSec As Integer, probesMs As List(Of Long)) As List(Of String)
+        Dim cfg   = FundCfg()
+        Dim ring  As New List(Of (UtcMs As Long, Rate As Double))
+        Dim state As New Dictionary(Of Long, String)
+        Dim stepMs As Long = cadenceSec * 1000L
+        Dim endMs  As Long = probesMs.Max()
+
+        Dim t As Long = FundT0
+        While t <= endMs
+            IndicatorEngine.AppendFundingSample(ring, t, FundingPathAt(t))
+            If probesMs.Contains(t) Then
+                state(t) = IndicatorEngine.CalcFundingMomentum(ring, t, cfg)
+            End If
+            t += stepMs
+        End While
+        Return probesMs.Select(Function(p) If(state.ContainsKey(p), state(p), "(no sample)")).ToList()
+    End Function
+
+    Private Sub A29e_CadenceInvariance()
+        ' Probe instants, all on the 180s grid so BOTH cadences land a sample there:
+        '  6 min → inside the flat stretch → FLAT
+        ' 12 min → still flat (build starts at 15) → FLAT
+        ' 21 min → mid-build → RISING
+        ' 30 min → still building → RISING
+        ' Note 21/30 are the interesting ones: the two cadences pick DIFFERENT anchors
+        ' (16 vs 15 min, 25 vs 24 min) and so compute DIFFERENT deltas (1.0e-6 vs 1.2e-6) —
+        ' and still agree on the state. That is the invariance claim: same states, not same
+        ' deltas. The count window agreed on neither.
+        Dim probes As New List(Of Long) From {
+            FundT0 + MinsMs(6.0), FundT0 + MinsMs(12.0), FundT0 + MinsMs(21.0), FundT0 + MinsMs(30.0)}
+
+        Dim fast = ReplayCadence(30, probes)      ' 30s cadence
+        Dim slow = ReplayCadence(180, probes)     ' 180s on-close cadence (res-3)
+
+        Dim agree As Boolean = fast.SequenceEqual(slow)
+        Check("A29e CADENCE INVARIANCE (30s vs 180s over one funding path → identical states at identical instants)",
+              agree AndAlso Not fast.Contains("(no sample)"),
+              String.Format("30s=[{0}] 180s=[{1}]", String.Join(",", fast), String.Join(",", slow)))
+
+        ' Pin the states themselves, so "invariant" can't pass by being uniformly wrong.
+        Check("A29e states are the expected path reading (FLAT, FLAT, RISING, RISING)",
+              fast.SequenceEqual(New String() {"FLAT", "FLAT", "RISING", "RISING"}),
+              String.Format("got [{0}]", String.Join(",", fast)))
+
+        ' The counter-example that motivated the spec: on this SAME path, a 3-change count
+        ' window spans 90s at the 30s cadence but 9 min at the 180s cadence — at 21 min the
+        ' 30s ring would read a +3e-7 delta and the 180s ring +1.8e-6, off the same path at
+        ' the same instant. Documented rather than asserted: the count-window code is gone,
+        ' so there is nothing left to run it against.
     End Sub
 
 End Module

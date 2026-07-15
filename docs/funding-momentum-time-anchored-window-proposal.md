@@ -1,6 +1,7 @@
 # Funding Momentum — Time-Anchored Window (mini-spec)
 
-**Status:** **APPROVED 2026-07-07 — trader ticked D1–D5, all as recommended** (proposed 2026-07-06, Fable seat; §4 amended same day with the pooled two-book fit → T=2e-7 final). Implementation = Opus, own ⚠ boundary after the #5 correlation-gate verdict (D4).
+**Status:** ✅ **IMPLEMENTED — settings v53, 2026-07-15** (spec-back: `funding-window-spec-back.md`; brief: `funding-window-implementer-brief.md`). Shipped as specced, W=5 / T=2e-7, with **one sequencing deviation: bundled at the v52 boundary rather than taking its own**, on trader sign-off 2026-07-15 — see §5 and the spec-back §2. Post-ship watch (§7, per-resolution) is LIVE and tracked in `DeribitIndicatorProject.md` §12.
+Previously: **APPROVED 2026-07-07 — trader ticked D1–D5, all as recommended** (proposed 2026-07-06, Fable seat; §4 amended same day with the pooled two-book fit → T=2e-7 final). Implementation = Opus, own ⚠ boundary after the #5 correlation-gate verdict (D4).
 **Trigger:** the retune §5 post-ship watch (first pass, 2026-07-06) — see §1. This is the "time-anchored window" code fix the signal-health audit deferred (`signal-health-audit-2026-07-03.md` §7; `signal-health-retune-proposal.md` §7). The deferral trigger has fired: the cadence-dependence is no longer a corner case, it is the operating mode.
 **Class:** ⚠ scoring-behaviour change (Step 3b input state becomes cadence-independent). Boundary rules apply (§5).
 
@@ -64,6 +65,8 @@ The 5-min funding-move distribution is **regime-dependent week to week** (quiet 
 - The original "re-fit on ≥5 weekday sessions" gate is **substantially discharged** by the pooled fit; what remains is the standard post-ship §5-style watch re-run (per-resolution, §7) — no further pre-ship data gate.
 
 ## 5. Sequencing (boundary discipline)
+
+> **RESOLVED at ship (2026-07-15) — D4 superseded.** It bundled at the **v52** boundary, not its own. Between D4 being ticked and the build, the #5 gate cleared (07-13) and the v52 wire-in shipped and went live on the evening of 07-14 — leaving a negligible number of rows between the two builds, so a separate v53 boundary would have sliced a dataset nobody could use. Trader signed off on bundling 2026-07-15 (rule-1 bundling precedent). **v52 + v53 share ONE dataset boundary**: rows after this build carry both the burst-modified TFI vote and the anchored funding state. D4's reasoning still holds for the world it was written in — it just isn't that world any more.
 
 ⚠ scoring-behaviour change → must not land mid-window. The #5 collection window is OPEN; B4b (placed-geometry) lands as its own pre-agreed boundary (its D7). Options, trader's call at D4: bundle at the B4b boundary (R1/R2-at-#5 precedent — one boundary, one reset), or own boundary after the #5 §5.1 gate clears (~Jul 8–9). **Until it lands, read Step 3b on 3-min sessions as always-engaged** — anyone consuming the current book for calibration should treat `FundingMomentum` on res-3 rows as uninformative (the #5 correlation gate is unaffected — burst columns don't touch funding; verdict contamination is bounded by the ±amplify/soften modifier on crowded rows only).
 

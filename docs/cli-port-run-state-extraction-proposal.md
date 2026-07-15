@@ -18,7 +18,7 @@
 
 | Field | Semantics (pinned as-is) | Run-path use |
 |---|---|---|
-| `_fundingHistory` (List(Of Double), max 10) | [S9] append **on change only**, trim head | CalcFundingMomentum, `r.FundingDelta` |
+| `_fundingHistory` (List(Of (UtcMs, Rate))) — **restated at v53** (was `List(Of Double)`, max 10) | append **every run** (no dedup), evict age > 30 min, **no count cap** — all of it inside `IndicatorEngine.AppendFundingSample`, which is already host-agnostic | CalcFundingMomentum (time-anchored — takes `nowUtcMs`), `r.FundingDelta` |
 | `_ofiHistory` (List(Of Double), max 10) | append every run, trim head | CalcOFIMomentum |
 | `_oiHistory` (List(Of OiSnapshot)) | append every run; evict > 70 min; 15 m/61 m window reads | OIChange15m/60m |
 | `_mtfCandles15m` + `_mtfLastFetchTime` | TTL cache via `MtfRefreshPolicy`; **kept stale on fetch failure** | MTF gate |
@@ -38,8 +38,8 @@ UI touchpoints inside the run: `rbLong/rbShort` (posState), ARM-AUTOTRADE checkb
 
 One host-agnostic class owning rows 1–8 of the §2 table. The mutation blocks move **verbatim** into methods so host and runner share one implementation:
 
-- `AppendFunding(rate)` ([S9] dedup + trim, exactly the current block), `AppendOfi(ratio)`, `AppendOi(ts, oi)` + eviction + the 15 m/61 m window reads, `MtfCandles`/`MtfLastFetch` (policy stays `MtfRefreshPolicy`), `PrevRegime`, `SkipCount`/`LastSkipReason`/`WsDegradedThisRun`/`LedgerWarn`.
-- `MainForm` replaces the eight fields with one `Friend _runCtx As New EngineRunContext` and delegates. `FundingHistoryMax`/`OFIHistoryMax` constants move with the rings.
+- `AppendFunding(nowMs, rate)` — **restated at v53**: a thin delegation to `IndicatorEngine.AppendFundingSample`, which already holds the append+evict rule host-agnostically (so this row is now the easiest of the eight, not a verbatim block move). `AppendOfi(ratio)`, `AppendOi(ts, oi)` + eviction + the 15 m/61 m window reads, `MtfCandles`/`MtfLastFetch` (policy stays `MtfRefreshPolicy`), `PrevRegime`, `SkipCount`/`LastSkipReason`/`WsDegradedThisRun`/`LedgerWarn`.
+- `MainForm` replaces the eight fields with one `Friend _runCtx As New EngineRunContext` and delegates. The `OFIHistoryMax` constant moves with its ring; the funding ring has no count cap since v53 (its 30-min horizon lives in `IndicatorEngine.FundingRingMaxAgeMs`).
 - NOT moved: `_metricMode`, `_lastSuccessful*`, overlays, all card/timer fields (display state); the transport objects stay MainForm-owned this stage (the runner constructs its own in Stage 4 — the classes are already host-agnostic).
 
 ### Stage 2 — `Core/PlaintextSnapshotRenderer.vb` (the text renderer)
