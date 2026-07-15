@@ -119,20 +119,41 @@ These are the expensive lessons. All are now also in code comments at their site
 
 ---
 
-## 6. Open / next
+## 6. SectionGroup unification — DONE (`fec366c`)
 
-- **Unify INDICATOR DETAILS' subsections to `SectionGroup`** (trader-approved, in progress).
-  Today there are **two** sub-box mechanisms:
-  - `SectionGroup` (`UI/Controls/SectionGroup.vb`) — owner-drawn **rounded** rect (4 px radius),
-    `AccentColor` pen, `Solid`|`Dashed`. Used by SETTINGS & TOOLS (LOG / AUTO-RUN / TOOLS).
-  - `BuildGroupInline` (in `MainForm_Render_Cards.vb`) — a `FlowLayoutPanel` with
-    `BorderStyle = FixedSingle`, i.e. a square 1 px system border. Used by INDICATOR DETAILS.
-  `BuildGroupInline` exists **only because `SectionGroup` has no coloured-title API** — those
-  groups tint their titles to the regime (REGIME · TRENDING_UP green, MICROCVD · BEAR_ACCEL red,
-  OPEN INTEREST · NEW LONGS, …). So unification requires giving `SectionGroup` a title-colour
-  property first, then porting `BuildGroupInline`'s callers. Note `SectionGroup`'s built-in
-  `Padding(8, 22, 8, 8)` and its title-inset geometry differ from the inline version's
-  `Padding(8, 6, 8, 6)` — the per-row `MatchRowBoxHeights` equalisation must keep working after
-  the port.
+There were **two** sub-box mechanisms; there is now one.
+
+- `SectionGroup` (`UI/Controls/SectionGroup.vb`) — owner-drawn **rounded** rect (4 px radius),
+  `AccentColor` pen, `Solid`|`Dashed`. Used by SETTINGS & TOOLS (LOG / AUTO-RUN / TOOLS).
+- `BuildGroupInline` (`MainForm_Render_Cards.vb`) — *was* a `FlowLayoutPanel` with
+  `BorderStyle = FixedSingle` (square 1 px system border). Used by INDICATOR DETAILS.
+
+`BuildGroupInline` existed **only because `SectionGroup` hardcoded its title colour** — those 12
+groups tint their titles to the regime tag (REGIME · TRENDING_UP green, MICROCVD · BEAR_DECEL red,
+…). Two new `SectionGroup` properties removed the reason:
+
+| Property | Default | Why |
+|---|---|---|
+| `TitleColor` | `FG_SECONDARY` | The whole reason for the second mechanism. |
+| `TitleUpper` | `True` | `OnPaint` force-upper-cased the title — right for LOG / AUTO-RUN / TOOLS (already caps) but it would have silently rewritten mixed-case titles: **"REGIME (5m)" → "REGIME (5M)"**. INDICATOR DETAILS passes `False`. |
+
+`BuildGroupInline` now returns `(host As SectionGroup, body As FlowLayoutPanel)` — the **tuple
+shape is unchanged, so all 12 `BuildGroup*` callers were untouched**. Two porting notes:
+
+- The **body docks Top, not Fill.** A `Dock.Fill` child cannot drive a Panel's `AutoSize` (circular
+  measure); `Dock.Top` lets the host measure it. The host keeps `Dock.Top` + AutoSize so the box
+  still stretches to the column width (C3a) and grows from content (C3b).
+- **`MatchRowBoxHeights` now equalises the HOSTS, not an inner body** — SectionGroup paints its
+  border across its own whole bounds, so the host *is* the outline. Still `MinimumSize` (AutoSize
+  honours it and can still grow), still per-row only.
+- Body `Padding` dropped to 0: SectionGroup already brings `Padding(8, 22, 8, 8)`. That 22 px title
+  inset is taller than the old ~16 px title label, so the boxes are slightly taller — the
+  INDICATOR DETAILS row (760, absolute) still holds all six rows, verified live (TREND STRUCTURE /
+  LIQUIDATIONS render fully).
+
+## 7. Open / next
+
 - LOG/AUTO-RUN box labels render centre-ish because they are `Anchor = None` (trap 2). Untouched —
   pre-existing, and not raised by the trader.
+- INDICATOR DETAILS' titles now paint at SectionGroup's 11 pt (was 9.5 pt) — deliberate, that IS
+  the unified look, but it is the one visual delta beyond the border shape.

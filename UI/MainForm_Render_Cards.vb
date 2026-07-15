@@ -2195,72 +2195,58 @@ Partial Public Class MainForm
         Next
     End Sub
 
-    ''' <summary>Equalise the two bordered group boxes in one INDICATOR DETAILS grid row so
-    ''' their outlines match (the taller is the reference). MinimumSize is used rather than
-    ''' Height because the bodies are AutoSize — AutoSize honours MinimumSize and still grows
-    ''' past it if content needs more.</summary>
+    ''' <summary>Equalise the two group boxes in one INDICATOR DETAILS grid row so their
+    ''' outlines match (the taller is the reference). [2026-07-15] Since the port to
+    ''' SectionGroup the box IS the host (SectionGroup paints its own border across its whole
+    ''' bounds), so the hosts are equalised rather than an inner body. MinimumSize is used
+    ''' rather than Height because the hosts are AutoSize — AutoSize honours MinimumSize and
+    ''' still grows past it if content needs more.</summary>
     Private Shared Sub MatchRowBoxHeights(grid As TableLayoutPanel, row As Integer)
-        Dim leftHost  = TryCast(grid.GetControlFromPosition(0, row), TableLayoutPanel)
-        Dim rightHost = TryCast(grid.GetControlFromPosition(1, row), TableLayoutPanel)
+        Dim leftHost  = TryCast(grid.GetControlFromPosition(0, row), SectionGroup)
+        Dim rightHost = TryCast(grid.GetControlFromPosition(1, row), SectionGroup)
         If leftHost Is Nothing OrElse rightHost Is Nothing Then Return
-        ' BuildGroupInline lays the host out as title @ (0,0) and the bordered body @ (0,1).
-        Dim lb = TryCast(leftHost.GetControlFromPosition(0, 1), FlowLayoutPanel)
-        Dim rb = TryCast(rightHost.GetControlFromPosition(0, 1), FlowLayoutPanel)
-        If lb Is Nothing OrElse rb Is Nothing Then Return
-        Dim h As Integer = Math.Max(lb.PreferredSize.Height, rb.PreferredSize.Height)
+        Dim h As Integer = Math.Max(leftHost.PreferredSize.Height, rightHost.PreferredSize.Height)
         If h <= 0 Then Return
-        lb.MinimumSize = New Size(0, h)
-        rb.MinimumSize = New Size(0, h)
+        leftHost.MinimumSize = New Size(0, h)
+        rightHost.MinimumSize = New Size(0, h)
     End Sub
 
     ''' <summary>
-    ''' Inline replacement for SectionGroup — coloured title label above a
-    ''' 1px bordered Panel host that hosts the group's KV rows. SectionGroup
-    ''' doesn't expose a coloured-title API; this composition lets the
-    ''' regime / MTF / OI / MicroCVD / Liq groups tint their title text to
-    ''' match the regime tag.
-    ''' Host is a TableLayoutPanel docked Top with AutoSize so the body's
-    ''' bordered box stretches to the parent column's full width (C3a equal
-    ''' widths) and the host's height grows from content (C3b: row height
-    ''' becomes max(left, right)).
+    ''' One INDICATOR DETAILS sub-group. [2026-07-15] Ported onto the shared SectionGroup
+    ''' control so these boxes match the SETTINGS &amp; TOOLS ones (rounded 4px accent border
+    ''' instead of the old square FixedSingle). SectionGroup previously hardcoded its title
+    ''' colour, which was the ONLY reason this built its own box — it now takes TitleColor,
+    ''' so the regime / MTF / OI / MicroCVD / Liq groups still tint their titles.
+    ''' TitleUpper:=False preserves mixed-case titles ("REGIME (5m)" must not become "(5M)").
+    ''' Host docks Top with AutoSize so the box stretches to the parent column's full width
+    ''' (C3a equal widths) and grows from content (C3b: row height = max(left, right)); the
+    ''' body docks Top (NOT Fill) so the host's AutoSize can measure it.
     ''' </summary>
     Private Shared Function BuildGroupInline(title As String,
-                                             titleColour As Color) As (host As TableLayoutPanel, body As FlowLayoutPanel)
-        Dim host As New TableLayoutPanel() With {
+                                             titleColour As Color) As (host As SectionGroup, body As FlowLayoutPanel)
+        Dim host As New SectionGroup() With {
+            .Title = title,
+            .TitleColor = titleColour,
+            .TitleUpper = False,
+            .AccentColor = Theme.BORDER_CARD,
+            .BorderStyle2 = SectionGroup.GroupBorderStyle.Solid,
             .Dock = DockStyle.Top,
             .AutoSize = True,
             .AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            .ColumnCount = 1, .RowCount = 2,
-            .BackColor = Color.Transparent,
-            .Margin = New Padding(0, 0, 0, 6),
-            .Padding = New Padding(0)
+            .Margin = New Padding(0, 0, 0, 6)
         }
-        host.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        host.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-        host.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-
-        Dim titleLbl = New Label() With {
-            .AutoSize = True,
-            .Text = title,
-            .Font = Theme.FontMono(9.5F, FontStyle.Bold),
-            .ForeColor = titleColour,
-            .BackColor = Color.Transparent,
-            .Margin = New Padding(2, 0, 0, 2)
-        }
-        host.Controls.Add(titleLbl, 0, 0)
 
         Dim body As New FlowLayoutPanel() With {
-            .Dock = DockStyle.Fill,
+            .Dock = DockStyle.Top,
             .AutoSize = True,
             .AutoSizeMode = AutoSizeMode.GrowAndShrink,
             .FlowDirection = FlowDirection.TopDown,
             .WrapContents = False,
             .BackColor = Color.Transparent,
-            .BorderStyle = BorderStyle.FixedSingle,
             .Margin = New Padding(0),
-            .Padding = New Padding(8, 6, 8, 6)
+            .Padding = New Padding(0)
         }
-        host.Controls.Add(body, 0, 1)
+        host.Controls.Add(body)
         Return (host, body)
     End Function
 

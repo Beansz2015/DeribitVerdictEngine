@@ -20,6 +20,15 @@ Public Class SectionGroup
     Private _title As String = "SECTION"
     Private _borderStyle As GroupBorderStyle = GroupBorderStyle.Solid
     Private _accentColor As Color = Theme.BORDER_CARD
+    ' [2026-07-15] Added so INDICATOR DETAILS can use SectionGroup instead of its own
+    ' BuildGroupInline box: those groups tint their titles to the regime tag
+    ' (REGIME · TRENDING_UP green, MICROCVD · BEAR_ACCEL red, …), and the lack of a
+    ' colour API was the ONLY reason a second sub-box mechanism existed.
+    Private _titleColor As Color = Theme.FG_SECONDARY
+    ' Force-upper is right for the LOG / AUTO-RUN / TOOLS titles (already caps) but would
+    ' silently rewrite INDICATOR DETAILS' mixed-case ones ("REGIME (5m)" → "(5M)"), so it
+    ' is opt-out rather than unconditional.
+    Private _titleUpper As Boolean = True
 
     Public Sub New()
         SetStyle(ControlStyles.OptimizedDoubleBuffer Or
@@ -53,6 +62,33 @@ Public Class SectionGroup
         End Set
     End Property
 
+    ''' <summary>Colour of the title text. Defaults to FG_SECONDARY (the LOG / AUTO-RUN /
+    ''' TOOLS look); INDICATOR DETAILS tints it per regime tag.</summary>
+    <Category("Theme")>
+    Public Property TitleColor As Color
+        Get
+            Return _titleColor
+        End Get
+        Set(c As Color)
+            _titleColor = c
+            Invalidate()
+        End Set
+    End Property
+
+    ''' <summary>Upper-case the title when painting. True (legacy behaviour) for titles that are
+    ''' already caps; set False to preserve mixed case such as "REGIME (5m)".</summary>
+    <Category("Theme")>
+    <DefaultValue(True)>
+    Public Property TitleUpper As Boolean
+        Get
+            Return _titleUpper
+        End Get
+        Set(v As Boolean)
+            _titleUpper = v
+            Invalidate()
+        End Set
+    End Property
+
     <Category("Theme")>
     Public Property AccentColor As Color
         Get
@@ -76,8 +112,9 @@ Public Class SectionGroup
         ' rest of the layout.
         Dim titleFont = Theme.FontMono(11.0F, FontStyle.Bold)
         Try
-            Using brush As New SolidBrush(Theme.FG_SECONDARY)
-                g.DrawString(_title.ToUpperInvariant(), titleFont, brush, 2.0F, 2.0F)
+            Using brush As New SolidBrush(_titleColor)
+                g.DrawString(If(_titleUpper, _title.ToUpperInvariant(), _title),
+                             titleFont, brush, 2.0F, 2.0F)
             End Using
         Finally
             titleFont.Dispose()
