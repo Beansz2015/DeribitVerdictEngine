@@ -218,6 +218,11 @@ Partial Public Class MainForm
     ' (rendered only when KellyContracts >= 1), so it is sized ~170 + 24 padding.
     Friend Const OICVD_CARD_H As Integer = 132
     Friend Const KELLY_CARD_H As Integer = 196
+
+    ' [2026-07-15] X of the Output-Dump settings cog inside the TOOLS box — sits just right
+    ' of the "Output Dump" LinkRow's text (the row itself is a fixed 320 px hit area, wider
+    ' than its label, so this is a measured text-edge offset, not the row's edge).
+    Friend Const OUTPUT_DUMP_COG_X As Integer = 140
     Friend _lblLastPrice      As Label
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
@@ -740,11 +745,12 @@ Partial Public Class MainForm
         ' P4e kickoff §4 "bump the row height by 40 px" guidance.
         _cardSettingsTools = NewCard()
         ' P4 #1: +26px over the P4e 340 for the full-width EXIT GUARD strip's own row, so the
-        ' TOOLS (percent) row stays whole. [2026-07-15 space pass] 366 → 344: the trim comes
-        ' from the LOG/AUTO-RUN row (110 → 88, dead space inside its boxes), NOT from the
-        ' TOOLS row — TOOLS is Percent and needs ~120 px for its 3 LinkRows + cog, so it must
-        ' keep the same slice: 344 − 24 card padding − 30 outer top pad − (88+26+56) = 120.
-        AddRow(_cardSettingsTools, 344)
+        ' TOOLS (percent) row stays whole. [2026-07-15 space pass] 366 → 344 → 278: first the
+        ' LOG/AUTO-RUN row lost its dead space (110 → 88), then the 56 px full-width CTA row
+        ' went away entirely (the button moved inside TOOLS) and the outer top pad dropped
+        ' 30 → 20. TOOLS is Percent, so it must still be left ~120 px for its 3 LinkRows +
+        ' the CTA: 278 − 24 card padding − 20 outer top pad − (88 + 26) = 120.
+        AddRow(_cardSettingsTools, 278)
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
@@ -944,12 +950,16 @@ Partial Public Class MainForm
         AddPlaceholderHeader(_cardSettingsTools, "SETTINGS & TOOLS")
         _cardSettingsTools.TabStop = False
 
-        ' Outer 3-row TLP — sits below the placeholder header.
+        ' Outer TLP — sits below the placeholder header.
+        ' [2026-07-15] Top padding 30 → 20: it only exists to clear the absolutely-placed
+        ' "SETTINGS & TOOLS" placeholder header (Location 12,12, ~16 px tall → ends ~28 in
+        ' card coords; outer starts at the card's 12 px padding, so 20 puts content at 32 —
+        ' still 4 px clear of the header). Pulls LOG up toward the section top.
         Dim outer = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 4,
+            .ColumnCount = 1, .RowCount = 3,
             .BackColor = Color.Transparent,
-            .Padding = New Padding(0, 30, 0, 0),
+            .Padding = New Padding(0, 20, 0, 0),
             .Margin = New Padding(0),
             .TabStop = False
         }
@@ -960,10 +970,12 @@ Partial Public Class MainForm
         ' TOOLS row below is Percent — it absorbs whatever is left, so this row and the card
         ' height must be trimmed TOGETHER or TOOLS starves and clips its 3rd LinkRow
         ' (Output Dump). That is exactly what a card-height-only trim did.
+        ' [2026-07-15] The 56 px full-width CTA row is GONE — the ANALYSIS REPORT button now
+        ' lives inside the TOOLS box (half width, right side), so TOOLS moves straight up
+        ' under LOG/AUTO-RUN and the card loses the whole row.
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 88))    ' LOG/AUTO-RUN
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 26))    ' P4#1 EXIT GUARD strip (full-width)
-        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))    ' CTA
-        outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS
+        outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS (now holds the CTA)
 
         ' ---------------- Row 1: LOG / AUTO-RUN (2 cols) ----------------
         Dim row1 = New TableLayoutPanel() With {
@@ -1067,18 +1079,18 @@ Partial Public Class MainForm
         }
         outer.Controls.Add(lblExitGuard, 0, 1)
 
-        ' ---------------- Row 3: ANALYSIS REPORT CTA ----------------
+        ' ---------------- ANALYSIS REPORT CTA (now inside the TOOLS box) ----------------
         ' P3 AnalysisReportButton — Solid amber FlatButton with 📊 icon, →
         ' arrow, and a persistent glow halo. Click shim forwards into the
         ' existing async LinkLabel handler so we don't duplicate its body.
+        ' [2026-07-15] Was a full-width row of its own; now half width, parented into the
+        ' TOOLS SectionGroup and laid out on its right side (see the SizeChanged below) —
+        ' the TOOLS box had ~700 px of dead space to the right of its LinkRows.
         Dim btnReport = New AnalysisReportButton() With {
             .Text = "ANALYSIS REPORT",
-            .Dock = DockStyle.Fill,
-            .Margin = New Padding(0, 0, 0, 8),
-            .Height = 44
+            .TabStop = False
         }
         AddHandler btnReport.Click, Sub(s, ev) lnkAnalysisReport_LinkClicked(s, Nothing)
-        outer.Controls.Add(btnReport, 0, 2)
 
         ' Hide the original Analysis Report LinkLabel — the FlatButton owns
         ' the visual surface now. The LinkLabel stays alive (Handles clause
@@ -1114,29 +1126,45 @@ Partial Public Class MainForm
         AddHandler rowTweak.LinkClicked, Sub(s, ev) lnkTweakSettings_LinkClicked(s, Nothing)
         grpTools.Controls.Add(rowTweak)
 
+        ' [2026-07-15] Narrower than its siblings (320) so the settings cog can sit directly
+        ' right of the label instead of on top of a hit area that ran far past the text.
         Dim rowDump = New LinkRow() With {
             .LinkText = "Output Dump",
             .Location = New Point(10, 78),
-            .Size = New Size(320, 22),
+            .Size = New Size(OUTPUT_DUMP_COG_X - 14, 22),
             .TabStop = False
         }
         AddHandler rowDump.LinkClicked, Sub(s, ev) lnkOutputDump_LinkClicked(s, Nothing)
         grpTools.Controls.Add(rowDump)
 
         ' Cog (settings) — reuse the existing programmatic LinkLabel so its
-        ' Handles … LinkClicked partial-class binding stays intact. Placed
-        ' right-anchored inside the TOOLS box, level with the Output Dump row.
+        ' Handles … LinkClicked partial-class binding stays intact.
+        ' [2026-07-15] Moved off the box's right edge to sit immediately right of the
+        ' "Output Dump" row's text, so it reads as that row's affordance rather than a
+        ' free-floating icon. It overlays the (fixed-width) LinkRow's hit area and is added
+        ' after it, so the cog wins its own clicks and the rest of the row still links.
         Me.Controls.Remove(lnkOutputDumpSettings)
-        lnkOutputDumpSettings.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+        ' Top|Left, NOT None: an unanchored child gets re-positioned proportionally when the
+        ' parent resizes (it drifts toward the middle — the same reason the LOG box's labels
+        ' sit centre-ish). Top|Left pins it to the fixed offset below.
+        lnkOutputDumpSettings.Anchor = AnchorStyles.Top Or AnchorStyles.Left
         lnkOutputDumpSettings.Dock = DockStyle.None
         lnkOutputDumpSettings.AutoSize = True
         lnkOutputDumpSettings.Font = Theme.FontMono(11.0F, FontStyle.Regular)
+        lnkOutputDumpSettings.Location = New Point(OUTPUT_DUMP_COG_X, 76)
         grpTools.Controls.Add(lnkOutputDumpSettings)
+        lnkOutputDumpSettings.BringToFront()
+
+        ' The CTA lives on the TOOLS box's right side, spanning the LinkRow block's vertical
+        ' extent (y 26..100) so it balances them. Width = half the box (the "shorten by half"
+        ' ask) — laid out on SizeChanged because the box is Dock.Fill and has no width yet.
+        grpTools.Controls.Add(btnReport)
         AddHandler grpTools.SizeChanged,
             Sub(s, ev)
                 If grpTools.ClientSize.Width <= 0 Then Return
-                lnkOutputDumpSettings.Location = New Point(
-                    grpTools.ClientSize.Width - lnkOutputDumpSettings.Width - 14, 80)
+                Dim w As Integer = Math.Max(160, CInt(grpTools.ClientSize.Width / 2) - 20)
+                btnReport.Size = New Size(w, 74)
+                btnReport.Location = New Point(grpTools.ClientSize.Width - w - 14, 26)
             End Sub
 
         ' The three replaced LinkLabels (Calib / Tweak / Output Dump) stay
@@ -1148,7 +1176,7 @@ Partial Public Class MainForm
             _cardSettingsTools.Controls.Add(lnk)
         Next
 
-        outer.Controls.Add(grpTools, 0, 3)
+        outer.Controls.Add(grpTools, 0, 2)
 
         _cardSettingsTools.Controls.Add(outer)
         outer.BringToFront()
