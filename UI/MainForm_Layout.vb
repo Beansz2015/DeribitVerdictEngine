@@ -1028,20 +1028,29 @@ Partial Public Class MainForm
             .AccentColor = Theme.BORDER_CARD,
             .TabStop = False
         }
+        ' [2026-07-15] Top|Left, NOT None, on every child of these boxes: an unanchored child is
+        ' re-positioned PROPORTIONALLY on parent resize, which is why this text drifted toward
+        ' the middle instead of sitting at its Location(10, …). Pinning it left-aligns the text
+        ' and makes the y values below mean what they say (see the LOG/AUTO-RUN geometry note).
         Me.Controls.Remove(lblLogInfo)
-        lblLogInfo.Anchor = AnchorStyles.None
+        lblLogInfo.Anchor = AnchorStyles.Top Or AnchorStyles.Left
         lblLogInfo.Dock = DockStyle.None
         lblLogInfo.AutoSize = True
-        lblLogInfo.Location = New Point(10, 26)
+        ' LOG/AUTO-RUN geometry: SectionGroup draws its border from y=20.5 to Height−0.5, so at
+        ' the 90px box (98 row − 8 margin) the interior is 20.5..89.5. The three lines' INK
+        ' measured 2285..2334 against that border at y=26/46/66 — 3.5px above vs 16.5px below,
+        ' i.e. top-heavy. +5 centres the ink block (≈9 above / ≈11 below) and keeps the last
+        ' label inside the border.
+        lblLogInfo.Location = New Point(10, 31)
         grpLog.Controls.Add(lblLogInfo)
 
         ' P4f — last-successful render timestamp. Hidden until UpdateLogInfo
         ' first sees _lastSuccessfulRenderTime > DateTime.MinValue.
         lblLastSuccess = New Label() With {
             .AutoSize = True,
-            .Anchor = AnchorStyles.None,
+            .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
             .Dock = DockStyle.None,
-            .Location = New Point(10, 46),
+            .Location = New Point(10, 51),
             .Text = "",
             .Font = lblLogInfo.Font,
             .ForeColor = Theme.FG_TERTIARY,
@@ -1052,10 +1061,10 @@ Partial Public Class MainForm
         grpLog.Controls.Add(lblLastSuccess)
 
         Me.Controls.Remove(lnkResetLog)
-        lnkResetLog.Anchor = AnchorStyles.None
+        lnkResetLog.Anchor = AnchorStyles.Top Or AnchorStyles.Left
         lnkResetLog.Dock = DockStyle.None
         lnkResetLog.AutoSize = True
-        lnkResetLog.Location = New Point(10, 66)
+        lnkResetLog.Location = New Point(10, 71)
         grpLog.Controls.Add(lnkResetLog)
 
         Dim grpAutoRun = New SectionGroup() With {
@@ -1067,10 +1076,12 @@ Partial Public Class MainForm
             .TabStop = False
         }
         Me.Controls.Remove(lblCountdown)
-        lblCountdown.Anchor = AnchorStyles.None
+        lblCountdown.Anchor = AnchorStyles.Top Or AnchorStyles.Left
         lblCountdown.Dock = DockStyle.None
         lblCountdown.AutoSize = True
-        lblCountdown.Location = New Point(10, 26)
+        ' Centred in the gap between the box's inner top (SectionGroup draws its border from
+        ' y=20.5) and the REPEAT/SINGLE chip at y=52 → (20.5+52)/2 − half a ~18px line ≈ 27.
+        lblCountdown.Location = New Point(10, 27)
         grpAutoRun.Controls.Add(lblCountdown)
 
         ' REPEAT / SINGLE chip — mirrors the rbRepeat/rbSingle radios that

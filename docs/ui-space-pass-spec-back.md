@@ -151,9 +151,23 @@ shape is unchanged, so all 12 `BuildGroup*` callers were untouched**. Two portin
   INDICATOR DETAILS row (760, absolute) still holds all six rows, verified live (TREND STRUCTURE /
   LIQUIDATIONS render fully).
 
-## 7. Open / next
+## 7. Final polish (`3de518f`)
 
-- LOG/AUTO-RUN box labels render centre-ish because they are `Anchor = None` (trap 2). Untouched —
-  pre-existing, and not raised by the trader.
+- **INDICATOR DETAILS centre gutter.** The pair's hosts now carry `Margin(0,0,4,6)` /
+  `(4,0,0,6)` — a 4+4 gutter mirroring LOG/AUTO-RUN. Applied in `LayOutIndicatorRow` (renamed
+  from `MatchRowBoxHeights`, which already had both hosts) rather than in the 12 `BuildGroup*`
+  callers. The hosts dock Top inside 50% columns, so the margin narrows each box instead of
+  overflowing the column.
+- **LOG/AUTO-RUN labels left-aligned** — they were `Anchor = None` (trap 2), so WinForms drifted
+  them toward centre instead of honouring `Location(10, …)`. Pinned `Top|Left`. This was the
+  "pre-existing quirk" noted earlier; the trader called it, and it was the same trap as the cog.
+- **LOG text vertical centring.** Once pinned, the ink measured 2285..2334 against a border of
+  20.5..89.5 → 3.5 px above vs 16.5 px below (top-heavy). Labels moved 26/46/66 → **31/51/71**
+  (≈9 above / ≈11 below). AUTO-RUN's countdown sits at **27** — centred in the gap between the
+  border top (20.5) and the REPEAT/SINGLE chip (y=52).
+
+## 8. Open / next
+
+- Nothing outstanding from the trader's list.
 - INDICATOR DETAILS' titles now paint at SectionGroup's 11 pt (was 9.5 pt) — deliberate, that IS
   the unified look, but it is the one visual delta beyond the border shape.

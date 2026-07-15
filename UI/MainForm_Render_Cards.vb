@@ -2191,20 +2191,28 @@ Partial Public Class MainForm
         ' boxes per row (taller wins) so the outlines line up. Runs after ResumeLayout so
         ' PreferredSize is measurable. PER-ROW only — rows stay independent of each other.
         For rowIdx As Integer = 0 To grid.RowCount - 1
-            MatchRowBoxHeights(grid, rowIdx)
+            LayOutIndicatorRow(grid, rowIdx)
         Next
     End Sub
 
-    ''' <summary>Equalise the two group boxes in one INDICATOR DETAILS grid row so their
-    ''' outlines match (the taller is the reference). [2026-07-15] Since the port to
-    ''' SectionGroup the box IS the host (SectionGroup paints its own border across its whole
-    ''' bounds), so the hosts are equalised rather than an inner body. MinimumSize is used
-    ''' rather than Height because the hosts are AutoSize — AutoSize honours MinimumSize and
-    ''' still grows past it if content needs more.</summary>
-    Private Shared Sub MatchRowBoxHeights(grid As TableLayoutPanel, row As Integer)
+    ''' <summary>Lay out one INDICATOR DETAILS grid row's pair: a centre gutter between the two
+    ''' boxes, and equal outline heights (the taller is the reference).
+    ''' [2026-07-15] Since the port to SectionGroup the box IS the host (SectionGroup paints its
+    ''' border across its whole bounds), so the hosts carry both the margin and the height —
+    ''' not an inner body. MinimumSize rather than Height because the hosts are AutoSize:
+    ''' AutoSize honours MinimumSize and can still grow past it if content needs more.
+    ''' Per-row only — rows stay independent of each other.</summary>
+    Private Shared Sub LayOutIndicatorRow(grid As TableLayoutPanel, row As Integer)
         Dim leftHost  = TryCast(grid.GetControlFromPosition(0, row), SectionGroup)
         Dim rightHost = TryCast(grid.GetControlFromPosition(1, row), SectionGroup)
         If leftHost Is Nothing OrElse rightHost Is Nothing Then Return
+
+        ' 4+4 centre gutter, mirroring LOG/AUTO-RUN's Margin(0,0,4,0) / (4,0,0,0). The hosts
+        ' dock Top inside 50% columns, so the margin narrows each box by 4px rather than
+        ' overflowing the column. Bottom 6 keeps the existing inter-row spacing.
+        leftHost.Margin  = New Padding(0, 0, 4, 6)
+        rightHost.Margin = New Padding(4, 0, 0, 6)
+
         Dim h As Integer = Math.Max(leftHost.PreferredSize.Height, rightHost.PreferredSize.Height)
         If h <= 0 Then Return
         leftHost.MinimumSize = New Size(0, h)
