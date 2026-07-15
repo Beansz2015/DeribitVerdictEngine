@@ -2184,6 +2184,33 @@ Partial Public Class MainForm
         outer.Controls.Add(grid, 0, 1)
         _cardIndicatorDetails.Controls.Add(outer)
         _cardIndicatorDetails.ResumeLayout(True)
+
+        ' C3b follow-up (2026-07-15): the AutoSize RowStyle already makes each grid ROW
+        ' max(left, right) tall, but each bordered body box still sized to its OWN content,
+        ' so the shorter side's outline stopped short of its neighbour's. Equalise the two
+        ' boxes per row (taller wins) so the outlines line up. Runs after ResumeLayout so
+        ' PreferredSize is measurable. PER-ROW only — rows stay independent of each other.
+        For rowIdx As Integer = 0 To grid.RowCount - 1
+            MatchRowBoxHeights(grid, rowIdx)
+        Next
+    End Sub
+
+    ''' <summary>Equalise the two bordered group boxes in one INDICATOR DETAILS grid row so
+    ''' their outlines match (the taller is the reference). MinimumSize is used rather than
+    ''' Height because the bodies are AutoSize — AutoSize honours MinimumSize and still grows
+    ''' past it if content needs more.</summary>
+    Private Shared Sub MatchRowBoxHeights(grid As TableLayoutPanel, row As Integer)
+        Dim leftHost  = TryCast(grid.GetControlFromPosition(0, row), TableLayoutPanel)
+        Dim rightHost = TryCast(grid.GetControlFromPosition(1, row), TableLayoutPanel)
+        If leftHost Is Nothing OrElse rightHost Is Nothing Then Return
+        ' BuildGroupInline lays the host out as title @ (0,0) and the bordered body @ (0,1).
+        Dim lb = TryCast(leftHost.GetControlFromPosition(0, 1), FlowLayoutPanel)
+        Dim rb = TryCast(rightHost.GetControlFromPosition(0, 1), FlowLayoutPanel)
+        If lb Is Nothing OrElse rb Is Nothing Then Return
+        Dim h As Integer = Math.Max(lb.PreferredSize.Height, rb.PreferredSize.Height)
+        If h <= 0 Then Return
+        lb.MinimumSize = New Size(0, h)
+        rb.MinimumSize = New Size(0, h)
     End Sub
 
     ''' <summary>

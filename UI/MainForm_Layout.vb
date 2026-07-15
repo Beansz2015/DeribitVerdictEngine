@@ -207,6 +207,17 @@ Partial Public Class MainForm
     ' banner) are visible this run. Index captured at AddRow time.
     Friend _heroRowIndex      As Integer = -1
     Friend Const HERO_ROW_BASE As Integer = 180
+
+    ' [2026-07-15 space pass] Row-7 split heights. OI × CVD only ever renders its
+    ' header + NEUTRAL/no-signal + Funding Mom + Spread rows, so it is sized to that
+    ' content; KELLY sits beneath it in the freed space. VOLUME PROFILE row-spans both,
+    ' so its bottom tracks KELLY's automatically.
+    ' Sized from a live pixel-scan: OI × CVD content measures ~100 px (header / NEUTRAL /
+    ' Funding Mom / Spread) + NewCard's 24 px padding + 8 px margin. KELLY measures ~150 px
+    ' in the bias-only state, but its MAX state adds the "Notional ≈ $X · N× lev" line
+    ' (rendered only when KellyContracts >= 1), so it is sized ~170 + 24 padding.
+    Friend Const OICVD_CARD_H As Integer = 132
+    Friend Const KELLY_CARD_H As Integer = 196
     Friend _lblLastPrice      As Label
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
@@ -661,48 +672,53 @@ Partial Public Class MainForm
         ' wrapped second line (review OBS-F). 130 gives cells ~80 px.
         AddRow(structRow, 130)
 
-        ' Row 6: SIGNAL BREAKDOWN (P4c binds). 500 px to accommodate 8 rows
-        ' in the longest tier (TIER 1) plus header / column headers / 3
-        ' footer rows / TOTAL.
+        ' Row 6: SIGNAL BREAKDOWN (P4c binds). Sized for the MAX column content: both
+        ' columns are fixed row-sets — left = CORE(5) + TIER 1(8) + 2 tier labels = 15 lines,
+        ' right = TIER 2(8) + TIER 3(4) + 2 tier labels + the conditional "Best vol. pivot"
+        ' sub-line = 15. [2026-07-15 space pass] 500 left a 69 px dead gap between the last
+        ' indicator row and the footer divider (outer row 2 is Percent, so it absorbed all
+        ' the card's slack and pushed the footer to the bottom). Live pixel-scan put the max
+        ' grid content at ~275 px, so 452 keeps ~20 px of headroom instead of 69.
         _cardSignalBreakdown = NewCard()
-        AddRow(_cardSignalBreakdown, 500)
+        AddRow(_cardSignalBreakdown, 452)
 
-        ' Row 7: OI × CVD CROSS + VOLUME PROFILE side by side (placeholders — P4d)
+        ' Row 7 [2026-07-15 space pass]: LEFT column stacks OI × CVD CROSS over KELLY SIZING;
+        ' RIGHT column is VOLUME PROFILE spanning BOTH rows. OI × CVD's content only filled
+        ' its top third, so KELLY moves into that dead space and its own full-width row goes
+        ' away (saves ~190 px of scroll). Because VOLUME PROFILE row-spans the pair, its
+        ' bottom aligns with KELLY's bottom BY CONSTRUCTION — no height matching to maintain.
+        ' Nested TLP is safe here: both columns are PERCENT (the col-0-absolute nesting trap
+        ' that collapsed the ATR row does not apply).
         Dim row7 = New TableLayoutPanel() With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 2,
             .BackColor = Theme.BG_BASE, .AutoSize = False,
             .Margin = New Padding(0, 0, 0, 8)
         }
         row7.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
         row7.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50.0F))
+        row7.RowStyles.Add(New RowStyle(SizeType.Absolute, OICVD_CARD_H))
+        row7.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
         _cardOiCvdCross    = NewCard()
         _cardVolumeProfile = NewCard()
+        _cardKelly         = NewCard()
         _cardOiCvdCross.Dock    = DockStyle.Fill
         _cardVolumeProfile.Dock = DockStyle.Fill
-        _cardOiCvdCross.Margin    = New Padding(0, 0, 8, 0)
+        _cardKelly.Dock         = DockStyle.Fill
+        _cardOiCvdCross.Margin    = New Padding(0, 0, 8, 8)   ' right gap to VP, bottom gap to Kelly
+        _cardKelly.Margin         = New Padding(0, 0, 8, 0)   ' right gap to VP
         _cardVolumeProfile.Margin = New Padding(0)
-        row7.Controls.Add(_cardOiCvdCross, 0, 0)
+        row7.Controls.Add(_cardOiCvdCross,    0, 0)
+        row7.Controls.Add(_cardKelly,         0, 1)
         row7.Controls.Add(_cardVolumeProfile, 1, 0)
-        ' Height grown from 140 → 210 (P4d commit 3) → 320 (Spec B) to fit
-        ' VOLUME PROFILE's 7-row level stack + 2 sub-labels + the 90 px
-        ' VolumeHistogramMini below them. OI × CVD column had headroom and
-        ' tolerates the bump without redesign.
-        AddRow(row7, 320)
+        row7.SetRowSpan(_cardVolumeProfile, 2)
+        ' Height = OI × CVD (its content only) + KELLY. VOLUME PROFILE inherits the full
+        ' height, which is >= the 320 it needed for its 7-row level stack + histogram.
+        ' KELLY still hides itself (Visible=False) when v.KellyPWin = 0 — the slot just
+        ' goes blank, as its own row used to.
+        AddRow(row7, OICVD_CARD_H + KELLY_CARD_H)
         AddPlaceholderHeader(_cardOiCvdCross,    "OI × CVD CROSS")
         AddPlaceholderHeader(_cardVolumeProfile, "VOLUME PROFILE")
-
-        ' Row 8: KELLY SIZING (P4d commit 2 binds). Height fits header + bias
-        ' / capped tags + 2-line advisory + 5 KV rows ending in contracts row.
-        ' Card hides itself entirely (Visible=False) when v.KellyPWin = 0,
-        ' so the row collapses visually but the AddRow slot remains reserved.
-        _cardKelly = NewCard()
-        ' Bumped 180 → 220 after live-run verification — 180 clipped the
-        ' Lean/Contracts row mid-line. NewCard adds 12 px padding top+bottom
-        ' (24 total), leaving usable interior. Header (~22) + 2 advisory
-        ' lines (~32) + 5 KV rows × 22 (~110) ≈ 164; row margins push to
-        ' ~180 actual content, so 220 gives breathing room.
-        AddRow(_cardKelly, 220)
-        AddPlaceholderHeader(_cardKelly, "KELLY SIZING")
+        AddPlaceholderHeader(_cardKelly,         "KELLY SIZING")
 
         ' Row 9: INDICATOR DETAILS (P4d commit 4 binds). Renamed from
         ' _cardDynamicNorms — holds the verbose absolute-value detail
@@ -724,8 +740,11 @@ Partial Public Class MainForm
         ' P4e kickoff §4 "bump the row height by 40 px" guidance.
         _cardSettingsTools = NewCard()
         ' P4 #1: +26px over the P4e 340 for the full-width EXIT GUARD strip's own row, so the
-        ' TOOLS (percent) row stays whole.
-        AddRow(_cardSettingsTools, 366)
+        ' TOOLS (percent) row stays whole. [2026-07-15 space pass] 366 → 344: the trim comes
+        ' from the LOG/AUTO-RUN row (110 → 88, dead space inside its boxes), NOT from the
+        ' TOOLS row — TOOLS is Percent and needs ~120 px for its 3 LinkRows + cog, so it must
+        ' keep the same slice: 344 − 24 card padding − 30 outer top pad − (88+26+56) = 120.
+        AddRow(_cardSettingsTools, 344)
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
@@ -935,7 +954,13 @@ Partial Public Class MainForm
             .TabStop = False
         }
         outer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 110))   ' LOG/AUTO-RUN (P4f +18px "last HH:mm:ss" line)
+        ' [2026-07-15 space pass] LOG/AUTO-RUN 110 → 88: the two SectionGroup boxes Dock.Fill
+        ' this row, so 110 left ~45 px dead INSIDE each box below its content (LOG = status +
+        ' "last HH:mm:ss" + Reset link ≈ 66 px incl. title; AUTO-RUN ≈ the same). NOTE: the
+        ' TOOLS row below is Percent — it absorbs whatever is left, so this row and the card
+        ' height must be trimmed TOGETHER or TOOLS starves and clips its 3rd LinkRow
+        ' (Output Dump). That is exactly what a card-height-only trim did.
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 88))    ' LOG/AUTO-RUN
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 26))    ' P4#1 EXIT GUARD strip (full-width)
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))    ' CTA
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS
