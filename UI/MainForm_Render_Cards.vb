@@ -598,7 +598,16 @@ Partial Public Class MainForm
     ' below it, so ALL values land on one horizontal line and ALL sub-labels on the line
     ' below — alignment by construction, not per-cell tuning. Nudge this one number to
     ' shift the whole value line up/down (higher % = lower on the card).
-    Private Const ATR_VALUE_BAND As Single = 58.0F
+    ' 75.5 centres the LONG+SHORT block in the space below the sub-header: measured on the
+    ' live card the zone row is 68px, and 58% left a 5px gap above LONG vs 29px below SHORT;
+    ' +17.6pp moves the block down 12px so both gaps land at ~17px. DIR_LABEL_BOTTOM_PAD
+    ' below tracks this (it is the complement — keep them in step if you retune the band).
+    Private Const ATR_VALUE_BAND As Single = 75.5F
+
+    ' Bottom padding that lifts the bottom-aligned LONG/SHORT label onto the value line
+    ' (= zone height − band boundary). Paired with ATR_VALUE_BAND: raising the band by N px
+    ' means lowering this by N px.
+    Private Const DIR_LABEL_BOTTOM_PAD As Integer = 14
 
     ''' <summary>Wrap a value label in the shared 2-row ATR cell: valueLbl bottom-aligned to
     ''' the common baseline (row 0), a fresh top-aligned sub-label returned via subLbl (row 1).
@@ -747,7 +756,7 @@ Partial Public Class MainForm
         ' the bottom-aligned text up onto the value line (row 0 baseline) so "LONG"/"SHORT"
         ' aligns with the STRUCT value beside it.
         r.DirLabel.TextAlign = ContentAlignment.BottomLeft
-        r.DirLabel.Padding = New Padding(0, 0, 0, 26)
+        r.DirLabel.Padding = New Padding(0, 0, 0, DIR_LABEL_BOTTOM_PAD)
         row.Controls.Add(r.DirLabel,        0, 0)
         row.Controls.Add(r.StopCellLayout,  1, 0)
         row.Controls.Add(rrCell,            2, 0)
