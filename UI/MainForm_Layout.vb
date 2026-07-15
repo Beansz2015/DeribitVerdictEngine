@@ -231,6 +231,16 @@ Partial Public Class MainForm
     ' to pull the header + LOG toward the section top. The card's absolutely-placed
     ' placeholder header is positioned from this same value.
     Friend Const SETTINGS_CARD_PAD_TOP As Integer = 6
+
+    ' [2026-07-15] The EXIT GUARD strip owns a row inside SETTINGS & TOOLS but only renders
+    ' while a position is declared — it was reserved at a flat 26 px, which was most of the
+    ' dead band between LOG and TOOLS. Its row is now AutoSize (collapses to 0 when hidden)
+    ' and the CARD grows by EXIT_GUARD_STRIP_H when it appears. The card must grow rather than
+    ' let the strip eat into TOOLS: TOOLS is a Percent row and starving it silently clips
+    ' Output Dump. Kept generous vs the strip's real AutoSize height so TOOLS keeps >= 120.
+    Friend Const SETTINGS_CARD_H_BASE As Integer = 250
+    Friend Const EXIT_GUARD_STRIP_H   As Integer = 28
+    Friend _settingsRowIndex As Integer = -1
     Friend _lblLastPrice      As Label
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
@@ -756,10 +766,13 @@ Partial Public Class MainForm
         ' TOOLS (percent) row stays whole. [2026-07-15 space pass] 366 → 288: the LOG/AUTO-RUN
         ' row lost its dead space (110 → 98, floored by LOG's bottom border) and the 56 px
         ' full-width CTA row went away entirely (the button moved inside TOOLS), with the
-        ' outer top pad 30 → 14, and the card's own top padding special-cased 12 → 6. TOOLS is
-        ' Percent, so it must still be left ~120 px for its 3 LinkRows + the CTA:
-        ' 276 − (6 top + 12 bottom) card padding − 14 outer top pad − (98 + 26) = 120.
-        AddRow(_cardSettingsTools, 276)
+        ' outer top pad 30 → 14, the card's own top padding special-cased 12 → 6, and the
+        ' EXIT GUARD row now collapses when hidden (SyncSettingsCardHeight re-grows the card
+        ' when it shows). TOOLS is Percent, so it must still be left ~120 px for its 3
+        ' LinkRows + the CTA: 250 − (6 top + 12 bottom) card padding − 14 outer top pad
+        ' − (98 + 0 collapsed guard) = 120.
+        AddRow(_cardSettingsTools, SETTINGS_CARD_H_BASE)
+        _settingsRowIndex = _gridRoot.RowStyles.Count - 1
         ReparentSettingsToolsControls()
 
         ' Populate the bindable cards from rows 3-5 with their static child
@@ -780,6 +793,22 @@ Partial Public Class MainForm
             .Dock = DockStyle.Fill
         }
     End Function
+
+    ''' <summary>
+    ''' [2026-07-15] Keep the SETTINGS & TOOLS row tall enough for the EXIT GUARD strip when it
+    ''' is showing. The strip's own row is AutoSize (0 while hidden), so without this the strip
+    ''' would appear by eating into the Percent TOOLS row below it — which silently clips
+    ''' Output Dump. Called from every lblExitGuard.Visible flip in MainForm_ExitGuard.vb.
+    ''' </summary>
+    Friend Sub SyncSettingsCardHeight()
+        If _gridRoot Is Nothing OrElse _settingsRowIndex < 0 Then Return
+        If _settingsRowIndex >= _gridRoot.RowStyles.Count Then Return
+        Dim shown As Boolean = (lblExitGuard IsNot Nothing AndAlso lblExitGuard.Visible)
+        Dim h As Single = SETTINGS_CARD_H_BASE + If(shown, EXIT_GUARD_STRIP_H, 0)
+        If _gridRoot.RowStyles(_settingsRowIndex).Height <> h Then
+            _gridRoot.RowStyles(_settingsRowIndex).Height = h
+        End If
+    End Sub
 
     Private Sub AddRow(c As Control, height As Integer)
         _gridRoot.RowCount += 1
@@ -999,7 +1028,10 @@ Partial Public Class MainForm
         ' box was only 80, so its BOTTOM BORDER fell outside the box and vanished. 98 → box 90,
         ' which clears the content and draws the border. (AUTO-RUN is shorter: chip ends y≈74.)
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 98))    ' LOG/AUTO-RUN
-        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 26))    ' P4#1 EXIT GUARD strip (full-width)
+        ' EXIT GUARD strip: AutoSize so it COLLAPSES to 0 while hidden (it only renders during
+        ' a declared position). A flat 26 was reserved permanently and was most of the dead
+        ' band between LOG and TOOLS. SyncSettingsCardHeight() grows the CARD when it appears.
+        outer.RowStyles.Add(New RowStyle(SizeType.AutoSize))        ' P4#1 EXIT GUARD strip
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS (now holds the CTA)
 
         ' ---------------- Row 1: LOG / AUTO-RUN (2 cols) ----------------

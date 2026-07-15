@@ -53,6 +53,7 @@ Partial Public Class MainForm
         _exitGuardConsecClear = 0
         _exitGuardLatched     = False
         If lblExitGuard IsNot Nothing Then lblExitGuard.Visible = False
+        SyncSettingsCardHeight()
     End Sub
 
     Private Shared Function ExitGuardIntervalMs(cfg As EngineSettings) As Integer
@@ -177,11 +178,13 @@ Partial Public Class MainForm
         If lblExitGuard Is Nothing Then Return
         If Not visible Then
             lblExitGuard.Visible = False
+            SyncSettingsCardHeight()
             Return
         End If
         lblExitGuard.Text = "EXIT GUARD · " & body
         If colour.HasValue Then lblExitGuard.ForeColor = colour.Value
         lblExitGuard.Visible = True
+        SyncSettingsCardHeight()
     End Sub
 
     Private Shared Sub PlayExitAlarm()

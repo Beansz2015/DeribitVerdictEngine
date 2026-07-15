@@ -166,6 +166,16 @@ shape is unchanged, so all 12 `BuildGroup*` callers were untouched**. Two portin
   (≈9 above / ≈11 below). AUTO-RUN's countdown sits at **27** — centred in the gap between the
   border top (20.5) and the REPEAT/SINGLE chip (y=52).
 
+- **LOG→TOOLS gap.** Most of that band was the **EXIT GUARD strip's row, reserved at a flat 26 px
+  even though the strip only renders while a position is declared.** Its row is now `AutoSize`
+  (collapses to 0 when hidden) and `SyncSettingsCardHeight()` grows the CARD by
+  `EXIT_GUARD_STRIP_H` (28) when it appears — called from every `lblExitGuard.Visible` flip in
+  `MainForm_ExitGuard.vb`. The card **must** grow rather than let the strip eat into TOOLS: TOOLS
+  is a Percent row and starving it silently clips Output Dump (trap 4). Card base
+  `SETTINGS_CARD_H_BASE` = 250 (guard hidden, TOOLS = 120); 278 with the guard up.
+  **Both states verified live** — hidden: tight gap, nothing clipped; declared position: strip
+  renders, form grows exactly 28 px, TOOLS keeps all 3 LinkRows + cog + CTA.
+
 ## 8. Open / next
 
 - Nothing outstanding from the trader's list.
