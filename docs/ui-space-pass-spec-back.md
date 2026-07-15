@@ -5,12 +5,14 @@ added/removed/renamed anywhere, so `BuildPlaintextSnapshot` is untouched and the
 display-string parity rule has nothing to sync (card-geometry only).
 **Driver:** trader request — "tighten the spaces so I can see more without scrolling", then four
 rounds of screenshot-driven follow-ups.
-**Commits:** `ea10168` (space pass) · `0400de0` (SETTINGS & TOOLS restructure) · `5705093`
-(follow-ups) · `0a4e3f6` (real border fix + padding special-case).
+**Commits (in order):** `ea10168` (space pass) · `0400de0` (SETTINGS & TOOLS restructure) ·
+`5705093` (follow-ups) · `0a4e3f6` (real border fix + padding special-case) · `fd72e61` (this
+doc) · `33330d3` (SectionGroup unification, §6) · `893a236` (gutter + text alignment, §7) ·
+`92184c6` (EXIT GUARD row collapse, §7).
 **Related:** the ATR-levels work (`c138cb7`) + the TAPE burst highlight are recorded in
 `aggr-vel-wirein-spec-back.md` §4b/§4c — they rode the aggressor-velocity wire-in.
 
-**Net result: form height ~2850 → 2518 px (~330 px less scrolling).**
+**Net result: form height ~2850 → 2492 px (~360 px less scrolling).**
 
 ---
 
@@ -36,15 +38,16 @@ its marker to the Debug bin. **Rebuild Release before the collector resumes.**)
 | OI × CVD | 150 (of a 320 row) | **132** | Content measures ~100 px + 24 padding. |
 | KELLY | own 220 row | **220, beside OI × CVD** | Moved into OI × CVD's dead space; its full-width row is gone. |
 | VOLUME PROFILE | 320 | **row-spans the pair** | Bottom now tracks KELLY's *by construction*. |
-| INDICATOR DETAILS | 760 | 760 (+ box matching) | Per-row box heights equalised. |
-| SETTINGS & TOOLS | 366 | **276** | CTA row removed, LOG row trimmed, top padding special-cased. |
+| INDICATOR DETAILS | 760 | 760 (+ box matching) | Per-row box heights equalised; later ported to SectionGroup + given a centre gutter (§6, §7). |
+| SETTINGS & TOOLS | 366 | **250** | CTA row removed, LOG row trimmed, top padding special-cased, EXIT GUARD row collapsed (§7). 278 while the guard is up. |
 
 **Key structural moves**
 
 - **KELLY beside OI × CVD.** Row 7's LEFT column stacks OI × CVD over KELLY; VOLUME PROFILE
   row-spans BOTH on the right. The trader asked for "grow VP to match Kelly's bottom" — the
   row-span makes that automatic, so there is **no second number to keep in sync**.
-- **INDICATOR DETAILS per-row box matching** (`MatchRowBoxHeights`). The AutoSize RowStyle already
+- **INDICATOR DETAILS per-row box matching** (`LayOutIndicatorRow`, née `MatchRowBoxHeights`).
+  The AutoSize RowStyle already
   made each *row* `max(left, right)` tall, but each bordered body still sized to its **own**
   content, so the shorter side's outline stopped short. Equalised via `MinimumSize` (AutoSize
   honours it and can still grow). **Per-row only** — rows stay independent, per the trader's rule.
@@ -85,8 +88,11 @@ These are the expensive lessons. All are now also in code comments at their site
    to 0 width — the card rendered **blank** except LONG/SHORT. Nested panels are fine in **percent**
    columns (the STOP cell and row 7 both prove it). Col 0 must hold its label directly.
 2. **`Anchor = None` does NOT mean "stay put".** An unanchored child is re-positioned
-   *proportionally* on parent resize, so the cog drifted to mid-box. `Top|Left` pins it. (Same
-   reason the LOG box's labels render centre-ish — pre-existing, untouched.)
+   *proportionally* on parent resize, so the cog drifted to mid-box. `Top|Left` pins it.
+   **This one bit twice:** the LOG/AUTO-RUN labels drifted centre-ish for the same reason. It was
+   dismissed here as a "pre-existing quirk, untouched" — wrong call; the trader spotted it and it
+   was the same bug, fixed in §7. Treat `Anchor = None` on any absolutely-placed child as a
+   defect, not a style.
 3. **A fixed-width `LinkRow` swallows anything placed over it.** `rowDump` was a 320 px hit area
    for a ~124 px label, so a cog next to the *text* landed inside the row and lost the z-order
    fight even after `BringToFront()`. Fixed by narrowing the row to its label, which also stops
@@ -116,6 +122,8 @@ These are the expensive lessons. All are now also in code comments at their site
 | `OICVD_CARD_H` / `KELLY_CARD_H` | 132 / 220 | Row-7 split. VP row-spans, so it follows. |
 | `OUTPUT_DUMP_COG_X` | 140 | Cog X; also sets `rowDump`'s width (`− 14`). |
 | `SETTINGS_CARD_PAD_TOP` | 6 | SETTINGS & TOOLS' special-cased top padding **and** its header `topY`. |
+| `SETTINGS_CARD_H_BASE` | 250 | SETTINGS & TOOLS height with the EXIT GUARD strip hidden (TOOLS = 120). |
+| `EXIT_GUARD_STRIP_H` | 28 | Added to the card by `SyncSettingsCardHeight()` while the strip is up. Deliberately > the strip's real AutoSize height so TOOLS keeps ≥ 120. |
 
 ---
 
