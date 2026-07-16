@@ -1,7 +1,8 @@
-# Autonomous WinForms Test Harness — Handoff for the Order-App Coordinator
+# Autonomous Windows-App Test Harness — Portable Recipe
 
-**From:** DeribitVerdictEngine coordinator seat, 2026-07-16 · **For:** the DeribitOrderPlacementApp coordinator, to replicate the engine's autonomous build/drive/verify loop.
+**Origin:** DeribitVerdictEngine (`C:\Dev\DeribitVerdictEngine`), 2026-07-16 · **For:** any project coordinator replicating the engine's autonomous build/drive/verify loop (first consumers: DeribitOrderPlacementApp, DeribitContango, CustomerSalesIDSystem).
 **What it enables:** an AI seat (or any script) can compile the app, launch it, click buttons, set textboxes/radios, dismiss popups, take screenshots (including content scrolled off-screen), and verify results — with **zero third-party dependencies**: everything is PowerShell + the .NET assemblies already on a stock Windows box.
+**Applicability:** WinForms is first-class (everything below is proven there). WPF apps: §1/§2 (UI Automation driving) work unchanged; the §3(b) full-form capture hook is WinForms-specific (`DrawToBitmap`) — WPF's equivalent is `RenderTargetBitmap`. Web/console apps: this recipe does not apply (different tooling).
 
 ---
 
@@ -103,21 +104,29 @@ dotnet build -c Debug
 
 Practical rules we learned: **know which bin you're driving** (Debug vs Release — our collector owns the Debug exe, so UI sessions must not rebuild Debug while it runs; define the order-app's equivalent rule); kill the app between iterations rather than trusting hot state; keep screenshots out of the repo (delete after use — standing rule here).
 
-## 5. ⚠ ORDER-APP-SPECIFIC SAFETY (read twice)
+## 5. ⚠ SAFETY — calibrate to what the app can DO (read twice)
 
-This harness will be pointed at an app that **places real orders**. Non-negotiables before the first autonomous run:
+The harness clicks whatever matches a pattern. Before the first autonomous run, classify the app's worst side effect and apply the matching profile:
 
-1. **Testnet only:** autonomous sessions run against `test.deribit.com` credentials/config — never the live key. Make the environment visible in the window title so every screenshot self-documents which world it was in (and scripts can refuse: find-window on "TESTNET" prefix).
-2. **Never automate the trade path blind:** scripts that click order-placing buttons must be separate, clearly named (`click-PLACES-ORDER-*.ps1`), and used only in testnet sessions. The generic click script matching on a substring like "Buy" is exactly how an accident happens — our click script's *print-all-buttons-on-miss* diagnostic is your friend; substring patterns should be exact-ish.
-3. **A kill rule:** any script that can't confirm the environment (title check fails) exits non-zero and does nothing.
-4. The AI seat's standing instruction should mirror ours: local-first, gate before done, and **the human flips anything that touches live trading** — automation proves mechanics, never authorizes exposure.
+**Trading / order apps (DeribitOrderPlacementApp, anything with an exchange key):**
+1. **Testnet only** for autonomous sessions (`test.deribit.com` credentials) — never the live key. Put the environment in the window title so every screenshot self-documents which world it was in, and scripts can *refuse* (find-window on a "TESTNET" prefix).
+2. **Never automate the trade path blind:** order-placing clicks live in separate, loudly-named scripts (`click-PLACES-ORDER-*.ps1`), testnet-sessions only. A generic click script matching "Buy" as a substring is how an accident happens — keep patterns exact-ish and lean on the print-all-buttons-on-miss diagnostic.
+3. **Kill rule:** any script that can't confirm the environment (title check fails) exits non-zero and does nothing.
+4. **The human flips anything touching live trading** — automation proves mechanics, never authorizes exposure.
+
+**Data / records apps (CustomerSalesIDSystem, anything holding customer PII):**
+1. **Never drive a production database:** autonomous sessions run against a test copy or synthetic seed data; make the DB/environment visible in the title, same refuse-rule as above.
+2. **Screenshots are a data-leak vector:** a PNG of a form full of real customer names/IDs ends up in repos, chats, and AI-conversation context. Autonomous sessions use synthetic data, or the capture step is scoped to windows known clean. Delete screenshots after use regardless (standing rule).
+3. Gate destructive actions (delete/merge/export buttons) the same way trade buttons are gated: separate named scripts, test-environment-only.
+
+**Read-only / analysis apps (DeribitContango-class, this engine):** the general rules suffice — know which bin you're driving, kill between iterations, delete screenshots. If the app ever grows a write path, re-classify.
 
 ## 6. Suggested build order (one conversation each)
 
-1. Gate script + logic-harness skeleton (if the order app lacks one, start with 5 fixtures around the signal-file consumer — it already has pure functions worth pinning).
+1. Gate script + logic-harness skeleton (if the project lacks one, start with ~5 fixtures around its purest functions — parsers, calculators, file consumers — whatever computes without UI).
 2. `find-window` + `click-button` + `inspect-tree` (the §1/§2 skeletons) + title-prefix convention.
 3. Screenshot (a), then the in-app hotkey + (b) if full-form capture is needed.
 4. `set-textbox` / `select-radio` / `close-popup` as needed.
-5. The safety wrappers (§5) **before** any script that can reach a trade button.
+5. The §5 safety wrappers **before** any script that can reach a trade button, a production database, or a destructive action.
 
-Copy freely from this repo's `tools/*.ps1` — they're small, commented, and battle-tested through a four-round UI overhaul driven entirely by this loop.
+Copy freely from the origin repo's `tools/*.ps1` (`click-mainform-button`, `inspect-mainform-tree`, `select-mainform-radio`, `close-popup-window`, `resize-mainform`, `screenshot-mainform`, `screenshot-mainform-full`) — they're small, commented, and battle-tested through a four-round UI overhaul driven entirely by this loop. The only per-project edits are the window-title substring and, for the full-capture hook, the in-app hotkey handler.
