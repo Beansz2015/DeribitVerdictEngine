@@ -37,6 +37,14 @@ WhatIfRunner <overlay.json> [--from 2026-07-08] [--to 2026-07-31]
 - **POC-tier caveat:** `VPFRPoc`/`VPFRSignal` are not logged, so the replay ladder is swing → HVN → fallback; rows whose LIVE placement was `poc` (TargetCapReason bucket) are excluded and counted in the report header. Measured population: near-zero (the POC tier is a documented rarity).
 - Rows: **v0.8+ only** (the columns exist; the book is growing fast; no legacy fabrication).
 
+## 3b. Grid-sweep mode (trader request 2026-07-16)
+
+Any whitelisted knob may be given as a sweep instead of a value — `{"sweep": {"from": 1.0, "to": 3.0, "step": 0.5}}` — with the cartesian product run across all sweep knobs, plus optional **constraints** that prune cells before running (e.g. `"ratio": {"of": ["atr_target_multiplier","atr_stop_multiplier"], "min": 1.0, "max": 3.0}`). Compute is a non-issue (each row's excursion path is walked once and every barrier pair evaluates against it; thousands of cells run in seconds) — the cap is readability + statistics, not CPU: **grid ≤ 1,000 cells**.
+
+Two grid-specific rules, both binding:
+- **Ranking objective = per-trade EV in ATR units**, never win-rate: target-touch → +targetDist, stop-touch → −stopDist, window-expiry → mark-to-window-end (from OHLC), ambiguous-bar → −stopDist (conservative). Win-rate is not comparable across geometries and is reported as context only.
+- **Split-half validation ON by default for sweeps:** the winner is selected on half the book (alternating session-days) and reported **beside its unseen-half performance**; a cell is flagged DIVERGENT when the holdout drops below the selection half's CI. The §4 overfit counter counts grid *cells*, not invocations.
+
 ## 4. Output & guardrails (binding)
 
 Per session × resolution × tier, baseline vs overlay on the same rows: `n directional | SUCC% | ADVERSE-first% | EXPIRED% | BELOW_MIN excluded`, each rate with a Wilson 95% CI; cells n<30 flagged. Plus a **population-shift line** (directional count baseline → overlay) whenever verdict knobs are in the overlay.
@@ -59,6 +67,7 @@ Per session × resolution × tier, baseline vs overlay on the same rows: `n dire
 | **W3** | POC tier | Exclude-and-label (unlogged inputs; near-zero population) |
 | **W4** | Guardrails | §4 all four, binding |
 | **W5** | Sequencing / model | Build **after #6 lands** (shared fixture file); **Opus, medium**, one conversation; no boundary |
+| **W6** | Grid-sweep mode (§3b) in v1 | **Yes** — sweep syntax + constraints, EV-in-ATR ranking, split-half validation default-on, ≤1,000 cells |
 
 ## 7. Acceptance
 
