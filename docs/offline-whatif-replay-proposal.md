@@ -68,6 +68,7 @@ Per session × resolution × tier, baseline vs overlay on the same rows: `n dire
 | **W4** | Guardrails | §4 all four, binding |
 | **W5** | Sequencing / model | Build **after #6 lands** (shared fixture file); **Opus, medium**, one conversation; no boundary |
 | **W6** | Grid-sweep mode (§3b) in v1 | **Yes** — sweep syntax + constraints, EV-in-ATR ranking, split-half validation default-on, ≤1,000 cells |
+| **W7** | In-app launcher (trader 2026-07-16) | **Yes** — a `What-If` LinkRow in SETTINGS & TOOLS opening a thin non-modal dialog (whitelisted-knob grid, each row value-or-sweep, constraint field, Run + status line), which writes the overlay JSON and `Process.Start`s the runner (the `TweakSettingsForm` precedent exactly); report opens in the existing `AnalysisReportForm` viewer. All logic stays in the host-agnostic runner; the form is a launcher only |
 
 ## 7. Acceptance
 
