@@ -1,6 +1,6 @@
 # Offline What-If Replay Runner — Proposal
 
-**Date:** 2026-07-16 · **Seat:** Fable coordinator · **Status:** PROPOSED — D-table awaits trader
+**Date:** 2026-07-16 · **Seat:** Fable coordinator · **Status:** **APPROVED 2026-07-16 — trader ticked W1–W7, all as recommended.** Build-authorized NOW (W5 slot: before #6, commit-before-#6 rule). Implementer: Opus, medium, one conversation; spec-back `offline-whatif-replay-spec-back.md`.
 **Type:** analysis-only instrument (`tools/` + `analysis/` class) — **zero scoring impact, no ⚠ boundary, never writes settings.**
 **Driver:** trader request 2026-07-16 — the calibrate-forward loop cannot answer *"which settings would have been optimal on the book so far"*; hypotheses (e.g. LONDON stop bounds, verdict selectivity) currently need one-off coordinator analyses. This tool makes that a repeatable, guard-railed instrument the trader drives.
 **Prototype evidence:** the D6 D4 both-ways report and the 07-15 F3 evaluation are exactly this computation, hand-run.
@@ -58,7 +58,7 @@ Per session × resolution × tier, baseline vs overlay on the same rows: `n dire
 
 `tools/WhatIfRunner/` — separate net8.0 console project (zero WinForms; AutoTweaker/ordercheck precedent; root vbproj already excludes `tools/**`), linked-source `SignalEmitter` + `analysis/` pieces. Manual, hypothesis-driven counterpart to the auto-tweaker (which optimizes without hypotheses) and to W6-4 (which measures the ceiling without proposing knobs). Fixtures ride `verify/ordercheck` (adapter fidelity via the **empty-overlay reproduction test**: replayed placements ≡ logged `Placed*` on real rows; whitelist rejection; a verdict-threshold replay case) — **serialize against the #6 lane on the shared fixture file; #6 has priority.**
 
-## 6. D-table (trader sign-off)
+## 6. D-table — **ALL TICKED 2026-07-16 (W1–W7 as recommended)**
 
 | # | Decision | Recommendation |
 |---|---|---|
