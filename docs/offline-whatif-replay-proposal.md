@@ -66,7 +66,7 @@ Per session × resolution × tier, baseline vs overlay on the same rows: `n dire
 | **W2** | Overlay format | Partial `settings.json` fragment, same key paths (familiar; whitelist-validated) |
 | **W3** | POC tier | Exclude-and-label (unlogged inputs; near-zero population) |
 | **W4** | Guardrails | §4 all four, binding |
-| **W5** | Sequencing / model | Build **after #6 lands** (shared fixture file); **Opus, medium**, one conversation; no boundary |
+| **W5** | Sequencing / model | **Build NOW, before #6** (trader 2026-07-16): #6 is watch-gated until ~Fri evening, and the only interaction is that both lanes EDIT `verify/ordercheck/Program.vb` (fixtures) — an ordering constraint, not a dependency. Rule: the what-if build must be **committed before #6's lane opens**; if the watch clears first, **#6 takes priority** and what-if pauses at a commit boundary. **Opus, medium**, one conversation; no boundary |
 | **W6** | Grid-sweep mode (§3b) in v1 | **Yes** — sweep syntax + constraints, EV-in-ATR ranking, split-half validation default-on, ≤1,000 cells |
 | **W7** | In-app launcher (trader 2026-07-16) | **Yes** — a `What-If` LinkRow in SETTINGS & TOOLS opening a thin non-modal dialog (whitelisted-knob grid, each row value-or-sweep, constraint field, Run + status line), which writes the overlay JSON and `Process.Start`s the runner (the `TweakSettingsForm` precedent exactly); report opens in the existing `AnalysisReportForm` viewer. All logic stays in the host-agnostic runner; the form is a launcher only |
 
