@@ -365,6 +365,15 @@ Partial Public Class MainForm
         ' by substring on it.
         Me.Text = $"Deribit Verdict Engine — settings v{SettingsLoader.Current.Version}"
 
+        ' ARM AUTOTRADE visibility at load (trader observation 2026-07-17): the
+        ' checkbox is created in BuildCardGridLayout ABOVE, i.e. before Initialise,
+        ' so its creation-time sync reads the POCO default (enabled=false) and the
+        ' toggle stayed hidden until the first run re-synced it. With the soak flip
+        ' now persistent in the tracked config, sync once more against the real
+        ' settings so the toggle is visible from form load. The per-run sync in the
+        ' emission glue still covers hot-reload flips.
+        SyncArmToggleVisibility(SettingsLoader.Current)
+
         _metricMode = NormaliseMode(SettingsLoader.Current.PerformanceDisplay.MetricMode)
         InitMarketDataSources()
         InitAutoRunControls()
