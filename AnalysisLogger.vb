@@ -9,9 +9,11 @@
 '         horizon), AggrVelSignal (BURST_BUY/BURST_SELL/NORMAL). Numerics empty
 '         on REST/fallback/cold-feed runs (§8 — null, never guessed).
 '       - 2 retune C1:  TFIValue, TFISignal (closes the F11 audit blindness).
-'       - 5 absorption (reserved per book-absorption-proposal.md D4/D8; EMPTY
-'         until the #6 build populates them): AbsorptionSignal, AbsorptionLevel,
-'         AbsorptionRatio, AbsorptionAggrUsd, AbsorptionPullFrac.
+'       - 5 absorption (reserved per book-absorption-proposal.md D4/D8; POPULATED
+'         by the #6 build — rotation-free, same header): AbsorptionSignal
+'         (NONE default), AbsorptionLevel, AbsorptionRatio, AbsorptionAggrUsd,
+'         AbsorptionPullFrac (numerics EMPTY unless a level episode is active on
+'         the WS-live path; pullFrac logs even on D8-vetoed episodes).
 '       - 4 placed-geometry (placed-geometry-structural-first D5; populated from
 '         day one with the CURRENT effective levels): PlacedTargetLong,
 '         PlacedStopLong, PlacedTargetShort, PlacedStopShort — sourced from
@@ -290,7 +292,11 @@ Public Class AnalysisLogger
                     If(r.AggrVelSignal, "NORMAL"),
                     Inv(r.TFIValue, "F4"),
                     If(r.TFISignal, "NEUTRAL"),
-                    "", "", "", "", "",
+                    If(r.AbsorptionSignal, "NONE"),
+                    InvOpt(r.AbsorptionLevel, "F2"),
+                    InvOpt(r.AbsorptionRatio, "F2"),
+                    InvOpt(r.AbsorptionAggrUsd, "F0"),
+                    InvOpt(r.AbsorptionPullFrac, "F4"),
                     Inv(placedLong.Target, "F2"),
                     Inv(placedLong.StopPx, "F2"),
                     Inv(placedShort.Target, "F2"),

@@ -61,6 +61,14 @@ Public NotInheritable Class MicrostructureSnapshot
     Public Property HasBurst       As Boolean
     Public Property BurstRatio     As Double
     Public Property BurstSignal    As String = "NORMAL"    ' BURST_BUY / BURST_SELL / NORMAL
+
+    ''' <summary>[P4 #6] Level-absorption tag (book-absorption proposal §7 D6 — strip-only
+    ''' surface, the #3/#5 precedent). HasAbsorption is True ONLY while an ABSORB state is
+    ''' active (the tag renders only then); blank on NONE/IDLE — never a fake reading.</summary>
+    Public Property HasAbsorption      As Boolean
+    Public Property AbsorptionSignal   As String = "NONE"  ' ABSORB_ABOVE / ABSORB_BELOW / NONE
+    Public Property AbsorptionLevel    As Double
+    Public Property AbsorptionRatio    As Double
 End Class
 
 Public NotInheritable Class LiveMicrostructureEvaluator
@@ -151,6 +159,27 @@ Public NotInheritable Class LiveMicrostructureEvaluator
                                            avSnap.BurstRatio, avSnap.Lean,
                                            ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, hourUtc),
                                            av.DirectionLeanFloor)
+                End If
+            End If
+
+            ' [P4 #6] Level-absorption tag — the same feed-side tracker snapshot the full
+            ' run reads, classified with the same pure fn + session-resolved min_aggr_usd
+            ' (identical methodology, only fresher — the strip discipline). The tag
+            ' renders ONLY while an ABSORB state is active (§7 D6).
+            Dim ab = cfg.Indicators.Absorption
+            If ab IsNot Nothing AndAlso ab.Enabled Then
+                Dim absNowMs As Long = If(nowUtcMs >= 0, nowUtcMs,
+                                          DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+                Dim absHour As Integer = DateTimeOffset.FromUnixTimeMilliseconds(absNowMs).UtcDateTime.Hour
+                Dim absRead = IndicatorEngine.ClassifyAbsorption(
+                                  state.GetAbsorption(absNowMs, ab),
+                                  ExecutionResolution.ResolveAbsorptionMinAggrUsd(cfg, absHour),
+                                  ab.AbsorbRatio, ab.MaxPullFrac)
+                If absRead.Signal = "ABSORB_ABOVE" OrElse absRead.Signal = "ABSORB_BELOW" Then
+                    snap.HasAbsorption    = True
+                    snap.AbsorptionSignal = absRead.Signal
+                    snap.AbsorptionLevel  = absRead.LevelPrice
+                    snap.AbsorptionRatio  = absRead.AbsorbRatio
                 End If
             End If
         Catch

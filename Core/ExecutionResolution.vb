@@ -157,6 +157,34 @@ Public Class ExecutionResolution
         Return o IsNot Nothing AndAlso o.BurstRatioThreshold.HasValue
     End Function
 
+    ''' <summary>
+    ''' [P4 #6 book absorption] Per-session minimum pressing USD for the given UTC hour
+    ''' (docs/book-absorption-proposal.md §5/§6). Session override → shared default
+    ''' (150k). Same inheritance contract as ResolveAggrVelNormWindow; the §5
+    ''' target-engagement calibration sets the per-session overrides (NY tape ≫ Asia).
+    ''' </summary>
+    Public Shared Function ResolveAbsorptionMinAggrUsd(cfg As EngineSettings, utcHour As Integer) As Double
+        Dim o = AbsorptionSessionOverrideFor(cfg, utcHour)
+        If o IsNot Nothing AndAlso o.MinAggrUsd.HasValue Then Return o.MinAggrUsd.Value
+        Return cfg.Indicators.Absorption.Defaults.MinAggrUsd
+    End Function
+
+    ''' <summary>The absorption.sessions{} override for the UTC hour's session bucket
+    ''' (matched by bucket NAME, case-insensitive), or Nothing when there is no matching
+    ''' bucket / no override entry.</summary>
+    Private Shared Function AbsorptionSessionOverrideFor(cfg As EngineSettings, utcHour As Integer) As AbsorptionSessionOverride
+        If cfg Is Nothing OrElse cfg.Indicators Is Nothing OrElse
+           cfg.Indicators.Absorption Is Nothing Then Return Nothing
+        Dim b = MatchSessionBucket(cfg, utcHour)
+        If b Is Nothing OrElse String.IsNullOrEmpty(b.Name) Then Return Nothing
+        Dim sessions = cfg.Indicators.Absorption.Sessions
+        If sessions Is Nothing Then Return Nothing
+        For Each kv In sessions
+            If String.Equals(kv.Key, b.Name, StringComparison.OrdinalIgnoreCase) Then Return kv.Value
+        Next
+        Return Nothing
+    End Function
+
     ''' <summary>The aggressor_velocity.sessions{} override for the UTC hour's session
     ''' bucket (matched by bucket NAME, case-insensitive), or Nothing when there is no
     ''' matching bucket / no override entry.</summary>

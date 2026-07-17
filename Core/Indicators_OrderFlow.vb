@@ -179,6 +179,63 @@ Partial Public Class IndicatorEngine
         Return "NORMAL"
     End Function
 
+    ''' <summary>
+    ''' [P4 #6] Classify a level-absorption tracker read into ABSORB_ABOVE / ABSORB_BELOW /
+    ''' NONE (docs/book-absorption-proposal.md §4.2). Pure — parallels ClassifyOfiRatio /
+    ''' ClassifyAggressorBurst. A side is a candidate when its episode is ACTIVE (which
+    ''' already implies no progress — a break-through closes the episode instantly),
+    ''' aggrUsd ≥ the session-resolved min_aggr_usd, and absorbRatio ≥ absorb_ratio.
+    ''' D8 veto: a candidate whose pullFrac exceeds max_pull_frac is painted defense →
+    ''' NONE for that side. Both sides qualifying (tight bracketing levels) → the higher
+    ''' ratio wins. NONE is the modal state by construction — the proximity gate keeps
+    ''' the tracker IDLE on most runs, and no non-directional payout exists (§2).
+    '''
+    ''' The returned read also carries the PRIMARY episode's numerics for CSV/display:
+    ''' the signalling side when one fires, else the active side with the larger
+    ''' aggrUsd — pullFrac is logged even on vetoed episodes (D8: the W4 fidelity-binds
+    ''' evidence). HasEpisode=False ⇒ all numerics meaningless (null CSV, §4.3).
+    ''' </summary>
+    Public Shared Function ClassifyAbsorption(snap As AbsorptionSnapshot,
+                                              minAggrUsd As Double,
+                                              absorbRatioThreshold As Double,
+                                              maxPullFrac As Double) As AbsorptionRead
+        Dim aboveFires As Boolean =
+            snap.Above.Active AndAlso snap.Above.AggrUsd >= minAggrUsd AndAlso
+            snap.Above.AbsorbRatio >= absorbRatioThreshold AndAlso
+            snap.Above.PullFrac <= maxPullFrac
+        Dim belowFires As Boolean =
+            snap.Below.Active AndAlso snap.Below.AggrUsd >= minAggrUsd AndAlso
+            snap.Below.AbsorbRatio >= absorbRatioThreshold AndAlso
+            snap.Below.PullFrac <= maxPullFrac
+
+        Dim primary As AbsorptionSideRead
+        Dim signal As String = "NONE"
+        If aboveFires AndAlso belowFires Then
+            primary = If(snap.Above.AbsorbRatio >= snap.Below.AbsorbRatio, snap.Above, snap.Below)
+            signal = If(snap.Above.AbsorbRatio >= snap.Below.AbsorbRatio, "ABSORB_ABOVE", "ABSORB_BELOW")
+        ElseIf aboveFires Then
+            primary = snap.Above : signal = "ABSORB_ABOVE"
+        ElseIf belowFires Then
+            primary = snap.Below : signal = "ABSORB_BELOW"
+        ElseIf snap.Above.Active AndAlso snap.Below.Active Then
+            primary = If(snap.Above.AggrUsd >= snap.Below.AggrUsd, snap.Above, snap.Below)
+        ElseIf snap.Above.Active Then
+            primary = snap.Above
+        ElseIf snap.Below.Active Then
+            primary = snap.Below
+        Else
+            Return New AbsorptionRead With {.Signal = "NONE", .HasEpisode = False}
+        End If
+
+        Return New AbsorptionRead With {
+            .Signal = signal,
+            .HasEpisode = True,
+            .LevelPrice = primary.LevelPrice,
+            .AbsorbRatio = primary.AbsorbRatio,
+            .AggrUsd = primary.AggrUsd,
+            .PullFrac = primary.PullFrac}
+    End Function
+
     ' -- Liquidations ---------------------------------------------------------
     ' [T3-D]: dominanceRatio optional param.
     ' LONG LIQS: liqLongSize >= liqShortSize * dominanceRatio.

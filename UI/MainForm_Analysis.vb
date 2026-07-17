@@ -451,6 +451,30 @@ Partial Public Class MainForm
                                           avCfg.DirectionLeanFloor)
             End If
         End If
+
+        ' [P4 #6] Book absorption — read the level-scoped episode tracker on the WS-live
+        ' path only (the dual-fed tracker needs the live book+trade streams; a REST/
+        ' fallback run has no equivalent). Display/CSV-only at the build — nothing
+        ' downstream of r.Absorption* touches scoring while scoring_enabled=false (the
+        ' penalty wire-in is a later, twice-evidence-gated activation, proposal §5).
+        ' Numerics populate for ANY active episode (pullFrac logs on vetoed episodes
+        ' too — D8); no episode / disabled / REST ⇒ NONE + Nothing (§4.3).
+        Dim absCfg = cfg.Indicators.Absorption
+        If absCfg IsNot Nothing AndAlso absCfg.Enabled AndAlso (src Is _wsSource) AndAlso _marketState IsNot Nothing Then
+            Dim absSnap = _marketState.GetAbsorption(
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), absCfg)
+            Dim absRead = IndicatorEngine.ClassifyAbsorption(
+                              absSnap,
+                              ExecutionResolution.ResolveAbsorptionMinAggrUsd(cfg, utcHour),
+                              absCfg.AbsorbRatio, absCfg.MaxPullFrac)
+            r.AbsorptionSignal = absRead.Signal
+            If absRead.HasEpisode Then
+                r.AbsorptionLevel    = absRead.LevelPrice
+                r.AbsorptionRatio    = absRead.AbsorbRatio
+                r.AbsorptionAggrUsd  = absRead.AggrUsd
+                r.AbsorptionPullFrac = absRead.PullFrac
+            End If
+        End If
         IndicatorEngine.CalcMicroCVD(recentTrades,
                                      r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate,
                                      r.MicroCVDMomentum, r.MicroCVDSignal,
@@ -640,6 +664,14 @@ Partial Public Class MainForm
             enabled:=cfg.AnalysisLogging.OutputDumpEnabled,
             maxRuns:=cfg.AnalysisLogging.OutputDumpMaxRuns,
             perfStripLine:=ComposePerfStripLine())
+
+        ' [P4 #6] Refresh the absorption tracker's carried candidate levels — the SAME
+        ' carry the TAPE strip brackets (_lastSuccessfulIndicators, set just below).
+        ' A re-mapped level resets that side's episode at the next fold (§4.1).
+        If _marketState IsNot Nothing Then
+            _marketState.SetAbsorptionLevels(r.LastSwingHigh5m, r.LastSwingLow5m,
+                                             r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
+        End If
 
         ' P4f — capture last-successful state for the SKIPPED-render fallback.
         ' Must be the last thing before the AnalysisCompleted event so the

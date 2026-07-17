@@ -1,5 +1,5 @@
 # DeribitVerdictEngine — Architecture Reference
-**Last updated: 2026-07-07 | App version: settings.json v51 — B4b placed-geometry structural-first levels (ONE arbitration seam `SignalEmitter.ComputeSideLevels`; Step 5b delegates; FOUR parity surfaces: snapshot ↔ cards ↔ `verdict_signal.json` ↔ CSV `Placed*`) on top of v50 #5 aggressor-velocity + retune bundle (CSV v0.8), v49 signal-bridge emitter, v48 OFI dominance re-baseline, v42 WebSocket cutover, v31 correctness pass. `settings.json` line 1 is the version source of truth.**
+**Last updated: 2026-07-17 | App version: settings.json v54 — #6 book-absorption build (level-scoped dual-fed episode tracker, display/CSV only, `scoring_enabled:false`) on top of v53 funding time-anchored window, v52 #5 TFI-modifier wire-in, v51 B4b placed-geometry structural-first levels (ONE arbitration seam `SignalEmitter.ComputeSideLevels`; Step 5b delegates; FOUR parity surfaces: snapshot ↔ cards ↔ `verdict_signal.json` ↔ CSV `Placed*`), v50 #5 aggressor-velocity + retune bundle (CSV v0.8), v49 signal-bridge emitter, v42 WebSocket cutover. `settings.json` line 1 is the version source of truth.**
 
 > **Trade-stream contract (v31).** `DeribitClient.GetRecentTradesAsync` returns trades in **chronological ascending** order (oldest first, most recent last) — the HTTP request keeps `sorting=desc` to guarantee the latest trades, and the parsed list is reversed before return. Window-consuming indicators (TFI, MicroCVD) take their window from the **end** of the list via `IndicatorEngine.LastN`; `Take(n)` on a trade list selects the OLDEST n and is a bug. CalcCVD's positional thirds (early/mid/late) are chronologically truthful under this contract.
 
@@ -33,7 +33,10 @@ DeribitVerdictEngine/
 │                                       gated (book/trades/ticker); candles defer to IsFresh.
 ├── MarketState.vb                      [WS-P1] Thread-safe snapshot store (1 SyncLock, copy-on-
 │                                       read): 4 candle series 1/3/5/15, 5000 ascending trade
-│                                       ring, top-10 ladder, ticker (funding_8h/OI/mark).
+│                                       ring, top-10 ladder, ticker (funding_8h/OI/mark). Also
+│                                       owns the OFI + aggressor-velocity accumulators and
+│                                       [v54 #6] the dual-fed LevelAbsorptionTracker (folds,
+│                                       reads, resets all under the same lock).
 ├── DeribitWsFeed.vb                    [WS-P1] One public ClientWebSocket — REST-seed →
 │                                       set_heartbeat → subscribe 1/3/5/15 chart + trades +
 │                                       ticker + depth-limited book → receive loop → backoff
@@ -162,7 +165,23 @@ DeribitVerdictEngine/
 │   │                                   cfg), CalcMicroCVD (dynamic accelThreshold),
 │   │                                   CalcTFI, CalcLiquidations,
 │   │                                   CalcFundingMomentum + AppendFundingSample
-│   │                                   (v53 time-anchored window + ring eviction)
+│   │                                   (v53 time-anchored window + ring eviction),
+│   │                                   ClassifyAbsorption (v54 #6 — pure classifier
+│   │                                   over the LevelAbsorptionTracker read)
+│   ├── LevelAbsorptionTracker.vb       [P4 #6 v54] Level-scoped absorption episode
+│   │                                   tracker (book-absorption-proposal.md §4) —
+│   │                                   the first DUAL-FED tracker: owned by
+│   │                                   MarketState under its ONE lock, folded from
+│   │                                   BOTH the ~100ms book snapshots (proximity
+│   │                                   gate on the nearest CARRIED level, band-size
+│   │                                   trajectory, D8 ΔSize=Posts−Pulls−Fills
+│   │                                   conservation w/ visibility mask) AND the
+│   │                                   trades stream (rolling pressing USD, band
+│   │                                   fills, break-through test). absorbRatio =
+│   │                                   pressing USD per USD net band depletion;
+│   │                                   pullFrac = provable pulls / provable posts
+│   │                                   (spoof veto). Reset on SeedAsync. Display/
+│   │                                   CSV only at the build (scoring_enabled:false).
 │   └── Indicators_Structure.vb         CalcDonchian (quartilePct from cfg),
 │                                       CalcOBV,
 │                                       CalcVPFRLite v2 (VAH/VAL + nearest HVN/LVN,
@@ -360,6 +379,14 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
         ├─ r.MicroCVD*          = CalcMicroCVD(recentTrades)
         │                         [dynamic accelThreshold: max(staticFloor, windowUsd × pct)]
         ├─ r.TFI* / TFISignal   = CalcTFI(recentTrades)
+        ├─ r.Absorption*        = [v54 #6, WS-live only] MarketState.GetAbsorption →
+        │                         IndicatorEngine.ClassifyAbsorption (session-resolved
+        │                         min_aggr_usd via ExecutionResolution) → ABSORB_ABOVE /
+        │                         ABSORB_BELOW / NONE + episode numerics (pullFrac logs
+        │                         even on D8-vetoed episodes). REST/fallback/cold/no
+        │                         episode ⇒ NONE + nulls. Display/CSV only at the build.
+        │                         Carried levels re-set post-run from this run's swing/HVN
+        │                         fields (the strip's carry) via SetAbsorptionLevels.
         ├─ r.MTFGatePassLong/Short/Details = CalcMTFGate(candles15m)  [cached; refreshed by TTL]
         │                         direction-independent per-side flags; the final
         │                         display reason is composed at scoring Step 4b
@@ -575,6 +602,7 @@ RunScoringPipeline(...)
 | MicroCVD can be negative | `MicroCVDEarly` and `MicroCVDLate` are net USD deltas over their sub-windows. Negative values are valid and intentional — they indicate net sell pressure in that segment. |
 | Funding momentum as adjunct (Step 3b) | Absolute funding rate alone misses the *direction of crowding*. A rate already at +0.03% but falling is less dangerous than one at +0.02% and rising fast. Step 3b amplifies or softens the Step 3 penalty based on momentum direction, reading the momentum state off the time-anchored window held in `_fundingHistory`. Display-only impact on the funding UI row; scoring impact is bounded by the amplify/soften cfg values. |
 | Funding momentum window anchored in **time**, not sample count (v53) | The original window was 3 funding *changes*. On the WS feed funding changes on ~96.5% of runs, so the window's wall-clock span was ≈ 3 × run cadence — the same funding path produced different states at different cadences. At the collector's on-close cadence this stopped being a corner case and became the operating mode: 60s NY runs gave FLAT 52.1% / Step-3b engagement 27.6% (bands: 60–70% / 15–25%), and on 180s Asia/London runs a *single* 3-min step (p50 6.5e-7) already exceeded the whole-window threshold — Step 3b moved scores on 95.8% of London rows, making res-3 `FundingMomentum` uninformative and violating the adjunct invariant by arithmetic. No per-cadence threshold could fix it: the backstop timer, feed gaps and session hand-offs all move the effective cadence *within* a session. The anchored window means "funding moved more than T over ≥ W minutes" — identical at every cadence. **Anchor = the newest sample ≥ W old, not the oldest in the ring**: the oldest would re-import cadence dependence through the ring's span. W=5 min is the knee (≥ 1 full bar at both execution resolutions, ≥ 2 samples at every cadence the engine has run, front edge of the 2–15 min hold horizon); 5-min anchored deltas run *smaller* than the old ~90s count-window deltas (p50 3.0e-8 vs 8.0e-8) because the funding premium oscillates at short horizons and partially cancels, so the anchor reads sustained drift rather than wiggle. See `docs/funding-momentum-time-anchored-window-proposal.md`. |
+| Level absorption as a dual-fed, level-scoped episode tracker (v54 #6) | Absorption is the only signal reading the *interaction* of flow with resting liquidity, and needs both streams at native cadence: the trades stream says how hard the flow hits the level band, the ~100 ms book snapshots say whether the band's resting size dies or replenishes. Folding both into one `LevelAbsorptionTracker` under MarketState's single lock (the OFI/AggrVel fold discipline) keeps the two feeds consistent without a second synchronisation primitive. Episodes are proximity-gated on the nearest CARRIED level (the strip's candidate set — carried, never recomputed, so the tracker adds no level machinery) and reset on break-through/leave/re-map, so a stale ABSORB can never outlive the structure that justified it. The D8 conservation accounting (`ΔSize = Posts − Pulls − Fills`, masked to the band portion visible in both consecutive top-10 snapshots) turns unfakeable fills into a hard lower bound on pulled-without-filled volume — the spoof signature — without incremental-book plumbing; where sub-interval flicker evades it, the signal degrades to the pre-D8 baseline, never below. Build is display/CSV only; activation is evidence-gated twice (independence AND an outcome gradient) per the proposal §5. |
 | _fundingHistory age-evicted at 30 min, no count cap (v53) | Eviction horizon = the audit's segment-reset horizon; ≤ 60 entries at the fastest cadence the engine has run, so the ring stays small without a count cap. The retired `FundingHistoryMax=10` cap is not merely unnecessary but actively wrong under age-anchoring: at a 30s cadence 10 samples span only 5 minutes, so the cap would evict the very samples the W=5min anchor needs and pin the state at FLAT. The pre-v53 `[S9]` append-on-change dedup went the same way — it existed because identical samples filled a *count*-indexed ring and forced FLAT; an age-anchored ring wants them, since "funding hasn't moved in W minutes" genuinely *is* FLAT. |
 | Session-aware volume norms in DynamicNorms | BTC volume has strong time-of-day seasonality. A single global `VolHighThreshold` / `VolMidThreshold` misclassifies quiet Asian-session participation as expansion and underweights genuine London/NY burst volume. Applying UTC session multipliers at the DynamicNorms layer preserves existing scoring logic while adapting thresholds to expected liquidity. |
 | OI × CVD as Pass 2b adjunct | OI and CVD together say more than either alone: rising/opening interest confirmed by supportive CVD is stronger than standalone OI, while a full OI build that directly opposes CVD often reflects weaker participation quality. Implementing this as a post-upgrade Pass 2b preserves existing indicator methods and lets the confirm/conflict effect be tuned independently via `OiCvdSettings`. Partial OI signals can be confirmed, but only full OI conflict is penalised, reducing false negatives on covering/capitulation transitions. |

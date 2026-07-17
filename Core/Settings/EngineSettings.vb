@@ -178,6 +178,8 @@ Public Class IndicatorSettings
     <JsonPropertyName("trend_structure")> Public Property TrendStructure As New TrendStructureSettings
     ''' <summary>[P4 #5] Aggressor velocity / tape burst parameters (docs/aggressor-velocity-proposal.md §6).</summary>
     <JsonPropertyName("aggressor_velocity")> Public Property AggressorVelocity As New AggressorVelocitySettings
+    ''' <summary>[P4 #6] Book absorption at structural levels (docs/book-absorption-proposal.md §6).</summary>
+    <JsonPropertyName("absorption")> Public Property Absorption As New AbsorptionSettings
 End Class
 
 Public Class AdxSettings
@@ -469,6 +471,71 @@ End Class
 Public Class AggressorVelocitySessionOverride
     <JsonPropertyName("norm_window_sec")>       Public Property NormWindowSec       As Double? = Nothing
     <JsonPropertyName("burst_ratio_threshold")> Public Property BurstRatioThreshold As Double? = Nothing
+End Class
+
+''' <summary>
+''' [P4 #6] Book absorption at structural levels — level-scoped episode tracker
+''' (docs/book-absorption-proposal.md §6). All shipped anchors are PROVISIONAL until the
+''' §5 target-engagement calibration pass. Three-tier tweaker surface (per the #5 §6
+''' pattern — HARD CONSTRAINT 23):
+'''   ON  surface — ProximityTicks, BandTicks, WindowSec, BreakTolTicks, AbsorbRatio,
+'''                 DepletionFloorUsd, MaxPullFrac, Penalty.
+'''   OFF, hand-tuned — Defaults + Sessions (per-session min_aggr_usd — the §5
+'''                 target-engagement re-baseline tier, HC11 class; SettingsDiffApplier
+'''                 rejects the default./sessions. prefixes).
+'''   OFF, hand-toggle — Enabled + ScoringEnabled (exact-match rejects; ScoringEnabled
+'''                 is the twice-evidence-gated ⚠ activation, proposal §5).
+''' </summary>
+Public Class AbsorptionSettings
+    ''' <summary>Feature switch — feed folds + reads stop entirely when False (byte-identical
+    ''' to pre-build). Default True.</summary>
+    <JsonPropertyName("enabled")>             Public Property Enabled           As Boolean = True
+    ''' <summary>The ⚠ activation gate — stays False at the build. Flipped only after BOTH §5
+    ''' gates clear (independence AND a ≥10 pp adverse outcome gradient on n≥30 flagged rows).</summary>
+    <JsonPropertyName("scoring_enabled")>     Public Property ScoringEnabled    As Boolean = False
+    ''' <summary>ACTIVE gate distance (ticks) from the watched level — the tracker measures
+    ''' only while the touch is within this of the level (§4.1). Default 12.</summary>
+    <JsonPropertyName("proximity_ticks")>     Public Property ProximityTicks    As Integer = 12
+    ''' <summary>Level band width (ticks) for resting-size tracking + fill assignment. Default 4.</summary>
+    <JsonPropertyName("band_ticks")>          Public Property BandTicks         As Integer = 4
+    ''' <summary>Rolling pressing-volume window (seconds). Default 10.</summary>
+    <JsonPropertyName("window_sec")>          Public Property WindowSec         As Double = 10.0
+    ''' <summary>Progress tolerance (ticks) beyond the level — a print past it ends the
+    ''' episode instantly (a broken level never carries a stale ABSORB). Default 2.</summary>
+    <JsonPropertyName("break_tol_ticks")>     Public Property BreakTolTicks     As Integer = 2
+    ''' <summary>Classification threshold: pressing USD per USD net band depletion. Default 3.0.</summary>
+    <JsonPropertyName("absorb_ratio")>        Public Property AbsorbRatio       As Double = 3.0
+    ''' <summary>Divide-by-nothing guard on the depletion denominator (and the D8 postLB
+    ''' denominator). Default 25000 USD.</summary>
+    <JsonPropertyName("depletion_floor_usd")> Public Property DepletionFloorUsd As Double = 25000.0
+    ''' <summary>D8 spoof-guard veto: provable pulls / provable posts above this ⇒ painted
+    ''' defense ⇒ NONE. Default 0.5.</summary>
+    <JsonPropertyName("max_pull_frac")>       Public Property MaxPullFrac       As Double = 0.5
+    ''' <summary>Scoring magnitude once activated (inert at the build). Default 1.</summary>
+    <JsonPropertyName("penalty")>             Public Property Penalty           As Integer = 1
+    ''' <summary>Shared fallback for the per-session tier (min_aggr_usd).</summary>
+    <JsonPropertyName("default")>             Public Property Defaults          As New AbsorptionDefaults
+    ''' <summary>Per-session overrides keyed by session bucket name (null field ⇒ inherit
+    ''' Defaults). Hand-tuned tier — OFF the tweaker surface. min_aggr_usd is expected to
+    ''' split per-session at the §5 calibration (NY tape ≫ Asia); seeded empty.</summary>
+    <JsonPropertyName("sessions")>            Public Property Sessions          As Dictionary(Of String, AbsorptionSessionOverride) =
+        New Dictionary(Of String, AbsorptionSessionOverride) From {
+            {"NY",     New AbsorptionSessionOverride()},
+            {"LONDON", New AbsorptionSessionOverride()},
+            {"ASIA",   New AbsorptionSessionOverride()}
+        }
+End Class
+
+''' <summary>[P4 #6] The shared default tier: minimum pressing USD before an episode can
+''' classify (150k — a pre-calibration anchor; §5 splits it per-session).</summary>
+Public Class AbsorptionDefaults
+    <JsonPropertyName("min_aggr_usd")> Public Property MinAggrUsd As Double = 150000.0
+End Class
+
+''' <summary>[P4 #6] Nullable per-session override — Nothing ⇒ inherit AbsorptionDefaults
+''' (the v40 per-session override pattern). Hand-tuned, off the tweaker surface (HC11 class).</summary>
+Public Class AbsorptionSessionOverride
+    <JsonPropertyName("min_aggr_usd")> Public Property MinAggrUsd As Double? = Nothing
 End Class
 
 ''' <summary>

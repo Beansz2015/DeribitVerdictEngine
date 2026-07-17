@@ -147,7 +147,20 @@ Partial Public Class MainForm
         parts.Add(If(s.HasSpread, s.SpreadBps.ToString("0.0") & " bps", "-- bps"))
         parts.Add(If(s.HasImbalance, "book " & ComposeImbalance(s), "book --"))
         parts.Add(ComposeTape(s))
+        ' [P4 #6] Compact absorption tag — present ONLY while an ABSORB state is active
+        ' (book-absorption proposal §7 D6). Strip-only surface, no card/snapshot
+        ' obligation (the #3/#5 precedent).
+        If s.HasAbsorption Then parts.Add(ComposeAbsorption(s))
         Return String.Join(" · ", parts)
+    End Function
+
+    ' [P4 #6] "ABS↑ 60510 (3.4×)" — the defended level + how many USD the band ate per
+    ' USD of net depletion. ↑ = resistance defended (adverse to longs pressing up);
+    ' ↓ = support defended (adverse to shorts).
+    Private Shared Function ComposeAbsorption(s As MicrostructureSnapshot) As String
+        Dim arrow As String = If(s.AbsorptionSignal = "ABSORB_ABOVE", "↑", "↓")
+        Return "ABS" & arrow & " " & s.AbsorptionLevel.ToString("0") &
+               " (" & s.AbsorptionRatio.ToString("0.0") & "×)"
     End Function
 
     ' Bracket the price between its floor and ceiling: "SL 59860 (+56) | SH 60103 (+299)".

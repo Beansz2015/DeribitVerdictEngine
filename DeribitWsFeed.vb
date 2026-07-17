@@ -173,6 +173,11 @@ Public NotInheritable Class DeribitWsFeed
         ' suppression re-arms. Seed trades are deliberately NOT folded (only live prints
         ' carry the burst signal; the warmup gate covers the cold window).
         _state.ResetAggressorVelocity()
+        ' [P4 #6] Same discipline for the absorption tracker — a pre-gap episode must
+        ' never survive a reconnect (its band trajectory spans the gap and is a lie).
+        ' Carried levels also clear; they re-carry at the next completed full run and
+        ' the tracker re-arms on the next approach.
+        _state.ResetAbsorption()
         For Each res As String In SeedResolutions
             ct.ThrowIfCancellationRequested()
             Dim cap As Integer = 250
@@ -328,6 +333,11 @@ Public NotInheritable Class DeribitWsFeed
             ' trade early/late — immaterial at a 60/120s horizon).
             tauNorm = ExecutionResolution.ResolveAggrVelNormWindow(cfg, nowUtc.Hour)
         End If
+        ' [P4 #6] Absorption trade fold (the trade half of the dual fold). Config read
+        ' once per notification batch; SettingsLoader.Current honours hot-reload of
+        ' enabled + the flat tracker params. Off ⇒ no extra work in the feed.
+        Dim ab = cfg.Indicators.Absorption
+        Dim foldAbs As Boolean = ab IsNot Nothing AndAlso ab.Enabled
         For Each t As JsonElement In data.EnumerateArray()
             Dim rec As New TradeRecord()
             rec.Price = t.GetProperty("price").GetDouble()
@@ -340,6 +350,10 @@ Public NotInheritable Class DeribitWsFeed
             If foldAggr Then
                 _state.FoldAggressorVelocity(rec.Amount, rec.Direction = "buy", rec.Timestamp,
                                              av.FastWindowSec, tauNorm)
+            End If
+            If foldAbs Then
+                _state.FoldAbsorptionTrade(rec.Price, rec.Amount, rec.Direction = "buy",
+                                           rec.Timestamp, ab)
             End If
         Next
     End Sub
@@ -361,6 +375,19 @@ Public NotInheritable Class DeribitWsFeed
         End If
         _state.UpdateBook(snap, nowUtc)
         FoldOfiAverage(snap, nowUtc)
+        FoldAbsorptionBook(snap, nowUtc)
+    End Sub
+
+    ' [P4 #6] Fold this book update into the absorption tracker (the book half of the
+    ' dual fold — the analogue of FoldOfiAverage). Receive time is the fold stamp (book
+    ' updates carry no exchange stamp — same basis as the OFI fold). Reading
+    ' SettingsLoader.Current each fold honours hot-reload of enabled + the tracker
+    ' params; when the feature is off the feed does no extra work.
+    Private Sub FoldAbsorptionBook(snap As OrderBookSnapshot, nowUtc As DateTime)
+        Dim ab = SettingsLoader.Current.Indicators.Absorption
+        If ab Is Nothing OrElse Not ab.Enabled Then Return
+        Dim tsMs As Long = New DateTimeOffset(nowUtc).ToUnixTimeMilliseconds()
+        _state.FoldAbsorptionBook(snap, tsMs, ab)
     End Sub
 
     ' [P4 #4] Fold this book update's top-book imbalance into the time-averaged OFI accumulator

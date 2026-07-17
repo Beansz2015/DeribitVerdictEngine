@@ -129,6 +129,19 @@ Public Class PromptBuilder
             "keys are trader-owned re-baseline values (already unreachable — array-nested) and every " &
             "other tunable stays proposable. (Enforced in code: SettingsDiffApplier exact-match " &
             "rejects 'session_volume.enabled'.)" & vbLf &
+        "23. Book absorption (indicators.absorption) is a THREE-TIER surface. " &
+            "Never propose 'indicators.absorption.enabled' or " &
+            "'indicators.absorption.scoring_enabled' (feature switches — the latter is the " &
+            "TWICE-evidence-gated scoring activation: independence AND a measured adverse " &
+            "outcome gradient, flipped only by the trader after both gates clear). Never " &
+            "propose any 'indicators.absorption.default.*' or 'indicators.absorption.sessions.*' " &
+            "key (the per-session min_aggr_usd target-engagement tier — hand-tuned by the " &
+            "trader like the aggressor_velocity sessions tier, HARD CONSTRAINT 11 class). " &
+            "The FLAT keys REMAIN tunable: 'indicators.absorption.proximity_ticks', " &
+            "'...band_ticks', '...window_sec', '...break_tol_ticks', '...absorb_ratio', " &
+            "'...depletion_floor_usd', '...max_pull_frac', '...penalty'. " &
+            "(Enforced in code: SettingsDiffApplier exact-match rejects the two switches and " &
+            "rejects the 'default.'/'sessions.' prefixes.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

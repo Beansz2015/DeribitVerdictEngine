@@ -82,6 +82,18 @@ Public Class IndicatorResults
     Public Property AggrVelNet As Double?                ' net taker USD/sec on the burst horizon; Nothing = unavailable
     Public Property AggrVelSignal As String = "NORMAL"   ' "BURST_BUY" / "BURST_SELL" / "NORMAL"
 
+    ' [P4 #6] Book absorption at structural levels (docs/book-absorption-proposal.md).
+    ' Display/CSV-only at the build (scoring_enabled=false; the penalty wire-in is a
+    ' later, twice-evidence-gated activation — proposal §5). Numerics populate ONLY on
+    ' the WS-live path while a level episode is active (pullFrac logs even on D8-vetoed
+    ' episodes — the W4 fidelity-binds evidence); REST / fallback / cold feed /
+    ' disabled / no episode ⇒ NONE + Nothing (null CSV, never blocks, never guesses).
+    Public Property AbsorptionSignal As String = "NONE"  ' "ABSORB_ABOVE" / "ABSORB_BELOW" / "NONE"
+    Public Property AbsorptionLevel As Double?           ' the watched level price; Nothing = no episode
+    Public Property AbsorptionRatio As Double?           ' pressing USD per USD net band depletion
+    Public Property AbsorptionAggrUsd As Double?         ' rolling window_sec pressing USD
+    Public Property AbsorptionPullFrac As Double?        ' D8 pullLB / max(postLB, floor)
+
     ' MicroCVD -- intra-window CVD segmentation (early / mid / late thirds)
     Public Property MicroCVDEarly As Double  ' USD delta, first third of trade window
     Public Property MicroCVDMid As Double    ' USD delta, middle third

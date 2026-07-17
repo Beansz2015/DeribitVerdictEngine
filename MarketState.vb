@@ -54,6 +54,13 @@ Public NotInheritable Class MarketState
     ' per analysis run / live-strip tick, reset on (re)connect — all under _lock.
     Private ReadOnly _aggrVelAcc As New AggressorVelocityAccumulator()
 
+    ' [P4 #6] Level-absorption episode tracker (docs/book-absorption-proposal.md §4.2).
+    ' The first DUAL-FED tracker: folded from BOTH UpdateBook (each ~100 ms snapshot)
+    ' and AppendTrade (each print) — MarketState sees both under this one lock, so the
+    ' fold sites mirror FoldOfi / FoldAggressorVelocity exactly. Carried levels set once
+    ' per full run; reset on (re)connect — all under _lock.
+    Private ReadOnly _absorptionTracker As New LevelAbsorptionTracker()
+
     ' ── Writers (receive loop / seeding) ───────────────────────────────────────────────
 
     ''' <summary>Replace a candle series wholesale from a REST seed burst (startup / reconnect).
@@ -163,6 +170,43 @@ Public NotInheritable Class MarketState
         End SyncLock
     End Sub
 
+    ''' <summary>[P4 #6] Refresh the absorption tracker's carried candidate levels from a
+    ''' completed full run (the strip's carry — proposal §4.1). A mid-episode re-map
+    ''' resets that side's episode at the next fold (no cross-level bleed).</summary>
+    Public Sub SetAbsorptionLevels(swingHigh5m As Double, swingLow5m As Double,
+                                   hvnAbove As Double, hvnBelow As Double)
+        SyncLock _lock
+            _absorptionTracker.SetLevels(swingHigh5m, swingLow5m, hvnAbove, hvnBelow)
+        End SyncLock
+    End Sub
+
+    ''' <summary>[P4 #6] Fold one book snapshot into the absorption tracker (proximity
+    ''' gate, band-size trajectory, D8 conservation interval). Called by the feed right
+    ''' after UpdateBook — the book half of the dual fold.</summary>
+    Public Sub FoldAbsorptionBook(snap As OrderBookSnapshot, tsMs As Long, cfg As AbsorptionSettings)
+        SyncLock _lock
+            _absorptionTracker.FoldBook(snap, tsMs, cfg)
+        End SyncLock
+    End Sub
+
+    ''' <summary>[P4 #6] Fold one streamed trade into the absorption tracker (pressing
+    ''' volume, interval fills, break-through test). Called by the feed right after
+    ''' AppendTrade — the trade half of the dual fold.</summary>
+    Public Sub FoldAbsorptionTrade(price As Double, amountUsd As Double, isBuy As Boolean,
+                                   tsMs As Long, cfg As AbsorptionSettings)
+        SyncLock _lock
+            _absorptionTracker.FoldTrade(price, amountUsd, isBuy, tsMs, cfg)
+        End SyncLock
+    End Sub
+
+    ''' <summary>[P4 #6] Clear the absorption tracker on (re)connect so no pre-gap
+    ''' episode bleeds across; it re-arms on the next approach after levels re-carry.</summary>
+    Public Sub ResetAbsorption()
+        SyncLock _lock
+            _absorptionTracker.Reset()
+        End SyncLock
+    End Sub
+
     ''' <summary>Update the ticker fields. Funding8h serves GetFundingRateAsync — it is
     ''' funding_8h, NOT current_funding (parity with DeribitClient.GetFundingRateAsync).</summary>
     Public Sub UpdateTicker(funding8h As Double?, openInterest As Double,
@@ -214,6 +258,16 @@ Public NotInheritable Class MarketState
     Public Function GetAggressorVelocity(grossFloorUsdPerSec As Double, minCoverageSec As Double) As AggressorVelocitySnapshot
         SyncLock _lock
             Return _aggrVelAcc.Snapshot(grossFloorUsdPerSec, minCoverageSec)
+        End SyncLock
+    End Function
+
+    ''' <summary>[P4 #6] A consistent read of both absorption-episode sides (proposal
+    ''' §4.3). nowMs prunes the rolling pressing windows; the caller classifies via
+    ''' IndicatorEngine.ClassifyAbsorption and surfaces numerics only for active
+    ''' episodes (else NONE / null — never guesses).</summary>
+    Public Function GetAbsorption(nowMs As Long, cfg As AbsorptionSettings) As AbsorptionSnapshot
+        SyncLock _lock
+            Return _absorptionTracker.Snapshot(nowMs, cfg)
         End SyncLock
     End Function
 

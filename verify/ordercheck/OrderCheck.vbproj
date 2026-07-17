@@ -51,6 +51,14 @@
          already linked). The feed-side fold + run-path routing stay OUT — same live-
          socket/WinForms boundary as A16-A22. -->
     <Compile Include="..\..\Core\AggressorVelocityAccumulator.vb" />
+    <!-- P4 #6 book absorption (A31): the host-agnostic dual-fed episode tracker
+         (owned by MarketState, above) + ClassifyAbsorption (in Indicators_OrderFlow,
+         already linked) + ResolveAbsorptionMinAggrUsd (in ExecutionResolution, already
+         linked) + AnalysisLogger for the A31f reserved-column population proof (LogRun
+         writes into the harness bin dir; the fixture cleans up). The feed-side folds +
+         run-path routing stay OUT — same live-socket/WinForms boundary as A16-A23. -->
+    <Compile Include="..\..\Core\LevelAbsorptionTracker.vb" />
+    <Compile Include="..\..\AnalysisLogger.vb" />
     <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
          exercised against a real MarketState (already linked above). -->
     <Compile Include="..\..\Core\BarCloseDetector.vb" />

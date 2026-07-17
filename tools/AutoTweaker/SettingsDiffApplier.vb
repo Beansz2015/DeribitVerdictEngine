@@ -72,7 +72,9 @@ Public Class SettingsDiffApplier
         "indicators.aggressor_velocity.default.",   ' [P4 #5] shared re-baseline tier (norm window + burst threshold) — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19). Prefix-safe: the flat aggressor_velocity params stay proposable
         "indicators.aggressor_velocity.sessions.",  ' [P4 #5] per-session overrides — hand-tuned per §5.2, HC11 class (HARD CONSTRAINT 19)
         "indicators.ofi.momentum_",                 ' [v50 retune R1] OFI momentum modifier RETIRED (momentum_enabled=false) — the momentum_window/threshold/bonus keys are inert; leaving them proposable recreates the recorded-APPLIED-no-op class v47 F1 closed (HARD CONSTRAINT 20). Prefix-safe: book_depth, buy/sell_dominant_ratio, averaging_enabled, avg_window_sec are NOT momentum_-prefixed
-        "scoring.structural_levels.sessions."       ' [B4b placed-geometry] per-session fallback-target overrides (DG3: LONDON 2.0 / ASIA 1.25) — hand-tuned re-baseline tier, HC11 class (HARD CONSTRAINT 21). Prefix-safe: the flat structural_levels numerics stay proposable
+        "scoring.structural_levels.sessions.",      ' [B4b placed-geometry] per-session fallback-target overrides (DG3: LONDON 2.0 / ASIA 1.25) — hand-tuned re-baseline tier, HC11 class (HARD CONSTRAINT 21). Prefix-safe: the flat structural_levels numerics stay proposable
+        "indicators.absorption.default.",           ' [P4 #6] shared re-baseline tier (min_aggr_usd) — hand-tuned per book-absorption §5 target-engagement, HC11 class (HARD CONSTRAINT 23). Prefix-safe: the flat absorption params stay proposable
+        "indicators.absorption.sessions."           ' [P4 #6] per-session overrides — hand-tuned per book-absorption §5, HC11 class (HARD CONSTRAINT 23)
     }
 
     ' Validate a proposed diff list.
@@ -142,6 +144,18 @@ Public Class SettingsDiffApplier
                 result.IsValid    = False
                 result.ErrorReason = String.Format(
                     "Rejected: '{0}' is an aggressor-velocity feature switch, not a threshold (off tweaker surface — HARD CONSTRAINT 19).", item.Path)
+                Return result
+            End If
+            ' [P4 #6] Absorption FEATURE SWITCHES — off the tweaker surface (structural on/off
+            ' toggles, not thresholds; scoring_enabled is the TWICE-evidence-gated ⚠ activation,
+            ' book-absorption proposal §5). Exact-match, NOT a prefix: the flat siblings
+            ' (proximity_ticks, band_ticks, window_sec, break_tol_ticks, absorb_ratio,
+            ' depletion_floor_usd, max_pull_frac, penalty) STAY tunable.
+            If path = "indicators.absorption.enabled" OrElse
+               path = "indicators.absorption.scoring_enabled" Then
+                result.IsValid    = False
+                result.ErrorReason = String.Format(
+                    "Rejected: '{0}' is a book-absorption feature switch, not a threshold (off tweaker surface — HARD CONSTRAINT 23).", item.Path)
                 Return result
             End If
             ' [P4 #5 wire-in / S5 rider] session_volume FEATURE SWITCH — off the tweaker surface.
