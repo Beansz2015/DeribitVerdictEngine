@@ -493,7 +493,7 @@
     "tape_window_sec": 10
   },
   "signal_bridge": {
-    "enabled": false,
+    "enabled": true,
     "output_path": "C:\\Dev\\DeribitBridge\\verdict_signal.json"
   }
 }
