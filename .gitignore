@@ -403,3 +403,9 @@ verify/ordercheck/obj/
 
 # Archived pre-correctness-pass calibration data (engine-correctness-pass-proposal.md §9)
 data-archive/
+
+# What-If replay outputs (docs/offline-whatif-replay-proposal.md) — the runner + the in-app
+# launcher write these to the repo root so "Open Last Report" can find them; generated
+# artefacts, never committed.
+whatif_report_*.md
+whatif_overlay_counter.json

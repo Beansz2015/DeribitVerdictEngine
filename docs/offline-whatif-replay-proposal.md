@@ -1,6 +1,6 @@
 # Offline What-If Replay Runner — Proposal
 
-**Date:** 2026-07-16 · **Seat:** Fable coordinator · **Status:** **APPROVED 2026-07-16 — trader ticked W1–W7, all as recommended.** Build-authorized NOW (W5 slot: before #6, commit-before-#6 rule). Implementer: Opus, medium, one conversation; spec-back `offline-whatif-replay-spec-back.md`.
+**Date:** 2026-07-16 · **Seat:** Fable coordinator · **Status:** **BUILT 2026-07-16 (local, unpushed) — awaiting trader test-gate.** APPROVED 2026-07-16 (trader ticked W1–W7, all as recommended). Built in the W5 slot (before #6, commit-before-#6 rule). Implementer: Opus, medium, one conversation; spec-back `offline-whatif-replay-spec-back.md` (build notes + decisions there).
 **Type:** analysis-only instrument (`tools/` + `analysis/` class) — **zero scoring impact, no ⚠ boundary, never writes settings.**
 **Driver:** trader request 2026-07-16 — the calibrate-forward loop cannot answer *"which settings would have been optimal on the book so far"*; hypotheses (e.g. LONDON stop bounds, verdict selectivity) currently need one-off coordinator analyses. This tool makes that a repeatable, guard-railed instrument the trader drives.
 **Prototype evidence:** the D6 D4 both-ways report and the 07-15 F3 evaluation are exactly this computation, hand-run.

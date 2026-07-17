@@ -64,6 +64,27 @@ Public Class CsvRow
     ' (session × resolution) population filter; never re-derived from the timestamp.
     Public Property ExecResolution  As Integer = 1
 
+    ' [offline-whatif-replay] Additional logged fields the What-If replay adapter feeds
+    ' into SignalEmitter.ComputeSideLevels and the verdict re-derivation (all header-name
+    ' parsed, guarded — absent columns leave the default, so existing consumers are
+    ' untouched). Scores drive the Math.Ceiling(MaxScore × pct) tier walk + regime veto;
+    ' the swing/HVN levels + cap-reason feed the placed-level arbitration (POC tier is
+    ' unlogged, so poc-bucket rows are excluded by the runner). See
+    ' docs/offline-whatif-replay-proposal.md §2/§3.
+    Public Property LongScore           As Integer   ' col 5 — raw long score (regime-veto input)
+    Public Property ShortScore          As Integer   ' col 6 — raw short score (regime-veto input)
+    Public Property EffectiveLongScore  As Integer   ' col 7 — post-Step-4 effective long (tier walk)
+    Public Property EffectiveShortScore As Integer   ' col 8 — post-Step-4 effective short (tier walk)
+    Public Property MaxScore            As Integer   ' col 9 — regimeMax (threshold denominator)
+    Public Property Confidence          As String    ' logged confidence (display only)
+    Public Property MtfGatePassLong     As Boolean = True   ' per-side MTF flag (re-applies the veto)
+    Public Property MtfGatePassShort    As Boolean = True
+    Public Property SwingTargetLong     As Double    ' 0 when no swing data logged
+    Public Property SwingTargetShort    As Double
+    Public Property VpfrNearestHvnAbove As Double    ' 0 = none
+    Public Property VpfrNearestHvnBelow As Double    ' 0 = none
+    Public Property TargetCapReason     As String    ' bucket: swing/hvn/poc/none (poc → replay-excluded)
+
     ' v2: per-window OHLC bar list populated by PopulateForwardBars after OHLC fetch.
     ' Key = window minutes (5, 10, 15). Empty list → row excluded from that window.
     Public Property ForwardBars As New Dictionary(Of Integer, List(Of OhlcBar))()
@@ -120,6 +141,20 @@ Public Class ForwardWindowJoiner
             TryParseD(parts, colIdx, "SwingStopShort", row.SwingStopShort)
             ' v0.7 ExecResolution — absent in legacy v0.6 rows ⇒ default 1.
             row.ExecResolution = ParseIntOr(GetStr(parts, colIdx, "ExecResolution"), 1)
+            ' [offline-whatif-replay] Scores + swing/HVN levels + cap-reason for the replay.
+            row.LongScore           = ParseIntOr(GetStr(parts, colIdx, "LongScore"), 0)
+            row.ShortScore          = ParseIntOr(GetStr(parts, colIdx, "ShortScore"), 0)
+            row.EffectiveLongScore  = ParseIntOr(GetStr(parts, colIdx, "EffectiveLongScore"), 0)
+            row.EffectiveShortScore = ParseIntOr(GetStr(parts, colIdx, "EffectiveShortScore"), 0)
+            row.MaxScore            = ParseIntOr(GetStr(parts, colIdx, "MaxScore"), 0)
+            row.Confidence          = GetStr(parts, colIdx, "Confidence")
+            row.MtfGatePassLong     = ParseBoolOr(GetStr(parts, colIdx, "MTFGatePassLong"), True)
+            row.MtfGatePassShort    = ParseBoolOr(GetStr(parts, colIdx, "MTFGatePassShort"), True)
+            TryParseD(parts, colIdx, "SwingTargetLong",     row.SwingTargetLong)
+            TryParseD(parts, colIdx, "SwingTargetShort",    row.SwingTargetShort)
+            TryParseD(parts, colIdx, "VPFRNearestHvnAbove", row.VpfrNearestHvnAbove)
+            TryParseD(parts, colIdx, "VPFRNearestHvnBelow", row.VpfrNearestHvnBelow)
+            row.TargetCapReason     = GetStr(parts, colIdx, "TargetCapReason")
             ' [D6] v0.8 placed levels — parsed only when the schema carries them.
             row.HasPlaced = hasPlacedSchema
             If hasPlacedSchema Then
@@ -194,6 +229,14 @@ Public Class ForwardWindowJoiner
         If String.IsNullOrEmpty(s) Then Return fallback
         Return If(Integer.TryParse(s.Trim(), NumberStyles.Integer,
                                    CultureInfo.InvariantCulture, v), v, fallback)
+    End Function
+
+    ' [offline-whatif-replay] Boolean read with a fallback — the engine logs "True"/"False"
+    ' (Boolean.ToString). Empty / unparseable ⇒ fallback (absent MTF column ⇒ pass).
+    Private Shared Function ParseBoolOr(s As String, fallback As Boolean) As Boolean
+        Dim v As Boolean
+        If String.IsNullOrEmpty(s) Then Return fallback
+        Return If(Boolean.TryParse(s.Trim(), v), v, fallback)
     End Function
 
 End Class

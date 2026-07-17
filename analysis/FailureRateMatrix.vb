@@ -39,6 +39,15 @@ Public Class FailureRateMatrix
 
     ' Maps engine verdict strings → canonical tier names.
     Private Shared Function ToTier(verdict As String) As String
+        Return CanonicalTier(verdict)
+    End Function
+
+    ''' <summary>Public tier classifier — the SAME mapping ToTier uses, exposed so the
+    ''' What-If replay tags its re-derived verdicts against the identical denominator
+    ''' definition (STRONG/MEDIUM LONG/SHORT feed the matrix; WEAK / NO TRADE excluded).
+    ''' Returns "" for excluded verdicts. Null-safe.</summary>
+    Public Shared Function CanonicalTier(verdict As String) As String
+        If verdict Is Nothing Then Return ""
         Select Case verdict.Trim().ToUpper()
             Case "STRONG LONG"  : Return "STRONG_LONG"
             Case "LONG"         : Return "MEDIUM_LONG"

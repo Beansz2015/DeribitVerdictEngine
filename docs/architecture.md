@@ -229,6 +229,11 @@ DeribitVerdictEngine/
 │   ├── OutputDumpSettingsForm.vb       Non-modal dialog: Enabled toggle, max-runs
 │   │                                   textbox, file path + size, Clear + Save + Close.
 │   │                                   Save routes through SettingsLoader.Save.
+│   ├── WhatIfLauncherForm.vb           [offline-whatif-replay W7] Non-modal launcher —
+│   │                                   whitelisted-knob grid (value-or-sweep), constraint
+│   │                                   field, span, Run. Writes overlay JSON + Process.Start's
+│   │                                   tools/WhatIfRunner, opens the report in AnalysisReportForm.
+│   │                                   A launcher only — zero replay logic, no tools-project ref.
 │   └── MainForm_Calibration.vb         BuildCalibrationReport() + calibration link
 │                                       handlers (UpdateLogInfo lives in
 │                                       MainForm_Layout.vb).
@@ -249,13 +254,24 @@ DeribitVerdictEngine/
 │                                       tier-major (offline-analysis-report-audit-proposal.md).
 │
 ├── tools/
-│   └── AutoTweaker/                    Host-agnostic console app (Bundle 2).
-│                                       AutoTweaker.vbproj — separate .NET 8 project.
-│                                       Zero WinForms references. Runs unmodified
-│                                       on Linux via `dotnet AutoTweaker.dll`.
-│                                       AutoTweakerProgram, AutoTweakerCore,
-│                                       PromptBuilder, ClaudeApiClient,
-│                                       SettingsDiffApplier, TweakerConfig, TweakerState.
+│   ├── AutoTweaker/                    Host-agnostic console app (Bundle 2).
+│   │                                   AutoTweaker.vbproj — separate .NET 8 project.
+│   │                                   Zero WinForms references. Runs unmodified
+│   │                                   on Linux via `dotnet AutoTweaker.dll`.
+│   │                                   AutoTweakerProgram, AutoTweakerCore,
+│   │                                   PromptBuilder, ClaudeApiClient,
+│   │                                   SettingsDiffApplier, TweakerConfig, TweakerState.
+│   └── WhatIfRunner/                   Offline What-If replay runner (analysis-only;
+│                                       zero scoring impact, never writes settings.json).
+│                                       WhatIfRunner.vbproj — separate .NET 8, zero WinForms.
+│                                       Links the SHIPPED SignalEmitter.ComputeSideLevels +
+│                                       FailureRateMatrix (one seam, no copies): applies a
+│                                       whitelisted settings overlay, re-derives placed levels
+│                                       + verdict tier per logged CSV row, re-walks 1m-OHLC
+│                                       outcomes, prints baseline-vs-overlay + EV-in-ATR grid
+│                                       ranking with split-half validation. WhatIfOverlay,
+│                                       WhatIfSettings, WhatIfReplay, WhatIfReport, WhatIfProgram.
+│                                       docs/offline-whatif-replay-proposal.md.
 │
 └── docs/
     ├── DeribitIndicatorProject.md      Authoritative handover document (read first)

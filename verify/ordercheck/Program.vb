@@ -189,6 +189,16 @@ Module Program
         A29d_ThirtyMinuteEviction()
         A29e_CadenceInvariance()
 
+        ' offline-whatif-replay (proposal §5 acceptance): the CsvRow → IndicatorResults
+        ' adapter feeds the SHIPPED SignalEmitter.ComputeSideLevels identically (no copies);
+        ' the overlay whitelist rejects off-list keys loudly; the verdict re-derivation shifts
+        ' the directional population under a threshold overlay; the POC ladder tier is closed
+        ' in replay (VPFRPoc/VPFRSignal are unlogged).
+        A30a_AdapterReproducesComputeSideLevels()
+        A30b_WhitelistRejectAccept()
+        A30c_ThresholdReplayPopulationShift()
+        A30d_PocTierClosedInReplay()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -3019,6 +3029,106 @@ Module Program
         ' 30s ring would read a +3e-7 delta and the 180s ring +1.8e-6, off the same path at
         ' the same instant. Documented rather than asserted: the count-window code is gone,
         ' so there is nothing left to run it against.
+    End Sub
+
+    ' =======================================================================
+    ' A30 — offline What-If replay runner (docs/offline-whatif-replay-proposal.md §5)
+    ' =======================================================================
+
+    ' A directional RANGE_BOUND row with a swing target + HVN on each side, at NY hour 14.
+    Private Function BuildWhatIfRow() As CsvRow
+        Return New CsvRow() With {
+            .Timestamp = New DateTime(2026, 7, 10, 14, 0, 0, DateTimeKind.Utc),
+            .Price = 62000, .ATR = 40, .Regime = "RANGE_BOUND", .ExecResolution = 1,
+            .MaxScore = 18, .LongScore = 12, .ShortScore = 4,
+            .EffectiveLongScore = 12, .EffectiveShortScore = 4,
+            .MtfGatePassLong = True, .MtfGatePassShort = True,
+            .SwingTargetLong = 62070, .SwingStopLong = 61950,
+            .SwingTargetShort = 61930, .SwingStopShort = 62050,
+            .VpfrNearestHvnAbove = 62090, .VpfrNearestHvnBelow = 61910,
+            .HasPlaced = True}
+    End Function
+
+    ' -- A30a: the adapter feeds ComputeSideLevels identically (the "no copies" guarantee) --
+    ' The replayed Placed* on a row must equal a DIRECT SignalEmitter.ComputeSideLevels call
+    ' on the same adapter output — proving the replay arbitration IS production, so the
+    ' empty-overlay baseline column reproduces the standing failure matrix (§7).
+    Private Sub A30a_AdapterReproducesComputeSideLevels()
+        Dim cfg As New EngineSettings()   ' structural_levels enabled by default
+        Dim row = BuildWhatIfRow()
+        Dim r = WhatIfReplay.BuildIndicator(row)
+        Dim directLong = SignalEmitter.ComputeSideLevels(New VerdictResult(), r, cfg, isLong:=True)
+        Dim directShort = SignalEmitter.ComputeSideLevels(New VerdictResult(), r, cfg, isLong:=False)
+
+        Dim run = WhatIfReplay.RunCell(New List(Of CsvRow) From {row}, cfg, 15, keepRows:=True)
+        Dim rep = run.ReplayedRows(0)
+
+        Check("A30a adapter placements ≡ ComputeSideLevels (no copies)",
+              Math.Abs(rep.PlacedTargetLong - directLong.Target) < 0.001 AndAlso
+              Math.Abs(rep.PlacedStopLong - directLong.StopPx) < 0.001 AndAlso
+              Math.Abs(rep.PlacedTargetShort - directShort.Target) < 0.001 AndAlso
+              Math.Abs(rep.PlacedStopShort - directShort.StopPx) < 0.001,
+              String.Format("replay L(t{0:F1}/s{1:F1}) S(t{2:F1}/s{3:F1}) vs direct L(t{4:F1}/s{5:F1}) S(t{6:F1}/s{7:F1})",
+                            rep.PlacedTargetLong, rep.PlacedStopLong, rep.PlacedTargetShort, rep.PlacedStopShort,
+                            directLong.Target, directLong.StopPx, directShort.Target, directShort.StopPx))
+    End Sub
+
+    ' -- A30b: whitelist rejects off-list keys loudly + accepts a listed knob ----------------
+    Private Sub A30b_WhitelistRejectAccept()
+        Dim threw As Boolean = False
+        Try
+            WhatIfOverlay.Parse("{""indicators"":{""OFI"":{""book_depth"":7}}}")
+        Catch ex As WhatIfOverlayError
+            threw = True
+        End Try
+        Dim ok As WhatIfOverlay = WhatIfOverlay.Parse("{""scoring"":{""structural_levels"":{""stop_max_atr_mult"":2.0}}}")
+
+        Check("A30b whitelist rejects off-list (indicators.OFI.book_depth) + accepts listed (stop_max_atr_mult)",
+              threw AndAlso ok.Knobs.Count = 1 AndAlso
+              ok.Knobs(0).Path = "scoring.structural_levels.stop_max_atr_mult" AndAlso
+              Math.Abs(ok.Knobs(0).Values(0) - 2.0) < 0.000001,
+              String.Format("threw={0}, knobs={1}, path={2}", threw, ok.Knobs.Count,
+                            If(ok.Knobs.Count > 0, ok.Knobs(0).Path, "(none)")))
+    End Sub
+
+    ' -- A30c: threshold overlay shifts the directional population --------------------------
+    ' regimeMax 18: live med_pct 0.53 → tMed=ceil(9.54)=10; weak_pct 0.35 → tWeak=ceil(6.3)=7.
+    ' effLS=9 ⇒ WEAK LONG at live (9<10, 9≥7). Lower med_pct to 0.45 → tMed=ceil(8.1)=9 ⇒ 9≥9
+    ' ⇒ LONG (MEDIUM, directional). The min-move gate does not fire (ATR fallback 40×1.75=70 >
+    ' floor 0.0008×62000=49.6), so the flip is purely the threshold re-derivation.
+    Private Sub A30c_ThresholdReplayPopulationShift()
+        Dim row = BuildWhatIfRow()
+        row.EffectiveLongScore = 9 : row.EffectiveShortScore = 2
+        row.LongScore = 9 : row.ShortScore = 2
+        row.SwingTargetLong = 0 : row.VpfrNearestHvnAbove = 0   ' force the ATR fallback target
+
+        Dim dom As String = WhatIfReplay.DominantSide(row)
+        Dim cfgBase As New EngineSettings()
+        Dim cfgLow As New EngineSettings()
+        cfgLow.Scoring.VerdictMedPct = 0.45
+
+        Dim placedBase = SignalEmitter.ComputeSideLevels(New VerdictResult(), WhatIfReplay.BuildIndicator(row), cfgBase, True).Target
+        Dim placedLow = SignalEmitter.ComputeSideLevels(New VerdictResult(), WhatIfReplay.BuildIndicator(row), cfgLow, True).Target
+        Dim tB As String = "", tL As String = ""
+        Dim vBase = WhatIfReplay.DeriveVerdict(row, cfgBase, dom, placedBase, tB)
+        Dim vLow = WhatIfReplay.DeriveVerdict(row, cfgLow, dom, placedLow, tL)
+
+        Check("A30c threshold overlay shifts population (WEAK LONG → LONG on med_pct 0.53→0.45)",
+              dom = "LONG" AndAlso vBase = "WEAK LONG" AndAlso vLow = "LONG",
+              String.Format("dom={0} base='{1}' low='{2}'", dom, vBase, vLow))
+    End Sub
+
+    ' -- A30d: the POC ladder tier is closed in replay (VPFRPoc/VPFRSignal are unlogged) -----
+    Private Sub A30d_PocTierClosedInReplay()
+        Dim cfg As New EngineSettings()
+        Dim row = BuildWhatIfRow()
+        row.SwingTargetLong = 0 : row.VpfrNearestHvnAbove = 0   ' no swing, no HVN → only ATR fallback left
+        Dim r = WhatIfReplay.BuildIndicator(row)
+        Dim lv = SignalEmitter.ComputeSideLevels(New VerdictResult(), r, cfg, isLong:=True)
+
+        Check("A30d replay ladder = swing→HVN→fallback (POC closed: VPFR unlogged → adapter zeroes it)",
+              lv.TargetReason = "FALLBACK_ATR" AndAlso r.VPFRPoc = 0 AndAlso r.VPFRSignal = "NEUTRAL",
+              String.Format("targetReason={0} poc={1} sig={2}", lv.TargetReason, r.VPFRPoc, r.VPFRSignal))
     End Sub
 
 End Module

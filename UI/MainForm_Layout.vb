@@ -137,6 +137,7 @@ Partial Public Class MainForm
     Private WithEvents lnkOutputDumpSettings  As System.Windows.Forms.LinkLabel
 
     Private _tweakForm              As TweakSettingsForm
+    Private _whatIfForm             As WhatIfLauncherForm
     Private _outputDumpSettingsForm As OutputDumpSettingsForm
 
     ' P4e commit 2 — REPEAT/SINGLE chip inside the AUTO-RUN sub-box; tooltip
@@ -241,7 +242,8 @@ Partial Public Class MainForm
     ' and the CARD grows by EXIT_GUARD_STRIP_H when it appears. The card must grow rather than
     ' let the strip eat into TOOLS: TOOLS is a Percent row and starving it silently clips
     ' Output Dump. Kept generous vs the strip's real AutoSize height so TOOLS keeps >= 120.
-    Friend Const SETTINGS_CARD_H_BASE As Integer = 250
+    ' [offline-whatif-replay W7] +28 for the 4th TOOLS LinkRow ("What-If Replay", y=104).
+    Friend Const SETTINGS_CARD_H_BASE As Integer = 278
     Friend Const EXIT_GUARD_STRIP_H   As Integer = 28
     Friend _settingsRowIndex As Integer = -1
     Friend _lblLastPrice      As Label
@@ -1225,6 +1227,18 @@ Partial Public Class MainForm
         AddHandler rowDump.LinkClicked, Sub(s, ev) lnkOutputDump_LinkClicked(s, Nothing)
         grpTools.Controls.Add(rowDump)
 
+        ' [offline-whatif-replay W7] What-If Replay launcher — opens the thin non-modal
+        ' dialog that writes an overlay JSON and Process.Start's the host-agnostic runner
+        ' (TweakSettingsForm precedent). The card grew by 28 px (SETTINGS_CARD_H_BASE) for it.
+        Dim rowWhatIf = New LinkRow() With {
+            .LinkText = "What-If Replay",
+            .Location = New Point(10, 104),
+            .Size = New Size(320, 22),
+            .TabStop = False
+        }
+        AddHandler rowWhatIf.LinkClicked, Sub(s, ev) OpenWhatIfLauncher()
+        grpTools.Controls.Add(rowWhatIf)
+
         ' Cog (settings) — reuse the existing programmatic LinkLabel so its
         ' Handles … LinkClicked partial-class binding stays intact.
         ' [2026-07-15] Moved off the box's right edge to sit immediately right of the
@@ -1472,6 +1486,17 @@ Partial Public Class MainForm
         PositionOnParentScreen(_tweakForm, Me)
         _tweakForm.Show()
         _tweakForm.BringToFront()
+    End Sub
+
+    ' [offline-whatif-replay W7] Open the non-modal What-If launcher (single instance).
+    Private Sub OpenWhatIfLauncher()
+        If _whatIfForm Is Nothing OrElse _whatIfForm.IsDisposed Then
+            _whatIfForm = New WhatIfLauncherForm()
+            AddHandler _whatIfForm.FormClosed, Sub(s, ev) _whatIfForm = Nothing
+        End If
+        PositionOnParentScreen(_whatIfForm, Me)
+        _whatIfForm.Show()
+        _whatIfForm.BringToFront()
     End Sub
 
     ' -----------------------------------------------------------------------

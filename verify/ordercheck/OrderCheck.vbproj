@@ -78,6 +78,12 @@
     <Compile Include="..\..\analysis\MarkdownReportWriter.vb" />
     <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
     <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
+    <!-- offline-whatif-replay (A30): the host-agnostic overlay whitelist + the replay core
+         (adapter → the shipped SignalEmitter.ComputeSideLevels + verdict re-derivation). The
+         report writer + console Program stay OUT (Program carries its own Main; the report
+         writer needs no fixture). docs/offline-whatif-replay-proposal.md §5. -->
+    <Compile Include="..\..\tools\WhatIfRunner\WhatIfOverlay.vb" />
+    <Compile Include="..\..\tools\WhatIfRunner\WhatIfReplay.vb" />
     <!-- v36 Phase-2a (A15a–A15g): the AutoTweaker chain so MatchesPopulation,
          the re-seed path (RunAsync), and SettingsDiffApplier.Validate run as the
          real shipped code. AutoTweakerProgram.vb is excluded — it carries its own
