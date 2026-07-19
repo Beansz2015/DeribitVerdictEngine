@@ -1,6 +1,7 @@
 # Session Policy Gate — Per-Session Tier/Context Subsets + Size Multipliers (Proposal)
 
-**Date:** 2026-07-18 · **Status:** PROPOSED — D-table awaits trader · **Implements in:** the ORDER APP (consumer side; hand this doc to its coordinator, the bridge-contract pattern) · **Engine impact: ZERO** — no boundary, no settings keys, no emission change.
+**Date:** 2026-07-18 · **Status:** **APPROVED — P1–P5 ALL TICKED 2026-07-18 (as recommended). HANDOFF-READY: give this doc to the order-app coordinator** (the bridge-contract pattern) · **Engine impact: ZERO** — no boundary, no settings keys, no emission change.
+**P2 UI note (trader expectation, recorded at sign-off):** the context selector (`any` / specific tags) and the per-session fields join the order app's EXISTING tier-gate settings section — one policy surface, not a new screen; the §2 config block is the contract, the UI grouping is the implementer's layout call within that expectation.
 **Driver:** trader 2026-07-18 — "MEDIUM seems more accurate than STRONG; I want the choice to trade specific subsets per session." Part of the profitability/risk ladder (`profitability-risk-levers.md` L1/L2).
 
 ## 1. Why consumer-side (the design decision)
