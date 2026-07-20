@@ -1,8 +1,8 @@
-# Seat Handover — 2026-07-18 (Fable window close → Opus orchestration)
+# Seat Handover — 2026-07-18 (execution brief; **REFRAMED 2026-07-19: the Fable seat CONTINUES through ~Aug 1**)
 
-**For:** every Opus orchestrator/implementer conversation from here, and any later Fable seat. **Supersedes the queue in `month-handover-2026-07-07.md`** (Q1–Q6 are done; its §0 start protocol, §5 review checklist, and §4 watch recipes remain valid and are referenced below, not repeated).
+**Seat plan (trader 2026-07-19):** Fable is extended for the trader's Max plan; the trader downgrades to Pro on **AUGUST 2** — Fable then becomes credit-rationed. So: **Fable orchestrates + reviews through ~Aug 1; Opus implements throughout (economics unchanged); the REAL handoff doc gets written ~Aug 1** for an Opus-led month with rationed Fable moments (this doc's queue is its base). Deliberate scheduling consequence: the judgment items — soak review, #6 activation gates, W6-1 ruling, funding re-read, matrix-migration review — all land INSIDE the window; batch them before Aug 2 and leave the post-Aug-2 world execution-shaped (W6-4 sits right at the boundary — prep it, hand it off clean).
+**For:** every conversation from here. **Supersedes the queue in `month-handover-2026-07-07.md`** (Q1–Q6 done; its §0 start protocol, §5 review checklist, and §4 watch recipes remain valid and are referenced below, not repeated).
 **Authorities:** `roadmap.md` = what runs in what order (§5 + §W6 + the 07-16/07-18 update lines) · `profitability-risk-levers.md` = the trader's profitability sub-project lens (L1–L9; tracking, not sequencing) · this doc = current state + how to execute the open queue.
-**Author:** Fable coordinator seat at window close (window ran 2026-07-13 → 07-18; usage restored, so a Fable seat MAY return — check with the trader before assuming pure-Opus).
 
 ## 0. Start protocol (every conversation)
 
