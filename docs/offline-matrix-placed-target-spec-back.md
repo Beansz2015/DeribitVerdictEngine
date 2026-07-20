@@ -134,13 +134,61 @@ would close that hole.
 | Tweaker window-only pick + old-history parse | **A32b** — a pre-migration `state.json` round-trips with its `atr_threshold` intact while a new pick omits the key entirely (one occurrence in the file, not two); and every cell `Compute` emits is a distinct `(tier × window)` key, 12 total, no duplicates. |
 | D4 single-column render | **A32c** — header is `Window` + one data column with no ATR caption; the data row has 3 pipes (the retired 2-threshold grid rendered 4). |
 | Floored-grid impossibility | **A32d** — two rows at ATR=30 (floor distance $80, so the whole retired grid would have been sub-floor) with placed targets 120 and 400 away produce **distinct outcomes** in the same cell: n=2, 1 success, 1 window-expiry. Under the old grid both barriers floored to the same price and both rows read identically. Second check: `belowMinMoveExcluded = 0` — the retired approximation (`2.0 × 30 = 60 < 80`) would have dropped **both**. |
-| Report regeneration sanity-checked vs the perf strip's `[B]` rates | **OPEN — trader gate.** Requires a live regen. The two surfaces now measure the same thing and should agree within window/precision differences. |
+| Report regeneration sanity-checked vs the perf strip's `[B]` rates | **DONE 2026-07-21 — PASS on geometry, with the spec's framing corrected. See §7a.** |
+
+### 7a. The `[B]`-rate cross-check (2026-07-21)
+
+Run against the 20260720_180842 report + the strip reading `[B] Cur.Wk 23% · 3d 23% · Cur.Day 15% · Asia --% · London 0% · NY 30%`.
+
+**Strip reproduced exactly.** Replicating `ComputeWindows` / `ComputeSessionWindow` boundaries against
+`analysis_eval_cache.csv` yields **23 / 23 / 15 / --  / 0 / 30** — all six cells, so the comparison below rests on
+verified mechanics.
+
+**Geometry parity is EXACT — this is the acceptance result that matters.** Joining the eval cache to
+`analysis_log.csv` on timestamp and comparing the tracker's `FavBar`/`AdvBar` against the logged
+`PlacedTarget*`/`PlacedStop*` for the row's side: **1335 / 1335 rows identical to <$0.005, zero mismatches.**
+Both surfaces now walk the same barriers on the same rows.
+
+**The spec's "should agree within window/precision differences" was WRONG and is withdrawn.** The two rates cannot
+agree numerically, for four structural reasons — none of them a migration defect:
+
+1. **Inverted orientation.** The strip is a SUCCESS rate (`fgColor = If(rate > 50, ACC_STRONG_LONG, ACC_SHORT)` —
+   green above 50); the report is a FAILURE rate.
+2. **Different populations.** `LivePerformanceTracker.IsEligibleVerdict` admits **WEAK LONG / WEAK SHORT**; the
+   matrix excludes them from the denominator. In the sampled NY block WEAK is **62.5% of the strip's denominator**
+   (50 of 80). Directional-only = 33.3%, WEAK = 28.0%, blended (displayed) = 30.0%.
+3. **Different spans.** Session cells are most-recent-**block** only, not the book. `London: 0%` is a genuine
+   0-for-26 in the 07-20 block (`min_sample_for_render` = 4), not a null and not a contradiction of the book-wide
+   London rates.
+4. **Different OHLC provenance.** The tracker freezes an outcome against cached candles at evaluation time; the
+   report re-fetches fresh Deribit OHLC on every regeneration.
+
+Same-population comparison (NY hours, res=1, directional, whole book): eval cache **33.6%** success vs report
+**38.5%**.
+
+**Finding — one bad eval-cache slice.** Expiry rate by day: **2026-07-03 is 22/22 = 100% `WINDOW_EXPIRED`** for NY
+directional rows (other days 5–19%). Implausible as market behaviour; those rows carry valid barriers and
+`.0000000Z` whole-second timestamps (the backfill signature), and 07-03 is the #5 build + CSV-rotation day — so
+that slice was backfilled without forward-bar coverage. Backfilled rows in aggregate are healthy (37.5% success /
+14.9% expiry vs live 36.2% / 11.5%), so this is one slice, not a systemic backfill fault. Excluding 07-03 the
+same-population gap narrows to **35.8% vs 38.5%** (2.7pp) — consistent with the provenance difference. **The
+offline report is the more trustworthy surface on historical rows**, since it re-walks fresh data rather than
+carrying a frozen verdict. The currently-displayed strip cells span 07-18 onward and are unaffected.
+
+**Interpretive trap worth recording:** the strip's headline is a WEAK-inclusive blend. Read as "how good are my
+tradeable signals" it understates the directional band (33.3% vs the displayed 30%). Not a bug — the tracker was
+specified WEAK-inclusive — but the two surfaces answer different questions and a reader moving between them
+should know which.
 
 ---
 
 ## 8. Open / follow-ups
 
-1. **Live report regeneration + `[B]`-rate cross-check** — the remaining §5 acceptance item; trader's gate.
+1. ~~Live report regeneration + `[B]`-rate cross-check~~ — **DONE 2026-07-21, §7a.** Two follow-ups fell out of it:
+   **(a)** the 2026-07-03 eval-cache slice is 100% `WINDOW_EXPIRED` (22 NY directional rows) from a backfill without
+   forward-bar coverage — a targeted re-backfill or an explicit exclusion would stop it poisoning any future
+   whole-cache read; the displayed strip windows are unaffected. **(b)** the strip's headline is a WEAK-inclusive
+   blend while the matrix excludes WEAK — worth a tooltip or a manual line so the two aren't read as one number.
 2. **Failure rates are not comparable across the re-base.** The header note says so, but any watch reading rates
    against a pre-2026-07-21 report needs re-basing. Expect movement in both directions: the stop side already
    re-based at D6, and now targets move from a fixed ATR fraction to real structural placements — closer targets
