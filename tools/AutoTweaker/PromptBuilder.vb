@@ -216,49 +216,43 @@ Public Class PromptBuilder
         user.AppendLine("```")
         user.AppendLine()
 
-        ' Failure-rate matrix as markdown table (per tier)
-        user.AppendLine("## Failure-Rate Matrix (ATR-based forward returns)")
+        ' Failure-rate matrix as markdown table (per tier). [placed-target migration] One
+        ' placed-geometry column: both barriers are the row's own emitted levels
+        ' (PlacedTarget* / PlacedStop*), so the hold window is the only axis left.
+        user.AppendLine("## Failure-Rate Matrix (placed target vs placed stop)")
         user.AppendLine()
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
             user.AppendLine("### " & tier)
-            Dim thrs As Double() = If(tier.StartsWith("STRONG"),
-                                      AnalysisConstants.StrongAtrThresholds,
-                                      AnalysisConstants.MediumAtrThresholds)
-            Dim hdr As New StringBuilder("| Window |")
-            For Each t In thrs : hdr.Append(String.Format(" {0:F1}x ATR |", t)) : Next
-            user.AppendLine(hdr.ToString())
-            Dim sep As New StringBuilder("|--------|")
-            For Each t In thrs : sep.Append("------------|") : Next
-            user.AppendLine(sep.ToString())
+            user.AppendLine("| Window | Placed geometry |")
+            user.AppendLine("|--------|-----------------|")
             For Each w In AnalysisConstants.HoldWindowsMinutes
                 Dim row As New StringBuilder(String.Format("| {0,4}m |", w))
-                For Each t In thrs
-                    Dim c = failureCells.Find(Function(x) x.VerdictTier = tier AndAlso
-                                                           x.WindowMin = w AndAlso
-                                                           x.AtrThreshold = t)
-                    If c Is Nothing OrElse c.SampleSize = 0 Then
-                        row.Append(" n/a        |")
-                    Else
-                        Dim star As String = If(c.IsRecommended, "*", " ")
-                        row.Append(String.Format(" {4}{0:P0} n={1} [{2:P0}-{3:P0}] |",
-                                                 c.FailureRate, c.SampleSize,
-                                                 c.CiLow, c.CiHigh, star))
-                    End If
-                Next
+                Dim c = failureCells.Find(Function(x) x.VerdictTier = tier AndAlso x.WindowMin = w)
+                If c Is Nothing OrElse c.SampleSize = 0 Then
+                    row.Append(" n/a             |")
+                Else
+                    Dim star As String = If(c.IsRecommended, "*", " ")
+                    row.Append(String.Format(" {4}{0:P0} n={1} [{2:P0}-{3:P0}] |",
+                                             c.FailureRate, c.SampleSize,
+                                             c.CiLow, c.CiHigh, star))
+                End If
                 user.AppendLine(row.ToString())
             Next
             user.AppendLine()
         Next
 
-        ' Picked-cell history (last 20 entries)
+        ' Picked-cell history (last 20 entries). Pre-migration entries carry an ATR
+        ' threshold; post-migration picks are (window) only and render "—".
         user.AppendLine("## Picked-Cell History (last 20 auto-tweaker runs)")
         user.AppendLine("| Timestamp           | Tier        | Window | ATR thr |")
         user.AppendLine("|---------------------|-------------|--------|---------|")
         Dim startIdx As Integer = Math.Max(0, pickedCellHistory.Count - 20)
         For i As Integer = startIdx To pickedCellHistory.Count - 1
             Dim e = pickedCellHistory(i)
-            user.AppendLine(String.Format("| {0,-19} | {1,-11} | {2,4}m  | {3,5:F2}  |",
-                                          e.Ts, e.Tier, e.WindowMin, e.AtrThreshold))
+            Dim thrText As String = If(e.AtrThreshold.HasValue,
+                                       e.AtrThreshold.Value.ToString("F2"), "—")
+            user.AppendLine(String.Format("| {0,-19} | {1,-11} | {2,4}m  | {3,5}  |",
+                                          e.Ts, e.Tier, e.WindowMin, thrText))
         Next
         user.AppendLine()
 

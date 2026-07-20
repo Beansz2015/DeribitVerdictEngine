@@ -212,12 +212,14 @@ Public Class WhatIfReport
             Dim ovlRows = If(ovlPops.ContainsKey(k), ovlPops(k), New List(Of CsvRow)())
             Dim res As Integer = If(baseRows.Count > 0, baseRows(0).ExecResolution, If(ovlRows.Count > 0, ovlRows(0).ExecResolution, 1))
 
-            Dim d1 As Integer = 0, d2 As Integer = 0, d3 As Integer = 0, d4 As Integer = 0
-            Dim baseCells = FailureRateMatrix.Compute(baseRows, d1, d2, d3, d4,
+            ' Throwaway barrier-diagnostic counters — this report shows outcome rates only.
+            Dim d1 As Integer = 0, d2 As Integer = 0, d3 As Integer = 0
+            Dim d4 As Integer = 0, d5 As Integer = 0, d6 As Integer = 0
+            Dim baseCells = FailureRateMatrix.Compute(baseRows, d1, d2, d3, d4, d5, d6,
                                                       m.LiveCfg.Scoring.MinTradeableMovePct,
                                                       m.LiveCfg.Scoring.AtrTargetMultiplier, res, AdverseBarrierMode.Placed)
-            d1 = 0 : d2 = 0 : d3 = 0 : d4 = 0
-            Dim ovlCells = FailureRateMatrix.Compute(ovlRows, d1, d2, d3, d4,
+            d1 = 0 : d2 = 0 : d3 = 0 : d4 = 0 : d5 = 0 : d6 = 0
+            Dim ovlCells = FailureRateMatrix.Compute(ovlRows, d1, d2, d3, d4, d5, d6,
                                                      m.WinnerCfg.Scoring.MinTradeableMovePct,
                                                      m.WinnerCfg.Scoring.AtrTargetMultiplier, res, AdverseBarrierMode.Placed)
 
@@ -227,8 +229,11 @@ Public Class WhatIfReport
 
             sb.AppendLine(String.Format("### {0}  (directional rows — baseline {1} / overlay {2})", k, baseDir, ovlDir))
             sb.AppendLine()
-            sb.AppendLine("| tier | win | k | n(b/o) | SUCC% base | SUCC% ovl | ADV% b/o | EXP% b/o |")
-            sb.AppendLine("|---|---:|---:|---|---|---|---|---|")
+            ' [placed-target migration] The per-cell "k" column is gone — the matrix cell space
+            ' is (tier × window) on placed geometry. Threshold sweeping lives in this runner's
+            ' own overlay grid, not in the matrix.
+            sb.AppendLine("| tier | win | n(b/o) | SUCC% base | SUCC% ovl | ADV% b/o | EXP% b/o |")
+            sb.AppendLine("|---|---:|---|---|---|---|---|")
 
             Dim any As Boolean = False
             For Each bc In baseCells
@@ -239,8 +244,8 @@ Public Class WhatIfReport
                 Dim flagB As String = If(bc.SampleSize < MinCellN, "†", "")
                 Dim flagO As String = If(oc IsNot Nothing AndAlso oc.SampleSize < MinCellN, "†", "")
                 sb.AppendLine(String.Format(CultureInfo.InvariantCulture,
-                    "| {0} | {1} | {2:0.0} | {3}{7}/{4}{8} | {5} | {6} | {9} | {10} |",
-                    bc.VerdictTier, bc.WindowMin, bc.AtrThreshold,
+                    "| {0} | {1} | {2}{6}/{3}{7} | {4} | {5} | {8} | {9} |",
+                    bc.VerdictTier, bc.WindowMin,
                     bc.SampleSize, If(oc IsNot Nothing, oc.SampleSize, 0),
                     RateCI(bc.Successes, bc.SampleSize),
                     If(oc IsNot Nothing, RateCI(oc.Successes, oc.SampleSize), "—"),
@@ -248,7 +253,7 @@ Public Class WhatIfReport
                     PairPct(bc.AdverseHitFails, bc.SampleSize, If(oc IsNot Nothing, oc.AdverseHitFails, 0), If(oc IsNot Nothing, oc.SampleSize, 0)),
                     PairPct(bc.WindowExpiryFails, bc.SampleSize, If(oc IsNot Nothing, oc.WindowExpiryFails, 0), If(oc IsNot Nothing, oc.SampleSize, 0))))
             Next
-            If Not any Then sb.AppendLine("| _(no directional rows with forward data)_ | | | | | | | |")
+            If Not any Then sb.AppendLine("| _(no directional rows with forward data)_ | | | | | | |")
             sb.AppendLine()
         Next
     End Sub
@@ -275,7 +280,7 @@ Public Class WhatIfReport
     End Function
 
     Private Shared Function CellKey(c As FailureCellResult) As String
-        Return String.Format(CultureInfo.InvariantCulture, "{0}|{1}|{2}", c.VerdictTier, c.WindowMin, c.AtrThreshold)
+        Return String.Format(CultureInfo.InvariantCulture, "{0}|{1}", c.VerdictTier, c.WindowMin)
     End Function
 
     ' Compact one-line label of a cell's grid knobs (short names).

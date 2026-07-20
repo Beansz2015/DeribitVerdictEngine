@@ -1,5 +1,5 @@
 ' analysis/FailureRateMatrix.vb
-' Computes per-tier x window x ATR-threshold failure rates with 95% Wilson CI.
+' Computes per-tier x window failure rates with 95% Wilson CI.
 ' Verdict tiers: STRONG_LONG, STRONG_SHORT, MEDIUM_LONG, MEDIUM_SHORT.
 ' NO_TRADE and WEAK_* are excluded from the denominator.
 ' Rows where ATR <= 0 are excluded entirely (degenerate barriers).
@@ -11,9 +11,15 @@
 '     advHit first → FAILURE
 '   Window expires without any hit → FAILURE
 '
-' Adverse barrier: structural stop (SwingStopLong/Short) where available;
-'   ATR-multiple fallback (AdverseFallbackAtrMultiplier) when not.
-' Favourable barrier: entry ± AtrThreshold × ATR (per cell).
+' [placed-target migration 2026-07-21, offline-matrix-placed-target-proposal.md]
+'   Both barriers are now the PLACED geometry the engine emitted for the row:
+'     Adverse    — PlacedStop{Long,Short}   (migrated at D6)
+'     Favourable — PlacedTarget{Long,Short} (this migration)
+'   Pre-v0.8 rows carry neither and keep the legacy formula on BOTH sides, labelled
+'   LEGACY_YARDSTICK. The cell space loses the ATR-threshold axis entirely: one
+'   placed-geometry cell per (tier × window). The retired grid was degenerate — at
+'   ATR≈44 every column sat below the min-move floor and collapsed onto one barrier.
+'   The window axis survives: the hold-horizon question is geometry-independent.
 '
 ' Host-agnostic: no System.Windows.Forms references.
 
@@ -57,11 +63,6 @@ Public Class FailureRateMatrix
         End Select
     End Function
 
-    Private Shared Function ThresholdsFor(tier As String) As Double()
-        If tier.StartsWith("STRONG") Then Return AnalysisConstants.StrongAtrThresholds
-        Return AnalysisConstants.MediumAtrThresholds
-    End Function
-
     Private Shared Function IsLong(tier As String) As Boolean
         Return tier.EndsWith("LONG")
     End Function
@@ -103,6 +104,55 @@ Public Class FailureRateMatrix
         End If
     End Function
 
+    ' [placed-target migration] Resolve the FAVOURABLE (target) barrier for one directional
+    ' row — the mirror of ResolveAdverseBarrier, and the change this migration exists for.
+    ' Placed mode uses the logged placed target (PlacedTarget{Long,Short}) when the row
+    ' carries a non-zero one: that price IS the barrier, returned UNFLOORED. The live
+    ' Step 5c min-tradeable-move gate already evaluated it, so re-flooring it here would
+    ' push low-ATR rows back onto a shared floor price — the exact degeneracy the retired
+    ' ATR grid suffered. Legacy (pre-v0.8) rows fall back to the engine's own take-profit
+    ' geometry, engineTargetMult × ATR, floored at floorPct × entry as before.
+    ' placedTargetRows / legacyFavourableRows track which side fired, so a PLACED
+    ' population that still contains fallback rows is visible rather than silently mixed.
+    ' Public for harness A32a (placed-vs-legacy favourable routing).
+    Public Shared Function ResolveFavourableBarrier(row As CsvRow, isLong As Boolean,
+                                                    entry As Double, atr As Double,
+                                                    mode As AdverseBarrierMode,
+                                                    engineTargetMult As Double,
+                                                    floorPct As Double,
+                                                    ByRef placedTargetRows As Integer,
+                                                    ByRef legacyFavourableRows As Integer) As Double
+        If mode = AdverseBarrierMode.Placed AndAlso row.HasPlaced Then
+            Dim placedTarget As Double = If(isLong, row.PlacedTargetLong, row.PlacedTargetShort)
+            If placedTarget > 0 Then
+                placedTargetRows += 1
+                Return placedTarget
+            End If
+        End If
+        legacyFavourableRows += 1
+        Dim favDist As Double = Max(engineTargetMult * atr, floorPct * entry)
+        Return If(isLong, entry + favDist, entry - favDist)
+    End Function
+
+    ' [placed-target migration] The target distance the LIVE min-move gate would have
+    ' evaluated for this row — the input to the v35 de-confound EXCLUDE test.
+    ' v0.8+ rows are tested EXACTLY against their logged placed target; the
+    ' engineTargetMult × ATR approximation survives only for pre-v0.8 rows, where it was
+    ' always a stand-in for a value the CSV did not carry (eval-metric-deconfound §3).
+    ' Using the approximation on a placed row would drop low-ATR rows whose structural
+    ' target the live gate actually passed — i.e. exactly the rows this migration makes
+    ' readable. Public for harness A32d (floored-grid impossibility).
+    Public Shared Function GateTargetDistance(row As CsvRow, isLong As Boolean,
+                                              entry As Double, atr As Double,
+                                              mode As AdverseBarrierMode,
+                                              engineTargetMult As Double) As Double
+        If mode = AdverseBarrierMode.Placed AndAlso row.HasPlaced Then
+            Dim placedTarget As Double = If(isLong, row.PlacedTargetLong, row.PlacedTargetShort)
+            If placedTarget > 0 Then Return Abs(placedTarget - entry)
+        End If
+        Return engineTargetMult * atr
+    End Function
+
     ' Walk eligible bars chronologically and classify outcome.
     ' Returns "SUCCESS", "ADVERSE_HIT", "AMBIGUOUS", or "WINDOW_EXPIRED".
     ' AMBIGUOUS (both barriers touched in same bar) → treated as FAILURE by caller
@@ -139,51 +189,56 @@ Public Class FailureRateMatrix
         Return False
     End Function
 
-    ' Compute the full failure-rate matrix.
-    ' ByRef counters are informational: atrInvalidExcluded counts rows excluded because
-    ' ATR <= 0; structuralStopRows / atrFallbackRows count rows where the adverse barrier
-    ' was structural vs ATR-multiple (counted once per row regardless of window count).
-    ' v35 de-confound (eval-metric-deconfound-proposal.md): the favourable barrier
-    ' per cell is floored at max(thr × ATR, floorPct × entry) so "success" always
-    ' means a tradeable move, and rows the live min-tradeable-move gate would
-    ' NO-TRADE (engineTargetMult × ATR < floorPct × entry) are EXCLUDED from the
-    ' denominator rather than counted as failures. floorPct / engineTargetMult default
-    ' to the AnalysisConstants POCO mirrors; call sites pass the live
-    ' cfg.Scoring.MinTradeableMovePct / .AtrTargetMultiplier.
+    ' Compute the full failure-rate matrix — one placed-geometry cell per (tier × window).
+    ' ByRef counters are informational (each counted once per row, not per window):
+    '   atrInvalidExcluded    — rows excluded because ATR <= 0
+    '   structuralStopRows / atrFallbackRows       — adverse barrier: real stop vs ATR-multiple
+    '   placedTargetRows   / legacyFavourableRows  — favourable barrier: placed target vs
+    '                          the legacy engineTargetMult × ATR fallback. The mirror of the
+    '                          adverse pair, so a PLACED population still carrying fallback
+    '                          favourable rows is visible rather than silently mixed.
+    ' v35 de-confound (eval-metric-deconfound-proposal.md): rows the live min-tradeable-move
+    ' gate would NO-TRADE are EXCLUDED from the denominator rather than counted as failures.
+    ' Post-migration that test is EXACT on v0.8+ rows (|placed target − entry| vs the floor)
+    ' and keeps the engineTargetMult × ATR approximation only for pre-v0.8 rows — see
+    ' GateTargetDistance. floorPct / engineTargetMult default to the AnalysisConstants POCO
+    ' mirrors; call sites pass the live cfg.Scoring.MinTradeableMovePct / .AtrTargetMultiplier.
     ' resolution scales the hold windows (three-min-hold-window-recalibration-proposal.md):
     ' res=1 → {5,10,15}, res=3 → {15,30,45}. Defaults to 1 so the NY×1-filtered
-    ' auto-tweaker call (which omits this arg) stays byte-identical; the offline report
+    ' auto-tweaker call (which omits this arg) keeps its window set; the offline report
     ' passes the population's resolution per (session × resolution) segment.
     Public Shared Function Compute(rows As List(Of CsvRow),
                                    ByRef atrInvalidExcluded As Integer,
                                    ByRef structuralStopRows  As Integer,
                                    ByRef atrFallbackRows     As Integer,
+                                   ByRef placedTargetRows    As Integer,
+                                   ByRef legacyFavourableRows As Integer,
                                    ByRef belowMinMoveExcluded As Integer,
                                    Optional floorPct As Double = AnalysisConstants.FavBarAbsFloorPct,
                                    Optional engineTargetMult As Double = AnalysisConstants.EngineTargetAtrMultiplier,
                                    Optional resolution As Integer = 1,
                                    Optional adverseMode As AdverseBarrierMode = AdverseBarrierMode.Placed) As List(Of FailureCellResult)
 
-        atrInvalidExcluded = 0
+        atrInvalidExcluded  = 0
         structuralStopRows  = 0
         atrFallbackRows     = 0
+        placedTargetRows    = 0
+        legacyFavourableRows = 0
         belowMinMoveExcluded = 0
 
         Dim windows As Integer() = AnalysisConstants.HoldWindowsForResolution(resolution)
 
-        ' counts(tier)(window)(threshold) = (N, Failures, Successes, AdverseHits, Expiries, Ambiguous)
-        Dim counts As New Dictionary(Of String, Dictionary(Of Integer, Dictionary(Of Double,
-            (N As Integer, F As Integer, Suc As Integer, Adv As Integer, Exp As Integer, Amb As Integer))))()
+        ' counts(tier)(window) = (N, Failures, Successes, AdverseHits, Expiries, Ambiguous)
+        ' [placed-target migration] The threshold dimension is gone — the favourable barrier
+        ' is a row property (the placed target), not a per-cell sweep knob.
+        Dim counts As New Dictionary(Of String, Dictionary(Of Integer,
+            (N As Integer, F As Integer, Suc As Integer, Adv As Integer, Exp As Integer, Amb As Integer)))()
 
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
-            counts(tier) = New Dictionary(Of Integer, Dictionary(Of Double,
-                (Integer, Integer, Integer, Integer, Integer, Integer)))()
+            counts(tier) = New Dictionary(Of Integer,
+                (Integer, Integer, Integer, Integer, Integer, Integer))()
             For Each w In windows
-                counts(tier)(w) = New Dictionary(Of Double,
-                    (Integer, Integer, Integer, Integer, Integer, Integer))()
-                For Each thr In ThresholdsFor(tier)
-                    counts(tier)(w)(thr) = (0, 0, 0, 0, 0, 0)
-                Next
+                counts(tier)(w) = (0, 0, 0, 0, 0, 0)
             Next
         Next
 
@@ -201,14 +256,13 @@ Public Class FailureRateMatrix
             Dim entry     As Double  = row.Price
             Dim atr       As Double  = row.ATR
 
-            ' [v35 de-confound] EXCLUDE gate-killed rows: a directional trade whose
-            ' engine target (engineTargetMult × ATR) can't clear the min-tradeable-move
-            ' floor is one the live v35 gate would NO-TRADE — remove it from the
-            ' denominator (not a prediction failure). The low-ATR case dominates;
-            ' near-swing-cap exclusions are approximated (the CSV lacks the adjusted
-            ' target value) per eval-metric-deconfound-proposal.md §3.
+            ' [v35 de-confound] EXCLUDE gate-killed rows: a directional trade whose engine
+            ' target can't clear the min-tradeable-move floor is one the live v35 gate
+            ' would NO-TRADE — remove it from the denominator (not a prediction failure).
+            ' The distance tested is the row's own placed target when logged, else the
+            ' pre-v0.8 engineTargetMult × ATR approximation (GateTargetDistance).
             Dim floorDist As Double = floorPct * entry
-            If engineTargetMult * atr < floorDist Then
+            If GateTargetDistance(row, isLongRow, entry, atr, adverseMode, engineTargetMult) < floorDist Then
                 belowMinMoveExcluded += 1
                 Continue For
             End If
@@ -220,34 +274,31 @@ Public Class FailureRateMatrix
             Dim advBar As Double = ResolveAdverseBarrier(row, isLongRow, entry, atr, adverseMode,
                                                          structuralStopRows, atrFallbackRows)
 
+            ' [placed-target migration] Favourable barrier: the placed target the engine
+            ' emitted for this row (unfloored), else the legacy floored ATR fallback.
+            ' Both barriers are now row properties, so they resolve ONCE per row — the
+            ' window loop below no longer re-derives geometry, it only varies the horizon.
+            Dim favBar As Double = ResolveFavourableBarrier(row, isLongRow, entry, atr, adverseMode,
+                                                            engineTargetMult, floorPct,
+                                                            placedTargetRows, legacyFavourableRows)
+
             For Each w In windows
                 Dim bars As List(Of OhlcBar) = Nothing
                 If Not row.ForwardBars.TryGetValue(w, bars) OrElse bars Is Nothing OrElse bars.Count = 0 Then
                     Continue For   ' no data for this window — exclude from denominator
                 End If
 
-                For Each thr In ThresholdsFor(tier)
-                    ' Favourable barrier per cell (varies by threshold), floored at the
-                    ' min-tradeable-move distance so "success" always means a tradeable
-                    ' move (v35 de-confound §1). Survivors of the row-level EXCLUDE can
-                    ' still have small-k cells below the floor (e.g. 0.3×ATR), which the
-                    ' floor pushes out; sub-floor k cells therefore collapse onto the
-                    ' same floored barrier (matrix differentiates on the window dim).
-                    Dim favDist As Double = Max(thr * atr, floorDist)
-                    Dim favBar  As Double = If(isLongRow, entry + favDist, entry - favDist)
+                Dim outcome As String = WalkBars(bars, favBar, advBar, isLongRow)
+                Dim failed  As Boolean = (outcome <> "SUCCESS")
 
-                    Dim outcome As String = WalkBars(bars, favBar, advBar, isLongRow)
-                    Dim failed  As Boolean = (outcome <> "SUCCESS")
-
-                    Dim cur = counts(tier)(w)(thr)
-                    Dim newSuc = cur.Suc + If(outcome = "SUCCESS",      1, 0)
-                    Dim newAdv = cur.Adv + If(outcome = "ADVERSE_HIT",  1, 0)
-                    Dim newExp = cur.Exp + If(outcome = "WINDOW_EXPIRED", 1, 0)
-                    Dim newAmb = cur.Amb + If(outcome = "AMBIGUOUS",    1, 0)
-                    counts(tier)(w)(thr) = (cur.N + 1,
-                                            cur.F + If(failed, 1, 0),
-                                            newSuc, newAdv, newExp, newAmb)
-                Next
+                Dim cur = counts(tier)(w)
+                Dim newSuc = cur.Suc + If(outcome = "SUCCESS",        1, 0)
+                Dim newAdv = cur.Adv + If(outcome = "ADVERSE_HIT",    1, 0)
+                Dim newExp = cur.Exp + If(outcome = "WINDOW_EXPIRED", 1, 0)
+                Dim newAmb = cur.Amb + If(outcome = "AMBIGUOUS",      1, 0)
+                counts(tier)(w) = (cur.N + 1,
+                                   cur.F + If(failed, 1, 0),
+                                   newSuc, newAdv, newExp, newAmb)
             Next
         Next
 
@@ -270,36 +321,33 @@ Public Class FailureRateMatrix
             Dim bestFailIdx  As Integer = -1
             Dim tierResults As New List(Of FailureCellResult)()
             For Each w In windows
-                For Each thr In ThresholdsFor(tier)
-                    Dim c = counts(tier)(w)(thr)
-                    Dim cell As New FailureCellResult() With {
-                        .VerdictTier        = tier,
-                        .WindowMin          = w,
-                        .AtrThreshold       = thr,
-                        .SampleSize         = c.N,
-                        .Failures           = c.F,
-                        .Successes          = c.Suc,
-                        .AdverseHitFails    = c.Adv,
-                        .WindowExpiryFails  = c.Exp,
-                        .AmbiguousFails     = c.Amb
-                    }
-                    If c.N > 0 Then
-                        cell.FailureRate = CDbl(c.F) / c.N
-                        WilsonCI(c.F, c.N, cell.CiLow, cell.CiHigh)
-                        cell.CiWidth = cell.CiHigh - cell.CiLow
+                Dim c = counts(tier)(w)
+                Dim cell As New FailureCellResult() With {
+                    .VerdictTier        = tier,
+                    .WindowMin          = w,
+                    .SampleSize         = c.N,
+                    .Failures           = c.F,
+                    .Successes          = c.Suc,
+                    .AdverseHitFails    = c.Adv,
+                    .WindowExpiryFails  = c.Exp,
+                    .AmbiguousFails     = c.Amb
+                }
+                If c.N > 0 Then
+                    cell.FailureRate = CDbl(c.F) / c.N
+                    WilsonCI(c.F, c.N, cell.CiLow, cell.CiHigh)
+                    cell.CiWidth = cell.CiHigh - cell.CiLow
+                End If
+                tierResults.Add(cell)
+                If c.N >= AnalysisConstants.MinSamplesPerCell Then
+                    If cell.CiWidth < bestCiWidth Then
+                        bestCiWidth = cell.CiWidth
+                        bestCiIdx = tierResults.Count - 1
                     End If
-                    tierResults.Add(cell)
-                    If c.N >= AnalysisConstants.MinSamplesPerCell Then
-                        If cell.CiWidth < bestCiWidth Then
-                            bestCiWidth = cell.CiWidth
-                            bestCiIdx = tierResults.Count - 1
-                        End If
-                        If cell.FailureRate < bestFailRate Then
-                            bestFailRate = cell.FailureRate
-                            bestFailIdx = tierResults.Count - 1
-                        End If
+                    If cell.FailureRate < bestFailRate Then
+                        bestFailRate = cell.FailureRate
+                        bestFailIdx = tierResults.Count - 1
                     End If
-                Next
+                End If
             Next
             If bestCiIdx >= 0 Then tierResults(bestCiIdx).IsRecommended = True
             If bestFailIdx >= 0 Then tierResults(bestFailIdx).IsMostProfitable = True
@@ -323,12 +371,18 @@ Public Class FailureRateMatrix
     End Sub
 
     ' Append one picked-cell entry to analysis/picked_cell_history.csv.
-    ' v2 schema: first line is "# schema=v2 (barrier-hit with adverse stop)".
+    ' v2 schema: first line starts with "# schema=v2 (barrier-hit with adverse stop)".
     ' If an existing file does NOT start with that marker it is a v1 file —
     ' rotate it to .v1.bak before writing. Idempotent on repeated calls.
+    '
+    ' [placed-target migration, M3] The pick space is (window) only — there is no
+    ' threshold to record. The file is NOT rotated: the AtrThreshold COLUMN is kept in
+    ' place and written EMPTY on new rows, so the file stays one consistent CSV shape
+    ' and a reader sees at a glance which rows predate the migration (numeric threshold)
+    ' and which are placed-geometry picks (blank). The schema marker still begins
+    ' "# schema=v2", so RotateV1HistoryIfNeeded leaves existing v2 files alone.
     Public Shared Sub AppendPickedCell(csvPath As String,
                                        tier As String, windowMin As Integer,
-                                       atrThreshold As Double,
                                        failureRate As Double, sampleSize As Integer,
                                        ciLow As Double, ciHigh As Double)
         Try
@@ -336,14 +390,15 @@ Public Class FailureRateMatrix
             Dim writeHeader As Boolean = Not IO.File.Exists(csvPath)
             Using sw As New IO.StreamWriter(csvPath, append:=True)
                 If writeHeader Then
-                    sw.WriteLine("# schema=v2 (barrier-hit with adverse stop)")
+                    sw.WriteLine("# schema=v2 (barrier-hit with adverse stop; placed-target favourable " &
+                                 "since 2026-07-21 — AtrThreshold blank on placed-geometry rows)")
                     sw.WriteLine("Timestamp,Tier,WindowMin,AtrThreshold,FailureRate,SampleSize,CiLow,CiHigh")
                 End If
                 sw.WriteLine(String.Join(",",
                     DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
                     tier,
                     windowMin.ToString(),
-                    Inv(atrThreshold, "F2"),
+                    "",                       ' AtrThreshold — retired; column held for shape
                     Inv(failureRate, "F6"),
                     sampleSize.ToString(),
                     Inv(ciLow, "F6"),

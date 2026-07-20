@@ -402,10 +402,15 @@ Public Class AutoTweakerCore
 
         ' ── 6. Compute failure-rate matrix and pick recommended cells ─────────
         Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
+        Dim placedTgt As Integer = 0, legacyFav As Integer = 0
         Dim belowMin As Integer = 0
-        ' v35 de-confound: floor the favourable barrier + EXCLUDE gate-killed rows so the
-        ' tweaker optimises only the book the engine will actually trade.
-        Dim failureCells = FailureRateMatrix.Compute(windowRows, atrEx, structStop, atrFb, belowMin,
+        ' v35 de-confound: EXCLUDE gate-killed rows so the tweaker optimises only the book
+        ' the engine will actually trade. [placed-target migration] The cell space the pick
+        ' walks is now (window) only — both barriers are the row's own placed geometry, so
+        ' there is no threshold axis left to choose. Trigger semantics are unchanged: the
+        ' >40%-failure decision still reads the aggregate rate over the picked cells.
+        Dim failureCells = FailureRateMatrix.Compute(windowRows, atrEx, structStop, atrFb,
+                                                     placedTgt, legacyFav, belowMin,
                                                      minTradeableMovePct, atrTargetMult)
         If belowMin > 0 Then
             Console.WriteLine(String.Format(
@@ -417,15 +422,17 @@ Public Class AutoTweakerCore
             If(String.IsNullOrEmpty(Path.GetDirectoryName(config.CsvPath)),
                ".", Path.GetDirectoryName(config.CsvPath)),
             "picked_cell_history.csv")
+        ' [placed-target migration, M3] New entries carry no AtrThreshold. Old entries keep
+        ' theirs and still deserialise — the field is nullable and omitted when absent, so
+        ' the history is parse-tolerant across the boundary with no rotation.
         For Each cell In recommended
             state.PickedCellHistory.Add(New PickedCellEntry With {
-                .Ts           = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
-                .Tier         = cell.VerdictTier,
-                .WindowMin    = cell.WindowMin,
-                .AtrThreshold = cell.AtrThreshold
+                .Ts        = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"),
+                .Tier      = cell.VerdictTier,
+                .WindowMin = cell.WindowMin
             })
             FailureRateMatrix.AppendPickedCell(pickedCsvPath,
-                cell.VerdictTier, cell.WindowMin, cell.AtrThreshold,
+                cell.VerdictTier, cell.WindowMin,
                 cell.FailureRate, cell.SampleSize, cell.CiLow, cell.CiHigh)
         Next
 
@@ -782,9 +789,9 @@ Public Class AutoTweakerCore
         If cells Is Nothing OrElse cells.Count = 0 Then Return "{}"
         Dim obj As New Dictionary(Of String, Object)()
         For Each c In cells
+            ' [placed-target migration] "thr" retired — the pick is (window) only.
             obj(c.VerdictTier) = New With {
                 .window = c.WindowMin,
-                .thr    = c.AtrThreshold,
                 .n      = c.SampleSize,
                 .fails  = c.Failures
             }

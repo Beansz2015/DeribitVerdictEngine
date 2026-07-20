@@ -6,21 +6,19 @@
 ' v2 (failure-definition-v2-proposal.md): barrier-hit semantic.
 '   - SUCCESS = favourable barrier hit by intra-bar wick before adverse barrier.
 '   - FAILURE = adverse barrier hit first, OR window expired without favourable hit.
-'   - STRONG/MEDIUM threshold swap vs v1: under barrier-hit semantics a SMALLER
-'     multiplier is MORE LENIENT (smaller required profit move), so STRONG must use
-'     the LARGER values to impose a higher bar.
+'
+' [placed-target migration 2026-07-21, offline-matrix-placed-target-proposal.md]
+'   The per-tier favourable ATR grid (StrongAtrThresholds {0.5,0.8} / MediumAtrThresholds
+'   {0.3,0.5}) is RETIRED. It was anchored at ATR≈115 and had gone degenerate: at ATR≈44
+'   every grid column sat below the $51 min-move floor, so all columns collapsed onto the
+'   same floored barrier and the threshold axis carried zero information. The favourable
+'   barrier is now the logged PlacedTarget* — the same placed-vs-placed geometry the live
+'   tracker, D4 and the what-if runner already measure. Threshold sweeping moved to the
+'   what-if runner, which does it properly (EV + split-half holdout).
 '
 ' Host-agnostic: no System.Windows.Forms references.
 
 Public Module AnalysisConstants
-
-    ' ATR-multiple thresholds for the favourable barrier per verdict tier.
-    ' Under v2 barrier-hit semantics: larger value = harder to succeed = STRONGER bar.
-    ' STRONG uses {0.5, 0.8} — higher conviction verdicts must reach a further target.
-    ' MEDIUM uses {0.3, 0.5} — moderate conviction verdicts pass on a smaller wick.
-    ' (v1 had these swapped; the swap is correct for the new barrier-hit direction.)
-    Public ReadOnly StrongAtrThresholds As Double() = {0.5, 0.8}
-    Public ReadOnly MediumAtrThresholds As Double() = {0.3, 0.5}
 
     ' Adverse barrier fallback multiplier when no structural stop is logged.
     ' Matches cfg.Scoring.AtrStopMultiplier default (1.2). Keep in sync if
@@ -29,18 +27,25 @@ Public Module AnalysisConstants
 
     ' [v35 eval-metric de-confound] Minimum favourable-barrier distance as a
     ' fraction of entry price. POCO-DEFAULT MIRROR ONLY — the live value is
-    ' cfg.Scoring.MinTradeableMovePct, passed in at the call sites (FailureRateMatrix
-    ' floors the favourable barrier at max(k×ATR, this×price); LivePerformanceTracker
-    ' uses it to EXCLUDE gate-killed rows). Kept here so host-agnostic callers without
-    ' a cfg fall back to the same 0.0008 the engine ships. Spec: docs/eval-metric-deconfound-proposal.md.
+    ' cfg.Scoring.MinTradeableMovePct, passed in at the call sites. Post-migration it
+    ' floors the LEGACY (pre-v0.8) favourable fallback only — a logged PlacedTarget is
+    ' returned unfloored, because the live Step 5c gate already evaluated that exact
+    ' price and flooring it would re-create the very column collapse this migration
+    ' removed. LivePerformanceTracker still uses it to EXCLUDE gate-killed rows.
+    ' Kept here so host-agnostic callers without a cfg fall back to the same 0.0008
+    ' the engine ships. Spec: docs/eval-metric-deconfound-proposal.md.
     Public Const FavBarAbsFloorPct As Double = 0.0008
 
     ' Engine's take-profit ATR multiplier — mirror of cfg.Scoring.AtrTargetMultiplier
-    ' default (2.0). Used by the de-confound EXCLUDE test: a historical directional
-    ' trade whose engine target (this × ATR) can't clear the min-tradeable-move floor
-    ' is a trade the live v35 gate would NO-TRADE, so it is EXCLUDED from the
-    ' failure-rate denominator rather than scored as a failure. POCO-default mirror;
-    ' the live value is passed in at the call sites.
+    ' default (2.0). Two roles, both LEGACY-row only since the placed-target migration:
+    '   (a) the pre-v0.8 favourable-barrier fallback distance (this × ATR, floored), and
+    '   (b) the de-confound EXCLUDE test for those same rows — a historical directional
+    '       trade whose engine target can't clear the min-tradeable-move floor is one the
+    '       live v35 gate would NO-TRADE, so it leaves the denominator rather than
+    '       counting as a failure.
+    ' v0.8+ rows are tested EXACTLY instead (|PlacedTarget − entry| vs the floor); the
+    ' approximation existed only because the CSV lacked the placed value.
+    ' POCO-default mirror; the live value is passed in at the call sites.
     Public Const EngineTargetAtrMultiplier As Double = 2.0
 
     ' Hold windows in minutes. Eligible bars: closes at row.Timestamp + 3 min

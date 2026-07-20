@@ -24,8 +24,13 @@ Public Class PickedCellEntry
     <JsonPropertyName("window_min")>
     Public Property WindowMin As Integer = 0
 
+    ' [placed-target migration, M3] The pick space collapsed to (window); new entries
+    ' carry no threshold. Nullable + WhenWritingNull so rows written before the migration
+    ' still deserialise with their value intact while new rows omit the key entirely —
+    ' parse-tolerant in both directions, no state.json rotation.
     <JsonPropertyName("atr_threshold")>
-    Public Property AtrThreshold As Double = 0.0
+    <JsonIgnore(Condition:=JsonIgnoreCondition.WhenWritingNull)>
+    Public Property AtrThreshold As Double? = Nothing
 End Class
 
 ' One evaluable round summary — written after every BELOW_THRESHOLD / APPLIED /

@@ -70,8 +70,15 @@ Public Class PopulationReport
     Public Property ExcludedRows         As Integer       ' rows with no valid OHLC bars for any window
     Public Property AtrInvalidExcluded   As Integer       ' rows excluded because ATR <= 0
     Public Property BelowMinMoveExcluded As Integer       ' v35 gate-killed: engine target < min-tradeable-move floor
-    Public Property StructuralStopRows   As Integer       ' rows where swing stop was available
-    Public Property AtrFallbackRows      As Integer       ' rows where ATR-multiple fallback was used
+    Public Property StructuralStopRows   As Integer       ' adverse: rows with a real stop level (placed or swing)
+    Public Property AtrFallbackRows      As Integer       ' adverse: rows using the ATR-multiple fallback
+    ' [placed-target migration] The favourable-side mirror of the two counters above:
+    ' rows whose target barrier came from the logged PlacedTarget* vs the legacy
+    ' engineTargetMult × ATR fallback. A PLACED population is split on HasPlaced, but a
+    ' row inside it can still carry a zero placed target for its side — these counters
+    ' make that visible instead of silently mixing two geometries in one cell.
+    Public Property PlacedTargetRows     As Integer
+    Public Property LegacyFavourableRows As Integer
     ' Caption stats for the per-session sub-table headers (proposal §2.4 req 3): ATR
     ' distribution of this population's DIRECTIONAL rows (the rows that feed the tier
     ' matrices) + the $ move-floor. Lets "0.5× ATR" translate to dollars at a glance
@@ -85,13 +92,15 @@ Public Class PopulationReport
 End Class
 
 ' -----------------------------------------------------------------------
-' FailureCellResult — one cell in the tier x window x threshold matrix
+' FailureCellResult — one cell in the tier x window matrix.
+' [placed-target migration] The AtrThreshold axis is retired: both barriers are the
+' row's own placed geometry, so there is exactly ONE cell per (tier × window) and
+' nothing left for a per-cell threshold field to mean.
 ' -----------------------------------------------------------------------
 Public Class FailureCellResult
 
     Public Property VerdictTier   As String   ' "STRONG_LONG" | "STRONG_SHORT" | "MEDIUM_LONG" | "MEDIUM_SHORT"
-    Public Property WindowMin     As Integer  ' 5 | 10 | 15
-    Public Property AtrThreshold  As Double   ' 0.3 | 0.5 | 0.8
+    Public Property WindowMin     As Integer  ' res=1: 5|10|15 · res=3: 15|30|45
     Public Property SampleSize    As Integer
     Public Property Failures      As Integer
     Public Property FailureRate   As Double   ' failures / sampleSize; 0 if sampleSize=0

@@ -23,6 +23,10 @@
          IndicatorResults / the adapter transitively need to compile (the runner does not
          re-run any indicator; it only constructs an IndicatorResults for ComputeSideLevels). -->
     <Compile Include="..\..\Core\Indicators_Momentum.vb" />
+    <!-- [v54 #6] Indicators_OrderFlow.ClassifyAbsorption consumes AbsorptionSnapshot /
+         AbsorptionRead, so this file is a hard dependency of the includes below. Missed
+         when #6 landed (ae6678c), which left this project un-buildable. -->
+    <Compile Include="..\..\Core\LevelAbsorptionTracker.vb" />
     <Compile Include="..\..\Core\Indicators_OrderFlow.vb" />
     <Compile Include="..\..\Core\Indicators_Structure.vb" />
     <Compile Include="..\..\Core\Indicators_Volatility.vb" />

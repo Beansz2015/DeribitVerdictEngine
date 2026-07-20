@@ -134,32 +134,41 @@ Public Class AnalysisRunner
             ' Pass the population's resolution so each matrix uses its own hold windows
             ' (NY×1 → {5,10,15}; ASIA/LONDON×3 → {15,30,45}) — three-min-hold-window-recal.
             Dim atrEx As Integer = 0, structStop As Integer = 0, atrFb As Integer = 0
+            Dim placedTgt As Integer = 0, legacyFav As Integer = 0
             Dim belowMin As Integer = 0
-            ' [D6] Main matrix uses this population's adverse mode: PLACED populations score
-            ' against the placed stop (the executed geometry); LEGACY_YARDSTICK populations
-            ' against the raw swing. structStop now counts placed-stop rows for a PLACED pop.
+            ' [D6 + placed-target migration] The main matrix runs in this population's mode:
+            ' PLACED populations score placed target vs placed stop — the geometry the engine
+            ' emitted and the autotrader executes; LEGACY_YARDSTICK populations keep the raw
+            ' swing / ATR formula on BOTH sides. structStop counts placed-stop rows and
+            ' placedTgt placed-target rows for a PLACED pop.
             Dim popMode As AdverseBarrierMode = If(pr.BarrierLabel = "LEGACY_YARDSTICK",
                                                    AdverseBarrierMode.Legacy, AdverseBarrierMode.Placed)
-            pr.FailureCells = FailureRateMatrix.Compute(popRows, atrEx, structStop, atrFb, belowMin,
+            pr.FailureCells = FailureRateMatrix.Compute(popRows, atrEx, structStop, atrFb,
+                                                        placedTgt, legacyFav, belowMin,
                                                         cfg.Scoring.MinTradeableMovePct,
                                                         cfg.Scoring.AtrTargetMultiplier,
                                                         popRes(popKey), popMode)
-            pr.AtrInvalidExcluded   = atrEx
-            pr.StructuralStopRows   = structStop
-            pr.AtrFallbackRows      = atrFb
-            pr.BelowMinMoveExcluded = belowMin
+            pr.AtrInvalidExcluded    = atrEx
+            pr.StructuralStopRows    = structStop
+            pr.AtrFallbackRows       = atrFb
+            pr.PlacedTargetRows      = placedTgt
+            pr.LegacyFavourableRows  = legacyFav
+            pr.BelowMinMoveExcluded  = belowMin
 
-            ' [D6] D4 before/after: re-walk the SAME rows under the LEGACY raw-swing adverse
-            ' barrier so the report can show the placed-vs-legacy failure-rate delta (the
-            ' continuity bridge). Throwaway counters — the diagnostics above are the main pass.
-            Dim lAtrEx As Integer = 0, lStruct As Integer = 0, lAtrFb As Integer = 0, lBelow As Integer = 0
-            pr.LegacyFailureCells = FailureRateMatrix.Compute(popRows, lAtrEx, lStruct, lAtrFb, lBelow,
+            ' [D6] D4 before/after: re-walk the SAME rows under the LEGACY barrier formula
+            ' (raw swing adverse + engine-target favourable) so the report can show the
+            ' placed-vs-legacy failure-rate delta — the continuity bridge. Throwaway
+            ' counters; the diagnostics above are the main pass.
+            Dim lAtrEx As Integer = 0, lStruct As Integer = 0, lAtrFb As Integer = 0
+            Dim lPlaced As Integer = 0, lLegacyFav As Integer = 0, lBelow As Integer = 0
+            pr.LegacyFailureCells = FailureRateMatrix.Compute(popRows, lAtrEx, lStruct, lAtrFb,
+                                                              lPlaced, lLegacyFav, lBelow,
                                                               cfg.Scoring.MinTradeableMovePct,
                                                               cfg.Scoring.AtrTargetMultiplier,
                                                               popRes(popKey), AdverseBarrierMode.Legacy)
 
             ' ── 5b. VerdictContext cross-tab (this population only) ───────────────────
-            pr.ContextOutcomes = ComputeContextOutcomes(popRows, pr.FailureCells)
+            pr.ContextOutcomes = ComputeContextOutcomes(popRows, pr.FailureCells, cfg)
 
             ' ── 5c. ATR caption stats (proposal §2.4 req 3) ───────────────────────────
             ' Directional rows = the rows that feed the tier matrices (tier-classified,
@@ -223,10 +232,14 @@ Public Class AnalysisRunner
     End Function
 
     ' VerdictContext × outcome cross-tab for ONE population's rows, using that
-    ' population's recommended cell (window/threshold) as the barrier geometry.
-    ' Failure classification uses v2 barrier-hit logic (same as FailureRateMatrix).
+    ' population's recommended cell's HOLD WINDOW as the horizon. Barrier geometry is
+    ' the row's own placed target/stop (placed-target migration) — the recommended cell
+    ' no longer carries a threshold to borrow. Failure classification uses v2 barrier-hit
+    ' logic (same as FailureRateMatrix). cfg supplies the legacy fallback multipliers for
+    ' any pre-v0.8 row.
     Private Shared Function ComputeContextOutcomes(popRows As List(Of CsvRow),
-                                                   failureCells As List(Of FailureCellResult)) _
+                                                   failureCells As List(Of FailureCellResult),
+                                                   cfg As EngineSettings) _
                                                    As Dictionary(Of String, FailureCellResult)
         Dim outcomes As New Dictionary(Of String, FailureCellResult)()
         Dim recCell = failureCells.Where(Function(c) c.IsRecommended).FirstOrDefault()
@@ -245,9 +258,8 @@ Public Class AnalysisRunner
             If ctxRows.Count = 0 Then Continue For
 
             Dim cell As New FailureCellResult() With {.VerdictTier = ctx}
-            Dim w   As Integer = 10
-            Dim thr As Double  = 0.5
-            If recCell IsNot Nothing Then w = recCell.WindowMin : thr = recCell.AtrThreshold
+            Dim w As Integer = 10
+            If recCell IsNot Nothing Then w = recCell.WindowMin
 
             Dim n As Integer = 0, f As Integer = 0
             For Each row In ctxRows
@@ -258,9 +270,14 @@ Public Class AnalysisRunner
                 Dim isLong   As Boolean = row.Verdict.ToUpper().Contains("LONG")
                 Dim entry    As Double  = row.Price
                 Dim atr      As Double  = row.ATR
-                Dim favBar   As Double  = If(isLong, entry + thr * atr, entry - thr * atr)
-                ' [D6] Adverse = placed stop when the row carries it, else legacy swing/ATR.
+                ' Placed target vs placed stop when the row carries them, else the legacy
+                ' formula on both sides — the same routing the main matrix uses.
                 Dim ctxStruct As Integer = 0, ctxFb As Integer = 0
+                Dim ctxPlaced As Integer = 0, ctxLegacyFav As Integer = 0
+                Dim favBar    As Double  = FailureRateMatrix.ResolveFavourableBarrier(
+                    row, isLong, entry, atr, AdverseBarrierMode.Placed,
+                    cfg.Scoring.AtrTargetMultiplier, cfg.Scoring.MinTradeableMovePct,
+                    ctxPlaced, ctxLegacyFav)
                 Dim advBar    As Double  = FailureRateMatrix.ResolveAdverseBarrier(
                     row, isLong, entry, atr, AdverseBarrierMode.Placed, ctxStruct, ctxFb)
                 Dim outcome   As String  = FailureRateMatrix.WalkBars(bars, favBar, advBar, isLong)

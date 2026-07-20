@@ -214,6 +214,16 @@ Module Program
         A31f_CsvReservedColumnsPopulate()
         A31g_SessionResolutionAndHc23Fences()
 
+        ' Offline matrix placed-target migration (docs/offline-matrix-placed-target
+        ' -proposal.md §5 acceptance): the favourable barrier routes to the logged
+        ' PlacedTarget* (v0.8 rows) vs the legacy formula (pre-v0.8), the tweaker picks on
+        ' (window) alone while still parsing pre-migration history, the before/after grid
+        ' renders one column, and the 2026-07-17 floored-grid collapse cannot recur.
+        A32a_PlacedFavourableRouting()
+        A32b_TweakerWindowOnlyPickAndHistoryParse()
+        A32c_D4SingleColumnRender()
+        A32d_FlooredGridImpossibility()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -2688,19 +2698,20 @@ Module Program
             .PopulationKey = "NY|1", .SessionName = "NY", .Resolution = 1,
             .BarrierLabel = "PLACED", .RowCount = 40}
         ' Placed (after) 60% failure vs legacy (before) 20% failure on the same cell.
+        ' [placed-target migration] Cells are keyed (tier × window) only — no threshold.
         pop.FailureCells.Add(New FailureCellResult With {
-            .VerdictTier = "STRONG_LONG", .WindowMin = 5, .AtrThreshold = 0.5,
+            .VerdictTier = "STRONG_LONG", .WindowMin = 5,
             .SampleSize = 40, .Failures = 24, .FailureRate = 0.6})
         pop.LegacyFailureCells.Add(New FailureCellResult With {
-            .VerdictTier = "STRONG_LONG", .WindowMin = 5, .AtrThreshold = 0.5,
+            .VerdictTier = "STRONG_LONG", .WindowMin = 5,
             .SampleSize = 40, .Failures = 8, .FailureRate = 0.2})
         rep.Populations.Add(pop)
 
         Dim md As String = MarkdownReportWriter.BuildD4Section(rep)
         Check("A27c D4 report renders before→after (both barrier bases)",
-              md.Contains("D6. Placed-Stop Migration") AndAlso md.Contains("STRONG_LONG") AndAlso
+              md.Contains("Placed-Geometry Migration") AndAlso md.Contains("STRONG_LONG") AndAlso
               md.Contains("→") AndAlso md.Contains("+40%") AndAlso md.Contains("n=40"),
-              "expected the D6 section with a before→after cell (+40% delta, n=40); got:" & vbLf & md)
+              "expected the migration section with a before→after cell (+40% delta, n=40); got:" & vbLf & md)
     End Sub
 
     ' -- A27d: eval-cache v4→v5 rotate-and-rebuild path ----------------------------
@@ -3471,6 +3482,200 @@ Module Program
               String.Format("enabled={0}'{1}' scoring={2} default={3} session={4} prox={5} ratio={6}",
                             rEnabled.IsValid, rEnabled.ErrorReason, rScoring.IsValid,
                             rDefault.IsValid, rSession.IsValid, rProx.IsValid, rRatio.IsValid))
+    End Sub
+
+    ' =======================================================================
+    ' A32 — offline matrix placed-target migration (docs/offline-matrix-placed-target
+    ' -proposal.md). The favourable barrier joins the adverse on placed geometry; the
+    ' per-tier ATR grid retires and the cell space collapses to (tier × window).
+    ' =======================================================================
+
+    ' -- A32a: favourable-barrier routing (placed target vs legacy formula) --------
+    Private Sub A32a_PlacedFavourableRouting()
+        Dim p As Integer = 0, l As Integer = 0
+        Const Entry As Double = 100000.0
+        Const FloorPct As Double = 0.0008      ' floor distance = 80
+        Const TgtMult As Double = 2.0
+
+        ' Placed row, LONG. The placed target sits 30 away — INSIDE the 80 floor — and must
+        ' still be returned verbatim. Flooring it would push low-ATR rows back onto a shared
+        ' floor price, which is exactly the collapse this migration removes.
+        Dim rowP As New CsvRow With {.HasPlaced = True,
+                                     .PlacedTargetLong = 100030.0, .PlacedTargetShort = 99940.0}
+        Dim favP = FailureRateMatrix.ResolveFavourableBarrier(rowP, True, Entry, 50.0,
+                                                              AdverseBarrierMode.Placed, TgtMult, FloorPct, p, l)
+        ' Short side reads the short column.
+        Dim favPs = FailureRateMatrix.ResolveFavourableBarrier(rowP, False, Entry, 50.0,
+                                                               AdverseBarrierMode.Placed, TgtMult, FloorPct, p, l)
+        ' Legacy row (pre-v0.8): engineTargetMult × ATR = 100, above the 80 floor.
+        Dim rowL As New CsvRow With {.HasPlaced = False}
+        Dim favL = FailureRateMatrix.ResolveFavourableBarrier(rowL, True, Entry, 50.0,
+                                                              AdverseBarrierMode.Placed, TgtMult, FloorPct, p, l)
+        ' Legacy row at low ATR: 2.0 × 20 = 40 < 80 → the floor binds (legacy side only).
+        Dim favLf = FailureRateMatrix.ResolveFavourableBarrier(rowL, True, Entry, 20.0,
+                                                               AdverseBarrierMode.Placed, TgtMult, FloorPct, p, l)
+        ' Legacy MODE forces the legacy formula even on a placed row (the D4 "before" walk).
+        Dim favForce = FailureRateMatrix.ResolveFavourableBarrier(rowP, True, Entry, 50.0,
+                                                                  AdverseBarrierMode.Legacy, TgtMult, FloorPct, p, l)
+        Check("A32a favourable routing (placed unfloored / short column / legacy / legacy-floored / forced-legacy)",
+              favP = 100030.0 AndAlso favPs = 99940.0 AndAlso
+              favL = 100100.0 AndAlso favLf = 100080.0 AndAlso favForce = 100100.0,
+              String.Format(CultureInfo.InvariantCulture,
+                            "placed={0} placedShort={1} legacy={2} legacyFloored={3} forced={4}",
+                            favP, favPs, favL, favLf, favForce))
+
+        ' Routing counters: 2 placed reads, 3 legacy reads across the five calls above.
+        Check("A32a favourable routing counters (placed 2 / legacy 3)",
+              p = 2 AndAlso l = 3,
+              String.Format("placedTargetRows={0} legacyFavourableRows={1}", p, l))
+
+        ' The gate distance the EXCLUDE test uses: exact on a placed row, approximated on legacy.
+        Dim gP = FailureRateMatrix.GateTargetDistance(rowP, True, Entry, 50.0, AdverseBarrierMode.Placed, TgtMult)
+        Dim gL = FailureRateMatrix.GateTargetDistance(rowL, True, Entry, 50.0, AdverseBarrierMode.Placed, TgtMult)
+        Check("A32a gate distance (placed exact 30 / legacy approx 100)",
+              Math.Abs(gP - 30.0) < 0.0001 AndAlso Math.Abs(gL - 100.0) < 0.0001,
+              String.Format(CultureInfo.InvariantCulture, "placed={0} legacy={1}", gP, gL))
+    End Sub
+
+    ' -- A32b: tweaker picks on (window) alone; pre-migration history still parses ---
+    Private Sub A32b_TweakerWindowOnlyPickAndHistoryParse()
+        Dim tmp As String = Path.Combine(Path.GetTempPath(), "a32_state_" & Guid.NewGuid().ToString("N") & ".json")
+        Try
+            ' A state.json written BEFORE the migration: the picked-cell entry carries
+            ' atr_threshold. It must survive Load with the value intact (no rotation).
+            File.WriteAllText(tmp,
+                "{""picked_cell_history"":[{""ts"":""2026-07-01 00:00:00"",""tier"":""STRONG_LONG""," &
+                """window_min"":10,""atr_threshold"":0.5}]}")
+            Dim loaded = TweakerState.Load(tmp)
+            Dim oldParsed As Boolean = loaded.PickedCellHistory.Count = 1 AndAlso
+                                       loaded.PickedCellHistory(0).AtrThreshold.HasValue AndAlso
+                                       Math.Abs(loaded.PickedCellHistory(0).AtrThreshold.Value - 0.5) < 0.0001 AndAlso
+                                       loaded.PickedCellHistory(0).WindowMin = 10
+
+            ' A post-migration pick records (tier, window) only — no threshold key at all.
+            loaded.PickedCellHistory.Add(New PickedCellEntry With {
+                .Ts = "2026-07-21 00:00:00", .Tier = "STRONG_LONG", .WindowMin = 15})
+            TweakerState.Save(tmp, loaded)
+            Dim json As String = File.ReadAllText(tmp)
+
+            ' The old entry keeps its key; the new one omits it. One occurrence total.
+            Dim occurrences As Integer =
+                json.Split(New String() {"atr_threshold"}, StringSplitOptions.None).Length - 1
+            Dim reloaded = TweakerState.Load(tmp)
+            Dim roundTrip As Boolean = reloaded.PickedCellHistory.Count = 2 AndAlso
+                                       reloaded.PickedCellHistory(0).AtrThreshold.HasValue AndAlso
+                                       Not reloaded.PickedCellHistory(1).AtrThreshold.HasValue AndAlso
+                                       reloaded.PickedCellHistory(1).WindowMin = 15
+
+            Check("A32b picked-cell history parse-tolerant (old row keeps threshold, new row omits it)",
+                  oldParsed AndAlso occurrences = 1 AndAlso roundTrip,
+                  String.Format("oldParsed={0} atr_threshold occurrences={1} roundTrip={2}" & vbLf & "{3}",
+                                oldParsed, occurrences, roundTrip, json))
+        Finally
+            Try : File.Delete(tmp) : Catch : End Try
+        End Try
+
+        ' The pick space itself: every cell Compute emits is keyed (tier × window) with no
+        ' duplicates, so a "recommended cell" can only differ from another by its window.
+        Dim rows As New List(Of CsvRow)()
+        Dim d1 As Integer, d2 As Integer, d3 As Integer, d4 As Integer, d5 As Integer, d6 As Integer
+        Dim cells = FailureRateMatrix.Compute(rows, d1, d2, d3, d4, d5, d6)
+        Dim keys As New HashSet(Of String)()
+        Dim dupes As Boolean = False
+        For Each c In cells
+            If Not keys.Add(c.VerdictTier & "|" & c.WindowMin.ToString()) Then dupes = True
+        Next
+        Check("A32b tweaker pick-space is (tier × window) only — 12 cells, no duplicates",
+              cells.Count = 12 AndAlso keys.Count = 12 AndAlso Not dupes,
+              String.Format("cells={0} distinctKeys={1} dupes={2}", cells.Count, keys.Count, dupes))
+    End Sub
+
+    ' -- A32c: before/after grid renders ONE placed-geometry column -----------------
+    Private Sub A32c_D4SingleColumnRender()
+        Dim rep As New AnalysisReport()
+        Dim pop As New PopulationReport With {
+            .PopulationKey = "NY|1", .SessionName = "NY", .Resolution = 1,
+            .BarrierLabel = "PLACED", .RowCount = 40}
+        pop.FailureCells.Add(New FailureCellResult With {
+            .VerdictTier = "STRONG_LONG", .WindowMin = 5,
+            .SampleSize = 40, .Failures = 24, .FailureRate = 0.6})
+        pop.LegacyFailureCells.Add(New FailureCellResult With {
+            .VerdictTier = "STRONG_LONG", .WindowMin = 5,
+            .SampleSize = 40, .Failures = 8, .FailureRate = 0.2})
+        rep.Populations.Add(pop)
+
+        Dim md As String = MarkdownReportWriter.BuildD4Section(rep)
+        ' Header is Window + exactly ONE data column, with no ATR-multiple caption. (The
+        ' section's prose still says "~1.6×ATR clamp", so the ATR check is scoped to the
+        ' GRID, not the whole section — the retired axis was a column, not a sentence.)
+        Const HdrLine As String = "| Window | Placed geometry (before→after Δ) |"
+        Dim hdrOk As Boolean = md.Contains(HdrLine)
+        Dim hdrHasNoThresholdCaption As Boolean = Not HdrLine.Contains("ATR")
+        ' The 5m data row: "|    5m  | 20% → 60% (+40%) n=40 |".
+        Dim dataRow As String = ""
+        For Each line In md.Split(New String() {vbLf, vbCrLf}, StringSplitOptions.None)
+            If line.TrimStart().StartsWith("|") AndAlso line.Contains("→") AndAlso line.Contains("n=40") Then
+                dataRow = line.Trim()
+            End If
+        Next
+        ' Window + one data column = 3 pipes. The retired 2-threshold grid rendered 4.
+        Dim pipeCount As Integer = dataRow.Split("|"c).Length - 1
+        Dim rowHasNoAtr As Boolean = Not dataRow.Contains("ATR")
+        Check("A32c before/after grid renders a single placed-geometry column",
+              hdrOk AndAlso hdrHasNoThresholdCaption AndAlso rowHasNoAtr AndAlso
+              pipeCount = 3 AndAlso dataRow.Contains("+40%"),
+              String.Format("hdrOk={0} hdrNoAtr={1} rowNoAtr={2} pipes={3} row='{4}'",
+                            hdrOk, hdrHasNoThresholdCaption, rowHasNoAtr, pipeCount, dataRow))
+    End Sub
+
+    ' -- A32d: the 2026-07-17 floored-grid collapse cannot recur --------------------
+    ' The bug: at ATR≈44 the whole per-tier grid ({0.5,0.8}) sat below the $51 min-move
+    ' floor, so every column resolved to the SAME floored barrier and reported identical
+    ' numbers by construction. On placed geometry the barrier is the row's own emitted
+    ' target, so two low-ATR rows with different targets must produce different outcomes.
+    Private Sub A32d_FlooredGridImpossibility()
+        Const Entry As Double = 100000.0
+        Const Atr As Double = 30.0             ' floor distance = 0.0008 × 100000 = 80 > 2.0 × 30
+        Dim bars As New List(Of OhlcBar) From {
+            New OhlcBar With {.CloseTime = DateTime.UtcNow, .Open = Entry, .High = 100200.0,
+                              .Low = 99950.0, .Close = 100150.0}}
+
+        ' Near target (120 away) — reachable by the 100200 wick. Far target (400) — not.
+        ' Both stops at 99900, below the 99950 low, so neither row stops out.
+        Dim near As New CsvRow With {
+            .Verdict = "STRONG LONG", .Price = Entry, .ATR = Atr, .HasPlaced = True,
+            .PlacedTargetLong = 100120.0, .PlacedStopLong = 99900.0}
+        Dim far As New CsvRow With {
+            .Verdict = "STRONG LONG", .Price = Entry, .ATR = Atr, .HasPlaced = True,
+            .PlacedTargetLong = 100400.0, .PlacedStopLong = 99900.0}
+        For Each w In {5, 10, 15}
+            near.ForwardBars(w) = bars
+            far.ForwardBars(w) = bars
+        Next
+
+        Dim atrEx As Integer, structStop As Integer, atrFb As Integer
+        Dim placedTgt As Integer, legacyFav As Integer, belowMin As Integer
+        Dim cells = FailureRateMatrix.Compute(New List(Of CsvRow) From {near, far},
+                                              atrEx, structStop, atrFb, placedTgt, legacyFav, belowMin)
+
+        Dim cell = cells.Where(Function(c) c.VerdictTier = "STRONG_LONG" AndAlso c.WindowMin = 5).FirstOrDefault()
+        Dim distinct As Boolean = cell IsNot Nothing AndAlso cell.SampleSize = 2 AndAlso
+                                  cell.Successes = 1 AndAlso cell.Failures = 1 AndAlso
+                                  cell.WindowExpiryFails = 1
+        Check("A32d low-ATR rows produce DISTINCT outcomes (no floored-grid collapse)",
+              distinct,
+              If(cell Is Nothing, "no STRONG_LONG/5m cell",
+                 String.Format("n={0} succ={1} fail={2} expiry={3} adverse={4}",
+                               cell.SampleSize, cell.Successes, cell.Failures,
+                               cell.WindowExpiryFails, cell.AdverseHitFails)))
+
+        ' Both rows survive the min-move EXCLUDE on their EXACT placed distances (120 / 400
+        ' ≥ 80). The retired approximation would have read 2.0 × 30 = 60 < 80 and dropped
+        ' BOTH — silently deleting exactly the low-ATR rows this migration makes readable.
+        Check("A32d exact gate keeps low-ATR placed rows the ATR approximation would have dropped",
+              belowMin = 0 AndAlso placedTgt = 2 AndAlso legacyFav = 0,
+              String.Format("belowMinMove={0} placedTargetRows={1} legacyFavourableRows={2}",
+                            belowMin, placedTgt, legacyFav))
     End Sub
 
 End Module
