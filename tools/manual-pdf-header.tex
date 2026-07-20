@@ -1,0 +1,21 @@
+% tools/manual-pdf-header.tex
+% XeLaTeX header for the TraderGuide / UserManual PDF builds (tools/build-manual-pdfs.ps1).
+%
+% The manuals are set in Cambria (body) + Cascadia Mono (code). Between them those two
+% cover every character the manuals use EXCEPT the six below, which XeLaTeX would
+% otherwise DROP SILENTLY from the PDF (pandoc only emits a "Missing character" warning).
+% Segoe UI Symbol is the one installed face with full coverage of the set, so these six
+% are routed to it individually rather than setting the whole document in a symbol font.
+%
+% If a new glyph ever starts disappearing from the PDFs, the build script's
+% missing-glyph check will name its codepoint — add a \newunicodechar line for it here.
+
+\usepackage{newunicodechar}
+\newfontfamily\symbolfallback{Segoe UI Symbol}
+
+\newunicodechar{∈}{{\symbolfallback ∈}}   % U+2208 set membership
+\newunicodechar{⌈}{{\symbolfallback ⌈}}   % U+2308 left ceiling
+\newunicodechar{⌉}{{\symbolfallback ⌉}}   % U+2309 right ceiling
+\newunicodechar{★}{{\symbolfallback ★}}   % U+2605 recommended-cell marker
+\newunicodechar{⚠}{{\symbolfallback ⚠}}   % U+26A0 warning / guard-rail marker
+\newunicodechar{✗}{{\symbolfallback ✗}}   % U+2717 cross mark

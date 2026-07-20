@@ -48,6 +48,7 @@ This manual is a field-by-field reference for every variable and display block t
 23. [Realtime Exit Guard](#23-realtime-exit-guard)
 24. [On-Close Trigger Mode](#24-on-close-trigger-mode)
 25. [Live Microstructure Strip (TAPE)](#25-live-microstructure-strip-tape)
+26. [What-If Replay (Backtesting)](#26-what-if-replay)
 
 ---
 
@@ -2457,3 +2458,132 @@ Requires the live WS feed (`MarketState`) to be enabled, connected, and fresh. T
 ### Interpretation
 
 Read this as the same raw inputs the verdict pipeline consumes, just faster and unfiltered — useful for watching a level develop between runs, but it is explicitly **not** a substitute for the full verdict. The multi-indicator pipeline exists precisely because single-glance microstructure reads (a TFI flicker, a one-sided book) are noisy in isolation; don't let the TAPE strip tempt a marginal entry the full run wouldn't support.
+
+---
+
+## 26. What-If Replay (Backtesting) {#26-what-if-replay}
+
+Shipped 2026-07-16 (`tools/WhatIfRunner`, launcher `UI/WhatIfLauncherForm.vb`). An **offline backtesting instrument**: it takes the runs the engine has already logged (`analysis_log.csv`, v0.8+ rows) plus 1-minute price history, applies a **hypothetical settings change** (an "overlay"), and re-computes — on the exact same historical rows — what levels the engine *would* have placed and what verdict it *would* have called under that change. It then re-walks each trade's outcome against the price that actually followed and prints a **baseline-vs-overlay** report: current settings on one side, your hypothesis on the other.
+
+It answers what the calibrate-forward loop can't answer quickly — *"would a wider LONDON stop have helped on the book so far?"*, *"is the MEDIUM threshold too tight?"* — as a repeatable, guard-railed instrument rather than a one-off hand analysis.
+
+**Where:** SETTINGS & TOOLS card → **What-If Replay** link → a non-modal dialog. The report opens in the same **Analysis Report Viewer** (§18).
+
+**What it is NOT.** It never changes the engine: it does not write `settings.json`, place orders, or touch the live verdict. A promising result is evidence for a *spec proposal* — the normal spec-first + test + own-watch discipline still gates any real change. Wind tunnel, not aircraft.
+
+**Reuse, not a copy.** Placed levels come from the shipped `SignalEmitter.ComputeSideLevels` (the same arbitration the live card, snapshot, bridge payload and CSV `Placed*` columns use), and outcomes from the shipped `FailureRateMatrix`. The replay geometry therefore cannot drift from production — it *is* production. The baseline column is the replay under **live** settings, so it reproduces the standing failure matrix for the span.
+
+### The fields
+
+Every field maps to one engine setting (except the last three, which are backtest-only). Blank = "use whatever the engine runs live", so you only fill what you want to test. Setting paths below are all under `scoring.`; the value in brackets is the current live setting.
+
+- **ATR target mult** — `atr_target_multiplier` (1.75). The **fallback** take-profit distance (×ATR), used only when no structural target qualifies. *Seen in:* ATR Entry Levels → `TARGET` on `FALLBACK_ATR` rows, and the header's `…x target`.
+- **ATR stop mult** — `atr_stop_multiplier` (1.6). The **fallback** stop distance (×ATR), used only on rows with no usable structural stop. **Not** the clamp ceiling — that's *Stop max ×ATR*. *Seen in:* ATR Entry Levels → `STOP` on `[FALLBACK_ATR]` rows, and the header's `…x stop`.
+- **Verdict STRONG %** — `verdict_strong_pct` (0.70). Fraction of the regime max at/above which the call is STRONG. *Seen in:* the Verdict headline and the Score gauge tier.
+- **Verdict MED %** — `verdict_med_pct` (0.53). Threshold for a MEDIUM (`LONG` / `SHORT`) call. *Seen in:* the Verdict headline.
+- **Verdict WEAK %** — `verdict_weak_pct` (0.35). Threshold for `WEAK LONG` / `WEAK SHORT`; below it the dominant side is `NO TRADE`. *Seen in:* the Verdict headline.
+- **Min tradeable move %** — `min_tradeable_move_pct` (0.0008). The smallest take-profit distance (as a fraction of price) a directional call must clear on its **placed** target. *Seen in:* Verdict flipping to `NO TRADE`, with Context `BELOW_MIN_MOVE`.
+- **Target max ×ATR** — `structural_levels.target_max_atr_mult` (3.5). Looseness bound: a structural target places only within this ×ATR of entry. *Seen in:* ATR Entry Levels → whether `TARGET` reads `PLACED @ …` or `FALLBACK_ATR`, and the Structural · 5m Pivots rows.
+- **Stop max ×ATR** — `structural_levels.stop_max_atr_mult` (1.6). The stop **clamp ceiling**: placed stop = min(structural swing stop, this ×ATR). *Seen in:* ATR Entry Levels → the `STOP` label, `SWING_STOP` vs `STOP_CLAMPED`.
+- **Stop min floor ticks** — `structural_levels.stop_min_floor_ticks` (4). Degenerate-tightness floor ($0.5 a tick) — a structural stop tighter than this falls back to ATR. *Seen in:* ATR Entry Levels → `STOP` (rare).
+- **NY / LONDON / ASIA fallback ×ATR** — the `fallback_target_atr_mult` key under `structural_levels.sessions.<NAME>` (NY inherits 1.75, LONDON 2.0, ASIA 1.25). Per-session override of the fallback target multiplier. *Seen in:* the ATR Entry Levels header and `TARGET` on `FALLBACK_ATR` rows **in that session only**.
+- **Eval window (bars)** — *backtest only.* How many bars forward the replay walks to score each trade for the **EV ranking** (5/10/15, scaled by resolution). No app element.
+- **Constraints** — *backtest only.* Optional rules that prune grid combinations before they run. No app element.
+- **From / To** — *backtest only.* Limits which logged rows the replay covers (`yyyy-MM-dd`); blank = the whole book. No app element.
+
+### Field nuances — read before you sweep
+
+Several fields don't behave the way the surface reading suggests.
+
+**Verdict STRONG / MED / WEAK %.** The threshold is `⌈maxScore × pct⌉` — **rounded up to a whole score** — and the test is `effectiveScore ≥ threshold`. So `70%` of a max-15 regime is `⌈10.5⌉ = 11`, not 10.5: a score of 11 is STRONG, 10 is not. And the max isn't fixed — it's the **regime's** ceiling:
+
+| Regime | Max | STRONG (≥) | MED (≥) | WEAK (≥) |
+|---|---|---|---|---|
+| TRENDING | 20 | 14 | 11 | 7 |
+| RANGE_BOUND | 19 | 14 | 11 | 7 |
+| TRANSITIONAL | 15 | 11 | 8 | 6 |
+
+(The `/ 20` on the Score gauge is the trending max.) Consequences: **sub-step no-ops** — a `%` change that doesn't cross a `⌈max×pct⌉` boundary yields the same threshold and an identical cell (sweeping `MED %` `0.50:0.56:0.01` on a max-19 regime gives threshold 10 for 0.50–0.52 and 11 for 0.53–0.56: seven inputs, two real outcomes). **Keep them ordered** (`strong ≥ med ≥ weak`) — the tier walk checks STRONG → MED → WEAK. And what's compared is the **dominant side's *effective* score** (post regime/MTF adjustment); the overlay re-tiers logged scores, it never rebuilds the raw Step-2 tally.
+
+**ATR stop mult vs Stop max ×ATR — the one to internalise.** Both default to 1.6, but they hit different rows. **Stop max ×ATR** is the clamp ceiling; most 5m swing stops run wider than it, so most structural rows come out `STOP_CLAMPED` at this value — **it moves the stop on the majority of directional rows**, the high-leverage lever. **ATR stop mult** is the fallback stop, used only where no structural stop exists — a minority. Sweeping it and seeing little change is expected, not a null result. To test "wider stops," sweep **Stop max ×ATR**.
+
+**ATR target mult.** Same fallback caveat — it sets the target only where no swing/HVN qualifies. In a structured tape most targets sit on structure, so its footprint is narrow; the session overrides are where the fallback target is actually tuned.
+
+**Target max ×ATR.** An *eligibility bound*, not a level. It decides whether a structural target may place, never where it sits. Raising it lets farther structural targets place (structure wins even when farther than the ATR fallback, up to the bound); lowering it pushes rows onto the fallback. Its real effect is the **structural-vs-fallback mix**, which shifts R:R and can trip the min-move gate.
+
+**Stop min floor ticks.** A guard, not a lever — structural stops are almost never that tight, so **expect a sweep to show ~no change**.
+
+**NY / LONDON / ASIA fallback ×ATR.** Session-scoped *and* fallback-only. NY's value touches only NY×1 rows, LONDON's only LONDON×3, etc. Watch what blank inherits: NY blank → the global 1.75, but **LONDON blank → 2.0 and ASIA blank → 1.25** (those overrides are live). To test "no session override," pin the field to the global — don't blank it. A corollary: sweeping the *global* `ATR target mult` moves NY only, because LONDON/ASIA are shielded by their own overrides.
+
+**Min tradeable move %.** A fraction of **price**, not ATR (`0.0008 ≈ $49.6` at $62k; auto-scales with BTC). Checked against the **placed** target, so a near swing target trips it just as a small ATR target does. Coupled to the geometry knobs: lower `MED %` to add trades and see the population barely grow, and the min-move gate is usually vetoing the small ones.
+
+**Eval window (bars).** Affects **only the EV ranking** used to pick a grid winner — not any placed level, verdict, or the failure matrix (which always reports all three windows). On a single-cell run it has no visible effect. Values are a bar-count budget scaled by resolution: 15 bars is 15 min on NY, 45 min on Asia/London.
+
+### How the grid works
+
+Each field accepts one of three things, and that's the whole input language:
+
+- **Blank** → inherit the live value.
+- **A single number** (`2.0`) → **pin** that knob for the whole run.
+- **A range `from:to:step`** (`1.6:2.4:0.2`) → **sweep** it (1.6, 1.8, 2.0, 2.2, 2.4).
+
+The runner builds a **grid** — every combination of every field's values — and runs each combination ("cell") as a full backtest:
+
+- **All blank or single** → **one cell**: the plain baseline-vs-overlay backtest. Test one concrete idea.
+- **One field swept** → a **1-D sweep**: find the best value of one knob with everything else fixed.
+- **Two or more swept** → a **grid**: every combination (sweep `MED %` over 4 values and `Min move %` over 4 → 16 cells). Explore how knobs interact.
+
+Every cell is a **complete, runnable overlay** — the swept/pinned fields plus live values for the blanks — so a winner is always a full settings combination you could propose, never a bare number.
+
+**Sweep endpoints are `from + k×step`.** `1.5:2.0:0.2` yields 1.5 / 1.7 / 1.9 — **2.0 is skipped** (the next step overshoots). Use `1.5:2.0:0.25` or `1.6:2.0:0.2` to land on it.
+
+**Prefill checkbox.** "Prefill default sweep ranges" fills every knob with the sweep shown in its hint (and clears them when unticked), so you can start from the full set and edit down rather than retyping ranges.
+
+**Cap: 3,000 cells.** Above that, compute climbs (the replay re-walks every row per cell — ~9 s at 1,000 cells, ~23 s at 3,000 on a ~4k-row book, growing with the book) and multiple-comparisons risk mounts. Narrow a range or pin a field. The ranking table shows only the **top 50 cells** regardless of grid size (the winner is always rank 1), so the report stays readable.
+
+**Constraints** prune combinations before they run. To keep two knobs coupled while sweeping both:
+
+```json
+[{"ratio": {
+    "of": ["scoring.structural_levels.stop_max_atr_mult",
+           "scoring.atr_stop_multiplier"],
+    "min": 1.0, "max": 1.0
+}}]
+```
+
+That keeps only cells where the ratio is exactly 1.0 — turning a 9-cell square into the 3-cell diagonal.
+
+**From / To** limit the rows by date; blank runs the whole book. A shorter span runs faster and lets you compare a recent regime against an older one.
+
+### How outcomes are scored, and how a winner is chosen
+
+For each row the overlay makes tradeable, the replay re-places stop and target under that overlay, then walks the **actual** 1-minute bars that followed: target touched first → **+target distance**; stop (or both in one bar) first → **−stop distance**; neither within the window → marked to the price at the window's end. Distances are in **ATR units** so trades are comparable, and the average is the cell's **EV per trade in ATR** — the ranking objective. Win-rate is *not* used to rank (a 90%-win/tiny-target setup can lose money) and is context only.
+
+**Split-half validation** (any swept grid): the winner is chosen on **half** the book (alternating session-days) then re-checked on the **unseen** half. If it falls apart there it's flagged **DIVERGENT** — the tool telling you the win is likely curve-fitting. **Trust the holdout, not the selection half.**
+
+**Matrix and EV answer different questions.** The failure matrix uses a fixed `k×ATR` favourable barrier, so a target-multiplier change barely moves it (it shows up mostly as population change); the EV uses the *actual placed* target and stop, so it does. A wider stop can improve the matrix (fewer stop-outs) while *hurting* EV (bigger loss per stop-out). For a fixed-size trader **EV is the bottom line; the matrix is the mechanism.**
+
+### Reading the report
+
+1. **Guard-rail banner** — the four binding cautions, including the overfit counter.
+2. **Grid ranking** (swept grids) — cells by EV/trade in ATR with selection-half and holdout figures, DIVERGENT flags, then the winner's full effective overlay.
+3. **Population shift** — per session, directional trades added/removed (`baseline → overlay`), plus the `BELOW_MIN excluded` tally. Verdict-threshold changes move this; pure geometry changes usually don't.
+4. **Baseline vs overlay failure matrix** — per session × resolution × tier on the *same* rows: `SUCC%`, `ADV%`, `EXP%`, each with a 95% Wilson CI; cells with n<30 flagged `†`.
+
+**The four binding cautions**, printed on every report:
+
+1. **It motivates, it isn't.** A result feeds a spec proposal; the runner never writes settings.
+2. **Overfit.** The header states how many overlays have been tested against this span and roughly how many false winners to expect from noise. Treat single-cell wins on a big sweep with suspicion.
+3. **Touch-based.** Barriers are mid-price wick touches — **no fills, slippage, or queue position.** Real execution is worse.
+4. **POC rows excluded.** VPFR POC inputs aren't logged, so rows whose live target used the POC tier are excluded and counted in the header (near-zero in practice). Only v0.8+ rows are replayed.
+
+### Worked examples
+
+- **Test one idea (single cell).** `2.0` in **Stop max ×ATR**, everything else blank, a recent span → baseline (1.6) vs 2.0 on the same rows; read the LONDON row.
+- **Best value of one knob (1-D sweep).** `1.6:2.4:0.2` in **Stop max ×ATR** → 5 cells, EV-ranked, split-half validated. The winner is the best *holdout* EV, not the best headline.
+- **Two knobs together (2-D grid).** `0.45:0.60:0.05` in **Verdict MED %** and `0.0006:0.0012:0.0002` in **Min tradeable move %** → 16 cells; watch the population-shift line.
+- **Coupled sweep (constraint).** Sweep **ATR stop mult** and **Stop max ×ATR** over `1.6:2.4:0.2` with the ratio constraint above → the 9-cell square prunes to the 3-cell diagonal.
+
+### Interpretation
+
+A result worth acting on shows a **positive holdout EV without a DIVERGENT flag**, on a cell with a decent `n`, in a session whose population didn't shrink to get there. Anything else is a null result — which is itself valuable: sweeps of the ATR fallback geometry on the current book have consistently come back flat with divergent winners, which is the tool steering you off a phantom rather than handing you one. And a genuine winner is still only the *start* of a spec proposal, never a change in itself.

@@ -34,6 +34,7 @@
 - `.gitignore` — `whatif_report_*.md` + `whatif_overlay_counter.json` now ignored (the runner + launcher write reports to the repo root so "Open Last Report" can find them; generated artefacts, never committed — same treatment as the other report/cache outputs).
 - `docs/whatif-manual-draft.md` — a **review draft** of the trader-facing documentation: per-field reference mapped to the app displays it drives, the blank/single/sweep semantics, a field-nuances section (verdict-threshold ceiling + per-regime max, the fallback-vs-clamp stop distinction, session-override precedence, min-move coupling, eval-window ranking-only), and four worked examples. **Pending trader approval**, then folds into the two manuals (see §4).
 - Proposal status line flipped to BUILT; `architecture.md` directory tree updated; `DeribitIndicatorProject.md` §15 build-history entry added (analysis-only, no settings bump).
+- **`tools/build-manual-pdfs.ps1` + `tools/manual-pdf-header.tex` (new).** The manuals had **no PDF build script** — the toolchain had to be reverse-engineered to republish them, so it is now pinned: pandoc + XeLaTeX, Cambria (body) + Cascadia Mono (code), 1in margins. Two things the script encodes that cost real debugging: (a) pdflatex hard-fails on the manuals' Unicode and **Consolas silently drops** `⚠ ★ ✓ ✗ ⌈ ⌉ ∈` inside code blocks, hence Cascadia Mono; (b) six glyphs no installed text font covers are routed to Segoe UI Symbol via the header's `\newunicodechar` map. A missing glyph is only a pandoc *warning* (the character just vanishes from the PDF), so **the script treats any missing-glyph warning as a build failure** and names the codepoints.
 
 ---
 
@@ -70,7 +71,7 @@
 
 ## 4. Open items
 
-- **Trader-facing docs — pending approval (the one open deliverable).** `docs/whatif-manual-draft.md` is written and current (reflects the 3,000 cap + top-50 display + the field-nuances). On the trader's sign-off it folds into `TraderGuide.md` (§17 "Working with the App", condensed) + `UserManual.md` (new §20, full) and both PDFs regenerate via the manuals' existing build path. Not yet inserted.
+- ~~Trader-facing docs~~ — **DONE 2026-07-17.** Draft approved and inserted: `TraderGuide.md` §17 gained a condensed *What-If Replay — backtesting a settings change* subsection; `UserManual.md` gained full **§26 What-If Replay (Backtesting)** (+ TOC entry). Both PDFs regenerated. `docs/whatif-manual-draft.md` is retained as the approved source draft.
 - **Fixture-file serialization vs #6 (W5):** A30 lives in `verify/ordercheck/Program.vb` alongside #6's lane. This build was authored before #6's lane opened (the W5 rule); if #6 has already landed at merge time, its lane takes priority and A30 rebases after it.
 - **Runner exe path** — the launcher points at `tools/WhatIfRunner/bin/Debug/net8.0/WhatIfRunner.exe`; the project must be built once (Debug) before the in-app launcher can run it (the CLI works regardless). Trader has built it.
 - **Not committed** — the whole change set is local on `master`, per the trader's test-then-push workflow. Trader validation is done; the push is his to make.

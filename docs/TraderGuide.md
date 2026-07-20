@@ -716,6 +716,29 @@ A continuously-updating one-line strip (toggle: the **TAPE** checkbox) showing f
 
 **This is deliberately not a signal.** It's the same raw microstructure inputs the verdict pipeline uses, shown faster and rawer. The full verdict is still the considered, multi-indicator product — don't treat a TAPE reading as a trade trigger on its own; it's there so you're not flying blind on flow between full runs (e.g. while watching a level for entry, or managing a hold).
 
+### What-If Replay — backtesting a settings change
+
+**Where:** SETTINGS & TOOLS → **What-If Replay**. The report opens in the Analysis Report Viewer.
+
+Takes the runs already logged plus 1-minute price history, applies a hypothetical settings change, and re-computes — on the *same* historical rows — what levels the engine would have placed and what it would have called. Then it re-walks what price actually did and shows **current settings vs your hypothesis, side by side**. It answers "would a wider LONDON stop have helped on the book so far?" without waiting for another month of forward data.
+
+**It never changes anything.** No `settings.json` write, no orders, no effect on the live verdict. A good result is evidence for a spec proposal — not a change.
+
+**Three inputs, that's the whole language.** Per field: **blank** = leave it live · **one number** = pin it · **`from:to:step`** = sweep it. Sweep one knob to find its best value; sweep several and it runs every combination. A checkbox prefills the default sweep ranges so you can start from the full set and edit down. Cap 3,000 cells (the ranking shows the top 50). Note sweeps land on `from + k×step` — `1.5:2.0:0.2` gives 1.5/1.7/1.9, **skipping 2.0**.
+
+**Reading the result — in priority order:**
+
+1. **Holdout EV, not the headline.** Cells are ranked by EV per trade in ATR (not win-rate — a high win-rate with a tiny target still loses). The winner is picked on half the book and re-checked on the unseen half. **⚠ DIVERGENT means the edge vanished out-of-sample — discard it.**
+2. **Population shift.** Did the change add or remove trades? A verdict-threshold change moves this; a stop/target change usually doesn't. If success went up because 14 marginal trades disappeared, that's survivorship, not skill.
+3. **The matrix is the mechanism, EV is the bottom line.** A wider stop can improve the hit-rate table (fewer stop-outs) while *hurting* EV, because you lose more when you do get stopped.
+4. **The overfit counter.** It tallies how many combinations you've tried against this book. Try enough and something will look good by chance — the header spells out how many false winners to expect.
+
+**Two knobs are worth knowing apart.** *Stop max ×ATR* is the clamp that binds most structural rows — the high-leverage stop lever. *ATR stop mult* is only the fallback, used where no structural stop exists, so sweeping it usually shows almost nothing. That's expected, not a broken run. (Likewise *Stop min floor ticks* is a guard that essentially never bites.)
+
+**Barriers are mid-price touches — no fills, no slippage, no queue.** Real execution is worse than any number here.
+
+Practical read: a result worth acting on has a **positive holdout EV, no DIVERGENT flag, a decent sample, and no shrunken population**. Everything else is a null result — which is still useful. Sweeps of the ATR fallback geometry on the current book keep coming back flat with divergent winners; that's the tool steering you off a phantom rather than handing you one.
+
 ---
 
 ## Quick Reference — Verdict Action Rules
