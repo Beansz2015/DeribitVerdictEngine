@@ -127,8 +127,9 @@ would close that hole.
 
 | Requirement | Result |
 |---|---|
-| Builds 0/0 | Main project **0 errors / 0 warnings** (to a scratch output dir — the trader's running app holds `bin/…/DeribitVerdictEngine.exe`, so the in-place solution build fails at the *copy* step, MSB3021, with zero BC diagnostics). AutoTweaker, WhatIfRunner, OrderCheck all 0/0. |
-| Harness unregressed | ALL PASS. One assertion updated: **A27c** pinned the literal `"D6. Placed-Stop Migration"` heading and constructed cells with `.AtrThreshold` — both retired by this spec. |
+| Builds 0/0 | Solution (Debug **and** Release), WhatIfRunner, OrderCheck — all **0 errors / 0 warnings**, built in place. |
+| Harness unregressed | **162 checks, ALL PASS**, 0 failures. One assertion updated: **A27c** pinned the literal `"D6. Placed-Stop Migration"` heading and constructed cells with `.AtrThreshold` — both retired by this spec. |
+| verify-gate | `prepush` mode (the strict one: full solution Release build + parity fail-without-token) — **GATE PASSED**, exit 0, including `version-bump: OK — engine path changed but [no-engine-change] token present`. |
 | Placed-favourable routing (v0.8 vs legacy row) | **A32a** — placed target returned verbatim *and unfloored* (target inside the floor distance), short column read for shorts, legacy fallback at `engineTargetMult × ATR`, legacy floored at low ATR, `AdverseBarrierMode.Legacy` forcing the legacy formula on a placed row, routing counters, and exact-vs-approximate gate distance. |
 | Tweaker window-only pick + old-history parse | **A32b** — a pre-migration `state.json` round-trips with its `atr_threshold` intact while a new pick omits the key entirely (one occurrence in the file, not two); and every cell `Compute` emits is a distinct `(tier × window)` key, 12 total, no duplicates. |
 | D4 single-column render | **A32c** — header is `Window` + one data column with no ATR caption; the data row has 3 pipes (the retired 2-threshold grid rendered 4). |
