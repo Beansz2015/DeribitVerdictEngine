@@ -2,7 +2,13 @@
 
 **Built:** 2026-07-21 · **Spec:** `offline-matrix-placed-target-proposal.md` (APPROVED, M1–M5 ticked 2026-07-18)
 **Type:** offline-analysis semantics — zero scoring impact, no ⚠ dataset boundary, no settings keys, no settings-version bump (stays v54).
-**State:** local commit; builds 0/0; harness ALL PASS incl. new A32a–d; verify-gate `local-fast` GATE PASSED. Trader tests + pushes.
+**State:** local commit; builds 0/0; harness ALL PASS incl. new A32a–d; verify-gate `prepush` GATE PASSED. Trader tests + pushes.
+
+> **⚠ §8 carries four findings the trader has flagged for the ORCHESTRATOR** — tier-ladder ordering unverified
+> (F1), success/failure orientation mismatch between strip and report (F2), the strip counting WEAK rows that
+> are never traded (F3), and empty bar-lists being recorded as failures by the live tracker while the offline
+> matrix excludes them (F4). **None is caused by this migration**; putting both surfaces on the same geometry
+> is what made them legible. F4 is a correctness bug and should go first — every other measurement inherits it.
 
 ---
 
@@ -182,24 +188,220 @@ should know which.
 
 ---
 
-## 8. Open / follow-ups
+## 8. Findings for the orchestrator
+
+Everything the migration + cross-check surfaced. **F1–F4 are the ones the trader flagged for escalation.**
+None of them is caused by this migration — the migration made them *visible* by putting both surfaces on the
+same geometry, which is what removing a confound is supposed to do.
+
+---
+
+### ⭐ F1 — The tier ladder carries no measurable ordering (STRONG ≯ MEDIUM ≯ WEAK)
+
+Two independent observations converged here: the trader noticed **STRONG reading worse than MEDIUM**, and the
+cross-check turned up **MEDIUM reading worse than WEAK**. Both are real in the cells. Neither is statistically
+established — and neither is the *correct* ordering.
+
+**Per-cell, at each population's tracker horizon** (res-1 → 15m, res-3 → 45m), success rates from report §5:
+
+| session | side | STRONG | MEDIUM | delta | |
+|---|---|---|---|---|---|
+| NY | LONG | 52.2% (n=46) | 38.4% (n=172) | +13.8pp | ok |
+| NY | SHORT | 30.0% (n=20) | 34.5% (n=113) | −4.5pp | **INVERTED** |
+| LONDON | LONG | 16.7% (n=6) | 50.0% (n=28) | −33.3pp | **INVERTED** |
+| LONDON | SHORT | 52.6% (n=19) | 47.6% (n=21) | +5.0pp | ok |
+| ASIA | LONG | n=0 | 50.0% (n=6) | — | no data |
+| ASIA | SHORT | 100% (n=1) | 45.5% (n=22) | +54.5pp | ok (n=1) |
+
+**Full ladder including WEAK** (eval cache — the report excludes WEAK; 07-03 slice removed per F4):
+
+| band | succ | n | success% | 95% Wilson CI |
+|---|---|---|---|---|
+| STRONG | 38 | 89 | 42.7% | [32.9% – 53.1%] |
+| MEDIUM | 131 | 361 | 36.3% | [31.5% – 41.4%] |
+| WEAK | 331 | 844 | 39.2% | [36.0% – 42.6%] |
+
+**Observed order is STRONG > WEAK > MEDIUM** — MEDIUM is the worst band. But every pairwise test fails:
+
+| comparison | delta | z | |
+|---|---|---|---|
+| STRONG vs MEDIUM | +6.4pp | +1.12 | not significant |
+| WEAK vs MEDIUM | +2.9pp | +0.96 | not significant |
+| STRONG vs WEAK | +3.5pp | +0.64 | not significant |
+
+All three CIs overlap heavily. **The honest reading: nothing about tier ordering is established in either
+direction on this book.** The inversions the trader spotted are small-n noise — and so is the apparent pooled
+correctness. The binding constraint is sample: **STRONG has only ~90 evaluable rows book-wide**, and the two
+inverted cells sit at n=20 and n=6.
+
+**Recommendation:** do not act on the inversions, and do not assume the ladder works either. This is a
+data-sufficiency problem before it is a model problem. Concretely — (a) treat "STRONG is better than MEDIUM" as
+*unverified*, not as a design invariant, in anything downstream (notably W6-3 Kelly CAL, which wants per-tier
+empirical win rates and would currently be fitting noise); (b) set a sample gate before re-reading, ~n≥150 at
+STRONG; (c) when re-read, use the offline report rather than the eval cache (F4 explains why); (d) if the
+ordering still fails to appear at n≥150, that is a genuine scoring-quality finding and belongs in its own spec.
+
+---
+
+### ⭐ F2 — Orientation mismatch: strip shows success, report shows failure
+
+Confirmed in code. The strip renders a **success** rate — `MainForm_Layout.vb:1384`,
+`fgColor = If(rate > 50, ACC_STRONG_LONG, ACC_SHORT)` (green above 50), fed by
+`WindowAggregate.BarrierRatePct = SuccessCount / n`. The offline report renders a **failure** rate throughout.
+
+**Trader's call: unify on SUCCESS.** Agreed — the mental inversion buys nothing, and it is exactly the kind of
+friction that produces a misread under time pressure. Success is also the better default: it is the direction a
+reader intuitively wants ("how often did this work"), and green-is-good needs no explanation.
+
+**One trap that must not be missed if this is implemented.** The auto-tweaker's trigger is
+*failure*-oriented: `AutoTweakerCore` compares `aggregateRatePct < config.FailureRateThresholdPct` to decide
+BELOW_THRESHOLD, where `aggregateRatePct` is built from `cell.Failures / cell.SampleSize`. Flipping the
+*display* must not flip that comparison, or the tweaker silently inverts — it would start firing when things are
+going *well*. Safest shape: keep `FailureCellResult.Failures`/`FailureRate` as the internal truth (the tweaker,
+the `IsMostProfitable` pick, and the CI maths all read it), and convert to success **only at the render
+boundary**. Surfaces to change together: report §2/§3/§4/§5/§6/§7/§8 render text, the summary CSV column name,
+the `MarkdownReportWriter` interpretation blurb, and `PromptBuilder`'s matrix table (the LLM prompt — flipping
+this one without updating the surrounding prose would actively mislead the tweaker's reasoning).
+
+Not implemented here: it is a cross-surface display-semantics change with a live scoring-adjacent dependency, so
+it wants its own small spec per the spec-first rule. Mechanically it is perhaps an hour.
+
+---
+
+### ⭐ F3 — The strip should exclude WEAK (show only what will actually be traded)
+
+Currently `LivePerformanceTracker.IsEligibleVerdict` (`:1042`) admits `WEAK LONG` / `WEAK SHORT` alongside
+STRONG/MEDIUM. In the sampled NY block **WEAK was 62.5% of the strip's denominator** (50 of 80 rows), so the
+displayed `NY: 30%` is mostly measuring a band that is never traded. Directional-only was 33.3%.
+
+**Trader's call: exclude WEAK.** Agreed, and the frozen bridge contract already backs it — the consumer's
+default tier gate refuses WEAK (`refused: policy`), so WEAK signals are by construction *not trades*. A strip
+that answers "how are my signals doing" should answer it about the signals that become orders.
+
+**Bonus: it makes the two surfaces directly comparable.** The matrix population is exactly STRONG+MEDIUM. Align
+the strip and the §5 cross-check becomes a like-for-like number instead of the four-way caveat in §7a.
+
+**Implementation notes.** This is a *display-time filter*, not a data change — the eval cache can keep storing
+WEAK rows (they cost nothing and preserve the option to show a WEAK band separately). So it is reversible with
+no cache rotation. Two consequences to decide on: **(a)** the denominator drops ~2.6× (NY block 80 → 30), so
+session cells will show `--%` more often — `min_sample_for_render` is currently **4**, which is very low for a
+rate that now moves in ~3pp steps; worth raising at the same time. **(b)** If WEAK is dropped from the headline,
+consider whether it is worth a separate dimmed cell rather than discarded — F1 shows WEAK is currently
+*out-performing* MEDIUM, which is information, even if it is not yet significant.
+
+---
+
+### ⭐ F4 — The 2026-07-03 expiry anomaly, explained
+
+**What was seen.** Expiry rate by day for NY directional rows in the eval cache:
+
+```
+2026-07-03    22 / 22  = 100%     <-- every single row
+2026-07-07    10 / 53  =  19%     2026-07-13     2 / 38 =  5%
+2026-07-08     4 / 43  =   9%     2026-07-17     7 / 79 =  9%
+2026-07-09     1 / 11  =   9%     2026-07-20     2 / 15 = 13%
+```
+
+**Why 100% is impossible as market behaviour.** `WINDOW_EXPIRED` means price touched *neither* the target *nor*
+the stop for the entire window. With placed geometry the stop is ~1.6×ATR and the target ~1.75×ATR or a
+structural level; at ATR≈45 on BTC over 15 one-minute bars, one barrier is normally reached. For 22 consecutive
+signals across a whole NY session to touch neither, the market would have to have been effectively frozen for
+hours. It was not.
+
+**The mechanism.** `WalkBars` iterates the bars it is *given*. `LivePerformanceTracker.EvaluateEntry:689` reads:
+
+```vb
+Dim bars = GetEligibleBars(ts, nowUtc, e.ExecResolution)
+If bars.Count = 0 Then Return ("WINDOW_EXPIRED", Nothing)
+```
+
+So **an empty bar list is recorded as a failure.** "No data" and "no movement" produce the same stored outcome
+and are afterwards indistinguishable.
+
+**This is the sharp part — the offline matrix already handles it correctly.** `FailureRateMatrix.Compute`, same
+condition:
+
+```vb
+If Not row.ForwardBars.TryGetValue(w, bars) OrElse bars Is Nothing OrElse bars.Count = 0 Then
+    Continue For   ' no data for this window — exclude from denominator
+End If
+```
+
+**Same condition, opposite handling: offline excludes from the denominator, live counts it as a failure.** That
+asymmetry is a bug class, not a rounding difference — it biases every live rate *downward* by however many rows
+lacked coverage, and it does so invisibly.
+
+**Why 07-03 specifically.** Those rows carry valid barriers (they matched the CSV 100% in the §7a join), and
+their timestamps end `.0000000Z` — whole seconds. Live entries carry genuine sub-second fractions
+(`...T18:08:08.2802248Z`) because they are stamped from `DateTime.UtcNow` at run time; whole-second stamps are
+reconstructed from the CSV's second-resolution `Timestamp` column, i.e. **backfilled**. The D6 eval-cache v4→v5
+rotation (2026-07-14) forced a full cold-start rebuild, so everything before that date in the current cache is
+backfill, sourced from `OhlcCache` — which evidently had no 07-03 coverage. 07-03 is also the #5 build + CSV
+v0.7→v0.8 rotation day, i.e. a restart boundary, which is a plausible reason the cache has a hole there.
+
+**Scope — deliberately not overstated.** Backfilled rows *in aggregate* are healthy (37.5% success / 14.9%
+expiry, vs live 36.2% / 11.5%), so this is **one bad slice, not a systemic backfill fault**. The currently
+displayed strip windows span 07-18 onward and are **unaffected**. Excluding 07-03 narrows the same-population
+gap from 4.9pp to 2.7pp.
+
+**Why it still matters.** It is latent and silent. Any future whole-cache read — a signal-health audit, the F1
+tier-ladder study, W6 calibration — inherits 22 fabricated failures with nothing marking them as suspect.
+
+**Recommended fix:** give "could not evaluate" its own outcome (e.g. `NO_DATA` / `UNEVALUABLE`) and exclude it
+from the denominator, mirroring what the offline side already does. That fixes 07-03 retroactively on the next
+rebuild *and* closes the asymmetry permanently. A targeted re-backfill of the slice is the tactical alternative
+but leaves the bug in place.
+
+---
+
+### Other findings (not escalated, recorded for completeness)
+
+**F5 — Geometry parity is exact.** The migration's core claim, verified: tracker `FavBar`/`AdvBar` equal the
+logged `PlacedTarget*`/`PlacedStop*` on **1335/1335** joined rows, <$0.005, zero mismatches. Both surfaces walk
+the same barriers on the same rows.
+
+**F6 — The strip was reproduced exactly.** All six cells (23/23/15/--/0/30) replayed from
+`analysis_eval_cache.csv` using the tracker's own `ComputeWindows` / `ComputeSessionWindow` boundary logic
+before any comparison was drawn, so §7a rests on verified mechanics rather than inference.
+
+**F7 — Session cells are most-recent-*block*, not book-wide.** `London: 0%` is a genuine 0-for-26 in the 07-20
+London block, not a null and not a contradiction of the book-wide London rates. Easy to misread as "London is
+broken"; worth a tooltip.
+
+**F8 — The `.0000000Z` backfill signature is a reusable diagnostic.** Whole-second eval-cache timestamps ⇒
+backfilled; sub-second ⇒ live. Combined with the eval-cache ↔ CSV timestamp join (replace `T`, truncate to 19
+chars) this is a ready-made parity/provenance instrument for any future audit.
+
+**F9 — `RoundStatsBuilder` is now the last synthetic-target measurement in the repo.** Private
+`FavAtrThreshold = 0.5`, calls `WalkBars` directly, not a `Compute` consumer, deliberately out of this spec's
+inventory. Needs its own decision: migrate for consistency, or document why the round-stats display wants a
+fixed yardstick.
+
+**F10 — `WhatIfRunner` is not in the verify gate.** The gate builds the solution + AutoTweaker + OrderCheck.
+That is why a project broken by #6 sat unnoticed for four days (§6). One line to add; would have caught it.
+
+**F11 — `UserManual.md` §18 still quotes the retired threshold constants** (~line 1861). Left to the active
+manual fold-in lane per the implementer orders.
+
+---
+
+## 9. Open / follow-ups
 
 1. ~~Live report regeneration + `[B]`-rate cross-check~~ — **DONE 2026-07-21, §7a.** Two follow-ups fell out of it:
-   **(a)** the 2026-07-03 eval-cache slice is 100% `WINDOW_EXPIRED` (22 NY directional rows) from a backfill without
-   forward-bar coverage — a targeted re-backfill or an explicit exclusion would stop it poisoning any future
-   whole-cache read; the displayed strip windows are unaffected. **(b)** the strip's headline is a WEAK-inclusive
-   blend while the matrix excludes WEAK — worth a tooltip or a manual line so the two aren't read as one number.
+   it produced §7a and the §8 findings. **Everything actionable that fell out of it is in §8** — F1–F4 are
+   flagged by the trader for the orchestrator; F5–F11 are recorded.
 2. **Failure rates are not comparable across the re-base.** The header note says so, but any watch reading rates
    against a pre-2026-07-21 report needs re-basing. Expect movement in both directions: the stop side already
    re-based at D6, and now targets move from a fixed ATR fraction to real structural placements — closer targets
    raise success, farther ones lower it, per row.
-3. **`docs/UserManual.md` §18 still quotes the retired constants** (~line 1861). Left untouched: the manual
-   fold-in lane was actively editing the manuals and PDFs, and the implementer orders say to serialize with it.
-   Needs a pass when that lane is clear.
-4. **Auto-tweaker first-fire readings re-base again.** The >40% trigger semantics are unchanged, but the aggregate
-   rate it reads is now computed on placed-vs-placed. Same caution D6 carried.
-5. **`RoundStatsBuilder` was left alone** — deliberately. It computes its own display-only tier accuracy with a
-   private `FavAtrThreshold = 0.5` const and calls `WalkBars` directly; it is not a `FailureRateMatrix.Compute`
-   consumer and is not in the §2 inventory. It is now the last surviving synthetic-target measurement in the repo,
-   so it is worth a decision — migrate it for consistency, or document why the round-stats display wants a fixed
-   yardstick. Not touched here because that call belongs in a spec, not in an implementer's discretion.
+3. **Auto-tweaker first-fire readings re-base again.** The >40% trigger semantics are unchanged, but the aggregate
+   rate it reads is now computed on placed-vs-placed. Same caution D6 carried. See also **F2** — if the
+   success/failure orientation is ever unified, the tweaker's comparison must NOT flip with the display.
+4. **Nothing in §8 is caused by this migration.** Putting both surfaces on the same geometry is what made the
+   tier-ladder question (F1), the orientation mismatch (F2), the WEAK-blend (F3) and the empty-bars asymmetry
+   (F4) legible. They were all present before; the confound was hiding them.
+
+**Orchestrator hand-off, in dependency order.** F4 first — it is a correctness bug (empty bars recorded as
+failures) and every other measurement inherits it, including F1's re-read. Then F3 (population) and F2
+(orientation), which are small and make the two surfaces directly comparable. F1 last, because it needs the
+other three fixed *and* more STRONG rows before it can be answered at all.
