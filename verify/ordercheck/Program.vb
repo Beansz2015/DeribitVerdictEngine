@@ -233,6 +233,20 @@ Module Program
         A33b_AggregationExcludesNoData()
         A33c_V6SweepReclassifiesUncoveredPreservesCovered()
 
+        ' F2/F3/F12 eval display-semantics pass (docs/eval-display-semantics-proposal.md
+        ' §6 acceptance): E1 success flip at the render boundary (MarkdownReportWriter
+        ' + PromptBuilder) with internal FailureCellResult truth unchanged and the
+        ' auto-tweaker's trigger comparison intact under the flipped render; E2a
+        ' WEAK exclusion at display time (matrix population = strip population); E3a
+        ' middle-band display rendering as "MEDIUM LONG" / "MEDIUM SHORT" while every
+        ' stored/wire string stays bare LONG / SHORT (the revision's load-bearing
+        ' invariant — CSV, payload, eval cache, string-matching sites all untouched).
+        A34a_SuccessRenderFlipMatrixAndCsv()
+        A34b_TweakerTriggerUnchangedUnderSuccessRender()
+        A34c_WeakExcludedFromStripAggregate()
+        A34d_BandDisplayHelperPrefix()
+        A34e_StoredFormPinsUnchanged()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -2717,10 +2731,13 @@ Module Program
         rep.Populations.Add(pop)
 
         Dim md As String = MarkdownReportWriter.BuildD4Section(rep)
-        Check("A27c D4 report renders before→after (both barrier bases)",
+        ' [E1 v55, 2026-07-21] Report render text flipped from FAILURE to SUCCESS
+        ' rates. The same before/after cell that read "20% → 60% (+40%)" pre-flip
+        ' now reads "80% → 40% (−40%)" — same rows, opposite side of the axis.
+        Check("A27c D4 report renders before→after (both barrier bases, success orientation)",
               md.Contains("Placed-Geometry Migration") AndAlso md.Contains("STRONG_LONG") AndAlso
-              md.Contains("→") AndAlso md.Contains("+40%") AndAlso md.Contains("n=40"),
-              "expected the migration section with a before→after cell (+40% delta, n=40); got:" & vbLf & md)
+              md.Contains("→") AndAlso md.Contains("-40%") AndAlso md.Contains("n=40"),
+              "expected the migration section with a before→after cell (-40% success delta, n=40); got:" & vbLf & md)
     End Sub
 
     ' -- A27d: eval-cache v4→v5 rotate-and-rebuild path ----------------------------
@@ -3630,9 +3647,11 @@ Module Program
         ' Window + one data column = 3 pipes. The retired 2-threshold grid rendered 4.
         Dim pipeCount As Integer = dataRow.Split("|"c).Length - 1
         Dim rowHasNoAtr As Boolean = Not dataRow.Contains("ATR")
-        Check("A32c before/after grid renders a single placed-geometry column",
+        ' [E1 v55, 2026-07-21] Delta re-sign after the failure→success flip: the
+        ' 20% failure → 60% failure cell now reads 80% success → 40% success (−40%).
+        Check("A32c before/after grid renders a single placed-geometry column (success orientation)",
               hdrOk AndAlso hdrHasNoThresholdCaption AndAlso rowHasNoAtr AndAlso
-              pipeCount = 3 AndAlso dataRow.Contains("+40%"),
+              pipeCount = 3 AndAlso dataRow.Contains("-40%"),
               String.Format("hdrOk={0} hdrNoAtr={1} rowNoAtr={2} pipes={3} row='{4}'",
                             hdrOk, hdrHasNoThresholdCaption, rowHasNoAtr, pipeCount, dataRow))
     End Sub
@@ -3770,6 +3789,206 @@ Module Program
     End Sub
 
     ' -- A33c: v5→v6 sweep reclassifies uncovered WE rows; preserves covered outcomes ---
+    ' =======================================================================
+    ' A34 — F2/F3/F12 eval display-semantics (docs/eval-display-semantics-proposal.md).
+    ' E1 render flip (report + prompt) with internal truth + tweaker trigger unchanged;
+    ' E2a WEAK exclusion at display time with a WEAK-only tooltip aggregate; E3a band
+    ' display rendering (middle band as "MEDIUM LONG" / "MEDIUM SHORT") while every
+    ' stored/wire string stays bare LONG / SHORT (the load-bearing invariant).
+    ' =======================================================================
+
+    ' -- A34a: MarkdownReportWriter renders SUCCESS + summary CSV column renamed ------
+    Private Sub A34a_SuccessRenderFlipMatrixAndCsv()
+        Dim rep As New AnalysisReport()
+        Dim pop As New PopulationReport With {
+            .PopulationKey = "NY|1", .SessionName = "NY", .Resolution = 1,
+            .BarrierLabel = "PLACED", .RowCount = 40}
+        ' Same cell as A32c: 24 failures / 40 = 60% failure ⇒ 40% success. Wilson
+        ' CI [.44, .74] on the failure side ⇒ [.26, .56] on the success side.
+        Dim ciLow As Double, ciHigh As Double
+        FailureRateMatrix.WilsonCI(24, 40, ciLow, ciHigh)
+        pop.FailureCells.Add(New FailureCellResult With {
+            .VerdictTier = "STRONG_LONG", .WindowMin = 5,
+            .SampleSize = 40, .Failures = 24, .FailureRate = 0.6,
+            .CiLow = ciLow, .CiHigh = ciHigh})
+        rep.Populations.Add(pop)
+
+        Dim md As String = MarkdownReportWriter.BuildD4Section(rep)
+        ' Section 3's blurb reads "success rates" and D4 renders 80%→40% for the
+        ' before/after (before defaults to after when no legacy cell exists).
+        Dim d4Flipped As Boolean = md.Contains("success") AndAlso md.Contains("40%")
+
+        ' Full report — section 2 heading changed AND the ★◆ cell renders as success.
+        Dim full As String = MarkdownReportWriter.BuildFullMarkdownForHarness(rep)
+        Dim matrixHeading  As Boolean = full.Contains("## 2. Success-Rate Matrix")
+        Dim legendPresent  As Boolean = full.Contains("MEDIUM_x") AndAlso full.Contains("STRONG_x") AndAlso
+                                        full.Contains("WEAK") AndAlso full.Contains("excluded")
+        Dim orientNote     As Boolean = full.Contains("Success orientation")
+
+        ' Summary CSV column name changed AND value flipped.
+        Dim csvPath As String = Path.Combine(Path.GetTempPath(), "a34a_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            MarkdownReportWriter.BuildSummaryCsvForHarness(rep, csvPath)
+            Dim csv = File.ReadAllText(csvPath)
+            Dim headerOk As Boolean = csv.Contains(",SuccessRate,") AndAlso Not csv.Contains(",FailureRate,")
+            ' Success value = 1 - 0.6 = 0.4 = "0.400000".
+            Dim valueOk As Boolean = csv.Contains(",0.400000,")
+
+            Check("A34a report + CSV render as SUCCESS (matrix heading, D4 blurb, legend, CSV column+value)",
+                  matrixHeading AndAlso d4Flipped AndAlso legendPresent AndAlso orientNote AndAlso
+                  headerOk AndAlso valueOk,
+                  String.Format("matrixHdr={0} d4Flip={1} legend={2} orient={3} csvHdr={4} csvVal={5}",
+                                matrixHeading, d4Flipped, legendPresent, orientNote, headerOk, valueOk))
+        Finally
+            Try : File.Delete(csvPath) : Catch : End Try
+        End Try
+    End Sub
+
+    ' -- A34b: the auto-tweaker's BELOW_THRESHOLD trigger comparison is UNCHANGED ------
+    ' The load-bearing invariant of the display-only spec: the internal
+    ' FailureCellResult.Failures/FailureRate stays as-is, so
+    ' `aggregateRatePct < FailureRateThresholdPct` still decides BELOW_THRESHOLD the
+    ' same way it did pre-flip. Same three cells that would have read below the
+    ' threshold pre-flip must still read below the threshold post-flip.
+    Private Sub A34b_TweakerTriggerUnchangedUnderSuccessRender()
+        ' Simulate the tweaker's aggregation: sum Failures / sum SampleSize across
+        ' recommended cells, compare to FailureRateThresholdPct=40.
+        Const Threshold As Double = 40.0
+        Dim cells As New List(Of FailureCellResult) From {
+            New FailureCellResult With {.SampleSize = 50, .Failures = 10, .FailureRate = 0.2},
+            New FailureCellResult With {.SampleSize = 30, .Failures =  9, .FailureRate = 0.3},
+            New FailureCellResult With {.SampleSize = 20, .Failures =  6, .FailureRate = 0.3}}
+        Dim totalN As Integer = 0, totalF As Integer = 0
+        For Each c In cells
+            totalN += c.SampleSize
+            totalF += c.Failures
+        Next
+        Dim aggregateRatePct As Double = CDbl(totalF) / totalN * 100.0
+        Dim isBelowThreshold As Boolean = aggregateRatePct < Threshold
+
+        ' Under the render flip, the same three cells would DISPLAY as 80%/70%/70% success
+        ' rates — visually way above 40. The trigger reads FAILURE and stays BELOW_THRESHOLD.
+        Check("A34b tweaker trigger stays failure-oriented under success render (25% < 40 ⇒ BELOW_THRESHOLD)",
+              isBelowThreshold AndAlso Math.Abs(aggregateRatePct - 25.0) < 0.0001,
+              String.Format("aggregateRatePct={0:F2}%, threshold={1:F2}%, below={2}",
+                            aggregateRatePct, Threshold, isBelowThreshold))
+    End Sub
+
+    ' -- A34c: WEAK excluded from Success/Failure counts; WeakBarrierRatePct tooltip ---
+    ' Storage is UNCHANGED — the entries retain their WEAK verdict strings. The
+    ' exclusion happens at display time in AggregateRange keyed off the verdict band.
+    Private Sub A34c_WeakExcludedFromStripAggregate()
+        Dim baseTs As DateTime = New DateTime(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc)
+        ' Rows in the list (indices 0-4):
+        '   0: STRONG LONG SUCCESS      — counted in SuccessCount
+        '   1: LONG (medium) FAILURE    — counted in FailureCount
+        '   2: WEAK LONG SUCCESS        — counted in WeakSuccessCount only (E2a)
+        '   3: WEAK SHORT SUCCESS       — counted in WeakSuccessCount only
+        '   4: WEAK LONG ADVERSE_HIT    — counted in WeakFailureCount only
+        ' Expected: Success/Failure = 1/1 → 50%; WeakBarrierRatePct = 2/3 → 66.7%.
+        Dim entries As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(0), .Verdict = "STRONG LONG",
+                .EvalOutcome = "SUCCESS", .TargetEverHit = True, .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(1), .Verdict = "LONG",
+                .EvalOutcome = "WINDOW_EXPIRED", .TargetEverHit = False, .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(2), .Verdict = "WEAK LONG",
+                .EvalOutcome = "SUCCESS", .TargetEverHit = True, .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(3), .Verdict = "WEAK SHORT",
+                .EvalOutcome = "SUCCESS", .TargetEverHit = True, .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(4), .Verdict = "WEAK LONG",
+                .EvalOutcome = "ADVERSE_HIT", .TargetEverHit = False, .ExecResolution = 1}}
+        Dim agg = LivePerformanceTracker.AggregateRange(entries,
+                                                        baseTs.AddMinutes(-1),
+                                                        baseTs.AddMinutes(10), 0)
+        ' Strip rate = STRONG + MEDIUM only: 1/1 → 50%. WEAK aggregate = 2/3 → 66.7%.
+        ' TotalRange still counts every row (tooltip's "predictions evaluated" line).
+        Check("A34c WEAK excluded from Success/Failure counts; WeakBarrierRatePct tracks the WEAK aggregate",
+              agg.SuccessCount = 1 AndAlso agg.FailureCount = 1 AndAlso
+              agg.WeakSuccessCount = 2 AndAlso agg.WeakFailureCount = 1 AndAlso
+              agg.TotalRange = 5 AndAlso
+              Math.Abs(agg.BarrierRatePct - 50.0) < 0.0001 AndAlso
+              Math.Abs(agg.WeakBarrierRatePct - (200.0 / 3.0)) < 0.01,
+              String.Format("succ={0} fail={1} weakSucc={2} weakFail={3} total={4} rate={5:F2} weakRate={6:F2}",
+                            agg.SuccessCount, agg.FailureCount,
+                            agg.WeakSuccessCount, agg.WeakFailureCount,
+                            agg.TotalRange, agg.BarrierRatePct, agg.WeakBarrierRatePct))
+    End Sub
+
+    ' -- A34d: middle band renders "MEDIUM LONG" / "MEDIUM SHORT" via the display helper ---
+    ' The helper is the ONE seam both render surfaces (snapshot + card) route through.
+    ' STRONG/WEAK/NO TRADE unchanged; stored/wire strings are never touched by rendering.
+    Private Sub A34d_BandDisplayHelperPrefix()
+        Dim mLong  As String = VerdictResult.FormatVerdictForDisplay("LONG")
+        Dim mShort As String = VerdictResult.FormatVerdictForDisplay("SHORT")
+        Dim strong As String = VerdictResult.FormatVerdictForDisplay("STRONG LONG")
+        Dim weakS  As String = VerdictResult.FormatVerdictForDisplay("WEAK SHORT")
+        Dim noTrd  As String = VerdictResult.FormatVerdictForDisplay("NO TRADE")
+        Dim noTrdW As String = VerdictResult.FormatVerdictForDisplay("NO TRADE [WEAK LONG]")
+        Dim empty  As String = VerdictResult.FormatVerdictForDisplay("")
+
+        Check("A34d display helper renders MEDIUM prefix on bare LONG/SHORT; leaves STRONG/WEAK/NO TRADE untouched",
+              mLong = "MEDIUM LONG" AndAlso mShort = "MEDIUM SHORT" AndAlso
+              strong = "STRONG LONG" AndAlso weakS = "WEAK SHORT" AndAlso
+              noTrd = "NO TRADE" AndAlso noTrdW = "NO TRADE [WEAK LONG]" AndAlso
+              empty = "",
+              String.Format("mLong='{0}' mShort='{1}' strong='{2}' weakS='{3}' noTrd='{4}' noTrdW='{5}' empty='{6}'",
+                            mLong, mShort, strong, weakS, noTrd, noTrdW, empty))
+    End Sub
+
+    ' -- A34e: STORED-FORM PINS — the revision's load-bearing invariant --------------
+    ' The card + snapshot render MEDIUM LONG / MEDIUM SHORT, but every OTHER surface
+    ' (CSV Verdict column, payload verdict field, eval cache Verdict) still carries
+    ' bare LONG / SHORT for the middle band. This fixture asserts the NON-change: a
+    ' VerdictResult built with .Verdict = "LONG" flows through the payload builder
+    ' unchanged (SignalEmitter reads v.Verdict verbatim into the payload's `verdict`
+    ' key), and the eval-cache classifier IsWeakVerdict / IsLongVerdict still route
+    ' bare LONG correctly (LivePerformanceTracker doesn't second-guess the string).
+    ' Regressing this in either direction breaks the frozen bridge contract.
+    Private Sub A34e_StoredFormPinsUnchanged()
+        Dim v As New VerdictResult With {
+            .Verdict = "LONG",
+            .LongScore = 10, .ShortScore = 2, .MaxScore = 19,
+            .EffectiveLongScore = 10, .EffectiveShortScore = 2,
+            .Confidence = "MEDIUM", .VerdictContext = "CONFIRMED",
+            .HoldStatus = "N/A -- no open position", .Timestamp = DateTime.UtcNow,
+            .MTFGateReason = "MTF PASS [LONG] test"}
+
+        ' Payload — the bridge reads v.Verdict verbatim into the "verdict" key (§4
+        ' R1); no display transform touches v.Verdict along the way. DeriveDirection
+        ' still routes "LONG" → "LONG" (side only, unchanged) — the two payload keys
+        ' that consumers gate on. A22 fixtures pin the full serialisation shape
+        ' separately; here we assert only the string identity in memory.
+        Dim directionFromStored As String = SignalEmitter.DeriveDirection(v.Verdict)
+        Dim storedVerdictBare  As Boolean = v.Verdict = "LONG"
+
+        ' Eval cache: an entry stored as "LONG" carries "LONG" — IsLongVerdict TRUE,
+        ' IsWeakVerdict FALSE. AggregateRange puts it in Success/Failure (not Weak*).
+        Dim baseTs As DateTime = New DateTime(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc)
+        Dim entries As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs, .Verdict = "LONG",
+                .EvalOutcome = "SUCCESS", .TargetEverHit = True, .ExecResolution = 1}}
+        Dim agg = LivePerformanceTracker.AggregateRange(entries,
+                                                        baseTs.AddMinutes(-1),
+                                                        baseTs.AddMinutes(10), 0)
+        Dim routedToStrongMedium As Boolean = agg.SuccessCount = 1 AndAlso agg.WeakSuccessCount = 0
+
+        ' Display side: the same stored "LONG" ⇒ "MEDIUM LONG" (surfaces routes through
+        ' the helper — divergence lives HERE, not on the storage side).
+        Dim displayed As String = VerdictResult.FormatVerdictForDisplay(v.Verdict)
+
+        Check("A34e stored-form pins — CSV/payload/eval-cache carry bare LONG; display renders MEDIUM LONG",
+              storedVerdictBare AndAlso directionFromStored = "LONG" AndAlso
+              routedToStrongMedium AndAlso displayed = "MEDIUM LONG",
+              String.Format("stored='{0}' direction='{1}' routedSM={2} displayed='{3}'",
+                            v.Verdict, directionFromStored, routedToStrongMedium, displayed))
+    End Sub
+
     Private Sub A33c_V6SweepReclassifiesUncoveredPreservesCovered()
         Dim tmp As String = Path.Combine(Path.GetTempPath(), "f4_eval_" & Guid.NewGuid().ToString("N") & ".csv")
         Try

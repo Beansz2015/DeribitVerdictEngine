@@ -39,7 +39,7 @@ Every time the engine runs, it prints its output in this order:
 **What to watch for:**
 
 - `STRONG LONG` / `STRONG SHORT` — high signal density; this is your primary trade trigger.
-- `LONG` / `SHORT` (no qualifier) — solid setup, medium confidence; valid for entry per trader-profile rules.
+- `MEDIUM LONG` / `MEDIUM SHORT` — solid setup, medium confidence; valid for entry per trader-profile rules. *(v55, 2026-07-21: renders `MEDIUM x` on-screen; **stored** as bare `LONG` / `SHORT` on the CSV, bridge payload, and eval cache — the display-only change kills the "STRONG vs LONG" ambiguity on the ladder.)*
 - `WEAK LONG` / `WEAK SHORT` — partial setup only; use as context, not an entry trigger.
 - `NO TRADE` — neither direction has enough confirmation; stand aside.
 - `NO TRADE [WEAK LONG]` / `NO TRADE [WEAK SHORT]` — a lean exists but a hard gate killed it (regime mismatch or 15m misalignment); the direction is noted but the trade is blocked.
@@ -743,13 +743,15 @@ Practical read: a result worth acting on has a **positive holdout EV, no DIVERGE
 
 ## Quick Reference — Verdict Action Rules
 
-| Verdict | Confidence | Action |
-|---|---|---|
-| `STRONG LONG` / `STRONG SHORT` | `HIGH` | Primary entry signal |
-| `LONG` / `SHORT` | `MEDIUM` | Valid entry signal |
-| `WEAK LONG` / `WEAK SHORT` | `LOW` | Informational only — no trade |
-| `NO TRADE` | `N/A` | Stand aside |
-| `NO TRADE [WEAK X]` | `N/A` | Gate fired — stand aside, note the lean |
+| Verdict (displayed) | Stored / wire | Confidence | Action |
+|---|---|---|---|
+| `STRONG LONG` / `STRONG SHORT` | (same) | `HIGH`   | Primary entry signal |
+| `MEDIUM LONG` / `MEDIUM SHORT` | `LONG` / `SHORT` | `MEDIUM` | Valid entry signal |
+| `WEAK LONG` / `WEAK SHORT`     | (same) | `LOW`    | Informational only — no trade |
+| `NO TRADE`                     | (same) | `N/A`    | Stand aside |
+| `NO TRADE [WEAK X]`            | (same) | `N/A`    | Gate fired — stand aside, note the lean |
+
+*(v55, 2026-07-21: the on-screen `MEDIUM x` is a display rendering only — the CSV, bridge payload, eval cache, and every string-matching site still carry bare `LONG` / `SHORT` for the middle band. Actionability keys `direction` + `confidence` on the frozen bridge contract are unchanged.)*
 
 ## Quick Reference — Context Tags
 

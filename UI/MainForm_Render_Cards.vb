@@ -898,7 +898,14 @@ Partial Public Class MainForm
         Dim verdictColour As Color = ResolveVerdictColour(v.Verdict)
 
         If _lblVerdictText IsNot Nothing Then
-            _lblVerdictText.Text      = If(String.IsNullOrEmpty(v.Verdict), "—", v.Verdict)
+            ' [F12 / E3a — 2026-07-21] Middle band renders as "MEDIUM LONG" /
+            ' "MEDIUM SHORT"; stored/wire strings (v.Verdict on the CSV, payload,
+            ' eval cache, colour-map switch above) stay bare LONG/SHORT. Snapshot
+            ' renders through the same helper — see BuildPlaintextSnapshot's
+            ' VERDICT: line. Both surfaces move together (parity rule).
+            Dim displayVerdict As String = If(String.IsNullOrEmpty(v.Verdict), "—",
+                                              VerdictResult.FormatVerdictForDisplay(v.Verdict))
+            _lblVerdictText.Text      = displayVerdict
             _lblVerdictText.ForeColor = verdictColour
         End If
 

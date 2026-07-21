@@ -47,10 +47,25 @@ Public Class LivePerformanceTracker
     Public Class WindowAggregate
         Public Property RangeStart      As DateTime  ' UTC+8 (display)
         Public Property RangeEnd        As DateTime  ' UTC+8 (display)
-        Public Property SuccessCount    As Integer   ' barrier metric numerator
-        Public Property FailureCount    As Integer
+        Public Property SuccessCount    As Integer   ' barrier metric numerator (STRONG+MEDIUM only, E2a)
+        Public Property FailureCount    As Integer   '                             (STRONG+MEDIUM only, E2a)
         Public Property TargetHitCount  As Integer   ' [target-hit-toggle] target metric numerator
         Public Property TotalRange      As Integer   ' all rows in range (incl. PENDING/EXCLUDED) — for tooltip
+        ''' <summary>
+        ''' [E2a WEAK exclusion — 2026-07-21] WEAK LONG / WEAK SHORT rows are
+        ''' EXCLUDED from SuccessCount/FailureCount at display time so the strip
+        ''' population equals the matrix population (STRONG+MEDIUM), i.e. the
+        ''' bands the frozen bridge contract actually trades. IsEligibleVerdict
+        ''' stays permissive at STORAGE (cache keeps WEAK rows, reversible, no
+        ''' rotation) — the exclusion applies here in AggregateRange keyed off
+        ''' the verdict band. These counters track the excluded rows so the
+        ''' EXISTING _perfTip tooltip can carry a "WEAK excl.: N% (n=M)" line
+        ''' (F1 shows WEAK currently out-performing MEDIUM — not significant,
+        ''' but information). Composes with the F4 NO_DATA exclusion (NO_DATA
+        ''' WEAK rows are counted in neither).
+        ''' </summary>
+        Public Property WeakSuccessCount As Integer
+        Public Property WeakFailureCount As Integer
 
         ''' <summary>
         ''' True when this aggregate's range terminates at "now" (i.e., the
@@ -79,6 +94,19 @@ Public Class LivePerformanceTracker
                 Dim n = SuccessCount + FailureCount
                 If n = 0 Then Return -1.0
                 Return CDbl(TargetHitCount) / n * 100.0
+            End Get
+        End Property
+
+        ''' <summary>
+        ''' [E2a] WEAK-only success rate for the perf-strip tooltip's
+        ''' "WEAK excl.: N% (n=M)" line. -1 when no evaluable WEAK rows.
+        ''' Barrier-metric only (the tooltip line does not toggle with [B]/[T]).
+        ''' </summary>
+        Public ReadOnly Property WeakBarrierRatePct As Double
+            Get
+                Dim n = WeakSuccessCount + WeakFailureCount
+                If n = 0 Then Return -1.0
+                Return CDbl(WeakSuccessCount) / n * 100.0
             End Get
         End Property
     End Class
@@ -696,14 +724,29 @@ Public Class LivePerformanceTracker
             ' in TotalRange (the tooltip sees it) but NOT in the success/failure denominator
             ' (the strip rate excludes it). Mirrors FailureRateMatrix.Compute, where an
             ' empty bar-list `Continue For`s past the per-window increment.
+            ' [E2a WEAK exclusion — v55, 2026-07-21] WEAK LONG / WEAK SHORT rows route
+            ' to WeakSuccess/FailureCount instead of Success/FailureCount so the strip
+            ' population equals the matrix population (STRONG+MEDIUM). Storage stays
+            ' permissive (IsEligibleVerdict); the exclusion is applied here at display
+            ' time keyed off the verdict band. The tooltip surfaces the WEAK block
+            ' separately in UpdatePerformanceLabels via WeakBarrierRatePct.
+            Dim isWeak As Boolean = IsWeakVerdict(e.Verdict)
             Select Case e.EvalOutcome
                 Case "SUCCESS"
-                    agg.SuccessCount += 1
-                    ' SUCCESS always implies TargetEverHit=True by construction.
-                    If e.TargetEverHit.HasValue AndAlso e.TargetEverHit.Value Then agg.TargetHitCount += 1
+                    If isWeak Then
+                        agg.WeakSuccessCount += 1
+                    Else
+                        agg.SuccessCount += 1
+                        ' SUCCESS always implies TargetEverHit=True by construction.
+                        If e.TargetEverHit.HasValue AndAlso e.TargetEverHit.Value Then agg.TargetHitCount += 1
+                    End If
                 Case "ADVERSE_HIT", "AMBIGUOUS", "WINDOW_EXPIRED"
-                    agg.FailureCount += 1
-                    If e.TargetEverHit.HasValue AndAlso e.TargetEverHit.Value Then agg.TargetHitCount += 1
+                    If isWeak Then
+                        agg.WeakFailureCount += 1
+                    Else
+                        agg.FailureCount += 1
+                        If e.TargetEverHit.HasValue AndAlso e.TargetEverHit.Value Then agg.TargetHitCount += 1
+                    End If
             End Select
         Next
         Return agg
@@ -1178,6 +1221,19 @@ Public Class LivePerformanceTracker
     Private Shared Function IsLongVerdict(verdict As String) As Boolean
         If String.IsNullOrEmpty(verdict) Then Return False
         Return verdict.Trim().ToUpperInvariant().Contains("LONG")
+    End Function
+
+    ''' <summary>
+    ''' [E2a — v55] True for "WEAK LONG" / "WEAK SHORT" (the bands the frozen
+    ''' bridge contract refuses under the default tier gate — `refused: policy`).
+    ''' Excludes NO TRADE, NO TRADE [WEAK X], STRONG/MEDIUM, non-verdict strings.
+    ''' Used by AggregateRange to route WEAK rows into their own counters so the
+    ''' strip's headline rate measures only what actually becomes an order.
+    ''' </summary>
+    Private Shared Function IsWeakVerdict(verdict As String) As Boolean
+        If String.IsNullOrEmpty(verdict) Then Return False
+        Dim v = verdict.Trim().ToUpperInvariant()
+        Return v = "WEAK LONG" OrElse v = "WEAK SHORT"
     End Function
 
     ' -----------------------------------------------------------------------

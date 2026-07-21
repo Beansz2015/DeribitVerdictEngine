@@ -1377,6 +1377,12 @@ Partial Public Class MainForm
             Dim text As String
             Dim fgColor As System.Drawing.Color
 
+            ' [F7 rider — v55] Session cells (Asia/London/NY, indexes 3-5) are
+            ' most-recent-BLOCK, not book-wide. "London: 0%" is a genuine
+            ' 0-for-26 in the current block — spelling out "block" in the
+            ' tooltip kills the "London is broken" misread.
+            Dim rangeWord As String = If(i >= 3, " block", "")
+
             If w IsNot Nothing AndAlso n >= minN Then
                 Dim activePct As Double = If(isTarget, w.TargetRatePct, w.BarrierRatePct)
                 Dim rate As Integer = CInt(Math.Round(activePct))
@@ -1395,17 +1401,33 @@ Partial Public Class MainForm
                 Dim otherLabel As String = If(isTarget, "Barrier-hit", "Target-hit")
                 Dim otherHits  As Integer = If(isTarget, w.SuccessCount, w.TargetHitCount)
                 Dim otherPct   As Double  = If(isTarget, w.BarrierRatePct, w.TargetRatePct)
-                tip = String.Format("{0} predictions evaluated. {1:yyyy-MM-dd HH:mm} → {2:yyyy-MM-dd HH:mm} UTC+8." &
+                Dim label      As String = "most-recent " & prefixes(i) & rangeWord
+                tip = String.Format("{0}, {1} predictions evaluated. {2:yyyy-MM-dd HH:mm} → {3:yyyy-MM-dd HH:mm} UTC+8." &
                                     Environment.NewLine &
-                                    "{3}: {4}% ({5}/{6})",
-                                    n, w.RangeStart, w.RangeEnd,
+                                    "{4}: {5}% ({6}/{7})",
+                                    label, n, w.RangeStart, w.RangeEnd,
                                     otherLabel, CInt(Math.Round(otherPct)), otherHits, n)
             Else
                 text    = prefixes(i) & ": --%"
                 fgColor = Theme.FG_QUATERNARY
                 If w IsNot Nothing Then
-                    tip = String.Format("{0} predictions evaluated (below threshold). {1:yyyy-MM-dd HH:mm} → {2:yyyy-MM-dd HH:mm} UTC+8.",
-                                        n, w.RangeStart, w.RangeEnd)
+                    Dim label As String = "most-recent " & prefixes(i) & rangeWord
+                    tip = String.Format("{0}, {1} predictions evaluated (below threshold). {2:yyyy-MM-dd HH:mm} → {3:yyyy-MM-dd HH:mm} UTC+8.",
+                                        label, n, w.RangeStart, w.RangeEnd)
+                End If
+            End If
+
+            ' [E2a — v55] Append a WEAK line to the EXISTING _perfTip tooltip
+            ' when WEAK rows exist in this window's block. The strip's headline
+            ' excludes WEAK (matrix population = STRONG+MEDIUM only); this line
+            ' keeps the WEAK-band success rate reachable without cluttering the
+            ' cell. Rate is barrier-only (does not toggle with [B]/[T]).
+            If w IsNot Nothing Then
+                Dim weakN As Integer = w.WeakSuccessCount + w.WeakFailureCount
+                If weakN > 0 Then
+                    tip &= Environment.NewLine &
+                           String.Format("WEAK excl.: {0}% (n={1})",
+                                         CInt(Math.Round(w.WeakBarrierRatePct)), weakN)
                 End If
             End If
 

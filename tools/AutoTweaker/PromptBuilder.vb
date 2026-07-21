@@ -219,7 +219,20 @@ Public Class PromptBuilder
         ' Failure-rate matrix as markdown table (per tier). [placed-target migration] One
         ' placed-geometry column: both barriers are the row's own emitted levels
         ' (PlacedTarget* / PlacedStop*), so the hold window is the only axis left.
-        user.AppendLine("## Failure-Rate Matrix (placed target vs placed stop)")
+        ' [E1 v55 — 2026-07-21] The matrix table AND its surrounding prose flip to
+        ' SUCCESS rates together (flipping the table alone would actively mislead the
+        ' tweaker's LLM reasoning). The trigger line above stays failure-oriented
+        ' because it names the internal comparison AutoTweakerCore actually made —
+        ' this section explicitly reconciles the two so the LLM sees both. Star (★)
+        ' still marks IsRecommended (lowest CI width); the pick is unchanged.
+        user.AppendLine("## Success-Rate Matrix (placed target vs placed stop)")
+        user.AppendLine()
+        user.AppendLine("_Rates below are SUCCESS rates (higher is better). The **Trigger** line above " &
+                        "quotes the auto-tweaker's INTERNAL failure comparison (`aggregateRatePct < " &
+                        "FailureRateThresholdPct`, unchanged) — the two views are the same rows read from " &
+                        "opposite sides (`success = 1 − failure`). CI is the Wilson complement of the " &
+                        "internal failure CI. Star (★) marks the recommended (narrowest-CI) cell — pick " &
+                        "unchanged from the failure-oriented era._")
         user.AppendLine()
         For Each tier In {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
             user.AppendLine("### " & tier)
@@ -232,9 +245,14 @@ Public Class PromptBuilder
                     row.Append(" n/a             |")
                 Else
                     Dim star As String = If(c.IsRecommended, "*", " ")
+                    ' [E1] Render as SUCCESS rate + CI complement (mirrors
+                    ' MarkdownReportWriter.SuccessPct / SuccessCiLow / SuccessCiHigh).
+                    Dim succRate  As Double = 1.0 - c.FailureRate
+                    Dim succCiLow As Double = 1.0 - c.CiHigh
+                    Dim succCiHigh As Double = 1.0 - c.CiLow
                     row.Append(String.Format(" {4}{0:P0} n={1} [{2:P0}-{3:P0}] |",
-                                             c.FailureRate, c.SampleSize,
-                                             c.CiLow, c.CiHigh, star))
+                                             succRate, c.SampleSize,
+                                             succCiLow, succCiHigh, star))
                 End If
                 user.AppendLine(row.ToString())
             Next
@@ -313,7 +331,9 @@ Public Class PromptBuilder
         user.AppendLine("```")
         user.AppendLine()
 
-        user.AppendLine("Based on the failure-rate data above, propose either a TWEAK diff " &
+        user.AppendLine("Based on the success-rate data above (equivalent to the failure comparison in " &
+                        "the Trigger line — the internal truth is unchanged, only the render orientation " &
+                        "flipped), propose either a TWEAK diff " &
                         "(<=" & maxKeysPerProposal.ToString() & " keys) or a REVERT to a past snapshot. " &
                         "Respect all constraints in the system message. Output JSON only.")
 

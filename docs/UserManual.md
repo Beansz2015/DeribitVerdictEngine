@@ -82,16 +82,18 @@ Long side is evaluated first; if long passes no tier, short is evaluated.
 
 **Possible values:**
 
-| Verdict | Trigger |
-|---|---|
-| `STRONG LONG`  | `effectiveLS ≥ tStrong` |
-| `LONG`         | `tMed ≤ effectiveLS < tStrong` |
-| `WEAK LONG`    | `tWeak ≤ effectiveLS < tMed` |
-| `STRONG SHORT` | `effectiveSS ≥ tStrong` AND short wins |
-| `SHORT`        | `tMed ≤ effectiveSS < tStrong` AND short wins |
-| `WEAK SHORT`   | `tWeak ≤ effectiveSS < tMed` AND short wins |
-| `NO TRADE`     | Neither side clears `tWeak` |
-| `NO TRADE [WEAK LONG]` / `NO TRADE [WEAK SHORT]` | Regime veto (Step 4) or MTF Gate block (Step 4b) triggered, but the underlying score still has a weak lean. The bracketed tag is the suppressed direction. |
+| Verdict (displayed) | Stored / wire string | Trigger |
+|---|---|---|
+| `STRONG LONG`   | `STRONG LONG`  | `effectiveLS ≥ tStrong` |
+| `MEDIUM LONG`   | `LONG`         | `tMed ≤ effectiveLS < tStrong` |
+| `WEAK LONG`     | `WEAK LONG`    | `tWeak ≤ effectiveLS < tMed` |
+| `STRONG SHORT`  | `STRONG SHORT` | `effectiveSS ≥ tStrong` AND short wins |
+| `MEDIUM SHORT`  | `SHORT`        | `tMed ≤ effectiveSS < tStrong` AND short wins |
+| `WEAK SHORT`    | `WEAK SHORT`   | `tWeak ≤ effectiveSS < tMed` AND short wins |
+| `NO TRADE`      | `NO TRADE`     | Neither side clears `tWeak` |
+| `NO TRADE [WEAK LONG]` / `NO TRADE [WEAK SHORT]` | (same, verbatim) | Regime veto (Step 4) or MTF Gate block (Step 4b) triggered, but the underlying score still has a weak lean. The bracketed tag is the suppressed direction. |
+
+**Display ↔ stored mapping (v55, 2026-07-21).** The screen (VERDICT line, verdict card) renders the middle band as `MEDIUM LONG` / `MEDIUM SHORT` so the on-screen ladder reads STRONG / MEDIUM / WEAK explicitly. Every other surface still carries the bare `LONG` / `SHORT` stored form — the CSV `Verdict` column, the bridge payload `verdict` field, the eval cache, and every string-matching site (`AnalysisLogger`, `SignalEmitter.DeriveDirection`, `LivePerformanceTracker`) are UNTOUCHED. The frozen bridge contract (schema v1) routes actionability through `direction` + `confidence`, which are unchanged. Anyone joining the CSV to the on-screen record joins on `(Timestamp, Verdict)` with the bare middle-band strings, exactly as before.
 
 **Interpretation:** Trader-profile rule is act on `MEDIUM` / `HIGH` tiers only. `WEAK` readings are informational — they mean a partial setup exists but the cross-confirmation density is insufficient. `NO TRADE [WEAK X]` means "the scoring said X but a hard gate killed it" — the lean is real but you're fighting either regime or the 15m timeframe. Stand down.
 
@@ -1855,24 +1857,28 @@ Since the resolution-segmentation fix (`offline-analysis-report-audit-proposal.m
 - **9. Pending data** — per tier × session: cells with `n < 30` (insufficient sample).
 - **Global Diagnostics** (not segmented — book-wide, resolution-independent): **5. Funding Momentum** (empirical FundingDelta distribution + percentiles; the "current threshold" now reads the live `momentum_threshold`), **6. OFI Outlier Audit** (`OFIRatio > 100` / `> 1000` + top-10), **7. OI×CVD Asymmetry Audit** (confirmed-long vs -short by Regime and Funding Bias).
 
-### Failure definition (constants in `analysis/AnalysisConstants.vb`)
+### Outcome definition (constants in `analysis/AnalysisConstants.vb`)
 
 ```
-Public ReadOnly StrongAtrThresholds As Double() = {0.5, 0.8}
-Public ReadOnly MediumAtrThresholds As Double() = {0.3, 0.5}
 Public ReadOnly HoldWindowsMinutes  As Integer() = {5, 10, 15}
 Public Const    MinSamplesPerCell              As Integer = 30
 Public Const    MinSamplesForAutoTweakerTrigger As Integer = 60
+' Legacy-fallback multipliers (pre-v0.8 rows only, since the placed-target
+' migration on 2026-07-21):
+Public Const    EngineTargetAtrMultiplier      As Double  = 2.0    ' legacy favourable
+Public Const    AdverseFallbackAtrMultiplier   As Double  = 1.2    ' legacy adverse
 ```
 
-**Barrier-hit with adverse stop (v2, `failure-definition-v2-proposal.md`).** Walk the 1-min OHLC bars across the hold window (the verdict bar and the next two minutes are excluded for execution latency — the first eligible bar closes at T+3 min):
+**Barrier-hit on placed geometry (v2 semantics on the placed-target migration, 2026-07-21).** Walk the 1-min OHLC bars across the hold window (the verdict bar and the next two minutes are excluded for execution latency — the first eligible bar closes at T+3 min):
 
-- **SUCCESS** = price wicks through the **favourable** barrier (`entry ± max(threshold × ATR, min-tradeable-move floor)`) before any adverse hit.
-- **FAILURE** = the **adverse** barrier (structural swing stop, or `1.2 × ATR` fallback when none is logged) is hit first, OR the window expires without a favourable hit, OR both barriers are touched in the same 1-min bar (conservative ambiguous-bar rule).
-- Under barrier-hit semantics a **smaller** multiplier is **easier** (a closer target), so STRONG uses the **larger** `{0.5, 0.8}` set (a higher bar) and MEDIUM the smaller `{0.3, 0.5}` set. (v1 had these swapped; the swap shipped with the v2 barrier model.)
-- `NO_TRADE` and `WEAK_*` rows are excluded from the denominator (informational counters only); directional rows the v35 min-move gate would kill are excluded as gate-killed, not scored as failures.
+- **SUCCESS** = price wicks through the **favourable** barrier (the logged `PlacedTargetLong` / `PlacedTargetShort` — used unfloored, because the live Step 5c min-move gate already vetted that exact price) before any adverse hit.
+- **FAILURE** = the **adverse** barrier (the logged `PlacedStopLong` / `PlacedStopShort`) is hit first, OR the window expires without a favourable hit, OR both barriers are touched in the same 1-min bar (conservative ambiguous-bar rule).
+- **NO_DATA** (F4, v6 eval-cache schema, 2026-07-21) = the OHLC window had no bars — excluded from both numerator and denominator, mirroring `FailureRateMatrix.Compute`. Fixes the invisible bias that stamped uncoverable rows as FAILURE.
+- Cell space is **(tier × session × window)**, one placed-geometry column per cell — the retired per-tier ATR-threshold grid (`StrongAtrThresholds {0.5, 0.8}` / `MediumAtrThresholds {0.3, 0.5}`) was collapsing at low ATR (every column sat below the min-move floor), so threshold sweeping moved to the What-If runner which does it with EV and a split-half holdout.
+- `NO_TRADE` rows are excluded from every denominator (informational only). `WEAK_*` rows are stored but excluded at DISPLAY time (E2a, v55) from both the strip's headline rate and the offline matrix — the strip surfaces the WEAK aggregate as a separate `WEAK excl.:` tooltip line.
+- Pre-v0.8 rows (no `Placed*` columns) keep the legacy formula on both sides via the two multipliers above and are labelled `[LEGACY_YARDSTICK]` (never silently pooled with placed rows).
 
-**v51 divergence.** The offline eval constants (`EngineTargetAtrMultiplier` 2.0, `AdverseFallbackAtrMultiplier` 1.2) were intentionally *not* updated when v51 moved placement to 1.75×/1.6× — the eval keeps the old yardstick so failure rates stay comparable across the boundary. See §21c for the full divergence; the migration onto the logged `Placed*` columns is a scheduled follow-up (D6).
+**Success orientation (v55, 2026-07-21).** All rates in the report are SUCCESS rates. The auto-tweaker's internal comparison is unchanged (it reads `Failures / SampleSize` directly), converted to success at render only.
 
 ### Picked-cell history
 

@@ -91,7 +91,12 @@ Partial Public Class MainForm
         Dim rrRatio As String = String.Format("1:{0:F1}", targetMult / stopMult)
 
         sb.AppendLine(SNAPSHOT_DIVIDER)
-        sb.AppendLine("  VERDICT:    " & v.Verdict)
+        ' [F12 / E3a — 2026-07-21] Middle band renders as "MEDIUM LONG" / "MEDIUM SHORT"
+        ' on the display surfaces; stored/wire strings stay bare LONG/SHORT (CSV, payload,
+        ' eval cache, string-matching sites all untouched). Card renders through the same
+        ' helper — see BindCardVerdict in MainForm_Render_Cards.vb. Parity rule
+        ' deliberately diverged on the two render surfaces (cap-reason precedent).
+        sb.AppendLine("  VERDICT:    " & VerdictResult.FormatVerdictForDisplay(v.Verdict))
 
         If v.VerdictContext <> "" Then
             sb.AppendLine("  CONTEXT:    " & v.VerdictContext)

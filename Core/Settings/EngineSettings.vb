@@ -1043,7 +1043,9 @@ End Class
 ''' <summary>
 ''' Controls the six-window live success/fail rate strip shown after each analysis run.
 ''' Enabled: master switch — false = strip not rendered, no cache I/O. Default True.
-''' MinSampleForRender: minimum evaluable rows before showing a numeric rate. Default 4.
+''' MinSampleForRender: minimum evaluable rows before showing a numeric rate. Default 10
+'''   (raised 4 -> 10 at v55 with the E2a WEAK exclusion; the denominator drops ~2.6x
+'''   under STRONG+MEDIUM only, and a 3pp-step rate needs a real floor).
 ''' EagerBackfillOnStartup: fetch 7-day OHLC gap + backfill eval cache on engine start. Default True.
 ''' SessionBlockSemantic: "most_recent" only for now; reserved for future "calendar_day" variant.
 ''' GapBackfillEnabled: detect and fill interior OHLC gaps within the 7-day window on startup.
@@ -1055,7 +1057,7 @@ Public Class PerformanceDisplaySettings
     Public Property Enabled As Boolean = True
 
     <JsonPropertyName("min_sample_for_render")>
-    Public Property MinSampleForRender As Integer = 4
+    Public Property MinSampleForRender As Integer = 10
 
     <JsonPropertyName("eager_backfill_on_startup")>
     Public Property EagerBackfillOnStartup As Boolean = True

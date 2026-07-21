@@ -1,6 +1,6 @@
 ' analysis/MarkdownReportWriter.vb
 ' Renders an AnalysisReport to a markdown string and writes it to disk.
-' Also writes the summary CSV (flat failure-rate matrix, one row per
+' Also writes the summary CSV (flat success-rate matrix, one row per
 ' population × tier × window).
 '
 ' v2 (failure-definition-v2-proposal.md): updated Section 1 summary, interpretation
@@ -20,6 +20,16 @@
 ' matrix from FailureRateMatrix.Compute over its filtered rows — it does NOT read
 ' this summary CSV, so the added column is a pure artifact (verified, proposal §2.3).
 '
+' [E1 success orientation — v55, 2026-07-21, eval-display-semantics-proposal.md]
+' Render text flips from FAILURE to SUCCESS rates at THIS boundary — every section
+' below, the summary CSV column, and PromptBuilder in the same commit. HARD
+' INVARIANT: the internal FailureCellResult.Failures/FailureRate stay
+' failure-oriented (the auto-tweaker's aggregateRatePct < FailureRateThresholdPct
+' trigger reads Failures directly, and that comparison MUST NOT flip); success
+' conversion happens ONLY at render boundaries via SuccessPct/SuccessCiLow/High.
+' ★ (most-precise) / ◆ (best-outcome) pick semantics are unchanged; captions
+' re-worded. The perf strip already renders success — untouched by this pass.
+'
 ' Host-agnostic: no System.Windows.Forms references.
 
 Imports System.Collections.Generic
@@ -30,6 +40,21 @@ Public Class MarkdownReportWriter
 
     Private Shared ReadOnly Tiers As String() =
         {"STRONG_LONG", "STRONG_SHORT", "MEDIUM_LONG", "MEDIUM_SHORT"}
+
+    ' ------------------------------------------------------------------ [E1] render-boundary helpers
+    ' Convert internal failure-oriented cell fields to success-oriented render values.
+    ' The internal FailureRate/CiLow/CiHigh stay untouched — the auto-tweaker reads them
+    ' directly and its trigger comparison MUST NOT flip with the display.
+    Private Shared Function SuccessPct(failureRate As Double) As Double
+        Return 1.0 - failureRate
+    End Function
+    Private Shared Function SuccessCiLow(ciHighFailure As Double) As Double
+        ' Wilson CI complement: success CI low = 1 - failure CI high.
+        Return 1.0 - ciHighFailure
+    End Function
+    Private Shared Function SuccessCiHigh(ciLowFailure As Double) As Double
+        Return 1.0 - ciLowFailure
+    End Function
 
     Public Shared Sub Write(report As AnalysisReport, outputDir As String)
         Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
@@ -57,6 +82,18 @@ Public Class MarkdownReportWriter
         End Try
     End Sub
 
+    ''' <summary>[E1 harness helper] Renders the full report without touching disk.
+    ''' A34a uses this to assert the flipped section headings + orientation note.</summary>
+    Public Shared Function BuildFullMarkdownForHarness(r As AnalysisReport) As String
+        Return BuildMarkdown(r, DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"))
+    End Function
+
+    ''' <summary>[E1 harness helper] Renders the summary CSV to the given path.
+    ''' A34a uses this to assert the FailureRate→SuccessRate column rename + value flip.</summary>
+    Public Shared Sub BuildSummaryCsvForHarness(r As AnalysisReport, path As String)
+        BuildSummaryCsv(r, path)
+    End Sub
+
     Private Shared Function BuildMarkdown(r As AnalysisReport, ts As String) As String
         Dim sb As New StringBuilder()
 
@@ -73,12 +110,35 @@ Public Class MarkdownReportWriter
         sb.AppendLine("> was anchored at ATR≈115 and had gone degenerate: at ATR≈44 every column sat below")
         sb.AppendLine("> the min-move floor and collapsed onto one barrier. Threshold sweeping now belongs")
         sb.AppendLine("> to the what-if runner, which does it with EV and a split-half holdout.")
-        sb.AppendLine("> **Failure rates are not comparable across the re-base** — targets moved from a")
+        sb.AppendLine("> **Success rates are not comparable across the re-base** — targets moved from a")
         sb.AppendLine("> fixed fraction of ATR to real structural placements.")
+        sb.AppendLine(">")
+        ' [E1 orientation — v55] Reader-facing note: the on-screen strip and this report
+        ' now agree — both surfaces read as SUCCESS rates. Internal storage stays
+        ' failure-oriented (the auto-tweaker's trigger reads it directly), converted at
+        ' the render boundary only. Rates are not comparable across the 2026-07-21 flip
+        ' — an old report's number is 100% minus the new one for the same cell.
+        sb.AppendLine("> **Success orientation (v55, 2026-07-21).** All rates below are SUCCESS rates —")
+        sb.AppendLine("> aligned with the live perf strip. Pre-v55 reports rendered failure; subtract from")
+        sb.AppendLine("> 100% to compare. The auto-tweaker's internal comparison is unchanged (it reads")
+        sb.AppendLine("> failure counts directly), so trigger semantics are preserved.")
+        sb.AppendLine(">")
+        ' [F12 / E3a legend — v55] One mapping line so a reader moving between report,
+        ' strip, card and payload can name the same rung the same way.
+        sb.AppendLine("> **Verdict-tier legend:** `MEDIUM_x` ↔ displayed ""MEDIUM x"" ↔ stored ""x"" ↔")
+        sb.AppendLine("> payload `MEDIUM` · `STRONG_x` ↔ payload `HIGH` · `WEAK` excluded from the matrix.")
+        sb.AppendLine(">")
+        ' [§7a cross-check reference — v55] The strip-vs-report parity instrument that
+        ' the migration cross-check produced. Standing recipe so a reader can re-run it.
+        sb.AppendLine("> **Parity instrument (§7a of `offline-matrix-placed-target-spec-back.md`):** strip")
+        sb.AppendLine("> replication via `ComputeWindows` / `ComputeSessionWindow` + eval-cache↔CSV join on")
+        sb.AppendLine("> `(instance_id, signal_id)` (or on truncated 19-char timestamp) + `.0000000Z`")
+        sb.AppendLine("> whole-second backfill-provenance check — reproduces the strip exactly and lets")
+        sb.AppendLine("> the two surfaces be compared like-for-like.")
         sb.AppendLine()
 
         ' Interpretation hint (static — v2 barrier-hit semantics on placed geometry).
-        sb.AppendLine("> **Failure model: barrier-hit, placed target vs placed stop (v2)**")
+        sb.AppendLine("> **Success model: barrier-hit, placed target vs placed stop (v2)**")
         sb.AppendLine("> - **SUCCESS** = price wicked through the placed target within the hold window,")
         sb.AppendLine(">   before any adverse hit.")
         sb.AppendLine("> - **FAILURE** = placed stop hit first, OR window expired without a target hit.")
@@ -86,7 +146,7 @@ Public Class MarkdownReportWriter
         sb.AppendLine(">   `PlacedStop{Long,Short}`, what `SignalEmitter.ComputeSideLevels` emitted for that")
         sb.AppendLine(">   row. Pre-v0.8 rows carry neither, keep the legacy swing-else-ATR formula on both")
         sb.AppendLine(">   sides, and are labelled **[LEGACY_YARDSTICK]**. The stop side moved from the raw")
-        sb.AppendLine(">   ~9×ATR swing to the executed 1.6×ATR clamp, so failure rates rise materially vs")
+        sb.AppendLine(">   ~9×ATR swing to the executed 1.6×ATR clamp, so success rates fall materially vs")
         sb.AppendLine(">   the pre-D6 book — see the **before/after** section.")
         sb.AppendLine("> - The placed target is used **unfloored**: the live min-move gate already vetted")
         sb.AppendLine(">   that exact price, so flooring it here would re-create the collapse above.")
@@ -156,11 +216,11 @@ Public Class MarkdownReportWriter
         sb.AppendLine()
     End Sub
 
-    ' ------------------------------------------------------------------ Section 2: Failure-Rate Matrix
+    ' ------------------------------------------------------------------ Section 2: Success-Rate Matrix
     Private Shared Sub AppendFailureMatrix(sb As StringBuilder, r As AnalysisReport)
-        sb.AppendLine("## 2. Failure-Rate Matrix")
+        sb.AppendLine("## 2. Success-Rate Matrix")
         sb.AppendLine()
-        sb.AppendLine("_Failure = placed stop hit first OR window expired without a placed-target hit. " &
+        sb.AppendLine("_Success = placed target hit first within the hold window (before the placed stop). " &
                       "Segmented per (tier × session); ★◆ picked WITHIN each sub-table._")
         sb.AppendLine()
         sb.AppendLine("_One placed-geometry column: the barriers are the row's own emitted levels, so the " &
@@ -205,9 +265,11 @@ Public Class MarkdownReportWriter
                 Else
                     tag = "  "
                 End If
+                ' [E1] Render as SUCCESS rate + CI complement. Internal storage
+                ' stays failure-oriented; the tweaker reads Failures/FailureRate.
                 row.Append(String.Format(" {4}{0:P0} n={1} [{2:P0}-{3:P0}] |",
-                                         cell.FailureRate, cell.SampleSize,
-                                         cell.CiLow, cell.CiHigh, tag))
+                                         SuccessPct(cell.FailureRate), cell.SampleSize,
+                                         SuccessCiLow(cell.CiHigh), SuccessCiHigh(cell.CiLow), tag))
             End If
             sb.AppendLine(row.ToString())
         Next
@@ -226,14 +288,15 @@ Public Class MarkdownReportWriter
     ' (before) and the placed levels (after), per session × resolution × tier.
     ' One before→after column since the placed-target migration.
     Private Shared Sub AppendD4Comparison(sb As StringBuilder, r As AnalysisReport)
-        sb.AppendLine("## 3. Placed-Geometry Migration — before/after failure rates")
+        sb.AppendLine("## 3. Placed-Geometry Migration — before/after success rates")
         sb.AppendLine()
         sb.AppendLine("_The SAME rows walked twice. **before** = the legacy formula on both sides — raw-swing " &
                       "adverse (median ~9×ATR, essentially unreachable intrabar, so 'failure' collapsed to " &
                       "window-expiry) against an engine-target favourable; **after** = the placed levels the " &
                       "engine emits and the autotrader executes (~1.6×ATR stop clamp, structural target). " &
-                      "Each cell shows `before% → after% (Δ)` at the population's own hold windows. Rising " &
-                      "failure rates are the honest re-base — stop-outs become recordable._")
+                      "Each cell shows `before% → after% (Δ)` at the population's own hold windows. Falling " &
+                      "success rates are the honest re-base — stop-outs become recordable (a −40pp Δ here " &
+                      "reads the same as the pre-v55 +40pp Δ on the retired failure axis)._")
         sb.AppendLine()
         For Each tier In Tiers
             sb.AppendLine("### " & tier)
@@ -268,9 +331,13 @@ Public Class MarkdownReportWriter
             Else
                 Dim beforeRate As Double = If(before IsNot Nothing AndAlso before.SampleSize > 0,
                                               before.FailureRate, after.FailureRate)
-                Dim delta As Double = after.FailureRate - beforeRate
+                ' [E1] Render as SUCCESS + success delta. Sign flips with the axis
+                ' (a pre-v55 +40pp failure Δ is a −40pp success Δ here).
+                Dim beforeSuccess As Double = SuccessPct(beforeRate)
+                Dim afterSuccess  As Double = SuccessPct(after.FailureRate)
+                Dim deltaSuccess  As Double = afterSuccess - beforeSuccess
                 rowSb.Append(String.Format(" {0:P0} → {1:P0} ({2:+0%;-0%;0%}) n={3} |",
-                                           beforeRate, after.FailureRate, delta, after.SampleSize))
+                                           beforeSuccess, afterSuccess, deltaSuccess, after.SampleSize))
             End If
             sb.AppendLine(rowSb.ToString())
         Next
@@ -288,8 +355,8 @@ Public Class MarkdownReportWriter
         sb.AppendLine("## 4. Recommended hold window — per (tier × session)")
         sb.AppendLine()
         sb.AppendLine("Two views per tier, both require n ≥ " & AnalysisConstants.MinSamplesPerCell & ":")
-        sb.AppendLine("- ★ **Most-precise estimate** — lowest CI width. Used by the auto-tweaker to decide if the current settings are failing. Wilson CI narrows at extreme p, so this can pick the WORST cell when failure rates are high — that's working as designed.")
-        sb.AppendLine("- ◆ **Lowest failure rate** — best actual trade outcome. The cell to look at when deciding whether the verdict is worth taking discretionarily.")
+        sb.AppendLine("- ★ **Most-precise estimate** — lowest CI width. Used by the auto-tweaker to decide whether current settings are underperforming (its internal comparison is failure-oriented — SUCCESS on this page is the same cell rendered from the other side). Wilson CI narrows at extreme p, so this can pick the WORST cell when success rates are low — that's working as designed.")
+        sb.AppendLine("- ◆ **Highest success rate** — best actual trade outcome. The cell to look at when deciding whether the verdict is worth taking discretionarily.")
         sb.AppendLine()
         For Each tier In Tiers
             sb.AppendLine("### " & tier)
@@ -306,12 +373,15 @@ Public Class MarkdownReportWriter
         If precise Is Nothing Then
             Return String.Format("no stable cell yet (need ≥ {0} rows per cell)", AnalysisConstants.MinSamplesPerCell)
         ElseIf profit IsNot Nothing AndAlso precise.WindowMin <> profit.WindowMin Then
-            Return String.Format("★ {0}m → {1:P1} failure CI [{2:P0}–{3:P0}] n={4}  |  ◆ {5}m → {6:P1} failure CI [{7:P0}–{8:P0}] n={9}",
-                                 precise.WindowMin, precise.FailureRate, precise.CiLow, precise.CiHigh, precise.SampleSize,
-                                 profit.WindowMin, profit.FailureRate, profit.CiLow, profit.CiHigh, profit.SampleSize)
+            Return String.Format("★ {0}m → {1:P1} success CI [{2:P0}–{3:P0}] n={4}  |  ◆ {5}m → {6:P1} success CI [{7:P0}–{8:P0}] n={9}",
+                                 precise.WindowMin, SuccessPct(precise.FailureRate),
+                                 SuccessCiLow(precise.CiHigh), SuccessCiHigh(precise.CiLow), precise.SampleSize,
+                                 profit.WindowMin, SuccessPct(profit.FailureRate),
+                                 SuccessCiLow(profit.CiHigh), SuccessCiHigh(profit.CiLow), profit.SampleSize)
         Else
-            Return String.Format("★◆ {0}m → {1:P1} failure CI [{2:P0}–{3:P0}] n={4}",
-                                 precise.WindowMin, precise.FailureRate, precise.CiLow, precise.CiHigh, precise.SampleSize)
+            Return String.Format("★◆ {0}m → {1:P1} success CI [{2:P0}–{3:P0}] n={4}",
+                                 precise.WindowMin, SuccessPct(precise.FailureRate),
+                                 SuccessCiLow(precise.CiHigh), SuccessCiHigh(precise.CiLow), precise.SampleSize)
         End If
     End Function
 
@@ -319,7 +389,7 @@ Public Class MarkdownReportWriter
     Private Shared Sub AppendDecomposition(sb As StringBuilder, r As AnalysisReport)
         sb.AppendLine("## 5. Barrier-Hit Decomposition — per (tier × session)")
         sb.AppendLine()
-        sb.AppendLine("How failures occurred within each cell (counts, not %). Ambiguous = both barriers in same 1m bar (counts as failure).")
+        sb.AppendLine("How each cell resolved (counts, not %). Success = placed target hit first; the other three columns are the failure decomposition. Ambiguous = both barriers in same 1m bar (counts as failure).")
         sb.AppendLine()
         For Each tier In Tiers
             sb.AppendLine("### " & tier)
@@ -359,13 +429,14 @@ Public Class MarkdownReportWriter
         For Each pop In r.Populations
             sb.AppendLine("### " & PopLabel(pop))
             If pop.ContextOutcomes.Count = 0 Then
-                sb.AppendLine("_Insufficient data to compute per-context failure rates._")
+                sb.AppendLine("_Insufficient data to compute per-context success rates._")
             Else
                 For Each kvp In pop.ContextOutcomes
                     Dim c = kvp.Value
                     If c.SampleSize > 0 Then
-                        sb.AppendLine(String.Format("- **{0}**: {1:P1} failure  n={2}  CI [{3:P0}–{4:P0}]",
-                                                    kvp.Key, c.FailureRate, c.SampleSize, c.CiLow, c.CiHigh))
+                        sb.AppendLine(String.Format("- **{0}**: {1:P1} success  n={2}  CI [{3:P0}–{4:P0}]",
+                                                    kvp.Key, SuccessPct(c.FailureRate), c.SampleSize,
+                                                    SuccessCiLow(c.CiHigh), SuccessCiHigh(c.CiLow)))
                     Else
                         sb.AppendLine("- **" & kvp.Key & "**: insufficient sample")
                     End If
@@ -545,17 +616,24 @@ Public Class MarkdownReportWriter
                 ' [placed-target migration] AtrThreshold column dropped — one placed-geometry
                 ' cell per (population × tier × window). Nothing reads this CSV programmatically
                 ' (the auto-tweaker computes its own matrix), so the column simply goes.
-                sw.WriteLine("Population,VerdictTier,WindowMin,FailureRate,SampleSize,CiLow,CiHigh,IsRecommended,IsMostProfitable")
+                ' [E1 v55, 2026-07-21] Column renamed FailureRate -> SuccessRate + values
+                ' flipped (1 - FailureRate). CI bounds re-flipped in the Wilson complement:
+                ' success CiLow = 1 - failure CiHigh; success CiHigh = 1 - failure CiLow.
+                ' Nothing reads this CSV programmatically (verified in the placed-target
+                ' migration spec-back §2.3 — the auto-tweaker computes its own matrix), so
+                ' the rename is safe. A downstream analyst joining an old CSV against a new
+                ' one MUST subtract from 1 to reconcile.
+                sw.WriteLine("Population,VerdictTier,WindowMin,SuccessRate,SampleSize,CiLow,CiHigh,IsRecommended,IsMostProfitable")
                 For Each pop In report.Populations
                     For Each c In pop.FailureCells
                         sw.WriteLine(String.Join(",",
                             pop.PopulationKey,
                             c.VerdictTier,
                             c.WindowMin.ToString(),
-                            c.FailureRate.ToString("F6"),
+                            SuccessPct(c.FailureRate).ToString("F6"),
                             c.SampleSize.ToString(),
-                            c.CiLow.ToString("F6"),
-                            c.CiHigh.ToString("F6"),
+                            SuccessCiLow(c.CiHigh).ToString("F6"),
+                            SuccessCiHigh(c.CiLow).ToString("F6"),
                             c.IsRecommended.ToString(),
                             c.IsMostProfitable.ToString()))
                     Next

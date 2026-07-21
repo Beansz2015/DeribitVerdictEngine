@@ -121,6 +121,26 @@ Public Class VerdictResult
     ''' CSV column. Zero scoring impact.
     ''' </summary>
     Public Property LedgerMismatch As Boolean = False
+
+    ''' <summary>
+    ''' [F12 / E3a — 2026-07-21] Render the verdict for display: the middle band
+    ''' is drawn as "MEDIUM LONG" / "MEDIUM SHORT" so the on-screen ladder reads
+    ''' STRONG / MEDIUM / WEAK explicitly. The stored/wire string stays bare
+    ''' LONG / SHORT — CSV Verdict, payload verdict, eval cache, and every
+    ''' string-matching site are untouched (parity rule deliberately diverged on
+    ''' the two render surfaces, precedented by the cap-reason rich string vs
+    ''' CSV bucket; spec §3 revised same-day to DISPLAY-RENDERING only). Both
+    ''' render sites — BuildPlaintextSnapshot and BindCardVerdict — MUST route
+    ''' through this helper so the mapping stays in one place; adding a third
+    ''' render surface means calling this here too.
+    ''' </summary>
+    Public Shared Function FormatVerdictForDisplay(stored As String) As String
+        If String.IsNullOrEmpty(stored) Then Return stored
+        Dim s As String = stored.Trim()
+        If s = "LONG"  Then Return "MEDIUM LONG"
+        If s = "SHORT" Then Return "MEDIUM SHORT"
+        Return stored
+    End Function
 End Class
 
 Public Enum PositionState
