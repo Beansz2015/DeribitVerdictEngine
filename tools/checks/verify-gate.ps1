@@ -57,6 +57,10 @@ function Build($proj) {
 $ok = $true
 if ($Mode -ne 'local-fast') { if (-not (Build 'DeribitVerdictEngine.sln')) { $ok = $false } }
 if ($ok) { if (-not (Build 'tools/AutoTweaker/AutoTweaker.vbproj')) { $ok = $false } }
+# R1 rider (2026-07-21): WhatIfRunner was invisible to the gate for four days when
+# #6 broke it (LevelAbsorptionTracker missing from its .vbproj). One extra build closes
+# the hole; the runtime cost is one small Release build.
+if ($ok) { if (-not (Build 'tools/WhatIfRunner/WhatIfRunner.vbproj')) { $ok = $false } }
 if ($ok) { if (-not (Build 'verify/ordercheck/OrderCheck.vbproj')) { $ok = $false } }
 
 # --- harness ---

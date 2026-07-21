@@ -224,6 +224,15 @@ Module Program
         A32c_D4SingleColumnRender()
         A32d_FlooredGridImpossibility()
 
+        ' F4 eval-cache no-data outcome (docs/eval-no-data-outcome-proposal.md
+        ' §4 acceptance): empty bar-lists produce NO_DATA (not WINDOW_EXPIRED);
+        ' aggregation excludes NO_DATA from numerator+denominator while TotalRange
+        ' still counts it; the v5→v6 sweep reclassifies uncovered WINDOW_EXPIRED
+        ' rows to NO_DATA and preserves rows with fresh OHLC coverage.
+        A33a_EmptyBarsProducesNoData()
+        A33b_AggregationExcludesNoData()
+        A33c_V6SweepReclassifiesUncoveredPreservesCovered()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -3676,6 +3685,141 @@ Module Program
               belowMin = 0 AndAlso placedTgt = 2 AndAlso legacyFav = 0,
               String.Format("belowMinMove={0} placedTargetRows={1} legacyFavourableRows={2}",
                             belowMin, placedTgt, legacyFav))
+    End Sub
+
+    ' =======================================================================
+    ' A33 — F4 eval-cache no-data outcome (docs/eval-no-data-outcome-proposal.md).
+    ' The empty-bar branch of LivePerformanceTracker.EvaluateEntry used to record
+    ' WINDOW_EXPIRED (a failure); the offline matrix already excluded the same
+    ' condition from its denominator. That asymmetry biased every live rate
+    ' downward and invisibly (2026-07-03 NY = 22/22 fabricated expiries — the
+    ' backfill day with no OHLC coverage for that slice).
+    ' =======================================================================
+
+    ' -- A33a: EvaluateEntry returns NO_DATA when the bar list is empty --------------
+    Private Sub A33a_EmptyBarsProducesNoData()
+        Dim entry As New LivePerformanceTracker.EvalCacheEntry With {
+            .Timestamp     = New DateTime(2026, 7, 3, 20, 0, 0, DateTimeKind.Utc),
+            .Verdict       = "STRONG LONG",
+            .EntryPrice    = 100000.0,
+            .FavBar        = 100200.0,
+            .AdvBar        = 99900.0,
+            .EvalOutcome   = "PENDING",
+            .ExecResolution = 1}
+        Dim nowUtc As DateTime = entry.Timestamp.AddMinutes(20)
+        ' Empty lookup ⇒ empty bar list. Post-F4: NO_DATA (was WINDOW_EXPIRED).
+        Dim empty As New Dictionary(Of DateTime, OhlcBar)()
+        Dim evEmpty = LivePerformanceTracker.EvaluateEntry(entry, entry.Timestamp, nowUtc, empty)
+        ' A single covering bar (CloseTime > ts+2 AND ≤ ts+15) with a target-hitting
+        ' wick should still resolve normally — SUCCESS/targetHit=True.
+        Dim covered As New Dictionary(Of DateTime, OhlcBar)()
+        Dim bar As New OhlcBar With {.CloseTime = entry.Timestamp.AddMinutes(5),
+                                     .Open = 100000.0, .High = 100300.0,
+                                     .Low = 99950.0, .Close = 100250.0}
+        covered(bar.CloseTime) = bar
+        Dim evCovered = LivePerformanceTracker.EvaluateEntry(entry, entry.Timestamp, nowUtc, covered)
+        ' Degenerate barrier keeps WINDOW_EXPIRED (proposal §1 — early-outs untouched).
+        Dim degen As New LivePerformanceTracker.EvalCacheEntry With {
+            .Timestamp     = entry.Timestamp,
+            .Verdict       = "STRONG LONG",
+            .EntryPrice    = 100000.0,
+            .FavBar        = 0.0,          ' degenerate
+            .AdvBar        = 99900.0,
+            .EvalOutcome   = "PENDING",
+            .ExecResolution = 1}
+        Dim evDegen = LivePerformanceTracker.EvaluateEntry(degen, degen.Timestamp, nowUtc, covered)
+        Check("A33a empty-bars ⇒ NO_DATA (covered still resolves; degenerate still WINDOW_EXPIRED)",
+              evEmpty.outcome = "NO_DATA" AndAlso evEmpty.targetHit Is Nothing AndAlso
+              evCovered.outcome = "SUCCESS" AndAlso evCovered.targetHit.HasValue AndAlso evCovered.targetHit.Value AndAlso
+              evDegen.outcome = "WINDOW_EXPIRED",
+              String.Format("empty={0}/{1} covered={2}/{3} degenerate={4}",
+                            evEmpty.outcome, evEmpty.targetHit,
+                            evCovered.outcome, evCovered.targetHit, evDegen.outcome))
+    End Sub
+
+    ' -- A33b: AggregateRange excludes NO_DATA from num+denom; TotalRange counts it --
+    Private Sub A33b_AggregationExcludesNoData()
+        Dim baseTs As DateTime = New DateTime(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc)
+        Dim entries As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(0), .Verdict = "STRONG LONG",
+                .EvalOutcome = "SUCCESS", .TargetEverHit = True, .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(1), .Verdict = "STRONG LONG",
+                .EvalOutcome = "WINDOW_EXPIRED", .TargetEverHit = False, .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(2), .Verdict = "STRONG LONG",
+                .EvalOutcome = "NO_DATA", .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(3), .Verdict = "STRONG LONG",
+                .EvalOutcome = "NO_DATA", .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(4), .Verdict = "STRONG LONG",
+                .EvalOutcome = "PENDING", .ExecResolution = 1}}
+        Dim agg = LivePerformanceTracker.AggregateRange(entries,
+                                                        baseTs.AddMinutes(-1),
+                                                        baseTs.AddMinutes(10), 0)
+        ' 1 success, 1 failure, 2 NO_DATA excluded from num+denom, 1 PENDING excluded.
+        ' TotalRange = 5 (every row in range, whatever the outcome).
+        ' BarrierRatePct denominator = SuccessCount + FailureCount = 2 → 50%.
+        Check("A33b NO_DATA excluded from success/failure counts; TotalRange counts it",
+              agg.SuccessCount = 1 AndAlso agg.FailureCount = 1 AndAlso
+              agg.TotalRange = 5 AndAlso Math.Abs(agg.BarrierRatePct - 50.0) < 0.0001,
+              String.Format("succ={0} fail={1} total={2} rate={3}",
+                            agg.SuccessCount, agg.FailureCount, agg.TotalRange, agg.BarrierRatePct))
+    End Sub
+
+    ' -- A33c: v5→v6 sweep reclassifies uncovered WE rows; preserves covered outcomes ---
+    Private Sub A33c_V6SweepReclassifiesUncoveredPreservesCovered()
+        Dim tmp As String = Path.Combine(Path.GetTempPath(), "f4_eval_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            ' A v5 file (has "placed-level" marker but LACKS "no-data outcome") is pre-v6.
+            File.WriteAllLines(tmp, New String() {
+                "# schema=v5 (placed-level barriers; min-tradeable-move floor; exec resolution) floor_pct=0.0008",
+                "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution"})
+            Dim wasPreV6 As Boolean = LivePerformanceTracker.IsPreV6Schema(tmp)
+
+            ' Two WINDOW_EXPIRED rows with valid barriers, both LONG. The "uncovered" row's
+            ' timestamp sits in an era with no OHLC bars in the lookup → sweep re-stamps as
+            ' NO_DATA. The "covered" row has bars in T+3..T+15 that touch the favourable
+            ' barrier → sweep re-stamps as SUCCESS. A third row is degenerate (FavBar=0) and
+            ' should be left as WINDOW_EXPIRED (proposal §1 — early-outs untouched).
+            Dim tsUncov As DateTime = New DateTime(2026, 7, 3, 20, 0, 0, DateTimeKind.Utc)
+            Dim tsCov   As DateTime = New DateTime(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc)
+            Dim tsDegen As DateTime = New DateTime(2026, 7, 21, 8, 0, 0, DateTimeKind.Utc)
+            Dim entries As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+                New LivePerformanceTracker.EvalCacheEntry With {
+                    .Timestamp = tsUncov, .Verdict = "STRONG LONG", .EntryPrice = 100000.0,
+                    .FavBar = 100200.0, .AdvBar = 99900.0,
+                    .EvalOutcome = "WINDOW_EXPIRED", .TargetEverHit = False, .ExecResolution = 1},
+                New LivePerformanceTracker.EvalCacheEntry With {
+                    .Timestamp = tsCov, .Verdict = "STRONG LONG", .EntryPrice = 100000.0,
+                    .FavBar = 100200.0, .AdvBar = 99900.0,
+                    .EvalOutcome = "WINDOW_EXPIRED", .TargetEverHit = False, .ExecResolution = 1},
+                New LivePerformanceTracker.EvalCacheEntry With {
+                    .Timestamp = tsDegen, .Verdict = "STRONG LONG", .EntryPrice = 100000.0,
+                    .FavBar = 0.0, .AdvBar = 99900.0,
+                    .EvalOutcome = "WINDOW_EXPIRED", .TargetEverHit = Nothing, .ExecResolution = 1}}
+            Dim lookup As New Dictionary(Of DateTime, OhlcBar)()
+            ' Only the "covered" window gets bars (CloseTime in ts+2..ts+15 exclusive/inclusive).
+            Dim bar As New OhlcBar With {.CloseTime = tsCov.AddMinutes(5),
+                                         .Open = 100000.0, .High = 100300.0,
+                                         .Low = 99950.0, .Close = 100250.0}
+            lookup(bar.CloseTime) = bar
+
+            LivePerformanceTracker.ReclassifyWindowExpiredForNoData(entries, lookup, tsCov.AddMinutes(30))
+
+            Check("A33c v5→v6 sweep: uncovered → NO_DATA / covered → SUCCESS / degenerate preserved",
+                  wasPreV6 AndAlso
+                  entries(0).EvalOutcome = "NO_DATA" AndAlso Not entries(0).TargetEverHit.HasValue AndAlso
+                  entries(1).EvalOutcome = "SUCCESS" AndAlso entries(1).TargetEverHit.HasValue AndAlso entries(1).TargetEverHit.Value AndAlso
+                  entries(2).EvalOutcome = "WINDOW_EXPIRED",
+                  String.Format("preV6={0} uncov={1}/{2} cov={3}/{4} degen={5}",
+                                wasPreV6, entries(0).EvalOutcome, entries(0).TargetEverHit,
+                                entries(1).EvalOutcome, entries(1).TargetEverHit, entries(2).EvalOutcome))
+        Finally
+            Try : File.Delete(tmp) : Catch : End Try
+        End Try
     End Sub
 
 End Module

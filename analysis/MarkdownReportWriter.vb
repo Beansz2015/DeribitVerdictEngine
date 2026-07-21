@@ -141,7 +141,10 @@ Public Class MarkdownReportWriter
         sb.AppendLine("(``PlacedStop*`` / ``PlacedTarget*``) vs the legacy fallback path — a non-zero fallback count")
         sb.AppendLine("inside a PLACED population means that side's level was absent on some rows, not silent mixing.")
         sb.AppendLine()
-        sb.AppendLine("| Population | Rows | No-OHLC excl. | ATR-invalid | Below-min-move | Adverse: placed / fallback | Favourable: placed / fallback |")
+        ' "No-data excl." — rows whose forward OHLC bar list was empty on every
+        ' window. Same condition the live tracker's F4 fix now stamps NO_DATA on;
+        ' aligning the label so both surfaces disclose it under the same name.
+        sb.AppendLine("| Population | Rows | No-data excl. | ATR-invalid | Below-min-move | Adverse: placed / fallback | Favourable: placed / fallback |")
         sb.AppendLine("|-----------|------|---------------|-------------|----------------|----------------------------|-------------------------------|")
         For Each pop In r.Populations
             sb.AppendLine(String.Format("| {0} | {1} | {2} | {3} | {4} | {5} / {6} | {7} / {8} |",

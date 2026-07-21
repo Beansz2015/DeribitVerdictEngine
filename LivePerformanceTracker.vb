@@ -114,7 +114,18 @@ Public Class LivePerformanceTracker
     ' header is UNCHANGED — FavBar/AdvBar change MEANING, not shape (no new column), so
     ' IsPreV4Schema stays False on a v5 file. The old FAV_ATR_MULT/ADV_ATR_MULT fallback
     ' constants are gone: ComputeSideLevels owns the fallback geometry now.
-    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v5 (placed-level barriers; min-tradeable-move floor; exec resolution)"
+    ' [F4 no-data outcome, v5→v6, 2026-07-21] EvaluateEntry now returns a distinct
+    ' NO_DATA outcome when bars.Count = 0 (offline already excludes that condition;
+    ' the live tracker had folded it into WINDOW_EXPIRED, biasing rates downward and
+    ' invisibly — the 07-03 slice was 22/22 fabricated expiries). NO_DATA is excluded
+    ' from both numerator AND denominator in AggregateRange (TotalRange still counts
+    ' it, so the tooltip shows the row exists). The comment gains the "no-data outcome"
+    ' marker (the IsPreV6Schema gate for the one-time reclassification sweep — a v5
+    ' file's WINDOW_EXPIRED rows are re-walked so still-uncovered rows become NO_DATA
+    ' and now-covered ones keep the fresh outcome; the v5 file is copied to .v5.bak
+    ' first, D6 rotation-pattern for archival). The whole-second .0000000Z timestamp
+    ' provenance note (F8) also lands here as a free diagnostic for future audits.
+    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v6 (placed-level barriers; min-tradeable-move floor; exec resolution; no-data outcome; whole-second .0000000Z timestamps = backfilled provenance)"
     Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution"
 
     ' The min-tradeable-move floor the eval cache was last written with. Set from
@@ -309,6 +320,10 @@ Public Class LivePerformanceTracker
             Dim preV3Schema As Boolean  = IsPreV3Schema(evalCachePath)
             ' [v36] capture the v3→v4 need BEFORE any rewrite below re-stamps the header.
             Dim preV4Schema As Boolean  = IsPreV4Schema(evalCachePath)
+            ' [F4 no-data outcome] Capture the v5→v6 gate BEFORE any migration below
+            ' re-stamps the schema comment (the sweep is one-time; once the file is
+            ' rewritten with the v6 comment, IsPreV6Schema returns False on restart).
+            Dim preV6Schema As Boolean  = IsPreV6Schema(evalCachePath)
             Dim storedFloor As Double?  = ReadSchemaFloorPct(evalCachePath)
             _floorPctInEffect = cfg.Scoring.MinTradeableMovePct
             _evalCache = LoadEvalCache(evalCachePath)
@@ -342,6 +357,43 @@ Public Class LivePerformanceTracker
             ' a clean schema. Idempotent: if an earlier migration already rewrote (any
             ' WriteEvalCache emits the v4 header now), this is one harmless redundant pass.
             If preV4Schema Then WriteEvalCache(_evalCachePath)
+
+            ' --- Step 2.8: [F4] v5→v6 no-data reclassification sweep ---------------
+            ' The empty-bar branch of EvaluateEntry used to return WINDOW_EXPIRED, so
+            ' historical WINDOW_EXPIRED rows are a mix of genuine expiries and rows
+            ' whose OHLC coverage was missing at evaluation time (see the 07-03 slice,
+            ' 22/22 fabricated failures). Re-walk every WINDOW_EXPIRED row against the
+            ' current OHLC lookup: still-uncovered rows become NO_DATA (excluded from
+            ' the strip rate); now-covered rows keep the honest fresh outcome. The
+            ' pre-v6 cache is COPIED to .v5.bak first (defensive archive — the sweep
+            ' is in-place, unlike the D6 pre-v5 rotation which discards). One-time,
+            ' gated by the schema comment (`preV6Schema` captured above BEFORE any
+            ' earlier migration re-stamps the header). WriteEvalCache at the end
+            ' stamps the v6 comment so this branch is idempotent on restart.
+            If preV6Schema Then
+                Try
+                    Dim bakPath As String = _evalCachePath & ".v5.bak"
+                    If File.Exists(bakPath) Then
+                        Dim tsSuffix As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
+                        bakPath = _evalCachePath & ".v5." & tsSuffix & ".bak"
+                    End If
+                    File.Copy(_evalCachePath, bakPath)
+                    Dim beforeExpired As Integer =
+                        Enumerable.Count(_evalCache, Function(x) x.EvalOutcome = "WINDOW_EXPIRED")
+                    ReclassifyWindowExpiredForNoData(_evalCache, _ohlcLookup, nowUtc)
+                    Dim afterNoData As Integer =
+                        Enumerable.Count(_evalCache, Function(x) x.EvalOutcome = "NO_DATA")
+                    Dim stillExpired As Integer =
+                        Enumerable.Count(_evalCache, Function(x) x.EvalOutcome = "WINDOW_EXPIRED")
+                    Dim recovered As Integer = beforeExpired - stillExpired - afterNoData
+                    WriteEvalCache(_evalCachePath)
+                    Console.WriteLine(String.Format(
+                        "[LivePerformanceTracker] v5→v6 no-data sweep: {0} WINDOW_EXPIRED re-walked → {1} NO_DATA, {2} recovered (backup {3}).",
+                        beforeExpired, afterNoData, Math.Max(0, recovered), bakPath))
+                Catch ex As Exception
+                    Console.WriteLine("[LivePerformanceTracker] v5→v6 no-data sweep error: " & ex.Message)
+                End Try
+            End If
 
             ' --- Step 3: Backfill from analysis_log.csv ---
             If eagerBackfill AndAlso File.Exists(analysisLogPath) Then
@@ -640,6 +692,10 @@ Public Class LivePerformanceTracker
             If e.Timestamp < rangeStartUtc OrElse e.Timestamp > rangeEndUtc Then Continue For
             If resolutionFilter > 0 AndAlso e.ExecResolution <> resolutionFilter Then Continue For
             agg.TotalRange += 1
+            ' [F4 no-data outcome] NO_DATA is treated like PENDING/EXCLUDED — counted
+            ' in TotalRange (the tooltip sees it) but NOT in the success/failure denominator
+            ' (the strip rate excludes it). Mirrors FailureRateMatrix.Compute, where an
+            ' empty bar-list `Continue For`s past the per-window increment.
             Select Case e.EvalOutcome
                 Case "SUCCESS"
                     agg.SuccessCount += 1
@@ -677,16 +733,33 @@ Public Class LivePerformanceTracker
     ''' <summary>
     ''' Walk OHLC bars T+3..T+horizon (horizon = EvalHorizonMinutes(res): 15 min 1-min /
     ''' 45 min 3-min) and return both the barrier-hit outcome and the target-hit boolean
-    ''' in a single pass.
-    ''' targetHit = Nothing when no OHLC bars are available (WINDOW_EXPIRED with no walk).
+    ''' in a single pass. Production path — reads the module's shared _ohlcLookup.
+    ''' targetHit = Nothing when no OHLC bars are available (NO_DATA — F4 fix).
     ''' SUCCESS always implies targetHit=True by construction.
     ''' </summary>
     Private Shared Function EvaluateEntry(e         As EvalCacheEntry,
                                            ts        As DateTime,
                                            nowUtc    As DateTime) As (outcome As String, targetHit As Boolean?)
+        Return EvaluateEntry(e, ts, nowUtc, _ohlcLookup)
+    End Function
+
+    ''' <summary>
+    ''' [F4 no-data outcome] Overload that takes an explicit ohlcLookup so the harness
+    ''' can drive the walk deterministically without touching module state. Also the
+    ''' body ReclassifyWindowExpiredForNoData routes through. Empty-bars branch now
+    ''' returns NO_DATA (was WINDOW_EXPIRED) — the same condition the offline matrix
+    ''' already excludes from its denominator. The degenerate-barrier early-out
+    ''' (FavBar=0 OrElse AdvBar=0) stays WINDOW_EXPIRED per spec §1.
+    ''' Friend for the harness A33a empty-bars fixture.
+    ''' </summary>
+    Friend Shared Function EvaluateEntry(e         As EvalCacheEntry,
+                                          ts        As DateTime,
+                                          nowUtc    As DateTime,
+                                          ohlcLookup As Dictionary(Of DateTime, OhlcBar)
+                                         ) As (outcome As String, targetHit As Boolean?)
         If e.FavBar = 0 OrElse e.AdvBar = 0 Then Return ("WINDOW_EXPIRED", Nothing)
-        Dim bars = GetEligibleBars(ts, nowUtc, e.ExecResolution)
-        If bars.Count = 0 Then Return ("WINDOW_EXPIRED", Nothing)
+        Dim bars = GetEligibleBars(ts, nowUtc, e.ExecResolution, ohlcLookup)
+        If bars.Count = 0 Then Return ("NO_DATA", Nothing)
         Dim isLong As Boolean = IsLongVerdict(e.Verdict)
         Dim barrierOutcome As String  = FailureRateMatrix.WalkBars(bars, e.FavBar, e.AdvBar, isLong)
         Dim targetHit      As Boolean = FailureRateMatrix.TargetHitWalk(bars, e.FavBar, isLong)
@@ -847,6 +920,53 @@ Public Class LivePerformanceTracker
         End Try
     End Sub
 
+    ''' <summary>
+    ''' [F4 no-data outcome] True when the eval cache exists but its schema comment
+    ''' predates v6 (the no-data outcome) — i.e. the comment lacks the "no-data outcome"
+    ''' marker. Triggers the one-time WINDOW_EXPIRED → NO_DATA reclassification sweep
+    ''' (Step 2.8). Detection is on the COMMENT line (the column header is unchanged
+    ''' v5→v6). Returns False when the file does not exist (fresh installs start at v6).
+    ''' Friend for the harness NO_DATA fixtures.
+    ''' </summary>
+    Friend Shared Function IsPreV6Schema(path As String) As Boolean
+        If Not File.Exists(path) Then Return False
+        Try
+            For Each line As String In File.ReadLines(path)
+                If line.StartsWith("#") Then Return Not line.Contains("no-data outcome")
+                ' First non-comment line with no schema comment above it → pre-v6.
+                Return True
+            Next
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] IsPreV6Schema error: " & ex.Message)
+        End Try
+        Return False
+    End Function
+
+    ''' <summary>
+    ''' [F4 no-data outcome] Re-walk every WINDOW_EXPIRED row against a supplied OHLC
+    ''' lookup: rows whose bars are still empty become NO_DATA (excluded from strip
+    ''' success/failure rates); rows with coverage keep their honest fresh outcome
+    ''' (SUCCESS / ADVERSE_HIT / AMBIGUOUS / WINDOW_EXPIRED). Degenerate-barrier rows
+    ''' (FavBar=0 OrElse AdvBar=0) are left as WINDOW_EXPIRED — the spec keeps those
+    ''' early-outs as they are. Pure (list + dict + time in, list mutated in place),
+    ''' so the harness can drive it deterministically without touching module state.
+    ''' Friend for the harness A33c v5→v6 sweep fixture.
+    ''' </summary>
+    Friend Shared Sub ReclassifyWindowExpiredForNoData(entries As List(Of EvalCacheEntry),
+                                                        ohlcLookup As Dictionary(Of DateTime, OhlcBar),
+                                                        nowUtc As DateTime)
+        If entries Is Nothing OrElse ohlcLookup Is Nothing Then Return
+        For Each e In entries
+            If e.EvalOutcome <> "WINDOW_EXPIRED" Then Continue For
+            ' Degenerate-barrier early-out: EvaluateEntry keeps this branch as
+            ' WINDOW_EXPIRED (proposal §1 — only the empty-bars branch changes).
+            If e.FavBar = 0 OrElse e.AdvBar = 0 Then Continue For
+            Dim ev = EvaluateEntry(e, e.Timestamp, nowUtc, ohlcLookup)
+            e.EvalOutcome   = ev.outcome
+            e.TargetEverHit = ev.targetHit
+        Next
+    End Sub
+
     ''' <summary>Parse "floor_pct=&lt;x&gt;" from the schema comment; Nothing if absent (pre-v3).</summary>
     Private Shared Function ReadSchemaFloorPct(path As String) As Double?
         If Not File.Exists(path) Then Return Nothing
@@ -943,9 +1063,18 @@ Public Class LivePerformanceTracker
     ''' (ts+2min, ts+horizon].
     ''' </summary>
     Private Shared Function GetEligibleBars(ts As DateTime, nowUtc As DateTime, execResolution As Integer) As List(Of OhlcBar)
+        Return GetEligibleBars(ts, nowUtc, execResolution, _ohlcLookup)
+    End Function
+
+    ''' <summary>[F4] Overload with explicit lookup so the reclassification sweep + harness
+    ''' fixtures can bypass module state. Semantics identical to the shared-state version.</summary>
+    Private Shared Function GetEligibleBars(ts As DateTime, nowUtc As DateTime,
+                                            execResolution As Integer,
+                                            ohlcLookup As Dictionary(Of DateTime, OhlcBar)) As List(Of OhlcBar)
         Dim t3   As DateTime = ts.AddMinutes(2)                                  ' CloseTime > t3 means ≥ T+3
         Dim tEnd As DateTime = ts.AddMinutes(EvalHorizonMinutes(execResolution)) ' CloseTime ≤ tEnd means ≤ T+horizon
-        Return _ohlcLookup.Values.
+        If ohlcLookup Is Nothing Then Return New List(Of OhlcBar)()
+        Return ohlcLookup.Values.
                Where(Function(b) b.CloseTime > t3 AndAlso b.CloseTime <= tEnd).
                OrderBy(Function(b) b.CloseTime).
                ToList()

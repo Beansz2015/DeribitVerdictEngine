@@ -13,6 +13,15 @@
 ' directly so we share the canonical SUCCESS / ADVERSE_HIT / WINDOW_EXPIRED /
 ' AMBIGUOUS semantics.
 '
+' [F4 rider N4, 2026-07-21] Barriers migrated off the private FavAtrThreshold=0.5
+' synthetic yardstick onto the placed-geometry pair — favourable = the row's own
+' PlacedTarget* on v0.8+ rows / legacy engineTargetMult×ATR floored fallback on
+' pre-v0.8 rows, mirroring FailureRateMatrix.ResolveFavourableBarrier /
+' ResolveAdverseBarrier verbatim. Round-stats now scores the same geometry as the
+' live tracker, the D4 re-walk and the offline matrix. Multipliers/floor default
+' to AnalysisConstants (POCO mirrors of the ships-with defaults) since this
+' surface doesn't have a live EngineSettings to reach.
+'
 ' Host-agnostic: no System.Windows.Forms references.
 
 Imports System.Collections.Generic
@@ -25,7 +34,6 @@ Imports System.Threading.Tasks
 Public Class RoundStatsBuilder
 
     Private Const FavWindowMin    As Integer = 10        ' default eval window for tier rows
-    Private Const FavAtrThreshold As Double = 0.5        ' middle threshold for both STRONG / MEDIUM
 
     Public Shared Async Function BuildAsync(state As TweakerState,
                                              csvPath As String,
@@ -97,20 +105,34 @@ Public Class RoundStatsBuilder
         Public Property Atr       As Integer = -1
         Public Property StopLong  As Integer = -1
         Public Property StopShort As Integer = -1
+        ' [F4 rider N4] v0.8 placed levels — when all four are present in the header,
+        ' HasPlacedSchema is True and per-row barriers come from the logged values
+        ' (mirrors ForwardWindowJoiner.Load / LivePerformanceTracker.ParseAnalysisLog).
+        Public Property PlacedTargetLong  As Integer = -1
+        Public Property PlacedStopLong    As Integer = -1
+        Public Property PlacedTargetShort As Integer = -1
+        Public Property PlacedStopShort   As Integer = -1
+        Public Property HasPlacedSchema   As Boolean = False
     End Class
 
     Private Shared Function ResolveColumns(header As String()) As CsvCols
         Dim c As New CsvCols()
         For i As Integer = 0 To header.Length - 1
             Select Case header(i).Trim()
-                Case "Timestamp"      : c.Timestamp = i
-                Case "Price"          : c.Price = i
-                Case "Verdict"        : c.Verdict = i
-                Case "ATR"            : c.Atr = i
-                Case "SwingStopLong"  : c.StopLong = i
-                Case "SwingStopShort" : c.StopShort = i
+                Case "Timestamp"         : c.Timestamp = i
+                Case "Price"             : c.Price = i
+                Case "Verdict"           : c.Verdict = i
+                Case "ATR"               : c.Atr = i
+                Case "SwingStopLong"     : c.StopLong = i
+                Case "SwingStopShort"    : c.StopShort = i
+                Case "PlacedTargetLong"  : c.PlacedTargetLong = i
+                Case "PlacedStopLong"    : c.PlacedStopLong = i
+                Case "PlacedTargetShort" : c.PlacedTargetShort = i
+                Case "PlacedStopShort"   : c.PlacedStopShort = i
             End Select
         Next
+        c.HasPlacedSchema = (c.PlacedTargetLong >= 0 AndAlso c.PlacedStopLong >= 0 AndAlso
+                             c.PlacedTargetShort >= 0 AndAlso c.PlacedStopShort >= 0)
         Return c
     End Function
 
@@ -234,15 +256,31 @@ Public Class RoundStatsBuilder
                                 CultureInfo.InvariantCulture, stopS)
             End If
 
+            ' [F4 rider N4] Route through the same placed-vs-legacy resolvers the
+            ' offline matrix uses so round-stats measures the same geometry as every
+            ' other eval surface. Build a lightweight CsvRow adapter — the resolvers
+            ' read HasPlaced / SwingStop* / Placed* / Price / ATR only.
             Dim isLong As Boolean = verdict.EndsWith("LONG")
-            Dim favBar As Double = If(isLong, entry + FavAtrThreshold * atr,
-                                                 entry - FavAtrThreshold * atr)
-            Dim advBar As Double
-            If isLong Then
-                advBar = If(stopL > 0, stopL, entry - 1.2 * atr)
-            Else
-                advBar = If(stopS > 0, stopS, entry + 1.2 * atr)
+            Dim adapter As New CsvRow With {
+                .Price = entry, .ATR = atr,
+                .SwingStopLong = stopL, .SwingStopShort = stopS,
+                .HasPlaced = cols.HasPlacedSchema}
+            If cols.HasPlacedSchema Then
+                Dim ptL, psL, ptS, psS As Double
+                If cols.PlacedTargetLong  < parts.Length Then Double.TryParse(parts(cols.PlacedTargetLong).Trim(),  NumberStyles.Float, CultureInfo.InvariantCulture, ptL)
+                If cols.PlacedStopLong    < parts.Length Then Double.TryParse(parts(cols.PlacedStopLong).Trim(),    NumberStyles.Float, CultureInfo.InvariantCulture, psL)
+                If cols.PlacedTargetShort < parts.Length Then Double.TryParse(parts(cols.PlacedTargetShort).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, ptS)
+                If cols.PlacedStopShort   < parts.Length Then Double.TryParse(parts(cols.PlacedStopShort).Trim(),   NumberStyles.Float, CultureInfo.InvariantCulture, psS)
+                adapter.PlacedTargetLong = ptL : adapter.PlacedStopLong = psL
+                adapter.PlacedTargetShort = ptS : adapter.PlacedStopShort = psS
             End If
+            Dim dummy1, dummy2 As Integer   ' routing counters — unused here
+            Dim advBar As Double = FailureRateMatrix.ResolveAdverseBarrier(
+                adapter, isLong, entry, atr, AdverseBarrierMode.Placed, dummy1, dummy2)
+            Dim favBar As Double = FailureRateMatrix.ResolveFavourableBarrier(
+                adapter, isLong, entry, atr, AdverseBarrierMode.Placed,
+                AnalysisConstants.EngineTargetAtrMultiplier, AnalysisConstants.FavBarAbsFloorPct,
+                dummy1, dummy2)
 
             Dim bars As New List(Of OhlcBar)()
             Dim rowMin As New DateTime(ts.Year, ts.Month, ts.Day, ts.Hour, ts.Minute, 0, DateTimeKind.Utc)
