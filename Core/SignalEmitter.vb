@@ -282,6 +282,16 @@ Public NotInheritable Class SignalEmitter
     ' [B4b] The structural-first arbitration proper (one side). Pure in r + cfg —
     ' verdict-independent (both sides are always computable, exactly as the legacy
     ' levels block emitted both sides on every run including NO TRADE).
+    '
+    ' [geometry-arbitration-modes v56] Two arbitration modes + two signed buffers are now
+    ' seamed here (docs/geometry-arbitration-modes-proposal.md §1). All defaults
+    ' (target/stop mode 0, buffer 0.0) are BYTE-IDENTICAL to the v51 B4b path — the
+    ' knobs are a what-if instrument at build; live activation is a later ⚠ D-table.
+    ' The mode-0 branches below are the shipped v51 code verbatim; the mode-1 branches
+    ' are additive; buffer application is a post-arbitration transform gated on pct ≠ 0
+    ' so the default path skips it entirely. The 4-tick stop floor and Step-5c min-move
+    ' gate evaluate the BUFFERED prices (buffers apply INSIDE the seam before outputs
+    ' leave it — every downstream surface inherits by construction).
     Private Shared Function ComputeStructuralSideLevels(r As IndicatorResults,
                                                         cfg As EngineSettings,
                                                         sl As StructuralLevelsSettings,
@@ -292,7 +302,7 @@ Public NotInheritable Class SignalEmitter
         Dim lv As New SideLevels
         lv.Entry = entry
 
-        ' ---- TARGET ladder: swing → nearest HVN → POC (HVN-gated) → ATR fallback ----
+        ' ---- TARGET candidate collection (shared by both modes) ----------------------
         Dim fallbackMult As Double = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, r.SessionUtcHour)
         Dim fallbackTarget As Double = entry + dirSign * (r.ATR * fallbackMult)
         Dim targetBound As Double = sl.TargetMaxAtrMult * r.ATR
@@ -307,70 +317,166 @@ Public NotInheritable Class SignalEmitter
             (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR"),
             (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL"))
 
-        ' Tier 1: swing target (5m structural memory — highest priority).
-        Dim dist As Double = dirSign * (swingTarget - entry)
-        If swingTarget > 0 AndAlso dist > 0 AndAlso dist <= targetBound Then
-            placedTarget = swingTarget
-            targetLabel = If(isLong, "SWING_HIGH_5M", "SWING_LOW_5M")
-        End If
+        Dim swingDist As Double = dirSign * (swingTarget - entry)
+        Dim swingQualifies As Boolean = swingTarget > 0 AndAlso swingDist > 0 AndAlso swingDist <= targetBound
+        Dim hvnDist As Double = dirSign * (nearestHvn - entry)
+        Dim hvnQualifies As Boolean = nearestHvn > 0 AndAlso hvnDist > 0 AndAlso hvnDist <= targetBound
+        Dim pocDist As Double = dirSign * (r.VPFRPoc - entry)
+        Dim pocQualifies As Boolean = pocGated AndAlso r.VPFRPoc > 0 AndAlso pocDist > 0 AndAlso pocDist <= targetBound
 
-        ' Tier 2: nearest HVN wall on the trade side.
-        If placedTarget = 0 Then
-            dist = dirSign * (nearestHvn - entry)
-            If nearestHvn > 0 AndAlso dist > 0 AndAlso dist <= targetBound Then
+        If sl.TargetArbitrationMode = 1 Then
+            ' Mode 1 — NEAREST: among qualifying structural candidates AND the session-resolved
+            ' ATR fallback target, pick whichever is CLOSEST to entry (pre-B4b cap philosophy,
+            ' generalised across all three tiers + the fallback). Labels stay truthful; fallback
+            ' wins ⇒ placedTarget stays 0 so the shared fallback-path materialisation runs (same
+            ' Reason=Nothing / Capped=False as today's fallback).
+            Dim bestDist As Double = r.ATR * fallbackMult                 ' fallback distance
+            Dim bestPrice As Double = fallbackTarget
+            Dim bestLabel As String = Nothing                              ' Nothing ⇒ fallback wins
+            If swingQualifies AndAlso swingDist < bestDist Then
+                bestDist = swingDist
+                bestPrice = swingTarget
+                bestLabel = If(isLong, "SWING_HIGH_5M", "SWING_LOW_5M")
+            End If
+            If hvnQualifies AndAlso hvnDist < bestDist Then
+                bestDist = hvnDist
+                bestPrice = nearestHvn
+                bestLabel = If(isLong, "NEAREST_HVN_ABOVE", "NEAREST_HVN_BELOW")
+            End If
+            If pocQualifies AndAlso pocDist < bestDist Then
+                bestDist = pocDist
+                bestPrice = r.VPFRPoc
+                bestLabel = "POC"
+            End If
+            If bestLabel IsNot Nothing Then
+                placedTarget = bestPrice
+                targetLabel = bestLabel
+            End If
+        Else
+            ' Mode 0 — LADDER (v51 B4b verbatim): swing → HVN → POC (HVN-gated) → fallback.
+            ' Structure wins even when farther than the ATR level, up to the bound.
+            If swingQualifies Then
+                placedTarget = swingTarget
+                targetLabel = If(isLong, "SWING_HIGH_5M", "SWING_LOW_5M")
+            End If
+            If placedTarget = 0 AndAlso hvnQualifies Then
                 placedTarget = nearestHvn
                 targetLabel = If(isLong, "NEAREST_HVN_ABOVE", "NEAREST_HVN_BELOW")
             End If
-        End If
-
-        ' Tier 3: POC, only when the VPFR signal gates it open (as the legacy cap did).
-        If placedTarget = 0 AndAlso pocGated Then
-            dist = dirSign * (r.VPFRPoc - entry)
-            If r.VPFRPoc > 0 AndAlso dist > 0 AndAlso dist <= targetBound Then
+            If placedTarget = 0 AndAlso pocQualifies Then
                 placedTarget = r.VPFRPoc
                 targetLabel = "POC"
             End If
         End If
 
+        ' ---- Materialise target + buffer + noise suppression -------------------------
+        ' At tBuf = 0 (default) the buffer branch is skipped ⇒ byte-identical to v51 B4b.
+        Dim tBuf As Double = sl.TargetBufferPct
         If placedTarget > 0 Then
-            lv.Target = placedTarget
+            Dim finalTarget As Double = placedTarget
+            If tBuf <> 0.0 Then
+                finalTarget = entry + (placedTarget - entry) * (1.0 + tBuf / 100.0)
+            End If
+            lv.Target = finalTarget
             lv.TargetReason = targetLabel
-            ' v30 sub-tick noise suppression, measured against the fallback ATR price:
-            ' a structural target within the floor renders/reports as uncapped.
+            ' v30 sub-tick noise suppression, measured against the fallback ATR price.
             Dim capNoiseFloor As Double = Math.Max(TickSize, r.ATR * 0.02)
-            If Math.Abs(fallbackTarget - placedTarget) >= capNoiseFloor Then
+            If Math.Abs(fallbackTarget - finalTarget) >= capNoiseFloor Then
                 lv.Capped = True
                 lv.Reason = String.Format(CultureInfo.InvariantCulture,
-                                          "PLACED @ {0:F1} ({1})", placedTarget, targetLabel)
+                                          "PLACED @ {0:F1} ({1})", finalTarget, targetLabel)
+                If tBuf <> 0.0 Then
+                    lv.Reason = lv.Reason & FormatBufferSuffix(tBuf)
+                End If
             End If
         Else
-            lv.Target = fallbackTarget
+            ' Fallback path — mode 0 always lands here when no structural tier qualifies,
+            ' mode 1 lands here when fallback wins the closest-to-entry race.
+            Dim finalFb As Double = fallbackTarget
+            If tBuf <> 0.0 Then
+                finalFb = entry + (fallbackTarget - entry) * (1.0 + tBuf / 100.0)
+            End If
+            lv.Target = finalFb
             lv.TargetReason = "FALLBACK_ATR"
+            ' Buffered fallback: reason string surfaces the buffer suffix if it moved the
+            ' price beyond the noise floor. At tBuf = 0 this is silent (Capped=False,
+            ' Reason=Nothing) — byte-identical to v51 B4b's fallback rendering.
+            If tBuf <> 0.0 Then
+                Dim capNoiseFloor As Double = Math.Max(TickSize, r.ATR * 0.02)
+                If Math.Abs(finalFb - fallbackTarget) >= capNoiseFloor Then
+                    lv.Capped = True
+                    lv.Reason = String.Format(CultureInfo.InvariantCulture,
+                                              "PLACED @ {0:F1} (FALLBACK_ATR)", finalFb) &
+                                FormatBufferSuffix(tBuf)
+                End If
+            End If
         End If
         lv.RawTarget = fallbackTarget
 
-        ' ---- STOP (DG1): min(structural, stop_max×ATR); structure only when tighter ----
+        ' ---- STOP arbitration --------------------------------------------------------
         Dim stopBound As Double = sl.StopMaxAtrMult * r.ATR
         Dim stopFloor As Double = sl.StopMinFloorTicks * TickSize
         Dim fallbackStopDist As Double = r.ATR * cfg.Scoring.AtrStopMultiplier
         Dim swingStop As Double = If(isLong, r.SwingStopLong, r.SwingStopShort)
         Dim stopDist As Double = dirSign * (entry - swingStop)   ' >0 = protective side
 
-        If swingStop > 0 AndAlso stopDist > 0 AndAlso stopDist >= stopFloor AndAlso stopDist <= stopBound Then
-            lv.StopPx = swingStop
-            lv.StopReason = "SWING_STOP"
-        ElseIf swingStop > 0 AndAlso stopDist > stopBound Then
-            ' D3 clamp (the only built mode; "skip" is D3-b, not implemented — any
-            ' unrecognised stop_too_loose_mode value lands here identically).
-            lv.StopPx = entry - dirSign * stopBound
-            lv.StopReason = "STOP_CLAMPED"
+        Dim placedStopPx As Double
+        Dim stopLabel As String
+
+        If sl.StopArbitrationMode = 1 Then
+            ' Mode 1 — WIDEST: max(structural swing stop distance, stop_max×ATR); structure
+            ' wins when it is WIDER than the bound (no upper clamp — the trader's SL half).
+            ' Below-floor structural distances always lose to the ATR distance (which is well
+            ' above the 4-tick floor by construction: fallbackStopDist ≈ stopBound = 1.6×ATR).
+            If swingStop > 0 AndAlso stopDist > stopBound Then
+                placedStopPx = swingStop
+                stopLabel = "SWING_STOP"
+            Else
+                placedStopPx = entry - dirSign * stopBound
+                stopLabel = "FALLBACK_ATR"
+            End If
         Else
-            ' No structural stop, wrong-side data, or sub-floor tightness.
-            lv.StopPx = entry - dirSign * fallbackStopDist
-            lv.StopReason = "FALLBACK_ATR"
+            ' Mode 0 — DG1 verbatim: min(structural swing stop, stop_max×ATR) ≥ floor.
+            If swingStop > 0 AndAlso stopDist > 0 AndAlso stopDist >= stopFloor AndAlso stopDist <= stopBound Then
+                placedStopPx = swingStop
+                stopLabel = "SWING_STOP"
+            ElseIf swingStop > 0 AndAlso stopDist > stopBound Then
+                ' D3 clamp (the only built mode; "skip" is D3-b, not implemented — any
+                ' unrecognised stop_too_loose_mode value lands here identically).
+                placedStopPx = entry - dirSign * stopBound
+                stopLabel = "STOP_CLAMPED"
+            Else
+                ' No structural stop, wrong-side data, or sub-floor tightness.
+                placedStopPx = entry - dirSign * fallbackStopDist
+                stopLabel = "FALLBACK_ATR"
+            End If
         End If
 
+        ' Apply signed stop buffer, then enforce the 4-tick floor on the buffered stop
+        ' (a −99% buffer snaps to the floor rather than crossing entry). Default 0.0 ⇒
+        ' the branch is skipped and the stop is byte-identical to v51 B4b.
+        Dim sBuf As Double = sl.StopBufferPct
+        If sBuf <> 0.0 Then
+            placedStopPx = entry + (placedStopPx - entry) * (1.0 + sBuf / 100.0)
+            Dim bufStopDist As Double = dirSign * (entry - placedStopPx)
+            If bufStopDist < stopFloor Then
+                placedStopPx = entry - dirSign * stopFloor
+            End If
+        End If
+
+        lv.StopPx = placedStopPx
+        lv.StopReason = stopLabel
+
         Return lv
+    End Function
+
+    ' [geometry-arbitration-modes v56] Reason-string suffix for a non-zero buffer.
+    ' Consumed only in the buffer ≠ 0 replay branches — no rendered surface at defaults.
+    ' Explicit "+" sign on non-negatives so the display cleanly separates pushed-beyond
+    ' (+N%) from shaved-toward-entry (−N%, sign from the Double).
+    Private Shared Function FormatBufferSuffix(pct As Double) As String
+        Dim sign As String = If(pct >= 0.0, "+", "")
+        Return String.Format(CultureInfo.InvariantCulture, " BUF {0}{1:0.###}%", sign, pct)
     End Function
 
     ' One side of the levels block — a thin JSON wrapper over the shared arbitration.

@@ -181,6 +181,23 @@ Public Class SettingsDiffApplier
                     "Rejected: '{0}' is a structural-levels hand-toggle, not a threshold (off tweaker surface — HARD CONSTRAINT 21).", item.Path)
                 Return result
             End If
+            ' [geometry-arbitration-modes v56] Geometry ARBITRATION MODES + SIGNED BUFFERS —
+            ' off the tweaker surface (hand-ruled geometry, HC11 class). Exact-match, NOT a
+            ' prefix: the flat siblings (target_max_atr_mult, stop_max_atr_mult,
+            ' stop_min_floor_ticks) STAY tunable, HC21 unchanged. Modes are a shape choice
+            ' (ladder vs nearest / tightest vs widest); enabling them live is a later ⚠
+            ' D-table gated on what-if replay evidence, and the stop-widest side is
+            ' ADDITIONALLY hard-gated on consumer sizing-by-stop-distance (L3). Buffers
+            ' are trader-owned pullback/protection shape, not failure-rate thresholds.
+            If path = "scoring.structural_levels.target_arbitration_mode" OrElse
+               path = "scoring.structural_levels.stop_arbitration_mode" OrElse
+               path = "scoring.structural_levels.target_buffer_pct" OrElse
+               path = "scoring.structural_levels.stop_buffer_pct" Then
+                result.IsValid    = False
+                result.ErrorReason = String.Format(
+                    "Rejected: '{0}' is a hand-ruled geometry knob (arbitration mode / signed buffer), not a threshold (off tweaker surface — HARD CONSTRAINT 24).", item.Path)
+                Return result
+            End If
 
             ' Reject version key (applier manages this)
             If path = "version" Then

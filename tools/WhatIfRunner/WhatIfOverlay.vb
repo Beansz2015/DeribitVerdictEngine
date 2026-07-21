@@ -82,6 +82,10 @@ Public Class WhatIfOverlay
         "scoring.structural_levels.sessions.NY.fallback_target_atr_mult",
         "scoring.structural_levels.sessions.LONDON.fallback_target_atr_mult",
         "scoring.structural_levels.sessions.ASIA.fallback_target_atr_mult",
+        "scoring.structural_levels.target_arbitration_mode",
+        "scoring.structural_levels.stop_arbitration_mode",
+        "scoring.structural_levels.target_buffer_pct",
+        "scoring.structural_levels.stop_buffer_pct",
         "eval_window"
     }
 

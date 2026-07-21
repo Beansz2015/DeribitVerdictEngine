@@ -257,6 +257,20 @@ Module Program
         A35c_MatrixCellSpaceUnchangedNoWeakTier()
         A35d_PromptBuilderOmitsLadderAndWeak()
 
+        ' [geometry-arbitration-modes v56 — docs/geometry-arbitration-modes-proposal.md §3]
+        ' Defaults byte-identical (the load-bearing pin); NEAREST target picks min-distance
+        ' incl. the fallback beating a farther swing; WIDEST stop picks max + respects the
+        ' 4-tick floor; signed buffers move each side the right direction and the min-move
+        ' gate reads buffered prices; whitelist accepts the 4 keys, HC24 fence rejects them,
+        ' a sibling numeric still passes; mode-1 overlay replays through the What-If adapter
+        ' (the A30a linked-seam pattern).
+        A36a_DefaultsByteIdenticalToV51B4b()
+        A36b_NearestTargetPicksMinDistance()
+        A36c_WidestStopPicksMaxAndRespectsFloor()
+        A36d_SignedBuffersMoveAndMinMoveGateReadsBuffered()
+        A36e_WhitelistAndHc24Fence()
+        A36f_ModeOneOverlayRoundTripsThroughWhatIf()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -4279,6 +4293,321 @@ Module Program
               noLadderHeading AndAlso noWeakBandRow AndAlso matrixStillThere,
               String.Format("noLadder={0} noWeak={1} matrixPresent={2} len={3}",
                             noLadderHeading, noWeakBandRow, matrixStillThere, userMsg.Length))
+    End Sub
+
+    ' =======================================================================
+    ' A36 — geometry arbitration modes + signed buffers (v56).
+    ' docs/geometry-arbitration-modes-proposal.md §3 acceptance.
+    ' All defaults (target/stop mode 0, buffer 0.0) are BYTE-IDENTICAL to v51 B4b —
+    ' A36a is the load-bearing pin: the exact A26 case set replayed with defaults
+    ' produces identical SideLevels. Mode 1 / buffer ≠ 0 fixtures exercise the new
+    ' branches. Same POCO cfg (entry 62000, ATR 40 ⇒ fallback 62070, target bound
+    ' 140, stop bound/fallback dist 64, stop floor $2) as A26.
+    ' =======================================================================
+
+    Private Function A36Cfg() As EngineSettings
+        Return New EngineSettings()          ' POCO defaults = shipped v56 (mode 0, buffer 0)
+    End Function
+
+    Private Function A36Indicators() As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = 62000.0
+        r.ATR = 40.0
+        Return r
+    End Function
+
+    ' -- A36a: defaults byte-identical to v51 B4b -- THE load-bearing fixture -------
+    ' Runs the A26 case set through ComputeSideLevels with an explicit A36 cfg (POCO
+    ' defaults = mode 0/0, buffer 0/0) and pins equality with the shipped placements.
+    ' A26a-f are the standing pin for v51 B4b; A36a asserts the v56 default path
+    ' produces the SAME outputs — the "zero live impact at this build" invariant.
+    Private Sub A36a_DefaultsByteIdenticalToV51B4b()
+        Dim cfg = A36Cfg()
+
+        ' Case 1 — swing target farther than fallback still places (A26a long).
+        Dim rSwing = A36Indicators() : rSwing.SwingTargetLong = 62100.0
+        Dim lvSwing = SignalEmitter.ComputeSideLevels(New VerdictResult(), rSwing, cfg, isLong:=True)
+        Dim ok1 As Boolean = lvSwing.Target = 62100.0 AndAlso lvSwing.Capped AndAlso
+                             lvSwing.Reason = "PLACED @ 62100.0 (SWING_HIGH_5M)" AndAlso
+                             lvSwing.TargetReason = "SWING_HIGH_5M" AndAlso
+                             Math.Abs(lvSwing.RawTarget - 62070.0) < 0.0001
+
+        ' Case 2 — swing too loose → HVN places (A26b tier walk).
+        Dim rHvn = A36Indicators()
+        rHvn.SwingTargetLong = 62150.0 : rHvn.VPFRNearestHvnAbove = 62120.0
+        Dim lvHvn = SignalEmitter.ComputeSideLevels(New VerdictResult(), rHvn, cfg, isLong:=True)
+        Dim ok2 As Boolean = lvHvn.Target = 62120.0 AndAlso lvHvn.TargetReason = "NEAREST_HVN_ABOVE" AndAlso
+                             lvHvn.Reason = "PLACED @ 62120.0 (NEAREST_HVN_ABOVE)"
+
+        ' Case 3 — no tier survives → FALLBACK_ATR, Reason Nothing (A26b fallback).
+        Dim rFb = A36Indicators()
+        rFb.SwingTargetLong = 62150.0 : rFb.VPFRNearestHvnAbove = 62200.0 : rFb.VPFRPoc = 62050.0
+        Dim lvFb = SignalEmitter.ComputeSideLevels(New VerdictResult(), rFb, cfg, isLong:=True)
+        Dim ok3 As Boolean = lvFb.Target = 62070.0 AndAlso Not lvFb.Capped AndAlso lvFb.Reason Is Nothing AndAlso
+                             lvFb.TargetReason = "FALLBACK_ATR"
+
+        ' Case 4 — structural stop within bound → SWING_STOP (A26c).
+        Dim rStop = A36Indicators() : rStop.SwingStopLong = 61950.0
+        Dim lvStop = SignalEmitter.ComputeSideLevels(New VerdictResult(), rStop, cfg, isLong:=True)
+        Dim ok4 As Boolean = lvStop.StopPx = 61950.0 AndAlso lvStop.StopReason = "SWING_STOP"
+
+        ' Case 5 — structural stop too loose → STOP_CLAMPED (A26c clamp).
+        Dim rClamp = A36Indicators() : rClamp.SwingStopLong = 61900.0
+        Dim lvClamp = SignalEmitter.ComputeSideLevels(New VerdictResult(), rClamp, cfg, isLong:=True)
+        Dim ok5 As Boolean = Math.Abs(lvClamp.StopPx - 61936.0) < 0.0001 AndAlso lvClamp.StopReason = "STOP_CLAMPED"
+
+        ' Case 6 — no structural stop → FALLBACK_ATR (A26c).
+        Dim lvNone = SignalEmitter.ComputeSideLevels(New VerdictResult(), A36Indicators(), cfg, isLong:=True)
+        Dim ok6 As Boolean = Math.Abs(lvNone.StopPx - 61936.0) < 0.0001 AndAlso lvNone.StopReason = "FALLBACK_ATR"
+
+        Check("A36a defaults (mode 0/0, buffer 0/0) byte-identical to v51 B4b across the A26 case set",
+              ok1 AndAlso ok2 AndAlso ok3 AndAlso ok4 AndAlso ok5 AndAlso ok6,
+              String.Format("swing={0} hvn={1} fallback={2} sSwing={3} sClamp={4} sFb={5}",
+                            ok1, ok2, ok3, ok4, ok5, ok6))
+    End Sub
+
+    ' -- A36b: NEAREST target mode picks the minimum-distance qualifying candidate --
+    ' Includes the load-bearing case where the ATR fallback (dist 70) beats a FARTHER
+    ' qualifying swing (dist 100 ≤ bound 140). Mode 0 would place the swing; mode 1
+    ' places the fallback. Fallback wins ⇒ TargetReason=FALLBACK_ATR, Reason=Nothing.
+    Private Sub A36b_NearestTargetPicksMinDistance()
+        Dim cfg = A36Cfg()
+        cfg.Scoring.StructuralLevels.TargetArbitrationMode = 1
+
+        ' Fallback beats a farther-out swing (the A36a Case 1 inputs).
+        Dim rFar = A36Indicators() : rFar.SwingTargetLong = 62100.0    ' swing dist 100 > fallback dist 70
+        Dim lvFar = SignalEmitter.ComputeSideLevels(New VerdictResult(), rFar, cfg, isLong:=True)
+        Dim okFallbackWins As Boolean = lvFar.Target = 62070.0 AndAlso Not lvFar.Capped AndAlso
+                                        lvFar.Reason Is Nothing AndAlso
+                                        lvFar.TargetReason = "FALLBACK_ATR" AndAlso
+                                        Math.Abs(lvFar.RawTarget - 62070.0) < 0.0001
+
+        ' Swing closer than fallback ⇒ swing still wins.
+        Dim rClose = A36Indicators() : rClose.SwingTargetLong = 62050.0   ' swing dist 50 < fallback dist 70
+        Dim lvClose = SignalEmitter.ComputeSideLevels(New VerdictResult(), rClose, cfg, isLong:=True)
+        Dim okSwingWinsWhenCloser As Boolean = lvClose.Target = 62050.0 AndAlso lvClose.Capped AndAlso
+                                               lvClose.TargetReason = "SWING_HIGH_5M" AndAlso
+                                               lvClose.Reason = "PLACED @ 62050.0 (SWING_HIGH_5M)"
+
+        ' Multiple structural candidates: HVN (dist 40) < swing (dist 50) < fallback (dist 70).
+        Dim rMulti = A36Indicators()
+        rMulti.SwingTargetLong = 62050.0
+        rMulti.VPFRNearestHvnAbove = 62040.0
+        Dim lvMulti = SignalEmitter.ComputeSideLevels(New VerdictResult(), rMulti, cfg, isLong:=True)
+        Dim okHvnWins As Boolean = lvMulti.Target = 62040.0 AndAlso
+                                   lvMulti.TargetReason = "NEAREST_HVN_ABOVE"
+
+        ' Short mirror — fallback (dist 70) beats a farther swing (dist 100).
+        Dim rShort = A36Indicators() : rShort.SwingTargetShort = 61900.0
+        Dim lvShort = SignalEmitter.ComputeSideLevels(New VerdictResult(), rShort, cfg, isLong:=False)
+        Dim okShort As Boolean = Math.Abs(lvShort.Target - 61930.0) < 0.0001 AndAlso
+                                 lvShort.TargetReason = "FALLBACK_ATR" AndAlso Not lvShort.Capped
+
+        Check("A36b NEAREST target picks min-distance (fallback beats farther swing; closer swing wins; HVN wins over swing+fallback; short mirror)",
+              okFallbackWins AndAlso okSwingWinsWhenCloser AndAlso okHvnWins AndAlso okShort,
+              String.Format("fbWins={0} swingWinsClose={1} hvnWins={2} short={3}",
+                            okFallbackWins, okSwingWinsWhenCloser, okHvnWins, okShort))
+    End Sub
+
+    ' -- A36c: WIDEST stop picks max(structural, stop_max×ATR), respects 4-tick floor --
+    ' Mode 0 would clamp a wider swing to stop_max; mode 1 keeps the wider swing.
+    ' Mode 1 with a tighter-than-bound swing loses to the ATR bound (FALLBACK_ATR).
+    Private Sub A36c_WidestStopPicksMaxAndRespectsFloor()
+        Dim cfg = A36Cfg()
+        cfg.Scoring.StructuralLevels.StopArbitrationMode = 1
+
+        ' Wider swing wins over the ATR bound (mode 0 would STOP_CLAMPED at 61936).
+        Dim rWide = A36Indicators() : rWide.SwingStopLong = 61900.0   ' dist 100 > bound 64
+        Dim lvWide = SignalEmitter.ComputeSideLevels(New VerdictResult(), rWide, cfg, isLong:=True)
+        Dim okWider As Boolean = lvWide.StopPx = 61900.0 AndAlso lvWide.StopReason = "SWING_STOP"
+
+        ' Tighter swing loses to the ATR bound → FALLBACK_ATR at entry − stop_max×ATR.
+        Dim rTight = A36Indicators() : rTight.SwingStopLong = 61950.0  ' dist 50 < bound 64
+        Dim lvTight = SignalEmitter.ComputeSideLevels(New VerdictResult(), rTight, cfg, isLong:=True)
+        Dim okTighterLoses As Boolean = Math.Abs(lvTight.StopPx - 61936.0) < 0.0001 AndAlso
+                                        lvTight.StopReason = "FALLBACK_ATR"
+
+        ' No structural stop → FALLBACK_ATR at entry − stop_max×ATR.
+        Dim lvNone = SignalEmitter.ComputeSideLevels(New VerdictResult(), A36Indicators(), cfg, isLong:=True)
+        Dim okNoStruct As Boolean = Math.Abs(lvNone.StopPx - 61936.0) < 0.0001 AndAlso
+                                    lvNone.StopReason = "FALLBACK_ATR"
+
+        ' Floor respected under a punishing negative stop buffer: ATR bound 64, buffer −99%
+        ' would give dist 0.64 → snaps to floor $2 (61998).
+        Dim cfgFloor = A36Cfg()
+        cfgFloor.Scoring.StructuralLevels.StopArbitrationMode = 1
+        cfgFloor.Scoring.StructuralLevels.StopBufferPct = -99.0
+        Dim lvFloor = SignalEmitter.ComputeSideLevels(New VerdictResult(), A36Indicators(), cfgFloor, isLong:=True)
+        Dim okFloor As Boolean = Math.Abs(lvFloor.StopPx - 61998.0) < 0.0001
+
+        ' Short mirror: wider swing (dist 100) beats the ATR bound (64) → keeps 62100.
+        Dim rShort = A36Indicators() : rShort.SwingStopShort = 62100.0
+        Dim lvShort = SignalEmitter.ComputeSideLevels(New VerdictResult(), rShort, cfg, isLong:=False)
+        Dim okShort As Boolean = lvShort.StopPx = 62100.0 AndAlso lvShort.StopReason = "SWING_STOP"
+
+        Check("A36c WIDEST stop picks max + respects the 4-tick floor (wider swing wins; tighter loses to ATR bound; floor snaps buffered stop; short mirror)",
+              okWider AndAlso okTighterLoses AndAlso okNoStruct AndAlso okFloor AndAlso okShort,
+              String.Format("wider={0} tighterLoses={1} noStruct={2} floor={3} short={4} px={5}",
+                            okWider, okTighterLoses, okNoStruct, okFloor, okShort, lvFloor.StopPx))
+    End Sub
+
+    ' -- A36d: signed buffers move the right direction; min-move gate reads buffered --
+    ' The load-bearing check: a negative target buffer must be able to gate a verdict to
+    ' BELOW_MIN_MOVE through the REAL Calculate() (Step 5c reads placed via Step 5b's
+    ' AdjustedLongTarget/TargetCapReasonLong, which SignalEmitter.ComputeSideLevels
+    ' populates with the buffered price when Capped fires).
+    Private Sub A36d_SignedBuffersMoveAndMinMoveGateReadsBuffered()
+        ' (a) Target buffer signs: entry 62000, placed 62100.
+        '     +10% → placed' = 62000 + 100×1.10 = 62110  (farther from entry).
+        '     −5%  → placed' = 62000 + 100×0.95 = 62095  (closer to entry).
+        Dim cfgPos = A36Cfg() : cfgPos.Scoring.StructuralLevels.TargetBufferPct = 10.0
+        Dim rL = A36Indicators() : rL.SwingTargetLong = 62100.0
+        Dim lvPos = SignalEmitter.ComputeSideLevels(New VerdictResult(), rL, cfgPos, isLong:=True)
+        Dim cfgNeg = A36Cfg() : cfgNeg.Scoring.StructuralLevels.TargetBufferPct = -5.0
+        Dim lvNeg = SignalEmitter.ComputeSideLevels(New VerdictResult(), rL, cfgNeg, isLong:=True)
+        Dim okTgt As Boolean = Math.Abs(lvPos.Target - 62110.0) < 0.0001 AndAlso
+                               Math.Abs(lvNeg.Target - 62095.0) < 0.0001 AndAlso
+                               lvPos.Reason.Contains("BUF +10%") AndAlso
+                               lvNeg.Reason.Contains("BUF -5%")
+
+        ' (b) Stop buffer signs: entry 62000, placed 61950 (dist 50).
+        '     +10% → placed' = 62000 − 50×1.10 = 61945 (wider stop, farther from entry).
+        '     −20% → placed' = 62000 − 50×0.80 = 61960 (tighter stop).
+        Dim cfgSp = A36Cfg() : cfgSp.Scoring.StructuralLevels.StopBufferPct = 10.0
+        Dim rS = A36Indicators() : rS.SwingStopLong = 61950.0
+        Dim lvSp = SignalEmitter.ComputeSideLevels(New VerdictResult(), rS, cfgSp, isLong:=True)
+        Dim cfgSn = A36Cfg() : cfgSn.Scoring.StructuralLevels.StopBufferPct = -20.0
+        Dim lvSn = SignalEmitter.ComputeSideLevels(New VerdictResult(), rS, cfgSn, isLong:=True)
+        Dim okStp As Boolean = Math.Abs(lvSp.StopPx - 61945.0) < 0.0001 AndAlso
+                               Math.Abs(lvSn.StopPx - 61960.0) < 0.0001
+
+        ' (c) Min-move gate reads buffered target (real Calculate). ATR 20 ⇒ fallback dist
+        ' 35 (raw 62035); swing 62060 (dist 60) places under bound 70. Without a buffer the
+        ' gate stands (60 > floor 49.6). With −40% target buffer: placed' = 62000 + 60×0.60
+        ' = 62036 → dist 36 < 49.6 ⇒ BELOW_MIN_MOVE. This proves the buffered price flows
+        ' through Step 5b onto Adjusted* and the gate reads it.
+        Dim cfgStandGate = BuildA8Cfg(fundingBoost:=0)
+        Dim rGate1 = BuildGateIndicators(atr:=20, price:=62000)
+        rGate1.SwingTargetShort = 61940.0                  ' dist 60 ≤ bound 70 → places
+        Dim vStand = ScoringEngine.Calculate(rGate1, PositionState.None, BuildA8Norms(), cfgStandGate)
+
+        Dim cfgGateBuf = BuildA8Cfg(fundingBoost:=0)
+        cfgGateBuf.Scoring.StructuralLevels.TargetBufferPct = -40.0
+        Dim rGate2 = BuildGateIndicators(atr:=20, price:=62000)
+        rGate2.SwingTargetShort = 61940.0
+        Dim vGated = ScoringEngine.Calculate(rGate2, PositionState.None, BuildA8Norms(), cfgGateBuf)
+        Dim okGate As Boolean = Not vStand.Verdict.StartsWith("NO TRADE") AndAlso
+                                vStand.VerdictContext <> "BELOW_MIN_MOVE" AndAlso
+                                vGated.Verdict = "NO TRADE" AndAlso
+                                vGated.VerdictContext = "BELOW_MIN_MOVE"
+
+        Check("A36d signed buffers move each side + Step 5c min-move gate reads BUFFERED target",
+              okTgt AndAlso okStp AndAlso okGate,
+              String.Format("tgt={0} stp={1} gate=(stand='{2}' ctx={3} adj={4:F1}; gated='{5}' ctx={6} adj={7:F1})",
+                            okTgt, okStp,
+                            vStand.Verdict, vStand.VerdictContext, vStand.AdjustedShortTarget,
+                            vGated.Verdict, vGated.VerdictContext, vGated.AdjustedShortTarget))
+    End Sub
+
+    ' -- A36e: WhatIfOverlay whitelist + HC24 tweaker fence -----------------------
+    Private Sub A36e_WhitelistAndHc24Fence()
+        ' Whitelist: the 4 new keys parse cleanly; a sibling flat numeric already listed
+        ' still parses.
+        Dim okMode = WhatIfOverlay.Parse("{""scoring"":{""structural_levels"":{""target_arbitration_mode"":1}}}")
+        Dim okBuf  = WhatIfOverlay.Parse("{""scoring"":{""structural_levels"":{""stop_buffer_pct"":10.0}}}")
+        Dim okSib  = WhatIfOverlay.Parse("{""scoring"":{""structural_levels"":{""target_max_atr_mult"":3.0}}}")
+        ' Numeric sweep 0→1 step 1 on an int-coded mode expands to two cells.
+        Dim okSweep = WhatIfOverlay.Parse("{""scoring"":{""structural_levels"":{""target_arbitration_mode"":{""sweep"":{""from"":0,""to"":1,""step"":1}}}}}")
+        Dim okWl As Boolean = okMode.Knobs.Count = 1 AndAlso
+                              okMode.Knobs(0).Path = "scoring.structural_levels.target_arbitration_mode" AndAlso
+                              okBuf.Knobs.Count = 1 AndAlso
+                              okBuf.Knobs(0).Path = "scoring.structural_levels.stop_buffer_pct" AndAlso
+                              okSib.Knobs.Count = 1 AndAlso
+                              okSweep.Knobs.Count = 1 AndAlso okSweep.Knobs(0).IsSweep AndAlso
+                              okSweep.Knobs(0).Values.Count = 2
+
+        ' HC24 fence: SettingsDiffApplier exact-match rejects the 4 keys; the sibling
+        ' target_max_atr_mult (HC21 flat surface) still passes.
+        Dim s As String = "{""version"":56,""scoring"":{""atr_target_multiplier"":1.75," &
+                          """structural_levels"":{""enabled"":true,""target_max_atr_mult"":3.5," &
+                          """stop_max_atr_mult"":1.6,""stop_min_floor_ticks"":4," &
+                          """stop_too_loose_mode"":""clamp""," &
+                          """target_arbitration_mode"":0,""stop_arbitration_mode"":0," &
+                          """target_buffer_pct"":0.0,""stop_buffer_pct"":0.0}}}"
+        Dim rTMode = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.target_arbitration_mode", "0", "1"), s, 3)
+        Dim rSMode = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.stop_arbitration_mode", "0", "1"), s, 3)
+        Dim rTBuf  = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.target_buffer_pct", "0.0", "-5.0"), s, 3)
+        Dim rSBuf  = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.stop_buffer_pct", "0.0", "10.0"), s, 3)
+        Dim rBound = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.target_max_atr_mult", "3.5", "3.0"), s, 3)
+        Dim okFence As Boolean =
+            Not rTMode.IsValid AndAlso rTMode.ErrorReason.Contains("HARD CONSTRAINT 24") AndAlso
+            Not rSMode.IsValid AndAlso rSMode.ErrorReason.Contains("HARD CONSTRAINT 24") AndAlso
+            Not rTBuf.IsValid  AndAlso rTBuf.ErrorReason.Contains("HARD CONSTRAINT 24") AndAlso
+            Not rSBuf.IsValid  AndAlso rSBuf.ErrorReason.Contains("HARD CONSTRAINT 24") AndAlso
+            rBound.IsValid
+
+        Check("A36e whitelist accepts 4 new keys (incl. int-mode sweep) + HC24 exact-match fence rejects them; sibling flat numeric still passes",
+              okWl AndAlso okFence,
+              String.Format("wl={0} fence(tMode={1},sMode={2},tBuf={3},sBuf={4},bound={5})",
+                            okWl, rTMode.IsValid, rSMode.IsValid, rTBuf.IsValid, rSBuf.IsValid, rBound.IsValid))
+    End Sub
+
+    ' -- A36f: a mode-1 overlay replays through the What-If adapter identically ------
+    ' The A30a linked-seam pattern extended: WhatIfSettings.BuildCellSettings applies the
+    ' overlay onto a cloned cfg, and the adapter fed through the shipped
+    ' SignalEmitter.ComputeSideLevels produces the SAME SideLevels a direct call under a
+    ' hand-mutated cfg would. Proves the overlay path actually reaches the new POCO fields.
+    Private Sub A36f_ModeOneOverlayRoundTripsThroughWhatIf()
+        ' Overlay: flip target mode to NEAREST + apply a +5% target buffer + +10% stop buffer.
+        Dim overlay As New Dictionary(Of String, Double) From {
+            {"scoring.structural_levels.target_arbitration_mode", 1},
+            {"scoring.structural_levels.target_buffer_pct", 5.0},
+            {"scoring.structural_levels.stop_buffer_pct", 10.0}
+        }
+
+        ' A settings.json fragment carrying the four new fields at their defaults —
+        ' WhatIfSettings deserialises this fresh per cell, then applies the overlay.
+        Dim tmp As String = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                                    "wifsettings-a36f-" & Guid.NewGuid().ToString("N") & ".json")
+        Try
+            System.IO.File.WriteAllText(tmp,
+                "{""version"":56," &
+                """scoring"":{""atr_target_multiplier"":1.75,""atr_stop_multiplier"":1.6," &
+                """structural_levels"":{""enabled"":true,""target_max_atr_mult"":3.5," &
+                """stop_max_atr_mult"":1.6,""stop_min_floor_ticks"":4," &
+                """stop_too_loose_mode"":""clamp""," &
+                """target_arbitration_mode"":0,""stop_arbitration_mode"":0," &
+                """target_buffer_pct"":0.0,""stop_buffer_pct"":0.0}}}")
+
+            Dim wis As New WhatIfSettings(tmp)
+            Dim cellCfg = wis.BuildCellSettings(overlay)
+
+            ' The mutation actually landed on the POCO fields.
+            Dim okApply As Boolean =
+                cellCfg.Scoring.StructuralLevels.TargetArbitrationMode = 1 AndAlso
+                cellCfg.Scoring.StructuralLevels.StopArbitrationMode = 0 AndAlso
+                Math.Abs(cellCfg.Scoring.StructuralLevels.TargetBufferPct - 5.0) < 0.0001 AndAlso
+                Math.Abs(cellCfg.Scoring.StructuralLevels.StopBufferPct - 10.0) < 0.0001
+
+            ' The adapter's placed levels ≡ a direct ComputeSideLevels call under the same cfg.
+            Dim row = BuildWhatIfRow()
+            Dim r = WhatIfReplay.BuildIndicator(row)
+            Dim direct = SignalEmitter.ComputeSideLevels(New VerdictResult(), r, cellCfg, isLong:=True)
+            Dim run = WhatIfReplay.RunCell(New List(Of CsvRow) From {row}, cellCfg, 15, keepRows:=True)
+            Dim rep = run.ReplayedRows(0)
+            Dim okAdapter As Boolean =
+                Math.Abs(rep.PlacedTargetLong - direct.Target) < 0.001 AndAlso
+                Math.Abs(rep.PlacedStopLong - direct.StopPx) < 0.001
+
+            Check("A36f mode-1 overlay round-trips through WhatIfSettings.BuildCellSettings and reproduces ComputeSideLevels via the WhatIfReplay adapter",
+                  okApply AndAlso okAdapter,
+                  String.Format(CultureInfo.InvariantCulture,
+                                "apply={0} adapter={1} directT={2:F3} repT={3:F3} directS={4:F3} repS={5:F3}",
+                                okApply, okAdapter,
+                                direct.Target, rep.PlacedTargetLong, direct.StopPx, rep.PlacedStopLong))
+        Finally
+            Try : System.IO.File.Delete(tmp) : Catch : End Try
+        End Try
     End Sub
 
 End Module

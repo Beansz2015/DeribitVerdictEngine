@@ -83,6 +83,12 @@ Public Class WhatIfSettings
             Case "scoring.structural_levels.sessions.NY.fallback_target_atr_mult"     : SetSessionFallback(s, "NY", value)
             Case "scoring.structural_levels.sessions.LONDON.fallback_target_atr_mult" : SetSessionFallback(s, "LONDON", value)
             Case "scoring.structural_levels.sessions.ASIA.fallback_target_atr_mult"   : SetSessionFallback(s, "ASIA", value)
+            ' [geometry-arbitration-modes v56] Modes are int-coded; the numeric sweep machinery
+            ' handles them unchanged (a {0,1} sweep is a mode comparison).
+            Case "scoring.structural_levels.target_arbitration_mode"                 : s.StructuralLevels.TargetArbitrationMode = CInt(value)
+            Case "scoring.structural_levels.stop_arbitration_mode"                   : s.StructuralLevels.StopArbitrationMode = CInt(value)
+            Case "scoring.structural_levels.target_buffer_pct"                       : s.StructuralLevels.TargetBufferPct = value
+            Case "scoring.structural_levels.stop_buffer_pct"                         : s.StructuralLevels.StopBufferPct = value
             Case Else
                 Throw New WhatIfOverlayError("No setter for whitelisted knob '" & path & "' — whitelist/setter drift.")
         End Select
@@ -119,6 +125,10 @@ Public Class WhatIfSettings
             Case "scoring.structural_levels.sessions.NY.fallback_target_atr_mult"     : Return SessionFallback(s, "NY")
             Case "scoring.structural_levels.sessions.LONDON.fallback_target_atr_mult" : Return SessionFallback(s, "LONDON")
             Case "scoring.structural_levels.sessions.ASIA.fallback_target_atr_mult"   : Return SessionFallback(s, "ASIA")
+            Case "scoring.structural_levels.target_arbitration_mode"                 : Return s.StructuralLevels.TargetArbitrationMode
+            Case "scoring.structural_levels.stop_arbitration_mode"                   : Return s.StructuralLevels.StopArbitrationMode
+            Case "scoring.structural_levels.target_buffer_pct"                       : Return s.StructuralLevels.TargetBufferPct
+            Case "scoring.structural_levels.stop_buffer_pct"                         : Return s.StructuralLevels.StopBufferPct
             Case "eval_window"                                         : Return 0   ' not a settings key
             Case Else
                 Throw New WhatIfOverlayError("No reader for knob '" & path & "'.")

@@ -863,6 +863,44 @@ Public Class StructuralLevelsSettings
     ''' new no-trade gate — NOT built; unrecognised values behave as clamp). Hand-toggle,
     ''' off the tweaker surface.</summary>
     <JsonPropertyName("stop_too_loose_mode")>  Public Property StopTooLooseMode  As String = "clamp"
+    ''' <summary>[geometry-arbitration-modes v56] Target arbitration mode.
+    ''' 0 = ladder (current: swing→HVN→POC→session-ATR fallback, priority-with-bound — the
+    '''     legacy DG shape; structure wins even when FARTHER than the ATR level, up to bound).
+    ''' 1 = NEAREST: among the qualifying structural candidates (same qualification: 0 &lt; dist
+    '''     ≤ target_max_atr_mult×ATR, POC HVN-gated as today) AND the session-resolved ATR
+    '''     fallback target, place whichever is CLOSEST to entry. Labels stay truthful (the
+    '''     winning tier's label; fallback wins ⇒ FALLBACK_ATR / no cap reason, matching today's
+    '''     fallback semantics). What-if instrument at build (defaults byte-identical to v51 B4b);
+    '''     live activation is a LATER ⚠ D-table gated on replay evidence.
+    ''' Fenced off the tweaker surface (HARD CONSTRAINT 24 — hand-ruled geometry, HC11 class;
+    ''' exact-match).</summary>
+    <JsonPropertyName("target_arbitration_mode")> Public Property TargetArbitrationMode As Integer = 0
+    ''' <summary>[geometry-arbitration-modes v56] Stop arbitration mode.
+    ''' 0 = tightest (current DG1: min(structural swing stop, stop_max_atr_mult×ATR) ≥ floor,
+    '''     STOP_CLAMPED semantics verbatim).
+    ''' 1 = WIDEST: max(structural swing stop distance, stop_max×ATR), still ≥ the 4-tick floor,
+    '''     UNCLAMPED above — the trader's SL half. Label truthfully (SWING_STOP when structure
+    '''     wins on wider distance, FALLBACK_ATR when the ATR distance wins). What-if instrument
+    '''     at build (defaults byte-identical to v51 B4b); live activation is a LATER ⚠ D-table,
+    '''     ALSO hard-gated on sizing-by-stop-distance (L3) regardless of replay evidence
+    '''     (derivation F1: wide stops at fixed size = bigger losses).
+    ''' Fenced off the tweaker surface (HARD CONSTRAINT 24; exact-match).</summary>
+    <JsonPropertyName("stop_arbitration_mode")>   Public Property StopArbitrationMode   As Integer = 0
+    ''' <summary>[geometry-arbitration-modes v56] Signed % of the placed target's distance from
+    ''' entry, applied AFTER arbitration. Negative shaves the target toward entry (the trader's
+    ''' pullback); positive pushes beyond. Formula: placed' = entry + (placed − entry) ×
+    ''' (1 + pct/100). The Step-5c min-move gate evaluates the BUFFERED target (a deep negative
+    ''' buffer can honestly gate a verdict to BELOW_MIN_MOVE in replay — where the gate
+    ''' re-derives). Default 0.0 ⇒ byte-identical to v51 B4b. Fenced off the tweaker surface
+    ''' (HARD CONSTRAINT 24; exact-match).</summary>
+    <JsonPropertyName("target_buffer_pct")>       Public Property TargetBufferPct       As Double  = 0.0
+    ''' <summary>[geometry-arbitration-modes v56] Signed % of the placed stop's distance from
+    ''' entry, applied AFTER arbitration. Positive pushes the stop farther from entry (the
+    ''' trader's buffer); negative tightens. Formula: placed' = entry + (placed − entry) ×
+    ''' (1 + pct/100). The 4-tick stop floor applies to the BUFFERED stop (a −99% buffer will
+    ''' snap to the floor rather than cross entry). Default 0.0 ⇒ byte-identical to v51 B4b.
+    ''' Fenced off the tweaker surface (HARD CONSTRAINT 24; exact-match).</summary>
+    <JsonPropertyName("stop_buffer_pct")>         Public Property StopBufferPct         As Double  = 0.0
     ''' <summary>Per-session nullable overrides keyed by session bucket name (v40 pattern;
     ''' null field ⇒ inherit the global scoring.atr_target_multiplier). DG3 hand-tuned tier:
     ''' LONDON 2.0 (already at the design reach), ASIA 1.25 (never reaches far targets).

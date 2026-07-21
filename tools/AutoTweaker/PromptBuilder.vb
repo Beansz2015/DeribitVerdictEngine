@@ -142,6 +142,20 @@ Public Class PromptBuilder
             "'...depletion_floor_usd', '...max_pull_frac', '...penalty'. " &
             "(Enforced in code: SettingsDiffApplier exact-match rejects the two switches and " &
             "rejects the 'default.'/'sessions.' prefixes.)" & vbLf &
+        "24. Geometry ARBITRATION MODES + SIGNED BUFFERS (four scoring.structural_levels keys) " &
+            "are hand-ruled shape/pullback knobs, not failure-rate thresholds. Never propose " &
+            "'scoring.structural_levels.target_arbitration_mode' or " &
+            "'scoring.structural_levels.stop_arbitration_mode' (0 = ladder / tightest = the " &
+            "current v51 B4b shape; 1 = nearest / widest = the trader's discretionary alternative). " &
+            "Never propose 'scoring.structural_levels.target_buffer_pct' or " &
+            "'scoring.structural_levels.stop_buffer_pct' (signed % pullback/protection buffers, " &
+            "trader-owned like scoring.hold_*). Enabling any of these live is a later ⚠ D-table " &
+            "gated on what-if replay evidence, and the stop-widest side is ADDITIONALLY hard-gated " &
+            "on consumer sizing-by-stop-distance. Same class as HARD CONSTRAINT 21's hand-toggles " &
+            "(HC11 class, geometry sub-class). SINGLE-key exclusions: the flat siblings " &
+            "'scoring.structural_levels.target_max_atr_mult', '...stop_max_atr_mult', " &
+            "'...stop_min_floor_ticks' REMAIN tunable, HC21 unchanged. (Enforced in code: " &
+            "SettingsDiffApplier exact-match rejects all four keys.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

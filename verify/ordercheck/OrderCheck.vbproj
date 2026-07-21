@@ -95,6 +95,10 @@
          writer needs no fixture). docs/offline-whatif-replay-proposal.md §5. -->
     <Compile Include="..\..\tools\WhatIfRunner\WhatIfOverlay.vb" />
     <Compile Include="..\..\tools\WhatIfRunner\WhatIfReplay.vb" />
+    <!-- A36f (geometry-arbitration-modes v56): WhatIfSettings so the mode-1 overlay
+         round-trips through the runner's real Clone → ApplyKnob path (the WhatIfSettings
+         is where "the overlay actually reaches the new POCO fields" is proved). -->
+    <Compile Include="..\..\tools\WhatIfRunner\WhatIfSettings.vb" />
     <!-- v36 Phase-2a (A15a–A15g): the AutoTweaker chain so MatchesPopulation,
          the re-seed path (RunAsync), and SettingsDiffApplier.Validate run as the
          real shipped code. AutoTweakerProgram.vb is excluded — it carries its own
