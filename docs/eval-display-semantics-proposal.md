@@ -1,6 +1,6 @@
 # Eval Display Semantics — Success Orientation + WEAK Exclusion + Band Vocabulary (F2/F3/F12) · Proposal
 
-**Date:** 2026-07-21 · **Status:** PROPOSED — E-table awaits trader (open questions marked ❓) · **Sequence: after the F4 fix** (`eval-no-data-outcome-proposal.md`) — this pass changes how rates READ; F4 changes what they ARE.
+**Date:** 2026-07-21 · **Status:** APPROVED — E1–E4 ALL TICKED 2026-07-21 (§5; E3a revised same day to DISPLAY-RENDERING only), build-authorized · **Sequence: after the F4 fix** (`eval-no-data-outcome-proposal.md`) — this pass changes how rates READ; F4 changes what they ARE.
 **Evidence:** `offline-matrix-placed-target-spec-back.md` §8 F2 (strip = success rate, report = failure rate — mental inversion between surfaces), F3 (strip counts WEAK, 62.5% of a sampled block's denominator, though WEAK is never traded — the bridge refuses it by contract), F12 (the three confidence bands carry four spellings; the middle band is never called MEDIUM on any surface the trader reads — this cost a real round-trip when "STRONG vs LONG" and "STRONG vs MEDIUM" turned out to be the same finding).
 **Type:** display/report semantics — zero scoring impact, no ⚠ boundary. **One hard invariant:** the auto-tweaker's failure-oriented trigger comparison (`aggregateRatePct < FailureRateThresholdPct`) must NOT flip — internal truth stays failure-oriented; conversion to success happens ONLY at render boundaries.
 
@@ -11,8 +11,8 @@ Report render text flips to success rates at the `MarkdownReportWriter` boundary
 ## 2. F3 — strip excludes WEAK at display time (trader-called)
 
 `IsEligibleVerdict` stays permissive at STORAGE (the cache keeps WEAK rows — reversible, no rotation); the exclusion applies in `BuildWindowAggregate`/display filtering, keyed off the verdict band. Makes the strip ≡ the matrix population (STRONG+MEDIUM) — the §7a cross-check becomes like-for-like.
-- ❓ **E2a — WEAK visibility:** drop entirely, or a separate **dimmed WEAK cell/tooltip line**? F1 shows WEAK currently *out-performing* MEDIUM (not significant, but information). Recommendation: **tooltip line, not a cell** (`WEAK excl.: 39% (n=…)`) — keeps the headline clean and the information reachable.
-- ❓ **E2b — `min_sample_for_render`:** the denominator drops ~2.6×; the current floor of 4 is far too low for a rate moving in ~3pp steps. Recommendation: **10** (session cells show `--%` a bit longer, and mean it).
+- **E2a — WEAK visibility (TICKED):** a tooltip line, not a cell — joins the **EXISTING** `_perfTip` tooltip (`WEAK excl.: 39% (n=…)`); keeps the headline clean and the information reachable. Rationale kept: F1 shows WEAK currently *out-performing* MEDIUM (not significant, but information).
+- **E2b — `min_sample_for_render` (TICKED): 10.** The denominator drops ~2.6×; the old floor of 4 was far too low for a rate moving in ~3pp steps. Session cells show `--%` a bit longer, and mean it.
 
 ## 3. F12 — band vocabulary (**E3a FINAL 2026-07-21 — REVISED same day: DISPLAY-RENDERING change only**)
 
@@ -36,6 +36,7 @@ Report render text flips to success rates at the `MarkdownReportWriter` boundary
 ## 4. Riders
 
 - **F7:** session-cell tooltip gains the word "block" (`most-recent London block, 0/26`) — kills the "London is broken" misread.
+- **Docs ride this pass (STILL in scope under display-only E3a — the screen ladder changes even though the strings don't):** UserManual/TraderGuide verdict tables gain the displayed forms (`MEDIUM LONG` / `MEDIUM SHORT`) with the display↔stored mapping stated; the `DeribitIndicatorProject.md` §5 verdict-levels ladder gets the same note *(the superseded inventory's "CLAUDE.md §5 ladder" pointed here — CLAUDE.md has no §5)*; **+ F11's leftover** (`UserManual.md` §18 retired threshold constants, ~line 1861) fixed in the same pass.
 - The §7a cross-check recipe (strip replication + cache↔CSV join + `.0000000Z` provenance) is referenced from the report header as the standing parity instrument.
 
 ## 5. E-table
@@ -53,4 +54,4 @@ Report render text flips to success rates at the `MarkdownReportWriter` boundary
 
 ## 6. Acceptance
 
-Builds 0/0; harness unregressed (A27c-class report-heading pins will re-pin); fixtures: tweaker trigger comparison unchanged under the flipped render (a BELOW_THRESHOLD case stays BELOW_THRESHOLD); WEAK-excluded aggregate vs WEAK-inclusive tooltip; band suffix renders on both surfaces (parity fixture); report legend + success captions. Live smoke: strip NY cell ≈ the directional-only rate from the last cross-check (~33% at the time — F4 may have moved it).
+Builds 0/0; harness unregressed (A27c-class report-heading pins will re-pin); fixtures: tweaker trigger comparison unchanged under the flipped render (a BELOW_THRESHOLD case stays BELOW_THRESHOLD); WEAK-excluded aggregate vs WEAK-inclusive tooltip; band **prefix** (`MEDIUM LONG` / `MEDIUM SHORT` — not the superseded `LONG [MEDIUM]` suffix form) renders on both surfaces (parity fixture); **stored-form pins — the revision's load-bearing invariant:** CSV `Verdict`, payload `verdict`, and eval-cache strings still carry bare `LONG`/`SHORT` (fixtures assert the NON-change); report legend + success captions. Live smoke: strip NY cell ≈ the directional-only rate from the last cross-check (~33% at the time — F4 may have moved it).
