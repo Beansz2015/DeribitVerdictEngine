@@ -36,6 +36,7 @@ Per CLAUDE.md: project doc + architecture.md in full, `crypto-trading-context` s
 4. Display parity: four surfaces via `ComputeSideLevels`; live status elements (TAPE/strips/checkboxes/title) are exempt BUT say so in the commit message.
 5. Trader-profile §4 rejected patterns bind everything. New-indicator bar = W6 header (the set is complete; refuse anything that isn't an orthogonal CLASS).
 6. Effort matching (memory `feedback_effort_matching`): low for recipes/watch reads, high for derivations/⚠ reviews. Link docs on first mention per reply (memory `feedback_link_referenced_docs`). Delete test screenshots. Freeze the CSV before computing stats (live-append drift). Weekday-only for all data gates.
+7. **`verdict_context` values are STABLE IDENTIFIERS (order-app session-policy addendum 2026-07-21; recorded in `signal-bridge-v1-proposal.md` §3):** renaming/removing any of `CONFIRMED / ALIGNED / FLOW_UNCONFIRMED / STRUCTURALLY_WEAK / MOMENTUM_FADING / BELOW_MIN_MOVE` — or touching the tier↔confidence 1:1 or the `generated_at_utc` session buckets — is a coordinated cross-repo pass (owner relays), never free drift. Adding tags is free but must be documented as policy-targetable.
 
 ## 4. Watches (live at handover)
 
