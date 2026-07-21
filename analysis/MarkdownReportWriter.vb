@@ -30,6 +30,16 @@
 ' ★ (most-precise) / ◆ (best-outcome) pick semantics are unchanged; captions
 ' re-worded. The perf strip already renders success — untouched by this pass.
 '
+' [E5 band-ladder — v55 addendum, 2026-07-21, eval-display-semantics-proposal.md §3c]
+' New §9 "Band ladder (diagnostic — includes untraded WEAK)": per-population +
+' pooled STRONG/MEDIUM/WEAK success at the population's tracker horizon (res-1 → 15m;
+' res-3 → 45m — the F1 method). Same placed-vs-placed eval as §2; the ONLY place
+' WEAK enters this report. Tradeable-population surfaces above (§2/§3/§4/§5/§6/§7/§8,
+' the summary CSV, PromptBuilder) all keep STRONG+MEDIUM. Global Diagnostics
+' renumbered §9 → §10 (subsections 9.1/9.2/9.3 → 10.1/10.2/10.3) so the ladder
+' lands next to the other per-population sections rather than after the globals.
+' The F1 re-read (offline-matrix-placed-target-spec-back.md §8 F1) reads off §9.
+'
 ' Host-agnostic: no System.Windows.Forms references.
 
 Imports System.Collections.Generic
@@ -167,6 +177,7 @@ Public Class MarkdownReportWriter
         AppendContextOutcomes(sb, r)
         AppendHoldWindow(sb, r)
         AppendPending(sb, r)
+        AppendBandLadder(sb, r)
         AppendGlobalDiagnostics(sb, r)
 
         Return sb.ToString()
@@ -495,15 +506,77 @@ Public Class MarkdownReportWriter
         End If
     End Sub
 
-    ' ------------------------------------------------------------------ Section 9: Global Diagnostics
+    ' ------------------------------------------------------------------ Section 9: Band ladder (E5 — v55 addendum)
+    ' Per population + pooled STRONG/MEDIUM/WEAK success + Wilson CI at the population's
+    ' tracker horizon (res-1 → 15m; res-3 → 45m — the F1 method). Same placed-vs-placed
+    ' eval as the matrix (§2); the ONE place WEAK enters this report. Tradeable-population
+    ' surfaces (§2/§3/§4/§5/§6/§7/§8, the summary CSV, the auto-tweaker) all keep
+    ' STRONG+MEDIUM — WEAK is here so the F1 re-read has a place to live, not so the
+    ' tweaker or the bridge start eating it. Spec: eval-display-semantics-proposal.md §3c.
+    Private Shared Sub AppendBandLadder(sb As StringBuilder, r As AnalysisReport)
+        sb.AppendLine("## 9. Band ladder (diagnostic — includes untraded WEAK)")
+        sb.AppendLine()
+        sb.AppendLine("_Diagnostic only. **WEAK never trades** — the bridge's default tier gate refuses it " &
+                      "(`refused: policy`) and the perf strip has excluded it since v55. WEAK sits here so the " &
+                      "F1 re-read (offline-matrix-placed-target-spec-back.md §8 F1, ""re-read at n≥150 STRONG"") " &
+                      "has a place to live off the offline report — the tweaker-facing surfaces above " &
+                      "(matrix / before-after / recommended / decomposition / context / hold-window / pending / " &
+                      "summary CSV) all keep STRONG+MEDIUM only, matching the population that reaches the market._")
+        sb.AppendLine()
+        sb.AppendLine("_Per population at that population's tracker horizon (res-1 → 15m; res-3 → 45m — F1 " &
+                      "method). LONG+SHORT pooled per band (this is a ladder read, not a direction read). " &
+                      "Same placed-vs-placed barriers, same ATR/de-confound exclusions as §2._")
+        sb.AppendLine()
+        For Each pop In r.Populations
+            Dim horizonMin As Integer = AnalysisConstants.HoldWindowsForResolution(pop.Resolution).Max()
+            sb.AppendLine(String.Format("### {0} · horizon {1}m", PopLabel(pop), horizonMin))
+            sb.AppendLine()
+            AppendLadderTable(sb, pop.BandLadder)
+            sb.AppendLine()
+        Next
+        ' Pooled block — every row walks at its own horizon so a 1-min NY row and a 3-min
+        ' Asia row both contribute against the horizon that matches their ForwardBars.
+        sb.AppendLine("### POOLED · per-row horizon")
+        sb.AppendLine()
+        AppendLadderTable(sb, r.PooledBandLadder)
+        sb.AppendLine()
+    End Sub
+
+    ' Render one ladder table (3 rows in STRONG/MEDIUM/WEAK order). Success + n + Wilson CI
+    ' via the E1 render-boundary helpers so the numbers agree with §2. Empty bands render
+    ' "—" rather than being hidden — "no MEDIUM rows this session" is a real thing to know.
+    Private Shared Sub AppendLadderTable(sb As StringBuilder, ladder As List(Of BandLadderRow))
+        sb.AppendLine("| Band   | n    | Success | CI              |")
+        sb.AppendLine("|--------|------|---------|-----------------|")
+        If ladder Is Nothing OrElse ladder.Count = 0 Then
+            sb.AppendLine("| STRONG |  —   | —       | —               |")
+            sb.AppendLine("| MEDIUM |  —   | —       | —               |")
+            sb.AppendLine("| WEAK   |  —   | —       | —               |")
+            Return
+        End If
+        For Each row In ladder
+            If row.SampleSize = 0 Then
+                sb.AppendLine(String.Format("| {0,-6} | {1,4} | —       | —               |",
+                                            row.Band, 0))
+            Else
+                sb.AppendLine(String.Format("| {0,-6} | {1,4} | {2,6:P1} | [{3:P0}–{4:P0}]     |",
+                                            row.Band, row.SampleSize,
+                                            SuccessPct(row.FailureRate),
+                                            SuccessCiLow(row.CiHigh),
+                                            SuccessCiHigh(row.CiLow)))
+            End If
+        Next
+    End Sub
+
+    ' ------------------------------------------------------------------ Section 10: Global Diagnostics
     Private Shared Sub AppendGlobalDiagnostics(sb As StringBuilder, r As AnalysisReport)
-        sb.AppendLine("## 9. Global Diagnostics")
+        sb.AppendLine("## 10. Global Diagnostics")
         sb.AppendLine()
         sb.AppendLine("_Not segmented (proposal D2): book-wide, resolution-independent._")
         sb.AppendLine()
 
-        ' § 9.1 Funding Momentum Diagnostic
-        sb.AppendLine("### 9.1 Funding Momentum Diagnostic")
+        ' § 10.1 Funding Momentum Diagnostic
+        sb.AppendLine("### 10.1 Funding Momentum Diagnostic")
         sb.AppendLine()
         Dim fd = r.FundingDiagnostic
         If fd IsNot Nothing Then
@@ -523,8 +596,8 @@ Public Class MarkdownReportWriter
         End If
         sb.AppendLine()
 
-        ' § 9.2 OFI Outlier Audit
-        sb.AppendLine("### 9.2 OFI Outlier Audit")
+        ' § 10.2 OFI Outlier Audit
+        sb.AppendLine("### 10.2 OFI Outlier Audit")
         sb.AppendLine()
         Dim oa = r.OfiAudit
         If oa IsNot Nothing Then
@@ -546,8 +619,8 @@ Public Class MarkdownReportWriter
         End If
         sb.AppendLine()
 
-        ' § 9.3 OI×CVD Asymmetry Audit
-        sb.AppendLine("### 9.3 OI×CVD Asymmetry Audit")
+        ' § 10.3 OI×CVD Asymmetry Audit
+        sb.AppendLine("### 10.3 OI×CVD Asymmetry Audit")
         sb.AppendLine()
         Dim oc = r.OiCvdAudit
         If oc IsNot Nothing Then

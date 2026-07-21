@@ -170,6 +170,13 @@ Public Class AnalysisRunner
             ' ── 5b. VerdictContext cross-tab (this population only) ───────────────────
             pr.ContextOutcomes = ComputeContextOutcomes(popRows, pr.FailureCells, cfg)
 
+            ' ── 5b2. Band ladder (E5, diagnostic — includes untraded WEAK) ────────────
+            ' Three rows (STRONG/MEDIUM/WEAK), pooled LONG+SHORT, at THIS population's
+            ' resolution horizon (res-1 → 15m; res-3 → 45m). Same placed-vs-placed
+            ' eval as the matrix; WEAK enters ONLY here (§3c). Diagnostic; not read
+            ' by the tweaker (PromptBuilder is oblivious to this list).
+            pr.BandLadder = BandLadder.Compute(popRows, cfg)
+
             ' ── 5c. ATR caption stats (proposal §2.4 req 3) ───────────────────────────
             ' Directional rows = the rows that feed the tier matrices (tier-classified,
             ' ATR > 0). Their ATR p25/p50/p75 + the $ move-floor caption each sub-table.
@@ -189,6 +196,12 @@ Public Class AnalysisRunner
 
             report.Populations.Add(pr)
         Next
+
+        ' ── 6. Pooled band ladder (E5, across all populations) ────────────────────────
+        ' Each row walks at its own resolution horizon (Compute reads row.ExecResolution),
+        ' so pooling rows across NY×1 and Asia/London×3 is coherent — every row uses the
+        ' horizon that matches its own ForwardBars.
+        report.PooledBandLadder = BandLadder.Compute(rows, cfg)
 
         ' ── 7. Diagnostics (GLOBAL — proposal D2: not segmented) ──────────────────────
         report.FundingDiagnostic = FundingMomentumDiagnostic.Compute(rows, cfg)

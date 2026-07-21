@@ -23,6 +23,8 @@
     <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
     <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
     <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
+    <!-- [E5 — v55 addendum] BandLadderRow POCO referenced by AnalysisReport. -->
+    <Compile Include="..\..\analysis\BandLadder.vb" />
   </ItemGroup>
 
   <!-- Snapshot-history additions (settings-snapshot-history-proposal.md):

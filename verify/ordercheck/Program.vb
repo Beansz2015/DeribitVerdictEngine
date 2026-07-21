@@ -247,6 +247,16 @@ Module Program
         A34d_BandDisplayHelperPrefix()
         A34e_StoredFormPinsUnchanged()
 
+        ' [E5 — v55 addendum, eval-display-semantics-proposal.md §3c] Band-ladder
+        ' diagnostic section: renders all three bands with correct counts/success%/CI;
+        ' WEAK classifier excludes NO TRADE (and NO TRADE [WEAK LONG] lean forms);
+        ' matrix cell space stays 12 (tier × window) with no WEAK tier; PromptBuilder
+        ' output contains no ladder section / no WEAK band row.
+        A35a_BandLadderRendersAllThreeBands()
+        A35b_BandClassifierExcludesNoTradeAndLeanForms()
+        A35c_MatrixCellSpaceUnchangedNoWeakTier()
+        A35d_PromptBuilderOmitsLadderAndWeak()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -4039,6 +4049,236 @@ Module Program
         Finally
             Try : File.Delete(tmp) : Catch : End Try
         End Try
+    End Sub
+
+    ' ======================================================================
+    ' A35 — E5 band-ladder diagnostic section.
+    ' Spec: eval-display-semantics-proposal.md §3c (TICKED 2026-07-21);
+    ' spec-back: eval-display-semantics-spec-back.md E5 addendum.
+    ' ======================================================================
+
+    ' -- A35a: report §9 renders all three bands with correct counts/success%/CI ---
+    ' Build a PopulationReport whose BandLadder carries pre-computed rows for STRONG /
+    ' MEDIUM / WEAK, plus a pooled ladder on the report, then assert the full markdown
+    ' render (via BuildFullMarkdownForHarness) carries the section heading + the three
+    ' band rows + the diagnostic + F1 footnote + WEAK-never-trades disclosure.
+    Private Sub A35a_BandLadderRendersAllThreeBands()
+        Dim rep As New AnalysisReport()
+        Dim pop As New PopulationReport With {
+            .PopulationKey = "NY|1", .SessionName = "NY", .Resolution = 1,
+            .BarrierLabel = "PLACED", .RowCount = 60}
+
+        ' STRONG 24/40 = 60% failure ⇒ 40% success (Wilson).
+        Dim sCiLow As Double, sCiHigh As Double
+        FailureRateMatrix.WilsonCI(24, 40, sCiLow, sCiHigh)
+        ' MEDIUM 3/10 = 30% failure ⇒ 70% success.
+        Dim mCiLow As Double, mCiHigh As Double
+        FailureRateMatrix.WilsonCI(3, 10, mCiLow, mCiHigh)
+        ' WEAK 5/10 = 50% failure ⇒ 50% success.
+        Dim wCiLow As Double, wCiHigh As Double
+        FailureRateMatrix.WilsonCI(5, 10, wCiLow, wCiHigh)
+
+        pop.BandLadder = New List(Of BandLadderRow) From {
+            New BandLadderRow With {.Band = "STRONG", .SampleSize = 40, .Failures = 24,
+                                    .FailureRate = 0.6, .CiLow = sCiLow, .CiHigh = sCiHigh},
+            New BandLadderRow With {.Band = "MEDIUM", .SampleSize = 10, .Failures = 3,
+                                    .FailureRate = 0.3, .CiLow = mCiLow, .CiHigh = mCiHigh},
+            New BandLadderRow With {.Band = "WEAK",   .SampleSize = 10, .Failures = 5,
+                                    .FailureRate = 0.5, .CiLow = wCiLow, .CiHigh = wCiHigh}}
+        rep.Populations.Add(pop)
+
+        ' Pooled ladder — an identical shape so the assert is single-target.
+        rep.PooledBandLadder = New List(Of BandLadderRow) From {
+            New BandLadderRow With {.Band = "STRONG", .SampleSize = 40, .Failures = 24,
+                                    .FailureRate = 0.6, .CiLow = sCiLow, .CiHigh = sCiHigh},
+            New BandLadderRow With {.Band = "MEDIUM", .SampleSize = 10, .Failures = 3,
+                                    .FailureRate = 0.3, .CiLow = mCiLow, .CiHigh = mCiHigh},
+            New BandLadderRow With {.Band = "WEAK",   .SampleSize = 10, .Failures = 5,
+                                    .FailureRate = 0.5, .CiLow = wCiLow, .CiHigh = wCiHigh}}
+
+        Dim full As String = MarkdownReportWriter.BuildFullMarkdownForHarness(rep)
+
+        Dim heading      As Boolean = full.Contains("## 9. Band ladder (diagnostic — includes untraded WEAK)")
+        Dim strongRow    As Boolean = full.Contains("| STRONG |") AndAlso full.Contains("40.0%")
+        Dim mediumRow    As Boolean = full.Contains("| MEDIUM |") AndAlso full.Contains("70.0%")
+        Dim weakRow      As Boolean = full.Contains("| WEAK   |") AndAlso full.Contains("50.0%")
+        Dim diagnostic   As Boolean = full.Contains("Diagnostic only") AndAlso full.Contains("WEAK never trades")
+        Dim f1Footnote   As Boolean = full.Contains("§8 F1") OrElse full.Contains("F1")
+        Dim pooledBlock  As Boolean = full.Contains("POOLED")
+        Dim popHorizon   As Boolean = full.Contains("horizon 15m")  ' res-1 → 15m
+        ' Global Diagnostics renumbered §9 → §10 by the ladder insertion.
+        Dim diagRenumber As Boolean = full.Contains("## 10. Global Diagnostics") AndAlso
+                                      full.Contains("### 10.1") AndAlso Not full.Contains("## 9. Global Diagnostics")
+
+        Check("A35a §9 band-ladder renders STRONG/MEDIUM/WEAK success/n/CI + pooled + diagnostic + F1 footnote",
+              heading AndAlso strongRow AndAlso mediumRow AndAlso weakRow AndAlso
+              diagnostic AndAlso f1Footnote AndAlso pooledBlock AndAlso popHorizon AndAlso
+              diagRenumber,
+              String.Format("head={0} s={1} m={2} w={3} diag={4} f1={5} pooled={6} horizon={7} renum={8}",
+                            heading, strongRow, mediumRow, weakRow, diagnostic,
+                            f1Footnote, pooledBlock, popHorizon, diagRenumber))
+    End Sub
+
+    ' -- A35b: WEAK classifier excludes NO TRADE strings (WEAK ≠ NO TRADE — §3c) ---
+    ' The load-bearing distinction: FailureRateMatrix.CanonicalTier maps WEAK LONG AND
+    ' NO TRADE [WEAK LONG] alike to "" (both excluded from the tradeable matrix). The
+    ' new BandLadder.CanonicalBand MUST distinguish them: WEAK LONG / WEAK SHORT → "WEAK",
+    ' every NO TRADE variant → "" (refused signals never count as WEAK, no matter how
+    ' the lean bracket is worded).
+    Private Sub A35b_BandClassifierExcludesNoTradeAndLeanForms()
+        ' Positive side: the four in-band tier strings collapse to the three ladder rungs.
+        Dim strongL As String = BandLadder.CanonicalBand("STRONG LONG")
+        Dim strongS As String = BandLadder.CanonicalBand("STRONG SHORT")
+        Dim medL    As String = BandLadder.CanonicalBand("LONG")
+        Dim medS    As String = BandLadder.CanonicalBand("SHORT")
+        Dim weakL   As String = BandLadder.CanonicalBand("WEAK LONG")
+        Dim weakS   As String = BandLadder.CanonicalBand("WEAK SHORT")
+
+        ' Exclusion side: every NO TRADE form MUST return "". This includes the lean
+        ' forms the WEAK-shape bracket embeds ("NO TRADE [WEAK LONG]") — the refused-
+        ' signal record is NOT a WEAK data point, no matter the annotation.
+        Dim noTrade    As String = BandLadder.CanonicalBand("NO TRADE")
+        Dim noTradeWL  As String = BandLadder.CanonicalBand("NO TRADE [WEAK LONG]")
+        Dim noTradeWS  As String = BandLadder.CanonicalBand("NO TRADE [WEAK SHORT]")
+        Dim noTradeL   As String = BandLadder.CanonicalBand("NO TRADE [LONG]")
+        Dim noTradeS   As String = BandLadder.CanonicalBand("NO TRADE [SHORT]")
+        Dim empty      As String = BandLadder.CanonicalBand("")
+        Dim nul        As String = BandLadder.CanonicalBand(Nothing)
+        Dim garbage    As String = BandLadder.CanonicalBand("UNKNOWN")
+
+        ' Cross-check against CanonicalTier: the two classifiers AGREE on the exclusion
+        ' set for NO TRADE strings (both return ""), but DIVERGE on WEAK — CanonicalTier
+        ' excludes WEAK (returns ""), BandLadder partitions it (returns "WEAK"). This
+        ' pin is the mechanical guarantee against a future consumer accidentally
+        ' cross-wiring the two.
+        Dim tierWL       As String = FailureRateMatrix.CanonicalTier("WEAK LONG")
+        Dim tierNoTradeW As String = FailureRateMatrix.CanonicalTier("NO TRADE [WEAK LONG]")
+
+        Check("A35b band classifier: WEAK LONG/SHORT → WEAK; every NO TRADE form → """" (WEAK ≠ NO TRADE)",
+              strongL = "STRONG" AndAlso strongS = "STRONG" AndAlso
+              medL = "MEDIUM" AndAlso medS = "MEDIUM" AndAlso
+              weakL = "WEAK" AndAlso weakS = "WEAK" AndAlso
+              noTrade = "" AndAlso noTradeWL = "" AndAlso noTradeWS = "" AndAlso
+              noTradeL = "" AndAlso noTradeS = "" AndAlso
+              empty = "" AndAlso nul = "" AndAlso garbage = "" AndAlso
+              tierWL = "" AndAlso tierNoTradeW = "",
+              String.Format("sL={0} sS={1} mL={2} mS={3} wL={4} wS={5} " &
+                            "NT={6} NT[WL]={7} NT[WS]={8} NT[L]={9} NT[S]={10} " &
+                            "empty={11} nul={12} garb={13} tierWL={14} tierNTWL={15}",
+                            strongL, strongS, medL, medS, weakL, weakS,
+                            noTrade, noTradeWL, noTradeWS, noTradeL, noTradeS,
+                            empty, nul, garbage, tierWL, tierNoTradeW))
+    End Sub
+
+    ' -- A35c: matrix cell space stays (tier × window) — no WEAK tier -------------
+    ' Run FailureRateMatrix.Compute on a synthetic row set that MIXES the four tier
+    ' strings AND both WEAK strings; assert exactly 12 cells at res=1 (4 tiers × 3
+    ' windows) with no WEAK tier present. This pins §3c's F3 lesson: the tweaker-
+    ' facing matrix population is UNCHANGED by the ladder — WEAK enters §9 alone.
+    Private Sub A35c_MatrixCellSpaceUnchangedNoWeakTier()
+        Dim cfg As New EngineSettings()
+        Dim baseTs As DateTime = New DateTime(2026, 7, 20, 15, 0, 0, DateTimeKind.Utc)
+
+        ' One row per tier + a WEAK row for each side. ATR/price arranged so the
+        ' de-confound gate passes (2×20 vs 100 000 × 0.0008 = 80 → 40 clears 80? no —
+        ' floor = 80, target dist = 40, would REJECT). Bump ATR so 2×ATR clears:
+        ' ATR = 60 ⇒ target dist = 120 > 80 floor. Placed target below unfloored, so
+        ' rows without HasPlaced use engineTarget × ATR = 2 × 60 = 120.
+        Dim rows As New List(Of CsvRow)()
+        Dim verdicts As String() = {"STRONG LONG", "STRONG SHORT", "LONG", "SHORT",
+                                    "WEAK LONG", "WEAK SHORT"}
+        For i As Integer = 0 To verdicts.Length - 1
+            Dim r As New CsvRow With {
+                .Index = i, .Timestamp = baseTs.AddMinutes(i),
+                .Price = 100000.0, .ATR = 60.0, .Verdict = verdicts(i),
+                .ExecResolution = 1, .HasPlaced = False}
+            ' Populate ForwardBars for the res-1 window set {5,10,15}. Bars keep price
+            ' flat so no barrier fires — outcomes = WINDOW_EXPIRED = failure. We only
+            ' need the CELL to be present (n > 0); the outcome doesn't matter for A35c.
+            For Each w In {5, 10, 15}
+                Dim bars As New List(Of OhlcBar)()
+                For b As Integer = 3 To w
+                    bars.Add(New OhlcBar With {
+                        .CloseTime = r.Timestamp.AddMinutes(b),
+                        .Open = 100000.0, .High = 100005.0,
+                        .Low = 99995.0, .Close = 100000.0})
+                Next
+                r.ForwardBars(w) = bars
+            Next
+            rows.Add(r)
+        Next
+
+        Dim atrEx, structStop, atrFb, placedTgt, legacyFav, belowMin As Integer
+        Dim cells = FailureRateMatrix.Compute(rows, atrEx, structStop, atrFb,
+                                               placedTgt, legacyFav, belowMin,
+                                               cfg.Scoring.MinTradeableMovePct,
+                                               cfg.Scoring.AtrTargetMultiplier,
+                                               1, AdverseBarrierMode.Placed)
+
+        ' 4 tiers × 3 windows = 12 cells. No WEAK tier — the two WEAK rows fell out
+        ' at CanonicalTier ("" — excluded from the matrix, admitted only to §9's ladder).
+        Dim distinctKeys = cells.Select(Function(c) c.VerdictTier & "|" & c.WindowMin.ToString()).Distinct().Count()
+        Dim tierSet      = cells.Select(Function(c) c.VerdictTier).Distinct().OrderBy(Function(t) t).ToList()
+        Dim expectedTiers = New List(Of String) From
+            {"MEDIUM_LONG", "MEDIUM_SHORT", "STRONG_LONG", "STRONG_SHORT"}
+        Dim tiersMatch    As Boolean = tierSet.SequenceEqual(expectedTiers)
+        Dim noWeakTier    As Boolean = Not cells.Any(Function(c) c.VerdictTier.Contains("WEAK"))
+        Dim allCellsHaveRows As Boolean = cells.All(Function(c) c.SampleSize = 1)
+
+        Check("A35c matrix cell space stays (tier × window): 12 cells, no WEAK tier, WEAK rows excluded upstream",
+              cells.Count = 12 AndAlso distinctKeys = 12 AndAlso tiersMatch AndAlso
+              noWeakTier AndAlso allCellsHaveRows,
+              String.Format("cellCount={0} distinct={1} tiersMatch={2} noWeak={3} allN=1?={4} tiers=[{5}]",
+                            cells.Count, distinctKeys, tiersMatch, noWeakTier,
+                            allCellsHaveRows, String.Join(",", tierSet)))
+    End Sub
+
+    ' -- A35d: PromptBuilder output carries NO ladder section / NO WEAK band row ---
+    ' The tweaker-facing surface stays tradeable-population only (§3c). Assert on the
+    ' full user message: the "Band ladder" heading is absent AND no line contains a
+    ' WEAK band row shape. Also assert the existing matrix heading is still there
+    ' (parity — this fixture should not accidentally hide the whole prompt).
+    Private Sub A35d_PromptBuilderOmitsLadderAndWeak()
+        ' Minimal inputs: an empty matrix + one CSV row are enough — PromptBuilder
+        ' iterates the four tiers unconditionally and renders "n/a" for empty cells.
+        Dim cells As New List(Of FailureCellResult)()
+        Dim rows  As New List(Of CsvRow) From {
+            New CsvRow With {.Timestamp = New DateTime(2026, 7, 20, 15, 0, 0, DateTimeKind.Utc),
+                             .Price = 100000.0, .ATR = 44.0, .Verdict = "STRONG LONG",
+                             .Regime = "TRENDING_UP", .FundingBias = "BULL_MILD",
+                             .VerdictContext = "CONFIRMED", .OiCvdOutcome = "CONFIRMED"}}
+        Dim history As New List(Of PickedCellEntry)()
+
+        Dim result = PromptBuilder.Build(
+            settingsJson:="{""version"": 55}",
+            csvRows:=rows,
+            failureCells:=cells,
+            pickedCellHistory:=history,
+            trigger:="test trigger",
+            manifestActiveRows:="",
+            conditions:=Nothing,
+            maxKeysPerProposal:=3)
+
+        Dim userMsg As String = result.UserMsg
+
+        ' The load-bearing negatives.
+        Dim noLadderHeading As Boolean = Not userMsg.Contains("Band ladder") AndAlso
+                                         Not userMsg.Contains("## 9. Band ladder")
+        Dim noWeakBandRow   As Boolean = Not userMsg.Contains("| WEAK   |") AndAlso
+                                         Not userMsg.Contains("| WEAK |") AndAlso
+                                         Not userMsg.Contains("WEAK LONG") AndAlso
+                                         Not userMsg.Contains("WEAK SHORT") AndAlso
+                                         Not userMsg.Contains("STRONG/MEDIUM/WEAK")
+        ' The matrix headings for the tradeable population are still there (this
+        ' fixture must not accidentally hide the whole prompt).
+        Dim matrixStillThere As Boolean = userMsg.Contains("## Success-Rate Matrix") AndAlso
+                                          userMsg.Contains("### STRONG_LONG") AndAlso
+                                          userMsg.Contains("### MEDIUM_LONG")
+
+        Check("A35d PromptBuilder omits ladder section + any WEAK band row; matrix tiers still rendered",
+              noLadderHeading AndAlso noWeakBandRow AndAlso matrixStillThere,
+              String.Format("noLadder={0} noWeak={1} matrixPresent={2} len={3}",
+                            noLadderHeading, noWeakBandRow, matrixStillThere, userMsg.Length))
     End Sub
 
 End Module

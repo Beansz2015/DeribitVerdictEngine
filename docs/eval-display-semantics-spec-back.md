@@ -99,3 +99,87 @@ The **expected live effect** is a re-read of the same rows: the perf-strip cells
 - [ ] Settings v54 → v55; only `performance_display.min_sample_for_render` value changed; no keys added or removed; `change_log` entry newest-first.
 - [ ] §15 row present; UserManual/TraderGuide/§5 tables carry display↔stored mapping; UserManual §18 refreshed to the placed-target migration reality.
 - [ ] Deviations in §3 above accepted.
+
+---
+
+## 8. E5 addendum — Band-ladder diagnostic section (built 2026-07-21, post-ship of E1–E4)
+
+**Built:** 2026-07-21, same day as E1–E4 · **Spec:** `eval-display-semantics-proposal.md` §3c (E5 TICKED 2026-07-21).
+**Type:** offline-report-only render — zero scoring impact, zero settings change, zero live-surface change (no snapshot / card / payload / bridge / CSV touched).
+**State:** local commit; solution + AutoTweaker + WhatIfRunner + OrderCheck build **0/0 Release**; harness **174 checks, ALL PASS** (170 pre-E5 + 4 new A35a–d); verify-gate `prepush` **GATE PASSED**.
+
+### 8.1 What was built
+
+One new section in the offline analysis report — `## 9. Band ladder (diagnostic — includes untraded WEAK)`. Per population (session × resolution) plus a pooled block, one row per band **STRONG / MEDIUM / WEAK**, columns = success % (E1-oriented), n, Wilson 95% CI. Window = the population's tracker horizon (res-1 → 15m; res-3 → 45m — the F1 method). Bands pool LONG+SHORT (band-level rows, not per-side — this is a ladder read, not a direction read). Same placed-vs-placed barriers, same ATR/de-confound exclusions as §2 — same eval, different population.
+
+The section text states plainly: *diagnostic only; WEAK never trades (bridge's default tier gate refuses it; strip excludes it since v55).* A footnote names the F1 gate (`re-read at n≥150 STRONG; see offline-matrix-placed-target-spec-back.md §8 F1`) so a reader knows why the section exists.
+
+**The F3 lesson holds:** the matrix cell space stays `(tier × window)` STRONG+MEDIUM only (12 cells at res=1); the auto-tweaker's aggregate trigger population, `PromptBuilder`'s matrix, the summary CSV population, and the ★/◆ pick semantics all keep the tradeable population. WEAK enters **only** the new §9 diagnostic — via a band classifier that distinguishes `WEAK LONG` / `WEAK SHORT` from every `NO TRADE*` string.
+
+### 8.2 Files touched
+
+| File | Change |
+|---|---|
+| `analysis/BandLadder.vb` | **NEW.** Host-agnostic band classifier + ladder computer. `CanonicalBand` collapses tier strings to STRONG / MEDIUM / WEAK and returns `""` for every NO TRADE variant (WEAK ≠ NO TRADE — the load-bearing distinction, A35b pins it). `Compute(rows, cfg)` runs the same barrier walk as `FailureRateMatrix.Compute` at each row's own resolution horizon (row-property, so pooled-across-resolutions is coherent — every row uses the horizon that matches its `ForwardBars`). Uses `FailureRateMatrix.ResolveFavourableBarrier` / `ResolveAdverseBarrier` / `GateTargetDistance` / `WalkBars` / `WilsonCI` — same eval semantics as the matrix. |
+| `analysis/AnalysisReport.vb` | Added `PopulationReport.BandLadder As List(Of BandLadderRow)` and `AnalysisReport.PooledBandLadder As List(Of BandLadderRow)`. Nothing else on the POCO shape changed. |
+| `analysis/AnalysisRunner.vb` | Two lines: `pr.BandLadder = BandLadder.Compute(popRows, cfg)` per population, and `report.PooledBandLadder = BandLadder.Compute(rows, cfg)` across all rows. |
+| `analysis/MarkdownReportWriter.vb` | New `AppendBandLadder` renderer emits `## 9. Band ladder (diagnostic — includes untraded WEAK)` + per-population sub-headings with the horizon (`horizon 15m` / `horizon 45m`) + a POOLED block. Global Diagnostics renumbered `§9 → §10` (subsections `9.1/9.2/9.3 → 10.1/10.2/10.3`) so the ladder sits next to the other per-population sections rather than after the globals. `SuccessPct` / `SuccessCiLow` / `SuccessCiHigh` re-used at the render boundary (E1 orientation rule). |
+| `tools/AutoTweaker/AutoTweaker.vbproj` · `tools/WhatIfRunner/WhatIfRunner.vbproj` · `verify/ordercheck/OrderCheck.vbproj` | Added `<Compile Include="..\..\analysis\BandLadder.vb" />` — the three consumers that already compile `AnalysisReport.vb` directly (which now references `BandLadderRow`). Root project auto-includes via `**/*.vb`; no root-vbproj change. |
+| `verify/ordercheck/Program.vb` | Four new fixtures **A35a–d** (see §8.3). |
+
+**Not touched (deliberate, per §3c):** `settings.json` · POCOs under `Core/Settings/` · `PromptBuilder.vb` (the ladder MUST NOT enter the LLM prompt — A35d pins the negative) · `AutoTweakerCore.vb` · `LivePerformanceTracker.vb` · CSV writers · `SignalEmitter.vb` · `UI/*.vb` · docs (self-documenting section; no manual pass needed).
+
+### 8.3 Fixtures (A35 family — A34 taken)
+
+| # | Assertion | Result |
+|---|---|---|
+| **A35a** | `## 9. Band ladder (…)` heading present; all three bands render with correct success % (STRONG 40%, MEDIUM 70%, WEAK 50% for the seeded rows); pooled block renders; per-population sub-heading carries `horizon 15m`; diagnostic + WEAK-never-trades + F1 footnote text present; Global Diagnostics renumbered `§9 → §10` (subsections `10.1`). Uses `BuildFullMarkdownForHarness` — full render text, no disk. | **PASS** |
+| **A35b** | `BandLadder.CanonicalBand`: `STRONG LONG/SHORT → STRONG`; `LONG/SHORT → MEDIUM`; `WEAK LONG/SHORT → WEAK`; every NO TRADE variant (`NO TRADE`, `NO TRADE [WEAK LONG]`, `NO TRADE [WEAK SHORT]`, `NO TRADE [LONG]`, `NO TRADE [SHORT]`), empty, null, garbage → `""`. Cross-check: `FailureRateMatrix.CanonicalTier("WEAK LONG") = ""` (the two classifiers AGREE on exclusion of NO TRADE strings, DIVERGE on WEAK — the mechanical guarantee against future cross-wiring). | **PASS** |
+| **A35c** | `FailureRateMatrix.Compute` on six rows (four tier strings + two WEAK strings) returns exactly 12 cells (4 tiers × 3 windows at res=1); the four tiers are the expected STRONG/MEDIUM × LONG/SHORT set; no WEAK tier appears; every cell has n=1 (WEAK rows fell out at `CanonicalTier`, matrix population unchanged). | **PASS** |
+| **A35d** | `PromptBuilder.Build` output contains no "Band ladder" heading, no `\| WEAK \|` band-row shape, no `WEAK LONG` / `WEAK SHORT` / `STRONG/MEDIUM/WEAK` phrase — AND the pre-existing `## Success-Rate Matrix` heading + `### STRONG_LONG` / `### MEDIUM_LONG` tier headings are still there (the negative assertion doesn't accidentally hide the whole prompt). | **PASS** |
+
+### 8.4 Decisions the spec left to the implementer
+
+**(a) Section placement: `§9` (inserted), Global Diagnostics renumbered `§9 → §10`.** The spec said "one new section", not where. Options: (i) append at the end (`§10`) — safest for pins, but the ladder is population-scoped like §1–§8 while diagnostics are global-scoped, so it landed out of family; (ii) insert as `§8a` — matches the pre-existing legacy `2/D6/3/4a` pattern the placed-target migration explicitly *cleaned up*, so re-introducing the pattern would be a hygiene regression; (iii) insert as `§9`, bump diagnostics to `§10`. Went with (iii) — clean sequential numbering, the pattern the placed-target migration standardised on. No harness pins reference `## 9. Global Diagnostics` or the `9.x` subsection headings (only `## 2. Success-Rate Matrix` is pinned, in A34a); the renumber is pin-safe. A35a asserts the renumber positively so a future accidental revert is caught.
+
+**(b) Per-row horizon (not a call parameter).** `BandLadder.Compute(rows, cfg)` derives the horizon from each row's own `ExecResolution` (`AnalysisConstants.HoldWindowsForResolution(r.ExecResolution).Max()`). Consequence: the per-population call (rows homogeneous in resolution) and the pooled call (rows mixed across NY×1 and Asia/London×3) share the same signature — every row walks against the horizon that matches its own `ForwardBars` entry. The alternative (passing an explicit `horizonMin`) would either force the pooled block onto one arbitrary horizon (Asia rows evaluated at 15m have no bars there, denominator collapses) or duplicate the computer. The row-property approach is coherent and simpler.
+
+**(c) `NO TRADE [WEAK LONG]` is a NO TRADE row, not a WEAK row.** The engine's refused-signal record for a scored-but-vetoed run reads `NO TRADE [WEAK X]` — the bracket names the tier the score would have hit if it hadn't been vetoed. Those rows are refused signals, not WEAK observations, and must not count in the WEAK band's success rate. A35b pins every NO TRADE variant to `""` so a future annotation change (`NO TRADE [WEAK]`, `NO TRADE [MEDIUM SHORT]`, etc.) cannot start silently counting refused signals as WEAK data.
+
+**(d) Empty-band rows render with `—` rather than being hidden.** A `WEAK: n=0` row still renders as `| WEAK   |    0 | —       | —               |`. "No WEAK rows in this session" is a real thing to know — hiding the rung leaves the reader guessing whether the population was silent or the report is broken.
+
+**(e) Placement of the F1 footnote — inline, not a full-doc paragraph.** The spec called for "a footnote in the section names the gate". Kept it as an inline sentence inside the diagnostic italic block ("*…the F1 re-read (offline-matrix-placed-target-spec-back.md §8 F1, 're-read at n≥150 STRONG') has a place to live off the offline report…*") rather than a separate footnote paragraph — reads more naturally and the fixture matches on `§8 F1` OR `F1`.
+
+**(f) `BandLadder` is a class, not a module.** `FailureRateMatrix` is a class with `Public Shared` methods; matched that convention for zero-cognitive-load consistency. Purely stylistic; the callers care about `BandLadder.CanonicalBand` / `BandLadder.Compute`, not the container shape.
+
+### 8.5 Acceptance
+
+| Requirement | Result |
+|---|---|
+| Builds 0/0 (Release only) | Solution + AutoTweaker + WhatIfRunner + OrderCheck — all **0 errors / 0 warnings** in Release. |
+| Harness unregressed + A35 family | **174 checks, ALL PASS** (170 pre-E5 + 4 new A35a–d). No pre-existing fixture re-pinned. |
+| Ladder renders all three bands with correct counts / success % / CI | **A35a** — synthetic ladder (STRONG 40% n=40, MEDIUM 70% n=10, WEAK 50% n=10) renders in the section; horizon caption `horizon 15m` correct; pooled block present; diagnostic + F1 footnote text present. |
+| WEAK classifier excludes NO TRADE + lean forms | **A35b** — 15 verdict strings tested; every NO TRADE variant → `""`; only `WEAK LONG` / `WEAK SHORT` → `"WEAK"`; cross-check against `CanonicalTier` documents the divergence contract. |
+| Cell space still 12 distinct (tier × window) keys, no WEAK tier | **A35c** — six-row synthetic set (4 tiers + 2 WEAK); `FailureRateMatrix.Compute` returns 12 cells, 4 tier names (STRONG/MEDIUM × LONG/SHORT), no tier contains "WEAK". |
+| PromptBuilder omits ladder + WEAK band row | **A35d** — no "Band ladder" heading in user message; no `\| WEAK \|` shape; no WEAK LONG / WEAK SHORT phrase; `## Success-Rate Matrix` heading + STRONG/MEDIUM tier headings still present. |
+| verify-gate | `prepush` mode — **GATE PASSED**, exit 0. `display-parity`: no snapshot/card drift (offline-report-only change; card + snapshot untouched). `version-bump`: **OK** — the check compares against `origin/master`, and the diff range still carries the earlier unpushed v54→v55 bump. On a clean-push machine where the v55 bump had already landed at `origin/master`, this same code-only change would trip the WARN (the accepted D6-precedent outcome for eval-only edits); disclosing here honestly. No settings keys added or changed. |
+
+### 8.6 Not verified by the implementer (trader / next-seat)
+
+- **Live report regeneration:** the trader runs the offline report against the current CSV to eyeball §9 populated with real data. Expected: STRONG likely n<150 still (waiting on the F1 gate), MEDIUM n moderate, WEAK n substantial. If WEAK's success % continues to sit at or above MEDIUM's on n≥30 (the F1 finding), that's the trader-signal that the L4 tier-collapse lever earns real consideration.
+- **§8 F1 re-read:** post-F4-fix + this ladder in place, the trader waits for n≥150 STRONG rows and reads the ladder off §9. That's the moment the ladder pays for itself.
+- **PromptBuilder LLM prompt regression:** A35d is a text-level negative assertion; a runtime replay against a real LLM call to confirm the model doesn't hallucinate a "WEAK" band from the surrounding docs is not something the harness can do. Low risk (the prompt's structure is explicit STRONG/MEDIUM only), but stated for completeness.
+
+### 8.7 Coordinator review checklist (E5)
+
+- [ ] `BandLadder.CanonicalBand`: WEAK LONG / WEAK SHORT → "WEAK"; every NO TRADE variant → "" (§3c hard requirement, A35b).
+- [ ] `BandLadder.Compute` uses `ResolveFavourableBarrier` / `ResolveAdverseBarrier` / `GateTargetDistance` in Placed mode — same eval semantics as the matrix (§3c).
+- [ ] Row horizon = `AnalysisConstants.HoldWindowsForResolution(r.ExecResolution).Max()` — res-1 → 15m, res-3 → 45m (F1 method).
+- [ ] `PopulationReport.BandLadder` populated per population; `AnalysisReport.PooledBandLadder` populated once across all rows.
+- [ ] `MarkdownReportWriter.AppendBandLadder` emits `## 9. Band ladder (diagnostic — includes untraded WEAK)`; per-population sub-headings carry `horizon Nm`; POOLED block present; diagnostic + F1 footnote inline.
+- [ ] Global Diagnostics renumbered `§9 → §10`; subsections `10.1 / 10.2 / 10.3` (A35a positive assert; A34a's `## 2.` pin unaffected).
+- [ ] `FailureRateMatrix.Compute` cell space unchanged: 12 cells at res=1, no WEAK tier (A35c).
+- [ ] `PromptBuilder.Build` output contains no ladder heading / no WEAK band row (A35d).
+- [ ] settings.json unchanged; no snapshot / card / payload / bridge / CSV / eval-cache surface touched.
+- [ ] Three `.vbproj` files gained `<Compile Include="..\..\analysis\BandLadder.vb" />` (AutoTweaker, WhatIfRunner, OrderCheck); root project auto-includes via `**/*.vb`.
+- [ ] Deviations in §8.4 above accepted (section number `§9`, per-row horizon, NO TRADE-lean → "", empty-band `—` rendering, inline F1 footnote, class-not-module).

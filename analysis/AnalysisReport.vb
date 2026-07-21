@@ -36,6 +36,15 @@ Public Class AnalysisReport
     Public Property OiCvdAudit As OiCvdAsymmetryResult
 
     ' -------------------------------------------------------------------
+    ' [E5 — v55 addendum] Pooled band ladder across ALL populations. Each row
+    ' walks at its own resolution's horizon (Compute is called on the full row set
+    ' — the horizon is a row property, not a call parameter). Displayed alongside
+    ' the per-population ladders in §10; the "combined" row a reader glances at
+    ' when the per-session sample sizes are too small to trust individually.
+    ' -------------------------------------------------------------------
+    Public Property PooledBandLadder As New List(Of BandLadderRow)()
+
+    ' -------------------------------------------------------------------
     ' Rendered output (written to disk by MarkdownReportWriter)
     ' -------------------------------------------------------------------
     Public Property MarkdownText     As String
@@ -88,6 +97,12 @@ Public Class PopulationReport
     Public Property DirAtrP50    As Double
     Public Property DirAtrP75    As Double
     Public Property MoveFloorUsd As Double   ' cfg.Scoring.MinTradeableMovePct × representative price
+
+    ' [E5 — v55 addendum] Three-row band ladder (STRONG / MEDIUM / WEAK) at THIS
+    ' population's tracker horizon (max hold window for its resolution). Diagnostic
+    ' only — WEAK never trades (bridge tier gate refuses it; strip excludes it).
+    ' The F1 re-read instrument (offline-matrix-placed-target-spec-back.md §8 F1).
+    Public Property BandLadder   As New List(Of BandLadderRow)()
 
 End Class
 

@@ -80,6 +80,9 @@
     <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
     <Compile Include="..\..\analysis\AnalysisConstants.vb" />
     <Compile Include="..\..\analysis\AnalysisReport.vb" />
+    <!-- [E5 — v55 addendum, A35a–d] BandLadder classifier + POCO used by
+         MarkdownReportWriter §9 render and the ladder-eligibility harness. -->
+    <Compile Include="..\..\analysis\BandLadder.vb" />
     <!-- D6 A27c: the offline report writer's D4 before/after section (BuildD4Section).
          Host-agnostic (StringBuilder only); AnalysisRunner stays OUT — it needs a live
          Deribit OHLC fetch. -->
