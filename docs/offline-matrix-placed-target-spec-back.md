@@ -4,11 +4,12 @@
 **Type:** offline-analysis semantics — zero scoring impact, no ⚠ dataset boundary, no settings keys, no settings-version bump (stays v54).
 **State:** local commit; builds 0/0; harness ALL PASS incl. new A32a–d; verify-gate `prepush` GATE PASSED. Trader tests + pushes.
 
-> **⚠ §8 carries four findings the trader has flagged for the ORCHESTRATOR** — tier-ladder ordering unverified
+> **⚠ §8 carries five findings the trader has flagged for the ORCHESTRATOR** — tier-ladder ordering unverified
 > (F1), success/failure orientation mismatch between strip and report (F2), the strip counting WEAK rows that
-> are never traded (F3), and empty bar-lists being recorded as failures by the live tracker while the offline
-> matrix excludes them (F4). **None is caused by this migration**; putting both surfaces on the same geometry
-> is what made them legible. F4 is a correctness bug and should go first — every other measurement inherits it.
+> are never traded (F3), empty bar-lists recorded as failures by the live tracker while the offline matrix
+> excludes them (F4), and four different names for the same three confidence bands (F12). **None is caused by
+> this migration**; putting both surfaces on the same geometry is what made them legible. F4 is a correctness
+> bug and should go first — every other measurement inherits it.
 
 ---
 
@@ -190,7 +191,8 @@ should know which.
 
 ## 8. Findings for the orchestrator
 
-Everything the migration + cross-check surfaced. **F1–F4 are the ones the trader flagged for escalation.**
+Everything the migration + cross-check surfaced. **F1–F4 and F12 are the ones the trader flagged for
+escalation** (F12 raised separately, after the first four).
 None of them is caused by this migration — the migration made them *visible* by putting both surfaces on the
 same geometry, which is what removing a confound is supposed to do.
 
@@ -354,6 +356,55 @@ but leaves the bug in place.
 
 ---
 
+### ⭐ F12 — The three confidence bands have four different names (and `LONG` means two things)
+
+Trader-raised. Confirmed: the same three-rung ladder is spelled differently on every surface, and the engine
+assigns two of the spellings **on the same line** (`ScoringEngine_Calculate_Verdict.vb:153–168`).
+
+| band | verdict string (UI / snapshot / CSV / card) | `confidence` (payload — the R1 action key) | matrix tier (offline report) | settings key |
+|---|---|---|---|---|
+| top | `STRONG LONG` / `STRONG SHORT` | `HIGH` | `STRONG_LONG` / `STRONG_SHORT` | `verdict_strong_pct` |
+| middle | **`LONG` / `SHORT`** — no qualifier | `MEDIUM` | `MEDIUM_LONG` / `MEDIUM_SHORT` | `verdict_med_pct` |
+| bottom | `WEAK LONG` / `WEAK SHORT` | `LOW` | *(excluded from the matrix)* | `verdict_weak_pct` |
+
+**Two concrete hazards, not just inconsistency:**
+
+**(a) The middle band is never called "MEDIUM" on any surface the trader reads.** The screen says bare `LONG`.
+"MEDIUM" exists only in the bridge payload, the offline report, and a settings key. This already cost us a
+round-trip in this very session: the trader reported *"STRONG LONG reads worse than LONG"* while F1 reports
+*"MEDIUM is the worst band"* — **the same finding, in two vocabularies**, and it took a table to see that.
+
+**(b) `LONG` is overloaded across fields in the frozen contract.** In `verdict` it is a tier+side compound
+(middle band, long side); in `direction` it is side only (`"LONG" | "SHORT" | "NONE"`). A consumer testing
+`verdict == "LONG"` to mean "this is a long" silently drops `STRONG LONG` and `WEAK LONG` — the top and bottom
+bands. The contract already routes actionability through `direction` + `confidence` (§4 R1), so the safe path is
+specified; the trap is for anyone who parses `verdict` because it looks self-explanatory.
+
+**One near-miss worth stating so it is not "fixed" by mistake:** `scoring.tier_floor` uses
+`high_/med_/low_threshold` + `_floor`, which *looks* like a fifth spelling of the same ladder. **It is not.** It
+is a separate three-band split of the **raw score** (12/9/6) used to floor the effective score after the
+TRANSITIONAL ADX penalty (`_Verdict.vb:76–77`), unrelated to the verdict ladder's percentage-of-regimeMax
+thresholds. Renaming it to match would create a false equivalence. If anything it should be renamed *away* —
+e.g. `penalty_floor.*` — to stop it reading as a tier vocabulary at all.
+
+**Recommendation.** Do not re-spell the wire format: `confidence` is `HIGH|MEDIUM|LOW`, verified verbatim
+against 8,025 live rows and **frozen** in the schema v1 contract — changing it breaks the consumer and costs a
+`schema_version` bump for cosmetics. Instead, pick **one** vocabulary for human-facing text and docs and make
+the rest explicitly derived:
+
+1. **Adopt HIGH / MEDIUM / LOW as the canonical band names** (it is the frozen one, and the only one that names
+   the middle band at all).
+2. **Surface the band next to the verdict** where a human reads it — the middle verdict rendering as bare
+   `LONG` is the root of (a). `LONG [MEDIUM]` or similar costs one label and kills the ambiguity.
+3. **Keep the matrix tier identifiers as-is** (`MEDIUM_LONG` is already correct under HIGH/MEDIUM/LOW) and add a
+   one-line legend to the report mapping tier ↔ verdict string, since the report is read alongside the app.
+4. **Rename `scoring.tier_floor`** to something that does not read as tier vocabulary — a settings-key rename
+   with a POCO/tweaker-fence follow-through, so it wants its own small spec rather than a drive-by.
+
+Cost is documentation + one UI label + one settings rename. No wire change, no scoring change.
+
+---
+
 ### Other findings (not escalated, recorded for completeness)
 
 **F5 — Geometry parity is exact.** The migration's core claim, verified: tracker `FavBar`/`AdvBar` equal the
@@ -403,5 +454,7 @@ manual fold-in lane per the implementer orders.
 
 **Orchestrator hand-off, in dependency order.** F4 first — it is a correctness bug (empty bars recorded as
 failures) and every other measurement inherits it, including F1's re-read. Then F3 (population) and F2
-(orientation), which are small and make the two surfaces directly comparable. F1 last, because it needs the
-other three fixed *and* more STRONG rows before it can be answered at all.
+(orientation), which are small and make the two surfaces directly comparable. **F12 (vocabulary) pairs naturally
+with F2** — both are display-semantics passes over the same two surfaces, and doing them together avoids
+touching the report's render text twice. F1 last, because it needs the others fixed *and* more STRONG rows
+before it can be answered at all.
