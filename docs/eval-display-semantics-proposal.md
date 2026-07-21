@@ -33,6 +33,16 @@ Report render text flips to success rates at the `MarkdownReportWriter` boundary
 
 **E3b — TICKED: `scoring.tier_floor` stays as-is** (trader 2026-07-21). The guard note REMAINS load-bearing: `tier_floor` is the TRANSITIONAL penalty floor on raw score, NOT tier vocabulary — documented in the spec-back's F12 near-miss so no future seat "harmonizes" it into the ladder.
 
+## 3c. E5 — Band-ladder diagnostic section (ADDED + TICKED 2026-07-21, post-ship of E1–E4; trader intent: quick WEAK visibility for impromptu decisions only)
+
+The offline report gains ONE new section: **"Band ladder (diagnostic — includes untraded WEAK)"**. Per population (session × resolution, the report's existing partitions) plus pooled: one row per band **STRONG / MEDIUM / WEAK**, columns = success % (success-oriented per E1), n, Wilson 95% CI. Window = the population's tracker horizon (res-1 → 15m, res-3 → 45m — the F1 method). Section text states plainly: *diagnostic only; WEAK never trades (the bridge's default tier gate refuses it; the strip excludes it).*
+
+**This section IS the F1 re-read instrument** — the F1 gate (roadmap W6-3 / levers L4) requires the tier-ladder re-read at n≥150 STRONG to run off the OFFLINE report, which until now could not show WEAK at all. A footnote in the section names the gate (`re-read at n≥150 STRONG; see offline-matrix-placed-target-spec-back.md §8 F1`).
+
+**Explicitly UNCHANGED (the F3 lesson, applied offline):** the matrix cell space stays `(tier × window)` STRONG+MEDIUM only; the auto-tweaker's aggregate trigger population, `PromptBuilder`'s matrix (the ladder section must NOT enter the LLM prompt), the summary CSV population, and the ★/◆ pick semantics all keep the tradeable population. WEAK enters ONLY the new diagnostic section, via a band classifier that distinguishes `WEAK LONG`/`WEAK SHORT` from the NO TRADE strings `CanonicalTier` also maps to `""` — WEAK ≠ NO TRADE must be explicit in code.
+
+Fixtures (A35 family — A34 taken): ladder section renders all three bands with correct counts; cell space still 12 cells; PromptBuilder output contains no ladder/WEAK section; summary CSV population unchanged. No settings change (no bump; the gate's version-bump WARN on a code-only eval change is the accepted D6-precedent outcome). No manual changes (the section self-documents).
+
 ## 4. Riders
 
 - **F7:** session-cell tooltip gains the word "block" (`most-recent London block, 0/26`) — kills the "London is broken" misread.
@@ -51,6 +61,7 @@ Report render text flips to success rates at the `MarkdownReportWriter` boundary
 | **E3a** | Band naming | ✅ **REVISED 07-21 (same day): DISPLAY-RENDERING only** — snapshot+card render `MEDIUM LONG`/`MEDIUM SHORT`; stored/wire strings UNCHANGED; order-app prerequisite CANCELLED; rename inventory retained as decision-of-record |
 | **E3b** | `tier_floor` | ✅ **remains as-is** (guard note stays) |
 | **E4** | Sequencing / model | After F4 ships (no external dependency remains); **Opus, medium**; spec-back `eval-display-semantics-spec-back.md` |
+| **E5** | Band-ladder diagnostic section (§3c) | ✅ **TICKED 2026-07-21 (post-ship addendum)** — separate report section STRONG/MEDIUM/WEAK success+CI per population; tweaker-facing surfaces keep the tradeable population; the F1 re-read instrument; **Opus, low-medium**, builds on the shipped E1–E4 |
 
 ## 6. Acceptance
 
