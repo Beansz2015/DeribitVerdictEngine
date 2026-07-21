@@ -14,7 +14,11 @@ Report render text flips to success rates at the `MarkdownReportWriter` boundary
 - ❓ **E2a — WEAK visibility:** drop entirely, or a separate **dimmed WEAK cell/tooltip line**? F1 shows WEAK currently *out-performing* MEDIUM (not significant, but information). Recommendation: **tooltip line, not a cell** (`WEAK excl.: 39% (n=…)`) — keeps the headline clean and the information reachable.
 - ❓ **E2b — `min_sample_for_render`:** the denominator drops ~2.6×; the current floor of 4 is far too low for a rate moving in ~3pp steps. Recommendation: **10** (session cells show `--%` a bit longer, and mean it).
 
-## 3. F12 — band vocabulary (**E3a TICKED 2026-07-21: VERDICT-STRING RENAME, trader's choice**)
+## 3. F12 — band vocabulary (**E3a FINAL 2026-07-21 — REVISED same day: DISPLAY-RENDERING change only**)
+
+**Final E3a (trader re-weighed on the blast-radius inventory):** the snapshot + card **render** the middle band as `MEDIUM LONG` / `MEDIUM SHORT` (the on-screen ladder reads STRONG / MEDIUM / WEAK explicitly — exactly what the trader wants to see) while the **stored/wire strings stay `LONG` / `SHORT` unchanged** (CSV, payload, eval cache, fixtures' stored-string pins, every string-matching site — all untouched). Display-form vs stored-form divergence has precedent (cap-reason rich string vs CSV bucket); the two render sites change in the SAME commit (parity rule) and the commit message states the mapping. **The rename inventory below is RETAINED FOR THE RECORD as the road not taken** — decision-of-record: a genuine rename was considered and rejected because the motivating failure was screen-side, the machine surfaces already carry the canonical `confidence` key, and a rename would create a permanent CSV vocabulary era-boundary + a forever both-era canonicalization tax. **Consequences of the revision: the order-app heads-up prerequisite is CANCELLED (nothing on the wire changes); the CSV vocabulary-boundary note is CANCELLED; the fixture sweep shrinks to the two render surfaces' pins.** Report legend gains the one mapping line: `MEDIUM_x ↔ displayed "MEDIUM x" ↔ stored "x" ↔ payload MEDIUM · STRONG↔HIGH · WEAK excluded from the matrix`.
+
+*(Superseded rename-scope inventory, kept for the record:)*
 
 **The middle-band verdict strings rename: `LONG` → `MEDIUM LONG`, `SHORT` → `MEDIUM SHORT`.** The ladder reads STRONG / MEDIUM / WEAK explicitly on every surface. This is a REAL string change (not a display suffix), so its scope is wider than the original recommendation — inventoried here so nothing is discovered mid-build:
 
@@ -43,9 +47,9 @@ Report render text flips to success rates at the `MarkdownReportWriter` boundary
 | **E1** | Success orientation at render; internal failure-truth + tweaker comparison untouched | ✅ as §1 |
 | **E2a** | WEAK visibility after exclusion | ✅ line added to the **EXISTING** perf-strip tooltip (`_perfTip` — no new tooltip; trader note) |
 | **E2b** | `min_sample_for_render` | ✅ **10** |
-| **E3a** | Band naming | ✅ **VERDICT-STRING RENAME** `LONG`→`MEDIUM LONG` / `SHORT`→`MEDIUM SHORT` — full §3 scope incl. the order-app heads-up PREREQUISITE |
+| **E3a** | Band naming | ✅ **REVISED 07-21 (same day): DISPLAY-RENDERING only** — snapshot+card render `MEDIUM LONG`/`MEDIUM SHORT`; stored/wire strings UNCHANGED; order-app prerequisite CANCELLED; rename inventory retained as decision-of-record |
 | **E3b** | `tier_floor` | ✅ **remains as-is** (guard note stays) |
-| **E4** | Sequencing / model | After F4 ships **AND the order-app confirms no verdict-string parsing**; **Opus, medium** (scope grew with E3a — budget the fixture sweep); spec-back `eval-display-semantics-spec-back.md` |
+| **E4** | Sequencing / model | After F4 ships (no external dependency remains); **Opus, medium**; spec-back `eval-display-semantics-spec-back.md` |
 
 ## 6. Acceptance
 
