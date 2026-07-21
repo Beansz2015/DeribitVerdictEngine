@@ -736,7 +736,7 @@ Public Class AutoRunSettings
     ' WHEN a run fires changes. Off the auto-tweaker surface (operational preference). The
     ' interval_* keys double as the on-close interval BACKSTOP ceiling. Default "interval"
     ' preserves v43 behaviour exactly. (docs/on-close-analysis-mode-proposal.md)
-    <JsonPropertyName("trigger_mode")> Public Property TriggerMode As String = "interval"
+    <JsonPropertyName("trigger_mode")> Public Property TriggerMode As String = "on_close" ' [v57] synced to the v44 operating mode (stomp-proofing); interval stays a valid operational choice
 End Class
 
 ' ---------------------------------------------------------------------------

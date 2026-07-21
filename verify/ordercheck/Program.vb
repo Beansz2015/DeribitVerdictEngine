@@ -1808,10 +1808,14 @@ Module Program
 
     Private Function BuildBridgeCfg() As EngineSettings
         ' POCO defaults carry the live geometry (B4b): structural_levels enabled,
-        ' fallback stop ×1.6 / target ×1.75, target bound 3.5×ATR, stop bound 1.6×ATR,
-        ' trigger_mode "interval". Version pinned so the pass-through is visible.
+        ' fallback stop ×1.6 / target ×1.75, target bound 3.5×ATR, stop bound 1.6×ATR.
+        ' Version pinned so the pass-through is visible. trigger_mode set EXPLICITLY
+        ' (the A22a pin tests pass-THROUGH, not the POCO default — which moved to
+        ' "on_close" at v57 stomp-proofing and must be free to drift without
+        ' re-pinning this fixture).
         Dim cfg As New EngineSettings()
         cfg.Version = 51
+        cfg.AutoRun.TriggerMode = "interval"
         Return cfg
     End Function
 
