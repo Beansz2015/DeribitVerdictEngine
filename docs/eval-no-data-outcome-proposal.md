@@ -23,8 +23,10 @@
 | **N1** | Outcome name + semantics | `NO_DATA`; excluded from both numerator and denominator; `TargetEverHit = Nothing` |
 | **N2** | Retroactive shape | Load-time reclassification sweep + v6 schema comment + `.v5.bak` (fixes 07-03 permanently AND closes the asymmetry; a targeted re-backfill alone would leave the bug) |
 | **N3** | Offline side | No change needed (already correct) — but `MarkdownReportWriter`'s §1 diagnostics gain a `No-data excl.` count so both surfaces disclose it |
-| **N4** | RoundStatsBuilder (F9) | **Migrate to placed geometry** (consistency; it feeds tweaker context) — trader may overrule to keep a fixed yardstick |
+| **N4** | RoundStatsBuilder (F9) | ✅ **TICKED 2026-07-21: migrate to placed geometry** |
 | **N5** | Sequencing / model | Build NOW, before the F2/F3/F12 display pass (they read rates this fixes); **Opus, medium-low**; one conversation; spec-back `eval-no-data-outcome-spec-back.md` |
+
+**N1–N5 ALL TICKED 2026-07-21 (N1–N3, N5 as recommended; N4 migrate) — BUILD-AUTHORIZED.**
 
 ## 4. Acceptance
 

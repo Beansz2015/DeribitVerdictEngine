@@ -14,13 +14,20 @@ Report render text flips to success rates at the `MarkdownReportWriter` boundary
 - ❓ **E2a — WEAK visibility:** drop entirely, or a separate **dimmed WEAK cell/tooltip line**? F1 shows WEAK currently *out-performing* MEDIUM (not significant, but information). Recommendation: **tooltip line, not a cell** (`WEAK excl.: 39% (n=…)`) — keeps the headline clean and the information reachable.
 - ❓ **E2b — `min_sample_for_render`:** the denominator drops ~2.6×; the current floor of 4 is far too low for a rate moving in ~3pp steps. Recommendation: **10** (session cells show `--%` a bit longer, and mean it).
 
-## 3. F12 — band vocabulary (canonical: HIGH / MEDIUM / LOW)
+## 3. F12 — band vocabulary (**E3a TICKED 2026-07-21: VERDICT-STRING RENAME, trader's choice**)
 
-The frozen wire enums are untouched (`confidence HIGH|MEDIUM|LOW` — verified against 8,025 rows; re-spelling costs a schema bump for cosmetics). Changes are display/docs only:
-1. **The middle band gets named where humans read it.** The bare `LONG`/`SHORT` verdict is the root hazard. ❓ **E3a — format:** recommendation: the verdict header line renders the band beside every directional verdict — `LONG · MEDIUM`, `STRONG LONG · HIGH`, `WEAK SHORT · LOW` — on **snapshot + card in the same commit** (display-parity rule; this is NOT strip-only). The CSV `Verdict` column and payload strings are UNCHANGED (book continuity + frozen contract). Alternative if the trader finds the suffix noisy: rely on the existing CONFIDENCE line + docs only — but that line's distance from the verdict is exactly what failed us this week.
-2. **Report legend:** one line in the matrix header mapping tier ↔ verdict string ↔ band (`STRONG_*↔STRONG*↔HIGH · MEDIUM_*↔bare*↔MEDIUM · (WEAK excluded)`).
-3. **Docs:** UserManual/TraderGuide state the canonical band names once, and F11's leftover (§18 quoting the retired threshold constants) gets corrected in the same pass.
-4. ❓ **E3b — `scoring.tier_floor` rename** (reads as tier vocabulary; is actually the TRANSITIONAL penalty floor on raw score — a false friend): rename to `penalty_floor.*` needs POCO + tweaker-fence + snapshot-compat care. Recommendation: **backlog it** as its own micro-spec (P-class), not this pass — record here so it isn't lost.
+**The middle-band verdict strings rename: `LONG` → `MEDIUM LONG`, `SHORT` → `MEDIUM SHORT`.** The ladder reads STRONG / MEDIUM / WEAK explicitly on every surface. This is a REAL string change (not a display suffix), so its scope is wider than the original recommendation — inventoried here so nothing is discovered mid-build:
+
+- **One canonical constant set** for the verdict strings; every producer reads it (`ScoringEngine_Calculate_Verdict` incl. any bracketed-lean forms that can carry the middle band).
+- **Both-era canonicalization at EVERY string-matching consumer** — historical rows/caches keep `LONG`/`SHORT` forever: `FailureRateMatrix.CanonicalTier` (public since the migration — the one mapping), `LivePerformanceTracker.IsEligibleVerdict`/`IsLongVerdict`, `AutoTweakerCore`'s tier-eligibility filter, `RoundStatsBuilder`, the what-if runner's verdict re-derivation, `UpdateVerdictLabel`'s colour mapping, `CalibrationReport`. Fixture sweep: every harness literal pinning a bare `LONG`/`SHORT` verdict re-pins.
+- **All four parity surfaces move together in one commit** (same field: snapshot, card, payload `verdict`, CSV `Verdict`) + §15 row + a **dated CSV-vocabulary-boundary note** (v31/v36 semantic-note precedent; NO settings bump — no keys change). Eval cache: no rotation (stored strings stay; canonicalization handles both eras).
+- **HARD PREREQUISITE — order-app heads-up BEFORE the engine ships:** the payload `verdict` string changes vocabulary. Actionability is contract-safe (`direction` + `confidence` untouched — the R1 action keys), but the consumer must CONFIRM nothing parses `verdict` literally (the F12(b) trap). Paste-ready text for the trader to send:
+  > Heads-up per the F12 vocabulary fix: the engine's `verdict` payload field renames its middle band — `LONG`→`MEDIUM LONG`, `SHORT`→`MEDIUM SHORT` (STRONG/WEAK unchanged, `NO TRADE*` unchanged). `direction` and `confidence` — your action keys — are untouched. Please confirm nothing on your side string-matches `verdict` (the contract routes actionability through direction+confidence); your disposition log will simply start echoing the new strings. Mixed vocabulary will appear across the rename date in soak-log joins — join on (instance_id, signal_id) as always.
+- **Mid-soak note for the reviewer:** the soak-log joins straddle the rename date; id-based joins are unaffected, vocabulary in `would-act` lines mixes. Expected.
+- **Report legend (per the rename, now minimal):** one line in the matrix header — `Tiers: STRONG_x ↔ "STRONG x" (payload HIGH) · MEDIUM_x ↔ "MEDIUM x" (payload MEDIUM) · WEAK excluded from the matrix` — the underscore↔space mapping is now self-evident; the line mainly pins the payload-confidence correspondence (STRONG↔HIGH is the one non-obvious pair).
+- **Docs:** UserManual/TraderGuide verdict tables + CLAUDE.md §5 ladder + F11's leftover (§18 retired constants) in the same pass.
+
+**E3b — TICKED: `scoring.tier_floor` stays as-is** (trader 2026-07-21). The guard note REMAINS load-bearing: `tier_floor` is the TRANSITIONAL penalty floor on raw score, NOT tier vocabulary — documented in the spec-back's F12 near-miss so no future seat "harmonizes" it into the ladder.
 
 ## 4. Riders
 
@@ -29,14 +36,16 @@ The frozen wire enums are untouched (`confidence HIGH|MEDIUM|LOW` — verified a
 
 ## 5. E-table
 
-| # | Decision | Recommendation / ❓ |
+**ALL TICKED 2026-07-21:**
+
+| # | Decision | Ticked |
 |---|---|---|
-| **E1** | Success orientation at render; internal failure-truth + tweaker comparison untouched | As §1 |
-| **E2a** ❓ | WEAK visibility after exclusion | Tooltip line (not a cell, not discarded) |
-| **E2b** ❓ | `min_sample_for_render` | 10 |
-| **E3a** ❓ | Band label placement | Verdict-line suffix `· MEDIUM` on snapshot+card |
-| **E3b** ❓ | `tier_floor` rename | Backlog (own micro-spec) |
-| **E4** | Sequencing / model | After F4 ships; **Opus, medium**; one conversation; spec-back `eval-display-semantics-spec-back.md` |
+| **E1** | Success orientation at render; internal failure-truth + tweaker comparison untouched | ✅ as §1 |
+| **E2a** | WEAK visibility after exclusion | ✅ line added to the **EXISTING** perf-strip tooltip (`_perfTip` — no new tooltip; trader note) |
+| **E2b** | `min_sample_for_render` | ✅ **10** |
+| **E3a** | Band naming | ✅ **VERDICT-STRING RENAME** `LONG`→`MEDIUM LONG` / `SHORT`→`MEDIUM SHORT` — full §3 scope incl. the order-app heads-up PREREQUISITE |
+| **E3b** | `tier_floor` | ✅ **remains as-is** (guard note stays) |
+| **E4** | Sequencing / model | After F4 ships **AND the order-app confirms no verdict-string parsing**; **Opus, medium** (scope grew with E3a — budget the fixture sweep); spec-back `eval-display-semantics-spec-back.md` |
 
 ## 6. Acceptance
 
