@@ -15,7 +15,7 @@
 | res-3 §5.2 (aggr-vel Asia/London thresholds) | Calibration | ~150 fires/session (late Jul) | Burst scoring auto-arms on those sessions | Data-gated |
 | Funding calm-week re-read | Watch | A calm funding week | Fully closes the v52+v53 window | Waiting |
 | **Bridge soak review** | Consumer | **CALLED CLEAN 2026-07-22** (order-app `soak-review-reply-orderapp.md` + `review-soak-join-2026-07-22.md` = the joint record; 69/69 would-act≡Placed* parity; engine seat ACCEPTED same day — nothing in our entry exceeded §5.7+join) | Live ladder: ARM → live-at-min-size → then L3 spec slot; **⚑ P5 values carry the CONFIRMED-inversion reminder (seat-handover §2.3)** | Dated |
-| **#6 absorption activation gates ⚠** | Scoring | Post-F4 eval data ~Jul 29–31 (independence + ≥10pp gradient, n≥30) | Absorption Step-2 penalty wire-in | Dated |
+| **#6 absorption activation gates ⚠** | Scoring | Post-F4 eval data ~Jul 29–31 (independence + ≥10pp gradient, n≥30) | Absorption Step-2 penalty wire-in | Dated — data-ready ~Jul 29–31; the next scheduled ⚠ |
 | W6-1 LONDON ruling | Calibration | Audit re-run ~Aug 1 (+ what-if LONDON grid — L5/L6) | LONDON stop_max override; swing-buffer design input | Dated |
 | W6-4 offline ceiling audit | Measurement | ~3–4 wks of v0.8 rows (early Aug); method draftable NOW | **W6-5 (B1)** + any W6-7 Tier-C spend | Prep-ahead OK |
 | F1 tier-ladder re-read | Measurement | n≥150 STRONG (report §9 ladder = the instrument; currently n≈103 pooled) | **Kelly CAL (W6-3/L4)** + P5 tier values | Gated |
@@ -23,12 +23,12 @@
 | L3 stop-distance sizing (order app) | Consumer | Live-at-min-size stabilises (post-soak) | **L9 un-clamp** + the widest-stop mode's live eligibility | Queued |
 | L9 structural-stop un-clamp + swing-buffer | Scoring ⚠ | L3 shipped (+ calm-regime re-derivation, DG5) | The trader's real stop method live | End-state |
 | Tweaker first fire (W5/W6-2) | Loop | A >40%-failure NY×1 window (post-migration rates only) | Window/MinTier recalibration | Data-gated, supervised dry-run first |
-| D2-v2 volume-weighted pivot promotion | Geometry | Revive only with evidence — test via the v56 what-if modes | — | Parked (B4b partially superseded) |
-| D3 / D4 / D5 / D6-backlog (5m RSI-div · Donchian×BBW · smart OBV · MFI) | Scoring refinements | W6-4 must show combination headroom (the W6 new-indicator bar) | — | Parked |
-| A5 VPFR shape classification | Scoring | 30-day book | — | Data-gated (approaching) |
-| C1 / C2 (multi-session VPFR · anchored VWAP) | Scoring | Multi-session state plumbing → effectively behind Q6 | — | Parked |
+| D2-v2 volume-weighted pivot promotion | Geometry | Revive only with evidence — test via the v56 what-if modes | — | Parked — NOT what-if-testable today (ComputeSideLevels never reads BestPivot*; needs a small candidate-mode extension to the v56 machinery first). CSV raw material: 2151 post-2026-07-08 directional rows carry a non-empty BestPivotByVolume5m. Newly interesting given the NY swing-tier underperformance — candidate topic for the Aug-1 geometry session (trader-checked 2026-07-22) |
+| D3 / D4 / D5 / D6-backlog (5m RSI-div · Donchian×BBW · smart OBV · MFI) | Scoring refinements | W6-4 ceiling audit must show combination headroom (NOT the #6 gates — clarified 2026-07-22); W6-4 method spec = next Fable task, its data gate ~early Aug | — | Parked |
+| A5 VPFR shape classification | Scoring | 30-day book | — | Data gate: 15 distinct calendar dates in CSV overall (first 2026-07-03, last 2026-07-22); same 15 since 2026-06-24 WS cutover — nearly met (halfway to 30). NOTE: even when met, A5 must clear the W6 new-indicator bar (it is a VPFR refinement, not an orthogonal class) — spec-first with that argument, not automatic |
+| C1 / C2 (multi-session VPFR · anchored VWAP) | Scoring | Multi-session state plumbing = the CLI-port run-state restructure the trader deferred to LAST (Q6) — Q6-last KEEPS these parked, it does not open them (clarified 2026-07-22) | — | Parked |
 | CLI port (Q6) | Platform | Trader ruling 07-08: AFTER the W6 programme — do not pull forward | O3 | Deferred LAST |
-| W6-7 cross-venue lead-lag | New signal class | Current queue done + W6-4; #5-style gates bind activation | The one remaining non-marginal class | Spec candidate authored |
+| W6-7 cross-venue lead-lag | New signal class | Current queue done + W6-4; #5-style gates bind activation | The one remaining non-marginal class | Spec candidate authored ONLY — not implemented; sequenced after the current queue AND W6-4 (unchanged; trader-checked 2026-07-22) |
 | Aug-1 handover doc | Process | ~Aug 1 (Pro downgrade Aug 2) | The credit-rationed month | Scheduled — this seat's last deliverable |
 | Untracked strays ruling (`.codex/`, DeepSeek script, `models-full.json`, `tools/tools/`) + UI-automation .ps1 commit | Hygiene | Trader keep-or-delete ruling | Clean tree | Pending |
 
