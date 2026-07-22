@@ -4721,8 +4721,8 @@ Module Program
         Dim iid As String = "test-instance-a37b"
         Dim ts As Long = 1_700_000_000_000L
         ' SignalEmitter.TickSize = 0.5 — the 12-tick anchor = $6.
-        ' Carried levels: swingHigh 60100, swingLow 59900 (HVN's zero — none).
-        tr.SetLevels(60100.0, 59900.0, 0.0, 0.0)
+        ' Carried levels: swingHigh5m 60100, swingLow5m 59900 (HVNs + 15m swings zero).
+        tr.SetLevels(60100.0, 59900.0, 0.0, 0.0, 0.0, 0.0)
 
         ' Price 60050 — 100 ticks below 60100 (100 * $0.5 = $50), NOT within 12 ticks ⇒ inactive.
         tr.FoldTrade(60050.0, 5000.0, True, isLiq:=False, tsMs:=ts, cfg:=cfg, instanceId:=iid)
@@ -4747,17 +4747,28 @@ Module Program
         Dim dReEnter As Boolean = sD.ApproachAboveActive AndAlso
                                    Math.Abs(sD.ApproachAboveLevel - 60100.0) < 0.01
 
-        ' Re-map the carried level (swingHigh moves to 60200) — mid-episode close (no
+        ' Re-map the carried level (swingHigh5m moves to 60200) — mid-episode close (no
         ' cross-level bleed — the #6 discipline).
-        tr.SetLevels(60200.0, 59900.0, 0.0, 0.0)
+        tr.SetLevels(60200.0, 59900.0, 0.0, 0.0, 0.0, 0.0)
         Dim sE = tr.Snapshot(ts + 800, cfg)
         Dim eReMapClosed As Boolean = Not sE.ApproachAboveActive
 
-        Check("A37b level-approach — enter within 12 ticks, re-arm on leave, close on level re-map",
-              aInactive AndAlso bAboveActive AndAlso cReArmed AndAlso dReEnter AndAlso eReMapClosed,
-              String.Format("inactive={0} enter={1} reArm={2} reEnter={3} reMap={4} (b.level={5} d.level={6})",
-                            aInactive, bAboveActive, cReArmed, dReEnter, eReMapClosed,
-                            sB.ApproachAboveLevel, sD.ApproachAboveLevel))
+        ' v59 follow-up: 15m swings extend the candidate set. Carry a 15m swingHigh AT
+        ' 60150 with the 5m swingHigh farther away (60300) — the ABOVE approach must
+        ' select the CLOSER 15m level (60150), not the 5m 60300. Price 60148 sits 4
+        ' ticks below 60150 ⇒ within band ⇒ fires against the 15m pivot.
+        Dim tr2 As New AlertsTracker()
+        tr2.SetLevels(60300.0, 59700.0, 0.0, 0.0, 60150.0, 59850.0)
+        tr2.FoldTrade(60148.0, 5000.0, True, isLiq:=False, tsMs:=ts + 900, cfg:=cfg, instanceId:=iid)
+        Dim sF = tr2.Snapshot(ts + 1000, cfg)
+        Dim f15mSelected As Boolean = sF.ApproachAboveActive AndAlso
+                                       Math.Abs(sF.ApproachAboveLevel - 60150.0) < 0.01
+
+        Check("A37b level-approach — enter within 12 ticks, re-arm on leave, close on level re-map, 15m in candidate set",
+              aInactive AndAlso bAboveActive AndAlso cReArmed AndAlso dReEnter AndAlso eReMapClosed AndAlso f15mSelected,
+              String.Format("inactive={0} enter={1} reArm={2} reEnter={3} reMap={4} 15mSelected={5} (b.level={6} d.level={7} f.level={8})",
+                            aInactive, bAboveActive, cReArmed, dReEnter, eReMapClosed, f15mSelected,
+                            sB.ApproachAboveLevel, sD.ApproachAboveLevel, sF.ApproachAboveLevel))
     End Sub
 
     ' -- A37c: sidecar append shape (utc | kind | side | usd | instance_id), never-throws ---

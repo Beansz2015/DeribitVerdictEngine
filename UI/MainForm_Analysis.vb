@@ -673,9 +673,12 @@ Partial Public Class MainForm
                                              r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
             ' [#7 + #8 v59] Same carry into the alerts tracker (H3 level-approach reads
             ' this identical candidate set — proposal §2). A re-mapped level closes that
-            ' side's approach episode (the #6 no-cross-level-bleed discipline).
+            ' side's approach episode (the #6 no-cross-level-bleed discipline). v59
+            ' follow-up: also carry the 15m swings so the nearest-per-side selection can
+            ' pick a higher-timeframe pivot when it's the closer bracket.
             _marketState.SetAlertsLevels(r.LastSwingHigh5m, r.LastSwingLow5m,
-                                         r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
+                                         r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow,
+                                         r.LastSwingHigh15m, r.LastSwingLow15m)
         End If
 
         ' P4f — capture last-successful state for the SKIPPED-render fallback.

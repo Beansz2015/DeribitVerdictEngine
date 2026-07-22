@@ -48,6 +48,13 @@ Public NotInheritable Class Theme
     Public Shared ReadOnly ACC_WARN         As Color = Color.FromArgb(251, 191, 36)
     Public Shared ReadOnly ACC_CTA          As Color = Color.FromArgb(245, 158, 11)
     Public Shared ReadOnly ACC_AMBER_DEEP   As Color = Color.FromArgb(217, 119, 6)
+    ' Rose-600 — the LIQ cascade accent (v59 follow-up). Deliberately magenta-tinted so
+    ' it reads as urgent-red WITHOUT overlapping the verdict ramp's short-side reds
+    ' (ACC_WEAK_SHORT 252,165,165 / ACC_SHORT 248,113,113 / ACC_STRONG_SHORT 239,68,68 —
+    ' all pure-red with green=blue) or the amber attention token (ACC_WARN 251,191,36).
+    ' Used by the TAPE strip when the liq-cascade signal or its 6-s flash is active.
+    ' Level-approach + FIRST_SEEN keep the amber ACC_WARN (spec-back §2.11 / display-only).
+    Public Shared ReadOnly ACC_CASCADE      As Color = Color.FromArgb(225, 29, 72)
     Public Shared ReadOnly ACC_INFO         As Color = Color.FromArgb(103, 232, 249)
     Public Shared ReadOnly ACC_NEUTRAL      As Color = Color.FromArgb(100, 116, 139)
 

@@ -28,11 +28,15 @@ Public NotInheritable Class AlertsTracker
     ' far fewer; the cap only guards a runaway stamp sequence — the #6 PressQueueCap idiom).
     Private Const LiqQueueCap As Integer = 4096
 
-    ' Carried candidate levels (0 = absent), set once per full run.
+    ' Carried candidate levels (0 = absent), set once per full run. The 15m swings
+    ' are the higher-timeframe context — added in the v59 follow-up so an ABOVE / BELOW
+    ' approach can also fire against a fresh 15m pivot the strip already brackets against.
     Private _swingHigh5m As Double = 0.0
     Private _swingLow5m As Double = 0.0
     Private _hvnAbove As Double = 0.0
     Private _hvnBelow As Double = 0.0
+    Private _swingHigh15m As Double = 0.0
+    Private _swingLow15m As Double = 0.0
 
     ' Rolling liq-flagged trade window: (TsMs, IsBuy, Usd). Ordered by folding order (the
     ' trades stream is chronological ascending — the F1 contract), pruned on Fold + Snapshot.
@@ -78,17 +82,24 @@ Public NotInheritable Class AlertsTracker
         _pending.Clear()
         _swingHigh5m = 0.0 : _swingLow5m = 0.0
         _hvnAbove = 0.0 : _hvnBelow = 0.0
+        _swingHigh15m = 0.0 : _swingLow15m = 0.0
     End Sub
 
     ''' <summary>Refresh the carried candidate levels (the same carry #6 reads). A re-map
-    ''' resets that side's approach episode (no cross-level bleed — the #6 discipline).</summary>
+    ''' resets that side's approach episode (no cross-level bleed — the #6 discipline).
+    ''' 15m swings extend the candidate set (v59 follow-up); nearest-per-side selection
+    ''' runs over all six candidates with the same max-below / min-above rule.</summary>
     Public Sub SetLevels(swingHigh5m As Double, swingLow5m As Double,
-                         hvnAbove As Double, hvnBelow As Double)
+                         hvnAbove As Double, hvnBelow As Double,
+                         swingHigh15m As Double, swingLow15m As Double)
         _swingHigh5m = swingHigh5m
         _swingLow5m = swingLow5m
         _hvnAbove = hvnAbove
         _hvnBelow = hvnBelow
+        _swingHigh15m = swingHigh15m
+        _swingLow15m = swingLow15m
         ' Close approach episodes if their level no longer matches an available candidate.
+        ' The identity check now spans all six carried levels (5m + 15m + HVNs).
         If _approachAbove.Active AndAlso Not IsCandidateAbove(_approachAbove.LevelPrice) Then
             _approachAbove = New ApproachState()
         End If
@@ -283,7 +294,8 @@ Public NotInheritable Class AlertsTracker
 
     Private Function NearestAbove(price As Double) As Double
         Dim best As Double = 0.0
-        Dim cands() As Double = {_swingHigh5m, _swingLow5m, _hvnAbove, _hvnBelow}
+        Dim cands() As Double = {_swingHigh5m, _swingLow5m, _hvnAbove, _hvnBelow,
+                                  _swingHigh15m, _swingLow15m}
         For Each c In cands
             If c > price Then
                 If best = 0.0 OrElse c < best Then best = c
@@ -294,7 +306,8 @@ Public NotInheritable Class AlertsTracker
 
     Private Function NearestBelow(price As Double) As Double
         Dim best As Double = 0.0
-        Dim cands() As Double = {_swingHigh5m, _swingLow5m, _hvnAbove, _hvnBelow}
+        Dim cands() As Double = {_swingHigh5m, _swingLow5m, _hvnAbove, _hvnBelow,
+                                  _swingHigh15m, _swingLow15m}
         For Each c In cands
             If c > 0 AndAlso c < price Then
                 If c > best Then best = c
@@ -304,7 +317,8 @@ Public NotInheritable Class AlertsTracker
     End Function
 
     Private Function IsCandidateAbove(level As Double) As Boolean
-        Dim cands() As Double = {_swingHigh5m, _swingLow5m, _hvnAbove, _hvnBelow}
+        Dim cands() As Double = {_swingHigh5m, _swingLow5m, _hvnAbove, _hvnBelow,
+                                  _swingHigh15m, _swingLow15m}
         For Each c In cands
             If Math.Abs(c - level) < 0.0001 AndAlso c > 0 Then Return True
         Next

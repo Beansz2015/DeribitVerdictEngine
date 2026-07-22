@@ -34,13 +34,15 @@ Partial Public Class MainForm
     Private _liveStripLastText As String = Nothing
     Private _liveStripSyncing  As Boolean = False   ' guards the checkbox→setting handler during sync
 
-    ' [#7 + #8 v59] Alert flash + tooltip state. FlashUntilUtc: while > UtcNow, the strip
-    ' renders in the amber attention accent (status-bar flash — H1). LiqEverSeenTip: the
-    ' one shared tooltip on the TAPE label — set to a non-empty string once the sidecar
-    ' file exists (H4 amended, survives restarts via file-existence check).
-    Private _alertFlashUntilUtc As DateTime = DateTime.MinValue
-    Private _liveStripTooltip   As ToolTip = Nothing
-    Private _liveStripLastTip   As String = Nothing
+    ' [#7 + #8 v59] Alert flash + tooltip state. Two flash windows so we can render the
+    ' strip in the cascade-red accent for a CASCADE event and in amber for anything else
+    ' (FIRST_SEEN / level-approach) — cascade takes precedence when both windows overlap.
+    ' LiqEverSeenTip: the one shared tooltip on the TAPE label — set to a non-empty string
+    ' once the sidecar file exists (H4 amended, survives restarts via file-existence check).
+    Private _alertFlashUntilUtc   As DateTime = DateTime.MinValue
+    Private _cascadeFlashUntilUtc As DateTime = DateTime.MinValue
+    Private _liveStripTooltip     As ToolTip = Nothing
+    Private _liveStripLastTip     As String = Nothing
 
     ' -----------------------------------------------------------------------
     ' Lifecycle — StartLiveStrip from the constructor (form load); StopLiveStrip on form close.
@@ -118,12 +120,20 @@ Partial Public Class MainForm
         ' flash (H1). The sidecar append was already done in the tracker; this is UI only.
         HandlePendingAlertEvents(snap, cfg)
 
-        ' Alert-active ⇒ render in the amber accent for the flash window; else neutral/dim
-        ' (the strip's usual "readout, not a call" hue).
+        ' Alert-active ⇒ render in an accent hue for the flash window; else neutral/dim
+        ' (the strip's usual "readout, not a call" hue). Cascade takes precedence — a live
+        ' CASCADE signal or its 6-s flash paints the whole strip in ACC_CASCADE (rose-600);
+        ' level-approach and other alert flashes stay in ACC_WARN amber (spec-back §2.11 /
+        ' v59 follow-up: cascade is the only red-tinted alert).
+        Dim now As DateTime = DateTime.UtcNow
+        Dim cascadeActive As Boolean = snap.CascadeSignal <> "NONE" OrElse
+                                        _cascadeFlashUntilUtc > now
+        Dim amberActive As Boolean = _alertFlashUntilUtc > now OrElse
+                                      snap.ApproachAboveActive OrElse snap.ApproachBelowActive
         Dim colour As Color = Theme.FG_TERTIARY
-        If _alertFlashUntilUtc > DateTime.UtcNow OrElse
-           snap.CascadeSignal <> "NONE" OrElse
-           snap.ApproachAboveActive OrElse snap.ApproachBelowActive Then
+        If cascadeActive Then
+            colour = Theme.ACC_CASCADE
+        ElseIf amberActive Then
             colour = Theme.ACC_WARN
         End If
 
@@ -133,15 +143,20 @@ Partial Public Class MainForm
 
     ' [#7 + #8 v59] Fire the audible cue on cascade events (opt-in), and stretch the
     ' status-bar flash so a transient event stays visible for a couple of ticks even if
-    ' the underlying signal already cleared.
+    ' the underlying signal already cleared. Two windows: any event extends the amber
+    ' flash; a CASCADE event ALSO extends the cascade-red flash (v59 follow-up — so a
+    ' transient cascade keeps painting the strip red for the ~6-s tail).
     Private Sub HandlePendingAlertEvents(snap As MicrostructureSnapshot, cfg As EngineSettings)
         If snap Is Nothing OrElse snap.PendingEvents Is Nothing OrElse snap.PendingEvents.Count = 0 Then Return
         Dim flashEnd As DateTime = DateTime.UtcNow.AddSeconds(6)
         If flashEnd > _alertFlashUntilUtc Then _alertFlashUntilUtc = flashEnd
 
-        Dim playSound As Boolean = cfg.Alerts.SoundEnabled AndAlso snap.PendingEvents.Any(
-            Function(ev) ev.Kind = "CASCADE")
-        If playSound Then
+        Dim hasCascade As Boolean = snap.PendingEvents.Any(Function(ev) ev.Kind = "CASCADE")
+        If hasCascade AndAlso flashEnd > _cascadeFlashUntilUtc Then
+            _cascadeFlashUntilUtc = flashEnd
+        End If
+
+        If hasCascade AndAlso cfg.Alerts.SoundEnabled Then
             Try
                 System.Media.SystemSounds.Exclamation.Play()
             Catch

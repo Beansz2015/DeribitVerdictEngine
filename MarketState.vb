@@ -280,11 +280,15 @@ Public NotInheritable Class MarketState
 
     ''' <summary>[#7 + #8 v59] Refresh the alerts tracker's carried candidate levels
     ''' from a completed full run (the same carry #6 uses). Called at the
-    ''' _lastSuccessfulIndicators capture site.</summary>
+    ''' _lastSuccessfulIndicators capture site. The 15m swings extend the candidate set
+    ''' (v59 follow-up) so ABOVE / BELOW approach episodes can also fire against a
+    ''' higher-timeframe pivot.</summary>
     Public Sub SetAlertsLevels(swingHigh5m As Double, swingLow5m As Double,
-                                hvnAbove As Double, hvnBelow As Double)
+                                hvnAbove As Double, hvnBelow As Double,
+                                swingHigh15m As Double, swingLow15m As Double)
         SyncLock _lock
-            _alertsTracker.SetLevels(swingHigh5m, swingLow5m, hvnAbove, hvnBelow)
+            _alertsTracker.SetLevels(swingHigh5m, swingLow5m, hvnAbove, hvnBelow,
+                                      swingHigh15m, swingLow15m)
         End SyncLock
     End Sub
 
