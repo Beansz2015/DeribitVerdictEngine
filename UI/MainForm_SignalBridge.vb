@@ -59,6 +59,10 @@ Partial Public Class MainForm
     ''' binds (the snapshot's inline CalcKellySizing populates v.Kelly*).</summary>
     Private Sub EmitBridgeSignal(v As VerdictResult, r As IndicatorResults,
                                  cfg As EngineSettings, signalId As Long)
+        ' [ws_health.log W4 row] Persist a WS-health line only on transition. Runs
+        ' UNCONDITIONALLY (not gated by signal_bridge.enabled) so the sidecar records
+        ' feed history even for the pure-REST configuration. Never throws.
+        LogWsHealthTransitionForRun(cfg)
         Try
             SyncArmToggleVisibility(cfg)
             If Not cfg.SignalBridge.Enabled Then Return
@@ -79,6 +83,9 @@ Partial Public Class MainForm
     ''' <summary>Skip path: reduced SKIPPED payload — stand down + previous signal
     ''' now stale, never "hold last signal" (§2).</summary>
     Private Sub EmitBridgeSkipped(skipReason As String, cfg As EngineSettings, signalId As Long)
+        ' [ws_health.log W4 row] Same transition-log discipline on the skip path — a
+        ' skip run still carries a valid feed-health reading. Never throws.
+        LogWsHealthTransitionForRun(cfg)
         Try
             SyncArmToggleVisibility(cfg)
             If Not cfg.SignalBridge.Enabled Then Return
@@ -95,9 +102,19 @@ Partial Public Class MainForm
         End Try
     End Sub
 
+    ' Transition-only WS-health sidecar append (Core/WsHealthLog). Runs for EVERY
+    ' completed run (success + skip), regardless of signal_bridge.enabled. Never throws.
+    Private Sub LogWsHealthTransitionForRun(cfg As EngineSettings)
+        Try
+            WsHealthLog.LogTransition(CurrentBridgeWsHealth(cfg), ProcessIdentity.InstanceId)
+        Catch ex As Exception
+            Console.WriteLine("[WsHealthLog] transition-log failed: " & ex.Message)
+        End Try
+    End Sub
+
     ' health.ws from the live host state via the pure pinned derivation
     ' (SignalEmitter.DeriveWsHealth — REST | DEGRADED | DOWN | OK, §8 D8).
-    Private Function CurrentBridgeWsHealth(cfg As EngineSettings) As String
+    Friend Function CurrentBridgeWsHealth(cfg As EngineSettings) As String
         Return SignalEmitter.DeriveWsHealth(
             transportIsWs:=String.Equals(cfg.Network.Transport, "ws", StringComparison.OrdinalIgnoreCase),
             degradedThisRun:=_wsDegradedThisRun,

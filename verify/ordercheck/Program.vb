@@ -281,6 +281,12 @@ Module Program
         A37d_ResetAndDisabledInert()
         A37e_Hc25AlertsFence()
 
+        ' [ws_health.log W4 row — A38] Transition-only WsHealthLog sidecar: same
+        ' state twice ⇒ one line; process-start line always writes; format shape
+        ' matches the AlertsSidecar contract (utc | state | instance_id).
+        A38a_TransitionOnly()
+        A38b_StartLineAndFormat()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -4885,6 +4891,90 @@ Module Program
               String.Format("enabled={0} min={1} win={2} ticks={3} sound={4} sib={5} reason='{6}'",
                             rEnabled.IsValid, rMin.IsValid, rWin.IsValid,
                             rTicks.IsValid, rSound.IsValid, rSib.IsValid, rEnabled.ErrorReason))
+    End Sub
+
+    ' ============================================================================
+    ' A38 — WsHealthLog transition-only sidecar (ws_health.log W4 row)
+    ' ============================================================================
+
+    ' -- A38a: same state twice ⇒ ONE line; a change writes the second line -------
+    Private Sub A38a_TransitionOnly()
+        Dim path As String = WsHealthLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            WsHealthLog.ResetForTest()
+
+            ' First transition call (no prior baseline) ⇒ writes.
+            WsHealthLog.LogTransition("REST", "iid-A38a")
+            Dim afterFirst As Integer = If(File.Exists(path), File.ReadAllLines(path).Length, 0)
+
+            ' Same state again — MUST NOT append.
+            WsHealthLog.LogTransition("REST", "iid-A38a")
+            WsHealthLog.LogTransition("REST", "iid-A38a")
+            Dim afterRepeat As Integer = If(File.Exists(path), File.ReadAllLines(path).Length, 0)
+
+            ' A real transition — writes one more line.
+            WsHealthLog.LogTransition("DEGRADED", "iid-A38a")
+            Dim afterFlip As Integer = If(File.Exists(path), File.ReadAllLines(path).Length, 0)
+
+            ' Another flip — writes; a further repeat of DEGRADED does NOT.
+            WsHealthLog.LogTransition("OK", "iid-A38a")
+            WsHealthLog.LogTransition("OK", "iid-A38a")
+            Dim afterAllTicks As Integer = If(File.Exists(path), File.ReadAllLines(path).Length, 0)
+
+            Dim ok As Boolean = afterFirst = 1 AndAlso afterRepeat = 1 AndAlso
+                                 afterFlip = 2 AndAlso afterAllTicks = 3
+
+            Check("A38a transition-only: same state twice → one line; each real transition adds one line",
+                  ok,
+                  String.Format("first={0} repeat={1} flip={2} allTicks={3}",
+                                afterFirst, afterRepeat, afterFlip, afterAllTicks))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            WsHealthLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A38b: LogStart writes unconditionally + shape "utc | state | iid" --------
+    Private Sub A38b_StartLineAndFormat()
+        Dim path As String = WsHealthLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            WsHealthLog.ResetForTest()
+
+            ' LogStart ALWAYS writes (even if same state).
+            WsHealthLog.LogStart("DOWN", "iid-A38b")
+            WsHealthLog.LogStart("DOWN", "iid-A38b")   ' still writes — start is unconditional
+            Dim lines() As String = File.ReadAllLines(path)
+            Dim startsOk As Boolean = lines.Length = 2
+
+            ' Shape of the first line: "<utc> | <state> | <iid>" (split on " | ").
+            Dim parts() As String = lines(0).Split(New String() {" | "}, StringSplitOptions.None)
+            Dim shapeOk As Boolean = parts.Length = 3 AndAlso
+                                     parts(0).EndsWith("Z") AndAlso
+                                     parts(1) = "DOWN" AndAlso
+                                     parts(2) = "iid-A38b"
+
+            ' After a LogStart, the last-logged baseline is set, so a matching LogTransition
+            ' must be a no-op (proves the two entrypoints share one baseline).
+            WsHealthLog.LogTransition("DOWN", "iid-A38b")
+            Dim afterMatch As Integer = File.ReadAllLines(path).Length
+            Dim baselineOk As Boolean = afterMatch = 2
+
+            Check("A38b LogStart unconditional + shape (utc | state | iid) + shared transition baseline",
+                  startsOk AndAlso shapeOk AndAlso baselineOk,
+                  String.Format("starts={0} shape={1} baseline={2} row0='{3}'",
+                                startsOk, shapeOk, baselineOk, If(lines.Length > 0, lines(0), "")))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            WsHealthLog.ResetForTest()
+        End Try
     End Sub
 
 End Module

@@ -376,6 +376,17 @@ Partial Public Class MainForm
 
         _metricMode = NormaliseMode(SettingsLoader.Current.PerformanceDisplay.MetricMode)
         InitMarketDataSources()
+
+        ' [ws_health.log W4 row] One process-start line to seed the transition baseline.
+        ' Computed here — after InitMarketDataSources so _wsFeed is constructed if configured;
+        ' feed usually not yet connected on the first tick, so ws-transport starts DOWN (that
+        ' IS the observation the file is meant to persist). Never throws.
+        Try
+            WsHealthLog.LogStart(CurrentBridgeWsHealth(SettingsLoader.Current),
+                                 ProcessIdentity.InstanceId)
+        Catch ex As Exception
+            Console.WriteLine("[WsHealthLog] start-log failed: " & ex.Message)
+        End Try
         InitAutoRunControls()
         ' [P4 #1] Start the exit-guard tick at form load (D6: decoupled from auto-run — MarketState
         ' streams whenever transport=ws regardless of auto-run). Each tick self-gates on posState +

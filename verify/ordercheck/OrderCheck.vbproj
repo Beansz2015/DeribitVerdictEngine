@@ -64,6 +64,11 @@
          side fold + strip render stay OUT (same live-socket / WinForms boundary as
          A16-A31). -->
     <Compile Include="..\..\Core\AlertsTracker.vb" />
+    <!-- ws_health.log W4 row (A38): the host-agnostic transition-only sidecar
+         (append-only, never-throws — the AlertsSidecar pattern). WinForms glue
+         (LogWsHealthTransitionForRun in MainForm_SignalBridge) stays OUT — same
+         live-socket/WinForms boundary as A22/A37. -->
+    <Compile Include="..\..\Core\WsHealthLog.vb" />
     <Compile Include="..\..\AnalysisLogger.vb" />
     <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
          exercised against a real MarketState (already linked above). -->
