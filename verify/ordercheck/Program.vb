@@ -5208,10 +5208,14 @@ Module Program
                             clean, byBlock.Count, distinctHours, offender))
     End Sub
 
-    ' -- A39e: informational Absorption* + un-armed AggrVel provably absent from the
-    ' -- decision-model design matrix. Build a schema and check that no column name
-    ' -- carries an informational feature name; also check the ScoredCategoricalNames
-    ' -- and ScoredNumericNames don't list them.
+    ' -- A39e: informational Absorption*, un-armed AggrVel, AND TargetCapReason provably
+    ' -- absent from the decision-model design matrix. TargetCapReason is Step-5b OUTPUT
+    ' -- (placed-geometry bucket the arbitration emitted, not a scoring input) — coordinator-
+    ' -- demoted 2026-07-23 to prevent geometry-difficulty leakage into the challenger's ΔAUC.
+    ' -- The Real CsvFeatureBuilder is the shipped writer of TargetCapReason into InfoCategoricals;
+    ' -- this fixture builds bundles the way the loader does (scored dictionary carries the
+    ' -- 23-name post-correction list; info dictionary carries TargetCapReason) so the schema
+    ' -- fit sees the same shape as production.
     Private Sub A39e_InformationalExtrasAbsentFromDecisionMatrix()
         Dim bundles As New List(Of FeatureBundle)()
         For i = 0 To 49
@@ -5222,6 +5226,7 @@ Module Program
             fb.ScoredNumerics("ATR") = 40.0 + i
             ' Populate informational fields — the audit MUST NOT let these into X.
             fb.InfoCategoricals("AbsorptionSignal") = "ABSORB_ABOVE"
+            fb.InfoCategoricals("TargetCapReason") = If(i Mod 3 = 0, "swing", If(i Mod 3 = 1, "hvn", "none"))
             fb.InfoNumerics("AbsorptionRatio") = 1.5
             fb.InfoNumerics("AbsorptionAggrUsd") = 250000
             fb.InfoNumerics("AbsorptionPullFrac") = 0.7
@@ -5234,7 +5239,7 @@ Module Program
         Next
 
         Dim schema = FeatureMatrix.FitSchema(bundles, includeAggrVel:=False)
-        Dim banned As String() = {"Absorption", "AggrVel"}
+        Dim banned As String() = {"Absorption", "AggrVel", "TargetCapReason"}
         Dim clean As Boolean = True
         Dim offender As String = ""
         For Each col In schema.Columns
@@ -5248,18 +5253,24 @@ Module Program
             If Not clean Then Exit For
         Next
         For Each nm In schema.ScoredCategoricalNames
-            If nm.IndexOf("Absorption", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-               nm.IndexOf("AggrVel", StringComparison.OrdinalIgnoreCase) >= 0 Then
-                clean = False
-                offender = "cat:" & nm
-            End If
+            For Each b In banned
+                If nm.IndexOf(b, StringComparison.OrdinalIgnoreCase) >= 0 Then
+                    clean = False
+                    offender = "cat:" & nm
+                    Exit For
+                End If
+            Next
+            If Not clean Then Exit For
         Next
         For Each nm In schema.ScoredNumericNames
-            If nm.IndexOf("Absorption", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
-               nm.IndexOf("AggrVel", StringComparison.OrdinalIgnoreCase) >= 0 Then
-                clean = False
-                offender = "num:" & nm
-            End If
+            For Each b In banned
+                If nm.IndexOf(b, StringComparison.OrdinalIgnoreCase) >= 0 Then
+                    clean = False
+                    offender = "num:" & nm
+                    Exit For
+                End If
+            Next
+            If Not clean Then Exit For
         Next
 
         ' Also verify the transformed X has no non-zero columns at banned positions
@@ -5268,7 +5279,7 @@ Module Program
         Dim X = FeatureMatrix.Transform(schema, bundles)
         Dim xClean As Boolean = X.GetLength(1) = schema.Columns.Count
 
-        Check("A39e informational Absorption/AggrVel-un-armed extras absent from decision matrix",
+        Check("A39e informational Absorption / AggrVel-un-armed / TargetCapReason absent from decision matrix",
               clean AndAlso xClean,
               String.Format("clean={0} offender={1} cols={2}", clean, offender, schema.Columns.Count))
     End Sub

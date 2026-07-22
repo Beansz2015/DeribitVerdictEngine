@@ -264,6 +264,25 @@ Public Class CeilingAuditProgram
         Next
         out.Add(("AbsorptionSignal (any)", If(absN = 0, Double.NaN, AuditMetrics.Auc(absScores.ToArray(), yTest)), absN))
 
+        ' TargetCapReason — Step-5b OUTPUT (placed-geometry bucket the arbitration emitted).
+        ' Coordinator-demoted 2026-07-23 to informational-only. Per-bucket indicator: SWING/HVN/
+        ' POC/NONE — for the univariate AUC we score the "structural tier fired" vs the null case
+        ' (swing / hvn / poc → +1; none → 0). The report table shows this ONE number so the
+        ' trader can see whether the geometry-difficulty class alone carries directional signal.
+        Dim tcrScores As New List(Of Double)()
+        Dim tcrN As Integer = 0
+        For Each fb In testBundles
+            Dim s As String = ""
+            fb.InfoCategoricals.TryGetValue("TargetCapReason", s)
+            Dim x As Double = 0
+            Dim sn As String = If(s, "").ToLowerInvariant()
+            If sn = "swing" OrElse sn = "hvn" OrElse sn = "poc" Then
+                x = 1 : tcrN += 1
+            End If
+            tcrScores.Add(x)
+        Next
+        out.Add(("TargetCapReason (structural fired)", If(tcrN = 0, Double.NaN, AuditMetrics.Auc(tcrScores.ToArray(), yTest)), tcrN))
+
         ' Absorption numerics — univariate AUC on the numeric itself (median-imputed for
         ' NaN so the AUC is stable; count records the non-NaN denominator).
         For Each nm In {"AbsorptionRatio", "AbsorptionAggrUsd", "AbsorptionPullFrac", "AbsorptionLevel"}

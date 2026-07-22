@@ -305,12 +305,17 @@ Namespace CeilingAudit
             fb.BaselineScore = dominant
 
             ' Scored categoricals — one per column listed in §2's scored inputs.
+            ' Coordinator correction 2026-07-23: TargetCapReason is Step-5b OUTPUT (placed-
+            ' geometry metadata), not a scoring input that votes or modifies. It's a mechanical
+            ' proxy for target-distance class, so admitting it into X would give the challenger
+            ' AUC from geometry difficulty the baseline can't see — inflating the ΔAUC "prize"
+            ' with signal that better combination could never harvest. Demoted to informational.
             Dim scoredCats As String() = {
                 "ROCSlope", "RSIDivergence", "SqueezeStatus", "TTMSignal", "EMAAlignment",
                 "FundingBias", "FundingMomentum", "OISignal", "OiCvdOutcome", "OFISignal",
                 "LiqSignal", "CVDSlope", "CVDDivergence", "MicroCVDSignal", "MicroCVDMomentum",
                 "TFISignal", "DonchianSignal", "OBVTrend", "OBVDivergence",
-                "TrendStructure5m", "TargetCapReason", "PriceVsEMA200",
+                "TrendStructure5m", "PriceVsEMA200",
                 "MTF15mTrend", "MTF15mEMAAlignment"}
             For Each c In scoredCats
                 fb.ScoredCategoricals(c) = GetStr(parts, colIdx, c)
@@ -329,8 +334,12 @@ Namespace CeilingAudit
             fb.AggrVelBurstRatio = TryDOrNaN(parts, colIdx, "AggrVelBurstRatio")
             fb.AggrVelNet = TryDOrNaN(parts, colIdx, "AggrVelNet")
 
-            ' Informational (never in X): Absorption* is scoring_enabled:false at build.
+            ' Informational (never in X): Absorption* is scoring_enabled:false at build;
+            ' TargetCapReason is Step-5b OUTPUT (placed-geometry bucket the arbitration emitted,
+            ' not a scoring input) — coordinator-demoted 2026-07-23 to prevent geometry-difficulty
+            ' leakage into the challenger's ΔAUC.
             fb.InfoCategoricals("AbsorptionSignal") = GetStr(parts, colIdx, "AbsorptionSignal")
+            fb.InfoCategoricals("TargetCapReason") = GetStr(parts, colIdx, "TargetCapReason")
             fb.InfoNumerics("AbsorptionLevel") = TryDOrNaN(parts, colIdx, "AbsorptionLevel")
             fb.InfoNumerics("AbsorptionRatio") = TryDOrNaN(parts, colIdx, "AbsorptionRatio")
             fb.InfoNumerics("AbsorptionAggrUsd") = TryDOrNaN(parts, colIdx, "AbsorptionAggrUsd")
