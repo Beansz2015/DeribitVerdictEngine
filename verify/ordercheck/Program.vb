@@ -271,6 +271,16 @@ Module Program
         A36e_WhitelistAndHc24Fence()
         A36f_ModeOneOverlayRoundTripsThroughWhatIf()
 
+        ' [#7 + #8 v59 — docs/liq-cascade-level-alerts-proposal.md §4 H5] Alerts tracker:
+        ' cascade window math (>= min in window, dominant side, edge-fire once), episode
+        ' re-arm on leave-proximity + level re-map close, FIRST_SEEN + CASCADE sidecar
+        ' append shape (never-throws), disabled/degenerate no-op, HC25 fence + siblings.
+        A37a_CascadeWindowMathAndEdgeFireOnce()
+        A37b_LevelApproachEpisodeReArm()
+        A37c_SidecarAppendShape()
+        A37d_ResetAndDisabledInert()
+        A37e_Hc25AlertsFence()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -4612,6 +4622,258 @@ Module Program
         Finally
             Try : System.IO.File.Delete(tmp) : Catch : End Try
         End Try
+    End Sub
+
+    ' =======================================================================
+    ' A37 — #7 liq-cascade alarm + #8 level-approach alerts (docs/liq-cascade-
+    ' level-alerts-proposal.md §4 H5). Deterministic folds against the host-
+    ' agnostic AlertsTracker; sidecar utility exercised via the shipped
+    ' AlertsSidecar.TryAppend in a scratch bin dir; tweaker surface via
+    ' SettingsDiffApplier. The strip render + audible cue stay OUT — same
+    ' live-socket / WinForms boundary as A16-A31.
+    ' =======================================================================
+
+    ' A helper: build a fresh AlertsSettings at proposal defaults (matches settings.json).
+    Private Function AlertsCfgDefault() As AlertsSettings
+        Return New AlertsSettings() ' the POCO defaults ARE the shipped v59 anchors
+    End Function
+
+    ' -- A37a: cascade window — 3 in 10s across sides, edge-fires ONCE, dominant side ---
+    Private Sub A37a_CascadeWindowMathAndEdgeFireOnce()
+        Dim tr As New AlertsTracker()
+        Dim cfg = AlertsCfgDefault()
+        Dim iid As String = "test-instance-a37a"
+        Dim ts As Long = 1_700_000_000_000L   ' arbitrary anchor (ms since epoch, ~2023-11)
+
+        ' Two non-liq trades — never enter the window at all.
+        tr.FoldTrade(60000.0, 5000.0, True, isLiq:=False, tsMs:=ts, cfg:=cfg, instanceId:=iid)
+        tr.FoldTrade(60005.0, 6000.0, True, isLiq:=False, tsMs:=ts + 100, cfg:=cfg, instanceId:=iid)
+        Dim s0 = tr.Snapshot(ts + 200, cfg)
+        Dim step0Ok As Boolean = s0.CascadeSignal = "NONE" AndAlso s0.CascadeCount = 0
+
+        ' Sidecar existence would let A37a's FIRST_SEEN counter go silent (the sidecar
+        ' sentinel = per-process-lifetime unlock). Clear it first so this fixture reads
+        ' a clean "first-ever" event.
+        Dim sidecarPath As String = AlertsSidecar.GetPath()
+        Try
+            If File.Exists(sidecarPath) Then File.Delete(sidecarPath)
+        Catch
+        End Try
+
+        ' Two liq-flagged BUYS in quick succession — count 2 < min 3 ⇒ still NONE, but
+        ' the FIRST_SEEN event fires on the FIRST of the two (drained by s1).
+        tr.FoldTrade(60010.0, 250000.0, True, isLiq:=True, tsMs:=ts + 1000, cfg:=cfg, instanceId:=iid)
+        tr.FoldTrade(60015.0, 300000.0, True, isLiq:=True, tsMs:=ts + 2000, cfg:=cfg, instanceId:=iid)
+        Dim s1 = tr.Snapshot(ts + 2100, cfg)
+        Dim firstSeenFired As Integer = 0
+        For Each ev In s1.PendingEvents
+            If ev.Kind = "FIRST_SEEN" Then firstSeenFired += 1
+        Next
+        Dim step1Ok As Boolean = s1.CascadeSignal = "NONE" AndAlso s1.CascadeCount = 2 AndAlso
+                                 firstSeenFired = 1
+
+        ' Third liq-flagged trade — one SELL — pushes the count over the threshold.
+        ' Dominant side is BUY ($550k) > SELL ($200k) ⇒ CASCADE_ABOVE. Pending events
+        ' now include one CASCADE (edge-fire) only (FIRST_SEEN was drained by s1).
+        tr.FoldTrade(60020.0, 200000.0, False, isLiq:=True, tsMs:=ts + 3000, cfg:=cfg, instanceId:=iid)
+        Dim s2 = tr.Snapshot(ts + 3100, cfg)
+        Dim cascadeFired As Integer = 0
+        For Each ev In s2.PendingEvents
+            If ev.Kind = "CASCADE" Then cascadeFired += 1
+        Next
+        Dim step2Ok As Boolean = s2.CascadeSignal = "CASCADE_ABOVE" AndAlso
+                                 s2.CascadeCount = 3 AndAlso
+                                 s2.CascadeBuyCount = 2 AndAlso s2.CascadeSellCount = 1 AndAlso
+                                 cascadeFired = 1
+
+        ' A fourth liq trade — still above threshold — must NOT double-fire the CASCADE event.
+        tr.FoldTrade(60021.0, 100000.0, True, isLiq:=True, tsMs:=ts + 4000, cfg:=cfg, instanceId:=iid)
+        Dim s3 = tr.Snapshot(ts + 4100, cfg)
+        Dim cascadeFired2 As Integer = 0
+        For Each ev In s3.PendingEvents
+            If ev.Kind = "CASCADE" Then cascadeFired2 += 1
+        Next
+        Dim step3Ok As Boolean = s3.CascadeSignal = "CASCADE_ABOVE" AndAlso cascadeFired2 = 0
+
+        ' Advance past the window ⇒ all pruned; re-arm.
+        Dim s4 = tr.Snapshot(ts + 20000, cfg)
+        Dim step4Ok As Boolean = s4.CascadeSignal = "NONE" AndAlso s4.CascadeCount = 0
+
+        Check("A37a cascade window math + edge-fires once + dominant side + re-arm",
+              step0Ok AndAlso step1Ok AndAlso step2Ok AndAlso step3Ok AndAlso step4Ok,
+              String.Format("s0(sig={0} n={1}) s1(sig={2} n={3} firstFired={4}) s2(sig={5} n={6} b={7} s={8} cascFired={9}) s3(sig={10} cascFired2={11}) s4(sig={12} n={13})",
+                            s0.CascadeSignal, s0.CascadeCount,
+                            s1.CascadeSignal, s1.CascadeCount, firstSeenFired,
+                            s2.CascadeSignal, s2.CascadeCount, s2.CascadeBuyCount, s2.CascadeSellCount,
+                            cascadeFired,
+                            s3.CascadeSignal, cascadeFired2,
+                            s4.CascadeSignal, s4.CascadeCount))
+        Try
+            If File.Exists(sidecarPath) Then File.Delete(sidecarPath)
+        Catch
+        End Try
+    End Sub
+
+    ' -- A37b: level-approach episode — enter within N ticks, re-arm on leave; re-map close ---
+    Private Sub A37b_LevelApproachEpisodeReArm()
+        Dim tr As New AlertsTracker()
+        Dim cfg = AlertsCfgDefault()
+        Dim iid As String = "test-instance-a37b"
+        Dim ts As Long = 1_700_000_000_000L
+        ' SignalEmitter.TickSize = 0.5 — the 12-tick anchor = $6.
+        ' Carried levels: swingHigh 60100, swingLow 59900 (HVN's zero — none).
+        tr.SetLevels(60100.0, 59900.0, 0.0, 0.0)
+
+        ' Price 60050 — 100 ticks below 60100 (100 * $0.5 = $50), NOT within 12 ticks ⇒ inactive.
+        tr.FoldTrade(60050.0, 5000.0, True, isLiq:=False, tsMs:=ts, cfg:=cfg, instanceId:=iid)
+        Dim sA = tr.Snapshot(ts + 100, cfg)
+        Dim aInactive As Boolean = Not sA.ApproachAboveActive AndAlso Not sA.ApproachBelowActive
+
+        ' Move to 60094 — 12 ticks below (12 * 0.5 = 6, matches level_ticks:12) ⇒ ABOVE approach fires.
+        tr.FoldTrade(60094.0, 5000.0, True, isLiq:=False, tsMs:=ts + 200, cfg:=cfg, instanceId:=iid)
+        Dim sB = tr.Snapshot(ts + 300, cfg)
+        Dim bAboveActive As Boolean = sB.ApproachAboveActive AndAlso
+                                       Math.Abs(sB.ApproachAboveLevel - 60100.0) < 0.01 AndAlso
+                                       Not sB.ApproachBelowActive
+
+        ' Leave the band — move down to 60070 (60 ticks below) — the ABOVE episode should re-arm.
+        tr.FoldTrade(60070.0, 5000.0, True, isLiq:=False, tsMs:=ts + 400, cfg:=cfg, instanceId:=iid)
+        Dim sC = tr.Snapshot(ts + 500, cfg)
+        Dim cReArmed As Boolean = Not sC.ApproachAboveActive
+
+        ' Re-enter — new episode.
+        tr.FoldTrade(60095.0, 5000.0, True, isLiq:=False, tsMs:=ts + 600, cfg:=cfg, instanceId:=iid)
+        Dim sD = tr.Snapshot(ts + 700, cfg)
+        Dim dReEnter As Boolean = sD.ApproachAboveActive AndAlso
+                                   Math.Abs(sD.ApproachAboveLevel - 60100.0) < 0.01
+
+        ' Re-map the carried level (swingHigh moves to 60200) — mid-episode close (no
+        ' cross-level bleed — the #6 discipline).
+        tr.SetLevels(60200.0, 59900.0, 0.0, 0.0)
+        Dim sE = tr.Snapshot(ts + 800, cfg)
+        Dim eReMapClosed As Boolean = Not sE.ApproachAboveActive
+
+        Check("A37b level-approach — enter within 12 ticks, re-arm on leave, close on level re-map",
+              aInactive AndAlso bAboveActive AndAlso cReArmed AndAlso dReEnter AndAlso eReMapClosed,
+              String.Format("inactive={0} enter={1} reArm={2} reEnter={3} reMap={4} (b.level={5} d.level={6})",
+                            aInactive, bAboveActive, cReArmed, dReEnter, eReMapClosed,
+                            sB.ApproachAboveLevel, sD.ApproachAboveLevel))
+    End Sub
+
+    ' -- A37c: sidecar append shape (utc | kind | side | usd | instance_id), never-throws ---
+    Private Sub A37c_SidecarAppendShape()
+        ' Redirect the sidecar path to a temp file — AlertsSidecar.GetPath uses
+        ' AppDomain.CurrentDomain.BaseDirectory + "liq_events.log", so we clean up
+        ' any residual file in the harness bin dir instead of relocating.
+        Dim path As String = AlertsSidecar.GetPath()
+        Dim didThrow As Boolean = False
+        Try
+            If File.Exists(path) Then File.Delete(path)
+
+            Dim ev1 As New AlertEvent With {
+                .Kind = "FIRST_SEEN", .Side = "SELL", .UsdAmount = 250000.0,
+                .UtcMs = 1_700_000_000_000L, .InstanceId = "iid-A37c"}
+            Dim ok1 As Boolean = AlertsSidecar.TryAppend(ev1)
+
+            Dim ev2 As New AlertEvent With {
+                .Kind = "CASCADE", .Side = "BUY", .UsdAmount = 1234567.0,
+                .UtcMs = 1_700_000_010_000L, .InstanceId = "iid-A37c"}
+            Dim ok2 As Boolean = AlertsSidecar.TryAppend(ev2)
+
+            Dim lines() As String = File.ReadAllLines(path)
+            Dim row1 As String = If(lines.Length > 0, lines(0), "")
+            Dim row2 As String = If(lines.Length > 1, lines(1), "")
+
+            ' Shape: "<utc> | <kind> | <side> | <usd> | <instance_id>". Split on " | " to
+            ' recover the fields.
+            Dim p1() As String = row1.Split(New String() {" | "}, StringSplitOptions.None)
+            Dim p2() As String = row2.Split(New String() {" | "}, StringSplitOptions.None)
+            Dim shape1Ok As Boolean = p1.Length = 5 AndAlso p1(1) = "FIRST_SEEN" AndAlso
+                                       p1(2) = "SELL" AndAlso p1(3) = "250000" AndAlso p1(4) = "iid-A37c" AndAlso
+                                       p1(0).EndsWith("Z")
+            Dim shape2Ok As Boolean = p2.Length = 5 AndAlso p2(1) = "CASCADE" AndAlso
+                                       p2(2) = "BUY" AndAlso p2(3) = "1234567" AndAlso p2(4) = "iid-A37c"
+
+            ' Never-throws on a null event.
+            Dim ok3 As Boolean = Not AlertsSidecar.TryAppend(Nothing)
+
+            Check("A37c sidecar append shape (utc | kind | side | usd | instance_id, append-only, null-safe)",
+                  ok1 AndAlso ok2 AndAlso shape1Ok AndAlso shape2Ok AndAlso ok3 AndAlso Not didThrow,
+                  String.Format("ok1={0} ok2={1} shape1={2} shape2={3} ok3(null)={4} row1='{5}' row2='{6}'",
+                                ok1, ok2, shape1Ok, shape2Ok, ok3, row1, row2))
+        Catch ex As Exception
+            didThrow = True
+            Check("A37c sidecar append shape", False, "threw: " & ex.Message)
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+        End Try
+    End Sub
+
+    ' -- A37d: Reset clears state; disabled cfg makes Fold + Snapshot a no-op ---
+    Private Sub A37d_ResetAndDisabledInert()
+        Dim tr As New AlertsTracker()
+        Dim cfg = AlertsCfgDefault()
+        Dim iid As String = "test-instance-a37d"
+        Dim ts As Long = 1_700_000_000_000L
+        Dim sidecarPath As String = AlertsSidecar.GetPath()
+        Try
+            If File.Exists(sidecarPath) Then File.Delete(sidecarPath)
+
+            ' Fire three liq-flagged trades to build a cascade — then Reset — then check.
+            tr.FoldTrade(60000.0, 100000.0, True, True, ts + 100, cfg, iid)
+            tr.FoldTrade(60000.0, 100000.0, True, True, ts + 200, cfg, iid)
+            tr.FoldTrade(60000.0, 100000.0, True, True, ts + 300, cfg, iid)
+            Dim sPre = tr.Snapshot(ts + 400, cfg)
+            Dim preFired As Boolean = sPre.CascadeSignal = "CASCADE_ABOVE"
+
+            tr.Reset()
+            Dim sPost = tr.Snapshot(ts + 500, cfg)
+            Dim resetOk As Boolean = sPost.CascadeSignal = "NONE" AndAlso sPost.CascadeCount = 0 AndAlso
+                                     sPost.PendingEvents.Count = 0
+
+            ' Disabled cfg — Fold and Snapshot are no-ops (the byte-identical rollback path).
+            Dim cfgOff As New AlertsSettings With {.Enabled = False}
+            tr.FoldTrade(60000.0, 100000.0, True, True, ts + 600, cfgOff, iid)
+            tr.FoldTrade(60000.0, 100000.0, True, True, ts + 700, cfgOff, iid)
+            tr.FoldTrade(60000.0, 100000.0, True, True, ts + 800, cfgOff, iid)
+            Dim sOff = tr.Snapshot(ts + 900, cfgOff)
+            Dim disabledInert As Boolean = sOff.CascadeSignal = "NONE" AndAlso sOff.CascadeCount = 0
+
+            Check("A37d Reset clears cascade state; disabled cfg makes Fold+Snapshot inert",
+                  preFired AndAlso resetOk AndAlso disabledInert,
+                  String.Format("preFired={0} resetOk={1} disabledInert={2} sPre.count={3} sPost.count={4} sOff.count={5}",
+                                preFired, resetOk, disabledInert, sPre.CascadeCount, sPost.CascadeCount, sOff.CascadeCount))
+        Finally
+            Try
+                If File.Exists(sidecarPath) Then File.Delete(sidecarPath)
+            Catch
+            End Try
+        End Try
+    End Sub
+
+    ' -- A37e: HC25 fence rejects alerts.* keys; sibling scoring key still passes -----
+    Private Sub A37e_Hc25AlertsFence()
+        Dim s As String = "{""version"":59,""scoring"":{""verdict_med_pct"":0.53}," &
+                          """alerts"":{""enabled"":true,""cascade_min_trades"":3," &
+                          """cascade_window_sec"":10,""level_ticks"":12,""sound_enabled"":false}}"
+        Dim rEnabled = SettingsDiffApplier.Validate(OneDiff("alerts.enabled", "true", "false"), s, 3)
+        Dim rMin = SettingsDiffApplier.Validate(OneDiff("alerts.cascade_min_trades", "3", "5"), s, 3)
+        Dim rWin = SettingsDiffApplier.Validate(OneDiff("alerts.cascade_window_sec", "10", "20"), s, 3)
+        Dim rTicks = SettingsDiffApplier.Validate(OneDiff("alerts.level_ticks", "12", "24"), s, 3)
+        Dim rSound = SettingsDiffApplier.Validate(OneDiff("alerts.sound_enabled", "false", "true"), s, 3)
+        Dim rSib = SettingsDiffApplier.Validate(OneDiff("scoring.verdict_med_pct", "0.53", "0.55"), s, 3)
+
+        Check("A37e HC25 fence rejects all 5 alerts.* keys; sibling scoring.verdict_med_pct still passes",
+              Not rEnabled.IsValid AndAlso rEnabled.ErrorReason.Contains("off-tweaker-surface") AndAlso
+              Not rMin.IsValid AndAlso Not rWin.IsValid AndAlso
+              Not rTicks.IsValid AndAlso Not rSound.IsValid AndAlso
+              rSib.IsValid,
+              String.Format("enabled={0} min={1} win={2} ticks={3} sound={4} sib={5} reason='{6}'",
+                            rEnabled.IsValid, rMin.IsValid, rWin.IsValid,
+                            rTicks.IsValid, rSound.IsValid, rSib.IsValid, rEnabled.ErrorReason))
     End Sub
 
 End Module

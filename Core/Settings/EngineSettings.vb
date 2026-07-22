@@ -137,6 +137,16 @@ Public Class EngineSettings
     ''' plumbing, zero scoring impact; OFF the auto-tweaker surface (HARD CONSTRAINT 18).</summary>
     <JsonPropertyName("signal_bridge")>
     Public Property SignalBridge As New SignalBridgeSettings
+
+    ''' <summary>[#7 liq-cascade alarm + #8 level-approach alerts, v59]
+    ''' Display/alert-only surface (docs/liq-cascade-level-alerts-proposal.md, H1–H5 all
+    ''' ticked 2026-07-22, H4 AMENDED to require persistence via a `liq_events.log`
+    ''' sidecar beside the CSV). ZERO scoring impact — no CSV column, no card, no
+    ''' snapshot line; TAPE-strip tag + status-bar flash only. OFF the auto-tweaker
+    ''' surface (HARD CONSTRAINT 25 — display / alert plumbing, no failure-rate linkage;
+    ''' same class as exit_guard.* / live_strip.* / signal_bridge.*).</summary>
+    <JsonPropertyName("alerts")>
+    Public Property Alerts As New AlertsSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -1180,4 +1190,39 @@ Public Class SignalBridgeSettings
     <JsonPropertyName("enabled")>     Public Property Enabled    As Boolean = False
     ''' <summary>Atomic-write target. Default = the agreed neutral folder outside both repos (§8 D9); the emitter creates the directory if missing. Empty ⇒ beside the exe (fallback semantic).</summary>
     <JsonPropertyName("output_path")> Public Property OutputPath As String = "C:\Dev\DeribitBridge\verdict_signal.json"
+End Class
+
+''' <summary>
+''' [#7 liq-cascade alarm + #8 level-approach alerts, v59] Display/alert-only surface
+''' (docs/liq-cascade-level-alerts-proposal.md, H1–H5 all ticked 2026-07-22, H4 AMENDED).
+''' The tracker (Core/AlertsTracker.vb) is dual-consumed: the strip drives the tag +
+''' status-bar flash (H1), and the sidecar `liq_events.log` records FIRST_SEEN / CASCADE
+''' events append-only beside the CSV — its existence IS the durable A4 gate evidence
+''' (H4). ZERO scoring impact — no CSV column, no card, no snapshot line; strip-only.
+''' OFF the auto-tweaker surface (HARD CONSTRAINT 25 — display / alert plumbing, no
+''' failure-rate linkage; same class as exit_guard.* / live_strip.* / signal_bridge.*):
+''' the `alerts.` prefix is fenced in SettingsDiffApplier and cited in PromptBuilder.
+''' Hot-reloadable (checked per Fold + per strip tick).
+''' </summary>
+Public Class AlertsSettings
+    ''' <summary>Master switch. False ⇒ tracker Fold+Snapshot do zero work + strip
+    ''' renders no alert tags (the rollback path — byte-identical to pre-build). Default True.</summary>
+    <JsonPropertyName("enabled")>            Public Property Enabled           As Boolean = True
+    ''' <summary>H2 threshold — minimum liq-flagged trade count within cascade_window_sec to
+    ''' fire CASCADE (either side; dominant side names the direction). Provisional anchor
+    ''' (proposal §3 — nobody has seen a live cascade; re-anchor after the first real one).
+    ''' Default 3.</summary>
+    <JsonPropertyName("cascade_min_trades")> Public Property CascadeMinTrades  As Integer = 3
+    ''' <summary>H2 window — cascade counting horizon in seconds. Default 10.</summary>
+    <JsonPropertyName("cascade_window_sec")> Public Property CascadeWindowSec  As Double  = 10.0
+    ''' <summary>H3 level-approach distance in ticks (BTC-PERPETUAL tick = $0.5) — a price
+    ''' within this many ticks of a CARRIED level (5m swing + VPFR HVN — the TAPE strip's
+    ''' candidate set, never recomputed here) enters an approach episode; re-arm on leave
+    ''' (the absorption-episode pattern). Provisional = the #6 absorption proximity anchor
+    ''' (12 ticks) so "near a level" reads with one mental model across features (proposal §3).
+    ''' Default 12.</summary>
+    <JsonPropertyName("level_ticks")>        Public Property LevelTicks        As Integer = 12
+    ''' <summary>H1 — play an audible cue on cascade fire. Default False (opt-in, per
+    ''' proposal §3 — the strip flash is the primary attention surface).</summary>
+    <JsonPropertyName("sound_enabled")>      Public Property SoundEnabled      As Boolean = False
 End Class

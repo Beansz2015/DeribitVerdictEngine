@@ -156,6 +156,14 @@ Public Class PromptBuilder
             "'scoring.structural_levels.target_max_atr_mult', '...stop_max_atr_mult', " &
             "'...stop_min_floor_ticks' REMAIN tunable, HC21 unchanged. (Enforced in code: " &
             "SettingsDiffApplier exact-match rejects all four keys.)" & vbLf &
+        "25. Never propose any 'alerts.*' key. The alerts block drives the #7 liquidation-cascade " &
+            "alarm + #8 level-approach alerts — a display/alert-only surface (TAPE-strip tag + " &
+            "status-bar flash + a tiny append-only sidecar `liq_events.log` for the A4 gate " &
+            "evidence). ZERO scoring impact, no CSV column, no failure-rate linkage; same class as " &
+            "'exit_guard.*' / 'live_strip.*' / 'signal_bridge.*'. The five keys (enabled, " &
+            "cascade_min_trades, cascade_window_sec, level_ticks, sound_enabled) are provisional " &
+            "anchors until the first real cascade is observed — re-anchor is the trader's job. " &
+            "(Enforced in code: SettingsDiffApplier rejects the 'alerts.' prefix as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

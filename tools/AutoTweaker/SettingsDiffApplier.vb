@@ -74,7 +74,8 @@ Public Class SettingsDiffApplier
         "indicators.ofi.momentum_",                 ' [v50 retune R1] OFI momentum modifier RETIRED (momentum_enabled=false) — the momentum_window/threshold/bonus keys are inert; leaving them proposable recreates the recorded-APPLIED-no-op class v47 F1 closed (HARD CONSTRAINT 20). Prefix-safe: book_depth, buy/sell_dominant_ratio, averaging_enabled, avg_window_sec are NOT momentum_-prefixed
         "scoring.structural_levels.sessions.",      ' [B4b placed-geometry] per-session fallback-target overrides (DG3: LONDON 2.0 / ASIA 1.25) — hand-tuned re-baseline tier, HC11 class (HARD CONSTRAINT 21). Prefix-safe: the flat structural_levels numerics stay proposable
         "indicators.absorption.default.",           ' [P4 #6] shared re-baseline tier (min_aggr_usd) — hand-tuned per book-absorption §5 target-engagement, HC11 class (HARD CONSTRAINT 23). Prefix-safe: the flat absorption params stay proposable
-        "indicators.absorption.sessions."           ' [P4 #6] per-session overrides — hand-tuned per book-absorption §5, HC11 class (HARD CONSTRAINT 23)
+        "indicators.absorption.sessions.",          ' [P4 #6] per-session overrides — hand-tuned per book-absorption §5, HC11 class (HARD CONSTRAINT 23)
+        "alerts."                                    ' [#7 + #8 v59] liq-cascade alarm + level-approach alerts — display/alert-only plumbing, zero scoring impact, no failure-rate linkage; same class as exit_guard.* / live_strip.* / signal_bridge.* (HARD CONSTRAINT 25). Prefix-safe: no other top-level "alerts." keys exist
     }
 
     ' Validate a proposed diff list.

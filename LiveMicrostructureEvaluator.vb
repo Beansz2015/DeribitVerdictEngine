@@ -69,6 +69,21 @@ Public NotInheritable Class MicrostructureSnapshot
     Public Property AbsorptionSignal   As String = "NONE"  ' ABSORB_ABOVE / ABSORB_BELOW / NONE
     Public Property AbsorptionLevel    As Double
     Public Property AbsorptionRatio    As Double
+
+    ''' <summary>[#7 + #8 v59] Alerts state — cascade fire (H2) + level-approach episode
+    ''' (H3) + first-liq-seen persistence sentinel (H4 amended, sidecar existence).
+    ''' Strip-only surface (H1). NONE / inactive when disabled or no event fired —
+    ''' never a fake reading (the tracker discipline).</summary>
+    Public Property HasAlerts          As Boolean
+    Public Property CascadeSignal      As String = "NONE"   ' CASCADE_ABOVE / CASCADE_BELOW / NONE
+    Public Property CascadeCount       As Integer
+    Public Property CascadeUsdDominant As Double
+    Public Property ApproachAboveActive As Boolean
+    Public Property ApproachAboveLevel As Double
+    Public Property ApproachBelowActive As Boolean
+    Public Property ApproachBelowLevel As Double
+    Public Property LiqEverSeen        As Boolean
+    Public Property PendingEvents      As New List(Of AlertEvent)()
 End Class
 
 Public NotInheritable Class LiveMicrostructureEvaluator
@@ -180,6 +195,31 @@ Public NotInheritable Class LiveMicrostructureEvaluator
                     snap.AbsorptionSignal = absRead.Signal
                     snap.AbsorptionLevel  = absRead.LevelPrice
                     snap.AbsorptionRatio  = absRead.AbsorbRatio
+                End If
+            End If
+
+            ' [#7 + #8 v59] Alerts snapshot — the same feed-side tracker the fold path
+            ' updates. The strip renders CASCADE + NEAR tags when active (H1); the
+            ' host consumes pending events (audible cue + flash + sidecar was
+            ' already appended inside the tracker). LiqEverSeen reads the sidecar
+            ' file's existence (H4 amended), so it survives restarts.
+            Dim alCfg = cfg.Alerts
+            If alCfg IsNot Nothing AndAlso alCfg.Enabled Then
+                Dim alNowMs As Long = If(nowUtcMs >= 0, nowUtcMs,
+                                         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+                Dim al = state.GetAlerts(alNowMs, alCfg)
+                snap.HasAlerts           = al.CascadeSignal <> "NONE" OrElse
+                                            al.ApproachAboveActive OrElse al.ApproachBelowActive
+                snap.CascadeSignal       = al.CascadeSignal
+                snap.CascadeCount        = al.CascadeCount
+                snap.CascadeUsdDominant  = al.CascadeUsdDominant
+                snap.ApproachAboveActive = al.ApproachAboveActive
+                snap.ApproachAboveLevel  = al.ApproachAboveLevel
+                snap.ApproachBelowActive = al.ApproachBelowActive
+                snap.ApproachBelowLevel  = al.ApproachBelowLevel
+                snap.LiqEverSeen         = al.LiqEverSeenThisProcess
+                If al.PendingEvents IsNot Nothing AndAlso al.PendingEvents.Count > 0 Then
+                    snap.PendingEvents.AddRange(al.PendingEvents)
                 End If
             End If
         Catch

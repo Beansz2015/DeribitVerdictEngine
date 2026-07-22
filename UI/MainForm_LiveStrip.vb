@@ -34,6 +34,14 @@ Partial Public Class MainForm
     Private _liveStripLastText As String = Nothing
     Private _liveStripSyncing  As Boolean = False   ' guards the checkbox→setting handler during sync
 
+    ' [#7 + #8 v59] Alert flash + tooltip state. FlashUntilUtc: while > UtcNow, the strip
+    ' renders in the amber attention accent (status-bar flash — H1). LiqEverSeenTip: the
+    ' one shared tooltip on the TAPE label — set to a non-empty string once the sidecar
+    ' file exists (H4 amended, survives restarts via file-existence check).
+    Private _alertFlashUntilUtc As DateTime = DateTime.MinValue
+    Private _liveStripTooltip   As ToolTip = Nothing
+    Private _liveStripLastTip   As String = Nothing
+
     ' -----------------------------------------------------------------------
     ' Lifecycle — StartLiveStrip from the constructor (form load); StopLiveStrip on form close.
     ' Idempotent: a re-start disposes the prior timer first. The timer keeps running even when
@@ -104,7 +112,58 @@ Partial Public Class MainForm
 
         Dim snap As MicrostructureSnapshot =
             LiveMicrostructureEvaluator.Evaluate(_marketState, _lastSuccessfulIndicators, cfg)
-        SetLiveStrip(ComposeLiveStrip(snap), Theme.FG_TERTIARY)
+
+        ' [#7 + #8 v59] Consume any pending alert events fired since the last tick — play
+        ' the audible cue if sound_enabled (opt-in; default OFF), extend the status-bar
+        ' flash (H1). The sidecar append was already done in the tracker; this is UI only.
+        HandlePendingAlertEvents(snap, cfg)
+
+        ' Alert-active ⇒ render in the amber accent for the flash window; else neutral/dim
+        ' (the strip's usual "readout, not a call" hue).
+        Dim colour As Color = Theme.FG_TERTIARY
+        If _alertFlashUntilUtc > DateTime.UtcNow OrElse
+           snap.CascadeSignal <> "NONE" OrElse
+           snap.ApproachAboveActive OrElse snap.ApproachBelowActive Then
+            colour = Theme.ACC_WARN
+        End If
+
+        SetLiveStrip(ComposeLiveStrip(snap), colour)
+        UpdateLiqEverSeenTooltip(snap)
+    End Sub
+
+    ' [#7 + #8 v59] Fire the audible cue on cascade events (opt-in), and stretch the
+    ' status-bar flash so a transient event stays visible for a couple of ticks even if
+    ' the underlying signal already cleared.
+    Private Sub HandlePendingAlertEvents(snap As MicrostructureSnapshot, cfg As EngineSettings)
+        If snap Is Nothing OrElse snap.PendingEvents Is Nothing OrElse snap.PendingEvents.Count = 0 Then Return
+        Dim flashEnd As DateTime = DateTime.UtcNow.AddSeconds(6)
+        If flashEnd > _alertFlashUntilUtc Then _alertFlashUntilUtc = flashEnd
+
+        Dim playSound As Boolean = cfg.Alerts.SoundEnabled AndAlso snap.PendingEvents.Any(
+            Function(ev) ev.Kind = "CASCADE")
+        If playSound Then
+            Try
+                System.Media.SystemSounds.Exclamation.Play()
+            Catch
+                ' A missing audio device must never disrupt the run — the visual flash stands alone.
+            End Try
+        End If
+    End Sub
+
+    ' [#7 + #8 v59] Persistent tooltip on the TAPE label — text is set once the sidecar
+    ' file exists (H4 amended). Reads File.Exists on each tick so a deleted sidecar
+    ' honestly clears the tooltip; hot-reload safe.
+    Private Sub UpdateLiqEverSeenTooltip(snap As MicrostructureSnapshot)
+        If lblLiveStrip Is Nothing Then Return
+        If _liveStripTooltip Is Nothing Then _liveStripTooltip = New ToolTip()
+        Dim newTip As String = ""
+        If snap IsNot Nothing AndAlso snap.LiqEverSeen Then
+            newTip = "liq events observed — sidecar: " & AlertsSidecar.GetPath()
+        End If
+        If newTip <> _liveStripLastTip Then
+            _liveStripTooltip.SetToolTip(lblLiveStrip, newTip)
+            _liveStripLastTip = newTip
+        End If
     End Sub
 
     ' Returns True only when the feed is connected, not cooling down, and book + trades are fresh.
@@ -151,7 +210,43 @@ Partial Public Class MainForm
         ' (book-absorption proposal §7 D6). Strip-only surface, no card/snapshot
         ' obligation (the #3/#5 precedent).
         If s.HasAbsorption Then parts.Add(ComposeAbsorption(s))
+        ' [#7 v59] Cascade tag — present ONLY while the current window is at/above the
+        ' threshold (proposal §1). Strip-only surface — the #3/#5/#6 precedent.
+        If s.CascadeSignal <> "NONE" Then parts.Add(ComposeCascade(s))
+        ' [#8 v59] Level-approach tags — one per active side. Renders while the
+        ' corresponding approach episode is active (re-arm on leave — proposal §2).
+        If s.ApproachAboveActive Then parts.Add(ComposeApproach(s, isAbove:=True))
+        If s.ApproachBelowActive Then parts.Add(ComposeApproach(s, isAbove:=False))
         Return String.Join(" · ", parts)
+    End Function
+
+    ' [#7 v59] "LIQ↑ 3× ($2.1M)" — cascade dominant side (↑ = buy-liqs / shorts squeezed;
+    ' ↓ = sell-liqs / longs squeezed), count in the window, dominant-side USD total.
+    Private Shared Function ComposeCascade(s As MicrostructureSnapshot) As String
+        Dim arrow As String = If(s.CascadeSignal = "CASCADE_ABOVE", "↑", "↓")
+        Return "LIQ" & arrow & " " & s.CascadeCount.ToString() & "× (" &
+               FormatUsdCompact(s.CascadeUsdDominant) & ")"
+    End Function
+
+    ' [#8 v59] "NEAR SH 60103 (7t)" — the bracketing level's approximate label (matches
+    ' the strip's carried-level labels) + price + distance in ticks (BTC-PERPETUAL tick = $0.5).
+    Private Shared Function ComposeApproach(s As MicrostructureSnapshot, isAbove As Boolean) As String
+        Dim price As Double = If(isAbove, s.ApproachAboveLevel, s.ApproachBelowLevel)
+        Dim label As String = If(isAbove,
+                                 If(s.Above.Has AndAlso Math.Abs(s.Above.Price - price) < 0.01, s.Above.Label, "L↑"),
+                                 If(s.Below.Has AndAlso Math.Abs(s.Below.Price - price) < 0.01, s.Below.Label, "L↓"))
+        Dim distTicks As Integer = 0
+        If s.HasPrice AndAlso price > 0 Then
+            distTicks = CInt(Math.Round(Math.Abs(price - s.LastPrice) / SignalEmitter.TickSize))
+        End If
+        Return "NEAR " & label & " " & price.ToString("0") & " (" & distTicks.ToString() & "t)"
+    End Function
+
+    Private Shared Function FormatUsdCompact(v As Double) As String
+        Dim a As Double = Math.Abs(v)
+        If a >= 1000000.0 Then Return "$" & (v / 1000000.0).ToString("0.0") & "M"
+        If a >= 1000.0 Then Return "$" & (v / 1000.0).ToString("0.0") & "k"
+        Return "$" & v.ToString("0")
     End Function
 
     ' [P4 #6] "ABS↑ 60510 (3.4×)" — the defended level + how many USD the band ate per

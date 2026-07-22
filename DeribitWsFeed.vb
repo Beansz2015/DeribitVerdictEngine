@@ -178,6 +178,12 @@ Public NotInheritable Class DeribitWsFeed
         ' Carried levels also clear; they re-carry at the next completed full run and
         ' the tracker re-arms on the next approach.
         _state.ResetAbsorption()
+        ' [#7 + #8 v59] Same discipline for the alerts tracker (cascade + approach) —
+        ' a pre-gap CASCADE edge cannot persist across a feed gap; a pre-gap approach
+        ' episode's price context is gone. The per-process first-liq-seen flag is
+        ' PRESERVED across reconnects within the same process (that persistence lives
+        ' in the sidecar file, not tracker memory — H4 amended).
+        _state.ResetAlerts()
         For Each res As String In SeedResolutions
             ct.ThrowIfCancellationRequested()
             Dim cap As Integer = 250
@@ -338,6 +344,12 @@ Public NotInheritable Class DeribitWsFeed
         ' enabled + the flat tracker params. Off ⇒ no extra work in the feed.
         Dim ab = cfg.Indicators.Absorption
         Dim foldAbs As Boolean = ab IsNot Nothing AndAlso ab.Enabled
+        ' [#7 + #8 v59] Alerts fold — the same per-batch cfg read pattern. Enabled ⇒
+        ' the tracker maintains the liq window (H2) + level-approach episodes (H3);
+        ' first-liq-seen writes into the sidecar (H4 amended) inside the tracker.
+        Dim al = cfg.Alerts
+        Dim foldAlerts As Boolean = al IsNot Nothing AndAlso al.Enabled
+        Dim alInstance As String = If(foldAlerts, ProcessIdentity.InstanceId, "")
         For Each t As JsonElement In data.EnumerateArray()
             Dim rec As New TradeRecord()
             rec.Price = t.GetProperty("price").GetDouble()
@@ -354,6 +366,11 @@ Public NotInheritable Class DeribitWsFeed
             If foldAbs Then
                 _state.FoldAbsorptionTrade(rec.Price, rec.Amount, rec.Direction = "buy",
                                            rec.Timestamp, ab)
+            End If
+            If foldAlerts Then
+                _state.FoldAlertsTrade(rec.Price, rec.Amount, rec.Direction = "buy",
+                                       rec.Liquidation IsNot Nothing AndAlso rec.Liquidation <> "none",
+                                       rec.Timestamp, al, alInstance)
             End If
         Next
     End Sub

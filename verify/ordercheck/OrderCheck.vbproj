@@ -58,6 +58,12 @@
          writes into the harness bin dir; the fixture cleans up). The feed-side folds +
          run-path routing stay OUT — same live-socket/WinForms boundary as A16-A23. -->
     <Compile Include="..\..\Core\LevelAbsorptionTracker.vb" />
+    <!-- #7 liq-cascade alarm + #8 level-approach alerts (A37 — docs/liq-cascade-level
+         -alerts-proposal.md §4 H5): the host-agnostic tracker (owned by MarketState,
+         above) + sidecar utility (append-only liq_events.log — H4 amended). The feed-
+         side fold + strip render stay OUT (same live-socket / WinForms boundary as
+         A16-A31). -->
+    <Compile Include="..\..\Core\AlertsTracker.vb" />
     <Compile Include="..\..\AnalysisLogger.vb" />
     <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
          exercised against a real MarketState (already linked above). -->

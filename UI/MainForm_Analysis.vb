@@ -671,6 +671,11 @@ Partial Public Class MainForm
         If _marketState IsNot Nothing Then
             _marketState.SetAbsorptionLevels(r.LastSwingHigh5m, r.LastSwingLow5m,
                                              r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
+            ' [#7 + #8 v59] Same carry into the alerts tracker (H3 level-approach reads
+            ' this identical candidate set — proposal §2). A re-mapped level closes that
+            ' side's approach episode (the #6 no-cross-level-bleed discipline).
+            _marketState.SetAlertsLevels(r.LastSwingHigh5m, r.LastSwingLow5m,
+                                         r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
         End If
 
         ' P4f — capture last-successful state for the SKIPPED-render fallback.

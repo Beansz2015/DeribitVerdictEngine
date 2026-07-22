@@ -61,6 +61,13 @@ Public NotInheritable Class MarketState
     ' per full run; reset on (re)connect — all under _lock.
     Private ReadOnly _absorptionTracker As New LevelAbsorptionTracker()
 
+    ' [#7 + #8 v59] Alerts tracker — liquidation-cascade alarm + level-approach alerts
+    ' (docs/liq-cascade-level-alerts-proposal.md). Folded per streamed trade (the trade
+    ' analogue of the aggressor-velocity fold); carried levels set once per full run
+    ' (SetAlertsLevels — the SAME candidate set the strip + absorption tracker use);
+    ' reset on (re)connect. Display/alert only — never touches the run path.
+    Private ReadOnly _alertsTracker As New AlertsTracker()
+
     ' ── Writers (receive loop / seeding) ───────────────────────────────────────────────
 
     ''' <summary>Replace a candle series wholesale from a REST seed burst (startup / reconnect).
@@ -268,6 +275,44 @@ Public NotInheritable Class MarketState
     Public Function GetAbsorption(nowMs As Long, cfg As AbsorptionSettings) As AbsorptionSnapshot
         SyncLock _lock
             Return _absorptionTracker.Snapshot(nowMs, cfg)
+        End SyncLock
+    End Function
+
+    ''' <summary>[#7 + #8 v59] Refresh the alerts tracker's carried candidate levels
+    ''' from a completed full run (the same carry #6 uses). Called at the
+    ''' _lastSuccessfulIndicators capture site.</summary>
+    Public Sub SetAlertsLevels(swingHigh5m As Double, swingLow5m As Double,
+                                hvnAbove As Double, hvnBelow As Double)
+        SyncLock _lock
+            _alertsTracker.SetLevels(swingHigh5m, swingLow5m, hvnAbove, hvnBelow)
+        End SyncLock
+    End Sub
+
+    ''' <summary>[#7 + #8 v59] Fold one streamed trade into the alerts tracker (liq
+    ''' cascade window + level-approach episode). Called by the feed right after
+    ''' AppendTrade — the same fold site FoldAggressorVelocity / FoldAbsorptionTrade use.
+    ''' Off when cfg.Enabled is false; the fold is a cheap early-out.</summary>
+    Public Sub FoldAlertsTrade(price As Double, amountUsd As Double, isBuy As Boolean,
+                                isLiq As Boolean, tsMs As Long,
+                                cfg As AlertsSettings, instanceId As String)
+        SyncLock _lock
+            _alertsTracker.FoldTrade(price, amountUsd, isBuy, isLiq, tsMs, cfg, instanceId)
+        End SyncLock
+    End Sub
+
+    ''' <summary>[#7 + #8 v59] Clear the alerts tracker on (re)connect so no pre-gap
+    ''' cascade / approach state bleeds across (the #4/#5/#6 discipline).</summary>
+    Public Sub ResetAlerts()
+        SyncLock _lock
+            _alertsTracker.Reset()
+        End SyncLock
+    End Sub
+
+    ''' <summary>[#7 + #8 v59] Read the alert state — cascade signal, per-side approach
+    ''' episodes, and any pending events (drained on read, host writes / plays them).</summary>
+    Public Function GetAlerts(nowMs As Long, cfg As AlertsSettings) As AlertsSnapshot
+        SyncLock _lock
+            Return _alertsTracker.Snapshot(nowMs, cfg)
         End SyncLock
     End Function
 
