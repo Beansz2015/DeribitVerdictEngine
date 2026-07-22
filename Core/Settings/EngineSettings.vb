@@ -464,7 +464,7 @@ Public Class AggressorVelocitySettings
     <JsonPropertyName("sessions")>                Public Property Sessions            As Dictionary(Of String, AggressorVelocitySessionOverride) =
         New Dictionary(Of String, AggressorVelocitySessionOverride) From {
             {"NY",     New AggressorVelocitySessionOverride With {.NormWindowSec = 60.0, .BurstRatioThreshold = 4.5}},
-            {"LONDON", New AggressorVelocitySessionOverride()},
+            {"LONDON", New AggressorVelocitySessionOverride With {.BurstRatioThreshold = 5.5}}, ' [v60] S1–S5 ticked 2026-07-23 — arms the LONDON TFI modifier (D1 auto-arm)
             {"ASIA",   New AggressorVelocitySessionOverride()}
         }
 End Class
