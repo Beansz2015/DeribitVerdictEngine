@@ -2903,12 +2903,15 @@ Module Program
     ' -- A28c: S2a session scoping + scoring_enabled:false byte-identical -----------
     Private Sub A28c_ScopingAndDisableInert()
         Dim cfg = BuildBurstCfg()   ' scoring on, bonus/penalty 1
-        ' (1) S2a scoping: a LONDON-hour run (res-3, no explicit burst_ratio_threshold)
+        ' (1) S2a scoping: an ASIA-hour run (res-3, no explicit burst_ratio_threshold)
         '     leaves the modifier inert even with a same-side BURST_SELL present.
-        '     (LONDON fallback ×2.0 clears the min-move floor, so the SHORT stands and
-        '     EffectiveShortScore reflects the plain cascade — no gate confound.)
-        Dim vLondon = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 10),
-                                              PositionState.None, BuildA8Norms(), cfg)
+        '     [v60 re-pin] LONDON armed 2026-07-23 (sessions.LONDON.burst_ratio_threshold
+        '     = 5.5, S1–S5 ticked) — the un-armed exemplar moves to ASIA, and LONDON now
+        '     pins the ARMED behaviour (+1 same-side upgrade, ss=12) alongside NY.
+        Dim vAsia = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 3),
+                                            PositionState.None, BuildA8Norms(), cfg)
+        Dim vLondonArmed = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 10),
+                                                   PositionState.None, BuildA8Norms(), cfg)
         ' (2) scoring_enabled:false → inert at NY too (the hot rollback).
         Dim cfgOff = BuildBurstCfg()
         cfgOff.Indicators.AggressorVelocity.ScoringEnabled = False
@@ -2918,12 +2921,14 @@ Module Program
         Dim vNorm = ScoringEngine.Calculate(BuildBurstIndicators("NORMAL", 15),
                                             PositionState.None, BuildA8Norms(), cfg)
 
-        Check("A28c S2a scoping + disable inert (LONDON burst ss=11; scoring_enabled:false ss=11 == NORMAL)",
-              vLondon.EffectiveShortScore = 11 AndAlso
+        Check("A28c S2a scoping + disable inert (ASIA burst ss=11 inert; LONDON ARMED ss=12 [v60]; off ss=11 == NORMAL)",
+              vAsia.EffectiveShortScore = 11 AndAlso
+              vLondonArmed.EffectiveShortScore = 12 AndAlso
               vOff.EffectiveShortScore = 11 AndAlso
               vNorm.EffectiveShortScore = 11,
-              String.Format("london={0} off={1} norm={2} (all must be 11 — modifier inert)",
-                            vLondon.EffectiveShortScore, vOff.EffectiveShortScore, vNorm.EffectiveShortScore))
+              String.Format("asia={0} londonArmed={1} off={2} norm={3} (asia/off/norm=11, londonArmed=12)",
+                            vAsia.EffectiveShortScore, vLondonArmed.EffectiveShortScore,
+                            vOff.EffectiveShortScore, vNorm.EffectiveShortScore))
     End Sub
 
     ' -- A28d: S5 rider — HC22 exact-match fences session_volume.enabled -----------
