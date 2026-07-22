@@ -14,7 +14,7 @@
 | Geometry-modes study re-read (v56 instrument) | Measurement | Book ~doubles (~mid-Aug) or the W6-1 audit — DIVERGENT flags must clear | TP-half (nearest-mode) live ⚠ candidate | First run 2026-07-21: nearest tops table, not separable |
 | res-3 §5.2 (aggr-vel Asia/London thresholds) | Calibration | ~150 fires/session (late Jul) | Burst scoring auto-arms on those sessions | Data-gated |
 | Funding calm-week re-read | Watch | A calm funding week | Fully closes the v52+v53 window | Waiting |
-| **Bridge soak review** | Consumer | Dated ~Jul 26–30 | Live ladder: ARM → live-at-min-size → then L3 spec slot; **⚑ P5 values carry the CONFIRMED-inversion reminder (seat-handover §2.3)** | Dated |
+| **Bridge soak review** | Consumer | **CALLED CLEAN 2026-07-22** (order-app `soak-review-reply-orderapp.md` + `review-soak-join-2026-07-22.md` = the joint record; 69/69 would-act≡Placed* parity; engine seat ACCEPTED same day — nothing in our entry exceeded §5.7+join) | Live ladder: ARM → live-at-min-size → then L3 spec slot; **⚑ P5 values carry the CONFIRMED-inversion reminder (seat-handover §2.3)** | Dated |
 | **#6 absorption activation gates ⚠** | Scoring | Post-F4 eval data ~Jul 29–31 (independence + ≥10pp gradient, n≥30) | Absorption Step-2 penalty wire-in | Dated |
 | W6-1 LONDON ruling | Calibration | Audit re-run ~Aug 1 (+ what-if LONDON grid — L5/L6) | LONDON stop_max override; swing-buffer design input | Dated |
 | W6-4 offline ceiling audit | Measurement | ~3–4 wks of v0.8 rows (early Aug); method draftable NOW | **W6-5 (B1)** + any W6-7 Tier-C spend | Prep-ahead OK |
