@@ -56,6 +56,15 @@ Public NotInheritable Class LevelAbsorptionTracker
     Private _hvnAbove As Double = 0.0
     Private _hvnBelow As Double = 0.0
 
+    ' [v61 geometry rescale] Resolved dollar distances, refreshed once per full run at
+    ' the SetAbsorptionLevels carry site (proximity/band/break_tol as ATR-fractions ×
+    ' r.ATR — proposal §1). The tracker keeps working in absolute dollars internally;
+    ' only the config→dollars conversion moved out. Zero (cold) ⇒ gate can never open,
+    ' so the tracker safely stays IDLE until levels + geometry are carried in.
+    Private _proximityUsd As Double = 0.0
+    Private _bandUsd As Double = 0.0
+    Private _breakTolUsd As Double = 0.0
+
     ' Previous book snapshot — the conservation interval's "before" side.
     Private _prevBook As OrderBookSnapshot = Nothing
 
@@ -109,18 +118,27 @@ Public NotInheritable Class LevelAbsorptionTracker
         _below.BrokenLevel = 0.0
         _swingHigh5m = 0.0 : _swingLow5m = 0.0
         _hvnAbove = 0.0 : _hvnBelow = 0.0
+        _proximityUsd = 0.0 : _bandUsd = 0.0 : _breakTolUsd = 0.0
         _prevBook = Nothing
     End Sub
 
-    ''' <summary>Refresh the carried candidate levels from a completed full run (the
-    ''' strip's carry — §4.1). A mid-episode re-map is handled at the next fold: if the
-    ''' side's selected nearest level changes, its episode resets (no cross-level bleed).</summary>
+    ''' <summary>Refresh the carried candidate levels + the resolved dollar geometry from
+    ''' a completed full run (the strip's carry — §4.1). A mid-episode re-map is handled
+    ''' at the next fold: if the side's selected nearest level changes, its episode resets
+    ''' (no cross-level bleed). [v61 geometry rescale] proximity/band/break-tol arrive in
+    ''' absolute dollars, resolved at the carry site from r.ATR × the ATR-fraction cfg
+    ''' keys — the tracker itself stays tick/ATR-agnostic. See
+    ''' docs/absorption-geometry-rescale-proposal.md §1.</summary>
     Public Sub SetLevels(swingHigh5m As Double, swingLow5m As Double,
-                         hvnAbove As Double, hvnBelow As Double)
+                         hvnAbove As Double, hvnBelow As Double,
+                         proximityUsd As Double, bandUsd As Double, breakTolUsd As Double)
         _swingHigh5m = swingHigh5m
         _swingLow5m = swingLow5m
         _hvnAbove = hvnAbove
         _hvnBelow = hvnBelow
+        _proximityUsd = Math.Max(proximityUsd, 0.0)
+        _bandUsd = Math.Max(bandUsd, 0.0)
+        _breakTolUsd = Math.Max(breakTolUsd, 0.0)
     End Sub
 
     ' ── Trade fold (per streamed print) ─────────────────────────────────────────────────
@@ -136,12 +154,13 @@ Public NotInheritable Class LevelAbsorptionTracker
         FoldTradeSide(_below, price, amountUsd, isBuy, tsMs, cfg)
     End Sub
 
-    Private Shared Sub FoldTradeSide(side As SideState, price As Double, amountUsd As Double,
-                                     isBuy As Boolean, tsMs As Long, cfg As AbsorptionSettings)
+    Private Sub FoldTradeSide(side As SideState, price As Double, amountUsd As Double,
+                              isBuy As Boolean, tsMs As Long, cfg As AbsorptionSettings)
         If Not side.Active Then Return
-        Dim tick As Double = SignalEmitter.TickSize
-        Dim band As Double = cfg.BandTicks * tick
-        Dim breakTol As Double = cfg.BreakTolTicks * tick
+        ' [v61 geometry rescale] Distances resolved once per run at SetLevels — the
+        ' tracker consumes absolute dollars here (no tick math, no cfg lookup).
+        Dim band As Double = _bandUsd
+        Dim breakTol As Double = _breakTolUsd
         Dim lvl As Double = side.LevelPrice
 
         If side.IsAbove Then
@@ -214,10 +233,11 @@ Public NotInheritable Class LevelAbsorptionTracker
                              bestAsk As Double, worstAsk As Double,
                              bestBid As Double, worstBid As Double,
                              tsMs As Long, cfg As AbsorptionSettings)
-        Dim tick As Double = SignalEmitter.TickSize
-        Dim prox As Double = cfg.ProximityTicks * tick
-        Dim band As Double = cfg.BandTicks * tick
-        Dim breakTol As Double = cfg.BreakTolTicks * tick
+        ' [v61 geometry rescale] Distances resolved once per run at SetLevels — the
+        ' tracker consumes absolute dollars here (no tick math, no cfg lookup).
+        Dim prox As Double = _proximityUsd
+        Dim band As Double = _bandUsd
+        Dim breakTol As Double = _breakTolUsd
 
         ' Nearest carried candidate on this side of the touch, required inside the
         ' visible ladder span (§8 — min(proximity, visible) by construction).

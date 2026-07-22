@@ -177,13 +177,20 @@ Public NotInheritable Class MarketState
         End SyncLock
     End Sub
 
-    ''' <summary>[P4 #6] Refresh the absorption tracker's carried candidate levels from a
-    ''' completed full run (the strip's carry — proposal §4.1). A mid-episode re-map
-    ''' resets that side's episode at the next fold (no cross-level bleed).</summary>
+    ''' <summary>[P4 #6] Refresh the absorption tracker's carried candidate levels + the
+    ''' resolved dollar geometry from a completed full run (the strip's carry — proposal
+    ''' §4.1). A mid-episode re-map resets that side's episode at the next fold (no
+    ''' cross-level bleed). [v61 geometry rescale] proximity/band/break-tol arrive as
+    ''' absolute dollars — the carry site (MainForm_Analysis) resolves ATR-fraction cfg
+    ''' × r.ATR, so the tracker itself stays tick/ATR-agnostic. See
+    ''' docs/absorption-geometry-rescale-proposal.md §1.</summary>
     Public Sub SetAbsorptionLevels(swingHigh5m As Double, swingLow5m As Double,
-                                   hvnAbove As Double, hvnBelow As Double)
+                                   hvnAbove As Double, hvnBelow As Double,
+                                   proximityUsd As Double, bandUsd As Double,
+                                   breakTolUsd As Double)
         SyncLock _lock
-            _absorptionTracker.SetLevels(swingHigh5m, swingLow5m, hvnAbove, hvnBelow)
+            _absorptionTracker.SetLevels(swingHigh5m, swingLow5m, hvnAbove, hvnBelow,
+                                         proximityUsd, bandUsd, breakTolUsd)
         End SyncLock
     End Sub
 

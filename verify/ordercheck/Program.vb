@@ -217,6 +217,7 @@ Module Program
         A31e_ResetColdDegenerate()
         A31f_CsvReservedColumnsPopulate()
         A31g_SessionResolutionAndHc23Fences()
+        A31h_TwoAtrScaleInvariance()
 
         ' Offline matrix placed-target migration (docs/offline-matrix-placed-target
         ' -proposal.md §5 acceptance): the favourable barrier routes to the logged
@@ -3253,16 +3254,28 @@ Module Program
     End Sub
 
     ' =======================================================================
-    ' A31 — book absorption at structural levels (P4 #6 build sub-version).
-    ' docs/book-absorption-proposal.md §4/§9 + docs/book-absorption-implementer-brief.md.
-    ' Exercises the REAL LevelAbsorptionTracker + ClassifyAbsorption +
-    ' ResolveAbsorptionMinAggrUsd. Tick $0.5 ⇒ POCO defaults: proximity $6,
-    ' band $2, break tolerance $1, window 10s, absorb_ratio 3.0, floor 25000,
-    ' max_pull_frac 0.5, min_aggr_usd 150000. The feed-side folds + the WS-only
-    ' run-path gate stay OUT (live-socket/WinForms boundary, the A23 precedent) —
-    ' REST-inertness holds by construction: nothing folds the tracker off the WS
-    ' feed, and the cold tracker reads NONE/null (A31e/A31f pin that surface).
+    ' A31 — book absorption at structural levels (P4 #6 build sub-version, v54;
+    ' [v61] geometry rescale onto ATR-fractions — docs/absorption-geometry-rescale-
+    ' proposal.md §1). Docs: book-absorption-proposal.md §4/§9 + book-absorption-
+    ' implementer-brief.md; rescale spec-back: docs/absorption-geometry-rescale-
+    ' spec-back.md. Exercises the REAL LevelAbsorptionTracker + ClassifyAbsorption +
+    ' ResolveAbsorptionMinAggrUsd. [v61] The three tick keys retired; SetLevels now
+    ' carries resolved dollar distances (the carry-site pattern). Fixtures re-pin the
+    ' PREVIOUS test book geometry byte-identical by passing 6/2/1 USD explicitly
+    ' (== the retired v54 defaults 12t/4t/2t at TickSize $0.5). POCO defaults [v61]:
+    ' proximity_atr_frac 0.30, band_atr_frac 0.10, break_tol_atr_frac 0.05, window
+    ' 10s, absorb_ratio 1.5, depletion_floor_usd 5000, max_pull_frac 0.75, default
+    ' min_aggr_usd 20000. The feed-side folds + the WS-only run-path gate stay OUT
+    ' (live-socket/WinForms boundary, the A23 precedent) — REST-inertness holds by
+    ' construction: nothing folds the tracker off the WS feed, and the cold tracker
+    ' reads NONE/null (A31e/A31f pin that surface).
     ' =======================================================================
+
+    ' Historic v54 test geometry (12t / 4t / 2t at TickSize $0.5) as absolute dollars —
+    ' passed to SetLevels so A31a-g exercise the same ladder/book geometry as pre-v61.
+    Private Const AbsProxUsd As Double = 6.0
+    Private Const AbsBandUsd As Double = 2.0
+    Private Const AbsBreakTolUsd As Double = 1.0
 
     ''' <summary>A 10-level ladder: asks ascending from askStart (step $0.5, default
     ''' size 5000, overridable per price), bids descending just below. Watched-level
@@ -3295,7 +3308,7 @@ Module Program
         Dim ab As New AbsorptionSettings()
         Dim tr As New LevelAbsorptionTracker()
         Dim t0 As Long = 1700000000000L
-        tr.SetLevels(100010.0, 0, 0, 0)
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
 
         tr.FoldBook(AbsBandBook(), t0, ab)
         Dim sOpen = tr.Snapshot(t0, ab)
@@ -3319,7 +3332,7 @@ Module Program
 
         ' Mid-episode carried-level re-map (the §4.1 no-cross-level-bleed rule): the side
         ' re-binds to the NEW nearest level as a fresh episode, never carrying the old one.
-        tr.SetLevels(100011.0, 0, 0, 0)
+        tr.SetLevels(100011.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
         tr.FoldBook(AbsBandBook(), t0 + 300, ab)
         Dim sRemap = tr.Snapshot(t0 + 300, ab)
         Check("A31a level re-map mid-episode resets onto the new level (100010→100011, fresh episode)",
@@ -3340,7 +3353,7 @@ Module Program
         Dim ab As New AbsorptionSettings()
         Dim tr As New LevelAbsorptionTracker()
         Dim t0 As Long = 1700000000000L
-        tr.SetLevels(100010.0, 0, 0, 0)
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
 
         tr.FoldBook(AbsBandBook(), t0, ab)
         tr.FoldTrade(100010.0, 90000.0, isBuy:=True, tsMs:=t0 + 50, cfg:=ab)    ' press + band fill
@@ -3383,7 +3396,7 @@ Module Program
         Dim ab As New AbsorptionSettings()
         Dim tr As New LevelAbsorptionTracker()
         Dim t0 As Long = 1700000000000L
-        tr.SetLevels(100010.0, 0, 0, 0)
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
 
         tr.FoldBook(AbsBandBook(), t0, ab)
         For i As Integer = 0 To 6
@@ -3396,7 +3409,7 @@ Module Program
         Dim s = tr.Snapshot(t0 + 350, ab)
         Dim read = IndicatorEngine.ClassifyAbsorption(s, ab.Defaults.MinAggrUsd, ab.AbsorbRatio, ab.MaxPullFrac)
 
-        Check("A31c churn (pullLB 120000 / postLB 60000 → pullFrac 2.0 > 0.5 → D8 veto NONE; ratio 3.5 would have fired)",
+        Check("A31c churn (pullLB 120000 / postLB 60000 → pullFrac 2.0 > 0.75 → D8 veto NONE; ratio 3.5 would have fired)",
               s.Above.Active AndAlso
               Math.Abs(s.Above.AbsorbRatio - 3.5) < 0.0001 AndAlso
               Math.Abs(s.Above.PullFrac - 2.0) < 0.0001 AndAlso
@@ -3411,7 +3424,7 @@ Module Program
         Dim ab As New AbsorptionSettings()
         Dim tr As New LevelAbsorptionTracker()
         Dim t0 As Long = 1700000000000L
-        tr.SetLevels(100010.0, 0, 0, 0)
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
 
         tr.FoldBook(AbsBandBook(), t0, ab)
         Dim sOpen = tr.Snapshot(t0, ab)
@@ -3466,14 +3479,14 @@ Module Program
 
         ' SeedAsync discipline: an ACTIVE episode + carried levels reset cold; after
         ' levels re-carry, the next approach re-arms a fresh episode.
-        tr.SetLevels(100010.0, 0, 0, 0)
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
         tr.FoldBook(AbsBandBook(), t0 + 100, ab)
         Dim sActive = tr.Snapshot(t0 + 100, ab)
         tr.Reset()
         Dim sReset = tr.Snapshot(t0 + 200, ab)
         tr.FoldBook(AbsBandBook(), t0 + 300, ab)      ' levels cleared by Reset ⇒ still idle
         Dim sNoLevels = tr.Snapshot(t0 + 300, ab)
-        tr.SetLevels(100010.0, 0, 0, 0)
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
         tr.FoldBook(AbsBandBook(), t0 + 400, ab)
         Dim sRearmed = tr.Snapshot(t0 + 400, ab)
 
@@ -3552,24 +3565,26 @@ Module Program
         Dim mNy As Double = ExecutionResolution.ResolveAbsorptionMinAggrUsd(cfg, 15)
         Dim mLon As Double = ExecutionResolution.ResolveAbsorptionMinAggrUsd(cfg, 10)
         Dim mUnset As Double = ExecutionResolution.ResolveAbsorptionMinAggrUsd(cfg, -1)
-        Check("A31g session min_aggr_usd (NY override 250000 / LONDON inherits 150000 / unstamped 150000)",
-              mNy = 250000.0 AndAlso mLon = 150000.0 AndAlso mUnset = 150000.0,
+        Check("A31g session min_aggr_usd (NY override 250000 / LONDON inherits v61 default 20000 / unstamped 20000)",
+              mNy = 250000.0 AndAlso mLon = 20000.0 AndAlso mUnset = 20000.0,
               String.Format(CultureInfo.InvariantCulture, "ny={0} lon={1} unset={2}", mNy, mLon, mUnset))
 
         ' HC23 fences: the two switches exact-match rejected; default./sessions. prefixes
-        ' rejected; the flat params stay proposable.
-        Dim s As String = "{""version"":54,""indicators"":{""absorption"":{""enabled"":true," &
-                          """scoring_enabled"":false,""proximity_ticks"":12,""band_ticks"":4," &
-                          """window_sec"":10,""break_tol_ticks"":2,""absorb_ratio"":3.0," &
-                          """depletion_floor_usd"":25000,""max_pull_frac"":0.5,""penalty"":1," &
-                          """default"":{""min_aggr_usd"":150000},""sessions"":{""NY"":{}}}}}"
+        ' rejected; the flat params stay proposable. [v61] JSON literal + proposable check
+        ' updated to the new *_atr_frac key names (retired tick keys resolve-fail as
+        ' UNRESOLVED, which C-6 rejects — not a HARD CONSTRAINT reject).
+        Dim s As String = "{""version"":61,""indicators"":{""absorption"":{""enabled"":true," &
+                          """scoring_enabled"":false,""proximity_atr_frac"":0.30,""band_atr_frac"":0.10," &
+                          """window_sec"":10,""break_tol_atr_frac"":0.05,""absorb_ratio"":1.5," &
+                          """depletion_floor_usd"":5000,""max_pull_frac"":0.75,""penalty"":1," &
+                          """default"":{""min_aggr_usd"":20000},""sessions"":{""NY"":{}}}}}"
         Dim rEnabled = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.enabled", "true", "false"), s, 3)
         Dim rScoring = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.scoring_enabled", "false", "true"), s, 3)
-        Dim rDefault = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.default.min_aggr_usd", "150000", "100000"), s, 3)
-        Dim rSession = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.sessions.NY.min_aggr_usd", "150000", "250000"), s, 3)
-        Dim rProx = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.proximity_ticks", "12", "10"), s, 3)
-        Dim rRatio = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.absorb_ratio", "3.0", "3.5"), s, 3)
-        Check("A31g HC23 fences (enabled/scoring_enabled + default./sessions. rejected; proximity_ticks + absorb_ratio tunable)",
+        Dim rDefault = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.default.min_aggr_usd", "20000", "15000"), s, 3)
+        Dim rSession = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.sessions.NY.min_aggr_usd", "20000", "35000"), s, 3)
+        Dim rProx = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.proximity_atr_frac", "0.30", "0.28"), s, 3)
+        Dim rRatio = SettingsDiffApplier.Validate(OneDiff("indicators.absorption.absorb_ratio", "1.5", "1.7"), s, 3)
+        Check("A31g HC23 fences (enabled/scoring_enabled + default./sessions. rejected; proximity_atr_frac + absorb_ratio tunable)",
               Not rEnabled.IsValid AndAlso rEnabled.ErrorReason.Contains("HARD CONSTRAINT 23") AndAlso
               Not rScoring.IsValid AndAlso rScoring.ErrorReason.Contains("HARD CONSTRAINT 23") AndAlso
               Not rDefault.IsValid AndAlso Not rSession.IsValid AndAlso
@@ -3577,6 +3592,76 @@ Module Program
               String.Format("enabled={0}'{1}' scoring={2} default={3} session={4} prox={5} ratio={6}",
                             rEnabled.IsValid, rEnabled.ErrorReason, rScoring.IsValid,
                             rDefault.IsValid, rSession.IsValid, rProx.IsValid, rRatio.IsValid))
+    End Sub
+
+    ' -- A31h: two-ATR scale invariance (V3 pin — docs/absorption-geometry-rescale-
+    ' proposal.md V3). At ATR=44 with defaults (0.30/0.10/0.05) the carry site
+    ' resolves prox=$13.2 / band=$4.4 / break-tol=$2.2. At ATR=88 (double) the
+    ' resolution gives prox=$26.4 / band=$8.8 / break-tol=$4.4 — twice the dollar
+    ' distances at twice the ATR. Verifies the arithmetic AND runs the tracker
+    ' against a 2×-scaled book at each ATR to confirm identical classification —
+    ' the "tracker internals stay absolute dollars, only the config→dollars
+    ' conversion moves" invariant holds across scale.
+    Private Sub A31h_TwoAtrScaleInvariance()
+        Dim ab As New AbsorptionSettings()
+        Const proxFrac As Double = 0.30
+        Const bandFrac As Double = 0.10
+        Const brkFrac As Double = 0.05
+        Const atrLo As Double = 44.0
+        Const atrHi As Double = 88.0
+        Dim proxLo As Double = atrLo * proxFrac    ' 13.2
+        Dim bandLo As Double = atrLo * bandFrac    ' 4.4
+        Dim brkLo As Double  = atrLo * brkFrac     ' 2.2
+        Dim proxHi As Double = atrHi * proxFrac    ' 26.4
+        Dim bandHi As Double = atrHi * bandFrac    ' 8.8
+        Dim brkHi As Double  = atrHi * brkFrac     ' 4.4
+
+        Dim frac2xOk As Boolean =
+            Math.Abs(proxLo - 13.2) < 1.0E-9 AndAlso Math.Abs(bandLo - 4.4) < 1.0E-9 AndAlso
+            Math.Abs(brkLo - 2.2) < 1.0E-9 AndAlso
+            Math.Abs(proxHi - 2.0 * proxLo) < 1.0E-9 AndAlso
+            Math.Abs(bandHi - 2.0 * bandLo) < 1.0E-9 AndAlso
+            Math.Abs(brkHi - 2.0 * brkLo) < 1.0E-9
+
+        ' Book #1: level 100010, touch $2 inside prox 13.2 (best ask 100008), band
+        ' [100010, 100010+bandLo≈100014.4]. Bands span ~4.4 USD; asks fill the
+        ' visible ladder every $0.5 tick from 100008 upward, with size 5000 default.
+        ' Sum inside band [100010, 100014.4]: prices 100010/100010.5/100011/100011.5/
+        ' 100012/100012.5/100013/100013.5/100014 = 9 asks × 5000 = 45000 sizeStart.
+        Dim tr1 As New LevelAbsorptionTracker()
+        tr1.SetLevels(100010.0, 0, 0, 0, proxLo, bandLo, brkLo)
+        tr1.FoldBook(AbsBook(100008.0), 1000L, ab)
+        Dim s1Open = tr1.Snapshot(1000L, ab)
+
+        ' Book #2: SAME logical geometry at 2×. Level 200020, touch 4 inside prox
+        ' 26.4 (best ask 200016), band [200020, 200020+bandHi≈200028.8].
+        Dim tr2 As New LevelAbsorptionTracker()
+        tr2.SetLevels(200020.0, 0, 0, 0, proxHi, bandHi, brkHi)
+        tr2.FoldBook(AbsBook(200016.0), 2000L, ab)
+        Dim s2Open = tr2.Snapshot(2000L, ab)
+
+        ' Both must open ACTIVE — the arithmetic-doubled resolution behaves identically.
+        Dim scaleOk As Boolean =
+            s1Open.Above.Active AndAlso s2Open.Above.Active AndAlso
+            s1Open.Above.LevelPrice = 100010.0 AndAlso
+            s2Open.Above.LevelPrice = 200020.0
+
+        ' Break-through arithmetic scales too: a print at level+brk_lo+ε on tr1 breaks
+        ' the level; the equivalent print at level+brk_hi+ε on tr2 also breaks. Anything
+        ' inside break_tol stays active.
+        tr1.FoldTrade(100010.0 + brkLo + 0.5, 5000.0, True, 1001L, ab)   ' > brk_lo → break
+        tr2.FoldTrade(200020.0 + brkHi + 0.5, 5000.0, True, 2001L, ab)   ' > brk_hi → break
+        Dim s1Brk = tr1.Snapshot(1001L, ab)
+        Dim s2Brk = tr2.Snapshot(2001L, ab)
+        Dim breakScales As Boolean = Not s1Brk.Above.Active AndAlso Not s2Brk.Above.Active
+
+        Check("A31h two-ATR scale invariance (V3): ATR-fraction resolution doubles cleanly; tracker fires + breaks identically at 1× and 2×",
+              frac2xOk AndAlso scaleOk AndAlso breakScales,
+              String.Format(CultureInfo.InvariantCulture,
+                            "frac2xOk={0} scaleOk={1} breakScales={2} proxLo={3} proxHi={4} s1Open={5}@{6} s2Open={7}@{8}",
+                            frac2xOk, scaleOk, breakScales, proxLo, proxHi,
+                            s1Open.Above.Active, s1Open.Above.LevelPrice,
+                            s2Open.Above.Active, s2Open.Above.LevelPrice))
     End Sub
 
     ' =======================================================================

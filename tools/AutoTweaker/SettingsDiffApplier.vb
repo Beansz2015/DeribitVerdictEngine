@@ -147,11 +147,14 @@ Public Class SettingsDiffApplier
                     "Rejected: '{0}' is an aggressor-velocity feature switch, not a threshold (off tweaker surface — HARD CONSTRAINT 19).", item.Path)
                 Return result
             End If
-            ' [P4 #6] Absorption FEATURE SWITCHES — off the tweaker surface (structural on/off
+            ' [P4 #6 / v61] Absorption FEATURE SWITCHES — off the tweaker surface (structural on/off
             ' toggles, not thresholds; scoring_enabled is the TWICE-evidence-gated ⚠ activation,
             ' book-absorption proposal §5). Exact-match, NOT a prefix: the flat siblings
-            ' (proximity_ticks, band_ticks, window_sec, break_tol_ticks, absorb_ratio,
-            ' depletion_floor_usd, max_pull_frac, penalty) STAY tunable.
+            ' (proximity_atr_frac, band_atr_frac, window_sec, break_tol_atr_frac, absorb_ratio,
+            ' depletion_floor_usd, max_pull_frac, penalty) STAY tunable — [v61] the three
+            ' *_atr_frac keys replaced the retired tick keys per docs/absorption-geometry-
+            ' rescale-proposal.md §1 (retired tick keys become applier-unresolvable ⇒ C-6 rejects
+            ' them naturally; NOT added to RejectedPathFragments — v47-F1 lesson).
             If path = "indicators.absorption.enabled" OrElse
                path = "indicators.absorption.scoring_enabled" Then
                 result.IsValid    = False

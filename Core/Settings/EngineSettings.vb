@@ -486,15 +486,20 @@ End Class
 ''' <summary>
 ''' [P4 #6] Book absorption at structural levels — level-scoped episode tracker
 ''' (docs/book-absorption-proposal.md §6). All shipped anchors are PROVISIONAL until the
-''' §5 target-engagement calibration pass. Three-tier tweaker surface (per the #5 §6
-''' pattern — HARD CONSTRAINT 23):
-'''   ON  surface — ProximityTicks, BandTicks, WindowSec, BreakTolTicks, AbsorbRatio,
+''' post-rescale §5 target-engagement re-derivation. Three-tier tweaker surface (per the
+''' #5 §6 pattern — HARD CONSTRAINT 23):
+'''   ON  surface — ProximityAtrFrac, BandAtrFrac, WindowSec, BreakTolAtrFrac, AbsorbRatio,
 '''                 DepletionFloorUsd, MaxPullFrac, Penalty.
 '''   OFF, hand-tuned — Defaults + Sessions (per-session min_aggr_usd — the §5
 '''                 target-engagement re-baseline tier, HC11 class; SettingsDiffApplier
 '''                 rejects the default./sessions. prefixes).
 '''   OFF, hand-toggle — Enabled + ScoringEnabled (exact-match rejects; ScoringEnabled
 '''                 is the twice-evidence-gated ⚠ activation, proposal §5).
+''' [v61 geometry rescale 2026-07-23] The three distances retired their tick keys for
+''' ATR-fraction keys resolved per run from r.ATR at the SetAbsorptionLevels carry site
+''' (execution-resolution ATR by construction); the tracker keeps working in absolute
+''' dollars internally — only the config→dollars conversion moves. See
+''' docs/absorption-geometry-rescale-proposal.md + spec-back.
 ''' </summary>
 Public Class AbsorptionSettings
     ''' <summary>Feature switch — feed folds + reads stop entirely when False (byte-identical
@@ -503,24 +508,31 @@ Public Class AbsorptionSettings
     ''' <summary>The ⚠ activation gate — stays False at the build. Flipped only after BOTH §5
     ''' gates clear (independence AND a ≥10 pp adverse outcome gradient on n≥30 flagged rows).</summary>
     <JsonPropertyName("scoring_enabled")>     Public Property ScoringEnabled    As Boolean = False
-    ''' <summary>ACTIVE gate distance (ticks) from the watched level — the tracker measures
-    ''' only while the touch is within this of the level (§4.1). Default 12.</summary>
-    <JsonPropertyName("proximity_ticks")>     Public Property ProximityTicks    As Integer = 12
-    ''' <summary>Level band width (ticks) for resting-size tracking + fill assignment. Default 4.</summary>
-    <JsonPropertyName("band_ticks")>          Public Property BandTicks         As Integer = 4
+    ''' <summary>[v61] ACTIVE gate distance as a fraction of execution-resolution ATR — the
+    ''' tracker measures only while the touch is within (ATR × ProximityAtrFrac) of the
+    ''' level (§4.1). Default 0.30 (≈$13 at ATR 44). Resolved to dollars per run at the
+    ''' SetAbsorptionLevels carry site; the tracker consumes the resolved dollars.</summary>
+    <JsonPropertyName("proximity_atr_frac")>  Public Property ProximityAtrFrac  As Double = 0.30
+    ''' <summary>[v61] Level band width as a fraction of ATR — resting-size tracking +
+    ''' fill assignment. Default 0.10 (≈$4.4 at ATR 44).</summary>
+    <JsonPropertyName("band_atr_frac")>       Public Property BandAtrFrac       As Double = 0.10
     ''' <summary>Rolling pressing-volume window (seconds). Default 10.</summary>
     <JsonPropertyName("window_sec")>          Public Property WindowSec         As Double = 10.0
-    ''' <summary>Progress tolerance (ticks) beyond the level — a print past it ends the
-    ''' episode instantly (a broken level never carries a stale ABSORB). Default 2.</summary>
-    <JsonPropertyName("break_tol_ticks")>     Public Property BreakTolTicks     As Integer = 2
-    ''' <summary>Classification threshold: pressing USD per USD net band depletion. Default 3.0.</summary>
-    <JsonPropertyName("absorb_ratio")>        Public Property AbsorbRatio       As Double = 3.0
+    ''' <summary>[v61] Progress tolerance as a fraction of ATR — a print past level±(ATR ×
+    ''' BreakTolAtrFrac) ends the episode instantly (a broken level never carries a stale
+    ''' ABSORB). Default 0.05 (≈$2.2 at ATR 44).</summary>
+    <JsonPropertyName("break_tol_atr_frac")>  Public Property BreakTolAtrFrac   As Double = 0.05
+    ''' <summary>Classification threshold: pressing USD per USD net band depletion.
+    ''' Default 1.5 (v61 — provisional, rescaled to the widened ATR-fraction shell;
+    ''' see docs/absorption-geometry-rescale-proposal.md §1).</summary>
+    <JsonPropertyName("absorb_ratio")>        Public Property AbsorbRatio       As Double = 1.5
     ''' <summary>Divide-by-nothing guard on the depletion denominator (and the D8 postLB
-    ''' denominator). Default 25000 USD.</summary>
-    <JsonPropertyName("depletion_floor_usd")> Public Property DepletionFloorUsd As Double = 25000.0
+    ''' denominator). Default 5000 USD (v61 — rescaled floor, provisional).</summary>
+    <JsonPropertyName("depletion_floor_usd")> Public Property DepletionFloorUsd As Double = 5000.0
     ''' <summary>D8 spoof-guard veto: provable pulls / provable posts above this ⇒ painted
-    ''' defense ⇒ NONE. Default 0.5.</summary>
-    <JsonPropertyName("max_pull_frac")>       Public Property MaxPullFrac       As Double = 0.5
+    ''' defense ⇒ NONE. Default 0.75 (v61 — provisional; the 0.5 pre-rescale value vetoed
+    ''' 50–83% at tiny volumes where the lower-bound ratio is noise).</summary>
+    <JsonPropertyName("max_pull_frac")>       Public Property MaxPullFrac       As Double = 0.75
     ''' <summary>Scoring magnitude once activated (inert at the build). Default 1.</summary>
     <JsonPropertyName("penalty")>             Public Property Penalty           As Integer = 1
     ''' <summary>Shared fallback for the per-session tier (min_aggr_usd).</summary>
@@ -537,9 +549,10 @@ Public Class AbsorptionSettings
 End Class
 
 ''' <summary>[P4 #6] The shared default tier: minimum pressing USD before an episode can
-''' classify (150k — a pre-calibration anchor; §5 splits it per-session).</summary>
+''' classify. [v61] 20000 — provisional anchor rescaled to the widened ATR-fraction
+''' shell; §5 splits it per-session post-rescale re-derivation.</summary>
 Public Class AbsorptionDefaults
-    <JsonPropertyName("min_aggr_usd")> Public Property MinAggrUsd As Double = 150000.0
+    <JsonPropertyName("min_aggr_usd")> Public Property MinAggrUsd As Double = 20000.0
 End Class
 
 ''' <summary>[P4 #6] Nullable per-session override — Nothing ⇒ inherit AbsorptionDefaults

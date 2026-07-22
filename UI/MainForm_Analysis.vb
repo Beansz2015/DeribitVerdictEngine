@@ -668,9 +668,21 @@ Partial Public Class MainForm
         ' [P4 #6] Refresh the absorption tracker's carried candidate levels — the SAME
         ' carry the TAPE strip brackets (_lastSuccessfulIndicators, set just below).
         ' A re-mapped level resets that side's episode at the next fold (§4.1).
+        ' [v61 geometry rescale] The three tick keys retired for ATR-fraction keys —
+        ' resolve here (execution-resolution ATR by construction, since r.ATR carries
+        ' the exec-resolution value) and hand the tracker absolute dollars. When ATR is
+        ' zero (warmup / degenerate) the resolved distances collapse to zero and the
+        ' tracker stays IDLE by construction (its proximity gate cannot open). See
+        ' docs/absorption-geometry-rescale-proposal.md §1.
         If _marketState IsNot Nothing Then
+            Dim absCarryCfg = cfg.Indicators.Absorption
+            Dim atrForAbs As Double = If(r.ATR > 0.0, r.ATR, 0.0)
+            Dim proxUsd As Double = atrForAbs * absCarryCfg.ProximityAtrFrac
+            Dim bandUsd As Double = atrForAbs * absCarryCfg.BandAtrFrac
+            Dim brkUsd  As Double = atrForAbs * absCarryCfg.BreakTolAtrFrac
             _marketState.SetAbsorptionLevels(r.LastSwingHigh5m, r.LastSwingLow5m,
-                                             r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
+                                             r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow,
+                                             proxUsd, bandUsd, brkUsd)
             ' [#7 + #8 v59] Same carry into the alerts tracker (H3 level-approach reads
             ' this identical candidate set — proposal §2). A re-mapped level closes that
             ' side's approach episode (the #6 no-cross-level-bleed discipline). v59

@@ -137,9 +137,11 @@ Public Class PromptBuilder
             "propose any 'indicators.absorption.default.*' or 'indicators.absorption.sessions.*' " &
             "key (the per-session min_aggr_usd target-engagement tier — hand-tuned by the " &
             "trader like the aggressor_velocity sessions tier, HARD CONSTRAINT 11 class). " &
-            "The FLAT keys REMAIN tunable: 'indicators.absorption.proximity_ticks', " &
-            "'...band_ticks', '...window_sec', '...break_tol_ticks', '...absorb_ratio', " &
-            "'...depletion_floor_usd', '...max_pull_frac', '...penalty'. " &
+            "The FLAT keys REMAIN tunable: 'indicators.absorption.proximity_atr_frac', " &
+            "'...band_atr_frac', '...window_sec', '...break_tol_atr_frac', '...absorb_ratio', " &
+            "'...depletion_floor_usd', '...max_pull_frac', '...penalty' " &
+            "(v61: the three tick keys retired for ATR-fraction keys; retired keys " &
+            "resolve-fail naturally, do not propose them). " &
             "(Enforced in code: SettingsDiffApplier exact-match rejects the two switches and " &
             "rejects the 'default.'/'sessions.' prefixes.)" & vbLf &
         "24. Geometry ARBITRATION MODES + SIGNED BUFFERS (four scoring.structural_levels keys) " &
