@@ -32,4 +32,4 @@
 
 ## 5. Decommission / handover note
 
-The box owes nothing at end-of-life beyond a final copy-back of `analysis_log.csv`, `liq_events.log`, and `ws_health.log`. Record deploy date + instance id in this doc when executed: __________
+The box owes nothing at end-of-life beyond a final copy-back of `analysis_log.csv`, `liq_events.log`, and `ws_health.log`. **DEPLOYED 2026-07-23 (trader-executed; CSVs sighted and populating).** Engine `InstanceId`: record at first copy-back (top of the AWS CSV's InstanceId column): __________
