@@ -409,3 +409,7 @@ data-archive/
 # artefacts, never committed.
 whatif_report_*.md
 whatif_overlay_counter.json
+# trader-kept local experiments (ruling 2026-07-22)
+.codex/
+configure-claude-deepseek.ps1
+models-full.json
