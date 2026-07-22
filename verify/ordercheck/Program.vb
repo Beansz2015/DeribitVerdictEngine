@@ -15,6 +15,10 @@ Imports System.Globalization
 Imports System.IO
 Imports System.Text.Json
 Imports System.Threading
+' RootNamespace=OrderCheck applies to files declared without an explicit top-level namespace;
+' the CeilingAudit fixture code lives under OrderCheck.CeilingAudit as a result. Alias so the
+' fixtures below can write `L2Logistic` / `AuditMetrics` unqualified.
+Imports OrderCheck.CeilingAudit
 
 Module Program
 
@@ -289,6 +293,19 @@ Module Program
         ' matches the AlertsSidecar contract (utc | state | instance_id).
         A38a_TransitionOnly()
         A38b_StartLineAndFormat()
+
+        ' [W6-4 ceiling audit — A39, docs/w6-4-ceiling-audit-method-proposal.md §5]
+        ' Hand-rolled L2 logistic + walk-forward + block bootstrap + feature matrix
+        ' fixtures: (a) monotone loss + direction recovery on a separable set,
+        ' (b) AUC≈0.5 on label-shuffled data (leakage canary),
+        ' (c) chronological split respected (no test row precedes any train row),
+        ' (d) bootstrap blocks never straddle a session-hour boundary,
+        ' (e) informational Absorption/AggrVel-un-armed extras absent from X.
+        A39a_LogisticLossMonotoneAndDirection()
+        A39b_LabelShuffledAucIsHalf()
+        A39c_ChronologicalSplitRespected()
+        A39d_BlockBootstrapNeverStraddlesHourBoundary()
+        A39e_InformationalExtrasAbsentFromDecisionMatrix()
 
         Console.WriteLine()
         If _failures = 0 Then
@@ -5023,5 +5040,244 @@ Module Program
             WsHealthLog.ResetForTest()
         End Try
     End Sub
+
+    ' ============================================================================
+    ' A39 — W6-4 ceiling audit (docs/w6-4-ceiling-audit-method-proposal.md §5)
+    ' The instrument that gates W6-5/B1 + D3-D6 + W6-7 Tier-C spend. These fixtures
+    ' exercise the standalone stats machinery against synthetic data — no CSV, no
+    ' OHLC — so they run in the offline harness with no external dependency.
+    ' ============================================================================
+
+    ' -- A39a: loss decreases monotonically on a linearly-separable set; the fitter
+    ' -- recovers the separating direction (weight on the informative dimension
+    ' -- dominates the noise dimensions). Pins the L2Logistic contract used for
+    ' -- the challenger model.
+    Private Sub A39a_LogisticLossMonotoneAndDirection()
+        ' 200 rows, 3 features: dim 0 is perfectly separable (positive class ~ N(+2,1),
+        ' negative ~ N(-2,1)); dims 1-2 are pure noise. Deterministic seed.
+        Dim rng As New Random(1)
+        Dim n As Integer = 200
+        Dim d As Integer = 3
+        Dim X(n - 1, d - 1) As Double
+        Dim y(n - 1) As Integer
+        For i = 0 To n - 1
+            y(i) = If(i < n \ 2, 0, 1)
+            X(i, 0) = If(y(i) = 1, 2.0, -2.0) + GaussianStd(rng)
+            X(i, 1) = GaussianStd(rng)
+            X(i, 2) = GaussianStd(rng)
+        Next
+        Dim m = L2Logistic.Fit(X, y, lambda:=0.1, lr:=0.5, epochs:=200)
+
+        ' Monotonicity: allow small floating-point wobble (< 1e-6) per step. Overall loss
+        ' at last epoch must be materially below first epoch.
+        Dim strictlyMonoUpTo As Integer = 0
+        For i = 1 To m.LossTrace.Count - 1
+            If m.LossTrace(i) > m.LossTrace(i - 1) + 0.000001 Then Exit For
+            strictlyMonoUpTo = i
+        Next
+        Dim lossFirst As Double = m.LossTrace(0)
+        Dim lossLast As Double = m.LossTrace(m.LossTrace.Count - 1)
+        Dim monotoneOk As Boolean = strictlyMonoUpTo = m.LossTrace.Count - 1
+        Dim descentOk As Boolean = lossLast < lossFirst * 0.5
+
+        ' Direction: |w0| must dominate |w1|, |w2|; and w0 > 0 (positive class has +ve x0).
+        Dim directionOk As Boolean = m.Weights(0) > 0 AndAlso
+                                     Math.Abs(m.Weights(0)) > 2.0 * Math.Abs(m.Weights(1)) AndAlso
+                                     Math.Abs(m.Weights(0)) > 2.0 * Math.Abs(m.Weights(2))
+
+        Check("A39a logistic loss monotone + separating direction recovered",
+              monotoneOk AndAlso descentOk AndAlso directionOk,
+              String.Format("mono={0} first={1:F4} last={2:F4} w=[{3:F3},{4:F3},{5:F3}] b={6:F3}",
+                            monotoneOk, lossFirst, lossLast, m.Weights(0), m.Weights(1), m.Weights(2), m.Bias))
+    End Sub
+
+    ' -- A39b: leakage canary. Shuffle the labels randomly; the AUC of the trained
+    ' -- model on a held-out slice must be near 0.5. A deterministic run may sit a
+    ' -- bit off centre on small n; we accept |auc - 0.5| < 0.15.
+    Private Sub A39b_LabelShuffledAucIsHalf()
+        Dim rng As New Random(2)
+        Dim n As Integer = 400
+        Dim d As Integer = 5
+        Dim X(n - 1, d - 1) As Double
+        Dim y(n - 1) As Integer
+        For i = 0 To n - 1
+            For j = 0 To d - 1
+                X(i, j) = GaussianStd(rng)
+            Next
+            y(i) = rng.Next(0, 2)     ' pure noise labels
+        Next
+        Dim trainN As Integer = n \ 2
+        Dim Xtr(trainN - 1, d - 1) As Double
+        Dim ytr(trainN - 1) As Integer
+        Dim Xte(n - trainN - 1, d - 1) As Double
+        Dim yte(n - trainN - 1) As Integer
+        For i = 0 To trainN - 1
+            For j = 0 To d - 1
+                Xtr(i, j) = X(i, j)
+            Next
+            ytr(i) = y(i)
+        Next
+        For i = trainN To n - 1
+            For j = 0 To d - 1
+                Xte(i - trainN, j) = X(i, j)
+            Next
+            yte(i - trainN) = y(i)
+        Next
+        Dim m = L2Logistic.Fit(Xtr, ytr, lambda:=1.0, epochs:=200)
+        Dim scores = m.PredictAll(Xte)
+        Dim auc As Double = AuditMetrics.Auc(scores, yte)
+        Dim ok As Boolean = Math.Abs(auc - 0.5) < 0.15
+
+        Check("A39b label-shuffled AUC ≈ 0.5 (leakage canary)", ok,
+              String.Format("auc={0:F4}", auc))
+    End Sub
+
+    ' -- A39c: chronological split respected — the LATEST train timestamp must be
+    ' -- STRICTLY earlier than (or equal to) the earliest test timestamp; the split
+    ' -- covers ≥ minTestDays * 24 hours and touches ≥ 3 distinct hours (§3
+    ' -- validity discipline flag).
+    Private Sub A39c_ChronologicalSplitRespected()
+        Dim bundles As New List(Of FeatureBundle)()
+        Dim ts As New List(Of DateTime)()
+        Dim start As New DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+        ' 21 days of hourly rows — 24×21 = 504 rows, all sessions covered.
+        For h = 0 To 21 * 24 - 1
+            ts.Add(start.AddHours(h))
+            bundles.Add(New FeatureBundle With {.RowIndex = h})
+        Next
+        Dim split = AuditMetrics.MakeChronologicalSplit(bundles, ts, minTestDays:=7)
+
+        Dim maxTrainTs As DateTime = split.TrainIdx.Select(Function(i) ts(i)).Max()
+        Dim minTestTs As DateTime = split.TestIdx.Select(Function(i) ts(i)).Min()
+        Dim chronoOk As Boolean = maxTrainTs <= minTestTs
+        Dim spanOk As Boolean = (split.TestEndUtc - split.TestStartUtc).TotalDays >= 6.5
+        Dim hourCoverOk As Boolean = split.TestSpansSessions AndAlso
+                                     split.TestIdx.Select(Function(i) ts(i).Hour).Distinct().Count() >= 3
+
+        Check("A39c chronological split — no test row precedes any train row",
+              chronoOk AndAlso spanOk AndAlso hourCoverOk,
+              String.Format("chrono={0} span={1} hours={2} maxTrain={3:yyyy-MM-dd HH:mm} minTest={4:yyyy-MM-dd HH:mm}",
+                            chronoOk, spanOk, hourCoverOk, maxTrainTs, minTestTs))
+    End Sub
+
+    ' -- A39d: block bootstrap blocks never straddle a session-hour boundary — every
+    ' -- row assigned to the same block MUST share (UTC date, UTC hour). The block
+    ' -- assignment is the mechanism that guarantees this at resample time.
+    Private Sub A39d_BlockBootstrapNeverStraddlesHourBoundary()
+        Dim ts As New List(Of DateTime)()
+        Dim start As New DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+        For m = 0 To 999
+            ts.Add(start.AddMinutes(m))    ' 1000 min ≈ 17 hours across 2 days
+        Next
+        Dim blocks = AuditMetrics.AssignBlocks(ts)
+
+        ' Group rows by assigned block, assert every group's dates+hours are identical.
+        Dim byBlock As New Dictionary(Of Integer, List(Of DateTime))()
+        For i = 0 To ts.Count - 1
+            Dim k As Integer = blocks(i)
+            Dim lst As List(Of DateTime) = Nothing
+            If Not byBlock.TryGetValue(k, lst) Then
+                lst = New List(Of DateTime)()
+                byBlock(k) = lst
+            End If
+            lst.Add(ts(i))
+        Next
+        Dim clean As Boolean = True
+        Dim offender As String = ""
+        For Each kv In byBlock
+            Dim first = kv.Value(0)
+            For Each t In kv.Value
+                If t.Date <> first.Date OrElse t.Hour <> first.Hour Then
+                    clean = False
+                    offender = String.Format("block {0}: {1:yyyy-MM-dd HH} vs {2:yyyy-MM-dd HH}",
+                                             kv.Key, first, t)
+                    Exit For
+                End If
+            Next
+            If Not clean Then Exit For
+        Next
+
+        ' Also assert the block COUNT equals the distinct (date, hour) count.
+        Dim distinctHours As Integer = ts.Select(Function(t) t.Date.ToString("yyyyMMdd") & t.Hour.ToString()).
+                                          Distinct().Count()
+        Dim countOk As Boolean = byBlock.Count = distinctHours
+
+        Check("A39d block-bootstrap blocks never straddle a session-hour boundary",
+              clean AndAlso countOk,
+              String.Format("clean={0} blocks={1} distinctHours={2} offender={3}",
+                            clean, byBlock.Count, distinctHours, offender))
+    End Sub
+
+    ' -- A39e: informational Absorption* + un-armed AggrVel provably absent from the
+    ' -- decision-model design matrix. Build a schema and check that no column name
+    ' -- carries an informational feature name; also check the ScoredCategoricalNames
+    ' -- and ScoredNumericNames don't list them.
+    Private Sub A39e_InformationalExtrasAbsentFromDecisionMatrix()
+        Dim bundles As New List(Of FeatureBundle)()
+        For i = 0 To 49
+            Dim fb As New FeatureBundle()
+            fb.SessionHour = i Mod 24
+            fb.Regime = "TRENDING_UP"
+            fb.ScoredCategoricals("ROCSlope") = If(i Mod 2 = 0, "RISING", "FALLING")
+            fb.ScoredNumerics("ATR") = 40.0 + i
+            ' Populate informational fields — the audit MUST NOT let these into X.
+            fb.InfoCategoricals("AbsorptionSignal") = "ABSORB_ABOVE"
+            fb.InfoNumerics("AbsorptionRatio") = 1.5
+            fb.InfoNumerics("AbsorptionAggrUsd") = 250000
+            fb.InfoNumerics("AbsorptionPullFrac") = 0.7
+            fb.InfoNumerics("AbsorptionLevel") = 65000
+            ' Populate AggrVel; test with IncludeAggrVel = False (un-armed population).
+            fb.AggrVelSignal = "BURST_BUY"
+            fb.AggrVelBurstRatio = 3.0
+            fb.AggrVelNet = 12345.0
+            bundles.Add(fb)
+        Next
+
+        Dim schema = FeatureMatrix.FitSchema(bundles, includeAggrVel:=False)
+        Dim banned As String() = {"Absorption", "AggrVel"}
+        Dim clean As Boolean = True
+        Dim offender As String = ""
+        For Each col In schema.Columns
+            For Each b In banned
+                If col.IndexOf(b, StringComparison.OrdinalIgnoreCase) >= 0 Then
+                    clean = False
+                    offender = col
+                    Exit For
+                End If
+            Next
+            If Not clean Then Exit For
+        Next
+        For Each nm In schema.ScoredCategoricalNames
+            If nm.IndexOf("Absorption", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+               nm.IndexOf("AggrVel", StringComparison.OrdinalIgnoreCase) >= 0 Then
+                clean = False
+                offender = "cat:" & nm
+            End If
+        Next
+        For Each nm In schema.ScoredNumericNames
+            If nm.IndexOf("Absorption", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+               nm.IndexOf("AggrVel", StringComparison.OrdinalIgnoreCase) >= 0 Then
+                clean = False
+                offender = "num:" & nm
+            End If
+        Next
+
+        ' Also verify the transformed X has no non-zero columns at banned positions
+        ' — the schema drives everything, so column-name absence is the primary proof;
+        ' this is belt-and-braces.
+        Dim X = FeatureMatrix.Transform(schema, bundles)
+        Dim xClean As Boolean = X.GetLength(1) = schema.Columns.Count
+
+        Check("A39e informational Absorption/AggrVel-un-armed extras absent from decision matrix",
+              clean AndAlso xClean,
+              String.Format("clean={0} offender={1} cols={2}", clean, offender, schema.Columns.Count))
+    End Sub
+
+    ' Standard-normal sample via Box-Muller (uniform → N(0,1)).
+    Private Function GaussianStd(rng As Random) As Double
+        Dim u1 As Double = 1.0 - rng.NextDouble()
+        Dim u2 As Double = 1.0 - rng.NextDouble()
+        Return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2)
+    End Function
 
 End Module

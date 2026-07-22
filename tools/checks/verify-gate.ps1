@@ -61,6 +61,10 @@ if ($ok) { if (-not (Build 'tools/AutoTweaker/AutoTweaker.vbproj')) { $ok = $fal
 # #6 broke it (LevelAbsorptionTracker missing from its .vbproj). One extra build closes
 # the hole; the runtime cost is one small Release build.
 if ($ok) { if (-not (Build 'tools/WhatIfRunner/WhatIfRunner.vbproj')) { $ok = $false } }
+# W6-4 ceiling audit (F10 lesson: every standalone tool joins the gate build set so a
+# silent break shows up in the next pre-push instead of days later — the trigger for the
+# WhatIfRunner R1 rider two days earlier).
+if ($ok) { if (-not (Build 'tools/CeilingAudit/CeilingAudit.vbproj')) { $ok = $false } }
 if ($ok) { if (-not (Build 'verify/ordercheck/OrderCheck.vbproj')) { $ok = $false } }
 
 # --- harness ---

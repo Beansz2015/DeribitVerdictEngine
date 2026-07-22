@@ -124,6 +124,14 @@
     <Compile Include="..\..\tools\AutoTweaker\RoundStatsBuilder.vb" />
     <Compile Include="..\..\tools\AutoTweaker\SnapshotManager.vb" />
     <Compile Include="..\..\tools\AutoTweaker\AutoTweakerCore.vb" />
+    <!-- W6-4 ceiling audit (A39 — docs/w6-4-ceiling-audit-method-proposal.md §5): the
+         hand-rolled L2 logistic + metrics + block bootstrap + feature matrix, exercised
+         against synthetic fixtures. The report writer + Program stay OUT (Program carries
+         its own Main; the report writer takes only a POCO). -->
+    <Compile Include="..\..\tools\CeilingAudit\L2Logistic.vb" />
+    <Compile Include="..\..\tools\CeilingAudit\CsvFeatureBuilder.vb" />
+    <Compile Include="..\..\tools\CeilingAudit\FeatureMatrix.vb" />
+    <Compile Include="..\..\tools\CeilingAudit\AuditMetrics.vb" />
   </ItemGroup>
 
 </Project>
