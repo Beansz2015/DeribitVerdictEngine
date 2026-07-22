@@ -45,7 +45,7 @@ Closes the roadmap W4 caveat that feed health was inferred from live UI state an
 Discharges D7 spin-off 2 (`docs/d7-confirmed-reread-2026-07-22.md` §8 classification) — the report §6 that RE-OPENED D7 juxtaposed directional-context success rates with a lean-tag baseline that has no committed outcomes at all. The current single-table shape encourages a reader to compare them; the two-sub-table split makes the incompatibility structural.
 
 **Deviations.**
-- Fixture check for existing A34/A35 pins on §6 text: none. `grep -n "§6\|Verdict Context Tag\|## 6\." verify/ordercheck/Program.vb` returned only §6-in-comment references, no text-pinning fixture. So no re-pinning needed; added one new fixture asserting the two sub-tables + caption render (A34c-lean, appended into the existing A34 family for §6 render — same file the writer harness already lives in).
+- Fixture check for existing A34/A35 pins on §6 text: none. `grep -n "§6\|Verdict Context Tag\|## 6\." verify/ordercheck/Program.vb` returned only §6-in-comment references, no text-pinning fixture. So no re-pinning needed; added **A34f** asserting both sub-table headers, the caption (naming the D7 dates 2026-06-24 + 2026-07-21), a directional row with `n=50`, both lean rows with `n=42` / `n=3`, and count-descending order (ALIGNED before untagged).
 - "Any tag on NO TRADE rows" includes the empty string case (a NO-TRADE row with `VerdictContext=""`), rendered as `(untagged)` in the lean table so the total lines up with the population's NO-TRADE row count.
 - `AnalysisPopulationReport.LeanContextCounts` is a new POCO field but zero settings impact (analysis is offline-only).
 

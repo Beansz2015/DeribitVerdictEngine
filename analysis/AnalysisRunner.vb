@@ -169,6 +169,9 @@ Public Class AnalysisRunner
 
             ' ── 5b. VerdictContext cross-tab (this population only) ───────────────────
             pr.ContextOutcomes = ComputeContextOutcomes(popRows, pr.FailureCells, cfg)
+            ' [D7 spin-off 2 — smalls-2026-07-22 item 2] NO-TRADE lean-tag counts,
+            ' rendered as the §6 (b) sub-table. Lean rows have NO barrier — counts only.
+            pr.LeanContextCounts = ComputeLeanContextCounts(popRows)
 
             ' ── 5b2. Band ladder (E5, diagnostic — includes untraded WEAK) ────────────
             ' Three rows (STRONG/MEDIUM/WEAK), pooled LONG+SHORT, at THIS population's
@@ -304,6 +307,27 @@ Public Class AnalysisRunner
             outcomes(ctx) = cell
         Next
         Return outcomes
+    End Function
+
+    ' [D7 spin-off 2] Per-tag row counts on NO-TRADE rows in this population — the
+    ' §6 (b) sub-table. Every NO-TRADE row is counted (incl. "NO TRADE [WEAK …]"),
+    ' bucketed by its VerdictContext; empty context → "(untagged)". No barrier, no
+    ' outcome (NO-TRADE runs log EXCLUDED_NO_PREDICTION), so counts only — the
+    ' whole point of splitting §6 is that lean-drift and committed outcomes are NOT
+    ' comparable (see d7-confirmed-reread-2026-07-22.md §8).
+    Private Shared Function ComputeLeanContextCounts(popRows As List(Of CsvRow)) _
+                                                     As Dictionary(Of String, Integer)
+        Dim counts As New Dictionary(Of String, Integer)()
+        For Each row In popRows
+            Dim v As String = If(row.Verdict, "").Trim().ToUpper()
+            If Not v.StartsWith("NO TRADE") Then Continue For
+            Dim tag As String = If(row.VerdictContext, "").Trim()
+            If tag.Length = 0 Then tag = "(untagged)"
+            Dim n As Integer = 0
+            counts.TryGetValue(tag, n)
+            counts(tag) = n + 1
+        Next
+        Return counts
     End Function
 
 End Class

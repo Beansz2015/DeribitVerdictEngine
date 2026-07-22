@@ -246,6 +246,9 @@ Module Program
         A34c_WeakExcludedFromStripAggregate()
         A34d_BandDisplayHelperPrefix()
         A34e_StoredFormPinsUnchanged()
+        ' [D7 spin-off 2 — smalls-2026-07-22 item 2] §6 render split into (a) DIRECTIONAL
+        ' + (b) NO-TRADE LEAN sub-tables with the not-comparable caption.
+        A34f_ContextOutcomesSplitAndCaption()
 
         ' [E5 — v55 addendum, eval-display-semantics-proposal.md §3c] Band-ladder
         ' diagnostic section: renders all three bands with correct counts/success%/CI;
@@ -4891,6 +4894,50 @@ Module Program
               String.Format("enabled={0} min={1} win={2} ticks={3} sound={4} sib={5} reason='{6}'",
                             rEnabled.IsValid, rMin.IsValid, rWin.IsValid,
                             rTicks.IsValid, rSound.IsValid, rSib.IsValid, rEnabled.ErrorReason))
+    End Sub
+
+    ' -- A34f: §6 renders TWO sub-tables (a directional + b lean) + caption --------
+    ' The D7 spin-off-2 render segmentation: same population, one directional
+    ' context outcome + one lean context count; verify both sub-tables and the
+    ' not-comparable caption appear in the rendered markdown.
+    Private Sub A34f_ContextOutcomesSplitAndCaption()
+        Dim rep As New AnalysisReport()
+        Dim pop As New PopulationReport With {
+            .PopulationKey = "NY|1", .SessionName = "NY", .Resolution = 1,
+            .BarrierLabel = "PLACED", .RowCount = 100}
+        ' Add a directional context cell (CONFIRMED, 20/50 success ⇒ 40%).
+        Dim ciLow As Double, ciHigh As Double
+        FailureRateMatrix.WilsonCI(30, 50, ciLow, ciHigh)
+        pop.ContextOutcomes.Add("CONFIRMED", New FailureCellResult With {
+            .VerdictTier = "CONFIRMED", .SampleSize = 50, .Failures = 30,
+            .FailureRate = 0.6, .CiLow = ciLow, .CiHigh = ciHigh})
+        ' Add lean-tag counts on NO-TRADE rows.
+        pop.LeanContextCounts.Add("ALIGNED", 42)
+        pop.LeanContextCounts.Add("(untagged)", 3)
+        rep.Populations.Add(pop)
+
+        Dim md As String = MarkdownReportWriter.BuildFullMarkdownForHarness(rep)
+
+        ' Caption present + names D7 dates.
+        Dim caption As Boolean = md.Contains("NOT comparable") AndAlso
+                                 md.Contains("2026-06-24") AndAlso md.Contains("2026-07-21")
+        ' Both sub-table headers present.
+        Dim dirHdr As Boolean = md.Contains("(a) DIRECTIONAL verdicts")
+        Dim leanHdr As Boolean = md.Contains("(b) NO-TRADE LEAN rows")
+        ' Directional row rendered (CONFIRMED n=50).
+        Dim dirRow As Boolean = md.Contains("**CONFIRMED**") AndAlso md.Contains("n=50")
+        ' Lean rows rendered as counts, ordered by n descending (ALIGNED 42 before untagged 3).
+        Dim leanAligned As Boolean = md.Contains("**ALIGNED**: n=42")
+        Dim leanUntagged As Boolean = md.Contains("**(untagged)**: n=3")
+        Dim iA As Integer = md.IndexOf("**ALIGNED**")
+        Dim iU As Integer = md.IndexOf("**(untagged)**")
+        Dim orderedDesc As Boolean = iA > 0 AndAlso iU > 0 AndAlso iA < iU
+
+        Check("A34f §6 splits into (a) DIRECTIONAL + (b) NO-TRADE LEAN sub-tables with the D7 not-comparable caption",
+              caption AndAlso dirHdr AndAlso leanHdr AndAlso dirRow AndAlso
+              leanAligned AndAlso leanUntagged AndAlso orderedDesc,
+              String.Format("caption={0} dirHdr={1} leanHdr={2} dirRow={3} leanA={4} leanU={5} order={6}",
+                            caption, dirHdr, leanHdr, dirRow, leanAligned, leanUntagged, orderedDesc))
     End Sub
 
     ' ============================================================================

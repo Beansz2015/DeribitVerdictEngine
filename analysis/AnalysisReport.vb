@@ -76,6 +76,13 @@ Public Class PopulationReport
     ' two is the continuity bridge — the first honest read of executed stop-out risk.
     Public Property LegacyFailureCells  As New List(Of FailureCellResult)()
     Public Property ContextOutcomes     As New Dictionary(Of String, FailureCellResult)()
+    ' [D7 spin-off 2 — smalls-2026-07-22 item 2] Per-tag row counts on NO-TRADE
+    ' rows in this population. Lean rows have NO barrier / NO outcome (NO-TRADE runs
+    ' are logged EXCLUDED_NO_PREDICTION), so we surface counts only. Key = the row's
+    ' VerdictContext string; empty context bucketed as "(untagged)". Rendered as the
+    ' (b) sub-table in §6 (MarkdownReportWriter.AppendContextOutcomes) — split from
+    ' the (a) directional table so the D7 CONFIRMED-inversion cannot recur.
+    Public Property LeanContextCounts   As New Dictionary(Of String, Integer)()
     Public Property ExcludedRows         As Integer       ' rows with no valid OHLC bars for any window
     Public Property AtrInvalidExcluded   As Integer       ' rows excluded because ATR <= 0
     Public Property BelowMinMoveExcluded As Integer       ' v35 gate-killed: engine target < min-tradeable-move floor

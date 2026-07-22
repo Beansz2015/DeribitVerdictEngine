@@ -44,6 +44,7 @@
 
 Imports System.Collections.Generic
 Imports System.IO
+Imports System.Linq
 Imports System.Text
 
 Public Class MarkdownReportWriter
@@ -431,14 +432,29 @@ Public Class MarkdownReportWriter
     End Sub
 
     ' ------------------------------------------------------------------ Section 6: VerdictContext × Outcome
+    ' [D7 spin-off 2 — smalls-2026-07-22 item 2] Split into TWO sub-tables per
+    ' session: (a) DIRECTIONAL committed-trade outcomes and (b) NO-TRADE LEAN
+    ' counts. The two are NOT comparable — juxtaposing them produced the D7
+    ' CONFIRMED-inversion in 2026-06-24 and again in 2026-07-21. Render
+    ' segmentation only; the population/matrix/logic is unchanged.
     Private Shared Sub AppendContextOutcomes(sb As StringBuilder, r As AnalysisReport)
         sb.AppendLine("## 6. Verdict Context Tag × Outcome — per session")
         sb.AppendLine()
-        sb.AppendLine("_Barrier-based, so segmented per session; each row uses its own placed geometry at " &
-                      "that session's recommended hold window._")
+        sb.AppendLine("_Two sub-tables per session — **NOT comparable**. (a) measures " &
+                      "committed-directional outcomes on their own placed geometry at that " &
+                      "session's recommended hold window. (b) counts lean-drift on rows that " &
+                      "never traded (NO-TRADE rows have no barrier — the eval cache logs them " &
+                      "`EXCLUDED_NO_PREDICTION`). Juxtaposing the two produced the D7 " &
+                      "CONFIRMED-inversion twice (2026-06-24, 2026-07-21) — the sub-tables " &
+                      "are split so that comparison cannot recur._")
         sb.AppendLine()
         For Each pop In r.Populations
             sb.AppendLine("### " & PopLabel(pop))
+            sb.AppendLine()
+
+            ' (a) DIRECTIONAL — committed-trade outcomes on tag-carrying directional verdicts.
+            sb.AppendLine("**(a) DIRECTIONAL verdicts — success rate on placed geometry**")
+            sb.AppendLine()
             If pop.ContextOutcomes.Count = 0 Then
                 sb.AppendLine("_Insufficient data to compute per-context success rates._")
             Else
@@ -451,6 +467,20 @@ Public Class MarkdownReportWriter
                     Else
                         sb.AppendLine("- **" & kvp.Key & "**: insufficient sample")
                     End If
+                Next
+            End If
+            sb.AppendLine()
+
+            ' (b) NO-TRADE LEAN — counts of the tags carried on NO-TRADE rows. No
+            ' outcome for these rows by construction; the count IS the whole reading.
+            sb.AppendLine("**(b) NO-TRADE LEAN rows — tag counts (no outcome; NO-TRADE has no barrier)**")
+            sb.AppendLine()
+            If pop.LeanContextCounts.Count = 0 Then
+                sb.AppendLine("_No NO-TRADE rows in this population._")
+            Else
+                Dim ordered = pop.LeanContextCounts.OrderByDescending(Function(kv) kv.Value).ToList()
+                For Each kvp In ordered
+                    sb.AppendLine(String.Format("- **{0}**: n={1}", kvp.Key, kvp.Value))
                 Next
             End If
             sb.AppendLine()
