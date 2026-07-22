@@ -4,8 +4,8 @@
 
 | Item | Class | Blocked by | Unblocks | State (2026-07-22) |
 |---|---|---|---|---|
-| **#7 liq-cascade alarm + #8 level alerts** (one spec, carries the first-liq-seen diagnostic) | Display/ops | Nothing — trader D-table (`liq-cascade-level-alerts-proposal.md` H1–H5) | **A4** (the diagnostic is A4's gate instrument) | Spec PROPOSED 2026-07-22 |
-| A4 liquidation × OFI flip ⚠ | Scoring | #7 diagnostic live + ≥1 real cascade observed (F9: zero liq-marked trades in 8,025 runs) | — | Gated |
+| **#7 liq-cascade alarm + #8 level alerts** | Display/ops | — | A4's gate instrument now EXISTS | ✅ **SHIPPED v59 2026-07-22** (`46e7614` + follow-up `97e2e24`: rose cascade accent, 6-level approach set incl. 15m swings; options 3/4 = leave-as-is rulings, spec-back addendum) |
+| A4 liquidation × OFI flip ⚠ | Scoring | **ONLY the market now**: ≥1 CASCADE line in `liq_events.log` (durable, survives restarts) | — | Gated — instrument live since v59 |
 | WS-health line persistence | Ops | Nothing | Closes "feed health is inferred" caveat | Buildable any gap (Opus, tiny) |
 | 3-min weekday-ASIA `session_volume` re-verify | Calibration | Data gate likely MET (verify ≥50 weekday-Asia 3-min rows) | Possible dial-back of v34's Saturday-set 1.10/1.05; bundles the OBV re-anchor | **READ DONE 2026-07-22** (`asia-session-volume-reverify-2026-07-22.md`: weekday Asia materially calmer — trade-rate 29.4% vs 63.1%; REC: dial to neutral 1.00/1.00 — **awaits trader tick**, then a small settings pass) |
 | v28 target-hit vs barrier-hit gap (§12) | Measurement | None (migrated matrix + [T]/[B] make it readable) | Closes the §12 row | Readable now |
