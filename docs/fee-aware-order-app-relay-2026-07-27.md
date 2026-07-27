@@ -30,6 +30,11 @@ Serves the manual flow too: the same arithmetic is the trader's own "has this ch
 
 The emergency path (triggered SL repositioned until it passes the threshold, then taker) now costs **+2.0 bps** vs the maker exit it replaces. Fold that delta into the threshold's break-even math so "give up repositioning and cross" prices the crossing correctly. Small, arithmetic-only.
 
+## 2b. ACK — order-app orchestrator, relayed 2026-07-27 (the joint record)
+
+- **Rec 1 ACCEPTED with one design correction:** the suggested `cancelled: ev_floor` DISPOSITION cannot exist — the disposition file is one-row-per-payload at consumption, and a chase abort post-dates that payload's acted row; a second row would break the frozen join cardinality. **The counterfactual instrument is the CANCEL REASON in the host log** (`Working entry cancelled (EV floor)` vs `(ATR slippage)`) — the same instrument the live-ladder audit used. Engine seat accepts: the correction is right (§1's token suggestion mis-modelled their file's cardinality), the measurement survives intact via the host log, and no engine-side change follows.
+- **Rec 2 ACCEPTED AS GUIDANCE in v1:** checklist §4 note — set M.SL net of the ~2 bps crossing delta (≈ `0.0002 × price`). No break-even arithmetic exists to fold into (the M.SL comparison is a flat dollar check), and that code just moved under N1's verbatim guarantee — touching it pre-acceptance would be wrong sequencing. A computed version, if wanted, is a later micro-spec. Engine seat accepts: sequencing argument is exactly the local-first discipline; guidance lands the economics either way.
+
 ## 3. Non-asks
 
 No bridge schema change · no new engine coupling · no change to the trader's maker-first execution policy · effective-date alignment: land with (or before) the Aug-1 schedule, order-app-side sequencing at the orchestrator's discretion.
