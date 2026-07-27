@@ -70,7 +70,9 @@ Public Class WhatIfSettings
             Case "scoring.verdict_strong_pct"                          : s.VerdictStrongPct = value
             Case "scoring.verdict_med_pct"                             : s.VerdictMedPct = value
             Case "scoring.verdict_weak_pct"                            : s.VerdictWeakPct = value
-            Case "scoring.min_tradeable_move_pct"                      : s.MinTradeableMovePct = value
+            ' [v62] The floor sweep IS the min-net sweep at fixed fees — the fee/style keys are
+            ' deliberately NOT sweepable (a fee sweep answers no question the trader can act on).
+            Case "scoring.trade_costs.min_net_move_pct"                : s.TradeCosts.MinNetMovePct = value
             Case "scoring.tier_floor.high_threshold"                   : s.TierFloor.HighThreshold = CInt(value)
             Case "scoring.tier_floor.high_floor"                       : s.TierFloor.HighFloor = CInt(value)
             Case "scoring.tier_floor.med_threshold"                    : s.TierFloor.MedThreshold = CInt(value)
@@ -112,7 +114,7 @@ Public Class WhatIfSettings
             Case "scoring.verdict_strong_pct"                          : Return s.VerdictStrongPct
             Case "scoring.verdict_med_pct"                             : Return s.VerdictMedPct
             Case "scoring.verdict_weak_pct"                            : Return s.VerdictWeakPct
-            Case "scoring.min_tradeable_move_pct"                      : Return s.MinTradeableMovePct
+            Case "scoring.trade_costs.min_net_move_pct"                : Return s.TradeCosts.MinNetMovePct
             Case "scoring.tier_floor.high_threshold"                   : Return s.TierFloor.HighThreshold
             Case "scoring.tier_floor.high_floor"                       : Return s.TierFloor.HighFloor
             Case "scoring.tier_floor.med_threshold"                    : Return s.TierFloor.MedThreshold

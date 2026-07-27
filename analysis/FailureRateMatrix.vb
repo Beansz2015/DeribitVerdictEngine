@@ -202,7 +202,8 @@ Public Class FailureRateMatrix
     ' Post-migration that test is EXACT on v0.8+ rows (|placed target − entry| vs the floor)
     ' and keeps the engineTargetMult × ATR approximation only for pre-v0.8 rows — see
     ' GateTargetDistance. floorPct / engineTargetMult default to the AnalysisConstants POCO
-    ' mirrors; call sites pass the live cfg.Scoring.MinTradeableMovePct / .AtrTargetMultiplier.
+    ' mirrors; call sites pass the live cfg.Scoring.TradeCosts.EffectiveMinMovePct (v62: the
+    ' composed fee + min-net floor) / cfg.Scoring.AtrTargetMultiplier.
     ' resolution scales the hold windows (three-min-hold-window-recalibration-proposal.md):
     ' res=1 → {5,10,15}, res=3 → {15,30,45}. Defaults to 1 so the NY×1-filtered
     ' auto-tweaker call (which omits this arg) keeps its window set; the offline report

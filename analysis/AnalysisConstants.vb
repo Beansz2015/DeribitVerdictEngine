@@ -27,7 +27,9 @@ Public Module AnalysisConstants
 
     ' [v35 eval-metric de-confound] Minimum favourable-barrier distance as a
     ' fraction of entry price. POCO-DEFAULT MIRROR ONLY — the live value is
-    ' cfg.Scoring.MinTradeableMovePct, passed in at the call sites. Post-migration it
+    ' cfg.Scoring.TradeCosts.EffectiveMinMovePct (v62: the composed fee + min-net
+    ' floor; was the flat cfg.Scoring.MinTradeableMovePct), passed in at the call
+    ' sites. Post-migration it
     ' floors the LEGACY (pre-v0.8) favourable fallback only — a logged PlacedTarget is
     ' returned unfloored, because the live Step 5c gate already evaluated that exact
     ' price and flooring it would re-create the very column collapse this migration

@@ -14,6 +14,7 @@
 ' readers — see the locked carve-out in the P5b kickoff §3.6).
 
 Imports System.Drawing
+Imports System.Globalization
 Imports System.IO
 Imports System.Threading
 Imports System.Windows.Forms
@@ -243,9 +244,17 @@ Partial Public Class MainForm
     ' let the strip eat into TOOLS: TOOLS is a Percent row and starving it silently clips
     ' Output Dump. Kept generous vs the strip's real AutoSize height so TOOLS keeps >= 120.
     ' [offline-whatif-replay W7] +28 for the 4th TOOLS LinkRow ("What-If Replay", y=104).
-    Friend Const SETTINGS_CARD_H_BASE As Integer = 278
+    ' [v62 fee-aware min-move floor] +28 for the MIN NET MOVE % editable row, which owns its
+    ' own absolute row between the EXIT GUARD strip and TOOLS. TOOLS is a Percent row, so the
+    ' card MUST grow with the new row or TOOLS starves and silently clips its 4th LinkRow.
+    Friend Const SETTINGS_CARD_H_BASE As Integer = 306
     Friend Const EXIT_GUARD_STRIP_H   As Integer = 28
     Friend _settingsRowIndex As Integer = -1
+
+    ' [v62 fee-aware min-move floor] The MIN NET MOVE % row inside SETTINGS & TOOLS —
+    ' the trader-owned half of the composed floor. See BuildMinNetMoveRow().
+    Private _txtMinNetMove      As TextBox
+    Private _lblMinNetMoveFloor As Label
     Friend _lblLastPrice      As Label
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
@@ -1042,7 +1051,7 @@ Partial Public Class MainForm
         ' between "SETTINGS TOOLS" and "LOG" — the boxes are transparent, so only ink matters.
         Dim outer = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 3,
+            .ColumnCount = 1, .RowCount = 4,
             .BackColor = Color.Transparent,
             .Padding = New Padding(0, 14, 0, 0),
             .Margin = New Padding(0),
@@ -1067,6 +1076,9 @@ Partial Public Class MainForm
         ' a declared position). A flat 26 was reserved permanently and was most of the dead
         ' band between LOG and TOOLS. SyncSettingsCardHeight() grows the CARD when it appears.
         outer.RowStyles.Add(New RowStyle(SizeType.AutoSize))        ' P4#1 EXIT GUARD strip
+        ' [v62] MIN NET MOVE % editor — always visible (unlike the guard strip), so a flat
+        ' absolute row. SETTINGS_CARD_H_BASE grew by the same 28 to pay for it.
+        outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 28))    ' v62 MIN NET MOVE % row
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS (now holds the CTA)
 
         ' ---------------- Row 1: LOG / AUTO-RUN (2 cols) ----------------
@@ -1189,6 +1201,18 @@ Partial Public Class MainForm
         }
         outer.Controls.Add(lblExitGuard, 0, 1)
 
+        ' ---------------- Row 3: MIN NET MOVE % editor (v62 fee-aware min-move floor) ------
+        ' The trader-owned half of the composed min-move floor:
+        '     EffectiveMinMovePct = round_trip_fee_pct(style) + min_net_move_pct
+        ' Fees + style are settings-file-only (they change when Deribit changes them, not per
+        ' mood); this row edits ONLY min_net_move_pct — the minimum move the trader will accept
+        ' AFTER costs. Commits on Enter or blur via SettingsLoader.Save(bumpVersion:=False)
+        ' (operational save, v36 §10a); hot-reload applies it on the next run.
+        ' A LIVE STATUS ELEMENT, like the EXIT GUARD strip above it — not an RTF/snapshot/card
+        ' surface, so no card-binding obligation under the display-string parity rule
+        ' (fee-aware-min-move-proposal.md §2/§3).
+        outer.Controls.Add(BuildMinNetMoveRow(), 0, 2)
+
         ' ---------------- ANALYSIS REPORT CTA (now inside the TOOLS box) ----------------
         ' P3 AnalysisReportButton — Solid amber FlatButton with 📊 icon, →
         ' arrow, and a persistent glow halo. Click shim forwards into the
@@ -1209,7 +1233,7 @@ Partial Public Class MainForm
         lnkAnalysisReport.Visible = False
         _cardSettingsTools.Controls.Add(lnkAnalysisReport)
 
-        ' ---------------- Row 4: TOOLS ----------------
+        ' ---------------- Row 5: TOOLS ----------------
         Dim grpTools = New SectionGroup() With {
             .Title = "TOOLS",
             .Dock = DockStyle.Fill,
@@ -1300,10 +1324,141 @@ Partial Public Class MainForm
             _cardSettingsTools.Controls.Add(lnk)
         Next
 
-        outer.Controls.Add(grpTools, 0, 2)
+        outer.Controls.Add(grpTools, 0, 3)
 
         _cardSettingsTools.Controls.Add(outer)
         outer.BringToFront()
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' [v62 fee-aware min-move floor] MIN NET MOVE % row.
+    ' Label + editable value + a derived read-out of the composed floor, so the
+    ' trader can see what the knob actually produces:
+    '     MIN NET MOVE % (after fees)  [0.0005]  → floor 0.0800% (fee 0.0300%)
+    ' The read-out is the resolver's own output (cfg.Scoring.TradeCosts.
+    ' EffectiveMinMovePct) — never a re-derivation, so it can't drift from the gate.
+    ' -----------------------------------------------------------------------
+    Private Function BuildMinNetMoveRow() As Control
+        ' A TLP, not absolute Locations: the label is AutoSize and its width scales with
+        ' DPI, so a hand-tuned X for the textbox would collide with the label at 150%.
+        Dim host = New TableLayoutPanel() With {
+            .Dock = DockStyle.Fill,
+            .ColumnCount = 3, .RowCount = 1,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(2, 0, 2, 4),
+            .Padding = New Padding(0),
+            .TabStop = False
+        }
+        host.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))          ' label
+        host.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))          ' value box
+        host.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))   ' derived read-out
+        host.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+
+        Dim lbl = New Label() With {
+            .AutoSize = True,
+            .Anchor = AnchorStyles.Left,
+            .Margin = New Padding(0, 0, 10, 0),
+            .Text = "MIN NET MOVE % (after fees)",
+            .Font = Theme.FontMono(8.5F, FontStyle.Bold),
+            .ForeColor = Theme.FG_TERTIARY,
+            .BackColor = Color.Transparent,
+            .TabStop = False
+        }
+        host.Controls.Add(lbl, 0, 0)
+
+        _txtMinNetMove = New TextBox() With {
+            .Anchor = AnchorStyles.Left,
+            .Margin = New Padding(0, 0, 10, 0),
+            .Width = 78,
+            .Font = Theme.FontMono(8.5F),
+            .BackColor = Theme.BG_CARD_RAISED,
+            .ForeColor = Theme.FG_PRIMARY,
+            .BorderStyle = BorderStyle.FixedSingle,
+            .TextAlign = HorizontalAlignment.Right
+        }
+        host.Controls.Add(_txtMinNetMove, 1, 0)
+
+        _lblMinNetMoveFloor = New Label() With {
+            .AutoSize = True,
+            .Anchor = AnchorStyles.Left,
+            .Margin = New Padding(0),
+            .Font = Theme.FontMono(8.5F),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .TabStop = False
+        }
+        host.Controls.Add(_lblMinNetMoveFloor, 2, 0)
+
+        Dim tip As New ToolTip()
+        tip.SetToolTip(_txtMinNetMove,
+            "Minimum move you will accept AFTER execution costs, as a fraction of price " &
+            "(0.0005 = 0.05%)." & vbCrLf &
+            "The gate's actual floor = round-trip fee for the configured style + this value." & vbCrLf &
+            "Fees and round_trip_style live in settings.json (scoring.trade_costs) — they are " &
+            "venue facts, not preferences." & vbCrLf &
+            "Enter or click away to save; the new floor applies on the next analysis run.")
+
+        AddHandler _txtMinNetMove.Leave, Sub(s, ev) CommitMinNetMove()
+        AddHandler _txtMinNetMove.KeyDown,
+            Sub(s As Object, ev As KeyEventArgs)
+                If ev.KeyCode = Keys.Enter Then
+                    ev.SuppressKeyPress = True
+                    CommitMinNetMove()
+                ElseIf ev.KeyCode = Keys.Escape Then
+                    ev.SuppressKeyPress = True
+                    RefreshMinNetMoveRow()
+                End If
+            End Sub
+
+        RefreshMinNetMoveRow()
+        Return host
+    End Function
+
+    ''' <summary>Re-read the live settings into the MIN NET MOVE row (also the Escape-key
+    ''' revert). Keeps the derived floor read-out in step with a file-side edit picked up by
+    ''' the SettingsLoader hot-reload.</summary>
+    Friend Sub RefreshMinNetMoveRow()
+        If _txtMinNetMove Is Nothing Then Return
+        Dim tc = SettingsLoader.Current.Scoring.TradeCosts
+        _txtMinNetMove.Text = tc.MinNetMovePct.ToString("0.0####", CultureInfo.InvariantCulture)
+        _txtMinNetMove.ForeColor = Theme.FG_PRIMARY
+        _lblMinNetMoveFloor.Text = String.Format(CultureInfo.InvariantCulture,
+            "→ floor {0:F4}%  (fee {1:F4}%, {2})",
+            tc.EffectiveMinMovePct * 100.0, tc.RoundTripFeePct * 100.0, tc.RoundTripStyle)
+    End Sub
+
+    ''' <summary>Validate + persist the MIN NET MOVE % edit. Operational save
+    ''' (bumpVersion:=False, v36 §10a) — a risk-preference turn is not a feature version.
+    ''' Invalid input is flagged in-place and left for the trader to correct rather than
+    ''' silently reverted.</summary>
+    Private Sub CommitMinNetMove()
+        If _txtMinNetMove Is Nothing Then Return
+        Dim cfg = SettingsLoader.Current
+        Dim entered As Double
+        If Not Double.TryParse(_txtMinNetMove.Text.Trim(), NumberStyles.Float,
+                               CultureInfo.InvariantCulture, entered) OrElse
+           entered < 0.0 OrElse entered > 0.01 Then
+            _txtMinNetMove.ForeColor = Theme.ACC_SHORT
+            _lblMinNetMoveFloor.Text = "→ invalid (expected 0 … 0.01)"
+            Return
+        End If
+
+        ' No-op edits must not write the file (the hot-reload would re-render for nothing).
+        If Math.Abs(entered - cfg.Scoring.TradeCosts.MinNetMovePct) < 0.0000000001 Then
+            RefreshMinNetMoveRow()
+            Return
+        End If
+
+        cfg.Scoring.TradeCosts.MinNetMovePct = entered
+        Try
+            SettingsLoader.Save(cfg, String.Format(CultureInfo.InvariantCulture,
+                "scoring.trade_costs.min_net_move_pct → {0} (floor {1}) via UI",
+                entered, cfg.Scoring.TradeCosts.EffectiveMinMovePct), bumpVersion:=False)
+            RefreshMinNetMoveRow()
+        Catch ex As Exception
+            _txtMinNetMove.ForeColor = Theme.ACC_SHORT
+            _lblMinNetMoveFloor.Text = "→ save failed: " & ex.Message
+        End Try
     End Sub
 
     ' -----------------------------------------------------------------------

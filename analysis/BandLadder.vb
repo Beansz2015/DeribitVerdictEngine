@@ -80,7 +80,7 @@ Public Class BandLadder
             counts(b) = (0, 0)
         Next
 
-        Dim floorPct         As Double = cfg.Scoring.MinTradeableMovePct
+        Dim floorPct         As Double = cfg.Scoring.TradeCosts.EffectiveMinMovePct
         Dim engineTargetMult As Double = cfg.Scoring.AtrTargetMultiplier
 
         For Each row In rows

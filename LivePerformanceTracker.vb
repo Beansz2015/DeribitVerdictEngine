@@ -157,7 +157,7 @@ Public Class LivePerformanceTracker
     Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution"
 
     ' The min-tradeable-move floor the eval cache was last written with. Set from
-    ' cfg.Scoring.MinTradeableMovePct at the start of Initialise/Update; embedded in
+    ' cfg.Scoring.TradeCosts.EffectiveMinMovePct at the start of Initialise/Update; embedded in
     ' the schema comment by SchemaCommentLine().
     Private Shared _floorPctInEffect As Double = 0.0008
 
@@ -353,7 +353,7 @@ Public Class LivePerformanceTracker
             ' rewritten with the v6 comment, IsPreV6Schema returns False on restart).
             Dim preV6Schema As Boolean  = IsPreV6Schema(evalCachePath)
             Dim storedFloor As Double?  = ReadSchemaFloorPct(evalCachePath)
-            _floorPctInEffect = cfg.Scoring.MinTradeableMovePct
+            _floorPctInEffect = cfg.Scoring.TradeCosts.EffectiveMinMovePct
             _evalCache = LoadEvalCache(evalCachePath)
             Dim existingTs As New HashSet(Of DateTime)(_evalCache.Select(Function(e) e.Timestamp))
 
@@ -436,7 +436,7 @@ Public Class LivePerformanceTracker
                     Dim entry As EvalCacheEntry = BuildEntry(row.Timestamp, row.Verdict,
                                                              row.EntryPrice, row.ATR,
                                                              favLong, advLong, favShort, advShort,
-                                                             cfg.Scoring.MinTradeableMovePct,
+                                                             cfg.Scoring.TradeCosts.EffectiveMinMovePct,
                                                              row.ExecResolution)
                     ' If window complete, evaluate; otherwise leave as PENDING. The
                     ' horizon is resolution-scaled (15 min 1-min / 45 min 3-min) so a
@@ -496,7 +496,7 @@ Public Class LivePerformanceTracker
 
         ' Keep the schema-comment floor in sync (stamped when AppendEvalRows / WriteEvalCache
         ' write a fresh header) so a mid-session settings.json floor edit is reflected.
-        _floorPctInEffect = cfg.Scoring.MinTradeableMovePct
+        _floorPctInEffect = cfg.Scoring.TradeCosts.EffectiveMinMovePct
 
         Try
             ' --- Step 1: Append new OHLC bars from this analysis run ---
@@ -1142,7 +1142,7 @@ Public Class LivePerformanceTracker
         Dim plShort As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
         Return BuildEntry(nowUtc, v.Verdict, r.CurrentPrice, r.ATR,
                           plLong.Target, plLong.StopPx, plShort.Target, plShort.StopPx,
-                          cfg.Scoring.MinTradeableMovePct, r.ExecResolution)
+                          cfg.Scoring.TradeCosts.EffectiveMinMovePct, r.ExecResolution)
     End Function
 
     ''' <summary>

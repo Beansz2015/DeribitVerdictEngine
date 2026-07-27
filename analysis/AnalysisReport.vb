@@ -103,7 +103,7 @@ Public Class PopulationReport
     Public Property DirAtrP25    As Double
     Public Property DirAtrP50    As Double
     Public Property DirAtrP75    As Double
-    Public Property MoveFloorUsd As Double   ' cfg.Scoring.MinTradeableMovePct × representative price
+    Public Property MoveFloorUsd As Double   ' cfg.Scoring.TradeCosts.EffectiveMinMovePct × representative price
 
     ' [E5 — v55 addendum] Three-row band ladder (STRONG / MEDIUM / WEAK) at THIS
     ' population's tracker horizon (max hold window for its resolution). Diagnostic

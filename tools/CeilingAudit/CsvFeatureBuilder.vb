@@ -405,7 +405,7 @@ Namespace CeilingAudit
         ''' would kill them (v35 de-confound), rows with ATR≤0, and rows with no bars at the
         ''' horizon are labelled -1 and dropped from every downstream stage.</summary>
         Public Shared Sub AttachLabels(pop As Population, cfg As EngineSettings)
-            Dim floorPct As Double = cfg.Scoring.MinTradeableMovePct
+            Dim floorPct As Double = cfg.Scoring.TradeCosts.EffectiveMinMovePct
             Dim engineTargetMult As Double = cfg.Scoring.AtrTargetMultiplier
             Dim dummyStruct As Integer, dummyAtrFb As Integer
             Dim dummyPlaced As Integer, dummyLegacyFav As Integer

@@ -37,7 +37,7 @@ Public Class WhatIfLauncherForm
         ("Verdict STRONG %", "scoring.verdict_strong_pct", "0.70  or  0.65:0.80:0.05", "0.65:0.80:0.05"),
         ("Verdict MED %", "scoring.verdict_med_pct", "0.53  or  0.45:0.60:0.05", "0.45:0.60:0.05"),
         ("Verdict WEAK %", "scoring.verdict_weak_pct", "0.35  or  0.30:0.45:0.05", "0.30:0.45:0.05"),
-        ("Min tradeable move %", "scoring.min_tradeable_move_pct", "0.0008  or  0.0006:0.0012:0.0002", "0.0006:0.0012:0.0002"),
+        ("Min net move % (after fees)", "scoring.trade_costs.min_net_move_pct", "0.0005  or  0.0003:0.0009:0.0002", "0.0003:0.0009:0.0002"),
         ("Target max ×ATR", "scoring.structural_levels.target_max_atr_mult", "3.5  or  3.0:4.0:0.5", "3.0:4.0:0.5"),
         ("Stop max ×ATR", "scoring.structural_levels.stop_max_atr_mult", "2.0  or  1.6:2.4:0.2", "1.6:2.4:0.2"),
         ("Stop min floor ticks", "scoring.structural_levels.stop_min_floor_ticks", "4  or  4:8:2", "4:8:2"),

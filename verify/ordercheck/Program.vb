@@ -308,6 +308,19 @@ Module Program
         A39d_BlockBootstrapNeverStraddlesHourBoundary()
         A39e_InformationalExtrasAbsentFromDecisionMatrix()
 
+        ' [v62 fee-aware min-move floor — A40, docs/fee-aware-min-move-proposal.md §5]
+        ' Resolver composition across all three round-trip styles (default composes to
+        ' 0.0008 EXACTLY); defaults byte-identical through the REAL Calculate() against a
+        ' cfg carrying the retired v35 flat-floor semantics; a knob turn moves the gate and
+        ' the composed delta clears the eval re-walk epsilon; HC26 prefix fence + the
+        ' retired key's natural C-6 rejection + the what-if whitelist split; and the
+        ' min_net overlay round-tripping through WhatIfSettings.BuildCellSettings.
+        A40a_ResolverComposition()
+        A40b_DefaultsByteIdenticalToV61Floor()
+        A40c_KnobChangeMovesTheGate()
+        A40d_Hc26FenceAndWhatIfWhitelist()
+        A40e_MinNetOverlayRoundTripsThroughWhatIf()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -740,7 +753,10 @@ Module Program
     ' SHORT-dominant structure is preserved at $62k. The gate (Step 5c, end of
     ' Calculate()) fires purely on (directional verdict, dominant side, ATR,
     ' price, EFFECTIVE post-cap target). At the POCO-default floor:
-    '   floor = MinTradeableMovePct(0.0008) × 62000 = 49.6
+    '   [v62] floor = TradeCosts.EffectiveMinMovePct × 62000
+    '               = (2 × 1.5bps + min_net 0.0005) × 62000 = 0.0008 × 62000 = 49.6
+    '   — the composed default reproduces the retired flat v35 floor exactly, which is
+    '   why every A13 number below is unchanged.
     Private Function BuildGateIndicators(atr As Double, price As Double) As IndicatorResults
         Dim r = BuildA8Indicators()
         r.CurrentPrice = price
@@ -787,10 +803,12 @@ Module Program
               String.Format("expected NO TRADE / BELOW_MIN_MOVE / placed 61970, got '{0}' / {1} / placed {2:F1}",
                             vNear.Verdict, vNear.VerdictContext, vNear.AdjustedShortTarget))
 
-        ' A13d — editability: lower the floor to 0.0003 (18.6); A13a's 22.75-pt target
-        ' now clears → the shared key drives the gate (hot-reloadable in-app).
+        ' A13d — editability: [v62] turn the trader-owned half of the composition to zero,
+        ' which collapses the floor onto the pure round-trip fee 0.0003 (18.6) — the same
+        ' number this fixture has always pinned. A13a's 22.75-pt target now clears → the
+        ' shared resolver drives the gate (hot-reloadable in-app via the SETTINGS & TOOLS row).
         Dim cfgLow = BuildA8Cfg(fundingBoost:=0)
-        cfgLow.Scoring.MinTradeableMovePct = 0.0003
+        cfgLow.Scoring.TradeCosts.MinNetMovePct = 0.0
         Dim vEdit = ScoringEngine.Calculate(BuildGateIndicators(atr:=13, price:=62000),
                                             PositionState.None, BuildA8Norms(), cfgLow)
         Check("A13d editability (floor 18.6 < target 22.75 → directional stands)",
@@ -1143,10 +1161,13 @@ Module Program
 
         Dim rRes = SettingsDiffApplier.Validate(OneDiff("resolution_profiles.3.roc_magnitude_threshold", "0.21", "0.25"), s, 3)
         Dim rKel = SettingsDiffApplier.Validate(OneDiff("kelly.max_leverage", "5.0", "6.0"), s, 3)
-        Dim rMin = SettingsDiffApplier.Validate(OneDiff("scoring.min_tradeable_move_pct", "0.0008", "0.0010"), s, 3)
+        ' [v62] The exemplar re-pinned from the retired exact-match key
+        ' scoring.min_tradeable_move_pct to its successor prefix scoring.trade_costs.
+        ' (HARD CONSTRAINT 26). A40d covers the whole block + the retired key.
+        Dim rMin = SettingsDiffApplier.Validate(OneDiff("scoring.trade_costs.min_net_move_pct", "0.0005", "0.0010"), s, 3)
         Dim rCtl = SettingsDiffApplier.Validate(OneDiff("indicators.OBV.trend_gate", "10", "12"), s, 3)
 
-        Check("A15f Validate rejects resolution_profiles.* / kelly.* / min_tradeable_move_pct, passes OBV.trend_gate",
+        Check("A15f Validate rejects resolution_profiles.* / kelly.* / scoring.trade_costs.*, passes OBV.trend_gate",
               Not rRes.IsValid AndAlso Not rKel.IsValid AndAlso Not rMin.IsValid AndAlso rCtl.IsValid,
               String.Format("res={0} kel={1} min={2} ctl={3}",
                             rRes.IsValid, rKel.IsValid, rMin.IsValid, rCtl.IsValid))
@@ -4355,7 +4376,7 @@ Module Program
         Dim atrEx, structStop, atrFb, placedTgt, legacyFav, belowMin As Integer
         Dim cells = FailureRateMatrix.Compute(rows, atrEx, structStop, atrFb,
                                                placedTgt, legacyFav, belowMin,
-                                               cfg.Scoring.MinTradeableMovePct,
+                                               cfg.Scoring.TradeCosts.EffectiveMinMovePct,
                                                cfg.Scoring.AtrTargetMultiplier,
                                                1, AdverseBarrierMode.Placed)
 
@@ -5380,5 +5401,283 @@ Module Program
         Dim u2 As Double = 1.0 - rng.NextDouble()
         Return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2)
     End Function
+
+    ' =======================================================================
+    ' A40 — fee-aware min-move floor (v62).
+    ' docs/fee-aware-min-move-proposal.md §5 acceptance.
+    '
+    ' The flat scoring.min_tradeable_move_pct key is retired; the floor is COMPOSED by
+    ' one shared resolver, TradeCostSettings.EffectiveMinMovePct = round-trip fee for the
+    ' configured style + the trader's minimum acceptable NET move. At the shipped defaults
+    ' (maker 1.5 bps, maker_maker, min_net 0.0005) that is 0.0003 + 0.0005 = 0.0008 — the
+    ' retired v35 floor EXACTLY, which is why this build is not a dataset boundary and why
+    ' every A13 number is unchanged. A40b is the load-bearing pin for that claim.
+    ' =======================================================================
+
+    ' -- A40a: resolver composition across all three styles + non-default bps ------
+    Private Sub A40a_ResolverComposition()
+        ' Default: maker_maker at 1.5/3.5 bps + min_net 0.0005 ⇒ 0.0008 EXACTLY.
+        ' Asserted to 1e-12: the whole no-dataset-boundary argument rests on this being
+        ' the v35 literal, not merely close to it.
+        Dim def As New TradeCostSettings()
+        Dim okDefault As Boolean = Math.Abs(def.RoundTripFeePct - 0.0003) < 0.000000000001 AndAlso
+                                   Math.Abs(def.EffectiveMinMovePct - 0.0008) < 0.000000000001
+
+        ' maker_taker: 1.5 + 3.5 = 5 bps ⇒ 0.0005; + min_net ⇒ 0.0010.
+        Dim mt As New TradeCostSettings() With {.RoundTripStyle = "maker_taker"}
+        Dim okMakerTaker As Boolean = Math.Abs(mt.RoundTripFeePct - 0.0005) < 0.000000000001 AndAlso
+                                      Math.Abs(mt.EffectiveMinMovePct - 0.0010) < 0.000000000001
+
+        ' taker_taker: 2 × 3.5 = 7 bps ⇒ 0.0007; + min_net ⇒ 0.0012.
+        Dim tt As New TradeCostSettings() With {.RoundTripStyle = "taker_taker"}
+        Dim okTakerTaker As Boolean = Math.Abs(tt.RoundTripFeePct - 0.0007) < 0.000000000001 AndAlso
+                                      Math.Abs(tt.EffectiveMinMovePct - 0.0012) < 0.000000000001
+
+        ' Non-default bps track through: maker 2.0 / taker 4.0.
+        Dim hi As New TradeCostSettings() With {.MakerFeeBps = 2.0, .TakerFeeBps = 4.0,
+                                                .RoundTripStyle = "maker_taker", .MinNetMovePct = 0.001}
+        Dim okBps As Boolean = Math.Abs(hi.RoundTripFeePct - 0.0006) < 0.000000000001 AndAlso
+                               Math.Abs(hi.EffectiveMinMovePct - 0.0016) < 0.000000000001
+
+        ' Style parsing is case/whitespace tolerant, and an unrecognised style falls back
+        ' to maker_maker rather than to zero cost (fail-safe = the conservative floor).
+        Dim loud As New TradeCostSettings() With {.RoundTripStyle = "  TAKER_TAKER "}
+        Dim junk As New TradeCostSettings() With {.RoundTripStyle = "carrier_pigeon"}
+        Dim nul  As New TradeCostSettings() With {.RoundTripStyle = Nothing}
+        Dim okFallback As Boolean = Math.Abs(loud.RoundTripFeePct - 0.0007) < 0.000000000001 AndAlso
+                                    Math.Abs(junk.RoundTripFeePct - 0.0003) < 0.000000000001 AndAlso
+                                    Math.Abs(nul.RoundTripFeePct - 0.0003) < 0.000000000001
+
+        ' The two DERIVED properties must never round-trip into settings.json — the UI's
+        ' operational save serialises the whole POCO, and the tweaker prompt inlines the
+        ' whole file, so a leaked computed key would become a phantom tunable.
+        Dim json As String = System.Text.Json.JsonSerializer.Serialize(
+            New EngineSettings(),
+            New System.Text.Json.JsonSerializerOptions With {.WriteIndented = True})
+        Dim okSerialise As Boolean =
+            json.Contains("""trade_costs""") AndAlso
+            json.Contains("""min_net_move_pct""") AndAlso
+            json.Contains("""round_trip_style""") AndAlso
+            Not json.Contains("EffectiveMinMovePct") AndAlso
+            Not json.Contains("RoundTripFeePct")
+
+        Check("A40a resolver composition (maker_maker default == 0.0008 exactly; maker_taker/taker_taker; bps track; unrecognised style ⇒ maker_maker; derived props never serialise)",
+              okDefault AndAlso okMakerTaker AndAlso okTakerTaker AndAlso okBps AndAlso
+              okFallback AndAlso okSerialise,
+              String.Format(CultureInfo.InvariantCulture,
+                            "def={0} ({1:R}) mt={2} tt={3} bps={4} fallback={5} serialise={6}",
+                            okDefault, def.EffectiveMinMovePct, okMakerTaker, okTakerTaker,
+                            okBps, okFallback, okSerialise))
+    End Sub
+
+    ' -- A40b: defaults byte-identical to the v61 flat floor -- THE load-bearing pin ---
+    ' The v61 cfg is reconstructed honestly rather than circularly: zero fees + min_net
+    ' 0.0008 IS the retired semantics (a flat 0.0008 floor with no fee model). The v62
+    ' default cfg reaches the same floor by a different composition (0.0003 + 0.0005), so
+    ' identical engine output across the A13 gate case set — including a BELOW_MIN_MOVE
+    ' case — proves the restructure is behaviour-neutral at ship.
+    Private Sub A40b_DefaultsByteIdenticalToV61Floor()
+        Dim cfgV62 = BuildA8Cfg(fundingBoost:=0)     ' POCO defaults ⇒ composed 0.0008
+
+        Dim cfgV61 = BuildA8Cfg(fundingBoost:=0)     ' the retired flat-key semantics
+        cfgV61.Scoring.TradeCosts.MakerFeeBps = 0.0
+        cfgV61.Scoring.TradeCosts.TakerFeeBps = 0.0
+        cfgV61.Scoring.TradeCosts.MinNetMovePct = 0.0008
+
+        Dim sameFloor As Boolean =
+            Math.Abs(cfgV61.Scoring.TradeCosts.EffectiveMinMovePct -
+                     cfgV62.Scoring.TradeCosts.EffectiveMinMovePct) < 0.000000000001
+
+        ' Case set: A13a (gate fires on a small fallback target — the BELOW_MIN_MOVE case),
+        ' A13b (clears the floor), A13c (gate fires on a near structural placement),
+        ' plus a high-ATR control well clear of the floor.
+        Dim allMatch As Boolean = True
+        Dim firstDiff As String = ""
+        Dim sawBelowMin As Boolean = False
+
+        For Each c In New(Name As String, Atr As Double, Swing As Double)() {
+                ("A13a low-ATR", 13.0, 0.0),
+                ("A13b tradeable-ATR", 30.0, 0.0),
+                ("A13c near-swing", 100.0, 61970.0),
+                ("control high-ATR", 100.0, 0.0)}
+
+            Dim r61 = BuildGateIndicators(atr:=c.Atr, price:=62000)
+            Dim r62 = BuildGateIndicators(atr:=c.Atr, price:=62000)
+            If c.Swing > 0 Then
+                r61.SwingTargetShort = c.Swing
+                r62.SwingTargetShort = c.Swing
+            End If
+
+            Dim v61 = ScoringEngine.Calculate(r61, PositionState.None, BuildA8Norms(), cfgV61)
+            Dim v62 = ScoringEngine.Calculate(r62, PositionState.None, BuildA8Norms(), cfgV62)
+
+            If v62.VerdictContext = "BELOW_MIN_MOVE" Then sawBelowMin = True
+
+            Dim match As Boolean =
+                v61.Verdict = v62.Verdict AndAlso
+                v61.Confidence = v62.Confidence AndAlso
+                v61.VerdictContext = v62.VerdictContext AndAlso
+                Math.Abs(v61.AdjustedLongTarget - v62.AdjustedLongTarget) < 0.000001 AndAlso
+                Math.Abs(v61.AdjustedShortTarget - v62.AdjustedShortTarget) < 0.000001 AndAlso
+                v61.TargetCapReasonLong = v62.TargetCapReasonLong AndAlso
+                v61.TargetCapReasonShort = v62.TargetCapReasonShort
+            If Not match Then
+                allMatch = False
+                If firstDiff = "" Then
+                    firstDiff = String.Format(CultureInfo.InvariantCulture,
+                        "{0}: v61 '{1}'/{2}/tgt {3:F2} vs v62 '{4}'/{5}/tgt {6:F2}",
+                        c.Name, v61.Verdict, v61.VerdictContext, v61.AdjustedShortTarget,
+                        v62.Verdict, v62.VerdictContext, v62.AdjustedShortTarget)
+                End If
+            End If
+        Next
+
+        Check("A40b v62 defaults byte-identical to the retired v61 flat 0.0008 floor through the REAL Calculate() (incl. a BELOW_MIN_MOVE case)",
+              sameFloor AndAlso allMatch AndAlso sawBelowMin,
+              String.Format("sameFloor={0} allMatch={1} sawBelowMin={2} firstDiff='{3}'",
+                            sameFloor, allMatch, sawBelowMin, firstDiff))
+    End Sub
+
+    ' -- A40c: turning the knob moves the gate (and clears the eval re-walk epsilon) ---
+    ' A13b's placed short target sits 52.5 from entry and clears the default floor 49.6.
+    ' min_net 0.0005 → 0.0010 lifts the composed floor to (0.0003 + 0.0010) × 62000 = 80.6,
+    ' so the same marginal directional flips to NO TRADE / BELOW_MIN_MOVE.
+    '
+    ' The eval side: LivePerformanceTracker stores the COMPOSED value as its
+    ' _floorPctInEffect and re-walks when it differs from the cache's stored floor by more
+    ' than 1e-7. Driving that re-walk end-to-end needs InitialiseAsync + a live OHLC fetch
+    ' (the same live-network boundary that keeps A16–A31 stubbed), so what is pinned here
+    ' is the input the trigger consumes: the composed delta produced by a knob turn is
+    ' non-zero and comfortably exceeds that epsilon.
+    Private Sub A40c_KnobChangeMovesTheGate()
+        Dim cfgBase = BuildA8Cfg(fundingBoost:=0)
+        Dim vBase = ScoringEngine.Calculate(BuildGateIndicators(atr:=30, price:=62000),
+                                            PositionState.None, BuildA8Norms(), cfgBase)
+        Dim okBaseStands As Boolean = Not vBase.Verdict.StartsWith("NO TRADE") AndAlso
+                                      vBase.VerdictContext <> "BELOW_MIN_MOVE"
+
+        Dim cfgRaised = BuildA8Cfg(fundingBoost:=0)
+        cfgRaised.Scoring.TradeCosts.MinNetMovePct = 0.0010
+        Dim vRaised = ScoringEngine.Calculate(BuildGateIndicators(atr:=30, price:=62000),
+                                              PositionState.None, BuildA8Norms(), cfgRaised)
+        Dim okRaisedVetoes As Boolean = vRaised.Verdict = "NO TRADE" AndAlso
+                                        vRaised.VerdictContext = "BELOW_MIN_MOVE"
+
+        ' The composed floor moved by exactly the knob delta, and clears the tracker's
+        ' 1e-7 re-walk epsilon.
+        Dim delta As Double = cfgRaised.Scoring.TradeCosts.EffectiveMinMovePct -
+                              cfgBase.Scoring.TradeCosts.EffectiveMinMovePct
+        Dim okRewalkTrigger As Boolean = Math.Abs(delta - 0.0005) < 0.000000000001 AndAlso
+                                         Math.Abs(delta) > 0.0000001
+
+        Check("A40c min_net 0.0005→0.0010 flips a marginal directional to NO TRADE / BELOW_MIN_MOVE; composed delta clears the eval re-walk epsilon",
+              okBaseStands AndAlso okRaisedVetoes AndAlso okRewalkTrigger,
+              String.Format(CultureInfo.InvariantCulture,
+                            "base='{0}'/{1} raised='{2}'/{3} delta={4:R}",
+                            vBase.Verdict, vBase.VerdictContext,
+                            vRaised.Verdict, vRaised.VerdictContext, delta))
+    End Sub
+
+    ' -- A40d: HC26 prefix fence + retired key unresolvable + what-if whitelist split --
+    Private Sub A40d_Hc26FenceAndWhatIfWhitelist()
+        ' A settings tree at v62 shape: the trade_costs block present, the retired flat key
+        ' ABSENT (so it can only fail the C-6 resolve check), plus a sibling scoring tunable.
+        Dim s As String = "{""version"":62,""scoring"":{""verdict_med_pct"":0.53," &
+                          """trade_costs"":{""maker_fee_bps"":1.5,""taker_fee_bps"":3.5," &
+                          """round_trip_style"":""maker_maker"",""min_net_move_pct"":0.0005}}}"
+
+        Dim rMaker = SettingsDiffApplier.Validate(OneDiff("scoring.trade_costs.maker_fee_bps", "1.5", "2.0"), s, 3)
+        Dim rTaker = SettingsDiffApplier.Validate(OneDiff("scoring.trade_costs.taker_fee_bps", "3.5", "4.0"), s, 3)
+        Dim rStyle = SettingsDiffApplier.Validate(OneDiff("scoring.trade_costs.round_trip_style", """maker_maker""", """taker_taker"""), s, 3)
+        Dim rNet   = SettingsDiffApplier.Validate(OneDiff("scoring.trade_costs.min_net_move_pct", "0.0005", "0.0010"), s, 3)
+        Dim okAllFour As Boolean = Not rMaker.IsValid AndAlso Not rTaker.IsValid AndAlso
+                                   Not rStyle.IsValid AndAlso Not rNet.IsValid
+
+        ' The retired key is applier-UNRESOLVABLE (C-6), NOT fragment-banned — the v47-F1
+        ' snapshot-poisoning lesson. Assert both halves: rejected, and rejected for the
+        ' resolve reason rather than by a fragment/prefix guard.
+        Dim rRetired = SettingsDiffApplier.Validate(OneDiff("scoring.min_tradeable_move_pct", "0.0008", "0.0010"), s, 3)
+        Dim okRetired As Boolean = Not rRetired.IsValid AndAlso
+                                   rRetired.ErrorReason.Contains("does not resolve") AndAlso
+                                   Not rRetired.ErrorReason.Contains("banned fragment")
+
+        ' Prefix-safety: a sibling scoring.* tunable is untouched by the fence.
+        Dim rSib = SettingsDiffApplier.Validate(OneDiff("scoring.verdict_med_pct", "0.53", "0.55"), s, 3)
+
+        ' What-if surface: min_net_move_pct is sweepable, the fee/style keys are not, and
+        ' the retired path no longer parses.
+        Dim wlNet As Boolean = WhatIfOverlay.Whitelist.Contains("scoring.trade_costs.min_net_move_pct")
+        Dim wlFee As Boolean = WhatIfOverlay.Whitelist.Contains("scoring.trade_costs.maker_fee_bps")
+        Dim wlOld As Boolean = WhatIfOverlay.Whitelist.Contains("scoring.min_tradeable_move_pct")
+
+        Dim parsedNet As Boolean = False
+        Try
+            Dim ov = WhatIfOverlay.Parse("{""scoring"":{""trade_costs"":{""min_net_move_pct"":0.0007}}}")
+            parsedNet = ov.Knobs.Count = 1 AndAlso
+                        ov.Knobs(0).Path = "scoring.trade_costs.min_net_move_pct"
+        Catch
+        End Try
+
+        Dim rejectedFee As Boolean = False
+        Try
+            WhatIfOverlay.Parse("{""scoring"":{""trade_costs"":{""maker_fee_bps"":2.0}}}")
+        Catch ex As WhatIfOverlayError
+            rejectedFee = True
+        End Try
+
+        Dim okWhatIf As Boolean = wlNet AndAlso Not wlFee AndAlso Not wlOld AndAlso
+                                  parsedNet AndAlso rejectedFee
+
+        Check("A40d HC26 rejects all four trade_costs keys; retired key unresolvable (not fragment-banned); sibling scoring tunable passes; what-if takes min_net only",
+              okAllFour AndAlso okRetired AndAlso rSib.IsValid AndAlso okWhatIf,
+              String.Format("fence(mk={0},tk={1},st={2},net={3}) retired={4}/'{5}' sib={6} whatif(wlNet={7},wlFee={8},wlOld={9},parse={10},rejFee={11})",
+                            rMaker.IsValid, rTaker.IsValid, rStyle.IsValid, rNet.IsValid,
+                            rRetired.IsValid, rRetired.ErrorReason, rSib.IsValid,
+                            wlNet, wlFee, wlOld, parsedNet, rejectedFee))
+    End Sub
+
+    ' -- A40e: a min_net overlay round-trips through the What-If settings seam ---------
+    ' The A36f linked-seam pattern: WhatIfSettings.BuildCellSettings must actually reach the
+    ' new nested POCO field, and the resolver must recompose off it — otherwise the runner
+    ' would sweep a knob the replay's Step 5c never reads.
+    Private Sub A40e_MinNetOverlayRoundTripsThroughWhatIf()
+        Dim overlay As New Dictionary(Of String, Double) From {
+            {"scoring.trade_costs.min_net_move_pct", 0.0010}
+        }
+
+        Dim tmp As String = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                                    "wifsettings-a40e-" & Guid.NewGuid().ToString("N") & ".json")
+        Try
+            System.IO.File.WriteAllText(tmp,
+                "{""version"":62," &
+                """scoring"":{""atr_target_multiplier"":1.75,""atr_stop_multiplier"":1.6," &
+                """trade_costs"":{""maker_fee_bps"":1.5,""taker_fee_bps"":3.5," &
+                """round_trip_style"":""maker_maker"",""min_net_move_pct"":0.0005}}}")
+
+            Dim wis As New WhatIfSettings(tmp)
+
+            ' The live read (used for constraint resolution + the report's pinned-vs-inherited
+            ' marking) sees the file value, not the POCO default.
+            Dim okLive As Boolean = Math.Abs(wis.LiveValueOf("scoring.trade_costs.min_net_move_pct") - 0.0005) < 0.000000000001
+
+            Dim cellCfg = wis.BuildCellSettings(overlay)
+            Dim okApply As Boolean =
+                Math.Abs(cellCfg.Scoring.TradeCosts.MinNetMovePct - 0.0010) < 0.000000000001 AndAlso
+                Math.Abs(cellCfg.Scoring.TradeCosts.MakerFeeBps - 1.5) < 0.000000000001
+
+            ' The resolver recomposes off the overlaid value — 0.0003 + 0.0010 = 0.0013 —
+            ' which is what the replay's Step 5c mirror multiplies by the row price.
+            Dim okCompose As Boolean =
+                Math.Abs(cellCfg.Scoring.TradeCosts.EffectiveMinMovePct - 0.0013) < 0.000000000001
+
+            Check("A40e min_net overlay round-trips through WhatIfSettings.BuildCellSettings and recomposes the floor (0.0003 + 0.0010 = 0.0013)",
+                  okLive AndAlso okApply AndAlso okCompose,
+                  String.Format(CultureInfo.InvariantCulture,
+                                "live={0} apply={1} compose={2} floor={3:R}",
+                                okLive, okApply, okCompose, cellCfg.Scoring.TradeCosts.EffectiveMinMovePct))
+        Finally
+            Try : System.IO.File.Delete(tmp) : Catch : End Try
+        End Try
+    End Sub
 
 End Module

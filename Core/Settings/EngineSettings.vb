@@ -799,19 +799,13 @@ Public Class ScoringSettings
     ''' the old 1.2 stopped ~30% of eventual London winners before their target, DG2).</summary>
     <JsonPropertyName("atr_stop_multiplier")>   Public Property AtrStopMultiplier   As Double = 1.6
     ''' <summary>
-    ''' [v35 min-tradeable-move gate + eval de-confound] Minimum take-profit distance as a
-    ''' fraction of entry price. Shared editable floor consumed by BOTH:
-    '''   (a) the scoring gate — a directional verdict whose realistic (post-cap) target sits
-    '''       closer than this is overridden to NO TRADE (VerdictContext = BELOW_MIN_MOVE);
-    '''   (b) the eval-metric de-confound — the favourable barrier is floored at this distance,
-    '''       and historical directional trades whose ATR target can't clear it are EXCLUDED
-    '''       from the success/fail counts (not scored as failures).
-    ''' Price-relative so it tracks BTC with no recalibration (≈ $50 at $62k, sized to clear
-    ''' slippage). Trader-owned risk preference — NEVER auto-tuned (off the auto-tweaker
-    ''' surface, same exclusion class as the kelly.* keys). Hot-reloadable. Default 0.0008 (0.08%).
-    ''' Specs: docs/min-tradeable-move-gate-proposal.md, docs/eval-metric-deconfound-proposal.md.
+    ''' [v62 fee-aware min-move floor] Execution-cost model + the trader's minimum acceptable
+    ''' NET move. Replaces the retired flat <c>scoring.min_tradeable_move_pct</c> key — the
+    ''' floor is now COMPOSED (see <see cref="TradeCostSettings.EffectiveMinMovePct"/>), so a
+    ''' Deribit fee change and a risk-preference change are separate, attributable edits.
+    ''' Spec: docs/fee-aware-min-move-proposal.md.
     ''' </summary>
-    <JsonPropertyName("min_tradeable_move_pct")> Public Property MinTradeableMovePct As Double = 0.0008
+    <JsonPropertyName("trade_costs")>            Public Property TradeCosts As New TradeCostSettings
     ''' <summary>[T1-D] ROC level above which TAKE PROFIT fires for a long. Default 0.6.</summary>
     <JsonPropertyName("hold_roc_take_profit_long")>  Public Property HoldRocTakeProfitLong  As Double = 0.6
     ''' <summary>[T1-D] ROC level below which TAKE PROFIT fires for a short. Default -0.6.</summary>
@@ -845,6 +839,88 @@ Public Class ScoringSettings
     <JsonPropertyName("context_tag_thresholds")> Public Property ContextTag     As New ContextTagThresholds
     ''' <summary>[placed-geometry B4b] Structural-first placed levels — see StructuralLevelsSettings.</summary>
     <JsonPropertyName("structural_levels")>      Public Property StructuralLevels As New StructuralLevelsSettings
+End Class
+
+' ---------------------------------------------------------------------------
+' Trade costs — the fee-aware min-move floor (v62)
+' ---------------------------------------------------------------------------
+
+''' <summary>
+''' [v62 fee-aware min-move floor] The execution-cost model behind the minimum-tradeable-move
+''' gate (docs/fee-aware-min-move-proposal.md).
+'''
+''' Deribit perp fees are proportional to NOTIONAL, so cost and move live in the same unit
+''' (% of price) and the engine never needs to know trade size. The floor decomposes as
+''' <c>EffectiveMinMovePct = RoundTripFeePct(style) + MinNetMovePct</c>:
+'''   • <see cref="RoundTripFeePct"/> — derived from the fee schedule + the assumed execution
+'''     style. Facts about the venue, not preferences.
+'''   • <see cref="MinNetMovePct"/> — the trader's minimum acceptable move AFTER costs. A risk
+'''     preference: UI-adjustable, hot-reloadable, NEVER auto-tuned.
+'''
+''' ATR enters nowhere here — fees do not scale with volatility, so % of ATR is the wrong unit
+''' for cost.
+'''
+''' At the shipped defaults the composition reproduces the retired v35 flat floor EXACTLY:
+''' maker/maker round trip = 2 × 1.5 bps = 0.0003, plus min_net_move_pct 0.0005 = <b>0.0008</b>.
+''' That byte-identity is why this build is not a dataset boundary; subsequent knob turns are
+''' ordinary live floor changes the v35 machinery already absorbs (the eval cache stores the
+''' floor-in-effect and re-walks when it moves).
+'''
+''' Whole block is OFF the auto-tweaker surface — HARD CONSTRAINT 26 rejects the
+''' <c>scoring.trade_costs.</c> PREFIX. Fees are facts; the preference is a kelly.*-class risk
+''' preference. Only <c>min_net_move_pct</c> is what-if sweepable.
+''' </summary>
+Public Class TradeCostSettings
+    ''' <summary>Deribit BTC-perp MAKER fee, bps of notional. Default 1.5 (schedule effective
+    ''' 2026-08-01). A venue fact — edit when Deribit changes it, never auto-tuned.</summary>
+    <JsonPropertyName("maker_fee_bps")>    Public Property MakerFeeBps    As Double = 1.5
+    ''' <summary>Deribit BTC-perp TAKER fee, bps of notional. Default 3.5 (schedule effective
+    ''' 2026-08-01). Documented single source: unused by the maker_maker floor, consumed by the
+    ''' loss-side / emergency-exit analytics named in the proposal §6.</summary>
+    <JsonPropertyName("taker_fee_bps")>    Public Property TakerFeeBps    As Double = 3.5
+    ''' <summary>Execution style the viability floor assumes: "maker_maker" (default) |
+    ''' "maker_taker" | "taker_taker". maker_maker is correct rather than optimistic — the floor
+    ''' gates the TARGET side (the profit path), which is maker entry + maker TP in the trader's
+    ''' flow. Taker occurs on emergency SL repositioning and rare manual exits, i.e. the LOSS
+    ''' path, which this floor does not price. Unrecognised values fall back to maker_maker.</summary>
+    <JsonPropertyName("round_trip_style")> Public Property RoundTripStyle As String = "maker_maker"
+    ''' <summary>Trader preference: the minimum acceptable move AFTER costs, as a fraction of
+    ''' entry price. Default 0.0005 (0.05%). Price-relative, so it tracks BTC with no
+    ''' recalibration. UI-editable (SETTINGS &amp; TOOLS row), hot-reloadable, never auto-tuned.</summary>
+    <JsonPropertyName("min_net_move_pct")> Public Property MinNetMovePct  As Double = 0.0005
+
+    ''' <summary>
+    ''' Round-trip execution cost as a fraction of notional for the configured style
+    ''' (both legs summed). maker_maker = 2 × maker; maker_taker = maker + taker;
+    ''' taker_taker = 2 × taker. Derived — never serialised.
+    ''' </summary>
+    <JsonIgnore>
+    Public ReadOnly Property RoundTripFeePct As Double
+        Get
+            Dim maker As Double = MakerFeeBps / 10000.0
+            Dim taker As Double = TakerFeeBps / 10000.0
+            Select Case If(RoundTripStyle, "").Trim().ToLowerInvariant()
+                Case "taker_taker" : Return taker + taker
+                Case "maker_taker" : Return maker + taker
+                Case Else          : Return maker + maker   ' "maker_maker" + any unrecognised value
+            End Select
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' THE shared resolver. Minimum take-profit distance as a fraction of entry price =
+    ''' round-trip fee + the trader's minimum NET move. Every consumer of the old
+    ''' <c>cfg.Scoring.MinTradeableMovePct</c> reads THIS — the live Step 5c gate, the eval-cache
+    ''' floor (LivePerformanceTracker), the offline matrix / band ladder / analysis report, the
+    ''' ceiling audit, and the what-if replay — so measurement and behaviour can never drift.
+    ''' Derived — never serialised.
+    ''' </summary>
+    <JsonIgnore>
+    Public ReadOnly Property EffectiveMinMovePct As Double
+        Get
+            Return RoundTripFeePct + MinNetMovePct
+        End Get
+    End Property
 End Class
 
 ' ---------------------------------------------------------------------------

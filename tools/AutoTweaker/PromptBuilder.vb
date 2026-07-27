@@ -40,8 +40,7 @@ Public Class PromptBuilder
         "10. Keys removed in the v15 cleanup (bbw_none_bonus, oi_prev15m, oi_prev60m, atr_avg20d, " &
             "static_vol_high, static_vol_mid, static_vol_low) must never be reintroduced." & vbLf &
         "11. Trader-owned risk-preference keys are NEVER auto-tuned. Do not propose changing " &
-            "'scoring.min_tradeable_move_pct' (the minimum-tradeable-move floor — the trader's slippage " &
-            "threshold, shared with the eval de-confound), any 'kelly.*' key, any " &
+            "any 'kelly.*' key, any " &
             "'session_volume.sessions[].execution_resolution' (the per-session execution timeframe — a " &
             "strategy/regime selector that defines a calibration-regime boundary, not a failure-rate lever), " &
             "any 'session_volume.sessions[].roc_magnitude_threshold' (the per-session 3-min ROC magnitude " &
@@ -166,6 +165,17 @@ Public Class PromptBuilder
             "cascade_min_trades, cascade_window_sec, level_ticks, sound_enabled) are provisional " &
             "anchors until the first real cascade is observed — re-anchor is the trader's job. " &
             "(Enforced in code: SettingsDiffApplier rejects the 'alerts.' prefix as well.)" & vbLf &
+        "26. Never propose any 'scoring.trade_costs.*' key. The trade_costs block is the " &
+            "execution-cost model behind the minimum-tradeable-move floor: 'maker_fee_bps' and " &
+            "'taker_fee_bps' are VENUE FACTS (Deribit's published schedule — they change when " &
+            "Deribit changes them, never as an optimisation), 'round_trip_style' is the assumed " &
+            "execution style for the profit path, and 'min_net_move_pct' is the trader's minimum " &
+            "acceptable move AFTER costs — a risk preference in the same class as 'kelly.*'. " &
+            "The floor those keys compose (round-trip fee + min net move) is a viability gate, " &
+            "not a failure-rate lever. The retired flat key 'scoring.min_tradeable_move_pct' no " &
+            "longer exists — do not propose it either. The sibling 'scoring.*' tunables (verdict " &
+            "percentages, ATR multipliers, penalties) REMAIN on the surface. (Enforced in code: " &
+            "SettingsDiffApplier rejects the 'scoring.trade_costs.' prefix as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

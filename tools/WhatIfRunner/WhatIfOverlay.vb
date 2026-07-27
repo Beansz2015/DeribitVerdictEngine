@@ -69,7 +69,7 @@ Public Class WhatIfOverlay
         "scoring.verdict_strong_pct",
         "scoring.verdict_med_pct",
         "scoring.verdict_weak_pct",
-        "scoring.min_tradeable_move_pct",
+        "scoring.trade_costs.min_net_move_pct",
         "scoring.tier_floor.high_threshold",
         "scoring.tier_floor.high_floor",
         "scoring.tier_floor.med_threshold",
@@ -95,7 +95,7 @@ Public Class WhatIfOverlay
     ' set just documents intent.)
     Public Shared ReadOnly VerdictKnobs As HashSet(Of String) = New HashSet(Of String)(StringComparer.Ordinal) From {
         "scoring.verdict_strong_pct", "scoring.verdict_med_pct", "scoring.verdict_weak_pct",
-        "scoring.min_tradeable_move_pct",
+        "scoring.trade_costs.min_net_move_pct",
         "scoring.tier_floor.high_threshold", "scoring.tier_floor.high_floor",
         "scoring.tier_floor.med_threshold", "scoring.tier_floor.med_floor",
         "scoring.tier_floor.low_threshold", "scoring.tier_floor.low_floor"

@@ -145,7 +145,7 @@ Public Class AnalysisRunner
                                                    AdverseBarrierMode.Legacy, AdverseBarrierMode.Placed)
             pr.FailureCells = FailureRateMatrix.Compute(popRows, atrEx, structStop, atrFb,
                                                         placedTgt, legacyFav, belowMin,
-                                                        cfg.Scoring.MinTradeableMovePct,
+                                                        cfg.Scoring.TradeCosts.EffectiveMinMovePct,
                                                         cfg.Scoring.AtrTargetMultiplier,
                                                         popRes(popKey), popMode)
             pr.AtrInvalidExcluded    = atrEx
@@ -163,7 +163,7 @@ Public Class AnalysisRunner
             Dim lPlaced As Integer = 0, lLegacyFav As Integer = 0, lBelow As Integer = 0
             pr.LegacyFailureCells = FailureRateMatrix.Compute(popRows, lAtrEx, lStruct, lAtrFb,
                                                               lPlaced, lLegacyFav, lBelow,
-                                                              cfg.Scoring.MinTradeableMovePct,
+                                                              cfg.Scoring.TradeCosts.EffectiveMinMovePct,
                                                               cfg.Scoring.AtrTargetMultiplier,
                                                               popRes(popKey), AdverseBarrierMode.Legacy)
 
@@ -194,7 +194,7 @@ Public Class AnalysisRunner
                 ' Representative price = median entry of this population's directional rows.
                 Dim dirPrices As List(Of Double) = dirRows.Select(Function(r) r.Price).ToList()
                 dirPrices.Sort()
-                pr.MoveFloorUsd = cfg.Scoring.MinTradeableMovePct * Percentile(dirPrices, 0.50)
+                pr.MoveFloorUsd = cfg.Scoring.TradeCosts.EffectiveMinMovePct * Percentile(dirPrices, 0.50)
             End If
 
             report.Populations.Add(pr)
@@ -292,7 +292,7 @@ Public Class AnalysisRunner
                 Dim ctxPlaced As Integer = 0, ctxLegacyFav As Integer = 0
                 Dim favBar    As Double  = FailureRateMatrix.ResolveFavourableBarrier(
                     row, isLong, entry, atr, AdverseBarrierMode.Placed,
-                    cfg.Scoring.AtrTargetMultiplier, cfg.Scoring.MinTradeableMovePct,
+                    cfg.Scoring.AtrTargetMultiplier, cfg.Scoring.TradeCosts.EffectiveMinMovePct,
                     ctxPlaced, ctxLegacyFav)
                 Dim advBar    As Double  = FailureRateMatrix.ResolveAdverseBarrier(
                     row, isLong, entry, atr, AdverseBarrierMode.Placed, ctxStruct, ctxFb)

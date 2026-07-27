@@ -292,8 +292,11 @@ Partial Public Class ScoringEngine
 
         ' -- Step 5c: Minimum-Tradeable-Move Gate (v35) -------------------------
         ' A directional verdict whose realistic take-profit can't clear the
-        ' minimum tradeable move (cfg.Scoring.MinTradeableMovePct of entry — sized
-        ' to clear slippage) is overridden to NO TRADE. The check uses the PLACED
+        ' minimum tradeable move is overridden to NO TRADE. [v62] The floor is the
+        ' COMPOSED cfg.Scoring.TradeCosts.EffectiveMinMovePct — round-trip execution
+        ' cost for the assumed style plus the trader's minimum acceptable NET move
+        ' (at defaults 2×1.5bps + 0.05% = 0.0008, the retired v35 flat floor exactly).
+        ' The check uses the PLACED
         ' target from Step 5b (B4b: the structural-first arbitration output when
         ' enabled; the post-cap effective target on the legacy path — the same
         ' values as the pre-B4b expression) so it catches BOTH causes: a small
@@ -302,11 +305,12 @@ Partial Public Class ScoringEngine
         ' preserved for display — only the verdict flips, BELOW_MIN_MOVE records why.
         ' Mirrors the MTF veto: compute everything, then override, then return.
         ' Shared floor with the eval-metric de-confound; off the auto-tweaker
-        ' surface (trader risk preference, never auto-tuned). See
-        ' docs/min-tradeable-move-gate-proposal.md.
+        ' surface (HARD CONSTRAINT 26 fences the whole scoring.trade_costs. prefix).
+        ' See docs/min-tradeable-move-gate-proposal.md,
+        ' docs/fee-aware-min-move-proposal.md.
         If dominant <> "NONE" AndAlso res.Verdict IsNot Nothing AndAlso
            Not res.Verdict.StartsWith("NO TRADE") Then
-            Dim floorDist As Double = cfg.Scoring.MinTradeableMovePct * r.CurrentPrice
+            Dim floorDist As Double = cfg.Scoring.TradeCosts.EffectiveMinMovePct * r.CurrentPrice
             Dim effTarget As Double = If(dominant = "LONG", placedLongTarget, placedShortTarget)
             Dim effDist As Double = Math.Abs(effTarget - r.CurrentPrice)
             If floorDist > 0 AndAlso effDist < floorDist Then

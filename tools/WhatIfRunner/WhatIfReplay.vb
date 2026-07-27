@@ -136,7 +136,7 @@ Public Class WhatIfReplay
 
         ' Step 5c — min-move gate on the PLACED target (the arbitration output, not the ATR approx).
         If dominant <> "NONE" AndAlso Not verdict.StartsWith("NO TRADE") Then
-            Dim floorDist As Double = cfg.Scoring.MinTradeableMovePct * row.Price
+            Dim floorDist As Double = cfg.Scoring.TradeCosts.EffectiveMinMovePct * row.Price
             Dim effDist As Double = Math.Abs(placedDomTarget - row.Price)
             If floorDist > 0 AndAlso effDist < floorDist Then
                 Return "NO TRADE"

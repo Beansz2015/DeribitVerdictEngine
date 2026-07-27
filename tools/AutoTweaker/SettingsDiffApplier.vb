@@ -56,8 +56,11 @@ Public Class SettingsDiffApplier
     ' prompt-only 'kelly.*' convention, covers the 'resolution_profiles.*' surface,
     ' and (WS-P2, HARD CONSTRAINT 12) the whole 'network.*' transport-plumbing block
     ' (the 3 REST keys + the WS keys + shadow_parity — no failure-rate linkage, no
-    ' rational tweak proposal). 'scoring.min_tradeable_move_pct' is handled as an exact
-    ' match below (a prefix would also catch sibling 'scoring.*' tunables). Applied only
+    ' rational tweak proposal). [v62] The retired flat 'scoring.min_tradeable_move_pct' key
+    ' is gone — its successor block 'scoring.trade_costs.' is prefix-fenced below (HARD
+    ' CONSTRAINT 26); the retired key is applier-unresolvable, so C-6 rejects it naturally
+    ' and it is deliberately NOT added to RejectedPathFragments (the v47-F1 snapshot-
+    ' poisoning lesson). Applied only
     ' on proposed CHANGES (Validate) — NOT ValidateSnapshotContent, where a wholesale
     ' revert legitimately restores these keys unchanged.
     Private Shared ReadOnly RejectedPathPrefixes As String() = {
@@ -75,6 +78,7 @@ Public Class SettingsDiffApplier
         "scoring.structural_levels.sessions.",      ' [B4b placed-geometry] per-session fallback-target overrides (DG3: LONDON 2.0 / ASIA 1.25) — hand-tuned re-baseline tier, HC11 class (HARD CONSTRAINT 21). Prefix-safe: the flat structural_levels numerics stay proposable
         "indicators.absorption.default.",           ' [P4 #6] shared re-baseline tier (min_aggr_usd) — hand-tuned per book-absorption §5 target-engagement, HC11 class (HARD CONSTRAINT 23). Prefix-safe: the flat absorption params stay proposable
         "indicators.absorption.sessions.",          ' [P4 #6] per-session overrides — hand-tuned per book-absorption §5, HC11 class (HARD CONSTRAINT 23)
+        "scoring.trade_costs.",                     ' [v62 fee-aware min-move floor] Execution-cost model + the trader's min NET move. The fee/style keys are VENUE FACTS (edited when Deribit changes them) and min_net_move_pct is a kelly.*-class risk preference — nothing under the block is ever a failure-rate lever (HARD CONSTRAINT 26). Prefix-safe: sibling scoring.* tunables stay proposable
         "alerts."                                    ' [#7 + #8 v59] liq-cascade alarm + level-approach alerts — display/alert-only plumbing, zero scoring impact, no failure-rate linkage; same class as exit_guard.* / live_strip.* / signal_bridge.* (HARD CONSTRAINT 25). Prefix-safe: no other top-level "alerts." keys exist
     }
 
@@ -123,11 +127,11 @@ Public Class SettingsDiffApplier
                     Return result
                 End If
             Next
-            If path = "scoring.min_tradeable_move_pct" Then
-                result.IsValid    = False
-                result.ErrorReason = "Rejected: 'scoring.min_tradeable_move_pct' is the trader's slippage floor (HARD CONSTRAINT 11)."
-                Return result
-            End If
+            ' [v62] The 'scoring.min_tradeable_move_pct' exact-match reject that lived here is
+            ' GONE with the key it guarded: the floor is now composed from the prefix-fenced
+            ' scoring.trade_costs. block (HARD CONSTRAINT 26, above). A diff naming the retired
+            ' key fails the C-6 resolve check instead — deliberately NOT re-added as a banned
+            ' fragment, which would poison every snapshot that still carries it (v47-F1).
             ' [P4 #4] OFI time-averaging FEATURE FLAG — off the tweaker surface (a structural
             ' on/off toggle, not a failure-rate threshold). Exact-match, NOT a prefix: the sibling
             ' OFI keys (avg_window_sec, buy/sell_dominant_ratio, book_depth) STAY tunable.

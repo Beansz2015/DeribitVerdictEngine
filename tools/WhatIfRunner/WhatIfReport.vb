@@ -216,11 +216,11 @@ Public Class WhatIfReport
             Dim d1 As Integer = 0, d2 As Integer = 0, d3 As Integer = 0
             Dim d4 As Integer = 0, d5 As Integer = 0, d6 As Integer = 0
             Dim baseCells = FailureRateMatrix.Compute(baseRows, d1, d2, d3, d4, d5, d6,
-                                                      m.LiveCfg.Scoring.MinTradeableMovePct,
+                                                      m.LiveCfg.Scoring.TradeCosts.EffectiveMinMovePct,
                                                       m.LiveCfg.Scoring.AtrTargetMultiplier, res, AdverseBarrierMode.Placed)
             d1 = 0 : d2 = 0 : d3 = 0 : d4 = 0 : d5 = 0 : d6 = 0
             Dim ovlCells = FailureRateMatrix.Compute(ovlRows, d1, d2, d3, d4, d5, d6,
-                                                     m.WinnerCfg.Scoring.MinTradeableMovePct,
+                                                     m.WinnerCfg.Scoring.TradeCosts.EffectiveMinMovePct,
                                                      m.WinnerCfg.Scoring.AtrTargetMultiplier, res, AdverseBarrierMode.Placed)
 
             Dim ovlMap = ovlCells.ToDictionary(Function(c) CellKey(c), Function(c) c)

@@ -712,6 +712,10 @@ Partial Public Class MainForm
         ' reflects this successful render.
         ClearStaleOverlays()
         UpdateLogInfo()
+        ' [v62] Re-read the MIN NET MOVE row from live settings so a FILE-side edit to
+        ' scoring.trade_costs (the Aug-1 fee change is exactly that) shows its new composed
+        ' floor once the hot-reload has landed, instead of waiting for a restart.
+        RefreshMinNetMoveRow()
 
         RaiseEvent AnalysisCompleted(Me, EventArgs.Empty)
     End Function

@@ -69,7 +69,8 @@ Public Class AutoTweakerCore
         ' v35 de-confound: live shared min-tradeable-move floor + engine target
         ' multiplier, read from settings.json (fall back to the AnalysisConstants
         ' mirror if absent). Passed to FailureRateMatrix.Compute so the tweaker
-        ' optimises the gate-filtered book. min_tradeable_move_pct is OFF the tweaker's
+        ' optimises the gate-filtered book. The composed min-move floor (v62:
+        ' scoring.trade_costs.*) is OFF the tweaker's
         ' tunable surface (PromptBuilder HARD CONSTRAINT 11) — read-only here.
         Dim minTradeableMovePct As Double = AnalysisConstants.FavBarAbsFloorPct
         Dim atrTargetMult       As Double = AnalysisConstants.EngineTargetAtrMultiplier
@@ -91,7 +92,7 @@ Public Class AutoTweakerCore
                 wideThresholdBps  = settings.Indicators.Spread.WideThresholdBps
             End If
             If settings?.Scoring IsNot Nothing Then
-                minTradeableMovePct = settings.Scoring.MinTradeableMovePct
+                minTradeableMovePct = settings.Scoring.TradeCosts.EffectiveMinMovePct
                 atrTargetMult       = settings.Scoring.AtrTargetMultiplier
             End If
         Catch ex As Exception
