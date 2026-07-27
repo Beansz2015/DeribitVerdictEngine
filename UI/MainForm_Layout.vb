@@ -255,6 +255,10 @@ Partial Public Class MainForm
     ' the trader-owned half of the composed floor. See BuildMinNetMoveRow().
     Private _txtMinNetMove      As TextBox
     Private _lblMinNetMoveFloor As Label
+    ' Held as a FIELD, not a local: WinForms controls keep no back-reference to the ToolTip
+    ' that serves them, so a locally-scoped one is collectible and the hover silently dies
+    ' (the _perfTip / _liveStripTooltip pattern).
+    Private _minNetMoveTip      As ToolTip
     Friend _lblLastPrice      As Label
     Friend _lblLastPriceAtr   As Label
     Friend _lblLastPriceTime  As Label
@@ -1389,14 +1393,36 @@ Partial Public Class MainForm
         }
         host.Controls.Add(_lblMinNetMoveFloor, 2, 0)
 
-        Dim tip As New ToolTip()
-        tip.SetToolTip(_txtMinNetMove,
-            "Minimum move you will accept AFTER execution costs, as a fraction of price " &
-            "(0.0005 = 0.05%)." & vbCrLf &
-            "The gate's actual floor = round-trip fee for the configured style + this value." & vbCrLf &
-            "Fees and round_trip_style live in settings.json (scoring.trade_costs) — they are " &
-            "venue facts, not preferences." & vbCrLf &
-            "Enter or click away to save; the new floor applies on the next analysis run.")
+        ' One explainer on the WHOLE row — label, box, read-out and the panel behind them —
+        ' so hovering anywhere on the line explains it, not just the 78 px input.
+        _minNetMoveTip = New ToolTip() With {
+            .AutoPopDelay = 30000,      ' the text is long; the 5s default cuts it off mid-read
+            .InitialDelay = 400,
+            .ReshowDelay = 200
+        }
+        Dim explainer As String =
+            "MIN NET MOVE % — the smallest move you're willing to take a trade for, measured" & vbCrLf &
+            "AFTER execution costs. A fraction of price, not of ATR: 0.0005 = 0.05% ≈ $31 at $62k," & vbCrLf &
+            "and it auto-scales as BTC moves." & vbCrLf &
+            vbCrLf &
+            "The gate's actual floor is this PLUS the round-trip fee:" & vbCrLf &
+            "    floor  =  round-trip fee  +  min net move" & vbCrLf &
+            "A directional call whose PLACED target sits closer than the floor is overridden to" & vbCrLf &
+            "NO TRADE, context BELOW_MIN_MOVE. Raise this to demand more room; lower it to let" & vbCrLf &
+            "tighter setups through." & vbCrLf &
+            vbCrLf &
+            "Fees and the assumed execution style live in settings.json under scoring.trade_costs." & vbCrLf &
+            "They're venue facts, not preferences, so they're not editable here. The default style" & vbCrLf &
+            "is maker/maker — the floor prices the TARGET side, and entry + take-profit are both" & vbCrLf &
+            "maker in your flow. Stop-side taker cost isn't priced here." & vbCrLf &
+            vbCrLf &
+            "Enter or click away to save. The new floor applies from the next analysis run;" & vbCrLf &
+            "Esc reverts. Valid range 0 … 0.01."
+
+        For Each c As Control In {CType(lbl, Control), CType(_txtMinNetMove, Control),
+                                  CType(_lblMinNetMoveFloor, Control), CType(host, Control)}
+            _minNetMoveTip.SetToolTip(c, explainer)
+        Next
 
         AddHandler _txtMinNetMove.Leave, Sub(s, ev) CommitMinNetMove()
         AddHandler _txtMinNetMove.KeyDown,
