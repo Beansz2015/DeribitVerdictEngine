@@ -14,6 +14,16 @@ re-walks on change).
 v35 floor (`scoring.min_tradeable_move_pct = 0.0008`) was sized "to clear slippage" under
 zero-maker-fee execution, so a nonzero maker fee invalidates its derivation basis.
 
+**Commits (local, unpushed at time of writing — trader tests + pushes):**
+
+| Commit | Contents |
+|---|---|
+| `ce4ce37` | The build: settings restructure, shared resolver, call-site sweep, HC26, what-if migration, UI row, A40a–e, docs. |
+| `c508d93` | UI follow-up after the trader sighted the row — tooltip scope + lifetime fix (§2.9). |
+
+Both gate green independently; the second run also reports the version-bump guard
+satisfied (v62 is committed by then, so the guard can see it).
+
 ---
 
 ## 1. What shipped (map to proposal §1–§5)
@@ -25,7 +35,7 @@ zero-maker-fee execution, so a nonzero maker fee invalidates its derivation basi
 | §1 Every `cfg.Scoring.MinTradeableMovePct` read routes through it | ✅ 15 code reads swept: Step 5c ([ScoringEngine_Calculate_Verdict.vb](../Core/ScoringEngine_Calculate_Verdict.vb)), `LivePerformanceTracker` ×4 (incl. `_floorPctInEffect` ×2), `AnalysisRunner` ×4, `BandLadder`, CeilingAudit `CsvFeatureBuilder`, `AutoTweakerCore`, `WhatIfReplay`, `WhatIfReport` ×2. Comment-only references in `AnalysisConstants` / `AnalysisReport` / `FailureRateMatrix` re-pointed too. |
 | §1 (D3) Old key retires — JSON key + POCO property REMOVED, NOT fence-fragmented | ✅ Both gone. Also removed: the now-dead exact-match reject in `SettingsDiffApplier` and the `min_tradeable_move_pct` clause of PromptBuilder HC11 (deviation §2.2). |
 | §1 Byte-identity at defaults | ✅ 2 × 1.5 bps = 0.0003, + 0.0005 = **0.0008**. Pinned to 1e-12 in A40a and through the real `Calculate()` in A40b. |
-| §2 UI row `MIN NET MOVE % (after fees)`, operational save | ✅ New row in the SETTINGS & TOOLS card ([UI/MainForm_Layout.vb](../UI/MainForm_Layout.vb) — `BuildMinNetMoveRow` / `RefreshMinNetMoveRow` / `CommitMinNetMove`). Commits on Enter or blur via `SettingsLoader.Save(bumpVersion:=False)`; Escape reverts; invalid input is flagged in place, not silently reverted. Live status element ⇒ display-parity exempt. Fees + style stay settings-file-only. |
+| §2 UI row `MIN NET MOVE % (after fees)`, operational save | ✅ New row in the SETTINGS & TOOLS card ([UI/MainForm_Layout.vb](../UI/MainForm_Layout.vb) — `BuildMinNetMoveRow` / `RefreshMinNetMoveRow` / `CommitMinNetMove`). Commits on Enter or blur via `SettingsLoader.Save(bumpVersion:=False)`; Escape reverts; invalid input is flagged in place, not silently reverted. Live status element ⇒ display-parity exempt. Fees + style stay settings-file-only. **Visually verified by the trader 2026-07-27** (§2.3). |
 | §3 No snapshot/card/payload/CSV line changes | ✅ None touched. `BELOW_MIN_MOVE` renders identically. |
 | §3 Eval cache stores the composed value | ✅ `_floorPctInEffect = cfg.Scoring.TradeCosts.EffectiveMinMovePct` at both assignment sites — same number at defaults ⇒ no re-walk at ship. |
 | §4 Tweaker fence HC26, `scoring.trade_costs.` **prefix** | ✅ `RejectedPathPrefixes` entry + PromptBuilder rule 26. Next-free confirmed against PromptBuilder at build (HC24 geometry modes, HC25 alerts → 26). |
@@ -64,6 +74,13 @@ drift from the gate. Rationale: with fees now settings-file-only, the trader edi
 floor that produced. The read-out also re-reads after every analysis run, so a hot-reloaded
 file-side fee edit surfaces without a restart.
 
+**Visually verified by the trader on 2026-07-27** — the row renders as designed between the
+LOG / AUTO-RUN pair and TOOLS, and TOOLS keeps all four LinkRows plus the CTA (the starve-
+and-clip failure mode §2.7 guards against did not occur). The build seat did **not** launch
+the app: doing so appends collector rows under a fresh `InstanceId` (the v57 stomp lesson),
+so layout was verified by arithmetic only and the render left to the trader's test gate.
+That gate found one real defect — see §2.9.
+
 **2.4 A40b reconstructs "the v61 cfg" rather than importing it.** The proposal asked for
 "v61 cfg vs v62-defaults cfg". The v61 POCO property is gone, so a literal v61 cfg is not
 constructible — and comparing v62 defaults against themselves would be circular. Shipped:
@@ -100,6 +117,31 @@ proposal doesn't specify the invalid-input arm. Falling back to the *cheapest pr
 style keeps a typo from silently producing a fee-free floor; `Nothing` and whitespace/case
 variants are handled the same way. Pinned in A40a.
 
+**2.9 Tooltip scope + lifetime — fixed post-sighting (`c508d93`).** The trader looked at the
+live row and asked for a hover explainer. One existed, but it was defective in two ways
+worth recording because both are reusable traps:
+
+- **Lifetime.** The `ToolTip` was a local in `BuildMinNetMoveRow`. WinForms controls hold
+  **no back-reference** to the `ToolTip` component serving them, so once the method returned
+  nothing kept it alive and it was collectible — the hover could stop working at an arbitrary
+  later moment, with no error. Every other tooltip in the form is a field (`_perfTip`,
+  `_logInfoTooltip`, `_liveStripTooltip`); this one was the outlier. Now `_minNetMoveTip`.
+  (`UI/TweakSettingsForm.vb:724` still has a local `minTierTip` with the same latent bug —
+  out of scope here, flagged for whoever next touches that dialog.)
+- **Scope.** It was attached to the 78 px `TextBox` only, so hovering the label or the
+  derived read-out — most of the row's width — did nothing. Now set on the label, the box,
+  the read-out and the host panel.
+
+Text expanded from four terse lines to a real explainer: what the value means (a fraction of
+**price**, not ATR, with a dollar anchor), the `floor = fee + min-net` composition and what
+crossing it does (`NO TRADE` / `BELOW_MIN_MOVE`), why the fee keys are not editable there
+(venue facts) plus the D1 maker/maker rationale in one sentence, and the save / Esc-revert /
+valid-range mechanics. `AutoPopDelay` set to 30 s — WinForms' 5 s default truncates text this
+long mid-read.
+
+No settings, scoring, fixture or contract impact; UI-only, and the row remains
+display-parity exempt.
+
 ---
 
 ## 3. Not done — deliberately
@@ -132,3 +174,20 @@ The real event is **2026-08-01**, when the trader sets the live fee numbers and 
 what `min_net_move_pct` should be against them. That knob turn IS a live floor change —
 attributable through the eval cache's floor-change re-walk, and worth a note in the §12
 watch list at the time.
+
+**Aug-1 mechanics, so nobody has to re-derive them under time pressure.** Edit
+`maker_fee_bps` / `taker_fee_bps` in `settings.json` (hot-reload picks them up; the row's
+read-out confirms the new composed floor on the next run). Then decide `min_net_move_pct`
+**independently** — that is the point of the split. Two anchors for that decision:
+
+- *Hold the floor where it is* (0.0008): whatever fees do, keep demanding the same gross
+  move. Net edge per trade shrinks by the fee increase.
+- *Hold the net where it is* (min_net 0.0005): keep demanding the same take-home move, and
+  let the floor rise with fees. Fewer trades clear the gate; the ones that do are worth the
+  same to you as before.
+
+They coincide today only because the current fee is already priced in. The what-if runner
+can quantify the trade-off before the knob is turned — sweep
+`scoring.trade_costs.min_net_move_pct` (`0.0003:0.0009:0.0002` is the launcher default) and
+read EV-in-ATR with the split-half holdout. Worth doing on real numbers rather than
+guessing, given it changes the population the collector accumulates.
