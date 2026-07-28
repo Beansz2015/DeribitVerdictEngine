@@ -6,6 +6,8 @@
 
 Engine ships a fee-aware min-move floor (`fee-aware-min-move-proposal.md`, APPROVED 2026-07-27): the verdict-viability floor decomposes into `round_trip_fee_pct + min_net_move_pct`, byte-identical at defaults (0.0008). **The bridge contract does NOT change:** no fee fields enter the payload; `BELOW_MIN_MOVE` and every disposition token stay frozen. The order app owns its own fee constants — the duplicate-constant risk (engine settings vs order-app settings both carrying 1.5/3.5) is accepted and documented on both sides; a schedule change is a two-repo settings touch, coordinated by relay like this one.
 
+> **§0 addendum (2026-07-28, order-app EV-review correction, accepted):** the note above under-counted — the order app already carried a **third, older** copy: a hardcoded 2024 taker constant (`TakerFeeRate = 0.0005`) driving its comms default, ~43% overstated against the Aug-1 schedule (5 vs 3.5 bps). Known and queued for repoint on their side (`spec-fee-comms-repoint.md`). No contract impact — this corrects the record. The engine carries no analogous constant (fees first entered engine code at v62, all four values in `scoring.trade_costs`).
+
 ## 1. Rec — EV-aware chase budget (enhances the existing min-ATR-slippage stop)
 
 Today the reposition loop cancels when the chase exceeds a fixed **0.6 ATR** from initial placement — a *structural* bound that doesn't know that every tick of chase comes directly out of the trade's net move (0.6 ATR into a 1.75-ATR target sacrifices ~a third of the move before fees).
