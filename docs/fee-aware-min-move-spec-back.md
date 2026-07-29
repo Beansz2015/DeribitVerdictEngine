@@ -238,12 +238,19 @@ paragraph. The `## Population shift` and `## Baseline vs overlay — failure mat
 are untouched — no EV numbers there, no orientation to disclose.
 
 **5.2.3 `EvSel.Mean` remains the ranking key.** Winner selection in `WhatIfProgram` sorts by
-`EvSel.Mean`. That mean is now net-of-fees on both sides of the sort, so the ranking order
-against any single overlay is identical to the pre-rider one when fees are constant across
-cells — which they are, because the trade-cost knobs sit outside the sweepable knobs. The
-knob that CAN move (`min_net_move_pct`) doesn't touch the fee formula, so the σ column is a
-pure diagnostic addition, not a re-ranking signal. Preserving `EvSel.Mean` as the sort key
-means the split-half mechanics — the guardrail against phantom winners — stay intact.
+`EvSel.Mean`, now net-of-fees on both sides of the sort. *(Precision correction, coordinator
+review 2026-07-29 — the original text here claimed the net ranking is identical to gross
+"when fees are constant across cells"; that holds ONLY for cells with identical row
+populations, where the per-row drags are the same rows' drags and the mean shift is a
+constant.)* The precise behaviour: fee **settings** are cell-constant (trade-cost knobs are
+not sweepable), but the drag is per-ROW (`× price/ATR`), so a **population-changing** sweep —
+`min_net_move_pct` being the headline case — admits different row sets per cell, mean drag
+differs per cell, and the net ranking can legitimately diverge from the gross ranking.
+**That divergence is the rider's purpose**: the tuner now sees that admitting low-move rows
+costs relatively more in fees. Same-population sweeps (e.g. a pure geometry knob over a fixed
+row set) shift every cell by the same constant and re-rank nothing. Preserving `EvSel.Mean`
+as the sort key keeps the split-half mechanics — the guardrail against phantom winners —
+intact in both cases.
 
 **5.2.4 Gate reports "no engine-path change" — the accepted D6-precedent outcome.** The
 version-bump check in `verify-gate.ps1` scopes engine paths to `Core/`, `DynamicNorms.vb`,
