@@ -104,7 +104,7 @@ Field sourcing rule (the parity anchor): every value comes from the **same `Verd
 
 ## 6. Explicitly out of scope (v1)
 
-Position-state feedback to the engine (**v2**, gated on 1–2 supervised weeks of v1 — agreed shape: position state **plus last-processed signal disposition**, same atomic-write pattern, closing the ack loop; v2 also carries the executor's armed/started state so the engine UI can display full interlock status). Actionable exit signals (`hold_status` informational until v2 makes `posState` truthful). Kelly-driven sizing. Network transports. Multi-instrument.
+~~Position-state feedback to the engine (**v2**)~~ — **SPECIFIED 2026-07-28, see §10** (the feedback file; phase 1 = display-only consumption, implementation queued). Actionable exit signals stay out of scope (`hold_status` informational until the phase-1 display soak proves `posState` truthful; actionability = a future signal-schema-v2 pinned field, §10.5). Kelly-driven sizing. Network transports. Multi-instrument.
 
 ## 7. Acceptance
 
@@ -144,3 +144,45 @@ Engine side: 3 Release builds 0/0; A1-series unregressed + A22a–f; live smoke 
 | Canonical doc on the order-app side | **Accepted with the mirror rule** (D10) |
 
 One heads-up carried in the ack: `engine.settings_version` will move 48→49 before the bridge likely ships (the signal-health retune bundles at the #5 boundary) — it is informational; the consumer must not hard-pin it.
+
+## 10. v2 feedback file — SPECIFIED 2026-07-28 (engine mirror; canonical for CONSUMPTION + DISPLAY)
+
+**Exchange of record:** order-app `proposal-c1-v2-feedback-file.md` → engine `feedback-file-engine-reply-2026-07-28.md` (ACCEPTED + 3 refinements, all accepted in their ack) → order-app `ack-c1-v2-feedback-file.md` → trader tick T1–T8 (2026-07-28) → the coordinated pass: order-app contract §8 (their `f6bea0a`) + THIS mirror. **Canonicality mirrors v1, reversed:** their §8 is canonical for EMITTER behavior; this section is canonical for engine consumption + display. **The v1 signal schema and its `schema_version: 1` gate are UNTOUCHED.**
+
+### 10.1 Schema — feedback v1 (the file's own counter, distinct from the signal schema)
+
+```json
+{
+  "schema_version": 1,
+  "feedback_id": 587,
+  "generated_at_utc": "2026-08-05T09:14:02Z",
+  "executor": { "instance_id": "3c1a…-guid", "app": "DeribitOrderPlacementApp",
+                "mode": "LIVE", "armed": true, "started": true,
+                "breaker_tripped": false, "ws": "OK" },
+  "instrument": "BTC-PERPETUAL",
+  "position": { "direction": "LONG", "size_usd": 250.0, "avg_entry": 59012.5,
+                "working": { "stop": 58962.5, "target": 59095.0 } },
+  "last_signal": { "instance_id": "9f0c…-guid", "signal_id": 1234,
+                   "disposition": "acted", "at_utc": "2026-08-05T09:13:41Z" }
+}
+```
+
+**Pinned enums:** `executor.mode` `"OFF"|"LOG_ONLY"|"LIVE"` · `executor.ws` `"OK"|"DOWN"` · `position.direction` `"LONG"|"SHORT"|"FLAT"`. **Enum tolerance (T8):** the engine gates only on pinned strings; unrecognised values render verbatim and take the conservative arm (unknown `mode` ≠ LIVE; unknown `direction` ⇒ manual fallback). Additive enum values = a coordinated docs note both sides, not a schema bump, never free drift.
+
+**Semantics highlights (full binding text = their §8.4):** `position` is the account position as the order app's model sees it, **including owner-manual trades (T6, ticked knowingly)**; flat ⇒ zeros-never-null. `last_signal` is written ONCE per consumed payload (the disposition-cardinality freeze; chase aborts live in their host log). Fill-window gap: after `acted`, `position` stays FLAT until the chase fills — the engine never infers failure from that window. The `avg_entry` join is the slippage record; the day stacking enters executor policy, an explicit per-signal achieved-entry field becomes a v2.1 amendment FIRST (T7).
+
+### 10.2 Transport + engine config
+
+`C:\Dev\DeribitBridge\executor_feedback.json` beside the signal file; single writer = the order app; atomic (tmp + `File.Replace`); ~10 s heartbeat + writes on every disposition / position change / **working-level reposition (engine refinement 3.1)** / ARM-START-mode-breaker transition / graceful close. Engine key (at the consumption build): **`signal_bridge.feedback` `{ enabled: false, path, stale_after_sec: 35 }`** — rides the existing `signal_bridge.` tweaker fence, no new HARD CONSTRAINT.
+
+### 10.3 Engine consumption (D6 shape, trader-ticked)
+
+Per-run fresh read at `RunAnalysisAsync` start (no watcher). **Governs** when `enabled` ∧ present ∧ fresh (≤ `stale_after_sec`) ∧ `direction` parses: `LONG`/`SHORT`/`FLAT` → `PositionState` Long/Short/None. While governed the manual radios grey out with a source tooltip; stale/absent/disabled/unparseable ⇒ radios re-enable, today's manual behaviour returns unchanged. **File absent = feature OFF, never an alarm.** Staleness surfaces as `EXECUTOR STALE`.
+
+### 10.4 Display surfaces — phase 1 is the live-status tier ONLY
+
+Source tag (`POS:EXEC`/`POS:MANUAL`), executor interlock display (armed/started/mode/breaker/ws), stale tag — all on the exit-guard strip / status-bar tier (the display-parity exempt class, stated per standing rule 4). **NO snapshot line, NO card binding, NO CSV column, NO payload field changes** — the engine consumption build is rotation-free and boundary-free (display/plumbing, no ⚠).
+
+### 10.5 Phase-2 fence (T5) + queue slots
+
+Actionable exits = a SEPARATE future amendment: a new pinned field on the SIGNAL schema with a bump to `schema_version: 2`, gated on the phase-1 display soak — **never by parsing `hold_status`** (informational free text forever). Rollout: OFF → emit-only → engine display consumption → soak. Queue: order-app emitter = own Opus-HIGH pass after N2 (their queue); engine consumption behind the §6.1 net-EV rider. Nothing is Aug-1-critical. Engine fixtures at build: parse / staleness / fallback / enum-tolerance / radios-grey (next-free family at build).

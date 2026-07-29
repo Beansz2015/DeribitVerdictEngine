@@ -27,6 +27,7 @@
 1. Copy the AWS `analysis_log.csv` back as `analysis_log_aws.csv` (never overwrite the local file).
 2. Concat for pooled reads: local CSV + AWS CSV minus its header line (both v0.8/111-col schema — verify header equality first; if a rotation happened on one box only, DO NOT pool until both are on the same schema).
 3. Provenance: `InstanceId` distinguishes boxes; the standing exclusions apply as always (weekday-only, burst instances).
+3b. **Cross-box dedup (RULED 2026-07-29, trader tick "as recommended"):** both boxes fire on the same bar closes, so overlapping-hours rows are near-duplicate observations — **pooled STATISTICAL reads must not double-count them**. Rule: **local-preferred** — for any (UTC session-hour) where the local book has rows, use ONLY local rows; AWS rows fill the hours local missed. Applied at pooled-snapshot construction (the read-time concat step above), so NO tool changes — the CeilingAudit/report/what-if consume the deduped snapshot as an ordinary CSV. Coverage-map reads (row counts per box) and single-box reads are unaffected.
 4. Eval caches do NOT pool (each box's tracker walks its own book); offline re-walks via the report/what-if tools regenerate outcomes from the pooled CSV + fresh OHLC — the more trustworthy surface anyway (§7a).
 5. **Same-settings discipline:** rows are only poolable while both boxes run the same settings version. After any settings bump locally, redeploy to AWS at the next opportunity; the CSV's settings-version column + `InstanceId` make any straddle visible and filterable.
 
