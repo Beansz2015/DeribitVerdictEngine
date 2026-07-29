@@ -203,7 +203,7 @@ Public Class WhatIfReplay
                 run.DirectionalCount += 1
                 Dim ev As Double? = ComputeEvAtr(rep, dominant, placedDomTarget,
                                                  If(dominant = "LONG", placedLong.StopPx, placedShort.StopPx),
-                                                 evalWindowBars)
+                                                 evalWindowBars, cfg)
                 If ev.HasValue Then
                     run.EvSamples.Add(New WhatIfEvSample With {
                         .Timestamp = row.Timestamp,
@@ -220,9 +220,18 @@ Public Class WhatIfReplay
     ' Per-trade EV in ATR units (§3b ranking objective). Reuses the shipped WalkBars for the
     ' outcome classification, then maps: target-touch → +targetDist; stop/ambiguous → −stopDist;
     ' window-expiry → mark-to-window-end. All distances normalised by ATR. Nothing = no window data.
+    '
+    ' §6.1 rider (net-EV): the per-row round-trip fee drag in ATR units =
+    '   round_trip_fee_pct × entry_price / rep.ATR
+    ' is subtracted UNCONDITIONALLY from all three outcome arms — every resolved trade pays the
+    ' round trip (a stop-out and a horizon close pay the same fees as a target touch). Entry-price
+    ' basis is the logged row Price; the exit-leg re-pricing error is fee_bps × the move (second-
+    ' order, ignored). The maker→taker emergency loss-arm delta (proposal §6.1 optional toggle)
+    ' is NOT built — default off (normal SL exits are maker in the trader's flow).
     Private Shared Function ComputeEvAtr(rep As CsvRow, dominant As String,
                                          target As Double, stopPx As Double,
-                                         evalWindowBars As Integer) As Double?
+                                         evalWindowBars As Integer,
+                                         cfg As EngineSettings) As Double?
         If rep.ATR <= 0 Then Return Nothing
         Dim isLong As Boolean = (dominant = "LONG")
         Dim windowKey As Integer = evalWindowBars * If(rep.ExecResolution <= 0, 1, rep.ExecResolution)
@@ -234,13 +243,14 @@ Public Class WhatIfReplay
         Dim entry As Double = rep.Price
         Dim targetDistAtr As Double = Math.Abs(target - entry) / rep.ATR
         Dim stopDistAtr As Double = Math.Abs(entry - stopPx) / rep.ATR
+        Dim feeDragAtr As Double = cfg.Scoring.TradeCosts.RoundTripFeePct * entry / rep.ATR
 
         Select Case FailureRateMatrix.WalkBars(bars, target, stopPx, isLong)
-            Case "SUCCESS" : Return targetDistAtr
-            Case "ADVERSE_HIT", "AMBIGUOUS" : Return -stopDistAtr
+            Case "SUCCESS" : Return targetDistAtr - feeDragAtr
+            Case "ADVERSE_HIT", "AMBIGUOUS" : Return -stopDistAtr - feeDragAtr
             Case Else       ' WINDOW_EXPIRED → mark-to-window-end
                 Dim endClose As Double = bars.Last().Close
-                Return (If(isLong, endClose - entry, entry - endClose)) / rep.ATR
+                Return (If(isLong, endClose - entry, entry - endClose)) / rep.ATR - feeDragAtr
         End Select
     End Function
 

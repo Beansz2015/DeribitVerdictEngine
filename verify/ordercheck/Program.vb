@@ -321,6 +321,15 @@ Module Program
         A40d_Hc26FenceAndWhatIfWhitelist()
         A40e_MinNetOverlayRoundTripsThroughWhatIf()
 
+        ' [§6.1 rider — eval net-EV, docs/fee-aware-min-move-proposal.md §6.1]
+        ' Analysis-only, no scoring impact, no settings keys. Pins the fee-drag arithmetic
+        ' inside WhatIfReplay.ComputeEvAtr across all three outcome arms + the fees-zero
+        ' regression identity + the report's net-of-fees label + σ dispersion column.
+        A41a_NetEvSubtractsFeeDragOnSuccessAndStopArms()
+        A41b_WindowExpiredArmAlsoPaysFeeDrag()
+        A41c_FeesZeroCfgIsByteIdenticalToGross()
+        A41d_ReportCarriesNetOfFeesLabelAndDispersionColumn()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -5678,6 +5687,199 @@ Module Program
         Finally
             Try : System.IO.File.Delete(tmp) : Catch : End Try
         End Try
+    End Sub
+
+    ' =======================================================================
+    ' A41 — eval net-EV rider (docs/fee-aware-min-move-proposal.md §6.1).
+    '
+    ' Analysis-only. WhatIfReplay.ComputeEvAtr now subtracts a per-row round-trip fee drag
+    ' (round_trip_fee_pct × entry_price / ATR) from EVERY outcome arm — SUCCESS, ADVERSE_HIT/
+    ' AMBIGUOUS, and WINDOW_EXPIRED mark-to-end. Every resolved trade pays the round trip:
+    ' the drag never depends on whether the target was hit. WhatIfReport labels the ranking
+    ' as "net of fees" and adds a dispersion column (σ = population std of the per-trade
+    ' EvAtr samples) beside the EV mean.
+    '
+    ' ComputeEvAtr is Private Shared; the harness reaches it through the same seam A30 uses
+    ' — WhatIfReplay.RunCell drives the replay end-to-end and emits WhatIfEvSample.EvAtr —
+    ' so these fixtures pin the observable output of the shipped call graph, no visibility
+    ' changes required.
+    '
+    ' The maker→taker emergency loss-arm delta (§6.1 optional toggle) is NOT built and no
+    ' fixture pins its absence — recorded as a deliberate deviation in the spec-back addendum.
+    ' =======================================================================
+
+    ' -- A41a: fee drag subtracted from SUCCESS + ADVERSE_HIT arms ------
+    ' Two single-row replays under default cfg (maker/maker 1.5 bps ⇒ RoundTripFeePct 0.0003).
+    ' At price 62000 / ATR 40 the drag is 0.0003 × 62000 / 40 = 0.465 ATR units. Bar geometry
+    ' is designed to force each arm deterministically via FailureRateMatrix.WalkBars; the
+    ' expected net EV is measured against whatever placed levels the arbitration emits (read
+    ' back off the ReplayedRow), so the fixture never re-derives ComputeSideLevels.
+    Private Sub A41a_NetEvSubtractsFeeDragOnSuccessAndStopArms()
+        Dim cfg As New EngineSettings()   ' default trade_costs ⇒ 1.5 bps maker/maker
+        Dim feeDragAtr As Double = cfg.Scoring.TradeCosts.RoundTripFeePct * 62000.0 / 40.0
+
+        ' SUCCESS: first bar's High clears the placed target while Low sits comfortably above
+        ' the placed stop (SwingStopLong 61950 ⇒ Low 61980 is safe). WalkBars ⇒ SUCCESS.
+        Dim rowSucc = BuildWhatIfRow()
+        rowSucc.ForwardBars(15) = New List(Of OhlcBar) From {
+            New OhlcBar With {.CloseTime = rowSucc.Timestamp.AddMinutes(1),
+                              .Open = 62000, .High = 63000, .Low = 61980, .Close = 62500}}
+        Dim runSucc = WhatIfReplay.RunCell(New List(Of CsvRow) From {rowSucc}, cfg, 15, keepRows:=True)
+        Dim repSucc = runSucc.ReplayedRows(0)
+        Dim grossSucc As Double = Math.Abs(repSucc.PlacedTargetLong - rowSucc.Price) / rowSucc.ATR
+        Dim netSucc As Double = runSucc.EvSamples(0).EvAtr
+        Dim okSucc As Boolean = Math.Abs(netSucc - (grossSucc - feeDragAtr)) < 0.000000000001
+
+        ' ADVERSE_HIT: first bar's Low hits the placed stop while High stays below the placed
+        ' target (SwingTargetLong 62070 ⇒ High 62050 is safe). WalkBars ⇒ ADVERSE_HIT.
+        Dim rowAdv = BuildWhatIfRow()
+        rowAdv.ForwardBars(15) = New List(Of OhlcBar) From {
+            New OhlcBar With {.CloseTime = rowAdv.Timestamp.AddMinutes(1),
+                              .Open = 62000, .High = 62050, .Low = 61800, .Close = 61850}}
+        Dim runAdv = WhatIfReplay.RunCell(New List(Of CsvRow) From {rowAdv}, cfg, 15, keepRows:=True)
+        Dim repAdv = runAdv.ReplayedRows(0)
+        Dim grossAdv As Double = -Math.Abs(rowAdv.Price - repAdv.PlacedStopLong) / rowAdv.ATR
+        Dim netAdv As Double = runAdv.EvSamples(0).EvAtr
+        Dim okAdv As Boolean = Math.Abs(netAdv - (grossAdv - feeDragAtr)) < 0.000000000001
+
+        Check("A41a per-row fee drag subtracted on SUCCESS + ADVERSE_HIT arms (net = gross − round_trip_fee_pct × price / ATR)",
+              okSucc AndAlso okAdv,
+              String.Format(CultureInfo.InvariantCulture,
+                            "drag={0:R}  succ: gross={1:R} net={2:R} Δ={3:R}  adv: gross={4:R} net={5:R} Δ={6:R}",
+                            feeDragAtr, grossSucc, netSucc, netSucc - (grossSucc - feeDragAtr),
+                            grossAdv, netAdv, netAdv - (grossAdv - feeDragAtr)))
+    End Sub
+
+    ' -- A41b: fee drag on WINDOW_EXPIRED arm (unconditional) ------
+    ' Two bars that stay strictly inside both barriers ⇒ WalkBars returns WINDOW_EXPIRED. The
+    ' mark-to-end reference is the last bar's Close, and the drag applies unchanged: a
+    ' horizon-close pays the same round trip as a stop-out or a target touch.
+    Private Sub A41b_WindowExpiredArmAlsoPaysFeeDrag()
+        Dim cfg As New EngineSettings()
+        Dim feeDragAtr As Double = cfg.Scoring.TradeCosts.RoundTripFeePct * 62000.0 / 40.0
+
+        Dim rowExp = BuildWhatIfRow()
+        Dim endClose As Double = 62030
+        rowExp.ForwardBars(15) = New List(Of OhlcBar) From {
+            New OhlcBar With {.CloseTime = rowExp.Timestamp.AddMinutes(1),
+                              .Open = 62000, .High = 62050, .Low = 61980, .Close = 62020},
+            New OhlcBar With {.CloseTime = rowExp.Timestamp.AddMinutes(2),
+                              .Open = 62020, .High = 62055, .Low = 61985, .Close = endClose}}
+        Dim runExp = WhatIfReplay.RunCell(New List(Of CsvRow) From {rowExp}, cfg, 15, keepRows:=True)
+        Dim grossExp As Double = (endClose - rowExp.Price) / rowExp.ATR
+        Dim netExp As Double = runExp.EvSamples(0).EvAtr
+        Dim okExp As Boolean = Math.Abs(netExp - (grossExp - feeDragAtr)) < 0.000000000001
+
+        Check("A41b WINDOW_EXPIRED arm also pays the round-trip fee drag (drag is unconditional across all three outcome arms)",
+              okExp,
+              String.Format(CultureInfo.InvariantCulture,
+                            "gross={0:R} net={1:R} drag={2:R} Δ={3:R}",
+                            grossExp, netExp, feeDragAtr, netExp - (grossExp - feeDragAtr)))
+    End Sub
+
+    ' -- A41c: fees-zero cfg ⇒ net ≡ gross (the regression identity) ------
+    ' A cfg with maker_fee_bps = taker_fee_bps = 0 has RoundTripFeePct = 0, so the drag term
+    ' collapses to zero across every arm. That IS the pre-rider (gross) semantics. Byte
+    ' identity to 1e-12 across SUCCESS + ADVERSE_HIT + WINDOW_EXPIRED proves the rider is a
+    ' pure add-on: turn off fees, the rider disappears — no accidental drift into other arms.
+    Private Sub A41c_FeesZeroCfgIsByteIdenticalToGross()
+        Dim cfg As New EngineSettings()
+        cfg.Scoring.TradeCosts.MakerFeeBps = 0.0
+        cfg.Scoring.TradeCosts.TakerFeeBps = 0.0
+        ' min_net stays at its default (0.0005) — the composed floor drops to 0.0005, still
+        ' well below the ~1.1%-of-price target distance, so directional gating is unchanged.
+
+        ' SUCCESS
+        Dim rowSucc = BuildWhatIfRow()
+        rowSucc.ForwardBars(15) = New List(Of OhlcBar) From {
+            New OhlcBar With {.CloseTime = rowSucc.Timestamp.AddMinutes(1),
+                              .Open = 62000, .High = 63000, .Low = 61980, .Close = 62500}}
+        Dim runSucc = WhatIfReplay.RunCell(New List(Of CsvRow) From {rowSucc}, cfg, 15, keepRows:=True)
+        Dim repSucc = runSucc.ReplayedRows(0)
+        Dim grossSucc As Double = Math.Abs(repSucc.PlacedTargetLong - rowSucc.Price) / rowSucc.ATR
+        Dim okSucc As Boolean = Math.Abs(runSucc.EvSamples(0).EvAtr - grossSucc) < 0.000000000001
+
+        ' ADVERSE_HIT
+        Dim rowAdv = BuildWhatIfRow()
+        rowAdv.ForwardBars(15) = New List(Of OhlcBar) From {
+            New OhlcBar With {.CloseTime = rowAdv.Timestamp.AddMinutes(1),
+                              .Open = 62000, .High = 62050, .Low = 61800, .Close = 61850}}
+        Dim runAdv = WhatIfReplay.RunCell(New List(Of CsvRow) From {rowAdv}, cfg, 15, keepRows:=True)
+        Dim repAdv = runAdv.ReplayedRows(0)
+        Dim grossAdv As Double = -Math.Abs(rowAdv.Price - repAdv.PlacedStopLong) / rowAdv.ATR
+        Dim okAdv As Boolean = Math.Abs(runAdv.EvSamples(0).EvAtr - grossAdv) < 0.000000000001
+
+        ' WINDOW_EXPIRED
+        Dim rowExp = BuildWhatIfRow()
+        Dim endClose As Double = 62030
+        rowExp.ForwardBars(15) = New List(Of OhlcBar) From {
+            New OhlcBar With {.CloseTime = rowExp.Timestamp.AddMinutes(1),
+                              .Open = 62000, .High = 62050, .Low = 61980, .Close = 62020},
+            New OhlcBar With {.CloseTime = rowExp.Timestamp.AddMinutes(2),
+                              .Open = 62020, .High = 62055, .Low = 61985, .Close = endClose}}
+        Dim runExp = WhatIfReplay.RunCell(New List(Of CsvRow) From {rowExp}, cfg, 15, keepRows:=True)
+        Dim grossExp As Double = (endClose - rowExp.Price) / rowExp.ATR
+        Dim okExp As Boolean = Math.Abs(runExp.EvSamples(0).EvAtr - grossExp) < 0.000000000001
+
+        Check("A41c fees-zero cfg (maker=taker=0) ⇒ net EV byte-identical to gross across SUCCESS + ADVERSE_HIT + WINDOW_EXPIRED (regression identity)",
+              okSucc AndAlso okAdv AndAlso okExp,
+              String.Format(CultureInfo.InvariantCulture,
+                            "succ Δ={0:R} adv Δ={1:R} exp Δ={2:R}",
+                            runSucc.EvSamples(0).EvAtr - grossSucc,
+                            runAdv.EvSamples(0).EvAtr - grossAdv,
+                            runExp.EvSamples(0).EvAtr - grossExp))
+    End Sub
+
+    ' -- A41d: report ranking table carries net-of-fees label + σ dispersion column ------
+    ' StdPop pinned against a known two-sample set (values +1, −1 ⇒ mean 0, population std 1).
+    ' The rendered ranking table (multi-cell path — AppendGridRanking is skipped when
+    ' GridCellCount == 1) is asserted to disclose net-of-fees orientation, the not-comparable
+    ' note, and the new σ column header — all three are E1-style rendered-semantics
+    ' disclosures the caller must be able to see at a glance.
+    Private Sub A41d_ReportCarriesNetOfFeesLabelAndDispersionColumn()
+        ' Population std of {+1, −1} = sqrt(((1-0)^2 + (-1-0)^2)/2) = 1.0 exactly.
+        Dim samples As New List(Of WhatIfEvSample) From {
+            New WhatIfEvSample With {.Timestamp = New DateTime(2026, 7, 10, 14, 0, 0, DateTimeKind.Utc),
+                                     .SessionName = "NY", .Resolution = 1, .Tier = "LONG", .EvAtr = 1.0},
+            New WhatIfEvSample With {.Timestamp = New DateTime(2026, 7, 11, 14, 0, 0, DateTimeKind.Utc),
+                                     .SessionName = "NY", .Resolution = 1, .Tier = "LONG", .EvAtr = -1.0}}
+        Dim statFull = WhatIfEvStat.Of_(samples.Select(Function(s) s.EvAtr))
+        Dim okStdPop As Boolean = Math.Abs(statFull.StdPop - 1.0) < 0.000000000001
+
+        Dim cfg As New EngineSettings()
+        Dim cell0 As New WhatIfGridCell With {.Index = 0, .Cell = New Dictionary(Of String, Double)(),
+                                              .EvalWindowBars = 15, .EvSamples = samples,
+                                              .DirectionalCount = 2, .BelowMinMoveExcluded = 0,
+                                              .EvFull = statFull, .EvSel = statFull, .EvHold = statFull,
+                                              .Divergent = False}
+        Dim cell1 As New WhatIfGridCell With {.Index = 1,
+                                              .Cell = New Dictionary(Of String, Double) From {
+                                                {"scoring.trade_costs.min_net_move_pct", 0.0007}},
+                                              .EvalWindowBars = 15, .EvSamples = samples,
+                                              .DirectionalCount = 2, .BelowMinMoveExcluded = 0,
+                                              .EvFull = statFull, .EvSel = statFull, .EvHold = statFull,
+                                              .Divergent = False}
+        Dim model As New WhatIfReportModel With {
+            .Stamp = "20260729_120000", .OverlayPath = "test.json", .CsvPath = "analysis_log.csv",
+            .SpanFrom = New DateTime(2026, 7, 10), .SpanTo = New DateTime(2026, 7, 11),
+            .TotalRows = 2, .PocExcluded = 0, .GridCellCount = 2,
+            .SweptKnobs = New List(Of String) From {"scoring.trade_costs.min_net_move_pct"},
+            .OverlaySummary = "", .OverfitCounter = 1,
+            .Cells = New List(Of WhatIfGridCell) From {cell0, cell1},
+            .WinnerIndex = 0, .LiveCfg = cfg, .WinnerCfg = cfg,
+            .BaselineRows = New List(Of CsvRow)(), .WinnerRows = New List(Of CsvRow)(),
+            .BaselineBelowMin = 0, .WinnerBelowMin = 0, .SettingsVersion = 62}
+        Dim md As String = WhatIfReport.Build(model)
+
+        Dim okTitle As Boolean = md.Contains("net of fees")
+        Dim okSigmaHeader As Boolean = md.Contains("| σ |")
+        Dim okNotComparable As Boolean = md.Contains("not comparable")
+
+        Check("A41d report ranking carries the net-of-fees label + σ dispersion column + not-comparable note (§6.1 rider)",
+              okStdPop AndAlso okTitle AndAlso okSigmaHeader AndAlso okNotComparable,
+              String.Format(CultureInfo.InvariantCulture,
+                            "stdPop={0} ({1:R}) title={2} sigma={3} notCmp={4}",
+                            okStdPop, statFull.StdPop, okTitle, okSigmaHeader, okNotComparable))
     End Sub
 
 End Module

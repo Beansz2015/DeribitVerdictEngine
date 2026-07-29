@@ -191,3 +191,85 @@ can quantify the trade-off before the knob is turned — sweep
 `scoring.trade_costs.min_net_move_pct` (`0.0003:0.0009:0.0002` is the launcher default) and
 read EV-in-ATR with the split-half holdout. Worth doing on real numbers rather than
 guessing, given it changes the population the collector accumulates.
+
+---
+
+## 5. §6.1 rider build — eval net-EV (2026-07-29)
+
+The first of the three §6-out-of-scope items ships. Analysis-only, zero scoring impact, no
+settings keys, no version bump; the ranking metric the What-If runner already prints is now
+**net of round-trip fees** using the same composed fee model settings v62 introduced.
+
+**Rider trigger:** the fee change lands 2026-08-01. Once the trader starts turning
+`min_net_move_pct` under nonzero fees, the ranking metric must price the drag or the tuner
+sees a rosier profitability picture than the trader actually pockets. §6.1's derivation was
+double-checked against `WhatIfReplay.ComputeEvAtr` on 2026-07-27; this build implements it
+verbatim modulo the one deliberate deviation flagged below.
+
+### 5.1 What shipped
+
+| Proposal item | Shipped |
+|---|---|
+| §6.1 Per-row fee drag in ATR units = `round_trip_fee_pct × entry_price / rep.ATR` | ✅ `WhatIfReplay.ComputeEvAtr` computes `feeDragAtr` from `cfg.Scoring.TradeCosts.RoundTripFeePct × rep.Price / rep.ATR`. `cfg` threaded into `ComputeEvAtr` from the existing `RunCell` call site (~line 204) — no new plumbing. |
+| §6.1 Subtraction unconditional across all three outcome arms (SUCCESS / stop / WINDOW_EXPIRED) | ✅ Applied in every `Select Case` arm — `SUCCESS: targetDistAtr − feeDragAtr`, `ADVERSE_HIT/AMBIGUOUS: −stopDistAtr − feeDragAtr`, `WINDOW_EXPIRED: (endClose − entry)/ATR − feeDragAtr`. A41b pins the WINDOW_EXPIRED arm specifically because it is the arm most likely to drift under future refactors (no "trade closed" event to hang a drag off). |
+| §6.1 Entry-price basis = the row's logged `Price` (exit-leg re-pricing error second-order, ignored) | ✅ `rep.Price` used verbatim; no exit-price interpolation. |
+| §6.1 Report says "net of fees" — the E1 rendered-semantics-disclose-orientation lesson | ✅ Section title now "**Grid ranking — per-trade EV/ATR (net of fees)**". Caption spells out that the per-row drag is subtracted unconditionally and cites the §6.1 rider. A stand-alone italicised line under the caption states net-EV rankings are **not comparable** to pre-rider (gross) runs (deviation §5.2 on why one header note, not per-column). |
+| §6.1 Dispersion column beside the mean (Sharpe-question resolution — metric follows cost model) | ✅ `WhatIfEvStat.StdPop` (population std of per-trade EvAtr samples) added; ranking table gains a `σ` column between `EV full` and `EV (sel)`. The split-half mechanics are untouched (they compare means; leaving their semantics alone was in-scope explicit). |
+| §5 fixture family — next-free letter | ✅ A41a–d (A40 was the v62 build; next-free confirmed against the harness). Fixtures reach `ComputeEvAtr` through the same seam A30/A36f use — `WhatIfReplay.RunCell` drives the replay end-to-end and emits `WhatIfEvSample.EvAtr` — so `ComputeEvAtr` stays `Private Shared`, no visibility changes required. |
+| §5 acceptance | ✅ solution + AutoTweaker + WhatIfRunner + CeilingAudit + OrderCheck build **0/0** Release; harness **ALL PASS** (A1–A40e unregressed + A41a–d new); `verify-gate.ps1 -Mode prepush` **GATE PASSED** (display-parity clean, version-bump clean — no engine-path change, per §5.2). |
+
+### 5.2 Deviations & decisions
+
+**5.2.1 Maker→taker emergency loss-arm delta is NOT built.** §6.1 flags a +2 bps delta on
+the loss arm only as *"an optional conservative toggle, default off (normal SL exits are
+maker in the trader's flow)"*. Building the default-off toggle with no way to turn it on is
+zero user value and a settings key we do not need. When the trader signals demand for the
+worst-case pricing arm, it slots in as a `taker_stop_delta_bps` field on `TradeCostSettings`
+plus a branch in `ComputeEvAtr`'s `ADVERSE_HIT/AMBIGUOUS` arm — analysis-only, still no
+engine impact. This is a deliberate deviation, recorded here so nobody assumes the toggle is
+buried somewhere.
+
+**5.2.2 Net-of-fees disclosure is one caption + one italicised line, not per-column
+suffixing.** The proposal names the section title/label; column-header labels ("EV full",
+"EV (sel)", "EV (holdout)") stay compact because all three EV columns share the same
+orientation — labeling one and leaving the others could imply mixed semantics. The caption
+says it once, prominently, then names σ ("dispersion beside the mean") in the same
+paragraph. The `## Population shift` and `## Baseline vs overlay — failure matrix` sections
+are untouched — no EV numbers there, no orientation to disclose.
+
+**5.2.3 `EvSel.Mean` remains the ranking key.** Winner selection in `WhatIfProgram` sorts by
+`EvSel.Mean`. That mean is now net-of-fees on both sides of the sort, so the ranking order
+against any single overlay is identical to the pre-rider one when fees are constant across
+cells — which they are, because the trade-cost knobs sit outside the sweepable knobs. The
+knob that CAN move (`min_net_move_pct`) doesn't touch the fee formula, so the σ column is a
+pure diagnostic addition, not a re-ranking signal. Preserving `EvSel.Mean` as the sort key
+means the split-half mechanics — the guardrail against phantom winners — stay intact.
+
+**5.2.4 Gate reports "no engine-path change" — the accepted D6-precedent outcome.** The
+version-bump check in `verify-gate.ps1` scopes engine paths to `Core/`, `DynamicNorms.vb`,
+`analysis/`. This rider only touches `tools/WhatIfRunner/*.vb`, `verify/ordercheck/*.vb`,
+`verify/ordercheck/OrderCheck.vbproj`, and `docs/fee-aware-min-move-spec-back.md`, so the
+gate's `no engine-path change` line is correct and the task's own "no version bump" rule is
+respected in the same breath. No settings key added, no `settings.json` line changed.
+
+**5.2.5 Population std, not sample std.** `WhatIfEvStat.StdPop` divides by N, not N−1. The
+σ column is a *description of the observed sample*, not an estimator of an unobserved
+population parameter — sample std would carry an inferential connotation that misleads at
+the small-N end of the ranking table (n<30 cells the caller is meant to distrust already).
+Pinned in A41d against a known two-sample set (±1 ⇒ mean 0, StdPop 1.0 exactly).
+
+### 5.3 Not done — deliberately, still
+
+The other two §6-out-of-scope items remain unchanged:
+
+1. **Display net-R:R rider** — optional, trader-demand; carries a snapshot+card same-commit
+   parity obligation if pursued.
+2. **Order-app relay** — EV-aware chase budget + the maker→taker 2 bps SL-emergency delta.
+   Consumer-side, own doc. The bridge payload does **not** carry fees; no contract change.
+
+### 5.4 Post-ship
+
+Nothing new to watch beyond the §4 event: 2026-08-01, when the trader edits the fee bps and
+picks a `min_net_move_pct` under them. The rider makes the What-If runner's EV numbers
+finally reflect what the trader will actually earn, so the `0.0003:0.0009:0.0002` sweep the
+launcher already suggests becomes a real decision tool instead of an inflated one.

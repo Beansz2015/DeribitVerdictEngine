@@ -102,10 +102,12 @@
     <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
     <!-- offline-whatif-replay (A30): the host-agnostic overlay whitelist + the replay core
          (adapter → the shipped SignalEmitter.ComputeSideLevels + verdict re-derivation). The
-         report writer + console Program stay OUT (Program carries its own Main; the report
-         writer needs no fixture). docs/offline-whatif-replay-proposal.md §5. -->
+         report writer joins the harness in A41d (docs/fee-aware-min-move-proposal.md §6.1
+         rider) so the net-of-fees label + σ dispersion column are pinned; the console
+         Program stays OUT (it carries its own Main). docs/offline-whatif-replay-proposal.md §5. -->
     <Compile Include="..\..\tools\WhatIfRunner\WhatIfOverlay.vb" />
     <Compile Include="..\..\tools\WhatIfRunner\WhatIfReplay.vb" />
+    <Compile Include="..\..\tools\WhatIfRunner\WhatIfReport.vb" />
     <!-- A36f (geometry-arbitration-modes v56): WhatIfSettings so the mode-1 overlay
          round-trips through the runner's real Clone → ApplyKnob path (the WhatIfSettings
          is where "the overlay actually reaches the new POCO fields" is proved). -->

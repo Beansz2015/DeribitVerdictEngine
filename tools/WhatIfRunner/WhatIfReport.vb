@@ -14,18 +14,25 @@ Imports System.Globalization
 Imports System.Linq
 Imports System.Text
 
-''' <summary>Mean EV in ATR units with a normal-approx 95% CI (mean ± 1.96·SE).</summary>
+''' <summary>Mean EV in ATR units with a normal-approx 95% CI (mean ± 1.96·SE). §6.1 rider adds
+''' <c>StdPop</c> — the population std of the per-trade EvAtr samples — for the ranking table's
+''' dispersion column (mean alone hides the distribution).</summary>
 Public Class WhatIfEvStat
     Public Property N      As Integer
     Public Property Mean   As Double
     Public Property CiLow  As Double
     Public Property CiHigh As Double
+    Public Property StdPop As Double   ' §6.1 rider — population std of per-trade EvAtr samples (dispersion)
 
     Public Shared Function Of_(samples As IEnumerable(Of Double)) As WhatIfEvStat
         Dim xs = samples.ToList()
         Dim s As New WhatIfEvStat With {.N = xs.Count}
         If xs.Count = 0 Then Return s
         s.Mean = xs.Average()
+        ' Population std (denominator = N, not N-1): the dispersion of the observed sample,
+        ' not an estimator of an unseen population parameter. N=1 ⇒ 0. §6.1 rider.
+        Dim varPop As Double = xs.Sum(Function(x) (x - s.Mean) * (x - s.Mean)) / xs.Count
+        s.StdPop = Math.Sqrt(varPop)
         If xs.Count < 2 Then
             s.CiLow = s.Mean : s.CiHigh = s.Mean
             Return s
@@ -132,13 +139,22 @@ Public Class WhatIfReport
     End Sub
 
     ' -- §3b EV-in-ATR grid ranking + split-half validation --------------------------------
+    ' §6.1 rider: EV values are per-trade EV in ATR units, NET of the round-trip fee drag
+    ' (round_trip_fee_pct × price / ATR subtracted unconditionally in ComputeEvAtr). The section
+    ' title, caption and column headers disclose that — rendered semantics disclose their
+    ' orientation (E1 lesson). Net-EV rankings from this section are not comparable to pre-rider
+    ' (gross) runs; the caption says so explicitly.
     Private Shared Sub AppendGridRanking(sb As StringBuilder, m As WhatIfReportModel)
-        sb.AppendLine("## Grid ranking — per-trade EV in ATR units")
+        sb.AppendLine("## Grid ranking — per-trade EV/ATR (net of fees)")
         sb.AppendLine()
         sb.AppendLine("_Ranking objective is EV/trade in ATR units, never win-rate (§3b): target-touch → +targetDist, " &
-                      "stop/ambiguous → −stopDist, window-expiry → mark-to-window-end. Winner selected on the selection " &
-                      "half (alternating session-days); holdout is the unseen half. **DIVERGENT** = holdout mean below the " &
-                      "selection-half CI._")
+                      "stop/ambiguous → −stopDist, window-expiry → mark-to-window-end. **Net of round-trip fees** (§6.1 rider) — " &
+                      "the per-row fee drag (`round_trip_fee_pct × price / ATR`) is subtracted unconditionally across all three " &
+                      "outcome arms. Winner selected on the selection half (alternating session-days); holdout is the unseen half. " &
+                      "**DIVERGENT** = holdout mean below the selection-half CI. σ is the population std of the per-trade EvAtr " &
+                      "samples (dispersion beside the mean)._")
+        sb.AppendLine()
+        sb.AppendLine("_Net-EV rankings are **not comparable** to pre-rider (gross) runs._")
         sb.AppendLine()
         Dim ranked = m.Cells.OrderByDescending(Function(c) c.EvSel.Mean).ToList()
         ' Show only the top cells — a full grid of up to 3,000 rows is unreadable, and the
@@ -150,8 +166,8 @@ Public Class WhatIfReport
                                         MaxRankingRows, ranked.Count))
             sb.AppendLine()
         End If
-        sb.AppendLine("| rank | cell | n | EV full | EV (sel) | EV (holdout) | flag |")
-        sb.AppendLine("|---|---|---:|---:|---:|---:|---|")
+        sb.AppendLine("| rank | cell | n | EV full | σ | EV (sel) | EV (holdout) | flag |")
+        sb.AppendLine("|---|---|---:|---:|---:|---:|---:|---|")
 
         Dim rank As Integer = 1
         For Each c In shown
@@ -160,9 +176,10 @@ Public Class WhatIfReport
             If c.Divergent Then flag = (flag & " ⚠ DIVERGENT").Trim()
             If c.EvFull.N < MinCellN Then flag = (flag & " n<30").Trim()
             sb.AppendLine(String.Format(CultureInfo.InvariantCulture,
-                "| {0} | {1} | {2} | {3:F3} | {4} | {5} | {6} |",
+                "| {0} | {1} | {2} | {3:F3} | {4} | {5} | {6} | {7} |",
                 rank, CellLabel(c.Cell), c.EvFull.N,
-                c.EvFull.Mean, EvCell(c.EvSel), EvCell(c.EvHold), flag))
+                c.EvFull.Mean, StdCell(c.EvFull),
+                EvCell(c.EvSel), EvCell(c.EvHold), flag))
             rank += 1
         Next
         sb.AppendLine()
@@ -263,6 +280,13 @@ Public Class WhatIfReport
     Private Shared Function EvCell(s As WhatIfEvStat) As String
         If s.N = 0 Then Return "—"
         Return String.Format(CultureInfo.InvariantCulture, "{0:F3} [{1:F3},{2:F3}] n={3}", s.Mean, s.CiLow, s.CiHigh, s.N)
+    End Function
+
+    ' §6.1 rider — dispersion column: population std of the per-trade EvAtr samples, rendered
+    ' beside the EV mean so the ranking table shows both the location and the spread.
+    Private Shared Function StdCell(s As WhatIfEvStat) As String
+        If s.N = 0 Then Return "—"
+        Return String.Format(CultureInfo.InvariantCulture, "{0:F3}", s.StdPop)
     End Function
 
     Private Shared Function RateCI(count As Integer, n As Integer) As String
