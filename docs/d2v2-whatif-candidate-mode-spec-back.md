@@ -67,6 +67,8 @@ Run: `pwsh -File tools/checks/verify-gate.ps1 -Mode prepush` after Release build
  preceded by "harness ALL PASS" and the version-bump / display-parity checks green)
 ```
 
+**Coordinator review 2026-07-29 — APPROVED.** Independent gate re-run: **GATE PASSED** — A1–A42d ALL PASS, display-parity clean, and version-bump correctly reads *"engine-path change accompanied by a settings.json version bump"* (the implementer lane's report message quoted a stale "no engine-path change" line — wrong for a diff touching `Core/`; the committed record here never carried it, and the re-run is the authoritative tail). Seam verified at source: candidate gate (flag ∧ pivot>0 ∧ price-side ∧ bound), ladder arm pivot-first with every lower tier guarded on the `placedTarget = 0` sentinel (no overwrite), NEAREST arm competes on strict min-distance, stop side untouched, materialisation reads `placedTarget > 0` consistently. The signature deviation (§2) is accepted — pivot rides `r` like every structural input, zero call-site churn, strictly the better reading of the brief.
+
 ## 4. Ceremony hygiene
 
 - Release-only builds (`dotnet build -c Release`) — the collector-vs-Debug 07-17 stomp rule holds.
