@@ -91,6 +91,8 @@ Public Class WhatIfSettings
             Case "scoring.structural_levels.stop_arbitration_mode"                   : s.StructuralLevels.StopArbitrationMode = CInt(value)
             Case "scoring.structural_levels.target_buffer_pct"                       : s.StructuralLevels.TargetBufferPct = value
             Case "scoring.structural_levels.stop_buffer_pct"                         : s.StructuralLevels.StopBufferPct = value
+            ' [D2-v2 v63] Boolean-as-int sweep: any non-zero ⇒ true (v56 int-mode precedent).
+            Case "scoring.structural_levels.use_best_pivot_candidate"                : s.StructuralLevels.UseBestPivotCandidate = (value <> 0)
             Case Else
                 Throw New WhatIfOverlayError("No setter for whitelisted knob '" & path & "' — whitelist/setter drift.")
         End Select
@@ -131,6 +133,7 @@ Public Class WhatIfSettings
             Case "scoring.structural_levels.stop_arbitration_mode"                   : Return s.StructuralLevels.StopArbitrationMode
             Case "scoring.structural_levels.target_buffer_pct"                       : Return s.StructuralLevels.TargetBufferPct
             Case "scoring.structural_levels.stop_buffer_pct"                         : Return s.StructuralLevels.StopBufferPct
+            Case "scoring.structural_levels.use_best_pivot_candidate"                : Return If(s.StructuralLevels.UseBestPivotCandidate, 1.0, 0.0)
             Case "eval_window"                                         : Return 0   ' not a settings key
             Case Else
                 Throw New WhatIfOverlayError("No reader for knob '" & path & "'.")

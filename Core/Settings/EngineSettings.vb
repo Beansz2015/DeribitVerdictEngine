@@ -1000,6 +1000,20 @@ Public Class StructuralLevelsSettings
     ''' snap to the floor rather than cross entry). Default 0.0 ⇒ byte-identical to v51 B4b.
     ''' Fenced off the tweaker surface (HARD CONSTRAINT 24; exact-match).</summary>
     <JsonPropertyName("stop_buffer_pct")>         Public Property StopBufferPct         As Double  = 0.0
+    ''' <summary>[D2-v2 what-if candidate mode v63] When True, the volume-weighted best pivot
+    ''' (<c>IndicatorResults.BestPivotByVolume5m</c>) joins the TARGET candidate set inside
+    ''' <see cref="SignalEmitter.ComputeSideLevels"/>. Side determined by price-vs-entry (D3,
+    ''' identical live + replay; a LOW pivot sitting above entry still marks a defended level).
+    ''' Ladder mode (<see cref="TargetArbitrationMode"/> = 0) ⇒ inserted as the FIRST tier,
+    ''' above swing (P1 verbatim). NEAREST mode ⇒ competes on distance like any candidate.
+    ''' Same looseness bound (<see cref="TargetMaxAtrMult"/>) as every tier; absent/zero pivot
+    ''' ⇒ candidate absent. STOP side untouched (D2 was always a target idea; DG1 stays).
+    ''' Label when it places: <c>BEST_PIVOT_5M</c> (renders through the same PLACED @ string).
+    ''' Default False ⇒ byte-identical to v56 B4b (this build is a what-if instrument; live
+    ''' promotion is a later ⚠ D-table gated on the Aug-1 geometry replay evidence — D6).
+    ''' Fenced off the tweaker surface (HARD CONSTRAINT 24 — same hand-ruled-geometry class
+    ''' as target_arbitration_mode / stop_arbitration_mode / buffers; exact-match reject).</summary>
+    <JsonPropertyName("use_best_pivot_candidate")> Public Property UseBestPivotCandidate As Boolean = False
     ''' <summary>Per-session nullable overrides keyed by session bucket name (v40 pattern;
     ''' null field ⇒ inherit the global scoring.atr_target_multiplier). DG3 hand-tuned tier:
     ''' LONDON 2.0 (already at the design reach), ASIA 1.25 (never reaches far targets).

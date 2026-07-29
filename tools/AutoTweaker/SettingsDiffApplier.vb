@@ -200,10 +200,11 @@ Public Class SettingsDiffApplier
             If path = "scoring.structural_levels.target_arbitration_mode" OrElse
                path = "scoring.structural_levels.stop_arbitration_mode" OrElse
                path = "scoring.structural_levels.target_buffer_pct" OrElse
-               path = "scoring.structural_levels.stop_buffer_pct" Then
+               path = "scoring.structural_levels.stop_buffer_pct" OrElse
+               path = "scoring.structural_levels.use_best_pivot_candidate" Then
                 result.IsValid    = False
                 result.ErrorReason = String.Format(
-                    "Rejected: '{0}' is a hand-ruled geometry knob (arbitration mode / signed buffer), not a threshold (off tweaker surface — HARD CONSTRAINT 24).", item.Path)
+                    "Rejected: '{0}' is a hand-ruled geometry knob (arbitration mode / signed buffer / candidate-set toggle), not a threshold (off tweaker surface — HARD CONSTRAINT 24).", item.Path)
                 Return result
             End If
 

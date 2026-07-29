@@ -59,6 +59,10 @@ Public Class WhatIfReplay
         r.VPFRNearestHvnBelow = row.VpfrNearestHvnBelow
         r.VPFRPoc = 0                 ' unlogged — keeps the POC tier closed (replay ladder = swing→HVN→fallback)
         r.VPFRSignal = "NEUTRAL"      ' unlogged — pocGated stays False in ComputeSideLevels
+        ' [D2-v2 v63] Volume-weighted best pivot — the D2-v2 candidate is a NO-OP unless
+        ' scoring.structural_levels.use_best_pivot_candidate is true in cfg. Empty column
+        ' (pre-D2 rows or a nulled feed) ⇒ 0 ⇒ candidate absent, counted not guessed.
+        r.BestPivotByVolume5m = row.BestPivotByVolume5m
         Return r
     End Function
 

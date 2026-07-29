@@ -150,13 +150,16 @@ Public Class PromptBuilder
             "current v51 B4b shape; 1 = nearest / widest = the trader's discretionary alternative). " &
             "Never propose 'scoring.structural_levels.target_buffer_pct' or " &
             "'scoring.structural_levels.stop_buffer_pct' (signed % pullback/protection buffers, " &
-            "trader-owned like scoring.hold_*). Enabling any of these live is a later ⚠ D-table " &
-            "gated on what-if replay evidence, and the stop-widest side is ADDITIONALLY hard-gated " &
-            "on consumer sizing-by-stop-distance. Same class as HARD CONSTRAINT 21's hand-toggles " &
-            "(HC11 class, geometry sub-class). SINGLE-key exclusions: the flat siblings " &
-            "'scoring.structural_levels.target_max_atr_mult', '...stop_max_atr_mult', " &
+            "trader-owned like scoring.hold_*). Never propose " &
+            "'scoring.structural_levels.use_best_pivot_candidate' (the D2-v2 volume-weighted " &
+            "best-pivot candidate-set toggle — a shape choice, live-enable gated on replay " &
+            "evidence via the P1 promotion D-table). Enabling any of these live is a later ⚠ " &
+            "D-table gated on what-if replay evidence, and the stop-widest side is ADDITIONALLY " &
+            "hard-gated on consumer sizing-by-stop-distance. Same class as HARD CONSTRAINT 21's " &
+            "hand-toggles (HC11 class, geometry sub-class). SINGLE-key exclusions: the flat " &
+            "siblings 'scoring.structural_levels.target_max_atr_mult', '...stop_max_atr_mult', " &
             "'...stop_min_floor_ticks' REMAIN tunable, HC21 unchanged. (Enforced in code: " &
-            "SettingsDiffApplier exact-match rejects all four keys.)" & vbLf &
+            "SettingsDiffApplier exact-match rejects all five keys.)" & vbLf &
         "25. Never propose any 'alerts.*' key. The alerts block drives the #7 liquidation-cascade " &
             "alarm + #8 level-approach alerts — a display/alert-only surface (TAPE-strip tag + " &
             "status-bar flash + a tiny append-only sidecar `liq_events.log` for the A4 gate " &

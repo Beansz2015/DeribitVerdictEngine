@@ -317,6 +317,16 @@ Public NotInheritable Class SignalEmitter
             (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR"),
             (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL"))
 
+        ' [D2-v2 v63] Best-pivot candidate — gated on use_best_pivot_candidate (default False ⇒
+        ' candidate absent ⇒ every downstream branch below is byte-identical to v56). Side is
+        ' PRICE-vs-entry (D3), the one rule live and replay share (CSV logs the price + ratio
+        ' but not IsHigh). Zero pivot ⇒ candidate absent — counted, not guessed (POC precedent).
+        Dim useBestPivot As Boolean = sl.UseBestPivotCandidate
+        Dim bestPivot As Double = r.BestPivotByVolume5m
+        Dim bestPivotDist As Double = dirSign * (bestPivot - entry)
+        Dim bestPivotQualifies As Boolean = useBestPivot AndAlso bestPivot > 0 AndAlso
+                                            bestPivotDist > 0 AndAlso bestPivotDist <= targetBound
+
         Dim swingDist As Double = dirSign * (swingTarget - entry)
         Dim swingQualifies As Boolean = swingTarget > 0 AndAlso swingDist > 0 AndAlso swingDist <= targetBound
         Dim hvnDist As Double = dirSign * (nearestHvn - entry)
@@ -333,6 +343,13 @@ Public NotInheritable Class SignalEmitter
             Dim bestDist As Double = r.ATR * fallbackMult                 ' fallback distance
             Dim bestPrice As Double = fallbackTarget
             Dim bestLabel As String = Nothing                              ' Nothing ⇒ fallback wins
+            ' [D2-v2] Best-pivot competes on distance like any other candidate (D1 orthogonal
+            ' to arbitration mode). No priority — the min-distance rule alone decides.
+            If bestPivotQualifies AndAlso bestPivotDist < bestDist Then
+                bestDist = bestPivotDist
+                bestPrice = bestPivot
+                bestLabel = "BEST_PIVOT_5M"
+            End If
             If swingQualifies AndAlso swingDist < bestDist Then
                 bestDist = swingDist
                 bestPrice = swingTarget
@@ -353,9 +370,15 @@ Public NotInheritable Class SignalEmitter
                 targetLabel = bestLabel
             End If
         Else
-            ' Mode 0 — LADDER (v51 B4b verbatim): swing → HVN → POC (HVN-gated) → fallback.
-            ' Structure wins even when farther than the ATR level, up to the bound.
-            If swingQualifies Then
+            ' Mode 0 — LADDER (v51 B4b): swing → HVN → POC (HVN-gated) → fallback, with the
+            ' [D2-v2] best-pivot tier inserted as the FIRST tier ABOVE swing when enabled
+            ' (D2 verbatim — P1's "4th cap tier above swing"). Structure wins even when farther
+            ' than the ATR level, up to the looseness bound.
+            If bestPivotQualifies Then
+                placedTarget = bestPivot
+                targetLabel = "BEST_PIVOT_5M"
+            End If
+            If placedTarget = 0 AndAlso swingQualifies Then
                 placedTarget = swingTarget
                 targetLabel = If(isLong, "SWING_HIGH_5M", "SWING_LOW_5M")
             End If

@@ -330,6 +330,15 @@ Module Program
         A41c_FeesZeroCfgIsByteIdenticalToGross()
         A41d_ReportCarriesNetOfFeesLabelAndDispersionColumn()
 
+        ' [v63 D2-v2 what-if candidate mode — A42, docs/d2v2-whatif-candidate-mode-proposal.md §4]
+        ' New POCO knob scoring.structural_levels.use_best_pivot_candidate (default false).
+        ' Ladder mode ⇒ inserted as the FIRST tier above swing; NEAREST mode ⇒ competes on
+        ' distance. Same looseness bound as every tier; STOP side untouched. Label BEST_PIVOT_5M.
+        A42a_DefaultsByteIdenticalToV56()
+        A42b_BestPivotEntersLadderFirstAndNearestDistancePick()
+        A42c_LoosenessBoundAndAbsentPivotEquivalence()
+        A42d_Hc24FenceAndWhatIfWhitelistAndRoundTrip()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -5880,6 +5889,287 @@ Module Program
               String.Format(CultureInfo.InvariantCulture,
                             "stdPop={0} ({1:R}) title={2} sigma={3} notCmp={4}",
                             okStdPop, statFull.StdPop, okTitle, okSigmaHeader, okNotComparable))
+    End Sub
+
+    ' =======================================================================
+    ' A42 — D2-v2 what-if candidate mode (v63). New POCO key:
+    ' scoring.structural_levels.use_best_pivot_candidate (Boolean, default False).
+    ' When true, r.BestPivotByVolume5m joins the TARGET candidate set inside
+    ' SignalEmitter.ComputeSideLevels — side by PRICE-vs-entry (D3); ladder mode
+    ' ⇒ FIRST tier above swing (D2, P1 verbatim); NEAREST mode ⇒ competes on
+    ' distance; same looseness bound (target_max_atr_mult) as every tier; absent
+    ' pivot ⇒ candidate absent (counted, not guessed). STOP side untouched.
+    ' Label BEST_PIVOT_5M. Same fixture cfg (entry 62000, ATR 40 ⇒ fallback 62070,
+    ' target bound 140, stop bound/fallback dist 64) as A36.
+    ' =======================================================================
+
+    Private Function A42Cfg() As EngineSettings
+        Return New EngineSettings()          ' POCO defaults = shipped v63 (flag off)
+    End Function
+
+    Private Function A42Indicators() As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = 62000.0
+        r.ATR = 40.0
+        Return r
+    End Function
+
+    ' -- A42a: defaults byte-identical to v56 across the A26 case set --------------
+    ' The load-bearing pin: at UseBestPivotCandidate=False the pivot must be a
+    ' complete no-op even when r.BestPivotByVolume5m is populated with a value
+    ' that WOULD win under the flag. Replays the A36a case set through the REAL
+    ' arbitration and additionally asserts a "pivot supplied but flag off" case.
+    Private Sub A42a_DefaultsByteIdenticalToV56()
+        Dim cfg = A42Cfg()
+
+        ' Case 1 — swing target farther than fallback still places (A26a long).
+        Dim rSwing = A42Indicators()
+        rSwing.SwingTargetLong = 62100.0
+        rSwing.BestPivotByVolume5m = 62050.0    ' populated but ignored (flag off)
+        Dim lvSwing = SignalEmitter.ComputeSideLevels(New VerdictResult(), rSwing, cfg, isLong:=True)
+        Dim ok1 As Boolean = lvSwing.Target = 62100.0 AndAlso lvSwing.Capped AndAlso
+                             lvSwing.Reason = "PLACED @ 62100.0 (SWING_HIGH_5M)" AndAlso
+                             lvSwing.TargetReason = "SWING_HIGH_5M"
+
+        ' Case 2 — swing too loose → HVN places (A26b tier walk).
+        Dim rHvn = A42Indicators()
+        rHvn.SwingTargetLong = 62150.0 : rHvn.VPFRNearestHvnAbove = 62120.0
+        rHvn.BestPivotByVolume5m = 62030.0      ' populated but ignored
+        Dim lvHvn = SignalEmitter.ComputeSideLevels(New VerdictResult(), rHvn, cfg, isLong:=True)
+        Dim ok2 As Boolean = lvHvn.Target = 62120.0 AndAlso lvHvn.TargetReason = "NEAREST_HVN_ABOVE"
+
+        ' Case 3 — no tier survives → FALLBACK_ATR (A26b fallback).
+        Dim rFb = A42Indicators()
+        rFb.SwingTargetLong = 62150.0 : rFb.VPFRNearestHvnAbove = 62200.0 : rFb.VPFRPoc = 62050.0
+        rFb.BestPivotByVolume5m = 62060.0       ' populated but ignored
+        Dim lvFb = SignalEmitter.ComputeSideLevels(New VerdictResult(), rFb, cfg, isLong:=True)
+        Dim ok3 As Boolean = lvFb.Target = 62070.0 AndAlso Not lvFb.Capped AndAlso
+                             lvFb.Reason Is Nothing AndAlso lvFb.TargetReason = "FALLBACK_ATR"
+
+        ' Case 4 — structural stop within bound → SWING_STOP (A26c). STOP side must
+        ' be entirely unaffected by the D2-v2 flag or a pivot value.
+        Dim rStop = A42Indicators() : rStop.SwingStopLong = 61950.0
+        rStop.BestPivotByVolume5m = 61960.0     ' populated but STOP side untouched
+        Dim lvStop = SignalEmitter.ComputeSideLevels(New VerdictResult(), rStop, cfg, isLong:=True)
+        Dim ok4 As Boolean = lvStop.StopPx = 61950.0 AndAlso lvStop.StopReason = "SWING_STOP"
+
+        ' Case 5 — structural stop too loose → STOP_CLAMPED (A26c clamp).
+        Dim rClamp = A42Indicators() : rClamp.SwingStopLong = 61900.0
+        Dim lvClamp = SignalEmitter.ComputeSideLevels(New VerdictResult(), rClamp, cfg, isLong:=True)
+        Dim ok5 As Boolean = Math.Abs(lvClamp.StopPx - 61936.0) < 0.0001 AndAlso
+                             lvClamp.StopReason = "STOP_CLAMPED"
+
+        ' Case 6 — no structural stop → FALLBACK_ATR (A26c).
+        Dim lvNone = SignalEmitter.ComputeSideLevels(New VerdictResult(), A42Indicators(), cfg, isLong:=True)
+        Dim ok6 As Boolean = Math.Abs(lvNone.StopPx - 61936.0) < 0.0001 AndAlso
+                             lvNone.StopReason = "FALLBACK_ATR"
+
+        ' Case 7 — pin the "pivot supplied, flag off ⇒ candidate absent" invariant
+        ' through the REAL Calculate() (byte-identity to a run with pivot=0). The
+        ' pivot at 62050 would be the closest qualifying candidate under NEAREST +
+        ' the ladder-first pick under the flag; here it must NOT alter the output.
+        Dim cfgReal = BuildA8Cfg(fundingBoost:=0)
+        Dim rReal0 = BuildGateIndicators(atr:=20, price:=62000)
+        rReal0.SwingTargetShort = 61940.0
+        Dim vNoPivot = ScoringEngine.Calculate(rReal0, PositionState.None, BuildA8Norms(), cfgReal)
+        Dim rReal1 = BuildGateIndicators(atr:=20, price:=62000)
+        rReal1.SwingTargetShort = 61940.0
+        rReal1.BestPivotByVolume5m = 61960.0
+        Dim vPivotSupplied = ScoringEngine.Calculate(rReal1, PositionState.None, BuildA8Norms(), cfgReal)
+        Dim ok7 As Boolean = vNoPivot.Verdict = vPivotSupplied.Verdict AndAlso
+                             Math.Abs(vNoPivot.AdjustedShortTarget - vPivotSupplied.AdjustedShortTarget) < 0.0001 AndAlso
+                             vNoPivot.TargetCapReasonShort = vPivotSupplied.TargetCapReasonShort
+
+        Check("A42a defaults (use_best_pivot_candidate=false) byte-identical to v56 across the A26 case set + real-Calculate with pivot supplied",
+              ok1 AndAlso ok2 AndAlso ok3 AndAlso ok4 AndAlso ok5 AndAlso ok6 AndAlso ok7,
+              String.Format("swing={0} hvn={1} fallback={2} sSwing={3} sClamp={4} sFb={5} realIdentity={6}",
+                            ok1, ok2, ok3, ok4, ok5, ok6, ok7))
+    End Sub
+
+    ' -- A42b: pivot enters the ladder FIRST + NEAREST distance pick + short mirror --
+    ' Ladder mode: even a swing CLOSER to entry than the pivot loses — the pivot is
+    ' the FIRST tier above swing (D2, P1 verbatim). NEAREST mode: pivot competes on
+    ' distance like any candidate; a closer swing still wins.
+    Private Sub A42b_BestPivotEntersLadderFirstAndNearestDistancePick()
+        Dim cfg = A42Cfg()
+        cfg.Scoring.StructuralLevels.UseBestPivotCandidate = True
+
+        ' (a) LADDER mode, pivot 62100 (dist 100) beats a CLOSER qualifying swing at
+        ' 62050 (dist 50) — the priority rule is candidate-set order, not distance.
+        Dim rLad = A42Indicators()
+        rLad.SwingTargetLong = 62050.0
+        rLad.BestPivotByVolume5m = 62100.0
+        Dim lvLad = SignalEmitter.ComputeSideLevels(New VerdictResult(), rLad, cfg, isLong:=True)
+        Dim okLadder As Boolean = lvLad.Target = 62100.0 AndAlso lvLad.Capped AndAlso
+                                  lvLad.TargetReason = "BEST_PIVOT_5M" AndAlso
+                                  lvLad.Reason = "PLACED @ 62100.0 (BEST_PIVOT_5M)"
+
+        ' (b) LADDER short mirror: pivot BELOW entry ⇒ short-target candidate. Pivot
+        ' 61900 (dist 100) beats a closer swing at 61950 (dist 50).
+        Dim rLadS = A42Indicators()
+        rLadS.SwingTargetShort = 61950.0
+        rLadS.BestPivotByVolume5m = 61900.0
+        Dim lvLadS = SignalEmitter.ComputeSideLevels(New VerdictResult(), rLadS, cfg, isLong:=False)
+        Dim okLadderShort As Boolean = lvLadS.Target = 61900.0 AndAlso lvLadS.Capped AndAlso
+                                       lvLadS.TargetReason = "BEST_PIVOT_5M" AndAlso
+                                       lvLadS.Reason = "PLACED @ 61900.0 (BEST_PIVOT_5M)"
+
+        ' (c) NEAREST mode: pivot competes on distance. A CLOSER swing (dist 40)
+        ' wins over a FARTHER pivot (dist 100).
+        Dim cfgN = A42Cfg()
+        cfgN.Scoring.StructuralLevels.UseBestPivotCandidate = True
+        cfgN.Scoring.StructuralLevels.TargetArbitrationMode = 1
+        Dim rN = A42Indicators()
+        rN.SwingTargetLong = 62040.0
+        rN.BestPivotByVolume5m = 62100.0
+        Dim lvN = SignalEmitter.ComputeSideLevels(New VerdictResult(), rN, cfgN, isLong:=True)
+        Dim okNearestSwing As Boolean = lvN.Target = 62040.0 AndAlso lvN.TargetReason = "SWING_HIGH_5M"
+
+        ' (d) NEAREST mode: pivot CLOSER than every other candidate wins.
+        Dim rN2 = A42Indicators()
+        rN2.SwingTargetLong = 62100.0                   ' dist 100
+        rN2.VPFRNearestHvnAbove = 62060.0               ' dist 60
+        rN2.BestPivotByVolume5m = 62030.0               ' dist 30 (closest)
+        Dim lvN2 = SignalEmitter.ComputeSideLevels(New VerdictResult(), rN2, cfgN, isLong:=True)
+        Dim okNearestPivot As Boolean = lvN2.Target = 62030.0 AndAlso
+                                        lvN2.TargetReason = "BEST_PIVOT_5M"
+
+        ' (e) LADDER STOP untouched: a pivot that would qualify as a stop-relevant
+        ' level must NOT alter the stop arbitration (which reads Swing*Stop only).
+        Dim rStop = A42Indicators()
+        rStop.SwingStopLong = 61950.0
+        rStop.BestPivotByVolume5m = 62100.0
+        Dim lvStop = SignalEmitter.ComputeSideLevels(New VerdictResult(), rStop, cfg, isLong:=True)
+        Dim okStop As Boolean = lvStop.StopPx = 61950.0 AndAlso lvStop.StopReason = "SWING_STOP"
+
+        Check("A42b pivot enters ladder FIRST (beats closer swing) + NEAREST picks min-distance + short mirror + STOP untouched",
+              okLadder AndAlso okLadderShort AndAlso okNearestSwing AndAlso okNearestPivot AndAlso okStop,
+              String.Format("ladder={0} ladShort={1} nearSwing={2} nearPivot={3} stop={4}",
+                            okLadder, okLadderShort, okNearestSwing, okNearestPivot, okStop))
+    End Sub
+
+    ' -- A42c: looseness bound rejects a too-far pivot + absent/zero pivot ≡ default --
+    ' Same looseness bound (target_max_atr_mult × ATR = 3.5 × 40 = 140) as every tier.
+    ' A pivot beyond the bound is rejected; the ladder walks on to swing.
+    Private Sub A42c_LoosenessBoundAndAbsentPivotEquivalence()
+        Dim cfg = A42Cfg()
+        cfg.Scoring.StructuralLevels.UseBestPivotCandidate = True
+
+        ' (a) LADDER: pivot at dist 150 > bound 140 ⇒ rejected; swing (dist 50) places.
+        Dim rTooFar = A42Indicators()
+        rTooFar.SwingTargetLong = 62050.0
+        rTooFar.BestPivotByVolume5m = 62150.0
+        Dim lvTooFar = SignalEmitter.ComputeSideLevels(New VerdictResult(), rTooFar, cfg, isLong:=True)
+        Dim okTooFar As Boolean = lvTooFar.Target = 62050.0 AndAlso
+                                  lvTooFar.TargetReason = "SWING_HIGH_5M"
+
+        ' (b) LADDER: pivot on the WRONG side of entry (below entry for long) ⇒
+        ' rejected (side is price-vs-entry, D3); swing places.
+        Dim rWrong = A42Indicators()
+        rWrong.SwingTargetLong = 62050.0
+        rWrong.BestPivotByVolume5m = 61950.0
+        Dim lvWrong = SignalEmitter.ComputeSideLevels(New VerdictResult(), rWrong, cfg, isLong:=True)
+        Dim okWrongSide As Boolean = lvWrong.Target = 62050.0 AndAlso
+                                     lvWrong.TargetReason = "SWING_HIGH_5M"
+
+        ' (c) Absent/zero pivot ⇒ candidate absent, output ≡ default (flag off).
+        Dim rAbs = A42Indicators()
+        rAbs.SwingTargetLong = 62100.0
+        rAbs.BestPivotByVolume5m = 0.0
+        Dim lvOn = SignalEmitter.ComputeSideLevels(New VerdictResult(), rAbs, cfg, isLong:=True)
+        Dim cfgOff = A42Cfg()
+        Dim rAbsOff = A42Indicators()
+        rAbsOff.SwingTargetLong = 62100.0
+        Dim lvOff = SignalEmitter.ComputeSideLevels(New VerdictResult(), rAbsOff, cfgOff, isLong:=True)
+        Dim okAbs As Boolean = lvOn.Target = lvOff.Target AndAlso
+                               lvOn.TargetReason = lvOff.TargetReason AndAlso
+                               lvOn.Reason = lvOff.Reason AndAlso
+                               lvOn.Capped = lvOff.Capped
+
+        Check("A42c looseness bound rejects too-far pivot (falls through to swing) + wrong-side rejected + absent/zero pivot ≡ default",
+              okTooFar AndAlso okWrongSide AndAlso okAbs,
+              String.Format("tooFar={0} wrongSide={1} absentEqDefault={2}", okTooFar, okWrongSide, okAbs))
+    End Sub
+
+    ' -- A42d: HC24 tweaker fence + what-if whitelist + {0,1} sweep round-trip -----
+    ' HC24 exact-match rejects the new key; the flat sibling target_max_atr_mult
+    ' (HC21) still passes. WhatIfOverlay whitelists the key + parses a {0,1} sweep
+    ' (v56 int-mode precedent) into two cells. WhatIfSettings.BuildCellSettings
+    ' applies the overlay onto a cloned cfg, and the WhatIfReplay adapter fed
+    ' through the shipped ComputeSideLevels reproduces the direct-call SideLevels.
+    Private Sub A42d_Hc24FenceAndWhatIfWhitelistAndRoundTrip()
+        ' Whitelist accepts the new key; a scalar 1 and a {0,1} sweep both parse.
+        Dim okFlag = WhatIfOverlay.Parse("{""scoring"":{""structural_levels"":{""use_best_pivot_candidate"":1}}}")
+        Dim okSweep = WhatIfOverlay.Parse("{""scoring"":{""structural_levels"":{""use_best_pivot_candidate"":{""sweep"":{""from"":0,""to"":1,""step"":1}}}}}")
+        Dim okWl As Boolean = okFlag.Knobs.Count = 1 AndAlso
+                              okFlag.Knobs(0).Path = "scoring.structural_levels.use_best_pivot_candidate" AndAlso
+                              okSweep.Knobs.Count = 1 AndAlso okSweep.Knobs(0).IsSweep AndAlso
+                              okSweep.Knobs(0).Values.Count = 2
+
+        ' HC24 fence: SettingsDiffApplier exact-match rejects the key; sibling flat
+        ' numeric (target_max_atr_mult, HC21 surface) still passes.
+        Dim s As String = "{""version"":63,""scoring"":{""atr_target_multiplier"":1.75," &
+                          """structural_levels"":{""enabled"":true,""target_max_atr_mult"":3.5," &
+                          """stop_max_atr_mult"":1.6,""stop_min_floor_ticks"":4," &
+                          """stop_too_loose_mode"":""clamp""," &
+                          """target_arbitration_mode"":0,""stop_arbitration_mode"":0," &
+                          """target_buffer_pct"":0.0,""stop_buffer_pct"":0.0," &
+                          """use_best_pivot_candidate"":false}}}"
+        Dim rFlag = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.use_best_pivot_candidate", "false", "true"), s, 3)
+        Dim rBound = SettingsDiffApplier.Validate(OneDiff("scoring.structural_levels.target_max_atr_mult", "3.5", "3.0"), s, 3)
+        Dim okFence As Boolean = Not rFlag.IsValid AndAlso
+                                 rFlag.ErrorReason.Contains("HARD CONSTRAINT 24") AndAlso
+                                 rBound.IsValid
+
+        ' Round-trip: an overlay {flag=1} through WhatIfSettings.BuildCellSettings
+        ' must reach the POCO field, and the WhatIfReplay adapter must reproduce a
+        ' direct SignalEmitter.ComputeSideLevels call under the same cfg (A36f pattern).
+        Dim overlay As New Dictionary(Of String, Double) From {
+            {"scoring.structural_levels.use_best_pivot_candidate", 1.0}
+        }
+
+        Dim tmp As String = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                                    "wifsettings-a42d-" & Guid.NewGuid().ToString("N") & ".json")
+        Dim okApply As Boolean = False
+        Dim okAdapter As Boolean = False
+        Try
+            System.IO.File.WriteAllText(tmp,
+                "{""version"":63," &
+                """scoring"":{""atr_target_multiplier"":1.75,""atr_stop_multiplier"":1.6," &
+                """structural_levels"":{""enabled"":true,""target_max_atr_mult"":3.5," &
+                """stop_max_atr_mult"":1.6,""stop_min_floor_ticks"":4," &
+                """stop_too_loose_mode"":""clamp""," &
+                """target_arbitration_mode"":0,""stop_arbitration_mode"":0," &
+                """target_buffer_pct"":0.0,""stop_buffer_pct"":0.0," &
+                """use_best_pivot_candidate"":false}}}")
+
+            Dim wis As New WhatIfSettings(tmp)
+            Dim cellCfg = wis.BuildCellSettings(overlay)
+            okApply = cellCfg.Scoring.StructuralLevels.UseBestPivotCandidate = True
+
+            ' Row: swing at 62070 (dist 70 — the fallback distance, in-bound) and a
+            ' pivot at 62100 (dist 100 — also in-bound). Under the flag, ladder mode
+            ' places the pivot FIRST — a distinct outcome from the flag-off path
+            ' (which would place the swing).
+            Dim row = BuildWhatIfRow()   ' SwingTargetLong = 62070
+            row.BestPivotByVolume5m = 62100.0
+
+            Dim r = WhatIfReplay.BuildIndicator(row)
+            Dim direct = SignalEmitter.ComputeSideLevels(New VerdictResult(), r, cellCfg, isLong:=True)
+            Dim run = WhatIfReplay.RunCell(New List(Of CsvRow) From {row}, cellCfg, 15, keepRows:=True)
+            Dim rep = run.ReplayedRows(0)
+            okAdapter = Math.Abs(rep.PlacedTargetLong - direct.Target) < 0.001 AndAlso
+                        Math.Abs(rep.PlacedStopLong - direct.StopPx) < 0.001 AndAlso
+                        direct.TargetReason = "BEST_PIVOT_5M" AndAlso
+                        Math.Abs(direct.Target - 62100.0) < 0.001
+        Finally
+            Try : System.IO.File.Delete(tmp) : Catch : End Try
+        End Try
+
+        Check("A42d HC24 fence rejects the key + whitelist accepts it + {0,1} sweep + BuildCellSettings round-trip reproduces ComputeSideLevels",
+              okWl AndAlso okFence AndAlso okApply AndAlso okAdapter,
+              String.Format("wl={0} fence(flag={1}, bound={2}) apply={3} adapter={4}",
+                            okWl, rFlag.IsValid, rBound.IsValid, okApply, okAdapter))
     End Sub
 
 End Module

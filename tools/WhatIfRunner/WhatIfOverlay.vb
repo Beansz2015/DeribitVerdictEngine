@@ -86,6 +86,7 @@ Public Class WhatIfOverlay
         "scoring.structural_levels.stop_arbitration_mode",
         "scoring.structural_levels.target_buffer_pct",
         "scoring.structural_levels.stop_buffer_pct",
+        "scoring.structural_levels.use_best_pivot_candidate",
         "eval_window"
     }
 

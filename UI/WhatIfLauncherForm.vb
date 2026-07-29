@@ -44,6 +44,7 @@ Public Class WhatIfLauncherForm
         ("NY fallback ×ATR", "scoring.structural_levels.sessions.NY.fallback_target_atr_mult", "1.75  or  1.5:2.25:0.25", "1.5:2.25:0.25"),
         ("LONDON fallback ×ATR", "scoring.structural_levels.sessions.LONDON.fallback_target_atr_mult", "2.0  or  1.75:2.5:0.25", "1.75:2.5:0.25"),
         ("ASIA fallback ×ATR", "scoring.structural_levels.sessions.ASIA.fallback_target_atr_mult", "1.25  or  1.0:1.5:0.25", "1.0:1.5:0.25"),
+        ("Use best-pivot candidate", "scoring.structural_levels.use_best_pivot_candidate", "0  or  0:1:1", "0:1:1"),
         ("Eval window (bars 5/10/15)", "eval_window", "15  or  5:15:5", "5:15:5")
     }
 

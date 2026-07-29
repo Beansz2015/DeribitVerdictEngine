@@ -84,6 +84,12 @@ Public Class CsvRow
     Public Property VpfrNearestHvnAbove As Double    ' 0 = none
     Public Property VpfrNearestHvnBelow As Double    ' 0 = none
     Public Property TargetCapReason     As String    ' bucket: swing/hvn/poc/none (poc → replay-excluded)
+    ' [D2-v2 v63] Volume-weighted best pivot (5m), fed into ComputeSideLevels by the What-If
+    ' adapter when scoring.structural_levels.use_best_pivot_candidate is true. Header-name parsed
+    ' (v0.4 CSV col 85 BestPivotByVolume5m); absent column ⇒ 0 ⇒ candidate absent (counted, not
+    ' guessed — POC precedent). Side determined by PRICE-vs-entry inside the seam (D3, IsHigh
+    ' unlogged).
+    Public Property BestPivotByVolume5m As Double    ' 0 = none
 
     ' v2: per-window OHLC bar list populated by PopulateForwardBars after OHLC fetch.
     ' Key = window minutes (5, 10, 15). Empty list → row excluded from that window.
@@ -155,6 +161,8 @@ Public Class ForwardWindowJoiner
             TryParseD(parts, colIdx, "VPFRNearestHvnAbove", row.VpfrNearestHvnAbove)
             TryParseD(parts, colIdx, "VPFRNearestHvnBelow", row.VpfrNearestHvnBelow)
             row.TargetCapReason     = GetStr(parts, colIdx, "TargetCapReason")
+            ' [D2-v2 v63] Best-pivot column parsed if the header carries it (all v0.4+ CSVs do).
+            TryParseD(parts, colIdx, "BestPivotByVolume5m",   row.BestPivotByVolume5m)
             ' [D6] v0.8 placed levels — parsed only when the schema carries them.
             row.HasPlaced = hasPlacedSchema
             If hasPlacedSchema Then
