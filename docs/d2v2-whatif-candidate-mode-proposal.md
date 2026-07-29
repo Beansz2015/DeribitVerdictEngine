@@ -1,6 +1,6 @@
 # D2-v2 What-If Candidate Mode — Proposal (BestPivot as a testable target candidate)
 
-**Date:** 2026-07-29 (Fable coordinator). **Status:** PROPOSED — D1–D6 await trader tick; small build (Opus, medium), queued behind the net-EV rider (landed `99cc0dc`).
+**Date:** 2026-07-29 (Fable coordinator). **Status:** **APPROVED 2026-07-29 — D1–D6 ticked all-as-recommended (trader). BUILD-AUTHORIZED** (Opus, medium; net-EV rider landed `99cc0dc`, lane clear).
 **Class:** v56-pattern seam extension — **one new settings key, default `false`, byte-identical at default ⇒ NOT a dataset boundary at ship.** What-if-testable immediately; **live-enable is a LATER separate ⚠** (the P1 promotion), evidence-gated on the what-if study + the P1 conditions.
 **Trigger:** the [map](backlog-dependency-map.md) D2-v2 row — BestPivot promotion is "NOT what-if-testable today (`ComputeSideLevels` never reads `BestPivot*`)" — and the Aug-1 geometry session, which wants to test it against the 2,151 post-07-08 directional rows carrying a non-empty `BestPivotByVolume5m`. Context: D2 volume-weighted pivots shipped display-only at v24; P1 (§16.6) parks promotion behind evidence this extension exists to produce.
 
