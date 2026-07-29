@@ -64,11 +64,30 @@ Public Class WhatIfLauncherForm
 
     Public Sub New()
         _repoRoot = Path.GetFullPath(Path.Combine(Application.StartupPath, "..", "..", ".."))
-        _runnerExe = Path.Combine(_repoRoot, "tools", "WhatIfRunner", "bin", "Debug", "net8.0", "WhatIfRunner.exe")
+        _runnerExe = ResolveRunnerExe(_repoRoot)
         _csvPath = Path.Combine(Application.StartupPath, "analysis_log.csv")
         _settingsPath = Path.Combine(_repoRoot, "settings.json")
         InitializeComponent()
     End Sub
+
+    ' [2026-07-29] Prefer the NEWEST built runner across Release/Debug. The launcher
+    ' originally hardcoded bin\Debug, but implementation lanes build Release-only while
+    ' the Debug collector runs (the 07-17 stomp rule), so the Debug exe goes stale and
+    ' rejects newly-whitelisted knobs (first hit: use_best_pivot_candidate, v63).
+    ' Neither exists ⇒ return the Debug path so the existing "not built" message fires.
+    Private Shared Function ResolveRunnerExe(repoRoot As String) As String
+        Dim releaseExe As String = Path.Combine(repoRoot, "tools", "WhatIfRunner", "bin", "Release", "net8.0", "WhatIfRunner.exe")
+        Dim debugExe As String = Path.Combine(repoRoot, "tools", "WhatIfRunner", "bin", "Debug", "net8.0", "WhatIfRunner.exe")
+        Dim best As String = debugExe
+        Dim bestTime As Date = Date.MinValue
+        For Each c As String In {releaseExe, debugExe}
+            If File.Exists(c) AndAlso File.GetLastWriteTimeUtc(c) > bestTime Then
+                bestTime = File.GetLastWriteTimeUtc(c)
+                best = c
+            End If
+        Next
+        Return best
+    End Function
 
     ' -- Run ------------------------------------------------------------------------------
     Private Sub btnRun_Click(sender As Object, e As EventArgs) Handles btnRun.Click
