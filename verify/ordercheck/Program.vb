@@ -351,6 +351,14 @@ Module Program
         A43d_MutedVoteInertness()
         A43e_HeaderParityAndProvenance()
 
+        ' [Backtest §7.1 forming-bar stub — A43f, post-validation amendment 2026-07-30]
+        ' Mirror live's forming-bar convention: every candle series's last bar in the
+        ' assembled slice is a stub built from real trades in [closeMs, closeMs + 2s]
+        ' (zero-trade fallback = prev close + 0 volume). Pins the three moving parts:
+        ' trades-in-window OHLCV compaction · zero-trade fallback shape · stub is the
+        ' LAST bar of the slice (Timestamp advanced past the last real bar).
+        A43f_FormingStubConstruction()
+
         ' [Backtest overlap validation — A44, docs/backtest-synthesizer-proposal.md §4]
         ' The validate CLI verb joins synthetic ⇔ live rows by execution-resolution bar.
         ' A44 pins the OverlapValidator.FloorToBucket contract: floor(ts, execRes-min grid)
@@ -6474,6 +6482,82 @@ Module Program
         Check("A44a FloorToBucket collapses same-bar timestamps + advances one bucket at the boundary + execRes<=0 guard",
               ok3 AndAlso ok1 AndAlso okZero,
               String.Format("ok3={0} ok1={1} okZero={2}", ok3, ok1, okZero))
+    End Sub
+
+    ' A43f: §7.1 forming-bar stub construction — the trader's post-validation amendment.
+    ' Three sub-checks pinned in a single fixture:
+    '   (i)   trades-in-window OHLCV compaction — 4 real trades in [closeMs, closeMs+2s]
+    '         yield Open=first, Close=last, High=max, Low=min, Volume=Σ amount,
+    '         VolumeUSD=Σ (amount × price); Timestamp = closeMs.
+    '   (ii)  zero-trade fallback — no trades in the window ⇒ {O=H=L=C = prevClose, V=0}.
+    '   (iii) stub-is-last-bar in the sliced series — after AppendFormingStub the slice's
+    '         last element IS the stub (identity check by Timestamp = closeMs advancing
+    '         past the last real bar), and total count = 1-less-slice + 1 = live-count.
+    Private Sub A43f_FormingStubConstruction()
+        Const closeMs As Long = 1785321600000L   ' 2026-07-29 18:00:00 UTC — a valid 1m/3m boundary
+        Dim endMs As Long = closeMs + ReplayLoop.FormingStubDeltaMs
+        Const prevClose As Double = 64000.0
+
+        ' -- (i) trades-in-window OHLCV --
+        Dim inWindow As New List(Of TradeRecord) From {
+            New TradeRecord With {.Price = 64010, .Amount = 0.5, .Direction = "buy",  .Liquidation = "none", .Timestamp = closeMs + 100L},
+            New TradeRecord With {.Price = 64050, .Amount = 1.0, .Direction = "buy",  .Liquidation = "none", .Timestamp = closeMs + 800L},
+            New TradeRecord With {.Price = 63990, .Amount = 0.25,.Direction = "sell", .Liquidation = "none", .Timestamp = closeMs + 1400L},
+            New TradeRecord With {.Price = 64025, .Amount = 0.75,.Direction = "buy",  .Liquidation = "none", .Timestamp = closeMs + 1900L}}
+        Dim stub = ReplayLoop.BuildFormingStub(prevClose, inWindow, closeMs)
+        Dim expVol As Double = 0.5 + 1.0 + 0.25 + 0.75
+        Dim expVolUsd As Double = 64010 * 0.5 + 64050 * 1.0 + 63990 * 0.25 + 64025 * 0.75
+        Dim okTrades = (stub.Timestamp = closeMs) AndAlso
+                       (Math.Abs(stub.Open  - 64010.0) < 1e-9) AndAlso
+                       (Math.Abs(stub.Close - 64025.0) < 1e-9) AndAlso
+                       (Math.Abs(stub.High  - 64050.0) < 1e-9) AndAlso
+                       (Math.Abs(stub.Low   - 63990.0) < 1e-9) AndAlso
+                       (Math.Abs(stub.Volume - expVol) < 1e-9) AndAlso
+                       (Math.Abs(stub.VolumeUSD - expVolUsd) < 1e-6)
+
+        ' -- (ii) zero-trade fallback --
+        Dim stubEmpty = ReplayLoop.BuildFormingStub(prevClose, New List(Of TradeRecord)(), closeMs)
+        Dim okEmpty = (stubEmpty.Timestamp = closeMs) AndAlso
+                      (stubEmpty.Open = prevClose) AndAlso (stubEmpty.High = prevClose) AndAlso
+                      (stubEmpty.Low = prevClose) AndAlso (stubEmpty.Close = prevClose) AndAlso
+                      (stubEmpty.Volume = 0) AndAlso (stubEmpty.VolumeUSD = 0)
+
+        ' -- (iii) stub is the last bar of the slice; TradesInStubWindow selects only
+        '         the [closeMs, closeMs+2s] set — trades outside are excluded.
+        Dim allTrades As New List(Of TradeRecord) From {
+            New TradeRecord With {.Price = 63000, .Amount = 1.0, .Direction = "buy",  .Liquidation = "none", .Timestamp = closeMs - 5000L},
+            New TradeRecord With {.Price = 63500, .Amount = 1.0, .Direction = "sell", .Liquidation = "none", .Timestamp = closeMs - 1L}}
+        allTrades.AddRange(inWindow)
+        allTrades.Add(New TradeRecord With {.Price = 65000, .Amount = 1.0, .Direction = "buy",  .Liquidation = "none", .Timestamp = endMs + 1L})
+
+        Dim windowTrades = ReplayLoop.TradesInStubWindow(allTrades, closeMs)
+        Dim okWindow = (windowTrades.Count = 4)   ' the 4 inWindow trades, not the 2 pre or 1 post
+
+        Dim slice As New List(Of Candle) From {
+            New Candle With {.Timestamp = closeMs - 3L * 60L * 1000L, .Open = 63700, .High = 63750, .Low = 63650, .Close = 63700, .Volume = 5},
+            New Candle With {.Timestamp = closeMs - 2L * 60L * 1000L, .Open = 63700, .High = 63780, .Low = 63690, .Close = 63750, .Volume = 6},
+            New Candle With {.Timestamp = closeMs - 1L * 60L * 1000L, .Open = 63750, .High = 64000, .Low = 63700, .Close = prevClose, .Volume = 8}}
+        Dim originalCount As Integer = slice.Count
+
+        ReplayLoop.AppendFormingStub(slice, windowTrades, closeMs)
+        Dim okAppendCount = (slice.Count = originalCount + 1)
+        Dim last = slice(slice.Count - 1)
+        Dim okAppendLast  = (last.Timestamp = closeMs) AndAlso
+                            (last.Timestamp > slice(slice.Count - 2).Timestamp) AndAlso
+                            (Math.Abs(last.Close - 64025.0) < 1e-9) AndAlso
+                            (Math.Abs(last.Volume - expVol) < 1e-9)
+
+        ' Empty-slice no-op guard: appending to an empty slice must not throw and must
+        ' leave the slice empty (there is no prevClose to fall back to).
+        Dim emptySlice As New List(Of Candle)()
+        ReplayLoop.AppendFormingStub(emptySlice, windowTrades, closeMs)
+        Dim okEmptyNoop = (emptySlice.Count = 0)
+
+        Check("A43f forming-bar stub (§7.1) — OHLCV compaction · zero-trade fallback · stub-is-last-bar",
+              okTrades AndAlso okEmpty AndAlso okWindow AndAlso okAppendCount AndAlso okAppendLast AndAlso okEmptyNoop,
+              String.Format("trades={0} empty={1} window={2}(cnt={3}) appCount={4} appLast={5} emptyNoop={6}",
+                            okTrades, okEmpty, okWindow, windowTrades.Count,
+                            okAppendCount, okAppendLast, okEmptyNoop))
     End Sub
 
 End Module
