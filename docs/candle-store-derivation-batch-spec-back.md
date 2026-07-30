@@ -5,6 +5,36 @@
 
 ---
 
+## 0. Update before delivery — the store was damaged and repaired after these numbers were produced
+
+**Nothing below is retracted. Every figure was independently re-derived on the repaired store and reproduces.** This section exists because a reviewer who re-runs anything is running it against a *different* store than the one I derived on, and should know why the numbers still match.
+
+**Sequence.** After this packet was written, two store-integrity defects surfaced and were fixed — full history in [`store-integrity-check-2026-07-31-post-fix.md`](store-integrity-check-2026-07-31-post-fix.md):
+
+1. A **28.2-day funding hole** (2026-06-30 → 2026-07-29), which had gone unnoticed since it formed. Fixed in `aaee7c6` — funding is now 4,336 / 4,336.
+2. The run that fixed it **destroyed June 2026 in the 3m/5m/15m candle files**, leaving each with only the last ~20 h of the month. Fixed in `cb1ffb9` (overwrite → merge).
+
+**Neither touched these results.** The funding hole never could: no derivation here consumed funding. The candle wipe happened *after* the derivations ran, against a store I had already verified at 0 missing bars.
+
+**Re-confirmation on the repaired store** — same harness, same pins, store now 0 missing at all four candle resolutions plus funding:
+
+| | published | re-run on repaired store |
+|---|---:|---:|
+| TTM 1m \|delta\| p50 | 52.58 | **52.50** |
+| TTM AWARD% @0.5 (1m / 3m) | 64.84 / 64.40 | **64.84 / 64.40** |
+| TTM 3m pooled p50 | 76.48 | **76.48** |
+| OBV p50 NY / ASIA / LONDON | 24.23 / 22.24 / 23.95 | **24.21 / 22.24 / 23.95** |
+| Volume full-fire NY / ASIA / LONDON | 2.16 / 3.17 / 3.27 % | **identical** |
+| Swing w3/lb30 placeable | 45.5 % | **45.5 %** |
+| Transcription pins | 0 mismatches | **0 mismatches** |
+| Matched replay row-agreement | 98.35 / 99.22 % | **98.59 / 99.22 %** |
+
+The store is now ~2.7 h longer than the one I used (1m 259,974 → 260,137), which is why the 1m figures move in the third significant figure and the 3m/5m arms — whose session hours the extra bars do not touch — are identical. **The matched replay improved**, which is the expected direction for a more complete store.
+
+**This makes the packet stronger, not weaker:** every conclusion has now been reproduced twice, on two different snapshots of the store, with the pins re-passing both times.
+
+---
+
 ## 1. Ranked verification handles
 
 Ordered by how much of the batch each covers. All are one command or one grep against files that exist now.
@@ -22,7 +52,8 @@ Ordered by how much of the batch each covers. All are one command or one grep ag
 | 7 | Swing widening is a bad trade | Derivations §4 table | The **pair**, not either column: 3→5 buys 7.5pp of durability and costs **14.3pp** of placeability |
 | 8 | Lookback is not binding | Same table | **Median pivot age 8 bars** against a lookback of 30 — and lb45 moves placeability +0.1pp. The age is the reason; the +0.1pp is the confirmation |
 | 9 | The ×2.1 proxy over-scales TTM | Derivations §1.4 | **76.48 / 52.58 = 1.45**, and it is stable across anchors (p25 1.50, p75 1.37) — a single-percentile coincidence would not be |
-| 10 | Nothing was consumed or changed | `git status -sb`; `sed -n 2p settings.json` | Settings **v64** (the trade-store build's, not mine); **A49** and **HC28** still free; my only writes are four `docs/*.md` |
+| 10 | Nothing was consumed or changed **by this batch** | `sed -n 2p settings.json`; `grep -oE "Fixture family \*\*A[0-9]+\*\*" docs/*.md` | Settings **v64** (the trade-store build's, not mine). **Fixture families moved after this packet was written and the earlier wording is now stale:** A48 consumed by the v64 build, **A49 reserved** by `trade-store-coverage-report-proposal.md`, **A50 reserved** by `settings-local-overlay-proposal.md` — both unbuilt — so **next free is A51**. **HC28 still free.** This batch consumed none of them; it writes only `docs/*.md` |
+| 11 | The store damage did not contaminate these numbers | §0 above, the re-run table | Not the match-rate — the **pins**: 0 transcription mismatches on *both* store snapshots. A store defect large enough to move a distribution would not leave the shipped-function pins clean twice |
 
 **Arithmetic identity worth spot-checking:** in derivations §1.3, `AWARD% + FADING% + FLAT% = 100` on every row of both ladders. A transcription error in `TtmDelta` would almost certainly break that closure at some threshold.
 
@@ -62,6 +93,20 @@ Both knobs are fine and the evidence is unusually clean (lookback is provably no
 
 `DeribitIndicatorProject.md` §12 line 330 still lists the 3-min weekday-ASIA `session_volume` re-verify as an open **Medium** row. `roadmap.md` (2026-07-22), `settings.json` v58 and `backlog-dependency-map.md` line 10 all record it **CLOSED**. Doc-only; no ruling needed, but someone should own it. **I did not edit §12** — the brief scoped me to derivations, and silently editing the backlog of a doc I was told to read seemed like the wrong call. Say the word and it's a one-line fix.
 
+### D-F · Should a derivation brief mandate a store-completeness pre-flight? — **my read: yes, and it is nearly free**
+
+**New since this packet was written, and the evidence is unusually direct.** In roughly 24 hours this store produced **three** integrity events: a 28-day funding hole that had gone unnoticed since it formed, a one-month three-resolution candle wipe created by the fix for the first, and — earlier — the ~64,000× synthesizer unit bug. Every one was found only by **counting rows against a deterministic expectation**. None had a symptom.
+
+This batch got lucky in a specific, non-repeatable way: I ran the completeness check because the brief's (incorrect) zero-close warning made me look at data quality at all, and I happened to run *before* the damage. A derivation that had run six hours later would have silently fitted TTM's 3m threshold on a June-less sample and reported it with the same confidence.
+
+**Options:** (a) every candle/volume-derived derivation opens with a completeness count against the deterministic expectation, recorded in the output doc; (b) rely on the `coverage` verb once built; (c) leave it to the analyst.
+
+**My read: (a) now, (b) as the automated successor.** It is four lines of arithmetic — bars present vs `(last − first) / resolution + 1` — it caught two real defects here, and it is the only check that distinguishes "quiet market" from "missing data" at the input stage rather than after a threshold has been recommended. (b) is strictly better once it exists but is unbuilt and its own spec is still awaiting the trader.
+
+**Scoping, without recommending it:** as a brief convention this costs one sentence in the next derivation brief and one table in each output doc. As enforcement it is the coverage verb's `--strict`, which is that spec's D6.
+
+**This decision is not mine and not the implementer's** — it is a convention for how derivation work is commissioned, which sits with the reviewing seat.
+
 ---
 
 ## 3. Spec-back proper — feedback on the brief
@@ -78,7 +123,9 @@ Both knobs are fine and the evidence is unusually clean (lookback is provably no
 
 **1. Item 4 was specified as a derivation; it is a blocked dependency.** The brief lists *"§12 session volume multipliers — the per-session volume distribution is candle-derived. Unblocked."* The distribution is candle-derived and I produced it. But the **engine does not consume that distribution** — it compares a partial-bar ratio against a closed-bar threshold, so the lever is inert at 0.69% live fire. **A candle-derived multiplier recommendation would have been a correct number answering the wrong question.** This is the highest-value item in the packet: the brief's own fence (*"do not extend the D3 evidence into a live change"*) turns out to be *upstream* of item 4, not parallel to it.
 
-**2. The data-quality note does not reproduce.** *"At least one candle in the store has a zero close … do not take raw price extrema from the store without filtering."* Across all four resolutions there are **zero** non-positive OHLC bars. What exists is **zero-volume** bars (2.1% of 1m). The substituted guidance: price extrema are safe unfiltered; **volume**-denominated work needs the divisor guard, and both live sites already have it. Cost of the substitution: none — but a future seat acting on the original note would filter the wrong axis.
+**2. The data-quality note does not reproduce — and it pointed at the wrong axis entirely.** *"At least one candle in the store has a zero close … do not take raw price extrema from the store without filtering."* Across all four resolutions there are **zero** non-positive OHLC bars. What exists is **zero-volume** bars (2.1% of 1m). The substituted guidance: price extrema are safe unfiltered; **volume**-denominated work needs the divisor guard, and both live sites already have it.
+
+**Updated after the fact, and this is now the more useful half of the item.** The brief warned about a per-bar *value* defect that does not exist, while the store's actual integrity risk turned out to be **whole-window absence** — a 28-day funding hole present the entire time this batch ran, and a one-month candle wipe hours later. A seat following the brief literally would have filtered zero-closes (finding none), concluded the store was sound, and never counted a row. **The warning was not merely wrong; following it would have produced false confidence.** The generalisable correction: a data-quality note on a *store* should specify a completeness check, not a value filter — which is what D-F proposes making standing.
 
 **3. The TTM row asks for the wrong quantity.** §12 (inherited by the brief) says *"review FLAT vs RISING/FALLING against 1m candle range distribution."* The knob gates the 7-bar drift of `close − SMA20`, not the candle range. Right order of magnitude, wrong quantity — and the difference matters, because the ratio you get from candle range is the ATR-ish ×2.1, while the measured ratio for the actual quantity is **1.45**. Substituting the real quantity is what produced the §12 Phase-2 answer.
 
@@ -102,7 +149,9 @@ Three rules together looked like a deadlock: **(i)** derivations are analysis an
 
 - **Nothing was joined to outcomes.** Every recommendation here is a *distributional* argument — what fires how often. Whether a more selective TTM or a re-anchored OBV **improves accuracy** is unmeasured, and unmeasurable until trades-covered replay exists. Both D-A and D-B are "restore the stated design intent," not "this will make money."
 - **The swing false-positive rate.** Blocked by the brief's own dividing line. "Crossed within 20 bars" is direction-blind and I did not treat it as a substitute.
-- **The WS-vs-REST bar difference.** The matched replay disagrees on 1.65% / 0.78% of rows. I attributed that to the known §12 *WS 3-min closed-bar volume undercount* row but **did not isolate it** — a real check would compare WS-built bars against REST bars directly, which needs a live capture window.
+- **The WS-vs-REST bar difference.** The matched replay disagrees on 1.65% / 0.78% of rows (1.41% / 0.78% on the repaired store). I attributed that to the known §12 *WS 3-min closed-bar volume undercount* row but **did not isolate it** — a real check would compare WS-built bars against REST bars directly, which needs a live capture window.
+- **Why the store's June data was lost, and whether the repaired June is byte-identical to the original.** I verified the repaired store is *complete* (0 missing at all four resolutions) and that every derivation figure reproduces, but I did **not** diff the restored June bars against the pre-damage ones — the originals are gone (`backtest_data/` is gitignored) so no such diff is possible. The reproduction of every figure is the practical evidence that the re-fetch returned the same data; it is not a proof.
+- **Whether the candle-backfill fix is guarded.** It is not, and I checked: `cb1ffb9` rewrote that path (+131/−58) with **zero fixtures**, and there is no `BackfillCandle` coverage anywhere in the harness (families stop at A48h). That is flagged for the implementer, not fixed here — but it means the defect that destroyed a month of data could recur silently with the harness green.
 - **Weekend and holiday behaviour.** Everything is weekday-filtered, matching the §12 rows' framing. Weekend distributions are unexamined.
 - **Whether `resolution_profiles` is the right home for a TTM key.** I confirmed the POCO shape supports it and that v40 set the precedent; I did not check whether the auto-tweaker fence (HC11) covers a new profile key by prefix or would need extending. That belongs to whoever specs D-A.
 - **Any live-app behaviour, for either job.** No app was run. For JOB 1 specifically that means no observed capture, no observed once-on-start repair against a real restart, and nothing checked on AWS — enumerated in [`trade-store-capture-review-2026-07-31.md`](trade-store-capture-review-2026-07-31.md) §5.

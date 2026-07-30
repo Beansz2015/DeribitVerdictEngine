@@ -16,6 +16,8 @@ Item 4's whole lever is **inert on the live engine**. `VolumeRatio`'s numerator 
 
 **And one correction to my own working, placed here because it governs every population number:** I flagged a 15pp store-vs-production gap on 3-min OBV and chased it as a possible production defect. It was **my sampling design**, not production. See §5.
 
+**§0.3 — the store was damaged and repaired after this record was written; every figure below was re-derived and reproduces.** A 28.2-day funding hole (`aaee7c6`) and then a June candle wipe caused by that fix (`cb1ffb9`) were both repaired; the store is now 0 missing at all four candle resolutions plus funding. Neither touched these results — no derivation consumed funding, and the candle wipe post-dated the run. **Nothing here is retracted.** Re-run comparison table and the reasoning: [spec-back §0](candle-store-derivation-batch-spec-back.md); full incident history: [`store-integrity-check-2026-07-31-post-fix.md`](store-integrity-check-2026-07-31-post-fix.md).
+
 ---
 
 ## 1. Item-by-item outcome

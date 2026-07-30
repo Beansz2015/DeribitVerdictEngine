@@ -31,6 +31,8 @@ Swing pivots call `IndicatorEngine.CalcSwingPivots` directly. The volume baselin
 | 5m | 51,995 | same | **0** | 84 (0.16%) | **0** |
 | 15m | 17,332 | same | **0** | 25 (0.14%) | **0** |
 
+> **The table above is the store *as derived on*, and is left as the record.** The store has since been damaged and repaired (a 28.2-day funding hole, then a June candle wipe caused by its fix) and now reads 1m **260,137** / 3m **86,713** / 5m **52,028** / 15m **17,343**, 0 missing everywhere plus funding 4,336 / 4,336 — ~2.7 h longer than what these figures were computed on. **Every derivation below was re-run against the repaired store and reproduces**; comparison table in [spec-back §0](candle-store-derivation-batch-spec-back.md), incident history in [`store-integrity-check-2026-07-31-post-fix.md`](store-integrity-check-2026-07-31-post-fix.md).
+
 **The brief's data-quality note does not reproduce.** It says "at least one candle in the store has a zero close." Scanning **all four resolutions** for a non-positive Open/High/Low/Close returns **zero bars**. What the store does contain is **zero-volume bars** — 2.1% of 1m bars, genuine no-trade minutes, not corruption. They matter only where volume is a divisor, and both such sites are already guarded (`CalcOBV`'s `If meanVol <= 0`, and `VolumeRatio`'s `If sma > 0`). Raw price extrema can be taken from this store without the filter the brief called for; **volume**-denominated work still wants the guard.
 
 ### 0.2 Matched replay — store vs production, like-for-like
