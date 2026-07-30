@@ -176,6 +176,8 @@ Frozen copy of the current live book taken first (freeze rule): `bin/Debug/net8.
 
 **The Friday session interprets. The DIVERGENT / overfit guard-rails printed in each report speak for themselves and are reproduced below.**
 
+> **RULED 2026-07-31 (Fable seat) — how to read these four tables.** The **full-book** tables are **context-only**: every cell flags ⚠ DIVERGENT because the 07-08 regime break dominates the span, consistent with the standing validation-window ruling. **The `--from 2026-07-08` tables are the decision surface.** Their winner is the live baseline (`stop_max_atr_mult=1.6`; `target_arbitration_mode=0, use_best_pivot_candidate=0`) carrying no flags — which means the Friday session should treat **"no separable geometry change yet" as a legitimate and likely outcome, not a failure of the study.**
+
 ### E.1 W6-1 LONDON stop grid — `stop_max_atr_mult` 1.6:2.2:0.2
 
 **Full book** (8,340 eligible rows, 2026-07-03 15:57 → 07-30 09:51 UTC) — `…/scratchpad/laneE/w61_full/whatif_report_20260730_144148.md`

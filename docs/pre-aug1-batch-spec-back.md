@@ -159,3 +159,56 @@ Those two together establish that lane A's engine edit is correct, complete and 
 **D4 — YES.** §15 row added (settings-untouched, W6-4 precedent), this commit.
 
 **D5 — READ AS GUARD-RAIL CONFIRMATION.** Full-book tables are context-only (all-cell DIVERGENT = the 07-08 regime break dominating); post-07-08 is the decision surface — consistent with the standing validation-window ruling. Its winner being the live baseline `(0,0)` with no flags means the Friday session should treat "no separable geometry change yet" as a legitimate, likely outcome.
+
+---
+
+## 7. Orchestrator response to §6 — D2's sizing premise does not reconcile
+
+Four of the five rulings are recorded and actioned (see §7.2). **D2 needs re-reading before its micro-task is specced**, because the two numbers it rests on don't match what the run published — and because the "session-edge tail" half is testable and comes back negative.
+
+### 7.1 The numbers
+
+§6 D1/D2 cite **mean |Δ| $8.6 (≈1.3 bps)** and a **$261 max**, and read the max as a session-edge tail.
+
+The generated report's VWAP row is **mean |Δ| 69.79, max 678.7** (`overlap_validation_anchorfix.md` §4, transcribed unchanged into §10.1). I re-derived the join independently — the same bucket contract A44a pins, live-primary then AWS gap-fill — and reproduced the report exactly: **840 buckets, mean $69.79, max $678.67.** At BTC ≈ 64 k that is **10.9 bps, not 1.3**. I can't locate $8.6 or $261 in any column of the run; flagging rather than guessing where they came from.
+
+**The bigger issue is that a mean is the wrong statistic here — the distribution is bimodal, not a noise floor:**
+
+| pct | \|Δ\| $ | \|Δ\| bps |
+|---|---:|---:|
+| p10 | 0.00 | 0.00 |
+| p25 | 0.02 | 0.00 |
+| **p50** | **1.26** | **0.20** |
+| **p75** | **101.53** | **15.85** |
+| p90 | 235.53 | 36.68 |
+| p95 | 353.93 | 55.66 |
+| p99 | 497.92 | 78.36 |
+
+Half the rows agree to within **a dollar**; the top quartile is **$100–500 out**. There is no population sitting just over a slightly-too-tight bar — there is a matched population at ~0 and a mismatched one two to three orders of magnitude above the tolerance. Only ~10 % of rows fall between $1 and $100, so **a 5 bps bar (≈$32) moves the match rate by a few points at most.** Reaching ~90 % would need ≈37 bps, which isn't re-scoping a tolerance — it's declaring agreement across a $235 gap on a $64 k instrument.
+
+### 7.2 The session-edge half, tested
+
+The ruling reads the tail as a session-edge artifact. That's directly checkable against `VWAPSessionCandles`, and it doesn't hold:
+
+- **Not session-window length.** Match rate is flat at **47–65 %** across every window bucket from 1–10 bars to 241+, and mean |Δ| is **highest in the longest-window class** ($84.75, p90 $336) — the opposite of an edge effect.
+- **Not which box supplied the live row.** PRIMARY(local) 53.2 % vs SECONDARY(aws) 58.8 % — both bimodal.
+- **Not time-of-day.** Miss rate 20–65 % across all 21 populated UTC hours, no structure.
+- **Not episodic.** 368 misses form **179 contiguous runs, mean length 2.1, longest 10**; pure scatter at that miss rate predicts ~184 runs of ~2.1. It's a per-row coin-flip, not an event.
+
+So the residual is a **scattered per-row content difference inside a provably identical window** (`VWAPSessionCandles` 100.00 %, max |Δ| 0). VWAP is volume-weighted, and lane C established the terminal bar of every series is a forming stub — live's taken at poll time, the synthetic's rebuilt from stored trades in `[closeMs, closeMs + 2 s]`. A per-row volume difference in that bar is the obvious candidate. **Untested; not asserted.**
+
+### 7.3 What this does to the ordering — flagged, not re-ruled
+
+As ordered, the micro-task looks likely to land without moving the match rate, and D1's fine-sweep clearance is conditioned on it landing — which would leave D1 stuck. Root-causing the 44 % first and letting the tolerance question follow the answer may be the cheaper path. **That's a re-ordering of your ruling and not mine to make**; the four eliminations above are yours to use either way.
+
+**Unaffected:** D2's *mechanism* claim stands on its own evidence — the window is provably exact, so the accumulator computes correctly over the right bars. That was never in question.
+
+### 7.4 Rulings actioned
+
+| # | Action taken |
+|---|---|
+| **D1** | Partial clearance recorded in `backtest-overlap-validation-2026-07-30.md` §10.4 and `backtest-synthesizer-spec-back.md` §9.2, **with the noise-floor figure flagged pending §7.1**. |
+| **D2** | Not actioned — see above. No micro-task specced. |
+| **D3** | Recorded; next-month work by construction, nothing this batch. One consequence worth noting: the ordering makes lane C's **Option D (`TriggerMode`) a prerequisite**, not one of four alternatives. |
+| **D4** | Already done by the coordinator in the ruling commit — §15 row present at `DeribitIndicatorProject.md:391`, settings-untouched, W6-4 precedent. Verified, not duplicated. |
+| **D5** | Recorded in `pre-aug1-batch-summary.md` §E — full-book tables marked context-only, post-07-08 marked the decision surface, and "no separable geometry change yet" marked a legitimate outcome. |

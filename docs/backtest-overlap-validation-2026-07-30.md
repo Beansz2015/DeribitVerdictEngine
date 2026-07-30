@@ -424,7 +424,16 @@ A seven-column indicator-family recovery moved the verdict agreement by exactly 
 
 ### 10.4 Clearance status — unchanged by this lane, and why
 
-§7.5's conditional clearance said the synthesizer is cleared for geometry/placement-class studies now, and NOT cleared for VWAP- or funding-sensitive studies "until the anchor fix lands and re-validates." The fix landed and re-validated. **The re-validation does not clear the VWAP-sensitive class**: the window is exact, the values are not (53–56 %, still the "do not use" band by §9.6's own < 60 % cut). Funding is untouched (`FundingMomentum` 22.02 %, identical — the anchor is not on the funding path). **Recording, not ruling** — the clearance call belongs to the Fable/trader seat.
+§7.5's conditional clearance said the synthesizer is cleared for geometry/placement-class studies now, and NOT cleared for VWAP- or funding-sensitive studies "until the anchor fix lands and re-validates." The fix landed and re-validated: the window is exact, the values are not (53–56 %, still the "do not use" band by §9.6's own < 60 % cut). Funding is untouched (`FundingMomentum` 22.02 %, identical — the anchor is not on the funding path).
+
+**RULED 2026-07-31 (Fable seat) — PARTIAL CLEARANCE:**
+
+- **Window-consuming studies: CLEARED.** Session membership / `VWAPSessionCandles` are exact on every row.
+- **VWAP *values*: CLEARED for coarse/structural use**, against a documented noise floor.
+- **Fine VWAP-dev threshold sweeps (steps < 5 bps): WITHHELD** pending the D2 accumulator-tolerance reclass.
+- **Funding: unchanged** — structurally approximate, discouraged.
+
+⚠ **The noise-floor figure in that ruling is disputed and the fine-sweep condition is therefore unresolved.** The ruling cites mean |Δ| $8.6 (≈1.3 bps); the run published **69.79** (≈10.9 bps) and the distribution is bimodal rather than a floor — p50 $1.26, p75 $101.53, p90 $235.53. The "session-edge tail" reading was tested against `VWAPSessionCandles` and does not hold. Full evidence and four eliminated hypotheses: `pre-aug1-batch-spec-back.md` §7. **The coarse/structural and window clearances above are unaffected** — they rest on the window being exact, which is not in dispute.
 
 ### 10.5 Gate tail + commit
 
