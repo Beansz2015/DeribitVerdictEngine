@@ -79,7 +79,8 @@ Public Class SettingsDiffApplier
         "indicators.absorption.default.",           ' [P4 #6] shared re-baseline tier (min_aggr_usd) — hand-tuned per book-absorption §5 target-engagement, HC11 class (HARD CONSTRAINT 23). Prefix-safe: the flat absorption params stay proposable
         "indicators.absorption.sessions.",          ' [P4 #6] per-session overrides — hand-tuned per book-absorption §5, HC11 class (HARD CONSTRAINT 23)
         "scoring.trade_costs.",                     ' [v62 fee-aware min-move floor] Execution-cost model + the trader's min NET move. The fee/style keys are VENUE FACTS (edited when Deribit changes them) and min_net_move_pct is a kelly.*-class risk preference — nothing under the block is ever a failure-rate lever (HARD CONSTRAINT 26). Prefix-safe: sibling scoring.* tunables stay proposable
-        "alerts."                                    ' [#7 + #8 v59] liq-cascade alarm + level-approach alerts — display/alert-only plumbing, zero scoring impact, no failure-rate linkage; same class as exit_guard.* / live_strip.* / signal_bridge.* (HARD CONSTRAINT 25). Prefix-safe: no other top-level "alerts." keys exist
+        "alerts.",                                   ' [#7 + #8 v59] liq-cascade alarm + level-approach alerts — display/alert-only plumbing, zero scoring impact, no failure-rate linkage; same class as exit_guard.* / live_strip.* / signal_bridge.* (HARD CONSTRAINT 25). Prefix-safe: no other top-level "alerts." keys exist
+        "trade_store."                               ' [v64 in-app trade-store capture] raw-trade capture to the backtest store — DATA-CAPTURE plumbing, zero scoring impact (no indicator reads it, no CSV column, no card, no snapshot line, no bridge field), no failure-rate linkage; same class as alerts.* / exit_guard.* / live_strip.* / signal_bridge.* (HARD CONSTRAINT 27). Prefix-safe: no other top-level "trade_store." keys exist
     }
 
     ' Validate a proposed diff list.

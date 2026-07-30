@@ -69,6 +69,10 @@
          (LogWsHealthTransitionForRun in MainForm_SignalBridge) stays OUT — same
          live-socket/WinForms boundary as A22/A37. -->
     <Compile Include="..\..\Core\WsHealthLog.vb" />
+    <!-- [v64] Trade-store writer/parser seam — A48a-h. Network-free BY DESIGN: this is the
+         half of the §2 split that exists so the fixture project never links an HttpClient
+         (HistoricalStore owns one and is deliberately NOT here). -->
+    <Compile Include="..\..\Core\TradeStoreWriter.vb" />
     <Compile Include="..\..\AnalysisLogger.vb" />
     <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
          exercised against a real MarketState (already linked above). -->
@@ -140,6 +144,10 @@
          DeribitClient already linked above). BacktestProgram stays OUT — it carries
          its own Main. -->
     <Compile Include="..\..\tools\BacktestRunner\HistoricalStore.vb" />
+    <!-- [v64] The funding-sample struct moved out of ReplayLoop.vb into its own file so the
+         app could link HistoricalStore for gap repair without the replay pipeline. Still
+         network-free, so the harness links it exactly as before. -->
+    <Compile Include="..\..\tools\BacktestRunner\BacktestFundingSample.vb" />
     <Compile Include="..\..\tools\BacktestRunner\ReplayLoop.vb" />
     <Compile Include="..\..\tools\BacktestRunner\BacktestRowWriter.vb" />
     <!-- Overlap validator (A44 — docs/backtest-synthesizer-proposal.md §4): the pure

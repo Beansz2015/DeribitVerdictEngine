@@ -46,6 +46,18 @@ Public NotInheritable Class DeribitWsFeed
     Private _runTask As Task
     Private _id As Integer = 0
 
+    ' ── [v64] Trade-store streaming capture (in-app-trade-store-capture-proposal.md §1.1)
+    ' The raw stream is already in hand, so appending it to the store is a WRITE, not a
+    ' fetch — which is what removes Deribit's ~24 h public-trades retention deadline for
+    ' everything captured while the app is up. Buffered (60k trades/day would otherwise mean
+    ' 60k file opens) and flushed on the D2 dual trigger: every flush_seconds OR every
+    ' flush_trade_count, whichever comes first. Rebuilt when store_dir hot-reloads.
+    Private _tradeStore As TradeStoreWriter
+    Private _tradeStoreDir As String = Nothing
+    Private _flushTimer As Threading.Timer
+    Private _flushPeriodSec As Integer = -1
+    Private ReadOnly _tradeStoreLock As New Object()
+
     ' ── Health surface (P2) — written on the background supervisor/receive task, read on
     ' the analysis thread for the per-run fallback gate + the WS-health status line. Plain
     ' fields: torn reads of a bool/int/DateTime are harmless for a per-run gate / display
@@ -75,14 +87,78 @@ Public NotInheritable Class DeribitWsFeed
     Public Function StartAsync() As Task
         If _runTask IsNot Nothing Then Return Task.CompletedTask
         _cts = New CancellationTokenSource()
+        StartFlushTimer()
         _runTask = Task.Run(Function() RunLoopAsync(_cts.Token))
         Return Task.CompletedTask
     End Function
 
-    ''' <summary>Signal the loop to stop. The background task unwinds and disposes the socket.</summary>
+    ''' <summary>Signal the loop to stop. The background task unwinds and disposes the socket.
+    ''' [v64] The buffered trade tail is flushed here so a clean shutdown never drops captured
+    ''' tape; a kill still costs at most flush_seconds, which gap repair recovers.</summary>
     Public Sub [Stop]()
         _cts?.Cancel()
+        Try
+            _flushTimer?.Dispose()
+        Catch
+        End Try
+        _flushTimer = Nothing
+        FlushTradeStore()
     End Sub
+
+    ' ── [v64] Trade-store capture plumbing ──────────────────────────────────────────────
+
+    ' D2 TIME trigger. A real timer rather than an elapsed-time check inside ApplyTrades:
+    ' the case the time trigger exists for is a quiet hour, which is exactly when no batch
+    ' arrives to run such a check. Period is re-read on every tick so flush_seconds
+    ' hot-reloads like the rest of the block.
+    Private Sub StartFlushTimer()
+        If _flushTimer IsNot Nothing Then Return
+        _flushPeriodSec = Math.Max(1, SettingsLoader.Current.TradeStore.FlushSeconds)
+        _flushTimer = New Threading.Timer(AddressOf OnFlushTick, Nothing,
+                                          _flushPeriodSec * 1000, _flushPeriodSec * 1000)
+    End Sub
+
+    Private Sub OnFlushTick(state As Object)
+        Try
+            FlushTradeStore()
+            Dim want As Integer = Math.Max(1, SettingsLoader.Current.TradeStore.FlushSeconds)
+            If want <> _flushPeriodSec AndAlso _flushTimer IsNot Nothing Then
+                _flushPeriodSec = want
+                _flushTimer.Change(want * 1000, want * 1000)
+            End If
+        Catch ex As Exception
+            ' Never let a capture problem escape onto a timer thread and kill the process.
+            Log("trade-store flush tick error: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub FlushTradeStore()
+        Try
+            Dim w As TradeStoreWriter
+            SyncLock _tradeStoreLock
+                w = _tradeStore
+            End SyncLock
+            w?.Flush()
+        Catch ex As Exception
+            Log("trade-store flush error: " & ex.Message)
+        End Try
+    End Sub
+
+    ' Resolve the writer for the configured store dir, rebuilding if store_dir hot-reloaded.
+    ' Nothing when capture is disabled — the caller early-outs and the feed does no extra work.
+    Private Function ResolveTradeStore(ts As TradeStoreSettings) As TradeStoreWriter
+        If ts Is Nothing OrElse Not ts.Enabled Then Return Nothing
+        Dim dir As String = TradeStoreWriter.ResolveStoreDir(ts.StoreDir)
+        SyncLock _tradeStoreLock
+            If _tradeStore Is Nothing OrElse Not String.Equals(dir, _tradeStoreDir, StringComparison.OrdinalIgnoreCase) Then
+                ' Dir changed under us — commit whatever the old writer holds before swapping.
+                _tradeStore?.Flush()
+                _tradeStore = New TradeStoreWriter(dir)
+                _tradeStoreDir = dir
+            End If
+            Return _tradeStore
+        End SyncLock
+    End Function
 
     ' ── Connect / reconnect supervisor ──────────────────────────────────────────────────
     Private Async Function RunLoopAsync(ct As CancellationToken) As Task
@@ -184,6 +260,18 @@ Public NotInheritable Class DeribitWsFeed
         ' PRESERVED across reconnects within the same process (that persistence lives
         ' in the sidecar file, not tracker memory — H4 amended).
         _state.ResetAlerts()
+        ' [v64] Same discipline for the trade-store buffer, with one difference: the pending
+        ' buffer is FLUSHED rather than discarded (a reconnect must not silently drop captured
+        ' tape), and only then is the monotonic guard un-seeded so it re-reads the on-disk
+        ' high-water mark. That is what makes the REST re-seed window below idempotent against
+        ' whatever is already stored.
+        Try
+            SyncLock _tradeStoreLock
+                _tradeStore?.ResetBufferState()
+            End SyncLock
+        Catch ex As Exception
+            Log("trade-store reset error: " & ex.Message)
+        End Try
         For Each res As String In SeedResolutions
             ct.ThrowIfCancellationRequested()
             Dim cap As Integer = 250
@@ -350,6 +438,11 @@ Public NotInheritable Class DeribitWsFeed
         Dim al = cfg.Alerts
         Dim foldAlerts As Boolean = al IsNot Nothing AndAlso al.Enabled
         Dim alInstance As String = If(foldAlerts, ProcessIdentity.InstanceId, "")
+        ' [v64] Trade-store capture — the same per-batch cfg read pattern. The stream is
+        ' already in hand, so this is a buffered WRITE, not a fetch. Disabled ⇒ Nothing here
+        ' and the fold below is inert, byte-identical to pre-build (A48f).
+        Dim ts = cfg.TradeStore
+        Dim store As TradeStoreWriter = ResolveTradeStore(ts)
         For Each t As JsonElement In data.EnumerateArray()
             Dim rec As New TradeRecord()
             rec.Price = t.GetProperty("price").GetDouble()
@@ -372,7 +465,17 @@ Public NotInheritable Class DeribitWsFeed
                                        rec.Liquidation IsNot Nothing AndAlso rec.Liquidation <> "none",
                                        rec.Timestamp, al, alInstance)
             End If
+            ' [v64] Buffer for the store. The writer's monotonic guard drops anything at or
+            ' before the newest committed timestamp, which is what makes the reconnect
+            ' re-seed idempotent — SeedAsync re-seeds the ring from REST on every (re)connect,
+            ' so the same trades WILL arrive twice (A48b).
+            If store IsNot Nothing Then store.Buffer(rec)
         Next
+        ' D2 COUNT trigger — checked once per batch, after the fold. The timer covers the
+        ' quiet-hour case this cannot.
+        If store IsNot Nothing AndAlso store.PendingCount >= Math.Max(1, ts.FlushTradeCount) Then
+            store.Flush()
+        End If
     End Sub
 
     ' Depth-limited book: bids/asks are [price, amount] pairs (same shape as REST get_order_book).

@@ -1,6 +1,6 @@
 # In-App Trade-Store Capture — Proposal
 
-**Status:** **APPROVED 2026-07-31** — D1–D5 all ticked (D1 ruled AGAINST the recommendation; see §7). Ready for an implementer. Build the approved spec; do not invent design decisions mid-code (CLAUDE.md / trader-profile §7).
+**Status:** **BUILT as v64, 2026-07-31** — local commit, awaiting the trader's test + push. APPROVED 2026-07-31 with D1–D5 all ticked (D1 ruled AGAINST the recommendation; see §7). Implementation notes and the two mechanical deviations are in `in-app-trade-store-capture-spec-back.md`.
 **Target:** settings **v63 → v64** (one new `trade_store` block).
 **Scoring impact:** **NONE.** No indicator reads it, no CSV column, no verdict path, no bridge field. It writes a sidecar the *backtester* consumes offline. **Not a dataset boundary.**
 **Gate to build:** safe anytime. Nothing it touches is on the scoring path.

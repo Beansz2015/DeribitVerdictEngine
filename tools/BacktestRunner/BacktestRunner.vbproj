@@ -41,6 +41,9 @@
     <Compile Include="..\..\Core\AggressorVelocityAccumulator.vb" />
     <Compile Include="..\..\Core\AlertsTracker.vb" />
     <Compile Include="..\..\Core\WsHealthLog.vb" />
+    <!-- [v64] The trade-store format/rollover/guard seam, shared with the live feed's
+         streaming capture and with LoadTradeRange's per-file parse. Network-free. -->
+    <Compile Include="..\..\Core\TradeStoreWriter.vb" />
     <Compile Include="..\..\DeribitClient.vb" />
     <Compile Include="..\..\DynamicNorms.vb" />
     <Compile Include="..\..\MarketState.vb" />

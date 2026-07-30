@@ -38,6 +38,14 @@ DeribitVerdictEngine/
 │                                       [v54 #6] the dual-fed LevelAbsorptionTracker (folds,
 │                                       reads, resets all under the same lock).
 ├── DeribitWsFeed.vb                    [WS-P1] One public ClientWebSocket — REST-seed →
+│                                       [v64] ApplyTrades also buffers every streamed trade
+│                                       into the trade store via TradeStoreWriter (a WRITE,
+│                                       not a fetch — the stream is already in hand); D2 dual
+│                                       flush trigger (count checked per batch, a
+│                                       System.Threading.Timer covering the quiet-hour case
+│                                       a per-batch check cannot); SeedAsync FLUSHES then
+│                                       un-seeds the monotonic guard so the REST re-seed is
+│                                       idempotent; Stop() flushes the tail.
 │                                       set_heartbeat → subscribe 1/3/5/15 chart + trades +
 │                                       ticker + depth-limited book → receive loop → backoff
 │                                       reconnect. Answers heartbeat test_request. DORMANT
@@ -48,6 +56,19 @@ DeribitVerdictEngine/
 │                                       the CSV/scoring. The proposal §7 acceptance instrument.
 │                                       Host-agnostic. (RunAnalysisAsync routes the 8 live fetches
 │                                       through IMarketDataSource via ResolveSource() since P2.)
+├── TradeStoreGapRepair.vb              [v64] In-app trade-store gap repair (§1.2 / D5) — the
+│                                       SECONDARY capture mechanism and, under D1's AWS-only
+│                                       ruling, the ONLY recovery mechanism. Plain
+│                                       System.Threading.Timer: one pass IMMEDIATELY on start
+│                                       (§7.1 — a restart is precisely when a gap exists),
+│                                       then every gap_repair_interval_hours over a
+│                                       gap_repair_lookback_hours window. Calls
+│                                       HistoricalStore.BackfillTradeMonthAsync with the
+│                                       exe-resolved store dir and clampToSegStart:=True (the
+│                                       clamp keeps the fetch inside Deribit's ~24h trade
+│                                       retention). Started INDEPENDENTLY of transport —
+│                                       transport="rest" has no stream, so repair alone
+│                                       carries the store. Host-agnostic, never throws.
 ├── MtfRefreshPolicy.vb                 [WS-P3] Pure host-agnostic predicate — whether to (re)fetch
 │                                       15m this run. transport="ws" → always (15m is in-memory; the
 │                                       60s TTL only spares the REST HTTP call, so it's moot);
@@ -168,6 +189,20 @@ DeribitVerdictEngine/
 │   │                                   (v53 time-anchored window + ring eviction),
 │   │                                   ClassifyAbsorption (v54 #6 — pure classifier
 │   │                                   over the LevelAbsorptionTracker read)
+│   ├── TradeStoreWriter.vb             [v64] The ONE trade-store seam — host-agnostic and
+│   │                                   deliberately NETWORK-FREE (that split is why the
+│   │                                   app's feed path and the fixture project never link
+│   │                                   HistoricalStore's HttpClient). Owns file naming,
+│   │                                   monthly rollover, buffered append + monotonic guard,
+│   │                                   the row FORMAT and the row PARSE, LastTradeTimestamp,
+│   │                                   ResolveStoreDir (exe-relative, D3/A48h) and
+│   │                                   ResolveResumeCursorMs (the by-construction overlap
+│   │                                   no-op, A48d). Three consumers: DeribitWsFeed's
+│   │                                   streaming capture, HistoricalStore's network backfill,
+│   │                                   and LoadTradeRange's per-file read — so writer and
+│   │                                   reader cannot drift. One process-wide append lock
+│   │                                   (streaming + repair append to the same file). Never
+│   │                                   throws. Fixtures A48a–h.
 │   ├── LevelAbsorptionTracker.vb       [P4 #6 v54] Level-scoped absorption episode
 │   │                                   tracker (book-absorption-proposal.md §4) —
 │   │                                   the first DUAL-FED tracker: owned by
@@ -632,6 +667,7 @@ RunScoringPipeline(...)
 | Layer 1.5 structural-break exit in CalcHoldStatus (spec #5) | A confirmed break through the prior swing low (long) or swing high (short) is a discrete structural event — it invalidates the original entry premise faster than gradual RSI/OBV divergence. Sits between Layer 1 (fast microstructure count) and Layer 2 (OBV divergence) to maintain the priority ordering: structural breaks are evaluated only when microstructure hasn't already triggered, but before the slower divergence signals can fire. |
 | CalcVerdictContext structural-target first check (spec #5) | When swing data exists (LastSwingHigh5m or LastSwingLow5m is non-zero), the engine has committed to a structural view. If neither target nor stop can be placed for the current direction, flagging STRUCTURALLY_WEAK is more informative than CONFIRMED even if the score is high — it means the structural picture is ambiguous or the trade doesn't have a defined structural R:R. The graceful-degradation path (check fires only when at least one swing level exists) prevents false STRUCTURALLY_WEAK signals when candle history is too short for pivot detection. |
 | Settings exposure pass (spec #6) | Exposing 19 formerly-hardcoded literals to settings.json completes the auto-tweaking audit prerequisite (Section 16.3 item 2). All defaults are exactly the previously-hardcoded values — zero behaviour change. The new Optional params on CalcBBW, CalcTTMSqueeze, CalcCVD, CalcDonchian match the existing pattern (cfg value passed at call site; default value in method signature for caller convenience). RegimeMaxScore() and TierFloor() now take cfg and read from POCO fields rather than returning hardcoded constants. |
+| Trade capture in the app, as two redundant mechanisms (v64) | Deribit's public trades endpoint serves ≈24 h and refuses older windows; candles have no such cap. Trades are therefore the one input the backtester cannot synthesise around, and trade-derived signals (CVD, MicroCVD, TFI, aggressor velocity, liquidations) can only be **re-derived under different settings** from raw ticks — `analysis_log.csv` stores their outputs, which keeps the answer and discards the question, so it cannot substitute. With a vendor feed declined on cost, append-forward is the only path, which makes its reliability the whole question. The app is the right host because it is already up 24/7, already watched daily, and **already receives every trade** — appending the stream is a write, not a fetch, so capture needs no API call and has no 24-hour deadline. The external-scheduled-task alternative had three failure modes that were each silent and unrecoverable past 24 h. Streaming and gap repair are deliberately NOT collapsed into one mechanism: streaming is complete while the app runs and recovers nothing from downtime; repair recovers downtime but, alone, reinstates the 24-hour deadline. The monotonic last-written guard is what makes them compose — `SeedAsync` re-seeds the trade ring from REST on every (re)connect, so duplicates are guaranteed by design, and the guard plus the reader's whole-row dedup make overlap a no-op at both write and read time. `HistoricalStore` was split rather than moved because it owns a live `HttpClient`: the format/rollover/guard half (`Core/TradeStoreWriter.vb`) links everywhere including the fixture project, the network half stays in `tools/BacktestRunner/` and is linked by the app for repair only. Store path resolves against the **exe directory**, never the cwd — the app's cwd is not guaranteed and a cwd-relative store would silently scatter capture files. `docs/in-app-trade-store-capture-proposal.md`. |
 | Linux CLI port as long-term target (2026-05-05) | The WinForms app remains the active surface but a future headless Linux service is on the roadmap (`DeribitIndicatorProject.md` §16.2). All code in `analysis/` and `tools/` must therefore be host-agnostic — no `System.Windows.Forms`, no `Control.Invoke`, no `MainForm` coupling. Form-side viewers like `AnalysisReportForm` and `TweakSettingsForm` are thin wrappers over host-agnostic core. The auto-tweaker console app builds as a separate .NET 8 project with **zero WinForms references** so it runs unmodified under `dotnet AutoTweaker.dll` on Linux. Port itself happens after auto-tweaker ships AND analysis accuracy plateaus. WebSocket migration is independent of the port. |
 
 ---

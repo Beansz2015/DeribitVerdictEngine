@@ -38,13 +38,10 @@ Imports System.IO
 Imports System.Linq
 Imports System.Threading.Tasks
 
-''' <summary>A single funding-rate history sample. Public + top-level so ReplayLoop's
-''' at-or-before helper compiles into the fixtures without pulling HistoricalStore
-''' (which owns a live HttpClient) into the harness project.</summary>
-Public Structure BacktestFundingSample
-    Public Property TsMs As Long
-    Public Property Rate As Double
-End Structure
+' [v64] BacktestFundingSample moved to its own file — tools/BacktestRunner/
+' BacktestFundingSample.vb. HistoricalStore references it, and the app now links
+' HistoricalStore for in-app gap repair (in-app-trade-store-capture-proposal.md §1.2 / D5);
+' leaving the struct here would have dragged this whole replay file into the app assembly.
 
 Public Class ReplayLoop
 

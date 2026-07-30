@@ -84,6 +84,9 @@ Partial Public Class MainForm
     Private _wsSource         As IMarketDataSource
     Private _marketState      As MarketState
     Private _wsFeed           As DeribitWsFeed
+    ' [v64] In-app trade-store gap repair (in-app-trade-store-capture-proposal.md §1.2 / D5).
+    ' Independent of transport — see InitMarketDataSources.
+    Private _tradeStoreRepair As TradeStoreGapRepair
     Private _wsDegradedThisRun As Boolean = False
 
     ' Shadow-parity comparer (P2). Non-Nothing only when network.shadow_parity is on; holds
@@ -479,6 +482,13 @@ Partial Public Class MainForm
                 _parityComparer = New ShadowParityComparer(GetParityLogPath())
             End If
         End If
+        ' [v64] Trade-store gap repair — started INDEPENDENTLY of transport. With
+        ' transport="rest" there is no WS stream and therefore no streaming capture, so
+        ' repair alone carries the store (in-app-trade-store-capture-proposal.md §5). Fires
+        ' one pass immediately (§7.1: under D1's AWS-only ruling a restart is precisely when
+        ' a gap exists), then on the configured interval. Host-agnostic and never throws.
+        _tradeStoreRepair = New TradeStoreGapRepair()
+        _tradeStoreRepair.Start()
     End Sub
 
     ' Side-log path for the shadow-parity comparison (exe dir; never the CSV).
@@ -489,7 +499,13 @@ Partial Public Class MainForm
     ' Stop the WS feed (if running) on form close so the background socket unwinds cleanly.
     Protected Overrides Sub OnFormClosing(e As System.Windows.Forms.FormClosingEventArgs)
         Try
+            ' Stop() also flushes the buffered trade-store tail (v64), so this must run
+            ' before the process unwinds — a clean shutdown never drops captured tape.
             _wsFeed?.Stop()
+        Catch
+        End Try
+        Try
+            _tradeStoreRepair?.Stop()   ' [v64] dispose the gap-repair timer on close
         Catch
         End Try
         Try

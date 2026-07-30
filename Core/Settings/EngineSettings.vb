@@ -147,6 +147,16 @@ Public Class EngineSettings
     ''' same class as exit_guard.* / live_strip.* / signal_bridge.*).</summary>
     <JsonPropertyName("alerts")>
     Public Property Alerts As New AlertsSettings
+
+    ''' <summary>[v64 in-app trade-store capture] Raw-trade capture to the backtest store
+    ''' (docs/in-app-trade-store-capture-proposal.md, APPROVED 2026-07-31, D1–D5 ticked).
+    ''' Streaming capture off the WS trades stream + a low-frequency gap-repair backfill.
+    ''' ZERO scoring impact — no indicator reads it, no CSV column, no card, no snapshot
+    ''' line, no bridge field; it writes a sidecar the BACKTESTER consumes offline. OFF the
+    ''' auto-tweaker surface (HARD CONSTRAINT 27 — data-capture plumbing, no failure-rate
+    ''' linkage; same class as alerts.* / exit_guard.* / live_strip.* / signal_bridge.*).</summary>
+    <JsonPropertyName("trade_store")>
+    Public Property TradeStore As New TradeStoreSettings
 End Class
 
 ' ---------------------------------------------------------------------------
@@ -1328,4 +1338,57 @@ Public Class AlertsSettings
     ''' <summary>H1 — play an audible cue on cascade fire. Default False (opt-in, per
     ''' proposal §3 — the strip flash is the primary attention surface).</summary>
     <JsonPropertyName("sound_enabled")>      Public Property SoundEnabled      As Boolean = False
+End Class
+
+''' <summary>
+''' [v64 in-app trade-store capture] Raw-trade capture parameters
+''' (docs/in-app-trade-store-capture-proposal.md §3, APPROVED 2026-07-31).
+'''
+''' Two deliberately redundant mechanisms, neither sufficient alone: STREAMING capture in
+''' DeribitWsFeed.ApplyTrades (§1.1 — the app already receives every trade, so this is a
+''' write not a fetch, and it removes Deribit's ~24 h public-trades retention deadline
+''' entirely) plus a low-frequency GAP REPAIR backfill (§1.2 — the only thing that recovers
+''' downtime, and under D1's AWS-only ruling the ONLY recovery mechanism there is, which is
+''' why it fires once on start rather than waiting a full interval — §7.1).
+'''
+''' ZERO scoring impact and NO rendered surface: no snapshot line, no card binding, no CSV
+''' column, no bridge field — so this block carries no display-string parity obligation.
+''' NOT a dataset boundary. OFF the auto-tweaker surface (HARD CONSTRAINT 27).
+''' Hot-reloadable: the feed reads the block once per trade batch and per flush tick.
+''' </summary>
+Public Class TradeStoreSettings
+    ''' <summary>Master switch. False ⇒ the ApplyTrades fold early-outs, the flush timer
+    ''' writes nothing and gap repair never runs — byte-identical to pre-build (A48f).
+    ''' Default True.</summary>
+    <JsonPropertyName("enabled")>                   Public Property Enabled                As Boolean = True
+
+    ''' <summary>Store directory, resolved against the EXE DIRECTORY and never the process
+    ''' working directory (D3 / A48h) — the capturing box writes `&lt;exe&gt;\backtest_data\`.
+    ''' The repo's own backtest_data\ (which BacktestRunner uses from the repo root) is a
+    ''' DIFFERENT directory and stays the local analysis store, populated by copy-back.
+    ''' An absolute path is honoured as-is. Default "backtest_data".</summary>
+    <JsonPropertyName("store_dir")>                 Public Property StoreDir               As String  = "backtest_data"
+
+    ''' <summary>D2 time trigger — flush the streaming buffer at least this often, so a
+    ''' crash costs at most this many seconds of tape. Default 30.</summary>
+    <JsonPropertyName("flush_seconds")>             Public Property FlushSeconds           As Integer = 30
+
+    ''' <summary>D2 count trigger — flush as soon as this many trades are buffered,
+    ''' whichever comes first. Time alone would lose a burst on a crash; count alone can
+    ''' sit unflushed through a quiet Asia hour. Default 500.</summary>
+    <JsonPropertyName("flush_trade_count")>         Public Property FlushTradeCount        As Integer = 500
+
+    ''' <summary>Master switch for the §1.2 gap-repair backfill. Default True (D5).</summary>
+    <JsonPropertyName("gap_repair_enabled")>        Public Property GapRepairEnabled       As Boolean = True
+
+    ''' <summary>D4 cadence — hours between gap-repair passes AFTER the fire-once-on-start
+    ''' pass (§7.1: a restart is precisely when a gap exists, so waiting a full interval for
+    ''' the first tick is the wrong shape). Default 6.</summary>
+    <JsonPropertyName("gap_repair_interval_hours")> Public Property GapRepairIntervalHours As Double  = 6.0
+
+    ''' <summary>D4 lookback — how far back a repair pass reaches. Sits under Deribit's
+    ''' measured ~24 h public-trades retention (backtest-synthesizer-proposal.md §7.3) so a
+    ''' repair after a long outage still recovers everything the venue will still serve,
+    ''' instead of asking for a refused window and getting nothing. Default 20.</summary>
+    <JsonPropertyName("gap_repair_lookback_hours")> Public Property GapRepairLookbackHours As Double  = 20.0
 End Class

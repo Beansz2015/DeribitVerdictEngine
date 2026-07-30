@@ -58,8 +58,11 @@ Public Class HistoricalStore
         Return Path.Combine(StoreDir, String.Format("candles_{0}m_{1:D4}-{2:D2}.csv", resolution, year, month))
     End Function
 
+    ' [v64] Trade-file naming lives in TradeStoreWriter — the ONE seam shared with the
+    ' streaming capture in DeribitWsFeed.ApplyTrades and with the reader below, so the
+    ' three cannot drift (in-app-trade-store-capture-proposal.md §2).
     Public Shared Function TradeFileFor(year As Integer, month As Integer) As String
-        Return Path.Combine(StoreDir, String.Format("trades_{0:D4}-{1:D2}.csv", year, month))
+        Return TradeStoreWriter.TradeFileFor(StoreDir, year, month)
     End Function
 
     Public Shared Function FundingFileFor(year As Integer, month As Integer) As String
@@ -253,99 +256,73 @@ Public Class HistoricalStore
     ''' to the month file. Resumable: if the month file already exists, we resume from
     ''' the last recorded timestamp + 1 ms. Rows are written in ascending order (the
     ''' F1 contract).
+    '''
+    ''' [v64] Rows are committed through TradeStoreWriter.AppendRows — the SAME seam the
+    ''' streaming capture writes through — so format, header-on-create and monthly rollover
+    ''' cannot drift between the two producers, and the process-wide append lock keeps a
+    ''' backfill page from interleaving with a streaming flush.
     ''' </summary>
+    ''' <param name="storeDir">Nothing ⇒ the CWD-relative repo store (BacktestProgram sets
+    ''' CWD to the repo root). The in-app gap repair passes the EXE-resolved dir (D3).</param>
+    ''' <param name="clampToSegStart">[v64 gap repair] True ⇒ never reach further back than
+    ''' segStart even when the on-disk resume point is older. Deribit's public trades endpoint
+    ''' refuses windows past its ~24 h retention, so after a long outage an unclamped resume
+    ''' cursor would ask for a refused window and recover NOTHING — including the last 20 h
+    ''' that are still served. False (the default) preserves the historical-backfill
+    ''' behaviour exactly: resume from disk and fill any hole between there and segEnd.</param>
     Public Shared Async Function BackfillTradeMonthAsync(
             year As Integer, month As Integer,
-            segStart As DateTime, segEndExcl As DateTime) As Task(Of Integer)
-        EnsureStoreDir()
-        Dim path As String = TradeFileFor(year, month)
-        Dim resumeMs As Long = -1
-        Dim isNewFile As Boolean = Not File.Exists(path)
-        If Not isNewFile Then
-            resumeMs = LastTradeTimestamp(path)
-        End If
-
-        Dim cursorMs As Long
-        If resumeMs > 0 Then
-            cursorMs = resumeMs + 1
-        Else
-            cursorMs = New DateTimeOffset(segStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
-        End If
+            segStart As DateTime, segEndExcl As DateTime,
+            Optional storeDir As String = Nothing,
+            Optional clampToSegStart As Boolean = False) As Task(Of Integer)
+        Dim dir As String = If(String.IsNullOrWhiteSpace(storeDir), StoreDir, storeDir)
+        Directory.CreateDirectory(dir)
+        Dim path As String = TradeStoreWriter.TradeFileFor(dir, year, month)
+        Dim segStartMs As Long = New DateTimeOffset(segStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim endMs As Long = New DateTimeOffset(segEndExcl, TimeSpan.Zero).ToUnixTimeMilliseconds() - 1
-        If cursorMs > endMs Then Return CountDataRows(path)
+
+        ' Resume decision lives on the shared seam (A48d exercises this exact call).
+        Dim cursorMs As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartMs, endMs, clampToSegStart)
+        If cursorMs < 0 Then Return CountDataRows(path)
 
         Dim total As Integer = 0
         Dim page As Integer = 0
-        Using sw As New StreamWriter(path, append:=Not isNewFile)
-            If isNewFile Then sw.WriteLine("Timestamp,Price,Amount,Direction,Liquidation")
 
-            Do
-                If page >= MaxTradePages Then
-                    Console.Error.WriteLine("[HistoricalStore] Trade page cap hit — aborting month " &
-                                            String.Format("{0:D4}-{1:D2}", year, month))
-                    Exit Do
-                End If
+        Do
+            If page >= MaxTradePages Then
+                Console.Error.WriteLine("[HistoricalStore] Trade page cap hit — aborting month " &
+                                        String.Format("{0:D4}-{1:D2}", year, month))
+                Exit Do
+            End If
 
-                Dim trades As List(Of TradeRecord) =
-                    Await FetchTradesByTimeAsync(cursorMs, endMs, TradesPerPage)
-                If trades Is Nothing Then
-                    Console.Error.WriteLine("[HistoricalStore] Trade fetch failed at cursor " & cursorMs)
-                    Exit Do
-                End If
-                If trades.Count = 0 Then Exit Do
+            Dim trades As List(Of TradeRecord) =
+                Await FetchTradesByTimeAsync(cursorMs, endMs, TradesPerPage)
+            If trades Is Nothing Then
+                Console.Error.WriteLine("[HistoricalStore] Trade fetch failed at cursor " & cursorMs)
+                Exit Do
+            End If
+            If trades.Count = 0 Then Exit Do
 
-                For Each t In trades
-                    sw.WriteLine(String.Format(CultureInfo.InvariantCulture,
-                        "{0},{1:F2},{2:F2},{3},{4}",
-                        t.Timestamp, t.Price, t.Amount, t.Direction, t.Liquidation))
-                Next
-                total += trades.Count
+            total += TradeStoreWriter.AppendRows(dir, trades)
 
-                Dim newestMs As Long = trades(trades.Count - 1).Timestamp
-                If newestMs <= cursorMs Then
-                    ' No forward progress — Deribit returned <=1000 trades all with the same ms.
-                    ' Nudge past to avoid infinite loop.
-                    cursorMs = newestMs + 1
-                Else
-                    cursorMs = newestMs + 1
-                End If
-                page += 1
+            Dim newestMs As Long = trades(trades.Count - 1).Timestamp
+            ' newestMs <= cursorMs means Deribit returned a full page all stamped the same
+            ' ms; the +1 nudge is what stops that from looping forever.
+            cursorMs = newestMs + 1
+            page += 1
 
-                If trades.Count < TradesPerPage Then
-                    ' Fewer than a full page ⇒ no more trades in the window.
-                    Exit Do
-                End If
+            If trades.Count < TradesPerPage Then
+                ' Fewer than a full page ⇒ no more trades in the window.
+                Exit Do
+            End If
 
-                Await Task.Delay(PoliteDelayMs)
-            Loop
-        End Using
+            Await Task.Delay(PoliteDelayMs)
+        Loop
 
         Console.WriteLine(String.Format(
             "[HistoricalStore] Trades {0:D4}-{1:D2}: appended {2} rows across {3} page(s)",
             year, month, total, page))
         Return total
-    End Function
-
-    Private Shared Function LastTradeTimestamp(path As String) As Long
-        Try
-            Using sr As New StreamReader(path)
-                sr.ReadLine()   ' header
-                Dim prev As String = Nothing
-                Dim line As String
-                Do
-                    line = sr.ReadLine()
-                    If line Is Nothing Then Exit Do
-                    prev = line
-                Loop
-                If prev Is Nothing Then Return -1
-                Dim comma As Integer = prev.IndexOf(","c)
-                If comma <= 0 Then Return -1
-                Dim n As Long
-                If Long.TryParse(prev.Substring(0, comma), NumberStyles.Integer, CultureInfo.InvariantCulture, n) Then Return n
-            End Using
-        Catch
-        End Try
-        Return -1
     End Function
 
     ''' <summary>One paginated call to get_last_trades_by_instrument_and_time. Ascending
@@ -402,36 +379,21 @@ Public Class HistoricalStore
     End Function
 
     ''' <summary>Load the union of trade months for [warmupStartUtc, toUtc], chronological
-    ''' ascending (the F1 contract). Duplicates deduped by (ts, price, amount, direction).</summary>
+    ''' ascending (the F1 contract). Duplicates deduped on the whole row, which is what makes
+    ''' a gap-repair pass overlapping streamed data harmless at read time (A48d).
+    '''
+    ''' [v64] The per-file parse delegates to TradeStoreWriter.ReadTradeFile — the same seam
+    ''' that formats the rows — so reader and writer cannot drift. Sorting here (rather than
+    ''' assuming file order) is what tolerates a backfill page landing after a streaming
+    ''' flush of newer trades.</summary>
     Public Shared Function LoadTradeRange(warmupStartUtc As DateTime, toUtc As DateTime) As List(Of TradeRecord)
         Dim all As New List(Of TradeRecord)()
         Dim seen As New HashSet(Of String)()
         For Each m In EnumerateMonths(warmupStartUtc, toUtc)
-            Dim path As String = TradeFileFor(m.Year, m.Month)
-            If Not File.Exists(path) Then Continue For
-            Try
-                Using sr As New StreamReader(path)
-                    sr.ReadLine()   ' header
-                    Dim line As String
-                    Do
-                        line = sr.ReadLine()
-                        If line Is Nothing Then Exit Do
-                        Dim parts = line.Split(","c)
-                        If parts.Length < 5 Then Continue Do
-                        Dim key = line
-                        If Not seen.Add(key) Then Continue Do
-                        Dim rec As New TradeRecord()
-                        rec.Timestamp   = Long.Parse(parts(0), CultureInfo.InvariantCulture)
-                        rec.Price       = Double.Parse(parts(1), CultureInfo.InvariantCulture)
-                        rec.Amount      = Double.Parse(parts(2), CultureInfo.InvariantCulture)
-                        rec.Direction   = parts(3)
-                        rec.Liquidation = parts(4)
-                        all.Add(rec)
-                    Loop
-                End Using
-            Catch ex As Exception
-                Console.Error.WriteLine("[HistoricalStore] LoadTradeRange failed: " & ex.Message)
-            End Try
+            For Each rec In TradeStoreWriter.ReadTradeFile(TradeFileFor(m.Year, m.Month))
+                If Not seen.Add(TradeStoreWriter.FormatRow(rec)) Then Continue For
+                all.Add(rec)
+            Next
         Next
         all.Sort(Function(a, b) a.Timestamp.CompareTo(b.Timestamp))
         Return all

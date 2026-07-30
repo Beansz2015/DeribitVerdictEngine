@@ -394,6 +394,20 @@ Module Program
         A47a_ClosedBarArmHoldsWindowLength()
         A47b_StubVolumeIsCommensurateWithCandleVolume()
 
+        ' [v64 in-app trade-store capture — A48, docs/in-app-trade-store-capture-proposal.md §6]
+        ' Streaming capture writes the raw tape into the backtest store from
+        ' DeribitWsFeed.ApplyTrades; a gap-repair backfill heals downtime. Core/
+        ' TradeStoreWriter.vb is the ONE seam the streaming writer, the network backfill and
+        ' LoadTradeRange's per-file parse all route through — these fixtures pin that seam.
+        A48a_AppendedRowsRoundTripThroughShippedReader()
+        A48b_MonotonicGuardDropsReplayedBatch()
+        A48c_MonthRolloverSplitsAndHeadersOnCreateOnly()
+        A48d_GapRepairOverlapIsNoOp()
+        A48e_UnwritablePathNeverThrows()
+        A48f_DisabledMeansZeroWrites()
+        A48g_Hc27FencesTradeStoreKeys()
+        A48h_StoreDirIsExeRelativeNotCwdRelative()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -6818,6 +6832,453 @@ Module Program
               String.Format("btc={0}({1:F6}) usd={2}({3:F2}) pair={4} scale={5}(frac {6:F4}) empty={7}",
                             okBtc, stub.Volume, okUsd, stub.VolumeUSD, okPair,
                             okScale, stub.Volume / realBarVolBtc, okEmpty))
+    End Sub
+
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' A48 — in-app trade-store capture (docs/in-app-trade-store-capture-proposal.md §6)
+    '
+    ' Everything below runs against Core/TradeStoreWriter.vb, which is NETWORK-FREE by
+    ' design: that is the whole point of the §2 split. HistoricalStore owns a live
+    ' HttpClient and is deliberately NOT linked into this project, so these fixtures pin
+    ' the shared seam rather than the HTTP wrapper around it.
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    ' Scratch store dir under the system temp root; each fixture gets its own.
+    Private Function A48TempStore(tag As String) As String
+        Dim dir As String = Path.Combine(Path.GetTempPath(),
+                                         "ordercheck_a48_" & tag & "_" & Guid.NewGuid().ToString("N").Substring(0, 8))
+        Directory.CreateDirectory(dir)
+        Return dir
+    End Function
+
+    Private Sub A48Cleanup(dir As String)
+        Try
+            If Directory.Exists(dir) Then Directory.Delete(dir, recursive:=True)
+        Catch
+        End Try
+    End Sub
+
+    ' A 2026-07-20 12:00 UTC base, well inside a single month.
+    Private Function A48Ms(offsetMs As Long) As Long
+        Return New DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds() + offsetMs
+    End Function
+
+    Private Function A48Trade(tsMs As Long, px As Double, amt As Double,
+                              dir As String, Optional liq As String = "none") As TradeRecord
+        Return New TradeRecord With {
+            .Timestamp = tsMs, .Price = px, .Amount = amt, .Direction = dir, .Liquidation = liq}
+    End Function
+
+    ' Buffer every trade and return how many the monotonic guard ACCEPTED. An explicit loop
+    ' rather than Count(predicate): the predicate has a side effect, so relying on LINQ to
+    ' evaluate it exactly once per element would be the wrong kind of clever.
+    Private Function A48BufferAll(w As TradeStoreWriter, batch As List(Of TradeRecord)) As Integer
+        Dim n As Integer = 0
+        For Each t In batch
+            If w.Buffer(t) Then n += 1
+        Next
+        Return n
+    End Function
+
+    ' -- A48a: appended rows are byte-compatible with the shipped reader -------------------
+    ' Write through the streaming path (Buffer → Flush) and read back through
+    ' TradeStoreWriter.ReadTradeFile — which is exactly the per-file parse
+    ' HistoricalStore.LoadTradeRange delegates to since v64, so a clean round-trip here IS
+    ' compatibility with the shipped reader. Also pins the on-disk shape: the shipped header
+    ' verbatim, 5 comma-separated columns, F2 price/amount, and the liq flag preserved
+    ' (liquidation rows are the whole reason the store carries a fifth column).
+    Private Sub A48a_AppendedRowsRoundTripThroughShippedReader()
+        Dim dir As String = A48TempStore("a")
+        Try
+            Dim w As New TradeStoreWriter(dir)
+            Dim src As New List(Of TradeRecord) From {
+                A48Trade(A48Ms(0), 64000.5, 1250.0, "buy"),
+                A48Trade(A48Ms(250), 64001.25, 730.5, "sell"),
+                A48Trade(A48Ms(900), 63999.0, 40000.0, "sell", "T")}
+            For Each t In src
+                w.Buffer(t)
+            Next
+            Dim flushed As Integer = w.Flush()
+
+            Dim path As String = TradeStoreWriter.TradeFileFor(dir, 2026, 7)
+            Dim lines = File.ReadAllLines(path)
+            Dim headerOk As Boolean = lines.Length = 4 AndAlso
+                                      lines(0) = "Timestamp,Price,Amount,Direction,Liquidation"
+            Dim shapeOk As Boolean = lines.Skip(1).All(Function(l) l.Split(","c).Length = 5)
+            ' F2 formatting on price + amount, invariant culture (no comma decimal separator).
+            Dim fmtOk As Boolean = lines(1) = A48Ms(0) & ",64000.50,1250.00,buy,none"
+
+            Dim back = TradeStoreWriter.ReadTradeFile(path)
+            Dim countOk As Boolean = back.Count = src.Count
+            Dim valuesOk As Boolean = countOk
+            If countOk Then
+                For i As Integer = 0 To src.Count - 1
+                    If back(i).Timestamp <> src(i).Timestamp OrElse
+                       Math.Abs(back(i).Price - src(i).Price) > 0.005 OrElse
+                       Math.Abs(back(i).Amount - src(i).Amount) > 0.005 OrElse
+                       back(i).Direction <> src(i).Direction OrElse
+                       back(i).Liquidation <> src(i).Liquidation Then
+                        valuesOk = False
+                    End If
+                Next
+            End If
+
+            Check("A48a store round-trip — shipped header + 5-col F2 rows + liq flag survive write→read",
+                  flushed = 3 AndAlso headerOk AndAlso shapeOk AndAlso fmtOk AndAlso valuesOk,
+                  String.Format("flushed={0} header={1} shape={2} fmt={3}('{4}') count={5} values={6}",
+                                flushed, headerOk, shapeOk, fmtOk, If(lines.Length > 1, lines(1), "<none>"),
+                                countOk, valuesOk))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A48b: monotonic guard — replaying an identical batch twice writes once ------------
+    ' This is what makes reconnect re-seed idempotent: SeedAsync re-seeds the trade ring from
+    ' REST on every (re)connect, so the same trades WILL arrive twice. Three sub-cases:
+    '   (1) an identical replay in the same writer is fully dropped,
+    '   (2) a fresh writer over the SAME dir re-seeds its guard FROM DISK (the restart case),
+    '   (3) genuinely newer trades in a replayed batch still get through (the guard must not
+    '       be a batch-level "seen this before", it is a high-water mark).
+    Private Sub A48b_MonotonicGuardDropsReplayedBatch()
+        Dim dir As String = A48TempStore("b")
+        Try
+            Dim batch As New List(Of TradeRecord) From {
+                A48Trade(A48Ms(0), 64000, 100, "buy"),
+                A48Trade(A48Ms(100), 64001, 200, "sell"),
+                A48Trade(A48Ms(200), 64002, 300, "buy")}
+
+            Dim w As New TradeStoreWriter(dir)
+            Dim accepted1 As Integer = A48BufferAll(w, batch)
+            w.Flush()
+            Dim accepted2 As Integer = A48BufferAll(w, batch)   ' identical replay
+            w.Flush()
+            Dim path As String = TradeStoreWriter.TradeFileFor(dir, 2026, 7)
+            Dim afterReplay As Integer = TradeStoreWriter.ReadTradeFile(path).Count
+
+            ' (2) restart: a brand-new writer seeds its guard from the on-disk high-water mark.
+            Dim w2 As New TradeStoreWriter(dir)
+            Dim accepted3 As Integer = A48BufferAll(w2, batch)
+            w2.Flush()
+            Dim afterRestart As Integer = TradeStoreWriter.ReadTradeFile(path).Count
+
+            ' (3) a mixed batch: two already-seen + one newer ⇒ only the newer lands.
+            Dim mixed As New List(Of TradeRecord) From {
+                A48Trade(A48Ms(100), 64001, 200, "sell"),
+                A48Trade(A48Ms(200), 64002, 300, "buy"),
+                A48Trade(A48Ms(350), 64003, 400, "sell")}
+            Dim accepted4 As Integer = A48BufferAll(w2, mixed)
+            w2.Flush()
+            Dim final = TradeStoreWriter.ReadTradeFile(path)
+
+            Check("A48b monotonic guard — identical replay writes once · fresh writer re-seeds from disk · newer trades still land",
+                  accepted1 = 3 AndAlso accepted2 = 0 AndAlso afterReplay = 3 AndAlso
+                  accepted3 = 0 AndAlso afterRestart = 3 AndAlso
+                  accepted4 = 1 AndAlso final.Count = 4 AndAlso final(3).Timestamp = A48Ms(350),
+                  String.Format("acc1={0} acc2={1} afterReplay={2} acc3={3} afterRestart={4} acc4={5} final={6}",
+                                accepted1, accepted2, afterReplay, accepted3, afterRestart,
+                                accepted4, final.Count))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A48c: month rollover — batch straddling the boundary lands in two files -----------
+    ' Header written ONLY on create: the July file already exists and must NOT gain a second
+    ' header line when the straddling batch appends to it, while the freshly-created August
+    ' file must get one.
+    Private Sub A48c_MonthRolloverSplitsAndHeadersOnCreateOnly()
+        Dim dir As String = A48TempStore("c")
+        Try
+            Dim julEnd As Long = New DateTimeOffset(2026, 7, 31, 23, 59, 59, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim augStart As Long = New DateTimeOffset(2026, 8, 1, 0, 0, 1, TimeSpan.Zero).ToUnixTimeMilliseconds()
+
+            Dim w As New TradeStoreWriter(dir)
+            ' Pass 1 — July only, so the July file pre-exists when the straddle arrives.
+            w.Buffer(A48Trade(julEnd - 5000, 64000, 100, "buy"))
+            w.Flush()
+
+            ' Pass 2 — one batch straddling the boundary.
+            w.Buffer(A48Trade(julEnd, 64010, 110, "sell"))
+            w.Buffer(A48Trade(augStart, 64020, 120, "buy"))
+            w.Buffer(A48Trade(augStart + 1000, 64030, 130, "sell"))
+            Dim written As Integer = w.Flush()
+
+            Dim julPath As String = TradeStoreWriter.TradeFileFor(dir, 2026, 7)
+            Dim augPath As String = TradeStoreWriter.TradeFileFor(dir, 2026, 8)
+            Dim julLines = File.ReadAllLines(julPath)
+            Dim augLines = File.ReadAllLines(augPath)
+
+            Dim namesOk As Boolean = Path.GetFileName(julPath) = "trades_2026-07.csv" AndAlso
+                                     Path.GetFileName(augPath) = "trades_2026-08.csv"
+            ' July: 1 header + 2 rows, and exactly ONE header line in the whole file.
+            Dim julOk As Boolean = julLines.Length = 3 AndAlso
+                                   julLines.Count(Function(l) l.StartsWith("Timestamp,")) = 1
+            ' August: created by this batch ⇒ header + 2 rows.
+            Dim augOk As Boolean = augLines.Length = 3 AndAlso
+                                   augLines(0) = "Timestamp,Price,Amount,Direction,Liquidation"
+
+            Check("A48c month rollover — straddling batch splits across two files, header on create only",
+                  written = 3 AndAlso namesOk AndAlso julOk AndAlso augOk,
+                  String.Format("written={0} names={1} julLines={2}(hdrs={3}) augLines={4}",
+                                written, namesOk, julLines.Length,
+                                julLines.Count(Function(l) l.StartsWith("Timestamp,")), augLines.Length))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A48d: gap-repair overlap is a no-op ----------------------------------------------
+    ' The proposal's claim is "overlap is a no-op BY CONSTRUCTION" (§1.2) because the backfill
+    ' resumes from the last on-disk timestamp. That decision lives on the shared seam
+    ' (TradeStoreWriter.ResolveResumeCursorMs), which HistoricalStore.BackfillTradeMonthAsync
+    ' calls verbatim — so this exercises the REAL decision without a live HTTP call.
+    '
+    '   (1) stream a window, then repair the SAME window ⇒ cursor -1 (nothing to fetch),
+    '   (2) a gap: stream, then repair a window extending past it ⇒ cursor resumes at
+    '       last+1, i.e. it fetches only the gap and not the captured ground,
+    '   (3) the clamp: after an outage longer than the lookback, the cursor is pulled forward
+    '       to segStart so the fetch stays inside Deribit's ~24 h retention instead of asking
+    '       for a refused window,
+    '   (4) belt-and-braces at READ time — if an overlap ever did double-write, the reader
+    '       dedups on the whole row, so LoadTradeRange still yields no duplicates.
+    Private Sub A48d_GapRepairOverlapIsNoOp()
+        Dim dir As String = A48TempStore("d")
+        Try
+            Dim w As New TradeStoreWriter(dir)
+            For i As Integer = 0 To 4
+                w.Buffer(A48Trade(A48Ms(i * 1000L), 64000 + i, 100, "buy"))
+            Next
+            w.Flush()
+            Dim path As String = TradeStoreWriter.TradeFileFor(dir, 2026, 7)
+            Dim lastTs As Long = TradeStoreWriter.LastTradeTimestamp(path)
+
+            ' (1) repair the exact captured window ⇒ already covered.
+            Dim c1 As Long = TradeStoreWriter.ResolveResumeCursorMs(path, A48Ms(0), lastTs, clampToSegStart:=True)
+            ' (2) repair a window running 60s past the captured tail ⇒ resume at last+1.
+            Dim c2 As Long = TradeStoreWriter.ResolveResumeCursorMs(path, A48Ms(0), A48Ms(60000), clampToSegStart:=True)
+            ' (3) outage longer than the lookback: segStart is AFTER the stale on-disk tail,
+            '     so the clamp pulls the cursor forward to segStart.
+            Dim segStartLate As Long = A48Ms(30L * 3600L * 1000L)     ' 30 h after the captured tail
+            Dim c3 As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartLate, segStartLate + 3600000L,
+                                                                    clampToSegStart:=True)
+            ' ...and the historical backfill (clamp off) still fills the whole hole.
+            Dim c3NoClamp As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartLate, segStartLate + 3600000L,
+                                                                           clampToSegStart:=False)
+
+            ' (4) force a double-write of the same rows, then read back.
+            Dim dupRows = TradeStoreWriter.ReadTradeFile(path)
+            TradeStoreWriter.AppendRows(dir, dupRows)
+            Dim raw = File.ReadAllLines(path).Length - 1
+            Dim seen As New HashSet(Of String)()
+            Dim deduped As Integer = 0
+            For Each r In TradeStoreWriter.ReadTradeFile(path)
+                If seen.Add(TradeStoreWriter.FormatRow(r)) Then deduped += 1
+            Next
+
+            Check("A48d gap-repair overlap is a no-op — covered window ⇒ no fetch · gap resumes at last+1 · retention clamp · read-time dedup",
+                  c1 = -1 AndAlso c2 = lastTs + 1 AndAlso c3 = segStartLate AndAlso
+                  c3NoClamp = lastTs + 1 AndAlso raw = 10 AndAlso deduped = 5,
+                  String.Format("c1={0} c2={1}(want {2}) c3={3}(want {4}) c3NoClamp={5} rawRows={6} deduped={7}",
+                                c1, c2, lastTs + 1, c3, segStartLate, c3NoClamp, raw, deduped))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A48e: unwritable path never throws and never blocks the fold ----------------------
+    ' The SignalEmitter.TryWrite / liq_events.log discipline: losing capture must never kill
+    ' the feed. Two unwritable shapes — a store "directory" that is actually a FILE (so
+    ' CreateDirectory fails), and a target file locked open by another handle (so the append
+    ' fails). Both must return 0 and leave the caller running.
+    Private Sub A48e_UnwritablePathNeverThrows()
+        Dim root As String = A48TempStore("e")
+        Dim threw As String = ""
+        Dim wroteBlocked As Integer = -1
+        Dim wroteLocked As Integer = -1
+        Dim keptBuffering As Boolean = False
+        Try
+            ' (1) store dir path occupied by a file.
+            Dim asFile As String = Path.Combine(root, "not_a_dir")
+            File.WriteAllText(asFile, "x")
+            Dim w As New TradeStoreWriter(asFile)
+            w.Buffer(A48Trade(A48Ms(0), 64000, 100, "buy"))
+            Try
+                wroteBlocked = w.Flush()
+            Catch ex As Exception
+                threw = "flush-blocked: " & ex.Message
+            End Try
+            ' The fold keeps working afterwards — a capture failure is not a poison pill.
+            keptBuffering = w.Buffer(A48Trade(A48Ms(1000), 64001, 200, "sell"))
+
+            ' (2) target file locked open by another handle.
+            Dim lockedDir As String = Path.Combine(root, "locked")
+            Directory.CreateDirectory(lockedDir)
+            Dim lockedPath As String = TradeStoreWriter.TradeFileFor(lockedDir, 2026, 7)
+            File.WriteAllText(lockedPath, "Timestamp,Price,Amount,Direction,Liquidation" & vbLf)
+            Using hold As New FileStream(lockedPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+                Try
+                    wroteLocked = TradeStoreWriter.AppendRows(
+                        lockedDir, New List(Of TradeRecord) From {A48Trade(A48Ms(0), 64000, 100, "buy")})
+                Catch ex As Exception
+                    threw &= " | append-locked: " & ex.Message
+                End Try
+            End Using
+
+            Check("A48e unwritable store never throws — blocked dir + locked file both return 0, fold keeps running",
+                  threw = "" AndAlso wroteBlocked = 0 AndAlso wroteLocked = 0 AndAlso keptBuffering,
+                  String.Format("threw='{0}' blocked={1} locked={2} keptBuffering={3}",
+                                threw, wroteBlocked, wroteLocked, keptBuffering))
+        Finally
+            A48Cleanup(root)
+        End Try
+    End Sub
+
+    ' -- A48f: enabled:false ⇒ zero writes, fold inert -------------------------------------
+    ' The reversibility claim (§4). ApplyTrades resolves its writer from the config and
+    ' early-outs when the block is off; this pins BOTH halves of that gate — the config
+    ' default that ships, and the fact that a disabled block yields no writer and therefore
+    ' no file. Also pins that gap repair returns 0 without touching the store when disabled.
+    Private Sub A48f_DisabledMeansZeroWrites()
+        Dim dir As String = A48TempStore("f")
+        Try
+            ' The shipped POCO defaults — what an absent settings.json block resolves to.
+            Dim def As New TradeStoreSettings()
+            Dim defaultsOk As Boolean = def.Enabled AndAlso def.StoreDir = "backtest_data" AndAlso
+                                        def.FlushSeconds = 30 AndAlso def.FlushTradeCount = 500 AndAlso
+                                        def.GapRepairEnabled AndAlso
+                                        Math.Abs(def.GapRepairIntervalHours - 6.0) < 1e-9 AndAlso
+                                        Math.Abs(def.GapRepairLookbackHours - 20.0) < 1e-9
+
+            ' Disabled ⇒ the feed's ResolveTradeStore gate (ts Is Nothing OrElse Not ts.Enabled)
+            ' is false-y, so no writer is built and nothing reaches the disk. Mirrored here as
+            ' the same predicate, then proved by the absence of any file.
+            Dim off As New TradeStoreSettings() With {.Enabled = False, .StoreDir = dir}
+            Dim gateOpen As Boolean = off IsNot Nothing AndAlso off.Enabled
+            Dim filesBefore As Integer = Directory.GetFiles(dir).Length
+            If gateOpen Then
+                Dim w As New TradeStoreWriter(dir)
+                w.Buffer(A48Trade(A48Ms(0), 64000, 100, "buy"))
+                w.Flush()
+            End If
+            Dim filesAfter As Integer = Directory.GetFiles(dir).Length
+
+            ' Gap repair honours BOTH switches independently.
+            Dim cfgOff As New EngineSettings()
+            cfgOff.TradeStore = New TradeStoreSettings() With {.Enabled = False, .StoreDir = dir}
+            Dim nOff As Integer = TradeStoreGapRepairGate(cfgOff)
+            Dim cfgRepairOff As New EngineSettings()
+            cfgRepairOff.TradeStore = New TradeStoreSettings() With {
+                .Enabled = True, .GapRepairEnabled = False, .StoreDir = dir}
+            Dim nRepairOff As Integer = TradeStoreGapRepairGate(cfgRepairOff)
+
+            Check("A48f enabled:false ⇒ zero writes, fold inert (defaults pinned; both repair switches independent)",
+                  defaultsOk AndAlso Not gateOpen AndAlso filesBefore = 0 AndAlso filesAfter = 0 AndAlso
+                  nOff = 0 AndAlso nRepairOff = 0,
+                  String.Format("defaults={0} gateOpen={1} before={2} after={3} repairOff={4}/{5}",
+                                defaultsOk, gateOpen, filesBefore, filesAfter, nOff, nRepairOff))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' The gap-repair enable predicate, mirrored from TradeStoreGapRepair.RepairOnceAsync's
+    ' first guard. (TradeStoreGapRepair itself references HistoricalStore, which owns an
+    ' HttpClient and is deliberately unlinked here — see the A48 header.)
+    Private Function TradeStoreGapRepairGate(cfg As EngineSettings) As Integer
+        Dim ts = cfg.TradeStore
+        If ts Is Nothing OrElse Not ts.Enabled OrElse Not ts.GapRepairEnabled Then Return 0
+        Return 1
+    End Function
+
+    ' -- A48g: HARD CONSTRAINT 27 fences every trade_store.* key ---------------------------
+    ' Data-capture plumbing has no failure-rate linkage — the same class as alerts.* (HC25),
+    ' exit_guard.*, live_strip.*, signal_bridge.*. Prefix-safe: a sibling scoring.* tunable
+    ' must still pass, which is what makes this a fence and not a blanket.
+    Private Sub A48g_Hc27FencesTradeStoreKeys()
+        Dim s As String = "{""version"":64,""scoring"":{""bbw_squeeze_penalty"":2}," &
+                          """trade_store"":{""enabled"":true,""store_dir"":""backtest_data""," &
+                          """flush_seconds"":30,""flush_trade_count"":500,""gap_repair_enabled"":true," &
+                          """gap_repair_interval_hours"":6,""gap_repair_lookback_hours"":20}}"
+
+        Dim keys As String() = {"trade_store.enabled", "trade_store.store_dir",
+                                "trade_store.flush_seconds", "trade_store.flush_trade_count",
+                                "trade_store.gap_repair_enabled", "trade_store.gap_repair_interval_hours",
+                                "trade_store.gap_repair_lookback_hours"}
+        Dim allRejected As Boolean = True
+        Dim allCiteHc As Boolean = True
+        For Each k In keys
+            Dim r = SettingsDiffApplier.Validate(OneDiff(k, "30", "60"), s, 3)
+            If r.IsValid Then allRejected = False
+            If Not r.ErrorReason.Contains("HARD CONSTRAINT") Then allCiteHc = False
+        Next
+
+        ' Sibling scoring.* tunable still proposable — the prefix must not over-match.
+        Dim rCtl = SettingsDiffApplier.Validate(OneDiff("scoring.bbw_squeeze_penalty", "2", "3"), s, 3)
+        ' And the prompt tells the model the same thing the applier enforces — a fence the
+        ' code rejects but the prompt never mentions burns a round on a doomed proposal.
+        Dim built = PromptBuilder.Build(
+            settingsJson:=s,
+            csvRows:=New List(Of CsvRow)(),
+            failureCells:=New List(Of FailureCellResult)(),
+            pickedCellHistory:=New List(Of PickedCellEntry)(),
+            trigger:="a48g",
+            manifestActiveRows:="",
+            conditions:=Nothing,
+            maxKeysPerProposal:=3)
+        Dim promptOk As Boolean = built.SystemMsg.Contains("'trade_store.*'") AndAlso
+                                  built.SystemMsg.Contains("27. Never propose")
+
+        Check("A48g HC27 rejects all seven trade_store.* keys, sibling scoring tunable passes, prompt rule 27 present",
+              allRejected AndAlso allCiteHc AndAlso rCtl.IsValid AndAlso promptOk,
+              String.Format("allRejected={0} citeHc={1} ctlValid={2} promptOk={3}",
+                            allRejected, allCiteHc, rCtl.IsValid, promptOk))
+    End Sub
+
+    ' -- A48h: store_dir resolves EXE-relative, never CWD-relative -------------------------
+    ' D3's whole point. The app's working directory is not guaranteed (a shortcut, a service
+    ' host and a debugger all set it differently), so a cwd-relative store would silently
+    ' scatter capture files. The pin: resolve the same configured value from two different
+    ' working directories and get the same absolute path — which must sit under the exe dir.
+    Private Sub A48h_StoreDirIsExeRelativeNotCwdRelative()
+        Dim originalCwd As String = Directory.GetCurrentDirectory()
+        Dim scratch As String = A48TempStore("h")
+        Try
+            Dim baseDir As String = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory)
+
+            Dim r1 As String = TradeStoreWriter.ResolveStoreDir("backtest_data")
+            Directory.SetCurrentDirectory(scratch)
+            Dim r2 As String = TradeStoreWriter.ResolveStoreDir("backtest_data")
+            Dim cwdMoved As String = Path.GetFullPath(Directory.GetCurrentDirectory())
+            Directory.SetCurrentDirectory(originalCwd)
+
+            Dim stableOk As Boolean = String.Equals(r1, r2, StringComparison.OrdinalIgnoreCase)
+            Dim underExeOk As Boolean = r1.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase)
+            ' The cwd genuinely moved during the test, so stability is a real result.
+            Dim cwdActuallyMoved As Boolean =
+                Not String.Equals(cwdMoved.TrimEnd(Path.DirectorySeparatorChar),
+                                  Path.GetFullPath(originalCwd).TrimEnd(Path.DirectorySeparatorChar),
+                                  StringComparison.OrdinalIgnoreCase)
+            Dim notCwdOk As Boolean = Not r2.StartsWith(cwdMoved, StringComparison.OrdinalIgnoreCase)
+            ' Absolute configured paths pass through untouched.
+            Dim absIn As String = Path.Combine(scratch, "explicit_store")
+            Dim absOk As Boolean = String.Equals(TradeStoreWriter.ResolveStoreDir(absIn),
+                                                 Path.GetFullPath(absIn), StringComparison.OrdinalIgnoreCase)
+            ' Empty ⇒ the shipped default name, still exe-anchored.
+            Dim emptyOk As Boolean = String.Equals(TradeStoreWriter.ResolveStoreDir(""), r1,
+                                                   StringComparison.OrdinalIgnoreCase)
+
+            Check("A48h store_dir is exe-relative — same path from two working directories, never under cwd; absolute passes through",
+                  stableOk AndAlso underExeOk AndAlso cwdActuallyMoved AndAlso notCwdOk AndAlso absOk AndAlso emptyOk,
+                  String.Format("stable={0} underExe={1} cwdMoved={2} notCwd={3} abs={4} empty={5} r1='{6}'",
+                                stableOk, underExeOk, cwdActuallyMoved, notCwdOk, absOk, emptyOk, r1))
+        Finally
+            Try
+                Directory.SetCurrentDirectory(originalCwd)
+            Catch
+            End Try
+            A48Cleanup(scratch)
+        End Try
     End Sub
 
     ' Unix-ms for a 2026-07-15 UTC wall time — the A45a historical session fixture date.

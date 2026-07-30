@@ -179,6 +179,18 @@ Public Class PromptBuilder
             "longer exists — do not propose it either. The sibling 'scoring.*' tunables (verdict " &
             "percentages, ATR multipliers, penalties) REMAIN on the surface. (Enforced in code: " &
             "SettingsDiffApplier rejects the 'scoring.trade_costs.' prefix as well.)" & vbLf &
+        "27. Never propose any 'trade_store.*' key. The trade_store block drives raw-trade " &
+            "capture to the backtest store — streaming capture off the WS trades stream plus " &
+            "a gap-repair backfill. It writes a sidecar the OFFLINE backtester consumes: no " &
+            "indicator reads it, no CSV column, no card, no snapshot line, no bridge field, " &
+            "so it has ZERO scoring impact and no failure-rate linkage whatsoever; same class " &
+            "as 'alerts.*' / 'exit_guard.*' / 'live_strip.*' / 'signal_bridge.*'. The seven " &
+            "keys (enabled, store_dir, flush_seconds, flush_trade_count, gap_repair_enabled, " &
+            "gap_repair_interval_hours, gap_repair_lookback_hours) are capture plumbing — a " &
+            "flush cadence or a lookback window can never be an optimisation of trade " &
+            "outcomes, and gap_repair_lookback_hours in particular is pinned under Deribit's " &
+            "~24h public-trades retention, not tuned. (Enforced in code: SettingsDiffApplier " &
+            "rejects the 'trade_store.' prefix as well.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

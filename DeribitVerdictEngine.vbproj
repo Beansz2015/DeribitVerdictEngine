@@ -40,6 +40,17 @@
     <Compile Include="tools\AutoTweaker\RoundStatsBuilder.vb" />
   </ItemGroup>
 
+  <!-- [v64 in-app trade-store capture §1.2 / D5] The app owns gap repair, so it links the
+       network backfill from the BacktestRunner tree. Two files only: HistoricalStore plus
+       the funding-sample struct it references (hoisted out of ReplayLoop.vb at v64 precisely
+       so this link stays two files and does not drag the replay pipeline in). The
+       format/rollover/guard half lives in Core\TradeStoreWriter.vb, which is network-free
+       and auto-globbed — that split is why an HttpClient never reaches the fixture project. -->
+  <ItemGroup>
+    <Compile Include="tools\BacktestRunner\BacktestFundingSample.vb" />
+    <Compile Include="tools\BacktestRunner\HistoricalStore.vb" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Copy settings.json to output directory so the app finds it at runtime -->
     <None Include="settings.json">
