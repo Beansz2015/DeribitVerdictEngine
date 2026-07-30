@@ -106,22 +106,42 @@ Public Class HistoricalStore
 
         Dim startMs As Long = New DateTimeOffset(segStart,   TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim endMs   As Long = New DateTimeOffset(segEndExcl.AddMilliseconds(-1), TimeSpan.Zero).ToUnixTimeMilliseconds()
-        Dim candles As List(Of Candle) = Await DeribitClient.GetCandlesAsync(resolution.ToString(), startMs, endMs)
-        If candles Is Nothing Then
-            Console.Error.WriteLine(String.Format(
-                "[HistoricalStore] Candle fetch failed for {0}m {1:D4}-{2:D2}", resolution, year, month))
-            Return 0
-        End If
 
+        ' Deribit's get_tradingview_chart_data caps each response at ~5001 ticks. For a
+        ' multi-day 1m fetch that under-reports silently (only the trailing window
+        ' comes back). Chunk into ~4000-candle segments per call — safely under the cap
+        ' at every resolution — and stitch the results (dedup by Timestamp).
+        Dim chunkMs As Long = CLng(resolution) * 60L * 1000L * 4000L
+        Dim collected As New SortedDictionary(Of Long, Candle)()
+        Dim cursor As Long = startMs
+        While cursor <= endMs
+            Dim chunkEnd As Long = Math.Min(endMs, cursor + chunkMs - 1)
+            Dim chunk As List(Of Candle) = Await DeribitClient.GetCandlesAsync(resolution.ToString(), cursor, chunkEnd)
+            If chunk Is Nothing Then
+                Console.Error.WriteLine(String.Format(
+                    "[HistoricalStore] Candle fetch failed for {0}m {1:D4}-{2:D2} @ {3}",
+                    resolution, year, month, cursor))
+                Exit While
+            End If
+            For Each c In chunk
+                collected(c.Timestamp) = c
+            Next
+            cursor = chunkEnd + 1
+            If chunk.Count > 0 Then
+                Await Task.Delay(PoliteDelayMs)
+            End If
+        End While
+
+        If collected.Count = 0 Then Return 0
         Using sw As New StreamWriter(path, append:=False)
             sw.WriteLine("Timestamp,Open,High,Low,Close,Volume,Cost")
-            For Each c In candles
+            For Each c In collected.Values
                 sw.WriteLine(String.Format(CultureInfo.InvariantCulture,
                     "{0},{1:F2},{2:F2},{3:F2},{4:F2},{5:F6},{6:F2}",
                     c.Timestamp, c.Open, c.High, c.Low, c.Close, c.Volume, c.VolumeUSD))
             Next
         End Using
-        Return candles.Count
+        Return collected.Count
     End Function
 
     Private Shared Function MonthFileCovers(path As String, segStart As DateTime, segEndExcl As DateTime) As Boolean
