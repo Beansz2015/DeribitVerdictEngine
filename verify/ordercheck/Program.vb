@@ -339,6 +339,18 @@ Module Program
         A42c_LoosenessBoundAndAbsentPivotEquivalence()
         A42d_Hc24FenceAndWhatIfWhitelistAndRoundTrip()
 
+        ' [Backtest synthesizer CORE — A43, docs/backtest-synthesizer-proposal.md §4]
+        ' Slicing exactness (window size + at-or-before-close boundary) · trade window
+        ' ascending + last-500-from-end · sequential-state replay (funding ring +
+        ' regime hysteresis vs a hand-walked case) · muted-vote inertness (OFI / spread
+        ' / OI / absorption contribute zero) · header byte-parity with AnalysisLogger
+        ' (reflection) + provenance stamping (BACKTEST- prefix + monotonic SignalId).
+        A43a_SliceCandlesAtOrBefore()
+        A43b_SliceTradesAscendingAndLastN()
+        A43c_SequentialStateReplay()
+        A43d_MutedVoteInertness()
+        A43e_HeaderParityAndProvenance()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -6170,6 +6182,258 @@ Module Program
               okWl AndAlso okFence AndAlso okApply AndAlso okAdapter,
               String.Format("wl={0} fence(flag={1}, bound={2}) apply={3} adapter={4}",
                             okWl, rFlag.IsValid, rBound.IsValid, okApply, okAdapter))
+    End Sub
+
+    ' == A43: Backtest synthesizer CORE (docs/backtest-synthesizer-proposal.md §4) ==
+
+    ''' <summary>Build a small candle list starting at openTsMs, cadence resMin (in minutes),
+    ''' n candles. Each candle closes at open + resMin*60000; the fixture asserts the slice
+    ''' obeys that boundary exactly.</summary>
+    Private Function BacktestCandleSeries(openTsMs As Long, resMin As Integer, n As Integer) As List(Of Candle)
+        Dim result As New List(Of Candle)()
+        Dim stepMs As Long = CLng(resMin) * 60000L
+        For i As Integer = 0 To n - 1
+            result.Add(New Candle With {
+                .Timestamp = openTsMs + i * stepMs,
+                .Open = 100000 + i, .High = 100000 + i + 5, .Low = 100000 + i - 5,
+                .Close = 100000 + i, .Volume = 10})
+        Next
+        Return result
+    End Function
+
+    ' -- A43a: slice candles at-or-before-close boundary ----------------------
+    ' 50 1-min candles starting at t=0. At closeMs = 30*60_000 we want candles whose
+    ' close time (openTs + 60_000) is <= closeMs — that's opens 0 .. 29*60_000 = the
+    ' first 30 candles. Requesting n=250 (the live 1m window) yields the whole 30
+    ' because that's all that has closed. The LAST candle in the slice is candle 29
+    ' (open t=29 min, close t=30 min) — the bar that JUST closed at closeMs.
+    Private Sub A43a_SliceCandlesAtOrBefore()
+        Dim series = BacktestCandleSeries(0, 1, 50)
+        Dim closeMs As Long = 30L * 60L * 1000L
+
+        Dim s250 = ReplayLoop.SliceCandlesAtOrBefore(series, 1, closeMs, 250)
+        Dim s10  = ReplayLoop.SliceCandlesAtOrBefore(series, 1, closeMs, 10)
+
+        Dim okAll = (s250.Count = 30) AndAlso (s250.Last().Timestamp = 29L * 60L * 1000L) AndAlso (s250.First().Timestamp = 0L)
+        Dim okLast10 = (s10.Count = 10) AndAlso (s10.Last().Timestamp = 29L * 60L * 1000L) AndAlso (s10.First().Timestamp = 20L * 60L * 1000L)
+
+        ' At exactly closeMs = 29*60_000 the bar with open 29 is NOT yet closed
+        ' (it would close at t=30 min). Only 29 candles qualify.
+        Dim onGrid = ReplayLoop.SliceCandlesAtOrBefore(series, 1, 29L * 60L * 1000L, 250)
+        Dim okBoundary = (onGrid.Count = 29) AndAlso (onGrid.Last().Timestamp = 28L * 60L * 1000L)
+
+        Check("A43a slice candles at-or-before-close (boundary + last-N-from-end)",
+              okAll AndAlso okLast10 AndAlso okBoundary,
+              String.Format("okAll={0} last10={1} boundary={2} (s250.Count={3} lastTs={4})",
+                            okAll, okLast10, okBoundary, s250.Count,
+                            If(s250.Count > 0, s250.Last().Timestamp, -1L)))
+    End Sub
+
+    ' -- A43b: trades ascending + LastN-from-end ------------------------------
+    ' 60 ascending trades: oldest 30 sells, newest 30 buys. Slicing last-500 at a
+    ' closeMs after all trades yields all 60 in ascending order. Then TFI (which
+    ' uses LastN internally at window=30) must classify BUY PRESSURE — proving the
+    ' slice keeps the newest trades at the END, not the beginning (Take(30) on the
+    ' slice would score the SELLS and produce SELL PRESSURE — the classic F1 bug).
+    Private Sub A43b_SliceTradesAscendingAndLastN()
+        Dim trades As New List(Of TradeRecord)()
+        Dim ts As Long = 1
+        For i As Integer = 1 To 30
+            trades.Add(Trade("sell", 1000, ts)) : ts += 1
+        Next
+        For i As Integer = 1 To 30
+            trades.Add(Trade("buy", 1000, ts)) : ts += 1
+        Next
+
+        ' All trades qualify at a closeMs past the newest.
+        Dim slice500 = ReplayLoop.SliceTradesAtOrBefore(trades, 100, 500)
+        Dim okAll  = slice500.Count = 60 AndAlso slice500(0).Direction = "sell" AndAlso slice500.Last().Direction = "buy"
+
+        ' Slicing to n=40 keeps the LAST 40 (all 30 buys + the newest 10 sells).
+        Dim slice40 = ReplayLoop.SliceTradesAtOrBefore(trades, 100, 40)
+        Dim okKeepEnd = slice40.Count = 40 AndAlso slice40.Last().Direction = "buy"
+
+        ' TFI over the WHOLE slice (windowSize>=count) must read BUY PRESSURE because
+        ' the newest half are buys — the ascending-order + LastN-from-end contract.
+        Dim tfiVal As Double, tfiSig As String = ""
+        IndicatorEngine.CalcTFI(slice500, tfiVal, tfiSig, tfiWindowSize:=30)
+        Dim okTfi = (tfiSig = "BUY PRESSURE") AndAlso (Math.Abs(tfiVal - 1.0) < 0.000001)
+
+        ' Boundary: closeMs = 40 admits the first 40 trades (ts 1..40); newest is a sell.
+        Dim slice40Boundary = ReplayLoop.SliceTradesAtOrBefore(trades, 40, 500)
+        Dim okBoundary = slice40Boundary.Count = 40 AndAlso slice40Boundary.Last().Timestamp = 40L
+
+        Check("A43b trades ascending + LastN-from-end + at-or-before-close",
+              okAll AndAlso okKeepEnd AndAlso okTfi AndAlso okBoundary,
+              String.Format("okAll={0} keepEnd={1} tfi={2} boundary={3}",
+                            okAll, okKeepEnd, okTfi, okBoundary))
+    End Sub
+
+    ' -- A43c: sequential-state replay (funding ring + regime hysteresis) ------
+    ' Two independent state pins:
+    '   (i)  Funding ring: append samples at t=0, t=W, t=2W minutes (W = the cfg's
+    '        MomentumWindowMinutes). The v53 window is "newest sample ≥W old" — after
+    '        the 2nd append the anchor is the t=0 sample; after the 3rd it becomes t=W.
+    '        A rate that jumps by > MomentumThreshold between anchor and current fires
+    '        RISING; a flat trajectory keeps FLAT.
+    '   (ii) Regime hysteresis: prev TRENDING_UP → raw RANGE_BOUND holds the trending
+    '        label for one bar (the fixture-pinned live rule); a following raw
+    '        RANGE_BOUND then flips (prev is now RANGE_BOUND, no hold applied).
+    Private Sub A43c_SequentialStateReplay()
+        ' (i) Funding ring
+        Dim cfg As New EngineSettings()
+        Dim winMs As Long = CLng(cfg.Indicators.Funding.MomentumWindowMinutes * 60_000.0)
+        Dim thr   As Double = cfg.Indicators.Funding.MomentumThreshold
+
+        Dim history As New List(Of (UtcMs As Long, Rate As Double))()
+        IndicatorEngine.AppendFundingSample(history, 0L, 0.00001)
+        Dim s1 = IndicatorEngine.CalcFundingMomentum(history, 0L, cfg)   ' cold start ⇒ FLAT
+
+        IndicatorEngine.AppendFundingSample(history, winMs, 0.00001)     ' identical rate at t=W
+        Dim s2 = IndicatorEngine.CalcFundingMomentum(history, winMs, cfg) ' anchor=t=0, delta=0 ⇒ FLAT
+
+        ' Bump by > 2*threshold at t=2W; anchor is now t=W (newest with age ≥ W); delta > threshold ⇒ RISING.
+        Dim bumpedRate As Double = 0.00001 + 2.0 * thr
+        IndicatorEngine.AppendFundingSample(history, 2L * winMs, bumpedRate)
+        Dim s3 = IndicatorEngine.CalcFundingMomentum(history, 2L * winMs, cfg)
+
+        Dim okFunding = (s1 = "FLAT") AndAlso (s2 = "FLAT") AndAlso (s3 = "RISING")
+
+        ' (ii) Regime hysteresis — the live rule (MainForm_Analysis) reproduced pure.
+        Dim prev As String = ""
+        Dim seq() As String = {"TRENDING_UP", "RANGE_BOUND", "RANGE_BOUND", "TRENDING_DOWN"}
+        Dim effective(seq.Length - 1) As String
+        For i As Integer = 0 To seq.Length - 1
+            Dim raw = seq(i)
+            Dim prevWasTrending As Boolean = (prev = "TRENDING_UP" OrElse prev = "TRENDING_DOWN" OrElse prev = "TRANSITIONAL")
+            effective(i) = If(raw = "RANGE_BOUND" AndAlso prevWasTrending, prev, raw)
+            prev = raw   ' hysteresis updates on the RAW regime — the fixture-pinned rule
+        Next
+        Dim okHyst = effective(0) = "TRENDING_UP" AndAlso
+                     effective(1) = "TRENDING_UP" AndAlso   ' held for 1 bar
+                     effective(2) = "RANGE_BOUND" AndAlso   ' 2nd RB flips (prev raw was RB, no hold)
+                     effective(3) = "TRENDING_DOWN"
+
+        Check("A43c sequential state (funding ring anchors + regime hysteresis)",
+              okFunding AndAlso okHyst,
+              String.Format("funding=[{0}/{1}/{2}] hyst=[{3},{4},{5},{6}]",
+                            s1, s2, s3, effective(0), effective(1), effective(2), effective(3)))
+    End Sub
+
+    ' -- A43d: muted-vote inertness -------------------------------------------
+    ' Drive Calculate() with the A8 dominant-side cascade fixture (isolates the vote
+    ' math from MTF/Pass 2b/2c). Run TWICE: once with the backtest muted-signal
+    ' defaults set (OFI BALANCED / FLAT, OFISignal="BALANCED", spread 0 / NORMAL,
+    ' OI NEUTRAL, absorption NONE); once with those same fields wiped to POCO
+    ' defaults. The verdict + effective scores must be IDENTICAL — the muted signals
+    ' contribute zero, which is the whole D2 contract.
+    Private Sub A43d_MutedVoteInertness()
+        Dim cfg = BuildA8Cfg(fundingBoost:=3)
+        Dim norms = BuildA8Norms()
+
+        ' (i) Backtest-muted version — the values ReplayLoop sets explicitly.
+        Dim rMuted = BuildA8Indicators()
+        rMuted.OFIRatio    = 1.0
+        rMuted.OFIBidVol   = 0
+        rMuted.OFIAskVol   = 0
+        rMuted.OFISignal   = "BALANCED"
+        rMuted.OFIMomentum = "FLAT"
+        rMuted.SpreadBps    = 0
+        rMuted.SpreadStatus = "NORMAL"
+        rMuted.OI_Current  = 0
+        rMuted.OIChange15m = 0
+        rMuted.OIChange60m = 0
+        rMuted.OISignal    = "NEUTRAL"
+        rMuted.AbsorptionSignal   = "NONE"
+        rMuted.AbsorptionLevel    = Nothing
+        rMuted.AbsorptionRatio    = Nothing
+        rMuted.AbsorptionAggrUsd  = Nothing
+        rMuted.AbsorptionPullFrac = Nothing
+
+        ' (ii) Bare "unavailable" version — leave the same fields at POCO defaults.
+        ' A8's own indicator builder sets OFISignal etc. to values that DO vote.
+        ' Wipe them so we're comparing "muted-explicit" against "empty/unset".
+        Dim rBare = BuildA8Indicators()
+        rBare.OFIRatio    = 0
+        rBare.OFIBidVol   = 0
+        rBare.OFIAskVol   = 0
+        rBare.OFISignal   = ""
+        rBare.OFIMomentum = ""
+        rBare.SpreadBps    = 0
+        rBare.SpreadStatus = ""
+        rBare.OI_Current  = 0
+        rBare.OIChange15m = 0
+        rBare.OIChange60m = 0
+        rBare.OISignal    = ""
+        rBare.AbsorptionSignal   = ""
+        rBare.AbsorptionLevel    = Nothing
+        rBare.AbsorptionRatio    = Nothing
+        rBare.AbsorptionAggrUsd  = Nothing
+        rBare.AbsorptionPullFrac = Nothing
+
+        Dim vMuted = ScoringEngine.Calculate(rMuted, PositionState.None, norms, cfg)
+        Dim vBare  = ScoringEngine.Calculate(rBare,  PositionState.None, norms, cfg)
+
+        Dim ok = vMuted.Verdict = vBare.Verdict AndAlso
+                 vMuted.EffectiveLongScore  = vBare.EffectiveLongScore AndAlso
+                 vMuted.EffectiveShortScore = vBare.EffectiveShortScore
+
+        Check("A43d muted-vote inertness (OFI/spread/OI/absorption contribute zero)",
+              ok,
+              String.Format("muted='{0}' eff {1}/{2} vs bare='{3}' eff {4}/{5}",
+                            vMuted.Verdict, vMuted.EffectiveLongScore, vMuted.EffectiveShortScore,
+                            vBare.Verdict, vBare.EffectiveLongScore, vBare.EffectiveShortScore))
+    End Sub
+
+    ' -- A43e: header byte-parity + provenance stamping ------------------------
+    ' The local BacktestRowWriter reproduces AnalysisLogger's v0.8 row format because
+    ' AnalysisLogger's Header is Private and its path is hardcoded — the task's
+    ' HARD CONSTRAINT forbids modifying that file. Byte-level equality via reflection
+    ' catches any header drift on either side; the provenance sub-check verifies the
+    ' "BACKTEST-" InstanceId prefix and the monotonic SignalId per writer instance.
+    Private Sub A43e_HeaderParityAndProvenance()
+        ' -- header equality --
+        Dim fld = GetType(AnalysisLogger).GetField("Header",
+            Reflection.BindingFlags.NonPublic Or Reflection.BindingFlags.Static)
+        Dim liveHeader As String = If(fld Is Nothing, "", CStr(fld.GetValue(Nothing)))
+        Dim okHeader = liveHeader = BacktestRowWriter.Header
+
+        ' -- provenance: write two rows and re-read to inspect prefix + monotonic id --
+        Dim tmp As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "backtest_row_writer_a43e_" & Guid.NewGuid().ToString("N") & ".csv")
+
+        Dim okProv As Boolean = False
+        Dim detail As String = ""
+        Try
+            Dim writer As New BacktestRowWriter(tmp)
+            Dim v As New VerdictResult() With {.Verdict = "NO TRADE", .Confidence = "LOW", .MaxScore = 18}
+            Dim r = BuildA8Indicators()   ' any populated fixture will do; header shape doesn't depend on values
+            r.ATR = 50
+            Dim cfg = BuildA8Cfg(fundingBoost:=0)
+            writer.WriteRow(r, v, cfg, New DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc))
+            writer.WriteRow(r, v, cfg, New DateTime(2026, 7, 30, 12, 1, 0, DateTimeKind.Utc))
+
+            Dim lines = System.IO.File.ReadAllLines(tmp)
+            If lines.Length <> 3 Then
+                detail = "expected 3 lines (header + 2 rows), got " & lines.Length
+            Else
+                Dim r1 = lines(1).Split(","c)
+                Dim r2 = lines(2).Split(","c)
+                Dim iid1 = r1(r1.Length - 2)
+                Dim iid2 = r2(r2.Length - 2)
+                Dim sid1 = Integer.Parse(r1(r1.Length - 1))
+                Dim sid2 = Integer.Parse(r2(r2.Length - 1))
+                okProv = iid1.StartsWith("BACKTEST-") AndAlso iid1 = iid2 AndAlso sid2 = sid1 + 1
+                detail = String.Format("iid1='{0}' iid2='{1}' sid1={2} sid2={3}", iid1, iid2, sid1, sid2)
+            End If
+        Finally
+            Try : System.IO.File.Delete(tmp) : Catch : End Try
+        End Try
+
+        Check("A43e header byte-parity + provenance (BACKTEST- prefix + monotonic SignalId)",
+              okHeader AndAlso okProv,
+              String.Format("header={0} prov={1} ({2})", okHeader, okProv, detail))
     End Sub
 
 End Module

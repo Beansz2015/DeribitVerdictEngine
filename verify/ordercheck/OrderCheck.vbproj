@@ -134,6 +134,14 @@
     <Compile Include="..\..\tools\CeilingAudit\CsvFeatureBuilder.vb" />
     <Compile Include="..\..\tools\CeilingAudit\FeatureMatrix.vb" />
     <Compile Include="..\..\tools\CeilingAudit\AuditMetrics.vb" />
+    <!-- Backtest synthesizer (A43 — docs/backtest-synthesizer-proposal.md §4):
+         the pure slicing helpers + the local CSV writer + the store (link-only for
+         type resolution; the harness never calls its HTTP paths — same idiom as
+         DeribitClient already linked above). BacktestProgram stays OUT — it carries
+         its own Main. -->
+    <Compile Include="..\..\tools\BacktestRunner\HistoricalStore.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\ReplayLoop.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\BacktestRowWriter.vb" />
   </ItemGroup>
 
 </Project>
