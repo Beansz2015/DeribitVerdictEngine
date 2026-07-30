@@ -123,3 +123,7 @@ The overlap-validation lane (proposal §4 diff run against the live-collection w
 
 All local, unpushed (the trader's local-first workflow).
 
+
+---
+
+**Coordinator review 2026-07-30 — CORE APPROVED (provisional on §4).** Independent gate re-run: GATE PASSED (A1–A43e ALL PASS; the version-bump line reflects the unpushed range's v62/v63, correct). Verified: the lane's three commits touch ZERO engine/UI/analysis files (the D1 linking discipline held); the D2e muted values are the engine's own neutral arms, not inventions (`"BALANCED"`/ratio-1.0 is Indicators_OrderFlow.vb's degenerate-book return). Deviations D2a–D2f all accepted — D2c (local writer) flags AnalysisLogger path-parameterization as a possible future refactor, not now. **Assembly fidelity is deliberately NOT hand-verified line-by-line — the §4 overlap validation is the systematic instrument for it and the next lane. Until that lane reports, the synthesizer is NOT cleared for studies.** Validation-window ruling (coordinator): validate on 2026-07-23→30, NOT the full live span — live rows before ~07-23 carry materially different settings (v48→v60 drift), which would pollute the diff with config-mismatch noise; post-07-23 live rows are effectively current-config (v61; v62/v63 byte-identical at defaults). The deep 6-month store fetch stays a separate unattended task.
