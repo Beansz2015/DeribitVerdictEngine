@@ -93,28 +93,54 @@ Public Class HistoricalStore
 
     ''' <summary>
     ''' Fetch (if needed) and store one calendar month of candles at the given resolution.
-    ''' If the month file already exists AND covers the entire requested [segStart, segEnd),
-    ''' it is left alone (fetch-once). Otherwise the file is rewritten in full for the
-    ''' segment window — candles are cheap (~44k rows/month at 1m) and this avoids
-    ''' complex merge logic. Returns the row count written.
+    '''
+    ''' [2026-07-31 fix] This function destroyed a month of 3m/5m/15m June data, via two
+    ''' independent defects that were each survivable alone:
+    '''
+    ''' (1) **Resolution-blind coverage check.** The retired `MonthFileCovers` heuristic
+    '''     required the file's last bar to be within a FIXED 2 minutes of the segment end.
+    '''     A month's last bar is 23:59 at 1m but 23:57 / 23:55 / 23:45 at 3m / 5m / 15m — so
+    '''     **every non-1m month failed the check on every run** and was refetched
+    '''     unconditionally. 1m alone was spared, which is exactly why 1m alone survived.
+    '''
+    ''' (2) **A SEGMENT fetch overwrote the whole MONTH file** (`append:=False`). Segments are
+    '''     not always whole months: `BackfillAllAsync` starts 20 h before `fromUtc`, so a
+    '''     fetch from 2026-07-01 gives June the segment 06-30 04:00 → 07-01. Combined with
+    '''     (1), that replaced all of June with 20 hours at three resolutions.
+    '''
+    ''' Both are fixed the way the funding path was: coverage is a COUNT against the
+    ''' deterministic grid, and the write MERGES with what is already stored. With the merge
+    ''' in place a partial or failed fetch can no longer destroy anything — the worst case is
+    ''' that it adds nothing. That is the invariant worth keeping; the count check is only an
+    ''' optimisation on top of it.
     ''' </summary>
     Public Shared Async Function BackfillCandleMonthAsync(
             resolution As Integer, year As Integer, month As Integer,
             segStart As DateTime, segEndExcl As DateTime) As Task(Of Integer)
         EnsureStoreDir()
         Dim path As String = CandleFileFor(resolution, year, month)
-        If File.Exists(path) AndAlso MonthFileCovers(path, segStart, segEndExcl) Then
-            Return CountDataRows(path)
-        End If
 
         Dim startMs As Long = New DateTimeOffset(segStart,   TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim endMs   As Long = New DateTimeOffset(segEndExcl.AddMilliseconds(-1), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim nowMs   As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        If endMs > nowMs Then endMs = nowMs
+
+        ' Coverage by count against the bar grid — resolution-aware by construction, which
+        ' defect (1) was not.
+        Dim intervalMs As Long = CLng(resolution) * 60000L
+        Dim existing As List(Of Candle) = LoadCandleFile(path)
+        Dim haveInRange As Integer = 0
+        For Each c In existing
+            If c.Timestamp >= startMs AndAlso c.Timestamp <= endMs Then haveInRange += 1
+        Next
+        Dim expected As Integer = ExpectedGridPoints(startMs, endMs, intervalMs)
+        If haveInRange >= expected Then Return existing.Count
 
         ' Deribit's get_tradingview_chart_data caps each response at ~5001 ticks. For a
         ' multi-day 1m fetch that under-reports silently (only the trailing window
         ' comes back). Chunk into ~4000-candle segments per call — safely under the cap
         ' at every resolution — and stitch the results (dedup by Timestamp).
-        Dim chunkMs As Long = CLng(resolution) * 60L * 1000L * 4000L
+        Dim chunkMs As Long = intervalMs * 4000L
         Dim collected As New SortedDictionary(Of Long, Candle)()
         Dim cursor As Long = startMs
         While cursor <= endMs
@@ -122,8 +148,8 @@ Public Class HistoricalStore
             Dim chunk As List(Of Candle) = Await DeribitClient.GetCandlesAsync(resolution.ToString(), cursor, chunkEnd)
             If chunk Is Nothing Then
                 Console.Error.WriteLine(String.Format(
-                    "[HistoricalStore] Candle fetch failed for {0}m {1:D4}-{2:D2} @ {3}",
-                    resolution, year, month, cursor))
+                    "[HistoricalStore] Candle fetch failed for {0}m {1:D4}-{2:D2} @ {3} — keeping {4} stored bar(s)",
+                    resolution, year, month, cursor, existing.Count))
                 Exit While
             End If
             For Each c In chunk
@@ -135,54 +161,42 @@ Public Class HistoricalStore
             End If
         End While
 
-        If collected.Count = 0 Then Return 0
+        If collected.Count = 0 Then Return existing.Count
+
+        ' MERGE — stored bars survive, fetched bars fill the holes and refresh any overlap.
+        ' This is the line whose absence cost a month of data.
+        Dim map As New SortedDictionary(Of Long, Candle)()
+        For Each c In existing
+            map(c.Timestamp) = c
+        Next
+        Dim added As Integer = 0
+        For Each kv In collected
+            If Not map.ContainsKey(kv.Key) Then added += 1
+            map(kv.Key) = kv.Value
+        Next
+
         Using sw As New StreamWriter(path, append:=False)
             sw.WriteLine("Timestamp,Open,High,Low,Close,Volume,Cost")
-            For Each c In collected.Values
+            For Each c In map.Values
                 sw.WriteLine(String.Format(CultureInfo.InvariantCulture,
                     "{0},{1:F2},{2:F2},{3:F2},{4:F2},{5:F6},{6:F2}",
                     c.Timestamp, c.Open, c.High, c.Low, c.Close, c.Volume, c.VolumeUSD))
             Next
         End Using
-        Return collected.Count
+        Console.WriteLine(String.Format(
+            "[HistoricalStore] Candles {0}m {1:D4}-{2:D2}: {3} stored (+{4} new, expected {5} in range)",
+            resolution, year, month, map.Count, added, expected))
+        Return map.Count
     End Function
 
-    Private Shared Function MonthFileCovers(path As String, segStart As DateTime, segEndExcl As DateTime) As Boolean
-        ' Sanity: if the file spans at least segStart's day to segEnd's day - 1, treat as
-        ' covering. Cheap heuristic; candle files are line-append order so first/last are
-        ' at the top/bottom.
-        Try
-            Dim first As Long = -1
-            Dim last  As Long = -1
-            Using sr As New StreamReader(path)
-                Dim header = sr.ReadLine()
-                Dim line As String = sr.ReadLine()
-                If line IsNot Nothing Then
-                    first = ParseFirstColLong(line)
-                    Dim prev As String = line
-                    Do
-                        Dim nxt = sr.ReadLine()
-                        If nxt Is Nothing Then Exit Do
-                        prev = nxt
-                    Loop
-                    last = ParseFirstColLong(prev)
-                End If
-            End Using
-            If first < 0 OrElse last < 0 Then Return False
-            Dim firstUtc As DateTime = DateTimeOffset.FromUnixTimeMilliseconds(first).UtcDateTime
-            Dim lastUtc  As DateTime = DateTimeOffset.FromUnixTimeMilliseconds(last).UtcDateTime
-            Return firstUtc <= segStart.AddMinutes(1) AndAlso lastUtc >= segEndExcl.AddMinutes(-2)
-        Catch
-            Return False
-        End Try
-    End Function
-
-    Private Shared Function ParseFirstColLong(line As String) As Long
-        Dim comma As Integer = line.IndexOf(","c)
-        If comma <= 0 Then Return -1
-        Dim n As Long
-        If Long.TryParse(line.Substring(0, comma), NumberStyles.Integer, CultureInfo.InvariantCulture, n) Then Return n
-        Return -1
+    ''' <summary>How many grid points sit in [startMs, endMsIncl] at the given interval — the
+    ''' deterministic expectation both the candle and funding coverage checks compare against.
+    ''' Pure.</summary>
+    Public Shared Function ExpectedGridPoints(startMs As Long, endMsIncl As Long, intervalMs As Long) As Integer
+        If intervalMs <= 0 OrElse endMsIncl < startMs Then Return 0
+        Dim firstPoint As Long = ((startMs + intervalMs - 1) \ intervalMs) * intervalMs
+        If firstPoint > endMsIncl Then Return 0
+        Return CInt((endMsIncl - firstPoint) \ intervalMs) + 1
     End Function
 
     Private Shared Function CountDataRows(path As String) As Integer
@@ -201,9 +215,14 @@ Public Class HistoricalStore
 
     ''' <summary>Load one candle-month file into memory. Empty list on any error.</summary>
     Public Shared Function LoadCandleMonth(resolution As Integer, year As Integer, month As Integer) As List(Of Candle)
+        Return LoadCandleFile(CandleFileFor(resolution, year, month))
+    End Function
+
+    ''' <summary>Parse one candle file by path. The single parse the loader and the coverage
+    ''' check both route through. Empty list on any error; never throws.</summary>
+    Public Shared Function LoadCandleFile(path As String) As List(Of Candle)
         Dim result As New List(Of Candle)
-        Dim path As String = CandleFileFor(resolution, year, month)
-        If Not File.Exists(path) Then Return result
+        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return result
         Try
             Using sr As New StreamReader(path)
                 sr.ReadLine()   ' header
@@ -497,14 +516,10 @@ Public Class HistoricalStore
         Return map.Count
     End Function
 
-    ''' <summary>How many hourly samples SHOULD sit in [startMs, endMsIncl] — the number of
-    ''' hour boundaries in the window. Pure; the coverage check above is the only caller.</summary>
+    ''' <summary>How many hourly samples SHOULD sit in [startMs, endMsIncl]. The candle path
+    ''' uses the same arithmetic at its own interval — one grid helper, two callers.</summary>
     Public Shared Function ExpectedFundingSamples(startMs As Long, endMsIncl As Long) As Integer
-        If endMsIncl < startMs Then Return 0
-        ' First hour boundary at or after startMs.
-        Dim firstHour As Long = ((startMs + FundingIntervalMs - 1) \ FundingIntervalMs) * FundingIntervalMs
-        If firstHour > endMsIncl Then Return 0
-        Return CInt((endMsIncl - firstHour) \ FundingIntervalMs) + 1
+        Return ExpectedGridPoints(startMs, endMsIncl, FundingIntervalMs)
     End Function
 
     ''' <summary>Parse one funding month file. Empty list when absent/unreadable; never throws.
