@@ -198,3 +198,44 @@ Commits (local, unpushed — the trader's local-first workflow):
 - **(this lane)** `feat(backtest): validate CLI verb + OverlapValidator (proposal §4)` — the `validate` subcommand, `OverlapValidator.vb`, and the `HistoricalStore` chunked-candle fix.
 - **(this lane)** `test(backtest): A44a FloorToBucket contract` — one small fixture; the join is the only new logic worth pinning per the task brief.
 - **(this lane)** `docs(backtest): overlap-validation report 2026-07-30 + spec-back addendum §7` — the written report + this addendum.
+
+---
+
+## 8. §7.1 forming-bar stub lane — 2026-07-30 (Opus implementer)
+
+Post-validation amendment per `docs/backtest-synthesizer-proposal.md` §7.1 — the synthesizer now mirrors live's forming-bar convention (last candle of every series is a stub built from real trades in `[closeMs, closeMs + 2s]`; zero-trade fallback = `{OHLC = prev close, V = 0}`). This lane is `tools/BacktestRunner/` and `verify/ordercheck/` only — ZERO engine `.vb` / `settings.json` touch.
+
+### 8.1 Files modified
+
+- `tools/BacktestRunner/ReplayLoop.vb` — three additions: `FormingStubDeltaMs` constant (2000 ms); the trio of pure helpers `TradesInStubWindow` / `BuildFormingStub` / `AppendFormingStub` (host-agnostic, harness-exercised); and the `Run()` splice that (a) slices `(N − 1)` closed bars per series then appends the stub, (b) widens the trade slice + aggr-vel feed cutoff to `closeMs + 2 s` so live's poll-at-closeMs+2s state is what we mirror. Under `execRes = 1`, the shared `sliceExec = slice1m` reference means the 1m append updates both — deliberate, single-append.
+- `verify/ordercheck/Program.vb` — new fixture **A43f** exercising three pins in one fixture: (i) OHLCV compaction of 4 real trades in-window yields the correct O/H/L/C/V/VolumeUSD + `Timestamp = closeMs`; (ii) zero-trade fallback yields `{O=H=L=C=prevClose, V=0, VolumeUSD=0}`; (iii) `AppendFormingStub` puts the stub as the LAST bar of the slice (Timestamp advances past the last real bar; total count = original + 1) and the empty-slice input is a safe no-op. `TradesInStubWindow` inclusion boundaries are exercised in the same fixture (4 in-window trades kept, 2 pre + 1 post excluded).
+
+### 8.2 Re-validation headline (docs/backtest-overlap-validation-2026-07-30.md §9)
+
+Same window (2026-07-29 12:00 → 2026-07-30 08:00 UTC), same frozen live files, same synthesizer inputs — only the stub logic changed.
+
+| Metric | Before (§4) | After (§9) | Δ |
+|---|---:|---:|---:|
+| Verdict agreement | 71.07 % | **74.17 %** | +3.10 pp |
+| Tier agreement | 79.64 % | **81.55 %** | +1.91 pp |
+| ATR | 0.00 % | **46.55 %** | +46.55 pp |
+| ATRMultiplier | 0.00 % | **57.62 %** | +57.62 pp |
+| ADX | 0.24 % | **49.76 %** | +49.52 pp |
+| TTMHistogram | 0.12 % | **42.62 %** | +42.50 pp |
+| ROC | 15.95 % | **77.74 %** | +61.79 pp |
+| EMA9 | 49.52 % | **99.52 %** | +50.00 pp |
+| Donchian Upper/Lower | 78 % / 81 % | **100 % / 100 %** | +22 pp / +19 pp |
+| Muted-vote delta | 0.09 pp (on 71 % baseline) | **0.30 pp** (on 74 % baseline) | remeasured, still tiny |
+| FundingMomentum | 22.02 % | 22.02 % | unchanged (funding path untouched) |
+
+**Residual systematic gap — NOT a synthesizer-side fidelity issue, so not fixed here per the task constraint.** VWAP family regressed (VWAP 72.6 % → 43.9 %) because `Core/Indicators_Volatility.vb::GetSessionCandles` uses `DateTime.UtcNow` for the session anchor — the REAL wall-clock, not replay-simulated time. Pre-fix and post-fix synth both hit this bug; pre-fix, the extra oldest closed bar happened to wash out; post-fix, dropping that oldest bar exposed the drift. Report §9.5 walks through the direct proof (row-by-row VWAP samples where replay-day = real-day match to the dollar; where they differ, drift 50–200 dollars). The fix belongs inside the engine (thread `nowUtc` into `CalcVWAP`) and is spec-first — recommended as report §8.6 #5. OBV family (97 % → 71 %) rides the same edge sensitivity from the stub's near-zero volume weighting into `meanVol`; not a bug in this lane's construction.
+
+### 8.3 Gate + commits
+
+Prepush verify-gate: **GATE PASSED**. All 6 Release builds 0/0 (main sln, AutoTweaker, WhatIfRunner, CeilingAudit, BacktestRunner, OrderCheck). Full harness unregressed; A43f fixture PASS. Display-parity and version-bump guards OK.
+
+Local commits (unpushed — the trader's local-first workflow):
+
+- `feat(backtest): §7.1 forming-bar stub in ReplayLoop (mirror live)` — the `ReplayLoop.vb` splice + helpers.
+- `test(backtest): A43f forming-bar stub construction` — the fixture family extension.
+- `docs(backtest): overlap re-validation §9 after §7.1` — the before / after report update + this addendum §8.
