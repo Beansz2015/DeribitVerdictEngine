@@ -377,3 +377,77 @@ Commits (local, unpushed — the trader's local-first workflow):
 - **test(backtest):** A43f fixture — pins OHLCV compaction, zero-trade fallback, stub-is-last-bar, and TradesInStubWindow inclusion boundaries.
 - **docs(backtest):** overlap re-validation §9 — before / after per-column table + muted-vote remeasurement + VWAP residual gap analysis.
 
+---
+
+## 10. Re-validation after §7.5 (VWAP session-anchor parameterization) — 2026-07-30
+
+**Amendment:** `docs/backtest-synthesizer-proposal.md` §7.5 — `Core/Indicators_Volatility.vb::GetSessionCandles` gained `Optional nowUtc As DateTime? = Nothing`. `Nothing` ⇒ `DateTime.UtcNow`, so the live path is byte-identical to every prior version; `CalcVWAP` / `CalcVWAPBands` thread the parameter through; `ReplayLoop` passes `curUtc` (the bar close, already this loop's "now" — it drives the `IsFresh` gates). The ONE engine edit authorized for this spec. Fixture pin: **A45a**.
+
+**Same window, same frozen live files, same historical store — only the anchor threading changed.** Regenerated synthetic CSV: `backtest_20260729_20260730_anchorfix.csv`. Report generated 2026-07-30 14:18:57 UTC.
+
+### 10.1 The VWAP family — §9 → §10
+
+| Column | §4 (pre-§7.1) | §9 (post-§7.1) | **§10 (anchor fix)** | Δ vs §9 | Mean \|Δ\| | Max \|Δ\| |
+|---|---:|---:|---:|---:|---:|---:|
+| **VWAPSessionCandles** | 50.24 % | 69.29 % | **100.00 %** | **+30.71 pp** | **0** | **0** |
+| VWAP | 72.62 % | 43.93 % | **56.19 %** | **+12.26 pp** | 69.79 | 678.7 |
+| VWAPSigma1Upper | 82.14 % | 47.98 % | **55.00 %** | **+7.02 pp** | 90.09 | 854.3 |
+| VWAPSigma1Lower | 71.31 % | 40.71 % | **55.00 %** | **+14.29 pp** | 69.66 | 627.8 |
+| VWAPSigma2Upper | 81.19 % | 47.62 % | **54.52 %** | **+6.90 pp** | 120.5 | 1065 |
+| VWAPSigma2Lower | 70.71 % | 39.29 % | **53.45 %** | **+14.16 pp** | 87.25 | 826.6 |
+| VWAPDevPct | 55.24 % | 36.07 % | **40.60 %** | **+4.53 pp** | 0.1122 | 1.06 |
+
+**`VWAPSessionCandles` = 100.00 % at mean and max \|Δ\| of exactly 0** is the decisive read: the session *window* the synthesizer selects is now byte-identical to live's on all 840 joined rows. The §9.5 root cause is closed — the whole-list fallback branch no longer fires under replay, on any row.
+
+**The §7.5 expectation ("recover toward the EMA-class levels") did NOT materialize for the VWAP *values*.** The family landed at 53–56 %, not 99 %. That is a residual to flag, not a fix to chase in this lane. What the numbers say plainly: with the window now provably exact, the remaining drift cannot be an anchor error — it is numeric edge sensitivity inside a correct window. The mechanism is visible in the same table: VWAP is a volume-weighted mean over as many as 240 bars, and the last of those bars is the §7.1 forming stub, whose volume is whatever printed in a 2-second slice. A near-zero-volume final bar shifts a long-window volume-weighted mean by a small amount that still exceeds the NumTight tolerance (`max(0.01, 0.01 % × |live|)` ≈ $6.4 at BTC 64 k). The sigma bands inherit it and `VWAPDevPct` amplifies it, which is why DevPct stays lowest of the seven. Whether that is worth another pass — and whether the tolerance class rather than the code is the thing that is mis-set for a 240-bar accumulator — is a spec-first question for the Fable/trader seat, not this lane.
+
+### 10.2 OBV family — did NOT recover
+
+| Column | §9 | §10 | Δ |
+|---|---:|---:|---:|
+| OBVTrend | 71.43 % | 71.43 % | 0.00 pp |
+| OBVDivergence | 84.17 % | 84.17 % | 0.00 pp |
+
+Unchanged to the row. §9.5's second regression cluster is independent of the VWAP anchor, exactly as its root-cause note said (`CalcOBV` normalises by `candles.Skip(1).Average(Volume)`, so the near-zero-volume stub pulls `meanVol` down and inflates normalised `obvChange`). Reported, not chased — per the §7.5 instruction.
+
+### 10.3 Headline agreement — §9 → §10
+
+| Metric | §9 (post-§7.1) | §10 (anchor fix) | Δ |
+|---|---:|---:|---:|
+| Verdict agreement | 623 / 840 = 74.17 % | 622 / 840 = 74.05 % | **−0.12 pp (one row)** |
+| Tier agreement | 685 / 840 = 81.55 % | 684 / 840 = 81.43 % | **−0.12 pp (one row)** |
+| ASIA verdict | 78.75 % | 78.75 % | 0.00 pp |
+| LONDON verdict (n=20) | 80.00 % | 80.00 % | 0.00 pp |
+| NY verdict | 72.88 % | 72.73 % | −0.15 pp (one row) |
+
+A seven-column indicator-family recovery moved the verdict agreement by exactly one row, in the *negative* direction. Stated flatly, without interpretation: VWAP deviation is one vote of ~20 in a pipeline whose thresholds are integer ceilings, so a numeric improvement below the categorical threshold changes nothing, and single-row noise dominates at this n. No other column in the per-column table moved outside the VWAP cluster.
+
+### 10.4 Clearance status — unchanged by this lane, and why
+
+§7.5's conditional clearance said the synthesizer is cleared for geometry/placement-class studies now, and NOT cleared for VWAP- or funding-sensitive studies "until the anchor fix lands and re-validates." The fix landed and re-validated. **The re-validation does not clear the VWAP-sensitive class**: the window is exact, the values are not (53–56 %, still the "do not use" band by §9.6's own < 60 % cut). Funding is untouched (`FundingMomentum` 22.02 %, identical — the anchor is not on the funding path). **Recording, not ruling** — the clearance call belongs to the Fable/trader seat.
+
+### 10.5 Gate tail + commit
+
+`tools/checks/verify-gate.ps1 -Mode prepush` — all 6 Release builds, harness incl. new **A45a**, A1–A44a unregressed:
+
+```
+PASS  A44a FloorToBucket collapses same-bar timestamps + advances one bucket at the boundary + execRes<=0 guard
+PASS  A45a VWAP session anchor (§7.5) — default ≡ UtcNow (non-trivial) · post/pre-cutoff historical anchor · §8.6 wall-clock fallback
+
+ALL PASS
+OK    harness ALL PASS
+
+=== display-parity ===
+OK    no snapshot/card drift detected
+
+=== version-bump ===
+OK    engine path changed but [no-engine-change] token present
+
+=== result ===
+GATE PASSED
+```
+
+Settings untouched (stays v63) — no config keys added, live behaviour byte-identical at the default `Nothing`, hence the `[no-engine-change]` token (the `5dc9646` precedent).
+
+**Out-of-scope finding, recorded not fixed** (batch §standing-constraints: stop the lane, record, move on): `tools/BacktestRunner/BacktestProgram.vb` leaks an unformatted `String.Format` placeholder to the console — `[BacktestRunner] Replay {0:yyyy-MM-dd HH:mm} → {1:yyyy-MM-dd HH:mm} UTC into <file>`. Cosmetic console logging only; the correctly-formatted line prints immediately after it. Not in lane A's one-parameter scope.
+

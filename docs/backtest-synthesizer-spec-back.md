@@ -239,3 +239,53 @@ Local commits (unpushed — the trader's local-first workflow):
 - `feat(backtest): §7.1 forming-bar stub in ReplayLoop (mirror live)` — the `ReplayLoop.vb` splice + helpers.
 - `test(backtest): A43f forming-bar stub construction` — the fixture family extension.
 - `docs(backtest): overlap re-validation §9 after §7.1` — the before / after report update + this addendum §8.
+
+---
+
+## 9. §7.5 VWAP session-anchor lane — 2026-07-30 (Opus implementer, pre-Aug-1 batch item A)
+
+Post-validation amendment per `docs/backtest-synthesizer-proposal.md` §7.5, the **sole authorized engine edit** for this spec (§0's zero-engine-changes claim has exactly this exception). Trader ticked it at batch handoff. Settings untouched — stays **v63**, no config keys.
+
+### 9.1 Files modified
+
+- `Core/Indicators_Volatility.vb` — `GetSessionCandles` gains `Optional nowUtc As DateTime? = Nothing`; the former `Dim nowUtc = DateTime.UtcNow` local becomes `Dim effNow = If(nowUtc.HasValue, nowUtc.Value, DateTime.UtcNow)`. `CalcVWAP` and `CalcVWAPBands` each gain the same trailing optional and forward it. Three signatures, one behaviour: **omitting the argument is `DateTime.UtcNow`, i.e. byte-identical to every prior version.** Both optionals are appended last, and both existing call sites pass `session2Hour`/`session2Minute` positionally, so no call site changes meaning.
+- `tools/BacktestRunner/ReplayLoop.vb` — the replay call site passes `curUtc`. That variable is already this loop's notion of "now" (it drives the `IsFresh` gates ~40 lines above), so the VWAP anchor and the freshness gate now read the same clock by construction rather than by coincidence.
+- `verify/ordercheck/Program.vb` — new fixture **A45a**, four pins in one fixture: (i) **default ≡ explicit-UtcNow** for both `CalcVWAP` and `CalcVWAPBands`, arranged to be *non-trivial* (the candle set is placed a day either side of the probe date, so the day-before candle is genuinely filtered out — the identity is not the whole-list fallback tie — and the answer is invariant to both the 13:30 cutoff and a midnight rollover landing between the two calls, so there is no clock race); (ii) post-cutoff historical anchor (15:00Z ⇒ 13:30Z anchor ⇒ 2 candles, VWAP 350, σ bands 300/400/250/450); (iii) pre-cutoff historical anchor (12:00Z ⇒ 00:00Z anchor ⇒ 4 candles, VWAP 250, σ = √12500); (iv) the **§8.6 defect itself** — the default call on that same historical set falls back to the whole list, so it returns the pre-cutoff answer and provably differs from the correct post-cutoff one. Pin (iv) is what makes A45a a regression test rather than a tautology: it fails if anyone ever re-hardwires the anchor.
+
+### 9.2 Re-validation headline (`docs/backtest-overlap-validation-2026-07-30.md` §10)
+
+Same window, same frozen live pair, same historical store — only the anchor threading changed.
+
+| Metric | §9 (post-§7.1) | §10 (anchor fix) | Δ |
+|---|---:|---:|---:|
+| **VWAPSessionCandles** | 69.29 % | **100.00 %** (mean/max \|Δ\| = 0) | **+30.71 pp** |
+| VWAP | 43.93 % | **56.19 %** | +12.26 pp |
+| VWAPSigma1Lower | 40.71 % | **55.00 %** | +14.29 pp |
+| VWAPSigma2Lower | 39.29 % | **53.45 %** | +14.16 pp |
+| VWAPSigma1Upper | 47.98 % | **55.00 %** | +7.02 pp |
+| VWAPSigma2Upper | 47.62 % | **54.52 %** | +6.90 pp |
+| VWAPDevPct | 36.07 % | **40.60 %** | +4.53 pp |
+| OBVTrend / OBVDivergence | 71.43 % / 84.17 % | 71.43 % / 84.17 % | **0.00 pp** (did not recover) |
+| Verdict agreement | 74.17 % | 74.05 % | −0.12 pp (one row) |
+| Tier agreement | 81.55 % | 81.43 % | −0.12 pp (one row) |
+
+**The §9.5 root cause is closed.** `VWAPSessionCandles` at 100.00 % with mean and max \|Δ\| of exactly **0** across all 840 joined rows says the session *window* is byte-identical to live's everywhere — the whole-list fallback branch no longer fires under replay on any row.
+
+**Two honest residuals, flagged not resolved** (§7.5 said "report, don't chase"):
+
+1. **The VWAP *values* did not reach EMA-class.** The expectation in §7.5 was recovery "toward the EMA-class levels" (99 %+); actual is 53–56 %, still under §9.6's < 60 % "do not use" cut. With the window provably exact, the residual cannot be an anchor error — it is numeric edge sensitivity inside a correct window: VWAP is a volume-weighted mean over up to 240 bars whose last bar is the §7.1 forming stub, carrying whatever volume printed in a 2-second slice. The NumTight tolerance for this class is `max(0.01, 0.01 % × |live|)` ≈ **$6.4** at BTC 64 k, which a 240-bar volume-weighted mean can exceed from a single near-zero-volume terminal bar. Whether the next move is a code pass or a re-think of the tolerance *class* for long-window accumulators is a spec-first question — **not decided here.**
+2. **OBV did not move at all.** Unchanged to the row, consistent with §9.5's root-cause note (`CalcOBV` normalises by `candles.Skip(1).Average(Volume)`, independent of the VWAP anchor).
+
+**Clearance status — recorded, not ruled.** §7.5's conditional clearance withheld the VWAP-sensitive study class "until the anchor fix lands and re-validates." It landed and re-validated; the window is exact, the values are not. Funding is untouched (`FundingMomentum` 22.02 %, identical — the anchor is not on the funding path). The clearance call belongs to the Fable/trader seat.
+
+### 9.3 Gate + commits
+
+Prepush verify-gate: **GATE PASSED**. All 6 Release builds 0/0 (main sln, AutoTweaker, WhatIfRunner, CeilingAudit, BacktestRunner, OrderCheck). Harness A1–A44a unregressed + new **A45a** PASS. Display-parity OK. Version-bump guard satisfied via the `[no-engine-change]` token (engine path touched, zero config keys, settings stays v63 — the `5dc9646` precedent).
+
+**Out-of-scope finding, recorded not fixed** (batch standing constraint: stop the lane, record, move on): `tools/BacktestRunner/BacktestProgram.vb` prints an unformatted `String.Format` placeholder — `[BacktestRunner] Replay {0:yyyy-MM-dd HH:mm} → {1:yyyy-MM-dd HH:mm} UTC into <file>`. Cosmetic console logging; the correctly-formatted line prints on the next row. Outside lane A's one-parameter scope.
+
+Local commits (unpushed — the trader's local-first workflow):
+
+- `feat(vwap): §7.5 session-anchor parameterization — nowUtc threaded through CalcVWAP/CalcVWAPBands` — the engine edit + the replay call site.
+- `test(vwap): A45a session-anchor default identity + historical anchor` — the fixture family extension.
+- `docs(backtest): §10 anchor-fix re-validation + spec-back §9` — the report addendum + this addendum §9.
