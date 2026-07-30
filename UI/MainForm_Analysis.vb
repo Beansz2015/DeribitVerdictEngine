@@ -647,7 +647,7 @@ Partial Public Class MainForm
         BindCardSignalBreakdown(verdict, r, vwapWarmup)
         BindCardOiCvdCross(r, verdict)
         BindCardVolumeProfile(r)
-        BindCardKelly(verdict)
+        BindCardKelly(verdict, r, SettingsLoader.Current)
         BindCardIndicatorDetails(verdict, r, norms, SettingsLoader.Current, vwapWarmup)
 
         ' Update live performance strip (eval cache + OHLC cache + 6 window aggregates).

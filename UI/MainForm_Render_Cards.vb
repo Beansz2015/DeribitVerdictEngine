@@ -13,6 +13,7 @@
 ' only update value-bearing controls.
 
 Imports System.Drawing
+Imports System.Globalization
 Imports System.Windows.Forms
 
 Partial Public Class MainForm
@@ -21,6 +22,44 @@ Partial Public Class MainForm
     ' "< 0.1" when ratio rounds to zero at 1dp but is non-zero, else 1dp.
     ' Migrated from MainForm_Render_Header.vb in P5a (file deleted in P5b).
     ' Callers: BindCardAtrLevels, BindCardStructural, BuildPlaintextSnapshot.
+    ''' <summary>[net-R:R rider, fee-aware-min-move-proposal.md §6.2] The one composer for
+    ''' the fee-adjusted R:R annotation on the Kelly/ATR-levels block. Lives here beside
+    ''' FormatRR so the plaintext snapshot and the card render the SAME string from the
+    ''' SAME code — the display-string parity rule is satisfied by construction rather
+    ''' than by two call sites being kept in step by hand.
+    '''
+    ''' Fee is charged on BOTH sides, which is the whole point of the annotation: a win
+    ''' pays the round trip out of the reward, and a loss pays it ON TOP of the stop
+    ''' distance. So net R:R = (reward − fee) / (risk + fee), where fee is the round-trip
+    ''' cost in PRICE terms (round_trip_fee_pct × entry). The ATR-multiple geometry is the
+    ''' Kelly block's own basis, matching the advisory line directly above it.
+    '''
+    ''' Degrades to the gross string when ATR or entry is unavailable (warmup), and when
+    ''' fees are zero the two ratios coincide and only one is shown.</summary>
+    Friend Shared Function BuildNetRRLine(v As VerdictResult, r As IndicatorResults,
+                                          cfg As EngineSettings) As String
+        Dim entry As Double = r.CurrentPrice
+        Dim atr   As Double = r.ATR
+        If entry <= 0 OrElse atr <= 0 Then Return "Net R:R: — (awaiting ATR)"
+
+        Dim feeUsd As Double = cfg.Scoring.TradeCosts.RoundTripFeePct * entry
+        Dim reward As Double = cfg.Scoring.AtrTargetMultiplier * atr
+        Dim risk   As Double = cfg.Scoring.AtrStopMultiplier * atr
+        Dim gross  As String = FormatRR(reward, risk)
+
+        If feeUsd <= 0 Then
+            Return String.Format(CultureInfo.InvariantCulture,
+                                 "Net R:R: {0}  (no fees configured)", gross)
+        End If
+
+        Dim netRR As String = FormatRR(reward - feeUsd, risk + feeUsd)
+        Return String.Format(CultureInfo.InvariantCulture,
+                             "Net R:R: {0}  (gross {1}; round-trip fee ${2:F2} = {3:F4}% of entry, {4})",
+                             netRR, gross, feeUsd,
+                             cfg.Scoring.TradeCosts.RoundTripFeePct * 100.0,
+                             cfg.Scoring.TradeCosts.RoundTripStyle)
+    End Function
+
     Friend Shared Function FormatRR(reward As Double, risk As Double) As String
         If risk <= 0 Then Return "—"
         Dim ratio As Double = reward / risk
@@ -1494,7 +1533,11 @@ Partial Public Class MainForm
     ' optional [BIAS ONLY] / [CAPPED] tags) + 2-line ATR-basis advisory +
     ' six KV rows ending in Contracts/Lean with singular/plural handling.
     ' =======================================================================
-    Public Sub BindCardKelly(v As VerdictResult)
+    ' r + cfg threaded in (net-R:R rider) rather than read from a captured field, so the
+    ' card composes from the SAME IndicatorResults the snapshot did — the BindCardSignal-
+    ' Breakdown / BindCardIndicatorDetails pattern, and the only way the two surfaces can
+    ' be guaranteed identical regardless of when _lastSuccessfulIndicators is captured.
+    Public Sub BindCardKelly(v As VerdictResult, r As IndicatorResults, cfg As EngineSettings)
         If _cardKelly Is Nothing Then Return
 
         _cardKelly.SuspendLayout()
@@ -1530,7 +1573,8 @@ Partial Public Class MainForm
         ' GAP-10: 2-line ATR-basis advisory.
         stack.Controls.Add(BuildCardAdvisory(
             "Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.",
-            "Treat as directional bias indicator only."))
+            "Treat as directional bias indicator only.",
+            BuildNetRRLine(v, r, cfg)))
 
         ' KV rows: p(win), f*/Half-Kelly, Applied fraction, Risk $, Contracts/Lean.
         stack.Controls.Add(BuildCardKvRow("p(win):",          v.KellyPWin.ToString("P1")))
@@ -1636,7 +1680,9 @@ Partial Public Class MainForm
     End Function
 
     ''' <summary>Two-line dim advisory text in FG_QUATERNARY at 9pt.</summary>
-    Private Shared Function BuildCardAdvisory(line1 As String, line2 As String) As Control
+    ' ParamArray since the net-R:R rider added a third advisory line; empty entries are
+    ' skipped by the loop below, so every existing two-line call site is unchanged.
+    Private Shared Function BuildCardAdvisory(ParamArray lines As String()) As Control
         Dim panel As New FlowLayoutPanel() With {
             .AutoSize = True,
             .AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -1646,7 +1692,7 @@ Partial Public Class MainForm
             .Margin = New Padding(0, 0, 0, 6),
             .Padding = New Padding(0)
         }
-        For Each line In {line1, line2}
+        For Each line In lines
             If String.IsNullOrEmpty(line) Then Continue For
             panel.Controls.Add(New Label() With {
                 .AutoSize = True,
