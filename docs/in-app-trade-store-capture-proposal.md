@@ -1,6 +1,6 @@
 # In-App Trade-Store Capture — Proposal
 
-**Status:** DRAFT — awaiting trader ruling on the §7 D-table. Build only after the D-table is ticked (CLAUDE.md spec-first).
+**Status:** **APPROVED 2026-07-31** — D1–D5 all ticked (D1 ruled AGAINST the recommendation; see §7). Ready for an implementer. Build the approved spec; do not invent design decisions mid-code (CLAUDE.md / trader-profile §7).
 **Target:** settings **v63 → v64** (one new `trade_store` block).
 **Scoring impact:** **NONE.** No indicator reads it, no CSV column, no verdict path, no bridge field. It writes a sidecar the *backtester* consumes offline. **Not a dataset boundary.**
 **Gate to build:** safe anytime. Nothing it touches is on the scoring path.
@@ -83,7 +83,9 @@ This is the "one seam, no copies" move already made for `SignalEmitter.ComputeSi
 }
 ```
 
-`store_dir` is resolved relative to the exe directory when relative. **Note the consequence:** the local app runs from `bin\Debug\net8.0-windows\`, so it writes `bin\Debug\net8.0-windows\backtest_data\` — *not* the repo's `backtest_data\` that `BacktestRunner` uses from the repo root. D3 decides whether that is fine (two stores, pooled at read time) or wants an absolute path.
+`store_dir` is resolved **relative to the exe directory** (D3): the capturing box writes `<exe>\backtest_data\`. On AWS that is beside the deployed engine; the repo's own `backtest_data\` (which `BacktestRunner` uses from the repo root) is a *different* directory and stays the local analysis store, populated by copy-back.
+
+**Add `A48h`:** the resolved path is exe-relative and does **not** depend on the process working directory — the app's cwd is not guaranteed, and a cwd-relative store would silently scatter files.
 
 ---
 
@@ -104,7 +106,7 @@ This is the "one seam, no copies" move already made for `SignalEmitter.ComputeSi
 | Month rollover mid-stream | Writer opens the new monthly file; header written only on create (A48c) |
 | Disk full / path unwritable | Logged to console, capture silently degrades; **feed and analysis unaffected** (A48e) |
 | App killed between flushes | Up to `flush_seconds` of trades lost; gap repair recovers them |
-| Two boxes both capturing | Two stores with overlapping coverage — merged at read time by concat + dedup on `(Timestamp, Price, Amount, Direction)`, the §4.3b CSV-pooling pattern (D1) |
+| Two boxes both capturing | **Cannot arise — D1 ruled AWS-only.** Ship with `enabled` defaulting appropriately for a single capturing box; if the local box is ever run with capture on, its store is its own and pools at read time (§7.1). |
 | Gap repair overlaps streamed data | Append resumes from last on-disk timestamp ⇒ no-op (A48d) |
 | REST fallback / `transport=rest` | No WS stream ⇒ no streaming capture; gap repair alone carries it |
 
@@ -128,13 +130,22 @@ Build acceptance: solution + AutoTweaker + WhatIfRunner + CeilingAudit + Backtes
 
 ## 7. D-table — awaiting the trader
 
-| # | Decision | Recommendation |
+| # | Decision | RULED 2026-07-31 |
 |---|---|---|
-| **D1** | Both boxes capture, or AWS only? | **Both.** Redundancy is the point — a gap on one box is covered by the other, and merging is the concat+dedup you already do for the CSVs (§4.3b). AWS-only saves nothing meaningful and reintroduces a single point of loss. |
-| **D2** | Flush policy | **Both triggers** — every `flush_seconds` (30) *or* `flush_trade_count` (500), whichever first. Time alone loses a burst on a crash; count alone can sit unflushed through a quiet Asia hour. |
-| **D3** | Store location | **Relative to exe dir, configurable.** Accept two stores (local + AWS) and pool at read time, consistent with how the CSVs are already handled. An absolute shared path invites two processes writing one file. |
-| **D4** | Gap-repair cadence | **Every 6 h, 20 h lookback.** Comfortably inside the ~24 h retention with margin for a long outage; four cheap calls a day. |
-| **D5** | Does the app own gap repair at all? | **Yes.** Leaving it manual reinstates exactly the "someone forgets" failure this proposal exists to remove. It is the only place the app depends on the runner's networking — accepted deliberately. |
+| **D1** | Both boxes capture, or AWS only? | **AWS ONLY — ruled against the recommendation, on a better reason than the one I offered.** I argued for redundancy; the trader's ground is that **the end goal is the app running on AWS and not on the local box at all**, so dual capture builds for a topology the project is leaving. That supersedes the redundancy argument: redundancy across a box you intend to retire is not redundancy, it is migration debt. **Consequences, which the build must honour — see §7.1.** |
+| **D2** | Flush policy | **Both triggers** as proposed — every `flush_seconds` (30) *or* `flush_trade_count` (500), whichever first. Time alone loses a burst on a crash; count alone can sit unflushed through a quiet Asia hour. |
+| **D3** | Store location | **A directory inside the exe's own directory** — i.e. `store_dir` relative, resolved against the exe dir (`<exe>\backtest_data\`). As proposed, now explicit. |
+| **D4** | Gap-repair cadence | **Every 6 h, 20 h lookback** as proposed. |
+| **D5** | Does the app own gap repair at all? | **Yes** as proposed. |
+
+### 7.1 What D1 = AWS-only changes — binding on the implementer
+
+The single-box ruling removes the fallback the recommendation was resting on, so two things get *more* weight, not less:
+
+1. **Gap repair (§1.2) is now the only recovery mechanism there is.** With no second box, an AWS outage means the stream stops and nothing else is capturing. Repair-on-restart must therefore be reliable and must run *promptly* after startup — **fire once on start, then on the D4 interval**, rather than waiting a full 6 h for the first tick. That is a build requirement, not a nicety.
+2. **The daily health check carries real data risk now.** `aws-collector-deploy-checklist.md` §3 already prescribes a ~30-second daily RDP glance. Post-build that check is the only thing standing between an unnoticed app death and permanently lost tape. Worth adding the store's newest-file mtime to that glance.
+
+Also settled by D1: **the store lives on AWS**, so any study needing trades takes a store copy-back alongside the CSV copy-back (§4.3b). There is no local store to pool with, so the merge question in §5 falls away entirely.
 
 ---
 
