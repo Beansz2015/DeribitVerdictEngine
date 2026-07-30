@@ -433,6 +433,10 @@ A seven-column indicator-family recovery moved the verdict agreement by exactly 
 - **Fine VWAP-dev threshold sweeps (steps < 5 bps): WITHHELD** pending the D2 accumulator-tolerance reclass.
 - **Funding: unchanged** — structurally approximate, discouraged.
 
+⚠ **SUPERSEDED 2026-07-31 — the volume difference was a SYNTHESIZER BUG, now fixed, and VWAP agrees 100.00 %.** `BuildFormingStub` summed `TradeRecord.Amount` (USD notional) into `Candle.Volume` (BTC) — a ~64,000× unit error found by running the D3 A/B (`ae8a1f6`; fixture A47b). Post-fix on the same 840 rows: **VWAP 56.19 % → 100.00 %**, sigma bands → 99.76–100.00 %, VolumeRatio 23.57 % → 65.00 %, OBVTrend 71.43 % → **99.76 %**, verdict agreement 74.05 % → **79.64 %**, tier 81.43 % → **86.19 %**. ATR/ADX/RSI unchanged. **There was no tolerance question at any point.** Detail: `d3-closed-bar-volume-ab-2026-07-31.md` §2. The withholding of fine dev-threshold sweeps no longer has evidence behind it — re-ruling is the Fable seat's call.
+
+*(Retained below for the audit trail — the localisation to volume was correct; only the cause was unknown at the time.)*
+
 ⚠ **RESOLVED 2026-07-30 by measurement — the residual is a VOLUME-INPUT difference, not a tolerance.** Highs and lows are byte-identical (Donchian 100.00 %, max |Δ| 0) and closes agree to 99.5 %+ (EMA family), so Volume is the only VWAP input that can move it. Splitting the 840 buckets by whether the row's own volume agrees: **volume agrees ⇒ VWAP matches 100.0 % (199/199) at median |Δ| $0.00**; volume differs ⇒ 42.6 %. There is no residual for a tolerance to explain, and the ordered bps-scale reclass should **not** be specced — it would widen a bar around a real difference. Evidence: `pre-aug1-batch-spec-back.md` §7.2b.
 
 **Consequence for the fine-sweep condition:** it is not gated on a tolerance task, it is gated on **volume fidelity** — the same defect as the D3 forming-bar lane, seen from the synthesizer side. **The window and coarse/structural clearances above are unaffected** — they rest on the window being exact, which is not in dispute.

@@ -164,6 +164,16 @@ Those two together establish that lane A's engine edit is correct, complete and 
 
 ## 7. Orchestrator response to §6 — D2's sizing premise does not reconcile
 
+> **⚠ SUPERSEDED 2026-07-31 by `docs/d3-closed-bar-volume-ab-2026-07-31.md` §2. Read that first.**
+>
+> §7.1–§7.2c below correctly localised the VWAP residual to the terminal bar's **volume** — every step of that reasoning holds and the eliminations are still valid. What none of it identified is **why** the volumes differed: `BuildFormingStub` was summing `TradeRecord.Amount` (USD notional) into `Candle.Volume` (BTC), a ~**64,000×** unit error in the synthesizer, found by running the D3 A/B and fixed in `ae8a1f6`.
+>
+> With that fixed, **VWAP agrees 100.00 % on all 840 rows** (from 56.19 %), the sigma bands 99.76–100.00 %, OBVTrend 99.76 % (from 71.43 %), and verdict agreement 74.05 % → **79.64 %**.
+>
+> **Net effect on D2:** there was never a tolerance question. Not a mis-scoped bar, not a noise floor, not a 1.3 bps figure and not a 10.9 bps one — a tool bug. The coordinator's ruling and my own §2 hypothesis were both wrong, in the same direction, because we both assumed the inputs were sound and argued about how to score them. **Do not spec the reclass. `NumTight` was right all along.**
+>
+> **Net effect on D1:** the fine-sweep withholding rested on the VWAP values being untrustworthy. They now agree exactly. Widening the clearance is the Fable seat's call, but nothing in the evidence still argues against it.
+
 Four of the five rulings are recorded and actioned (see §7.2). **D2 needs re-reading before its micro-task is specced**, because the two numbers it rests on don't match what the run published — and because the "session-edge tail" half is testable and comes back negative.
 
 ### 7.1 The numbers
