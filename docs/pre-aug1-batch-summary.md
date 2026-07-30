@@ -16,7 +16,45 @@
 | **E** Geometry-session grids | ✅ 4 runs, raw attached, zero conclusions | `9273416` (overlays only) | n/a — runs, not code |
 | **F** Ops list | reminders only — §6 | — | — |
 
-**Nine local commits, none pushed.** Settings untouched throughout — **still v63**, no config keys added by any lane. Every build Release. Fixture families consumed: **A45** (lane A), **A46** (lane B) — **next free is A47**. Harness A1–A46a all green on every gate run.
+**Nineteen local commits, none pushed** (ten from the batch proper, nine from the post-batch ruling and evidence work in §0). Settings untouched throughout — **still v63**, no config keys added by any lane. Every build Release. Fixture families consumed: **A45** (lane A), **A46** (lane B), **A47** (§0 below) — **next free is A48**. Harness A1–A47b green on every gate run.
+
+---
+
+## §0. POST-BATCH — a ~64,000× unit bug in the synthesizer, found and fixed
+
+**Read this before §A.** It changes how §A's numbers should be read, and it is the largest single finding of the arc.
+
+Running D3's ordered closed-bar A/B (`docs/d3-closed-bar-volume-ab-2026-07-31.md`) produced an impossible first result: the *stub* arm carried **more** volume than the *closed-bar* arm — p50 `VolumeRatio` 2.3547 against live's 0.0123, with 48.1 % of rows at exactly zero and a dense cluster at ~8.9–9.0. That shape is arithmetic, not market behaviour: `ratio = V / ((8 real + V)/9) → 9` as `V` dominates the SMA-9.
+
+**Cause.** `ReplayLoop.BuildFormingStub` summed `TradeRecord.Amount` straight into `Candle.Volume`. On Deribit perpetuals `Amount` is **USD notional** (contracts are $10); `Candle.Volume` is **base currency (BTC)** — the chart endpoint's `volume`, with `cost` (USD) landing in `VolumeUSD`. Store evidence: mean 1m candle `Volume` **2.3937** (and `cost/volume ≈ spot`), mean trade `Amount` **2909.10**. Every forming stub since §7.1 shipped carried a number ~**64,000×** too large.
+
+**Fix** (`ae8a1f6`, tools-only, no engine file, no settings): `Volume = Σ(amount / price)`, `VolumeUSD = Σ amount`.
+
+**Effect on synthetic↔live agreement** — same window, same 840 rows, only the stub arithmetic changed:
+
+| Column | before | after |
+|---|---:|---:|
+| **VWAP** | 56.19 % | **100.00 %** |
+| VWAPSigma1Upper / 2Upper | 55.00 / 54.52 % | **100.00 / 100.00 %** |
+| VWAPSigma1Lower / 2Lower | 55.00 / 53.45 % | 99.88 / 99.76 % |
+| VWAPDevPct | 40.60 % | 78.21 % *(bounded by Price at 77.62 %)* |
+| **VolumeRatio** | 23.57 % | **65.00 %** |
+| **OBVTrend / OBVDivergence** | 71.43 / 84.17 % | **99.76 / 99.52 %** |
+| **Verdict agreement** | 74.05 % | **79.64 %** |
+| **Tier agreement** | 81.43 % | **86.19 %** |
+| ATR / ADX / RSI | 46.55 / 49.76 / 42.98 % | unchanged |
+
+### What it changes for Friday
+
+1. **The D2 ruling is void, and so was my counter-argument.** There was never a tolerance question — not the 1.3 bps noise floor the ruling specced against, not the 10.9 bps I countered with. A tool bug. **Do not spec the bps-scale reclass; `NumTight` was correct throughout.** Both of us assumed the inputs were sound and argued about how to score them; neither checked the inputs.
+2. **D1 can widen on evidence.** The fine-sweep withholding rested on VWAP values being untrustworthy. They now agree **exactly** on all 840 rows. Widening is still the Fable seat's call, but nothing in the evidence argues against it — this should be a one-line confirmation, not a discussion.
+3. **§9.5's OBV finding is also resolved.** It was attributed to the stub's *near-zero* volume dragging `meanVol` down. The cause was the stub's *oversized* volume. OBVTrend is now 99.76 %.
+4. **§A's VWAP-family numbers below were measured against the broken stub.** The §7.5 anchor fix's own result — `VWAPSessionCandles` 100.00 % at max |Δ| 0 — is **unaffected** and remains correct, because it is a count, not a volume-weighted value. The 53–56 % value figures in §A are superseded by the 100.00 % above.
+5. **ATR / ADX / RSI are untouched and remain the honest residual**, with separate causes. Volume was never a universal explanation.
+
+**Why A43f didn't catch it:** that fixture verified the stub's *internal* arithmetic against hand-computed sums — and passed, correctly, while the units were wrong. Internal consistency cannot detect a unit error. New fixture **A47b** checks the stub against *real store scale* instead: a 2-second stub must be a small fraction of a one-minute bar, never a multiple. Pre-fix that read 9000 vs 2.4 — a 3,750× overshoot. A43f's expectations were corrected in the same commit (`4bc6c93`), since they encoded the inverted convention.
+
+**Also delivered post-batch, no Fable spend:** the D2 root-cause chain (spec-back §7.1–§7.2c — four eliminated hypotheses, retained for audit), the overlap re-read conditioned on volume agreement, and the D3 A/B result itself (§3 of its own doc: closed bars raise the breakout gate ~12× and the partial-vote threshold ~17×, while moving the directional verdict share by 0.3 pp — no recommendation, the live change stays its own maximal-⚠ D-table).
 
 ---
 
