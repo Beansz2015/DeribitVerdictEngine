@@ -51,7 +51,7 @@ Public NotInheritable Class TradeStoreGapRepair
     Public Sub Start()
         If _timer IsNot Nothing OrElse _stopped Then Return
         Dim ts = SettingsLoader.Current.TradeStore
-        If ts Is Nothing OrElse Not ts.Enabled OrElse Not ts.GapRepairEnabled Then Return
+        If Not TradeStoreWriter.ShouldGapRepair(ts) Then Return
         Dim periodMs As Long = CLng(Math.Max(0.25, ts.GapRepairIntervalHours) * 3600.0 * 1000.0)
         ' dueTime 0 ⇒ fire once on start.
         _timer = New Timer(AddressOf OnTick, Nothing, 0, periodMs)
@@ -97,7 +97,7 @@ Public NotInheritable Class TradeStoreGapRepair
         Try
             If cfg Is Nothing Then Return 0
             Dim ts = cfg.TradeStore
-            If ts Is Nothing OrElse Not ts.Enabled OrElse Not ts.GapRepairEnabled Then Return 0
+            If Not TradeStoreWriter.ShouldGapRepair(ts) Then Return 0
 
             Dim storeDir As String = TradeStoreWriter.ResolveStoreDir(ts.StoreDir)
             Dim toUtc As DateTime = DateTime.UtcNow

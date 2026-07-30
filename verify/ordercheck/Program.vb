@@ -7135,10 +7135,19 @@ Module Program
     End Sub
 
     ' -- A48f: enabled:false ⇒ zero writes, fold inert -------------------------------------
-    ' The reversibility claim (§4). ApplyTrades resolves its writer from the config and
-    ' early-outs when the block is off; this pins BOTH halves of that gate — the config
-    ' default that ships, and the fact that a disabled block yields no writer and therefore
-    ' no file. Also pins that gap repair returns 0 without touching the store when disabled.
+    ' The reversibility claim (§4).
+    '
+    ' [F1 fix] This calls the PRODUCTION gates — TradeStoreWriter.ShouldCapture /
+    ' ShouldGapRepair, the same functions DeribitWsFeed.ResolveTradeStore and
+    ' TradeStoreGapRepair call. It previously re-stated the predicate inline and asserted the
+    ' copy was false, which would have kept passing if the real gate lost its `Not ts.Enabled`
+    ' arm — the A43f shape (internal consistency of a mirror proves nothing about the thing it
+    ' mirrors). The gate decision is now genuinely harness-proven.
+    '
+    ' What remains REASONED rather than proven: that a closed gate makes the ApplyTrades fold
+    ' inert. `ApplyTrades` is private on DeribitWsFeed, which owns a ClientWebSocket the
+    ' harness deliberately does not link (the A22/A37 boundary). The fixture proves the gate
+    ' answers false and that no file appears; it does not drive the feed.
     Private Sub A48f_DisabledMeansZeroWrites()
         Dim dir As String = A48TempStore("f")
         Try
@@ -7150,11 +7159,13 @@ Module Program
                                         Math.Abs(def.GapRepairIntervalHours - 6.0) < 1e-9 AndAlso
                                         Math.Abs(def.GapRepairLookbackHours - 20.0) < 1e-9
 
-            ' Disabled ⇒ the feed's ResolveTradeStore gate (ts Is Nothing OrElse Not ts.Enabled)
-            ' is false-y, so no writer is built and nothing reaches the disk. Mirrored here as
-            ' the same predicate, then proved by the absence of any file.
+            ' Disabled ⇒ the SHIPPED capture gate answers false, so ResolveTradeStore builds no
+            ' writer and nothing reaches the disk. Nothing/enabled arms both pinned.
             Dim off As New TradeStoreSettings() With {.Enabled = False, .StoreDir = dir}
-            Dim gateOpen As Boolean = off IsNot Nothing AndAlso off.Enabled
+            Dim gateOpen As Boolean = TradeStoreWriter.ShouldCapture(off)
+            Dim gateNothing As Boolean = TradeStoreWriter.ShouldCapture(Nothing)
+            Dim gateOn As Boolean = TradeStoreWriter.ShouldCapture(
+                New TradeStoreSettings() With {.Enabled = True, .StoreDir = dir})
             Dim filesBefore As Integer = Directory.GetFiles(dir).Length
             If gateOpen Then
                 Dim w As New TradeStoreWriter(dir)
@@ -7163,33 +7174,26 @@ Module Program
             End If
             Dim filesAfter As Integer = Directory.GetFiles(dir).Length
 
-            ' Gap repair honours BOTH switches independently.
-            Dim cfgOff As New EngineSettings()
-            cfgOff.TradeStore = New TradeStoreSettings() With {.Enabled = False, .StoreDir = dir}
-            Dim nOff As Integer = TradeStoreGapRepairGate(cfgOff)
-            Dim cfgRepairOff As New EngineSettings()
-            cfgRepairOff.TradeStore = New TradeStoreSettings() With {
-                .Enabled = True, .GapRepairEnabled = False, .StoreDir = dir}
-            Dim nRepairOff As Integer = TradeStoreGapRepairGate(cfgRepairOff)
+            ' Gap repair honours BOTH switches independently — the SHIPPED gate, all four arms.
+            Dim rOff As Boolean = TradeStoreWriter.ShouldGapRepair(
+                New TradeStoreSettings() With {.Enabled = False, .GapRepairEnabled = True, .StoreDir = dir})
+            Dim rRepairOff As Boolean = TradeStoreWriter.ShouldGapRepair(
+                New TradeStoreSettings() With {.Enabled = True, .GapRepairEnabled = False, .StoreDir = dir})
+            Dim rBothOn As Boolean = TradeStoreWriter.ShouldGapRepair(
+                New TradeStoreSettings() With {.Enabled = True, .GapRepairEnabled = True, .StoreDir = dir})
+            Dim rNothing As Boolean = TradeStoreWriter.ShouldGapRepair(Nothing)
 
-            Check("A48f enabled:false ⇒ zero writes, fold inert (defaults pinned; both repair switches independent)",
-                  defaultsOk AndAlso Not gateOpen AndAlso filesBefore = 0 AndAlso filesAfter = 0 AndAlso
-                  nOff = 0 AndAlso nRepairOff = 0,
-                  String.Format("defaults={0} gateOpen={1} before={2} after={3} repairOff={4}/{5}",
-                                defaultsOk, gateOpen, filesBefore, filesAfter, nOff, nRepairOff))
+            Check("A48f shipped capture/repair gates — enabled:false ⇒ no writer, no files; both repair switches independent; defaults pinned",
+                  defaultsOk AndAlso Not gateOpen AndAlso Not gateNothing AndAlso gateOn AndAlso
+                  filesBefore = 0 AndAlso filesAfter = 0 AndAlso
+                  Not rOff AndAlso Not rRepairOff AndAlso rBothOn AndAlso Not rNothing,
+                  String.Format("defaults={0} capture(off={1} nothing={2} on={3}) files={4}/{5} repair(off={6} repairOff={7} bothOn={8} nothing={9})",
+                                defaultsOk, gateOpen, gateNothing, gateOn, filesBefore, filesAfter,
+                                rOff, rRepairOff, rBothOn, rNothing))
         Finally
             A48Cleanup(dir)
         End Try
     End Sub
-
-    ' The gap-repair enable predicate, mirrored from TradeStoreGapRepair.RepairOnceAsync's
-    ' first guard. (TradeStoreGapRepair itself references HistoricalStore, which owns an
-    ' HttpClient and is deliberately unlinked here — see the A48 header.)
-    Private Function TradeStoreGapRepairGate(cfg As EngineSettings) As Integer
-        Dim ts = cfg.TradeStore
-        If ts Is Nothing OrElse Not ts.Enabled OrElse Not ts.GapRepairEnabled Then Return 0
-        Return 1
-    End Function
 
     ' -- A48g: HARD CONSTRAINT 27 fences every trade_store.* key ---------------------------
     ' Data-capture plumbing has no failure-rate linkage — the same class as alerts.* (HC25),

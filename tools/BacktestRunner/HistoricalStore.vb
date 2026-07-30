@@ -403,34 +403,135 @@ Public Class HistoricalStore
     ' The sample type is the TOP-LEVEL BacktestFundingSample (declared in ReplayLoop.vb) —
     ' keeps HistoricalStore's HttpClient off the harness's link surface.
 
-    ''' <summary>Fetch and store one calendar-month of funding rate history. Fetch-once:
-    ''' existing file left alone. The funding endpoint returns the full range in one call
-    ''' (~720 hourly samples/month) so pagination is unnecessary.</summary>
+    ' Funding samples land on the hour, every hour (verified: 0 off-hour samples across
+    ' Feb–Jun 2026, and 3,637 of 3,643 intervals exactly 60 min).
+    Private Const FundingIntervalMs As Long = 3600000L
+
+    ''' <summary>
+    ''' Fetch and store one calendar-month of funding rate history. The endpoint returns the
+    ''' full range in one call (~720 hourly samples/month), so pagination is unnecessary.
+    '''
+    ''' [2026-07-31 fix] Two defects lived here and both are closed:
+    '''
+    ''' (1) **Exclusive start.** `start_timestamp` is EXCLUSIVE — verified against the live
+    '''     endpoint: a request from exactly 2026-06-01T00:00:00.000Z returns 01:00 first,
+    '''     the same request minus 1 ms returns 00:00. Since each month's window began at the
+    '''     boundary instant, **every month silently lost its 00:00 sample** — 5 of 5 internal
+    '''     seams in the store (Feb 671/672, Mar 743/744, Apr 719/720, May 743/744,
+    '''     Jun 719/720: exactly one missing each, always the boundary). Fixed by fetching one
+    '''     interval early and filtering the result back to the segment, which is correct
+    '''     under either inclusive or exclusive semantics.
+    '''
+    ''' (2) **Fetch-once with no coverage check.** The guard was `If File.Exists(path)`, so a
+    '''     partial month file was frozen PERMANENTLY. That is what produced the 28.2-day hole
+    '''     (2026-06-30 23:00 → 2026-07-29 05:00 UTC): a narrow early fetch on 07-30 created
+    '''     `funding_2026-07.csv` with 30 samples, and the 6-month fetch the next day skipped
+    '''     the month entirely on File.Exists. The candle path never had this bug because it
+    '''     checks `MonthFileCovers`; funding had no equivalent. Fixed by comparing the stored
+    '''     in-range count against the expected hourly count, and MERGING on refetch rather
+    '''     than rewriting — so repeated runs accumulate coverage instead of churning it.
+    '''
+    ''' Cost of the coverage check: a month the VENUE genuinely cannot fill stays short and
+    ''' costs one redundant call per run. At one call per month that is not worth extra state
+    ''' to avoid.
+    ''' </summary>
     Public Shared Async Function BackfillFundingMonthAsync(
             year As Integer, month As Integer,
             segStart As DateTime, segEndExcl As DateTime) As Task(Of Integer)
         EnsureStoreDir()
         Dim path As String = FundingFileFor(year, month)
-        If File.Exists(path) Then Return CountDataRows(path)
 
-        Dim startMs As Long = New DateTimeOffset(segStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
-        Dim endMs   As Long = New DateTimeOffset(segEndExcl.AddMilliseconds(-1), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim segStartMs As Long = New DateTimeOffset(segStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim endMs      As Long = New DateTimeOffset(segEndExcl.AddMilliseconds(-1), TimeSpan.Zero).ToUnixTimeMilliseconds()
 
-        Dim samples As List(Of BacktestFundingSample) = Await FetchFundingHistoryAsync(startMs, endMs)
+        ' Cap the window at NOW. The current month's segment runs to the month end, so without
+        ' this the expectation counts hours that have not happened yet and the month can never
+        ' satisfy the coverage check — a redundant fetch every run, forever. (Observed: the
+        ' repair fetch left July at 716/720, the four "missing" samples being 20:00–23:00 on a
+        ' day that had not reached 20:00.) Nothing is lost: the future cannot be fetched.
+        Dim nowMs As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        If endMs > nowMs Then endMs = nowMs
+
+        ' Coverage check (defect 2). Count what is already stored INSIDE the requested
+        ' segment — an out-of-range straggler must not make a short month look complete.
+        Dim existing As List(Of BacktestFundingSample) = LoadFundingFile(path)
+        Dim haveInRange As Integer = 0
+        For Each s In existing
+            If s.TsMs >= segStartMs AndAlso s.TsMs <= endMs Then haveInRange += 1
+        Next
+        Dim expected As Integer = ExpectedFundingSamples(segStartMs, endMs)
+        If haveInRange >= expected Then Return existing.Count
+
+        ' Fetch one interval early (defect 1) and filter back to the segment below.
+        Dim samples As List(Of BacktestFundingSample) =
+            Await FetchFundingHistoryAsync(segStartMs - FundingIntervalMs, endMs)
         If samples Is Nothing Then
             Console.Error.WriteLine(String.Format(
-                "[HistoricalStore] Funding fetch failed for {0:D4}-{1:D2}", year, month))
-            Return 0
+                "[HistoricalStore] Funding fetch failed for {0:D4}-{1:D2} — keeping {2} stored sample(s)",
+                year, month, existing.Count))
+            Return existing.Count
         End If
 
-        samples.Sort(Function(a, b) a.TsMs.CompareTo(b.TsMs))
+        ' Merge: stored rows survive, fetched rows fill the holes. Dedup by timestamp,
+        ' newest fetch wins on a collision.
+        Dim map As New SortedDictionary(Of Long, Double)()
+        For Each s In existing
+            map(s.TsMs) = s.Rate
+        Next
+        Dim added As Integer = 0
+        For Each s In samples
+            If s.TsMs < segStartMs OrElse s.TsMs > endMs Then Continue For   ' the margin, discarded
+            If Not map.ContainsKey(s.TsMs) Then added += 1
+            map(s.TsMs) = s.Rate
+        Next
+
         Using sw As New StreamWriter(path, append:=False)
             sw.WriteLine("Timestamp,Rate")
-            For Each s In samples
-                sw.WriteLine(String.Format(CultureInfo.InvariantCulture, "{0},{1:F10}", s.TsMs, s.Rate))
+            For Each kv In map
+                sw.WriteLine(String.Format(CultureInfo.InvariantCulture, "{0},{1:F10}", kv.Key, kv.Value))
             Next
         End Using
-        Return samples.Count
+        Console.WriteLine(String.Format(
+            "[HistoricalStore] Funding {0:D4}-{1:D2}: {2} stored (+{3} new, expected {4} in range)",
+            year, month, map.Count, added, expected))
+        Return map.Count
+    End Function
+
+    ''' <summary>How many hourly samples SHOULD sit in [startMs, endMsIncl] — the number of
+    ''' hour boundaries in the window. Pure; the coverage check above is the only caller.</summary>
+    Public Shared Function ExpectedFundingSamples(startMs As Long, endMsIncl As Long) As Integer
+        If endMsIncl < startMs Then Return 0
+        ' First hour boundary at or after startMs.
+        Dim firstHour As Long = ((startMs + FundingIntervalMs - 1) \ FundingIntervalMs) * FundingIntervalMs
+        If firstHour > endMsIncl Then Return 0
+        Return CInt((endMsIncl - firstHour) \ FundingIntervalMs) + 1
+    End Function
+
+    ''' <summary>Parse one funding month file. Empty list when absent/unreadable; never throws.
+    ''' The single parse both LoadFundingRange and the coverage check route through.</summary>
+    Public Shared Function LoadFundingFile(path As String) As List(Of BacktestFundingSample)
+        Dim all As New List(Of BacktestFundingSample)()
+        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return all
+        Try
+            Using sr As New StreamReader(path)
+                sr.ReadLine()   ' header
+                Dim line As String
+                Do
+                    line = sr.ReadLine()
+                    If line Is Nothing Then Exit Do
+                    Dim parts = line.Split(","c)
+                    If parts.Length < 2 Then Continue Do
+                    Dim ts As Long
+                    Dim rate As Double
+                    If Not Long.TryParse(parts(0), NumberStyles.Integer, CultureInfo.InvariantCulture, ts) Then Continue Do
+                    If Not Double.TryParse(parts(1), NumberStyles.Float, CultureInfo.InvariantCulture, rate) Then Continue Do
+                    all.Add(New BacktestFundingSample() With {.TsMs = ts, .Rate = rate})
+                Loop
+            End Using
+        Catch ex As Exception
+            Console.Error.WriteLine("[HistoricalStore] LoadFundingFile failed: " & ex.Message)
+        End Try
+        Return all
     End Function
 
     Public Shared Async Function FetchFundingHistoryAsync(startMs As Long, endMs As Long) As Task(Of List(Of BacktestFundingSample))
@@ -487,26 +588,7 @@ Public Class HistoricalStore
     Public Shared Function LoadFundingRange(warmupStartUtc As DateTime, toUtc As DateTime) As List(Of BacktestFundingSample)
         Dim all As New List(Of BacktestFundingSample)()
         For Each m In EnumerateMonths(warmupStartUtc, toUtc)
-            Dim path As String = FundingFileFor(m.Year, m.Month)
-            If Not File.Exists(path) Then Continue For
-            Try
-                Using sr As New StreamReader(path)
-                    sr.ReadLine()   ' header
-                    Dim line As String
-                    Do
-                        line = sr.ReadLine()
-                        If line Is Nothing Then Exit Do
-                        Dim parts = line.Split(","c)
-                        If parts.Length < 2 Then Continue Do
-                        Dim s As New BacktestFundingSample()
-                        s.TsMs = Long.Parse(parts(0), CultureInfo.InvariantCulture)
-                        s.Rate = Double.Parse(parts(1), CultureInfo.InvariantCulture)
-                        all.Add(s)
-                    Loop
-                End Using
-            Catch ex As Exception
-                Console.Error.WriteLine("[HistoricalStore] LoadFundingRange failed: " & ex.Message)
-            End Try
+            all.AddRange(LoadFundingFile(FundingFileFor(m.Year, m.Month)))
         Next
         all.Sort(Function(a, b) a.TsMs.CompareTo(b.TsMs))
         Return all

@@ -9,14 +9,16 @@
 
 ---
 
-## 0a. The hole is not hypothetical — it already exists, and it is in `funding`
+## 0a. The hole was not hypothetical — it existed, went undetected for a month, and is now fixed
 
-The review found this by running S4's own arithmetic against the current store, and I reproduced it independently. **It is the strongest argument in this document**, so it goes first.
+**Status: DIAGNOSED AND REPAIRED 2026-07-31** (`HistoricalStore.BackfillFundingMonthAsync`, separate commit). The store is now complete — 4,336 samples, **zero gaps** across all six months. The section stays because *the defect is the argument*: it sat in the store undetected from 2026-06-30 until a reviewer happened to run S4's arithmetic by hand. **A coverage report would have caught it on day one, which is the entire case for building this.**
 
-| Stream | Have | Expected | Missing |
-|---|---:|---:|---:|
-| Candles 1m / 3m / 5m / 15m | 259,974 / 86,658 / 51,995 / 17,332 | same | **0 — complete at all four resolutions** |
-| **Funding** | **3,644** | **4,326** | **682 (15.8 %)** |
+The review found it and I reproduced it independently before fixing.
+
+| Stream | Have (before) | Expected | Missing | After the fix |
+|---|---:|---:|---:|---|
+| Candles 1m / 3m / 5m / 15m | 259,974 / 86,658 / 51,995 / 17,332 | same | **0** | unchanged — complete |
+| **Funding** | **3,644** | **4,326** | **682 (15.8 %)** | **4,336, zero gaps** |
 
 **`funding` has a 28.2-day hole: 2026-06-30 23:00 UTC → 2026-07-29 05:00 UTC** (measured gap 40,680 min). Per-month counts show the shape plainly — Feb 671 · Mar 743 · Apr 719 · May 743 · Jun 719, essentially complete, against **July 30**.
 
@@ -28,7 +30,12 @@ It is **not** a venue retention cap: the endpoint served a complete February, an
 
 The review reads the five 120-minute funding gaps as *"five genuinely dropped samples"* — noise alongside the big hole. They are not noise. **All five sit exactly on a month boundary** — 2026-02-01, 03-01, 04-01, 05-01, 06-01, each at **00:00 UTC** — which is **5 of 5 internal boundaries in the store, a 100 % hit rate.** That is not random loss; it is a deterministic off-by-one at the monthly-file seam in `BackfillFundingMonthAsync`, where the window is `[segStart, segEndExcl − 1 ms]` and the sample landing on the boundary instant falls in the crack between two months' fetches.
 
-The distinction matters because the two defects want different responses: the 28.2-day hole is undiagnosed and needs investigation; the boundary drop is deterministic, reproducible, and a small fix. **Both belong to `HistoricalStore.BackfillFundingMonthAsync`, not to this spec** — flagged, not folded in. I have not diagnosed the 28.2-day hole's cause and am not proposing a fix here.
+Both turned out to live in `BackfillFundingMonthAsync`, and both are now fixed:
+
+1. **Exclusive start.** Probed against the live endpoint: a request from exactly `2026-06-01T00:00:00.000Z` returns `01:00` first; the same request minus 1 ms returns `00:00`. `start_timestamp` is **exclusive**, and every month's window began at the boundary instant — so every month silently lost its 00:00 sample. The repair fetch added **exactly +1 sample to each of Feb/Mar/Apr/May/Jun**, confirming the diagnosis precisely.
+2. **Fetch-once with no coverage check.** The guard was `If File.Exists(path)`, so a partial file froze **permanently**. A narrow early fetch on 07-30 created `funding_2026-07.csv` with 30 samples; the 6-month fetch the next day skipped the month on `File.Exists`. The candle path never had this bug — it checks `MonthFileCovers` — funding simply had no equivalent. The repair fetch took July **30 → 716 (+686)**.
+
+**The second defect is the one that matters for this spec**, and it generalises beyond funding: *a fetch-once guard that checks existence rather than completeness converts one bad fetch into permanent silent loss.* That is precisely the class S4 exists to surface, and it is why S4 earns its place despite being the least glamorous of the five signals.
 
 ---
 

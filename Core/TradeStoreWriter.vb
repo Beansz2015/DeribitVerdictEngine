@@ -142,6 +142,26 @@ Public NotInheritable Class TradeStoreWriter
         If onDisk > _lastTs Then _lastTs = onDisk
     End Sub
 
+    ' ── Feature gates ─────────────────────────────────────────────────────────────────
+    ' [F1] These live here rather than inline at their call sites so the harness tests the
+    ' PRODUCTION decision instead of a restatement of it. A48f originally re-stated the
+    ' predicate and asserted the copy was false — which would still have passed if the real
+    ' gate lost its `Not ts.Enabled` arm. Same class as the A43f lesson: internal consistency
+    ' of a mirror proves nothing about the thing it mirrors.
+
+    ''' <summary>The streaming-capture gate. `DeribitWsFeed.ResolveTradeStore` and A48f both
+    ''' call this — there is one decision, in one place.</summary>
+    Public Shared Function ShouldCapture(ts As TradeStoreSettings) As Boolean
+        Return ts IsNot Nothing AndAlso ts.Enabled
+    End Function
+
+    ''' <summary>The gap-repair gate. Repair additionally requires its own switch, so the two
+    ''' are independent: `enabled:false` stops both, `gap_repair_enabled:false` stops only
+    ''' repair. `TradeStoreGapRepair.Start` / `RepairOnceAsync` and A48f all call this.</summary>
+    Public Shared Function ShouldGapRepair(ts As TradeStoreSettings) As Boolean
+        Return ShouldCapture(ts) AndAlso ts.GapRepairEnabled
+    End Function
+
     ' ── Shared path / format helpers ──────────────────────────────────────────────────
 
     ''' <summary>

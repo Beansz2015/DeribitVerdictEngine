@@ -147,7 +147,7 @@ Public NotInheritable Class DeribitWsFeed
     ' Resolve the writer for the configured store dir, rebuilding if store_dir hot-reloaded.
     ' Nothing when capture is disabled — the caller early-outs and the feed does no extra work.
     Private Function ResolveTradeStore(ts As TradeStoreSettings) As TradeStoreWriter
-        If ts Is Nothing OrElse Not ts.Enabled Then Return Nothing
+        If Not TradeStoreWriter.ShouldCapture(ts) Then Return Nothing
         Dim dir As String = TradeStoreWriter.ResolveStoreDir(ts.StoreDir)
         SyncLock _tradeStoreLock
             If _tradeStore Is Nothing OrElse Not String.Equals(dir, _tradeStoreDir, StringComparison.OrdinalIgnoreCase) Then
