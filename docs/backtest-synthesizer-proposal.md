@@ -53,3 +53,17 @@ The live collectors (still irreplaceable for book/OI/fills/population), the What
 | D6 | History depth for the first store | **6 months** (balances fetch time vs study value; extend later — the store is append-forward) |
 | D7 | Tier-2 paid L2/OI history | **Defer** — revisit only after the free tier proves value on ≥2 real studies |
 | D8 | Roadmap slot | **Early Opus month, after the absorption mechanism spec** — it accelerates W6-1/v56/D2-v2/§5.2 and every future re-baseline; the Aug-1 handover names it |
+
+---
+
+## 7. Post-validation coordinator amendments (2026-07-30 — binding)
+
+The §4 overlap validation ran (`backtest-overlap-validation-2026-07-30.md`) and found two structural facts that amend this spec:
+
+**7.1 The one-bar convention gap (fidelity blocker — fix required before study clearance).** Live rows compute with the FORMING bar as the last candle (the WS chart series carries the in-progress bar; at on-close firing it is a seconds-old stub) while the synthesizer used the closed bar — every candle-derived indicator window is shifted one bar, collapsing per-column match rates (ATR 0%). Ruling: **the synthesizer MIRRORS live** — append a forming-bar stub built from real stored trades in [close, close+2s] (δ=2s fixed, documented; zero-trade fallback = {OHLC=prev close, V=0}), then RE-VALIDATE. The synthesizer's purpose is transfer to the live book; semantic purity loses to fidelity.
+
+**7.2 NAMED SEPARATELY — a live-engine question this surfaced (do NOT conflate with the synth fix):** live's last-bar-is-a-stub convention means on-close runs compute momentum/volume indicators on a bar seconds old (a live CSV row shows VolumeRatio 0.0002 mid-bar — the corroborating fingerprint). Whether this is intended (v44 on-close design) or a latent systematic defect the whole calibration book has absorbed is an **Opus-month investigation item** (read the v44 spec + MarketState candle semantics + which indicators consume the last bar; report only — any live change would be a maximal ⚠ touching dataset continuity). The handover names it.
+
+**7.3 D6 REVISED (trades-history constraint).** Deribit's public trades endpoint serves only ~24h of history — the "6-month store in one go" premise holds for CANDLES + FUNDING only. Consequences: geometry/candle-class deep studies (W6-1, v56 re-read, D2-v2 depth — the headline uses) are UNAFFECTED; trade-derived signals (CVD/TFI/MicroCVD/aggr-vel/liq) reconstruct only within the accumulated store → the store becomes **append-forward**: run `BacktestRunner fetch` daily (candidate: a scheduled task on the AWS box beside the collector), building deep trade history from now on. Paid historical trades (Tardis-class) remains the D7 escape hatch, unchanged.
+
+**7.4 The muted-vote delta (0.09pp) is NOT yet a result** — it was measured under the 7.1 confound (71% baseline agreement dominated by bar-swap noise). Remeasure at the re-validation; only then does the D4 "empirical OFI/OI contribution" reading count.
