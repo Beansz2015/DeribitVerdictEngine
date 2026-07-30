@@ -142,6 +142,10 @@
     <Compile Include="..\..\tools\BacktestRunner\HistoricalStore.vb" />
     <Compile Include="..\..\tools\BacktestRunner\ReplayLoop.vb" />
     <Compile Include="..\..\tools\BacktestRunner\BacktestRowWriter.vb" />
+    <!-- Overlap validator (A44 — docs/backtest-synthesizer-proposal.md §4): the pure
+         join + comparison helpers (FloorToBucket + column tables). The validate CLI verb
+         lives in BacktestProgram, which stays OUT (its own Main). -->
+    <Compile Include="..\..\tools\BacktestRunner\OverlapValidator.vb" />
   </ItemGroup>
 
 </Project>

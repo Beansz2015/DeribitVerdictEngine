@@ -351,6 +351,14 @@ Module Program
         A43d_MutedVoteInertness()
         A43e_HeaderParityAndProvenance()
 
+        ' [Backtest overlap validation — A44, docs/backtest-synthesizer-proposal.md §4]
+        ' The validate CLI verb joins synthetic ⇔ live rows by execution-resolution bar.
+        ' A44 pins the OverlapValidator.FloorToBucket contract: floor(ts, execRes-min grid)
+        ' collapses everything within the same bar to a single key so the join is
+        ' well-defined even when live and synthetic timestamps differ by seconds
+        ' (live-collection latency vs synthetic exact-close alignment).
+        A44a_FloorToBucketSameGrid()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -6434,6 +6442,38 @@ Module Program
         Check("A43e header byte-parity + provenance (BACKTEST- prefix + monotonic SignalId)",
               okHeader AndAlso okProv,
               String.Format("header={0} prov={1} ({2})", okHeader, okProv, detail))
+    End Sub
+
+    ' A44a: OverlapValidator.FloorToBucket collapses live and synthetic timestamps that
+    ' land in the same execution-resolution bar into a single join key. Rows drifting
+    ' by seconds within the same 3-min ASIA/LONDON bar or 1-min NY bar MUST hash to the
+    ' same bucket; rows crossing the grid boundary MUST land in different buckets.
+    Private Sub A44a_FloorToBucketSameGrid()
+        ' 3-min grid: 12:03:00 UTC.
+        Dim mid3   As Long = New DateTimeOffset(2026, 7, 30, 12, 3, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim late3  As Long = New DateTimeOffset(2026, 7, 30, 12, 5, 59, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim next3  As Long = New DateTimeOffset(2026, 7, 30, 12, 6, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim b1 = OverlapValidator.FloorToBucket(mid3, 3)
+        Dim b2 = OverlapValidator.FloorToBucket(late3, 3)
+        Dim b3 = OverlapValidator.FloorToBucket(next3, 3)
+        Dim ok3 As Boolean = (b1 = b2) AndAlso (b3 = b1 + 3L * 60L * 1000L)
+
+        ' 1-min grid: two timestamps 30 s apart on same minute bucket must collapse.
+        Dim mid1   As Long = New DateTimeOffset(2026, 7, 30, 14, 27, 0,  TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim late1  As Long = New DateTimeOffset(2026, 7, 30, 14, 27, 59, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim next1  As Long = New DateTimeOffset(2026, 7, 30, 14, 28, 0,  TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim c1 = OverlapValidator.FloorToBucket(mid1, 1)
+        Dim c2 = OverlapValidator.FloorToBucket(late1, 1)
+        Dim c3 = OverlapValidator.FloorToBucket(next1, 1)
+        Dim ok1 As Boolean = (c1 = c2) AndAlso (c3 = c1 + 60L * 1000L)
+
+        ' Guard: execRes<=0 must fall through to 1-min grid, not divide by zero.
+        Dim zGuard = OverlapValidator.FloorToBucket(mid1, 0)
+        Dim okZero As Boolean = (zGuard = c1)
+
+        Check("A44a FloorToBucket collapses same-bar timestamps + advances one bucket at the boundary + execRes<=0 guard",
+              ok3 AndAlso ok1 AndAlso okZero,
+              String.Format("ok3={0} ok1={1} okZero={2}", ok3, ok1, okZero))
     End Sub
 
 End Module
