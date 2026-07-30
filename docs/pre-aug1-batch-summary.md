@@ -3,6 +3,8 @@
 **Executed:** 2026-07-30 (Opus orchestrator). **Spec:** `docs/pre-aug1-opus-batch-2026-07-31.md`, run top-down.
 **For:** relay to the Fable seat for the final double-check. **This orchestrator's review does not replace that double-check** — §7 lists everything flagged rather than resolved.
 
+**Companion document:** `docs/pre-aug1-batch-spec-back.md` — the coordinator-facing review packet (verification handles, the five queued decisions, and feedback on the batch spec's own assumptions). This file is the outcome record; that one is what the Fable seat actually works from.
+
 **All five lanes ran. Nothing was skipped, nothing was blocked.** Item A's tick was given at handoff.
 
 | Item | Outcome | Commits | Gate |
