@@ -143,3 +143,19 @@ Stated plainly so nothing is assumed covered.
 **Read A45a sub-check (iv)**, then the `VWAPSessionCandles` row in §10.
 
 Those two together establish that lane A's engine edit is correct, complete and protected against silent regression — which is the only irreversible thing in the batch. Everything else is a document, a tool verb, a tooltip, or a study run, and all four are cheap to undo.
+
+---
+
+## 6. Fable double-check — VERDICT + the five rulings (2026-07-31)
+
+**Batch APPROVED.** All six §1 verification handles checked and pass (A45a(iv) is a genuine regression trap; the lane-A diff is the one optional parameter; exactly one `Core/` file in the whole range; dedup identities close; the §10 |Δ| stats verified at source). Independent gate re-run: see the summary relay. The §3 feedback is accepted in full — the TriggerMode gap was this coordinator's spec error (the batch asked for a column `AnalysisLogger` never wrote; the substitution was the right move), and future batches will name the `[no-engine-change]` token explicitly. The lane-E overlay commit is approved.
+
+**D1 — PARTIAL CLEARANCE.** Window-consuming studies: cleared. VWAP *values*: cleared for coarse/structural use with a documented ~1.3 bps noise floor (mean |Δ| $8.6 at 64k); fine VWAP-dev threshold sweeps (steps < 5 bps) stay withheld pending D2's reclass. Funding unchanged: structurally approximate, discouraged.
+
+**D2 — HYPOTHESIS CONFIRMED from the shipped numbers.** Mean |Δ| ≈ 1.3 bps against a ~$6.4 point-value bar is a correctly-computed accumulator scored on a mis-scoped tolerance; the $261 max is a session-edge tail, not noise. **Ordered (reporting-only micro-task, next batch):** re-class accumulator-family columns to a bps-scale tolerance (recommend 5 bps of price) and report the session-edge tail separately. On landing, D1's value clearance widens accordingly.
+
+**D3 — SLOT GRANTED: the Opus month's headline ⚠ CANDIDATE, strictly evidence-first.** (a) Option D (`TriggerMode` CSV column) approved to ride the NEXT header rotation — never forcing one; (b) the closed-bar volume A/B runs on the BACKTESTER first (volume is candle-derived — inside the cleared class; this is a registered use case now); (c) any live change is its own maximal-⚠ D-table, sequenced AFTER F1/Kelly-CAL land, never stacked with another boundary. The narrow Option-B scoping (one function + `CurrentVolume` off the closed bar) is noted as the likely shape if evidence supports it. The finding's magnitude (volume vote ≤2% vs ~20% closed-bar; the trader's 3× rule at 10–40× lower fire rate; Pass-2 upgrade suppression) justifies the headline slot.
+
+**D4 — YES.** §15 row added (settings-untouched, W6-4 precedent), this commit.
+
+**D5 — READ AS GUARD-RAIL CONFIRMATION.** Full-book tables are context-only (all-cell DIVERGENT = the 07-08 regime break dominating); post-07-08 is the decision surface — consistent with the standing validation-window ruling. Its winner being the live baseline `(0,0)` with no flags means the Friday session should treat "no separable geometry change yet" as a legitimate, likely outcome.
