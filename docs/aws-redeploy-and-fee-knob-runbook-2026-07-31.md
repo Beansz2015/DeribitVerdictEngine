@@ -5,6 +5,24 @@
 
 ---
 
+> ## ✅ EXECUTED 2026-07-31 — redeploy done, knob deliberately NOT turned
+>
+> - **AWS** on v63 and running from **16:42 UTC**; **local** confirmed from **16:43 UTC** (00:43 MYT).
+> - **`min_net_move_pct` left at `0.0005`** — trader's decision to keep the composed floor at **0.0008**, unchanged on both boxes.
+>
+> **Consequences, and they are all good:**
+>
+> 1. **No dataset boundary.** The floor is identical before and after, and v61 → v63 is behaviour-neutral at defaults (v62 and v63 both shipped byte-identical). Rows across the restart are **fully comparable** — no filtering, no re-walk, nothing to annotate in later reads.
+> 2. **The straddle is CLOSED, not merely benign.** Before, the two boxes reached 0.0008 by *different mechanisms* (AWS a flat literal, local a composed value) and pooled only because the numbers coincided. Both now compose it from the same block, so §4.5 same-settings discipline is satisfied structurally rather than by luck.
+> 3. **The two timestamps are restart markers, not a boundary.** Worth keeping only because AWS's `InstanceId` changes there.
+> 4. **The Aug-1 to-do is now empty.** The fee schedule in `settings.json` already carries the post-Aug-1 values (maker 1.5 / taker 3.5, set at v62). With the knob deliberately left alone, nothing needs to happen when the fee change lands. The engine's floor stays 0.0008, of which 3 bps is fee and **5 bps is net move kept** — the trade-off in §1.1, accepted knowingly.
+>
+> **One item still owed:** the AWS restart minted a **new `InstanceId`**. Capture it at the next copy-back (the first AWS row written after 16:42 UTC) and add it to the authoritative list in `aws-collector-deploy-checklist.md` §5.
+>
+> §1–§5 below are retained as the standing procedure for the next redeploy or a later knob turn.
+
+---
+
 ## 0. Why the order matters (the thing that makes this urgent)
 
 Right now **both boxes gate at the same floor**, which is the only reason the pooled corpus is valid:
