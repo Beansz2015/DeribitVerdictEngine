@@ -15,16 +15,23 @@ Partial Public Class IndicatorEngine
 
     ' Returns the active VWAP session window, anchored at session-2 cutoff or 00:00 UTC.
     ' Falls back to the full candle list if no candle is in-session yet.
+    '
+    ' nowUtc (§7.5): the clock the session anchor is derived from. Nothing => DateTime.UtcNow,
+    ' which is the live path and is byte-identical to the pre-parameterisation behaviour.
+    ' Offline replay passes the bar close instead: anchoring historical candles to the real
+    ' wall clock puts the whole slice on the wrong side of the session cutoff (the VWAP-family
+    ' agreement collapse documented in backtest-overlap-validation-2026-07-30.md §8.6).
     Private Shared Function GetSessionCandles(candles As List(Of Candle),
                                               session2Hour As Integer,
-                                              session2Minute As Integer) As List(Of Candle)
-        Dim nowUtc As DateTime = DateTime.UtcNow
+                                              session2Minute As Integer,
+                                              Optional nowUtc As DateTime? = Nothing) As List(Of Candle)
+        Dim effNow As DateTime = If(nowUtc.HasValue, nowUtc.Value, DateTime.UtcNow)
         Dim sessionStart As DateTime
-        If nowUtc.Hour < session2Hour OrElse
-           (nowUtc.Hour = session2Hour AndAlso nowUtc.Minute < session2Minute) Then
-            sessionStart = nowUtc.Date
+        If effNow.Hour < session2Hour OrElse
+           (effNow.Hour = session2Hour AndAlso effNow.Minute < session2Minute) Then
+            sessionStart = effNow.Date
         Else
-            sessionStart = nowUtc.Date.AddHours(session2Hour).AddMinutes(session2Minute)
+            sessionStart = effNow.Date.AddHours(session2Hour).AddMinutes(session2Minute)
         End If
         Dim sessionStartMs As Long = New DateTimeOffset(sessionStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim sessionCandles = candles.Where(Function(c) c.Timestamp >= sessionStartMs).ToList()
@@ -36,8 +43,9 @@ Partial Public Class IndicatorEngine
     Public Shared Function CalcVWAP(candles As List(Of Candle),
                                      ByRef sessionCandleCount As Integer,
                                      Optional session2Hour As Integer = 13,
-                                     Optional session2Minute As Integer = 30) As Double
-        Dim sessionCandles = GetSessionCandles(candles, session2Hour, session2Minute)
+                                     Optional session2Minute As Integer = 30,
+                                     Optional nowUtc As DateTime? = Nothing) As Double
+        Dim sessionCandles = GetSessionCandles(candles, session2Hour, session2Minute, nowUtc)
         sessionCandleCount = sessionCandles.Count
 
         Dim cumTPV As Double = 0
@@ -55,12 +63,13 @@ Partial Public Class IndicatorEngine
                                      ByRef sigma1Upper As Double, ByRef sigma1Lower As Double,
                                      ByRef sigma2Upper As Double, ByRef sigma2Lower As Double,
                                      Optional session2Hour As Integer = 13,
-                                     Optional session2Minute As Integer = 30)
+                                     Optional session2Minute As Integer = 30,
+                                     Optional nowUtc As DateTime? = Nothing)
         sigma1Upper = vwap : sigma1Lower = vwap
         sigma2Upper = vwap : sigma2Lower = vwap
         If vwap = 0 Then Return
 
-        Dim sessionCandles = GetSessionCandles(candles, session2Hour, session2Minute)
+        Dim sessionCandles = GetSessionCandles(candles, session2Hour, session2Minute, nowUtc)
         If sessionCandles.Count < 2 Then Return
 
         Dim cumVol As Double = 0

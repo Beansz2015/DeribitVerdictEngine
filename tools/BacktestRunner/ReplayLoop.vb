@@ -376,14 +376,19 @@ Public Class ReplayLoop
             End If
             prevRegime = rawRegime
 
+            ' §7.5: pass the bar close as the session anchor. Live's default (DateTime.UtcNow)
+            ' is correct there because now ~= candle time; under replay it would anchor
+            ' historical candles to the real wall clock. curUtc is already this loop's "now"
+            ' (it drives the IsFresh gates above), so the anchor and the freshness gate agree.
             Dim vwapS2Hour   As Integer = cfg.Indicators.VWAP.Session2StartHour
             Dim vwapS2Minute As Integer = cfg.Indicators.VWAP.Session2StartMinute
-            r.VWAP       = IndicatorEngine.CalcVWAP(sliceExec, r.VWAPSessionCandles, vwapS2Hour, vwapS2Minute)
+            r.VWAP       = IndicatorEngine.CalcVWAP(sliceExec, r.VWAPSessionCandles,
+                                                    vwapS2Hour, vwapS2Minute, curUtc)
             r.VWAPDevPct = If(r.VWAP > 0, (r.CurrentPrice - r.VWAP) / r.VWAP * 100, 0)
             IndicatorEngine.CalcVWAPBands(sliceExec, r.VWAP,
                                           r.VWAPSigma1Upper, r.VWAPSigma1Lower,
                                           r.VWAPSigma2Upper, r.VWAPSigma2Lower,
-                                          vwapS2Hour, vwapS2Minute)
+                                          vwapS2Hour, vwapS2Minute, curUtc)
 
             IndicatorEngine.CalcBBW(sliceExec, cfg.Indicators.BBW.Period, cfg.Indicators.BBW.StdDev,
                                     r.BBW, r.SqueezeStatus,
