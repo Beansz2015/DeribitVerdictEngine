@@ -73,6 +73,9 @@
          half of the §2 split that exists so the fixture project never links an HttpClient
          (HistoricalStore owns one and is deliberately NOT here). -->
     <Compile Include="..\..\Core\TradeStoreWriter.vb" />
+    <!-- Candle/funding store file layer — the merge invariant that, unguarded, cost a
+         month of June data. A51. -->
+    <Compile Include="..\..\Core\StoreFiles.vb" />
     <Compile Include="..\..\AnalysisLogger.vb" />
     <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
          exercised against a real MarketState (already linked above). -->

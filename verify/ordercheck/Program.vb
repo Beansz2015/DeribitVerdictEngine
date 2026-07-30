@@ -408,6 +408,17 @@ Module Program
         A48g_Hc27FencesTradeStoreKeys()
         A48h_StoreDirIsExeRelativeNotCwdRelative()
 
+        ' [A51 — candle/funding store write invariant, docs/store-integrity-check-2026-07-31
+        ' -post-fix.md] The candle backfill destroyed June 2026 at 3m/5m/15m by writing a
+        ' whole MONTH file from a partial SEGMENT fetch, behind a resolution-blind coverage
+        ' check that refetched every non-1m month on every run. Both decisions now live in
+        ' Core/StoreFiles.vb as pure functions, and these pin them. Test debt closed.
+        A51a_MergePreservesExistingRowsOnPartialFetch()
+        A51b_CoverageCountIsResolutionAware()
+        A51c_EmptyOrFailedFetchNeverDestroys()
+        A51d_FundingMergeClipsOverreachButKeepsStored()
+        A51e_CandleRoundTripThroughShippedParse()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -6838,9 +6849,14 @@ Module Program
     ' A48 — in-app trade-store capture (docs/in-app-trade-store-capture-proposal.md §6)
     '
     ' Everything below runs against Core/TradeStoreWriter.vb, which is NETWORK-FREE by
-    ' design: that is the whole point of the §2 split. HistoricalStore owns a live
-    ' HttpClient and is deliberately NOT linked into this project, so these fixtures pin
-    ' the shared seam rather than the HTTP wrapper around it.
+    ' design — that is the point of the §2 split, which keeps an HttpClient off the app's
+    ' feed path. These fixtures pin the shared seam rather than the HTTP wrapper around it.
+    '
+    ' [CORRECTION 2026-07-31] An earlier version of this comment, and the v64 spec-back §2.1,
+    ' claimed HistoricalStore is "deliberately NOT linked into this project". That is false —
+    ' OrderCheck.vbproj:146 has linked it since the A43 family. The real constraint is that
+    ' the store's backfill entry points are Async and call the network, so a fixture cannot
+    ' drive them; that is why A51 tests the extracted pure layer (Core/StoreFiles.vb) instead.
     ' ═══════════════════════════════════════════════════════════════════════════════════
 
     ' Scratch store dir under the system temp root; each fixture gets its own.
@@ -7285,6 +7301,237 @@ Module Program
         End Try
     End Sub
 
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' A51 — candle/funding store write invariant (Core/StoreFiles.vb)
+    '
+    ' THE INVARIANT: stored rows ALWAYS survive a write; the result is the UNION of stored
+    ' and fetched. A partial, truncated or failed fetch can never destroy anything.
+    '
+    ' This is the guard the June wipe did not have. `BackfillCandleMonthAsync` used
+    ' `append:=False` over a whole month file from a segment fetch — and `BackfillAllAsync`
+    ' starts 20 h before `fromUtc`, so `fetch --from 2026-07-01` handed June a 20-hour
+    ' segment. 14,400 3m bars became 400. A51a is the direct regression trap for that.
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    Private Function A51TempDir(tag As String) As String
+        Dim dir As String = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                         "ordercheck_a51_" & tag & "_" & Guid.NewGuid().ToString("N").Substring(0, 8))
+        Directory.CreateDirectory(dir)
+        Return dir
+    End Function
+
+    ' A month of bars at `intervalMin`, starting at `startMs`, count `n`. Close encodes the
+    ' index so provenance is checkable after a merge.
+    Private Function A51Bars(startMs As Long, intervalMin As Integer, n As Integer,
+                             Optional closeBase As Double = 60000.0) As List(Of Candle)
+        Dim outp As New List(Of Candle)()
+        For i As Integer = 0 To n - 1
+            outp.Add(New Candle With {
+                .Timestamp = startMs + CLng(i) * intervalMin * 60000L,
+                .Open = closeBase + i, .High = closeBase + i + 5, .Low = closeBase + i - 5,
+                .Close = closeBase + i, .Volume = 1.5, .VolumeUSD = (closeBase + i) * 1.5})
+        Next
+        Return outp
+    End Function
+
+    ' -- A51a: a partial-segment fetch must NOT destroy the rest of the month --------------
+    ' The June wipe, reproduced in miniature and asserted against. A full 3m "month" is
+    ' stored; then a fetch returns only the LAST 20 hours of it (exactly the shape
+    ' BackfillAllAsync's 20 h warmup produces). Pre-fix that replaced the file. Post-fix the
+    ' union must be complete and the early bars must still carry their original values.
+    Private Sub A51a_MergePreservesExistingRowsOnPartialFetch()
+        Dim dir As String = A51TempDir("a")
+        Try
+            Dim monthStart As Long = New DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Const barsPerMonth As Integer = 14400          ' 30 days of 3m bars
+            Const tailBars As Integer = 400                ' the 20-hour survivor window
+            Dim csvPath As String = System.IO.Path.Combine(dir, "candles_3m_2026-06.csv")
+
+            ' Store the whole month.
+            StoreFiles.MergeAndWriteCandles(csvPath, Nothing, A51Bars(monthStart, 3, barsPerMonth))
+            Dim storedFull As Integer = StoreFiles.LoadCandleFile(csvPath).Count
+
+            ' A fetch that returns ONLY the trailing 20 hours, with different values so an
+            ' overwrite would be detectable even at equal row counts.
+            Dim tailStart As Long = monthStart + CLng(barsPerMonth - tailBars) * 3L * 60000L
+            Dim partialFetch = A51Bars(tailStart, 3, tailBars, closeBase:=99000.0)
+
+            Dim total As Integer = StoreFiles.MergeAndWriteCandles(csvPath, StoreFiles.LoadCandleFile(csvPath), partialFetch)
+            Dim after = StoreFiles.LoadCandleFile(csvPath)
+
+            Dim countOk As Boolean = (storedFull = barsPerMonth) AndAlso
+                                     (total = barsPerMonth) AndAlso (after.Count = barsPerMonth)
+            ' The first bar must still be the ORIGINAL value — this is the assertion that
+            ' fails pre-fix, where the file would hold 400 rows starting at tailStart.
+            Dim firstOk As Boolean = after.Count > 0 AndAlso
+                                     after(0).Timestamp = monthStart AndAlso
+                                     Math.Abs(after(0).Close - 60000.0) < 1e-9
+            ' The overlapping tail took the fetched values (fetch wins on collision).
+            Dim tailOk As Boolean = Math.Abs(after(after.Count - 1).Close - (99000.0 + tailBars - 1)) < 1e-9
+            ' Chronological + no duplicates.
+            Dim orderOk As Boolean = True
+            For i As Integer = 1 To after.Count - 1
+                If after(i).Timestamp <= after(i - 1).Timestamp Then orderOk = False
+            Next
+
+            Check("A51a partial-segment fetch preserves the month — union complete · early bars keep original values · tail refreshed · ordered (the June-wipe trap)",
+                  countOk AndAlso firstOk AndAlso tailOk AndAlso orderOk,
+                  String.Format("storedFull={0} total={1} after={2} first={3} tail={4} order={5}",
+                                storedFull, total, after.Count, firstOk, tailOk, orderOk))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A51b: coverage counting is resolution-aware ---------------------------------------
+    ' The retired MonthFileCovers required the last bar within a FIXED 2 minutes of the
+    ' segment end. A month's last bar is 23:59 at 1m but 23:57 / 23:55 / 23:45 at 3m/5m/15m,
+    ' so only 1m could ever pass — every other resolution refetched forever. The grid count
+    ' must call a complete month complete at ALL four resolutions.
+    Private Sub A51b_CoverageCountIsResolutionAware()
+        Dim monthStart As Long = New DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim monthEndIncl As Long = New DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds() - 1
+
+        Dim allOk As Boolean = True
+        Dim detail As String = ""
+        For Each res As Integer In New Integer() {1, 3, 5, 15}
+            Dim iv As Long = CLng(res) * 60000L
+            Dim expected As Integer = StoreFiles.ExpectedGridPoints(monthStart, monthEndIncl, iv)
+            Dim want As Integer = CInt(30L * 24L * 60L \ res)          ' June = 30 days
+            Dim bars = A51Bars(monthStart, res, expected)
+            Dim have As Integer = StoreFiles.CountCandlesInRange(bars, monthStart, monthEndIncl)
+            ' A complete month must satisfy the check — this is the arm that failed before.
+            If expected <> want OrElse have < expected Then allOk = False
+            detail &= String.Format("{0}m(exp={1} want={2} have={3}) ", res, expected, want, have)
+        Next
+
+        ' And a genuinely short month must NOT satisfy it (the check still has teeth).
+        Dim shortBars = A51Bars(monthStart, 3, 400)
+        Dim shortExpected As Integer = StoreFiles.ExpectedGridPoints(monthStart, monthEndIncl, 3L * 60000L)
+        Dim shortHave As Integer = StoreFiles.CountCandlesInRange(shortBars, monthStart, monthEndIncl)
+        Dim teethOk As Boolean = shortHave < shortExpected
+
+        Check("A51b coverage count is resolution-aware — complete month passes at 1/3/5/15m, a 400-bar month still fails",
+              allOk AndAlso teethOk,
+              detail & String.Format("| short have={0} exp={1} teeth={2}", shortHave, shortExpected, teethOk))
+    End Sub
+
+    ' -- A51c: an empty or failed fetch never destroys -------------------------------------
+    ' The worst case a fetch failure may produce is "adds nothing". Three shapes: Nothing,
+    ' an empty list, and a fetch that duplicates what is already there.
+    Private Sub A51c_EmptyOrFailedFetchNeverDestroys()
+        Dim dir As String = A51TempDir("c")
+        Try
+            Dim start As Long = New DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim csvPath As String = System.IO.Path.Combine(dir, "candles_5m_2026-06.csv")
+            Dim seed = A51Bars(start, 5, 500)
+            StoreFiles.MergeAndWriteCandles(csvPath, Nothing, seed)
+            Dim baseline = StoreFiles.LoadCandleFile(csvPath)
+
+            Dim nNothing As Integer = StoreFiles.MergeAndWriteCandles(csvPath, StoreFiles.LoadCandleFile(csvPath), Nothing)
+            Dim afterNothing = StoreFiles.LoadCandleFile(csvPath)
+            Dim nEmpty As Integer = StoreFiles.MergeAndWriteCandles(csvPath, StoreFiles.LoadCandleFile(csvPath), New List(Of Candle)())
+            Dim afterEmpty = StoreFiles.LoadCandleFile(csvPath)
+            Dim nDup As Integer = StoreFiles.MergeAndWriteCandles(csvPath, StoreFiles.LoadCandleFile(csvPath), seed)
+            Dim afterDup = StoreFiles.LoadCandleFile(csvPath)
+
+            Dim ok As Boolean = baseline.Count = 500 AndAlso
+                                nNothing = 500 AndAlso afterNothing.Count = 500 AndAlso
+                                nEmpty = 500 AndAlso afterEmpty.Count = 500 AndAlso
+                                nDup = 500 AndAlso afterDup.Count = 500 AndAlso
+                                Math.Abs(afterDup(0).Close - baseline(0).Close) < 1e-9
+
+            Check("A51c empty / Nothing / duplicate fetch never destroys — row count and values stable across all three",
+                  ok,
+                  String.Format("base={0} nothing={1}/{2} empty={3}/{4} dup={5}/{6}",
+                                baseline.Count, nNothing, afterNothing.Count,
+                                nEmpty, afterEmpty.Count, nDup, afterDup.Count))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A51d: funding merge clips the deliberate over-reach, keeps everything stored -------
+    ' The funding fetch reaches one interval EARLIER than the segment because Deribit's
+    ' start_timestamp is exclusive (verified live: from exactly T the first sample back is
+    ' T+1h; from T−1ms it is T). That over-reach must not leak the previous month's sample
+    ' into this month's file — but stored rows are never clipped.
+    Private Sub A51d_FundingMergeClipsOverreachButKeepsStored()
+        Dim dir As String = A51TempDir("d")
+        Try
+            Const hour As Long = 3600000L
+            Dim monthStart As Long = New DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim endIncl As Long = monthStart + 5L * hour
+            Dim csvPath As String = System.IO.Path.Combine(dir, "funding_2026-06.csv")
+
+            ' Stored: hours 1..3 (the 00:00 sample is the one the exclusive-start bug lost).
+            Dim stored As New List(Of BacktestFundingSample) From {
+                New BacktestFundingSample With {.TsMs = monthStart + 1 * hour, .Rate = 0.0000011},
+                New BacktestFundingSample With {.TsMs = monthStart + 2 * hour, .Rate = 0.0000022},
+                New BacktestFundingSample With {.TsMs = monthStart + 3 * hour, .Rate = 0.0000033}}
+            StoreFiles.MergeAndWriteFunding(csvPath, Nothing, stored, monthStart, endIncl)
+
+            ' Fetched with the over-reach: includes the PREVIOUS month's 23:00 sample, the
+            ' boundary 00:00 sample, and hours 4..5.
+            Dim fetched As New List(Of BacktestFundingSample) From {
+                New BacktestFundingSample With {.TsMs = monthStart - 1 * hour, .Rate = 0.0000999},
+                New BacktestFundingSample With {.TsMs = monthStart, .Rate = 0.0000001},
+                New BacktestFundingSample With {.TsMs = monthStart + 4 * hour, .Rate = 0.0000044},
+                New BacktestFundingSample With {.TsMs = monthStart + 5 * hour, .Rate = 0.0000055}}
+
+            Dim total As Integer = StoreFiles.MergeAndWriteFunding(
+                csvPath, StoreFiles.LoadFundingFile(csvPath), fetched, monthStart, endIncl)
+            Dim after = StoreFiles.LoadFundingFile(csvPath)
+
+            Dim clipOk As Boolean = Not after.Any(Function(s) s.TsMs < monthStart)
+            Dim boundaryOk As Boolean = after.Any(Function(s) s.TsMs = monthStart)      ' the recovered sample
+            Dim keptOk As Boolean = after.Any(Function(s) s.TsMs = monthStart + 2 * hour)
+            Dim countOk As Boolean = (total = 6) AndAlso (after.Count = 6)               ' hours 0..5
+            Dim expOk As Boolean = StoreFiles.ExpectedGridPoints(monthStart, endIncl, hour) = 6
+
+            Check("A51d funding merge — previous-month over-reach clipped · boundary 00:00 sample recovered · stored rows kept · grid expectation 6",
+                  clipOk AndAlso boundaryOk AndAlso keptOk AndAlso countOk AndAlso expOk,
+                  String.Format("clip={0} boundary={1} kept={2} total={3} after={4} exp={5}",
+                                clipOk, boundaryOk, keptOk, total, after.Count, expOk))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A51e: written candles round-trip through the shipped parse ------------------------
+    ' Same discipline as A48a on the trade side: the writer and the reader are one seam, so
+    ' a round-trip proves the on-disk format rather than asserting it.
+    Private Sub A51e_CandleRoundTripThroughShippedParse()
+        Dim dir As String = A51TempDir("e")
+        Try
+            Dim start As Long = New DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim csvPath As String = System.IO.Path.Combine(dir, "candles_15m_2026-06.csv")
+            Dim src = A51Bars(start, 15, 12)
+            StoreFiles.MergeAndWriteCandles(csvPath, Nothing, src)
+
+            Dim lines = File.ReadAllLines(csvPath)
+            Dim headerOk As Boolean = lines.Length = 13 AndAlso lines(0) = "Timestamp,Open,High,Low,Close,Volume,Cost"
+            Dim colsOk As Boolean = lines.Skip(1).All(Function(l) l.Split(","c).Length = 7)
+
+            Dim back = StoreFiles.LoadCandleFile(csvPath)
+            Dim valuesOk As Boolean = back.Count = src.Count
+            If valuesOk Then
+                For i As Integer = 0 To src.Count - 1
+                    If back(i).Timestamp <> src(i).Timestamp OrElse
+                       Math.Abs(back(i).Close - src(i).Close) > 0.005 OrElse
+                       Math.Abs(back(i).Volume - src(i).Volume) > 5e-7 OrElse
+                       Math.Abs(back(i).VolumeUSD - src(i).VolumeUSD) > 0.005 Then valuesOk = False
+                Next
+            End If
+
+            Check("A51e candle round-trip — shipped header + 7 columns + OHLCV survive write→read",
+                  headerOk AndAlso colsOk AndAlso valuesOk,
+                  String.Format("header={0} cols={1} values={2} n={3}", headerOk, colsOk, valuesOk, back.Count))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
     ' Unix-ms for a 2026-07-15 UTC wall time — the A45a historical session fixture date.
     Private Function HistMs(hour As Integer, minute As Integer) As Long
         Return New DateTimeOffset(2026, 7, 15, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
@@ -7315,7 +7562,7 @@ Module Program
         Dim verdicts As String() = {"STRONG LONG", "STRONG LONG", "LONG", "LONG", "WEAK LONG", "WEAK LONG"}
         Dim wins     As Boolean() = {True, False, True, False, True, False}
 
-        Dim csvPath As String = Path.Combine(Path.GetTempPath(),
+        Dim csvPath As String = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
                                              "a46a_pooled_" & Guid.NewGuid().ToString("N") & ".csv")
         Dim ohlc As New Dictionary(Of DateTime, OhlcBar)()
         Dim rowTimes As New List(Of DateTime)()

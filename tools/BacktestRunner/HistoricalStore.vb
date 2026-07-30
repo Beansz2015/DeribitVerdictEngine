@@ -128,12 +128,9 @@ Public Class HistoricalStore
         ' Coverage by count against the bar grid — resolution-aware by construction, which
         ' defect (1) was not.
         Dim intervalMs As Long = CLng(resolution) * 60000L
-        Dim existing As List(Of Candle) = LoadCandleFile(path)
-        Dim haveInRange As Integer = 0
-        For Each c In existing
-            If c.Timestamp >= startMs AndAlso c.Timestamp <= endMs Then haveInRange += 1
-        Next
-        Dim expected As Integer = ExpectedGridPoints(startMs, endMs, intervalMs)
+        Dim existing As List(Of Candle) = StoreFiles.LoadCandleFile(path)
+        Dim haveInRange As Integer = StoreFiles.CountCandlesInRange(existing, startMs, endMs)
+        Dim expected As Integer = StoreFiles.ExpectedGridPoints(startMs, endMs, intervalMs)
         If haveInRange >= expected Then Return existing.Count
 
         ' Deribit's get_tradingview_chart_data caps each response at ~5001 ticks. For a
@@ -163,40 +160,15 @@ Public Class HistoricalStore
 
         If collected.Count = 0 Then Return existing.Count
 
-        ' MERGE — stored bars survive, fetched bars fill the holes and refresh any overlap.
-        ' This is the line whose absence cost a month of data.
-        Dim map As New SortedDictionary(Of Long, Candle)()
-        For Each c In existing
-            map(c.Timestamp) = c
-        Next
-        Dim added As Integer = 0
-        For Each kv In collected
-            If Not map.ContainsKey(kv.Key) Then added += 1
-            map(kv.Key) = kv.Value
-        Next
-
-        Using sw As New StreamWriter(path, append:=False)
-            sw.WriteLine("Timestamp,Open,High,Low,Close,Volume,Cost")
-            For Each c In map.Values
-                sw.WriteLine(String.Format(CultureInfo.InvariantCulture,
-                    "{0},{1:F2},{2:F2},{3:F2},{4:F2},{5:F6},{6:F2}",
-                    c.Timestamp, c.Open, c.High, c.Low, c.Close, c.Volume, c.VolumeUSD))
-            Next
-        End Using
+        ' MERGE — stored bars survive, fetched bars fill the holes. The invariant lives in
+        ' StoreFiles (network-free, fixture-reachable, A51); this is the line whose absence
+        ' cost a month of data.
+        Dim before As Integer = existing.Count
+        Dim total As Integer = StoreFiles.MergeAndWriteCandles(path, existing, collected.Values)
         Console.WriteLine(String.Format(
             "[HistoricalStore] Candles {0}m {1:D4}-{2:D2}: {3} stored (+{4} new, expected {5} in range)",
-            resolution, year, month, map.Count, added, expected))
-        Return map.Count
-    End Function
-
-    ''' <summary>How many grid points sit in [startMs, endMsIncl] at the given interval — the
-    ''' deterministic expectation both the candle and funding coverage checks compare against.
-    ''' Pure.</summary>
-    Public Shared Function ExpectedGridPoints(startMs As Long, endMsIncl As Long, intervalMs As Long) As Integer
-        If intervalMs <= 0 OrElse endMsIncl < startMs Then Return 0
-        Dim firstPoint As Long = ((startMs + intervalMs - 1) \ intervalMs) * intervalMs
-        If firstPoint > endMsIncl Then Return 0
-        Return CInt((endMsIncl - firstPoint) \ intervalMs) + 1
+            resolution, year, month, total, total - before, expected))
+        Return total
     End Function
 
     Private Shared Function CountDataRows(path As String) As Integer
@@ -215,39 +187,11 @@ Public Class HistoricalStore
 
     ''' <summary>Load one candle-month file into memory. Empty list on any error.</summary>
     Public Shared Function LoadCandleMonth(resolution As Integer, year As Integer, month As Integer) As List(Of Candle)
-        Return LoadCandleFile(CandleFileFor(resolution, year, month))
+        Return StoreFiles.LoadCandleFile(CandleFileFor(resolution, year, month))
     End Function
 
-    ''' <summary>Parse one candle file by path. The single parse the loader and the coverage
-    ''' check both route through. Empty list on any error; never throws.</summary>
-    Public Shared Function LoadCandleFile(path As String) As List(Of Candle)
-        Dim result As New List(Of Candle)
-        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return result
-        Try
-            Using sr As New StreamReader(path)
-                sr.ReadLine()   ' header
-                Dim line As String
-                Do
-                    line = sr.ReadLine()
-                    If line Is Nothing Then Exit Do
-                    Dim parts = line.Split(","c)
-                    If parts.Length < 7 Then Continue Do
-                    Dim c As New Candle()
-                    c.Timestamp = Long.Parse(parts(0), CultureInfo.InvariantCulture)
-                    c.Open      = Double.Parse(parts(1), CultureInfo.InvariantCulture)
-                    c.High      = Double.Parse(parts(2), CultureInfo.InvariantCulture)
-                    c.Low       = Double.Parse(parts(3), CultureInfo.InvariantCulture)
-                    c.Close     = Double.Parse(parts(4), CultureInfo.InvariantCulture)
-                    c.Volume    = Double.Parse(parts(5), CultureInfo.InvariantCulture)
-                    c.VolumeUSD = Double.Parse(parts(6), CultureInfo.InvariantCulture)
-                    result.Add(c)
-                Loop
-            End Using
-        Catch ex As Exception
-            Console.Error.WriteLine("[HistoricalStore] LoadCandleMonth failed: " & ex.Message)
-        End Try
-        Return result
-    End Function
+    ' [2026-07-31] The candle parse moved to Core/StoreFiles.vb — network-free and
+    ' fixture-reachable (A51). LoadCandleMonth above delegates to it.
 
     ''' <summary>Load the union of candle months covering [fromUtc, toUtc] and preceding
     ''' warm-up (needed for the 250-bar window at the leftmost bar-close). Chronological
@@ -473,8 +417,8 @@ Public Class HistoricalStore
 
         ' Coverage check (defect 2). Count what is already stored INSIDE the requested
         ' segment — an out-of-range straggler must not make a short month look complete.
-        Dim existing As List(Of BacktestFundingSample) = LoadFundingFile(path)
-        Dim haveInRange As Integer = 0
+        Dim existing As List(Of BacktestFundingSample) = StoreFiles.LoadFundingFile(path)
+        Dim haveInRange As Integer = StoreFiles.CountFundingInRange(existing, segStartMs, endMs)
         For Each s In existing
             If s.TsMs >= segStartMs AndAlso s.TsMs <= endMs Then haveInRange += 1
         Next
@@ -491,62 +435,20 @@ Public Class HistoricalStore
             Return existing.Count
         End If
 
-        ' Merge: stored rows survive, fetched rows fill the holes. Dedup by timestamp,
-        ' newest fetch wins on a collision.
-        Dim map As New SortedDictionary(Of Long, Double)()
-        For Each s In existing
-            map(s.TsMs) = s.Rate
-        Next
-        Dim added As Integer = 0
-        For Each s In samples
-            If s.TsMs < segStartMs OrElse s.TsMs > endMs Then Continue For   ' the margin, discarded
-            If Not map.ContainsKey(s.TsMs) Then added += 1
-            map(s.TsMs) = s.Rate
-        Next
-
-        Using sw As New StreamWriter(path, append:=False)
-            sw.WriteLine("Timestamp,Rate")
-            For Each kv In map
-                sw.WriteLine(String.Format(CultureInfo.InvariantCulture, "{0},{1:F10}", kv.Key, kv.Value))
-            Next
-        End Using
+        ' Merge: stored rows survive, fetched rows fill the holes; the deliberate one-interval
+        ' over-reach on the start is clipped. Invariant lives in StoreFiles (A51).
+        Dim before As Integer = existing.Count
+        Dim total As Integer = StoreFiles.MergeAndWriteFunding(path, existing, samples, segStartMs, endMs)
         Console.WriteLine(String.Format(
             "[HistoricalStore] Funding {0:D4}-{1:D2}: {2} stored (+{3} new, expected {4} in range)",
-            year, month, map.Count, added, expected))
-        Return map.Count
+            year, month, total, total - before, expected))
+        Return total
     End Function
 
     ''' <summary>How many hourly samples SHOULD sit in [startMs, endMsIncl]. The candle path
-    ''' uses the same arithmetic at its own interval — one grid helper, two callers.</summary>
+    ''' uses the same grid arithmetic at its own interval — one helper, two callers.</summary>
     Public Shared Function ExpectedFundingSamples(startMs As Long, endMsIncl As Long) As Integer
-        Return ExpectedGridPoints(startMs, endMsIncl, FundingIntervalMs)
-    End Function
-
-    ''' <summary>Parse one funding month file. Empty list when absent/unreadable; never throws.
-    ''' The single parse both LoadFundingRange and the coverage check route through.</summary>
-    Public Shared Function LoadFundingFile(path As String) As List(Of BacktestFundingSample)
-        Dim all As New List(Of BacktestFundingSample)()
-        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return all
-        Try
-            Using sr As New StreamReader(path)
-                sr.ReadLine()   ' header
-                Dim line As String
-                Do
-                    line = sr.ReadLine()
-                    If line Is Nothing Then Exit Do
-                    Dim parts = line.Split(","c)
-                    If parts.Length < 2 Then Continue Do
-                    Dim ts As Long
-                    Dim rate As Double
-                    If Not Long.TryParse(parts(0), NumberStyles.Integer, CultureInfo.InvariantCulture, ts) Then Continue Do
-                    If Not Double.TryParse(parts(1), NumberStyles.Float, CultureInfo.InvariantCulture, rate) Then Continue Do
-                    all.Add(New BacktestFundingSample() With {.TsMs = ts, .Rate = rate})
-                Loop
-            End Using
-        Catch ex As Exception
-            Console.Error.WriteLine("[HistoricalStore] LoadFundingFile failed: " & ex.Message)
-        End Try
-        Return all
+        Return StoreFiles.ExpectedGridPoints(startMs, endMsIncl, FundingIntervalMs)
     End Function
 
     Public Shared Async Function FetchFundingHistoryAsync(startMs As Long, endMs As Long) As Task(Of List(Of BacktestFundingSample))
@@ -603,7 +505,7 @@ Public Class HistoricalStore
     Public Shared Function LoadFundingRange(warmupStartUtc As DateTime, toUtc As DateTime) As List(Of BacktestFundingSample)
         Dim all As New List(Of BacktestFundingSample)()
         For Each m In EnumerateMonths(warmupStartUtc, toUtc)
-            all.AddRange(LoadFundingFile(FundingFileFor(m.Year, m.Month)))
+            all.AddRange(StoreFiles.LoadFundingFile(FundingFileFor(m.Year, m.Month)))
         Next
         all.Sort(Function(a, b) a.TsMs.CompareTo(b.TsMs))
         Return all
