@@ -80,9 +80,27 @@ Stated as a fact, not a conclusion: the volume vote is one of ~20 inputs into in
 
 ---
 
+### 3.2 Outcomes — attempted, and underpowered by ~25×
+
+§4 originally listed "no outcome measurement" as a gap. It was then attempted rather than left open: both arms were run through the shipped offline report (`BacktestRunner report`), giving a placed-vs-placed re-walk on identical rows. §9 band ladders:
+
+| Band | stub | closed | overlap |
+|---|---|---|---|
+| STRONG | 33.3 % (n=6) [10–70 %] | 42.9 % (n=7) [16–75 %] | total |
+| MEDIUM | 47.7 % (n=44) [34–62 %] | 41.7 % (n=36) [27–58 %] | total |
+| WEAK | 45.8 % (n=166) [38–53 %] | 43.4 % (n=175) [36–51 %] | total |
+
+**Every interval overlaps every other. Nothing is separable, and nothing should be read from the point estimates** — STRONG rests on 6 and 7 rows.
+
+This is worth recording as a *result* rather than an omission, because it bounds what any amount of further analysis on this window can deliver. Detecting a ~6 pp success-rate difference at a ~45 % base needs roughly **n ≈ 1,100 directional rows per arm**; the MEDIUM band here has **44 and 36**. The A/B is therefore **~25× short on outcome power** while being decisive on engagement (a 12–17× effect, §3).
+
+**What would close it, and what wouldn't.** Not more analysis, not a wider knob sweep, not a better estimator — only more *trades-covered* window. The replay skips any bar-close with no trade slice, so the A/B is bounded by the store's trade coverage, which the ~24 h public retention caps at the 20 h used here. **The append-forward store (ops item F, `BacktestRunner fetch` scheduled daily) is the only path to an outcome-powered version of this comparison**, and it is calendar-gated: roughly 6–8 weekday-weeks of accumulation to reach ~1,000 directional rows per arm at the observed ~26 % directional rate. That is a genuine constraint, not a scheduling preference.
+
+---
+
 ## 4. What this does NOT establish
 
-- **No outcome measurement.** This compares signal engagement and verdict mix, not win rate or EV. The 840-row window yields ~217 directional rows — thin for outcome statistics, and the two arms would need a placed-vs-placed re-walk to compare honestly.
+- **No usable outcome measurement.** The placed-vs-placed re-walk was run (§3.2) and is underpowered by ~25× — every band's CI overlaps. Engagement is measured decisively; outcome impact is not measured at all, and cannot be on this window.
 - **One 20-hour window, one price regime.** Bounded by the ~24 h trades cap (proposal §7.3), not by choice. The append-forward store fetch (ops item F) is what widens this.
 - **The A/B is synthesizer-internal.** Both arms are replay. It answers "what would the engine have seen," not "what would have happened."
 - **The one-extra-old-bar confound** (§1) rides on the full-series indicators. Immaterial for the volume result, which is tail-window.

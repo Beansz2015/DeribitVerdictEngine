@@ -168,7 +168,7 @@ Public Class BacktestProgram
                 If String.IsNullOrEmpty(synCsv) Then
                     Dim stampV As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
                     synCsv = "backtest_log_validate_" & stampV & ".csv"
-                    Console.WriteLine("[BacktestRunner] Replay {0:yyyy-MM-dd HH:mm} → {1:yyyy-MM-dd HH:mm} UTC into " & synCsv)
+                    Console.WriteLine("[BacktestRunner] Replay into " & synCsv)
                     Console.WriteLine(String.Format(
                         "[BacktestRunner] Replay {0:yyyy-MM-dd HH:mm} → {1:yyyy-MM-dd HH:mm} UTC (settings v{2})",
                         fromUtc, toUtc, cfg.Version))
