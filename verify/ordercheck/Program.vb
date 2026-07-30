@@ -367,6 +367,14 @@ Module Program
         ' (live-collection latency vs synthetic exact-close alignment).
         A44a_FloorToBucketSameGrid()
 
+        ' [VWAP session-anchor parameterization — A45, docs/backtest-synthesizer-proposal.md §7.5]
+        ' GetSessionCandles gained Optional nowUtc As DateTime? = Nothing. Nothing => UtcNow,
+        ' which is the LIVE path and must stay byte-identical to the pre-parameterisation
+        ' behaviour; replay passes the bar close. A45a pins default-path identity, the
+        ' historical-anchor semantics on both sides of the session-2 cutoff, and the
+        ' whole-list fallback the un-parameterised call produced under replay (§8.6).
+        A45a_VwapSessionAnchorParameterization()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -6559,5 +6567,103 @@ Module Program
                             okTrades, okEmpty, okWindow, windowTrades.Count,
                             okAppendCount, okAppendLast, okEmptyNoop))
     End Sub
+
+    ' A45a: VWAP session-anchor parameterization (§7.5). Four sub-checks:
+    '
+    '   (i)   DEFAULT-PATH IDENTITY — the live contract. Omitting nowUtc must equal passing
+    '         DateTime.UtcNow explicitly, for BOTH CalcVWAP and CalcVWAPBands. The candle set
+    '         is placed a day either side of the probe date so the answer is invariant to the
+    '         13:30 cutoff AND to a midnight rollover landing between the two calls — the
+    '         identity is therefore clock-race-free while still being NON-TRIVIAL (the
+    '         day-before candle is genuinely filtered out, so this is not the fallback tie).
+    '   (ii)  HISTORICAL ANCHOR, POST-CUTOFF — nowUtc = 2026-07-15 15:00Z anchors at 13:30Z
+    '         that day, selecting only the two post-cutoff candles: VWAP = (300+400)/2 = 350.
+    '   (iii) HISTORICAL ANCHOR, PRE-CUTOFF — nowUtc = 2026-07-15 12:00Z anchors at 00:00Z,
+    '         selecting all four: VWAP = (100+200+300+400)/4 = 250. Sigma differs too
+    '         (50 over the 2-candle window vs sqrt(12500) over the 4-candle one), so the
+    '         band path is pinned to the same anchor, not just the mean.
+    '   (iv)  THE §8.6 DEFECT — the un-parameterised (default) call on that same historical
+    '         set anchors to the real clock, finds zero in-session candles and falls back to
+    '         the WHOLE list. So default == the pre-cutoff answer (250) and != the correct
+    '         post-cutoff answer (350). This is why replay had to pass the bar close.
+    Private Sub A45a_VwapSessionAnchorParameterization()
+        Const s2Hour As Integer = 13
+        Const s2Min  As Integer = 30
+
+        ' -- (i) default ≡ explicit-UtcNow, non-trivially --
+        Dim probe As DateTime = DateTime.UtcNow
+        Dim before As Long = New DateTimeOffset(probe.Date.AddDays(-1).AddHours(12), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim afterA As Long = New DateTimeOffset(probe.Date.AddDays(1).AddHours(2), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim afterB As Long = New DateTimeOffset(probe.Date.AddDays(1).AddHours(4), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim liveSet As New List(Of Candle) From {
+            New Candle With {.Timestamp = before, .Open = 1000, .High = 1000, .Low = 1000, .Close = 1000, .Volume = 1},
+            New Candle With {.Timestamp = afterA, .Open = 2000, .High = 2000, .Low = 2000, .Close = 2000, .Volume = 1},
+            New Candle With {.Timestamp = afterB, .Open = 3000, .High = 3000, .Low = 3000, .Close = 3000, .Volume = 1}}
+
+        Dim cntDefault As Integer = 0, cntExplicit As Integer = 0
+        Dim vwapDefault As Double = IndicatorEngine.CalcVWAP(liveSet, cntDefault, s2Hour, s2Min)
+        Dim vwapExplicit As Double = IndicatorEngine.CalcVWAP(liveSet, cntExplicit, s2Hour, s2Min, probe)
+        Dim okLiveIdentity As Boolean = (Math.Abs(vwapDefault - vwapExplicit) < 1e-9) AndAlso
+                                        (cntDefault = cntExplicit) AndAlso
+                                        (cntDefault = 2) AndAlso
+                                        (Math.Abs(vwapDefault - 2500.0) < 1e-9)
+
+        Dim d1U As Double, d1L As Double, d2U As Double, d2L As Double
+        Dim e1U As Double, e1L As Double, e2U As Double, e2L As Double
+        IndicatorEngine.CalcVWAPBands(liveSet, vwapDefault, d1U, d1L, d2U, d2L, s2Hour, s2Min)
+        IndicatorEngine.CalcVWAPBands(liveSet, vwapDefault, e1U, e1L, e2U, e2L, s2Hour, s2Min, probe)
+        Dim okBandIdentity As Boolean = (Math.Abs(d1U - e1U) < 1e-9) AndAlso (Math.Abs(d1L - e1L) < 1e-9) AndAlso
+                                        (Math.Abs(d2U - e2U) < 1e-9) AndAlso (Math.Abs(d2L - e2L) < 1e-9) AndAlso
+                                        (Math.Abs(d1U - 3000.0) < 1e-9)   ' vwap 2500 + sigma 500
+
+        ' -- historical set: 2026-07-15, two candles either side of the 13:30Z cutoff --
+        Dim hist As New List(Of Candle) From {
+            New Candle With {.Timestamp = HistMs(10, 0), .Open = 100, .High = 100, .Low = 100, .Close = 100, .Volume = 1},
+            New Candle With {.Timestamp = HistMs(12, 0), .Open = 200, .High = 200, .Low = 200, .Close = 200, .Volume = 1},
+            New Candle With {.Timestamp = HistMs(14, 0), .Open = 300, .High = 300, .Low = 300, .Close = 300, .Volume = 1},
+            New Candle With {.Timestamp = HistMs(16, 0), .Open = 400, .High = 400, .Low = 400, .Close = 400, .Volume = 1}}
+
+        ' -- (ii) post-cutoff anchor: 15:00Z ⇒ session starts 13:30Z ⇒ last two candles --
+        Dim cntPost As Integer = 0
+        Dim vwapPost As Double = IndicatorEngine.CalcVWAP(hist, cntPost, s2Hour, s2Min,
+                                                          New DateTime(2026, 7, 15, 15, 0, 0, DateTimeKind.Utc))
+        Dim p1U As Double, p1L As Double, p2U As Double, p2L As Double
+        IndicatorEngine.CalcVWAPBands(hist, vwapPost, p1U, p1L, p2U, p2L, s2Hour, s2Min,
+                                      New DateTime(2026, 7, 15, 15, 0, 0, DateTimeKind.Utc))
+        Dim okPost As Boolean = (cntPost = 2) AndAlso (Math.Abs(vwapPost - 350.0) < 1e-9) AndAlso
+                                (Math.Abs(p1U - 400.0) < 1e-9) AndAlso (Math.Abs(p1L - 300.0) < 1e-9) AndAlso
+                                (Math.Abs(p2U - 450.0) < 1e-9) AndAlso (Math.Abs(p2L - 250.0) < 1e-9)
+
+        ' -- (iii) pre-cutoff anchor: 12:00Z ⇒ session starts 00:00Z ⇒ all four candles --
+        Dim cntPre As Integer = 0
+        Dim vwapPre As Double = IndicatorEngine.CalcVWAP(hist, cntPre, s2Hour, s2Min,
+                                                         New DateTime(2026, 7, 15, 12, 0, 0, DateTimeKind.Utc))
+        Dim q1U As Double, q1L As Double, q2U As Double, q2L As Double
+        IndicatorEngine.CalcVWAPBands(hist, vwapPre, q1U, q1L, q2U, q2L, s2Hour, s2Min,
+                                      New DateTime(2026, 7, 15, 12, 0, 0, DateTimeKind.Utc))
+        Dim expSigmaPre As Double = Math.Sqrt(12500.0)
+        Dim okPre As Boolean = (cntPre = 4) AndAlso (Math.Abs(vwapPre - 250.0) < 1e-9) AndAlso
+                               (Math.Abs(q1U - (250.0 + expSigmaPre)) < 1e-9) AndAlso
+                               (Math.Abs(q1L - (250.0 - expSigmaPre)) < 1e-9)
+
+        ' -- (iv) the §8.6 defect: default anchors to the real clock ⇒ whole-list fallback --
+        Dim cntWall As Integer = 0
+        Dim vwapWall As Double = IndicatorEngine.CalcVWAP(hist, cntWall, s2Hour, s2Min)
+        Dim okDefect As Boolean = (cntWall = 4) AndAlso
+                                  (Math.Abs(vwapWall - 250.0) < 1e-9) AndAlso
+                                  (Math.Abs(vwapWall - vwapPost) > 1.0)
+
+        Check("A45a VWAP session anchor (§7.5) — default ≡ UtcNow (non-trivial) · post/pre-cutoff historical anchor · §8.6 wall-clock fallback",
+              okLiveIdentity AndAlso okBandIdentity AndAlso okPost AndAlso okPre AndAlso okDefect,
+              String.Format("liveIdentity={0}(def={1}/exp={2} cnt={3}/{4}) bandIdentity={5} post={6}(cnt={7} vwap={8}) pre={9}(cnt={10} vwap={11}) defect={12}(cnt={13} vwap={14})",
+                            okLiveIdentity, vwapDefault, vwapExplicit, cntDefault, cntExplicit,
+                            okBandIdentity, okPost, cntPost, vwapPost,
+                            okPre, cntPre, vwapPre, okDefect, cntWall, vwapWall))
+    End Sub
+
+    ' Unix-ms for a 2026-07-15 UTC wall time — the A45a historical session fixture date.
+    Private Function HistMs(hour As Integer, minute As Integer) As Long
+        Return New DateTimeOffset(2026, 7, 15, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+    End Function
 
 End Module
