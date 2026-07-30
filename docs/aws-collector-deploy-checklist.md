@@ -6,9 +6,30 @@
 
 1. On the local machine, from the PUSHED tree (never an unpushed build): `dotnet build -c Release` and take the whole `bin\Release\net8.0-windows\` output.
 2. **Include `fonts\`** (Geist Mono OFL licence file travels as Content — CLAUDE.md bundled-fonts rule).
-3. Confirm the copied `settings.json` is the tracked v59+ file — spot-check line 1 (`"version"`) and `auto_run.trigger_mode: "on_close"` (v57 seeds it correctly).
+3. Confirm the copied `settings.json` is the tracked v59+ file — spot-check line 1 (`"version"`), `auto_run.trigger_mode: "on_close"` (v57 seeds it correctly), and **`trade_store.enabled: true`** (v64 seeds it correctly — see §1a).
 4. **Do NOT copy `analysis_log.csv`, `analysis_eval_cache.csv`, or any `.bak`/sidecars** — the AWS book starts EMPTY on purpose (a seeded copy forks the history and forces dedup at every pooled read; a fresh book concatenates cleanly).
 5. `signal_bridge.enabled` may stay as-tracked — emission to `C:\Dev\DeribitBridge\` on a box with no consumer is harmless (payloads simply overwrite). ARM stays OFF by construction (never persisted).
+
+## 1a. The one setting the two boxes must NOT share — `trade_store.enabled` (v64, trader-ruled 2026-07-31)
+
+| Box | `trade_store.enabled` | Why |
+|---|---|---|
+| **AWS** | **`true`** | D1 ruled capture **AWS-only**. This box is the sole capturer of raw tape, and tape past ~24 h is unobtainable at any price. |
+| **Local `bin\Debug`** | **`false`** | The local box is intermittent (trader, 2026-07-31), so its store would be a partial book nobody reads, growing ~1.4 GB/year in a directory nobody watches. Capture there also recreates the dual-box topology D1 explicitly rejected. |
+
+**The tracked `settings.json` carries `true`, and that is deliberate — do not "fix" it.** §1.1 deploys AWS from the Release build output, so the tracked value *is* what lands on AWS. The two failure directions are not symmetric:
+
+- Tracked `false`, AWS not corrected after a deploy ⇒ **the only capturing box silently stops. Tape is lost permanently.**
+- Tracked `true`, local not corrected after a rebuild ⇒ local captures again. Costs disk. Nothing is lost.
+
+So the tracked seed carries the value that is *safe when it propagates*, and the **local box is the exception that gets edited by hand** — the mirror of the v57 stomp-proofing decision, pointing the other way because here it is AWS, not local, that must never be stomped.
+
+**Applying it locally, and the chore it creates.** `settings.json` is `CopyToOutputDirectory=PreserveNewest`, so **every Debug build with a newer tracked file overwrites `bin\Debug\net8.0-windows\settings.json`** and restores `true`. Therefore:
+
+1. Build Debug **first**, then set `"enabled": false` inside the `trade_store` block of `bin\Debug\net8.0-windows\settings.json`, then start the collector. Editing before the build is wasted — the build stomps it.
+2. **Re-apply after every settings-version bump**, since that is exactly when the tracked file becomes newer. If it is missed, the symptom is a growing `bin\Debug\net8.0-windows\backtest_data\` — harmless, and safe to delete.
+
+**Durable fix, not built:** a gitignored `settings.local.json` overlay applied after `settings.json` would make per-box divergence survive builds and retire this chore. It is a real code change and a design decision, so it wants a spec first — flagged here rather than done.
 
 ## 2. Run 24/7 (WinForms — needs an interactive session)
 
@@ -21,6 +42,7 @@
 - TAPE strip alive + `[B]` strip populated → collecting.
 - `ws_health.log` tail → any DOWN/DEGRADED transitions overnight (transitions-only, so a short file is a healthy file).
 - **`liq_events.log` existence** → the AWS box runs the A4 cascade instrument 24/7 too — it may catch the first cascade before the local box does. A CASCADE line here counts as the A4 gate evidence (pool both boxes' sidecars).
+- **[v64] `backtest_data\` newest-file mtime is advancing** → capture is alive. **This is the item on this list that now carries real data risk.** Under D1 there is no second capturing box, so this glance is the only thing standing between an unnoticed app death and permanently lost tape — trades older than ~24 h cannot be refetched, by anyone, at any price. A stale mtime with the app otherwise healthy points at `trade_store.enabled` having been reset to `false` by a redeploy (§1a) or at the store path being unwritable. Everything else on this list is recoverable; this one is not.
 
 ## 4. Copy-back / pooled-read recipe (at analysis time)
 
