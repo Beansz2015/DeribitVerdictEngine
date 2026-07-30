@@ -386,6 +386,14 @@ Module Program
         ' DeribitOhlcFetcher path, unchanged by this lane.
         A46a_PooledCsvReportSections()
 
+        ' [D3 closed-bar A/B arm — A47, pre-aug1-batch-spec-back.md §7]
+        ' ReplayLoop.Run gained Optional useFormingStub As Boolean = True. The False arm
+        ' slices N fully-closed bars and appends no stub, so the window LENGTH matches the
+        ' stub arm and the terminal bar is the only variable. A47a pins that equal-length
+        ' property and that the closed arm's terminal bar is a REAL bar, not a stub.
+        A47a_ClosedBarArmHoldsWindowLength()
+        A47b_StubVolumeIsCommensurateWithCandleVolume()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -6523,9 +6531,13 @@ Module Program
             New TradeRecord With {.Price = 64050, .Amount = 1.0, .Direction = "buy",  .Liquidation = "none", .Timestamp = closeMs + 800L},
             New TradeRecord With {.Price = 63990, .Amount = 0.25,.Direction = "sell", .Liquidation = "none", .Timestamp = closeMs + 1400L},
             New TradeRecord With {.Price = 64025, .Amount = 0.75,.Direction = "buy",  .Liquidation = "none", .Timestamp = closeMs + 1900L}}
+        ' UNITS (corrected 2026-07-31): TradeRecord.Amount is USD notional; Candle.Volume
+        ' is BASE (BTC) and Candle.VolumeUSD is the USD cost. So Volume = Σ(amount/price)
+        ' and VolumeUSD = Σ amount. The original expectations here encoded the inverted
+        ' convention and are why the ~64,000x stub-volume error survived to the D3 A/B.
         Dim stub = ReplayLoop.BuildFormingStub(prevClose, inWindow, closeMs)
-        Dim expVol As Double = 0.5 + 1.0 + 0.25 + 0.75
-        Dim expVolUsd As Double = 64010 * 0.5 + 64050 * 1.0 + 63990 * 0.25 + 64025 * 0.75
+        Dim expVol As Double = 0.5 / 64010 + 1.0 / 64050 + 0.25 / 63990 + 0.75 / 64025
+        Dim expVolUsd As Double = 0.5 + 1.0 + 0.25 + 0.75
         Dim okTrades = (stub.Timestamp = closeMs) AndAlso
                        (Math.Abs(stub.Open  - 64010.0) < 1e-9) AndAlso
                        (Math.Abs(stub.Close - 64025.0) < 1e-9) AndAlso
@@ -6670,6 +6682,142 @@ Module Program
                             okLiveIdentity, vwapDefault, vwapExplicit, cntDefault, cntExplicit,
                             okBandIdentity, okPost, cntPost, vwapPost,
                             okPre, cntPre, vwapPre, okDefect, cntWall, vwapWall))
+    End Sub
+
+    ' A47a: the D3 closed-bar A/B arm holds the window length constant.
+    '
+    ' The whole point of the A/B is that ONE thing differs between arms. The stub arm
+    ' slices (N−1) closed bars and appends a 2-second stub; the closed arm slices N closed
+    ' bars and appends nothing. Both must therefore yield N bars, and the closed arm's
+    ' terminal bar must be a REAL closed bar (a genuine store candle with real volume),
+    ' not a stub. If the reserve arithmetic ever drifts, the A/B silently becomes a
+    ' two-variable comparison — window length AND terminal-bar kind — and its result
+    ' would be uninterpretable. This fixture is what stops that.
+    Private Sub A47a_ClosedBarArmHoldsWindowLength()
+        Const closeMs As Long = 1785321600000L    ' 2026-07-29 18:00:00 UTC, a 1m/3m boundary
+        Const barMs   As Long = 60000L
+        Const want    As Integer = 10             ' stand-in for Candles1mCount
+
+        ' 12 real closed 1m bars ending at closeMs (the last one closes exactly at closeMs).
+        Dim store As New List(Of Candle)
+        For k = 12 To 1 Step -1
+            store.Add(New Candle With {.Timestamp = closeMs - k * barMs,
+                                       .Open = 64000 + k, .High = 64010 + k,
+                                       .Low = 63990 + k, .Close = 64005 + k,
+                                       .Volume = 5 + k})
+        Next
+
+        ' Trades inside [closeMs, closeMs+2s] — what the stub arm compacts.
+        Dim stubTrades As New List(Of TradeRecord) From {
+            New TradeRecord With {.Price = 64100, .Amount = 0.4, .Direction = "buy",
+                                  .Liquidation = "none", .Timestamp = closeMs + 250L}}
+
+        ' -- stub arm: (N−1) closed + 1 stub --
+        Dim stubArm = ReplayLoop.SliceCandlesAtOrBefore(store, 1, closeMs, want - 1)
+        Dim closedTail = stubArm(stubArm.Count - 1)          ' last REAL bar before the stub
+        ReplayLoop.AppendFormingStub(stubArm, stubTrades, closeMs)
+
+        ' -- closed arm: N closed, no stub --
+        Dim closedArm = ReplayLoop.SliceCandlesAtOrBefore(store, 1, closeMs, want)
+
+        ' (a) equal window length — the controlled-comparison property
+        Dim okLen As Boolean = (stubArm.Count = want) AndAlso (closedArm.Count = want)
+
+        ' (b) the closed arm's terminal bar is a REAL store bar (carries real volume and
+        '     its timestamp is a closed-bar open, strictly before closeMs)
+        Dim cTail = closedArm(closedArm.Count - 1)
+        Dim okReal As Boolean = (cTail.Timestamp < closeMs) AndAlso
+                                (cTail.Timestamp + barMs <= closeMs) AndAlso
+                                (cTail.Volume > 0) AndAlso
+                                (cTail.Timestamp = closedTail.Timestamp) AndAlso
+                                (Math.Abs(cTail.Volume - closedTail.Volume) < 1e-9)
+
+        ' (c) the stub arm's terminal bar is the STUB (timestamp = closeMs, trade-built).
+        '     Volume is BTC — $0.4 notional at $64,100 — see A47b for the unit pin.
+        Dim sTail = stubArm(stubArm.Count - 1)
+        Dim okStub As Boolean = (sTail.Timestamp = closeMs) AndAlso
+                                (Math.Abs(sTail.Volume - (0.4 / 64100.0)) < 1e-12) AndAlso
+                                (Math.Abs(sTail.VolumeUSD - 0.4) < 1e-9) AndAlso
+                                (Math.Abs(sTail.Close - 64100.0) < 1e-9)
+
+        ' (d) The arms share their RECENT history exactly, offset by one: holding total
+        '     length at N means the closed arm reaches one bar FURTHER BACK than the stub
+        '     arm. So stubArm(k) must equal closedArm(k+1) across the whole overlap.
+        '     Consequence, pinned here so it is never rediscovered as a surprise: the two
+        '     arms differ in exactly TWO places — the terminal bar (the thing under test)
+        '     and one extra OLD bar in the closed arm. For tail-window indicators
+        '     (VolumeRatio's SMA-9, ATR-7) the old bar falls outside the window and the
+        '     comparison is clean; for full-series indicators (VWAP session window, OBV
+        '     meanVol, BBW percentile series) it is a ~1/N perturbation that rides along.
+        Dim okOverlap As Boolean = True
+        For k = 0 To want - 2
+            If stubArm(k).Timestamp <> closedArm(k + 1).Timestamp OrElse
+               Math.Abs(stubArm(k).Volume - closedArm(k + 1).Volume) > 1e-9 Then
+                okOverlap = False : Exit For
+            End If
+        Next
+        ' and the closed arm's extra bar really is older than anything the stub arm holds
+        Dim okOlder As Boolean = (closedArm(0).Timestamp < stubArm(0).Timestamp)
+
+        ' (e) the closed arm carries MORE terminal volume than the stub arm — the effect
+        '     the A/B exists to measure (a full bar vs ~2 seconds of it).
+        Dim okVolGap As Boolean = (cTail.Volume > sTail.Volume)
+
+        Check("A47a closed-bar arm — equal window length · real terminal bar · stub arm keeps its stub · overlap identical (offset 1) · terminal volume gap",
+              okLen AndAlso okReal AndAlso okStub AndAlso okOverlap AndAlso okOlder AndAlso okVolGap,
+              String.Format("len={0}({1}/{2}) real={3} stub={4} overlap={5} older={6} volGap={7} (closed {8} vs stub {9})",
+                            okLen, stubArm.Count, closedArm.Count, okReal, okStub, okOverlap,
+                            okOlder, okVolGap, cTail.Volume, sTail.Volume))
+    End Sub
+
+    ' A47b: the forming stub's volume must be COMMENSURATE with the candle series it is
+    ' appended to. This is the pin that was missing.
+    '
+    ' A43f verified the stub's internal arithmetic (Σ over the window) against hand-computed
+    ' sums — and passed, while the stub was writing USD notional into a BTC-denominated
+    ' Candle.Volume. An internal-consistency check cannot catch a unit error; only a
+    ' cross-series check can. Real store scale: 1m candle Volume ≈ 2.4 BTC, trade Amount
+    ' ≈ $2,909, price ≈ $64k. A 2-second slice of a 60-second bar must therefore carry a
+    ' SMALL FRACTION of that bar's volume — never a multiple of it.
+    Private Sub A47b_StubVolumeIsCommensurateWithCandleVolume()
+        Const px      As Double = 64000.0
+        Const closeMs As Long   = 1785321600000L
+        Const realBarVolBtc As Double = 2.4        ' store-typical 1m volume, BTC
+
+        ' ~2 s of tape: three trades totalling $9,000 notional.
+        Dim wnd As New List(Of TradeRecord) From {
+            New TradeRecord With {.Price = px, .Amount = 4000, .Direction = "buy",  .Liquidation = "none", .Timestamp = closeMs + 100L},
+            New TradeRecord With {.Price = px, .Amount = 3000, .Direction = "sell", .Liquidation = "none", .Timestamp = closeMs + 900L},
+            New TradeRecord With {.Price = px, .Amount = 2000, .Direction = "buy",  .Liquidation = "none", .Timestamp = closeMs + 1700L}}
+
+        Dim stub = ReplayLoop.BuildFormingStub(px, wnd, closeMs)
+
+        ' (a) Volume is BTC: $9,000 / $64,000 = 0.140625 BTC.
+        Dim okBtc As Boolean = Math.Abs(stub.Volume - (9000.0 / px)) < 1e-12
+
+        ' (b) VolumeUSD is the raw USD notional.
+        Dim okUsd As Boolean = Math.Abs(stub.VolumeUSD - 9000.0) < 1e-9
+
+        ' (c) the two agree through price — the self-consistency that makes them the same
+        '     pair of units the chart endpoint delivers (volume + cost).
+        Dim okPair As Boolean = Math.Abs(stub.VolumeUSD - stub.Volume * px) < 1e-6
+
+        ' (d) THE PIN THAT CATCHES THE BUG: a 2-second stub must be a small fraction of a
+        '     real one-minute bar, never a multiple. Pre-fix this read 9000 vs 2.4 — a
+        '     3,750x OVERSHOOT — which drove VolumeRatio to a degenerate 0-or-~9 split and
+        '     dominated the volume-weighted VWAP on every row that had any tape.
+        Dim okScale As Boolean = (stub.Volume < realBarVolBtc) AndAlso
+                                 (stub.Volume / realBarVolBtc < 0.25)
+
+        ' (e) zero-trade fallback still carries no volume in either unit.
+        Dim empty = ReplayLoop.BuildFormingStub(px, New List(Of TradeRecord)(), closeMs)
+        Dim okEmpty As Boolean = (empty.Volume = 0) AndAlso (empty.VolumeUSD = 0)
+
+        Check("A47b stub volume commensurate with the candle series — BTC in .Volume · USD in .VolumeUSD · pair agrees through price · 2s stub << 1m bar",
+              okBtc AndAlso okUsd AndAlso okPair AndAlso okScale AndAlso okEmpty,
+              String.Format("btc={0}({1:F6}) usd={2}({3:F2}) pair={4} scale={5}(frac {6:F4}) empty={7}",
+                            okBtc, stub.Volume, okUsd, stub.VolumeUSD, okPair,
+                            okScale, stub.Volume / realBarVolBtc, okEmpty))
     End Sub
 
     ' Unix-ms for a 2026-07-15 UTC wall time — the A45a historical session fixture date.
