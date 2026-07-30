@@ -1,8 +1,15 @@
 # Review — in-app trade-store capture build (v64)
 
 **Reviewer:** the Opus orchestrator seat, 2026-07-31. **Reviewed:** the implementer's working-tree build of [`in-app-trade-store-capture-proposal.md`](in-app-trade-store-capture-proposal.md) (APPROVED, D1–D5 ticked).
-**State at review:** **uncommitted working tree** on `master` (7 commits ahead of origin, none of them this build). `verify-gate -Mode prepush` ⇒ **GATE PASSED**. Nothing pushed.
-**Verdict: the build is sound and matches the approved spec.** Three findings, none blocking; one of them is a claim-strength issue worth fixing before the commit message repeats it.
+**State at review:** the build landed as **`1229a30`** (local, unpushed) partway through this review — the first pass ran against the uncommitted tree, the second against the commit.
+**Verdict: the build is sound and matches the approved spec.** Four findings, none blocking; the load-bearing one is a claim-strength issue about A48f that the implementer's own spec-back reads the other way.
+
+> **Update after the commit landed.** Two findings resolved themselves and one was added.
+> - **F4 resolved** — `docs/in-app-trade-store-capture-spec-back.md` shipped inside `1229a30`. It is a good packet; §5 is honest about the live-run gap and independently reaches my read on A48d ("tests the *decision* that guards them, not the fetch").
+> - **F5 resolved** — re-running the gate post-commit makes both git-diff guards run substantively, and they pass: *display-parity → no snapshot/card drift*, *version-bump → **engine-path change accompanied by a settings.json version bump***. The caveat below was real for the pre-commit run and is closed for the committed state.
+> - **F6 added** — surfaced by the implementer's own spec-back §4 and worth elevating, because it collides with a standing operational constraint.
+>
+> **F1 stands, and it is a disagreement, not an oversight.** Their spec-back §4 says *"A48f pins the stronger reading."* For the two-switch asymmetry it describes, that is correct. For the reversibility claim it is attached to, it is not — see §3 F1.
 
 ---
 
@@ -83,7 +90,7 @@ A trade buffered by `ApplyTrades` between the `Flush()` and the `SyncLock` is si
 
 `HistoricalStore`'s shared constructor sets that User-Agent. Post-build the **live collector** makes venue calls under the backtester's identity. Harmless functionally; only matters if venue-side attribution is ever used to reason about the collector's behaviour.
 
-### F5 — moderate (process). Two of the gate's checks passed **vacuously**, because the build is uncommitted.
+### F5 — RESOLVED post-commit, but the mechanism is worth keeping.
 
 `verify-gate.ps1` in `prepush` mode derives its changed-file set from **committed** history:
 
@@ -100,11 +107,31 @@ The entire trade-store build is in the **working tree**, so `$changed` does not 
 
 What it means: **"GATE PASSED" pre-commit is a weaker claim than "GATE PASSED" post-commit.** The load-bearing halves — the Release builds of all six projects and the A1–A48h harness run — execute the working tree and are fully genuine. The two git-diff guards are not. The `change_log` acceptance line ("verify-gate `prepush` GATE PASSED") will be true in the ordinary sense once the work is committed; **re-run the gate after committing** so the parity and version guards actually see the diff they exist to police.
 
-Generalizable beyond this build: any lane that runs the gate before committing gets the same two blind spots.
+**Closed.** Re-running the gate against `1229a30` makes both guards run substantively and both pass:
 
-### F4 — process. No spec-back doc, and the build is uncommitted.
+```
+=== display-parity ===   OK  no snapshot/card drift detected
+=== version-bump ===     OK  engine-path change accompanied by a settings.json version bump
+=== result ===           GATE PASSED
+```
 
-Neither is a code defect and both are plausibly just "not reached yet" — the spec-back and the commit are normally the last steps. Recorded so the handover is accurate: at review time the work exists only in the working tree, and `docs/` contains no `*trade-store*spec-back*`.
+Generalizable beyond this build, and the reason to keep the finding: **any lane that runs the gate before committing gets the same two blind spots**, and the gate reports `GATE PASSED` either way. The acceptance line in a `change_log` should mean the post-commit run.
+
+### F6 — moderate (operational, not code). `enabled` ships `true`, so the **local collector captures too** — which is the topology D1 ruled out.
+
+The implementer's spec-back §4 raises this and calls it harmless. It is harmless *for the store*; it is less harmless in context. D1 ruled **AWS-only**, and the spec §5 says to *"ship with `enabled` defaulting appropriately for a single capturing box."* The shipped default is `true`, which is right on AWS — but **this repo's `bin\Debug` build is the live local collector**, running 24/7 alongside AWS. Post-build it will also capture, into `<exe>\backtest_data\` under `bin\Debug\net8.0-windows\`.
+
+Consequences, in order of how much they matter:
+
+1. **The dual-capture topology D1 rejected is now the de-facto state**, by default, on the box the ruling was about. Not dangerous — exe-relative resolution (D3) keeps those files out of the repo's analysis store, and §5 anticipates that each store is its own — but it is the opposite of what the ruling said the build was for.
+2. **~900 MB/year of silent disk growth on the local box**, in a directory nobody is watching, from a mechanism whose out-of-scope §9 explicitly defers retention.
+3. A future seat finding capture files under `bin\Debug\` has to reconstruct why they are there.
+
+**Not a code change — a settings call for the trader:** set `trade_store.enabled: false` in the **local** box's `settings.json` (the AWS deployment keeps `true`), or accept dual capture explicitly and record that D1 was softened in practice. Worth a line in `aws-collector-deploy-checklist.md` beside the §7.1 mtime rider, since that is where the capture-ops knowledge is accumulating.
+
+### F4 — RESOLVED. Spec-back now exists.
+
+At first-pass review the work existed only in the working tree and `docs/` contained no `*trade-store*spec-back*`. Both are closed: `1229a30` carries `docs/in-app-trade-store-capture-spec-back.md` along with the code, plus `docs/architecture.md` updates I had not seen in the working tree. Recorded rather than deleted so the sequence is legible.
 
 ---
 
