@@ -433,7 +433,9 @@ A seven-column indicator-family recovery moved the verdict agreement by exactly 
 - **Fine VWAP-dev threshold sweeps (steps < 5 bps): WITHHELD** pending the D2 accumulator-tolerance reclass.
 - **Funding: unchanged** — structurally approximate, discouraged.
 
-⚠ **The noise-floor figure in that ruling is disputed and the fine-sweep condition is therefore unresolved.** The ruling cites mean |Δ| $8.6 (≈1.3 bps); the run published **69.79** (≈10.9 bps) and the distribution is bimodal rather than a floor — p50 $1.26, p75 $101.53, p90 $235.53. The "session-edge tail" reading was tested against `VWAPSessionCandles` and does not hold. Full evidence and four eliminated hypotheses: `pre-aug1-batch-spec-back.md` §7. **The coarse/structural and window clearances above are unaffected** — they rest on the window being exact, which is not in dispute.
+⚠ **RESOLVED 2026-07-30 by measurement — the residual is a VOLUME-INPUT difference, not a tolerance.** Highs and lows are byte-identical (Donchian 100.00 %, max |Δ| 0) and closes agree to 99.5 %+ (EMA family), so Volume is the only VWAP input that can move it. Splitting the 840 buckets by whether the row's own volume agrees: **volume agrees ⇒ VWAP matches 100.0 % (199/199) at median |Δ| $0.00**; volume differs ⇒ 42.6 %. There is no residual for a tolerance to explain, and the ordered bps-scale reclass should **not** be specced — it would widen a bar around a real difference. Evidence: `pre-aug1-batch-spec-back.md` §7.2b.
+
+**Consequence for the fine-sweep condition:** it is not gated on a tolerance task, it is gated on **volume fidelity** — the same defect as the D3 forming-bar lane, seen from the synthesizer side. **The window and coarse/structural clearances above are unaffected** — they rest on the window being exact, which is not in dispute.
 
 ### 10.5 Gate tail + commit
 

@@ -197,6 +197,38 @@ The ruling reads the tail as a session-edge artifact. That's directly checkable 
 
 So the residual is a **scattered per-row content difference inside a provably identical window** (`VWAPSessionCandles` 100.00 %, max |Δ| 0). VWAP is volume-weighted, and lane C established the terminal bar of every series is a forming stub — live's taken at poll time, the synthetic's rebuilt from stored trades in `[closeMs, closeMs + 2 s]`. A per-row volume difference in that bar is the obvious candidate. **Untested; not asserted.**
 
+### 7.2b RESOLVED by measurement — it is a volume-input difference, not a tolerance
+
+Rather than spend a Fable turn re-ruling this, I took it the rest of the way. The answer is unambiguous and needs no judgment.
+
+**Step 1 — the price inputs are provably identical.** VWAP is `Σ((H+L+C)/3 × Vol) / Σ(Vol)`. From the same run:
+
+| Column | Input it exercises | Match | mean \|Δ\| |
+|---|---|---:|---:|
+| DonchianUpper / Lower | **High, Low** | **100.00 %** | **0** |
+| EMA9 / 21 / 50 | **Close** | 99.52 / 99.88 / 99.88 % | 0.77 / 0.35 / 0.15 |
+| **VolumeRatio** | **Volume** | **23.57 %** | 4.108 |
+| VWAP | (H+L+C)/3 **weighted by Volume** | 56.19 % | 69.79 |
+
+Highs and lows are byte-identical across the whole window (max |Δ| 0). Closes agree to 99.5 %+. **Volume is the only VWAP input left that can be producing a $100–500 difference.**
+
+**Step 2 — confirmed per row.** Splitting the 840 joined buckets by whether the row's own volume reading agrees (same NumTight rule applied to `VolumeRatio`):
+
+| Volume state | n | VWAP match | median \|ΔVWAP\| |
+|---|---:|---:|---:|
+| **VolumeRatio AGREES** | 199 | **100.0 %** | **$0.00** |
+| VolumeRatio DIFFERS | 641 | 42.6 % | $19.01 |
+
+**Every single row whose volume agrees has a VWAP that agrees — 199 for 199, median difference exactly zero.** There is no residual left over for a tolerance to explain.
+
+**This refutes the tolerance hypothesis outright, including my own §2 D2 read.** I proposed the mis-scoped-accumulator theory and the coordinator confirmed it; the data says we were both wrong. The accumulator is correct *and* correctly scored — when it is fed the same inputs it returns the same answer to the cent. The 44 % miss is a genuine difference in the volume the two sides see.
+
+**Do not spec the bps-scale reclass.** It would widen a bar around a difference that is real, converting a true negative into a false pass. The `NumTight` class is doing its job.
+
+**D2 and D3 are now provably the same defect, not two related ones.** The synthetic rebuilds each series' terminal bar from stored trades in `[closeMs, closeMs + 2 s]`; live carries whatever the feed had accumulated at poll time. That is a per-row, coin-like volume difference — which is exactly the scattered non-episodic signature §7.2 measured, and exactly lane C's finding seen from the synthesizer side. **Fixing the volume representation resolves both; a tolerance change resolves neither.**
+
+**What this does to D1:** the fine-sweep withholding is no longer gated on a tolerance micro-task that shouldn't happen. It is gated on volume fidelity — i.e. on D3's evidence lane, which is already ordered and already runnable. D1's window and coarse/structural clearances are untouched and remain correct: they rest on the window being exact, and it is.
+
 ### 7.3 What this does to the ordering — flagged, not re-ruled
 
 As ordered, the micro-task looks likely to land without moving the match rate, and D1's fine-sweep clearance is conditioned on it landing — which would leave D1 stuck. Root-causing the 44 % first and letting the tolerance question follow the answer may be the cheaper path. **That's a re-ordering of your ruling and not mine to make**; the four eliminations above are yours to use either way.
