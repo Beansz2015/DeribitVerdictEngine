@@ -108,6 +108,8 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 **Spec-first workflow.** Novel features require a proposal `.md` file committed to `/docs` before coding begins. Implement only approved specs — do not invent design decisions unilaterally.
 
+**Reporting a multi-lane batch back to a reviewing seat** follows `docs/batch-review-packet-convention.md` — two documents, not one: a `*-batch-summary.md` outcome record (what happened) plus a `*-spec-back.md` review packet (ranked verification handles · decisions queued with your read where you have one · feedback on the spec's own assumptions · what you did not verify). Fable-confirmed 2026-07-31.
+
 **Push back explicitly** when a proposed change would reintroduce a deliberately removed pattern (non-directional padding, double-counting, fixed penalties vs. ADX-proximity scale). Cite the version it was removed and why.
 
 **Every commit that changes engine behaviour** gets a version history entry in `docs/DeribitIndicatorProject.md` Section 15 and a `settings.json` version bump if any config keys were added or changed.
