@@ -1,6 +1,6 @@
 # Backtest Synthesizer — Proposal (historical replay through the pure engine core)
 
-**Date:** 2026-07-30 (Fable coordinator; trader-initiated 2026-07-30 — the data-collection-time concern). **Status:** PROPOSED — D1–D8 await trader tick. **Build:** Opus month, ~1–2 weeks of lanes; usable ~mid-Aug.
+**Date:** 2026-07-30 (Fable coordinator; trader-initiated 2026-07-30 — the data-collection-time concern). **Status:** **APPROVED 2026-07-30 — D1–D8 ticked all-as-recommended (trader). BUILD-AUTHORIZED, pulled forward** (trader 2026-07-30: build now, staged, so coordinator review lands before the seat rations; the D8 slot note is superseded by this pull-forward — the absorption mechanism spec stays an Opus-month item).
 **Class:** new host-agnostic console project `tools/BacktestRunner/` (own .vbproj, zero WinForms — the AutoTweaker/WhatIfRunner pattern). **ZERO engine changes, zero settings keys, no ⚠, no dataset boundary** — the engine binary, the live collectors, and every live surface are untouched.
 
 ## 0. The design inversion that makes it cheap
