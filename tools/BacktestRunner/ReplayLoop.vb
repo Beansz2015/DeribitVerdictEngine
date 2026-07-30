@@ -61,6 +61,14 @@ Public Class ReplayLoop
     Public Const CandlesExecCount As Integer = 250   ' when execRes != 1
     Public Const TradeWindowCount As Integer = 500
 
+    ' §7.1 (backtest-synthesizer-proposal.md) forming-bar stub — the on-close firing
+    ' latency window. Live's REST/WS chart response at closeMs+~2s includes the
+    ' currently-forming bar as the last candle of every series; the synthesizer mirrors
+    ' that by appending a stub built from trades in [closeMs, closeMs + FormingStubDeltaMs]
+    ' (zero-trade fallback = prev close + 0 volume). The delta is fixed at 2 s — a
+    ' documented approximation, not a per-run calibration.
+    Public Const FormingStubDeltaMs As Long = 2000L
+
     Public Class RunSummary
         Public Property RowsWritten     As Integer
         Public Property RowsPerSession  As New Dictionary(Of String, Integer)()
@@ -123,6 +131,74 @@ Public Class ReplayLoop
         Return latest
     End Function
 
+    ''' <summary>§7.1 forming-bar stub — return every trade in the closed interval
+    ''' [closeMs, closeMs + FormingStubDeltaMs]. Trades in the store are chronologically
+    ''' ascending, so a single linear scan suffices; the window is small so the total
+    ''' cost across a full replay is trivial.</summary>
+    Public Shared Function TradesInStubWindow(allTrades As List(Of TradeRecord), closeMs As Long) As List(Of TradeRecord)
+        Dim out As New List(Of TradeRecord)()
+        If allTrades Is Nothing OrElse allTrades.Count = 0 Then Return out
+        Dim endMs As Long = closeMs + FormingStubDeltaMs
+        For i As Integer = 0 To allTrades.Count - 1
+            Dim ts As Long = allTrades(i).Timestamp
+            If ts < closeMs Then Continue For
+            If ts > endMs Then Exit For
+            out.Add(allTrades(i))
+        Next
+        Return out
+    End Function
+
+    ''' <summary>§7.1 forming-bar stub — build one Candle from the trades-in-window set.
+    ''' Zero-trade fallback: {Open=High=Low=Close = prevClose, Volume=0}. The stub's
+    ''' Timestamp is closeMs — a valid boundary for the 1m/3m execution-resolution grid;
+    ''' for 5m/15m at non-aligned closes the value is semantically "the moment we sampled",
+    ''' consumed by no timestamp-sensitive indicator on those series.</summary>
+    Public Shared Function BuildFormingStub(prevClose As Double,
+                                             tradesInWindow As List(Of TradeRecord),
+                                             stubTsMs As Long) As Candle
+        Dim stub As New Candle With {.Timestamp = stubTsMs}
+        If tradesInWindow Is Nothing OrElse tradesInWindow.Count = 0 Then
+            stub.Open  = prevClose
+            stub.High  = prevClose
+            stub.Low   = prevClose
+            stub.Close = prevClose
+            stub.Volume = 0
+            stub.VolumeUSD = 0
+            Return stub
+        End If
+        Dim first = tradesInWindow(0)
+        Dim last  = tradesInWindow(tradesInWindow.Count - 1)
+        Dim hi As Double = first.Price
+        Dim lo As Double = first.Price
+        Dim vol As Double = 0
+        Dim volUsd As Double = 0
+        For i As Integer = 0 To tradesInWindow.Count - 1
+            Dim tr = tradesInWindow(i)
+            If tr.Price > hi Then hi = tr.Price
+            If tr.Price < lo Then lo = tr.Price
+            vol += tr.Amount
+            volUsd += tr.Amount * tr.Price
+        Next
+        stub.Open  = first.Price
+        stub.High  = hi
+        stub.Low   = lo
+        stub.Close = last.Price
+        stub.Volume = vol
+        stub.VolumeUSD = volUsd
+        Return stub
+    End Function
+
+    ''' <summary>§7.1 forming-bar stub — append a stub to `slice` in place. `prevClose`
+    ''' is drawn from the last real bar in the slice (which is expected to be non-empty
+    ''' by the caller's freshness / count gates); if the slice is empty, no-op.</summary>
+    Public Shared Sub AppendFormingStub(slice As List(Of Candle),
+                                         stubTrades As List(Of TradeRecord),
+                                         closeMs As Long)
+        If slice Is Nothing OrElse slice.Count = 0 Then Return
+        Dim prevClose As Double = slice(slice.Count - 1).Close
+        slice.Add(BuildFormingStub(prevClose, stubTrades, closeMs))
+    End Sub
+
     ' -- Per-run driver ---------------------------------------------------------------
     '
     ' cfg          — pinned EngineSettings (typically SettingsLoader.Current after Initialise).
@@ -174,11 +250,15 @@ Public Class ReplayLoop
 
             Dim closeMs As Long = New DateTimeOffset(curUtc, TimeSpan.Zero).ToUnixTimeMilliseconds()
 
-            ' Feed all trades in (lastFed, closeMs] through MarketState (aggr-vel only).
+            ' Feed all trades in (lastFed, closeMs + stub delta] through MarketState
+            ' (aggr-vel only). The +stub-delta widening mirrors live's poll-at-closeMs+~2s
+            ' state — the trades in [closeMs, closeMs+2s] are already folded when live
+            ' reads the accumulator (§7.1).
+            Dim aggrCutoff As Long = closeMs + FormingStubDeltaMs
             If avCfg IsNot Nothing AndAlso avCfg.Enabled Then
                 Dim tauFast As Double = avCfg.FastWindowSec
                 Dim tauNorm As Double = ExecutionResolution.ResolveAggrVelNormWindow(cfg, utcHour)
-                While tradeCursor < allTrades.Count AndAlso allTrades(tradeCursor).Timestamp <= closeMs
+                While tradeCursor < allTrades.Count AndAlso allTrades(tradeCursor).Timestamp <= aggrCutoff
                     Dim tr = allTrades(tradeCursor)
                     state.AppendTrade(tr, DateTime.UtcNow)
                     state.FoldAggressorVelocity(tr.Amount, tr.Direction = "buy", tr.Timestamp, tauFast, tauNorm)
@@ -186,22 +266,36 @@ Public Class ReplayLoop
                 End While
             End If
 
-            ' Slice windows.
-            Dim slice1m  = SliceCandlesAtOrBefore(c1m, 1, closeMs, Candles1mCount)
-            Dim slice5m  = SliceCandlesAtOrBefore(c5m, 5, closeMs, Candles5mCount)
-            Dim slice15m = SliceCandlesAtOrBefore(c15m, 15, closeMs, Candles15mCount)
+            ' Slice closed-bar windows. We deliberately request (count - 1) closed bars
+            ' per series, then append the §7.1 forming stub as the last bar — the resulting
+            ' total-count matches live's chart-endpoint response byte-for-byte (which is
+            ' (count-1) closed bars + 1 forming bar).
+            Dim slice1m  = SliceCandlesAtOrBefore(c1m, 1, closeMs, Candles1mCount - 1)
+            Dim slice5m  = SliceCandlesAtOrBefore(c5m, 5, closeMs, Candles5mCount - 1)
+            Dim slice15m = SliceCandlesAtOrBefore(c15m, 15, closeMs, Candles15mCount - 1)
+            Dim slice3m As List(Of Candle) = Nothing
+            If execRes = 3 Then
+                slice3m = SliceCandlesAtOrBefore(c3m, 3, closeMs, CandlesExecCount - 1)
+            End If
+
             Dim sliceExec As List(Of Candle)
             If execRes = 1 Then
                 sliceExec = slice1m
             ElseIf execRes = 3 Then
-                sliceExec = SliceCandlesAtOrBefore(c3m, 3, closeMs, CandlesExecCount)
+                sliceExec = slice3m
             Else
-                sliceExec = SliceCandlesAtOrBefore(c5m, 5, closeMs, CandlesExecCount)
+                sliceExec = slice5m
             End If
-            Dim sliceTrades = SliceTradesAtOrBefore(allTrades, closeMs, TradeWindowCount)
+
+            ' Trade slice widened to closeMs + stub delta so live's [closeMs, closeMs+2s]
+            ' trades are inside our indicator window too (CVD / TFI / MicroCVD / etc. see
+            ' the same trades live saw at poll time).
+            Dim sliceTrades = SliceTradesAtOrBefore(allTrades, aggrCutoff, TradeWindowCount)
 
             ' Live-parity skip gates (mirroring RunAnalysisAsync). Under-populated windows
             ' or stale candles ⇒ no row (no scoring, matches the live SKIPPED path).
+            ' Gates run on the RAW closed-bar slices — the stub-appended count is a mirror
+            ' artefact, not a warmup signal.
             If slice1m.Count < 50 OrElse slice5m.Count < 30 OrElse
                (execRes <> 1 AndAlso sliceExec.Count < 50) OrElse
                sliceTrades.Count = 0 Then
@@ -211,6 +305,16 @@ Public Class ReplayLoop
                Not IndicatorEngine.IsFresh(slice5m, 5, curUtc) Then
                 curUtc = curUtc.AddMinutes(1) : Continue While
             End If
+
+            ' -- §7.1 FORMING-BAR STUBS: mirror live's convention across all four series.
+            ' A single trade window [closeMs, closeMs + 2s] feeds every stub (they differ
+            ' only in prevClose, drawn from each series' last-real bar). Under execRes=1
+            ' the sliceExec/slice1m reference is shared, so the 1m append updates both.
+            Dim stubTrades = TradesInStubWindow(allTrades, closeMs)
+            AppendFormingStub(slice1m,  stubTrades, closeMs)
+            AppendFormingStub(slice5m,  stubTrades, closeMs)
+            AppendFormingStub(slice15m, stubTrades, closeMs)
+            If slice3m IsNot Nothing Then AppendFormingStub(slice3m, stubTrades, closeMs)
 
             ' Funding for this close.
             Dim fund = FundingAtOrBefore(allFunding, closeMs)
