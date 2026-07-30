@@ -375,6 +375,17 @@ Module Program
         ' whole-list fallback the un-parameterised call produced under replay (§8.6).
         A45a_VwapSessionAnchorParameterization()
 
+        ' [Pooled-file report runner — A46, pre-aug1-opus-batch-2026-07-31.md item B]
+        ' The `report` verb runs the SHIPPED analysis/AnalysisRunner pipeline over an
+        ' arbitrary (pooled) CSV. A46a drives that chain from a real CSV file on disk
+        ' through the REAL Load → PopulateForwardBars → FailureRateMatrix.Compute →
+        ' BandLadder.Compute → MarkdownReportWriter path and asserts the produced
+        ' document carries the §2 matrix and §9 band-ladder sections with the fixture's
+        ' own numbers. The forward-OHLC map is supplied synthetically, so the fixture is
+        ' offline; the network hop it stands in for is the pre-existing shared
+        ' DeribitOhlcFetcher path, unchanged by this lane.
+        A46a_PooledCsvReportSections()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -6665,5 +6676,126 @@ Module Program
     Private Function HistMs(hour As Integer, minute As Integer) As Long
         Return New DateTimeOffset(2026, 7, 15, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
     End Function
+
+    ' A46a: the pooled-file report path. Writes a small v0.8-shaped CSV to a temp file,
+    ' then runs the SHIPPED chain the `report` verb runs:
+    '
+    '   ForwardWindowJoiner.Load  →  PopulateForwardBars  →  FailureRateMatrix.Compute
+    '                             →  BandLadder.Compute   →  MarkdownReportWriter
+    '
+    ' Asserts (a) the CSV genuinely round-trips (row count + placed-schema detection via
+    ' HasPlaced, which is what routes the barriers), (b) the rendered document carries
+    ' `## 2. Success-Rate Matrix` with a real STRONG_LONG cell, and (c) it carries
+    ' `## 9. Band ladder` with all three bands at the fixture's own success rates.
+    '
+    ' Six rows, 14:00–15:40 UTC on 2026-07-28 (NY hours ⇒ population NY|1, ExecResolution 1):
+    ' two per band, one hitting the placed target and one hitting the placed stop. So every
+    ' band reads exactly 50 % success, and STRONG_LONG / MEDIUM_LONG each carry n=2 in the
+    ' matrix while WEAK appears ONLY in the ladder (the matrix has no WEAK tier — A35c).
+    Private Sub A46a_PooledCsvReportSections()
+        Const entryPx As Double = 100000.0
+        Const atr     As Double = 40.0
+        Const tgtLong As Double = 100200.0    ' dist 200 > floor 80 (0.0008 × 100000)
+        Const stpLong As Double = 99900.0
+
+        ' The bands in CSV/wire form — bare LONG is the MEDIUM band (v55 stored-form pin).
+        Dim verdicts As String() = {"STRONG LONG", "STRONG LONG", "LONG", "LONG", "WEAK LONG", "WEAK LONG"}
+        Dim wins     As Boolean() = {True, False, True, False, True, False}
+
+        Dim csvPath As String = Path.Combine(Path.GetTempPath(),
+                                             "a46a_pooled_" & Guid.NewGuid().ToString("N") & ".csv")
+        Dim ohlc As New Dictionary(Of DateTime, OhlcBar)()
+        Dim rowTimes As New List(Of DateTime)()
+
+        Try
+            Dim sb As New System.Text.StringBuilder()
+            ' Header-name indexed loader ⇒ a minimal column set is legitimate input.
+            ' All four Placed* columns must be present together or HasPlaced stays False.
+            sb.AppendLine("Timestamp,Price,Verdict,ATR,Regime,VerdictContext,ExecResolution," &
+                          "PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort")
+            For k = 0 To verdicts.Length - 1
+                Dim ts As DateTime = New DateTime(2026, 7, 28, 14, 0, 0, DateTimeKind.Utc).AddMinutes(k * 20)
+                rowTimes.Add(ts)
+                sb.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                    "{0:yyyy-MM-dd HH:mm:ss},{1},{2},{3},TRENDING_UP,CONFIRMED,1,{4},{5},{6},{7}",
+                    ts, entryPx, verdicts(k), atr, tgtLong, stpLong, 99800.0, 100100.0))
+
+                ' Forward bars at +3/+5/+10/+15 (the eligible T+3..T+W band for res-1).
+                ' A winning row's +5 bar wicks through the placed target without touching
+                ' the stop; a losing row's +5 bar does the mirror.
+                For Each off In {3, 5, 10, 15}
+                    Dim closeTime As DateTime = ts.AddMinutes(off)
+                    Dim hi As Double = entryPx + 50
+                    Dim lo As Double = entryPx - 50
+                    If off = 5 Then
+                        If wins(k) Then
+                            hi = tgtLong + 50 : lo = entryPx - 50      ' target first
+                        Else
+                            hi = entryPx + 50 : lo = stpLong - 50      ' stop first
+                        End If
+                    End If
+                    ohlc(closeTime) = New OhlcBar With {.CloseTime = closeTime, .Open = entryPx,
+                                                        .High = hi, .Low = lo, .Close = entryPx}
+                Next
+            Next
+            File.WriteAllText(csvPath, sb.ToString())
+
+            ' -- the shipped chain --
+            Dim cfg As New EngineSettings()
+            Dim rows As List(Of CsvRow) = ForwardWindowJoiner.Load(csvPath)
+            Dim okLoad As Boolean = (rows.Count = verdicts.Length) AndAlso
+                                    rows.All(Function(x) x.HasPlaced) AndAlso
+                                    rows.All(Function(x) x.ExecResolution = 1) AndAlso
+                                    (rows(0).Timestamp = rowTimes(0))
+
+            ForwardWindowJoiner.PopulateForwardBars(rows, ohlc)
+            Dim okBars As Boolean = rows.All(Function(x) x.ForwardBars.ContainsKey(15) AndAlso
+                                                         x.ForwardBars(15).Count > 0)
+
+            Dim atrInv As Integer, structStop As Integer, atrFb As Integer
+            Dim placedTgt As Integer, legacyFav As Integer, belowMin As Integer
+            Dim cells = FailureRateMatrix.Compute(rows, atrInv, structStop, atrFb,
+                                                  placedTgt, legacyFav, belowMin,
+                                                  cfg.Scoring.TradeCosts.EffectiveMinMovePct,
+                                                  cfg.Scoring.AtrTargetMultiplier, 1)
+            Dim ladder = BandLadder.Compute(rows, cfg)
+
+            Dim rep As New AnalysisReport() With {.TotalRows = rows.Count}
+            rep.Populations.Add(New PopulationReport With {
+                .PopulationKey = "NY|1", .SessionName = "NY", .Resolution = 1,
+                .BarrierLabel = "PLACED", .RowCount = rows.Count,
+                .FailureCells = cells, .BandLadder = ladder})
+            rep.PooledBandLadder = ladder
+
+            Dim md As String = MarkdownReportWriter.BuildFullMarkdownForHarness(rep)
+
+            ' §2 — heading, the STRONG_LONG sub-table, and a real cell (n=2, 50 %).
+            Dim okMatrixHead As Boolean = md.Contains("## 2. Success-Rate Matrix") AndAlso
+                                          md.Contains("### STRONG_LONG") AndAlso
+                                          md.Contains("| Window | Placed geometry |")
+            Dim okMatrixCell As Boolean = md.Contains("n=2")
+
+            ' §9 — heading and all three bands. Two rows per band, one win each ⇒ 50 %.
+            Dim okLadderHead As Boolean = md.Contains("## 9. Band ladder")
+            Dim okLadderRows As Boolean = ladder.Count = 3 AndAlso
+                                          ladder.All(Function(b) b.SampleSize = 2) AndAlso
+                                          ladder.All(Function(b) Math.Abs(b.FailureRate - 0.5) < 1e-9) AndAlso
+                                          md.Contains("| STRONG |") AndAlso
+                                          md.Contains("| MEDIUM |") AndAlso
+                                          md.Contains("| WEAK   |")
+
+            ' WEAK is ladder-only: the matrix tier list has no WEAK tier (A35c pin).
+            Dim okWeakNotInMatrix As Boolean = Not cells.Any(Function(c) c.VerdictTier.Contains("WEAK"))
+
+            Check("A46a pooled CSV → report carries §2 matrix + §9 band ladder (real Load/matrix/ladder/writer chain)",
+                  okLoad AndAlso okBars AndAlso okMatrixHead AndAlso okMatrixCell AndAlso
+                  okLadderHead AndAlso okLadderRows AndAlso okWeakNotInMatrix,
+                  String.Format("load={0}(n={1}) bars={2} matrixHead={3} matrixCell={4} ladderHead={5} ladderRows={6}(n={7}) weakOutOfMatrix={8}",
+                                okLoad, rows.Count, okBars, okMatrixHead, okMatrixCell,
+                                okLadderHead, okLadderRows, ladder.Count, okWeakNotInMatrix))
+        Finally
+            Try : File.Delete(csvPath) : Catch : End Try
+        End Try
+    End Sub
 
 End Module
