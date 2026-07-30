@@ -65,6 +65,9 @@ if ($ok) { if (-not (Build 'tools/WhatIfRunner/WhatIfRunner.vbproj')) { $ok = $f
 # silent break shows up in the next pre-push instead of days later — the trigger for the
 # WhatIfRunner R1 rider two days earlier).
 if ($ok) { if (-not (Build 'tools/CeilingAudit/CeilingAudit.vbproj')) { $ok = $false } }
+# BacktestRunner joins the gate build set for the same F10 reason as WhatIfRunner and
+# CeilingAudit — a silent break must show up in the next pre-push instead of days later.
+if ($ok) { if (-not (Build 'tools/BacktestRunner/BacktestRunner.vbproj')) { $ok = $false } }
 if ($ok) { if (-not (Build 'verify/ordercheck/OrderCheck.vbproj')) { $ok = $false } }
 
 # --- harness ---

@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Historical-replay backtest synthesizer (docs/backtest-synthesizer-proposal.md,
+       APPROVED 2026-07-30). Analysis-only console app; ZERO WinForms, ZERO engine
+       modifications. Runs the SHIPPED indicator + scoring pipeline over a fetch-once
+       local historical store and writes a synthetic v0.8 CSV under a BACKTEST InstanceId
+       prefix — never mixed with the live analysis_log.csv (§2 population discipline).
+       net8.0, runs on Linux via `dotnet BacktestRunner.dll`. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>BacktestRunner</AssemblyName>
+    <Nullable>enable</Nullable>
+    <StartupObject>DeribitVerdictEngine.BacktestProgram</StartupObject>
+  </PropertyGroup>
+
+  <!-- Host-agnostic shared files from the main project — no WinForms references in any
+       of these. The runner calls the ACTUAL shipped indicator + scoring functions +
+       SignalEmitter.ComputeSideLevels (one seam, no copies) so the replay pipeline
+       cannot drift from production. -->
+  <ItemGroup>
+    <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
+    <Compile Include="..\..\Core\ExecutionResolution.vb" />
+    <Compile Include="..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\Core\IndicatorResults.vb" />
+    <Compile Include="..\..\Core\Indicators_Momentum.vb" />
+    <Compile Include="..\..\Core\LevelAbsorptionTracker.vb" />
+    <Compile Include="..\..\Core\Indicators_OrderFlow.vb" />
+    <Compile Include="..\..\Core\Indicators_Structure.vb" />
+    <Compile Include="..\..\Core\Indicators_Volatility.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Types.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Helpers.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Calculate_Scoring.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Calculate_Verdict.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Kelly.vb" />
+    <Compile Include="..\..\Core\SignalEmitter.vb" />
+    <Compile Include="..\..\Core\OfiAccumulator.vb" />
+    <Compile Include="..\..\Core\AggressorVelocityAccumulator.vb" />
+    <Compile Include="..\..\Core\AlertsTracker.vb" />
+    <Compile Include="..\..\Core\WsHealthLog.vb" />
+    <Compile Include="..\..\DeribitClient.vb" />
+    <Compile Include="..\..\DynamicNorms.vb" />
+    <Compile Include="..\..\MarketState.vb" />
+    <Compile Include="..\..\AnalysisLogger.vb" />
+    <Compile Include="..\..\analysis\AnalysisConstants.vb" />
+    <Compile Include="..\..\analysis\AnalysisReport.vb" />
+    <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
+    <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
+    <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
+    <Compile Include="..\..\analysis\BandLadder.vb" />
+  </ItemGroup>
+
+  <!-- HistoricalStore.vb, BacktestRowWriter.vb, ReplayLoop.vb, BacktestProgram.vb
+       are auto-included by the SDK glob (they live in this directory). -->
+
+</Project>

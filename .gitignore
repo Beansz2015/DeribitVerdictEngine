@@ -409,6 +409,13 @@ data-archive/
 # artefacts, never committed.
 whatif_report_*.md
 whatif_overlay_counter.json
+
+# Backtest synthesizer (docs/backtest-synthesizer-proposal.md) — the fetch-once historical
+# store + synthetic replay logs. Data (candles / trades / funding CSVs, months × MBs) is
+# never committed; the synthetic run CSVs stay local under BACKTEST-prefixed InstanceIds so
+# they cannot be confused for live rows.
+backtest_data/
+backtest_log_*.csv
 # trader-kept local experiments (ruling 2026-07-22)
 .codex/
 configure-claude-deepseek.ps1
