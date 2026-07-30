@@ -57,6 +57,7 @@ Public Class BacktestProgram
         Dim replayPath As String = ""
         Dim reportPath As String = ""
         Dim csvPath    As String = ""
+        Dim useFormingStub As Boolean = True
 
         Dim i As Integer = 1
         While i < args.Length
@@ -88,6 +89,9 @@ Public Class BacktestProgram
                 Case "--csv"
                     i += 1
                     If i < args.Length Then csvPath = args(i)
+                Case "--closed-bars"
+                    ' D3 evidence lane: closed bars only, no §7.1 forming stub.
+                    useFormingStub = False
             End Select
             i += 1
         End While
@@ -127,8 +131,10 @@ Public Class BacktestProgram
                 Console.WriteLine("[BacktestRunner] Settings: " & Path.GetFullPath(settingsPath) &
                                   " (version " & cfg.Version & ")")
                 Console.WriteLine("[BacktestRunner] Output:   " & Path.GetFullPath(outPath))
+                Console.WriteLine("[BacktestRunner] Bar mode: " &
+                                  If(useFormingStub, "forming stub (§7.1 live mirror)", "CLOSED BARS ONLY (D3 A/B arm)"))
 
-                Dim summary = ReplayLoop.Run(cfg, fromUtc, toUtc, outPath)
+                Dim summary = ReplayLoop.Run(cfg, fromUtc, toUtc, outPath, useFormingStub)
 
                 Console.WriteLine("")
                 Console.WriteLine("[BacktestRunner] === Replay summary ===")
@@ -264,7 +270,7 @@ Public Class BacktestProgram
         Console.Error.WriteLine("Usage:")
         Console.Error.WriteLine("  BacktestRunner fetch    --from yyyy-MM-dd --to yyyy-MM-dd")
         Console.Error.WriteLine("  BacktestRunner replay   --from yyyy-MM-dd --to yyyy-MM-dd " &
-                                "[--settings <path>] [--out <path>]")
+                                "[--settings <path>] [--out <path>] [--closed-bars]")
         Console.Error.WriteLine("  BacktestRunner validate --from yyyy-MM-dd[Thh:mm] --to yyyy-MM-dd[Thh:mm] " &
                                 "--live <path> [--live2 <path>] [--replay <syntheticCsv>] " &
                                 "[--report <mdOut>] [--settings <path>]")

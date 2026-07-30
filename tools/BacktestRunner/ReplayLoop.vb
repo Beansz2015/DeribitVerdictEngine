@@ -172,12 +172,20 @@ Public Class ReplayLoop
         Dim lo As Double = first.Price
         Dim vol As Double = 0
         Dim volUsd As Double = 0
+        ' UNITS (fixed 2026-07-31 — the D3 A/B surfaced this):
+        '   TradeRecord.Amount is USD NOTIONAL on Deribit perpetuals (contracts are $10),
+        '   whereas Candle.Volume is BASE currency (BTC) — the chart endpoint's `volume`,
+        '   with `cost` (USD) landing in Candle.VolumeUSD (DeribitClient.vb:123,
+        '   DeribitWsFeed.vb:437, and the store round-trips both).
+        '   So the stub must DIVIDE by price to reach BTC, and VolumeUSD is the raw
+        '   USD sum. The original summed Amount straight into .Volume, putting a
+        '   ~64,000x-oversized number into a BTC series.
         For i As Integer = 0 To tradesInWindow.Count - 1
             Dim tr = tradesInWindow(i)
             If tr.Price > hi Then hi = tr.Price
             If tr.Price < lo Then lo = tr.Price
-            vol += tr.Amount
-            volUsd += tr.Amount * tr.Price
+            If tr.Price > 0 Then vol += tr.Amount / tr.Price
+            volUsd += tr.Amount
         Next
         stub.Open  = first.Price
         stub.High  = hi
@@ -205,9 +213,19 @@ Public Class ReplayLoop
     ' fromUtc/toUtc — [inclusive, exclusive) replay window; bar-closes at every execRes-min
     '                 tick inside this window are scored.
     ' outputPath   — synthetic CSV path (BACKTEST-*.csv per proposal §2).
+    ' useFormingStub (D3 evidence lane, pre-aug1-batch-spec-back.md §7):
+    '   True  (default) — the §7.1 mirror: (N-1) closed bars + a forming stub built from
+    '                     real trades in [closeMs, closeMs + 2s]. This is what LIVE sees.
+    '   False           — closed bars ONLY: N fully-closed bars, no stub.
+    '
+    ' The window LENGTH is held constant across both arms (N either way), so the ONLY
+    ' variable is whether the terminal bar is a real closed bar or a ~2-second stub.
+    ' Trade slicing is deliberately IDENTICAL in both arms — the closed-bar question is
+    ' about candles, and changing two things at once would not answer it.
     Public Shared Function Run(cfg As EngineSettings,
                                 fromUtc As DateTime, toUtc As DateTime,
-                                outputPath As String) As RunSummary
+                                outputPath As String,
+                                Optional useFormingStub As Boolean = True) As RunSummary
         Dim warmupStart As DateTime = fromUtc.AddHours(-WarmupHours)
 
         Console.WriteLine("[Replay] Loading historical store ...")
@@ -270,12 +288,15 @@ Public Class ReplayLoop
             ' per series, then append the §7.1 forming stub as the last bar — the resulting
             ' total-count matches live's chart-endpoint response byte-for-byte (which is
             ' (count-1) closed bars + 1 forming bar).
-            Dim slice1m  = SliceCandlesAtOrBefore(c1m, 1, closeMs, Candles1mCount - 1)
-            Dim slice5m  = SliceCandlesAtOrBefore(c5m, 5, closeMs, Candles5mCount - 1)
-            Dim slice15m = SliceCandlesAtOrBefore(c15m, 15, closeMs, Candles15mCount - 1)
+            ' One fewer closed bar when a stub will be appended, so both arms end up with
+            ' the same total window length and the terminal bar is the only difference.
+            Dim reserve As Integer = If(useFormingStub, 1, 0)
+            Dim slice1m  = SliceCandlesAtOrBefore(c1m, 1, closeMs, Candles1mCount - reserve)
+            Dim slice5m  = SliceCandlesAtOrBefore(c5m, 5, closeMs, Candles5mCount - reserve)
+            Dim slice15m = SliceCandlesAtOrBefore(c15m, 15, closeMs, Candles15mCount - reserve)
             Dim slice3m As List(Of Candle) = Nothing
             If execRes = 3 Then
-                slice3m = SliceCandlesAtOrBefore(c3m, 3, closeMs, CandlesExecCount - 1)
+                slice3m = SliceCandlesAtOrBefore(c3m, 3, closeMs, CandlesExecCount - reserve)
             End If
 
             Dim sliceExec As List(Of Candle)
@@ -310,11 +331,13 @@ Public Class ReplayLoop
             ' A single trade window [closeMs, closeMs + 2s] feeds every stub (they differ
             ' only in prevClose, drawn from each series' last-real bar). Under execRes=1
             ' the sliceExec/slice1m reference is shared, so the 1m append updates both.
-            Dim stubTrades = TradesInStubWindow(allTrades, closeMs)
-            AppendFormingStub(slice1m,  stubTrades, closeMs)
-            AppendFormingStub(slice5m,  stubTrades, closeMs)
-            AppendFormingStub(slice15m, stubTrades, closeMs)
-            If slice3m IsNot Nothing Then AppendFormingStub(slice3m, stubTrades, closeMs)
+            If useFormingStub Then
+                Dim stubTrades = TradesInStubWindow(allTrades, closeMs)
+                AppendFormingStub(slice1m,  stubTrades, closeMs)
+                AppendFormingStub(slice5m,  stubTrades, closeMs)
+                AppendFormingStub(slice15m, stubTrades, closeMs)
+                If slice3m IsNot Nothing Then AppendFormingStub(slice3m, stubTrades, closeMs)
+            End If
 
             ' Funding for this close.
             Dim fund = FundingAtOrBefore(allFunding, closeMs)
