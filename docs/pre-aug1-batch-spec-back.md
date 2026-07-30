@@ -229,6 +229,34 @@ Highs and lows are byte-identical across the whole window (max |Δ| 0). Closes a
 
 **What this does to D1:** the fine-sweep withholding is no longer gated on a tolerance micro-task that shouldn't happen. It is gated on volume fidelity — i.e. on D3's evidence lane, which is already ordered and already runnable. D1's window and coarse/structural clearances are untouched and remain correct: they rest on the window being exact, and it is.
 
+### 7.2c Overlap re-read conditioned on volume agreement — the whole VWAP family goes to 100 %
+
+Analysis only, no code, no re-run of the validator. Per-column match rate over the same 840 buckets, all rows vs the 199 where the row's own volume reading agrees (each column scored under its own validator tolerance class):
+
+| Column | all rows | volume-agreeing | Δ |
+|---|---:|---:|---:|
+| **VolumeRatio** | 23.69 % | **100.00 %** | **+76.3** |
+| **VWAP** | 56.19 % | **100.00 %** | **+43.8** |
+| **VWAPSigma1Upper / Lower** | 55.00 % | **100.00 %** | **+45.0** |
+| **VWAPSigma2Upper** | 54.52 % | **100.00 %** | **+45.5** |
+| **VWAPSigma2Lower** | 53.45 % | **100.00 %** | **+46.5** |
+| VWAPDevPct | 40.60 % | 76.38 % | +35.8 |
+| ATR | 46.55 % | 32.16 % | −14.4 |
+| RSI | 42.98 % | 32.16 % | −10.8 |
+| ADX | 49.76 % | 43.22 % | −6.5 |
+| PlusDI / MinusDI | 14.4 / 14.1 % | 1.5 / 1.5 % | −12.9 / −12.5 |
+| TTMHistogram | 42.62 % | 32.16 % | −10.5 |
+| CVD / MicroCVD family | 4–24 % | 4–18 % | −6 to +3 |
+| Score fields | 33–36 % | 34–44 % | −1 to +8 |
+
+**Every price column in the VWAP family lands on exactly 100.00 %.** VWAPDevPct stops at 76.38 % only because it also divides by `Price`, which itself matches 77.62 % overall.
+
+**What the conditioning actually selects, checked rather than assumed:** all 199 agreeing rows have live `VolumeRatio` ≤ 0.01, and in **100 %** of them it is the tolerance's *absolute* 0.01 floor that decides — not a proportional match. So the split is really **"both terminal bars carry ~zero volume"** (p50 0.00100) vs **"at least one carries real volume"** (p50 0.01840, max 4.37).
+
+That makes the mechanism exact rather than merely correlated. VWAP is a volume-**weighted** mean: when the terminal bar's weight is ~0 on both sides it drops out of both sums, leaving 239 identical bars and a VWAP identical to the cent. When it carries real volume on one side and a different amount on the other, it enters one weighted mean and not the other. **The entire VWAP-family disagreement is carried by the terminal bar's volume — not the window, not the prices, not session edges.**
+
+**The necessary caveat, stated so nobody over-reads this:** the 199-row subpopulation is *quiet terminal bars*, which is a biased subsample. That is exactly why ATR / RSI / ADX / DI / TTM get **worse** on it, not better — those columns have their own separate causes and a quiet subsample doesn't help them. **Volume is not a universal explanation for the synthesizer's residuals.** It is the complete explanation for the VWAP family, and for nothing else in the table.
+
 ### 7.3 What this does to the ordering — flagged, not re-ruled
 
 As ordered, the micro-task looks likely to land without moving the match rate, and D1's fine-sweep clearance is conditioned on it landing — which would leave D1 stuck. Root-causing the 44 % first and letting the tolerance question follow the answer may be the cheaper path. **That's a re-ordering of your ruling and not mine to make**; the four eliminations above are yours to use either way.
