@@ -38,6 +38,10 @@ Public Class TweakSettingsForm
     ' user manually edits the value, so changes to WindowSize stop auto-updating it.
     Private _minTierIsAuto As Boolean = True
     Private _suppressMinTierEdit As Boolean = False
+    ' Held as a FIELD, not a local: WinForms controls keep no back-reference to the ToolTip
+    ' that serves them, so a locally-scoped one is collectible and the hover silently dies
+    ' (the c508d93 / _minNetMoveTip pattern; fee-aware-min-move-spec-back.md §2.9).
+    Private            _minTierTip           As ToolTip
     Private            lblActiveSnapshot     As Label
     Private WithEvents btnShowRoundStats     As Button
     Private WithEvents btnOpenSnapshotsDir   As Button
@@ -721,8 +725,8 @@ Public Class TweakSettingsForm
 
         ' ── Min tier-eligible rows ───────────────────────────────────────────
         AddRow("Min tier-eligible rows:", LBL_X, CTL_X, y, 60, txtMinTierRows)
-        Dim minTierTip As New ToolTip()
-        minTierTip.SetToolTip(txtMinTierRows,
+        _minTierTip = New ToolTip()
+        _minTierTip.SetToolTip(txtMinTierRows,
             "Minimum STRONG/MEDIUM directional rows that must exist within a window for " &
             "the round to evaluate. Rounds with fewer are skipped (don't tick the streak). " &
             "Must be ≤ Window Size — the tier-eligible count is a subset of the window's " &
