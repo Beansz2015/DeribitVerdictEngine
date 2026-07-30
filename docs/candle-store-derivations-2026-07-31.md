@@ -245,3 +245,34 @@ The §12 row asks for a **false-positive rate**. Candles cannot produce one. "Cr
 
 The harness is scratchpad-only and deliberately not committed (it is a one-off derivation instrument, not a tool the project maintains). To reproduce: a `net8.0` VB console project with `EnableDefaultCompileItems=false`, compiling `Program.vb` (a local `Candle`/`TradeRecord`/`OrderBookSnapshot` DTO trio plus the drivers) alongside `<Compile Include>` of the three `Core/Indicators_*.vb` files, reading `backtest_data/` and the frozen CSV copy. Pins: `PinTtm` / `PinObv` as described in §0. Path:
 `…\scratchpad\deriv\` (session-scoped; regenerate rather than rely on it).
+
+---
+
+## 6. Confirmation re-run after the store repair (2026-07-31, trader-requested)
+
+**Result: every recommendation stands. Nothing moved.**
+
+Context: `store-integrity-check-2026-07-31-post-fix.md` found June destroyed at 3m/5m/15m and advised re-running once repaired. The store was repaired in `cb1ffb9` (merge-instead-of-overwrite in both backfill paths) and swept gap-free at all four resolutions plus funding. The same harness was rebuilt and re-run against it — **the original instrument, unmodified**, so this is a re-execution, not a re-implementation.
+
+**Timeline note that changes how to read the diff:** the published run (`run5`, 02:39) predates the damage (03:36). So this is not damaged-vs-repaired — it is **intact-vs-repaired-plus-extra-data**. The repair fetch extended the store by ~2.7 hours of NY-session bars: 1m 259,974 → **260,137**, 3m 86,658 → **86,713**, 5m 51,995 → **52,028**. Since the 3m arms filter to ASIA/LONDON and the added hours are NY, **every 3m population is byte-identical** and only the 1m/5m arms move at all.
+
+| Published | Re-derived | |
+|---|---|---|
+| TTM 1m \|delta\| p50 **52.58** | **52.50** | ✓ |
+| TTM 3m \|delta\| p50 **76.48** | **76.4750** | ✓ exact |
+| 3m/1m ratio **1.45** (not 2.1) | **1.457** | ✓ |
+| Principle A, 1m 25 / 3m 40 → AWARD **50.5 / 49.3**, FLAT **26.9 / 28.4** | **50.44 / 49.28**, **26.97 / 28.39** | ✓ |
+| Principle B, 1m 20 / 3m 30 → AWARD **53.4 / 53.1**, FLAT **21.9 / 21.7** | **53.39 / 53.14**, **21.93 / 21.70** | ✓ |
+| OBV p50 span **22.2–24.2** (ASIA/LONDON/NY) | **22.24 / 23.95 / 24.21** | ✓ |
+| OBV 3m/1m ratio **≈0.95** | **0.947** | ✓ |
+| Volume vote fires on **0.69%** of NY runs | **0.69%** | ✓ exact |
+| Swing w3/lb30: pivot age **8**, **1.77** ATR, placeable **45.5%**, crossed **56.5%** | 8, **1.76**, **45.5%**, **56.5%** | ✓ |
+| Swing 3→5 costs **14.3pp** placeability, buys **7.5pp** crossing | **14.2pp** / **7.4pp** | ✓ |
+| lb45 changes placeability by **+0.1pp** | **+0.1pp** | ✓ |
+| Data quality: 0 bad-price bars, ~2.1% zero-volume 1m | 0 / **2.10%** | ✓ |
+
+**The pins still hold:** 16,000 sampled windows (5,000 TTM × 2 resolutions, 3,000 OBV × 2) against the shipped `CalcTTMSqueeze` / `CalcOBV` — **0 mismatches**, unchanged.
+
+**One number improved, and it is worth recording.** The matched replay's ExecRes-1 row agreement rose **98.35% → 98.59%**, and store-replay directional went **63.60% → 63.87%** against production's 63.88% — closing a 0.28 pp gap to **0.01 pp**. ExecRes 3 was already exact (99.22%, 77.05% vs 77.05%) and is unchanged. More store coverage makes the replay track production more closely, which is the direction that should reassure rather than worry.
+
+**§0.2's conclusion is therefore reinforced, not revised:** the store reproduces production, and the 15 pp OBV gap chased in §0.2 remains a sampling-design artefact rather than a production defect.
