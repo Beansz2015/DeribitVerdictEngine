@@ -1,11 +1,34 @@
 # Trade-Store Coverage Report — Proposal
 
-**Status:** **AWAITING TRADER** — D1–D6 in §9. Spec-first; nothing built.
+**Status:** **AWAITING TRADER** — D1–**D7** in §9. Spec-first; nothing built. **Revised 2026-07-31** against [`trade-store-coverage-report-review-2026-07-31.md`](trade-store-coverage-report-review-2026-07-31.md) — see §11 for what changed and the two places the review needs correcting.
 **Target:** Part A is **tools-only** — no settings keys, **no version bump**, `[no-engine-change]`. Part B (D5) touches the app and would take a bump.
 **Scoring impact:** **NONE.** Reads the store and a sidecar; writes a report. No indicator, no CSV column, no verdict path, no bridge field.
 **Dataset boundary:** **NONE**, either part.
 **Gate to build:** safe anytime.
 **Origin:** trader question 2026-07-31, after the v64 capture build — *"what's the consequence of a missing day of tape, assuming we read through 6 months at a time?"* The honest answer was **statistically almost nothing** (~0.55 % of a 182-day window; under one row in the scarcest STRONG × session cell), and that a lost day matters as a **smoke alarm**, not as data loss. Which exposed the real gap: **nothing reports coverage**, so a three-week hole runs a sweep happily and prints a number.
+
+---
+
+## 0a. The hole is not hypothetical — it already exists, and it is in `funding`
+
+The review found this by running S4's own arithmetic against the current store, and I reproduced it independently. **It is the strongest argument in this document**, so it goes first.
+
+| Stream | Have | Expected | Missing |
+|---|---:|---:|---:|
+| Candles 1m / 3m / 5m / 15m | 259,974 / 86,658 / 51,995 / 17,332 | same | **0 — complete at all four resolutions** |
+| **Funding** | **3,644** | **4,326** | **682 (15.8 %)** |
+
+**`funding` has a 28.2-day hole: 2026-06-30 23:00 UTC → 2026-07-29 05:00 UTC** (measured gap 40,680 min). Per-month counts show the shape plainly — Feb 671 · Mar 743 · Apr 719 · May 743 · Jun 719, essentially complete, against **July 30**.
+
+It is **not** a venue retention cap: the endpoint served a complete February, and a cap cannot explain a hole in the *newest* month while the oldest is intact. That points at the fetch — precisely the failure class S4 was written for, and precisely the failure class that has **no symptom at all** until something reports it.
+
+**Consequence:** anything consuming the store's funding is currently working on ~5 months, not 6. A funding-momentum re-baseline or the §12 per-resolution funding watch would silently fit on a truncated book. Candle-derived work is unaffected — the candle store is complete.
+
+### 0a.1 A correction to the review, and a second defect inside the first
+
+The review reads the five 120-minute funding gaps as *"five genuinely dropped samples"* — noise alongside the big hole. They are not noise. **All five sit exactly on a month boundary** — 2026-02-01, 03-01, 04-01, 05-01, 06-01, each at **00:00 UTC** — which is **5 of 5 internal boundaries in the store, a 100 % hit rate.** That is not random loss; it is a deterministic off-by-one at the monthly-file seam in `BackfillFundingMonthAsync`, where the window is `[segStart, segEndExcl − 1 ms]` and the sample landing on the boundary instant falls in the crack between two months' fetches.
+
+The distinction matters because the two defects want different responses: the 28.2-day hole is undiagnosed and needs investigation; the boundary drop is deterministic, reproducible, and a small fix. **Both belong to `HistoricalStore.BackfillFundingMonthAsync`, not to this spec** — flagged, not folded in. I have not diagnosed the 28.2-day hole's cause and am not proposing a fix here.
 
 ---
 
@@ -43,29 +66,45 @@ The streams do not share a notion of ground truth, and a report that pretends th
 |---|---|---|
 | **Candles** (1m/3m/5m/15m) | **Yes, exactly.** A UTC day at 1m has 1,440 bars, deterministically. | Missing-bar count per day, per resolution. A *fetch* defect, precisely detectable. |
 | **Funding** | **Nearly.** ~1 sample/hour. | Sample count per day vs 24. Coarse but real. |
-| **Trades** | **No.** The tape is whatever the market did; nobody can say how many trades "should" have printed. | Only *indirect* signals — §2. |
+| **Trades**, older than ~24 h | **No.** The tape is whatever the market did; nobody can say how many trades "should" have printed. | Only *indirect* signals — S1–S3. |
+| **Trades**, inside the ~24 h retention window | **Yes, exactly — the venue will tell you.** | An exact set diff against `get_last_trades_by_instrument_and_time` — S0. |
 
-Trades are the stream that matters and the only one without ground truth. That asymmetry is the design problem.
+Trades are the stream that matters, and the honest statement is **not** that they have no ground truth — it is that they have ground truth for about a day and none after. The original draft of this spec said flatly that trades have no ground truth; that is wrong, and it is wrong in the place where it costs the most, because **the daily-check use case lives entirely inside the window where ground truth exists.** §2's S0 is the consequence.
 
 ---
 
-## 2. Four signals, ranked by how much they can be trusted
+## 2. Five signals, ranked by how much they can be trusted
 
-### S1 — Uptime cross-reference (strongest; no market baseline at all)
+### S0 — Venue diff inside the retention window (exact; the only signal with ground truth)
 
-`ws_health.log` already exists beside the CSV (`Core/WsHealthLog.vb`, v-W4): append-only, transition-only, `utc | state | instance_id`, plus one line per process start. Verified present locally — 32 lines spanning 2026-07-23 → 07-30, with the instance GUID changing on every process start, so **restarts are directly visible**.
+For any window younger than Deribit's ~24 h trade retention, `get_last_trades_by_instrument_and_time` **is** the answer key. Fetch what the venue says printed; diff it against what the store holds. The difference is not an estimate of capture loss — it **is** capture loss, enumerated.
 
-That converts an unanswerable question into an answerable one:
+Two properties make this the top signal rather than a nice extra:
+
+- **It measures residual loss *after* repair**, which is the number that actually matters. If gap repair is working, S0 reads zero for everything older than one repair interval; a non-zero S0 means both mechanisms missed, which is the only genuinely alarming state the v64 design admits.
+- **It needs no threshold, no baseline and no uptime record.** It is immune to every ambiguity S1–S3 have to reason around.
+
+Costs, both real: it is a **network call**, so the verb stops being purely read-only, and it only answers for the last day. Therefore **opt-in via `--verify-venue`**, default off, and the report states plainly which hours S0 covered and which fell back to S1–S3.
+
+This signal exists because of the review's C5 — see §11.
+
+### S1 — Uptime cross-reference (strong; no market baseline)
+
+Converts an unanswerable question into an answerable one:
 
 > ~~Should there have been tape in this hour?~~ → **Was the app up in this hour, and did we capture while it was?**
 
-- App **DOWN / absent** ⇒ missing tape is **expected**, reported as such, not as a defect. This is what stops the report crying about the pre-capture era and about legitimate maintenance windows.
-- App **OK** but the store has no trades ⇒ **capture defect**, which is exactly the failure class v64's §1.1 must never hit silently.
-- App **DEGRADED / REST** ⇒ no WS stream, so streaming capture is expected-absent and repair is meant to carry it — a distinct third state worth naming, because it tells you *which* mechanism to look at.
+**The primary uptime record is `analysis_log.csv`, not `ws_health.log`.** The original draft had this backwards, and the review's C2 is right that `ws_health.log` alone cannot carry S1 — it is transition-only, so a healthy app that logs nothing for twelve hours and a dead one are byte-identical in the file. Measured locally: `ws_health.log` holds **32 lines across seven days**. Over the same two days, `analysis_log.csv` holds a row per completed run at **p50 60 s / p90 155 s** spacing, with an `InstanceId` column (col 110) attributing every row to a process life. One is a ~60-second heartbeat; the other is a weekly handful of transitions.
 
-This needs no baseline, works from day one, and is the only signal that separates "the market was quiet" from "we broke."
+So:
 
-**Dependency it creates:** the health log must travel with the store on copy-back. Under D1 (AWS-only) studies already take a store copy-back; this adds one small file beside it. That is D2.
+- **`analysis_log.csv` rows present in hour H ⇒ the app was definitively up in hour H.** No inference. This collapses C2's ambiguous window from *hours* to *the minutes since the last row*.
+- **`ws_health.log` supplements it** with the two things the CSV cannot say: the **DEGRADED / REST** state (which tells you *which* capture mechanism should have been carrying the hour), and the all-runs-skipped case where the app is up but writing no CSV rows.
+- **Residual ambiguity — the trailing window and cross-GUID gaps — defaults to DEFECT, not expected-missing** (C2's recommendation, accepted). A report that silently reclassifies real loss as expected is worse than no report. Erring toward defect costs a human dismissal; erring the other way costs the tape.
+
+**Wording correction the review caught, and it is worth stating loudly because the file's token is genuinely misleading:** `WsHealthLog.LogStart` writes a `DOWN` line at *process start*, before the socket connects. So **a `DOWN` line proves the app was alive to write it.** The original §2 said "App DOWN ⇒ missing tape is expected", which is exactly backwards. `DOWN` means running-but-not-connected; **absent lines**, not DOWN lines, are what indicate a dead process — and absence is the ambiguous state the rule above now resolves toward defect.
+
+**Dependency it creates:** the uptime records must travel with the store on copy-back — see D2 and C4.
 
 ### S2 — Empty hours inside an up-interval (strong; no baseline)
 
@@ -75,7 +114,11 @@ An hour with **zero** stored trades while the app was OK is unambiguous. No thre
 
 The §0 numbers make this the *third*-best signal, not the first. Proposed default **300,000 ms (5 min)** — 1.85× the observed max of 161,652 ms. Deliberately loose: it will not catch a 4-minute stall, and it is not supposed to. It catches the multi-minute-to-hours outages that S1 might miss if the health log is absent or the app died without writing a DOWN line.
 
-**Provisional anchor, re-anchor on evidence** (the `alerts.*` / absorption discipline): re-derive after the first full week of *streaming* capture that includes a weekend, since weekend Asia is where the natural max will actually live. The report should print the observed max alongside the threshold so the re-anchor is a read, not a project.
+**Provisional anchor, re-anchor on evidence** (the `alerts.*` / absorption discipline) — but **re-anchor on REST-backfilled data, not streamed data.** The original draft listed "REST-backfilled rather than streamed" among three caveats that all *loosen* the threshold. The review's C5 shows it cuts the other way and I accept the correction: a REST backfill is **the venue's own record of what printed**, which is exactly the ground truth you want for *"what is a natural silence?"* A streamed sample carries capture-path gaps **on top of** natural ones, so re-anchoring on it would absorb capture loss into the "natural" baseline and inflate the threshold — blunting the very signal S3 provides.
+
+The genuinely load-bearing caveat of the three is the missing **weekend**, since weekend Asia is where the natural max will actually live. So: extend the REST-derived window to include a weekend, and re-anchor from that. The report prints the observed max alongside the threshold so the re-anchor is a read, not a project.
+
+**And the difference between the two samples is itself the measurement** (C5's constructive half): REST-vs-streamed over the same window is capture loss observed directly rather than inferred from a threshold. That is S0, promoted out of this note to the top of the ranking where it belongs.
 
 ### S4 — Candle / funding completeness (deterministic; different failure)
 
@@ -99,17 +142,24 @@ BacktestRunner coverage --from 2026-02-01 --to 2026-07-31 [--gap-ms 300000] [--o
 
 Console summary always (this is meant to be glanceable); `--out` additionally writes markdown next to the other reports.
 
+The illustrative numbers below are the **store's real current state**, not invented ones — the review's first recommendation, and correctly so: the original draft's example line read `funding 4,344 / 4,344 samples OK`, which is the exact opposite of the truth and was the one line a reader would have anchored on.
+
 ```
 TRADE STORE COVERAGE  2026-02-01 → 2026-07-31
   capture begins      2026-07-29 10:43 UTC  (179 earlier days outside capture)
-  app-up hours        742   (ws_health.log, 32 transitions, 9 process starts)
-  captured hours      736
-  UP BUT UNCAPTURED     6   ← capture defects
-  empty hours (up)      2
-  longest gap        161.7s  (threshold 300.0s — 0 breaches)
-  candles 1m         259,974 / 259,974 bars   OK
-  funding              4,344 / 4,344 samples  OK
-  VERDICT: 6 defect hour(s) — see coverage.md §2
+  app-up hours          742   (analysis_log.csv, 8,498 rows, 89 instances
+                               + ws_health.log, 32 transitions, 15 process lives)
+  captured hours        736
+  UP BUT UNCAPTURED       6   ← capture defects
+  ambiguous (→ defect)    1   ← trailing window since last heartbeat
+  empty hours (up)        2
+  longest gap         161.7s  (threshold 300.0s — 0 breaches)
+  candles 1m/3m/5m/15m       complete at all four resolutions   OK
+  funding             3,644 / 4,326 samples   *** 682 MISSING (15.8%) ***
+                      28.2-day hole 2026-06-30 23:00 → 2026-07-29 05:00 UTC
+                      + 5 boundary drops, one per month seam (deterministic)
+  venue diff (S0)     not run — pass --verify-venue
+  VERDICT: 7 defect hour(s) + funding incomplete — see coverage.md §2
 ```
 
 The markdown adds the per-day table and names the defect hours with their instance IDs, so a hole is traceable to a specific process life.
@@ -157,6 +207,8 @@ Fixture family **A49** (A48 consumed by the v64 capture build; next free after t
 - **A49f** — S4 candle completeness: a month file short by k bars reports exactly k missing at the right resolution.
 - **A49g** — absent `ws_health.log` ⇒ S1 skipped **with a stated reason in the output**, S2–S4 still run, exit code unaffected.
 - **A49h** — `--strict` exits 1 on a defect hour and 0 on expected-missing-only; default (no flag) always exits 0.
+- **A49i** — S1 primary/supplement precedence: an hour with `analysis_log.csv` rows resolves **up** even when `ws_health.log` is silent across it; an hour with neither, inside a cross-GUID or trailing window, resolves **defect** and not expected-missing (the C2 rule, pinned as a regression trap — this is the arm whose inversion loses tape silently).
+- **A49j** — S0 venue diff: against a stubbed venue response, trades present at the venue but absent from the store are enumerated exactly; an identical set reports zero; hours outside the retention window are reported as **not covered by S0** rather than as clean. No live HTTP in the fixture.
 
 Build acceptance: solution + AutoTweaker + WhatIfRunner + CeilingAudit + BacktestRunner + OrderCheck **0/0 Release**; A1–A48h unregressed + A49a–h; verify-gate `prepush` **GATE PASSED**.
 
@@ -164,7 +216,7 @@ Build acceptance: solution + AutoTweaker + WhatIfRunner + CeilingAudit + Backtes
 
 ## 7. What this cannot do — stated so it is not assumed
 
-- **It cannot detect a partial hour.** If capture dropped 30 % of trades in an hour but kept the rest, S1 and S2 both pass and S3 almost certainly does too. Nothing short of a per-hour volume baseline catches that, and §0 shows the baseline needs weeks of weekend-inclusive history before it means anything. **Deliberately out of scope** — revisit once there is a quarter of streaming capture to fit it on.
+- **It cannot detect a partial hour older than ~24 h.** If capture dropped 30 % of trades in an hour but kept the rest, S1 and S2 both pass and S3 almost certainly does too. Inside the retention window **S0 catches it exactly**; outside it, nothing short of a per-hour volume baseline does, and §0 shows that baseline needs weeks of weekend-inclusive history before it means anything. **Deliberately out of scope** — revisit once there is a quarter of streaming capture to fit it on. This is the main argument for running the check *daily* rather than before a study: within a day the answer is exact, after a day it is a heuristic.
 - **It cannot recover anything.** It is an alarm, not a repair. What it finds within ~24 h, gap repair can still fix; what it finds later is gone.
 - **It cannot tell you the app died if the app died without a DOWN line.** A hard kill leaves the health log's last line as OK. S2/S3 are the backstop for exactly that case — which is why S1 alone is not enough and the weaker signals still earn their place.
 
@@ -184,9 +236,10 @@ Build acceptance: solution + AutoTweaker + WhatIfRunner + CeilingAudit + Backtes
 | # | Decision | Options | My read |
 |---|---|---|---|
 | **D1** | New `coverage` verb, or a section inside the existing `report`? | (a) new verb · (b) fold into `report` | **(a) new verb.** `report` consumes a logged CSV and answers a different question; folding store health in makes neither runnable alone, and a schedulable exit code needs its own entry point. |
-| **D2** | Does the report consume `ws_health.log` — which means it must be copied back alongside the store? | (a) yes, degrade gracefully when absent · (b) store-only signals | **(a).** S1 is the only signal that separates "quiet market" from "we broke"; without it the report is three weak heuristics. Cost is one small file on copy-back. |
+| **D2** | Does the report consume the uptime records — which means they must be copied back alongside the store? | (a) yes, degrade gracefully when absent · (b) store-only signals | **(a).** S1 is what separates "quiet market" from "we broke". **Naming the paths explicitly, per the review's C4, because the natural copy-back action misses them:** the store is `<exe>\backtest_data\`, but **both** `analysis_log.csv` and `ws_health.log` sit in `<exe>\` — the store's *parent*, not inside it. Copying `backtest_data\` alone silently drops S1. The CSV is already routinely copied back, which is a further reason to make it the primary record. |
 | **D3** | `--gap-ms` as a CLI flag, or a settings key? | (a) CLI flag · (b) `trade_store.coverage_gap_ms` | **(a) CLI flag.** Keeps Part A tools-only — no POCO, no bump, no fence question. It is an analysis parameter, not engine configuration. |
-| **D4** | Default gap threshold. | 300,000 ms (1.85× the observed max), or another value | **300,000 ms, explicitly provisional**, re-anchored after the first streaming week that includes a weekend. §0 is why this is looser than intuition wants. |
+| **D4** | Default gap threshold, and what to re-anchor it on. | 300,000 ms (1.85× the observed max), or another value | **300,000 ms, explicitly provisional**, re-anchored on a **REST-backfilled** window extended to include a weekend — **not** on streamed data (C5 accepted; streamed data would fold capture loss into the "natural" baseline and inflate the threshold). §0 is why this is looser than intuition wants. |
+| **D7** | How does the report tell a capture **defect** from capture being **switched off**? (`trade_store.enabled:false` produces S1's exact defect signature — and the v64 review's F6 recommends setting it false on the local box.) | (a) one marker line per process recording the flag + store_dir · (b) read `trade_store.enabled` from the `settings.json` beside the exe · (c) scope the verb to AWS copy-backs and say so | **(a) marker line.** (b) tells you the flag's value *now*, not during the historical window, so a single flip misreads all of history. **The cost of (a) is that Part A stops being tools-only — but that cost is zero if D5 is (a)**, since Part B already takes a bump. If D5 is (b)/(c), (c) here is the honest fallback: state the assumption rather than fake the signal. |
 | **D5** | Build Part B (live `TAPE STORE` status element) now, later, or not? | (a) now, same build · (b) later, own spec · (c) no | **(a) or (b), not (c).** Part B is the half that actually retires the daily glance; Part A reports a hole after the fact. It touches the app and takes a version bump, which is the only reason it is a separate question. |
 | **D6** | Should `--strict` be the default rather than opt-in? | (a) opt-in as specced · (b) strict by default | **(a) opt-in.** Interactive runs during a study should not fail on a known historical hole; the scheduled use passes the flag. |
 
@@ -197,3 +250,26 @@ Build acceptance: solution + AutoTweaker + WhatIfRunner + CeilingAudit + Backtes
 - `HistoricalStore.EnumerateMonths` already gives the month-segment walk; coverage wants an hour walk over the same window — a small addition beside it, not a new traversal concept.
 - The per-file read is already on the shared seam (`TradeStoreWriter.ReadTradeFile`), so coverage reads the store through exactly the code the writer writes with. Do not add a second parse.
 - A full-store pass at current size is ~120k rows/day of capture; a 6-month window will eventually be ~17 M rows. Stream the files and accumulate per-hour counters — do **not** materialise `LoadTradeRange` for this, which sorts and dedups the whole range in memory and is the wrong tool here.
+- S0's fetch should reuse `HistoricalStore.FetchTradesByTimeAsync` rather than a second HTTP path, and must **not** write to the store — the diff is a measurement; repairing what it finds is gap repair's job, already scheduled.
+
+---
+
+## 11. Revision record — what the review changed
+
+Against [`trade-store-coverage-report-review-2026-07-31.md`](trade-store-coverage-report-review-2026-07-31.md) (verdict: *"well-founded and I'd build it"*, all six §0 figures independently re-derived and matching).
+
+**Accepted in full:**
+
+- **The funding hole leads the document** (§0a). It was the review's first recommendation and it is right — a measured 28.2-day hole is a stronger argument than any hypothetical, and the original illustrative output claimed the opposite of the truth.
+- **C2 — the ambiguous window defaults to defect**, and the `DOWN`-token wording is corrected (§2 S1). But C2's premise is softened by something neither document used: **`analysis_log.csv` is a ~60-second liveness heartbeat with `InstanceId` attribution**, against `ws_health.log`'s 32 lines per week. Making the CSV the primary uptime record shrinks the ambiguous window from hours to minutes. C2's rule still applies to the residual.
+- **C4 — D2 now names all three paths.** Both uptime records live in `<exe>\`, the store's parent, so "copy the store directory" misses them.
+- **C5 — accepted, and it was the sharpest finding.** I had the REST-vs-streamed caveat pointing the wrong way. Its constructive half is promoted to **S0**, the top of the ranking: within the retention window the venue *is* ground truth, so capture loss can be enumerated rather than inferred. That also corrects §1's flat claim that trades have no ground truth.
+- **C3 — raised as D7**, with the note that its cost is zero if D5 is (a).
+
+**Where the review needs correcting:**
+
+- **The five 120-minute funding gaps are not "five genuinely dropped samples."** They are 5 of 5 internal month boundaries, every one at 00:00 UTC — a deterministic off-by-one at the monthly-file seam, not random loss (§0a.1). Different defect, different fix.
+- Minor: the review reads `ws_health.log`'s 32 lines as **15 process lives**; the local `analysis_log.csv` carries **89 distinct `InstanceId` values** over its full range, so the health log is capturing a small fraction of process lives even as a restart record — further reason it is the supplement and not the primary.
+
+**Unchanged by the review:** D1, D3, D5, D6 (all agreed), §7's partial-hour honesty (now sharpened by S0's window), and A49 as the fixture family.
+
