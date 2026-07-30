@@ -11,6 +11,15 @@
 '                            [--live2 <secondCsvPath>]
 '                            [--settings <settings.json>] [--replay <existingSyntheticCsv>]
 '                            [--report <markdownOut>]
+'   BacktestRunner report   --csv <analysisLogCsv> [--settings <settings.json>]
+'
+' The `report` verb runs the SHIPPED analysis/AnalysisRunner pipeline over an
+' arbitrary CSV file and writes the standard markdown report + summary CSV BESIDE
+' the input. It exists so a pooled book (local + AWS-collector rows concatenated
+' externally) can be reported on without going through the in-app status-bar link,
+' which is hardwired to the engine's own working-directory analysis_log.csv. Zero
+' changes to that in-app path; the analysis layer is host-agnostic by design and
+' forward-bar OHLC comes from its existing DeribitOhlcFetcher path.
 '
 ' Exit codes: 0 = success, 1 = bad args / fetch failed / no data.
 
@@ -47,6 +56,7 @@ Public Class BacktestProgram
         Dim livePath2 As String = ""
         Dim replayPath As String = ""
         Dim reportPath As String = ""
+        Dim csvPath    As String = ""
 
         Dim i As Integer = 1
         While i < args.Length
@@ -75,18 +85,25 @@ Public Class BacktestProgram
                 Case "--report"
                     i += 1
                     If i < args.Length Then reportPath = args(i)
+                Case "--csv"
+                    i += 1
+                    If i < args.Length Then csvPath = args(i)
             End Select
             i += 1
         End While
 
-        If fromUtc = DateTime.MinValue OrElse toUtc = DateTime.MinValue Then
-            Console.Error.WriteLine("[BacktestRunner] --from and --to are required (yyyy-MM-dd, UTC).")
-            PrintUsage()
-            Return 1
-        End If
-        If toUtc <= fromUtc Then
-            Console.Error.WriteLine("[BacktestRunner] --to must be strictly greater than --from.")
-            Return 1
+        ' `report` derives its own range from the CSV's own row timestamps, so --from/--to
+        ' are meaningless there. Every other verb requires them.
+        If cmd <> "report" Then
+            If fromUtc = DateTime.MinValue OrElse toUtc = DateTime.MinValue Then
+                Console.Error.WriteLine("[BacktestRunner] --from and --to are required (yyyy-MM-dd, UTC).")
+                PrintUsage()
+                Return 1
+            End If
+            If toUtc <= fromUtc Then
+                Console.Error.WriteLine("[BacktestRunner] --to must be strictly greater than --from.")
+                Return 1
+            End If
         End If
 
         Select Case cmd
@@ -188,6 +205,54 @@ Public Class BacktestProgram
                 End If
                 Return If(rep.JoinedPairs > 0, 0, 1)
 
+            Case "report"
+                SettingsLoader.Initialise(settingsPath)
+                Dim cfg = SettingsLoader.Current
+                If String.IsNullOrEmpty(csvPath) Then
+                    Console.Error.WriteLine("[BacktestRunner] report requires --csv <analysisLogCsv>.")
+                    PrintUsage()
+                    Return 1
+                End If
+                Dim csvFull As String = Path.GetFullPath(csvPath)
+                If Not File.Exists(csvFull) Then
+                    Console.Error.WriteLine("[BacktestRunner] CSV not found: " & csvFull)
+                    Return 1
+                End If
+
+                ' Report lands BESIDE the input, never in the repo root — a pooled snapshot
+                ' usually lives in a scratch directory and its report belongs with it.
+                Dim outDir As String = Path.GetDirectoryName(csvFull)
+                Console.WriteLine("[BacktestRunner] Report over: " & csvFull)
+                Console.WriteLine("[BacktestRunner] Settings:    " & Path.GetFullPath(settingsPath) &
+                                  " (version " & cfg.Version & ")")
+                Console.WriteLine("[BacktestRunner] Output dir:  " & outDir)
+                Console.WriteLine("[BacktestRunner] Fetching forward-bar OHLC ...")
+
+                Dim rpt As AnalysisReport = Await AnalysisRunner.Run(csvFull, outDir, cfg)
+
+                Console.WriteLine("")
+                Console.WriteLine("[Report] Rows loaded: " & rpt.TotalRows)
+                If rpt.Populations.Count = 0 Then
+                    Console.WriteLine("[Report] No populations — check the CSV schema / row timestamps.")
+                Else
+                    Console.WriteLine("[Report] Populations:")
+                    For Each pop In rpt.Populations
+                        Console.WriteLine(String.Format("[Report]   {0,-24} rows={1} excluded={2}",
+                                                        pop.PopulationKey, pop.RowCount, pop.ExcludedRows))
+                    Next
+                End If
+                If String.IsNullOrEmpty(rpt.MarkdownFilePath) Then
+                    ' AnalysisRunner writes an error banner and leaves the path empty when the
+                    ' forward-OHLC fetch fails — surface that as a non-zero exit, not a silent pass.
+                    Console.Error.WriteLine("[Report] No markdown written: " & If(rpt.MarkdownText, "(no detail)"))
+                    Return 1
+                End If
+                Console.WriteLine("[Report] Markdown:   " & rpt.MarkdownFilePath)
+                If Not String.IsNullOrEmpty(rpt.SummaryCsvPath) Then
+                    Console.WriteLine("[Report] Summary CSV: " & rpt.SummaryCsvPath)
+                End If
+                Return If(rpt.TotalRows > 0, 0, 1)
+
             Case Else
                 Console.Error.WriteLine("[BacktestRunner] Unknown subcommand: " & cmd)
                 PrintUsage()
@@ -203,6 +268,7 @@ Public Class BacktestProgram
         Console.Error.WriteLine("  BacktestRunner validate --from yyyy-MM-dd[Thh:mm] --to yyyy-MM-dd[Thh:mm] " &
                                 "--live <path> [--live2 <path>] [--replay <syntheticCsv>] " &
                                 "[--report <mdOut>] [--settings <path>]")
+        Console.Error.WriteLine("  BacktestRunner report   --csv <analysisLogCsv> [--settings <path>]")
     End Sub
 
     Private Shared Function ParseDate(s As String) As DateTime

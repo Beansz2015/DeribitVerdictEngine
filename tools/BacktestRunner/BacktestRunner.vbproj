@@ -51,6 +51,13 @@
     <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
     <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
     <Compile Include="..\..\analysis\BandLadder.vb" />
+    <!-- The `report` verb runs the SHIPPED offline pipeline over a pooled CSV. These four
+         complete AnalysisRunner's dependency set; all are host-agnostic. AnalysisReportForm.vb
+         is deliberately NOT here — it is the WinForms viewer. -->
+    <Compile Include="..\..\analysis\FundingMomentumDiagnostic.vb" />
+    <Compile Include="..\..\analysis\OutlierAudit.vb" />
+    <Compile Include="..\..\analysis\MarkdownReportWriter.vb" />
+    <Compile Include="..\..\analysis\AnalysisRunner.vb" />
   </ItemGroup>
 
   <!-- HistoricalStore.vb, BacktestRowWriter.vb, ReplayLoop.vb, BacktestProgram.vb
