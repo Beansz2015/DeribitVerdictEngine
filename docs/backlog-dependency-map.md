@@ -1,6 +1,6 @@
 # Backlog Dependency Map
 
-**Created:** 2026-07-22 (trader-directed). **Purpose:** one referral table for everything outstanding — what blocks what, so any seat can see what must happen first. **Authorities unchanged:** `roadmap.md` = execution order · `profitability-risk-levers.md` = profitability lens · `post-websocket-post-calibration-backlog.md` = full item detail. This doc is the CROSS-REFERENCE, not a new authority. **Maintenance:** update State on every tick/ship; move dead rows to the bottom section rather than deleting.
+**Created:** 2026-07-22 (trader-directed). **Purpose:** one referral table for everything outstanding — what blocks what, so any seat can see what must happen first. **Authorities unchanged:** `roadmap.md` = execution order · `profitability-risk-levers.md` = profitability lens · `post-websocket-post-calibration-backlog.md` = full item detail. This doc is the CROSS-REFERENCE, not a new authority. **For "what is waiting on the TRADER, in what order", see [`trader-tick-queue.md`](trader-tick-queue.md)** (created 2026-08-01) — this board carries dependencies, that one carries ordering and gates. **Maintenance:** update State on every tick/ship; move dead rows to the bottom section rather than deleting.
 
 | Item | Class | Blocked by | Unblocks | State (2026-07-22) |
 |---|---|---|---|---|
