@@ -1,6 +1,7 @@
 # Spec-back — candle-store derivation batch (2026-07-31)
 
 **From:** the Opus orchestrator seat that ran JOB 1 + JOB 2 of the 2026-07-31 handover brief.
+**Scope: JOB 2 only.** JOB 1 (the trade-store arc) has its own packet — [`trade-store-arc-spec-back-2026-07-31.md`](trade-store-arc-spec-back-2026-07-31.md). Between them they cover the brief; neither covers the other's decisions. **Its J-F and this packet's D-F share a root and should be ruled together.**
 **For:** the reviewing seat. Working document — the outcome record is [`candle-store-derivation-batch-summary-2026-07-31.md`](candle-store-derivation-batch-summary-2026-07-31.md); the analysis is [`candle-store-derivations-2026-07-31.md`](candle-store-derivations-2026-07-31.md); JOB 1 is [`trade-store-capture-review-2026-07-31.md`](trade-store-capture-review-2026-07-31.md).
 
 ---
