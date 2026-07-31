@@ -52,6 +52,8 @@ Its substance: the original rule was *"a key is safe to diverge per box exactly 
 
 ---
 
+> ⚠ **AUDIT GAP IN THIS AUDIT, found by the trader 2026-08-01.** This document reproduced the handover's §4 task list in its preamble but then tracked only G-numbered items, so **task 3 — the J-A / A48f ratification — was never carried into the findings and never done.** Closed now in [`job1-outstanding-2026-08-01.md`](job1-outstanding-2026-08-01.md), together with the v64 review's still-open findings **F2** (a lossy `ResetBufferState` race), **F3** (cosmetic User-Agent) and **F6** (local box captures too — **latent, and it fires on the very build that is the v64 test gate**). The lesson is the one this audit was written about: *a task list reproduced but not converted into tracked items is a list that will be dropped.*
+
 ## 4. Standing watches dropped
 
 **G11 ·** §4 task 5 lists five periodic checks: liq_events CASCADE ⇒ A4 · §9 STRONG accrual · burst spot-checks · funding calm-week · absorption episode accrual under Path B. Against [`seat-handover-2026-07-18.md`](seat-handover-2026-07-18.md) §4, **three live watches are missing**:
