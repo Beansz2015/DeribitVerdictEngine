@@ -34,6 +34,12 @@ Five. I have a read on two and say so; none is mine to make.
 
 That is not the binary §7.5 anticipated. Options as I see them: clear the class outright / keep it withheld on the value match / clear it for studies that consume the *window* (session membership, `VWAPSessionCandles`) but not the *level*. **I have no read here** — the clearance criterion was yours and only you know whether it was about the anchor or about the agreement number.
 
+> **ANSWERED 2026-07-31 (incoming orchestrator seat) — option 1, clear the class outright, on the VWAP axis.** The question dissolved rather than being decided: the 53–56 % values were produced by a **~64,000× unit error** in the synthesizer's forming stub, not by the anchor and not by a tolerance. Post-fix, same 840 rows, only the stub arithmetic changed: **VWAP 100.00 %**, σ bands 99.76–100.00 %. There is no values/window split left to arbitrate. The `~1.3 bps` noise floor recorded with the interim PARTIAL ruling is **withdrawn**, and fine dev-threshold sweeps (< 5 bps) are **cleared** — their withholding was gated on volume fidelity, and volume was the defect.
+>
+> **The boundary that survives:** `VolumeRatio` at **65.00 %** keeps volume-**magnitude** studies *advisory only*. That is the D3 forming-bar effect, not the unit bug — `VolumeRatio` **is** the partial terminal bar, while VWAP merely contains it among 240 bars. Funding (22.02 %) and ATR/ADX/RSI are untouched by any of this.
+>
+> **Why this sat undone:** [`fable-handover-2026-07-31.md`](fable-handover-2026-07-31.md) §5 ranked it #2 of three items worth the Friday budget and called it "one line, given §1." The budget went elsewhere. Canonical record: [`backtest-overlap-validation-2026-07-30.md`](backtest-overlap-validation-2026-07-30.md) §10.4.
+
 ### D2 — Is the 53–56 % residual a code problem or a tolerance problem?
 
 **I do have a read, offered as hypothesis.** With the window provably exact the residual cannot be an anchor error; it is inside a correct window. VWAP is a volume-weighted mean over up to 240 bars whose last bar is the §7.1 forming stub, carrying whatever printed in a 2-second slice. The NumTight tolerance for this class is `max(0.01, 0.01 % × |live|)` ≈ **$6.4** at BTC 64 k — a single near-zero-volume terminal bar can move a 240-bar volume-weighted mean past that.

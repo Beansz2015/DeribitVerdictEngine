@@ -435,6 +435,21 @@ A seven-column indicator-family recovery moved the verdict agreement by exactly 
 
 ⚠ **SUPERSEDED 2026-07-31 — the volume difference was a SYNTHESIZER BUG, now fixed, and VWAP agrees 100.00 %.** `BuildFormingStub` summed `TradeRecord.Amount` (USD notional) into `Candle.Volume` (BTC) — a ~64,000× unit error found by running the D3 A/B (`ae8a1f6`; fixture A47b). Post-fix on the same 840 rows: **VWAP 56.19 % → 100.00 %**, sigma bands → 99.76–100.00 %, VolumeRatio 23.57 % → 65.00 %, OBVTrend 71.43 % → **99.76 %**, verdict agreement 74.05 % → **79.64 %**, tier 81.43 % → **86.19 %**. ATR/ADX/RSI unchanged. **There was no tolerance question at any point.** Detail: `d3-closed-bar-volume-ab-2026-07-31.md` §2. The withholding of fine dev-threshold sweeps no longer has evidence behind it — re-ruling is the Fable seat's call.
 
+**RE-RULED 2026-07-31 (incoming orchestrator seat) — D1 WIDENED TO FULL CLEARANCE on the VWAP axis.** This executes the widening [`fable-handover-2026-07-31.md`](fable-handover-2026-07-31.md) §1 flagged as available on evidence and §5 ranked #2 for the Friday budget; it was never carried out, and the partial ruling above stood on numbers the unit fix has since replaced. The re-ruling:
+
+- **Window-consuming studies: CLEARED** — unchanged, `VWAPSessionCandles` exact on every row (max \|Δ\| 0).
+- **VWAP *values*: CLEARED outright, faithful band.** 100.00 % on all 840 rows; σ bands 99.76–100.00 %. Both above the ≥90 % cut.
+- **The documented ~1.3 bps noise floor attached to the coarse/structural clearance is WITHDRAWN.** It was the measured signature of the ~64,000× unit error, not a property of long-window accumulators. This is the same conclusion as D2's voiding, reached from the clearance side: there was never a tolerance question, so there is no floor to carry.
+- **Fine VWAP-dev threshold sweeps (steps < 5 bps): CLEARED.** The withholding was gated on volume fidelity because Volume was VWAP's only disagreeing input (§10.4's own consequence note). That input is fixed and the value now agrees exactly; a 1 bp sweep step is resolvable against a 100.00 % match.
+
+**Scope boundary that does NOT clear — read this before extending the ruling:**
+
+- **`VolumeRatio` = 65.00 %**, inside the 60–90 % *advisory only* band. Studies consuming volume **magnitude** stay advisory. This residual is **not** the unit bug and is not fixed by it: it is genuine forming-bar partiality (the D3 lane). VWAP is a 240-bar volume-weighted mean in which one partial terminal bar is negligible once its units are right; `VolumeRatio` **is** that one bar. Same input, opposite sensitivity — which is why one axis clears to faithful and the other does not.
+- **Funding: unchanged and still discouraged** (`FundingMomentum` 22.02 %) — the anchor was never on the funding path, so nothing here touches it.
+- **ATR / ADX / RSI: unchanged** (46.6 / 49.8 / 43.0 %) — still *do not use*.
+
+Mirrored in [`backtest-synthesizer-spec-back.md`](backtest-synthesizer-spec-back.md) §9.2 and [`pre-aug1-batch-spec-back.md`](pre-aug1-batch-spec-back.md) §2 D1.
+
 *(Retained below for the audit trail — the localisation to volume was correct; only the cause was unknown at the time.)*
 
 ⚠ **RESOLVED 2026-07-30 by measurement — the residual is a VOLUME-INPUT difference, not a tolerance.** Highs and lows are byte-identical (Donchian 100.00 %, max |Δ| 0) and closes agree to 99.5 %+ (EMA family), so Volume is the only VWAP input that can move it. Splitting the 840 buckets by whether the row's own volume agrees: **volume agrees ⇒ VWAP matches 100.0 % (199/199) at median |Δ| $0.00**; volume differs ⇒ 42.6 %. There is no residual for a tolerance to explain, and the ordered bps-scale reclass should **not** be specced — it would widen a bar around a real difference. Evidence: `pre-aug1-batch-spec-back.md` §7.2b.

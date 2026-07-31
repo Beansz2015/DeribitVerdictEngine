@@ -10,6 +10,8 @@
 
 ## 1. Carries a task that was explicitly killed — fix before anyone acts on §5
 
+> ✅ **BOTH CLOSED 2026-07-31**, in the order recommended in §8. **G2:** D1 re-ruled to **full clearance on the VWAP axis** — window cleared, VWAP values cleared outright at 100.00 %, fine dev-threshold sweeps < 5 bps cleared, the ~1.3 bps noise floor withdrawn; `VolumeRatio` at 65.00 % stays *advisory* as a separate axis (D3 forming-bar partiality, not the unit bug). Recorded in [`backtest-overlap-validation-2026-07-30.md`](backtest-overlap-validation-2026-07-30.md) §10.4 (canonical), mirrored in [`backtest-synthesizer-spec-back.md`](backtest-synthesizer-spec-back.md) §9.2 and [`pre-aug1-batch-spec-back.md`](pre-aug1-batch-spec-back.md) §2 D1. **G1:** the void D2 task struck from the handover's §5 and replaced with the corrected status. Doing G2 first was the right order — the clearance evidence is what makes G1's deletion self-evidently correct.
+
 **G1 · §5 still lists the D2 tolerance-reclass micro-task as live.** The handover says *"backtester: cleared geometry-class, VWAP-values partial (D1/D2 rulings in `pre-aug1-batch-spec-back.md` §6 — **the D2 tolerance-reclass micro-task widens it**)"*.
 
 That task is **void**. [`fable-handover-2026-07-31.md`](fable-handover-2026-07-31.md) §1: *"**D2 — do NOT spec the bps-scale tolerance reclass.** `NumTight` was correct throughout."* The ~64,000× unit bug in the synthesizer's forming stub — USD notional summed into a BTC field — removed the question the reclass existed to answer. An implementer handed §5 as written would spec a task the previous seat's own handover forbids.
