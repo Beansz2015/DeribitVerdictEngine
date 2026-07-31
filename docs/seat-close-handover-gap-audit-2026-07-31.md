@@ -22,6 +22,8 @@ Post-fix, VWAP agrees **100.00%** and the σ bands 99.76–100.00% on all 840 ro
 
 ---
 
+> ✅ **G3 + G4 CLOSED 2026-07-31** — [`overlay-whitelist-reaudit-2026-07-31.md`](overlay-whitelist-reaudit-2026-07-31.md). **The residual was worth chasing.** J-D ratified **and extended** with a second clause (an instrument-integrity test the original rule lacked). Of the seven blocks reported clean: **`alerts.` must be REJECTED** — `alerts.enabled:false` means `liq_events.log` is never written, and that file is the *sole gate* on A4, pooled across both boxes; **`mtf_gate` — the hard veto — is named nowhere in the whitelist enumeration** and A50d doesn't pin it; **`performance_display.` stays admitted but gates the entire live eval/OHLC cache**. Plus: the section's arithmetic is wrong (nine blocks, not eight), and §1.2 misses two of four live-save paths, leaving whitelist ∩ UI-writeback unpinned. Corrections landed in the spec, which is still awaiting the trader.
+
 ## 2. Open decisions dropped
 
 **G3 · J-D is absent entirely.** JOB 1 §2 queues five lettered decisions. The handover rules J-A (§4.3), J-B, J-C, J-E (§2) and J-F (§2). **J-D — ratify the overlay's restated whitelist rule — appears nowhere.**
@@ -33,6 +35,8 @@ Its substance: the original rule was *"a key is safe to diverge per box exactly 
 **G5 · D-C is unassigned.** §4 task 2 says *"JOB 2 read (deferred to you in full) + close **D-D/D-E**"* — naming two of JOB 2's six decisions. **D-C** (does session-volume calibration park behind D3?) is neither ruled nor assigned. Its concrete deliverable is a one-row board edit that the packet says *"costs nothing, and stops the next seat re-deriving what I just derived"* — and the packet re-confirmed at hand-over that the board **still** lacks the edge. Also inside D-C: a flag that v58's stated *mechanism* (the notch "suppressing trades") could account for at most a fraction of a percentage point through the volume channel, and **the same reasoning is queued next for LONDON and NY**.
 
 ---
+
+> ✅ **G6 CLOSED 2026-07-31, with G11's B4b row folded in** — [`w6-1-london-ruling-2026-07-31.md`](w6-1-london-ruling-2026-07-31.md). **W6-1: NO CHANGE.** The two named candidates turn out to be **one lever** (`stop_buffer_pct` applies after the clamp, which binds 95.5% of LONDON rows) — confirmed empirically by matched grid pairs agreeing to 0.002 EV. Widening loses monotonically pooled; LONDON-only the top three cells tie inside noise at n=215. **The depth gate was misleading:** 556 directional rows, but only **215 evaluable** — no deeper than the ~227 the original read had. B4b watch items (2) and (3) read; **(1) and (4) are unrunnable — the F3 trigger outlived its instrument** when the placed-target migration retired the cap-bucket axis.
 
 ## 3. Board items with no slot in §4 or §5
 
