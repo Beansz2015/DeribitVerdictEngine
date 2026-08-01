@@ -30,11 +30,24 @@
 
 **Why A2 moved up.** It was a convenience item. F6 makes it the clean way to run the v64 test, and §5.1 means building it **before** A5 saves rework on that spec's D7 (which must read the *merged* value once an overlay exists). **Re-read D1 before ticking** — the [second-pass re-audit](overlay-whitelist-reaudit-2026-07-31.md) rejects `alerts.` from the whitelist (it gates `liq_events.log`, the sole A4 instrument) and found `mtf_gate` — the hard veto — named nowhere in the enumeration.
 
-### Cluster B — ~~ungated correctness~~ **CORRECTION: this was never awaiting a tick**
+### Cluster B — ~~ungated correctness~~ ✅ **CLOSED: it was never work. It shipped 2026-07-21.**
 
-**B1 (eval `NO_DATA` / F4) has been BUILD-AUTHORIZED since 2026-07-21** — N1–N5 all ticked, including N4 (migrate `RoundStatsBuilder` to placed geometry). It appeared on this queue as an outstanding tick because **its header still read *"PROPOSED — D-table awaits trader"*** while §3 recorded the tick — the same doc-drift class as the §12 row closed as D-E. **Header corrected 2026-08-01.** The trader's 2026-08-01 tick confirms an authorization that already existed.
+**B1 (eval `NO_DATA` / F4) SHIPPED 2026-07-21 as `75a2694`** — N1–N5 built, R1 (WhatIfRunner in the gate build set) and R2/N4 (`RoundStatsBuilder` onto placed geometry) with it. The successor display pass (F2/F3/F12, `4eef0d8`, v55) shipped after it, per N5's sequencing. **Verified live 2026-08-01:** `# schema=v6` in the cache, `analysis_eval_cache.csv.v5.bak` present, **120 `NO_DATA` rows**. Nothing to build, nothing to tick.
 
-**It therefore needs a BUILD SLOT, not a decision — moved to §2.** Substance unchanged and still worth doing early: `EvaluateEntry` records an empty bar-list as `WINDOW_EXPIRED` (a failure) while the offline `FailureRateMatrix` excludes the same condition, so **live rates bias downward, invisibly** (proven instance: 2026-07-03 NY, 22/22 fabricated expiries). Every live measurement inherits it — and it is the precondition for any EV-on-the-strip work. Zero scoring impact, no boundary, no settings keys. N5 pins the sequencing: *build before the F2/F3/F12 display pass, which reads the rates this fixes.*
+**The EV-on-the-strip precondition is therefore already satisfied** — that question is unblocked whenever it is wanted.
+
+### 2a. The convention this produced — verify shipped state before offering work
+
+**This item was carried on the queue as outstanding, ticked by the trader, and an implementer conversation was recommended for it. All three were wrong, and the error survived a correction pass.** The proposal's header read *"PROPOSED — D-table awaits trader"* while §3 recorded the tick; on 2026-08-01 I corrected the header to "BUILD-AUTHORIZED" **from the D-table alone** and never checked the tree. That fixed the wrong half. It surfaced only when reading the code to write the implementer brief.
+
+**Second occurrence of this exact shape.** [`fable-handover-2026-07-31.md`](fable-handover-2026-07-31.md) §6.2: *"I listed the eval net-EV rider as an available candidate. It was already shipped (`99cc0dc`) … I checked before building and did not rebuild it, but I should have checked before offering it."* Same failure, same month, and — noting it because it is not a coincidence — **both times the item was an eval-surface fix whose spec header had gone stale.**
+
+**Convention, on the two-occurrence standard this project applies elsewhere (J-A's fixture-mirroring rule):**
+
+> **A spec's status header is not evidence of code state. Before offering any spec as available work, verify it in the tree.**
+> One command: `git log --oneline -S'<distinctive-symbol>' -- <file>`. For B1 that was `git log -S'NO_DATA' -- LivePerformanceTracker.vb`, which names the commit immediately.
+
+The cost of skipping it is asymmetric and this case shows both halves: a wasted implementer conversation, and a queue that misrepresents what is actually outstanding to the person deciding what to spend on.
 
 ### Cluster C — the instrument.
 
@@ -86,7 +99,6 @@ Ruled the **precondition instrument for every data-gated item** — it decides w
 | **F3** — live collector's repair calls send `User-Agent: DeribitBacktestRunner/1.0` | one line, cosmetic | same |
 | **G12** — three manual-content gaps, now baked into the regenerated PDFs | `use_best_pivot_candidate` in neither manual · the `MIN NET MOVE %` row label · **`BacktestRunner` absent from both** | [`seat-close-handover-gap-audit-2026-07-31.md`](seat-close-handover-gap-audit-2026-07-31.md) §5 |
 | **F3-watch tooling** — the B4b F3 trigger is unevaluable | Needs cap-bucket segmentation on an offline surface, **or** an explicit retirement | [`w6-1-london-ruling-2026-07-31.md`](w6-1-london-ruling-2026-07-31.md) §3 |
-| ⭐ **B1 — eval `NO_DATA` (F4)** | **Build-authorized since 2026-07-21** (N1–N5 ticked). Opus, medium-low, one conversation. N5: build **before** the F2/F3/F12 display pass | [`eval-no-data-outcome-proposal.md`](eval-no-data-outcome-proposal.md) |
 | **CeilingAudit expected-version constant** — warns `expected 59` against live v64 | One constant; confirm nothing the audit reads changed v59→v64, then bump. Otherwise the warning becomes noise that hides a real mismatch | [`w6-4-ceiling-audit-run-2026-08-01.md`](w6-4-ceiling-audit-run-2026-08-01.md) §4 |
 
 ---
