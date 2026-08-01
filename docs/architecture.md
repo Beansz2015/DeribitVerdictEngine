@@ -91,7 +91,24 @@ DeribitVerdictEngine/
 │   │   │                               ContextTagThresholds blocks
 │   │   └── SettingsLoader.vb           JSON loader — SettingsLoader.Current singleton;
 │   │                                   FileSystemWatcher hot-reload; Save(... bumpVersion)
-│   │                                   — operational/UI saves pass False (v36 §10a)
+│   │                                   — operational/UI saves pass False (v36 §10a).
+│   │                                   [settings.local.json overlay 2026-08-02] Deep
+│   │                                   per-key merge of a gitignored per-box overlay
+│   │                                   over the tracked base (AWS captures the tape,
+│   │                                   the local box does not — same binary, same
+│   │                                   settings.json). Allow-list BY CONSTRUCTION:
+│   │                                   trade_store / signal_bridge / live_strip /
+│   │                                   exit_guard / performance_display /
+│   │                                   analysis_logging whole + four network keys;
+│   │                                   everything else rejected + logged, non-fatal.
+│   │                                   Save() writes the BASE, never the merge — an
+│   │                                   override can never be promoted into the shared
+│   │                                   file and from there onto AWS. Absent overlay ⇒
+│   │                                   byte-identical to the pre-overlay engine.
+│   │                                   Second watcher (incl. Created/Deleted) so
+│   │                                   dropping the overlay in and deleting it both
+│   │                                   take effect live. OverlayActive drives the
+│   │                                   title-bar "+local" marker. Fixtures A50a–j.
 │   │
 │   ├── ExecutionResolution.vb          [v36] Host-agnostic session-conditional execution
 │   │                                   resolver. MatchSessionBucket (shared by
