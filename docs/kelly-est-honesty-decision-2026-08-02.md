@@ -4,6 +4,10 @@
 **Evidence:** [`f1-tier-ladder-read-2026-08-01.md`](f1-tier-ladder-read-2026-08-01.md) §2.1–§2.2.
 **Type:** display-only. **No scoring impact, no settings keys, no version bump, no dataset boundary.** ⚠ **Both render surfaces in one commit** — the display-string parity rule, which has three recorded drift instances.
 
+> ✅ **SHIPPED `18b1ea8` and VISUALLY CONFIRMED by the trader 2026-08-02.** Both surfaces moved in the one commit; solution Release 0/0; `verify-gate prepush` GATE PASSED post-commit with `display-parity` clean. **The `[EST]` mode tag renders correctly** — it reads off `v.KellyPMode` rather than a literal, so the `p(win) []:` failure mode I flagged as the one thing worth a glance did not occur, and when CAL eventually ships the tag flips to `[CAL]` on its own. **The only remaining edit at that point is retiring the advisory line.**
+>
+> **The watch this wording obliges is live** — §2.1. It is the only watch in the project with a computed trigger.
+
 ---
 
 ## 1. What is being fixed

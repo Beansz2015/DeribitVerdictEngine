@@ -16,7 +16,7 @@
 | Next free fixture family | **A52** (A50 + A51 consumed) | `Select-String verify/ordercheck/Program.vb -Pattern '\bA[0-9]{2}[a-z]_'` → highest is `A51e_` |
 | Next free hard constraint | **HC28** | HC27 consumed by the v64 `trade_store.` fence |
 | AWS collector | **live, v64, capturing** — `5a3afd99-6db4-461c-886e-dddcca3d8c62` since 2026-08-01 17:50 UTC | `ws_health_aws.log` tail at next copy-back |
-| Local collector | ⚠ **not running** — last row 2026-08-01 17:45 UTC | `Get-Process DeribitVerdictEngine` |
+| Local collector | ✅ **running** — `2f8c9fe1-8325-4fbb-9ee5-41fc267e1efd` since 2026-08-01 18:00:26 UTC, rows landing, title carries `+local` | `Get-Process DeribitVerdictEngine` |
 | Local capture | **OFF and correct** — overlay present, `backtest_data\` absent | both under `bin\Debug\net8.0-windows\` |
 
 **On the local box being down:** it is an *opportunistic addendum*, not a 24/7 collector — the trader ruled that on 2026-07-31 and it is why the dedup is AWS-preferred. Its silence is the default state, **not** a defect, and any coverage report must scope J-B's "silence ⇒ defect" per-box or it will flag most of local's existence. That scoping clause is **flagged and unruled** — see §4.
@@ -37,7 +37,7 @@
 
 **Read [`trader-tick-queue.md`](trader-tick-queue.md) §1.** It is the state read, it carries a dated shipped-state sweep, and its §0 scopes what every other doc is authoritative *for*. **Do not rebuild it from a grep over doc prose — that is exactly how 4 of 13 rows went wrong.** Re-run the §2b sweep instead.
 
-The two items most likely to be wanted next: **the Kelly block's visual confirmation** (the trader has not yet scrolled to it; `p(win) [EST]:` is the string to check, and `p(win) []:` would be a `KellyPMode` bug) and **D3** (ASIA `burst_ratio_threshold` = 5.5, ready, its own ⚠ boundary).
+**Cluster A is complete** — both boxes live on v64, capture where D1 put it, Kelly confirmed. **The next item wanted is D3** (ASIA `burst_ratio_threshold` = 5.5 — derived, gate met at 323 fires vs a ~150 bar, ships **alone and first** per the D-cluster sequencing, its own ⚠ boundary). After that, D1+D2 bundle once D-A is re-derived.
 
 ---
 
@@ -75,7 +75,7 @@ The two items most likely to be wanted next: **the Kelly block's visual confirma
 ## 7. What I did not verify
 
 - **No live app run on AWS beyond the trader's screenshot and logs.** Capture is confirmed *started* (`backtest_data\` appeared); nothing has yet verified a month rollover, gap-repair's first real HTTP call, or buffer behaviour across multi-day uptime.
-- **The Kelly display change is unconfirmed visually on either box.** Harness-clean and gate-clean; the string itself is unseen.
+- ~~**The Kelly display change is unconfirmed visually on either box.**~~ **CLOSED 2026-08-02 — trader-confirmed visually**, `[EST]` tag renders correctly.
 - **W6-4 and F1 figures are touch-based**, no slippage, no queue position — every offline surface in this project shares that caveat.
 - **I did not re-derive the block-by-block scoring-path analysis** the overlay whitelist rests on; I audited the seven blocks the first reviewer had not, and took §2.4's own enumeration as given.
 - **`performance_display.` is admitted to the overlay on "no tool reads the eval cache"**, verified by enumeration on 2026-07-31 and not re-checked since. Kelly CAL was the named candidate to break it — and F1's read has made CAL unlikely to ship soon, so that admission is *safer* now, not less.
