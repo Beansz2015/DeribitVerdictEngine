@@ -49,6 +49,23 @@
 
 The cost of skipping it is asymmetric and this case shows both halves: a wasted implementer conversation, and a queue that misrepresents what is actually outstanding to the person deciding what to spend on.
 
+### 2b. Systematic sweep, 2026-08-01 — **4 of 13 rows were wrong, all in the same direction**
+
+Trader-directed after B1. Every outstanding row was checked against the tree rather than against its doc. **Nothing was found in the opposite direction** — no row was more outstanding than stated.
+
+| Row | Queue said | Tree says |
+|---|---|---|
+| **B1** eval `NO_DATA` | outstanding tick | **SHIPPED** 2026-07-21 `75a2694`, live (v6 cache, 120 `NO_DATA` rows) |
+| **E3** D2-v2 candidate mode | tick awaited | **APPROVED + BUILT** 2026-07-29 — wired at `SignalEmitter.vb:324-328` |
+| **E4** backtest synthesizer | D1–D8 await trader | **APPROVED + BUILT** 2026-07-30 — `tools/BacktestRunner/`, in active use |
+| **E1** F1 → Kelly CAL → P5 | blocked on report mechanics | **Blocker removed** 2026-07-30 — the pooled report runner is built; the §9 read is runnable now |
+
+**Confirmed genuinely outstanding** (checked, not assumed): A1 (trader decision, no code) · **A2** — `SettingsLoader.vb` has no overlay support at all · A3 — `bin\Debug` still pre-v64 · **C1** — no `coverage` verb exists in `BacktestRunner` · **D1** TTM still `0.5` · **D2** OBV still `18.0` · **D3** ASIA threshold still absent ⇒ unarmed · **E5** — no absorption mechanism-revision spec exists (the anchor-rederivation is evidence, not spec) · E7 market-gated · E8 order-app · F2/F3 verified open earlier today.
+
+**G12 is partially closed:** `use_best_pivot_candidate` and `BacktestRunner` are absent from **both** manuals (gaps real); `MIN NET MOVE` now appears in `UserManual.md` but **not** `TraderGuide.md`.
+
+**The root cause, stated once.** This queue was assembled partly from a grep for *"await trader"* across `docs/`. **That grep matches prose and section headings, not state** — and four specs carry stale status text in four different shapes: B1's header contradicted its own §3; E4's §6 heading contradicts its own status line; E3 and E1 were stale on the board rather than in the spec. **Prose is not state.** §2a's convention is the fix; this sweep is what applying it systematically looks like, and it should be re-run whenever this queue is rebuilt rather than trusted from a prior assembly.
+
 ### Cluster C — the instrument.
 
 | # | Tick | Gate | Where |
@@ -80,10 +97,10 @@ Ruled the **precondition instrument for every data-gated item** — it decides w
 
 | # | Tick | Gate |
 |---|---|---|
-| **E1** | F1 report mechanics → **Kelly CAL** → **P5 tier values** | Count gate GO (201 pooled weekday STRONG, re-verified). Blocked on the pooled-book report-runner decision; inputs inherit **B1** |
+| **E1** | ⭐ **F1 §9 pooled read → Kelly CAL → P5 tier values** | ✅ **NOT BLOCKED — the blocker was removed 2026-07-30.** The pooled-file report runner **is built**: `BacktestRunner report --csv <pooledCsv>` runs the shipped `AnalysisRunner` pipeline over an arbitrary pooled CSV, and its spec-back states the purpose outright — *"unblock the F1 §9 read."* Count gate is GO (201, re-verified) and a frozen pooled book exists. **The §9 read is runnable now and is the head of this chain.** Kelly CAL itself is genuinely unbuilt — `ScoringEngine_Kelly.vb:23` still reads *"EST mode only for now (pre-calibration)."* B1 is shipped, so its inputs are already clean |
 | ~~**E2**~~ | ~~**W6-4 ceiling audit run**~~ | ✅ **RUN 2026-08-01 → INCONCLUSIVE.** NY×1 ΔAUC −0.0291, CI [−0.197, +0.124] straddling the ±0.030 margin. **The queue does not unlock:** W6-5/B1, the D3–D6 backlog refinements and any W6-7 Tier-C spend stay parked, and §4's instruction is *"re-run at the next book doubling. No spend meanwhile."* [`w6-4-ceiling-audit-run-2026-08-01.md`](w6-4-ceiling-audit-run-2026-08-01.md) |
-| **E3** | **D2-v2 what-if candidate mode** — D-table | Wants ticking **before** the geometry session, since v63 built `use_best_pivot_candidate` to make exactly that testable |
-| **E4** | **Backtest synthesizer** — D1–D8 | Build sequenced behind the absorption mechanism spec |
+| ~~**E3**~~ | ~~**D2-v2 what-if candidate mode** — D-table~~ | ✅ **NOT OUTSTANDING — APPROVED 2026-07-29 (D1–D6 ticked) and BUILT.** `use_best_pivot_candidate` is wired into the real arbitration at `SignalEmitter.vb:324-328`. What remains is the **what-if study**, not a tick; live-enable is a later separate ⚠ (the P1 promotion). Folds into the geometry session |
+| ~~**E4**~~ | ~~**Backtest synthesizer** — D1–D8~~ | ✅ **NOT OUTSTANDING — APPROVED 2026-07-30, D1–D8 ticked all-as-recommended, BUILD-AUTHORIZED and pulled forward, and BUILT.** `tools/BacktestRunner/` exists and is in active use — `ReplayLoop.vb`, `OverlapValidator.vb`, `BacktestRowWriter.vb`, verbs `fetch`/`replay`/`report` with `--closed-bars`. The D3 closed-bar A/B ran through it, and the ~64,000× unit bug was found *in* it. Its §6 heading still reads *"D-table (await trader)"* — **that heading is the stale artefact, not the status line** |
 | **E5** | **Absorption Path B** — tick the path | Activation slips past mid-Aug on any path |
 | ~~**E6**~~ | ~~**Fee knob** — `min_net_move_pct`~~ | ✅ **CONFIRMED 2026-08-01 (trader): the 5-bps-net state stands.** Decision-of-record — `trade_costs` keeps `maker_fee_bps 1.5` / `taker_fee_bps 3.5` / `round_trip_style maker_maker` / `min_net_move_pct 0.0005`, composing an effective floor of **0.0008**, unchanged from the pre-fee-change value. **No settings write**, so the v64 change_log rider (§3) does **not** travel here and still awaits a qualifying event |
 | **E7** | **A4 liquidation × OFI flip** | Market-gated only (≥1 CASCADE line). **Protect the instrument — see A2's `alerts.` finding** |
