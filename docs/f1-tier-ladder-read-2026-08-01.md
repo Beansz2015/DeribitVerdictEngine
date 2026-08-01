@@ -39,6 +39,38 @@ Per session:
 
 **My read: Kelly CAL should not ship on this book.** The honest options are (a) keep EST and say why, (b) collapse to a single pooled p(win) and stop pretending tiers size differently, or (c) wait for separation to appear. **This is a decision for the trader and it should be taken explicitly rather than by CAL quietly not shipping.**
 
+### 2.1 The arithmetic, worked — it collapses those three options (added 2026-08-02)
+
+`CalcKellySizing` uses `b = atr_target_multiplier / atr_stop_multiplier` = **1.75 / 1.6 = 1.0938**, and `f* = (b·p − q)/b` with a silent block at `f* ≤ 0`. So **breakeven is p = 1/(1+b) = 47.76 %**.
+
+| source | p | f* | applied |
+|---|---:|---:|---|
+| EST HIGH | 0.650 | +0.3300 | half 0.165 → **capped 5 %** |
+| EST MEDIUM | 0.550 | +0.1386 | half 0.069 → **capped 5 %** |
+| EST LOW | 0.450 | −0.0529 | suppressed |
+| **F1 STRONG measured** | 0.468 | **−0.0184** | **suppressed** |
+| **F1 MEDIUM measured** | 0.422 | **−0.1065** | **suppressed** |
+| **F1 pooled STRONG+MED** | 0.431 | **−0.0892** | **suppressed** |
+
+**Two consequences.**
+
+1. **EST's tier ladder is already invisible in the output.** HIGH and MEDIUM both exceed the 5 % cap after halving, so they produce **identical applied sizing**; the tier survives only in the `KellyCapped` flag. EST today is effectively *"5 % on anything HIGH or MEDIUM, nothing on LOW"* — so options (a) and (b) are less different than they sound.
+2. **Every measured rate is below breakeven, so any honest calibration blanks the block** — permanently, on every tier. "Collapse to one measured p" and "turn Kelly off" are the same thing at current numbers.
+
+**Is `b` the problem? Checked, and no.** I hypothesised the hardcoded ATR-basis `b` understates the placed geometry. Measured from logged `PlacedTarget*`/`PlacedStop*` (post-07-08, weekday, directional, n=2,512): **pooled b_p50 = 1.094 — essentially identical to the hardcoded 1.0938.** The hypothesis does not hold and the conclusion stands on the geometry the engine actually places.
+
+**But `b` varies by session while Kelly uses one global constant, and that is worth its own look:**
+
+| | n | b_p50 | b_mean | breakeven p |
+|---|---:|---:|---:|---:|
+| NY | 1,500 | 1.094 | 1.266 | 47.8 % |
+| LONDON | 556 | **1.250** | 1.371 | 44.4 % |
+| **ASIA** | 456 | **0.781** | 1.154 | **56.1 %** |
+
+**ASIA's placed R:R is below 1 at the median** — the median ASIA setup risks more than it stands to make, needing a 56 % hit rate to break even. That is independent of the Kelly decision and flagged on its own account. (Mean exceeds median everywhere — right-skewed by a few far structural targets.)
+
+At the realised per-session `b`, **no session's measured rate clears breakeven except ASIA at n=15**, which is unusable. So this is not a choice between three probabilities; it is that **the book does not currently demonstrate a Kelly-sizeable edge on the ATR-basis payoff Kelly uses.**
+
 **P5 tier values (order-app session policy).** P5 selects which tiers the consumer acts on. On this evidence, tier-based selection has no demonstrated basis pooled, and **the LONDON inversion actively contradicts a STRONG-only policy for that session.** The prior [D7 re-read](d7-confirmed-reread-2026-07-22.md) already established that the *context-tag* inversion was an artifact; this is the *tier* ladder, and it is a different measurement that does not resolve the same way.
 
 ---
