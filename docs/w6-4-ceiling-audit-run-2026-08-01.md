@@ -49,6 +49,18 @@ But it is now **the only outcome-linked evidence that exists** on this knob for 
 
 ---
 
+## 3a. Could the 6-month store have helped? No — and it cannot later either
+
+Asked by the trader 2026-08-01. **The 6-month candle+funding store is irrelevant to W6-4, and this is structural rather than a matter of timing.**
+
+The audit's unit of observation is **a logged engine decision with its full feature vector** — tier, effective scores, and ~30 indicator outputs — joined to a forward-walked outcome. Those rows exist only in `analysis_log.csv`, and only from **2026-07-03** when the v0.8 schema began. Candles cannot reconstruct them: the store holds OHLCV and funding, not what the engine *decided* or what it saw when it decided. The one thing the store could have supplied — 1m bars for the label walk — the runner already fetches directly from Deribit (40,256 bars this run), so there was nothing to gain.
+
+**The obvious follow-up — "then synthesize the rows" — does not work either, and the reason is specific.** That is what the [backtest synthesizer](backtest-synthesizer-proposal.md) exists for, but its clearance is class-by-class ([`backtest-overlap-validation-2026-07-30.md`](backtest-overlap-validation-2026-07-30.md) §10.4): VWAP now **fully cleared** at 100.00%, `VolumeRatio` **advisory** at 65.00%, and **ATR / ADX / RSI still in the *do not use* band at 46.6 / 49.8 / 43.0 %**.
+
+W6-4's design matrix consumes exactly those three. From this run's own coefficient tables: `ADX` (NY −0.2726, ASIA −0.1756), `ATR` (ASIA −0.2441), `RSIDivergence` (NY −0.1662). **Feeding synthesized rows into the ceiling audit would inject unfaithful values into the very features being tested** — and a ceiling audit run on a matrix it cannot trust is worse than no audit, because it produces a number.
+
+**So "re-run at the next book doubling" is not a scheduling preference — it is the only available path.** The store genuinely unblocked other work (the TTM, OBV, volume and swing derivations are all candle-derived and ran on it), which is precisely why the distinction is worth recording: **the dividing line is what a study consumes, and W6-4 consumes verdicts and outcomes.**
+
 ## 4. Maintenance items found in passing
 
 - **The runner's expected-settings-version constant is stale:** `WARN: settings.json version = 64 (expected 59 at build time)`. The binary is current (rebuilt 2026-07-31) but the constant was not updated across v59→v64. Someone should confirm nothing the audit reads changed in that span and then bump the constant, or the warning becomes background noise that hides a real mismatch later.
