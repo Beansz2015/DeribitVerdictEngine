@@ -15,6 +15,7 @@ Added 2026-08-01 after a Q&A seat reported that seat briefs name superseded docs
 | [`trader-tick-queue.md`](trader-tick-queue.md) *(this doc)* | **What is outstanding, in what order, and its gates.** Carries a dated shipped-state sweep (§2b) | Dependencies · decision text · execution order of *builds* |
 | [`backlog-dependency-map.md`](backlog-dependency-map.md) | **What blocks what** | **Current state** — its cells are dated individually; it is not a snapshot |
 | [`roadmap.md`](roadmap.md) | **Execution order** | Current state |
+| [`seat-handover-2026-08-02.md`](seat-handover-2026-08-02.md) | **The current seat handover** — verified state with re-check commands, what was ruled, and the conventions | A task list; it points here instead, deliberately |
 | [`seat-handover-2026-07-18.md`](seat-handover-2026-07-18.md) §3 | **Standing rules — all still binding**, reaffirmed by the seat-close handover | Current state · its §2 queue is spent |
 | [`fable-seat-close-handover-2026-08-01.md`](fable-seat-close-handover-2026-08-01.md) | The **2026-07-31 rulings** (J-B/J-C/J-E/D-F) | Its §4 task list and §1 state — **read [`seat-close-handover-gap-audit-2026-07-31.md`](seat-close-handover-gap-audit-2026-07-31.md) beside it** |
 | each spec's own D-table | **The decision text** — where this queue disagrees, the spec wins | — |
