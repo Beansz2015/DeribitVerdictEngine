@@ -1,6 +1,8 @@
 # `settings.local.json` — Per-Box Settings Overlay
 
-**Status:** **AWAITING TRADER** — D1–D6 in §7. Spec-first; nothing built.
+**Status:** ✅ **APPROVED 2026-08-01 — D1–D6 ALL TICKED all-as-recommended (trader), after reading them through. D7 was answered 2026-07-31 by the orchestrator seat. BUILD-AUTHORIZED.** Implementer brief: [`settings-local-overlay-implementer-brief.md`](settings-local-overlay-implementer-brief.md).
+
+> ⚠ **What the tick authorizes, stated so the implementer is not guessing.** D1 = option **(a)**, the key-granular whitelist — the *approach*. Its **contents are the re-audited ones**, not §2.2 as originally drafted: `alerts.` **rejected** (it gates `liq_events.log`, the sole A4 instrument), `mtf_gate` **named explicitly** in the reject list with the allow-list constraint stated in code, `performance_display.` admitted **with a recorded reason**. Those are corrections *to* option (a), not a different option, which is why the tick carries them. **The brief is the build spec where it and §2.2 disagree.** If the intent was the uncorrected §2.2 list, that is a different instruction and needs saying — it would re-open A4's gate instrument.
 **Target:** code-only in `Core/Settings/SettingsLoader.vb` + one `.gitignore` line. **No new settings keys, no version bump.**
 **Scoring impact:** **NONE by construction** — the overlay whitelist (§2) admits only blocks already fenced off the auto-tweaker surface for having no failure-rate linkage.
 **Dataset boundary:** **NONE.** Same reason: nothing an overlay can touch reaches the scoring path.
