@@ -63,3 +63,17 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 ## 5. Decommission / handover note
 
 The box owes nothing at end-of-life beyond a final copy-back of `analysis_log.csv`, `liq_events.log`, and `ws_health.log`. **DEPLOYED 2026-07-23 (trader-executed; CSVs sighted and populating).** Engine `InstanceId` (recorded at first copy-back, 2026-07-27 08:18 UTC): `4325cb7e-c21e-444d-b6c4-b355178776cf` (deploy-evening run, 181 rows, 07-22 16:24–19:24 UTC) · `fb908147-0312-4c55-b9d1-a23be310256e` (the standing collector, since 07-22 19:25 UTC). Note: every app restart mints a new id — the authoritative provenance set is the distinct `InstanceId` values in `analysis_log_aws.csv` at each copy-back; re-record any new ids that appear.
+
+**Subsequent ids, from `ws_health.log`:** `0efcda74-6b75-4d5f-af04-f3875b5afd8e` (the v63 redeploy, 2026-07-30 16:41 UTC — not a silent death, despite one 2026-08-01 read calling it that) · **`5a3afd99-6db4-461c-886e-dddcca3d8c62` (the v64 deploy, 2026-08-01 17:49:55 UTC DOWN → 17:50:13 OK, an 18-second connect).**
+
+### 5a. v64 deploy — trader-executed 2026-08-01, verified
+
+**This is the moment raw-trade capture began, anywhere.** Under D1 (AWS-only) this box is the sole capturer, and tape older than ~24 h is unobtainable at any price — so everything before 2026-08-01 17:50 UTC is permanently absent from the store, by design and not by defect. That gap is the argument the v64 build was written on.
+
+Verified at deploy:
+
+- **Title bar `settings v64` with NO `+local`** — the §3 glance in its inverted AWS form. The overlay correctly did not travel.
+- **`backtest_data\` appeared** — the first observation anywhere of a trade going from the WS stream to disk. The [v64 review](trade-store-capture-review-2026-07-31.md) §5 listed exactly this as unverifiable without a live run; the local box could not close it because capture is off there by ruling.
+- **`ws_health.log` DOWN → OK in 18 s**, new id above.
+- **The perf strip still reads `Cur.Wk 43% · 3d 53%`** — which is the useful negative: AWS's own eval cache and book **survived the overwrite**. A wipe-and-replace would have blanked it. Confirms the deploy overwrote files rather than replacing the directory, per §1.
+- **Both boxes now on v64** ⇒ the §5 same-settings discipline holds and rows stay poolable across the deploy. v64 added seven `trade_store` keys and changed no other value, so nothing tunable moved.
