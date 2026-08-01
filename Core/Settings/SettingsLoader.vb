@@ -64,6 +64,9 @@ Public Class SettingsLoader
     Private Shared _currentNode As JsonObject = Nothing
     Private Shared _overlayApplied As New List(Of String)
     Private Shared _overlayRejected As New List(Of String)
+    ''' <summary>Admitted paths with NO counterpart in the base document — a typo, or a key
+    ''' the base has not been seeded with yet. See the F1 note on OverlayActive.</summary>
+    Private Shared _overlayUnknown As New List(Of String)
 
     ' -- whitelist (§2.2 as corrected by the re-audit) -----------------------
     '
@@ -149,10 +152,22 @@ Public Class SettingsLoader
     End Property
 
     ''' <summary>
-    ''' True when settings.local.json exists, parsed, and actually applied at least one
-    ''' admitted key. Drives the title-bar "+local" marker (D4). An overlay whose every
-    ''' key was rejected reads False on purpose — the marker means "the overlay is doing
-    ''' something", so the trader's daily glance can rely on its ABSENCE too.
+    ''' True when settings.local.json exists, parsed, and applied at least one admitted key
+    ''' THAT EXISTS IN THE BASE. Drives the title-bar "+local" marker (D4).
+    '''
+    ''' Two exclusions, both the same principle: the marker means "the overlay is doing
+    ''' something", so the trader's daily glance can rely on its ABSENCE too, and anything
+    ''' that renders "+local" while the override does nothing is false reassurance in
+    ''' exactly the direction the glance exists to catch.
+    '''   - An overlay whose every key was REJECTED reads False (D-B).
+    '''   - [F1, review 2026-08-02] An overlay whose every admitted key is absent from the
+    '''     base reads False too. IsAdmitted is a path-prefix match with no POCO validation,
+    '''     so {"trade_store":{"enabledd":false}} is admitted and merged — and changes
+    '''     nothing, because no POCO field matches. Before this, that typo rendered "+local"
+    '''     and logged success while capture kept running: the F6 failure this feature exists
+    '''     to prevent, on the one key it was built for.
+    ''' The residual is a legitimately-new key overlaid ALONE yielding no "+local" — a false
+    ''' negative in the safe direction, and the warning on the same screen explains it.
     ''' </summary>
     Public Shared ReadOnly Property OverlayActive As Boolean
         Get
@@ -171,6 +186,19 @@ Public Class SettingsLoader
     Public Shared ReadOnly Property OverlayRejectedKeys As IReadOnlyList(Of String)
         Get
             Return _overlayRejected
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' [F1] Admitted paths the base document has no counterpart for — merged, warned, and
+    ''' excluded from OverlayActive. Every admitted block is fully seeded in the tracked
+    ''' base (trade_store 7 keys, signal_bridge 2, live_strip 3, exit_guard 4,
+    ''' performance_display 8, analysis_logging 2), so on that base this can only be a typo
+    ''' or a not-yet-seeded new key — a low-noise signal.
+    ''' </summary>
+    Public Shared ReadOnly Property OverlayUnknownKeys As IReadOnlyList(Of String)
+        Get
+            Return _overlayUnknown
         End Get
     End Property
 
@@ -361,11 +389,29 @@ Public Class SettingsLoader
 
             Dim applied As New List(Of String)
             CollectLeafPaths(effective, "", applied)
-            If applied.Count = 0 Then
+
+            ' [F1] Split the admitted paths by whether the base carries them. An admitted
+            ' path with no base counterpart still merges (rejecting it would block a
+            ' genuinely new key landing before the base is seeded) but it is warned about
+            ' and it does not count toward OverlayActive — see the property's remarks.
+            Dim unknown As New List(Of String)
+            Dim present As New List(Of String)
+            For Each p As String In applied
+                Dim probe As JsonNode = Nothing
+                If TryGetPath(baseObj, p, probe) Then present.Add(p) Else unknown.Add(p)
+            Next
+            For Each u As String In unknown
+                Console.WriteLine("[SettingsLoader] " & LocalOverlayFileName & ": '" & u &
+                                  "' is admitted but the BASE HAS NO SUCH KEY — merged, but it will have" &
+                                  " NO EFFECT unless a POCO field matches. Check for a typo.")
+            Next
+
+            If present.Count = 0 Then
                 LoadBaseOnly(json, opts)
                 _overlayRejected = rejected
+                _overlayUnknown = unknown
                 Console.WriteLine("[SettingsLoader] " & LocalOverlayFileName &
-                                  " present but overrode nothing — base settings in force")
+                                  " present but overrode no key the base carries — base settings in force")
                 Return
             End If
 
@@ -382,13 +428,18 @@ Public Class SettingsLoader
             Dim shown As New List(Of String)
             For Each p As String In applied
                 Dim beforeNode As JsonNode = Nothing
-                Dim beforeTxt As String = If(TryGetPath(baseObj, p, beforeNode), NodeText(beforeNode), "(absent)")
+                Dim inBase As Boolean = TryGetPath(baseObj, p, beforeNode)
                 Dim afterNode As JsonNode = Nothing
                 TryGetPath(merged, p, afterNode)
-                shown.Add(p & ": " & beforeTxt & " -> " & NodeText(afterNode))
+                ' Absent keys are tagged inline so the entry count and the override count
+                ' reconcile on sight — the line has to be readable at a glance to be useful.
+                shown.Add(p & ": " & If(inBase, NodeText(beforeNode), "(absent)") & " -> " &
+                          NodeText(afterNode) & If(inBase, "", " [NO EFFECT]"))
             Next
             Console.WriteLine("[SettingsLoader] " & LocalOverlayFileName & " ACTIVE — " &
-                              applied.Count & " override(s): " & String.Join(" · ", shown))
+                              present.Count & " override(s): " & String.Join(" · ", shown) &
+                              If(unknown.Count = 0, "",
+                                 "  [" & unknown.Count & " admitted key(s) absent from the base — see the warning above]"))
 
             _lock.EnterWriteLock()
             Try
@@ -400,6 +451,7 @@ Public Class SettingsLoader
             _effectiveOverlay = effective
             _overlayApplied = applied
             _overlayRejected = rejected
+            _overlayUnknown = unknown
             _overlayActive = True
             _currentNode = SerialiseToObject(loaded)
             _lastLoadError = ""
@@ -438,6 +490,7 @@ Public Class SettingsLoader
         _currentNode = Nothing
         _overlayApplied = New List(Of String)
         _overlayRejected = New List(Of String)
+        _overlayUnknown = New List(Of String)
     End Sub
 
     ''' <summary>Overlay text, or Nothing when the file is absent or unreadable.</summary>
@@ -669,8 +722,13 @@ Public Class SettingsLoader
     Private Shared Sub OnOverlayChanged(sender As Object, e As FileSystemEventArgs)
         Thread.Sleep(200)
         LoadFromDisk()
-        Console.WriteLine("[SettingsLoader] Hot-reloaded " & LocalOverlayFileName &
-                          " (" & e.ChangeType.ToString() & ") — overlay active: " & _overlayActive)
+        ' [F2] Report the OBSERVED condition, not e.ChangeType. The reload is state-based —
+        ' it re-reads both files from disk — so under churn the triggering event is already
+        ' stale by the time this prints, and pairing it with a fresh _overlayActive asserts a
+        ' causation it does not have. This is §3's diagnosis line; it has to be true.
+        Console.WriteLine("[SettingsLoader] Re-read " & LocalOverlayFileName &
+                          " — overlay present: " & File.Exists(_localPath) &
+                          " · active: " & _overlayActive)
     End Sub
 
     Private Shared Sub OnOverlayRenamed(sender As Object, e As RenamedEventArgs)

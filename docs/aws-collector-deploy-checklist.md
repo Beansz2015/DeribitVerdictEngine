@@ -24,12 +24,18 @@
 
 So the tracked seed carries the value that is *safe when it propagates*, and the **local box is the exception that gets edited by hand** — the mirror of the v57 stomp-proofing decision, pointing the other way because here it is AWS, not local, that must never be stomped.
 
-**Applying it locally, and the chore it creates.** `settings.json` is `CopyToOutputDirectory=PreserveNewest`, so **every Debug build with a newer tracked file overwrites `bin\Debug\net8.0-windows\settings.json`** and restores `true`. Therefore:
+**Applying it locally — the overlay, since 2026-08-02.** The hand-edit chore below is **retired**. `bin\Debug\net8.0-windows\settings.local.json` holds
 
-1. Build Debug **first**, then set `"enabled": false` inside the `trade_store` block of `bin\Debug\net8.0-windows\settings.json`, then start the collector. Editing before the build is wasted — the build stomps it.
-2. **Re-apply after every settings-version bump**, since that is exactly when the tracked file becomes newer. If it is missed, the symptom is a growing `bin\Debug\net8.0-windows\backtest_data\` — harmless, and safe to delete.
+```json
+{"trade_store": {"enabled": false}}
+```
 
-**Durable fix, not built:** a gitignored `settings.local.json` overlay applied after `settings.json` would make per-box divergence survive builds and retire this chore. It is a real code change and a design decision, so it wants a spec first — flagged here rather than done.
+and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gitignored and is not a project item, so **no build copies over it** — `PreserveNewest` can refresh the tracked settings and the merge still resolves capture to `false`. Two things to know:
+
+1. **Place it BEFORE the first build that carries a newer tracked `settings.json`**, not after. Order is the whole point; get it backwards once and the build that was meant to be protected is the one that captures.
+2. **`dotnet clean` deletes it along with the rest of `bin\`, and that failure direction is the bad one** — losing the overlay silently switches capture back **on**. §3's `+local` glance is what makes its absence visible.
+
+*(Superseded, kept for the record: the old chore was "build Debug first, then set `"enabled": false` in `bin\Debug\net8.0-windows\settings.json`, and re-apply after every settings-version bump." Its failure mode — silently restored on the next bump, with no symptom until someone noticed a growing directory — is what the overlay exists to remove. Spec: [`settings-local-overlay-proposal.md`](settings-local-overlay-proposal.md).)*
 
 ## 2. Run 24/7 (WinForms — needs an interactive session)
 
@@ -39,6 +45,7 @@ So the tracked seed carries the value that is *safe when it propagates*, and the
 
 ## 3. Daily one-glance health check (RDP in, ~30 seconds)
 
+- **Title bar reads `settings v{N} +local`** (local box only — AWS must NOT show it) → the per-box overlay is in force, so `trade_store.enabled` is `false` here and capture is where D1 put it. **Its absence is the alarm**, and it is a *quiet* alarm: `bin\settings.local.json` does not survive `dotnet clean`, and losing it silently switches local capture back on — the state §1a rules against. On AWS the same glance is inverted: a `+local` there means an overlay it should not have. The marker only appears when the overlay actually overrode a key the base carries, so it cannot be earned by a typo'd or rejected key ([F1](settings-local-overlay-spec-back.md), 2026-08-02).
 - TAPE strip alive + `[B]` strip populated → collecting.
 - `ws_health.log` tail → any DOWN/DEGRADED transitions overnight (transitions-only, so a short file is a healthy file).
 - **`liq_events.log` existence** → the AWS box runs the A4 cascade instrument 24/7 too — it may catch the first cascade before the local box does. A CASCADE line here counts as the A4 gate evidence (pool both boxes' sidecars).

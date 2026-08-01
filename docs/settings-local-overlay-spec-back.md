@@ -104,3 +104,71 @@ Brief §6, restated because the build is shaped for it and the order matters:
 The gap between steps is harmless — the currently-running binary is pre-v64 and has no capture code at all.
 
 **Cross-spec, carried forward:** [`trade-store-coverage-report-proposal.md`](trade-store-coverage-report-proposal.md) **D7 must read the MERGED value** (`SettingsLoader.Current.TradeStore.Enabled`), not the base file. Reading the base sees `true` and reports every up-hour on the local store as a capture defect. That spec builds second and inherits this.
+
+---
+
+# 6. Review response — F1 + F2 + D-C (2026-08-02)
+
+Against [`settings-local-overlay-change-request-2026-08-02.md`](settings-local-overlay-change-request-2026-08-02.md) / [`settings-local-overlay-review-2026-08-02.md`](settings-local-overlay-review-2026-08-02.md). Build was APPROVED; this closes the one required finding and the optional one.
+
+**Second commit:** `Core/Settings/SettingsLoader.vb` + `verify/ordercheck/Program.vb` (A50k) + `docs/aws-collector-deploy-checklist.md`. Six Release builds 0/0, harness ALL PASS (A1–A51e + A50a–k), `verify-gate prepush` GATE PASSED post-commit. Still no settings keys, **no version bump — v64**.
+
+## 6.1 F1 — CLOSED. Implemented exactly as scoped, both parts.
+
+The finding is correct and it is the sharper half of D-B: I guarded the rejected-key door and left the typo door open, on the one key the feature was built for.
+
+**(a) Warn on admitted-but-absent.** The `(absent)` that was display text is now a distinct condition. Each such path logs its own line before the ACTIVE line:
+
+```
+[SettingsLoader] settings.local.json: 'trade_store.enabledd' is admitted but the BASE HAS NO SUCH KEY
+                 — merged, but it will have NO EFFECT unless a POCO field matches. Check for a typo.
+```
+
+**(b) `OverlayActive` requires an applied key that exists in the base.** Admitted paths split into *present* and *unknown*; `OverlayActive = present.Count > 0`. A typo-only overlay takes the `LoadBaseOnly` path, so `Save` also reverts to the pre-overlay branch — correct, since no real override exists for it to protect.
+
+**All three "do NOT"s honoured.** The key is still merged, not rejected. No `UnmappedMemberHandling.Disallow`. The merge itself is untouched — only the reporting and the predicate moved.
+
+**One addition beyond the scope, and why.** The ACTIVE line now counts *effective* overrides while still listing every merged path, so those two numbers can disagree. Rather than leave the reader to reconcile them from the bracketed suffix, absent entries are tagged inline:
+
+```
+ACTIVE — 1 override(s): trade_store.enabledd: (absent) -> false [NO EFFECT] · live_strip.enabled: true -> false  [1 admitted key(s) absent from the base — see the warning above]
+```
+
+Reporting only, no behaviour. It seemed within the spirit of "this is the line a future seat greps".
+
+**`OverlayUnknownKeys`** joins `OverlayAppliedKeys` / `OverlayRejectedKeys` as a third diagnostic list — what A50k asserts on. The arithmetic identity from §1 still holds and gains a term: `applied + rejected` = leaf paths in the file, and `unknown ⊆ applied`.
+
+**A50k** — two arms, because one would not have been enough. Arm 1 pairs the typo with a real admitted key: the typo changes nothing, the real key still applies, and the marker still shows — so the fix cannot be satisfied by the lazy reading (deactivate any overlay containing an absent key). Arm 2 is the typo alone: no `+local`, `trade_store.enabled` still `true`, tree intact, startup fine. That arm is the F6 shape verbatim.
+
+**Knock-on, deliberate:** A50g's probe array (`trade_store.probe_list`) is absent from the base by construction, so it now trips the warning too. Harmless — `trade_store.enabled` is present in the same overlay, so it still activates — and the fixture comment says so.
+
+**On the F1/D-D family point, which is worth keeping:** `TRADE_STORE` failed loudly because the *allow-list* is ordinal; `enabledd` failed silently because the allow-list is a *prefix match over paths* and knows nothing about the POCO. Same class of mistake, two different mechanisms, and only one of them had a guard. The general shape: **a whitelist validates the key's authority, never its existence.** Any future allow-list over a config surface inherits this and should be built with both checks from the start.
+
+## 6.2 F2 — TAKEN. It was cheap.
+
+`OnOverlayChanged` now reports the observed condition:
+
+```
+[SettingsLoader] Re-read settings.local.json — overlay present: True · active: True
+```
+
+The `(Deleted) — overlay active: True` pairs are gone from the harness output. You were right that it asserted a causation it did not have; the reload is state-based, so the triggering event is already stale by the time the line prints. The base watcher's line was already event-free and is unchanged.
+
+## 6.3 D-A — confirmed, no change. Reversal recipe kept.
+
+Recorded per your instruction, so a future seat does not have to re-derive it: **to make an overlaid key's UI click a no-op on disk instead of a one-way mirror, delete the `callerChanged` test in `Save`'s revert loop** — the `If callerChanged Then Continue For` and the four lines computing it — so every overlay-owned leaf reverts unconditionally. A50j arm 1's expectation flips (`clickWroteBase` becomes `Not clickWroteBase`); arm 2 is unaffected either way, because it never depended on the branch.
+
+**D-D stands**, and §6.1's last paragraph is the note you asked for on why it and F1 are the same family.
+
+## 6.4 D-C — done, on trader instruction (2026-08-02)
+
+The change request left it with the trader; the trader then said add it. `aws-collector-deploy-checklist.md` now carries it in **two** places, because one would have been wrong:
+
+- **§3 daily glance** — the line as designed, plus the two things that make it usable: it is **inverted on AWS** (a `+local` there means an overlay that box should not have), and after F1 the marker **cannot be earned by a typo'd or rejected key**, which is what makes its absence trustworthy.
+- **§1a** — the hand-edit chore is marked **retired**, since leaving it standing beside the overlay is exactly the stale-status-prose failure the queue's §2b sweep exists to catch. The old procedure is kept in a parenthetical for the record, along with the ordering constraint (place the overlay *before* the build) and the `dotnet clean` failure direction.
+
+## 6.5 What I did not verify, this round
+
+- **Still nothing in the live app.** The `+local` title bar remains harness-proven and visually unverified — the trader's test gate.
+- **The F1 precondition is the review's, not re-derived.** "Every admitted block is fully seeded in the tracked base (7/2/3/4/8/2 keys)" is what makes `(absent)` a low-noise signal; I took it as given. If a future block ships partially seeded, the warning gets noisier — but it stays correct, and the residual is a false negative in the safe direction.
+- **No live-app check that the console warning is actually visible** where the trader looks. It goes to `Console.WriteLine` like every other loader message, so it lands wherever those land; I did not confirm that surface on a WinForms host.

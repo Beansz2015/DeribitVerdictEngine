@@ -434,6 +434,7 @@ Module Program
         A50h_ScoringSurfacePinThroughRealCalculate()
         A50i_NetworkSplitIsKeyGranular()
         A50j_WhitelistIntersectUiWriteback()
+        A50k_AdmittedButAbsentKeyIsWarnedAndDoesNotActivate()
 
         Console.WriteLine()
         If _failures = 0 Then
@@ -7942,6 +7943,10 @@ Module Program
     ' POCO field: an array counts as exactly ONE path on both sides of the whitelist. If the
     ' merge ever descended into arrays these would come back as per-element paths, which is
     ' the partial-element surprise §1 rules out.
+    '
+    ' The probe array is absent from the base, so this fixture also trips the F1 warning —
+    ' deliberate and harmless. trade_store.enabled IS in the base, so the overlay still
+    ' activates; A50k is where the absent-key rule itself is pinned.
     Private Sub A50g_ArraysReplaceWholesale()
         Dim dir As String = A50TempDir("g")
         Try
@@ -8086,6 +8091,60 @@ Module Program
                                 overlayWinsBefore, clickWroteBase, snapsBack, noPromotion, editKept))
         Finally
             A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A50k: an admitted-but-absent key is warned and does not activate the overlay -------
+    ' [F1, review 2026-08-02] IsAdmitted is a path-prefix match with no POCO validation, so
+    ' {"trade_store":{"enabledd":false}} is ADMITTED and merged — and changes nothing,
+    ' because no POCO field matches. Before the fix it counted as an override, rendered
+    ' "+local" and logged success while local capture kept running: the exact F6 failure this
+    ' feature exists to prevent, on the one key it was built for. Same family as D-D — case
+    ' variants failed loudly, typos failed silently. Now both fail loudly.
+    '
+    ' Arm 1 pairs the typo with a REAL admitted key: the real one still applies, the marker
+    ' still shows, and the typo is reported separately — so the fix cannot be satisfied by
+    ' simply deactivating any overlay that contains an absent key.
+    ' Arm 2 is the typo alone: no marker, base untouched, startup fine.
+    Private Sub A50k_AdmittedButAbsentKeyIsWarnedAndDoesNotActivate()
+        Dim dirA As String = A50TempDir("k1")
+        Dim dirB As String = A50TempDir("k2")
+        Try
+            ' Arm 1 — typo alongside a real admitted key.
+            A50Init(dirA, A50Json(A50BaseSettings()),
+                    "{""trade_store"":{""enabledd"":false},""live_strip"":{""enabled"":false}}")
+            Dim cA = SettingsLoader.Current
+            Dim mixedOk As Boolean =
+                SettingsLoader.OverlayUnknownKeys.Count = 1 AndAlso
+                SettingsLoader.OverlayUnknownKeys(0) = "trade_store.enabledd" AndAlso
+                cA.TradeStore.Enabled AndAlso                      ' the typo changed NOTHING
+                Not cA.LiveStrip.Enabled AndAlso                   ' the real key still applies
+                SettingsLoader.OverlayActive                       ' …and still earns "+local"
+            ' Snapshot arm 1's diagnostics before arm 2 replaces the singleton's state.
+            Dim unknownA As String = String.Join(",", SettingsLoader.OverlayUnknownKeys)
+            Dim activeA As Boolean = SettingsLoader.OverlayActive
+
+            ' Arm 2 — the typo on its own. This is the F6 shape: capture must stay ON and the
+            ' title bar must NOT claim an overlay is doing something.
+            A50Init(dirB, A50Json(A50BaseSettings()), "{""trade_store"":{""enabledd"":false}}")
+            Dim cB = SettingsLoader.Current
+            Dim aloneOk As Boolean =
+                SettingsLoader.OverlayUnknownKeys.Count = 1 AndAlso
+                SettingsLoader.OverlayUnknownKeys(0) = "trade_store.enabledd" AndAlso
+                Not SettingsLoader.OverlayActive AndAlso           ' no false "+local"
+                cB.TradeStore.Enabled AndAlso                      ' base untouched — capture ON
+                cB.TradeStore.StoreDir = "backtest_data" AndAlso
+                cB.Version = 64                                    ' startup succeeded, tree intact
+
+            Check("A50k admitted-but-absent key — warned, excluded from +local, base untouched; a real sibling key still applies and still activates",
+                  mixedOk AndAlso aloneOk,
+                  String.Format("mixed={0} alone={1} armA(unknown=[{2}] tradeStore={3} liveStrip={4} active={5}) armB(unknown=[{6}] tradeStore={7} active={8})",
+                                mixedOk, aloneOk, unknownA, cA.TradeStore.Enabled, cA.LiveStrip.Enabled, activeA,
+                                String.Join(",", SettingsLoader.OverlayUnknownKeys),
+                                cB.TradeStore.Enabled, SettingsLoader.OverlayActive))
+        Finally
+            A50Cleanup(dirA)
+            A50Cleanup(dirB)
         End Try
     End Sub
 
