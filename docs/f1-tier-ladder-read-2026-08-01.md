@@ -71,6 +71,30 @@ Per session:
 
 At the realised per-session `b`, **no session's measured rate clears breakeven except ASIA at n=15**, which is unusable. So this is not a choice between three probabilities; it is that **the book does not currently demonstrate a Kelly-sizeable edge on the ATR-basis payoff Kelly uses.**
 
+### 2.2 Does the `b` result settle option (c), "wait for separation"? **No — and the two tests do not share an n** (added 2026-08-02, trader question)
+
+They are different halves of the same fraction: **`b` is the denominator (payoff), the ladder is the numerator (win rate).** The `b` test rests on **n=2,512** placed-geometry rows and is settled. The ladder rests on **n=203** evaluable STRONG with a ±7 pp CI and is not. Twelve-fold difference in evidence, and the larger number belongs to the question that was already answerable.
+
+**What the `b` test did do is close the cheap escape.** Had `b` been understated, Kelly would have been fixable by correcting the payoff — no waiting required. That route is gone, so option (c)'s value now rests entirely on the win rates themselves moving.
+
+**And they might, because the CI spans the entire decision space.** f* across F1 STRONG's interval, at b = 1.0938:
+
+| p | f* | half-Kelly | applied |
+|---:|---:|---:|---|
+| 0.400 *(CI low)* | −0.1486 | — | SUPPRESSED |
+| **0.468** *(point est.)* | **−0.0184** | — | **SUPPRESSED** |
+| 0.478 | +0.0007 | 0.0004 | breakeven |
+| 0.490 | +0.0237 | 0.0119 | 1.19 % |
+| 0.500 | +0.0429 | 0.0214 | 2.14 % |
+| 0.520 | +0.0811 | 0.0406 | 4.06 % |
+| 0.540 *(CI high)* | +0.1194 | 0.0597 | **CAPPED 5 %** |
+
+**The interval runs from "suppressed" to "capped at 5 %" — the whole range.** So the measurement cannot presently distinguish *no edge* from *full edge*. That is **underpowered, not null**, and it is the same shape as W6-4's INCONCLUSIVE: the honest verdict is that the instrument can't resolve the question yet, not that the answer is known.
+
+**But note how steep the curve is just above breakeven.** The point estimate sits **1.0 pp below** breakeven, and even a favourable resolution buys little: 49 % → 1.2 %, 50 % → 2.1 %. **You need ≈54 % — the very top of the CI — to justify the 5 % EST displays today.** So the realistic good outcome from waiting is a *small* Kelly fraction, not a vindication of the current number.
+
+**Which is what actually decides it.** Waiting is defensible on information grounds. **Waiting while EST displays 5 % is not** — 5 % is the extreme optimistic end of the plausible range, and the point estimate says suppressed. **Refined recommendation: take option (c) for the measurement and fix the display now** — either render the assumption honestly (`p assumed, not measured`) or suppress with a stated reason. The two are separable decisions and only the first needs more data.
+
 **P5 tier values (order-app session policy).** P5 selects which tiers the consumer acts on. On this evidence, tier-based selection has no demonstrated basis pooled, and **the LONDON inversion actively contradicts a STRONG-only policy for that session.** The prior [D7 re-read](d7-confirmed-reread-2026-07-22.md) already established that the *context-tag* inversion was an artifact; this is the *tier* ladder, and it is a different measurement that does not resolve the same way.
 
 ---
