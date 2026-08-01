@@ -152,6 +152,8 @@ Ruled the **precondition instrument for every data-gated item** — it decides w
 
 liq_events CASCADE ⇒ A4 · §9 STRONG accrual · burst-watch spot-checks · funding calm-week re-read · absorption episode accrual under Path B · **v48 §4a OFI dominance** · **B4b §12** (its F3 arm is blocked — §2) · **pullFrac distribution (W4)**. The last three were dropped from the seat-close handover's periodic list and are restored here.
 
+**⭐ Dated trigger — the only watch here with a computed date, added 2026-08-02.** The Kelly EST advisory now renders *"Actual numbers after next book doubling"*, which is a **forward promise on screen**. **Trigger: ≥406 pooled weekday STRONG** (double the 201 at the F1 read), **ETA ~2026-08-30** at the measured two-box rate of **12.4 STRONG/weekday** (the whole-book rate of 10.1 understates it — it averages in the single-box era before AWS came up 2026-07-22). **Bundle with the W6-4 re-run**, which lands in the same window on its own basis (2,712 eligible rows) — one pooled freeze, one session, both instruments, and the overfit counter stays honest because they consume the same span. **If the ladder still does not separate, the line must be re-worded or the block suppressed — it must not silently promise another doubling.** [`kelly-est-honesty-decision-2026-08-02.md`](kelly-est-honesty-decision-2026-08-02.md) §2.1.
+
 ---
 
 ## 5. Closed — recorded so they are not re-asked

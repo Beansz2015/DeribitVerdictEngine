@@ -29,15 +29,29 @@ KELLY SIZING
 ```
 KELLY SIZING
   Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.
-  p(win) is ASSUMED from the confidence tier — not measured, and currently unvalidated.
+  p(win) is ASSUMED from the confidence tier — Actual numbers after next book doubling.
   Treat as directional bias indicator only.
   <net R:R line>
   p(win) [EST]:   65.0%
 ```
 
-**Two changes, and that is all:**
+**Wording set by the trader 2026-08-02.** It is better than the draft it replaced ("not measured, and currently unvalidated") because it gives the reader a **horizon** rather than an open-ended disclaimer — the question "so when does this become real?" is answered on the line itself.
 
-1. **One advisory line inserted** after the ATR-basis line. Deliberately carries **no numbers and no dates** — a display string with `46.8 %` in it goes stale the moment the book grows, which is the exact failure this session spent its time correcting. "Assumed, not measured, currently unvalidated" stays true whatever the next re-read says.
+**It also changes the line's nature, and that is why §2.1 exists.** The string now makes a **forward promise**. If the doubling arrives and nobody re-reads, the display becomes untrue — a stale commitment rendered on screen, which is a worse failure than the vagueness it replaced. **The watch is not an optional companion to this wording; it is what keeps it honest.**
+
+Still deliberately carries **no measured numbers** — a string with `46.8 %` in it goes stale the moment the book grows, which is the exact failure this session spent its time correcting.
+
+### 2.1 The watch this wording obliges — **trigger derived, not estimated**
+
+Doubling is measured against **F1's own basis**, since this line is downstream of F1: **pooled weekday STRONG**, currently **201** (evaluable 203 after post-filters).
+
+**Trigger: ≥ 406 pooled weekday STRONG** on the AWS-preferred deduped book.
+
+Accrual measured on the current two-box topology rather than assumed: **12.4 STRONG/weekday** across the 8 weekdays since AWS came up 2026-07-22 (the whole-book rate of 10.1 understates it, because it averages in the single-box era). So a doubling needs ~201 more at 12.4/weekday ≈ **17 weekdays ≈ 4 calendar weeks — ETA ~2026-08-30.**
+
+**W6-4's re-run lands in the same window** on its own separate basis (2,712 eligible rows), so **the two should bundle** — one pooled freeze, one re-read session, both instruments. That also keeps the overfit counter honest, since both consume the same book span.
+
+**On trigger:** re-run the §9 band ladder ([`f1-tier-ladder-read-2026-08-01.md`](f1-tier-ladder-read-2026-08-01.md) recipe — `BacktestRunner report --csv <pooled>`), then re-work §2.1's f\* table at the then-current `b`. **Outcomes and what each obliges:** ladder separates **and** STRONG clears the 47.76 % breakeven ⇒ CAL becomes arguable, and this advisory line is retired with the mode tag flipping to `[CAL]` on its own. Ladder still flat, or STRONG still below breakeven ⇒ **the line must be re-worded or the block suppressed** — what it must *not* do is silently promise another doubling.
 2. **The `p(win):` label gains the mode tag**, sourced from the existing `v.KellyPMode` field (already populated, already in the bridge payload) rather than a literal. So when CAL eventually ships it renders `p(win) [CAL]:` **automatically**, and retiring the advisory line is then the only remaining edit.
 
 ## 3. Sites
