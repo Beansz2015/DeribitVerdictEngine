@@ -3,7 +3,7 @@
 **From:** the Opus orchestrator seat that opened on the 2026-08-01 Fable seat-close handover and ran through the v64 landing.
 **Read in this order:** CLAUDE.md session-start protocol (**it now has a step 6 — read it, it is the state rule**) → [`trader-tick-queue.md`](trader-tick-queue.md) **§0 orientation, then §1** → this doc. Everything else is reachable from the queue.
 
-> **The single most important thing I can hand you:** the handover I inherited had a **wrong headline and twelve omissions**, and a later sweep found **4 of 13 queue rows describing already-shipped work as outstanding**. Both were traceable to *prose that had gone stale*. So: **verify state in the tree before you assert it.** The queue's §2a/§2b carry the convention and the one-line command. I broke this rule myself once mid-session and it nearly cost an implementer conversation.
+> **The single most important thing I can hand you:** the handover I inherited had a **wrong headline and twelve omissions**, and a later sweep found **4 of 13 queue rows describing already-shipped work as outstanding**. Both were traceable to *prose that had gone stale*. So: **verify state in the tree before you assert it.** The queue's §1a/§1b carry the convention and the one-line command. **I broke this rule three times myself in one session** — §6 lists them; the third was in the queue itself, the doc everything else points at.
 
 ---
 
@@ -12,14 +12,14 @@
 | Fact | Value | Re-check |
 |---|---|---|
 | Settings version | **v64**, tracked **and** bin | `Get-Content settings.json` line 2 — **the TRACKED repo-root file**; `bin\` is a build artefact and legitimately lags |
-| Unpushed | **2 commits** | `git status -sb` |
+| Unpushed | **check it** — this number goes stale within the hour | `git status -sb` |
 | Next free fixture family | **A52** (A50 + A51 consumed) | `Select-String verify/ordercheck/Program.vb -Pattern '\bA[0-9]{2}[a-z]_'` → highest is `A51e_` |
 | Next free hard constraint | **HC28** | HC27 consumed by the v64 `trade_store.` fence |
 | AWS collector | **live, v64, capturing** — `5a3afd99-6db4-461c-886e-dddcca3d8c62` since 2026-08-01 17:50 UTC | `ws_health_aws.log` tail at next copy-back |
 | Local collector | ✅ **running** — `2f8c9fe1-8325-4fbb-9ee5-41fc267e1efd` since 2026-08-01 18:00:26 UTC, rows landing, title carries `+local` | `Get-Process DeribitVerdictEngine` |
 | Local capture | **OFF and correct** — overlay present, `backtest_data\` absent | both under `bin\Debug\net8.0-windows\` |
 
-**On the local box being down:** it is an *opportunistic addendum*, not a 24/7 collector — the trader ruled that on 2026-07-31 and it is why the dedup is AWS-preferred. Its silence is the default state, **not** a defect, and any coverage report must scope J-B's "silence ⇒ defect" per-box or it will flag most of local's existence. That scoping clause is **flagged and unruled** — see §4.
+**On the local box, whenever you find it down:** it is an *opportunistic addendum*, not a 24/7 collector — the trader ruled that on 2026-07-31 and it is why the dedup is AWS-preferred. **Its silence is the default state, not a defect**, so do not treat a gap in the local book as an incident. It was down twice during this session and restarted both times without anything being wrong. Any coverage report must scope J-B's "silence ⇒ defect" per-box or it will flag most of local's existence — that clause is **flagged and unruled**, see §4.
 
 ---
 
@@ -35,11 +35,9 @@
 
 ## 3. What is open
 
-**Read [`trader-tick-queue.md`](trader-tick-queue.md) §1.** It is the state read, it carries a dated shipped-state sweep, and its §0 scopes what every other doc is authoritative *for*. **Do not rebuild it from a grep over doc prose — that is exactly how 4 of 13 rows went wrong.** Re-run the §2b sweep instead.
+**Read [`trader-tick-queue.md`](trader-tick-queue.md) — §0a first, then §1 for detail.** §0a is the short explicit list of what is actually owed; §1 records history with strikethrough and does **not** answer "what is unanswered" at a glance. **Do not rebuild the queue from a grep over doc prose — that is exactly how 4 of 13 rows went wrong.** Re-run the §1b sweep instead.
 
 **Cluster A is complete** — both boxes live on v64, capture where D1 put it, Kelly confirmed.
-
-**For what is actually owed, read the queue's §0a — a short explicit list, added 2026-08-02.** It exists because a fresh seat had to reconstruct it by reading every row and got one wrong: §1 records history with strikethrough, so it does not answer "what is unanswered" at a glance. §0a does.
 
 **Seven items are genuinely open**, and only five are the trader's: **C1** (coverage report D1–D7) · **the J-B scoping clause** — *a ruling seat's, not the trader's, and it gates C1* · **D1** (TTM — **cannot be ticked as written**, needs re-derivation) · **D2** (OBV, ready, bundles with D1 after) · **D3** (ASIA, ready, **ships alone and first**) · **E5** (absorption Path B — the path is unticked) · **the F3 watch** — *a tooling decision; it is live and unevaluable.*
 
