@@ -419,6 +419,14 @@ Module Program
         A51d_FundingMergeClipsOverreachButKeepsStored()
         A51e_CandleRoundTripThroughShippedParse()
 
+        ' [A52 — v65 / D3 ASIA aggressor-velocity arming,
+        ' docs/asia-burst-threshold-derivation-2026-08-01.md §5] D3 arms a session by the
+        ' PRESENCE of its burst_ratio_threshold and ships no code of its own, so the whole
+        ' change rests on the JSON→POCO→HasExplicit path. A23g pinned the tweaker fence on
+        ' that path and A28c pins the scoring behaviour off POCO defaults; neither pinned
+        ' the arming contract itself.
+        A52a_AsiaArmingJsonContract()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -2416,9 +2424,13 @@ Module Program
         Dim nyThr      = ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, 14)
         cfg.Indicators.AggressorVelocity.Sessions("ASIA").BurstRatioThreshold = 3.1
         Dim asiaThr    = ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, 3)
-        ' [v52 wire-in] NY now carries an EXPLICIT burst_ratio_threshold 4.5 (the §5.2 value,
-        ' also the S2a scoping key); LONDON/ASIA still inherit the 2.5 default until their own pass.
-        Check("A23f per-session resolution (NY norm 60 / thr 4.5; LONDON/ASIA inherit 120/2.5; explicit override wins)",
+        ' [v52 wire-in] NY carries an EXPLICIT burst_ratio_threshold 4.5 (the §5.2 value, also
+        ' the S2a scoping key). [comment corrected v65] The old text claimed "LONDON/ASIA still
+        ' inherit the 2.5 default" — stale since v60 armed LONDON at 5.5, and doubly so since
+        ' v65/D3 armed ASIA at 5.5. What res-3 still inherits is the NORM WINDOW (120), which is
+        ' what this fixture asserts; the threshold arm here sets ASIA explicitly to 3.1, so it
+        ' demonstrates override-wins over ASIA's shipped 5.5 rather than over the 2.5 default.
+        Check("A23f per-session resolution (NY norm 60 / thr 4.5; LONDON/ASIA inherit norm 120; explicit override wins)",
               nyNorm = 60.0 AndAlso londonNorm = 120.0 AndAlso asiaNorm = 120.0 AndAlso
               nyThr = 4.5 AndAlso asiaThr = 3.1,
               String.Format(CultureInfo.InvariantCulture,
@@ -3040,16 +3052,26 @@ Module Program
     ' -- A28c: S2a session scoping + scoring_enabled:false byte-identical -----------
     Private Sub A28c_ScopingAndDisableInert()
         Dim cfg = BuildBurstCfg()   ' scoring on, bonus/penalty 1
-        ' (1) S2a scoping: an ASIA-hour run (res-3, no explicit burst_ratio_threshold)
-        '     leaves the modifier inert even with a same-side BURST_SELL present.
-        '     [v60 re-pin] LONDON armed 2026-07-23 (sessions.LONDON.burst_ratio_threshold
-        '     = 5.5, S1–S5 ticked) — the un-armed exemplar moves to ASIA, and LONDON now
-        '     pins the ARMED behaviour (+1 same-side upgrade, ss=12) alongside NY.
-        Dim vAsia = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 3),
-                                            PositionState.None, BuildA8Norms(), cfg)
+        ' (1) S2a scoping: the modifier fires ONLY for a session carrying an EXPLICIT
+        '     burst_ratio_threshold — absence is what keeps it inert.
+        '     [v65 re-pin] D3 armed ASIA (sessions.ASIA.burst_ratio_threshold = 5.5,
+        '     trader-ticked 2026-08-02), so ALL THREE shipped sessions are now armed and
+        '     NO session is left that can serve as the un-armed exemplar. The un-armed arm
+        '     is therefore CONSTRUCTED — ASIA's threshold cleared on a cfg copy — which is
+        '     strictly better coverage: it pins the MECHANISM (absence ⇒ inert) rather than
+        '     an incidental session, and it is the D3 rollback's only cover.
+        '     [v60 history] LONDON was armed 2026-07-23, which is when the un-armed
+        '     exemplar last moved (NY→ASIA). It has now run out of sessions to move to.
+        Dim cfgUnarmed = BuildBurstCfg()
+        cfgUnarmed.Indicators.AggressorVelocity.Sessions("ASIA").BurstRatioThreshold = Nothing
+        Dim vAsiaUnarmed = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 3),
+                                                   PositionState.None, BuildA8Norms(), cfgUnarmed)
+        ' (2) all three shipped sessions ARMED at their own thresholds → +1 same-side.
+        Dim vAsiaArmed = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 3),
+                                                 PositionState.None, BuildA8Norms(), cfg)
         Dim vLondonArmed = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 10),
                                                    PositionState.None, BuildA8Norms(), cfg)
-        ' (2) scoring_enabled:false → inert at NY too (the hot rollback).
+        ' (3) scoring_enabled:false → inert at NY too (the hot rollback).
         Dim cfgOff = BuildBurstCfg()
         cfgOff.Indicators.AggressorVelocity.ScoringEnabled = False
         Dim vOff = ScoringEngine.Calculate(BuildBurstIndicators("BURST_SELL", 15),
@@ -3058,14 +3080,16 @@ Module Program
         Dim vNorm = ScoringEngine.Calculate(BuildBurstIndicators("NORMAL", 15),
                                             PositionState.None, BuildA8Norms(), cfg)
 
-        Check("A28c S2a scoping + disable inert (ASIA burst ss=11 inert; LONDON ARMED ss=12 [v60]; off ss=11 == NORMAL)",
-              vAsia.EffectiveShortScore = 11 AndAlso
+        Check("A28c S2a scoping + disable inert (constructed un-armed ss=11; ASIA ARMED ss=12 [v65]; LONDON ss=12; off ss=11 == NORMAL)",
+              vAsiaUnarmed.EffectiveShortScore = 11 AndAlso
+              vAsiaArmed.EffectiveShortScore = 12 AndAlso
               vLondonArmed.EffectiveShortScore = 12 AndAlso
               vOff.EffectiveShortScore = 11 AndAlso
               vNorm.EffectiveShortScore = 11,
-              String.Format("asia={0} londonArmed={1} off={2} norm={3} (asia/off/norm=11, londonArmed=12)",
-                            vAsia.EffectiveShortScore, vLondonArmed.EffectiveShortScore,
-                            vOff.EffectiveShortScore, vNorm.EffectiveShortScore))
+              String.Format("asiaUnarmed={0} asiaArmed={1} londonArmed={2} off={3} norm={4} (unarmed/off/norm=11, armed=12)",
+                            vAsiaUnarmed.EffectiveShortScore, vAsiaArmed.EffectiveShortScore,
+                            vLondonArmed.EffectiveShortScore, vOff.EffectiveShortScore,
+                            vNorm.EffectiveShortScore))
     End Sub
 
     ' -- A28d: S5 rider — HC22 exact-match fences session_volume.enabled -----------
@@ -7547,6 +7571,50 @@ Module Program
         Finally
             A48Cleanup(dir)
         End Try
+    End Sub
+
+    ''' <summary>A52 settings shape — the aggressor_velocity block with a substitutable ASIA body.</summary>
+    Private Function A52Json(asiaBody As String) As String
+        Return "{""version"":65,""indicators"":{""aggressor_velocity"":{" &
+               """enabled"":true,""scoring_enabled"":true," &
+               """default"":{""norm_window_sec"":120,""burst_ratio_threshold"":2.5}," &
+               """sessions"":{""NY"":{""norm_window_sec"":60,""burst_ratio_threshold"":4.5}," &
+               """LONDON"":{""burst_ratio_threshold"":5.5},""ASIA"":" & asiaBody & "}}}}"
+    End Function
+
+    ' -- A52a: the JSON contract for the ASIA arming key (v65 / D3) -----------------
+    ' Three arms, because D3's correctness has three separable failure modes:
+    '   (1) present ⇒ ARMED at 5.5 — the change itself;
+    '   (2) absent  ⇒ INERT at the 2.5 default — the rollback, and the mechanism that
+    '       A28c can no longer borrow a real session to demonstrate;
+    '   (3) the shipped POCO agrees with the shipped JSON. This one is the drift guard:
+    '       the harness builds every cfg from New EngineSettings(), so if settings.json
+    '       and EngineSettings.vb ever disagree about ASIA, the app and the harness pin
+    '       DIFFERENT behaviour and A28c still passes. v60 established that lockstep for
+    '       LONDON; v65 owes it for ASIA.
+    Private Sub A52a_AsiaArmingJsonContract()
+        Dim opts As New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True}
+        Dim armed   = JsonSerializer.Deserialize(Of EngineSettings)(
+                          A52Json("{""burst_ratio_threshold"":5.5}"), opts)
+        Dim unarmed = JsonSerializer.Deserialize(Of EngineSettings)(A52Json("{}"), opts)
+
+        Const ASIA_HOUR As Integer = 3      ' ASIA bucket is UTC 0–7
+        Dim armedHas   As Boolean = ExecutionResolution.HasExplicitAggrVelBurstThreshold(armed, ASIA_HOUR)
+        Dim armedThr   As Double = ExecutionResolution.ResolveAggrVelBurstThreshold(armed, ASIA_HOUR)
+        Dim unarmedHas As Boolean = ExecutionResolution.HasExplicitAggrVelBurstThreshold(unarmed, ASIA_HOUR)
+        Dim unarmedThr As Double = ExecutionResolution.ResolveAggrVelBurstThreshold(unarmed, ASIA_HOUR)
+
+        Dim poco As New EngineSettings()
+        Dim pocoHas As Boolean = ExecutionResolution.HasExplicitAggrVelBurstThreshold(poco, ASIA_HOUR)
+        Dim pocoThr As Double = ExecutionResolution.ResolveAggrVelBurstThreshold(poco, ASIA_HOUR)
+
+        Check("A52a ASIA arming JSON contract (present ⇒ armed @5.5 · absent ⇒ inert @2.5 · shipped POCO mirrors shipped JSON)",
+              armedHas AndAlso Math.Abs(armedThr - 5.5) < 0.000001 AndAlso
+              Not unarmedHas AndAlso Math.Abs(unarmedThr - 2.5) < 0.000001 AndAlso
+              pocoHas AndAlso Math.Abs(pocoThr - 5.5) < 0.000001,
+              String.Format(CultureInfo.InvariantCulture,
+                            "armed={0}/{1} unarmed={2}/{3} poco={4}/{5} (want True/5.5 False/2.5 True/5.5)",
+                            armedHas, armedThr, unarmedHas, unarmedThr, pocoHas, pocoThr))
     End Sub
 
     ' Unix-ms for a 2026-07-15 UTC wall time — the A45a historical session fixture date.

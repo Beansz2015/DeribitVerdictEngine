@@ -72,4 +72,41 @@ This was not flagged when LONDON was armed at v60, and it is worth recording pla
 - **The norm window is assumed, not re-derived.** ASIA inherits `default.norm_window_sec = 120`. The §4 coupling caveat binds: **5.5 is derived FOR fast=5 s / norm=120 s**, and changing either re-opens this.
 - **No LONDON re-fit.** LONDON's 5.5 was read here only as a cross-check; its own watch passed 2026-07-27 and this derivation does not re-open it. That my method reproduces LONDON's shipped value from independent data is the main evidence that the method transferred correctly.
 - **Weekend behaviour** — weekday-only throughout, per the standing rule.
-- **No engagement preview.** The 07-13 pass produced a §6 wire-in preview (upgrades/softens per day against TFI's directional share). At ~10.4 fires/day and a dead contra arm the shape is clear, but the ASIA D-table should carry a proper preview before arming.
+- ~~**No engagement preview.**~~ **Supplied in §5.1** at the tick. The 07-13 pass produced a §6 wire-in preview (upgrades/softens per day against TFI's directional share); this one is **computed from §1's own table, not separately measured**, and is labelled as such.
+
+---
+
+## 5. D-table — **TICKED 2026-08-02 (trader). SHIPPED as settings v65.**
+
+Status: **BUILT 2026-08-02**, local commit, unpushed — trader tests + pushes (§8 workflow). ⚠ **This is a live scoring change and a dataset boundary:** rows after this build carry the burst-modified TFI vote on ASIA.
+
+| # | Decision | Ruling | Basis |
+|---|---|---|---|
+| **D3-1** | The value | **`sessions.ASIA.burst_ratio_threshold` = 5.5**, as recommended | §1 — fire rate 9.7 % against the ~10 % design point and inside the 8–12 % band; p90 knee 5.35 → nearest grid value; same-side 91.0 % over the ≥85 % bar |
+| **D3-2** | ASIA-specific value, or LONDON's? | **LONDON's value. Decision-of-record: `burst_ratio_threshold` needs no ASIA-vs-LONDON split — the res-3 burst distribution is ONE distribution.** | §2 — every percentile within ±9 % on n≈1,489 each. `burstRatio` is scale-free by construction, so it should not carry session liquidity levels. A bespoke 5.35 would be fitting noise |
+| **D3-3** | Where the key lives | **Two identical per-session entries. NOT promoted to `default`** | §2 — the auto-arm keys on session-threshold *presence*, so writing it to `default` would silently arm every session, including any future one |
+| **D3-4** | Sequencing | **Alone and first**, ahead of the D1+D2 bundle | D-cluster ruling 2026-08-01 — D3 *arms* rather than retunes and an activation deserves a clean window; bundling with D2 (OBV `trend_gate` 18→23) would confound ASIA, since both push the ASIA upgrade path the same way |
+| **D3-5** | Post-ship watch | **Fire rate ≈9.7 % · same-side ≥85 %, read over a MULTI-DAY band — never a single session-day** | §3 — ASIA's per-day rate spans **4.5–13.8 %** at T=5.5 on ~106 AggrVel rows/day. NY's ±2pp band does **not** transfer, and no res-3 threshold may be re-fitted off one session-day |
+| **D3-6** | The outcome evidence | **Recorded in the change_log and here; does not block arming** | See §5.2 — it is neutral at best, and the queue's ruling was explicit that the D-table must say so rather than lead with the distributional case alone |
+
+**Also carried into the build:** the §3 finding that **the contra-soften arm is effectively dead on res-3** at every candidate T including LONDON's shipped 5.5 (ASIA 0.21–0.43 contra/day). On 3-minute sessions this modifier is in practice **upgrade-only** — not a defect, the upgrade arm carries the design, but the §4.5 "genuine warning" half must not be claimed as operative on res-3. And the **coupling caveat binds**: 5.5 is derived *for* `fast_window_sec` 5 / `norm_window_sec` 120, so changing either re-opens this.
+
+### 5.1 Engagement preview — computed from §1, not separately measured
+
+At T=5.5 on ~106 AggrVel rows/day: **~10.4 fires/day**, of which **~9.5/day same-side** (+1 upgrade) and **~0.29/day contra** (−1 soften). The modifier therefore touches **~9.7 %** of ASIA rows, essentially all of it through the upgrade arm — which is §3's finding restated as a rate.
+
+### 5.2 ⚠ The honest caveat, recorded rather than buried
+
+The W6-4 ceiling audit's informational column is **the only outcome-linked read that exists on this knob, and it is neutral at best**: `AggrVelBurstRatio` univariate test **AUC 0.5179** (n=217), `AggrVelNet` **0.4654**.
+
+It does not refute arming — NY and LONDON were armed on distributional grounds too, LONDON's watch passed 2026-07-27, and a ±1 modifier on ~10 % of rows would not be expected to show strongly in a univariate AUC on ~220 test rows. But it is the *only* outcome evidence, and it sits inside the **three-instrument finding of 2026-08-02**: the engine's own score at AUC 0.5407 with no challenger beating it, tier bands that do not separate, structural placement at 0.4683 / 0.5000 / 0.3221. **Do not spend on further scoring refinement without weighing that**, per W6-4's own "no spend meanwhile."
+
+### 5.3 What the build actually touched
+
+**Not a settings-only change**, contrary to how the queue row reads. Threshold *presence* is the arming mechanism, so the value must exist on **both** surfaces:
+
+- `settings.json` — the ASIA key, version 64 → 65, change_log entry.
+- `Core/Settings/EngineSettings.vb:478` — the POCO default in lockstep (the **v60 LONDON precedent**). The regression harness builds every cfg from `New EngineSettings()`, so a JSON-only edit would leave the app and the harness pinning different behaviour.
+- `verify/ordercheck/Program.vb` — **A28c re-pinned.** ASIA *was* the un-armed exemplar; with all three shipped sessions now armed, **no session remains that can demonstrate the S2a scoping mechanism**, so the un-armed arm is now constructed by clearing ASIA's threshold on a cfg copy. That pins the mechanism rather than an incidental session, and it is the D3 rollback's only cover. A23f's comment corrected (stale since v60). **New A52a** pins the JSON→arming contract in three arms, the third being a JSON↔POCO drift guard.
+- **No new hard constraint** — `indicators.aggressor_velocity.sessions.` is already prefix-rejected under **HC19**; HC28 stays free.
+- **No display-string parity obligation** — the burst suffix appends to the existing TFI breakdown note row and the card binds the same `SignalBreakdownItem.Note`. Arming ASIA only makes an already-rendered suffix *reachable* on ASIA rows.

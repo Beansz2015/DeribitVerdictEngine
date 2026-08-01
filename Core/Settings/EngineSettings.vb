@@ -475,7 +475,7 @@ Public Class AggressorVelocitySettings
         New Dictionary(Of String, AggressorVelocitySessionOverride) From {
             {"NY",     New AggressorVelocitySessionOverride With {.NormWindowSec = 60.0, .BurstRatioThreshold = 4.5}},
             {"LONDON", New AggressorVelocitySessionOverride With {.BurstRatioThreshold = 5.5}}, ' [v60] S1–S5 ticked 2026-07-23 — arms the LONDON TFI modifier (D1 auto-arm)
-            {"ASIA",   New AggressorVelocitySessionOverride()}
+            {"ASIA",   New AggressorVelocitySessionOverride With {.BurstRatioThreshold = 5.5}} ' [v65] D3 ticked 2026-08-02 — arms the ASIA TFI modifier (D1 auto-arm). LONDON's value, not a bespoke ASIA one: the res-3 burst distribution is ONE distribution (all percentiles within 9% on n~1,489 each), so a separate constant would be fitting noise. MUST mirror settings.json — the harness builds cfgs from these defaults.
         }
 End Class
 

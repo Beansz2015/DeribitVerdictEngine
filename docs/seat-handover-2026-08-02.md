@@ -49,7 +49,7 @@
 
 - **J-B needs a per-box expected-uptime scoping clause** before the coverage report is built. Unscoped it classifies most of the local box's existence as defect. **This is a correction to a Fable ruling and was not mine to make.**
 - **The F3 watch outlived its instrument.** Its trigger needs outcomes segmented by cap bucket, and nothing has produced that since the 2026-07-21 placed-target migration retired the axis. Either add the segmentation or retire the trigger — **do not leave it live and unevaluable.**
-- **`session_block_semantic` is a dead settings key** — declared in `EngineSettings.vb`, read nowhere.
+- **`session_block_semantic` is unread — but "dead key" understates what removing it costs.** *Corrected 2026-08-02 by the incoming seat, verified in the tree.* It is declared in `EngineSettings.vb` **and shipped as a live key** in `settings.json` (`performance_display.session_block_semantic: "most_recent"`), and its own `change_log` entry declares it *"reserved; currently always most-recent-block per §2b"* — a deliberate placeholder, not a leak. So retiring it is a **settings change needing a version bump + `change_log` entry**, not a code-only cleanup: it belongs with the decisions rather than in the queue's §2 build slots, and it is a valid carrier for the §3 `change_log` rider.
 - **The CeilingAudit expected-version constant is stale** (warns `expected 59` against live v64).
 - **F2 and F3 from the v64 review** remain open — a lossy `ResetBufferState` race and a cosmetic User-Agent. Both small, neither blocking.
 
