@@ -37,7 +37,13 @@
 
 **Read [`trader-tick-queue.md`](trader-tick-queue.md) §1.** It is the state read, it carries a dated shipped-state sweep, and its §0 scopes what every other doc is authoritative *for*. **Do not rebuild it from a grep over doc prose — that is exactly how 4 of 13 rows went wrong.** Re-run the §2b sweep instead.
 
-**Cluster A is complete** — both boxes live on v64, capture where D1 put it, Kelly confirmed. **The next item wanted is D3** (ASIA `burst_ratio_threshold` = 5.5 — derived, gate met at 323 fires vs a ~150 bar, ships **alone and first** per the D-cluster sequencing, its own ⚠ boundary). After that, D1+D2 bundle once D-A is re-derived.
+**Cluster A is complete** — both boxes live on v64, capture where D1 put it, Kelly confirmed.
+
+**For what is actually owed, read the queue's §0a — a short explicit list, added 2026-08-02.** It exists because a fresh seat had to reconstruct it by reading every row and got one wrong: §1 records history with strikethrough, so it does not answer "what is unanswered" at a glance. §0a does.
+
+**Seven items are genuinely open**, and only five are the trader's: **C1** (coverage report D1–D7) · **the J-B scoping clause** — *a ruling seat's, not the trader's, and it gates C1* · **D1** (TTM — **cannot be ticked as written**, needs re-derivation) · **D2** (OBV, ready, bundles with D1 after) · **D3** (ASIA, ready, **ships alone and first**) · **E5** (absorption Path B — the path is unticked) · **the F3 watch** — *a tooling decision; it is live and unevaluable.*
+
+⚠ **E1 Kelly is DECIDED, not pending** — 2026-08-02, option (c) wait-for-separation plus the honest display, which shipped `18b1ea8` and is confirmed. **CAL is parked, not owed.** A stale row of mine in the queue said otherwise and a fresh seat believed it; corrected. E6, E2, E3, E4 and Cluster A are likewise closed.
 
 ---
 
@@ -69,6 +75,7 @@
 3. **I hand-waved the W6-4 re-run as "roughly late September"** and flagged it as needing confirmation. When I finally measured it, it was **~4 weeks, not ~2 months** — wrong in the pessimistic direction.
 4. **I gave a Bash-form path in a block the trader ran in PowerShell**, and MSBuild read the leading `/` as a switch.
 5. **I introduced a markdown defect in the tick queue** — a prose paragraph inserted between table rows orphaned the A3 row out of its table.
+6. **I left the queue's E1 row reading "needs an explicit trader decision" after the trader had decided it.** I wrote the decision into its own doc and never returned to the row, and a fresh seat reading the queue — **the doc §0 designates as the state read** — reported Kelly as unanswered. **Third instance of the same shape in one session** (B1, the D1–D7 count, this), and the worst-placed of the three, because a stale row here is wrong in the file everything else points at. It is what §0a now exists to prevent.
 
 ---
 
