@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **Load the `crypto-trading-context` skill** — it carries the trader profile and writing style. Do not separately read `docs/trader-profile.md`; the skill loads it.
 4. **Do not read individual `.vb` files at session start** — only open them when a specific edit is required.
 5. **When the task involves prioritisation, sequencing, or selecting new features**, also read `docs/roadmap.md` — the cross-project strategic roadmap (calibration queue, indicator queue, the DeribitOrderPlacementApp signal bridge, Linux port). Skip it for routine implementation of an already-specced item.
+6. **Before saying anything about what is outstanding, read `docs/trader-tick-queue.md`** — it is the state read, and its §0 scopes what every other doc is authoritative *for*. **Authority is scoped, not ranked:** `roadmap.md` = execution order · `backlog-dependency-map.md` = what blocks what, **not** current state (its cells are dated individually) · `seat-handover-2026-07-18.md` §3 = standing rules, still binding · each spec's own D-table = the decision text, which wins over any summary. A doc's status header is **not** evidence of code state — verify in the tree (`git log --oneline -S'<symbol>' -- <file>`) before offering any spec as available work. A 2026-08-01 sweep found 4 of 13 queue rows describing already-shipped work as outstanding, every one traceable to stale status prose.
 
 This preserves context budget for actual work.
 
@@ -126,4 +127,4 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 Current: **v31**. Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`, `regime_weights`, `network`, `performance_display`, `analysis_logging`. When adding new config keys, increment `version` and append an entry to `change_log` (newest first inside the array).
 
-The exact current version is the source of truth — read `settings.json` line 1 (`"version": N`) before assuming. Always bump from whatever is current, not from the number quoted here (this header drifts).
+The exact current version is the source of truth — read the **tracked repo-root** `settings.json` line 1 (`"version": N`) before assuming. **Name which copy you read: `bin\Debug\net8.0-windows\settings.json` is a build artefact and legitimately lags the tracked file until the next build** (`CopyToOutputDirectory=PreserveNewest` copies on *build*, not on push — as of 2026-08-01 tracked is v64 while the running collector's copy is v63). Quoting the bin copy as "the version" is a live orientation hazard, not a hypothetical one. Always bump from whatever is current, not from the number quoted here (this header drifts).
