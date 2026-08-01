@@ -65,7 +65,19 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 > **Measured impact:** on the 2,159 minute-keys present in both books the two boxes **disagree on verdict 4.49 %** of the time (97 bars), so the preference is not cosmetic — but it moves the F1 STRONG count by 2 and the W6-1 LONDON count by 2, i.e. no gate conclusion turns on it.
 > **Reproducibility note:** every pooled figure published from 2026-07-31 onward — F1's 203 evaluable STRONG, the W6-1 grids, the W6-4 ceiling audit, the ASIA burst derivation — was built on **this** method. A snapshot built the old way will not reproduce them.
 4. Eval caches do NOT pool (each box's tracker walks its own book); offline re-walks via the report/what-if tools regenerate outcomes from the pooled CSV + fresh OHLC — the more trustworthy surface anyway (§7a).
-5. **Same-settings discipline:** rows are only poolable while both boxes run the same settings version. After any settings bump locally, redeploy to AWS at the next opportunity; the CSV's settings-version column + `InstanceId` make any straddle visible and filterable.
+5. **Same-settings discipline:** rows are only poolable while both boxes run the same settings version. After any settings bump locally, redeploy to AWS at the next opportunity.
+
+> ⚠ **CORRECTED 2026-08-02 — this item claimed a column that does not exist.** The old text read *"the CSV's settings-version column + `InstanceId` make any straddle visible and filterable."* **There is no settings-version column.** Verified in the tree: the header constant in `AnalysisLogger.vb` runs `Timestamp` → `SignalId`, and the only attribution fields are **`InstanceId,SignalId`** (the §5 v0.8 rotation added those two and nothing else). So a version straddle is **NOT filterable from the data.**
+>
+> **It is worse than a two-box problem.** `settings.json` is hot-reloaded by `FileSystemWatcher`, so a version change can land **mid-`InstanceId`** — same instance, different scoring, one undifferentiated row stream, no marker anywhere. `InstanceId` is minted per *process start*, not per settings version, so it does not track this on its own.
+>
+> **Discipline that actually works, until a version column ships:** **make every settings-version change coincide with a process restart** — stop the collector, swap settings, start it. That mints a fresh `InstanceId` at the version edge and makes it a usable proxy for the straddle. Then **deploy both boxes close together** to keep the mixed window short.
+>
+> **This makes §5's `InstanceId` ledger load-bearing, not a nicety.** The version↔instance mapping exists *only* there (`0efcda74…` = v63, `5a3afd99…` = v64). If it is not recorded at each deploy, the straddle becomes unreconstructable — the data cannot answer it.
+>
+> **⚠ This matters most at a scoring boundary.** For a display-only or capture-only bump a straddle is harmless. For **v65/D3** it is not: armed and unarmed ASIA rows are byte-identical in shape, so a mixed fleet silently contaminates the D3 watch's own numerator. Get both boxes onto v65 before reading that watch.
+>
+> Filed as a rider on the next CSV header rotation — see [`trader-tick-queue.md`](trader-tick-queue.md) §3, alongside `TriggerMode` and the J-E effective-source stamp, which share the same "rows cannot be attributed" shape.
 
 ## 5. Decommission / handover note
 
