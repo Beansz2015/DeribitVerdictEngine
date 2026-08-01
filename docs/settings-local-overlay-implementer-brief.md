@@ -1,6 +1,6 @@
 # `settings.local.json` overlay — Implementer Brief (fresh conversation handoff)
 
-**Date:** 2026-08-01 · **Status:** build-authorized once the trader ticks D1–D7 — **⚠ read §1 before ticking, D1 changed materially on 2026-07-31.** · **Model/effort: Opus, medium — one conversation.** Coordinator review after (this seat).
+**Date:** 2026-08-01 · **Status:** build-authorized once the trader ticks **D1–D6** (D7 was answered 2026-07-31 by the orchestrator seat — option (a), not a permanent close) — **⚠ read §1 before ticking, D1 changed materially on 2026-07-31.** · **Model/effort: Opus, medium — one conversation.** Coordinator review after (this seat).
 **Not a scoring change, no dataset boundary, no settings keys, no version bump.** Code-only in `Core/Settings/SettingsLoader.vb` + one `.gitignore` line. Run the CLAUDE.md session-start protocol first.
 **Verified unbuilt 2026-08-01:** `SettingsLoader.vb` contains no overlay, merge, or `settings.local` handling of any kind. This is a from-scratch build.
 

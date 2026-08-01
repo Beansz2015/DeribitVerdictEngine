@@ -4,7 +4,23 @@
 
 **Authorities unchanged:** [`roadmap.md`](roadmap.md) = execution order · [`backlog-dependency-map.md`](backlog-dependency-map.md) = what blocks what · [`profitability-risk-levers.md`](profitability-risk-levers.md) = profitability lens · each spec's own D-table = the decision text. **This doc carries ORDER and GATES only; where it disagrees with a spec, the spec wins.**
 
-**Maintenance:** update State on every tick. Move closed rows to §5 rather than deleting them — the same convention the board uses. A tick that turns out to need re-deriving goes back to the queue with the reason.
+**Maintenance:** update State on every tick. Move closed rows to §5 rather than deleting them — the same convention the board uses. A tick that turns out to need re-deriving goes back to the queue with the reason. **Re-run the §2b shipped-state sweep whenever this queue is rebuilt** — do not inherit a prior assembly.
+
+## 0. Orientation — what each doc is authoritative FOR
+
+Added 2026-08-01 after a Q&A seat reported that seat briefs name superseded docs as current-state authorities. **The failure is not that those docs are wrong — it is that "authority" was never scoped.** Nothing below is demoted; each is pinned to what it actually governs.
+
+| Doc | Authoritative for | **Not** for |
+|---|---|---|
+| [`trader-tick-queue.md`](trader-tick-queue.md) *(this doc)* | **What is outstanding, in what order, and its gates.** Carries a dated shipped-state sweep (§2b) | Dependencies · decision text · execution order of *builds* |
+| [`backlog-dependency-map.md`](backlog-dependency-map.md) | **What blocks what** | **Current state** — its cells are dated individually; it is not a snapshot |
+| [`roadmap.md`](roadmap.md) | **Execution order** | Current state |
+| [`seat-handover-2026-07-18.md`](seat-handover-2026-07-18.md) §3 | **Standing rules — all still binding**, reaffirmed by the seat-close handover | Current state · its §2 queue is spent |
+| [`fable-seat-close-handover-2026-08-01.md`](fable-seat-close-handover-2026-08-01.md) | The **2026-07-31 rulings** (J-B/J-C/J-E/D-F) | Its §4 task list and §1 state — **read [`seat-close-handover-gap-audit-2026-07-31.md`](seat-close-handover-gap-audit-2026-07-31.md) beside it** |
+| each spec's own D-table | **The decision text** — where this queue disagrees, the spec wins | — |
+| [`profitability-risk-levers.md`](profitability-risk-levers.md) | The **profitability lens** (L1–L9) | Sequencing |
+
+**Superseded for state, still current for rules:** `seat-handover-2026-07-18.md` (§3 binds), `fable-continuation-2026-07-23.md`. **Neither should be cited for what is outstanding today.**
 
 ---
 
@@ -15,7 +31,9 @@
 | # | Tick | Gate | Where |
 |---|---|---|---|
 | **A1** | **F6 — how does the local box avoid capturing?** | **Ungated. Precondition on A3.** | [`job1-outstanding-2026-08-01.md`](job1-outstanding-2026-08-01.md) §3 |
-| **A2** | **`settings.local.json` overlay — D1–D7** | Ungated. **Re-read D1 first.** Implementer brief written + build verified unbuilt | [`settings-local-overlay-proposal.md`](settings-local-overlay-proposal.md) §7 · brief: [`settings-local-overlay-implementer-brief.md`](settings-local-overlay-implementer-brief.md) |
+| **A2** | **`settings.local.json` overlay — D1–D6** *(D7 already answered)* | Ungated. **Re-read D1 first.** Implementer brief written; build verified unbuilt | [`settings-local-overlay-proposal.md`](settings-local-overlay-proposal.md) §7 · brief: [`settings-local-overlay-implementer-brief.md`](settings-local-overlay-implementer-brief.md) |
+
+**A2's outstanding set is D1–D6, not D1–D7** *(corrected 2026-08-01 — earlier turns of this queue said D1–D7)*. **D7 was answered 2026-07-31 by the orchestrator seat**, option (a): a REST-mode box is expressed by a tracked `settings.json` change with a version bump, because a REST box is break-glass rather than routine and a break-glass change *should* be deliberate and version-visible. It is **not a permanent close** — option (c), excluding a REST box's rows from the pooled book, unlocks once the J-E effective-source stamp gives rows a source column. **D5 is conditional on D1 staying (a).**
 | **A3** | **v64 test** — *push done, runtime test outstanding* | **Blocked on A1** | the test gate |
 
 **A3 status 2026-08-01: pushed ✅, tested ❌.** All 37 commits are on origin (`master...origin/master`, clean). But **no rebuild has occurred** — `bin\Debug` still carries the pre-v64 dll (2026-07-30 17:45 UTC) and **v63 settings with no `trade_store` block**, and `backtest_data\` is absent. So the v64 *runtime* test — trades actually landing on disk from the WS stream, first flush, first gap-repair call — is still entirely unexercised, and it is the one the [v64 review §5](trade-store-capture-review-2026-07-31.md) says matters most. **The upside: F6 has not fired, so A1 can still be decided before the test build, exactly as this cluster intends.**
