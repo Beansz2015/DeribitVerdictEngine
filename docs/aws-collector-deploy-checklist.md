@@ -85,6 +85,21 @@ The box owes nothing at end-of-life beyond a final copy-back of `analysis_log.cs
 
 **Subsequent ids, from `ws_health.log`:** `0efcda74-6b75-4d5f-af04-f3875b5afd8e` (the v63 redeploy, 2026-07-30 16:41 UTC — not a silent death, despite one 2026-08-01 read calling it that) · **`5a3afd99-6db4-461c-886e-dddcca3d8c62` (the v64 deploy, 2026-08-01 17:49:55 UTC DOWN → 17:50:13 OK, an 18-second connect).**
 
+### 5a. Version ↔ InstanceId ledger — **BOTH boxes.** Load-bearing, not a nicety
+
+**Added 2026-08-02 with the §4.5 correction.** There is **no settings-version column in the CSV**, so this table is the *only* place a version straddle can be reconstructed from. It covers **both** boxes because both books pool. **Record a row at every deploy and every restart-for-a-bump.** The [restart discipline](#4-copy-back--pooled-read-recipe-at-analysis-time) is what keeps it sound: stop → swap settings → start, so the version edge and the new id are the same instant and no row straddles a version inside an instance.
+
+| Box | InstanceId | Settings | From (UTC) | Note |
+|---|---|---|---|---|
+| AWS | `0efcda74-6b75-4d5f-af04-f3875b5afd8e` | v63 | 2026-07-30 16:41 | |
+| AWS | `5a3afd99-6db4-461c-886e-dddcca3d8c62` | **v64** | 2026-08-01 17:49:55 | 18-second connect. **First raw-trade capture anywhere** |
+| AWS | *(pending — read from `ws_health_aws.log`)* | **v65** | 2026-08-02 | **The D3 deploy.** ⚠ ASIA aggressor velocity ARMED from this id onward |
+| local | `2f8c9fe1-8325-4fbb-9ee5-41fc267e1efd` | v64 | 2026-08-01 18:00:26 | capture OFF via overlay |
+| local | `a4333d00-2b3e-43fd-9226-32184761f4f6` | **v65** | 2026-08-01 18:58:37 | short run, ~4 min |
+| local | `3916540f-6bc9-4648-ad6c-26bd65cfa462` | **v65** | 2026-08-01 19:02:32 | current. Title `settings v65 +local` |
+
+⚠ **The v64→v65 edge is a SCORING boundary.** ASIA rows under a v64 id carry an *unarmed* TFI burst vote; ASIA rows under a v65 id carry an armed one, and the two are byte-identical in shape. **Any ASIA read spanning 2026-08-01/02 must split on this table**, or the D3 watch reads its own contamination.
+
 ### 5a. v64 deploy — trader-executed 2026-08-01, verified
 
 **This is the moment raw-trade capture began, anywhere.** Under D1 (AWS-only) this box is the sole capturer, and tape older than ~24 h is unobtainable at any price — so everything before 2026-08-01 17:50 UTC is permanently absent from the store, by design and not by defect. That gap is the argument the v64 build was written on.
