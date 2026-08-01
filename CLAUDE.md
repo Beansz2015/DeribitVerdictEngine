@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Session Start Protocol
 
-1. **Read `docs/DeribitIndicatorProject.md`** in full (~10K tokens after the 2026-05-17 trim; historical content moved to `docs/history-archive.md`). Touch the archive doc only if you need pre-v27 settings rationale or full version history.
+1. **Read `docs/DeribitIndicatorProject.md`** in full (**~24K tokens, measured 2026-08-02**; historical content lives in `docs/history-archive.md`). Touch the archive doc only if you need pre-v61 version history or pre-v27 settings rationale. **The figure here was "~10K" and was wrong by 9× for months** — §15 had grown to 56 rows against its own five-row rule and 69 % of the file. If you find this number stale again, §15 has re-grown: move the oldest rows to the archive rather than living with it.
 2. **Read `docs/architecture.md`** in full.
 3. **Load the `crypto-trading-context` skill** — it carries the trader profile and writing style. Do not separately read `docs/trader-profile.md`; the skill loads it.
 4. **Do not read individual `.vb` files at session start** — only open them when a specific edit is required.
@@ -125,6 +125,6 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 ## settings.json Version
 
-Current: **v31**. Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`, `regime_weights`, `network`, `performance_display`, `analysis_logging`. When adding new config keys, increment `version` and append an entry to `change_log` (newest first inside the array).
+**No version is quoted here on purpose** — this header carried "v31" while the tree ran to v65, and the same rot hit `architecture.md`'s header (stuck at v54). **Read the tracked repo-root `settings.json` line 2.** Top-level blocks: `indicators`, `session_volume`, `mtf_gate`, `auto_run`, `scoring`, `kelly`, `regime_gates`, `regime_weights`, `network`, `performance_display`, `analysis_logging`. When adding new config keys, increment `version` and append an entry to `change_log` (newest first inside the array).
 
 The exact current version is the source of truth — read the **tracked repo-root** `settings.json` line 1 (`"version": N`) before assuming. **Name which copy you read: `bin\Debug\net8.0-windows\settings.json` is a build artefact and legitimately lags the tracked file until the next build** (`CopyToOutputDirectory=PreserveNewest` copies on *build*, not on push — as of 2026-08-01 tracked is v64 while the running collector's copy is v63). Quoting the bin copy as "the version" is a live orientation hazard, not a hypothetical one. Always bump from whatever is current, not from the number quoted here (this header drifts).
