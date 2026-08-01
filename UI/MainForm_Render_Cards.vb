@@ -1570,14 +1570,21 @@ Partial Public Class MainForm
         Dim capTag  As String = If(v.KellyCapped, "  [CAPPED]", "")
         stack.Controls.Add(BuildCardHeaderWithTags("KELLY SIZING", biasTag, capTag))
 
-        ' GAP-10: 2-line ATR-basis advisory.
+        ' GAP-10: ATR-basis advisory. The p(win) assumption line was added 2026-08-02
+        ' (kelly-est-honesty-decision-2026-08-02.md) — F1's §9 read measured STRONG at
+        ' 46.8% against the 65% this tier map assumes, so the block says so on screen.
+        ' Deliberately carries no measured numbers: a string with "46.8%" in it goes
+        ' stale the moment the book grows. Mirrors MainForm_PlaintextSnapshot.vb.
         stack.Controls.Add(BuildCardAdvisory(
             "Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.",
+            "p(win) is ASSUMED from the confidence tier — Actual numbers after next book doubling.",
             "Treat as directional bias indicator only.",
             BuildNetRRLine(v, r, cfg)))
 
         ' KV rows: p(win), f*/Half-Kelly, Applied fraction, Risk $, Contracts/Lean.
-        stack.Controls.Add(BuildCardKvRow("p(win):",          v.KellyPWin.ToString("P1")))
+        ' The mode tag reads off KellyPMode rather than a literal, so when CAL ships it
+        ' renders "p(win) [CAL]:" on its own and only the advisory line needs retiring.
+        stack.Controls.Add(BuildCardKvRow($"p(win) [{v.KellyPMode}]:", v.KellyPWin.ToString("P1")))
         stack.Controls.Add(BuildCardKvRow("f* / Half-Kelly:", $"{v.KellyF:P2}  /  {v.KellyFHalf:P2}"))
         stack.Controls.Add(BuildCardKvRow("Applied fraction:", v.KellyFApplied.ToString("P2")))
         stack.Controls.Add(BuildCardKvRow("Risk $:",          $"${v.KellyRiskUsd:F2}"))
