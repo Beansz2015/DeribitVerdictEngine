@@ -419,6 +419,22 @@ Module Program
         A51d_FundingMergeClipsOverreachButKeepsStored()
         A51e_CandleRoundTripThroughShippedParse()
 
+        ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
+        ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
+        ' DELIBERATELY LAST in the run order: these are the only fixtures that call
+        ' SettingsLoader.Initialise, so they mutate the process-wide SettingsLoader.Current
+        ' singleton. Running them after everything else keeps that blast radius at zero.
+        A50a_AbsentOverlayIsByteIdentical()
+        A50b_DeepMergeFlipsOneKeyOnly()
+        A50c_SaveWritesTheBaseNotTheMerge()
+        A50d_WhitelistRejectsScoringIndicatorsVersionMtfGateAlerts()
+        A50e_MalformedOverlayIsIgnored()
+        A50f_HotReloadReMergesAndDeleteReverts()
+        A50g_ArraysReplaceWholesale()
+        A50h_ScoringSurfacePinThroughRealCalculate()
+        A50i_NetworkSplitIsKeyGranular()
+        A50j_WhitelistIntersectUiWriteback()
+
         Console.WriteLine()
         If _failures = 0 Then
             Console.WriteLine("ALL PASS")
@@ -7655,6 +7671,421 @@ Module Program
                                 okLadderHead, okLadderRows, ladder.Count, okWeakNotInMatrix))
         Finally
             Try : File.Delete(csvPath) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' A50 — settings.local.json per-box overlay (Core/Settings/SettingsLoader.vb)
+    '
+    ' Two boxes, one binary, one tracked settings.json. AWS captures the raw tape; the
+    ' local box does not. The overlay is how that divergence gets expressed without a
+    ' hand-edit that every PreserveNewest build silently undoes.
+    '
+    ' THE REGRESSION TRAP IS A50c: Save() must write the BASE document, never the merge.
+    ' Inverting it promotes a local-only override into the shared tracked file and from
+    ' there onto AWS on the next xcopy — for trade_store.enabled that is permanent, silent
+    ' tape loss. A50j is its sibling: the whitelist ∩ UI-writeback interaction, which A50c
+    ' does not cover (re-audit F4).
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    Private Function A50TempDir(tag As String) As String
+        Dim dir As String = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                 "ordercheck_a50_" & tag & "_" & Guid.NewGuid().ToString("N").Substring(0, 8))
+        Directory.CreateDirectory(dir)
+        Return dir
+    End Function
+
+    Private Sub A50Cleanup(dir As String)
+        Try : Directory.Delete(dir, True) : Catch : End Try
+    End Sub
+
+    ''' <summary>
+    ''' A full settings tree, off the shipped POCO with a handful of non-default values so
+    ''' the round-trip assertions are not trivially satisfied by defaults.
+    ''' </summary>
+    Private Function A50BaseSettings() As EngineSettings
+        Dim s As New EngineSettings()
+        s.Version = 64
+        s.LastModified = "2026-08-01T00:00:00Z"
+        s.ModifiedBy = "A50 fixture base"
+        s.ChangeLog.Add("v64 [2026-08-01T00:00:00Z]: fixture seed")
+        s.TradeStore.Enabled = True
+        s.TradeStore.StoreDir = "backtest_data"
+        s.TradeStore.FlushSeconds = 30
+        s.LiveStrip.Enabled = True
+        s.LiveStrip.RefreshSec = 2
+        s.AnalysisLogging.OutputDumpMaxRuns = 3000
+        s.Network.Transport = "ws"
+        s.Network.RequestTimeoutSeconds = 15
+        s.AutoRun.TriggerMode = "on_close"
+        s.AutoRun.IntervalSeconds = 0
+        s.MTFGate.Enabled = True
+        s.Alerts.Enabled = True
+        s.Scoring.BbwSqueezePenalty = 2
+        s.Scoring.RegimeMaxScore.Trending = 19
+        s.Indicators.RSI.Pass2cMidline = 50.0
+        Return s
+    End Function
+
+    Private Function A50Json(s As EngineSettings) As String
+        Return JsonSerializer.Serialize(s, New JsonSerializerOptions With {.WriteIndented = True})
+    End Function
+
+    Private Function A50Read(path As String) As EngineSettings
+        Return JsonSerializer.Deserialize(Of EngineSettings)(
+            File.ReadAllText(path), New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True})
+    End Function
+
+    ''' <summary>Write base (+ optional overlay) into a fresh dir and Initialise the loader on it.</summary>
+    Private Function A50Init(dir As String, baseJson As String, overlayJson As String) As String
+        Dim basePath As String = System.IO.Path.Combine(dir, "settings.json")
+        File.WriteAllText(basePath, baseJson)
+        If overlayJson IsNot Nothing Then
+            File.WriteAllText(System.IO.Path.Combine(dir, SettingsLoader.LocalOverlayFileName), overlayJson)
+        End If
+        SettingsLoader.Initialise(basePath)
+        Return basePath
+    End Function
+
+    ' -- A50a: absent overlay ⇒ byte-identical to the pre-overlay engine -------------------
+    ' The merge branch must be skipped entirely, not merely produce the same answer. Pinned
+    ' two ways: the loaded tree re-serialises to the base text exactly, AND it matches a
+    ' plain JsonSerializer.Deserialize of the same text — which is literally what the loader
+    ' did before this build.
+    Private Sub A50a_AbsentOverlayIsByteIdentical()
+        Dim dir As String = A50TempDir("a")
+        Try
+            Dim baseJson As String = A50Json(A50BaseSettings())
+            A50Init(dir, baseJson, Nothing)
+
+            Dim loadedJson As String = A50Json(SettingsLoader.Current)
+            Dim plain As String = A50Json(JsonSerializer.Deserialize(Of EngineSettings)(
+                baseJson, New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True}))
+
+            Check("A50a absent overlay — loaded tree byte-identical to the base text and to a plain deserialise; overlay inactive",
+                  loadedJson = baseJson AndAlso loadedJson = plain AndAlso
+                  Not SettingsLoader.OverlayActive AndAlso SettingsLoader.OverlayAppliedKeys.Count = 0,
+                  String.Format("roundTrip={0} vsPlain={1} active={2} applied={3}",
+                                loadedJson = baseJson, loadedJson = plain,
+                                SettingsLoader.OverlayActive, SettingsLoader.OverlayAppliedKeys.Count))
+        Finally
+            A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A50b: deep per-key merge, not block replacement ------------------------------------
+    ' {"trade_store":{"enabled":false}} must flip exactly that key. The control is the base
+    ' tree with the same single field changed in code — equal serialisations prove nothing
+    ' else moved, in trade_store or anywhere else.
+    Private Sub A50b_DeepMergeFlipsOneKeyOnly()
+        Dim dir As String = A50TempDir("b")
+        Try
+            Dim baseCfg = A50BaseSettings()
+            A50Init(dir, A50Json(baseCfg), "{""trade_store"":{""enabled"":false}}")
+
+            Dim expected = A50BaseSettings()
+            expected.TradeStore.Enabled = False
+
+            Dim mergedJson As String = A50Json(SettingsLoader.Current)
+            Dim appliedOk As Boolean = SettingsLoader.OverlayAppliedKeys.Count = 1 AndAlso
+                                       SettingsLoader.OverlayAppliedKeys(0) = "trade_store.enabled"
+
+            Check("A50b deep merge — trade_store.enabled flips, every sibling and every other block survives; +local marker on",
+                  mergedJson = A50Json(expected) AndAlso
+                  SettingsLoader.Current.TradeStore.StoreDir = "backtest_data" AndAlso
+                  SettingsLoader.Current.TradeStore.FlushSeconds = 30 AndAlso
+                  SettingsLoader.OverlayActive AndAlso appliedOk,
+                  String.Format("treeEqual={0} storeDir='{1}' flush={2} active={3} applied=[{4}]",
+                                mergedJson = A50Json(expected), SettingsLoader.Current.TradeStore.StoreDir,
+                                SettingsLoader.Current.TradeStore.FlushSeconds, SettingsLoader.OverlayActive,
+                                String.Join(",", SettingsLoader.OverlayAppliedKeys)))
+        Finally
+            A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A50c: Save writes the BASE, not the merge — THE REGRESSION TRAP -------------------
+    ' An unrelated UI edit (the auto_run interval path) is saved while trade_store.enabled is
+    ' overlaid to false. The tracked file must come back with enabled STILL TRUE — the AWS
+    ' value — and the edit preserved. Inverting this is how a local "don't capture" silently
+    ' becomes AWS's.
+    Private Sub A50c_SaveWritesTheBaseNotTheMerge()
+        Dim dir As String = A50TempDir("c")
+        Try
+            Dim basePath As String = A50Init(dir, A50Json(A50BaseSettings()),
+                                             "{""trade_store"":{""enabled"":false}}")
+
+            Dim cfg = SettingsLoader.Current
+            Dim mergedBeforeSave As Boolean = Not cfg.TradeStore.Enabled       ' overlay in force
+            cfg.AutoRun.IntervalSeconds = 77                                    ' the unrelated edit
+            SettingsLoader.Save(cfg, "A50c unrelated operational edit", bumpVersion:=False)
+
+            Dim onDisk = A50Read(basePath)
+
+            Check("A50c Save writes the BASE — tracked trade_store.enabled stays TRUE, the unrelated edit persists, the overlay keeps winning in memory",
+                  mergedBeforeSave AndAlso
+                  onDisk.TradeStore.Enabled AndAlso onDisk.AutoRun.IntervalSeconds = 77 AndAlso
+                  onDisk.Version = 64 AndAlso
+                  Not SettingsLoader.Current.TradeStore.Enabled AndAlso
+                  SettingsLoader.Current.AutoRun.IntervalSeconds = 77,
+                  String.Format("mergedBefore={0} diskEnabled={1} diskInterval={2} diskVersion={3} curEnabled={4} curInterval={5}",
+                                mergedBeforeSave, onDisk.TradeStore.Enabled, onDisk.AutoRun.IntervalSeconds,
+                                onDisk.Version, SettingsLoader.Current.TradeStore.Enabled,
+                                SettingsLoader.Current.AutoRun.IntervalSeconds))
+        Finally
+            A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A50d: the whitelist is an ALLOW-LIST — five rejects, base values survive ----------
+    ' scoring.* / indicators.* / version were the spec's original three. mtf_gate.* and
+    ' alerts.* are the re-audit's additions and the load-bearing ones: mtf_gate is the HARD
+    ' VETO and was named nowhere in the spec's 16-of-17 enumeration; alerts gates
+    ' liq_events.log, the sole A4 gate instrument. A reject-list implementation passes the
+    ' first three and ships the other two.
+    Private Sub A50d_WhitelistRejectsScoringIndicatorsVersionMtfGateAlerts()
+        Dim dir As String = A50TempDir("d")
+        Try
+            Dim overlay As String =
+                "{""version"":999," &
+                """scoring"":{""bbw_squeeze_penalty"":99}," &
+                """indicators"":{""RSI"":{""pass2c_midline"":99.0}}," &
+                """mtf_gate"":{""enabled"":false}," &
+                """alerts"":{""enabled"":false}," &
+                """trade_store"":{""enabled"":false}}"
+            A50Init(dir, A50Json(A50BaseSettings()), overlay)
+
+            Dim c = SettingsLoader.Current
+            Dim rej = SettingsLoader.OverlayRejectedKeys
+            Dim wanted As String() = {"version", "scoring.bbw_squeeze_penalty",
+                                      "indicators.RSI.pass2c_midline", "mtf_gate.enabled", "alerts.enabled"}
+            Dim allRejected As Boolean = True
+            For Each w In wanted
+                If Not rej.Contains(w) Then allRejected = False
+            Next
+
+            Check("A50d whitelist rejects version / scoring.* / indicators.* / mtf_gate.* / alerts.* with base values intact; the admitted key still applies and startup succeeds",
+                  allRejected AndAlso rej.Count = wanted.Length AndAlso
+                  c.Version = 64 AndAlso c.Scoring.BbwSqueezePenalty = 2 AndAlso
+                  Math.Abs(c.Indicators.RSI.Pass2cMidline - 50.0) < 1e-9 AndAlso
+                  c.MTFGate.Enabled AndAlso c.Alerts.Enabled AndAlso
+                  Not c.TradeStore.Enabled AndAlso SettingsLoader.OverlayActive,
+                  String.Format("rejected=[{0}] version={1} bbw={2} midline={3} mtf={4} alerts={5} tradeStore={6}",
+                                String.Join(",", rej), c.Version, c.Scoring.BbwSqueezePenalty,
+                                c.Indicators.RSI.Pass2cMidline, c.MTFGate.Enabled, c.Alerts.Enabled,
+                                c.TradeStore.Enabled))
+        Finally
+            A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A50e: malformed overlay ⇒ logged, ignored, app starts ------------------------------
+    ' D3 chose ignore-and-log over fatal: a box that will not boot loses more data than a box
+    ' running shared settings, and on AWS "will not boot" means silent tape loss.
+    Private Sub A50e_MalformedOverlayIsIgnored()
+        Dim dir As String = A50TempDir("e")
+        Try
+            Dim baseJson As String = A50Json(A50BaseSettings())
+            A50Init(dir, baseJson, "{ this is not json ")
+
+            Check("A50e malformed overlay — ignored, base settings load intact, overlay inactive, no throw",
+                  A50Json(SettingsLoader.Current) = baseJson AndAlso
+                  Not SettingsLoader.OverlayActive AndAlso
+                  SettingsLoader.Current.TradeStore.Enabled,
+                  String.Format("treeEqual={0} active={1} tradeStore={2}",
+                                A50Json(SettingsLoader.Current) = baseJson,
+                                SettingsLoader.OverlayActive, SettingsLoader.Current.TradeStore.Enabled))
+        Finally
+            A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A50f: hot reload — the overlay appearing and disappearing both take effect --------
+    ' §1.1. Editing the overlay must not require a restart; DELETING it must revert, which is
+    ' the direction that matters (dotnet clean removes bin/, and losing the overlay silently
+    ' switches local capture back ON). Drives the REAL FileSystemWatcher, so it polls.
+    Private Sub A50f_HotReloadReMergesAndDeleteReverts()
+        Dim dir As String = A50TempDir("f")
+        Try
+            A50Init(dir, A50Json(A50BaseSettings()), Nothing)
+            Dim startsOff As Boolean = Not SettingsLoader.OverlayActive AndAlso SettingsLoader.Current.TradeStore.Enabled
+
+            Dim overlayPath As String = System.IO.Path.Combine(dir, SettingsLoader.LocalOverlayFileName)
+            File.WriteAllText(overlayPath, "{""trade_store"":{""enabled"":false}}")
+            Dim mergedOnCreate As Boolean = A50WaitFor(Function() SettingsLoader.OverlayActive AndAlso
+                                                                  Not SettingsLoader.Current.TradeStore.Enabled)
+
+            File.Delete(overlayPath)
+            Dim revertedOnDelete As Boolean = A50WaitFor(Function() Not SettingsLoader.OverlayActive AndAlso
+                                                                     SettingsLoader.Current.TradeStore.Enabled)
+
+            Check("A50f hot reload — dropping the overlay in re-merges without a restart; deleting it reverts to base",
+                  startsOff AndAlso mergedOnCreate AndAlso revertedOnDelete,
+                  String.Format("startsOff={0} mergedOnCreate={1} revertedOnDelete={2}",
+                                startsOff, mergedOnCreate, revertedOnDelete))
+        Finally
+            A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ''' <summary>Poll a condition for up to ~10 s — the watcher handler sleeps 200 ms before reloading.</summary>
+    Private Function A50WaitFor(cond As Func(Of Boolean)) As Boolean
+        For i As Integer = 1 To 100
+            If cond() Then Return True
+            Thread.Sleep(100)
+        Next
+        Return cond()
+    End Function
+
+    ' -- A50g: arrays are leaves — replaced wholesale, never element-merged -----------------
+    ' No admitted block carries an array today, so the pin is on the WALK rather than on a
+    ' POCO field: an array counts as exactly ONE path on both sides of the whitelist. If the
+    ' merge ever descended into arrays these would come back as per-element paths, which is
+    ' the partial-element surprise §1 rules out.
+    Private Sub A50g_ArraysReplaceWholesale()
+        Dim dir As String = A50TempDir("g")
+        Try
+            Dim baseCfg = A50BaseSettings()
+            A50Init(dir, A50Json(baseCfg),
+                    "{""trade_store"":{""enabled"":false,""probe_list"":[9,9]},""change_log"":[""nope""]}")
+
+            Dim applied = SettingsLoader.OverlayAppliedKeys
+            Dim rej = SettingsLoader.OverlayRejectedKeys
+            Dim appliedOk As Boolean = applied.Count = 2 AndAlso
+                                       applied.Contains("trade_store.enabled") AndAlso
+                                       applied.Contains("trade_store.probe_list")
+            Dim rejOk As Boolean = rej.Count = 1 AndAlso rej(0) = "change_log"
+            Dim c = SettingsLoader.Current
+
+            Check("A50g arrays are single leaves — one applied path for an admitted array, one rejected path for change_log; siblings and the base array survive",
+                  appliedOk AndAlso rejOk AndAlso Not c.TradeStore.Enabled AndAlso
+                  c.TradeStore.StoreDir = "backtest_data" AndAlso
+                  c.ChangeLog.Count = 1 AndAlso c.ChangeLog(0).Contains("fixture seed"),
+                  String.Format("applied=[{0}] rejected=[{1}] tradeStore={2} storeDir='{3}' changeLog={4}",
+                                String.Join(",", applied), String.Join(",", rej),
+                                c.TradeStore.Enabled, c.TradeStore.StoreDir, c.ChangeLog.Count))
+        Finally
+            A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A50h: the scoring-surface pin, through the REAL Calculate() ------------------------
+    ' A50d proves the key is ignored at parse. The header claims "Scoring impact: NONE by
+    ' construction", and that claim deserves a pin at the surface it is about (the A42a/A36a
+    ' pattern). The third arm is what makes the first two mean anything: the SAME overlay
+    ' values, applied directly to the POCO, DO move the verdict — so equality is a property
+    ' of the whitelist, not of values that were never potent.
+    Private Sub A50h_ScoringSurfacePinThroughRealCalculate()
+        Dim dirA As String = A50TempDir("h1")
+        Dim dirB As String = A50TempDir("h2")
+        Try
+            Dim baseJson As String = A50Json(A50BaseSettings())
+            Dim jopt As New JsonSerializerOptions With {.WriteIndented = True}
+
+            A50Init(dirA, baseJson, Nothing)
+            Dim vBase = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.None,
+                                                BuildA8Norms(), SettingsLoader.Current)
+            Dim jsonBase As String = JsonSerializer.Serialize(vBase, jopt)
+
+            Dim overlay As String =
+                "{""scoring"":{""regime_max_score"":{""trending"":5,""range_bound"":5,""transitional"":5}," &
+                """verdict_strong_pct"":0.01}," &
+                """indicators"":{""RSI"":{""pass2c_midline"":99.0}}}"
+            A50Init(dirB, baseJson, overlay)
+            Dim vOverlaid = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.None,
+                                                    BuildA8Norms(), SettingsLoader.Current)
+            Dim jsonOverlaid As String = JsonSerializer.Serialize(vOverlaid, jopt)
+
+            ' Potency arm — the same values applied to the POCO directly.
+            Dim potent = A50BaseSettings()
+            potent.Scoring.RegimeMaxScore.Trending = 5
+            potent.Scoring.RegimeMaxScore.RangeBound = 5
+            potent.Scoring.RegimeMaxScore.Transitional = 5
+            potent.Scoring.VerdictStrongPct = 0.01
+            Dim vPotent = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.None,
+                                                  BuildA8Norms(), potent)
+            Dim potencyOk As Boolean = JsonSerializer.Serialize(vPotent, jopt) <> jsonBase
+
+            Check("A50h scoring-surface pin — a scoring.*/indicators.* overlay leaves the verdict byte-identical through the real Calculate(), and the same values DO move it when applied directly",
+                  jsonBase = jsonOverlaid AndAlso potencyOk,
+                  String.Format("identical={0} potent={1} baseMax={2} overlaidMax={3} potentMax={4}",
+                                jsonBase = jsonOverlaid, potencyOk, vBase.MaxScore,
+                                vOverlaid.MaxScore, vPotent.MaxScore))
+        Finally
+            A50Cleanup(dirA)
+            A50Cleanup(dirB)
+        End Try
+    End Sub
+
+    ' -- A50i: network. is split PER KEY, not per block -------------------------------------
+    ' A block-granular reading silently undoes §2.2. transport selects the data source (three
+    ' run-path signals gate on `src Is _wsSource`), and auto_run cadence moves scoring — both
+    ' must fail while a sibling in the same block passes.
+    Private Sub A50i_NetworkSplitIsKeyGranular()
+        Dim dir As String = A50TempDir("i")
+        Try
+            A50Init(dir, A50Json(A50BaseSettings()),
+                    "{""network"":{""transport"":""rest"",""request_timeout_seconds"":45}," &
+                    """auto_run"":{""trigger_mode"":""interval""}}")
+
+            Dim c = SettingsLoader.Current
+            Dim rej = SettingsLoader.OverlayRejectedKeys
+            Dim applied = SettingsLoader.OverlayAppliedKeys
+
+            Check("A50i network split is key-granular — request_timeout_seconds admitted, transport and auto_run.trigger_mode rejected, base values survive",
+                  c.Network.RequestTimeoutSeconds = 45 AndAlso c.Network.Transport = "ws" AndAlso
+                  c.AutoRun.TriggerMode = "on_close" AndAlso
+                  applied.Count = 1 AndAlso applied(0) = "network.request_timeout_seconds" AndAlso
+                  rej.Count = 2 AndAlso rej.Contains("network.transport") AndAlso
+                  rej.Contains("auto_run.trigger_mode"),
+                  String.Format("timeout={0} transport='{1}' trigger='{2}' applied=[{3}] rejected=[{4}]",
+                                c.Network.RequestTimeoutSeconds, c.Network.Transport, c.AutoRun.TriggerMode,
+                                String.Join(",", applied), String.Join(",", rej)))
+        Finally
+            A50Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A50j: whitelist ∩ UI-writeback (re-audit F4) ---------------------------------------
+    ' Three admitted blocks are live-UI-writable — live_strip.enabled, performance_display.
+    ' metric_mode, analysis_logging.output_dump_*. On an overlaid box these become one-way
+    ' mirrors: the click writes the shared tracked file (the AWS xcopy source) while the
+    ' overlay keeps winning locally, so the checkbox visibly snaps back within ~2 s.
+    '
+    ' That is the ACCEPTED behaviour; what must never happen is the OVERLAY's own value
+    ' reaching the tracked file. Arm 1 is the click; arm 2 is the unrelated save, which is
+    ' where a naive implementation quietly promotes the override.
+    Private Sub A50j_WhitelistIntersectUiWriteback()
+        Dim dir As String = A50TempDir("j")
+        Try
+            Dim basePath As String = A50Init(dir, A50Json(A50BaseSettings()),
+                                             "{""live_strip"":{""enabled"":false}}")
+
+            ' Arm 1 — the TAPE checkbox click on an overlaid key (MainForm_LiveStrip.vb:341-343).
+            Dim cfg = SettingsLoader.Current
+            Dim overlayWinsBefore As Boolean = Not cfg.LiveStrip.Enabled
+            cfg.LiveStrip.Enabled = True
+            SettingsLoader.Save(cfg, "live_strip enabled toggled via UI", bumpVersion:=False)
+            Dim afterClick = A50Read(basePath)
+            Dim clickWroteBase As Boolean = afterClick.LiveStrip.Enabled          ' the click reached the base
+            Dim snapsBack As Boolean = Not SettingsLoader.Current.LiveStrip.Enabled ' overlay still wins
+
+            ' Arm 2 — an UNRELATED save must not promote the overlay's false into the base.
+            Dim cfg2 = SettingsLoader.Current
+            cfg2.AnalysisLogging.OutputDumpMaxRuns = 1234
+            SettingsLoader.Save(cfg2, "A50j unrelated save", bumpVersion:=False)
+            Dim afterUnrelated = A50Read(basePath)
+            Dim noPromotion As Boolean = afterUnrelated.LiveStrip.Enabled
+            Dim editKept As Boolean = afterUnrelated.AnalysisLogging.OutputDumpMaxRuns = 1234
+
+            Check("A50j whitelist ∩ UI-writeback — a click on an overlaid key writes the BASE and snaps back; an unrelated save never promotes the overlay value",
+                  overlayWinsBefore AndAlso clickWroteBase AndAlso snapsBack AndAlso
+                  noPromotion AndAlso editKept AndAlso
+                  Not SettingsLoader.Current.LiveStrip.Enabled,
+                  String.Format("before={0} clickWroteBase={1} snapsBack={2} noPromotion={3} editKept={4}",
+                                overlayWinsBefore, clickWroteBase, snapsBack, noPromotion, editKept))
+        Finally
+            A50Cleanup(dir)
         End Try
     End Sub
 

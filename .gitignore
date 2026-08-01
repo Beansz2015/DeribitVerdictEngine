@@ -386,6 +386,11 @@ bin/Release/net8.0-windows/analysis_output_dump.md
 # Settings snapshot history (per settings-snapshot-history-proposal.md §3p)
 settings_snapshots/
 
+# Per-box settings overlay (docs/settings-local-overlay-proposal.md §4). The running
+# copy already sits under the ignored bin/, but a root-level convenience copy must never
+# be committed — committing one would make it shared again and defeat the whole feature.
+settings.local.json
+
 # Live performance display sidecar caches (per live-performance-display-proposal.md §2d)
 bin/Debug/net8.0-windows/analysis_eval_cache.csv
 bin/Debug/net8.0-windows/ohlc_1m_cache.csv

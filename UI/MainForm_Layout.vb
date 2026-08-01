@@ -379,7 +379,16 @@ Partial Public Class MainForm
         ' only (the brief permits this over a hot-reload hook). The "Deribit Verdict
         ' Engine" prefix is load-bearing — tools/screenshot-mainform.ps1 finds the window
         ' by substring on it.
-        Me.Text = $"Deribit Verdict Engine — settings v{SettingsLoader.Current.Version}"
+        '
+        ' [settings.local.json overlay §3/D4] "+local" when a per-box overlay actually
+        ' overrode something. An override mechanism that hides itself is one more silent
+        ' divergence, and the marker's ABSENCE is what the daily glance in
+        ' aws-collector-deploy-checklist.md §3 relies on: no "+local" on the local box
+        ' means the overlay is gone and trade_store capture has quietly switched back on.
+        ' A live status element ⇒ display-parity exempt (the v62 MIN NET MOVE % precedent):
+        ' no snapshot line, no card binding.
+        Me.Text = $"Deribit Verdict Engine — settings v{SettingsLoader.Current.Version}" &
+                  If(SettingsLoader.OverlayActive, " +local", "")
 
         ' ARM AUTOTRADE visibility at load (trader observation 2026-07-17): the
         ' checkbox is created in BuildCardGridLayout ABOVE, i.e. before Initialise,
