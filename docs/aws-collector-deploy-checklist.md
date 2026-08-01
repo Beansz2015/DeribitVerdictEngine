@@ -93,10 +93,14 @@ The box owes nothing at end-of-life beyond a final copy-back of `analysis_log.cs
 |---|---|---|---|---|
 | AWS | `0efcda74-6b75-4d5f-af04-f3875b5afd8e` | v63 | 2026-07-30 16:41 | |
 | AWS | `5a3afd99-6db4-461c-886e-dddcca3d8c62` | **v64** | 2026-08-01 17:49:55 | 18-second connect. **First raw-trade capture anywhere** |
-| AWS | *(pending — read from `ws_health_aws.log`)* | **v65** | 2026-08-02 | **The D3 deploy.** ⚠ ASIA aggressor velocity ARMED from this id onward |
+| **AWS** | **`09c747f8-1efb-4ffe-8716-ec8cedfa54c6`** | **v65** | **2026-08-01 19:02:31** | **The D3 deploy.** ⚠ **ASIA aggressor velocity ARMED from this id onward.** 20-second connect (19:02:50.932Z OK), and that `OK` is a *completed-run* signal, not just a connect — so a run had fired by then |
 | local | `2f8c9fe1-8325-4fbb-9ee5-41fc267e1efd` | v64 | 2026-08-01 18:00:26 | capture OFF via overlay |
-| local | `a4333d00-2b3e-43fd-9226-32184761f4f6` | **v65** | 2026-08-01 18:58:37 | short run, ~4 min |
+| local | `a4333d00-2b3e-43fd-9226-32184761f4f6` | **v65** | 2026-08-01 18:58:37 | short run, ~4 min. v65 confirmed by mtime — the Debug exe was built 18:58:32Z, five seconds before |
 | local | `3916540f-6bc9-4648-ad6c-26bd65cfa462` | **v65** | 2026-08-01 19:02:32 | current. Title `settings v65 +local` |
+
+**The v65 edge is unusually clean and worth recording as the standard to hit.** AWS went down at **19:02:31.111Z** and local at **19:02:32.710Z** — **1.6 seconds apart** — so the two-box mixed-version window is effectively zero, and no pooled ASIA read spanning the boundary has a straddle to resolve beyond the id split itself. Contrast the alternative the §4.5 correction warns about: had the settings been dropped onto either running box, the version would have changed mid-`InstanceId` and no split would have been possible at all.
+
+**Reading `ws_health.log` correctly** (it is easy to over- or under-read, and both happened during the v64 landing): the process-start line comes from `WsHealthLog.LogStart` and fires unconditionally, so **a lone `DOWN` means the app started and nothing else has happened**. The following `OK` comes from `LogWsHealthTransitionForRun`, which runs **for every completed run, success or skip** — so **an `OK` line is positive evidence that at least one analysis run completed.** It is *not* evidence the auto-run timer is still ticking; only `analysis_log.csv` row growth shows that.
 
 ⚠ **The v64→v65 edge is a SCORING boundary.** ASIA rows under a v64 id carry an *unarmed* TFI burst vote; ASIA rows under a v65 id carry an armed one, and the two are byte-identical in shape. **Any ASIA read spanning 2026-08-01/02 must split on this table**, or the D3 watch reads its own contamination.
 
