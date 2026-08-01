@@ -1,6 +1,6 @@
 # Eval Cache — NO_DATA Outcome (F4 fix) · Proposal
 
-**Date:** 2026-07-21 · **Status:** PROPOSED — D-table awaits trader · **Priority: FIRST of the F-series** (correctness; every measurement inherits it — F1's re-read, W6 audits, Kelly CAL inputs).
+**Date:** 2026-07-21 · **Status:** ✅ **BUILD-AUTHORIZED — N1–N5 ALL TICKED 2026-07-21** (see §3; header corrected 2026-08-01, it had read *"PROPOSED — D-table awaits trader"* since the tick, which made a build-ready item look like an outstanding decision) · **Priority: FIRST of the F-series** (correctness; every measurement inherits it — F1's re-read, W6 audits, Kelly CAL inputs).
 **Evidence:** `offline-matrix-placed-target-spec-back.md` §8 F4 — `LivePerformanceTracker.EvaluateEntry` records an **empty bar-list as `WINDOW_EXPIRED` (a failure)** while `FailureRateMatrix.Compute` excludes the same condition from the denominator. Same condition, opposite handling: live rates bias **downward**, invisibly. Proven instance: 2026-07-03 NY = 22/22 fabricated expiries (backfill without OHLC coverage; other days 5–19%).
 **Type:** eval/measurement only — zero scoring impact, no ⚠ boundary, no settings keys.
 
