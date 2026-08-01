@@ -66,6 +66,22 @@ Hot-reloaded settings.local.json (Created) — overlay active: False
 
 ---
 
+## 3a. Close-out — F1/F2/D-C reviewed and ACCEPTED (2026-08-02, `1611011`)
+
+**Verified independently, not accepted:** I re-ran `verify-gate.ps1 -Mode prepush` — **GATE PASSED**, six Release builds, harness **ALL PASS** (A1–A51e + A50a–**k**), display-parity clean, version-bump satisfied by the token. Still **v64**, no settings keys.
+
+- **F1 — closed, both parts, and the three "do NOT"s honoured.** `UnmappedMemberHandling` is absent from the tree (checked); the key is still merged rather than rejected; the merge itself is untouched. The warning fires with the scoped text, and `OverlayActive` now keys on `present.Count > 0`.
+- **A50k is the right fixture, and arm 1 is why.** Pairing the typo with a real admitted key means the fix **cannot be satisfied by the lazy reading** — deactivating any overlay that contains an absent key would fail arm 1. Arm 2 is the F6 shape verbatim: typo alone ⇒ no `+local`, `trade_store.enabled` still `true`, tree intact. Confirmed in the gate output.
+- **The out-of-scope addition is sound and I would keep it.** The ACTIVE line counts *effective* overrides while still listing every merged path, with absent entries tagged `[NO EFFECT]` inline plus a reconciling suffix. Two numbers that could disagree now explain themselves on the same line. Within the spirit of "the line a future seat greps."
+- **Ordering checked on the one path where it could have silently cost the diagnostic:** `LoadBaseOnly` clears `_overlayUnknown`, and the typo-only branch re-assigns it *after* that call — so the diagnostic survives the very case it exists for. A50k arm 2 asserts it and passes.
+- **The typo-only branch's `Save` behaviour is safe.** With `_overlayActive = False` the pre-overlay write path runs, and that is correct rather than merely tolerable: the caller's POCO came from a merged tree whose only difference deserialised to nothing, so it is byte-equivalent to the base.
+- **F2 — taken.** `Re-read settings.local.json — overlay present: True · active: True`. The `(Deleted) — overlay active: True` pairs are gone from the harness output.
+- **D-C — done, and better than asked.** Two places, not one: §3 carries the glance line **plus the AWS inversion** (a `+local` there means an overlay that box should not have), and §1a marks the hand-edit chore **retired** with the old procedure kept parenthetically. Retiring the superseded chore was not in the request and is exactly right — leaving it standing beside the overlay is the stale-status-prose failure the queue's §2b sweep exists to catch.
+
+**One observation worth carrying beyond this spec**, from §6.1's closing note: `TRADE_STORE` failed loudly because the allow-list is ordinal; `enabledd` failed silently because the allow-list is a prefix match over *paths* and knows nothing about the POCO. **A whitelist validates a key's authority, never its existence.** Any future allow-list over a config surface should carry both checks from the start.
+
+**Nothing outstanding on this build.** A3's landing sequence is unblocked.
+
 ## 4. What I did not verify
 
 - **No live app run.** The title-bar `+local` string is harness-proven at `OverlayActive` but visually unverified — the trader's test gate, and step 3 of the landing sequence is the check.
