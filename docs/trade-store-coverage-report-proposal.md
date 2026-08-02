@@ -240,7 +240,18 @@ Build acceptance: solution + AutoTweaker + WhatIfRunner + CeilingAudit + Backtes
 
 ---
 
-## 9. D-table — awaiting the trader
+## 9. D-table — **D1–D5 TICKED 2026-08-03; D6–D7 outstanding**
+
+> ✅ **TICKED 2026-08-03 (trader), all as recommended: D1 (a) new verb · D2 (a) consume the uptime records · D3 (a) CLI flag · D4 300,000 ms · D5 (a) build Part B now, same build.**
+>
+> ⏳ **Still outstanding: D6** (`--strict` default — recommendation is (a) opt-in) and **D7** (defect vs switched-off).
+>
+> ⚠ **Two rulings now bind this spec and change two of its rows. Read both before building:**
+>
+> 1. **[`j-b-scoping-ruling-2026-08-02.md`](j-b-scoping-ruling-2026-08-02.md)** — the defect default applies only to hours positively recorded as capturing. Adds `not-capturing` and `unknown-scope` classes. **Rules out D7 = (b).** With **D5 = (a) now ticked, D7 = (a) costs nothing extra** — Part B's version bump absorbs the marker line, which was the only argument against it.
+> 2. **[`weekday-scope-ruling-2026-08-03.md`](weekday-scope-ruling-2026-08-03.md)** — the report evaluates **weekday hours only**; weekend hours classify `out-of-scope-weekend`. **This retires J-C's "extended to include a weekend" requirement and settles D4:** the 300,000 ms default was derived at 1.85× the observed 2m42s max on a **Wed→Thu** window, i.e. already a weekday basis, so it is **confirmed rather than provisional**. Sensitivity improves — including weekends would have raised the threshold to tolerate quiet periods. **Part B stays unconditional**: liveness detection does not take weekends off.
+>
+> **Net: the spec now has no outstanding data dependency.** The REST-backfill-a-weekend task is cancelled.
 
 | # | Decision | Options | My read |
 |---|---|---|---|
