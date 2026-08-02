@@ -6,6 +6,8 @@
 
 > **Headline: the unit defect is real and confirmed, but BOTH numbers the previous work produced must be discarded — the 25.0/40.0 ladder *and* the 1.45 ratio it was to be rebuilt from. `flat_threshold` is denominated in the wrong kind of unit, not merely set to the wrong value.**
 
+> ⛔ **OUTCOME — PARKED 2026-08-02 (trader).** No build, and **no ⚠ boundary is opened for this.** The finding is banked; the fix is not scheduled. **It rides the next scoring boundary that opens for another reason** — the same treatment the v64 `change_log` rider got, which could not justify a boundary alone and travelled on D3's. **What would un-park it: trades-covered replay**, at which point TTM's vote can be tested against outcomes instead of counted, and an ATR-relative form showing a real gradient would earn its own boundary. Until then `flat_threshold` stays **0.5** and the FLAT band stays inert — a known, recorded, deliberate state rather than an unnoticed one.
+
 ---
 
 ## 1. What reproduces
@@ -84,7 +86,7 @@ Across the entire plausible range the vote rate moves only 45.5 % (k=0.10) → 4
 | **D1-a** | Fix the **unit** or just the **value**? | (a) ATR-relative multiple, replacing the USD constant · (b) new USD constant · (c) no change | **(a).** It is the only option that survives a volatility regime change, it collapses the per-resolution ladder, and the measured stability gain is **2–4×**. (b) buys a number that is ~26 % wrong within months. |
 | **D1-b** | If (a), what multiple? | 0.20 / **0.25** / 0.30 / 0.40 | **0.25–0.30**, one value for both resolutions. FLAT lands ~9.5–14 % (a band that does something without gutting the signal) and the vote stays 41.5–43.5 %, i.e. within ~4 pp of today. **0.25 if the priority is minimal disturbance; 0.30 if the priority is a band that visibly bites.** |
 | **D1-c** | If (b) — a USD value now | — | The honest equivalents at 2026-07 median ATR are **1m ≈ 5.2, 3m ≈ 11.7** (k=0.25) — an order of magnitude *below* the retired 25/40, and needing a re-check every regime. **Recorded for completeness; not recommended.** |
-| **D1-d** | Ship it at all? | (a) build now · (b) park | ⚠ **Genuinely open — see §6.** The unit argument is a correctness argument and it is solid. The *benefit* is unmeasured, the knob is low-leverage, and the standing instruction from W6-4 is "no spend meanwhile." **My read: park the build, bank the finding.** |
+| **D1-d** | Ship it at all? | (a) build now · (b) park | ✅ **RULED 2026-08-02 (trader): (b) PARK.** No boundary is opened for this. **D1-a/b/c are answered in principle but not scheduled** — when this is built it goes ATR-relative at k ≈ 0.25–0.30, one value for both resolutions; until then nothing changes and `flat_threshold` stays 0.5. |
 
 **D1-a = (a) is a CODE change**, not a settings tick: `CalcTTMSqueeze`'s `flatThreshold` parameter becomes a multiple applied to an ATR passed in, so the signature, the call site in `MainForm_Analysis`, the POCO key and the what-if/tweaker surfaces all move together. It needs its own spec and its own ⚠ boundary. **It is not the one-line change the queue row implies.**
 
