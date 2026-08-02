@@ -240,11 +240,11 @@ Build acceptance: solution + AutoTweaker + WhatIfRunner + CeilingAudit + Backtes
 
 ---
 
-## 9. D-table — **D1–D5 TICKED 2026-08-03; D6–D7 outstanding**
+## 9. D-table — ✅ **ALL SEVEN TICKED 2026-08-03. BUILD-AUTHORIZED.**
 
-> ✅ **TICKED 2026-08-03 (trader), all as recommended: D1 (a) new verb · D2 (a) consume the uptime records · D3 (a) CLI flag · D4 300,000 ms · D5 (a) build Part B now, same build.**
+> ✅ **TICKED 2026-08-03 (trader), all as recommended: D1 (a) new verb · D2 (a) consume the uptime records · D3 (a) CLI flag · D4 300,000 ms · D5 (a) build Part B now, same build · D6 (a) `--strict` opt-in · D7 (a) marker line.**
 >
-> ⏳ **Still outstanding: D6** (`--strict` default — recommendation is (a) opt-in) and **D7** (defect vs switched-off).
+> **Implementer brief: [`trade-store-coverage-report-implementer-brief.md`](trade-store-coverage-report-implementer-brief.md)** — carries the six-class set, the three fixture arms the rulings add (A49k–m), and the traps. **Fixture family A49**, verified free.
 >
 > ⚠ **Two rulings now bind this spec and change two of its rows. Read both before building:**
 >
