@@ -6,6 +6,25 @@
 
 ---
 
+## 0. Model + effort recommendation
+
+**Sonnet 5 at high effort. Not Opus.** The judgment work is done — the proposal, the two rulings in §2 and this brief pin every decision, so nothing here needs novel design. Every mechanical piece has a close in-repo template: **four existing verbs** for dispatch (`BacktestProgram.vb:114-214`), **`WsHealthLog` / `AlertsSidecar`** for the marker's never-throws contract, the **EXIT GUARD strip / `MIN NET MOVE %` row** for a parity-exempt live element, and **A48/A50/A51** for the fixture idiom. It is a large build, not a hard one.
+
+**Split across two sessions** — it is a lot for one context:
+
+| Session | Scope | Effort |
+|---|---|---|
+| **1** | D7 marker line → Part A verb + S0–S4 + six-class logic → **A49a–l** | **high** |
+| **2** | Part B `TAPE STORE` element → **A49m** | **medium** |
+
+The marker goes first because A49k/l cannot be written without it. Session 2 is genuinely easier: a read plus a label over state `TradeStoreWriter` already tracks, parity-exempt, two precedents.
+
+⚠ **Two inversion traps are where a fast read will fail, and both yield a report that looks fine and is backwards** — see §6.2 and §6.1. The fixtures are meant to catch them, **but the implementer writes the fixtures too**, so a misunderstanding propagates into its own test. Verify these two by hand before accepting the build.
+
+**Escalate to Opus if** the implementer proposes collapsing any of the six classes in §2.3, or "simplifying" the classification. That is the tell that it has not internalised why six exist, and it is the failure mode that costs tape.
+
+---
+
 ## 1. The D-table, settled
 
 | # | Ticked |
