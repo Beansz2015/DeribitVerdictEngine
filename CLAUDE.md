@@ -109,6 +109,15 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 **Spec-first workflow.** Novel features require a proposal `.md` file committed to `/docs` before coding begins. Implement only approved specs — do not invent design decisions unilaterally.
 
+**Every spec or implementer brief handed to a new implementer MUST carry a model + effort recommendation (RULED 2026-08-03, trader-directed).** The seat that wrote the spec has just done the hardest read of it and is the only one positioned to judge what building it needs; making the trader ask is making the wrong person estimate. Put it at the **top** of the brief, not the end. A bare "Sonnet, high" is not enough — it must carry:
+
+- **Model + effort**, and **why that tier** — name what makes it easy or hard. "The judgment work is done and every mechanical piece has an in-repo template" is a reason; "this is straightforward" is not.
+- **Where that model will specifically slip**, if anywhere — the two or three concrete traps, not a general warning. Say plainly when the fixtures cannot be relied on to catch them (the implementer writes the fixtures too, so a misunderstanding propagates into its own test).
+- **The escalation trigger** — the observable behaviour that means stop and move up a tier.
+- **A session split** when the build is large, with per-session effort. Sequence it by dependency, not by size.
+
+Worked example: [`trade-store-coverage-report-implementer-brief.md`](docs/trade-store-coverage-report-implementer-brief.md) §0.
+
 **Reporting a multi-lane batch back to a reviewing seat** follows `docs/batch-review-packet-convention.md` — two documents, not one: a `*-batch-summary.md` outcome record (what happened) plus a `*-spec-back.md` review packet (ranked verification handles · decisions queued with your read where you have one · feedback on the spec's own assumptions · what you did not verify). Fable-confirmed 2026-07-31.
 
 **Push back explicitly** when a proposed change would reintroduce a deliberately removed pattern (non-directional padding, double-counting, fixed penalties vs. ADX-proximity scale). Cite the version it was removed and why.
