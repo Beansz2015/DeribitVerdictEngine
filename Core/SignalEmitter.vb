@@ -20,8 +20,15 @@
 ' invariant culture, generated_at_utc ISO-8601 UTC with Z, JsonObject insertion
 ' order = the §3 schema order.
 '
-' TryWrite is the repo's standard atomic write (tmp + File.Replace — the
-' SettingsLoader/OhlcCache pattern), creates the target directory if missing
+' TryWrite is the repo's standard atomic write (temp + atomic replace — the
+' SettingsLoader/OhlcCache pattern). NOTE the existence guard is load-bearing:
+' File.Replace THROWS when the destination does not exist, which is exactly the
+' first-write case, so TryWrite falls back to File.Move there. Naming the API
+' alone would pin something that cannot serve the requirement unaided —
+' atomicity is the requirement, File.Replace is only half of how it is met.
+' (Wording aligned 2026-08-04 with the order-app seat's §8.1 correction; the
+' CODE already had the guard, only this comment was imprecise.)
+' Creates the target directory if missing
 ' (§1 never-throw discipline), and NEVER throws (catch + console log).
 '
 ' Host-agnostic: no WinForms, no MainForm coupling — CLI-port-ready. The two
