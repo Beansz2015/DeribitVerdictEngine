@@ -211,3 +211,116 @@ immediately — no separate activation step. Session 2's implementer should re-r
 this document before starting; the `expected-missing` and S1-skip decisions (§2.1, §2.2)
 constrain how A49m's weekend/liveness pairing should be written, since A49m needs the SAME
 six-class walk this session already ships.
+
+---
+
+## 5. Session 2 build — live TAPE STORE status strip (2026-08-05)
+
+**Settings v65 → v65 (unchanged).** No settings keys added — derives cadence and thresholds
+from the existing `trade_store.flush_seconds` — so no version bump, per the review's own
+guidance (§4 item 4 of `c1-session1-review-2026-08-04.md`). Part B of the proposal, per the
+Session 1/Session 2 split. Reviewed and accepted before starting: **✅ ACCEPTED, Session 2
+may proceed**, two non-blocking findings, both addressed below.
+
+### 5.1 What shipped (map to the proposal's §4 Part B description)
+
+| Proposal item | Shipped |
+|---|---|
+| Seconds since the last successful FLUSH (not last trade) | ✅ `Core/TradeStoreWriter.vb` gains `_lastFlushUtc`/`LastFlushUtc` — set inside `Flush()` only when `AppendRows` returns `> 0` (a flush that wrote nothing doesn't count as evidence of anything). |
+| Rows committed this process | ✅ `_totalRowsWritten`/`TotalRowsWritten` — cumulative across this writer INSTANCE's life, deliberately not reset by `ResetBufferState` (a WS reconnect is still the same process capturing the same tape). |
+| Amber past 3× flush_seconds, red past 10× | ✅ `TradeStoreWriter.ClassifyTapeStoreTier(secondsSinceFlush, flushSeconds)` — pure, host-agnostic, fixture-reachable. Returns `"UNKNOWN"` when never-yet-flushed (cold start, not a fault) — a fourth state the proposal's illustrative two-tier description didn't need to name but the code has to. |
+| "A read plus a label" — TradeStoreWriter already tracks the state | ✅ `DeribitWsFeed.GetTradeStoreStatus()` is the read (new `TradeStoreStatus` POCO); `UI/MainForm_TapeStoreStatus.vb` is the label — its own `System.Windows.Forms.Timer`, ticking every `flush_seconds` (floored at 2s, capped at 30s), independent of auto-run/exit-guard/live-strip, matching the established one-timer-per-live-element pattern exactly. |
+| Live status element ⇒ display-parity exempt | ✅ No snapshot line, no card binding — the v62 MIN NET MOVE % / EXIT GUARD strip precedent, stated explicitly. |
+| Renders `TAPE STORE: 12s · 47.3k rows` | ✅ Verbatim shape, `ComposeTapeStoreStrip`. Row counts ≥1000 compact to `47.3k`. |
+| Fixture A49m | ✅ Pairs Part A's weekday classification (a Saturday hour → `out-of-scope-weekend`, never `defect`) with Part B's tier classifier reporting `RED` on the identical silence duration — proving Part B has nothing in it that could suppress a weekend reading (it takes no date input at all). |
+| Acceptance | ✅ Solution + AutoTweaker + WhatIfRunner + CeilingAudit + BacktestRunner + OrderCheck **0/0** Release; harness **ALL PASS** (A1–A49l unregressed + A49m); `verify-gate prepush` **GATE PASSED** (same expected non-blocking version-bump WARN as Session 1, same reason — a `Core/` file changed, no key added). |
+
+### 5.2 Deviations & decisions
+
+**5.2.1 Placement: its own AutoSize row in the SETTINGS & TOOLS card, not appended to the
+existing microstructure TAPE strip.** The proposal's illustrative text could be read either
+way. I read it as a distinct element because the two precedents it explicitly names — MIN
+NET MOVE % and the EXIT GUARD strip — are BOTH their own dedicated rows in that same card,
+not segments folded into the crowded microstructure strip (which already carries price,
+levels, TFI, spread, book imbalance, tape speed, and up to four conditional tags). Folding
+capture health in there would bury exactly the signal meant to retire a daily glance.
+
+**5.2.2 Own timer at the `flush_seconds` cadence, no new settings key.** Every other live
+element in this codebase (EXIT GUARD, live TAPE strip) has its own dedicated refresh-interval
+settings key. Adding `tape_store_status.refresh_sec` here would have been consistent with
+that pattern but would cost a settings key and — per the review's own framing — a version
+bump for no real gain, since checking at the flush cadence already matches the feature's
+subject matter. Floored at 2s / capped at 30s so an extreme `flush_seconds` (very small or
+very large) can't busy-spin the UI thread or under-refresh the glance.
+
+**5.2.3 Hidden entirely (AutoSize row collapses to 0) when `trade_store.enabled` is false,**
+mirroring the WS-health segment's precedent (empty unless `transport="ws"`) rather than
+showing a permanent "disabled" state. On the local box (capture off under D1's AWS-only
+ruling) this means **zero visual change** — verified by construction: `GetTradeStoreStatus`
+returns `Enabled=False` whenever `TradeStoreWriter.ShouldCapture` is false, and the tick
+handler's very first branch on `Not status.Enabled` calls `SetTapeStoreStrip(..., visible
+:=False)`, which never flips `Visible` to `True` and therefore never touches
+`SyncSettingsCardHeight`'s conditional +28. On the capturing (AWS) box the element is visible
+essentially always — the opposite of EXIT GUARD, which is the minority case — because that
+box is precisely the one this feature exists for.
+
+**5.2.4 `Enabled` reflects the SETTINGS gate only, not "has a writer been constructed yet."**
+`GetTradeStoreStatus` returns `Enabled=True` as soon as `trade_store.enabled=true`, even
+before any trade has ever streamed (no `TradeStoreWriter` instance exists yet). The element
+then shows `"TAPE STORE: no flush yet · 0 rows"` rather than staying hidden — a genuinely
+different, honest state from "nothing to report" (capture off) and from "well past the
+threshold" (a real problem). `ClassifyTapeStoreTier` returns `"UNKNOWN"` for this case,
+rendered in the neutral `FG_TERTIARY` colour, not amber/red — a cold start is not a fault.
+
+**5.2.5 Not launched live — the same "v57 stomp" precedent the v62 fee-aware min-move build
+recorded.** Starting `MainForm` appends collector rows under a fresh `InstanceId` into the
+real `analysis_log.csv`, so I verified the layout by arithmetic instead of by screenshot: the
+`outer` TableLayoutPanel's `RowCount` (5) and its five `RowStyles.Add` calls line up 1:1 with
+its five `Controls.Add` calls at indices 0–4 (`row1`, `lblExitGuard`, `BuildMinNetMoveRow()`,
+`lblTapeStoreStatus`, `grpTools`), and `SyncSettingsCardHeight` now sums both conditional
+strips' contributions rather than just EXIT GUARD's. **The live render is the trader's test
+gate** — same as the MIN NET MOVE % row before it, which is also the build that this
+precedent is drawn from.
+
+### 5.3 Findings from the Session 1 review, addressed
+
+**F1 — `Captured` does not mean "fully covered" (low-medium, not blocking).** The reviewer's
+own recommended minimum: a legend line, not a blind fix. Added to `BuildConsoleSummary` (and
+therefore `BuildMarkdown`, which wraps it) —
+*"'captured' = rows present and no gap ENDING in this hour breached the threshold — a
+trailing-edge silence is charged to the FOLLOWING hour, not this one."* The bounded fix (cap
+a trailing-edge candidate gap against `ResolveBoundaryUtc`) is **not** built — deliberately,
+per the reviewer's own steer that it "needs care" and that Session 2 could decide whether it
+was cheap enough. Given Session 2's actual scope turned out to be Part B (a separate,
+larger piece of work), I judged rushing a change to already-reviewed classification logic
+under the same session's time budget as the wrong trade — flagged as a named follow-up
+instead of touched.
+
+**F2 — a capture-state transition mid-hour is scoped by the PREVIOUS marker (low, not
+blocking).** Flagging-only per the review ("a fix wants a rule for split hours, which is a
+spec question, not an implementation one"). Not changed. Recorded here so it isn't
+rediscovered as if new.
+
+### 5.4 Not done / noted, not fixed
+
+1. **§15's changelog table is growing again** — now four "settings-untouched" rows atop the
+   five capped versioned rows (v65–v61), the same shape CLAUDE.md's own header warns about.
+   I did not trim it this session: `docs/history-archive.md` is ~31K tokens and a rushed
+   splice into it under time pressure risked a worse mistake than the growth it would fix.
+   Flagging for whoever next touches that table — the archive's §E section is the target,
+   oldest entries first (v61, then the W6-4 untouched row).
+2. **F1's bounded fix** — see §5.3. A real but scoped follow-up, not urgent (the incident
+   is mis-attributed by exactly one hour, never lost).
+3. **F2's split-hour scoping rule** — needs a trader/orchestrator decision on which rule to
+   apply, not an implementer judgment call.
+
+### 5.5 Post-ship
+
+**Visual verification is the trader's test gate** (§5.2.5) — the one thing this session
+could not do itself. Look for: the SETTINGS & TOOLS card growing by 28px when capture is on
+(compare against a build from before this session on the same box, or toggle
+`trade_store.enabled` locally via `settings.local.json` and restart); the strip reading
+`TAPE STORE: Ns · Mk rows` and colouring neutral/amber/red as flush latency crosses the
+3×/10× `flush_seconds` thresholds; and confirming it stays fully hidden (no dead space) when
+capture is off. Once confirmed, both C1 sessions are complete and the two local commits
+(Session 1) plus this session's commit are ready to push together.

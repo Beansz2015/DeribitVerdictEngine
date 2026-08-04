@@ -426,6 +426,9 @@ Module Program
         A49k_NotCapturingInversionTrap()
         A49l_UnknownScopeWithNoMarkerAtAll()
 
+        ' [C1 Session 2 / Part B — trade-store-coverage-report-implementer-brief.md §0]
+        A49m_WeekdayScopeVsPartBUnconditionalLiveness()
+
         ' [A51 — candle/funding store write invariant, docs/store-integrity-check-2026-07-31
         ' -post-fix.md] The candle backfill destroyed June 2026 at 3m/5m/15m by writing a
         ' whole MONTH file from a partial SEGMENT fetch, behind a resolution-blind coverage
@@ -7799,6 +7802,37 @@ Module Program
         Check("A49l unknown-scope — no marker record at all classifies unknown-scope regardless of store state, distinct from not-capturing and expected-missing",
               hSilent.Classification = HourClass.UnknownScope AndAlso hClean.Classification = HourClass.UnknownScope,
               String.Format("silent={0} clean={1}", hSilent.Classification, hClean.Classification))
+    End Sub
+
+    ' -- A49m: weekday scope — Part A never flags a weekend defect, Part B stays unconditional
+    ' (C1 Session 2 / Part B pairing) ------------------------------------------------------
+    Private Sub A49m_WeekdayScopeVsPartBUnconditionalLiveness()
+        Dim saturday As New DateTime(2026, 7, 25, 5, 0, 0, DateTimeKind.Utc)   ' A49Monday() minus 2 days
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(saturday.AddDays(-7)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(saturday.AddDays(-7)),
+                                 .LastUtcMs = A49Ms(saturday.AddDays(7)), .IsTrailing = True}
+        }
+        ' Part A — the Saturday hour is silent (zero store rows, the same silence that would
+        ' flag DEFECT on a weekday) but must classify out-of-scope-weekend, never defect.
+        Dim weekendHour = CoverageReport.ClassifyHour(saturday, markers, upIntervals, False, Nothing, 300000L)
+
+        ' Part B — the SAME silence, expressed as seconds-since-flush, evaluated by the
+        ' liveness tier classifier. It takes no date/day-of-week input at all, so there is
+        ' nothing in it that COULD suppress a weekend reading — it reports RED exactly as it
+        ' would on a weekday. That absence-of-a-check IS the "stays unconditional on
+        ' weekends" guarantee (weekday-scope-ruling-2026-08-03.md §3 — Part B is the one
+        ' place the ruling deliberately does not apply).
+        Dim flushSeconds As Integer = 30
+        Dim longSilenceSec As Double = 15.0 * flushSeconds   ' well past the 10× red threshold
+        Dim tier As String = TradeStoreWriter.ClassifyTapeStoreTier(longSilenceSec, flushSeconds)
+
+        Check("A49m weekday scope — a Saturday hour classifies out-of-scope-weekend and never defect, while Part B's liveness tier still reports RED on the identical silence",
+              weekendHour.Classification = HourClass.OutOfScopeWeekend AndAlso tier = "RED",
+              String.Format("weekendHour={0} (dayOfWeek={1}) tapeTier={2}",
+                            weekendHour.Classification, saturday.DayOfWeek, tier))
     End Sub
 
     ' ═══════════════════════════════════════════════════════════════════════════════════

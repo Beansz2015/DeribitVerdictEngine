@@ -669,6 +669,17 @@ Public NotInheritable Class CoverageReport
             sb.AppendLine(String.Format("  VERDICT: {0} defect hour(s){1}", defectCount,
                                         If(Not candleOk OrElse fundingBad, " + store gaps above", "")))
         End If
+        ' [Session 1 review F1, 2026-08-04 — c1-session1-review-2026-08-04.md] AccumulateHourStats
+        ' attributes a gap to the hour containing the trade that ENDS it, so a trailing-edge
+        ' silence (trades early in an hour, then quiet until well into the next) reads
+        ' `captured` on the hour it started in. The incident is not lost — the FOLLOWING hour
+        ' still flags — but `captured` here means "no gap ENDING in this hour breached the
+        ' threshold", not "gap-free throughout". Stated once per report rather than fixed
+        ' blind: the bounded fix needs the trailing-evidence boundary this same file already
+        ' computes (ResolveBoundaryUtc), and rushing it risks a worse mis-attribution than the
+        ' one it fixes.
+        sb.AppendLine("  NOTE: 'captured' = rows present and no gap ENDING in this hour breached the threshold — " &
+                      "a trailing-edge silence is charged to the FOLLOWING hour, not this one.")
         Return sb.ToString()
     End Function
 

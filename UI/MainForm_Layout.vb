@@ -252,6 +252,12 @@ Partial Public Class MainForm
     ' card MUST grow with the new row or TOOLS starves and silently clips its 4th LinkRow.
     Friend Const SETTINGS_CARD_H_BASE As Integer = 306
     Friend Const EXIT_GUARD_STRIP_H   As Integer = 28
+    ' [C1 Session 2 / Part B] TAPE STORE status strip — same collapsing-AutoSize-row shape as
+    ' the EXIT GUARD strip above (SyncSettingsCardHeight below extends the same mechanism):
+    ' hidden (row height 0) when trade_store.enabled is false, so a non-capturing box (the
+    ' local box, under D1's AWS-only ruling) shows nothing extra. On a capturing box it is
+    ' visible essentially always, unlike EXIT GUARD which is the minority case.
+    Friend Const TAPE_STORE_STRIP_H   As Integer = 28
     Friend _settingsRowIndex As Integer = -1
 
     ' [v62 fee-aware min-move floor] The MIN NET MOVE % row inside SETTINGS & TOOLS —
@@ -433,6 +439,10 @@ Partial Public Class MainForm
         ' [P4 #3] Start the live TAPE strip tick at form load (independent of auto-run + the exit-guard
         ' timer). Each tick self-gates on live_strip.enabled + feed health; disposed in OnFormClosing.
         StartLiveStrip()
+        ' [C1 Session 2 / Part B] Start the TAPE STORE status tick — independent of auto-run,
+        ' exit guard, and the live strip. Each tick self-gates on trade_store.enabled; disposed
+        ' in OnFormClosing.
+        StartTapeStoreStatus()
 
         UpdateLogInfo()
 
@@ -536,6 +546,10 @@ Partial Public Class MainForm
         End Try
         Try
             StopLiveStrip()   ' [P4 #3] dispose the live TAPE strip tick on close
+        Catch
+        End Try
+        Try
+            StopTapeStoreStatus()   ' [C1 Session 2] dispose the TAPE STORE status tick on close
         Catch
         End Try
         MyBase.OnFormClosing(e)
@@ -889,8 +903,10 @@ Partial Public Class MainForm
     Friend Sub SyncSettingsCardHeight()
         If _gridRoot Is Nothing OrElse _settingsRowIndex < 0 Then Return
         If _settingsRowIndex >= _gridRoot.RowStyles.Count Then Return
-        Dim shown As Boolean = (lblExitGuard IsNot Nothing AndAlso lblExitGuard.Visible)
-        Dim h As Single = SETTINGS_CARD_H_BASE + If(shown, EXIT_GUARD_STRIP_H, 0)
+        Dim exitShown As Boolean = (lblExitGuard IsNot Nothing AndAlso lblExitGuard.Visible)
+        Dim tapeShown As Boolean = (lblTapeStoreStatus IsNot Nothing AndAlso lblTapeStoreStatus.Visible)
+        Dim h As Single = SETTINGS_CARD_H_BASE + If(exitShown, EXIT_GUARD_STRIP_H, 0) +
+                          If(tapeShown, TAPE_STORE_STRIP_H, 0)
         If _gridRoot.RowStyles(_settingsRowIndex).Height <> h Then
             _gridRoot.RowStyles(_settingsRowIndex).Height = h
         End If
@@ -1093,7 +1109,7 @@ Partial Public Class MainForm
         ' between "SETTINGS TOOLS" and "LOG" — the boxes are transparent, so only ink matters.
         Dim outer = New TableLayoutPanel() With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = 1, .RowCount = 4,
+            .ColumnCount = 1, .RowCount = 5,
             .BackColor = Color.Transparent,
             .Padding = New Padding(0, 14, 0, 0),
             .Margin = New Padding(0),
@@ -1121,6 +1137,9 @@ Partial Public Class MainForm
         ' [v62] MIN NET MOVE % editor — always visible (unlike the guard strip), so a flat
         ' absolute row. SETTINGS_CARD_H_BASE grew by the same 28 to pay for it.
         outer.RowStyles.Add(New RowStyle(SizeType.Absolute, 28))    ' v62 MIN NET MOVE % row
+        ' [C1 Session 2] TAPE STORE strip — AutoSize like EXIT GUARD (collapses to 0 when
+        ' trade_store.enabled is false; SyncSettingsCardHeight grows the card when it shows).
+        outer.RowStyles.Add(New RowStyle(SizeType.AutoSize))        ' C1 TAPE STORE strip
         outer.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F)) ' TOOLS (now holds the CTA)
 
         ' ---------------- Row 1: LOG / AUTO-RUN (2 cols) ----------------
@@ -1255,6 +1274,28 @@ Partial Public Class MainForm
         ' (fee-aware-min-move-proposal.md §2/§3).
         outer.Controls.Add(BuildMinNetMoveRow(), 0, 2)
 
+        ' ---------------- Row 3: TAPE STORE status strip (C1 Session 2 / Part B) -----------
+        ' Live capture-health readout — docs/trade-store-coverage-report-proposal.md §4:
+        ' "TAPE STORE: 12s · 47.3k rows", seconds since the last successful FLUSH (not last
+        ' trade — a flush proves the whole chain to disk) + rows committed this process.
+        ' Amber past 3× trade_store.flush_seconds, red past 10× (MainForm_TapeStoreStatus.vb).
+        ' Hidden (AutoSize collapses to 0) when trade_store.enabled is false — nothing to
+        ' report on a non-capturing box. A LIVE STATUS ELEMENT like EXIT GUARD/MIN NET MOVE %
+        ' above — no snapshot line, no card-binding obligation under the display-string parity
+        ' rule (proposal §4/§5).
+        lblTapeStoreStatus = New Label() With {
+            .Dock = DockStyle.Fill,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Text = "",
+            .Font = Theme.FontMono(9.0F, FontStyle.Bold),
+            .ForeColor = Theme.FG_QUATERNARY,
+            .BackColor = Color.Transparent,
+            .Margin = New Padding(2, 0, 2, 4),
+            .Visible = False,
+            .TabStop = False
+        }
+        outer.Controls.Add(lblTapeStoreStatus, 0, 3)
+
         ' ---------------- ANALYSIS REPORT CTA (now inside the TOOLS box) ----------------
         ' P3 AnalysisReportButton — Solid amber FlatButton with 📊 icon, →
         ' arrow, and a persistent glow halo. Click shim forwards into the
@@ -1366,7 +1407,7 @@ Partial Public Class MainForm
             _cardSettingsTools.Controls.Add(lnk)
         Next
 
-        outer.Controls.Add(grpTools, 0, 3)
+        outer.Controls.Add(grpTools, 0, 4)
 
         _cardSettingsTools.Controls.Add(outer)
         outer.BringToFront()

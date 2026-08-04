@@ -84,6 +84,38 @@ Public NotInheritable Class TradeStoreWriter
         End Get
     End Property
 
+    ' [C1 Session 2 / Part B — trade-store-coverage-report-proposal.md §4] Wall-clock flush
+    ' bookkeeping for the live TAPE STORE status element. Distinct from _lastTs above: _lastTs
+    ' is a TRADE timestamp (the monotonic dedup guard), these are WALL-CLOCK facts about this
+    ' writer INSTANCE's own life — "when did disk last actually receive something" and "how
+    ' much have I committed since I was constructed". A flush proves the WHOLE chain reached
+    ' disk; a buffered trade only proves the stream got it.
+    Private _lastFlushUtc As DateTime? = Nothing
+    Private _totalRowsWritten As Long = 0
+
+    ''' <summary>[Part B] Wall-clock time of the last flush that committed ≥1 row, or Nothing
+    ''' if this writer instance has never successfully flushed anything.</summary>
+    Public ReadOnly Property LastFlushUtc As DateTime?
+        Get
+            SyncLock _pending
+                Return _lastFlushUtc
+            End SyncLock
+        End Get
+    End Property
+
+    ''' <summary>[Part B] Rows committed by THIS writer instance since construction — "this
+    ''' process" for the streaming writer DeribitWsFeed owns, since a store_dir hot-reload or
+    ''' an app restart both construct a fresh writer. Deliberately NOT reset by
+    ''' ResetBufferState (a WS reconnect is still the same process capturing the same tape,
+    ''' not a reason to zero the counter).</summary>
+    Public ReadOnly Property TotalRowsWritten As Long
+        Get
+            SyncLock _pending
+                Return _totalRowsWritten
+            End SyncLock
+        End Get
+    End Property
+
     ''' <summary>
     ''' Buffer one streamed trade. The monotonic guard drops anything at or before the
     ''' newest committed timestamp, which is what makes reconnect re-seed idempotent:
@@ -114,7 +146,14 @@ Public NotInheritable Class TradeStoreWriter
             batch = New List(Of TradeRecord)(_pending)
             _pending.Clear()
         End SyncLock
-        Return AppendRows(_storeDir, batch)
+        Dim written As Integer = AppendRows(_storeDir, batch)
+        If written > 0 Then
+            SyncLock _pending
+                _lastFlushUtc = DateTime.UtcNow
+                _totalRowsWritten += written
+            End SyncLock
+        End If
+        Return written
     End Function
 
     ''' <summary>
@@ -141,6 +180,25 @@ Public NotInheritable Class TradeStoreWriter
         Dim onDisk As Long = LastTradeTimestamp(TradeFileFor(_storeDir, utc.Year, utc.Month))
         If onDisk > _lastTs Then _lastTs = onDisk
     End Sub
+
+    ' ── Part B — live TAPE STORE status tier ──────────────────────────────────────────
+    ' [C1 Session 2 — trade-store-coverage-report-proposal.md §4] Pure, host-agnostic, so the
+    ' harness reaches it directly (A49m) without a live feed. Deliberately takes no date/day-
+    ' of-week input at all — that absence IS the "stays unconditional on weekends" guarantee
+    ' the weekday-scope-ruling-2026-08-03.md requires of Part B: there is nothing here that
+    ' COULD suppress a Saturday/Sunday reading, unlike Part A's per-hour classification.
+
+    ''' <summary>Amber past 3× flush_seconds since the last successful flush, red past 10×
+    ''' (the proposal's own thresholds). "UNKNOWN" when secondsSinceFlush is Nothing — this
+    ''' writer instance has never successfully flushed yet (freshly constructed / cold start,
+    ''' not a fault).</summary>
+    Public Shared Function ClassifyTapeStoreTier(secondsSinceFlush As Double?, flushSeconds As Integer) As String
+        If Not secondsSinceFlush.HasValue Then Return "UNKNOWN"
+        Dim safeFlush As Double = Math.Max(1, flushSeconds)
+        If secondsSinceFlush.Value >= 10.0 * safeFlush Then Return "RED"
+        If secondsSinceFlush.Value >= 3.0 * safeFlush Then Return "AMBER"
+        Return "NORMAL"
+    End Function
 
     ' ── Feature gates ─────────────────────────────────────────────────────────────────
     ' [F1] These live here rather than inline at their call sites so the harness tests the

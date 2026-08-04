@@ -160,6 +160,34 @@ Public NotInheritable Class DeribitWsFeed
         End SyncLock
     End Function
 
+    ''' <summary>[C1 Session 2 / Part B] Live capture-health snapshot for the TAPE STORE
+    ''' status element — a read plus a label over state TradeStoreWriter already tracks, per
+    ''' the proposal's own framing. Enabled=False (everything else default) when capture is
+    ''' off or no writer has been constructed yet (no trade folded this process life) — the
+    ''' UI host treats that as "nothing to show", the same as a REST-only transport hides the
+    ''' WS-health segment. Never throws.</summary>
+    Public Function GetTradeStoreStatus() As TradeStoreStatus
+        Dim snap As New TradeStoreStatus()
+        Try
+            Dim ts = SettingsLoader.Current.TradeStore
+            snap.Enabled = TradeStoreWriter.ShouldCapture(ts)
+            If Not snap.Enabled Then Return snap
+            Dim w As TradeStoreWriter
+            SyncLock _tradeStoreLock
+                w = _tradeStore
+            End SyncLock
+            snap.FlushSeconds = Math.Max(1, ts.FlushSeconds)
+            If w Is Nothing Then Return snap
+            snap.RowsThisProcess = w.TotalRowsWritten
+            If w.LastFlushUtc.HasValue Then
+                snap.SecondsSinceFlush = (DateTime.UtcNow - w.LastFlushUtc.Value).TotalSeconds
+            End If
+        Catch ex As Exception
+            Log("GetTradeStoreStatus error: " & ex.Message)
+        End Try
+        Return snap
+    End Function
+
     ' ── Connect / reconnect supervisor ──────────────────────────────────────────────────
     Private Async Function RunLoopAsync(ct As CancellationToken) As Task
         Dim backoffMs As Integer = 1000
@@ -599,4 +627,16 @@ Public NotInheritable Class DeribitWsFeed
     Private Shared Sub Log(msg As String)
         Console.WriteLine("[WS] " & msg)
     End Sub
+
+End Class
+
+''' <summary>[C1 Session 2 / Part B] Snapshot returned by DeribitWsFeed.GetTradeStoreStatus.
+''' All fields safe-default (never a fake reading) — Enabled=False when capture is off or no
+''' writer has been constructed yet.</summary>
+Public Class TradeStoreStatus
+    Public Property Enabled As Boolean = False
+    ''' <summary>Nothing = this writer instance has never successfully flushed yet.</summary>
+    Public Property SecondsSinceFlush As Double? = Nothing
+    Public Property RowsThisProcess As Long = 0
+    Public Property FlushSeconds As Integer = 30
 End Class
