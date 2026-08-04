@@ -118,6 +118,14 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 
 Worked example: [`trade-store-coverage-report-implementer-brief.md`](docs/trade-store-coverage-report-implementer-brief.md) §0.
 
+**Set your own effort level to match the task in front of you (RULED 2026-08-04, trader-directed).** Do not run everything at one tier. If the trader prefixes an explicit effort directive, that wins. Otherwise infer it, and say which you picked when it is not obvious:
+
+- **Low** — recipes with a known answer: watch-reads, status checks, a settings-value lookup, re-running a documented command, tidying a doc.
+- **Medium** — mechanical builds against a settled spec, routine reviews, writing up a decision already made.
+- **High** — derivations, ⚠ reviews, anything correcting a prior ruling, spec-backs on a build that touched scoring, and any task where being wrong is expensive or hard to notice.
+
+**Re-assess mid-task rather than once at the start.** A task that opens as a lookup and turns into a contradiction between two documents has changed tier, and the tier should change with it — this is how the 1.45-ratio and `AWARD%` errors were caught, both of which began as routine reads. Escalating costs a few minutes; not escalating costs a wrong number that ships and is inherited.
+
 **Reporting a multi-lane batch back to a reviewing seat** follows `docs/batch-review-packet-convention.md` — two documents, not one: a `*-batch-summary.md` outcome record (what happened) plus a `*-spec-back.md` review packet (ranked verification handles · decisions queued with your read where you have one · feedback on the spec's own assumptions · what you did not verify). Fable-confirmed 2026-07-31.
 
 **Push back explicitly** when a proposed change would reintroduce a deliberately removed pattern (non-directional padding, double-counting, fixed penalties vs. ADX-proximity scale). Cite the version it was removed and why.
