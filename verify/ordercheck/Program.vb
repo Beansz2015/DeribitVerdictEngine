@@ -408,6 +408,24 @@ Module Program
         A48g_Hc27FencesTradeStoreKeys()
         A48h_StoreDirIsExeRelativeNotCwdRelative()
 
+        ' [A49 — trade-store coverage report `coverage` verb, Session 1,
+        ' docs/trade-store-coverage-report-proposal.md + docs/trade-store-coverage-report
+        ' -implementer-brief.md + docs/j-b-scoping-ruling-2026-08-02.md +
+        ' docs/weekday-scope-ruling-2026-08-03.md] Six-class per-hour classification +
+        ' S0-S4 signals. A49m (Part B pairing) is Session 2.
+        A49a_UptimeParseAcrossTwoProcessLives()
+        A49b_S1JoinUpButUncapturedVsAppDown()
+        A49c_DegradedRestCountsAsUpNotConflated()
+        A49d_CaptureEraSelfBounding()
+        A49e_S3ThresholdReportsExactMaxAndBreachesOnlyAbove()
+        A49f_S4CandleCompletenessShortByK()
+        A49g_AbsentWsHealthSkipsS1S2ToS4StillRun()
+        A49h_StrictExitDecisionDefectVsExpectedMissing()
+        A49i_PrimarySupplementPrecedenceAndAmbiguousDefaultsToDefect()
+        A49j_S0VenueDiffEnumeratesExactly()
+        A49k_NotCapturingInversionTrap()
+        A49l_UnknownScopeWithNoMarkerAtAll()
+
         ' [A51 — candle/funding store write invariant, docs/store-integrity-check-2026-07-31
         ' -post-fix.md] The candle backfill destroyed June 2026 at 3m/5m/15m by writing a
         ' whole MONTH file from a partial SEGMENT fetch, behind a resolution-blind coverage
@@ -7340,6 +7358,447 @@ Module Program
             End Try
             A48Cleanup(scratch)
         End Try
+    End Sub
+
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' A49 — trade-store coverage report `coverage` verb (Session 1)
+    ' docs/trade-store-coverage-report-proposal.md, docs/trade-store-coverage-report
+    ' -implementer-brief.md, docs/j-b-scoping-ruling-2026-08-02.md,
+    ' docs/weekday-scope-ruling-2026-08-03.md.
+    '
+    ' A49a-j are the proposal's own §6 arms; A49k/A49l are the two the rulings add
+    ' (A49m — the weekday+Part B pairing — is Session 2, per the implementer brief split).
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    Private Function A49TempStore(tag As String) As String
+        Dim dir As String = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                         "ordercheck_a49_" & tag & "_" & Guid.NewGuid().ToString("N").Substring(0, 8))
+        Directory.CreateDirectory(dir)
+        Return dir
+    End Function
+
+    Private Sub A49Cleanup(dir As String)
+        Try
+            If Directory.Exists(dir) Then Directory.Delete(dir, recursive:=True)
+        Catch
+        End Try
+    End Sub
+
+    ' A Monday, so the six-day walk in most fixtures stays inside weekday scope without
+    ' needing to reason about the weekend carve-out (that is A49m's job, Session 2).
+    Private Function A49Monday() As DateTime
+        Return New DateTime(2026, 7, 20, 0, 0, 0, DateTimeKind.Utc)
+    End Function
+
+    Private Function A49Ms(dt As DateTime) As Long
+        Return New DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+    End Function
+
+    Private Function A49WsLine(dt As DateTime, state As String, iid As String) As String
+        Return dt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture) & " | " & state & " | " & iid
+    End Function
+
+    Private Function A49MarkerLine(dt As DateTime, enabled As Boolean, storeDir As String, iid As String) As String
+        Return dt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture) & " | " &
+               enabled.ToString(CultureInfo.InvariantCulture) & " | " & storeDir & " | " & iid
+    End Function
+
+    Private Function A49CsvRow(dt As DateTime, iid As String) As String
+        ' Only Timestamp (col 0) and InstanceId matter to ParseAnalysisLogEvidence, which
+        ' resolves both by header name — pad the rest with a matching column count isn't
+        ' required since the parser only reads the two indices it finds by name.
+        Return dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) & "," & iid
+    End Function
+
+    Private Function A49Trade(tsMs As Long, px As Double) As TradeRecord
+        Return New TradeRecord With {.Timestamp = tsMs, .Price = px, .Amount = 100.0, .Direction = "buy", .Liquidation = "none"}
+    End Function
+
+    ' -- A49a: uptime parse across two process lives -------------------------------------
+    Private Sub A49a_UptimeParseAcrossTwoProcessLives()
+        Dim day = A49Monday()
+        Dim lines As New List(Of String) From {
+            A49WsLine(day.AddHours(0), "DOWN", "iid-1"),
+            A49WsLine(day.AddHours(0).AddMinutes(5), "OK", "iid-1"),
+            A49WsLine(day.AddHours(2), "DEGRADED", "iid-1"),   ' ends WITHOUT a DOWN line
+            A49WsLine(day.AddHours(10), "DOWN", "iid-2"),      ' restart — new instance
+            A49WsLine(day.AddHours(10).AddMinutes(30), "OK", "iid-2")   ' iid-2 is the open-ended TRAILING life — no further lines
+        }
+        Dim evidence = CoverageReport.ParseWsHealthEvidence(lines)
+        Dim intervals = CoverageReport.BuildUpIntervals(evidence)
+
+        Dim iv1 = intervals.FirstOrDefault(Function(iv) iv.InstanceId = "iid-1")
+        Dim iv2 = intervals.FirstOrDefault(Function(iv) iv.InstanceId = "iid-2")
+        Dim ok As Boolean = intervals.Count = 2 AndAlso
+                            iv1 IsNot Nothing AndAlso Not iv1.IsTrailing AndAlso
+                            iv1.FirstUtcMs = A49Ms(day.AddHours(0)) AndAlso
+                            iv1.LastUtcMs = A49Ms(day.AddHours(2)) AndAlso
+                            iv2 IsNot Nothing AndAlso iv2.IsTrailing AndAlso
+                            iv2.FirstUtcMs = A49Ms(day.AddHours(10)) AndAlso
+                            iv2.LastUtcMs = A49Ms(day.AddHours(10).AddMinutes(30))
+
+        Check("A49a uptime parse — two process lives resolve to correct up-intervals; " &
+              "iid-1 closes on its last DEGRADED line (no DOWN needed); iid-2 is the open trailing interval",
+              ok, String.Format("count={0} iv1.trailing={1} iv2.trailing={2}",
+                                intervals.Count, If(iv1 Is Nothing, "?", iv1.IsTrailing.ToString()),
+                                If(iv2 Is Nothing, "?", iv2.IsTrailing.ToString())))
+    End Sub
+
+    ' -- A49b: the S1 join — up-but-uncaptured (defect) vs app-down (expected-missing) ----
+    Private Sub A49b_S1JoinUpButUncapturedVsAppDown()
+        Dim day = A49Monday()
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        ' One up-interval, 04:00 → 07:30. Hours before it (app-down / before-first) must
+        ' read expected-missing; hour 04 (up, but the store is silent) must read defect;
+        ' hours 05-07 (up, store clean) must read captured.
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(4)),
+                                 .LastUtcMs = A49Ms(day.AddHours(7).AddMinutes(30)), .IsTrailing = True}
+        }
+        Dim cleanStats As New HourStoreStats With {.RowCount = 10, .LongestGapMs = 1000}
+
+        Dim h00 = CoverageReport.ClassifyHour(day.AddHours(0), markers, upIntervals, False, Nothing, 300000L)
+        Dim h03 = CoverageReport.ClassifyHour(day.AddHours(3), markers, upIntervals, False, Nothing, 300000L)
+        Dim h04 = CoverageReport.ClassifyHour(day.AddHours(4), markers, upIntervals, False, Nothing, 300000L)
+        Dim h05 = CoverageReport.ClassifyHour(day.AddHours(5), markers, upIntervals, False, cleanStats, 300000L)
+        Dim h07 = CoverageReport.ClassifyHour(day.AddHours(7), markers, upIntervals, False, cleanStats, 300000L)
+
+        Dim ok As Boolean = h00.Classification = HourClass.ExpectedMissing AndAlso
+                           h03.Classification = HourClass.ExpectedMissing AndAlso
+                           h04.Classification = HourClass.Defect AndAlso
+                           h05.Classification = HourClass.Captured AndAlso
+                           h07.Classification = HourClass.Captured
+
+        Check("A49b S1 join — before the app ever started ⇒ expected-missing (never defect); " &
+              "up but the store is silent ⇒ defect; up with a clean store ⇒ captured",
+              ok, String.Format("h00={0} h03={1} h04={2} h05={3} h07={4}",
+                                h00.Classification, h03.Classification, h04.Classification,
+                                h05.Classification, h07.Classification))
+    End Sub
+
+    ' -- A49c: DEGRADED/REST evidence counts as "up", never conflated with down or defect --
+    Private Sub A49c_DegradedRestCountsAsUpNotConflated()
+        Dim day = A49Monday()
+        ' ONLY DEGRADED/REST lines for this instance — no OK, no DOWN — bracketing hour 05.
+        Dim lines As New List(Of String) From {
+            A49WsLine(day.AddHours(2), "DEGRADED", "iid-1"),
+            A49WsLine(day.AddHours(5), "REST", "iid-1"),
+            A49WsLine(day.AddHours(8), "DEGRADED", "iid-1")
+        }
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals = CoverageReport.BuildUpIntervals(CoverageReport.ParseWsHealthEvidence(lines))
+        Dim cleanStats As New HourStoreStats With {.RowCount = 5, .LongestGapMs = 1000}
+        Dim emptyStats As New HourStoreStats With {.RowCount = 0, .LongestGapMs = 0}
+
+        ' DEGRADED/REST evidence ⇒ "up": a clean store there reads captured (not accidentally
+        ' expected-missing/unknown), and a SILENT store there reads defect (not silently let
+        ' off as expected-missing) — DEGRADED is trusted evidence, not a "down" token.
+        Dim hClean = CoverageReport.ClassifyHour(day.AddHours(5), markers, upIntervals, False, cleanStats, 300000L)
+        Dim hSilent = CoverageReport.ClassifyHour(day.AddHours(5), markers, upIntervals, False, emptyStats, 300000L)
+
+        Dim ok As Boolean = hClean.Classification = HourClass.Captured AndAlso
+                           hSilent.Classification = HourClass.Defect
+
+        Check("A49c DEGRADED/REST lines count as 'up' evidence exactly like OK — clean store ⇒ captured, silent store ⇒ defect, never expected-missing",
+              ok, String.Format("clean={0} silent={1}", hClean.Classification, hSilent.Classification))
+    End Sub
+
+    ' -- A49d: capture-era self-bounding ---------------------------------------------------
+    Private Sub A49d_CaptureEraSelfBounding()
+        Dim dir As String = A49TempStore("d")
+        Try
+            Dim monthStart As New DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+            ' First trade lands on day 5 — days 1-4 are outside capture.
+            Dim firstTradeUtc As New DateTime(2026, 7, 5, 9, 0, 0, DateTimeKind.Utc)
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(firstTradeUtc), 64000),
+                A49Trade(A49Ms(firstTradeUtc.AddHours(1)), 64010)
+            })
+
+            Dim fromUtc = monthStart
+            Dim toUtc = New DateTime(2026, 7, 10, 0, 0, 0, DateTimeKind.Utc)
+            Dim begins = CoverageReport.ResolveCaptureBeginsUtc(dir, fromUtc, toUtc)
+
+            Dim opts As New CoverageOptions With {.FromUtc = fromUtc, .ToUtc = toUtc, .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, "", "", "")
+
+            Dim earliestWalked = If(result.Hours.Count > 0, result.Hours.Min(Function(h) h.HourUtc), DateTime.MaxValue)
+
+            Dim ok As Boolean = begins.HasValue AndAlso begins.Value = firstTradeUtc AndAlso
+                               result.PreCaptureDaysExcluded = 4 AndAlso
+                               earliestWalked >= New DateTime(2026, 7, 5, 0, 0, 0, DateTimeKind.Utc)
+
+            Check("A49d capture-era self-bounding — reports from the store's first trade, not --from; pre-capture days counted, not walked as gaps",
+                  ok, String.Format("begins={0} preDays={1} earliestWalked={2}",
+                                    If(begins.HasValue, begins.Value.ToString("u"), "<none>"),
+                                    result.PreCaptureDaysExcluded, earliestWalked.ToString("u")))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49e: S3 threshold — exact max, breach only strictly above --------------------------
+    Private Sub A49e_S3ThresholdReportsExactMaxAndBreachesOnlyAbove()
+        Dim dir As String = A49TempStore("e")
+        Try
+            Dim hourStart As New DateTime(2026, 7, 20, 5, 0, 0, DateTimeKind.Utc)   ' Monday
+            Dim gapMs As Long = 300000L
+            ' Exactly AT the threshold ⇒ not a breach.
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(1)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(1)) + gapMs, 64010)
+            })
+            Dim statsAtThreshold = CoverageReport.AccumulateHourStats(dir, hourStart, hourStart.AddHours(1))
+            Dim s1 As HourStoreStats = Nothing
+            statsAtThreshold.TryGetValue(A49Ms(hourStart), s1)
+
+            A49Cleanup(dir)
+            Directory.CreateDirectory(dir)
+            ' One ms OVER the threshold ⇒ a breach, and the max is reported exactly.
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(1)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(1)) + gapMs + 1, 64010)
+            })
+            Dim statsOverThreshold = CoverageReport.AccumulateHourStats(dir, hourStart, hourStart.AddHours(1))
+            Dim s2 As HourStoreStats = Nothing
+            statsOverThreshold.TryGetValue(A49Ms(hourStart), s2)
+
+            Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+            }
+            Dim upIntervals As New List(Of UpInterval) From {
+                New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(hourStart.AddHours(-1)),
+                                     .LastUtcMs = A49Ms(hourStart.AddHours(2)), .IsTrailing = True}
+            }
+            Dim clsAt = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, s1, gapMs)
+            Dim clsOver = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, s2, gapMs)
+
+            Dim ok As Boolean = s1 IsNot Nothing AndAlso s1.LongestGapMs = gapMs AndAlso
+                               s2 IsNot Nothing AndAlso s2.LongestGapMs = gapMs + 1 AndAlso
+                               clsAt.Classification = HourClass.Captured AndAlso
+                               clsOver.Classification = HourClass.Defect
+
+            Check("A49e S3 threshold — observed max reported exactly; breach fires strictly above the threshold, not at it",
+                  ok, String.Format("gapAt={0} clsAt={1} gapOver={2} clsOver={3}",
+                                    If(s1 Is Nothing, -1, s1.LongestGapMs), clsAt.Classification,
+                                    If(s2 Is Nothing, -1, s2.LongestGapMs), clsOver.Classification))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49f: S4 candle completeness — a month short by k bars reports exactly k missing ---
+    Private Sub A49f_S4CandleCompletenessShortByK()
+        Dim dir As String = A49TempStore("f")
+        Try
+            Dim fromUtc As New DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+            Dim toUtc As New DateTime(2026, 7, 1, 1, 0, 0, DateTimeKind.Utc)   ' one hour ⇒ 60 expected 1m bars
+            Dim path As String = System.IO.Path.Combine(dir, "candles_1m_2026-07.csv")
+            Using sw As New StreamWriter(path, append:=False)
+                sw.WriteLine(StoreFiles.CandleHeader)
+                ' Write only 55 of the 60 expected minutes — short by k=5.
+                For i As Integer = 0 To 54
+                    Dim ts As Long = A49Ms(fromUtc.AddMinutes(i))
+                    sw.WriteLine(String.Format(CultureInfo.InvariantCulture, "{0},{1:F2},{2:F2},{3:F2},{4:F2},{5:F6},{6:F2}",
+                                               ts, 64000.0, 64010.0, 63990.0, 64005.0, 1.0, 64000.0))
+                Next
+            End Using
+
+            Dim result = CoverageReport.ComputeCandleCompleteness(dir, fromUtc, toUtc)
+            Dim have As Integer = result(1).Have
+            Dim expected As Integer = result(1).Expected
+            Dim missing As Integer = expected - have
+
+            Check("A49f S4 candle completeness — a 1m month file short by k=5 bars reports exactly 5 missing against the deterministic grid",
+                  expected = 60 AndAlso have = 55 AndAlso missing = 5,
+                  String.Format("expected={0} have={1} missing={2}", expected, have, missing))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49g: absent ws_health.log ⇒ S1 skipped (when analysis_log.csv ALSO carries nothing
+    ' in range), stated reason, S2-S4 still run -------------------------------------------
+    Private Sub A49g_AbsentWsHealthSkipsS1S2ToS4StillRun()
+        Dim dir As String = A49TempStore("g")
+        Try
+            Dim day = A49Monday()
+            ' A clean hour of trades — proves S2/S3/S4 still run with S1 unavailable.
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(day.AddHours(5).AddMinutes(1)), 64000),
+                A49Trade(A49Ms(day.AddHours(5).AddMinutes(2)), 64010)
+            })
+            Dim markerPath As String = System.IO.Path.Combine(dir, "capture_marker.log")
+            File.WriteAllText(markerPath, A49MarkerLine(day.AddHours(-1), True, dir, "iid-1") & vbLf)
+
+            Dim missingWsHealthPath As String = System.IO.Path.Combine(dir, "ws_health.log")     ' never created
+            Dim missingAnalysisLogPath As String = System.IO.Path.Combine(dir, "analysis_log.csv") ' never created
+
+            Dim opts As New CoverageOptions With {.FromUtc = day, .ToUtc = day.AddHours(6), .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, missingAnalysisLogPath, missingWsHealthPath, markerPath)
+
+            Dim h05 = result.Hours.FirstOrDefault(Function(h) h.HourUtc = day.AddHours(5))
+
+            Check("A49g absent ws_health.log + no analysis_log rows ⇒ S1 skipped with a stated reason; S2-S4 still run (a clean hour still reads captured)",
+                  result.S1Skipped AndAlso Not String.IsNullOrEmpty(result.S1SkipReason) AndAlso
+                  h05 IsNot Nothing AndAlso h05.Classification = HourClass.Captured,
+                  String.Format("s1Skipped={0} reason='{1}' h05={2}",
+                                result.S1Skipped, result.S1SkipReason, If(h05 Is Nothing, "<none>", h05.Classification.ToString())))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49h: --strict exit decision — defect ⇒ 1, expected-missing-only ⇒ 0 ----------------
+    ' BacktestProgram.vb carries its own Main and stays OUT of this harness (the same
+    ' boundary as every other verb) — this pins the DECISION the CLI's `Case "coverage"`
+    ' block makes (opts.Strict AndAlso CountByClass(Defect) > 0), not the literal process
+    ' exit code.
+    Private Sub A49h_StrictExitDecisionDefectVsExpectedMissing()
+        Dim day = A49Monday()
+        Dim markersOn As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(4)),
+                                 .LastUtcMs = A49Ms(day.AddHours(6)), .IsTrailing = True}
+        }
+        ' Hour 4 is up but silent ⇒ defect.
+        Dim hDefect = CoverageReport.ClassifyHour(day.AddHours(4), markersOn, upIntervals, False, Nothing, 300000L)
+        ' Hour 0 is before the app ever started ⇒ expected-missing only.
+        Dim hExpected = CoverageReport.ClassifyHour(day.AddHours(0), markersOn, upIntervals, False, Nothing, 300000L)
+
+        Dim exitWithDefect As Integer = If(True AndAlso hDefect.Classification = HourClass.Defect, 1, 0)
+        Dim exitExpectedOnlyStrict As Integer = If(True AndAlso hExpected.Classification = HourClass.Defect, 1, 0)
+        Dim exitExpectedOnlyNoStrict As Integer = If(False AndAlso hExpected.Classification = HourClass.Defect, 1, 0)
+
+        Check("A49h --strict decision — a defect hour ⇒ exit 1; an expected-missing-only report ⇒ exit 0 under --strict; default (no --strict) always 0",
+              exitWithDefect = 1 AndAlso exitExpectedOnlyStrict = 0 AndAlso exitExpectedOnlyNoStrict = 0,
+              String.Format("defect={0} expectedStrict={1} expectedNoStrict={2}",
+                            exitWithDefect, exitExpectedOnlyStrict, exitExpectedOnlyNoStrict))
+    End Sub
+
+    ' -- A49i: S1 primary/supplement precedence + ambiguous residual defaults to defect -----
+    Private Sub A49i_PrimarySupplementPrecedenceAndAmbiguousDefaultsToDefect()
+        Dim day = A49Monday()
+
+        ' Part 1 — analysis_log.csv rows alone (ws_health.log entirely silent across the
+        ' hour) still resolve "up".
+        Dim csvLines As New List(Of String) From {
+            "Timestamp,InstanceId",
+            A49CsvRow(day.AddHours(5).AddMinutes(1), "iid-1"),
+            A49CsvRow(day.AddHours(5).AddMinutes(2), "iid-1")
+        }
+        Dim evidence = CoverageReport.ParseAnalysisLogEvidence(csvLines)   ' zero ws_health lines merged
+        Dim upIntervals = CoverageReport.BuildUpIntervals(evidence)
+        Dim up = CoverageReport.ClassifyUptime(A49Ms(day.AddHours(5)), upIntervals)
+
+        ' Part 2 — an hour with NEITHER analysis_log NOR ws_health evidence, sitting in a
+        ' cross-GUID gap between two known instances, resolves DEFECT and not
+        ' expected-missing (the inversion trap this arm exists to catch).
+        Dim crossGuidIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(2)), .LastUtcMs = A49Ms(day.AddHours(3))},
+            New UpInterval With {.InstanceId = "iid-2", .FirstUtcMs = A49Ms(day.AddHours(9)), .LastUtcMs = A49Ms(day.AddHours(10)), .IsTrailing = True}
+        }
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        ' Hour 5 sits strictly between the two intervals — no store data (silent).
+        Dim gapHour = CoverageReport.ClassifyHour(day.AddHours(5), markers, crossGuidIntervals, False, Nothing, 300000L)
+
+        Dim ok As Boolean = up.Kind = "up" AndAlso up.InstanceId = "iid-1" AndAlso
+                           gapHour.Classification = HourClass.Defect
+
+        Check("A49i S1 precedence — analysis_log.csv rows resolve UP even with ws_health.log silent; " &
+              "a cross-GUID gap with no evidence at all resolves DEFECT, never expected-missing",
+              ok, String.Format("upKind={0} upIid={1} gapHour={2}", up.Kind, up.InstanceId, gapHour.Classification))
+    End Sub
+
+    ' -- A49j: S0 venue diff — exact enumeration, pure, no live HTTP -------------------------
+    Private Sub A49j_S0VenueDiffEnumeratesExactly()
+        Dim baseTs As Long = A49Ms(A49Monday().AddHours(5))
+        Dim storeTrades As New List(Of TradeRecord) From {
+            A49Trade(baseTs, 64000),
+            A49Trade(baseTs + 1000, 64010)
+        }
+        ' Venue has one trade the store also has, plus TWO the store is missing.
+        Dim venueTrades As New List(Of TradeRecord) From {
+            A49Trade(baseTs, 64000),
+            A49Trade(baseTs + 2000, 64020),
+            A49Trade(baseTs + 3000, 64030)
+        }
+        Dim missing = CoverageReport.ComputeVenueDiff(storeTrades, venueTrades)
+        Dim missingOk As Boolean = missing.Count = 2 AndAlso
+                                  missing.Any(Function(t) t.Timestamp = baseTs + 2000) AndAlso
+                                  missing.Any(Function(t) t.Timestamp = baseTs + 3000)
+
+        ' An identical set reports zero missing.
+        Dim identicalMissing = CoverageReport.ComputeVenueDiff(storeTrades, storeTrades)
+        Dim identicalOk As Boolean = identicalMissing.Count = 0
+
+        ' S0's absence never turns a defect into "clean" — the per-hour six-class result is
+        ' computed independently of whether S0 ran at all (CoverageResult.VenueRan defaults
+        ' False and nothing in ClassifyHour reads it), which is the "not covered by S0 rather
+        ' than clean" guarantee: hours outside S0's window keep whatever S1-S3 already said.
+        Dim freshResult As New CoverageResult()
+        Dim s0NeverOverridesClassification As Boolean = Not freshResult.VenueRan
+
+        Check("A49j S0 venue diff — missing trades enumerated exactly (2 of 3), identical sets report zero, S0 never overrides the six-class result",
+              missingOk AndAlso identicalOk AndAlso s0NeverOverridesClassification,
+              String.Format("missingCount={0} identicalCount={1} venueRanDefault={2}",
+                            missing.Count, identicalMissing.Count, freshResult.VenueRan))
+    End Sub
+
+    ' -- A49k: not-capturing — the inversion trap, in A49i's shape ---------------------------
+    Private Sub A49k_NotCapturingInversionTrap()
+        Dim day = A49Monday()
+        ' The SAME silence (no up-interval evidence, no store rows) under two different
+        ' marker scopes — this is the trap: get the marker join backwards and BOTH read the
+        ' same, either always-defect (false-alarm storm) or always-clean (silently absolving
+        ' a real capturing box).
+        Dim markersOff As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = False, .InstanceId = "iid-1"}
+        }
+        Dim markersOn As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(0)),
+                                 .LastUtcMs = A49Ms(day.AddHours(10)), .IsTrailing = True}
+        }
+        ' Store is silent throughout (zero rows every hour) despite the app being "up".
+        Dim hOff = CoverageReport.ClassifyHour(day.AddHours(5), markersOff, upIntervals, False, Nothing, 300000L)
+        Dim hOn = CoverageReport.ClassifyHour(day.AddHours(5), markersOn, upIntervals, False, Nothing, 300000L)
+
+        Check("A49k not-capturing inversion trap — marker OFF over a silence ⇒ not-capturing (zero defects); " &
+              "the IDENTICAL silence with marker ON ⇒ defect",
+              hOff.Classification = HourClass.NotCapturing AndAlso hOn.Classification = HourClass.Defect,
+              String.Format("off={0} on={1}", hOff.Classification, hOn.Classification))
+    End Sub
+
+    ' -- A49l: unknown-scope — no marker record at all ---------------------------------------
+    Private Sub A49l_UnknownScopeWithNoMarkerAtAll()
+        Dim day = A49Monday()
+        Dim noMarkers As New List(Of CaptureMarkerLog.MarkerRecord)   ' empty — no marker file / no records
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(0)),
+                                 .LastUtcMs = A49Ms(day.AddHours(10)), .IsTrailing = True}
+        }
+        Dim cleanStats As New HourStoreStats With {.RowCount = 10, .LongestGapMs = 1000}
+
+        ' Distinct from BOTH not-capturing (no marker ≠ marker-says-off) and expected-missing
+        ' (a clean store during "up" evidence would otherwise read captured) — scope
+        ' resolution runs BEFORE the store is even consulted, so it wins unconditionally.
+        Dim hSilent = CoverageReport.ClassifyHour(day.AddHours(5), noMarkers, upIntervals, False, Nothing, 300000L)
+        Dim hClean = CoverageReport.ClassifyHour(day.AddHours(5), noMarkers, upIntervals, False, cleanStats, 300000L)
+
+        Check("A49l unknown-scope — no marker record at all classifies unknown-scope regardless of store state, distinct from not-capturing and expected-missing",
+              hSilent.Classification = HourClass.UnknownScope AndAlso hClean.Classification = HourClass.UnknownScope,
+              String.Format("silent={0} clean={1}", hSilent.Classification, hClean.Classification))
     End Sub
 
     ' ═══════════════════════════════════════════════════════════════════════════════════

@@ -12,6 +12,16 @@
 '                            [--settings <settings.json>] [--replay <existingSyntheticCsv>]
 '                            [--report <markdownOut>]
 '   BacktestRunner report   --csv <analysisLogCsv> [--settings <settings.json>]
+'   BacktestRunner coverage --from yyyy-MM-dd --to yyyy-MM-dd
+'                            [--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue]
+'
+' The `coverage` verb reports raw-trade capture health (docs/trade-store-coverage-report
+' -proposal.md): six classes per weekday UTC hour, S4 candle/funding completeness, and an
+' optional S0 venue diff (--verify-venue, network). Read-only — never fetches (except S0)
+' and never writes to the store. Reads analysis_log.csv / ws_health.log / capture_marker.log
+' beside the store (CWD-relative, i.e. the repo root BacktestProgram already sets CWD to) if
+' present, degrading gracefully when absent. Exit 1 with --strict when any DEFECT hour
+' exists; without the flag, always exits 0 (interactive-safe).
 '
 ' The `report` verb runs the SHIPPED analysis/AnalysisRunner pipeline over an
 ' arbitrary CSV file and writes the standard markdown report + summary CSV BESIDE
@@ -58,6 +68,9 @@ Public Class BacktestProgram
         Dim reportPath As String = ""
         Dim csvPath    As String = ""
         Dim useFormingStub As Boolean = True
+        Dim gapMs As Long = 300000L
+        Dim strict As Boolean = False
+        Dim verifyVenue As Boolean = False
 
         Dim i As Integer = 1
         While i < args.Length
@@ -92,6 +105,13 @@ Public Class BacktestProgram
                 Case "--closed-bars"
                     ' D3 evidence lane: closed bars only, no §7.1 forming stub.
                     useFormingStub = False
+                Case "--gap-ms"
+                    i += 1
+                    If i < args.Length Then Long.TryParse(args(i), gapMs)
+                Case "--strict"
+                    strict = True
+                Case "--verify-venue"
+                    verifyVenue = True
             End Select
             i += 1
         End While
@@ -259,6 +279,48 @@ Public Class BacktestProgram
                 End If
                 Return If(rpt.TotalRows > 0, 0, 1)
 
+            Case "coverage"
+                Dim opts As New CoverageOptions With {
+                    .FromUtc = fromUtc, .ToUtc = toUtc, .GapMs = gapMs,
+                    .Strict = strict, .VerifyVenue = verifyVenue
+                }
+                Dim storeDir As String = HistoricalStore.StoreDir
+                Dim repoRoot As String = Directory.GetCurrentDirectory()
+                Dim analysisLogPath As String = Path.Combine(repoRoot, "analysis_log.csv")
+                Dim wsHealthPath As String = Path.Combine(repoRoot, "ws_health.log")
+                Dim markerPath As String = Path.Combine(repoRoot, "capture_marker.log")
+
+                Console.WriteLine(String.Format("[BacktestRunner] Coverage {0:yyyy-MM-dd} → {1:yyyy-MM-dd} UTC (gap-ms={2})",
+                                                fromUtc, toUtc, gapMs))
+                Dim covResult = CoverageReport.BuildResult(opts, storeDir, analysisLogPath, wsHealthPath, markerPath)
+
+                If verifyVenue Then
+                    Dim windowStartMs As Long = New DateTimeOffset(toUtc.AddHours(-24), TimeSpan.Zero).ToUnixTimeMilliseconds()
+                    Dim windowEndMs As Long = New DateTimeOffset(toUtc, TimeSpan.Zero).ToUnixTimeMilliseconds()
+                    Dim venueMissing = Await CoverageReport.RunVenueDiffAsync(storeDir, windowStartMs, windowEndMs)
+                    If venueMissing IsNot Nothing Then
+                        covResult.VenueRan = True
+                        covResult.VenueMissingTrades = venueMissing
+                        covResult.VenueCoveredFromUtc = toUtc.AddHours(-24)
+                        covResult.VenueCoveredToUtc = toUtc
+                    Else
+                        Console.Error.WriteLine("[BacktestRunner] --verify-venue fetch failed — S0 not run.")
+                    End If
+                End If
+
+                Console.WriteLine("")
+                Console.Write(CoverageReport.BuildConsoleSummary(covResult))
+                If Not String.IsNullOrEmpty(outPath) Then
+                    Dim md As String = CoverageReport.BuildMarkdown(covResult)
+                    Dim outDirCov As String = Path.GetDirectoryName(Path.GetFullPath(outPath))
+                    If Not String.IsNullOrEmpty(outDirCov) Then Directory.CreateDirectory(outDirCov)
+                    File.WriteAllText(outPath, md)
+                    Console.WriteLine("[BacktestRunner] Markdown: " & Path.GetFullPath(outPath))
+                End If
+
+                If strict AndAlso covResult.CountByClass(HourClass.Defect) > 0 Then Return 1
+                Return 0
+
             Case Else
                 Console.Error.WriteLine("[BacktestRunner] Unknown subcommand: " & cmd)
                 PrintUsage()
@@ -275,6 +337,8 @@ Public Class BacktestProgram
                                 "--live <path> [--live2 <path>] [--replay <syntheticCsv>] " &
                                 "[--report <mdOut>] [--settings <path>]")
         Console.Error.WriteLine("  BacktestRunner report   --csv <analysisLogCsv> [--settings <path>]")
+        Console.Error.WriteLine("  BacktestRunner coverage --from yyyy-MM-dd --to yyyy-MM-dd " &
+                                "[--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue]")
     End Sub
 
     Private Shared Function ParseDate(s As String) As DateTime

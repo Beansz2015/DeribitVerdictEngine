@@ -412,6 +412,19 @@ Partial Public Class MainForm
         Catch ex As Exception
             Console.WriteLine("[WsHealthLog] start-log failed: " & ex.Message)
         End Try
+
+        ' [C1 / D7] One capture-scope marker line per process — the coverage report's ONLY
+        ' valid source of "was this box capturing", per j-b-scoping-ruling-2026-08-02.md.
+        ' Reads SettingsLoader.Current (the MERGED, overlay-aware value), never the tracked
+        ' base file — a base-file read would see trade_store.enabled:true on a box whose
+        ' settings.local.json overlay turned it off. Never throws.
+        Try
+            Dim ts = SettingsLoader.Current.TradeStore
+            CaptureMarkerLog.LogStart(ts.Enabled, TradeStoreWriter.ResolveStoreDir(ts.StoreDir),
+                                      ProcessIdentity.InstanceId)
+        Catch ex As Exception
+            Console.WriteLine("[CaptureMarkerLog] start-log failed: " & ex.Message)
+        End Try
         InitAutoRunControls()
         ' [P4 #1] Start the exit-guard tick at form load (D6: decoupled from auto-run — MarketState
         ' streams whenever transport=ws regardless of auto-run). Each tick self-gates on posState +

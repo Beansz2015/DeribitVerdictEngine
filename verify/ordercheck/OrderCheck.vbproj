@@ -73,6 +73,8 @@
          half of the §2 split that exists so the fixture project never links an HttpClient
          (HistoricalStore owns one and is deliberately NOT here). -->
     <Compile Include="..\..\Core\TradeStoreWriter.vb" />
+    <!-- [C1 / D7] The per-process capture-scope marker (A49k, A49l). -->
+    <Compile Include="..\..\Core\CaptureMarkerLog.vb" />
     <!-- Candle/funding store file layer — the merge invariant that, unguarded, cost a
          month of June data. A51. -->
     <Compile Include="..\..\Core\StoreFiles.vb" />
@@ -157,6 +159,10 @@
          join + comparison helpers (FloorToBucket + column tables). The validate CLI verb
          lives in BacktestProgram, which stays OUT (its own Main). -->
     <Compile Include="..\..\tools\BacktestRunner\OverlapValidator.vb" />
+    <!-- Trade-store coverage report (A49 — docs/trade-store-coverage-report-proposal.md):
+         the `coverage` verb's host-agnostic classification core. BacktestProgram stays
+         OUT — its own Main. -->
+    <Compile Include="..\..\tools\BacktestRunner\CoverageReport.vb" />
   </ItemGroup>
 
 </Project>

@@ -45,6 +45,8 @@
          streaming capture and with LoadTradeRange's per-file parse. Network-free. -->
     <Compile Include="..\..\Core\TradeStoreWriter.vb" />
     <Compile Include="..\..\Core\StoreFiles.vb" />
+    <!-- [C1 / D7] The per-process capture-scope marker the `coverage` verb reads back. -->
+    <Compile Include="..\..\Core\CaptureMarkerLog.vb" />
     <Compile Include="..\..\DeribitClient.vb" />
     <Compile Include="..\..\DynamicNorms.vb" />
     <Compile Include="..\..\MarketState.vb" />
