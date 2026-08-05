@@ -15,7 +15,7 @@
 | Box | `trade_store.enabled` | Why |
 |---|---|---|
 | **AWS** | **`true`** | D1 ruled capture **AWS-only**. This box is the sole capturer of raw tape, and tape past ~24 h is unobtainable at any price. |
-| **Local `bin\Debug`** | **`false`** | The local box is intermittent (trader, 2026-07-31), so its store would be a partial book nobody reads, growing ~1.4 GB/year in a directory nobody watches. Capture there also recreates the dual-box topology D1 explicitly rejected. |
+| **Local — EVERY output folder, `bin\Debug` *and* `bin\Release`** | **`false`** | The local box is intermittent (trader, 2026-07-31), so its store would be a partial book nobody reads, growing ~1.4 GB/year in a directory nobody watches. Capture there also recreates the dual-box topology D1 explicitly rejected. **The "and `bin\Release`" is not pedantry — see point 3 below.** |
 
 **The tracked `settings.json` carries `true`, and that is deliberate — do not "fix" it.** §1.1 deploys AWS from the Release build output, so the tracked value *is* what lands on AWS. The two failure directions are not symmetric:
 
@@ -34,6 +34,13 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 
 1. **Place it BEFORE the first build that carries a newer tracked `settings.json`**, not after. Order is the whole point; get it backwards once and the build that was meant to be protected is the one that captures.
 2. **`dotnet clean` deletes it along with the rest of `bin\`, and that failure direction is the bad one** — losing the overlay silently switches capture back **on**. §3's `+local` glance is what makes its absence visible.
+3. ⚠ **ONE OVERLAY PER OUTPUT FOLDER. `bin\Debug` and `bin\Release` are separate boxes as far as this file is concerned** — added 2026-08-05 after it bit. The overlay lives in `bin\`, is gitignored, and is **not** a project item, which is exactly what stops a build from clobbering it — and equally what stops a build from ever *creating* it in a second folder. From 2026-08-02 to 2026-08-05 only `bin\Debug` had one.
+
+> **What that cost, recorded because the number makes the point:** the local `bin\Release` build ran three times (2026-08-04 17:44, 2026-08-05 12:59 and 13:13 UTC) and **captured 78,798 trades / 3.2 MB from 2026-08-03 21:44 UTC onward**, into `bin\Release\net8.0-windows\backtest_data\`. Three `capture_marker.log` lines now record `enabled=True` for this box under instance ids `b4369c8b`, `f91e8f68`, `74af27ff` — **the marker was correct; it faithfully recorded a state that should not have existed.** Nothing was corrupted and nothing pooled (that store is in a folder no analysis reads), and the tape was kept rather than deleted.
+>
+> **Nobody noticed for two days because nobody runs Release locally** — it exists to be xcopied to AWS. It surfaced only when the trader ran it to visually verify the C1 TAPE STORE strip, and the strip *appeared* — which is itself the tell: on a correctly-overlaid local box that element is hidden by design (`trade-store-coverage-report-spec-back.md` §5.2.3). **A visible TAPE STORE row on a local build means capture is on and the overlay is missing.**
+>
+> **§1a's own asymmetry reasoning held up exactly as written** — "tracked `true`, local not corrected ⇒ local captures again. Costs disk. Nothing is lost." That is precisely what happened, in the direction the analysis called safe. **The defect was never the tracked value or the failure-direction call; it was scoping the remedy to one output folder.** A fresh clone, a `dotnet clean`, or a first-ever Release build reopens it the same way.
 
 *(Superseded, kept for the record: the old chore was "build Debug first, then set `"enabled": false` in `bin\Debug\net8.0-windows\settings.json`, and re-apply after every settings-version bump." Its failure mode — silently restored on the next bump, with no symptom until someone noticed a growing directory — is what the overlay exists to remove. Spec: [`settings-local-overlay-proposal.md`](settings-local-overlay-proposal.md).)*
 
