@@ -180,7 +180,17 @@ One heads-up carried in the ack: `engine.settings_version` will move 48→49 bef
 > 1. **`File.Replace` un-named.** It **throws when the destination does not exist** — precisely the first-write and OFF→ON cases. Naming the API pinned something that cannot serve the requirement unaided; atomicity was always the requirement, the API never was. *(Engine-side note, verified 2026-08-04: our own `SignalEmitter.TryWrite` does **not** have this defect — it guards with `If File.Exists(path) Then File.Replace(...) Else File.Move(...)`, so the first write is handled. The file-header comment describing it as "tmp + `File.Replace`" was corrected in the same pass for the same reason.)*
 > 2. **`ws` joins the transition triggers, and (f) is new.** `executor.ws` maps to a *computed* property on their side, so no assignment site exists for a trigger to hook — without an explicit trigger a WebSocket drop publishes nothing and the file heartbeats `ws:"OK"` indefinitely. **This one reaches us:** §10.4's executor interlock display renders `ws`, so it would have shown a stale `OK` straight through a disconnect. And without (f), a fresh, configured, idle, flat executor writes no file at all — indistinguishable from the feature being off, which would have made **§10.3's "File absent = feature OFF, never an alarm"** ambiguous and the 35 s staleness rule unfounded. With (f): **file-absent means OFF, file-stale means dead.**
 >
-> Both were latent until they ruled that the heartbeat **republishes the last snapshot** rather than re-reading live state (avoiding a cross-thread coherence race on the position block) — which removed the 10-second self-correction these two gaps had been relying on. Engine key (at the consumption build): **`signal_bridge.feedback` `{ enabled: false, path, stale_after_sec: 35 }`** — rides the existing `signal_bridge.` tweaker fence, no new HARD CONSTRAINT.
+> **THE CONSEQUENCE THAT MAKES THE TRIGGER LIST LOAD-BEARING — take this, not the mechanics behind it.** Canonical text pinned in their **§8.5**; cite that for the mechanism rather than restating it here:
+>
+> > **A fresh `generated_at_utc` proves the executor PROCESS IS ALIVE. It does not prove any field was recently observed. Every field is as of its last TRIGGERING event.**
+>
+> So **trigger completeness is the only thing bounding any individual field's staleness**, and a field with no trigger lets a perfectly fresh file hide an arbitrarily old value. That is exactly what the missing `ws` trigger was: our §10.4 strip would have rendered a stale `OK` through an entire disconnect, with a fresh timestamp sitting next to it. **Freshness of the file is not freshness of the field** — anything we build against this payload must treat the two as separate questions.
+>
+> **⚠ STANDING RULE FOR THIS MIRROR (adopted 2026-08-05, order-app seat's proposal, agreed):**
+>
+> > **§10.2 carries consumption-visible CONSEQUENCES, never emitter MECHANICS.**
+>
+> Both corrections above were mechanics we had restated, and their mechanics moved. **Neither correction would have needed to exist under this rule** — which is why it is recorded here rather than in a commit message. Mechanics live in their §8 and are cited, not copied. If a future edit finds itself describing *how* the order app does something, that is the signal it belongs on their side with a pointer from ours. Engine key (at the consumption build): **`signal_bridge.feedback` `{ enabled: false, path, stale_after_sec: 35 }`** — rides the existing `signal_bridge.` tweaker fence, no new HARD CONSTRAINT.
 
 ### 10.3 Engine consumption (D6 shape, trader-ticked)
 

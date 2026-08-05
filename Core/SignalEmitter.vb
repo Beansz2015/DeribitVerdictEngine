@@ -556,9 +556,14 @@ Public NotInheritable Class SignalEmitter
         Return configuredPath
     End Function
 
-    ''' <summary>Atomic write (tmp + File.Replace — the repo pattern), creating the
+    ''' <summary>Atomic write (temp + atomic replace — the repo pattern), creating the
     ''' target directory if missing. NEVER throws (§2 emitter discipline): failures
-    ''' are console-logged and reported via the return value.</summary>
+    ''' are console-logged and reported via the return value.
+    ''' <para>The <c>File.Exists</c> guard below is LOAD-BEARING, not defensive:
+    ''' <c>File.Replace</c> THROWS when the destination does not exist, which is exactly
+    ''' the first-write case, so this falls back to <c>File.Move</c> there. Naming the API
+    ''' alone would pin something that cannot serve the requirement unaided — atomicity is
+    ''' the requirement, <c>File.Replace</c> is only half of how it is met.</para></summary>
     Public Shared Function TryWrite(json As String, path As String) As Boolean
         Dim tmpPath As String = path & ".tmp"
         Try

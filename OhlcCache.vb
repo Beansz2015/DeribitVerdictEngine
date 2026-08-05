@@ -131,6 +131,13 @@ Public Class OhlcCache
             result.AddRange(kept)
 
             ' Atomic write — see WriteAll comment.
+            ' NOTE: unlike WriteAll (and every other File.Replace site in this repo) there is
+            ' deliberately NO File.Exists guard here — File.Replace THROWS on a missing
+            ' destination, and the ONLY reason that is safe is the `If Not File.Exists(path)
+            ' Then Return` early-out at the top of this method. That precondition is DISTANT,
+            ' so if this write is ever extracted, or that early-out removed or moved below
+            ' this point, ADD THE GUARD. Recorded 2026-08-05 because a reader comparing this
+            ' against WriteAll would reasonably conclude one of the two is wrong.
             Dim tmpPath As String = path & ".tmp"
             Try
                 File.WriteAllLines(tmpPath, result)

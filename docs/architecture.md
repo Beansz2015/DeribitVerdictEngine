@@ -136,7 +136,10 @@ DeribitVerdictEngine/
 │   │                                   suppression) — the THIRD parity surface. Pinned
 │   │                                   DeriveDirection (NONE on all NO TRADE*) +
 │   │                                   DeriveWsHealth (OK/DEGRADED/DOWN/REST). Atomic
-│   │                                   TryWrite (tmp + File.Replace, create-dir,
+│   │                                   TryWrite (temp + atomic replace — the
+│                                   File.Exists guard is load-bearing: File.Replace
+│                                   THROWS when the destination is absent, so the
+│                                   first write falls back to File.Move; create-dir,
 │   │                                   never-throws). Host-agnostic; harness A22.
 │   │                                   [v51 B4b] ComputeSideLevels IS the structural-
 │   │                                   first arbitration (target ladder swing→HVN→
