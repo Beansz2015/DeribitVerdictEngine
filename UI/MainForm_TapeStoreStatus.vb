@@ -30,6 +30,12 @@ Partial Public Class MainForm
 
     Private _tapeStoreTimer As System.Windows.Forms.Timer
 
+    ' [Session 2 review finding, 2026-08-05] The second clock ClassifyTapeStoreTier needs so a
+    ' never-throwing dead capture path (A48e) cannot hide behind "cold start, not a fault"
+    ' forever. Stamped once, at the same moment tracking begins — restarts naturally on every
+    ' process start, matching the "rows this process" framing GetTradeStoreStatus already uses.
+    Private _tapeStoreTrackingStartUtc As DateTime = DateTime.MinValue
+
     ' -----------------------------------------------------------------------
     ' Lifecycle — StartTapeStoreStatus from the constructor (form load); StopTapeStoreStatus
     ' on form close. Idempotent: a re-start disposes the prior timer first.
@@ -37,6 +43,7 @@ Partial Public Class MainForm
     Private Sub StartTapeStoreStatus()
         StopTapeStoreStatus()
 
+        _tapeStoreTrackingStartUtc = DateTime.UtcNow
         _tapeStoreTimer = New System.Windows.Forms.Timer() With {
             .Interval = TapeStoreIntervalMs(SettingsLoader.Current)
         }
@@ -88,26 +95,31 @@ Partial Public Class MainForm
             Return
         End If
 
-        Dim tier As String = TradeStoreWriter.ClassifyTapeStoreTier(status.SecondsSinceFlush, status.FlushSeconds)
+        Dim secondsSinceStart As Double = Math.Max(0.0, (DateTime.UtcNow - _tapeStoreTrackingStartUtc).TotalSeconds)
+        Dim tier As String = TradeStoreWriter.ClassifyTapeStoreTier(status.SecondsSinceFlush, secondsSinceStart, status.FlushSeconds)
         Dim colour As Color
         Select Case tier
             Case "RED"
                 colour = Theme.ACC_CASCADE
             Case "AMBER"
                 colour = Theme.ACC_WARN
-            Case Else   ' NORMAL / UNKNOWN (cold start, not a fault)
+            Case Else   ' NORMAL, or UNKNOWN still inside its early grace window (genuine cold start)
                 colour = Theme.FG_TERTIARY
         End Select
 
-        SetTapeStoreStrip(ComposeTapeStoreStrip(status), colour, visible:=True)
+        SetTapeStoreStrip(ComposeTapeStoreStrip(status, secondsSinceStart), colour, visible:=True)
     End Sub
 
-    ' "TAPE STORE: 12s · 47.3k rows" (proposal §4, verbatim shape). "no flush yet" before the
-    ' first successful commit this writer instance's life — a cold start, not a fault.
-    Private Shared Function ComposeTapeStoreStrip(status As TradeStoreStatus) As String
+    ' "TAPE STORE: 12s · 47.3k rows" (proposal §4, verbatim shape). Before the first successful
+    ' commit this writer instance's life, shows elapsed time since tracking began instead — a
+    ' brief cold start reads neutral (matching the tier colour), but a permanently dead capture
+    ' path now shows a growing, eventually-red number rather than a static "no flush yet" that
+    ' never changes (the Session 2 review finding).
+    Private Shared Function ComposeTapeStoreStrip(status As TradeStoreStatus, secondsSinceStart As Double) As String
         Dim rowsText As String = FormatTapeStoreRows(status.RowsThisProcess)
         If Not status.SecondsSinceFlush.HasValue Then
-            Return String.Format("TAPE STORE: no flush yet · {0} rows", rowsText)
+            Return String.Format("TAPE STORE: no flush yet ({0}s) · {1} rows",
+                                 CInt(Math.Round(secondsSinceStart)), rowsText)
         End If
         Return String.Format("TAPE STORE: {0}s · {1} rows",
                              CInt(Math.Round(status.SecondsSinceFlush.Value)), rowsText)

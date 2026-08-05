@@ -192,12 +192,32 @@ Public NotInheritable Class TradeStoreWriter
     ''' (the proposal's own thresholds). "UNKNOWN" when secondsSinceFlush is Nothing — this
     ''' writer instance has never successfully flushed yet (freshly constructed / cold start,
     ''' not a fault).</summary>
-    Public Shared Function ClassifyTapeStoreTier(secondsSinceFlush As Double?, flushSeconds As Integer) As String
-        If Not secondsSinceFlush.HasValue Then Return "UNKNOWN"
+    ''' <summary>
+    ''' [Session 2 review finding, 2026-08-05] "UNKNOWN" alone is unbounded in time: A48e pins
+    ''' that an unwritable store (blocked dir, locked file, full disk) NEVER THROWS —
+    ''' AppendRows logs and returns 0 forever, so a permanently dead capture path is
+    ''' indistinguishable from a genuine cold start unless the classifier is given a second
+    ''' clock. `secondsSinceStart` (time since this process began expecting capture — the
+    ''' status element's own first tick) is that clock: while no flush has EVER landed, a dead
+    ''' path escalates UNKNOWN → AMBER → RED on the SAME 3×/10× thresholds a stale flush would
+    ''' trip, instead of staying neutral forever.
+    ''' </summary>
+    Public Shared Function ClassifyTapeStoreTier(secondsSinceFlush As Double?, secondsSinceStart As Double,
+                                                 flushSeconds As Integer) As String
         Dim safeFlush As Double = Math.Max(1, flushSeconds)
-        If secondsSinceFlush.Value >= 10.0 * safeFlush Then Return "RED"
-        If secondsSinceFlush.Value >= 3.0 * safeFlush Then Return "AMBER"
-        Return "NORMAL"
+        Dim thresholdAmber As Double = 3.0 * safeFlush
+        Dim thresholdRed As Double = 10.0 * safeFlush
+
+        If secondsSinceFlush.HasValue Then
+            If secondsSinceFlush.Value >= thresholdRed Then Return "RED"
+            If secondsSinceFlush.Value >= thresholdAmber Then Return "AMBER"
+            Return "NORMAL"
+        End If
+
+        ' Never flushed yet — judge against how long we've been waiting instead.
+        If secondsSinceStart >= thresholdRed Then Return "RED"
+        If secondsSinceStart >= thresholdAmber Then Return "AMBER"
+        Return "UNKNOWN"
     End Function
 
     ' ── Feature gates ─────────────────────────────────────────────────────────────────

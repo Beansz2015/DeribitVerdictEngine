@@ -428,6 +428,8 @@ Module Program
 
         ' [C1 Session 2 / Part B — trade-store-coverage-report-implementer-brief.md §0]
         A49m_WeekdayScopeVsPartBUnconditionalLiveness()
+        ' [C1 Session 2 review finding, 2026-08-05 — dead capture path vs genuine cold start]
+        A49n_DeadCapturePathEscalatesPastGraceWindow()
 
         ' [A51 — candle/funding store write invariant, docs/store-integrity-check-2026-07-31
         ' -post-fix.md] The candle backfill destroyed June 2026 at 3m/5m/15m by writing a
@@ -7827,12 +7829,40 @@ Module Program
         ' place the ruling deliberately does not apply).
         Dim flushSeconds As Integer = 30
         Dim longSilenceSec As Double = 15.0 * flushSeconds   ' well past the 10× red threshold
-        Dim tier As String = TradeStoreWriter.ClassifyTapeStoreTier(longSilenceSec, flushSeconds)
+        Dim tier As String = TradeStoreWriter.ClassifyTapeStoreTier(longSilenceSec, 0.0, flushSeconds)
 
         Check("A49m weekday scope — a Saturday hour classifies out-of-scope-weekend and never defect, while Part B's liveness tier still reports RED on the identical silence",
               weekendHour.Classification = HourClass.OutOfScopeWeekend AndAlso tier = "RED",
               String.Format("weekendHour={0} (dayOfWeek={1}) tapeTier={2}",
                             weekendHour.Classification, saturday.DayOfWeek, tier))
+    End Sub
+
+    ' -- A49n: a dead-but-never-throwing capture path must not hide behind UNKNOWN forever
+    ' (C1 Session 2 review finding, 2026-08-05) -------------------------------------------
+    ' A48e already pins that an unwritable store (blocked dir, locked file, full disk) NEVER
+    ' THROWS — AppendRows logs and returns 0 forever, so `written > 0` is never true and
+    ' secondsSinceFlush stays Nothing permanently. Before this fix, ClassifyTapeStoreTier read
+    ' that as "UNKNOWN" (cold start, neutral colour) indefinitely — exactly the failure this
+    ' element exists to catch, rendered as benign, on the only box that captures.
+    Private Sub A49n_DeadCapturePathEscalatesPastGraceWindow()
+        Dim flushSeconds As Integer = 30
+
+        ' Genuine cold start — no flush yet, but well inside the grace window.
+        Dim coldStart As String = TradeStoreWriter.ClassifyTapeStoreTier(Nothing, 5.0, flushSeconds)
+        ' Past the amber horizon, still no flush ever — a dead path, not a slow one.
+        Dim deadAmber As String = TradeStoreWriter.ClassifyTapeStoreTier(Nothing, 3.0 * flushSeconds, flushSeconds)
+        ' Well past the red horizon, still no flush ever.
+        Dim deadRed As String = TradeStoreWriter.ClassifyTapeStoreTier(Nothing, 20.0 * flushSeconds, flushSeconds)
+        ' A stale-but-once-working flush uses the SAME thresholds, unaffected by the new arm.
+        Dim staleFlush As String = TradeStoreWriter.ClassifyTapeStoreTier(11.0 * flushSeconds, 999.0, flushSeconds)
+        ' A healthy, recent flush stays NORMAL regardless of how long the process has run.
+        Dim healthy As String = TradeStoreWriter.ClassifyTapeStoreTier(2.0, 999.0, flushSeconds)
+
+        Check("A49n dead capture path escalates UNKNOWN → AMBER → RED on the SAME 3×/10× thresholds when no flush ever lands; a genuine cold start stays UNKNOWN inside the grace window; a stale/healthy flush is unaffected",
+              coldStart = "UNKNOWN" AndAlso deadAmber = "AMBER" AndAlso deadRed = "RED" AndAlso
+              staleFlush = "RED" AndAlso healthy = "NORMAL",
+              String.Format("coldStart={0} deadAmber={1} deadRed={2} staleFlush={3} healthy={4}",
+                            coldStart, deadAmber, deadRed, staleFlush, healthy))
     End Sub
 
     ' ═══════════════════════════════════════════════════════════════════════════════════
