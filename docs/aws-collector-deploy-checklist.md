@@ -86,6 +86,16 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 >
 > Filed as a rider on the next CSV header rotation — see [`trader-tick-queue.md`](trader-tick-queue.md) §3, alongside `TriggerMode` and the J-E effective-source stamp, which share the same "rows cannot be attributed" shape.
 
+## 4a. Tape retention — **RULED 2026-08-05 (trader)**
+
+> **Keep all tape unless it is a copy of tape already held.** Deleting is the only irreversible option, and tape past Deribit's ~24 h window cannot be re-fetched at any price. Duplicate rows are cheap: the store's read path whole-row-dedups, and the pooled recipe (§4.3b) is AWS-preferred per minute-key, so an overlapping book costs disk and nothing else.
+
+**The practical order is therefore: merge first, judge duplication after** — never discard a store because it *looks* redundant. A book can only be shown redundant by comparing it against the one that supersedes it, and that comparison needs both books in hand.
+
+**Open instance, 2026-08-05.** `bin\Release\net8.0-windows\backtest_data\trades_2026-08.csv` — **78,798 trades, 2026-08-03 21:44 → 2026-08-05 13:13 UTC**, captured by the un-overlaid local Release build (§1a point 3). **Kept, not merged, not discarded.** AWS has been capturing continuously since 2026-08-01 17:50 UTC, so this span is *probably* covered — but "probably" is not the standard this rule sets, and **AWS's store has not been copied back yet**, so the comparison cannot be made. Do it at the next store copy-back: if every minute-key is present on the AWS side it is a pure duplicate and can go; if it fills any gap, that fill is unobtainable anywhere else.
+
+---
+
 ## 5. Decommission / handover note
 
 The box owes nothing at end-of-life beyond a final copy-back of `analysis_log.csv`, `liq_events.log`, and `ws_health.log`. **DEPLOYED 2026-07-23 (trader-executed; CSVs sighted and populating).** Engine `InstanceId` (recorded at first copy-back, 2026-07-27 08:18 UTC): `4325cb7e-c21e-444d-b6c4-b355178776cf` (deploy-evening run, 181 rows, 07-22 16:24–19:24 UTC) · `fb908147-0312-4c55-b9d1-a23be310256e` (the standing collector, since 07-22 19:25 UTC). Note: every app restart mints a new id — the authoritative provenance set is the distinct `InstanceId` values in `analysis_log_aws.csv` at each copy-back; re-record any new ids that appear.
