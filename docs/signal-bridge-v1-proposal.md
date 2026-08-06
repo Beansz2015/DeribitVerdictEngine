@@ -200,6 +200,16 @@ Per-run fresh read at `RunAnalysisAsync` start (no watcher). **Governs** when `e
 
 Source tag (`POS:EXEC`/`POS:MANUAL`), executor interlock display (armed/started/mode/breaker/ws), stale tag — all on the exit-guard strip / status-bar tier (the display-parity exempt class, stated per standing rule 4). **NO snapshot line, NO card binding, NO CSV column, NO payload field changes** — the engine consumption build is rotation-free and boundary-free (display/plumbing, no ⚠).
 
+> ⚠ **T8 AMENDMENT — an unrecognised enum value MUST render DISTINGUISHABLY, not merely verbatim (added 2026-08-05, from the order-app seat's runtime acceptance report).**
+>
+> Their run found **`mode` has only ever been observed as `"OFF"`** — `LOG_ONLY` and `LIVE` remain fixture evidence only — and E2's failure mode is precisely a wrong `mode` string. As specced, our tolerance would **render it verbatim and take the conservative arm without erroring**: safe, but *silent*. Their side would meanwhile be emitting what it believes is correct. **Neither repo is wrong, and that is exactly the problem — the blind spot belongs to the PAIR, and neither side can detect it alone.**
+>
+> **Requirement:** any enum value outside the known set renders with a **visible anomaly marker**, on the `[EST]` / `EXECUTOR STALE` precedent this tier already uses. **The conservative-arm behaviour does not change** — this turns a silent fallback into a conspicuous one, nothing more. Cheap now because the consumption build is unwritten; expensive later, because by then the silent path is the shipped path.
+>
+> **Fixture consequence:** §10.5's named `enum-tolerance` fixture gains a second arm — *unknown value ⇒ conservative arm **AND** a visible marker*. Pinning only the conservative arm pins half the requirement, and the half that is already true.
+>
+> **Runtime status this rests on (their report, 2026-08-05):** trigger (f) and the `ws` OK edge are now **observed** on testnet, so *"file absent = OFF, file stale = dead"* is founded rather than assumed. **Acceptance 3 is the only one outstanding** — it needs owner-only mode Live + ARM + START. Until it passes, treat the file as **partially proven**: shape, lifecycle and position semantics observed; **the disposition path, `last_signal` and the mode strings are not.**
+
 ### 10.5 Phase-2 fence (T5) + queue slots
 
 Actionable exits = a SEPARATE future amendment: a new pinned field on the SIGNAL schema with a bump to `schema_version: 2`, gated on the phase-1 display soak — **never by parsing `hold_status`** (informational free text forever). Rollout: OFF → emit-only → engine display consumption → soak. Queue: order-app emitter = own Opus-HIGH pass after N2 (their queue); engine consumption behind the §6.1 net-EV rider. Nothing is Aug-1-critical. Engine fixtures at build: parse / staleness / fallback / enum-tolerance / radios-grey (next-free family at build).

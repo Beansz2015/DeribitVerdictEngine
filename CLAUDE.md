@@ -18,6 +18,8 @@ This preserves context budget for actual work.
 - **Do not `cd`** in shell commands — the harness manages the working directory. Use absolute paths in `Read`/`Write`/`Edit`/`Bash` calls.
 - **Bash + Windows paths**: backslashes get consumed as escape characters. Use forward-slash form (`/c/Dev/DeribitVerdictEngine/...`) or quote the path (`"C:\Dev\DeribitVerdictEngine"`).
 - **Build verification**: run `dotnet build` against the absolute solution path (`dotnet build /c/Dev/DeribitVerdictEngine/DeribitVerdictEngine.sln` or use the harness `Bash` working dir).
+- **Do not line-anchor greps over VB (learned 2026-08-05, order-app seat's miss, relayed).** A scan anchored on `^\s*Return` misses **`If … Then Return`** — VB's inline single-line form, and the *commonest* one in this codebase. The same trap applies to `^\s*Throw`, `^\s*Exit`, `^\s*Continue`, and to any `^\s*If` scan against a `Select Case` arm. **Prefer unanchored patterns and filter the noise by eye**; a line-anchored VB grep that returns few hits is more likely mis-anchored than genuinely sparse. Their instance is worth knowing because the missed form *was the one the claim was about* — an anchor can hide exactly the case you are checking.
+- **A build failure that names a locked `.exe` is not a compile error.** `MSB3021`/`MSB3027` on `bin\...\DeribitVerdictEngine.exe` means the app is running; the copy step fails while compilation succeeded. Close it, or build `verify/ordercheck/OrderCheck.vbproj` instead — it links `Core/`, `analysis/` and the root `.vb` files, so it type-checks the same sources without touching the app's output.
 
 ---
 
