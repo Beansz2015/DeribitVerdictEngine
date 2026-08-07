@@ -425,3 +425,6 @@ backtest_log_*.csv
 .codex/
 configure-claude-deepseek.ps1
 models-full.json
+
+# AWS copy-backs — collector data staged for pooled reads; never tracked (multi-MB, regenerable from the box)
+AWS-copybacks/
