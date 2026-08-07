@@ -92,7 +92,53 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 
 **The practical order is therefore: merge first, judge duplication after** — never discard a store because it *looks* redundant. A book can only be shown redundant by comparing it against the one that supersedes it, and that comparison needs both books in hand.
 
-**Open instance, 2026-08-05.** `bin\Release\net8.0-windows\backtest_data\trades_2026-08.csv` — **78,798 trades, 2026-08-03 21:44 → 2026-08-05 13:13 UTC**, captured by the un-overlaid local Release build (§1a point 3). **Kept, not merged, not discarded.** AWS has been capturing continuously since 2026-08-01 17:50 UTC, so this span is *probably* covered — but "probably" is not the standard this rule sets, and **AWS's store has not been copied back yet**, so the comparison cannot be made. Do it at the next store copy-back: if every minute-key is present on the AWS side it is a pure duplicate and can go; if it fills any gap, that fill is unobtainable anywhere else.
+**RESOLVED 2026-08-07 — and the rule paid for itself.** `bin\Release\net8.0-windows\backtest_data\trades_2026-08.csv` (78,798 rows / 76,354 unique, 2026-08-03 21:44 → 2026-08-05 13:13 UTC), captured by the un-overlaid local Release build (§1a point 3), was compared whole-row against the first AWS store copy-back. It is **NOT a duplicate**:
+
+| Overlap window 08-03 21:44 → 08-05 13:13 UTC | rows |
+|---|---|
+| In both books | 59,895 |
+| **Release-only — would have been lost** | **16,459** |
+| AWS-only | 1,145 |
+| Union | 77,499 |
+
+AWS held **78.8 %** of known trades in that window; the local Release box held **98.5 %**. **AWS was healthy throughout** — no `DOWN`/`DEGRADED` between 2026-08-01 19:02 and 2026-08-06 16:11, 921 analysis rows/day on 08-03/04/05 — so this is not an outage, and the loss is scattered rather than contiguous (36 distinct UTC hours affected, spanning the whole window). Both tapes are now merged into the repo-root store per §4b. **The earlier reading that this span was "probably covered" was wrong, and only the retention rule stopped it being acted on.**
+
+> ⚠ **What this says about the instrument, and it is the load-bearing part.** AWS-only max inter-trade gap over that window is **153.1 s** against the 300 s threshold — **no breach** — and the *merged* store, carrying all 16,459 extra trades, reads **exactly the same 153.1 s**. At one trade per ~2.3 s, scattered per-trade loss can never approach a 300 s threshold, so **S3's gap metric is structurally incapable of detecting it.** Queued for a ruling — see [`trader-tick-queue.md`](trader-tick-queue.md) §0a.
+
+## 4b. Store copy-back — the step-by-step. **Written 2026-08-07, after executing it for the first time**
+
+§4 covers the **CSV**. This covers the **store** (raw tape + candles + funding), which had no written procedure — §4a said to do it and not how. Everything below was run end-to-end on 2026-08-07; the traps are the ones that actually fired, not anticipated ones.
+
+### Know these two before you start, or the run reads the wrong data and says so quietly
+
+1. ⚠ **`BacktestRunner` sets its own working directory.** `BacktestProgram.vb:359` walks up from the exe looking for `DeribitVerdictEngine.sln` and calls `Directory.SetCurrentDirectory` on it. So the `coverage` verb **always** reads the **repo-root** `backtest_data\`, `analysis_log.csv`, `ws_health.log` and `capture_marker.log` — **launching it from elsewhere changes nothing.** There is no `--store-dir` flag. A staging folder therefore cannot be the target: **merge into the repo root first, then run coverage.**
+2. ⚠ **The app writes exe-relative; the verb reads CWD-relative.** `TradeStoreWriter.ResolveStoreDir` anchors to `AppDomain.BaseDirectory`, so the app's store is `bin\…\backtest_data\` while the verb's is the repo root. They are different directories on purpose — the repo root is the analysis workspace — but nothing enforces it, and a run against the wrong one produces a plausible report rather than an error. **Tell them apart by the S1 line: `analysis_log.csv has no rows in range` when you know it has rows means you are reading the repo root and staged nothing.**
+
+*(A third trap if you drive this from PowerShell: `Push-Location` does **not** change `[Environment]::CurrentDirectory`, which is what a child process inherits. It will silently run against the repo root anyway.)*
+
+### The procedure
+
+**0.** §3 glance on AWS: title bar `settings v{N}` with **no** `+local`, `backtest_data\` mtime advancing, note the current InstanceId from `ws_health.log`.
+
+**1. Copy off AWS — read-only, delete nothing.** `analysis_log.csv`, `ws_health.log`, the whole `backtest_data\`, and `liq_events.log` if present (A4 gate evidence — pool both boxes' sidecars). The box keeps collecting throughout.
+
+**2. Land it in a dated staging folder under `AWS-copybacks\`,** which is gitignored (added 2026-08-07 — it was untracked, i.e. one `git add -A` from committing ~22 MB of collector data into the repo).
+
+**3. Verify the CSV before trusting it.** Header equality against the local book (§4.2). Then — because AWS's `analysis_log.csv` is a *whole book*, not an increment — **prove the new copy is a strict superset of the previous one** before it supersedes it: `comm -23 <(old timestamps) <(new timestamps)` must be empty. Only then overwrite `bin\Debug\net8.0-windows\analysis_log_aws.csv`.
+
+**4. Compare any second tape against AWS *before* merging** (§4a). Whole-row, not by timestamp.
+
+**5. Merge — additive, whole-line dedup, counts on both sides.**
+
+> ⚠ **`sort -u` with a KEY (`sort -t, -k1,1n -u`) dedups on the KEY, not the line.** On 2026-08-07 that silently collapsed every trade sharing a millisecond and would have destroyed ~44,000 rows — **10,199 timestamps in one month's AWS file carry more than one distinct trade.** Use whole-line `sort -u`. Timestamps are 13-digit epoch ms, so lexicographic order *is* chronological and no second sort is needed.
+
+**Count before, merge, count after, and require every number to be ≥ its before value.** This is the store-integrity lesson applied: all three of the 2026-07-31 store holes were found by counting rows against a deterministic expectation, and none by a test. Assert **zero rows lost from each source** (`comm -23 source merged` empty for every input) *before* installing. Build into a temp file and install only on a clean check — never edit the store in place.
+
+*Also: the store is CRLF. A filter that strips `\r` (plain `awk` will) makes every line differ by one byte and turns a comparison into nonsense — a `0 rows in common` result between two books of the same instrument is that bug, not a finding.*
+
+**6. Coverage.** Stage AWS's `analysis_log.csv` / `ws_health.log` at the **repo root** (there is no local file of those names there, so nothing is overwritten), run the verb, then **delete them** — repo-root `analysis_log.csv` is *not* gitignored. Expect `unknown-scope` for every hour until AWS runs a build carrying `Core/CaptureMarkerLog.vb`; S2/S3/S4 are scope-independent and still meaningful.
+
+**7. Ledger.** Record any new InstanceId in §5a. If AWS has not restarted since the last copy-back, nothing is owed — confirm from `ws_health.log` rather than assuming.
 
 ---
 
