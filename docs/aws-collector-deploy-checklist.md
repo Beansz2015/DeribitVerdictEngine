@@ -12,10 +12,17 @@
 
 ## 1a. The one setting the two boxes must NOT share — `trade_store.enabled` (v64, trader-ruled 2026-07-31)
 
+> ⚠ **THIS SECTION WAS AMENDED 2026-08-07 — the two boxes now share the value, and that reverses the whole point of the section for the interim.** See D1-a in `docs/in-app-trade-store-capture-proposal.md` §7. **Read the table below, not the reasoning underneath it**, which is preserved because it explains the original design and still governs the end state.
+
 | Box | `trade_store.enabled` | Why |
 |---|---|---|
-| **AWS** | **`true`** | D1 ruled capture **AWS-only**. This box is the sole capturer of raw tape, and tape past ~24 h is unobtainable at any price. |
-| **Local — EVERY output folder, `bin\Debug` *and* `bin\Release`** | **`false`** | The local box is intermittent (trader, 2026-07-31), so its store would be a partial book nobody reads, growing ~1.4 GB/year in a directory nobody watches. Capture there also recreates the dual-box topology D1 explicitly rejected. **The "and `bin\Release`" is not pedantry — see point 3 below.** |
+| **AWS** | **`true`** | Unchanged. This box is the canonical capturer, and tape past ~24 h is unobtainable at any price. |
+| **Local — `bin\Debug` and `bin\Release`** | ⚠ **`true` as of 2026-08-07 — the overlay is REMOVED, not edited** | **Ruled by D1-a, temporary, for data collection only.** The sole capturer measured **78.8 %** complete while healthy against **98.5 %** on a second box, and 16,459 trades existed only locally. A second sampler is what made the book complete. **This retires when the local box retires** — the end state is still AWS-only. |
+
+⚠ **Two consequences of removing the local overlay, and both are easy to miss:**
+
+1. **`trade_store.enabled` was the ONLY key either local overlay overrode.** Removing it leaves an empty overlay, so **the `+local` title-bar marker disappears from the local box.** That marker was §3's daily alarm in *its absence*. **The local glance is now inverted: expect NO `+local`, and expect `backtest_data\` to be advancing.** A `+local` on the local box now means someone re-added an override.
+2. **The AWS glance is unchanged** — AWS must still never show `+local`.
 
 **The tracked `settings.json` carries `true`, and that is deliberate — do not "fix" it.** §1.1 deploys AWS from the Release build output, so the tracked value *is* what lands on AWS. The two failure directions are not symmetric:
 
@@ -52,7 +59,7 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 
 ## 3. Daily one-glance health check (RDP in, ~30 seconds)
 
-- **Title bar reads `settings v{N} +local`** (local box only — AWS must NOT show it) → the per-box overlay is in force, so `trade_store.enabled` is `false` here and capture is where D1 put it. **Its absence is the alarm**, and it is a *quiet* alarm: `bin\settings.local.json` does not survive `dotnet clean`, and losing it silently switches local capture back on — the state §1a rules against. On AWS the same glance is inverted: a `+local` there means an overlay it should not have. The marker only appears when the overlay actually overrode a key the base carries, so it cannot be earned by a typo'd or rejected key ([F1](settings-local-overlay-spec-back.md), 2026-08-02).
+- ⚠ **REWRITTEN 2026-08-07 — this check inverted.** **AWS: title bar must read `settings v{N}` with NO `+local`.** A `+local` on AWS still means an overlay it should not have. **Local box: also expect NO `+local` now**, because D1-a removed the only key its overlay carried; the live check on the local box is that **`backtest_data\` is advancing**, which is the same check AWS gets. *(Superseded, kept because it explains the marker: until 2026-08-07 the local box was expected to show `+local`, and its ABSENCE was the alarm — the overlay does not survive `dotnet clean`, and losing it silently switched local capture on. That failure direction is now the intended state, so the alarm is retired rather than fixed.)* On AWS the same glance is inverted: a `+local` there means an overlay it should not have. The marker only appears when the overlay actually overrode a key the base carries, so it cannot be earned by a typo'd or rejected key ([F1](settings-local-overlay-spec-back.md), 2026-08-02).
 - TAPE strip alive + `[B]` strip populated → collecting.
 - `ws_health.log` tail → any DOWN/DEGRADED transitions overnight (transitions-only, so a short file is a healthy file).
 - **`liq_events.log` existence** → the AWS box runs the A4 cascade instrument 24/7 too — it may catch the first cascade before the local box does. A CASCADE line here counts as the A4 gate evidence (pool both boxes' sidecars).

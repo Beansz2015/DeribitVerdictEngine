@@ -14,7 +14,19 @@ Two of this project's own rulings say so directly: **"a doc must not carry a num
 
 **Consequence for readers:** to learn whether an item is done, follow the pointer. This doc will never tell you.
 
-> ⚠ **Name collision, flagged 2026-08-07.** "**C1**" means two unrelated things in this project. **C1 (queue Cluster C)** = the trade-store coverage report, BUILT. **C1 (bridge)** = the order-app's v2 feedback-file proposal, documentation phase closed. **C1/C2 (backlog)** = multi-session VPFR / anchored VWAP, parked. They are disambiguated below by suffix; do not merge them.
+## 0a. Reused IDs — read this before you go looking for one
+
+**Flagged 2026-08-07, trader-directed.** Several short IDs mean more than one thing in this project. Always take the ID together with its source document.
+
+| ID | Meaning A | Meaning B | Meaning C |
+|---|---|---|---|
+| **C1** | **Trade-store coverage report** — a build, shipped 2026-08-05 (queue Cluster C) | **Bridge v2 feedback file** — a cross-repo contract with the order app, documentation phase closed | **C1/C2 backlog** — multi-session VPFR / anchored VWAP, parked behind the CLI port |
+| **F1** | **Tier-ladder read** — `docs/f1-tier-ladder-read-2026-08-01.md`; gates Kelly CAL | **Coverage-report review finding** — trailing-edge gaps are charged to the following hour (`docs/c1-session1-review-2026-08-04.md`) | **Overlay spec-back finding** — the `+local` marker cannot be earned by a rejected key (`docs/settings-local-overlay-spec-back.md`) |
+| **F2** | **Coverage-report review finding** — a capture-state flip mid-hour is scoped by the previous marker | **Buffer race** — `ResetBufferState` drops trades (`docs/job1-outstanding-2026-08-01.md`) | — |
+| **F3** | **Observational watch** — EXIT GUARD strip vs HOLD/EXIT row during holds; live and unevaluable | **Collector defect** — repair calls send `User-Agent: DeribitBacktestRunner/1.0` (`docs/job1-outstanding-2026-08-01.md`) | — |
+| **D1** | **Trade-store capture ruling** — who captures raw tape (`docs/in-app-trade-store-capture-proposal.md` §7) | **TTM `flat_threshold` re-anchor** — parked scoring item (queue Cluster D) | Also the first row of most other specs' D-tables |
+
+**F1, F2 and F3 are the dangerous set.** All three are live in `docs/trader-tick-queue.md` at the same time, in both meanings. A bare "F2" there could mean a spec question or a four-line `SyncLock` fix.
 
 ---
 
