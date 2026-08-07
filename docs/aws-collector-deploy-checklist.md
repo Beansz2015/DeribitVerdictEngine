@@ -4,11 +4,24 @@
 
 ## 1. Deploy (xcopy — there is no installer)
 
-1. On the local machine, from the PUSHED tree (never an unpushed build): `dotnet build -c Release` and take the whole `bin\Release\net8.0-windows\` output.
-2. **Include `fonts\`** (Geist Mono OFL licence file travels as Content — CLAUDE.md bundled-fonts rule).
+1. On the local machine, from the PUSHED tree (never an unpushed build): `dotnet build -c Release`.
+2. ⚠ **Copy EXACTLY these six items. Nothing else.** Rewritten 2026-08-07 from "take the whole output folder" to a positive allowlist — the folder now also contains per-box state and runtime output, and one of those files stops AWS collecting. **A deploy is irreversible in one direction, so name what goes rather than what stays** (the same reason the J-B rule scopes by a positive record).
+
+| # | Item | Why it must travel |
+|---|---|---|
+| 1 | `DeribitVerdictEngine.exe` | the app |
+| 2 | `DeribitVerdictEngine.dll` | the code — this is what actually carries a version change |
+| 3 | `DeribitVerdictEngine.deps.json` | .NET will not start without it |
+| 4 | `DeribitVerdictEngine.runtimeconfig.json` | .NET will not start without it |
+| 5 | `settings.json` | the tracked config. **Confirm line 2 is the version you intend** |
+| 6 | `fonts\` (holds `OFL.txt`) | SIL OFL 1.1 licence must ship beside the exe. The three `.ttf` are `EmbeddedResource` and travel *inside* the exe — CLAUDE.md bundled-fonts rule |
+
+**Optional:** `DeribitVerdictEngine.pdb` — debug symbols. Harmless, and it gives real line numbers if AWS ever throws. Take it or leave it.
+
+**Everything else in that folder is per-box state or runtime output and must NOT travel** — see §1.4 and §1.5. As of 2026-08-07 that means `settings.local.json`, `ohlc_1m_cache.csv` and `analysis_output_dump.md`, plus anything the box generated on a previous run.
 3. Confirm the copied `settings.json` is the tracked v59+ file — spot-check line 1 (`"version"`), `auto_run.trigger_mode: "on_close"` (v57 seeds it correctly), and **`trade_store.enabled: true`** (v64 seeds it correctly — see §1a).
 4. ⚠ **NEVER copy `settings.local.json`. This is the one that stops AWS collecting.** Added 2026-08-07. The overlay carries `trade_store.enabled: false`; on AWS that silently switches off **the only capturing box**, which is the unrecoverable direction §1a is built around. It sits in the deploy source *because* §1a keeps it there to stop the local Release build capturing — so the file that protects the local box is the file that would kill AWS. **Backstop if it slips through: the §3 AWS glance — a `+local` on the AWS title bar means exactly this, and means capture is off.** Check it immediately after every deploy, not the next day.
-5. **Do NOT copy `analysis_log.csv`, `analysis_eval_cache.csv`, `ws_health.log`, `capture_marker.log`, any `.bak`/sidecars — or `backtest_data\`.** The AWS book starts EMPTY on purpose (a seeded copy forks the history and forces dedup at every pooled read; a fresh book concatenates cleanly). ⚠ **`backtest_data\` was added to this list 2026-08-07 and it is the dangerous one** — the others merely fork history, while the store *overwrites AWS's tape*. See the hazard box in §1a.
+5. **Do NOT copy `analysis_log.csv`, `analysis_eval_cache.csv`, `ws_health.log`, `capture_marker.log`, `ohlc_1m_cache.csv`, `analysis_output_dump.md`, any `.bak`/sidecars — or `backtest_data\`.** *(`ohlc_1m_cache.csv` and `analysis_output_dump.md` added 2026-08-07 — a rolling 7-day candle cache and the per-run text dump. Neither is dangerous: candles refetch from the API and the dump is regenerated. They are listed so the allowlist in §1.2 and this list agree.)* The AWS book starts EMPTY on purpose (a seeded copy forks the history and forces dedup at every pooled read; a fresh book concatenates cleanly). ⚠ **`backtest_data\` was added to this list 2026-08-07 and it is the dangerous one** — the others merely fork history, while the store *overwrites AWS's tape*. See the hazard box in §1a.
 5. **Copy files INTO the existing folder — never replace the directory.** The v64 deploy confirmed this works: AWS's eval cache and book survived because the copy overwrote file-by-file (§5a). Replacing the directory would delete AWS's store and book outright.
 5. `signal_bridge.enabled` may stay as-tracked — emission to `C:\Dev\DeribitBridge\` on a box with no consumer is harmless (payloads simply overwrite). ARM stays OFF by construction (never persisted).
 
