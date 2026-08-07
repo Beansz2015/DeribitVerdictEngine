@@ -1,6 +1,8 @@
 # Trade-store trade identity — `trade_id` and `trade_seq`
 
-**Status:** PROPOSED 2026-08-08. D-table in §7 awaits the trader.
+**Status:** ✅ **APPROVED 2026-08-08 — D1–D7 ticked, all as recommended. BUILD-AUTHORIZED behind the §1 verification gate.**
+
+> ⚠ **Sequencing note the D-table does not cover, and it costs tape if missed.** Building this does **not** start capturing identity. `settings.json` is unchanged, so **AWS keeps running the old binary and keeps writing five-field rows until it is redeployed.** Every hour between the build landing and the AWS redeploy produces tape that is permanently unmergeable, for the same reason as the quarantined books. **Treat the AWS redeploy as part of this change, not as a follow-up** — deploy steps are in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §1.2 and §1b.
 **Class:** store schema + ingest + dedup + venue diff. **No settings keys. No scoring impact. NOT a dataset boundary** — no indicator, card, snapshot line, CSV column or bridge field reads the trade store.
 **Origin:** the withdrawn 78.8 % completeness claim, [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §4a.
 
@@ -144,9 +146,11 @@ Match on `trade_id` when both sides carry one. Fall back to whole-row otherwise,
 
 ---
 
-## 7. D-table — awaits the trader
+## 7. D-table — ✅ **ALL TICKED 2026-08-08 (trader), every row as recommended**
 
-| # | Question | Recommendation |
+> ⚠ **Read D7 carefully before acting on it.** Its recommendation was *"trader's call, and it becomes a real option again"* — so ticking it means **the question re-opens once identity ships**, not that local capture is pre-approved to resume. **A future seat must not read "D7 ticked" as authorisation.** Local capture stays OFF until an explicit decision is made at that point.
+
+| # | Question | Ruling — as recommended |
 |---|---|---|
 | **D1** | Capture `trade_id`, `trade_seq`, or both? | **Both.** `trade_id` fixes dedup and merging. `trade_seq` adds local gap detection and **retires the ~24 h completeness clock** (§3.3). The marginal cost over taking one is two characters of parse |
 | **D2** | Mark the point where identity begins? | **Yes, in the spec-back and the deploy checklist — not in the data.** A marker row would be a sixth thing to parse. The first identified row in each file is self-marking |
