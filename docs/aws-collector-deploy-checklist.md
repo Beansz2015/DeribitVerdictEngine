@@ -7,21 +7,27 @@
 1. On the local machine, from the PUSHED tree (never an unpushed build): `dotnet build -c Release` and take the whole `bin\Release\net8.0-windows\` output.
 2. **Include `fonts\`** (Geist Mono OFL licence file travels as Content — CLAUDE.md bundled-fonts rule).
 3. Confirm the copied `settings.json` is the tracked v59+ file — spot-check line 1 (`"version"`), `auto_run.trigger_mode: "on_close"` (v57 seeds it correctly), and **`trade_store.enabled: true`** (v64 seeds it correctly — see §1a).
-4. **Do NOT copy `analysis_log.csv`, `analysis_eval_cache.csv`, `ws_health.log`, `capture_marker.log`, any `.bak`/sidecars — or `backtest_data\`.** The AWS book starts EMPTY on purpose (a seeded copy forks the history and forces dedup at every pooled read; a fresh book concatenates cleanly). ⚠ **`backtest_data\` was added to this list 2026-08-07 and it is the dangerous one** — the others merely fork history, while the store *overwrites AWS's tape*. See the hazard box in §1a.
+4. ⚠ **NEVER copy `settings.local.json`. This is the one that stops AWS collecting.** Added 2026-08-07. The overlay carries `trade_store.enabled: false`; on AWS that silently switches off **the only capturing box**, which is the unrecoverable direction §1a is built around. It sits in the deploy source *because* §1a keeps it there to stop the local Release build capturing — so the file that protects the local box is the file that would kill AWS. **Backstop if it slips through: the §3 AWS glance — a `+local` on the AWS title bar means exactly this, and means capture is off.** Check it immediately after every deploy, not the next day.
+5. **Do NOT copy `analysis_log.csv`, `analysis_eval_cache.csv`, `ws_health.log`, `capture_marker.log`, any `.bak`/sidecars — or `backtest_data\`.** The AWS book starts EMPTY on purpose (a seeded copy forks the history and forces dedup at every pooled read; a fresh book concatenates cleanly). ⚠ **`backtest_data\` was added to this list 2026-08-07 and it is the dangerous one** — the others merely fork history, while the store *overwrites AWS's tape*. See the hazard box in §1a.
 5. **Copy files INTO the existing folder — never replace the directory.** The v64 deploy confirmed this works: AWS's eval cache and book survived because the copy overwrote file-by-file (§5a). Replacing the directory would delete AWS's store and book outright.
 5. `signal_bridge.enabled` may stay as-tracked — emission to `C:\Dev\DeribitBridge\` on a box with no consumer is harmless (payloads simply overwrite). ARM stays OFF by construction (never persisted).
 
 ## 1b. Pre-flight before every xcopy to AWS — 30 seconds, prevents an irreversible loss
 
-Run this in the repo root. **Every line must print nothing.** Any output means the deploy source is dirty; clean it before copying.
+Run this in the repo root, in **PowerShell** — this is a Windows box and the earlier `ls`/`grep` form did not run here. A clean source prints **only** the two `OK` lines and the version.
 
-```
-ls bin/Release/net8.0-windows/ | grep -E 'backtest_data|analysis_log|analysis_eval_cache|ws_health|capture_marker|\.bak$'
+```powershell
+$d = 'bin\Release\net8.0-windows'
+Get-ChildItem $d -Force -EA SilentlyContinue | Where-Object { $_.Name -match 'backtest_data|analysis_log|analysis_eval_cache|ws_health|capture_marker|\.bak$' } | ForEach-Object { "DIRTY  -> $($_.Name)" }
+if (-not (Get-ChildItem $d -Force -EA SilentlyContinue | Where-Object { $_.Name -match 'backtest_data|analysis_log|analysis_eval_cache|ws_health|capture_marker|\.bak$' })) { 'OK     deploy source carries no data files' }
+if (Test-Path "$d\settings.local.json") { 'OK     Release overlay present - Release will not capture'; 'EXCLUDE  settings.local.json MUST NOT travel to AWS - it would stop AWS capturing' } else { 'ALARM  settings.local.json MISSING - Release will capture and repopulate backtest_data' }
+"VERSION $((Get-Content "$d\settings.json" -TotalCount 2)[1].Trim())"
 ```
 
-- If `backtest_data\` appears, the local Release build captured tape. **Do not copy.** Merge that tape into the repo-root store first (§4b), confirm it is a copy, then delete it.
-- If the CSVs or sidecars appear, delete them from the deploy source only. They are regenerated on the local box and must never seed AWS.
-- **Confirm `bin\Release\net8.0-windows\settings.local.json` still EXISTS** — it is what stops Release capturing. Its absence is why the store reappears.
+- **`DIRTY -> backtest_data`** — the local Release build captured tape. **Do not copy.** Merge that tape into the repo-root store first (§4b), confirm it is a copy, then delete it.
+- **`DIRTY -> ` a CSV or sidecar** — delete it from the deploy source only. They regenerate on the local box and must never seed AWS.
+- **`ALARM`** — restore the overlay before building, not after. The build is what repopulates the folder.
+- **`VERSION`** must match the version you intend to deploy, and must equal the version the other box is on (§4.5 same-settings discipline). Its absence is why the store reappears.
 
 ## 1a. The one setting the two boxes must NOT share — `trade_store.enabled` (v64, trader-ruled 2026-07-31; amended 2026-08-07)
 
