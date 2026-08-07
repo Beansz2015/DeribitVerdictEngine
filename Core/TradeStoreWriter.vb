@@ -27,6 +27,7 @@
 Imports System.Collections.Generic
 Imports System.Globalization
 Imports System.IO
+Imports System.Text.Json
 
 Public NotInheritable Class TradeStoreWriter
 
@@ -34,9 +35,28 @@ Public NotInheritable Class TradeStoreWriter
     ''' Resolved against the EXE directory by <see cref="ResolveStoreDir"/> — see D3/A48h.</summary>
     Public Const DefaultStoreDir As String = "backtest_data"
 
-    ''' <summary>The store's trade-file header. Unchanged from the shipped format so
-    ''' existing files append seamlessly and the shipped reader needs no change.</summary>
-    Public Const HeaderLine As String = "Timestamp,Price,Amount,Direction,Liquidation"
+    ''' <summary>
+    ''' The store's trade-file header — SEVEN columns since the trade-identity build
+    ''' (docs/trade-store-trade-identity-proposal.md §3.2, D5).
+    '''
+    ''' The two identity columns APPEND at the end, and that is the whole migration:
+    ''' <see cref="TryParseRow"/> guards on `parts.Length &lt; 5` — a `&lt;`, not an `=` — so
+    ''' five-column files written by every prior binary parse unchanged. No file rotation, no
+    ''' rewrite of existing months, and a single file legitimately holds both shapes (§5).
+    ''' </summary>
+    Public Const HeaderLine As String = "Timestamp,Price,Amount,Direction,Liquidation,TradeId,TradeSeq"
+
+    ''' <summary>The pre-identity five-column header, still written by every binary before this
+    ''' build. Kept as a named constant because the reader must recognise it as a HEADER (and
+    ''' skip it) rather than as data.</summary>
+    Public Const LegacyHeaderLine As String = "Timestamp,Price,Amount,Direction,Liquidation"
+
+    ''' <summary>Sentinel for an absent <see cref="TradeRecord.TradeSeq"/> — an ALIAS of
+    ''' <see cref="TradeRecord.AbsentSeq"/>, which is where it is defined. It lives on
+    ''' TradeRecord because AutoTweaker, WhatIfRunner and CeilingAudit link DeribitClient.vb but
+    ''' NOT this file; defining it here would break those three builds. Kept as an alias so
+    ''' store-side call sites read against the store seam.</summary>
+    Public Const AbsentSeq As Long = TradeRecord.AbsentSeq
 
     ' One process-wide append lock. Streaming capture and gap repair both append to the
     ' SAME monthly file, on different threads, so without this a flush could interleave
@@ -266,15 +286,54 @@ Public NotInheritable Class TradeStoreWriter
                             String.Format("trades_{0:D4}-{1:D2}.csv", year, month))
     End Function
 
-    ''' <summary>One store row for a trade. The shipped format, verbatim.</summary>
+    ''' <summary>
+    ''' One store row for a trade — SEVEN fields since the identity build. Absent identity
+    ''' writes as an EMPTY column, which <see cref="TryParseRow"/> reads back as absent.
+    '''
+    ''' ⚠ This is the ON-DISK ROW and nothing else. It used to double as the dedup key; it no
+    ''' longer may, because two genuinely distinct trades can share all five legacy fields
+    ''' (observed live at the §1 gate: trade_id 439922656 and 439922657, same millisecond,
+    ''' same price, same amount, same direction). Dedup goes through
+    ''' <see cref="DedupTrades"/>; the five-field fallback key is <see cref="LegacyRowKey"/>.
+    ''' </summary>
     Public Shared Function FormatRow(t As TradeRecord) As String
+        Return String.Format(CultureInfo.InvariantCulture,
+                             "{0},{1},{2}",
+                             LegacyRowKey(t), SanitizeField(t.TradeId),
+                             If(t.HasSeq, t.TradeSeq.ToString(CultureInfo.InvariantCulture), ""))
+    End Function
+
+    ''' <summary>
+    ''' The five legacy fields, formatted exactly as every pre-identity binary wrote them.
+    ''' Two jobs, and both need it to stay byte-stable: it is the prefix of
+    ''' <see cref="FormatRow"/>, and it is the FALLBACK dedup/match key used whenever either
+    ''' side of a comparison lacks an identity (§3.4, §3.5).
+    ''' </summary>
+    Public Shared Function LegacyRowKey(t As TradeRecord) As String
         Return String.Format(CultureInfo.InvariantCulture,
                              "{0},{1:F2},{2:F2},{3},{4}",
                              t.Timestamp, t.Price, t.Amount,
                              If(t.Direction, ""), If(t.Liquidation, "none"))
     End Function
 
-    ''' <summary>Parse one store row. False (and rec untouched) on any malformed line.</summary>
+    ' A comma inside a field would silently change the row's column count and corrupt every
+    ' later parse. Deribit's trade_id is a numeric string so this is unreachable in practice —
+    ' which is exactly why it is stripped rather than trusted.
+    Private Shared Function SanitizeField(s As String) As String
+        If String.IsNullOrEmpty(s) Then Return ""
+        If s.IndexOf(","c) < 0 Then Return s
+        Return s.Replace(",", "")
+    End Function
+
+    ''' <summary>
+    ''' Parse one store row. False (and rec untouched) on any malformed line.
+    '''
+    ''' The `&lt; 5` guard is load-bearing and predates this build: it is what makes appending
+    ''' identity columns backward-compatible in both directions (D5). Five-column legacy rows
+    ''' parse with identity ABSENT; seven-column rows parse with it present. A seven-column row
+    ''' whose identity columns are EMPTY also reads as absent — an empty column is not a value,
+    ''' and treating it as one is the collapse this whole build exists to prevent (§3.4).
+    ''' </summary>
     Public Shared Function TryParseRow(line As String, ByRef rec As TradeRecord) As Boolean
         If String.IsNullOrEmpty(line) Then Return False
         Dim parts = line.Split(","c)
@@ -284,10 +343,85 @@ Public NotInheritable Class TradeStoreWriter
         If Not Long.TryParse(parts(0), NumberStyles.Integer, CultureInfo.InvariantCulture, ts) Then Return False
         If Not Double.TryParse(parts(1), NumberStyles.Float, CultureInfo.InvariantCulture, px) Then Return False
         If Not Double.TryParse(parts(2), NumberStyles.Float, CultureInfo.InvariantCulture, amt) Then Return False
+
+        Dim tradeId As String = Nothing
+        If parts.Length >= 6 AndAlso Not String.IsNullOrWhiteSpace(parts(5)) Then tradeId = parts(5).Trim()
+
+        Dim tradeSeq As Long = AbsentSeq
+        If parts.Length >= 7 Then
+            Dim sq As Long
+            If Long.TryParse(parts(6).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, sq) AndAlso
+               sq >= 0 Then tradeSeq = sq
+        End If
+
         rec = New TradeRecord() With {
             .Timestamp = ts, .Price = px, .Amount = amt,
-            .Direction = parts(3), .Liquidation = parts(4)}
+            .Direction = parts(3), .Liquidation = parts(4),
+            .TradeId = tradeId, .TradeSeq = tradeSeq}
         Return True
+    End Function
+
+    ' ── Dedup ─────────────────────────────────────────────────────────────────────────
+
+    ''' <summary>
+    ''' THE dedup contract (docs/trade-store-trade-identity-proposal.md §3.4), in the one place
+    ''' all three consumers route through so they cannot drift:
+    '''
+    '''   • Two rows are the same trade iff both carry an identity and the identities are equal.
+    '''   • If EITHER row lacks an identity, fall back to whole-row equality on the five legacy fields.
+    '''   • ⚠ NEVER key on an absent or empty identity. A missing identity is not a value and
+    '''     must not join a group. Keying a legacy row on "" collapses EVERY legacy row into
+    '''     one — the original defect, reproduced at greater scale inside its own fix.
+    '''
+    ''' ⚠ IMPLEMENTATION NOTE — the spec's relation is not transitive, so an order had to be
+    ''' chosen and it is recorded here rather than left implicit. Given a legacy row L and two
+    ''' identified rows I1, I2 that all share the same five fields: L≡I1 and L≡I2 by fallback,
+    ''' but I1≢I2 by identity. No grouping can satisfy all three. This resolves IDENTITY-FIRST:
+    ''' identified rows are settled among themselves, then an identity-less row is dropped if its
+    ''' legacy key was already claimed by an identified row. That makes the result independent of
+    ''' input order (the alternative silently returned 1 or 2 rows depending on which came first)
+    ''' and errs toward NOT double-counting, which is the conservative direction for a store whose
+    ''' whole problem was inflated volume on merge.
+    ''' </summary>
+    Public Shared Function DedupTrades(rows As IEnumerable(Of TradeRecord)) As List(Of TradeRecord)
+        Dim result As New List(Of TradeRecord)()
+        If rows Is Nothing Then Return result
+
+        ' Materialise once — the caller may hand us a lazy sequence and this walks it twice.
+        Dim all As New List(Of TradeRecord)(rows)
+
+        Dim seenIds As New HashSet(Of String)(StringComparer.Ordinal)
+        Dim claimedLegacy As New HashSet(Of String)(StringComparer.Ordinal)
+        Dim keep(all.Count - 1) As Boolean
+
+        ' Pass 1 — identified rows, settled among themselves on identity ALONE. Two rows here
+        ' with equal legacy fields and different ids are two trades and both survive (A53e).
+        For i As Integer = 0 To all.Count - 1
+            Dim r = all(i)
+            If Not r.HasIdentity Then Continue For
+            If Not seenIds.Add(r.TradeId) Then Continue For
+            claimedLegacy.Add(LegacyRowKey(r))
+            keep(i) = True
+        Next
+
+        ' Pass 2 — identity-less rows, on the five-field fallback key. Each distinct legacy row
+        ' survives (A53c); one already represented by an identified row does not (A53f).
+        For i As Integer = 0 To all.Count - 1
+            Dim r = all(i)
+            If r.HasIdentity Then Continue For
+            If Not claimedLegacy.Add(LegacyRowKey(r)) Then Continue For
+            keep(i) = True
+        Next
+
+        ' Emit in INPUT order. The two-pass resolution above is about which rows survive, not
+        ' about what order they come back in — a caller that does not sort (and the coverage
+        ' walk's gap arithmetic did not, before it sorted) must not silently get the file
+        ' re-ordered underneath it.
+        For i As Integer = 0 To all.Count - 1
+            If keep(i) Then result.Add(all(i))
+        Next
+
+        Return result
     End Function
 
     ''' <summary>

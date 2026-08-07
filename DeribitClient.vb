@@ -2,6 +2,7 @@
 ' Handles all REST calls to Deribit public API.
 ' No authentication required -- all endpoints are public.
 
+Imports System.Globalization
 Imports System.Net.Http
 Imports System.Text.Json
 
@@ -280,6 +281,13 @@ Public Class DeribitClient
                     Else
                         rec.Liquidation = "none"
                     End If
+                    ' [trade identity] Populated through the SAME shared readers the store's two
+                    ' capture paths use. This path does not itself write to the store — SeedAsync
+                    ' hands these to MarketState.SeedTrades (the in-memory ring), and only
+                    ' ApplyTrades buffers to disk — but leaving the one REST shape blind would be
+                    ' a live trap for the next reader who wires a seed row through to capture.
+                    rec.TradeId = TradeRecord.ReadTradeId(t)
+                    rec.TradeSeq = TradeRecord.ReadTradeSeq(t)
                     list.Add(rec)
                 Next
                 list.Reverse()   ' API order is newest-first; contract is ascending
@@ -312,4 +320,96 @@ Public Class TradeRecord
     Public Property Direction As String
     Public Property Liquidation As String
     Public Property Timestamp As Long
+
+    ' ── Trade identity (docs/trade-store-trade-identity-proposal.md §3.2) ────────────────
+    ' Deribit supplies both on every trade record, on both the REST endpoints and the WS
+    ' trades channel — CONFIRMED live at the §1 verification gate, 2026-08-08.
+    '
+    ' ABSENT is distinct from EMPTY and both are distinct from a value. A row written by a
+    ' pre-identity binary carries neither field, and NOTHING may key on that. See §3.4 and
+    ' TradeStoreWriter.DedupTrades.
+
+    ''' <summary>Deribit's `trade_id`. A STRING at the venue — it looks numeric ("439922657")
+    ''' and is quoted on every feed, so it is stored and compared as text, never parsed to a
+    ''' number. Nothing or "" ⇒ this record has no identity (a legacy store row, or a feed
+    ''' that omitted the field).</summary>
+    Public Property TradeId As String = Nothing
+
+    ''' <summary>Sentinel for an absent <see cref="TradeSeq"/>. Venue sequences are positive, so
+    ''' a negative value can never collide with a real one. Lives HERE, not on TradeStoreWriter:
+    ''' AutoTweaker, WhatIfRunner and CeilingAudit all link this file and none of them link
+    ''' Core/TradeStoreWriter.vb, so a sentinel over there would break three builds.</summary>
+    Public Const AbsentSeq As Long = -1L
+
+    ''' <summary>Deribit's `trade_seq` — a per-instrument monotonic sequence. Long, not
+    ''' Integer: the live value passed 296,000,000 on 2026-08-08 and only ever climbs.
+    ''' <see cref="AbsentSeq"/> (-1) ⇒ absent; venue values are positive.</summary>
+    Public Property TradeSeq As Long = AbsentSeq
+
+    ''' <summary>True when this record carries a usable identity. THE presence test — dedup,
+    ''' the venue diff and the parse all branch on this rather than re-deriving it, so
+    ''' "absent" means one thing everywhere.</summary>
+    Public ReadOnly Property HasIdentity As Boolean
+        Get
+            Return Not String.IsNullOrEmpty(TradeId)
+        End Get
+    End Property
+
+    ''' <summary>True when this record carries a usable sequence number. Separate from
+    ''' <see cref="HasIdentity"/> on purpose: gap detection needs the sequence and does not
+    ''' care about the id, and a row could legitimately carry one without the other.</summary>
+    Public ReadOnly Property HasSeq As Boolean
+        Get
+            Return TradeSeq >= 0
+        End Get
+    End Property
+
+    ' ── Shared venue-JSON readers ─────────────────────────────────────────────────────
+    ' [§0 trap 3] The WS path and the two REST paths parse trade JSON in three separate files.
+    ' If they disagreed about the shape of these two fields, cross-feed matching would fail
+    ' SILENTLY and every venue diff would report total loss. Routing all three through ONE pair
+    ' of readers makes that divergence structurally impossible rather than merely tested for.
+    '
+    ' Observed at the §1 verification gate, 2026-08-08, identical on all three shapes
+    ' (get_last_trades_by_instrument · get_last_trades_by_instrument_and_time · the
+    ' trades.BTC-PERPETUAL.100ms WS channel), and a trade seen on BOTH feeds carried the same
+    ' values:
+    '   "trade_id"  : JSON STRING, e.g. "439922657"
+    '   "trade_seq" : JSON NUMBER, e.g. 295960019
+    ' Both readers accept either JSON kind anyway. The venue changing a field's type is exactly
+    ' the drift that must degrade to ABSENT, never to a wrong value.
+
+    ''' <summary>Read `trade_id` off a Deribit trade element. Nothing when absent, empty, or of
+    ''' an unusable JSON kind — never throws.</summary>
+    Public Shared Function ReadTradeId(t As JsonElement) As String
+        Dim el As JsonElement = Nothing
+        If Not t.TryGetProperty("trade_id", el) Then Return Nothing
+        Select Case el.ValueKind
+            Case JsonValueKind.String
+                Dim s As String = el.GetString()
+                If String.IsNullOrWhiteSpace(s) Then Return Nothing
+                Return s.Trim()
+            Case JsonValueKind.Number
+                ' Defensive: if Deribit ever unquotes it, keep the digits rather than lose identity.
+                Return el.GetRawText()
+            Case Else
+                Return Nothing
+        End Select
+    End Function
+
+    ''' <summary>Read `trade_seq` off a Deribit trade element. <see cref="AbsentSeq"/> when
+    ''' absent or unusable — never throws.</summary>
+    Public Shared Function ReadTradeSeq(t As JsonElement) As Long
+        Dim el As JsonElement = Nothing
+        If Not t.TryGetProperty("trade_seq", el) Then Return AbsentSeq
+        Dim n As Long
+        Select Case el.ValueKind
+            Case JsonValueKind.Number
+                If el.TryGetInt64(n) AndAlso n >= 0 Then Return n
+            Case JsonValueKind.String
+                If Long.TryParse(el.GetString(), NumberStyles.Integer,
+                                 CultureInfo.InvariantCulture, n) AndAlso n >= 0 Then Return n
+        End Select
+        Return AbsentSeq
+    End Function
 End Class

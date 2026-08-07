@@ -1,6 +1,6 @@
 # Trade-store trade identity — `trade_id` and `trade_seq`
 
-**Status:** ✅ **APPROVED 2026-08-08 — D1–D7 ticked, all as recommended. BUILD-AUTHORIZED behind the §1 verification gate.**
+**Status:** ✅ **BUILT 2026-08-08.** §1 verification gate PASSED (both feeds carry both fields; the escalation fork did not fire). Solution + AutoTweaker + WhatIfRunner + CeilingAudit + BacktestRunner + OrderCheck build 0/0 Release; harness ALL PASS, 265 checks, A1–A52a unregressed + A53a–h. Spec-back: [`trade-store-trade-identity-spec-back.md`](trade-store-trade-identity-spec-back.md). ⚠ **NOT YET DEPLOYED TO AWS — until it is, AWS keeps writing five-field rows and that tape is permanently unmergeable.** Previously: APPROVED 2026-08-08 — D1–D7 ticked, all as recommended.
 
 > ⚠ **Sequencing note the D-table does not cover, and it costs tape if missed.** Building this does **not** start capturing identity. `settings.json` is unchanged, so **AWS keeps running the old binary and keeps writing five-field rows until it is redeployed.** Every hour between the build landing and the AWS redeploy produces tape that is permanently unmergeable, for the same reason as the quarantined books. **Treat the AWS redeploy as part of this change, not as a follow-up** — deploy steps are in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §1.2 and §1b.
 **Class:** store schema + ingest + dedup + venue diff. **No settings keys. No scoring impact. NOT a dataset boundary** — no indicator, card, snapshot line, CSV column or bridge field reads the trade store.

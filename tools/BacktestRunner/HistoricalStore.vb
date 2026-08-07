@@ -315,6 +315,13 @@ Public Class HistoricalStore
                     rec.Timestamp = t.GetProperty("timestamp").GetInt64()
                     Dim liqEl As JsonElement = Nothing
                     rec.Liquidation = If(t.TryGetProperty("liquidation", liqEl), liqEl.GetString(), "none")
+                    ' [trade identity] The REST half of the capture path — gap repair and the S0
+                    ' venue fetch both land here. Same two shared readers the WS feed uses.
+                    ' Verified at the §1 gate that get_last_trades_by_instrument_and_time (THIS
+                    ' endpoint) carries both fields, not only the count-based endpoint the spec
+                    ' §1 table named.
+                    rec.TradeId = TradeRecord.ReadTradeId(t)
+                    rec.TradeSeq = TradeRecord.ReadTradeSeq(t)
                     list.Add(rec)
                 Next
                 Return list
@@ -342,22 +349,26 @@ Public Class HistoricalStore
     End Function
 
     ''' <summary>Load the union of trade months for [warmupStartUtc, toUtc], chronological
-    ''' ascending (the F1 contract). Duplicates deduped on the whole row, which is what makes
-    ''' a gap-repair pass overlapping streamed data harmless at read time (A48d).
+    ''' ascending (the F1 contract). Duplicates removed by TradeStoreWriter.DedupTrades, which
+    ''' is what makes a gap-repair pass overlapping streamed data harmless at read time (A48d).
     '''
     ''' [v64] The per-file parse delegates to TradeStoreWriter.ReadTradeFile — the same seam
     ''' that formats the rows — so reader and writer cannot drift. Sorting here (rather than
     ''' assuming file order) is what tolerates a backfill page landing after a streaming
-    ''' flush of newer trades.</summary>
+    ''' flush of newer trades.
+    '''
+    ''' [trade identity] The dedup was `seen.Add(FormatRow(rec))` — whole-row equality on five
+    ''' fields. That silently DROPPED genuinely distinct trades that happened to share all five
+    ''' (22,376 of AWS's 228,163 August rows were exact five-field duplicates, and nothing could
+    ''' say how many were real). It now routes through the §3.4 contract, which keys on identity
+    ''' where identity exists and falls back to the five fields only where it does not. Dedup is
+    ''' applied ACROSS the whole month union, not per file, exactly as before.</summary>
     Public Shared Function LoadTradeRange(warmupStartUtc As DateTime, toUtc As DateTime) As List(Of TradeRecord)
-        Dim all As New List(Of TradeRecord)()
-        Dim seen As New HashSet(Of String)()
+        Dim raw As New List(Of TradeRecord)()
         For Each m In EnumerateMonths(warmupStartUtc, toUtc)
-            For Each rec In TradeStoreWriter.ReadTradeFile(TradeFileFor(m.Year, m.Month))
-                If Not seen.Add(TradeStoreWriter.FormatRow(rec)) Then Continue For
-                all.Add(rec)
-            Next
+            raw.AddRange(TradeStoreWriter.ReadTradeFile(TradeFileFor(m.Year, m.Month)))
         Next
+        Dim all = TradeStoreWriter.DedupTrades(raw)
         all.Sort(Function(a, b) a.Timestamp.CompareTo(b.Timestamp))
         Return all
     End Function

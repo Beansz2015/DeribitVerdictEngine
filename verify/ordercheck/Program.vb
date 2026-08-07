@@ -450,6 +450,20 @@ Module Program
         ' the arming contract itself.
         A52a_AsiaArmingJsonContract()
 
+        ' [A53 — trade identity in the store schema,
+        ' docs/trade-store-trade-identity-proposal.md §6] The store row carried no trade
+        ' identity, so its dedup and S0's venue diff both matched on five fields that
+        ' genuinely distinct trades can share. A53c and A53e are the two that matter:
+        ' both guard failure modes that produce a FULL STORE and a GREEN HARNESS.
+        A53a_IdentityRoundTripsThroughStore()
+        A53b_LegacyRowParsesWithIdentityAbsent()
+        A53c_EmptyIdentityDoesNotCollapseLegacyRows()
+        A53d_EqualIdentityDedupsToOne()
+        A53e_DistinctIdentitySameLegacyFieldsSurvivesAsTwo()
+        A53f_MixedShapeFileDedupsUnderBothBranches()
+        A53g_VenueDiffSeparatesIdentityAndFallbackMatches()
+        A53h_SequenceGapDetection()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -6982,11 +6996,19 @@ Module Program
 
             Dim path As String = TradeStoreWriter.TradeFileFor(dir, 2026, 7)
             Dim lines = File.ReadAllLines(path)
+            ' [trade identity, 2026-08-08] The on-disk shape moved from 5 columns to 7. These
+            ' three assertions are UPDATED, not relaxed: the header is the seven-column one, and
+            ' every row still has a fixed, known column count.
             Dim headerOk As Boolean = lines.Length = 4 AndAlso
-                                      lines(0) = "Timestamp,Price,Amount,Direction,Liquidation"
-            Dim shapeOk As Boolean = lines.Skip(1).All(Function(l) l.Split(","c).Length = 5)
+                                      lines(0) = "Timestamp,Price,Amount,Direction,Liquidation,TradeId,TradeSeq"
+            Dim shapeOk As Boolean = lines.Skip(1).All(Function(l) l.Split(","c).Length = 7)
             ' F2 formatting on price + amount, invariant culture (no comma decimal separator).
-            Dim fmtOk As Boolean = lines(1) = A48Ms(0) & ",64000.50,1250.00,buy,none"
+            ' These synthetic trades carry NO identity, so both new columns are EMPTY — and the
+            ' first five fields are byte-identical to what every pre-identity binary wrote, which
+            ' is the backward-compatibility claim in D5 stated as a literal.
+            Dim legacyPrefix As String = A48Ms(0) & ",64000.50,1250.00,buy,none"
+            Dim fmtOk As Boolean = lines(1) = legacyPrefix & ",," AndAlso
+                                   TradeStoreWriter.LegacyRowKey(src(0)) = legacyPrefix
 
             Dim back = TradeStoreWriter.ReadTradeFile(path)
             Dim countOk As Boolean = back.Count = src.Count
@@ -7003,7 +7025,7 @@ Module Program
                 Next
             End If
 
-            Check("A48a store round-trip — shipped header + 5-col F2 rows + liq flag survive write→read",
+            Check("A48a store round-trip — 7-col header + F2 rows + liq flag + empty identity survive write→read",
                   flushed = 3 AndAlso headerOk AndAlso shapeOk AndAlso fmtOk AndAlso valuesOk,
                   String.Format("flushed={0} header={1} shape={2} fmt={3}('{4}') count={5} values={6}",
                                 flushed, headerOk, shapeOk, fmtOk, If(lines.Length > 1, lines(1), "<none>"),
@@ -7096,7 +7118,7 @@ Module Program
                                    julLines.Count(Function(l) l.StartsWith("Timestamp,")) = 1
             ' August: created by this batch ⇒ header + 2 rows.
             Dim augOk As Boolean = augLines.Length = 3 AndAlso
-                                   augLines(0) = "Timestamp,Price,Amount,Direction,Liquidation"
+                                   augLines(0) = TradeStoreWriter.HeaderLine
 
             Check("A48c month rollover — straddling batch splits across two files, header on create only",
                   written = 3 AndAlso namesOk AndAlso julOk AndAlso augOk,
@@ -7150,11 +7172,10 @@ Module Program
             Dim dupRows = TradeStoreWriter.ReadTradeFile(path)
             TradeStoreWriter.AppendRows(dir, dupRows)
             Dim raw = File.ReadAllLines(path).Length - 1
-            Dim seen As New HashSet(Of String)()
-            Dim deduped As Integer = 0
-            For Each r In TradeStoreWriter.ReadTradeFile(path)
-                If seen.Add(TradeStoreWriter.FormatRow(r)) Then deduped += 1
-            Next
+            ' [trade identity] Routes through the production dedup contract rather than
+            ' restating it. These rows carry no identity, so the §3.4 fallback arm decides —
+            ' which is what makes the overlap no-op survive the schema change unchanged.
+            Dim deduped As Integer = TradeStoreWriter.DedupTrades(TradeStoreWriter.ReadTradeFile(path)).Count
 
             Check("A48d gap-repair overlap is a no-op — covered window ⇒ no fetch · gap resumes at last+1 · retention clamp · read-time dedup",
                   c1 = -1 AndAlso c2 = lastTs + 1 AndAlso c3 = segStartLate AndAlso
@@ -7736,13 +7757,19 @@ Module Program
             A49Trade(baseTs + 2000, 64020),
             A49Trade(baseTs + 3000, 64030)
         }
-        Dim missing = CoverageReport.ComputeVenueDiff(storeTrades, venueTrades)
+        ' [trade identity] ComputeVenueDiff now returns a VenueDiffResult so the two match
+        ' populations can be reported apart (D4). These A49 trades carry NO identity, so this
+        ' fixture exercises the FALLBACK arm — which is exactly what the S0 diff falls back to
+        ' on every pre-identity store row, and therefore still the case worth pinning here.
+        Dim diff = CoverageReport.ComputeVenueDiff(storeTrades, venueTrades)
+        Dim missing = diff.MissingTrades
         Dim missingOk As Boolean = missing.Count = 2 AndAlso
                                   missing.Any(Function(t) t.Timestamp = baseTs + 2000) AndAlso
-                                  missing.Any(Function(t) t.Timestamp = baseTs + 3000)
+                                  missing.Any(Function(t) t.Timestamp = baseTs + 3000) AndAlso
+                                  diff.FallbackMatched = 1 AndAlso diff.IdentityMatched = 0
 
         ' An identical set reports zero missing.
-        Dim identicalMissing = CoverageReport.ComputeVenueDiff(storeTrades, storeTrades)
+        Dim identicalMissing = CoverageReport.ComputeVenueDiff(storeTrades, storeTrades).MissingTrades
         Dim identicalOk As Boolean = identicalMissing.Count = 0
 
         ' S0's absence never turns a defect into "clean" — the per-hour six-class result is
@@ -8115,6 +8142,312 @@ Module Program
     '       and EngineSettings.vb ever disagree about ASIA, the app and the harness pin
     '       DIFFERENT behaviour and A28c still passes. v60 established that lockstep for
     '       LONDON; v65 owes it for ASIA.
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' A53 — trade identity in the store schema
+    ' (docs/trade-store-trade-identity-proposal.md §6)
+    '
+    ' The defect being fixed is a case where WRONG LOOKS RIGHT: five-field rows silently
+    ' merged distinct trades, and every surface downstream reported a full, clean store.
+    ' Two of the fixtures below (A53c, A53e) exist because the OBVIOUS implementation of
+    ' this fix reproduces the same defect at greater scale inside its own repair.
+    '
+    ' ⚠ A53c and A53e were written FROM THE SPEC TEXT (§3.4 and the §0 trap list), before
+    ' reading TradeStoreWriter.DedupTrades, precisely because the implementer writes both the
+    ' code and the test and a misunderstanding of the contract would otherwise propagate
+    ' straight into its own check.
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    Private Function A53Ms(offsetMs As Long) As Long
+        Return New DateTimeOffset(2026, 8, 8, 9, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds() + offsetMs
+    End Function
+
+    Private Function A53Trade(tsMs As Long, px As Double, amt As Double, dir As String,
+                              Optional liq As String = "none",
+                              Optional id As String = Nothing,
+                              Optional seq As Long = TradeStoreWriter.AbsentSeq) As TradeRecord
+        Return New TradeRecord With {
+            .Timestamp = tsMs, .Price = px, .Amount = amt, .Direction = dir, .Liquidation = liq,
+            .TradeId = id, .TradeSeq = seq}
+    End Function
+
+    ' -- A53a: a seven-field row writes and parses back with both identity fields intact ----
+    ' Through the real streaming path (Buffer → Flush) and the real reader, so this is the
+    ' on-disk contract, not a formatter unit test. Values are the ones observed at the §1
+    ' verification gate on 2026-08-08 — a real trade_id (a STRING) and a real trade_seq.
+    Private Sub A53a_IdentityRoundTripsThroughStore()
+        Dim dir As String = A48TempStore("53a")
+        Try
+            Dim w As New TradeStoreWriter(dir)
+            Dim src As New List(Of TradeRecord) From {
+                A53Trade(A53Ms(0), 64670.0, 3050.0, "sell", "none", "439922712", 295960045L),
+                A53Trade(A53Ms(100), 64670.0, 10.0, "sell", "none", "439922713", 295960046L),
+                A53Trade(A53Ms(200), 64665.0, 30000.0, "sell", "T", "439922717", 295960050L)}
+            For Each t In src
+                w.Buffer(t)
+            Next
+            Dim flushed As Integer = w.Flush()
+
+            Dim path As String = TradeStoreWriter.TradeFileFor(dir, 2026, 8)
+            Dim lines = File.ReadAllLines(path)
+            Dim headerOk As Boolean = lines(0) = TradeStoreWriter.HeaderLine
+            Dim rowOk As Boolean = lines(1) = A53Ms(0) & ",64670.00,3050.00,sell,none,439922712,295960045"
+
+            Dim back = TradeStoreWriter.ReadTradeFile(path)
+            Dim ok As Boolean = back.Count = 3
+            If ok Then
+                For i As Integer = 0 To 2
+                    If back(i).TradeId <> src(i).TradeId OrElse
+                       back(i).TradeSeq <> src(i).TradeSeq OrElse
+                       Not back(i).HasIdentity OrElse Not back(i).HasSeq OrElse
+                       back(i).Liquidation <> src(i).Liquidation Then ok = False
+                Next
+            End If
+
+            Check("A53a identity round-trip — 7-field row writes and parses back with trade_id (string) + trade_seq intact",
+                  flushed = 3 AndAlso headerOk AndAlso rowOk AndAlso ok,
+                  String.Format("flushed={0} header={1} row={2} ('{3}') values={4}",
+                                flushed, headerOk, rowOk, If(lines.Length > 1, lines(1), "<none>"), ok))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A53b: a five-field legacy row still parses, and reports identity ABSENT ------------
+    ' Absent is NOT empty and NOT a value. This is the migration claim in D5 stated as a test:
+    ' every month-file written by every prior binary must keep reading, with no rotation and no
+    ' rewrite. Also pins that a SEVEN-column row with empty identity columns reads as absent
+    ' too — an empty column is not an identity, and treating it as one is the A53c collapse.
+    Private Sub A53b_LegacyRowParsesWithIdentityAbsent()
+        Dim dir As String = A48TempStore("53b")
+        Try
+            Dim path As String = TradeStoreWriter.TradeFileFor(dir, 2026, 8)
+            Directory.CreateDirectory(dir)
+            ' A genuine pre-identity file: the five-column header and five-column rows.
+            File.WriteAllLines(path, {
+                TradeStoreWriter.LegacyHeaderLine,
+                A53Ms(0) & ",64000.00,100.00,buy,none",
+                A53Ms(50) & ",64001.00,200.00,sell,none",
+                A53Ms(90) & ",64002.00,300.00,buy,none,,"})   ' 7 cols, identity columns EMPTY
+
+            Dim back = TradeStoreWriter.ReadTradeFile(path)
+            Dim parsedAll As Boolean = back.Count = 3
+            Dim absentOk As Boolean = parsedAll
+            If parsedAll Then
+                For Each r In back
+                    If r.HasIdentity OrElse r.HasSeq Then absentOk = False
+                    If r.TradeId IsNot Nothing Then absentOk = False           ' absent, not ""
+                    If r.TradeSeq <> TradeStoreWriter.AbsentSeq Then absentOk = False
+                Next
+            End If
+            ' The legacy values themselves survived intact.
+            Dim valuesOk As Boolean = parsedAll AndAlso
+                                      back(0).Timestamp = A53Ms(0) AndAlso back(0).Direction = "buy" AndAlso
+                                      Math.Abs(back(2).Amount - 300.0) < 0.005
+
+            Check("A53b legacy row — 5-col file still parses, identity reports ABSENT (Nothing/-1) not empty; 7-col empty columns also absent",
+                  parsedAll AndAlso absentOk AndAlso valuesOk,
+                  String.Format("count={0} absent={1} values={2}", back.Count, absentOk, valuesOk))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A53c: ⚠ THE EMPTY-IDENTITY COLLAPSE ----------------------------------------------
+    ' Written from docs/trade-store-trade-identity-proposal.md §3.4 before reading the
+    ' implementation. The contract sentence this encodes:
+    '
+    '   "Never key on an absent or empty identity. A missing identity is not a value and
+    '    must not join a group."
+    '
+    ' If dedup keys on trade_id and a legacy row has none, every legacy row keys on the SAME
+    ' empty string and the whole file collapses to ONE row — the original defect, reproduced
+    ' at greater scale by the code written to fix it. Ten rows differing only in amount are
+    ' ten distinct trades and must survive as ten.
+    Private Sub A53c_EmptyIdentityDoesNotCollapseLegacyRows()
+        Dim rows As New List(Of TradeRecord)
+        For i As Integer = 1 To 10
+            ' Identical in EVERY field except amount. No identity on any of them.
+            rows.Add(A53Trade(A53Ms(0), 64000.0, 100.0 * i, "buy"))
+        Next
+
+        Dim deduped = TradeStoreWriter.DedupTrades(rows)
+
+        ' The failure mode stated explicitly, so the fixture names what it is guarding against:
+        ' keying these on TradeId would produce exactly 1.
+        Dim collapsedTo As Integer = rows.Select(Function(r) If(r.TradeId, "")).Distinct().Count()
+
+        Check("A53c ⚠ empty-identity collapse — 10 identity-less rows differing only in amount survive dedup as 10, not 1",
+              deduped.Count = 10 AndAlso collapsedTo = 1,
+              String.Format("deduped={0} (want 10) · naive-identity-key would give {1}", deduped.Count, collapsedTo))
+    End Sub
+
+    ' -- A53d: two rows with equal trade_id and differing other fields dedup to one ---------
+    ' The positive half of the identity contract: identity WINS over content. A gap-repair page
+    ' and a streamed print of the same trade can differ in formatting or in the liquidation
+    ' flag; if the ids agree it is one trade.
+    Private Sub A53d_EqualIdentityDedupsToOne()
+        Dim rows As New List(Of TradeRecord) From {
+            A53Trade(A53Ms(0), 64000.0, 100.0, "buy", "none", "439922700", 295960001L),
+            A53Trade(A53Ms(5), 64000.5, 250.0, "sell", "T", "439922700", 295960001L)}
+
+        Dim deduped = TradeStoreWriter.DedupTrades(rows)
+        ' First occurrence wins, and it is the one kept.
+        Dim keptFirst As Boolean = deduped.Count = 1 AndAlso deduped(0).Timestamp = A53Ms(0)
+
+        Check("A53d equal trade_id — same identity, different content, dedups to one (identity beats content)",
+              deduped.Count = 1 AndAlso keptFirst,
+              String.Format("deduped={0} keptFirst={1}", deduped.Count, keptFirst))
+    End Sub
+
+    ' -- A53e: ⚠ THE SILENT NO-OP ---------------------------------------------------------
+    ' Written from docs/trade-store-trade-identity-proposal.md §0 trap 2 before reading the
+    ' implementation. TryParseRow accepts `parts.Length < 5`, so it already TOLERATED extra
+    ' columns and IGNORED them. A writer that emits trade_id against a reader that never reads
+    ' it produces a full store, a green harness and no behaviour change whatsoever.
+    '
+    ' This fixture fails if the reader ignores the new column. The two rows are identical in
+    ' all five legacy fields and differ ONLY in trade_id — so under the old five-field dedup
+    ' they collapse to one, and under a correct identity dedup they stay two.
+    '
+    ' ⚠ These are not synthetic. Both were returned by Deribit on 2026-08-08 at the §1 gate,
+    ' in the FIRST three trades fetched: same millisecond, same price, same amount, same
+    ' direction, distinct ids. The defect is this common.
+    Private Sub A53e_DistinctIdentitySameLegacyFieldsSurvivesAsTwo()
+        Dim shared5 As Long = 1786122637808L
+        Dim rows As New List(Of TradeRecord) From {
+            A53Trade(shared5, 64730.0, 10.0, "sell", "none", "439922656", 295960018L),
+            A53Trade(shared5, 64730.0, 10.0, "sell", "none", "439922657", 295960019L)}
+
+        ' Proof the two rows really are indistinguishable on the legacy five fields — without
+        ' this, the fixture could pass for the wrong reason (rows that were never colliding).
+        Dim legacyIdentical As Boolean =
+            TradeStoreWriter.LegacyRowKey(rows(0)) = TradeStoreWriter.LegacyRowKey(rows(1))
+
+        Dim deduped = TradeStoreWriter.DedupTrades(rows)
+
+        Check("A53e ⚠ silent no-op — 2 real trades identical in all 5 legacy fields but with different trade_id survive as 2",
+              legacyIdentical AndAlso deduped.Count = 2,
+              String.Format("legacyKeysIdentical={0} deduped={1} (want 2 — 1 means the reader ignores TradeId)",
+                            legacyIdentical, deduped.Count))
+    End Sub
+
+    ' -- A53f: mixed-shape file — legacy and identified rows in ONE file --------------------
+    ' §5 calls this the NORMAL case, not an edge case: after the AWS redeploy every current
+    ' month-file holds five-column rows written before it and seven-column rows written after.
+    ' Both dedup branches must work in the same pass, and the result must not depend on the
+    ' order the rows happen to sit in the file.
+    Private Sub A53f_MixedShapeFileDedupsUnderBothBranches()
+        Dim dir As String = A48TempStore("53f")
+        Try
+            Dim path As String = TradeStoreWriter.TradeFileFor(dir, 2026, 8)
+            Directory.CreateDirectory(dir)
+            File.WriteAllLines(path, {
+                TradeStoreWriter.LegacyHeaderLine,
+                A53Ms(0) & ",64000.00,100.00,buy,none",                       ' legacy A
+                A53Ms(10) & ",64001.00,200.00,sell,none",                     ' legacy B
+                A53Ms(0) & ",64000.00,100.00,buy,none",                       ' legacy A again → drop
+                A53Ms(20) & ",64002.00,300.00,buy,none,439922801,295960101",  ' identified C
+                A53Ms(20) & ",64002.00,300.00,buy,none,439922802,295960102",  ' identified D — same 5 fields as C, keep
+                A53Ms(20) & ",64002.00,300.00,buy,none,439922801,295960101"}) ' C again → drop
+
+            Dim deduped = TradeStoreWriter.DedupTrades(TradeStoreWriter.ReadTradeFile(path))
+            Dim identified As Integer = deduped.Where(Function(r) r.HasIdentity).Count()
+            Dim legacy As Integer = deduped.Where(Function(r) Not r.HasIdentity).Count()
+
+            ' Order-independence: the same file read back-to-front must dedup to the same count.
+            Dim reversed = TradeStoreWriter.ReadTradeFile(path)
+            reversed.Reverse()
+            Dim dedupedRev = TradeStoreWriter.DedupTrades(reversed)
+
+            Check("A53f mixed-shape file — legacy + identified rows dedup under both branches (2 legacy + 2 identified), order-independently",
+                  deduped.Count = 4 AndAlso identified = 2 AndAlso legacy = 2 AndAlso dedupedRev.Count = 4,
+                  String.Format("deduped={0} identified={1} legacy={2} reversed={3}",
+                                deduped.Count, identified, legacy, dedupedRev.Count))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A53g: venue diff reports the two match populations SEPARATELY ---------------------
+    ' D4. A single blended "matched" number would hide exactly the ambiguity this build exists
+    ' to remove: a fallback match is a five-field coincidence, an identity match is proof. The
+    ' store here is deliberately MIXED, which is what every real store will be after the
+    ' redeploy, so both arms are exercised in one call.
+    Private Sub A53g_VenueDiffSeparatesIdentityAndFallbackMatches()
+        Dim storeTrades As New List(Of TradeRecord) From {
+            A53Trade(A53Ms(0), 64000.0, 100.0, "buy", "none", "id-1", 1L),   ' identified
+            A53Trade(A53Ms(10), 64001.0, 200.0, "sell")}                     ' legacy, no identity
+
+        Dim venueTrades As New List(Of TradeRecord) From {
+            A53Trade(A53Ms(0), 64000.0, 100.0, "buy", "none", "id-1", 1L),   ' → identity match
+            A53Trade(A53Ms(10), 64001.0, 200.0, "sell", "none", "id-2", 2L), ' → fallback match
+            A53Trade(A53Ms(20), 64002.0, 300.0, "buy", "none", "id-3", 3L)}  ' → missing
+
+        Dim d = CoverageReport.ComputeVenueDiff(storeTrades, venueTrades)
+
+        Check("A53g venue diff — identity-matched and fallback-matched counted and reported SEPARATELY, never blended",
+              d.IdentityMatched = 1 AndAlso d.FallbackMatched = 1 AndAlso
+              d.MissingTrades.Count = 1 AndAlso d.MissingTrades(0).TradeId = "id-3" AndAlso
+              d.StoreIdentified = 1 AndAlso d.StoreLegacyOnly = 1,
+              String.Format("identity={0} fallback={1} missing={2} storeIdentified={3} storeLegacy={4}",
+                            d.IdentityMatched, d.FallbackMatched, d.MissingTrades.Count,
+                            d.StoreIdentified, d.StoreLegacyOnly))
+    End Sub
+
+    ' -- A53h: trade_seq gap detection -----------------------------------------------------
+    ' The §3.3 property: a store holding 100, 101, 103 is PROVABLY missing 102, with no venue
+    ' call, no network and no exposure to Deribit's ~24 h trade retention. This is what retires
+    ' the clock that made a daily S0 job urgent.
+    '
+    ' Also pins the false-clean trap: a store with NO sequences at all finds zero gaps, which is
+    ' "nothing to check", not "nothing wrong". If that reported OK the metric would be worse
+    ' than useless on exactly the legacy data it will meet first.
+    '
+    ' ⚠ Whether Deribit ever RESETS trade_seq was not verified at the §1 gate, so a backwards
+    ' step is reported as a discontinuity and deliberately NOT counted as loss.
+    Private Sub A53h_SequenceGapDetection()
+        Dim withGap As New List(Of TradeRecord) From {
+            A53Trade(A53Ms(0), 64000, 10, "buy", "none", "id-a", 100L),
+            A53Trade(A53Ms(10), 64001, 10, "buy", "none", "id-b", 101L),
+            A53Trade(A53Ms(20), 64002, 10, "buy", "none", "id-c", 103L)}
+        Dim g = CoverageReport.ComputeSequenceGaps(withGap)
+        Dim gapOk As Boolean = g.MissingCount = 1 AndAlso g.GapRuns = 1 AndAlso
+                               g.LongestGap = 1 AndAlso g.RowsWithSeq = 3 AndAlso
+                               g.RowsWithoutSeq = 0 AndAlso g.Checkable
+
+        ' Contiguous ⇒ no gaps.
+        Dim contiguous As New List(Of TradeRecord) From {
+            A53Trade(A53Ms(0), 64000, 10, "buy", "none", "id-a", 100L),
+            A53Trade(A53Ms(10), 64001, 10, "buy", "none", "id-b", 101L),
+            A53Trade(A53Ms(20), 64002, 10, "buy", "none", "id-c", 102L)}
+        Dim c = CoverageReport.ComputeSequenceGaps(contiguous)
+        Dim cleanOk As Boolean = c.MissingCount = 0 AndAlso c.GapRuns = 0 AndAlso c.Checkable
+
+        ' ⚠ The false-clean trap: legacy rows carry no sequence, so there is nothing to check.
+        ' Zero gaps here must NOT read as a clean store.
+        Dim legacyOnly As New List(Of TradeRecord) From {
+            A53Trade(A53Ms(0), 64000, 10, "buy"),
+            A53Trade(A53Ms(10), 64001, 10, "buy")}
+        Dim l = CoverageReport.ComputeSequenceGaps(legacyOnly)
+        Dim notCheckableOk As Boolean = l.MissingCount = 0 AndAlso Not l.Checkable AndAlso
+                                        l.RowsWithoutSeq = 2 AndAlso l.RowsWithSeq = 0
+
+        ' Scattered loss — the shape S3's longest-gap metric cannot see. Three separate holes.
+        Dim scattered As New List(Of TradeRecord) From {
+            A53Trade(A53Ms(0), 64000, 10, "buy", "none", "id-a", 200L),
+            A53Trade(A53Ms(10), 64001, 10, "buy", "none", "id-b", 202L),
+            A53Trade(A53Ms(20), 64002, 10, "buy", "none", "id-c", 204L),
+            A53Trade(A53Ms(30), 64003, 10, "buy", "none", "id-d", 206L)}
+        Dim s = CoverageReport.ComputeSequenceGaps(scattered)
+        Dim scatteredOk As Boolean = s.MissingCount = 3 AndAlso s.GapRuns = 3 AndAlso s.LongestGap = 1
+
+        Check("A53h trade_seq gap detection — 100/101/103 reports 102 missing · contiguous clean · " &
+              "no-sequence store reports NOT CHECKABLE not clean · scattered loss counted as 3 runs",
+              gapOk AndAlso cleanOk AndAlso notCheckableOk AndAlso scatteredOk,
+              String.Format("gap(missing={0},runs={1}) clean={2} notCheckable={3} scattered(missing={4},runs={5})",
+                            g.MissingCount, g.GapRuns, cleanOk, notCheckableOk, s.MissingCount, s.GapRuns))
+    End Sub
+
     Private Sub A52a_AsiaArmingJsonContract()
         Dim opts As New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True}
         Dim armed   = JsonSerializer.Deserialize(Of EngineSettings)(

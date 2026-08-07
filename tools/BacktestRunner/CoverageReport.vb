@@ -114,9 +114,23 @@ Public Class CoverageResult
     Public Property FundingExpected As Integer
 
     Public Property VenueRan As Boolean = False
-    Public Property VenueMissingTrades As New List(Of TradeRecord)
+    Public Property VenueDiff As VenueDiffResult = Nothing
     Public Property VenueCoveredFromUtc As DateTime?
     Public Property VenueCoveredToUtc As DateTime?
+
+    ''' <summary>[trade identity §3.3] Sequence-gap read over the same window the hourly walk
+    ''' covers. Nothing when not computed.</summary>
+    Public Property SequenceGaps As SequenceGapResult = Nothing
+
+    ''' <summary>Trades the venue reported and the store does not hold. Convenience passthrough
+    ''' so existing readers keep working; the two MATCH populations live on
+    ''' <see cref="VenueDiff"/> and are deliberately not summed into anything.</summary>
+    Public ReadOnly Property VenueMissingTrades As List(Of TradeRecord)
+        Get
+            If VenueDiff Is Nothing Then Return New List(Of TradeRecord)
+            Return VenueDiff.MissingTrades
+        End Get
+    End Property
 
     Public Function CountByClass(cls As HourClass) As Integer
         ' .Where(...).Count() rather than .Count(predicate) — List(Of T)'s own zero-arg
@@ -124,6 +138,77 @@ Public Class CoverageResult
         ' resolves as an indexer on the property's Integer return type instead (BC32016).
         Return Hours.Where(Function(h) h.Classification = cls).Count()
     End Function
+End Class
+
+''' <summary>
+''' [trade identity / D4] The S0 venue diff, reported as TWO match populations plus the misses.
+''' They are never summed. An identity match is exact; a fallback match is a five-field
+''' coincidence that MIGHT be the same trade. Blending them into one "matched" number would
+''' restore precisely the ambiguity this build removes.
+''' </summary>
+Public Class VenueDiffResult
+    ''' <summary>Venue trades the store does not hold under either matching arm.</summary>
+    Public Property MissingTrades As New List(Of TradeRecord)
+
+    ''' <summary>Venue trades matched EXACTLY — both sides carried a trade_id and they agreed.</summary>
+    Public Property IdentityMatched As Integer = 0
+
+    ''' <summary>Venue trades matched only on the five legacy fields, because one side had no
+    ''' identity. Ambiguous by construction — this count is a CEILING on real matches.</summary>
+    Public Property FallbackMatched As Integer = 0
+
+    ''' <summary>Store rows in the window that carry an identity.</summary>
+    Public Property StoreIdentified As Integer = 0
+
+    ''' <summary>Store rows in the window written before identity shipped. While this is
+    ''' non-zero the fallback arm is load-bearing and the diff cannot be read as exact.</summary>
+    Public Property StoreLegacyOnly As Integer = 0
+
+    Public ReadOnly Property TotalMatched As Integer
+        Get
+            ' Exposed for a row count only. Do NOT render this as a quality figure — the two
+            ' populations carry different evidential weight and the report prints them apart.
+            Return IdentityMatched + FallbackMatched
+        End Get
+    End Property
+End Class
+
+''' <summary>
+''' [trade identity / §3.3] Local completeness from trade_seq alone — no network, no venue call,
+''' and no exposure to Deribit's ~24 h trade retention.
+''' </summary>
+Public Class SequenceGapResult
+    Public Property RowsWithSeq As Integer = 0
+
+    ''' <summary>⚠ Rows carrying NO sequence. Non-zero means the walk below is partial. A store
+    ''' of pure legacy rows reports zero gaps because there is nothing to check, which is not
+    ''' the same as being complete.</summary>
+    Public Property RowsWithoutSeq As Integer = 0
+
+    Public Property FirstSeq As Long = -1
+    Public Property LastSeq As Long = -1
+
+    ''' <summary>Sequence numbers provably absent between FirstSeq and LastSeq.</summary>
+    Public Property MissingCount As Long = 0
+
+    ''' <summary>Contiguous runs of absence. Many small runs = scattered loss, which is exactly
+    ''' what the S3 longest-gap metric cannot see.</summary>
+    Public Property GapRuns As Integer = 0
+
+    Public Property LongestGap As Long = 0
+
+    ''' <summary>Repeated sequence numbers — a duplicate that survived dedup.</summary>
+    Public Property DuplicateSeqs As Integer = 0
+
+    ''' <summary>Backwards steps. Reported, never counted as loss: whether Deribit ever resets
+    ''' trade_seq was NOT verified, so a negative step means "cannot interpret".</summary>
+    Public Property Discontinuities As Integer = 0
+
+    Public ReadOnly Property Checkable As Boolean
+        Get
+            Return RowsWithSeq > 1
+        End Get
+    End Property
 End Class
 
 Public NotInheritable Class CoverageReport
@@ -304,11 +389,10 @@ Public NotInheritable Class CoverageReport
             Dim path As String = TradeStoreWriter.TradeFileFor(storeDir, m.Year, m.Month)
             Dim rows = TradeStoreWriter.ReadTradeFile(path)
             If rows.Count = 0 Then Continue For
-            Dim seen As New HashSet(Of String)
-            Dim deduped As New List(Of TradeRecord)
-            For Each r In rows
-                If seen.Add(TradeStoreWriter.FormatRow(r)) Then deduped.Add(r)
-            Next
+            ' [trade identity] Was whole-row equality on the five legacy fields, which merged
+            ' distinct trades that shared them and so UNDER-counted every hour they fell in.
+            ' Now the one §3.4 contract, shared with LoadTradeRange.
+            Dim deduped = TradeStoreWriter.DedupTrades(rows)
             deduped.Sort(Function(a, b) a.Timestamp.CompareTo(b.Timestamp))
 
             For Each t In deduped
@@ -474,32 +558,141 @@ Public NotInheritable Class CoverageReport
 
     ' ── S0 — venue diff (optional, --verify-venue) ────────────────────────────────────
 
-    ''' <summary>Trades present at the venue but absent from the store — the diff IS the
-    ''' loss, enumerated exactly, never estimated. Identity = the full formatted row (the
-    ''' same equality TradeStoreWriter's own read-time dedup uses). Pure — no HTTP — so
-    ''' fixtures exercise it with a stubbed venue list (A49j).</summary>
+    ''' <summary>
+    ''' Trades present at the venue but absent from the store — the diff IS the loss,
+    ''' enumerated exactly, never estimated. Pure — no HTTP — so fixtures exercise it with a
+    ''' stubbed venue list (A49j, A53g).
+    '''
+    ''' [trade identity / D4] Matching is now two-population, not one:
+    '''   • IDENTITY-MATCHED — both sides carry a trade_id and the ids are equal. Exact.
+    '''   • FALLBACK-MATCHED — either side lacks an identity, so the five legacy fields decide.
+    '''     Ambiguous by construction: distinct trades can share all five.
+    ''' The counts are reported SEPARATELY and never blended. A single number would hide exactly
+    ''' the ambiguity this build exists to remove — it would let a store of legacy rows report a
+    ''' confident match rate that is really a five-field coincidence rate.
+    ''' </summary>
     Public Shared Function ComputeVenueDiff(storeTrades As List(Of TradeRecord),
-                                            venueTrades As List(Of TradeRecord)) As List(Of TradeRecord)
-        Dim storeKeys As New HashSet(Of String)
+                                            venueTrades As List(Of TradeRecord)) As VenueDiffResult
+        Dim result As New VenueDiffResult()
+
+        Dim storeIds As New HashSet(Of String)(StringComparer.Ordinal)
+        Dim storeLegacy As New HashSet(Of String)(StringComparer.Ordinal)
         If storeTrades IsNot Nothing Then
             For Each t In storeTrades
-                storeKeys.Add(TradeStoreWriter.FormatRow(t))
+                If t.HasIdentity Then storeIds.Add(t.TradeId)
+                ' EVERY store row contributes a legacy key, identified or not — the fallback arm
+                ' must be able to match a venue trade against an identified store row whose id
+                ' the venue happens not to carry.
+                storeLegacy.Add(TradeStoreWriter.LegacyRowKey(t))
+                If t.HasIdentity Then result.StoreIdentified += 1 Else result.StoreLegacyOnly += 1
             Next
         End If
-        Dim missing As New List(Of TradeRecord)
+
         If venueTrades IsNot Nothing Then
             For Each t In venueTrades
-                If Not storeKeys.Contains(TradeStoreWriter.FormatRow(t)) Then missing.Add(t)
+                If t.HasIdentity AndAlso storeIds.Contains(t.TradeId) Then
+                    result.IdentityMatched += 1
+                ElseIf storeLegacy.Contains(TradeStoreWriter.LegacyRowKey(t)) Then
+                    result.FallbackMatched += 1
+                Else
+                    result.MissingTrades.Add(t)
+                End If
             Next
         End If
-        Return missing
+
+        Return result
+    End Function
+
+    ' ── Sequence-gap detection (§3.3) ─────────────────────────────────────────────────
+    ' The property that makes trade_seq worth taking, and the reason it outranks trade_id in
+    ' §3.3: a per-instrument MONOTONIC sequence makes completeness a LOCAL computation. A store
+    ' holding 100, 101, 103 is provably missing 102 — with no venue call, no network, and no
+    ' exposure to Deribit's ~24 h trade retention. A month-old file can be checked at any time.
+    '
+    ' ⚠ It supplements S0, it does not replace it (D6). A sequence proves CONTINUITY; only the
+    ' venue diff proves the stored rows AGREE WITH THE VENUE on content.
+
+    ''' <summary>
+    ''' Walk a trade list in sequence order and report the holes.
+    '''
+    ''' ⚠ Rows WITHOUT a sequence are counted and reported, never silently skipped. A store of
+    ''' pure legacy rows has no sequences at all, so a naive walk finds zero gaps and reads as
+    ''' PERFECT — the worst possible failure for a completeness instrument. RowsWithoutSeq is
+    ''' what stops a reader mistaking "nothing to check" for "nothing wrong".
+    '''
+    ''' A negative step (a sequence reset, or two feeds interleaved) is reported as
+    ''' <see cref="SequenceGapResult.Discontinuities"/> rather than counted as loss: we did not
+    ''' verify that Deribit never resets trade_seq, so a backwards step is "cannot interpret",
+    ''' not "missing trades".
+    ''' </summary>
+    Public Shared Function ComputeSequenceGaps(trades As IEnumerable(Of TradeRecord)) As SequenceGapResult
+        Dim seqs As New List(Of Long)()
+        Dim withoutSeq As Integer = 0
+        If trades IsNot Nothing Then
+            For Each t In trades
+                If t.HasSeq Then seqs.Add(t.TradeSeq) Else withoutSeq += 1
+            Next
+        End If
+        Return FoldSequenceGaps(seqs, withoutSeq)
+    End Function
+
+    ''' <summary>Stream the store month by month and fold the sequence walk — never
+    ''' materialising the whole multi-month range at once (the §10 constraint
+    ''' AccumulateHourStats already obeys). Only the sequence NUMBERS are carried across
+    ''' months, not the trade records.</summary>
+    Public Shared Function AccumulateSequenceGaps(storeDir As String, fromUtc As DateTime, toUtc As DateTime) _
+            As SequenceGapResult
+        Dim seqs As New List(Of Long)()
+        Dim withoutSeq As Integer = 0
+        Dim fromMs As Long =
+            New DateTimeOffset(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim toMs As Long =
+            New DateTimeOffset(DateTime.SpecifyKind(toUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+
+        For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
+            Dim rows = TradeStoreWriter.ReadTradeFile(TradeStoreWriter.TradeFileFor(storeDir, m.Year, m.Month))
+            If rows.Count = 0 Then Continue For
+            For Each t In TradeStoreWriter.DedupTrades(rows)
+                If t.Timestamp < fromMs OrElse t.Timestamp >= toMs Then Continue For
+                If t.HasSeq Then seqs.Add(t.TradeSeq) Else withoutSeq += 1
+            Next
+        Next
+        Return FoldSequenceGaps(seqs, withoutSeq)
+    End Function
+
+    Private Shared Function FoldSequenceGaps(seqs As List(Of Long), withoutSeq As Integer) As SequenceGapResult
+        Dim r As New SequenceGapResult()
+        r.RowsWithoutSeq = withoutSeq
+        If seqs Is Nothing OrElse seqs.Count = 0 Then Return r
+        r.RowsWithSeq = seqs.Count
+
+        seqs.Sort()
+        r.FirstSeq = seqs(0)
+        r.LastSeq = seqs(seqs.Count - 1)
+
+        Dim prev As Long = seqs(0)
+        For i As Integer = 1 To seqs.Count - 1
+            Dim cur As Long = seqs(i)
+            Dim delta As Long = cur - prev
+            If delta = 0 Then
+                r.DuplicateSeqs += 1
+            ElseIf delta < 0 Then
+                r.Discontinuities += 1
+            ElseIf delta > 1 Then
+                r.GapRuns += 1
+                r.MissingCount += (delta - 1)
+                If delta - 1 > r.LongestGap Then r.LongestGap = delta - 1
+            End If
+            prev = cur
+        Next
+        Return r
     End Function
 
     ''' <summary>CLI-side wiring for S0 — reuses HistoricalStore.FetchTradesByTimeAsync (§10:
     ''' no second HTTP path), never writes to the store. Nothing ⇒ the fetch failed; the
     ''' caller reports "not run", distinct from an empty (zero-missing) result.</summary>
     Public Shared Async Function RunVenueDiffAsync(storeDir As String, windowStartMs As Long, windowEndMs As Long) _
-            As Task(Of List(Of TradeRecord))
+            As Task(Of VenueDiffResult)
         Dim venueTrades = Await HistoricalStore.FetchTradesByTimeAsync(windowStartMs, windowEndMs, 1000)
         If venueTrades Is Nothing Then Return Nothing
 
@@ -573,6 +766,12 @@ Public NotInheritable Class CoverageReport
         End If
 
         Dim hourStats = AccumulateHourStats(storeDir, walkFromUtc, walkToUtc)
+
+        ' [§3.3] Local completeness over the SAME window the hourly walk covers. Unlike S0 this
+        ' needs no network and is not bounded by Deribit's ~24 h trade retention, so it stays
+        ' readable on a month-old file. It SUPPLEMENTS S0 (D6) — a sequence proves continuity,
+        ' only the venue diff proves the rows agree with the venue on content.
+        result.SequenceGaps = AccumulateSequenceGaps(storeDir, walkFromUtc, walkToUtc)
 
         Dim cursor As DateTime = New DateTime(walkFromUtc.Year, walkFromUtc.Month, walkFromUtc.Day,
                                               walkFromUtc.Hour, 0, 0, DateTimeKind.Utc)
@@ -654,11 +853,50 @@ Public NotInheritable Class CoverageReport
                                         result.FundingHave, result.FundingExpected))
         End If
 
-        If result.VenueRan Then
+        If result.VenueRan AndAlso result.VenueDiff IsNot Nothing Then
+            Dim vd = result.VenueDiff
             sb.AppendLine(String.Format("  venue diff (S0)     {0} missing trade(s) in [{1:yyyy-MM-dd HH:mm}, {2:yyyy-MM-dd HH:mm}] UTC",
-                                        result.VenueMissingTrades.Count, result.VenueCoveredFromUtc, result.VenueCoveredToUtc))
+                                        vd.MissingTrades.Count, result.VenueCoveredFromUtc, result.VenueCoveredToUtc))
+            ' [D4] The two match populations, side by side and never summed. A high fallback
+            ' count is not reassurance — it says the store rows in this window predate identity,
+            ' so the match is a five-field coincidence rate, not a trade-for-trade agreement.
+            sb.AppendLine(String.Format("                      matched: {0} by identity (exact) · {1} by legacy five-field fallback (ambiguous)",
+                                        vd.IdentityMatched, vd.FallbackMatched))
+            sb.AppendLine(String.Format("                      store rows in window: {0} identified · {1} pre-identity{2}",
+                                        vd.StoreIdentified, vd.StoreLegacyOnly,
+                                        If(vd.StoreLegacyOnly > 0, "   *** diff is NOT exact while this is non-zero ***", "")))
+        ElseIf result.VenueRan Then
+            sb.AppendLine("  venue diff (S0)     ran but returned no result")
         Else
             sb.AppendLine("  venue diff (S0)     not run — pass --verify-venue")
+        End If
+
+        ' [§3.3] Local completeness from trade_seq. Costs no network and is not bound by
+        ' Deribit's ~24 h retention, so unlike S0 it stays readable on a month-old file.
+        If result.SequenceGaps IsNot Nothing Then
+            Dim sg = result.SequenceGaps
+            If Not sg.Checkable Then
+                sb.AppendLine(String.Format("  seq gaps (local)    NOT CHECKABLE — {0} row(s) carry no trade_seq, {1} do",
+                                            sg.RowsWithoutSeq, sg.RowsWithSeq))
+            Else
+                Dim partialNote As String = If(sg.RowsWithoutSeq > 0,
+                    String.Format("   *** PARTIAL: {0} row(s) carry no trade_seq and were not checked ***", sg.RowsWithoutSeq), "")
+                If sg.MissingCount = 0 Then
+                    sb.AppendLine(String.Format("  seq gaps (local)    none across {0} sequenced row(s)   OK{1}",
+                                                sg.RowsWithSeq, partialNote))
+                Else
+                    sb.AppendLine(String.Format(CultureInfo.InvariantCulture,
+                        "  seq gaps (local)    *** {0} TRADE(S) MISSING *** in {1} run(s), longest {2}, across {3} sequenced row(s){4}",
+                        sg.MissingCount, sg.GapRuns, sg.LongestGap, sg.RowsWithSeq, partialNote))
+                End If
+                If sg.Discontinuities > 0 Then
+                    sb.AppendLine(String.Format("                      {0} backwards step(s) — sequence reset or interleaved feeds; NOT counted as loss",
+                                                sg.Discontinuities))
+                End If
+                If sg.DuplicateSeqs > 0 Then
+                    sb.AppendLine(String.Format("                      {0} repeated sequence number(s) survived dedup", sg.DuplicateSeqs))
+                End If
+            End If
         End If
 
         Dim defectCount As Integer = result.CountByClass(HourClass.Defect)

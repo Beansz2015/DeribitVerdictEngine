@@ -479,6 +479,12 @@ Public NotInheritable Class DeribitWsFeed
             rec.Timestamp = t.GetProperty("timestamp").GetInt64()
             Dim liqEl As JsonElement = Nothing
             rec.Liquidation = If(t.TryGetProperty("liquidation", liqEl), liqEl.GetString(), "none")
+            ' [trade identity] The WS half of the capture path. Same two shared readers the REST
+            ' backfill uses — one seam, so the two feeds cannot disagree about these fields'
+            ' shape (§0 trap 3). Confirmed live at the §1 gate: a trade seen on BOTH feeds
+            ' carried the same trade_id and the same trade_seq.
+            rec.TradeId = TradeRecord.ReadTradeId(t)
+            rec.TradeSeq = TradeRecord.ReadTradeSeq(t)
             _state.AppendTrade(rec, nowUtc)
             If foldAggr Then
                 _state.FoldAggressorVelocity(rec.Amount, rec.Direction = "buy", rec.Timestamp,

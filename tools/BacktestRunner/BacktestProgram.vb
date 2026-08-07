@@ -297,10 +297,10 @@ Public Class BacktestProgram
                 If verifyVenue Then
                     Dim windowStartMs As Long = New DateTimeOffset(toUtc.AddHours(-24), TimeSpan.Zero).ToUnixTimeMilliseconds()
                     Dim windowEndMs As Long = New DateTimeOffset(toUtc, TimeSpan.Zero).ToUnixTimeMilliseconds()
-                    Dim venueMissing = Await CoverageReport.RunVenueDiffAsync(storeDir, windowStartMs, windowEndMs)
-                    If venueMissing IsNot Nothing Then
+                    Dim venueDiff = Await CoverageReport.RunVenueDiffAsync(storeDir, windowStartMs, windowEndMs)
+                    If venueDiff IsNot Nothing Then
                         covResult.VenueRan = True
-                        covResult.VenueMissingTrades = venueMissing
+                        covResult.VenueDiff = venueDiff
                         covResult.VenueCoveredFromUtc = toUtc.AddHours(-24)
                         covResult.VenueCoveredToUtc = toUtc
                     Else
