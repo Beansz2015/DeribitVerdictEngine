@@ -7,22 +7,35 @@
 1. On the local machine, from the PUSHED tree (never an unpushed build): `dotnet build -c Release` and take the whole `bin\Release\net8.0-windows\` output.
 2. **Include `fonts\`** (Geist Mono OFL licence file travels as Content — CLAUDE.md bundled-fonts rule).
 3. Confirm the copied `settings.json` is the tracked v59+ file — spot-check line 1 (`"version"`), `auto_run.trigger_mode: "on_close"` (v57 seeds it correctly), and **`trade_store.enabled: true`** (v64 seeds it correctly — see §1a).
-4. **Do NOT copy `analysis_log.csv`, `analysis_eval_cache.csv`, or any `.bak`/sidecars** — the AWS book starts EMPTY on purpose (a seeded copy forks the history and forces dedup at every pooled read; a fresh book concatenates cleanly).
+4. **Do NOT copy `analysis_log.csv`, `analysis_eval_cache.csv`, `ws_health.log`, `capture_marker.log`, any `.bak`/sidecars — or `backtest_data\`.** The AWS book starts EMPTY on purpose (a seeded copy forks the history and forces dedup at every pooled read; a fresh book concatenates cleanly). ⚠ **`backtest_data\` was added to this list 2026-08-07 and it is the dangerous one** — the others merely fork history, while the store *overwrites AWS's tape*. See the hazard box in §1a.
+5. **Copy files INTO the existing folder — never replace the directory.** The v64 deploy confirmed this works: AWS's eval cache and book survived because the copy overwrote file-by-file (§5a). Replacing the directory would delete AWS's store and book outright.
 5. `signal_bridge.enabled` may stay as-tracked — emission to `C:\Dev\DeribitBridge\` on a box with no consumer is harmless (payloads simply overwrite). ARM stays OFF by construction (never persisted).
 
-## 1a. The one setting the two boxes must NOT share — `trade_store.enabled` (v64, trader-ruled 2026-07-31)
+## 1b. Pre-flight before every xcopy to AWS — 30 seconds, prevents an irreversible loss
+
+Run this in the repo root. **Every line must print nothing.** Any output means the deploy source is dirty; clean it before copying.
+
+```
+ls bin/Release/net8.0-windows/ | grep -E 'backtest_data|analysis_log|analysis_eval_cache|ws_health|capture_marker|\.bak$'
+```
+
+- If `backtest_data\` appears, the local Release build captured tape. **Do not copy.** Merge that tape into the repo-root store first (§4b), confirm it is a copy, then delete it.
+- If the CSVs or sidecars appear, delete them from the deploy source only. They are regenerated on the local box and must never seed AWS.
+- **Confirm `bin\Release\net8.0-windows\settings.local.json` still EXISTS** — it is what stops Release capturing. Its absence is why the store reappears.
+
+## 1a. The one setting the two boxes must NOT share — `trade_store.enabled` (v64, trader-ruled 2026-07-31; amended 2026-08-07)
 
 > ⚠ **THIS SECTION WAS AMENDED 2026-08-07 — the two boxes now share the value, and that reverses the whole point of the section for the interim.** See D1-a in `docs/in-app-trade-store-capture-proposal.md` §7. **Read the table below, not the reasoning underneath it**, which is preserved because it explains the original design and still governs the end state.
 
 | Box | `trade_store.enabled` | Why |
 |---|---|---|
 | **AWS** | **`true`** | Unchanged. This box is the canonical capturer, and tape past ~24 h is unobtainable at any price. |
-| **Local — `bin\Debug` and `bin\Release`** | ⚠ **`true` as of 2026-08-07 — the overlay is REMOVED, not edited** | **Ruled by D1-a, temporary, for data collection only.** The sole capturer measured **78.8 %** complete while healthy against **98.5 %** on a second box, and 16,459 trades existed only locally. A second sampler is what made the book complete. **This retires when the local box retires** — the end state is still AWS-only. |
+| **Local `bin\Debug`** | ⚠ **`true` as of 2026-08-07 — DELETE the overlay file** | **Ruled by D1-a, temporary, for data collection only.** The sole capturer measured **78.8 %** complete while healthy against **98.5 %** on a second box, and 16,459 trades existed only locally. A second sampler is what made the book complete. Debug is the folder the trader actually runs (policy 2026-08-05). **This retires when the local box retires** — the end state is still AWS-only. |
+| **Local `bin\Release`** | **`false` — KEEP the overlay** | ⚠ **Corrected 2026-08-07, same day, before it shipped.** Release exists only to build the AWS deploy. Capture there collects nothing anyone runs, and it **repopulates `backtest_data\` inside the deploy source on every run** — see the hazard box below. Keeping the overlay is also the safety net against the 2026-08-03 accident. |
 
-⚠ **Two consequences of removing the local overlay, and both are easy to miss:**
+> ⚠ **THE DEPLOY HAZARD — read this before any xcopy to AWS.** `bin\Release\net8.0-windows\` is the deploy source. If it contains `backtest_data\`, an overwriting copy replaces **AWS's** `trades_YYYY-MM.csv` with the local one. Measured on 2026-08-07: AWS's August file held **228,163 rows** and the local Release file held **78,798** — the copy would have destroyed about **150,000 trades**, and tape past ~24 h cannot be refetched by anyone at any price. §1.4 already bans copying the CSVs and sidecars; it predates local capture and never named the store. **Never copy `backtest_data\`. Verify the deploy source is clean before every copy** — the pre-flight is in §1b.
 
-1. **`trade_store.enabled` was the ONLY key either local overlay overrode.** Removing it leaves an empty overlay, so **the `+local` title-bar marker disappears from the local box.** That marker was §3's daily alarm in *its absence*. **The local glance is now inverted: expect NO `+local`, and expect `backtest_data\` to be advancing.** A `+local` on the local box now means someone re-added an override.
-2. **The AWS glance is unchanged** — AWS must still never show `+local`.
+**Consequence of removing the `bin\Debug` overlay, easy to miss:** `trade_store.enabled` was the **only** key it overrode, so removing it leaves nothing to override and **the `+local` title-bar marker disappears from `bin\Debug`.** That marker was §3's daily alarm *in its absence*. The Debug glance is now inverted — see §3. `bin\Release` keeps its overlay and therefore keeps showing `+local`. AWS must still never show it.
 
 **The tracked `settings.json` carries `true`, and that is deliberate — do not "fix" it.** §1.1 deploys AWS from the Release build output, so the tracked value *is* what lands on AWS. The two failure directions are not symmetric:
 
@@ -59,7 +72,15 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 
 ## 3. Daily one-glance health check (RDP in, ~30 seconds)
 
-- ⚠ **REWRITTEN 2026-08-07 — this check inverted.** **AWS: title bar must read `settings v{N}` with NO `+local`.** A `+local` on AWS still means an overlay it should not have. **Local box: also expect NO `+local` now**, because D1-a removed the only key its overlay carried; the live check on the local box is that **`backtest_data\` is advancing**, which is the same check AWS gets. *(Superseded, kept because it explains the marker: until 2026-08-07 the local box was expected to show `+local`, and its ABSENCE was the alarm — the overlay does not survive `dotnet clean`, and losing it silently switched local capture on. That failure direction is now the intended state, so the alarm is retired rather than fixed.)* On AWS the same glance is inverted: a `+local` there means an overlay it should not have. The marker only appears when the overlay actually overrode a key the base carries, so it cannot be earned by a typo'd or rejected key ([F1](settings-local-overlay-spec-back.md), 2026-08-02).
+- ⚠ **REWRITTEN 2026-08-07 — the expected marker is now different in all three folders. Read the row you are actually looking at.**
+
+| Where | Expect `+local`? | What it means |
+|---|---|---|
+| **AWS** | **NO** | Unchanged. A `+local` here means an overlay AWS should not have. |
+| **Local `bin\Debug`** | **NO — changed** | D1-a removed its overlay, so it captures. The live check is that **`backtest_data\` is advancing**, same as AWS. A `+local` here means someone re-added an override and capture is off. |
+| **Local `bin\Release`** | **YES** | It keeps its overlay and must not capture. **A missing `+local` here is the alarm** — it means Release will capture and repopulate `backtest_data\` in the deploy source (§1a hazard box). |
+
+  *(Superseded, kept because it explains the marker: until 2026-08-07 every local folder was expected to show `+local`, and its ABSENCE was the alarm. For `bin\Debug` that failure direction is now the intended state, so the alarm is retired there rather than fixed. For `bin\Release` it still binds.)* On AWS the same glance is inverted: a `+local` there means an overlay it should not have. The marker only appears when the overlay actually overrode a key the base carries, so it cannot be earned by a typo'd or rejected key ([F1](settings-local-overlay-spec-back.md), 2026-08-02).
 - TAPE strip alive + `[B]` strip populated → collecting.
 - `ws_health.log` tail → any DOWN/DEGRADED transitions overnight (transitions-only, so a short file is a healthy file).
 - **`liq_events.log` existence** → the AWS box runs the A4 cascade instrument 24/7 too — it may catch the first cascade before the local box does. A CASCADE line here counts as the A4 gate evidence (pool both boxes' sidecars).
