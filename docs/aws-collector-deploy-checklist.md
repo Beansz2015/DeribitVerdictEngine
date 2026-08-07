@@ -49,7 +49,7 @@ if (Test-Path "$d\settings.local.json") { 'OK     Release overlay present - Rele
 | Box | `trade_store.enabled` | Why |
 |---|---|---|
 | **AWS** | **`true`** | Unchanged. This box is the canonical capturer, and tape past ~24 h is unobtainable at any price. |
-| **Local `bin\Debug`** | ⚠ **`true` as of 2026-08-07 — DELETE the overlay file** | **Ruled by D1-a, temporary, for data collection only.** The sole capturer measured **78.8 %** complete while healthy against **98.5 %** on a second box, and 16,459 trades existed only locally. A second sampler is what made the book complete. Debug is the folder the trader actually runs (policy 2026-08-05). **This retires when the local box retires** — the end state is still AWS-only. |
+| **Local `bin\Debug`** | ⚠⚠ **`true` since 2026-08-07, but the reason is WITHDRAWN — awaiting a trader re-read** | **Ruled by D1-a, temporary.** ⚠ **The measurement that justified it is retracted** — see §4a. It read the two boxes' disagreement as AWS missing 16,459 trades; they in fact disagree on *amounts at shared timestamps*, and the store has no `trade_id` to tell the cases apart. **Recommendation: set this back to `false` until `trade_id` ships** — two tape books cannot be merged, so a second capturer contributes nothing usable, and tape written meanwhile is permanently unmergeable. The end state was always AWS-only regardless. |
 | **Local `bin\Release`** | **`false` — KEEP the overlay** | ⚠ **Corrected 2026-08-07, same day, before it shipped.** Release exists only to build the AWS deploy. Capture there collects nothing anyone runs, and it **repopulates `backtest_data\` inside the deploy source on every run** — see the hazard box below. Keeping the overlay is also the safety net against the 2026-08-03 accident. |
 
 > ⚠ **THE DEPLOY HAZARD — read this before any xcopy to AWS.** `bin\Release\net8.0-windows\` is the deploy source. If it contains `backtest_data\`, an overwriting copy replaces **AWS's** `trades_YYYY-MM.csv` with the local one. Measured on 2026-08-07: AWS's August file held **228,163 rows** and the local Release file held **78,798** — the copy would have destroyed about **150,000 trades**, and tape past ~24 h cannot be refetched by anyone at any price. §1.4 already bans copying the CSVs and sidecars; it predates local capture and never named the store. **Never copy `backtest_data\`. Verify the deploy source is clean before every copy** — the pre-flight is in §1b.
@@ -139,18 +139,27 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 
 **The practical order is therefore: merge first, judge duplication after** — never discard a store because it *looks* redundant. A book can only be shown redundant by comparing it against the one that supersedes it, and that comparison needs both books in hand.
 
-**RESOLVED 2026-08-07 — and the rule paid for itself.** `bin\Release\net8.0-windows\backtest_data\trades_2026-08.csv` (78,798 rows / 76,354 unique, 2026-08-03 21:44 → 2026-08-05 13:13 UTC), captured by the un-overlaid local Release build (§1a point 3), was compared whole-row against the first AWS store copy-back. It is **NOT a duplicate**:
+> ⚠⚠ **WITHDRAWN 2026-08-08. THE CLAIM THIS SECTION MADE WAS WRONG. Read the correction before anything else here.**
 
-| Overlap window 08-03 21:44 → 08-05 13:13 UTC | rows |
+**What was claimed on 2026-08-07:** that a whole-row comparison of the local `bin\Release` tape against the first AWS copy-back showed **16,459 trades present only locally**, putting AWS at **78.8 %** complete while healthy — and that the retention rule had therefore just saved 16,459 unrecoverable trades.
+
+**Why it is withdrawn.** The trader challenged it on the right ground: a box in Deribit's own datacentre, running 24/7, should hold *more* trades than an intermittent laptop, not fewer. Re-checking produced this:
+
+| Test | Result |
 |---|---|
-| In both books | 59,895 |
-| **Release-only — would have been lost** | **16,459** |
-| AWS-only | 1,145 |
-| Union | 77,499 |
+| Timestamps absent from AWS entirely | **ZERO**, across all 16,190 pre-cut rows and 6,808 distinct timestamps |
+| Where the disagreement actually sits | Same timestamp, same price, same side — **different amounts** |
+| Volume over the same window | AWS 78.6 M vs union 152.2 M — it nearly **doubles** |
+| Aggregation anywhere in our code | **None.** `DeribitWsFeed` and `HistoricalStore` both write `amount` verbatim |
+| Where the disagreement concentrates | **98.4 %** of it falls in the period the local tape was **REST-backfilled**, only 1.6 % where both boxes streamed live |
 
-AWS held **78.8 %** of known trades in that window; the local Release box held **98.5 %**. **AWS was healthy throughout** — no `DOWN`/`DEGRADED` between 2026-08-01 19:02 and 2026-08-06 16:11, 921 analysis rows/day on 08-03/04/05 — so this is not an outage, and the loss is scattered rather than contiguous (36 distinct UTC hours affected, spanning the whole window). Both tapes are now merged into the repo-root store per §4b. **The earlier reading that this span was "probably covered" was wrong, and only the retention rule stopped it being acted on.**
+Worked example at ts `1785793449897`: AWS holds one row of `790.00`; the local box holds `120`, `310`, `500`, `900` — same millisecond, price and side. **Those are not missing trades. They are the same market activity represented differently by the two feeds.**
 
-> ⚠ **What this says about the instrument, and it is the load-bearing part.** AWS-only max inter-trade gap over that window is **153.1 s** against the 300 s threshold — **no breach** — and the *merged* store, carrying all 16,459 extra trades, reads **exactly the same 153.1 s**. At one trade per ~2.3 s, scattered per-trade loss can never approach a 300 s threshold, so **S3's gap metric is structurally incapable of detecting it.** Queued for a ruling — see [`trader-tick-queue.md`](trader-tick-queue.md) §0a.
+> ⚠ **THE ROOT CAUSE, and it is bigger than the measurement error. The store has NO TRADE IDENTITY.** Deribit's trade records carry a `trade_id`. `HistoricalStore.vb:307-317` reads price, amount, direction, timestamp and liquidation and **never reads it**. The store row is those five fields, and `TradeStoreWriter.FormatRow` — that same five-field row — is what the store dedups on *and* what S0's venue diff matches on (`CoverageReport.vb:310, 486, 492`). **Three consequences:** a whole-row comparison can never distinguish "the other box has a trade I lack" from "the other box represents the same trade differently"; the store **silently drops genuinely distinct trades at write time** when five fields collide (22,376 of AWS's 228,163 August rows are exact duplicates, and nothing can say how many were real); and **S0 inherits the same blindness**, so a daily venue-diff job would report the same ambiguity as "missing trades".
+
+**What still stands, on reasoning that does not depend on identity:** **S3's longest-gap metric cannot detect scattered loss.** At ~1 trade per 2.3 s against a 300 s threshold you would have to lose ~130 *consecutive* trades to trip it. That is arithmetic, and it holds whatever the extra rows turn out to be.
+
+**Store state after the correction (2026-08-08).** The merged store was **un-merged**. Each file now has a **single provenance**: `trades_2026-07.csv` is a pure `BacktestRunner fetch` (REST), `trades_2026-08.csv` is pure AWS capture. The mixed versions are kept, not deleted, in `AWS-copybacks\quarantine-mixed-2026-08-08\` per the retention rule. **Do not merge two tape books again until `trade_id` is in the schema** — see [`trader-tick-queue.md`](trader-tick-queue.md) §0a and §2.
 
 ## 4b. Store copy-back — the step-by-step. **Written 2026-08-07, after executing it for the first time**
 
