@@ -173,7 +173,7 @@ Full AWS chain: `09c747f8…` → `ec487909…` → **`ffced26c…`** → `d8678
 
 ---
 
-## 10. PROPOSED — the ASIA watch tolerance that was never specified. **Awaits a trader tick.**
+## 10. The ASIA watch tolerance that was never specified — ✅ **T-1 … T-5 ALL TICKED 2026-08-11 (trader), as proposed**
 
 **The problem.** `asia-burst-threshold-derivation-2026-08-01.md` row D3-5 gives a trigger *value* (≈9.7 %) and removes NY's per-day rule, but never replaces it with a numeric tolerance or a read length. A watch with a target and no tolerance cannot be passed or failed except by judgement.
 
@@ -190,9 +190,9 @@ Full AWS chain: `09c747f8…` → `ec487909…` → **`ffced26c…`** → `d8678
 
 **Why the 8–12 % design band cannot serve as the watch tolerance.** With the baseline at 10.97 %, the 12 % ceiling is only ~1.2 se away on a 10-weekday read. That band would false-alarm on the upper side in roughly one read in nine — a watch that cries wolf gets ignored, which is the failure `trader-tick-queue.md` §0a already records twice.
 
-**Proposed replacement — doc-only, no key moves, no ⚠ boundary:**
+**The replacement — ✅ TICKED 2026-08-11. Doc-only, no key moves, no ⚠ boundary.** It **supersedes row D3-5** of [`asia-burst-threshold-derivation-2026-08-01.md`](asia-burst-threshold-derivation-2026-08-01.md) §5, which is amended in place to point here.
 
-| # | Element | Proposed |
+| # | Element | Ruled |
 |---|---|---|
 | **T-1** | Reference rate | **11.0 %**, replacing 9.7 %. Measured, 12 fully-covered AWS weekday session-days |
 | **T-2** | Band | **8–14 %** (±3 pp). At a 10-weekday read that is ±3.5 se ⇒ ~0.05 % false-alarm rate. The 8 % floor coincides with the design band's floor |

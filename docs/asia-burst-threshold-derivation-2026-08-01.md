@@ -86,7 +86,25 @@ Status: **BUILT 2026-08-02**, local commit, unpushed — trader tests + pushes (
 | **D3-2** | ASIA-specific value, or LONDON's? | **LONDON's value. Decision-of-record: `burst_ratio_threshold` needs no ASIA-vs-LONDON split — the res-3 burst distribution is ONE distribution.** | §2 — every percentile within ±9 % on n≈1,489 each. `burstRatio` is scale-free by construction, so it should not carry session liquidity levels. A bespoke 5.35 would be fitting noise |
 | **D3-3** | Where the key lives | **Two identical per-session entries. NOT promoted to `default`** | §2 — the auto-arm keys on session-threshold *presence*, so writing it to `default` would silently arm every session, including any future one |
 | **D3-4** | Sequencing | **Alone and first**, ahead of the D1+D2 bundle | D-cluster ruling 2026-08-01 — D3 *arms* rather than retunes and an activation deserves a clean window; bundling with D2 (OBV `trend_gate` 18→23) would confound ASIA, since both push the ASIA upgrade path the same way |
-| **D3-5** | Post-ship watch | **Fire rate ≈9.7 % · same-side ≥85 %, read over a MULTI-DAY band — never a single session-day** | §3 — ASIA's per-day rate spans **4.5–13.8 %** at T=5.5 on ~106 AggrVel rows/day. NY's ±2pp band does **not** transfer, and no res-3 threshold may be re-fitted off one session-day |
+| **D3-5** | Post-ship watch | ⚠ **AMENDED AND SUPERSEDED 2026-08-11 — see below. Original: fire rate ≈9.7 % · same-side ≥85 %, read over a MULTI-DAY band, never a single session-day** | §3 — ASIA's per-day rate spans **4.5–13.8 %** at T=5.5 on ~106 AggrVel rows/day. NY's ±2pp band does **not** transfer, and no res-3 threshold may be re-fitted off one session-day |
+
+> ⚠ **D3-5 AMENDMENT — RULED 2026-08-11 (trader), T-1 … T-5 in [`d3-asia-burst-watch-read-2026-08-10.md`](d3-asia-burst-watch-read-2026-08-10.md) §10. Read that row there, not here.**
+>
+> **The defect this fixes: D3-5 named a trigger VALUE but never a TOLERANCE or a READ LENGTH.** A watch that says "check it is ≈9.7 %" cannot be passed or failed except by judgement, and the first read (2026-08-11) had to invent both to reach a verdict.
+>
+> **What changed, and why the numbers here are superseded rather than merely refined:**
+>
+> | Element | This document said | Ruled 2026-08-11 |
+> |---|---|---|
+> | Reference rate | 9.7 % | **11.0 %** |
+> | Band | *(never stated)* | **8–14 %** |
+> | Read length | "multi-day" | **≥10 weekday session-days** |
+> | Same-side | ≥85 % | ≥85 % — **unchanged** |
+> | Row density | ~106/day | **~158–160/day** |
+>
+> ⚠ **Both the 9.7 % and the ~106 rows/day in this document are artefacts of a partially-covered book.** The §1 population pooled 14 session-days of which roughly half predate the AWS collector and are thin local-box rows. Measured on 12 **fully covered** AWS weekday session-days (n=1,905), the rate is **10.97 %** and density is ~158/day. **§1's candidate table is not re-fitted** — its *relative* ordering across T is unaffected, and T=5.5 still passes — but **do not quote its 9.7 % or ~106/day as current.**
+>
+> **The threshold itself does not move. `burst_ratio_threshold` stays 5.5.** Recorded and deliberately not acted on: 11.0 % sits in the upper half of the 8–12 % design band, so **T=6.0 is the natural candidate if a re-derivation ever happens for another reason** — but chasing 1 pp inside the band now is exactly the over-tuning §5.2 rules against.
 | **D3-6** | The outcome evidence | **Recorded in the change_log and here; does not block arming** | See §5.2 — it is neutral at best, and the queue's ruling was explicit that the D-table must say so rather than lead with the distributional case alone |
 
 **Also carried into the build:** the §3 finding that **the contra-soften arm is effectively dead on res-3** at every candidate T including LONDON's shipped 5.5 (ASIA 0.21–0.43 contra/day). On 3-minute sessions this modifier is in practice **upgrade-only** — not a defect, the upgrade arm carries the design, but the §4.5 "genuine warning" half must not be claimed as operative on res-3. And the **coupling caveat binds**: 5.5 is derived *for* `fast_window_sec` 5 / `norm_window_sec` 120, so changing either re-opens this.
