@@ -277,8 +277,13 @@ Public Class DonchianSettings
 End Class
 
 Public Class ObvSettings
-    ''' <summary>Units since v31: net OBV drift in average-bar-volumes over the window (F5 normalisation). Seeded, not calibrated.</summary>
-    <JsonPropertyName("trend_gate")>      Public Property TrendGate      As Double = 10.0
+    ''' <summary>Units since v31: net OBV drift in average-bar-volumes over the window (F5 normalisation).
+    ''' v66 (D2): re-anchored to 23.0 on six months of store data (pooled |obvChange| p50 22.2-24.2),
+    ''' restoring v33's own ~50% directional design point. ONE GLOBAL VALUE - the decision-of-record is
+    ''' that OBV needs no per-session or per-resolution split (3m/1m ratio ~0.95).
+    ''' NOTE this default stood at the pre-v33 value 10.0 against a shipped JSON 18.0 from 2026-06-13
+    ''' until v66 moved both in lockstep. Keep them equal.</summary>
+    <JsonPropertyName("trend_gate")>      Public Property TrendGate      As Double = 23.0
     <JsonPropertyName("divergence_gate")> Public Property DivergenceGate As Double = 0.001
 End Class
 
