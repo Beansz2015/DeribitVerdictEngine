@@ -48,6 +48,18 @@ One host-agnostic class owning rows 1–8 of the §2 table. The mutation blocks 
 
 ### Stage 3 — `Core/AnalysisOrchestrator.vb` + `IAnalysisRunHost` (the run sequence)
 
+> ⚠ **AMENDED 2026-08-08 (trader-directed). Call-order preservation is now an explicit, provable acceptance condition — not a stated intention.**
+>
+> **Why this amendment exists.** This whole stage is safe to run only because it is behaviour-neutral, and behaviour-neutrality here rests entirely on the *order* of the run sequence being preserved. `MainForm_Analysis.vb` has ordering constraints that are load-bearing and not obvious from reading it — the clearest being that **`BuildPlaintextSnapshot` must run BEFORE the card binds**, because its inline `CalcKellySizing` is what populates the `v.Kelly*` fields the card then reads (CLAUDE.md, data-flow section). An extraction that preserves every call but reorders two of them produces a green build, a green harness, and **a card with blank Kelly values** — wrong in a way that looks right.
+>
+> **The condition.** Stage 3 is accepted only if the run sequence is proven byte-order-identical, not merely byte-output-identical on one fixture. Two outputs can match while the order that produced them differs, and the difference then surfaces on a path the fixture did not exercise.
+>
+> **How to prove it — an order ledger, not an eyeball.** Before the extraction, instrument `RunAnalysisAsync` to append each touchpoint name to an in-memory list as it fires, and capture that list for a set of fixture runs covering: a scored run, a SKIPPED run, a NO TRADE run, and an error-path run. After the extraction, capture the same list from `AnalysisOrchestrator.RunOnceAsync`. **The two lists must be equal, element for element, for every case.** Ship the comparison as a fixture so the property is defended afterwards, not just at the moment of the change.
+>
+> ⚠ **The error path is the one that will be missed.** Ordering on the happy path is easy to preserve by construction. An early `Return` or a `Try/Catch` that skipped a touchpoint in the original will quietly stop skipping it once the body is behind an interface — and no output diff on a successful run will show that.
+>
+> **Escalation trigger.** If the ledgers cannot be made equal for any one of the four cases, **stop and report rather than adjusting the expected ledger.** A mismatch is the finding. Editing the expectation to match the new behaviour converts a caught regression into a shipped one.
+
 The body of `RunAnalysisAsync` moves to a host-agnostic `AnalysisOrchestrator.RunOnceAsync(deps, ctx, host)` with the UI touchpoints seamed behind:
 
 ```
