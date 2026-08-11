@@ -176,3 +176,79 @@ Stated so nothing is assumed covered.
 | **The A48/A53 fixtures beyond the four I read** | I read A48a/b/d/e and A53a/b/c/e/f/h. The rest are covered only by "ALL PASS" |
 | **F2** (`ResetBufferState` race, `DeribitWsFeed.vb:298`) | Out of scope per §7. Untouched and unexamined |
 | **Whether Deribit ever resets `trade_seq`** | Still unverified — the same gap the identity build recorded. D-2's ratification means nothing in this build depends on it |
+
+---
+
+# ✅ REVIEW — orchestrator seat, 2026-08-11. **ACCEPTED. Deploy authorised.**
+
+**Verified in the tree, not read off this packet.** Harness re-run: **272 PASS / 0 FAIL** (265 → 272 = A55a–g).
+
+## R1. ⚠ The packet's own headline check is WRONG — and it is the session's defect class again
+
+**H1 says `grep -c "_lastTs" Core/TradeStoreWriter.vb` "must print `0`". It prints `2`.**
+
+**The build is correct and the handle is broken.** Both hits are inside comments *explaining that `_lastTs` is gone* (`:76`, `:81`); the field is **not declared** and **no executable line references it**. A reviewer following H1 literally would read `2`, conclude trap 1 had fired, and reject a sound build.
+
+⚠ **Two things make this worth more than a typo correction.** First, **H2 applies a comment filter (`grep -v "^.*'"`) and H1 does not** — the hazard was known and missed on the one check billed as *"if you only run one."* Second, and this is the point: **H1 counts a STRING as a proxy for "is the field gone."** That is a copy of the property, not the property, and it drifts from it the moment a comment mentions the name. **It is the same shape as everything else this cycle** — copy 4, the `<=` guard, the POCO defaults.
+
+**The correct handles, either of which is exact:**
+
+```bash
+grep -c "Private _lastTs" Core/TradeStoreWriter.vb          # 0 — the field is gone
+grep -n "_lastTs" Core/TradeStoreWriter.vb | grep -vE ":\s*'"   # empty — no executable reference
+```
+
+## R2. H2's flagged gap — read, and it resolves clean
+
+The packet asks for one read of `AlreadyCommitted` rather than a new fixture. Done:
+
+```vb
+If t.HasIdentity Then Return _windowIds.ContainsKey(t.TradeId)
+Return _windowLegacy.ContainsKey(LegacyRowKey(t))
+```
+
+**The identified branch returns on `_windowIds` alone and never consults the legacy set**, so the reverse ordering (identity-less first, then an identified row sharing its five legacy fields) yields a **duplicate, not a drop** — the safe direction. **The concern was correctly raised and correctly scoped to a read.** No fixture owed.
+
+## R3. §3.1 is right, and the error is mine
+
+All three sub-claims verified: `SeedAsync` hands its 500 REST trades to `_state.SeedTrades` (the in-memory ring, no store reference) · `store.Buffer` has **exactly one caller**, `DeribitWsFeed.vb:515` · gap repair calls `TradeStoreWriter.AppendRows` directly at `HistoricalStore.vb:269`, bypassing the guard.
+
+**I wrote that justification into the spec, inheriting v64's comment without checking it.** The correction is right, the assessment of its cost is right — a wrong *reason*, not wrong behaviour — and **finding it while writing the packet, after the gate had passed, is the packet doing its job.**
+
+## R4. Rulings on the queued decisions
+
+| # | Ruling | Note |
+|---|---|---|
+| **Q1** | ✅ **(a) accept** | Agreed. **And a reason the packet did not give, which settles it harder:** (b) would introduce a **second dedup contract in the write path** — the copy-class this entire cycle exists to remove. Do not build a second relation to make one path order-independent |
+| **Q2** | ✅ **(a) leave** | Agreed. Doubling seed I/O on every writer construction to fix a few-second window once a month is a bad trade |
+| **Q3** | ✅ **Leave — and it is safer than the packet argues** | A **persistent** disk failure is **not** silent: `AppendRows` returns 0 forever, `LastFlushUtc` never advances, and `ClassifyTapeStoreTier` escalates the TAPE STORE strip **UNKNOWN → AMBER → RED**. So the exposure is bounded to **one batch per TRANSIENT failure**, not to unbounded silent loss. That is acceptable, and it is a better reason than "unchanged from before". **No workstream** |
+| **Q4** | ✅ **Keep A48b** | Agreed, and the documentary argument is the right one: it is the fixture that missed the defect for ten days, and the call site now says so |
+| **Q5** | ✅ **No change to 20000** | Agreed. ⚠ **Flagging it was correct precisely because of the new fixture-literal provenance hard rule** — a constant whose *stated reason* is wrong is exactly what a future seat trims against |
+
+## R5. Two spec lessons, both mine, both recorded
+
+- **§3.3 is a real internal contradiction in my spec.** §5 listed A55b/f/g as *"must not regress"* properties two lines after §5's own mutation paragraph forbids fixtures that pass on unfixed code. **The implementer resolved it toward mutation, which is correct**, and all seven fixtures were proven by mutation. Future specs: *"every fixture, including regression guards, must fail on the unfixed code."*
+- **§3.4's `Public Const` hatch is genuinely reusable and is now a standing rule** — see `CLAUDE.md`. Verified applied: `TradeStoreWriter.RecentWindowCapacity` is `Public Const` at `:118`, and A55e reads it rather than restating `20000`.
+
+## R6. Verified independently
+
+| Check | Result |
+|---|---|
+| `_lastTs` field declared | **No** — gone |
+| `AlreadyCommitted` branch order | ✅ identity-first, `_windowIds` alone |
+| A55e's pairing inside the `Check` condition, not the message | ✅ all four conjuncts in the condition |
+| A55e reads the production constant | ✅ `TradeStoreWriter.RecentWindowCapacity` |
+| Harness | ✅ **272 PASS / 0 FAIL** |
+| §9 outcome record present | ✅ §9.1–9.5 — the one-document deviation is legitimate |
+
+**Not re-verified by me:** the §9.2 mutation table (I read it, did not re-run each mutation), the §1a gate figures (I derived those originally), and everything in §4.
+
+## R7. ⚠ Deploy — the clock the packet names is real
+
+**Ship it.** Trader tests → push → `dotnet build -c Release` from the pushed tree → deploy per `aws-collector-deploy-checklist.md` §1.2's six-item allowlist → record the new InstanceId in §5a.
+
+⚠ **`settings.json` does not move, so this is NOT a scoring boundary** — but it IS a tape boundary: rows before the new id are ~50 % complete and rows after should be ~100 %.
+
+⚠ **Take the D-7 / §5b measurement from a copy-back BEFORE too much post-fix tape accumulates** — not because the fix destroys it (it does not; that was corrected), but because the outage band is easiest to locate while it is near the tail.
+
+**The falsifiable prediction stands and must be checked after deploy:** G2 showed the feed loses nothing, so a post-fix `trade_seq` check should read **~100 % complete**. **If gaps remain, this build did not find the whole problem.**
