@@ -118,6 +118,31 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 > **Both boxes fire 1–10 s after the close, so a bar never straddles two minute-keys** — verified on both books before this was adopted.
 > **Measured impact:** on the 2,159 minute-keys present in both books the two boxes **disagree on verdict 4.49 %** of the time (97 bars), so the preference is not cosmetic — but it moves the F1 STRONG count by 2 and the W6-1 LONDON count by 2, i.e. no gate conclusion turns on it.
 > **Reproducibility note:** every pooled figure published from 2026-07-31 onward — F1's 203 evaluable STRONG, the W6-1 grids, the W6-4 ceiling audit, the ASIA burst derivation — was built on **this** method. A snapshot built the old way will not reproduce them.
+
+> ### ⚠ AMENDED 2026-08-11 — what the minute key does WITHIN one book, measured
+>
+> **The rule above is written as a cross-box rule. It is not only that.** A minute key also collapses two runs from the **same** box that land in one minute, and nothing here said so. Raised as finding **S-5** in [`seam-audit-2026-08-11.md`](seam-audit-2026-08-11.md); the figures below are an **independent re-measurement**, not the audit's.
+>
+> | Book | Rows | Minutes carrying >1 distinct run | Rows the minute key DROPS |
+> |---|---:|---:|---:|
+> | AWS copy-back 2026-08-10 | 15,499 | 25 | **25 (0.16 %)** |
+> | Local `bin\Debug\net8.0-windows` | 10,779 | 181 | **548 (5.08 %)** |
+>
+> ⚠ **The AWS losses are strongly session-clustered: 21 of 25 sit at hour 13:00 UTC** (3 at 20:00, 1 at 09:00). 13:00 is the NY `session_volume` boundary where `execution_resolution` switches **3 → 1**, so the cadence changes and two runs can land in one minute. **A session-correlated loss is not noise.**
+>
+> ### ✅ THE RULING: keep the minute key. Do NOT change it for the Kelly / W6-4 freeze.
+>
+> ⚠ **This reverses the orchestrator's first recommendation, which was "fix the key before the next pooled read". Measurement did not support it.**
+>
+> **Of the 573 dropped rows, exactly ONE is a weekday STRONG** — one in the local book, zero on AWS — against **281** weekday STRONG across both books. **The instrument that actually consumes the pooled read is the Kelly dated trigger (≥406 pooled weekday STRONG), and the minute key costs it one row in 281 — 0.36 %.**
+>
+> Against that, changing the key **breaks the reproducibility note directly above**: every pooled figure published since 2026-07-31 was built on the minute key. **Reproducibility beats one row.**
+>
+> ### ⚠ When this DOES matter — the hazard is real for reads that do not exist yet
+>
+> The bias is concentrated, not diffuse. **Any future pooled read that segments by session, by execution resolution, or specifically around the 13:00 handover is materially biased by this key** — it removes ~84 % of its dropped AWS rows from one hour. **Before any such read, switch to second-resolution keying, or `InstanceId` + `SignalId` + timestamp** — both are exact and cost nothing extra — **and say in the write-up that the figures will not reconcile with pre-2026-08-11 pooled reads.**
+>
+> **Not a code change.** No minute-key dedup exists in any `.vb` file; this is a construction procedure applied by hand at pooled-snapshot time.
 4. Eval caches do NOT pool (each box's tracker walks its own book); offline re-walks via the report/what-if tools regenerate outcomes from the pooled CSV + fresh OHLC — the more trustworthy surface anyway (§7a).
 5. **Same-settings discipline:** rows are only poolable while both boxes run the same settings version. After any settings bump locally, redeploy to AWS at the next opportunity.
 
