@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Delivery gate for the same-millisecond trade drop
+       (docs/trade-store-same-millisecond-drop-2026-08-11.md §6 item 3).
+
+       ONE question: does Deribit's trades.BTC-PERPETUAL.100ms channel actually DELIVER
+       several trades sharing a millisecond timestamp? If it does, TradeStoreWriter.vb:149's
+       `<=` guard is discarding them and a guard fix is the answer. If it does not, the
+       trades never arrived and a guard fix would change nothing — the capture strategy
+       itself would need rethinking.
+
+       DELIBERATELY STANDALONE. It links NOTHING from the app: no Core files, no settings
+       loader, no TradeStoreWriter. It cannot read or write any file the collector uses, so
+       it can be run on the same box as a live collector without touching its state.
+
+       Read-only against the venue: one public WS connection, public channels, no auth,
+       no orders. net8.0 + zero WinForms — runs on Linux via `dotnet WsTradeProbe.dll`. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>WsTradeProbe</AssemblyName>
+    <Nullable>enable</Nullable>
+    <StartupObject>DeribitVerdictEngine.WsTradeProbeProgram</StartupObject>
+  </PropertyGroup>
+
+</Project>
