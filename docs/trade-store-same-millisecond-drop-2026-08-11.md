@@ -216,7 +216,47 @@ With streaming active, the last written row is always ~now. **So the cursor is a
 
 ---
 
-## 5b. ⚠ A free second experiment is arriving — MEASURE IT AT THE NEXT COPY-BACK
+## 5a-bis. ⚠⚠ REPAIR CANNOT HEAL DOWNTIME EITHER — measured 2026-08-12, and it is worse than §5a
+
+**§5a says repair cannot heal *in-flight* loss. That understated it. Repair cannot heal *downtime* loss either, in the normal case — which is the case it exists for.**
+
+**The live instance, from the 2026-08-12 copy-back.** The tape carries a **60.3-minute hole**:
+
+```
+2026-08-11 08:59:56  ->  2026-08-11 10:00:12      zero rows
+```
+
+**Gap repair never filled it, and it had over seven hours in which to try.**
+
+**Why, traced:** `3be7f4c9` ran unbroken 2026-08-10 18:36 → 2026-08-11 17:18, so **the app was never restarted across the outage** and the start-triggered pass never fired. That left the 6-hourly passes — 00:36, 06:36, **12:36**. By 12:36 streaming had long since resumed, and `ResolveResumeCursorMs` begins at **the file's last written row**, which was current. **The hole sat behind the cursor and was skipped.**
+
+⚠ **The window in which repair could have reached that hole was the time between the venue returning and streaming writing its first row — seconds, or at most one flush interval.** After that the hole is permanently behind the cursor.
+
+**The consequence, stated as a rule because it is not what the v64 design assumes:**
+
+> **Gap repair recovers downtime ONLY if the app is RESTARTED after the outage, or if a scheduled pass happens to land inside the outage window. If the app rides through an outage and reconnects on its own, the hole is unrecoverable within seconds.**
+
+**That is the common case, not the rare one** — a WS feed reconnecting after a venue blip is exactly what the supervisor is built to do.
+
+**Cost here: one hour of tape, permanently.** Past Deribit's ~24 h retention as of 2026-08-12.
+
+⚠ **A fix must not simply widen the lookback** — the cursor, not the window, is what skips the hole. The candidates are: seed the cursor from the **hole**, not the tail (which needs the store to know where its holes are — `trade_seq` now makes that computable); or fire a repair pass **on WS reconnect** rather than only on process start. **Not designed here.**
+
+---
+
+## 5b. ⛔ RETIRED 2026-08-12 — the experiment it describes does not exist
+
+**This section instructed a measurement of a repair-written "complete band" left by the maintenance outage. There is no such band. There is a 60.3-minute hole — see §5a-bis, which is what looking for the band actually found.**
+
+**Its original purpose is also obsolete.** §5b existed to confirm the ~50 % drop independently. That is now confirmed four ways, and **the fix's own production before/after — 61.88 % → 100 % — is stronger than a band comparison would have been.**
+
+⚠ **Recorded because the error repeated: this item carried false urgency three times** — *"the window closes"*, then D-7 gating the ship, then *"measure it while it is near the tail."* All three were wrong, and all three were written by the same seat. **The band's boundaries were always recoverable from `ws_health.log` timestamps, so no decay ever existed.** When an item keeps acquiring deadlines that do not survive checking, the deadline is the thing to doubt.
+
+**What survives, with no urgency:** *how much of the pre-fix tape is repair-written (complete) versus streaming-written (~50 %)?* The 61.88 % blend implies more of the pre-fix era is usable for re-derivation than the ~50 % headline suggests. **Worth knowing before anyone replays pre-2026-08-11 tape; worth nothing before that.**
+
+*Original text follows, per the quote-and-label convention.*
+
+## 5b-original. ⚠ A free second experiment is arriving — MEASURE IT AT THE NEXT COPY-BACK
 
 **Deribit entered system maintenance on 2026-08-11** (`{"error":{"message":"system_maintenance","code":11051}}`, HTTP 503 on every endpoint). When it returns, gap repair will backfill the outage window **via `AppendRows`, which bypasses `Buffer` and therefore bypasses the guard.**
 
