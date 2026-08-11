@@ -1,3 +1,37 @@
+> # ✅ FIXED AND VERIFIED IN PRODUCTION — 2026-08-12
+>
+> **Deployed to AWS 2026-08-11 17:18:42Z, InstanceId `a5d701ad-eea1-4ba0-97a5-2ea05274c8c5`.** Verified from the 2026-08-12 copy-back. **The §6 falsifiable prediction was stated before the fix and it holds.**
+>
+> | `trade_seq` completeness, identified rows | Result |
+> |---|---:|
+> | **Pre-fix** era (identity deploy → write-guard deploy) | **61.88 %** — 28,745 rows across a span of 46,452, **17,707 missing** in 7,471 gap runs |
+> | **Post-fix** | ✅ **100.00 %** — 66 rows, span 66, **zero missing, zero gap runs** |
+>
+> **Rows per millisecond: 1.272 → 2.062**, against the **1.969** the live probe measured off the wire. The store now records what the feed delivers.
+>
+> **The fix on disk, one millisecond at 17:19:29 — eight trades that could not previously coexist:**
+>
+> ```
+> 63488.50    340.00 sell  id=440103591 seq=296089381   <- the only one the old guard kept
+> 63488.50    490.00 sell  id=440103592 seq=296089382
+> 63488.50   9950.00 sell  id=440103593 seq=296089383
+> 63488.50    180.00 sell  id=440103594 seq=296089384
+> 63488.50  10600.00 sell  id=440103595 seq=296089385
+> 63488.50  10690.00 sell  id=440103596 seq=296089386
+> 63488.50  10680.00 sell  id=440103597 seq=296089387
+> 63488.50  10620.00 sell  id=440103598 seq=296089388
+> ```
+>
+> Both `trade_id` and `trade_seq` run unbroken. **53,550 USD, of which the old guard kept 340 — 0.6 %.**
+>
+> ⚠ **The honest bound on this verification, because the numbers are cleaner than the sample.** The copy-back was taken **~6 minutes** after deploy, so post-fix is **66 rows**. Sixty-six consecutive gap-free sequence numbers is overwhelming evidence the rate **changed** — at the pre-fix 61.88 % the odds of that are ~10⁻¹⁴ — but **it cannot distinguish 100 % from ~97 %.** **Re-run this check on the next substantial copy-back before calling completeness settled.**
+>
+> ⚠ **Why the pre-fix figure reads 61.88 % rather than ~50 %, since the two are easily mistaken for a contradiction:** that era blends **streaming** rows (~50 % complete) with **gap-repair** rows, which go through `AppendRows`, bypass the guard, and are complete. The blend is consistent with both, not in tension with either.
+>
+> **Everything below is the original finding, kept unchanged as the record of how it was found.**
+
+---
+
 # ⚠⚠ The streaming capture path drops ~50 % of trades — `TradeStoreWriter.vb:149`
 
 **Found:** 2026-08-11, while checking fixture **A48d** against the live gap-repair path at the trader's request.
