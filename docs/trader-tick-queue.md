@@ -15,7 +15,8 @@
 | [`trader-tick-queue.md`](trader-tick-queue.md) *(this doc)* | **What is outstanding, in what order, and its gates.** §0a answers "what is owed" at a glance; §1b is the dated shipped-state sweep | Dependencies · decision text · strategic altitude |
 | [`roadmap.md`](roadmap.md) | **The strategic board** — every workstream, done and outstanding, at altitude; execution order; the **binding sequencing rules** (§5) | The immediate slice — it points here |
 | [`backlog-dependency-map.md`](backlog-dependency-map.md) | **What blocks what** — edges, and a pointer to where each item's state lives | **State. It carries none, deliberately** (restructured 2026-08-07 after 7 stale cells) |
-| [`seat-handover-2026-08-10.md`](seat-handover-2026-08-10.md) | **THE current seat handover** — verified state, the first task with its four traps, rulings, conventions, and what I got wrong | A task list beyond its §0; it points here |
+| [`seat-handover-2026-08-12.md`](seat-handover-2026-08-12.md) | ⭐ **THE current seat handover** — verified state, what is open, rulings, conventions, and what that seat got wrong | A task list beyond its §0; it points here |
+| [`seat-handover-2026-08-10.md`](seat-handover-2026-08-10.md) | **Superseded for STATE 2026-08-12; its rulings and conventions still bind.** Its §0 first task (the D3 ASIA watch) is **DONE and PASSED** | Current state |
 | [`seat-handover-2026-08-05.md`](seat-handover-2026-08-05.md) | Its **rulings and conventions**, still binding | **Current state — superseded by 2026-08-10** — verified state with re-check commands, rulings, conventions, and what that seat got wrong | A task list; it points here instead, deliberately |
 | [`seat-handover-2026-08-02.md`](seat-handover-2026-08-02.md) | Its **rulings and conventions**, all still binding | Current state — superseded |
 | [`seat-handover-2026-07-18.md`](seat-handover-2026-07-18.md) §3 | **Standing rules — all still binding** | Current state · its §2 queue is spent |
