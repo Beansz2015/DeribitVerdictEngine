@@ -291,8 +291,15 @@ Public NotInheritable Class DeribitWsFeed
         ' [v64] Same discipline for the trade-store buffer, with one difference: the pending
         ' buffer is FLUSHED rather than discarded (a reconnect must not silently drop captured
         ' tape), and only then is the write guard un-seeded so it rebuilds its recent-trade
-        ' window from the on-disk tail. That is what makes the REST re-seed window below
-        ' idempotent against whatever is already stored.
+        ' window from the on-disk tail. That is what makes the prints the WS REPLAYS after
+        ' re-subscribe idempotent against whatever is already stored.
+        '
+        ' ⚠ CORRECTED 2026-08-11. This comment used to end "...idempotent against the REST
+        ' re-seed window below", and that was wrong for ten months: the REST seed at the end of
+        ' this function feeds `_state.SeedTrades` — the in-memory ring — and NEVER the store.
+        ' `store.Buffer` has exactly one caller, ApplyTrades, so the only duplicates the guard
+        ' can ever see are WS re-subscribe replays and a fresh writer over an existing file.
+        ' Gap repair reaches the file through AppendRows and bypasses the guard entirely.
         Try
             SyncLock _tradeStoreLock
                 _tradeStore?.ResetBufferState()
@@ -499,12 +506,12 @@ Public NotInheritable Class DeribitWsFeed
                                        rec.Liquidation IsNot Nothing AndAlso rec.Liquidation <> "none",
                                        rec.Timestamp, al, alInstance)
             End If
-            ' [v64] Buffer for the store. The writer's guard drops a trade already in its recent
-            ' window, which is what makes the reconnect re-seed idempotent — SeedAsync re-seeds
-            ' the ring from REST on every (re)connect, so the same trades WILL arrive twice
-            ' (A48b). ⚠ It keys on trade IDENTITY, not on the timestamp: this is the batch where
-            ' same-millisecond siblings arrive together, and keying on the millisecond cost 49.2 %
-            ' of the tape (docs/trade-store-write-guard-identity-proposal.md).
+            ' [v64] Buffer for the store. ⚠ THIS IS THE STORE'S ONLY INBOUND PATH — `store.Buffer`
+            ' has no other caller, so every duplicate the guard exists to stop arrives HERE, as a
+            ' WS re-subscribe replay after a reconnect (A48b, A55b). ⚠ The guard keys on trade
+            ' IDENTITY, not on the timestamp: this is also the batch where same-millisecond
+            ' siblings arrive together, and keying on the millisecond cost 49.2 % of the tape
+            ' (docs/trade-store-write-guard-identity-proposal.md).
             If store IsNot Nothing Then store.Buffer(rec)
         Next
         ' D2 COUNT trigger — checked once per batch, after the fold. The timer covers the

@@ -82,9 +82,16 @@ Public NotInheritable Class TradeStoreWriter
     ' pre-filter reinstates the defect exactly: same-millisecond siblings would fail it and
     ' never reach the check below (§0 trap 1).
     '
-    ' The guard is still needed. SeedAsync re-seeds the trade ring from REST on every
-    ' (re)connect and the WS may replay on re-subscribe, so duplicates genuinely arrive.
-    ' Only its KEY was wrong.
+    ' The guard is still needed: the WS replays prints on re-subscribe after a reconnect, and a
+    ' fresh writer can open a store that already holds them. Only its KEY was wrong.
+    '
+    ' ⚠ WHERE THE DUPLICATES DO *NOT* COME FROM, corrected 2026-08-11 — v64's comment here and
+    ' at both DeribitWsFeed call sites credited SeedAsync's REST re-seed, and this file repeated
+    ' it. `Buffer` has exactly ONE caller (`DeribitWsFeed.ApplyTrades`); SeedAsync's REST trades
+    ' go to `MarketState.SeedTrades`, the in-memory ring, and never reach the store. Gap repair
+    ' reaches the file through `AppendRows` and bypasses this guard entirely. So the replay
+    ' window this must cover is a WS re-subscribe, not a 500-trade REST fetch — which is why
+    ' RecentWindowCapacity below is generous rather than merely sufficient.
     '
     ' ⚠ THE BIAS IS DELIBERATE AND ASYMMETRIC (§3.1). A duplicate on disk is harmless — the
     ' read path dedups it and A48d already pins that. A dropped trade is unrecoverable past
@@ -194,9 +201,9 @@ Public NotInheritable Class TradeStoreWriter
     End Property
 
     ''' <summary>
-    ''' Buffer one streamed trade. The guard drops a trade this writer has already seen in its
-    ''' recent window, which is what makes reconnect re-seed idempotent: SeedAsync re-seeds the
-    ''' trade ring from REST on every (re)connect, so the same trades WILL arrive twice (A48b,
+    ''' Buffer one streamed trade — the store's ONLY inbound path, called from
+    ''' DeribitWsFeed.ApplyTrades and nowhere else. The guard drops a trade already in this
+    ''' writer's recent window, which is what makes a WS re-subscribe replay idempotent (A48b,
     ''' A55b). Two DISTINCT trades sharing a millisecond both survive (A55a) — that is the
     ''' defect this replaced.
     ''' Returns True when the trade was accepted into the buffer.
