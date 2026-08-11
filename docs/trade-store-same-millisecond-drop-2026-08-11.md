@@ -169,7 +169,9 @@ With streaming active, the last written row is always ~now. **So the cursor is a
 2. Compare rows/hour **inside** the repaired band against rows/hour in the streamed bands either side. **Prediction: the repaired band runs ~2× the streamed density.**
 3. Compare `trade_seq` continuity inside the repaired band against the streamed bands. **Prediction: near-contiguous inside, ~47 % missing outside.**
 
-⚠ **This window closes.** Once the tape scrolls past Deribit's ~24 h retention the repaired band can never be reconstructed, and nobody will think to look for it later. **If the fix ships before the measurement is taken, the experiment is lost** — the repaired band would then be indistinguishable from correctly-streamed tape.
+⚠ **CORRECTED 2026-08-11 — an earlier draft of this section overstated the deadline.** It claimed the experiment is lost if the fix ships first. **That is wrong.** The repaired band is written to disk, its boundaries are recoverable from `ws_health.log`, and the streaming bands either side are **pre-fix and therefore still ~50 %** — the contrast survives permanently and shipping the fix does not rewrite history. **The analysis can be done at any later copy-back.**
+
+⚠ **The real deadline sits upstream of the measurement, and it is the one to act on:** gap repair has to *run* after the venue returns, inside its **20 h lookback** and Deribit's **~24 h retention**. **If the collector is down or stopped across the return, the hole is never filled and there is no band to measure at all.** Keep the collector up when Deribit comes back. That is the whole action.
 
 ---
 
