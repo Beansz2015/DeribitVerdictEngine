@@ -224,6 +224,8 @@ Code-only and additive in behaviour. Reverting the file restores the shipped gua
 
 ## 9. ✅ BUILD RECORD — 2026-08-11
 
+> **Review packet: [`trade-store-write-guard-spec-back.md`](trade-store-write-guard-spec-back.md)** — ranked verification handles, five decisions queued, feedback on this spec, and what was not verified. **This section is the outcome record; that document is the working document for the reviewing seat.** ⚠ Its §3.1 corrects an assumption **this spec makes in §2 and §3.4** — the guard's duplicates do not come from `SeedAsync`'s REST re-seed, which never reaches the store. Comment-only fix in `161aaa7`; the fix's correctness is unaffected.
+
 ### 9.1 What changed
 
 | File | Change |
