@@ -71,6 +71,31 @@ The trade-identity deploy (`d8678d2b…`, 2026-08-10 14:08) began writing `trade
 
 **The two instruments agree without being told to: ~50 % capture (20,477/41,013) and ~53 % capture (431/816).**
 
+### Instrument C — the live feed itself, ✅ added 2026-08-11 after the gate ran
+
+`tools/WsTradeProbe` on the AWS box, 14:37:50 → 14:47:37 UTC, 313 trades. **This one observes the mechanism rather than inferring it.**
+
+| | |
+|---|---:|
+| Trades delivered | 313 |
+| Distinct timestamps | **159** |
+| **Max trades on ONE millisecond** | ⚠ **24** |
+| Guard simulation: accepted / dropped | 159 / **154 — 49.2 %** |
+| `trade_seq` delivered: span / distinct / **missing** | 313 / 313 / ⚠ **0** |
+
+⚠ **Two facts settle the causal question that stored data could not:**
+
+1. **`accepted` = 159 = `distinct timestamps` exactly.** One trade per millisecond survives. That is the guard's signature with nothing left to interpret.
+2. **The delivered `trade_seq` stream is perfectly contiguous — span 313, distinct 313, zero gaps, zero duplicates.** **The feed loses nothing.** So every missing row in the store is attributable to the guard, and to nothing else.
+
+**And the mechanism is visible: 69 of the 70 multi-trade timestamps arrive inside a SINGLE notification batch**, which is precisely where `_lastTs` advances on `Buffer` rather than on flush.
+
+**The worked example.** The 24-trade millisecond is one aggressive sell walking the book 63904.00 → 63875.00, `trade_seq` 296083705–296083728 unbroken, **239,990 USD**. The guard keeps the first leg — **50,000** — and drops the rest. ⚠ **189,990 USD, 79 % of that sweep, never reaches disk.** §5's bias, no longer a projection.
+
+⚠ **Bias of the sample, and it runs the safe way:** Deribit had just returned from maintenance, so volume may be depressed — which means *fewer* sweeps and *fewer* siblings. **49.2 % is a conservative floor, not an inflated figure.**
+
+**Three routes, three methods, no shared assumptions: 50.1 % · 47.2 % · 49.2 %.**
+
 ---
 
 ## 2. Why this is NOT the withdrawn 78.8 % claim

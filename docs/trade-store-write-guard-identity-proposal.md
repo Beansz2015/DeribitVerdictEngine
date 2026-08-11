@@ -1,6 +1,6 @@
 # Trade-store write guard — key it on IDENTITY, not on a millisecond
 
-**Status:** PROPOSED 2026-08-11. ⚠ **NOT BUILD-AUTHORIZED — §1's gate must pass and the §4 D-table must be ticked first.**
+**Status:** PROPOSED 2026-08-11. ✅ **§1's GATE HAS PASSED — all three answers green (see §1a).** ⚠ **Still NOT build-authorized: the §4 D-table awaits the trader.** The gate no longer blocks anything.
 **Fixes:** [`trade-store-same-millisecond-drop-2026-08-11.md`](trade-store-same-millisecond-drop-2026-08-11.md) — the streaming capture path discards ~50 % of trades at write time.
 **Depends on:** trade identity (`trade_id` + `trade_seq`), shipped 2026-08-08, deployed to AWS 2026-08-10.
 
@@ -55,7 +55,39 @@ dotnet WsTradeProbe.dll 600
 | **G3 simulated drop ≈ 50 %** | Matches both stored-data instruments | ✅ Three independent routes agree — the acceptance bar |
 | **G3 far from ~50 %** | Something in the model is wrong | ⚠ **Stop and reconcile before building.** Do not proceed on two of three |
 
-⚠ **As of 2026-08-11 the gate has NOT run** — Deribit is in system maintenance (`system_maintenance`, code 11051, HTTP 503 on every endpoint). **Do not treat that 503 as a finding; it is the outage.**
+### ✅ 1a. THE GATE HAS RUN — 2026-08-11, on the AWS box. **ALL THREE ANSWERS GREEN.**
+
+**Run:** `dotnet WsTradeProbe.dll 600` on AWS, **14:37:50 → 14:47:37 UTC (NY session)**. Raw capture: `ws_trade_probe_20260811-144742.csv`, 313 rows. **Every figure below was re-derived independently from that file, not taken from the console summary.**
+
+| Gate | Result | Verdict |
+|---|---|---|
+| **G1** | 313 trades over **159 distinct timestamps**; **max 24 trades on one millisecond**; 70 timestamps carried more than one | ✅ **The feed DOES deliver siblings.** The spec is the correct fix — **proceed** |
+| **G2** | seq **296083662 … 296083974** · span **313** · delivered **313** · distinct **313** · **MISSING 0, gap runs 0, duplicates 0** | ✅ **The feed is COMPLETE.** ⚠ **Stronger than "proceed": the guard is the SOLE cause of store loss, so this spec is SUFFICIENT and no second workstream is owed** |
+| **G3** | 313 delivered, **159 accepted, 154 DROPPED — 49.2 %** | ✅ Matches both stored-data instruments. **Three independent routes agree** |
+
+**The acceptance bar is met.** Three routes, three methods, no shared assumptions:
+
+| Route | Measured loss |
+|---|---|
+| 20 h window, streamed vs REST repair (stored data) | **50.1 %** |
+| `trade_seq` gaps on 431 identified store rows | **47.2 %** |
+| G3 live guard simulation off the wire | **49.2 %** |
+
+⚠ **The mechanism is now observed, not inferred.** **69 of the 70 multi-trade timestamps arrive inside a SINGLE notification batch** — which is exactly where `_lastTs` advances on `Buffer` rather than on flush, so the 2nd…Nth siblings are rejected before the buffer ever sees them. And **`accepted` (159) equals `distinct timestamps` (159) precisely**: one trade per millisecond survives, which is the guard's signature with no interpretation required.
+
+**The worked example, and it is the whole argument in one row.** The 24-trade millisecond is a **single aggressive sell sweeping the book from 63904.00 to 63875.00**, `trade_seq` 296083705–296083728 unbroken, **239,990 USD of notional**. The guard keeps the **first leg — 50,000 @ 63904.00 — and discards the other 23.** ⚠ **189,990 USD, 79 % of that sweep, never reaches disk.** This is §5's bias made concrete: the loss falls hardest on exactly the aggressive multi-leg prints that CVD, TFI and aggressor velocity exist to measure.
+
+**Three caveats, stated because the numbers are cleaner than the sample:**
+
+1. **313 trades over ~10 minutes ≈ 31/min.** Small in absolute terms — but it agrees with the 34/min density independently measured from the REST repair block, so it is not anomalous.
+2. ⚠ **Deribit had just returned from maintenance, so volume may be depressed — and that biases the result DOWN, not up.** Fewer sweeps means fewer siblings means a lower drop rate. **49.2 % is a conservative floor.**
+3. **One session (NY).** The 20 h stored-data route spanned NY, ASIA and LONDON and gave ~50 %, so the figure holds across sessions.
+
+⚠ **A testable prediction for after the fix, worth writing down now:** since G2 shows the feed loses nothing, fixing the guard should take store completeness to **~100 %**, not to some partial improvement. If a post-fix `trade_seq` check still shows gaps, something else is wrong and this spec did not find it.
+
+**Also settled by this run:** the seam audit's **S-1** (the probe's private readers diverge from `TradeRecord.ReadTradeId`/`ReadTradeSeq` on `trade_seq ≤ 0`) **had zero exposure here — the capture contains no `trade_seq ≤ 0`.** S-1 remains a real instance of the defect class and is queued, but **it did not affect this result.**
+
+*Historical note: the gate was blocked earlier on 2026-08-11 by a venue-wide outage (`system_maintenance`, code 11051, HTTP 503 on every endpoint, REST and WS alike). That was the outage, not a finding.*
 
 ---
 
