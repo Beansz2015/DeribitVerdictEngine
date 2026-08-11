@@ -134,6 +134,29 @@ So neither A48d nor A48b — the fixture named *"monotonic guard"* — ever pres
 
 ---
 
+## 5a. ⚠ Gap repair CANNOT heal this, and the reason is structural — added 2026-08-11
+
+**The v64 design is "two deliberately redundant halves, neither sufficient alone." Against this failure mode they are not redundant at all.**
+
+`TradeStoreGapRepair.RepairOnceAsync` builds the window `[now − gap_repair_lookback_hours, now]`. But the fetch does not start at the window's start — `ResolveResumeCursorMs` starts it at **the file's last written row + 1**:
+
+```vb
+Dim resumeMs As Long = LastTradeTimestamp(path)   ' the file's LAST LINE
+cursorMs = resumeMs + 1
+If clampToSegStart AndAlso cursorMs < segStartMs Then cursorMs = segStartMs
+If cursorMs > segEndInclMs Then Return -1          ' "already covered" ⇒ no fetch
+```
+
+With streaming active, the last written row is always ~now. **So the cursor is always at the tail, the fetched window is near-empty, and everything streaming dropped sits BEHIND the cursor and is skipped permanently.**
+
+**This predicts something that should have looked odd earlier and did not:** repair runs every `gap_repair_interval_hours` (6), yet across ten days it appended **exactly one** block. It fired that once because something — a flush stall or a brief disconnect — left a genuine hole at the tail, which is the only shape that lets the cursor reach backwards. **That single accident is the only reason this defect was ever visible.**
+
+⚠ **Repair recovers DOWNTIME — a hole at the tail. It cannot recover IN-FLIGHT LOSS — holes behind the cursor.** The v64 spec states the assumption in its own words: *"streaming is complete while the app runs and recovers NOTHING from downtime."* **The first half of that sentence is false, and the whole redundancy argument rests on it.**
+
+**Consequence for planning: there is no stopgap.** No settings value fixes this — the no-op is structural, not a tuning question. Loss continues at roughly half the tape every hour the collector runs until a code fix ships.
+
+---
+
 ## 6. The fix, and why it is not a one-liner
 
 The guard cannot simply become `<`. That would re-admit every duplicate the REST re-seed produces on each reconnect, which is the failure the guard was written to prevent.
