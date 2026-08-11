@@ -3,7 +3,7 @@
 ' trade store (docs/in-app-trade-store-capture-proposal.md §2).
 '
 ' This file owns the ONE place that knows the trade store's file naming, monthly rollover,
-' row format, parse and monotonic append guard. Three consumers route through it:
+' row format, parse and identity-keyed append guard. Three consumers route through it:
 '
 '   • DeribitWsFeed.ApplyTrades   — streaming capture (§1.1), the PRIMARY mechanism
 '   • HistoricalStore.Backfill*   — the network backfill / gap repair (§1.2)
@@ -20,9 +20,10 @@
 ' SignalEmitter.TryWrite / liq_events.log discipline. Losing capture must never kill the
 ' feed or an analysis run.
 '
-' Fixtures: A48a (round-trip vs the shipped reader), A48b (monotonic guard),
+' Fixtures: A48a (round-trip vs the shipped reader), A48b (write guard vs replay),
 ' A48c (month rollover + header-on-create), A48e (unwritable path never throws),
-' A48f (enabled:false ⇒ zero writes), A48h (exe-relative resolution, CWD-independent).
+' A48f (enabled:false ⇒ zero writes), A48h (exe-relative resolution, CWD-independent),
+' A55a-g (the write guard keyed on IDENTITY — docs/trade-store-write-guard-identity-proposal.md).
 
 Imports System.Collections.Generic
 Imports System.Globalization
@@ -69,10 +70,64 @@ Public NotInheritable Class TradeStoreWriter
     Private ReadOnly _storeDir As String
     Private ReadOnly _pending As New List(Of TradeRecord)()
 
-    ' Monotonic guard: the newest timestamp this writer has committed. -1 = not yet seeded
-    ' from disk. Seeding lazily (rather than in the ctor) keeps construction free of I/O
-    ' and means a writer built before the store exists still guards correctly.
-    Private _lastTs As Long = -1
+    ' ── The write guard (docs/trade-store-write-guard-identity-proposal.md §3.2) ───────
+    '
+    ' ⚠ THIS REPLACED A MONOTONIC TIMESTAMP HIGH-WATER MARK, and the reason is the whole
+    ' point of the file. The shipped guard was `If t.Timestamp <= _lastTs Then Return False`
+    ' — a MILLISECOND USED AS AN IDENTITY. It is not one: Deribit reports a market order
+    ' sweeping several price levels as several records sharing one millisecond, so the writer
+    ' kept the first leg and silently discarded the rest. Measured at 49.2 % of the tape
+    ' against the live wire, and 69 of 70 multi-trade timestamps arrived inside a SINGLE
+    ' notification batch (§1a). `_lastTs` is GONE — not demoted to a pre-filter, because a
+    ' pre-filter reinstates the defect exactly: same-millisecond siblings would fail it and
+    ' never reach the check below (§0 trap 1).
+    '
+    ' The guard is still needed. SeedAsync re-seeds the trade ring from REST on every
+    ' (re)connect and the WS may replay on re-subscribe, so duplicates genuinely arrive.
+    ' Only its KEY was wrong.
+    '
+    ' ⚠ THE BIAS IS DELIBERATE AND ASYMMETRIC (§3.1). A duplicate on disk is harmless — the
+    ' read path dedups it and A48d already pins that. A dropped trade is unrecoverable past
+    ' Deribit's ~24 h retention. So every ambiguous case here resolves toward WRITING the row.
+    ' Anything that makes this guard stricter is a defect; anything that makes it looser is
+    ' at worst a wasted row.
+    '
+    ' Bounded recent-trade window, testing MEMBERSHIP rather than a tolerance. Not a
+    ' `trade_seq` high-water mark (D-2, ratified): a high-water mark IS a tolerance, and
+    ' whether Deribit ever resets `trade_seq` was never verified — a reset, a wrap or one
+    ' out-of-order batch would silently drop everything behind the mark, which is the exact
+    ' failure class being fixed.
+
+    ''' <summary>
+    ''' [D-3, ruled 2026-08-11] How many recently-seen trades the write guard remembers. A
+    ''' CONSTANT, not a settings key: it has no failure-rate linkage, nobody will ever tune it,
+    ''' and a key would cost a version bump and a boundary question for nothing.
+    '''
+    ''' 20,000 trades is ≈5–10 h of tape at the measured true rate (~31–60 trades/min) and
+    ''' costs a few MB of strings — far longer than any reconnect replay window, which is all
+    ''' the guard actually has to cover. Public so fixtures read the PRODUCTION number instead
+    ''' of restating it (the F1 lesson below).
+    ''' </summary>
+    Public Const RecentWindowCapacity As Integer = 20000
+
+    ' One remembered trade, with both its keys precomputed so eviction never re-formats.
+    ' Id is Nothing when the row carries no identity — ABSENT, which is not a value and must
+    ' never become a key (§0 trap 2).
+    Private Structure WindowEntry
+        Public Id As String
+        Public LegacyKey As String
+    End Structure
+
+    ' Insertion-ordered window + refcounted key indexes. Refcounts rather than plain sets
+    ' because two DISTINCT trades can legitimately share a legacy key (that is A53e), so
+    ' evicting one must not un-remember the other.
+    Private ReadOnly _window As New Queue(Of WindowEntry)()
+    Private ReadOnly _windowIds As New Dictionary(Of String, Integer)(StringComparer.Ordinal)
+    Private ReadOnly _windowLegacy As New Dictionary(Of String, Integer)(StringComparer.Ordinal)
+
+    ' False until the window has been populated from the on-disk tail. Seeding lazily (rather
+    ' than in the ctor) keeps construction free of I/O and means a writer built before the
+    ' store exists still guards correctly.
     Private _seeded As Boolean = False
 
     Public Sub New(storeDir As String)
@@ -95,20 +150,22 @@ Public NotInheritable Class TradeStoreWriter
         End Get
     End Property
 
-    ''' <summary>Newest committed timestamp, or -1 before the first commit/seed. Test surface.</summary>
-    Public ReadOnly Property LastWrittenTimestamp As Long
+    ''' <summary>Trades currently remembered by the write guard, capped at
+    ''' <see cref="RecentWindowCapacity"/>. Test surface — A55e needs the window BOUNDARY, and
+    ''' guessing at it from the outside would be restating the implementation.</summary>
+    Public ReadOnly Property RecentWindowCount As Integer
         Get
             SyncLock _pending
-                Return _lastTs
+                Return _window.Count
             End SyncLock
         End Get
     End Property
 
     ' [C1 Session 2 / Part B — trade-store-coverage-report-proposal.md §4] Wall-clock flush
-    ' bookkeeping for the live TAPE STORE status element. Distinct from _lastTs above: _lastTs
-    ' is a TRADE timestamp (the monotonic dedup guard), these are WALL-CLOCK facts about this
-    ' writer INSTANCE's own life — "when did disk last actually receive something" and "how
-    ' much have I committed since I was constructed". A flush proves the WHOLE chain reached
+    ' bookkeeping for the live TAPE STORE status element. Distinct from the write guard above:
+    ' that one keys on TRADE identity, these are WALL-CLOCK facts about this writer INSTANCE's
+    ' own life — "when did disk last actually receive something" and "how much have I
+    ' committed since I was constructed". A flush proves the WHOLE chain reached
     ' disk; a buffered trade only proves the stream got it.
     Private _lastFlushUtc As DateTime? = Nothing
     Private _totalRowsWritten As Long = 0
@@ -137,23 +194,76 @@ Public NotInheritable Class TradeStoreWriter
     End Property
 
     ''' <summary>
-    ''' Buffer one streamed trade. The monotonic guard drops anything at or before the
-    ''' newest committed timestamp, which is what makes reconnect re-seed idempotent:
-    ''' SeedAsync re-seeds the trade ring from REST on every (re)connect, so the same
-    ''' trades WILL arrive twice (A48b).
+    ''' Buffer one streamed trade. The guard drops a trade this writer has already seen in its
+    ''' recent window, which is what makes reconnect re-seed idempotent: SeedAsync re-seeds the
+    ''' trade ring from REST on every (re)connect, so the same trades WILL arrive twice (A48b,
+    ''' A55b). Two DISTINCT trades sharing a millisecond both survive (A55a) — that is the
+    ''' defect this replaced.
     ''' Returns True when the trade was accepted into the buffer.
     ''' </summary>
     Public Function Buffer(t As TradeRecord) As Boolean
         SyncLock _pending
             EnsureSeeded(t.Timestamp)
-            If t.Timestamp <= _lastTs Then Return False
+            If AlreadyCommitted(t) Then Return False
             _pending.Add(t)
-            ' Advance the guard on BUFFER, not on flush: a batch arriving before the flush
-            ' timer fires would otherwise re-admit its own duplicates.
-            _lastTs = t.Timestamp
+            ' Advance the window on BUFFER, not on flush: a batch arriving before the flush
+            ' timer fires would otherwise re-admit its own duplicates (§3.4).
+            Remember(t)
             Return True
         End SyncLock
     End Function
+
+    ' ⚠ THE SAME RELATION <see cref="DedupTrades"/> DEFINES, in streaming form — one contract,
+    ' two call sites, no copies. Caller holds _pending.
+    '
+    '   • An IDENTIFIED trade is settled on identity ALONE. Its legacy fields are irrelevant,
+    '     which is exactly why the sibling case works: two trades on one millisecond with equal
+    '     price, amount and direction but different trade_id are two trades (A53e, A55a).
+    '   • An IDENTITY-LESS trade falls back to whole-row equality on the five legacy fields.
+    '   • ⚠ NEVER key on an absent or empty identity. Keying identity-less rows on "" would
+    '     collapse every one of them into a single group — the original defect, reproduced at
+    '     greater scale inside its own fix (§0 trap 2, A53c, A55d).
+    '
+    ' ⚠ One deliberate divergence from DedupTrades, and it resolves toward ADMITTING. DedupTrades
+    ' settles identified rows FIRST so its result is order-independent; a streaming guard only
+    ' ever sees arrival order and cannot look ahead. So if an identity-less row arrives before an
+    ' identified row sharing its legacy fields, BOTH are written where DedupTrades would have
+    ' kept one. That is a duplicate on disk, which the read path removes — the harmless
+    ' direction under §3.1, and the only direction this guard is ever allowed to err in.
+    Private Function AlreadyCommitted(t As TradeRecord) As Boolean
+        If t.HasIdentity Then Return _windowIds.ContainsKey(t.TradeId)
+        Return _windowLegacy.ContainsKey(LegacyRowKey(t))
+    End Function
+
+    ' Remember one trade and evict past the cap. An identified trade registers BOTH keys — its
+    ' identity, and its legacy key so a later identity-less re-delivery of the same trade is
+    ' still recognised (the `claimedLegacy` arm of DedupTrades Pass 1). Caller holds _pending.
+    Private Sub Remember(t As TradeRecord)
+        Dim e As WindowEntry
+        e.Id = If(t.HasIdentity, t.TradeId, Nothing)
+        e.LegacyKey = LegacyRowKey(t)
+        _window.Enqueue(e)
+        If e.Id IsNot Nothing Then BumpKey(_windowIds, e.Id, 1)
+        BumpKey(_windowLegacy, e.LegacyKey, 1)
+
+        Do While _window.Count > RecentWindowCapacity
+            Dim old As WindowEntry = _window.Dequeue()
+            If old.Id IsNot Nothing Then BumpKey(_windowIds, old.Id, -1)
+            BumpKey(_windowLegacy, old.LegacyKey, -1)
+        Loop
+    End Sub
+
+    ' Refcount one key, removing it at zero so the dictionaries stay bounded by the window.
+    Private Shared Sub BumpKey(counts As Dictionary(Of String, Integer), key As String, delta As Integer)
+        Dim n As Integer = 0
+        counts.TryGetValue(key, n)
+        n += delta
+        If n <= 0 Then
+            counts.Remove(key)
+        Else
+            counts(key) = n
+        End If
+    End Sub
 
     ''' <summary>
     ''' Write the buffered trades and clear the buffer. Never throws — on a disk error the
@@ -179,26 +289,38 @@ Public NotInheritable Class TradeStoreWriter
     ''' <summary>
     ''' Called from DeribitWsFeed.SeedAsync on every (re)connect. Flushes anything already
     ''' buffered (a reconnect must not silently discard captured tape) and then un-seeds the
-    ''' monotonic guard so it re-reads the on-disk high-water mark — which is what makes the
+    ''' guard so its window is rebuilt from the on-disk tail — which is what makes the
     ''' re-seeded REST window idempotent against whatever is already stored.
     ''' </summary>
     Public Sub ResetBufferState()
         Flush()
         SyncLock _pending
             _pending.Clear()
-            _lastTs = -1
+            _window.Clear()
+            _windowIds.Clear()
+            _windowLegacy.Clear()
             _seeded = False
         End SyncLock
     End Sub
 
-    ' Seed the guard from the on-disk high-water mark of the month the first trade lands in.
-    ' Caller holds _pending.
+    ' [D-4(a), ruled 2026-08-11] Seed the window from the TAIL of the month file the first trade
+    ' lands in, so a restart does not re-write the rows it already holds. Caller holds _pending.
+    '
+    ' ⚠ Every failure here must produce DUPLICATES, never drops (§3.1). ReadTradeFileTail
+    ' returns an empty list on a missing or unreadable file rather than throwing, so an
+    ' unseedable window simply admits everything and leaves the read path to dedup.
+    '
+    ' Only the FIRST trade's month is read, matching the shipped behaviour. A restart in the
+    ' first moments of a new month therefore seeds from an empty file and may re-admit a few
+    ' rows from the previous month's tail — duplicates, in the safe direction, and not worth a
+    ' second file read on every writer construction.
     Private Sub EnsureSeeded(tsMs As Long)
         If _seeded Then Return
         _seeded = True
         Dim utc As DateTime = DateTimeOffset.FromUnixTimeMilliseconds(tsMs).UtcDateTime
-        Dim onDisk As Long = LastTradeTimestamp(TradeFileFor(_storeDir, utc.Year, utc.Month))
-        If onDisk > _lastTs Then _lastTs = onDisk
+        For Each r In ReadTradeFileTail(TradeFileFor(_storeDir, utc.Year, utc.Month), RecentWindowCapacity)
+            Remember(r)
+        Next
     End Sub
 
     ' ── Part B — live TAPE STORE status tier ──────────────────────────────────────────
@@ -449,8 +571,48 @@ Public NotInheritable Class TradeStoreWriter
         Return result
     End Function
 
+    ''' <summary>
+    ''' The LAST <paramref name="maxRows"/> parseable rows of a monthly trade file, in file
+    ''' order. Missing / unreadable file ⇒ empty list, never throws.
+    '''
+    ''' Exists so the write guard's window can be seeded (D-4) without holding a whole month in
+    ''' memory: a month of tape at the true rate is well over a million rows, and this runs on
+    ''' the WS message thread inside the writer's lock. One streaming pass with a bounded ring —
+    ''' the same single pass <see cref="LastTradeTimestamp"/> already makes, so seeding costs no
+    ''' more file I/O than the guard it replaced.
+    ''' </summary>
+    Public Shared Function ReadTradeFileTail(path As String, maxRows As Integer) As List(Of TradeRecord)
+        Dim ring As New Queue(Of TradeRecord)()
+        If maxRows <= 0 Then Return New List(Of TradeRecord)()
+        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return New List(Of TradeRecord)()
+        Try
+            Using sr As New StreamReader(path)
+                sr.ReadLine()   ' header
+                Dim line As String
+                Do
+                    line = sr.ReadLine()
+                    If line Is Nothing Then Exit Do
+                    Dim rec As New TradeRecord()
+                    If TryParseRow(line, rec) Then
+                        ring.Enqueue(rec)
+                        If ring.Count > maxRows Then ring.Dequeue()
+                    End If
+                Loop
+            End Using
+        Catch ex As Exception
+            Console.Error.WriteLine("[TradeStoreWriter] ReadTradeFileTail failed: " & ex.Message)
+        End Try
+        Return New List(Of TradeRecord)(ring)
+    End Function
+
     ''' <summary>Newest timestamp in a monthly trade file, or -1 when absent/empty/unreadable.
-    ''' Rows are append-order so the last data line carries it.</summary>
+    ''' Rows are append-order so the last data line carries it.
+    '''
+    ''' ⚠ RESIDUAL, recorded rather than fixed (§3.5): this reads the file's LAST LINE, not its
+    ''' MAXIMUM timestamp. The store already holds one out-of-order block, so the invariant is
+    ''' already violated once. Harmless today — the write guard no longer depends on it, and its
+    ''' other caller (<see cref="ResolveResumeCursorMs"/>) wants a resume point, not a
+    ''' maximum.</summary>
     Public Shared Function LastTradeTimestamp(path As String) As Long
         If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return -1
         Try

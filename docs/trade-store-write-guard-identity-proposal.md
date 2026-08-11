@@ -1,6 +1,6 @@
 # Trade-store write guard — key it on IDENTITY, not on a millisecond
 
-**Status:** PROPOSED 2026-08-11. ✅ **§1's GATE HAS PASSED — all three answers green (see §1a).** ⚠ **Still NOT build-authorized: the §4 D-table awaits the trader.** The gate no longer blocks anything.
+**Status:** ✅ **BUILT 2026-08-11.** §1's gate PASSED (all three answers green, §1a) · the §4 D-table is **RULED — all seven as recommended, trader-directed 2026-08-11** · code, fixtures A55a–g and the §5 mutation are done. **See §9 for the build record.** ⚠ **NOT YET DEPLOYED — AWS keeps dropping ~half the tape until it gets the new binary (§6).**
 **Fixes:** [`trade-store-same-millisecond-drop-2026-08-11.md`](trade-store-same-millisecond-drop-2026-08-11.md) — the streaming capture path discards ~50 % of trades at write time.
 **Depends on:** trade identity (`trade_id` + `trade_seq`), shipped 2026-08-08, deployed to AWS 2026-08-10.
 
@@ -165,9 +165,13 @@ A high-water mark is a **tolerance**. Set membership tests **the actual thing**.
 
 ---
 
-## 4. D-table — ⚠ awaits the trader
+## 4. D-table — ✅ RULED 2026-08-11, trader-directed
 
-| # | Decision | Options | My recommendation |
+> **All seven rows ruled AS RECOMMENDED. No option was overruled and no row was deferred.** The
+> recommendation column below is therefore the decision text; it is left as written rather than
+> reworded, so the reasoning that was ruled on is still legible.
+
+| # | Decision | Options | Ruling — as recommended |
 |---|---|---|---|
 | **D-1** | The guard's key | (a) identity set, read-path relation · (b) `trade_seq` high-water · (c) composite | **(a).** §3.1's asymmetry and §3.3's tolerance-vs-existence argument both point here, and (a) reuses a relation that already exists and is already fixture-covered |
 | **D-2** | Ratify rejecting `trade_seq` as a high-water mark | ratify / overrule | **Ratify.** It is the obvious fix and it rests on an unverified monotonic. If overruled, the build must first verify that Deribit never resets `trade_seq` and that batches never arrive out of sequence order — both are gate work, not build work |
@@ -215,3 +219,61 @@ A high-water mark is a **tolerance**. Set membership tests **the actual thing**.
 ## 8. Reversibility
 
 Code-only and additive in behaviour. Reverting the file restores the shipped guard exactly; rows already written stay readable, since the read path's dedup is unchanged and was already tolerant of duplicates. **No settings key moves, so there is no config to roll back and no dataset boundary.**
+
+---
+
+## 9. ✅ BUILD RECORD — 2026-08-11
+
+### 9.1 What changed
+
+| File | Change |
+|---|---|
+| `Core/TradeStoreWriter.vb` | `_lastTs` and `LastWrittenTimestamp` **deleted**. `Buffer` now calls `AlreadyCommitted` / `Remember` against a bounded window (`RecentWindowCapacity = 20000`, a public constant per D-3). New `ReadTradeFileTail(path, maxRows)` seeds the window from the file tail per D-4. New `RecentWindowCount` test surface for A55e's boundary |
+| `DeribitWsFeed.vb` | Comments only, at both call sites (lines ~293, ~502) — they described a monotonic timestamp guard that no longer exists |
+| `verify/ordercheck/Program.vb` | A55a–g added and registered. A48b's comment and `Check` label corrected — it was named "monotonic guard" and had never presented two trades on one millisecond |
+
+**`AlreadyCommitted` reuses `DedupTrades`'s relation and does not copy it:** identified rows settle on `TradeId` alone, identity-less rows on `LegacyRowKey`, and an absent identity is never a key. An identified row registers **both** keys, matching `DedupTrades` Pass 1's `claimedLegacy` arm.
+
+⚠ **One deliberate divergence from `DedupTrades`, recorded because it is a real behaviour difference and not an oversight.** `DedupTrades` settles identified rows first, which is what makes its result order-independent. A streaming guard sees arrival order only and cannot look ahead. So if an identity-less row arrives *before* an identified row sharing its five legacy fields, both are written where `DedupTrades` would keep one. **That is a duplicate on disk, which the read path removes — the §3.1 direction.** It is commented at the function.
+
+### 9.2 ⚠ §5 MUTATION — all seven fixtures PROVEN to have teeth
+
+The guard was reverted to the shipped `If t.Timestamp <= _lastTs Then Return False`, including its disk seed and its `ResetBufferState` reset, and the harness was re-run. **§5's escalation trigger did not fire.**
+
+| Fixture | On the fix | On the shipped `<=` guard | What the mutation reported |
+|---|---|---|---|
+| **A55a** | PASS | ⚠ **FAIL** | `accepted=1` — wanted 2. The defect itself, on real Deribit rows |
+| **A55b** | PASS | ⚠ **FAIL** | `acc1=2` (wanted 3), `onDisk=3` (wanted 4) |
+| **A55c** | PASS | ⚠ **FAIL** | `accepted=2` — wanted 4; one identified and one legacy row lost |
+| **A55d** | PASS | ⚠ **FAIL** | `accepted=1` — wanted 10. Nine of ten sweep legs discarded |
+| **A55e** | PASS | ⚠ **FAIL** | `readmitted=False` — the bias inverted, which is the bug |
+| **A55f** | PASS | ⚠ **FAIL** | `siblingAccepted=False`, `onDisk=2` — wanted 4 |
+| **A55g** | PASS | ⚠ **FAIL** | `accepted=1` — wanted 2 |
+
+⚠ **A55b, A55f and A55g would each have passed on the shipped guard as first drafted**, because their stated job in §5 is only to stop an older property regressing. Each was given a same-millisecond sibling pair until it failed. **A regression guard that passes on the unfixed code proves nothing about the fix** — that is A48b's whole story, and it nearly repeated here.
+
+**A48b, A48d and A48e passed under BOTH the fix and the mutation**, which is the §1a finding restated as a measurement: those fixtures are structurally blind to this defect.
+
+### 9.3 §6 acceptance
+
+| Item | Result |
+|---|---|
+| Six projects, Release | ✅ **0 warnings / 0 errors** on all six: solution · AutoTweaker · WhatIfRunner · CeilingAudit · BacktestRunner · OrderCheck |
+| Harness | ✅ **ALL PASS** — A1–A53h unregressed, plus A55a–g |
+| Mutation stated | ✅ §9.2 |
+| `verify-gate.ps1 prepush` | ✅ **GATE PASSED**, 0 warnings |
+| Display-string parity | ✅ **NO OBLIGATION**, and the gate agrees (`no snapshot/card drift detected`). The trade store has no rendered surface: no snapshot line, no card binding, no CSV column, no bridge field |
+| Deploy to AWS | ⛔ **NOT DONE — the one open item.** §6 makes it part of this change |
+
+### 9.4 Two corrections to this spec's own text
+
+1. ⚠ **D-6's expected version-bump WARN did not appear, and that is not the same as the guard clearing the change.** `tools/checks/verify-gate.ps1` line 126 tests **committed** paths against `Core/`, `DynamicNorms.vb`, `analysis/`. The gate was run with the work uncommitted, so `$changed` was empty and it reported `no engine-path change`. `Core/TradeStoreWriter.vb` matches `Core/`, so **the nudge will fire on the pre-push hook instead.** Expected and non-blocking, exactly as D-6 says — but it fires one step later than D-6 implies.
+2. **D-3's cost figures were understated.** 20,000 entries is **≈5–10 h** of tape at the measured 31–60 trades/min, not ≈4 h, and it costs **a few MB** rather than ~1 MB (two precomputed key strings and two refcount dictionary entries per trade, not one bare key). Both are wrong in the harmless direction — more coverage and still trivial memory — so the ruling stands unchanged. The code comment carries the corrected numbers.
+
+### 9.5 Left undone on purpose
+
+- **`LastTradeTimestamp` still reads the last line, not the maximum** (§3.5). Now documented at the function. It no longer has anything to do with the write guard; its remaining caller wants a resume point.
+- **F2**, the `ResetBufferState` race at `DeribitWsFeed.vb:298` (§7) — untouched.
+- **The existing half-tape** (D-5) — untouched.
+- **A restart in the first moments of a new month** seeds from the new month's empty file and may re-admit a few rows from the previous month's tail. Duplicates, in the safe direction; commented at `EnsureSeeded` rather than fixed, to avoid a second file read on every writer construction.
+

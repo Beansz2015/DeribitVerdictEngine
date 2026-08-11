@@ -464,6 +464,20 @@ Module Program
         A53g_VenueDiffSeparatesIdentityAndFallbackMatches()
         A53h_SequenceGapDetection()
 
+        ' [A55 — the trade-store WRITE guard, keyed on identity,
+        ' docs/trade-store-write-guard-identity-proposal.md §5] The identity build fixed the
+        ' READ path and left the WRITE guard keyed on a millisecond, which discarded 49.2 % of
+        ' the live tape — measured off the wire, not inferred (§1a). ⚠ Every fixture here puts
+        ' two DISTINCT trades on ONE millisecond, because that is the single thing the eight
+        ' A48 fixtures never did. All seven were confirmed to FAIL against the shipped guard.
+        A55a_SameMillisecondSiblingsBothSurvive()
+        A55b_ReconnectReplayWritesOnce()
+        A55c_MixedIdentifiedAndLegacyBatch()
+        A55d_IdentitylessRowsDifferingOnlyInAmountAllSurvive()
+        A55e_DuplicateOlderThanWindowIsAdmitted()
+        A55f_RestartSeedsWindowFromFileTail()
+        A55g_UnwritableStoreNeverThrowsAndStillGuards()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -6963,7 +6977,7 @@ Module Program
             .Timestamp = tsMs, .Price = px, .Amount = amt, .Direction = dir, .Liquidation = liq}
     End Function
 
-    ' Buffer every trade and return how many the monotonic guard ACCEPTED. An explicit loop
+    ' Buffer every trade and return how many the write guard ACCEPTED. An explicit loop
     ' rather than Count(predicate): the predicate has a side effect, so relying on LINQ to
     ' evaluate it exactly once per element would be the wrong kind of clever.
     Private Function A48BufferAll(w As TradeStoreWriter, batch As List(Of TradeRecord)) As Integer
@@ -7035,13 +7049,19 @@ Module Program
         End Try
     End Sub
 
-    ' -- A48b: monotonic guard — replaying an identical batch twice writes once ------------
+    ' -- A48b: write guard — replaying an identical batch twice writes once -----------------
     ' This is what makes reconnect re-seed idempotent: SeedAsync re-seeds the trade ring from
     ' REST on every (re)connect, so the same trades WILL arrive twice. Three sub-cases:
     '   (1) an identical replay in the same writer is fully dropped,
     '   (2) a fresh writer over the SAME dir re-seeds its guard FROM DISK (the restart case),
     '   (3) genuinely newer trades in a replayed batch still get through (the guard must not
-    '       be a batch-level "seen this before", it is a high-water mark).
+    '       be a batch-level "seen this before").
+    '
+    ' ⚠ These trades are one SECOND apart, and that is why this fixture — named "monotonic
+    ' guard" until 2026-08-11 — passed for ten days while the guard discarded half the tape.
+    ' It never presented two trades on the same millisecond, so the defect it was closest to
+    ' was never in its input. A55a-g are the fixtures that actually reach it. This one keeps
+    ' its original job: the guard's REASON TO EXIST must not regress.
     Private Sub A48b_MonotonicGuardDropsReplayedBatch()
         Dim dir As String = A48TempStore("b")
         Try
@@ -7073,7 +7093,7 @@ Module Program
             w2.Flush()
             Dim final = TradeStoreWriter.ReadTradeFile(path)
 
-            Check("A48b monotonic guard — identical replay writes once · fresh writer re-seeds from disk · newer trades still land",
+            Check("A48b write guard — identical replay writes once · fresh writer re-seeds from disk · newer trades still land",
                   accepted1 = 3 AndAlso accepted2 = 0 AndAlso afterReplay = 3 AndAlso
                   accepted3 = 0 AndAlso afterRestart = 3 AndAlso
                   accepted4 = 1 AndAlso final.Count = 4 AndAlso final(3).Timestamp = A48Ms(350),
@@ -8446,6 +8466,300 @@ Module Program
               gapOk AndAlso cleanOk AndAlso notCheckableOk AndAlso scatteredOk,
               String.Format("gap(missing={0},runs={1}) clean={2} notCheckable={3} scattered(missing={4},runs={5})",
                             g.MissingCount, g.GapRuns, cleanOk, notCheckableOk, s.MissingCount, s.GapRuns))
+    End Sub
+
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' A55 — the trade-store WRITE guard, keyed on identity
+    ' (docs/trade-store-write-guard-identity-proposal.md §5)
+    '
+    ' ⚠ WHAT THESE EXIST FOR, and it is a lesson about fixtures rather than about code. The
+    ' shipped guard was `If t.Timestamp <= _lastTs Then Return False` — a millisecond used as
+    ' an identity. It discarded 49.2 % of the live tape for ten days, inside a path covered by
+    ' EIGHT fixtures, one of them called "monotonic guard". None of them noticed, for one
+    ' reason: every A48 fixture builds its trades `A48Ms(i * 1000L)`, one SECOND apart, so no
+    ' two distinct trades were ever put on the same millisecond.
+    '
+    ' ⚠ A fixture that does not put two distinct trades on ONE millisecond does not test this.
+    ' Every fixture below therefore does, INCLUDING the three whose stated job is only to stop
+    ' an old property regressing (A55b, A55f, A55g) — a regression guard that passes on the
+    ' unfixed code proves nothing about the fix, so each was given a sibling pair until it
+    ' failed. All seven were confirmed to FAIL against the shipped `<=` guard (§5 mutation).
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    ' -- A55a: ⭐ THE DEFECT — two trades on one millisecond both reach disk -----------------
+    ' ⚠ REAL Deribit data, reused from A53e: two trades in the FIRST THREE fetched at the
+    ' identity build's §1 gate. Same millisecond, same price, same amount, same direction,
+    ' distinct trade_id. A53e aimed this pair at the READ path's dedup contract and passed; the
+    ' WRITE guard was never shown it, which is exactly how the defect survived that build.
+    Private Sub A55a_SameMillisecondSiblingsBothSurvive()
+        Dim dir As String = A48TempStore("55a")
+        Try
+            Dim sharedMs As Long = 1786122637808L
+            Dim a = A53Trade(sharedMs, 64730.0, 10.0, "sell", "none", "439922656", 295960018L)
+            Dim b = A53Trade(sharedMs, 64730.0, 10.0, "sell", "none", "439922657", 295960019L)
+
+            ' Proof the two really are indistinguishable on the five legacy fields — without it
+            ' the fixture could pass for the wrong reason, on rows that never collided.
+            Dim legacyIdentical As Boolean =
+                TradeStoreWriter.LegacyRowKey(a) = TradeStoreWriter.LegacyRowKey(b)
+
+            Dim w As New TradeStoreWriter(dir)
+            Dim accepted As Integer = A48BufferAll(w, New List(Of TradeRecord) From {a, b})
+            Dim flushed As Integer = w.Flush()
+
+            ' Month derived from the real timestamp rather than hand-written, so the fixture
+            ' cannot quietly read a different file than the writer wrote.
+            Dim utc As DateTime = DateTimeOffset.FromUnixTimeMilliseconds(sharedMs).UtcDateTime
+            Dim path As String = TradeStoreWriter.TradeFileFor(dir, utc.Year, utc.Month)
+            Dim back = TradeStoreWriter.ReadTradeFile(path)
+            Dim bothOnDisk As Boolean = back.Count = 2 AndAlso
+                                        back.Any(Function(r) r.TradeId = "439922656") AndAlso
+                                        back.Any(Function(r) r.TradeId = "439922657")
+
+            Check("A55a ⭐ same-millisecond siblings — 2 REAL trades on one ms with distinct trade_id BOTH reach disk",
+                  legacyIdentical AndAlso accepted = 2 AndAlso flushed = 2 AndAlso bothOnDisk,
+                  String.Format("legacyKeysIdentical={0} accepted={1} (want 2 — 1 IS the shipped defect) flushed={2} onDisk={3}",
+                                legacyIdentical, accepted, flushed, back.Count))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A55b: reconnect re-seed replays a batch ⇒ written ONCE ----------------------------
+    ' The guard's REASON TO EXIST. SeedAsync re-seeds the ring from REST on every (re)connect
+    ' and the WS may replay on re-subscribe, so duplicates genuinely arrive. A48b's property
+    ' must not regress — loosening the guard until replays get through would trade one silent
+    ' defect for another.
+    '
+    ' ⚠ The batch deliberately carries a same-millisecond sibling pair (…801/…802). Without it
+    ' this fixture passes on the shipped code and proves nothing, which is A48b's exact failure.
+    Private Sub A55b_ReconnectReplayWritesOnce()
+        Dim dir As String = A48TempStore("55b")
+        Try
+            Dim batch As New List(Of TradeRecord) From {
+                A53Trade(A53Ms(0), 64000.0, 100.0, "buy", "none", "439922800", 295960200L),
+                A53Trade(A53Ms(500), 64002.0, 300.0, "buy", "none", "439922801", 295960201L),
+                A53Trade(A53Ms(500), 64002.0, 300.0, "buy", "none", "439922802", 295960202L)}
+
+            Dim w As New TradeStoreWriter(dir)
+            Dim accepted1 As Integer = A48BufferAll(w, batch)
+            w.Flush()
+            ' (1) identical replay with no reconnect — the WS re-subscribe case.
+            Dim accepted2 As Integer = A48BufferAll(w, batch)
+            w.Flush()
+
+            ' (2) the REAL reconnect path: ResetBufferState flushes, clears the window and
+            '     un-seeds, so the window is rebuilt from the on-disk tail (D-4).
+            w.ResetBufferState()
+            Dim accepted3 As Integer = A48BufferAll(w, batch)
+            w.Flush()
+
+            ' (3) a genuinely new trade still lands after all that.
+            Dim accepted4 As Integer = If(w.Buffer(A53Trade(A53Ms(900), 64003.0, 400.0, "sell",
+                                                            "none", "439922803", 295960203L)), 1, 0)
+            w.Flush()
+
+            Dim back = TradeStoreWriter.ReadTradeFile(TradeStoreWriter.TradeFileFor(dir, 2026, 8))
+
+            Check("A55b reconnect re-seed — a batch holding same-ms siblings replays 3× and is written ONCE; new trades still land",
+                  accepted1 = 3 AndAlso accepted2 = 0 AndAlso accepted3 = 0 AndAlso
+                  accepted4 = 1 AndAlso back.Count = 4,
+                  String.Format("acc1={0}(want 3) acc2={1} acc3={2}(post-ResetBufferState) acc4={3} onDisk={4}(want 4)",
+                                accepted1, accepted2, accepted3, accepted4, back.Count))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A55c: a MIXED batch — some rows identified, some not ------------------------------
+    ' §5's fallback arm. After the AWS redeploy this is the normal case, not an edge case: a
+    ' month file holds pre-identity rows and identified rows, and a re-seeded REST window can
+    ' hand the writer either shape. Neither duplicates nor drops are allowed in one pass.
+    Private Sub A55c_MixedIdentifiedAndLegacyBatch()
+        Dim dir As String = A48TempStore("55c")
+        Try
+            ' Rows 1-2: IDENTIFIED trades on one ms, identical in all five legacy fields, so
+            '           separable only by trade_id.
+            ' Rows 3-4: IDENTITY-LESS trades on one (later) ms, separable only by amount.
+            Dim batch As New List(Of TradeRecord) From {
+                A53Trade(A53Ms(500), 64002.0, 300.0, "buy", "none", "439922900", 295960300L),
+                A53Trade(A53Ms(500), 64002.0, 300.0, "buy", "none", "439922901", 295960301L),
+                A53Trade(A53Ms(600), 64003.0, 100.0, "sell"),
+                A53Trade(A53Ms(600), 64003.0, 200.0, "sell")}
+
+            Dim w As New TradeStoreWriter(dir)
+            Dim accepted As Integer = A48BufferAll(w, batch)
+            w.Flush()
+            ' No drops above; no duplicates below.
+            Dim replayed As Integer = A48BufferAll(w, batch)
+            w.Flush()
+
+            Dim back = TradeStoreWriter.ReadTradeFile(TradeStoreWriter.TradeFileFor(dir, 2026, 8))
+            Dim identified As Integer = back.Where(Function(r) r.HasIdentity).Count()
+            Dim legacy As Integer = back.Where(Function(r) Not r.HasIdentity).Count()
+
+            Check("A55c mixed batch — 2 identified siblings + 2 identity-less rows all land, and a replay of the same batch adds none",
+                  accepted = 4 AndAlso replayed = 0 AndAlso back.Count = 4 AndAlso
+                  identified = 2 AndAlso legacy = 2,
+                  String.Format("accepted={0}(want 4) replayed={1} onDisk={2} identified={3} legacy={4}",
+                                accepted, replayed, back.Count, identified, legacy))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A55d: ⚠ THE EMPTY-IDENTITY COLLAPSE, at the WRITE path ----------------------------
+    ' A53c's property, one path further upstream. If the guard keys identity-less rows on ""
+    ' they all collapse into a single group and nine of ten real trades never reach disk — the
+    ' original defect reproduced at greater scale inside its own fix (§0 trap 2).
+    '
+    ' Ten rows identical in every field EXCEPT amount, all on one millisecond. That is not a
+    ' contrived shape: it is what a book-sweep looks like once the identity columns are absent.
+    Private Sub A55d_IdentitylessRowsDifferingOnlyInAmountAllSurvive()
+        Dim dir As String = A48TempStore("55d")
+        Try
+            Dim w As New TradeStoreWriter(dir)
+            Dim rows As New List(Of TradeRecord)
+            For i As Integer = 1 To 10
+                rows.Add(A53Trade(A53Ms(0), 64000.0, 100.0 * i, "buy"))
+            Next
+            Dim accepted As Integer = A48BufferAll(w, rows)
+            w.Flush()
+
+            ' The pairing that stops this passing on a guard that admits EVERYTHING: an EXACT
+            ' duplicate of one of them — same five fields, still no identity — must be dropped.
+            Dim exactDupRejected As Boolean = Not w.Buffer(A53Trade(A53Ms(0), 64000.0, 300.0, "buy"))
+            w.Flush()
+
+            Dim back = TradeStoreWriter.ReadTradeFile(TradeStoreWriter.TradeFileFor(dir, 2026, 8))
+
+            Check("A55d ⚠ empty-identity collapse at the WRITE path — 10 identity-less rows on ONE ms differing only in amount all reach disk; an exact duplicate still drops",
+                  accepted = 10 AndAlso back.Count = 10 AndAlso exactDupRejected,
+                  String.Format("accepted={0}(want 10 — 1 means the guard keyed on the ms, and a collapse to 1 means it keyed on empty identity) onDisk={1} exactDupRejected={2}",
+                                accepted, back.Count, exactDupRejected))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A55e: ⚠ THE BIAS — a duplicate older than the window is ADMITTED, not dropped ------
+    ' §3.1 stated as a test. The costs are asymmetric: a duplicate on disk is harmless (the read
+    ' path dedups it, and A48d already writes duplicates deliberately), while a dropped trade is
+    ' unrecoverable past Deribit's ~24 h retention. So once a trade has aged out of the window
+    ' the guard no longer KNOWS it was seen, and it must admit.
+    '
+    ' ⚠ If a future edit makes this fixture assert the opposite, the guard has the bias backwards
+    ' and the defect is back. No Flush here on purpose — the window advances on Buffer (§3.4), so
+    ' the boundary is reachable without writing 20,000 rows to disk.
+    Private Sub A55e_DuplicateOlderThanWindowIsAdmitted()
+        Dim dir As String = A48TempStore("55e")
+        Try
+            Dim w As New TradeStoreWriter(dir)
+            ' Identified, so this exercises the identity arm and not the legacy fallback.
+            Dim oldest = A53Trade(A53Ms(0), 64000.0, 10.0, "buy", "none", "id-oldest", 500000L)
+            Dim acceptedOldest As Boolean = w.Buffer(oldest)
+
+            ' Fill exactly to the cap. Reads the PRODUCTION constant rather than restating
+            ' 20000 — the F1 lesson: a fixture that restates the number still passes when the
+            ' number changes underneath it.
+            Dim cap As Integer = TradeStoreWriter.RecentWindowCapacity
+            For i As Integer = 1 To cap
+                w.Buffer(A53Trade(A53Ms(i), 64000.0 + i, 10.0, "buy", "none", "id-fill-" & i, 500000L + i))
+            Next
+            Dim windowFull As Boolean = w.RecentWindowCount = cap
+
+            ' `oldest` has now been evicted ⇒ ADMIT.
+            Dim readmitted As Boolean = w.Buffer(oldest)
+
+            ' The pairing: a trade still INSIDE the window is still rejected, so this cannot
+            ' pass on a guard that has simply stopped guarding.
+            Dim insideStillRejected As Boolean =
+                Not w.Buffer(A53Trade(A53Ms(cap), 64000.0 + cap, 10.0, "buy", "none",
+                                      "id-fill-" & cap, 500000L + cap))
+
+            Check("A55e ⚠ window bias — a duplicate aged OUT of the window is ADMITTED (a dup on disk is harmless, a drop is not); one still inside is rejected",
+                  acceptedOldest AndAlso windowFull AndAlso readmitted AndAlso insideStillRejected,
+                  String.Format("acceptedOldest={0} windowCount={1}(want {2}) readmitted={3}(want True) insideStillRejected={4}",
+                                acceptedOldest, w.RecentWindowCount, cap, readmitted, insideStillRejected))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A55f: restart over a populated file seeds the window from the tail ------------------
+    ' D-4(a). A fresh writer over an existing store must not re-write the rows it already holds,
+    ' and must still accept a NEW sibling of the row at the tail — which is the case the shipped
+    ' guard got wrong at every restart, not merely in a batch.
+    Private Sub A55f_RestartSeedsWindowFromFileTail()
+        Dim dir As String = A48TempStore("55f")
+        Try
+            Dim w1 As New TradeStoreWriter(dir)
+            Dim seed As New List(Of TradeRecord) From {
+                A53Trade(A53Ms(0), 64000.0, 100.0, "buy", "none", "439922950", 295960350L),
+                A53Trade(A53Ms(100), 64001.0, 200.0, "sell", "none", "439922951", 295960351L),
+                A53Trade(A53Ms(100), 64001.0, 200.0, "sell", "none", "439922952", 295960352L)}
+            Dim accepted1 As Integer = A48BufferAll(w1, seed)
+            w1.Flush()
+
+            ' The restart.
+            Dim w2 As New TradeStoreWriter(dir)
+            ' (1) a re-delivered trade already on disk is rejected — the point of D-4.
+            Dim dupRejected As Boolean = Not w2.Buffer(seed(1))
+            ' (2) ⚠ a NEW sibling on the same millisecond as the on-disk tail must still land.
+            Dim newSibling = A53Trade(A53Ms(100), 64001.0, 200.0, "sell", "none", "439922953", 295960353L)
+            Dim siblingAccepted As Boolean = w2.Buffer(newSibling)
+            w2.Flush()
+
+            Dim back = TradeStoreWriter.ReadTradeFile(TradeStoreWriter.TradeFileFor(dir, 2026, 8))
+
+            Check("A55f restart over a populated store — window seeds from the file tail: re-delivered rows drop, a NEW same-ms sibling of the tail still lands",
+                  accepted1 = 3 AndAlso dupRejected AndAlso siblingAccepted AndAlso back.Count = 4,
+                  String.Format("acc1={0}(want 3) dupRejected={1} siblingAccepted={2} onDisk={3}(want 4)",
+                                accepted1, dupRejected, siblingAccepted, back.Count))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A55g: unwritable store — never throws, and the guard still guards -------------------
+    ' A48e's property must not regress: losing capture must never kill the feed or a run. The
+    ' guard now holds state that a failed flush does not clear, so the no-throw path is worth
+    ' re-pinning at the same time as the sibling behaviour.
+    Private Sub A55g_UnwritableStoreNeverThrowsAndStillGuards()
+        Dim root As String = A48TempStore("55g")
+        Dim threw As String = ""
+        Dim accepted As Integer = -1
+        Dim wrote As Integer = -1
+        Dim keptBuffering As Boolean = False
+        Dim dupRejected As Boolean = False
+        Try
+            ' Store "directory" path occupied by a FILE, so CreateDirectory fails on flush.
+            Dim asFile As String = Path.Combine(root, "not_a_dir")
+            File.WriteAllText(asFile, "x")
+            Dim w As New TradeStoreWriter(asFile)
+
+            Dim siblings As New List(Of TradeRecord) From {
+                A53Trade(A53Ms(500), 64002.0, 300.0, "buy", "none", "439922970", 295960370L),
+                A53Trade(A53Ms(500), 64002.0, 300.0, "buy", "none", "439922971", 295960371L)}
+            Try
+                accepted = A48BufferAll(w, siblings)
+                wrote = w.Flush()
+                ' The fold keeps working afterwards — a capture failure is not a poison pill.
+                keptBuffering = w.Buffer(A53Trade(A53Ms(900), 64003.0, 400.0, "sell",
+                                                  "none", "439922972", 295960372L))
+                ' ...and the guard is still a guard with no disk underneath it.
+                dupRejected = Not w.Buffer(siblings(0))
+            Catch ex As Exception
+                threw = ex.Message
+            End Try
+
+            Check("A55g unwritable store — same-ms siblings both accepted, flush returns 0, never throws, fold keeps running, guard still rejects a dup",
+                  threw = "" AndAlso accepted = 2 AndAlso wrote = 0 AndAlso keptBuffering AndAlso dupRejected,
+                  String.Format("threw='{0}' accepted={1}(want 2) wrote={2} keptBuffering={3} dupRejected={4}",
+                                threw, accepted, wrote, keptBuffering, dupRejected))
+        Finally
+            A48Cleanup(root)
+        End Try
     End Sub
 
     Private Sub A52a_AsiaArmingJsonContract()

@@ -290,9 +290,9 @@ Public NotInheritable Class DeribitWsFeed
         _state.ResetAlerts()
         ' [v64] Same discipline for the trade-store buffer, with one difference: the pending
         ' buffer is FLUSHED rather than discarded (a reconnect must not silently drop captured
-        ' tape), and only then is the monotonic guard un-seeded so it re-reads the on-disk
-        ' high-water mark. That is what makes the REST re-seed window below idempotent against
-        ' whatever is already stored.
+        ' tape), and only then is the write guard un-seeded so it rebuilds its recent-trade
+        ' window from the on-disk tail. That is what makes the REST re-seed window below
+        ' idempotent against whatever is already stored.
         Try
             SyncLock _tradeStoreLock
                 _tradeStore?.ResetBufferState()
@@ -499,10 +499,12 @@ Public NotInheritable Class DeribitWsFeed
                                        rec.Liquidation IsNot Nothing AndAlso rec.Liquidation <> "none",
                                        rec.Timestamp, al, alInstance)
             End If
-            ' [v64] Buffer for the store. The writer's monotonic guard drops anything at or
-            ' before the newest committed timestamp, which is what makes the reconnect
-            ' re-seed idempotent — SeedAsync re-seeds the ring from REST on every (re)connect,
-            ' so the same trades WILL arrive twice (A48b).
+            ' [v64] Buffer for the store. The writer's guard drops a trade already in its recent
+            ' window, which is what makes the reconnect re-seed idempotent — SeedAsync re-seeds
+            ' the ring from REST on every (re)connect, so the same trades WILL arrive twice
+            ' (A48b). ⚠ It keys on trade IDENTITY, not on the timestamp: this is the batch where
+            ' same-millisecond siblings arrive together, and keying on the millisecond cost 49.2 %
+            ' of the tape (docs/trade-store-write-guard-identity-proposal.md).
             If store IsNot Nothing Then store.Buffer(rec)
         Next
         ' D2 COUNT trigger — checked once per batch, after the fold. The timer covers the
