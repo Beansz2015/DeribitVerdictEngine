@@ -157,6 +157,22 @@ With streaming active, the last written row is always ~now. **So the cursor is a
 
 ---
 
+## 5b. ⚠ A free second experiment is arriving — MEASURE IT AT THE NEXT COPY-BACK
+
+**Deribit entered system maintenance on 2026-08-11** (`{"error":{"message":"system_maintenance","code":11051}}`, HTTP 503 on every endpoint). When it returns, gap repair will backfill the outage window **via `AppendRows`, which bypasses `Buffer` and therefore bypasses the guard.**
+
+**So the tape will hold a COMPLETE band sandwiched between two ~50 % streaming bands.** That is a second natural experiment, free, and it confirms the finding by a different route than either instrument in §1 — this time with the boundaries known in advance rather than discovered by accident.
+
+**What to measure**, on the first copy-back after the venue returns:
+
+1. Locate the outage window from `ws_health.log` and the `analysis_log.csv` hole.
+2. Compare rows/hour **inside** the repaired band against rows/hour in the streamed bands either side. **Prediction: the repaired band runs ~2× the streamed density.**
+3. Compare `trade_seq` continuity inside the repaired band against the streamed bands. **Prediction: near-contiguous inside, ~47 % missing outside.**
+
+⚠ **This window closes.** Once the tape scrolls past Deribit's ~24 h retention the repaired band can never be reconstructed, and nobody will think to look for it later. **If the fix ships before the measurement is taken, the experiment is lost** — the repaired band would then be indistinguishable from correctly-streamed tape.
+
+---
+
 ## 6. The fix, and why it is not a one-liner
 
 The guard cannot simply become `<`. That would re-admit every duplicate the REST re-seed produces on each reconnect, which is the failure the guard was written to prevent.
