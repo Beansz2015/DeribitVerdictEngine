@@ -8,6 +8,19 @@
 ' collapsible — streaming without repair loses every restart; repair without streaming
 ' reinstates the 24-hour deadline the whole build exists to remove.
 '
+' ⚠ BOTH HALVES OF THAT SENTENCE WERE FALSIFIED, and the corrections are recorded here rather
+' than left in the specs, because this comment is what a reader trusts:
+'
+'   • "complete while the app runs" — FALSE until 2026-08-11. The write guard keyed on a
+'     millisecond and silently discarded 49.2 % of the tape (see TradeStoreWriter's own note).
+'   • "recovers ... from downtime" — TRUE ONLY IF THE APP RESTARTS. A pass resumed from the
+'     file's LAST WRITTEN ROW, which streaming makes current again within seconds of
+'     reconnecting, so an app that RIDES THROUGH an outage lost the hole permanently. Measured:
+'     a 60.3-minute hole on 2026-08-11 survived two scheduled passes and aged out of retention.
+'     Fixed by passing repairHoles:=True below — the pass now fetches the trade_seq-bracketed
+'     holes BEHIND the tail as well as the tail itself
+'     (docs/trade-store-downtime-repair-proposal.md Part A).
+'
 ' D1 ruled AWS-ONLY, which makes this the ONLY recovery mechanism there is: with no second
 ' box, an AWS outage means the stream stops and nothing else is capturing. So per §7.1 the
 ' first pass fires ONCE ON START rather than waiting a full interval — a restart is precisely
@@ -105,9 +118,15 @@ Public NotInheritable Class TradeStoreGapRepair
 
             Dim total As Integer = 0
             For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
+                ' [downtime repair Part A, D-1/D-5] repairHoles:=True is what makes this pass
+                ' able to heal an outage the app RODE THROUGH. Without it the fetch resumes from
+                ' the file's last written row, which streaming makes current again within
+                ' seconds of reconnecting — so every hole behind it reads as already covered and
+                ' is never fetched. This is the ONLY caller that opts in; the historical backfill
+                ' keeps the default False and is byte-identical.
                 total += Await HistoricalStore.BackfillTradeMonthAsync(
                              m.Year, m.Month, m.StartUtc, m.EndUtcExcl,
-                             storeDir:=storeDir, clampToSegStart:=True)
+                             storeDir:=storeDir, clampToSegStart:=True, repairHoles:=True)
             Next
             Console.WriteLine(String.Format(
                 "[TradeStoreGapRepair] pass complete — {0} row(s) appended to {1}", total, storeDir))

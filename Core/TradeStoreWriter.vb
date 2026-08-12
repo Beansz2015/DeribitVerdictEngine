@@ -675,6 +675,295 @@ Public NotInheritable Class TradeStoreWriter
         Return cursorMs
     End Function
 
+    ' ── Hole-derived repair windows (docs/trade-store-downtime-repair-proposal.md Part A) ──
+    '
+    ' ⚠ WHY ResolveResumeCursorMs ABOVE IS NOT ENOUGH, and it is not a refinement of it.
+    ' That function seeds the fetch cursor from the file's LAST WRITTEN ROW. Once streaming
+    ' reconnects after an outage, that row is current again, so every hole BEHIND it reads as
+    ' "already covered" and is never fetched. Measured instance: a 60.3-minute hole on
+    ' 2026-08-11 (08:59:56 -> 10:00:12 UTC, zero rows) survived seven hours and two scheduled
+    ' repair passes, then aged past Deribit's ~24 h retention and became unrecoverable.
+    '
+    ' ⚠ WIDENING gap_repair_lookback_hours DOES NOT FIX THIS and is the single most likely
+    ' wrong turn (proposal §0 trap 4). The lookback moves segStartMs earlier; the cursor is
+    ' still lastTs + 1. The cursor skips the HOLE, not the WINDOW.
+    '
+    ' Detection is on trade_seq ALONE — never on a time gap (D-2, ratified). A time threshold
+    ' is a TOLERANCE, and this project's recorded store-integrity lesson is that a guard
+    ' checking a fixed tolerance rather than completeness turns one bad fetch into permanent
+    ' silent loss. ASIA at 03:00 is legitimately sparse; a tolerance would either miss real
+    ' holes or invent them. trade_seq gives completeness with no threshold at all.
+
+    ''' <summary>
+    ''' [D-4, ruled 2026-08-12] Holes narrower than this are dropped — below the flush interval,
+    ''' so nothing a real outage produces is anywhere near it. A CONSTANT, not a settings key:
+    ''' no failure-rate linkage, nobody will tune it, and a key would cost a version bump and a
+    ''' dataset-boundary question for nothing. Public so fixtures read the PRODUCTION number
+    ''' instead of restating it (the F1 lesson, and the 2026-08-11 Public-not-Private ruling).
+    ''' </summary>
+    Public Const MinHoleMs As Long = 2000L
+
+    ''' <summary>
+    ''' [D-4, ruled 2026-08-12] Backstop against a pathological era, not a tuning knob. The
+    ''' pre-fix era holds 7,471 gap runs; without a cap one pass over it would issue 7,471 REST
+    ''' fetches. Same constant rationale as <see cref="MinHoleMs"/>.
+    ''' </summary>
+    Public Const MaxHolesPerPass As Integer = 32
+
+    ''' <summary>
+    ''' Row cap for one scan. Required by the proposal's §4.1 step 1 ("bounded by a constant row
+    ''' cap") but not named in its D-4 constant table, so it is ruled here on D-4's own stated
+    ''' principle — no failure-rate linkage, nobody will tune it.
+    '''
+    ''' 500,000 rows is ~7× a 20 h lookback at the measured true rate (~31–60 trades/min) and is
+    ''' held as two Longs per row, not as TradeRecords — a bounded ~8 MB, not the ~50 MB the
+    ''' records would cost. When the cap bites, the NEWEST rows are kept (the recoverable
+    ''' ground) and the truncation is LOGGED — a silent cap reads as "covered everything".
+    ''' </summary>
+    Public Const MaxScanRows As Integer = 500000
+
+    ''' <summary>A closed, inclusive millisecond range — one window a repair pass should fetch.
+    ''' Deliberately a value type holding two Longs: the scan below keeps up to
+    ''' <see cref="MaxScanRows"/> of these and must not retain whole TradeRecords.</summary>
+    Public Structure LongRange
+        Public ReadOnly StartMs As Long
+        Public ReadOnly EndInclMs As Long
+
+        Public Sub New(startMs As Long, endInclMs As Long)
+            Me.StartMs = startMs
+            Me.EndInclMs = endInclMs
+        End Sub
+
+        ''' <summary>Inclusive width. An empty or inverted range reports 0 or less.</summary>
+        Public ReadOnly Property WidthMs As Long
+            Get
+                Return EndInclMs - StartMs + 1L
+            End Get
+        End Property
+    End Structure
+
+    ' One scanned row, reduced to the only two fields hole detection needs. Seq is
+    ' AbsentSeq when the row carries none.
+    Private Structure SeqPoint
+        Public TsMs As Long
+        Public Seq As Long
+    End Structure
+
+    ' A detected hole, carried with its missing-sequence count so the MaxHolesPerPass cap can
+    ' rank by SIZE rather than by position.
+    Private Structure Hole
+        Public Range As LongRange
+        Public MissingSeqs As Long
+    End Structure
+
+    ''' <summary>
+    ''' Every window a repair pass should fetch for one monthly file — the holes BEHIND the
+    ''' tail, then the tail itself. An empty list means there is nothing to fetch.
+    '''
+    ''' <para><b>The relationship to <see cref="ResolveResumeCursorMs"/>, stated precisely
+    ''' because a looser version of it appears in the proposal.</b> The LAST window returned is
+    ''' the trailing window, and for an IN-ORDER store its start is exactly today's
+    ''' ResolveResumeCursorMs result; an empty list is exactly today's −1. Everything before it
+    ''' is strictly additional, which makes A48d's "gap-repair overlap is a no-op by
+    ''' construction" a special case of this function rather than something the change has to be
+    ''' argued not to have broken.</para>
+    '''
+    ''' <para>⚠ For an OUT-OF-ORDER store the two differ, deliberately: ResolveResumeCursorMs
+    ''' reads the file's LAST LINE (it says so in its own summary), this reads the MAXIMUM
+    ''' timestamp after sorting. Max is the correct choice here and cannot under-cover — the
+    ''' span between the last line and the maximum is bracketed by rows at BOTH ends, so any
+    ''' sequence gap inside it is emitted as a hole by the walk below.</para>
+    ''' </summary>
+    ''' <param name="clampToSegStart">As <see cref="ResolveResumeCursorMs"/> — True ⇒ never reach
+    ''' further back than segStartMs, so the fetch stays inside Deribit's ~24 h retention. Only
+    ''' the in-app gap repair passes True.</param>
+    Public Shared Function ResolveRepairWindowsMs(path As String,
+                                                  segStartMs As Long,
+                                                  segEndInclMs As Long,
+                                                  clampToSegStart As Boolean) As List(Of LongRange)
+        Dim result As New List(Of LongRange)()
+
+        ' ── 1. Scan ───────────────────────────────────────────────────────────────────
+        Dim truncated As Boolean = False
+        Dim rows As List(Of SeqPoint) = ScanForRepair(path, segStartMs, truncated)
+
+        ' ── 2. Sort. ⚠ TRAP 1, AND IT IS NON-NEGOTIABLE ───────────────────────────────
+        ' The store is NOT sorted, and LastTradeTimestamp's own summary records why: repair
+        ' appends its pages AFTER whatever streaming has already written, and the store already
+        ' holds one out-of-order block. Walking the file in append order reports a PHANTOM HOLE
+        ' at every repair-block boundary, and each phantom costs a REST fetch.
+        '
+        ' Sorted by (Timestamp, TradeSeq), not by Timestamp alone. List.Sort is unstable, and
+        ' same-millisecond siblings are the defining feature of this tape — a market order
+        ' sweeping several levels reports as several records sharing one millisecond. Ordering
+        ' those arbitrarily would manufacture negative deltas inside a millisecond.
+        rows.Sort(Function(a, b)
+                      Dim c As Integer = a.TsMs.CompareTo(b.TsMs)
+                      If c <> 0 Then Return c
+                      Return a.Seq.CompareTo(b.Seq)
+                  End Function)
+
+        ' ── 3–4. Walk the sequence-carrying rows and emit holes ───────────────────────
+        Dim holes As New List(Of Hole)()
+        Dim prev As SeqPoint
+        Dim hasPrev As Boolean = False
+
+        For Each cur In rows
+            ' ⚠ TRAP 2 — an absent trade_seq is NOT a sequence number. TradeRecord.AbsentSeq is
+            ' −1 and every pre-2026-08-10 row carries it, so feeding it into the arithmetic
+            ' makes a legacy→identified boundary look like a hole ~296 million wide. That count
+            ' would then win the MaxHolesPerPass ranking outright and evict every real hole.
+            ' Same lesson as the write guard's "⚠ NEVER key on an absent identity", one seam over.
+            '
+            ' ⚠ A seq-less row BREAKS the walk rather than being skipped past, and the
+            ' difference is the whole point. Skipping past would bracket two identified rows
+            ' ACROSS an interleaved block of legacy rows and report the ground those legacy rows
+            ' already cover as a hole — a phantom, in exactly the mixed-era store trap 2 is
+            ' about. Breaking can only ever MISS a hole in legacy ground, never invent one, and
+            ' D-6 rules that the pre-fix era is not to be chased. Costs nothing today: every row
+            ' written since 2026-08-10 carries a sequence, so inside the lookback the two
+            ' readings are identical.
+            If cur.Seq < 0 Then
+                hasPrev = False
+                Continue For
+            End If
+
+            If hasPrev Then
+                Dim delta As Long = cur.Seq - prev.Seq
+                ' delta = 0 is a surviving duplicate, delta < 0 a discontinuity (whether Deribit
+                ' ever RESETS trade_seq was never verified project-wide). Neither is loss, and
+                ' neither emits a window.
+                If delta > 1L Then
+                    Dim h As Hole
+                    h.Range = New LongRange(prev.TsMs + 1L, cur.TsMs - 1L)
+                    h.MissingSeqs = delta - 1L
+                    holes.Add(h)
+                End If
+            End If
+
+            prev = cur
+            hasPrev = True
+        Next
+
+        ' ── 5–6. Clamp each hole into the window, then drop the narrow ones ───────────
+        ' ⚠ TRAP 3 — the clamp goes on EACH HOLE, not only on the pass's outer window. A hole
+        ' past Deribit's retention would otherwise be found, fetched, return nothing, and be
+        ' found again at the next pass, forever.
+        Dim kept As New List(Of Hole)()
+        For Each h In holes
+            Dim s As Long = Math.Max(h.Range.StartMs, segStartMs)
+            Dim e As Long = Math.Min(h.Range.EndInclMs, segEndInclMs)
+            If e < s Then Continue For
+            Dim clamped As New LongRange(s, e)
+            If clamped.WidthMs < MinHoleMs Then Continue For
+            Dim k As Hole
+            k.Range = clamped
+            k.MissingSeqs = h.MissingSeqs
+            kept.Add(k)
+        Next
+
+        ' ── 7. Cap, keeping the LARGEST, and say what was dropped ─────────────────────
+        Dim dropped As Integer = 0
+        If kept.Count > MaxHolesPerPass Then
+            kept.Sort(Function(a, b) b.MissingSeqs.CompareTo(a.MissingSeqs))
+            dropped = kept.Count - MaxHolesPerPass
+            kept.RemoveRange(MaxHolesPerPass, dropped)
+        End If
+        ' Back into chronological order — the ranking above is about WHICH holes survive, not
+        ' about what order they come back in, and the trailing window must still be last.
+        kept.Sort(Function(a, b) a.Range.StartMs.CompareTo(b.Range.StartMs))
+        For Each k In kept
+            result.Add(k.Range)
+        Next
+
+        If dropped > 0 OrElse truncated Then
+            Console.WriteLine(String.Format(
+                "[TradeStoreWriter] repair scan '{0}': {1} hole(s) returned, {2} dropped by the " &
+                "MaxHolesPerPass={3} cap{4}",
+                path, result.Count, dropped, MaxHolesPerPass,
+                If(truncated, ", scan TRUNCATED at MaxScanRows=" & MaxScanRows, "")))
+        End If
+
+        ' ── 8. The trailing window, last ──────────────────────────────────────────────
+        Dim tailStart As Long
+        If rows.Count = 0 Then
+            tailStart = segStartMs
+        Else
+            tailStart = rows(rows.Count - 1).TsMs + 1L
+            If clampToSegStart AndAlso tailStart < segStartMs Then tailStart = segStartMs
+        End If
+        If tailStart <= segEndInclMs Then result.Add(New LongRange(tailStart, segEndInclMs))
+
+        Return result
+    End Function
+
+    ''' <summary>
+    ''' One streaming pass over a monthly file, keeping the rows the hole walk needs: every row
+    ''' at or after <paramref name="segStartMs"/>, plus the single row with the greatest
+    ''' timestamp BELOW it.
+    '''
+    ''' <para>⚠ That one earlier row is the bracket. Without it a hole STRADDLING segStartMs has
+    ''' nothing on its left to bracket against and is invisible — which would make the clamp in
+    ''' step 5 unreachable for the case it exists to serve. It is kept whether or not it carries
+    ''' a sequence: a seq-less bracket correctly BREAKS the walk instead of licensing a phantom
+    ''' hole across the boundary.</para>
+    '''
+    ''' Missing / unreadable file ⇒ empty list, never throws — the ReadTradeFile discipline.
+    ''' </summary>
+    Private Shared Function ScanForRepair(path As String, segStartMs As Long,
+                                          ByRef truncated As Boolean) As List(Of SeqPoint)
+        Dim inWindow As New List(Of SeqPoint)()
+        truncated = False
+        If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return inWindow
+
+        Dim haveBracket As Boolean = False
+        Dim bracket As SeqPoint
+
+        Try
+            Using sr As New StreamReader(path)
+                sr.ReadLine()   ' header
+                Dim line As String
+                Do
+                    line = sr.ReadLine()
+                    If line Is Nothing Then Exit Do
+                    Dim rec As New TradeRecord()
+                    If Not TryParseRow(line, rec) Then Continue Do
+
+                    Dim p As SeqPoint
+                    p.TsMs = rec.Timestamp
+                    p.Seq = rec.TradeSeq
+
+                    If p.TsMs < segStartMs Then
+                        ' The bracket is the MAXIMUM below segStartMs, not the last one seen —
+                        ' the file is not sorted, so those are different rows.
+                        If Not haveBracket OrElse p.TsMs > bracket.TsMs OrElse
+                           (p.TsMs = bracket.TsMs AndAlso p.Seq > bracket.Seq) Then
+                            bracket = p
+                            haveBracket = True
+                        End If
+                        Continue Do
+                    End If
+
+                    inWindow.Add(p)
+                    If inWindow.Count > MaxScanRows Then
+                        ' Keep the NEWEST rows — the recoverable ground. RemoveAt(0) on a large
+                        ' List is O(n), so drop a block at a time rather than one per row.
+                        inWindow.RemoveRange(0, MaxScanRows \ 10)
+                        truncated = True
+                    End If
+                Loop
+            End Using
+        Catch ex As Exception
+            Console.Error.WriteLine("[TradeStoreWriter] ScanForRepair failed: " & ex.Message)
+        End Try
+
+        ' ⚠ A truncated scan invalidates the bracket. The rows the cap discarded sit BETWEEN the
+        ' bracket and the oldest retained row, so bracketing across them would report ground
+        ' those discarded rows cover as a hole. Drop it and let the walk start clean.
+        If haveBracket AndAlso Not truncated Then inWindow.Add(bracket)
+        Return inWindow
+    End Function
+
     ''' <summary>
     ''' Append rows to the store, splitting by calendar month so a batch straddling a month
     ''' boundary lands in two files (A48c). The header is written ONLY when a file is

@@ -233,58 +233,83 @@ Public Class HistoricalStore
     ''' cursor would ask for a refused window and recover NOTHING — including the last 20 h
     ''' that are still served. False (the default) preserves the historical-backfill
     ''' behaviour exactly: resume from disk and fill any hole between there and segEnd.</param>
+    ''' <param name="repairHoles">[downtime repair Part A, D-5] True ⇒ resolve the fetch windows
+    ''' through TradeStoreWriter.ResolveRepairWindowsMs, which returns the trade_seq-bracketed
+    ''' HOLES behind the tail as well as the tail itself. OPT-IN so this shared function's
+    ''' historical-backfill path is byte-identical: TradeStoreGapRepair.RepairOnceAsync is the
+    ''' only caller that passes True. Mirrors how clampToSegStart was added and keeps the blast
+    ''' radius at one caller.</param>
     Public Shared Async Function BackfillTradeMonthAsync(
             year As Integer, month As Integer,
             segStart As DateTime, segEndExcl As DateTime,
             Optional storeDir As String = Nothing,
-            Optional clampToSegStart As Boolean = False) As Task(Of Integer)
+            Optional clampToSegStart As Boolean = False,
+            Optional repairHoles As Boolean = False) As Task(Of Integer)
         Dim dir As String = If(String.IsNullOrWhiteSpace(storeDir), StoreDir, storeDir)
         Directory.CreateDirectory(dir)
         Dim path As String = TradeStoreWriter.TradeFileFor(dir, year, month)
         Dim segStartMs As Long = New DateTimeOffset(segStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim endMs As Long = New DateTimeOffset(segEndExcl, TimeSpan.Zero).ToUnixTimeMilliseconds() - 1
 
-        ' Resume decision lives on the shared seam (A48d exercises this exact call).
-        Dim cursorMs As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartMs, endMs, clampToSegStart)
-        If cursorMs < 0 Then Return CountDataRows(path)
+        ' Both resume decisions live on the shared seam (A48d and A56a–f exercise these exact
+        ' calls). The single-window branch below is today's behaviour, unchanged.
+        Dim windows As New List(Of TradeStoreWriter.LongRange)()
+        If repairHoles Then
+            windows = TradeStoreWriter.ResolveRepairWindowsMs(path, segStartMs, endMs, clampToSegStart)
+        Else
+            Dim cursor0 As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartMs, endMs, clampToSegStart)
+            If cursor0 >= 0 Then windows.Add(New TradeStoreWriter.LongRange(cursor0, endMs))
+        End If
+        If windows.Count = 0 Then Return CountDataRows(path)
 
         Dim total As Integer = 0
         Dim page As Integer = 0
+        Dim aborted As Boolean = False
 
-        Do
-            If page >= MaxTradePages Then
-                Console.Error.WriteLine("[HistoricalStore] Trade page cap hit — aborting month " &
-                                        String.Format("{0:D4}-{1:D2}", year, month))
-                Exit Do
-            End If
+        For w As Integer = 0 To windows.Count - 1
+            If aborted Then Exit For
+            Dim win As TradeStoreWriter.LongRange = windows(w)
+            If w > 0 Then Await Task.Delay(PoliteDelayMs)
+            Dim cursorMs As Long = win.StartMs
 
-            Dim trades As List(Of TradeRecord) =
-                Await FetchTradesByTimeAsync(cursorMs, endMs, TradesPerPage)
-            If trades Is Nothing Then
-                Console.Error.WriteLine("[HistoricalStore] Trade fetch failed at cursor " & cursorMs)
-                Exit Do
-            End If
-            If trades.Count = 0 Then Exit Do
+            Do
+                If page >= MaxTradePages Then
+                    Console.Error.WriteLine("[HistoricalStore] Trade page cap hit — aborting month " &
+                                            String.Format("{0:D4}-{1:D2}", year, month))
+                    aborted = True
+                    Exit Do
+                End If
 
-            total += TradeStoreWriter.AppendRows(dir, trades)
+                Dim trades As List(Of TradeRecord) =
+                    Await FetchTradesByTimeAsync(cursorMs, win.EndInclMs, TradesPerPage)
+                If trades Is Nothing Then
+                    Console.Error.WriteLine("[HistoricalStore] Trade fetch failed at cursor " & cursorMs)
+                    ' A failed fetch abandons THIS window only. The next one is independent
+                    ' ground and a transient 503 on one hole must not cost the others.
+                    Exit Do
+                End If
+                If trades.Count = 0 Then Exit Do
 
-            Dim newestMs As Long = trades(trades.Count - 1).Timestamp
-            ' newestMs <= cursorMs means Deribit returned a full page all stamped the same
-            ' ms; the +1 nudge is what stops that from looping forever.
-            cursorMs = newestMs + 1
-            page += 1
+                total += TradeStoreWriter.AppendRows(dir, trades)
 
-            If trades.Count < TradesPerPage Then
-                ' Fewer than a full page ⇒ no more trades in the window.
-                Exit Do
-            End If
+                Dim newestMs As Long = trades(trades.Count - 1).Timestamp
+                ' newestMs <= cursorMs means Deribit returned a full page all stamped the same
+                ' ms; the +1 nudge is what stops that from looping forever.
+                cursorMs = newestMs + 1
+                page += 1
 
-            Await Task.Delay(PoliteDelayMs)
-        Loop
+                If trades.Count < TradesPerPage Then
+                    ' Fewer than a full page ⇒ no more trades in the window.
+                    Exit Do
+                End If
+
+                Await Task.Delay(PoliteDelayMs)
+            Loop
+        Next
 
         Console.WriteLine(String.Format(
-            "[HistoricalStore] Trades {0:D4}-{1:D2}: appended {2} rows across {3} page(s)",
-            year, month, total, page))
+            "[HistoricalStore] Trades {0:D4}-{1:D2}: appended {2} rows across {3} page(s) in {4} window(s)",
+            year, month, total, page, windows.Count))
         Return total
     End Function
 
