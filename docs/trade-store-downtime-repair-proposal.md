@@ -6,7 +6,7 @@
 >
 > ⚠ **Gate G-1 is now PARTIALLY answered and the answer changes Part B — read §2 before building it.** The outage was a **venue-wide Deribit outage**, not a box-local fault. **Part B is authorised but its value has dropped**, and §2 carries a stop-and-ask: build Part A, watch one outage self-heal, then re-decide whether Part B is worth touching the live feed supervisor. **Do not open a Part B session before that.**
 
-**Status:** ✅ **AUTHORISED (Part A).** §7 D-table ticked in full 2026-08-12. No code written yet.
+**Status:** ✅ **PART A IS BUILT — 2026-08-13, commit `c6c6942`.** §7 D-table ticked in full 2026-08-12. Gate `prepush` PASSED, harness ALL PASS, fixtures A56a–f proven by five mutations. ⚠ **NOT YET DEPLOYED to AWS.** Review packet: [`trade-store-downtime-repair-spec-back.md`](trade-store-downtime-repair-spec-back.md) — it carries **one deviation from this document's §0 trap 2**, ranked first, and shows why this document's own **A56d** shape would not have caught it. **Part B remains UNBUILT and deferred by §2.4's stop-and-ask.**
 **Fixes:** [`trade-store-same-millisecond-drop-2026-08-11.md`](trade-store-same-millisecond-drop-2026-08-11.md) **§5a** and **§5a-bis**.
 **Author:** the orchestrator seat that opened on [`seat-handover-2026-08-12.md`](seat-handover-2026-08-12.md), 2026-08-12.
 
