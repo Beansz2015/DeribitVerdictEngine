@@ -25,7 +25,11 @@
 ### Where it will slip — four concrete traps
 
 1. ⚠ **The store is not sorted, and this is recorded in the code you are editing.** `TradeStoreWriter.LastTradeTimestamp`'s own doc comment says it reads *the file's last line, not its maximum timestamp*, and that *"the store already holds one out-of-order block"*. Repair appends its pages **after** whatever streaming has already written. **Scanning the file in append order reports a phantom hole at every repair-block boundary, and each phantom costs a REST fetch.** Sort the scanned window before detecting holes.
-2. ⚠ **An absent `trade_seq` is not a sequence number.** `TradeRecord.AbsentSeq` is **−1** and every pre-2026-08-10 row carries it. Feeding −1 into the gap arithmetic makes each legacy→identified boundary look like a hole ~296 million wide. **This is the same trap the identity build recorded as "never key on an absent identity", one seam over** — see the `⚠ NEVER key on an absent or empty identity` comment in `Core/TradeStoreWriter.vb`. Skip rows without a sequence; require **both** bracketing rows to carry one.
+2. ⚠ **An absent `trade_seq` is not a sequence number.** `TradeRecord.AbsentSeq` is **−1** and every pre-2026-08-10 row carries it. Feeding −1 into the gap arithmetic makes each legacy→identified boundary look like a hole ~296 million wide. **This is the same trap the identity build recorded as "never key on an absent identity", one seam over** — see the `⚠ NEVER key on an absent or empty identity` comment in `Core/TradeStoreWriter.vb`. ~~Skip rows without a sequence; require **both** bracketing rows to carry one.~~
+
+   > ⚠⚠ **CORRECTED 2026-08-13 — the sentence above was WRONG and is ratified as BREAK, not SKIP.** A seq-less row must **break the walk**, not be skipped past. **Why the original was wrong:** with three legacy rows interleaved between an identified row at seq 3000 and one at seq 3500, *both bracketing rows carry a sequence* — the stated requirement is satisfied — so a hole is emitted over ground the three legacy rows already cover. **A phantom, in exactly the mixed-era store this trap exists to protect.** ⚠ **And this document's own `A56d` shape could not have caught it**: "legacy rows *adjacent to* identified rows" puts seq-carrying rows on one side only, so no bracketing pair spans the legacy block and **the fixture passes under either reading.** The shipped `A56d` carries **two** parts — era-boundary and interleaved — and mutation 3 fails only the interleaved one. **Breaking can only ever MISS a hole in legacy ground, never invent one, which is what D-6 already rules.** Found by the implementer, proven by mutation, ratified 2026-08-13.
+
+   ⚠ **The real cost of getting trap 2 wrong is the RANKING, not the window width** — corrected 2026-08-13. The emitted window is `[ts(prev)+1, ts(next)−1]`, bounded by two *adjacent* timestamps, so it stays narrow however absurd the delta. **But `MaxHolesPerPass` ranks by missing-sequence count, so one AbsentSeq-derived phantom scores ~296 million, wins the cap outright, and evicts every real hole from the pass.** Same fix, far worse consequence than "a hole 296 million wide" suggests.
 3. ⚠ **An unfillable hole is re-detected on every pass, forever.** A hole past Deribit's ~24 h retention will be found, fetched, return nothing, and be found again six hours later. The pre-fix era holds **7,471 gap runs**. The lookback clamp bounds this — but only if it is applied to **each hole**, not just to the pass's outer window. Clamping the window and not the hole reintroduces the whole cost.
 4. ⚠ **Do not widen `gap_repair_lookback_hours`.** Stated again here because it is the single most likely wrong turn, and because it will *appear* to work on a hand-built fixture.
 
@@ -140,7 +144,7 @@ Public Shared Function ResolveRepairWindowsMs(path As String,
 
 **Behaviour, in order:**
 
-1. Read the rows of `path` whose `Timestamp >= segStartMs`, streaming, bounded by a constant row cap.
+1. Read the rows of `path` whose `Timestamp >= segStartMs`, streaming, bounded by `MaxScanRows`. ⚠ **AMENDED 2026-08-13 — this filter as first written made step 5 unreachable.** A hole straddling `segStartMs` has **no left bracket** under it, so it is invisible and the clamp in step 5 can never fire for the case it exists to serve. **The scan must additionally keep the single row with the greatest timestamp BELOW `segStartMs`** — the maximum, not the last one seen, because the file is not sorted. **Keep it whether or not it carries a sequence:** a seq-less bracket correctly *breaks* the walk rather than licensing a phantom across the boundary. `A56e` pins it.
 2. **Sort by `Timestamp`.** ⚠ Trap 1. Non-negotiable.
 3. Walk the rows that **carry a sequence** (`TradeSeq >= 0`), skipping the rest. ⚠ Trap 2.
 4. Where two consecutive sequence-carrying rows have `seq(next) − seq(prev) > 1`, emit the hole window `[ts(prev) + 1, ts(next) − 1]`.
@@ -151,7 +155,13 @@ Public Shared Function ResolveRepairWindowsMs(path As String,
 
 **The invariant that makes this safe, and the one the fixtures must pin:**
 
-> **The LAST window this function returns is exactly today's `ResolveResumeCursorMs` result**, and an empty list is exactly today's `−1`. Everything else is strictly additional.
+> ~~**The LAST window this function returns is exactly today's `ResolveResumeCursorMs` result**, and an empty list is exactly today's `−1`. Everything else is strictly additional.~~
+>
+> ⚠ **CORRECTED 2026-08-13 — that sentence was not literally true, and it contradicted trap 1 five lines above it.** `ResolveResumeCursorMs` reads the file's **LAST LINE** (its own summary says so); after sorting, this function's tail comes from the **MAXIMUM timestamp**. **For an out-of-order store — which trap 1 asserts is the real case — the two differ.** The precise invariant:
+>
+> **For an IN-ORDER store, the last window's start is exactly today's `ResolveResumeCursorMs` result; an empty list is exactly today's `−1`.** For an out-of-order store the tail starts at the **maximum**, deliberately: **max cannot under-cover**, because the span between the last line and the maximum is bracketed by rows at *both* ends, so any sequence gap inside it is emitted as a hole by the walk. `A56b` pins the equivalence by **calling** the shipped function on an in-order store; `A56c` pins the deliberate divergence on an out-of-order one, and additionally asserts the file really is out of order so a future refactor cannot turn that fixture into a tautology.
+>
+> ⚠ **The one disclosed cost of the BREAK ruling, stated here so it is not rediscovered:** on **seq-less** ground between the last line and the maximum, the walk breaks, no hole is emitted, and the new tail window is **narrower** than the old cursor would have given. **The new code therefore covers strictly less than the old on legacy tape** — which D-6 rules out of scope, and which is the same "can only miss a hole in legacy ground" cost trap 2 now records.
 
 That makes the existing no-op property (fixture A48d — *"gap-repair overlap is a no-op by construction"*) a **special case** of the new function rather than something the change has to be argued not to have broken.
 
@@ -165,12 +175,13 @@ Optional repairHoles As Boolean = False
 
 ⚠ **Opt-in, so the historical backfill path is byte-identical.** `BackfillTradeMonthAsync` is shared: `TradeStoreGapRepair.RepairOnceAsync` passes `clampToSegStart:=True`, the historical backfill passes `False`. **Only gap repair opts in.** This mirrors how `clampToSegStart` was added and keeps the blast radius at one caller.
 
-**Two constants, not settings keys** — per the 2026-08-11 ruling, a value ruled into a constant goes `Public Const` so fixtures read the production number instead of restating it:
+**THREE constants, not settings keys** — ⚠ **amended 2026-08-13; this table listed two and D-4 ruled two, while §4.1 step 1 mechanically requires a third.** Per the 2026-08-11 ruling, a value ruled into a constant goes `Public Const` so fixtures read the production number instead of restating it:
 
-| Constant | Proposed | Why a constant |
+| Constant | Value | Why a constant |
 |---|---|---|
-| `MinHoleMs` | **2,000** | Below the flush interval; no failure-rate linkage; nobody will tune it |
+| `MinHoleMs` | **2,000** | Below the flush interval; no failure-rate linkage; nobody will tune it. ⚠ **But see F-2 in the review below — this filter is on the wrong axis** |
 | `MaxHolesPerPass` | **32** | A backstop against a pathological era, not a tuning knob |
+| `MaxScanRows` | **500,000** | ⚠ **ADDED 2026-08-13, ruled on D-4's own principle.** §4.1 step 1 says the scan is "bounded by a constant row cap" and never named it. ~7× a 20 h lookback at the measured true rate (31–60 trades/min), held as two `Long`s per row (~8 MB, not the ~50 MB `TradeRecord`s would cost) because this runs on a background timer inside a WinForms app |
 
 **No new settings keys ⇒ no `settings.json` version bump ⇒ no dataset boundary and no ⚠.** The engine reads trades from `MarketState`'s in-memory ring, never from the store, so this change has **zero scoring impact** — the same argument the write-guard fix carried, and it holds for the same reason.
 
@@ -215,7 +226,7 @@ Optional repairHoles As Boolean = False
 | **V1** | Harness run | **0 FAIL, ALL PASS**, A56a–f present |
 | **V2** | Mutation: tail-only return ⇒ re-run harness | ⚠ **A56a FAILS.** If it passes, stop |
 | **V3** | `Select-String settings.json -Pattern '"version"' -TotalCount 1` | **unchanged** — no key moved |
-| **V4** | `Select-String tools/BacktestRunner/HistoricalStore.vb -Pattern 'repairHoles'` on the historical-backfill call path | **no hit** — that path is untouched |
+| **V4** | ⚠⚠ **WITHDRAWN 2026-08-13 — this handle was WRONG and would have rejected a correct build.** It counted a NAME. On a correct build `Select-String … 'repairHoles'` prints **3** (verified), because the parameter is *declared* in that file — doc comment, signature, branch. **This is the `_lastTs` failure from [`trade-store-write-guard-spec-back.md`](trade-store-write-guard-spec-back.md) repeating one build later, in a spec that quotes the rule forbidding it.** ✅ **RESTATED — the property is about the CALL SITE, not the file:** enumerate `BackfillTradeMonthAsync(` call sites and read whether each passes the argument | **Exactly two call sites.** `HistoricalStore.vb:575` (`BackfillAllAsync`) passes **no** `repairHoles` argument; `TradeStoreGapRepair.vb:127` passes `repairHoles:=True`. ✅ **Verified 2026-08-13** |
 | **V5** | Release rebuild of all six projects | **0 warnings, 0 errors** |
 | **V6** | Post-deploy, next copy-back: `trade_seq` completeness across a span containing a known outage | **~100 %**, hole filled |
 

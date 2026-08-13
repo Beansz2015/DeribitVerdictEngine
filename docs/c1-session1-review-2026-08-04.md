@@ -45,7 +45,23 @@
 
 `ResolveScope` selects the marker with the greatest `UtcMs ≤ hourStartMs`. A process that starts at 10:30 with capture ON does not govern hour 10:00 — the previous process's marker does. So the hour containing a capture-state flip is classified by the pre-flip state.
 
-Only reachable at a deploy or a capture-toggle, so rare. But note the direction: it errs toward **not** flagging, which is the opposite of J-B's stated preference that a false defect is the cheaper error. **Flagging only** — a fix wants a rule for split hours, which is a spec question, not an implementation one.
+Only reachable at a deploy or a capture-toggle, so rare. But note the direction: it errs toward **not** flagging, which is the opposite of J-B's stated preference that a false defect is the cheaper error. ~~**Flagging only** — a fix wants a rule for split hours, which is a spec question, not an implementation one.~~
+
+> ## ✅ RULED 2026-08-12 (trader) — SPLIT THE HOUR. This is now a build slot.
+>
+> **The rule:** an hour containing a capture-state marker is **split at the marker**; each part is classified against the state that governed it; **the hour is reported defective if EITHER part is defective.**
+>
+> ⚠ **The two options NOT taken, recorded so they are not re-proposed:**
+> - **(a) scope by the LATER marker** — one line, and it does move the error to J-B's preferred side. **Rejected:** it manufactures a **false defect on every deploy**, and a check that cries wolf at each deploy stops being read. That is the alarm-fatigue failure this project has already flagged once, on the F3 observational watch.
+> - **(c) exclude split hours from the denominator** — ⛔ **rejected outright.** A silent hole in a coverage report is the exact defect class this store keeps producing, and the report exists to make gaps visible.
+>
+> ⚠ **The implementer must state what the classification UNIT becomes.** The report classifies whole hours today; splitting introduces sub-hour spans. Say plainly whether the output stays one row per hour with a worst-of verdict, or becomes one row per span.
+>
+> ⚠ **Where it slips:** `ResolveScope` has callers for which no split is possible. **Do not change its contract for all of them** — add the split at the classification site.
+>
+> **Fixtures must cover:** a flip at **:00** exactly · a flip at **:59** · an hour carrying **two** markers.
+>
+> **Model: Sonnet, effort: medium.** Tracked in [`trader-tick-queue.md`](trader-tick-queue.md) §2; the decision text of record is that doc's §0a row.
 
 ---
 

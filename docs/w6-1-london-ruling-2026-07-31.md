@@ -78,7 +78,19 @@ So there is no LONDON evidence supporting 2.0 or 2.2, and none supporting a buff
 - The what-if runner reads `TargetCapReason` only to **exclude** `poc` rows (`WhatIfProgram.vb:91-92`).
 - `CeilingAudit` carries it only as an info-categorical for an AUC column.
 
-**The F3 watch outlived its instrument.** The migration that made the eval stack coherent removed the axis this watch was written against, and nobody noticed because the watch's next read was deferred to W6-1 — which is now. Either F3 gets a cap-bucket segmentation added to some offline surface, or it should be retired explicitly rather than left as a live trigger nobody can evaluate. **Flagged, not ruled** — it is a measurement-tooling decision, and it belongs with whoever owns the offline surfaces.
+**The F3 watch outlived its instrument.** The migration that made the eval stack coherent removed the axis this watch was written against, and nobody noticed because the watch's next read was deferred to W6-1 — which is now. Either F3 gets a cap-bucket segmentation added to some offline surface, or it should be retired explicitly rather than left as a live trigger nobody can evaluate. ~~**Flagged, not ruled**~~ ✅ **RULED 2026-08-12 (trader).**
+
+> ## ✅ THE F3 WATCH IS RETIRED — 2026-08-12, trader-directed.
+>
+> **Retired explicitly, not archived and not stranded.** ⛔ **No cap-bucket segmentation is to be built for it.** The F3-watch tooling row in [`trader-tick-queue.md`](trader-tick-queue.md) §2 is **cancelled**.
+>
+> ⚠ **`F3` here means the B4b post-ship watch item (4) — the LONDON structural-TARGET inversion trigger, *"still under 45 % after ≥3 more LONDON session-days"*. It is not a coverage-report finding ID.** Other spec-backs reuse `F3` for unrelated findings; always name the document.
+>
+> ⚠ **What is retired is the TRIGGER, not the TOPIC.** *Does a LONDON structural target actually get reached?* is still open and still has no instrument. If it is ever wanted, it returns as a **scoped instrument request with its own spec** — never again as a live watch nobody can read.
+>
+> **What survives and stays usable:** the denominator above — LONDON directional placement **structural 41.0 %** vs **fallback 59.0 %** — is computable from the CSV today. The **reach rate** is the half with no instrument.
+>
+> ⚠ **Do not cite §4's 95.5 % ATR-clamp figure as the reason for this retirement.** That figure is about structural **stops**; F3 is about structural **targets**. The two are different questions and conflating them would make this ruling look better-evidenced than it is. **F3 was retired because it is unreadable, not because it was answered.**
 
 What *can* be said from the CSV alone: LONDON directional placement is **structural 41.0%** (swing 33.6% + hvn 7.4%) vs **fallback 59.0%**. That is the denominator of F3, not its reach.
 

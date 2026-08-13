@@ -28,6 +28,20 @@
 >
 > ⚠ **Why the pre-fix figure reads 61.88 % rather than ~50 %, since the two are easily mistaken for a contradiction:** that era blends **streaming** rows (~50 % complete) with **gap-repair** rows, which go through `AppendRows`, bypass the guard, and are complete. The blend is consistent with both, not in tension with either.
 >
+> ---
+>
+> ## ✅ NOTHING IN THIS DOCUMENT IS OWED AS A DECISION — checked 2026-08-12
+>
+> **This is a closed defect record.** The write guard is fixed, deployed and production-verified; §5a/§5a-bis's design question is now settled in [`trade-store-downtime-repair-proposal.md`](trade-store-downtime-repair-proposal.md), whose D-table is ticked in full. **What remains here is two measurements with no urgency and one separate bug — none of them a decision:**
+>
+> | What remains | Kind | Urgency |
+> |---|---|---|
+> | ⚠ **Re-run the completeness check on a larger sample.** The 100 % figure rests on **66 rows** — enough to prove the rate *changed* (~10⁻¹⁴ against the pre-fix rate), **not** enough to distinguish 100 % from ~97 % | a measurement | At the next substantial copy-back. **Do not call completeness settled before it** |
+> | **How much pre-fix tape is repair-written (complete) vs streaming-written (~50 %)** — §5b's survivor. The 61.88 % blend implies more of that era is usable than the ~50 % headline suggests | a measurement | **None.** Worth knowing only before someone replays pre-2026-08-11 tape |
+> | **F2 — the `ResetBufferState` race, `DeribitWsFeed.vb:298`** | ⚠ **a DIFFERENT bug** | Its own queue row. ⚠ **§4 exists specifically to stop it being merged with this one** — different bug, different fix |
+>
+> ✅ **§6 item 3 is ANSWERED and can be struck** — *"whether the feed even delivers the dropped trades"* was the one thing stored data could not settle, and **Instrument C settled it directly**: `accepted` = 159 = distinct timestamps exactly, and the delivered `trade_seq` stream was perfectly contiguous. The feed loses nothing.
+>
 > **Everything below is the original finding, kept unchanged as the record of how it was found.**
 
 ---
@@ -240,7 +254,17 @@ With streaming active, the last written row is always ~now. **So the cursor is a
 
 **Cost here: one hour of tape, permanently.** Past Deribit's ~24 h retention as of 2026-08-12.
 
-⚠ **A fix must not simply widen the lookback** — the cursor, not the window, is what skips the hole. The candidates are: seed the cursor from the **hole**, not the tail (which needs the store to know where its holes are — `trade_seq` now makes that computable); or fire a repair pass **on WS reconnect** rather than only on process start. **Not designed here.**
+⚠ **A fix must not simply widen the lookback** — the cursor, not the window, is what skips the hole. The candidates are: seed the cursor from the **hole**, not the tail (which needs the store to know where its holes are — `trade_seq` now makes that computable); or fire a repair pass **on WS reconnect** rather than only on process start. ~~**Not designed here.**~~
+
+> ## ✅ DESIGNED AND AUTHORISED 2026-08-12 — [`trade-store-downtime-repair-proposal.md`](trade-store-downtime-repair-proposal.md)
+>
+> **The two candidates above were ranked and they are not equal.** ✅ **Candidate (a) — the hole-derived cursor — IS the fix**, keyed on `trade_seq` gaps with no time threshold anywhere. **Candidate (b) — fire on WS reconnect — is a latency improvement only**, and it is deferred behind a stop-and-ask.
+>
+> **The decisive argument:** with a hole-derived cursor and **no schedule change at all**, the pass that already ran at **12:36 would have filled this hole**. Candidate (b) alone would have had to win a ≤30 s race against a venue that had only just left maintenance.
+>
+> ⚠ **Gate G-1 answered 2026-08-12 (trader):** both boxes showed the amber `ANALYSIS SKIPPED` hero with no readings, so **the outage was venue-wide and REST was down too, and the app was alive throughout.** That kills the *"or a scheduled pass lands inside the outage"* escape hatch in the rule above — **a pass inside a venue outage calls an endpoint returning 503 and recovers nothing.** Only a pass *after* the venue returns can help, which is exactly what candidate (a) provides and candidate (b) races against.
+>
+> **The D-table is ticked in full. Part A is ready to hand to an implementer. Nothing further is owed from THIS document on the repair question.**
 
 ---
 

@@ -1,5 +1,9 @@
 # Book Absorption — Anchor Re-Derivation (post-v61 geometry, §12 <1%-engagement branch)
 
+> ## ✅ RESOLVED 2026-08-12 — the trader ticked **PATH B**. Anchors HOLD at v61; nothing ships from this doc.
+>
+> ⚠ **§5a's V-table was NOT ticked and must not be implemented.** Path A is rejected. What Path B owes is a **new proposal file** on the book-absorption §8 residuals — see §5's banner and [`trader-tick-queue.md`](trader-tick-queue.md) §2.
+
 **Date:** 2026-07-30 · **Scope:** analysis-only, no code / no settings change in this pass
 **Trigger:** §12 post-ship watch on the v61 geometry rescale — the "<1% engagement after 5 weekday sessions ⇒ re-derive with looser default" branch fired. Post-v61 pooled weekday collection shows **0 ABSORB flags across 1 569 directional runs** while 208 of those runs carry populated episode numerics (the tracker forms episodes; the classification anchors never trip).
 **Data source:** frozen 2026-07-30 CSVs in scratchpad — `frozen_local_20260730.csv` (8 338 rows) + `frozen_aws_20260730.csv` (7 079 rows), dedup-pooled local-preferred per (UTC date, UTC hour) hour bucket, AWS backfills only hours with no local coverage. Pooled: 13 339 rows across 206 local hour-buckets + AWS gap-fill.
@@ -162,9 +166,21 @@ Two honest paths, matching the 07-23 J-table structure:
 
 **Coordinator recommendation: Path B.** The 07-23 J-table already picked Path A once (as J1e, on the same reasoning); Path A was executed via the v61 geometry rescale (widening the shell to unblock observation). The v61 collection shows the widened shell is not the limiting factor — the observation mechanism itself is. Repeating Path A now, on evidence that the widened shell alone did not raise flag rates into a usable band, buys collection but not answers. The next honest lever is the `window_sec`/D8 spec revision (a separate proposal, out of this pass's scope), and holding v61 anchors while that spec is drafted keeps the tracker in a coherent state.
 
-**But if the trader ticks Path A** (matching the 07-23 precedent and prioritising *any* stream over zero), the V-table below is the loosest-still-meaningful anchor set from the post-v61 evidence.
+> ## ✅ TICKED 2026-08-12 — **PATH B**. The trader took the coordinator recommendation.
+>
+> **Anchors HOLD at their v61 provisional values.** `absorb_ratio`, `default.min_aggr_usd`, `max_pull_frac` and `depletion_floor_usd` do not move. `scoring_enabled` stays **false**. `sessions.{}` stays empty.
+>
+> **This pass ships NOTHING** — no settings change, no version bump, no `change_log` entry, no §15 row, **no ⚠ boundary**, no display-string parity obligation.
+>
+> ⚠ **§5a below is now DEAD TEXT. Do not implement its V-table.** It is kept per the quote-and-label convention as the record of what Path A would have been, and because its distributions are the evidence Path B rests on. **A future reader who lands on §5a's table without this banner would ship the rejected path** — that is exactly the stale-header failure [`trader-tick-queue.md`](trader-tick-queue.md) §1a exists to stop.
+>
+> ✅ **What Path B owes: a new proposal file, not a knob.** Re-open the book-absorption proposal's §8 residuals — **`window_sec`**, **episode-cumulative pressing**, **D8 `pullFrac` inflation on sparse `postLB`** — carrying the §4 evidence that the v61 geometry rescale alone did not lift flag rates into the 3–8 % band. Tracked as a build slot in [`trader-tick-queue.md`](trader-tick-queue.md) §2. ⚠ **Start by re-counting the population on the post-2026-08-11 book** — §5c's sanity note says plainly that 208 episode rows over 6 weekday days may not be representative, and Path B's whole premise is that the *mechanism* under-observes.
+>
+> **The §5 activation clock does NOT restart.** The §12 watch convention resets collection at a knob turn; no knob turned.
 
-### 5a. V-table (await trader tick)
+**Superseded text follows, per the quote-and-label convention.** ~~**But if the trader ticks Path A** (matching the 07-23 precedent and prioritising *any* stream over zero), the V-table below is the loosest-still-meaningful anchor set from the post-v61 evidence.~~
+
+### 5a. ⛔ V-table — NOT TICKED. Path A was rejected 2026-08-12; this table is the record, not the plan
 
 | # | Decision | Recommended value | Rationale |
 |---|---|---|---|

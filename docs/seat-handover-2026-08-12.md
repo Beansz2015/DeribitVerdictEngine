@@ -10,11 +10,25 @@
 
 ## 0. YOUR FIRST TASK — read `trader-tick-queue.md` §0a, then pick from §2
 
-**No single task is gating anything.** Unlike the last handover, there is no blocked watch and no unread instrument. **Three things are owed by the trader** (E5 absorption Path B · the F3 watch decision · C1-coverage F2's split-hour rule) and everything else is a build slot you can schedule.
+**No single task is gating anything.** Unlike the last handover, there is no blocked watch and no unread instrument. **Two things are owed by the trader** (the F3 watch decision · C1-coverage F2's split-hour rule) and everything else is a build slot you can schedule.
+
+> ## ⚠ AMENDED 2026-08-12, after this doc was written — **NOTHING IS OWED BY THE TRADER ANY MORE.**
+>
+> All three decisions closed the same day, and **three of them turned into work rather than into nothing:**
+>
+> | Decision | Outcome | What it became |
+> |---|---|---|
+> | **E5** absorption Path B | ✅ **TICKED — Path B.** Anchors hold at v61; no settings change, no ⚠ | A **mechanism-revision proposal** — [`trader-tick-queue.md`](trader-tick-queue.md) §2. Opus / high |
+> | **F3 watch** (B4b trigger) | ✅ **RETIRED**, explicitly | ⛔ Nothing. The tooling row is cancelled |
+> | **C1-coverage F2** split-hour | ✅ **RULED — split the hour at the marker** | A **build slot** — queue §2. Sonnet / medium |
+>
+> **And the highest-value item below is now specced AND authorised:** [`trade-store-downtime-repair-proposal.md`](trade-store-downtime-repair-proposal.md), D-table ticked in full. ⚠ **Part A only for now** — gate G-1 came back "venue-wide Deribit outage", which demotes Part B to a latency improvement; that spec's §2.4 carries a stop-and-ask.
+>
+> ⚠⚠ **`F3` names TWO different watches and only the B4b one was retired.** The 2026-07-02 audit-fixes F3 (EXIT GUARD strip vs HOLD\EXIT during holds) is untouched and its state is unverified. [`roadmap.md`](roadmap.md)'s F3 row conflates them — flagged there, **not fixed**.
 
 **If you want the highest-value item, it is this one:**
 
-> ⚠⚠ **Gap repair cannot heal downtime loss** — [`trade-store-same-millisecond-drop-2026-08-11.md`](trade-store-same-millisecond-drop-2026-08-11.md) **§5a-bis**. Live, undocumented until 2026-08-12, and it has already cost an hour of tape. **Model: Opus, effort: high.**
+> ⚠⚠ **Gap repair cannot heal downtime loss** — [`trade-store-same-millisecond-drop-2026-08-11.md`](trade-store-same-millisecond-drop-2026-08-11.md) **§5a-bis**. Live, undocumented until 2026-08-12, and it has already cost an hour of tape. **Model: Opus, effort: high.** ✅ **Specced 2026-08-12** — see the amendment above.
 
 ⚠ **Do not read that section and conclude the fix is a bigger `gap_repair_lookback_hours`.** The **cursor** skips the hole, not the window. The section says so; a reader in a hurry will miss it.
 
@@ -58,14 +72,15 @@
 
 | Item | Model + effort | Note |
 |---|---|---|
-| ⚠⚠ **Repair cannot heal downtime** | Opus / high | §0 above. The biggest live gap |
+| ⚠⚠ **Repair cannot heal downtime** | Opus / high | §0 above. The biggest live gap. ✅ **SPECCED 2026-08-12** — [`trade-store-downtime-repair-proposal.md`](trade-store-downtime-repair-proposal.md), §7 D-table awaits a tick, §2 gate G-1 unanswered |
+| **Absorption mechanism revision** | Opus / high | ⚠ **NEW 2026-08-12** — what ticking E5 Path B bought. A proposal file, no code, no settings |
 | **Value-copy guard** | Sonnet / medium | [`value-copy-guard-implementer-brief.md`](value-copy-guard-implementer-brief.md) — **ready to hand over as-is** |
 | ⚠ **`ws_health.log` under-reports outages by ~34 min** | Sonnet / medium | Affects `CoverageReport`'s S1 join |
 | **Eval-cache identity key** | Sonnet / medium | Latent, measured zero occurrences |
 | **The `0.105` stale fixture literal** | Sonnet / low | First real test of the new provenance rule |
 | **Merge the 2026-08-12 copy-back** | ops | ⚠ **Count rows before and after; every number must rise.** August 278,761 → expect ~307,141 |
 
-**Owed by the trader:** E5 absorption Path B · the F3 watch decision · C1-coverage F2's split-hour rule.
+**Owed by the trader:** ✅ **NOTHING — all three closed 2026-08-12.** ~~E5 absorption Path B~~ **ticked (Path B)** · ~~the F3 watch decision~~ **retired** · ~~C1-coverage F2's split-hour rule~~ **ruled (split the hour)**. See §0's amendment for what each became.
 
 ⚠ **The AWS cost path is still unresolved** and now has better inputs: `docs/roadmap.md` §5b parks the Postgres migration with DuckDB recorded as the cheaper answer, and the intentional-downtime scoping row has widened.
 
