@@ -491,6 +491,7 @@ Module Program
         A56d_AbsentSeqRowsProduceNoPhantomHoles()
         A56e_HoleReachingPastSegStartIsClamped()
         A56f_HoleCountIsCappedKeepingTheLargest()
+        A56g_TruncationCutIsTimeContiguousNotFileOrder()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -8794,7 +8795,9 @@ Module Program
     ' ⚠ FIXTURE-LITERAL PROVENANCE (hard rule, 2026-08-11), declared once for the family:
     ' every timestamp and sequence number below is a CONSTRUCTED INPUT and asserts MECHANISM,
     ' so a literal is correct. The one exception is A56f, which asserts SHIPPED BEHAVIOUR and
-    ' therefore READS TradeStoreWriter.MaxHolesPerPass and MinHoleMs instead of restating them.
+    ' therefore READS TradeStoreWriter.MaxHolesPerPass instead of restating it. (MinHoleMs was
+    ' the other production constant read here — REMOVED, DR-1, 2026-08-13: the width floor it
+    ' gated is gone, not replaced.)
 
     ' A 2026-08-11 08:00 UTC base — the morning of the measured outage. Well inside one month.
     Private Function A56Ms(offsetMs As Long) As Long
@@ -8862,7 +8865,13 @@ Module Program
     ' list is exactly today's -1. Asserted by CALLING the shipped function and comparing, not by
     ' restating what it returns — a restatement would pass even if the two drifted apart.
     '
-    ' Also pins the MinHoleMs floor: a sub-threshold sequence gap is NOT worth a REST fetch.
+    ' ⚠ Part 4, REPURPOSED (DR-1, docs/downtime-repair-followups-implementer-briefs.md §1) — the
+    ' MinHoleMs width floor is GONE, so this no longer pins "a sub-threshold gap is not fetched".
+    ' The property that survives the removal: a real sequence gap is UNFETCHABLE only when it
+    ' inverts after clamping — the two bracketing rows one millisecond apart, so the venue
+    ' window would be empty — and that drop is LOGGED. Any FETCHABLE gap, however narrow, is now
+    ' returned as its own window; asserted with a gap well under the old 2,000 ms floor so the
+    ' fixture would have failed against the pre-DR-1 code.
     Private Sub A56b_CoveredStoreReturnsTailOnlyAndA48dHolds()
         Dim dir As String = A48TempStore("56b")
         Try
@@ -8895,23 +8904,42 @@ Module Program
                                      wEmpty(0).EndInclMs = segEndFar
             A48Cleanup(emptyDir)
 
-            ' (4) MinHoleMs floor — a real sequence gap spanning less than the constant is not
-            '     worth a fetch. Width derived FROM the constant, never restated.
+            ' (4) NO WIDTH FLOOR — a real sequence gap well under the old 2,000 ms MinHoleMs
+            '     value IS returned as its own fetch window, ahead of the tail. Would FAIL
+            '     pre-DR-1 (old code returned the tail alone, count=1).
             Dim tinyDir As String = A48TempStore("56b3")
-            Dim tinyGap As Long = TradeStoreWriter.MinHoleMs \ 2L
+            Dim tinyGap As Long = 3L   ' 3 ms — comfortably fetchable, comfortably sub-2000ms
             A56Write(tinyDir, New List(Of TradeRecord) From {
                 A53Trade(A56Ms(0), 64000, 10, "buy", "none", "t-1", 9000L),
                 A53Trade(A56Ms(tinyGap), 64001, 10, "buy", "none", "t-2", 9005L)})
             Dim wTiny = TradeStoreWriter.ResolveRepairWindowsMs(A56Path(tinyDir), A56Ms(0),
                                                                 A56Ms(600000), True)
-            Dim tinyOk As Boolean = wTiny.Count = 1 AndAlso wTiny(0).StartMs = A56Ms(tinyGap) + 1
+            Dim tinyOk As Boolean = wTiny.Count = 2 AndAlso
+                                    wTiny(0).StartMs = A56Ms(0) + 1 AndAlso
+                                    wTiny(0).EndInclMs = A56Ms(tinyGap) - 1 AndAlso
+                                    wTiny(1).StartMs = A56Ms(tinyGap) + 1
             A48Cleanup(tinyDir)
 
-            Check("A56b covered store ⇒ tail window only · already-covered ⇒ empty list (today's -1) · empty store ⇒ whole window · sub-MinHoleMs gap not fetched",
-                  farOk AndAlso coveredOk AndAlso emptyOk AndAlso tinyOk,
-                  String.Format("far={0}(n={1} start={2} cursor={3}) covered={4}(n={5} cursor={6}) empty={7} tiny={8}(n={9})",
+            ' (5) UNFETCHABLE — two rows one millisecond apart carrying a real sequence gap
+            '     invert after clamping (their hole window is [ts+1, ts]) and are dropped, not
+            '     returned. This is the one drop DR-1 keeps, and the only one left to keep.
+            Dim unfetchDir As String = A48TempStore("56b4")
+            A56Write(unfetchDir, New List(Of TradeRecord) From {
+                A53Trade(A56Ms(0), 64000, 10, "buy", "none", "u-1", 9100L),
+                A53Trade(A56Ms(1), 64001, 10, "buy", "none", "u-2", 9105L)})
+            Dim wUnfetch = TradeStoreWriter.ResolveRepairWindowsMs(A56Path(unfetchDir), A56Ms(0),
+                                                                   A56Ms(600000), True)
+            ' Only the tail window survives — the 1-ms-wide hole itself is unfetchable.
+            Dim unfetchOk As Boolean = wUnfetch.Count = 1 AndAlso
+                                       wUnfetch(0).StartMs = A56Ms(1) + 1
+            A48Cleanup(unfetchDir)
+
+            Check("A56b covered store ⇒ tail window only · already-covered ⇒ empty list (today's -1) · empty store ⇒ whole window · sub-old-floor gap IS fetched · 1ms-apart gap is unfetchable and dropped",
+                  farOk AndAlso coveredOk AndAlso emptyOk AndAlso tinyOk AndAlso unfetchOk,
+                  String.Format("far={0}(n={1} start={2} cursor={3}) covered={4}(n={5} cursor={6}) empty={7} tiny={8}(n={9}) unfetch={10}(n={11})",
                                 farOk, wFar.Count, If(wFar.Count > 0, wFar(0).StartMs, -1), cursorFar,
-                                coveredOk, wCovered.Count, cursorCovered, emptyOk, tinyOk, wTiny.Count))
+                                coveredOk, wCovered.Count, cursorCovered, emptyOk, tinyOk, wTiny.Count,
+                                unfetchOk, wUnfetch.Count))
         Finally
             A48Cleanup(dir)
         End Try
@@ -9076,8 +9104,7 @@ Module Program
             Dim seq As Long = 100000L
             rows.Add(A53Trade(A56Ms(0), 64000, 10, "buy", "none", "h-0", seq))
             For j As Integer = 1 To holeCount
-                ' Hole j is missing exactly j sequences, and spans 10 s — comfortably above
-                ' MinHoleMs so the floor never decides this fixture.
+                ' Hole j is missing exactly j sequences, and spans 10 s.
                 seq += 1L + CLng(j)
                 rows.Add(A53Trade(A56Ms(CLng(j) * 10000L), 64000 + j, 10, "buy", "none", "h-" & j, seq))
             Next
@@ -9099,15 +9126,92 @@ Module Program
             For i As Integer = 1 To w.Count - 1
                 If w(i).StartMs <= w(i - 1).StartMs Then orderedOk = False
             Next
-            ' The spans are wide enough that MinHoleMs is not what produced the count.
-            Dim widthOk As Boolean = w.Count > 0 AndAlso w(0).WidthMs >= TradeStoreWriter.MinHoleMs
+            ' ⚠ DR-1 (docs/downtime-repair-followups-implementer-briefs.md §1): this fixture
+            ' USED to also assert `w(0).WidthMs >= MinHoleMs` as a sanity check that the CAP,
+            ' not the FLOOR, produced the count — MinHoleMs is gone, so there is no floor left
+            ' to rule out. `countOk` above already asserts the count against
+            ' TradeStoreWriter.MaxHolesPerPass directly, which is the property this stood in for.
 
             Check("A56f MaxHolesPerPass cap — " & holeCount & " holes capped at the production constant, the smallest dropped, survivors chronological, tail last",
-                  countOk AndAlso firstOk AndAlso tailOk AndAlso orderedOk AndAlso widthOk,
-                  String.Format("windows={0}(want {1}) firstStart={2}(want {3}) ordered={4} tailOk={5} widthOk={6}",
+                  countOk AndAlso firstOk AndAlso tailOk AndAlso orderedOk,
+                  String.Format("windows={0}(want {1}) firstStart={2}(want {3}) ordered={4} tailOk={5}",
                                 w.Count, TradeStoreWriter.MaxHolesPerPass + 1,
                                 If(w.Count > 0, w(0).StartMs, -1),
-                                A56Ms(CLng(lowestKept - 1) * 10000L) + 1, orderedOk, tailOk, widthOk))
+                                A56Ms(CLng(lowestKept - 1) * 10000L) + 1, orderedOk, tailOk))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A56g: DR-2 — a truncation cut is TIME-contiguous, not a FILE-position slice ----------
+    ' docs/downtime-repair-followups-implementer-briefs.md §2. `ScanForRepair`'s truncation used
+    ' to drop the oldest MaxScanRows\10 rows by FILE POSITION. On an out-of-order store — repair
+    ' pages append after streaming, so file order and time order differ — that scatters holes
+    ' across the retained set's interior, and the walk in ResolveRepairWindowsMs reports each one
+    ' as a PHANTOM hole with a large missing-sequence count, which then wins the MaxHolesPerPass
+    ' ranking and evicts every real hole.
+    '
+    ' Construction: 16 rows, fully sequence-contiguous (seq 0..15, zero real holes) when sorted
+    ' by time, but written out of order — an "S" block (seq 0,2,4,...,14, ascending timestamps)
+    ' written first, then an "R" block (seq 1,3,5,...,15, interleaved timestamps) appended after,
+    ' exactly the streaming-then-repair shape A56c uses. Driven through the Friend overload with
+    ' a cap of 10 so the truncation path fires without 500,000 rows.
+    '
+    ' ⚠ THIS IS THE MUTATION PROOF. Hand-traced against the pre-fix file-order RemoveRange: the
+    ' same 16 rows produce FIVE phantom holes (seq boundaries 2, 4, 6, 8, 10 — the S-block rows
+    ' the file-order cut discarded while every R-block row, always appended at the list's end,
+    ' survived every cut). The fix retains seq 6..15 — perfectly contiguous, zero phantoms.
+    Private Sub A56g_TruncationCutIsTimeContiguousNotFileOrder()
+        Dim dir As String = A48TempStore("56g")
+        Try
+            Dim sRows As New List(Of TradeRecord)()
+            For k As Integer = 0 To 7
+                sRows.Add(A53Trade(A56Ms(CLng(k * 2) * 10000L), 64000 + k, 10, "buy", "none",
+                                   "s-" & k, CLng(k * 2)))
+            Next
+            A56Write(dir, sRows)   ' streaming wrote these first
+
+            Dim rRows As New List(Of TradeRecord)()
+            For k As Integer = 0 To 7
+                rRows.Add(A53Trade(A56Ms(CLng(k * 2 + 1) * 10000L), 64100 + k, 10, "sell", "none",
+                                   "r-" & k, CLng(k * 2 + 1)))
+            Next
+            A56Write(dir, rRows)   ' a repair pass filled the gaps, appended LATER, timestamped EARLIER
+
+            ' Confirm the file really IS out of order (A56c's own discipline) — otherwise a
+            ' future refactor that starts writing sorted would turn this into a tautology.
+            Dim allRows = TradeStoreWriter.ReadTradeFile(A56Path(dir))
+            Dim genuinelyUnsorted As Boolean = False
+            For i As Integer = 1 To allRows.Count - 1
+                If allRows(i).Timestamp < allRows(i - 1).Timestamp Then genuinelyUnsorted = True
+            Next
+
+            Dim smallCap As Integer = 10
+            Dim truncated As Boolean = False
+            Dim scanned = TradeStoreWriter.ScanForRepair(A56Path(dir), A56Ms(0), smallCap, truncated)
+
+            scanned.Sort(Function(a, b)
+                             Dim c As Integer = a.TsMs.CompareTo(b.TsMs)
+                             If c <> 0 Then Return c
+                             Return a.Seq.CompareTo(b.Seq)
+                         End Function)
+
+            Dim noPhantom As Boolean = True
+            For i As Integer = 1 To scanned.Count - 1
+                If scanned(i).Seq - scanned(i - 1).Seq <> 1L Then noPhantom = False
+            Next
+
+            Dim countOk As Boolean = scanned.Count = smallCap
+            Dim rangeOk As Boolean = scanned.Count > 0 AndAlso
+                                     scanned(0).Seq = 6L AndAlso
+                                     scanned(scanned.Count - 1).Seq = 15L
+
+            Check("A56g DR-2 ⚠ truncation cut is TIME-contiguous, not file-order — an out-of-order store's cap truncation produces ZERO phantom holes and reports truncated",
+                  truncated AndAlso genuinelyUnsorted AndAlso countOk AndAlso rangeOk AndAlso noPhantom,
+                  String.Format("truncated={0} unsorted={1} count={2}(want {3}) firstSeq={4}(want 6) lastSeq={5}(want 15) noPhantom={6}",
+                                truncated, genuinelyUnsorted, scanned.Count, smallCap,
+                                If(scanned.Count > 0, scanned(0).Seq, -1L),
+                                If(scanned.Count > 0, scanned(scanned.Count - 1).Seq, -1L), noPhantom))
         Finally
             A48Cleanup(dir)
         End Try

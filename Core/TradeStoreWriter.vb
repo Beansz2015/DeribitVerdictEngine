@@ -695,18 +695,10 @@ Public NotInheritable Class TradeStoreWriter
     ' holes or invent them. trade_seq gives completeness with no threshold at all.
 
     ''' <summary>
-    ''' [D-4, ruled 2026-08-12] Holes narrower than this are dropped — below the flush interval,
-    ''' so nothing a real outage produces is anywhere near it. A CONSTANT, not a settings key:
-    ''' no failure-rate linkage, nobody will tune it, and a key would cost a version bump and a
-    ''' dataset-boundary question for nothing. Public so fixtures read the PRODUCTION number
-    ''' instead of restating it (the F1 lesson, and the 2026-08-11 Public-not-Private ruling).
-    ''' </summary>
-    Public Const MinHoleMs As Long = 2000L
-
-    ''' <summary>
     ''' [D-4, ruled 2026-08-12] Backstop against a pathological era, not a tuning knob. The
     ''' pre-fix era holds 7,471 gap runs; without a cap one pass over it would issue 7,471 REST
-    ''' fetches. Same constant rationale as <see cref="MinHoleMs"/>.
+    ''' fetches. No failure-rate linkage, nobody will tune it, and a key would cost a version
+    ''' bump and a dataset-boundary question for nothing.
     ''' </summary>
     Public Const MaxHolesPerPass As Integer = 32
 
@@ -743,8 +735,10 @@ Public NotInheritable Class TradeStoreWriter
     End Structure
 
     ' One scanned row, reduced to the only two fields hole detection needs. Seq is
-    ' AbsentSeq when the row carries none.
-    Private Structure SeqPoint
+    ' AbsentSeq when the row carries none. Friend (not Private): ScanForRepair below is Friend
+    ' so A56g can drive it directly with a small cap, and a Friend function cannot expose a
+    ' Private type through its signature.
+    Friend Structure SeqPoint
         Public TsMs As Long
         Public Seq As Long
     End Structure
@@ -785,7 +779,7 @@ Public NotInheritable Class TradeStoreWriter
 
         ' ── 1. Scan ───────────────────────────────────────────────────────────────────
         Dim truncated As Boolean = False
-        Dim rows As List(Of SeqPoint) = ScanForRepair(path, segStartMs, truncated)
+        Dim rows As List(Of SeqPoint) = ScanForRepair(path, segStartMs, MaxScanRows, truncated)
 
         ' ── 2. Sort. ⚠ TRAP 1, AND IT IS NON-NEGOTIABLE ───────────────────────────────
         ' The store is NOT sorted, and LastTradeTimestamp's own summary records why: repair
@@ -845,19 +839,30 @@ Public NotInheritable Class TradeStoreWriter
             hasPrev = True
         Next
 
-        ' ── 5–6. Clamp each hole into the window, then drop the narrow ones ───────────
+        ' ── 5–6. Clamp each hole into the window, dropping only the UNFETCHABLE ones ──
         ' ⚠ TRAP 3 — the clamp goes on EACH HOLE, not only on the pass's outer window. A hole
         ' past Deribit's retention would otherwise be found, fetched, return nothing, and be
         ' found again at the next pass, forever.
+        '
+        ' ⚠ NO WIDTH FLOOR (DR-1, docs/downtime-repair-followups-implementer-briefs.md §1).
+        ' Detection is on trade_seq completeness alone (D-2); a time threshold applied to the
+        ' output of that check is the exact tolerance-over-completeness pattern this project's
+        ' own store-integrity lesson warns against. The only drop kept here is a range that
+        ' INVERTS after clamping — `prev.Ts = cur.Ts` or the two rows one millisecond apart —
+        ' which is not a tolerance but a hard fact: the venue API takes a time range, so there
+        ' is no sub-millisecond query to issue. That drop is LOGGED below, because a silent
+        ' drop here is the same mistake in miniature.
         Dim kept As New List(Of Hole)()
+        Dim unfetchable As Integer = 0
         For Each h In holes
             Dim s As Long = Math.Max(h.Range.StartMs, segStartMs)
             Dim e As Long = Math.Min(h.Range.EndInclMs, segEndInclMs)
-            If e < s Then Continue For
-            Dim clamped As New LongRange(s, e)
-            If clamped.WidthMs < MinHoleMs Then Continue For
+            If e < s Then
+                unfetchable += 1
+                Continue For
+            End If
             Dim k As Hole
-            k.Range = clamped
+            k.Range = New LongRange(s, e)
             k.MissingSeqs = h.MissingSeqs
             kept.Add(k)
         Next
@@ -876,11 +881,11 @@ Public NotInheritable Class TradeStoreWriter
             result.Add(k.Range)
         Next
 
-        If dropped > 0 OrElse truncated Then
+        If dropped > 0 OrElse truncated OrElse unfetchable > 0 Then
             Console.WriteLine(String.Format(
                 "[TradeStoreWriter] repair scan '{0}': {1} hole(s) returned, {2} dropped by the " &
-                "MaxHolesPerPass={3} cap{4}",
-                path, result.Count, dropped, MaxHolesPerPass,
+                "MaxHolesPerPass={3} cap, {4} unfetchable (sub-millisecond after clamp){5}",
+                path, result.Count, dropped, MaxHolesPerPass, unfetchable,
                 If(truncated, ", scan TRUNCATED at MaxScanRows=" & MaxScanRows, "")))
         End If
 
@@ -908,16 +913,34 @@ Public NotInheritable Class TradeStoreWriter
     ''' a sequence: a seq-less bracket correctly BREAKS the walk instead of licensing a phantom
     ''' hole across the boundary.</para>
     '''
+    ''' <para>⚠ DR-2 (docs/downtime-repair-followups-implementer-briefs.md §2). After truncation
+    ''' the retained rows must stay CONTIGUOUS IN TIME — no interior gaps — because the caller
+    ''' sorts by (Timestamp, TradeSeq) and walks brackets across whatever survives. A cut that
+    ''' removes rows by FILE POSITION rather than by TIME leaves interior gaps on an
+    ''' out-of-order store (repair pages append after streaming, so file order and time order
+    ''' differ), and the walk reports each gap as a PHANTOM hole with a huge missing-sequence
+    ''' count — which then wins the MaxHolesPerPass ranking and evicts every real hole. So when
+    ''' the cap bites: sort once, drop the oldest block BY TIME, and remember the new floor —
+    ''' every row read afterward that falls below the floor is discarded as it arrives rather
+    ''' than being re-admitted and removed again later.</para>
+    '''
+    ''' <paramref name="maxScanRows"/> is a parameter (not a direct read of
+    ''' <see cref="MaxScanRows"/>) so a fixture can drive a small cap and reach the truncation
+    ''' path without constructing 500,000 rows; the production call site passes the constant.
+    '''
     ''' Missing / unreadable file ⇒ empty list, never throws — the ReadTradeFile discipline.
     ''' </summary>
-    Private Shared Function ScanForRepair(path As String, segStartMs As Long,
-                                          ByRef truncated As Boolean) As List(Of SeqPoint)
+    Friend Shared Function ScanForRepair(path As String, segStartMs As Long, maxScanRows As Integer,
+                                         ByRef truncated As Boolean) As List(Of SeqPoint)
         Dim inWindow As New List(Of SeqPoint)()
         truncated = False
         If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return inWindow
 
         Dim haveBracket As Boolean = False
         Dim bracket As SeqPoint
+        ' Nothing until the cap first bites. Once set, no row below it may re-enter the window —
+        ' that is what keeps the retained set contiguous after a cut (see the doc comment above).
+        Dim floorMs As Long? = Nothing
 
         Try
             Using sr As New StreamReader(path)
@@ -944,12 +967,23 @@ Public NotInheritable Class TradeStoreWriter
                         Continue Do
                     End If
 
+                    If floorMs.HasValue AndAlso p.TsMs < floorMs.Value Then Continue Do
+
                     inWindow.Add(p)
-                    If inWindow.Count > MaxScanRows Then
-                        ' Keep the NEWEST rows — the recoverable ground. RemoveAt(0) on a large
-                        ' List is O(n), so drop a block at a time rather than one per row.
-                        inWindow.RemoveRange(0, MaxScanRows \ 10)
+                    If inWindow.Count > maxScanRows Then
+                        ' Sort ONCE at the cut — not on every overflow, which would be
+                        ' O(n log n) per row — then drop the oldest block BY TIME so the
+                        ' survivors have no interior gap.
+                        inWindow.Sort(Function(a, b)
+                                          Dim c As Integer = a.TsMs.CompareTo(b.TsMs)
+                                          If c <> 0 Then Return c
+                                          Return a.Seq.CompareTo(b.Seq)
+                                      End Function)
+                        Dim dropCount As Integer = Math.Max(1, maxScanRows \ 10)
+                        If dropCount > inWindow.Count Then dropCount = inWindow.Count
+                        inWindow.RemoveRange(0, dropCount)
                         truncated = True
+                        floorMs = inWindow(0).TsMs
                     End If
                 Loop
             End Using
@@ -957,9 +991,10 @@ Public NotInheritable Class TradeStoreWriter
             Console.Error.WriteLine("[TradeStoreWriter] ScanForRepair failed: " & ex.Message)
         End Try
 
-        ' ⚠ A truncated scan invalidates the bracket. The rows the cap discarded sit BETWEEN the
-        ' bracket and the oldest retained row, so bracketing across them would report ground
-        ' those discarded rows cover as a hole. Drop it and let the walk start clean.
+        ' ⚠ A truncated scan invalidates the bracket. The rows the cap discarded sit BELOW the
+        ' floor, which may now sit ABOVE the bracket's own timestamp; bracketing across them
+        ' would report ground those discarded rows cover as a hole. Drop it and let the walk
+        ' start clean.
         If haveBracket AndAlso Not truncated Then inWindow.Add(bracket)
         Return inWindow
     End Function
