@@ -171,20 +171,6 @@ Public Class HistoricalStore
         Return total
     End Function
 
-    Private Shared Function CountDataRows(path As String) As Integer
-        Dim n As Integer = 0
-        Try
-            Using sr As New StreamReader(path)
-                sr.ReadLine()   ' header
-                While sr.ReadLine() IsNot Nothing
-                    n += 1
-                End While
-            End Using
-        Catch
-        End Try
-        Return n
-    End Function
-
     ''' <summary>Load one candle-month file into memory. Empty list on any error.</summary>
     Public Shared Function LoadCandleMonth(resolution As Integer, year As Integer, month As Integer) As List(Of Candle)
         Return StoreFiles.LoadCandleFile(CandleFileFor(resolution, year, month))
@@ -260,7 +246,13 @@ Public Class HistoricalStore
             Dim cursor0 As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartMs, endMs, clampToSegStart)
             If cursor0 >= 0 Then windows.Add(New TradeStoreWriter.LongRange(cursor0, endMs))
         End If
-        If windows.Count = 0 Then Return CountDataRows(path)
+        ' [DR-3] Nothing to fetch ⇒ this pass appended 0 rows. Returning the file's total row
+        ' count here (as before) meant TradeStoreGapRepair.RepairOnceAsync summed the WHOLE
+        ' month file into TotalRowsRepaired and logged it as "rows appended" on every healthy
+        ' pass — the common case. BackfillAllAsync (this function's other caller) discards the
+        ' return value entirely (see its .vb:575 call site), so this contract change is safe
+        ' for both callers.
+        If windows.Count = 0 Then Return 0
 
         Dim total As Integer = 0
         Dim page As Integer = 0

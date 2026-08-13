@@ -7203,7 +7203,19 @@ Module Program
             Dim c3NoClamp As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartLate, segStartLate + 3600000L,
                                                                            clampToSegStart:=False)
 
-            ' (4) force a double-write of the same rows, then read back.
+            ' (4) [DR-3] the SAME covered window as case (1), driven through the real entry
+            ' point rather than the cursor helper it depends on: BackfillTradeMonthAsync must
+            ' report 0 rows appended when there is nothing to fetch. Pre-fix it returns
+            ' CountDataRows(path) — the whole file's row count (5 here) — which is why every
+            ' healthy gap-repair pass over a multi-hundred-thousand-row month logged that
+            ' figure as "rows appended". windows.Count = 0 is reached without any network call
+            ' (cursor -1 short-circuits before the fetch loop), so this is safe to drive live.
+            Dim segStart5 As DateTime = DateTimeOffset.FromUnixTimeMilliseconds(A48Ms(0)).UtcDateTime
+            Dim segEndExcl5 As DateTime = DateTimeOffset.FromUnixTimeMilliseconds(lastTs + 1L).UtcDateTime
+            Dim n5 As Integer = HistoricalStore.BackfillTradeMonthAsync(
+                2026, 7, segStart5, segEndExcl5, storeDir:=dir, clampToSegStart:=True).GetAwaiter().GetResult()
+
+            ' (5) force a double-write of the same rows, then read back.
             Dim dupRows = TradeStoreWriter.ReadTradeFile(path)
             TradeStoreWriter.AppendRows(dir, dupRows)
             Dim raw = File.ReadAllLines(path).Length - 1
@@ -7212,11 +7224,11 @@ Module Program
             ' which is what makes the overlap no-op survive the schema change unchanged.
             Dim deduped As Integer = TradeStoreWriter.DedupTrades(TradeStoreWriter.ReadTradeFile(path)).Count
 
-            Check("A48d gap-repair overlap is a no-op — covered window ⇒ no fetch · gap resumes at last+1 · retention clamp · read-time dedup",
+            Check("A48d gap-repair overlap is a no-op — covered window ⇒ no fetch · gap resumes at last+1 · retention clamp · read-time dedup · DR-3 reports 0 rows appended",
                   c1 = -1 AndAlso c2 = lastTs + 1 AndAlso c3 = segStartLate AndAlso
-                  c3NoClamp = lastTs + 1 AndAlso raw = 10 AndAlso deduped = 5,
-                  String.Format("c1={0} c2={1}(want {2}) c3={3}(want {4}) c3NoClamp={5} rawRows={6} deduped={7}",
-                                c1, c2, lastTs + 1, c3, segStartLate, c3NoClamp, raw, deduped))
+                  c3NoClamp = lastTs + 1 AndAlso raw = 10 AndAlso deduped = 5 AndAlso n5 = 0,
+                  String.Format("c1={0} c2={1}(want {2}) c3={3}(want {4}) c3NoClamp={5} rawRows={6} deduped={7} n5={8}(want 0)",
+                                c1, c2, lastTs + 1, c3, segStartLate, c3NoClamp, raw, deduped, n5))
         Finally
             A48Cleanup(dir)
         End Try
