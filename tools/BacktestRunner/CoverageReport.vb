@@ -321,10 +321,19 @@ Public NotInheritable Class CoverageReport
     ''' trailing and cross-guid are BOTH ambiguous and share the same downstream default.</summary>
     Public Shared Function ClassifyUptime(hourStartMs As Long, upIntervals As List(Of UpInterval)) _
             As (Kind As String, InstanceId As String)
-        Dim hourEndMs As Long = hourStartMs + HourMs - 1
+        Return ClassifyUptimeSpan(hourStartMs, hourStartMs + HourMs - 1, upIntervals)
+    End Function
+
+    ''' <summary>[SH-1] Same walk as <see cref="ClassifyUptime"/>, generalised to an arbitrary
+    ''' [spanStartMs, spanEndMsInclusive] span rather than a fixed whole hour — the piece a
+    ''' split sub-span needs to resolve its own uptime read. ClassifyUptime is now the
+    ''' whole-hour special case of this.</summary>
+    Public Shared Function ClassifyUptimeSpan(spanStartMs As Long, spanEndMsInclusive As Long,
+                                              upIntervals As List(Of UpInterval)) _
+            As (Kind As String, InstanceId As String)
         If upIntervals IsNot Nothing Then
             For Each iv In upIntervals
-                If hourEndMs >= iv.FirstUtcMs AndAlso hourStartMs <= iv.LastUtcMs Then
+                If spanEndMsInclusive >= iv.FirstUtcMs AndAlso spanStartMs <= iv.LastUtcMs Then
                     Return ("up", iv.InstanceId)
                 End If
             Next
@@ -334,9 +343,9 @@ Public NotInheritable Class CoverageReport
         Dim nextIv As UpInterval = Nothing
         If upIntervals IsNot Nothing Then
             For Each iv In upIntervals
-                If iv.LastUtcMs < hourStartMs Then
+                If iv.LastUtcMs < spanStartMs Then
                     If prevIv Is Nothing OrElse iv.LastUtcMs > prevIv.LastUtcMs Then prevIv = iv
-                ElseIf iv.FirstUtcMs > hourEndMs Then
+                ElseIf iv.FirstUtcMs > spanEndMsInclusive Then
                     If nextIv Is Nothing OrElse iv.FirstUtcMs < nextIv.FirstUtcMs Then nextIv = iv
                 End If
             Next
@@ -414,17 +423,128 @@ Public NotInheritable Class CoverageReport
         Return byHour
     End Function
 
+    ''' <summary>[SH-1 §4.2 route (b)] A second, targeted-by-caller pass for hours a D7 marker
+    ''' splits — rare, deploy/toggle only. <see cref="AccumulateHourStats"/>'s hot path stays
+    ''' whole-hour and untouched; this walks the SAME [fromUtc, toUtc) range once more, keyed
+    ''' by `spanBoundsByHour` (hourStartMs → each span's start ms, ascending, first entry
+    ''' always the hour start itself). `prevTs` is carried CONTINUOUSLY across the whole walk —
+    ''' never reset at a span or hour boundary — so a gap that starts before a span's own first
+    ''' row (slip 2: straddling the marker, or straddling the hour before it) is still
+    ''' attributed to the span it lands in, exactly like the whole-hour accumulator's own
+    ''' cross-boundary carry.</summary>
+    Public Shared Function AccumulateSplitSpanStats(storeDir As String, fromUtc As DateTime, toUtc As DateTime,
+                                                     spanBoundsByHour As Dictionary(Of Long, List(Of Long))) _
+            As Dictionary(Of Long, HourStoreStats)
+        Dim bySpan As New Dictionary(Of Long, HourStoreStats)
+        If spanBoundsByHour Is Nothing OrElse spanBoundsByHour.Count = 0 Then Return bySpan
+
+        Dim prevTs As Long = Long.MinValue
+        Dim havePrev As Boolean = False
+
+        For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
+            Dim path As String = TradeStoreWriter.TradeFileFor(storeDir, m.Year, m.Month)
+            Dim rows = TradeStoreWriter.ReadTradeFile(path)
+            If rows.Count = 0 Then Continue For
+            Dim deduped = TradeStoreWriter.DedupTrades(rows)
+            deduped.Sort(Function(a, b) a.Timestamp.CompareTo(b.Timestamp))
+
+            For Each t In deduped
+                Dim hourStartMs As Long = (t.Timestamp \ HourMs) * HourMs
+                Dim bounds As List(Of Long) = Nothing
+                If spanBoundsByHour.TryGetValue(hourStartMs, bounds) Then
+                    Dim spanStartMs As Long = SpanStartFor(t.Timestamp, bounds)
+                    Dim stats As HourStoreStats = Nothing
+                    If Not bySpan.TryGetValue(spanStartMs, stats) Then
+                        stats = New HourStoreStats()
+                        bySpan(spanStartMs) = stats
+                    End If
+                    stats.RowCount += 1
+                    If havePrev Then
+                        Dim gap As Long = t.Timestamp - prevTs
+                        If gap > stats.LongestGapMs Then stats.LongestGapMs = gap
+                    End If
+                End If
+                prevTs = t.Timestamp
+                havePrev = True
+            Next
+        Next
+        Return bySpan
+    End Function
+
+    ''' <summary>The last entry in `boundsAscending` that is ≤ tsMs — which span a trade's
+    ''' timestamp falls into. `boundsAscending(0)` is always the hour start, so this always
+    ''' resolves to some entry.</summary>
+    Private Shared Function SpanStartFor(tsMs As Long, boundsAscending As List(Of Long)) As Long
+        Dim result As Long = boundsAscending(0)
+        For Each b In boundsAscending
+            If b <= tsMs Then result = b Else Exit For
+        Next
+        Return result
+    End Function
+
     ' ── Per-hour classification ───────────────────────────────────────────────────────
 
-    ''' <summary>The six-class per-hour verdict. Positive store evidence (clean rows) always
-    ''' wins as Captured, regardless of how ambiguous the uptime read is. See the file-header
-    ''' note for the ExpectedMissing / S1-skipped design decisions.</summary>
+    ''' <summary>One sub-span's classify — the same five checks <see cref="ClassifyHour"/> ran
+    ''' inline pre-SH-1, parameterised on an already-resolved scope and an already-scoped
+    ''' stats/uptime read so both the whole-hour path and the split path share one
+    ''' implementation.</summary>
+    Private Shared Function ClassifySpan(spanStartMs As Long, spanEndMsInclusive As Long,
+                                         scopeKind As String, scopeInstanceId As String,
+                                         upIntervals As List(Of UpInterval),
+                                         s1Skipped As Boolean,
+                                         spanStats As HourStoreStats,
+                                         gapMs As Long) As (Classification As HourClass, InstanceId As String, Reason As String)
+        If scopeKind = "unknown" Then
+            Return (HourClass.UnknownScope, "", "")
+        End If
+        If scopeKind = "off" Then
+            Return (HourClass.NotCapturing, scopeInstanceId, "")
+        End If
+
+        Dim stats As HourStoreStats = If(spanStats, New HourStoreStats())
+        Dim storeClean As Boolean = stats.RowCount > 0 AndAlso stats.LongestGapMs <= gapMs
+        If storeClean Then
+            Return (HourClass.Captured, "", "")
+        End If
+
+        If s1Skipped Then
+            Dim skipReason As String = If(stats.RowCount = 0, "empty(S1 skipped)",
+                                          "gap-breach(S1 skipped," & stats.LongestGapMs & "ms)")
+            Return (HourClass.Defect, "", skipReason)
+        End If
+
+        Dim up = ClassifyUptimeSpan(spanStartMs, spanEndMsInclusive, upIntervals)
+        If up.Kind = "before-first" Then
+            Return (HourClass.ExpectedMissing, up.InstanceId, "")
+        End If
+
+        Dim reason As String = If(up.Kind <> "up", "ambiguous-uptime(" & up.Kind & ")",
+                                  If(stats.RowCount = 0, "empty", "gap-breach(" & stats.LongestGapMs & "ms)"))
+        Return (HourClass.Defect, up.InstanceId, reason)
+    End Function
+
+    ''' <summary>[SH-1] The six-class per-hour verdict. Positive store evidence (clean rows)
+    ''' always wins as Captured, regardless of how ambiguous the uptime read is. See the
+    ''' file-header note for the ExpectedMissing / S1-skipped design decisions.
+    '''
+    ''' An hour containing a D7 marker strictly inside it (hourStartMs &lt; UtcMs ≤ hourEndMs —
+    ''' a marker landing exactly ON hourStartMs was already handled by ResolveScope's `≤`) is
+    ''' SPLIT at every such marker and each part classified against the scope that governed it.
+    ''' Ruling (docs/coverage-split-hour-implementer-brief.md §2): the hour is DEFECT if EITHER
+    ''' part is DEFECT. D-2: when no part is Defect but the parts disagree, Captured wins —
+    ''' positive store evidence outranks an ambiguous/absent uptime or scope read, same
+    ''' precedence the whole-hour path already used. Output stays ONE ROW PER HOUR (D-1); the
+    ''' split detail goes in Reason only.
+    ''' `spanStats` carries the route-(b) targeted pass's per-span stats (see
+    ''' AccumulateSplitSpanStats) — Nothing/absent is fine for an hour that turns out not to be
+    ''' split.</summary>
     Public Shared Function ClassifyHour(hourStartUtc As DateTime,
                                         markers As List(Of CaptureMarkerLog.MarkerRecord),
                                         upIntervals As List(Of UpInterval),
                                         s1Skipped As Boolean,
                                         hourStats As HourStoreStats,
-                                        gapMs As Long) As HourResult
+                                        gapMs As Long,
+                                        Optional spanStats As Dictionary(Of Long, HourStoreStats) = Nothing) As HourResult
         Dim result As New HourResult With {.HourUtc = hourStartUtc}
 
         If hourStartUtc.DayOfWeek = DayOfWeek.Saturday OrElse hourStartUtc.DayOfWeek = DayOfWeek.Sunday Then
@@ -434,42 +554,86 @@ Public NotInheritable Class CoverageReport
 
         Dim hourStartMs As Long =
             New DateTimeOffset(DateTime.SpecifyKind(hourStartUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim hourEndMs As Long = hourStartMs + HourMs - 1
 
-        Dim scope = ResolveScope(hourStartMs, markers)
-        If scope.Kind = "unknown" Then
-            result.Classification = HourClass.UnknownScope
-            Return result
-        End If
-        If scope.Kind = "off" Then
-            result.Classification = HourClass.NotCapturing
-            result.InstanceId = scope.InstanceId
-            Return result
-        End If
+        Dim splitMarkers = If(markers, New List(Of CaptureMarkerLog.MarkerRecord)).
+            Where(Function(m) m.UtcMs > hourStartMs AndAlso m.UtcMs <= hourEndMs).
+            OrderBy(Function(m) m.UtcMs).ToList()
 
-        Dim stats As HourStoreStats = If(hourStats, New HourStoreStats())
-        Dim storeClean As Boolean = stats.RowCount > 0 AndAlso stats.LongestGapMs <= gapMs
-        If storeClean Then
-            result.Classification = HourClass.Captured
+        If splitMarkers.Count = 0 Then
+            Dim scope = ResolveScope(hourStartMs, markers)
+            Dim only = ClassifySpan(hourStartMs, hourEndMs, scope.Kind, scope.InstanceId,
+                                    upIntervals, s1Skipped, hourStats, gapMs)
+            result.Classification = only.Classification
+            result.InstanceId = only.InstanceId
+            result.Reason = only.Reason
             Return result
         End If
 
-        If s1Skipped Then
-            result.Classification = HourClass.Defect
-            result.Reason = If(stats.RowCount = 0, "empty(S1 skipped)",
-                               "gap-breach(S1 skipped," & stats.LongestGapMs & "ms)")
-            Return result
+        ' Split hour (rare — a deploy or a capture toggle landed inside it). Build N+1 spans:
+        ' [hourStart, marker1) governed by the pre-flip scope, then [markerK, markerK+1) each
+        ' governed by markerK's own Enabled, the last running to hourEnd.
+        Dim boundaries As New List(Of Long) From {hourStartMs}
+        boundaries.AddRange(splitMarkers.Select(Function(m) m.UtcMs))
+        Dim preFlipScope = ResolveScope(hourStartMs, markers)
+
+        Dim spans As New List(Of (Classification As HourClass, InstanceId As String, Reason As String, SpanStartMs As Long))
+        For i As Integer = 0 To boundaries.Count - 1
+            Dim spanStartMs As Long = boundaries(i)
+            Dim spanEndMsIncl As Long = If(i + 1 < boundaries.Count, boundaries(i + 1) - 1, hourEndMs)
+            Dim scopeKind As String
+            Dim scopeIid As String
+            If i = 0 Then
+                scopeKind = preFlipScope.Kind
+                scopeIid = preFlipScope.InstanceId
+            Else
+                Dim marker = splitMarkers(i - 1)
+                scopeKind = If(marker.Enabled, "on", "off")
+                scopeIid = marker.InstanceId
+            End If
+            Dim spanStat As HourStoreStats = Nothing
+            If spanStats IsNot Nothing Then spanStats.TryGetValue(spanStartMs, spanStat)
+            Dim cls = ClassifySpan(spanStartMs, spanEndMsIncl, scopeKind, scopeIid,
+                                   upIntervals, s1Skipped, spanStat, gapMs)
+            spans.Add((cls.Classification, cls.InstanceId, cls.Reason, spanStartMs))
+        Next
+
+        ' Worst-of, per the ruling: any Defect ⇒ Defect. D-2: else Captured wins on a
+        ' disagreement. [D-3, RULED 2026-08-13 — docs/coverage-split-hour-implementer-brief.md
+        ' §5a] The residual (no Defect, no Captured) orders UnknownScope > ExpectedMissing >
+        ' NotCapturing: bottom-placing UnknownScope would launder an uncharacterisable span into
+        ' a confident label (the SH-1 defect in miniature), and it would silently reverse
+        ' ClassifySpan's own precedence, which already checks unknown BEFORE off on the
+        ' single-scope path. ExpectedMissing > NotCapturing stands — NotCapturing asserts a
+        ' deliberate off-state that a span with no such record cannot honestly claim.
+        Dim finalCls As HourClass
+        If spans.Any(Function(s) s.Classification = HourClass.Defect) Then
+            finalCls = HourClass.Defect
+        ElseIf spans.Any(Function(s) s.Classification = HourClass.Captured) Then
+            finalCls = HourClass.Captured
+        ElseIf spans.Any(Function(s) s.Classification = HourClass.UnknownScope) Then
+            finalCls = HourClass.UnknownScope
+        ElseIf spans.Any(Function(s) s.Classification = HourClass.ExpectedMissing) Then
+            finalCls = HourClass.ExpectedMissing
+        Else
+            finalCls = HourClass.NotCapturing
         End If
 
-        Dim up = ClassifyUptime(hourStartMs, upIntervals)
-        result.InstanceId = up.InstanceId
-        If up.Kind = "before-first" Then
-            result.Classification = HourClass.ExpectedMissing
-            Return result
-        End If
+        Dim winner = spans.First(Function(s) s.Classification = finalCls)
+        result.Classification = finalCls
+        result.InstanceId = winner.InstanceId
 
-        result.Classification = HourClass.Defect
-        result.Reason = If(up.Kind <> "up", "ambiguous-uptime(" & up.Kind & ")",
-                           If(stats.RowCount = 0, "empty", "gap-breach(" & stats.LongestGapMs & "ms)"))
+        Dim markerTimes As New List(Of String)
+        For Each m In splitMarkers
+            markerTimes.Add(DateTimeOffset.FromUnixTimeMilliseconds(m.UtcMs).UtcDateTime.ToString("HH:mm"))
+        Next
+        Dim spanParts As New List(Of String)
+        For Each s In spans
+            Dim spanTimeUtc = DateTimeOffset.FromUnixTimeMilliseconds(s.SpanStartMs).UtcDateTime
+            Dim reasonSuffix As String = If(String.IsNullOrEmpty(s.Reason), "", "(" & s.Reason & ")")
+            spanParts.Add("[" & spanTimeUtc.ToString("HH:mm") & "] " & s.Classification.ToString() & reasonSuffix)
+        Next
+        result.Reason = "split@" & String.Join(",", markerTimes) & " :: " & String.Join(" | ", spanParts)
         Return result
     End Function
 
@@ -767,6 +931,32 @@ Public NotInheritable Class CoverageReport
 
         Dim hourStats = AccumulateHourStats(storeDir, walkFromUtc, walkToUtc)
 
+        ' [SH-1 §4.2] Find hours a marker splits (strictly inside — a marker landing exactly on
+        ' hourStartMs was already ResolveScope's business) and run route (b)'s targeted second
+        ' pass ONLY when at least one exists. Split hours are deploy/toggle-rare, so this stays
+        ' a no-op cost on every normal run.
+        Dim spanBoundsByHour As New Dictionary(Of Long, List(Of Long))
+        If markers IsNot Nothing Then
+            For Each mk In markers
+                Dim hMs As Long = (mk.UtcMs \ HourMs) * HourMs
+                If mk.UtcMs > hMs Then
+                    Dim bounds As List(Of Long) = Nothing
+                    If Not spanBoundsByHour.TryGetValue(hMs, bounds) Then
+                        bounds = New List(Of Long) From {hMs}
+                        spanBoundsByHour(hMs) = bounds
+                    End If
+                    bounds.Add(mk.UtcMs)
+                End If
+            Next
+            For Each kv In spanBoundsByHour
+                kv.Value.Sort()
+            Next
+        End If
+        Dim splitSpanStats As Dictionary(Of Long, HourStoreStats) = Nothing
+        If spanBoundsByHour.Count > 0 Then
+            splitSpanStats = AccumulateSplitSpanStats(storeDir, walkFromUtc, walkToUtc, spanBoundsByHour)
+        End If
+
         ' [§3.3] Local completeness over the SAME window the hourly walk covers. Unlike S0 this
         ' needs no network and is not bounded by Deribit's ~24 h trade retention, so it stays
         ' readable on a month-old file. It SUPPLEMENTS S0 (D6) — a sequence proves continuity,
@@ -779,7 +969,7 @@ Public NotInheritable Class CoverageReport
             Dim hourStartMs As Long = New DateTimeOffset(cursor).ToUnixTimeMilliseconds()
             Dim stats As HourStoreStats = Nothing
             hourStats.TryGetValue(hourStartMs, stats)
-            Dim hr = ClassifyHour(cursor, markers, upIntervals, result.S1Skipped, stats, opts.GapMs)
+            Dim hr = ClassifyHour(cursor, markers, upIntervals, result.S1Skipped, stats, opts.GapMs, splitSpanStats)
             result.Hours.Add(hr)
             If stats IsNot Nothing Then
                 If stats.LongestGapMs > result.ObservedLongestGapMs Then result.ObservedLongestGapMs = stats.LongestGapMs

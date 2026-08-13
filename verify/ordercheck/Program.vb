@@ -431,6 +431,19 @@ Module Program
         ' [C1 Session 2 review finding, 2026-08-05 — dead capture path vs genuine cold start]
         A49n_DeadCapturePathEscalatesPastGraceWindow()
 
+        ' [SH-1 — split-hour fix, docs/coverage-split-hour-implementer-brief.md, ruled
+        ' trader-tick-queue.md §0a 2026-08-12. Origin: c1-session1-review-2026-08-04.md F2 —
+        ' called "SH-1" throughout, never "F2" (collides with three other things; brief §0).]
+        A49o_SplitHourFlipOnMidHourCleanOnHalfNotLaundered()
+        A49p_SplitHourFlipOnMidHourSilentOnHalfIsDefect()
+        A49q_SplitHourFlipOffMidHourDefectInOnHalfNotLaundered()
+        A49r_SplitHourMarkerExactlyAtHourStartUnchanged()
+        A49s_SplitHourMarkerAtFiftyNineUsesAbsoluteThresholdNotScaled()
+        A49t_SplitHourTwoMarkersThreeSpansAllClassified()
+        A49u_SplitHourGapStraddlingMarkerAttributedToEndingSpan()
+        A49w_SplitHourFirstEverMarkerMidHourResidualPrefersUnknownScope()
+        A49v_BuildResultOneRowPerHourAcrossASplitDay()
+
         ' [A51 — candle/funding store write invariant, docs/store-integrity-check-2026-07-31
         ' -post-fix.md] The candle backfill destroyed June 2026 at 3m/5m/15m by writing a
         ' whole MONTH file from a partial SEGMENT fetch, behind a resolution-blind coverage
@@ -7937,6 +7950,360 @@ Module Program
               staleFlush = "RED" AndAlso healthy = "NORMAL",
               String.Format("coldStart={0} deadAmber={1} deadRed={2} staleFlush={3} healthy={4}",
                             coldStart, deadAmber, deadRed, staleFlush, healthy))
+    End Sub
+
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' SH-1 — split the coverage hour at a capture-state marker
+    ' (docs/coverage-split-hour-implementer-brief.md). Pre-fix, ResolveScope's whole-hour
+    ' <= pick governs the ENTIRE hour a marker lands inside, so a flip mid-hour reads the
+    ' hour by whichever scope happened to apply at :00 — a box that starts capturing at
+    ' :30 reads not-capturing for the whole hour and a defect in its ON half is never
+    ' examined. A49o/A49p are the mutation proof (§7 handle 1): both MUST fail if this
+    ' fix is reverted.
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    ' -- A49o: flip ON at :30, clean store in the ON half — not laundered into not-capturing
+    ' by the OFF marker that governed the hour's start. MUTATION PROOF: pre-fix this reads
+    ' NotCapturing (ResolveScope picks the OFF marker for the whole hour and the store is
+    ' never consulted) -----------------------------------------------------------------------
+    Private Sub A49o_SplitHourFlipOnMidHourCleanOnHalfNotLaundered()
+        Dim dir As String = A49TempStore("o")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            Dim flipMs As Long = A49Ms(hourStart.AddMinutes(30))
+            Dim hourStartMs As Long = A49Ms(hourStart)
+
+            ' Pre-flip: OFF (capture had not started on this box yet). Flip ON at :30.
+            Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = False, .InstanceId = "iid-1"},
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipMs, .Enabled = True, .InstanceId = "iid-2"}
+            }
+            Dim upIntervals As New List(Of UpInterval) From {
+                New UpInterval With {.InstanceId = "iid-2", .FirstUtcMs = flipMs,
+                                     .LastUtcMs = A49Ms(hourStart.AddHours(2)), .IsTrailing = True}
+            }
+            ' Clean, tight trades in the ON half only (05:31-05:33, well under the 300,000ms
+            ' threshold).
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(31)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(32)), 64010),
+                A49Trade(A49Ms(hourStart.AddMinutes(33)), 64020)
+            })
+
+            Dim spanBounds As New Dictionary(Of Long, List(Of Long)) From {
+                {hourStartMs, New List(Of Long) From {hourStartMs, flipMs}}
+            }
+            Dim spanStats = CoverageReport.AccumulateSplitSpanStats(dir, hourStart, hourStart.AddHours(1), spanBounds)
+
+            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats)
+
+            Check("A49o split hour — flip ON at :30 with a clean ON-half store reads CAPTURED, not laundered into not-capturing by the OFF marker that governed the hour's start (mutation proof — pre-fix reads NotCapturing)",
+                  hr.Classification = HourClass.Captured,
+                  String.Format("classification={0} reason='{1}'", hr.Classification, hr.Reason))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49p: flip ON at :30, SILENT store in the ON half — reads DEFECT. MUTATION PROOF:
+    ' pre-fix this also reads NotCapturing, which is the opposite of the stated preference
+    ' (a false defect is the cheaper error) -------------------------------------------------
+    Private Sub A49p_SplitHourFlipOnMidHourSilentOnHalfIsDefect()
+        Dim dir As String = A49TempStore("p")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            Dim flipMs As Long = A49Ms(hourStart.AddMinutes(30))
+            Dim hourStartMs As Long = A49Ms(hourStart)
+
+            Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = False, .InstanceId = "iid-1"},
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipMs, .Enabled = True, .InstanceId = "iid-2"}
+            }
+            Dim upIntervals As New List(Of UpInterval) From {
+                New UpInterval With {.InstanceId = "iid-2", .FirstUtcMs = flipMs,
+                                     .LastUtcMs = A49Ms(hourStart.AddHours(2)), .IsTrailing = True}
+            }
+            ' No trades at all — the store is silent throughout, including the ON half.
+            Dim spanBounds As New Dictionary(Of Long, List(Of Long)) From {
+                {hourStartMs, New List(Of Long) From {hourStartMs, flipMs}}
+            }
+            Dim spanStats = CoverageReport.AccumulateSplitSpanStats(dir, hourStart, hourStart.AddHours(1), spanBounds)
+
+            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats)
+
+            Check("A49p split hour — flip ON at :30 with a SILENT ON-half store reads DEFECT (up evidence present, zero rows) — the second mutation-proof case",
+                  hr.Classification = HourClass.Defect,
+                  String.Format("classification={0} reason='{1}'", hr.Classification, hr.Reason))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49q: flip OFF at :30, defect entirely inside the ON (first) half — not laundered by
+    ' the later off marker governing the rest of the hour --------------------------------
+    Private Sub A49q_SplitHourFlipOffMidHourDefectInOnHalfNotLaundered()
+        Dim dir As String = A49TempStore("q")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            Dim flipMs As Long = A49Ms(hourStart.AddMinutes(30))
+            Dim hourStartMs As Long = A49Ms(hourStart)
+
+            ' Pre-flip: ON. Flip OFF at :30.
+            Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"},
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipMs, .Enabled = False, .InstanceId = "iid-1"}
+            }
+            Dim upIntervals As New List(Of UpInterval) From {
+                New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(hourStart.AddHours(-1)),
+                                     .LastUtcMs = flipMs, .IsTrailing = True}
+            }
+            ' One trade at :05, then silence past the 300,000ms threshold before the flip at
+            ' :30 — a gap-breach entirely inside the ON half.
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(5)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(25)), 64010)   ' 20-minute gap > 5-minute threshold
+            })
+
+            Dim spanBounds As New Dictionary(Of Long, List(Of Long)) From {
+                {hourStartMs, New List(Of Long) From {hourStartMs, flipMs}}
+            }
+            Dim spanStats = CoverageReport.AccumulateSplitSpanStats(dir, hourStart, hourStart.AddHours(1), spanBounds)
+
+            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats)
+
+            Check("A49q split hour — flip OFF at :30 with a gap-breach entirely inside the ON (first) half still reads DEFECT, not laundered by the later off marker governing the rest of the hour",
+                  hr.Classification = HourClass.Defect,
+                  String.Format("classification={0} reason='{1}'", hr.Classification, hr.Reason))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49r: a marker landing EXACTLY at hourStartMs is ResolveScope's business (<=), not a
+    ' split — no split-detail Reason, single-scope path unchanged ---------------------------
+    Private Sub A49r_SplitHourMarkerExactlyAtHourStartUnchanged()
+        Dim day = A49Monday()
+        Dim hourStart = day.AddHours(5)
+        Dim atStart As Long = A49Ms(hourStart)
+
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = False, .InstanceId = "iid-1"},
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = atStart, .Enabled = True, .InstanceId = "iid-2"}
+        }
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-2", .FirstUtcMs = atStart,
+                                 .LastUtcMs = A49Ms(hourStart.AddHours(2)), .IsTrailing = True}
+        }
+        Dim cleanStats As New HourStoreStats With {.RowCount = 3, .LongestGapMs = 60000}
+
+        Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, cleanStats, 300000L)
+
+        Check("A49r a marker landing EXACTLY at hourStartMs is ResolveScope's business (<=), not a split — no split-detail Reason, classification via the ordinary single-scope path",
+              hr.Classification = HourClass.Captured AndAlso String.IsNullOrEmpty(hr.Reason),
+              String.Format("classification={0} reason='{1}'", hr.Classification, hr.Reason))
+    End Sub
+
+    ' -- A49s: a marker at :59 still splits (the last span is ~60s wide); a 50s gap inside it
+    ' (83% of the span's own width) must NOT breach the absolute 300,000ms threshold — gapMs
+    ' is not scaled to the sub-span length ---------------------------------------------------
+    Private Sub A49s_SplitHourMarkerAtFiftyNineUsesAbsoluteThresholdNotScaled()
+        Dim dir As String = A49TempStore("s")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            Dim flipMs As Long = A49Ms(hourStart.AddMinutes(59))
+            Dim hourStartMs As Long = A49Ms(hourStart)
+
+            Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = False, .InstanceId = "iid-1"},
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipMs, .Enabled = True, .InstanceId = "iid-2"}
+            }
+            Dim upIntervals As New List(Of UpInterval) From {
+                New UpInterval With {.InstanceId = "iid-2", .FirstUtcMs = flipMs,
+                                     .LastUtcMs = A49Ms(hourStart.AddHours(2)), .IsTrailing = True}
+            }
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(59).AddSeconds(5)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(59).AddSeconds(55)), 64010)
+            })
+
+            Dim spanBounds As New Dictionary(Of Long, List(Of Long)) From {
+                {hourStartMs, New List(Of Long) From {hourStartMs, flipMs}}
+            }
+            Dim spanStats = CoverageReport.AccumulateSplitSpanStats(dir, hourStart, hourStart.AddHours(1), spanBounds)
+            Dim s59Stats As HourStoreStats = Nothing
+            spanStats.TryGetValue(flipMs, s59Stats)
+
+            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats)
+
+            Check("A49s split hour — a marker at :59 still splits; a 50s gap inside the ~60s-wide last span (83% of the span's own width) does NOT breach the absolute 300,000ms threshold — not scaled to the sub-span length",
+                  hr.Classification = HourClass.Captured AndAlso
+                  s59Stats IsNot Nothing AndAlso s59Stats.LongestGapMs = 50000L,
+                  String.Format("classification={0} reason='{1}' span59Gap={2}",
+                                hr.Classification, hr.Reason, If(s59Stats Is Nothing, -1, s59Stats.LongestGapMs)))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49t: two in-hour markers split an hour into THREE spans, all independently
+    ' classified — off / captured / off, worst-of combine reads CAPTURED -------------------
+    Private Sub A49t_SplitHourTwoMarkersThreeSpansAllClassified()
+        Dim dir As String = A49TempStore("t")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            Dim hourStartMs As Long = A49Ms(hourStart)
+            Dim onMs As Long = A49Ms(hourStart.AddMinutes(20))
+            Dim offMs As Long = A49Ms(hourStart.AddMinutes(40))
+
+            ' OFF (:00-:20) → ON (:20-:40) → OFF (:40-:59).
+            Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = False, .InstanceId = "iid-1"},
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = onMs, .Enabled = True, .InstanceId = "iid-2"},
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = offMs, .Enabled = False, .InstanceId = "iid-2"}
+            }
+            Dim upIntervals As New List(Of UpInterval) From {
+                New UpInterval With {.InstanceId = "iid-2", .FirstUtcMs = onMs, .LastUtcMs = offMs, .IsTrailing = True}
+            }
+            ' Clean, tight trades inside the ON middle span only.
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(25)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(30)), 64010)
+            })
+
+            Dim spanBounds As New Dictionary(Of Long, List(Of Long)) From {
+                {hourStartMs, New List(Of Long) From {hourStartMs, onMs, offMs}}
+            }
+            Dim spanStats = CoverageReport.AccumulateSplitSpanStats(dir, hourStart, hourStart.AddHours(1), spanBounds)
+
+            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats)
+            Dim spanCount As Integer = hr.Reason.Split("|"c).Length
+
+            Check("A49t split hour — two in-hour markers split it into THREE spans, all independently classified (off/captured/off); worst-of combine reads CAPTURED, D-2",
+                  hr.Classification = HourClass.Captured AndAlso spanCount = 3,
+                  String.Format("classification={0} spanCount={1} reason='{2}'", hr.Classification, spanCount, hr.Reason))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49u: a gap straddling the marker (starts in span0, ends in span1) is attributed to
+    ' span1 — the span containing the ENDING trade, the same convention AccumulateHourStats
+    ' already uses at the hour level. Slip 2: prevTs must carry across the split, never reset
+    ' to the span's own first row --------------------------------------------------------
+    Private Sub A49u_SplitHourGapStraddlingMarkerAttributedToEndingSpan()
+        Dim dir As String = A49TempStore("u")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            Dim hourStartMs As Long = A49Ms(hourStart)
+            Dim restartMs As Long = A49Ms(hourStart.AddMinutes(30))
+
+            ' A restart (same scope, ON, on both sides) — isolates the stats-attribution
+            ' question from the scope-combination logic A49o/A49q already cover.
+            Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"},
+                New CaptureMarkerLog.MarkerRecord With {.UtcMs = restartMs, .Enabled = True, .InstanceId = "iid-2"}
+            }
+            Dim upIntervals As New List(Of UpInterval) From {
+                New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(hourStart.AddHours(-1)),
+                                     .LastUtcMs = A49Ms(hourStart.AddHours(2)), .IsTrailing = True}
+            }
+            ' One trade at :25 (span0), then silence across the restart until :32 (span1) — a
+            ' 7-minute (420,000ms) gap that STARTS before the marker and ENDS after it.
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(25)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(32)), 64010)
+            })
+
+            Dim spanBounds As New Dictionary(Of Long, List(Of Long)) From {
+                {hourStartMs, New List(Of Long) From {hourStartMs, restartMs}}
+            }
+            Dim spanStats = CoverageReport.AccumulateSplitSpanStats(dir, hourStart, hourStart.AddHours(1), spanBounds)
+            Dim span0 As HourStoreStats = Nothing
+            Dim span1 As HourStoreStats = Nothing
+            spanStats.TryGetValue(hourStartMs, span0)
+            spanStats.TryGetValue(restartMs, span1)
+
+            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats)
+
+            Dim ok As Boolean = span0 IsNot Nothing AndAlso span0.RowCount = 1 AndAlso span0.LongestGapMs = 0 AndAlso
+                               span1 IsNot Nothing AndAlso span1.RowCount = 1 AndAlso span1.LongestGapMs = 420000L AndAlso
+                               hr.Classification = HourClass.Defect
+
+            Check("A49u split hour — a gap straddling the marker (starts in span0, ends in span1) is attributed to span1, the span containing the ending trade; span0's own first row carries no phantom gap; the straddling gap alone flips the hour to DEFECT",
+                  ok, String.Format("span0={{rows={0},gap={1}}} span1={{rows={2},gap={3}}} classification={4}",
+                                    If(span0 Is Nothing, -1, span0.RowCount), If(span0 Is Nothing, -1, span0.LongestGapMs),
+                                    If(span1 Is Nothing, -1, span1.RowCount), If(span1 Is Nothing, -1, span1.LongestGapMs),
+                                    hr.Classification))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A49w: D-3 [RULED 2026-08-13, docs/coverage-split-hour-implementer-brief.md §5a] — the
+    ' residual combine (no Defect, no Captured present) must prefer UnknownScope over
+    ' NotCapturing, not the reverse. A first-ever marker landing mid-hour splits an
+    ' UnknownScope span (nothing applies before it) from a NotCapturing span (its own off
+    ' record) — laundering that into NotCapturing is the SH-1 defect in miniature, and it
+    ' silently reverses ClassifySpan's own unknown-before-off precedence. Not contrived: this
+    ' is exactly the shape capture_marker.log's first-ever write produces on a box brought up
+    ' with the capture overlay (ec487909…, 2026-08-07 16:02, AWS) --------------------------
+    Private Sub A49w_SplitHourFirstEverMarkerMidHourResidualPrefersUnknownScope()
+        Dim day = A49Monday()
+        Dim hourStart = day.AddHours(5)
+        Dim firstMarkerMs As Long = A49Ms(hourStart.AddMinutes(30))
+
+        ' The ONLY marker that exists at all lands mid-hour: span0 [hourStart, marker) has no
+        ' applicable marker (UnknownScope); span1 [marker, hourEnd] is governed by this
+        ' first-ever marker, recorded OFF (NotCapturing).
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = firstMarkerMs, .Enabled = False, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals As New List(Of UpInterval)
+
+        Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L)
+
+        Check("A49w split hour D-3 — a first-ever marker landing mid-hour splits UnknownScope (before it) from NotCapturing (its own off record); the residual combine reads UnknownScope, never laundered into NotCapturing",
+              hr.Classification = HourClass.UnknownScope,
+              String.Format("classification={0} reason='{1}'", hr.Classification, hr.Reason))
+    End Sub
+
+    ' -- A49v: BuildResult end-to-end — a day containing a split hour still returns exactly
+    ' 24 HourResult rows (D-1, §7 handle 5) -------------------------------------------------
+    Private Sub A49v_BuildResultOneRowPerHourAcrossASplitDay()
+        Dim dir As String = A49TempStore("v")
+        Try
+            Dim day = A49Monday()
+            Dim splitAt = day.AddHours(10).AddMinutes(15)
+
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(day.AddMinutes(5)), 64000)
+            })
+
+            Dim markerPath As String = System.IO.Path.Combine(dir, "capture_marker.log")
+            File.WriteAllText(markerPath,
+                A49MarkerLine(day.AddHours(-1), True, dir, "iid-1") & vbLf &
+                A49MarkerLine(splitAt, False, dir, "iid-1") & vbLf)
+
+            Dim missingAnalysisLogPath As String = System.IO.Path.Combine(dir, "analysis_log.csv")   ' never created
+            Dim missingWsHealthPath As String = System.IO.Path.Combine(dir, "ws_health.log")         ' never created
+
+            Dim opts As New CoverageOptions With {.FromUtc = day, .ToUtc = day.AddDays(1), .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, missingAnalysisLogPath, missingWsHealthPath, markerPath)
+
+            Dim splitHour = result.Hours.FirstOrDefault(Function(h) h.HourUtc = day.AddHours(10))
+
+            Check("A49v BuildResult end-to-end — a day containing a split hour still returns exactly 24 HourResult rows (D-1 preserved, §7 handle 5); the split hour carries split detail in Reason",
+                  result.Hours.Count = 24 AndAlso splitHour IsNot Nothing AndAlso splitHour.Reason.StartsWith("split@"),
+                  String.Format("hoursCount={0} splitHourReason='{1}'", result.Hours.Count, If(splitHour Is Nothing, "<none>", splitHour.Reason)))
+        Finally
+            A49Cleanup(dir)
+        End Try
     End Sub
 
     ' ═══════════════════════════════════════════════════════════════════════════════════
