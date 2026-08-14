@@ -201,7 +201,13 @@ Worked example at ts `1785793449897`: AWS holds one row of `790.00`; the local b
 
 **0.** §3 glance on AWS: title bar `settings v{N}` with **no** `+local`, `backtest_data\` mtime advancing, note the current InstanceId from `ws_health.log`.
 
-**1. Copy off AWS — read-only, delete nothing.** `analysis_log.csv`, `ws_health.log`, the whole `backtest_data\`, and `liq_events.log` if present (A4 gate evidence — pool both boxes' sidecars). The box keeps collecting throughout.
+**1. Copy off AWS — read-only, delete nothing.** `analysis_log.csv`, `ws_health.log`, ⚠ **`capture_marker.log`**, the whole `backtest_data\`, and `liq_events.log` if present (A4 gate evidence — pool both boxes' sidecars). The box keeps collecting throughout.
+
+> ⚠⚠ **`capture_marker.log` ADDED TO THIS LIST 2026-08-14 — its absence blocked a scheduled check.** The 2026-08-14 copy-back brought back the CSV, the health log and the store, and **no marker log**, because this list did not name one. **Without AWS's markers `CoverageReport.ResolveScope` returns `unknown` for every hour**, so every hour classifies `UnknownScope`, no split hour can occur, and the coverage report cannot answer anything about capture scope. That blocked the SH-1 / D-3 real-world confirmation on AWS hour 2026-08-07 16:00.
+>
+> ⚠ **Do NOT substitute a local box's `capture_marker.log`.** The verb reads the repo root and the store there is AWS tape; staging local markers against AWS tape produces a plausible report describing neither box. **The report has no way to detect the mismatch.**
+>
+> **Where it lives on the box:** beside the exe, exe-relative, same directory as `analysis_log.csv`. It is append-only and small (~2 KB), so there is no reason it was ever left off.
 
 **2. Land it in a dated staging folder under `AWS-copybacks\`,** which is gitignored (added 2026-08-07 — it was untracked, i.e. one `git add -A` from committing ~22 MB of collector data into the repo).
 
@@ -210,6 +216,23 @@ Worked example at ts `1785793449897`: AWS holds one row of `790.00`; the local b
 **4. Compare any second tape against AWS *before* merging** (§4a). Whole-row, not by timestamp.
 
 **5. Merge — additive, whole-line dedup, counts on both sides.**
+
+> ## ⚠⚠ CORRECTED 2026-08-14 — **DO NOT WHOLE-LINE DEDUP A MIXED-ERA STORE. It destroys real trades.**
+>
+> **Measured on the 2026-08-14 copy-back: whole-line dedup would have removed 23,806 genuinely distinct rows from `trades_2026-08.csv` alone.** The legacy era is five-field, and **two distinct trades can share all five fields** — that is the entire reason `trade_id` was added, and it is already recorded in §4a's root-cause box. Whole-line equality was the right relation only while nothing better existed.
+>
+> ✅ **THE RULE NOW: CONCATENATE. Do not dedup on disk at all.**
+>
+> **Duplicates on disk are harmless BY DESIGN** — `Core/TradeStoreWriter.vb` states it in terms: *"A duplicate on disk is harmless — the read path dedups it."* Both readers (`LoadTradeRange`, `CoverageReport.AccumulateHourStats`) route through `TradeStoreWriter.DedupTrades`, the identity-first §3.4 contract. **Deduping at merge time applies a WEAKER relation than the read path and the loss is permanent.**
+>
+> ⚠ **Check containment BEFORE deciding anything** — it is usually cheaper than a merge and often shows no merge is needed:
+>
+> - **2026-08-14, August:** 0 distinct lines only in the repo, 162,518 only in the copy-back ⇒ **the copy-back is a strict superset; a plain file copy is correct and safe.**
+> - **2026-08-14, July:** 0 distinct lines only in the copy-back, **115,029 only in the repo** ⇒ ⚠⚠ **the repo file is authoritative and a copy would have destroyed 118,775 rows.** July on AWS holds only what gap repair reached back into it; the repo's July is a full REST backfill.
+>
+> ⚠ **And beware a containment check that cannot fail.** The first pass at this compared each source against the union that contained it, so "rows lost: 0" was vacuous. **Compare each source against the OTHER source, not against the result.**
+
+*Superseded guidance follows, kept per the quote-and-label convention — its `sort -u` warning still holds for any single-file operation.*
 
 > ⚠ **`sort -u` with a KEY (`sort -t, -k1,1n -u`) dedups on the KEY, not the line.** On 2026-08-07 that silently collapsed every trade sharing a millisecond and would have destroyed ~44,000 rows — **10,199 timestamps in one month's AWS file carry more than one distinct trade.** Use whole-line `sort -u`. Timestamps are 13-digit epoch ms, so lexicographic order *is* chronological and no second sort is needed.
 
