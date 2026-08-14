@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Session Start Protocol
 
-1. **Read `docs/DeribitIndicatorProject.md`** in full (**~24K tokens, measured 2026-08-02**; historical content lives in `docs/history-archive.md`). Touch the archive doc only if you need pre-v61 version history or pre-v27 settings rationale. **The figure here was "~10K" and was wrong by 9× for months** — §15 had grown to 56 rows against its own five-row rule and 69 % of the file. If you find this number stale again, §15 has re-grown: move the oldest rows to the archive rather than living with it.
+1. **Read `docs/DeribitIndicatorProject.md`** in full (**~41K tokens / 121.5 KB after the 2026-08-14 trim**; historical content lives in `docs/history-archive.md`). Touch the archive doc only if you need pre-v61 version history or pre-v27 settings rationale.
+
+   ⚠ **This number has now been wrong TWICE, in the same direction, and the mechanism is worth more than the figure.** It read "~10K" while the file was ~9× that; corrected to "~24K" on 2026-08-02; measured at **47K** on 2026-08-12, again ~2× the stated value. **Assume it is stale and re-check it, rather than budgeting against it.** *(The 41K above is the 47K measurement scaled by the byte reduction, not a fresh token count — treat it as ±10 %.)*
+
+   ⚠ **If it has grown again, check §15's row count BEFORE reaching for the archive.** The 2026-08-14 trim recovered 13 % of the file and moved **nothing** to the archive: retention was already at its cap (five settings versions), and the entire overgrowth was the *other* half of §15's rule — **one item had taken three rows, twice.** The archive is the remedy for *age*; collapsing is the remedy for *sprawl*, and sprawl has been the actual mechanism both times.
 2. **Read `docs/architecture.md`** in full.
 3. **Load the `crypto-trading-context` skill** — it carries the trader profile and writing style. Do not separately read `docs/trader-profile.md`; the skill loads it.
 4. **Do not read individual `.vb` files at session start** — only open them when a specific edit is required.
