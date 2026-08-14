@@ -1,5 +1,9 @@
 # Seat handover — 2026-08-12 (orchestrator seat)
 
+> ## ⛔ SUPERSEDED FOR STATE — 2026-08-14. Read [`seat-handover-2026-08-14.md`](seat-handover-2026-08-14.md) instead.
+>
+> **Its rulings and conventions still bind.** ✅ **Its §0 first task — the downtime-repair spec — is DONE: specced, built, reviewed, three follow-ups shipped, deployed 2026-08-13 13:10:32Z.** ✅ **All three decisions it listed as owed by the trader are closed** (E5 → Path B · the F3 watch → retired · C1-coverage F2 → split the hour, shipped as SH-1). ⚠ **Do not quote its §1 state table** — settings are still v66, but the store, the fixture high-water, the AWS instance and the push state have all moved.
+
 **From:** the Opus orchestrator seat that opened on [`seat-handover-2026-08-10.md`](seat-handover-2026-08-10.md) and ran the D3 ASIA watch read, the v66/D2 ship, the AWS store merge, the discovery-to-deploy arc of the trade-store write-guard defect, the seam audit, and two decision consults.
 
 **Read in this order:** CLAUDE.md session-start protocol (**step 6 is the state rule**) → [`trader-tick-queue.md`](trader-tick-queue.md) **§0a first — what is OWED** → this doc → **§0 below.**
