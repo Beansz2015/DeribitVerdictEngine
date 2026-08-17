@@ -8,15 +8,46 @@
 
 ---
 
-## 0. YOUR FIRST TASK — the absorption mechanism proposal
+## 0. YOUR FIRST TASK — ⚠ BLIND RE-DERIVATION, then compare. Two parts, in order.
 
-**Trader-directed 2026-08-14: this is the first thing after your kickoff read.**
+**Trader-directed 2026-08-14.** The absorption mechanism proposal **has already been written** — [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) — by the seat that wrote this handover.
 
-> **Write the proposal that ticking E5 Path B bought.** Re-open the book-absorption proposal's **§8 residuals** with the evidence that the v61 geometry rescale alone did not lift flag rates into the 3–8 % design band: **`window_sec` too short** · **episode-cumulative pressing** · **D8 `pullFrac` inflation on sparse `postLB`**.
+> ## ⛔ PART 1 — DO NOT OPEN THAT PROPOSAL YET.
+>
+> **Derive the population yourself, from the raw books, and write your numbers down BEFORE you read mine.**
 >
 > **Model: Opus. Effort: high.**
 
-**Why that tier.** It is a derivation against a mechanism nobody has yet shown to observe what it claims. The prior pass produced a wrong answer by re-tuning instead of re-mechanising, and this proposal exists precisely because that failed.
+⚠⚠ **Why this is structured as a blind check and not a review.** *Commission the attack, not the review* is this project's standing rule, and **nothing in the absorption chain has an independent eye: one seat wrote this handover, the measurement scripts, and the proposal.** A reviewer who reads the conclusion first will confirm it — the previous seat recorded four of its own conclusions being overturned, **every one by a measurement and none by an argument.** ⚠ **If you read my numbers first, this exercise is worth nothing.** That is not a figure of speech; it is the whole design.
+
+### Part 1 — measure these, from `bin\Debug\net8.0-windows\analysis_log.csv` and `analysis_log_aws.csv`
+
+**The definitions, so you measure the same thing I did — the values are deliberately withheld:**
+
+- **Scope:** weekday only, UTC, **since v61 shipped (2026-07-23)** — pre-v61 geometry is a different shell.
+- ⚠ **Report PER BOOK, not pooled.** The two boxes run different session coverage; a pooled count hides which contributed. Pool **only** for a stage-loss funnel, and say when you do.
+- **Absorption columns:** `AbsorptionSignal` 100 · `AbsorptionLevel` 101 · `AbsorptionRatio` 102 · `AbsorptionAggrUsd` 103 · `AbsorptionPullFrac` 104 · `Verdict` 2 · `InstanceId` 109.
+- **Episode row** = the tracker produced a level. **Pressed** = `AbsorptionAggrUsd > 0`.
+- ⚠ **Session buckets: use the SHIPPED ones** — ASIA 0–7, LONDON 8–12, NY 13–23. **The 2026-07-23 derivation used ASIA 22–07 / LONDON 07–13 / NY 13–22, so its per-session figures are NOT comparable.** That doc flags the divergence itself; the 07-30 pass and `settings.json` both use the shipped set.
+
+**Produce:** proximity-ACTIVE episodes · pressed · **pressed / active** · the funnel against the **shipped** v61 anchors (read them from `settings.json`, do not restate them) · `aggrUsd` and `AbsorptionRatio` percentiles · the `AbsorptionPullFrac` **distribution shape**, not just its median.
+
+### Part 2 — then read the proposal and compare
+
+**Where we agree**, say so and say what you checked. **Where we disagree, your number wins until one of us shows the other's method is wrong** — then edit [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) accordingly and record the correction in it, plainly.
+
+⚠ **Four claims are load-bearing. Attack these first:**
+
+1. **The headline ratio is stable across a 14× larger sample and both books agree independently.** If it is not stable, the proposal's central argument — that under-engagement is *structural* rather than small-sample — collapses, and Path A becomes arguable again.
+2. **The funnel's biggest loss is at the observation stage, not at the anchors.** Check the stage counts add up and that my "pressed" definition is not quietly doing work.
+3. **A hypothesis I FALSIFIED:** that `AbsorptionPullFrac` piles at exactly 1.000 (the ladder-shift signature). I found it does not, and therefore recommended **not** touching `max_pull_frac`. ⚠ **If I am wrong about that, the recommendation inverts** — so check the distribution shape yourself rather than the median.
+4. **That the §8 residual is not diagnosable from the book at all**, because neither `pullLB`/`postLB` nor episode duration is logged. **If you find a way to test it from existing data, D-1 changes.**
+
+⚠ **Things I could not measure and did not:** episode duration, `pullLB`/`postLB`, and therefore whether the 90 % observation loss is `window_sec` or a too-wide proximity gate. **If you can separate those two from logged data, that is the single most valuable thing you can contribute.**
+
+### What the proposal is, once you are past Part 2
+
+It re-opens the book-absorption proposal's **§8 residuals** — **`window_sec` too short** · **episode-cumulative pressing** · **D8 `pullFrac` inflation on sparse `postLB`** — on the evidence that the v61 geometry rescale alone did not lift flag rates into the 3–8 % design band. **It ends at a D-table and is NOT buildable until the trader ticks it.**
 
 **The evidence base:** [`absorption-anchor-rederivation-2026-07-30.md`](absorption-anchor-rederivation-2026-07-30.md) §4–§5 · [`absorption-engagement-derivation-2026-07-23.md`](absorption-engagement-derivation-2026-07-23.md) · [`book-absorption-proposal.md`](book-absorption-proposal.md) §8.
 
@@ -77,7 +108,7 @@
 
 | Item | Model + effort | Note |
 |---|---|---|
-| ⭐ **Absorption mechanism proposal** | Opus / high | **§0 above — your first task** |
+| ⭐ **Absorption proposal — BLIND re-derivation, then compare** | Opus / high | **§0 above — your first task.** The proposal is written; **the check is what is owed** |
 | ⚠ **`V6` — the falsifiable prediction** | a read, not a build | ⛔ **ARMED BUT UNTESTED.** No outage since the deploy. **Read `trade_seq` completeness from the STORE, not the repair log** |
 | ⚠ **`ws_health.log` under-reports outages** | Sonnet / medium | ✅ **Now a FINDING, not an investigation** — two routes named, spec must pick one |
 | **An up-interval starts at the `DOWN` line** | Sonnet / medium | ⚠ **NEW** — a connect window reads as capture time. ⚠ **The obvious fix trades a false defect for a missed one** |
