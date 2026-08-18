@@ -80,12 +80,23 @@ books** — 3 = 3 on LOCAL, 2 = 2 on AWS. Nothing below depends on an unchecked 
 | **pressed / active** | **10.76 %** | **10.05 %** |
 | flagged (`AbsorptionSignal ≠ NONE`) | 3 | 2 |
 | flag rate, all rows | 0.060 % | 0.014 % |
-| flag rate, **directional runs only** | 0.130 % (2/1 540) | 0.022 % (1/4 541) |
+| directional runs (**strict** — see below) | 790 | 2 486 |
+| flag rate, **directional runs only** | 0.253 % (2/790) | 0.040 % (1/2 486) |
 
 **Pooled** (stage-loss only, and labelled as such): 19 679 rows · 2 894 active (14.71 %) ·
-296 pressed (**10.23 %** of active) · **5 flagged** — 0.025 % of rows, 0.17 % of active,
-0.049 % of directional runs. The design band is **3–8 % of directional runs**
-(`book-absorption-proposal.md` §8 header note at line 89). **We are 60–160× below its floor.**
+296 pressed (**10.23 %** of active) · **5 flagged** — 0.025 % of rows, 0.17 % of active, and
+**0.092 %** of directional runs (3 of the 5 flags land on a directional verdict). The design band is
+**3–8 % of directional runs** (`book-absorption-proposal.md` §8 header note at line 89).
+**We are 33–87× below its floor.**
+
+> ⚠ **CORRECTION TO MY OWN FIRST PASS, recorded rather than silently fixed.** The `Verdict` column
+> is **not** two-valued. Alongside `NO TRADE` it carries **`NO TRADE [WEAK LONG]`** (788 AWS / 291
+> LOCAL), **`NO TRADE [WEAK SHORT]`** (1 256 / 452) and **`NO TRADE [TIE]`** (11 / 7). My first cut
+> filtered `Verdict != "NO TRADE"` and so counted **all three NO-TRADE variants as directional**,
+> inflating the denominator from 3 276 to 6 082 — **1.86×** — and halving every rate computed
+> against it. **Directional must be `Verdict` not matching `^NO TRADE`.** Every directional figure
+> in this document uses the strict form. ⚠ **Anyone re-deriving from this book will hit the same
+> trap; it is invisible in a `uniq -c` that is eyeballed rather than read.**
 
 **The two books agree independently and to within noise on both headline ratios** —
 active/rows 14.68 % vs 14.71 %, pressed/active 10.76 % vs 10.05 % — on populations differing
@@ -265,7 +276,7 @@ inside to count as pressing (`FoldTradeSide`: `price >= lvl - band` above, mirro
 **The admission shell is three times the measurement shell.** `AbsorptionLevel`, `Price` and `ATR`
 are all logged, so `|level − price| / ATR` is directly computable on every active row.
 
-| `|level − price| / ATR` | LOCAL rows (share) | LOCAL press rate | AWS rows (share) | AWS press rate |
+| `abs(level − price) / ATR` | LOCAL rows (share) | LOCAL press rate | AWS rows (share) | AWS press rate |
 |---|---:|---:|---:|---:|
 | **≤ 0.10 — inside the pressing band** | 218 (29.7 %) | **31.65 %** | 646 (29.9 %) | **30.34 %** |
 | (0.10, 0.20] | 174 (23.7 %) | 4.02 % | 561 (26.0 %) | 2.32 % |
@@ -387,4 +398,261 @@ clearing `min_aggr_usd` in the entire 17-weekday-day AWS book.**
 
 ## 6. Part 2 — comparison against the proposal
 
-*(Added after §1–§5 were committed.)*
+*(Added after §1–§5 were committed at `8485173`.)*
+
+**Overall: the proposal's population is right, its central conclusion survives, and two of its four
+load-bearing claims do not.** The failures are both in the *inference*, not the arithmetic — the
+author measured well and read the measurement wrong in two places.
+
+### 6.1 Where we agree, and what I actually checked
+
+| Quantity | Proposal | Mine | |
+|---|---|---|---|
+| AWS weekday rows since v61 | 14 680 | **14 680** | ✅ exact |
+| pressed / active, AWS | 9.8 % | **10.05 %** | ✅ |
+| pressed / active, LOCAL | 10.9 % | **10.76 %** | ✅ |
+| clears `min_aggr_usd` (pooled) | 28 | **28** | ✅ exact |
+| survives the pull veto (pooled) | 5 | **5** | ✅ exact |
+| `pullFrac` exactly 0.000 | 24.8 % | **24.95 %** pooled | ✅ |
+| `pullFrac` p50 / p75 / p90 | 0.906 / 1.204 / 2.682 | **0.90 / 1.21 / 2.66** pooled | ✅ |
+| pressed `aggrUsd` p50 | 220 USD | **200 (AWS) / 250 (LOCAL)** | ✅ |
+
+**What I checked, specifically.** I read the anchors from tracked `settings.json` v66 rather than
+from any document; I re-derived the gate from `IndicatorEngine.ClassifyAbsorption` and
+`LevelAbsorptionTracker` rather than from the proposal's prose; and **I validated the reconstruction
+against the logged `AbsorptionSignal` on both books (3 = 3, 2 = 2)** — a control the proposal does
+not report running. I confirmed the v61 boundary from the books' own `InstanceId` edges rather than
+accepting the date. I confirmed both headers are byte-identical and every row has exactly 111
+fields, so column indices are safe.
+
+> ⭐ **CLAIM 1 — the ~10 % ratio's stability — is CONFIRMED, and by a stronger route than the
+> proposal used.** My independent pass lands within **0.3 pp** on both books, and I add a control
+> the proposal lacks: `active / rows` is **14.68 % (LOCAL) vs 14.71 % (AWS)** — agreement to
+> **0.03 pp** on populations differing by 2.9×. Two boxes, different session coverage, different
+> uptime, same shell. **The under-engagement is structural. Path A stays dead.**
+
+### 6.2 Small unreconciled deltas — reported, not resolved
+
+The AWS row totals match **exactly** (14 680), yet the proposal counts **2 143** active / **210**
+pressed where I count **2 160** / **217**. Since all four absorption columns populate on exactly the
+same row set (verified: `AbsorptionLevel`, `Ratio`, `AggrUsd`, `PullFrac` all non-empty on precisely
+734 / 2 160 rows), this cannot be a column-choice difference. **I could not reproduce it and I am
+not going to guess at it.** It is 0.8 %, it moves no conclusion, and my figure is the one tied to a
+validated gate reconstruction. LOCAL row totals also differ slightly (5 023 vs my 4 999).
+
+⚠ **The proposal's §3.1 pooled `aggrUsd` max of 176 220 is the AWS max.** The LOCAL book carries
+**255 540** (2026-07-23 16:51:09, in scope). A stat labelled pooled should be pooled.
+
+### 6.3 ⚠ CLAIM 3 — the falsified `pullFrac`-piles-at-1.000 hypothesis — DOES NOT SURVIVE
+
+**We measured the same thing and read it differently.** The proposal reports *"within 0.001 of
+1.000: only 3.8 %"* and concludes *"that is a plausible spoof-metric shape, not an artefact
+signature… I went looking for evidence that D8 is broken and did not find it."* D-3 rests on it.
+
+**3.8 % is not the number to compare against 100 %. It is the number to compare against the local
+density of the continuum it sits in — and against that it is enormous.**
+
+| | LOCAL | AWS |
+|---|---:|---:|
+| rows at **exactly** `1.0000` | 21 (2.86 %) | 71 (3.29 %) |
+| rows in [0.99, 1.01] **excluding** the exact point | 20 | 64 |
+| ⇒ continuum density, per 0.0001 cell | 0.100 | 0.320 |
+| ⭐ **the exact cell holds** | **210× the local density** | **222×** |
+| against the wider [0.90, 1.10] neighbourhood | **328×** | **381×** |
+
+**On both books independently. In a 4-decimal continuous metric a single value holding 200× its
+neighbours' density is a point mass, not a shape.** Supporting checks: `1.0000` is the
+**second-most-frequent exact logged value on both books** (after `0.0000`), at ~10× the next
+non-zero mode; and it is **spread, not clustered** — 9 days / 20 distinct level prices on LOCAL,
+15 days / 65 on AWS, against a mean episode-run length of 1.13 rows.
+
+**The mechanism is identifiable and it is the one §8 named.** `pullFrac = pullLB / max(postLB, 5000)`,
+and per conservation interval **only one accumulator increments**. A single visible-size round trip —
+a block leaving the visibility mask and returning, i.e. **a ladder shift** — writes `−X` into `pullLB`
+and `+X` into `postLB`, giving **exactly 1.0000 whenever X ≥ 5 000**. That is an ordinary band size.
+**The signature the author went looking for is present, at ~200× background, and it was dismissed by
+comparing it to the wrong baseline.**
+
+> ### Does D-3's recommendation invert? **No — but its stated reason is false and must be replaced.**
+>
+> **What is true:** the artefact is ~3 % of active rows, so it explains only ~3 pp of the pull
+> veto's ~59 % rejection rate on the population. Relaxing the anchor does **not** reach the design
+> band — §6.4 quantifies that. **So "leave `max_pull_frac` alone" survives.**
+>
+> **What is false:** *"§3.2 found no evidence D8 is broken."* There is evidence, it is on both books,
+> and **at the gate — where it decides flags — the artefact-suspicious band is 4 of the 10 vetoed
+> rows.** D-3 must be re-grounded on *"the artefact is real but too small to be the fix, and the
+> right response is instrumentation, not a threshold move"* — which reaches the same action from a
+> premise that is actually true, and **strengthens D-1 instead of weakening it.**
+
+### 6.4 What the pull veto actually costs — the proposal understates it
+
+§3.2 says the veto kills 9 of 14 qualifiers (64 %). I count **10 of 15 (67 %)** — a one-row
+difference at the ratio stage that I could not reconcile and that changes nothing.
+
+**What the proposal does not report is how close the vetoed rows are.** One is `0.7615` — **rejected
+by 0.0115.** Four more sit inside [0.9990, 1.0250], i.e. on the point mass §6.3 just established.
+Pooled what-if over the fifteen rows that reach the gate: `≤0.75` → 5 flags · `≤0.85` → 7 ·
+`≤0.95` → 8 · `≤1.00` → 10 · **`≤1.05` → 13** · `≤1.20` → 14.
+
+**So the single anchor the proposal recommends not touching is worth 2.6× on flag count — and even
+at 2.6× we are at ~0.24 % of directional runs, still an order of magnitude below the 3–8 % floor.**
+Both halves matter: it is **not** the fix, and it is **not** free either. Saying only the first half,
+as §3.2 and D-3 do, is what makes the recommendation look better-supported than it is.
+
+### 6.5 ⚠ CLAIM 4 — *"§8's residual is not diagnosable from the book at all"* — DOES NOT SURVIVE
+
+§4.2 states this as *"itself the finding"*: only the ratio is logged, so the sparse-`postLB`
+inflation cannot be tested. **Two independent tests of it run today, on data already on disk.**
+
+**Test 1 — the point mass.** §6.3. The ladder-shift half of the residual is directly visible in the
+logged ratio.
+
+**Test 2 — the floor-binding fingerprint, and this one is decisive.** When `postLB < 5 000` the
+denominator pins to the constant 5 000, so `pullFrac` becomes `pullLB / 5000` — an absolute quantity
+wearing a fraction's clothes, which is precisely the named residual. Book sizes and fills on this
+instrument are multiples of 10 USD, so `pullLB` is too, so **a floored row must land on an exact
+multiple of 0.0020.** An unfloored row (a genuine ratio of two independent sums) has no reason to.
+
+| | LOCAL | AWS | chance |
+|---|---:|---:|---:|
+| non-zero `pullFrac` rows | 534 | 1 638 | — |
+| …an exact multiple of **0.0020** | **147 (27.5 %)** | **437 (26.7 %)** | **5 %** |
+| …an exact multiple of 0.0010 | 169 (31.6 %) | 496 (30.3 %) | 10 % |
+
+**A 5.4× enrichment over chance, on both books, and 88 % of the multiples-of-0.0010 are also
+multiples of 0.0020 where half would be by chance.** The floor is binding on roughly **a quarter of
+non-zero rows**, which means for a quarter of the population `pullFrac` **is not a fraction at all**
+and comparing it to a `max_pull_frac` of 0.75 is comparing it to a fixed 3 750 USD of pulls.
+
+> ⭐ **This is the one place D-1 changes.** §5's instrumentation is still worth shipping — the raw
+> `pullLB` / `postLB` turn a fingerprint into a direct reading, and `AbsorptionEpisodeSec` has no
+> substitute. **But D-1 is no longer a precondition for knowing whether §4.2's residual is real. It
+> is real, it is measured above, and it is measured on the shipped book.** The handover named this
+> as the trigger that would change D-1; it fired.
+
+### 6.6 ⚠ CLAIM 2 — the funnel's biggest loss — TRUE AS STATED, but the stated *cause* is wrong, and one arithmetic error must be corrected
+
+**The stage counts reconcile** (§6.1) and the *"pressed"* definition is not doing quiet work:
+`aggrUsd > 0` is exactly `HasEpisode ∧ PressSum > 0`, all four absorption columns populate together,
+and the reconstruction reproduces the logged signal. **The claim that observation is the largest
+single loss in absolute rows is correct** — 2 598 rows against 291 lost across all three anchors.
+
+**Two corrections.**
+
+**(a) It is not the only ~90 % stage, and the proposal's framing hides the other one.** Observation
+survives 10.2 % pooled; the `min_aggr_usd` anchor survives 9.5 %. The anchor stages *together* take
+296 → 5, a **1.7 %** survival — worse than observation's 10.2 %. Both readings belong in the
+funnel; §3 gives only the one that supports its conclusion.
+
+**(b) ⚠⚠ §3.1's scale argument is arithmetically right on the mean and wrong about the tape.** It
+reasons: *"~31–60 trades/min at a mean trade around 3,000 USD, so a 10-second window spans roughly
+5–10 prints ≈ 15,000–30,000 USD… Recording 220 USD says almost nothing lands in the band."* The rate
+and mean check out (I measure ~40 trades/min, mean ≈ 2 900 USD). **But the distribution is so skewed
+that the mean is the wrong statistic.** Measured directly from the verified-complete tape — total
+market flow, all prints, both directions, all prices, in the 10 seconds before each of 364 reads:
+
+| p10 | p25 | **p50** | p75 | p90 | p99 |
+|---:|---:|---:|---:|---:|---:|
+| 0 | 10 USD | **1 020 USD** | 17 300 | 64 080 | 210 080 |
+
+**The median 10-second window holds about 1 020 USD, not 15 000–30 000. A quarter of them are
+effectively empty.** So a *band-and-direction-filtered* 220 USD is roughly **22 % of everything that
+traded in that window** — which is not "almost nothing lands in the band". **The conclusion (widen
+the accumulation span) survives; the reason given for it does not.** The real reason is stronger and
+simpler: **on this tape, 20 000 USD of single-sided in-band flow is not reachable inside 10 seconds
+except in the top decile of windows.** ⚠ **Anyone who repeats the mean-based version will also
+conclude the band is leaking, and will go on to widen the wrong shell.**
+
+### 6.7 ⭐ The observation loss separates — §4.3, D-4 and §7's "could not separate" are all superseded
+
+§4.3 names the proximity gate as an alternative to `window_sec`, declines to choose, and §5 makes
+instrumentation the precondition. **It is separable from data already on disk, and I separated it in
+§5 above.** Recapping the two results against the proposal:
+
+**(i) ≈ 77 % of the observation loss is geometric — the same figure on both books.** `proximity_atr_frac`
+0.30 admits an episode; `band_atr_frac` 0.10 is what a print must land inside to be counted.
+**The admission shell is 3× the measurement shell.** `AbsorptionLevel`, `Price` and `ATR` are all in
+the CSV, so `|level − price| / ATR` is computable on every active row today. Press rate **31.7 % /
+30.3 %** inside the band, **1–4 %** outside it, and only ~30 % of active rows are ever inside.
+**77.3 % (LOCAL) / 76.8 % (AWS) of unpressed active rows had price outside the band.** No new
+instrumentation was needed for any of that.
+
+**(ii) There is a third cause, larger than `window_sec`, and it was on nobody's list.** Replaying the
+tracker's own predicate over the `trade_seq`-verified-complete tape era (134 204 rows, alignment
+validated to +2 s — all 22 logged-pressed rows reproduced, 12 of 22 to within 1 USD), **the engine
+logs pressing on 22 rows where its own band-and-window definition admits flow on 72.** It counts
+**31 %** of what it should. Only 42 % of the 50-row gap has a break-through print to justify it, and
+**13 of those 50 rows carried ≥ 20 000 USD** — against just 19 rows clearing `min_aggr_usd` in the
+entire 17-day AWS book. **The episode is not `Active` when the flow arrives.**
+
+> ⚠ **This has a direct consequence for D-2 that the proposal cannot state, because it did not have
+> this measurement.** §4.1 is right that episode-cumulative beats a longer tolerance, and right that
+> the current 10-second numerator over an episode-scoped denominator is dimensionally incoherent.
+> **But if the side is not `Active` for the flow, a cumulative numerator accumulates over the same
+> gap.** ⚠ **Widening the span is worth less than the replay table suggests, by roughly the factor
+> in (ii), and D-2 should not be ticked as though the span were the whole problem.**
+
+### 6.8 ⚠ §4.3's "~49 % arming rate" is a category error and D-4 rests on it
+
+> *"2,880 ACTIVE episodes against 5,918 directional rows is a ~49 % arming rate. For a feature whose
+> modal state is meant to be NONE by construction, that is high."*
+
+**The numerator is counted over ALL rows and the denominator over directional rows only.** 2 880 is
+every active episode in 19 679 rows; 5 918 is a ~30 % subset of those rows. The quotient is not a
+rate of anything. Computed consistently:
+
+| Arming rate, computed properly | value |
+|---|---:|
+| active / **all** rows | **14.71 %** |
+| active **and** directional / directional | **11.78 %** (386 / 3 276) |
+
+**11.8 %, not 49 %** — the claim is off by ~4×. ⚠ **And the denominator itself is wrong in a second
+way**: 5 918 counts the `NO TRADE [WEAK LONG]` / `NO TRADE [WEAK SHORT]` / `NO TRADE [TIE]` variants
+as directional (the strict count is 3 276). **My own first pass made that same mistake — see the
+correction box in §1 — which is why I am confident about the mechanism rather than merely asserting
+it.**
+
+**D-4's action still stands** — do not narrow the proximity gate on a hunch — but not for D-4's
+reason. **The arming rate is unremarkable; the proximity gate's problem is not that it arms too
+often, it is that it arms 3× wider than the shell that measures (§6.7(i)).** Those want different
+fixes: the first would narrow `proximity_atr_frac`, the second would reconcile proximity and band.
+
+---
+
+## 7. Consolidated read for the trader
+
+**Do not tick anything on this document.** Per the brief, the D-table is the trader's call after
+this check. What the check changes:
+
+| Proposal claim | Verdict | What replaces it |
+|---|---|---|
+| 1 — ~10 % ratio stable across books | ✅ **CONFIRMED**, independently, +0.03 pp on a second ratio the proposal did not use | Path A stays dead |
+| 2 — biggest loss at observation, not anchors | ⚠ **TRUE in absolute rows only.** The anchors together are proportionally worse (1.7 % vs 10.2 %), and §3.1's *reason* is built on a mean where the median is 15× smaller | §6.6 |
+| 3 — `pullFrac` does **not** pile at 1.000 | ❌ **FALSE.** The point mass is there at **200–380× local density** on both books, spread across days and levels, with an identified ladder-shift mechanism | §6.3. D-3's action survives; **its stated reason must be rewritten** |
+| 4 — §8's residual not diagnosable from the book | ❌ **FALSE.** Two tests run today; the floor-binding fingerprint shows `postLB` pinned on **~27 %** of non-zero rows at 5.4× chance | §6.5. **D-1 is no longer the precondition for knowing the residual is real** |
+| §4.3 / D-4 — "~49 % arming rate is high" | ❌ **arithmetic error** — 11.8 %, and on a denominator that itself over-counts by 1.86× | §6.8. D-4's action stands on a different ground |
+| §7 — "could not separate window_sec from the proximity gate" | ⭐ **SUPERSEDED — they separate from logged data.** ≈ 77 % geometric on both books, plus a third cause (episode state) larger than the window | §5, §6.7 |
+
+**The one thing I would say if the trader reads nothing else.** The proposal's instinct — fix the
+observation, not the thresholds — is correct and this pass strengthens it. But it names the wrong
+observation. **The dominant leak is that the tracker admits episodes into a shell three times wider
+than the shell it measures in, and then fails to be `Active` for two-thirds of the flow that does
+land in the measurement shell. `window_sec` is real and is the third-largest of the three.** A
+build that ships §4.1 alone will move the number less than anyone expects, and — because
+`scoring_enabled` is `false` and the failure mode is silence — **nobody will be able to tell it
+underperformed.** That is the write-guard shape the proposal's own §0 warns about, pointed at itself.
+
+## 8. What I did not verify, in Part 2
+
+- ⛔ **The proposal's 2 143 / 210 / 737 / 80 counts.** I could not reproduce them and did not
+  determine why (§6.2).
+- ⛔ **Its "5,918 directional rows".** Neither my strict (3 276) nor my loose (6 082) definition
+  yields it.
+- ⛔ **That the exact-`1.0000` rows are ladder shifts *in the book*.** The mechanism is derived from
+  the accumulator structure and supported by the density; **`pullLB` and `postLB` are still not
+  logged, so it is inference from a signature, not a direct reading.** §5's instrumentation would
+  settle it and remains worth shipping for that reason.
+- ⛔ **Anything live, and anything on the AWS box.** No run was performed.
+- ⛔ **Any outcome linkage.** Unchanged: this is engagement only, and the §5.2 activation gate has
+  still never had a population.
