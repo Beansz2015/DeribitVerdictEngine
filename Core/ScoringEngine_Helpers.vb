@@ -56,6 +56,20 @@ Partial Public Class ScoringEngine
         End Select
     End Function
 
+    ''' <summary>Smallest trade count at which every trade-derived signal has a full
+    ''' window. Derived, never a literal: TFI and MicroCVD window sizes are settings
+    ''' (EngineSettings.vb) and a hardcoded copy rots the first time either
+    ''' moves — the fixture-literal provenance rule, applied at the source.
+    ''' CalcCVD walks the whole list and imposes no minimum of its own.
+    ''' cfg.Scoring.MinTradesForScoringOverride > 0 takes precedence over the derived
+    ''' value; 0 (the default) means "use the derived value" (docs/thin-trade-window-skip-gate-proposal.md §3.2/§3.4).
+    ''' </summary>
+    Public Shared Function MinTradesForScoring(cfg As EngineSettings) As Integer
+        If cfg.Scoring.MinTradesForScoringOverride > 0 Then Return cfg.Scoring.MinTradesForScoringOverride
+        Return Math.Max(cfg.Indicators.TFI.WindowSize,
+                        cfg.Indicators.MicroCVD.WindowSize)
+    End Function
+
     ''' <summary>
     ''' Returns the integer threshold at or above which a score qualifies for the given tier.
     ''' Replaces the former ThresholdStrong / ThresholdMed / ThresholdWeak trio (identical bodies).

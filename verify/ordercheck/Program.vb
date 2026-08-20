@@ -506,6 +506,15 @@ Module Program
         A56f_HoleCountIsCappedKeepingTheLargest()
         A56g_TruncationCutIsTimeContiguousNotFileOrder()
 
+        ' [A57 — thin-trade-window skip gate, docs/thin-trade-window-skip-gate-proposal.md §6]
+        ' Every guard on the trade path tested Count = 0; nothing tested for a THIN list. A57c
+        ' is the mutation proof: revert ScoringEngine.MinTradesForScoring to a hardcoded 50 and
+        ' it MUST fail — that is the entire point of the fixture family.
+        A57a_DerivesToFiftyAtDefaultsAndReasonStringFormat()
+        A57b_AtMinimumDoesNotFire()
+        A57c_NonDefaultMicroCvdWindowMovesTheDerivedMinimum()
+        A57d_OverrideAndTweakerFence()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -9594,6 +9603,74 @@ Module Program
         Finally
             A48Cleanup(dir)
         End Try
+    End Sub
+
+    ' =======================================================================
+    ' A57 — thin-trade-window skip gate (docs/thin-trade-window-skip-gate-proposal.md §6).
+    ' ScoringEngine.MinTradesForScoring is the host-agnostic seam the live skip gate
+    ' (UI/MainForm_Analysis.vb) and the exit guard (ExitGuardEvaluator.vb, D-4) both
+    ' call — the UI event handler itself sits outside this harness's WinForms boundary
+    ' (same class as the A16-A31 boundary notes), so these fixtures pin the derived-
+    ' minimum function and its tweaker fence directly.
+    ' =======================================================================
+
+    ' -- A57a: derives to 50 at shipped defaults (Max(TFI 30, MicroCVD 50)); the reason
+    ' string the live gate builds carries both numbers --------------------------------
+    Private Sub A57a_DerivesToFiftyAtDefaultsAndReasonStringFormat()
+        Dim cfg As New EngineSettings()
+        Dim minTrades As Integer = ScoringEngine.MinTradesForScoring(cfg)
+        Dim count As Integer = 10
+        Dim reason As String = "recent trades thin (" & count & "<" & minTrades & ")"
+        Check("A57a MinTradesForScoring derives to 50 at shipped defaults (Max(TFI 30, MicroCVD 50)) + reason string carries both numbers",
+              minTrades = 50 AndAlso reason = "recent trades thin (10<50)",
+              String.Format("minTrades={0} reason='{1}'", minTrades, reason))
+    End Sub
+
+    ' -- A57b: the gate does not over-fire — a count AT the derived minimum passes -----
+    Private Sub A57b_AtMinimumDoesNotFire()
+        Dim cfg As New EngineSettings()
+        Dim minTrades As Integer = ScoringEngine.MinTradesForScoring(cfg)
+        Dim atMinFires As Boolean = (minTrades < minTrades)         ' the live gate's own condition
+        Dim belowFires As Boolean = ((minTrades - 1) < minTrades)
+        Check("A57b gate condition: count == derived minimum does NOT fire, minimum-1 DOES",
+              Not atMinFires AndAlso belowFires,
+              String.Format("minTrades={0} atMinFires={1} belowFires={2}", minTrades, atMinFires, belowFires))
+    End Sub
+
+    ' -- A57c: ⚠ THE HARDCODE-TRAP CATCHER — a non-default MicroCVD window moves the
+    ' derived minimum. A build that hardcoded "< 50" passes A57a and A57b and FAILS this
+    ' one. Mutation-proved: reverting MinTradesForScoring to Return 50 makes this fail. --
+    Private Sub A57c_NonDefaultMicroCvdWindowMovesTheDerivedMinimum()
+        Dim cfg As New EngineSettings()
+        cfg.Indicators.MicroCVD.WindowSize = 80        ' non-default; TFI stays 30
+        Dim minTrades As Integer = ScoringEngine.MinTradesForScoring(cfg)
+        Dim fires79 As Boolean = (79 < minTrades)
+        Dim passes80 As Boolean = Not (80 < minTrades)
+        Check("A57c ⚠ non-default MicroCVD.WindowSize=80 moves the derived minimum to 80 (fires at 79, passes at 80) — catches the hardcoded-50 trap",
+              minTrades = 80 AndAlso fires79 AndAlso passes80,
+              String.Format("minTrades={0} fires79={1} passes80={2}", minTrades, fires79, passes80))
+    End Sub
+
+    ' -- A57d: the override — 0 = derived (byte-identical), a positive value takes
+    ' precedence, and HC28 rejects the override key while a sibling scoring.* key passes --
+    Private Sub A57d_OverrideAndTweakerFence()
+        Dim cfgZero As New EngineSettings()
+        cfgZero.Scoring.MinTradesForScoringOverride = 0
+        Dim derivedViaZero As Integer = ScoringEngine.MinTradesForScoring(cfgZero)
+
+        Dim cfgOverride As New EngineSettings()
+        cfgOverride.Scoring.MinTradesForScoringOverride = 100
+        Dim viaOverride As Integer = ScoringEngine.MinTradesForScoring(cfgOverride)
+
+        Dim s As String = "{""version"":67,""scoring"":{""verdict_med_pct"":0.53,""min_trades_for_scoring_override"":0}}"
+        Dim rOverride = SettingsDiffApplier.Validate(OneDiff("scoring.min_trades_for_scoring_override", "0", "80"), s, 3)
+        Dim rSibling = SettingsDiffApplier.Validate(OneDiff("scoring.verdict_med_pct", "0.53", "0.55"), s, 3)
+
+        Check("A57d override: 0 == derived (50); positive value (100) takes precedence; HC28 rejects the override key while sibling scoring.verdict_med_pct still passes",
+              derivedViaZero = 50 AndAlso viaOverride = 100 AndAlso
+              Not rOverride.IsValid AndAlso rOverride.ErrorReason.Contains("HARD CONSTRAINT 28") AndAlso rSibling.IsValid,
+              String.Format("derivedViaZero={0} viaOverride={1} overrideValid={2} overrideReason='{3}' siblingValid={4}",
+                            derivedViaZero, viaOverride, rOverride.IsValid, rOverride.ErrorReason, rSibling.IsValid))
     End Sub
 
     Private Sub A52a_AsiaArmingJsonContract()

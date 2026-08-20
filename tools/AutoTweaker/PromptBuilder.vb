@@ -191,6 +191,15 @@ Public Class PromptBuilder
             "outcomes, and gap_repair_lookback_hours in particular is pinned under Deribit's " &
             "~24h public-trades retention, not tuned. (Enforced in code: SettingsDiffApplier " &
             "rejects the 'trade_store.' prefix as well.)" & vbLf &
+        "28. Never propose 'scoring.min_trades_for_scoring_override'. This is the thin-trade-" &
+            "window skip gate's override (docs/thin-trade-window-skip-gate-proposal.md): 0 " &
+            "(shipped default) means 'use the derived minimum' — Max(indicators.TFI.window_size, " &
+            "indicators.MicroCVD.window_size), so a hardcoded copy would rot the first time " &
+            "either window moves. Whether the tape is THICK ENOUGH TO TRUST is a data-" &
+            "sufficiency question, not a failure-rate lever — same HC11 class as the retired " &
+            "'scoring.min_tradeable_move_pct' flat key. The sibling 'scoring.*' tunables " &
+            "(verdict percentages, ATR multipliers, penalties) REMAIN on the surface. " &
+            "(Enforced in code: SettingsDiffApplier exact-match rejects this one key.)" & vbLf &
         vbLf &
         "SCOPE CAP: Propose AT MOST {0} key changes in a single TWEAK diff. Conservative, small steps." & vbLf &
         vbLf &

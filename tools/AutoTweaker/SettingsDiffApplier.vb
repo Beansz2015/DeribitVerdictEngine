@@ -208,6 +208,16 @@ Public Class SettingsDiffApplier
                     "Rejected: '{0}' is a hand-ruled geometry knob (arbitration mode / signed buffer / candidate-set toggle), not a threshold (off tweaker surface — HARD CONSTRAINT 24).", item.Path)
                 Return result
             End If
+            ' [v67 thin-trade-window skip gate] min_trades_for_scoring_override is DATA-
+            ' SUFFICIENCY plumbing (HC11 class, the retired min_tradeable_move_pct precedent) —
+            ' whether the tape is thick enough to trust, not a failure-rate lever. Exact-match,
+            ' NOT a prefix: the sibling scoring.* tunables (verdict percentages, ATR multipliers,
+            ' penalties) STAY proposable.
+            If path = "scoring.min_trades_for_scoring_override" Then
+                result.IsValid    = False
+                result.ErrorReason = "Rejected: 'scoring.min_trades_for_scoring_override' is data-sufficiency plumbing, not a threshold (off tweaker surface — HARD CONSTRAINT 28)."
+                Return result
+            End If
 
             ' Reject version key (applier manages this)
             If path = "version" Then

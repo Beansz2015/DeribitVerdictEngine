@@ -137,6 +137,14 @@ Partial Public Class MainForm
             skipReason = "order book unavailable"
         ElseIf recentTrades Is Nothing OrElse recentTrades.Count = 0 Then
             skipReason = "recent trades unavailable"
+        ElseIf recentTrades.Count < ScoringEngine.MinTradesForScoring(cfg) Then
+            ' [v67 thin-trade-window skip gate, docs/thin-trade-window-skip-gate-proposal.md]
+            ' One transient REST failure on DeribitWsFeed.SeedAsync's trade seed silently
+            ' leaves the trade ring thin after connect; TFI/MicroCVD/CVD then score off a
+            ' handful of prints. The minimum is DERIVED (never a literal) — see
+            ' ScoringEngine.MinTradesForScoring.
+            skipReason = "recent trades thin (" & recentTrades.Count & "<" &
+                         ScoringEngine.MinTradesForScoring(cfg) & ")"
         ElseIf Not IndicatorEngine.IsFresh(candlesExec, execRes, DateTime.UtcNow) Then
             ' D5 (S-6): stale tape scores hours-old data as current → row pollution.
             ' [v36] Freshness honours the execution resolution — a 3-min bar is fresh up

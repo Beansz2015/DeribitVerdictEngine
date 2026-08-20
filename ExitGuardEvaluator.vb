@@ -55,7 +55,11 @@ Public NotInheritable Class ExitGuardEvaluator
             If posState = PositionState.None OrElse state Is Nothing Then Return result
 
             Dim allTrades As List(Of TradeRecord) = state.GetTrades()
-            If allTrades Is Nothing OrElse allTrades.Count = 0 Then Return result   ' empty buffer → Clear
+            ' [v67 thin-trade-window skip gate, D-4] Same derived minimum as the full-run
+            ' gate (MainForm_Analysis.vb) — below it, the guard returns its existing Clear
+            ' result, the same posture it already takes on an empty buffer. It must never
+            ' skip or throw: it runs on an open position (§3.3).
+            If allTrades Is Nothing OrElse allTrades.Count < ScoringEngine.MinTradesForScoring(cfg) Then Return result
 
             ' Mirror GetRecentTradesAsync(500): the most-recent 500 trades (the buffer is ascending).
             Dim window As List(Of TradeRecord) =

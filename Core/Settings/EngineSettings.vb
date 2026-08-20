@@ -814,6 +814,14 @@ Public Class ScoringSettings
     ''' the old 1.2 stopped ~30% of eventual London winners before their target, DG2).</summary>
     <JsonPropertyName("atr_stop_multiplier")>   Public Property AtrStopMultiplier   As Double = 1.6
     ''' <summary>
+    ''' [v67 thin-trade-window skip gate] Override for <see cref="ScoringEngine.MinTradesForScoring"/>.
+    ''' <c>0</c> (default) means "use the derived value" — <c>Max(TFI.WindowSize, MicroCVD.WindowSize)</c>,
+    ''' byte-identical to deriving. A positive value takes precedence, so a deploy surprise is
+    ''' tunable without a rebuild. OFF the auto-tweaker surface (HARD CONSTRAINT 28) — data-
+    ''' sufficiency plumbing, not a failure-rate lever. Spec: docs/thin-trade-window-skip-gate-proposal.md §3.2/§3.4.
+    ''' </summary>
+    <JsonPropertyName("min_trades_for_scoring_override")> Public Property MinTradesForScoringOverride As Integer = 0
+    ''' <summary>
     ''' [v62 fee-aware min-move floor] Execution-cost model + the trader's minimum acceptable
     ''' NET move. Replaces the retired flat <c>scoring.min_tradeable_move_pct</c> key — the
     ''' floor is now COMPOSED (see <see cref="TradeCostSettings.EffectiveMinMovePct"/>), so a
