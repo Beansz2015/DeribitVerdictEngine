@@ -1,0 +1,25 @@
+{
+  "commands": [
+    "$os=Get-CimInstance Win32_OperatingSystem",
+    "$a=Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue",
+    "$cs=Get-CimInstance Win32_ComputerSystem",
+    "'host      {0}' -f $env:COMPUTERNAME",
+    "'os        {0}' -f $os.Caption",
+    "'uptime    {0:dd\\.hh\\:mm}' -f ((Get-Date) - $os.LastBootUpTime)",
+    "'total   {0,6:N0} MB' -f ($os.TotalVisibleMemorySize/1KB)",
+    "'avail   {0,6:N0} MB' -f ($os.FreePhysicalMemory/1KB)",
+    "'inuse   {0,6:N0} MB' -f (($os.TotalVisibleMemorySize-$os.FreePhysicalMemory)/1KB)",
+    "if($a){'app WS  {0,6:N0} MB' -f ($a.WorkingSet64/1MB); 'app PVT {0,6:N0} MB' -f ($a.PrivateMemorySize64/1MB); 'app up  {0:dd\\.hh\\:mm}' -f ((Get-Date)-$a.StartTime)}else{'app NOT RUNNING'}",
+    "$c=Get-Counter '\\Memory\\Available MBytes','\\Memory\\Pages Output/sec','\\Memory\\Pages Input/sec','\\Paging File(_Total)\\% Usage' -SampleInterval 2 -MaxSamples 15",
+    "$sm={param($p) ($c.CounterSamples | Where-Object {$_.Path -like $p} | Measure-Object -Property CookedValue -Average -Maximum)}",
+    "$av=& $sm '*available mbytes'; $po=& $sm '*pages output/sec'; $pi=& $sm '*pages input/sec'; $pf=& $sm '*% usage'",
+    "''",
+    "'--- 30s sustained (avg / max) ---'",
+    "'avail      {0,8:N0} / {1,8:N0} MB' -f $av.Average,$av.Maximum",
+    "'pagesOUT/s {0,8:N1} / {1,8:N1}   <-- eviction pressure; sustained >0 = thrashing' -f $po.Average,$po.Maximum",
+    "'pagesIN/s  {0,8:N1} / {1,8:N1}   (noisy: counts mapped-file reads too)' -f $pi.Average,$pi.Maximum",
+    "'pagefile   {0,8:N1} / {1,8:N1} %' -f $pf.Average,$pf.Maximum",
+    "''",
+    "'sessions: ' + ((quser 2>$null) -join ' | ')"
+  ]
+}
