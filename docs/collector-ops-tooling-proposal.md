@@ -92,7 +92,7 @@ One bucket, same region as the instances.
 - **No versioning.** Deletes would leave billable old versions.
 - **Lifecycle rule: expire objects after 7 days, and abort incomplete multipart uploads after 1 day.** Without the second rule, failed uploads bill invisibly forever.
 - EC2 → S3 in-region is free; storage at these sizes rounds to zero; an empty bucket costs nothing.
-- Instance profiles need `s3:PutObject` + `s3:GetObject` scoped **to that bucket only**.
+✅ **DONE AND PROVEN 2026-08-21.** Managed policy `DeribitCollectorS3Access` (`arn:aws:iam::002125563513:policy/DeribitCollectorS3Access`) grants `s3:GetObject`+`s3:PutObject` on `arn:aws:s3:::deribit-engine-bucket/*` and `s3:ListBucket` on the bucket itself — **nothing else, and NO `s3:DeleteObject`** (the lifecycle rule is the only thing that removes objects, so a bug in the tooling cannot delete). Attached to **both** roles `EC2-SSM-Access` (prod) and `DeribitEngineSSM` (test). ⭐ **SCOPING PROVEN ON THE LIVE BOX, not assumed:** a PUT/LIST/GET round-trip succeeded against the collector bucket, and listing `thecentralstorage` returned *"is not authorized to perform: s3:ListBucket ... because no identity-based policy allows the s3:ListBucket action"*. **The collector cannot reach the trader's hostel backups.** Probe committed as `ssm-s3-verify.json`; re-run it after any IAM change. ⚠ **PREREQUISITE FOUND THE SAME DAY: the test box (Server 2019) has NO AWS CLI, while production (Server 2025) ships `aws-cli/2.28.20` in the AMI.** The ops tooling needs it on any box it targets. ⛔ **Do NOT install it while a memory test is running** — an MSI install on a 1 GiB box with ~115 MB headroom will pollute the eviction reading this whole exercise depends on.
 
 ### 2.3 `status` — read-only, no S3 needed
 
