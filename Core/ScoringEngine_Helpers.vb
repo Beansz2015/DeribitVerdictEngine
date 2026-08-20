@@ -70,6 +70,15 @@ Partial Public Class ScoringEngine
                         cfg.Indicators.MicroCVD.WindowSize)
     End Function
 
+    ''' <summary>The thin-trade-window skip reason string, hoisted so a fixture can assert
+    ''' against the exact function the skip gate calls rather than a copy of its format
+    ''' (F2, thin-trade-window-skip-gate-spec-back.md follow-up). Takes the already-computed
+    ''' minimum as an argument so the ElseIf's own MinTradesForScoring(cfg) call is not
+    ''' duplicated.</summary>
+    Public Shared Function ThinTradesSkipReason(count As Integer, minTrades As Integer) As String
+        Return "recent trades thin (" & count & "<" & minTrades & ")"
+    End Function
+
     ''' <summary>
     ''' Returns the integer threshold at or above which a score qualifies for the given tier.
     ''' Replaces the former ThresholdStrong / ThresholdMed / ThresholdWeak trio (identical bodies).

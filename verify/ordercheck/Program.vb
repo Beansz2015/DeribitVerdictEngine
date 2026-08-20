@@ -509,11 +509,17 @@ Module Program
         ' [A57 — thin-trade-window skip gate, docs/thin-trade-window-skip-gate-proposal.md §6]
         ' Every guard on the trade path tested Count = 0; nothing tested for a THIN list. A57c
         ' is the mutation proof: revert ScoringEngine.MinTradesForScoring to a hardcoded 50 and
-        ' it MUST fail — that is the entire point of the fixture family.
+        ' it MUST fail — that is the entire point of the fixture family. [Follow-up to 613cf1e]
+        ' A57b DELETED — mutated MinTradesForScoring to drop the MicroCVD term (Max(TFI,1)=30):
+        ' A57a/c/d all failed, A57b passed. It asserted only that "<" is strict; it cannot fail
+        ' for any implementation. A57c already pins the boundary (fires79/passes80) at a
+        ' non-default window, strictly stronger. Numbering kept — do not renumber A57c/A57d,
+        ' the spec and the spec-back packet reference them by name. A57e is new (F3): the
+        ' exit-guard's own thin-but-nonzero path had no assertion until now.
         A57a_DerivesToFiftyAtDefaultsAndReasonStringFormat()
-        A57b_AtMinimumDoesNotFire()
         A57c_NonDefaultMicroCvdWindowMovesTheDerivedMinimum()
         A57d_OverrideAndTweakerFence()
+        A57e_ExitGuardClearOnThinAdverseBuffer()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -9620,21 +9626,13 @@ Module Program
         Dim cfg As New EngineSettings()
         Dim minTrades As Integer = ScoringEngine.MinTradesForScoring(cfg)
         Dim count As Integer = 10
-        Dim reason As String = "recent trades thin (" & count & "<" & minTrades & ")"
-        Check("A57a MinTradesForScoring derives to 50 at shipped defaults (Max(TFI 30, MicroCVD 50)) + reason string carries both numbers",
+        ' [F2 follow-up to 613cf1e] Assert against the REAL production function, not a copy
+        ' of its format — the copy left A57a green even if ThinTradesSkipReason's own text
+        ' changed, because the live call site never ran under the WinForms boundary.
+        Dim reason As String = ScoringEngine.ThinTradesSkipReason(count, minTrades)
+        Check("A57a MinTradesForScoring derives to 50 at shipped defaults (Max(TFI 30, MicroCVD 50)) + ScoringEngine.ThinTradesSkipReason carries both numbers",
               minTrades = 50 AndAlso reason = "recent trades thin (10<50)",
               String.Format("minTrades={0} reason='{1}'", minTrades, reason))
-    End Sub
-
-    ' -- A57b: the gate does not over-fire — a count AT the derived minimum passes -----
-    Private Sub A57b_AtMinimumDoesNotFire()
-        Dim cfg As New EngineSettings()
-        Dim minTrades As Integer = ScoringEngine.MinTradesForScoring(cfg)
-        Dim atMinFires As Boolean = (minTrades < minTrades)         ' the live gate's own condition
-        Dim belowFires As Boolean = ((minTrades - 1) < minTrades)
-        Check("A57b gate condition: count == derived minimum does NOT fire, minimum-1 DOES",
-              Not atMinFires AndAlso belowFires,
-              String.Format("minTrades={0} atMinFires={1} belowFires={2}", minTrades, atMinFires, belowFires))
     End Sub
 
     ' -- A57c: ⚠ THE HARDCODE-TRAP CATCHER — a non-default MicroCVD window moves the
@@ -9671,6 +9669,36 @@ Module Program
               Not rOverride.IsValid AndAlso rOverride.ErrorReason.Contains("HARD CONSTRAINT 28") AndAlso rSibling.IsValid,
               String.Format("derivedViaZero={0} viaOverride={1} overrideValid={2} overrideReason='{3}' siblingValid={4}",
                             derivedViaZero, viaOverride, rOverride.IsValid, rOverride.ErrorReason, rSibling.IsValid))
+    End Sub
+
+    ' -- A57e: ⚠ D-4 pinned — the exit guard goes SILENT on a thin, heavily-adverse
+    ' buffer while holding an open position. §4 of the spec-back undersold this: the
+    ' guard previously went silent only on an EMPTY buffer (effectively never); it now
+    ' goes silent for up to ~36s after a seed failure while a position is open. The
+    ' same 40-trade heavy-sell pattern is evaluated TWICE — once with the derived
+    ' minimum bypassed (MinTradesForScoringOverride=1) to prove it WOULD read Exit /
+    ' AdverseCount>=2 if evaluated, and once at the shipped default (50) to prove the
+    ' guard instead returns Clear. Without the bypass comparison this fixture could not
+    ' tell "correctly gated" from "coincidentally not adverse". -----------------------
+    Private Sub A57e_ExitGuardClearOnThinAdverseBuffer()
+        Dim state As New MarketState()
+        Dim trades As New List(Of TradeRecord)
+        For i As Integer = 1 To 40                     ' 40 < the shipped derived minimum (50)
+            trades.Add(Trade("sell", 20000, i))
+        Next
+        state.SeedTrades(trades, DateTime.UtcNow)
+
+        Dim cfgBypassed As New EngineSettings()
+        cfgBypassed.Scoring.MinTradesForScoringOverride = 1
+        Dim resBypassed = ExitGuardEvaluator.Evaluate(state, PositionState.InLong, 0, 0, cfgBypassed)
+
+        Dim cfgDefault As New EngineSettings()
+        Dim resDefault = ExitGuardEvaluator.Evaluate(state, PositionState.InLong, 0, 0, cfgDefault)
+
+        Check("A57e ⚠ D-4: 40-trade heavy-sell buffer (< derived min 50) evaluates Clear at shipped defaults, despite the SAME buffer reading Exit/AdverseCount>=2 once the gate is bypassed",
+              resBypassed.Kind = ExitGuardKind.[Exit] AndAlso resBypassed.AdverseCount >= 2 AndAlso
+              resDefault.Kind = ExitGuardKind.Clear,
+              String.Format("bypassed={0}/cnt{1} default={2}", resBypassed.Kind, resBypassed.AdverseCount, resDefault.Kind))
     End Sub
 
     Private Sub A52a_AsiaArmingJsonContract()

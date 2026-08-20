@@ -120,6 +120,9 @@ Partial Public Class MainForm
             If(execRes = 1, candles1m, Await src.GetCandlesAsync(execRes.ToString(), 250))
 
         ' Resilience check: if any required fetch failed, skip cleanly.
+        ' [v67 F2] Computed once — the ElseIf condition and the reason string both consume
+        ' this value rather than each calling ScoringEngine.MinTradesForScoring(cfg) itself.
+        Dim minTradesForScoring As Integer = ScoringEngine.MinTradesForScoring(cfg)
         Dim skipReason As String = Nothing
         If candles1m Is Nothing OrElse candles1m.Count < 50 Then
             skipReason = "1m candles unavailable"
@@ -137,14 +140,13 @@ Partial Public Class MainForm
             skipReason = "order book unavailable"
         ElseIf recentTrades Is Nothing OrElse recentTrades.Count = 0 Then
             skipReason = "recent trades unavailable"
-        ElseIf recentTrades.Count < ScoringEngine.MinTradesForScoring(cfg) Then
+        ElseIf recentTrades.Count < minTradesForScoring Then
             ' [v67 thin-trade-window skip gate, docs/thin-trade-window-skip-gate-proposal.md]
             ' One transient REST failure on DeribitWsFeed.SeedAsync's trade seed silently
             ' leaves the trade ring thin after connect; TFI/MicroCVD/CVD then score off a
             ' handful of prints. The minimum is DERIVED (never a literal) — see
             ' ScoringEngine.MinTradesForScoring.
-            skipReason = "recent trades thin (" & recentTrades.Count & "<" &
-                         ScoringEngine.MinTradesForScoring(cfg) & ")"
+            skipReason = ScoringEngine.ThinTradesSkipReason(recentTrades.Count, minTradesForScoring)
         ElseIf Not IndicatorEngine.IsFresh(candlesExec, execRes, DateTime.UtcNow) Then
             ' D5 (S-6): stale tape scores hours-old data as current → row pollution.
             ' [v36] Freshness honours the execution resolution — a 3-min bar is fresh up
