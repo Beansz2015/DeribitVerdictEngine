@@ -149,9 +149,9 @@ A hash match proves the bytes arrived. **It proves nothing about whether the app
 | **D-4** | Backup is **single-generation**, six items only, overwritten by the next deploy | **Yes** — trader-chosen 2026-08-21. ⚠ TRAP 1 is the whole risk here |
 | **D-5** | Acceptance = a new CSV row within 5 min, not a hash match | **Yes** — §2.6 |
 | **D-6** | Scope: `status` + `fetch` + `deploy` in one tool | **Yes** — trader-chosen 2026-08-21 |
-| **D-7** | ⚠ **Does `deploy` target the t2.micro test box too, or production only?** | **Both, with the box named explicitly on every invocation and no default.** A tool that defaults to a target is a tool that deploys to the wrong one |
-| **D-8** | ⚠ **S3 bucket name and region** — needs your answer; the region must match the instances | **Trader input required** |
-| **D-9** | Should `fetch` run on a schedule (e.g. daily) rather than on demand? | **On demand only, this build.** A scheduled copy-back is a second thing to monitor, and §2.4 deliberately does not pool — an unattended transfer with no consumer earns nothing |
+| **D-7** | ⚠ **Does `deploy` target the t2.micro test box too, or production only?** | ✅ **TICKED 2026-08-21 — PRODUCTION ONLY.** The test box is a candidate REPLACEMENT, not a second target: once proven it BECOMES production and the current box is shut down. ⚠ **The box must still be named explicitly on every invocation, with no default** — a tool that defaults to a target is a tool that deploys to the wrong one, and that matters more, not less, once two boxes are interchangeable. ⛔ **See §5 — replacement is NOT what [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) documents, and the difference is the irreplaceable tape** |
+| **D-8** | ⚠ **S3 bucket name and region** — needs your answer; the region must match the instances | ✅ **TICKED 2026-08-21 — a NEW, DEDICATED bucket.** The trader's existing `arn:aws:s3:::thecentralstorage` holds live backups from an unrelated hostel app on a Linux box. ⛔ **DO NOT USE IT AND DO NOT WRITE A LIFECYCLE RULE ANYWHERE NEAR IT** — §2.2's 7-day expiry, if its prefix scope slipped, would delete those backups silently and irreversibly. A separate bucket makes that impossible by construction, scopes the instance-profile IAM to one bucket instead of one prefix, and **costs nothing extra** (buckets are free; storage bills per GB either way). Region must match the instances |
+| **D-9** | Should `fetch` run on a schedule (e.g. daily) rather than on demand? | ✅ **TICKED 2026-08-21 — ON DEMAND ONLY.** A scheduled copy-back is a second thing to monitor, and §2.4 deliberately does not pool — an unattended transfer with no consumer earns nothing |
 
 ---
 
@@ -161,3 +161,51 @@ A hash match proves the bytes arrived. **It proves nothing about whether the app
 - Part A display-string parity: **no rendered line changes** — auto-run engagement uses the existing `UpdateCountdownLabel` path and the existing button state. **State this explicitly in the commit message.**
 - Part B: **no engine build impact** (a `.ps1` outside every `.vbproj`). Prove `deploy` end-to-end **against the t2.micro test box first**, never production.
 - ⛔ **Part B must never be run against production during its own build session.** First production use is trader-driven, after the test-box run is clean.
+
+---
+
+## 5. ⚠⚠ Collector REPLACEMENT — the cutover, which no existing doc covers
+
+**Trader plan, 2026-08-21:** if the t2.micro proves out, **it becomes production and the current box is shut down.** That is a *replacement*, and [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) does not describe one — it describes deploying to a **supplementary** collector running *alongside*. **The two have opposite rules, and the thing at stake is unrecoverable.**
+
+### 5.1 The rule that INVERTS
+
+The checklist §1.5 says **do not** seed a new AWS box with `analysis_log.csv` or `backtest_data\`, because *"a seeded copy forks the history and forces dedup at every pooled read; a fresh book concatenates cleanly."*
+
+⚠ **That reasoning holds only while BOTH boxes run.** In a replacement the old box stops, so **nothing forks** — and starting the new box fresh instead throws away continuity for no gain. **For a replacement you MUST carry the book and the store across.** Do not follow §1.5 here; it is answering a different question.
+
+### 5.2 What is irreplaceable, named explicitly
+
+- **`backtest_data\trades_2026-07.csv` + `trades_2026-08.csv`** — ~42.5 MB of tape back to 2026-07-22. ⛔ **Past ~24 h this cannot be re-fetched at any price.** This is the one that ends the project's optionality if lost.
+- **`analysis_log.csv`** — 22,970 rows from 2026-07-22, the AWS half of every pooled read and of the Kelly dated trigger.
+- `analysis_eval_cache.csv`, `ws_health.log`, `capture_marker.log`, `settings_snapshots\`.
+
+### 5.3 ⛔ Discard the test box's own book and store at cutover
+
+The t2.micro has been collecting since **2026-08-20 15:42** into its own book and store. **Delete both before carrying production's across.** Two reasons, either sufficient:
+
+- Production covered the same period, so **nothing is lost**.
+- ⚠ **The test box ran settings v67 while production ran v66.** Merging them silently mixes two engine versions in one book — a dataset boundary created by accident, which is exactly the class of error this project keeps finding after the fact.
+
+### 5.4 The ordered procedure
+
+**Order is the safety property. Do not reorder to save time.**
+
+1. **`fetch` everything from old production to local, and VERIFY it there** — row counts, date ranges, store file sizes, `trade_seq` continuity. **Do this first, while the old box is still healthy and running.**
+2. **Stop the app on old production.** Collection pauses from here; gap repair heals up to 20 h, so the window is forgiving but not unlimited.
+3. **Re-`fetch`** to capture the final rows written between step 1 and step 2.
+4. **Stop the app on the new box. Delete its book and store** (§5.3).
+5. **Copy production's book + store to the new box.**
+6. **Verify the copy** — row counts and file sizes must match what step 3 pulled.
+7. **Start the new box.** Confirm it **appends to the carried book** rather than creating a fresh one, and that a new row lands within 5 minutes (the §2.6 gate).
+8. **Watch the new box for a full day** using `status` before touching the old one further.
+
+### 5.5 ⛔ Stop the old instance. Do NOT terminate it.
+
+**Stopping preserves the EBS volume. Terminating destroys it** — and with it the only remaining copy of anything step 1 missed.
+
+⭐ **Before terminating, take an EBS snapshot of the 30 GB volume.** At roughly **$1.50/month** it is the cheapest insurance available against a mistake in a procedure whose failure mode is permanent. **Keep it until at least one full pooled read has been run successfully against the new box.**
+
+### 5.6 What this changes about the `fetch` verb
+
+§2.4 describes `fetch` as an on-demand convenience. **In a replacement it is the load-bearing step**, and step 1 above is the only thing standing between a procedural slip and permanent loss. **`fetch` must therefore report what it transferred — per-file row counts and byte sizes, both sides — and fail loudly on any mismatch.** A silent partial transfer here is the worst outcome this whole document exists to prevent.
