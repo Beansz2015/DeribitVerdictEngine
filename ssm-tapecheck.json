@@ -34,7 +34,7 @@
     "'span (max-min+1)     {0:N0}' -f $span",
     "'distinct present     {0:N0}' -f $seqs.Count",
     "'MISSING              {0:N0}   ({1:N3} %)' -f $miss,(100*$miss/$span)",
-    "if($miss -eq 0){'==> NO MISSING SEQUENCES. The tape is COMPLETE for this window. 26a0 This does NOT prove gap repair healed anything - contiguous seqs across a TIME void means the VENUE assigned no seqs, i.e. no trades occurred. Check the per-minute burst on resume to confirm a halt. Gap repair healing remains UNTESTED until a window shows missing seqs that a later pass fills.'}else{'==> {0:N0} SEQUENCE NUMBERS MISSING - investigate' -f $miss}",
+    "if($miss -eq 0){'==> NO MISSING SEQUENCES. The tape is COMPLETE for this window. NOTE: this does NOT prove gap repair healed anything - contiguous seqs across a TIME void means the VENUE assigned no seqs, i.e. no trades occurred. Check the per-minute burst on resume to confirm a halt. Gap repair healing remains UNTESTED until a window shows missing seqs that a later pass fills.'}else{'==> {0:N0} SEQUENCE NUMBERS MISSING - investigate' -f $miss}",
     "''",
     "'--- rows per minute (a hole shows as missing/!!low minutes) ---'",
     "$perMin.GetEnumerator() | Sort-Object Name | ForEach-Object { '{0}  {1,5}  {2}' -f $_.Name,$_.Value,('#'*[Math]::Min(40,[int]($_.Value/4))) }"
