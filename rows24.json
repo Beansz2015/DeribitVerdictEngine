@@ -1,0 +1,21 @@
+{
+  "commands": [
+    "$p=Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue",
+    "$dir=if($p){Split-Path $p.Path}else{'C:/DeribitVerdictEngine'}",
+    "$csv=Join-Path $dir 'analysis_log.csv'",
+    "$from=(Get-Date).ToUniversalTime().AddHours(-24)",
+    "$n=0; $perHour=@{}",
+    "foreach($line in [System.IO.File]::ReadLines($csv)){",
+    "  $c=$line.IndexOf(','); if($c -lt 1){continue}",
+    "  $dt=[datetime]::MinValue",
+    "  if(-not [datetime]::TryParseExact($line.Substring(0,$c),'yyyy-MM-dd HH:mm:ss',$null,'None',[ref]$dt)){continue}",
+    "  if($dt -lt $from){continue}",
+    "  $n++; $k=$dt.ToString('MM-dd HH'); $perHour[$k]=1+$perHour[$k]",
+    "}",
+    "'host            {0}' -f $env:COMPUTERNAME",
+    "'rows last 24h   {0:N0}   ({1:N1}/hour)' -f $n,($n/24.0)",
+    "'hours covered   {0} of 24' -f $perHour.Count",
+    "$v=($perHour.Values | Measure-Object -Average -Minimum -Maximum)",
+    "'per-hour   min {0:N0}  avg {1:N1}  max {2:N0}' -f $v.Minimum,$v.Average,$v.Maximum"
+  ]
+}
