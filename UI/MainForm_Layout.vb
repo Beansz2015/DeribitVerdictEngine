@@ -432,6 +432,17 @@ Partial Public Class MainForm
             Console.WriteLine("[CaptureMarkerLog] start-log failed: " & ex.Message)
         End Try
         InitAutoRunControls()
+        ' [v68] Auto-run-on-start (docs/collector-ops-tooling-proposal.md §1) — a scripted
+        ' deploy produces a running app that is still stopped without this. Reuses the exact
+        ' StartAutoRun() path a manual Start click takes, right after InitAutoRunControls has
+        ' seeded nudMinutes/nudSeconds/trigger-mode from cfg, so there is no second source of
+        ' truth for the interval. Safe by construction: chkArmAutotrade (below, built earlier
+        ' in this constructor) has no settings-backed initial state and is never persisted
+        ' (MainForm_SignalBridge.vb OnArmAutotradeCheckChanged), so this cannot arm autotrade.
+        ' silentOnInvalid:=True [FIX 4, docs/collector-ops-tooling-spec-back.md §5] — an
+        ' unattended box must never block on the "minimum interval 10s" MessageBox; a
+        ' hand-edited invalid interval logs to console and leaves auto-run disengaged instead.
+        If SettingsLoader.Current.AutoRun.StartEngaged Then StartAutoRun(silentOnInvalid:=True)
         ' [P4 #1] Start the exit-guard tick at form load (D6: decoupled from auto-run — MarketState
         ' streams whenever transport=ws regardless of auto-run). Each tick self-gates on posState +
         ' feed health; disposed in OnFormClosing.

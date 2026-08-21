@@ -766,6 +766,10 @@ End Class
 Public Class AutoRunSettings
     ' D4 (S-4): the former 'enabled' key was dead — InitAutoRunControls always
     ' starts stopped and nothing read it. Removed in v32.
+    ' [v68] start_engaged is NOT that key revived — 'enabled' was never read; this one is,
+    ' exactly once, at MainForm_Layout.vb form load (docs/collector-ops-tooling-proposal.md
+    ' §1). Default False ⇒ byte-identical to every prior version on a box that hasn't set it.
+    <JsonPropertyName("start_engaged")> Public Property StartEngaged As Boolean = False
     <JsonPropertyName("interval_minutes")> Public Property IntervalMinutes As Integer = 1
     <JsonPropertyName("interval_seconds")> Public Property IntervalSeconds As Integer = 0
     ' P4 #2 (on-close analysis mode, v44): run-TRIGGER selector — "interval" (default,

@@ -521,6 +521,11 @@ Module Program
         A57d_OverrideAndTweakerFence()
         A57e_ExitGuardClearOnThinAdverseBuffer()
 
+        ' [A58 — auto-run on start, docs/collector-ops-tooling-proposal.md §1] A58a/b are
+        ' host-agnostic; A58c joins the A50 group below (it calls SettingsLoader.Initialise).
+        A58a_AbsentKeyDefaultsFalseOnOldSettingsFile()
+        A58b_StartEngagedRoundTripsTrueThroughJson()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -537,6 +542,7 @@ Module Program
         A50i_NetworkSplitIsKeyGranular()
         A50j_WhitelistIntersectUiWriteback()
         A50k_AdmittedButAbsentKeyIsWarnedAndDoesNotActivate()
+        A58c_OverlayRoutesStartEngagedAndTweakerFenceStillRejectsIt()
 
         Console.WriteLine()
         If _failures = 0 Then
@@ -9701,6 +9707,47 @@ Module Program
               String.Format("bypassed={0}/cnt{1} default={2}", resBypassed.Kind, resBypassed.AdverseCount, resDefault.Kind))
     End Sub
 
+    ' =======================================================================
+    ' A58 — auto-run on start (docs/collector-ops-tooling-proposal.md §1). A58a/b are
+    ' host-agnostic settings-load fixtures; A58c joins the A50 overlay group further down
+    ' (it is one of the fixtures that calls SettingsLoader.Initialise). The UI wiring itself
+    ' (MainForm_Layout.vb's `If cfg.AutoRun.StartEngaged Then StartAutoRun()`) sits outside
+    ' this harness's WinForms boundary, same class as every A16-A57 boundary note.
+    ' ⚠ §1.3's safety property (auto-start cannot arm autotrade) is NOT fixture-tested and
+    ' cannot be from here — OrderCheck.vbproj does not Compile Include any MainForm_*.vb file,
+    ' so a reflection check over AutoRunSettings (as an earlier draft of A58b did) proves only
+    ' that the SETTINGS side carries no arm field; it says nothing about chkArmAutotrade or
+    ' _autotradeArmed, which is where the property actually lives. That earlier draft read as
+    ' coverage it did not provide (review finding, docs/collector-ops-tooling-spec-back.md
+    ' FIX 3) and has been removed. The property is verified by READING
+    ' UI/MainForm_Layout.vb (chkArmAutotrade's construction takes no settings-backed initial
+    ' state) and UI/MainForm_SignalBridge.vb (_autotradeArmed is assigned only from the
+    ' checkbox's own Checked property) — recorded there, not asserted here.
+    ' =======================================================================
+
+    ' -- A58a: a pre-v68 settings.json with no start_engaged key deserialises to False -------
+    Private Sub A58a_AbsentKeyDefaultsFalseOnOldSettingsFile()
+        Dim json As String = "{""version"":67,""auto_run"":{""interval_minutes"":1,""interval_seconds"":0,""trigger_mode"":""on_close""}}"
+        Dim cfg = JsonSerializer.Deserialize(Of EngineSettings)(
+            json, New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True})
+        Check("A58a a pre-v68 settings.json with no start_engaged key deserialises AutoRun.StartEngaged to False — byte-identical on every box that has not been re-deployed",
+              Not cfg.AutoRun.StartEngaged,
+              String.Format("startEngaged={0}", cfg.AutoRun.StartEngaged))
+    End Sub
+
+    ' -- A58b: start_engaged:true round-trips True through JSON deserialisation. This is a
+    ' JSON-contract check ONLY — it does not touch and cannot prove the §1.3 safety property;
+    ' see the group comment above.
+    Private Sub A58b_StartEngagedRoundTripsTrueThroughJson()
+        Dim json As String = "{""version"":67,""auto_run"":{""start_engaged"":true,""interval_minutes"":2,""interval_seconds"":30,""trigger_mode"":""interval""}}"
+        Dim cfg = JsonSerializer.Deserialize(Of EngineSettings)(
+            json, New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True})
+
+        Check("A58b start_engaged:true round-trips True through JSON deserialisation (JSON-contract check only — see the A58 group comment for why §1.3's safety property is not, and cannot be, fixture-tested here)",
+              cfg.AutoRun.StartEngaged AndAlso cfg.AutoRun.IntervalMinutes = 2,
+              String.Format("startEngaged={0} intervalMinutes={1}", cfg.AutoRun.StartEngaged, cfg.AutoRun.IntervalMinutes))
+    End Sub
+
     Private Sub A52a_AsiaArmingJsonContract()
         Dim opts As New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True}
         Dim armed   = JsonSerializer.Deserialize(Of EngineSettings)(
@@ -10322,6 +10369,38 @@ Module Program
         Finally
             A50Cleanup(dirA)
             A50Cleanup(dirB)
+        End Try
+    End Sub
+
+    ' -- A58c: overlay routes auto_run.start_engaged key-granular, and the tweaker fence
+    ' still rejects it (docs/collector-ops-tooling-proposal.md §1.4) --------------------------
+    ' Base ships true (collectors, hands-off after a scripted deploy); the dev box opts out
+    ' via settings.local.json — the SAME overlay mechanism as trade_store.enabled (A50b). Pins
+    ' BOTH directions of the routing PLUS that admitting the key individually does not open a
+    ' hole on the tweaker surface: auto_run. stays whole-block fenced (HARD CONSTRAINT 14
+    ' label; the shared prefix-reject message text is "HARD CONSTRAINT 11/12" — see A57d's
+    ' HC28 fixture for the contrasting exact-match-reject message shape).
+    Private Sub A58c_OverlayRoutesStartEngagedAndTweakerFenceStillRejectsIt()
+        Dim dir As String = A50TempDir("58c")
+        Try
+            Dim baseCfg = A50BaseSettings()
+            baseCfg.AutoRun.StartEngaged = True
+            A50Init(dir, A50Json(baseCfg), "{""auto_run"":{""start_engaged"":false}}")
+
+            Dim c = SettingsLoader.Current
+            Dim applied = SettingsLoader.OverlayAppliedKeys
+
+            Dim s As String = "{""version"":67,""auto_run"":{""start_engaged"":false}}"
+            Dim rTweak = SettingsDiffApplier.Validate(OneDiff("auto_run.start_engaged", "false", "true"), s, 3)
+
+            Check("A58c overlay admits auto_run.start_engaged key-granular (base true -> overlaid false), and the tweaker fence still rejects it (auto_run. stays whole-block fenced)",
+                  Not c.AutoRun.StartEngaged AndAlso
+                  applied.Count = 1 AndAlso applied(0) = "auto_run.start_engaged" AndAlso
+                  Not rTweak.IsValid AndAlso rTweak.ErrorReason.Contains("HARD CONSTRAINT 11/12"),
+                  String.Format("mergedStartEngaged={0} applied=[{1}] tweakerValid={2} tweakerReason='{3}'",
+                                c.AutoRun.StartEngaged, String.Join(",", applied), rTweak.IsValid, rTweak.ErrorReason))
+        Finally
+            A50Cleanup(dir)
         End Try
     End Sub
 

@@ -93,11 +93,21 @@ Public Class SettingsLoader
     ' network. — admitted PER KEY. These change whether a run skips, never what a
     ' completed run computes; a skipped run emits no row, so the rows that exist stay
     ' comparable. ws_url is a different endpoint for the same venue and the same data.
+    '
+    ' auto_run.start_engaged — admitted PER KEY, same reasoning class as network.* above
+    ' [v68, docs/collector-ops-tooling-proposal.md §1.4]. auto_run AS A WHOLE BLOCK stays
+    ' REJECTED (see RejectNotes below) — interval_minutes/interval_seconds/trigger_mode
+    ' still move scoring cadence and that reasoning is untouched. start_engaged is narrower:
+    ' it decides only WHETHER the run loop starts automatically at load, using whatever
+    ' cadence the (rejected, always-shared) interval keys already set — it cannot itself
+    ' create a cadence divergence, which is what earns it the individual admit rather than
+    ' widening the block.
     Private Shared ReadOnly AdmittedKeys As String() = {
         "network.request_timeout_seconds",
         "network.retry_count",
         "network.retry_backoff_ms",
-        "network.ws_url"
+        "network.ws_url",
+        "auto_run.start_engaged"
     }
     '
     ' EVERYTHING ELSE IS REJECTED. The enforcement is the allow-list above, not this
@@ -116,6 +126,8 @@ Public Class SettingsLoader
     '                  v64 also runs trade-store capture.
     '   auto_run.*  -- cadence moves scoring (the whole v53 funding rewrite is the proof),
     '                  and trigger_mode is not yet a CSV column, so divergence is invisible.
+    '                  [v68] EXCEPT auto_run.start_engaged, admitted individually above —
+    '                  it does not touch cadence, only whether it starts unattended.
     Private Shared ReadOnly RejectNotes As String() = {
         "mtf_gate|the hard veto — BLOCK forces NO TRADE regardless of score",
         "alerts|gates liq_events.log, the sole A4 gate instrument (both boxes pooled)",

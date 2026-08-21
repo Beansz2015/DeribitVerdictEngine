@@ -32,8 +32,12 @@ Partial Public Class MainForm
         End If
         UpdateTriggerModeUi()
 
-        ' Always start in stopped state regardless of saved setting.
-        ' User must manually click Start each session.
+        ' Always initialise the CONTROLS to the stopped visual state here, regardless of
+        ' auto_run.start_engaged — the constructor may immediately call StartAutoRun() right
+        ' after this returns (MainForm_Layout.vb, [v68]), which flips them again. Keeping the
+        ' rest state here (rather than branching on start_engaged inside this sub) means
+        ' StartAutoRun() is the ONLY place that puts the UI into the running state, on start
+        ' or on a manual click alike — one code path, not two.
         btnStartStop.Text      = CHAR_PLAY
         btnStartStop.BackColor = Color.FromArgb(0, 140, 60)
         UpdateCountdownLabel("Auto-run: OFF")
@@ -47,13 +51,26 @@ Partial Public Class MainForm
         End If
     End Sub
 
-    Private Sub StartAutoRun()
+    ''' <summary>
+    ''' silentOnInvalid: [v68 FIX 4, docs/collector-ops-tooling-spec-back.md §5] the
+    ''' auto-start-on-load caller (MainForm_Layout.vb) passes True — an unattended box with a
+    ''' hand-edited invalid interval must never block on a MessageBox nobody is present to
+    ''' dismiss (the same session-0 hazard docs/collector-ops-tooling-proposal.md §2.1 warns
+    ''' about, reopened in session 2 by this build). The manual Start-button click path
+    ''' (btnStartStop_Click) passes the default False and keeps the dialog — a human is
+    ''' present there to see it.
+    ''' </summary>
+    Private Sub StartAutoRun(Optional silentOnInvalid As Boolean = False)
         Dim mins As Integer = CInt(nudMinutes.Value)
         Dim secs As Integer = CInt(nudSeconds.Value)
         _intervalMs = (mins * 60 + secs) * 1000
         If _intervalMs < 10_000 Then
-            MessageBox.Show(Me, "Minimum interval is 10 seconds.", "Auto-Run",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            If silentOnInvalid Then
+                Console.WriteLine("[AutoRun] start_engaged: interval below the 10-second minimum — not engaging, no dialog (unattended start)")
+            Else
+                MessageBox.Show(Me, "Minimum interval is 10 seconds.", "Auto-Run",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End If
             Return
         End If
 
