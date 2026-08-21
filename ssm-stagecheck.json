@@ -1,0 +1,14 @@
+{
+  "commands": [
+    "$p=Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue",
+    "$dir=Split-Path $p.Path",
+    "'app dir: ' + $dir",
+    "'--- any leftover staging / fetch dirs? (must be NONE) ---'",
+    "$found=@(Get-ChildItem $dir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'stag|fetch|_tmp|temp' })",
+    "if($found.Count -eq 0){'  none - staging cleaned up correctly'}else{ $found | ForEach-Object { '  LEFTOVER: ' + $_.FullName + '  (' + [int](((Get-ChildItem $_.FullName -Recurse -File | Measure-Object -Property Length -Sum).Sum)/1MB) + ' MB)' } }",
+    "'--- all dirs under the app dir, for context ---'",
+    "Get-ChildItem $dir -Directory | ForEach-Object { '  ' + $_.Name }",
+    "'--- disk headroom (a snapshot transiently doubles ~80 MB) ---'",
+    "Get-PSDrive C | ForEach-Object { '  C: used {0:N1} GB   free {1:N1} GB' -f ($_.Used/1GB),($_.Free/1GB) }"
+  ]
+}
