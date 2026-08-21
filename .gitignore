@@ -428,3 +428,6 @@ models-full.json
 
 # AWS copy-backs — collector data staged for pooled reads; never tracked (multi-MB, regenerable from the box)
 AWS-copybacks/
+
+# Local memory-probe log (t2.micro/collector eviction watch) — scratch data, regenerable, never committed
+tools/mem-probe.csv
