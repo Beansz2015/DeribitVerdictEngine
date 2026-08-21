@@ -230,9 +230,20 @@ function Invoke-Fetch {
     $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
     $prefix = "fetch/$InstanceId/$stamp"
 
-    # -- Step 1: on the box, resolve $dir and upload each target to S3, reporting a
-    # per-file manifest (size, and row count for the CSV) BEFORE the upload leaves the box,
-    # so a truncated transfer is visible by comparing this against what lands locally.
+    # -- Step 1: on the box, resolve $dir and SNAPSHOT every target into a staging dir FIRST,
+    # then manifest and upload FROM THE SNAPSHOT, never from the live files. [FIX 7,
+    # live-execution finding, docs/collector-ops-tooling-spec-back.md §7] The original
+    # version measured (Get-Item).Length, then counted lines, then ran `aws s3 cp` -- three
+    # separate instants against a file a 24/7 collector is actively appending to. Live run
+    # against production caught it directly: analysis_log.csv manifested at 21,943,640 bytes
+    # / 23,847 lines; the download landed at 21,944,609 bytes / the SAME 23,847 lines -- the
+    # manifest read was torn mid-row, the upload (later still) caught the completed row, and
+    # the download was correct throughout. A size-tolerance check would have papered over
+    # that instead of preventing it, and would as easily hide a genuinely short transfer.
+    # Snapshotting first makes manifest == uploaded == downloaded BY CONSTRUCTION -- all
+    # three read the same static copy -- and removes the torn-read risk on a growing file
+    # entirely, rather than tolerating it. ~80 MB transient cost on a 30 GB disk. The
+    # snapshot dir is removed on every exit path, including a snapshot failure itself.
     $fileList = ($FetchFiles | ForEach-Object { "'$_'" }) -join ','
     $dirList  = ($FetchDirs  | ForEach-Object { "'$_'" }) -join ','
     $remoteCmds = @(
@@ -240,8 +251,25 @@ function Invoke-Fetch {
         "if (-not `$p) { 'ERROR=app not running, cannot resolve install dir'; exit 1 }",
         "`$dir = Split-Path `$p.Path",
         "'REMOTE_DIR=' + `$dir",
+        "`$snap = Join-Path `$dir '_fetch_snapshot'",
+        "Remove-Item -Recurse -Force `$snap -ErrorAction SilentlyContinue",
+        "New-Item -ItemType Directory -Force `$snap | Out-Null",
+        "try {",
+        "  foreach (`$f in @($fileList)) {",
+        "    `$fp = Join-Path `$dir `$f",
+        "    if (Test-Path `$fp) { Copy-Item `$fp (Join-Path `$snap `$f) -Force -ErrorAction Stop }",
+        "  }",
+        "  foreach (`$d in @($dirList)) {",
+        "    `$dp = Join-Path `$dir `$d",
+        "    if (Test-Path `$dp) { Copy-Item `$dp (Join-Path `$snap `$d) -Recurse -Force -ErrorAction Stop }",
+        "  }",
+        "} catch {",
+        "  'ERROR=snapshot failed: ' + `$_.Exception.Message",
+        "  Remove-Item -Recurse -Force `$snap -ErrorAction SilentlyContinue",
+        "  exit 1",
+        "}",
         "foreach (`$f in @($fileList)) {",
-        "  `$fp = Join-Path `$dir `$f",
+        "  `$fp = Join-Path `$snap `$f",
         "  if (Test-Path `$fp) {",
         "    `$sz = (Get-Item `$fp).Length",
         "    `$rows = if (`$f -like '*.csv') { (Get-Content `$fp | Measure-Object -Line).Lines } else { -1 }",
@@ -250,19 +278,23 @@ function Invoke-Fetch {
         "  } else { 'MANIFEST_FILE=' + `$f + '|ABSENT|ABSENT' }",
         "}",
         "foreach (`$d in @($dirList)) {",
-        "  `$dp = Join-Path `$dir `$d",
+        "  `$dp = Join-Path `$snap `$d",
         "  if (Test-Path `$dp) {",
         "    `$cnt = (Get-ChildItem `$dp -Recurse -File | Measure-Object).Count",
         "    `$sz  = (Get-ChildItem `$dp -Recurse -File | Measure-Object -Property Length -Sum).Sum",
         "    'MANIFEST_DIR=' + `$d + '|' + `$sz + '|' + `$cnt",
         "    aws s3 cp `$dp `"s3://$Bucket/$prefix/`$d`" --recursive --only-show-errors",
         "  } else { 'MANIFEST_DIR=' + `$d + '|ABSENT|ABSENT' }",
-        "}"
+        "}",
+        "Remove-Item -Recurse -Force `$snap -ErrorAction SilentlyContinue",
+        "'SNAPSHOT_CLEANED=true'"
     )
     $r = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $remoteCmds -TimeoutSec 600
     if ($r.Status -ne 'Success') {
         Fail "remote fetch step ended $($r.Status) -- nothing downloaded"
-        $r.StdErr -split "`r?`n" | ForEach-Object { Info $_ }
+        # ERROR= lines (app not running, snapshot failed) are bare expressions on the success
+        # stream, so they land in StdOut, not StdErr -- print both or the reason is invisible.
+        $r.StdOut, $r.StdErr | ForEach-Object { $_ -split "`r?`n" } | ForEach-Object { Info $_ }
         exit 1
     }
     Section 'box-side manifest'
