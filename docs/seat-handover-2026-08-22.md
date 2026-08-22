@@ -14,7 +14,7 @@ The trader is replacing the production collector (t3.small / Server 2025, `i-08c
 |---|---|---|---|
 | 1 | ✅ **DONE 2026-08-22 — 5 readings + a 30-sample sweep. VERDICT: VIABLE.** Evidence in §0.2 | complete | — |
 | 2 | ✅ **DONE 2026-08-22 — `aws-cli/2.36.29` installed via `ssm-install-awscli.json`.** MSI signature verified Valid (signer `Amazon Web Services, Inc.`) BEFORE running it; msiexec exit 0; **app PID 4388 unchanged, collector undisturbed**; box lists `s3://deribit-engine-bucket/` under its instance role, so the S3 path `deploy` needs is proven end-to-end from the box | complete | — |
-| 3 | **Deploy v68 to the test box** via `collector.ps1` | ⚠ **ATTEMPTED 2026-08-22 — FAILED SAFELY, nothing lost. Found FIX 8 + FIX 9 (+ a 4th marker defect). Fixes claimed applied but NOT YET REVIEWED OR RE-RUN.** See §0.3 | step 4 |
+| 3 | **Deploy v68 to the test box** via `collector.ps1` | ⚠ **TWO ATTEMPTS, BOTH FAILED SAFELY. Nothing lost, TAPE NEVER STOPPED.** Attempt 1 found FIX 8 + FIX 9 (+ a 4th marker defect); **attempt 2 proved both fixes WORK** and found ⚠ **FIX 10 (fonts nesting)**. See §0.3 and §0.3b | step 4 |
 | 4 | **Cutover** — [`collector-ops-tooling-proposal.md`](collector-ops-tooling-proposal.md) **§5.4**, ordered, do not reorder | the weekend | — |
 
 ⭐ **A simplification worth not losing: production never needs a v68 deploy.** It is on v66. The test box will be on v68 and *becomes* production, so the old box — the one holding 57.8 MB of irreplaceable tape — is never stopped for a deploy at all. **Do not "helpfully" bring production up to v68 first.** The cost is that production lacks v67's thin-trade gate for a few more days; that path needs a REST seed failure to fire and is rare. The trade is deliberate.
@@ -67,6 +67,24 @@ Gap repair fires every 6 h from app start (~2026-08-20 15:51 UTC). On 2026-08-22
 ⚠ **The test box is currently IDLE** (running v67, auto-run stopped after the rollback). Its book is discarded at cutover anyway, so this costs nothing — one RDP click resumes it, or a successful v68 deploy brings it back collecting.
 
 ⭐ **THE SEQUENCING PAID FOR ITSELF.** Run against production first, this deploy would have failed identically **and the rollback would have left the live collector silently not capturing tape.** Test box first was the right call.
+
+### 0.3b ⚠ Step 3, SECOND attempt — FIX 8 and FIX 9 both WORKED. One new defect (FIX 10), and one refinement that matters more.
+
+**Re-run 2026-08-22 after FIX 8/9 landed.** ⭐ **FIX 8 WORKED — all six items placed and ALL SIX HASHES MATCHED.** The PATH refresh and the `$LASTEXITCODE` checks did their job. ⭐ **FIX 9 WORKED TOO — it correctly detected that collection had not resumed and escalated instead of reporting `OK`.** Both fixes are proven by execution, not by reading.
+
+**⚠ FIX 10 — `fonts\` nests one level deeper on every deploy attempt.** Measured on the box:
+
+```
+\fonts\OFL.txt
+\fonts\fonts\OFL.txt
+\fonts\fonts\fonts\OFL.txt
+```
+
+`aws s3 cp s3://.../fonts <dir>\fonts --recursive` copies the **source prefix itself** into the destination, so each run adds a level — and the backup then preserves the nesting and re-seeds it. **The hash check caught it** (`fonts\fonts\OFL.txt` has no local counterpart, so `local` was blank) and the restore's new file-count check caught it too (`fonts (file count 3 vs backup 2)`). **Harmless in itself** — `OFL.txt` is a licence text file and the `.ttf` fonts are `EmbeddedResource` inside the exe — **but it fails the deploy every time and it must be fixed before the cutover.** Fix: trailing-slash / destination form on the recursive copy, and clean the existing nesting on the box by hand.
+
+⭐⭐ **THE REFINEMENT THAT MATTERS MORE THAN THE DEFECT — and it corrects FIX 9's own alarm text.** `Invoke-Rollback` reports *"The box is up and NOT capturing."* **That is not true, and the distinction is important.** Measured at the same moment: `trades_2026-08.csv` at **29,829,967 bytes, mtime 11 seconds old**. **The TAPE never stopped.** WS streaming capture starts at form load and is **independent of auto-run**; only the ANALYSIS loop needs auto-run engaged. So a rollback stops the **book**, not the **tape**. ⚠ **The tape is the thing this project treats as unrecoverable past ~24 h, and it was never at risk.** **`Wait-DeployGate` checks for a new CSV row, which is the right gate — but its FAILURE MESSAGE overstates what has gone wrong and would send an operator into an emergency that isn't one.** Reword it: *"analysis is not running — the tape is still capturing; engage auto-run"*.
+
+**BOX STATE AS OF HANDOVER (verified read-only, no further automated writes — the script said stop and investigate by hand, and that was honoured):** v67 correctly restored (exe `95064B0B…`, dll 1,126,400 B, settings v67) · app running PID 4152, session 2 · **tape capturing normally** · **analysis loop stopped — needs ONE RDP click on Start, or a successful v68 deploy** · cosmetic 3-level `fonts` nesting. ⛔ **Nothing is lost.**
 
 ### 0.4 Three things to have ready for step 4
 
