@@ -8,9 +8,56 @@
 
 **Single document, not a two-document batch** — [`batch-review-packet-convention.md`](batch-review-packet-convention.md) governs multi-lane batches handed to a different seat; this is one proposal implemented by one seat in one sitting, so there is no separate outcome record to point at. Everything material is in this packet.
 
-**State:** Part A built, harness green, `verify-gate.ps1 -Mode local-fast` → GATE PASSED. `status` ran live against production (§6). `fetch` ran live against production (§7). **`deploy` has now run live against the test box — FAILED SAFELY, nothing lost, two more defects found (FIX 8, FIX 9) — see §8.** `deploy` has not run against production and must not until §8's fixes are independently re-checked.
+**State:** Part A built, harness green, `verify-gate.ps1 -Mode local-fast` → GATE PASSED. `status` ran live against production (§6). `fetch` ran live against production (§7). `deploy` ran live against the test box twice — the first run FAILED SAFELY and found FIX 8/FIX 9 (§8); the second confirmed both fixes live and found FIX 10/FIX 11 (§9). **The test box's `fonts\` and its `_deploy_backup\fonts\` still carry stray nesting from before FIX 10 and need a one-off manual clean before the next `deploy` run — see §9.** `deploy` has not run against production and must not until it goes green end to end against the test box.
 
 **⚠ REVIEWED — see §5 for the response.** One blocking defect (Part B, a bare PowerShell `if`-expression that parses clean but throws at runtime) plus three lesser findings, all fixed. §4's prediction that a parse check could not catch this class of defect was correct — the reviewer caught it only by executing the payload on 5.1. **`deploy` remains unrun against anything, including the test box, until this document's fixes are independently re-checked** — §4 and §5's own execution gap are unchanged by fixing the one bug the reviewer happened to find by hand; they are evidence for running the smoke test §5 recommends, not a substitute for it.
+
+---
+
+## 0. ⚠ ACTION REQUESTED — orchestrator: clean the test box, then re-run `deploy`
+
+**Two things, in order. I cannot do either myself — I was never given the test box's instance ID (only production's, for the §6 `status` re-run), and per the standing instruction `deploy` should not run again until the box is clean.**
+
+### 0.1 Clean the stray `fonts\` nesting (FIX 10 aftermath, §9)
+
+Both the live install directory and `_deploy_backup\` on the test box currently carry the pre-FIX-10 nesting (`fonts\fonts\fonts\OFL.txt`, per your own measurement). `robocopy /MIR` (now shipped in `Restore-DeployBackup`) cannot fix this retroactively — it mirrors whatever the backup already holds, nesting included, and per §9's new check the next `deploy` will correctly report `RESTORED=incomplete` against a still-nested backup rather than silently accept it. That check is doing its job, but it means the box needs the one-off manual clean first, not another automated run.
+
+Content is identical at every nesting level (`OFL.txt` doesn't change), so this is safe to run via a single SSM `AWS-RunPowerShellScript` command against the test box:
+
+```powershell
+$p = Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue
+if (-not $p) { 'ERROR=app not running'; exit 1 }
+$dir = Split-Path $p.Path
+foreach ($base in @($dir, (Join-Path $dir '_deploy_backup'))) {
+    $fontsPath = Join-Path $base 'fonts'
+    if (Test-Path $fontsPath) {
+        $ofl = Get-ChildItem $fontsPath -Recurse -Filter 'OFL.txt' -File | Select-Object -First 1
+        if ($ofl) {
+            Remove-Item $fontsPath -Recurse -Force
+            New-Item -ItemType Directory -Force $fontsPath | Out-Null
+            Copy-Item $ofl.FullName (Join-Path $fontsPath 'OFL.txt') -Force
+            "$fontsPath -> flattened to a single OFL.txt"
+        } else {
+            "$fontsPath -> no OFL.txt found anywhere under it, left untouched -- investigate before deploying"
+        }
+    } else {
+        "$fontsPath -> absent, nothing to flatten"
+    }
+}
+```
+
+Expect two `-> flattened` lines (live dir + `_deploy_backup`). If either prints the "no OFL.txt found" branch, stop and look before running `deploy` — that would mean the nesting is deeper or different than what was measured, not just what this remediation assumes.
+
+### 0.2 Re-run `deploy` against the test box, end to end
+
+Per §9's standing instruction, this is what "done" looks like — **all** of the following, not just a `y` at the prompt:
+
+- Pre-flight, plan, stop, backup — unchanged from the last two runs, should behave identically.
+- Upload → place → hash check: **`PLACED=done` on the first attempt** (FIX 8's `$PathRefreshCmd` + per-item exit-code check should hold now that the box's agent has already picked up the `aws` PATH once).
+- **Restart, and the acceptance gate should pass** (a new `analysis_log.csv` row within 5 minutes) — v68 sets `auto_run.start_engaged`, so this is the first run where the gate is expected to pass on the *forward* path rather than only being exercised on rollback.
+- If anything fails and rollback triggers: **`RESTORED=done`, zero nested directories reported, and `Invoke-Rollback`'s gate check runs and reports correctly** — with FIX 11's message, which should now say plainly whether it's the analysis loop or the process that didn't come back, not "NOT capturing."
+
+**Please report back**: pass/fail at each numbered step, and if you want the deepest test of FIX 9 — deliberately induce a failure (e.g. answer the hash step with a mismatched file, or interrupt after step 6) to force `Invoke-Rollback` to run on purpose rather than by accident, since that path has now only ever been exercised by a real defect finding it. Full context and reasoning for every fix referenced above: §8 and §9 below.
 
 ---
 
@@ -257,4 +304,34 @@ Every defect found in this file so far was found by running it, not by anything 
 
 **Not yet re-verified live.** FIX 8 and FIX 9 are believed correct on the same static basis (trace + parse) that has now missed something live-only-detectable four times in this file (FIX 1, FIX 6, FIX 7, FIX 8) — the sweep-found FIX 2-pattern fix to `RESTORED=done` is *additionally* unverified since it sits on the one path (rollback) this run actually exercised, under the *old*, buggy version of that same function. **Standing instruction, strengthened rather than relaxed by how much worked this run: `deploy` does not run against anything, including the test box again, until FIX 8 and FIX 9 are independently re-checked — and given FIX 9 changes the failure path specifically, the next test-box run should include a deliberate failure (e.g. a wrong hash) to exercise `Invoke-Rollback` on purpose, not wait to find it by accident a second time.**
 
-**What the sequencing bought, stated plainly:** had this run gone against production first — as was nearly the case two turns ago — the deploy would have failed identically (FIX 8 is box-state-dependent, not target-dependent) and the rollback would have left the live collector silently not capturing, on the box whose data loss this whole project treats as unrecoverable. Test box first was the right call, ratified in §5, and it just paid for itself a second time.
+**What the sequencing bought, stated plainly:** had this run gone against production first — as was nearly the case two turns ago — the deploy would have failed identically (FIX 8 is box-state-dependent, not target-dependent) and the rollback would have left the live collector's analysis loop silently stopped ⚠ *(corrected by FIX 9 — see §9 — from an earlier draft of this sentence that said "silently not capturing"; the tape is unaffected, the book is what stops)*, on the box this whole project treats data loss on as unrecoverable. Test box first was the right call, ratified in §5, and it just paid for itself a second time.
+
+---
+
+## 9. `deploy` re-ran against the test box — FIX 8 and FIX 9 both confirmed live. Two more found (FIX 10, FIX 11).
+
+**FIX 8 and FIX 9 both proved correct by execution, not just by trace.** All six items placed, all six hashes matched — the `$PathRefreshCmd` splice and the per-item `$LASTEXITCODE` checks did their job (FIX 8). `Invoke-Rollback` correctly detected that the analysis loop had not resumed and escalated instead of printing a bare `OK relaunched` (FIX 9) — the exact scenario the previous run's fix was written for, exercised for real this time. The §8 sweep also paid a second dividend: `RESTORED=done`'s new file-count check is what caught FIX 10 below, on its very first live restore.
+
+### FIX 10 — `fonts\` nested one level deeper on every restore, and the cause was not `aws s3 cp`
+
+Measured on the box: `fonts\OFL.txt`, `fonts\fonts\OFL.txt`, `fonts\fonts\fonts\OFL.txt` — one extra nesting level per failure cycle this file's own repeated test runs had driven through the restore path. **Root cause: `Copy-Item -Recurse` into an EXISTING destination copies the source directory INTO it rather than merging** — reproduced directly: `Copy-Item "<src>\fonts" "<dst>\fonts" -Recurse -Force` against a pre-existing `<dst>\fonts` produces `<dst>\fonts\fonts`, not a merge. **FIX 2's backup step uses the identical `Copy-Item -Recurse` call and is exonerated only because it deletes `$bk` first** — its destination never pre-exists, so the nesting behaviour never triggers. A restore's destination is never absent; that is the entire point of a restore, so the same line could not simply be reused there once traced through.
+
+**Fixed with `robocopy /MIR`**, not a `Copy-Item` content-glob — chosen over the equally-viable `Copy-Item (Join-Path $bk "$d\*") ... -Recurse` because `/MIR` makes the destination match the source exactly and would self-heal any *future* stray nesting on its own, which a content-copy would not. Robocopy's exit codes are bit flags, not a boolean — `0`–`7` are success (`1` = files copied, `2` = extra files removed, `4` = mismatched files); `8+` means a real failure. Checked as `-ge 8`, explicitly not `-ne 0`, which would have reported robocopy successfully doing its job as a failure.
+
+**One thing `/MIR` cannot do: un-nest a backup that is ALREADY nested.** Robocopy mirrors whatever `$bk\fonts\` currently holds — if the backup itself still carries the three-level nesting (it does, per the review), mirroring it faithfully reproduces that same nesting in the destination, file-count-matched, which would otherwise satisfy the existing `RESTORED=done` check while the actual layout stayed broken. **Added one more check for exactly this**: after the file-count comparison, every `$SixDirs` target is asserted to contain **zero subdirectories of its own** (every item in the six-item allowlist is meant to be flat) — a stray nested directory now reports `RESTORED=incomplete` naming the backup itself as needing a manual clean, rather than silently passing. This is the check that would have caught the box's current state had a restore run against it as-is.
+
+**Applied the same reasoning to the place step's `$SixDirs` loop, per the review's instruction to check rather than assume even where `aws s3 cp` is exonerated.** `aws s3 cp --recursive` is content-merge semantics (each S3 object lands at its matching relative path under the destination), not `Copy-Item`'s directory-nesting behaviour, so the mechanism itself does not reproduce FIX 10. Rather than duplicating a second nested-directory check there, documented in code why the existing hash-verification walk (step 7) already structurally catches this case: it enumerates every file actually present under the placed `fonts\` and looks each one up in `$localHashes` by relative path — a stray `fonts\fonts\OFL.txt` would have no local counterpart and would print as a hash **mismatch**, the same backstop that already caught FIX 8b live. One verification, not a second copy of it.
+
+**⚠ Not yet remediated: the box's live `fonts\` and `_deploy_backup\fonts\` both still carry the nesting measured above.** This needs a one-off manual clean (by hand or a single ad-hoc SSM command) — not something `collector.ps1` does automatically, and not something I can do without the test box's instance ID, which was never given to me for this box (only production's was, for the §6 `status` re-run). **Asked the trader for it in chat, alongside the request to re-run `deploy`.**
+
+### FIX 11 — `Invoke-Rollback`'s failure message named the wrong emergency
+
+The message read: *"The box is up and NOT capturing... this is the exact failure mode this project treats as unrecoverable past ~24h."* **Measured at that exact moment: `trades_2026-08.csv` (the tape) had an mtime 11 seconds old. Streaming had never stopped.**
+
+**WS streaming trade capture starts at form load and is independent of auto-run; only the analysis loop (the book — verdicts, the `analysis_log.csv` row this gate actually checks) needs `auto_run.start_engaged` or a manual Start click.** A rollback to a pre-v68 build stops the **book**, not the **tape** — the thing this project actually treats as unrecoverable past ~24h is unaffected by exactly the scenario this message was warning about. **The gate itself is correct and stays** — a stalled analysis loop is a real defect worth escalating loudly — **only the diagnosis in the message was wrong**, and a wrong diagnosis at the worst possible moment (an already-failed deploy, already mid-rollback) is worse than a vague one: it sends whoever reads it toward the wrong fire. Reworded throughout — the function's own doc comment, the `Ok`/`Fail` messages inside it, and step 9's parallel message at the top of `Invoke-Deploy` — to say plainly that tape capture is unaffected and name the actual fix (engage auto-run by hand, or redeploy a build carrying `auto_run.start_engaged`). Also corrected the same imprecise phrasing where it had already been carried into this document's own §8 closing paragraph (see the strikethrough above) — a corrected claim left standing elsewhere in the same record is exactly the failure mode this convention's "supersede in place" rule exists to prevent.
+
+### The pattern, updated: five for five
+
+FIX 1, 6, 7, 8, and now 10 were all found by running this file, none by reading it. **Nothing in `collector.ps1` has ever been caught by review or parsing alone — every real defect found so far was found by executing it against a real box.** FIX 11 is the first exception in kind (a message quality issue, not a logic defect) and it was still found the same way: by comparing what the script *said* against what was independently measured on the box at the same instant, which is a form of execution-checking too.
+
+**Not yet re-verified live.** FIX 10 and FIX 11 are believed correct on the same static basis (trace + parse) every prior fix was, before each of the first five turned out to have something execution alone could catch. **Standing instruction: `deploy` does not run against production, and this section does not get marked confirmed, until `deploy` goes green end to end against the test box** — no `PLACED=incomplete`, no `RESTORED=incomplete`, no nested directory anywhere, gate passing on the first attempt or (deliberately induced) correctly escalating on rollback with the corrected message. The box's existing nested `fonts\` needs clearing first, or this run will report a false `RESTORED=incomplete` for a reason the code fix was never meant to address retroactively.

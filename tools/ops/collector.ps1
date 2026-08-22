@@ -547,6 +547,16 @@ function Invoke-Deploy {
     foreach ($f in $SixFiles) {
         $placeCmds += "aws s3 cp `"s3://$Bucket/$dprefix/$f`" (Join-Path `$dir '$f') --only-show-errors; if (`$LASTEXITCODE -ne 0) { `$failed += '$f' }"
     }
+    # [FIX 10 follow-up] `aws s3 cp --recursive` is CONTENT-merge semantics, not
+    # Copy-Item's directory-nesting behaviour -- it copies each object under the S3 prefix
+    # to the matching relative path under the destination, so a pre-existing `fonts\`
+    # destination does not produce `fonts\fonts\` the way FIX 10's Copy-Item bug did.
+    # Checked, not just assumed: step 7's hash walk (below) enumerates every file actually
+    # present under the placed `fonts\` and looks each one up in $localHashes by its
+    # relative path; a stray `fonts\fonts\OFL.txt` from any future nesting would have no
+    # local counterpart and would print as a hash MISMATCH there, same backstop that
+    # already caught FIX 8b live. No separate check added here for that reason -- one
+    # verification, not two copies of it.
     foreach ($d in $SixDirs) {
         $placeCmds += "aws s3 cp `"s3://$Bucket/$dprefix/$d`" (Join-Path `$dir '$d') --recursive --only-show-errors; if (`$LASTEXITCODE -ne 0) { `$failed += '$d' }"
     }
@@ -605,7 +615,7 @@ function Invoke-Deploy {
         exit 0
     }
 
-    Fail 'gate did not pass within 5 minutes -- the new build is running but not collecting (or not running at all)'
+    Fail 'gate did not pass within 5 minutes -- the analysis loop is not producing rows (process may still be up)'
     Invoke-Rollback -RemoteDir $remoteDir | Out-Null
     exit 2
 }
@@ -617,21 +627,30 @@ gate failure (step 9) -- now shares this ONE function instead of three/four hand
 restore+restart sequences, which is what let step 6 and step 7's copies silently omit the
 gate check step 9's own copy happened to have. Measured on the test box: the hash-failure
 branch restored v67, relaunched it, printed "OK relaunched (LAUNCH_SESSION=2)", and exited --
-PROCESS confirmed, COLLECTION never checked. v67 (and every build before v68) has no
-auto_run.start_engaged, so the restored app came back RUNNING AND STOPPED: up, not
-collecting, reporting success. Measured 3.4 minutes past a 3-minute cadence with zero new
-rows. On production (still v66 at review time), ANY rollback before this fix would leave the
-collector silently idle -- the exact failure mode this project treats as unrecoverable past
-~24h.
+PROCESS confirmed, ANALYSIS LOOP never checked. v67 (and every build before v68) has no
+auto_run.start_engaged, so the restored app came back running with auto-run disengaged: up,
+not producing rows, reporting success. Measured 3.4 minutes past a 3-minute cadence with
+zero new rows.
+
+[FIX 11 correction] The original wording here and in the Fail message below called this
+"the collector silently idle" / "NOT capturing" -- WRONG, and important to get right because
+it names the wrong emergency. WS streaming trade capture (the TAPE -- the thing genuinely
+unrecoverable past ~24h) starts at form load and is independent of auto-run; only the
+ANALYSIS LOOP (the BOOK -- verdicts, the analysis_log.csv row this gate actually checks)
+needs auto-run engaged. A rollback to a pre-v68 build stops the BOOK, not the TAPE. Measured
+live: analysis_log.csv gate failure, trades_2026-08.csv (tape) mtime 11 seconds old at the
+same moment -- streaming had not stopped. The gate itself is correct (a missing analysis row
+IS a real defect worth escalating loudly) and stays; only the diagnosis in the message was
+wrong, and a wrong diagnosis at 3am is worse than no diagnosis.
 
 Q2's original design ("restore + restart, without re-running the full 5-minute gate -- just
 the restart") was reviewed and ratified on the reasoning that a stopped collector is worse
 than an unverified one. This run proved that reasoning incomplete: an unverified restart can
-ALSO be a stopped collector, just one that lies about it. The 5-minute wait this function
-adds to every rollback is the cost of finding that out immediately instead of up to ~24h
-later.
+ALSO leave the analysis loop stopped, just reporting success instead of admitting it. The
+5-minute wait this function adds to every rollback is the cost of finding that out
+immediately instead of leaving it to the next daily glance.
 
-Returns $true only if the restored build is confirmed both running AND collecting.
+Returns $true only if the restored build is confirmed both running AND producing rows.
 #>
 function Invoke-Rollback {
     param([Parameter(Mandatory = $true)][string]$RemoteDir)
@@ -644,9 +663,14 @@ function Invoke-Rollback {
     Section 'rollback acceptance gate (new CSV row within 5 minutes, on the RESTORED build)'
     $gateOk = Wait-DeployGate -RestartUtc $restartUtc -RemoteDir $RemoteDir -ExpectSettingsVersion $null
     if ($gateOk) {
-        Ok 'rollback verified -- the restored build is running AND collecting (a new row landed). Deploy did not complete; investigate before retrying.'
+        Ok 'rollback verified -- the restored build is running AND the analysis loop is producing rows. Deploy did not complete; investigate before retrying.'
     } else {
-        Fail 'ROLLBACK RESTARTED THE PROCESS BUT COLLECTION DID NOT RESUME -- no new CSV row within 5 minutes. The box is up and NOT capturing. STOP. Do not retry any automated action -- investigate the box by hand immediately; this is the exact failure mode this project treats as unrecoverable past ~24h.'
+        # [FIX 11] Not "NOT capturing" / "unrecoverable past ~24h" -- that describes the TAPE
+        # (WS streaming, independent of auto-run, unaffected by this). This gate only proves
+        # the ANALYSIS LOOP, which the restored build may not auto-start (no
+        # auto_run.start_engaged before v68). Naming the wrong emergency sends an operator
+        # after the wrong fire.
+        Fail 'ROLLBACK RESTARTED THE PROCESS, BUT THE ANALYSIS LOOP IS NOT RUNNING -- no new CSV row within 5 minutes. Tape capture (WS streaming) is UNAFFECTED and continues regardless -- this is not the ~24h data-loss emergency. It means the restored build is not producing verdicts/rows, most likely because it predates auto_run.start_engaged (v68) and nobody has clicked Start. Engage auto-run on the box by hand, or redeploy a build that sets auto_run.start_engaged. Do not retry any automated action until you know which.'
     }
     return $gateOk
 }
@@ -660,10 +684,25 @@ check that the six items actually landed back in $dir -- the single most safety-
 place in this file for that defect class, since a rollback that lies about succeeding is
 what Invoke-Rollback's own gate check exists to catch, but a partially-restored box could
 fail that gate for a reason unrelated to collection (a missing settings.json, say) and be
-misdiagnosed. Now matches FIX 2's backup-verification pattern exactly: try/catch
--ErrorAction Stop around the copies, then every item re-verified present in $dir (dirs by
-file COUNT against the backup, not existence alone) before the line that says RESTORED=done
-is reached.
+misdiagnosed. Now matches FIX 2's backup-verification pattern: every item re-verified
+present in $dir (dirs by file COUNT against the backup, not existence alone) before the
+line that says RESTORED=done is reached.
+
+[FIX 10, live-execution finding] The directory copy is `robocopy /MIR`, not `Copy-Item
+-Recurse`. Copy-Item -Recurse into an EXISTING destination copies the source directory INTO
+it rather than merging -- `Copy-Item fonts fonts -Recurse` on a pre-existing `fonts\`
+produces `fonts\fonts\`, and each subsequent restore compounds it one level deeper
+(`fonts\fonts\fonts\`, measured live). The backup step (FIX 2, above) gets away with plain
+Copy-Item -Recurse only because it deletes $bk first, so ITS destination never pre-exists;
+a restore's destination is never absent -- that is the entire point of a restore, so the
+same call cannot be reused here. `/MIR` makes the destination match the source exactly
+(also self-healing any stray nesting on the NEXT restore, though the existing nesting on a
+box that hit this bug still needs a one-off manual clean -- robocopy mirrors whatever the
+backup itself currently holds, and cannot know the backup's own nesting is wrong).
+Robocopy's exit codes are bit flags, not a single success/fail bit: 0-7 are success (1 =
+files copied, 2 = extra files removed to match source, 4 = mismatched files), 8+ means at
+least one directory failed -- checked as `-ge 8`, never `-ne 0`, which would treat robocopy
+doing its job (code 1, 2, or 3) as a failure.
 #>
 function Restore-DeployBackup {
     param([Parameter(Mandatory = $true)][string]$RemoteDir)
@@ -674,11 +713,20 @@ function Restore-DeployBackup {
         "if (-not (Test-Path `$bk)) { 'ERROR=no backup present'; exit 1 }",
         "try {",
         "  foreach (`$f in @($(($SixFiles | ForEach-Object { "'$_'" }) -join ','))) { Copy-Item (Join-Path `$bk `$f) (Join-Path `$dir `$f) -Force -ErrorAction Stop }",
-        "  foreach (`$d in @($(($SixDirs | ForEach-Object { "'$_'" }) -join ','))) { Copy-Item (Join-Path `$bk `$d) (Join-Path `$dir `$d) -Recurse -Force -ErrorAction Stop }",
         "} catch {",
         "  'ERROR=restore failed: ' + `$_.Exception.Message",
         "  exit 1",
         "}",
+        "`$roboFailed = @()",
+        "foreach (`$d in @($(($SixDirs | ForEach-Object { "'$_'" }) -join ','))) {",
+        "  `$src = Join-Path `$bk `$d",
+        "  `$dst = Join-Path `$dir `$d",
+        "  if (Test-Path `$src) {",
+        "    robocopy `$src `$dst /MIR /NFL /NDL /NJH /NJS /NP | Out-Null",
+        "    if (`$LASTEXITCODE -ge 8) { `$roboFailed += `$d }",
+        "  }",
+        "}",
+        "if (`$roboFailed.Count -gt 0) { 'ERROR=restore failed: robocopy failed for ' + (`$roboFailed -join ','); exit 1 }",
         "`$missing = @()",
         "foreach (`$f in @($(($SixFiles | ForEach-Object { "'$_'" }) -join ','))) { if (-not (Test-Path (Join-Path `$dir `$f))) { `$missing += `$f } }",
         "foreach (`$d in @($(($SixDirs | ForEach-Object { "'$_'" }) -join ','))) {",
@@ -688,6 +736,15 @@ function Restore-DeployBackup {
         "  `$bkCount = (Get-ChildItem `$bkPath -Recurse -File | Measure-Object).Count",
         "  `$dstCount = (Get-ChildItem `$dstPath -Recurse -File | Measure-Object).Count",
         "  if (`$bkCount -ne `$dstCount) { `$missing += `$d + ' (file count ' + `$dstCount + ' vs backup ' + `$bkCount + ')' }",
+        # robocopy /MIR mirrors whatever $bkPath currently holds -- it cannot tell a
+        # STILL-NESTED backup (the exact state a box that hit FIX 10 was left in, and which
+        # this script cannot clean without a live instance ID) from a correct one, and an
+        # equal file count either side of a nested mirror would otherwise report RESTORED=done
+        # over a still-broken layout. Every one of $SixDirs is meant to be flat (no
+        # subdirectory of its own); a stray one means the backup itself needs the one-off
+        # manual clean this fix could not perform, and that must fail loudly, not silently.
+        "  `$nested = (Get-ChildItem `$dstPath -Directory -ErrorAction SilentlyContinue | Measure-Object).Count",
+        "  if (`$nested -gt 0) { `$missing += `$d + ' (unexpected nested directory -- the BACKUP itself is still corrupt, needs a one-off manual clean, not a re-run)' }",
         "}",
         "if (`$missing.Count -gt 0) { 'RESTORED=incomplete:' + (`$missing -join ',') } else { 'RESTORED=done' }"
     )
