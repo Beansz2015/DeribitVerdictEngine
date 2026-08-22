@@ -6,6 +6,22 @@
 
 **Maintenance:** update State on every tick. Move closed rows to §5 rather than deleting. **Re-run the §1b shipped-state sweep whenever this queue is rebuilt — do not inherit a prior assembly.**
 
+---
+
+> ## ⛔ STATE BANNER — 2026-08-23. Read this before believing any row below.
+>
+> ✅ **THE COLLECTOR MIGRATION IS DONE.** [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §0 lists it as the first task with steps 2–8 outstanding — **that is now stale for steps 2–7.** The **t2.micro `i-0d6c133058876273e` IS production**, holding production's carried book (24,721 rows at handover, first row `2026-07-22 16:24:54`) and its full 65,088,339 B store. The old `i-08c740e22d507667d` is **stopped, not terminated**, with termination protection ON and snapshot `snap-0a17195c58e850cbd` completed. **Tape loss across the cutover: ZERO** (`trade_seq` span 1586, distinct 1586, MISSING=0).
+>
+> ⛔ **THE FIRST TASK IS NOW the four-site single-instance defect class in `tools/ops/collector.ps1`** — see [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) §0. `Invoke-Rollback` restores WITHOUT stopping the app, so the restore aborts on a file lock and the box ends with TWO collectors. **`Get-Process` returns an array and four sites treat it as scalar; only one of them throws, the other three fail silently.**
+>
+> ⚠ **Step 8 (a full day of `status` on the new box) is the only migration step still open. DO NOT DEPLOY during it.**
+>
+> ⚠⚠ **The v68 auto-run defect is the reason this queue's `collector.ps1` rows read the way they do.** v68 as first shipped collected **exactly one analysis row per process start** — and the deploy acceptance gate, which required only ONE new row, **certified that as healthy.** Both are fixed (`9e9fe33` engine, `9eb3329` gate) and both are proven live by a controlled V1/V2 pair. **Any row below that cites the one-row gate as the acceptance criterion is superseded.**
+>
+> **Authoritative state read: [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md).** §0a below is still correct that **nothing is owed by the TRADER** — the migration was execution, not a decision.
+
+---
+
 ## 0. Orientation — what each doc is authoritative FOR
 
 **The failure this table fixes is not that docs go wrong — it is that "authority" was never scoped.** Nothing below is demoted; each is pinned to what it actually governs.
