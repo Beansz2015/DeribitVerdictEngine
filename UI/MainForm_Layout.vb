@@ -442,7 +442,23 @@ Partial Public Class MainForm
         ' silentOnInvalid:=True [FIX 4, docs/collector-ops-tooling-spec-back.md §5] — an
         ' unattended box must never block on the "minimum interval 10s" MessageBox; a
         ' hand-edited invalid interval logs to console and leaves auto-run disengaged instead.
-        If SettingsLoader.Current.AutoRun.StartEngaged Then StartAutoRun(silentOnInvalid:=True)
+        ' REPEAT, not SINGLE — without this the unattended start collects exactly ONE row and
+        ' then goes silent for the life of the process. InitAutoRunControls (just above) sets
+        ' rbSingle.Checked = True unconditionally, and SINGLE poisons EVERY branch of
+        ' StartAutoRun's mode selection, not just the interval one: in on_close mode the
+        ' bar-close watcher starts normally and then RunAutoAnalysis disposes it on its own
+        ' first fire (MainForm_AutoRun.vb, the `If rbSingle.Checked Then StopOnCloseWatcher()`
+        ' arm) — which also takes the feed-stall backstop down, because the backstop lives
+        ' inside the tick that no longer runs. Only the final Else branch repeats, and it is
+        ' reachable only when rbSingle is unchecked. A human clicking Start never hit this
+        ' because they pick REPEAT by hand; auto-start had no such step.
+        ' MEASURED, t2.micro collector, 2026-08-22: one analysis row at 11:12:03, then 175
+        ' minutes of silence with the WS tape still capturing normally (streaming capture is
+        ' independent of auto-run). The deploy acceptance gate passed on that single row.
+        If SettingsLoader.Current.AutoRun.StartEngaged Then
+            rbRepeat.Checked = True
+            StartAutoRun(silentOnInvalid:=True)
+        End If
         ' [P4 #1] Start the exit-guard tick at form load (D6: decoupled from auto-run — MarketState
         ' streams whenever transport=ws regardless of auto-run). Each tick self-gates on posState +
         ' feed health; disposed in OnFormClosing.
