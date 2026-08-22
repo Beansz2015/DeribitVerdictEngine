@@ -606,16 +606,17 @@ function Invoke-Deploy {
         exit 2
     }
 
-    # -- Step 9: verify for real -- a NEW CSV row within 5 minutes (§2.6), not a file compare.
-    Section '9. acceptance gate (new CSV row within 5 minutes)'
+    # -- Step 9: verify for real -- TWO new CSV rows >=45 s apart within 12 minutes (§2.6, as
+    # tightened 2026-08-22), not a file compare and not one row.
+    Section '9. acceptance gate (2 new CSV rows >=45s apart, within 12 minutes)'
     $gateOk = Wait-DeployGate -RestartUtc $restartUtc -RemoteDir $remoteDir -ExpectSettingsVersion $localSettingsVersion
 
     if ($gateOk) {
-        Ok 'ACCEPTED -- new row landed, session non-zero, settings version matches. Deploy complete.'
+        Ok 'ACCEPTED -- the analysis loop fired more than once, session non-zero, settings version matches. Deploy complete. This does NOT prove the box will still be collecting in an hour -- check status later.'
         exit 0
     }
 
-    Fail 'gate did not pass within 5 minutes -- the analysis loop is not producing rows (process may still be up)'
+    Fail 'gate did not pass within 12 minutes -- the analysis loop is not producing rows at cadence (process may still be up, and one row alone does not pass)'
     Invoke-Rollback -RemoteDir $remoteDir | Out-Null
     exit 2
 }
@@ -647,10 +648,21 @@ Q2's original design ("restore + restart, without re-running the full 5-minute g
 the restart") was reviewed and ratified on the reasoning that a stopped collector is worse
 than an unverified one. This run proved that reasoning incomplete: an unverified restart can
 ALSO leave the analysis loop stopped, just reporting success instead of admitting it. The
-5-minute wait this function adds to every rollback is the cost of finding that out
-immediately instead of leaving it to the next daily glance.
+wait this function adds to every rollback is the cost of finding that out immediately instead
+of leaving it to the next daily glance.
 
-Returns $true only if the restored build is confirmed both running AND producing rows.
+[2026-08-22 cadence gate] That wait is now up to 12 minutes, not 5 -- this function inherits
+Wait-DeployGate's tightening automatically, and that is correct. A rollback to v66 or v67
+restores a binary with no auto_run.start_engaged, so the app comes back running-but-stopped
+and produces ZERO rows. The gate fails, which is exactly FIX 9's purpose: escalate rather
+than report OK. Only the escalation LATENCY changes.
+
+STILL UNPROVEN: this rollback path has never run on a green deploy. FIX 9 and FIX 10 are
+proven only from the two FAILING attempts, and FIX 10's robocopy /MIR restore has never
+executed at all (docs/seat-handover-2026-08-22.md §7). The cadence gate does not change that.
+
+Returns $true only if the restored build is confirmed both running AND producing rows
+at cadence.
 #>
 function Invoke-Rollback {
     param([Parameter(Mandatory = $true)][string]$RemoteDir)
@@ -660,7 +672,7 @@ function Invoke-Rollback {
         Fail 'ROLLBACK RESTART DID NOT CONFIRM A RUNNING PROCESS. STOP. Investigate the box by hand -- do not retry any automated action.'
         return $false
     }
-    Section 'rollback acceptance gate (new CSV row within 5 minutes, on the RESTORED build)'
+    Section 'rollback acceptance gate (2 new CSV rows >=45s apart, within 12 minutes, on the RESTORED build)'
     $gateOk = Wait-DeployGate -RestartUtc $restartUtc -RemoteDir $RemoteDir -ExpectSettingsVersion $null
     if ($gateOk) {
         Ok 'rollback verified -- the restored build is running AND the analysis loop is producing rows. Deploy did not complete; investigate before retrying.'
@@ -670,7 +682,7 @@ function Invoke-Rollback {
         # the ANALYSIS LOOP, which the restored build may not auto-start (no
         # auto_run.start_engaged before v68). Naming the wrong emergency sends an operator
         # after the wrong fire.
-        Fail 'ROLLBACK RESTARTED THE PROCESS, BUT THE ANALYSIS LOOP IS NOT RUNNING -- no new CSV row within 5 minutes. Tape capture (WS streaming) is UNAFFECTED and continues regardless -- this is not the ~24h data-loss emergency. It means the restored build is not producing verdicts/rows, most likely because it predates auto_run.start_engaged (v68) and nobody has clicked Start. Engage auto-run on the box by hand, or redeploy a build that sets auto_run.start_engaged. Do not retry any automated action until you know which.'
+        Fail 'ROLLBACK RESTARTED THE PROCESS, BUT THE ANALYSIS LOOP IS NOT RUNNING AT CADENCE -- fewer than 2 new CSV rows within 12 minutes. Tape capture (WS streaming) is UNAFFECTED and continues regardless -- this is not the ~24h data-loss emergency. It means the restored build is not producing verdicts/rows, most likely because it predates auto_run.start_engaged (v68) and nobody has clicked Start. Engage auto-run on the box by hand, or redeploy a build that sets auto_run.start_engaged. Do not retry any automated action until you know which.'
     }
     return $gateOk
 }
@@ -778,8 +790,19 @@ function Start-RemoteApp {
     return $false
 }
 
-<# Polls up to 5 minutes for a CSV row newer than $RestartUtc, a non-zero session, and
-   (when supplied) a matching settings version -- the §2.6 acceptance gate. #>
+<# Polls up to 12 minutes for CADENCE -- at least TWO CSV rows newer than $RestartUtc and at
+   least 45 s apart -- plus a non-zero session and (when supplied) a matching settings version.
+   The §2.6 acceptance gate, tightened 2026-08-22 (docs/deploy-acceptance-gate-cadence-spec.md).
+
+   WHAT A PASS PROVES: the analysis loop fired MORE THAN ONCE after the restart.
+   WHAT IT DOES NOT PROVE: that the collector will still be running in an hour. Two rows defeat
+   the observed single-shot failure mode exactly, and nothing beyond it.
+
+   The old one-row form passed the v68 deploy on 2026-08-22 -- and the box then wrote no
+   analysis row for 175 minutes while its WS tape kept capturing normally. The gate did not
+   merely miss the defect, it reported the opposite, and a handover recorded "proven in
+   production conditions" on the strength of it. A marker you print is not a property you
+   checked. #>
 function Wait-DeployGate {
     param(
         [Parameter(Mandatory = $true)][datetime]$RestartUtc,
@@ -787,7 +810,13 @@ function Wait-DeployGate {
         [string]$ExpectSettingsVersion
     )
     $restartIso = $RestartUtc.ToString('yyyy-MM-ddTHH:mm:ss')
-    $deadline = (Get-Date).AddMinutes(5)
+    # 12 min, derived not guessed: worst-case cadence is the 3-minute ASIA/LONDON execution
+    # resolution (settings.json session_volume.sessions[].execution_resolution, v36). Two rows
+    # need up to 3 min to the first bar roll + ~1 min analysis + 3 min to the second, and the
+    # on_close feed-stall backstop is max(interval, (execRes+1)*60s) = 4 min. 12 gives headroom
+    # without being open-ended. The SUCCESS path is unaffected -- it returns on the first
+    # passing poll; only a genuine failure waits longer, and a genuine failure means STOP anyway.
+    $deadline = (Get-Date).AddMinutes(12)
     while ((Get-Date) -lt $deadline) {
         $gateCmds = @(
             "`$dir = '$RemoteDir'",
@@ -798,21 +827,34 @@ function Wait-DeployGate {
             "if (Test-Path `$sj) { 'GATE_SETTINGS_VERSION=' + ((Get-Content `$sj -TotalCount 2) -join ' ') }",
             "`$csv = Join-Path `$dir 'analysis_log.csv'",
             "if (Test-Path `$csv) {",
-            "  `$l = Get-Content `$csv",
-            "  if (`$l.Count -gt 1) {",
-            "    `$lastTs = [datetime]::Parse(`$l[-1].Split(',')[0])",
-            "    `$restart = [datetime]::Parse('$restartIso')",
-            "    'GATE_LAST_ROW_NEWER=' + (`$lastTs -gt `$restart)",
-            "  } else { 'GATE_LAST_ROW_NEWER=False' }",
-            "} else { 'GATE_LAST_ROW_NEWER=False' }"
+            "  `$restart = [datetime]::Parse('$restartIso')",
+            # -Tail 50, NOT a full read: the production book is 22 MB and this runs every 20 s
+            # over SSM. 50 rows is ~25 min of 1-min cadence -- far more than the 12-minute window
+            # can consume. The header line and any malformed row throw inside [datetime]::Parse
+            # and are skipped by the catch. That is the intent, not an accident: the parse IS the
+            # validation. Do NOT "improve" it into a regex match on the timestamp shape.
+            "  `$after = @()",
+            "  foreach (`$ln in @(Get-Content `$csv -Tail 50)) {",
+            "    try { `$dt = [datetime]::Parse(`$ln.Split(',')[0]); if (`$dt -gt `$restart) { `$after += `$dt } } catch { }",
+            "  }",
+            "  'GATE_ROWS_AFTER=' + `$after.Count",
+            "  if (`$after.Count -ge 2) { 'GATE_SPAN_SEC=' + [math]::Round((`$after[-1] - `$after[0]).TotalSeconds, 0) }",
+            "  else { 'GATE_SPAN_SEC=0' }",
+            "} else { 'GATE_ROWS_AFTER=0'; 'GATE_SPAN_SEC=0' }"
         )
         $g = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $gateCmds -TimeoutSec 60
         if ($g.Status -eq 'Success') {
             $gv = ConvertFrom-KeyValueLines $g.StdOut
             $sessionOk = ($gv['GATE_SESSION'] -and [int]$gv['GATE_SESSION'] -gt 0)
-            $rowOk = ($gv['GATE_LAST_ROW_NEWER'] -eq 'True')
+            $rowsAfter = 0; [void][int]::TryParse($gv['GATE_ROWS_AFTER'], [ref]$rowsAfter)
+            $spanSec   = 0; [void][int]::TryParse($gv['GATE_SPAN_SEC'],   [ref]$spanSec)
+            # CADENCE, not existence. One row newer than the restart is exactly what a single-shot
+            # auto-run produces -- measured on the t2.micro 2026-08-22, where this gate passed on one
+            # row and the box then wrote nothing for 175 minutes. Two rows >=45 s apart prove the loop
+            # fired MORE THAN ONCE. It does not prove the box will still be collecting in an hour.
+            $rowOk = ($rowsAfter -ge 2 -and $spanSec -ge 45)
             $versionOk = (-not $ExpectSettingsVersion) -or ($gv['GATE_SETTINGS_VERSION'] -eq $ExpectSettingsVersion)
-            Info "poll: PID=$($gv['GATE_PID']) session=$($gv['GATE_SESSION']) newerRow=$($gv['GATE_LAST_ROW_NEWER']) settings=[$($gv['GATE_SETTINGS_VERSION'])]"
+            Info "poll: PID=$($gv['GATE_PID']) session=$($gv['GATE_SESSION']) rowsAfterRestart=$rowsAfter spanSec=$spanSec settings=[$($gv['GATE_SETTINGS_VERSION'])]"
             if ($sessionOk -and $rowOk -and $versionOk) { return $true }
         }
         Start-Sleep -Seconds 20

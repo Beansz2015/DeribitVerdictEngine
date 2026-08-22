@@ -15,7 +15,7 @@
 
 - ⚠⚠ **TRAP 1 — backing up the wrong things.** The backup in §2.5 covers **only the six allowlist items**. A naive "back up the folder first" copies `backtest_data\` and doubles the tape on a box with finite disk, and copies `analysis_log.csv` — the two things [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §1 spends most of its words keeping apart.
 - ⚠ **TRAP 2 — reusing the retired key name.** Part A's key is **`auto_run.start_engaged`**, NOT `auto_run.enabled`. The latter existed, was **never read**, and was deleted at v32. Reviving that exact name makes the version history unreadable and invites "wasn't this removed?" forever.
-- ⚠ **TRAP 3 — verifying the deploy by reading back what you just wrote.** Comparing the copied file to the source proves the copy worked. **It does not prove the app runs.** The acceptance gate in §2.6 is a NEW CSV ROW appearing after restart — the only check that exercises the whole chain.
+- ⚠ **TRAP 3 — verifying the deploy by reading back what you just wrote.** Comparing the copied file to the source proves the copy worked. **It does not prove the app runs.** The acceptance gate in §2.6 is NEW CSV ROWS appearing after restart — the only check that exercises the whole chain. ⚠ **AMENDED 2026-08-22: the gate needs TWO rows, not one** — one row proves the chain fired, and a chain that fires exactly once is the failure this trap did not anticipate. See §2.6.
 - ⚠ **TRAP 4 — assuming the launch lands in session 0.** It does not, and this is measured, not assumed (§2.1). Do not "fix" it by adding session-0 handling.
 
 **Escalation trigger — stop and move up a tier if:**
@@ -120,13 +120,21 @@ Box → S3 → local. Targets: `analysis_log.csv`, `backtest_data\`, `ws_health.
 8. **Restart** via the §2.1 scheduled task; delete the task afterwards.
 9. **Verify for real** — see §2.6.
 
-### 2.6 ⚠ Acceptance is a NEW CSV ROW, not a file comparison
+### 2.6 ⚠ Acceptance is NEW CSV ROWS, not a file comparison
 
 A hash match proves the bytes arrived. **It proves nothing about whether the app runs.**
 
-**The gate: within 5 minutes of restart, `analysis_log.csv` must gain a row with a timestamp later than the restart.** That single check exercises the launch, the interactive session, auto-run engagement, the WS connect, the seed, and the write path — everything the deploy could have broken.
+> ⚠ **AMENDED 2026-08-22 — the original one-row gate is superseded. It shipped, ran, and certified a dead analysis loop as healthy.** The paragraph below records what was ratified on 2026-08-21 and why; the amendment that replaces it follows. Both are kept because the *reasoning* was sound and only the *sufficiency* was wrong — deleting it would lose the lesson.
 
-**Also assert:** the process is in a **non-zero** session, and the reported settings version matches what was deployed.
+**~~The gate: within 5 minutes of restart, `analysis_log.csv` must gain a row with a timestamp later than the restart.~~** That single check exercises the launch, the interactive session, auto-run engagement, the WS connect, the seed, and the write path — everything the deploy could have broken.
+
+**The gap in that reasoning: it also passes when auto-run fires once and stops.** Measured on the t2.micro collector, 2026-08-22 — the v68 deploy went green, the gate passed on poll 5 with one row, and the box then wrote **no further analysis row for 175 minutes** while its WS tape kept capturing normally. The gate did not merely miss the defect; **it reported the opposite**, and [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §7 recorded "Part A is proven in production conditions" on the strength of it. ⭐ **[`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §5.3's own lesson, turned on the checker itself: a marker you print is not a property you checked.**
+
+**THE GATE, as of 2026-08-22:** within **12 minutes** of restart, `analysis_log.csv` must gain **at least TWO rows** with timestamps later than the restart, and the **span between the first and last of them must be ≥ 45 s**. Two rows prove the loop fired **more than once**, which is exactly what defeats the observed single-shot failure. The 12-minute deadline is derived, not guessed: the worst-case cadence is the **3-minute ASIA/LONDON `execution_resolution`** (v36), so two rows can legitimately take ~7 minutes — **a 5-minute deadline would fail a healthy box and trigger a rollback, which is destructive theatre.** Spec: [`deploy-acceptance-gate-cadence-spec.md`](deploy-acceptance-gate-cadence-spec.md). Built in `tools/ops/collector.ps1`, `Wait-DeployGate`.
+
+⛔ **What the amended gate still does NOT prove:** that the collector will be running in an hour. It proves the loop fired more than once, and nothing beyond it. **Do not read a pass as a health certificate** — reading one row as one is what caused this amendment.
+
+**Also assert:** the process is in a **non-zero** session, and the reported settings version matches what was deployed. **Both unchanged — they were never the problem.**
 
 **On failure: restore the six items from `_deploy_backup\`, restart, and re-run the same gate. Then stop and report — do not retry the deploy.**
 
@@ -147,7 +155,7 @@ A hash match proves the bytes arrived. **It proves nothing about whether the app
 | **D-2** | Part A ships **before** Part B | **Yes.** Small, independently useful, and Part B is not hands-off without it |
 | **D-3** | `deploy` prints the full plan then asks y/n; nothing changes before the answer | **Yes** — trader-chosen 2026-08-21 |
 | **D-4** | Backup is **single-generation**, six items only, overwritten by the next deploy | **Yes** — trader-chosen 2026-08-21. ⚠ TRAP 1 is the whole risk here |
-| **D-5** | Acceptance = a new CSV row within 5 min, not a hash match | **Yes** — §2.6 |
+| **D-5** | Acceptance = a new CSV row within 5 min, not a hash match | **Yes** — §2.6. ⚠ **AMENDED 2026-08-22 — the "not a hash match" half stands; the "a new CSV row within 5 min" half is SUPERSEDED.** Now **≥2 rows ≥45 s apart within 12 min**. One row is exactly what a single-shot auto-run produces, and this gate passed on one row while the box was dead for 175 minutes. See §2.6 and [`deploy-acceptance-gate-cadence-spec.md`](deploy-acceptance-gate-cadence-spec.md) |
 | **D-6** | Scope: `status` + `fetch` + `deploy` in one tool | **Yes** — trader-chosen 2026-08-21 |
 | **D-7** | ⚠ **Does `deploy` target the t2.micro test box too, or production only?** | ✅ **TICKED 2026-08-21 — PRODUCTION ONLY.** The test box is a candidate REPLACEMENT, not a second target: once proven it BECOMES production and the current box is shut down. ⚠ **The box must still be named explicitly on every invocation, with no default** — a tool that defaults to a target is a tool that deploys to the wrong one, and that matters more, not less, once two boxes are interchangeable. ⛔ **See §5 — replacement is NOT what [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) documents, and the difference is the irreplaceable tape** |
 | **D-8** | ⚠ **S3 bucket name and region** — needs your answer; the region must match the instances | ✅ **TICKED 2026-08-21 — a NEW, DEDICATED bucket.** The trader's existing `arn:aws:s3:::thecentralstorage` holds live backups from an unrelated hostel app on a Linux box. ⛔ **DO NOT USE IT AND DO NOT WRITE A LIFECYCLE RULE ANYWHERE NEAR IT** — §2.2's 7-day expiry, if its prefix scope slipped, would delete those backups silently and irreversibly. A separate bucket makes that impossible by construction, scopes the instance-profile IAM to one bucket instead of one prefix, and **costs nothing extra** (buckets are free; storage bills per GB either way). ✅ **CREATED 2026-08-21: `arn:aws:s3:::deribit-engine-bucket`, eu-west-2** — matching both instances (`eu-west-2c` prod, `eu-west-2b` test). Public access fully blocked; lifecycle `expire-7d` + 1-day incomplete-multipart abort, both verified live. ⚠ **The trader asked for `DeribitEngineBucket`; S3 bucket names must be LOWERCASE, so it is `deribit-engine-bucket`.** ✅ `thecentralstorage` verified untouched after creation — 7 objects, 106 MB, exactly as before |
@@ -197,7 +205,7 @@ The t2.micro has been collecting since **2026-08-20 15:42** into its own book an
 4. **Stop the app on the new box. Delete its book and store** (§5.3).
 5. **Copy production's book + store to the new box.**
 6. **Verify the copy** — row counts and file sizes must match what step 3 pulled.
-7. **Start the new box.** Confirm it **appends to the carried book** rather than creating a fresh one, and that a new row lands within 5 minutes (the §2.6 gate).
+7. **Start the new box.** Confirm it **appends to the carried book** rather than creating a fresh one, and that **two rows land ≥45 s apart within 12 minutes** (the §2.6 gate, as amended 2026-08-22). ⚠ **On a box you have just carried a book onto, one row is not enough** — it is consistent with an app that wrote once and stopped, which is the failure §2.6 now exists to catch.
 8. **Watch the new box for a full day** using `status` before touching the old one further.
 
 ### 5.5 ⛔ Stop the old instance. Do NOT terminate it.
