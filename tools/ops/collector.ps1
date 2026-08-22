@@ -107,6 +107,28 @@ $FetchDirs  = @('backtest_data', 'settings_snapshots')
 # duplicate this line by hand at a new call site; reference this variable instead.
 $PathRefreshCmd = "`$env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User') + ';' + `$env:Path"
 
+# [2026-08-23, single-instance guard -- docs/seat-handover-2026-08-23.md §0]
+# `Get-Process` returns an ARRAY. Every site in this file that resolved the install dir or
+# reported a PID/session treated it as a scalar, and on a two-instance box that silently
+# produced garbage: `Split-Path $p.Path` yields an ARRAY (so $dir became
+# "C:\DeribitEngine C:\DeribitEngine"), and 'REMOTE_SESSION=' + $p.SessionId rendered "2 2".
+# Only ONE of the four sites threw -- Wait-DeployGate's [int] cast. The other three failed
+# QUIETLY, which is worse. Measured live 2026-08-22: a failed rollback left two collectors
+# running against one book and one tape, and every subsequent poll printed a stack trace.
+#
+# A box with two collectors is AMBIGUOUS, not merely awkward -- there is no correct answer to
+# "which one is the app?" -- so this refuses to act rather than guessing. Splice it into any
+# remote command array that needs $dir or $proc; do NOT hand-roll a Get-Process at a new call
+# site. Concatenate with `+` (an array inside @(...) nests instead of flattening).
+$ResolveSingleProcCmd = @(
+    "`$procs = @(Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue)",
+    "'PROC_COUNT=' + `$procs.Count",
+    "if (`$procs.Count -eq 0) { 'ERROR=app not running on this box -- cannot resolve the install dir'; exit 1 }",
+    "if (`$procs.Count -gt 1) { 'ERROR=' + `$procs.Count + ' DeribitVerdictEngine instances are running (PIDs ' + ((`$procs | ForEach-Object { `$_.Id }) -join ',') + '). The box is ambiguous; refusing to act. Stop all but one by hand, then retry.'; exit 1 }",
+    "`$proc = `$procs[0]",
+    "`$dir  = Split-Path `$proc.Path"
+)
+
 # ===========================================================================
 # AWS CLI + SSM plumbing -- collector.ps1 is the first script in this repo to drive
 # ssm send-command / get-command-invocation programmatically; the existing ssm-*.json
@@ -256,10 +278,10 @@ function Invoke-Fetch {
     # snapshot dir is removed on every exit path, including a snapshot failure itself.
     $fileList = ($FetchFiles | ForEach-Object { "'$_'" }) -join ','
     $dirList  = ($FetchDirs  | ForEach-Object { "'$_'" }) -join ','
-    $remoteCmds = @(
-        "`$p = Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue",
-        "if (-not `$p) { 'ERROR=app not running, cannot resolve install dir'; exit 1 }",
-        "`$dir = Split-Path `$p.Path",
+    # $ResolveSingleProcCmd sets $proc and $dir, or aborts with ERROR= on 0 or >1 instances.
+    # `fetch` is the load-bearing step of a cutover, so an ambiguous box must stop it dead
+    # rather than snapshot from a $dir that is silently an array of two paths.
+    $remoteCmds = $ResolveSingleProcCmd + @(
         "'REMOTE_DIR=' + `$dir",
         $PathRefreshCmd,
         "`$snap = Join-Path `$dir '_fetch_snapshot'",
@@ -425,16 +447,16 @@ function Invoke-Deploy {
 
     # -- Step 2: pre-flight, remote. ---------------------------------------------------------
     Section '2. pre-flight (remote)'
-    $preCmds = @(
-        "`$p = Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue",
-        "if (-not `$p) { 'ERROR=app not running on this box' } else {",
-        "  `$dir = Split-Path `$p.Path",
-        "  'REMOTE_DIR=' + `$dir",
-        "  'REMOTE_PID=' + `$p.Id",
-        "  'REMOTE_SESSION=' + `$p.SessionId",
-        "  `$sj = Join-Path `$dir 'settings.json'",
-        "  if (Test-Path `$sj) { 'REMOTE_SETTINGS_VERSION=' + ((Get-Content `$sj -TotalCount 2) -join ' ') }",
-        "}"
+    # $ResolveSingleProcCmd sets $proc and $dir, or aborts with ERROR= on 0 or >1 instances --
+    # the local check below already treats any ERROR= as fatal. This is the pre-flight for the
+    # only verb that WRITES, so a two-instance box must never reach the plan step: $dir would
+    # be "C:\DeribitEngine C:\DeribitEngine" and every path built from it would be wrong.
+    $preCmds = $ResolveSingleProcCmd + @(
+        "'REMOTE_DIR=' + `$dir",
+        "'REMOTE_PID=' + `$proc.Id",
+        "'REMOTE_SESSION=' + `$proc.SessionId",
+        "`$sj = Join-Path `$dir 'settings.json'",
+        "if (Test-Path `$sj) { 'REMOTE_SETTINGS_VERSION=' + ((Get-Content `$sj -TotalCount 2) -join ' ') }"
     )
     $pre = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $preCmds -TimeoutSec 60
     if ($pre.Status -ne 'Success' -or $pre.StdOut -match 'ERROR=') {
@@ -473,20 +495,11 @@ function Invoke-Deploy {
 
     # -- Step 4: stop the app. ----------------------------------------------------------------
     Section '4. stop the app'
-    $stopCmds = @(
-        "Stop-Process -Name DeribitVerdictEngine -Force -ErrorAction SilentlyContinue",
-        "for (`$i = 0; `$i -lt 10; `$i++) {",
-        "  if (-not (Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue)) { 'STOPPED=true'; break }",
-        "  Start-Sleep -Seconds 1",
-        "}",
-        "if (Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue) { 'STOPPED=false' }"
-    )
-    $stop = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $stopCmds -TimeoutSec 60
-    if ($stop.Status -ne 'Success' -or $stop.StdOut -notmatch 'STOPPED=true') {
+    # [2026-08-23] Body moved to Stop-RemoteApp so Invoke-Rollback shares it verbatim.
+    if (-not (Stop-RemoteApp -Context 'pre-deploy')) {
         Fail 'could not confirm the app stopped -- aborting before touching any file. Nothing backed up or overwritten.'
         exit 1
     }
-    Ok 'app stopped'
 
     # -- Step 5: back up ONLY the six allowlist items. TRAP 1 -- never widen this. ----------
     # TRAP 3's own shape applies here too, not just to the step-9 gate: a marker this script
@@ -666,6 +679,21 @@ at cadence.
 #>
 function Invoke-Rollback {
     param([Parameter(Mandatory = $true)][string]$RemoteDir)
+    # ⛔ [2026-08-23] STOP BEFORE RESTORING. On the gate-timeout path the app is RUNNING --
+    # step 8 restarted it -- so Restore-DeployBackup would try to overwrite a locked .exe.
+    # Measured live 2026-08-22: the restore aborted on the lock, Start-RemoteApp ran anyway,
+    # and the box ended with TWO collectors against one book and one tape.
+    #
+    # Why three reviews missed it: attempts 1-2 rolled back from a PRE-restart failure (a hash
+    # mismatch), when the app was still stopped from step 4. The two rollback paths differ in
+    # exactly the property that matters, and only one had ever been exercised.
+    #
+    # If the stop cannot be confirmed we do NOT restore. A half-written six-item set over a
+    # running process is strictly worse than the failed deploy we are already recovering from.
+    if (-not (Stop-RemoteApp -Context 'before restore')) {
+        Fail 'ROLLBACK COULD NOT STOP THE APP -- REFUSING TO RESTORE over a running process, because overwriting a locked binary is what leaves a box half-restored. The box is still on the NEW (failed) build and is NOT rolled back. Stop the app by hand, then restore from _deploy_backup\ by hand. Do not retry any automated action first.'
+        return $false
+    }
     Restore-DeployBackup -RemoteDir $RemoteDir
     $restartUtc = (Get-Date).ToUniversalTime()
     if (-not (Start-RemoteApp -RemoteDir $RemoteDir)) {
@@ -767,19 +795,64 @@ function Restore-DeployBackup {
 
 <# Launches the app via the measured session-2 scheduled-task mechanism (proposal §2.1),
    using the REAL engine exe path (not the PoC's notepad.exe), then deletes the task. #>
+<# Stops EVERY DeribitVerdictEngine process on the box and CONFIRMS none remains.
+
+   [2026-08-23] Extracted from Invoke-Deploy step 4 so Invoke-Rollback can call it too. That
+   is the whole point: the rollback used to restore over a RUNNING app. On the gate-timeout
+   path the app is running by construction -- step 8 restarted it -- so Restore-DeployBackup
+   hit a locked .exe, aborted, and Start-RemoteApp then added a SECOND instance. Measured
+   live 2026-08-22 (docs/seat-handover-2026-08-23.md §0.2).
+
+   Idempotent: on an already-stopped box Stop-Process no-ops and the poll confirms immediately,
+   so the callers that roll back BEFORE the restart (a hash mismatch, say) pay nothing.
+   Stop-Process -Name stops ALL matching processes, so this also cleans up a box that has
+   somehow acquired two. Returns $true only when zero processes remain. #>
+function Stop-RemoteApp {
+    param([Parameter(Mandatory = $true)][string]$Context)
+    $stopCmds = @(
+        "Stop-Process -Name DeribitVerdictEngine -Force -ErrorAction SilentlyContinue",
+        "for (`$i = 0; `$i -lt 10; `$i++) {",
+        "  if (-not (Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue)) { 'STOPPED=true'; break }",
+        "  Start-Sleep -Seconds 1",
+        "}",
+        # Assert the PROPERTY. A remaining-count, not just the absence of a marker.
+        "`$rem = @(Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue)",
+        "'REMAINING=' + `$rem.Count",
+        "if (`$rem.Count -gt 0) { 'STOPPED=false' }"
+    )
+    $stop = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $stopCmds -TimeoutSec 60
+    if ($stop.Status -ne 'Success' -or $stop.StdOut -notmatch 'STOPPED=true' -or $stop.StdOut -match 'STOPPED=false') {
+        Fail "could not confirm the app stopped ($Context)"
+        $stop.StdOut, $stop.StdErr | ForEach-Object { $_ -split "`r?`n" } | Where-Object { $_ } | ForEach-Object { Info $_ }
+        return $false
+    }
+    Ok "app stopped ($Context)"
+    return $true
+}
+
 function Start-RemoteApp {
     param([Parameter(Mandatory = $true)][string]$RemoteDir)
     $tn = 'DeribitEngineDeploy'
     $launchCmds = @(
         "`$dir = '$RemoteDir'",
         "`$exe = Join-Path `$dir 'DeribitVerdictEngine.exe'",
+        # [2026-08-23] REFUSE to launch onto a box that already has one. Every caller reaches
+        # here only AFTER a confirmed stop, so a live process means an earlier step did not do
+        # its job -- and starting a SECOND collector against the same book and tape is never
+        # the right answer to that. Measured 2026-08-22: the rollback path did exactly this
+        # (its restore had failed on a file lock) and left PIDs 2484 and 2920 both running.
+        "`$pre = @(Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue)",
+        "if (`$pre.Count -gt 0) { 'LAUNCHED=false'; 'ERROR=refusing to launch -- ' + `$pre.Count + ' instance(s) already running (PIDs ' + ((`$pre | ForEach-Object { `$_.Id }) -join ',') + '). An earlier stop did not take.'; exit 1 }",
         "schtasks /delete /tn $tn /f 2>`$null | Out-Null",
         "schtasks /create /tn $tn /tr `"`$exe`" /sc once /st 00:00 /ru 'administrator' /it /f 2>&1 | Out-Null",
         "schtasks /run /tn $tn 2>&1 | Out-Null",
         "Start-Sleep -Seconds 6",
         "schtasks /delete /tn $tn /f 2>&1 | Out-Null",
-        "`$p = Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue",
-        "if (`$p) { 'LAUNCHED=true'; 'LAUNCH_SESSION=' + `$p.SessionId } else { 'LAUNCHED=false' }"
+        # EXACTLY one, not "at least one" -- `if ($p)` was true for an array of two, which is
+        # how LAUNCH_SESSION came to print "2 2" and be reported as a success.
+        "`$p = @(Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue)",
+        "'LAUNCH_COUNT=' + `$p.Count",
+        "if (`$p.Count -eq 1) { 'LAUNCHED=true'; 'LAUNCH_SESSION=' + `$p[0].SessionId } else { 'LAUNCHED=false' }"
     )
     $lr = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $launchCmds -TimeoutSec 60
     if ($lr.Status -eq 'Success' -and $lr.StdOut -match 'LAUNCHED=true') {
@@ -820,9 +893,17 @@ function Wait-DeployGate {
     while ((Get-Date) -lt $deadline) {
         $gateCmds = @(
             "`$dir = '$RemoteDir'",
-            "`$p = Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue",
-            "'GATE_PID=' + `$(if (`$p) { `$p.Id } else { 'NONE' })",
-            "'GATE_SESSION=' + `$(if (`$p) { `$p.SessionId } else { -1 })",
+            # Report the COUNT and index explicitly. This site does not use
+            # $ResolveSingleProcCmd on purpose: the gate polls a box that may legitimately be
+            # mid-transition, so it must REPORT an odd count rather than abort the payload --
+            # the local side decides. `$p.Id` on an array of two rendered "2484 2920" and
+            # `[int]"2 2"` threw on every poll (measured 2026-08-22), which meant $sessionOk
+            # was never assigned and the gate could never pass, with a stack trace instead of
+            # a diagnosis.
+            "`$p = @(Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue)",
+            "'GATE_PROC_COUNT=' + `$p.Count",
+            "'GATE_PID=' + `$(if (`$p.Count -eq 1) { `$p[0].Id } else { 'NONE' })",
+            "'GATE_SESSION=' + `$(if (`$p.Count -eq 1) { `$p[0].SessionId } else { -1 })",
             "`$sj = Join-Path `$dir 'settings.json'",
             "if (Test-Path `$sj) { 'GATE_SETTINGS_VERSION=' + ((Get-Content `$sj -TotalCount 2) -join ' ') }",
             "`$csv = Join-Path `$dir 'analysis_log.csv'",
@@ -845,7 +926,15 @@ function Wait-DeployGate {
         $g = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $gateCmds -TimeoutSec 60
         if ($g.Status -eq 'Success') {
             $gv = ConvertFrom-KeyValueLines $g.StdOut
-            $sessionOk = ($gv['GATE_SESSION'] -and [int]$gv['GATE_SESSION'] -gt 0)
+            # Parse defensively and name a multi-instance box as its OWN failure. Casting
+            # first and diagnosing later is what produced 28 consecutive stack traces on
+            # 2026-08-22 instead of the one line an operator needed: "2 instances running".
+            $procCount = 0; [void][int]::TryParse($gv['GATE_PROC_COUNT'], [ref]$procCount)
+            $sessionVal = 0; [void][int]::TryParse($gv['GATE_SESSION'], [ref]$sessionVal)
+            $sessionOk = ($procCount -eq 1 -and $sessionVal -gt 0)
+            if ($procCount -gt 1) {
+                Warn "$procCount DeribitVerdictEngine instances are running -- the box is ambiguous and this gate cannot pass. Stop all but one by hand before retrying."
+            }
             $rowsAfter = 0; [void][int]::TryParse($gv['GATE_ROWS_AFTER'], [ref]$rowsAfter)
             $spanSec   = 0; [void][int]::TryParse($gv['GATE_SPAN_SEC'],   [ref]$spanSec)
             # CADENCE, not existence. One row newer than the restart is exactly what a single-shot
@@ -854,7 +943,7 @@ function Wait-DeployGate {
             # fired MORE THAN ONCE. It does not prove the box will still be collecting in an hour.
             $rowOk = ($rowsAfter -ge 2 -and $spanSec -ge 45)
             $versionOk = (-not $ExpectSettingsVersion) -or ($gv['GATE_SETTINGS_VERSION'] -eq $ExpectSettingsVersion)
-            Info "poll: PID=$($gv['GATE_PID']) session=$($gv['GATE_SESSION']) rowsAfterRestart=$rowsAfter spanSec=$spanSec settings=[$($gv['GATE_SETTINGS_VERSION'])]"
+            Info "poll: procs=$procCount PID=$($gv['GATE_PID']) session=$($gv['GATE_SESSION']) rowsAfterRestart=$rowsAfter spanSec=$spanSec settings=[$($gv['GATE_SETTINGS_VERSION'])]"
             if ($sessionOk -and $rowOk -and $versionOk) { return $true }
         }
         Start-Sleep -Seconds 20
