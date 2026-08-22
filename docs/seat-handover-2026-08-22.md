@@ -78,7 +78,7 @@ Gap repair fires every 6 h from app start (~2026-08-20 15:51 UTC). On 2026-08-22
 
 - **Absorption D-table** — [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6. ⚠ **Attack `pullFrac` first, not the anchors**: measured 2026-08-21, the D8 pull veto kills **77.3 %** of real-depletion episodes and **56.6 %** of floor-bound ones, outranking both anchor gates. The population is **bimodal** and the two halves are killed by *different* gates, so no single-anchor fix reaches both.
 - **CLI port reversal** — still not written into [`roadmap.md`](roadmap.md); O3 and W4 both still read "DEFERRED LAST". The trader is holding it until the queue drains, which the `_evalCache` finding supports.
-- **`_evalCache`** — see §5. ⛔ **Do not "just trim it".**
+- **`_evalCache`** — see [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §4 (NOT §5 — corrected). ⛔ **Do not "just trim it".** ⚠ **NO SPEC EXISTS FOR THIS WORK.** The problem, the trap and the corrected urgency are recorded; nobody has written the spec. It is NOT a memory leak — handles and threads are flat across a 4x process-age gap — it is ONE unbounded static cache growing ~0.33 MB/day with the book. **Years of headroom on t3.small; it blocks nothing. If it is ever built, the spec must decouple the in-memory list from the file FIRST.**
 - **Kelly: 340 / 406, ETA ~2026-09-01** at 9.4/weekday. ⭐ **Readable without a copy-back** — `ssm-kelly.json` counts it on the box; regenerate the embedded local key list first.
 
 ---
