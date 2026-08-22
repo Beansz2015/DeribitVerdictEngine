@@ -14,7 +14,7 @@ The trader is replacing the production collector (t3.small / Server 2025, `i-08c
 |---|---|---|---|
 | 1 | ✅ **DONE 2026-08-22 — 5 readings + a 30-sample sweep. VERDICT: VIABLE.** Evidence in §0.2 | complete | — |
 | 2 | ✅ **DONE 2026-08-22 — `aws-cli/2.36.29` installed via `ssm-install-awscli.json`.** MSI signature verified Valid (signer `Amazon Web Services, Inc.`) BEFORE running it; msiexec exit 0; **app PID 4388 unchanged, collector undisturbed**; box lists `s3://deribit-engine-bucket/` under its instance role, so the S3 path `deploy` needs is proven end-to-end from the box | complete | — |
-| 3 | **Deploy v68 to the test box** via `collector.ps1` — BOTH the write-path proof AND the version upgrade | ▶ **NEXT — unblocked. ⛔ This is the FIRST REAL WRITE: `deploy` steps 4–9 have never run.** Watch `Start-RemoteApp` with the real engine binary rather than notepad, and `Wait-DeployGate` (FIX 1) | step 4 |
+| 3 | **Deploy v68 to the test box** via `collector.ps1` | ⚠ **ATTEMPTED 2026-08-22 — FAILED SAFELY, nothing lost. Found FIX 8 + FIX 9 (+ a 4th marker defect). Fixes claimed applied but NOT YET REVIEWED OR RE-RUN.** See §0.3 | step 4 |
 | 4 | **Cutover** — [`collector-ops-tooling-proposal.md`](collector-ops-tooling-proposal.md) **§5.4**, ordered, do not reorder | the weekend | — |
 
 ⭐ **A simplification worth not losing: production never needs a v68 deploy.** It is on v66. The test box will be on v68 and *becomes* production, so the old box — the one holding 57.8 MB of irreplaceable tape — is never stopped for a deploy at all. **Do not "helpfully" bring production up to v68 first.** The cost is that production lacks v67's thin-trade gate for a few more days; that path needs a REST seed failure to fire and is rare. The trade is deliberate.
@@ -54,7 +54,21 @@ Gap repair fires every 6 h from app start (~2026-08-20 15:51 UTC). On 2026-08-22
 
 **CPU is a settled non-issue.** Credit balance **pinned at 144.0 — the t2.micro maximum — for 12 h straight**, so the app spends less than the box earns and cannot throttle. Peak CPU **52.5 % of 1 vCPU** vs production's **26.2 % of 2** — identical absolute work. ⛔ **t3.micro would buy nothing; the second vCPU would sit idle.** Memory, not CPU, is the thin dimension.
 
-### 0.3 Three things to have ready for step 4
+### 0.3 ⚠ Step 3 — ATTEMPTED, FAILED SAFELY. Read this before re-running it.
+
+**First live `deploy`, test box, 2026-08-22. NOTHING WAS LOST.** Every guard fired in order: pre-flight (all three gates) → plan with hashes → y/N answered → app stopped and confirmed → **backup written, all six items verified present (FIX 2 works)** → uploaded to S3 → **hash check CAUGHT the failure** → rollback restored → **`Start-RemoteApp` relaunched the REAL engine binary into SESSION 2.** ⭐ **That last one was the item flagged as most likely to fail. It did not.** The §2.1 mechanism holds for a WinForms app with a live WS connection, not just `notepad.exe`.
+
+**⚠ FIX 8 — the place step reported success it never checked.** Bare `aws s3 cp` on the box; **`aws` does not resolve in an SSM session** (measured: *"The term 'aws' is not recognized"*; `C:/Program Files/Amazon/AWSCLIV2/aws.exe` exists — **the SSM agent's process PATH predates the CLI install**). Every cp failed to stderr, `$ErrorActionPreference` is `Continue` remotely, and `'PLACED=done'` printed anyway. ⭐ **The diagnosis is airtight without re-running anything: the three files that MATCHED (`deps.json`, `runtimeconfig.json`, `OFL.txt`) are exactly the three byte-identical between v67 and v68; the three that MISMATCHED (`exe`, `dll`, `settings.json`) are exactly the three that differ.**
+
+**⛔⛔ FIX 9 — the serious one, and it is NOT about the test box.** The rollback restored v67, relaunched it, printed `OK relaunched`, and exited. **v67 has no `auto_run.start_engaged`, so the app came back RUNNING AND STOPPED** — measured 3.4 min past a 3-min cadence with no new row. **The rollback verified the PROCESS started, never that COLLECTION resumed.** ⚠⚠ **Production is on v66 and equally has no auto-run — so ANY rollback there would leave the live collector running but IDLE, reporting success, while tape quietly stops.** ⚠ **Q2 deliberately skipped the gate on the rollback path to avoid a 5-minute wait. That trade was wrong; I ratified it in review and should not have.**
+
+**STATE AS OF HANDOVER:** implementer claims FIX 8 + FIX 9 applied, **plus a FOURTH marker defect they found by sweeping (`Restore-DeployBackup`'s `RESTORED=done`)** — the sweep was recommended precisely because FIX 2 / FIX 7 / FIX 8 were three instances of one class. ⛔ **NOT REVIEWED, NOT RE-RUN.** Spot-check before trusting: `PLACED=done` is now conditional (`collector.ps1:553`) and the rollback now calls `Wait-DeployGate` (`:645`) — **but confirm FIX 8a, the full-path/PATH-refresh half, is genuinely present; a grep for `AWSCLIV2` returned nothing.**
+
+⚠ **The test box is currently IDLE** (running v67, auto-run stopped after the rollback). Its book is discarded at cutover anyway, so this costs nothing — one RDP click resumes it, or a successful v68 deploy brings it back collecting.
+
+⭐ **THE SEQUENCING PAID FOR ITSELF.** Run against production first, this deploy would have failed identically **and the rollback would have left the live collector silently not capturing tape.** Test box first was the right call.
+
+### 0.4 Three things to have ready for step 4
 
 - ⚠ **The test box's own book and store are DISCARDED at cutover** ([`collector-ops-tooling-proposal.md`](collector-ops-tooling-proposal.md) §5.3). Production covered the same period, and the test box collected under a different settings version. **Deliberate, not an oversight.**
 - ⛔ **Stop the old instance. NEVER terminate it.** Stopping preserves the EBS volume.
