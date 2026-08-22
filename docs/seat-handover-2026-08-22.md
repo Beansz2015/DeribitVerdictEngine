@@ -13,8 +13,8 @@ The trader is replacing the production collector (t3.small / Server 2025, `i-08c
 | # | Step | When | Blocks |
 |---|---|---|---|
 | 1 | ✅ **DONE 2026-08-22 — 5 readings + a 30-sample sweep. VERDICT: VIABLE.** Evidence in §0.2 | complete | — |
-| 2 | **Install the AWS CLI on the test box** — Server 2019 lacks it, Server 2025 ships it | ▶ **NEXT — unblocked** | step 3 |
-| 3 | **Deploy v68 to the test box** via `collector.ps1` — this is BOTH the write-path proof AND the version upgrade | after step 2 | step 4 |
+| 2 | ✅ **DONE 2026-08-22 — `aws-cli/2.36.29` installed via `ssm-install-awscli.json`.** MSI signature verified Valid (signer `Amazon Web Services, Inc.`) BEFORE running it; msiexec exit 0; **app PID 4388 unchanged, collector undisturbed**; box lists `s3://deribit-engine-bucket/` under its instance role, so the S3 path `deploy` needs is proven end-to-end from the box | complete | — |
+| 3 | **Deploy v68 to the test box** via `collector.ps1` — BOTH the write-path proof AND the version upgrade | ▶ **NEXT — unblocked. ⛔ This is the FIRST REAL WRITE: `deploy` steps 4–9 have never run.** Watch `Start-RemoteApp` with the real engine binary rather than notepad, and `Wait-DeployGate` (FIX 1) | step 4 |
 | 4 | **Cutover** — [`collector-ops-tooling-proposal.md`](collector-ops-tooling-proposal.md) **§5.4**, ordered, do not reorder | the weekend | — |
 
 ⭐ **A simplification worth not losing: production never needs a v68 deploy.** It is on v66. The test box will be on v68 and *becomes* production, so the old box — the one holding 57.8 MB of irreplaceable tape — is never stopped for a deploy at all. **Do not "helpfully" bring production up to v68 first.** The cost is that production lacks v67's thin-trade gate for a few more days; that path needs a REST seed failure to fire and is rare. The trade is deliberate.
