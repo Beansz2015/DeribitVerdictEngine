@@ -14,7 +14,7 @@ The trader is replacing the production collector (t3.small / Server 2025, `i-08c
 |---|---|---|---|
 | 1 | ✅ **DONE 2026-08-22 — 5 readings + a 30-sample sweep. VERDICT: VIABLE.** Evidence in §0.2 | complete | — |
 | 2 | ✅ **DONE 2026-08-22 — `aws-cli/2.36.29` installed via `ssm-install-awscli.json`.** MSI signature verified Valid (signer `Amazon Web Services, Inc.`) BEFORE running it; msiexec exit 0; **app PID 4388 unchanged, collector undisturbed**; box lists `s3://deribit-engine-bucket/` under its instance role, so the S3 path `deploy` needs is proven end-to-end from the box | complete | — |
-| 3 | **Deploy v68 to the test box** via `collector.ps1` | ⚠ **TWO ATTEMPTS, BOTH FAILED SAFELY. Nothing lost, TAPE NEVER STOPPED.** Attempt 1 found FIX 8 + FIX 9 (+ a 4th marker defect); **attempt 2 proved both fixes WORK** and found ⚠ **FIX 10 (fonts nesting)**. See §0.3 and §0.3b | step 4 |
+| 3 | ✅ **DONE 2026-08-22, THIRD ATTEMPT — GREEN END TO END.** All six hashes matched · restarted into session 2 · **acceptance gate PASSED (new row on poll 5)** · box now on **v68**. ⭐ **v68 auto-run-on-start PROVEN LIVE** — the row landed with nobody clicking Start. Attempts 1–2 found FIX 8/9/10/11; see §0.3 and §0.3b for what they cost and taught | complete | — |
 | 4 | **Cutover** — [`collector-ops-tooling-proposal.md`](collector-ops-tooling-proposal.md) **§5.4**, ordered, do not reorder | the weekend | — |
 
 ⭐ **A simplification worth not losing: production never needs a v68 deploy.** It is on v66. The test box will be on v68 and *becomes* production, so the old box — the one holding 57.8 MB of irreplaceable tape — is never stopped for a deploy at all. **Do not "helpfully" bring production up to v68 first.** The cost is that production lacks v67's thin-trade gate for a few more days; that path needs a REST seed failure to fire and is rare. The trade is deliberate.
@@ -183,3 +183,24 @@ That is verbatim this project's own recorded lesson: *"`append:=False` over a wh
 
 - **The 2026-08-18 venue halt** — an 87-minute void in `trades_2026-08.csv`, `09:04:04Z → 10:26:55Z`. **NOT capture loss.** `trade_seq` is perfectly contiguous across it (338 rows, span 338, **0 missing**), so the venue assigned no sequence numbers. Resume burst 122/109 per minute against a ~22/min baseline confirms a halt. ⭐ **This validated D-2 on live data** — a time-based detector reports catastrophe here and `trade_seq` correctly reports zero missing. ⛔ **And the downtime-repair prediction did NOT pass — it did not FIRE.** No hole means nothing to heal. **Do not tick it.**
 - **`trade_seq` skip claim** — ✅ **RESOLVED as unsourced.** Both candidate sources checked; the API reference documents only *"The sequence number of the trade within instrument"*. **Treat as strictly sequential. D-2 needs no caveat.**
+
+---
+
+## 7. ✅ Step 3 CLOSED — what the green deploy proved, and what it did NOT
+
+**Deploy went green end to end on the third attempt, 2026-08-22.** Box is on **v68**.
+
+**PROVEN BY EXECUTION:**
+
+- `deploy` steps 4–9 complete: stop → backup (six verified) → upload → place → hash → restart → gate.
+- **`Start-RemoteApp` with the REAL engine binary**, into session 2 — not `notepad.exe`.
+- **`Wait-DeployGate` (FIX 1)** — passed on poll 5 with `newerRow=True`.
+- **FIX 8** — PATH refresh + per-cp exit codes; all six placed, all six hashes matched.
+- ⭐ **v68's auto-run-on-start, live.** The acceptance row landed with no human clicking Start. **Part A is proven in production conditions.**
+
+⚠ **NOT EXERCISED — be honest about this before the cutover:**
+
+- ⛔ **The ROLLBACK path never ran on the green attempt**, because nothing failed. **FIX 9's gate-on-rollback and FIX 10's `robocopy /MIR` restore are therefore proven only from the FAILING runs** (attempts 1–2), not from a clean rollback-and-recover cycle. FIX 9 was observed doing the right thing when collection genuinely had not resumed; FIX 10's robocopy has **never executed at all**.
+- **The `fonts` nesting was cleared by hand before this run.** The code cannot self-heal a pre-existing mess — `robocopy /MIR` mirrors whatever the backup holds. **If a future box shows nesting, flatten it manually first.**
+
+⭐ **THE STANDING LESSON, five for five: FIX 1, 6, 7, 8 and 10 were ALL found by running the tool, and NONE was reachable by parsing or review.** Three separate reviews of this file — including two of mine — passed code that failed on first execution. **Do not accept "it parses" or "I traced it" as verification for anything in `collector.ps1`. Run it.**
