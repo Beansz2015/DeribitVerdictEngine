@@ -97,6 +97,16 @@ $OptionalPdb = 'DeribitVerdictEngine.pdb'
 $FetchFiles = @('analysis_log.csv', 'ws_health.log', 'capture_marker.log', 'analysis_eval_cache.csv')
 $FetchDirs  = @('backtest_data', 'settings_snapshots')
 
+# [FIX 8a, live-execution finding] `aws` does not reliably resolve by name inside an SSM
+# session -- measured on the test box: the CLI installer updates the MACHINE PATH, but the
+# SSM Agent's own long-running process keeps the PATH it started with, and does not pick up
+# the registry change until the agent itself restarts. A fresh box (or an agent that hasn't
+# restarted since install) fails silently on every remote `aws` call. Prepended, not
+# appended, so a stale cached agent PATH entry pointing at a missing/older aws.exe cannot
+# shadow the real one. Spliced into every remote command array that invokes `aws` -- do not
+# duplicate this line by hand at a new call site; reference this variable instead.
+$PathRefreshCmd = "`$env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User') + ';' + `$env:Path"
+
 # ===========================================================================
 # AWS CLI + SSM plumbing -- collector.ps1 is the first script in this repo to drive
 # ssm send-command / get-command-invocation programmatically; the existing ssm-*.json
@@ -251,6 +261,7 @@ function Invoke-Fetch {
         "if (-not `$p) { 'ERROR=app not running, cannot resolve install dir'; exit 1 }",
         "`$dir = Split-Path `$p.Path",
         "'REMOTE_DIR=' + `$dir",
+        $PathRefreshCmd,
         "`$snap = Join-Path `$dir '_fetch_snapshot'",
         "Remove-Item -Recurse -Force `$snap -ErrorAction SilentlyContinue",
         "New-Item -ItemType Directory -Force `$snap | Out-Null",
@@ -287,7 +298,11 @@ function Invoke-Fetch {
         "  } else { 'MANIFEST_DIR=' + `$d + '|ABSENT|ABSENT' }",
         "}",
         "Remove-Item -Recurse -Force `$snap -ErrorAction SilentlyContinue",
-        "'SNAPSHOT_CLEANED=true'"
+        # Sweep finding: this printed unconditionally too. Nothing downstream currently
+        # gates on it (informational only, unlike PLACED=done/BACKUP=done/RESTORED=done),
+        # but a leftover _fetch_snapshot is worth knowing about rather than assuming clean --
+        # made it check like every other marker in the file, for the same reason.
+        "if (Test-Path `$snap) { 'SNAPSHOT_CLEANED=false' } else { 'SNAPSHOT_CLEANED=true' }"
     )
     $r = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $remoteCmds -TimeoutSec 600
     if ($r.Status -ne 'Success') {
@@ -520,15 +535,26 @@ function Invoke-Deploy {
     foreach ($d in $SixDirs)  { Invoke-Aws -Args @('s3', 'cp', (Join-Path $LocalBuildDir $d), "s3://$Bucket/$dprefix/$d", '--recursive', '--only-show-errors') | Out-Null }
     Ok "uploaded to s3://$Bucket/$dprefix/"
 
-    $placeCmds = @("`$dir = '$remoteDir'")
-    foreach ($f in $SixFiles) { $placeCmds += "aws s3 cp `"s3://$Bucket/$dprefix/$f`" (Join-Path `$dir '$f') --only-show-errors" }
-    foreach ($d in $SixDirs)  { $placeCmds += "aws s3 cp `"s3://$Bucket/$dprefix/$d`" (Join-Path `$dir '$d') --recursive --only-show-errors" }
-    $placeCmds += "'PLACED=done'"
+    # [FIX 8b, live-execution finding] PLACED=done used to print unconditionally -- with
+    # $ErrorActionPreference 'Continue' remotely, every `aws s3 cp` here can fail to stderr
+    # and the script carries on regardless, so the marker was never actually checking the
+    # property it claimed. Measured on the test box: all six `aws s3 cp` calls failed (FIX
+    # 8a's PATH issue), PLACED=done printed anyway, and step 7's hash check was the only
+    # thing that caught it -- exactly what TRAP 3 exists for, but the place step's own report
+    # should not have needed step 7 to be told it was wrong. Each cp's $LASTEXITCODE is now
+    # checked; PLACED=done is reached only if every one of the six succeeded.
+    $placeCmds = @("`$dir = '$remoteDir'", $PathRefreshCmd, "`$failed = @()")
+    foreach ($f in $SixFiles) {
+        $placeCmds += "aws s3 cp `"s3://$Bucket/$dprefix/$f`" (Join-Path `$dir '$f') --only-show-errors; if (`$LASTEXITCODE -ne 0) { `$failed += '$f' }"
+    }
+    foreach ($d in $SixDirs) {
+        $placeCmds += "aws s3 cp `"s3://$Bucket/$dprefix/$d`" (Join-Path `$dir '$d') --recursive --only-show-errors; if (`$LASTEXITCODE -ne 0) { `$failed += '$d' }"
+    }
+    $placeCmds += "if (`$failed.Count -gt 0) { 'PLACED=incomplete:' + (`$failed -join ',') } else { 'PLACED=done' }"
     $place = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $placeCmds -TimeoutSec 180
     if ($place.Status -ne 'Success' -or $place.StdOut -notmatch 'PLACED=done') {
-        Fail 'place step did not confirm completion -- box may be in a PARTIAL state. Restoring from backup and restarting on the OLD build (the app is currently stopped and must not be left that way).'
-        Restore-DeployBackup -RemoteDir $remoteDir
-        Start-RemoteApp -RemoteDir $remoteDir | Out-Null
+        Fail "place step did not confirm completion -- box may be in a PARTIAL state ($($place.StdOut) $($place.StdErr))"
+        Invoke-Rollback -RemoteDir $remoteDir | Out-Null
         exit 2
     }
     Ok 'placed on box'
@@ -556,9 +582,8 @@ function Invoke-Deploy {
         }
     }
     if ($hashMismatch) {
-        Fail 'hash verification failed -- restoring from backup and restarting on the OLD build (the app is currently stopped and must not be left that way)'
-        Restore-DeployBackup -RemoteDir $remoteDir
-        Start-RemoteApp -RemoteDir $remoteDir | Out-Null
+        Fail 'hash verification failed -- box may be in a PARTIAL state'
+        Invoke-Rollback -RemoteDir $remoteDir | Out-Null
         exit 2
     }
 
@@ -566,9 +591,9 @@ function Invoke-Deploy {
     Section '8. restart'
     $restartUtc = (Get-Date).ToUniversalTime()
     if (-not (Start-RemoteApp -RemoteDir $remoteDir)) {
-        Fail 'restart did not confirm a running process -- restoring from backup and retrying restart once'
-        Restore-DeployBackup -RemoteDir $remoteDir
-        Start-RemoteApp -RemoteDir $remoteDir | Out-Null
+        Fail 'restart did not confirm a running process'
+        Invoke-Rollback -RemoteDir $remoteDir | Out-Null
+        exit 2
     }
 
     # -- Step 9: verify for real -- a NEW CSV row within 5 minutes (§2.6), not a file compare.
@@ -580,17 +605,66 @@ function Invoke-Deploy {
         exit 0
     }
 
-    Fail 'gate did not pass within 5 minutes -- restoring from backup and restarting'
-    Restore-DeployBackup -RemoteDir $remoteDir
-    $rollbackRestartUtc = (Get-Date).ToUniversalTime()
-    Start-RemoteApp -RemoteDir $remoteDir | Out-Null
-    $rollbackOk = Wait-DeployGate -RestartUtc $rollbackRestartUtc -RemoteDir $remoteDir -ExpectSettingsVersion $null
-    if ($rollbackOk) { Warn 'rollback verified (new row landed on the RESTORED build). STOP. Do not retry the deploy. Investigate before trying again.' }
-    else { Fail 'rollback ALSO did not produce a new row. STOP. Investigate the box by hand — do not retry any automated action.' }
+    Fail 'gate did not pass within 5 minutes -- the new build is running but not collecting (or not running at all)'
+    Invoke-Rollback -RemoteDir $remoteDir | Out-Null
     exit 2
 }
 
-<# Restores the six items from the single-generation backup and reports success/failure. #>
+<#
+[FIX 9, live-execution finding, docs/collector-ops-tooling-spec-back.md §8] Every rollback
+path -- place failure (step 6), hash failure (step 7), restart-confirm failure (step 8), and
+gate failure (step 9) -- now shares this ONE function instead of three/four hand-copied
+restore+restart sequences, which is what let step 6 and step 7's copies silently omit the
+gate check step 9's own copy happened to have. Measured on the test box: the hash-failure
+branch restored v67, relaunched it, printed "OK relaunched (LAUNCH_SESSION=2)", and exited --
+PROCESS confirmed, COLLECTION never checked. v67 (and every build before v68) has no
+auto_run.start_engaged, so the restored app came back RUNNING AND STOPPED: up, not
+collecting, reporting success. Measured 3.4 minutes past a 3-minute cadence with zero new
+rows. On production (still v66 at review time), ANY rollback before this fix would leave the
+collector silently idle -- the exact failure mode this project treats as unrecoverable past
+~24h.
+
+Q2's original design ("restore + restart, without re-running the full 5-minute gate -- just
+the restart") was reviewed and ratified on the reasoning that a stopped collector is worse
+than an unverified one. This run proved that reasoning incomplete: an unverified restart can
+ALSO be a stopped collector, just one that lies about it. The 5-minute wait this function
+adds to every rollback is the cost of finding that out immediately instead of up to ~24h
+later.
+
+Returns $true only if the restored build is confirmed both running AND collecting.
+#>
+function Invoke-Rollback {
+    param([Parameter(Mandatory = $true)][string]$RemoteDir)
+    Restore-DeployBackup -RemoteDir $RemoteDir
+    $restartUtc = (Get-Date).ToUniversalTime()
+    if (-not (Start-RemoteApp -RemoteDir $RemoteDir)) {
+        Fail 'ROLLBACK RESTART DID NOT CONFIRM A RUNNING PROCESS. STOP. Investigate the box by hand -- do not retry any automated action.'
+        return $false
+    }
+    Section 'rollback acceptance gate (new CSV row within 5 minutes, on the RESTORED build)'
+    $gateOk = Wait-DeployGate -RestartUtc $restartUtc -RemoteDir $RemoteDir -ExpectSettingsVersion $null
+    if ($gateOk) {
+        Ok 'rollback verified -- the restored build is running AND collecting (a new row landed). Deploy did not complete; investigate before retrying.'
+    } else {
+        Fail 'ROLLBACK RESTARTED THE PROCESS BUT COLLECTION DID NOT RESUME -- no new CSV row within 5 minutes. The box is up and NOT capturing. STOP. Do not retry any automated action -- investigate the box by hand immediately; this is the exact failure mode this project treats as unrecoverable past ~24h.'
+    }
+    return $gateOk
+}
+
+<#
+Restores the six items from the single-generation backup and reports success/failure.
+[Sweep finding, docs/collector-ops-tooling-spec-back.md §8 -- the "fourth instance" the
+review asked to look for after FIX 2/7/8 found the same class three times.] RESTORED=done
+used to print unconditionally, with no -ErrorAction Stop on the Copy-Item calls and no
+check that the six items actually landed back in $dir -- the single most safety-critical
+place in this file for that defect class, since a rollback that lies about succeeding is
+what Invoke-Rollback's own gate check exists to catch, but a partially-restored box could
+fail that gate for a reason unrelated to collection (a missing settings.json, say) and be
+misdiagnosed. Now matches FIX 2's backup-verification pattern exactly: try/catch
+-ErrorAction Stop around the copies, then every item re-verified present in $dir (dirs by
+file COUNT against the backup, not existence alone) before the line that says RESTORED=done
+is reached.
+#>
 function Restore-DeployBackup {
     param([Parameter(Mandatory = $true)][string]$RemoteDir)
     Section 'restore from _deploy_backup'
@@ -598,13 +672,28 @@ function Restore-DeployBackup {
         "`$dir = '$RemoteDir'",
         "`$bk = Join-Path `$dir '_deploy_backup'",
         "if (-not (Test-Path `$bk)) { 'ERROR=no backup present'; exit 1 }",
-        "foreach (`$f in @($(($SixFiles | ForEach-Object { "'$_'" }) -join ','))) { Copy-Item (Join-Path `$bk `$f) (Join-Path `$dir `$f) -Force }",
-        "foreach (`$d in @($(($SixDirs | ForEach-Object { "'$_'" }) -join ','))) { Copy-Item (Join-Path `$bk `$d) (Join-Path `$dir `$d) -Recurse -Force }",
-        "'RESTORED=done'"
+        "try {",
+        "  foreach (`$f in @($(($SixFiles | ForEach-Object { "'$_'" }) -join ','))) { Copy-Item (Join-Path `$bk `$f) (Join-Path `$dir `$f) -Force -ErrorAction Stop }",
+        "  foreach (`$d in @($(($SixDirs | ForEach-Object { "'$_'" }) -join ','))) { Copy-Item (Join-Path `$bk `$d) (Join-Path `$dir `$d) -Recurse -Force -ErrorAction Stop }",
+        "} catch {",
+        "  'ERROR=restore failed: ' + `$_.Exception.Message",
+        "  exit 1",
+        "}",
+        "`$missing = @()",
+        "foreach (`$f in @($(($SixFiles | ForEach-Object { "'$_'" }) -join ','))) { if (-not (Test-Path (Join-Path `$dir `$f))) { `$missing += `$f } }",
+        "foreach (`$d in @($(($SixDirs | ForEach-Object { "'$_'" }) -join ','))) {",
+        "  `$bkPath = Join-Path `$bk `$d",
+        "  `$dstPath = Join-Path `$dir `$d",
+        "  if (-not (Test-Path `$dstPath)) { `$missing += `$d; continue }",
+        "  `$bkCount = (Get-ChildItem `$bkPath -Recurse -File | Measure-Object).Count",
+        "  `$dstCount = (Get-ChildItem `$dstPath -Recurse -File | Measure-Object).Count",
+        "  if (`$bkCount -ne `$dstCount) { `$missing += `$d + ' (file count ' + `$dstCount + ' vs backup ' + `$bkCount + ')' }",
+        "}",
+        "if (`$missing.Count -gt 0) { 'RESTORED=incomplete:' + (`$missing -join ',') } else { 'RESTORED=done' }"
     )
     $rs = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $restoreCmds -TimeoutSec 90
-    if ($rs.Status -eq 'Success' -and $rs.StdOut -match 'RESTORED=done') { Ok 'restored from backup' }
-    else { Fail 'RESTORE ITSELF DID NOT CONFIRM -- the box may now be in an unknown state. Stop and investigate by hand.' }
+    if ($rs.Status -eq 'Success' -and $rs.StdOut -match 'RESTORED=done') { Ok 'restored from backup -- all six items verified present' }
+    else { Fail "RESTORE ITSELF DID NOT CONFIRM -- the box may now be in an unknown state. Stop and investigate by hand. ($($rs.StdOut) $($rs.StdErr))" }
 }
 
 <# Launches the app via the measured session-2 scheduled-task mechanism (proposal §2.1),
