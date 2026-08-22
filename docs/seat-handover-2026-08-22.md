@@ -12,8 +12,8 @@ The trader is replacing the production collector (t3.small / Server 2025, `i-08c
 
 | # | Step | When | Blocks |
 |---|---|---|---|
-| 1 | **3–4 memory readings on the test box**, spread out | 2026-08-22 afternoon MYT | everything |
-| 2 | **Install the AWS CLI on the test box** — Server 2019 lacks it, Server 2025 ships it | after step 1 (an MSI install pollutes the memory reading) | step 3 |
+| 1 | ✅ **DONE 2026-08-22 — 5 readings + a 30-sample sweep. VERDICT: VIABLE.** Evidence in §0.2 | complete | — |
+| 2 | **Install the AWS CLI on the test box** — Server 2019 lacks it, Server 2025 ships it | ▶ **NEXT — unblocked** | step 3 |
 | 3 | **Deploy v68 to the test box** via `collector.ps1` — this is BOTH the write-path proof AND the version upgrade | after step 2 | step 4 |
 | 4 | **Cutover** — [`collector-ops-tooling-proposal.md`](collector-ops-tooling-proposal.md) **§5.4**, ordered, do not reorder | the weekend | — |
 
@@ -32,7 +32,29 @@ Gap repair fires every 6 h from app start (~2026-08-20 15:51 UTC). On 2026-08-22
 
 ⚠ **Do not restart the test box before step 1 completes.** A restart resets the only memory-pressure evidence that exists.
 
-### 0.2 Three things to have ready for step 4
+### 0.2 ✅ Step 1 evidence — t2.micro is VIABLE
+
+**Five readings plus a 30-sample sweep, all via SSM with no RDP session attached.**
+
+| Reading | app up | avail (sust) | **pagesOUT/s** | pagesIN/s | **pagefile** | handles |
+|---|---|---:|---:|---:|---:|---:|
+| 1 | 1 h | 115 | **0.0** | 2.7 | 36.6 % | — |
+| 2 | 24 h | 112 | **0.0** | 1,321 | **67.3 %** ← outlier | 548 |
+| 3 | 25 h | 220 | **0.0** | 7.7 | 39.7 % | — |
+| 4 | 41.7 h | 206 | **0.0** | 67.5 | 39.8 % | 540 |
+| **5 (sweep)** | **42.0 h** | **174–208** | **0.0 ×30** | **0.0 on 29/30** | **39.6 % ×30** | — |
+
+⭐ **Zero eviction in every sample ever taken. The page file did not move by one tick across thirty consecutive 10-second samples.** Handles went **548 → 540** (declining) and app private **62 → 57.6 MB**; measured twice, **there is no leak**.
+
+⭐ **What actually carries the verdict is the work, not the memory:** **38.6 rows/hour against production's 38.3**, 1.0 min behind, **zero DEGRADED events in 42 hours**, six-plus gap repairs survived, and the 24 h head-to-head was **919 rows vs production's 920**.
+
+⚠ **The honest caveat: ~206 MB sustained headroom against production's 496.** Viable is not roomy.
+
+⛔ **AND ONE THING I GOT WRONG — do not repeat it.** I attributed reading 2's spike (67.3 %, 1,321 pagesIN) to a gap-repair pass. **The sweep refutes that.** A repair triggered at 09:41:45 UTC, ~100 s before the sweep, and the sweep shows **nothing** — store growth over 5 minutes was 50,562 bytes, which is streaming capture almost exactly (~1.4 trades/s × 300 s × ~120 B/row), with no backfill signature. **A routine repair on a healthy box finds no holes and costs essentially nothing.** So reading 2 is a **one-off transient of unknown cause** — not recurring, not explained. ⚠ **That was the fourth time this session I offered a tidy explanation for a surprising number and the measurement did not support it.** See §5.1.
+
+**CPU is a settled non-issue.** Credit balance **pinned at 144.0 — the t2.micro maximum — for 12 h straight**, so the app spends less than the box earns and cannot throttle. Peak CPU **52.5 % of 1 vCPU** vs production's **26.2 % of 2** — identical absolute work. ⛔ **t3.micro would buy nothing; the second vCPU would sit idle.** Memory, not CPU, is the thin dimension.
+
+### 0.3 Three things to have ready for step 4
 
 - ⚠ **The test box's own book and store are DISCARDED at cutover** ([`collector-ops-tooling-proposal.md`](collector-ops-tooling-proposal.md) §5.3). Production covered the same period, and the test box collected under a different settings version. **Deliberate, not an oversight.**
 - ⛔ **Stop the old instance. NEVER terminate it.** Stopping preserves the EBS volume.
