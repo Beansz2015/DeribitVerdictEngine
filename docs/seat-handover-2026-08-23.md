@@ -277,3 +277,40 @@ ExecutionResolution.ResolveResolution(cfg, DateTime.UtcNow.Hour)
 ⛔ **Collector hosts run UTC.** Until line 613 is ruled on, that is a hard constraint rather than a convention, and it should be checked on any new box before it collects a single row. `TZ_ID` is one line of a status probe.
 
 ⚠ **Note for a Windows host specifically:** the `TZ` environment variable is **inert** on Windows .NET — verified 2026-08-23 by setting `TZ=America/New_York` on a Singapore-zoned machine and observing `TimeZoneInfo.Local` unchanged. On Windows the timezone comes from the registry. **Do not attempt to pin a host's timezone with `TZ`; it will silently do nothing.** On Linux the same variable *is* honoured, which is precisely why the port makes this defect live.
+
+### 7.6 ⭐ The checklist item this produced — a taxonomy, RANKED, not a blanket ban
+
+**Two local-time defects were found in two independent codebases in one exchange, neither by a test, both invisible because the host timezone happened to match the assumption.** That is a category, not a coincidence. The hostel app's seat proposed carrying it into the migration checklist as a class to grep for; this is the form it settled into.
+
+**The grep:**
+
+```
+DateTime.Now · DateTime.Today · DateTimeOffset.Now · Date.Now
+```
+
+⚠ **Include `DateTimeOffset.Now`.** My first sweep omitted it and I only checked after the other seat swept for it in their code. We have none — but that was luck confirmed late, not diligence.
+
+**Then classify every hit. The categories are NOT equal, and the order is the point:**
+
+| # | Category | Severity | Action |
+|---|---|---|---|
+| **1** | **PERSISTS a value** — written to a file, a store, a cache that outlives the process | ⛔ **corrupts a dataset** | **grep this first; treat every hit as a defect until proven otherwise** |
+| **2** | **TRANSMITS a value** — an email, an API payload, a signal to another process | ⚠ **confuses a person** | real, but recoverable |
+| 3 | **Elapsed-time arithmetic** — `now - storedNow`, cache TTLs | ✅ legitimate | same clock at both ends, self-consistent by construction |
+| 4 | **Display only** | ✅ legitimate | renders in host-local time, which is usually what a human wants |
+| 5 | String literals — `"Today"` as a label | ✅ false positive | ignore |
+
+⭐⭐ **The asymmetry between 1 and 2 is the useful part, and it is evidenced rather than asserted.** Both codebases were swept independently against this taxonomy:
+
+| | This repo | The hostel app |
+|---|---:|---:|
+| Persists | **1 defect** — `MainForm_Analysis.vb:613` | 0 |
+| Transmits | 0 — the signal bridge already uses `DateTime.UtcNow` | **2 defects** |
+| Elapsed / display / literals | 5, all legitimate | 11, all legitimate |
+| **Total calls** | **6** | **13** |
+
+**The taxonomy ranked severity correctly in code neither author wrote.** Ours is the persisted one and is the worse defect; theirs are transmitted and are the milder kind; and our transmit path was already clean without anyone having planned it that way.
+
+⛔ **Why a blanket ban on `DateTime.Now` is the wrong rule:** it flags all 19 calls across both codebases and buries the 3 that matter. **5 of our 6 sites are correct as written** and a sweep that "fixed" them would be pure churn — `AnalysisOutputDump.vb:79` in particular *deliberately* computes `TimeZoneInfo.Local.GetUtcOffset(...)` and must not be touched.
+
+**Apply this at:** any host migration, any new collector box, and — most importantly — **the Linux CLI port**, where `TZ` becomes live and the assumption that has protected us stops holding.
