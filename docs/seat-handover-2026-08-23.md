@@ -2,7 +2,7 @@
 
 **Read after** CLAUDE.md's session-start protocol and [`trader-tick-queue.md`](trader-tick-queue.md) §0a. **This document is the STATE read.** Prior handover: [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) — **superseded for STATE, its rulings still bind.** Its §0 first task (the collector migration) is **DONE**.
 
-**Settings: v68, pushed.** Master at `9eb3329`. Verify with `git status -sb` — never inherit a push state.
+**Settings: v68, pushed.** Master at `54d2975` at the time of writing — the four-site fix is `30ca04d`. Verify with `git status -sb` — never inherit a push state.
 
 ⚠ **DATES IN THIS DOCUMENT ARE UTC.** The machine is GMT+8, so the whole cutover reads 2026-08-22 in UTC and spans local midnight into 2026-08-23. **Check now-in-UTC before claiming any collection gap** — this project has made two false gap claims from that confusion, one formally withdrawn.
 
@@ -10,7 +10,11 @@
 
 ## 0. FIRST TASK — the four-site single-instance defect class in `collector.ps1`
 
-⛔ **This is the only thing gating further use of the deploy tooling, and the box it threatens is now production.**
+> ✅ **UPDATE — the FIX IS WRITTEN, REVIEWED AND PUSHED (`30ca04d`).** All four sites are guarded by a shared `$ResolveSingleProcCmd`, `Stop-RemoteApp` is extracted, and `Invoke-Rollback` now stops before restoring and refuses to restore if the stop cannot be confirmed. **Proven by execution:** the guard run against real processes at 0/1/2 instances, array concatenation proven to flatten, the 11-case gate harness re-run with no regression, parse clean, and a live `-DryRun` resolving one PID and one path.
+>
+> ⛔ **WHAT REMAINS IS §0.4 — VERIFICATION AGAINST A DELIBERATELY FAILING DEPLOY.** That has never been run to completion, and `robocopy /MIR` has still never executed. **Read §0.1–§0.3 for what the defect was; read §0.4 for the only step still owed.**
+
+⛔ **Until §0.4 runs, the deploy tooling's recovery path is proven only at the unit level, and the box it protects is production.**
 
 **Model: Opus. Effort: high.** Not for the diff — it is a guard repeated at four call sites. It is because this file has now produced **seven** defects found only by executing it, and because the fix has to be *verified against a deliberately failing deploy*, which is the one test nobody has ever run to completion. A cheap tier will patch the loud site and leave the three silent ones.
 
@@ -60,7 +64,7 @@ Deploy step 8 restarts the app; the gate then fails; `Invoke-Rollback` tries to 
 3. Confirm exactly one process afterwards, and that `robocopy /MIR` genuinely ran.
 4. Stop the instance again.
 
-⛔ **Do not deploy anything during the step-8 watch** (§1.2). Writing and reviewing the fix during the watch is fine — it is a local script with no engine change. **Verifying it needs a deploy, so verification waits until the watch completes.**
+✅ **The step-8 watch is COMPLETE (§1.4), so the deploy embargo that deferred this has lifted.** The fix itself is written, reviewed and pushed; only this verification is owed.
 
 ---
 
@@ -81,7 +85,7 @@ Procedure: [`collector-ops-tooling-proposal.md`](collector-ops-tooling-proposal.
 | 5 — copy production's book + store across | Hash-verified **on the box** against production-computed SHA256s |
 | 6 — verify the copy | Met and exceeded — hashes, not just sizes |
 | 7 — start, confirm append + cadence | **Append proven**, gate passed, tape healed |
-| **8 — watch a full day** | ⬜ **OUTSTANDING** |
+| **8 — watch a full day** | ✅ **PASSED** — see §1.4 |
 
 **Carried state:** book 24,721 rows (first row `2026-07-22 16:24:54`), eval cache 44,910 rows, store **65,088,339 B across 2 files**, both sidecars.
 
@@ -98,6 +102,25 @@ SEQ_MIN=296958647 SEQ_MAX=296960232 DISTINCT=1586 SPAN=1586 MISSING=0
 **Zero trades missing across the cutover.**
 
 ⚠ **The byte count nearly produced a false alarm and `trade_seq` settled it.** The store grew only ~54 KB where the morning's measured rate (~168 B/s) predicted ~270 KB. The market was simply quieter — 1,586 trades over ~40 min is ~0.66/s. **A volume- or time-based detector gives false comfort or false alarm here; `trade_seq` gives the answer.** That is D-2's whole point, now demonstrated twice on live data.
+
+### 1.4 ✅ Step 8 — the full-day watch PASSED
+
+Measured 2026-08-23 14:31Z, **22 h 27 m** after the new box went live at 2026-08-22 16:02:54Z. The remaining 92 minutes could not have added information — nothing was trending toward a threshold.
+
+| Check | Result |
+|---|---|
+| Rows | 24,721 -> **25,550** = +829, i.e. **36.9/hour** (old production historical: 33.3) |
+| Cadence | gap now-lastrow **0.3 min** |
+| Stability | **no restart** — app uptime 22 h 27 m |
+| `ws_health` | **zero DEGRADED, zero DOWN** since the 16:02 startup |
+| History | first row `2026-07-22 16:24:54` intact — it is appending, not a fresh book |
+| CPU credits | **144.0 pinned** across 20 h, one dip to 143.58 |
+| Memory | ~150–160 MB baseline available; **`pagesOUT/s` 0 across 15 consecutive samples** |
+| Eval cache | 3.83 -> 4.1 MB in 22.5 h = **0.29 MB/day**, matching the ~0.33 MB/day predicted in [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §4 |
+
+⚠⚠ **ONE READING NEARLY PRODUCED A FALSE ALARM, AND IT IS THE LESSON OF THIS SECTION.** An `ssm-mem.json` read at 14:31Z showed `app PVT 90 MB` and **`pagesOUT/s avg 726.8 / max 5,108` sustained over 30 s** — against `0.0` on the same probe pre-cutover. That looked like a genuine regression and I had the alarm half-written. **A third reading four minutes later showed `71.1 MB` and `pagesOUT/s 0 across 15/15 samples.** App private across three readings ran **74.3 -> 90 -> 71.1 MB — not monotonic.** The 90 was a transient of undetermined cause; I did not invent one. ⭐ **[`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §5.1 records the prior seat making this exact call three times in one day. Two points is not a trend, and one point is not either.**
+
+⭐ **The one genuinely monotonic series is Windows Defender:** `MsMpEng` 298.8 -> 305.5 -> **322.8 MB** across three readings ~21 h apart — now **31 % of the box RAM** and larger than the collector, `dwm`, `explorer` and `SearchUI` combined. **If memory ever needs relief, that is the target**, but it is a security-posture decision on a box holding trading data.
 
 ### 1.3 ⚠ A real ordering defect in the procedure document
 
@@ -199,8 +222,57 @@ FIX 1, 6, 7, 8, 10, plus this session's rollback-lock defect and the two-instanc
 
 ## 6. What is NOT done
 
-- ⬜ **Step 8** — a full day of `status` on the new collector. **This is where V4 belongs** ([`deploy-acceptance-gate-cadence-spec.md`](deploy-acceptance-gate-cadence-spec.md) §5): the box is now in its final production state, so a soak here means something. **Do not deploy during it.**
-- ⛔ **The four-site defect class** — §0 above.
-- ⛔ **The rollback path has still never completed successfully**, and `robocopy /MIR` has still never executed.
+- ✅ **Step 8 — DONE and PASSED**, 22 h 27 m, see §1.4. That also discharges V4 of [`deploy-acceptance-gate-cadence-spec.md`](deploy-acceptance-gate-cadence-spec.md) §5.
+- ⛔ **THE ONE THING STILL OWED: §0.4** — verify the four-site fix against a **deliberately failing deploy**, on the **retired** box, not production. The fix itself (`30ca04d`) is written, reviewed and pushed.
+- ⛔ **The rollback path has still never completed successfully**, and `robocopy /MIR` has still never executed. §0.4 is what closes that.
+- ⚠ **The book's `Timestamp` column is LOCAL time, not UTC** — §7 below. Dormant while every host is UTC; **a decision, not a cleanup**; and the CLI port is what makes it live.
 - **Open trader decisions, untouched:** the absorption D-table ([`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 — attack `pullFrac` first), the CLI-port reversal not yet written into [`roadmap.md`](roadmap.md), and `_evalCache` (still no spec; **do not "just trim it"** — see [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §4).
 - **Cosmetic:** `tools/checks/verify-gate.ps1:144` prints *"no engine-path change"* on commits that change engine behaviour. Its engine prefixes are `Core/`, `DynamicNorms.vb`, `analysis/` — `UI/` is excluded, correctly, because the check is a *settings-version-bump* nudge and a new key must touch `Core/Settings/EngineSettings.vb`. **The logic is sound; only the message overclaims.** Reword if that file is ever touched.
+
+---
+
+## 7. ⚠ LATENT DEFECT — the book's `Timestamp` column is LOCAL time, not UTC
+
+**Found 2026-08-23**, not by a test, but because the hostel app's seat asked whether co-locating on the collector box carried a timezone risk. **Their app's bug was elsewhere; the question found ours.**
+
+### 7.1 What it is
+
+```
+UI/MainForm_Analysis.vb:613     verdict.Timestamp = DateTime.Now
+```
+
+`verdict.Timestamp` becomes the **`Timestamp` column of `analysis_log.csv`** — the first field of every row in a book running back to 2026-07-22.
+
+**It is `DateTime.Now`. Local time.** It has only ever looked correct because **every collector host this project has ever run has been UTC** — both the retired t3.small and the current t2.micro (`TZ_ID=UTC`, verified 2026-08-22). On a UTC host `DateTime.Now` and `DateTime.UtcNow` carry the same clock value, so the defect is invisible.
+
+### 7.2 ⚠ It is also latently self-inconsistent, today
+
+The engine does **not** use local time everywhere. Session bucketing resolves on UTC:
+
+```
+ExecutionResolution.ResolveResolution(cfg, DateTime.UtcNow.Hour)
+```
+
+**So a row's stamped hour and the session it was scored under come from two different clocks.** They agree only because the host is UTC. On any other host they would diverge by the offset, and a later reader inferring the session from the CSV timestamp would get the wrong session — silently, with no error anywhere.
+
+### 7.3 Where it becomes real
+
+- ⛔ **Changing the box timezone** would shift every new row by the offset, against a month of existing rows. That desynchronises the eval cache (keyed to analysis rows), the Kelly dated trigger, and any pooled date-range read across the boundary. **This is the concrete reason the collector host must stay UTC** — a harder reason than the one recorded during the hostel co-location exchange, which was about an email header.
+- ⛔ **The Linux CLI port** (`DeribitIndicatorProject.md` Section 16.2). A headless Linux host's local time is not guaranteed to be UTC, and on Linux .NET *does* honour the `TZ` environment variable. **The port would make this live.**
+
+### 7.4 ⚠ The fix is NOT a trivial swap — it needs a ruling
+
+⭐ **On a UTC host, `DateTime.Now` → `DateTime.UtcNow` is byte-identical in the rendered CSV**, because the clock value is the same and the write formats to `yyyy-MM-dd HH:mm:ss`. **That makes it cheap to do NOW and expensive to do after a non-UTC host exists** — once one does, the change becomes a visible discontinuity rather than a no-op.
+
+**But it is a decision, not a cleanup, for two reasons:**
+
+1. **`DateTime.Kind` changes** from `Local` to `Utc`. Any consumer that converts, compares against a `Local` value, or round-trips through a typed parse would see a difference the rendered string does not show. **`LivePerformanceTracker`, the eval cache walk, and `AnalysisLogger` all need checking before this moves** — the rendered-output equivalence is not by itself sufficient evidence.
+2. **It changes what is written to the book**, which is a data-model decision and the trader's to make, not an implementer's.
+
+**The other five `DateTime.Now` sites are NOT affected** and should not be swept up in a fix: `MainForm_Analysis.vb:713` and `MainForm_Render_Cards.vb:503` are elapsed-time calculations that are self-consistent by construction; `MainForm_PlaintextSnapshot.vb:80` and `MainForm_Render_Cards.vb:1043` are display-only; `AnalysisOutputDump.vb:79` explicitly computes `TimeZoneInfo.Local.GetUtcOffset(...)` and is deliberately timezone-aware. **Only line 613 reaches persisted data.**
+
+### 7.5 Standing constraint this establishes
+
+⛔ **Collector hosts run UTC.** Until line 613 is ruled on, that is a hard constraint rather than a convention, and it should be checked on any new box before it collects a single row. `TZ_ID` is one line of a status probe.
+
+⚠ **Note for a Windows host specifically:** the `TZ` environment variable is **inert** on Windows .NET — verified 2026-08-23 by setting `TZ=America/New_York` on a Singapore-zoned machine and observing `TimeZoneInfo.Local` unchanged. On Windows the timezone comes from the registry. **Do not attempt to pin a host's timezone with `TZ`; it will silently do nothing.** On Linux the same variable *is* honoured, which is precisely why the port makes this defect live.
