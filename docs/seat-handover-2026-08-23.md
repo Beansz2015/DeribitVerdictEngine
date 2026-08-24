@@ -2,7 +2,7 @@
 
 **Read after** CLAUDE.md's session-start protocol and [`trader-tick-queue.md`](trader-tick-queue.md) §0a. **This document is the STATE read.** Prior handover: [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) — **superseded for STATE, its rulings still bind.** Its §0 first task (the collector migration) is **DONE**.
 
-**Settings: v68, pushed.** Master at `54d2975` at the time of writing — the four-site fix is `30ca04d`. Verify with `git status -sb` — never inherit a push state.
+**Settings: v68, pushed.** Master at `e4e298d` and pushed; the four-site fix is `30ca04d`, verified live by §0.5. Verify with `git status -sb` — never inherit a push state.
 
 ⚠ **DATES IN THIS DOCUMENT ARE UTC.** The machine is GMT+8, so the whole cutover reads 2026-08-22 in UTC and spans local midnight into 2026-08-23. **Check now-in-UTC before claiming any collection gap** — this project has made two false gap claims from that confusion, one formally withdrawn.
 
@@ -12,11 +12,11 @@
 
 > ✅ **UPDATE — the FIX IS WRITTEN, REVIEWED AND PUSHED (`30ca04d`).** All four sites are guarded by a shared `$ResolveSingleProcCmd`, `Stop-RemoteApp` is extracted, and `Invoke-Rollback` now stops before restoring and refuses to restore if the stop cannot be confirmed. **Proven by execution:** the guard run against real processes at 0/1/2 instances, array concatenation proven to flatten, the 11-case gate harness re-run with no regression, parse clean, and a live `-DryRun` resolving one PID and one path.
 >
-> ⛔ **WHAT REMAINS IS §0.4 — VERIFICATION AGAINST A DELIBERATELY FAILING DEPLOY.** That has never been run to completion, and `robocopy /MIR` has still never executed. **Read §0.1–§0.3 for what the defect was; read §0.4 for the only step still owed.**
+> ✅✅ **§0.4 IS NOW DONE TOO — RUN 2026-08-24, PASSED. THIS WHOLE SECTION IS CLOSED.** The failing deploy was executed end to end against the retired box: the gate failed, **the rollback stopped the app before restoring** (`OK app stopped (before restore)` — the line that did not exist on 08-22), **`robocopy /MIR` executed successfully for the first time ever**, and **exactly one process remained**. Evidence in §0.5.
 
-⛔ **Until §0.4 runs, the deploy tooling's recovery path is proven only at the unit level, and the box it protects is production.**
+✅ **The deploy tooling's recovery path is now proven by execution, not merely at the unit level.** §0.1–§0.3 record what the defect was; §0.5 records the verification.
 
-**Model: Opus. Effort: high.** Not for the diff — it is a guard repeated at four call sites. It is because this file has now produced **seven** defects found only by executing it, and because the fix has to be *verified against a deliberately failing deploy*, which is the one test nobody has ever run to completion. A cheap tier will patch the loud site and leave the three silent ones.
+**Model: Opus. Effort: high.** *(Recorded as the recommendation that was made and followed; the work is now complete.)* Not for the diff — it is a guard repeated at four call sites. It is because this file has now produced **seven** defects found only by executing it, and because the fix has to be *verified against a deliberately failing deploy*, which is the one test nobody has ever run to completion. A cheap tier will patch the loud site and leave the three silent ones.
 
 ### 0.1 What is wrong
 
@@ -44,7 +44,7 @@ Deploy step 8 restarts the app; the gate then fails; `Invoke-Rollback` tries to 
 
 ⚠ **Why three prior reviews missed it:** attempts 1–2 (recorded in [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §0.3/§0.3b) rolled back from a **pre-restart** failure — a hash mismatch, when the app was still stopped from step 4. The gate-timeout path is the **post-restart** rollback, and it is the only one that leaves the app running. **The two paths differ in exactly the property that matters, and only one had ever been exercised.**
 
-⛔ **FIX 10's `robocopy /MIR` restore STILL has never successfully executed.** It aborted on the lock before doing any work. [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §7's gap has moved, not closed.
+✅ **CLOSED BY §0.5 (2026-08-24).** ~~FIX 10's `robocopy /MIR` restore STILL has never successfully executed. It aborted on the lock before doing any work.~~ It has now executed successfully, and the restored binaries hash-match the 2026-08-22 archive. [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §7's gap is finally closed rather than moved.
 
 ### 0.3 The fix, in order
 
@@ -65,6 +65,37 @@ Deploy step 8 restarts the app; the gate then fails; `Invoke-Rollback` tries to 
 4. Stop the instance again.
 
 ✅ **The step-8 watch is COMPLETE (§1.4), so the deploy embargo that deferred this has lifted.** The fix itself is written, reviewed and pushed; only this verification is owed.
+
+### 0.5 ✅ §0.4 EXECUTED 2026-08-24 — PASSED, and the recovery path is finally proven
+
+**Run against the retired box `i-08c740e22d507667d`, negative build `B8BE290F…` (the `rbRepeat` fix backed out on a throwaway branch, since deleted). Exit code 2, which is the PASS condition — a green deploy would have invalidated the test.**
+
+```
+=== 4. stop the app ===
+OK    app stopped (pre-deploy)
+=== 9. acceptance gate ===
+FAIL  gate did not pass within 12 minutes
+OK    app stopped (before restore)          <-- THE FIX
+=== restore from _deploy_backup ===
+OK    restored from backup -- all six items verified present
+OK    relaunched (LAUNCH_SESSION=2)          <-- single value, not "2 2"
+```
+
+**Compare to the same code path on 2026-08-22:** `FAIL RESTORE ITSELF DID NOT CONFIRM … being used by another process`, then `LAUNCH_SESSION=2 2` and 28 consecutive cast exceptions.
+
+| Claim | Evidence |
+|---|---|
+| Rollback stops before restoring | `OK app stopped (before restore)` — **no file lock** |
+| `robocopy /MIR` executes | `OK restored from backup -- all six items verified present` — **first ever successful execution** |
+| Exactly one process | **`procs=1` on every poll of BOTH gates**; zero cast errors, zero `2 2`, zero `procs=2` |
+
+⭐ **An independent check that was not planned:** the restored `exe` hashes to `C934DD7D38B2DD15…` and the `dll` to `0FF3553647A2180A…`, and **both match the `_manual_backup` entries in the 28-file archive manifest taken 2026-08-22.** The restore was byte-correct, not merely "six items present."
+
+**Box afterwards:** one process, settings back to **v66**, `fonts` flat (no FIX 10 nesting), backup intact at 6 items. Instance stopped again.
+
+⚠ **ONE HONEST NUANCE — this run did NOT reproduce the one-row signature.** Its gate failed at `rowsAfterRestart=0`, not `1`; the box had been down ~41 h, so gap repair probably consumed the window. **§0.4 proves the ROLLBACK path; V2 on 2026-08-22 proves the ONE-ROW discrimination (28 polls stuck at `rows=1`).** Together they cover both. **Neither run covers both on its own** — do not cite this one as evidence the gate discriminates a single-shot start.
+
+⚠ **A prerequisite worth recording for anyone repeating this:** a rebooted box has NO logged-on session, and the §2.1 launch mechanism needs one. `schtasks /run` returns **SUCCESS** and produces **zero processes** — measured. Someone must RDP in once and DISCONNECT (not sign out) before the app can be launched. `Start-RemoteApp` asserts the process count afterwards, so it catches the false success rather than reporting it.
 
 ---
 
@@ -223,8 +254,8 @@ FIX 1, 6, 7, 8, 10, plus this session's rollback-lock defect and the two-instanc
 ## 6. What is NOT done
 
 - ✅ **Step 8 — DONE and PASSED**, 22 h 27 m, see §1.4. That also discharges V4 of [`deploy-acceptance-gate-cadence-spec.md`](deploy-acceptance-gate-cadence-spec.md) §5.
-- ⛔ **THE ONE THING STILL OWED: §0.4** — verify the four-site fix against a **deliberately failing deploy**, on the **retired** box, not production. The fix itself (`30ca04d`) is written, reviewed and pushed.
-- ⛔ **The rollback path has still never completed successfully**, and `robocopy /MIR` has still never executed. §0.4 is what closes that.
+- ✅ **§0.4 — DONE and PASSED 2026-08-24.** The rollback path has now completed successfully end to end, `robocopy /MIR` has executed for the first time, and the restored binaries hash-match the archive. Evidence in §0.5.
+- ✅ **Nothing on the deploy tooling is outstanding.** Both remaining items below are LATENT and need trader rulings, not builds.
 - ⚠ **The book's `Timestamp` column is LOCAL time, not UTC** — §7 below. Dormant while every host is UTC; **a decision, not a cleanup**; and the CLI port is what makes it live.
 - ⚠⚠ **`_evalCache` — still no spec, and it now has a CLOCK.** Confirmed UNBOUNDED from source (`LivePerformanceTracker.vb:118`; no `Remove`/`Clear`/`Take` of any kind). **The code did not change — the box did.** [`seat-handover-2026-08-22.md`](seat-handover-2026-08-22.md) §4's "years of headroom" was measured against ~496 MB free on a 2 GB t3.small; the collector now runs a 1 GB t2.micro with ~150 MB free. File growth **measured at 0.29 MB/day**; the in-memory rate is **not** measured, so the runway is **roughly 8–17 months** on a 1×–2× multiplier, not "years". ⛔ **The §4 landmine is unchanged and now dated: `WriteEvalCache` rewrites the whole file with `append:=False` from five call sites, so trimming the list TRUNCATES `analysis_eval_cache.csv`. Decoupling the list from the file is the work, and it comes first.** **Do not "just trim it."**
 - **Other open trader decisions, untouched:** the absorption D-table ([`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 — attack `pullFrac` first) and the CLI-port reversal not yet written into [`roadmap.md`](roadmap.md).
