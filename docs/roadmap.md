@@ -28,25 +28,24 @@
 
 ---
 
-## 2. State snapshot — **2026-08-07, verified in the tree**
+## 2. State snapshot — **2026-08-24. Replaced, not appended, per the maintenance rule above.**
 
-Everything here was checked against code or data on the date shown, not inherited from prose. *(The 07-02 → 07-22 snapshot log this replaced is verbatim in [`history-archive.md`](history-archive.md) §H.)*
+⚠ **Read the provenance column, not just the value.** The 2026-08-07 snapshot this replaces claimed *"verified in the tree"* across every row, and by 2026-08-24 six of its rows were stale — settings **three versions** behind, push state wrong, and both "next free" counters off by one in the direction that makes an implementer collide with a live family. **A blanket "verified" header does not survive the document ageing; a per-row source does.**
 
-| | |
-|---|---|
-| **Settings** | **v65**, tracked. `settings.json:2` |
-| **Push state** | **ahead 1** — `8b488cc` (the 08-05 handover doc) is unpushed |
-| **Boundary state** | ⚠ **OPEN — the v65/D3 ASIA arming window**, live on both boxes since **2026-08-01 19:02:31Z**. This is the window §5 rule 1 governs |
-| **Collectors** | AWS live on v65 (`09c747f8`), capturing tape since 2026-08-01 17:50Z. **Local Debug ran 2026-08-06 23:11 → 2026-08-07 06:27** — it is back in the pool |
-| **Local capture** | OFF in **both** `bin\Debug` and `bin\Release` (overlay in each). Trader policy: run **Debug** locally — latest build, tape off, contributes CSV rows |
-| **Book (local)** | 10,512 rows, 2026-07-03 → 2026-08-06, **149 weekday STRONG** |
-| **Book (AWS copy in hand)** | ⚠ **CORRECTED 2026-08-12 — this row said the AWS trade store "has never been copied back at all". It has.** Copy-backs have run; the **2026-08-12** one is in hand and **not yet merged** (its August file holds **307,141** rows against the repo's 278,761). Re-check the CSV's own end date before quoting it |
-| **Candle/trade store** | ⚠ **CORRECTED 2026-08-12 — this row said "2026-01…2026-07 only, no August data". Wrong.** The repo store holds July **122,018** and August **278,761** trade rows. ⚠ **But the store has THREE ERAS and any tape-derived measure must split on them** — identity-less (before 2026-08-10 14:08) · identified but ~50 % complete **and biased toward dropping sweep legs** (to 2026-08-11 17:18) · identified and complete (after) |
-| **Next free fixture family** | ⚠ **A56** — **CORRECTED 2026-08-12; this row said A53, and A53a–h plus A55a–g already exist.** An implementer trusting the old value would have collided with a live family. **A55g is the high-water mark.** Re-check: `Select-String verify/ordercheck/Program.vb -Pattern '\bA[0-9]{2}[a-z]_'` |
-| **Next free hard constraint** | **HC28** (HC27 is the high-water mark) |
-| **F3 observational watch** | ⚠⚠ **THIS ROW CONFLATES TWO DIFFERENT WATCHES AND NEEDS RESOLVING — flagged 2026-08-12, not fixed.** Its *description* (EXIT GUARD strip vs HOLD\EXIT row corroboration during holds) is the **2026-07-02 audit-fixes F3** — see [`audit-fixes-2026-07-02-spec-back.md`](audit-fixes-2026-07-02-spec-back.md) and [`history-archive.md`](history-archive.md). Its *status* ("unevaluable; see the queue") is the **B4b F3 trigger** — the LONDON structural-target inversion, which needs cap-bucket segmentation. **They are not the same watch.** ⚠ **Only the B4b one was RETIRED on 2026-08-12** ([`w6-1-london-ruling-2026-07-31.md`](w6-1-london-ruling-2026-07-31.md) §3). **The 2026-07-02 EXIT GUARD watch is NOT retired and its state is unverified** — someone must read it and say which of the two this row is meant to track |
+| | | Source |
+|---|---|---|
+| **Settings** | **v68** | ✅ Tracked repo-root `settings.json` line 2, read 2026-08-24 |
+| **Push state** | **In sync.** `## master...origin/master`, clean, HEAD `6a72bf7` | ✅ `git status -sb`, run 2026-08-24. ⛔ **Never inherit this — re-run it** |
+| **Boundary state** | ⚠ **The v65/D3 ASIA arming window is CLOSED** — watch READ and PASSED 2026-08-11 (fire 10.97 %, same-side 89.47 %). **The last ⚠ boundary opened is v66's OBV `trend_gate` 18 → 23**, shipped and deployed 2026-08-10. **v67 was ruled NOT a boundary; v68 defaults to byte-identical.** ⚠ **Whether a v66 post-ship watch is live was NOT verified here** — read `DeribitIndicatorProject.md` §15's v66 row before claiming the slot under §5 rule 1 is free | 📄 [`trader-tick-queue.md`](trader-tick-queue.md) §0a/§4 + `DeribitIndicatorProject.md` §15. Not re-derived |
+| **Collectors** | ⛔ **Production is `i-0d6c133058876273e` (t2.micro, Server 2019). The old `i-08c740e22d507667d` is TERMINATED** and lives as `ami-0247c8b7275de49ac`. ⛔ **Do not use stale instance IDs.** **Figures are deliberately not restated here** — a box's row count and cadence are *current* facts and belong at their source | 📄 [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) §1. **Not independently verified by the seat writing this row** |
+| **Local capture** | OFF in **both** `bin\Debug` and `bin\Release` (overlay in each). Trader policy: run **Debug** locally — latest build, tape off, contributes CSV rows | 📄 Carried from the 08-07 snapshot, **not re-verified 2026-08-24** |
+| **Books and store** | ⚠ **Row counts deliberately removed.** They were re-stated here four times and corrected twice. **The AWS copy-back is DONE (2026-08-14) and installed** — that unblocked the Kelly trigger, the W6-4 re-run and the first coverage report against the real store. ⚠ **The store still has THREE ERAS and any tape-derived measure must split on them:** identity-less (before 2026-08-10 14:08) · identified but ~50 % complete **and biased toward dropping sweep legs** (to 2026-08-11 17:18) · identified and complete (after) | 📄 [`trader-tick-queue.md`](trader-tick-queue.md) §2 copy-back row + [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §4b |
+| **Next free fixture family** | **A59.** ⚠ **This row read A56 until 2026-08-24 — A56a–g, A57a–e and A58a–c all exist, so it named a live family, the exact collision its own 08-12 correction was written to prevent.** **A58c is the high-water mark** | ✅ Counted in `verify/ordercheck/Program.vb` 2026-08-24. Re-check: `grep -oE '\bA[0-9]{2}[a-z]?_' verify/ordercheck/Program.vb \| sort -u \| tail` |
+| **Next free hard constraint** | **HC29.** ⚠ **This row read HC28 until 2026-08-24 — v67 shipped HC28** (`scoring.min_trades_for_scoring_override`). **HC28 is the high-water mark** | ✅ Counted across `Core/`, `tools/AutoTweaker/`, `verify/` 2026-08-24 |
+| **Two latent defects, both trader DECISIONS not builds** | (1) `analysis_log.csv`'s `Timestamp` is written from **local time** — a hard constraint that collector hosts run UTC, and a live risk for the CLI port (O3). (2) `_evalCache` is **unbounded** and now on an 8–17 month clock; ⛔ **its obvious fix is destructive — `WriteEvalCache` rewrites the whole file with `append:=False` from five call sites.** Decoupling comes first; **no spec exists** | 📄 [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) §2, detail in [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) §6/§7. **Code lines not re-verified here** |
+| **F3 observational watch** | ⚠⚠ **THIS ROW CONFLATES TWO DIFFERENT WATCHES AND NEEDS RESOLVING — flagged 2026-08-12, not fixed.** Its *description* (EXIT GUARD strip vs HOLD\EXIT row corroboration during holds) is the **2026-07-02 audit-fixes F3** — see [`audit-fixes-2026-07-02-spec-back.md`](audit-fixes-2026-07-02-spec-back.md) and [`history-archive.md`](history-archive.md). Its *status* ("unevaluable; see the queue") is the **B4b F3 trigger** — the LONDON structural-target inversion, which needs cap-bucket segmentation. **They are not the same watch.** ⚠ **Only the B4b one was RETIRED on 2026-08-12** ([`w6-1-london-ruling-2026-07-31.md`](w6-1-london-ruling-2026-07-31.md) §3). **The 2026-07-02 EXIT GUARD watch is NOT retired and its state is unverified** — someone must read it and say which of the two this row is meant to track | 📄 Flagged 2026-08-12, **still unresolved 2026-08-24**. ⚠ **A third `F3` exists as an ordinary finding ID in several spec-backs — always name the document** |
 
-**Two dated instruments are blocked on the same thing.** The Kelly trigger (≥406 pooled weekday STRONG, ETA ~2026-08-30) and the W6-4 re-run both need a pooled freeze, and **both are unreadable until an AWS copy-back**. Bundle them into one freeze on one span — that is what keeps the overfit counter honest.
+**Two dated instruments still share one gate — but it is no longer the copy-back.** ⚠ **This paragraph read *"both are unreadable until an AWS copy-back"* until 2026-08-24; the copy-back landed 2026-08-14 and that blocker is SPENT.** The Kelly trigger (**≥406 pooled weekday STRONG**, ETA ~2026-08-30 at the measured 12.4 STRONG/weekday) and the W6-4 re-run both want a **pooled freeze on one span** — bundle them, which is what keeps the overfit counter honest. ⚠ **The Kelly trigger is a forward PROMISE rendered on screen** (*"Actual numbers after next book doubling"*): if the ladder still does not separate, **the line must be re-worded or the block suppressed — it must not silently promise another doubling.**
 
 ### 2b. Shipped ledger — settings versions, newest first
 
@@ -161,7 +160,18 @@ First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry
 
 *(This replaces the spent "Fable window Jul 2–7" schedule and the fully-consumed "month execution order" — both verbatim in [`history-archive.md`](history-archive.md) §H.)*
 
-**Open trader decisions — ✅ NONE.** As of **2026-08-12** every row in [`trader-tick-queue.md`](trader-tick-queue.md) §0a is ruled.
+**Open trader decisions — TWO, and neither is in §0a.** ⚠ **This line read *"✅ NONE"* until 2026-08-24, and it was true only of [`trader-tick-queue.md`](trader-tick-queue.md) §0a's table** — every row there has been ruled since 2026-08-12. **Two decisions have opened SINCE, recorded in [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) §2 rather than in that table:**
+
+| Decision | Why it is a decision and not a cleanup |
+|---|---|
+| **The book's `Timestamp` column is LOCAL time** | On a UTC host the change to `DateTime.UtcNow` is byte-identical in the rendered CSV — but **`DateTime.Kind` moves `Local` → `Utc`**, and `LivePerformanceTracker`, the eval-cache walk and `AnalysisLogger` all need checking first. ⛔ **Rendered-output equivalence is NOT sufficient evidence.** It also changes what is persisted to the book, which is a data-model decision. ⛔ **Standing constraint until ruled: collector hosts run UTC** — and on Linux the `TZ` variable *is* honoured, which is what makes this live for the CLI port (O3) |
+| **`_evalCache` is UNBOUNDED and now has a clock** | ⛔ **The obvious fix is destructive.** `WriteEvalCache` rewrites the **entire** file with `append:=False` from **five** call sites, so "just trim the list" truncates `analysis_eval_cache.csv` — the file Kelly and F1 both read. **Decoupling the list from the file IS the work, and it comes first. No spec exists** |
+
+⛔ **Do not invent work from either.** Both have a destructive or contested obvious fix, which is exactly why they are decisions and not build slots.
+
+**Also owed on this document, and NOT written here because the correcting seat does not hold it:** [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) §5 records a **CLI-port reversal not yet written into this roadmap**. Until someone writes it, O3's "DEFERRED LAST" status in §1 and the "CLI port last" line below are **unconfirmed**, not authoritative.
+
+**Previously closed** — as of 2026-08-12, every row in [`trader-tick-queue.md`](trader-tick-queue.md) §0a is ruled.
 
 **Closed since this line last read "four":**
 
@@ -178,9 +188,11 @@ First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry
 
 > ⚠ **CORRECTED 2026-08-12 — this line used to read "C1-coverage F1 · F2 · F3", and both extra IDs were wrong.** The C1-coverage report has **only F1 and F2**; there is no C1-coverage F3. **F2 is a DECISION, not a build slot** (it is in the open-decisions line above), and the **F3** meant here is the **B4b observational watch**, which is also a decision. ⚠ **`F3` names two unrelated things in this project's docs** — the B4b watch, and a finding ID reused in other spec-backs. Always name the document.
 
-**The one ops action that unblocks the most** — an **AWS copy-back** (CSV *and* store). It is the sole blocker on the Kelly trigger, the W6-4 re-run, the first coverage report against the real AWS store, and resolving the `bin\Release` tape.
+~~**The one ops action that unblocks the most** — an **AWS copy-back** (CSV *and* store).~~ ✅ **DONE 2026-08-14 and INSTALLED — this blocker is SPENT.** The Kelly trigger, the W6-4 re-run and the first coverage report against the real AWS store are all unblocked. ⚠ **Two traps fired during it and are recorded in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §4b — read them before the next one:** July must **not** be copied (the repo file holds rows AWS lacks), and the rule is **CONCATENATE, never dedup on disk** (whole-line dedup would have destroyed ~23,800 genuinely distinct legacy-era rows).
 
-**Sequenced after that:** D1+D2 bundled at one ⚠ boundary once the D3 watch reads · absorption mechanism spec → re-collection → activation gates · A4 whenever the market delivers a cascade · A5 at 30 dates *if* it clears the W6 bar · then the W6 tail (W6-5/W6-7) **only if** a re-run of W6-4 shows a prize · **CLI port last**.
+**Sequenced now:** ~~D1+D2 bundled at one ⚠ boundary once the D3 watch reads~~ ⛔ **that bundle no longer exists — D2 SHIPPED as v66 and D1 is PARKED** (its *unit* is wrong, not its value) · **absorption mechanism proposal — WRITTEN and blind-checked; its §6 D-table awaits a trader tick, and that is the only thing outstanding on it** ⛔ **do not open an implementer session until it is ticked** · A4 whenever the market delivers a cascade · A5 at 30 dates *if* it clears the W6 bar · then the W6 tail (W6-5/W6-7) **only if** a re-run of W6-4 shows a prize · **CLI port last — ⚠ pending the unwritten reversal flagged above.**
+
+**Ready to build with no decision owed** (from [`trader-tick-queue.md`](trader-tick-queue.md) §2): the three weekday filters — **AutoTweaker first, because it is the only surface that WRITES `settings.json`** and it has verifiably never fired · the atomic-write total-primitive swap · **C1-coverage F1** · the CeilingAudit expected-version constant · G12.
 
 ---
 

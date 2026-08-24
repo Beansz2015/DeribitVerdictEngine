@@ -1,5 +1,11 @@
 # DeribitVerdictEngine — Project Handover Document
-**Last updated: 2026-06-11 | Current version: settings.json v31 — engine correctness pass (F1–F9 + CSV v0.5 + data reset) on top of v30 (display polish), v29 (auto-tweaker fixed window), v28 (target-hit metric toggle).**
+**This header deliberately carries NO version number and NO "last updated" date.** It carried *"Last updated: 2026-06-11 | Current version: settings.json v31"* while the tree ran to **v68** — **thirty-seven versions stale, in the document `CLAUDE.md` names as the FIRST session-start read.** Corrected 2026-08-24.
+
+- **For the live settings version, read the tracked repo-root `settings.json` line 2.**
+- **For what each version changed, read §15 below** (most recent five) and [`history-archive.md`](history-archive.md) §E (everything older).
+- **For when this file last moved, read `git log -1 -- docs/DeribitIndicatorProject.md`.**
+
+> **The rule, same as [`architecture.md`](architecture.md)'s header and for the same reason: a doc header must not carry a number that lives somewhere else.** Both failed identically — silently, and in the place a reader trusts most. Structural facts belong in the document; *current* facts belong at their source, with a pointer.
 
 Operational reference for any AI conversation continuing this project. Historical content — pre-v27 settings change rationale, full version history back to v0.33, completed spec bundles, resolved parked observations — lives in `docs/history-archive.md`.
 
@@ -211,7 +217,9 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 
 **Source of truth:** `settings.json` itself + its inline `change_log` array.
 
-Current version: **v64**. Top-level blocks:
+**Current version: read the tracked repo-root `settings.json` line 2** — ⚠ **this line read *"v64"* while the tree ran to v68**, the same rot the header above now documents, in the same file. Corrected 2026-08-24. **Name which copy you read:** `bin\Debug\net8.0-windows\settings.json` is a build artefact and legitimately lags the tracked file until the next build.
+
+The 17 top-level blocks (verified against the tracked file 2026-08-24 — this is a *structural* list, so it belongs here; the version does not):
 - `indicators` (per-indicator parameter blocks; incl. `aggressor_velocity` — v50 #5 build, three-tier tweaker surface, HARD CONSTRAINT 19; `OFI.momentum_*` fenced off the tweaker surface — v50 retune R1, HARD CONSTRAINT 20)
 - `session_volume` (UTC bucket multipliers + per-session `execution_resolution` — v36; + per-session `roc_magnitude_threshold` — v40 Asia/London (B) re-baseline)
 - `resolution_profiles` (per-resolution ROC threshold overrides keyed by "1"/"3"/"5" — v36; 3-min `roc_slope_delta_threshold` re-baselined 0.105→0.06 in v40)

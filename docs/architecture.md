@@ -591,8 +591,10 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
 
 ## Settings Data Flow
 
+*(⚠ This diagram's first node read `settings.json (v17)` until 2026-08-24, against a tree on v68 — **fifty-one versions stale, inside the file whose own header carries the rule against exactly this.** A version number buried in an ASCII diagram is the same defect as one in a header; it just hides better. The block list below is structural and stays.)*
+
 ```
-settings.json (v17)
+settings.json          ← version lives in the file, line 2. Never quoted here
     │
     ▼
 SettingsLoader.Initialise()
@@ -654,7 +656,7 @@ RunScoringPipeline(...)
 
 | Decision | Rationale |
 |---|---|
-| REST polling (not WebSocket) | Simpler implementation; adequate for 1m candle resolution. WebSocket is the highest-impact next upgrade. |
+| ~~REST polling (not WebSocket)~~ — ⚠ **SUPERSEDED, quoted not deleted** | **Original rationale, still the reason the REST path exists:** *"Simpler implementation; adequate for 1m candle resolution. WebSocket is the highest-impact next upgrade."* ⛔ **The second sentence went stale on 2026-06-24 and was still standing on 2026-08-24 — two months describing a shipped migration as the next one, in the row a reader hits first.** WebSocket SHIPPED (P1 v38 → P2 v39 → **cutover v42, 2026-06-24**); `network.transport` is `"ws"` on the live boxes. **REST is now the FALLBACK path, not the primary** — `RestMarketDataSource` behind `IMarketDataSource`, selected by `ResolveSource()`, and the resilience row below still governs it. The next architectural ceiling, if one emerges, is the full-depth **incremental order-book channel** — see `DeribitIndicatorProject.md` §16.4, which is authoritative for that and is where the claim belongs. |
 | API resilience — retry + skip (v18) | Transient Deribit/Cloudflare failures (HTTP 525, timeout) observed during AFK auto-run. `ExecuteWithRetry` in `DeribitClient`: retry-once on 5xx/timeout, return `Nothing` on hard failure. `RunAnalysisAsync` skip-on-any-failure rather than degraded-mode — cleaner calibration CSV, simpler code. 15m failure does not skip: stale MTF cache data is better than no data (15m candles change slowly). Retry-once vs exponential backoff: single retry catches the most common transient flakes without risking overlap with the next auto-run cycle. Both layers preserve the same `GetXxxAsync` call-site contract so WebSocket migration can replace the implementation without changing call sites. |
 | 15m MTF cached with TTL | 15m candles change slowly; re-fetching every 10s run wastes API quota. TTL=60s balances freshness vs. rate limits. |
 | Dual-session VWAP anchor | BTC perpetual has meaningful session breaks at 00:00 UTC and 13:30 UTC. Single-anchor VWAP deviates badly after Asian/EU handoff. |
