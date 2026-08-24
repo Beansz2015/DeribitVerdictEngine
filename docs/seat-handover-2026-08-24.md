@@ -85,13 +85,22 @@ Backing snap   snap-0b5c126dd898c6bd0  completed, 30 GB
 
 ## 2. ⚠ The only two open items — both need a RULING, not a build
 
-### 2.1 The book's `Timestamp` column is LOCAL time
+### 2.1 ~~The book's `Timestamp` column is LOCAL time~~ ⛔ **REFUTED 2026-08-25 — THE BOOK IS UTC. This item is CLOSED as stated.**
 
-`UI/MainForm_Analysis.vb:613` — `verdict.Timestamp = DateTime.Now`. **Full write-up: [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) §7, including the ranked grep taxonomy in §7.6.**
+⛔ **The premise was wrong.** `AnalysisLogger.vb:180` writes the CSV `Timestamp` column from **`DateTime.UtcNow`**, emitted as the first field at `:194`, and `AnalysisLogger.vb` **never reads `VerdictResult.Timestamp` at all**. The eval cache is UTC (`BuildEntry(nowUtc, …)`, serialised `{0:o}`) and the bridge is UTC (`generated_at_utc`).
 
-**Why it needs a ruling rather than a fix:** on a UTC host the change to `DateTime.UtcNow` is byte-identical in the rendered CSV — cheap now, a visible discontinuity later. **But `DateTime.Kind` moves `Local` → `Utc`, and `LivePerformanceTracker`, the eval-cache walk and `AnalysisLogger` all need checking first.** Rendered-output equivalence is *not* sufficient evidence — that is the same reasoning error the one-row acceptance gate made. It also changes what is persisted to the book, which is a data-model decision.
+**`verdict.Timestamp = DateTime.Now` reaches exactly two surfaces, both display:** the rendered `TIME` line (`UI/MainForm_PlaintextSnapshot.vb:80`) and `analysis_output_dump.md` (`UI/MainForm_Analysis.vb:671`), the latter deliberately local — `AnalysisOutputDump.vb:79` computes `TimeZoneInfo.Local.GetUtcOffset(...)` on purpose.
 
-⛔ **Standing constraint until ruled: collector hosts run UTC.** Verify `TZ_ID` on any new box before it collects a row. ⚠ On Windows the `TZ` environment variable is **inert** (verified) — the timezone comes from the registry. On Linux it *is* honoured, which is why the CLI port makes this live.
+**Full refutation, with the table and the downstream consequences: [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) §7.0.** ⭐ **Its §7.6 taxonomy survives and is still good** — *persist > transmit >> elapsed / display*. **Line 613 is a display site, which is the class the taxonomy says not to sweep up.**
+
+⚠ **What this closes and what it does not:**
+
+- ❌ **Not a data-model decision.** Nothing analytical is persisted from it. **There is no trader decision owed here.**
+- ⚠ **The constraint *"collector hosts run UTC"* is NOT justified by this**, and it was relayed to the hostel-app seat on this basis. **It remains sound practice for log correlation and the output dump — but re-ground it or downgrade it to a convention; do not keep citing this defect for it.**
+- ⚠ **The CLI port is not affected by this.** The book does not depend on host local time.
+- **What is left is small:** on a non-UTC host the on-screen `TIME` would read local while the CSV reads UTC. **Arguably correct. If anyone wants it changed it is a display-consistency preference and needs its own spec.**
+
+⚠⚠ **The lesson, recorded because it cost four downstream artefacts:** the finding was traced from the field's *assignment* to an *assumed* consumer, and the consumer was never read. **§7.4 named `AnalysisLogger` as needing checking before a fix — it needed checking before the finding.** **Trace to the write site, not from the assignment.**
 
 ### 2.2 `_evalCache` is UNBOUNDED and now has a clock
 

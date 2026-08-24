@@ -263,7 +263,39 @@ FIX 1, 6, 7, 8, 10, plus this session's rollback-lock defect and the two-instanc
 
 ---
 
-## 7. ⚠ LATENT DEFECT — the book's `Timestamp` column is LOCAL time, not UTC
+## 7. ~~⚠ LATENT DEFECT — the book's `Timestamp` column is LOCAL time, not UTC~~ ⛔ **REFUTED 2026-08-25 — THE BOOK IS UTC. See §7.0.**
+
+### 7.0 ⛔ REFUTATION — read this before acting on anything below
+
+**The central factual claim of this section is wrong, and the whole section rests on it.** §7.1 states that *"`verdict.Timestamp` becomes the `Timestamp` column of `analysis_log.csv`"*, and §7.4 concludes *"Only line 613 reaches persisted data."* **Neither holds.** Checked 2026-08-25 by direct read, three independent ways:
+
+| Surface | What actually writes it | Clock |
+|---|---|---|
+| **`analysis_log.csv` `Timestamp` column** | `AnalysisLogger.vb:180` — `Dim ts As String = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")`, emitted as the first field of `sw.WriteLine(String.Join(",", ts, …))` at `:194` | ⭐ **UTC** |
+| `analysis_eval_cache.csv` | `LivePerformanceTracker.BuildLiveEntry(v, r, cfg, nowUtc)` → `BuildEntry(nowUtc, …)`; serialised `{0:o}` | ⭐ **UTC** |
+| `verdict_signal.json` | `SignalEmitter` — `generated_at_utc` | ⭐ **UTC** |
+| Rendered `TIME` line | `UI/MainForm_PlaintextSnapshot.vb:80` reads `v.Timestamp` | Local — **display** |
+| `analysis_output_dump.md` | `UI/MainForm_Analysis.vb:671` passes `timestamp:=verdict.Timestamp` | Local — **display, and deliberate**: `AnalysisOutputDump.vb:79` explicitly computes `TimeZoneInfo.Local.GetUtcOffset(...)` |
+
+⛔ **`AnalysisLogger.vb` never reads `VerdictResult.Timestamp` at all — zero references in the file.** `ts` is assigned once and never reassigned. There is one `LogRun` and one append write.
+
+**So `verdict.Timestamp = DateTime.Now` (`UI/MainForm_Analysis.vb:613`) reaches exactly two surfaces, both display, one of which wants local on purpose.**
+
+**What follows from the refutation, stated plainly because these were acted on:**
+
+- ❌ **§7.2 is false.** The stamped hour and the session bucket do **not** come from two different clocks. Both are UTC. There is no latent self-inconsistency.
+- ❌ **§7.3's first bullet is false.** Changing the box timezone would **not** shift a single book row — the rows are written from `DateTime.UtcNow` regardless of host timezone.
+- ❌ **§7.3's second bullet is false as stated.** The Linux CLI port does not make *this* live, because the book does not depend on host local time.
+- ⚠ **§7.5's hard constraint is not justified BY THIS.** *"Collector hosts run UTC"* remains sound operational practice — log correlation, the output dump, and human sanity when reading a box — **but the reason recorded here is not a real one, and the constraint was relayed to the hostel-app seat on this basis.** It should be re-grounded or downgraded to a convention.
+- ✅ **§7.6's TAXONOMY SURVIVES INTACT.** *persist > transmit >> elapsed / display*, and *"a blanket ban on `DateTime.Now` is the wrong rule"*, are both good and were validated on a second codebase. ⭐ **The taxonomy is right; this instance was mis-classified against it.** Line 613 is a **display** site, which is exactly the class §7.6 says not to sweep up.
+
+⚠⚠ **THE LESSON, and it is the one this project keeps paying for.** The finding was traced from the field's *assignment* (`verdict.Timestamp = DateTime.Now`) to an *assumed* consumer, and the consumer was never read. **`AnalysisLogger` was named in §7.4 as needing checking before a fix — it needed checking before the FINDING.** ⛔ **A defect report must trace to the write site, not from the assignment.** Everything downstream — a hard constraint, a queued trader decision, a claim about the CLI port, and guidance sent to another team — was built on one unread line.
+
+⚠ **What is genuinely left, and it is small:** on a non-UTC host the on-screen `TIME` line would show local while the CSV shows UTC. That is arguably correct behaviour rather than a defect. **If anyone still wants line 613 changed, it is a display-consistency preference, not a data-model decision — and it should be re-specced as one.**
+
+*(The original section follows verbatim, per the quote-and-label convention. It is preserved because the taxonomy in §7.6 is worth keeping and because the reasoning error is instructive.)*
+
+---
 
 **Found 2026-08-23**, not by a test, but because the hostel app's seat asked whether co-locating on the collector box carried a timezone risk. **Their app's bug was elsewhere; the question found ours.**
 
