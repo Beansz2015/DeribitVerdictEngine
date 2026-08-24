@@ -32,7 +32,34 @@
 | Cadence | **39.3 rows/hour** over the last ~19.6 h; gap now-lastrow **1.8 min** |
 | Uptime | **1 d 18 h — no restart since the cutover** |
 | WS health | **zero DEGRADED / DOWN since 2026-08-22 16:03Z** — 42 hours clean |
-| Memory | `pagesOUT/s` **0.0**, ~125–139 MB available sustained |
+| Memory | ⛔ **CORRECTED 2026-08-24 — this cell read `pagesOUT/s` 0.0 and that is NOT a property of the box.** Two independent 30-sample sweeps the same day each returned **2 of 30 non-zero**, bursts of **169–468 pages/sec**; steady state is 0.0 between them. Available **~139 MB mean, 114–119 MB trough**; page file flat **39.5 %**. ⚠ **The 0.0 was never refuted by these sweeps — it was never strong evidence.** At the measured **6.7 % of samples**, the chance a 30-sample sweep returns all-zero is `0.933^30` ≈ **12.6 %, about 1 in 8.** **An all-zero draw got written down as a property.** ⛔ **Quote the non-zero COUNT and the MAX, never a mean** — sweep B's mean of 29.35 is one burst divided by thirty and describes nothing that happens. ⚠ **The cause is UNATTRIBUTED** — candidates are Defender real-time protection, the SSM agent, and the app's own GC; a settle-60s-then-sample test ruled out probe *startup* only, and no SSM-attached instrument can separate observer from observed. **Settling it needs the box to write counter samples to a local file with no session attached, fetched afterwards.** See §1.1a |
+
+### 1.1a ⚠ The memory baseline — measured 2026-08-24, and it corrects §1.1's own earlier cell
+
+**Why this exists: the `pagesOUT/s` 0.0 figure became load-bearing for someone else's decision.** The hostel app's parallel run carries the stop condition *"if `pagesOUT/s` goes sustained non-zero, I stop"* — measured against a baseline of zero that the box does not actually have. **A wrong baseline would have attributed the box's own bursts to their app.**
+
+**Two independent 30-sample sweeps at 10 s intervals, both taken deliberately away from a gap-repair pass:**
+
+| | Sweep B, 13:05:43 → 13:10:33 | Sweep C, 13:12:18 → 13:17:18 |
+|---|---|---|
+| `pagesOUT/s` non-zero | **2 of 30** | **2 of 30** |
+| Values | 468.5 · 412.0 | 465.3 · 168.9 |
+| Position in window | 0 s and 30 s in | **50 s and 3 m 50 s in** |
+| Available MB | min 114 · mean 138 · max 180 | min 119 · mean 139 · max 186 |
+
+⚠⚠ **A hypothesis was raised and REFUTED inside this exercise, recorded because that is the point.** Sweep B's bursts both landed in the first 40 s alongside available memory falling 180 → 114 MB, so they were called probe startup. **Sweep C settled 60 s before sampling to remove exactly that — and still produced two bursts, one nearly four minutes in.** The startup explanation is dead.
+
+**The baseline of record, and the three numbers that would make a change REAL:**
+
+> Steady state **0.0**. Bursts of **~170–470 pages/sec at ~6.7 % of 10-second samples**. Available **~139 MB mean, 114–119 MB trough**, on 1024 MB. Page file **flat at 39.5 %**.
+>
+> ⛔ **An isolated non-zero reading proves nothing.** What would be real: the burst **rate** rising materially above ~7 % of samples · the page file moving off 39.5 % · the available-memory trough falling below ~114 MB.
+
+⛔ **The instrument is the open problem.** `Get-Counter` runs inside the SSM session for the whole window, so the observer is present at every sample — and this box's observer effect is measured (a 59–77 MB probe on ~93 MB free *caused* the paging it reported). **No SSM-attached instrument can separate the two.** The fix is to have the box write counter samples to a local file on its own schedule with no session attached, and fetch the file afterwards. **Not built.**
+
+**Other figures measured the same day:** app **137.4 MB private**, PID 4180, **session 2**, started 2026-08-22 16:02:46Z · **MsMpEng 321.8 MB private** — the largest single consumer on the box, 2.3× the app · `TZ_ID` **UTC**, confirmed by `tzutil /g` and by `NOW_UTC` equalling `NOW_LOCAL` · Defender runs a **daily quick scan at ~04:43Z** (configured 02:00, but `RandomizeScheduleTaskTimes` is on, so the scheduled-task table is the truth, not the preference).
+
+⚠ **Gap-repair anchor, computable and NOT fixed:** repair fires once on process start then every `gap_repair_interval_hours` (6). From the 16:02:46Z start that is **04:02:46 · 10:02:46 · 16:02:46 · 22:02:46 UTC** — **and it re-anchors on every restart, so a deploy moves it.** Recompute from `(Get-Process DeribitVerdictEngine).StartTime` rather than quoting these times.
 
 ### 1.2 The old collector — GONE, lives as an AMI
 
