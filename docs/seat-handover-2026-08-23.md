@@ -59,7 +59,7 @@ Deploy step 8 restarts the app; the gate then fails; `Invoke-Rollback` tries to 
 
 ⭐ **Use the retired old box as the test target.** It is now ideal, and for a non-obvious reason: **it runs v66, which has no `auto_run.start_engaged`, so it comes up running-but-idle and will NEITHER collect NOR fork the book.** Its data is archived and snapshotted, so it is fully disposable.
 
-1. `aws ec2 start-instances --region eu-west-2 --instance-ids i-08c740e22d507667d`
+1. ⛔ ~~`aws ec2 start-instances --region eu-west-2 --instance-ids i-08c740e22d507667d`~~ **THAT INSTANCE NO LONGER EXISTS — terminated 2026-08-24 after this verification passed. Launch from the AMI instead; the exact command and why the parameters matter are in §8.**
 2. Deploy a knowingly-bad build to it (the V2 recipe in §3.3 below) → the gate must fail → **watch the rollback actually stop the app, restore, and relaunch ONE instance.**
 3. Confirm exactly one process afterwards, and that `robocopy /MIR` genuinely ran.
 4. Stop the instance again.
@@ -211,9 +211,9 @@ poll: rowsAfterRestart=2 spanSec=61    <-- the NEW gate passes here
 | Thing | State |
 |---|---|
 | **New production** `i-0d6c133058876273e` | t2.micro, Server 2019, `C:\DeribitEngine`, **v68 + the rbRepeat fix** (exe built 2026-08-22 15:27Z), collecting at ~0.6 min gap |
-| **Old production** `i-08c740e22d507667d` | **`stopped`** 16:43:34Z. Volume `vol-03c79bb3716c94809` attached and intact |
-| **Termination protection** | ✅ **`DisableApiTermination = True`** — set because `DeleteOnTermination` is `true`, so one mistaken terminate would have destroyed the volume with no confirmation step |
-| **Snapshot** | ✅ **`snap-0a17195c58e850cbd`**, `completed` 100%, 30 GB, standard tier |
+| **Old production** `i-08c740e22d507667d` | ⛔ **TERMINATED 2026-08-24 — see §8.** ~~`stopped` 16:43:34Z, volume attached and intact~~ Replaced by AMI `ami-0247c8b7275de49ac`; `vol-03c79bb3716c94809` destroyed with it |
+| **Termination protection** | ~~`DisableApiTermination = True`~~ **Lifted deliberately 2026-08-24 as the last checkpoint before the planned terminate (§8). Moot now — the instance is gone.** It did its job: it stood for two days while the box was the §0.4 test target |
+| **Snapshot** | ~~`snap-0a17195c58e850cbd`~~ **superseded and deleted 2026-08-24.** The live artifact is **`snap-0b5c126dd898c6bd0`**, which backs `ami-0247c8b7275de49ac` — ⛔ **deleting THAT one silently breaks the AMI.** See §8 |
 | **Local archive** | `C:\Dev\collector-cutover-2026-08-22\production-full-archive\` — **all 28 files, hash-verified**, 112,328,075 B |
 | **Local cutover copies** | same parent dir: the 14:03 fetch, the 15:36 pre-stop fetch, and the hash-verified `final\` set |
 
@@ -345,3 +345,65 @@ DateTime.Now · DateTime.Today · DateTimeOffset.Now · Date.Now
 ⛔ **Why a blanket ban on `DateTime.Now` is the wrong rule:** it flags all 19 calls across both codebases and buries the 3 that matter. **5 of our 6 sites are correct as written** and a sweep that "fixed" them would be pure churn — `AnalysisOutputDump.vb:79` in particular *deliberately* computes `TimeZoneInfo.Local.GetUtcOffset(...)` and must not be touched.
 
 **Apply this at:** any host migration, any new collector box, and — most importantly — **the Linux CLI port**, where `TZ` becomes live and the assumption that has protected us stops holding.
+
+---
+
+## 8. ⛔ The old collector box is TERMINATED — it lives as an AMI now
+
+**Done 2026-08-24, after §0.5 passed.** `i-08c740e22d507667d` no longer exists and `vol-03c79bb3716c94809` was destroyed with it (`DeleteOnTermination` was `true`). **Anywhere in this document that says "start the retired box" is superseded by this section.**
+
+### 8.1 What replaces it
+
+```
+AMI            ami-0247c8b7275de49ac      "deribit-collector-v66-retired-20260824"
+Backing snap   snap-0b5c126dd898c6bd0     completed, 30 GB, gp3
+```
+
+### 8.2 ⚠ The launch parameters — RECORDED HERE BECAUSE THEY ARE OTHERWISE UNRECOVERABLE
+
+**A terminated instance ages out of `describe-instances` in about an hour, taking its network and IAM configuration with it.** These were captured *before* termination for exactly that reason:
+
+| | |
+|---|---|
+| Instance type | `t3.small` |
+| AZ / Subnet | `eu-west-2c` / `subnet-04aa80d58b46f6b8a` |
+| Security group | `sg-06d4dc051bda56562` |
+| Key pair | `DeribitKey` |
+| **IAM instance profile** | **`EC2-SSM-Access`** — ⛔ **without this a relaunched box has NO SSM and is unmanageable remotely** |
+| Original source AMI | `ami-03f84cec9560bfc97` |
+
+**Relaunch:**
+
+```
+aws ec2 run-instances --region eu-west-2 --image-id ami-0247c8b7275de49ac \
+  --instance-type t3.small --subnet-id subnet-04aa80d58b46f6b8a \
+  --security-group-ids sg-06d4dc051bda56562 --key-name DeribitKey \
+  --iam-instance-profile Name=EC2-SSM-Access --count 1
+```
+
+### 8.3 ⚠⚠ TWO THINGS A RELAUNCHED BOX WILL DO THAT LOOK LIKE FAILURES
+
+Both were measured on 2026-08-24 and both cost time to rediscover. They are also in the AMI's own description so they travel with the artifact.
+
+1. ⛔ **The app does NOT auto-start.** There is no scheduled task and no startup entry — verified by `Get-ScheduledTask` and `Win32_StartupCommand`, both empty. The box that ran production for four days had simply been launched by hand after boot. **A fresh boot gives `APP_COUNT=0`, and `deploy`/`fetch` both abort because they resolve the install dir from `Get-Process`.**
+2. ⛔ **A freshly booted box has NO logged-on session, and the §2.1 launch mechanism needs one.** `schtasks /create … /it` plus `schtasks /run` returns **`SUCCESS`** and produces **zero processes** — measured, not inferred. **Someone must RDP in once and DISCONNECT (not sign out)**, leaving a `Disc` session, before the app can be launched at all. ⭐ `Start-RemoteApp` asserts the process count afterwards, so it reports this honestly rather than passing the false `SUCCESS` through — the fix earning its keep on a failure mode nobody designed it for.
+
+### 8.4 Why the AMI and not the stopped instance
+
+Measured EU (London) rates: gp3 **$0.0928/GB-mo**, snapshot **$0.053/GB-mo**.
+
+| Option | $/year | Durability | Relaunch |
+|---|---:|---|---|
+| Stopped instance + snapshot (previous state) | **52.21** | region | `start-instances` |
+| Stopped instance, no snapshot | 33.41 | ⚠ **AZ-scoped only** | `start-instances` |
+| **AMI, instance terminated (chosen)** | **18.80** | region | **one `run-instances`** |
+
+⭐ **An EBS volume is AZ-scoped; a snapshot is region-scoped.** Keeping the stopped instance and deleting the snapshot would have kept the costlier, *less* durable half — which is why that option was declined.
+
+### 8.5 What still backs this up
+
+- `ami-0247c8b7275de49ac` + `snap-0b5c126dd898c6bd0` — the machine.
+- **The 28-file archive at `C:\Dev\collector-cutover-2026-08-22\production-full-archive\`** — hash-verified again immediately before termination, 112,328,075 bytes. Holds the things the migration deliberately did *not* carry: `analysis_output_dump.md`, production's v66 `settings.json`, `ohlc_1m_cache.csv`, the July report pairs, `tools\ws_trade_probe_20260811-144742.csv`, and `_manual_backup\`.
+- The book and store themselves live on the **current production box**, carried and hash-verified during the cutover.
+
+⚠ **`snap-0a17195c58e850cbd`** — the original standalone snapshot from 2026-08-22 — was deleted after termination, since the AMI's backing snapshot supersedes it. ⛔ **Do not confuse the two: `snap-0b5c126dd898c6bd0` backs the AMI, and deleting it silently breaks `ami-0247c8b7275de49ac` while leaving it listed as `available`.**
