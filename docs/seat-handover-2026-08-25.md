@@ -10,13 +10,19 @@
 
 ---
 
-## 0. ⭐ FIRST TASK — **#5, C1-coverage F1.** The spec is written; it needs a RULING, then a build.
+## 0. ⭐ FIRST TASK — **#5, C1-coverage F1.** ✅ RULED IN FULL. It is a BUILD, and it is ready to hand over.
 
-**Spec: [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md).**
+**Spec: [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md) — status BUILD-AUTHORIZED 2026-08-25.**
 
-⛔ **Step 1 is the trader ruling on §4 — D-1…D-6, six COUPLED decisions.** Do not open an implementer session until they are ticked. **D-5 is the one the spec is least sure of and says so:** reclassifying a trailing-edge hour to `Defect` changes the CLI's `--strict` exit code and could fail a scheduled job on first run; the alternative is a seventh `HourClass`, honest but it grows the enum, the D-3 combine and every count surface. **That is a trader call.**
+~~*Step 1 is the trader ruling on §4 — D-1…D-6, six COUPLED decisions. Do not open an implementer session until they are ticked.*~~ ✅ **DONE — and it took TWO ticks, not one.** The first ruled D-1…D-6. A post-tick re-read of `tools/BacktestRunner/CoverageReport.vb` then **re-opened D-3 and D-6** and raised **five follow-on sub-decisions (D-5.1…D-5.5)** that the ruling of D-5 had silently created. All eleven are now closed.
 
-**Step 2 is the build. Sonnet, effort HIGH, one session.**
+⛔ **Hand the implementer that spec's §4b — the single build list. Its §4 is kept as the pre-tick record and still recommends the LOSING option on D-3 and D-6.** A reader who builds from §4 produces a `-1` sentinel and folds the header counters, which is the exact opposite of the ruling. The spec says so at the top and again at §4, but say it in the brief too.
+
+⭐ **D-5 went to (c), the new `HourClass`** — so ~~*"changes the CLI's `--strict` exit code and could fail a scheduled job"*~~ **no longer applies.** `--strict` stays keyed on `HourClass.Defect` alone, and §7 of that spec now requires **proving** the exit code unmoved rather than managing it as a risk.
+
+⚠⚠ **The finding worth carrying, because it overturned that spec's own recommendation:** D-6's argument was that leaving `ObservedLongestGapMs`/`GapBreachHours` alone makes the report under-report. **It is false by construction** — `AccumulateHourStats` charges the WHOLE gap to the hour containing the ENDING trade, so the full gap is always ≥ the trailing edge and is already recorded. Folding is a **no-op** on one counter and a **double-count** on the other. ⭐ **A recommendation written from the mechanism can still be wrong about the arithmetic; the fixture that settled it (`A49u`, 420,000 ms vs 299,999 ms) was already in the tree.**
+
+**The build. Sonnet, effort HIGH, one session.** Unchanged by the amendment — the added items are mechanical. **What keeps it at HIGH is that two ways to get it wrong fail SILENTLY:** `D-5.1`'s precedence (a split hour would report `Captured`, reproducing the SH-1 defect) and `D-4`'s superset trap (a store-end taken by `Max()` over the stats dictionary un-exempts the true last hour).
 
 ⭐ **The one thing to carry into the ruling: the crux is NOT the bound the origin ruling names.** [`c1-session1-review-2026-08-04.md`](c1-session1-review-2026-08-04.md) §3 says bound the trailing gap against `ResolveBoundaryUtc`. **That is necessary and NOT sufficient** — it returns `toUtc` unchanged when there is no evidence (`CoverageReport.vb:665`), so it does not protect `A49e` or `A49g`. **"We stopped observing" and "the tape simply ends" are two different exclusions**, and a fix with only the first false-flags the last hour of every run without `ws_health` evidence — which is most manual invocations.
 
@@ -53,7 +59,7 @@
 
 | # | Item | Model / effort | Note |
 |---|---|---|---|
-| **5** | ⭐ **C1-coverage F1 trailing edge** | **Sonnet HIGH** | ⛔ **§4 D-table needs a tick FIRST.** §0 above |
+| **5** | ⭐ **C1-coverage F1 trailing edge** | **Sonnet HIGH** | ✅ **RULED IN FULL — BUILD-AUTHORIZED.** Build from that spec's **§4b**, never its §4. §0 above |
 | 6 | `WsTradeProbe` through the shared trade reader (S-1) | Sonnet medium | Fourth trade-parse site; the probe is a delivery gate |
 | 7 | Eval-cache backfill — identity key **and** the loop bug (S-4) | Sonnet medium | ⚠ Both halves, or state why one |
 | 8 | **A54a** — JSON↔POCO reflection drift guard | Sonnet medium | ✅ **RULED 2026-08-11** (option d + scoped b). Two confirmed instances of the class |

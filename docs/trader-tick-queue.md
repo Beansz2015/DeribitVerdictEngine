@@ -10,9 +10,11 @@
 
 > ## ⛔ STATE BANNER — 2026-08-25. Read this before believing any row below.
 >
-> ⭐ **CURRENT STATE READ: [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md).** Settings **v68**, master ⛔ **AHEAD 5 AND UNPUSHED** — verify with `git status -sb`.
+> ⭐ **CURRENT STATE READ: [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md).** Settings **v68**. ~~master ⛔ **AHEAD 5 AND UNPUSHED**~~ ⛔ **THAT WAS ALREADY STALE WHEN WRITTEN — corrected 2026-08-25.** Verified `HEAD` = `origin/master` = `9c43a52`, tree clean and **in sync**; the five commits plus the handover itself were pushed. ⚠ **Push state is the one fact in this banner that rots hourly — `git status -sb` is the answer, never this line.**
 >
-> ⭐ **FIRST TASK: #5, C1-coverage F1** — [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md). ⛔ **Its §4 D-1…D-6 need a trader tick BEFORE any build.** Then Sonnet, effort HIGH.
+> ⭐ **FIRST TASK: #5, C1-coverage F1** — [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md). ✅ **RULED IN FULL 2026-08-25 AND BUILD-AUTHORIZED — nothing is owed by the trader.** ~~*Its §4 D-1…D-6 need a trader tick BEFORE any build.*~~ **Eleven decisions, ruled across two ticks:** the first took D-1…D-6, then a post-tick code read **re-opened D-3 and D-6** and raised **D-5.1…D-5.5**, all since ruled. ⛔ **The implementer builds from that spec's §4b, NOT its §4** — §4's "My read" column still recommends the losing option on D-3 and D-6, and is kept only as the pre-tick record. **Sonnet, effort HIGH, one session.**
+>
+> ⚠ **The headline finding, because it cost a recommendation:** the spec's own D-6 argument — that leaving `ObservedLongestGapMs`/`GapBreachHours` alone under-reports — **is false by construction.** `AccumulateHourStats` charges the WHOLE gap to the hour containing the ENDING trade, so the full gap is always ≥ the trailing edge and is already recorded. Folding is a **no-op** on one counter and a **double-count** on the other.
 >
 > ⛔ **ONE OF THE TWO OPEN TRADER DECISIONS IS CLOSED** — the book's `Timestamp` column is **UTC**, not local. [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) §7.0 carries the refutation. **Nothing to rule.**
 >
