@@ -165,7 +165,7 @@ For the full annotated directory tree and data flow diagram, see `docs/architect
 ### Tier 2
 | Indicator | Method | Config keys |
 |---|---|---|
-| Bid-Ask Spread | order book | `cfg.Indicators.Spread.WidePenaltyThresholdBps`. WIDE penalty in Step 2. |
+| Bid-Ask Spread | order book | `cfg.Indicators.Spread.WideThresholdBps` (JSON `wide_threshold_bps`, default 5.0). WIDE penalty in Step 2. ⚠ **This cell named `WidePenaltyThresholdBps` until 2026-08-25 — no such property has ever existed.** Anyone grepping the documented name found nothing, and it cost the 2026-08-11 seam auditor a false finding mid-sweep. Verified against `Core/Settings/EngineSettings.vb:632`. |
 | OFI | CalcOFI | `cfg.Indicators.OFI.BookDepth` (5); `BuyDominantRatio` (2.0) / `SellDominantRatio` (0.5). |
 | OFI Momentum | CalcOFIMomentum | RISING/FALLING/FLAT modifier. Ring buffer `_ofiHistory` (max=10). |
 | Liquidations | CalcLiquidations | `cfg.Indicators.Liquidations.DominanceRatio` (2.0). |

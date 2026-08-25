@@ -124,6 +124,17 @@ Public Class ForwardWindowJoiner
         For i = 1 To lines.Length - 1
             Dim parts = lines(i).Split(","c)
             If parts.Length < 2 Then Continue For
+            ' Skip an EMBEDDED header line. A pooled book is a manual concat of two
+            ' boxes' CSVs (aws-collector-deploy-checklist.md §3b), so the second file's
+            ' header can survive into the middle of the data. CsvFeatureBuilder.vb:139
+            ' already guards this and counts it as RepeatedHeadersSkipped; this reader
+            ' was the unguarded half of the pair. No counter here — this class has no
+            ' LoadStats equivalent, and inventing one for a single guard is the scope
+            ' creep the AutoTweaker D-4 ruling declined for the same reason.
+            ' NOT a live defect at the time of writing: such a row carries
+            ' Verdict = "Verdict", which never matches a tier, so the Kelly count was
+            ' unaffected either way. Closed because the file was open.
+            If String.Equals(parts(0).Trim(), "Timestamp", StringComparison.OrdinalIgnoreCase) Then Continue For
             Dim row As New CsvRow() With {.Index = i - 1}
             If colIdx.ContainsKey("Timestamp") Then
                 DateTime.TryParseExact(parts(colIdx("Timestamp")).Trim(),
