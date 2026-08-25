@@ -76,7 +76,22 @@ Public Class CeilingAuditProgram
             Console.Error.WriteLine("[CeilingAudit] Settings load failed: " & ex.Message)
             Return 1
         End Try
-        Dim expectedVersion As Integer = 59   ' current baseline at build time; a later bump WARNs.
+        ' Baseline at build time; a later settings bump WARNs. 59 -> 68, 2026-08-25.
+        ' ⚠ THIS HAS NOW GONE STALE THREE TIMES (recorded as "six versions stale", then
+        ' seven, then nine) because settings.json bumps for reasons this tool does not
+        ' read, so the WARN fires on versions that cannot affect it and gets ignored —
+        ' the alarm-fatigue failure this project has flagged elsewhere.
+        ' ⭐ THE CHECK IS A PROXY FOR EXACTLY THREE VALUES. Confirm these, not the number:
+        '     cfg.Scoring.AtrTargetMultiplier          (last moved v51)
+        '     cfg.Scoring.TradeCosts.EffectiveMinMovePct
+        '     cfg.SessionVolume.Sessions[].StartHour   (last moved v12; v58 moved the
+        '                                               MULTIPLIERS, which this tool
+        '                                               never reads)
+        ' Verified for 59 -> 68: none of the three changed value. v62 DID restructure
+        ' scoring.trade_costs, but its defaults compose to 0.0008 exactly — identical to
+        ' the flat min_tradeable_move_pct it replaced — and this tool already reads the
+        ' shared EffectiveMinMovePct resolver rather than either literal.
+        Dim expectedVersion As Integer = 68
         If cfg.Version <> expectedVersion Then
             versionCheck = "WARN: settings.json version = " & cfg.Version & " (expected " & expectedVersion & " at build time)"
             Console.WriteLine("[CeilingAudit] " & versionCheck)
