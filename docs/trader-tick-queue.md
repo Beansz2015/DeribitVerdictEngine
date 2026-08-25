@@ -8,7 +8,17 @@
 
 ---
 
-> ## ⛔ STATE BANNER — 2026-08-24. Read this before believing any row below.
+> ## ⛔ STATE BANNER — 2026-08-25. Read this before believing any row below.
+>
+> ⭐ **CURRENT STATE READ: [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md).** Settings **v68**, master ⛔ **AHEAD 5 AND UNPUSHED** — verify with `git status -sb`.
+>
+> ⭐ **FIRST TASK: #5, C1-coverage F1** — [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md). ⛔ **Its §4 D-1…D-6 need a trader tick BEFORE any build.** Then Sonnet, effort HIGH.
+>
+> ⛔ **ONE OF THE TWO OPEN TRADER DECISIONS IS CLOSED** — the book's `Timestamp` column is **UTC**, not local. [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) §7.0 carries the refutation. **Nothing to rule.**
+>
+> ⚠ **The `pagesOUT/s` baseline is NOT zero** — 4 non-zero in 90 samples (4.4 %). The old "0.0 on all thirty" was a 1-in-8 draw. **Defender is REFUTED as the cause** (180-sample A/B: observed 7 against a null of 8).
+>
+> *(The 2026-08-24 banner follows, still accurate for what it covers.)*
 >
 > ⛔ **AUTHORITATIVE STATE READ: [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md).** Settings **v68**, master pushed and in sync — **verify with `git status -sb`, never inherit a push state.**
 >
@@ -59,7 +69,8 @@
 | [`trader-tick-queue.md`](trader-tick-queue.md) *(this doc)* | **What is outstanding, in what order, and its gates.** §0a answers "what is owed" at a glance; §1b is the dated shipped-state sweep | Dependencies · decision text · strategic altitude |
 | [`roadmap.md`](roadmap.md) | **The strategic board** — every workstream, done and outstanding, at altitude; execution order; the **binding sequencing rules** (§5) | The immediate slice — it points here |
 | [`backlog-dependency-map.md`](backlog-dependency-map.md) | **What blocks what** — edges, and a pointer to where each item's state lives | **State. It carries none, deliberately** (restructured 2026-08-07 after 7 stale cells) |
-| [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) | ⭐ **THE current seat handover — the STATE read.** ⭐ **Its §0 says there is NO first task; nothing is blocked.** Its two open items are trader DECISIONS, not builds: the book's local-time `Timestamp` column, and `_evalCache` | A task list — it has none. ⛔ **Not the authoritative DETAIL** — it deliberately does not repeat [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md), which remains authoritative for everything it summarises |
+| [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) | ⭐ **THE current seat handover — the STATE read.** Its §2 carries the OUTSTANDING ITEMS table; its §0 is the first task (#5, C1-coverage F1) | A task list beyond §0; it points here |
+| [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) | **Superseded for STATE 2026-08-25.** Its §1.1a is the authoritative memory-baseline detail; ⛔ **its §2.1 is CLOSED, not open** ⭐ **Its §0 says there is NO first task; nothing is blocked.** Its two open items are trader DECISIONS, not builds: the book's local-time `Timestamp` column, and `_evalCache` | A task list — it has none. ⛔ **Not the authoritative DETAIL** — it deliberately does not repeat [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md), which remains authoritative for everything it summarises |
 | [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) | **The authoritative DETAIL behind the 08-24 summary** — §7 the local-time taxonomy, §6 `_evalCache`, §8 the AMI relaunch parameters | Current state — superseded 2026-08-24 |
 | [`seat-handover-2026-08-14.md`](seat-handover-2026-08-14.md) | Its **rulings and conventions**, still binding | ⛔ **Current state — superseded, now three times over (08-22, 08-23, 08-24).** ⚠ **This row read "THE current seat handover" until 2026-08-24, naming the absorption proposal as the first task** — that task is still open but is **no longer the top item**, and the row was ten days stale in the table that exists to say which doc governs what |
 | [`seat-handover-2026-08-12.md`](seat-handover-2026-08-12.md) | **Superseded for STATE 2026-08-14; its rulings and conventions still bind.** Its §0 first task (the downtime-repair spec) is **DONE, shipped and deployed** | Current state |
