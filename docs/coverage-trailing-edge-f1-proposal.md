@@ -1,28 +1,32 @@
 # C1-coverage F1 — trailing-edge gap mis-attribution: implementation spec
 
-**Status:** ⚠ **PART-RULED 2026-08-25 — READ §4a BEFORE §4.** The trader ticked all six: **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)**, with the standing direction *"do this properly instead of the minimum."* **A post-tick re-read of `tools/BacktestRunner/CoverageReport.vb` leaves four of the six standing and RE-OPENS two — and D-5's ruling opens five follow-on sub-decisions the spec never asked.** ⛔ **Do not begin coding until §4a's open rows are ticked.**
-**Author seat:** Opus, 2026-08-25. **Amended:** Opus, 2026-08-25 — post-tick review, §4a. **Origin:** [`c1-session1-review-2026-08-04.md`](c1-session1-review-2026-08-04.md) §3 · [`trader-tick-queue.md`](trader-tick-queue.md) §2.
+**Status:** ✅ **BUILD-AUTHORIZED 2026-08-25 — every decision is ruled, nothing is open.** ⛔ **§4b is the SINGLE AUTHORITATIVE BUILD LIST. Read it and build from it.** §4's table is **superseded in two rows** and is kept only as the record of how the decisions were reached — its "My read" column still recommends the losing option on both. §4a carries the evidence behind the two re-rulings.
+**Author seat:** Opus, 2026-08-25. **Amended:** Opus, 2026-08-25 — post-tick review (§4a) and final ruling (§4b). **Origin:** [`c1-session1-review-2026-08-04.md`](c1-session1-review-2026-08-04.md) §3 · [`trader-tick-queue.md`](trader-tick-queue.md) §2.
+
+**Ruling history, in one line:** first tick **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)** → §4a re-opened **D-3** and **D-6** on evidence and raised **D-5.1…D-5.5** → second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**. Both ticks trader-directed 2026-08-25, standing direction *"do this properly instead of the minimum."*
 
 ---
 
 ## 0. Model + effort — **Sonnet, effort HIGH**, one session
 
-⚠ **THE QUEUE'S SIZING IS WRONG AND IS CORRECTED HERE.** That row reads *"Small-medium; one new fixture."* The investigation found **six existing fixtures that a naive fix breaks**, **three more at risk**, **six coupled decisions**, and a change that **moves the CLI's `--strict` exit code**. It is not small-medium and it is not one fixture.
+⚠ **THE QUEUE'S SIZING IS WRONG AND IS CORRECTED HERE.** That row reads *"Small-medium; one new fixture."* The investigation found **six existing fixtures that a naive fix breaks**, **three more at risk**, **six coupled decisions** — since grown to eleven — and ~~a change that **moves the CLI's `--strict` exit code**~~. It is not small-medium and it is not one fixture.
 
-**Why HIGH and not medium.** This changes hour classification in `CoverageReport` — *"the precondition instrument for every data-gated item"*, the thing that decides whether future collection gaps are seen at all. **Being wrong here is expensive and hard to notice**, which is CLAUDE.md's own high-effort criterion. It also alters `--strict`'s exit code, so it can fail a scheduled job.
+**Why HIGH and not medium.** This changes hour classification in `CoverageReport` — *"the precondition instrument for every data-gated item"*, the thing that decides whether future collection gaps are seen at all. **Being wrong here is expensive and hard to notice**, which is CLAUDE.md's own high-effort criterion. ~~It also alters `--strict`'s exit code, so it can fail a scheduled job.~~
+
+⛔ **THE `--strict` CLAIM IS STRUCK — it was written when `D-5` (a) was the recommendation, and `D-5` was ruled (c).** Struck rather than deleted, per the quote-and-label convention. **Under the ruling `--strict` does NOT move**: it stays keyed on `HourClass.Defect` alone (`D-5.2`), and `Defect` counts are expected to be unchanged. ⚠ **That is now a thing to PROVE, not a risk to manage** — §7 requires running `--strict` both ways and reporting the exit code as unmoved. **A `Defect` count that shifts means the new class is being reached through the wrong branch.**
 
 **Where the implementer will slip — four traps, all with code in §5:**
 
 1. ⛔ **`ResolveBoundaryUtc` does NOT protect the two fixtures everyone assumes it protects.** With no evidence files it returns `toUtc` unchanged, so `A49e` and `A49g` get no bound at all. **"The store simply ends" is a DIFFERENT bound from "the evidence boundary."** This is the crux — §3.
 2. ⛔ **`A49u` forecloses the obvious implementation.** It asserts `span0.LongestGapMs = 0` *exactly*, so folding the trailing gap into `LongestGapMs` breaks it. That fixture, not taste, decides new-field-vs-widen.
-3. ⚠ **A new `HourStoreStats` field silently poisons four hand-built fixtures.** They construct the type with property initialisers; a `LastTsMs` defaulting to `0` reads as "last trade at 1970-01-01" — a 56-year trailing gap.
-4. ⚠ **A "Captured with a warning" design is invisible.** `BuildMarkdown` skips every `Captured` hour, and the console prints class counts only. The reason string would go nowhere.
+3. ✅ **CLOSED BY `D-3` (c).** *A new `HourStoreStats` field silently poisons four hand-built fixtures — a `LastTsMs` defaulting to `0` reads as "last trade at 1970-01-01".* **The ruled `Long?` defaults to `Nothing`, so the four are protected by the type.** ⚠ **Re-opens the moment anyone "simplifies" the field to a plain `Long`.**
+4. ✅ **CLOSED BY `D-5` (c).** *A "Captured with a warning" design is invisible — `BuildMarkdown` skips every `Captured` hour.* **This was the argument against option (b), and (b) was not taken.** A new class renders for free; the two count surfaces that do NOT come free are explicit build items (`D-5.3`, `D-5.4`).
 
-⚠ **The fixtures cannot be trusted to catch traps 1 and 3**, because the implementer revises those same fixtures. §6 therefore specifies the blast radius as a table of *named existing fixtures* and what each must assert afterwards — **revising a fixture your own change breaks is this project's named hazard, and the way through it is to say so, name why, and re-verify.**
+⚠ **Trap 1 remains live and is now the ONLY one the fixtures cannot be trusted to catch**, because the implementer revises those same fixtures. §6 therefore specifies the blast radius as a table of *named existing fixtures* and what each must assert afterwards — **revising a fixture your own change breaks is this project's named hazard, and the way through it is to say so, name why, and re-verify.** ⛔ **Two NEW silent traps arrived with the second ruling and are not in this list because they are not fixture-shaped: `D-5.1`'s precedence and `D-4`'s superset trap. Both are in §4b.**
 
 **Escalation trigger — stop and move to Opus/high if:** the chosen bound requires `ClassifyHour`/`ClassifySpan` to know about anything beyond a single extra scalar argument, **or** if `ObservedLongestGapMs` / `GapBreachHours` (D-6) turn out to need restructuring rather than an added term. Either means the blast radius has left this spec.
 
-⭐ **BOTH HALVES OF THAT TRIGGER ARE PRE-CLEARED BY §4a — do not re-derive them.** §4a.1 shows D-4(c)'s three bounds collapse into **one** caller-computed scalar, and §4a.3's recommended D-6(c) **adds a counter pair beside** `ObservedLongestGapMs`/`GapBreachHours` rather than restructuring them. **Added trigger for the ruled D-5(c):** stop if `HourClass` needs more than ONE new value, or if D-5.1's precedence needs anything other than a single insertion between `Defect` and `Captured`.
+⭐ **BOTH HALVES OF THAT TRIGGER ARE PRE-CLEARED BY THE RULING — do not re-derive them.** §4a.1 shows `D-4` (c)'s three bounds collapse into **one** caller-computed scalar, and the ruled `D-6` (c) **adds a counter pair beside** `ObservedLongestGapMs`/`GapBreachHours` rather than restructuring them. **Added trigger for the ruled `D-5` (c):** stop if `HourClass` needs more than ONE new value, or if `D-5.1`'s precedence needs anything other than a single insertion between `Defect` and `Captured`.
 
 ⚠ **The amendment does NOT change the tier.** Every item §4a adds is mechanical once ruled — one enum value, one combine insertion, one console line, one verdict-line term, one scalar through two signatures. **What keeps it at HIGH is unchanged and is not size: two of the ways to get this wrong (D-5.1's precedence, D-4's superset trap) fail SILENTLY, on the instrument that decides whether future collection gaps are seen at all.**
 
@@ -84,9 +88,9 @@ The origin ruling says: bound `hourEnd − lastTradeInHour` against **`ResolveBo
 
 ---
 
-## 4. D-table — ✅ all six TICKED 2026-08-25. ⚠ Two are RE-OPENED by §4a; read it first
+## 4. D-table — ⛔ SUPERSEDED IN TWO ROWS. The build list is §4b
 
-⚠ **The table below is preserved verbatim as written pre-tick, per the quote-and-label convention. It is NOT the current state.** Ruled: **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)**. **§4a amends D-3 and D-6 and adds D-5.1…D-5.5.**
+⛔ **DO NOT BUILD FROM THIS TABLE.** It is preserved verbatim as written pre-tick, per the quote-and-label convention, because it is the record of how the decisions were reached. **Its "My read" column recommends `D-3` (a) and `D-6` (a) — both were re-ruled to (c) after evidence found in the code.** ⚠ **A reader taking this table at face value builds a `-1` sentinel and folds the header counters, which is the exact opposite of what was ruled.** **§4b is the build list.**
 
 
 | # | Decision | Options | **My read** |
@@ -100,7 +104,9 @@ The origin ruling says: bound `hourEnd − lastTradeInHour` against **`ResolveBo
 
 ---
 
-## 4a. ⚠ POST-TICK AMENDMENT — read before §4
+## 4a. ⚠ POST-TICK AMENDMENT — the EVIDENCE behind the two re-rulings
+
+⭐ **If you only want to know what to build, skip to §4b.** This section exists so the two re-rulings can be checked rather than taken on trust — **the `D-6` one overturns a recommendation this same document made, and that is worth being able to audit.**
 
 **All line references re-verified against `tools/BacktestRunner/CoverageReport.vb` and `verify/ordercheck/Program.vb` on 2026-08-25, after the tick.**
 
@@ -125,7 +131,9 @@ flag when (observedEndMs − lastTsMs) > gapMs
 
 **D-5(c) — right, and RIGHTER than §4 argues.** §4's D-5 row omits the strongest point in (c)'s favour: `BuildMarkdown:1127` skips `Captured OrElse OutOfScopeWeekend` **only**, so a new class **renders automatically**. ⭐ **Trap 4 — the invisibility that kills option (b) — does not apply to (c) at all, at zero cost.**
 
-### 4a.2 ⛔ D-5(c) opens five follow-on decisions. Two of them fail silently
+### 4a.2 ✅ D-5(c)'s five follow-on decisions — ALL RULED as recommended, 2026-08-25
+
+**Every row below was ticked to my read, so the `My read` column IS the ruling.** ⚠ **Two of the five fail silently if built wrong — `D-5.1` and `D-5.3`.**
 
 | # | Sub-decision | Options | My read |
 |---|---|---|---|
@@ -135,7 +143,7 @@ flag when (observedEndMs − lastTsMs) > gapMs
 | **D-5.4** | The console count line (`:1009-1014`) | (a) add a seventh line · (b) fold into an existing one | ⭐ **(a).** Those six lines are hardcoded one-per-class. A seventh class with no line is counted **nowhere** in the console — trap 4 in a new costume |
 | **D-5.5** | What is the class called? | (a) `TrailingEdge` · (b) `TrailingSilence` · (c) `PartiallyCaptured` | ⭐ **(a) `TrailingEdge`** — the name every document in this arc already uses. ⚠ **Not (c)** — `PartiallyCaptured` invites the reader to treat it as a flavour of `Captured`, which is precisely the precedence error D-5.1 forbids |
 
-### 4a.3 ⛔ D-6 — RE-OPENED. Its stated rationale does not survive the code
+### 4a.3 ✅ D-6 — RE-RULED to (c), 2026-08-25. Its original rationale does not survive the code
 
 **D-6(a)'s argument is:** *"leaving them makes the console report a smaller longest-gap and fewer breaches than its own defect count implies."*
 
@@ -149,7 +157,7 @@ flag when (observedEndMs − lastTsMs) > gapMs
 
 ⚠ **And D-6(a) contradicts D-2(a).** D-2 was ticked to keep *"gap between trades"* and *"silence to the edge"* separable **because they are different quantities**. D-6(a) then merges them in the header counter — discarding in the summary exactly what D-2 preserved in the stats.
 
-**⛔ RE-TICK NEEDED:**
+**✅ RE-TICKED 2026-08-25 — (c). The three options as they were put:**
 
 | Option | |
 |---|---|
@@ -159,7 +167,7 @@ flag when (observedEndMs − lastTsMs) > gapMs
 
 ⚠ **Pre-existing, out of scope, named because it lives in these same two counters:** the walk loop updates `ObservedLongestGapMs`/`GapBreachHours` **outside** `ClassifyHour` (`:973-977`), so **weekend hours contribute to both** while `ClassifyHour` returns `OutOfScopeWeekend` for them. **That predates this spec. Do not fix it here — and do not "tidy" it incidentally while adding a counter beside it.**
 
-### 4a.4 ⚠ D-3 — RE-OPENED with a third option, strictly better than the sentinel
+### 4a.4 ✅ D-3 — RE-RULED to (c), 2026-08-25. The nullable, not the sentinel
 
 **D-3(a)'s reasoning is right and is not in question.** A default of `0` reads as 1970-01-01 on the four hand-built fixtures — `verify/ordercheck/Program.vb:7757`, `:7791`, `:8094`, `:8311`, **all four verified to use `With { … }` property initialisers** — which fails silently in the alarming direction. **A default meaning "unknown" is required.**
 
@@ -174,15 +182,39 @@ flag when (observedEndMs − lastTsMs) > gapMs
 
 ---
 
+## 4b. ✅ THE RULED STATE — build from THIS table
+
+**Every decision is ticked. Nothing here is open.** Where this table and §4 disagree, **this table wins** — §4 is the pre-tick record, not the instruction.
+
+| # | Ruled | What to build |
+|---|---|---|
+| **D-1** | **(a)** | The rule lives in `ClassifySpan` (`CoverageReport.vb:491-524`), so the whole-hour and split paths share one implementation. ⚠ **No threshold scaling for narrow spans** — §4a.1 explains why the apparent problem is not one |
+| **D-2** | **(a)** | A **NEW field** on `HourStoreStats`. **Never widen `LongestGapMs`** — `A49u` forecloses it |
+| **D-3** | ⭐ **(c)** — *supersedes §4's (a)* | `Public Property LastTsMs As Long?`. Guard on `.HasValue`. ⛔ **No `-1` sentinel anywhere.** The four hand-built fixtures inherit `Nothing` and are protected by construction |
+| **D-4** | **(c)** | `observedEndMs = MIN(spanEndMsInclusive, boundaryMs, storeEndMs)`, computed in `BuildResult`, passed as **ONE** scalar into `ClassifyHour` → `ClassifySpan`. Flag when `(observedEndMs − lastTsMs) > gapMs` — **`>`, so the at-threshold convention at `:505` is preserved.** ⛔ **`storeEndMs` comes from the walk's own final `prevTs`, NOT from `Max()` over the `AccumulateHourStats` dictionary** — §4a.1 |
+| **D-5** | **(c)** | One new `HourClass` value |
+| **D-5.1** | **(a)** | It sits **between `Defect` and `Captured`** in the combine at `:609-624`. **New order: `Defect > TrailingEdge > Captured > UnknownScope > ExpectedMissing > NotCapturing`.** ⚠ **Silent if wrong** |
+| **D-5.2** | **(a)** | `--strict` stays keyed on `HourClass.Defect` alone. **Leave `BacktestProgram.vb:321` untouched** — and state in the spec-back that leaving it is the DECISION, not an oversight |
+| **D-5.3** | **(a)** | The VERDICT line (`:1092-1098`) counts the new class. ⛔ **A report with trailing-edge hours and zero `Defect` hours must NOT print `clean`.** ⚠ **Silent if wrong** |
+| **D-5.4** | **(a)** | A seventh console count line beside the six at `:1009-1014` |
+| **D-5.5** | **(a)** | The value is named **`TrailingEdge`** |
+| **D-6** | ⭐ **(c)** — *supersedes §4's (a)* | `ObservedLongestGapMs` and `GapBreachHours` are **UNTOUCHED**. Add `TrailingEdgeHours` and `ObservedLongestTrailingMs` as their own pair, rendered beside them. ⚠ **Do not "tidy" the weekend-hour contribution to the existing two while working next to them** — §4a.3 |
+
+⭐ **Verified 2026-08-25, so D-5's mid-enum insertion is safe:** every `HourClass` reference across the tree is **by name**. There are **no ordinal casts, no `CInt`, no serialisation by number** — `CountByClass` compares values (`:135-139`), `BuildMarkdown` and the split-detail Reason use `ToString()`. **Inserting `TrailingEdge` between `Defect` and `Captured` shifts the ordinals of four members and breaks nothing.** ⚠ **Re-run that check if the enum is later persisted anywhere.**
+
+⚠ **One consequence of `D-5.1` worth stating, because it is free and desirable:** a span classified `TrailingEdge` inside a split hour renders as `TrailingEdge` in the existing split-detail Reason string (`:634-640`), with no new formatting code.
+
+---
+
 ## 5. The four traps, with the code
 
 **5.1 — the boundary that isn't.** `ResolveBoundaryUtc:665`: `If evidence Is Nothing OrElse evidence.Count = 0 Then Return toUtc`. **No evidence ⇒ no protection.** §3.
 
 **5.2 — `A49u` forecloses widening.** `Program.vb:8445` asserts `span0.LongestGapMs = 0`. Any fix that widens `LongestGapMs` to carry the trailing edge changes that value and breaks the fixture. **The fixture decides D-2.**
 
-**5.3 — the default-value poison.** Four sites build `HourStoreStats` with initialisers and get the declaration default for anything new: `Program.vb:7757`, `:7791`, `:8094`, `:8311`. **A `LastTsMs = 0` makes all four read as a 1970 last-trade.**
+**5.3 — the default-value poison.** Four sites build `HourStoreStats` with initialisers and get the declaration default for anything new: `Program.vb:7757`, `:7791`, `:8094`, `:8311`. **A `LastTsMs = 0` makes all four read as a 1970 last-trade.** ✅ **CLOSED BY `D-3` (c)** — a `Long?` defaults to `Nothing`, so all four are protected by the type rather than by a convention the reader has to know. ⚠ **The trap is only closed while the field stays nullable; a later "simplification" to a plain `Long` re-opens it silently.**
 
-**5.4 — the invisible reason.** `BuildMarkdown:1127` — `If h.Classification = HourClass.Captured OrElse … Then Continue For`. A Captured-with-reason hour renders **nowhere**; the console prints class counts only (`:1009-1014`).
+**5.4 — the invisible reason.** `BuildMarkdown:1127` — `If h.Classification = HourClass.Captured OrElse … Then Continue For`. A Captured-with-reason hour renders **nowhere**; the console prints class counts only (`:1009-1014`). ✅ **CLOSED BY `D-5` (c) + `D-5.3` + `D-5.4`** — the new class falls through `BuildMarkdown`'s skip list and renders for free, and the two count surfaces that do NOT come free are now explicit build items. ⛔ **This trap was the argument against option (b); it is not an argument against (c), and §4's D-5 row failed to say so.**
 
 ---
 
@@ -192,11 +224,11 @@ flag when (observedEndMs − lastTsMs) > gapMs
 
 | Fixture | Why it moves | Must assert afterwards |
 |---|---|---|
-| **`A49e`** | ⛔ **Most exposed.** One-hour window, trades 05:01/05:06, ~54 min trailing, **no boundary passed at all** | Whatever D-4 rules. **If it still asserts `Captured`, the bound works; if it must change, D-4(a) was insufficient** |
-| **`A49g`** | Hour 05 has ~57 min trailing and the store ends; `walkToUtc = 06:00` gives no protection | Same — this is D-4's second witness |
-| **`A49b`, `A49c`, `A49l`, `A49r`** | Hand-built `cleanStats` inherit the new field's default (trap 3) | Unchanged classification, once D-3's sentinel is in |
-| **`A49r`** *(also)* | ⚠ **Doubly exposed** — additionally asserts `String.IsNullOrEmpty(hr.Reason)` | Forecloses "Captured + explanatory reason" for the non-split path |
-| **`A49o`, `A49t`** | 🟡 Per-span rule: ON spans with ~27 min and ~10 min trailing edges | Depends on D-1 + D-5 |
+| **`A49e`** | ⛔ **Most exposed.** One-hour window, trades 05:01/05:06, ~54 min trailing, **no boundary passed at all** | ✅ **Under `D-4` (c) it must STILL assert `Captured`** — the store-end bound is what carries it, since the evidence bound alone does not. **If it cannot be kept at `Captured` without contorting the fixture, the store-end bound is built wrong** |
+| **`A49g`** | Hour 05 has ~57 min trailing and the store ends; `walkToUtc = 06:00` gives no protection | ✅ Same — `D-4` (c)'s second witness. **Still `Captured`** |
+| **`A49b`, `A49c`, `A49l`, `A49r`** | Hand-built `cleanStats` inherit the new field's default (trap 3) | ✅ **Unchanged classification, and under `D-3` (c) they need NO EDIT AT ALL** — `Long?` defaults to `Nothing`, the guard skips, the hours stay as they are. **Re-run them; do not touch them** |
+| **`A49r`** *(also)* | ⚠ **Doubly exposed** — additionally asserts `String.IsNullOrEmpty(hr.Reason)` | ✅ **Survives untouched under the ruling.** Its hour is `Captured` with a hand-built `LastTsMs = Nothing`, so no trailing reason is ever composed. ⚠ **`D-5` (c) puts the signal in the CLASS, not the Reason — so nothing here pushes back on the empty-Reason assertion** |
+| **`A49o`, `A49t`** | 🟡 Per-span rule: ON spans with ~27 min and ~10 min trailing edges | ⚠ **Now resolvable: under `D-1` (a) the rule DOES apply per span, and under `D-5.1` a `TrailingEdge` span outranks `Captured`.** Work out each span's `observedEndMs` before assuming the classification moves — **a span whose trailing edge is bounded by store-end does not flag.** State the arithmetic per span in the spec-back |
 | **`A49s`, `A49u`** | 🟡 Assert exact `HourStoreStats` contents | `A49u` is D-2's decider |
 | **`A49u`** *(also — added by §4a)* | ⚠ **A knife-edge witness for D-4's measurement convention.** Span 0's trade sits at :25 and the span ends :29:59.999, so its trailing edge is **299,999 ms against a 300,000 ms threshold — a 1 ms margin** | **Its assertions do NOT break** (the hour is already `Defect` via span 1, and worst-of absorbs a span-0 flag). ⛔ **Named so nobody "fixes" the fixture:** measuring the trailing edge off the span's EXCLUSIVE end instead of its inclusive one moves this to exactly 300,000 ms, and `<=` still holds — but any move to `<` flips it. **Keep the `<=` the gap rule already uses (`:505`)** |
 | **`A49e`** *(mechanism note — added by §4a)* | ⛔ **`ClassifyHour` is called DIRECTLY here**, not through `BuildResult` (`Program.vb:7874-7875`) | **This is what forces D-4's bound to be a PARAMETER, not something `BuildResult` resolves internally.** The revision is clean and preserves the fixture's real intent — it tests the gap threshold's `<=` boundary, nothing about trailing edges — by passing an `observedEndMs` equal to the hour's last trade |
