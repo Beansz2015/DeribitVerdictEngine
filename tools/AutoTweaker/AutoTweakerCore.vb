@@ -118,16 +118,27 @@ Public Class AutoTweakerCore
         ' prompt) becomes single-population because it only ever sees `filtered`.
         ' Absent filter ⇒ filtered = allRows ⇒ exactly today's behaviour.
         Dim pop = config.PopulationFilter
+        ' Weekday-scope ruling 2026-08-03: evaluation is weekday-only, unconditionally —
+        ' folded into the same load-time Where as the (session × resolution) population
+        ' filter (docs/autotweaker-weekday-filter-proposal.md §3.1/D-1). Applies whether
+        ' or not a population filter is configured.
+        ' Scoped to the (session × resolution)-eligible rows, NOT allRows — otherwise
+        ' the three numbers in the line below don't reconcile (a row can be excluded
+        ' by population mismatch, weekday, or both, and counting weekday exclusions
+        ' over the whole file conflates the two reasons). Orchestrator review F2,
+        ' 2026-08-25: filtered.Count + weekdayExcludedCount = the population-eligible
+        ' count before the weekday cut.
+        Dim weekdayExcludedCount As Integer =
+            allRows.Where(Function(r) (pop Is Nothing OrElse MatchesPopulation(r, pop, settings)) AndAlso
+                                      Not MatchesWeekday(r)).Count()
         Dim filtered As List(Of CsvRow) =
-            If(pop Is Nothing, allRows,
-               allRows.Where(Function(r) MatchesPopulation(r, pop, settings)).ToList())
-        If pop IsNot Nothing Then
-            Console.WriteLine(String.Format(
-                "[AutoTweaker] population filter {0}×{1}m — {2}/{3} rows in population.",
-                If(pop.Session, "any"),
-                If(pop.ExecutionResolution.HasValue, pop.ExecutionResolution.Value.ToString(), "any"),
-                filtered.Count, allRows.Count))
-        End If
+            allRows.Where(Function(r) MatchesWeekday(r) AndAlso
+                                      (pop Is Nothing OrElse MatchesPopulation(r, pop, settings))).ToList()
+        Console.WriteLine(String.Format(
+            "[AutoTweaker] population filter {0}×{1}m, weekday-only — {2}/{3} rows in population ({4} of the otherwise-eligible rows excluded as weekend/unparsed).",
+            If(pop IsNot Nothing, If(pop.Session, "any"), "any"),
+            If(pop IsNot Nothing AndAlso pop.ExecutionResolution.HasValue, pop.ExecutionResolution.Value.ToString(), "any"),
+            filtered.Count, allRows.Count, weekdayExcludedCount))
         ' Informational row count persisted to state.LastRunCsvRowCount: the filtered
         ' population size in fixed mode (§4.3), the raw CSV count in sliding mode
         ' (where the cooldown still consumes it and filtered === allRows anyway).
@@ -147,11 +158,14 @@ Public Class AutoTweakerCore
             ' a different population (or the unfiltered era) is wrong for this view.
             ' On first introduction OR when the trader switches populations, re-seed to
             ' filtered.Count — identical to the v29 first-run init — and skip this round.
+            ' "|WD" term added by the weekday-filter change: the string changing
+            ' (even for pop Is Nothing → "none|WD") forces the one-time re-seed below,
+            ' because LastEvaluatedRowIndex indexes the pre-weekday-filter list otherwise.
             Dim populationKey As String =
-                If(pop Is Nothing, "none",
-                   String.Format("{0}|{1}", pop.Session,
-                                 If(pop.ExecutionResolution.HasValue,
-                                    pop.ExecutionResolution.Value.ToString(), "")))
+                (If(pop Is Nothing, "none",
+                    String.Format("{0}|{1}", pop.Session,
+                                  If(pop.ExecutionResolution.HasValue,
+                                     pop.ExecutionResolution.Value.ToString(), "")))) & "|WD"
             If populationKey <> state.PopulationFilterKey Then
                 Console.WriteLine(String.Format(
                     "[AutoTweaker] INFO — population filter changed ('{0}' → '{1}'); " &
@@ -806,6 +820,19 @@ Public Class AutoTweakerCore
     ' shared engine bucket (inclusive boundary), so the filter and the engine agree.
     ' A null pop field means "any" for that axis. Friend so the acceptance harness can
     ' exercise it directly.
+    ' Weekday-scope ruling 2026-08-03: evaluation is weekday-only. Matches
+    ' CsvFeatureBuilder.vb:198-203 deliberately — same guard order, same two-day
+    ' test, same CsvRow.Timestamp source. One convention across the three surfaces.
+    ' MinValue guard FIRST - DateTime.MinValue.DayOfWeek is MONDAY, so an unparsed
+    ' timestamp would otherwise pass as a valid weekday row. Friend so the
+    ' acceptance harness can exercise it directly.
+    Friend Shared Function MatchesWeekday(r As CsvRow) As Boolean
+        If r.Timestamp = DateTime.MinValue Then Return False
+        Dim dow As DayOfWeek = r.Timestamp.DayOfWeek
+        If dow = DayOfWeek.Saturday OrElse dow = DayOfWeek.Sunday Then Return False
+        Return True
+    End Function
+
     Friend Shared Function MatchesPopulation(r As CsvRow, pop As PopulationFilter,
                                              settings As EngineSettings) As Boolean
         If pop.ExecutionResolution.HasValue AndAlso

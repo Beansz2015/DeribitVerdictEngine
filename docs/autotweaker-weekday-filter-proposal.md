@@ -1,6 +1,6 @@
 # AutoTweaker weekday-only row filter — implementation spec
 
-**Status:** ✅ **APPROVED — D-1…D-5 ALL TICKED AS RECOMMENDED, trader-directed 2026-08-25.** Clear to implement. The D-table in §4 is the decision of record; where this document disagrees with itself elsewhere, §4 wins.
+**Status:** ✅ **BUILT 2026-08-25.** D-1…D-5 all ticked as recommended, trader-directed 2026-08-25; code, fixtures A59a–e (plus the A15e key-literal update) and the §6 mutation proofs are done. Solution + AutoTweaker + WhatIfRunner + CeilingAudit + BacktestRunner + OrderCheck build 0/0 Release; harness ALL PASS. See `docs/DeribitIndicatorProject.md` §15 for the shipped-row summary. The D-table in §4 is the decision of record; where this document disagrees with itself elsewhere, §4 wins.
 **Author seat:** Opus, 2026-08-25. **Origin:** [`weekday-scope-ruling-2026-08-03.md`](weekday-scope-ruling-2026-08-03.md) · [`trader-tick-queue.md`](trader-tick-queue.md) §2 "Weekday filters — 3 surfaces" · [`roadmap.md`](roadmap.md) W5.
 
 ---

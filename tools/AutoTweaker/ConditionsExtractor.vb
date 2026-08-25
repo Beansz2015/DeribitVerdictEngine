@@ -57,6 +57,7 @@ Public Class ConditionsExtractor
 
     ' Column indexes are derived once from the CSV header.
     Private Class ColIdx
+        Public Property Timestamp      As Integer = -1
         Public Property Price          As Integer = -1
         Public Property ATRMultiplier  As Integer = -1
         Public Property Regime         As Integer = -1
@@ -81,6 +82,14 @@ Public Class ConditionsExtractor
         If lines.Length < 2 Then Return cv
 
         Dim idx = ResolveColumns(lines(0))
+
+        ' D-3 (docs/autotweaker-weekday-filter-proposal.md §5.4) fail-CLOSED: resolved
+        ' ONCE — not re-tested every row — so a header with no Timestamp column excludes
+        ' every row rather than silently admitting all of them unfiltered. The per-row
+        ' form of this check originally failed OPEN, the opposite of
+        ' AutoTweakerCore.MatchesWeekday's own MinValue-first philosophy (orchestrator
+        ' review F1, 2026-08-25).
+        Dim hasTimestampCol As Boolean = idx.Timestamp >= 0
 
         ' Accumulators
         Dim regimeCounts     As New Dictionary(Of String, Integer)()
@@ -119,6 +128,26 @@ Public Class ConditionsExtractor
             For r As Integer = startIdx To endIdx
                 Dim parts As String() = lines(r).Split(","c)
                 If parts.Length < 2 Then Continue For
+
+                ' D-3 (docs/autotweaker-weekday-filter-proposal.md §5.4): this loop
+                ' re-reads raw CSV lines by absolute index, so it does not inherit the
+                ' load-time weekday exclusion AutoTweakerCore.MatchesWeekday applies to
+                ' `filtered`. Re-derive it here from the same column, same parse
+                ' (TryParseExact matching ForwardWindowJoiner.vb:128-134), same guard
+                ' order (MinValue first) — or weekend rows re-enter the prompt. Fails
+                ' CLOSED on both an absent header column and a too-short row — neither
+                ' is verifiable, so neither is admitted.
+                If Not hasTimestampCol OrElse idx.Timestamp >= parts.Length Then Continue For
+                Dim rowTs As DateTime
+                DateTime.TryParseExact(parts(idx.Timestamp).Trim(),
+                                       "yyyy-MM-dd HH:mm:ss",
+                                       CultureInfo.InvariantCulture,
+                                       DateTimeStyles.None,
+                                       rowTs)
+                If rowTs = DateTime.MinValue Then Continue For
+                Dim rowDow As DayOfWeek = rowTs.DayOfWeek
+                If rowDow = DayOfWeek.Saturday OrElse rowDow = DayOfWeek.Sunday Then Continue For
+
                 totalRows += 1
 
                 ' Regime mix
@@ -245,6 +274,7 @@ Public Class ConditionsExtractor
         Dim headers As String() = headerLine.Split(","c)
         For i As Integer = 0 To headers.Length - 1
             Select Case headers(i).Trim()
+                Case "Timestamp"      : idx.Timestamp = i
                 Case "Price"          : idx.Price = i
                 Case "ATRMultiplier"  : idx.ATRMultiplier = i
                 Case "Regime"         : idx.Regime = i

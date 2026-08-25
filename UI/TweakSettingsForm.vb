@@ -122,10 +122,15 @@ Public Class TweakSettingsForm
             ' instead of a negative count. Mirrors AutoTweakerCore re-seed-on-change +
             ' shrink guard; LastEvaluatedRowIndex indexes the FILTERED sequence.
             Dim pop = cfg.PopulationFilter
-            Dim popRowCount As Integer = If(pop Is Nothing, currentRowCount, CountPopulationRows(pop))
-            Dim popKey As String = If(pop Is Nothing, "none",
+            ' Weekday-scope ruling 2026-08-03: CountPopulationRows now applies the
+            ' weekday-only test unconditionally (mirrors AutoTweakerCore.filtered), so
+            ' it is the row count to use whether or not a population filter is set.
+            Dim popRowCount As Integer = CountPopulationRows(pop)
+            ' "|WD" mirrors AutoTweakerCore's populationKey term — must change identically
+            ' or this status line shows "Ready" while the core still re-seeds.
+            Dim popKey As String = (If(pop Is Nothing, "none",
                 String.Format("{0}|{1}", pop.Session,
-                    If(pop.ExecutionResolution.HasValue, pop.ExecutionResolution.Value.ToString(), "")))
+                    If(pop.ExecutionResolution.HasValue, pop.ExecutionResolution.Value.ToString(), "")))) & "|WD"
             Dim popLabel As String = If(pop Is Nothing, "all rows",
                 String.Format("{0}×{1}m", If(pop.Session, "any"),
                     If(pop.ExecutionResolution.HasValue, pop.ExecutionResolution.Value.ToString(), "any")))
@@ -271,8 +276,9 @@ Public Class TweakSettingsForm
     ' rows. Resolution from the ExecResolution column (v0.7; absent/legacy ⇒ 1);
     ' session from the shared engine bucket (ExecutionResolution.MatchSessionBucket,
     ' inclusive <=). Falls back to the raw count on any parse trouble.
+    ' `pop` may be Nothing — the weekday-only test below is unconditional
+    ' (docs/autotweaker-weekday-filter-proposal.md D-1) and applies even then.
     Private Function CountPopulationRows(pop As PopulationFilter) As Integer
-        If pop Is Nothing Then Return CountCsvRows()
         Try
             If Not File.Exists(_csvPath) Then Return 0
             Dim lines As String() = File.ReadAllLines(_csvPath)
@@ -286,33 +292,43 @@ Public Class TweakSettingsForm
                 If h.Equals("ExecResolution", StringComparison.OrdinalIgnoreCase) Then resIdx = i
             Next
 
-            Dim needSession As Boolean = Not String.IsNullOrEmpty(pop.Session)
+            Dim needSession As Boolean = pop IsNot Nothing AndAlso Not String.IsNullOrEmpty(pop.Session)
             Dim settings = SettingsLoader.Current
-            ' Can't derive session without timestamps or settings → fall back to raw.
-            If needSession AndAlso (tsIdx < 0 OrElse settings Is Nothing) Then Return CountCsvRows()
+            ' The weekday test needs timestamps too, so absence of the column now falls
+            ' back to raw regardless of pop. Can't derive session without settings.
+            If tsIdx < 0 Then Return CountCsvRows()
+            If needSession AndAlso settings Is Nothing Then Return CountCsvRows()
 
             Dim count As Integer = 0
             For i As Integer = 1 To lines.Length - 1
                 Dim parts As String() = lines(i).Split(","c)
+                If parts.Length <= tsIdx Then Continue For
 
-                ' Resolution (default 1 when the column is absent/unparseable — legacy v0.6).
-                Dim execRes As Integer = 1
-                If resIdx >= 0 AndAlso parts.Length > resIdx Then
-                    Dim rv As Integer
-                    If Integer.TryParse(parts(resIdx).Trim(), rv) Then execRes = rv
-                End If
-                If pop.ExecutionResolution.HasValue AndAlso execRes <> pop.ExecutionResolution.Value Then Continue For
+                ' Weekday-scope ruling 2026-08-03: evaluation is weekday-only. Uses this
+                ' form's own TryParse path (AssumeUniversal) deliberately, NOT unified
+                ' with AutoTweakerCore's TryParseExact — proposal §3.3.
+                Dim ts As DateTime
+                If Not DateTime.TryParse(parts(tsIdx).Trim(), Nothing,
+                        Globalization.DateTimeStyles.AssumeUniversal Or
+                        Globalization.DateTimeStyles.AdjustToUniversal, ts) Then Continue For
+                Dim dow As DayOfWeek = ts.DayOfWeek
+                If dow = DayOfWeek.Saturday OrElse dow = DayOfWeek.Sunday Then Continue For
 
-                ' Session via the shared engine bucket (only when the filter pins a session).
-                If needSession Then
-                    If parts.Length <= tsIdx Then Continue For
-                    Dim ts As DateTime
-                    If Not DateTime.TryParse(parts(tsIdx).Trim(), Nothing,
-                            Globalization.DateTimeStyles.AssumeUniversal Or
-                            Globalization.DateTimeStyles.AdjustToUniversal, ts) Then Continue For
-                    Dim b = ExecutionResolution.MatchSessionBucket(settings, ts.Hour)
-                    If b Is Nothing OrElse
-                       Not String.Equals(b.Name, pop.Session, StringComparison.OrdinalIgnoreCase) Then Continue For
+                If pop IsNot Nothing Then
+                    ' Resolution (default 1 when the column is absent/unparseable — legacy v0.6).
+                    Dim execRes As Integer = 1
+                    If resIdx >= 0 AndAlso parts.Length > resIdx Then
+                        Dim rv As Integer
+                        If Integer.TryParse(parts(resIdx).Trim(), rv) Then execRes = rv
+                    End If
+                    If pop.ExecutionResolution.HasValue AndAlso execRes <> pop.ExecutionResolution.Value Then Continue For
+
+                    ' Session via the shared engine bucket (only when the filter pins a session).
+                    If needSession Then
+                        Dim b = ExecutionResolution.MatchSessionBucket(settings, ts.Hour)
+                        If b Is Nothing OrElse
+                           Not String.Equals(b.Name, pop.Session, StringComparison.OrdinalIgnoreCase) Then Continue For
+                    End If
                 End If
 
                 count += 1

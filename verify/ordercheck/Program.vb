@@ -64,6 +64,13 @@ Module Program
         ' WS-P2 — auto-tweaker network.* hardening (HARD CONSTRAINT 12).
         A15h_ValidateRejectsNetworkKeys()
 
+        ' A59 — AutoTweaker weekday-only row filter, docs/autotweaker-weekday-filter-proposal.md.
+        A59a_WeekdayRowsSurviveWeekendExcluded()
+        A59b_ReseedOnWeekdayKeyChange()
+        A59c_WeekendGapTripsSessionBoundary()
+        A59d_ConditionsExtractionExcludesWeekendRows()
+        A59e_UnparseableTimestampExcludedNotAdmittedAsMonday()
+
         ' WS-P3 — cutover: §3 trades connection-health gate + §4 15m-refresh policy.
         A16a_TradesServedWhenConnectedButQuiet()
         A16b_TradesWithheldWhenConnectionDown()
@@ -1359,13 +1366,196 @@ Module Program
 
             Dim rc As Integer = AutoTweakerCore.RunAsync(cfg, st, statePath).GetAwaiter().GetResult()
 
-            Check("A15e re-seed on filter change (ASIA|3 → NY|1: index→3, INELIGIBLE, nothing evaluated)",
+            ' Key now carries the "|WD" weekday-filter term (docs/autotweaker-weekday-filter
+            ' -proposal.md D-1); all 5 rows are Thursday 2026-01-01, so the weekday filter
+            ' does not change filtered.Count=3, only the key string.
+            Check("A15e re-seed on filter change (ASIA|3 → NY|1|WD: index→3, INELIGIBLE, nothing evaluated)",
                   rc = 2 AndAlso st.LastEvaluatedRowIndex = 3 AndAlso
-                  st.PopulationFilterKey = "NY|1" AndAlso st.LastRunOutcome = "INELIGIBLE",
+                  st.PopulationFilterKey = "NY|1|WD" AndAlso st.LastRunOutcome = "INELIGIBLE",
                   String.Format("rc={0} idx={1} key={2} outcome={3}",
                                 rc, st.LastEvaluatedRowIndex, st.PopulationFilterKey, st.LastRunOutcome))
         Finally
             Try : System.IO.Directory.Delete(dir, True) : Catch : End Try
+        End Try
+    End Sub
+
+    ' =======================================================================
+    ' A59 — AutoTweaker weekday-only row filter
+    ' docs/autotweaker-weekday-filter-proposal.md §6.
+    ' Reference week: 2026-01-01=Thu, 01-02=Fri, 01-03=Sat, 01-04=Sun, 01-05=Mon.
+    ' =======================================================================
+
+    ' -- A59a: weekday rows survive, Saturday and Sunday rows are excluded -----
+    Private Sub A59a_WeekdayRowsSurviveWeekendExcluded()
+        Dim rows As New List(Of CsvRow) From {
+            New CsvRow With {.Timestamp = New DateTime(2026, 1, 1, 12, 0, 0)}, ' Thu
+            New CsvRow With {.Timestamp = New DateTime(2026, 1, 2, 12, 0, 0)}, ' Fri
+            New CsvRow With {.Timestamp = New DateTime(2026, 1, 3, 12, 0, 0)}, ' Sat
+            New CsvRow With {.Timestamp = New DateTime(2026, 1, 4, 12, 0, 0)}, ' Sun
+            New CsvRow With {.Timestamp = New DateTime(2026, 1, 5, 12, 0, 0)}} ' Mon
+        Dim kept = rows.Where(Function(r) AutoTweakerCore.MatchesWeekday(r)).ToList()
+
+        Check("A59a weekday rows survive, Sat/Sun excluded (5 rows -> 3 kept)",
+              kept.Count = 3 AndAlso
+              Not kept.Any(Function(r) r.Timestamp.DayOfWeek = DayOfWeek.Saturday OrElse
+                                        r.Timestamp.DayOfWeek = DayOfWeek.Sunday),
+              String.Format("kept={0}/{1}", kept.Count, rows.Count))
+    End Sub
+
+    ' -- A59b: the "|WD" key term triggers exactly one re-seed off the LIVE key --
+    ' Pre-seeds population_filter_key="NY|1" — the value shipped before this change —
+    ' so the fixture proves the deploy-day re-seed fires, not just a fresh-config one.
+    Private Sub A59b_ReseedOnWeekdayKeyChange()
+        Dim dir As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a59b_" & Guid.NewGuid().ToString("N"))
+        System.IO.Directory.CreateDirectory(dir)
+        Try
+            Dim csvPath   As String = System.IO.Path.Combine(dir, "analysis_log.csv")
+            Dim setPath   As String = System.IO.Path.Combine(dir, "settings.json")
+            Dim statePath As String = System.IO.Path.Combine(dir, "state.json")
+
+            ' 5 NY res-1 rows, one per day Thu..Mon — filtered (NY×1, weekday) drops
+            ' Sat/Sun, so filtered.Count = 3.
+            System.IO.File.WriteAllText(csvPath,
+                "Timestamp,Price,Verdict,ExecResolution" & vbCrLf &
+                "2026-01-01 14:00:00,100000,LONG,1" & vbCrLf &
+                "2026-01-02 15:00:00,100000,LONG,1" & vbCrLf &
+                "2026-01-03 16:00:00,100000,LONG,1" & vbCrLf &
+                "2026-01-04 17:00:00,100000,LONG,1" & vbCrLf &
+                "2026-01-05 18:00:00,100000,LONG,1" & vbCrLf)
+
+            System.IO.File.WriteAllText(setPath,
+                "{""version"":1,""session_volume"":{""sessions"":[" &
+                "{""name"":""ASIA"",""start_hour"":0,""end_hour"":7,""execution_resolution"":3}," &
+                "{""name"":""LONDON"",""start_hour"":8,""end_hour"":12,""execution_resolution"":3}," &
+                "{""name"":""NY"",""start_hour"":13,""end_hour"":23,""execution_resolution"":1}]}}")
+
+            Dim cfg As New TweakerConfig With {
+                .WindowMode = TweakerConfig.WindowModeFixed,
+                .CsvPath = csvPath, .SettingsPath = setPath, .StatePath = statePath,
+                .DryRunEnabled = True,
+                .PopulationFilter = New PopulationFilter With {.Session = "NY", .ExecutionResolution = 1}}
+            Dim st As New TweakerState With {
+                .PopulationFilterKey = "NY|1", .LastEvaluatedRowIndex = 999}
+
+            Dim rc As Integer = AutoTweakerCore.RunAsync(cfg, st, statePath).GetAwaiter().GetResult()
+
+            Check("A59b re-seed on weekday-key change (NY|1 -> NY|1|WD: index->3, INELIGIBLE, nothing evaluated)",
+                  rc = 2 AndAlso st.LastEvaluatedRowIndex = 3 AndAlso
+                  st.PopulationFilterKey = "NY|1|WD" AndAlso st.LastRunOutcome = "INELIGIBLE",
+                  String.Format("rc={0} idx={1} key={2} outcome={3}",
+                                rc, st.LastEvaluatedRowIndex, st.PopulationFilterKey, st.LastRunOutcome))
+        Finally
+            Try : System.IO.Directory.Delete(dir, True) : Catch : End Try
+        End Try
+    End Sub
+
+    ' -- A59c: pins the D-2 burn — a window spanning a weekend after filtering ---
+    ' emits SKIPPED_SESSION_BOUNDARY. No Thursday row: the CSV starts on Friday so
+    ' filtered[0..1] is exactly [Fri, Mon] under the fix. Asserting on the absolute
+    ' WindowStartRow/WindowEndRow (not just the outcome string) makes this
+    ' mutation-sensitive to the weekday guard: if MatchesWeekday were reverted,
+    ' filtered[0..1] would be [Fri, Sat] instead and WindowEndRow would read 1, not 3.
+    Private Sub A59c_WeekendGapTripsSessionBoundary()
+        Dim dir As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a59c_" & Guid.NewGuid().ToString("N"))
+        System.IO.Directory.CreateDirectory(dir)
+        Try
+            Dim csvPath   As String = System.IO.Path.Combine(dir, "analysis_log.csv")
+            Dim setPath   As String = System.IO.Path.Combine(dir, "settings.json")
+            Dim statePath As String = System.IO.Path.Combine(dir, "state.json")
+
+            System.IO.File.WriteAllText(csvPath,
+                "Timestamp,Price,Verdict,ExecResolution" & vbCrLf &
+                "2026-01-02 14:00:00,100000,LONG,1" & vbCrLf &  ' Fri — CsvRow.Index=0
+                "2026-01-03 14:00:00,100000,LONG,1" & vbCrLf &  ' Sat — excluded, Index=1
+                "2026-01-04 14:00:00,100000,LONG,1" & vbCrLf &  ' Sun — excluded, Index=2
+                "2026-01-05 14:00:00,100000,LONG,1" & vbCrLf)   ' Mon — Index=3
+
+            System.IO.File.WriteAllText(setPath,
+                "{""version"":1,""session_volume"":{""sessions"":[" &
+                "{""name"":""ASIA"",""start_hour"":0,""end_hour"":7,""execution_resolution"":3}," &
+                "{""name"":""LONDON"",""start_hour"":8,""end_hour"":12,""execution_resolution"":3}," &
+                "{""name"":""NY"",""start_hour"":13,""end_hour"":23,""execution_resolution"":1}]}}")
+
+            Dim cfg As New TweakerConfig With {
+                .WindowMode = TweakerConfig.WindowModeFixed,
+                .WindowSizeVerdicts = 2,
+                .CsvPath = csvPath, .SettingsPath = setPath, .StatePath = statePath,
+                .DryRunEnabled = True,
+                .PopulationFilter = New PopulationFilter With {.Session = "NY", .ExecutionResolution = 1}}
+            ' Key already matches post-fix — this run must reach the boundary check,
+            ' not the re-seed gate.
+            Dim st As New TweakerState With {
+                .PopulationFilterKey = "NY|1|WD", .LastEvaluatedRowIndex = 0}
+
+            Dim rc As Integer = AutoTweakerCore.RunAsync(cfg, st, statePath).GetAwaiter().GetResult()
+            Dim lastRound = st.RoundHistory.LastOrDefault()
+
+            Check("A59c weekend gap (Fri idx0 -> Mon idx3, filtered-adjacent) trips SKIPPED_SESSION_BOUNDARY",
+                  rc = 2 AndAlso st.LastRunOutcome = "SKIPPED_SESSION_BOUNDARY" AndAlso
+                  lastRound IsNot Nothing AndAlso
+                  lastRound.Outcome = "SKIPPED_SESSION_BOUNDARY" AndAlso
+                  lastRound.WindowStartRow = 0 AndAlso lastRound.WindowEndRow = 3,
+                  String.Format("rc={0} outcome={1} start={2} end={3}",
+                                rc, st.LastRunOutcome,
+                                If(lastRound Is Nothing, -1, lastRound.WindowStartRow),
+                                If(lastRound Is Nothing, -1, lastRound.WindowEndRow)))
+        Finally
+            Try : System.IO.Directory.Delete(dir, True) : Catch : End Try
+        End Try
+    End Sub
+
+    ' -- A59d: ConditionsExtractor sees no weekend row (D-3) --------------------
+    ' A round span (WindowStartRow=0..WindowEndRow=3) that contains weekend lines.
+    ' Without the fix, all 4 rows are counted (2 UP + 2 RB -> "UP:50|...|RB:50|...");
+    ' with it, only the 2 weekday rows are counted (both UP -> "UP:100|...").
+    Private Sub A59d_ConditionsExtractionExcludesWeekendRows()
+        Dim path As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a59d_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            System.IO.File.WriteAllText(path,
+                "Timestamp,Price,Regime,Verdict" & vbCrLf &
+                "2026-01-02 14:00:00,100,TRENDING_UP,LONG" & vbCrLf &   ' Fri — kept
+                "2026-01-03 14:00:00,101,RANGE_BOUND,LONG" & vbCrLf &   ' Sat — must be excluded
+                "2026-01-04 14:00:00,102,RANGE_BOUND,LONG" & vbCrLf &   ' Sun — must be excluded
+                "2026-01-05 14:00:00,103,TRENDING_UP,LONG" & vbCrLf)    ' Mon — kept
+
+            Dim round As New RoundSummary With {.WindowStartRow = 0, .WindowEndRow = 3}
+            Dim cv = ConditionsExtractor.Extract(path, New List(Of RoundSummary) From {round}, 5.0, 15.0)
+
+            Check("A59d ConditionsExtractor excludes weekend rows from the regime mix (UP:100, not UP:50/RB:50)",
+                  cv.RegimeMix = "UP:100|DN:0|RB:0|TR:0",
+                  String.Format("RegimeMix='{0}'", cv.RegimeMix))
+        Finally
+            Try : System.IO.File.Delete(path) : Catch : End Try
+        End Try
+    End Sub
+
+    ' -- A59e: the MinValue trap — an unparseable timestamp is EXCLUDED, --------
+    ' not admitted as Monday (DateTime.MinValue.DayOfWeek = Monday).
+    Private Sub A59e_UnparseableTimestampExcludedNotAdmittedAsMonday()
+        Dim path As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a59e_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            System.IO.File.WriteAllText(path,
+                "Timestamp,Price,Verdict" & vbCrLf &
+                "2026-01-05 14:00:00,100000,LONG" & vbCrLf &   ' well-formed Monday
+                "2026-01-05T14:00:00,100000,LONG" & vbCrLf)    ' ISO 'T' separator — TryParseExact rejects
+            Dim rows = ForwardWindowJoiner.Load(path)
+
+            Check("A59e malformed timestamp parses to MinValue and is excluded, not admitted as Monday",
+                  rows.Count = 2 AndAlso
+                  rows(1).Timestamp = DateTime.MinValue AndAlso
+                  AutoTweakerCore.MatchesWeekday(rows(0)) AndAlso
+                  Not AutoTweakerCore.MatchesWeekday(rows(1)),
+                  String.Format("rows={0} row1Ts={1:o} row0Match={2} row1Match={3}",
+                                rows.Count,
+                                If(rows.Count > 1, rows(1).Timestamp, DateTime.MinValue),
+                                If(rows.Count > 0, AutoTweakerCore.MatchesWeekday(rows(0)), False),
+                                If(rows.Count > 1, AutoTweakerCore.MatchesWeekday(rows(1)), False)))
+        Finally
+            Try : System.IO.File.Delete(path) : Catch : End Try
         End Try
     End Sub
 
