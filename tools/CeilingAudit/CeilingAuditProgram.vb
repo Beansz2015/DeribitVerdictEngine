@@ -66,8 +66,7 @@ Public Class CeilingAuditProgram
             Return 1
         End If
 
-        ' -- Load settings (version check honest — D6 precedent: WARN, do not block) --
-        Dim versionCheck As String = "OK"
+        ' -- Load settings ---------------------------------------------------------
         Dim cfg As EngineSettings
         Try
             SettingsLoader.Initialise(settingsPath)
@@ -76,26 +75,43 @@ Public Class CeilingAuditProgram
             Console.Error.WriteLine("[CeilingAudit] Settings load failed: " & ex.Message)
             Return 1
         End Try
-        ' Baseline at build time; a later settings bump WARNs. 59 -> 68, 2026-08-25.
-        ' ⚠ THIS HAS NOW GONE STALE THREE TIMES (recorded as "six versions stale", then
-        ' seven, then nine) because settings.json bumps for reasons this tool does not
-        ' read, so the WARN fires on versions that cannot affect it and gets ignored —
-        ' the alarm-fatigue failure this project has flagged elsewhere.
-        ' ⭐ THE CHECK IS A PROXY FOR EXACTLY THREE VALUES. Confirm these, not the number:
-        '     cfg.Scoring.AtrTargetMultiplier          (last moved v51)
-        '     cfg.Scoring.TradeCosts.EffectiveMinMovePct
-        '     cfg.SessionVolume.Sessions[].StartHour   (last moved v12; v58 moved the
-        '                                               MULTIPLIERS, which this tool
-        '                                               never reads)
-        ' Verified for 59 -> 68: none of the three changed value. v62 DID restructure
-        ' scoring.trade_costs, but its defaults compose to 0.0008 exactly — identical to
-        ' the flat min_tradeable_move_pct it replaced — and this tool already reads the
-        ' shared EffectiveMinMovePct resolver rather than either literal.
-        Dim expectedVersion As Integer = 68
-        If cfg.Version <> expectedVersion Then
-            versionCheck = "WARN: settings.json version = " & cfg.Version & " (expected " & expectedVersion & " at build time)"
-            Console.WriteLine("[CeilingAudit] " & versionCheck)
+
+        ' ⭐ PROVENANCE RECORD, NOT A VERSION CHECK (2026-08-25).
+        ' This used to compare cfg.Version against a build-time literal and WARN on a
+        ' mismatch. That check ROTTED BY CONSTRUCTION and did so three times — recorded
+        ' as "six versions stale", then seven, then nine — because settings.json bumps
+        ' for reasons this tool cannot read. It fired on versions that could not affect
+        ' the audit, which trains a reader to ignore it: alarm fatigue on a check nobody
+        ' could act on. The version number was only ever a poor PROXY for the real
+        ' question, which is "what was this run parameterised by?"
+        '
+        ' So answer that question directly. The audit consumes EXACTLY these three
+        ' values (verified 2026-08-25 by grepping every cfg.* reference in this project):
+        '     cfg.Scoring.AtrTargetMultiplier             CsvFeatureBuilder.vb:409
+        '     cfg.Scoring.TradeCosts.EffectiveMinMovePct  CsvFeatureBuilder.vb:408
+        '     cfg.SessionVolume.Sessions[].StartHour      CsvFeatureBuilder.vb:395
+        '
+        ' ⛔ DO NOT reintroduce a baseline to compare these against. A hardcoded
+        ' expected set is a FOURTH COPY of values that already live in settings.json,
+        ' and it drifts exactly as the version literal did — the defect class
+        ' docs/seam-audit-2026-08-11.md S-2 found across 11 of 42 method defaults.
+        ' RECORD the values; do not judge them. A reader comparing two reports can see
+        ' what moved; a literal in here can only go stale.
+        Dim consumed As New List(Of String)()
+        consumed.Add("atr_target_mult=" & cfg.Scoring.AtrTargetMultiplier.ToString("0.####", CultureInfo.InvariantCulture))
+        consumed.Add("min_move_pct=" & cfg.Scoring.TradeCosts.EffectiveMinMovePct.ToString("0.######", CultureInfo.InvariantCulture))
+        Dim buckets As New List(Of String)()
+        If cfg.SessionVolume IsNot Nothing AndAlso cfg.SessionVolume.Sessions IsNot Nothing Then
+            For Each b In cfg.SessionVolume.Sessions
+                If b IsNot Nothing Then buckets.Add(b.Name & "@" & b.StartHour.ToString(CultureInfo.InvariantCulture))
+            Next
         End If
+        ' Absence is reported, never silently rendered as an empty list — a report that
+        ' shows "buckets=" reads as "no buckets configured", which is a different and
+        ' much worse claim than "this tool could not read them".
+        consumed.Add("buckets=" & If(buckets.Count > 0, String.Join("/", buckets), "NONE READABLE"))
+        Dim versionCheck As String = "consumed " & String.Join(" · ", consumed)
+        Console.WriteLine("[CeilingAudit] " & versionCheck)
 
         ' -- Load + partition rows -------------------------------------------------
         Dim stats As LoadStats = Nothing
