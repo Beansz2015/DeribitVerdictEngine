@@ -2,11 +2,22 @@
 ' The `coverage` verb (docs/trade-store-coverage-report-proposal.md, BUILD-AUTHORIZED
 ' 2026-08-03 — see docs/trade-store-coverage-report-implementer-brief.md).
 '
-' Reports capture health for the raw-trade store: six classes per weekday UTC hour
-' (captured / defect / expected-missing / not-capturing / unknown-scope /
+' Reports capture health for the raw-trade store: seven classes per weekday UTC hour
+' (captured / defect / trailing-edge / expected-missing / not-capturing / unknown-scope /
 ' out-of-scope-weekend — docs/j-b-scoping-ruling-2026-08-02.md +
-' docs/weekday-scope-ruling-2026-08-03.md), plus S4 candle/funding completeness and an
-' optional S0 venue diff. Tools-only, read-only, no settings keys, no version bump.
+' docs/weekday-scope-ruling-2026-08-03.md + docs/coverage-trailing-edge-f1-proposal.md
+' §4b), plus S4 candle/funding completeness and an optional S0 venue diff. Tools-only,
+' read-only, no settings keys, no version bump.
+'
+' ── trailing-edge (F1, docs/coverage-trailing-edge-f1-proposal.md) ──
+' AccumulateHourStats charges a gap to the hour containing the trade that ENDS it, so an
+' hour with trades early and silence to its own end read Captured — the silence was real
+' but attributed to the FOLLOWING hour. HourClass.TrailingEdge (D-5(c)) now reports that
+' hour on its own terms: rows present, internally clean, but silent from the last trade to
+' the observed end. "Observed end" is bounded (D-4(c)) by MIN(the span's own end, the
+' evidence boundary, the store's own last in-range trade) so a run with no fresher evidence
+' — most manual invocations — does not flag its own final hour just because the tape
+' stopped there.
 '
 ' ── Two decisions worth flagging explicitly to the reviewing seat (see the Session 1
 '    spec-back) ──
@@ -45,6 +56,12 @@ Imports System.Threading.Tasks
 Public Enum HourClass
     Captured
     Defect
+    ' [F1, D-5.1] Sits between Defect and Captured in the combine precedence at
+    ' ClassifyHour's worst-of resolution — a split hour with one clean span and one
+    ' trailing-edge span must report TrailingEdge, never Captured. Ordinal position here is
+    ' inert (every HourClass reference in the tree is by name — CountByClass, ToString() —
+    ' never by ordinal), so the insertion point is free to match that precedence.
+    TrailingEdge
     ExpectedMissing
     NotCapturing
     UnknownScope
@@ -93,6 +110,11 @@ End Class
 Public Class HourStoreStats
     Public Property RowCount As Integer
     Public Property LongestGapMs As Long
+    ''' <summary>[F1, D-2/D-3(c)] The last trade timestamp seen in this bucket. Nullable BY
+    ''' RULING — a default of 0 reads as a 1970-01-01 trailing gap on every hand-built fixture
+    ''' that never sets it (coverage-trailing-edge-f1-proposal.md §4a.4). Nothing ⇒ the
+    ''' trailing-edge check is skipped, never evaluated against a phantom epoch.</summary>
+    Public Property LastTsMs As Long?
 End Class
 
 Public Class CoverageResult
@@ -107,6 +129,14 @@ Public Class CoverageResult
     Public Property GapMs As Long
     Public Property ObservedLongestGapMs As Long
     Public Property GapBreachHours As Integer
+
+    ''' <summary>[F1, D-6(c)] Reported BESIDE ObservedLongestGapMs/GapBreachHours, never folded
+    ''' into them — D-6's re-ruling found folding is a no-op on the gap metric (the straddling
+    ''' gap that produces a trailing edge is always ≥ the trailing edge itself and is already
+    ''' counted there) and a silent double-count on the hour metric (the hour the gap ENDS in
+    ''' already counts the breach). See coverage-trailing-edge-f1-proposal.md §4a.3.</summary>
+    Public Property TrailingEdgeHours As Integer
+    Public Property ObservedLongestTrailingMs As Long
 
     Public Property CandleHave As New Dictionary(Of Integer, Integer)
     Public Property CandleExpected As New Dictionary(Of Integer, Integer)
@@ -387,12 +417,25 @@ Public NotInheritable Class CoverageReport
     ''' tool for a 6-month window) — and fold into per-UTC-hour counters. Each month is
     ''' individually whole-row-deduped + sorted (bounded to one month in memory at a time),
     ''' carrying the previous trade's timestamp across month boundaries so a gap spanning
-    ''' the seam is still measured correctly.</summary>
+    ''' the seam is still measured correctly.
+    '''
+    ''' [F1, D-4(c)] Also returns StoreEndMs — the last trade timestamp actually WITHIN
+    ''' [fromUtc, toUtc), Nothing if none. This is deliberately NOT the same as the largest
+    ''' LastTsMs across the returned ByHour dictionary: EnumerateMonths reads WHOLE month
+    ''' files, so ByHour is a superset of the requested range (§4a.1/§8) — a trade sitting
+    ''' past toUtc in the same file must never leak into this value, or it silently
+    ''' un-exempts the true last hour of the walk (coverage-trailing-edge-f1-proposal.md
+    ''' §4a.1, fixture F1-e).</summary>
     Public Shared Function AccumulateHourStats(storeDir As String, fromUtc As DateTime, toUtc As DateTime) _
-            As Dictionary(Of Long, HourStoreStats)
+            As (ByHour As Dictionary(Of Long, HourStoreStats), StoreEndMs As Long?)
         Dim byHour As New Dictionary(Of Long, HourStoreStats)
         Dim prevTs As Long = Long.MinValue
         Dim havePrev As Boolean = False
+        Dim fromMs As Long =
+            New DateTimeOffset(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim toMs As Long =
+            New DateTimeOffset(DateTime.SpecifyKind(toUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim storeEndMs As Long? = Nothing
 
         For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
             Dim path As String = TradeStoreWriter.TradeFileFor(storeDir, m.Year, m.Month)
@@ -412,15 +455,17 @@ Public NotInheritable Class CoverageReport
                     byHour(hourStartMs) = stats
                 End If
                 stats.RowCount += 1
+                stats.LastTsMs = t.Timestamp
                 If havePrev Then
                     Dim gap As Long = t.Timestamp - prevTs
                     If gap > stats.LongestGapMs Then stats.LongestGapMs = gap
                 End If
                 prevTs = t.Timestamp
                 havePrev = True
+                If t.Timestamp >= fromMs AndAlso t.Timestamp < toMs Then storeEndMs = t.Timestamp
             Next
         Next
-        Return byHour
+        Return (byHour, storeEndMs)
     End Function
 
     ''' <summary>[SH-1 §4.2 route (b)] A second, targeted-by-caller pass for hours a D7 marker
@@ -459,6 +504,7 @@ Public NotInheritable Class CoverageReport
                         bySpan(spanStartMs) = stats
                     End If
                     stats.RowCount += 1
+                    stats.LastTsMs = t.Timestamp
                     If havePrev Then
                         Dim gap As Long = t.Timestamp - prevTs
                         If gap > stats.LongestGapMs Then stats.LongestGapMs = gap
@@ -484,16 +530,25 @@ Public NotInheritable Class CoverageReport
 
     ' ── Per-hour classification ───────────────────────────────────────────────────────
 
-    ''' <summary>One sub-span's classify — the same five checks <see cref="ClassifyHour"/> ran
+    ''' <summary>One sub-span's classify — the same checks <see cref="ClassifyHour"/> ran
     ''' inline pre-SH-1, parameterised on an already-resolved scope and an already-scoped
     ''' stats/uptime read so both the whole-hour path and the split path share one
-    ''' implementation.</summary>
+    ''' implementation.
+    '''
+    ''' [F1, D-1/D-4(c)] `boundMs` is the caller-resolved MIN of the evidence boundary and the
+    ''' store's own last in-range trade (BuildResult computes it once; a direct caller — e.g.
+    ''' a fixture bypassing BuildResult — may pass Long.MaxValue for "unconstrained"). The
+    ''' observed end of this span is Min(spanEndMsInclusive, boundMs); a span that is
+    ''' otherwise clean but silent from its last trade to that observed end past `gapMs`
+    ''' reports TrailingEdge rather than Captured — the D-3(c) nullable LastTsMs is the guard,
+    ''' so a hand-built HourStoreStats that never sets it is never evaluated.</summary>
     Private Shared Function ClassifySpan(spanStartMs As Long, spanEndMsInclusive As Long,
                                          scopeKind As String, scopeInstanceId As String,
                                          upIntervals As List(Of UpInterval),
                                          s1Skipped As Boolean,
                                          spanStats As HourStoreStats,
-                                         gapMs As Long) As (Classification As HourClass, InstanceId As String, Reason As String)
+                                         gapMs As Long,
+                                         boundMs As Long) As (Classification As HourClass, InstanceId As String, Reason As String)
         If scopeKind = "unknown" Then
             Return (HourClass.UnknownScope, "", "")
         End If
@@ -504,6 +559,13 @@ Public NotInheritable Class CoverageReport
         Dim stats As HourStoreStats = If(spanStats, New HourStoreStats())
         Dim storeClean As Boolean = stats.RowCount > 0 AndAlso stats.LongestGapMs <= gapMs
         If storeClean Then
+            Dim observedEndMs As Long = Math.Min(spanEndMsInclusive, boundMs)
+            If stats.LastTsMs.HasValue AndAlso observedEndMs > stats.LastTsMs.Value Then
+                Dim trailingMs As Long = observedEndMs - stats.LastTsMs.Value
+                If trailingMs > gapMs Then
+                    Return (HourClass.TrailingEdge, "", "trailing-edge(" & trailingMs & "ms)")
+                End If
+            End If
             Return (HourClass.Captured, "", "")
         End If
 
@@ -523,7 +585,7 @@ Public NotInheritable Class CoverageReport
         Return (HourClass.Defect, up.InstanceId, reason)
     End Function
 
-    ''' <summary>[SH-1] The six-class per-hour verdict. Positive store evidence (clean rows)
+    ''' <summary>[SH-1] The seven-class per-hour verdict. Positive store evidence (clean rows)
     ''' always wins as Captured, regardless of how ambiguous the uptime read is. See the
     ''' file-header note for the ExpectedMissing / S1-skipped design decisions.
     '''
@@ -531,20 +593,28 @@ Public NotInheritable Class CoverageReport
     ''' a marker landing exactly ON hourStartMs was already handled by ResolveScope's `≤`) is
     ''' SPLIT at every such marker and each part classified against the scope that governed it.
     ''' Ruling (docs/coverage-split-hour-implementer-brief.md §2): the hour is DEFECT if EITHER
-    ''' part is DEFECT. D-2: when no part is Defect but the parts disagree, Captured wins —
-    ''' positive store evidence outranks an ambiguous/absent uptime or scope read, same
-    ''' precedence the whole-hour path already used. Output stays ONE ROW PER HOUR (D-1); the
-    ''' split detail goes in Reason only.
+    ''' part is DEFECT. [F1, D-5.1] TrailingEdge sits directly below Defect and above Captured —
+    ''' a split hour with one clean span and one trailing-edge span reports TrailingEdge, never
+    ''' Captured (the SH-1 defect reproduced in miniature if this precedence is wrong). D-2:
+    ''' when no part is Defect or TrailingEdge but the parts disagree, Captured wins — positive
+    ''' store evidence outranks an ambiguous/absent uptime or scope read, same precedence the
+    ''' whole-hour path already used. Output stays ONE ROW PER HOUR (D-1); the split detail goes
+    ''' in Reason only.
     ''' `spanStats` carries the route-(b) targeted pass's per-span stats (see
     ''' AccumulateSplitSpanStats) — Nothing/absent is fine for an hour that turns out not to be
-    ''' split.</summary>
+    ''' split. `observedBoundMs` [F1, D-4(c)] is the caller-resolved trailing-edge bound —
+    ''' BuildResult computes MIN(the evidence boundary, the store's own last in-range trade) once
+    ''' and threads it here; the default Long.MaxValue ("unconstrained") is what every pre-F1
+    ''' direct caller (fixtures that never set HourStoreStats.LastTsMs) keeps running under
+    ''' unchanged, since the trailing check is gated on that field being set at all.</summary>
     Public Shared Function ClassifyHour(hourStartUtc As DateTime,
                                         markers As List(Of CaptureMarkerLog.MarkerRecord),
                                         upIntervals As List(Of UpInterval),
                                         s1Skipped As Boolean,
                                         hourStats As HourStoreStats,
                                         gapMs As Long,
-                                        Optional spanStats As Dictionary(Of Long, HourStoreStats) = Nothing) As HourResult
+                                        Optional spanStats As Dictionary(Of Long, HourStoreStats) = Nothing,
+                                        Optional observedBoundMs As Long = Long.MaxValue) As HourResult
         Dim result As New HourResult With {.HourUtc = hourStartUtc}
 
         If hourStartUtc.DayOfWeek = DayOfWeek.Saturday OrElse hourStartUtc.DayOfWeek = DayOfWeek.Sunday Then
@@ -563,7 +633,7 @@ Public NotInheritable Class CoverageReport
         If splitMarkers.Count = 0 Then
             Dim scope = ResolveScope(hourStartMs, markers)
             Dim only = ClassifySpan(hourStartMs, hourEndMs, scope.Kind, scope.InstanceId,
-                                    upIntervals, s1Skipped, hourStats, gapMs)
+                                    upIntervals, s1Skipped, hourStats, gapMs, observedBoundMs)
             result.Classification = only.Classification
             result.InstanceId = only.InstanceId
             result.Reason = only.Reason
@@ -594,21 +664,28 @@ Public NotInheritable Class CoverageReport
             Dim spanStat As HourStoreStats = Nothing
             If spanStats IsNot Nothing Then spanStats.TryGetValue(spanStartMs, spanStat)
             Dim cls = ClassifySpan(spanStartMs, spanEndMsIncl, scopeKind, scopeIid,
-                                   upIntervals, s1Skipped, spanStat, gapMs)
+                                   upIntervals, s1Skipped, spanStat, gapMs, observedBoundMs)
             spans.Add((cls.Classification, cls.InstanceId, cls.Reason, spanStartMs))
         Next
 
-        ' Worst-of, per the ruling: any Defect ⇒ Defect. D-2: else Captured wins on a
-        ' disagreement. [D-3, RULED 2026-08-13 — docs/coverage-split-hour-implementer-brief.md
-        ' §5a] The residual (no Defect, no Captured) orders UnknownScope > ExpectedMissing >
-        ' NotCapturing: bottom-placing UnknownScope would launder an uncharacterisable span into
-        ' a confident label (the SH-1 defect in miniature), and it would silently reverse
-        ' ClassifySpan's own precedence, which already checks unknown BEFORE off on the
-        ' single-scope path. ExpectedMissing > NotCapturing stands — NotCapturing asserts a
-        ' deliberate off-state that a span with no such record cannot honestly claim.
+        ' Worst-of, per the ruling: any Defect ⇒ Defect. [F1, D-5.1] Else any TrailingEdge ⇒
+        ' TrailingEdge — a span silent to the observed edge outranks a sibling span that
+        ' happens to be clean, exactly as a Defect span would; placing this check BELOW
+        ' Captured would launder a genuine trailing-edge span into Captured, the SH-1 defect
+        ' reproduced in miniature (fixture F1-d). D-2: else Captured wins on a disagreement.
+        ' [D-3, RULED 2026-08-13 — docs/coverage-split-hour-implementer-brief.md §5a] The
+        ' residual (no Defect, no TrailingEdge, no Captured) orders UnknownScope >
+        ' ExpectedMissing > NotCapturing: bottom-placing UnknownScope would launder an
+        ' uncharacterisable span into a confident label (the SH-1 defect in miniature), and it
+        ' would silently reverse ClassifySpan's own precedence, which already checks unknown
+        ' BEFORE off on the single-scope path. ExpectedMissing > NotCapturing stands —
+        ' NotCapturing asserts a deliberate off-state that a span with no such record cannot
+        ' honestly claim.
         Dim finalCls As HourClass
         If spans.Any(Function(s) s.Classification = HourClass.Defect) Then
             finalCls = HourClass.Defect
+        ElseIf spans.Any(Function(s) s.Classification = HourClass.TrailingEdge) Then
+            finalCls = HourClass.TrailingEdge
         ElseIf spans.Any(Function(s) s.Classification = HourClass.Captured) Then
             finalCls = HourClass.Captured
         ElseIf spans.Any(Function(s) s.Classification = HourClass.UnknownScope) Then
@@ -883,7 +960,7 @@ Public NotInheritable Class CoverageReport
         End Try
     End Function
 
-    ''' <summary>Read-only: builds the full six-class hourly walk + S4 completeness. S0 is
+    ''' <summary>Read-only: builds the full seven-class hourly walk + S4 completeness. S0 is
     ''' NOT run here (it needs live HTTP) — the CLI wires RunVenueDiffAsync's result onto the
     ''' returned CoverageResult separately when --verify-venue is passed.</summary>
     Public Shared Function BuildResult(opts As CoverageOptions, storeDir As String,
@@ -929,7 +1006,18 @@ Public NotInheritable Class CoverageReport
             result.PostBoundaryHoursExcluded = CInt(Math.Ceiling((opts.ToUtc - walkToUtc).TotalHours))
         End If
 
-        Dim hourStats = AccumulateHourStats(storeDir, walkFromUtc, walkToUtc)
+        Dim hourStatsResult = AccumulateHourStats(storeDir, walkFromUtc, walkToUtc)
+        Dim hourStats = hourStatsResult.ByHour
+
+        ' [F1, D-4(c)] The trailing-edge observation bound — MIN of the evidence/request
+        ' boundary and the store's own last in-range trade, resolved ONCE here and threaded
+        ' into every ClassifyHour call below. StoreEndMs is already filtered to
+        ' [walkFromUtc, walkToUtc), so it is always ≤ walkToUtcMs when present; the Min() is
+        ' kept explicit to match the ruled formula literally rather than rely on that fact.
+        Dim walkToUtcMs As Long =
+            New DateTimeOffset(DateTime.SpecifyKind(walkToUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim observedBoundMs As Long = If(hourStatsResult.StoreEndMs.HasValue,
+                                         Math.Min(walkToUtcMs, hourStatsResult.StoreEndMs.Value), walkToUtcMs)
 
         ' [SH-1 §4.2] Find hours a marker splits (strictly inside — a marker landing exactly on
         ' hourStartMs was already ResolveScope's business) and run route (b)'s targeted second
@@ -969,11 +1057,25 @@ Public NotInheritable Class CoverageReport
             Dim hourStartMs As Long = New DateTimeOffset(cursor).ToUnixTimeMilliseconds()
             Dim stats As HourStoreStats = Nothing
             hourStats.TryGetValue(hourStartMs, stats)
-            Dim hr = ClassifyHour(cursor, markers, upIntervals, result.S1Skipped, stats, opts.GapMs, splitSpanStats)
+            Dim hr = ClassifyHour(cursor, markers, upIntervals, result.S1Skipped, stats, opts.GapMs,
+                                  splitSpanStats, observedBoundMs)
             result.Hours.Add(hr)
             If stats IsNot Nothing Then
                 If stats.LongestGapMs > result.ObservedLongestGapMs Then result.ObservedLongestGapMs = stats.LongestGapMs
                 If stats.LongestGapMs > opts.GapMs Then result.GapBreachHours += 1
+            End If
+            ' [F1, D-6(c)] Reported beside — never folded into — ObservedLongestGapMs/
+            ' GapBreachHours (§4a.3). Whole-hour `stats` is the same simplification the two
+            ' sibling counters above already accept (they too read only from the whole-hour
+            ' walk, not per-split-span) — pre-existing, not tightened here.
+            If hr.Classification = HourClass.TrailingEdge Then
+                result.TrailingEdgeHours += 1
+                If stats IsNot Nothing AndAlso stats.LastTsMs.HasValue Then
+                    Dim hourEndMs As Long = hourStartMs + HourMs - 1
+                    Dim observedEndMs As Long = Math.Min(hourEndMs, observedBoundMs)
+                    Dim trailingMs As Long = Math.Max(0L, observedEndMs - stats.LastTsMs.Value)
+                    If trailingMs > result.ObservedLongestTrailingMs Then result.ObservedLongestTrailingMs = trailingMs
+                End If
             End If
             cursor = cursor.AddHours(1)
         End While
@@ -1008,6 +1110,7 @@ Public NotInheritable Class CoverageReport
         End If
         sb.AppendLine(String.Format("  captured hours      {0}", result.CountByClass(HourClass.Captured)))
         sb.AppendLine(String.Format("  DEFECT              {0}   ← capture defects", result.CountByClass(HourClass.Defect)))
+        sb.AppendLine(String.Format("  trailing-edge        {0}   ← silence to the observed edge, not a gap between trades", result.CountByClass(HourClass.TrailingEdge)))
         sb.AppendLine(String.Format("  expected-missing     {0}", result.CountByClass(HourClass.ExpectedMissing)))
         sb.AppendLine(String.Format("  not-capturing        {0}", result.CountByClass(HourClass.NotCapturing)))
         sb.AppendLine(String.Format("  unknown-scope        {0}", result.CountByClass(HourClass.UnknownScope)))
@@ -1018,6 +1121,10 @@ Public NotInheritable Class CoverageReport
         sb.AppendLine(String.Format(CultureInfo.InvariantCulture,
             "  longest gap         {0:F1}s  (threshold {1:F1}s — {2} breach(es))",
             result.ObservedLongestGapMs / 1000.0, result.GapMs / 1000.0, result.GapBreachHours))
+        ' [F1, D-6(c)] Own pair, reported beside — never folded into — the gap counters above.
+        sb.AppendLine(String.Format(CultureInfo.InvariantCulture,
+            "  longest trailing    {0:F1}s  ({1} trailing-edge hour(s))",
+            result.ObservedLongestTrailingMs / 1000.0, result.TrailingEdgeHours))
 
         Dim resList = {1, 3, 5, 15}
         Dim candleOk As Boolean = True
@@ -1089,25 +1196,19 @@ Public NotInheritable Class CoverageReport
             End If
         End If
 
+        ' [F1, D-5.3] TrailingEdgeCount joins the "clean" gate — a report carrying
+        ' trailing-edge hours and zero Defect hours must not print `clean` (fixture F1-f).
         Dim defectCount As Integer = result.CountByClass(HourClass.Defect)
+        Dim trailingEdgeCount As Integer = result.CountByClass(HourClass.TrailingEdge)
         Dim fundingBad As Boolean = result.FundingExpected > 0 AndAlso result.FundingHave < result.FundingExpected
-        If defectCount = 0 AndAlso candleOk AndAlso Not fundingBad Then
+        If defectCount = 0 AndAlso trailingEdgeCount = 0 AndAlso candleOk AndAlso Not fundingBad Then
             sb.AppendLine("  VERDICT: clean — no capture defects, candles + funding complete")
         Else
-            sb.AppendLine(String.Format("  VERDICT: {0} defect hour(s){1}", defectCount,
+            Dim trailingNote As String = If(trailingEdgeCount > 0,
+                String.Format(" + {0} trailing-edge hour(s)", trailingEdgeCount), "")
+            sb.AppendLine(String.Format("  VERDICT: {0} defect hour(s){1}{2}", defectCount, trailingNote,
                                         If(Not candleOk OrElse fundingBad, " + store gaps above", "")))
         End If
-        ' [Session 1 review F1, 2026-08-04 — c1-session1-review-2026-08-04.md] AccumulateHourStats
-        ' attributes a gap to the hour containing the trade that ENDS it, so a trailing-edge
-        ' silence (trades early in an hour, then quiet until well into the next) reads
-        ' `captured` on the hour it started in. The incident is not lost — the FOLLOWING hour
-        ' still flags — but `captured` here means "no gap ENDING in this hour breached the
-        ' threshold", not "gap-free throughout". Stated once per report rather than fixed
-        ' blind: the bounded fix needs the trailing-evidence boundary this same file already
-        ' computes (ResolveBoundaryUtc), and rushing it risks a worse mis-attribution than the
-        ' one it fixes.
-        sb.AppendLine("  NOTE: 'captured' = rows present and no gap ENDING in this hour breached the threshold — " &
-                      "a trailing-edge silence is charged to the FOLLOWING hour, not this one.")
         Return sb.ToString()
     End Function
 

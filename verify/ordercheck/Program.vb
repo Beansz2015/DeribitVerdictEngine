@@ -451,6 +451,15 @@ Module Program
         A49w_SplitHourFirstEverMarkerMidHourResidualPrefersUnknownScope()
         A49v_BuildResultOneRowPerHourAcrossASplitDay()
 
+        ' [C1-coverage F1 — trailing-edge gap mis-attribution fix, docs/coverage-trailing-edge
+        ' -f1-proposal.md §4b, BUILD-AUTHORIZED 2026-08-25]
+        F1a_TrailingEdgeCanonicalShapeFlags()
+        F1b_TrailingEdgeBoundStoreEndsHereExempts()
+        F1c_TrailingEdgePartialFinalHourMeasuresToBoundaryNotHourEnd()
+        F1d_TrailingEdgeSplitHourPrecedenceOverCaptured()
+        F1e_TrailingEdgeStoreEndSupersetTrapExemptsLastWalkedHour()
+        F1f_TrailingEdgeVerdictLineNotCleanWithZeroDefects()
+
         ' [A51 — candle/funding store write invariant, docs/store-integrity-check-2026-07-31
         ' -post-fix.md] The candle backfill destroyed June 2026 at 3m/5m/15m by writing a
         ' whole MONTH file from a partial SEGMENT fetch, behind a resolution-blind coverage
@@ -7839,6 +7848,15 @@ Module Program
     End Sub
 
     ' -- A49e: S3 threshold — exact max, breach only strictly above --------------------------
+    ' [F1 revision, docs/coverage-trailing-edge-f1-proposal.md §6 "mechanism note"] This
+    ' fixture calls ClassifyHour DIRECTLY, bypassing BuildResult, so the D-4(c) trailing-edge
+    ' bound is never resolved for it automatically. Without an explicit bound, ClassifySpan
+    ' would measure this hour's trailing edge against the FULL hour end (~53 minutes past the
+    ' hour's own last trade) and wrongly flag TrailingEdge, breaking the Captured assertion at
+    ' the threshold — a defect this fixture was never testing. Passing the real StoreEndMs
+    ' (the hour's own last trade, from AccumulateHourStats' new tuple output) as
+    ' observedBoundMs collapses the trailing gap to zero and restores the fixture's original,
+    ' narrower intent: the INTERNAL gap threshold's <= boundary, nothing about trailing edges.
     Private Sub A49e_S3ThresholdReportsExactMaxAndBreachesOnlyAbove()
         Dim dir As String = A49TempStore("e")
         Try
@@ -7851,7 +7869,8 @@ Module Program
             })
             Dim statsAtThreshold = CoverageReport.AccumulateHourStats(dir, hourStart, hourStart.AddHours(1))
             Dim s1 As HourStoreStats = Nothing
-            statsAtThreshold.TryGetValue(A49Ms(hourStart), s1)
+            statsAtThreshold.ByHour.TryGetValue(A49Ms(hourStart), s1)
+            Dim boundAt As Long = If(statsAtThreshold.StoreEndMs.HasValue, statsAtThreshold.StoreEndMs.Value, Long.MaxValue)
 
             A49Cleanup(dir)
             Directory.CreateDirectory(dir)
@@ -7862,7 +7881,8 @@ Module Program
             })
             Dim statsOverThreshold = CoverageReport.AccumulateHourStats(dir, hourStart, hourStart.AddHours(1))
             Dim s2 As HourStoreStats = Nothing
-            statsOverThreshold.TryGetValue(A49Ms(hourStart), s2)
+            statsOverThreshold.ByHour.TryGetValue(A49Ms(hourStart), s2)
+            Dim boundOver As Long = If(statsOverThreshold.StoreEndMs.HasValue, statsOverThreshold.StoreEndMs.Value, Long.MaxValue)
 
             Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
                 New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
@@ -7871,8 +7891,8 @@ Module Program
                 New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(hourStart.AddHours(-1)),
                                      .LastUtcMs = A49Ms(hourStart.AddHours(2)), .IsTrailing = True}
             }
-            Dim clsAt = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, s1, gapMs)
-            Dim clsOver = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, s2, gapMs)
+            Dim clsAt = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, s1, gapMs, Nothing, boundAt)
+            Dim clsOver = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, s2, gapMs, Nothing, boundOver)
 
             Dim ok As Boolean = s1 IsNot Nothing AndAlso s1.LongestGapMs = gapMs AndAlso
                                s2 IsNot Nothing AndAlso s2.LongestGapMs = gapMs + 1 AndAlso
@@ -8177,6 +8197,13 @@ Module Program
     ' by the OFF marker that governed the hour's start. MUTATION PROOF: pre-fix this reads
     ' NotCapturing (ResolveScope picks the OFF marker for the whole hour and the store is
     ' never consulted) -----------------------------------------------------------------------
+    ' [F1 revision, docs/coverage-trailing-edge-f1-proposal.md §6] The ON span's last trade
+    ' (05:33) sits ~27 minutes before the hour's own end (05:59:59.999) — real accumulated
+    ' data, via AccumulateSplitSpanStats, DOES set LastTsMs now (D-2), so without an explicit
+    ' bound this span would wrongly flag TrailingEdge and break the Captured assertion. The
+    ' real store-end (AccumulateHourStats' StoreEndMs — the only trades in this temp store
+    ' are the three written below, so it resolves to 05:33) is the same bound BuildResult
+    ' would compute in a real run, and it collapses the span's trailing gap to zero.
     Private Sub A49o_SplitHourFlipOnMidHourCleanOnHalfNotLaundered()
         Dim dir As String = A49TempStore("o")
         Try
@@ -8206,8 +8233,10 @@ Module Program
                 {hourStartMs, New List(Of Long) From {hourStartMs, flipMs}}
             }
             Dim spanStats = CoverageReport.AccumulateSplitSpanStats(dir, hourStart, hourStart.AddHours(1), spanBounds)
+            Dim hourStatsResult = CoverageReport.AccumulateHourStats(dir, hourStart, hourStart.AddHours(1))
+            Dim storeEndMs As Long = If(hourStatsResult.StoreEndMs.HasValue, hourStatsResult.StoreEndMs.Value, Long.MaxValue)
 
-            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats)
+            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats, storeEndMs)
 
             Check("A49o split hour — flip ON at :30 with a clean ON-half store reads CAPTURED, not laundered into not-capturing by the OFF marker that governed the hour's start (mutation proof — pre-fix reads NotCapturing)",
                   hr.Classification = HourClass.Captured,
@@ -8362,6 +8391,10 @@ Module Program
 
     ' -- A49t: two in-hour markers split an hour into THREE spans, all independently
     ' classified — off / captured / off, worst-of combine reads CAPTURED -------------------
+    ' [F1 revision, docs/coverage-trailing-edge-f1-proposal.md §6] The middle ON span's last
+    ' trade (:30) sits ~10 minutes before that span's own end (:39:59.999) — same trap as
+    ' A49o, on a narrower span. The real store-end (only two trades exist in this temp store,
+    ' so AccumulateHourStats' StoreEndMs resolves to :30) collapses the trailing gap to zero.
     Private Sub A49t_SplitHourTwoMarkersThreeSpansAllClassified()
         Dim dir As String = A49TempStore("t")
         Try
@@ -8390,8 +8423,10 @@ Module Program
                 {hourStartMs, New List(Of Long) From {hourStartMs, onMs, offMs}}
             }
             Dim spanStats = CoverageReport.AccumulateSplitSpanStats(dir, hourStart, hourStart.AddHours(1), spanBounds)
+            Dim hourStatsResult = CoverageReport.AccumulateHourStats(dir, hourStart, hourStart.AddHours(1))
+            Dim storeEndMs As Long = If(hourStatsResult.StoreEndMs.HasValue, hourStatsResult.StoreEndMs.Value, Long.MaxValue)
 
-            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats)
+            Dim hr = CoverageReport.ClassifyHour(hourStart, markers, upIntervals, False, Nothing, 300000L, spanStats, storeEndMs)
             Dim spanCount As Integer = hr.Reason.Split("|"c).Length
 
             Check("A49t split hour — two in-hour markers split it into THREE spans, all independently classified (off/captured/off); worst-of combine reads CAPTURED, D-2",
@@ -8515,6 +8550,183 @@ Module Program
         Finally
             A49Cleanup(dir)
         End Try
+    End Sub
+
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' F1 — trailing-edge gap mis-attribution fix (docs/coverage-trailing-edge-f1-proposal.md
+    ' §4b, BUILD-AUTHORIZED 2026-08-25). AccumulateHourStats charges a gap to the hour
+    ' containing the trade that ENDS it, so an hour with trades early and silence to its own
+    ' end read Captured — the FOLLOWING hour still flagged, but this hour's own trailing
+    ' silence was invisible. HourClass.TrailingEdge (D-5(c)) fixes that, bounded (D-4(c)) by
+    ' MIN(the span's own end, the evidence boundary, the store's own last in-range trade).
+    ' F1-a/b/d/e are mutation-proofed per §6 — each fails on the naive implementation the
+    ' spec names, confirmed by temporarily reverting the relevant guard and re-running.
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    ' -- F1-a: the canonical shape — trades early in an hour, silence to hour end, a later
+    ' trade well into the NEXT hour. Must flag TrailingEdge, not Captured. MUTATION PROOF:
+    ' reverting the D-1 trailing check in ClassifySpan makes this read Captured -------------
+    Private Sub F1a_TrailingEdgeCanonicalShapeFlags()
+        Dim dir As String = A49TempStore("f1a")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(1)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(2)), 64010),
+                A49Trade(A49Ms(hourStart.AddHours(1).AddMinutes(30)), 64020)   ' well into the NEXT hour
+            })
+            Dim markerPath As String = System.IO.Path.Combine(dir, "capture_marker.log")
+            File.WriteAllText(markerPath, A49MarkerLine(hourStart.AddHours(-1), True, dir, "iid-1") & vbLf)
+
+            Dim opts As New CoverageOptions With {.FromUtc = day, .ToUtc = hourStart.AddHours(2), .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, "", "", markerPath)
+            Dim h05 = result.Hours.FirstOrDefault(Function(h) h.HourUtc = hourStart)
+
+            Check("F1-a trailing edge — trades early in an hour, silence to hour end, a later trade well into the next hour ⇒ TrailingEdge, not Captured (the canonical F1 shape)",
+                  h05 IsNot Nothing AndAlso h05.Classification = HourClass.TrailingEdge,
+                  String.Format("h05={0} reason='{1}'", If(h05 Is Nothing, "<none>", h05.Classification.ToString()), If(h05 Is Nothing, "", h05.Reason)))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- F1-b: the bound's first witness — the SAME shape, but the hour IS the last hour with
+    ' any data. Must NOT flag; store-end exempts it (D-4(c)) -------------------------------
+    Private Sub F1b_TrailingEdgeBoundStoreEndsHereExempts()
+        Dim dir As String = A49TempStore("f1b")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(1)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(2)), 64010)
+            })   ' nothing follows — hour 05 IS the last hour with any data
+            Dim markerPath As String = System.IO.Path.Combine(dir, "capture_marker.log")
+            File.WriteAllText(markerPath, A49MarkerLine(hourStart.AddHours(-1), True, dir, "iid-1") & vbLf)
+
+            Dim opts As New CoverageOptions With {.FromUtc = day, .ToUtc = hourStart.AddHours(2), .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, "", "", markerPath)
+            Dim h05 = result.Hours.FirstOrDefault(Function(h) h.HourUtc = hourStart)
+
+            Check("F1-b trailing edge bound — the SAME shape but hour 05 IS the last hour with any data ⇒ store-end exempts it, stays Captured",
+                  h05 IsNot Nothing AndAlso h05.Classification = HourClass.Captured,
+                  String.Format("h05={0} reason='{1}'", If(h05 Is Nothing, "<none>", h05.Classification.ToString()), If(h05 Is Nothing, "", h05.Reason)))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- F1-c: the partial-final-hour case — --to lands mid-hour. Must measure to the boundary
+    ' instant, not :59:59.999 (D-4(c), pins the behaviour rather than a deferral) -----------
+    Private Sub F1c_TrailingEdgePartialFinalHourMeasuresToBoundaryNotHourEnd()
+        Dim dir As String = A49TempStore("f1c")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(1)), 64000)
+            })
+            Dim markerPath As String = System.IO.Path.Combine(dir, "capture_marker.log")
+            File.WriteAllText(markerPath, A49MarkerLine(hourStart.AddHours(-1), True, dir, "iid-1") & vbLf)
+            ' --to lands 4 minutes after the trade — under the 5-minute threshold if measured
+            ' to the boundary instant. A naive hourEndMs (:59:59.999) would measure ~58 minutes
+            ' and wrongly flag.
+            Dim opts As New CoverageOptions With {.FromUtc = day, .ToUtc = hourStart.AddMinutes(5), .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, "", "", markerPath)
+            Dim h05 = result.Hours.FirstOrDefault(Function(h) h.HourUtc = hourStart)
+
+            Check("F1-c trailing edge — the partial-final-hour case: --to lands mid-hour, must measure to the boundary instant, not :59:59.999 (D-4(c))",
+                  h05 IsNot Nothing AndAlso h05.Classification = HourClass.Captured,
+                  String.Format("h05={0} reason='{1}'", If(h05 Is Nothing, "<none>", h05.Classification.ToString()), If(h05 Is Nothing, "", h05.Reason)))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- F1-d: split-hour precedence (D-5.1) — one span clean, one span trailing-edge. Must
+    ' report TrailingEdge, never Captured. MUTATION PROOF: swapping the combine order to place
+    ' TrailingEdge below Captured makes this read Captured (the naive order passes every other
+    ' fixture in the table — this is the only one that catches it) ------------------------
+    Private Sub F1d_TrailingEdgeSplitHourPrecedenceOverCaptured()
+        Dim dir As String = A49TempStore("f1d")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(25)), 64000),
+                A49Trade(A49Ms(hourStart.AddMinutes(29)), 64010),    ' span0: tight, clean to its own end
+                A49Trade(A49Ms(hourStart.AddMinutes(31)), 64020),    ' span1: one early trade, then silence
+                A49Trade(A49Ms(hourStart.AddHours(1).AddMinutes(15)), 64030)  ' well into the NEXT hour
+            })
+            Dim markerPath As String = System.IO.Path.Combine(dir, "capture_marker.log")
+            File.WriteAllText(markerPath,
+                A49MarkerLine(hourStart.AddHours(-1), True, dir, "iid-1") & vbLf &
+                A49MarkerLine(hourStart.AddMinutes(30), True, dir, "iid-1") & vbLf)   ' same scope both sides — isolates the trailing test from the scope-flip tests A49o/A49q already cover
+
+            Dim opts As New CoverageOptions With {.FromUtc = day, .ToUtc = hourStart.AddHours(3), .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, "", "", markerPath)
+            Dim h05 = result.Hours.FirstOrDefault(Function(h) h.HourUtc = hourStart)
+
+            Check("F1-d trailing edge split-hour precedence — one span clean, one span trailing-edge ⇒ the hour reports TrailingEdge, never Captured (D-5.1)",
+                  h05 IsNot Nothing AndAlso h05.Classification = HourClass.TrailingEdge,
+                  String.Format("h05={0} reason='{1}'", If(h05 Is Nothing, "<none>", h05.Classification.ToString()), If(h05 Is Nothing, "", h05.Reason)))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- F1-e: the store-end superset trap (D-4's second witness) — the month file carries a
+    ' trade PAST walkToUtc, with the walk's last hour ending in silence. Must still exempt
+    ' that hour. MUTATION PROOF: deriving StoreEndMs via Max() over the whole (superset)
+    ' AccumulateHourStats dictionary instead of the walk's own filtered last trade fails this
+    ' and passes F1-b ------------------------------------------------------------------------
+    Private Sub F1e_TrailingEdgeStoreEndSupersetTrapExemptsLastWalkedHour()
+        Dim dir As String = A49TempStore("f1e")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(hourStart.AddMinutes(1)), 64000),          ' hour 05 — the walk's last hour
+                A49Trade(A49Ms(hourStart.AddHours(3)), 64010)             ' hour 08 — SAME month file, PAST walkToUtc
+            })
+            Dim markerPath As String = System.IO.Path.Combine(dir, "capture_marker.log")
+            File.WriteAllText(markerPath, A49MarkerLine(hourStart.AddHours(-1), True, dir, "iid-1") & vbLf)
+            ' The walk stops at hour 06 (walkToUtc=06:00); the second trade at hour 08 sits in
+            ' the SAME month file but past the requested/walked range. AccumulateHourStats
+            ' reads whole month files (§4a.1) — a storeEndMs derived by Max() over that
+            ' superset dictionary would pick up the hour-08 trade and un-exempt hour 05, the
+            ' true last WALKED hour.
+            Dim opts As New CoverageOptions With {.FromUtc = day, .ToUtc = hourStart.AddHours(1), .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, "", "", markerPath)
+            Dim h05 = result.Hours.FirstOrDefault(Function(h) h.HourUtc = hourStart)
+
+            Check("F1-e trailing edge store-end superset trap — a month file carrying trades PAST walkToUtc must not un-exempt the true last walked hour (storeEndMs from the walk's own filtered last trade, never Max() over the superset dictionary)",
+                  h05 IsNot Nothing AndAlso h05.Classification = HourClass.Captured,
+                  String.Format("h05={0} reason='{1}'", If(h05 Is Nothing, "<none>", h05.Classification.ToString()), If(h05 Is Nothing, "", h05.Reason)))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- F1-f: the VERDICT line (D-5.3) — trailing-edge hours with ZERO Defect hours must NOT
+    ' print `clean`. Constructed directly against BuildConsoleSummary (no store I/O) so
+    ' candle/funding completeness — both zero-expected on an empty CoverageResult — cannot
+    ' mask the assertion: without D-5.3's fix, defectCount=0 alone would print `clean` ------
+    Private Sub F1f_TrailingEdgeVerdictLineNotCleanWithZeroDefects()
+        Dim day = A49Monday()
+        Dim result As New CoverageResult With {.FromUtc = day, .ToUtc = day.AddHours(1), .GapMs = 300000L}
+        result.Hours.Add(New HourResult With {.HourUtc = day.AddHours(5), .Classification = HourClass.TrailingEdge,
+                                              .Reason = "trailing-edge(600000ms)"})
+        result.TrailingEdgeHours = 1
+        result.ObservedLongestTrailingMs = 600000L
+
+        Dim summary = CoverageReport.BuildConsoleSummary(result)
+        Dim ok As Boolean = Not summary.Contains("VERDICT: clean") AndAlso summary.Contains("trailing-edge")
+
+        Check("F1-f trailing edge VERDICT line — a report with trailing-edge hours and zero Defect hours must NOT print clean (D-5.3)",
+              ok, summary)
     End Sub
 
     ' ═══════════════════════════════════════════════════════════════════════════════════
