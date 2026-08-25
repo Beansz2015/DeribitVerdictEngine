@@ -18,7 +18,9 @@
 >
 > ⛔ **ONE OF THE TWO OPEN TRADER DECISIONS IS CLOSED** — the book's `Timestamp` column is **UTC**, not local. [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) §7.0 carries the refutation. **Nothing to rule.**
 >
-> ⚠ **The `pagesOUT/s` baseline is NOT zero** — 4 non-zero in 90 samples (4.4 %). The old "0.0 on all thirty" was a 1-in-8 draw. **Defender is REFUTED as the cause** (180-sample A/B: observed 7 against a null of 8).
+> ⛔ **THE `pagesOUT/s` BASELINE IS TIME-OF-DAY DEPENDENT — corrected 2026-08-25 from a DETACHED 24-hour instrument, 8,640 samples.** ~~*4 non-zero in 90 samples (4.4 %).*~~ **NY 13:00–23:00 UTC = 1.83 % · non-NY 23:00–13:00 UTC = 14.29 %.** Our 4.4 % was a correct reading of **the quietest 80 minutes of the day**, generalised to 24 hours. ⛔ **Do not quote the 9.10 % pooled figure either — quote the SPLIT.** availMB median **168**, routine floor **55**. *(The "0.0 on all thirty was a 1-in-8 draw" correction still stands; only its replacement number was wrong.)*
+>
+> ⚠⚠ **AND THE LESSON IS NOT SAMPLE SIZE — 30 → 90 → 180 samples ALL came from the SAME 80-minute window. A bigger sample from the same window does not fix a time-of-day confound.** ⛔ **This project segments every market number by session and then pooled 80 minutes for a box number.** **Three causes now refuted: gap repair · Defender · our own write volume** (writes 3× higher in NY, which has 8× fewer bursts — anti-correlated). Full table and the re-grounded stop conditions: [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) §1.1.
 >
 > *(The 2026-08-24 banner follows, still accurate for what it covers.)*
 >

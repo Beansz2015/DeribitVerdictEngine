@@ -43,13 +43,46 @@
 | Defender on the box | ✅ **Original configuration, verified 2026-08-24** — `ScanScheduleDay 0`, **0 exclusions**, RTP on |
 | Boundary state | Last ⚠ boundary was v66 (2026-08-10). v67, v68 and everything this session are non-boundary |
 
-### 1.1 ⚠ The memory baseline is NOT zero
+### 1.1 ⛔ The memory baseline — CORRECTED 2026-08-25. The bursts are TIME-OF-DAY dependent
 
-**Measured 2026-08-24, two independent 30-sample sweeps: 4 non-zero in 90 samples = 4.4 % of samples**, bursts of 169–468 pages/sec, steady state 0. Available **~139 MB mean, 114–119 MB trough** on 1024 MB; page file flat 39.5 %.
+⛔⛔ **THE 4.4 % IS WITHDRAWN AS A BASELINE.** It was a correct measurement of **the quietest 80 minutes of the day**, generalised to 24 hours.
 
-⛔ **The old "pagesOUT/s 0.0" figure was a one-in-eight draw written down as a property** — at 4.4 %, `P(all 30 zero)` = `0.956³⁰` ≈ 26 %. **Quote the non-zero COUNT and MAX, never a mean.** Detail: [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) §1.1a.
+~~*Measured 2026-08-24, two independent 30-sample sweeps: 4 non-zero in 90 samples = 4.4 % of samples, bursts of 169–468 pages/sec, steady state 0. Available ~139 MB mean, 114–119 MB trough on 1024 MB; page file flat 39.5 %.*~~ ⚠ *(Struck, not deleted. The `pagesOUT/s 0.0` correction it carried — that the old figure was a one-in-eight draw recorded as a property — still stands; only the replacement number was wrong.)*
 
-⚠ **The burst cause is UNATTRIBUTED.** Two hypotheses died: gap repair (refuted 08-22) and Defender scan-on-write (refuted 08-24 by a 180-sample A/B, observed 7 against a null of 8 — **no effect**). **Do not offer a third without measuring it.**
+**Source of the correction: the hostel-app team's DETACHED 24-hour `logman` collector — 8,640 samples at 10 s, 8,640 expected, no truncation.** ⭐ **It is a better instrument than anything we pointed at this box, for exactly the reason §5 predicted: it is detached, so it does not perturb what it measures.**
+
+| | Ours — attached, 13:05–14:23 UTC | Theirs — detached, 24 h |
+|---|---|---|
+| Burst rate | 4.4 % (n=90) | **9.10 % pooled — but never quote the pooled figure, see the split** |
+| — NY, 13:00–23:00 UTC | — | **1.83 %** (n=3,600) |
+| — non-NY, 23:00–13:00 UTC | — | **14.29 %** (n=5,040) |
+| availMB | ~139 mean, 114–119 trough | **168 median · 55 routine floor** · 31 absolute |
+| Page file | flat 39.5 % | **42.9 % routine max** · 74.79 % absolute |
+
+⭐ **Our 4.4 % is NOT refuted as a measurement** — their hours 13 and 14 read ~5.6 %, which brackets it closely. **NY runs 8× fewer bursts than non-NY, and all four of our sweeps landed inside NY's quietest stretch.**
+
+⚠ **Both absolute extremes (31 MB, 74.79 %) are ONE 60-second excursion, seven samples, 2026-08-24 15:30:37–15:31:37.** Excluding it moves the burst rate 9.10 % → 9.07 % and the page-file max to 42.9 %. **UNATTRIBUTED** — it fell 29 minutes after their collector started, which is suggestive and is not evidence.
+
+⚠⚠ **THE LESSON IS NEW AND IT IS NOT §6's LESSON 4.** Lesson 4 says a number's authority outlives its sample size. **This was not a sample-size failure.** We went **30 → 90 → 180 samples** and every increase felt like more rigour — **but all of them were drawn from the same 80-minute window, so the extra samples bought precision on the wrong quantity.** ⛔ **A BIGGER SAMPLE FROM THE SAME WINDOW DOES NOT FIX A TIME-OF-DAY CONFOUND.**
+
+⛔ **And this project of all projects should have caught it.** The **engine is session-bucketed throughout** — `session_volume`, per-session ROC magnitude, per-session `burst_ratio_threshold`, the ASIA/LONDON/NY split behind half of `DeribitIndicatorProject.md` §15. **We segment every market number we touch by time of day, and then pooled an 80-minute window for a box number.**
+
+⚠ **The typical state is BETTER than we believed; the TAIL is WORSE.** Median availMB **168** against our 139 — **the difference is us: an SSM-attached PowerShell session costs this box 30–50 MB.** But the routine floor is **55 MB**, below anything our 80 minutes ever saw. Below 100 MB on 5.27 % of samples; below 60 MB on 0.05 %.
+
+⚠ **The cause is STILL UNATTRIBUTED, and a THIRD hypothesis died.** Gap repair (refuted 08-22) · Defender scan-on-write (refuted 08-24, 180-sample A/B) · ⛔ **our own file-write volume (refuted 08-25 — our writes are 3× HIGHER during NY, which has 8× FEWER bursts, so paging is ANTI-CORRELATED with them).** **Do not offer a fourth without measuring it.**
+
+**RE-GROUNDED STOP CONDITIONS — from the detached instrument. These REPLACE every sweep-derived number, including the ones relayed to the hostel-app seat:**
+
+| Metric | Baseline | Investigate |
+|---|---|---|
+| Burst rate, NY | 1.83 % | above ~2.5 % |
+| Burst rate, non-NY | 14.29 % | above ~16 % |
+| availMB floor | 55 MB | below 55 |
+| Page file max | 42.9 % | above 43 % |
+
+⛔ **THE RULE THAT FALLS OUT OF THE SPLIT: COMPARE LIKE-FOR-LIKE BY TIME OF DAY.** A few hours of post-change data cannot be held against a pooled 24-hour figure — **in either direction.**
+
+⚠ **NOT independently verified by us.** These are their numbers, from their instrument, on our box. **The raw CSV, the burst timestamps and the hourly histogram were each offered and none has been requested.** Worth taking — the box is ours and the data is as much ours as theirs.
 
 ---
 
