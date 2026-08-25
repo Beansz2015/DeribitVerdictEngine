@@ -88,6 +88,26 @@ The origin ruling says: bound `hourEnd − lastTradeInHour` against **`ResolveBo
 
 ---
 
+### 3a. ⛔ POST-BUILD CORRECTION TO THIS SECTION — 2026-08-26. Only ONE of the three bounds does any work
+
+**Found by the implementer, extended by the reviewing seat. This section's framing is right about the CONCEPTS and wrong about the IMPLEMENTATION, and the difference is worth recording rather than quietly leaving.**
+
+⛔ **In the shipped build, `storeEndMs` is the ONLY term of `MIN(spanEnd, boundaryMs, storeEndMs)` that ever binds.**
+
+- `storeEndMs` is filtered to `[walkFromUtc, walkToUtc)`, so when it exists it is **always strictly less than `walkToUtcMs`** — the last trade inside a range cannot sit at or past that range's end.
+- When it does **not** exist there are no trades in range at all, so no hour carries a `LastTsMs` and the trailing check never runs.
+- Therefore `walkToUtcMs` — which already carries the evidence boundary, since `walkToUtc = MIN(boundaryUtc, opts.ToUtc)` — **contributes nothing to the `MIN`.**
+
+⭐ **The consequence the implementer did not draw, and it is the one that matters:** the **third element of D-4 (c) — hour-aligning the partial final hour — is satisfied INCIDENTALLY by the store-end bound, not by the term specified for it.** **Fixture `F1-c` passes for a different reason than this document claims it does.**
+
+⚠ **The framing above is still correct that the two exclusions are DIFFERENT CONCEPTS** — *"we stopped observing"* and *"the tape simply ends"* genuinely are not the same question. **What is wrong is the implied conclusion that both must appear in the trailing-edge `MIN`.** The evidence boundary already does its work **upstream**, by truncating the walk itself; re-applying it downstream is a no-op.
+
+✅ **Nothing is being changed in the code.** The literal three-way `MIN` matches the ruled formula, costs nothing, and is the honest expression of the intent. ⛔ **This note exists so that (a) nobody "simplifies" the redundant term away believing it is dead weight — it is the ruling written out — and (b) nobody cites `F1-c` as proof the boundary term works, because it is not.**
+
+⚠ **What would be needed to test the boundary term independently:** a store whose last in-range trade sits **after** `walkToUtc`, which the range filter makes unconstructible by design. **The term is untestable, not merely untested** — record it as such rather than queueing a fixture nobody can write.
+
+---
+
 ## 4. D-table — ⛔ SUPERSEDED IN TWO ROWS. The build list is §4b
 
 ⛔ **DO NOT BUILD FROM THIS TABLE.** It is preserved verbatim as written pre-tick, per the quote-and-label convention, because it is the record of how the decisions were reached. **Its "My read" column recommends `D-3` (a) and `D-6` (a) — both were re-ruled to (c) after evidence found in the code.** ⚠ **A reader taking this table at face value builds a `-1` sentinel and folds the header counters, which is the exact opposite of what was ruled.** **§4b is the build list.**

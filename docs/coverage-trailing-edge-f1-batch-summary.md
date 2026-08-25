@@ -113,9 +113,27 @@ GATE PASSED
 
 ## 6. Real-store acceptance run (§7)
 
-Store used: `AWS-copybacks/aws-copyback-2026-08-14/` — the freshest AWS copy-back present locally. **~12 days stale relative to today (2026-08-26).** No live SSH/SSM pull was performed this session — see the spec-back's "what was not verified" for the consequence of that.
+⛔ **CORRECTED 2026-08-26 BY THE REVIEWING SEAT — the original wording named the wrong store and its recipe does not reproduce.** ~~*Store used: `AWS-copybacks/aws-copyback-2026-08-14/`.*~~ **Two different sources were in play and the original text collapsed them into one:**
 
-Evidence files (`analysis_log.csv`, `ws_health.log`, `capture_marker.log`) were temporarily copied from that same copy-back into the repo root (none existed there before), used for the run, then deleted — repo root is back to its pre-session state.
+| Input | Where it actually came from |
+|---|---|
+| **The trade store** | the **repo's own `backtest_data/`** — the documented local analysis store. `HistoricalStore.StoreDir` is the literal `"backtest_data"` (`HistoricalStore.vb:35`), resolved against the **working directory**, and the run was made from the repo root |
+| **The three evidence files** (`analysis_log.csv`, `ws_health.log`, `capture_marker.log`) | copied from `AWS-copybacks/aws-copyback-2026-08-14/` into the repo root, used, then deleted — repo root confirmed back to its pre-run state |
+
+⚠ **Why this matters and is not pedantry:** `AWS-copybacks/aws-copyback-2026-08-14/backtest_data/` holds **two trade files and no candles**, while the repo store holds July candles plus `trades_2026-07/08`. **A reader who runs from the copy-back directory as the original text instructs gets different numbers** — the reviewing seat lost two runs to exactly that before finding the cause.
+
+⭐ **The recipe that DOES reproduce, verified independently 2026-08-26** — same seven counts, same exit code:
+
+```
+cp AWS-copybacks/aws-copyback-2026-08-14/{analysis_log.csv,ws_health.log,capture_marker.log} .
+./tools/BacktestRunner/bin/Release/net8.0/BacktestRunner.exe coverage \
+    --from 2026-08-01 --to 2026-08-14 --gap-ms 300000 --strict
+rm -f analysis_log.csv ws_health.log capture_marker.log
+```
+
+⚠ **Run it from the repo root and do NOT `cd`** — this harness resets the working directory, and a `cd` that appears to work silently sends the run at the wrong store. Without the evidence files staged the same command returns `0 / 0 / 0 / 216 / 96` (S1 skipped, everything unknown-scope) — a useful negative control, since 216 + 96 still totals the same 312 walked hours.
+
+**Staleness, unchanged from the original:** the copy-back is **~12 days stale relative to 2026-08-26**, and no live SSH/SSM pull was performed — see the spec-back's "what was not verified".
 
 **`--strict` both ways, `--from 2026-08-01 --to 2026-08-14 --gap-ms 300000`:**
 

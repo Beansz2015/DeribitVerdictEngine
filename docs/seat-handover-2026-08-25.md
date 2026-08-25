@@ -10,7 +10,17 @@
 
 ---
 
-## 0. ⭐ FIRST TASK — **#5, C1-coverage F1.** ✅ RULED IN FULL. It is a BUILD, and it is ready to hand over.
+## 0. ✅ **#5, C1-coverage F1 — BUILT, REVIEWED, ACCEPTED 2026-08-26 (`4032f9c`). It is DONE bar the push.**
+
+⛔ **THE ONLY THING OUTSTANDING ON IT IS THE TRADER'S TEST + PUSH.** Local commit only, per `docs/trader-profile.md` §8.
+
+⭐ **What the review verified by RUNNING, not by reading:** harness **306/306** rebuilt from a clean tree · all six `F1-` fixtures confirmed to have **executed** · **both** silent-trap mutations re-applied independently, each proving its fixture is the **only one of 306** that catches it · the real-store run reproduced exactly (100 / 4 / 0 / 112 / 96, exit 1) · repo root confirmed clean.
+
+⚠ **Three review findings, none blocking.** **F-1** — the batch summary's reproduction recipe named the wrong store and does not reproduce; **fixed in place**, with a verified recipe. **F-2** — only ONE of `D-4` (c)'s three bounds ever binds, so `F1-c` passes for a different reason than the spec claims; **recorded as [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md) §3a, no code change.** **F-3** — a display-only over-report, now **item 18** in §2.
+
+⭐ **The build also caught a real defect in the SPEC:** "between `Defect` and `Captured`" conflated combine precedence with enum declaration order, and the enum declares `Captured` first. The implementer derived the right slot from the spec's own "shifts four ordinals" note instead of guessing.
+
+*(Superseded framing follows, per the quote-and-label convention.)* ~~**FIRST TASK — #5, C1-coverage F1. RULED IN FULL. It is a BUILD, and it is ready to hand over.**~~
 
 **Spec: [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md) — status BUILD-AUTHORIZED 2026-08-25.**
 
@@ -92,7 +102,8 @@
 
 | # | Item | Model / effort | Note |
 |---|---|---|---|
-| **5** | ⭐ **C1-coverage F1 trailing edge** | **Sonnet HIGH** | ✅ **RULED IN FULL — BUILD-AUTHORIZED.** Build from that spec's **§4b**, never its §4. §0 above |
+| ~~**5**~~ | ✅ ~~**C1-coverage F1 trailing edge**~~ | — | ✅ **BUILT, REVIEWED AND ACCEPTED 2026-08-26** (`4032f9c`). Local commit — **trader tests and pushes.** Both silent traps guarded, each by exactly ONE fixture of 306, **both mutations re-run independently by the reviewing seat.** Real-store run reproduced exactly (100/4/0/112/96, exit 1). Packets: [`coverage-trailing-edge-f1-batch-summary.md`](coverage-trailing-edge-f1-batch-summary.md) · [`coverage-trailing-edge-f1-spec-back.md`](coverage-trailing-edge-f1-spec-back.md). **Three review findings, none blocking — F-1 and F-2 fixed in the docs, F-3 is item 18 below** |
+| **18** | ⚠ **`ObservedLongestTrailingMs` can over-report on a split hour** | Sonnet low | ⚠ **NEW 2026-08-26, from the F1 review. Display-only — no classification, no `--strict`, no gate.** `BuildResult` computes the figure from **whole-hour** `HourStoreStats`, so a split hour whose trailing span is NOT the last one — span 0 ON with trailing silence, a marker turns capture off, span 1 `NotCapturing` with no trades — reports a trailing edge measured to the HOUR end, i.e. **a value no span actually had.** ⛔ **The build's own spec-back characterised this as matching the sibling counters' pre-existing imprecision. It does not: `ObservedLongestGapMs` measures a genuine whole-hour quantity; this one can invent a number.** ⚠ **Reachable by inspection, NOT demonstrated — nobody has constructed the case, and the first job is a fixture that produces it.** `D-6` (c) only ever required the counter to exist, so this is a refinement, not a defect against the ruling. **Decide first whether the honest fix is per-span stats or simply not reporting the figure on split hours** |
 | 6 | `WsTradeProbe` through the shared trade reader (S-1) | Sonnet medium | Fourth trade-parse site; the probe is a delivery gate |
 | 7 | Eval-cache backfill — identity key **and** the loop bug (S-4) | Sonnet medium | ⚠ Both halves, or state why one |
 | 8 | **A54a** — JSON↔POCO reflection drift guard | Sonnet medium | ✅ **RULED 2026-08-11** (option d + scoped b). Two confirmed instances of the class |
