@@ -290,7 +290,15 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ✅ **The stale-environment risk is RESOLVED, and by inference rather than luck.** `fallback=False` means the scheduled run read `GoogleSheets__CredentialsPath` out of the machine environment — without it Sheets fails and the app drops to hardcoded rates. All four variables live in the same registry key, **so `Email__Password` is reaching the task too.** ⛔ **Stop watching for `email=SEND-FAILED` on that account.**
 
-⚠ **SMTP THROUGH THE APP ON A SCHEDULE IS STILL UNPROVEN.** Both runs so far read `email=suppressed-quiet` — their quiet period is 20:59–07:00 business time and both landed inside it. **The first run that CAN send is 23:25 UTC, and a real change is queued for it.** The credential is proven from our box; **the app's own send path on a schedule is not, and they are not counting it.**
+⚠ **SMTP THROUGH THE APP ON A SCHEDULE IS STILL UNPROVEN.** Both runs so far read `email=suppressed-quiet` — their quiet period is 20:59–07:00 business time and both landed inside it. **The first run that CAN send is 23:25 UTC, and a real change is queued for it.** The credential is proven from our box; **the app's own send path on a schedule is not, and they are not counting it.** ⛔ **Treat the soak as having an untested leg until that line comes back.**
+
+### 5.5 ✅ `RIPPerfBaseline` comparison run — ACKNOWLEDGED 2026-08-27, starting 15:01 UTC
+
+**Trader-approved as scoped:** the **existing** collector, same counters, same 10 s interval, same PLA service, **nothing attached**, 24 h self-stopping, output to `C:\RedInnPricing\logs\perf\`. **Nothing of ours touched.** ⭐ **They refused to read our "soak away" as covering this — correct, it was not.**
+
+⭐ **Start time is 15:01 UTC by our request, and the reason is phase-matching, not neatness.** Their baseline began **15:01:07 UTC**, and **hour 15 in that dataset is not one visit but TWO partial ones** (15:01→16:00 on 08/24 plus ~15:00→15:01 on 08/25) pooled into its 360 samples. **Any other start gives hour 15 a different composition — and hour 15 is a transitional hour at 4.72 %, where composition matters most.** It also sits fully inside the soak window and captures 24 consecutive `:25` runs, which is what the `:25` test needs.
+
+**What this run settles**, per §1.1b: **if the `:25`–`:27` dip DEEPENS ⇒ their app and nothing else** (their baseline had no `:25` periodicity, so the "before" is a clean control); **if it does not deepen ⇒ the baseline dip was noise and it is closed.** ⚠ **We committed in advance to saying so plainly if it does not deepen, rather than hunting for a reason it still holds.**
 
 **Rollback, accepted and standing:** disable the scheduled task `RedInnCourt-DynamicPricing-Hourly`, tell them afterwards, **do not wait for them.** No service, no listener, no resident process. Their Linux box serves production throughout, so nothing of theirs breaks.
 
