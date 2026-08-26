@@ -250,7 +250,9 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 **Their `RIPPerfBaseline` collector is left REGISTERED AND STOPPED** for the post-deployment comparison. They asked whether we want it removed. ⭐ **Keep it** — a post-soak comparison needs the same instrument, and a stopped collector costs nothing.
 
-⚠ **STILL OPEN, neither answered nor chased:** confirmation that the **leaked older Gmail password was actually revoked** (still a future-tense claim), and **what happens to both credentials if the soak fails or the migration is abandoned** — they call the new password *"the one we keep."*
+✅ **CLOSED 2026-08-26 — the leaked older Gmail password IS revoked, confirmed by the trader.** ⚠ **Provenance, stated precisely: this is the trader's confirmation, not a read-back we performed against Google.** The credential never reached our box in any case; what it closes is the disclosure, not a risk to us.
+
+⚠ **STILL OPEN, the last one:** **what happens to BOTH credentials if the soak fails or the migration is abandoned.** They call the new password *"the one we keep"* and exclude it from their post-cutover rotation sweep — **so a credential landing for a 48-hour soak is permanent by default unless someone says otherwise.** That is our box's end state, and nobody has stated it.
 
 **Rollback, accepted and standing:** disable the scheduled task `RedInnCourt-DynamicPricing-Hourly`, tell them afterwards, **do not wait for them.** No service, no listener, no resident process. Their Linux box serves production throughout, so nothing of theirs breaks.
 
