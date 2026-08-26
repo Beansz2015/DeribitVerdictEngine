@@ -300,6 +300,30 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 **What this run settles**, per §1.1b: **if the `:25`–`:27` dip DEEPENS ⇒ their app and nothing else** (their baseline had no `:25` periodicity, so the "before" is a clean control); **if it does not deepen ⇒ the baseline dip was noise and it is closed.** ⚠ **We committed in advance to saying so plainly if it does not deepen, rather than hunting for a reason it still holds.**
 
+**AMENDED 2026-08-27 — two deviations, both within the approved scope, neither expanding the footprint:**
+
+| # | Deviation | Assessment |
+|---|---|---|
+| 1 | **Scheduled via `logman update -b`, not started by hand** — 15:01 UTC is outside their session's reach | **Mechanism, not footprint.** No new collector, no new scheduled task, nothing added to our Task Scheduler. Counters, interval, duration and run-as all unchanged; still self-stopping at 24 h |
+| 2 | **Output base name `soak`, not `baseline`** | ⭐ **An improvement, not a concession.** `LogOverwrite=0`, so a name collision makes the start **FAIL SILENTLY at 15:01 with nobody watching.** `soak*` cannot collide — **verified against our own copy of that directory.** Side benefit: the two datasets become self-describing |
+
+✅ **Our baseline file is untouched — corroborated, not taken on trust.** They report 513,264 bytes; **our fetched copy is byte-for-byte 513,264.** ⚠ **Corroboration, not proof** — our copy predates the change, so it establishes the size they claim, not that the on-box file still has it.
+
+⛔ **THE ONE REAL RISK, and they named it rather than hoping: the exported schedule carries `Days=0`, an empty weekday bitmask.** They cannot tell whether it means *"one-shot on StartDate"* or *"never"* — and a third reading, **daily recurrence**, would leave a collector running on our box **past the 24 hours we approved.**
+
+⭐ **Our read, offered to them and NOT verified by execution: `Days=0` is almost certainly `plaRunOnce`.** The Windows PLA `ISchedule::Days` property takes the `WeekDays` enum, whose zero member is **`plaRunOnce = 0`** (`plaSunday = 0x1` … `plaEveryday = 0x7F`). **On that reading it fires ONCE on StartDate and does not recur** — which resolves the daily-recurrence fear and supports it firing at all. ⚠ **We cannot test this from here and have not.** It changes what to EXPECT at their checks, not what those checks should be.
+
+**Their check plan, which is correct under every reading:**
+
+- **~15:05 UTC 2026-08-27** — status check; if `Stopped`, `logman start` immediately. Phase-match holds to within minutes.
+- **~15:05 UTC 2026-08-28** — confirm it STOPPED and did not restart.
+
+⛔ **OUR WATCH — `2026-08-28`, shortly after 15:01 UTC.** **If a collector is still running and they have not already said so, STOP IT.** They pre-authorised this explicitly: it is theirs, it would be past its approved window, and we do not wait for them.
+
+⚠ **Volunteered against their own interest:** they did **not** capture `FileNameFormat` before changing it, so they cannot prove the version suffix is unchanged. **Immaterial to collision — the base name settles that — and flagged rather than implied.**
+
+⭐ **And our own rule caught something on their side, one message after we wrote it.** After the filename update, `logman query` still displayed the OLD path — they would have reported *"the update failed"* off that summary. The exported definition shows `DC_FileName=soak` alongside `DC_LatestOutputLocation=<old path>`: **`logman query` renders the LAST RESOLVED path, not the configured filename.** **A truncated view mistaken for the whole, in a tool they had used all week.** *Recompute from raw* generalises to *reconfigure and export*.
+
 **Rollback, accepted and standing:** disable the scheduled task `RedInnCourt-DynamicPricing-Hourly`, tell them afterwards, **do not wait for them.** No service, no listener, no resident process. Their Linux box serves production throughout, so nothing of theirs breaks.
 
 **Agreed and binding both ways:** neither side touches a scheduled task it did not create · never log off session 2 · neither measures inside the other's write window. **Their window: hourly at `:25`, ~10 s, SYSTEM.** Oversight: notice before each change during proving, standing go-ahead once proven.
@@ -322,7 +346,8 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ## 7. Loose ends
 
-- ⛔ **Five commits unpushed.** All `[no-engine-change]`, settings stays v68. The pre-push hook runs `verify-gate.ps1` in `prepush` mode.
+- ⛔⛔ **DATED WATCH — `2026-08-28`, just after 15:01 UTC. Check whether the hostel-app `RIPPerfBaseline` collector actually STOPPED.** If it is still running and they have not already flagged it, **stop it — pre-authorised, no need to wait for them.** This is §5.5's `Days=0` ambiguity going the wrong way. **The only item in this document with a date on it.**
+- ⛔ **Commits unpushed — all `[no-engine-change]` except `4032f9c` (the F1 fix, tested and reviewed).** Settings stays v68. The pre-push hook runs `verify-gate.ps1` in `prepush` mode. ⚠ **Verify the count with `git status -sb`; do not inherit it from this line.**
 - ⚠ **`tools/AutoTweaker/state.json` is UNTRACKED** and records a real run (2026-06-18, `SKIPPED_INSUFFICIENT_TIER`, cursor at 81). Same nearly-lost shape as `tools/mem-probe.csv`. **Commit it or ignore it deliberately.**
 - **F2's fix in the AutoTweaker build has no fixture** — a console string with no consumer, and every A59 row is in-population so no fixture can distinguish the two definitions. Named in the commit, not papered over.
 - **The `DeribitWsFeed` `ResetBufferState` race (F2)** and the collector's `User-Agent` (F3) remain open, both verified still present.
