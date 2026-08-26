@@ -81,18 +81,46 @@
 
 ⚠ **The cause is STILL UNATTRIBUTED, and a THIRD hypothesis died.** Gap repair (refuted 08-22) · Defender scan-on-write (refuted 08-24, 180-sample A/B) · ⛔ **our own file-write volume (refuted 08-25 — our writes are 3× HIGHER during NY, which has 8× FEWER bursts, so paging is ANTI-CORRELATED with them).** **Do not offer a fourth without measuring it.**
 
-**RE-GROUNDED STOP CONDITIONS — from the detached instrument. These REPLACE every sweep-derived number, including the ones relayed to the hostel-app seat:**
+### 1.1a ✅ INDEPENDENTLY VERIFIED 2026-08-26 — and the NY/non-NY split is ITSELF too coarse
+
+⭐ **We now hold the raw file and re-derived everything from it. Every headline figure reproduces EXACTLY** — overall 9.10 %, NY 1.83 %, non-NY 14.29 %, availMB min 31 / max 276 / mean 158.0, `<100 MB` 5.27 % · `<80` 0.57 % · `<60` 0.05 %, page file max 74.79 %, max `pagesOUT` 11522.1 at 15:30:47, **and all 24 hourly rows.** ⛔ **Drop the old "not independently verified by us" caveat — it no longer applies.**
+
+⚠ **One figure did NOT reproduce exactly, stated because everything else did:** their excursion-excluded burst rate reads **9.07 %**, ours **9.08 %** — a boundary-inclusion difference of one sample. **Immaterial, and it does not touch their point** (the excursion changes nothing).
+
+⛔⛔ **THE SAME POOLING ERROR, ONE LEVEL UP — and they found it, not us.** The NY/non-NY split we adopted **five sections ago** is itself too coarse. The real shape is three bands, not two:
+
+| Band | Hours (UTC) | Rate | |
+|---|---|---|---|
+| **Busy** | 00–12 | **11.4–18.3 %** | |
+| **Transitional** | 13–15 | **4.7–5.6 %** | ⛔ classified NY, but **3× the NY average** |
+| **Near-silent** | 16–23 | **0.0–1.1 %** | ⛔ hour 23 is classified non-NY and reads **0.56 %**, dragging that average |
+
+**Per-hour, verified — this table is the stop condition, not the band summary:**
+
+| H | % | H | % | H | % | H | % |
+|---|---|---|---|---|---|---|---|
+| 00 | 12.22 | 06 | 18.33 | 12 | 15.56 | 18 | **0.00** |
+| 01 | 11.39 | 07 | 15.28 | 13 | 5.56 | 19 | 1.11 |
+| 02 | 13.33 | 08 | 18.33 | 14 | 5.56 | 20 | 0.28 |
+| 03 | 12.22 | 09 | 17.50 | 15 | 4.72 | 21 | 0.28 |
+| 04 | 17.22 | 10 | 17.50 | 16 | 0.28 | 22 | 0.56 |
+| 05 | 15.28 | 11 | 15.28 | 17 | **0.00** | 23 | 0.56 |
+
+⛔ **THE RULE, REPLACING THE SESSION SPLIT: COMPARE AGAINST THE PER-HOUR ROW, NEVER A SESSION AVERAGE.** Post-change data at 13:00–15:00 judged against NY's 1.83 % reads as a **3× breach that is only the wrong denominator**; the same comparison at 16:00–22:00 **hides a real one**. ⭐ **They proposed this themselves and it is stricter on them.**
+
+⚠⚠ **THIS IS THE SECOND INSTANCE OF ONE ERROR IN ONE ARC.** We pooled 80 minutes and called it a day; then we pooled 10 hours across a 3×-varying range and called it a session. **Segmenting once is not segmenting correctly — check that the segments are homogeneous, not merely that segments exist.**
+
+**Remaining stop conditions, verified:**
 
 | Metric | Baseline | Investigate |
 |---|---|---|
-| Burst rate, NY | 1.83 % | above ~2.5 % |
-| Burst rate, non-NY | 14.29 % | above ~16 % |
-| availMB floor | 55 MB | below 55 |
-| Page file max | 42.9 % | above 43 % |
+| Burst rate | **the per-hour row above** | above ~1.5× that hour |
+| availMB routine floor | 55 MB | below 55 |
+| Page file routine max | 42.9 % | above 43 % |
 
-⛔ **THE RULE THAT FALLS OUT OF THE SPLIT: COMPARE LIKE-FOR-LIKE BY TIME OF DAY.** A few hours of post-change data cannot be held against a pooled 24-hour figure — **in either direction.**
+⚠ **Observation, deliberately NOT a hypothesis.** Three of the twelve lowest `availMB` samples fall at **:26–:27**, and minute **:25** carries the third-lowest mean of all sixty (147.0 MB) — **but the whole between-minute spread is ~6 MB and this does not separate from noise.** Their perf probe ran hourly at `:25`, and **Change 2's task now runs at `:25` too.** ⭐ **That makes it a falsifiable prediction rather than a fourth hypothesis: if the dip is instrument-related it should DEEPEN in the soak data. Check it there; do not adopt it now.**
 
-⚠ **NOT independently verified by us.** These are their numbers, from their instrument, on our box. ~~*The raw CSV, the burst timestamps and the hourly histogram were each offered and none has been requested.*~~ ✅ **ALL THREE REQUESTED 2026-08-26.** ⛔ **And the raw CSV was on our box the whole time — `C:\RedInnPricing\logs\perf\baseline_08241501.csv`, 8,640 rows.** See §5.1: **copy it off before reading it, or pay the same 30–50 MB attachment cost this correction is about.**
+⛔ **All four sub-60 MB samples, since "routine floor 55" rests on them:** three are inside the 15:30 excursion (32 · 56 · 31, all with `pagesOUT` 3,100–5,900); **the fourth is `08/25 14:26:06`, availMB 55 with `pagesOUT` 0 and a flat 39.24 % page file** — a quiet isolated dip with no paging pressure at all, and it is the sample the 55 MB floor actually comes from.
 
 ---
 
@@ -203,7 +231,26 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ⚠ **OPEN, and worth an answer: what happens to both credentials if the soak fails or the migration is abandoned?** They state the new password is *"the one we keep"* and is excluded from their post-cutover rotation sweep — **so a credential landing for a 48-hour soak is in fact permanent unless someone says otherwise.**
 
-**Owed back to us in ONE post-deploy report** (their commitment, all three read back rather than asserted): the applied ACL read off the directory · the two task settings read off the registered task · the perf data. **They fetch in the SAME SSM session as the deployment — one attachment, not two.**
+### 5.3 ✅ DEPLOYED 2026-08-26. Everything promised was read back, not asserted
+
+**They delivered all three read-backs. ⚠ We can verify NONE of the on-box ones — no access from here — so these are their readings, labelled as such:**
+
+| Read back | Value |
+|---|---|
+| ACL on `C:\RedInnPricing\Credentials` | `BUILTIN\Administrators:(OI)(CI)(F)` + `NT AUTHORITY\SYSTEM:(OI)(CI)(F)`, inheritance broken, **no `BUILTIN\Users`** |
+| Task | `IgnoreNew` · `PT10M` · SYSTEM / `ServiceAccount` (non-interactive) · trigger 00:25 UTC repeat PT1H |
+| Our collector | **PID 4180, start `2026-08-22T16:02:46Z` — unchanged, re-read TWICE** (at deploy and again after task registration). Their 15:25:25 is **22m39s clear** of the 16:02:46 repair pass |
+| Footprint | 51 files, all under `C:\RedInnPricing\` |
+
+⚠ **Self-corrected: "41 published files" was wrong, it is 43** — their own handover carried two irreconcilable counts side by side. Minor, and volunteered.
+
+**Manual first run PASSED** — `exit=0`, 6.7 s against a predicted 7.2 s, `fallback=False` (so Sheets answered, proving credential + ACL in one shot). ⭐ **And they did NOT count the SMTP leg as proven**: the run fell inside their quiet period, so `email=suppressed-quiet` — *"a run that sends nothing proves nothing."* They exercised the credential separately and confirmed it **from Google's own "last used" timestamp rather than from their log claiming success.** That is the assert-the-check-ran discipline, applied to themselves.
+
+⚠ **ONE THING WE MAY SEE FIRST.** Our box's Task Scheduler service was running **before** the environment variables were set. If it passes a stale environment block, **the first `:25` run fails SMTP** while their manual run succeeded. **The tell is `email=SEND-FAILED` in the `RIP-RESULT` line.** Their configuration problem, not ours; fix is a service restart.
+
+**Their `RIPPerfBaseline` collector is left REGISTERED AND STOPPED** for the post-deployment comparison. They asked whether we want it removed. ⭐ **Keep it** — a post-soak comparison needs the same instrument, and a stopped collector costs nothing.
+
+⚠ **STILL OPEN, neither answered nor chased:** confirmation that the **leaked older Gmail password was actually revoked** (still a future-tense claim), and **what happens to both credentials if the soak fails or the migration is abandoned** — they call the new password *"the one we keep."*
 
 **Rollback, accepted and standing:** disable the scheduled task `RedInnCourt-DynamicPricing-Hourly`, tell them afterwards, **do not wait for them.** No service, no listener, no resident process. Their Linux box serves production throughout, so nothing of theirs breaks.
 
