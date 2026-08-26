@@ -311,7 +311,19 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ⛔ **THE ONE REAL RISK, and they named it rather than hoping: the exported schedule carries `Days=0`, an empty weekday bitmask.** They cannot tell whether it means *"one-shot on StartDate"* or *"never"* — and a third reading, **daily recurrence**, would leave a collector running on our box **past the 24 hours we approved.**
 
-⭐ **Our read, offered to them and NOT verified by execution: `Days=0` is almost certainly `plaRunOnce`.** The Windows PLA `ISchedule::Days` property takes the `WeekDays` enum, whose zero member is **`plaRunOnce = 0`** (`plaSunday = 0x1` … `plaEveryday = 0x7F`). **On that reading it fires ONCE on StartDate and does not recur** — which resolves the daily-recurrence fear and supports it firing at all. ⚠ **We cannot test this from here and have not.** It changes what to EXPECT at their checks, not what those checks should be.
+⭐ **Our read: `Days=0` is `plaRunOnce`.** The Windows PLA `ISchedule::Days` property takes the `WeekDays` enum, whose zero member is **`plaRunOnce = 0`** (`plaSunday = 0x1` … `plaEveryday = 0x7F`) — **a distinct sentinel meaning "fire once on StartDate", not an empty bitmask meaning "no days".**
+
+✅ **U1 CLOSED BY EXECUTION 2026-08-27 — a `Days=0` schedule DOES fire.** They built a throwaway collector with the identical command, exported the identical `Days=0` sentinel, and at the scheduled second it reported `STATUS: Running` / `FILES: 1` — **it fired AND wrote its output file**, not merely a status flip.
+
+⛔ **WHERE THAT TEST RAN, because it is not where the phrase "my own dev box" suggests: THIS MACHINE.** They report Windows 11 Pro **10.0.26200**; this workstation is Windows 11 Pro **10.0.26200**. **Same box both sessions run on — the trader's own machine, not a third one.** ✅ **Cleanup verified independently by us, not taken on trust: `logman query` returns ZERO Data Collector Sets.** Nothing was left behind. ⭐ **And the box that actually mattered — the AWS collector `i-0d6c133058876273e` — was never touched.**
+
+⭐ **What they did NOT do, and it is the creditable part.** SSM runs as SYSTEM on the collector box, so testing there would have worked first time. **They declined, explicitly because we had already weighed that option and rejected it as a change outside the acknowledged notice** — *"reaching for it after you had declined it would have been treating your reasoning as an obstacle rather than as a decision."* **That is the right instinct, unprompted.**
+
+⚠ **U2 IS UNTOUCHED AND THE 08-28 WATCH STANDS.** A two-minute test cannot observe a 24-hour recurrence. **Falsification unchanged: fires 08-27 AND again 08-28 ⇒ the `plaRunOnce` reading is wrong.**
+
+⚠ **Their cross-build caveat is correct and they raised it themselves:** tested on Windows 11 build 10.0.26200, but the collector box is **Windows Server 2019 Datacenter**. Strong evidence for that box, **not proof of it**. ⭐ **One argument they did not make, which transfers better than the test does: `plaRunOnce` is part of the PLA COM interface contract, stable since the API shipped — a build difference changing its meaning would be a breaking API change, not a behaviour variation.**
+
+⚠ **Their first attempt FAILED, and they reported it: piping `logman create` to `Out-Null` swallowed an "Access is denied" from a non-elevated shell**, producing an export of a collector that had never been created — which reads as *"the schedule did not take"* rather than *"the setup never ran"*. ⛔ **They suppressed the output of the step they were verifying. Fourth instance of one class across both seats** — after our truncated sort view, our doc-line-as-data-claim, and their `logman query` adjacent field. **The lesson is not holding for either side yet.**
 
 **Their check plan, which is correct under every reading:**
 
