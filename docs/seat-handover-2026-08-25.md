@@ -85,7 +85,7 @@
 
 ⭐ **We now hold the raw file and re-derived everything from it. Every headline figure reproduces EXACTLY** — overall 9.10 %, NY 1.83 %, non-NY 14.29 %, availMB min 31 / max 276 / mean 158.0, `<100 MB` 5.27 % · `<80` 0.57 % · `<60` 0.05 %, page file max 74.79 %, max `pagesOUT` 11522.1 at 15:30:47, **and all 24 hourly rows.** ⛔ **Drop the old "not independently verified by us" caveat — it no longer applies.**
 
-⚠ **One figure did NOT reproduce exactly, stated because everything else did:** their excursion-excluded burst rate reads **9.07 %**, ours **9.08 %** — a boundary-inclusion difference of one sample. **Immaterial, and it does not touch their point** (the excursion changes nothing).
+⚠ **One figure did NOT reproduce exactly, stated because everything else did:** their excursion-excluded burst rate reads **9.07 %**, ours **9.08 %**. ~~*a boundary-inclusion difference of one sample*~~ ⛔ **THAT DIAGNOSIS WAS WRONG — corrected 2026-08-27, verified from raw.** The true rate is **9.0760 %**: it **rounds to 9.08** and **truncates to 9.07**. Both boundary treatments give the identical n and the identical rate, so boundary inclusion **cannot** produce 9.07 in either direction. **It is a truncation-vs-rounding artefact in their tooling**, carried into their handover and forward again without re-derivation. ⭐ **Our value was right, our reason was wrong, and naming the gap instead of rounding it away is what found a real defect — just not the one we were looking for.**
 
 ⛔⛔ **THE SAME POOLING ERROR, ONE LEVEL UP — and they found it, not us.** The NY/non-NY split we adopted **five sections ago** is itself too coarse. The real shape is three bands, not two:
 
@@ -118,9 +118,32 @@
 | availMB routine floor | 55 MB | below 55 |
 | Page file routine max | 42.9 % | above 43 % |
 
-⚠ **Observation, deliberately NOT a hypothesis.** Three of the twelve lowest `availMB` samples fall at **:26–:27**, and minute **:25** carries the third-lowest mean of all sixty (147.0 MB) — **but the whole between-minute spread is ~6 MB and this does not separate from noise.** Their perf probe ran hourly at `:25`, and **Change 2's task now runs at `:25` too.** ⭐ **That makes it a falsifiable prediction rather than a fourth hypothesis: if the dip is instrument-related it should DEEPEN in the soak data. Check it there; do not adopt it now.**
+### 1.1b ⛔ THREE OF OUR OWN OBSERVATIONS WERE WRONG — corrected 2026-08-27, all re-verified from raw
 
-⛔ **All four sub-60 MB samples, since "routine floor 55" rests on them:** three are inside the 15:30 excursion (32 · 56 · 31, all with `pagesOUT` 3,100–5,900); **the fourth is `08/25 14:26:06`, availMB 55 with `pagesOUT` 0 and a flat 39.24 % page file** — a quiet isolated dip with no paging pressure at all, and it is the sample the 55 MB floor actually comes from.
+⚠ **We published three claims about the `:25` minute-of-hour dip. The hostel-app seat checked all three against their copy and all three were wrong.** Re-derived from our own copy and **every correction holds.** Quoted rather than deleted, per the convention.
+
+| Our claim | ⛔ Truth | How we got it wrong |
+|---|---|---|
+| ~~"the whole between-minute spread is ~6 MB"~~ | **27.9 MB** — lowest `:30` = 145.8, highest `:17` = 173.7 | ⛔ **We read the range off a `head -8` of a sorted list.** The 8 rows we printed spanned ~6 MB; the other 52 were never looked at |
+| ~~"three of the twelve lowest fall at :26–:27"~~ | **Four** | A miscount of **our own printed output** |
+| ~~"their perf probe ran hourly at `:25`"~~ | ⛔ **It did not.** The PLA collector sampled **uniformly every 10 s** — we measure **8,639 gaps of 10 s and exactly one of 11 s** across the full 24 h | **Inherited from §5's own *"their window: hourly at `:25`, ~10 s"* line, which described the PROVING-period agreement, not the Change-1 collector.** We carried a doc line into a data claim without checking it against the data sitting in front of us |
+
+⛔ **AND TWO OF OUR "SEPARATE FINDINGS" ARE THE SAME SAMPLE.** `08/25 14:26:06` (availMB 55) is the sample the **55 MB routine floor** rests on **AND** one of the two `:26–:27` events. **They cannot corroborate each other, and we presented them as independent in the same section.**
+
+⚠ **The cluster is TWO EVENTS, not four samples.** `06:27:17` / `:27` / `:37` are **three consecutive 10-second samples of one ~20-second dip** (verified: the surrounding samples read 123 → 102 → 66 → 65 → 65 → 70). Plus `14:26:06`. **n = 2.**
+
+⛔ **The strongest argument against instrument-relatedness is one we never made, and they did:** **`:30` (145.8 MB) and `:45` (145.9 MB) are BOTH lower than `:25` (147.0 MB)**, and nothing of theirs runs at either. **Minute-of-hour variation exists on that box independently of anyone's software.**
+
+⭐ **THE PREDICTION SURVIVES, AND ON A BETTER FOOTING THAN WE GAVE IT.** Because their baseline collector had **no `:25` periodicity at all**, the baseline `:25` figure is a **CLEAN CONTROL**, not a contaminated reading. Change 2's task **does** run at `:25`. So there is a genuine before-and-after with an uncontaminated "before":
+
+- **If the `:25`–`:27` dip DEEPENS in the soak data ⇒ it is their app, and nothing else.**
+- **If it does not deepen ⇒ the baseline dip was noise and this is closed.**
+
+⚠ **But the PRIOR is weaker than we implied.** n = 2 events · one of them is the floor sample · two other minutes sit lower. **Record the prediction; do not lean on it.**
+
+⛔ **All four sub-60 MB samples, since "routine floor 55" rests on them:** three are inside the 15:30 excursion (32 · 56 · 31, all with `pagesOUT` 3,100–5,900); **the fourth is `08/25 14:26:06` — availMB 55, `pagesOUT` 0, page file flat at 39.24 %.** A quiet dip with **no paging pressure behind it at all**, and it is where the floor actually comes from. **The floor and the excursion are two different phenomena.**
+
+⚠⚠ **THE LESSON, AND IT IS THE THIRD INSTANCE IN THIS ARC OF ONE FAILURE:** we pooled 80 minutes and called it a baseline · we pooled 10 hours across a 3×-varying range and called it a session · **and then we read a 60-value range off the 8 rows we happened to print.** ⛔ **Each time the error was a TRUNCATED VIEW mistaken for the whole. Not a reasoning failure — a looking failure. Recompute from raw; do not read conclusions off a convenience view.**
 
 ---
 
@@ -252,7 +275,22 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ✅ **CLOSED 2026-08-26 — the leaked older Gmail password IS revoked, confirmed by the trader.** ⚠ **Provenance, stated precisely: this is the trader's confirmation, not a read-back we performed against Google.** The credential never reached our box in any case; what it closes is the disclosure, not a risk to us.
 
-⚠ **STILL OPEN, the last one:** **what happens to BOTH credentials if the soak fails or the migration is abandoned.** They call the new password *"the one we keep"* and exclude it from their post-cutover rotation sweep — **so a credential landing for a 48-hour soak is permanent by default unless someone says otherwise.** That is our box's end state, and nobody has stated it.
+✅ **ANSWERED 2026-08-27, and the suspicion was right — nobody had decided it.** *"The one we keep"* was describing a **rotation-sweep exclusion**, not a choice that a credential placed for 48 hours becomes a permanent resident of our box. **Same shape as the machine-scope answer: an outcome nobody chose.** Now an owner decision, written into their plan and runbook:
+
+| Outcome | Credential end state |
+|---|---|
+| **Soak passes, they migrate** | **Both stay**, reviewed at their Phase 5 — **a decision, not a default** |
+| **Soak fails, or abandoned** | **Both go**, five ordered steps: delete the task · delete `C:\RedInnPricing\` entirely incl. `Credentials\` · remove all four machine env vars · **REVOKE `RedInnWindows` in the Google app-password list** · **REISSUE the service-account key** |
+
+⭐ **Steps 4 and 5 are the whole point, and 5 is the one that gets skipped.** Deleting the key FILE from our box is **not** the key being dead — it sat on a machine they do not own. **Only reissuing closes that, and only that is checkable from outside.** Neither step is conditional on anyone believing something went wrong: they are what makes the removal **verifiable rather than asserted**.
+
+### 5.4 Soak status — running, and one leg still unproven
+
+**First scheduled run fired 15:25:25 UTC:** `LAST_RESULT=0x0`, `NUM_MISSED=0`, `exit=0`, `fallback=False`.
+
+✅ **The stale-environment risk is RESOLVED, and by inference rather than luck.** `fallback=False` means the scheduled run read `GoogleSheets__CredentialsPath` out of the machine environment — without it Sheets fails and the app drops to hardcoded rates. All four variables live in the same registry key, **so `Email__Password` is reaching the task too.** ⛔ **Stop watching for `email=SEND-FAILED` on that account.**
+
+⚠ **SMTP THROUGH THE APP ON A SCHEDULE IS STILL UNPROVEN.** Both runs so far read `email=suppressed-quiet` — their quiet period is 20:59–07:00 business time and both landed inside it. **The first run that CAN send is 23:25 UTC, and a real change is queued for it.** The credential is proven from our box; **the app's own send path on a schedule is not, and they are not counting it.**
 
 **Rollback, accepted and standing:** disable the scheduled task `RedInnCourt-DynamicPricing-Hourly`, tell them afterwards, **do not wait for them.** No service, no listener, no resident process. Their Linux box serves production throughout, so nothing of theirs breaks.
 
