@@ -172,6 +172,10 @@
 
 | Item | State |
 |---|---|
+| **19 — the shared-workstation rule** (§5.6) | ⛔ **NEW 2026-08-27. The hostel-app seat proposed a working-agreement addition and left the line to us deliberately.** ⚠ **Their draft catches too much: "or builds" would make every ordinary `dotnet build` a notice, on BOTH sides.** ⛔ **A rule that fires constantly gets ignored — this project already rejected a design on exactly that ground** (the split-hour option (a): *"a check that cries wolf at each deploy gets ignored"*). ⭐ **Our counter-line, narrower and equally protective: announce anything that (a) sets MACHINE-SCOPE state — scheduled task, service, machine env var, registry, firewall — or (b) DELIBERATELY constrains or exhausts a shared resource — heap hard limit, memory-pressure test, disk fill, CPU saturation. Ordinary builds and ordinary test runs inside your own tree stay free.** That still catches `memprobe` under `DOTNET_GCHeapHardLimit` and does not catch a `dotnet build`. **Plus a standing one-line inventory of what has been run, which is cheaper than per-event notices and gives the same traceability.** |
+
+| Item | State |
+|---|---|
 | **Absorption mechanism revision** — [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 | ⛔ **Written and blind-checked. §6 D-table awaits a tick.** Do not open an implementer session until ticked. **Opus, high** |
 | **`_evalCache` unbounded** | ⛔ **No spec exists, and the obvious fix is destructive** — `WriteEvalCache` rewrites the whole file with `append:=False` from five call sites. **Decoupling the list from the file IS the work and comes first.** ~8–17 month runway |
 | **CLI-port reversal** | ⚠ Still unwritten into [`roadmap.md`](roadmap.md). **The only known-stale item in that document** — O3's "DEFERRED LAST" is unconfirmed until someone writes it |
@@ -346,7 +350,28 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ---
 
-## 6. Lessons — each cost something this session
+### 5.6 ⛔ THE WORKSTATION IS SHARED, AND IT ALREADY INTERACTED — eleven probe builds, one of them a deliberate memory test
+
+⛔ **Disclosed unprompted by the hostel-app seat, 2026-08-27, after we raised the shared-machine point as a HYPOTHETICAL.** It is not hypothetical. Across earlier sessions that project built and ran **eleven .NET probe projects on this workstation**: `memprobe` · `realprobe` · `envtest` · `tzprobe` · `winprobe` · `b7test` · `mksheet` · `q4probe` · `q8probe` · `q9probe` · `qpprobe`.
+
+⚠ **`memprobe` is the one that matters.** It held a `ProjectReference` to their real pricing project, **deliberately allocated**, and ran under a `DOTNET_GCHeapHardLimit` test — it is where their 19.2 MB private / 63.8 MB working-set figures came from. **That is exactly the "test that consumes memory" case we named, and it had already run, unannounced, because they believed the workstation was theirs alone.**
+
+⭐ **They also confirmed what we could not politely check: `C:\Dev\DeribitVerdictEngine` is visible from their side — our full tree, `Core\`, `AWS-copybacks\`, the solution, our `CLAUDE.md`.** Two boxes, not three. **They declined to inspect it further, which is the same courtesy we extended.**
+
+✅ **OUR EXPOSURE, MEASURED RATHER THAN ASSUMED — and it is genuinely bounded:**
+
+| Check | Result |
+|---|---|
+| Local trade capture | ⭐ **OFF** — `settings.local.json` present in **both** `bin\Debug` and `bin\Release`, each `{"trade_store": {"enabled": false}}` |
+| Newest write to the local `backtest_data` store | **2026-08-14 16:24** — the copy-back. **Nothing has written since**, so no capture was ever in flight during their probes |
+| Tree | Clean |
+| Harness | **306/306**, re-run from a clean build this session |
+
+⭐ **THE STRUCTURAL REASON THE EXPOSURE IS SMALL, and it is worth naming because nobody designed it for this:** the irreplaceable data — the tape — **lives on AWS, not here.** `v64`'s **D1 ruled capture AWS-only**, on the entirely unrelated ground that *"the end goal is the app on AWS and not on the local box at all"*. **A decision taken about redundancy happens to cap this exposure to transient CPU and memory contention during builds and harness runs.** Nothing persistent, nothing irrecoverable.
+
+⚠ **"No harm is known to have come of it" is NOT "no harm occurred" — their words, and correct.** Nobody was looking. **We are not going to claim a clean bill from a check nobody ran at the time.**
+
+⛔ **THEY PROPOSED AN ADDITION TO THE WORKING AGREEMENT AND EXPLICITLY LEFT THE LINE TO US.** Their draft: *announce a local test before running it when it allocates memory, creates a scheduled task or service, holds a file lock, or builds; reading, searching and editing stay free.* ⚠ **TRADER DECISION — see §2 item 19.**
 
 1. ⛔ **A check that reports a result it never performed — FOUR more instances, all mine.** A `perl` mutation that silently did not apply, and I nearly reported the resulting PASS as independent confirmation *inside the review whose job was to catch exactly that*. Two CeilingAudit runs that died on a CSV gate before reaching the line under test. A `grep -c` that returned 303 because `\|` is alternation in BRE. **The fix is always: assert the check RAN before believing its result.**
 2. ⚠ **`|` in a regex is alternation, and escaping it through bash → perl fails silently and looks like success.** Three consecutive verification failures on a one-character fix. **Use exact string replacement when the pattern contains pipes.**
