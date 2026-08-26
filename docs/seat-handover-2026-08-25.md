@@ -92,7 +92,7 @@
 
 ⛔ **THE RULE THAT FALLS OUT OF THE SPLIT: COMPARE LIKE-FOR-LIKE BY TIME OF DAY.** A few hours of post-change data cannot be held against a pooled 24-hour figure — **in either direction.**
 
-⚠ **NOT independently verified by us.** These are their numbers, from their instrument, on our box. **The raw CSV, the burst timestamps and the hourly histogram were each offered and none has been requested.** Worth taking — the box is ours and the data is as much ours as theirs.
+⚠ **NOT independently verified by us.** These are their numbers, from their instrument, on our box. ~~*The raw CSV, the burst timestamps and the hourly histogram were each offered and none has been requested.*~~ ✅ **ALL THREE REQUESTED 2026-08-26.** ⛔ **And the raw CSV was on our box the whole time — `C:\RedInnPricing\logs\perf\baseline_08241501.csv`, 8,640 rows.** See §5.1: **copy it off before reading it, or pay the same 30–50 MB attachment cost this correction is about.**
 
 ---
 
@@ -170,15 +170,42 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ---
 
-## 5. The hostel-app parallel run — live, and something is due today
+## 5. The hostel-app parallel run — Change 1 CLOSED, Change 2 DEPLOYING
 
-**Change 1 (a detached `logman` perf-baseline collector) has been RUNNING since 2026-08-24 15:01:10 UTC and stops itself ~15:01 UTC today.** Scope: `C:\RedInnPricing\logs\perf\` and one PLA collector. No app, no scheduled task, nothing in `C:\DeribitEngine`, session 2 untouched.
+### 5.1 ✅ Change 1 is DONE and it delivered. Its three answers are in §1.1
 
-⭐ **Their analyzer output, both context snapshots, and an NY / non-NY burst split are owed to us when it completes.** Worth reading for our own question, not just theirs — **their instrument is detached, so it is the best one anyone has pointed at this box.** It answers three things we cannot:
+~~*Change 1 (a detached `logman` perf-baseline collector) has been RUNNING since 2026-08-24 15:01:10 UTC and stops itself ~15:01 UTC today.*~~ **It stopped cleanly — 8,640 samples against 8,640 expected, no truncation, no reboot.** All three of our questions are answered and the results are the corrected baseline in §1.1 above: bursts are **time-of-day dependent**, the **138 → 118 MB decline was our own SSM session**, and the **daily quick scan is not the driver** (n=5, correctly not called either way).
 
-- Whether the **4.4 % burst rate survives a detached instrument**, or was partly our own SSM probing.
-- Whether the **138 → 118 MB mean decline** across 80 minutes was real or was us.
-- Whether the **daily quick scan** shows as a burst at all.
+⛔ **THE RAW CSV IS ALREADY ON OUR BOX AND NEVER LEFT IT** — `C:\RedInnPricing\logs\perf\baseline_08241501.csv`, 8,640 rows, plus `context_start_*.txt`. **We do not need them to send it.** ⚠ **But reading it ON the box attaches a session and costs the same 30–50 MB this whole exercise measured — copy it off first.** The baseline is finished so there is nothing left to contaminate; the cost is real anyway.
+
+**Still coming from them, generated OFF the box:** the hourly histogram (24 hours, NY/non-NY marked) · the burst timestamps with values · the raw samples inside the 04:22:42–04:23:32 scan window. **Their analyzer ships to `C:\RedInnPricing\deploy\analyze-perf.ps1` with Change 2**, and it **refuses to apply a burst threshold unless one is passed explicitly** — it will not inherit a number from anywhere, including from them. Good design given how this arc went.
+
+### 5.2 ⛔ Change 2 — DEPLOYING, on the conditional acknowledgement. TWO credentials land
+
+**Acknowledged conditionally on two questions; both answered 2026-08-26, so it proceeds without a second acknowledgement — that was explicit in our reply.** ⚠ **Both questions found something, which is the point of having asked.**
+
+**Q2 found a real gap: `MultipleInstances` and `ExecutionTimeLimit` did not exist.** Not at defaults — **no task-creation script had been written at all.** Now `IgnoreNew` / `PT10M`. ⛔ **And they read their own source rather than assume: NO timeout is set on any remote call** — `HttpClient`, `SheetsService` (plus default backoff retries) and `SmtpClient` all run to 100 s defaults or unbounded, across eight Sheets call sites and one HTTP call per run. ⚠⚠ **`SmtpClient.Timeout` is documented as applying to SYNCHRONOUS sends only, so it does not bound `SendMailAsync` — they flagged this as untested and it is correct. It does not change the conclusion, because they never set `Timeout` anyway.** ⭐ **`ExecutionTimeLimit` is therefore the ONLY bound on a hung run, not a backstop.**
+
+⚠ **`IgnoreNew` converts stacking into SILENCE** — one hung instance and every later run is skipped with nothing raising an error. **They named this themselves before we did**, and it is covered: their acceptance criterion **counts `RIP-RESULT` lines with `status=OK` across all 48 hours**, so a missing run FAILS the soak. **They assert the run happened rather than infer it from the absence of an error** — the discipline this project keeps writing lessons about.
+
+**Q1 was a concession, not a confirmation.** Machine scope for the Gmail app password was **a default written up as a decision** — the stated reason ("so the SYSTEM task inherits them") never distinguished machine scope from SYSTEM's own user scope, which would inherit too. **It is now an owner DECISION**: machine scope, because the narrowing does not change *who* can reach the box (anyone who can read the machine environment there is already an administrator) and the alternative means carrying an untested path plus a fallback branch through a migration. **DPAPI stays out of reach — the app reads a plain env var, so it is a code change.**
+
+⛔⛔ **AND THE SCOPE WAS WORSE THAN THEIR OWN NOTICE DESCRIBED, until hours before deployment.** Their repo's `appsettings.json` holds the **OLDER** Gmail app password — **the one that was publicly exposed.** Anyone deploying would have copied it straight out of the repo, and **if it still authenticated it would have WORKED, so nothing would ever have surfaced the mistake.** ⭐ **They disclosed this unprompted rather than quietly swapping it.** What lands is a **brand-new password created for this box, never in a repo, tarball, backup or anywhere public**; the leaked one is being revoked. ⚠ **"Being revoked tonight" is a FUTURE-TENSE claim — get it confirmed, do not carry it as done.**
+
+**WHAT WE ARE ACCEPTING, stated as scope rather than as reassurance:**
+
+| # | Credential | Form | Protection |
+|---|---|---|---|
+| 1 | Google service-account private key | **File**, `C:\RedInnPricing\Credentials\` | `icacls /inheritance:r`, granted to SYSTEM + Administrators only. ⚠ **Would have been left at inherited permissions — i.e. `BUILTIN\Users: Read & Execute` — had we not asked** |
+| 2 | Gmail app password | **Machine-scope environment variable** | **None. Readable by every process on the box.** Accepted knowingly |
+
+**Blast radius of both is theirs** — hostel spreadsheets and a hostel mailbox. Nothing of ours is reachable from either.
+
+⚠ **OPEN, and worth an answer: what happens to both credentials if the soak fails or the migration is abandoned?** They state the new password is *"the one we keep"* and is excluded from their post-cutover rotation sweep — **so a credential landing for a 48-hour soak is in fact permanent unless someone says otherwise.**
+
+**Owed back to us in ONE post-deploy report** (their commitment, all three read back rather than asserted): the applied ACL read off the directory · the two task settings read off the registered task · the perf data. **They fetch in the SAME SSM session as the deployment — one attachment, not two.**
+
+**Rollback, accepted and standing:** disable the scheduled task `RedInnCourt-DynamicPricing-Hourly`, tell them afterwards, **do not wait for them.** No service, no listener, no resident process. Their Linux box serves production throughout, so nothing of theirs breaks.
 
 **Agreed and binding both ways:** neither side touches a scheduled task it did not create · never log off session 2 · neither measures inside the other's write window. **Their window: hourly at `:25`, ~10 s, SYSTEM.** Oversight: notice before each change during proving, standing go-ahead once proven.
 
