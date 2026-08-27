@@ -172,7 +172,7 @@
 
 | Item | State |
 |---|---|
-| **19 — the shared-workstation rule** (§5.6) | ⛔ **NEW 2026-08-27. The hostel-app seat proposed a working-agreement addition and left the line to us deliberately.** ⚠ **Their draft catches too much: "or builds" would make every ordinary `dotnet build` a notice, on BOTH sides.** ⛔ **A rule that fires constantly gets ignored — this project already rejected a design on exactly that ground** (the split-hour option (a): *"a check that cries wolf at each deploy gets ignored"*). ⭐ **Our counter-line, narrower and equally protective: announce anything that (a) sets MACHINE-SCOPE state — scheduled task, service, machine env var, registry, firewall — or (b) DELIBERATELY constrains or exhausts a shared resource — heap hard limit, memory-pressure test, disk fill, CPU saturation. Ordinary builds and ordinary test runs inside your own tree stay free.** That still catches `memprobe` under `DOTNET_GCHeapHardLimit` and does not catch a `dotnet build`. **Plus a standing one-line inventory of what has been run, which is cheaper than per-event notices and gives the same traceability.** |
+| ~~**19 — the shared-workstation rule**~~ (§5.6) | ✅ **RULED 2026-08-27 (trader). See §5.6 for the rule as it now stands — it is narrower than either draft.** |
 
 | Item | State |
 |---|---|
@@ -371,7 +371,23 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ⚠ **"No harm is known to have come of it" is NOT "no harm occurred" — their words, and correct.** Nobody was looking. **We are not going to claim a clean bill from a check nobody ran at the time.**
 
-⛔ **THEY PROPOSED AN ADDITION TO THE WORKING AGREEMENT AND EXPLICITLY LEFT THE LINE TO US.** Their draft: *announce a local test before running it when it allocates memory, creates a scheduled task or service, holds a file lock, or builds; reading, searching and editing stay free.* ⚠ **TRADER DECISION — see §2 item 19.**
+### 5.7 ✅ THE SHARED-WORKSTATION RULE — RULED 2026-08-27, and it is narrower than either draft
+
+**They proposed the addition and explicitly left the line to us. The trader drew it tighter than our own counter-proposal.**
+
+> ⭐ **ANNOUNCE BEFORE SETTING MACHINE-SCOPE STATE on the shared workstation** — a scheduled task, a service, a machine environment variable, the registry, the firewall. **Anything that outlives the process that created it and can act later.**
+>
+> **Everything else on your own tree is free** — builds, test runs, memory-pressure tests, file locks, reading, searching, editing. **No notice.**
+
+⛔ **What was in our draft and was CUT: clause (b), "deliberately constrains or exhausts a shared resource."** So a `memprobe`-class test under `DOTNET_GCHeapHardLimit` needs **no** notice.
+
+⭐ **THE REASONING, because a rule nobody can justify is a rule nobody follows.** **Notice is only worth anything for effects you would want to PREVENT or TIME AROUND.** Machine-scope state qualifies: it persists, it fires again, it surprises someone later, and a notice genuinely changes what the other side does. **Transient resource use does not** — neither side would stop working on hearing about it, so the notice buys nothing.
+
+⚠ **Clause (b) also needed judgment to apply** (*is this deliberate enough? is this a shared resource?*) while machine-scope is objectively testable: **did you write something outside your own tree that outlives your process?** ⭐ **A crisp one-category rule gets followed; a two-category rule with a judgment call in the second gets argued about and then ignored** — the alarm-fatigue ground this project already rejected a design on.
+
+⚠ **The residual we accept, named rather than waved away:** a `memprobe`-class run could coincide with our harness or a build and cause a transient failure that reads as a real one. ⭐ **The mitigation is the INVENTORY, not a notice** — for a transient effect, after-the-fact traceability beats before-the-fact warning, because notice would not have changed anyone's behaviour anyway. **A standing one-line inventory of what has been run is what makes an odd build failure diagnosable.**
+
+⛔ **THE RULE BINDS US TOO.** We know of nothing we currently do on this workstation that sets machine-scope state — our builds, harness runs and `settings.local.json` writes are all inside our own tree, and AWS deploys touch the AWS box. **If that changes, we announce first.**
 
 1. ⛔ **A check that reports a result it never performed — FOUR more instances, all mine.** A `perl` mutation that silently did not apply, and I nearly reported the resulting PASS as independent confirmation *inside the review whose job was to catch exactly that*. Two CeilingAudit runs that died on a CSV gate before reaching the line under test. A `grep -c` that returned 303 because `\|` is alternation in BRE. **The fix is always: assert the check RAN before believing its result.**
 2. ⚠ **`|` in a regex is alternation, and escaping it through bash → perl fails silently and looks like success.** Three consecutive verification failures on a one-character fix. **Use exact string replacement when the pattern contains pipes.**
