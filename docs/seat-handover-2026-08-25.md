@@ -389,6 +389,27 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ⛔ **THE RULE BINDS US TOO.** We know of nothing we currently do on this workstation that sets machine-scope state — our builds, harness runs and `settings.local.json` writes are all inside our own tree, and AWS deploys touch the AWS box. **If that changes, we announce first.**
 
+### 5.8 ✅ ADOPTED BY BOTH SEATS, AUDIT VERIFIED, AND THE INVENTORY EXISTS
+
+⭐ **THE INVENTORY IS READABLE FROM HERE:** `C:\Users\user\source\repos\RedInnDynamicPricingLinux\docs\shared-workstation-inventory.md`. **Read it directly — it is on this machine and they invited it.** One line per item, append-only. It carries the rule, both reasons for it, all eleven transient items, and **our own assessment and caveats quoted unedited**, including *"structurally bounded is not verified as harmless."*
+
+⚠⚠ **ITS DATE LIMIT, WHICH CHANGES WHAT IT IS WORTH:** the historical dates are **directory timestamps, not a contemporaneous log** — nobody was recording at the time. **Trustworthy from 2026-08-27 FORWARD; reconstructed before it.** ⛔ **Correlating a build failure against anything older than 2026-08-27 gives a LEAD, not a fact.**
+
+✅ **THEIR AUDIT INDEPENDENTLY VERIFIED BY US — all four rows, and they were right that it needed doing.** They flagged that two seats running the same command on the same machine is weak corroboration, so we ran the **three rows we had not previously checked** rather than repeating the one we had:
+
+| Check | Ours |
+|---|---|
+| `HKLM\…\Session Manager\Environment` — `Email__` · `GoogleSheets__` · `LittleHotelier__` · `RIP_` · `DOTNET_GC` · `RedInnPricing` | **none** |
+| `HKCU\Environment`, same patterns | **none** |
+| Scheduled tasks matching `RedInn` / `RIP` / `Pricing` | **none** |
+| PLA collector sets | **none** |
+
+⭐ **No machine-scope state from that project remains on this workstation. Confirmed twice, by two methods.**
+
+⭐⭐ **THE PRECEDENT WORTH KEEPING: they self-reported the first instance of the covered class rather than leaving us to find it.** The `Days=0` test created a PLA collector set (`RIPDaysZeroTest`) — **machine-scope by the new definition and not marginally: it persisted past its creating process and ACTED LATER ON A SCHEDULE, which was the entire point of it.** It predates the rule so it breaks nothing, and it is logged as *"noticed in advance? **NO**"*. **A rule whose first breach is volunteered by the breaching side is a rule that will work.**
+
+⚠ **SIXTH LESSON INSTANCE, offered by them:** they nearly published **build-output timestamps as run times.** Several read `2025-06-10` and `2023-03-08` — **SDK reference-DLL dates copied into the output**, obvious only because they predate the project. ⛔ **Had the SDK shipped a DLL stamped last week, it would have been filed as fact.** Same shape as the other five, caught the same way — **checking the thing rather than reading the rendered value. Not by being more careful, which has never worked for either side.**
+
 1. ⛔ **A check that reports a result it never performed — FOUR more instances, all mine.** A `perl` mutation that silently did not apply, and I nearly reported the resulting PASS as independent confirmation *inside the review whose job was to catch exactly that*. Two CeilingAudit runs that died on a CSV gate before reaching the line under test. A `grep -c` that returned 303 because `\|` is alternation in BRE. **The fix is always: assert the check RAN before believing its result.**
 2. ⚠ **`|` in a regex is alternation, and escaping it through bash → perl fails silently and looks like success.** Three consecutive verification failures on a one-character fix. **Use exact string replacement when the pattern contains pipes.**
 3. ⛔ **Trace a defect to the WRITE SITE, not from the assignment.** §4.1. One unread line produced a hard constraint, a queued trader decision, a claim about the CLI port, and guidance sent to another team.
