@@ -410,6 +410,39 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ⚠ **SIXTH LESSON INSTANCE, offered by them:** they nearly published **build-output timestamps as run times.** Several read `2025-06-10` and `2023-03-08` — **SDK reference-DLL dates copied into the output**, obvious only because they predate the project. ⛔ **Had the SDK shipped a DLL stamped last week, it would have been filed as fact.** Same shape as the other five, caught the same way — **checking the thing rather than reading the rendered value. Not by being more careful, which has never worked for either side.**
 
+### 5.9 ⛔ U1 IS FALSIFIED ON THE COLLECTOR BOX — the `Days=0` schedule did NOT fire
+
+**Scheduled 15:01:00 UTC · checked 15:08:55 · `Status Stopped` · no new file.** Seven minutes past the scheduled second, nothing had happened.
+
+| Build | `Days=0` schedule |
+|---|---|
+| Windows 11 Pro 10.0.26200 (this workstation) | **FIRED**, wrote its file |
+| Windows Server 2019 Datacenter (`i-0d6c133058876273e`) | ⛔ **DID NOT FIRE** |
+
+**Same sentinel, same command, same configuration, different build, opposite outcome.**
+
+⛔⛔ **OUR COM-CONTRACT ARGUMENT WAS HALF RIGHT, AND THE WRONG HALF.** We argued `plaRunOnce` is fixed by the interface contract, so build variation should not reach it. **They limited it: the interface fixes that member zero is NAMED `plaRunOnce`; it does NOT fix that the SCHEDULER HANDLES zero identically on every build.** ⭐ **We conceded that split and said we would not defend it — and it is the half that decided the question. Conceding a limit we could have argued is the only reason this landed as a caught prediction rather than a surprise.**
+
+⚠ **Be precise about what is falsified.** It does **NOT** show `plaRunOnce` means something else on Server 2019. It shows **a `Days=0` schedule did not autostart there.** *The value's meaning* and *the scheduler's willingness to act on it* are different claims; **only the second is falsified.**
+
+⭐ **Their own test is what nearly misled us both** — it fired on Windows 11 and was reported as supporting our reading, which it did, **on a build that is not the collector's.** They flagged the cross-build gap at the time and refused to let *"we tested it"* become *"we tested it there."*
+
+**Started BY HAND instead:** `logman start RIPPerfBaseline` at **15:09:56 UTC**, `Running`, writing `soak_08271509.csv`, `DC_FileName=soak` read from the exported definition.
+
+✅ **Phase alignment is 8m56s late and we are NOT restarting — a decision, since they offered a clean 15:01 redo costing one day.** **The property we asked for survives:** hour 15 is still the ONE hour built from two partial visits, every other hour contiguous, **24 consecutive `:25` runs still captured.** Only the split point inside hour 15 differs. ⛔ **And a redo would be WORSE: the soak ends 15:25 UTC on 08-28, so a run starting 15:01 on 08-28 would overlap it by 24 minutes instead of sitting almost wholly inside it.** **Hour 15 is one row of 24 and is simply the least-comparable row — a footnote, not a redo.**
+
+⚠ **U2 is largely moot — a schedule that does not fire cannot recur** — but the 08-28 check still runs and **our dated watch stands, retimed to 15:09.**
+
+⚠⚠ **INSTANCES SIX AND SEVEN, both theirs, both volunteered, and ONE WOULD HAVE STOPPED THE MIGRATION.** (1) The cross-box comparison was keyed on `(date, room, availability)` and reported **36 of 36 MISMATCHED** — including rows where both boxes read identically, **which is what made them look.** The key omitted **lead time**: the same calendar date carries a different target at Day +1 vs Day >+2. Re-keyed, **22 of 22 match exactly.** ⛔ **"36 of 36 mismatched" at face value is a failed migration.** (2) A change-count gap predicted from **Linux's** sold-out count at `:00` when it is set by **Windows'** availability at `:25` — the boxes run 25 minutes apart — flagged 11 hours as unexplained; the correct test is clean at 25 of 25.
+
+⭐⭐ **THE THROUGH-LINE, now seven instances across two seats, and it is the most useful thing this exchange produced: NOT ONE was caught by care.** Every one was caught by **a contradiction** — identical values labelled as mismatches, arithmetic pointing the wrong way, a date predating the project, a status line disagreeing with an exported definition. ⛔ **Vigilance has never once been the mechanism. Build things that can contradict themselves, then look at the contradiction.**
+
+---
+
+## 6. Lessons — each cost something this session
+
+⚠ **This header was DELETED BY ACCIDENT on 2026-08-27 (commit `1872b44`) and restored 2026-08-27.** A `§5.6` insertion used it as its edit anchor and **replaced** it instead of inserting before it, orphaning the numbered list below under the preceding subsection for four commits. ⛔ **Eighth instance of the same class, and ours: the edit reported success because the anchor matched — the check that would have caught it is looking at the RESULT, not the exit status.**
+
 1. ⛔ **A check that reports a result it never performed — FOUR more instances, all mine.** A `perl` mutation that silently did not apply, and I nearly reported the resulting PASS as independent confirmation *inside the review whose job was to catch exactly that*. Two CeilingAudit runs that died on a CSV gate before reaching the line under test. A `grep -c` that returned 303 because `\|` is alternation in BRE. **The fix is always: assert the check RAN before believing its result.**
 2. ⚠ **`|` in a regex is alternation, and escaping it through bash → perl fails silently and looks like success.** Three consecutive verification failures on a one-character fix. **Use exact string replacement when the pattern contains pipes.**
 3. ⛔ **Trace a defect to the WRITE SITE, not from the assignment.** §4.1. One unread line produced a hard constraint, a queued trader decision, a claim about the CLI port, and guidance sent to another team.
@@ -420,7 +453,7 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ## 7. Loose ends
 
-- ⛔⛔ **DATED WATCH — `2026-08-28`, just after 15:01 UTC. Check whether the hostel-app `RIPPerfBaseline` collector actually STOPPED.** If it is still running and they have not already flagged it, **stop it — pre-authorised, no need to wait for them.** This is §5.5's `Days=0` ambiguity going the wrong way. **The only item in this document with a date on it.**
+- ⛔⛔ **DATED WATCH — `2026-08-28`, just after **15:09** UTC. Check whether the hostel-app `RIPPerfBaseline` collector actually STOPPED.** If it is still running and they have not already flagged it, **stop it — pre-authorised, no need to wait for them.** ⚠ **Time corrected from 15:01: the schedule never fired and it was started BY HAND at 15:09:56 UTC on 08-27** (§5.9), so the 24 h self-stop lands at ~15:09, not 15:01. **The only item in this document with a date on it.**
 - ⛔ **Commits unpushed — all `[no-engine-change]` except `4032f9c` (the F1 fix, tested and reviewed).** Settings stays v68. The pre-push hook runs `verify-gate.ps1` in `prepush` mode. ⚠ **Verify the count with `git status -sb`; do not inherit it from this line.**
 - ⚠ **`tools/AutoTweaker/state.json` is UNTRACKED** and records a real run (2026-06-18, `SKIPPED_INSUFFICIENT_TIER`, cursor at 81). Same nearly-lost shape as `tools/mem-probe.csv`. **Commit it or ignore it deliberately.**
 - **F2's fix in the AutoTweaker build has no fixture** — a console string with no consumer, and every A59 row is in-population so no fixture can distinguish the two definitions. Named in the commit, not papered over.
