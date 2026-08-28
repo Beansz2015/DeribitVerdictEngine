@@ -180,6 +180,8 @@
 | **`_evalCache` unbounded** | ⛔ **No spec exists, and the obvious fix is destructive** — `WriteEvalCache` rewrites the whole file with `append:=False` from five call sites. **Decoupling the list from the file IS the work and comes first.** ~8–17 month runway |
 | **CLI-port reversal** | ⚠ Still unwritten into [`roadmap.md`](roadmap.md). **The only known-stale item in that document** — O3's "DEFERRED LAST" is unconfirmed until someone writes it |
 
+| **20** | ⭐⭐ **AWS copy-back + `coverage` run — ONE fetch, THREE purposes** | Sonnet medium | ⛔ **NEW 2026-08-28, and it needs a trader go-ahead because it touches production.** (a) **Criterion 6 attribution** — §5.11: whether the box's state is acceptable for the collector is answerable from `trade_seq` completeness, row cadence and `ws_health` DEGRADED count, **none of which anyone has checked.** (b) **The copy-back is 14 days overdue** and everything we hold **predates the current box.** (c) ⭐ **The Kelly dated trigger + W6-4 re-run need a fresh pooled book and their ETA is ~2026-08-30 — two days out.** ⚠ **Take the store copy too, not just the CSV.** ⚠ **One SSM attach, not three — it costs the box 30–50 MB and that is the whole reason the detached instrument existed** |
+
 **Gated — do not start:**
 
 - **A4** liquidation × OFI — market-gated (needs one real CASCADE line).
@@ -439,6 +441,47 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ---
 
+### 5.10 ⛔ THE PERF COMPARISON BREACHED ALL FOUR STOP CONDITIONS — and the attribution is OURS
+
+| | Baseline | Soak | |
+|---|---|---|---|
+| Burst rate NY | 1.83 % | **4.78 %** | ⛔ threshold ~2.5 % |
+| Burst rate non-NY | 14.29 % | **20.93 %** | ⛔ threshold ~16 % |
+| availMB routine floor | 55 MB | **48 MB** | ⛔ |
+| Page file routine max | 42.9 % | **44.96 %** | ⛔ |
+| Mean availMB | 158.0 | 142.8 | |
+| Samples < 100 MB | 5.25 % | **33.44 %** | |
+| Samples < 60 MB | 0.05 % | **1.66 %** | |
+
+⭐ **THEIR APP IS EXCLUDED BY THREE INDEPENDENT TESTS, and the third was run because "it is not us" is a convenient conclusion:** (1) **arithmetic ceiling** — 7 s of every 3600 is a 0.194 % duty cycle, so even if every sample during a run were a burst the ceiling is **+0.28 pp/hour** against an observed **+7.66 pp**, twenty-seven times over; (2) **non-uniformity** — hours 16–23 show **11 bursts baseline, 11 soak, identical**, and *an hourly app cannot be absent from eight consecutive hours*; (3) **lagged eviction TESTED AND DEAD** — minutes `:25`–`:34` read **13.68 %** against **14.31 %** elsewhere, so their window is *quieter*, not louder.
+
+**The measured shape, offered as measurement only:** availMB fell **~15–25 MB roughly uniformly across the whole day**, but bursts rose **only where availMB was already below ~130 MB**. At 180+ MB free, losing 20 MB costs nothing; at 120 MB it crosses into paging. **A constant memory reduction with a threshold effect deciding where it surfaces.**
+
+⚠⚠ **THE LIMIT THEY PUT ON THEIR OWN NUMBERS IS THE MOST IMPORTANT LINE IN THE REPORT, and it is correct: n = 2 DAYS.** There is **no measurement of this box's day-to-day variance when nothing changes.** Calling this *"something changed"* would generalise one 24-hour window to "the normal state" — ⛔ **structurally the same error as generalising 80 minutes to 24 hours, which is where this entire exchange began.** **What the data supports: these two windows differ materially, and their app cannot account for it. Nothing more.**
+
+### 5.11 ⛔ THEY ASKED IF WE HOLD A HISTORICAL SPREAD FOR THIS BOX. WE DO NOT — and it is worse than that
+
+| What we hold | Covers | Verdict |
+|---|---|---|
+| `tools/mem-probe.csv` | 2026-08-10 17:47 → 08-11 14:36, ~2,200–2,300 MB in use | ⛔ **The OLD box** — t3.small / Server 2025, retired at the 08-22 migration |
+| Freshest copy-back `AWS-copybacks/aws-copyback-2026-08-14/` | to 2026-08-14 | ⛔ **Also predates the current box** |
+| `ssm-mem.json`, `ssm-memprofile.json` | single-shot probes | Not series |
+
+⛔⛔ **EVERYTHING WE HOLD PREDATES THE MACHINE IT WOULD DESCRIBE.** Production `i-0d6c133058876273e` started **2026-08-22 16:02:46 UTC**; our newest operational data is **2026-08-14**. **Their n = 2 stands, and we cannot improve it. Their caution should be adopted, not argued with.**
+
+⭐⭐ **AND THE FINDING THAT MATTERS MORE THAN THE MEMORY: FOUR DAYS OF MEASURING `pagesOUT/s` AND `availMB`, AND NOBODY HAS ONCE CHECKED WHETHER THE COLLECTOR'S OUTPUT DEGRADED.** The question criterion 6 actually asks — *is the box's state acceptable for the collector* — **is answerable directly, and not by more memory sampling:**
+
+- **Row cadence** in `analysis_log.csv` against the **36.9 rows/hour** measured at the migration.
+- **`DEGRADED` events** in `ws_health.log` — **zero** across the 22 h migration watch.
+- ⭐ **`trade_seq` completeness in the store — DEFINITIVE, and it needs NO network and no venue call**, which is precisely why the 2026-08-08 identity build made completeness a local computation.
+- ⭐ **The `coverage` verb — the instrument we built for exactly this question**, and whose F1 trailing-edge defect we fixed three days ago.
+
+⛔ **If memory pressure were harming capture it would show as gaps in `trade_seq`. That check exists, is cheap, and has never been pointed at this box.**
+
+⚠ **The most attributable signal in their dataset, flagged as a LEAD with a named check and NOT as a hypothesis:** the soak excursion runs **15:30:36–15:31:37** and the baseline's ran **15:30:37–15:31:37 — the same wall-clock second, three days apart.** ⭐ **That killed their own "29 minutes after collector start" suggestion (offsets differ: +29m27s vs +20m40s), and what replaces it is schedule-shaped.** **The check is the box's own scheduled-task list, not more sampling.** ⛔ **Nobody has looked, and we are not offering a cause.**
+
+---
+
 ## 6. Lessons — each cost something this session
 
 ⚠ **This header was DELETED BY ACCIDENT on 2026-08-27 (commit `1872b44`) and restored 2026-08-27.** A `§5.6` insertion used it as its edit anchor and **replaced** it instead of inserting before it, orphaning the numbered list below under the preceding subsection for four commits. ⛔ **Eighth instance of the same class, and ours: the edit reported success because the anchor matched — the check that would have caught it is looking at the RESULT, not the exit status.**
@@ -453,7 +496,7 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 
 ## 7. Loose ends
 
-- ⛔⛔ **DATED WATCH — `2026-08-28`, just after **15:09** UTC. Check whether the hostel-app `RIPPerfBaseline` collector actually STOPPED.** If it is still running and they have not already flagged it, **stop it — pre-authorised, no need to wait for them.** ⚠ **Time corrected from 15:01: the schedule never fired and it was started BY HAND at 15:09:56 UTC on 08-27** (§5.9), so the 24 h self-stop lands at ~15:09, not 15:01. **The only item in this document with a date on it.**
+- ✅ ~~**DATED WATCH — `2026-08-28` after 15:09 UTC, check the `RIPPerfBaseline` collector STOPPED.**~~ **CLOSED 2026-08-28.** `Status Stopped`, last write `2026-08-28T15:09:56Z` — **exactly 24 h after the manual start, and it did not restart.** The schedule still reads 8/27 15:01 and never fired at all. **U2 is closed with U1: a schedule that never fires cannot recur. Nothing of theirs runs on the box.**
 - ⛔ **Commits unpushed — all `[no-engine-change]` except `4032f9c` (the F1 fix, tested and reviewed).** Settings stays v68. The pre-push hook runs `verify-gate.ps1` in `prepush` mode. ⚠ **Verify the count with `git status -sb`; do not inherit it from this line.**
 - ⚠ **`tools/AutoTweaker/state.json` is UNTRACKED** and records a real run (2026-06-18, `SKIPPED_INSUFFICIENT_TIER`, cursor at 81). Same nearly-lost shape as `tools/mem-probe.csv`. **Commit it or ignore it deliberately.**
 - **F2's fix in the AutoTweaker build has no fixture** — a console string with no consumer, and every A59 row is in-population so no fixture can distinguish the two definitions. Named in the commit, not papered over.
