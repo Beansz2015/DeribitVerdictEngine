@@ -182,6 +182,8 @@
 
 | **20** | ⭐⭐ **AWS copy-back + `coverage` run — ONE fetch, THREE purposes** | Sonnet medium | ⛔ **NEW 2026-08-28, and it needs a trader go-ahead because it touches production.** (a) **Criterion 6 attribution** — §5.11: whether the box's state is acceptable for the collector is answerable from `trade_seq` completeness, row cadence and `ws_health` DEGRADED count, **none of which anyone has checked.** (b) **The copy-back is 14 days overdue** and everything we hold **predates the current box.** (c) ⭐ **The Kelly dated trigger + W6-4 re-run need a fresh pooled book and their ETA is ~2026-08-30 — two days out.** ⚠ **Take the store copy too, not just the CSV.** ⚠ **One SSM attach, not three — it costs the box 30–50 MB and that is the whole reason the detached instrument existed** |
 
+| **21** | ⚠ **`coverage` cannot be aimed at a copy-back** | Sonnet low | ⛔ **NEW 2026-08-28, found while answering criterion 6.** `HistoricalStore.StoreDir` is the const `"backtest_data"` resolved against the CWD, and evidence paths come from `Directory.GetCurrentDirectory()`. **Three ways of setting a child working directory all failed to redirect it**, so the definitive numbers had to be computed from the store file by hand. ⭐ **An instrument built to audit copy-backs that cannot be aimed at one — and this is why it had never been run against the current box.** Smallest honest fix: an optional `--store-dir` on the `coverage` verb, threaded to `BuildResult`'s existing `storeDir` parameter (**which already takes one** — only the CLI hardcodes it) |
+
 **Gated — do not start:**
 
 - **A4** liquidation × OFI — market-gated (needs one real CASCADE line).
@@ -479,6 +481,38 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 ⛔ **If memory pressure were harming capture it would show as gaps in `trade_seq`. That check exists, is cheap, and has never been pointed at this box.**
 
 ⚠ **The most attributable signal in their dataset, flagged as a LEAD with a named check and NOT as a hypothesis:** the soak excursion runs **15:30:36–15:31:37** and the baseline's ran **15:30:37–15:31:37 — the same wall-clock second, three days apart.** ⭐ **That killed their own "29 minutes after collector start" suggestion (offsets differ: +29m27s vs +20m40s), and what replaces it is schedule-shaped.** **The check is the box's own scheduled-task list, not more sampling.** ⛔ **Nobody has looked, and we are not offering a cause.**
+
+---
+
+### 5.12 ✅ CRITERION 6 ANSWERED — the collector is HEALTHY. Fetch run 2026-08-28
+
+**Trader-authorised fetch, one SSM attach, read-only.** `tools/ops/collector.ps1 fetch -InstanceId i-0d6c133058876273e`. **All transfers verified — FIX 7's snapshot-before-manifest held, no false SIZE MISMATCH.** Landed at `AWS-copybacks/aws-copyback-2026-08-28/aws_fetch/20260828-153838/`: `analysis_log.csv` 27.8 MB / 30,218 rows · `analysis_eval_cache.csv` 4.7 MB / 54,939 rows · `backtest_data` **108.3 MB** · `ws_health.log` · `capture_marker.log`. **Store current to 2026-08-28 15:38:15Z.**
+
+⭐ **THE ANSWER: memory pressure has NOT harmed capture. Four measures, all clean:**
+
+| Measure | Result |
+|---|---|
+| **Row cadence**, post-migration | **37.0 rows/hour** across 160 hours vs the **36.9** migration baseline |
+| **Book currency** | newest row `2026-08-28 15:38:03` — current to the fetch second |
+| **`trade_seq` completeness**, post-migration | **709,557 rows, 33 missing of a 709,579 span — 99.9953 %** |
+| **Feed health** since migration | 2 DEGRADED (08-25 ~11 min, 08-26 ~3 min) + **1 DOWN** (08-27 00:51:12→00:54:20) |
+
+⚠ **The migration watch's "zero DEGRADED" no longer holds** — three feed incidents have occurred since. ⭐ **None cost tape.**
+
+⭐⭐ **AND IT SETTLES A PREDICTION ARMED AND UNTESTED FOR 15 DAYS.** The 2026-08-13 downtime-repair build wrote: *"after one outage the hole is filled within `gap_repair_interval_hours`, provided it is inside the 20 h lookback. If a hole survives a full pass cycle, Part A did not find the whole problem."* ⛔ **The 08-27 DOWN is the first real outage since — and it is a genuine feed outage, not a restart: the instance id `03a60e32…` is IDENTICAL either side of it, where every prior DOWN carries a NEW id.** ✅ **Measured across the outage window: 188 rows, 188 distinct `trade_seq`, span 188, MISSING = 0. The hole was filled. THE PREDICTION HELD.**
+
+**The 33 missing sit in exactly TWO runs, and BOTH POST-DATE THE LAST REPAIR PASS:**
+
+| Run | Window | vs repair schedule |
+|---|---|---|
+| 10 trades | `2026-08-28 10:02:43Z → 10:02:58Z` | ⚠ **spans the 10:02:46Z pass instant** |
+| 23 trades | `2026-08-28 14:05:33Z → 14:05:43Z` | after it; next pass 16:02:46Z, **after the fetch** |
+
+⭐ **So NO hole has survived a full pass cycle.** Both are simply awaiting the 16:02:46 pass. **Part A is not falsified.**
+
+⚠ **A lead, with the arithmetic that keeps it from becoming a hypothesis.** The first run brackets a repair-pass instant to the second, which is a **~1-in-800 coincidence** if unrelated. ⛔ **But 22 of the 23 repair passes since migration produced NO gap at all, so it is not a reliable effect.** Both statements are true; **the honest reading is "occasional, unattributed", and the check is to re-measure gap runs against pass instants on the next copy-back — not to reason about the append lock now.**
+
+⚠ **Tooling finding, queued as item 21: the `coverage` verb CANNOT be pointed at a copy-back.** `HistoricalStore.StoreDir` is the const `"backtest_data"` resolved against the working directory, and the evidence paths come from `Directory.GetCurrentDirectory()` — **so it only ever reads the store under the CWD, and three separate methods of setting a child working directory failed to redirect it.** ⛔ **Every number in the table above was computed directly from the store file instead. An instrument built to audit copy-backs that cannot be aimed at one is a real gap, and it is why nobody has run it against this box before.**
 
 ---
 
