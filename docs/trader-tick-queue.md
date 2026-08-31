@@ -10,7 +10,13 @@
 
 > ## ⛔ STATE BANNER — 2026-08-25. Read this before believing any row below.
 >
-> ⭐ **CURRENT STATE READ: [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md).** Settings **v68**. ~~master ⛔ **AHEAD 5 AND UNPUSHED**~~ ⛔ **THAT WAS ALREADY STALE WHEN WRITTEN — corrected 2026-08-25.** Verified `HEAD` = `origin/master` = `9c43a52`, tree clean and **in sync**; the five commits plus the handover itself were pushed. ⚠ **Push state is the one fact in this banner that rots hourly — `git status -sb` is the answer, never this line.**
+> ⭐ **CURRENT STATE READ: [`seat-handover-2026-08-29.md`](seat-handover-2026-08-29.md).** Settings **v68**. ⛔ **NO PUSH STATE IS QUOTED HERE ON PURPOSE — `git status -sb` is the answer, and this line was wrong twice in four days because the trader pushes mid-session.**
+>
+> ⭐ **NOTHING IS BLOCKED and nothing is owed by the trader.** Three items are ready to build; the 08-29 handover's §0 recommends **item 21** (let `coverage` be aimed at a copy-back — Sonnet, low) because it unblocks every future audit. **One trader DECISION is open: the absorption mechanism revision §6 D-table (Opus, high).**
+>
+> ⛔ **KELLY DATED TRIGGER — READ 2026-08-29, NOT MET: 311 weekday STRONG against ≥406, and the old "ETA ~2026-08-30" is WRONG.** The realised accrual is **~5.8 STRONG/weekday against a projected 12.4**, putting the shortfall around **mid-September**. **W6-4 waits with it. Re-read the count before scheduling anything.**
+>
+> *(The 2026-08-25 banner follows and its DETAIL still binds — [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) §5 is the full hostel-app record and §1.1/§1.1a/§1.1b the memory-baseline corrections.)*
 >
 > ✅ **#5, C1-coverage F1 — BUILT, REVIEWED AND ACCEPTED 2026-08-26 (`4032f9c`). DONE bar the trader's test + push.** ~~*FIRST TASK … RULED IN FULL AND BUILD-AUTHORIZED.*~~ Eleven decisions across two ticks; the build took all eleven and **the review re-ran both silent-trap mutations independently — each is caught by exactly ONE fixture of 306.** Packets: [`coverage-trailing-edge-f1-batch-summary.md`](coverage-trailing-edge-f1-batch-summary.md) · [`coverage-trailing-edge-f1-spec-back.md`](coverage-trailing-edge-f1-spec-back.md).
 >

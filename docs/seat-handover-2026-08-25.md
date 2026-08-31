@@ -188,7 +188,7 @@
 
 - **A4** liquidation × OFI — market-gated (needs one real CASCADE line).
 - **A5** VPFR shape — data-gated **and** must clear the W6 new-indicator bar.
-- **Kelly dated trigger + W6-4 re-run** — ⭐ **ETA ~2026-08-30, five days out.** Needs ≥406 pooled weekday STRONG; bundle both into **one pooled freeze on one span**. ⚠ **The Kelly EST advisory renders a forward promise on screen** — if the ladder still does not separate, the line must be re-worded or the block suppressed.
+- ⛔ **Kelly dated trigger + W6-4 re-run — TRIGGER READ 2026-08-29 ON THE FRESH BOOK: NOT MET. 311 weekday STRONG against a ≥406 threshold.** ~~*ETA ~2026-08-30*~~ ⚠ **THE ETA WAS WRONG AND THE RATE IS THE REASON.** The projection assumed **12.4 STRONG/weekday**; measured against the 201 on file at the 2026-08-01 read, the realised rate is **110 over ~19 weekday-days ≈ 5.8/weekday — under half.** At that rate the 95-row shortfall is **~16 more weekday-days, i.e. mid-September, not 08-30.** ⚠ **Confidence: the NOT-MET verdict is robust — a 95-row shortfall is far too large for any pooling question to close. The RATE is softer: it assumes the 2026-08-01 "201 pooled" and this single-book count are the same population, which was NOT verified.** Book span `2026-07-22 16:24:54 → 2026-08-28 15:38:03`, 30,217 rows, 24,099 weekday. **W6-4 waits with it** — the 08-25 ruling bundled both into one pooled freeze on one span. ⭐ **Re-read the count before scheduling anything; the query is two lines of awk over the book's `Verdict` column.**
 - **Downtime-repair Part B** — ⛔ forbidden until Part A heals one real outage.
 - **Auto-tweaker first live fire** — data-gated (>40 %-failure NY×1 window).
 
