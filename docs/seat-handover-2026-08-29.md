@@ -68,7 +68,19 @@
 
 ⛔ **Gated, and the gate MOVED:**
 
-- **Kelly dated trigger + W6-4 re-run — READ 2026-08-29: NOT MET. 311 weekday STRONG against ≥406.** ⚠ **The old "ETA ~2026-08-30" is wrong.** Measured against the 201 on file at the 2026-08-01 read, the realised rate is **~5.8 STRONG/weekday, under half the projected 12.4** — putting the 95-row shortfall around **mid-September**. ⚠ **The NOT-MET verdict is robust; the RATE assumes the two counts are the same population, which was not verified.** **Re-read the count before scheduling — two lines of awk over the book's `Verdict` column.**
+- **Kelly dated trigger + W6-4 re-run — READ 2026-08-29 on the 08-28 book: NOT MET. 311 weekday STRONG against ≥406.** ⛔ **A FRESH FETCH CANNOT CLOSE IT — checked 2026-08-31, and it is not marginal.**
+
+  ⚠ **The pooled "~5.8/weekday" rate first written here was itself the pooling error this project keeps making.** Replaced with the distribution, which is what the decision actually needs:
+
+  | Daily weekday STRONG, last 10 in the book | |
+  |---|---|
+  | `0 · 1 · 8 · 8 · 9 · 13 · 14 · 18 · 23 · 35` | **median ~11**, record **35** (2026-08-19) |
+
+  ⛔ **Only ONE weekday has elapsed since the fetch.** 08-28 was a **Friday** and the fetch cut it at 15:38 (420 rows against a full day's ~920); **08-29 Sat and 08-30 Sun are excluded by the weekday-only rule**; 08-31 is Monday and partial. **Ceiling available: ~8 (rest of Friday) + 35 (Monday at the ALL-TIME RECORD rate) ≈ 43, against a shortfall of 95.** ⭐ **Even two consecutive record days would not close it. A fetch today is arithmetically incapable of meeting the trigger.**
+
+  **Revised earliest dates:** ~**2026-09-03** at a sustained record 35/weekday · ~**2026-09-10** at the median 11 · ~**2026-09-16** if quiet. ⚠ **Volatile stretches DO lift the count 2–3× (08-19/20/21 ran 35/18/23), so a strong BTC move genuinely helps — it just cannot deliver 95 in one weekday.**
+
+  ⛔ **Do not fetch for this before ~2026-09-08.** **Re-read the count from whatever copy-back exists then — two lines of awk over the book's `Verdict` column — and only fetch if it is close.** **W6-4 waits with it.**
 - **A4** liquidation × OFI — market-gated. **A5** VPFR shape — data-gated. **Downtime-repair Part B** — ⛔ still forbidden; Part A has now healed one real outage, so **the G-1 gate can be re-argued, but it has not been.** **Auto-tweaker first live fire** — data-gated.
 
 ---

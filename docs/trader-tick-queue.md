@@ -14,7 +14,7 @@
 >
 > ⭐ **NOTHING IS BLOCKED and nothing is owed by the trader.** Three items are ready to build; the 08-29 handover's §0 recommends **item 21** (let `coverage` be aimed at a copy-back — Sonnet, low) because it unblocks every future audit. **One trader DECISION is open: the absorption mechanism revision §6 D-table (Opus, high).**
 >
-> ⛔ **KELLY DATED TRIGGER — READ 2026-08-29, NOT MET: 311 weekday STRONG against ≥406, and the old "ETA ~2026-08-30" is WRONG.** The realised accrual is **~5.8 STRONG/weekday against a projected 12.4**, putting the shortfall around **mid-September**. **W6-4 waits with it. Re-read the count before scheduling anything.**
+> ⛔ **KELLY DATED TRIGGER — NOT MET: 311 weekday STRONG against ≥406, and a FRESH FETCH CANNOT CLOSE IT (checked 2026-08-31).** ⛔ **Only ONE weekday has elapsed since the 08-28 book** — 08-28 was a Friday cut at 15:38, 08-29/08-30 are weekend and excluded by the weekday-only rule. **Ceiling available ≈ 43 even at the all-time record daily rate, against a shortfall of 95.** Daily weekday STRONG runs `0…35`, **median ~11**. **Revised: ~09-03 at a sustained record rate, ~09-10 at the median, ~09-16 if quiet.** ⛔ **Do not fetch for this before ~2026-09-08. W6-4 waits with it.**
 >
 > *(The 2026-08-25 banner follows and its DETAIL still binds — [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) §5 is the full hostel-app record and §1.1/§1.1a/§1.1b the memory-baseline corrections.)*
 >
