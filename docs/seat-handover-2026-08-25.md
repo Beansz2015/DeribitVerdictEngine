@@ -227,6 +227,8 @@
 
 A 180-sample A/B with five path exclusions applied: **observed 7 against a null prediction of 8**, `p` ≈ 0.83. **No effect.** ⛔ **That also kills the case for disabling Defender**, which was only attractive on the assumption it was doing something. Box reverted and verified.
 
+⚠ **NOT CONTRADICTED by the 2026-08-29 excursion attribution (§5.13) — and the reconciliation matters, because at a glance it looks like we reversed ourselves.** This A/B applied **PATH EXCLUSIONS**, which suppress **scan-on-access/write**. They do not suppress a **signature-update install**, which is a different Defender activity entirely. ⭐ **This row refutes scan-on-write as a driver of the burst RATE; §5.13 attributes one 60-second EXCURSION to a signature update. Different mechanism, different quantity, both stand.**
+
 ---
 
 ## 5. The hostel-app parallel run — Change 1 CLOSED, Change 2 DEPLOYING
@@ -513,6 +515,31 @@ A 180-sample A/B with five path exclusions applied: **observed 7 against a null 
 ⚠ **A lead, with the arithmetic that keeps it from becoming a hypothesis.** The first run brackets a repair-pass instant to the second, which is a **~1-in-800 coincidence** if unrelated. ⛔ **But 22 of the 23 repair passes since migration produced NO gap at all, so it is not a reliable effect.** Both statements are true; **the honest reading is "occasional, unattributed", and the check is to re-measure gap runs against pass instants on the next copy-back — not to reason about the append lock now.**
 
 ⚠ **Tooling finding, queued as item 21: the `coverage` verb CANNOT be pointed at a copy-back.** `HistoricalStore.StoreDir` is the const `"backtest_data"` resolved against the working directory, and the evidence paths come from `Directory.GetCurrentDirectory()` — **so it only ever reads the store under the CWD, and three separate methods of setting a child working directory failed to redirect it.** ⛔ **Every number in the table above was computed directly from the store file instead. An instrument built to audit copy-backs that cannot be aimed at one is a real gap, and it is why nobody has run it against this box before.**
+
+---
+
+### 5.13 ✅ CUTOVER COMPLETE 2026-08-29. The excursion is ATTRIBUTED — the delta is NOT
+
+⭐ **The check we handed them was run, and it came back negative before it came back positive.** The scheduled-task list showed **no task triggering at `:30`** — our "schedule-shaped" read was right in shape and wrong in target. **The SYSTEM EVENT LOG answered it: Defender Security Intelligence Update `KB2267602` installs daily at ~15:30:30.**
+
+| Day | Install window | Excursion |
+|---|---|---|
+| 08-24 | 15:30:34 → 15:31:50 | **baseline** 15:30:37–15:31:37 |
+| 08-27 | 15:30:29 → 15:31:42 | **soak** 15:30:36–15:31:37 |
+
+**Both excursions sit ENTIRELY INSIDE an install window, on two independent days, with SCM `7036` service transitions in the same seconds.** ⭐ **A different CLASS of evidence from the three hypotheses that died earlier: those were inferences from coincidence; this is a named, logged, recurring system event whose timestamps bracket both.** Observational, not controlled.
+
+⛔⛔ **AND IT DOES NOT EXPLAIN THE DELTA — they said so themselves, loudly, and it must not be softened here.** The update runs **identically in both windows**, so it cannot account for the difference between them: excluding 15:25–15:40 moves the soak rate by **−0.02 pp** and the baseline by **+0.01 pp**. ⛔ **THE 9.10 → 14.20 % BURST DELTA AND THE 15–25 MB REMAIN UNATTRIBUTED. Attributing the excursion is not attributing the shift, and the first must never be read as the second.**
+
+**Also established:** `LastBootUpTime 2026-08-20 15:19:39 UTC` — **no reboot in either measurement window**, and no pending-reboot state.
+
+✅ **Criterion 6 closed on OUR measure, not theirs** — their four stop conditions remain breached and they did not pretend otherwise. **The owner cut over on the basis that the criterion existed to protect our collector and our collector is measurably unharmed, with the delta recorded as an OPEN unattributed observation rather than a resolved one.**
+
+**What changed on our box: TWO environment variables.** `Email__ToAddress` → the real staff address, `GoogleSheets__AnalyticsSheetId` → the production sheet. ⭐ **Unchanged: same binary, same 7 seconds, same ~20.5 MB, same `:25`, same `IgnoreNew`/`PT10M`/SYSTEM task settings. Their footprint is identical to the soak, so the cutover moves the memory question in neither direction.**
+
+**Their side is finished:** Linux timer disabled and read back inactive · Linux instance **STOPPED, not terminated**, EBS snapshot `snap-02c2503aecc46c96b` taken first · Linux Gmail app password **revoked**.
+
+⚠⚠ **THEIR DEFECT N8 IS A BUG WE ALSO HAVE, AND OURS IS DOCUMENTED AND UNFIXED.** Their config-sheet read **catches its own error, returns an empty cache without throwing**, and the caller then falls through to a **hardcoded table and suppresses on the hardcoded rule, logging nothing** — an owner's live edit silently overridden. ⭐ **We faced the identical design question at the 2026-08-11 seeded-buckets ruling and answered it: keep the fallback, but make it ANNOUNCE** — `UI/MainForm_Layout.vb:1898` renders *"settings.json parse failed — running on code defaults"*, and **option (e), making load failure fatal, was REJECTED as wrong for a 24/7 unattended collector.** ⛔ **But our banner covers a PARSE FAILURE only. A `settings.json` that parses cleanly while MISSING a block produces no exception, no banner, and the seed applies silently — recorded in [`trader-tick-queue.md`](trader-tick-queue.md) §0a and still not fixed. That is their N8 exactly.**
 
 ---
 
