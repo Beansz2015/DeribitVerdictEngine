@@ -243,6 +243,22 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 | **D-5** | Keep `scoring_enabled = false` and the §5.1/§5.2 activation gates **unchanged** | ✅ **Yes.** The n ≥ 30 flagged-evaluated-rows gate stands; this proposal does not touch it | ✅ **Unchanged by the check.** ⚠ Worth stating plainly alongside it: because `scoring_enabled` is false and the failure mode is **silence**, a build that underperforms will not announce it — the write-guard shape this proposal's own §0 warns about, pointed at itself |
 | ⚠ **D-6** | ⚠ **NEW, raised by the 2026-08-19 check — reconcile `proximity_atr_frac` (0.30) with `band_atr_frac` (0.10), or state why a 3× mismatch is intended** | *(no author recommendation — the author did not have this measurement)* | ⚠ **This is the largest single leak in the funnel and it is not currently on the table.** ≈ 77 % of the observation loss is episodes admitted into a shell three times wider than the shell that measures. **Not a threshold re-tune** — it is a shape question, the same class as §4.1 |
 
+> ## ⛔ D-6 HAS A SPEC-BACK — READ IT BEFORE TICKING THAT ROW. Added 2026-09-01.
+>
+> **[`absorption-d6-spec-back.md`](absorption-d6-spec-back.md)** — raised by the trader's question *"can this measurement be done?"* against D-6's *"the author did not have this measurement"*.
+>
+> **Nothing in the D-table is rewritten by it. Nothing is ticked by it.** Its three load-bearing claims, so they are attacked rather than skimmed:
+>
+> | | Claim |
+> |---|---|
+> | **1** | **D-6 is three questions with three different verdicts, so no single tick can be right.** One is already measured, one is answerable from [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) with no measurement at all, one is not measurable from any data this project holds |
+> | **2** | ⛔ **D-6's right-hand column claim — "the largest single leak in the funnel" — is DISPUTED.** The annulus (0.10, 0.30] presses at 2.6–2.8 % on both books, so collapsing the shells recovers almost nothing. **The ≈ 77 % is a share of unpressed active rows, not of recoverable pressing** |
+> | **3** | ⭐ **The 0.30 / 0.10 pair is arm-early / measure-tight BY CONSTRUCTION.** The episode arms on proximity (`:251`) but `SizeStart` samples the band (`:295`). **The wide shell captures the band's depth before price arrives.** So "a 3× mismatch" is a misnomer, and D-6's second branch can be answered today |
+>
+> ✅ **§4.3 box (a)'s geometry table was independently reproduced on BOTH books** by that pass, on longer books than this one used. **That table stands.**
+>
+> ⚠ **§5's "no substitute for `AbsorptionEpisodeSec`" was tested and SURVIVES** — 89.3 % (AWS) / 89.6 % (LOCAL) of reconstructed episodes are a single CSV row, so the book cannot resolve episode life at all.
+
 ⚠ **If D-1 is declined, the honest consequence is that §4.1 ships blind** — buildable, but with no way to say afterwards whether it worked. Say so explicitly rather than proceeding quietly.
 
 ---
