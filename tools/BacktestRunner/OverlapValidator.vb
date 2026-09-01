@@ -63,6 +63,15 @@ Public Class OverlapValidator
         End Sub
     End Class
 
+    ' ⛔ This list is a THIRD copy of the analysis_log.csv schema (AnalysisLogger.Header
+    ' and BacktestRowWriter.Header are the other two) and ColIndex() resolves against
+    ' IT, not against the file's own header. Any column added to the writers MUST be
+    ' added here, in the same position, or the overlap check silently compares the wrong
+    ' columns. [absorption instrumentation, spec R5, 2026-09-01] The five Absorption*
+    ' instrumentation columns are appended AFTER InstanceId/SignalId to match the
+    ' writers' order byte-for-byte, and are Muted for the same reason the five existing
+    ' Absorption* entries are: the tracker is WS-live-only, so every synthetic row
+    ' carries them empty. Fixture A60e pins the two writer headers against each other.
     Public Shared ReadOnly Cols As New List(Of ColSpec) From {
         New ColSpec("Timestamp",                ColKind.Meta),
         New ColSpec("Price",                    ColKind.NumTight),
@@ -174,7 +183,12 @@ Public Class OverlapValidator
         New ColSpec("PlacedTargetShort",        ColKind.NumTight),
         New ColSpec("PlacedStopShort",          ColKind.NumTight),
         New ColSpec("InstanceId",               ColKind.Meta),
-        New ColSpec("SignalId",                 ColKind.Meta)
+        New ColSpec("SignalId",                 ColKind.Meta),
+        New ColSpec("AbsorptionEpisodeSec",     ColKind.Muted),
+        New ColSpec("AbsorptionPullLB",         ColKind.Muted),
+        New ColSpec("AbsorptionPostLB",         ColKind.Muted),
+        New ColSpec("AbsorptionSizeStart",      ColKind.Muted),
+        New ColSpec("AbsorptionSizeMin",        ColKind.Muted)
     }
 
     ' ── Row model ────────────────────────────────────────────────────────────────────

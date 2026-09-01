@@ -94,6 +94,17 @@ Public Class IndicatorResults
     Public Property AbsorptionAggrUsd As Double?         ' rolling window_sec pressing USD
     Public Property AbsorptionPullFrac As Double?        ' D8 pullLB / max(postLB, floor)
 
+    ' [absorption instrumentation, docs/absorption-instrumentation-spec.md] Five
+    ' diagnostic quantities the read boundary used to discard. Same null discipline as
+    ' the four above (Nothing ⇒ empty CSV field); CSV-only — R3 keeps every one of them
+    ' off the live strip, and none touches scoring. EpisodeSec is the one new
+    ' measurement; the other four were already live state on SideState.
+    Public Property AbsorptionEpisodeSec As Double?      ' episode age at the read instant (s)
+    Public Property AbsorptionPullLB As Double?          ' D8 provable pulls, USD
+    Public Property AbsorptionPostLB As Double?          ' D8 provable posts, USD
+    Public Property AbsorptionSizeStart As Double?       ' band size at episode open, USD
+    Public Property AbsorptionSizeMin As Double?         ' minimum band size this episode, USD
+
     ' MicroCVD -- intra-window CVD segmentation (early / mid / late thirds)
     Public Property MicroCVDEarly As Double  ' USD delta, first third of trade window
     Public Property MicroCVDMid As Double    ' USD delta, middle third

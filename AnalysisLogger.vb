@@ -3,6 +3,21 @@
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
 '
+' 2026-09-01 (absorption instrumentation, docs/absorption-instrumentation-spec.md):
+'       5 columns APPENDED at 112-116 — AbsorptionEpisodeSec, AbsorptionPullLB,
+'       AbsorptionPostLB, AbsorptionSizeStart, AbsorptionSizeMin. Four were already
+'       live state on LevelAbsorptionTracker.SideState and were thrown away at the
+'       read boundary; EpisodeSec is the one new measurement (R2).
+'       ⚠ NOT a schema version bump and NOT a comparability boundary. The columns go
+'       AFTER InstanceId/SignalId (spec R1) precisely so no existing column moves:
+'       every column keeps its position AND its meaning, and rows written before and
+'       after this change stay fully comparable. The five are simply empty on every
+'       pre-change row — the same shape a no-episode row writes.
+'       ⚠ EnsureLogFile still rotates on the header change, and the .bak name is the
+'       hardcoded "v0.7" string below. That name was already wrong for the v0.8 book
+'       and is left alone deliberately (renaming it is a behaviour change no ruling
+'       covers, and the file it names is NEVER deleted). Recorded in the spec-back.
+'
 ' v0.8 (#5 aggressor-velocity boundary, ONE rotation for the whole wave —
 '       roadmap §5 item 3 manifest): 16 columns appended (96-111):
 '       - 3 native #5:  AggrVelBurstRatio, AggrVelNet (net taker USD/sec, burst
@@ -107,7 +122,8 @@ Public Class AnalysisLogger
         "TFIValue,TFISignal," &
         "AbsorptionSignal,AbsorptionLevel,AbsorptionRatio,AbsorptionAggrUsd,AbsorptionPullFrac," &
         "PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort," &
-        "InstanceId,SignalId"
+        "InstanceId,SignalId," &
+        "AbsorptionEpisodeSec,AbsorptionPullLB,AbsorptionPostLB,AbsorptionSizeStart,AbsorptionSizeMin"
 
     Public Shared Function GetLogPath() As String
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
@@ -302,7 +318,12 @@ Public Class AnalysisLogger
                     Inv(placedShort.Target, "F2"),
                     Inv(placedShort.StopPx, "F2"),
                     ProcessIdentity.InstanceId,
-                    ProcessIdentity.CurrentSignalId.ToString()))
+                    ProcessIdentity.CurrentSignalId.ToString(),
+                    InvOpt(r.AbsorptionEpisodeSec, "F1"),
+                    InvOpt(r.AbsorptionPullLB, "F0"),
+                    InvOpt(r.AbsorptionPostLB, "F0"),
+                    InvOpt(r.AbsorptionSizeStart, "F0"),
+                    InvOpt(r.AbsorptionSizeMin, "F0")))
             End Using
         Catch
             ' Silent fail — logging must never crash the main pipeline

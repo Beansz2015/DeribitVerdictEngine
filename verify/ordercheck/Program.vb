@@ -226,6 +226,19 @@ Module Program
         A31g_SessionResolutionAndHc23Fences()
         A31h_TwoAtrScaleInvariance()
 
+        ' A60 — absorption instrumentation, docs/absorption-instrumentation-spec.md §5.
+        ' Five appended CSV columns (AbsorptionEpisodeSec / PullLB / PostLB / SizeStart /
+        ' SizeMin). A60e runs FIRST: it is the only one that catches the two silent
+        ' schema-twin traps (BacktestRowWriter's cloned header, OverlapValidator's third
+        ' copy). A60d is R1's own guard that no existing column moved.
+        ' ⚠ A60a/A60b write analysis_log.csv through the REAL LogRun and clean up after
+        ' themselves — they run AFTER A31f, which asserts on that same file.
+        A60e_WriterHeaderParityAcrossSchemaCopies()
+        A60a_InstrumentationColumnsRoundTrip()
+        A60b_IdleRendersEmptyNotZero()
+        A60c_EpisodeSecMeasuresAndResets()
+        A60d_ExistingColumnPositionsUnmoved()
+
         ' Offline matrix placed-target migration (docs/offline-matrix-placed-target
         ' -proposal.md §5 acceptance): the favourable barrier routes to the logged
         ' PlacedTarget* (v0.8 rows) vs the legacy formula (pre-v0.8), the tweaker picks on
@@ -4124,6 +4137,323 @@ Module Program
     End Sub
 
     ' =======================================================================
+    ' A60 — absorption instrumentation: the five appended CSV columns
+    ' (docs/absorption-instrumentation-spec.md §5). AbsorptionEpisodeSec is the one
+    ' NEW measurement (spec R2); PullLB / PostLB / SizeStart / SizeMin were already
+    ' live state on LevelAbsorptionTracker.SideState and were discarded at the read
+    ' boundary. All five are CSV-only — R3 keeps them off the live strip.
+    '
+    ' ⚠ WRITTEN A60e FIRST, per the spec's own instruction. It is the only fixture
+    ' that catches the two SILENT schema-twin traps: T1 (BacktestRowWriter.vb clones
+    ' AnalysisLogger's header byte-for-byte) and T2 (OverlapValidator carries a THIRD
+    ' copy as a hardcoded ColSpec list, and its ColIndex() resolves against that list
+    ' rather than against the file's header — miss it and the overlap check silently
+    ' compares the wrong columns).
+    ' =======================================================================
+
+    ''' <summary>AnalysisLogger.Header is Private; A43e already reads it by reflection
+    ''' for exactly this reason. One helper so every A60 fixture reads the SHIPPED
+    ''' string instead of restating it (CLAUDE.md fixture-literal provenance rule).</summary>
+    Private Function LiveCsvHeader() As String
+        Dim fld = GetType(AnalysisLogger).GetField("Header",
+            Reflection.BindingFlags.NonPublic Or Reflection.BindingFlags.Static)
+        Return If(fld Is Nothing, "", CStr(fld.GetValue(Nothing)))
+    End Function
+
+    ''' <summary>Delete analysis_log.csv and every rotated .bak beside it, so a fixture
+    ''' that calls LogRun reads back exactly the rows it wrote. Same pre-clean A31f
+    ''' performs — the header change in this build DOES trip EnsureLogFile's rotation.</summary>
+    Private Sub ClearAnalysisLog()
+        Dim logPath As String = AnalysisLogger.GetLogPath()
+        Dim dir As String = Path.GetDirectoryName(logPath)
+        If File.Exists(logPath) Then File.Delete(logPath)
+        For Each bak In Directory.GetFiles(dir, "analysis_log.csv*.bak")
+            File.Delete(bak)
+        Next
+    End Sub
+
+    ' -- A60e: writer-header parity across ALL THREE schema copies -----------------
+    ' ⛔ Compares the STRINGS, not the column counts — two schemas can have equal counts
+    ' and different order, and the whole point of the twin is byte-verbatim identity.
+    Private Sub A60e_WriterHeaderParityAcrossSchemaCopies()
+        Dim live As String = LiveCsvHeader()
+        Dim twin As String = BacktestRowWriter.Header
+
+        ' T1 — the live writer vs the backtest twin.
+        Dim okTwin As Boolean = (live <> "") AndAlso (live = twin)
+
+        ' T2 — the third copy. OverlapValidator.ColIndex(name) resolves against Cols,
+        ' so the property is equal NAMES IN EQUAL ORDER, not merely equal membership.
+        Dim colsJoined As String = String.Join(",", OverlapValidator.Cols.Select(Function(c) c.Name))
+        Dim okCols As Boolean = (colsJoined = live)
+
+        ' Each of the five new names appears exactly once — a paste that duplicated a
+        ' name would still satisfy byte-equality across two identically-wrong copies.
+        Dim newNames = {"AbsorptionEpisodeSec", "AbsorptionPullLB", "AbsorptionPostLB",
+                        "AbsorptionSizeStart", "AbsorptionSizeMin"}
+        Dim hdrFields = live.Split(","c)
+        Dim okOnce As Boolean = newNames.All(Function(n) hdrFields.Count(Function(h) h = n) = 1)
+
+        ' The five must be Muted in the ColSpec list — the tracker is WS-live-only, so
+        ' every synthetic row carries them empty and a comparing kind would fail the
+        ' overlap check on every run.
+        Dim okMuted As Boolean = newNames.All(
+            Function(n) OverlapValidator.Cols.Any(
+                Function(c) c.Name = n AndAlso c.Kind = OverlapValidator.ColKind.Muted))
+
+        Check("A60e writer-header parity across all THREE schema copies (AnalysisLogger == BacktestRowWriter byte-for-byte == OverlapValidator.Cols name order; five new names once each, all Muted)",
+              okTwin AndAlso okCols AndAlso okOnce AndAlso okMuted,
+              String.Format("okTwin={0} okCols={1} okOnce={2} okMuted={3} liveLen={4} twinLen={5} colsLen={6}",
+                            okTwin, okCols, okOnce, okMuted,
+                            live.Length, twin.Length, colsJoined.Length))
+    End Sub
+
+    ' -- A60a: round-trip — all five values travel SideState → CSV row unchanged ----
+    ' ⚠ Asserts on the VALUES, not on the columns being present. The tracker input is
+    ' A31b's analytic case, whose arithmetic is already derived and pinned there:
+    '   sizeStart 210000 (band [100010,100012] = 100000+50000+30000+20000+10000)
+    '   sizeMin   150000 (the level-10 rung drops 100000 → 40000)
+    '   fills     90000 at 100010 ⇒ net = (150000−210000) + 90000 = +30000
+    '             ⇒ postLB 30000, pullLB 0 (the A31b conservation walk, unchanged)
+    '   episodeSec 1.5   (episode opens at t0; the read is taken at t0 + 1500 ms)
+    Private Sub A60a_InstrumentationColumnsRoundTrip()
+        ' MECHANISM literal: AbsorptionSettings defaults supply window_sec 10 and
+        ' depletion_floor_usd — both read from cfg below, never restated.
+        Dim ab As New AbsorptionSettings()
+        Dim tr As New LevelAbsorptionTracker()
+        Dim t0 As Long = 1700000000000L   ' MECHANISM literal: an arbitrary fixed clock
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+
+        tr.FoldBook(AbsBandBook(), t0, ab)
+        tr.FoldTrade(100010.0, 90000.0, isBuy:=True, tsMs:=t0 + 50, cfg:=ab)     ' press + band fill
+        tr.FoldTrade(100008.5, 120000.0, isBuy:=True, tsMs:=t0 + 60, cfg:=ab)    ' press only
+        tr.FoldBook(AbsBandBook(level10Size:=40000.0), t0 + 100, ab)
+
+        ' MECHANISM literal: +1500 ms is chosen so EpisodeSec is exactly 1.5 and its
+        ' "F1" rendering carries no midpoint-rounding ambiguity.
+        Dim s = tr.Snapshot(t0 + 1500, ab)
+        Dim read = IndicatorEngine.ClassifyAbsorption(
+            s, ab.Defaults.MinAggrUsd, ab.AbsorbRatio, ab.MaxPullFrac)
+
+        ' The side read and the classified read must carry the same five values — the
+        ' ClassifyAbsorption hop is where a forgotten field silently defaults to 0.
+        Dim hopOk As Boolean =
+            read.HasEpisode AndAlso
+            read.EpisodeSec = s.Above.EpisodeSec AndAlso read.PullLB = s.Above.PullLB AndAlso
+            read.PostLB = s.Above.PostLB AndAlso read.SizeStart = s.Above.SizeStart AndAlso
+            read.SizeMin = s.Above.SizeMin
+
+        Dim rowOk As Boolean = False
+        Dim detail As String = ""
+        Try
+            ClearAnalysisLog()
+            Dim cfg As New EngineSettings()
+            Dim v As New VerdictResult With {.Verdict = "NO TRADE", .Confidence = "N/A"}
+            Dim r As New IndicatorResults()
+            r.CurrentPrice = 62000.0 : r.ATR = 40.0
+            r.AbsorptionSignal      = read.Signal
+            r.AbsorptionLevel       = read.LevelPrice
+            r.AbsorptionRatio       = read.AbsorbRatio
+            r.AbsorptionAggrUsd     = read.AggrUsd
+            r.AbsorptionPullFrac    = read.PullFrac
+            r.AbsorptionEpisodeSec  = read.EpisodeSec
+            r.AbsorptionPullLB      = read.PullLB
+            r.AbsorptionPostLB      = read.PostLB
+            r.AbsorptionSizeStart   = read.SizeStart
+            r.AbsorptionSizeMin     = read.SizeMin
+            AnalysisLogger.LogRun(r, v, cfg)
+
+            Dim lines() As String = File.ReadAllLines(AnalysisLogger.GetLogPath())
+            Dim header() As String = lines(0).Split(","c)
+            Dim row() As String = lines(1).Split(","c)
+            Dim g = Function(n As String) As String
+                        Dim i = Array.IndexOf(header, n)
+                        If i < 0 OrElse i >= row.Length Then Return "<missing>"
+                        Return row(i)
+                    End Function
+            rowOk = lines.Length = 2 AndAlso row.Length = header.Length AndAlso
+                    g("AbsorptionEpisodeSec") = "1.5" AndAlso
+                    g("AbsorptionPullLB") = "0" AndAlso
+                    g("AbsorptionPostLB") = "30000" AndAlso
+                    g("AbsorptionSizeStart") = "210000" AndAlso
+                    g("AbsorptionSizeMin") = "150000"
+            detail = String.Format("epSec='{0}' pullLB='{1}' postLB='{2}' sizeStart='{3}' sizeMin='{4}' width={5}/{6}",
+                                   g("AbsorptionEpisodeSec"), g("AbsorptionPullLB"), g("AbsorptionPostLB"),
+                                   g("AbsorptionSizeStart"), g("AbsorptionSizeMin"),
+                                   row.Length, header.Length)
+        Finally
+            Try : ClearAnalysisLog() : Catch : End Try
+        End Try
+
+        Check("A60a round-trip (SideState → ClassifyAbsorption → CSV: episodeSec 1.5 / pullLB 0 / postLB 30000 / sizeStart 210000 / sizeMin 150000)",
+              hopOk AndAlso rowOk,
+              String.Format(CultureInfo.InvariantCulture, "hopOk={0} rowOk={1} side(ep={2} pull={3} post={4} start={5} min={6}) {7}",
+                            hopOk, rowOk, s.Above.EpisodeSec, s.Above.PullLB, s.Above.PostLB,
+                            s.Above.SizeStart, s.Above.SizeMin, detail))
+    End Sub
+
+    ' -- A60b: idle ⇒ EMPTY, not 0 -------------------------------------------------
+    ' The §4.3 null-never-guess discipline. A zero episodeSec and a zero sizeStart are
+    ' both legitimate VALUES, so "0" in a no-episode row is not a harmless default —
+    ' it is a fabricated measurement that the study cannot tell from a real one.
+    Private Sub A60b_IdleRendersEmptyNotZero()
+        Dim ok As Boolean = False
+        Dim detail As String = ""
+        Try
+            ClearAnalysisLog()
+            Dim cfg As New EngineSettings()
+            Dim v As New VerdictResult With {.Verdict = "NO TRADE", .Confidence = "N/A"}
+
+            ' The no-episode shape: exactly what MainForm_Analysis leaves behind when
+            ' HasEpisode is False, and what ReplayLoop sets on the replay path.
+            Dim r As New IndicatorResults()
+            r.CurrentPrice = 62000.0 : r.ATR = 40.0
+            AnalysisLogger.LogRun(r, v, cfg)
+
+            ' A cold tracker read must also produce an inactive side with no numerics —
+            ' the source half of the same property.
+            Dim ab As New AbsorptionSettings()
+            Dim trCold As New LevelAbsorptionTracker()
+            Dim sCold = trCold.Snapshot(1700000000000L, ab)   ' MECHANISM literal: fixed clock
+            Dim readCold = IndicatorEngine.ClassifyAbsorption(
+                sCold, ab.Defaults.MinAggrUsd, ab.AbsorbRatio, ab.MaxPullFrac)
+
+            Dim lines() As String = File.ReadAllLines(AnalysisLogger.GetLogPath())
+            Dim header() As String = lines(0).Split(","c)
+            Dim row() As String = lines(1).Split(","c)
+            Dim names = {"AbsorptionEpisodeSec", "AbsorptionPullLB", "AbsorptionPostLB",
+                         "AbsorptionSizeStart", "AbsorptionSizeMin"}
+            Dim allEmpty As Boolean = names.All(
+                Function(n)
+                    Dim i = Array.IndexOf(header, n)
+                    Return i >= 0 AndAlso i < row.Length AndAlso row(i) = ""
+                End Function)
+
+            ok = lines.Length = 2 AndAlso row.Length = header.Length AndAlso allEmpty AndAlso
+                 Not sCold.Above.Active AndAlso Not sCold.Below.Active AndAlso
+                 Not readCold.HasEpisode
+            detail = String.Format("allEmpty={0} width={1}/{2} coldActive={3}/{4} coldHasEp={5} cells=[{6}]",
+                                   allEmpty, row.Length, header.Length,
+                                   sCold.Above.Active, sCold.Below.Active, readCold.HasEpisode,
+                                   String.Join("|", names.Select(
+                                       Function(n)
+                                           Dim i = Array.IndexOf(header, n)
+                                           Return n & "='" & If(i >= 0 AndAlso i < row.Length, row(i), "<missing>") & "'"
+                                       End Function)))
+        Finally
+            Try : ClearAnalysisLog() : Catch : End Try
+        End Try
+
+        Check("A60b idle ⇒ the five instrumentation columns render EMPTY, not 0 (no-episode row + cold tracker read)",
+              ok, detail)
+    End Sub
+
+    ' -- A60c: EpisodeSec MEASURES, and the episode baseline RESETS ----------------
+    ' ⚠ The spec names the input that makes a half-built version fail: open an episode,
+    ' advance nowMs, close it, re-open at the SAME level, read again. The observable
+    ' route to CloseEpisode() from outside the class is leaving proximity (A31a's
+    ' route) — SideState is Private, so the fixture drives the real gate, not the field.
+    '
+    ' ⚠ SPEC-BACK NOTE. The spec expects "forgets the reset ⇒ returns the FIRST
+    ' episode's elapsed time". As built, episode-open assigns EpisodeStartMs
+    ' UNCONDITIONALLY, so the re-open overwrites a stale value and the re-open leg
+    ' ALONE cannot see a missing reset. The second assertion below closes that hole
+    ' directly: it reflects into the private SideState and requires EpisodeStartMs to
+    ' be 0 while the side is idle. Without it the reset would be untested code.
+    Private Sub A60c_EpisodeSecMeasuresAndResets()
+        Dim ab As New AbsorptionSettings()
+        Dim tr As New LevelAbsorptionTracker()
+        ' MECHANISM literals: a fixed clock and fixed offsets. EpisodeSec is arithmetic
+        ' over (nowMs − EpisodeStartMs), so a literal is the whole point of the check;
+        ' nothing here is settings-derived. The one settings-derived quantity this
+        ' fixture touches is depletion_floor_usd, and it is read from cfg (ab) below,
+        ' never restated — CLAUDE.md fixture-literal provenance rule.
+        Dim t0 As Long = 1700000000000L
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+
+        ' Episode 1 opens at t0. Two reads at different nowMs must MEASURE, not latch.
+        tr.FoldBook(AbsBandBook(), t0, ab)
+        Dim sAt2 = tr.Snapshot(t0 + 2000, ab)
+        Dim sAt5 = tr.Snapshot(t0 + 5000, ab)
+
+        ' Price leaves proximity ⇒ CloseEpisode() on that side. Reflect into the private
+        ' SideState and require the baseline is actually cleared, not merely unread.
+        tr.FoldBook(AbsBook(100000.0), t0 + 6000, ab)
+        Dim sIdle = tr.Snapshot(t0 + 6000, ab)
+        Dim startAfterClose As Long = -1L
+        Dim aboveFld = GetType(LevelAbsorptionTracker).GetField("_above",
+            Reflection.BindingFlags.NonPublic Or Reflection.BindingFlags.Instance)
+        If aboveFld IsNot Nothing Then
+            Dim aboveObj = aboveFld.GetValue(tr)
+            Dim startFld = aboveObj.GetType().GetField("EpisodeStartMs")
+            If startFld IsNot Nothing Then startAfterClose = CLng(startFld.GetValue(aboveObj))
+        End If
+
+        ' Re-open at the SAME level. The new episode must measure from ITS open.
+        tr.FoldBook(AbsBandBook(), t0 + 7000, ab)
+        Dim sReopen = tr.Snapshot(t0 + 7500, ab)
+
+        Dim measures As Boolean =
+            sAt2.Above.Active AndAlso Math.Abs(sAt2.Above.EpisodeSec - 2.0) < 1.0E-9 AndAlso
+            sAt5.Above.Active AndAlso Math.Abs(sAt5.Above.EpisodeSec - 5.0) < 1.0E-9
+        Dim resets As Boolean =
+            Not sIdle.Above.Active AndAlso startAfterClose = 0L AndAlso
+            sReopen.Above.Active AndAlso sReopen.Above.LevelPrice = 100010.0 AndAlso
+            Math.Abs(sReopen.Above.EpisodeSec - 0.5) < 1.0E-9
+
+        Check("A60c EpisodeSec measures (2.0 s then 5.0 s on one episode) and RESETS (close clears EpisodeStartMs to 0; re-open at the same level reads 0.5 s, not 7.5 s)",
+              measures AndAlso resets,
+              String.Format(CultureInfo.InvariantCulture,
+                            "at2={0} at5={1} idleActive={2} startAfterClose={3} reopenActive={4} reopenSec={5}",
+                            sAt2.Above.EpisodeSec, sAt5.Above.EpisodeSec, sIdle.Above.Active,
+                            startAfterClose, sReopen.Above.Active, sReopen.Above.EpisodeSec))
+    End Sub
+
+    ' -- A60d: R1's own guard — no existing column moved ---------------------------
+    ' ⚠ FIXTURE-LITERAL PROVENANCE: the four indices below are MECHANISM literals, and
+    ' deliberately so. They are a FROZEN PRE-BUILD BASELINE — the 0-based positions the
+    ' columns held before the five instrumentation columns were appended (1-based
+    ' 101 / 105 / 110 / 111). They are not settings-derived and there is nothing in cfg
+    ' to derive them from: deriving them from the header under test would make the
+    ' fixture agree with any header at all, which is the exact failure it exists to
+    ' catch. They must NEVER be "fixed" to match a moved column — a mismatch means R1
+    ' was violated and a positional reader in the 17-file audit list is now silently
+    ' reading the wrong column.
+    Private Sub A60d_ExistingColumnPositionsUnmoved()
+        Dim header() As String = LiveCsvHeader().Split(","c)
+
+        Const PreBuildIdxAbsorptionSignal   As Integer = 100   ' 1-based 101
+        Const PreBuildIdxAbsorptionPullFrac As Integer = 104   ' 1-based 105
+        Const PreBuildIdxInstanceId         As Integer = 109   ' 1-based 110
+        Const PreBuildIdxSignalId           As Integer = 110   ' 1-based 111
+
+        Dim iSig  = Array.IndexOf(header, "AbsorptionSignal")
+        Dim iPull = Array.IndexOf(header, "AbsorptionPullFrac")
+        Dim iIid  = Array.IndexOf(header, "InstanceId")
+        Dim iSid  = Array.IndexOf(header, "SignalId")
+
+        Dim unmoved As Boolean =
+            iSig = PreBuildIdxAbsorptionSignal AndAlso
+            iPull = PreBuildIdxAbsorptionPullFrac AndAlso
+            iIid = PreBuildIdxInstanceId AndAlso
+            iSid = PreBuildIdxSignalId
+
+        ' The five new columns occupy 112-116 (1-based), i.e. everything after SignalId,
+        ' contiguously and in spec order — R1's append, stated as a position.
+        Dim newNames = {"AbsorptionEpisodeSec", "AbsorptionPullLB", "AbsorptionPostLB",
+                        "AbsorptionSizeStart", "AbsorptionSizeMin"}
+        Dim appended As Boolean = header.Length = PreBuildIdxSignalId + 1 + newNames.Length
+        For k As Integer = 0 To newNames.Length - 1
+            If Array.IndexOf(header, newNames(k)) <> PreBuildIdxSignalId + 1 + k Then appended = False
+        Next
+
+        Check("A60d R1 guard — no existing column moved (AbsorptionSignal 101, AbsorptionPullFrac 105, InstanceId 110, SignalId 111, 1-based) and the five new columns append contiguously at 112-116",
+              unmoved AndAlso appended,
+              String.Format("iSig={0} iPull={1} iIid={2} iSid={3} width={4} appended={5}",
+                            iSig, iPull, iIid, iSid, header.Length, appended))
+    End Sub
+
+    ' =======================================================================
     ' A32 — offline matrix placed-target migration (docs/offline-matrix-placed-target
     ' -proposal.md). The favourable barrier joins the adverse on placed geometry; the
     ' per-tier ATR grid retires and the cell space collapses to (tier × window).
@@ -6826,14 +7156,32 @@ Module Program
             If lines.Length <> 3 Then
                 detail = "expected 3 lines (header + 2 rows), got " & lines.Length
             Else
+                ' [absorption instrumentation R1, 2026-09-01] InstanceId/SignalId are located
+                ' by HEADER NAME, not by trailing position. They were the last two columns
+                ' when this fixture was written, so r(Length - 2) / r(Length - 1) happened to
+                ' work; the five appended Absorption* instrumentation columns (112-116) end
+                ' that coincidence. The three properties A43e actually asserts — the
+                ' "BACKTEST-" prefix, id equality across rows, monotonic SignalId — are
+                ' positional in no way, so this changes how the columns are found and nothing
+                ' about what is checked. Row width is asserted explicitly below; that is the
+                ' one incidental guard trailing indexing used to give, and it is now stronger.
+                Dim hdr = lines(0).Split(","c)
+                Dim iIid = Array.IndexOf(hdr, "InstanceId")
+                Dim iSid = Array.IndexOf(hdr, "SignalId")
                 Dim r1 = lines(1).Split(","c)
                 Dim r2 = lines(2).Split(","c)
-                Dim iid1 = r1(r1.Length - 2)
-                Dim iid2 = r2(r2.Length - 2)
-                Dim sid1 = Integer.Parse(r1(r1.Length - 1))
-                Dim sid2 = Integer.Parse(r2(r2.Length - 1))
-                okProv = iid1.StartsWith("BACKTEST-") AndAlso iid1 = iid2 AndAlso sid2 = sid1 + 1
-                detail = String.Format("iid1='{0}' iid2='{1}' sid1={2} sid2={3}", iid1, iid2, sid1, sid2)
+                If iIid < 0 OrElse iSid < 0 Then
+                    detail = String.Format("header does not carry InstanceId/SignalId (iIid={0} iSid={1})", iIid, iSid)
+                ElseIf r1.Length <> hdr.Length OrElse r2.Length <> hdr.Length Then
+                    detail = String.Format("row width mismatch: header={0} r1={1} r2={2}", hdr.Length, r1.Length, r2.Length)
+                Else
+                    Dim iid1 = r1(iIid)
+                    Dim iid2 = r2(iIid)
+                    Dim sid1 = Integer.Parse(r1(iSid))
+                    Dim sid2 = Integer.Parse(r2(iSid))
+                    okProv = iid1.StartsWith("BACKTEST-") AndAlso iid1 = iid2 AndAlso sid2 = sid1 + 1
+                    detail = String.Format("iid1='{0}' iid2='{1}' sid1={2} sid2={3}", iid1, iid2, sid1, sid2)
+                End If
             End If
         Finally
             Try : System.IO.File.Delete(tmp) : Catch : End Try

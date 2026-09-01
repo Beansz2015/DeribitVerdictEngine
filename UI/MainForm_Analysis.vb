@@ -483,6 +483,13 @@ Partial Public Class MainForm
                 r.AbsorptionRatio    = absRead.AbsorbRatio
                 r.AbsorptionAggrUsd  = absRead.AggrUsd
                 r.AbsorptionPullFrac = absRead.PullFrac
+                ' [absorption instrumentation] The five diagnostic columns — same
+                ' HasEpisode gate, so they stay empty on every no-episode row.
+                r.AbsorptionEpisodeSec  = absRead.EpisodeSec
+                r.AbsorptionPullLB      = absRead.PullLB
+                r.AbsorptionPostLB      = absRead.PostLB
+                r.AbsorptionSizeStart   = absRead.SizeStart
+                r.AbsorptionSizeMin     = absRead.SizeMin
             End If
         End If
         IndicatorEngine.CalcMicroCVD(recentTrades,

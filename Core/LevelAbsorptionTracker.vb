@@ -77,6 +77,16 @@ Public NotInheritable Class LevelAbsorptionTracker
 
         Public Active As Boolean = False
         Public LevelPrice As Double = 0.0
+
+        ' [absorption instrumentation R2] Fold stamp of the snapshot that OPENED this
+        ' episode — the only new state the instrumentation build adds. Set at episode
+        ' open beside LevelPrice, cleared in CloseEpisode(), so the invariant is
+        ' Active ⇒ EpisodeStartMs > 0. ReadSide turns it into EpisodeSec against the
+        ' read's nowMs; both stamps come from the same receive-time clock (the book
+        ' fold stamps DeribitWsFeed's nowUtc, Snapshot is called with UtcNow), so the
+        ' difference is non-negative by construction, not by clamping.
+        Public EpisodeStartMs As Long = 0
+
         Public SizeStart As Double = 0.0
         Public SizeMin As Double = 0.0
         Public SizeNow As Double = 0.0
@@ -101,6 +111,7 @@ Public NotInheritable Class LevelAbsorptionTracker
         Public Sub CloseEpisode()
             Active = False
             LevelPrice = 0.0
+            EpisodeStartMs = 0
             SizeStart = 0.0 : SizeMin = 0.0 : SizeNow = 0.0
             PullLB = 0.0 : PostLB = 0.0
             Press.Clear() : PressSum = 0.0
@@ -290,8 +301,13 @@ Public NotInheritable Class LevelAbsorptionTracker
 
         If Not side.Active Then
             ' Episode opens on the first in-proximity snapshot.
+            ' [D-6a, ruled 2026-09-01] SizeStart samples the BAND (band_atr_frac) at the
+            ' PROXIMITY (proximity_atr_frac) instant — arm-early / measure-tight, so the
+            ' baseline is captured before price arrives. Collapsing the two shells shrinks
+            ' the depletion denominator and inflates absorbRatio. See the proposal §4.3a.
             side.Active = True
             side.LevelPrice = lvl
+            side.EpisodeStartMs = tsMs         ' [R2] episode age baseline — see SideState
             side.SizeStart = bandSize
             side.SizeMin = bandSize
             side.SizeNow = bandSize
@@ -417,19 +433,31 @@ Public NotInheritable Class LevelAbsorptionTracker
         PrunePress(_above, nowMs, win)
         PrunePress(_below, nowMs, win)
         Return New AbsorptionSnapshot With {
-            .Above = ReadSide(_above, floorUsd),
-            .Below = ReadSide(_below, floorUsd)}
+            .Above = ReadSide(_above, nowMs, floorUsd),
+            .Below = ReadSide(_below, nowMs, floorUsd)}
     End Function
 
-    Private Shared Function ReadSide(side As SideState, floorUsd As Double) As AbsorptionSideRead
+    ' [absorption instrumentation R2] nowMs is threaded in from Snapshot (its only call
+    ' site, which already receives it) rather than read from a clock here — a read must
+    ' stay deterministic for the fixtures and consistent across both sides of one snapshot.
+    Private Shared Function ReadSide(side As SideState, nowMs As Long, floorUsd As Double) As AbsorptionSideRead
         If Not side.Active Then Return New AbsorptionSideRead()
         Dim depletion As Double = Math.Max(side.SizeStart - side.SizeMin, floorUsd)
+        ' Active ⇒ EpisodeStartMs > 0 (set at open, cleared at close). The guard makes a
+        ' broken invariant read 0 rather than the whole unix epoch in seconds.
+        Dim episodeSec As Double = If(side.EpisodeStartMs > 0L,
+                                      (nowMs - side.EpisodeStartMs) / 1000.0, 0.0)
         Return New AbsorptionSideRead With {
             .Active = True,
             .LevelPrice = side.LevelPrice,
             .AggrUsd = side.PressSum,
             .AbsorbRatio = side.PressSum / depletion,
-            .PullFrac = side.PullLB / Math.Max(side.PostLB, floorUsd)}
+            .PullFrac = side.PullLB / Math.Max(side.PostLB, floorUsd),
+            .EpisodeSec = episodeSec,
+            .PullLB = side.PullLB,
+            .PostLB = side.PostLB,
+            .SizeStart = side.SizeStart,
+            .SizeMin = side.SizeMin}
     End Function
 End Class
 
@@ -441,6 +469,15 @@ Public Structure AbsorptionSideRead
     Public Property AggrUsd As Double
     Public Property AbsorbRatio As Double
     Public Property PullFrac As Double
+
+    ' [absorption instrumentation, docs/absorption-instrumentation-spec.md §1] The five
+    ' diagnostic quantities the read boundary used to throw away. CSV-only — R3 keeps
+    ' them off the live strip. Active=False ⇒ meaningless, same as the four above.
+    Public Property EpisodeSec As Double     ' episode age at the read instant (seconds)
+    Public Property PullLB As Double         ' D8 provable pulls, USD (PullFrac numerator)
+    Public Property PostLB As Double         ' D8 provable posts, USD (PullFrac denominator)
+    Public Property SizeStart As Double      ' band size at episode open, USD
+    Public Property SizeMin As Double        ' minimum band size seen this episode, USD
 End Structure
 
 ''' <summary>A point-in-time read of the absorption tracker (both sides). Classified by
@@ -461,4 +498,12 @@ Public Structure AbsorptionRead
     Public Property AbsorbRatio As Double
     Public Property AggrUsd As Double
     Public Property PullFrac As Double
+
+    ' [absorption instrumentation] The PRIMARY episode's five diagnostic quantities,
+    ' carried for CSV alongside the four above. HasEpisode=False ⇒ meaningless.
+    Public Property EpisodeSec As Double
+    Public Property PullLB As Double
+    Public Property PostLB As Double
+    Public Property SizeStart As Double
+    Public Property SizeMin As Double
 End Structure

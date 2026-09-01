@@ -194,6 +194,9 @@ Partial Public Class IndicatorEngine
     ''' the signalling side when one fires, else the active side with the larger
     ''' aggrUsd — pullFrac is logged even on vetoed episodes (D8: the W4 fidelity-binds
     ''' evidence). HasEpisode=False ⇒ all numerics meaningless (null CSV, §4.3).
+    ''' [absorption instrumentation, 2026-09-01] The read also carries the primary
+    ''' episode's EpisodeSec / PullLB / PostLB / SizeStart / SizeMin, on the same
+    ''' HasEpisode discipline — CSV-only diagnostics, no scoring or display effect.
     ''' </summary>
     Public Shared Function ClassifyAbsorption(snap As AbsorptionSnapshot,
                                               minAggrUsd As Double,
@@ -233,7 +236,12 @@ Partial Public Class IndicatorEngine
             .LevelPrice = primary.LevelPrice,
             .AbsorbRatio = primary.AbsorbRatio,
             .AggrUsd = primary.AggrUsd,
-            .PullFrac = primary.PullFrac}
+            .PullFrac = primary.PullFrac,
+            .EpisodeSec = primary.EpisodeSec,
+            .PullLB = primary.PullLB,
+            .PostLB = primary.PostLB,
+            .SizeStart = primary.SizeStart,
+            .SizeMin = primary.SizeMin}
     End Function
 
     ' -- Liquidations ---------------------------------------------------------

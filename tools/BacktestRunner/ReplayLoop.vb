@@ -470,6 +470,14 @@ Public Class ReplayLoop
             r.AbsorptionRatio    = Nothing
             r.AbsorptionAggrUsd  = Nothing
             r.AbsorptionPullFrac = Nothing
+            ' [absorption instrumentation] The five diagnostic columns are muted on the
+            ' replay path for the same reason as the five above — no book stream, so no
+            ' episode ever opens. Explicit Nothing, never 0 (§4.3 null-never-guess).
+            r.AbsorptionEpisodeSec  = Nothing
+            r.AbsorptionPullLB      = Nothing
+            r.AbsorptionPostLB      = Nothing
+            r.AbsorptionSizeStart   = Nothing
+            r.AbsorptionSizeMin     = Nothing
 
             ' -- Trade-derived signals (reconstructable at full fidelity) --
             IndicatorEngine.CalcLiquidations(sliceTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal,

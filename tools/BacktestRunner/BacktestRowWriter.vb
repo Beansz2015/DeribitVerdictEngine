@@ -53,7 +53,8 @@ Public Class BacktestRowWriter
         "TFIValue,TFISignal," &
         "AbsorptionSignal,AbsorptionLevel,AbsorptionRatio,AbsorptionAggrUsd,AbsorptionPullFrac," &
         "PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort," &
-        "InstanceId,SignalId"
+        "InstanceId,SignalId," &
+        "AbsorptionEpisodeSec,AbsorptionPullLB,AbsorptionPostLB,AbsorptionSizeStart,AbsorptionSizeMin"
 
     Private ReadOnly _path As String
     Private ReadOnly _instanceId As String
@@ -212,7 +213,12 @@ Public Class BacktestRowWriter
                 Inv(placedShort.Target, "F2"),
                 Inv(placedShort.StopPx, "F2"),
                 _instanceId,
-                _signalId.ToString()))
+                _signalId.ToString(),
+                InvOpt(r.AbsorptionEpisodeSec, "F1"),
+                InvOpt(r.AbsorptionPullLB, "F0"),
+                InvOpt(r.AbsorptionPostLB, "F0"),
+                InvOpt(r.AbsorptionSizeStart, "F0"),
+                InvOpt(r.AbsorptionSizeMin, "F0")))
         End Using
     End Sub
 

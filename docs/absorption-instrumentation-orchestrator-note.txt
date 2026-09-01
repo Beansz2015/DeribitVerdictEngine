@@ -1,0 +1,101 @@
+Handing back the absorption instrumentation build for review.
+
+BUILT BY: an Opus/high seat, 2026-09-01, in one session, per the handoff's own
+recommendation.
+
+SPEC:    docs/absorption-instrumentation-spec.md
+HANDOFF: docs/absorption-instrumentation-escalation-2026-09-01.md
+
+TWO DOCUMENTS TO READ, per docs/batch-review-packet-convention.md:
+  docs/absorption-instrumentation-spec-back.md        <- the review packet. START HERE.
+  docs/absorption-instrumentation-batch-summary.md    <- the outcome record.
+
+STATUS: the WHOLE spec is built. A43e cleared, R1-R9 built, fixtures A60a-e written and
+each one mutation-tested, gate green, and EVERY acceptance check in
+docs/absorption-instrumentation-spec.md section 7 passes -- including item 4's populated
+half, which landed on a real live episode row.
+
+NOTHING IS BLOCKED. Four decisions are queued in
+docs/absorption-instrumentation-spec-back.md section 2; none of them gates anything.
+
+THE BUILD IS NOT COMMITTED. Ten modified files plus two new docs, unstaged. The ready
+commit message -- carrying the CLAUDE.md parity rule's required "no card surface is
+affected" statement -- is in docs/absorption-instrumentation-batch-summary.md section 6.
+Run `git status -sb` yourself; do not inherit a push state from any document.
+
+------------------------------------------------------------------------------
+THE FOUR THINGS THE REVIEWING SEAT SHOULD LOOK AT FIRST
+------------------------------------------------------------------------------
+
+1. THE SPEC'S ACCEPTANCE ITEM 4 STATES THE WRONG CONDITION, and following it literally
+   would make a reviewer reject correct code.
+   docs/absorption-instrumentation-spec.md section 7 item 4 says the columns should be
+   "empty when AbsorptionSignal is NONE and populated when it is not". Population is NOT
+   gated on AbsorptionSignal -- it is gated on HasEpisode. The two differ on exactly the
+   case this build exists to instrument: a D8-vetoed episode is NONE AND populated.
+   This is not hypothetical. The only live episode row obtained reads
+   AbsorptionSignal=NONE with all five columns populated. It is correct.
+   Detail: docs/absorption-instrumentation-spec-back.md section 3.
+
+2. THE SPEC'S DESCRIBED FAILURE MODE FOR FIXTURE A60c CANNOT OCCUR, so A60c as specced
+   would have passed a build with no reset at all.
+   docs/absorption-instrumentation-spec.md predicts that forgetting the CloseEpisode()
+   reset "returns the FIRST episode's elapsed time". It does not -- episode-open assigns
+   EpisodeStartMs unconditionally, so the re-open overwrites any stale value. PROVEN BY
+   MUTATION, not argued: with the reset deleted, the re-open leg still reads the correct
+   0.5 s and only the added reflection assertion fires.
+   The fixture was widened to assert the reset directly.
+   Detail: docs/absorption-instrumentation-spec-back.md section 3.
+
+3. A LIVE EPISODE ROW PROVES THE FIVE NEW COLUMNS REPRODUCE THE TWO DERIVED COLUMNS THAT
+   ALREADY EXISTED -- exactly. No fixture can prove this, because a fixture builds both
+   sides from the same input. This is verification handle H9.
+   On the 2026-09-01 15:04:00 UTC row:
+     PullLB / max(PostLB, depletion_floor_usd) = 33180 / max(0, 5000) = 6.6360
+       -> logged AbsorptionPullFrac = 6.6360
+     AggrUsd / max(SizeStart - SizeMin, floor)  = 7930 / 33180      = 0.2390
+       -> logged AbsorptionRatio = 0.24 at F2
+   Detail: docs/absorption-instrumentation-batch-summary.md section 4.1.
+
+4. FOUR DECISIONS ARE QUEUED, each with my read labelled as a hypothesis. The one that
+   actually needs your call is D-1: AnalysisLogger.EnsureLogFile rotates a superseded
+   book to the hardcoded name "analysis_log.csv.v0.7.bak", which was ALREADY wrong for
+   the v0.8 book. The live run rotated a 12,312-row v0.8 book into
+   analysis_log.csv.v0.7.20260901_145200.bak. Nothing was lost; it is mislabelled.
+   I left it alone -- it is a behaviour change no ruling covers, and it turns on what the
+   v48 section 4a fire-rate watch globs, which I did NOT open.
+   Detail: docs/absorption-instrumentation-spec-back.md section 2.
+
+------------------------------------------------------------------------------
+IF YOU RUN ONLY ONE CHECK
+------------------------------------------------------------------------------
+
+  dotnet run --project verify/ordercheck > /tmp/h.out 2>/dev/null; echo "exit=$?"; grep -cE "^FAIL" /tmp/h.out; grep -c "ALL PASS" /tmp/h.out
+
+Expect: exit=0, then 0, then 1.
+
+Do NOT write it as `2>&1 | grep ...`. The A48 fixtures write diagnostics to stderr on
+purpose; merging the streams interleaves mid-line and can swallow the terminal ALL PASS.
+That is not a warning from theory -- it produced a false failure on a green run during
+this build (it showed 308 PASS and no ALL PASS; the truth was 311 PASS, 0 FAIL, exit 0).
+
+Ten further ranked handles are in docs/absorption-instrumentation-spec-back.md section 1.
+EVERY ONE WAS RUN BEFORE IT WAS WRITTEN DOWN, and three of my first drafts had wrong
+expected values -- including one that counted a name my own comments then inflated, which
+is the _lastTs failure verbatim. The corrections are tabulated there rather than quietly
+fixed.
+
+------------------------------------------------------------------------------
+WHAT WAS NOT VERIFIED
+------------------------------------------------------------------------------
+
+Listed in full in docs/absorption-instrumentation-spec-back.md section 4. The ones that
+matter most:
+  - The five columns on the AWS collector (i-0d6c133058876273e). Built and run locally
+    only. Its book WILL rotate on the first run after deploy.
+  - What the v48 section 4a fire-rate watch globs for .bak files. D-1 turns on this.
+    Do not act on D-1 without checking it first.
+  - The technical accuracy of the D-6a comment text (spec R8). Transcribed verbatim;
+    not re-derived. The handoff already flagged it unverified and it remains so.
+  - OverlapValidator's behaviour on a real synthetic-vs-live `validate` run. The ColSpec
+    list is proved to match the header; the verb was not run over two real CSVs.
