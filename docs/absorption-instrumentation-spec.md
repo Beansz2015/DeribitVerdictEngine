@@ -46,7 +46,7 @@
 
 | Column | Source | Why — from [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §5 |
 |---|---|---|
-| `AbsorptionEpisodeSec` | **NEW state** — see R2 | ⚠ **The single most valuable missing number.** §4.1's effect cannot be estimated without it |
+| `AbsorptionEpisodeSec` | **NEW state** — see R2 | ⚠ **The single most valuable missing number.** §4.1's effect cannot be estimated without it. ⭐ **It may also be the instrument that diagnoses D-6d** — see the note below |
 | `AbsorptionPullLB` | `SideState.PullLB` | Makes §4.2's residual testable. Today only their ratio survives |
 | `AbsorptionPostLB` | `SideState.PostLB` | As above |
 | `AbsorptionSizeStart` | `SideState.SizeStart` | The ratio's denominator, currently invisible |
@@ -55,6 +55,14 @@
 ✅ **Four of the five already exist as live state** in [`Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:80-84`. **They are computed every fold and thrown away at the read boundary.** This build stops throwing them away.
 
 ⚠ **`AbsorptionEpisodeSec` is the only one that needs new state.** See R2.
+
+> ## ⭐ `AbsorptionEpisodeSec` GOT MORE VALUABLE ON 2026-09-01. Do not treat it as the low-stakes column.
+>
+> **Measured that day:** `AbsorptionLevel` changes between **50.4 %** of adjacent ACTIVE row pairs, driven by HVN churn (`VPFRNearestHvnAbove` moves on 30.1 % of consecutive runs; `LastSwingHigh5m` on only 3.7 %). **Every re-map fires `CloseEpisode()` at [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:265` and discards the whole episode.**
+>
+> ⭐ **So `EpisodeSec` will not merely describe episodes — it should EXPOSE whether they are being destroyed at run boundaries.** If the logged values cluster below one auto-run interval, that is the churn showing itself.
+>
+> ⛔ **This does NOT add work to this build, and you must not chase it.** Build the column exactly as specced. **It is flagged so the study that reads it knows what to look for**, and because it is a live candidate mechanism for the unruled D-6d — see [`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) §0.3.
 
 ---
 

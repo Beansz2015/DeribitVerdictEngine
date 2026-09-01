@@ -80,6 +80,28 @@ Measured this pass on **both books**, weekday, UTC, since v61 — the method in 
 - **Method:** group adjacent active rows sharing one `AbsorptionLevel` into an episode. Read duration from the first and last timestamps.
 - **Result: 89.3 % of reconstructed episodes are a SINGLE CSV row (AWS, 2 975 episodes). Median duration 0 seconds.** ✅ **Replicated on the LOCAL book: 89.6 %, 685 episodes.**
 - ⛔ **That is a sampling artefact, not a measurement.** The tracker folds `UpdateBook` snapshots at ~100 ms. `analysis_log.csv` samples at the auto-run cadence, minutes apart. **The book cannot see episode life.**
+
+> ## ⚠ CORRECTED 2026-09-01 BY ITS OWN AUTHOR — I NAMED ONE CAUSE AND THERE ARE TWO.
+>
+> **"A sampling artefact" asserts a cause. It is one of two live candidates, and I did not separate them.**
+>
+> **The second: episodes are genuinely being KILLED at run boundaries.** [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:265` — `If side.Active AndAlso lvl <> side.LevelPrice Then side.CloseEpisode()`. **Every level re-map discards the episode**, and with it `PressSum`, `SizeStart`, `SizeMin`, `PullLB` and `PostLB`.
+>
+> **Measured 2026-09-01, AWS book, weekday, since v61 — consecutive-run change rates:**
+>
+> | Source | Changed between consecutive runs |
+> |---|---:|
+> | `LastSwingHigh5m` | 3.7 % |
+> | `LastSwingLow5m` | 3.9 % |
+> | **`VPFRNearestHvnAbove`** | ⚠ **30.1 %** |
+> | **`VPFRNearestHvnBelow`** | ⚠ **29.6 %** |
+> | **`AbsorptionLevel`, adjacent ACTIVE row pairs** | ⛔ **50.4 %** (386 of 766) |
+>
+> ⭐ **Swings are stable. HVNs churn, and `NearestAbove`/`NearestBelow` pick from both.** So the carried level moves at the run boundary far more often than the swing structure does.
+>
+> ✅ **The section's CONCLUSION survives untouched** — the book still cannot resolve episode life, and `AbsorptionEpisodeSec` still has no substitute. **What does not survive is my attribution.** ⚠ **The two causes have opposite implications: sampling means the episodes are fine and we cannot see them; re-map churn means the episodes are being destroyed.**
+>
+> ⭐ **And this is a live candidate mechanism for D-6d.** A re-map fires `CloseEpisode()`, `Active` goes False, and [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:159` — `If Not side.Active Then Return` — **drops every trade until a book snapshot re-arms the side.** That is precisely §4.3 box (b)'s *"the side is not `Active` when the flow arrives."* ⛔ **HYPOTHESIS, NOT A DIAGNOSIS.** It is not shown that the 50 missed rows coincide with re-maps, nor that an HVN was the selected level in those cases.
 - ✅ **So §5's "no substitute" claim STANDS, and it now stands on a test rather than on an assumption.**
 - ⛔ **It also caps this packet's own episode-level numbers.** Any statement of the form "N % of armed episodes never reached the band" is an **upper bound**, because an episode can dip into the band between two polls unseen. **No such number is offered as evidence anywhere in this packet.**
 
