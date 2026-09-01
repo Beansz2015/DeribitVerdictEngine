@@ -256,8 +256,12 @@ verify/ordercheck/Program.vb
 >
 > | Column | Condition |
 > |---|---|
-> | **`SizeMin`** | `SizeMin > 0` **AND** `SizeStart − SizeMin > depletion_floor_usd` |
-> | **`PostLB`** | `PostLB > depletion_floor_usd` |
+> | **`SizeMin`** | `SizeMin > 0` **AND** `SizeStart − SizeMin > depletion_floor_usd` **AND `AggrUsd > 0`** |
+> | **`PostLB`** | `PostLB > depletion_floor_usd` **AND `PullLB > 0`** |
+>
+> ⛔ **THIRD CORRECTION, 2026-09-01 — the numerator conditions in bold were MISSING, and the first live AWS row is what exposed it.** That row read `PostLB=52210` — comfortably over the floor — and still discriminated nothing, **because `PullLB=0` made `AbsorptionPullFrac` 0.0000 whatever the denominator held.** A quotient with a zero numerator carries no information about its denominator. **Same trap on the ratio side: `AggrUsd=0` ⇒ `AbsorptionRatio=0.00` regardless of the depletion term.**
+>
+> ⚠ **The measured probabilities below are UNAFFECTED** — the measurement always required `aggr > 0 && ratio > 0` and `pullFrac > 0`. **It was the prose condition that was incomplete, not the arithmetic behind the table.**
 >
 > ⭐ **They need NOT be the same row.** Two rows, one discriminating each, close item 4 together.
 >
