@@ -248,7 +248,34 @@ verify/ordercheck/Program.vb
 >
 > ✅ **`PullLB` and `SizeStart` ARE genuinely cross-checked** by that row, through `AbsorptionPullFrac`'s numerator and `AbsorptionRatio`'s denominator.
 >
-> ⛔ **So require a live row with `SizeMin > 0` AND `PostLB > 0` before calling item 4 met for all five.** ⚠ **No fixture can substitute** — a fixture builds both sides of the comparison from the same input. **This is waiting for data, not work.**
+> ⛔ **CORRECTED AGAIN, same day — the first version of this box said `SizeMin > 0` AND `PostLB > 0`. BOTH THRESHOLDS WERE WRONG, and wrong in the direction that would declare item 4 met too early.**
+>
+> **The floor is `depletion_floor_usd` = 5 000, not zero.** `max(PostLB, 5000)` returns 5 000 for **any** `PostLB` below 5 000 — so a `PostLB` of 3 000 is exactly as invisible as a `PostLB` of 0. Same for the depletion term.
+>
+> **The conditions that actually discriminate:**
+>
+> | Column | Condition |
+> |---|---|
+> | **`SizeMin`** | `SizeMin > 0` **AND** `SizeStart − SizeMin > depletion_floor_usd` |
+> | **`PostLB`** | `PostLB > depletion_floor_usd` |
+>
+> ⭐ **They need NOT be the same row.** Two rows, one discriminating each, close item 4 together.
+>
+> **Measured 2026-09-01 on the AWS book (weekday, since v61), by recovering `max(SizeStart − SizeMin, floor)` as `AggrUsd / AbsorptionRatio` and testing `AbsorptionPullFrac` for exact multiples of 0.0020:** a qualifying row of either kind is **rare** — 0.83 % and 0.96 % of all rows respectively. **Empirical probability that a run produces BOTH kinds, over sliding windows:**
+>
+> | Run length | P(both) |
+> |---|---:|
+> | 30 min | **17 %** |
+> | 1 h | 30 % |
+> | 2 h | 49 % |
+> | 4 h | 71 % |
+> | 8 h | 90 % |
+>
+> ⚠ **NY is not the good window for this** — 13.8 % at 30 minutes against 17.4 % pooled. **Absorption episodes need price to loiter at a level, which the quieter sessions do more of.**
+>
+> ⭐ **So do not babysit a local run for this. Deploy to the collector and let it accumulate** — it reaches 90 % inside one session-day.
+>
+> ⚠ **No fixture can substitute** — a fixture builds both sides of the comparison from the same input. **This is waiting for data, not work.**
 
 **Report back per [`batch-review-packet-convention.md`](batch-review-packet-convention.md).** ⚠ **Two documents** — this is a spec'd build handed to a reviewing seat, which is exactly the case that convention covers.
 
