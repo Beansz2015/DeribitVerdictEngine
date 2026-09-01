@@ -1,6 +1,8 @@
 # Absorption instrumentation — build spec
 
-**Status:** SPEC. Buildable. **Authorised by:** the D-table in [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6, ticked by the trader 2026-09-01.
+**Status:** SPEC. Buildable. **Authorised by:** **D-1** in the D-table at [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 — **ticked by the trader 2026-09-01**, whose definition of a tick is *"follow as recommended"*. **D-1 through D-5 are ticked. D-6 is OPEN.**
+
+⛔ **D-6 being open does NOT gate this build.** `AbsorptionSizeStart` and `AbsorptionSizeMin` are in the §5 field list regardless of how D-6 lands — **do not wait for it, and do not treat its absence as a missing input.**
 
 **Implements:** [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §5, which D-1 rules must ship **first and alone**.
 

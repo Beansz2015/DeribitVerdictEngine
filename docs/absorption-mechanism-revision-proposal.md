@@ -1,6 +1,6 @@
 # Book absorption — mechanism revision (E5 Path B)
 
-**Status:** PROPOSED. **§6 D-table awaits a trader tick.** No code, no settings change.
+**Status:** ⭐ **PARTLY TICKED 2026-09-01.** **D-1 through D-5 are TICKED — "follow as recommended", the trader's own definition.** **D-6 is left OPEN.** No code, no settings change in this document; the ticked D-1 authorises a build, specced separately — see §6.
 **Authorised by:** E5 → **Path B**, ticked 2026-08-12. Anchors HOLD at v61; this is the mechanism revision Path B bought.
 **Supersedes as the active question:** [`absorption-anchor-rederivation-2026-07-30.md`](absorption-anchor-rederivation-2026-07-30.md) — its §5a V-table is **rejected** and banner-marked as dead text.
 **Author:** the orchestrator seat that opened on [`seat-handover-2026-08-14.md`](seat-handover-2026-08-14.md), 2026-08-14.
@@ -18,7 +18,7 @@
 >
 > ⚠ **Also corrected: §4.3's "~49 % arming rate" is a category error (11.8 %), and §7's "could not separate `window_sec` from the proximity gate" is SUPERSEDED — they separate from logged data, ≈ 77 % geometric.**
 >
-> **Corrections are recorded in place below, quoted-and-labelled rather than rewritten.** ⚠ **§6 remains UNTICKED — the D-table is still the trader's call.** The independent seat was directed not to tick it and did not.
+> **Corrections are recorded in place below, quoted-and-labelled rather than rewritten.** ~~⚠ **§6 remains UNTICKED — the D-table is still the trader's call.**~~ ⭐ **SUPERSEDED 2026-09-01 — D-1…D-5 are now TICKED and D-6 is OPEN. See §6.** *(True as written on 2026-08-19, and kept because it records that the checking seat did not tick: the independent seat was directed not to tick it and did not.)*
 >
 > *Superseded header text follows, per the quote-and-label convention:*
 >
@@ -30,6 +30,16 @@
 
 ## 0. Implementer brief — model, effort, and where it slips
 
+> ## ⭐ SUPERSEDED 2026-09-01 BY THE TICK. Read this box, not the one below it.
+>
+> **D-1 through D-5 are ticked.** The gate this box sets has been met for them, and **one build is authorised: the §5 instrumentation, specced in [`absorption-instrumentation-spec.md`](absorption-instrumentation-spec.md).** That spec carries its own model and effort — **Sonnet, high, one session** — which supersedes the *"Opus, effort high"* line below, because that line costed §4.1 + §4.2 + §4.3 and **none of those are authorised.**
+>
+> ⛔ **D-2, D-3, D-4 and D-5 authorise NO build.** D-2 is gated behind ~2 weekday-weeks of the instrumentation's data. D-3, D-4 and D-5 are all *"leave it alone"*.
+>
+> ⛔ **D-6 is OPEN. It does not gate the instrumentation build** — `AbsorptionSizeStart` and `AbsorptionSizeMin` are in §5's field list regardless of how D-6 lands.
+>
+> *Superseded text follows, per the quote-and-label convention:*
+>
 > **Nothing here is buildable yet.** This proposal ends at a D-table. **Do not open an implementer session against it until §6 is ticked** — the whole point of Path B was that the previous pass re-tuned when it should have re-mechanised.
 >
 > **When it is ticked, the build is: Opus, effort high, one session for §4.1 + §4.3, a separate session for §4.2.**
@@ -230,9 +240,28 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 
 ---
 
-## 6. D-table — awaits a trader tick
+## 6. D-table — ⭐ D-1…D-5 TICKED 2026-09-01 · D-6 OPEN
 
-⚠ **STILL UNTICKED. The 2026-08-19 blind check did NOT tick this table** — it was directed not to, and did not. **The rows below carry the author's recommendation plus, where the check moved it, a second column.** The right-hand column is the checking seat's read; it is not a decision.
+> ## ⭐ THE TRADER'S RULING, 2026-09-01. This is the current state of the table.
+>
+> | Row | State |
+> |---|---|
+> | **D-1 … D-5** | ✅ **TICKED.** The trader's definition, in their words: *"ticked means follow as recommended."* **Every one of those five rows carries a ✅ Yes recommendation, so the action is the author's recommendation, re-grounded where the 2026-08-19 check corrected the reason** — see D-3 and D-4, where the ACTION survives and the REASON does not |
+> | **D-6** | ⛔ **OPEN.** It has no recommendation, so *"follow as recommended"* has nothing to follow. **Trader ruling: leave it open until §5 is done** |
+>
+> ⚠ **THE D-6 RULING IS SCOPED NARROWER THAN IT READS, AND THE SCOPE MATTERS.** The trader's condition was *"if D-6 cannot be determined yet until §5 is done."* **[`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) establishes that only ONE of D-6's three questions actually waits on §5:**
+>
+> | | Question | Waits on §5? |
+> |---|---|---|
+> | **D-6a** | Is the 0.30 / 0.10 pair intended? | ❌ **No — answerable from `Core/LevelAbsorptionTracker.vb` today.** ⛔ **UNRULED** |
+> | **D-6b** | Is it "the largest single leak in the funnel"? | ❌ **No — answerable from both books today, and DISPUTED.** ⛔ **UNRULED** |
+> | **D-6c** | Is 3× the right ratio? | ✅ **Yes. This is the one the ruling covers** |
+>
+> ⛔ **D-6a and D-6b are therefore parked UNRULED by default, not by decision.** ⚠ **The live cost: the D-6 row below still asserts "the largest single leak in the funnel" as though it were settled, and the spec-back disputes it on both books.** **Anyone acting on that row before D-6b is ruled will aim at the annulus, which presses at 2.6–2.8 % and has almost nothing in it to recover.**
+>
+> *Superseded status text follows, per the quote-and-label convention:*
+>
+> ⚠ **STILL UNTICKED. The 2026-08-19 blind check did NOT tick this table** — it was directed not to, and did not. **The rows below carry the author's recommendation plus, where the check moved it, a second column.** The right-hand column is the checking seat's read; it is not a decision.
 
 | # | Decision | Author's recommendation | ⚠ After the 2026-08-19 check |
 |---|---|---|---|
@@ -250,7 +279,7 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 >
 > **[`absorption-d6-spec-back.md`](absorption-d6-spec-back.md)** — raised by the trader's question *"can this measurement be done?"* against D-6's *"the author did not have this measurement"*.
 >
-> **Nothing in the D-table is rewritten by it. Nothing is ticked by it.** Its three load-bearing claims, so they are attacked rather than skimmed:
+> **Nothing in the D-table was rewritten by that packet, and it ticked nothing** — the 2026-09-01 tick above is the trader's, recorded separately. Its three load-bearing claims, so they are attacked rather than skimmed:
 >
 > | | Claim |
 > |---|---|
