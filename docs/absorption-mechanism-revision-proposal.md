@@ -1,6 +1,6 @@
 # Book absorption — mechanism revision (E5 Path B)
 
-**Status:** ⭐ **PARTLY TICKED 2026-09-01.** **D-1 through D-5 are TICKED — "follow as recommended", the trader's own definition.** **D-6 is left OPEN.** No code, no settings change in this document; the ticked D-1 authorises a build, specced separately — see §6.
+**Status:** ⭐ **PARTLY TICKED 2026-09-01.** **D-1 through D-5 are TICKED — "follow as recommended", the trader's own definition.** **D-6 was SPLIT: D-6a and D-6b RULED 2026-09-01, D-6c OPEN until §5, D-6d raised-not-ruled.** No code, no settings change in this document; the ticked D-1 authorises a build, specced separately — see §6.
 **Authorised by:** E5 → **Path B**, ticked 2026-08-12. Anchors HOLD at v61; this is the mechanism revision Path B bought.
 **Supersedes as the active question:** [`absorption-anchor-rederivation-2026-07-30.md`](absorption-anchor-rederivation-2026-07-30.md) — its §5a V-table is **rejected** and banner-marked as dead text.
 **Author:** the orchestrator seat that opened on [`seat-handover-2026-08-14.md`](seat-handover-2026-08-14.md), 2026-08-14.
@@ -18,7 +18,7 @@
 >
 > ⚠ **Also corrected: §4.3's "~49 % arming rate" is a category error (11.8 %), and §7's "could not separate `window_sec` from the proximity gate" is SUPERSEDED — they separate from logged data, ≈ 77 % geometric.**
 >
-> **Corrections are recorded in place below, quoted-and-labelled rather than rewritten.** ~~⚠ **§6 remains UNTICKED — the D-table is still the trader's call.**~~ ⭐ **SUPERSEDED 2026-09-01 — D-1…D-5 are now TICKED and D-6 is OPEN. See §6.** *(True as written on 2026-08-19, and kept because it records that the checking seat did not tick: the independent seat was directed not to tick it and did not.)*
+> **Corrections are recorded in place below, quoted-and-labelled rather than rewritten.** ~~⚠ **§6 remains UNTICKED — the D-table is still the trader's call.**~~ ⭐ **SUPERSEDED 2026-09-01 — D-1…D-5 are now TICKED; D-6 was split, with D-6a and D-6b RULED and D-6c OPEN. See §6.** *(True as written on 2026-08-19, and kept because it records that the checking seat did not tick: the independent seat was directed not to tick it and did not.)*
 >
 > *Superseded header text follows, per the quote-and-label convention:*
 >
@@ -36,7 +36,7 @@
 >
 > ⛔ **D-2, D-3, D-4 and D-5 authorise NO build.** D-2 is gated behind ~2 weekday-weeks of the instrumentation's data. D-3, D-4 and D-5 are all *"leave it alone"*.
 >
-> ⛔ **D-6 is OPEN. It does not gate the instrumentation build** — `AbsorptionSizeStart` and `AbsorptionSizeMin` are in §5's field list regardless of how D-6 lands.
+> ⛔ **D-6c is OPEN and does NOT gate the instrumentation build** — `AbsorptionSizeStart` and `AbsorptionSizeMin` are in §5's field list regardless of how D-6 lands.
 >
 > *Superseded text follows, per the quote-and-label convention:*
 >
@@ -224,6 +224,30 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 >
 > **2,880 ACTIVE episodes against 5,918 directional rows is a ~49 % arming rate.** For a feature whose modal state is meant to be NONE by construction, that is high. **The instrumentation in §5 separates the two explanations; do not guess between them.**
 
+### 4.3a ⭐ Why `proximity_atr_frac` is 3× `band_atr_frac` — RULED 2026-09-01, D-6a
+
+> ## THE PAIR IS INTENDED. IT IS ARM-EARLY / MEASURE-TIGHT, AND IT IS VISIBLE IN THE TRACKER.
+>
+> **Ruled by the trader 2026-09-01** on the recommendation in [`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) §2. **No code change, no settings change.** This subsection IS the ruling's deliverable — D-6's second branch asked for the reason to be stated, and this states it.
+>
+> | [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) | Statement | Establishes |
+> |---|---|---|
+> | `:251` | `gateOpen = If(side.IsAbove, lvl - bestAsk <= prox, bestBid - lvl <= prox)` | The episode **arms on proximity** — 0.30 |
+> | `:292` | `' Episode opens on the first in-proximity snapshot.` | The arming instant |
+> | `:295` | `side.SizeStart = bandSize` | `bandSize` sums the ladder over `[bandLo, bandHi]` — the **band**, 0.10 |
+>
+> ⭐ **The outer shell decides WHEN to sample. The inner shell decides WHAT is sampled.** The wide shell captures the band's resting depth **before price arrives**, so `SizeStart − SizeMin` measures depletion against a **pre-test baseline**.
+>
+> ⛔ **Why collapsing them to 0.10 is the wrong move, and it is not obvious.** `absorbRatio = aggrUsd / max(sizeStart − sizeMin, floor)`. Arming at 0.10 samples `SizeStart` **after** price has already reached the level and eaten into the band. `SizeStart` falls ⇒ the depletion term falls ⇒ **the denominator falls ⇒ the ratio RISES.** **You would get more flags by weakening the measurement, which is the pattern [`trader-profile.md`](trader-profile.md) rejects.**
+>
+> ⚠ **"A 3× mismatch" is a misnomer.** The two fractions are not two attempts at one quantity. They are a **sampling window** and a **measurement shell**, and they are not required to agree.
+>
+> ⚠ **One qualifier:** [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:42` enforces `min(proximity, visible ladder span)`. **0.30 is a ceiling, not always the operative distance.**
+>
+> ⛔ **What this ruling does NOT settle: whether 3× is the RIGHT ratio.** That is D-6c, and it stays OPEN until §5 ships — it needs `SizeStart` and `SizeMin` logged, and no stored data can answer it today.
+>
+> ⚠ **Read this before reaching for the book again.** The 2026-08-14 author recorded *"the author did not have this measurement"* and the 2026-08-19 check went looking for one. **There was never a measurement to find — the answer was a code path that nobody re-read**, because the book is where the previous three passes found their answers.
+
 ---
 
 ## 5. What must be logged before any of this can be judged
@@ -240,24 +264,27 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 
 ---
 
-## 6. D-table — ⭐ D-1…D-5 TICKED 2026-09-01 · D-6 OPEN
+## 6. D-table — ⭐ D-1…D-5 TICKED 2026-09-01 · D-6 SPLIT: D-6a + D-6b RULED, D-6c OPEN
 
 > ## ⭐ THE TRADER'S RULING, 2026-09-01. This is the current state of the table.
 >
 > | Row | State |
 > |---|---|
 > | **D-1 … D-5** | ✅ **TICKED.** The trader's definition, in their words: *"ticked means follow as recommended."* **Every one of those five rows carries a ✅ Yes recommendation, so the action is the author's recommendation, re-grounded where the 2026-08-19 check corrected the reason** — see D-3 and D-4, where the ACTION survives and the REASON does not |
-> | **D-6** | ⛔ **OPEN.** It has no recommendation, so *"follow as recommended"* has nothing to follow. **Trader ruling: leave it open until §5 is done** |
+> | **D-6** | ⭐ **TWO THIRDS RULED, ONE THIRD OPEN.** It carried no recommendation, so *"follow as recommended"* had nothing to follow — it was split into three and ruled separately. See the table below |
 >
-> ⚠ **THE D-6 RULING IS SCOPED NARROWER THAN IT READS, AND THE SCOPE MATTERS.** The trader's condition was *"if D-6 cannot be determined yet until §5 is done."* **[`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) establishes that only ONE of D-6's three questions actually waits on §5:**
+> ⭐ **D-6 IS THREE QUESTIONS. Ruled 2026-09-01 on [`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) §2:**
 >
-> | | Question | Waits on §5? |
+> | | Question | Ruling |
 > |---|---|---|
-> | **D-6a** | Is the 0.30 / 0.10 pair intended? | ❌ **No — answerable from `Core/LevelAbsorptionTracker.vb` today.** ⛔ **UNRULED** |
-> | **D-6b** | Is it "the largest single leak in the funnel"? | ❌ **No — answerable from both books today, and DISPUTED.** ⛔ **UNRULED** |
-> | **D-6c** | Is 3× the right ratio? | ✅ **Yes. This is the one the ruling covers** |
+> | **D-6a** | Is the 0.30 / 0.10 pair intended? | ✅ **RULED — YES, INTENDED.** Arm-early / measure-tight. **The mechanism is written up at §4.3a**, which is this ruling's deliverable. No code, no settings |
+> | **D-6b** | Is it "the largest single leak in the funnel"? | ✅ **RULED — CLAIM WITHDRAWN.** The annulus presses at 2.6–2.8 % on both books, so collapsing the shells recovers almost nothing. **The D-6 row's cell is struck through and re-grounded in place** |
+> | **D-6c** | Is 3× the right ratio? | ⛔ **OPEN until §5 ships.** It needs `SizeStart` / `SizeMin` logged; **no stored data can answer it, and none can be made to** |
+> | **D-6d** | The §4.3 box (b) counting gap — 31 % of admitted flow | ⚠ **RAISED, NOT RULED.** The spec-back offers **no read** on the fix. **It has no row of its own and it is larger than both the geometry and `window_sec`** |
 >
-> ⛔ **D-6a and D-6b are therefore parked UNRULED by default, not by decision.** ⚠ **The live cost: the D-6 row below still asserts "the largest single leak in the funnel" as though it were settled, and the spec-back disputes it on both books.** **Anyone acting on that row before D-6b is ruled will aim at the annulus, which presses at 2.6–2.8 % and has almost nothing in it to recover.**
+> ⚠ **D-6c is the only part the "leave it open until §5" condition ever covered.** The trader's condition was *"if D-6 cannot be determined yet until §5 is done"* — true for D-6c alone, which is why the other two were ruled on their merits instead of inheriting the wait.
+>
+> ⛔ **D-6d is the live one now.** It is unruled, it has no row, and by §4.3 box (b)'s own numbers it is the largest of the three causes. **Whoever picks it up: Opus, effort high, and it is a different session from the §5 build.**
 >
 > *Superseded status text follows, per the quote-and-label convention:*
 >
@@ -270,7 +297,7 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 | **D-3** | Leave `max_pull_frac` and every other anchor **untouched** | ✅ **Yes.** §3.2 found no evidence D8 is broken, and moving it is the re-tuning Path B rejected | ⚠ **ACTION SURVIVES, REASON DOES NOT.** There *is* evidence D8 is broken — a 200–380× point mass at exactly 1.000 plus a floored `postLB` on ~27 % of non-zero rows. **Re-ground on: the artefact is real but too small to be the fix (≈3 pp of a 59 % veto), so the response is instrumentation, not a threshold move.** ⚠ Note the veto costs more than §3.2 shows: **10 of the 15 gate-reaching rows, one by 0.0115** |
 | **D-4** | Treat the ~49 % arming rate as an **open question**, not a defect | ✅ **Yes** — §4.3. Do not narrow the proximity gate on a hunch | ⚠ **ACTION SURVIVES, PREMISE IS AN ARITHMETIC ERROR.** The rate is **11.78 %**, not 49 % (§4.3 box (c)). **The gate's problem is not how often it arms — it is that it arms 3× wider than the shell that measures.** Those want different fixes, and this row should say which one it is deferring |
 | **D-5** | Keep `scoring_enabled = false` and the §5.1/§5.2 activation gates **unchanged** | ✅ **Yes.** The n ≥ 30 flagged-evaluated-rows gate stands; this proposal does not touch it | ✅ **Unchanged by the check.** ⚠ Worth stating plainly alongside it: because `scoring_enabled` is false and the failure mode is **silence**, a build that underperforms will not announce it — the write-guard shape this proposal's own §0 warns about, pointed at itself |
-| ⚠ **D-6** | ⚠ **NEW, raised by the 2026-08-19 check — reconcile `proximity_atr_frac` (0.30) with `band_atr_frac` (0.10), or state why a 3× mismatch is intended** | *(no author recommendation — the author did not have this measurement)* | ⚠ **This is the largest single leak in the funnel and it is not currently on the table.** ≈ 77 % of the observation loss is episodes admitted into a shell three times wider than the shell that measures. **Not a threshold re-tune** — it is a shape question, the same class as §4.1 |
+| ⚠ **D-6** | ⚠ **NEW, raised by the 2026-08-19 check — reconcile `proximity_atr_frac` (0.30) with `band_atr_frac` (0.10), or state why a 3× mismatch is intended** | ⭐ **ANSWERED 2026-09-01 — the pair is INTENDED. See §4.3a.** *(Superseded: "no author recommendation — the author did not have this measurement." The answer was never a measurement; it was in the tracker.)* | ⛔ **WITHDRAWN 2026-09-01 by trader ruling.** ~~This is the largest single leak in the funnel and it is not currently on the table. ≈ 77 % of the observation loss is episodes admitted into a shell three times wider than the shell that measures.~~ **The annulus presses at 2.6–2.8 % on BOTH books, so collapsing the shells recovers almost nothing. The ≈ 77 % is a share of unpressed active rows, not of recoverable pressing** — [`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) §0.2. ✅ **The surviving half: "not a threshold re-tune — it is a shape question."** |
 
 
 ⚠ **If D-1 is declined, the honest consequence is that §4.1 ships blind** — buildable, but with no way to say afterwards whether it worked. Say so explicitly rather than proceeding quietly.

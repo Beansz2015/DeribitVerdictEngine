@@ -1,8 +1,8 @@
 # Absorption instrumentation — build spec
 
-**Status:** SPEC. Buildable. **Authorised by:** **D-1** in the D-table at [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 — **ticked by the trader 2026-09-01**, whose definition of a tick is *"follow as recommended"*. **D-1 through D-5 are ticked. D-6 is OPEN.**
+**Status:** SPEC. Buildable. **Authorised by:** **D-1** in the D-table at [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 — **ticked by the trader 2026-09-01**, whose definition of a tick is *"follow as recommended"*. **D-1 through D-5 are ticked. D-6 was split: D-6a and D-6b RULED 2026-09-01, D-6c OPEN, D-6d raised-not-ruled.**
 
-⛔ **D-6 being open does NOT gate this build.** `AbsorptionSizeStart` and `AbsorptionSizeMin` are in the §5 field list regardless of how D-6 lands — **do not wait for it, and do not treat its absence as a missing input.**
+⛔ **D-6c being open does NOT gate this build.** `AbsorptionSizeStart` and `AbsorptionSizeMin` are in the §5 field list regardless of how D-6c lands — **do not wait for it, and do not treat its absence as a missing input.**
 
 **Implements:** [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §5, which D-1 rules must ship **first and alone**.
 
@@ -107,7 +107,25 @@ Follow the existing discipline exactly: the numerics are `Double?` on `Indicator
 
 ⛔ **No `HC` is needed and none should be invented.** Hard constraints fence *settings prefixes* from the auto-tweaker. **This build adds no settings keys, so there is nothing to fence.** HC29 stays free.
 
-### R8 Reader audit is part of the build, not a follow-up
+### R8 ⭐ Add ONE comment while you are in the file — D-6a's ruling, at the line it explains
+
+**D-6a was ruled 2026-09-01: the 0.30 / 0.10 pair is INTENDED, arm-early / measure-tight.** The write-up lives at [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §4.3a.
+
+⭐ **You are already editing `SideState` and the episode-open block. Put the reason where it prevents the recurrence**, immediately below the existing comment at [`Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:292`:
+
+```
+' Episode opens on the first in-proximity snapshot.
+' [D-6a, ruled 2026-09-01] SizeStart samples the BAND (band_atr_frac) at the
+' PROXIMITY (proximity_atr_frac) instant — arm-early / measure-tight, so the
+' baseline is captured before price arrives. Collapsing the two shells shrinks
+' the depletion denominator and inflates absorbRatio. See the proposal §4.3a.
+```
+
+⚠ **Why this is in the spec and not left to judgement.** The 2026-08-14 author wrote *"the author did not have this measurement"* and the 2026-08-19 check went looking for one. **There was never a measurement to find — the answer was this code path, and nobody re-read it.** A comment here is the cheapest possible guard against a fourth pass making the same move.
+
+⛔ **Comment only. Do NOT change `proximity_atr_frac`, `band_atr_frac`, or any behaviour at that line.**
+
+### R9 Reader audit is part of the build, not a follow-up
 
 **17 files touch the book.** R1 makes appending safe *by construction* for positional readers, **but §5 of the proposal explicitly says this property "must be re-verified, not assumed."** See §4 below for the list and the check.
 

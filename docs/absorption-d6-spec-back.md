@@ -150,6 +150,8 @@ awk -F',' 'function dow(ds, y,m,d,K,J,h){y=substr(ds,1,4)+0;m=substr(ds,6,2)+0;d
 
 ### D-6a — how to answer the "reconcile … or state why" branch
 
+> ✅ **RULED 2026-09-01 — option a.** The pair is INTENDED. **Deliverable written up at [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §4.3a**, and the D-6 row now points at it.
+
 | Option | |
 |---|---|
 | ⭐ **a** | **Rule the pair INTENDED and document the mechanism** — arm-early / measure-tight, citing [`Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:251` and `:295`. No code, no settings, no wait |
@@ -160,6 +162,8 @@ awk -F',' 'function dow(ds, y,m,d,K,J,h){y=substr(ds,1,4)+0;m=substr(ds,6,2)+0;d
 
 ### D-6b — the "largest single leak" claim
 
+> ✅ **RULED 2026-09-01 — option a. THE CLAIM IS WITHDRAWN.** ⚠ **My read was a hypothesis and it was not attacked before it was ruled.** The dispute is a denominator argument on a table both sides agree about. **If the denominator reading is wrong, this ruling inverts and the geometry becomes the primary target** — that risk is now carried, not resolved.
+
 | Option | |
 |---|---|
 | ⭐ **a** | **Withdraw it and re-ground the row** on §0.2 above — the annulus presses at 2.8 %, so there is little there to recover |
@@ -168,6 +172,8 @@ awk -F',' 'function dow(ds, y,m,d,K,J,h){y=substr(ds,1,4)+0;m=substr(ds,6,2)+0;d
 **My read — a, and it is a hypothesis I would like attacked.** The claim and my rebuttal use the same table, so we are not disagreeing about data. We are disagreeing about which denominator the ≈ 77 % belongs to. **If my reading of the denominator is wrong, D-6b inverts and the geometry does become the primary target.**
 
 ### D-6c — the sizing question
+
+> ⛔ **OPEN 2026-09-01 — option a. Parked behind the §5 instrumentation**, which is now specced at [`absorption-instrumentation-spec.md`](absorption-instrumentation-spec.md). **This is the only part of D-6 the "wait for §5" condition ever covered.**
 
 | Option | |
 |---|---|
@@ -179,6 +185,8 @@ awk -F',' 'function dow(ds, y,m,d,K,J,h){y=substr(ds,1,4)+0;m=substr(ds,6,2)+0;d
 **Scoping, supplied without recommending it.** The narrowest change that would make D-6c measurable later: add `AbsorptionSizeStart` and `AbsorptionSizeMin` to the CSV. Two `InvOpt` calls at [`AnalysisLogger.vb`](../AnalysisLogger.vb) `:295-299`, two names in the header at `:108`, two fields carried on the result type. **It is a strict subset of the §5 instrumentation and rides along with it at no extra cost.** ⚠ **A CSV column addition is a rotation — [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §5 already warns that `analysis_log.csv` has a different reader from the trade store, and that backward compatibility must be re-verified rather than assumed.**
 
 ### D-6d — the item that is not in the D-table at all
+
+> ⚠ **NOT RULED 2026-09-01, and deliberately so — I offered no read and none was invented.** ⛔ **It is now the largest unaddressed item in the whole proposal.**
 
 ⭐ **[`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §4.3 box (b)'s counting gap has no D-table row.** The engine logs pressing on 22 rows where its own band-and-window predicate admits flow on 72. **The side is not `Active` when the flow arrives.**
 
