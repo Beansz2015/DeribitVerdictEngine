@@ -9,7 +9,7 @@
 ---
 
 > ## ⛔ STATE BANNER — 2026-08-25. Read this before believing any row below.
->
+> ⭐ **CURRENT STATE READ: [`seat-handover-2026-09-03.md`](seat-handover-2026-09-03.md).** Settings **v68**. ⛔ **NO PUSH STATE IS QUOTED HERE ON PURPOSE — `git status -sb` is the answer.** ⭐ **FIRST TASK: write the item 8 spec (transcription — the ruling is complete), THEN item 6 (needs a code read first — they are NOT symmetric).**
 > ⭐ **CURRENT STATE READ: [`seat-handover-2026-08-29.md`](seat-handover-2026-08-29.md).** Settings **v68**. ⛔ **NO PUSH STATE IS QUOTED HERE ON PURPOSE — `git status -sb` is the answer, and this line was wrong twice in four days because the trader pushes mid-session.**
 >
 > ⭐ **NOTHING IS BLOCKED and nothing is owed.** ✅ **Items 17 and 18 — the two decisions that were hiding in §2 build rows — are RULED (trader, 2026-09-03) AND BUILT the same day.** See the (now-closed) box below §0a and packet [`queue-17-18-batch-spec-back.md`](queue-17-18-batch-spec-back.md). ✅ **Item 21 — `coverage` aimed at a copy-back — is DONE 2026-09-03 (`7794320`), and with it R8, which prints the resolved store and evidence paths on every run.** Items 6 and 8 remain ready to build. ✅ **The absorption D-table is TICKED 2026-09-01** — D-1…D-5 ticked, D-6a/D-6b ruled, D-6c open until §5 reads (~09-15), D-6d parked. Its §5 instrumentation is BUILT, DEPLOYED and accepted.
