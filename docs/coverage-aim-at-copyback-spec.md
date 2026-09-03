@@ -109,7 +109,7 @@ The `coverage` usage line at `BacktestProgram.vb` `:340`. ⚠ **An option that w
 | | Check |
 |---|---|
 | 1 | `dotnet build` clean. ⚠ On `MSB3021` naming a locked `.exe`, the app is running — build `verify/ordercheck/OrderCheck.vbproj` instead |
-| 2 | ⭐ **`coverage` with NO new flag produces byte-identical output to before the change.** This is R1's guard and the one that matters |
+| 2 | ⭐ **`coverage` with NO new flag reads byte-identical INPUTS to before the change.** This is R1's guard and the one that matters. ⚠ **AMENDED 2026-09-03 by R8 — the stdout preamble gains two lines on every run, deliberately, so "byte-identical OUTPUT" no longer holds and must not be asserted.** ✅ **`CoverageReport.BuildConsoleSummary` and `BuildMarkdown` are untouched**, so the report body, the `--out` markdown, and the fixture at `verify/ordercheck/Program.vb:9073` that asserts against `BuildConsoleSummary` are all unchanged |
 | 3 | ⭐ **`coverage --evidence-dir AWS-copybacks/aws-copyback-2026-09-01/aws_fetch/20260901-153838 --from … --to …` runs and reports on the COPY-BACK**, not the local store. Confirm by a figure that differs between the two |
 | 4 | `--store-dir` alone redirects only the store |
 | 5 | A non-existent `--evidence-dir` returns **1** and prints the resolved path. **No fallback** |
@@ -127,3 +127,28 @@ The `coverage` usage line at `BacktestProgram.vb` `:340`. ⚠ **An option that w
 - ⛔ **Whether `coverage` produces a correct report against a copy-back once aimed.** This spec makes it *aimable*. **If the report then disagrees with the hand-computed 2026-08-29 numbers, that is a finding for a separate pass, not a bug in this change.**
 - ⛔ **Item 18** (`ObservedLongestTrailingMs` over-reports on a split hour) is **NOT in scope** and carries an unmade decision. ⚠ **It becomes testable once this ships** — a purpose-built store can be aimed at — **but do not fix it here.**
 - ⚠ **The three evidence filenames are hardcoded strings today and stay hardcoded.** Parameterising them individually is not in scope and was not asked for.
+
+---
+
+## 6. R8 — say what was actually read, on every run. Added 2026-09-03 at review.
+
+**Found at review, and it is a SPEC defect, not an implementation one.** ⛔ **R4 ("follow the existing option idiom exactly") and R6 ("fail loudly, never fall back") pull in opposite directions, and this spec did not say which wins.**
+
+**The parser's shared idiom is `i += 1 : If i < args.Length Then …`, so a value-taking flag at the end of the command line is dropped SILENTLY.** Demonstrated:
+
+```
+coverage --from … --to … --evidence-dir      →  captured hours 0, DEFECT 0, exit 0
+```
+
+⛔ **A bad path exits 1 loudly. A MISSING VALUE exits 0 with a clean-looking report — the operator believes they audited the copy-back; the tool audited the empty local store and said "no defects."** ⚠ **It matters more here than for `--from`: a dropped date shows up in the banner that prints it back; a dropped `--evidence-dir` changes WHICH MACHINE was audited and nothing said so.**
+
+**The fix is not another per-flag guard.** Print the resolved paths on **every** run, default included:
+
+```
+[BacktestRunner] store:    <full path>   [default (cwd) | --evidence-dir | --store-dir]
+[BacktestRunner] evidence: <full path>   [default (cwd) | --evidence-dir]
+```
+
+⭐ **Defence in depth rather than a special case** — it closes this hole and any future one, and it serves the reason item 21 existed at all: **nobody could tell what `coverage` had been aimed at.**
+
+⚠ **This changes acceptance item 2 and the change is deliberate — see the amendment there.** `BuildConsoleSummary` and `BuildMarkdown` are NOT touched, so the report body, the markdown file and the fixture that asserts against the summary are unaffected.

@@ -14,13 +14,16 @@
 '   BacktestRunner report   --csv <analysisLogCsv> [--settings <settings.json>]
 '   BacktestRunner coverage --from yyyy-MM-dd --to yyyy-MM-dd
 '                            [--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue]
+'                            [--evidence-dir <dir>] [--store-dir <dir>]
 '
 ' The `coverage` verb reports raw-trade capture health (docs/trade-store-coverage-report
 ' -proposal.md): six classes per weekday UTC hour, S4 candle/funding completeness, and an
 ' optional S0 venue diff (--verify-venue, network). Read-only — never fetches (except S0)
 ' and never writes to the store. Reads analysis_log.csv / ws_health.log / capture_marker.log
 ' beside the store (CWD-relative, i.e. the repo root BacktestProgram already sets CWD to) if
-' present, degrading gracefully when absent. Exit 1 with --strict when any DEFECT hour
+' present, degrading gracefully when absent — or, with --evidence-dir <dir>, reads all four
+' from a copy-back's aws_fetch/<stamp>/ directory instead (--store-dir independently overrides
+' just the store). Exit 1 with --strict when any DEFECT hour
 ' exists; without the flag, always exits 0 (interactive-safe).
 '
 ' The `report` verb runs the SHIPPED analysis/AnalysisRunner pipeline over an
@@ -71,6 +74,8 @@ Public Class BacktestProgram
         Dim gapMs As Long = 300000L
         Dim strict As Boolean = False
         Dim verifyVenue As Boolean = False
+        Dim evidenceDir As String = ""
+        Dim storeDirOverride As String = ""
 
         Dim i As Integer = 1
         While i < args.Length
@@ -112,6 +117,12 @@ Public Class BacktestProgram
                     strict = True
                 Case "--verify-venue"
                     verifyVenue = True
+                Case "--evidence-dir"
+                    i += 1
+                    If i < args.Length Then evidenceDir = args(i)
+                Case "--store-dir"
+                    i += 1
+                    If i < args.Length Then storeDirOverride = args(i)
             End Select
             i += 1
         End While
@@ -290,8 +301,47 @@ Public Class BacktestProgram
                 Dim wsHealthPath As String = Path.Combine(repoRoot, "ws_health.log")
                 Dim markerPath As String = Path.Combine(repoRoot, "capture_marker.log")
 
+                ' R1: --evidence-dir aims all four paths at a copy-back's aws_fetch/<stamp>/
+                ' directory, which already carries this exact layout. Absent, all four stay
+                ' byte-identical to the pre-existing defaults above.
+                If Not String.IsNullOrEmpty(evidenceDir) Then
+                    If Not Directory.Exists(evidenceDir) Then
+                        Console.Error.WriteLine("[BacktestRunner] --evidence-dir not found: " & Path.GetFullPath(evidenceDir))
+                        Return 1
+                    End If
+                    storeDir = Path.Combine(evidenceDir, HistoricalStore.StoreDir)
+                    analysisLogPath = Path.Combine(evidenceDir, "analysis_log.csv")
+                    wsHealthPath = Path.Combine(evidenceDir, "ws_health.log")
+                    markerPath = Path.Combine(evidenceDir, "capture_marker.log")
+                End If
+
+                ' R2: --store-dir is an independent override, applied AFTER R1.
+                If Not String.IsNullOrEmpty(storeDirOverride) Then
+                    If Not Directory.Exists(storeDirOverride) Then
+                        Console.Error.WriteLine("[BacktestRunner] --store-dir not found: " & Path.GetFullPath(storeDirOverride))
+                        Return 1
+                    End If
+                    storeDir = storeDirOverride
+                End If
+
                 Console.WriteLine(String.Format("[BacktestRunner] Coverage {0:yyyy-MM-dd} → {1:yyyy-MM-dd} UTC (gap-ms={2})",
                                                 fromUtc, toUtc, gapMs))
+
+                ' Say what was actually read, on EVERY run including the default one. A
+                ' value-taking flag whose value is missing is dropped silently by this
+                ' parser (the pre-existing `If i < args.Length` idiom, shared by --from and
+                ' every other option), so `--evidence-dir` at the end of the line would
+                ' otherwise audit the LOCAL store while the operator believed they had
+                ' aimed at a copy-back — reporting "0 captured hours, 0 DEFECT" and exit 0,
+                ' which reads as clean rather than as not-run. Printing the resolved paths
+                ' makes the aim visible instead of guarding one flag at a time.
+                Dim aimNote As String = If(String.IsNullOrEmpty(evidenceDir), "default (cwd)", "--evidence-dir")
+                Dim storeNote As String = If(String.IsNullOrEmpty(storeDirOverride), aimNote, "--store-dir")
+                Console.WriteLine("[BacktestRunner] store:    " & Path.GetFullPath(storeDir) & "   [" & storeNote & "]")
+                Console.WriteLine("[BacktestRunner] evidence: " &
+                                  Path.GetFullPath(If(String.IsNullOrEmpty(evidenceDir), repoRoot, evidenceDir)) &
+                                  "   [" & aimNote & "]")
+
                 Dim covResult = CoverageReport.BuildResult(opts, storeDir, analysisLogPath, wsHealthPath, markerPath)
 
                 If verifyVenue Then
@@ -338,7 +388,8 @@ Public Class BacktestProgram
                                 "[--report <mdOut>] [--settings <path>]")
         Console.Error.WriteLine("  BacktestRunner report   --csv <analysisLogCsv> [--settings <path>]")
         Console.Error.WriteLine("  BacktestRunner coverage --from yyyy-MM-dd --to yyyy-MM-dd " &
-                                "[--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue]")
+                                "[--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue] " &
+                                "[--evidence-dir <dir>] [--store-dir <dir>]")
     End Sub
 
     Private Shared Function ParseDate(s As String) As DateTime
