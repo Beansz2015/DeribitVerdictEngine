@@ -485,6 +485,8 @@ Module Program
         A61c_NonSplitHourTrailingParityUnchanged()
         A61d_NoTrailingSpanLastTsMsGuardHolds()
         A61e_PrecedenceUntouchedTrailingBeatsCaptured()
+        ' [R7 handback, coverage-trailing-split-span-spec.md §7, review 2026-09-04]
+        A61f_TwoTrailingSpansMaxNotFirst()
 
         ' [A51 — candle/funding store write invariant, docs/store-integrity-check-2026-07-31
         ' -post-fix.md] The candle backfill destroyed June 2026 at 3m/5m/15m by writing a
@@ -9260,6 +9262,69 @@ Module Program
               hr.TrailingMsForHour.HasValue AndAlso hr.TrailingMsForHour.Value = expectedMs,
               String.Format("classification={0} trailingMsForHour={1} expected={2}",
                             hr.Classification, If(hr.TrailingMsForHour.HasValue, hr.TrailingMsForHour.Value.ToString(), "Nothing"), expectedMs))
+    End Sub
+
+    ' -- A61f: R7 handback (coverage-trailing-split-span-spec.md §7, review 2026-09-04) —
+    ' `spans.First(finalCls)` under-reports when an hour carries TWO TrailingEdge spans, since
+    ' ObservedLongestTrailingMs is a MAXIMUM. Two scenarios in one fixture: (A) two trailing
+    ' spans of different lengths — the LARGER must be reported, not the first in span order;
+    ' (B) a Defect span alongside a trailing span — TrailingMsForHour must stay Nothing (the
+    ' Nothing-unless-TrailingEdge invariant, asserted directly, R7 acceptance item 4).
+    ' MUTATION PROOF: reverting the fix back to `spans.First(...).TrailingMs` makes scenario A
+    ' report the FIRST span's (smaller) gap — watch that happen before fixing it, as A61a was --
+    Private Sub A61f_TwoTrailingSpansMaxNotFirst()
+        ' Scenario A: two trailing spans, different lengths, same scope both sides (isolates
+        ' from the scope-flip tests A49o/A49q already cover).
+        Dim day = A49Monday()
+        Dim hourStartA = day.AddHours(5)
+        Dim hourStartAMs As Long = A49Ms(hourStartA)
+        Dim flipAMs As Long = A49Ms(hourStartA.AddMinutes(20))
+        Dim hourEndAMs As Long = hourStartAMs + CoverageReport.HourMs - 1L
+
+        Dim markersA As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStartA.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"},
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipAMs, .Enabled = True, .InstanceId = "iid-2"}
+        }
+        Dim span0ATrade As Long = A49Ms(hourStartA.AddMinutes(5))    ' span0: trailing ~899,999ms — the SMALLER, and FIRST in span order
+        Dim span1ATrade As Long = A49Ms(hourStartA.AddMinutes(25))   ' span1: trailing ~2,099,999ms — the LARGER
+        Dim span0AStats As New HourStoreStats With {.RowCount = 1, .LongestGapMs = 0, .LastTsMs = span0ATrade}
+        Dim span1AStats As New HourStoreStats With {.RowCount = 1, .LongestGapMs = 0, .LastTsMs = span1ATrade}
+        Dim spanStatsA As New Dictionary(Of Long, HourStoreStats) From {
+            {hourStartAMs, span0AStats},
+            {flipAMs, span1AStats}
+        }
+        Dim hrA = CoverageReport.ClassifyHour(hourStartA, markersA, Nothing, False, Nothing, 300000L, spanStatsA, Long.MaxValue)
+        Dim smallerMs As Long = (flipAMs - 1L) - span0ATrade
+        Dim largerMs As Long = hourEndAMs - span1ATrade
+
+        ' Scenario B: a Defect span alongside a trailing span (a DIFFERENT hour, so the two
+        ' scenarios' ClassifyHour calls stay independent) — Defect wins the worst-of combine
+        ' (F1 D-5.1's own precedence, untouched by R7), and Max() restricted to the
+        ' Defect-classified set must still read Nothing.
+        Dim hourStartB = day.AddHours(6)
+        Dim hourStartBMs As Long = A49Ms(hourStartB)
+        Dim flipBMs As Long = A49Ms(hourStartB.AddMinutes(20))
+        Dim markersB As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStartB.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"},
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipBMs, .Enabled = True, .InstanceId = "iid-2"}
+        }
+        Dim span0BStats As New HourStoreStats With {.RowCount = 0}   ' empty ⇒ Defect (s1Skipped:=True below)
+        Dim span1BTrade As Long = A49Ms(hourStartB.AddMinutes(25))   ' would be TrailingEdge alone, but Defect outranks it
+        Dim span1BStats As New HourStoreStats With {.RowCount = 1, .LongestGapMs = 0, .LastTsMs = span1BTrade}
+        Dim spanStatsB As New Dictionary(Of Long, HourStoreStats) From {
+            {hourStartBMs, span0BStats},
+            {flipBMs, span1BStats}
+        }
+        Dim hrB = CoverageReport.ClassifyHour(hourStartB, markersB, Nothing, True, Nothing, 300000L, spanStatsB, Long.MaxValue)
+
+        Check("A61f ⭐ R7 — an hour with TWO TrailingEdge spans reports the LARGER gap, not the first in span order; and a Defect span alongside a trailing span still reports TrailingMsForHour=Nothing (the invariant, asserted directly)",
+              hrA.Classification = HourClass.TrailingEdge AndAlso
+              hrA.TrailingMsForHour.HasValue AndAlso hrA.TrailingMsForHour.Value = largerMs AndAlso
+              hrA.TrailingMsForHour.Value <> smallerMs AndAlso
+              hrB.Classification = HourClass.Defect AndAlso Not hrB.TrailingMsForHour.HasValue,
+              String.Format("A: classification={0} trailingMsForHour={1} smaller={2} larger={3} | B: classification={4} trailingMsForHour={5}",
+                            hrA.Classification, If(hrA.TrailingMsForHour.HasValue, hrA.TrailingMsForHour.Value.ToString(), "Nothing"), smallerMs, largerMs,
+                            hrB.Classification, If(hrB.TrailingMsForHour.HasValue, hrB.TrailingMsForHour.Value.ToString(), "Nothing")))
     End Sub
 
     ' ═══════════════════════════════════════════════════════════════════════════════════

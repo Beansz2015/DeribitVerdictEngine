@@ -195,3 +195,29 @@ result.TrailingMsForHour = max( s.TrailingMs ) over spans where s.Classification
 | 4 | `TrailingMsForHour` still `Nothing` on a `Defect` hour that contains a trailing span — **the invariant, asserted directly** |
 
 **Model: Sonnet. Effort: LOW.** One expression, one fixture. ⚠ **Not zero — `A61f` must construct a two-trailing-span hour**, a variant of `A61a`'s shape with a second marker and a second silent span.
+
+### ✅ R7 BUILT 2026-09-04
+
+`CoverageReport.vb`'s split path now reads `spans.Where(Function(s) s.Classification = finalCls).Select(Function(s) s.TrailingMs).Max()` — one expression, `Enumerable.Max(Of Long?)` doing the null-ignoring work for free. `InstanceId` still reads `winner.InstanceId` (unchanged, per R7's own note).
+
+`A61f` built with two scenarios in one fixture (one `Check()`, per house convention): scenario A — two `TrailingEdge` spans of different lengths (899,999ms first, 2,099,999ms second) — reports the **larger**, not the first; scenario B — a `Defect` span alongside a would-be-trailing span — `TrailingMsForHour` stays `Nothing` (acceptance item 4, asserted directly in the same `Check`).
+
+**Before/after proof:** reverted the fix to `winner.TrailingMs` alone, rebuilt — `A61f` **FAILED**, reporting `899999` (scenario A's first/smaller span) against `expected larger=2099999`; scenario B was unaffected (its invariant holds under `First` too, since `First` and `Max` agree on a single-element set). Restored the fix, rebuilt — **PASSED**.
+
+Harness **317 PASS, 0 FAIL, ALL PASS** — exactly the predicted count. `tools/checks/verify-gate.ps1` **GATE PASSED**. `A61a`–`A61e` re-verified unchanged (acceptance item 2).
+
+### R7 review response — reviewing seat, 2026-09-03 UTC
+
+**ACCEPTED.** Packet: [`queue-18-r7-handback-spec-back.md`](queue-18-r7-handback-spec-back.md). **Everything in it reproduced independently**, including the headline: reverting to `winner.TrailingMs` gives **exactly one FAIL, `A61f`, at `trailingMsForHour=899999 smaller=899999 larger=2099999`** — byte-identical to their reported evidence. File restored and `diff`-verified identical. **317 PASS / 0 FAIL** at the fixed state; no `TEMP REVERT` residue in either file; `InstanceId` still reads `winner.InstanceId`.
+
+⭐ **Their attack on R7 is CORRECT and it improves on what R7 claimed.** The invariant does not depend on F1 D-5.1's ordering: `ClassifySpan` pairs a non-`Nothing` `TrailingMs` with exactly one class, so filtering to `finalCls` before selecting can never surface a value unless `finalCls = TrailingEdge` — **whatever precedence produced it. The fix is robust to a future re-ordering of the worst-of combine**, which R7 did not claim and should have.
+
+> ## ⚠ ONE LINK THEIR PROOF LEFT OPEN — and closing it found a LATENT DEFECT that predates this whole item.
+>
+> **They argued the empty-sequence branch is unreachable "by elimination of the five `ElseIf`s above it."** ⛔ **That elimination is not sound on its own: `HourClass` has SEVEN members and the combine handles SIX.** `Captured` · `Defect` · `TrailingEdge` · `ExpectedMissing` · `NotCapturing` · `UnknownScope` — **and `OutOfScopeWeekend`, which appears in no branch.**
+>
+> ✅ **Their conclusion still holds, for a reason one function away:** `ClassifySpan` has seven `Return`s and **none emits `OutOfScopeWeekend`**. It is produced only at `CoverageReport.vb:630`, on `ClassifyHour`'s pre-split path. **So no span can carry it, the `Else` is reached only when every span is `NotCapturing`, and the filtered set is non-empty.**
+>
+> ⛔ **But the guard is a fact about the PRODUCER, not about the combine — and it is unstated and untested.** **If anyone ever teaches `ClassifySpan` to return `OutOfScopeWeekend`** (a weekend span inside a split hour is not far-fetched), **an all-weekend split hour falls to `Else finalCls = NotCapturing` with no matching span, and `spans.First(…)` at `:709` THROWS `InvalidOperationException` — before `Max()` is ever reached.**
+>
+> ⭐ **This is PRE-EXISTING. `spans.First` predates R7, predates the item-18 build, and predates the split-hour work's own F1 review.** Neither seat introduced it; reviewing R7 surfaced it. **Not fixed here — it is a separate item, and it needs its own ruling** (guard the `Else`, or make the combine exhaustive over all seven, or assert the producer's return set). **Recorded so the next seat to touch that combine does not have to rediscover it.**

@@ -709,10 +709,16 @@ Public NotInheritable Class CoverageReport
         Dim winner = spans.First(Function(s) s.Classification = finalCls)
         result.Classification = finalCls
         result.InstanceId = winner.InstanceId
-        ' [coverage-trailing-split-span-spec.md R1/R2] winner.TrailingMs is Nothing unless
-        ' ClassifySpan itself returned TrailingEdge, so this is Nothing whenever finalCls
-        ' isn't TrailingEdge too — matches R2's "Nothing when the hour is not TrailingEdge".
-        result.TrailingMsForHour = winner.TrailingMs
+        ' [coverage-trailing-split-span-spec.md R7, handback 2026-09-04] MAX over every span
+        ' matching finalCls, not just the first — an hour can carry TWO TrailingEdge spans and
+        ' ObservedLongestTrailingMs is itself a maximum, so `winner.TrailingMs` alone could
+        ' silently report the SMALLER of the two. Restricted to finalCls (not all spans) so the
+        ' Nothing-unless-TrailingEdge invariant survives for free: when finalCls isn't
+        ' TrailingEdge, every matching span's TrailingMs is Nothing (ClassifySpan only ever
+        ' pairs a non-Nothing TrailingMs with a TrailingEdge return), and Max() over an
+        ' all-Nothing sequence is Nothing.
+        result.TrailingMsForHour = spans.Where(Function(s) s.Classification = finalCls).
+                                         Select(Function(s) s.TrailingMs).Max()
 
         Dim markerTimes As New List(Of String)
         For Each m In splitMarkers
