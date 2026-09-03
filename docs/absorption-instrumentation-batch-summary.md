@@ -93,7 +93,7 @@ an implementer choice the spec does not rule — see the packet §2 D-2.
 | 1 | `dotnet build` clean | ✅ `dotnet build DeribitVerdictEngine.sln` — 0 warnings, 0 errors |
 | 2 | Harness green incl. the five A60 fixtures | ✅ `ALL PASS` |
 | 3 | `tools/checks/verify-gate.ps1` green | ✅ `GATE PASSED` (`-Mode prepush`) |
-| 4 | One live run, new columns read back | ✅ **BOTH halves verified on live data** — see below |
+| 4 | One live run, new columns read back | ✅ **BOTH halves verified on live data** — see below. ⭐ **AND RE-VERIFIED IN PRODUCTION 2026-09-03 on 1,664 collector rows — see §4.2** |
 | 5 | Reader audit's 17 lines recorded | ✅ packet §0 |
 | 6 | `docs/DeribitIndicatorProject.md` §15 entry with R6's statement | ✅ |
 
@@ -148,6 +148,25 @@ denominators are finally visible.**
 ⚠ **`EpisodeSec` = 1.3 s on this row — far below the 60 s auto-run interval.** That is
 the shape the spec's ⭐ note said to watch for. ⛔ **One row is not evidence and this build
 does not chase it** (spec §6). It is recorded here for the study that reads the column.
+
+### 4.2 ⭐ Production verification — added 2026-09-03 by the reviewing seat
+
+**Deployed 2026-09-01 15:49:02 UTC** to `i-0d6c133058876273e` via `tools/ops/collector.ps1 deploy`, commit `49d0098`. All six hashes verified against the local Release build **before** the run. Read back read-only over SSM.
+
+| | |
+|---|---|
+| Rows since deploy | **1,664** · `2026-09-01 15:50:01` → `2026-09-03 12:36:00` |
+| Cadence | **37.2 rows/hour** vs the 37.0 baseline in [`seat-handover-2026-08-29.md`](seat-handover-2026-08-29.md) §1.1 — **healthy** |
+| Header | **116 columns**, the five appended after `SignalId` — **R1 honoured in production** |
+| Rotation | `analysis_log.csv.v0.7.bak`, **31,234,053 bytes** — 9,229 larger than the pre-deploy copy-back, exactly the rows between the fetch and the restart. ⚠ **No timestamp in the name** — there was no pre-existing `.bak`, so it took the hardcoded string. That is §2's D-1 |
+| Populated rows | **289** (17.4 %) |
+| `PullLB`/`PostLB` cross-check | ✅ **145 rows.** Recovered 412,422 vs actual 412,440; 55,593 vs 55,590 |
+| `SizeMin`/`SizeStart` cross-check | ✅ **7 of 27** usable; 20 blocked by F2 rounding on `AbsorptionRatio`. Agreement 0.24 %–4 % where `Ratio ≥ 0.04` |
+| Absorption signals fired | **0** in 44.8 h — expected (289 × 0.17 % funnel survival ≈ 0.5) and **re-confirms the under-engagement finding on fresh post-deploy data** |
+
+⭐ **Acceptance §7 item 4 is CLOSED for all five columns.** The 26 % discrepancy on the single `Ratio = 0.01` row is F2 quantisation — the error scales inversely with `Ratio`, which is rounding's signature, not a defect's.
+
+---
 
 ## 5. Gate tail
 

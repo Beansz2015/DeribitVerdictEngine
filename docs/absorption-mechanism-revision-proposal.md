@@ -172,6 +172,24 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 
 **Expected effect: unquantified, deliberately.** Episode duration is not logged (§5), so the multiplier cannot be estimated from the book. **Do not let anyone put a projected flag rate on this without that instrumentation.**
 
+> ## ⚠⚠ THE INSTRUMENTATION SHIPPED, AND ITS FIRST READING POINTS THE OTHER WAY. 2026-09-03.
+>
+> **`AbsorptionEpisodeSec` went live on the collector 2026-09-01 15:49:02 UTC.** First reading, **1,664 rows over 44.8 h, 289 populated:**
+>
+> ```
+> n = 289    min = 0 s    median = 1.7 s    max = 135.2 s
+> ```
+>
+> ⛔ **§4.1's premise is that 10 seconds is TOO SHORT. If the median episode is observed at 1.7 s old, episode-cumulative accumulation gives a SHORTER span than the 10-second rolling window, not a longer one — so §4.1 as designed would SHRINK the numerator, not extend it.**
+>
+> ⚠ **And the true episodes are shorter still than 1.7 s.** The reading is length-biased twice over: a poll is more likely to land inside a long episode than a short one, **and an episode that opens and closes between two polls is never seen at all.** Both biases push the observed median above the truth.
+>
+> ⛔⛔ **THIS IS A PRELIMINARY READ AND MUST NOT BE TICKED ON.** n = 289 over **2 weekdays**, against D-1's ruled **~2 weekday-weeks** (earliest ~2026-09-15). ⚠ **Acting on it now would repeat this project's most-repeated error — a truncated view mistaken for the whole, three times in five days per [`seat-handover-2026-08-29.md`](seat-handover-2026-08-29.md) §5.**
+>
+> ⭐ **What it changes about the 09-15 read: the first question is no longer "how much does §4.1 help." It is "does §4.1's premise survive."**
+>
+> ⚠ **And the book still cannot say WHY episodes are short.** Age-at-poll cannot separate *naturally short* from *killed by level re-map* — births and deaths between polls are invisible. **That is D-6d's question, and answering it needs a different measurement, not more of this one.** See [`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) §0.3.
+
 ### 4.2 D8 `pullFrac` on sparse `postLB` — instrument before touching
 
 **The named residual:** `pullFrac = pullLB / max(postLB, depletion_floor_usd)` inflates when `postLB` is small.
@@ -293,7 +311,7 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 | # | Decision | Author's recommendation | ⚠ After the 2026-08-19 check |
 |---|---|---|---|
 | **D-1** | Ship the §5 instrumentation **first, alone**, and re-read after ~2 weekday-weeks | ✅ **Yes.** Every other decision here is unmeasurable without it, and it is display-only | ⚠ **The premise is now partly false — it was NOT all unmeasurable.** ≈ 77 % of the observation loss and both halves of §4.2's residual were measured from the shipped book (§4.3, §4.2 boxes). **`AbsorptionEpisodeSec` still has no substitute** and raw `pullLB`/`postLB` still upgrade a fingerprint to a reading, so the row survives — but **not as a blocker on the other rows** |
-| **D-2** | `window_sec` → **episode-cumulative pressing** (§4.1) | ✅ **Yes** — but **after D-1 reads**, so the effect is measured rather than projected | ⚠ **Do not tick this as though the span were the whole problem.** The engine counts only **31 %** of the in-band flow its own 10 s window already admits (§4.3 box (b)) — a cumulative numerator accumulates over the same gap. **The span is the third-largest of three causes**, behind geometry and episode state |
+| **D-2** | `window_sec` → **episode-cumulative pressing** (§4.1) | ✅ **Yes** — but **after D-1 reads**, so the effect is measured rather than projected. ⛔ **D-1 HAS SHIPPED (2026-09-01) AND ITS FIRST READING POINTS AGAINST §4.1 — median `EpisodeSec` 1.7 s, so episode-cumulative would SHORTEN the span, not extend it. See §4.1's 2026-09-03 box. PRELIMINARY: 2 weekdays of a ruled ~10. Do not build against this row before ~2026-09-15** | ⚠ **Do not tick this as though the span were the whole problem.** The engine counts only **31 %** of the in-band flow its own 10 s window already admits (§4.3 box (b)) — a cumulative numerator accumulates over the same gap. **The span is the third-largest of three causes**, behind geometry and episode state |
 | **D-3** | Leave `max_pull_frac` and every other anchor **untouched** | ✅ **Yes.** §3.2 found no evidence D8 is broken, and moving it is the re-tuning Path B rejected | ⚠ **ACTION SURVIVES, REASON DOES NOT.** There *is* evidence D8 is broken — a 200–380× point mass at exactly 1.000 plus a floored `postLB` on ~27 % of non-zero rows. **Re-ground on: the artefact is real but too small to be the fix (≈3 pp of a 59 % veto), so the response is instrumentation, not a threshold move.** ⚠ Note the veto costs more than §3.2 shows: **10 of the 15 gate-reaching rows, one by 0.0115** |
 | **D-4** | Treat the ~49 % arming rate as an **open question**, not a defect | ✅ **Yes** — §4.3. Do not narrow the proximity gate on a hunch | ⚠ **ACTION SURVIVES, PREMISE IS AN ARITHMETIC ERROR.** The rate is **11.78 %**, not 49 % (§4.3 box (c)). **The gate's problem is not how often it arms — it is that it arms 3× wider than the shell that measures.** Those want different fixes, and this row should say which one it is deferring |
 | **D-5** | Keep `scoring_enabled = false` and the §5.1/§5.2 activation gates **unchanged** | ✅ **Yes.** The n ≥ 30 flagged-evaluated-rows gate stands; this proposal does not touch it | ✅ **Unchanged by the check.** ⚠ Worth stating plainly alongside it: because `scoring_enabled` is false and the failure mode is **silence**, a build that underperforms will not announce it — the write-guard shape this proposal's own §0 warns about, pointed at itself |

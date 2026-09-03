@@ -368,9 +368,30 @@ book on its first run. **That is correct and non-destructive**, but a spec that 
   **2026-09-01 15:04:00 UTC** and both derived columns reproduce exactly from the five
   new ones — see [`absorption-instrumentation-batch-summary.md`](absorption-instrumentation-batch-summary.md) §4.1.
   **Superseded in place rather than deleted, per the convention's own rule.**
-- ⛔ **That the five columns are correct on the AWS collector** (`i-0d6c133058876273e`).
-  I built and ran locally only. The collector's book will rotate on its first run after
-  deploy; the five will be empty until an episode opens there.
+- ✅ ~~**That the five columns are correct on the AWS collector** (`i-0d6c133058876273e`).~~
+  **RESOLVED 2026-09-03 by the reviewing seat. Deployed 2026-09-01 15:49:02 UTC; verified
+  on 1,664 production rows over 44.8 h.** The book rotated exactly as predicted
+  (`analysis_log.csv.v0.7.bak`, 31,234,053 bytes — 9,229 bytes larger than the pre-deploy
+  copy-back, the difference being the rows written between the fetch and the restart).
+  **Header is 116 columns ending
+  `SignalId,AbsorptionEpisodeSec,AbsorptionPullLB,AbsorptionPostLB,AbsorptionSizeStart,AbsorptionSizeMin`
+  — R1 honoured.** Both cross-checks pass:
+
+  | Cross-check | Rows | Agreement |
+  |---|---:|---|
+  | `PullFrac × PostLB → PullLB` (F4) | **145** | 412,422 vs 412,440 · 55,593 vs 55,590 — **0.005 %** |
+  | `AggrUsd ÷ Ratio → depletion` (F2) | **7** of 27 | 0.24 %–4 % where `Ratio ≥ 0.04`; **26 % at `Ratio = 0.01`** |
+
+  ⚠ **The 26 % outlier is NOT a defect — it is F2 quantisation and nothing else.** At
+  `Ratio = 0.01` one logged unit is 100 % of the value; at `Ratio = 0.55` it is 1.8 % and
+  the error is 0.24 %. **The error scales inversely with `Ratio`, which is the signature of
+  rounding, not of a bug.**
+
+  ⛔ **A limitation nobody had named: `AbsorptionRatio`'s F1/F2 format blocks the
+  cross-check on 20 of the 27 otherwise-qualifying rows.** It does not affect the stored
+  values, only the ability to reproduce them from the older derived column. **Recorded, not
+  proposed as a change** — see D-2 in this packet's §2, which already queues the format
+  question.
 - ⛔ **What the v48 §4a fire-rate watch actually globs for `.bak` files.** D-1 above turns
   on this and I did not open it. **Do not act on D-1 without checking it first.**
 - ⛔ **The technical accuracy of the D-6a comment text (R8).** I transcribed it verbatim
