@@ -102,6 +102,26 @@ Measured this pass on **both books**, weekday, UTC, since v61 — the method in 
 > ✅ **The section's CONCLUSION survives untouched** — the book still cannot resolve episode life, and `AbsorptionEpisodeSec` still has no substitute. **What does not survive is my attribution.** ⚠ **The two causes have opposite implications: sampling means the episodes are fine and we cannot see them; re-map churn means the episodes are being destroyed.**
 >
 > ⭐ **And this is a live candidate mechanism for D-6d.** A re-map fires `CloseEpisode()`, `Active` goes False, and [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:159` — `If Not side.Active Then Return` — **drops every trade until a book snapshot re-arms the side.** That is precisely §4.3 box (b)'s *"the side is not `Active` when the flow arrives."* ⛔ **HYPOTHESIS, NOT A DIAGNOSIS.** It is not shown that the 50 missed rows coincide with re-maps, nor that an HVN was the selected level in those cases.
+
+> ## ⛔ THE RE-MAP HYPOTHESIS IS LARGELY FALSIFIED — 2026-09-03, and by data that cost nothing.
+>
+> **`AbsorptionEpisodeSec` shipped 2026-09-01. Splitting the 289 populated collector rows by what the PREVIOUS row held — using only `AbsorptionLevel` and `AbsorptionEpisodeSec`, both already logged:**
+>
+> | Previous row | n | median `EpisodeSec` |
+> |---|---:|---:|
+> | **same `AbsorptionLevel`** | 28 | **3.7 s** |
+> | **different `AbsorptionLevel`** | 35 | **4.1 s** |
+> | no episode at all | 226 | 1.3 s |
+>
+> ⛔ **Re-map does not explain it. Same-level and different-level rows carry indistinguishable episode ages** (3.7 s vs 4.1 s). If re-map were killing episodes, the different-level group would be systematically younger. ⚠ **At n = 28/35 this test is underpowered against a SMALL difference — but it rules out a large one, and a dominant cause would be large.**
+>
+> ⭐⭐ **THE DECISIVE NUMBER IS THE SAME-LEVEL ROW'S 3.7 s, AND IT IS ROBUST TO THE SMALL n.** Rows arrive ~97 s apart (1,664 rows / 44.8 h). **An episode observed at an UNCHANGED level is still only 3.7 s old — so it is a NEW episode. It died and was reborn inside the gap, with the level never moving.** Re-map cannot be the cause when the level did not change.
+>
+> ⭐ **What is left, from `CloseEpisode()`'s call sites:** `Not gateOpen` — **price leaving the proximity shell and re-entering it.** Break-through and `Reset()` are the other two, and neither fits a same-level rebirth as naturally. **Proximity-boundary chatter is now the leading candidate, and it was on nobody's list.**
+>
+> ⚠ **It also reframes D-6a.** The 0.30 shell was ruled INTENDED as an early-baseline capture — that ruling stands on its own mechanism. **But if price chatters across that boundary, each crossing discards `SizeStart`, `SizeMin`, `PullLB`, `PostLB` and `PressSum` and re-samples them.** The arm-early design assumes ONE arming per approach. It may be getting many.
+>
+> ⛔ **Still preliminary: 2 weekdays of a ruled ~10, and n = 28 on the load-bearing cell.** ⭐ **But it is enough to say a counter of "episodes closed BY RE-MAP" would have measured the wrong thing.** Any future counter should split closes by CAUSE — gate-close, break-through, re-map, reset — and gate-close is the one to watch.
 - ✅ **So §5's "no substitute" claim STANDS, and it now stands on a test rather than on an assumption.**
 - ⛔ **It also caps this packet's own episode-level numbers.** Any statement of the form "N % of armed episodes never reached the band" is an **upper bound**, because an episode can dip into the band between two polls unseen. **No such number is offered as evidence anywhere in this packet.**
 
