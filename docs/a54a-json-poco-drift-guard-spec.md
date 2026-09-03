@@ -375,6 +375,35 @@ and the result recorded in the spec-back.** [`seat-handover-2026-09-03.md`](seat
 
 ---
 
+## 6a. Acceptance, and the parity statement the hard rule requires
+
+**Display-string parity: NO OBLIGATION — stated explicitly per CLAUDE.md's hard rule.** No
+line is added, removed, renamed or re-formatted on any surface. The guard is harness-only.
+The three POCO re-syncs change **no rendered output at all** on the normal path, because the
+app reads JSON and every production call site passes the cfg value by name. On the
+parse-failure path the *values behind* CVD / MicroCVD / transport change, but **no line's
+shape or presence does**, so `UI/MainForm_PlaintextSnapshot.vb` and
+`UI/MainForm_Render_Cards.vb` are untouched and no card binding is affected.
+
+⚠ **The implementer must still say this in the commit message** — the rule requires the
+statement, not the absence of a change.
+
+**Acceptance:**
+
+- Solution + `AutoTweaker` + `WhatIfRunner` + `CeilingAudit` + `BacktestRunner` + `OrderCheck`
+  build **0/0 Release**, each run separately.
+- Harness **ALL PASS**, `A1`–`A61f` unregressed + `A62a`–`A62g`.
+- `verify-gate.ps1` **GATE PASSED**.
+- ⛔ **Every mutation in §6 RUN, not reasoned** — reverted, confirmed FAIL, restored,
+  confirmed PASS, with the actual output recorded.
+- **Settings stays v68.** No key added or changed ⇒ **no version bump, no `change_log`
+  entry, no dataset boundary.** ⚠ **A §15 row is still owed** — the re-syncs change what the
+  parse-failure path does.
+- ⛔ **ONE commit.** D-4 requires the guard and all three re-syncs to land together, or the
+  harness ships red.
+
+---
+
 ## 7. Session 2 — scoped (b), dead-code removal
 
 **The ruling:** delete the `Optional` default from method parameters that mirror a settings
@@ -457,3 +486,58 @@ trailing genuinely-optional parameters, so promoting one to required keeps the o
 | D-table ticked | **2026-09-04** | Trader-directed. D-1/D-2/D-4/D-5 as recommended; **D-3 ruled against the abstention** — sync `transport` to `"ws"` |
 | Session 1 built | — | ⛔ Not started |
 | Session 2 built | — | ⛔ Not started |
+
+---
+
+## 11. ⛔ For the implementer — read this before §5
+
+**The spec author is the REVIEWER on this build and did not write the code, deliberately**
+(trader-directed, 2026-09-04). That separation is the reason for everything below.
+
+### 11.1 ⛔ REPRODUCE the numbers. Do NOT ask for the probe.
+
+§3's measurements came from a throwaway probe in the author's scratchpad. **It is deliberately
+not committed and will not be handed over.**
+
+⭐ **§3.1's nine paths, and the counts — 261 compared · 0 orphans · 0 JSON-only · 15 nullable
+skips — are a FALSIFIABLE PREDICTION, not a specification.** Write the walk from §5 and see
+what it reports.
+
+- **Same numbers ⇒ two independent implementations agree**, and that is worth more than either
+  one alone.
+- ⚠ **Different numbers ⇒ one of us is wrong, and finding out is the point.** Report the
+  difference in the spec-back. **Do not quietly adjust the walk until it matches §3.**
+
+⛔ **Porting the author's probe would destroy the only independent check this build has.**
+This is [`seat-handover-2026-08-12.md`](seat-handover-2026-08-12.md)'s *"commission the
+attack, not the review"* applied at the build boundary.
+
+### 11.2 The spec-back
+
+Follow [`batch-review-packet-convention.md`](batch-review-packet-convention.md) — **two
+documents, not one:** a `*-batch-summary.md` outcome record and a `*-spec-back.md` review
+packet (ranked verification handles · decisions queued with your read · feedback on **this
+spec's own assumptions** · what you did not verify).
+
+⭐ **§3, §4.1 and §5 are the author's claims and are fair game. Attack them.** The author
+already got trap 2 wrong on the first attempt (§3.3) and abstained on D-3 where the code had
+the answer (§4.1). **Assume there is a third.**
+
+### 11.3 What the reviewer will check, ranked
+
+⚠ **Every handle below asserts a PROPERTY. Per the 2026-08-11 ruling, a count of a name is
+not a handle — `grep -c` over a symbol that appears in comments proves nothing.**
+
+| # | Handle | Rejects if |
+|---|---|---|
+| **1** | **A62b was written FIRST and its mutation was RUN.** Show the FAIL output from the neutered comparison, then the PASS after restoring | The spec-back says A62b "exists" or "passes" without the mutation output |
+| **2** | **The trap-2 swap produces exactly SEVEN false orphans.** Swap the nullable and absent-key tests in A62c and record the count | A different count, unexplained. It means your walk and §3.3's differ somewhere |
+| **3** | **The D-1 allow-list has exactly TWO entries.** Assert the declaration | A third entry. **That is §0's escalation trigger and it must have been surfaced, not absorbed** — see the standing rule that a named stop condition is honoured literally |
+| **4** | **`Compared`'s floor is asserted AND proven.** Mutate the walk to visit nothing; A62a must FAIL | A62a passing on a walk that compared zero properties. That is the "reports success it never performed" defect, five instances on file |
+| **5** | **A62g proves the allow-list is a list, not a class exemption** | The allow-list widened to "any Boolean" and A62g still passes |
+| **6** | **`OrderCheck.vbproj` is UNCHANGED.** `git diff` on it is empty | A `CopyToOutputDirectory` on `settings.json` — that is the fifth copy §5.1 forbids, and it lags by construction |
+| **7** | **The D-3 COMMENT was rewritten**, not just the value flipped | `EngineSettings.vb:1150` still claims *"P3 flips the default. Stays 'rest' in P1/P2"* |
+| **8** | **One commit; §15 row present; settings still v68 with no `change_log` entry** | The guard and the re-syncs split across commits — the harness ships red in between |
+
+⛔ **"Harness ALL PASS" is not evidence on its own and will not be accepted as the headline.**
+The defect class this guard exists to close ran for two months inside a green harness.
