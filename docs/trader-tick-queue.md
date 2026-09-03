@@ -12,7 +12,7 @@
 >
 > ⭐ **CURRENT STATE READ: [`seat-handover-2026-08-29.md`](seat-handover-2026-08-29.md).** Settings **v68**. ⛔ **NO PUSH STATE IS QUOTED HERE ON PURPOSE — `git status -sb` is the answer, and this line was wrong twice in four days because the trader pushes mid-session.**
 >
-> ⭐ **NOTHING IS BLOCKED and nothing is owed by the trader.** Three items are ready to build; the 08-29 handover's §0 recommends **item 21** (let `coverage` be aimed at a copy-back — Sonnet, low) because it unblocks every future audit. **One trader DECISION is open: the absorption mechanism revision §6 D-table (Opus, high).**
+> ⭐ **NOTHING IS BLOCKED and nothing is owed by the trader.** ✅ **Item 21 — `coverage` aimed at a copy-back — is DONE 2026-09-03 (`7794320`), and with it R8, which prints the resolved store and evidence paths on every run.** Items 6 and 8 remain ready to build. ✅ **The absorption D-table is TICKED 2026-09-01** — D-1…D-5 ticked, D-6a/D-6b ruled, D-6c open until §5 reads (~09-15), D-6d parked. Its §5 instrumentation is BUILT, DEPLOYED and accepted. ⛔ **TWO decisions ARE open and they are hiding in §2 build rows — items 17 and 18. See the box below §0a.**
 >
 > ⛔ **KELLY DATED TRIGGER — NOT MET: 311 weekday STRONG against ≥406, and a FRESH FETCH CANNOT CLOSE IT (checked 2026-08-31).** ⛔ **Only ONE weekday has elapsed since the 08-28 book** — 08-28 was a Friday cut at 15:38, 08-29/08-30 are weekend and excluded by the weekday-only rule. **Ceiling available ≈ 43 even at the all-time record daily rate, against a shortfall of 95.** Daily weekday STRONG runs `0…35`, **median ~11**. **Revised: ~09-03 at a sustained record rate, ~09-10 at the median, ~09-16 if quiet.** ⛔ **Do not fetch for this before ~2026-09-08. W6-4 waits with it.**
 >

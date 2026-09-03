@@ -16,7 +16,7 @@
 
 | Pick | Item | Model / effort |
 |---|---|---|
-| ⭐ **A** | **Item 21 — let `coverage` be aimed at a copy-back.** Smallest, and it unblocks every future audit | **Sonnet, low** |
+| ~~⭐ **A**~~ | ✅ ~~**Item 21 — let `coverage` be aimed at a copy-back.**~~ **DONE 2026-09-03 (`7794320`)** — see §2 | ~~Sonnet, low~~ |
 | **B** | Item 6 — `WsTradeProbe` through the shared trade reader (S-1) | Sonnet medium |
 | **C** | Item 8 — **A54a**, the JSON↔POCO reflection drift guard. ✅ Already RULED 2026-08-11 (option d + scoped b) | Sonnet medium |
 
@@ -64,7 +64,7 @@
 |---|---|---|
 | ~~5~~ | C1-coverage F1 | ✅ **SHIPPED AND PUSHED** (`4032f9c`), reviewed and accepted, three findings recorded |
 | **20** | AWS copy-back + coverage run | ✅ **DONE 2026-08-28.** One SSM attach, all transfers verified |
-| **21** | `coverage` cannot be aimed at a copy-back | ⛔ **NEW — §0 above, recommended first task** |
+| ~~**21**~~ | ✅ ~~`coverage` cannot be aimed at a copy-back~~ | ✅ **DONE 2026-09-03 (`7794320`).** `--evidence-dir` aims all four paths at a copy-back's `aws_fetch/<stamp>/`; `--store-dir` overrides the store independently; a bad dir exits 1. ⭐ **Plus R8, found at review: the resolved store and evidence paths now print on EVERY run** — the parser drops a trailing value-taking flag silently, so `--evidence-dir` with no value used to audit the local box and report "0 hours, 0 DEFECT, exit 0", which reads as clean rather than not-run. Spec + packet: [`coverage-aim-at-copyback-spec.md`](coverage-aim-at-copyback-spec.md) · [`coverage-aim-at-copyback-spec-back.md`](coverage-aim-at-copyback-spec-back.md) |
 
 ⛔ **Gated, and the gate MOVED:**
 
