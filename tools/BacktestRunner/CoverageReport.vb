@@ -703,9 +703,27 @@ Public NotInheritable Class CoverageReport
         ElseIf spans.Any(Function(s) s.Classification = HourClass.ExpectedMissing) Then
             finalCls = HourClass.ExpectedMissing
         Else
+            ' [coverage-trailing-split-span-spec.md R8, RULED 2026-09-03] Reached only because
+            ' ClassifySpan never emits OutOfScopeWeekend — the seventh HourClass, handled by no
+            ' branch here. If that ever changes, this Else and the combine's exhaustiveness must
+            ' be revisited together.
             finalCls = HourClass.NotCapturing
         End If
 
+        ' [R8, AMENDED at review 2026-09-03] Membership check FIRST, then First() —
+        ' deliberately NOT FirstOrDefault plus a Classification comparison. A default value
+        ' tuple carries Classification = CType(0, HourClass), so comparing it against finalCls
+        ' is an ORDINAL read — and this enum's own comment (see HourClass above) states that
+        ' ordinal position is INERT and the insertion point is FREE. Reordering so that
+        ' NotCapturing sat at ordinal 0 would have silently DISARMED this guard on exactly the
+        ' case it exists to catch, via an edit the enum explicitly authorises. This form
+        ' depends on no ordinal, and First() provably cannot throw after the check.
+        If Not spans.Any(Function(s) s.Classification = finalCls) Then
+            Throw New InvalidOperationException(
+                "ClassifyHour: the combine selected finalCls=" & finalCls.ToString() &
+                " but no span in this split hour carries that classification. " &
+                "See the Else branch's comment above — this should be unreachable.")
+        End If
         Dim winner = spans.First(Function(s) s.Classification = finalCls)
         result.Classification = finalCls
         result.InstanceId = winner.InstanceId

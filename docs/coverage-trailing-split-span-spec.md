@@ -265,6 +265,10 @@ Harness **317 PASS, 0 FAIL, ALL PASS** — exactly the predicted count. `tools/c
 | **Add an `ElseIf` for `OutOfScopeWeekend`** | ⛔ **Requires inventing a precedence position for a class that cannot occur.** D-3 ruled the existing ordering with stated reasons; **considered-looking precedence for an impossible case is worse than the gap**, because the next reader takes it as deliberate |
 | **Invert the derivation** (pick the winning span first, derive `finalCls` from it) | ⚠ **Architecturally the better answer — it kills the class by construction.** Rejected on risk: it **rewrites D-3-ruled combine logic to fix a path that cannot execute.** Recorded because it is the right shape if that combine is ever rewritten for another reason |
 
+### ✅ R8 BUILT 2026-09-04
+
+Two parts, both landed: **(1)** `winner = spans.First(...)` → `spans.FirstOrDefault(...)` plus an explicit `If winner.Classification <> finalCls Then Throw ...` naming `finalCls` in the message; **(2)** a comment on the `Else` branch stating the `OutOfScopeWeekend` dependency. No fixture — confirmed unreachable given `ClassifySpan`'s current seven `Return`s, not attempted by editing `ClassifySpan` to manufacture a red. Harness **317 PASS, 0 FAIL, ALL PASS** (unchanged). `TrailingMsForHour`'s line re-confirmed byte-identical by diff — the R8 edit's hunk ends before it. Gate **PASSED**. Packet: [`queue-18-r8-handback-spec-back.md`](queue-18-r8-handback-spec-back.md).
+
 ### Acceptance
 
 | | Check |
@@ -274,3 +278,23 @@ Harness **317 PASS, 0 FAIL, ALL PASS** — exactly the predicted count. `tools/c
 | 3 | ⭐ **R7's `TrailingMsForHour` line is UNCHANGED** — still `spans.Where(… = finalCls).Select(… .TrailingMs).Max()`. **Confirm by diff; this is the regression that would silently undo R7** |
 | 4 | `tools/checks/verify-gate.ps1` green |
 | 5 | **No new fixture.** ⚠ **State in the spec-back that none is possible and why** — not that none was needed |
+
+### R8 review response — reviewing seat, 2026-09-03 UTC. ACCEPTED, with one amendment folded in.
+
+**Packet: [`queue-18-r8-handback-spec-back.md`](queue-18-r8-handback-spec-back.md). All five acceptance items verified independently** — harness **317 / 0**, gate `PASSED`, and ⭐ **R7's `TrailingMsForHour` line does not appear in the R8 diff at all** (`grep -c` on the diff → 0), which was the acceptance item most likely to be silently violated.
+
+⭐ **Their §1 is the standout: they distinguished "no fixture was POSSIBLE" from "no fixture was needed", and named why this differs from `A61f`** — where the case was rare but constructible. **They did not try to manufacture a red, and said so.**
+
+⭐ **They also found the ordinal-0 concern themselves, unprompted, and reasoned it correctly for today's enum.**
+
+> ## ⛔ THE AMENDMENT — the guard as first written made the enum's own comment FALSE.
+>
+> **`HourClass`'s comment states: *"Ordinal position here is inert … never by ordinal … so the insertion point is free."*** ⛔ **`FirstOrDefault` on a value tuple returns `default`, whose `Classification` is `CType(0, HourClass)` — an ORDINAL read.** The guard's soundness depended on ordinal 0 being `Captured`.
+>
+> ⛔ **The failure was precisely targeted: a future seat reorders so `NotCapturing` sits at ordinal 0 — which that comment explicitly authorises — and the default tuple then carries `NotCapturing`, `winner.Classification = finalCls`, the guard does NOT fire, and `result.InstanceId` is silently `Nothing`.** **The tripwire would be disarmed by an edit the file licences.**
+>
+> ✅ **Folded in at review: membership check FIRST (`spans.Any`), then `First()`.** Ordinal-independent; `First()` provably cannot throw after it; same named message; **and the enum's comment stays true.** Verified: harness still **317 / 0** (parity), R7's line untouched, gate `PASSED`.
+>
+> ⚠ **Two process notes worth keeping.** (1) A `sed`-splice appeared to leave a duplicated `End If`; **the build was the arbiter and said 0 errors — "fixing" the apparent duplicate would have broken the file.** (2) `grep -c FirstOrDefault` returns **1** after the amendment — **from the comment that explains what was deliberately not used.** That is the count-a-name trap from the 2026-08-11 ruling, hit again. **Assert the declaration, not the name.**
+
+⚠ **One stale claim in the packet, harmless but worth naming:** it says *"neither has been committed"* of R7 and R8. **R7 was committed as `6a6f93e`.** An inherited state claim, against this project's own standing rule to run `git status -sb` rather than carry one forward.
