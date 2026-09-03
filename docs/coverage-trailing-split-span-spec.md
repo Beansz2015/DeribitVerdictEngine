@@ -1,6 +1,6 @@
 # `ObservedLongestTrailingMs` — measure it per-span, not per-hour
 
-**Status:** SPEC. Buildable. **The decision it was waiting on is RULED.**
+**Status:** ✅ **BUILT 2026-09-03.** Harness `ALL PASS` (`A61a`–`A61e`), gate `PASSED`. A61a proven to fail pre-fix and pass post-fix; a real copy-back run before/after showed no change (its one trailing-edge hour is not split). Packet: [`queue-17-18-batch-spec-back.md`](queue-17-18-batch-spec-back.md).
 **Item:** queue item **18** ([`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) §2, raised 2026-08-26 from the C1-coverage F1 review).
 **Ruling:** ⭐ **PER-SPAN — trader, 2026-09-03.** The alternative (stop reporting the figure on split hours) is rejected: the number is recoverable, so discarding it is a silent hole in a coverage report, which is the defect class this report exists to expose.
 **Author:** the orchestrator seat of 2026-09-03.
@@ -140,3 +140,58 @@ Replace the whole-hour arithmetic at `:1073-1077` with a max over `hr.TrailingMs
 - ⛔ **Whether any real copy-back contains the triggering shape.** The case is reachable by inspection only. **If none exists in the sample, acceptance item 7 reports "no change" and that is a complete answer.**
 - ⛔ **Whether `ClassifyHour` can name its deciding span without restructuring.** ⚠ **I read its signature and doc comment, NOT its body.** **That reading is the implementer's first real task and it is the escalation trigger above.**
 - ⛔ **`HourStoreStats`' per-span key semantics** — I confirmed `AccumulateSplitSpanStats` returns `Dictionary(Of Long, HourStoreStats)` but did not verify what the key is. **Read it; do not assume it is the span start.**
+
+---
+
+## 7. R7 — HANDBACK, added at review 2026-09-04. `spans.First` under-reports a metric named "longest".
+
+⛔ **This is a SPEC GAP, not an implementation defect.** R1 said *"compute the trailing span's own gap"* — **singular, assuming one trailing span per hour.** The build implemented exactly that, and its packet describes the choice openly as *"the winning span in the worst-of combine."* **Nothing was hidden and nothing was done wrong against the spec as written.**
+
+### The defect
+
+`CoverageReport.vb`, the split path:
+
+```vb
+Dim winner = spans.First(Function(s) s.Classification = finalCls)
+result.TrailingMsForHour = winner.TrailingMs
+```
+
+⛔ **When an hour has TWO `TrailingEdge` spans, this takes the FIRST — not the largest.** `CoverageResult.ObservedLongestTrailingMs` is a **maximum**, so such an hour can contribute the smaller of its two trailing gaps.
+
+- **Reachable:** an hour carrying ≥2 markers where two spans each exceed `gapMs` (default 300 000 ms). **Rare; not impossible.**
+- **Direction: under-reports.** The safer way to be wrong — and still wrong for a field whose name is *longest*.
+- ⚠ **Uncovered.** None of `A61a`–`A61e` builds an hour with two trailing spans.
+
+### R7 The fix — max over the deciding class, NOT over all spans
+
+⛔ **Do not simply max over every span's `TrailingMs`.** That breaks the invariant the current comment correctly relies on: **`TrailingMsForHour` is `Nothing` whenever the hour is not `TrailingEdge`.**
+
+**Max over spans whose `Classification = finalCls`:**
+
+```
+result.TrailingMsForHour = max( s.TrailingMs ) over spans where s.Classification = finalCls
+                           ( Nothing when that set has no non-null TrailingMs )
+```
+
+⭐ **The invariant survives for free.** When `finalCls` is `Defect`, every span in that set returned `Nothing` from `ClassifySpan` — verified: `ClassifySpan` has six returns passing `Nothing` and exactly one passing `trailingMs`, on the `TrailingEdge` branch alone.
+
+⚠ **`InstanceId` keeps using `First`.** It is a representative, not an aggregate. **Only the trailing figure changes** — say so in the diff rather than letting a reviewer wonder why one line moved and its neighbour did not.
+
+### A61f — the missing fixture
+
+| | Fixture | Asserts |
+|---|---|---|
+| **A61f** | **Two trailing spans in one hour** | A split hour where **both** spans classify `TrailingEdge` with **different** gaps. ⭐ **The reported figure is the LARGER.** Build the failing case first: on the current code it reports the FIRST span's gap — **watch that happen before fixing it**, exactly as `A61a` was proven |
+
+⚠ **Mutation-test it like the rest:** break the `Max` back to `First`, watch `A61f` go red, restore.
+
+### Acceptance for the handback
+
+| | Check |
+|---|---|
+| 1 | ⭐ **`A61f` fails on the current code and passes after.** Recorded as a before/after, not asserted |
+| 2 | **`A61a`–`A61e` still pass unchanged.** A one-trailing-span hour has a single-element set, so `Max` and `First` agree — **if any of them moves, the change reached too far** |
+| 3 | Harness green at **317**, gate `PASSED` |
+| 4 | `TrailingMsForHour` still `Nothing` on a `Defect` hour that contains a trailing span — **the invariant, asserted directly** |
+
+**Model: Sonnet. Effort: LOW.** One expression, one fixture. ⚠ **Not zero — `A61f` must construct a two-trailing-span hour**, a variant of `A61a`'s shape with a second marker and a second silent span.

@@ -1,6 +1,6 @@
 # `BuildResolutionCfg` — declare the literals MECHANISM, and make them look it
 
-**Status:** SPEC. Buildable. **The decision it was waiting on is RULED.**
+**Status:** ✅ **BUILT 2026-09-03.** Harness `ALL PASS`, gate `PASSED`, all seven consumers re-verified unchanged. Packet: [`queue-17-18-batch-spec-back.md`](queue-17-18-batch-spec-back.md).
 **Item:** queue item **17** ([`trader-tick-queue.md`](trader-tick-queue.md) §2, raised 2026-08-11 by the reviewing seat while checking something else — **not by the audit**).
 **Ruling:** ⭐ **MECHANISM, option (c) — trader, 2026-09-03.** Keep literals, add the declaring comment, **and change the values to obviously-synthetic ones.**
 **Author:** the orchestrator seat of 2026-09-03.

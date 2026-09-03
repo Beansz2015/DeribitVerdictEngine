@@ -75,6 +75,14 @@ Public Class HourResult
     ''' ambiguous gap. Never consumed for classification, display/markdown only.</summary>
     Public Property Reason As String = ""
     Public Property InstanceId As String = ""
+    ''' <summary>[coverage-trailing-split-span-spec.md, RULED 2026-09-03] The DECIDING span's
+    ''' own trailing gap — bounded by that span's own end (the hour's end when the hour was
+    ''' not split), never by the whole hour. Nothing when Classification is not TrailingEdge,
+    ''' or when the deciding span's HourStoreStats never set LastTsMs (D-2/D-3(c) guard).
+    ''' Structural, not rendered — BuildResult maxes over it into
+    ''' CoverageResult.ObservedLongestTrailingMs; BuildConsoleSummary/BuildMarkdown never read
+    ''' it directly (T3, confirmed 2026-09-03: neither enumerates HourResult generically).</summary>
+    Public Property TrailingMsForHour As Long?
 End Class
 
 Public Class CoverageOptions
@@ -548,12 +556,13 @@ Public NotInheritable Class CoverageReport
                                          s1Skipped As Boolean,
                                          spanStats As HourStoreStats,
                                          gapMs As Long,
-                                         boundMs As Long) As (Classification As HourClass, InstanceId As String, Reason As String)
+                                         boundMs As Long) _
+            As (Classification As HourClass, InstanceId As String, Reason As String, TrailingMs As Long?)
         If scopeKind = "unknown" Then
-            Return (HourClass.UnknownScope, "", "")
+            Return (HourClass.UnknownScope, "", "", Nothing)
         End If
         If scopeKind = "off" Then
-            Return (HourClass.NotCapturing, scopeInstanceId, "")
+            Return (HourClass.NotCapturing, scopeInstanceId, "", Nothing)
         End If
 
         Dim stats As HourStoreStats = If(spanStats, New HourStoreStats())
@@ -563,26 +572,26 @@ Public NotInheritable Class CoverageReport
             If stats.LastTsMs.HasValue AndAlso observedEndMs > stats.LastTsMs.Value Then
                 Dim trailingMs As Long = observedEndMs - stats.LastTsMs.Value
                 If trailingMs > gapMs Then
-                    Return (HourClass.TrailingEdge, "", "trailing-edge(" & trailingMs & "ms)")
+                    Return (HourClass.TrailingEdge, "", "trailing-edge(" & trailingMs & "ms)", trailingMs)
                 End If
             End If
-            Return (HourClass.Captured, "", "")
+            Return (HourClass.Captured, "", "", Nothing)
         End If
 
         If s1Skipped Then
             Dim skipReason As String = If(stats.RowCount = 0, "empty(S1 skipped)",
                                           "gap-breach(S1 skipped," & stats.LongestGapMs & "ms)")
-            Return (HourClass.Defect, "", skipReason)
+            Return (HourClass.Defect, "", skipReason, Nothing)
         End If
 
         Dim up = ClassifyUptimeSpan(spanStartMs, spanEndMsInclusive, upIntervals)
         If up.Kind = "before-first" Then
-            Return (HourClass.ExpectedMissing, up.InstanceId, "")
+            Return (HourClass.ExpectedMissing, up.InstanceId, "", Nothing)
         End If
 
         Dim reason As String = If(up.Kind <> "up", "ambiguous-uptime(" & up.Kind & ")",
                                   If(stats.RowCount = 0, "empty", "gap-breach(" & stats.LongestGapMs & "ms)"))
-        Return (HourClass.Defect, up.InstanceId, reason)
+        Return (HourClass.Defect, up.InstanceId, reason, Nothing)
     End Function
 
     ''' <summary>[SH-1] The seven-class per-hour verdict. Positive store evidence (clean rows)
@@ -637,6 +646,7 @@ Public NotInheritable Class CoverageReport
             result.Classification = only.Classification
             result.InstanceId = only.InstanceId
             result.Reason = only.Reason
+            result.TrailingMsForHour = only.TrailingMs
             Return result
         End If
 
@@ -647,7 +657,7 @@ Public NotInheritable Class CoverageReport
         boundaries.AddRange(splitMarkers.Select(Function(m) m.UtcMs))
         Dim preFlipScope = ResolveScope(hourStartMs, markers)
 
-        Dim spans As New List(Of (Classification As HourClass, InstanceId As String, Reason As String, SpanStartMs As Long))
+        Dim spans As New List(Of (Classification As HourClass, InstanceId As String, Reason As String, SpanStartMs As Long, TrailingMs As Long?))
         For i As Integer = 0 To boundaries.Count - 1
             Dim spanStartMs As Long = boundaries(i)
             Dim spanEndMsIncl As Long = If(i + 1 < boundaries.Count, boundaries(i + 1) - 1, hourEndMs)
@@ -665,7 +675,7 @@ Public NotInheritable Class CoverageReport
             If spanStats IsNot Nothing Then spanStats.TryGetValue(spanStartMs, spanStat)
             Dim cls = ClassifySpan(spanStartMs, spanEndMsIncl, scopeKind, scopeIid,
                                    upIntervals, s1Skipped, spanStat, gapMs, observedBoundMs)
-            spans.Add((cls.Classification, cls.InstanceId, cls.Reason, spanStartMs))
+            spans.Add((cls.Classification, cls.InstanceId, cls.Reason, spanStartMs, cls.TrailingMs))
         Next
 
         ' Worst-of, per the ruling: any Defect ⇒ Defect. [F1, D-5.1] Else any TrailingEdge ⇒
@@ -699,6 +709,10 @@ Public NotInheritable Class CoverageReport
         Dim winner = spans.First(Function(s) s.Classification = finalCls)
         result.Classification = finalCls
         result.InstanceId = winner.InstanceId
+        ' [coverage-trailing-split-span-spec.md R1/R2] winner.TrailingMs is Nothing unless
+        ' ClassifySpan itself returned TrailingEdge, so this is Nothing whenever finalCls
+        ' isn't TrailingEdge too — matches R2's "Nothing when the hour is not TrailingEdge".
+        result.TrailingMsForHour = winner.TrailingMs
 
         Dim markerTimes As New List(Of String)
         For Each m In splitMarkers
@@ -1065,16 +1079,17 @@ Public NotInheritable Class CoverageReport
                 If stats.LongestGapMs > opts.GapMs Then result.GapBreachHours += 1
             End If
             ' [F1, D-6(c)] Reported beside — never folded into — ObservedLongestGapMs/
-            ' GapBreachHours (§4a.3). Whole-hour `stats` is the same simplification the two
-            ' sibling counters above already accept (they too read only from the whole-hour
-            ' walk, not per-split-span) — pre-existing, not tightened here.
+            ' GapBreachHours (§4a.3). [coverage-trailing-split-span-spec.md, RULED 2026-09-03]
+            ' Unlike those two siblings — which measure a real whole-hour quantity even when
+            ' imprecise — this one is read PER-SPAN: a whole-hour figure could report a gap
+            ' measured to the HOUR end even when the deciding span (the one ClassifyHour
+            ' actually classified TrailingEdge on) ended earlier, inventing a trailing value no
+            ' span ever had. ClassifyHour already selects the deciding span and returns its own
+            ' span-bounded figure on HourResult.TrailingMsForHour; this only maxes over it.
             If hr.Classification = HourClass.TrailingEdge Then
                 result.TrailingEdgeHours += 1
-                If stats IsNot Nothing AndAlso stats.LastTsMs.HasValue Then
-                    Dim hourEndMs As Long = hourStartMs + HourMs - 1
-                    Dim observedEndMs As Long = Math.Min(hourEndMs, observedBoundMs)
-                    Dim trailingMs As Long = Math.Max(0L, observedEndMs - stats.LastTsMs.Value)
-                    If trailingMs > result.ObservedLongestTrailingMs Then result.ObservedLongestTrailingMs = trailingMs
+                If hr.TrailingMsForHour.HasValue AndAlso hr.TrailingMsForHour.Value > result.ObservedLongestTrailingMs Then
+                    result.ObservedLongestTrailingMs = hr.TrailingMsForHour.Value
                 End If
             End If
             cursor = cursor.AddHours(1)

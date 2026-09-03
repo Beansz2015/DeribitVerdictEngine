@@ -473,6 +473,19 @@ Module Program
         F1e_TrailingEdgeStoreEndSupersetTrapExemptsLastWalkedHour()
         F1f_TrailingEdgeVerdictLineNotCleanWithZeroDefects()
 
+        ' [A61 — ObservedLongestTrailingMs read per-span, not per-hour, docs/coverage-trailing
+        ' -split-span-spec.md, RULED 2026-09-03 (queue item 18). BuildResult's whole-hour
+        ' arithmetic could report a trailing gap measured to the HOUR end even when the span
+        ' ClassifyHour actually classified TrailingEdge on ended earlier — inventing a value no
+        ' span ever had. gapMs=300000L below matches CoverageOptions.GapMs's own D4-confirmed
+        ' shipped default (not a settings.json key), same as every A49/F1 fixture already
+        ' passes directly; the timestamps are MECHANISM scaffolding for the split-hour walk.]
+        A61a_TrailingEdgeSplitSpanDefectReproduced()
+        A61b_TrailingEdgeSplitSpanFixReportsSpanFigure()
+        A61c_NonSplitHourTrailingParityUnchanged()
+        A61d_NoTrailingSpanLastTsMsGuardHolds()
+        A61e_PrecedenceUntouchedTrailingBeatsCaptured()
+
         ' [A51 — candle/funding store write invariant, docs/store-integrity-check-2026-07-31
         ' -post-fix.md] The candle backfill destroyed June 2026 at 3m/5m/15m by writing a
         ' whole MONTH file from a partial SEGMENT fetch, behind a resolution-blind coverage
@@ -1081,9 +1094,16 @@ Module Program
             New SessionBucketSettings With {.Name = "ASIA",   .StartHour = 0,  .EndHour = 7,  .ExecutionResolution = 3},
             New SessionBucketSettings With {.Name = "LONDON", .StartHour = 8,  .EndHour = 12, .ExecutionResolution = 3},
             New SessionBucketSettings With {.Name = "NY",     .StartHour = 13, .EndHour = 23, .ExecutionResolution = 1}}
+        ' [Fixture-literal provenance, CLAUDE.md RULED 2026-08-11] MECHANISM, not shipped
+        ' behaviour. BuildResolutionCfg builds a SYNTHETIC EngineSettings — it invents the
+        ' session buckets too — so A14b round-trips what this line writes and no assertion
+        ' depends on the value. The numbers are deliberately OFF-SPEC (shipped is 0.21/0.06)
+        ' so nobody reads them as a claim about settings.json, the same signal A20a/A20b use.
+        ' ⛔ If a future fixture asserts that ROC fires at the SHIPPED 3-minute threshold, that
+        ' fixture derives from cfg — it does not read these.
         cfg.ResolutionProfiles = New Dictionary(Of String, ResolutionProfile) From {
             {"1", New ResolutionProfile()},
-            {"3", New ResolutionProfile With {.RocMagnitudeThreshold = 0.21, .RocSlopeDeltaThreshold = 0.105}}}
+            {"3", New ResolutionProfile With {.RocMagnitudeThreshold = 0.50, .RocSlopeDeltaThreshold = 0.25}}}
         Return cfg
     End Function
 
@@ -1118,10 +1138,10 @@ Module Program
     ' -- A14b: ROC override resolves through the profile map -------------------
     Private Sub A14b_RocOverrideResolves()
         Dim cfg = BuildResolutionCfg()
-        Check("A14b ROC override (mag 3→0.21 / 1→0.1; slope 3→0.105 / 1→0.05)",
-              Math.Abs(ExecutionResolution.ResolveRocMagnitude(cfg, 3) - 0.21) < 0.0000001 AndAlso
+        Check("A14b ROC override (mag 3→0.50 / 1→0.1; slope 3→0.25 / 1→0.05)",
+              Math.Abs(ExecutionResolution.ResolveRocMagnitude(cfg, 3) - 0.50) < 0.0000001 AndAlso
               Math.Abs(ExecutionResolution.ResolveRocMagnitude(cfg, 1) - 0.1) < 0.0000001 AndAlso
-              Math.Abs(ExecutionResolution.ResolveRocSlopeDelta(cfg, 3) - 0.105) < 0.0000001 AndAlso
+              Math.Abs(ExecutionResolution.ResolveRocSlopeDelta(cfg, 3) - 0.25) < 0.0000001 AndAlso
               Math.Abs(ExecutionResolution.ResolveRocSlopeDelta(cfg, 1) - 0.05) < 0.0000001,
               String.Format("got mag3={0} mag1={1} slope3={2} slope1={3}",
                             ExecutionResolution.ResolveRocMagnitude(cfg, 3),
@@ -9075,6 +9095,171 @@ Module Program
 
         Check("F1-f trailing edge VERDICT line — a report with trailing-edge hours and zero Defect hours must NOT print clean (D-5.3)",
               ok, summary)
+    End Sub
+
+    ' -- A61a: the defect, reproduced. A split hour whose TrailingEdge span is NOT the last
+    ' span (span 0 capture-ON with an early trade, marker flips capture OFF at :30, span 1
+    ' NotCapturing with no trades) must report the SPAN's own trailing gap, not one measured
+    ' to the hour end. A later trade well into hour 06 pushes observedBoundMs past hour 05
+    ' entirely, so hour 05's own end (buggy) vs span 0's own end (fixed) is the only thing in
+    ' play — isolating R1's fix from D-4(c)'s separate boundary clamp. MUTATION PROOF: the
+    ' pre-fix whole-hour arithmetic (see this spec's §1) reports ~54:59.999 (to the hour end);
+    ' the fix reports ~24:59.999 (to span 0's own end) -----------------------------------------
+    Private Sub A61a_TrailingEdgeSplitSpanDefectReproduced()
+        Dim dir As String = A49TempStore("61a")
+        Try
+            Dim day = A49Monday()
+            Dim hourStart = day.AddHours(5)
+            Dim hourStartMs As Long = A49Ms(hourStart)
+            Dim flipMs As Long = A49Ms(hourStart.AddMinutes(30))
+            Dim tradeAMs As Long = A49Ms(hourStart.AddMinutes(5))
+
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {
+                A49Trade(tradeAMs, 64000),
+                A49Trade(A49Ms(hourStart.AddHours(1).AddMinutes(15)), 64010)   ' well into the NEXT hour
+            })
+            Dim markerPath As String = System.IO.Path.Combine(dir, "capture_marker.log")
+            File.WriteAllText(markerPath,
+                A49MarkerLine(hourStart.AddHours(-1), True, dir, "iid-1") & vbLf &
+                A49MarkerLine(hourStart.AddMinutes(30), False, dir, "iid-1") & vbLf)
+
+            Dim opts As New CoverageOptions With {.FromUtc = day, .ToUtc = hourStart.AddHours(2), .GapMs = 300000L}
+            Dim result = CoverageReport.BuildResult(opts, dir, "", "", markerPath)
+            Dim h05 = result.Hours.FirstOrDefault(Function(h) h.HourUtc = hourStart)
+
+            Dim correctSpanMs As Long = (flipMs - 1L) - tradeAMs
+            Dim buggyHourEndMs As Long = (hourStartMs + CoverageReport.HourMs - 1L) - tradeAMs
+
+            Check("A61a ⭐ the defect reproduced — a split hour whose TrailingEdge span is NOT the last span reports the SPAN's own trailing gap (~25min), not a gap measured to the hour end (~55min, the pre-fix figure)",
+                  h05 IsNot Nothing AndAlso h05.Classification = HourClass.TrailingEdge AndAlso
+                  result.TrailingEdgeHours = 1 AndAlso
+                  result.ObservedLongestTrailingMs = correctSpanMs AndAlso
+                  result.ObservedLongestTrailingMs < buggyHourEndMs,
+                  String.Format("h05={0} trailingEdgeHours={1} observedLongestTrailingMs={2} correctSpanMs={3} buggyHourEndMs={4}",
+                                If(h05 Is Nothing, "<none>", h05.Classification.ToString()),
+                                result.TrailingEdgeHours, result.ObservedLongestTrailingMs, correctSpanMs, buggyHourEndMs))
+        Finally
+            A49Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A61b: the fix, at the mechanism. Same shape as A61a but called directly against
+    ' ClassifyHour (T1: a structural field, never a Reason-string scrape) with
+    ' observedBoundMs unconstrained (Long.MaxValue) — isolating R1's fix so only the span's
+    ' own end is in play ------------------------------------------------------------------
+    Private Sub A61b_TrailingEdgeSplitSpanFixReportsSpanFigure()
+        Dim day = A49Monday()
+        Dim hourStart = day.AddHours(5)
+        Dim hourStartMs As Long = A49Ms(hourStart)
+        Dim flipMs As Long = A49Ms(hourStart.AddMinutes(30))
+        Dim tradeMs As Long = A49Ms(hourStart.AddMinutes(5))
+
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"},
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipMs, .Enabled = False, .InstanceId = "iid-1"}
+        }
+        Dim span0Stats As New HourStoreStats With {.RowCount = 1, .LongestGapMs = 0, .LastTsMs = tradeMs}
+        Dim spanStats As New Dictionary(Of Long, HourStoreStats) From {
+            {hourStartMs, span0Stats}
+        }
+
+        Dim hr = CoverageReport.ClassifyHour(hourStart, markers, Nothing, False, Nothing, 300000L, spanStats, Long.MaxValue)
+        Dim expectedMs As Long = (flipMs - 1L) - tradeMs
+
+        Check("A61b the fix — a split hour's TrailingEdge span (not the last span) reports ITS OWN trailing gap on HourResult.TrailingMsForHour, bounded by the span's own end, not the hour's",
+              hr.Classification = HourClass.TrailingEdge AndAlso
+              hr.TrailingMsForHour.HasValue AndAlso hr.TrailingMsForHour.Value = expectedMs,
+              String.Format("classification={0} trailingMsForHour={1} expected={2}",
+                            hr.Classification, If(hr.TrailingMsForHour.HasValue, hr.TrailingMsForHour.Value.ToString(), "Nothing"), expectedMs))
+    End Sub
+
+    ' -- A61c: R4's guard. An UNSPLIT TrailingEdge hour (no marker inside it — the whole hour
+    ' IS the one span) must report EXACTLY today's whole-hour figure. The pair with A61a that
+    ' matters: one proves the defect exists, this one proves the fix did not reach further
+    ' than the defect ------------------------------------------------------------------------
+    Private Sub A61c_NonSplitHourTrailingParityUnchanged()
+        Dim day = A49Monday()
+        Dim hourStart = day.AddHours(5)
+        Dim hourStartMs As Long = A49Ms(hourStart)
+        Dim tradeMs As Long = A49Ms(hourStart.AddMinutes(10))
+        Dim hourEndMs As Long = hourStartMs + CoverageReport.HourMs - 1L
+
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim stats As New HourStoreStats With {.RowCount = 1, .LongestGapMs = 0, .LastTsMs = tradeMs}
+
+        Dim hr = CoverageReport.ClassifyHour(hourStart, markers, Nothing, False, stats, 300000L, Nothing, Long.MaxValue)
+        Dim expectedMs As Long = hourEndMs - tradeMs
+
+        Check("A61c ⭐ R4 guard — an UNSPLIT TrailingEdge hour's per-span figure equals TODAY's whole-hour figure exactly (the span IS the hour)",
+              hr.Classification = HourClass.TrailingEdge AndAlso
+              hr.TrailingMsForHour.HasValue AndAlso hr.TrailingMsForHour.Value = expectedMs,
+              String.Format("classification={0} trailingMsForHour={1} expected={2}",
+                            hr.Classification, If(hr.TrailingMsForHour.HasValue, hr.TrailingMsForHour.Value.ToString(), "Nothing"), expectedMs))
+    End Sub
+
+    ' -- A61d: the no-trailing-span case. A split hour whose deciding span is otherwise clean
+    ' (RowCount>0, LongestGapMs<=gapMs) but a hand-built HourStoreStats never set LastTsMs
+    ' (the D-2/D-3(c) guard's own case) must classify Captured, never TrailingEdge, and
+    ' TrailingMsForHour must be Nothing — the guard applies per-span exactly as it always did
+    ' whole-hour ------------------------------------------------------------------------------
+    Private Sub A61d_NoTrailingSpanLastTsMsGuardHolds()
+        Dim day = A49Monday()
+        Dim hourStart = day.AddHours(5)
+        Dim hourStartMs As Long = A49Ms(hourStart)
+        Dim flipMs As Long = A49Ms(hourStart.AddMinutes(30))
+
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"},
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipMs, .Enabled = False, .InstanceId = "iid-1"}
+        }
+        Dim span0Stats As New HourStoreStats With {.RowCount = 1, .LongestGapMs = 0}   ' LastTsMs deliberately unset
+        Dim spanStats As New Dictionary(Of Long, HourStoreStats) From {
+            {hourStartMs, span0Stats}
+        }
+
+        Dim hr = CoverageReport.ClassifyHour(hourStart, markers, Nothing, False, Nothing, 300000L, spanStats, Long.MaxValue)
+
+        Check("A61d no-trailing-span case — a split hour whose deciding span carries no LastTsMs classifies Captured (D-2/D-3(c) guard holds per-span) and TrailingMsForHour is Nothing",
+              hr.Classification = HourClass.Captured AndAlso Not hr.TrailingMsForHour.HasValue,
+              String.Format("classification={0} trailingMsForHour={1}",
+                            hr.Classification, If(hr.TrailingMsForHour.HasValue, hr.TrailingMsForHour.Value.ToString(), "Nothing")))
+    End Sub
+
+    ' -- A61e: precedence untouched (F1 D-5.1). A split hour with one clean span and one
+    ' trailing-edge span must still classify TrailingEdge, never Captured — the SAME
+    ' precedence F1d already pins via BuildResult, checked here directly against ClassifyHour
+    ' plus the new field: TrailingMsForHour must report the TRAILING span's own figure, not
+    ' the clean span's (Nothing) ---------------------------------------------------------------
+    Private Sub A61e_PrecedenceUntouchedTrailingBeatsCaptured()
+        Dim day = A49Monday()
+        Dim hourStart = day.AddHours(5)
+        Dim hourStartMs As Long = A49Ms(hourStart)
+        Dim flipMs As Long = A49Ms(hourStart.AddMinutes(30))
+        Dim hourEndMs As Long = hourStartMs + CoverageReport.HourMs - 1L
+
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(hourStart.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"},
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = flipMs, .Enabled = True, .InstanceId = "iid-2"}   ' same scope both sides
+        }
+        Dim span0Trade As Long = A49Ms(hourStart.AddMinutes(25))   ' span0: 299,999ms before its own end — under gapMs, Captured
+        Dim span1Trade As Long = A49Ms(hourStart.AddMinutes(35))   ' span1: far short of its own end — over gapMs, TrailingEdge
+        Dim span0Stats As New HourStoreStats With {.RowCount = 1, .LongestGapMs = 0, .LastTsMs = span0Trade}
+        Dim span1Stats As New HourStoreStats With {.RowCount = 1, .LongestGapMs = 0, .LastTsMs = span1Trade}
+        Dim spanStats As New Dictionary(Of Long, HourStoreStats) From {
+            {hourStartMs, span0Stats},
+            {flipMs, span1Stats}
+        }
+
+        Dim hr = CoverageReport.ClassifyHour(hourStart, markers, Nothing, False, Nothing, 300000L, spanStats, Long.MaxValue)
+        Dim expectedMs As Long = hourEndMs - span1Trade
+
+        Check("A61e ⭐ F1 D-5.1 precedence untouched — a split hour with one clean span and one trailing-edge span still classifies TrailingEdge, never Captured, and TrailingMsForHour reports the TRAILING span's own figure",
+              hr.Classification = HourClass.TrailingEdge AndAlso
+              hr.TrailingMsForHour.HasValue AndAlso hr.TrailingMsForHour.Value = expectedMs,
+              String.Format("classification={0} trailingMsForHour={1} expected={2}",
+                            hr.Classification, If(hr.TrailingMsForHour.HasValue, hr.TrailingMsForHour.Value.ToString(), "Nothing"), expectedMs))
     End Sub
 
     ' ═══════════════════════════════════════════════════════════════════════════════════
