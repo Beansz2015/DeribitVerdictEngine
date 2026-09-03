@@ -97,6 +97,37 @@
 
 ---
 
+> ## ⛔⛔ READ BEFORE THE KELLY READ — THE COLLECTOR'S BOOK ROTATED 2026-09-01 AND A NAIVE COUNT UNDER-REPORTS BY 93 %.
+>
+> **Added 2026-09-03, BEFORE the ~09-08 read, deliberately — this is the "stale prose in the doc everything points at" failure, caught in advance instead of at the read.**
+>
+> **The absorption-instrumentation deploy (2026-09-01 15:49:02 UTC) added five CSV columns. The header changed, so `EnsureLogFile` rotated the book.** Nothing was lost. **But the weekday-STRONG count now lives in TWO files:**
+>
+> | File on `i-0d6c133058876273e` | weekday STRONG | measured 2026-09-03 |
+> |---|---:|---|
+> | `C:\DeribitEngine\analysis_log.csv` (live, post-rotation) | **25** | rows from `2026-09-01 15:50:01` |
+> | `C:\DeribitEngine\analysis_log.csv.v0.7.bak` (pre-rotation) | **337** | 33,911 rows |
+> | **TRUE TOTAL** | **362** | ✅ no overlap — the rotation split 09-01 cleanly at 15:49/15:50 |
+>
+> ⛔ **Counting `analysis_log.csv` alone gives 25 against a ≥406 trigger. That is a 93 % apparent collapse and it is PURE ROTATION ARTEFACT.** ⚠ **The `.bak` name carries no timestamp** — there was no pre-existing `.bak`, so it took the hardcoded `v0.7` string. **That name is wrong for a v0.8 book and is a queued decision in [`absorption-instrumentation-spec-back.md`](absorption-instrumentation-spec-back.md) §2 — do not "tidy" it before that is ruled.**
+>
+> ⭐ **STATE OF THE TRIGGER, measured not projected: 362 against ≥406. Shortfall 44.** Recent weekdays: 08-28 = 23 · 08-31 = 4 · 09-01 = 11 · 09-02 = 14 · 09-03 = 7 (partial). **At ~12/weekday the rest of 09-03 plus 09-04, 09-07 and 09-08 lands near 403 — just under.** **Realistic: ~2026-09-08 to 09-09.** ⚠ **Better than the banner's "~09-10 at the median", because the banner's 311 came from the older partially-cut 08-28 book. Do not quote 311 as current.**
+>
+> ⚠ **The 337 was cross-validated against the local copy-back `AWS-copybacks/aws-copyback-2026-09-01/analysis_log_aws.csv` — same number, independent read.**
+
+> ## ⛔ §0a SAYS NOTHING IS OWED. THAT IS NOT TRUE — TWO DECISIONS ARE HIDING IN §2 BUILD ROWS. Found 2026-09-03.
+>
+> **§0a's own stated purpose is that *"what is actually owed" is not answerable at a glance* anywhere else. Two rows defeat it by carrying a decision inside a row that looks like a build, complete with a model-and-effort tag:**
+>
+> | Row | Its own words | Actually |
+> |---|---|---|
+> | **17** — `BuildResolutionCfg` stale fixture literal | *"**Do not just change the number.** First decide what the fixture asserts… **the decision above is the work, not the edit**"* | ⛔ **A DECISION.** SHIPPED BEHAVIOUR (derive from cfg) or MECHANISM (literal + a comment saying why)? |
+> | **18** — `ObservedLongestTrailingMs` over-reports | *"**Decide first** whether the honest fix is per-span stats or simply not reporting the figure on split hours"* | ⛔ **A DECISION**, and its first build job is *"a fixture that produces it"* — the case has never been constructed |
+>
+> ⚠ **Both are tagged "Sonnet, low", which reads as ready-to-build.** **The tag costs the eventual build, not the decision.** ⛔ **Neither can be specced until it is ruled — a spec written today would be inventing the design decision, which the CLAUDE.md spec-first rule forbids.**
+>
+> ⚠ **Line drift on 17, so nobody greps the wrong place:** the row cites `verify/ordercheck/Program.vb:995`; the literal is at **`:1086`** as of 2026-09-03. **Grep the symbol `RocSlopeDeltaThreshold`, not the line.**
+
 ## 0a. Decisions genuinely unanswered — the short list
 
 **§1 records history with strikethrough, so "what is actually owed" is not answerable at a glance. This is.** ✅ **Re-verified against the tree 2026-08-07** — re-verify rather than inherit.

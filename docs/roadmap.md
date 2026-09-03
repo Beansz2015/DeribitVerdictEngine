@@ -169,7 +169,23 @@ First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry
 
 ⛔ **Do not invent work from either.** Both have a destructive or contested obvious fix, which is exactly why they are decisions and not build slots.
 
-**Also owed on this document, and NOT written here because the correcting seat does not hold it:** [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) §5 records a **CLI-port reversal not yet written into this roadmap**. Until someone writes it, O3's "DEFERRED LAST" status in §1 and the "CLI port last" line below are **unconfirmed**, not authoritative.
+> ## ✅ RESOLVED 2026-09-03 (trader ruling) — THERE IS NO REVERSAL. O3's status is now CONFIRMED, not unconfirmed.
+>
+> **The trader's words:** *"It will no longer be reversed and its position at the end of the queue remains. It is possible that it might be put off indefinitely if the current Windows box proves to be economical enough."*
+>
+> | | |
+> |---|---|
+> | **O3 — Linux CLI port** | ✅ **DEFERRED LAST — CONFIRMED.** The 2026-07-08 ruling stands unchanged |
+> | **The reversal** | ⛔ **CANCELLED. It is not pending, not owed, and not to be looked for.** Any doc still saying a reversal is unwritten is stale |
+> | **New condition** | ⚠ **O3 may be deferred INDEFINITELY** — the gate is whether the current Windows collector proves economical enough. **Not a date. Not a build trigger. A standing economic judgement the trader holds** |
+>
+> ⚠ **What this does NOT change.** The CLAUDE.md host-agnostic rule for `analysis/` and `tools/` **still binds** — new code there stays free of `System.Windows.Forms`, `Control.Invoke` and `MainForm` coupling. **A port that may never happen is still the reason that rule exists**, and the rule is cheap. ⛔ **Do not read "possibly indefinite" as permission to write WinForms-coupled code into those trees.**
+>
+> ⭐ **One live consequence, and it gets MORE important, not less.** `LivePerformanceTracker._evalCache` was queued partly on *"the CLI port carries it across unchanged, so it should land before the port."* **If the port may never come, that argument is gone — and the item's real driver is the one that survives: ~150 MB free on a 1 GB t2.micro, an 8–17 month runway, and a destructive obvious fix.** ⚠ **Re-ground that row on the box, not on the port.**
+
+*Superseded text follows, per the quote-and-label convention:*
+
+~~**Also owed on this document, and NOT written here because the correcting seat does not hold it:** [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) §5 records a **CLI-port reversal not yet written into this roadmap**. Until someone writes it, O3's "DEFERRED LAST" status in §1 and the "CLI port last" line below are **unconfirmed**, not authoritative.~~
 
 **Previously closed** — as of 2026-08-12, every row in [`trader-tick-queue.md`](trader-tick-queue.md) §0a is ruled.
 
