@@ -7,6 +7,12 @@ abstention — sync to `"ws"` and fix the comment.**
 ⚠ **D-3's ruling changes two other sections and they are corrected in place: the D-1
 allow-list is now TWO entries, not three, and the escalation trigger moves with it.**
 
+⛔⛔ **SCOPE CORRECTED 2026-09-04, AFTER AN IMPLEMENTER ESCALATION — READ §4.2 BEFORE §5.**
+**D-2 as first written re-synced TWO of the SIX calibration drifts.** The implementer stopped
+and asked for a ruling on the missing four. ⭐ **The stop was right; the request is not needed
+— those four were ruled on 2026-08-11 and this spec failed to carry the ruling.**
+**SEVEN re-syncs, not three. Nothing is owed by the trader.**
+
 **Implements:** [`trader-tick-queue.md`](trader-tick-queue.md) §0a, row *"A54a scope — GUARD
 the third copy, or DELETE it?"* — **RULED 2026-08-11, option (d) + scoped (b).**
 Second opinion: [`seam-audit-decisions-second-opinion-2026-08-11.md`](seam-audit-decisions-second-opinion-2026-08-11.md).
@@ -81,7 +87,7 @@ fixture precisely to break that loop — it must be written BEFORE the allow-lis
 
 | Session | Scope | Effort |
 |---|---|---|
-| **1** | The reflection walk + fixtures **A62a–g** + **THREE** POCO re-syncs (D-2's two, plus D-3's `network.transport`) + the D-3 comment correction | Sonnet, **high** |
+| **1** | The reflection walk + fixtures **A62a–g** + ⛔ **SEVEN** POCO re-syncs (D-2's six after the §4.2 scope correction, plus D-3's `network.transport`) + the D-3 comment correction | Sonnet, **high** |
 | **2** | The scoped-(b) dead-code removal (§7) | Sonnet, **medium** |
 
 ⛔ **Session 2 depends on session 1 and must not lead.** Session 1's guard is what proves a
@@ -244,7 +250,7 @@ not transcription.
 | # | Decision | ✅ Ruling |
 |---|---|---|
 | **D-1** | **How is a DELIBERATE divergence declared?** (a) a small explicit allow-list of paths in the guard, each carrying its reason and the doc that ruled it; (b) a `<PocoDefaultDiffers("reason")>` attribute on the POCO property itself; (c) no distinction — every inequality fails | ✅ **(a) AS RECOMMENDED.** ⚠ **TWO entries, not three — D-3 removed `network.transport`:** `auto_run.start_engaged` and `signal_bridge.enabled`, each citing its ruling. **(b) edits the POCO for a test's benefit** — guards do not reshape the thing they guard. ⛔ **(c) rejected: it reverses two trader decisions to make a fixture green** |
-| **D-2** | **The two real calibration drifts (rows 1–2) — re-sync the POCO to shipped?** | ✅ **YES, RE-SYNC, as recommended.** `CvdSettings.SlopePctOfValue` 0.01 → **0.10**; `MicroCvdSettings.AccelThresholdDynamicPct` 0.03 → **0.30**. Precedent twofold — v66 moved the OBV POCO in step, v57 synced `trigger_mode` for the same reason (*"stomp-proofing"*) |
+| **D-2** | **The real calibration drifts — re-sync the POCO to shipped?** | ✅ **YES, RE-SYNC, as recommended.** ⛔⛔ **SCOPE CORRECTED 2026-09-04 AFTER THE IMPLEMENTER'S ESCALATION — D-2 as first written covered TWO of the SIX calibration drifts, and that was a drafting error, not a ruling. It covers all six. See §4.2.** `CvdSettings.SlopePctOfValue` 0.01 → **0.10** · `MicroCvdSettings.AccelThresholdDynamicPct` 0.03 → **0.30** · `SessionVolume.Sessions` **ASIA** `HighMultiplier` 0.8 → **1.00**, `MidMultiplier` 0.85 → **1.00**, `ExecutionResolution` 1 → **3** · **LONDON** `ExecutionResolution` 1 → **3**. Precedent twofold — v66 moved the OBV POCO in step, v57 synced `trigger_mode` for the same reason (*"stomp-proofing"*) |
 | **D-3** | **`network.transport` — sync the POCO to `"ws"`, or keep `"rest"` and fix the stale comment?** | ⛔ **RULED AGAINST THE SPEC'S ABSTENTION: SYNC TO `"ws"` AND FIX THE COMMENT.** `NetworkSettings.Transport` `"rest"` → **`"ws"`**, and the comment at `EngineSettings.vb:1150` (*"cutover flag; P3 flips the default. Stays 'rest' in P1/P2"*) is rewritten to record that **P3 shipped at cutover v42, 2026-06-24**. ⭐ **Verified safe before acting — §4.1** |
 | **D-4** | **Does a drift FAIL the harness or WARN?** | ✅ **FAIL, as recommended** — a warning inside a 317-check run is not read. ⛔ **All THREE re-syncs must land in the SAME commit as the guard**, or the harness ships red |
 | **D-5** | **Does scoped-(b) ship here or as its own session?** | ✅ **Its own session, second, as recommended.** Session 1's guard is the instrument that proves a (b) edit changed nothing |
@@ -253,6 +259,56 @@ not transcription.
 settings stays v68, no `change_log` entry, and NOT a dataset boundary** — the app reads JSON
 and every production call site passes by name. They still earn a §15 row, because they change
 what the **parse-failure path** does.
+
+### 4.2 ⛔ D-2's scope was wrong, the implementer caught it, and the ruling it needs ALREADY EXISTS
+
+**Raised by:** [`a54a-drift-guard-escalation-2026-09-04.md`](a54a-drift-guard-escalation-2026-09-04.md).
+⭐ **The stop was correct** — the implementer found that §3.1 classifies **seven** rows
+`⛔ DRIFT` while the D-table disposed of only **three**, and refused to re-sync four
+production defaults on their own judgment. That is the escalation behaving exactly as asked.
+
+⛔ **But its conclusion — "take this back to the trader for a fresh ruling" — is wrong. Rows
+3–6 have been ruled since 2026-08-11, and this spec failed to carry the ruling.**
+
+[`trader-tick-queue.md`](trader-tick-queue.md) §0a, row *"Seeded session buckets — does the
+code-defaults path exist at all?"*:
+
+> ✅ **RULED 2026-08-11 — DO NOT empty the seed. Guard it via (d).**
+> ✅ *"A CORRECT seed beats both an empty one and a stale one, and **(d) makes it correct and
+> keeps it correct**"* — *"this decision is a free special case of the row above, not a
+> separate job."*
+
+Its superseded twin names **exactly these four values** — *"ASIA `high_multiplier` 0.8 vs
+1.00 · ASIA `mid_multiplier` 0.85 vs 1.00 · ASIA and LONDON `execution_resolution` 1 vs 3.
+**NY is clean.**"* — and frames the fork as *"Either that path matters — **re-sync AND guard
+it** — or it does not, and an empty list is honest."* **The trader took the first branch.**
+And the A54a ruling itself says option (d) *"**subsumes the session-bucket decision for
+free**."*
+
+⛔⛔ **THE ERROR IS THE SPEC AUTHOR'S, AND IT IS A SPECIFIC CLASS.** That §0a row was read at
+session start and **half of it was used**: §1 above cites `SettingsLoader.vb:44` and
+`:460-461` straight from it to argue the code-defaults path is real. ⚠ **The *guard* half was
+carried and the *re-sync* half was dropped.** §0's own arithmetic — *"two deliberate against
+seven real ones"* — then contradicted a D-table disposing of three, **inside one document, and
+the author did not notice.**
+
+⚠⚠ **This is the FOURTH instance of the defect §0a exists to prevent, and the mechanism has
+moved to a new document class.** §0a's own closing note records the third: *"The E1 row said
+'needs an explicit trader decision' for a decision the trader had already made — written into
+its own doc and never carried back to the row."* **Here the stale carrier is not the queue —
+it is a spec written five hours earlier by a seat that had just read the ruling.** ⭐ **A
+freshly-written document is not evidence that a standing ruling reached it.**
+
+**Consequence for the build:** **SEVEN re-syncs, not three. No new trader ruling is owed.**
+The escalation's own option 1 is correct — and it is correct because it is already ruled,
+not because it is the better argument. ⛔ **Option 2 (allow-list) is foreclosed twice over:**
+the 2026-08-11 ruling, and §0's escalation trigger.
+
+⭐ **Fixture safety for the four added re-syncs — RE-VERIFIED 2026-09-04, not inherited from
+the 2026-08-11 claim.** `BuildResolutionCfg` (`verify/ordercheck/Program.vb:1095`) **fully
+replaces** `cfg.SessionVolume.Sessions` with its own three buckets, so `A14a`/`A14b`/`A14d`/
+`A14e`/`A14i` never read the seed; `A15g` (`:1639`) and `A28d` (`:3431`) build their own JSON
+string literals and never touch the POCO. **Zero fixtures reach the seed.**
 
 ### 4.1 ⭐ Why D-3 is safe to act on — verified in the tree 2026-09-04, not reasoned from the ruling
 
@@ -362,7 +418,7 @@ the-same-misunderstanding loop (§0).
 | Fixture | Asserts | Mutation that must make it FAIL |
 |---|---|---|
 | **A62b** ⭐ | **Teeth, independent of any real drift.** Take a `New EngineSettings()`, mutate exactly one scalar in memory, walk it against the shipped JSON, and assert the result names **that path and no other** | Neuter the scalar comparison → A62b fails while a shipped-tree-only fixture would still pass |
-| **A62a** ⭐ | **The shipped tree is clean.** Walk `New EngineSettings()` against the tracked `settings.json`: unexplained drifts = 0 · orphans = 0 · JSON-only = 0 · **`Compared` ≥ 200** | Revert **any of the three** re-syncs (D-2's two, or D-3's `transport`) → A62a fails naming that path. **Run all three separately** |
+| **A62a** ⭐ | **The shipped tree is clean.** Walk `New EngineSettings()` against the tracked `settings.json`: unexplained drifts = 0 · orphans = 0 · JSON-only = 0 · **`Compared` ≥ 200** | Revert **any of the SEVEN** re-syncs → A62a fails naming that path. ⛔ **Run all seven separately** — a mutation list that only covers three is the §4.2 error re-entering through the fixture |
 | **A62g** ⚠ | **The allow-list is a list, not a blanket.** `auto_run.start_engaged` and `signal_bridge.enabled` are tolerated; assert that a THIRD mismatch on any other Boolean path is still reported | Widen the allow-list to "any Boolean" → A62g fails. ⛔ **Without this, the allow-list can silently become a class exemption** |
 | **A62c** | **The nullable rule, both arms.** A nullable override ABSENT from JSON is not an orphan; one PRESENT in JSON is not compared | Move the nullable test after the absent-key test → 7 false orphans (§3.3) |
 | **A62d** | **Case-insensitive resolution.** A hand-built JSON object whose key casing differs from the `JsonPropertyName` still resolves | Switch to case-sensitive `TryGetProperty` → false orphan |
@@ -399,7 +455,7 @@ statement, not the absence of a change.
 - **Settings stays v68.** No key added or changed ⇒ **no version bump, no `change_log`
   entry, no dataset boundary.** ⚠ **A §15 row is still owed** — the re-syncs change what the
   parse-failure path does.
-- ⛔ **ONE commit.** D-4 requires the guard and all three re-syncs to land together, or the
+- ⛔ **ONE commit.** D-4 requires the guard and all SEVEN re-syncs to land together, or the
   harness ships red.
 
 ---
@@ -484,7 +540,9 @@ trailing genuinely-optional parameters, so promoting one to required keeps the o
 |---|---|---|
 | Spec written | **2026-09-04** | `6e1753b`. Probe measured 261 scalars / 9 divergences against tracked v68 |
 | D-table ticked | **2026-09-04** | Trader-directed. D-1/D-2/D-4/D-5 as recommended; **D-3 ruled against the abstention** — sync `transport` to `"ws"` |
-| Session 1 built | — | ⛔ Not started |
+| Session 1 STOPPED | **2026-09-04** | Implementer escalation — [`a54a-drift-guard-escalation-2026-09-04.md`](a54a-drift-guard-escalation-2026-09-04.md). ⭐ **Correct stop.** Three ruled re-syncs applied to `EngineSettings.vb`, uncommitted; guard not written |
+| Scope corrected | **2026-09-04** | §4.2 — D-2 covers **six**, not two. No new trader ruling; the 2026-08-11 seeded-session-buckets ruling already covered them |
+| Session 1 built | — | ⛔ Not started. **Resumes with SEVEN re-syncs** |
 | Session 2 built | — | ⛔ Not started |
 
 ---
@@ -536,8 +594,29 @@ not a handle — `grep -c` over a symbol that appears in comments proves nothing
 | **4** | **`Compared`'s floor is asserted AND proven.** Mutate the walk to visit nothing; A62a must FAIL | A62a passing on a walk that compared zero properties. That is the "reports success it never performed" defect, five instances on file |
 | **5** | **A62g proves the allow-list is a list, not a class exemption** | The allow-list widened to "any Boolean" and A62g still passes |
 | **6** | **`OrderCheck.vbproj` is UNCHANGED.** `git diff` on it is empty | A `CopyToOutputDirectory` on `settings.json` — that is the fifth copy §5.1 forbids, and it lags by construction |
-| **7** | **The D-3 COMMENT was rewritten**, not just the value flipped | `EngineSettings.vb:1150` still claims *"P3 flips the default. Stays 'rest' in P1/P2"* |
+| **7** | **The D-3 COMMENT was rewritten**, not just the value flipped | `EngineSettings.vb:1150` still claims *"P3 flips the default. Stays 'rest' in P1/P2"*. ✅ **SATISFIED in the 2026-09-04 working-tree edit — verified by the reviewer** |
+| **9** | ⛔ **NEW 2026-09-04, from reviewing the stopped build. A corrected value must not be left standing beside its stale statement.** `MicroCvdSettings.AccelThresholdDynamicPct` currently carries TWO `<summary>` blocks: the new one says *"Synced to the shipped 0.30"* and **the pre-existing one directly above it still reads *"Default 0.03 (3%)"*** | The stale line survives. ⚠ **This is verbatim [`seat-handover-2026-09-03.md`](seat-handover-2026-09-03.md) §5 lesson 5 — *"Correct the line; do not add a box beside it"* — and it is the same shape as the defect being fixed.** **Edit the existing summary; do not stack a second.** *(`CvdSettings.SlopePctOfValue` is clean — it had no prior summary.)* |
 | **8** | **One commit; §15 row present; settings still v68 with no `change_log` entry** | The guard and the re-syncs split across commits — the harness ships red in between |
 
 ⛔ **"Harness ALL PASS" is not evidence on its own and will not be accepted as the headline.**
 The defect class this guard exists to close ran for two months inside a green harness.
+
+### 11.4 ⚠ Review finding carried into the resumed build — the `Skipped` over-claim
+
+[`a54a-drift-guard-escalation-2026-09-04.md`](a54a-drift-guard-escalation-2026-09-04.md) §2
+reports `Skipped=19` and states it *"matches §3's 4 root-provenance + 15 nullable exactly
+(4+15=19)"*, offered as evidence the two walks agree.
+
+⛔ **It matches a quantity this spec never claimed.** §3.4 documents **EIGHT** non-nullable
+exclusions — 4 root-provenance **+ 2 `<JsonIgnore>` derived properties + 2
+`resolution_profiles` dict keys** — so the author's walk skipped **23**, not 19.
+
+⭐ **The agreement that carries weight is `Compared=261`, and that one holds exactly** — as do
+`Orphans=0` and `JsonOnly=0`. **The `Skipped` comparison does not, and must not be cited as
+confirmation.** ⚠ **This is the counting-a-name defect wearing different clothes: a number was
+matched against a different quantity than the one it was named against.**
+
+**What the resumed build must answer, in the spec-back:** does the second walk *visit* the two
+derived properties and the two dict keys and simply not record them in `Skipped` (harmless
+bookkeeping), or does it never reach them? **`A62f` asserts the derived-property exclusion is
+structural, so the answer determines whether A62f is testing anything.**
