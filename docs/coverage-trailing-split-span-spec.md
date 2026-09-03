@@ -221,3 +221,56 @@ Harness **317 PASS, 0 FAIL, ALL PASS** — exactly the predicted count. `tools/c
 > ⛔ **But the guard is a fact about the PRODUCER, not about the combine — and it is unstated and untested.** **If anyone ever teaches `ClassifySpan` to return `OutOfScopeWeekend`** (a weekend span inside a split hour is not far-fetched), **an all-weekend split hour falls to `Else finalCls = NotCapturing` with no matching span, and `spans.First(…)` at `:709` THROWS `InvalidOperationException` — before `Max()` is ever reached.**
 >
 > ⭐ **This is PRE-EXISTING. `spans.First` predates R7, predates the item-18 build, and predates the split-hour work's own F1 review.** Neither seat introduced it; reviewing R7 surfaced it. **Not fixed here — it is a separate item, and it needs its own ruling** (guard the `Else`, or make the combine exhaustive over all seven, or assert the producer's return set). **Recorded so the next seat to touch that combine does not have to rediscover it.**
+
+---
+
+## 8. R8 — the combine handles six of seven classes. RULED (c): tripwire, not a fix.
+
+**Ruled by the trader 2026-09-03 UTC**, on the finding surfaced while reviewing R7. **This is an amendment, not a new spec — same shape as R7, so it can be picked up from this file without a fresh read.**
+
+> ### Model: **Sonnet.** Effort: **LOW.**
+>
+> ⛔⛔ **READ THIS BEFORE ANYTHING ELSE: THIS PATH CANNOT BE MADE TO FAIL TODAY, AND THAT IS NOT A DEFECT IN YOUR WORK.**
+>
+> **Three times in this batch a fixture was proven by making it go red first — A61a, A61f, and the A60c mutation before them. That method DOES NOT APPLY HERE.** The path is unreachable, so **no fixture can exercise it without first breaking `ClassifySpan`.** ⛔ **Do not spend a session trying to construct a failing case. There isn't one. If you find yourself editing `ClassifySpan` to make a test go red, stop — that is the trap this paragraph exists to prevent.**
+>
+> **Acceptance is therefore presence-and-parity, not before/after:** the harness still reads **317**, and the guard is in place. **Say exactly that in the spec-back rather than implying a proof you could not run.**
+
+### The finding
+
+**`HourClass` has SEVEN members. `ClassifyHour`'s worst-of combine handles SIX** — `Defect`, `TrailingEdge`, `Captured`, `UnknownScope`, `ExpectedMissing`, and `NotCapturing` via the bare `Else`. ⛔ **`OutOfScopeWeekend` appears in no branch.**
+
+✅ **It cannot fire today**, for a reason **one function away**: `ClassifySpan` has seven `Return`s and none emits `OutOfScopeWeekend` — it is produced only at `CoverageReport.vb:630`, on `ClassifyHour`'s pre-split path. **So every span carries one of the six, the `Else` is reached only when all spans are `NotCapturing`, and `spans.First(…)` always matches.**
+
+✅ **`spans` itself is never empty** — `boundaries` is initialised `From {hourStartMs}`.
+
+⛔ **But the guard is a fact about the PRODUCER, and it is unstated and untested.** Teach `ClassifySpan` to return `OutOfScopeWeekend` — a weekend span inside a split hour is not far-fetched — and an all-weekend split hour sets `finalCls = NotCapturing` with **no matching span**, so **`spans.First(…)` at `:709` throws `InvalidOperationException`**, before `Max()` is reached.
+
+⭐ **PRE-EXISTING.** `spans.First` predates R7, the item-18 build, and the split-hour F1 review. **Neither seat introduced it. Reviewing R7 surfaced it.**
+
+### R8 The change — two parts, both small
+
+**1. Make the failure NAMED instead of opaque.** Replace `spans.First(Function(s) s.Classification = finalCls)` with a `FirstOrDefault` plus an explicit check that fails **naming `finalCls`** — so the day it fires, the message says which class had no span, not `InvalidOperationException`.
+
+⚠ **Keep `winner` a single value used by both `InstanceId` and nothing else.** R7's `TrailingMsForHour` line already filters `spans` independently and **must not be re-pointed at `winner`** — that would undo R7.
+
+**2. State the dependency where the assumption lives.** A comment on the `Else` branch:
+
+> *reached only because `ClassifySpan` never emits `OutOfScopeWeekend` — the seventh `HourClass`, handled by no branch here. If that ever changes, this `Else` and the combine's exhaustiveness must be revisited together.*
+
+### ⛔ What was rejected, and why — do not re-propose
+
+| | |
+|---|---|
+| **Add an `ElseIf` for `OutOfScopeWeekend`** | ⛔ **Requires inventing a precedence position for a class that cannot occur.** D-3 ruled the existing ordering with stated reasons; **considered-looking precedence for an impossible case is worse than the gap**, because the next reader takes it as deliberate |
+| **Invert the derivation** (pick the winning span first, derive `finalCls` from it) | ⚠ **Architecturally the better answer — it kills the class by construction.** Rejected on risk: it **rewrites D-3-ruled combine logic to fix a path that cannot execute.** Recorded because it is the right shape if that combine is ever rewritten for another reason |
+
+### Acceptance
+
+| | Check |
+|---|---|
+| 1 | ⭐ **Harness reads exactly 317 PASS, 0 FAIL, `ALL PASS`** — unchanged. **This is a parity check: R8 must alter no outcome** |
+| 2 | The named-failure guard is present, and `InstanceId` still resolves as before |
+| 3 | ⭐ **R7's `TrailingMsForHour` line is UNCHANGED** — still `spans.Where(… = finalCls).Select(… .TrailingMs).Max()`. **Confirm by diff; this is the regression that would silently undo R7** |
+| 4 | `tools/checks/verify-gate.ps1` green |
+| 5 | **No new fixture.** ⚠ **State in the spec-back that none is possible and why** — not that none was needed |
