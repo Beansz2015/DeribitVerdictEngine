@@ -1,7 +1,11 @@
 # A54a — a JSON↔POCO drift guard by reflection walk
 
-**Status:** SPEC. ⛔ **§4's D-table needs a trader tick before any code is written.** The
-mechanism (§5) and the fixtures (§6) are ruled and ready; **§4 is not.**
+**Status:** ✅ **BUILD-AUTHORIZED. §4's D-table is TICKED IN FULL — trader-directed
+2026-09-04.** D-1 · D-2 · D-4 · D-5 as recommended; **D-3 ruled AGAINST the spec's
+abstention — sync to `"ws"` and fix the comment.**
+
+⚠ **D-3's ruling changes two other sections and they are corrected in place: the D-1
+allow-list is now TWO entries, not three, and the escalation trigger moves with it.**
 
 **Implements:** [`trader-tick-queue.md`](trader-tick-queue.md) §0a, row *"A54a scope — GUARD
 the third copy, or DELETE it?"* — **RULED 2026-08-11, option (d) + scoped (b).**
@@ -24,13 +28,15 @@ Origin finding: [`seam-audit-2026-08-11.md`](seam-audit-2026-08-11.md) **S-2**.
 evidence-driven — see §3.** That handover bills item 8 as **"Transcription. The ruling is
 COMPLETE."** ⚠ **It is not.** The ruling settled *how to find drift*. It did not settle *what
 to do when the walk finds a divergence that is deliberate* — and the shipped tree contains
-three of those, against six real ones. A build that treats all nine alike either fails the
-harness on correct code or passes over two live defects.
+**two** of those, against **seven** real ones. A build that treats all nine alike either fails
+the harness on correct code or passes over two live defects.
 
 **Why HIGH rather than medium.** The walk itself is ~60 lines and genuinely mechanical. The
-hard part is the **classification rule** in §4 D-1: three of the nine divergences the walk
+hard part is the **classification rule** in §4 D-1: two of the nine divergences the walk
 finds today are documented design choices, and *nothing in the value or the type tells them
-apart from drift.* That is the same SHIPPED-BEHAVIOUR-vs-MECHANISM problem CLAUDE.md's
+apart from drift.* ⚠ **A third looked deliberate and was not — `network.transport` was ruled
+DRIFT on 2026-09-04 (D-3), against this spec's own abstention.** That is the measure of how
+hard the classification is: the spec author could not call it from the declaration comment. That is the same SHIPPED-BEHAVIOUR-vs-MECHANISM problem CLAUDE.md's
 fixture-literal provenance rule exists for, reappearing one level up the stack. Getting it
 wrong is expensive and quiet, which is this project's definition of high-effort work.
 
@@ -60,10 +66,12 @@ fixture precisely to break that loop — it must be written BEFORE the allow-lis
 
 **⛔ ESCALATION TRIGGER — stop and move to Opus/high.** Two conditions, either one:
 
-- **The D-1 allow-list needs a FOURTH entry** beyond the three named in §3.2 during the
-  build. Three is a fixed, documented set. A growing one is a hand-maintained table that can
-  drift — **which is the exact objection that killed option (a)**, reappearing inside option
-  (d). Stop and re-take D-1.
+- ⚠ **The D-1 allow-list needs a THIRD entry** beyond the **two** named in §3.2 during the
+  build. **Two is a fixed, documented set** — D-3's ruling removed the third. A growing one is
+  a hand-maintained table that can drift — **which is the exact objection that killed option
+  (a)**, reappearing inside option (d). Stop and re-take D-1. *(This trigger read "a FOURTH
+  entry beyond the three" before D-3 was ruled; corrected 2026-09-04, and it is now a
+  TIGHTER trigger than the one written.)*
 - **The walk needs a hand-written exception to resolve a property to its JSON path.** This
   is the ruling's own trigger, carried forward verbatim: *"(d) has quietly become (a) and the
   decision must be re-taken."* ⭐ **Measured 2026-09-04: it does not fire today** — 0 orphans,
@@ -73,7 +81,7 @@ fixture precisely to break that loop — it must be written BEFORE the allow-lis
 
 | Session | Scope | Effort |
 |---|---|---|
-| **1** | The reflection walk + fixtures **A62a–f** + the D-2/D-3 POCO re-syncs | Sonnet, **high** |
+| **1** | The reflection walk + fixtures **A62a–g** + **THREE** POCO re-syncs (D-2's two, plus D-3's `network.transport`) + the D-3 comment correction | Sonnet, **high** |
 | **2** | The scoped-(b) dead-code removal (§7) | Sonnet, **medium** |
 
 ⛔ **Session 2 depends on session 1 and must not lead.** Session 1's guard is what proves a
@@ -157,10 +165,13 @@ actually finds is five divergences beyond the session buckets, and they are not 
 | 5 | `session_volume.sessions.ASIA.execution_resolution` | 1 | 3 | ⛔ **DRIFT** |
 | 6 | `session_volume.sessions.LONDON.execution_resolution` | 1 | 3 | ⛔ **DRIFT** |
 | 7 | `auto_run.start_engaged` | False | True | ✅ **DELIBERATE** |
-| 8 | `network.transport` | "rest" | "ws" | ⚠ **CONTESTED — see D-3** |
+| 8 | `network.transport` | "rest" | "ws" | ⛔ **DRIFT — RULED D-3, 2026-09-04.** Sync to `"ws"` |
 | 9 | `signal_bridge.enabled` | False | True | ✅ **DELIBERATE** |
 
 ⭐ **Rows 1 and 2 are new. Nobody has recorded them before, and both are ten times apart.**
+
+⚠ **Row 8 was written CONTESTED and is now ruled DRIFT. So the split is SEVEN re-syncs and
+TWO deliberate divergences — not six and three.** The allow-list in §5 is two entries.
 
 **Provenance, traced in git rather than assumed:**
 
@@ -182,20 +193,22 @@ call sites of each key pass the cfg value by name —
 live scoring change and NOT a dataset boundary.** ⚠ **And `grep` finds ZERO fixture references
 to either key — so no fixture pins them, and no fixture would ever have noticed.**
 
-### 3.2 Why rows 7–9 are not drift, from the code
+### 3.2 Why rows 7 and 9 are not drift, from the code
 
-Each POCO default here is deliberately the **safe / off / pre-cutover** value while the
-shipped file turns the feature on. The comments say so at the declaration site:
+Each POCO default here is deliberately the **safe / off** value while the shipped file turns
+the feature on. The comments say so at the declaration site — **these two, and only these
+two, are the D-1 allow-list:**
 
 - `auto_run.start_engaged` (`EngineSettings.vb:772`) — *"Default False ⇒ byte-identical to
   every prior version on a box that hasn't set it."* §15's v68 row states the routing: tracked
   JSON ships `true` so collectors run hands-off; the dev box opts out via `settings.local.json`.
 - `signal_bridge.enabled` (`EngineSettings.vb:1320`) — *"Default False (§8 D3) — flipping it
   on is the trader's dated action after the consumer's log-only validation."*
-- `network.transport` (`EngineSettings.vb:1150`) — *"cutover flag; P3 flips the default. Stays
-  'rest' in P1/P2."* ⚠ **P3 shipped (cutover v42, 2026-06-24) and the default was never
-  flipped, so this comment is now false.** Whether that is drift or a deliberate safe degraded
-  default is **D-3**, and it is the one of the three I will not rule.
+
+~~`network.transport` — whether that is drift or a deliberate safe degraded default is **D-3**,
+and it is the one of the three I will not rule.~~ ⛔ **RULED 2026-09-04 — it is DRIFT. Sync to
+`"ws"` and fix the comment.** Kept struck rather than deleted, per the quote-and-label
+convention. See §4.1 for the verification that made the ruling safe to act on.
 
 ### 3.3 ⚠ The seven orphans that were mine, not the design's
 
@@ -224,19 +237,44 @@ not transcription.
 
 ---
 
-## 4. ⛔ D-table — needs a trader tick before code
+## 4. ✅ D-table — TICKED IN FULL, trader-directed 2026-09-04
 
-| # | Decision | My read | Consequence of the alternative |
-|---|---|---|---|
-| **D-1** | **How is a DELIBERATE divergence declared?** (a) a small explicit allow-list of paths in the guard, each carrying its reason and the doc that ruled it; (b) a `<PocoDefaultDiffers("reason")>` attribute on the POCO property itself; (c) no distinction — every inequality fails, and rows 7–9 get their POCO defaults flipped to match | ⭐ **(a)** — three entries, each citing its ruling. **(b) is cleaner but edits the POCO for a test's benefit**, and this project's own rule is that guards do not reshape the thing they guard. ⛔ **(c) is wrong and must not be taken quietly: it reverses two trader decisions (D3 on the bridge, §1.4 on `start_engaged`) to make a fixture green** | (c) turns the signal bridge and hands-off collector start ON by POCO default. That is a behaviour change on the parse-failure path, decided by a test |
-| **D-2** | **The two real calibration drifts (rows 1–2) — re-sync the POCO to shipped?** | ⭐ **YES, re-sync**: `SlopePctOfValue` 0.01 → **0.10**, `AccelThresholdDynamicPct` 0.03 → **0.30**. Precedent is explicit and twofold — v66 moved the OBV POCO in step, and v57 synced `trigger_mode` to the shipped operating mode for exactly this reason (*"stomp-proofing"*) | Leaving them re-arms the OBV failure: a parse-failure box scores CVD and MicroCVD on values 10× off the calibrated ones, silently |
-| **D-3** | **`network.transport` — sync the POCO to `"ws"`, or keep `"rest"` and fix the stale comment?** | ⚠ **I do not have a read and will not invent one.** Syncing follows D-2's logic and the comment's own stated intent. Keeping `"rest"` means a box whose settings fail to parse falls back to the transport that needs no configuration — arguably the safer degraded mode. **This is a behaviour question about degraded mode, not bookkeeping** | Whichever is taken, the comment at `EngineSettings.vb:1150` is false today and must move in the same commit |
-| **D-4** | **Does a drift FAIL the harness or WARN?** | ⭐ **FAIL** — a warning in a 317-check run is not read. ⛔ **But only after D-2/D-3 land in the SAME commit**, or the harness ships red | WARN reproduces the defect this item exists to close: a signal nobody acts on |
-| **D-5** | **Does scoped-(b) ship here or as its own session?** | ⭐ **Its own session, second** (§0). (b) is dead-code removal across production indicator signatures; session 1's guard is the instrument that proves it changed nothing | Bundling makes one commit that both adds an instrument and edits the code it measures |
+**Four as recommended; D-3 ruled against the spec's abstention.**
 
-⚠ **D-2 and D-3 are POCO-default edits with NO settings-key change: no version bump, settings
-stays v68, no dataset boundary, no `change_log` entry.** They still earn a §15 row because
-they change what the degraded-mode path does.
+| # | Decision | ✅ Ruling |
+|---|---|---|
+| **D-1** | **How is a DELIBERATE divergence declared?** (a) a small explicit allow-list of paths in the guard, each carrying its reason and the doc that ruled it; (b) a `<PocoDefaultDiffers("reason")>` attribute on the POCO property itself; (c) no distinction — every inequality fails | ✅ **(a) AS RECOMMENDED.** ⚠ **TWO entries, not three — D-3 removed `network.transport`:** `auto_run.start_engaged` and `signal_bridge.enabled`, each citing its ruling. **(b) edits the POCO for a test's benefit** — guards do not reshape the thing they guard. ⛔ **(c) rejected: it reverses two trader decisions to make a fixture green** |
+| **D-2** | **The two real calibration drifts (rows 1–2) — re-sync the POCO to shipped?** | ✅ **YES, RE-SYNC, as recommended.** `CvdSettings.SlopePctOfValue` 0.01 → **0.10**; `MicroCvdSettings.AccelThresholdDynamicPct` 0.03 → **0.30**. Precedent twofold — v66 moved the OBV POCO in step, v57 synced `trigger_mode` for the same reason (*"stomp-proofing"*) |
+| **D-3** | **`network.transport` — sync the POCO to `"ws"`, or keep `"rest"` and fix the stale comment?** | ⛔ **RULED AGAINST THE SPEC'S ABSTENTION: SYNC TO `"ws"` AND FIX THE COMMENT.** `NetworkSettings.Transport` `"rest"` → **`"ws"`**, and the comment at `EngineSettings.vb:1150` (*"cutover flag; P3 flips the default. Stays 'rest' in P1/P2"*) is rewritten to record that **P3 shipped at cutover v42, 2026-06-24**. ⭐ **Verified safe before acting — §4.1** |
+| **D-4** | **Does a drift FAIL the harness or WARN?** | ✅ **FAIL, as recommended** — a warning inside a 317-check run is not read. ⛔ **All THREE re-syncs must land in the SAME commit as the guard**, or the harness ships red |
+| **D-5** | **Does scoped-(b) ship here or as its own session?** | ✅ **Its own session, second, as recommended.** Session 1's guard is the instrument that proves a (b) edit changed nothing |
+
+⚠ **All three re-syncs are POCO-default edits with NO settings-key change: no version bump,
+settings stays v68, no `change_log` entry, and NOT a dataset boundary** — the app reads JSON
+and every production call site passes by name. They still earn a §15 row, because they change
+what the **parse-failure path** does.
+
+### 4.1 ⭐ Why D-3 is safe to act on — verified in the tree 2026-09-04, not reasoned from the ruling
+
+The spec abstained on D-3 because syncing to `"ws"` changes what a box does when
+`settings.json` fails to parse. **That concern is answered by the code, and the answer is that
+the ruling improves the degraded path rather than risking it.**
+
+`ResolveSource` (`UI/MainForm_Analysis.vb:746-759`) carries **two independent REST fallbacks**
+on the `transport="ws"` branch: `WsFallbackToRest AndAlso _wsFeed.IsDegraded()` → REST, and
+`_wsSource Is Nothing` → REST. **`WsFallbackToRest`'s POCO default is `True`**
+(`EngineSettings.vb:1160`). ⭐ **And the probe measured ZERO drift on every other `network.*`
+key** — `ws_url`, `ws_heartbeat_sec`, `ws_stale_after_sec`, `ws_cooldown_sec`,
+`ws_fallback_to_rest` all already carry the shipped values in the POCO. So a parse-failure box
+running on POCO defaults gets the correct endpoint and cadences and still falls back to REST
+on degradation.
+
+⭐⭐ **And D-3 repairs an inconsistency nobody had named.** `auto_run.trigger_mode`'s POCO
+default is **`"on_close"`** (synced at v57 for stomp-proofing) while `network.transport`'s is
+`"rest"` — and `OnCloseModeActive()` (`UI/MainForm_AutoRun.vb:187-192`) returns `False` unless
+transport is `"ws"`. **So today's POCO defaults ask for bar-close firing over a transport that
+cannot deliver it, and the box silently falls back to interval mode.** Syncing `transport`
+makes the two v57-era defaults agree. **This was found while checking D-3, not before it.**
 
 ---
 
@@ -270,6 +308,14 @@ standing *"assert the check RAN"* lesson made structural rather than remembered.
    `Math.Abs(a - b) < 1e-9`, never string equality; every render and parse through
    `CultureInfo.InvariantCulture`. On mismatch → `Drifts`, **unless the path is on the D-1
    allow-list.**
+
+   ⭐ **The D-1 allow-list is EXACTLY TWO entries. Adding a third is the §0 escalation
+   trigger, not a build step:**
+
+   | Path | Why it is not drift | Ruled by |
+   |---|---|---|
+   | `auto_run.start_engaged` | POCO `False` keeps a box byte-identical to v67 until it opts in; tracked JSON ships `true` for hands-off collectors | `collector-ops-tooling-proposal.md` §1.4 |
+   | `signal_bridge.enabled` | POCO `False`; flipping it on is the trader's own dated action | signal-bridge §8 **D3** |
 6. **`Dictionary(Of String, T)`** → recurse only into keys present on **both** sides.
 7. **`List(Of T)`** where `T` is a settings class → **match elements by their `name` property
    where the type has one, falling back to index.** ⛔ **Name-matching is required, not a
@@ -316,7 +362,8 @@ the-same-misunderstanding loop (§0).
 | Fixture | Asserts | Mutation that must make it FAIL |
 |---|---|---|
 | **A62b** ⭐ | **Teeth, independent of any real drift.** Take a `New EngineSettings()`, mutate exactly one scalar in memory, walk it against the shipped JSON, and assert the result names **that path and no other** | Neuter the scalar comparison → A62b fails while a shipped-tree-only fixture would still pass |
-| **A62a** ⭐ | **The shipped tree is clean.** Walk `New EngineSettings()` against the tracked `settings.json`: unexplained drifts = 0 · orphans = 0 · JSON-only = 0 · **`Compared` ≥ 200** | Revert either D-2 re-sync → A62a fails naming that path |
+| **A62a** ⭐ | **The shipped tree is clean.** Walk `New EngineSettings()` against the tracked `settings.json`: unexplained drifts = 0 · orphans = 0 · JSON-only = 0 · **`Compared` ≥ 200** | Revert **any of the three** re-syncs (D-2's two, or D-3's `transport`) → A62a fails naming that path. **Run all three separately** |
+| **A62g** ⚠ | **The allow-list is a list, not a blanket.** `auto_run.start_engaged` and `signal_bridge.enabled` are tolerated; assert that a THIRD mismatch on any other Boolean path is still reported | Widen the allow-list to "any Boolean" → A62g fails. ⛔ **Without this, the allow-list can silently become a class exemption** |
 | **A62c** | **The nullable rule, both arms.** A nullable override ABSENT from JSON is not an orphan; one PRESENT in JSON is not compared | Move the nullable test after the absent-key test → 7 false orphans (§3.3) |
 | **A62d** | **Case-insensitive resolution.** A hand-built JSON object whose key casing differs from the `JsonPropertyName` still resolves | Switch to case-sensitive `TryGetProperty` → false orphan |
 | **A62e** | **The resolver fails loudly.** Point the walk-up at a temp directory with no marker; assert a FAIL with the path in the message | Make the resolver return a default or skip → A62e fails |
@@ -392,7 +439,21 @@ trailing genuinely-optional parameters, so promoting one to required keeps the o
 - **That 261 is the complete comparable population.** It is what this walk visits under §5's
   rules. A property added with no `JsonPropertyName` would be skipped silently — A62f guards
   the derived case, not that general one.
-- **Whether `network.transport` staying `"rest"` is deliberate.** The comment says P3 would
-  flip it and P3 shipped. I did not find a ruling either way. **D-3.**
+- ~~**Whether `network.transport` staying `"rest"` is deliberate.**~~ ✅ **CLOSED 2026-09-04 —
+  RULED DRIFT (D-3), sync to `"ws"`.** Before acting I verified the degraded path in the tree
+  (§4.1): `ResolveSource`'s two REST fallbacks, `WsFallbackToRest` defaulting `True`, and zero
+  drift on every other `network.*` key. **That verification is new this session and is
+  recorded as measured.**
 - **Nothing was built or run against the harness.** No `dotnet build`, no fixture added. This
   session produced a spec and a throwaway probe.
+
+---
+
+## 10. Build record
+
+| Event | Date | Detail |
+|---|---|---|
+| Spec written | **2026-09-04** | `6e1753b`. Probe measured 261 scalars / 9 divergences against tracked v68 |
+| D-table ticked | **2026-09-04** | Trader-directed. D-1/D-2/D-4/D-5 as recommended; **D-3 ruled against the abstention** — sync `transport` to `"ws"` |
+| Session 1 built | — | ⛔ Not started |
+| Session 2 built | — | ⛔ Not started |
