@@ -185,3 +185,70 @@ assumed from "the numbers happen to match."
 - The live app's behaviour under an actual forced `settings.json` parse failure — the
   claim in §5 (POCO defaults match tracked JSON) is a static read of both sources, not a
   live-triggered parse failure.
+
+---
+
+## 7. ⭐ REVIEWER VERDICT — ACCEPTED, 2026-09-05. One finding, and it is the reviewer's omission.
+
+**Reviewed by the spec author, who wrote no code on this build.**
+
+### 7.1 Verified independently, not taken on report
+
+| Check | Result |
+|---|---|
+| Harness, re-run | **326 PASS · 0 FAIL · `ALL PASS`** |
+| Solution Release build, re-run | **0 errors** |
+| `verify-gate.ps1 -Mode local-fast`, re-run | ✅ **`GATE PASSED`** — display-parity clean, version-bump clean |
+| `settings.json` across both commits | ✅ **`git diff f1e216a HEAD -- settings.json` is 0 lines.** Still v68 |
+| Two commits, correctly split | ✅ `fded077` harness-only + 4 indicator files; `94b68d5` `CalcSpread` + the one production call site. **Each self-compiles** |
+| ⭐ **Trap A defence** | ⭐⭐ **Confirmed by reading the diff: every added argument is named (`:=`). ZERO positional arguments were introduced anywhere.** That is a stronger defence than the per-site review I asked for — it converts the silent-swap class into a compile error, leaving only wrong-*value*, which §1's table then covers |
+| **Trap C** | ✅ `A6`'s `trendGate:=10.0` is **byte-identical**; `divergenceGate:=0.001` added beside it with the collision named in a call-site comment. **Not silently fixed** |
+| ⭐ **Trap B's comments** | ⭐ **Present, at every call site, and they are the real thing** — each names MECHANISM, says *why* the value is inert or load-bearing, and cites the rule. **`A2`'s carries the actual arithmetic** (`effThreshold` 10000 vs 41400; 90000 clears `microEarly` + either), not an assertion of insensitivity |
+
+### 7.2 The provenance work is sound — spot-checked on the two hardest cases
+
+- **`A1`'s `slopePctOfValue:=0.05`** now pins a value that is **off-shipped** (POCO and JSON
+  both read 0.10 since the R-2/R-3 build). ⭐ **That is correct and is exactly the
+  `A20a`/`A20b` case CLAUDE.md names as legitimate** — a MECHANISM literal, declared as one,
+  in a fixture that tests chronological classification rather than calibration.
+- **`A9`/`A14h`'s `adxPeriod:=9, adxMin:=20.0, minOf:=2, candleLookback:=60`** — the reviewer
+  read the tracked `settings.json`: shipped `mtf_gate` is **9 / 20.0 / 2 / 60**, identical.
+  So nothing moved, and the asserted insensitivity is moot in fact. ⚠ **Noted only as an
+  asymmetry:** `A2` earned a hand-computation while `A9`/`A14h` earned an assertion. It costs
+  nothing here because the values match, but *"built to classify BEAR unambiguously under any
+  reasonable gate parameter"* is reasoning, and this arc's standing lesson is that reasoning
+  about insensitivity is what `A62f` and `A63a` both defeated. **Not a finding; a note.**
+
+### 7.3 ⛔ THE FINDING — a §15 row IS owed, and the acceptance list that omitted it was mine
+
+§5 declines a `docs/DeribitIndicatorProject.md` §15 entry on the grounds that neither commit
+changes engine behaviour, and notes — **correctly** — that *"this build's own acceptance
+criteria did not name a §15 entry as required, unlike session 1's."* ⭐ **That is factually
+right: the reviewer's own acceptance list omitted it. Sixth reviewer correction in this arc.**
+
+⛔ **But the conclusion does not hold against §15's own practice.** The reviewer counted the
+rows: **ten of the current thirteen are marked `settings-untouched`**, and several change no
+engine behaviour whatever — *"Trade identity in the trade store"* states outright **"ZERO
+scoring impact, NO rendered surface, NOT a dataset boundary"**; `SH-1` changed a coverage
+report's hour classification; `C1` added a CLI verb. ⭐⭐ **§15's operating bar is "a notable
+change worth recording in the version history", not CLAUDE.md's narrower
+"changes engine behaviour" trigger.**
+
+**And this build clears that bar more clearly than most rows already there:** it deleted **44
+`Optional` defaults across 15 methods**, removing **copy 1 of the three-copies-plus-JSON
+problem for the entire indicator surface.** ⛔ **A future seat reading §15 sees session 1's
+guard row and has no way to learn that the method-default copy is gone.** That is precisely
+the gap §15 exists to close.
+
+**Action: add one §15 row covering both commits.** Settings stays **v68**, no `change_log`
+entry — the row records the structural change, not a version bump. **Not blocking; it is a
+doc row, and the code is accepted as it stands.**
+
+### 7.4 Everything else
+
+**No other findings.** The build is exactly the ruled scope, both traps A and C are handled
+better than specified, the 26 provenance decisions are individually reasoned rather than
+batch-labelled, and §6's compiler cross-check — **26 `BC30455` errors resolving to the same 9
+file:line locations step 1 predicted** — is a genuinely good independent corroboration of the
+measurement and the edit at once. ⭐ **Nobody asked for that check; it is the best thing in
+§6.**
