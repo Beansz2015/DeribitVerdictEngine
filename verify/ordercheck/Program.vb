@@ -819,13 +819,19 @@ Module Program
         Dim trendB As String = "", divB As String = ""
         ' [A54a S2, MECHANISM] divergenceGate is inert -- Check() below asserts trendA/trendB
         ' only, never divA/divB. Literal preserves the method's own former default
-        ' (byte-identical to the pre-S2 implicit value). ⚠ trendGate:=10.0 is NOT touched here
-        ' -- it is queue item 17's own known-stale literal (pins 10.0 against a shipped 23.0);
-        ' applying item 17's MECHANISM-vs-SHIPPED convention to it is a separate, still-open
-        ' slot per docs/a54a-json-poco-drift-guard-spec.md §8, named here per §7.2 trap C
-        ' rather than fixed silently.
-        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=True), trendA, divA, trendGate:=10.0, divergenceGate:=0.001)
-        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=False), trendB, divB, trendGate:=10.0, divergenceGate:=0.001)
+        ' (byte-identical to the pre-S2 implicit value).
+        ' [queue item 17 APPLIED 2026-09-05, I17-A6] trendGate is MECHANISM too, and its literal
+        ' is now an obviously-synthetic 1.0. ObvRiseCandles builds 50 bars at volume 10 rising
+        ' +10/bar, so obvChange = 48 on BOTH variants -- any gate below 48 gives RISING, which is
+        ' what Check() asserts. ⛔ Do NOT derive this from cfg: a legitimate retune of
+        ' indicators.OBV.trend_gate above 48 would flip both paths to FLAT and break this fixture
+        ' on a calibration change it was never designed to track. The former 10.0 was worse than
+        ' arbitrary -- it is the pre-v33 SHIPPED value (trend_gate history: 0.001 -> 10.0 in v31
+        ' -> 18.0 in v33 -> 23.0 in v66), so a reader greps it, finds it in the version history,
+        ' and cannot tell stale from deliberate. 1.0 has never been shipped in settings.json nor
+        ' held as a method default, so it cannot be misread as a claim about settings.
+        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=True), trendA, divA, trendGate:=1.0, divergenceGate:=0.001)
+        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=False), trendB, divB, trendGate:=1.0, divergenceGate:=0.001)
 
         Check("A6 OBV normalisation (first-pair-equal not dead)",
               trendA = "RISING" AndAlso trendA = trendB,
