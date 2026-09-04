@@ -664,7 +664,16 @@ Module Program
         Next
 
         Dim cvdValue As Double, cvdSlope As String = "", cvdDiv As String = ""
-        IndicatorEngine.CalcCVD(trades, FlatCandles(), cvdValue, cvdSlope, cvdDiv)
+        ' [A54a S2, MECHANISM] This fixture asserts the chronological RISING classification
+        ' mechanism, not shipped calibration -- weightedSlope here (~1.8M) clears any plausible
+        ' slopeMinUsd by two orders of magnitude, and cvdDiv is not asserted below, so
+        ' divergencePriceGate is inert. Literals preserve the method's own former defaults
+        ' (byte-identical to the pre-S2 implicit values), per CLAUDE.md's fixture-literal
+        ' provenance rule.
+        IndicatorEngine.CalcCVD(trades, FlatCandles(), cvdValue, cvdSlope, cvdDiv,
+                                slopeMinUsd:=50000, slopePctOfValue:=0.05,
+                                divergencePriceGate:=0.002,
+                                lateSegmentWeight:=2.0, earlySegmentWeight:=1.0)
 
         Check("A1 CVD slope (old sells → recent buys)",
               cvdSlope = "RISING",
@@ -694,7 +703,15 @@ Module Program
 
         Dim e As Double, m As Double, l As Double
         Dim momentum As String = "", signal As String = ""
-        IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal)
+        ' [A54a S2, MECHANISM] Verified by hand-computation before this edit: the fixture's
+        ' burst (early=16000, mid=32000, late=90000) reads ACCELERATING under BOTH the method's
+        ' former static-mode default (accelThreshold=10000, dynamicPct=0.0 -> effThreshold=10000)
+        ' AND the shipped cfg (dynamicPct=0.30 -> effThreshold=Max(138000*0.30, 10000*0.25)=41400)
+        ' -- 90000 clears microEarly+effThreshold either way. Literals preserve the method's own
+        ' former defaults (byte-identical to the pre-S2 implicit values).
+        IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal,
+                                     microWindowSize:=50, accelThreshold:=10000,
+                                     dynamicPct:=0.0, floorPct:=0.25)
 
         Check("A2 MicroCVD polarity (bull burst in tail)",
               signal = "BULL_ACCEL",
@@ -717,7 +734,14 @@ Module Program
 
         Dim e As Double, m As Double, l As Double
         Dim momentum As String = "", signal As String = ""
-        IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal)
+        ' [A54a S2, MECHANISM] This fixture asserts window selection only (E and E+M+L) --
+        ' momentum/signal are computed but not asserted below, so accelThreshold/dynamicPct/
+        ' floorPct are inert here; only microWindowSize=50 matters, to correctly exclude the
+        ' 10 huge sells outside the window. Literals preserve the method's own former defaults
+        ' (byte-identical to the pre-S2 implicit values).
+        IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal,
+                                     microWindowSize:=50, accelThreshold:=10000,
+                                     dynamicPct:=0.0, floorPct:=0.25)
 
         Check("A3 MicroCVD window (huge old sells excluded)",
               e = 16000 AndAlso (e + m + l) = 50000,
@@ -740,7 +764,12 @@ Module Program
         Next
 
         Dim tfiValue As Double, tfiSignal As String = ""
-        IndicatorEngine.CalcTFI(trades, tfiValue, tfiSignal)
+        ' [A54a S2, MECHANISM] tfiWindowSize=30 is load-bearing to the exact tfiValue=1.0
+        ' assertion below (the fixture's 30-sell/30-buy split is built around it -- a larger
+        ' window would mix in sells and fail the ±1e-6 tolerance); threshold is inert since
+        ' tfiValue=1.0 clears any threshold below it. Literals preserve the method's own former
+        ' defaults (byte-identical to the pre-S2 implicit values).
+        IndicatorEngine.CalcTFI(trades, tfiValue, tfiSignal, tfiWindowSize:=30, threshold:=0.15)
 
         Check("A4 TFI window (first 30 sells excluded)",
               tfiSignal = "BUY PRESSURE" AndAlso Math.Abs(tfiValue - 1.0) < 0.000001,
@@ -788,8 +817,15 @@ Module Program
     Private Sub A6_ObvNormalisation()
         Dim trendA As String = "", divA As String = ""
         Dim trendB As String = "", divB As String = ""
-        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=True), trendA, divA, trendGate:=10.0)
-        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=False), trendB, divB, trendGate:=10.0)
+        ' [A54a S2, MECHANISM] divergenceGate is inert -- Check() below asserts trendA/trendB
+        ' only, never divA/divB. Literal preserves the method's own former default
+        ' (byte-identical to the pre-S2 implicit value). ⚠ trendGate:=10.0 is NOT touched here
+        ' -- it is queue item 17's own known-stale literal (pins 10.0 against a shipped 23.0);
+        ' applying item 17's MECHANISM-vs-SHIPPED convention to it is a separate, still-open
+        ' slot per docs/a54a-json-poco-drift-guard-spec.md §8, named here per §7.2 trap C
+        ' rather than fixed silently.
+        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=True), trendA, divA, trendGate:=10.0, divergenceGate:=0.001)
+        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=False), trendB, divB, trendGate:=10.0, divergenceGate:=0.001)
 
         Check("A6 OBV normalisation (first-pair-equal not dead)",
               trendA = "RISING" AndAlso trendA = trendB,
@@ -926,8 +962,13 @@ Module Program
         Dim trend As String = "", emaAlign As String = "", details As String = ""
         Dim adx As Double
         Dim passLong As Boolean, passShort As Boolean
+        ' [A54a S2, MECHANISM] The 70-candle series falls 100/bar, a strongly one-sided series
+        ' built to classify BEAR unambiguously under any reasonable gate parameters -- not a
+        ' calibration-sensitivity test. Literals preserve the method's own former defaults
+        ' (byte-identical to the pre-S2 implicit values).
         IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign,
-                                    passLong, passShort, details)
+                                    passLong, passShort, details,
+                                    adxPeriod:=9, adxMin:=20.0, minOf:=2, candleLookback:=60)
 
         Check("A9 MTF per-side flags (15m BEAR)",
               trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
@@ -1299,7 +1340,12 @@ Module Program
         Dim trend As String = "", emaAlign As String = "", details As String = ""
         Dim adx As Double
         Dim passLong As Boolean, passShort As Boolean
-        IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign, passLong, passShort, details)
+        ' [A54a S2, MECHANISM] Same construction as A9 -- a strongly one-sided 70-candle BEAR
+        ' series, classifying unambiguously under any reasonable gate parameters. Literals
+        ' preserve the method's own former defaults (byte-identical to the pre-S2 implicit
+        ' values).
+        IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign, passLong, passShort, details,
+                                    adxPeriod:=9, adxMin:=20.0, minOf:=2, candleLookback:=60)
 
         Check("A14h regime/MTF unchanged (15m gate resolution-independent)",
               trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
@@ -7039,7 +7085,10 @@ Module Program
         ' TFI over the WHOLE slice (windowSize>=count) must read BUY PRESSURE because
         ' the newest half are buys — the ascending-order + LastN-from-end contract.
         Dim tfiVal As Double, tfiSig As String = ""
-        IndicatorEngine.CalcTFI(slice500, tfiVal, tfiSig, tfiWindowSize:=30)
+        ' [A54a S2, MECHANISM] threshold is inert -- the window's last 30 trades are all buys,
+        ' so tfiVal=1.0 clears any threshold below it. Literal preserves the method's own
+        ' former default (byte-identical to the pre-S2 implicit value).
+        IndicatorEngine.CalcTFI(slice500, tfiVal, tfiSig, tfiWindowSize:=30, threshold:=0.15)
         Dim okTfi = (tfiSig = "BUY PRESSURE") AndAlso (Math.Abs(tfiVal - 1.0) < 0.000001)
 
         ' Boundary: closeMs = 40 admits the first 40 trades (ts 1..40); newest is a sell.

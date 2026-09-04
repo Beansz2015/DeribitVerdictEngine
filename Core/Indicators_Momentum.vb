@@ -175,12 +175,15 @@ Partial Public Class IndicatorEngine
     '            the pivot (testing/breaking the high); RSI must be meaningfully lower.
     '   BULLISH: mirror — swing low, oversold pivot, current price at or below pivot, RSI higher.
     '   Replaces v0.48 "highest pivot in lookback" approach which fired on any pullback (~80% rate).
+    ''' <summary>[A54a S2, 2026-09-05] pivotWing/lookbackBars/overboughtThreshold/oversoldThreshold
+    ''' were Optional with method-local defaults; both production call sites already supplied
+    ''' cfg values for all four, so making them required is dead-code removal only.</summary>
     Public Shared Function CalcRSIDivergence(candles As List(Of Candle), period As Integer,
                                               priceGate As Double, rsiDelta As Double,
-                                              Optional pivotWing As Integer = 3,
-                                              Optional lookbackBars As Integer = 30,
-                                              Optional overboughtThreshold As Double = 65.0,
-                                              Optional oversoldThreshold As Double = 35.0) As String
+                                              pivotWing As Integer,
+                                              lookbackBars As Integer,
+                                              overboughtThreshold As Double,
+                                              oversoldThreshold As Double) As String
         Dim minNeeded As Integer = period + lookbackBars + pivotWing
         If candles.Count < minNeeded Then Return "NONE"
 

@@ -40,10 +40,14 @@ Partial Public Class IndicatorEngine
     End Function
 
     ' -- VWAP (auto-session, parameterised boundary) --------------------------
+    ''' <summary>[A54a S2, 2026-09-05] session2Hour/session2Minute were Optional with
+    ''' method-local defaults; both production call sites already supplied cfg values
+    ''' (positionally), so making them required is dead-code removal only. nowUtc stays
+    ''' Optional -- excluded per the ruling (internal convenience, no settings counterpart).</summary>
     Public Shared Function CalcVWAP(candles As List(Of Candle),
                                      ByRef sessionCandleCount As Integer,
-                                     Optional session2Hour As Integer = 13,
-                                     Optional session2Minute As Integer = 30,
+                                     session2Hour As Integer,
+                                     session2Minute As Integer,
                                      Optional nowUtc As DateTime? = Nothing) As Double
         Dim sessionCandles = GetSessionCandles(candles, session2Hour, session2Minute, nowUtc)
         sessionCandleCount = sessionCandles.Count
@@ -59,11 +63,15 @@ Partial Public Class IndicatorEngine
     End Function
 
     ' -- VWAP Sigma Bands (parameterised boundary) ----------------------------
+    ''' <summary>[A54a S2, 2026-09-05] session2Hour/session2Minute were Optional with
+    ''' method-local defaults; both production call sites already supplied cfg values
+    ''' (positionally), so making them required is dead-code removal only. nowUtc stays
+    ''' Optional -- excluded per the ruling (internal convenience, no settings counterpart).</summary>
     Public Shared Sub CalcVWAPBands(candles As List(Of Candle), vwap As Double,
                                      ByRef sigma1Upper As Double, ByRef sigma1Lower As Double,
                                      ByRef sigma2Upper As Double, ByRef sigma2Lower As Double,
-                                     Optional session2Hour As Integer = 13,
-                                     Optional session2Minute As Integer = 30,
+                                     session2Hour As Integer,
+                                     session2Minute As Integer,
                                      Optional nowUtc As DateTime? = Nothing)
         sigma1Upper = vwap : sigma1Lower = vwap
         sigma2Upper = vwap : sigma2Lower = vwap
@@ -92,10 +100,13 @@ Partial Public Class IndicatorEngine
     ' -- Bollinger Band Width -------------------------------------------------
     ' [P2] v0.48: Squeeze threshold is now 20th-percentile of the BBW series.
     '             Previously used minBBW * 1.5 which fired on any session-low spike.
+    ''' <summary>[A54a S2, 2026-09-05] seriesWindowMultiplier/squeezePercentile were Optional
+    ''' with method-local defaults; both production call sites already supplied cfg values
+    ''' by name, so making them required is dead-code removal only.</summary>
     Public Shared Sub CalcBBW(candles As List(Of Candle), period As Integer, stdMult As Double,
                                ByRef bbw As Double, ByRef squeezeStatus As String,
-                               Optional seriesWindowMultiplier As Integer = 5,
-                               Optional squeezePercentile As Double = 0.20)
+                               seriesWindowMultiplier As Integer,
+                               squeezePercentile As Double)
         bbw = 0 : squeezeStatus = "NONE"
         If candles.Count < period Then Return
 
@@ -133,13 +144,16 @@ Partial Public Class IndicatorEngine
     End Sub
 
     ' -- TTM Squeeze Momentum -------------------------------------------------
+    ''' <summary>[A54a S2, 2026-09-05] smaPeriod/linRegPeriod/flatThreshold were Optional
+    ''' with method-local defaults; both production call sites already supplied cfg values
+    ''' by name, so making them required is dead-code removal only.</summary>
     Public Shared Sub CalcTTMSqueeze(candles As List(Of Candle),
                                       ByRef histogram As Double,
                                       ByRef direction As String,
                                       ByRef signal As String,
-                                      Optional smaPeriod As Integer = 20,
-                                      Optional linRegPeriod As Integer = 7,
-                                      Optional flatThreshold As Double = 0.5)
+                                      smaPeriod As Integer,
+                                      linRegPeriod As Integer,
+                                      flatThreshold As Double)
         histogram = 0 : direction = "FLAT" : signal = "FLAT"
         If candles.Count < smaPeriod + linRegPeriod Then Return
 

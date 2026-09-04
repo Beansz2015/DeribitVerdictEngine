@@ -39,10 +39,13 @@ Partial Public Class IndicatorEngine
     ' First-bar normalisation was degenerate: zero when the first two closes
     ' were equal (OBV dead for the whole run) and effectively sign() otherwise.
     ' trendGate is in the same average-bar-volume units (settings v31: 10.0).
+    ''' <summary>[A54a S2, 2026-09-05] trendGate/divergenceGate were Optional with method-local
+    ''' defaults; both production call sites already supplied cfg values (positionally), so
+    ''' making them required is dead-code removal only.</summary>
     Public Shared Sub CalcOBV(candles As List(Of Candle),
                                ByRef obvTrend As String, ByRef obvDivergence As String,
-                               Optional trendGate As Double = 10.0,
-                               Optional divergenceGate As Double = 0.001)
+                               trendGate As Double,
+                               divergenceGate As Double)
         obvTrend = "FLAT" : obvDivergence = "NONE"
         If candles.Count < 3 Then Return
 
@@ -86,6 +89,10 @@ Partial Public Class IndicatorEngine
     ' age=0 for the most recent candle.  decayBase default 0.985 gives ~22%
     ' weight reduction per 15 bars, making the POC track intraday structure
     ' shifts rather than anchoring to high-volume events earlier in the session.
+    ''' <summary>[A54a S2, 2026-09-05] numBuckets/hvnVolPct/lvnVolPct/hvnProximityPct/decayBase/
+    ''' valueAreaPct were Optional with method-local defaults; both production call sites
+    ''' already supplied cfg values by name, so making them required is dead-code removal
+    ''' only. ⚠ Five adjacent Doubles -- see the S2 spec-back's per-call-site diff review.</summary>
     Public Shared Sub CalcVPFRLite(candles As List(Of Candle),
                                     currentPrice As Double,
                                     ByRef poc As Double,
@@ -101,12 +108,12 @@ Partial Public Class IndicatorEngine
                                     ByRef bucketVolumesOut As Double(),
                                     ByRef bucketPriceLowOut As Double,
                                     ByRef bucketSizeOut As Double,
-                                    Optional numBuckets As Integer = 50,
-                                    Optional hvnVolPct As Double = 0.6,
-                                    Optional lvnVolPct As Double = 0.2,
-                                    Optional hvnProximityPct As Double = 0.002,
-                                    Optional decayBase As Double = 0.985,
-                                    Optional valueAreaPct As Double = 0.70)
+                                    numBuckets As Integer,
+                                    hvnVolPct As Double,
+                                    lvnVolPct As Double,
+                                    hvnProximityPct As Double,
+                                    decayBase As Double,
+                                    valueAreaPct As Double)
         poc = 0 : hvnNearPoc = False : signal = "NEUTRAL"
         vah = 0 : val = 0 : valueAreaSignal = "INSIDE_VA"
         nearestHvnAbove = 0 : nearestHvnBelow = 0
@@ -256,11 +263,16 @@ Partial Public Class IndicatorEngine
     ''' D2 optional outputs: bestPivotByVolume / bestPivotVolumeRatio / bestPivotIsHigh —
     ''' price and relative volume of the highest-volume confirmed pivot in the lookback.
     ''' </summary>
+    ''' <summary>[A54a S2, 2026-09-05] pivotWing/lookbackBars were Optional with method-local
+    ''' defaults; all production call sites already supplied cfg values by name, so making them
+    ''' required is dead-code removal only. bestPivotByVolume/bestPivotVolumeRatio/bestPivotIsHigh
+    ''' stay Optional ByRef -- output parameters wearing Optional clothing, excluded per the
+    ''' ruling.</summary>
     Public Shared Sub CalcSwingPivots(candles As List(Of Candle),
                                        ByRef lastSwingHighPrice As Double,
                                        ByRef lastSwingLowPrice As Double,
-                                       Optional pivotWing As Integer = 3,
-                                       Optional lookbackBars As Integer = 30,
+                                       pivotWing As Integer,
+                                       lookbackBars As Integer,
                                        Optional ByRef bestPivotByVolume As Double = 0.0,
                                        Optional ByRef bestPivotVolumeRatio As Double = 0.0,
                                        Optional ByRef bestPivotIsHigh As Boolean = False)
@@ -423,6 +435,9 @@ Partial Public Class IndicatorEngine
     ' (both flags True). The comparison against the verdict direction — and
     ' the composition of the final display reason — happens at scoring
     ' Step 4b against the actual dominant side, not here.
+    ''' <summary>[A54a S2, 2026-09-05] adxPeriod/adxMin/minOf/candleLookback were Optional
+    ''' with method-local defaults; both production call sites already supplied cfg values
+    ''' by name, so making them required is dead-code removal only.</summary>
     Public Shared Sub CalcMTFGate(candles15m As List(Of Candle),
                                    ByRef mtfTrend As String,
                                    ByRef mtfADX As Double,
@@ -430,10 +445,10 @@ Partial Public Class IndicatorEngine
                                    ByRef gatePassLong As Boolean,
                                    ByRef gatePassShort As Boolean,
                                    ByRef gateDetails As String,
-                                   Optional adxPeriod As Integer = 9,
-                                   Optional adxMin As Double = 20.0,
-                                   Optional minOf As Integer = 2,
-                                   Optional candleLookback As Integer = 60)
+                                   adxPeriod As Integer,
+                                   adxMin As Double,
+                                   minOf As Integer,
+                                   candleLookback As Integer)
         mtfTrend = "FLAT" : mtfADX = 0 : mtfEMAAlignment = "MIXED"
         gatePassLong = True : gatePassShort = True : gateDetails = "MTF gate: no data"
 

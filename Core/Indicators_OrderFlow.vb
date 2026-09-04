@@ -71,12 +71,15 @@ Partial Public Class IndicatorEngine
     ' two pure helpers (ComputeOfiImbalance / ClassifyOfiRatio) shared with the
     ' time-averaged OFI accumulator (OfiAccumulator), so the snapshot and the WS-averaged
     ' paths run the SAME cap/floor/weight logic. CalcOFI is byte-identical to v45.
+    ''' <summary>[A54a S2, 2026-09-05] buyDominantRatio/sellDominantRatio/bookDepth were
+    ''' Optional with method-local defaults; all production call sites already supplied cfg
+    ''' values by name, so making them required is dead-code removal only.</summary>
     Public Shared Sub CalcOFI(orderBook As OrderBookSnapshot,
                                ByRef ofiRatio As Double, ByRef ofiSignal As String,
                                ByRef ofiBidVol As Double, ByRef ofiAskVol As Double,
-                               Optional buyDominantRatio  As Double  = 1.2,
-                               Optional sellDominantRatio As Double  = 0.833,
-                               Optional bookDepth         As Integer = 3)
+                               buyDominantRatio  As Double,
+                               sellDominantRatio As Double,
+                               bookDepth         As Integer)
         ofiRatio = 1.0 : ofiSignal = "BALANCED" : ofiBidVol = 0 : ofiAskVol = 0
 
         Dim bidVol, askVol, ratio As Double
@@ -250,11 +253,14 @@ Partial Public Class IndicatorEngine
     ' SHORT LIQS: liqShortSize > liqLongSize * dominanceRatio.
     ' Default 1.0 = equal-or-greater fallback; live config (settings.json) supplies 2.0
     ' to require the dominant side to be proportionally larger before signalling.
+    ''' <summary>[A54a S2, 2026-09-05] dominanceRatio was Optional with a method-local default;
+    ''' both production call sites already supplied cfg values by name, so making it required
+    ''' is dead-code removal only.</summary>
     Public Shared Sub CalcLiquidations(trades As List(Of TradeRecord),
                                         ByRef liqLongSize As Double,
                                         ByRef liqShortSize As Double,
                                         ByRef liqSignal As String,
-                                        Optional dominanceRatio As Double = 1.0)
+                                        dominanceRatio As Double)
         liqLongSize = 0 : liqShortSize = 0 : liqSignal = "NONE"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
         For Each t In trades
@@ -284,14 +290,19 @@ Partial Public Class IndicatorEngine
     ' Late segment carries 2x weight so the slope emphasises the most recent
     ' flow and a single large trade in early does not dominate the signal,
     ' reducing false RISING/FALLING flips.
+    ''' <summary>[A54a S2, 2026-09-05] slopeMinUsd/slopePctOfValue/divergencePriceGate/
+    ''' lateSegmentWeight/earlySegmentWeight were Optional with method-local defaults; all
+    ''' production call sites already supplied cfg values by name, so making them required is
+    ''' dead-code removal only. weightedSlopeOut stays Optional ByRef -- it is an output
+    ''' parameter wearing Optional clothing, excluded per the ruling.</summary>
     Public Shared Sub CalcCVD(trades As List(Of TradeRecord), candles As List(Of Candle),
                                ByRef cvdValue As Double, ByRef cvdSlope As String,
                                ByRef cvdDivergence As String,
-                               Optional slopeMinUsd As Double = 50000,
-                               Optional slopePctOfValue As Double = 0.05,
-                               Optional divergencePriceGate As Double = 0.002,
-                               Optional lateSegmentWeight As Double = 2.0,
-                               Optional earlySegmentWeight As Double = 1.0,
+                               slopeMinUsd As Double,
+                               slopePctOfValue As Double,
+                               divergencePriceGate As Double,
+                               lateSegmentWeight As Double,
+                               earlySegmentWeight As Double,
                                Optional ByRef weightedSlopeOut As Double = 0)
         cvdValue = 0 : cvdSlope = "FLAT" : cvdDivergence = "NONE" : weightedSlopeOut = 0
         If trades Is Nothing OrElse trades.Count = 0 Then Return
@@ -346,11 +357,14 @@ Partial Public Class IndicatorEngine
     ' aggressor pressure; a smaller window (20-30 trades) is more responsive and
     ' appropriate for 1m scalping.  MicroCVD needs a wider window to segment
     ' meaningfully into thirds.  Renamed param: windowSize -> tfiWindowSize.
+    ''' <summary>[A54a S2, 2026-09-05] tfiWindowSize/threshold were Optional with method-local
+    ''' defaults; all production call sites already supplied cfg values by name, so making them
+    ''' required is dead-code removal only.</summary>
     Public Shared Sub CalcTFI(trades As List(Of TradeRecord),
                                ByRef tfiValue As Double,
                                ByRef tfiSignal As String,
-                               Optional tfiWindowSize As Integer = 30,
-                               Optional threshold As Double = 0.15)
+                               tfiWindowSize As Integer,
+                               threshold As Double)
         tfiValue = 0.0 : tfiSignal = "NEUTRAL"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
 
@@ -388,16 +402,19 @@ Partial Public Class IndicatorEngine
     ' the oldest trade of the window, so microLate vs microEarly compares the
     ' newest flow against the oldest. Early/Mid/Late are net USD deltas;
     ' negative values are valid (net sell pressure in that segment).
+    ''' <summary>[A54a S2, 2026-09-05] microWindowSize/accelThreshold/dynamicPct/floorPct
+    ''' were Optional with method-local defaults; all production call sites already supplied
+    ''' cfg values by name, so making them required is dead-code removal only.</summary>
     Public Shared Sub CalcMicroCVD(trades As List(Of TradeRecord),
                                     ByRef microEarly As Double,
                                     ByRef microMid As Double,
                                     ByRef microLate As Double,
                                     ByRef microMomentum As String,
                                     ByRef microSignal As String,
-                                    Optional microWindowSize  As Integer = 50,
-                                    Optional accelThreshold   As Double  = 10000,
-                                    Optional dynamicPct       As Double  = 0.0,
-                                    Optional floorPct         As Double  = 0.25)
+                                    microWindowSize  As Integer,
+                                    accelThreshold   As Double,
+                                    dynamicPct       As Double,
+                                    floorPct         As Double)
         microEarly = 0 : microMid = 0 : microLate = 0
         microMomentum = "FLAT" : microSignal = "FLAT"
         If trades Is Nothing OrElse trades.Count = 0 Then Return
