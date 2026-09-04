@@ -664,16 +664,33 @@ Module Program
         Next
 
         Dim cvdValue As Double, cvdSlope As String = "", cvdDiv As String = ""
-        ' [A54a S2, MECHANISM] This fixture asserts the chronological RISING classification
-        ' mechanism, not shipped calibration -- weightedSlope here (~1.8M) clears any plausible
-        ' slopeMinUsd by two orders of magnitude, and cvdDiv is not asserted below, so
-        ' divergencePriceGate is inert. Literals preserve the method's own former defaults
-        ' (byte-identical to the pre-S2 implicit values), per CLAUDE.md's fixture-literal
-        ' provenance rule.
+        ' [A54a S2, MECHANISM -- bands MEASURED, not argued, by I17-SWEEP 2026-09-05]
+        ' This fixture asserts the chronological RISING classification mechanism, not shipped
+        ' calibration. Per-literal, with the mechanism that makes each what it is:
+        '   slopeMinUsd 50000        BAND-INERT: band [0, 6.0e6); the fixture's weightedSlope is
+        '                            600000*(lateW+earlyW) = 6.0e6, so 50000 clears it by ~120x.
+        '                            50000 was NEVER a shipped value (slope_min_usd history:
+        '                            1000.0 -> 12000.0), so item 17 does not bite. Left as-is.
+        '   slopePctOfValue 0.037    STRUCTURALLY INERT: slopeThreshold = Max(slopeMinUsd,
+        '                            |cvdValue| * slopePctOfValue), and this fixture's cvdValue is
+        '                            EXACTLY 0 (early -600k, mid 0, late +600k cancel), so the
+        '                            second term is 0 for any value. Band [0, 1000], no edge found.
+        '                            ⚠ Was 0.05, which IS a historically shipped value (0.01 ->
+        '                            0.05 -> 0.10) -- the same confusability item 17 removed from
+        '                            A6. Now synthetic 0.037.
+        '   divergencePriceGate 0.002 STRUCTURALLY INERT: gates cvdDivergence only, which Check()
+        '                            never reads; and FlatCandles() gives priceChange = 0 exactly.
+        '                            Never a shipped value (history 0.0005, 0.001). Left as-is.
+        '   late/earlySegmentWeight  BAND-INERT: every pair passes except (0, 0). Both EQUALLED
+        '   7.0 / 3.0                shipped (2.0 / 1.0), so both are now obviously synthetic,
+        '                            keeping late > early. Side effect, measured: weightedSlope
+        '                            rises 1.8e6 -> 6.0e6, widening slopeMinUsd's margin.
+        ' ⛔ Do NOT derive any of these from cfg -- this is an ordering test, not a calibration
+        ' test, and coupling it to a knob it was never designed to track is the A6 failure shape.
         IndicatorEngine.CalcCVD(trades, FlatCandles(), cvdValue, cvdSlope, cvdDiv,
-                                slopeMinUsd:=50000, slopePctOfValue:=0.05,
+                                slopeMinUsd:=50000, slopePctOfValue:=0.037,
                                 divergencePriceGate:=0.002,
-                                lateSegmentWeight:=2.0, earlySegmentWeight:=1.0)
+                                lateSegmentWeight:=7.0, earlySegmentWeight:=3.0)
 
         Check("A1 CVD slope (old sells → recent buys)",
               cvdSlope = "RISING",
@@ -703,15 +720,31 @@ Module Program
 
         Dim e As Double, m As Double, l As Double
         Dim momentum As String = "", signal As String = ""
-        ' [A54a S2, MECHANISM] Verified by hand-computation before this edit: the fixture's
-        ' burst (early=16000, mid=32000, late=90000) reads ACCELERATING under BOTH the method's
-        ' former static-mode default (accelThreshold=10000, dynamicPct=0.0 -> effThreshold=10000)
-        ' AND the shipped cfg (dynamicPct=0.30 -> effThreshold=Max(138000*0.30, 10000*0.25)=41400)
-        ' -- 90000 clears microEarly+effThreshold either way. Literals preserve the method's own
-        ' former defaults (byte-identical to the pre-S2 implicit values).
+        ' [A54a S2, MECHANISM -- bands MEASURED, not argued, by I17-SWEEP 2026-09-05]
+        ' Asserts signal = "BULL_ACCEL" on a burst of early=16000, mid=32000, late=90000.
+        '   microWindowSize 50       ⛔ KEPT, and its equality with the shipped window_size (50) is
+        '                            INCIDENTAL, not a claim. Band is [20, 1000+], so a synthetic
+        '                            value would pass -- but 50 is a DATASET DESIGN CONSTANT here:
+        '                            the 10/16/16/18 trade groups above are laid out around a
+        '                            50-trade window and their own comments name it. Band width
+        '                            licenses a change; it does not compel one.
+        '   accelThreshold 1234.0    BAND-INERT: band [0, 73999]; 74000 flips it to FLAT. Was
+        '                            10000, which EQUALLED shipped accel_threshold, so it is now
+        '                            obviously synthetic.
+        '   dynamicPct 0.0           BAND-INERT: band [0, 0.53]; the SHIPPED 0.30 is inside it, so
+        '                            the divergence session 2 hand-computed is confirmed by
+        '                            measurement. 0.0 was never shipped (history 0.03, 0.30).
+        '   floorPct 0.375           ⚠ MASKED, NOT INERT -- and a one-at-a-time sweep gets this
+        '                            WRONG. Its band reads [0, 1000] only because dynamicPct = 0.0
+        '                            leaves the whole `If dynamicPct > 0.0` branch that floorPct
+        '                            lives in unexecuted. Measured jointly, (accel 10000, dyn 0.30,
+        '                            floor 10) FAILS. Was 0.25, which EQUALLED shipped; now
+        '                            synthetic. Do not read its wide band as insensitivity.
+        ' ⚠ Measured joint dependency one-at-a-time misses entirely: microWindowSize 20 or 30 with
+        ' the SHIPPED dynamicPct 0.30 FAILS, though each value passes alone.
         IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal,
-                                     microWindowSize:=50, accelThreshold:=10000,
-                                     dynamicPct:=0.0, floorPct:=0.25)
+                                     microWindowSize:=50, accelThreshold:=1234.0,
+                                     dynamicPct:=0.0, floorPct:=0.375)
 
         Check("A2 MicroCVD polarity (bull burst in tail)",
               signal = "BULL_ACCEL",
@@ -734,14 +767,24 @@ Module Program
 
         Dim e As Double, m As Double, l As Double
         Dim momentum As String = "", signal As String = ""
-        ' [A54a S2, MECHANISM] This fixture asserts window selection only (E and E+M+L) --
-        ' momentum/signal are computed but not asserted below, so accelThreshold/dynamicPct/
-        ' floorPct are inert here; only microWindowSize=50 matters, to correctly exclude the
-        ' 10 huge sells outside the window. Literals preserve the method's own former defaults
-        ' (byte-identical to the pre-S2 implicit values).
+        ' [A54a S2, MECHANISM -- bands MEASURED, not argued, by I17-SWEEP 2026-09-05]
+        ' Asserts window selection only (e = 16000 and e+m+l = 50000).
+        '   microWindowSize 50       ⛔ LOAD-BEARING, and its band is a SINGLE POINT: {50}. 49
+        '                            gives net=49000, 51 gives e=-984000 (it pulls in the first
+        '                            huge sell). ⛔ KEPT. Its equality with the shipped window_size
+        '                            (50) is INCIDENTAL -- the fixture pins 50 because its own
+        '                            60-trade dataset is built to break at 51, not because
+        '                            settings says 50. A retune of window_size must NOT move this.
+        '   accelThreshold 1234.0    STRUCTURALLY INERT: these three feed momentum/signal only,
+        '   dynamicPct 0.0           which Check() never reads. Measured band for all three is the
+        '   floorPct 0.375           full probe range [0, 1e12] / [0, 1e9], and the 125-point
+        '                            accel x dyn x floor joint grid is 125/125 unbroken -- so
+        '                            unlike A2, floorPct is genuinely inert here, not masked.
+        '                            accelThreshold and floorPct EQUALLED shipped, so both are now
+        '                            obviously synthetic; dynamicPct 0.0 was never shipped.
         IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal,
-                                     microWindowSize:=50, accelThreshold:=10000,
-                                     dynamicPct:=0.0, floorPct:=0.25)
+                                     microWindowSize:=50, accelThreshold:=1234.0,
+                                     dynamicPct:=0.0, floorPct:=0.375)
 
         Check("A3 MicroCVD window (huge old sells excluded)",
               e = 16000 AndAlso (e + m + l) = 50000,
@@ -764,12 +807,17 @@ Module Program
         Next
 
         Dim tfiValue As Double, tfiSignal As String = ""
-        ' [A54a S2, MECHANISM] tfiWindowSize=30 is load-bearing to the exact tfiValue=1.0
-        ' assertion below (the fixture's 30-sell/30-buy split is built around it -- a larger
-        ' window would mix in sells and fail the ±1e-6 tolerance); threshold is inert since
-        ' tfiValue=1.0 clears any threshold below it. Literals preserve the method's own former
-        ' defaults (byte-identical to the pre-S2 implicit values).
-        IndicatorEngine.CalcTFI(trades, tfiValue, tfiSignal, tfiWindowSize:=30, threshold:=0.15)
+        ' [A54a S2, MECHANISM -- bands MEASURED, not argued, by I17-SWEEP 2026-09-05]
+        '   tfiWindowSize 30         ⛔ LOAD-BEARING AT ITS UPPER EDGE: band [1, 30]; 31 drops
+        '                            tfiValue to 0.935484 and fails the ±1e-6 pin. ⛔ KEPT, and its
+        '                            equality with the shipped TFI.window_size (30) is INCIDENTAL
+        '                            -- the fixture pins 30 because its own 30-sell/30-buy split
+        '                            is built around it, not because settings says 30.
+        '   threshold 0.42           BAND-INERT: band [0, 1); at exactly 1.0 the signal drops to
+        '                            NEUTRAL (the comparison is strict, and tfiValue is exactly
+        '                            1.0). Was 0.15, which EQUALLED shipped TFI.threshold; now an
+        '                            obviously synthetic mid-band value.
+        IndicatorEngine.CalcTFI(trades, tfiValue, tfiSignal, tfiWindowSize:=30, threshold:=0.42)
 
         Check("A4 TFI window (first 30 sells excluded)",
               tfiSignal = "BUY PRESSURE" AndAlso Math.Abs(tfiValue - 1.0) < 0.000001,
@@ -817,21 +865,27 @@ Module Program
     Private Sub A6_ObvNormalisation()
         Dim trendA As String = "", divA As String = ""
         Dim trendB As String = "", divB As String = ""
-        ' [A54a S2, MECHANISM] divergenceGate is inert -- Check() below asserts trendA/trendB
-        ' only, never divA/divB. Literal preserves the method's own former default
-        ' (byte-identical to the pre-S2 implicit value).
+        ' [A54a S2, MECHANISM -- band MEASURED by I17-SWEEP 2026-09-05]
+        '   divergenceGate 0.0077    STRUCTURALLY INERT: CalcOBV sets obvTrend BEFORE it ever
+        '                            reads divergenceGate, so the gate cannot reach trendA/trendB
+        '                            at all -- and Check() below asserts those only, never
+        '                            divA/divB. Band is the full probe range [0, 1000], both call
+        '                            sites swept independently, divA/divB constant at NONE
+        '                            throughout. Was 0.001, which EQUALLED shipped
+        '                            indicators.OBV.divergence_gate; now obviously synthetic.
         ' [queue item 17 APPLIED 2026-09-05, I17-A6] trendGate is MECHANISM too, and its literal
         ' is now an obviously-synthetic 1.0. ObvRiseCandles builds 50 bars at volume 10 rising
         ' +10/bar, so obvChange = 48 on BOTH variants -- any gate below 48 gives RISING, which is
-        ' what Check() asserts. ⛔ Do NOT derive this from cfg: a legitimate retune of
+        ' what Check() asserts. Band MEASURED by I17-SWEEP: [0, 47.9] passes, 48.0 flips BOTH
+        ' paths to FLAT. ⛔ Do NOT derive this from cfg: a legitimate retune of
         ' indicators.OBV.trend_gate above 48 would flip both paths to FLAT and break this fixture
         ' on a calibration change it was never designed to track. The former 10.0 was worse than
         ' arbitrary -- it is the pre-v33 SHIPPED value (trend_gate history: 0.001 -> 10.0 in v31
         ' -> 18.0 in v33 -> 23.0 in v66), so a reader greps it, finds it in the version history,
         ' and cannot tell stale from deliberate. 1.0 has never been shipped in settings.json nor
         ' held as a method default, so it cannot be misread as a claim about settings.
-        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=True), trendA, divA, trendGate:=1.0, divergenceGate:=0.001)
-        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=False), trendB, divB, trendGate:=1.0, divergenceGate:=0.001)
+        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=True), trendA, divA, trendGate:=1.0, divergenceGate:=0.0077)
+        IndicatorEngine.CalcOBV(ObvRiseCandles(firstPairEqual:=False), trendB, divB, trendGate:=1.0, divergenceGate:=0.0077)
 
         Check("A6 OBV normalisation (first-pair-equal not dead)",
               trendA = "RISING" AndAlso trendA = trendB,
@@ -968,13 +1022,36 @@ Module Program
         Dim trend As String = "", emaAlign As String = "", details As String = ""
         Dim adx As Double
         Dim passLong As Boolean, passShort As Boolean
-        ' [A54a S2, MECHANISM] The 70-candle series falls 100/bar, a strongly one-sided series
-        ' built to classify BEAR unambiguously under any reasonable gate parameters -- not a
-        ' calibration-sensitivity test. Literals preserve the method's own former defaults
-        ' (byte-identical to the pre-S2 implicit values).
+        ' [A54a S2, MECHANISM -- bands MEASURED by I17-SWEEP 2026-09-05, and the measurement
+        ' CORRECTED session 2's reasoning here. See docs/i17-sweep-spec-back.md §4.]
+        ' ⭐ The real mechanism is VOTE REDUNDANCY, not gate insensitivity. CalcMTFGate scores
+        ' three independent bear votes (DMI, ADX-strong, EMA stack) and needs `minOf`. This
+        ' fixture scores Bear:3 against need:2 -- ONE SPARE VOTE. That spare is the entire reason
+        ' adxPeriod and adxMin each read as inert one at a time: each can only remove one vote.
+        '   adxPeriod 7              ⚠ Assertion band is [1, 68], but the fixture goes PARTLY
+        '                            VACUOUS above 29: ADX collapses to 0.0, the ADX vote drops,
+        '                            and BEAR then comes from DMI+EMA alone -- while A9's own
+        '                            docstring claims it exercises "ADX strong". So the synthetic
+        '                            value is deliberately BELOW 30, not merely inside the band.
+        '                            Was 9, which EQUALLED shipped mtf_gate.adx_period.
+        '   adxMin 7.5               ⚠ MASKED, NOT INERT. One-at-a-time band is unbounded
+        '                            ([0, 1000] all pass) purely because of the spare vote: at
+        '                            adxMin > 100 the ADX vote drops and Bear falls 3 -> 2, still
+        '                            clearing minOf 2. Measured jointly, (adxMin 101, minOf 3)
+        '                            FAILS. Synthetic value chosen LOW so adx 100 still clears it
+        '                            and the ADX vote is genuinely cast. Was 20.0 = shipped.
+        '   minOf 2                  ⛔ LOAD-BEARING, narrow band [1, 3]: at 0 the trend INVERTS to
+        '                            BULL, at 4+ it goes FLAT. ⛔ KEPT, and its equality with the
+        '                            shipped mtf_gate.min_of (2) is INCIDENTAL, not a claim.
+        '   candleLookback 55        Band [20, 1000+]; <= 12 breaks. Chosen >= 50 on purpose: below
+        '                            50 the EMA stack cannot form and emaAlign degrades to MIXED,
+        '                            dropping the third vote even though the assertion survives.
+        '                            Was 60 = shipped mtf_gate.candle_lookback.
+        ' ⛔ CONFIRMED by measurement, at these values: Bull:0 Bear:3 (need 2), ADX 100.0,
+        ' EMA:BEAR -- byte-identical to the pre-change diagnostics. All three votes still cast.
         IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign,
                                     passLong, passShort, details,
-                                    adxPeriod:=9, adxMin:=20.0, minOf:=2, candleLookback:=60)
+                                    adxPeriod:=7, adxMin:=7.5, minOf:=2, candleLookback:=55)
 
         Check("A9 MTF per-side flags (15m BEAR)",
               trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
@@ -1346,12 +1423,15 @@ Module Program
         Dim trend As String = "", emaAlign As String = "", details As String = ""
         Dim adx As Double
         Dim passLong As Boolean, passShort As Boolean
-        ' [A54a S2, MECHANISM] Same construction as A9 -- a strongly one-sided 70-candle BEAR
-        ' series, classifying unambiguously under any reasonable gate parameters. Literals
-        ' preserve the method's own former defaults (byte-identical to the pre-S2 implicit
-        ' values).
+        ' [A54a S2, MECHANISM -- bands MEASURED by I17-SWEEP 2026-09-05] Same construction as A9,
+        ' same measured bands, same four values. ⭐ The full per-literal reasoning lives at A9's
+        ' call site above and is NOT repeated here; the short version is that these four look
+        ' inert one at a time only because the fixture carries a SPARE BEAR VOTE (Bear:3 vs
+        ' need:2), so adxPeriod is held below 30 and adxMin low on purpose, to keep the ADX vote
+        ' genuinely cast rather than silently dropped. minOf 2 is LOAD-BEARING (band [1, 3]) and
+        ' its equality with shipped is INCIDENTAL.
         IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign, passLong, passShort, details,
-                                    adxPeriod:=9, adxMin:=20.0, minOf:=2, candleLookback:=60)
+                                    adxPeriod:=7, adxMin:=7.5, minOf:=2, candleLookback:=55)
 
         Check("A14h regime/MTF unchanged (15m gate resolution-independent)",
               trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
@@ -7091,10 +7171,14 @@ Module Program
         ' TFI over the WHOLE slice (windowSize>=count) must read BUY PRESSURE because
         ' the newest half are buys — the ascending-order + LastN-from-end contract.
         Dim tfiVal As Double, tfiSig As String = ""
-        ' [A54a S2, MECHANISM] threshold is inert -- the window's last 30 trades are all buys,
-        ' so tfiVal=1.0 clears any threshold below it. Literal preserves the method's own
-        ' former default (byte-identical to the pre-S2 implicit value).
-        IndicatorEngine.CalcTFI(slice500, tfiVal, tfiSig, tfiWindowSize:=30, threshold:=0.15)
+        ' [A54a S2, MECHANISM -- bands MEASURED, not argued, by I17-SWEEP 2026-09-05]
+        '   threshold 0.42           BAND-INERT: band [0, 1); the window's last 30 trades are all
+        '                            buys so tfiVal is exactly 1.0, and only threshold >= 1.0
+        '                            drops the signal to NEUTRAL. Was 0.15, which EQUALLED shipped
+        '                            TFI.threshold; now obviously synthetic.
+        '   tfiWindowSize 30         Pre-existing (NOT one of session 2's 26), swept for context:
+        '                            same band [1, 30] as A4, 31 breaks it. Left untouched.
+        IndicatorEngine.CalcTFI(slice500, tfiVal, tfiSig, tfiWindowSize:=30, threshold:=0.42)
         Dim okTfi = (tfiSig = "BUY PRESSURE") AndAlso (Math.Abs(tfiVal - 1.0) < 0.000001)
 
         ' Boundary: closeMs = 40 admits the first 40 trades (ts 1..40); newest is a sell.
