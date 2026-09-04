@@ -275,3 +275,108 @@ mislead the next reader exactly as it misled this one.
 spot-audited on the hardest case (positional supply). ⭐ **The measurement's substance stands;
 only its headline needs the condition attached.** Session 2 remains a behaviour-preserving
 cleanup on the production side **for every method except `CalcSpread`.**
+
+---
+
+## 8. ⛔ §7.3's recommendation is FLIPPED to (B) — trader-directed 2026-09-05
+
+**The reviewer recommended (A). That was wrong, and it was wrong on two facts he had not
+checked before recommending.** ⚠ **Fifth reviewer correction in this arc. Recorded rather
+than quietly edited, per the same convention applied to everyone else's work.**
+
+### 8.1 What changed the read
+
+1. ⭐⭐ **`indicators.spread.` is AUTO-TWEAKER-TUNABLE.** Read in full:
+   `tools/AutoTweaker/SettingsDiffApplier.vb:66-84` fences **nineteen** prefixes and
+   `indicators.spread.` is **not one of them**. So the tweaker may propose a change to
+   `wide_threshold_bps`. When it does, `UI/MainForm_Analysis.vb:422` follows (passes cfg by
+   name) and ⛔ **`LiveMicrostructureEvaluator.vb:135` does not — it keeps the compiled-in
+   5.0.** **Two surfaces, two thresholds, no signal: the OBV drift shape, except created
+   automatically by a tool rather than by a human forgetting.** Under (A) that path stays
+   open permanently.
+2. **It gates SCORING, not display.** `SpreadStatus = "WIDE"` drives the Step-2 entry
+   penalty (`Core/ScoringEngine_Calculate_Scoring.vb:417`) — the class most likely to be
+   retuned, which is exactly why it is on the tweaker surface.
+
+**And the cost the reviewer weighted does not survive scrutiny:** passing
+`cfg.Indicators.Spread.WideThresholdBps` where POCO **and** JSON both already read 5.0 is
+**byte-identical behaviour today.** It is not a behaviour change; it is what every other call
+site already does. ⭐ **"Purity of dead-code removal" was a cosmetic distinction traded for a
+real, permanent hole.** There was also no ruling to exceed — the exclusion's stated reason is
+false, so this was never actually decided.
+
+⭐ **The governance argument is the decisive one:** under (A), session 2 leaves **exactly one
+method still carrying the defect class it exists to remove** — and it is the one method where
+a production caller genuinely relies on the default. That is the worst one to leave, and it
+establishes that *"a caller finds it inconvenient"* is grounds for exemption.
+
+### 8.2 (B)'s scope — verified, and it is small
+
+| Step | Detail |
+|---|---|
+| Signature | Drop both `Optional` defaults on `CalcSpread` (`Core/Indicators_OrderFlow.vb:561-562`) |
+| Call site 1 | `UI/MainForm_Analysis.vb:422-424` — **already passes both by name. No change** |
+| Call site 2 | `LiveMicrostructureEvaluator.vb:135` — pass `cfg.Indicators.Spread.WideThresholdBps` / `TightThresholdBps`; `cfg` is in scope at `:103` |
+| Fixtures | ⭐ **None touched.** `CalcSpread` has exactly two call sites tree-wide, both production; fixtures set `r.SpreadStatus` directly and never call the method |
+| Behaviour | **Zero change today** — all three copies read 5.0 / 1.5 |
+| In-scope population | **42 → 44** (the two thresholds re-enter). Production omissions become **2**, both closed by the one call-site edit |
+
+⛔ **The exclusion note must still be rewritten** — but under (B) it survives *correctly*,
+applied to `spreadStatus`, which is what "the documented `CalcSpread` discard" actually names
+and which genuinely has no settings counterpart. **The note becomes true instead of deleted.**
+
+---
+
+## 9. `spreadStatus` — what fixing it would take, and what it buys
+
+**Asked by the trader 2026-09-05. This is analysis, not a ruling — it is a SEPARATE item from
+(B) and does not block it.**
+
+### 9.1 What the problem actually is
+
+`CalcSpread` returns two values through `ByRef`, and its threshold parameters exist **only**
+to compute the second one. `LiveMicrostructureEvaluator` wants the first, so it declares a
+throwaway `sStatus` it never reads (`snap.HasSpread` comes from `HasTopOfBook(book)`).
+
+⚠⚠ **Under (B) this gets slightly worse before it gets better: that call site will pass two
+cfg threshold values purely to compute a status it discards.** Correct, guarded, and ugly.
+
+### 9.2 The fix — split the method
+
+| Option | Verdict |
+|---|---|
+| ⭐ **(i) Split:** `CalcSpreadBps(orderBook) As Double` (pure, no thresholds) + `ClassifySpread(bps, wide, tight) As String` | ⭐ **The right end state.** `MainForm_Analysis` calls both; `LiveMicrostructureEvaluator` calls only the first and needs **no thresholds at all** |
+| (ii) `Optional ByRef spreadStatus` | No help — the caller still declares a variable |
+| (iii) Return a tuple `(Bps, Status)` | Tidier than `ByRef`, but the thresholds stay mandatory for a caller that doesn't want them. **Solves the lesser half** |
+| (iv) Leave it | Works; keeps the ugliness (i) removes |
+
+### 9.3 What (i) buys — and it is more than tidiness
+
+1. ⭐⭐ **It removes the divergence risk BY CONSTRUCTION rather than guarding it.**
+   `LiveMicrostructureEvaluator` would no longer reference the spread thresholds at all, so
+   the tweaker-retune hazard in §8.1 becomes **impossible** rather than *"currently correct."*
+   ⭐ **That is this project's own strongest pattern** — `ComputeSideLevels` (*"one seam, no
+   copies"*), `TradeStoreWriter` (*"writer and reader cannot drift"*). **Making the wrong
+   thing impossible beats guarding against it.**
+2. **It turns a comment into a type.** The call site today asserts *"the bps is
+   threshold-independent"* in a comment that can go stale. After (i) the signature says it.
+3. **It deletes (B)'s one call-site line** — (B)'s signature edit survives (`ClassifySpread`
+   wants required params too), but the awkward pass-to-discard disappears.
+4. The declare-a-variable-to-throw-away pattern goes.
+
+### 9.4 What it costs, and why it is NOT session 2's job
+
+- ⛔ **It is a refactor of a shipped indicator's public API, not dead-code removal.** Under
+  CLAUDE.md's spec-first rule it needs its own proposal with a D-table — *"do not invent
+  design decisions unilaterally."*
+- **Blast radius is small but real:** 2 call sites, and `MainForm_Analysis` becomes two calls
+  instead of one. ⭐ **Zero fixture churn** — fixtures set `r.SpreadStatus` directly.
+- ⚠ **The classify half is genuinely used and must not be lost:** `SpreadStatus` feeds the
+  Step-2 WIDE penalty, the breakdown note (`:853`), the snapshot line
+  (`UI/MainForm_PlaintextSnapshot.vb:450`) and two card bindings
+  (`UI/MainForm_Render_Cards.vb:2073`, `:3248`). ⛔ **Four rendered surfaces ⇒ the
+  display-string parity rule is live for any such change**, unlike everything else in this arc.
+
+**Recommendation: do (B) now — it is ruled, one line, and zero behaviour change. Queue (i)
+separately.** (B) is not wasted work: its signature edit is what (i) would want anyway, and
+only the one call-site line is throwaway.
