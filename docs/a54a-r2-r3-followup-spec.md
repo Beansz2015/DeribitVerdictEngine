@@ -1,6 +1,7 @@
 # A54a follow-up — R-2 (dictionary completeness), R-1 (stale seed comment), R-3 (degraded-path ROC)
 
-**Status:** ⚠ **R-2 and R-1 are RULED and ready. R-3 carries ONE open decision — §3's D-R3.**
+**Status:** ✅ **BUILD-AUTHORIZED. Everything is ruled — R-2 = (b), R-1 rides it, and
+`D-R3` = (i) SEED THE NULLABLES (trader-directed 2026-09-04). Nothing is owed.**
 
 **Parent:** [`a54a-json-poco-drift-guard-spec.md`](a54a-json-poco-drift-guard-spec.md).
 **Findings:** [`a54a-drift-guard-spec-back.md`](a54a-drift-guard-spec-back.md) §5.3.
@@ -30,9 +31,23 @@ shipped resolver. **Nothing here is a derivation.**
    `StructuralLevelsSettings.Sessions` (`:1062`). **Measure all four before and after**; the
    spec author's probe says they match today, **but that is a 2026-09-04 measurement, not a
    property.**
-3. ⚠ **Re-running `A62a`'s mutation list unchanged.** The seed edit adds new comparable
-   scalars, so `Compared` moves off 261. **`A62a` asserts a floor (`>= 200`), not equality —
-   confirm that still holds and record the new number**; do not "fix" the floor to match.
+3. ⚠ **Expecting `Compared` to move. It should NOT.** ⛔ *(This trap read "the seed edit adds
+   new comparable scalars, so `Compared` moves off 261" until 2026-09-04 — **that was the spec
+   author's, and it was wrong.** Corrected in place; the reasoning is below and it is a
+   falsifiable prediction, not a measurement.)* **Every property the seed edits touch is
+   `Double?`** — both `ResolutionProfile` properties and both seeded `SessionBucketSettings.RocMagnitudeThreshold`
+   values — **and step 3 skips nullables before comparing.** So the walk should report:
+
+   | Counter | Before | **Predicted after (b) + (i)** |
+   |---|---:|---:|
+   | `Compared` | 261 | **261 — unchanged** |
+   | `Skipped` | 21 | **25** (+2 per recursed `ResolutionProfile`) |
+   | `Orphans` / `JsonOnly` | 0 / 0 | **0 / 0** |
+
+   ⭐ **`Compared` staying at 261 is the interesting part and is worth asserting:** the dict
+   recursion adds reach without adding a single comparison, because everything inside it is
+   nullable. ⚠ **If `Compared` moves, something is wrong — report it, do not adjust the
+   floor.**
 
 **⛔ ESCALATION TRIGGER.** If closing R-3 requires seeding a nullable whose absence is
 *load-bearing somewhere else* — i.e. some code path keys on `HasValue` rather than reading the
@@ -76,6 +91,19 @@ POCO counterpart*. The reverse — a **POCO** dict key absent from JSON — is s
 silently. **Measure it; if any exist today, report the count and stop rather than inventing a
 rule for it.**
 
+**D-R3 (i) — seed the per-session ROC nullables**, in the same `SessionVolumeSettings.Sessions`
+initialiser (`EngineSettings.vb:673-683`):
+
+| Bucket | `RocMagnitudeThreshold` | Why |
+|---|---|---|
+| ASIA | `0.17` | mirrors shipped |
+| LONDON | `0.11` | mirrors shipped |
+| **NY** | ⛔ **leave `Nothing`** | shipped carries **no** NY override — seeding one invents a value |
+
+⚠ **Carry the `AggressorVelocitySessionOverride` comment's discipline across:** say at the
+declaration that these **MUST mirror `settings.json`**, and say that **no guard enforces it**
+(§3) — only `A63a` does.
+
 **R-1 rides this commit** — `SessionVolumeSettings.Sessions`' comment still opens *"Default
 buckets aligned to live **v30** (ASIA/LONDON/NY)"* against buckets now aligned to **v68**.
 ⛔ **Edit that opening line. Do not append a correction below it** — that is the exact defect
@@ -118,13 +146,21 @@ changed underneath it.** No reflection walk scoped by that rule can ever catch t
 
 ---
 
-## 3. ⛔ D-R3 — the one open decision
+## 3. ✅ D-R3 — RULED (i), trader-directed 2026-09-04
 
-| # | Decision | Options | Reviewer's read |
-|---|---|---|---|
-| **D-R3** | **Do the per-session nullable ROC overrides get seeded too?** | **(i)** Seed `SessionBucketSettings.RocMagnitudeThreshold` — ASIA **0.17**, LONDON **0.11**, NY left `Nothing` (shipped has no NY override). Degraded path then matches shipped exactly. · **(ii)** Do (b) only; accept LONDON getting worse; record it. · **(iii)** Seed only the slope profile, skip magnitude — arbitrary | ⭐ **(i).** It is the only option that leaves the degraded path equal to shipped, and ⭐ **there is direct in-file precedent twelve lines from the edit:** `AggressorVelocitySessionOverride.BurstRatioThreshold` is a `Double?` seeded with **real values** (NY 4.5, LONDON 5.5, ASIA 5.5), and its own comment reads *"**MUST mirror settings.json** — the harness builds cfgs from these defaults."* **The rule already exists in this file; `session_volume` is the exception.** ⚠ **The honest counter:** (i) seeds a nullable, and the guard's scoping rule says nullables are out of scope — so this fix is **outside** what A54a can protect, and will rot silently unless the §4 fixture pins it |
+| # | Decision | ✅ Ruling |
+|---|---|---|
+| **D-R3** | **Do the per-session nullable ROC overrides get seeded too?** | ✅ **(i) — SEED THE NULLABLES, as recommended.** `SessionBucketSettings.RocMagnitudeThreshold`: **ASIA = 0.17**, **LONDON = 0.11**, ⛔ **NY stays `Nothing`** — the shipped file carries no NY override, and seeding one would be inventing a value, not mirroring. Precedent, twelve lines from the edit: `AggressorVelocitySessionOverride.BurstRatioThreshold` is a `Double?` seeded with real values under a comment reading *"**MUST mirror settings.json** — the harness builds cfgs from these defaults."* **The rule already exists in this file; `session_volume` was the exception.** ⛔ **(ii) rejected — it would have shipped LONDON knowingly 10× further off shipped than it is today.** (iii) was arbitrary |
 
-⚠ **If D-R3 is ruled (ii), say so explicitly in the commit and in `docs/DeribitIndicatorProject.md` §15** — *"LONDON's degraded-path ROC magnitude moved from 0.01 to 0.10 off shipped, knowingly"* is a very different record from silence.
+**Outcome: the parse-failure path now equals shipped on every ROC value.** §2's fourth column
+is the shipped state after this build.
+
+⛔⛔ **AND THE CONSEQUENCE THE IMPLEMENTER MUST CARRY: (i) IS COMPLETELY INVISIBLE TO THE A54a
+GUARD.** Both seeded values are `Double?`, and step 3 skips nullables **before** it compares —
+so the walk sees no change at all, `Compared` stays 261, and `A62a` passes identically whether
+(i) is applied, reverted, or typo'd to 1.7. ⭐ **`A63a` is therefore not "a fixture for R-3" —
+it is the ONLY thing in the tree that can ever detect this class.** Build it first, and prove
+its teeth by reverting the seed rather than by reasoning.
 
 ---
 
@@ -134,7 +170,7 @@ changed underneath it.** No reflection walk scoped by that rule can ever catch t
 
 | Fixture | Asserts | Mutation that must FAIL it |
 |---|---|---|
-| **A63a** ⭐ | ⭐ **THE ONE THAT MATTERS — it is the only guard against R-3 recurring.** From a bare `New EngineSettings()`, assert `ExecutionResolution.ResolveRocMagnitudeForHour` and `ResolveRocSlopeDelta` return the **shipped** values for an ASIA hour, a LONDON hour and an NY hour. **Derive the expected values from the tracked `settings.json`, never as literals** — CLAUDE.md's fixture-literal provenance rule, SHIPPED BEHAVIOUR arm | Revert any part of the seed → A63a names the session and the value |
+| **A63a** ⭐⭐ | ⛔ **THE ONLY THING IN THE TREE THAT CAN DETECT THIS CLASS — write it FIRST.** From a bare `New EngineSettings()`, assert `ExecutionResolution.ResolveRocMagnitudeForHour` and `ResolveRocSlopeDelta` return the **shipped** values for an ASIA hour (0–7), a LONDON hour (8–12) and an NY hour (13–23). **Derive every expected value from the tracked `settings.json`, never as a literal** — CLAUDE.md's fixture-literal provenance rule, SHIPPED BEHAVIOUR arm. ⚠ **NY is the arm that proves inheritance still works**: no bucket override, so it must resolve through `resolution_profiles` → global, not to 0.17 or 0.11 | ⛔ **Revert EACH of the four seeded values separately** — ASIA magnitude, LONDON magnitude, and both `ResolutionProfile` fields. **A62a stays GREEN under every one of them** (§3), which is the whole reason A63a exists |
 | **A63b** | **The dictionary completeness half.** A hand-built POCO/JSON pair where the JSON dict carries a key the POCO lacks → reported as `JsonOnly`; the matching case → not | Remove the new `Else` arm → A63b fails. ⛔ **`A62a` alone does NOT catch this** — after (b) there is no unmatched key left in the tree, so a clean-tree fixture proves nothing here. Same lesson as `A62b` |
 | **A62a** *(existing, re-proved)* | Still clean; `JsonOnly = 0`; record the **new** `Compared` count | Re-run the full §6 mutation list — the seed edit changes what the walk visits |
 

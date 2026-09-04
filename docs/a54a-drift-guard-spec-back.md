@@ -229,3 +229,23 @@ ROC nullables get seeded too (ASIA 0.17 / LONDON 0.11). ⭐ **Reviewer's read: y
 in-file precedent twelve lines from the edit (`AggressorVelocitySessionOverride.BurstRatioThreshold`
 is a `Double?` seeded with real values, its comment reading *"MUST mirror settings.json"*).
 **Without it, (b) ships LONDON knowingly worse.**
+
+### 6.1 ✅ D-R3 RULED (i) — seed the nullables, 2026-09-04
+
+**ASIA `RocMagnitudeThreshold` = 0.17 · LONDON = 0.11 · NY stays `Nothing`** (shipped carries
+no NY override; seeding one would invent a value rather than mirror one). **The parse-failure
+path now equals shipped on every ROC value.** Nothing is owed.
+
+⛔⛔ **The consequence that must not be lost: (i) is INVISIBLE to the A54a guard.** Both seeded
+values are `Double?`, and the walk's step 3 skips nullables **before** comparing — so `A62a`
+passes identically whether (i) is applied, reverted, or mistyped. ⭐ **`A63a` is not "a fixture
+for R-3"; it is the only instrument in the tree that can ever detect this class**, which is why
+[`a54a-r2-r3-followup-spec.md`](a54a-r2-r3-followup-spec.md) §4 orders it first and requires
+its teeth proven by reverting each seeded value separately.
+
+⚠ **One further reviewer correction, made in the same pass:** that follow-up spec's §0 trap 3
+originally predicted `Compared` would move off 261 after the seed edit. **It should not** —
+every property the edit touches is nullable, so the dict recursion adds reach without adding a
+single comparison. Corrected in place, and left as a **falsifiable prediction** (`Compared`
+261 · `Skipped` 21 → 25 · `Orphans`/`JsonOnly` 0) rather than a measurement. **Two unverified
+claims by the reviewer in one document is the pattern worth naming, not the individual slips.**
