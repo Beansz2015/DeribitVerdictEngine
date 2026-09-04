@@ -201,3 +201,77 @@ unilaterally.
   ordering, compile impact) — that is step 2's own job, not this measurement's.
 - The R-2/R-3 follow-up (`docs/a54a-r2-r3-followup-spec.md`) — separate, already
   build-authorized, not bundled here per the instruction.
+
+---
+
+## 7. ⭐ REVIEWER VERDICT — 2026-09-05. ACCEPTED as a measurement; ⛔ ONE finding on the headline.
+
+**Reviewed by the spec author, who did not perform the measurement.**
+
+### 7.1 Verified independently by spot-audit
+
+| Check | Result |
+|---|---|
+| `A1`'s `CalcCVD` (`Program.vb:667`) supplies 0 of 5 | ✅ confirmed — bare `CalcCVD(trades, FlatCandles(), cvdValue, cvdSlope, cvdDiv)` |
+| `A6`'s two `CalcOBV` calls omit `divergenceGate` | ✅ confirmed — both pass `trendGate:=10.0` alone |
+| ⭐ **Trap 2 handled correctly** | ⭐ **Confirmed on the case most likely to produce a false positive:** both production `CalcOBV` sites (`UI/MainForm_Analysis.vb:542-544`, `tools/BacktestRunner/ReplayLoop.vb:551-552`) supply `TrendGate`/`DivergenceGate` **positionally, with no `:=` anywhere.** A `:=`-seeking or line-anchored sweep would have counted these as production omissions and fired the trigger falsely. **They were correctly read as supplied** |
+| The 9-vs-26 reconciliation | ⭐ **Genuinely useful.** "Distinct call sites carrying ≥1 omission" reproduces **9 exactly** — an exact match, not a rough one. That is very likely the inherited figure's provenance, and finding it is worth more than the count itself |
+
+**The measurement method is sound and the report is honest.** §3 in particular names the
+awkward case explicitly and states its consequence rather than burying it.
+
+### 7.2 ⛔ THE FINDING — §0's headline is CONDITIONAL and is presented as unconditional
+
+§0's table reads **"Production omissions: 0"** flat. **It is not flat.** §3 discloses —
+correctly and prominently — that `LiveMicrostructureEvaluator.vb:132-135` **is a production
+call site that omits both `CalcSpread` threshold parameters**, and that *"without the ruling's
+exclusion, this would be 2 production omissions and would trip the escalation trigger
+outright."*
+
+⛔ **The exclusion it rests on has a stated reason that is FALSE.** The ruling
+([`trader-tick-queue.md`](trader-tick-queue.md) §0a) reads: *"Leave `maxAgeMs`, `nowUtc` and
+the documented `CalcSpread` discard alone — **internal conveniences with no settings
+counterpart**."*
+
+| Named item | "No settings counterpart"? |
+|---|---|
+| `maxAgeMs` | ✅ true |
+| `nowUtc` | ✅ true |
+| `spreadStatus` (`sStatus`) — the ByRef output the caller declares and **never reads**; `snap.HasSpread` comes from `HasTopOfBook(book)` | ✅ **true — and this is what "the discard" most naturally names** |
+| `wideThresholdBps` / `tightThresholdBps` | ⛔ **FALSE** — `SpreadSettings.WideThresholdBps` / `TightThresholdBps` exist (`EngineSettings.vb:630-635`) |
+
+⭐ **So the coherent reading of "the documented `CalcSpread` discard" is `sStatus`, not the two
+threshold inputs.** Under that reading the thresholds are in scope, and the production count
+is **2, not 0** — and the escalation trigger fires.
+
+⛔⛔ **THE ROOT DEFECT IS THE SPEC AUTHOR'S, NOT THE IMPLEMENTER'S — fourth correction in this
+arc.** [`a54a-json-poco-drift-guard-spec.md`](a54a-json-poco-drift-guard-spec.md) §7/§7.1
+carried the ruling's exclusion forward **while already noting its reason was false**, and told
+the implementer to *"read before deciding what the discard refers to rather than assuming."*
+**That handed them an ambiguity dressed as an exclusion, then asked them to resolve it
+mid-measurement.** They read it, resolved it, and disclosed the resolution in full — which is
+the best available response to a contradictory instruction.
+
+### 7.3 The disposition is small — one decision, and it is not urgent
+
+⭐ **Practical consequence, verified:** if the two parameters become required,
+`LiveMicrostructureEvaluator.vb:135` **fails to compile** — not a silent behaviour change. And
+`cfg As EngineSettings` **is already in scope** at that method (`:103`; it passes
+`cfg.Indicators.TFI.*` three lines above), so the fix is one line.
+
+| Option | Consequence |
+|---|---|
+| **(A)** Keep `CalcSpread` excluded — leave both `Optional` defaults, session 2 skips this one method | ⭐ Session 2 stays **pure dead-code removal** everywhere it applies, which is its whole ruled framing. In-scope population 42 → unchanged; production omissions genuinely 0 |
+| **(B)** Include it — make both required, pass `cfg.Indicators.Spread.*` at the one call site | Removes the last method carrying the three-copies problem, at the cost of one **production** edit — so (b) is no longer purely dead-code removal |
+
+**Reviewer's read: (A)** — session 2's ruled framing is dead-code removal, and (B) trades that
+for one line of tidiness. ⛔ **But whichever is taken, the exclusion note must be REWRITTEN
+with a true reason.** *"No settings counterpart"* is false for these two parameters and will
+mislead the next reader exactly as it misled this one.
+
+### 7.4 What this does NOT change
+
+**The other 34 production call sites are genuinely clean** — 0 omissions across 13 methods,
+spot-audited on the hardest case (positional supply). ⭐ **The measurement's substance stands;
+only its headline needs the condition attached.** Session 2 remains a behaviour-preserving
+cleanup on the production side **for every method except `CalcSpread`.**
