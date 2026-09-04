@@ -542,6 +542,57 @@ call site** — that is a behaviour-preserving edit nobody ruled, made mid-measu
 and **has never been checked by anyone.** A different number is a finding, not an error to
 reconcile away.
 
+### 7.2 ⛔ STEP 2 — the traps in the EDIT, added 2026-09-05 after step 1 reported
+
+⛔⛔ **THE DELETION IS THE SAFE HALF. THE 27 EDITS THAT FOLLOW IT ARE NOT.**
+
+Removing an `Optional` default is **compiler-checked**: any call site that relied on it fails
+to build. **That half cannot ship broken.** Everything below is about what you write next.
+
+#### Trap A — the wrong cfg key compiles and is silently wrong
+
+A call site "fixed" by passing `cfg.Indicators.Spread.TightThresholdBps` where
+`WideThresholdBps` belongs **builds cleanly, runs, produces rows, and is wrong.** ⛔ **Neither
+the compiler nor a live run catches it** — and `A54a`'s guard cannot either, because it
+compares POCO to JSON and never looks at call sites.
+
+**Highest-risk methods — same-type parameters, adjacent, where a swap compiles:**
+
+| Method | The pair(s) that swap silently |
+|---|---|
+| `CalcVPFRLite` | ⛔ **five adjacent `Double`s** — `hvnVolPct` · `lvnVolPct` · `hvnProximityPct` · `decayBase` · `valueAreaPct`. **The worst in the set** |
+| `CalcCVD` | `lateSegmentWeight` / `earlySegmentWeight` — and note the shipped pair is **2.0 / 1.0**, so a swap inverts the late-weighting the signal exists for |
+| `CalcOFI` | `buyDominantRatio` / `sellDominantRatio` (**2.0 / 0.5** — a swap inverts direction) |
+| `CalcOBV` | `trendGate` / `divergenceGate` |
+| `CalcSpread` | `wideThresholdBps` / `tightThresholdBps` — ⚠ **the one PRODUCTION edit (`S2-1` (B)), so this pair carries live scoring impact** |
+| `CalcTTMSqueeze` · `CalcSwingPivots` · `CalcRSIDivergence` · `CalcMTFGate` | adjacent same-type `Integer` pairs throughout |
+
+⭐ **The only real guard is a per-call-site diff review against the signature, parameter by
+parameter.** Say in the spec-back that you did it, and how.
+
+#### ⛔ Trap B — the bigger one: 26 fixture sites need VALUES, and each is a PROVENANCE DECISION
+
+**This is what "dead-code removal" understates.** Those 26 omissions are omissions *because*
+the default supplied the value. Make the parameter required and **every one of them must now
+be given a value** — and CLAUDE.md's **fixture-literal provenance rule** governs each:
+
+> **SHIPPED BEHAVIOUR** ⇒ derive it from cfg, never hardcode.
+> **MECHANISM** ⇒ a literal is correct, and the comment must say so and why.
+
+⛔ **So step 2 is not one mechanical edit; it is 26 provenance decisions plus a mechanical
+edit.** ⚠ **Size the session accordingly — this is the half most likely to be
+under-estimated**, and getting it wrong writes fresh instances of the exact defect class
+`A54a` exists to close.
+
+#### ⚠ Trap C — step 2 collides with queue item 17, and forces it
+
+Two of the 26 are `A6`'s `CalcOBV` calls (`verify/ordercheck/Program.vb:791-792`), which omit
+`divergenceGate` while passing **`trendGate:=10.0` — a value already known STALE** against a
+shipped 23.0. ⛔ **You cannot supply `divergenceGate` at that call site without deciding what
+the neighbouring literal asserts.** Item 17 ruled the convention (MECHANISM, 2026-09-03) but
+nobody has applied it to `A6`. **Step 2 forces that application. Name it in the spec-back
+rather than editing `A6` silently.**
+
 ---
 
 ## 8. Out of scope — named so they are not lost
