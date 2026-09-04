@@ -104,13 +104,22 @@ Public Class EngineSettings
 
     ''' <summary>
     ''' [v36 session-timeframe-resolution] Per-resolution override map keyed by the
-    ''' resolution string ("1"/"3"/"5"). "1" is empty (everything inherits the global
-    ''' values); "3" carries only the overridden ROC keys. A pure override-map: any key
-    ''' absent from the active profile falls back to the global value. Default-empty dict
-    ''' so an absent block = pure 1-min behaviour. Spec §2.2.
+    ''' resolution string ("1"/"3"/"5"). A pure override-map: any key absent from the
+    ''' active profile falls back to the global value. [A54a R-2/R-3 follow-up,
+    ''' docs/a54a-r2-r3-followup-spec.md, 2026-09-05] Seeded to mirror shipped -- "1"
+    ''' empty, "3" carries the shipped ROC overrides. Was default-empty on the premise
+    ''' that an absent block means pure 1-min behaviour; D-2 (2026-09-04) synced
+    ''' ASIA/LONDON SessionBucketSettings.ExecutionResolution to 3 in this same seed, so
+    ''' the parse-failure path now runs 3-min bars and needs profile "3" populated or it
+    ''' silently falls through to the 1-min globals (§2 of the follow-up spec). MUST
+    ''' mirror settings.json -- no guard enforces it; only A63a does.
     ''' </summary>
     <JsonPropertyName("resolution_profiles")>
-    Public Property ResolutionProfiles As Dictionary(Of String, ResolutionProfile) = New Dictionary(Of String, ResolutionProfile)
+    Public Property ResolutionProfiles As Dictionary(Of String, ResolutionProfile) =
+        New Dictionary(Of String, ResolutionProfile) From {
+            {"1", New ResolutionProfile()},
+            {"3", New ResolutionProfile With {.RocMagnitudeThreshold = 0.21, .RocSlopeDeltaThreshold = 0.06}}
+        }
 
     <JsonPropertyName("regime_weights")>
     Public Property RegimeWeights As New RegimeWeightSettings
@@ -670,18 +679,25 @@ End Class
 ''' </summary>
 Public Class SessionVolumeSettings
     <JsonPropertyName("enabled")>  Public Property Enabled  As Boolean = True
-    ' Default buckets aligned to live v30 (ASIA/LONDON/NY). An empty default would
+    ' Default buckets aligned to live v68 (ASIA/LONDON/NY). An empty default would
     ' silently skip all session scaling on the code-defaults path; a settable List
     ' property is fully replaced by settings.json on a successful load.
     ' [A54a D-2, 2026-09-04] ASIA HighMultiplier/MidMultiplier and ASIA+LONDON
     ' ExecutionResolution synced to shipped -- ruled 2026-08-11 (trader-tick-queue.md
-    ' Sec0a, "Seeded session buckets"), carried forward by the A54a drift guard's
+    ' §0a, "Seeded session buckets"), carried forward by the A54a drift guard's
     ' reflection walk, not by a fixture -- zero fixtures read this seed
     ' (BuildResolutionCfg fully replaces Sessions; A15g/A28d build their own JSON
     ' literals). NY is clean -- left untouched.
+    ' [A54a R-2/R-3 follow-up, D-R3 (i), docs/a54a-r2-r3-followup-spec.md, 2026-09-05]
+    ' ASIA/LONDON RocMagnitudeThreshold seeded to shipped (0.17 / 0.11) -- D-2 moved
+    ' ASIA/LONDON to 3-min bars without seeding the ROC magnitude these sessions need,
+    ' so the parse-failure path fell through to the 1-min global (§2 of the follow-up
+    ' spec). NY stays Nothing -- shipped carries no NY override; seeding one would
+    ' invent a value, not mirror it. MUST mirror settings.json -- no guard enforces it;
+    ' only A63a does.
     <JsonPropertyName("sessions")> Public Property Sessions As New List(Of SessionBucketSettings) From {
-        New SessionBucketSettings With {.Name = "ASIA",   .StartHour = 0,  .EndHour = 7,  .HighMultiplier = 1.0,  .MidMultiplier = 1.0, .ExecutionResolution = 3},
-        New SessionBucketSettings With {.Name = "LONDON", .StartHour = 8,  .EndHour = 12, .HighMultiplier = 1.0,  .MidMultiplier = 1.0, .ExecutionResolution = 3},
+        New SessionBucketSettings With {.Name = "ASIA",   .StartHour = 0,  .EndHour = 7,  .HighMultiplier = 1.0,  .MidMultiplier = 1.0, .ExecutionResolution = 3, .RocMagnitudeThreshold = 0.17},
+        New SessionBucketSettings With {.Name = "LONDON", .StartHour = 8,  .EndHour = 12, .HighMultiplier = 1.0,  .MidMultiplier = 1.0, .ExecutionResolution = 3, .RocMagnitudeThreshold = 0.11},
         New SessionBucketSettings With {.Name = "NY",     .StartHour = 13, .EndHour = 23, .HighMultiplier = 1.15, .MidMultiplier = 1.1}
     }
 End Class
@@ -707,8 +723,10 @@ Public Class SessionBucketSettings
     ''' ROC *levels* diverge (Asia ~1.8× hotter), so a single resolution_profiles["3"]
     ''' magnitude cannot serve both — this per-session override does (ASIA 0.17 / LONDON
     ''' 0.11). Slope stays shared in resolution_profiles["3"]. MANUAL re-baseline only —
-    ''' OFF the auto-tweaker surface (PromptBuilder HARD CONSTRAINT 11). Default buckets
-    ''' leave it Nothing (silent-defaults path inherits base, like execution_resolution).
+    ''' OFF the auto-tweaker surface (PromptBuilder HARD CONSTRAINT 11). [A54a R-2/R-3
+    ''' follow-up, D-R3 (i), 2026-09-05] Default ASIA/LONDON buckets now seed this to
+    ''' shipped (0.17 / 0.11); NY leaves it Nothing (silent-defaults path inherits base,
+    ''' like execution_resolution — shipped carries no NY override).
     ''' Spec: docs/asia-london-roc-rebaseline-proposal.md.
     ''' </summary>
     <JsonPropertyName("roc_magnitude_threshold")> Public Property RocMagnitudeThreshold As Double? = Nothing

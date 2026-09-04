@@ -589,6 +589,10 @@ Module Program
         A62e_ResolverFailsLoudly()
         A62f_StructuralExclusionNotByName()
 
+        ' [A63 — R-2/R-3 follow-up, docs/a54a-r2-r3-followup-spec.md §4]
+        A63a_ParseFailurePathResolvesShipped()
+        A63b_DictionaryCompletenessJsonOnly()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -11582,13 +11586,28 @@ Module Program
             ElseIf propType.IsGenericType AndAlso propType.GetGenericTypeDefinition() Is GetType(Dictionary(Of ,)) Then
                 Dim dictObj = TryCast(val, IDictionary)
                 If dictObj IsNot Nothing Then
+                    Dim seenDictKeys As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
                     For Each keyObj In dictObj.Keys
                         Dim keyStr As String = CStr(keyObj)
+                        seenDictKeys.Add(keyStr)
                         Dim entryEl As JsonElement
                         If A62TryGetPropertyCI(childEl, keyStr, entryEl) Then
                             WalkPocoVsJson(dictObj(keyObj), entryEl, A62BuildPath(path, keyStr), False, result)
                         End If
                     Next
+                    ' [R-2 (a), docs/a54a-r2-r3-followup-spec.md §1] A JSON dict key with no
+                    ' POCO counterpart is otherwise invisible: WalkPocoVsJson is never entered
+                    ' for it, so the bottom-of-function JsonOnly loop -- which belongs to
+                    ' THIS object's own recursion, never the dict's -- never runs for it either.
+                    ' Report it here instead. Direction only: the reverse (a POCO dict key
+                    ' absent from JSON) is still silently Skipped -- not ruled, see §1.
+                    If childEl.ValueKind = JsonValueKind.Object Then
+                        For Each jsonEntry In childEl.EnumerateObject()
+                            If Not seenDictKeys.Contains(jsonEntry.Name) Then
+                                result.JsonOnly.Add(A62BuildPath(path, jsonEntry.Name))
+                            End If
+                        Next
+                    End If
                 End If
 
             ' Step 7: List(Of T). T=String -> skip entirely. T=settings class -> match by the
@@ -11857,6 +11876,143 @@ Module Program
               String.Format("realShape: compared={0} orphans=[{1}] drifts=[{2}] skipped=[{3}] | arbShape: compared={4} orphans=[{5}] drifts=[{6}] skipped=[{7}]",
                             r.Compared, String.Join(",", r.Orphans), String.Join(",", r.Drifts), String.Join(",", r.Skipped),
                             rArb.Compared, String.Join(",", rArb.Orphans), String.Join(",", rArb.Drifts), String.Join(",", rArb.Skipped)))
+    End Sub
+
+    ' [A63 — R-2/R-3 follow-up, docs/a54a-r2-r3-followup-spec.md §4] A62 is fully used
+    ' (A62a-A62g); A63 is free.
+
+    ''' <summary>Navigates a chain of JSON object keys (case-insensitive), throwing loudly if
+    ''' any segment is missing rather than returning a silent default -- a fixture deriving its
+    ''' own expected values must fail visibly if the tracked file's shape changes under it,
+    ''' not quietly compare against 0.</summary>
+    Private Function A63ReadDouble(rootEl As JsonElement, ParamArray path As String()) As Double
+        Dim cur As JsonElement = rootEl
+        For Each seg In path
+            Dim nextEl As JsonElement
+            If Not A62TryGetPropertyCI(cur, seg, nextEl) Then
+                Throw New InvalidOperationException("A63: settings.json is missing expected path segment '" & seg & "' (full path: " & String.Join(".", path) & ")")
+            End If
+            cur = nextEl
+        Next
+        Return cur.GetDouble()
+    End Function
+
+    ''' <summary>Finds a session_volume.sessions[] array entry by its "name" field
+    ''' (case-insensitive), throwing loudly if absent.</summary>
+    Private Function A63FindSessionByName(sessionsArrEl As JsonElement, name As String) As JsonElement
+        For Each item In sessionsArrEl.EnumerateArray()
+            Dim nameEl As JsonElement
+            If A62TryGetPropertyCI(item, "name", nameEl) AndAlso nameEl.ValueKind = JsonValueKind.String AndAlso
+               String.Equals(nameEl.GetString(), name, StringComparison.OrdinalIgnoreCase) Then
+                Return item
+            End If
+        Next
+        Throw New InvalidOperationException("A63: session_volume.sessions[] has no entry named '" & name & "'")
+    End Function
+
+    ''' <summary>A63a ⭐⭐ THE ONLY THING IN THE TREE THAT CAN DETECT THE R-3 CLASS
+    ''' (docs/a54a-r2-r3-followup-spec.md §3-§4). Both D-R3 (i) seeded values are Double?,
+    ''' and WalkPocoVsJson's step 3 skips nullables BEFORE it compares -- so A62a cannot see
+    ''' this seed at all; Compared stays 261 whether it is applied, reverted, or typo'd.
+    ''' This fixture goes around the walk and calls the resolvers directly instead. Every
+    ''' expected value is DERIVED from the tracked settings.json, never a literal (CLAUDE.md's
+    ''' fixture-literal provenance rule, SHIPPED BEHAVIOUR arm) -- this asserts the built
+    ''' POCO defaults reproduce shipped, not a copy of the numbers restated as literals.</summary>
+    Private Sub A63a_ParseFailurePathResolvesShipped()
+        Dim errMsg As String = ""
+        Dim root As String = A62RequireSettingsRoot(AppContext.BaseDirectory, errMsg)
+        If root Is Nothing Then
+            Check("A63a parse-failure path resolves shipped ROC magnitude/slope for ASIA/LONDON/NY", False, errMsg)
+            Return
+        End If
+        Dim rootEl = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "settings.json"))).RootElement
+
+        Dim svEl As JsonElement
+        A62TryGetPropertyCI(rootEl, "session_volume", svEl)
+        Dim sessionsArrEl As JsonElement
+        A62TryGetPropertyCI(svEl, "sessions", sessionsArrEl)
+
+        Dim asiaEl = A63FindSessionByName(sessionsArrEl, "ASIA")
+        Dim londonEl = A63FindSessionByName(sessionsArrEl, "LONDON")
+
+        Dim expectedAsiaMag As Double = A63ReadDouble(asiaEl, "roc_magnitude_threshold")
+        Dim expectedLondonMag As Double = A63ReadDouble(londonEl, "roc_magnitude_threshold")
+        Dim expectedGlobalMag As Double = A63ReadDouble(rootEl, "indicators", "ROC", "magnitude_threshold")
+        Dim expectedGlobalSlope As Double = A63ReadDouble(rootEl, "indicators", "ROC", "slope_delta_threshold")
+        Dim expectedProfile3Slope As Double = A63ReadDouble(rootEl, "resolution_profiles", "3", "roc_slope_delta_threshold")
+        Dim expectedProfile3Mag As Double = A63ReadDouble(rootEl, "resolution_profiles", "3", "roc_magnitude_threshold")
+
+        Dim cfg As New EngineSettings()
+
+        Const asiaHour As Integer = 3     ' inside ASIA 0-7
+        Const londonHour As Integer = 10  ' inside LONDON 8-12
+        Const nyHour As Integer = 18      ' inside NY 13-23, no bucket ROC override -- the
+                                           ' arm that proves inheritance still resolves through
+                                           ' resolution_profiles -> global, not to 0.17/0.11.
+
+        Dim asiaMag = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, asiaHour)
+        Dim londonMag = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, londonHour)
+        Dim nyMag = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, nyHour)
+
+        Dim asiaSlope = ExecutionResolution.ResolveRocSlopeDelta(cfg, ExecutionResolution.ResolveResolution(cfg, asiaHour))
+        Dim londonSlope = ExecutionResolution.ResolveRocSlopeDelta(cfg, ExecutionResolution.ResolveResolution(cfg, londonHour))
+        Dim nySlope = ExecutionResolution.ResolveRocSlopeDelta(cfg, ExecutionResolution.ResolveResolution(cfg, nyHour))
+
+        ' ResolveRocMagnitudeForHour checks the ASIA/LONDON bucket override BEFORE it ever
+        ' reaches resolution_profiles["3"] -- so the per-hour asserts above cannot see
+        ' profile "3"'s OWN magnitude field at all (it is masked for every live session
+        ' today; no bucket runs resolution 3 with no bucket override). Assert it directly
+        ' via ResolveRocMagnitude(cfg, 3), or reverting that field alone is invisible to
+        ' this fixture -- found while running the required mutation-proof pass (§4).
+        Dim profile3Mag = ExecutionResolution.ResolveRocMagnitude(cfg, 3)
+
+        Const tol As Double = 0.000000001
+        Dim ok As Boolean =
+            Math.Abs(asiaMag - expectedAsiaMag) < tol AndAlso
+            Math.Abs(londonMag - expectedLondonMag) < tol AndAlso
+            Math.Abs(nyMag - expectedGlobalMag) < tol AndAlso
+            Math.Abs(asiaSlope - expectedProfile3Slope) < tol AndAlso
+            Math.Abs(londonSlope - expectedProfile3Slope) < tol AndAlso
+            Math.Abs(nySlope - expectedGlobalSlope) < tol AndAlso
+            Math.Abs(profile3Mag - expectedProfile3Mag) < tol
+
+        Check("A63a parse-failure path (bare New EngineSettings(), no JSON loaded) resolves the SAME ROC magnitude/slope as the tracked settings.json for an ASIA, LONDON and NY hour -- NY resolves through resolution_profiles->global (no bucket override), proving inheritance still works; resolution_profiles[""3""].roc_magnitude_threshold is asserted directly since the ASIA/LONDON bucket overrides mask it in the per-hour path (D-R3 (i))",
+              ok,
+              String.Format(CultureInfo.InvariantCulture,
+                            "asiaMag={0} want={1} | londonMag={2} want={3} | nyMag={4} want={5}(global) | asiaSlope={6} londonSlope={7} want={8}(profile3) | nySlope={9} want={10}(global) | profile3Mag={11} want={12}",
+                            asiaMag, expectedAsiaMag, londonMag, expectedLondonMag, nyMag, expectedGlobalMag,
+                            asiaSlope, londonSlope, expectedProfile3Slope, nySlope, expectedGlobalSlope,
+                            profile3Mag, expectedProfile3Mag))
+    End Sub
+
+    ''' <summary>A63b-only local test shapes carrying a dictionary property, isolated from
+    ''' production types. After R-2 (b) the real tree's resolution_profiles carries no
+    ''' unmatched key, so a clean-tree fixture proves nothing about the new Else arm --
+    ''' same lesson as A62b: teeth need an artificial mutation, not a hope that production
+    ''' drifts on cue.</summary>
+    Private Class A63DictEntryTestShape
+        <JsonPropertyName("value")> Public Property Value As Double = 1.0
+    End Class
+
+    Private Class A63DictHolderTestShape
+        <JsonPropertyName("items")> Public Property Items As New Dictionary(Of String, A63DictEntryTestShape) From {
+            {"known", New A63DictEntryTestShape()}
+        }
+    End Class
+
+    Private Sub A63b_DictionaryCompletenessJsonOnly()
+        Dim el = JsonDocument.Parse(
+            "{""items"": {""known"": {""value"": 1.0}, ""unknown"": {""value"": 2.0}}}").RootElement
+        Dim r As New DriftWalkResult()
+        WalkPocoVsJson(New A63DictHolderTestShape(), el, "test", False, r)
+
+        Dim reportedUnknown As Boolean = r.JsonOnly.Contains("test.items.unknown")
+        Dim didNotReportKnown As Boolean = Not r.JsonOnly.Contains("test.items.known")
+
+        Check("A63b dictionary completeness (R-2 (a)) -- a JSON dict key with no POCO counterpart (items.unknown) is reported as JsonOnly; the matching key (items.known) is not, and is compared normally",
+              reportedUnknown AndAlso didNotReportKnown AndAlso r.Compared = 1 AndAlso r.Drifts.Count = 0 AndAlso r.Orphans.Count = 0,
+              String.Format("jsonOnly=[{0}] compared={1} drifts=[{2}] orphans=[{3}]",
+                            String.Join(",", r.JsonOnly), r.Compared, String.Join(",", r.Drifts), String.Join(",", r.Orphans)))
     End Sub
 
 End Module
