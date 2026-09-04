@@ -483,6 +483,65 @@ documented `CalcSpread` discard alone — internal conveniences, ⚠ **though no
 trailing genuinely-optional parameters, so promoting one to required keeps the ordering legal.
 **Confirm this per method rather than trusting the general claim.**
 
+### 7.1 ⛔ STEP 1 — the measurement, specified. Trader-directed 2026-09-05.
+
+**Model: Sonnet · Effort: MEDIUM · a short session. NO CODE IS EDITED IN STEP 1.**
+
+**Why medium and not low:** the method is mechanical, but **exhaustiveness is the whole
+deliverable** and the search is over VB, where this project has a documented grep trap. A
+sampled answer is worse than none, because *"0 production omissions"* is the claim that turns
+a live signature change into a cleanup.
+
+**Deliverable: a measurement, not a recommendation.** Two counts, the population they were
+measured over, and the per-method table behind them. **Report it even if — especially if — it
+refutes the inherited figure.**
+
+#### The population — decide and STATE it before counting
+
+A parameter is in scope when it **mirrors a settings key**: a production call site passes it
+from `cfg`. ⛔ **Exclude, and say you did:**
+
+- `ByRef` output parameters — `weightedSlopeOut` (`Indicators_OrderFlow.vb:295`),
+  `bestPivotByVolume` / `bestPivotVolumeRatio` / `bestPivotIsHigh`
+  (`Indicators_Structure.vb:264-266`). **These are outputs wearing `Optional` clothing.**
+- The ruling's named exclusions above (`maxAgeMs`, `nowUtc`, the `CalcSpread` discard —
+  and read `Indicators_OrderFlow.vb:558-562` before accepting what "discard" means).
+
+**Starting inventory, measured 2026-09-04, to be re-derived not trusted:** 60 `Optional`
+occurrences across the four `Core/Indicators_*.vb` files — Momentum 4 · Volatility 12 ·
+OrderFlow 27 · Structure 17. **That is occurrences of the keyword, not in-scope parameters.**
+
+#### The four traps
+
+1. ⛔⛔ **DO NOT line-anchor the grep, and DO NOT grep for `MethodName(` alone.** CLAUDE.md's
+   standing rule, and this is the case it bites hardest: **call sites in this codebase span
+   many lines with named arguments** — `CalcCVD` at `UI/MainForm_Analysis.vb:434` carries
+   `slopePctOfValue:=` on its own line, four lines below the opening paren. **A single-line
+   grep sees the call and none of its arguments, and reports a false omission.** Use multiline
+   matching or read each call site.
+2. ⚠ **An argument can be supplied POSITIONALLY.** "Omission" means *the parameter receives no
+   value*, not *the name `foo:=` is absent*. Count positions, not colons.
+3. ⚠ **`tools/` is PRODUCTION, not fixtures.** `AutoTweaker`, `BacktestRunner`, `WhatIfRunner`
+   and `CeilingAudit` are shipped offline tools that load real settings. ⛔ **Only
+   `verify/ordercheck/` is the fixture side.** Misfiling one `ReplayLoop` call site turns a
+   production omission into a fixture omission and inverts the answer.
+4. ⚠ **The count is per CALL SITE × PARAMETER, not per method.** One call site omitting three
+   in-scope parameters is three omissions. **State which convention you used** — the inherited
+   "9" does not say.
+
+#### ⛔ ESCALATION TRIGGER — stop and report, do not proceed to the edit
+
+**Any production omission at all — a count above zero.** The ruling scopes (b) as
+**dead-code removal**; a production site relying on a method default means deleting that
+default **changes live behaviour**, and (b) is then a different job under a ruling that does
+not cover it. ⭐ **Report the count and stop. Do not "fix" it by adding the argument at the
+call site** — that is a behaviour-preserving edit nobody ruled, made mid-measurement.
+
+⚠ **Equally, if the fixture count is not 9, say so plainly.** The figure is inherited from
+[`seam-audit-decisions-second-opinion-2026-08-11.md`](seam-audit-decisions-second-opinion-2026-08-11.md)
+and **has never been checked by anyone.** A different number is a finding, not an error to
+reconcile away.
+
 ---
 
 ## 8. Out of scope — named so they are not lost
