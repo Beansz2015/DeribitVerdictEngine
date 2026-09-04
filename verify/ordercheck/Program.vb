@@ -591,7 +591,7 @@ Module Program
 
         ' [A63 — R-2/R-3 follow-up, docs/a54a-r2-r3-followup-spec.md §4]
         A63a_ParseFailurePathResolvesShipped()
-        A63b_DictionaryCompletenessJsonOnly()
+        A63b_DictionaryCompletenessBothDirections()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -11582,7 +11582,19 @@ Module Program
                     A62RecordDrift(result, path, pocoBool.ToString(CultureInfo.InvariantCulture), jsonBool.ToString(CultureInfo.InvariantCulture))
                 End If
 
-            ' Step 6: Dictionary(Of String, T) -- recurse only into keys present on BOTH sides.
+            ' Step 6: Dictionary(Of String, T) -- recurse into keys present on BOTH sides;
+            ' report a one-sided key on EITHER side (docs/a54a-r2-r3-followup-spec-back.md
+            ' §6, F-1). A JSON dict key with no POCO counterpart is otherwise invisible --
+            ' WalkPocoVsJson is never entered for it, so the bottom-of-function JsonOnly
+            ' loop (which belongs to THIS object's own recursion, never the dict's) never
+            ' runs for it either -- reported as JsonOnly, path-qualified (R-2 (a)). A POCO
+            ' dict key with no JSON counterpart is DRIFT, not a benign omission: measured
+            ' 2026-09-05 that System.Text.Json REPLACES a pre-seeded dictionary rather than
+            ' merging into it, so on the parse-failure path a POCO-only key survives
+            ' un-overridden, and presence alone is load-bearing for at least one reader
+            ' (HasExplicitAggrVelBurstThreshold). Reported as Orphans -- the existing
+            ' meaning ("POCO has it, JSON doesn't"), one level down -- so A62a's existing
+            ' Orphans=0 assertion guards it for free, no allow-list, no new assertion (F-1).
             ElseIf propType.IsGenericType AndAlso propType.GetGenericTypeDefinition() Is GetType(Dictionary(Of ,)) Then
                 Dim dictObj = TryCast(val, IDictionary)
                 If dictObj IsNot Nothing Then
@@ -11593,14 +11605,10 @@ Module Program
                         Dim entryEl As JsonElement
                         If A62TryGetPropertyCI(childEl, keyStr, entryEl) Then
                             WalkPocoVsJson(dictObj(keyObj), entryEl, A62BuildPath(path, keyStr), False, result)
+                        Else
+                            result.Orphans.Add(A62BuildPath(path, keyStr))
                         End If
                     Next
-                    ' [R-2 (a), docs/a54a-r2-r3-followup-spec.md §1] A JSON dict key with no
-                    ' POCO counterpart is otherwise invisible: WalkPocoVsJson is never entered
-                    ' for it, so the bottom-of-function JsonOnly loop -- which belongs to
-                    ' THIS object's own recursion, never the dict's -- never runs for it either.
-                    ' Report it here instead. Direction only: the reverse (a POCO dict key
-                    ' absent from JSON) is still silently Skipped -- not ruled, see §1.
                     If childEl.ValueKind = JsonValueKind.Object Then
                         For Each jsonEntry In childEl.EnumerateObject()
                             If Not seenDictKeys.Contains(jsonEntry.Name) Then
@@ -11987,32 +11995,37 @@ Module Program
 
     ''' <summary>A63b-only local test shapes carrying a dictionary property, isolated from
     ''' production types. After R-2 (b) the real tree's resolution_profiles carries no
-    ''' unmatched key, so a clean-tree fixture proves nothing about the new Else arm --
-    ''' same lesson as A62b: teeth need an artificial mutation, not a hope that production
-    ''' drifts on cue.</summary>
+    ''' unmatched key in either direction, so a clean-tree fixture proves nothing about
+    ''' either Else arm -- same lesson as A62b: teeth need an artificial mutation, not a
+    ''' hope that production drifts on cue. Three keys, one per arm under test: "known"
+    ''' (both sides, the non-drift control), "unknown" (JSON-only, R-2 (a)), "pocoonly"
+    ''' (POCO-only, F-1, docs/a54a-r2-r3-followup-spec-back.md §6).</summary>
     Private Class A63DictEntryTestShape
         <JsonPropertyName("value")> Public Property Value As Double = 1.0
     End Class
 
     Private Class A63DictHolderTestShape
         <JsonPropertyName("items")> Public Property Items As New Dictionary(Of String, A63DictEntryTestShape) From {
-            {"known", New A63DictEntryTestShape()}
+            {"known", New A63DictEntryTestShape()},
+            {"pocoonly", New A63DictEntryTestShape()}
         }
     End Class
 
-    Private Sub A63b_DictionaryCompletenessJsonOnly()
+    Private Sub A63b_DictionaryCompletenessBothDirections()
         Dim el = JsonDocument.Parse(
             "{""items"": {""known"": {""value"": 1.0}, ""unknown"": {""value"": 2.0}}}").RootElement
         Dim r As New DriftWalkResult()
         WalkPocoVsJson(New A63DictHolderTestShape(), el, "test", False, r)
 
-        Dim reportedUnknown As Boolean = r.JsonOnly.Contains("test.items.unknown")
-        Dim didNotReportKnown As Boolean = Not r.JsonOnly.Contains("test.items.known")
+        Dim reportedUnknownAsJsonOnly As Boolean = r.JsonOnly.Contains("test.items.unknown")
+        Dim reportedPocoOnlyAsOrphan As Boolean = r.Orphans.Contains("test.items.pocoonly")
+        Dim didNotMisreportKnown As Boolean =
+            Not r.JsonOnly.Contains("test.items.known") AndAlso Not r.Orphans.Contains("test.items.known")
 
-        Check("A63b dictionary completeness (R-2 (a)) -- a JSON dict key with no POCO counterpart (items.unknown) is reported as JsonOnly; the matching key (items.known) is not, and is compared normally",
-              reportedUnknown AndAlso didNotReportKnown AndAlso r.Compared = 1 AndAlso r.Drifts.Count = 0 AndAlso r.Orphans.Count = 0,
-              String.Format("jsonOnly=[{0}] compared={1} drifts=[{2}] orphans=[{3}]",
-                            String.Join(",", r.JsonOnly), r.Compared, String.Join(",", r.Drifts), String.Join(",", r.Orphans)))
+        Check("A63b dictionary completeness, BOTH directions (R-2 (a) forward + F-1 reverse) -- a JSON dict key with no POCO counterpart (items.unknown) is JsonOnly; a POCO dict key with no JSON counterpart (items.pocoonly) is Orphans; the matching key (items.known) is neither, and is compared normally",
+              reportedUnknownAsJsonOnly AndAlso reportedPocoOnlyAsOrphan AndAlso didNotMisreportKnown AndAlso r.Compared = 1 AndAlso r.Drifts.Count = 0,
+              String.Format("jsonOnly=[{0}] orphans=[{1}] compared={2} drifts=[{3}]",
+                            String.Join(",", r.JsonOnly), String.Join(",", r.Orphans), r.Compared, String.Join(",", r.Drifts)))
     End Sub
 
 End Module
