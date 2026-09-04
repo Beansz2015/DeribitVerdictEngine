@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Session Start Protocol
 
-1. **Read `docs/DeribitIndicatorProject.md`** in full (**58K tokens / 139,185 B, MEASURED 2026-09-04**; historical content lives in `docs/history-archive.md`). Touch the archive doc only if you need pre-v61 version history or pre-v27 settings rationale.
+1. **Read `docs/DeribitIndicatorProject.md`** in full (**58K tokens at 139,185 B, MEASURED 2026-09-04**; historical content lives in `docs/history-archive.md`). Touch the archive doc only if you need pre-v61 version history or pre-v27 settings rationale.
+
+   ⚠ **The file moved on 2026-09-05 and is now 145,788 B (+4.7 %). The 58K figure is NOT re-measured against that — and per the rule below, a byte ratio must NOT be used to derive a new one.** ⭐ **The 09-05 change is itself the cell-content mechanism this note describes: §15's two A54a rows were collapsed to ONE (row count 15 → 14, obeying the one-item-one-row rule) and the file still GREW ~6.6 KB, because the single replacement cell is larger than the two it replaced.** **Collapsing fixed the row count and did nothing for size. Re-measure before quoting.**
 
    ⚠ **This number has now been wrong FOUR times, always in the same direction — the file is always BIGGER than stated.** It read "~10K" while the file was ~9× that; corrected to "~24K" on 2026-08-02; measured at **47K** on 2026-08-12; carried "~41K" until 2026-08-24, when it **measured 52K**; then carried that until 2026-09-04, when it **measured 58K**. **Assume it is stale and re-check it, rather than budgeting against it.**
 
