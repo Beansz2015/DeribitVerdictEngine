@@ -210,3 +210,53 @@ predated the commit and saw a different range. **Nothing is wrong**; recorded on
 [`batch-review-packet-convention.md`](batch-review-packet-convention.md) is titled
 *"reporting a **multi-lane batch**"*, and CLAUDE.md scopes it the same way. **This was a solo
 build; §0 carries the outcome facts a summary would have.** No finding.
+
+---
+
+## 6. ⛔ F-1 disposition — it is a PATCH, not a ruling. The reviewer over-classified it.
+
+**Trader-directed 2026-09-05: fix F-1 while the implementer still has context.**
+
+⛔⛔ **§5.3 called F-1 *"a RULING, not a patch"* and that was wrong.** The reviewer hedged
+because he had not established whether a POCO-only dict key can ever be legitimate. **It
+cannot, and the evidence was already in the tree.** ⚠ **Third reviewer correction in this arc
+— recorded because the count is the point, not the individual slips.**
+
+### 6.1 What settles it — measured 2026-09-05, not reasoned
+
+| Question | Answer |
+|---|---|
+| Does a POCO-only dict key reach the **normal** (successful-load) path? | ⭐ **No — measured.** `System.Text.Json` **REPLACES** a pre-seeded `Dictionary` property rather than merging into it. A probe deserialising a `sessions` block naming only `NY`/`LONDON` against a POCO seeding all three yields **`LONDON, NY`** — ASIA is dropped |
+| So where can it bite? | **The parse-failure path only** — the same surface this whole arc has been correcting |
+| Is that harmless there? | ⛔ **No.** `HasExplicitAggrVelBurstThreshold` (`Core/ExecutionResolution.vb:155-158`) returns true on the override **existing** with a value — **presence is load-bearing.** A POCO-only session key would **arm a session on the degraded path that production leaves inert**, which is precisely the hazard D-R3's escalation trigger was written for |
+| Is there a legitimate case for one? | **None constructible.** The seed's documented purpose is *"MUST mirror settings.json"*; on the normal path a POCO-only key does nothing, and on the degraded path it makes the degraded config differ from shipped — the exact thing the guard exists to prevent |
+
+**⇒ A POCO dict key absent from JSON is DRIFT. No ruling is owed. Build it.**
+
+### 6.2 The build — Sonnet, effort LOW, one short session
+
+**It is one `Else` and one fixture arm.** The dict branch already computes the JSON→POCO
+direction; the reverse is the `Else` on the existing `A62TryGetPropertyCI` test.
+
+- ⭐ **Report it as `Orphans`, not a new category.** `Orphans` already means *"POCO has it,
+  JSON does not"* — this is that, one level down. **Reusing it is strictly better than
+  inventing a category:** fewer concepts, and `A62a`'s existing `Orphans = 0` assertion
+  guards it for free with no allow-list and no new assertion. Path-qualify the entry
+  (e.g. `indicators.aggressor_velocity.sessions.TOKYO`).
+- **Extend `A63b` rather than adding a fixture** — it is already *"dictionary completeness"*,
+  and two arms in one fixture is the `A62c` precedent (nullable rule, both arms).
+  ⚠ **Both arms need their own mutation proof:** removing the new reverse arm must fail
+  `A63b`, **and** removing the original JSON-only arm must still fail it. Run both.
+- **Update the step-6 comment.** It currently says *"the reverse ... is still silently
+  Skipped -- not ruled, see §1."* That becomes false the moment this lands. ⛔ **Edit the
+  line; do not append** — handle 9's class, and this arc has now produced it twice.
+
+### 6.3 ⛔ Escalation trigger — and it is a falsifiable prediction
+
+**`Orphans` must still be 0 after the change.** §1 handle 4 measured all four dictionaries as
+matching, **but that was a manual key-set comparison, not an instrument.** ⭐ **The automated
+version is the first real check of that claim.**
+
+⛔ **If `Orphans` comes back non-zero, STOP and report.** It would mean a POCO-only dict key
+exists today — a live parse-failure-path divergence that the manual check missed — and that is
+a finding, not a fixture to adjust. **Do not allow-list it.**
