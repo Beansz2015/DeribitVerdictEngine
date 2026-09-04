@@ -133,3 +133,57 @@ session 1 and untouched by this batch.
   live run was made to actually force a `settings.json` parse failure and observe the app.
 - **`git diff`'s exact byte count / whether any unrelated whitespace moved** — checked via
   `git diff --stat` and a manual read of the diff, not a byte-for-byte tool.
+
+---
+
+## 5. ⭐ REVIEWER VERDICT — ACCEPTED, 2026-09-04
+
+**Reviewed by the spec author, who wrote no code on this build (trader-directed seat split).**
+✅ **ACCEPTED. Two non-blocking findings, neither of which should hold the commit.**
+
+### 5.1 Verified independently, not taken on report
+
+| Check | Result |
+|---|---|
+| Harness, run by the reviewer | **324 PASS · 0 FAIL · `ALL PASS`** |
+| All seven `A62` fixtures **executed**, not merely present | ✅ — `A62b` registered and running **before** `A62a`, confirming handle 1's ordering claim in execution, not just in file order |
+| `verify-gate.ps1 -Mode local-fast`, run by the reviewer | ✅ **`GATE PASSED`** · display-parity `no snapshot/card drift detected` · version-bump `no engine-path change` |
+| Seven re-syncs present in `Core/Settings/EngineSettings.vb` | ✅ all seven, each carrying provenance at the declaration site |
+| ⭐ **The reviewer's own independent probe, re-run against the post-build tree** | ⭐⭐ **Reports exactly TWO divergences — `auto_run.start_engaged` and `signal_bridge.enabled`, i.e. precisely the D-1 allow-list.** The probe has no allow-list, so it reports them; **all seven previously-drifting paths are clean under a second, independently-written instrument** |
+| `OrderCheck.vbproj` | ✅ unchanged — handle 6 |
+| `settings.json` | ✅ not in the diff; still **v68**, no `change_log` entry |
+| Handle 9 — the stacked `<summary>` | ✅ fixed properly: **one** block, and the original line itself now reads *"Default 0.30 (30 %)"* rather than a correction bolted underneath |
+| `A62f`'s repair | ✅ read and confirmed real — `A62StructuralTestShape` carries a genuinely arbitrary `<JsonIgnore>` `ReadOnly` property no production-scoped name list could anticipate |
+
+### 5.2 ⭐ The `A62f` finding is the best thing in this packet, and the defect was the spec's
+
+**§2's `A62f` account is correct and the fixture as I specified it had no teeth.** `RoundTripFeePct`
+and `EffectiveMinMovePct` are the only two `ReadOnly` properties in `EngineSettings.vb`, so
+the mutation I wrote — *"swap the structural test for a name list"* — is **behaviourally
+identical to the structural check for every type that exists today.** The implementer ran it,
+observed **no change**, recognised the silent false pass rather than recording a green tick,
+and rebuilt the fixture around a locally-declared arbitrary shape. ⭐ **That is exactly the
+attack §11.2 asked for, and it landed on the spec rather than on the code.**
+
+⭐ **The general rule it produces is worth more than the fixture and should outlive it:**
+*when a shape rule protects a small number of instances, a black-box test against production
+types alone cannot separate the rule from a name list that happens to be complete today.*
+**Recommend promoting this into CLAUDE.md's Collaboration Rules beside the fixture-literal
+provenance rule — it is the same defect class at the level of shapes rather than values.**
+
+⭐ **Also credited: the packet flags its own escalation doc's `Skipped=19` over-claim against
+itself** (§2, final paragraph) rather than leaving the reviewer to raise it. §11.4 is answered
+and closed — see R-2 below for the one part of that answer that generalises wrongly.
+
+### 5.3 Findings — both NON-BLOCKING
+
+| # | Finding | Severity |
+|---|---|---|
+| **R-1** | ⚠ **The stale line the seam audit originally cited is still standing, directly above its own correction.** `SessionVolumeSettings.Sessions`' comment still opens *"Default buckets aligned to live **v30** (ASIA/LONDON/NY)"* — the buckets are now aligned to live **v68**. ⛔ **This is handle 9's defect class recurring inside the commit that fixed handle 9 elsewhere**, and it is not a generic stale comment: [`seam-audit-2026-08-11.md`](seam-audit-2026-08-11.md) **S-3** quoted *this exact line* as the evidence of drift. Left as-is, the next auditor re-raises S-3 against a now-correct seed. **Fix: edit the opening line to say v68; do not append.** | **Trivial.** Ride the next commit that opens the file |
+| **R-2** | ⚠ **The dictionary branch has a hole, and §0's answer generalises from one dictionary when there are FOUR.** `EngineSettings` carries `ResolutionProfiles` **plus three seeded session dictionaries** — `AggressorVelocitySettings.Sessions` (`:487`), `AbsorptionSettings.Sessions` (`:566`), `StructuralLevelsSettings.Sessions` (`:1062`). Step 6 iterates the **POCO's** keys, so **a JSON dict key with no POCO counterpart is neither recursed NOR recorded as `JsonOnly`** — the recursion that would emit `JsonOnly` is never entered. ⛔ **So the walk's own comment — *"This half proves the POCO is COMPLETE"* — is true at object level and FALSE inside dictionaries.** ⚠ **The hole is already live twice** (`resolution_profiles["1"]`/`["3"]` have no POCO counterpart) **and benign twice** (both `ResolutionProfile` properties are `Double?`, so nothing would be compared anyway) — ⛔ **which is exactly the condition under which it stops being noticed.** A future `session_volume`-style bucket added to a *seeded* session dict would be invisible. **⚠ The defect is the SPEC'S, not the build's** — §5 step 6 says *"recurse only into keys present on BOTH sides"* and the build implements that faithfully | **Scoped follow-up, needs a decision.** ⛔ **Do NOT patch silently** — recording unmatched JSON dict keys as `JsonOnly` would make `A62a` report 2 and FAIL today, so it is a ruling (report / allow-list the two / leave and document), not an edit |
+
+### 5.4 Not accepted as evidence, and not needed
+
+`ALL PASS` and `GATE PASSED` are recorded above because the reviewer re-ran them, **not because
+the packet reported them.** ⭐ **The packet did not lead with them** — it led with the mutation
+log — which is the right shape and is noted.
