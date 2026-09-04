@@ -1,8 +1,31 @@
 # A54a drift guard — session 1 stopped at the spec's own escalation trigger
 
-**Status:** ⛔ **STOPPED before the guard code was written.** `EngineSettings.vb` carries three
-already-ruled edits (below); `verify/ordercheck/Program.vb` is untouched — no walk, no
-`DriftWalkResult`, no `A62a`–`A62g`. Nothing is committed.
+> ## ✅ RESOLVED 2026-09-04. THE BUILD IS DONE. This document is now a historical record.
+>
+> **The gap in §1 below did not need a new trader ruling.** It was already ruled at
+> [`trader-tick-queue.md`](trader-tick-queue.md) §0a (2026-08-11) — the spec's first draft
+> simply failed to carry it forward. See the spec's own
+> [§4.2](a54a-json-poco-drift-guard-spec.md#42--d-2s-scope-was-wrong-the-implementer-caught-it-and-the-ruling-it-needs-already-exists)
+> for the correction. Session 1 resumed the same day with **seven** re-syncs (not three)
+> and finished: guard + fixtures `A62a`–`A62g` + all seven re-syncs landed in commit
+> `3a89093`.
+>
+> **Read these for the finished state:**
+>
+> | Document | What it is |
+> |---|---|
+> | [`a54a-drift-guard-batch-summary.md`](a54a-drift-guard-batch-summary.md) | The outcome record — what was built, the full mutation-proof log |
+> | [`a54a-drift-guard-spec-back.md`](a54a-drift-guard-spec-back.md) | The review packet — verification handles, spec feedback, what was not verified |
+>
+> **What is still worth reading HERE, and only here:** §1's evidence that the D-table's
+> re-sync scope was wrong, and §2's independent from-scratch reproduction of the spec's
+> §3 numbers (`Compared=261`, `Orphans=0`, `JsonOnly=0`) — that reproduction is what made
+> the gap in §1 credible rather than a guess.
+
+**Status:** ⛔ ~~STOPPED before the guard code was written.~~ **See the banner above — this
+line is superseded.** `EngineSettings.vb` carried three already-ruled edits when this was
+written (below); `verify/ordercheck/Program.vb` was untouched — no walk, no
+`DriftWalkResult`, no `A62a`–`A62g`. Nothing was committed at the time.
 
 **Spec:** [`a54a-json-poco-drift-guard-spec.md`](a54a-json-poco-drift-guard-spec.md), §4's
 D-table, trader-directed 2026-09-04.
