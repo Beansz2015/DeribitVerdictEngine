@@ -187,3 +187,45 @@ and closed — see R-2 below for the one part of that answer that generalises wr
 `ALL PASS` and `GATE PASSED` are recorded above because the reviewer re-ran them, **not because
 the packet reported them.** ⭐ **The packet did not lead with them** — it led with the mutation
 log — which is the right shape and is noted.
+
+---
+
+## 6. ✅ R-1 / R-2 RULED, and ⛔ R-3 recorded with a correction against the reviewer
+
+**Trader-directed 2026-09-04: R-2 = option (b) · R-1 rides it · record R-3.**
+**Follow-up build spec: [`a54a-r2-r3-followup-spec.md`](a54a-r2-r3-followup-spec.md).**
+
+- **R-2 = (b)** — populate the `ResolutionProfiles` POCO seed to mirror shipped, which makes
+  option (a) free: with the keys matched, recording unmatched JSON dict keys as `JsonOnly`
+  leaves `A62a` at zero and the D-1 allow-list at two.
+- **R-1 rides that commit** — the `SessionVolumeSettings.Sessions` comment's *"aligned to
+  live v30"* opening line is edited, not appended to.
+- **R-3 recorded** — see below, and §2 of the follow-up spec.
+
+⛔⛔ **THE REVIEWER'S OWN RECOMMENDATION WAS HALF WRONG AND IS CORRECTED HERE.** §5.3 R-2
+argued for (b) partly because *"it fixes R-3 in the same stroke."* **It does not.** The
+arithmetic, done afterwards:
+
+| Value | Shipped | POCO today | After (b) | After (b) + seeded nullables |
+|---|---:|---:|---:|---:|
+| ASIA `roc_magnitude_threshold` | 0.17 | 0.1 | 0.21 | **0.17** |
+| LONDON `roc_magnitude_threshold` | 0.11 | 0.1 | ⛔ **0.21** | **0.11** |
+| `roc_slope_delta_threshold` | 0.06 | 0.05 | **0.06** | **0.06** |
+
+**(b) fixes the slope half exactly, improves ASIA, and moves LONDON from 0.01 off shipped to
+0.10 off — ten times further.** The reviewer recommended (b) on a claim he had not computed,
+which is the same failure mode this project keeps recording: a tidy explanation offered
+before the measurement.
+
+⭐⭐ **What R-3 exposes is bigger than R-3.** The A54a guard is scoped by the ruled rule *"a
+`Double?` = `Nothing` nullable override cannot drift."* That is correct **about drift** and
+silent **about correctness**: here the nullable is legitimately absent, and the seed is still
+wrong, because the **resolution it inherits under changed underneath it**. **No reflection
+walk scoped by that rule can catch this class** — it needs a behavioural fixture that
+resolves the value through the shipped resolver, which is what `A63a` is for.
+
+⛔ **ONE DECISION REMAINS OPEN — `D-R3` in the follow-up spec §3:** whether the per-session
+ROC nullables get seeded too (ASIA 0.17 / LONDON 0.11). ⭐ **Reviewer's read: yes** — there is
+in-file precedent twelve lines from the edit (`AggressorVelocitySessionOverride.BurstRatioThreshold`
+is a `Double?` seeded with real values, its comment reading *"MUST mirror settings.json"*).
+**Without it, (b) ships LONDON knowingly worse.**
