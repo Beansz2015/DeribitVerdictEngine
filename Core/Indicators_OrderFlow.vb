@@ -571,12 +571,18 @@ Partial Public Class IndicatorEngine
     ''' <summary>
     ''' Computes basis-point spread from the best bid/ask of the order book snapshot.
     ''' Classifies as TIGHT / NORMAL / WIDE against configurable thresholds.
+    ''' [A54a S2-1 (B), 2026-09-05] wideThresholdBps/tightThresholdBps were Optional with
+    ''' method-local defaults. Made required -- indicators.spread. is auto-tweaker-tunable
+    ''' (not in SettingsDiffApplier.RejectedPathPrefixes) and gates the Step-2 WIDE scoring
+    ''' penalty, so a call site relying on the default could silently diverge from a retuned
+    ''' cfg. This is the ONE production call-site edit in the A54a S2 arc -- see
+    ''' LiveMicrostructureEvaluator.vb. trader-tick-queue.md §2 S2-1.
     ''' </summary>
     Public Shared Sub CalcSpread(orderBook As OrderBookSnapshot,
                                   ByRef spreadBps As Double,
                                   ByRef spreadStatus As String,
-                                  Optional wideThresholdBps  As Double = 5.0,
-                                  Optional tightThresholdBps As Double = 1.5)
+                                  wideThresholdBps  As Double,
+                                  tightThresholdBps As Double)
         spreadBps = 0 : spreadStatus = "NORMAL"
         If orderBook Is Nothing Then Return
         If orderBook.Bids Is Nothing OrElse orderBook.Bids.Count = 0 Then Return

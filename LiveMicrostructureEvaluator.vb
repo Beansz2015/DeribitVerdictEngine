@@ -129,10 +129,17 @@ Public NotInheritable Class LiveMicrostructureEvaluator
             End If
 
             If book IsNot Nothing Then
-                ' Spread — the SpreadBps formula via CalcSpread (only the bps value is read; the bps is
-                ' threshold-independent, so the TIGHT/NORMAL/WIDE status args are left at their defaults).
+                ' Spread — the SpreadBps formula via CalcSpread (only the bps value is read; the bps
+                ' is threshold-independent of the classification, so sStatus below is computed but
+                ' never read here -- snap.HasSpread comes from HasTopOfBook, not sStatus).
+                ' [A54a S2-1 (B), 2026-09-05] Both thresholds are now REQUIRED params -- pass cfg so
+                ' this call site cannot silently diverge from MainForm_Analysis if the tweaker retunes
+                ' indicators.spread.* (it is NOT tweaker-fenced; trader-tick-queue.md §2 S2-1). Zero
+                ' behaviour change: cfg reads 5.0/1.5 today, matching the former method defaults.
                 Dim sBps As Double = 0, sStatus As String = "NORMAL"
-                IndicatorEngine.CalcSpread(book, sBps, sStatus)
+                IndicatorEngine.CalcSpread(book, sBps, sStatus,
+                    wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
+                    tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)
                 snap.SpreadBps = sBps
                 snap.HasSpread = HasTopOfBook(book)
 
