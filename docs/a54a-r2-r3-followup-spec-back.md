@@ -1,9 +1,11 @@
 # A54a R-2/R-3 follow-up — spec-back
 
 **Spec:** [`a54a-r2-r3-followup-spec.md`](a54a-r2-r3-followup-spec.md).
-**Commit:** `cc44e9f`, local — not pushed. Solo build, not a multi-lane batch, so this is
-the single document per `docs/batch-review-packet-convention.md`'s shape rather than a
-summary+packet pair — the outcome facts that a summary would otherwise carry sit in §0.
+**Commits:** `cc44e9f` (the follow-up build, §0–§4) · `a86a0cf` (F-1, §6's disposition —
+outcome recorded in §7). Both local, not pushed. Solo build, not a multi-lane batch, so
+this is the single document per `docs/batch-review-packet-convention.md`'s shape rather
+than a summary+packet pair — the outcome facts that a summary would otherwise carry sit
+in §0 and §7.
 
 ---
 
@@ -260,3 +262,103 @@ version is the first real check of that claim.**
 ⛔ **If `Orphans` comes back non-zero, STOP and report.** It would mean a POCO-only dict key
 exists today — a live parse-failure-path divergence that the manual check missed — and that is
 a finding, not a fixture to adjust. **Do not allow-list it.**
+
+---
+
+## 7. ✅ F-1 built, committed `a86a0cf`, 2026-09-05 — outcome
+
+**Escalation trigger did NOT fire.** `Orphans` measured **0** on the shipped tree after the
+change (`A62a` still asserts `orphans=0` and passes). §6.3's falsifiable prediction — that the
+manual key-set comparison in §1 handle 4 might not survive becoming a real instrument — held.
+**No live parse-failure-path divergence found; nothing to report beyond confirming it.**
+
+### 7.1 What shipped, exactly as scoped in §6.2
+
+- **One `Else` arm**, on the existing `A62TryGetPropertyCI` test inside the dictionary
+  branch's key loop: a POCO dict key with no JSON counterpart is added to `result.Orphans`,
+  path-qualified (e.g. `indicators.aggressor_velocity.sessions.TOKYO`) — no new category,
+  no allow-list, no new `A62a` assertion.
+- **`A63b` extended, not duplicated** — one three-key shape (`known` / `unknown` /
+  `pocoonly`) now covers the non-drift control plus both Else arms in the one fixture, the
+  `A62c` precedent §6.2 named.
+- **Step-6 comment edited in place.** The line asserting the reverse was *"still silently
+  Skipped — not ruled"* is gone; the replacement states the Orphans mechanism and cites
+  §6's measurement, not a restated hedge.
+
+### 7.2 Ranked verification handles for this build
+
+**If you only run one: handle 2.** It is the pair of runs that proves both arms are
+independently load-bearing inside one fixture, which is the actual risk in "extend, don't
+duplicate" — a shared assertion could pass on one arm's teeth alone.
+
+| # | Handle | Result |
+|---|---|---|
+| **1** | Escalation check — `Orphans` stays 0 on the shipped tree post-change | ✅ `A62a` PASSED unchanged (`orphans=0`) — §6.3's trigger did not fire, per §7 above |
+| **2** | Both `A63b` arms independently mutation-proven | ✅ Reverse arm (`Orphans.Add`) commented out → `A63b` FAILED (`orphans=[]`, `jsonOnly=[test.items.unknown]`), `A62a` stayed GREEN → restored, confirmed PASS. Forward arm (the `JsonOnly` loop) then commented out on its own → `A63b` FAILED again (`orphans=[test.items.pocoonly]`, `jsonOnly=[]`), `A62a` stayed GREEN → restored, confirmed PASS. Neither arm's removal was masked by the other |
+| **3** | `known` (the non-drift control) is never misreported under either mutation | ✅ Present in both mutation outputs above — `known` appears in neither `orphans=[]` nor `jsonOnly=[]` in either FAIL line |
+| **4** | Comment edited in place, not appended | ✅ `git diff` shows the old six-line comment block replaced by the new one at the same site — no trailing correction bolted underneath, the handle-9 class §6.2 flagged against itself twice already in this arc |
+| **5** | Full build + gate | ✅ Solution + AutoTweaker + WhatIfRunner + CeilingAudit + BacktestRunner + OrderCheck build 0/0 Release, each run separately; harness ALL PASS; `verify-gate.ps1 -Mode local-fast` GATE PASSED |
+| **6** | Scope discipline — one file changed | ✅ `git status -sb` before commit showed only `verify/ordercheck/Program.vb` modified; `settings.json` and `EngineSettings.vb` untouched by this build, matching §6.2's "one `Else` and one fixture arm" framing |
+
+### 7.3 What I did not verify
+
+- **No independent second instrument re-run against the post-F-1 tree**, unlike the parent
+  build's reviewer cross-check in §5.1. The escalation check (handle 1) is the walk's own
+  `A62a` assertion, not a second, differently-written probe.
+- **No search for a POCO-only dict key outside the four dictionaries §1 handle 4 already
+  named.** If `EngineSettings` gains a fifth seeded dictionary before the next audit, this
+  build's guard covers it automatically (the `Else` arm is structural, not enumerated by
+  dictionary name) — but that claim itself rests on the walk's own recursion reaching every
+  `Dictionary(Of String, T)` property, which was not re-derived from scratch here.
+- **Live-app behaviour.** Same caveat as §4's first bullet — argued statically through the
+  same resolver chain and fixture posture, not observed against a forced parse failure.
+
+---
+
+## 8. ⭐ REVIEWER VERDICT on F-1 — ACCEPTED, 2026-09-05. No findings.
+
+**Reviewed by the spec author, who wrote no code on this build.**
+
+### 8.1 ⭐ The gap §7.3 named is now closed — by the reviewer, which is where it belonged
+
+§7.3's first bullet is the right disclosure: *"No independent second instrument re-run against
+the post-F-1 tree... The escalation check is the walk's own `A62a` assertion, not a second,
+differently-written probe."* ⭐ **That is not a gap the implementer could close** — a second
+instrument written by the same seat is not a second instrument. **Closed here.**
+
+The reviewer wrote a probe that **does not reimplement `WalkPocoVsJson`**: it walks the POCO
+by reflection for `Dictionary` properties, resolves each one's JSON counterpart by
+`JsonPropertyName` path, and compares the two **key sets in both directions**. Result:
+
+```
+Dictionary properties reached : 4
+POCO-only dict keys (F-1 -> Orphans) : 0
+JSON-only dict keys (R-2 (a))        : 0
+RESULT: both directions clean under an independent instrument.
+```
+
+⭐⭐ **Four dictionaries reached — matching the four §5.3 named — and both directions clean.
+§6.3's falsifiable prediction holds under two independently-written instruments, and the
+manual key-set comparison in §1 handle 4 is now corroborated rather than merely believed.**
+
+### 8.2 Verified independently
+
+| Check | Result |
+|---|---|
+| Harness, re-run | **326 PASS · 0 FAIL · `ALL PASS`** — and **326 both before and after**, correct: `A63b` was extended, not duplicated |
+| `A63b` executed, both directions in its name and its assertions | ✅ |
+| `verify-gate.ps1 -Mode local-fast`, re-run | ✅ **`GATE PASSED`** |
+| The reverse arm is **structural**, not enumerated per dictionary | ✅ `Else result.Orphans.Add(A62BuildPath(path, keyStr))` sits inside the POCO-key loop, so a fifth seeded dictionary is covered with no edit. §7.3's second bullet is right to hedge the claim and right on the substance |
+| **Step-6 comment edited in place** | ✅ The old *"the reverse ... is still silently Skipped — not ruled"* block is **gone**, replaced at the same site — not appended to. ⭐ **Handle 9's class, and this is the first time in the arc it was avoided by construction rather than caught in review** |
+| Scope | ✅ one file, `verify/ordercheck/Program.vb`. `settings.json` and `EngineSettings.vb` untouched |
+
+### 8.3 No findings
+
+**Nothing to raise.** The build is exactly §6.2's scope, both arms are independently
+mutation-proven (§7.2 handle 2 — and the cross-mutation check that neither arm's removal is
+masked by the other is the right test to have thought of), the non-drift control is asserted,
+and the one thing the implementer could not verify about their own work was correctly handed
+up rather than glossed.
+
+⭐ **The A54a arc is closed: guard, seven re-syncs, dictionary completeness in both
+directions, and the parse-failure path equal to shipped on every ROC value.**
