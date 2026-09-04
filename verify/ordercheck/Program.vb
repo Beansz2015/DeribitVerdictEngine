@@ -11,9 +11,12 @@
 ' Exit code 0 = all pass, 1 = failures.
 
 Imports System
+Imports System.Collections
 Imports System.Globalization
 Imports System.IO
+Imports System.Reflection
 Imports System.Text.Json
+Imports System.Text.Json.Serialization
 Imports System.Threading
 ' RootNamespace=OrderCheck applies to files declared without an explicit top-level namespace;
 ' the CeilingAudit fixture code lives under OrderCheck.CeilingAudit as a result. Alias so the
@@ -569,6 +572,22 @@ Module Program
         ' host-agnostic; A58c joins the A50 group below (it calls SettingsLoader.Initialise).
         A58a_AbsentKeyDefaultsFalseOnOldSettingsFile()
         A58b_StartEngagedRoundTripsTrueThroughJson()
+
+        ' [A62 — JSON<->POCO drift guard, docs/a54a-json-poco-drift-guard-spec.md §5-§6]
+        ' A reflection walk comparing New EngineSettings() against the deserialised tracked
+        ' settings.json. Host-agnostic (no SettingsLoader.Current touched), so order relative
+        ' to A50 below does not matter -- placed here rather than after A50 only to keep the
+        ' settings/JSON-shaped fixtures grouped. A62b first, per the spec's own instruction --
+        ' it is the only one that proves the walk has teeth independent of the shipped tree's
+        ' own state, breaking the write-the-test-and-the-code-with-the-same-misunderstanding
+        ' loop before A62a's clean-tree claim is trusted.
+        A62b_MutationTeeth()
+        A62a_ShippedTreeIsClean()
+        A62g_AllowListIsListNotBlanket()
+        A62c_NullableRuleBothArms()
+        A62d_CaseInsensitiveResolution()
+        A62e_ResolverFailsLoudly()
+        A62f_StructuralExclusionNotByName()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -11402,6 +11421,442 @@ Module Program
         Finally
             A50Cleanup(dir)
         End Try
+    End Sub
+
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+    ' A62 — JSON<->POCO drift guard by reflection walk
+    ' docs/a54a-json-poco-drift-guard-spec.md §5-§6.
+    '
+    ' A reflection walk comparing New EngineSettings() (the code-defaults path) against the
+    ' deserialised TRACKED settings.json (the shipped path). Nothing compared these before
+    ' this build; ObvSettings.TrendGate sat at a pre-v33 value against a shipped v34 value
+    ' for two months, found by an audit, not by a test.
+    '
+    ' No fifth copy: the walk reads the JsonPropertyName attributes the serialiser itself
+    ' uses. Key resolution is CASE-INSENSITIVE, matching SettingsLoader's
+    ' PropertyNameCaseInsensitive=True -- a case-sensitive match agrees with the shipped file
+    ' today and would silently stop agreeing the first time anyone re-cases a key.
+    ' ═══════════════════════════════════════════════════════════════════════════════════
+
+    ''' <summary>Four buckets from one walk, plus a load-bearing counter. `Compared` is not
+    ''' diagnostics -- A62a asserts a floor on it, so a walk that silently visits nothing
+    ''' cannot report clean (this project's "assert the check RAN" lesson, made structural).</summary>
+    Private Class DriftWalkResult
+        Public Property Drifts As New List(Of String)
+        Public Property Orphans As New List(Of String)
+        Public Property JsonOnly As New List(Of String)
+        Public Property Skipped As New List(Of String)
+        Public Property Compared As Integer = 0
+    End Class
+
+    ''' <summary>D-1's allow-list, EXACTLY two entries (docs/a54a-json-poco-drift-guard-spec.md
+    ''' §4 D-1, §5). Adding a third here IS the spec's own escalation trigger, not a build
+    ''' step -- stop and re-take D-1 rather than grow this array.</summary>
+    Private ReadOnly A62D1AllowList As String() = {"auto_run.start_engaged", "signal_bridge.enabled"}
+
+    Private Function A62IsAllowListed(path As String) As Boolean
+        Return A62D1AllowList.Contains(path, StringComparer.Ordinal)
+    End Function
+
+    Private Function A62BuildPath(prefix As String, key As String) As String
+        Return If(String.IsNullOrEmpty(prefix), key, prefix & "." & key)
+    End Function
+
+    ''' <summary>Case-insensitive property lookup on a JSON object -- JsonElement.TryGetProperty
+    ''' is ordinal/case-sensitive, which disagrees with SettingsLoader's deserialisation.</summary>
+    Private Function A62TryGetPropertyCI(el As JsonElement, name As String, ByRef found As JsonElement) As Boolean
+        If el.ValueKind <> JsonValueKind.Object Then Return False
+        For Each p In el.EnumerateObject()
+            If String.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) Then
+                found = p.Value
+                Return True
+            End If
+        Next
+        Return False
+    End Function
+
+    Private Sub A62RecordDrift(result As DriftWalkResult, path As String, pocoRepr As String, jsonRepr As String)
+        If Not A62IsAllowListed(path) Then
+            result.Drifts.Add(String.Format(CultureInfo.InvariantCulture, "{0}: poco={1} json={2}", path, pocoRepr, jsonRepr))
+        End If
+    End Sub
+
+    ''' <summary>The walk. Per public instance property, in the exact order docs/a54a-json-poco
+    ''' -drift-guard-spec.md §5 specifies -- the nullable skip (step 3) MUST run before the
+    ''' absent-key test (step 4), or a present-but-nullable session override reports as a false
+    ''' orphan (§0 trap 2; this session reproduced exactly 7 of them on the first attempt with
+    ''' the order swapped, per §3.3).</summary>
+    Private Sub WalkPocoVsJson(poco As Object, el As JsonElement, prefix As String, isRoot As Boolean, result As DriftWalkResult)
+        If poco Is Nothing OrElse el.ValueKind <> JsonValueKind.Object Then Return
+
+        Dim seenJsonKeys As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Dim pocoType As Type = poco.GetType()
+
+        For Each prop In pocoType.GetProperties(BindingFlags.Public Or BindingFlags.Instance)
+            ' Step 1: structural skip -- by SHAPE (JsonIgnore / no JsonPropertyName / not
+            ' writable), never by name. A62f pins this against TradeCostSettings' two derived
+            ' properties (RoundTripFeePct, EffectiveMinMovePct) -- a name list is a fifth copy
+            ' and rots the first time a derived property is renamed or a new one is added.
+            Dim jsonIgnoreAttr = prop.GetCustomAttribute(Of JsonIgnoreAttribute)()
+            Dim jsonNameAttr = prop.GetCustomAttribute(Of JsonPropertyNameAttribute)()
+            If jsonIgnoreAttr IsNot Nothing OrElse jsonNameAttr Is Nothing OrElse Not prop.CanWrite Then
+                result.Skipped.Add(A62BuildPath(prefix, "<" & prop.Name & ">"))
+                Continue For
+            End If
+
+            Dim jsonKey As String = jsonNameAttr.Name
+            Dim path As String = A62BuildPath(prefix, jsonKey)
+
+            Dim childEl As JsonElement
+            Dim hasJsonKey As Boolean = A62TryGetPropertyCI(el, jsonKey, childEl)
+            If hasJsonKey Then seenJsonKeys.Add(jsonKey)
+
+            ' Step 2: root provenance keys -- version/last_modified/modified_by/change_log.
+            ' The POCO seeds Version=1 against a shipped 68; permanently and correctly
+            ' different, so never compared.
+            If isRoot AndAlso (jsonKey = "version" OrElse jsonKey = "last_modified" OrElse
+                                jsonKey = "modified_by" OrElse jsonKey = "change_log") Then
+                result.Skipped.Add(path)
+                Continue For
+            End If
+
+            ' Step 3: nullable skip -- BEFORE the absent-key test. The ruling's derived rule:
+            ' a concrete POCO default can drift; a Double? = Nothing nullable override cannot.
+            Dim propType As Type = prop.PropertyType
+            If Nullable.GetUnderlyingType(propType) IsNot Nothing Then
+                result.Skipped.Add(path)
+                Continue For
+            End If
+
+            ' Step 4: absent from JSON -> orphan.
+            If Not hasJsonKey Then
+                result.Orphans.Add(path)
+                Continue For
+            End If
+
+            Dim val As Object = prop.GetValue(poco)
+
+            ' Step 5: scalar compare. Double on a tolerance, never string equality; every
+            ' render/parse through CultureInfo.InvariantCulture.
+            If propType Is GetType(String) Then
+                result.Compared += 1
+                Dim jsonStr As String = If(childEl.ValueKind = JsonValueKind.String, childEl.GetString(), Nothing)
+                Dim pocoStr As String = TryCast(val, String)
+                If Not String.Equals(pocoStr, jsonStr, StringComparison.Ordinal) Then
+                    A62RecordDrift(result, path, If(pocoStr, "<null>"), If(jsonStr, "<null>"))
+                End If
+
+            ElseIf propType Is GetType(Double) Then
+                result.Compared += 1
+                Dim jsonNum As Double = childEl.GetDouble()
+                Dim pocoNum As Double = CDbl(val)
+                If Math.Abs(pocoNum - jsonNum) >= 0.000000001 Then
+                    A62RecordDrift(result, path, pocoNum.ToString(CultureInfo.InvariantCulture), jsonNum.ToString(CultureInfo.InvariantCulture))
+                End If
+
+            ElseIf propType Is GetType(Integer) Then
+                result.Compared += 1
+                Dim jsonNum As Integer = childEl.GetInt32()
+                Dim pocoNum As Integer = CInt(val)
+                If pocoNum <> jsonNum Then
+                    A62RecordDrift(result, path, pocoNum.ToString(CultureInfo.InvariantCulture), jsonNum.ToString(CultureInfo.InvariantCulture))
+                End If
+
+            ElseIf propType Is GetType(Long) Then
+                result.Compared += 1
+                Dim jsonNum As Long = childEl.GetInt64()
+                Dim pocoNum As Long = CLng(val)
+                If pocoNum <> jsonNum Then
+                    A62RecordDrift(result, path, pocoNum.ToString(CultureInfo.InvariantCulture), jsonNum.ToString(CultureInfo.InvariantCulture))
+                End If
+
+            ElseIf propType Is GetType(Boolean) Then
+                result.Compared += 1
+                Dim jsonBool As Boolean = childEl.GetBoolean()
+                Dim pocoBool As Boolean = CBool(val)
+                If pocoBool <> jsonBool Then
+                    A62RecordDrift(result, path, pocoBool.ToString(CultureInfo.InvariantCulture), jsonBool.ToString(CultureInfo.InvariantCulture))
+                End If
+
+            ' Step 6: Dictionary(Of String, T) -- recurse only into keys present on BOTH sides.
+            ElseIf propType.IsGenericType AndAlso propType.GetGenericTypeDefinition() Is GetType(Dictionary(Of ,)) Then
+                Dim dictObj = TryCast(val, IDictionary)
+                If dictObj IsNot Nothing Then
+                    For Each keyObj In dictObj.Keys
+                        Dim keyStr As String = CStr(keyObj)
+                        Dim entryEl As JsonElement
+                        If A62TryGetPropertyCI(childEl, keyStr, entryEl) Then
+                            WalkPocoVsJson(dictObj(keyObj), entryEl, A62BuildPath(path, keyStr), False, result)
+                        End If
+                    Next
+                End If
+
+            ' Step 7: List(Of T). T=String -> skip entirely. T=settings class -> match by the
+            ' element's own "name" property where the type has one, falling back to index.
+            ' Name-matching is required: index-matching silently compares ASIA against LONDON
+            ' the first time anyone reorders the sessions array.
+            ElseIf propType.IsGenericType AndAlso propType.GetGenericTypeDefinition() Is GetType(List(Of )) Then
+                Dim elemType = propType.GetGenericArguments()(0)
+                If elemType IsNot GetType(String) Then
+                    Dim listObj = TryCast(val, IList)
+                    Dim jsonArr As New List(Of JsonElement)
+                    If childEl.ValueKind = JsonValueKind.Array Then
+                        For Each item In childEl.EnumerateArray()
+                            jsonArr.Add(item)
+                        Next
+                    End If
+                    Dim nameProp = elemType.GetProperty("Name")
+                    Dim hasNameProp As Boolean = nameProp IsNot Nothing AndAlso nameProp.PropertyType Is GetType(String)
+                    If listObj IsNot Nothing Then
+                        For i As Integer = 0 To listObj.Count - 1
+                            Dim elemVal = listObj(i)
+                            Dim matched As JsonElement
+                            Dim hasMatch As Boolean = False
+                            Dim label As String = i.ToString(CultureInfo.InvariantCulture)
+                            If hasNameProp Then
+                                Dim nameVal As String = CStr(nameProp.GetValue(elemVal))
+                                For Each je In jsonArr
+                                    Dim nameEl As JsonElement
+                                    If A62TryGetPropertyCI(je, "name", nameEl) AndAlso nameEl.ValueKind = JsonValueKind.String AndAlso
+                                       String.Equals(nameEl.GetString(), nameVal, StringComparison.Ordinal) Then
+                                        matched = je : hasMatch = True : label = nameVal
+                                        Exit For
+                                    End If
+                                Next
+                            End If
+                            If Not hasMatch AndAlso i < jsonArr.Count Then
+                                matched = jsonArr(i) : hasMatch = True
+                            End If
+                            If hasMatch Then
+                                WalkPocoVsJson(elemVal, matched, A62BuildPath(path, label), False, result)
+                            End If
+                        Next
+                    End If
+                End If
+
+            ' Step 8: class -> recurse.
+            Else
+                WalkPocoVsJson(val, childEl, path, False, result)
+            End If
+        Next
+
+        ' After the property loop: JSON's own keys not seen -> JsonOnly. This half proves the
+        ' POCO is COMPLETE, not just that what it has agrees.
+        For Each jsonProp In el.EnumerateObject()
+            If Not seenJsonKeys.Contains(jsonProp.Name) Then
+                result.JsonOnly.Add(A62BuildPath(prefix, jsonProp.Name))
+            End If
+        Next
+    End Sub
+
+    ''' <summary>Walk up from `startDir` until a directory holds BOTH DeribitVerdictEngine.sln
+    ''' AND settings.json -- requiring both makes the anchor unambiguous. Returns Nothing if
+    ''' not found; never guesses. Does not anchor on Directory.GetCurrentDirectory() (unstable:
+    ''' verify-gate.ps1 runs this project from the repo root while OrderCheck.vbproj's own
+    ''' header documents running it from verify/ordercheck) and does not add a
+    ''' CopyToOutputDirectory settings.json to the vbproj (a build-artefact copy that lags the
+    ''' tracked file -- a fifth copy, precisely the drift class this guard exists to catch).</summary>
+    Private Function A62ResolveRepoRoot(startDir As String) As String
+        Dim dir As String = startDir
+        For i As Integer = 1 To 12
+            If File.Exists(Path.Combine(dir, "DeribitVerdictEngine.sln")) AndAlso
+               File.Exists(Path.Combine(dir, "settings.json")) Then
+                Return dir
+            End If
+            Dim parent = Directory.GetParent(dir)
+            If parent Is Nothing Then Exit For
+            dir = parent.FullName
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>Wraps A62ResolveRepoRoot with the loud-failure message §5.1 requires -- a
+    ''' guard that silently does nothing when it cannot find its input is the "reports success
+    ''' it never performed" defect this project has recorded five times. Callers on a Nothing
+    ''' return MUST Check(False, errorMsg) and Return, never skip.</summary>
+    Private Function A62RequireSettingsRoot(startDir As String, ByRef errorMsg As String) As String
+        Dim root As String = A62ResolveRepoRoot(startDir)
+        If root Is Nothing Then
+            errorMsg = "A54a drift guard: could not locate a directory holding both DeribitVerdictEngine.sln and settings.json, walking up from " & startDir
+            Return Nothing
+        End If
+        errorMsg = ""
+        Return root
+    End Function
+
+    ' -- A62b: teeth, independent of any real drift. Mutate exactly one scalar in a FRESH
+    ' New EngineSettings() and assert the walk names THAT path as new drift, relative to an
+    ' unmutated baseline walked the same run -- and no other. Diffing against a baseline
+    ' (rather than asserting Drifts.Count = 1 outright) decouples this fixture's pass/fail
+    ' from A62a's own separate claim that the shipped tree is currently clean; the two
+    ' fixtures test different properties and must not depend on each other's result.
+    ' indicators.ADX.trend_threshold is not on the D-1 allow-list and, at the tracked v68
+    ' settings.json, agrees with the POCO default (25.0) -- confirmed by reading the file,
+    ' not assumed.
+    Private Sub A62b_MutationTeeth()
+        Dim errMsg As String = ""
+        Dim root As String = A62RequireSettingsRoot(AppContext.BaseDirectory, errMsg)
+        If root Is Nothing Then
+            Check("A62b JSON<->POCO drift guard -- mutation teeth", False, errMsg)
+            Return
+        End If
+        Dim rootEl = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "settings.json"))).RootElement
+
+        Dim baseline As New DriftWalkResult()
+        WalkPocoVsJson(New EngineSettings(), rootEl, "", True, baseline)
+        Dim baselinePaths As New HashSet(Of String)(baseline.Drifts.Select(Function(d) d.Split(":"c)(0)), StringComparer.Ordinal)
+
+        Const mutatedPath As String = "indicators.ADX.trend_threshold"
+        Dim mutated As New EngineSettings()
+        mutated.Indicators.ADX.TrendThreshold += 1234.5
+        Dim result As New DriftWalkResult()
+        WalkPocoVsJson(mutated, rootEl, "", True, result)
+        Dim resultPaths As New HashSet(Of String)(result.Drifts.Select(Function(d) d.Split(":"c)(0)), StringComparer.Ordinal)
+
+        Dim newDrifts = resultPaths.Except(baselinePaths).ToList()
+
+        Check("A62b JSON<->POCO drift guard -- mutation teeth (mutate ADX.trend_threshold in memory; the walk must name EXACTLY that path as new drift relative to the unmutated baseline, and no other)",
+              newDrifts.Count = 1 AndAlso newDrifts(0) = mutatedPath,
+              String.Format("newDrifts=[{0}] (want exactly [{1}])", String.Join(",", newDrifts), mutatedPath))
+    End Sub
+
+    ' -- A62a: the shipped tree is clean. New EngineSettings() walked against the TRACKED
+    ' settings.json -- unexplained drift = 0, orphans = 0, JSON-only = 0, Compared >= 200.
+    Private Sub A62a_ShippedTreeIsClean()
+        Dim errMsg As String = ""
+        Dim root As String = A62RequireSettingsRoot(AppContext.BaseDirectory, errMsg)
+        If root Is Nothing Then
+            Check("A62a the shipped tree is clean", False, errMsg)
+            Return
+        End If
+        Dim rootEl = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "settings.json"))).RootElement
+        Dim result As New DriftWalkResult()
+        WalkPocoVsJson(New EngineSettings(), rootEl, "", True, result)
+
+        Check("A62a the shipped tree is clean -- New EngineSettings() vs the tracked settings.json: unexplained drifts=0, orphans=0, JSON-only=0, Compared>=200",
+              result.Drifts.Count = 0 AndAlso result.Orphans.Count = 0 AndAlso result.JsonOnly.Count = 0 AndAlso result.Compared >= 200,
+              String.Format("drifts=[{0}] orphans=[{1}] jsonOnly=[{2}] compared={3}",
+                            String.Join(",", result.Drifts), String.Join(",", result.Orphans), String.Join(",", result.JsonOnly), result.Compared))
+    End Sub
+
+    ' -- A62g: the D-1 allow-list is a LIST, not a class exemption. Flip a THIRD Boolean path
+    ' (mtf_gate.enabled -- not on the two-entry allow-list; POCO True agrees with the tracked
+    ' JSON's true) and assert it is STILL reported, proving the allow-list check is an exact
+    ' path match, not "any Boolean disagreement is tolerated".
+    Private Sub A62g_AllowListIsListNotBlanket()
+        Dim errMsg As String = ""
+        Dim root As String = A62RequireSettingsRoot(AppContext.BaseDirectory, errMsg)
+        If root Is Nothing Then
+            Check("A62g the D-1 allow-list is a list, not a class exemption", False, errMsg)
+            Return
+        End If
+        Dim rootEl = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "settings.json"))).RootElement
+
+        Dim mutated As New EngineSettings()
+        mutated.MTFGate.Enabled = Not mutated.MTFGate.Enabled
+        Dim result As New DriftWalkResult()
+        WalkPocoVsJson(mutated, rootEl, "", True, result)
+
+        Check("A62g the D-1 allow-list is EXACTLY two named paths, not a type-based blanket -- a third Boolean mismatch (mtf_gate.enabled) is still reported as drift",
+              result.Drifts.Any(Function(d) d.StartsWith("mtf_gate.enabled:", StringComparison.Ordinal)),
+              String.Format("drifts=[{0}]", String.Join(",", result.Drifts)))
+    End Sub
+
+    ' -- A62c: the nullable rule, both arms (§0 trap 2 / §3.3 -- the trap this session walked
+    ' into on its own first attempt). AggressorVelocitySessionOverride carries only the two
+    ' nullable fields the ruling's derived rule exists for.
+    Private Sub A62c_NullableRuleBothArms()
+        Dim elAbsent = JsonDocument.Parse("{}").RootElement
+        Dim rAbsent As New DriftWalkResult()
+        WalkPocoVsJson(New AggressorVelocitySessionOverride(), elAbsent, "test", False, rAbsent)
+
+        Dim elPresent = JsonDocument.Parse("{""norm_window_sec"": 999.0, ""burst_ratio_threshold"": 888.0}").RootElement
+        Dim rPresent As New DriftWalkResult()
+        WalkPocoVsJson(New AggressorVelocitySessionOverride(), elPresent, "test", False, rPresent)
+
+        Check("A62c nullable rule holds both arms -- ABSENT from JSON is Skipped, not an Orphan; PRESENT in JSON is Skipped, never compared or drifted",
+              rAbsent.Orphans.Count = 0 AndAlso rAbsent.Skipped.Count = 2 AndAlso rAbsent.Compared = 0 AndAlso
+              rPresent.Orphans.Count = 0 AndAlso rPresent.Skipped.Count = 2 AndAlso rPresent.Compared = 0 AndAlso rPresent.Drifts.Count = 0,
+              String.Format("absent(orphans={0} skipped={1} compared={2}) present(orphans={3} skipped={4} compared={5} drifts={6})",
+                            rAbsent.Orphans.Count, rAbsent.Skipped.Count, rAbsent.Compared,
+                            rPresent.Orphans.Count, rPresent.Skipped.Count, rPresent.Compared, rPresent.Drifts.Count))
+    End Sub
+
+    ' -- A62d: case-insensitive key resolution, matching SettingsLoader's
+    ' PropertyNameCaseInsensitive=True. A hand-built JSON object whose key casing differs
+    ' from the JsonPropertyName attributes must still resolve and compare clean.
+    Private Sub A62d_CaseInsensitiveResolution()
+        Dim el = JsonDocument.Parse("{""PERIOD"": 9, ""Trend_Threshold"": 25.0, ""RANGE_THRESHOLD"": 20.0}").RootElement
+        Dim r As New DriftWalkResult()
+        WalkPocoVsJson(New AdxSettings(), el, "test", False, r)
+
+        Check("A62d case-insensitive key resolution -- differently-cased JSON keys still resolve (0 orphans) and compare clean (Compared=3, 0 drifts)",
+              r.Orphans.Count = 0 AndAlso r.Compared = 3 AndAlso r.Drifts.Count = 0,
+              String.Format("orphans=[{0}] compared={1} drifts=[{2}]", String.Join(",", r.Orphans), r.Compared, String.Join(",", r.Drifts)))
+    End Sub
+
+    ' -- A62e: the resolver fails loudly. A directory with no DeribitVerdictEngine.sln /
+    ' settings.json marker anywhere above it (a fresh OS temp dir, well outside the repo)
+    ' must return Nothing and name the searched starting path in the failure message -- never
+    ' skip, warn, or silently pass.
+    Private Sub A62e_ResolverFailsLoudly()
+        Dim tempDir As String = Path.Combine(Path.GetTempPath(), "a62e_" & Guid.NewGuid().ToString("N"))
+        Directory.CreateDirectory(tempDir)
+        Try
+            Dim errMsg As String = ""
+            Dim root As String = A62RequireSettingsRoot(tempDir, errMsg)
+            Check("A62e the resolver fails loudly -- no DeribitVerdictEngine.sln/settings.json marker above the start dir returns Nothing and names the searched path in the failure message",
+                  root Is Nothing AndAlso errMsg.Contains(tempDir),
+                  String.Format("root={0} errMsg='{1}'", If(root Is Nothing, "<Nothing>", root), errMsg))
+        Finally
+            Try : Directory.Delete(tempDir, True) : Catch : End Try
+        End Try
+    End Sub
+
+    ' -- A62f: structural exclusion, not a name list. TradeCostSettings carries four real
+    ' JSON-backed keys plus two <JsonIgnore> ReadOnly derived properties (RoundTripFeePct,
+    ' EffectiveMinMovePct). The walk must compare the four and skip the two BY SHAPE -- the
+    ' Skipped list records both derived properties by name, proving they were VISITED via
+    ' reflection and structurally excluded, not simply never reached.
+    ''' <summary>A62f-only local test shape carrying an ARBITRARILY-named derived property.
+    ''' A name-list mutation scoped to TradeCostSettings' two real derived-property names
+    ''' (RoundTripFeePct/EffectiveMinMovePct) would still pass a check against
+    ''' TradeCostSettings alone -- both names are correct today. It cannot know about THIS
+    ''' type's derived property; only a genuinely structural (JsonIgnore/CanWrite) check
+    ''' excludes it correctly. This is what makes the fixture's teeth independent of the
+    ''' two names the walk happens to be right about today.</summary>
+    Private Class A62StructuralTestShape
+        <JsonPropertyName("real_value")> Public Property RealValue As Double = 5.0
+        <JsonIgnore>
+        Public ReadOnly Property DoubledDerivedForTesting As Double
+            Get
+                Return RealValue * 2.0
+            End Get
+        End Property
+    End Class
+
+    Private Sub A62f_StructuralExclusionNotByName()
+        ' Part 1: the real production shape named in the fixture table.
+        Dim el = JsonDocument.Parse(
+            "{""maker_fee_bps"": 1.5, ""taker_fee_bps"": 3.5, ""round_trip_style"": ""maker_maker"", ""min_net_move_pct"": 0.0005}").RootElement
+        Dim r As New DriftWalkResult()
+        WalkPocoVsJson(New TradeCostSettings(), el, "scoring.trade_costs", False, r)
+        Dim skippedBothDerived As Boolean =
+            r.Skipped.Any(Function(s) s.Contains("RoundTripFeePct")) AndAlso
+            r.Skipped.Any(Function(s) s.Contains("EffectiveMinMovePct"))
+
+        ' Part 2: an arbitrarily-named local shape -- see A62StructuralTestShape's own comment.
+        Dim elArb = JsonDocument.Parse("{""real_value"": 5.0}").RootElement
+        Dim rArb As New DriftWalkResult()
+        WalkPocoVsJson(New A62StructuralTestShape(), elArb, "test", False, rArb)
+        Dim arbOk As Boolean = rArb.Compared = 1 AndAlso rArb.Orphans.Count = 0 AndAlso rArb.Drifts.Count = 0 AndAlso
+                                rArb.Skipped.Any(Function(s) s.Contains("DoubledDerivedForTesting"))
+
+        Check("A62f structural exclusion -- trade_costs compares its four real keys and excludes RoundTripFeePct/EffectiveMinMovePct by SHAPE; an arbitrarily-named derived property on an unrelated local shape is excluded the same way, proving this cannot be a name list scoped to today's two known names",
+              r.Compared = 4 AndAlso r.Orphans.Count = 0 AndAlso r.Drifts.Count = 0 AndAlso skippedBothDerived AndAlso arbOk,
+              String.Format("realShape: compared={0} orphans=[{1}] drifts=[{2}] skipped=[{3}] | arbShape: compared={4} orphans=[{5}] drifts=[{6}] skipped=[{7}]",
+                            r.Compared, String.Join(",", r.Orphans), String.Join(",", r.Drifts), String.Join(",", r.Skipped),
+                            rArb.Compared, String.Join(",", rArb.Orphans), String.Join(",", rArb.Drifts), String.Join(",", rArb.Skipped)))
     End Sub
 
 End Module

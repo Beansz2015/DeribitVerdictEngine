@@ -362,7 +362,11 @@ End Class
 
 Public Class CvdSettings
     <JsonPropertyName("slope_min_usd")>         Public Property SlopeMinUsd         As Double  = 12000.0
-    <JsonPropertyName("slope_pct_of_value")>    Public Property SlopePctOfValue     As Double  = 0.01
+    ''' <summary>[A54a D-2, 2026-09-04] Synced to the shipped 0.10 — the POCO stood at the
+    ''' pre-v33 0.01 from birth-in-agreement (f3a6f36) through the v34 re-baseline
+    ''' (61b4532, 2026-06-13) that moved the JSON alone. Found by the A54a drift guard's
+    ''' reflection walk, not by a fixture — zero fixtures referenced this key.</summary>
+    <JsonPropertyName("slope_pct_of_value")>    Public Property SlopePctOfValue     As Double  = 0.10
     <JsonPropertyName("divergence_price_gate")> Public Property DivergencePriceGate As Double  = 0.0005
     ''' <summary>[P13] v0.50: Score penalty magnitude for CVD divergence. Default 1.</summary>
     <JsonPropertyName("divergence_penalty")>    Public Property DivergencePenalty   As Integer = 1
@@ -387,10 +391,14 @@ Public Class MicroCvdSettings
     ''' <summary>Static USD acceleration threshold. Used as floor anchor in dynamic mode. Default 10000.</summary>
     <JsonPropertyName("accel_threshold")> Public Property AccelThreshold As Double  = 10000.0
     ''' <summary>
-    ''' Dynamic acceleration threshold as fraction of total window USD flow. Default 0.03 (3%).
+    ''' Dynamic acceleration threshold as fraction of total window USD flow. Default 0.30 (30%).
     ''' Set to 0.0 to disable dynamic mode and use accel_threshold as a literal static value.
+    ''' [A54a D-2, 2026-09-04] Synced to the shipped 0.30 — the POCO stood at the pre-v33
+    ''' 0.03 from birth-in-agreement (f02b3b2) through the v33 re-baseline (1e9df84,
+    ''' 2026-06-13) that moved the JSON alone. Found by the A54a drift guard's reflection
+    ''' walk, not by a fixture — zero fixtures referenced this key.
     ''' </summary>
-    <JsonPropertyName("accel_threshold_dynamic_pct")> Public Property AccelThresholdDynamicPct As Double = 0.03
+    <JsonPropertyName("accel_threshold_dynamic_pct")> Public Property AccelThresholdDynamicPct As Double = 0.30
     ''' <summary>
     ''' Floor on dynamic threshold as fraction of accel_threshold. Default 0.25 (25%).
     ''' Prevents dead-flow windows from producing nonsensically small thresholds.
@@ -665,9 +673,15 @@ Public Class SessionVolumeSettings
     ' Default buckets aligned to live v30 (ASIA/LONDON/NY). An empty default would
     ' silently skip all session scaling on the code-defaults path; a settable List
     ' property is fully replaced by settings.json on a successful load.
+    ' [A54a D-2, 2026-09-04] ASIA HighMultiplier/MidMultiplier and ASIA+LONDON
+    ' ExecutionResolution synced to shipped -- ruled 2026-08-11 (trader-tick-queue.md
+    ' Sec0a, "Seeded session buckets"), carried forward by the A54a drift guard's
+    ' reflection walk, not by a fixture -- zero fixtures read this seed
+    ' (BuildResolutionCfg fully replaces Sessions; A15g/A28d build their own JSON
+    ' literals). NY is clean -- left untouched.
     <JsonPropertyName("sessions")> Public Property Sessions As New List(Of SessionBucketSettings) From {
-        New SessionBucketSettings With {.Name = "ASIA",   .StartHour = 0,  .EndHour = 7,  .HighMultiplier = 0.8,  .MidMultiplier = 0.85},
-        New SessionBucketSettings With {.Name = "LONDON", .StartHour = 8,  .EndHour = 12, .HighMultiplier = 1.0,  .MidMultiplier = 1.0},
+        New SessionBucketSettings With {.Name = "ASIA",   .StartHour = 0,  .EndHour = 7,  .HighMultiplier = 1.0,  .MidMultiplier = 1.0, .ExecutionResolution = 3},
+        New SessionBucketSettings With {.Name = "LONDON", .StartHour = 8,  .EndHour = 12, .HighMultiplier = 1.0,  .MidMultiplier = 1.0, .ExecutionResolution = 3},
         New SessionBucketSettings With {.Name = "NY",     .StartHour = 13, .EndHour = 23, .HighMultiplier = 1.15, .MidMultiplier = 1.1}
     }
 End Class
@@ -1144,10 +1158,19 @@ Public Class NetworkSettings
     <JsonPropertyName("retry_backoff_ms")>         Public Property RetryBackoffMs        As Integer = 1000
 
     ' ── WebSocket transport (v38, migration P1) ──────────────────────────────────────────
-    ' Additive-only foundation; the live path stays pure REST until P2 wires the source in
-    ' and P3 flips the cutover. See docs/websocket-migration-p1-implementer-handoff.md.
-    ' Transport: "rest" | "ws" — cutover flag; P3 flips the default. Stays "rest" in P1/P2.
-    <JsonPropertyName("transport")>           Public Property Transport        As String  = "rest"
+    ' Additive-only foundation; the live path stays pure REST until P2 wires the source in.
+    ' See docs/websocket-migration-p1-implementer-handoff.md.
+    ' Transport: "rest" | "ws" — cutover flag. [A54a D-3, 2026-09-04] P3 SHIPPED AT CUTOVER
+    ' v42 (2026-06-24); the POCO default was never moved to follow and stood at the pre-
+    ' cutover "rest" against a shipped "ws" for two and a half months. Synced here — found
+    ' by the A54a drift guard's reflection walk. Safe on the parse-failure path: ResolveSource
+    ' carries two independent REST fallbacks (WsFallbackToRest defaulting True; _wsSource
+    ' Is Nothing), and every other network.* POCO default already matched the shipped file.
+    ' Also repairs a standing inconsistency: auto_run.trigger_mode's POCO default is
+    ' "on_close" (synced at v57) while transport stayed "rest", and OnCloseModeActive()
+    ' requires transport="ws" — so the pre-fix POCO defaults asked for bar-close firing over
+    ' a transport that cannot deliver it.
+    <JsonPropertyName("transport")>           Public Property Transport        As String  = "ws"
     ' WsUrl: Deribit public JSON-RPC v2 WebSocket endpoint (public channels only, no auth).
     <JsonPropertyName("ws_url")>              Public Property WsUrl            As String  = "wss://www.deribit.com/ws/api/v2"
     ' WsHeartbeatSec: public/set_heartbeat interval (Deribit minimum 10s).
