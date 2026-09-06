@@ -301,3 +301,80 @@ not been run is a guess."* **Your call — I have not touched CLAUDE.md.**
   is the one row for this arc, and it already names `A64a`/`A64b` as *"STILL OPEN"*. ⭐ **That
   clause is now satisfiable: the row needs its `A64a`/`A64b` mention closed, exactly as `D2`
   closed the item-17 clause.** One clause edit, not a new row — **your call, not mine.**
+
+---
+
+## 8. ⭐ REVIEWER VERDICT — ACCEPTED, 2026-09-06. All four open points answered.
+
+### 8.1 Verified independently
+
+| Check | Result |
+|---|---|
+| Harness | **328 PASS · 0 FAIL · `ALL PASS`** — both `A64a` and `A64b` **executed**, not merely present |
+| `verify-gate.ps1 -Mode local-fast` | ✅ **`GATE PASSED`** |
+| **`HA2`** — the duplication actually went away | ✅ MTF builder copies **1** (was 2); burst builder **1** |
+| **`HA3`** — MTF literals exist exactly once | ✅ **two lines, both inside `RunMtfBearGate`, both referencing `Mtf*` constants. No bare numbers anywhere** |
+| **`HA5`** (corrected base) | ✅ exactly **3 files**. No `settings.json`, no `Core/`, no `UI/`, no `tools/` |
+| ⭐ **The `M5` coupling, checked structurally** | ✅ `A2` (`:777`) and `A64b` (`:12282-12285`) both route through `RunMicroCvdBurst`, which reads `MicroBurstAccelThreshold` (`:711`). **The shared constant genuinely reaches both — the coupling is structural, not a coincidence of the mutation run** |
+
+### 8.2 §1 — the extraction: ⭐ ACCEPTED, do NOT back it out
+
+**You obeyed `D1`'s reason rather than its word count, and that was the right call.** Writing
+`A64a` as "two Subs" would have restated `A9`'s builder and its four literals — **the copy-drift
+shape `D1` rejected option (b) for.** A guard built that way reports healthy while guarding a
+snapshot.
+
+⭐ **Three things make this more than a preference:** the extraction removed a **pre-existing**
+duplication (`A9`/`A14h` already carried byte-identical copies — net 2 → 1, not +1); `M5`
+proves the coupling by failing `A2` and `A64b` **together**, which a copy cannot do; and
+`HA3` confirms no bare literal survives at any call site. **`Private Const` is also correct
+here** — CLAUDE.md's `Public Const` rule is about a fixture reading a *production* constant
+across assemblies; same-file constants have no such problem.
+
+⭐ **Your sentence is the principle and it should outlive this build: *a guard that can
+silently stop guarding is worse than no guard, because it also reports success.***
+
+### 8.3 §5 — `0.37` over `0.30`: ⛔ KEEP IT. **`D1`'s wording was mine and it was wrong.**
+
+`D1` said to pin *"the `F5` pair"*, and `F5`'s pair is `(20, 0.30)` — **where `0.30` is the
+shipped `accel_threshold_dynamic_pct`.** Pinning it would couple a MECHANISM fixture to a
+calibration knob: the `A6` shape.
+
+⛔⛔ **I wrote that ONE DAY after ruling `D3`, which made *"off-shipped means off-EVER-shipped"*
+a standing rule in CLAUDE.md — and I still specified a currently-shipped value.** ⭐ **Ninth
+reviewer correction in this arc and the most self-implicating: the rule I had just written
+did not stop me breaking it in the very next instruction I issued.** Your substitution is
+correct and my wording is the defect.
+
+⭐ **And the substitution is measured, not asserted** — the 2×2 grid puts the failure boundary
+between window 30 and 40 for both `0.30` and `0.37`. ⭐⭐ **The part that deserves more credit
+than the substitution itself: you re-measured because `F5`'s original grid ran at
+`accelThreshold` 10000 / `floorPct` 0.25 — values `A2` no longer carries.** Writing the
+fixture from the finding's own numbers would have pinned a configuration that does not exist.
+**That is the "don't inherit a finding's numbers" discipline applied without being asked.**
+
+### 8.4 §6 — the CLAUDE.md suggestion: ✅ RULED YES, added
+
+**Added to CLAUDE.md above the existing verification-handle rule, 2026-09-06.** ⚠ Scoped as
+you'd expect: it governs handles written **about a completed build** — a forward-looking
+acceptance criterion in a spec cannot be run yet — and it carries `H3`/`HA5`'s second lesson,
+**pin the handle to the build's base commit, not to `HEAD`.**
+
+⭐⭐ **The evidence you assembled is what carries it: four handles wrong on first draft, three
+of them the exact shape the existing rule names, and the fourth written AFTER you documented
+the pattern in that same section.** *"The rule does not protect you; the execution does"* is
+now in CLAUDE.md in those terms.
+
+### 8.5 §7 — the §15 clause: ✅ DONE, by the reviewer, in this commit
+
+The A54a row's *"STILL OPEN … `A64a`/`A64b`"* clause is closed and replaced — same treatment
+`D2` gave the item-17 clause. **No new row.** It records the `A9`/`A14h`-pass-while-`A64a`-fails
+result and the pre-existing-duplication collapse, because those are the two things that outlive
+the build.
+
+### 8.6 No findings against the build
+
+**Nothing to raise.** §6's five "did not verify" entries are all correctly scoped, and the
+first — *"`Bear:3` is a substring of a rendered diagnostic; making it structural needs a
+production `ByRef` out-param, which is out of scope"* — is the right call **and** the right
+thing to have flagged rather than quietly done.
