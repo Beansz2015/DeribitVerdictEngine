@@ -1,379 +1,346 @@
-# I17-SWEEP + I17-A6 — the sensitivity measurement and its application — spec-back
+# I17-SWEEP + I17-A6 — review packet for the orchestrator
 
-**Solo build; one document**, per [`batch-review-packet-convention.md`](batch-review-packet-convention.md)'s
-own scope note (it governs multi-lane batches).
+**This is the WORKING DOCUMENT.** The record — per-literal band table, findings, method,
+acceptance evidence — is [`i17-sweep-batch-summary.md`](i17-sweep-batch-summary.md). Per
+[`batch-review-packet-convention.md`](batch-review-packet-convention.md): two documents,
+cross-referenced, never duplicated. Nothing below restates the table; it points at it.
 
-**Ruling:** [`trader-tick-queue.md`](trader-tick-queue.md) §2, rows `I17-A6` (a stale-literal
-fix, ruled in full) and `I17-SWEEP` (measure insensitivity per literal, then decide).
-**Reasoning under test:** [`a54a-session2-step2-spec-back.md`](a54a-session2-step2-spec-back.md)
-§2, session 2's own 26-row MECHANISM table.
+**Ruling being reported against:** [`trader-tick-queue.md`](trader-tick-queue.md) §2, rows
+`I17-A6` and `I17-SWEEP`. **Reasoning under test:**
+[`a54a-session2-step2-spec-back.md`](a54a-session2-step2-spec-back.md) §2.
 
-**Commits:** `98ed4fd` (`I17-A6`) · this commit (`I17-SWEEP`).
+**Commits:** `98ed4fd` (`I17-A6`) · `1b2adbe` (`I17-SWEEP`) · this one (docs restructure +
+the §0 count correction).
+
+⛔ **Read the superseding note at the top of
+[`i17-sweep-batch-summary.md`](i17-sweep-batch-summary.md) first.** Its published §0 counts
+were wrong (13/5/8 → **17/5/4**) and commit `1b2adbe`'s message carries the wrong figures.
+Nothing else moves; the band table was right throughout.
 
 ---
 
-## 0. Outcome
+## 1. Ranked verification handles
 
-| | Result |
+⭐ **Rank order here is not the usual one, and the reason matters.** The harness and the gate
+do **not** discriminate this build: *every value inside its measured band passes*. So the
+green gate confirms soundness and says nothing about the actual claim, which is that the
+**right** values were chosen for the **right** reasons. The structural checks outrank the
+behavioural one.
+
+⛔ **Every handle below was RUN before it was written here**, and every one that greps
+`Program.vb` carries a **comment filter**. That is not fussiness — see `H0`.
+
+### H0 — the trap these handles are shaped around. Run this first; it costs one command.
+
+This build's new comments **quote the old values on purpose** ("Was 0.15, which EQUALLED
+shipped…"). So a naive value grep reports the old literal as still present when it is gone —
+the [`trade-store-write-guard-spec-back.md`](trade-store-write-guard-spec-back.md) `R1`
+failure exactly, where a reviewer following a handle literally would have rejected a sound
+build. Measured, on the committed tree:
+
+| Naive handle | Prints | Truth |
+|---|---|---|
+| `grep -c '0\.15' verify/ordercheck/Program.vb` | **6** | zero executable call sites use 0.15 |
+| `grep -c '10000' …` | **116** | zero use 10000 |
+| `grep -c '20\.0' …` | **38** | zero use 20.0 |
+| `grep -c '0\.001' …` | **38** | zero use 0.001 |
+
+**⛔ Do not use any bare value grep on this file. Filter comment lines** — in VB that is a
+line whose first non-space character is `'`:
+
+```bash
+grep -vE "^[[:space:]]*'" verify/ordercheck/Program.vb
+```
+
+### ⭐ H1 — IF YOU RUN ONLY ONE, RUN THIS. Every changed value, with zero comment noise.
+
+```bash
+git diff 4701ef6 HEAD -- verify/ordercheck/Program.vb | grep -E "^[+-]" | grep -vE "^(\+\+\+|---)" | grep -vE "^[+-][[:space:]]*'" | grep ':='
+```
+
+**Expected: 24 lines — 12 `-` and 12 `+`**, and that is the *entire* value change set of
+both commits in one screen. It covers all 9 call sites and both commits at once, and it is
+the check that catches a wrong value, a swapped argument, or an unintended edit.
+
+⚠ **The load-bearing part is the pairing, not the count.** Read the `-`/`+` pairs against
+[`i17-sweep-batch-summary.md`](i17-sweep-batch-summary.md) §2's `Was` / `Now` columns. A
+correct count with one wrong value passes a count check and fails this one.
+
+### H2 — the arithmetic identity that would expose a silent miscount
+
+From the summary's §2 table, count the `Now` column: **17 changed + 4 kept-as-load-bearing +
+1 kept-as-design-constant + 4 left-alone = 26.**
+
+⛔ **Re-derive it from the table; do not take the number on report.** The superseded §0 said
+13 + 5 + 8, which also sums to 26 — **two wrong figures that summed correctly is precisely
+why the totals check is worthless and the identity is not.** This handle is the one that
+caught it.
+
+### H3 — the 13 executable call-site lines, current state
+
+```bash
+grep -nE 'slopeMinUsd:=|slopePctOfValue:=|divergencePriceGate:=|SegmentWeight:=|microWindowSize:=|accelThreshold:=|dynamicPct:=|floorPct:=|tfiWindowSize:=|trendGate:=|divergenceGate:=|adxPeriod:=|adxMin:=|minOf:=|candleLookback:=' verify/ordercheck/Program.vb | grep -vE "^[0-9]+:[[:space:]]*'"
+```
+
+**Expected: exactly 13 lines** at 691–693, 746–747, 786–787, 820, 887–888, 1054, 1434, 7181.
+Use it to confirm no tenth call site was missed and no comment leaked into the set.
+
+### H4 — no synthetic value is a shipped value, ever. This is the check that would have caught `F3`.
+
+⭐ **`F3` exists because the previous review checked a literal against the CURRENT
+`settings.json` only.** The correct check is against the whole tracked history:
+
+```bash
+mkdir -p /tmp/sr && i=0; for c in $(git log --format=%H -- settings.json); do i=$((i+1)); git show $c:settings.json | tr -d ' \n' > /tmp/sr/$i.json; done; echo "revisions: $i"
+for k in slope_pct_of_value late_segment_weight early_segment_weight accel_threshold accel_threshold_floor_pct threshold divergence_gate adx_period adx_min candle_lookback; do echo -n "$k: "; grep -oh "\"$k\":[0-9.]*" /tmp/sr/*.json | sed 's/.*://' | sort -u -g | tr '\n' ' '; echo; done
+```
+
+**Expected: 87 revisions**, and these exact value sets — each of which **excludes the
+synthetic now pinned against it**:
+
+| Key | Every value it has ever held | Synthetic now pinned | Collides? |
+|---|---|---|---|
+| `slope_pct_of_value` | 0.01 · **0.05** · 0.10 | 0.037 | no |
+| `late_segment_weight` | 2.0 | 7.0 | no |
+| `early_segment_weight` | 1.0 | 3.0 | no |
+| `accel_threshold` | 5000.0 · 10000.0 | 1234.0 | no |
+| `accel_threshold_floor_pct` | 0.25 | 0.375 | no |
+| `TFI.threshold` | 0.15 | 0.42 | no |
+| `OBV.divergence_gate` | 0.001 | 0.0077 | no |
+| `OBV.trend_gate` | 0.001 · 10.0 · 18.0 · 23.0 | 1.0 | no |
+| `adx_period` | 9 | 7 | no |
+| `adx_min` | 20.0 | 7.5 | no |
+| `candle_lookback` | 60 | 55 | no |
+
+⛔ **The test is PER KEY, and the wording matters — my first draft of this handle said
+"appears in no value set", which is false and would fail on a broader grep.** Some synthetics
+do appear elsewhere in `settings.json` as values of *unrelated* keys (`3.0` is
+`absorb_ratio`, `7` is `lin_reg_period`, `55` is `partial_overbought`, `1.0` is
+`atr_stop_multiplier`). ⭐ **That is not the defect.** Item 17's confusability is *"a reader
+greps this literal, finds it in the history of THE KEY THIS PARAMETER MIRRORS, and cannot
+tell stale from deliberate."* `lateSegmentWeight:=7.0` cannot be misread as `absorb_ratio`.
+**Run it per key; a cross-key collision is noise.**
+
+⚠ **Worth the reviewer's eye:** seven of the eleven keys have held exactly **one** value ever.
+One could argue equality is harmless for a key that never moves. **I did not treat it that
+way** — a never-retuned key is precisely the one that gets retuned with nobody checking the
+fixtures, which is `A6`'s own history. Flagging the argument rather than burying it.
+
+### H5 — settings untouched
+
+```bash
+git diff 4701ef6 HEAD -- settings.json | wc -l
+```
+
+**Expected: `0`.** Confirms v68 stands and no `change_log` entry is owed.
+
+### ⛔ H6 — the one check that proves the VALUE CHOICE, and it CANNOT be run from the committed tree
+
+The claim the whole build rests on is not "still passes" — it is **"the unasserted
+diagnostics are unchanged, so the mechanism the fixture documents is still exercised."**
+`A9`/`A14h` must still report `Bull:0 Bear:3 (need 2)`, `ADX:100.0`, `EMA:BEAR`; `A6` must
+still report `divA=NONE divB=NONE`.
+
+**The harness prints only `PASS`, so none of that is observable from the tree.** Verifying it
+requires the probe, which is not committed. ⛔ **This is a genuine hole in the packet, and it
+is decision `D1` below, not a formality.**
+
+### H7 — the behavioural floor (soundness, not correctness of choice)
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/checks/verify-gate.ps1 -Mode local-fast
+```
+
+**Expected `GATE PASSED`** — 6 builds, harness `ALL PASS`, display-parity clean, version-bump
+clean. ⚠ **Ranked last on purpose:** it passes for any in-band value, so it cannot distinguish
+this build from a careless one.
+
+---
+
+## 2. Decisions queued, with my read where I have one
+
+### `D1` — commit the sweep probe, or not?
+
+| Option | What it is |
 |---|---|
-| Literals swept | 26 (session 2's full set), plus `A6.trendGate` and `A43b.tfiWindowSize` for context |
-| Probe points run | 608 one-at-a-time + 5 joint grids |
-| Fixtures that could NOT be swept safely | **0** — see §6 |
-| Literals changed to synthetic | **13** of 26 |
-| Literals kept, with an INCIDENTAL-equality comment | **5** of 26 |
-| Literals left alone (never a shipped value) | **8** of 26 |
-| Session 2 classifications **corrected** | **11** of 26 — see §4 |
-| Session 2 classifications **confirmed** | **15** of 26 |
-| Build matrix | Solution + `AutoTweaker` + `WhatIfRunner` + `CeilingAudit` + `BacktestRunner` + `OrderCheck`, each **0 errors / 0 warnings** Release, each built separately |
-| Harness | **326 PASS · 0 FAIL · `ALL PASS`** |
-| `verify-gate.ps1 -Mode local-fast` | **`GATE PASSED`** |
-| Settings | Unchanged — still **v68**, `git diff` on `settings.json` is empty |
-| Display-string parity | **NO OBLIGATION** — see §7 |
+| **(a)** | Leave scratchpad-only. Status quo. `H6` stays unrunnable |
+| **(b)** | Commit the probe as its own project under `verify/` |
+| **(c)** | Fold the probe's *diagnostics* into the harness as 1–2 new fixtures that pin the unasserted values |
 
----
+**My read, as a hypothesis: (c).** (b) commits ~330 lines that duplicate every fixture's data
+builder — it would rot on the first fixture edit, and it is the copy-drift shape CLAUDE.md's
+fixture-literal provenance rule exists to prevent. (c) keeps the *property* and discards the
+scaffolding: a fixture asserting `A9`'s `details` contains `Bear:3 (need 2)` makes `F1`'s
+spare-vote finding permanent and would fail loudly if a future edit silently drops a vote.
+**That is worth more than an archived probe** — it converts a one-off measurement into a
+standing guard.
 
-## 1. Method, and why it is not the naive sweep the ruling warned about
+**Scoping, supplied without recommending it:** (c) touches `verify/ordercheck/Program.vb`
+only — no new project, no `.vbproj`, no solution change. (b) needs a new `.vbproj`; per
+CLAUDE.md the root project already carries a `Compile Remove` for `verify/**`, so it would
+not break the solution build — but it does need the same `Compile Include` list
+`OrderCheck.vbproj` carries, which is a second copy of *that*.
 
-The ruling's trap is that **a fixture can keep passing for the wrong reason at an extreme
-value**, so the sweep must assert the *asserted values*, not the pass/fail bit.
+### `D2` — the `docs/DeribitIndicatorProject.md` §15 row
 
-**What was built:** a standalone probe (`Sweep.vb` + `Sweep.vbproj`) that links the same
-shipped sources `OrderCheck.vbproj` links, replicates each of the nine call sites' data
-builders **verbatim**, and re-evaluates each fixture across a probe range per literal.
-Every probe prints the **exact tuple the real `Check()` reads**, plus the **unasserted**
-outputs alongside it — which is what caught the two vacuity findings in §4.
-
-**⛔ The probe is a replica, so it was validated against the real harness before any
-conclusion was drawn from it — twice, in two directions:**
-
-- **Baseline agreement.** At the as-found literals the replica reproduces each fixture's
-  asserted values exactly: `A3` `e=16000 net=50000` · `A4` `BUY PRESSURE / 1.000000` ·
-  `A9` `BEAR / passL=False / passS=True` · `A6` `trendA=RISING trendB=RISING`.
-- **⭐ Differential agreement.** Four predicted outcomes were applied to the **real**
-  `verify/ordercheck/Program.vb`, rebuilt, and run:
-
-| Mutation applied to the real fixture | Replica predicted | Real harness produced |
-|---|---|---|
-| `A6` `trendGate` → 48.0 | FAIL, `trendA=FLAT trendB=FLAT` | **FAIL** — *"got equal-pair=FLAT distinct-pair=FLAT"* |
-| `A2` `microWindowSize` → 20, `dynamicPct` → 0.3 | FAIL, `signal=FLAT` | **FAIL** — *"expected BULL_ACCEL, got FLAT"* |
-| `A9` `adxMin` → 101.0, `minOf` → 3 | FAIL, `Bull:0 Bear:2 (need 3)` | **FAIL** — *"`Bull:0 Bear:2 (need 3)`"*, byte-identical |
-| `A4` `threshold` → 0.999999 (positive control) | PASS | **PASS** |
-
-  `A3`, `A14h` and `A43b` stayed PASS throughout, confirming the mutations were
-  site-scoped. The tree was then restored from a byte-exact backup before any real edit.
-
-**⚠ The probe is NOT committed.** It is scratchpad-only, because it duplicates fixture
-data and would itself rot. If you want it in-tree for re-runs, say so and it becomes its
-own commit — I did not add it unasked.
-
----
-
-## 2. ⭐ THE PER-LITERAL BAND TABLE — the deliverable
-
-**"Band" = the range over which the fixture's ASSERTED VALUES are unchanged**, not merely
-where it still passes. `A14h`'s four are omitted as rows 23–26: same data, same assertion,
-byte-identical results to `A9`'s.
-
-| # | Call site | Param | Was | Now | Shipped | Class | Measured band | Edge |
-|---|---|---|---|---|---|---|---|---|
-| 1 | `A1` `CalcCVD` | `slopeMinUsd` | 50000 | *50000* | 12000.0 | BAND-INERT | `[0, 5.999e6]` | 6.0e6 → FLAT |
-| 2 | `A1` | `slopePctOfValue` | 0.05 | **0.037** | 0.10 | STRUCTURALLY INERT | `[0, 1000]` | none found |
-| 3 | `A1` | `divergencePriceGate` | 0.002 | *0.002* | 0.0005 | STRUCTURALLY INERT | `[0, 1000]` | none found |
-| 4 | `A1` | `lateSegmentWeight` | 2.0 | **7.0** | **2.0** | BAND-INERT | `[0.001, 1e6]` | only joint `(0, 0)` |
-| 5 | `A1` | `earlySegmentWeight` | 1.0 | **3.0** | **1.0** | BAND-INERT | `[0.001, 1e6]` | only joint `(0, 0)` |
-| 6 | `A2` `CalcMicroCVD` | `microWindowSize` | 50 | *50* ⛔kept | **50** | DESIGN CONSTANT | `[20, 1000]` | ≤10 → FLAT |
-| 7 | `A2` | `accelThreshold` | 10000 | **1234.0** | **10000.0** | BAND-INERT | `[0, 73999]` | 74000 → FLAT |
-| 8 | `A2` | `dynamicPct` | 0.0 | *0.0* | 0.30 | BAND-INERT | `[0, 0.53]` | 0.54 → FLAT |
-| 9 | `A2` | `floorPct` | 0.25 | **0.375** | **0.25** | ⚠ **MASKED** | `[0, 1000]` *(artefact)* | none 1-at-a-time |
-| 10 | `A3` `CalcMicroCVD` | `microWindowSize` | 50 | *50* ⛔kept | **50** | ⛔ **LOAD-BEARING** | **`{50}` — one point** | 49 → net 49000; 51 → e −984000 |
-| 11 | `A3` | `accelThreshold` | 10000 | **1234.0** | **10000.0** | STRUCTURALLY INERT | `[0, 1e12]` | none found |
-| 12 | `A3` | `dynamicPct` | 0.0 | *0.0* | 0.30 | STRUCTURALLY INERT | `[0, 1e9]` | none found |
-| 13 | `A3` | `floorPct` | 0.25 | **0.375** | **0.25** | STRUCTURALLY INERT | `[0, 1e9]` | none found |
-| 14 | `A4` `CalcTFI` | `tfiWindowSize` | 30 | *30* ⛔kept | **30** | ⛔ **LOAD-BEARING** | `[1, 30]` | 31 → val 0.935484 |
-| 15 | `A4` | `threshold` | 0.15 | **0.42** | **0.15** | BAND-INERT | `[0, 1)` | 1.0 → NEUTRAL |
-| 16 | `A43b` `CalcTFI` | `threshold` | 0.15 | **0.42** | **0.15** | BAND-INERT | `[0, 1)` | 1.0 → NEUTRAL |
-| 17 | `A6` site 1 | `divergenceGate` | 0.001 | **0.0077** | **0.001** | STRUCTURALLY INERT | `[0, 1000]` | none found |
-| 18 | `A6` site 2 | `divergenceGate` | 0.001 | **0.0077** | **0.001** | STRUCTURALLY INERT | `[0, 1000]` | none found |
-| 19 | `A9` `CalcMTFGate` | `adxPeriod` | 9 | **7** | **9** | ⚠ BAND-INERT, **vacuous ≥30** | `[1, 68]` | 69 → FLAT |
-| 20 | `A9` | `adxMin` | 20.0 | **7.5** | **20.0** | ⚠ **MASKED** | `[0, 1000]` *(artefact)* | none 1-at-a-time |
-| 21 | `A9` | `minOf` | 2 | *2* ⛔kept | **2** | ⛔ **LOAD-BEARING** | `[1, 3]` | 0 → **BULL**; 4 → FLAT |
-| 22 | `A9` | `candleLookback` | 60 | **55** | **60** | ⚠ BAND-INERT, partly vacuous 20–49 | `[20, 1000+]` | ≤12 → FLAT |
-
-**Bold in the `Shipped` column = the literal equalled the shipped value.** That is 21 of
-26 as the queue row measured — plus one more the queue did not catch, `A1.slopePctOfValue`
-(§4, `F3`). **The confusable set is 22 of 26, not 21.**
-
-### 2.1 The four classes the measurement produced
-
-The ruling anticipated two outcomes (wide band ⇒ inert ⇒ synthetic · narrow band ⇒
-load-bearing ⇒ keep). The data needs four, and the extra two are where the value is:
-
-| Class | What it means | Is a wide band evidence of insensitivity? |
-|---|---|---|
-| **STRUCTURALLY INERT** | The parameter cannot reach the asserted output at all — it gates something `Check()` never reads, or a term that is exactly zero | **Yes**, and it is the strongest form |
-| **BAND-INERT** | It can reach the assertion, but the fixture's data sits far from the boundary | **Yes**, within the measured edge |
-| ⚠ **MASKED** | Its band is wide **only because a sibling literal at the same call site disables or dominates it**. Change the sibling and it becomes load-bearing at once | ⛔ **NO.** The width is an artefact |
-| ⛔ **LOAD-BEARING** | Single point, or the literal sits on an edge | n/a — keep the value |
-
----
-
-## 3. What was applied, and the rule used to decide
-
-**Not every wide band was cashed in for a synthetic value.** The rule applied, stated so a
-reviewer can disagree with it rather than reverse-engineer it:
-
-1. **Band is a single point, or the literal sits on an edge** → **KEEP**, comment says the
-   equality with shipped is **INCIDENTAL**. *(rows 10, 14, 21 ×2)*
-2. **The literal is a DATASET DESIGN CONSTANT** — the fixture's data construction is built
-   around that number and its own comments name it → **KEEP + INCIDENTAL**, whatever the
-   band. ⭐ **Band width licenses a change; it does not compel one.** *(row 6)*
-3. **Wide band, not a design constant, and the value equals a shipped value (current OR
-   historical)** → **make it obviously synthetic**, choosing a value that preserves the
-   *mechanism the fixture documents*, not merely the assertion. *(13 rows)*
-4. **The value was never a shipped value** → leave it; item 17's confusability defect is
-   simply absent. *(rows 1, 3, 8, 12 — and rows 12/8's `dynamicPct:=0.0` is never-shipped
-   because `accel_threshold_dynamic_pct` has only ever held 0.03 and 0.30)*
-
-**⭐ Rule 3's "preserves the mechanism" clause is doing real work, not decoration.** Two
-values were chosen against band-width alone:
-
-- **`adxPeriod` → 7, deliberately below 30**, though the band runs to 68 — because at ≥30
-  `ADX` collapses to `0.0` and the ADX vote silently stops being cast.
-- **`adxMin` → 7.5, deliberately low**, though every probed value passed — because a high
-  one drops the same vote.
-
-**Confirmed at the chosen values, all applied together** (so interactions between the new
-values are exercised, not just each against the old baseline): every asserted tuple is
-byte-identical to the baseline, **and so is every unasserted diagnostic** — `A9`/`A14h`
-still report `Bull:0 Bear:3 (need 2)`, `ADX:100.0`, `EMA:BEAR`; `A6` still reports
-`divA=NONE divB=NONE`.
-
-**Every synthetic value was checked against the full tracked history** — all 87 revisions
-of `settings.json` — so none can be misread as a settings claim. Historical value sets:
-`slope_min_usd {1000, 12000}` · `slope_pct_of_value {0.01, 0.05, 0.10}` ·
-`divergence_price_gate {0.0005, 0.001}` · `late/early_segment_weight {2.0} / {1.0}` ·
-`accel_threshold {5000, 10000}` · `accel_threshold_dynamic_pct {0.03, 0.30}` ·
-`accel_threshold_floor_pct {0.25}` · `TFI {window_size 30, threshold 0.15}` ·
-`OBV.divergence_gate {0.001}` · `mtf_gate {9, 20.0, 2, 60}`.
-
----
-
-## 4. ⛔ FINDINGS — where the measurement contradicts session 2
-
-**This is the section the measurement was commissioned for. It is reported, not reconciled
-away.**
-
-### F1 ⭐⭐ The MTF four are not inert. They are covered by a SPARE VOTE. (8 of the 26)
-
-Session 2, rows 8–9: *"a strongly one-sided series built to classify BEAR unambiguously
-under any reasonable gate parameter — not a calibration-sensitivity test."*
-
-**The measurement agrees with the conclusion and rejects the reason, and the reason is what
-a future seat will reuse.** `CalcMTFGate` scores three independent bear votes — DMI,
-ADX-strong, EMA stack — and compares the total against `minOf`. This fixture scores
-**`Bear:3` against `need:2`. One spare vote.** That spare is the entire mechanism:
-
-| Probe | Bear votes | Result |
-|---|---|---|
-| baseline `9 / 20.0 / 2 / 60` | 3 | BEAR ✅ |
-| `adxMin` 101 (ADX vote drops) | 2 | BEAR ✅ — **still clears `minOf` 2** |
-| `adxPeriod` 30 (ADX → 0.0, vote drops) | 2 | BEAR ✅ — **still clears `minOf` 2** |
-| ⛔ `adxMin` 101 **× `minOf` 3** | 2 | **FLAT ❌** |
-| ⛔ `adxPeriod` 30 **× `minOf` 3** | 2 | **FLAT ❌** |
-| ⛔ `candleLookback` 30 **× `minOf` 3** | 2 | **FLAT ❌** |
-
-So `adxMin`'s one-at-a-time band is **unbounded across five orders of magnitude** — and
-that is an artefact of a sibling literal, not evidence about `adxMin`. ⛔ **A naive sweep
-would have read "totally inert" and licensed any synthetic value at all.**
-
-**And `minOf` itself is outright LOAD-BEARING** (band `[1, 3]`; at 0 the verdict **inverts
-to BULL**), which *"unambiguously under any reasonable gate parameter"* directly denies.
-
-### F2 ⚠ The fixture goes partly vacuous inside its own band — `A9`'s docstring stops being true
-
-`A9`'s docstring claims it exercises *"DMI bearish, **ADX strong**, EMA stack bearish."*
-At `adxPeriod ≥ 30` the ADX reads **0.00** and the ADX vote is not cast; at
-`candleLookback` 20–49 the EMA stack degrades to `MIXED` and *that* vote is not cast. The
-**assertion is unchanged in both cases.** This is the ruling's vacuous-pass trap in a form
-it did not name: not "the fixture passes for the wrong reason", but **"the fixture still
-passes while quietly testing less than it says it does."** It was only visible because the
-probe printed the unasserted `adx`, `emaAlign` and vote counts next to the assertion.
-
-### F3 ⛔ `A1.slopePctOfValue:=0.05` IS a shipped value — the confusable set is 22, not 21
-
-The session-2 reviewer's §7.2 spot-checked this literal and cleared it: *"now pins a value
-that is **off-shipped** (POCO and JSON both read 0.10 since the R-2/R-3 build) … exactly
-the `A20a`/`A20b` case CLAUDE.md names as legitimate."*
-
-⛔ **That check was against the CURRENT value only.** Across all 87 tracked revisions,
-`slope_pct_of_value` has held **{0.01, 0.05, 0.10}**. `0.05` is a *former shipped value* —
-**structurally the same defect as `A6`'s `10.0`**, which is the pre-v33 shipped value and
-which item 17 exists to remove. A reader greps `0.05`, finds it in the version history, and
-cannot tell stale from deliberate.
-
-⭐ **The lesson generalises past this literal: "off-shipped" must mean off-*ever*-shipped.**
-Checking a fixture literal against today's `settings.json` is exactly the check that lets
-the `A6` shape survive.
-
-### F4 ⚠ `A2.floorPct` is dead code, not inert
-
-`floorPct` lives inside `If dynamicPct > 0.0 Then …` in `CalcMicroCVD`. `A2` pins
-`dynamicPct:=0.0`, so **that branch never executes** and `floorPct` is unreachable. Its
-`[0, 1000]` band is an artefact of the sibling. Measured jointly, `(accelThreshold 10000,
-dynamicPct 0.30, floorPct 10)` **FAILS**. Session 2's A2 row hand-computed the
-static-vs-dynamic divergence correctly for `dynamicPct` and did not notice that the same
-pinned `0.0` silently kills `floorPct`.
-
-### F5 ⚠ A joint dependency that one-at-a-time misses entirely
-
-`A2`'s `microWindowSize` band is `[20, 1000]` and its `dynamicPct` band is `[0, 0.53]`.
-Both `20` and the **shipped** `0.30` are inside their own bands. **Together they FAIL.**
-Same for `(30, 0.30)`. This is the ruling's second trap, confirmed to exist rather than
-merely guarded against.
-
-### F6 ⚠ The queue row's `trend_gate` history is wrong in its first element
-
-`trader-tick-queue.md` §2, row `I17-A6`, states the history is *"8.0 → 10.0 → 18.0 →
-23.0"*. Measured across all 87 tracked `settings.json` revisions plus the method-local
-default's own git history, the values are **{0.001, 10.0, 18.0, 23.0}** in settings
-(`0.001` → `10.0` at v31 → `18.0` at v33 → `23.0` at v66) and **{0.01, 10.0}** as the
-former method default. **`8.0` never existed anywhere.**
-
-**This does not change the `I17-A6` ruling** — `1.0` is still a value never shipped in
-either place, which is the property the ruling needed. Reported because the row will be
-read again.
-
-### F7 ✅ Where session 2 was right, and precisely right
-
-Not everything moved, and the confirmations matter as much as the corrections:
-
-| Session 2 said | Measurement |
+| Option | What it is |
 |---|---|
-| `A3`: *"only `microWindowSize=50` matters"* | ⭐ Exactly right, and stronger than stated — the band is a **single point**. 49 and 51 both break it |
-| `A4`: *"`threshold` is inert (`tfiValue=1.0` clears anything `<1.0`)"* | ⭐ Exactly right, to the boundary: `0.999999` passes, `1.0` fails |
-| `A4`: *"`tfiWindowSize=30` is load-bearing"* | Confirmed — it sits on the upper edge |
-| `A2`: `dynamicPct` hand-computation | Confirmed by measurement: band `[0, 0.53]`, shipped `0.30` inside |
-| `A1`: *"`cvdDiv` is not asserted, so `divergencePriceGate` is inert"* | Confirmed, and sharpened: it is **structurally** unreachable |
-| `A1`: *"`weightedSlope` ~1.8M clears any plausible `slopeMinUsd`"* | Confirmed; exact edge is 1.8e6 (6.0e6 after the weight change) |
-| `A6`: *"`divergenceGate` wholly inert"* | Confirmed, and sharpened: `CalcOBV` sets `obvTrend` **before** it reads the gate, so it is structurally unreachable |
+| **(a)** | No row. Fixture-only commits, zero runtime reach |
+| **(b)** | **One** row covering session 2 **and** this arc |
+| **(c)** | Two rows — one for session 2's still-owed row, one for this |
 
-**15 of 26 confirmed, 11 corrected.** Session 2's per-literal reasoning was sound wherever
-it reasoned about *this fixture's data*; it went wrong wherever it reasoned about *the
-gate parameters being generous* — which is `A9`/`A14h`, and `A2`'s `floorPct`.
+**My read, as a hypothesis: (b).** Session 2's reviewer already ruled a row is owed
+([`a54a-session2-step2-spec-back.md`](a54a-session2-step2-spec-back.md) §7.3) on the grounds
+that §15's operating bar is *"a notable change worth recording"*, not CLAUDE.md's narrower
+*"changes engine behaviour"* — **and that row was never added.** This arc is the second half
+of the same movement: session 2 deleted the `Optional` defaults, this build fixed the
+literals that deletion made explicit. One item, one row, which is §15's own rule.
 
----
+⚠ **CLAUDE.md's session-start note argues against (c) independently:** §15's growth is now in
+**cell content**, not row count, and a second row costs more than it buys.
 
-## 5. `I17-A6` — commit `98ed4fd`
+⭐ **`D2` shares a root with session 2's open §7.3 finding — ruling them together is cheaper
+and avoids one arc getting a row while its other half does not.** `D1` and `D2` do **not**
+share a root.
 
-Ruled in full, applied as ruled, nothing re-litigated.
+### `D3` — does `F3` become a standing rule?
 
-- `trendGate:=10.0` → **`1.0`** at both `CalcOBV` call sites.
-- **Measured band `[0, 47.9]`; `48.0` flips both paths to FLAT** — the ruling's derived
-  `obvChange = 48` confirmed by measurement, and by the differential test against the real
-  harness (§1).
-- The session-2 comment at that call site was **extended, not duplicated**, as instructed.
-- `1.0` verified never-shipped in `settings.json` (87 revisions) **and** never held as the
-  method-local default (`{0.01, 10.0}`).
+`F3`: `A1`'s `slopePctOfValue:=0.05` was cleared as *"off-shipped"* against the **current**
+`0.10`, but the key has historically held `{0.01, 0.05, 0.10}`. **"Off-shipped" must mean
+off-*ever*-shipped.**
 
----
+| Option | What it is |
+|---|---|
+| **(a)** | Leave it as a finding in this packet |
+| **(b)** | Add one sentence to CLAUDE.md's fixture-literal provenance rule |
 
-## 6. The escalation condition — checked, and it did not fire
+**My read, as a hypothesis: (b), one sentence.** The existing rule's own worked examples
+(`A20a`/`A20b` at 2.0/0.5 vs the shipped 1.6/0.625) reason explicitly about **current**
+values, so a careful reader following the rule as written reproduces `F3`. ⛔ **But CLAUDE.md
+is yours, not mine — I have not touched it and will not without a ruling.**
 
-The ruling: *"any fixture whose `Check()` compares two computed values without pinning
-either to a literal expectation must be flagged, because it cannot be swept safely."*
+### `D4` — is the masking shape elsewhere? Do we sweep the rest?
 
-**Zero of the nine match.** Every `Check()` pins at least one computed value to a literal:
+**I have no read on priority — that is a scheduling call, and it is yours.** What I can
+supply is the scoping, which I measured rather than guessed:
 
-| Fixture | `Check()` | Sweepable? |
+| Shape | Where it exists in `Core/` | Does a fixture pin it? |
 |---|---|---|
-| `A1` | `cvdSlope = "RISING"` | ✅ pinned |
-| `A2` | `signal = "BULL_ACCEL"` | ✅ pinned |
-| `A3` | `e = 16000 AndAlso (e+m+l) = 50000` | ✅ pinned |
-| `A4` | `tfiSignal = "BUY PRESSURE" AndAlso \|tfiValue − 1.0\| < 1e−6` | ✅ pinned |
-| `A43b` | four booleans over pinned counts, directions and `tfiVal` | ✅ pinned |
-| `A6` | `trendA = "RISING" AndAlso trendA = trendB` | ✅ **survives on its first conjunct** — exactly as the ruling predicted |
-| `A9` / `A14h` | `trend = "BEAR" AndAlso passLong = False AndAlso passShort = True` | ✅ pinned |
+| **(a) N-of-M votes vs a minimum** — the `F1` shape | `Indicators_Structure.vb:505-507` (`CalcMTFGate`) · `AlertsTracker.vb:152,190` · `Indicators_OrderFlow.vb:209,213` · `ScoringEngine_Calculate_Scoring.vb:97` · `ScoringEngine_Calculate_Verdict.vb:92` | **Only `CalcMTFGate`** — `grep 'minOf:=\|minTrades:=\|minAggrUsd:='` over the harness returns the two sites already fixed |
+| **(b) a parameter guarded by another parameter** — the `F4` shape | `Indicators_OrderFlow.vb:441` (`If dynamicPct > 0.0`) — **the only instance**. `OfiAccumulator.vb:84` (`If tauSec <= 0.0`) is the same *class* (a mode switch that kills the path) | `tauSec` is pinned by **no** fixture, by name |
 
-⭐ **`A6` is worth naming again:** it is the ruling's own exemplar of the vacuous shape, and
-it is safe **only** because `trendA = "RISING"` is conjoined to the comparative half. Drop
-that one conjunct and the fixture becomes unsweepable and, at `trendGate ≥ 48`, silently
-vacuous. **That is an argument for the conjunct, not a defect.**
+⭐ **So within named-argument call sites the population looks closed at the two instances
+already found** — which is a direct dividend of session 2's work making these parameters
+required and named.
 
----
-
-## 7. Display-string parity — NO OBLIGATION, stated explicitly per the hard rule
-
-**Neither commit touches any production code path.** Both are confined to
-`verify/ordercheck/Program.vb` — fixture literals and fixture comments only. No
-`VerdictResult` or `IndicatorResults` field default changed; `BuildPlaintextSnapshot`
-(`UI/MainForm_PlaintextSnapshot.vb`) and `UI/MainForm_Render_Cards.vb` were not opened and
-read exactly the values they read before. `verify-gate.ps1`'s own display-parity check
-independently reports **`no snapshot/card drift detected`**.
+⚠ **The residual, stated so it is not assumed covered:** this scan sees **named** arguments
+only. It does not cover positional passing, nor fixtures that build a whole `cfg` POCO
+(`BuildA8Cfg`, `BuildResolutionCfg`), where the same masking can hide with no `:=` to grep
+for. ⚠ **My first pass at this scan was line-anchored (`^\s*If`) — the exact VB trap CLAUDE.md
+warns about — and I redid it unanchored.** The anchored version missed nothing here, but that
+was luck, not method.
 
 ---
 
-## 8. What was verified, and how
+## 3. Spec-back proper — feedback on the ruling
 
-- **Every build in the acceptance matrix was actually run**, separately, in the order given,
-  after each commit — 6 projects × 2 commits, all `0 errors / 0 warnings` Release.
-- **The harness was run and counted**, not inferred: `grep -c '^PASS '` → **326**,
-  `grep -c '^FAIL '` → **0**.
-- **`verify-gate.ps1 -Mode local-fast` was run** after each commit: `GATE PASSED` both times.
-- **`settings.json` is untouched** — `git diff` on it is empty across both commits; still v68.
-- ⭐ **The measuring instrument was validated against the thing it measures** — baseline
-  agreement plus four differential mutations applied to the real harness (§1). The `A9`
-  case matched down to the `details` string, `Bull:0 Bear:2 (need 3)`.
-- **Every synthetic value was checked against the complete tracked settings history** (87
-  revisions), not against the current file only — which is precisely the check whose
-  absence produced finding `F3`.
-- **The chosen set was confirmed applied all-at-once**, so interactions among the new
-  values are exercised, and the unasserted diagnostics were compared too, not just the
-  assertions.
+### What the ruling got right, specifically
 
-**Not verified:**
+- ⭐ **"Do NOT decide from the packet's argued insensitivity — MEASURE it per literal."** This
+  is the whole value of the exercise. **Eleven of 26 classifications moved**, and every one
+  came from a probe, not from re-reading the argument. Had this been ruled the other way, all
+  eight MTF literals would have been made synthetic on reasoning that the measurement shows
+  is wrong about *why* they are safe.
+- ⭐ **"Assert the ASSERTED VALUES, not the pass/fail bit."** Necessary, and it is what made
+  the band table a table of *values* rather than of booleans.
+- ⭐ **"Any fixture whose `Check()` compares two computed values without pinning either …
+  cannot be swept safely — flag it, don't measure it."** Correctly specified, correctly
+  checked, and it did not fire. Naming `A6` as the exemplar was what made the check fast: I
+  knew the shape to look for.
+- ⭐ **"Bundle `I17-A6` into the same session"** paid off for a reason the ruling did not
+  anticipate: `A6` became the **differential-validation case for the whole instrument** (its
+  boundary at 48.0 is sharp and independently derivable), which is what let me trust the
+  replica before drawing conclusions from it.
 
-- **Whether the same masking shape exists in fixtures outside these nine.** `CalcMTFGate`'s
-  vote-redundancy structure is not unique to `A9`/`A14h`; any fixture pinning a threshold
-  next to a vote-count or an enable flag can be masked the same way. Out of scope here, and
-  it is a real candidate for a follow-up sweep.
-- **The bands' behaviour under a `settings.json` parse failure** (POCO-default path). Not
-  reachable from these fixtures, which pass every parameter explicitly — that is the whole
-  point of session 2's work.
-- **Non-numeric probe space.** Only the four numeric/integer parameter types were swept; no
-  probe covers `Nothing`/empty-list inputs, which are a different fixture's job.
+### Which assumptions broke
+
+- ⛔ **The two-way outcome is one category short.** The ruling maps *wide band ⇒ inert ⇒
+  synthetic is safe* and *narrow band containing shipped ⇒ load-bearing ⇒ keep*. The data
+  needs a third: ⚠ **MASKED** — a literal whose band is wide **only because a sibling at the
+  same call site disables or dominates it**. `adxMin` reads inert across five orders of
+  magnitude and is load-bearing the moment `minOf` moves; `floorPct` reads inert across
+  `[0, 1000]` and is unreachable dead code. **Masked literals produce the WIDEST bands of
+  all** — so under the ruling as written, the most confident "genuinely inert" verdicts are
+  the least trustworthy ones. **Band width is not evidence; the reason for the width is.**
+- ⚠ **"The sweep hands you the value as a by-product — pick from the middle, far from
+  shipped" needs a guard.** It hands you a value that preserves the *assertion*. It does not
+  hand you one that preserves the *mechanism*. `adxPeriod:=40` sits comfortably mid-band and
+  silently switches off the ADX vote, in a fixture whose own docstring claims to exercise
+  "ADX strong". Two of my values (`adxPeriod:=7`, `adxMin:=7.5`) were chosen **against**
+  band-width for exactly this reason.
+- ⚠ **"Assert the asserted values" is necessary but not sufficient.** It catches the trap the
+  ruling names — passing for the wrong reason. It does **not** catch `F2`: a fixture whose
+  asserted values are stable while a documented component quietly stops being exercised.
+  ⭐ **Printing the UNASSERTED outputs beside the asserted ones is what caught that, and it
+  cost nothing.** Worth writing into any future sweep instruction as a third line.
+
+### ⛔ Where I substituted a method, and what it cost
+
+**The ruling says: *"re-run the harness with the literal set across a range."*** Taken
+literally that is one rebuild per probe — roughly 150 builds for the one-at-a-time pass alone,
+before any joint grid. **I substituted an in-process replica** that links the same shipped
+sources and re-evaluates the fixtures without rebuilding, which made 608 probes plus five
+joint grids affordable and is the only reason `F1`, `F4` and `F5` were found at all — they
+all needed grids, not points.
+
+**What it cost:** the replica can drift from the fixtures it copies, a risk the literal method
+does not have. **I paid for it explicitly** — baseline agreement on every asserted tuple, plus
+four differential mutations applied to the *real* fixtures, rebuilt and run
+([`i17-sweep-batch-summary.md`](i17-sweep-batch-summary.md) §1). ⚠ **Flagging it because a
+substitution that works is still a substitution, and the next seat should know the ruling's
+literal method was not the one executed.**
+
+### Constraint pair that nearly conflicted — and the hatch
+
+Three standing rules point in different directions at the same call site:
+
+1. CLAUDE.md's **fixture-literal provenance rule**: MECHANISM ⇒ a literal is *correct*.
+2. Queue **item 17 option (c)**: the literal must *also* be obviously synthetic.
+3. Session 2's own choice: every literal is *byte-identical to the pre-S2 implicit default* —
+   the deliberate **opposite** of (2).
+
+⭐ **The escape hatch is that they are sequential, not simultaneous**, and the `I17-SWEEP`
+queue row already names it: session 2 was right to freeze behaviour *during* the edit;
+item 17 applies *after*. **That sentence did real work and should survive into whatever
+becomes the standing rule** — without it a reader sees a contradiction between the repo's own
+conventions and picks one.
+
+⚠ **One rule that looks applicable and is not:** the *"a value ruled into a CONSTANT goes
+`Public Const`"* rule. These are fixture-local call arguments, not constants, so nothing here
+should become a `Const`. Naming it so the next seat does not reach for it.
 
 ---
 
-## 9. Queued, not done
+## 4. What I did not verify, and cannot
 
-- **`S2-2`** (splitting `CalcSpread` into `CalcSpreadBps` + `ClassifySpread`) — explicitly
-  out of scope; queued separately, needs its own proposal per CLAUDE.md's spec-first rule.
-- **A `docs/DeribitIndicatorProject.md` §15 row.** Not added. Both commits are
-  fixture-only with zero runtime reach, so neither meets CLAUDE.md's "changes engine
-  behaviour" trigger. ⚠ **But note the session-2 reviewer's §7.3 finding, which argued §15's
-  operating bar is the wider *"a notable change worth recording"*** — under **that** bar
-  this arc arguably owes a row too, and the row session 2 was told to add is itself still
-  open. **Flagged, not decided: it is the reviewer's call whether one row now covers both.**
-- **Committing the sweep probe.** Scratchpad-only by default (§1). Say the word and it
-  becomes its own commit.
-
----
-
-## 10. Feedback on the ruling itself
-
-- ⭐ **The ruling's core instruction was right and it paid off immediately.** *"Do NOT decide
-  from the packet's argued insensitivity — MEASURE it."* Eleven of 26 classifications
-  moved. Every one of them came from a probe, none from re-reading the argument.
-- ⭐ **The "assert the asserted values, not the pass/fail bit" instruction was necessary but
-  not sufficient.** It catches the ruling's named trap. It does **not** catch `F2` — a
-  fixture whose asserted values are stable while a documented component stops being
-  exercised. **Printing the UNASSERTED outputs alongside is what caught that**, and it cost
-  nothing. Worth making standard in any future sweep.
-- ⚠ **The ruling's two-way outcome (wide ⇒ synthetic · narrow ⇒ incidental) is one category
-  short.** MASKED literals produce the widest bands of all and are the *least* safe to
-  reason from. **Band width alone is not evidence; you need the reason for the width.**
-- ⚠ **"Wide band ⇒ synthetic is safe, and the sweep hands you the value" needs one guard.**
-  It hands you a value that keeps the *assertion*; it does not guarantee one that keeps the
-  *mechanism*. `adxPeriod` 40 is inside the band and quietly disables the ADX vote.
-- ⭐ **"Bundle `I17-A6` into the same session" was a good call** for a reason the ruling did
-  not anticipate: `A6` became the differential-validation case for the whole instrument.
+- ⛔ **`H6` — the unasserted diagnostics — is not independently verifiable from the committed
+  tree.** I verified it with the probe and the probe is not committed. This is the single
+  largest gap in the packet, and it is `D1`.
+- ⚠ **Positional and cfg-built call sites** were not scanned for the masking shape (`D4`
+  residual). The named-argument scan is close to complete for the indicator surface, and says
+  nothing about the rest.
+- ⚠ **Bands are measured, not proved.** A band is the range over the *probed points*; between
+  two adjacent probes the fixture could in principle break. Edges were bracketed tightly where
+  one was found (73999/74000, 47.9/48.0, 0.53/0.54, 30/31, 0.999999/1.0), but the "none found"
+  rows are *no edge within the probe range*, not *no edge*.
+- ⚠ **The `settings.json` parse-failure path (POCO defaults)** is not reachable from these
+  fixtures, which now pass every parameter explicitly. Unverifiable by nature here, and that
+  is the point of session 2's work rather than a gap in it.
+- ⚠ **Non-numeric probe space** — no probe covers `Nothing` or empty-list inputs. A different
+  fixture's job.
+- ⚠ **`A14h` was measured, not assumed identical to `A9`** — but it is the same data and the
+  same assertion, so its four rows carry no independent information. If `A9`'s reasoning is
+  wrong, `A14h`'s is wrong the same way.
+- ⛔ **I did not verify the corrected 17/5/4 counts against anything but the diff and the band
+  table.** They agree with each other. Given that the first published figures were wrong,
+  **`H2` is worth running rather than trusting this sentence.**

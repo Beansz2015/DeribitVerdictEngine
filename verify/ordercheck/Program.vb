@@ -1023,7 +1023,7 @@ Module Program
         Dim adx As Double
         Dim passLong As Boolean, passShort As Boolean
         ' [A54a S2, MECHANISM -- bands MEASURED by I17-SWEEP 2026-09-05, and the measurement
-        ' CORRECTED session 2's reasoning here. See docs/i17-sweep-spec-back.md §4.]
+        ' CORRECTED session 2's reasoning here. See docs/i17-sweep-batch-summary.md §4.]
         ' ⭐ The real mechanism is VOTE REDUNDANCY, not gate insensitivity. CalcMTFGate scores
         ' three independent bear votes (DMI, ADX-strong, EMA stack) and needs `minOf`. This
         ' fixture scores Bear:3 against need:2 -- ONE SPARE VOTE. That spare is the entire reason
