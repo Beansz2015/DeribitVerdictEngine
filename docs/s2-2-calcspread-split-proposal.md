@@ -1,7 +1,9 @@
-# `S2-2` — split `CalcSpread` into `CalcSpreadBps` + `ClassifySpread`: proposal
+# `S2-2` — split `CalcSpread` into `CalcSpreadBps` + `ClassifySpread`: implementation spec
 
-**Status:** ⛔ **NOT BUILD-AUTHORIZED. §4's D-table needs a tick before any code.** Nothing here is ruled.
+**Status:** ✅ **BUILD-AUTHORIZED 2026-09-06 (UTC) — §4's D-table TICKED IN FULL, every row as recommended.** ⛔ **§4b is the SINGLE AUTHORITATIVE BUILD LIST. Read §3 first, then build from §4b.** §4 is kept as the record of how the decisions were reached.
 **Author seat:** Opus, 2026-09-06 (UTC). **Origin:** [`a54a-session2-step1-measurement-2026-09-05.md`](a54a-session2-step1-measurement-2026-09-05.md) §9 (the analysis, trader-requested 2026-09-05) · [`trader-tick-queue.md`](trader-tick-queue.md) §2 `S2-2` row · [`seat-handover-2026-09-06.md`](seat-handover-2026-09-06.md) §4.
+
+**Ruling, in one line:** **`D-1` (a) `Double?` · `D-2` (a) inside `ClassifySpread` · `D-3` (b) leave `HasTopOfBook`, record the residual · `D-4` (a) delete `CalcSpread` · `D-5` (a) keep the names.** Trader-directed 2026-09-06, ticked in full without amendment.
 
 ⚠ **All dates in this document are UTC.** The workstation is GMT+8.
 
@@ -151,7 +153,9 @@ r.SpreadStatus = IndicatorEngine.ClassifySpread(r.SpreadBps, wide, tight)  ' 0.0
 
 ---
 
-## 4. D-table — ⛔ needs a tick before any code
+## 4. D-table — ✅ TICKED IN FULL 2026-09-06, every row as recommended. ⛔ **Build from §4b, not this table**
+
+*(Kept as the record of how each decision was reached. The "My read" column is what was ruled, so it does not disagree with §4b — but §4b is the one that carries the code.)*
 
 **Legend:** ⭐ marks my read. Nothing below is ruled.
 
@@ -174,6 +178,127 @@ Public Shared Function ClassifySpread(spreadBps As Double?,
                                       wideThresholdBps As Double,
                                       tightThresholdBps As Double) As String
 ```
+
+---
+
+## 4b. ✅ THE RULED STATE — build from THIS section
+
+**Six build items. Nothing else is in scope.** ⛔ **Order matters: item 4 before item 2/3 is wrong — write the fixtures against the NEW methods, then move the callers, so the harness proves the composition rather than the other way round.**
+
+### 4b.1 — `Core/Indicators_OrderFlow.vb`: delete `CalcSpread`, add the pair
+
+⛔ **Delete `CalcSpread` outright (`D-4` (a)) — no wrapper, no `<Obsolete>` shim.** Both callers are in this repo and no `.vb` fixture calls it (§2.1). A wrapper is a third place the composition can drift.
+
+Replace `Core/Indicators_OrderFlow.vb:571-606` with the pair below. ⚠ **`:571` — the range starts at the `''' <summary>` line, not at `Public Shared Sub` (`:581`); the whole `S2-1` doc block goes with the method it documents.** *(Verified by reading `:568-582`, 2026-09-06. The first draft of this section said `:576` and was wrong — re-read the range before deleting, do not trust this line either.)*
+
+```vb
+''' <summary>
+''' Computes basis-point spread from the best bid/ask of the order book snapshot.
+''' Returns Nothing when there is NO MEASURABLE TOP OF BOOK -- an absent book, an empty
+''' ladder on either side, a non-positive best price, or a non-positive mid.
+'''
+''' [S2-2, 2026-09-06] Split out of the former CalcSpread. ⛔ Nothing is NOT a failure code:
+''' it is the DEGENERATE-BOOK ANSWER, and ClassifySpread maps it to "NORMAL" -- exactly the
+''' value the pre-split CalcSpread seeded before its five early-return guards. Returning 0.0
+''' here instead would classify TIGHT (0.0 <= tight_threshold_bps) and render a book the
+''' engine could not read as best-possible execution, on four surfaces. A LOCKED book
+''' (bestBid = bestAsk > 0) is a real 0.0 and legitimately TIGHT -- the two zeros are
+''' different answers and this signature is what keeps them apart.
+''' See s2-2-calcspread-split-proposal.md §3.
+'''
+''' Deliberately THRESHOLD-FREE: LiveMicrostructureEvaluator wants only this value, so after
+''' the split it references indicators.spread.* not at all and CANNOT diverge from
+''' MainForm_Analysis when the auto-tweaker retunes those keys (they are NOT fenced in
+''' SettingsDiffApplier.RejectedPathPrefixes). Impossible by construction rather than
+''' guarded -- the ComputeSideLevels / TradeStoreWriter one-seam pattern.
+''' </summary>
+Public Shared Function CalcSpreadBps(orderBook As OrderBookSnapshot) As Double?
+    If orderBook Is Nothing Then Return Nothing
+    If orderBook.Bids Is Nothing OrElse orderBook.Bids.Count = 0 Then Return Nothing
+    If orderBook.Asks Is Nothing OrElse orderBook.Asks.Count = 0 Then Return Nothing
+
+    Dim bestBid As Double = orderBook.Bids(0).Price
+    Dim bestAsk As Double = orderBook.Asks(0).Price
+    If bestBid <= 0 OrElse bestAsk <= 0 Then Return Nothing
+    Dim mid As Double = (bestBid + bestAsk) / 2.0
+    If mid <= 0 Then Return Nothing
+
+    Return ((bestAsk - bestBid) / mid) * 10000.0
+End Function
+
+''' <summary>
+''' Classifies a spread (bps) as TIGHT / NORMAL / WIDE against configurable thresholds.
+''' Nothing -- no measurable top of book -- returns "NORMAL".
+'''
+''' [S2-2, 2026-09-06] ⚠ The ">= wide" arm is tested FIRST and THAT ORDER IS LOAD-BEARING.
+''' Both comparisons are inclusive, so when tight >= wide the arms overlap and order alone
+''' decides. That state is reachable: indicators.spread. is auto-tweaker-tunable. Shipped
+''' resolved WIDE, which is the conservative answer (WIDE is the only value that scores).
+''' ⛔ Do not rewrite as a Select Case -- that is where the order gets lost.
+''' </summary>
+Public Shared Function ClassifySpread(spreadBps As Double?,
+                                      wideThresholdBps  As Double,
+                                      tightThresholdBps As Double) As String
+    If Not spreadBps.HasValue Then Return "NORMAL"
+    If spreadBps.Value >= wideThresholdBps  Then Return "WIDE"
+    If spreadBps.Value <= tightThresholdBps Then Return "TIGHT"
+    Return "NORMAL"
+End Function
+```
+
+⚠ **The five guards must each `Return Nothing`, not `Return 0.0`.** A partial conversion — even one guard left returning `0.0` — re-creates §3's flip through that path alone, and only that path's fixture catches it.
+
+### 4b.2 — `UI/MainForm_Analysis.vb:422-424`
+
+```vb
+' [S2-2] CalcSpread split into a pure bps fn + a classifier. Nothing = no measurable top of
+' book, which ClassifySpread maps to "NORMAL" -- the pre-split seed value. r.SpreadBps still
+' receives 0.0 in that case, exactly as before (it is a Double and four surfaces format it F2).
+Dim spreadBps As Double? = IndicatorEngine.CalcSpreadBps(orderBook)
+r.SpreadBps    = If(spreadBps.HasValue, spreadBps.Value, 0.0)
+r.SpreadStatus = IndicatorEngine.ClassifySpread(spreadBps,
+                     wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
+                     tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)
+```
+
+⛔ **Arguments stay NAMED** — the A54a session-2 convention: a named argument turns a silent threshold swap into a compile error.
+
+### 4b.3 — `LiveMicrostructureEvaluator.vb:132-145`
+
+⭐ **The whole threshold pass disappears, and the stale-prose comment goes with it.**
+
+```vb
+' Spread -- CalcSpreadBps is THRESHOLD-FREE by construction (S2-2), so this evaluator no
+' longer references indicators.spread.* at all and cannot diverge from MainForm_Analysis if
+' the auto-tweaker retunes them. The claim the old comment made in prose is now the signature.
+' ⚠ snap.HasSpread deliberately STAYS on HasTopOfBook (D-3 ruled (b)): the two predicates are
+' NOT equivalent -- HasTopOfBook tests 3 conditions, CalcSpreadBps tests 6 (it adds the three
+' price tests). Collapsing them would change live-strip behaviour on a zero-priced top of
+' book. That divergence is a NAMED RESIDUAL, not an oversight -- see the proposal §8.
+Dim bps As Double? = IndicatorEngine.CalcSpreadBps(book)
+snap.SpreadBps = If(bps.HasValue, bps.Value, 0.0)
+snap.HasSpread = HasTopOfBook(book)
+```
+
+⛔ **Delete the two-line `Dim sBps As Double = 0, sStatus As String = "NORMAL"` declaration.** The throwaway variable is the thing this build exists to remove; leaving it means the build did not land.
+
+### 4b.4 — Fixtures `A65a`–`A65d` in `verify/ordercheck/Program.vb`
+
+**Next free family is `A65`.** Register the four calls beside `A64a_…` / `A64b_…` (`verify/ordercheck/Program.vb:597-598`). Signature is `Check(name As String, cond As Boolean, detail As String)` (`:629`).
+
+⚠ **`MakeBook(bestBid, bestAsk, bidSize, askSize)` (the existing helper) always fills FIVE levels a side, so it CANNOT build `A65a`'s shape.** `A65a` constructs `New OrderBookSnapshot()` directly and leaves one ladder empty. `A65b` may use `MakeBook`. See §6 for what each pins and the mutation that must fail it.
+
+### 4b.5 — `docs/DeribitIndicatorProject.md` §15
+
+**ONE row**, per its own one-item-one-row rule. ⚠ **Check the retention cap first: five settings versions (v68 · v67 · v66 · v65 · v64) currently sit exactly at it, and §15 holds 14 rows** (measured 2026-09-06). Settings does **not** move, so this is a settings-untouched row and it must be newer than v64's date — it is.
+
+### 4b.6 — `docs/trader-tick-queue.md`
+
+Close the `S2-2` row in §2 and clear the `S2-2` line from the **§0a owed table** and the state banner. ⛔ **Both places** — a decision closed in one and left standing in the other is the exact defect §0a exists to prevent, recorded there four times already.
+
+### 4b.7 — ⛔ NOT in scope
+
+`settings.json` · any `Core/IndicatorResults.vb` field type · `tools/BacktestRunner/ReplayLoop.vb:466` (sets `r.SpreadStatus` directly, never calls the method) · the `HasTopOfBook` predicate itself (`D-3` (b)) · the 5.0 / 1.5 values.
 
 ---
 
@@ -253,8 +378,8 @@ snap.HasSpread = HasTopOfBook(book)        ' unchanged under D-3 (b)
 
 | Fixture | Pins | ⛔ The input shape that makes it fail — name it before writing the assertion |
 |---|---|---|
-| **`A65a`** | ⛔ **The crux.** A degenerate book classifies **`NORMAL`**, not `TIGHT` | A book with a **non-empty** bid ladder and an **empty ask ladder** (and a second case: top-of-book priced `0`). ⛔ **NOT `orderBook = Nothing`** — that shape is unreachable at `UI/MainForm_Analysis.vb:422` and passing it tests the guard nobody can hit. **Mutation: make `CalcSpreadBps` return `0.0` instead of `Nothing` on that guard — `A65a` must FAIL** |
-| **`A65b`** | The **locked book** stays `TIGHT` | `bestBid = bestAsk = 100000.0` ⇒ `bps = 0.0`, status `TIGHT`. ⭐ **This is `A65a`'s twin and the pair is the point:** both produce `0.00 bps`, and they must classify **differently**. A fixture that only has `A65a` passes trivially if `ClassifySpread` returns `"NORMAL"` unconditionally |
+| **`A65a`** | ⛔ **The crux.** A degenerate book classifies **`NORMAL`**, not `TIGHT` | ⚠ **`MakeBook` CANNOT build this shape** — it always fills five levels a side. Construct directly: `Dim b As New OrderBookSnapshot() : b.Bids.Add((100000.0, 10.0))` and leave `Asks` **empty**. **Second case in the same fixture:** a zero-priced top of book — `b.Bids.Add((0.0, 10.0))` + `b.Asks.Add((100010.0, 10.0))` — which exercises the `bestBid <= 0` guard rather than the empty-ladder one. ⛔ **NOT `orderBook = Nothing`** — unreachable at `UI/MainForm_Analysis.vb:422` (`:139` skips first), so it tests the one guard nobody can hit. **Mutation: make `CalcSpreadBps` return `0.0` instead of `Nothing` on the empty-ladder guard — `A65a` must FAIL and the other three must still PASS** |
+| **`A65b`** | The **locked book** stays `TIGHT` | `MakeBook(100000.0, 100000.0, 10.0, 10.0)` ⇒ level 0 is exactly `bestBid = bestAsk = 100000.0` ⇒ `bps = 0.0`, status `TIGHT`. ⭐ **This is `A65a`'s twin and the pair IS the point:** both produce `0.00 bps` and they must classify **differently**. ⛔ **Without `A65b`, `A65a` passes trivially under a `ClassifySpread` that returns `"NORMAL"` unconditionally** — which would silently retire the TIGHT state on every surface. **Mutation: make `ClassifySpread` return `"NORMAL"` for `HasValue` too — `A65b` must FAIL** |
 | **`A65c`** | The **order** of the two arms (§5.2) | `wideThresholdBps:=1.0`, `tightThresholdBps:=2.0` (deliberately inverted), `bps = 1.5` ⇒ **`WIDE`**. ⛔ **MECHANISM literals — the inversion is impossible in shipped config and is asserting the arm order, not a settings value.** Declare that at the call site per CLAUDE.md's fixture-literal provenance rule. **Mutation: swap the two `If` arms — `A65c` must FAIL and `A65a`/`A65b`/`A65d` must all still PASS** |
 | **`A65d`** | Boundary **inclusivity** on both arms | `bps` exactly `= wide` ⇒ `WIDE`; exactly `= tight` ⇒ `TIGHT`; strictly between ⇒ `NORMAL`. Derive the two thresholds **from `cfg`**, not literals — this one asserts SHIPPED BEHAVIOUR, so the provenance rule requires cfg-derived values |
 
