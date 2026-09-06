@@ -1,0 +1,111 @@
+# `S2-2` — `CalcSpread` split: spec-back (review packet)
+
+**For the reviewing seat.** The outcome record is [`s2-2-calcspread-split-batch-summary.md`](s2-2-calcspread-split-batch-summary.md); this is the working document.
+**Spec reported against:** [`s2-2-calcspread-split-proposal.md`](s2-2-calcspread-split-proposal.md), built from its **§4b**.
+**Base commit:** `f6a2c08`. **Build commit:** `57b55f9`. **Local only — not pushed.**
+
+⚠ **All dates UTC.** `date -u` was run: **2026-09-06 16:43 UTC**, against a workstation clock reading 2026-09-07 (GMT+8).
+
+**Model + effort for a review of this:** **Sonnet, effort medium.** The judgment is all in the spec and was ruled; what remains is checking that seven cheap handles print what §1 says and that the parity argument's two halves both hold. **Escalate to Opus/high only if handle `H-1` or `H-7` disagrees** — either would mean the parity claim is wrong, which is the one claim in this build that cannot be repaired by a follow-up.
+
+---
+
+## 1. Ranked verification handles
+
+**Every handle below was RUN at `57b55f9` and the printed value pasted.** Ranked by how much of the build each covers.
+
+### ⭐ If you only run one, run `H-1`.
+
+| # | Claim | Handle | Printed at `57b55f9` |
+|---|---|---|---|
+| **H-1** | Parity holds — no rendered string or colour moved | Rebuild the §3 instrument, run pre/post, `md5sum` both | `fbcafa201a26d45e8c8d72ab5923183a` **both sides**, 3706 bytes both |
+| **H-2** | The render code is untouched (parity's *other* half) | `git show --name-only --format="" HEAD \| grep -cE "MainForm_Render_Cards\|MainForm_PlaintextSnapshot\|ScoringEngine_Calculate_Scoring"` | **`0`** |
+| **H-3** | Harness green at the right count | run `OrderCheck.dll`; `grep -cE "^PASS "` | **`332`** (`ALL PASS`, `FAIL` = `0`) |
+| **H-4** | `CalcSpread` is genuinely gone, not just unreferenced | `grep -rn "CalcSpread(" --include=*.vb . \| grep -v /obj/ \| grep -v /bin/ \| grep -v "CalcSpreadBps(" \| grep -vE ":[0-9]+:[[:space:]]*'" \| wc -l` | **`0`** |
+| **H-5** | **All five** guards return `Nothing` — the partial-conversion shape | `sed -n '/Public Shared Function CalcSpreadBps/,/^    End Function/p' Core/Indicators_OrderFlow.vb \| grep -c "Then Return Nothing"` | **`5`** |
+| **H-6** | The evaluator no longer reads the spread thresholds — **the point of the build** | `grep -c "Indicators\.Spread" LiveMicrostructureEvaluator.vb`, then the same against `f6a2c08` | **`0`** now · **`2`** at base |
+| **H-7** | Settings frozen | `git show --stat --format="" HEAD -- settings.json \| wc -l`; `sed -n '2p' settings.json` | **`0`** · `"version": 68` |
+
+### Notes on why these handles and not the obvious ones
+
+⛔ **`H-4` is deliberately NOT `grep -c "CalcSpread"`.** **MEASURED at `57b55f9`: that grep prints `19` lines, and it always will.** `CalcSpreadBps` contains the string (11 of the 19), and **8** comment lines legitimately narrate the deleted method by name — 3 in `Core/Indicators_OrderFlow.vb`, 1 in `UI/MainForm_Analysis.vb`, 4 in `verify/ordercheck/Program.vb`. ⚠ **A reviewer following a naive name-count would see 19 and reject a correct build.** That is the `_lastTs` failure verbatim (`docs/trade-store-write-guard-spec-back.md` §R1), reproduced here at nearly ten times the magnitude. **Counting a name is a copy of the property and drifts the moment a comment mentions it.** The handle above excludes the successor token and excludes comment lines, so it asserts *executable references* — and it is paired with `grep -c "Sub CalcSpread("` = **`0`** for the declaration itself.
+
+⛔ **`H-3` is a harness RUN, never a source count.** The spec warns that `grep -c '^\s*Check('` prints 333 and the unanchored form 342, and **neither is the harness count**. The 328 baseline was likewise re-measured by running `OrderCheck.dll` at `f6a2c08`, not carried from the spec's `2e8bc76` reading.
+
+⚠ **`H-5` is unanchored on purpose.** All five guards are VB's inline `If … Then Return` form, which a `^\s*Return` anchor misses entirely — CLAUDE.md's VB grep rule, and here the missed form *is* the one the claim is about.
+
+⭐ **`H-1` and `H-2` are one claim in two halves and neither is sufficient alone.** `H-1`'s instrument transcribes the two card bindings (they need WinForms and cannot be linked host-agnostically), so `H-1` alone rests on a transcription. `H-2` proves the real renderers did not move but says nothing about the values fed to them. **Run both or neither.**
+
+---
+
+## 2. Decisions queued, with my read
+
+### `Q-1` — schedule the `D-3` residual, or leave it standing?
+
+`D-3` was ruled **(b)**: leave `HasTopOfBook` alone. That was right for *this* build. It leaves a divergence that is now **visible rather than latent**: `HasTopOfBook` tests 3 conditions, `CalcSpreadBps` tests 6, and on a zero-priced top of book the live strip reads `snap.HasSpread = True` beside a `Nothing` bps — **captured in the parity output, not inferred.**
+
+- **(a)** schedule a one-line follow-up moving `snap.HasSpread` onto `bps.HasValue`
+- **(b)** leave it standing as a permanent documented residual
+
+⭐ **My read — hypothesis, not a recommendation: (a), but low priority and NOT bundled with anything.** The spec's own §4 already calls (a) *"defensible on the merits … strictly more truthful"*, and a zero-priced top of book genuinely is *no spread*. What made it wrong for `S2-2` was that it is a **real live-strip behaviour change** and `S2-2`'s whole claim was zero behaviour change on every surface. Standing alone it can carry its own line in the record, which is exactly what §4 said it deserved.
+
+⚠ **Scoping, offered without recommending:** the narrowest version is **one line** at `LiveMicrostructureEvaluator.vb:141`, no settings key, no new method. But it **is** a display change on the live strip, so the display-string parity rule is live for it too and it needs its own before/after capture — which is the actual cost, not the line.
+
+### `Q-2` — does the frequency question stay unanswerable?
+
+The spec's §3.4 states plainly that it did **not** measure how often a degenerate book reaches `UI/MainForm_Analysis.vb:422`, and that it is **not measurable from the book**: `SpreadStatus` has no CSV column, and the degenerate and locked cases both log `0.00`.
+
+⭐ **My read: leave it unanswerable, and do not add a column for it.** §8 correctly calls a new column a **schema rotation**, and the fix did not depend on the frequency — reachability was established from the code, which is all the build needed. **Paying a rotation to measure something that would not change any decision is the wrong trade.** ⚠ **But flag the asymmetry:** if the `D-3` follow-up (`Q-1`) is ever taken, the same blindness applies to *it* and there the frequency **would** matter, because it is a behaviour change rather than a preservation. **`Q-1` and `Q-2` share a root and are cheaper ruled together.**
+
+### `Q-3` — is `[no-engine-change]` the honest token for this commit?
+
+The commit edits `Core/Indicators_OrderFlow.vb`, which `verify-gate.ps1`'s `$enginePrefixes` treats as an engine path, and carries `[no-engine-change]` so the settings-bump nudge passes.
+
+⭐ **My read: yes, and the proof is what makes it honest.** The token's meaning in this repo is *"not a behaviour change requiring a settings bump"*, and that is established here by measurement rather than by claim. ⚠ **I have no read on whether the token should be narrowed** to distinguish "engine file touched, behaviour proved identical" from "engine file not touched at all" — that is a gate-design question and the criterion is the reviewer's.
+
+---
+
+## 3. Spec-back proper — feedback on the spec itself
+
+### What it got right, specifically
+
+⭐⭐ **"§6 therefore names the input shape, not just the assertion" is the sentence that did the real work.** It is the reason `A65a` was built by hand instead of through `MakeBook`, and the reason `A65a` covers two *different* guards rather than the same guard twice. **A fixture written from the assertion alone would have used `MakeBook`, been structurally incapable of expressing an empty ladder, and read as coverage** — the exact shape `A62f` and `A63a` failed in.
+
+⭐⭐ **Naming `A65a` and `A65b` as a PAIR, with the reason, is the single highest-value line in the spec.** Mutation 2 confirmed it by running: with `ClassifySpread` returning `"NORMAL"` unconditionally, **`A65a` still passes**. Without `A65b`, that mutation ships and silently retires the TIGHT state everywhere. A reviewer would not derive that from `A65a`'s text.
+
+⭐ **Ordering §4b before §4, and saying so four times, worked.** Building from §4 would have produced a `Double` return.
+
+⭐ **The §4b.1 self-correction — "the first draft of this section said `:576` and was wrong — re-read the range before deleting, do not trust this line either"** — is the right shape for a spec to carry. The range was re-read (`:568-610`) and `:571` is correct.
+
+### Which assumptions broke
+
+⚠ **§4b.3 was narrower than its own words.** It says *"the stale-prose comment goes with it"*, singular, and shows the block at `:132-134`. **There were two more**, both in the same file, both naming `CalcSpread` as a live reused function:
+
+- `LiveMicrostructureEvaluator.vb:12` — *"reuses the engine's pure indicator functions (CalcTFI / CalcSpread / CalcOFI)"*
+- `LiveMicrostructureEvaluator.vb:93` — the same claim in the method's `''' <summary>`
+
+**Both were corrected to `CalcSpreadBps`.** They are outside §4b's literal instruction and inside its intent — a comment naming a deleted method is the rot the split exists to prevent. **Recorded rather than quietly fixed** because the generalisation is worth having: a spec that says "delete the method" should say **"and grep the whole file for its name"**, not point at one comment block.
+
+⛔ **Nothing else in the spec was found wrong.** §2's map, §3's arithmetic, §5's three traps and §6's four input shapes all held on inspection. §3's arithmetic was independently **confirmed by measurement** before any code moved — see the batch summary §0.
+
+### Where a constraint pair nearly conflicted
+
+⚠ **§4b's build order ("fixtures before callers") and the compiler are in tension, and the spec does not say how to resolve it.** Fixtures against the new methods cannot compile until the methods exist, and deleting `CalcSpread` breaks both callers immediately — so a literal reading leaves no order that keeps the tree green.
+
+**The hatch used:** items 4b.1 → 4b.4 → 4b.2 → 4b.3, with a single build at the end. **The fixtures were written from §6's table without reading the new call sites**, which is what §4b's ordering is actually protecting — *"the harness proves the composition instead of following it"*. The tree does not compile between 4b.1 and 4b.3, and that is unavoidable under `D-4` (a). **Worth one sentence in the next spec of this shape**, because the obvious alternative — keeping `CalcSpread` as a temporary shim — is precisely what `D-4` forbids.
+
+### On the spec's own §0 warning about itself
+
+⭐ The spec predicted *"the obvious implementation is wrong in a way that READS CORRECT"* and *"a reviewer reasoning about this split ticks it green."* **That prediction is testable here and it held.** The three-line naive composition in §3.2 looks correct on the page; only running it against shapes 5–8 shows the flip. **Everything asserted in this build about behaviour was run.**
+
+---
+
+## 4. What I did not verify, and cannot
+
+- ⛔ **The live app was never launched.** No verdict ran against a real Deribit order book. The parity proof is over **constructed** book shapes through the shipped composition, not over live traffic. **Nothing here says a degenerate book has ever actually reached `:422` in production** — the spec's §3.4 says the same and calls frequency unestablished.
+- ⛔ **The two card bindings' actual `Color` structs were not resolved.** `Theme.ACC_STRONG_LONG` / `ACC_SHORT` / `FG_TERTIARY` are compared as **token names**, because linking `MainForm_Render_Cards.vb` needs WinForms. `H-2` is what covers this gap, and it covers it by showing the file is untouched — **not** by evaluating the colours.
+- ⛔ **The MiniMeter's rendered pixels, and `BuildMiniMeter`/`MakeSignalRow` themselves, were not exercised.** Only their *inputs* — text, percentage, colour token — were compared.
+- ⚠ **`spreadPct` is captured but is NOT part of the parity claim's risk.** It derives from `r.SpreadBps` alone, never from `SpreadStatus`, so this build could not move it; it is in the capture for completeness and it was identical.
+- ⚠ **No performance measurement.** `CalcSpreadBps` returns a `Double?` where the old method wrote a `Double` by reference. **Boxing/allocation was not measured.** It is called once per analysis run and once per live-strip tick, so I do not believe it matters — **but I did not measure it and am not claiming it.**
+- ⚠ **The auto-tweaker was not run against the new keys.** The claim that `indicators.spread.` is tweaker-reachable is read from `SettingsDiffApplier.RejectedPathPrefixes` **not containing it** — carried from the spec, checked by reading, **not exercised by running the tweaker**. `A65c` pins the consequence (arm order under an inverted pair) regardless.
+- ⚠ **Only `local-fast` was run for `verify-gate.ps1`.** `prepush` and `ci` modes were not, since the change is not being pushed.
