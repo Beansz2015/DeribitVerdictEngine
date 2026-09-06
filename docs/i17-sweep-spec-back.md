@@ -30,6 +30,21 @@ behavioural one.
 ⛔ **Every handle below was RUN before it was written here**, and every one that greps
 `Program.vb` carries a **comment filter**. That is not fussiness — see `H0`.
 
+> ⚠ **HANDLE MAINTENANCE NOTE — the `A64` build (`D1`) moved two of these numbers.**
+> `A64a`/`A64b` collapsed `A2`'s and `A9`/`A14h`'s duplicated data builders and literals into
+> shared helpers, so the call-site shape changed. Both handles below are now **pinned to the
+> commit they were written against** rather than to `HEAD`:
+>
+> | Handle | At `3f16a9b` (the build these handles review) | At `HEAD` after the `A64` build |
+> |---|---|---|
+> | `H1` | 24 lines | unchanged — the range is pinned, so it stays 24 |
+> | `H3` | 13 lines | **15 lines** — `A2`'s and `A9`/`A14h`'s call sites became two shared helper call sites |
+>
+> ⭐ **This is the very failure `H0` warns about, arriving from the other direction:** a handle
+> whose expected value was correct when written and is wrong two commits later. **A pinned
+> commit range is the fix; `HEAD` is not.** See [`a64-fixtures-spec-back.md`](a64-fixtures-spec-back.md)
+> for the `A64` build's own handles.
+
 ### H0 — the trap these handles are shaped around. Run this first; it costs one command.
 
 This build's new comments **quote the old values on purpose** ("Was 0.15, which EQUALLED
@@ -55,7 +70,7 @@ grep -vE "^[[:space:]]*'" verify/ordercheck/Program.vb
 ### ⭐ H1 — IF YOU RUN ONLY ONE, RUN THIS. Every changed value, with zero comment noise.
 
 ```bash
-git diff 4701ef6 HEAD -- verify/ordercheck/Program.vb | grep -E "^[+-]" | grep -vE "^(\+\+\+|---)" | grep -vE "^[+-][[:space:]]*'" | grep ':='
+git diff 4701ef6..3f16a9b -- verify/ordercheck/Program.vb | grep -E "^[+-]" | grep -vE "^(\+\+\+|---)" | grep -vE "^[+-][[:space:]]*'" | grep ':='
 ```
 
 **Expected: 24 lines — 12 `-` and 12 `+`**, and that is the *entire* value change set of
@@ -76,14 +91,21 @@ From the summary's §2 table, count the `Now` column: **17 changed + 4 kept-as-l
 why the totals check is worthless and the identity is not.** This handle is the one that
 caught it.
 
-### H3 — the 13 executable call-site lines, current state
+### H3 — the executable call-site lines (13 at `3f16a9b`, **15 at `HEAD`** — see the note above)
 
 ```bash
 grep -nE 'slopeMinUsd:=|slopePctOfValue:=|divergencePriceGate:=|SegmentWeight:=|microWindowSize:=|accelThreshold:=|dynamicPct:=|floorPct:=|tfiWindowSize:=|trendGate:=|divergenceGate:=|adxPeriod:=|adxMin:=|minOf:=|candleLookback:=' verify/ordercheck/Program.vb | grep -vE "^[0-9]+:[[:space:]]*'"
 ```
 
-**Expected: exactly 13 lines** at 691–693, 746–747, 786–787, 820, 887–888, 1054, 1434, 7181.
-Use it to confirm no tenth call site was missed and no comment leaked into the set.
+**Expected at `3f16a9b`: exactly 13 lines** at 691–693, 746–747, 786–787, 820, 887–888, 1054,
+1434, 7181 — one group per call site. Use it to confirm no tenth call site was missed and no
+comment leaked into the set.
+
+⚠ **At `HEAD` it prints 15**, and that is correct rather than a regression: the `A64` build
+replaced `A2`'s inline call and `A9`/`A14h`'s two identical calls with the shared helpers
+`RunMicroCvdBurst` (4 lines) and `RunMtfBearGate` (2 lines). **Net effect on the property this
+handle checks: three call sites carrying literals became two, and the two duplicated literal
+sets became one each.** Run it against `3f16a9b` to review *this* build.
 
 ### H4 — no synthetic value is a shipped value, ever. This is the check that would have caught `F3`.
 
@@ -129,7 +151,7 @@ fixtures, which is `A6`'s own history. Flagging the argument rather than burying
 ### H5 — settings untouched
 
 ```bash
-git diff 4701ef6 HEAD -- settings.json | wc -l
+git diff 4701ef6..3f16a9b -- settings.json | wc -l
 ```
 
 **Expected: `0`.** Confirms v68 stands and no `change_log` entry is owed.

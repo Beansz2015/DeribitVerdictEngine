@@ -593,6 +593,10 @@ Module Program
         A63a_ParseFailurePathResolvesShipped()
         A63b_DictionaryCompletenessBothDirections()
 
+        ' I17-SWEEP D1 — the two mechanisms the sweep exposed, made permanent.
+        A64a_MtfAllThreeVotesCast()
+        A64b_MicroCvdJointDependency()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -697,12 +701,21 @@ Module Program
               "expected RISING, got " & cvdSlope)
     End Sub
 
-    ' -- A2: MicroCVD polarity — accelerating bull burst in the tail ----------
-    ' 60 ascending buys with sharply growing size toward the end. Window = last
-    ' 50; within it, late third USD flow far exceeds early third → chronological
-    ' truth is BULL_ACCEL. (Pre-fix the early/late labels were inverted →
-    ' BULL_DECEL.)
-    Private Sub A2_MicroCvdBullAccel()
+    ' == A2 / A64b — one shared burst dataset and one shared invocation ==========
+    ' [I17-SWEEP D1, 2026-09-06] A64b guards A2's joint dependency, so it MUST exercise
+    ' A2's actual dataset and A2's actual accelThreshold/floorPct. Copying either into
+    ' A64b is the copy-drift shape D1 rejected option (b) for: retune A2 and the guard
+    ' would silently stop guarding it. Extracted instead — ONE dataset, ONE pair of
+    ' literals, two callers. microWindowSize and dynamicPct are parameters because A64b's
+    ' whole claim is about varying exactly that pair.
+    Private Const MicroBurstAccelThreshold As Double = 1234.0
+    Private Const MicroBurstFloorPct       As Double = 0.375
+    Private Const MicroBurstWindow         As Integer = 50
+    Private Const MicroBurstDynamicPct     As Double = 0.0
+
+    ''' <summary>A2's 60-trade ascending burst: 10 outside the 50-window, then 16/16/18
+    ''' at 1000/2000/5000 — early 16000, mid 32000, late 90000.</summary>
+    Private Function MicroCvdBurstTrades() As List(Of TradeRecord)
         Dim trades As New List(Of TradeRecord)
         Dim ts As Long = 1
         For i As Integer = 1 To 10                      ' outside the 50-trade window
@@ -717,7 +730,25 @@ Module Program
         For i As Integer = 1 To 18                      ' window late third — the burst
             trades.Add(Trade("buy", 5000, ts)) : ts += 1
         Next
+        Return trades
+    End Function
 
+    Private Sub RunMicroCvdBurst(microWindowSize As Integer, dynamicPct As Double,
+                                 ByRef e As Double, ByRef m As Double, ByRef l As Double,
+                                 ByRef momentum As String, ByRef signal As String)
+        IndicatorEngine.CalcMicroCVD(MicroCvdBurstTrades(), e, m, l, momentum, signal,
+                                     microWindowSize:=microWindowSize,
+                                     accelThreshold:=MicroBurstAccelThreshold,
+                                     dynamicPct:=dynamicPct,
+                                     floorPct:=MicroBurstFloorPct)
+    End Sub
+
+    ' -- A2: MicroCVD polarity — accelerating bull burst in the tail ----------
+    ' 60 ascending buys with sharply growing size toward the end. Window = last
+    ' 50; within it, late third USD flow far exceeds early third → chronological
+    ' truth is BULL_ACCEL. (Pre-fix the early/late labels were inverted →
+    ' BULL_DECEL.)
+    Private Sub A2_MicroCvdBullAccel()
         Dim e As Double, m As Double, l As Double
         Dim momentum As String = "", signal As String = ""
         ' [A54a S2, MECHANISM -- bands MEASURED, not argued, by I17-SWEEP 2026-09-05]
@@ -742,9 +773,8 @@ Module Program
         '                            synthetic. Do not read its wide band as insensitivity.
         ' ⚠ Measured joint dependency one-at-a-time misses entirely: microWindowSize 20 or 30 with
         ' the SHIPPED dynamicPct 0.30 FAILS, though each value passes alone.
-        IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal,
-                                     microWindowSize:=50, accelThreshold:=1234.0,
-                                     dynamicPct:=0.0, floorPct:=0.375)
+        ' ⭐ That joint dependency is now PINNED by A64b, so it cannot silently return.
+        RunMicroCvdBurst(MicroBurstWindow, MicroBurstDynamicPct, e, m, l, momentum, signal)
 
         Check("A2 MicroCVD polarity (bull burst in tail)",
               signal = "BULL_ACCEL",
@@ -1005,10 +1035,25 @@ Module Program
                             vTie.Verdict, vTie.EffectiveLongScore, vTie.EffectiveShortScore))
     End Sub
 
-    ' -- A9: MTF per-side flags on a 15m BEAR fixture ---------------------------
-    ' 70 steadily falling 15m candles → DMI bearish, ADX strong, EMA stack
-    ' bearish → mtfTrend BEAR → long blocked, short passes.
-    Private Sub A9_MtfPerSideFlags()
+    ' == A9 / A14h / A64a — one shared 15m BEAR series and one shared invocation ====
+    ' [I17-SWEEP D1, 2026-09-06] A9 and A14h already carried BYTE-IDENTICAL copies of this
+    ' 70-candle builder and of these four literals; A64a would have made a third. It guards
+    ' A9's configuration, so it must exercise A9's ACTUAL configuration — a copy would let a
+    ' retune move A9 while the guard kept watching the old values, which is exactly the
+    ' copy-drift shape D1 rejected option (b) for. Collapsed to ONE builder, ONE set of
+    ' literals, three callers. Private Const is correct here: the constants and every reader
+    ' live in this file, so the F1 Public Const lesson (a fixture reading a PRODUCTION
+    ' constant across assemblies) does not apply.
+    ' ⭐ A64a asserts against MtfAdxMin directly, which is the second reason these are named
+    ' rather than inline — a literal it could not read would have to be restated.
+    Private Const MtfAdxPeriod      As Integer = 7
+    Private Const MtfAdxMin         As Double = 7.5
+    Private Const MtfMinOf          As Integer = 2
+    Private Const MtfCandleLookback As Integer = 55
+
+    ''' <summary>70 steadily falling 15m candles, −100/bar: DMI bearish, ADX strong, EMA
+    ''' stack bearish — all three bear votes cast.</summary>
+    Private Function MtfBearCandles() As List(Of Candle)
         Dim candles As New List(Of Candle)
         Dim p As Double = 110000
         For i As Integer = 0 To 69
@@ -1018,7 +1063,22 @@ Module Program
             candles.Add(c)
             p = c.Close
         Next
+        Return candles
+    End Function
 
+    Private Sub RunMtfBearGate(ByRef trend As String, ByRef adx As Double, ByRef emaAlign As String,
+                               ByRef passLong As Boolean, ByRef passShort As Boolean,
+                               ByRef details As String)
+        IndicatorEngine.CalcMTFGate(MtfBearCandles(), trend, adx, emaAlign,
+                                    passLong, passShort, details,
+                                    adxPeriod:=MtfAdxPeriod, adxMin:=MtfAdxMin,
+                                    minOf:=MtfMinOf, candleLookback:=MtfCandleLookback)
+    End Sub
+
+    ' -- A9: MTF per-side flags on a 15m BEAR fixture ---------------------------
+    ' 70 steadily falling 15m candles → DMI bearish, ADX strong, EMA stack
+    ' bearish → mtfTrend BEAR → long blocked, short passes.
+    Private Sub A9_MtfPerSideFlags()
         Dim trend As String = "", emaAlign As String = "", details As String = ""
         Dim adx As Double
         Dim passLong As Boolean, passShort As Boolean
@@ -1049,9 +1109,9 @@ Module Program
         '                            Was 60 = shipped mtf_gate.candle_lookback.
         ' ⛔ CONFIRMED by measurement, at these values: Bull:0 Bear:3 (need 2), ADX 100.0,
         ' EMA:BEAR -- byte-identical to the pre-change diagnostics. All three votes still cast.
-        IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign,
-                                    passLong, passShort, details,
-                                    adxPeriod:=7, adxMin:=7.5, minOf:=2, candleLookback:=55)
+        ' ⭐ And that "all three still cast" claim is now PINNED by A64a rather than merely
+        ' recorded here -- this Check() cannot see a dropped vote, which is finding F2.
+        RunMtfBearGate(trend, adx, emaAlign, passLong, passShort, details)
 
         Check("A9 MTF per-side flags (15m BEAR)",
               trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
@@ -1411,27 +1471,19 @@ Module Program
 
     ' -- A14h: 5m regime + 15m MTF resolution-independent (unchanged) ----------
     Private Sub A14h_RegimeMtfUnchanged()
-        Dim candles As New List(Of Candle)
-        Dim p As Double = 110000
-        For i As Integer = 0 To 69
-            Dim c As New Candle With {
-                .Timestamp = i, .Open = p, .High = p + 20,
-                .Close = p - 100, .Low = p - 120, .Volume = 10}
-            candles.Add(c)
-            p = c.Close
-        Next
         Dim trend As String = "", emaAlign As String = "", details As String = ""
         Dim adx As Double
         Dim passLong As Boolean, passShort As Boolean
         ' [A54a S2, MECHANISM -- bands MEASURED by I17-SWEEP 2026-09-05] Same construction as A9,
-        ' same measured bands, same four values. ⭐ The full per-literal reasoning lives at A9's
-        ' call site above and is NOT repeated here; the short version is that these four look
-        ' inert one at a time only because the fixture carries a SPARE BEAR VOTE (Bear:3 vs
-        ' need:2), so adxPeriod is held below 30 and adxMin low on purpose, to keep the ADX vote
-        ' genuinely cast rather than silently dropped. minOf 2 is LOAD-BEARING (band [1, 3]) and
-        ' its equality with shipped is INCIDENTAL.
-        IndicatorEngine.CalcMTFGate(candles, trend, adx, emaAlign, passLong, passShort, details,
-                                    adxPeriod:=7, adxMin:=7.5, minOf:=2, candleLookback:=55)
+        ' same measured bands, same four values -- and since I17-SWEEP D1 that is now literally
+        ' true rather than a claim: both call RunMtfBearGate, so the builder and the four
+        ' literals exist once. ⭐ The full per-literal reasoning lives at A9's call site above and
+        ' is NOT repeated here; the short version is that these four look inert one at a time only
+        ' because the fixture carries a SPARE BEAR VOTE (Bear:3 vs need:2), so adxPeriod is held
+        ' below 30 and adxMin low on purpose, to keep the ADX vote genuinely cast rather than
+        ' silently dropped. minOf 2 is LOAD-BEARING (band [1, 3]); equality with shipped is
+        ' INCIDENTAL. A64a is what pins all three votes actually being cast.
+        RunMtfBearGate(trend, adx, emaAlign, passLong, passShort, details)
 
         Check("A14h regime/MTF unchanged (15m gate resolution-independent)",
               trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
@@ -12165,6 +12217,78 @@ Module Program
               reportedUnknownAsJsonOnly AndAlso reportedPocoOnlyAsOrphan AndAlso didNotMisreportKnown AndAlso r.Compared = 1 AndAlso r.Drifts.Count = 0,
               String.Format("jsonOnly=[{0}] orphans=[{1}] compared={2} drifts=[{3}]",
                             String.Join(",", r.JsonOnly), String.Join(",", r.Orphans), r.Compared, String.Join(",", r.Drifts)))
+    End Sub
+
+    ' =======================================================================
+    ' A64 — the two mechanisms I17-SWEEP exposed, made permanent.
+    ' Ruled at docs/i17-sweep-spec-back.md §5.3, D1 = (c) SCOPED.
+    ' Findings: docs/i17-sweep-batch-summary.md §4 (F1, F2, F5).
+    ' ⛔ Both exist because the fixtures they guard CANNOT see what they check.
+    ' =======================================================================
+
+    ' -- A64a: all three MTF bear votes are actually cast (F1 + F2) -------------
+    ' ⭐ WHY THIS EXISTS, and why A9 cannot do its job.
+    ' CalcMTFGate scores three independent bear votes -- DMI, ADX-strong, EMA stack --
+    ' and compares the total against minOf. A9's series scores Bear:3 against need:2:
+    ' ONE SPARE VOTE. A9 asserts trend = BEAR, which SURVIVES losing any single vote.
+    ' Measured, all three of these leave A9 PASSING while a vote is silently gone:
+    '     adxMin    101   -> ADX vote not cast   -> Bull:0 Bear:2 (need 2), trend BEAR
+    '     adxPeriod  30   -> ADX collapses to 0.0 -> Bull:0 Bear:2 (need 2), trend BEAR
+    '     lookback   30   -> EMA stack goes MIXED -> Bull:0 Bear:2 (need 2), trend BEAR
+    ' That is F2: the fixture keeps passing while testing less than its docstring claims
+    ' ("DMI bearish, ADX strong, EMA stack bearish"). The vote count is observable ONLY
+    ' through gateDetails, which is why this fixture reads it.
+    ' ⚠ THREE INDEPENDENT CHANNELS on purpose. gateDetails is a rendered diagnostic and a
+    ' format change would take a single-channel assertion with it silently; and each of
+    ' the other two names WHICH vote dropped rather than only that one did.
+    ' [MECHANISM] The one literal here, "Bear:3", is the vote COUNT -- a property of the
+    ' algorithm having three vote sources, not a settings value. The need-count is derived
+    ' from MtfMinOf, not restated. No literal in this fixture mirrors a settings key.
+    Private Sub A64a_MtfAllThreeVotesCast()
+        Dim trend As String = "", emaAlign As String = "", details As String = ""
+        Dim adx As Double
+        Dim passLong As Boolean, passShort As Boolean
+        RunMtfBearGate(trend, adx, emaAlign, passLong, passShort, details)
+
+        Dim spareVote  As Boolean = details.Contains("Bear:3") AndAlso
+                                    details.Contains("(need " & MtfMinOf.ToString() & ")")
+        Dim adxVoteCast As Boolean = adx >= MtfAdxMin      ' the vote adxPeriod/adxMin can drop
+        Dim emaVoteCast As Boolean = (emaAlign = "BEAR")   ' the vote candleLookback can drop
+
+        Check("A64a MTF all three bear votes cast (spare vote real, not vacuous)",
+              spareVote AndAlso adxVoteCast AndAlso emaVoteCast,
+              String.Format("spare={0} adxVote={1} (adx={2:F2} vs min={3}) emaVote={4} (ema={5}) details=[{6}]",
+                            spareVote, adxVoteCast, adx, MtfAdxMin, emaVoteCast, emaAlign, details))
+    End Sub
+
+    ' -- A64b: the MicroCVD joint dependency, so the masking cannot return (F5) --
+    ' ⭐ WHY THIS EXISTS. microWindowSize and dynamicPct each sit inside their own measured
+    ' one-at-a-time band -- window [20, 1000], dynamicPct [0, 0.53] -- and the PAIR fails.
+    ' A one-at-a-time sweep cannot see it, and A2 pins only the safe corner. The 2x2 below
+    ' is the whole claim: neither value alone breaks the burst classification, together
+    ' they do.
+    ' [MECHANISM] dynamicPct 0.37 is deliberately SYNTHETIC, not the shipped 0.30, per queue
+    ' item 17 -- a fixture that pinned the shipped value would couple this mechanism test to
+    ' a calibration knob, which is the A6 failure shape. ⭐ MEASURED 2026-09-06: the shipped
+    ' 0.30 produces the identical 2x2 (window 20 and 30 FLAT, 40 and 50 BULL_ACCEL), so the
+    ' finding is about the shipped configuration even though the assertion is not pinned to
+    ' it. Window 20 is the low edge of A2's band and was chosen for that reason: 15 is FLAT
+    ' even at dynamicPct 0, so it would not isolate the JOINT effect.
+    Private Sub A64b_MicroCvdJointDependency()
+        Dim e As Double, m As Double, l As Double
+        Dim mom As String = "", sBase As String = ""
+        Dim sWinAlone As String = "", sDynAlone As String = "", sJoint As String = ""
+
+        RunMicroCvdBurst(MicroBurstWindow, MicroBurstDynamicPct, e, m, l, mom, sBase)      ' 50, 0.0  = A2's own
+        RunMicroCvdBurst(20, MicroBurstDynamicPct, e, m, l, mom, sWinAlone)                ' 20, 0.0
+        RunMicroCvdBurst(MicroBurstWindow, 0.37, e, m, l, mom, sDynAlone)                  ' 50, 0.37
+        RunMicroCvdBurst(20, 0.37, e, m, l, mom, sJoint)                                   ' 20, 0.37 <- the pair
+
+        Check("A64b MicroCVD joint dependency (neither value alone breaks it; the pair does)",
+              sBase = "BULL_ACCEL" AndAlso sWinAlone = "BULL_ACCEL" AndAlso
+              sDynAlone = "BULL_ACCEL" AndAlso sJoint = "FLAT",
+              String.Format("expected BULL_ACCEL/BULL_ACCEL/BULL_ACCEL/FLAT, got base={0} winAlone={1} dynAlone={2} joint={3}",
+                            sBase, sWinAlone, sDynAlone, sJoint))
     End Sub
 
 End Module
