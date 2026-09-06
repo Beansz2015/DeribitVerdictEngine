@@ -109,3 +109,126 @@ The commit edits `Core/Indicators_OrderFlow.vb`, which `verify-gate.ps1`'s `$eng
 - ⚠ **No performance measurement.** `CalcSpreadBps` returns a `Double?` where the old method wrote a `Double` by reference. **Boxing/allocation was not measured.** It is called once per analysis run and once per live-strip tick, so I do not believe it matters — **but I did not measure it and am not claiming it.**
 - ⚠ **The auto-tweaker was not run against the new keys.** The claim that `indicators.spread.` is tweaker-reachable is read from `SettingsDiffApplier.RejectedPathPrefixes` **not containing it** — carried from the spec, checked by reading, **not exercised by running the tweaker**. `A65c` pins the consequence (arm order under an inverted pair) regardless.
 - ⚠ **Only `local-fast` was run for `verify-gate.ps1`.** `prepush` and `ci` modes were not, since the change is not being pushed.
+
+---
+
+## 5. ⭐ REVIEWER VERDICT — 2026-09-06 (UTC). **ACCEPTED.** Two findings, neither blocking; three questions ruled.
+
+**Reviewing seat:** Opus, effort **HIGH**. ⛔ **The packet's own recommendation of *"Sonnet, medium"* is CORRECTED — see §5.4; the reason is structural, not a judgement about care.**
+
+**Nothing was taken on report.** Every handle was re-run at `57b55f9` and all three mutations were re-applied, rebuilt and run.
+
+### 5.1 Independently reproduced — printed values, this seat
+
+| Handle | Packet's value | This seat | |
+|---|---|---|---|
+| **H-2** render files in the diff | `0` | **`0`** | ✅ |
+| **H-3** harness | `332`, ALL PASS, FAIL 0 | **`332` PASS · `0` FAIL · `ALL PASS` · 0 warnings** | ✅ |
+| **H-4** executable refs to `CalcSpread` | `0` | **`0`**, and `Sub CalcSpread(` = `0` | ✅ |
+| **H-4** the naive grep it avoids | `19` | **`19`** — the trap reproduces exactly | ✅ |
+| **H-5** guards returning `Nothing` | `5` | **`5`**, and guards returning `0.0` = **`0`** | ✅ |
+| **H-6** evaluator ↔ `Indicators.Spread` | `0` now · `2` at base | **`0`** now · **`2`** at `f6a2c08` | ✅ |
+| **H-7** settings frozen | `0` · v68 | **`0`** · `"version": 68` | ✅ |
+| **H-1** parity MD5 | `fbcafa20…` | ⛔ **NOT RE-RUNNABLE — see `R-1`** | ⚠ |
+
+**Diff scope confirmed:** six files, exactly §4b's six items. No render surface, no `settings.json`, no `IndicatorResults` field type. **No escalation trigger fired**, verified against all three conditions.
+
+### 5.2 The three mutations — RE-RUN by this seat, not accepted on report
+
+⚠ **The first attempt at this used a `python` one-liner. Python is not installed on this box, the edit never applied, and the harness printed four PASS lines against UNMUTATED code.** ⛔ **Recorded because it is the "assert the check RAN" failure, live, in the act of checking someone else's work.** Re-done with the editor and each mutation confirmed present in the file before building.
+
+| Mutation | Packet's claim | This seat's run | |
+|---|---|---|---|
+| **(1)** empty-ladder guard returns `0.0` | `A65a` FAILS, others PASS | **`A65a` FAILS · whole-harness FAIL = 1** | ✅ |
+| **(2)** `ClassifySpread` always `"NORMAL"` | `A65b` FAILS, **`A65a` still PASSES** | **`A65a` PASSES · `A65b`/`A65c`/`A65d` FAIL** | ✅ |
+| **(3)** the two arms swapped | `A65c` FAILS alone | **`A65c` FAILS ALONE · whole-harness FAIL = 1** | ✅ |
+
+⭐⭐ **Mutation (1)'s printed detail is better than the packet claims and deserves to be on the record:**
+
+```
+emptyAsks: hasValue=True status=TIGHT | zeroBid: hasValue=False status=NORMAL
+```
+
+**That is the PARTIAL-CONVERSION signature** — one guard converted, one not — visible only because `A65a` puts two different guards in one assertion and prints both. §4b.1 warned that a half-converted method re-creates the flip through one path alone; `A65a` catches it *and names which path*.
+
+⭐ **Mutation (3) is the non-obvious result and it held: `A65c` fails ALONE, `A65d` passes.** One would expect the boundary fixture to catch arm order. It cannot — at the shipped 5.0/1.5 the arms do not overlap, so only `A65c`'s deliberately inverted MECHANISM literals can express the state. **The packet's design reasoning is correct and is now demonstrated on the harness.**
+
+⭐ **Mutation (2) confirms the pair argument by running it.** `A65a` alone would have licensed a `ClassifySpread` that returns `"NORMAL"` unconditionally — silently retiring the TIGHT state on every surface. **Also confirmed: all 328 pre-existing fixtures pass under mutation (2)**, which independently establishes the packet's claim that `A65` is the first coverage this method has ever had.
+
+### 5.3 ⚠ `R-1` — **a handle only its author can run.** Not blocking; the claim stands by another route
+
+⛔ **`H-1`'s instrument was never committed** (batch summary §3.1: *"a temporary console project, scratchpad only"*). Searched the tree — it is not there. **So the packet's headline handle — *"if you only run one, run `H-1`"* — cannot be run by any reviewer, now or later, and `fbcafa201a26d45e8c8d72ab5923183a` is unreproducible.**
+
+⛔ **And §1's own pairing instruction makes it worse: *"Run both or neither."*** A reviewer obeying that literally runs **neither**, and the one acceptance item the spec called *"not a formality"* goes unchecked. The escalation trigger inherits the flaw — *"escalate if `H-1` disagrees"* cannot fire on a handle nobody can run.
+
+⭐ **This is a NEW shape, and worth naming beside the two rules already in `CLAUDE.md`.** The standing rules cover *"a handle that tests a string, not the property"* (`_lastTs`) and *"a handle that was never run"*. Neither anticipates **a handle whose instrument does not survive the build.** It was run honestly, it was reported honestly, and it is still not a handle — because a handle is a thing the *reader* can execute. **A one-way measurement is evidence; only a re-runnable one is a handle.**
+
+⭐⭐ **The parity claim itself is NOT in doubt, and the durable proof is already in the tree — the packet just ranked it wrong.** The four rendered surfaces are pure functions of `(r.SpreadBps, r.SpreadStatus)` plus one unrelated `cfg` read for the meter percentage. So:
+
+> **`A65a` + `A65b` (the field values are unchanged on the shapes that matter) + `H-2` (the renderers are untouched) ⇒ parity.**
+
+All three are in the tree and all three were re-run by this seat. **That triad should have been ranked first; `H-1` was a build-time instrument, not a review handle.**
+
+### 5.4 ⚠ `R-2` — deleting the instrument left exactly one property unguarded
+
+**Traced, not inferred.** `verify/ordercheck/OrderCheck.vbproj` links `LiveMicrostructureEvaluator.vb` but **does not link `UI/MainForm_Analysis.vb`** (measured: 1 and 0 matches). So:
+
+| Composition line | Coverable by the harness? | Covered on the degenerate path? |
+|---|---|---|
+| `UI/MainForm_Analysis.vb:423` — `r.SpreadBps = If(spreadBps.HasValue, spreadBps.Value, 0.0)` | ⛔ **No — structurally. `UI/` needs WinForms** | **No.** `H-1` covered it by copying the call-site body verbatim; that instrument is gone |
+| `LiveMicrostructureEvaluator.vb:141` — `snap.SpreadBps = If(bps.HasValue, bps.Value, 0.0)` | ✅ yes, the file is linked | **No.** `A19a` uses a healthy book; `A19e` passes an empty `MarketState`, so `GetBook()` returns `Nothing` and the whole `If book IsNot Nothing` block is skipped |
+
+⚠ **Both lines are CORRECT — read, not assumed.** The finding is that nothing guards them: swap either `0.0` for `-1.0` and the harness still prints 332.
+
+⭐ **The symmetry is the point.** `S2-2` removed a threshold divergence *by construction* and left a smaller unguarded composition behind it. **Not a defect and not a blocker** — but it is why `R-1` matters in practice rather than only in principle: the instrument was the only thing covering the `UI/` half, and it was thrown away.
+
+**Disposition: no action required for this build.** If the `Q-1` follow-up is taken it closes the evaluator half for free (see below). The `UI/` half is uncoverable without an instrument and should be accepted as such, explicitly, rather than left looking like an oversight.
+
+### 5.5 The three queued questions — RULED
+
+#### `Q-1` — the `D-3` residual ⇒ ✅ **(a). Schedule it. Low priority, NOT bundled.**
+
+⭐ **The implementer's read is right and the justification is stronger than the one offered.** `UI/MainForm_LiveStrip.vb:221` was read and it settles it:
+
+```vb
+parts.Add(If(s.HasSpread, s.SpreadBps.ToString("0.0") & " bps", "-- bps"))
+```
+
+**`HasSpread` gates exactly one thing: whether a number or `-- bps` is printed.** It is the *"is this number usable"* gate, not a *"does the ladder exist"* gate. So on a zero-priced top of book the strip prints **`0.0 bps`** where `-- bps` is the honest output.
+
+⛔⛔ **That is the SAME fabricated-measurement class this very build exists to remove** — the absorption row in [`DeribitIndicatorProject.md`](DeribitIndicatorProject.md) §15 states it directly: *"a zero … would be a fabricated measurement the study cannot tell from a real one."* **`S2-2` removed a fabricated `TIGHT` from four surfaces and left a fabricated `0.0 bps` standing on a fifth.** That reframes it from tidy-up to **consistency**, which is why it gets scheduled rather than left.
+
+⚠ **Why it stays LOW priority and unbundled:** a zero-priced top of book on a Deribit BTC-PERP ladder is not a real market state — it is a defensive guard. **Reachability is effectively nil, so nothing is being lost by waiting.** The cost is the display-parity capture, not the line — the implementer identified that correctly.
+⭐ **Bonus, and it is why (a) beats (b) on more than principle:** `snap.HasSpread = bps.HasValue` puts the evaluator's composition line under whatever fixture covers `HasSpread`, closing half of `R-2` for free.
+
+#### `Q-2` — the frequency question ⇒ ✅ **Leave it unanswerable. Do NOT add a CSV column.**
+
+**Agreed, and the reasoning is endorsed as written:** a schema rotation to measure something that would not change any decision is the wrong trade, and reachability was established from the code, which is all the build needed.
+
+⭐ **The flagged asymmetry is correct and is now ruled, so it does not have to be re-argued at `Q-1`'s build:** `Q-1` *is* a behaviour change, so frequency would matter there in a way it did not here. ⛔ **It still does not justify a column.** The right instrument for `Q-1` is the before/after parity capture on the two states, not a rotation — the state is synthetic and constructible, which is exactly why it needs no telemetry.
+
+#### `Q-3` — is `[no-engine-change]` honest here ⇒ ✅ **Yes. And no, do not narrow the token.**
+
+The token's meaning in this repo is *"no behaviour change requiring a settings bump."* This build established that by measurement. **Honest.**
+
+⛔ **On the narrowing question, which the packet correctly left to this seat: do not narrow it.** A second token distinguishing *"engine file touched, behaviour proved identical"* from *"engine file not touched"* would be a distinction `verify-gate.ps1` does not act on differently — **a new thing to get wrong, guarding nothing.** The proof belongs in the commit body, where it already is. ⭐ **The general rule: add a token when the gate will branch on it, not to describe a nuance prose already carries.**
+
+### 5.6 On the review-effort recommendation — ⛔ **`Sonnet, medium` was too low, for a structural reason**
+
+**Not a comment on the packet's care, which is high.** The recommendation assumes the handles are runnable and that the escalation trigger can fire. **One of the two headline handles cannot be run at all**, so a medium-effort review following §1 literally would have skipped the parity check under *"run both or neither"* and stopped. **Neither `R-1` nor `R-2` is reachable from the handle list** — both needed reading the `.vbproj` linkage and searching the tree for the instrument.
+
+⭐ **The generalisation for the next packet: rank handles by whether the READER can run them, and mark any measurement that cannot be reproduced as evidence rather than as a handle.** A packet whose top-ranked handle is unrunnable mis-sizes its own review.
+
+### 5.7 On the spec, from the reviewing side
+
+⭐ **§4b.3's under-scoping is confirmed and the implementer's generalisation is adopted.** Two further comments named `CalcSpread` as a live function (`LiveMicrostructureEvaluator.vb:12` and `:93`); both were correctly fixed. **The spec should have said *"delete the method AND grep the whole tree for its name"*, not pointed at one comment block.** ⛔ **Note the sharp edge: the tree-wide grep now returns 19 hits, 8 of them legitimate narration** — so the instruction has to be *"grep and read"*, never *"grep until zero"*, or it recreates the `_lastTs` trap it is meant to prevent.
+
+⭐ **The build-order tension in §3 is real and the hatch was right.** Under `D-4` (a) there is no order that keeps the tree compiling, because the shim that would allow one is the thing `D-4` forbids. **The next spec of this shape should say so in one sentence: "the tree will not compile between the first and last items; that is expected and is the cost of no-wrapper."**
+
+⭐ **One thing the implementer improved on the spec without flagging it, worth recording:** the `'''` XML doc comments escape `&lt;` / `&gt;`, while the plain `'` comment leaves `<=` raw. **The spec's §4b.1 gave the raw form inside `'''`, which would have produced XML-doc parse warnings.** The build is 0 warnings because the implementer noticed. **Corrected silently and correctly.**
+
+### 5.8 Verdict
+
+✅ **ACCEPTED.** The build does what the spec ruled, the parity claim holds by a route that survives in the tree, and every mutation reproduces. **`R-1` and `R-2` are recorded, neither blocks.** `Q-1` scheduled as a low-priority unbundled item; `Q-2` and `Q-3` closed.
+
+⛔ **Nothing is owed by the trader.**
