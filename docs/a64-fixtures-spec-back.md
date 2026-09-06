@@ -168,11 +168,20 @@ third handle in this arc whose stated expectation was wrong on first draft — s
 ### HA5 — nothing else moved
 
 ```bash
-git diff 3f16a9b..HEAD --stat
+git diff c034c5f..HEAD --stat
 ```
 
-**Expected:** `verify/ordercheck/Program.vb` plus the three docs only. **No `settings.json`,
-no `Core/`, no `UI/`, no `tools/`.**
+**Expected: exactly 3 files** — `verify/ordercheck/Program.vb` (190 changed),
+`docs/a64-fixtures-spec-back.md` (new), `docs/i17-sweep-spec-back.md` (the handle-maintenance
+note). **No `settings.json`, no `Core/`, no `UI/`, no `tools/`.**
+
+⛔ **This handle was ALSO wrong on first draft — the fourth in the arc, and it is now the
+worked example for its own §6 entry.** It read `git diff 3f16a9b..HEAD`, which sweeps in
+`c034c5f`, the reviewing seat's own commit, and prints **5** files including `CLAUDE.md` and
+`docs/DeribitIndicatorProject.md`. Both of those are the `D3` and `D2` actions and are
+correct — but a reviewer running the handle as written would see two unexpected files and have
+to work out why. **The base must be the commit this build started from, not the one the
+previous packet was written against.**
 
 ---
 
@@ -252,7 +261,7 @@ coupling.**
 - ⚠ **No check exists that a *future* fixture will use the shared helpers** rather than adding
   a fourth copy. The extraction removes today's copies; it does not enforce tomorrow's.
 
-### ⛔ A pattern worth naming: three handles in this arc were wrong on first draft
+### ⛔ A pattern worth naming: FOUR handles in this arc were wrong on first draft
 
 Not the builds — the **handles**, the things a reviewer would have run:
 
@@ -261,13 +270,19 @@ Not the builds — the **handles**, the things a reviewer would have run:
 | `H4` ([`i17-sweep-spec-back.md`](i17-sweep-spec-back.md)) | *"appears in no value set"* | collisions on 4 synthetics | The test is per **key**; cross-key matches are noise |
 | `H3` (same doc) | 13 lines | **15** two commits later | Pinned to `HEAD`, not to a commit |
 | `HA4` (this doc) | 2 lines, and `0.30` absent | **4**, and `0.30` present ×3 | `0.37` ⊂ `0.375`; `0.30` is also an absorption key |
+| `HA5` (this doc) | 3 files | **5 files** | Base commit swept in the reviewer's own commit |
 
-⭐ **All three share one shape: a grep that matches a STRING which resembles the property,
-rather than the property.** It is CLAUDE.md's own `R1` rule — *"verification handles must test
-the property, not a string that mentions it"* — and I reproduced it three times while
-explicitly writing about it. ⛔ **The only reason none of them shipped as a wrong handle is the
-rule "run it before you publish it."** That rule is doing more work than the `R1` rule itself,
-because knowing `R1` demonstrably did not prevent the error; running the command did.
+⭐ **The first three share one shape: a grep that matches a STRING which resembles the
+property, rather than the property.** That is CLAUDE.md's own `R1` rule — *"verification
+handles must test the property, not a string that mentions it"* — and I reproduced it three
+times **while explicitly writing about it.** `HA5` is the fourth and a different shape: a
+correct command with the wrong **baseline**, which is `H3`'s failure again.
+
+⛔ **The only reason none of the four shipped as a wrong handle is the habit "run it before
+you publish it."** Knowing `R1` demonstrably did not prevent any of them; running the command
+caught all four. ⚠ **`HA5` is the sharpest instance, because it was written AFTER I had
+already documented the pattern in this very section** — the rule does not protect you, the
+execution does.
 
 **Suggested, not decided:** a line in CLAUDE.md's verification-handle rule saying *"run every
 handle against the tree and paste the actual output before publishing it; a handle that has
