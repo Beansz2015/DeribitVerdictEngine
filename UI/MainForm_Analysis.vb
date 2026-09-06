@@ -419,9 +419,14 @@ Partial Public Class MainForm
         If _ofiHistory.Count > OFIHistoryMax Then _ofiHistory.RemoveAt(0)
         r.OFIMomentum = IndicatorEngine.CalcOFIMomentum(_ofiHistory, cfg)
 
-        IndicatorEngine.CalcSpread(orderBook, r.SpreadBps, r.SpreadStatus,
-                                   wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
-                                   tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)
+        ' [S2-2] CalcSpread split into a pure bps fn + a classifier. Nothing = no measurable top of
+        ' book, which ClassifySpread maps to "NORMAL" -- the pre-split seed value. r.SpreadBps still
+        ' receives 0.0 in that case, exactly as before (it is a Double and four surfaces format it F2).
+        Dim spreadBps As Double? = IndicatorEngine.CalcSpreadBps(orderBook)
+        r.SpreadBps = If(spreadBps.HasValue, spreadBps.Value, 0.0)
+        r.SpreadStatus = IndicatorEngine.ClassifySpread(spreadBps,
+                             wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
+                             tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)
 
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal,
                                          dominanceRatio:=cfg.Indicators.Liquidations.DominanceRatio)

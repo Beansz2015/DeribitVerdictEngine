@@ -597,6 +597,13 @@ Module Program
         A64a_MtfAllThreeVotesCast()
         A64b_MicroCvdJointDependency()
 
+        ' [S2-2 — the CalcSpread split, docs/s2-2-calcspread-split-proposal.md §6]
+        ' A65a/A65b are a PAIR: both books render 0.00 bps and must classify DIFFERENTLY.
+        A65a_DegenerateBookIsNormalNotTight()
+        A65b_LockedBookIsTight()
+        A65c_WideArmIsTestedFirst()
+        A65d_BoundaryInclusivity()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -12289,6 +12296,120 @@ Module Program
               sDynAlone = "BULL_ACCEL" AndAlso sJoint = "FLAT",
               String.Format("expected BULL_ACCEL/BULL_ACCEL/BULL_ACCEL/FLAT, got base={0} winAlone={1} dynAlone={2} joint={3}",
                             sBase, sWinAlone, sDynAlone, sJoint))
+    End Sub
+
+    ' ══ A65a-A65d — the CalcSpread split (S2-2) ═══════════════════════════════════════
+    ' docs/s2-2-calcspread-split-proposal.md §6. Before this family there was NO fixture
+    ' coverage of the spread method at all -- no .vb fixture ever called CalcSpread; the
+    ' fixtures that need a spread state set r.SpreadStatus directly. These four ARE the
+    ' guard, which is why §6 names the INPUT SHAPE for each and not just the assertion.
+
+    ' -- A65a: THE CRUX. A degenerate book classifies NORMAL, never TIGHT ---------------
+    ' ⭐ WHY THIS EXISTS. Pre-split, CalcSpread seeded spreadStatus = "NORMAL" at
+    ' Core/Indicators_OrderFlow.vb:586 BEFORE its five early-return guards, so "NORMAL" was
+    ' the DEGENERATE-BOOK ANSWER, not a default. A split that returns a plain 0.0 and
+    ' classifies it yields TIGHT (0.0 <= tight_threshold_bps 1.5) and moves FOUR rendered
+    ' surfaces -- breakdown note, snapshot line, and both card bindings, whose colour flips
+    ' Theme.FG_TERTIARY grey -> Theme.ACC_STRONG_LONG green. A book the engine could not
+    ' read would render as best-possible execution.
+    ' ⚠ MakeBook CANNOT build case 1 -- it always fills five levels a side. Constructed
+    ' directly so one ladder is genuinely empty.
+    ' ⛔ NOT orderBook = Nothing: UI/MainForm_Analysis.vb:139 skips the whole run first, so
+    ' that guard is unreachable at the :422 call site and testing it proves nothing.
+    ' Case 1 exercises the EMPTY-LADDER guard, case 2 the bestBid <= 0 guard -- different
+    ' guards, so a partial conversion that fixes one and not the other is still caught.
+    Private Sub A65a_DegenerateBookIsNormalNotTight()
+        Dim cfg As New EngineSettings()
+        Dim wide As Double = cfg.Indicators.Spread.WideThresholdBps
+        Dim tight As Double = cfg.Indicators.Spread.TightThresholdBps
+
+        ' Case 1 — empty ASK ladder.
+        Dim bEmptyAsks As New OrderBookSnapshot()
+        bEmptyAsks.Bids.Add((100000.0, 10.0))
+        Dim bpsEmpty As Double? = IndicatorEngine.CalcSpreadBps(bEmptyAsks)
+        Dim statusEmpty As String = IndicatorEngine.ClassifySpread(bpsEmpty,
+                                        wideThresholdBps:=wide, tightThresholdBps:=tight)
+
+        ' Case 2 — zero-priced top of book (bestBid <= 0), both ladders populated.
+        Dim bZeroBid As New OrderBookSnapshot()
+        bZeroBid.Bids.Add((0.0, 10.0))
+        bZeroBid.Asks.Add((100010.0, 10.0))
+        Dim bpsZero As Double? = IndicatorEngine.CalcSpreadBps(bZeroBid)
+        Dim statusZero As String = IndicatorEngine.ClassifySpread(bpsZero,
+                                       wideThresholdBps:=wide, tightThresholdBps:=tight)
+
+        Check("A65a degenerate book -> CalcSpreadBps Nothing and ClassifySpread NORMAL (empty ladder + zero-priced top)",
+              Not bpsEmpty.HasValue AndAlso statusEmpty = "NORMAL" AndAlso
+              Not bpsZero.HasValue AndAlso statusZero = "NORMAL",
+              String.Format("emptyAsks: hasValue={0} status={1} | zeroBid: hasValue={2} status={3} (wide={4} tight={5})",
+                            bpsEmpty.HasValue, statusEmpty, bpsZero.HasValue, statusZero, wide, tight))
+    End Sub
+
+    ' -- A65b: the LOCKED book is a REAL zero and stays TIGHT ---------------------------
+    ' ⭐⭐ A65a's TWIN, AND THE PAIR IS THE POINT. Both books render 0.00 bps and they must
+    ' classify DIFFERENTLY -- locked TIGHT, degenerate NORMAL. Without this fixture A65a
+    ' passes trivially under a ClassifySpread that returns "NORMAL" unconditionally, which
+    ' would silently retire the TIGHT state on every surface.
+    ' MakeBook level 0 is exactly bestBid = bestAsk = 100000.0, so bps = 0/100000 x 10000 = 0.0
+    ' -- a measured zero, not an absent one.
+    Private Sub A65b_LockedBookIsTight()
+        Dim cfg As New EngineSettings()
+        Dim wide As Double = cfg.Indicators.Spread.WideThresholdBps
+        Dim tight As Double = cfg.Indicators.Spread.TightThresholdBps
+
+        Dim locked As OrderBookSnapshot = MakeBook(100000.0, 100000.0, 10.0, 10.0)
+        Dim bps As Double? = IndicatorEngine.CalcSpreadBps(locked)
+        Dim status As String = IndicatorEngine.ClassifySpread(bps,
+                                   wideThresholdBps:=wide, tightThresholdBps:=tight)
+
+        Check("A65b locked book (bestBid = bestAsk > 0) is a REAL 0.00 bps and classifies TIGHT, not NORMAL",
+              bps.HasValue AndAlso Math.Abs(bps.Value) < 0.0000001 AndAlso status = "TIGHT",
+              String.Format("hasValue={0} bps={1} status={2} (wide={3} tight={4})",
+                            bps.HasValue, If(bps.HasValue, bps.Value, Double.NaN), status, wide, tight))
+    End Sub
+
+    ' -- A65c: the ">= wide" arm is tested FIRST, and the order is load-bearing ---------
+    ' [MECHANISM] wide:=1.0 / tight:=2.0 are DELIBERATELY INVERTED and are NOT settings
+    ' values -- no shipped or historical settings.json has ever held tight >= wide (the key
+    ' has run 5.0/1.5 throughout). The fixture asserts the ARM ORDER, not a threshold, so a
+    ' literal is correct here and a cfg-derived value could not express the state at all.
+    ' ⚠ The state is REACHABLE: indicators.spread. is auto-tweaker-tunable -- it is not in
+    ' tools/AutoTweaker/SettingsDiffApplier.vb's RejectedPathPrefixes. Both comparisons are
+    ' inclusive, so when tight >= wide the arms overlap and order alone decides the answer.
+    ' Shipped resolved WIDE, the conservative outcome (WIDE is the only value that scores).
+    Private Sub A65c_WideArmIsTestedFirst()
+        Dim bps As Double? = 1.5
+        Dim status As String = IndicatorEngine.ClassifySpread(bps,
+                                   wideThresholdBps:=1.0, tightThresholdBps:=2.0)
+
+        Check("A65c inverted thresholds (wide 1.0 <= tight 2.0) resolve WIDE -- the >= wide arm runs first",
+              status = "WIDE",
+              String.Format("bps=1.5 wide=1.0 tight=2.0 -> got {0}, expected WIDE (TIGHT means the arms were swapped)", status))
+    End Sub
+
+    ' -- A65d: boundary inclusivity on BOTH arms ---------------------------------------
+    ' [SHIPPED BEHAVIOUR] Every threshold here is DERIVED FROM cfg, never a literal -- this
+    ' fixture asserts what the shipped configuration does at its own boundaries, so a literal
+    ' would rot the moment the key moves (CLAUDE.md's fixture-literal provenance rule).
+    ' Both comparisons are inclusive: exactly-wide is WIDE, exactly-tight is TIGHT, and the
+    ' open interval between them is NORMAL.
+    Private Sub A65d_BoundaryInclusivity()
+        Dim cfg As New EngineSettings()
+        Dim wide As Double = cfg.Indicators.Spread.WideThresholdBps
+        Dim tight As Double = cfg.Indicators.Spread.TightThresholdBps
+        Dim between As Double = (wide + tight) / 2.0        ' strictly inside (tight, wide)
+
+        Dim atWide As String = IndicatorEngine.ClassifySpread(wide,
+                                   wideThresholdBps:=wide, tightThresholdBps:=tight)
+        Dim atTight As String = IndicatorEngine.ClassifySpread(tight,
+                                    wideThresholdBps:=wide, tightThresholdBps:=tight)
+        Dim inMiddle As String = IndicatorEngine.ClassifySpread(between,
+                                     wideThresholdBps:=wide, tightThresholdBps:=tight)
+
+        Check("A65d ClassifySpread boundaries are inclusive on both arms (= wide -> WIDE, = tight -> TIGHT, between -> NORMAL)",
+              atWide = "WIDE" AndAlso atTight = "TIGHT" AndAlso inMiddle = "NORMAL",
+              String.Format("wide={0} -> {1} | tight={2} -> {3} | between={4} -> {5}",
+                            wide, atWide, tight, atTight, between, inMiddle))
     End Sub
 
 End Module

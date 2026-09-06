@@ -570,39 +570,59 @@ Partial Public Class IndicatorEngine
 
     ''' <summary>
     ''' Computes basis-point spread from the best bid/ask of the order book snapshot.
-    ''' Classifies as TIGHT / NORMAL / WIDE against configurable thresholds.
-    ''' [A54a S2-1 (B), 2026-09-05] wideThresholdBps/tightThresholdBps were Optional with
-    ''' method-local defaults. Made required -- indicators.spread. is auto-tweaker-tunable
-    ''' (not in SettingsDiffApplier.RejectedPathPrefixes) and gates the Step-2 WIDE scoring
-    ''' penalty, so a call site relying on the default could silently diverge from a retuned
-    ''' cfg. This is the ONE production call-site edit in the A54a S2 arc -- see
-    ''' LiveMicrostructureEvaluator.vb. trader-tick-queue.md §2 S2-1.
+    ''' Returns Nothing when there is NO MEASURABLE TOP OF BOOK -- an absent book, an empty
+    ''' ladder on either side, a non-positive best price, or a non-positive mid.
+    '''
+    ''' [S2-2, 2026-09-06] Split out of the former CalcSpread. ⛔ Nothing is NOT a failure code:
+    ''' it is the DEGENERATE-BOOK ANSWER, and ClassifySpread maps it to "NORMAL" -- exactly the
+    ''' value the pre-split CalcSpread seeded before its five early-return guards. Returning 0.0
+    ''' here instead would classify TIGHT (0.0 &lt;= tight_threshold_bps) and render a book the
+    ''' engine could not read as best-possible execution, on four surfaces. A LOCKED book
+    ''' (bestBid = bestAsk > 0) is a real 0.0 and legitimately TIGHT -- the two zeros are
+    ''' different answers and this signature is what keeps them apart.
+    ''' See s2-2-calcspread-split-proposal.md §3.
+    '''
+    ''' Deliberately THRESHOLD-FREE: LiveMicrostructureEvaluator wants only this value, so after
+    ''' the split it references indicators.spread.* not at all and CANNOT diverge from
+    ''' MainForm_Analysis when the auto-tweaker retunes those keys (they are NOT fenced in
+    ''' SettingsDiffApplier.RejectedPathPrefixes). Impossible by construction rather than
+    ''' guarded -- the ComputeSideLevels / TradeStoreWriter one-seam pattern.
     ''' </summary>
-    Public Shared Sub CalcSpread(orderBook As OrderBookSnapshot,
-                                  ByRef spreadBps As Double,
-                                  ByRef spreadStatus As String,
-                                  wideThresholdBps  As Double,
-                                  tightThresholdBps As Double)
-        spreadBps = 0 : spreadStatus = "NORMAL"
-        If orderBook Is Nothing Then Return
-        If orderBook.Bids Is Nothing OrElse orderBook.Bids.Count = 0 Then Return
-        If orderBook.Asks Is Nothing OrElse orderBook.Asks.Count = 0 Then Return
+    Public Shared Function CalcSpreadBps(orderBook As OrderBookSnapshot) As Double?
+        If orderBook Is Nothing Then Return Nothing
+        If orderBook.Bids Is Nothing OrElse orderBook.Bids.Count = 0 Then Return Nothing
+        If orderBook.Asks Is Nothing OrElse orderBook.Asks.Count = 0 Then Return Nothing
 
         Dim bestBid As Double = orderBook.Bids(0).Price
         Dim bestAsk As Double = orderBook.Asks(0).Price
-        If bestBid <= 0 OrElse bestAsk <= 0 Then Return
+        If bestBid <= 0 OrElse bestAsk <= 0 Then Return Nothing
         Dim mid As Double = (bestBid + bestAsk) / 2.0
-        If mid <= 0 Then Return
+        If mid <= 0 Then Return Nothing
 
-        spreadBps = ((bestAsk - bestBid) / mid) * 10000.0
+        Return ((bestAsk - bestBid) / mid) * 10000.0
+    End Function
 
-        If spreadBps >= wideThresholdBps Then
-            spreadStatus = "WIDE"
-        ElseIf spreadBps <= tightThresholdBps Then
-            spreadStatus = "TIGHT"
-        Else
-            spreadStatus = "NORMAL"
-        End If
-    End Sub
+    ''' <summary>
+    ''' Classifies a spread (bps) as TIGHT / NORMAL / WIDE against configurable thresholds.
+    ''' Nothing -- no measurable top of book -- returns "NORMAL".
+    '''
+    ''' [S2-2, 2026-09-06] ⚠ The "&gt;= wide" arm is tested FIRST and THAT ORDER IS LOAD-BEARING.
+    ''' Both comparisons are inclusive, so when tight &gt;= wide the arms overlap and order alone
+    ''' decides. That state is reachable: indicators.spread. is auto-tweaker-tunable. Shipped
+    ''' resolved WIDE, which is the conservative answer (WIDE is the only value that scores).
+    ''' ⛔ Do not rewrite as a Select Case -- that is where the order gets lost.
+    ''' </summary>
+    Public Shared Function ClassifySpread(spreadBps As Double?,
+                                          wideThresholdBps  As Double,
+                                          tightThresholdBps As Double) As String
+        ' [S2-2] Nothing is the DEGENERATE-BOOK answer, not a default. Pre-split, CalcSpread
+        ' seeded spreadStatus = "NORMAL" before its five early-return guards, so an unreadable
+        ' book rendered NORMAL. Classifying a 0.0 instead yields TIGHT (0.0 <= 1.5) and moves
+        ' four rendered surfaces. See s2-2-calcspread-split-proposal.md §3.
+        If Not spreadBps.HasValue Then Return "NORMAL"
+        If spreadBps.Value >= wideThresholdBps Then Return "WIDE"
+        If spreadBps.Value <= tightThresholdBps Then Return "TIGHT"
+        Return "NORMAL"
+    End Function
 
 End Class

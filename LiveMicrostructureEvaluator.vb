@@ -9,7 +9,7 @@
 ' raw microstructure *inputs* (price vs nearest structural levels, TFI, spread, book imbalance, tape
 ' speed) at tick freshness, visually distinct from the verdict so it informs without tempting an entry.
 '
-' It reuses the engine's pure indicator functions (CalcTFI / CalcSpread / CalcOFI) and the carried
+' It reuses the engine's pure indicator functions (CalcTFI / CalcSpreadBps / CalcOFI) and the carried
 ' levels from the last full run — identical methodology to the full run, only fresher. Levels are
 ' CARRIED, not recomputed (5m swing / VPFR HVN are slow; they refresh each full run); price, TFI,
 ' spread, imbalance, and tape speed are recomputed live.
@@ -90,7 +90,7 @@ Public NotInheritable Class LiveMicrostructureEvaluator
 
     ''' <summary>
     ''' Recompute the fast streaming microstructure from the live MarketState + carry the last run's
-    ''' structural levels. Reuses CalcTFI / CalcSpread / CalcOFI (same cfg params the full run uses) so
+    ''' structural levels. Reuses CalcTFI / CalcSpreadBps / CalcOFI (same cfg params the full run uses) so
     ''' the strip's numbers are, by construction, the engine's numbers — only fresher. Never throws into
     ''' the caller; a degenerate/empty buffer maps to safe blanks (advisory overlay).
     '''
@@ -129,18 +129,15 @@ Public NotInheritable Class LiveMicrostructureEvaluator
             End If
 
             If book IsNot Nothing Then
-                ' Spread — the SpreadBps formula via CalcSpread (only the bps value is read; the bps
-                ' is threshold-independent of the classification, so sStatus below is computed but
-                ' never read here -- snap.HasSpread comes from HasTopOfBook, not sStatus).
-                ' [A54a S2-1 (B), 2026-09-05] Both thresholds are now REQUIRED params -- pass cfg so
-                ' this call site cannot silently diverge from MainForm_Analysis if the tweaker retunes
-                ' indicators.spread.* (it is NOT tweaker-fenced; trader-tick-queue.md §2 S2-1). Zero
-                ' behaviour change: cfg reads 5.0/1.5 today, matching the former method defaults.
-                Dim sBps As Double = 0, sStatus As String = "NORMAL"
-                IndicatorEngine.CalcSpread(book, sBps, sStatus,
-                    wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
-                    tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)
-                snap.SpreadBps = sBps
+                ' Spread -- CalcSpreadBps is THRESHOLD-FREE by construction (S2-2), so this evaluator no
+                ' longer references indicators.spread.* at all and cannot diverge from MainForm_Analysis if
+                ' the auto-tweaker retunes them. The claim the old comment made in prose is now the signature.
+                ' ⚠ snap.HasSpread deliberately STAYS on HasTopOfBook (D-3 ruled (b)): the two predicates are
+                ' NOT equivalent -- HasTopOfBook tests 3 conditions, CalcSpreadBps tests 6 (it adds the three
+                ' price tests). Collapsing them would change live-strip behaviour on a zero-priced top of
+                ' book. That divergence is a NAMED RESIDUAL, not an oversight -- see the proposal §8.
+                Dim bps As Double? = IndicatorEngine.CalcSpreadBps(book)
+                snap.SpreadBps = If(bps.HasValue, bps.Value, 0.0)
                 snap.HasSpread = HasTopOfBook(book)
 
                 ' Top-book imbalance — the CalcOFI basis (cfg book depth + dominance ratios).
