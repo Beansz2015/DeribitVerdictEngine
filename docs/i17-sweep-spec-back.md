@@ -344,3 +344,54 @@ should become a `Const`. Naming it so the next seat does not reach for it.
 - ⛔ **I did not verify the corrected 17/5/4 counts against anything but the diff and the band
   table.** They agree with each other. Given that the first published figures were wrong,
   **`H2` is worth running rather than trusting this sentence.**
+
+---
+
+## 5. ⭐ REVIEWER VERDICT — ACCEPTED, 2026-09-06. D-table ruled.
+
+**Reviewed by the seat that wrote the ruling and wrote no code on this build.**
+
+### 5.1 Verified independently
+
+| Check | Result |
+|---|---|
+| Harness, re-run | **326 PASS · 0 FAIL · `ALL PASS`** |
+| `verify-gate.ps1 -Mode local-fast`, re-run | ✅ **`GATE PASSED`** |
+| ⭐ **`F3` — was `slope_pct_of_value` ever `0.05`?** | ⛔ **CONFIRMED. Walked every tracked revision: `{0.01, 0.05, 0.10}`. `0.05` WAS shipped.** The session-2 reviewer cleared that literal as *"off-shipped"* against the current `0.10` and **was wrong** |
+| ⭐ **`F6` — was `trend_gate` ever `8.0`?** | ⛔ **CONFIRMED. History is `{0.001, 10.0, 18.0, 23.0}`. `8.0` never existed** — the reviewer invented it when writing the `I17-A6` queue row |
+
+⭐⭐ **Two of the reviewer's own published claims, falsified by measurement. That is precisely
+what this build was commissioned to do, and it did it.**
+
+### 5.2 The build is accepted
+
+`F1`'s spare-vote finding, `F4`'s dead-`floorPct`, and `F5`'s joint failure are the three
+that justify the whole exercise — **each is a case where a wide one-at-a-time band is an
+artefact of a sibling literal, and a naive sweep would have licensed any value at all.** The
+four-class model (STRUCTURALLY INERT / BAND-INERT / MASKED / LOAD-BEARING) is a better
+instrument than the two-class one the ruling supplied, and **`MASKED` is the class that did
+the work.**
+
+⭐ **Rule 2 — *"band width licenses a change; it does not compel one"* — is right and should
+outlive this build.** Keeping `A2.microWindowSize` at 50 because the fixture's data is built
+around it, despite a `[20, 1000]` band, is the correct call.
+
+⭐ **The self-caught count error (13/5/8 → 17/5/4), corrected in place with the note that the
+commit message still carries the wrong figures, is the right handling.** History not
+rewritten, correction where a reader will meet it.
+
+### 5.3 ⛔ D-TABLE RULED
+
+| # | Ruling |
+|---|---|
+| **`D1`** | ✅ **(c), as recommended — but SCOPED.** Not a general diagnostic layer: **two fixtures in family `A64`** pinning exactly the mechanisms this build exposed. **`A64a`** asserts `A9`'s `details` carries the spare vote (`Bear:3` against `need:2`) — that makes `F1` permanent and fails loudly if a future edit silently drops a vote, and it is the only thing that stops `F2`'s partial-vacuity recurring. **`A64b`** pins `A2`'s joint dependency (`microWindowSize` × `dynamicPct`, the `F5` pair) so the masking cannot silently return. ⛔ **(b) rejected for the reason given — ~330 lines duplicating every fixture's data builder is the copy-drift shape the provenance rule exists to prevent.** (a) rejected: it leaves the value choice unpinned |
+| **`D2`** | ⚠ **(b) in substance, but the premise is WRONG and the action is different.** The packet says session 2's §15 row *"was never added"*. **It was — by the reviewer, on 2026-09-05 in commit `5c34d39`**, which collapsed the whole A54a arc into ONE row per §15's own one-item-one-row rule; that row already carries *"SESSION 2 (the ruling's scoped (b)): 44 `Optional` defaults deleted across 15 methods."* ⭐ **So: do NOT add a row. UPDATE the existing A54a row** — close its *"STILL OPEN … queue item 17 applied to `A6`"* clause, and add **only** the two findings that outlive the build: **`F1`'s MASKED lesson** (a wide one-at-a-time band can be a sibling artefact) and **`F3`'s off-*ever*-shipped rule**. ⛔ **The band table stays in the packet — §15's growth is cell content, and this row is already large** |
+| **`D3`** | ✅ **(b), YES — add the sentence.** ⭐ **The evidence is that the rule as written misled its own reviewer:** `F3` is exactly the error the session-2 review made, following the rule's own worked examples, which reason about **current** values. **Draft, to be inserted in CLAUDE.md's fixture-literal provenance rule:** *"⚠ **MECHANISM means off-EVER-shipped, not off-currently-shipped.** Check a literal against every tracked revision of `settings.json`, not today's — a former shipped value is exactly as confusable as a current one, and is how `A6`'s `10.0` survived."* |
+| **`D4`** | ✅ **(a) — NO further sweep now, and the reason is the scoping, not fatigue.** The packet measured the named-argument population **closed** at the two instances already fixed — ⭐ **a direct dividend of session 2 making these parameters required and named.** ⛔ **But the residual is queued, not assumed covered:** positional passing and whole-`cfg` builders (`BuildA8Cfg`, `BuildResolutionCfg`) are outside that scan, and **`OfiAccumulator.vb:84`'s `tauSec` is the one same-class mode-switch pinned by NO fixture.** Queued at low priority |
+
+### 5.4 One correction to the packet, and it is small
+
+§2's note *"the confusable set is 22 of 26, not 21"* is right, and the reviewer's queue row
+said 21. **Corrected by measurement, accepted.** ⚠ The reviewer's `I17-A6` row also carried
+the invented `8.0` (`F6`) — **both queue-row errors are the reviewer's, both are now on
+record, and neither changes a ruling.**
