@@ -94,7 +94,27 @@ $SixDirs = @('fonts')
 $OptionalPdb = 'DeribitVerdictEngine.pdb'
 
 # -- fetch targets (proposal §2.4 + §5.2's named sidecars) ------------------------------
-$FetchFiles = @('analysis_log.csv', 'ws_health.log', 'capture_marker.log', 'analysis_eval_cache.csv')
+# [OPS-1, ruled 2026-09-06] analysis_log.csv.v0.7.bak added as a LITERAL, never a *.bak glob.
+# Two reasons, both mechanism rather than taste:
+#   1. $FetchFiles entries are NAME KEYS, not paths. Each is used three times -- box-side
+#      snapshot (Join-Path $dir $f), manifest keying ($manifest[$f]), and the local
+#      size-verification loop (Join-Path $localDest $f, ~line 361). A wildcard breaks all
+#      three: $manifest['*.bak'] is one key for many files and Test-Path on a literal
+#      wildcard path is not a verification. A glob is NOT a one-line change -- it makes the
+#      manifest list-valued and rewrites the very loop that caught the FIX 8 defect.
+#   2. The name is STABLE and cannot sweep future rotations. AnalysisLogger.EnsureLogFile
+#      (AnalysisLogger.vb:159-163) names a NEW rotation analysis_log.csv.v0.7.bak, and only
+#      if that already exists does it give the INCOMING file a timestamped name instead. So
+#      this .bak is never renamed and never overwritten -- it is the closed pre-rotation
+#      book from 2026-09-01 15:49 UTC, permanently. Future rotations land as
+#      analysis_log.csv.v0.7.<ts>.bak and this entry will NOT pull them.
+# Cost is bounded: Test-Path-guarded on the box, so it is a no-op wherever the file is
+# absent (including every future box), and it is ~33,911 rows against a backtest_data\
+# transfer already an order of magnitude larger.
+# KNOWN RESIDUAL, named rather than silent: timestamped .bak files from a SECOND rotation
+# are still not fetched. Fetching every historical .bak grows without bound, so that wants
+# its own ruling if a second rotation ever happens. See trader-tick-queue.md §2 OPS-1.
+$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'capture_marker.log', 'analysis_eval_cache.csv')
 $FetchDirs  = @('backtest_data', 'settings_snapshots')
 
 # [FIX 8a, live-execution finding] `aws` does not reliably resolve by name inside an SSM
