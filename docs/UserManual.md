@@ -49,6 +49,8 @@ This manual is a field-by-field reference for every variable and display block t
 24. [On-Close Trigger Mode](#24-on-close-trigger-mode)
 25. [Live Microstructure Strip (TAPE)](#25-live-microstructure-strip-tape)
 26. [What-If Replay (Backtesting)](#26-what-if-replay)
+27. [MIN NET MOVE % Row (SETTINGS & TOOLS)](#27-min-net-move-row)
+28. [BacktestRunner (offline CLI)](#28-backtestrunner)
 
 ---
 
@@ -239,6 +241,20 @@ The `atrStop` / `atrTarget` in the calculation above are the **fallback**. Befor
 2. **Nearest HVN wall** — `VPFRNearestHvnAbove` (long) / `VPFRNearestHvnBelow` (short). Label `NEAREST_HVN_ABOVE` / `NEAREST_HVN_BELOW`.
 3. **POC** — the VPFR point of control, only when the HVN gate is open. Label `POC`.
 4. **ATR fallback** — `entry ± targetMult × ATR` when no structural level qualifies within the bound. Label `FALLBACK_ATR`.
+
+**Optional best-pivot tier (v63) — OFF in the shipped settings.** `scoring.structural_levels.use_best_pivot_candidate` is a Boolean that defaults to **`false`**, and the tracked `settings.json` ships it `false`. When it is `false` the candidate is simply absent and every downstream branch is byte-identical to v56 — snapshot, card, bridge payload and CSV all render exactly as they did before the key existed. **So this is not something the engine currently does.** The key is a **what-if instrument**: it exists so the §10 promotion question ("should the volume-weighted pivot be a target tier at all?") can be measured in the replay before it is answered live. Live promotion is a separate, later decision.
+
+When the key is set `true`, the volume-weighted best 5m pivot (`BestPivotByVolume5m`, §10) joins the target candidate set:
+
+- **Ladder mode** (`structural_levels.target_arbitration_mode: 0`, the shipped default) inserts it as the **first** tier, above swing — it wins whenever it qualifies.
+- **NEAREST mode** (`target_arbitration_mode: 1`) gives it no priority at all; it competes on distance like every other candidate.
+- **Side is decided by price against entry**, not by whether the pivot was a swing high or a swing low: above entry ⇒ long-target candidate, below entry ⇒ short-target candidate. A *low* pivot sitting above entry is still a level the market defended on volume. (This is also the only rule the live path and the replay can share — the CSV logs `BestPivotByVolume5m` and `BestPivotVolumeRatio5m` but not `BestPivotIsHigh5m`.)
+- **Same looseness bound as every other tier** — `0 < dist ≤ target_max_atr_mult × ATR`. A pivot price of `0` (fewer than 2 confirmed pivots in the lookback) means the candidate is absent, not guessed — the POC-tier precedent.
+- `BestPivotVolumeRatio5m` is **not** consulted. There is no minimum-ratio gate.
+- Label when it places: `BEST_PIVOT_5M`, rendered through the same `PLACED @ …` string as every other tier — no new line, no format change.
+- **The stop side is untouched.** This is a target-only candidate; the DG1 stop below is unchanged.
+
+Sweeping it is covered in §26 ("Use best-pivot candidate"). Source: `Core/SignalEmitter.vb::ComputeStructuralSideLevels`; spec `docs/d2v2-whatif-candidate-mode-proposal.md`.
 
 ### Stop placement (DG1)
 
@@ -1059,6 +1075,8 @@ Colours: UPTREND green, DOWNTREND red, EXPANSION amber, CONTRACTION dim cyan, UN
 **Scoring use:** none in v1. Logged for offline analysis and CalibrationReport `BEST VOLUME PIVOT DISTRIBUTION` section.
 
 **v2 promotion condition** (parked in `DeribitIndicatorProject.md` §16.6 P1): if CalibrationReport shows "best is also most-recent" rate falls below 50% AND auto-tweaker output shows volume-weighted pivots correlate with subsequent target-hit rate, promote to a 4th cap tier (best-volume-swing > most-recent-swing > nearest HVN > POC).
+
+**Measurable since v63 — still not live.** That promotion can now be *tested* without being shipped. `scoring.structural_levels.use_best_pivot_candidate` (Boolean) inserts this pivot into the placed-target candidate set as the first tier above swing (§2). It ships **`false`**, so nothing here changes and the engine still places no level from this pivot — the rows above stay display-only. Turning it on is a backtest exercise (§26, field "Use best-pivot candidate"), not a live settings change.
 
 **Display:** Renders under `MARKET STRUCTURE` below the swing pivot rows:
 
@@ -2494,6 +2512,7 @@ Every field maps to one engine setting (except the last three, which are backtes
 - **Stop max ×ATR** — `structural_levels.stop_max_atr_mult` (1.6). The stop **clamp ceiling**: placed stop = min(structural swing stop, this ×ATR). *Seen in:* ATR Entry Levels → the `STOP` label, `SWING_STOP` vs `STOP_CLAMPED`.
 - **Stop min floor ticks** — `structural_levels.stop_min_floor_ticks` (4). Degenerate-tightness floor ($0.5 a tick) — a structural stop tighter than this falls back to ATR. *Seen in:* ATR Entry Levels → `STOP` (rare).
 - **NY / LONDON / ASIA fallback ×ATR** — the `fallback_target_atr_mult` key under `structural_levels.sessions.<NAME>` (NY inherits 1.75, LONDON 2.0, ASIA 1.25). Per-session override of the fallback target multiplier. *Seen in:* the ATR Entry Levels header and `TARGET` on `FALLBACK_ATR` rows **in that session only**.
+- **Use best-pivot candidate** — `structural_levels.use_best_pivot_candidate` (0). **[v63]** A Boolean entered as `0` / `1`: switch the volume-weighted best 5m pivot into the placed-target candidate set — first tier above swing under the shipped ladder arbitration (§2, §10). **`0` is what the engine runs live**, so `0:1:1` is the whole useful sweep. *Seen in:* ATR Entry Levels → a `[PLACED @ … (BEST_PIVOT_5M)]` target row, a label that never appears on a live run because the key is off.
 - **Eval window (bars)** — *backtest only.* How many bars forward the replay walks to score each trade for the **EV ranking** (5/10/15, scaled by resolution). No app element.
 - **Constraints** — *backtest only.* Optional rules that prune grid combinations before they run. No app element.
 - **From / To** — *backtest only.* Limits which logged rows the replay covers (`yyyy-MM-dd`); blank = the whole book. No app element.
@@ -2523,6 +2542,8 @@ Several fields don't behave the way the surface reading suggests.
 **NY / LONDON / ASIA fallback ×ATR.** Session-scoped *and* fallback-only. NY's value touches only NY×1 rows, LONDON's only LONDON×3, etc. Watch what blank inherits: NY blank → the global 1.75, but **LONDON blank → 2.0 and ASIA blank → 1.25** (those overrides are live). To test "no session override," pin the field to the global — don't blank it. A corollary: sweeping the *global* `ATR target mult` moves NY only, because LONDON/ASIA are shielded by their own overrides.
 
 **Min net move % (after fees).** A fraction of **price**, not ATR (the composed floor `0.0008 ≈ $49.6` at $62k; auto-scales with BTC). Checked against the **placed** target, so a near swing target trips it just as a small ATR target does. Coupled to the geometry knobs: lower `MED %` to add trades and see the population barely grow, and the min-move gate is usually vetoing the small ones. **[v62]** Because fees are fixed during a sweep, a `min_net` grid IS a floor grid shifted by the round-trip cost — `0.0003:0.0009:0.0002` here is the old `0.0006:0.0012:0.0002` floor sweep.
+
+**Use best-pivot candidate.** A Boolean swept as an integer — `0:1:1` gives exactly two cells, off and on. It is the only field on this form whose `on` state the live engine has never run: every other field sweeps around a shipped number, this one sweeps around a shipped `false`. It is gated by the same **Target max ×ATR** bound as every other structural tier, so a `0:1:1` sweep that moves almost nothing may mean the pivot rarely qualified *inside the bound* rather than that the tier is inert — put **Target max ×ATR** in the same grid if you want to separate those two readings. Note also that the tier's priority depends on `structural_levels.target_arbitration_mode`, which this form does **not** expose: under the shipped ladder mode (`0`) the pivot outranks swing whenever it qualifies.
 
 **Eval window (bars).** Affects **only the EV ranking** used to pick a grid winner — not any placed level, verdict, or the failure matrix (which always reports all three windows). On a single-cell run it has no visible effect. Values are a bar-count budget scaled by resolution: 15 bars is 15 min on NY, 45 min on Asia/London.
 
@@ -2594,3 +2615,119 @@ For each row the overlay makes tradeable, the replay re-places stop and target u
 ### Interpretation
 
 A result worth acting on shows a **positive holdout EV without a DIVERGENT flag**, on a cell with a decent `n`, in a session whose population didn't shrink to get there. Anything else is a null result — which is itself valuable: sweeps of the ATR fallback geometry on the current book have consistently come back flat with divergent winners, which is the tool steering you off a phantom rather than handing you one. And a genuine winner is still only the *start* of a spec proposal, never a change in itself.
+
+---
+
+## 27. MIN NET MOVE % Row (SETTINGS & TOOLS) {#27-min-net-move-row}
+
+The one engine setting editable from the main window. Built by `BuildMinNetMoveRow` in `UI/MainForm_Layout.vb`. Like the EXIT GUARD strip (§23) it is a **live status element**, not a card/snapshot surface, so it sits outside the card ↔ snapshot parity rule.
+
+**Where:** SETTINGS & TOOLS card, third row — below LOG / AUTO-RUN and the EXIT GUARD strip, above TOOLS. Always visible: unlike the guard strip, it does not collapse when no position is declared.
+
+**Format:** a fixed label, an editable text box, and a derived read-out.
+
+```
+MIN NET MOVE % (after fees)  [0.0005]  → floor 0.0800%  (fee 0.0300%, maker_maker)
+```
+
+### What the box edits
+
+`scoring.trade_costs.min_net_move_pct`, and **only** that key. It is the trader-owned half of the composed minimum-move floor behind the `BELOW_MIN_MOVE` context tag (§1):
+
+```
+EffectiveMinMovePct = RoundTripFeePct(round_trip_style) + min_net_move_pct
+```
+
+- `min_net_move_pct` — your minimum acceptable move **after** execution costs, as a fraction of entry price. A risk preference. Default `0.0005` (0.05%).
+- `RoundTripFeePct` — derived from `maker_fee_bps`, `taker_fee_bps` and `round_trip_style` in the same `scoring.trade_costs` block: `maker_maker = 2 × maker`, `maker_taker = maker + taker`, `taker_taker = 2 × taker`, and any unrecognised style falls back to `maker_maker`. These are venue facts, **not editable from this row** — edit `settings.json` when Deribit changes its schedule.
+
+At the shipped defaults: `2 × 1.5 bps + 0.0005 = 0.0008`, i.e. 0.08% of price.
+
+### The derived read-out
+
+`→ floor <n>%  (fee <n>%, <style>)` — printed from `EffectiveMinMovePct` and `RoundTripFeePct` themselves, not re-derived in the UI. The number on screen therefore cannot drift from the number the Step 5c gate uses.
+
+### Editing
+
+| Action | Result |
+|---|---|
+| Type a value, then **Enter** or click away | Validated, then saved |
+| **Escape** | Reverts the box to the live setting; nothing is written |
+| Value outside `0 … 0.01`, or unparseable | Box turns red, read-out shows `→ invalid (expected 0 … 0.01)`. **Not saved and not reverted** — the bad text is left in place for you to correct |
+| Value equal to the current setting | No file write at all |
+| Save throws | Box turns red, read-out shows `→ save failed: <message>` |
+
+A successful save is an **operational save** — `SettingsLoader.Save(…, bumpVersion:=False)`. The settings `version` does not move and **no `change_log` entry is appended**, because a risk-preference turn is not a feature version; only `last_modified` is refreshed.
+
+**When it takes effect:** the next analysis run, via the normal `SettingsLoader` hot-reload. No restart. The row is also re-read at the end of every run (`RefreshMinNetMoveRow`, called from `UI/MainForm_Analysis.vb`), so a **file-side** edit to `scoring.trade_costs` — a Deribit fee-schedule change, for instance — shows its new composed floor without a restart either.
+
+### Interpretation
+
+Raise it to demand more room before the engine will call a trade; lower it to let tighter setups through. Because it is a fraction of **price**, not of ATR, it auto-scales with BTC — `0.0005` is ≈ $31 at $62k and needs no recalibration as price moves. The effect to watch is §1's `BELOW_MIN_MOVE` context tag: that is the gate this knob moves, and only the **placed** target is measured against it, so a near structural target trips it exactly as a small ATR fallback target does.
+
+The whole `scoring.trade_costs.` prefix is **off the auto-tweaker surface** (HARD CONSTRAINT 26), so nothing but you or a file edit ever changes it. To test a value before committing to it, sweep the **Min net move % (after fees)** field in What-If Replay (§26) rather than turning the live knob — and note that because the fee half is fixed during a sweep, a `min_net` grid is a floor grid shifted by the round-trip cost.
+
+---
+
+## 28. BacktestRunner (offline CLI) {#28-backtestrunner}
+
+A console application — `tools/BacktestRunner/`, project `BacktestRunner.vbproj`, in the solution — that does the offline data work the WinForms app cannot: build a local historical store, replay the shipped pipeline over it, validate that replay against live rows, run the standard analysis report over an arbitrary CSV, and audit raw-trade capture health.
+
+It is **read-mostly and separate from the live engine**: it never writes `settings.json`, never places orders, and never touches the running app's `analysis_log.csv`. It reads a settings file (`--settings`, default `settings.json`) purely as input. It is host-agnostic (no WinForms), so it survives the planned Linux port.
+
+**Running it.** Build the solution, then run the exe from `tools/BacktestRunner/bin/Release/net8.0/` (or `bin/Debug/net8.0/`). It walks up from its own location to the directory holding `DeribitVerdictEngine.sln` and **sets that as the working directory**, so every relative path below — the store, `analysis_log.csv` — resolves against the repo root regardless of where you invoke it from.
+
+### Verbs
+
+```
+BacktestRunner fetch    --from yyyy-MM-dd --to yyyy-MM-dd
+BacktestRunner replay   --from yyyy-MM-dd --to yyyy-MM-dd
+                         [--settings <path>] [--out <path>] [--closed-bars]
+BacktestRunner validate --from yyyy-MM-dd[Thh:mm] --to yyyy-MM-dd[Thh:mm]
+                         --live <liveCsvPath> [--live2 <secondCsvPath>]
+                         [--replay <existingSyntheticCsv>] [--report <markdownOut>]
+                         [--settings <path>]
+BacktestRunner report   --csv <analysisLogCsv> [--settings <path>]
+BacktestRunner coverage --from yyyy-MM-dd --to yyyy-MM-dd
+                         [--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue]
+                         [--evidence-dir <dir>] [--store-dir <dir>]
+```
+
+`--from` / `--to` are **required by every verb except `report`**, are parsed as UTC, and `--to` must be strictly greater than `--from`. `report` derives its own range from the CSV's row timestamps, so the two flags are meaningless there.
+
+**`fetch`** — backfills the local historical store at `backtest_data/` from Deribit's public endpoints: 1m / 3m / 5m / 15m candles, raw trades (carrying the liquidation flag), and funding-rate history, one CSV per month per stream plus a `.state.json` of resumable cursors. It starts **20 hours before `--from`** so indicators have warm-up bars. Fetch-once: complete months are skipped on a re-run and a partial trade month resumes from its last stored timestamp. Paginated calls are spaced 200 ms apart.
+
+**`replay`** — runs the shipped scoring pipeline over the store for the range and writes a synthetic `analysis_log.csv`-shaped file (default `backtest_log_<yyyyMMdd_HHmmss>.csv`, or `--out`). Prints rows written, rows per session, rows per verdict, and the first three sample rows. `--closed-bars` drops the forming-bar stub and replays **closed bars only**; the console echoes which bar mode is active.
+
+**`validate`** — the honesty check on `replay`. It joins the synthetic rows to real logged rows over the same window and reports verdict-agreement and tier-agreement counts and percentages. `--live` is required; `--live2` joins a second live CSV (two collectors); `--replay` reuses an existing synthetic CSV instead of replaying again. Full markdown goes to `--report`, or to stdout when that is omitted.
+
+**`report`** — runs the shipped `analysis/AnalysisRunner` pipeline over any CSV and writes the standard markdown report plus summary CSV **beside the input file**, not into the repo root. This is how a pooled book (local plus collector rows concatenated externally) gets reported on; the in-app Analysis Report link (§18) is hardwired to the engine's own working-directory `analysis_log.csv` and cannot. It fetches forward-bar OHLC over the network, exactly as the in-app path does.
+
+**`coverage`** — audits raw-trade capture health against the store (spec: `docs/trade-store-coverage-report-proposal.md`). Read-only: it never fetches (except under `--verify-venue`) and never writes to the store. Every weekday UTC hour in range is classified and counted as one of **captured · DEFECT · trailing-edge · expected-missing · not-capturing · unknown-scope · out-of-scope-weekend**, alongside the longest observed trade gap against the `--gap-ms` threshold (default 300000, i.e. 300 s), the longest trailing-edge silence, and candle completeness at all four resolutions plus funding.
+
+- `--gap-ms <ms>` — the gap threshold, in milliseconds.
+- `--out <path>` — also write the full markdown report there (the console summary always prints).
+- `--strict` — exit `1` when any DEFECT hour exists. Without it the verb **always exits 0**, so it is safe to run interactively.
+- `--verify-venue` — adds the S0 venue diff over the last 24 hours of the range. This is the only part of `coverage` that touches the network; a failed fetch prints a warning and skips S0 rather than failing the run.
+- `--evidence-dir <dir>` — aim the store *and* all three evidence files (`analysis_log.csv`, `ws_health.log`, `capture_marker.log`) at a copy-back's `aws_fetch/<stamp>/` directory instead of the repo root.
+- `--store-dir <dir>` — override just the store, applied after `--evidence-dir`.
+
+Both directory flags are validated: a path that does not exist is an error, not a silent fall-through. Every `coverage` run — including a plain one — prints the **resolved** store and evidence paths with a tag saying which flag chose them, because this argument parser silently drops a value-taking flag whose value is missing, and an unnoticed `--evidence-dir` at the end of a line would otherwise audit the local store and report "0 captured hours, 0 DEFECT, exit 0" — which reads as clean rather than as not-run.
+
+### Exit codes
+
+| Verb | `0` | `1` |
+|---|---|---|
+| `fetch` | backfill completed | — |
+| `replay` | at least one row written | no rows written |
+| `validate` | at least one joined pair | no joined pairs, or `--live` missing |
+| `report` | markdown written over ≥ 1 row | CSV missing, `--csv` missing, or the forward-OHLC fetch failed so no markdown was written |
+| `coverage` | always, unless `--strict` | `--strict` **and** at least one DEFECT hour |
+
+Bad or missing arguments, an unknown subcommand, and any unhandled exception all exit `1`.
+
+### Interpretation
+
+`fetch` → `replay` → `validate` is the sequence that earns trust in a backtest: the replay is only as good as its agreement with rows the engine actually logged, and `validate` is the number that says so. Treat a low verdict-agreement figure as a reason to distrust the replay, not the engine.
+
+`coverage` answers a different question — not "is the engine right?" but "is the tape complete?" — and it is the check to run **before** any study that leans on the raw-trade store, because a DEFECT hour is silent everywhere else.

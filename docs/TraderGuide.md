@@ -394,6 +394,15 @@ Every time the engine runs, it prints its output in this order:
 - When the "best" pivot price differs from the most-recent swing being used as your target/stop, eyeball whether it's a stronger structural level worth referencing for partials.
 - Ratios above 2.0× are meaningful; under 1.5× the volume-weighting is barely differentiating from the most-recent pivot.
 
+**There is a switch for this, and it is off.** Since v63 the engine *can* place its target on this pivot instead of the most-recent swing — but the setting that does it (`use_best_pivot_candidate`) ships **off**, and nothing on your screen changes while it is off. It was built so the idea could be **backtested before anyone turns it on live**, not to change how the engine behaves. Until that study says otherwise, the pivot on this line is something for *you* to read, not something the engine acts on.
+
+If you do run the sweep — What-If Replay → **Use best-pivot candidate**, `0:1:1`, in this guide's §17 *Working with the App* — this is what switching it on does:
+
+- The pivot becomes the **first** choice of target, ahead of the swing, whenever it qualifies. It is a target candidate only; your stop is unaffected.
+- It qualifies on **which side of entry the price sits**, not on whether it was a high or a low. A *low* pivot above entry still counts as a long target — it is a level the market defended on volume, and that is the part that matters for placement.
+- It has to sit within the same reach bound as every other structural target (`Target max ×ATR`), so a far-away pivot is ignored rather than stretched to.
+- Because it moves where targets land, it can also pull some trades **under** the min-move floor and turn them into `BELOW_MIN_MOVE` — read the population-shift line, not just the hit rate.
+
 ---
 
 ## 11. Open Interest
@@ -738,6 +747,30 @@ Takes the runs already logged plus 1-minute price history, applies a hypothetica
 **Barriers are mid-price touches — no fills, no slippage, no queue.** Real execution is worse than any number here.
 
 Practical read: a result worth acting on has a **positive holdout EV, no DIVERGENT flag, a decent sample, and no shrunken population**. Everything else is a null result — which is still useful. Sweeps of the ATR fallback geometry on the current book keep coming back flat with divergent winners; that's the tool steering you off a phantom rather than handing you one.
+
+### BacktestRunner — the offline command-line tool
+
+**Where:** not in the app. It's a separate console program (`tools/BacktestRunner/`), built with the solution and run from a terminal. There is no button for it.
+
+Everything above works off runs the engine has *already logged*. BacktestRunner works off **raw market history** instead, so it can answer questions about periods the engine never watched — and it can check the tape itself for holes. It never writes settings, never places orders, and never touches the running app's log.
+
+**Five things it does:**
+
+| Verb | What it's for |
+|---|---|
+| `fetch` | Downloads BTC-PERPETUAL history — candles, raw trades with the liquidation flag, funding — into a local store. Downloads once; a re-run resumes rather than re-fetching. |
+| `replay` | Runs the real scoring pipeline over that history and produces the verdicts the engine *would* have called. |
+| `validate` | The honesty check on `replay`: joins those synthetic verdicts to real logged ones over the same hours and reports how often they agree. |
+| `report` | Runs the same Analysis Report you get from the status bar, but over **any** CSV — this is how you report on a pooled book (your box plus the collector, concatenated). |
+| `coverage` | Audits the raw-trade store for holes: which UTC hours are properly captured, which are defective, which the collector simply wasn't running for. |
+
+**How to use it, in order.** `fetch` → `replay` → `validate`. Don't skip `validate`. A replay you haven't agreement-checked is a story, not evidence — and the agreement number is the one that tells you whether to believe the rest. Low agreement means distrust the replay, not the engine.
+
+**`coverage` is the one to run before any study that leans on the tape.** A missing hour is silent everywhere else — the store just has fewer rows, and nothing complains. Run it, and read the DEFECT count first: those are hours the collector was supposed to have and doesn't. `not-capturing` and `out-of-scope-weekend` hours are expected and fine. Add `--verify-venue` to diff the last 24 hours against Deribit itself; that's the only part that goes to the network.
+
+**One trap worth knowing.** `coverage` exits `0` by default even when it finds defects — that's deliberate, so running it by hand never looks like a failure. It only fails the run if you pass `--strict`. So read the DEFECT line; don't read the exit code.
+
+**What it is not.** Same rule as What-If Replay: a promising backtest is evidence for a proposal, never a change in itself. And outcomes here are scored the same way the Analysis Report scores them — a wick **touching** the placed target or stop on a historical bar, with no fills, no slippage and no queue position. Real execution is worse than any number it prints.
 
 ---
 

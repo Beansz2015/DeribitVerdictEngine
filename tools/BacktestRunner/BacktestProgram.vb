@@ -17,7 +17,12 @@
 '                            [--evidence-dir <dir>] [--store-dir <dir>]
 '
 ' The `coverage` verb reports raw-trade capture health (docs/trade-store-coverage-report
-' -proposal.md): six classes per weekday UTC hour, S4 candle/funding completeness, and an
+' -proposal.md): SEVEN classes per weekday UTC hour, S4 candle/funding completeness, and an
+' [2026-09-07] "six" until now, and stale since the C1-coverage F1 build inserted
+' HourClass.TrailingEdge between Defect and ExpectedMissing (CoverageReport.vb:56-69).
+' Counted, not assumed: Captured · Defect · TrailingEdge · ExpectedMissing · NotCapturing ·
+' UnknownScope · OutOfScopeWeekend. Found by the G12 manual-authoring pass, which declined
+' to repeat the stale count into a user manual and surfaced it instead.
 ' optional S0 venue diff (--verify-venue, network). Read-only — never fetches (except S0)
 ' and never writes to the store. Reads analysis_log.csv / ws_health.log / capture_marker.log
 ' beside the store (CWD-relative, i.e. the repo root BacktestProgram already sets CWD to) if
