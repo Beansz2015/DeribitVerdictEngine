@@ -6,25 +6,39 @@
 
 ⚠ **All dates UTC.** `date -u` was run: **2026-09-06 16:43 UTC**, against a workstation clock reading 2026-09-07 (GMT+8).
 
-**Model + effort for a review of this:** **Sonnet, effort medium.** The judgment is all in the spec and was ruled; what remains is checking that seven cheap handles print what §1 says and that the parity argument's two halves both hold. **Escalate to Opus/high only if handle `H-1` or `H-7` disagrees** — either would mean the parity claim is wrong, which is the one claim in this build that cannot be repaired by a follow-up.
+**Model + effort for a review of this:** ⛔ **CORRECTED 2026-09-06 after the review — the original sizing was WRONG and the reason is `R-1`.** It read *"Sonnet, effort medium … escalate only if handle `H-1` or `H-7` disagrees."* ⚠ **That trigger could never fire: `H-1` was unrunnable, so it could not disagree with anything.** And a medium review following the old §1 literally would have skipped the parity check and stopped clean. **The actual review ran at Opus/high, and neither finding was reachable from the handle list** — `R-1` needed searching the tree for the instrument, `R-2` needed reading `OrderCheck.vbproj`'s linkage.
+
+**The corrected sizing: Opus, effort HIGH.** ⭐ **Not because the handles are hard — because a packet's blind spots are never in its own handle list, and this build's one irreplaceable claim (parity) sits exactly there.** Run `H-0`, then read what is NOT listed: the `.vbproj` linkage, and whether every instrument the packet cites still exists.
 
 ---
 
 ## 1. Ranked verification handles
 
-**Every handle below was RUN at `57b55f9` and the printed value pasted.** Ranked by how much of the build each covers.
+> ⛔⛔ **RE-RANKED 2026-09-06 after review finding `R-1`. The original ranking put `H-1` first and `H-1` IS NOT RE-RUNNABLE — its instrument was a scratchpad that was never committed.** A reviewer following the old §1 literally would have found the headline handle unexecutable, then read *"run both or neither"* and run **neither** — skipping the one acceptance item the spec called *"not a formality"*. **My error, and it is a ranking error, not a claim error: the parity conclusion is sound and was independently reproduced at review.** The rule it produced is now standing — see §3 and [`batch-review-packet-convention.md`](batch-review-packet-convention.md). *(Original ranking quoted at the foot of this section, per the quote-and-label convention.)*
 
-### ⭐ If you only run one, run `H-1`.
+**Every handle below was RUN at `57b55f9` and the printed value pasted.** ⛔ **Ranked by whether the READER can run it, then by coverage** — a check whose instrument does not survive the build is **evidence**, not a handle.
+
+### ⭐ If you only run one, run `H-0` — the parity triad. Every part of it survives in the tree.
 
 | # | Claim | Handle | Printed at `57b55f9` |
 |---|---|---|---|
-| **H-1** | Parity holds — no rendered string or colour moved | Rebuild the §3 instrument, run pre/post, `md5sum` both | `fbcafa201a26d45e8c8d72ab5923183a` **both sides**, 3706 bytes both |
-| **H-2** | The render code is untouched (parity's *other* half) | `git show --name-only --format="" HEAD \| grep -cE "MainForm_Render_Cards\|MainForm_PlaintextSnapshot\|ScoringEngine_Calculate_Scoring"` | **`0`** |
+| **H-0** | ⭐ **Parity holds** — the four surfaces are pure functions of `(r.SpreadBps, r.SpreadStatus)`, so identical field values into unchanged renderers **is** the proof | **(i)** `A65a` PASS — degenerate ⇒ `Nothing` / `"NORMAL"` · **(ii)** `A65b` PASS — locked ⇒ real `0.0` / `"TIGHT"` · **(iii)** `H-2` below — the render files are absent from the diff | **all three green**; `A65a`/`A65b` in the harness output, `H-2` = **`0`** |
+| **H-2** | The render code is untouched (`H-0`'s third leg) | `git show --name-only --format="" HEAD \| grep -cE "MainForm_Render_Cards\|MainForm_PlaintextSnapshot\|ScoringEngine_Calculate_Scoring"` | **`0`** |
 | **H-3** | Harness green at the right count | run `OrderCheck.dll`; `grep -cE "^PASS "` | **`332`** (`ALL PASS`, `FAIL` = `0`) |
 | **H-4** | `CalcSpread` is genuinely gone, not just unreferenced | `grep -rn "CalcSpread(" --include=*.vb . \| grep -v /obj/ \| grep -v /bin/ \| grep -v "CalcSpreadBps(" \| grep -vE ":[0-9]+:[[:space:]]*'" \| wc -l` | **`0`** |
 | **H-5** | **All five** guards return `Nothing` — the partial-conversion shape | `sed -n '/Public Shared Function CalcSpreadBps/,/^    End Function/p' Core/Indicators_OrderFlow.vb \| grep -c "Then Return Nothing"` | **`5`** |
 | **H-6** | The evaluator no longer reads the spread thresholds — **the point of the build** | `grep -c "Indicators\.Spread" LiveMicrostructureEvaluator.vb`, then the same against `f6a2c08` | **`0`** now · **`2`** at base |
 | **H-7** | Settings frozen | `git show --stat --format="" HEAD -- settings.json \| wc -l`; `sed -n '2p' settings.json` | **`0`** · `"version": 68` |
+
+### ⛔ `E-1` — BUILD-TIME EVIDENCE, **not a handle**. Not re-runnable.
+
+| # | What it is | Status |
+|---|---|---|
+| **E-1** | The pre/post parity capture over eight book shapes — `diff` clean, 3706 bytes both sides, MD5 `fbcafa201a26d45e8c8d72ab5923183a` both sides | ⛔ **NOT RE-RUNNABLE. The instrument was a scratchpad console project and was NEVER COMMITTED**, so this MD5 is unreproducible for good. It is a record of what the author observed at build time, not something a reviewer can confirm |
+
+⚠ **`E-1` is why `H-0` exists.** The capture is real and it is the strongest single piece of evidence in the build — it is also the one piece the reader cannot check. **`H-0` reaches the same conclusion by a route that survives in the tree**, which is what a handle has to do. **Do not cite `E-1` as verification; cite it as provenance.**
+
+⭐ **The reader loses nothing by using `H-0` instead.** `E-1` measured eight shapes; `A65a` and `A65b` pin the two that carry information — the degenerate book and the locked book, both `0.00` bps, classifying differently. The other six are identical under the defective implementation too and never discriminated anything.
 
 ### Notes on why these handles and not the obvious ones
 
@@ -34,7 +48,9 @@
 
 ⚠ **`H-5` is unanchored on purpose.** All five guards are VB's inline `If … Then Return` form, which a `^\s*Return` anchor misses entirely — CLAUDE.md's VB grep rule, and here the missed form *is* the one the claim is about.
 
-⭐ **`H-1` and `H-2` are one claim in two halves and neither is sufficient alone.** `H-1`'s instrument transcribes the two card bindings (they need WinForms and cannot be linked host-agnostically), so `H-1` alone rests on a transcription. `H-2` proves the real renderers did not move but says nothing about the values fed to them. **Run both or neither.**
+⭐ **Why parity needs more than one leg, and why `H-0` is a triad.** `E-1`'s instrument **transcribes** the two card bindings (they need WinForms and cannot be linked host-agnostically), so it never resolved a real `Color`; and `H-2` proves the renderers did not move but says nothing about the values fed to them. **Neither alone carries the claim.** `H-0` closes it from the other side: `A65a` and `A65b` pin the two field values on the shapes that discriminate, `H-2` pins the renderers, and the four surfaces read nothing else.
+
+> ⚠ **This paragraph originally read *"`H-1` and `H-2` are one claim in two halves … Run both or neither."*** — superseded by `R-1`. **With `H-1` unrunnable, "run both or neither" resolved to NEITHER**, which is worse than either half alone. **A conjunctive instruction inherits the runnability of its weakest term, and I did not check that when I wrote it.**
 
 ---
 
@@ -86,7 +102,19 @@ The commit edits `Core/Indicators_OrderFlow.vb`, which `verify-gate.ps1`'s `$eng
 
 **Both were corrected to `CalcSpreadBps`.** They are outside §4b's literal instruction and inside its intent — a comment naming a deleted method is the rot the split exists to prevent. **Recorded rather than quietly fixed** because the generalisation is worth having: a spec that says "delete the method" should say **"and grep the whole file for its name"**, not point at one comment block.
 
+⚠ **§4b.1's code block would not have compiled at 0 warnings as written — added 2026-09-06, and I should have flagged it the first time.** Its doc comment carries a **raw `<`** inside a `''' <summary>` block:
+
+```
+''' here instead would classify TIGHT (0.0 <= tight_threshold_bps) and render a book the
+```
+
+`'''` comments are **XML doc comments**, so a bare `<` opens a malformed element and the VB compiler emits an XML-doc parse warning. **Written as given, the build is not 0/0.** I escaped them (`&lt;=` at `Core/Indicators_OrderFlow.vb:579`, `&gt;=` at `:609-610`) and left the **plain `'` comment at `:620` raw**, where `<=` is just text and escaping it would be noise. **The rule is `'''` escapes, `'` does not.**
+
+⛔ **I fixed this silently at build time and did not record it, which was the wrong call** — a spec's code block is copied verbatim by the next implementer, and a defect nobody wrote down gets re-introduced. **A fix applied without a note is indistinguishable from a defect nobody noticed.** Recorded here on the reviewer's prompt.
+
 ⛔ **Nothing else in the spec was found wrong.** §2's map, §3's arithmetic, §5's three traps and §6's four input shapes all held on inspection. §3's arithmetic was independently **confirmed by measurement** before any code moved — see the batch summary §0.
+
+⛔ **And one thing wrong was in MY packet, not the spec: `R-1`.** The build's headline handle cited an instrument I had already discarded. **The generalisation is in §1's banner and is now a standing convention rule: rank handles by whether the READER can run them, and if an instrument is the sole cover for something, say so BEFORE throwing it away.** That one sentence in the batch summary §3.1 would have surfaced `R-2` without a reviewer.
 
 ### Where a constraint pair nearly conflicted
 
@@ -101,6 +129,10 @@ The commit edits `Core/Indicators_OrderFlow.vb`, which `verify-gate.ps1`'s `$eng
 ---
 
 ## 4. What I did not verify, and cannot
+
+> ⛔⛔ **THE ITEM THAT SHOULD HAVE LED THIS SECTION AND DID NOT — added 2026-09-06 after review finding `R-2`.** **The two call sites' `Nothing`-arm fallback constants are guarded by nothing, and I did not say so.** `UI/MainForm_Analysis.vb:423` is **structurally uncoverable** — `OrderCheck.vbproj` cannot link `UI/` (WinForms; measured: `LiveMicrostructureEvaluator.vb` matches `1`, `MainForm_Analysis.vb` matches `0`, `UI/` files linked `0`), so swapping its `0.0` for `-1.0` still prints **332**. `LiveMicrostructureEvaluator.vb:141` is **half-covered**: `A19a` asserts `snap.SpreadBps ≈ 2.0` on a healthy book, so the *value* arm is guarded, but the harness holds **exactly one `UpdateBook` call** (`Program.vb:2244`, a healthy book) and every other `Evaluate` runs with no book at all — **so no fixture reaches the fallback**. ⚠ **Both lines are CORRECT; this is an absent guard, EXPLICITLY ACCEPTED AS UNCOVERABLE.** Full record and disposition: batch summary **§8a**. ⛔ **No instrument is to be built now to close it** — that is how the F3 watch outlived its own instrument.
+>
+> ⭐ **Why I missed it, which is the transferable part:** the parity instrument *was* the cover for those two lines, and I deleted it without ever writing down that it was the sole cover. **State that before discarding an instrument, not after.**
 
 - ⛔ **The live app was never launched.** No verdict ran against a real Deribit order book. The parity proof is over **constructed** book shapes through the shipped composition, not over live traffic. **Nothing here says a degenerate book has ever actually reached `:422` in production** — the spec's §3.4 says the same and calls frequency unestablished.
 - ⛔ **The two card bindings' actual `Color` structs were not resolved.** `Theme.ACC_STRONG_LONG` / `ACC_SHORT` / `FG_TERTIARY` are compared as **token names**, because linking `MainForm_Render_Cards.vb` needs WinForms. `H-2` is what covers this gap, and it covers it by showing the file is untouched — **not** by evaluating the colours.

@@ -173,4 +173,35 @@ The new row is **settings-untouched, dated 2026-09-06**, so it satisfies the "ne
 
 **It is a one-line change with a real if small live-strip effect, and it deserves its own line in the record rather than a quiet tidy-up inside a refactor billed as zero-change.** Recorded in `trader-tick-queue.md`'s state banner and §0a.
 
+⭐ **RULED (a) at review, 2026-09-06 — SCHEDULE it, low priority, NOT bundled.** Queued as **`D3-RESIDUAL`** in [`trader-tick-queue.md`](trader-tick-queue.md) §2; **the trader picks the slot.** ⛔ **The justification is stronger than the one given above, and it is `UI/MainForm_LiveStrip.vb:221`:**
+
+```vb
+parts.Add(If(s.HasSpread, s.SpreadBps.ToString("0.0") & " bps", "-- bps"))
+```
+
+**`HasSpread` gates exactly whether a NUMBER or `-- bps` prints.** So on a zero-priced top of book the strip renders a **fabricated `0.0 bps`** where `-- bps` is the honest output. ⛔ **That is the same fabricated-measurement class `S2-2` existed to remove — cleared from four surfaces and left standing on a fifth.** That makes it consistency, not tidy-up. It stays **low** because a zero-priced top of book on Deribit BTC-PERP is a defensive guard, not a market state.
+
+---
+
+## 8a. ⛔ `R-2` — the fallback constants have no guard, and that is EXPLICITLY ACCEPTED AS UNCOVERABLE
+
+**Raised at review 2026-09-06. Re-measured here rather than transcribed.** ⚠ **Both lines are CORRECT. This is the ABSENCE OF A GUARD, not a bug — recorded so the next reader does not read it as an oversight.**
+
+Deleting the parity instrument (see `R-1`) removed the only thing that ever exercised the `Nothing` arm of the two call-site compositions:
+
+| Line | The unguarded expression | Why it cannot be covered |
+|---|---|---|
+| `UI/MainForm_Analysis.vb:423` | `r.SpreadBps = If(spreadBps.HasValue, spreadBps.Value, 0.0)` | ⛔ **STRUCTURALLY UNCOVERABLE.** `verify/ordercheck/OrderCheck.vbproj` **cannot link `UI/`** — it needs WinForms, and the harness is host-agnostic by design. **Measured: the `.vbproj` matches `LiveMicrostructureEvaluator.vb` `1` time and `MainForm_Analysis.vb` `0` times; `UI/` files linked = `0`.** Swap the `0.0` for `-1.0` and the harness still prints **332** |
+| `LiveMicrostructureEvaluator.vb:141` | `snap.SpreadBps = If(bps.HasValue, bps.Value, 0.0)` | ⚠ **Coverable in principle; the FALLBACK ARM is uncovered in fact** |
+
+⭐ **A correction to the finding as raised, in the build's favour.** The review recorded `:141` as simply *"uncovered"*. **Measured, it is half-covered and the half matters:** `A19a` drives the evaluator with a healthy book and **asserts `snap.SpreadBps ≈ 2.0`** (`Program.vb:2245-2251`), so the **value arm** of `:141` is genuinely guarded. What is unguarded is the **`, 0.0` fallback**.
+
+⛔ **And it cannot currently be reached: the harness contains exactly ONE `UpdateBook` call** — `Program.vb:2244`, `MakeBook(99990, 100010, 10, 1)`, a healthy book. **Every other `Evaluate` call runs against a `MarketState` with no book at all**, so `GetBook()` returns `Nothing`, the whole `If book IsNot Nothing` block is skipped, and `A19e` asserts `Not snap.HasSpread` off the field default rather than off the composition. **No fixture anywhere puts a degenerate-but-non-`Nothing` book into a `MarketState`.**
+
+⛔⛔ **DO NOT BUILD A PARITY INSTRUMENT NOW TO CLOSE THIS.** Ruled at review: **building tooling for a single use is how the F3 watch outlived its own instrument** ([`DeribitIndicatorProject.md`](DeribitIndicatorProject.md) §12, *"the F3 watch outlived its instrument"*). The right time is when something else needs the same rig.
+
+⭐ **`D3-RESIDUAL` closes half of this for free.** Its fix is `snap.HasSpread = bps.HasValue`, which forces a fixture driving the evaluator with a degenerate book — and that fixture puts `:141`'s fallback arm under coverage as a side effect. **`UI/MainForm_Analysis.vb:423` stays uncoverable regardless**, because the linkage boundary is architectural (the Linux-port host-agnostic constraint) and is not worth breaking for one constant.
+
+---
+
 Everything else the spec's §8 listed as out of scope stays out of scope and untouched.
