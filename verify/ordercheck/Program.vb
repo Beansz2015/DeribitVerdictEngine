@@ -613,6 +613,8 @@ Module Program
 
         ' [weekday filter — surface 2 of 3, LivePerformanceTracker]
         A67a_PerfStripExcludesWeekendRows()
+        ' [weekday filter — surface 3 of 3, the shared offline predicate]
+        A67b_IsWeekdayRowGuardsTheMinValueTrap()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -12593,6 +12595,42 @@ Module Program
               agg.SuccessCount = 1 AndAlso agg.FailureCount = 1,
               String.Format("TotalRange={0} (unfiltered would be 4) WeekendExcluded={1} success={2} failure={3}",
                             agg.TotalRange, agg.WeekendExcluded, agg.SuccessCount, agg.FailureCount))
+    End Sub
+
+    ' ══ A67b — the shared offline weekday predicate ═══════════════════════════════════
+    ' weekday-scope-ruling-2026-08-03.md §2, surface 3 of 3 (AnalysisRunner + WhatIfRunner).
+    '
+    ' ⛔ THE MinValue CASE IS THE WHOLE POINT AND IT IS COUNTER-INTUITIVE:
+    ' DateTime.MinValue.DayOfWeek is MONDAY. A naive `dow <> Saturday AndAlso dow <> Sunday`
+    ' therefore ADMITS every unparsed timestamp as a valid weekday row. Both pre-existing
+    ' implementations carry the guard for that reason (AutoTweakerCore.MatchesWeekday and
+    ' CsvFeatureBuilder.vb:198); extracting one predicate is what stops copies four and five
+    ' being written without it, and this fixture is what stops the guard being "simplified"
+    ' back out of the shared one.
+    '
+    ' ⚠ 2026-01-03 Sat / 2026-01-04 Sun / 2026-01-05 Mon / 2026-01-09 Fri — verified against
+    ' the calendar, not eyeballed. Friday and Monday are BOTH included deliberately: they are
+    ' the two days adjacent to the weekend, so an off-by-one in the day comparison shows up
+    ' here rather than passing on a midweek-only sample.
+    Private Sub A67b_IsWeekdayRowGuardsTheMinValueTrap()
+        Dim sat As New DateTime(2026, 1, 3, 12, 0, 0, DateTimeKind.Utc)
+        Dim sun As New DateTime(2026, 1, 4, 12, 0, 0, DateTimeKind.Utc)
+        Dim mon As New DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc)
+        Dim fri As New DateTime(2026, 1, 9, 12, 0, 0, DateTimeKind.Utc)
+
+        Dim okWeekdays As Boolean = ForwardWindowJoiner.IsWeekdayRow(mon) AndAlso
+                                    ForwardWindowJoiner.IsWeekdayRow(fri)
+        Dim okWeekend As Boolean = (Not ForwardWindowJoiner.IsWeekdayRow(sat)) AndAlso
+                                   (Not ForwardWindowJoiner.IsWeekdayRow(sun))
+        ' The trap: MinValue must be REJECTED even though its DayOfWeek reads Monday.
+        Dim okMinValue As Boolean = Not ForwardWindowJoiner.IsWeekdayRow(DateTime.MinValue)
+
+        Check("A67b IsWeekdayRow — Mon/Fri in, Sat/Sun out, and MinValue REJECTED despite its DayOfWeek being Monday",
+              okWeekdays AndAlso okWeekend AndAlso okMinValue,
+              String.Format("mon={0} fri={1} sat={2} sun={3} minValue={4} (MinValue.DayOfWeek={5})",
+                            ForwardWindowJoiner.IsWeekdayRow(mon), ForwardWindowJoiner.IsWeekdayRow(fri),
+                            ForwardWindowJoiner.IsWeekdayRow(sat), ForwardWindowJoiner.IsWeekdayRow(sun),
+                            ForwardWindowJoiner.IsWeekdayRow(DateTime.MinValue), DateTime.MinValue.DayOfWeek))
     End Sub
 
 End Module

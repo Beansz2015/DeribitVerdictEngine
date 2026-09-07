@@ -10,6 +10,15 @@ Public Class AnalysisReport
     ' Summary (GLOBAL — counts span all populations)
     ' -------------------------------------------------------------------
     Public Property TotalRows           As Integer
+
+    ''' <summary>
+    ''' [weekday filter, 2026-09-07] Rows dropped from this report because they fell on a
+    ''' Saturday or Sunday (UTC). Counted rather than silently discarded — the same discipline
+    ''' as CeilingAudit's stats.WeekendExcluded and the perf strip's WindowAggregate counter.
+    ''' ⚠ TotalRows is the POST-filter count, so TotalRows + WeekendExcluded = rows loaded.
+    ''' A report that silently shrank would otherwise be indistinguishable from a short book.
+    ''' </summary>
+    Public Property WeekendExcluded     As Integer
     Public Property VerdictCounts       As New Dictionary(Of String, Integer)()
 
     ' -------------------------------------------------------------------

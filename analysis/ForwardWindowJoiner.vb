@@ -104,6 +104,37 @@ Public Class ForwardWindowJoiner
     ' Load and parse all rows from a v0.4 analysis_log.csv.
     ' ForwardBars is NOT populated here — call PopulateForwardBars separately
     ' after DeribitOhlcFetcher.FetchOhlcRange completes.
+    ''' <summary>
+    ''' True when a row's timestamp falls Monday–Friday (UTC). The ONE weekday predicate for
+    ''' the offline analysis surfaces — `analysis/` is linked by AutoTweaker, BacktestRunner,
+    ''' CeilingAudit, WhatIfRunner and the harness, so every consumer can reach it here.
+    '''
+    ''' [weekday filter, 2026-09-07 — weekday-scope-ruling-2026-08-03.md §2, surface 3 of 3]
+    ''' "The trader does not trade weekends. Therefore weekend rows are out of scope for
+    ''' anything that JUDGES, TUNES, or REPORTS ON engine performance."
+    '''
+    ''' ⛔ THE MinValue GUARD IS NOT DEFENSIVE PADDING — IT IS THE TRAP. DateTime.MinValue
+    ''' .DayOfWeek is MONDAY, so an unparsed timestamp sails through a naive day check as a
+    ''' valid weekday row. Both pre-existing implementations carry this guard for exactly that
+    ''' reason (AutoTweakerCore.MatchesWeekday, CsvFeatureBuilder.vb:198), and extracting the
+    ''' predicate here is what stops the fourth and fifth copies being written without it.
+    '''
+    ''' ⚠ UTC day-of-week, matching the ruling's named precedent (CsvFeatureBuilder.vb:199-200,
+    ''' "the existing precedent to copy") and the tweaker. Any surface that scoped this on a
+    ''' local calendar instead would disagree with both about which rows exist.
+    '''
+    ''' ⚠ NOT applied inside Load(). Load has five callers — AutoTweaker (which filters
+    ''' downstream via its own MatchesWeekday, pinned by A59a-e), WhatIfRunner, AnalysisRunner
+    ''' and three fixtures, one of which (A46a) asserts an exact row count. Filtering inside a
+    ''' shared loader would change its contract for callers that never asked. The established
+    ''' pattern, set by surface 1, is LOAD THEN FILTER at each consumer.
+    ''' </summary>
+    Public Shared Function IsWeekdayRow(ts As DateTime) As Boolean
+        If ts = DateTime.MinValue Then Return False
+        Dim dow As DayOfWeek = ts.DayOfWeek
+        Return dow <> DayOfWeek.Saturday AndAlso dow <> DayOfWeek.Sunday
+    End Function
+
     Public Shared Function Load(csvPath As String) As List(Of CsvRow)
         Dim lines As String() = File.ReadAllLines(csvPath)
         If lines.Length <= 1 Then Return New List(Of CsvRow)()

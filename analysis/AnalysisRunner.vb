@@ -29,7 +29,21 @@ Public Class AnalysisRunner
         Dim report As New AnalysisReport()
 
         ' ── 1. Load CSV rows ────────────────────────────────────────────────────────
-        Dim rows As List(Of CsvRow) = ForwardWindowJoiner.Load(csvPath)
+        Dim loadedRows As List(Of CsvRow) = ForwardWindowJoiner.Load(csvPath)
+
+        ' [weekday filter, 2026-09-07 — weekday-scope-ruling §2, surface 3 of 3]
+        ' The report JUDGES engine performance, so weekend rows are out of scope. Until now
+        ' this was "correct only because every published derivation pre-filtered by hand"
+        ' (the ruling's own words) — nothing enforced it, and a `report --csv` on an
+        ' unfiltered book silently included Saturday and Sunday.
+        ' ⚠ Filtered HERE, not inside ForwardWindowJoiner.Load: Load has five callers and
+        ' A46a asserts an exact row count against it. Load-then-filter is the pattern
+        ' surface 1 (AutoTweaker) set.
+        ' ⚠ The filter runs BEFORE report.TotalRows and before the verdict counts, so every
+        ' figure the report carries is weekday-scoped rather than only the matrix.
+        Dim rows As List(Of CsvRow) = loadedRows.Where(
+            Function(r) ForwardWindowJoiner.IsWeekdayRow(r.Timestamp)).ToList()
+        report.WeekendExcluded = loadedRows.Count - rows.Count
         report.TotalRows = rows.Count
 
         ' Verdict counts (over all rows regardless of forward-data availability).

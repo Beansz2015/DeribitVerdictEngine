@@ -85,11 +85,28 @@ Public Class WhatIfProgram
         Dim allRows As List(Of CsvRow) = ForwardWindowJoiner.Load(csvPath)
         Dim toEff As DateTime = If(toDate <> DateTime.MaxValue AndAlso toDate.TimeOfDay = TimeSpan.Zero,
                                    toDate.AddDays(1), toDate)
-        Dim inSpan = allRows.Where(Function(r) r.HasPlaced AndAlso r.MaxScore > 0 AndAlso
+        ' [weekday filter, 2026-09-07 — weekday-scope-ruling §2, surface 3 of 3]
+        ' An overlay sweep SCORES these rows, so weekend sessions are out of scope: without
+        ' this an overlay could be picked on Saturday tape the trader never trades. The
+        ' ruling's words — "correct only because every published derivation pre-filtered by
+        ' hand. Nothing enforces it."
+        ' ⚠ IsWeekdayRow carries the MinValue guard too (DateTime.MinValue.DayOfWeek is
+        ' MONDAY), so the existing `r.Timestamp <> DateTime.MinValue` term below is now
+        ' redundant — kept deliberately, because it states the span filter's own precondition
+        ' and removing it would couple this chain to a guard that lives in another file.
+        Dim weekdayRows = allRows.Where(Function(r) ForwardWindowJoiner.IsWeekdayRow(r.Timestamp)).ToList()
+        Dim weekendExcluded As Integer = allRows.Count - weekdayRows.Count
+        Dim inSpan = weekdayRows.Where(Function(r) r.HasPlaced AndAlso r.MaxScore > 0 AndAlso
                                        r.Timestamp <> DateTime.MinValue AndAlso
                                        r.Timestamp >= fromDate AndAlso r.Timestamp < toEff).ToList()
         Dim pocExcluded As Integer = inSpan.Where(Function(r) String.Equals(r.TargetCapReason, "poc", StringComparison.OrdinalIgnoreCase)).Count()
         Dim rows = inSpan.Where(Function(r) Not String.Equals(r.TargetCapReason, "poc", StringComparison.OrdinalIgnoreCase)).ToList()
+        ' Report the weekend drop the same way pocExcluded is reported — a sweep whose
+        ' population silently shrank is indistinguishable from a short book.
+        If weekendExcluded > 0 Then
+            Console.WriteLine(String.Format("[WhatIf] Weekend rows excluded: {0} (weekday-scope ruling 2026-08-03).",
+                                            weekendExcluded))
+        End If
 
         If rows.Count = 0 Then
             Console.Error.WriteLine("[WhatIf] No eligible v0.8+ rows in span " &
