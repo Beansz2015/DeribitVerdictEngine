@@ -1729,6 +1729,20 @@ Partial Public Class MainForm
                 End If
             End If
 
+            ' [weekday filter, 2026-09-07] Same shape as the WEAK line above, and for the same
+            ' reason: the strip now excludes Saturday/Sunday rows (weekday-scope-ruling
+            ' 2026-08-03 — "the trader does not trade weekends"), and a count that is dropped
+            ' without being shown is a silent hole. This line is what makes AggregateRange's
+            ' WeekendExcluded counter honest; without it the counter would be computed and
+            ' discarded. No rate is offered — weekend rows are OUT OF SCOPE, not a comparison
+            ' population, and rendering a weekend success rate would invite exactly the reading
+            ' the ruling exists to prevent. Only the dropped COUNT is shown, so a suppressed or
+            ' shrunken cell is explicable rather than mysterious.
+            If w IsNot Nothing AndAlso w.WeekendExcluded > 0 Then
+                tip &= Environment.NewLine &
+                       String.Format("Weekend excl.: n={0}", w.WeekendExcluded)
+            End If
+
             lbl.Text      = text
             lbl.ForeColor = fgColor
             lbl.Visible   = True

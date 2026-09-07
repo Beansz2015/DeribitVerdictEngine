@@ -68,6 +68,20 @@ Public Class LivePerformanceTracker
         Public Property WeakFailureCount As Integer
 
         ''' <summary>
+        ''' [weekday filter, 2026-09-07] Rows dropped because they fell on a Saturday or
+        ''' Sunday (UTC). Counted rather than silently discarded — the same discipline as
+        ''' the WEAK counters above and as CeilingAudit's own stats.WeekendExcluded, which
+        ''' the 2026-08-03 ruling names as "the existing precedent to copy".
+        '''
+        ''' ⚠ Weekend rows are excluded from TotalRange too, not just from the
+        ''' success/failure denominator — unlike the WEAK and NO_DATA exclusions, which
+        ''' stay inside TotalRange because those rows WERE predictions the engine made on
+        ''' a session the trader trades. A weekend row is out of scope entirely, so
+        ''' counting it as a "prediction evaluated" in the tooltip would misreport n.
+        ''' </summary>
+        Public Property WeekendExcluded As Integer
+
+        ''' <summary>
         ''' True when this aggregate's range terminates at "now" (i.e., the
         ''' block is currently running or partially-running). False when the
         ''' range is fully in the past (a completed historical block —
@@ -719,6 +733,34 @@ Public Class LivePerformanceTracker
         For Each e In entries
             If e.Timestamp < rangeStartUtc OrElse e.Timestamp > rangeEndUtc Then Continue For
             If resolutionFilter > 0 AndAlso e.ExecResolution <> resolutionFilter Then Continue For
+            ' [weekday filter, 2026-09-07 — weekday-scope-ruling-2026-08-03.md §2, surface 2 of 3]
+            ' "The trader does not trade weekends. Therefore weekend rows are out of scope for
+            ' anything that JUDGES, TUNES, or REPORTS ON engine performance." The perf strip's
+            ' 3-day and week windows were mixing in sessions never traded.
+            '
+            ' ⛔ MinValue guard FIRST: DateTime.MinValue.DayOfWeek is MONDAY, so an unparsed
+            ' timestamp would otherwise sail through as a valid weekday row. Both existing
+            ' implementations carry this guard for that reason (AutoTweakerCore.MatchesWeekday,
+            ' CsvFeatureBuilder.vb:198) and it is not optional.
+            '
+            ' ⚠ UTC day-of-week, deliberately, NOT the UTC+8 display calendar. The ruling's
+            ' named precedent (CsvFeatureBuilder.vb:199-200) reads the raw UTC timestamp, and so
+            ' does the tweaker; scoping this surface differently would make the strip's
+            ' population disagree with the tweaker's and the ceiling audit's, which is the
+            ' two-surfaces-disagree class the ruling exists to close. CONSEQUENCE, stated: the
+            ' display WINDOWS are UTC+8-anchored, so the trader's Monday-morning window opens on
+            ' Sunday 16:00 UTC and that portion is now excluded. The window defines the RANGE;
+            ' the filter defines the SCOPE. They are different questions and only scope moved.
+            '
+            ' STORAGE IS UNTOUCHED — the eval cache keeps weekend rows exactly as before, no
+            ' rotation, fully reversible. This is a display-time filter, the same seam and the
+            ' same discipline as the E2a WEAK exclusion twelve lines below.
+            If e.Timestamp = DateTime.MinValue Then Continue For
+            Dim dow As DayOfWeek = e.Timestamp.DayOfWeek
+            If dow = DayOfWeek.Saturday OrElse dow = DayOfWeek.Sunday Then
+                agg.WeekendExcluded += 1
+                Continue For
+            End If
             agg.TotalRange += 1
             ' [F4 no-data outcome] NO_DATA is treated like PENDING/EXCLUDED — counted
             ' in TotalRange (the tooltip sees it) but NOT in the success/failure denominator

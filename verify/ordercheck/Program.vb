@@ -611,6 +611,9 @@ Module Program
         ' [F3 — the repair User-Agent must name the running host, not a hardcoded foreign one]
         A66c_UserAgentNamesTheRunningHost()
 
+        ' [weekday filter — surface 2 of 3, LivePerformanceTracker]
+        A67a_PerfStripExcludesWeekendRows()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -12540,6 +12543,56 @@ Module Program
         Check("A66c repair User-Agent names the RUNNING host, not a hardcoded foreign one",
               ua = expected AndAlso ua <> "DeribitBacktestRunner/1.0",
               String.Format("ua={0} expected={1} entryAssembly={2}", ua, expected, entry))
+    End Sub
+
+    ' ══ A67a — the perf strip must not report on sessions the trader never trades ══════
+    ' weekday-scope-ruling-2026-08-03.md §2, surface 2 of 3 (AutoTweaker was 1, shipped
+    ' 2026-08-25; AnalysisRunner/WhatIfRunner is 3, still open).
+    '
+    ' ⛔ THIS FIXTURE IS REQUIRED BECAUSE THE EXISTING ONES PROVE NOTHING HERE. A14f, A33b
+    ' and the E2a fixture all drive AggregateRange, but their data sits on 2026-07-20
+    ' (a MONDAY) and 2026-01-01 (a THURSDAY) — measured, not assumed. Every one of them
+    ' passes IDENTICALLY with the weekday filter present or absent, so none of them
+    ' observes this change. That they survive is luck, not coverage.
+    '
+    ' ⛔ THE LOAD-BEARING ASSERTION IS TotalRange. Without the filter it is 4; with it, 2.
+    ' A fixture asserting only the success rate would MISS a filter that excluded rows from
+    ' the rate but left them inflating the tooltip's "predictions evaluated" count.
+    '
+    ' Dates verified against the calendar, not eyeballed: 2026-07-18 Sat · 2026-07-19 Sun ·
+    ' 2026-07-20 Mon. Two weekday rows, two weekend rows, one range covering all four.
+    '
+    ' ⚠ "ADVERSE_HIT" is a REAL failure outcome and "FAILURE" is NOT one. AggregateRange's
+    ' Select Case takes SUCCESS / ADVERSE_HIT / AMBIGUOUS / WINDOW_EXPIRED, and an
+    ' unrecognised string falls through BOTH arms silently — it is counted in TotalRange
+    ' and in neither numerator. This fixture's first draft used "FAILURE" and read
+    ' failure=0 against an expected 1; the assertion caught it, review would not have.
+    Private Sub A67a_PerfStripExcludesWeekendRows()
+        Dim sat As New DateTime(2026, 7, 18, 12, 0, 0, DateTimeKind.Utc)   ' Saturday
+        Dim sun As New DateTime(2026, 7, 19, 12, 0, 0, DateTimeKind.Utc)   ' Sunday
+        Dim mon As New DateTime(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc)   ' Monday
+
+        Dim entries As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = mon, .Verdict = "STRONG LONG", .EvalOutcome = "SUCCESS", .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = mon.AddMinutes(1), .Verdict = "STRONG LONG", .EvalOutcome = "ADVERSE_HIT", .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = sat, .Verdict = "STRONG LONG", .EvalOutcome = "SUCCESS", .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = sun, .Verdict = "STRONG LONG", .EvalOutcome = "SUCCESS", .ExecResolution = 1}
+        }
+
+        Dim agg = LivePerformanceTracker.AggregateRange(
+            entries, sat.AddDays(-1), mon.AddDays(1), 0)
+
+        ' Weekday rows only: 1 SUCCESS + 1 FAILURE = 50 %. Both weekend SUCCESSes are gone —
+        ' unfiltered they would read 3/4 = 75 %, so the rate moves as well as the count.
+        Check("A67a perf strip excludes weekend rows — TotalRange counts weekdays only, and WeekendExcluded reports what was dropped",
+              agg.TotalRange = 2 AndAlso agg.WeekendExcluded = 2 AndAlso
+              agg.SuccessCount = 1 AndAlso agg.FailureCount = 1,
+              String.Format("TotalRange={0} (unfiltered would be 4) WeekendExcluded={1} success={2} failure={3}",
+                            agg.TotalRange, agg.WeekendExcluded, agg.SuccessCount, agg.FailureCount))
     End Sub
 
 End Module
