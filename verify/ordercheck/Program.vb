@@ -604,6 +604,9 @@ Module Program
         A65c_WideArmIsTestedFirst()
         A65d_BoundaryInclusivity()
 
+        ' [D3-RESIDUAL — the live strip must not print a fabricated spread]
+        A66a_DegenerateBookGivesNoSpreadOnTheStrip()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -12410,6 +12413,56 @@ Module Program
               atWide = "WIDE" AndAlso atTight = "TIGHT" AndAlso inMiddle = "NORMAL",
               String.Format("wide={0} -> {1} | tight={2} -> {3} | between={4} -> {5}",
                             wide, atWide, tight, atTight, between, inMiddle))
+    End Sub
+
+    ' ══ A66a — D3-RESIDUAL: the live strip must not print a fabricated spread ═════════
+    ' docs/trader-tick-queue.md §2 D3-RESIDUAL, ruled Q-1 (a) 2026-09-06.
+    '
+    ' ⛔⛔ THE LOAD-BEARING CASE IS CASE 2, AND ONLY CASE 2. Before this change,
+    ' snap.HasSpread read the retired HasTopOfBook, which tested 3 conditions where
+    ' CalcSpreadBps tests 6 -- it omitted bestBid > 0, bestAsk > 0, mid > 0. So:
+    '   case 1 (empty ask ladder)   -- HasTopOfBook False, bps.HasValue False -> NO CHANGE
+    '   case 2 (zero-priced bid)    -- HasTopOfBook TRUE,  bps.HasValue False -> THE CHANGE
+    ' ⚠ A fixture built only from case 1 would pass IDENTICALLY before and after and read as
+    ' coverage while observing nothing. Case 1 is here to prove the honest shape did not
+    ' regress; case 2 is the fixture's reason to exist. Naming which input carries the
+    ' assertion is the A62f / A63a lesson.
+    '
+    ' ⭐ WHY IT MATTERS: UI/MainForm_LiveStrip.vb renders
+    '     parts.Add(If(s.HasSpread, s.SpreadBps.ToString("0.0") & " bps", "-- bps"))
+    ' so HasSpread gates EXACTLY whether a number or "-- bps" prints. With the old predicate a
+    ' zero-priced top of book printed "0.0 bps" -- a measurement the engine never made.
+    '
+    ' ⭐ This is also the FIRST fixture in the tree to put a degenerate-but-non-Nothing book
+    ' into a MarketState. It is the harness's SECOND UpdateBook call; the absence of one is
+    ' precisely why finding R-2 recorded this composition as unreachable
+    ' (docs/s2-2-calcspread-split-spec-back.md §5.4). A19e reaches the evaluator with an EMPTY
+    ' MarketState, so GetBook() returns Nothing and the whole spread block is skipped -- a
+    ' different path that cannot observe any of this.
+    Private Sub A66a_DegenerateBookGivesNoSpreadOnTheStrip()
+        Dim cfg As New EngineSettings()
+
+        ' Case 1 — empty ASK ladder. False under BOTH predicates; a non-regression check.
+        Dim stateEmpty As New MarketState()
+        Dim bEmptyAsks As New OrderBookSnapshot()
+        bEmptyAsks.Bids.Add((100000.0, 10.0))
+        stateEmpty.UpdateBook(bEmptyAsks, DateTime.UtcNow)
+        Dim snapEmpty = LiveMicrostructureEvaluator.Evaluate(stateEmpty, Nothing, cfg)
+
+        ' Case 2 — ⛔ THE ONE THAT MOVES. Both ladders populated, so the retired HasTopOfBook
+        ' returned True; bestBid = 0 fails CalcSpreadBps's price test, so bps.HasValue is False.
+        Dim stateZero As New MarketState()
+        Dim bZeroBid As New OrderBookSnapshot()
+        bZeroBid.Bids.Add((0.0, 10.0))
+        bZeroBid.Asks.Add((100010.0, 10.0))
+        stateZero.UpdateBook(bZeroBid, DateTime.UtcNow)
+        Dim snapZero = LiveMicrostructureEvaluator.Evaluate(stateZero, Nothing, cfg)
+
+        Check("A66a degenerate book -> strip shows NO spread; the zero-priced top of book (case 2) is the one that moves",
+              Not snapEmpty.HasSpread AndAlso Math.Abs(snapEmpty.SpreadBps) < 0.0000001 AndAlso
+              Not snapZero.HasSpread AndAlso Math.Abs(snapZero.SpreadBps) < 0.0000001,
+              String.Format("emptyAsks: hasSpread={0} bps={1} | zeroBid: hasSpread={2} bps={3} (case 2 True = the fabricated ""0.0 bps"" is back)",
+                            snapEmpty.HasSpread, snapEmpty.SpreadBps, snapZero.HasSpread, snapZero.SpreadBps))
     End Sub
 
 End Module

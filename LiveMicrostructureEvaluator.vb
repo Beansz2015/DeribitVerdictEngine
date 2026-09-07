@@ -132,13 +132,23 @@ Public NotInheritable Class LiveMicrostructureEvaluator
                 ' Spread -- CalcSpreadBps is THRESHOLD-FREE by construction (S2-2), so this evaluator no
                 ' longer references indicators.spread.* at all and cannot diverge from MainForm_Analysis if
                 ' the auto-tweaker retunes them. The claim the old comment made in prose is now the signature.
-                ' ⚠ snap.HasSpread deliberately STAYS on HasTopOfBook (D-3 ruled (b)): the two predicates are
-                ' NOT equivalent -- HasTopOfBook tests 3 conditions, CalcSpreadBps tests 6 (it adds the three
-                ' price tests). Collapsing them would change live-strip behaviour on a zero-priced top of
-                ' book. That divergence is a NAMED RESIDUAL, not an oversight -- see the proposal §8.
+                '
+                ' [D3-RESIDUAL, 2026-09-07] snap.HasSpread now reads bps.HasValue, NOT the retired
+                ' HasTopOfBook. S2-2's D-3 ruled (b) and deliberately left them diverging, because S2-2
+                ' claimed zero behaviour change and this is a real (if tiny) live-strip change. Q-1 then
+                ' ruled (a): make the move on its own slot. HasTopOfBook tested 3 conditions where
+                ' CalcSpreadBps tests 6 -- it omitted bestBid > 0, bestAsk > 0 and mid > 0.
+                ' ⛔ WHAT THAT COST: MainForm_LiveStrip.vb renders `If(s.HasSpread, bps & " bps", "-- bps")`,
+                ' so HasSpread gates EXACTLY whether a number or "-- bps" prints. On a zero-priced top of
+                ' book the strip printed a FABRICATED "0.0 bps" -- a measurement the engine never made --
+                ' where "-- bps" is the honest output. That is the same fabricated-measurement class S2-2
+                ' existed to remove from four surfaces (see the absorption row, DeribitIndicatorProject.md
+                ' §15: "a zero would be a fabricated measurement"); it was simply left standing on a fifth.
+                ' ⭐ Reading HasValue makes the flag and the number ONE decision instead of two that agree
+                ' by coincidence -- the same one-seam reasoning as CalcSpreadBps itself.
                 Dim bps As Double? = IndicatorEngine.CalcSpreadBps(book)
                 snap.SpreadBps = If(bps.HasValue, bps.Value, 0.0)
-                snap.HasSpread = HasTopOfBook(book)
+                snap.HasSpread = bps.HasValue
 
                 ' Top-book imbalance — the CalcOFI basis (cfg book depth + dominance ratios).
                 Dim ratio As Double = 1, sig As String = "BALANCED"
@@ -297,10 +307,11 @@ Public NotInheritable Class LiveMicrostructureEvaluator
         snap.UsdPerSec = usd / CDbl(w)
     End Sub
 
-    Private Shared Function HasTopOfBook(book As OrderBookSnapshot) As Boolean
-        Return book IsNot Nothing AndAlso
-               book.Bids IsNot Nothing AndAlso book.Bids.Count > 0 AndAlso
-               book.Asks IsNot Nothing AndAlso book.Asks.Count > 0
-    End Function
+    ' [D3-RESIDUAL, 2026-09-07] HasTopOfBook DELETED here. It had exactly ONE call site --
+    ' snap.HasSpread -- and that now reads bps.HasValue, so the function was dead the moment
+    ' the assignment moved. Deleting it is the point rather than a tidy-up: leaving a weaker
+    ' duplicate of CalcSpreadBps's validity test in the file is how the two diverged in the
+    ' first place, and a future caller would reach for it by name. Its three conditions live
+    ' on inside CalcSpreadBps, which tests those three and the three price tests it omitted.
 
 End Class
