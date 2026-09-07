@@ -48,8 +48,32 @@ Public Class HistoricalStore
 
     Private Shared ReadOnly _http As New HttpClient() With {.Timeout = TimeSpan.FromSeconds(30)}
 
+    ' [F2/F3 sweep, 2026-09-07] The User-Agent now names the ACTUAL host process, resolved from
+    ' the entry assembly, instead of the hardcoded "DeribitBacktestRunner/1.0".
+    '
+    ' Why this is not a literal swap. HistoricalStore is linked by the APP as well as by the
+    ' offline tool -- TradeStoreGapRepair calls BackfillTradeMonthAsync -- so the live
+    ' collector's repair traffic was announcing itself to Deribit as a backtest runner, and
+    ' venue-side logs could not tell live repair from an offline replay. Swapping the literal to
+    ' "DeribitVerdictEngine" would simply move the same lie onto the offline tool. Reading the
+    ' entry assembly is the only form that is TRUE from every host: the app reports
+    ' DeribitVerdictEngine, tools/BacktestRunner reports BacktestRunner, and a future host
+    ' reports itself with no edit here.
+    '
+    ' GetEntryAssembly() can return Nothing (unmanaged host, some test runners), so the literal
+    ' fallback stays -- it is a last resort, not the normal path.
+    ''' <summary>The User-Agent this process sends. Extracted from the shared constructor so the
+    ''' property is assertable -- _http is Private Shared ReadOnly and a fixture cannot read its
+    ''' headers, so testing the ctor directly would mean reflection over a private field. A66c
+    ''' pins that the string NAMES THE RUNNING HOST rather than a hardcoded foreign one.</summary>
+    Friend Shared Function ResolveUserAgent() As String
+        Dim host As String = System.Reflection.Assembly.GetEntryAssembly()?.GetName()?.Name
+        If String.IsNullOrWhiteSpace(host) Then host = "DeribitVerdictEngine"
+        Return host & "/1.0"
+    End Function
+
     Shared Sub New()
-        _http.DefaultRequestHeaders.Add("User-Agent", "DeribitBacktestRunner/1.0")
+        _http.DefaultRequestHeaders.Add("User-Agent", ResolveUserAgent())
     End Sub
 
     ' ── Path helpers ──────────────────────────────────────────────────────────────────

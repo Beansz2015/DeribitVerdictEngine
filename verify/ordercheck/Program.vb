@@ -608,6 +608,8 @@ Module Program
         A66a_DegenerateBookGivesNoSpreadOnTheStrip()
         ' [R-2 residual — the full-run composition, previously guarded by nothing]
         A66b_ApplySpreadCompositionPairsBpsAndStatus()
+        ' [F3 — the repair User-Agent must name the running host, not a hardcoded foreign one]
+        A66c_UserAgentNamesTheRunningHost()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -12516,6 +12518,28 @@ Module Program
               String.Format("degenerate: bps={0} status={1} | wideBook: bps={2} status={3} (wide={4} tight={5})",
                             rDegenerate.SpreadBps, rDegenerate.SpreadStatus,
                             rWide.SpreadBps, rWide.SpreadStatus, wide, tight))
+    End Sub
+
+    ' ══ A66c — F3: the repair User-Agent names the RUNNING host ═══════════════════════
+    ' HistoricalStore is linked by the APP (TradeStoreGapRepair -> BackfillTradeMonthAsync)
+    ' as well as by tools/BacktestRunner, so the hardcoded "DeribitBacktestRunner/1.0" meant
+    ' the LIVE COLLECTOR announced itself to Deribit as a backtest runner and venue-side logs
+    ' could not separate live repair traffic from an offline replay.
+    '
+    ' ⛔ THE ASSERTION IS DELIBERATELY RELATIVE, NOT A LITERAL. Pinning "OrderCheck/1.0" would
+    ' pass just as well against a hardcoded string that happened to match, and would break the
+    ' moment this harness is renamed. What is being tested is the PROPERTY -- that the agent is
+    ' derived from the entry assembly -- so the expected value is computed the same way the
+    ' caller's environment defines it. Swapping the body back to any fixed literal fails this,
+    ' because no literal equals the running host's own name.
+    Private Sub A66c_UserAgentNamesTheRunningHost()
+        Dim ua As String = HistoricalStore.ResolveUserAgent()
+        Dim entry As String = System.Reflection.Assembly.GetEntryAssembly()?.GetName()?.Name
+        Dim expected As String = If(String.IsNullOrWhiteSpace(entry), "DeribitVerdictEngine", entry) & "/1.0"
+
+        Check("A66c repair User-Agent names the RUNNING host, not a hardcoded foreign one",
+              ua = expected AndAlso ua <> "DeribitBacktestRunner/1.0",
+              String.Format("ua={0} expected={1} entryAssembly={2}", ua, expected, entry))
     End Sub
 
 End Module

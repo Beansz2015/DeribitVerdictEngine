@@ -299,9 +299,30 @@ Public NotInheritable Class TradeStoreWriter
     ''' guard so its window is rebuilt from the on-disk tail — which is what makes the
     ''' re-seeded REST window idempotent against whatever is already stored.
     ''' </summary>
+    ''' <remarks>
+    ''' [F2, 2026-09-07] The whole body is under ONE SyncLock. It used to be
+    ''' `Flush() : SyncLock _pending { Clear... }` -- two separate acquisitions with a gap
+    ''' between them, and that gap DROPPED TAPE. Flush() releases _pending before AppendRows
+    ''' does its disk I/O, so a trade buffered by the WS receive loop in that window was then
+    ''' erased by the _pending.Clear() below without ever being written. Same loss class as the
+    ''' 49.2 % write-guard defect, reached by a different route.
+    '''
+    ''' Monitor is RE-ENTRANT, so Flush()'s own inner `SyncLock _pending` is a no-op recursion
+    ''' here -- that is what makes the one-lock form legal rather than a self-deadlock.
+    '''
+    ''' ⚠ VERIFIED BEFORE WIDENING, because widening a lock over file I/O is how deadlocks are
+    ''' introduced: nothing in the tree acquires _appendLock and then _pending. Inside the
+    ''' `SyncLock _appendLock` region of AppendRows there are ZERO _pending references, so the
+    ''' ordering is strictly _pending -> _appendLock and never the reverse.
+    '''
+    ''' ⚠ CONSEQUENCE, stated rather than hidden: AppendRows' disk write now runs while
+    ''' _pending is held, so the WS buffering path blocks for that write. It happens only on
+    ''' (re)connect, and stalling the buffer briefly is strictly better than silently dropping
+    ''' the trades it holds -- which is the trade this project has already made twice.
+    ''' </remarks>
     Public Sub ResetBufferState()
-        Flush()
         SyncLock _pending
+            Flush()
             _pending.Clear()
             _window.Clear()
             _windowIds.Clear()
