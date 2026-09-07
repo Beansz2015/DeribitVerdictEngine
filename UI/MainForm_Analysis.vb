@@ -420,13 +420,15 @@ Partial Public Class MainForm
         r.OFIMomentum = IndicatorEngine.CalcOFIMomentum(_ofiHistory, cfg)
 
         ' [S2-2] CalcSpread split into a pure bps fn + a classifier. Nothing = no measurable top of
-        ' book, which ClassifySpread maps to "NORMAL" -- the pre-split seed value. r.SpreadBps still
-        ' receives 0.0 in that case, exactly as before (it is a Double and four surfaces format it F2).
-        Dim spreadBps As Double? = IndicatorEngine.CalcSpreadBps(orderBook)
-        r.SpreadBps = If(spreadBps.HasValue, spreadBps.Value, 0.0)
-        r.SpreadStatus = IndicatorEngine.ClassifySpread(spreadBps,
-                             wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
-                             tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)
+        ' book, which ClassifySpread maps to "NORMAL" -- the pre-split seed value.
+        ' [R-2 residual, 2026-09-07] The three-line composition that stood here MOVED into
+        ' IndicatorEngine.ApplySpread. It is not shorter for its own sake: this file cannot be linked
+        ' by verify/ordercheck (net8.0, no WinForms; MainForm is a partial class needing the designer),
+        ' so the `, 0.0` fallback was guarded by NOTHING -- swapping it for -1.0 left the harness green.
+        ' Nothing with logic in it is left here to get wrong; A66b pins the composition.
+        IndicatorEngine.ApplySpread(orderBook, r,
+                                    wideThresholdBps:=cfg.Indicators.Spread.WideThresholdBps,
+                                    tightThresholdBps:=cfg.Indicators.Spread.TightThresholdBps)
 
         IndicatorEngine.CalcLiquidations(recentTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal,
                                          dominanceRatio:=cfg.Indicators.Liquidations.DominanceRatio)

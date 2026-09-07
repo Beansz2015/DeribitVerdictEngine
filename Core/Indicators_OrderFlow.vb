@@ -625,4 +625,44 @@ Partial Public Class IndicatorEngine
         Return "NORMAL"
     End Function
 
+    ''' <summary>
+    ''' Writes the spread pair onto an IndicatorResults: r.SpreadBps and r.SpreadStatus, from one
+    ''' order book and the two thresholds. The full-run composition, in ONE testable place.
+    '''
+    ''' [R-2 residual, 2026-09-07] This exists so the composition is GUARDED, not because the
+    ''' full run needed a shorter call site. It previously lived as three lines in
+    ''' UI/MainForm_Analysis.vb, which verify/ordercheck CANNOT link -- OrderCheck.vbproj targets
+    ''' net8.0 with no WinForms, and MainForm_Analysis.vb is a Partial Public Class MainForm that
+    ''' does not compile without MainForm_Layout.vb and the designer. So the `, 0.0` fallback below
+    ''' was reachable by no fixture in the tree: swapping it for -1.0 left the harness green while
+    ''' four rendered surfaces would have shown "-1.00 bps" on an unreadable book.
+    ''' See s2-2-calcspread-split-spec-back.md §5.4 (finding R-2).
+    '''
+    ''' ⛔ This does NOT re-merge what S2-2 split. CalcSpreadBps and ClassifySpread stay public and
+    ''' unchanged, and LiveMicrostructureEvaluator still calls CalcSpreadBps ALONE -- so S2-2's
+    ''' guarantee (the evaluator references indicators.spread.* not at all, and therefore cannot
+    ''' diverge from the full run when the auto-tweaker retunes them) survives intact. This is a
+    ''' composition ON the two, for the one caller that wants both.
+    '''
+    ''' ⚠ The 0.0 is deliberate and is NOT interchangeable with the Nothing above it. r.SpreadBps
+    ''' is a Double and four surfaces format it "F2", so the degenerate book must render "0.00 bps"
+    ''' beside a NORMAL status -- exactly what the pre-S2-2 CalcSpread wrote. The absence is carried
+    ''' by the STATUS, never by a magic number in the value.
+    ''' </summary>
+    Public Shared Sub ApplySpread(orderBook As OrderBookSnapshot,
+                                  r As IndicatorResults,
+                                  wideThresholdBps  As Double,
+                                  tightThresholdBps As Double)
+        ' ⛔ No `If r Is Nothing Then Return` guard, deliberately. It would SILENTLY do nothing on a
+        ' caller error, and a silent no-op is the shape this project keeps removing -- A62a exists so
+        ' a walk that visits nothing cannot report clean. A Nothing target should throw, loudly, at
+        ' the call site that made the mistake. orderBook IS guarded, inside CalcSpreadBps, because a
+        ' degenerate book is a real venue state rather than a caller error.
+        Dim bps As Double? = CalcSpreadBps(orderBook)
+        r.SpreadBps = If(bps.HasValue, bps.Value, 0.0)
+        r.SpreadStatus = ClassifySpread(bps,
+                             wideThresholdBps:=wideThresholdBps,
+                             tightThresholdBps:=tightThresholdBps)
+    End Sub
+
 End Class

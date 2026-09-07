@@ -606,6 +606,8 @@ Module Program
 
         ' [D3-RESIDUAL — the live strip must not print a fabricated spread]
         A66a_DegenerateBookGivesNoSpreadOnTheStrip()
+        ' [R-2 residual — the full-run composition, previously guarded by nothing]
+        A66b_ApplySpreadCompositionPairsBpsAndStatus()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -12463,6 +12465,57 @@ Module Program
               Not snapZero.HasSpread AndAlso Math.Abs(snapZero.SpreadBps) < 0.0000001,
               String.Format("emptyAsks: hasSpread={0} bps={1} | zeroBid: hasSpread={2} bps={3} (case 2 True = the fabricated ""0.0 bps"" is back)",
                             snapEmpty.HasSpread, snapEmpty.SpreadBps, snapZero.HasSpread, snapZero.SpreadBps))
+    End Sub
+
+    ' ══ A66b — R-2 residual: the full-run spread composition ══════════════════════════
+    ' docs/s2-2-calcspread-split-spec-back.md §5.4 (finding R-2).
+    '
+    ' ⛔ WHY THIS FIXTURE EXISTS AT ALL. Until 2026-09-07 these three lines lived in
+    ' UI/MainForm_Analysis.vb, which verify/ordercheck CANNOT link -- OrderCheck.vbproj
+    ' targets net8.0 with no WinForms, and MainForm_Analysis.vb is a Partial Public Class
+    ' MainForm that will not compile without MainForm_Layout.vb and the designer. So the
+    ' `, 0.0` fallback was reachable by NO fixture in the tree: swap it for -1.0 and the
+    ' harness stayed green while four rendered surfaces would show "-1.00 bps" on a book
+    ' the engine could not read. Moving the composition into IndicatorEngine.ApplySpread is
+    ' what makes it assertable; this fixture is the assertion.
+    '
+    ' ⛔ THE LOAD-BEARING CASE IS CASE 1. The `, 0.0` arm runs ONLY when CalcSpreadBps
+    ' returns Nothing, i.e. only on a degenerate book. A healthy-book-only fixture cannot
+    ' observe the fallback at all and would read as coverage while pinning nothing --
+    ' the A62f / A63a shape. Case 2 is the non-regression half: it proves the pair is
+    ' genuinely computed rather than hardwired to (0.0, "NORMAL").
+    '
+    ' ⚠ DISTINCT FROM A65a, which calls CalcSpreadBps / ClassifySpread directly. What is
+    ' pinned here is the COMPOSITION -- that the two are wired to each other in the right
+    ' order, that the absent bps becomes exactly 0.0 (not a sentinel), and that the status
+    ' is classified from the NULLABLE rather than from the defaulted 0.0. That last one is
+    ' the S2-2 defect re-entering at the composition level, where A65a cannot see it.
+    Private Sub A66b_ApplySpreadCompositionPairsBpsAndStatus()
+        Dim cfg As New EngineSettings()
+        Dim wide As Double = cfg.Indicators.Spread.WideThresholdBps
+        Dim tight As Double = cfg.Indicators.Spread.TightThresholdBps
+
+        ' Case 1 — ⛔ THE ONE THAT MOVES. Degenerate book (empty ask ladder) => CalcSpreadBps
+        ' returns Nothing, so the `, 0.0` fallback runs and the status must be NORMAL, never
+        ' TIGHT. r.SpreadBps is a Double formatted "F2" on four surfaces, so 0.00 is required.
+        Dim rDegenerate As New IndicatorResults()
+        Dim bDegenerate As New OrderBookSnapshot()
+        bDegenerate.Bids.Add((100000.0, 10.0))
+        IndicatorEngine.ApplySpread(bDegenerate, rDegenerate,
+                                    wideThresholdBps:=wide, tightThresholdBps:=tight)
+
+        ' Case 2 — a real WIDE book. bid 99950 / ask 100050, mid 100000 => 100/100000 x 10000
+        ' = 10.00 bps, which is >= the shipped wide threshold. Proves the pair is computed.
+        Dim rWide As New IndicatorResults()
+        IndicatorEngine.ApplySpread(MakeBook(99950.0, 100050.0, 10.0, 10.0), rWide,
+                                    wideThresholdBps:=wide, tightThresholdBps:=tight)
+
+        Check("A66b ApplySpread pairs bps+status — degenerate gives exactly 0.00/NORMAL (the unguarded fallback), a real book gives 10.00/WIDE",
+              Math.Abs(rDegenerate.SpreadBps) < 0.0000001 AndAlso rDegenerate.SpreadStatus = "NORMAL" AndAlso
+              Math.Abs(rWide.SpreadBps - 10.0) < 0.0001 AndAlso rWide.SpreadStatus = "WIDE",
+              String.Format("degenerate: bps={0} status={1} | wideBook: bps={2} status={3} (wide={4} tight={5})",
+                            rDegenerate.SpreadBps, rDegenerate.SpreadStatus,
+                            rWide.SpreadBps, rWide.SpreadStatus, wide, tight))
     End Sub
 
 End Module
