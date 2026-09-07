@@ -84,3 +84,74 @@ The review declared *"rank handles by runnability"* a **standing rule**. **Measu
 - ⛔ **I did not verify the reviewer's `python` no-op account.** Taken on report. *(It matches this box: `python` is not installed — I hit the same thing this session and used the `Edit` tool instead.)*
 - ⚠ **`E-1` cannot be re-verified by anyone, including me.** The scratchpad instrument is gone. **The MD5 in the packet is now permanently a historical assertion**, which is the whole point of relabelling it — but it does mean **`S2-2`'s parity rests on `H-0` from here, not on the capture that originally established it.** If `H-0` is ever found insufficient, there is no falling back to `E-1`.
 - ⚠ **No live app run**, unchanged from the original packet.
+
+---
+
+## 5. ⭐ REVIEWER VERDICT — 2026-09-06 (UTC). **ACCEPTED.** `Q-4` ruled AGAINST the recommendation; `Q-5` ruled and both are DONE
+
+**Reviewing seat:** Opus, effort **medium**. ⭐ **The packet's own *"Sonnet, LOW"* sizing is endorsed as reasonable** — it is docs-only and every handle is a one-liner. Medium was spent only because `R-1` was itself about runnability, so each handle was executed rather than read.
+
+### 5.1 All six handles reproduced — printed values, this seat
+
+| Handle | Packet | This seat | |
+|---|---|---|---|
+| **HR-0** headline names a runnable handle | `H-0`; `A65a`/`A65b` PASS; diff = 0 | **names `H-0`** · `A65a` **PASS** · `A65b` **PASS** · render-files-in-diff **`0`** | ✅ |
+| **HR-1** dead handle demoted, not deleted | `3` | **`3`** | ✅ |
+| **HR-2** scope | 2 files | **exactly 2**, both `docs/s2-2-calcspread-split-*.md` | ✅ |
+| **HR-3** §15 untouched | `0` | **`0`** | ✅ |
+| **HR-4** the `R-2` refinement | `1` · `1` | **`1`** (`:2244`) · **`1`** | ✅ |
+| **HR-5** XML-escape record | `1` · `3` · `1` | escaped in source **`3`**; the raw `<=` still stands in the spec's `'''` block at `s2-2-calcspread-split-proposal.md:203`; the plain `'` comment raw at `Indicators_OrderFlow.vb:620` | ✅ |
+| **HR-6** no regression | GATE PASSED, 332/0 | **`GATE PASSED`** · **332 PASS / 0 FAIL** | ✅ |
+
+⭐ **The re-rank is correct where it matters most: the stale cross-references were caught.** `s2-2-calcspread-split-spec-back.md:9` no longer says *"escalate if `H-1` disagrees"* — it carries an explicit correction. **That was the part most likely to be missed**, and the packet says so itself in §3.
+
+⚠ **`HR-1` counting a string is acceptable here and the packet is right to flag it.** The property *is* document text. It is correctly paired with `HR-0`, which tests the behaviour. **Endorsed as a legitimate exception, stated as one.**
+
+### 5.2 ⛔ `Q-4` — RULED **(c)**, not the recommended (a). The recommendation is DEFEATED on evidence, and the finding itself is upheld
+
+⭐⭐ **The finding is correct and is the best thing in this packet: `R-1` was recursing.** A standing rule recorded only inside the packet of the build that produced it is *"a rule recorded where its reader cannot use it"* — the same shape. **Measured and reproduced by this seat: `grep -ci 'runnab'` prints `0` in `docs/batch-review-packet-convention.md`, `0` in `CLAUDE.md`, `9` in `s2-2-calcspread-split-spec-back.md`.**
+
+⛔ **But (a) — the convention doc — is the wrong home, on a fact the packet did not check.** Measured this seat:
+
+| Existing handle rule | `CLAUDE.md` | `batch-review-packet-convention.md` |
+|---|---:|---:|
+| *"RUN EVERY HANDLE AND PASTE ITS ACTUAL OUTPUT"* | **1** | **0** |
+| *"test the property, not a string that mentions it"* | **1** | **0** |
+
+⭐ **Both siblings already live in `CLAUDE.md`. Putting the third in the convention doc would scatter one family 2–1** — and *"a reader finds two of three rules"* is precisely the half-a-ruling failure this project has already recorded (`docs/trader-tick-queue.md` §0a, the A54a spec that carried a ruling's guard half and dropped its re-sync half).
+
+✅ **RULED AND DONE, both halves, this seat:**
+- **`CLAUDE.md`** — the rule inserted **immediately above** *"Verification handles must test the property…"*, so the three sit together. Carries the `S2-2` evidence and both riders (an unrunnable handle mis-sizes its own review; declare an instrument that is a sole cover before deleting it).
+- **`docs/batch-review-packet-convention.md`** §1 — a pointer bullet, not a copy. ⛔ **A copy would be a second source that drifts**, which is the defect class this whole arc is about.
+
+⚠⚠ **AND THE RULE BIT ITS OWN ENFORCER, ONE MINUTE AFTER BEING WRITTEN — recorded because it is the cheapest possible demonstration.** Re-running `Q-4`'s own table to confirm the fix, `grep -ci 'runnab'` printed **`0`** for `docs/batch-review-packet-convention.md` — **after the pointer had been added.** The bullet's first draft read *"whether the READER can run it"*; **the stem `runnab` never appeared, so the handle reported the rule absent from a document that carried it.** ⛔ **That is `CLAUDE.md`'s OTHER handle rule — *"test the property, not a string that mentions it"* — failing in the act of verifying the rule being added beside it.** ✅ **Fixed by naming the property in the text (*"Rank by RUNNABILITY"*), so the term is greppable in both documents; `grep -ci 'runnab'` now prints `1` and `1`.** ⭐ **The lesson is not "pick a better grep" — it is that a string-count handle silently reports ABSENCE, which is the direction nobody double-checks.** `HR-1` in §1 above is the same shape and is safe only because it is paired with `HR-0`.
+
+### 5.3 ✅ `Q-5` — RULED **yes**, and bundled with `Q-4` exactly as recommended
+
+The `H-n` / `E-n` split is conventionalised, in both edits above. ⭐ **The packet's reasoning is adopted verbatim: the rule and its notation are one idea, and splitting them across two decisions is how one ships without the other.**
+
+### 5.4 ⚠ The correction to `R-2` is ACCEPTED — my finding was over-stated
+
+⭐ **The packet is right and this seat was wrong.** `R-2` said `LiveMicrostructureEvaluator.vb:141` was *"coverable but also uncovered"* and that *"nothing guards them"*. **Verified here: `verify/ordercheck/Program.vb:2244` is the ONLY `UpdateBook(` call in the entire harness, and `A19a` drives the evaluator with that book and asserts `Math.Abs(snap.SpreadBps - 2.0) < 0.01`. The value arm IS guarded.** Only the `, 0.0` **fallback** is unreachable.
+
+⭐ **And the mechanism the packet supplies is stronger than the one `R-2` gave.** *"`A19a` uses a healthy book"* describes one fixture; **"the harness contains exactly one `UpdateBook` call, so no fixture anywhere can put a degenerate-but-non-`Nothing` book into a `MarketState`"** describes the whole space. **That is the sentence a future fixture author needs**, and it is now the record. `R-2`'s conclusion stands; its characterisation is corrected.
+
+### 5.5 The two process deviations — both correct
+
+- ✅ **ONE document instead of the convention's two: right call.** `docs/batch-review-packet-convention.md` prescribes summary + packet for a **multi-lane batch**; a single remediation has no per-item outcomes and a summary would restate the packet. **Flagging it rather than assuming was the right move, and no second document is wanted.**
+- ✅ **NOT running `R-2`'s stated mutation: right call, and well handled.** The review forbade touching `UI/MainForm_Analysis.vb` and the packet took that literally rather than mutate-and-restore. ⭐ **It substituted a structurally dispositive check — a file the harness does not compile cannot be executed by any fixture — and said plainly that this is a different check from the one raised.** That is exactly the distinction the *"do not upgrade source strength"* rule asks for.
+- ✅ **`§8a` rather than merging into `§8`: right.** `§8` is the `D-3` residual, a different subject.
+
+### 5.6 On the review block, from the reviewing side — one hit, accepted
+
+⚠ **"YOUR ONLY TASK: one edit to your own packet" was wrong, and the packet is right to name it.** It was **four locations across two files**, and the stale cross-references — the header's escalation trigger, the *"run both or neither"* note — are the part a seat working strictly to *"one edit"* would have left behind, still pointing at a handle nobody can run. **The ~10-minute sizing held; the "one edit" framing did not.** ⭐ **The general form, worth carrying: when a finding invalidates a LABEL, the remediation is every place that label is referenced — say "re-rank and sweep the cross-references", never "one edit".**
+
+### 5.7 ⛔ `E-1` is now permanently unverifiable, and that is accepted with open eyes
+
+The packet states it plainly in §4 and it is worth restating in the verdict: **`S2-2`'s parity now rests on `H-0`, and there is no falling back to `E-1` if `H-0` is ever found insufficient.** ⭐ **This is judged acceptable, not merely unavoidable:** `H-0`'s triad reaches the same conclusion by a route whose every leg is in the tree, and `E-1`'s extra six shapes carried no information about this build — rows 1, 2 and 4 of its table would have been identical under the defective implementation too.
+
+### 5.8 Verdict
+
+✅ **ACCEPTED.** All six handles reproduce. `Q-4` ruled **(c)** and **implemented**; `Q-5` ruled **yes** and **implemented**; `R-2`'s characterisation corrected in the packet's favour. **No further work on `S2-2`.**
+
+⛔ **Nothing is owed by the trader.** Still open and unstarted, both low priority: **`D3-RESIDUAL`** (`Q-1` ruled (a)) and the **`R-2` residual** disposition (a).

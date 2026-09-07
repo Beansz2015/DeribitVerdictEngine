@@ -29,6 +29,7 @@ For each substantive claim, **the one cheap check that confirms it**, ordered by
 - Prefer checks that are **one command or one grep**.
 - Include the **arithmetic identities** that would expose a silent error (e.g. `kept + dropped = raw`). A reviewer can verify a whole pipeline in a line.
 - Say which single check to run **if they only run one**.
+- ⛔ **Rank by RUNNABILITY — whether the READER can run it — and split the labels: `H-n` = a handle they can execute · `E-n` = build-time evidence they cannot.** A measurement from a scratchpad instrument that was never committed is `E-n`, however honestly it was run — **never rank one first, and never pair it *"run both or neither"***. ⚠ **If an instrument is the sole cover for a property, say so before deleting it.** **The full rule, its evidence and its two riders live in `CLAUDE.md` beside the other two handle rules** — *"run every handle and paste its actual output"* and *"test the property, not a string that mentions it"*. ⭐ **All three are one family; they are kept together there on purpose, so a reader who finds one finds all three.** (RULED 2026-09-06, from `docs/s2-2-calcspread-split-spec-back.md` §5.3.)
 
 ### 2. Decisions queued, with your read where you have one
 
