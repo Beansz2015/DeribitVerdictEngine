@@ -42,6 +42,15 @@ Public Class LivePerformanceTracker
         ' the (session × resolution) aggregation filter so 3-min Asia/London rows are
         ' never blended with 1-min NY (or pre-v36 1-min Asia) rows in a session rate.
         Public Property ExecResolution As Integer = 1
+        ' [S-4, D-2 (b)] Identity pair for the backfill dedup key. Nothing/Nothing on every
+        ' row written before the #5 v0.8 CSV attribution columns existed — D-3 (a) falls
+        ' back to Timestamp for those, since re-deriving them by matching back to
+        ' analysis_log.csv on Timestamp would be circular (the key this change exists to
+        ' distrust). Deliberately NOT given non-null defaults: an absent identity must stay
+        ' distinguishable from a real one, or the D-3 (a) fallback cannot tell which rows
+        ' are legacy.
+        Public Property InstanceId As String = Nothing
+        Public Property SignalId   As Long?  = Nothing
     End Class
 
     Public Class WindowAggregate
@@ -167,8 +176,16 @@ Public Class LivePerformanceTracker
     ' and now-covered ones keep the fresh outcome; the v5 file is copied to .v5.bak
     ' first, D6 rotation-pattern for archival). The whole-second .0000000Z timestamp
     ' provenance note (F8) also lands here as a free diagnostic for future audits.
-    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v6 (placed-level barriers; min-tradeable-move floor; exec resolution; no-data outcome; whole-second .0000000Z timestamps = backfilled provenance)"
-    Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution"
+    ' [S-4, 2026-09-09] schema v6 → v7: two columns APPENDED — InstanceId, SignalId — the
+    ' dedup identity pair (D-2 (b)). This migration adds columns and NOTHING ELSE: no re-walk,
+    ' no re-judgement of any existing EvalOutcome/TargetEverHit/FavBar/AdvBar (§0.2 escalation
+    ' boundary of docs/s4-eval-cache-identity-proposal.md, AC-8). Legacy rows parse with
+    ' InstanceId=Nothing/SignalId=Nothing (ParseEvalLine is absent-tolerant on the two new
+    ' trailing columns, same pattern as the v3→v4 ExecResolution column); D-3 (a)'s Timestamp
+    ' fallback covers those at dedup time. The comment gains the "identity pair" marker (the
+    ' IsPreV7Schema gate for the one-time re-stamp) alongside the v6 markers it still carries.
+    Private Const EVAL_SCHEMA_COMMENT As String = "# schema=v7 (placed-level barriers; min-tradeable-move floor; exec resolution; no-data outcome; identity pair; whole-second .0000000Z timestamps = backfilled provenance)"
+    Private Const EVAL_COL_HEADER     As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution,InstanceId,SignalId"
 
     ' The min-tradeable-move floor the eval cache was last written with. Set from
     ' cfg.Scoring.TradeCosts.EffectiveMinMovePct at the start of Initialise/Update; embedded in
@@ -366,10 +383,13 @@ Public Class LivePerformanceTracker
             ' re-stamps the schema comment (the sweep is one-time; once the file is
             ' rewritten with the v6 comment, IsPreV6Schema returns False on restart).
             Dim preV6Schema As Boolean  = IsPreV6Schema(evalCachePath)
+            ' [S-4] Capture the v6→v7 identity-pair gate BEFORE any migration below
+            ' re-stamps the schema comment (same reason as every probe above it — a rewrite
+            ' would make a later probe read false).
+            Dim preV7Schema As Boolean  = IsPreV7Schema(evalCachePath)
             Dim storedFloor As Double?  = ReadSchemaFloorPct(evalCachePath)
             _floorPctInEffect = cfg.Scoring.TradeCosts.EffectiveMinMovePct
             _evalCache = LoadEvalCache(evalCachePath)
-            Dim existingTs As New HashSet(Of DateTime)(_evalCache.Select(Function(e) e.Timestamp))
 
             ' --- Step 2.5: One-time v1→v2 schema migration (target-hit-toggle) ---
             ' Detect by absence of "TargetEverHit" in the v1 header line. Walks every
@@ -398,7 +418,7 @@ Public Class LivePerformanceTracker
             ' explicit ExecResolution column so the resolution-filtered aggregation reads
             ' a clean schema. Idempotent: if an earlier migration already rewrote (any
             ' WriteEvalCache emits the v4 header now), this is one harmless redundant pass.
-            If preV4Schema Then WriteEvalCache(_evalCachePath)
+            If preV4Schema Then WriteEvalCache(_evalCachePath, _evalCache)
 
             ' --- Step 2.8: [F4] v5→v6 no-data reclassification sweep ---------------
             ' The empty-bar branch of EvaluateEntry used to return WINDOW_EXPIRED, so
@@ -428,7 +448,7 @@ Public Class LivePerformanceTracker
                     Dim stillExpired As Integer =
                         Enumerable.Count(_evalCache, Function(x) x.EvalOutcome = "WINDOW_EXPIRED")
                     Dim recovered As Integer = beforeExpired - stillExpired - afterNoData
-                    WriteEvalCache(_evalCachePath)
+                    WriteEvalCache(_evalCachePath, _evalCache)
                     Console.WriteLine(String.Format(
                         "[LivePerformanceTracker] v5→v6 no-data sweep: {0} WINDOW_EXPIRED re-walked → {1} NO_DATA, {2} recovered (backup {3}).",
                         beforeExpired, afterNoData, Math.Max(0, recovered), bakPath))
@@ -437,32 +457,22 @@ Public Class LivePerformanceTracker
                 End Try
             End If
 
+            ' --- Step 2.9: [S-4] v6→v7 identity-pair column re-stamp -----------------------
+            ' Two new nullable columns (InstanceId, SignalId), NOTHING ELSE — no re-walk, no
+            ' re-judgement of EvalOutcome/TargetEverHit/FavBar/AdvBar (§0.2 escalation boundary,
+            ' AC-8). Legacy rows already parsed with InstanceId=Nothing/SignalId=Nothing via the
+            ' absent-tolerant ParseEvalLine, so this is a plain re-stamp of the header/comment —
+            ' the exact v3→v4 pattern (Step 2.7): a rewrite with no data transform, so every
+            ' pre-existing outcome field survives the LoadEvalCache→WriteEvalCache round trip
+            ' byte-for-byte by construction. Idempotent: if an earlier migration above already
+            ' rewrote (any WriteEvalCache now stamps the v7 header), this is one harmless
+            ' redundant pass.
+            If preV7Schema Then WriteEvalCache(_evalCachePath, _evalCache)
+
             ' --- Step 3: Backfill from analysis_log.csv ---
             If eagerBackfill AndAlso File.Exists(analysisLogPath) Then
-                Dim newEntries As New List(Of EvalCacheEntry)()
                 Dim logRows = ParseAnalysisLog(analysisLogPath)
-                For Each row In logRows
-                    If existingTs.Contains(row.Timestamp) Then Continue For
-                    ' [D6] Barriers from the row's logged Placed* columns (v0.8) or the
-                    ' legacy swing-else-ATR formula (pre-v0.8, D3) — see ResolveBackfillBarriers.
-                    Dim favLong, advLong, favShort, advShort As Double
-                    ResolveBackfillBarriers(row, cfg, favLong, advLong, favShort, advShort)
-                    Dim entry As EvalCacheEntry = BuildEntry(row.Timestamp, row.Verdict,
-                                                             row.EntryPrice, row.ATR,
-                                                             favLong, advLong, favShort, advShort,
-                                                             cfg.Scoring.TradeCosts.EffectiveMinMovePct,
-                                                             row.ExecResolution)
-                    ' If window complete, evaluate; otherwise leave as PENDING. The
-                    ' horizon is resolution-scaled (15 min 1-min / 45 min 3-min) so a
-                    ' 3-min row isn't judged before its window fills — three-min-hold-window-recal §5.
-                    If entry.EvalOutcome = "PENDING" AndAlso
-                       row.Timestamp.AddMinutes(EvalHorizonMinutes(entry.ExecResolution)) <= nowUtc Then
-                        Dim ev = EvaluateEntry(entry, row.Timestamp, nowUtc)
-                        entry.EvalOutcome   = ev.outcome
-                        entry.TargetEverHit = ev.targetHit
-                    End If
-                    newEntries.Add(entry)
-                Next
+                Dim newEntries = BackfillNewEntries(logRows, _evalCache, cfg, nowUtc)
                 If newEntries.Count > 0 Then
                     _evalCache.AddRange(newEntries)
                     AppendEvalRows(evalCachePath, newEntries)
@@ -814,7 +824,7 @@ Public Class LivePerformanceTracker
             e.TargetEverHit = ev.targetHit
             dirty = True
         Next
-        If dirty Then WriteEvalCache(_evalCachePath)
+        If dirty Then WriteEvalCache(_evalCachePath, _evalCache)
     End Sub
 
     ''' <summary>
@@ -885,7 +895,7 @@ Public Class LivePerformanceTracker
                 e.TargetEverHit = FailureRateMatrix.TargetHitWalk(bars, e.FavBar, isLong)
                 backfilled += 1
             Next
-            WriteEvalCache(_evalCachePath)
+            WriteEvalCache(_evalCachePath, _evalCache)
             Console.WriteLine(String.Format(
                 "[LivePerformanceTracker] v1→v2 migration: {0} rows backfilled, {1} blank (no OHLC)",
                 backfilled, blank))
@@ -1030,6 +1040,29 @@ Public Class LivePerformanceTracker
     End Function
 
     ''' <summary>
+    ''' [S-4] True when the eval cache exists but its schema comment predates v7 (the
+    ''' InstanceId/SignalId identity-pair columns) — i.e. the comment lacks the "identity pair"
+    ''' marker. Triggers the one-time re-stamp (Step 2.9). Detection is on the COMMENT line
+    ''' (the column header shape is what actually changes v6→v7, but the comment is checked
+    ''' first for the same reason every prior probe in this file is — a cheap single-line
+    ''' test). Returns False when the file does not exist (fresh installs start at v7). Friend
+    ''' for the harness (A69d).
+    ''' </summary>
+    Friend Shared Function IsPreV7Schema(path As String) As Boolean
+        If Not File.Exists(path) Then Return False
+        Try
+            For Each line As String In File.ReadLines(path)
+                If line.StartsWith("#") Then Return Not line.Contains("identity pair")
+                ' First non-comment line with no schema comment above it → pre-v7.
+                Return True
+            Next
+        Catch ex As Exception
+            Console.WriteLine("[LivePerformanceTracker] IsPreV7Schema error: " & ex.Message)
+        End Try
+        Return False
+    End Function
+
+    ''' <summary>
     ''' [F4 no-data outcome] Re-walk every WINDOW_EXPIRED row against a supplied OHLC
     ''' lookup: rows whose bars are still empty become NO_DATA (excluded from strip
     ''' success/failure rates); rows with coverage keep their honest fresh outcome
@@ -1117,7 +1150,7 @@ Public Class LivePerformanceTracker
                     e.TargetEverHit = ev.targetHit
                 End If
             Next
-            WriteEvalCache(_evalCachePath)
+            WriteEvalCache(_evalCachePath, _evalCache)
             If logForensic Then
                 Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
                     "[LivePerformanceTracker] v2→v3 min-tradeable-move floor ({0:P3} of price): " &
@@ -1184,9 +1217,13 @@ Public Class LivePerformanceTracker
                                           nowUtc As DateTime) As EvalCacheEntry
         Dim plLong  As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
         Dim plShort As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
+        ' [S-4] The SAME identity ProcessIdentity.NextSignalId() ticked for this run at
+        ' RunAnalysisAsync BEFORE the CSV write — UpdateAsync (and so BuildLiveEntry) always
+        ' runs after that tick, so CurrentSignalId here ≡ this row's analysis_log.csv SignalId.
         Return BuildEntry(nowUtc, v.Verdict, r.CurrentPrice, r.ATR,
                           plLong.Target, plLong.StopPx, plShort.Target, plShort.StopPx,
-                          cfg.Scoring.TradeCosts.EffectiveMinMovePct, r.ExecResolution)
+                          cfg.Scoring.TradeCosts.EffectiveMinMovePct, r.ExecResolution,
+                          ProcessIdentity.InstanceId, ProcessIdentity.CurrentSignalId)
     End Function
 
     ''' <summary>
@@ -1206,13 +1243,17 @@ Public Class LivePerformanceTracker
             favBarShort     As Double,
             advBarShort     As Double,
             minMovePct      As Double,
-            execResolution  As Integer) As EvalCacheEntry
+            execResolution  As Integer,
+            instanceId      As String,
+            signalId        As Long?) As EvalCacheEntry
 
         Dim e As New EvalCacheEntry() With {
             .Timestamp      = ts,
             .Verdict        = verdict,
             .EntryPrice     = entryPrice,
-            .ExecResolution = execResolution
+            .ExecResolution = execResolution,
+            .InstanceId     = instanceId,
+            .SignalId       = signalId
         }
 
         ' Excluded: non-directional verdicts
@@ -1252,6 +1293,141 @@ Public Class LivePerformanceTracker
     End Function
 
     ' -----------------------------------------------------------------------
+    ' Private: dedup identity key + the backfill loop (S-4)
+    ' -----------------------------------------------------------------------
+
+    ''' <summary>
+    ''' [S-4, D-2 (b)] The eval-cache dedup identity: the (InstanceId, SignalId) pair when both
+    ''' are present. SignalId ALONE is never the key on its own — it is a per-InstanceId
+    ''' counter that restarts at 1 (§0.1 Trap 2 of docs/s4-eval-cache-identity-proposal.md), so
+    ''' two distinct process runs can share a SignalId and only the pair tells them apart.
+    ''' D-3 (a): rows with no identity (legacy, pre-#5 v0.8 CSV attribution) fall back to
+    ''' Timestamp. The "ID|" / "TS|" prefixes keep the two identity spaces provably disjoint —
+    ''' a legacy Timestamp string can never collide with a real identity pair.
+    ''' </summary>
+    ''' <summary>
+    ''' [S-4, review finding R-4] The ONE definition of "this row carries an identity".
+    ''' KeyFor and BackfillNewEntries' two-set split MUST agree on it exactly — a second copy
+    ''' of this predicate is a fourth-copy drift of the kind the seam audit exists to catch,
+    ''' and here it would silently mis-sort rows between the two dedup sets.
+    ''' </summary>
+    Private Shared Function HasIdentity(instanceId As String, signalId As Long?) As Boolean
+        Return Not String.IsNullOrEmpty(instanceId) AndAlso signalId.HasValue
+    End Function
+
+    Private Shared Function HasIdentity(e As EvalCacheEntry) As Boolean
+        Return HasIdentity(e.InstanceId, e.SignalId)
+    End Function
+
+    Private Shared Function HasIdentity(row As LogRow) As Boolean
+        Return HasIdentity(row.InstanceId, row.SignalId)
+    End Function
+
+    Private Shared Function KeyFor(instanceId As String, signalId As Long?, ts As DateTime) As String
+        If HasIdentity(instanceId, signalId) Then
+            Return "ID|" & instanceId & "|" & signalId.Value.ToString(CultureInfo.InvariantCulture)
+        End If
+        Return "TS|" & ts.ToString("o", CultureInfo.InvariantCulture)
+    End Function
+
+    Private Shared Function KeyFor(e As EvalCacheEntry) As String
+        Return KeyFor(e.InstanceId, e.SignalId, e.Timestamp)
+    End Function
+
+    Private Shared Function KeyFor(row As LogRow) As String
+        Return KeyFor(row.InstanceId, row.SignalId, row.Timestamp)
+    End Function
+
+    ''' <summary>
+    ''' [S-4] The backfill loop's pure core: which analysis_log.csv rows are new relative to
+    ''' existingCache, keyed on the identity pair with the D-3 (a) Timestamp fallback. D-1 (b):
+    ''' the key set is updated INSIDE the loop as each row is admitted, so a batch containing
+    ''' two same-identity rows behaves the same whether the cache started cold or warm — the
+    ''' bias-flip defect this whole change exists to close (§2.2 of the S-4 proposal: before
+    ''' this fix, a cold cache admitted both of two colliding rows while a warm cache admitted
+    ''' only one, because the old existingTs set was built once and never grew during the loop
+    ''' that used it). Friend + no I/O so the harness can drive it deterministically
+    ''' (A69a–A69c) without touching module state, mirroring AggregateRange/EvaluateEntry/
+    ''' ReclassifyWindowExpiredForNoData's Friend-pure pattern elsewhere in this file.
+    ''' </summary>
+    Friend Shared Function BackfillNewEntries(
+            logRows       As List(Of LogRow),
+            existingCache As List(Of EvalCacheEntry),
+            cfg           As EngineSettings,
+            nowUtc        As DateTime) As List(Of EvalCacheEntry)
+
+        Dim newEntries As New List(Of EvalCacheEntry)()
+
+        ' [S-4, review finding R-4] TWO SETS, NOT ONE — and this is the whole point.
+        '
+        ' ⛔ A single KeyFor() set is WRONG, and it is wrong in the direction that silently
+        ' DUPLICATES the cache. KeyFor picks its namespace PER ROW ("ID|…" when identity is
+        ' present, "TS|…" when it is not) and those two spaces are disjoint by construction.
+        ' Dedup, however, needs the CACHE side and the INCOMING side to share a namespace.
+        ' Today they do not: MEASURED on the production box 2026-09-08, the eval cache holds
+        ' 74,518 rows of which ZERO carry an identity (all "TS|"), while analysis_log.csv holds
+        ' 6,696 rows of which ALL 6,696 carry one (all "ID|"). 3,308 of those log rows are
+        ' ALREADY in the cache by timestamp — and under a single-set key not one of them can
+        ' match, so every engine start re-admits all 3,308 as new. eager_backfill_on_startup
+        ' is true in shipped settings.json, so that is every start, not once.
+        '
+        ' The fix keeps the namespaces and splits the CACHE side instead:
+        '   existingIds      — identity keys of cached rows that HAVE an identity
+        '   existingLegacyTs — timestamps of cached rows that LACK one (the D-3 (a) population)
+        ' A row is a duplicate iff its identity key is in existingIds OR its timestamp is in
+        ' existingLegacyTs. That restores legacy matching without weakening the identity key:
+        ' A69c's two-rows-one-timestamp-different-InstanceId case still admits BOTH, because an
+        ' empty cache has nothing in either set.
+        '
+        ' ⚠ Residual, stated rather than hidden: a legacy cached row at timestamp X still blocks
+        ' a genuinely different new signal at X. That is exactly the PRE-S-4 behaviour, so it is
+        ' no regression, and it decays as identity-bearing rows replace legacy ones.
+        '
+        ' Named existingTs (the identity set) because that is what the S-4 proposal's AC-5
+        ' handle greps for. Pinned by A69e; A69a–A69d do NOT cover this — they never build a
+        ' mixed cache, so their shape cannot produce the failure.
+        Dim existingTs As New HashSet(Of String)(
+            existingCache.Where(Function(e) HasIdentity(e)).Select(Function(e) KeyFor(e)))
+        Dim existingLegacyTs As New HashSet(Of DateTime)(
+            existingCache.Where(Function(e) Not HasIdentity(e)).Select(Function(e) e.Timestamp))
+
+        For Each row In logRows
+            If existingTs.Contains(KeyFor(row)) Then Continue For
+            If existingLegacyTs.Contains(row.Timestamp) Then Continue For
+            ' [D6] Barriers from the row's logged Placed* columns (v0.8) or the
+            ' legacy swing-else-ATR formula (pre-v0.8, D3) — see ResolveBackfillBarriers.
+            Dim favLong, advLong, favShort, advShort As Double
+            ResolveBackfillBarriers(row, cfg, favLong, advLong, favShort, advShort)
+            Dim entry As EvalCacheEntry = BuildEntry(row.Timestamp, row.Verdict,
+                                                     row.EntryPrice, row.ATR,
+                                                     favLong, advLong, favShort, advShort,
+                                                     cfg.Scoring.TradeCosts.EffectiveMinMovePct,
+                                                     row.ExecResolution, row.InstanceId, row.SignalId)
+            ' If window complete, evaluate; otherwise leave as PENDING. The
+            ' horizon is resolution-scaled (15 min 1-min / 45 min 3-min) so a
+            ' 3-min row isn't judged before its window fills — three-min-hold-window-recal §5.
+            If entry.EvalOutcome = "PENDING" AndAlso
+               row.Timestamp.AddMinutes(EvalHorizonMinutes(entry.ExecResolution)) <= nowUtc Then
+                Dim ev = EvaluateEntry(entry, row.Timestamp, nowUtc)
+                entry.EvalOutcome   = ev.outcome
+                entry.TargetEverHit = ev.targetHit
+            End If
+            newEntries.Add(entry)
+            ' [S-4, D-1 (b)] The sets must learn about rows THIS loop created, or a cold start
+            ' admits two colliding rows while a warm start drops one. [R-4] Route the row to
+            ' the SAME set its cache-side counterpart would occupy — mirroring the construction
+            ' above exactly, so an admitted identity-less row also blocks a later identity-
+            ' bearing row at that timestamp.
+            If HasIdentity(row) Then
+                existingTs.Add(KeyFor(row))
+            Else
+                existingLegacyTs.Add(row.Timestamp)
+            End If
+        Next
+        Return newEntries
+    End Function
+
+    ' -----------------------------------------------------------------------
     ' Private: verdict helpers
     ' -----------------------------------------------------------------------
 
@@ -1284,7 +1460,8 @@ Public Class LivePerformanceTracker
     ' Private: eval cache I/O
     ' -----------------------------------------------------------------------
 
-    Private Shared Function LoadEvalCache(path As String) As List(Of EvalCacheEntry)
+    ''' <summary>Friend for the harness (A69d — the v6→v7 round-trip byte-identity proof).</summary>
+    Friend Shared Function LoadEvalCache(path As String) As List(Of EvalCacheEntry)
         Dim result As New List(Of EvalCacheEntry)()
         If Not File.Exists(path) Then Return result
         Try
@@ -1339,6 +1516,21 @@ Public Class LivePerformanceTracker
                     entry.ExecResolution = parsedRes
                 End If
             End If
+            ' [S-4] v7 9th/10th columns InstanceId/SignalId. Absent or empty (a pre-identity
+            ' row, whether truly legacy or just written by a v6 process) ⇒ stay Nothing — do
+            ' NOT default to empty string / 0, or D-3 (a)'s Timestamp fallback cannot tell a
+            ' real identity from an absent one.
+            If p.Length >= 9 Then
+                Dim rawInst As String = p(8).Trim()
+                If Not String.IsNullOrEmpty(rawInst) Then entry.InstanceId = rawInst
+            End If
+            If p.Length >= 10 Then
+                Dim rawSig As String = p(9).Trim()
+                Dim sigVal As Long
+                If Long.TryParse(rawSig, NumberStyles.Integer, CultureInfo.InvariantCulture, sigVal) Then
+                    entry.SignalId = sigVal
+                End If
+            End If
             Return entry
         Catch
             Return Nothing
@@ -1363,13 +1555,19 @@ Public Class LivePerformanceTracker
         End Try
     End Sub
 
-    ''' <summary>Rewrite the entire eval cache file (used after in-place PENDING resolves).</summary>
-    Private Shared Sub WriteEvalCache(path As String)
+    ''' <summary>
+    ''' Rewrite the entire eval cache file from an explicit entry list (used after in-place
+    ''' PENDING resolves and by every schema re-stamp). [S-4] Pure w.r.t. module state — takes
+    ''' entries rather than reading _evalCache implicitly — so the v6→v7 re-stamp is directly
+    ''' harness-testable together with LoadEvalCache (A69d: prove the round trip leaves every
+    ''' pre-existing EvalOutcome/TargetEverHit/FavBar/AdvBar untouched). Friend for the harness.
+    ''' </summary>
+    Friend Shared Sub WriteEvalCache(path As String, entries As List(Of EvalCacheEntry))
         Try
             Using sw As New StreamWriter(path, append:=False)
                 sw.WriteLine(SchemaCommentLine())
                 sw.WriteLine(EVAL_COL_HEADER)
-                For Each e In _evalCache
+                For Each e In entries
                     sw.WriteLine(FormatEvalEntry(e))
                 Next
             End Using
@@ -1383,16 +1581,23 @@ Public Class LivePerformanceTracker
         If e.TargetEverHit.HasValue Then
             targetCol = If(e.TargetEverHit.Value, "1", "0")
         End If
+        ' [S-4] v7 9th/10th columns. Empty string when absent — mirrors targetCol's Nothing
+        ' convention, never a fabricated "0" or a synthesised id.
+        Dim instCol   As String = If(e.InstanceId, "")
+        Dim signalCol As String = If(e.SignalId.HasValue, e.SignalId.Value.ToString(CultureInfo.InvariantCulture), "")
         Return String.Format(CultureInfo.InvariantCulture,
-            "{0:o},{1},{2:F2},{3:F2},{4:F2},{5},{6},{7}",
-            e.Timestamp, e.Verdict, e.EntryPrice, e.FavBar, e.AdvBar, e.EvalOutcome, targetCol, e.ExecResolution)
+            "{0:o},{1},{2:F2},{3:F2},{4:F2},{5},{6},{7},{8},{9}",
+            e.Timestamp, e.Verdict, e.EntryPrice, e.FavBar, e.AdvBar, e.EvalOutcome, targetCol, e.ExecResolution,
+            instCol, signalCol)
     End Function
 
     ' -----------------------------------------------------------------------
     ' Private: analysis_log.csv parser (backfill only)
     ' -----------------------------------------------------------------------
 
-    Private Structure LogRow
+    ''' <summary>Friend so ParseAnalysisLog/BackfillNewEntries (also Friend) can be driven
+    ''' directly by the harness (A69a–A69c).</summary>
+    Friend Structure LogRow
         Public Timestamp    As DateTime
         Public Verdict      As String
         Public EntryPrice   As Double
@@ -1408,6 +1613,10 @@ Public Class LivePerformanceTracker
         Public PlacedTargetShort As Double
         Public PlacedStopShort   As Double
         Public HasPlaced         As Boolean
+        ' [S-4] The #5 v0.8 CSV attribution columns. Nothing on any analysis_log.csv row that
+        ' predates them — legacy books lack the columns entirely and must still parse.
+        Public InstanceId As String
+        Public SignalId   As Long?
     End Structure
 
     ''' <summary>
@@ -1445,7 +1654,8 @@ Public Class LivePerformanceTracker
     ''' corrupt the eval cache. Rows with parse errors are silently skipped;
     ''' a header missing any required column yields an empty result.
     ''' </summary>
-    Private Shared Function ParseAnalysisLog(path As String) As List(Of LogRow)
+    ''' <summary>Friend for the harness (A69a–A69c — the identity-pair backfill fixtures).</summary>
+    Friend Shared Function ParseAnalysisLog(path As String) As List(Of LogRow)
         Dim result As New List(Of LogRow)()
         Dim hasPlacedSchema As Boolean = False   ' [D6] v0.8 Placed* columns present in the header
         Try
@@ -1473,7 +1683,15 @@ Public Class LivePerformanceTracker
                 If String.IsNullOrWhiteSpace(line) Then Continue For
                 Dim p = line.Split(","c)
                 Try
-                    Dim row As LogRow
+                    ' [S-4, review finding R-1] `As New`, not a bare `Dim`. LogRow is a
+                    ' Structure, and S-4 added InstanceId As String to it — a REFERENCE-type
+                    ' member. That makes a bare `Dim row As LogRow` trip BC42109 ("used before
+                    ' it has been assigned a value") at the `result.Add(row)` below. The zero-
+                    ' initialised struct was already correct (InstanceId = Nothing is the
+                    ' intended legacy default), so this is the warning, not a behaviour fix —
+                    ' but AC-1 requires 0 warnings and an incremental build HIDES it. Rebuild
+                    ' with -t:Rebuild to see it come back if this is ever reverted.
+                    Dim row As New LogRow
                     ' Timestamp stored as UTC in AnalysisLogger ("yyyy-MM-dd HH:mm:ss" — no
                     ' timezone indicator). AssumeUniversal treats unsuffixed strings as UTC;
                     ' AdjustToUniversal ensures Kind=Utc on output. Defensive against future
@@ -1504,6 +1722,22 @@ Public Class LivePerformanceTracker
                         row.PlacedStopLong    = ParseColD(p, colIdx, "PlacedStopLong")
                         row.PlacedTargetShort = ParseColD(p, colIdx, "PlacedTargetShort")
                         row.PlacedStopShort   = ParseColD(p, colIdx, "PlacedStopShort")
+                    End If
+                    ' [S-4] InstanceId/SignalId — OPTIONAL (not in the required set above); a
+                    ' pre-#5-v0.8 analysis_log.csv lacks both columns and must still parse. By
+                    ' NAME from colIdx, never by position — today's column 110/111 is what the
+                    ' current file happens to be, not a contract (§0.1 Trap 1 of the S-4
+                    ' proposal).
+                    Dim instIdx As Integer
+                    If colIdx.TryGetValue("InstanceId", instIdx) AndAlso instIdx < p.Length AndAlso
+                       Not String.IsNullOrWhiteSpace(p(instIdx)) Then
+                        row.InstanceId = p(instIdx).Trim()
+                    End If
+                    Dim sigIdx As Integer
+                    Dim parsedSig As Long
+                    If colIdx.TryGetValue("SignalId", sigIdx) AndAlso sigIdx < p.Length AndAlso
+                       Long.TryParse(p(sigIdx).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, parsedSig) Then
+                        row.SignalId = parsedSig
                     End If
                     result.Add(row)
                 Catch

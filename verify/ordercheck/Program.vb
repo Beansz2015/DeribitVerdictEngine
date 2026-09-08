@@ -621,6 +621,15 @@ Module Program
         A68a_WeekendCounterDoesNotAbsorbUnparsedRows()
         A68b_AuditWeekendCounterDoesNotAbsorbUnparsedRows()
 
+        ' [S-4 — eval-cache backfill dedup keyed on identity, docs/s4-eval-cache-identity-
+        ' proposal.md §5. Placed before the A50/A58c settings-mutating block, same reason as
+        ' every other fixture above it.]
+        A69a_ColdWarmAsymmetryGone()
+        A69b_LoopUpdatesSetWithinBatch()
+        A69c_DifferentInstanceIdSameTimestampBothAdmitted()
+        A69d_LegacyFallbackAndV7MigrationByteIdentical()
+        A69e_LegacyCacheBlocksIdentityBearingRow()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -12734,6 +12743,255 @@ Module Program
                                 stats.NonV08Excluded, stats.NonDirectionalExcluded))
         Finally
             Try : System.IO.File.Delete(path) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ══ A69 — S-4: eval-cache backfill dedup keyed on identity, docs/s4-eval-cache-identity-
+    ' proposal.md. D-1 (b): the loop fix and the key fix land together. D-2 (b): the true
+    ' (InstanceId, SignalId) pair, not Timestamp alone. D-3 (a): identity-less legacy rows
+    ' fall back to Timestamp. ═══════════════════════════════════════════════════════════
+
+    ' ══ A69a — the cold/warm backfill asymmetry is gone (§2.2 of the proposal) ═════════
+    ' Before this fix, LivePerformanceTracker's dedup set was built once from the loaded
+    ' cache and never grew inside the backfill loop, so a batch containing two rows that
+    ' share one identity was admitted DIFFERENTLY depending on whether the cache started
+    ' cold (both admitted — the set never learned about the first) or warm (one admitted —
+    ' the set already had it from the prior load). Same input, different output, decided
+    ' only by whether the process had restarted.
+    ' ⛔ If this passes before the fix, it is not testing the defect.
+    Private Sub A69a_ColdWarmAsymmetryGone()
+        Dim cfg As New EngineSettings()
+        Dim ts As New DateTime(2026, 9, 9, 12, 0, 0, DateTimeKind.Utc)
+        Dim csvPath As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a69a_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            Dim header As String = "Timestamp,Price,Verdict,ATR,SwingStopLong,SwingStopShort,ExecResolution,PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort,InstanceId,SignalId"
+            ' The SAME identity row, appearing twice in the batch (e.g. a log line seen by
+            ' two overlapping backfill passes) — a genuine duplicate that must dedup to ONE
+            ' either way.
+            Dim rowLine As String = String.Format(CultureInfo.InvariantCulture,
+                "{0:yyyy-MM-dd HH:mm:ss},100000,LONG,100,0,0,1,101000,99000,99000,101000,inst-A,1", ts)
+            System.IO.File.WriteAllLines(csvPath, New String() {header, rowLine, rowLine})
+            Dim logRows = LivePerformanceTracker.ParseAnalysisLog(csvPath)
+
+            ' Cold: the cache is empty when the batch runs.
+            Dim coldNew = LivePerformanceTracker.BackfillNewEntries(
+                logRows, New List(Of LivePerformanceTracker.EvalCacheEntry)(), cfg, ts)
+            Dim coldTotal As Integer = coldNew.Count
+
+            ' Warm: the identity is already in the cache from an earlier run.
+            Dim warmExisting As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+                New LivePerformanceTracker.EvalCacheEntry() With {
+                    .Timestamp = ts, .Verdict = "LONG", .EntryPrice = 100000,
+                    .InstanceId = "inst-A", .SignalId = 1L, .EvalOutcome = "PENDING"
+                }
+            }
+            Dim warmNew = LivePerformanceTracker.BackfillNewEntries(logRows, warmExisting, cfg, ts)
+            Dim warmTotal As Integer = warmExisting.Count + warmNew.Count
+
+            Check("A69a cold/warm backfill asymmetry is gone — a duplicate-identity batch yields the SAME total population whether the cache started cold or warm",
+                  coldTotal = 1 AndAlso warmTotal = 1,
+                  String.Format("coldTotal={0} (expected 1) warmTotal={1} (expected 1) — pre-fix this read cold=2 warm=1",
+                                coldTotal, warmTotal))
+        Finally
+            Try : System.IO.File.Delete(csvPath) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ══ A69b — D-1 (b): the identity-key set is updated INSIDE the loop ═══════════════
+    ' A three-row batch where rows 1 and 2 share one identity and row 3 is distinct must
+    ' admit exactly TWO, not three — proving the set that guards against duplicates learns
+    ' about a row the SAME loop just admitted, not only what was loaded from disk.
+    Private Sub A69b_LoopUpdatesSetWithinBatch()
+        Dim cfg As New EngineSettings()
+        Dim ts As New DateTime(2026, 9, 9, 12, 5, 0, DateTimeKind.Utc)
+        Dim csvPath As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a69b_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            Dim header As String = "Timestamp,Price,Verdict,ATR,SwingStopLong,SwingStopShort,ExecResolution,PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort,InstanceId,SignalId"
+            Dim rowA As String = String.Format(CultureInfo.InvariantCulture,
+                "{0:yyyy-MM-dd HH:mm:ss},100000,LONG,100,0,0,1,101000,99000,99000,101000,inst-A,1", ts)
+            ' Different price so the dedup is provably by IDENTITY, not by row content equality.
+            Dim rowB As String = String.Format(CultureInfo.InvariantCulture,
+                "{0:yyyy-MM-dd HH:mm:ss},100500,LONG,100,0,0,1,101500,99500,99500,101500,inst-A,1", ts)
+            Dim rowC As String = String.Format(CultureInfo.InvariantCulture,
+                "{0:yyyy-MM-dd HH:mm:ss},100000,LONG,100,0,0,1,101000,99000,99000,101000,inst-B,1", ts)
+            System.IO.File.WriteAllLines(csvPath, New String() {header, rowA, rowB, rowC})
+            Dim logRows = LivePerformanceTracker.ParseAnalysisLog(csvPath)
+
+            Dim newEntries = LivePerformanceTracker.BackfillNewEntries(
+                logRows, New List(Of LivePerformanceTracker.EvalCacheEntry)(), cfg, ts)
+
+            Check("A69b the identity-key set is updated INSIDE the loop — a three-row batch with two colliding rows (rowA/rowB share inst-A|1) admits exactly two, not three",
+                  newEntries.Count = 2,
+                  String.Format("newEntries.Count={0} (expected 2 — rowA admitted, rowB skipped as a same-batch duplicate, rowC admitted)", newEntries.Count))
+        Finally
+            Try : System.IO.File.Delete(csvPath) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ══ A69c — D-2 (b): the key is the (InstanceId, SignalId) PAIR, not either alone ═══
+    ' Two rows share ONE Timestamp AND ONE SignalId but carry DIFFERENT InstanceId — the
+    ' sharpest possible test, because it fails under BOTH wrong keys at once: a Timestamp-
+    ' only key collapses them (same second), and a SignalId-only key ALSO collapses them
+    ' (SignalId restarts at 1 per InstanceId, §0.1 Trap 2 of the proposal — it is not an
+    ' identity on its own). Only the true pair admits both.
+    ' ⛔ AC-9: this fixture MUST fail if the key is reverted to Timestamp alone.
+    ' Header order is deliberately SHUFFLED relative to the shipped analysis_log.csv layout
+    ' (SignalId/InstanceId lead; Placed* columns reordered) — proves ParseAnalysisLog
+    ' resolves both columns BY NAME, never by position (§0.1 Trap 1: today's column
+    ' 110/111 is what the file happens to be, not a contract).
+    Private Sub A69c_DifferentInstanceIdSameTimestampBothAdmitted()
+        Dim cfg As New EngineSettings()
+        Dim ts As New DateTime(2026, 9, 9, 12, 10, 0, DateTimeKind.Utc)
+        Dim csvPath As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a69c_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            Dim header As String = "SignalId,InstanceId,Verdict,PlacedStopShort,PlacedTargetShort,PlacedStopLong,PlacedTargetLong,ExecResolution,SwingStopShort,SwingStopLong,ATR,Price,Timestamp"
+            Dim rowX As String = String.Format(CultureInfo.InvariantCulture,
+                "1,inst-A,LONG,101000,99000,99000,101000,1,0,0,100,100000,{0:yyyy-MM-dd HH:mm:ss}", ts)
+            Dim rowY As String = String.Format(CultureInfo.InvariantCulture,
+                "1,inst-B,LONG,101000,99000,99000,101000,1,0,0,100,100000,{0:yyyy-MM-dd HH:mm:ss}", ts)
+            System.IO.File.WriteAllLines(csvPath, New String() {header, rowX, rowY})
+            Dim logRows = LivePerformanceTracker.ParseAnalysisLog(csvPath)
+
+            Dim newEntries = LivePerformanceTracker.BackfillNewEntries(
+                logRows, New List(Of LivePerformanceTracker.EvalCacheEntry)(), cfg, ts)
+
+            Check("A69c two rows sharing ONE Timestamp AND ONE SignalId but DIFFERENT InstanceId are BOTH admitted — the key is the (InstanceId,SignalId) pair, not Timestamp alone and not SignalId alone",
+                  newEntries.Count = 2,
+                  String.Format("newEntries.Count={0} (expected 2 — under a Timestamp-only OR a SignalId-only key this collapses to 1; parsed logRows.Count={1})",
+                                newEntries.Count, logRows.Count))
+        Finally
+            Try : System.IO.File.Delete(csvPath) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ══ A69e — R-4: a LEGACY cache vs an IDENTITY-BEARING log row ════════════════════════
+    ' ⛔ THE MIXED CASE. A69a-A69d cannot produce this failure: every one of them builds a
+    ' cache whose rows sit in the SAME namespace as the incoming rows (all identity, or all
+    ' legacy). Production is neither — MEASURED on the box 2026-09-08: the eval cache holds
+    ' 74,518 rows of which ZERO carry an identity, while analysis_log.csv holds 6,696 of which
+    ' ALL carry one, and 3,308 log rows are already in the cache by timestamp.
+    '
+    ' KeyFor picks its namespace PER ROW and prefixes them "ID|" / "TS|", so a single-set key
+    ' makes the cache side and the incoming side PROVABLY DISJOINT — no incoming row can ever
+    ' match a legacy cached row, and every engine start re-admits all 3,308 as new
+    ' (eager_backfill_on_startup is true in shipped settings.json). The two-set split in
+    ' BackfillNewEntries is what closes it.
+    '
+    ' ⛔ MUTATION: collapse BackfillNewEntries back to one HashSet keyed on KeyFor(e) and this
+    ' fixture MUST fail with newEntries.Count=1. It is the ONLY fixture that fails on that
+    ' mutation — A69a-A69d all still pass, which is exactly why it had to be written.
+    Private Sub A69e_LegacyCacheBlocksIdentityBearingRow()
+        Dim cfg As New EngineSettings()
+        Dim ts As New DateTime(2026, 9, 9, 13, 30, 0, DateTimeKind.Utc)
+        Dim csvPath As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a69e_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            ' The cache side: ONE legacy row — no InstanceId, no SignalId — at ts. This is the
+            ' shape of all 74,518 production rows.
+            Dim legacy As New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = ts, .Verdict = "LONG", .EntryPrice = 100000,
+                .FavBar = 101000, .AdvBar = 99000, .EvalOutcome = "PENDING",
+                .ExecResolution = 1, .InstanceId = Nothing, .SignalId = Nothing}
+            Dim cache As New List(Of LivePerformanceTracker.EvalCacheEntry) From {legacy}
+
+            ' The incoming side: the SAME signal as it now arrives from analysis_log.csv —
+            ' same Timestamp, but carrying identity. Under the old single-set key its "ID|"
+            ' key cannot match the cached "TS|" key, so it is re-admitted as new.
+            Dim header As String = "Timestamp,Price,Verdict,ATR,ExecResolution,SwingStopLong,SwingStopShort,PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort,InstanceId,SignalId"
+            Dim row As String = String.Format(CultureInfo.InvariantCulture,
+                "{0:yyyy-MM-dd HH:mm:ss},100000,LONG,100,1,0,0,101000,99000,99000,101000,inst-A,7", ts)
+            System.IO.File.WriteAllLines(csvPath, New String() {header, row})
+            Dim logRows = LivePerformanceTracker.ParseAnalysisLog(csvPath)
+
+            Dim newEntries = LivePerformanceTracker.BackfillNewEntries(logRows, cache, cfg, ts)
+
+            Check("A69e R-4 — an identity-BEARING log row is deduped against an identity-LESS cached row at the same Timestamp: 0 admitted, not 1 (a single-set key re-admits it and duplicates the cache)",
+                  newEntries.Count = 0 AndAlso logRows.Count = 1,
+                  String.Format("newEntries.Count={0} (expected 0 — a single-set KeyFor gives 1) parsedLogRows={1} cacheRowHasIdentity={2}",
+                                newEntries.Count, logRows.Count, legacy.InstanceId IsNot Nothing))
+        Finally
+            Try : System.IO.File.Delete(csvPath) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ══ A69d — D-3 (a) legacy fallback, and AC-8 the v6→v7 migration byte-identity proof ═
+    ' Two independent claims in one fixture, per the S-4 proposal's own framing of A69d.
+    Private Sub A69d_LegacyFallbackAndV7MigrationByteIdentical()
+        Dim cfg As New EngineSettings()
+        Dim ts As New DateTime(2026, 9, 9, 12, 15, 0, DateTimeKind.Utc)
+
+        ' --- Part 1 (D-3 (a)): an identity-less row falls back to Timestamp ---------------
+        Dim legacyCsvPath As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a69d_log_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            ' A genuinely pre-#5-v0.8 header — no InstanceId/SignalId columns at all, not
+            ' merely empty values in those columns.
+            Dim header As String = "Timestamp,Price,Verdict,ATR,SwingStopLong,SwingStopShort,ExecResolution,PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort"
+            Dim rowLine As String = String.Format(CultureInfo.InvariantCulture,
+                "{0:yyyy-MM-dd HH:mm:ss},100000,LONG,100,0,0,1,101000,99000,99000,101000", ts)
+            System.IO.File.WriteAllLines(legacyCsvPath, New String() {header, rowLine})
+            Dim logRows = LivePerformanceTracker.ParseAnalysisLog(legacyCsvPath)
+
+            Dim existingLegacy As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+                New LivePerformanceTracker.EvalCacheEntry() With {
+                    .Timestamp = ts, .Verdict = "LONG", .EntryPrice = 100000, .EvalOutcome = "PENDING"
+                }
+            }
+            Dim newEntries = LivePerformanceTracker.BackfillNewEntries(logRows, existingLegacy, cfg, ts)
+
+            Check("A69d D-3 (a) — an identity-less row falls back to Timestamp and still dedups against an existing identity-less row at the same Timestamp",
+                  newEntries.Count = 0,
+                  String.Format("newEntries.Count={0} (expected 0)", newEntries.Count))
+        Finally
+            Try : System.IO.File.Delete(legacyCsvPath) : Catch : End Try
+        End Try
+
+        ' --- Part 2 (AC-8, "THE LOAD-BEARING ONE"): v6→v7 touches nothing but the two new
+        ' columns — no re-walk, no re-judgement of any existing outcome field. -------------
+        Dim evalPath As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a69d_eval_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            Dim v6Comment As String = "# schema=v6 (placed-level barriers; min-tradeable-move floor; exec resolution; no-data outcome; whole-second .0000000Z timestamps = backfilled provenance) floor_pct=0.0008"
+            Dim v6Header  As String = "Timestamp,Verdict,EntryPrice,FavBar,AdvBar,EvalOutcome,TargetEverHit,ExecResolution"
+            ' Four representative outcome shapes: a resolved SUCCESS and ADVERSE_HIT (both
+            ' TargetEverHit populated), a still-open PENDING (TargetEverHit empty), and a
+            ' NO_DATA row on a non-default ExecResolution — the migration must leave every
+            ' one of these fields untouched.
+            Dim v6Rows As String() = {
+                "2026-09-01T00:00:00.0000000Z,LONG,100000.00,101000.00,99000.00,SUCCESS,1,1",
+                "2026-09-01T00:05:00.0000000Z,SHORT,100500.00,99500.00,101500.00,ADVERSE_HIT,0,1",
+                "2026-09-01T00:10:00.0000000Z,LONG,100200.00,101200.00,99200.00,PENDING,,1",
+                "2026-09-01T00:15:00.0000000Z,SHORT,100300.00,99300.00,101300.00,NO_DATA,,3"
+            }
+            Dim v6Lines As New List(Of String) From {v6Comment, v6Header}
+            v6Lines.AddRange(v6Rows)
+            System.IO.File.WriteAllLines(evalPath, v6Lines)
+
+            Dim wasPreV7 As Boolean = LivePerformanceTracker.IsPreV7Schema(evalPath)
+            Dim before = LivePerformanceTracker.LoadEvalCache(evalPath)
+            Dim beforeSig = String.Join("|", before.Select(Function(e) String.Format(CultureInfo.InvariantCulture,
+                "{0:o}~{1}~{2:F2}~{3:F2}~{4}~{5}", e.Timestamp, e.EvalOutcome, e.FavBar, e.AdvBar,
+                If(e.TargetEverHit.HasValue, e.TargetEverHit.Value.ToString(), "null"), e.ExecResolution)))
+
+            ' The Step 2.9 re-stamp: load, then rewrite with the (now current, v7) schema
+            ' constants — a plain re-serialisation, no data transform.
+            LivePerformanceTracker.WriteEvalCache(evalPath, before)
+
+            Dim isPreV7After As Boolean = LivePerformanceTracker.IsPreV7Schema(evalPath)
+            Dim after = LivePerformanceTracker.LoadEvalCache(evalPath)
+            Dim afterSig = String.Join("|", after.Select(Function(e) String.Format(CultureInfo.InvariantCulture,
+                "{0:o}~{1}~{2:F2}~{3:F2}~{4}~{5}", e.Timestamp, e.EvalOutcome, e.FavBar, e.AdvBar,
+                If(e.TargetEverHit.HasValue, e.TargetEverHit.Value.ToString(), "null"), e.ExecResolution)))
+
+            Check("A69d AC-8 — v6→v7 migration is byte-identical on every pre-existing EvalOutcome/TargetEverHit/FavBar/AdvBar/ExecResolution; the schema comment gains the identity-pair marker",
+                  wasPreV7 AndAlso Not isPreV7After AndAlso beforeSig = afterSig AndAlso before.Count = 4,
+                  String.Format("wasPreV7={0} (expected True) isPreV7After={1} (expected False) rows={2} (expected 4) beforeSig=[{3}] afterSig=[{4}]",
+                                wasPreV7, isPreV7After, before.Count, beforeSig, afterSig))
+        Finally
+            Try : System.IO.File.Delete(evalPath) : Catch : End Try
         End Try
     End Sub
 
