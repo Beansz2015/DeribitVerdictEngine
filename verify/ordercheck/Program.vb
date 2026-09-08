@@ -616,6 +616,11 @@ Module Program
         ' [weekday filter — surface 3 of 3, the shared offline predicate]
         A67b_IsWeekdayRowGuardsTheMinValueTrap()
 
+        ' [WD-TIDY — the counter fold. Both sites keep the MinValue guard INLINE and FIRST,
+        '  so an unparsed row drops SILENTLY and never inflates WeekendExcluded.]
+        A68a_WeekendCounterDoesNotAbsorbUnparsedRows()
+        A68b_AuditWeekendCounterDoesNotAbsorbUnparsedRows()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -12604,7 +12609,7 @@ Module Program
     ' DateTime.MinValue.DayOfWeek is MONDAY. A naive `dow <> Saturday AndAlso dow <> Sunday`
     ' therefore ADMITS every unparsed timestamp as a valid weekday row. Both pre-existing
     ' implementations carry the guard for that reason (AutoTweakerCore.MatchesWeekday and
-    ' CsvFeatureBuilder.vb:198); extracting one predicate is what stops copies four and five
+    ' CsvFeatureBuilder.vb:203); extracting one predicate is what stops copies four and five
     ' being written without it, and this fixture is what stops the guard being "simplified"
     ' back out of the shared one.
     '
@@ -12631,6 +12636,105 @@ Module Program
                             ForwardWindowJoiner.IsWeekdayRow(mon), ForwardWindowJoiner.IsWeekdayRow(fri),
                             ForwardWindowJoiner.IsWeekdayRow(sat), ForwardWindowJoiner.IsWeekdayRow(sun),
                             ForwardWindowJoiner.IsWeekdayRow(DateTime.MinValue), DateTime.MinValue.DayOfWeek))
+    End Sub
+
+    ' ══ A68a — WD-TIDY: the counter fold, LivePerformanceTracker side ═════════════════
+    ' docs/wd-tidy-weekday-predicate-convergence-spec.md §5, D-2 (a).
+    '
+    ' ⛔ THIS FIXTURE EXISTS FOR EXACTLY ONE MUTATION and nothing else. AggregateRange's
+    ' two weekday branches have DIFFERENT SIDE EFFECTS:
+    '   DateTime.MinValue  -> Continue For, SILENTLY, no counter
+    '   Saturday / Sunday  -> agg.WeekendExcluded += 1, THEN Continue For
+    ' Delegating to ForwardWindowJoiner.IsWeekdayRow is correct, but folding the two
+    ' branches into one call —
+    '     If Not ForwardWindowJoiner.IsWeekdayRow(e.Timestamp) Then WeekendExcluded += 1 : ...
+    ' — compiles, passes A67a, and starts counting UNPARSED rows as weekend rows.
+    ' UI/MainForm_Layout.vb:1743 renders that number as "Weekend excl.: n={0}", so the fold
+    ' moves a value a user reads. The load-bearing assertion is WeekendExcluded = 2, NOT 3.
+    '
+    ' ⛔ rangeStartUtc IS DateTime.MinValue DELIBERATELY, and the fixture is INERT without it.
+    ' AggregateRange applies the RANGE filter first (e.Timestamp < rangeStartUtc). With any
+    ' realistic start the MinValue entry is dropped by the range test and never reaches the
+    ' weekday guard at all — the fold would then pass and the fixture would prove nothing.
+    ' (The D3-RESIDUAL lesson: a fixture built from the obvious input can be inert under both
+    ' predicates.) MinValue < MinValue is False, so the entry survives the range test here.
+    '
+    ' ⚠ A67a is NOT a substitute: its four entries carry no MinValue row, so the fold passes it.
+    ' ⚠ Fixture-literal provenance: no value here is settings-derived. 2026-01-03 Sat /
+    ' 2026-01-04 Sun / 2026-01-05 Mon are CALENDAR FACTS (2026-01-01 is a Thursday), and
+    ' 2 / 1 are counts this fixture's own four entries determine. MECHANISM, not shipped values.
+    Private Sub A68a_WeekendCounterDoesNotAbsorbUnparsedRows()
+        Dim sat As New DateTime(2026, 1, 3, 12, 0, 0, DateTimeKind.Utc)   ' Saturday
+        Dim sun As New DateTime(2026, 1, 4, 12, 0, 0, DateTimeKind.Utc)   ' Sunday
+        Dim mon As New DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc)   ' Monday
+
+        Dim entries As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = mon, .Verdict = "STRONG LONG", .EvalOutcome = "SUCCESS", .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = sat, .Verdict = "STRONG LONG", .EvalOutcome = "SUCCESS", .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = sun, .Verdict = "STRONG LONG", .EvalOutcome = "SUCCESS", .ExecResolution = 1},
+            New LivePerformanceTracker.EvalCacheEntry() With {
+                .Timestamp = DateTime.MinValue, .Verdict = "STRONG LONG", .EvalOutcome = "SUCCESS", .ExecResolution = 1}
+        }
+
+        Dim agg = LivePerformanceTracker.AggregateRange(
+            entries, DateTime.MinValue, mon.AddDays(1), 0)
+
+        Check("A68a WD-TIDY counter fold — the MinValue row drops SILENTLY: WeekendExcluded=2 (the fold reads 3), TotalRange=1",
+              agg.TotalRange = 1 AndAlso agg.WeekendExcluded = 2,
+              String.Format("TotalRange={0} (expected 1) WeekendExcluded={1} (expected 2; the fold gives 3)",
+                            agg.TotalRange, agg.WeekendExcluded))
+    End Sub
+
+    ' ══ A68b — WD-TIDY: the counter fold, CeilingAudit side ═══════════════════════════
+    ' docs/wd-tidy-weekday-predicate-convergence-spec.md §5, D-2 (a). Sibling of A68a, and
+    ' the FIRST fixture CsvFeatureBuilder has ever had.
+    '
+    ' ⛔ SAME ONE MUTATION. LoadAndBuild's two weekday branches differ in side effect:
+    '   DateTime.MinValue  -> Continue For, SILENTLY, no counter
+    '   Saturday / Sunday  -> stats.WeekendExcluded += 1, THEN Continue For
+    ' Folding them into a single IsWeekdayRow call starts counting UNPARSED rows as weekend
+    ' rows. tools/CeilingAudit/AuditReport.vb:84 renders that number as
+    ' "| Excluded — weekend | N |". The load-bearing assertion is WeekendExcluded = 1, NOT 2.
+    '
+    ' ⛔ THE CSV SHAPE IS LOAD-BEARING, not decoration. LoadAndBuild returns early unless the
+    ' header carries ALL FOUR v0.8 placed columns, and it drops any row with MaxScore <= 0 or
+    ' a non-directional Verdict BEFORE the weekday guard runs. A thinner CSV yields an EMPTY
+    ' parse, and WeekendExcluded then reads 1 off nothing at all — passing under both
+    ' predicates and proving nothing. rows.Count = 1 is asserted alongside for exactly that
+    ' reason. (Built probe-first per spec §5: an all-weekday version was confirmed to yield
+    ' a non-zero row count before the weekend and MinValue rows were added.)
+    '
+    ' ⚠ The MinValue row uses the ISO 'T' separator, which ParseCsvRow's TryParseExact
+    ' ("yyyy-MM-dd HH:mm:ss") rejects — the same device A59e uses. It is otherwise a fully
+    ' valid, placed, directional row, so it reaches the weekday guard rather than being
+    ' filtered out earlier.
+    ' ⚠ Fixture-literal provenance: no value here is settings-derived. 2026-01-03 is a
+    ' Saturday and 2026-01-05 a Monday — CALENDAR FACTS. MaxScore 19 and the placed prices
+    ' are arbitrary shape-satisfiers, not shipped values. MECHANISM.
+    Private Sub A68b_AuditWeekendCounterDoesNotAbsorbUnparsedRows()
+        Dim path As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a68b_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            System.IO.File.WriteAllText(path,
+                "Timestamp,Price,Verdict,MaxScore,EffectiveLongScore,EffectiveShortScore,PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort" & vbCrLf &
+                "2026-01-05 14:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf &
+                "2026-01-03 14:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf &
+                "2026-01-05T14:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf)
+
+            Dim stats As LoadStats = Nothing
+            Dim res = CsvFeatureBuilder.LoadAndBuild(path, stats)
+
+            Check("A68b WD-TIDY counter fold (audit) — the unparseable row drops SILENTLY: WeekendExcluded=1 (the fold reads 2), 1 row kept off 3 parsed",
+                  res.Item1.Count = 1 AndAlso stats.TotalRows = 3 AndAlso stats.WeekendExcluded = 1,
+                  String.Format("rows={0} (expected 1) totalRows={1} (expected 3) weekend={2} (expected 1; the fold gives 2) nonV08={3} nonDir={4}",
+                                res.Item1.Count, stats.TotalRows, stats.WeekendExcluded,
+                                stats.NonV08Excluded, stats.NonDirectionalExcluded))
+        Finally
+            Try : System.IO.File.Delete(path) : Catch : End Try
+        End Try
     End Sub
 
 End Module

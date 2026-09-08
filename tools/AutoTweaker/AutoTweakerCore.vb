@@ -820,17 +820,17 @@ Public Class AutoTweakerCore
     ' shared engine bucket (inclusive boundary), so the filter and the engine agree.
     ' A null pop field means "any" for that axis. Friend so the acceptance harness can
     ' exercise it directly.
-    ' Weekday-scope ruling 2026-08-03: evaluation is weekday-only. Matches
-    ' CsvFeatureBuilder.vb:198-203 deliberately — same guard order, same two-day
-    ' test, same CsvRow.Timestamp source. One convention across the three surfaces.
-    ' MinValue guard FIRST - DateTime.MinValue.DayOfWeek is MONDAY, so an unparsed
-    ' timestamp would otherwise pass as a valid weekday row. Friend so the
-    ' acceptance harness can exercise it directly.
+    ' Weekday-scope ruling 2026-08-03: evaluation is weekday-only.
+    ' [WD-TIDY 2026-09-08] The two-day test and the MinValue-first guard order are no
+    ' longer restated here — they live in ONE place, ForwardWindowJoiner.IsWeekdayRow,
+    ' which also carries the rationale (DateTime.MinValue.DayOfWeek is MONDAY, so an
+    ' unparsed timestamp would otherwise pass as a valid weekday row). Semantics are
+    ' unchanged: False on MinValue, False on Sat/Sun, True otherwise.
+    ' This wrapper survives because it takes a CsvRow, not a DateTime, and because it is
+    ' Friend so the acceptance harness can exercise it directly — 5 call occurrences in
+    ' verify/ordercheck/Program.vb, across A59a and A59e.
     Friend Shared Function MatchesWeekday(r As CsvRow) As Boolean
-        If r.Timestamp = DateTime.MinValue Then Return False
-        Dim dow As DayOfWeek = r.Timestamp.DayOfWeek
-        If dow = DayOfWeek.Saturday OrElse dow = DayOfWeek.Sunday Then Return False
-        Return True
+        Return ForwardWindowJoiner.IsWeekdayRow(r.Timestamp)
     End Function
 
     Friend Shared Function MatchesPopulation(r As CsvRow, pop As PopulationFilter,

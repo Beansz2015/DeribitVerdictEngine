@@ -195,9 +195,13 @@ Namespace CeilingAudit
                     Continue For
                 End If
 
+                ' [WD-TIDY, D-2 (a)] The MinValue guard stays INLINE and stays FIRST. It is NOT
+                ' redundant with IsWeekdayRow's own MinValue branch: an unparsed row must drop
+                ' SILENTLY, while a genuine weekend row must bump stats.WeekendExcluded, which
+                ' AuditReport.vb:84 renders as "| Excluded — weekend | N |". Folding the two into
+                ' one call changes a number a user reads. Pinned by A68b.
                 If w.Row.Timestamp = DateTime.MinValue Then Continue For
-                Dim dow As DayOfWeek = w.Row.Timestamp.DayOfWeek
-                If dow = DayOfWeek.Saturday OrElse dow = DayOfWeek.Sunday Then
+                If Not ForwardWindowJoiner.IsWeekdayRow(w.Row.Timestamp) Then
                     stats.WeekendExcluded += 1
                     Continue For
                 End If

@@ -738,13 +738,12 @@ Public Class LivePerformanceTracker
             ' anything that JUDGES, TUNES, or REPORTS ON engine performance." The perf strip's
             ' 3-day and week windows were mixing in sessions never traded.
             '
-            ' ⛔ MinValue guard FIRST: DateTime.MinValue.DayOfWeek is MONDAY, so an unparsed
-            ' timestamp would otherwise sail through as a valid weekday row. Both existing
-            ' implementations carry this guard for that reason (AutoTweakerCore.MatchesWeekday,
-            ' CsvFeatureBuilder.vb:198) and it is not optional.
+            ' ⛔ MinValue guard FIRST, and it is not optional — the rationale
+            ' (DateTime.MinValue.DayOfWeek is MONDAY) now lives in
+            ' ForwardWindowJoiner.IsWeekdayRow, the one shipped predicate.
             '
             ' ⚠ UTC day-of-week, deliberately, NOT the UTC+8 display calendar. The ruling's
-            ' named precedent (CsvFeatureBuilder.vb:199-200) reads the raw UTC timestamp, and so
+            ' named precedent (CsvFeatureBuilder.vb:204) reads the raw UTC timestamp, and so
             ' does the tweaker; scoping this surface differently would make the strip's
             ' population disagree with the tweaker's and the ceiling audit's, which is the
             ' two-surfaces-disagree class the ruling exists to close. CONSEQUENCE, stated: the
@@ -755,9 +754,12 @@ Public Class LivePerformanceTracker
             ' STORAGE IS UNTOUCHED — the eval cache keeps weekend rows exactly as before, no
             ' rotation, fully reversible. This is a display-time filter, the same seam and the
             ' same discipline as the E2a WEAK exclusion twelve lines below.
+            ' [WD-TIDY, D-2 (a)] MinValue guard stays INLINE and FIRST — an unparsed row drops
+            ' SILENTLY, a weekend row bumps agg.WeekendExcluded, which MainForm_Layout.vb:1743
+            ' renders as "Weekend excl.: n={0}". Folding them changes a number a user reads.
+            ' Pinned by A68a.
             If e.Timestamp = DateTime.MinValue Then Continue For
-            Dim dow As DayOfWeek = e.Timestamp.DayOfWeek
-            If dow = DayOfWeek.Saturday OrElse dow = DayOfWeek.Sunday Then
+            If Not ForwardWindowJoiner.IsWeekdayRow(e.Timestamp) Then
                 agg.WeekendExcluded += 1
                 Continue For
             End If

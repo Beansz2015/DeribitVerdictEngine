@@ -132,11 +132,14 @@ Public Class ConditionsExtractor
                 ' D-3 (docs/autotweaker-weekday-filter-proposal.md §5.4): this loop
                 ' re-reads raw CSV lines by absolute index, so it does not inherit the
                 ' load-time weekday exclusion AutoTweakerCore.MatchesWeekday applies to
-                ' `filtered`. Re-derive it here from the same column, same parse
-                ' (TryParseExact matching ForwardWindowJoiner.vb:128-134), same guard
-                ' order (MinValue first) — or weekend rows re-enter the prompt. Fails
-                ' CLOSED on both an absent header column and a too-short row — neither
-                ' is verifiable, so neither is admitted.
+                ' `filtered`. Re-derive it here from the same column and the same parse
+                ' (TryParseExact matching ForwardWindowJoiner.vb) — or weekend rows
+                ' re-enter the prompt. [WD-TIDY 2026-09-08] The guard order (MinValue
+                ' first) and the two-day test are no longer restated here: this site now
+                ' delegates to ForwardWindowJoiner.IsWeekdayRow, which carries both.
+                ' Fails CLOSED on both an absent header column and a too-short row —
+                ' neither is verifiable, so neither is admitted. That fail-closed pair is
+                ' D-3 logic about THIS site and stays inline; only the predicate moved.
                 If Not hasTimestampCol OrElse idx.Timestamp >= parts.Length Then Continue For
                 Dim rowTs As DateTime
                 DateTime.TryParseExact(parts(idx.Timestamp).Trim(),
@@ -144,9 +147,7 @@ Public Class ConditionsExtractor
                                        CultureInfo.InvariantCulture,
                                        DateTimeStyles.None,
                                        rowTs)
-                If rowTs = DateTime.MinValue Then Continue For
-                Dim rowDow As DayOfWeek = rowTs.DayOfWeek
-                If rowDow = DayOfWeek.Saturday OrElse rowDow = DayOfWeek.Sunday Then Continue For
+                If Not ForwardWindowJoiner.IsWeekdayRow(rowTs) Then Continue For
 
                 totalRows += 1
 

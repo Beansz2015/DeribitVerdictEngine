@@ -116,10 +116,10 @@ Public Class ForwardWindowJoiner
     ''' ⛔ THE MinValue GUARD IS NOT DEFENSIVE PADDING — IT IS THE TRAP. DateTime.MinValue
     ''' .DayOfWeek is MONDAY, so an unparsed timestamp sails through a naive day check as a
     ''' valid weekday row. Both pre-existing implementations carry this guard for exactly that
-    ''' reason (AutoTweakerCore.MatchesWeekday, CsvFeatureBuilder.vb:198), and extracting the
+    ''' reason (AutoTweakerCore.MatchesWeekday, CsvFeatureBuilder.vb:203), and extracting the
     ''' predicate here is what stops the fourth and fifth copies being written without it.
     '''
-    ''' ⚠ UTC day-of-week, matching the ruling's named precedent (CsvFeatureBuilder.vb:199-200,
+    ''' ⚠ UTC day-of-week, matching the ruling's named precedent (CsvFeatureBuilder.vb:204,
     ''' "the existing precedent to copy") and the tweaker. Any surface that scoped this on a
     ''' local calendar instead would disagree with both about which rows exist.
     '''
