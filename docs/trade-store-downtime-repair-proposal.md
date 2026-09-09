@@ -1,8 +1,14 @@
 # Gap repair cannot heal downtime — hole-derived resume cursor
 
+> ## ✅✅ BUILT (Part A only) 2026-08-13 (UTC), commit `c6c6942`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** `grep -n 'Hole-derived repair windows' --include=*.vb -r .` → `Core/TradeStoreWriter.vb:699`. **Part B remains UNBUILT — that is not stale, it is this document's own §2.4 stop-and-ask, still standing.**
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
 > ## ✅ D-TABLE TICKED IN FULL — 2026-08-12. D-1 … D-6 all approved as recommended.
 >
-> **Part A is authorised and ready to hand to an implementer as written.**
+> ~~**Part A is authorised and ready to hand to an implementer as written.**~~
 >
 > ⚠ **Gate G-1 is now PARTIALLY answered and the answer changes Part B — read §2 before building it.** The outage was a **venue-wide Deribit outage**, not a box-local fault. **Part B is authorised but its value has dropped**, and §2 carries a stop-and-ask: build Part A, watch one outage self-heal, then re-decide whether Part B is worth touching the live feed supervisor. **Do not open a Part B session before that.**
 

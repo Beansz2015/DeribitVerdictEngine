@@ -1,6 +1,12 @@
 # `S2-2` — split `CalcSpread` into `CalcSpreadBps` + `ClassifySpread`: implementation spec
 
-**Status:** ✅ **BUILD-AUTHORIZED 2026-09-06 (UTC) — §4's D-table TICKED IN FULL, every row as recommended.** ⛔ **§4b is the SINGLE AUTHORITATIVE BUILD LIST. Read §3 first, then build from §4b.** §4 is kept as the record of how the decisions were reached.
+> ## ✅✅ BUILT 2026-09-06 (UTC), commits `57b55f9` + `9e418e0`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** `grep -rln 'CalcSpreadBps' --include=*.vb .` finds it live in `Core/Indicators_OrderFlow.vb`, `LiveMicrostructureEvaluator.vb` and `verify/ordercheck/Program.vb`. `57b55f9` is the split build; `9e418e0` is its batch summary + spec-back. Reviewed and accepted per [`trader-tick-queue.md`](trader-tick-queue.md) §0a, 2026-09-06.
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+**Status:** ~~✅ **BUILD-AUTHORIZED 2026-09-06 (UTC) — §4's D-table TICKED IN FULL, every row as recommended.**~~ ⛔ **§4b is the SINGLE AUTHORITATIVE BUILD LIST. Read §3 first, then build from §4b.** §4 is kept as the record of how the decisions were reached.
 **Author seat:** Opus, 2026-09-06 (UTC). **Origin:** [`a54a-session2-step1-measurement-2026-09-05.md`](a54a-session2-step1-measurement-2026-09-05.md) §9 (the analysis, trader-requested 2026-09-05) · [`trader-tick-queue.md`](trader-tick-queue.md) §2 `S2-2` row · [`seat-handover-2026-09-06.md`](seat-handover-2026-09-06.md) §4.
 
 **Ruling, in one line:** **`D-1` (a) `Double?` · `D-2` (a) inside `ClassifySpread` · `D-3` (b) leave `HasTopOfBook`, record the residual · `D-4` (a) delete `CalcSpread` · `D-5` (a) keep the names.** Trader-directed 2026-09-06, ticked in full without amendment.

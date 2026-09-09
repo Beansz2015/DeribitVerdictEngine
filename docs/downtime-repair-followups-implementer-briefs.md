@@ -1,7 +1,13 @@
 # Downtime-repair follow-ups — three implementer briefs
 
+> ## ✅✅ BUILT 2026-08-14 (UTC), commits `91942d6` (DR-1 + DR-2) and `5346bc0` (DR-3). **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** `grep -rq 'MinHoleMs' --include=*.vb .` finds it referenced only in removal comments (the floor is gone, as DR-1 specified). `git log --oneline --grep='DR-1'` → `91942d6 fix(trade-store): DR-1 no width floor + DR-2 time-contiguous scan cut`; `git log --oneline --grep='DR-3'` → `5346bc0 fix(trade-store): DR-3 gap repair reports rows APPENDED, not the whole file`. Reviewed: `c585d0c` (DR-1+DR-2) and `feee138` (DR-3).
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
 **Source:** the 2026-08-13 review of [`trade-store-downtime-repair-spec-back.md`](trade-store-downtime-repair-spec-back.md) §6. **Build under repair:** `c6c6942` (Part A, hole-derived repair windows).
-**Status:** ⚠ **DR-1 carries one decision (§1.2). DR-2 and DR-3 are ready to hand over as written.**
+**Status:** ~~⚠ **DR-1 carries one decision (§1.2). DR-2 and DR-3 are ready to hand over as written.**~~
 
 ---
 

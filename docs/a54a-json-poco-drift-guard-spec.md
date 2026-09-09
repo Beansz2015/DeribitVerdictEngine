@@ -1,6 +1,12 @@
 # A54a — a JSON↔POCO drift guard by reflection walk
 
-**Status:** ✅ **BUILD-AUTHORIZED. §4's D-table is TICKED IN FULL — trader-directed
+> ## ✅✅ BUILT 2026-09-09 (UTC), commit `3a89093`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** `grep -rq 'WalkPocoVsJson' --include=*.vb .` finds the guard live in `verify/ordercheck/Program.vb` (definition at line 11723, three call sites). Commit `3a89093` confirms fixtures `A62a`-`A62g` and the seven POCO re-syncs shipped in the same commit.
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+**Status:** ~~✅ **BUILD-AUTHORIZED.**~~ **§4's D-table is TICKED IN FULL — trader-directed
 2026-09-04.** D-1 · D-2 · D-4 · D-5 as recommended; **D-3 ruled AGAINST the spec's
 abstention — sync to `"ws"` and fix the comment.**
 

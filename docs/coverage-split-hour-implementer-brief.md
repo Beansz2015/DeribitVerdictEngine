@@ -1,7 +1,13 @@
 # SH-1 — split the coverage hour at a capture-state marker
 
+> ## ✅✅ BUILT, COMMITTED AND CONFIRMED IN PRODUCTION, commit `c19f0ef`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** [`trader-tick-queue.md`](trader-tick-queue.md) §2's `SH-1` row records `git log -S'A49o' -- verify/ordercheck/Program.vb` → `c19f0ef`, fixtures `A49o`-`A49w`, and confirmation in production 2026-08-14 on the real AWS store (hour 2026-08-10 09:00 rendered the split correctly).
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
 **Ruling of record:** [`trader-tick-queue.md`](trader-tick-queue.md) §0a, ruled by the trader 2026-08-12. Origin: [`c1-session1-review-2026-08-04.md`](c1-session1-review-2026-08-04.md) finding F2.
-**Status:** ✅ **RULED AND READY TO BUILD.** Two small decisions in §5 carry my read; neither blocks the session.
+**Status:** ~~✅ **RULED AND READY TO BUILD.**~~ Two small decisions in §5 carry my read; neither blocks the session.
 
 ---
 

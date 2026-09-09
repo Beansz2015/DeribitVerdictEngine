@@ -1,6 +1,12 @@
 # C1-coverage F1 — trailing-edge gap mis-attribution: implementation spec
 
-**Status:** ✅ **BUILD-AUTHORIZED 2026-08-25 — every decision is ruled, nothing is open.** ⛔ **§4b is the SINGLE AUTHORITATIVE BUILD LIST. Read it and build from it.** §4's table is **superseded in two rows** and is kept only as the record of how the decisions were reached — its "My read" column still recommends the losing option on both. §4a carries the evidence behind the two re-rulings.
+> ## ✅✅ BUILT 2026-08-26 (UTC), commit `4032f9c`, with two follow-ups `5cd7269` and `6a6f93e`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** [`trader-tick-queue.md`](trader-tick-queue.md) §2's `C1-coverage F1` row records `DONE 2026-08-26` with the tree check `grep -c "TrailingEdge" tools/BacktestRunner/CoverageReport.vb` → **26**.
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+**Status:** ~~✅ **BUILD-AUTHORIZED 2026-08-25 — every decision is ruled, nothing is open.**~~ ⛔ **§4b is the SINGLE AUTHORITATIVE BUILD LIST. Read it and build from it.** §4's table is **superseded in two rows** and is kept only as the record of how the decisions were reached — its "My read" column still recommends the losing option on both. §4a carries the evidence behind the two re-rulings.
 **Author seat:** Opus, 2026-08-25. **Amended:** Opus, 2026-08-25 — post-tick review (§4a) and final ruling (§4b). **Origin:** [`c1-session1-review-2026-08-04.md`](c1-session1-review-2026-08-04.md) §3 · [`trader-tick-queue.md`](trader-tick-queue.md) §2.
 
 **Ruling history, in one line:** first tick **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)** → §4a re-opened **D-3** and **D-6** on evidence and raised **D-5.1…D-5.5** → second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**. Both ticks trader-directed 2026-08-25, standing direction *"do this properly instead of the minimum."*

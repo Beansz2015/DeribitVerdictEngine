@@ -1,6 +1,12 @@
 # WD-SEMANTICS spec-back
 
-Spec: `docs/wd-semantics-unparsed-counter-spec.md` · RULED (c) 2026-09-09 UTC · BUILD-AUTHORIZED  
+> ## ✅✅ BUILT 2026-09-09 (UTC), commit `ab5600f`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** this spec-back is itself the record of a shipped build — `ab5600f feat(reporting): WD-SEMANTICS - split UnparsedExcluded from WeekendExcluded, fix the report row label`. Its header line carries an authorization label inherited from the spec it reviews, which describes the build BEFORE it shipped, not a pending one.
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+Spec: `docs/wd-semantics-unparsed-counter-spec.md` · RULED (c) 2026-09-09 UTC · ~~BUILD-AUTHORIZED~~  
 Baseline: `113edbb`  
 Build date: 2026-09-10  
 Harness before: **346** · Harness after: **349** · Delta: **+3** (A71a, A71b, A71c)

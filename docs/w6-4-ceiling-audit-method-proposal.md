@@ -1,6 +1,12 @@
 # W6-4 Offline Ceiling Audit — Method · Proposal
 
-**Date:** 2026-07-23 · **Status:** APPROVED — **K1–K6 ALL TICKED 2026-07-23, BUILD-AUTHORIZED. Implementer model: Opus, and use the HIGHEST effort tier available (Opus Extra/Max) — trader-directed, this instrument gates five parked items.** §2 amended at tick time (trader Q): the decision-rule feature set = SCORED inputs only; logged-but-unscored signals demoted to an informational side-column · **Type:** measurement INSTRUMENT — offline, one-off (re-runnable), zero scoring impact, no ⚠ boundary. **The model never ships and never scores live** (interpretability principle, roadmap W6-4: "an INSTRUMENT, never a live scorer").
+> ## ✅✅ BUILT AND RUN, commit `ac004bc`. Result: **INCONCLUSIVE** (re-run 2026-09-09, CI halved from the first read). **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** `test -d tools/CeilingAudit` → EXISTS, built at `ac004bc feat(W6-4): offline ceiling-audit tool (tools/CeilingAudit/) — build + fixtures`. [`trader-tick-queue.md`](trader-tick-queue.md) §2's `E2` row records the run: *"RUN → INCONCLUSIVE. ΔAUC −0.0291, CI [−0.197, +0.124] straddling ±0.030. The queue does not unlock; re-run at the next book doubling."* A re-run's read was executed 2026-09-09 per [`seat-handover-2026-09-09.md`](seat-handover-2026-09-09.md).
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+**Date:** 2026-07-23 · **Status:** APPROVED — **K1–K6 ALL TICKED 2026-07-23,** ~~**BUILD-AUTHORIZED.**~~ **Implementer model: Opus, and use the HIGHEST effort tier available (Opus Extra/Max) — trader-directed, this instrument gates five parked items.** §2 amended at tick time (trader Q): the decision-rule feature set = SCORED inputs only; logged-but-unscored signals demoted to an informational side-column · **Type:** measurement INSTRUMENT — offline, one-off (re-runnable), zero scoring impact, no ⚠ boundary. **The model never ships and never scores live** (interpretability principle, roadmap W6-4: "an INSTRUMENT, never a live scorer").
 **Purpose (roadmap W6-4):** quantify how much predictive signal the additive +1/−1 pipeline leaves unharvested in its own inputs. **Model ≈ pipeline ⇒ declare the system ceiling reached and STOP spending on combination** (closes W6-5/B1 and the D3/D4/D5/D6 parked family honestly; blocks any W6-7 Tier-C spend). **Model ≫ pipeline ⇒ the delta IS the B1 prize, measured** — W6-5 proceeds with the model's top signals as its evidence base.
 **Data gate:** ~3–4 weeks of v0.8 rows (early Aug; the AWS supplementary collector accelerates LONDON/ASIA depth). Build can precede the gate; the RUN waits for it.
 

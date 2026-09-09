@@ -1,6 +1,12 @@
 # A54a follow-up — R-2 (dictionary completeness), R-1 (stale seed comment), R-3 (degraded-path ROC)
 
-**Status:** ✅ **BUILD-AUTHORIZED. Everything is ruled — R-2 = (b), R-1 rides it, and
+> ## ✅✅ BUILT 2026-09-09 (UTC), commit `cc44e9f`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** `git log --oneline --grep='R-2 dict completeness' -i` → `cc44e9f fix(settings): A54a follow-up - R-2 dict completeness, R-1 stale comment, D-R3 (i) seed ROC nullables`. ⚠ **Correction to this spec's own §1.1 handle: `git log --grep='R-2 residual'` matches `1ad7d6d`, an UNRELATED later commit (ApplySpread extraction for `S2-2`) — a T-3-shaped name collision, not this build.** `cc44e9f`'s message and diff match this document's R-2/R-1/D-R3 content directly.
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+**Status:** ~~✅ **BUILD-AUTHORIZED.**~~ **Everything is ruled — R-2 = (b), R-1 rides it, and
 `D-R3` = (i) SEED THE NULLABLES (trader-directed 2026-09-04). Nothing is owed.**
 
 **Parent:** [`a54a-json-poco-drift-guard-spec.md`](a54a-json-poco-drift-guard-spec.md).
