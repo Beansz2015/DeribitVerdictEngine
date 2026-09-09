@@ -249,7 +249,7 @@ Partial Public Class MainForm
                 sb.AppendLine(String.Format("KELLY SIZING{0}", capTag))
             End If
             sb.AppendLine("  Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.")
-            sb.AppendLine("  p(win) is ASSUMED from the confidence tier — Actual numbers after next book doubling.")
+            sb.AppendLine("  p(win) is ASSUMED from the confidence tier — the calibration read did not separate the tiers.")
             sb.AppendLine("  Treat as directional bias indicator only.")
             sb.AppendLine("  " & BuildNetRRLine(v, r, cfg))
             sb.AppendLine(String.Format("  p(win) [{0}]:   {1:P1}", v.KellyPMode, v.KellyPWin))

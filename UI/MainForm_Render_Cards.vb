@@ -1571,13 +1571,22 @@ Partial Public Class MainForm
         stack.Controls.Add(BuildCardHeaderWithTags("KELLY SIZING", biasTag, capTag))
 
         ' GAP-10: ATR-basis advisory. The p(win) assumption line was added 2026-08-02
-        ' (kelly-est-honesty-decision-2026-08-02.md) — F1's §9 read measured STRONG at
-        ' 46.8% against the 65% this tier map assumes, so the block says so on screen.
-        ' Deliberately carries no measured numbers: a string with "46.8%" in it goes
-        ' stale the moment the book grows. Mirrors MainForm_PlaintextSnapshot.vb.
+        ' (kelly-est-honesty-decision-2026-08-02.md) — F1's §9 read measured STRONG below
+        ' the 65% this tier map assumes, so the block says so on screen.
+        ' [D-2, 2026-09-09] RE-WORDED. The old line promised "Actual numbers after next
+        ' book doubling". The doubling HAPPENED — the Kelly trigger was met at 407 weekday
+        ' STRONG against ≥406 — and the numbers say the tier ladder still does not separate
+        ' and pooled STRONG still sits below breakeven. Leaving the promise standing would
+        ' have turned a pending statement into a false one, which the 2026-08-02 decision
+        ' explicitly forbids ("what it must not do is silently promise another doubling").
+        ' Spec + the three candidate strings: docs/kelly-est-advisory-reword-spec.md §3;
+        ' candidate A signed off by the trader 2026-09-09.
+        ' ⛔ Still deliberately carries no measured numbers: a string with "47.1%" in it goes
+        ' stale the moment the book grows. Mirrors MainForm_PlaintextSnapshot.vb — BOTH
+        ' surfaces move together or neither does (engine display-string parity rule).
         stack.Controls.Add(BuildCardAdvisory(
             "Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.",
-            "p(win) is ASSUMED from the confidence tier — Actual numbers after next book doubling.",
+            "p(win) is ASSUMED from the confidence tier — the calibration read did not separate the tiers.",
             "Treat as directional bias indicator only.",
             BuildNetRRLine(v, r, cfg)))
 
