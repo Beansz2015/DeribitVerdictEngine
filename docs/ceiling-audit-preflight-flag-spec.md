@@ -1,6 +1,16 @@
 # `D-1` — a committed `--preflight` flag for `CeilingAudit`
 
-✅ **RULED (a) 2026-09-09 (UTC), trader. BUILD-AUTHORIZED.** Decision record: [`kelly-w6-4-spec-back.md`](kelly-w6-4-spec-back.md) §2.
+> ## ✅✅ BUILT AND SHIPPED — commit `1e624ec`, 2026-09-09 (UTC). **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> ✅ **Verified by the reviewing seat, not carried:** `--preflight` on the frozen pooled book prints `PREFLIGHT_ELIGIBLE_ROWS=8269`, exits **0**, emits **no** OHLC-fetch line, and **every** exclusion field matches the earlier throwaway harness digit for digit. Both argument orders produce byte-identical output. Harness **345 → 346** (`A70a`); `GATE PASSED`; `settings.json` untouched.
+>
+> ⭐ **It did what it was for: the previous session's `E-1` — the harness that authorised the `W6-4` spend and that no reader could re-run — is now reproducible from tracked code.**
+>
+> ⚠ **§3's gap is still open by ruling:** pre-flight `P-5`'s duplicate-`(InstanceId, SignalId)` half remains **uncovered**, and that scan stays manual. Any spec that needs it must keep saying so.
+>
+> ⚠ **One defect found in review and fixed in the same commit:** the header's `Exit codes` contract still read *"0 report written"*; with `--preflight` a 0 now also means *"stats printed, NO report written"*.
+
+✅ **RULED (a) 2026-09-09 (UTC), trader.** Decision record: [`kelly-w6-4-spec-back.md`](kelly-w6-4-spec-back.md) §2.
 
 **Baseline commit: `d5ce4a5`.** Line numbers read at that commit.
 

@@ -1,6 +1,16 @@
 # Kelly CAL + `W6-4` re-run — the pooled-book assembly and read
 
-✅ **BUILD-AUTHORIZED. The Kelly dated trigger is MET.** Measured 2026-09-09 14:04 UTC on the collector: **407 weekday STRONG against ≥406**.
+> ## ✅✅ EXECUTED 2026-09-09 (UTC). Packet at commit `d5ce4a5`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> ✅ **All five pre-flight assertions passed**, so `W6-4` was authorised and run. Pooled book: **47,682 rows · 518 weekday STRONG · MD5 `E8418846838FF97F3C90F782A95B3523`**, frozen at `AWS-copybacks/pooled-book-2026-09-09/` (gitignored, persists on disk).
+>
+> **Outcomes — both instruments still unresolved, and that is the honest result:** the tier ladder **did not separate** (pooled STRONG 47.1 % vs MEDIUM 42.5 % vs WEAK 42.4 %, CIs overlapping) and pooled STRONG remains **below** the 47.76 % breakeven. `W6-4` NY×1 stays **INCONCLUSIVE**, though its CI halved in width (0.160 vs 0.321). **`E2`'s standing instruction is unchanged: re-run at the next book doubling, no spend meanwhile.**
+>
+> ⛔ **A headline finding in the returned packet was WITHDRAWN in review** — the claim that ASIA×3's CI sat entirely above breakeven used the **global** breakeven. ASIA's own `b` is 0.78125, breakeven **56.14 %**, and its CI floor of 52 % is **below** it. See [`kelly-w6-4-batch-summary.md`](kelly-w6-4-batch-summary.md)'s correction block.
+>
+> ⚠ **Trap 5's "0.36 %" figure below is a METRIC MISMATCH waiting to mislead the next reader.** It counts weekday STRONG **lost** (1 in 281). This run's dedup dropped **5,824 of 12,311** local rows — but those are rows **superseded** by AWS in the overlap window, a different measure entirely. **Zero pre-AWS rows were dropped.** ⛔ **Still unmeasured: how many of the 81 dropped local weekday STRONG were minute-collisions with a DIFFERENT AWS signal.** Not material to the gate (518 against 406).
+
+✅ **The Kelly dated trigger is MET.** Measured 2026-09-09 14:04 UTC on the collector: **407 weekday STRONG against ≥406**.
 
 ⛔ **TWO INSTRUMENTS, ONE BOOK, ONE FREEZE. They bundle by design** — `docs/kelly-est-honesty-decision-2026-08-02.md` §2.1: *"one pooled freeze, one re-read session, both instruments. That also keeps the overfit counter honest, since both consume the same book span."* **Do not assemble the book twice.**
 

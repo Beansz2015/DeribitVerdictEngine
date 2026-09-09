@@ -1,6 +1,16 @@
 # `S-4` — eval-cache backfill: key on identity, and fix the loop
 
-✅✅ **RULED 2026-09-08 (UTC, trader) — `D-1` (b) · `D-2` (b) · `D-3` (a). THIS IS NOW A BUILD-AUTHORIZED SPEC.**
+> ## ✅✅ BUILT AND SHIPPED — commit `1aeae5a`, 2026-09-08 (UTC). **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> Harness **339 → 345** (`A69a`–`A69e`); Release `-t:Rebuild` **0/0**; `GATE PASSED`; `settings.json` untouched at **v68**.
+>
+> ⛔⛔ **THE ORCHESTRATOR REVIEW CAUGHT A BLOCKING REGRESSION THAT THE BUILD'S OWN FIVE FIXTURES, THE GATE AND A CLEAN BUILD ALL PASSED — `R-4`.** `KeyFor` chose its namespace **per row** (`"ID\|"` vs `"TS\|"`), leaving the eval cache and the incoming rows **provably unable to match**: measured on the box, **74,518 cached rows with ZERO identities against 6,696 log rows with ALL identities, and 3,308 already in the cache by timestamp** — re-admitted as duplicates on **every** engine start. **Fixed with two sets plus a single `HasIdentity` predicate, and pinned by `A69e`, which fails ALONE under the single-set mutation.**
+>
+> ⭐ **The reusable lesson is in [[feedback-migrations-create-a-mixed-population]]: `A69a`–`A69d` each built a cache in the SAME namespace as the incoming rows. Production was NEITHER.**
+>
+> ⚠ Two smaller findings also fixed: a `BC42109` warning the build introduced and wrongly reported as pre-existing (only `-t:Rebuild` shows it), and five unescaped pipes in the §15 entry that broke its table row.
+
+✅✅ **RULED 2026-09-08 (UTC, trader) — `D-1` (b) · `D-2` (b) · `D-3` (a).**
 
 ⛔ **BUILD FROM §4b. It is the build list.** §4 below is the record of how it was reached and is **not** the instruction — same convention as [`s2-2-calcspread-split-proposal.md`](s2-2-calcspread-split-proposal.md) §4b/§4.
 

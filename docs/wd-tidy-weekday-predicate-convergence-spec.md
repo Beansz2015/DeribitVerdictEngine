@@ -1,6 +1,16 @@
 # `WD-TIDY` — converge the inline weekday predicates onto `ForwardWindowJoiner.IsWeekdayRow`
 
-**Spec status:** RULED AND BUILD-AUTHORIZED. Every decision in §3 is ticked. There is no open D-table.
+> ## ✅✅ BUILT AND SHIPPED — commit `5996f01`, 2026-09-08 (UTC). **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> Four sites converged onto `ForwardWindowJoiner.IsWeekdayRow`. Harness **337 → 339** (`A68a`, `A68b`); `GATE PASSED`; `settings.json` untouched at **v68**. `D-2` (a) held — **no rendered value moved**.
+>
+> ⚠ **A spec assumption below BROKE and the implementer caught it: `A68a` is INERT unless `rangeStartUtc = DateTime.MinValue`**, because `AggregateRange` range-filters **before** the weekday guard — under any realistic start the `MinValue` entry never reaches the code under test and the fold would have passed. **§5 gives no warning of this.** Sibling lesson: [[feedback-fixture-shape-must-admit-the-failure]].
+>
+> ⚠ **§2.1's claim that no target file declares a `Namespace` is WRONG** — `tools/CeilingAudit/CsvFeatureBuilder.vb` declares `Namespace CeilingAudit`. The conclusion held (VB resolves outward, no new `Imports` needed), but the stated reason did not.
+>
+> ⚠ **Residual raised by this build and still OWED: `WD-SEMANTICS`** — `WeekendExcluded` means three different things on three surfaces. It is a **decision**, not a build slot.
+
+**Spec status:** RULED AND BUILT. Every decision in §3 is ticked. There is no open D-table.
 
 **Baseline commit: `2da3872`.** Every line number in this spec was read at that commit. ⛔ **Re-read before editing if `HEAD` has moved** — a line number correct when written goes wrong two commits later.
 

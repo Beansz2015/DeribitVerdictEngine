@@ -2,7 +2,15 @@
 
 ✅ **RULED (c) 2026-09-09 (UTC), trader.** ⛔ **Option (b) — "leave it, another doubling will come" — is STRUCK.** Decision record: [`kelly-w6-4-spec-back.md`](kelly-w6-4-spec-back.md) §2.
 
-⛔⛔ **DO NOT BUILD YET. §3's exact strings need the trader's sign-off first** — [`kelly-est-honesty-decision-2026-08-02.md`](kelly-est-honesty-decision-2026-08-02.md) requires it (*"Exact strings — sign these off before the code lands"*). Everything else in this spec is settled.
+> ## ✅✅ BUILT AND SHIPPED — commit `517f7b6`, 2026-09-09 (UTC). **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> ✅ **Candidate A was signed off by the trader** and is live on both surfaces: *"p(win) is ASSUMED from the confidence tier — the calibration read did not separate the tiers."* — `UI/MainForm_PlaintextSnapshot.vb:252` and `UI/MainForm_Render_Cards.vb:1589`. `verify-gate.ps1` reported **`no snapshot/card drift detected`**; harness **346 unchanged**; Release `-t:Rebuild` **0/0**; `settings.json` untouched at **v68**. A `docs/DeribitIndicatorProject.md` §15 entry rode with it, so the commit is deliberately **not** tagged `[no-engine-change]`.
+>
+> ⛔ **`AC-3` AS WRITTEN BELOW IS WRONG AND FAILED — read §4 with that in mind.** It demanded `grep -rn "book doubling" --include=*.vb` return zero hits in `UI/`. It returned **one**: the new code COMMENT quoting the retired wording to explain the change. **That is the standing defect `CLAUDE.md` names — counting a NAME is a copy of the property and drifts the moment a comment mentions it.** The correct check excludes VB comment lines and passes with zero.
+>
+> ⚠ **`AC-6` was NOT done** — the line was never seen rendered in the running app. It is 94 characters against the retired line's 96, so it fits by construction, but that is reasoning, not observation.
+
+⛔ **The "do not build" instruction below is SPENT. Kept per the quote-and-label convention.** ~~DO NOT BUILD YET. §3's exact strings need the trader's sign-off first~~ — [`kelly-est-honesty-decision-2026-08-02.md`](kelly-est-honesty-decision-2026-08-02.md) requires it (*"Exact strings — sign these off before the code lands"*). Everything else in this spec is settled.
 
 **Baseline commit: `d5ce4a5`.** Line numbers read at that commit.
 
