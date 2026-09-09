@@ -629,6 +629,7 @@ Module Program
         A69c_DifferentInstanceIdSameTimestampBothAdmitted()
         A69d_LegacyFallbackAndV7MigrationByteIdentical()
         A69e_LegacyCacheBlocksIdentityBearingRow()
+        A70a_LoadStatsExclusionIdentityHolds()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -12992,6 +12993,42 @@ Module Program
                                 wasPreV7, isPreV7After, before.Count, beforeSig, afterSig))
         Finally
             Try : System.IO.File.Delete(evalPath) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ══ A70a — D-1: CeilingAudit's --preflight prints a view of LoadStats, and this pins the
+    ' arithmetic the printed block is only a view of, not the formatting.
+    ' docs/ceiling-audit-preflight-flag-spec.md §4.
+    ' ⚠ Fixture-literal provenance: no value here is settings-derived. 2026-01-05 is a Monday,
+    ' 2026-01-03 a Saturday — CALENDAR FACTS. MaxScore 19/0 and the placed prices are arbitrary
+    ' shape-satisfiers, not shipped values. MECHANISM.
+    Private Sub A70a_LoadStatsExclusionIdentityHolds()
+        Dim path As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a70a_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            System.IO.File.WriteAllText(path,
+                "Timestamp,Price,Verdict,MaxScore,EffectiveLongScore,EffectiveShortScore,PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort" & vbCrLf &
+                "2026-01-05 09:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf &
+                "2026-01-05 10:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf &
+                "2026-01-05 11:00:00,100000,STRONG LONG,0,15,2,101000,99000,0,0" & vbCrLf &
+                "2026-01-03 09:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf &
+                "2026-01-05 12:00:00,100000,NO TRADE,19,15,2,101000,99000,0,0" & vbCrLf)
+
+            Dim stats As LoadStats = Nothing
+            Dim res = CsvFeatureBuilder.LoadAndBuild(path, stats)
+            Dim eligible As Integer = res.Item1.Count
+            Dim derived As Integer = stats.TotalRows - stats.BurstCadenceRowsExcluded -
+                                      stats.NonV08Excluded - stats.WeekendExcluded - stats.NonDirectionalExcluded
+
+            Check("A70a LoadStats exclusion identity — TotalRows - burstRows - nonV08 - weekend - nonDirectional = eligible (the printed --preflight block is only a view of this arithmetic)",
+                  stats.TotalRows = 5 AndAlso stats.NonV08Excluded = 1 AndAlso stats.WeekendExcluded = 1 AndAlso
+                  stats.NonDirectionalExcluded = 1 AndAlso stats.BurstCadenceRowsExcluded = 0 AndAlso
+                  eligible = 2 AndAlso derived = eligible,
+                  String.Format("total={0} nonV08={1} weekend={2} nonDir={3} burst={4} eligible={5} derived={6}",
+                                stats.TotalRows, stats.NonV08Excluded, stats.WeekendExcluded,
+                                stats.NonDirectionalExcluded, stats.BurstCadenceRowsExcluded, eligible, derived))
+        Finally
+            Try : System.IO.File.Delete(path) : Catch : End Try
         End Try
     End Sub
 

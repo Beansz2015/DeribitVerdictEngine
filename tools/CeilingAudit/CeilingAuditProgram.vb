@@ -4,10 +4,11 @@
 '
 ' Usage:
 '   CeilingAudit <csvPath> [--out <dir>] [--settings <settings.json>] [--min-test-days N]
-'                          [--margin 0.03] [--bootstrap-b 1000] [--seed 42]
+'                          [--margin 0.03] [--bootstrap-b 1000] [--seed 42] [--preflight]
 '   → ceiling_audit_report_<stamp>.md
 '
-' Exit codes: 0 report written · 1 error (missing CSV, empty book, OHLC fetch failed).
+' Exit codes: 0 report written, OR --preflight stats printed and NO report written ·
+'             1 error (missing CSV, empty book, OHLC fetch failed).
 '
 ' Analysis-only: reads the pooled analysis_log.csv (local + AWS-collector externally
 ' concatenated), fetches 1m OHLC for the label walk, produces one markdown report. Never
@@ -37,7 +38,7 @@ Public Class CeilingAuditProgram
 
         If args Is Nothing OrElse args.Length = 0 OrElse args(0).StartsWith("--") Then
             Console.Error.WriteLine("Usage: CeilingAudit <csvPath> [--out <dir>] [--settings <settings.json>] " &
-                                    "[--min-test-days N] [--margin 0.03] [--bootstrap-b 1000] [--seed 42]")
+                                    "[--min-test-days N] [--margin 0.03] [--bootstrap-b 1000] [--seed 42] [--preflight]")
             Return 1
         End If
 
@@ -48,6 +49,7 @@ Public Class CeilingAuditProgram
         Dim margin As Double = 0.03
         Dim bootstrapB As Integer = 1000
         Dim seed As Integer = 42
+        Dim preflight As Boolean = False
         Dim i As Integer = 1
         While i < args.Length
             Select Case args(i).ToLowerInvariant()
@@ -57,6 +59,7 @@ Public Class CeilingAuditProgram
                 Case "--margin" : i += 1 : If i < args.Length Then Double.TryParse(args(i), NumberStyles.Float, CultureInfo.InvariantCulture, margin)
                 Case "--bootstrap-b" : i += 1 : If i < args.Length Then Integer.TryParse(args(i), bootstrapB)
                 Case "--seed" : i += 1 : If i < args.Length Then Integer.TryParse(args(i), seed)
+                Case "--preflight" : preflight = True
             End Select
             i += 1
         End While
@@ -126,6 +129,21 @@ Public Class CeilingAuditProgram
         Dim populations = CsvFeatureBuilder.PartitionIntoPopulations(cfg, allRows, allBundles)
         Console.WriteLine("[CeilingAudit] Loaded " & allRows.Count & " eligible rows; populations: " &
                           String.Join(", ", populations.Select(Function(p) p.Name & "=" & p.Rows.Count)))
+
+        If preflight Then
+            Console.WriteLine("PREFLIGHT_TOTAL_ROWS=" & stats.TotalRows)
+            Console.WriteLine("PREFLIGHT_ELIGIBLE_ROWS=" & allRows.Count)
+            Console.WriteLine("PREFLIGHT_REPEATED_HEADERS_SKIPPED=" & stats.RepeatedHeadersSkipped)
+            Console.WriteLine("PREFLIGHT_NON_V08_EXCLUDED=" & stats.NonV08Excluded)
+            Console.WriteLine("PREFLIGHT_WEEKEND_EXCLUDED=" & stats.WeekendExcluded)
+            Console.WriteLine("PREFLIGHT_NON_DIRECTIONAL_EXCLUDED=" & stats.NonDirectionalExcluded)
+            Console.WriteLine("PREFLIGHT_BURST_INSTANCE_PREFIX_EXCLUDED=" & stats.BurstInstancePrefixExcluded)
+            Console.WriteLine("PREFLIGHT_BURST_CADENCE_INSTANCES_EXCLUDED=" & stats.BurstCadenceInstancesExcluded)
+            Console.WriteLine("PREFLIGHT_BURST_CADENCE_ROWS_EXCLUDED=" & stats.BurstCadenceRowsExcluded)
+            Console.WriteLine("PREFLIGHT_POPULATIONS=" &
+                              String.Join(", ", populations.Select(Function(p) p.Name & "=" & p.Rows.Count)))
+            Return 0
+        End If
 
         ' -- OHLC fetch for the label walk ----------------------------------------
         Dim spanFrom As DateTime = allRows.Min(Function(r) r.Timestamp)
