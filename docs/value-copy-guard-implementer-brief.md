@@ -1,6 +1,16 @@
 # Implementer brief — the value-copy guard (A54a as ruled) + the probe parse site
 
-**Status:** ✅ **BUILD-AUTHORIZED.** Both design decisions are RULED — [`trader-tick-queue.md`](trader-tick-queue.md) §0a, 2026-08-11. **Do not re-open them; §1 below is the ruling, not a proposal.**
+> ## ✅⚠ HALF BUILT — SPLIT STATUS, verified 2026-09-09 (UTC). **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **The value-copy guard — BUILT BY SUPERSESSION, commit `3a89093`.** It shipped as fixtures `A62a`–`A62g` (the `WalkPocoVsJson` reflection walk) under [`a54a-json-poco-drift-guard-spec.md`](a54a-json-poco-drift-guard-spec.md), **NOT** as this brief's planned `A56a`–`A56d` with `A56b` as the guard.
+>
+> ⛔⛔ **ID COLLISION — do not grep `A56b` for this doc.** This brief's own §5 planned `A56a`–`A56d` (`A56b` = the guard itself). **The tree instead gave `A56a`–`A56g` to an unrelated trade-store hole-detection fixture family** (`A56b_CoveredStoreReturnsTailOnlyAndA48dHolds`, [`trade-store-downtime-repair-proposal.md`](trade-store-downtime-repair-proposal.md)). A reader who greps `A56b` for this brief lands on the wrong file's fixture and the paragraph stops making sense.
+>
+> **The probe parse site — DEFERRED, NOT BUILT.** Ruling of record: [`trader-tick-queue.md`](trader-tick-queue.md) ITEM 6 — `S-1` re-checked and ruled **(a) as the direction, but NOT NOW**, 2026-09-07 (UTC), scheduled behind anything with a live consumer. **Verified in the tree 2026-09-09 (UTC):** `tools/WsTradeProbe/WsTradeProbeProgram.vb` still parses the WebSocket payload independently (its own `ReadLong`/`ReadDouble`/`ReadString` helpers) — no call into a shared `TradeRecord` reader. The defect class this brief exists to remove — two independent readers that can disagree — is still live.
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+**Status:** ~~✅ **BUILD-AUTHORIZED.**~~ Both design decisions are RULED — [`trader-tick-queue.md`](trader-tick-queue.md) §0a, 2026-08-11. **Do not re-open them; §1 below is the ruling, not a proposal.**
 **Evidence, for reference only — you do not need to read these to build:** [`seam-audit-2026-08-11.md`](seam-audit-2026-08-11.md) (findings S-1, S-2, S-3, S-7) · [`seam-audit-decisions-second-opinion-2026-08-11.md`](seam-audit-decisions-second-opinion-2026-08-11.md) (the review that decided it).
 
 ---
