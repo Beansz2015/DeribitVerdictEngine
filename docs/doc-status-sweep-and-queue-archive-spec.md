@@ -1,6 +1,6 @@
 # Doc-status sweep + `trader-tick-queue.md` archive split — implementation spec
 
-**Status:** ⛔ **DRAFT — NOT BUILD-AUTHORIZED.** §3's D-table needs one trader tick before session 2 starts. **Session 1 needs no tick and can start immediately.**
+**Status:** ✅✅ **BUILD-AUTHORIZED — BOTH SESSIONS. `D-1` ticked (a) by the trader, 2026-09-09 (UTC).** Nothing is owed. ⛔ **Build session 1 first, then session 2 — the order is a dependency, not a preference (§0).**
 
 **Author seat:** Opus, 2026-09-09 (UTC). **Baseline commit: `74aeb60` plus the three uncommitted edits described in §1.2.** ⛔ **Re-read every line number if `HEAD` has moved.**
 
@@ -177,7 +177,17 @@ The orientation seat fixed these on 2026-09-09 (UTC). **They are the worked exam
 
 ---
 
-## 3. ⛔ D-table — ONE decision, needed before session 2 only
+## 3. ✅ D-table — TICKED 2026-09-09 (UTC). Session 2 is BUILD-AUTHORIZED
+
+> ## ✅✅ `D-1` RULED **(a)** — 2026-09-09 (UTC), trader.
+>
+> **The live [`trader-tick-queue.md`](trader-tick-queue.md) keeps a ONE-LINE INDEX ROW per archived item — title · commit · `→ archive`.** The full cell moves to `docs/trader-tick-queue-archive.md`.
+>
+> ⛔ **Session 2 is now BUILD-AUTHORIZED. Nothing else is owed on this spec.**
+>
+> ⚠ **Write the BUILT banner on THIS document the moment session 2 ships** — this spec exists because that step was skipped. **Do not leave it for a sweep.**
+
+### 3.1 The decision as put
 
 | # | Question | Options | My read |
 |---|---|---|---|
@@ -204,9 +214,11 @@ The orientation seat fixed these on 2026-09-09 (UTC). **They are the worked exam
 - **Record the `A56` collision inside the banner.** ⚠ **The next reader will otherwise repeat exactly the mistake this spec's author made.**
 - **The deferred half:** ✅ **I verified it independently — `tools/WsTradeProbe/WsTradeProbeProgram.vb` still parses independently, no shared-reader call.** Cite the `S-1` ruling, (a) as direction, **NOT NOW**, 2026-09-07.
 
-### `Q-2` — session 2: ⛔ **HOLD. Do not start it.**
+### `Q-2` — session 2: ✅✅ **UNBLOCKED. `D-1` TICKED (a) by the trader, 2026-09-09 (UTC).**
 
-**`D-1` is the trader's tick and I will not take it on their behalf.** The repo rule is explicit — *"implement only approved specs; do not invent design decisions unilaterally"* — and this one restructures their primary state document. **It is in front of them now.** ⭐ **My read is unchanged and recorded in §3: (a).** ⚠ **Session 1 is unaffected — finish it.**
+⭐ **Keep a one-line index row per archived item — title · commit · `→ archive`.** Full cell moves to `docs/trader-tick-queue-archive.md`. **Session 2 is BUILD-AUTHORIZED; see §3.** ⚠ **Still run session 1 to completion first — the order is a dependency.**
+
+*(This row read "HOLD, do not start it" until the tick landed. Kept per the quote-and-label convention.)*
 
 ### `Q-3` — commit session 1: ✅ **YES, commit now.**
 
