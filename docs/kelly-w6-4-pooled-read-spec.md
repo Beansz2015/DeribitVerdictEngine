@@ -8,7 +8,13 @@
 >
 > ⛔ **A headline finding in the returned packet was WITHDRAWN in review** — the claim that ASIA×3's CI sat entirely above breakeven used the **global** breakeven. ASIA's own `b` is 0.78125, breakeven **56.14 %**, and its CI floor of 52 % is **below** it. See [`kelly-w6-4-batch-summary.md`](kelly-w6-4-batch-summary.md)'s correction block.
 >
-> ⚠ **Trap 5's "0.36 %" figure below is a METRIC MISMATCH waiting to mislead the next reader.** It counts weekday STRONG **lost** (1 in 281). This run's dedup dropped **5,824 of 12,311** local rows — but those are rows **superseded** by AWS in the overlap window, a different measure entirely. **Zero pre-AWS rows were dropped.** ⛔ **Still unmeasured: how many of the 81 dropped local weekday STRONG were minute-collisions with a DIFFERENT AWS signal.** Not material to the gate (518 against 406).
+> ⚠ **Trap 5's "0.36 %" figure below is a METRIC MISMATCH waiting to mislead the next reader.** It counts weekday STRONG **lost** (1 in 281). This run's dedup dropped **5,824 of 12,311** local rows — but those are rows **superseded** by AWS in the overlap window, a different measure entirely. **Zero pre-AWS rows were dropped.**
+>
+> ✅✅ **NOW MEASURED, 2026-09-09 — the loose end is CLOSED.** Of the **81** local weekday STRONG rows in the overlap window, **all 81** were dropped by the minute-key dedup. **76 of them are NOT losses** — AWS recorded its own weekday STRONG in the same minute (**39 at the very same second**), so the signal survives via AWS's copy. **5 are genuine losses**: AWS recorded **no** STRONG in that minute. That is **5 against a pooled 518 ≈ 1.0 %**, roughly **2.7× the documented 0.36 %** and the same order of magnitude.
+>
+> ⭐ **The mechanism is NOT an AWS outage — measured and ruled out.** AWS coverage is flat at **~921 rows/day** right across 2026-07-27 → 08-03, with no gap where the losses fall. **All five are the two boxes genuinely DISAGREEING on the same market minute** — each polls Deribit independently, so order-book snapshots and recent-trade windows differ. **They are not lost data; they are the other box's differing verdict, deliberately discarded. That is exactly what AWS-preferred dedup means, and it is the ruled behaviour, not a defect.** ⚠ All five are `STRONG SHORT`, clustered 07-28 → 07-31.
+>
+> ⭐⭐ **IMPACT ON THE CAL VERDICT: NONE, and this is a hard bound rather than a judgement.** Pooled STRONG is 47.1 % on n=518, so ≈244 successes. Restoring all five: **best case (all five wins) = 249/523 = 47.61 %**; worst case = 244/523 = 46.65 %. **Breakeven is 47.76 %. Even the best case stays BELOW it.** The dedup cannot flip the ladder's verdict.
 
 ✅ **The Kelly dated trigger is MET.** Measured 2026-09-09 14:04 UTC on the collector: **407 weekday STRONG against ≥406**.
 
