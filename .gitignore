@@ -431,3 +431,10 @@ AWS-copybacks/
 
 # Local memory-probe log (t2.micro/collector eviction watch) — scratch data, regenerable, never committed
 tools/mem-probe.csv
+
+# collector.ps1 fetch artefacts — the tool stages the box's CSVs at the repo root
+# and under aws_fetch/<stamp>/. Multi-MB, regenerable from the box on demand, and the
+# pooled-book assembly copies what it needs into AWS-copybacks/ (also ignored, above).
+# Ignored 2026-09-09 after a fetch left them loose in the working tree.
+analysis_log_aws.csv
+aws_fetch/
