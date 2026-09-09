@@ -621,6 +621,11 @@ Module Program
         A68a_WeekendCounterDoesNotAbsorbUnparsedRows()
         A68b_AuditWeekendCounterDoesNotAbsorbUnparsedRows()
 
+        ' [WD-SEMANTICS — separate the unparsed count from the weekend count.
+        '  A71a extends A68a in place (same Sub, second Check call). A71b/A71c are new Subs.]
+        A71b_AuditUnparsedCountedSeparatelyFromWeekend()
+        A71c_AnalysisRunnerClassificationIdentity()
+
         ' [S-4 — eval-cache backfill dedup keyed on identity, docs/s4-eval-cache-identity-
         ' proposal.md §5. Placed before the A50/A58c settings-mutating block, same reason as
         ' every other fixture above it.]
@@ -12696,6 +12701,13 @@ Module Program
               agg.TotalRange = 1 AndAlso agg.WeekendExcluded = 2,
               String.Format("TotalRange={0} (expected 1) WeekendExcluded={1} (expected 2; the fold gives 3)",
                             agg.TotalRange, agg.WeekendExcluded))
+        ' [A71a — WD-SEMANTICS extension] The same batch now also populates UnparsedExcluded.
+        ' The MinValue row must land in UnparsedExcluded=1, not in WeekendExcluded=3.
+        ' ⛔ This assertion is why A68a cannot be skipped: without it the new counter is
+        '    unpinned (A68a passes on WeekendExcluded=2 whether the counter fires or not).
+        Check("A71a WD-SEMANTICS — same AggregateRange batch: UnparsedExcluded=1 (MinValue routes to the new counter, not WeekendExcluded)",
+              agg.UnparsedExcluded = 1,
+              String.Format("UnparsedExcluded={0} (expected 1)", agg.UnparsedExcluded))
     End Sub
 
     ' ══ A68b — WD-TIDY: the counter fold, CeilingAudit side ═══════════════════════════
@@ -12745,6 +12757,86 @@ Module Program
         Finally
             Try : System.IO.File.Delete(path) : Catch : End Try
         End Try
+    End Sub
+
+    ' ══ A71b — WD-SEMANTICS: CsvFeatureBuilder counts UnparsedExcluded separately from WeekendExcluded ═══════════
+    ' [WD-SEMANTICS, docs/wd-semantics-unparsed-counter-spec.md §6]
+    '
+    ' Same CSV shape as A68b (weekday + weekend + unparseable-timestamp row) but this fixture
+    ' asserts BOTH counters independently. A68b proves WeekendExcluded does NOT absorb the
+    ' unparsed row (asserting =1, not =2). A71b proves the unparsed row lands in
+    ' UnparsedExcluded=1, closing the loop: nothing is silently dropped.
+    '
+    ' ⚠ Fixture-literal provenance: no value here is settings-derived.
+    ' 2026-01-03 is a Saturday and 2026-01-05 a Monday — CALENDAR FACTS.
+    ' MaxScore 19 and the placed prices are arbitrary shape-satisfiers. MECHANISM.
+    Private Sub A71b_AuditUnparsedCountedSeparatelyFromWeekend()
+        Dim path As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a71b_" & Guid.NewGuid().ToString("N") & ".csv")
+        Try
+            System.IO.File.WriteAllText(path,
+                "Timestamp,Price,Verdict,MaxScore,EffectiveLongScore,EffectiveShortScore,PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort" & vbCrLf &
+                "2026-01-05 14:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf &
+                "2026-01-03 14:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf &
+                "2026-01-05T14:00:00,100000,STRONG LONG,19,15,2,101000,99000,0,0" & vbCrLf)
+
+            Dim stats As LoadStats = Nothing
+            Dim res = CsvFeatureBuilder.LoadAndBuild(path, stats)
+
+            Check("A71b WD-SEMANTICS (audit) — unparsed row in UnparsedExcluded=1, weekend in WeekendExcluded=1; neither absorbs the other",
+                  res.Item1.Count = 1 AndAlso stats.WeekendExcluded = 1 AndAlso stats.UnparsedExcluded = 1,
+                  String.Format("rows={0} (expected 1) weekend={1} (expected 1) unparsed={2} (expected 1)",
+                                res.Item1.Count, stats.WeekendExcluded, stats.UnparsedExcluded))
+        Finally
+            Try : System.IO.File.Delete(path) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ══ A71c — WD-SEMANTICS: AnalysisRunner.ClassifyLoadedRows identity ════════════════
+    ' [WD-SEMANTICS, docs/wd-semantics-unparsed-counter-spec.md §6]
+    '
+    ' ⭐ This is the step-3 restructure's only guard. A71a and A71b cover the two other
+    ' surfaces; this one guards that AnalysisRunner's explicit classifying loop satisfies
+    ' TotalRows + WeekendExcluded + UnparsedExcluded = loaded, with a MinValue row
+    ' present so the three-way split is actually exercised.
+    '
+    ' ⛔ MUTATION THAT MUST FAIL: revert ClassifyLoadedRows to the subtraction:
+    '     kept = loadedRows.Where(IsWeekdayRow).ToList()
+    '     WeekendExcluded = loadedRows.Count - kept.Count   ' absorbs MinValue
+    '     UnparsedExcluded = 0
+    ' Under the mutation: TotalRows=2, WeekendExcluded=2 (sat+MinValue), UnparsedExcluded=0.
+    ' splitCorrect fails because WeekendExcluded=2≠1.
+    '
+    ' ⚠ Fixture-literal provenance: no value here is settings-derived.
+    ' 2026-01-03 Sat / 2026-01-05 Mon / 2026-01-06 Tue — CALENDAR FACTS.
+    ' 2 / 1 / 1 are counts that this fixture's four entries determine. MECHANISM.
+    Private Sub A71c_AnalysisRunnerClassificationIdentity()
+        Dim sat As New DateTime(2026, 1, 3, 12, 0, 0, DateTimeKind.Utc)   ' Saturday
+        Dim mon As New DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc)   ' Monday
+        Dim tue As New DateTime(2026, 1, 6, 12, 0, 0, DateTimeKind.Utc)   ' Tuesday
+
+        Dim loadedRows As New List(Of CsvRow) From {
+            New CsvRow() With {.Timestamp = mon, .Verdict = "STRONG LONG"},
+            New CsvRow() With {.Timestamp = tue, .Verdict = "STRONG SHORT"},
+            New CsvRow() With {.Timestamp = sat, .Verdict = "STRONG LONG"},
+            New CsvRow() With {.Timestamp = DateTime.MinValue, .Verdict = "STRONG LONG"}
+        }
+
+        Dim report As New AnalysisReport()
+        Dim kept = ForwardWindowJoiner.ClassifyLoadedRows(loadedRows, report)
+
+        ' The identity: the three buckets must sum to the input.
+        Dim identity As Boolean = (report.TotalRows + report.WeekendExcluded + report.UnparsedExcluded = loadedRows.Count)
+        ' The split: MinValue must route to UnparsedExcluded, not WeekendExcluded.
+        Dim splitCorrect As Boolean = (report.TotalRows = 2 AndAlso
+                                       report.WeekendExcluded = 1 AndAlso
+                                       report.UnparsedExcluded = 1)
+
+        Check("A71c AnalysisRunner classification identity — TotalRows+WeekendExcluded+UnparsedExcluded=loaded; MinValue→unparsed, not weekend",
+              identity AndAlso splitCorrect,
+              String.Format("TotalRows={0} WeekendExcluded={1} UnparsedExcluded={2} loaded={3} identity={4} splitCorrect={5}",
+                            report.TotalRows, report.WeekendExcluded, report.UnparsedExcluded,
+                            loadedRows.Count, identity, splitCorrect))
     End Sub
 
     ' ══ A69 — S-4: eval-cache backfill dedup keyed on identity, docs/s4-eval-cache-identity-

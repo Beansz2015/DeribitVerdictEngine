@@ -79,6 +79,8 @@ Namespace CeilingAudit
         Public Property RepeatedHeadersSkipped As Integer
         Public Property NonV08Excluded As Integer
         Public Property WeekendExcluded As Integer
+        ''' <summary>[WD-SEMANTICS] Rows whose timestamp parsed to DateTime.MinValue — a data defect, counted separately from WeekendExcluded.</summary>
+        Public Property UnparsedExcluded As Integer
         Public Property NonDirectionalExcluded As Integer
         Public Property BurstInstancePrefixExcluded As Integer
         Public Property BurstCadenceInstancesExcluded As Integer
@@ -200,7 +202,10 @@ Namespace CeilingAudit
                 ' SILENTLY, while a genuine weekend row must bump stats.WeekendExcluded, which
                 ' AuditReport.vb:84 renders as "| Excluded — weekend | N |". Folding the two into
                 ' one call changes a number a user reads. Pinned by A68b.
-                If w.Row.Timestamp = DateTime.MinValue Then Continue For
+                If w.Row.Timestamp = DateTime.MinValue Then
+                    stats.UnparsedExcluded += 1    ' [WD-SEMANTICS] data defect, not scope exclusion
+                    Continue For
+                End If
                 If Not ForwardWindowJoiner.IsWeekdayRow(w.Row.Timestamp) Then
                     stats.WeekendExcluded += 1
                     Continue For

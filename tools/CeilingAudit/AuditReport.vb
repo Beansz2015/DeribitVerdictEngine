@@ -82,6 +82,7 @@ Namespace CeilingAudit
             sb.AppendLine("| Repeated headers skipped | " & m.LoadStats.RepeatedHeadersSkipped & " |")
             sb.AppendLine("| Excluded — pre-v0.8 / no placed levels | " & m.LoadStats.NonV08Excluded & " |")
             sb.AppendLine("| Excluded — weekend | " & m.LoadStats.WeekendExcluded & " |")
+            sb.AppendLine("| Excluded — unparsed timestamp | " & m.LoadStats.UnparsedExcluded & " |")
             sb.AppendLine("| Excluded — NO TRADE / lean / non-directional | " & m.LoadStats.NonDirectionalExcluded & " |")
             sb.AppendLine("| Excluded — burst InstanceId prefix `8706ebae` | " & m.LoadStats.BurstInstancePrefixExcluded & " |")
             sb.AppendLine("| Excluded — burst-cadence rows (median gap < 45s) | " & m.LoadStats.BurstCadenceRowsExcluded & " |")

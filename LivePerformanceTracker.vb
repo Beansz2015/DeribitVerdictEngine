@@ -91,6 +91,15 @@ Public Class LivePerformanceTracker
         Public Property WeekendExcluded As Integer
 
         ''' <summary>
+        ''' [WD-SEMANTICS] Rows dropped because their timestamp parsed to DateTime.MinValue —
+        ''' a data defect (broken timestamp in the tape), not a scope exclusion.
+        ''' Counted separately from WeekendExcluded: a weekend row is out of scope;
+        ''' an unparsed row is a corrupt entry. Rendered in the perf-strip tooltip
+        ''' when > 0, mirroring the WeekendExcluded shape.
+        ''' </summary>
+        Public Property UnparsedExcluded As Integer
+
+        ''' <summary>
         ''' True when this aggregate's range terminates at "now" (i.e., the
         ''' block is currently running or partially-running). False when the
         ''' range is fully in the past (a completed historical block —
@@ -768,7 +777,10 @@ Public Class LivePerformanceTracker
             ' SILENTLY, a weekend row bumps agg.WeekendExcluded, which MainForm_Layout.vb:1743
             ' renders as "Weekend excl.: n={0}". Folding them changes a number a user reads.
             ' Pinned by A68a.
-            If e.Timestamp = DateTime.MinValue Then Continue For
+            If e.Timestamp = DateTime.MinValue Then
+                agg.UnparsedExcluded += 1    ' [WD-SEMANTICS] data defect, not scope exclusion
+                Continue For
+            End If
             If Not ForwardWindowJoiner.IsWeekdayRow(e.Timestamp) Then
                 agg.WeekendExcluded += 1
                 Continue For

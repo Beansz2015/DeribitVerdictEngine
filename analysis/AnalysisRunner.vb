@@ -41,10 +41,7 @@ Public Class AnalysisRunner
         ' surface 1 (AutoTweaker) set.
         ' ⚠ The filter runs BEFORE report.TotalRows and before the verdict counts, so every
         ' figure the report carries is weekday-scoped rather than only the matrix.
-        Dim rows As List(Of CsvRow) = loadedRows.Where(
-            Function(r) ForwardWindowJoiner.IsWeekdayRow(r.Timestamp)).ToList()
-        report.WeekendExcluded = loadedRows.Count - rows.Count
-        report.TotalRows = rows.Count
+        Dim rows As List(Of CsvRow) = ForwardWindowJoiner.ClassifyLoadedRows(loadedRows, report)
 
         ' Verdict counts (over all rows regardless of forward-data availability).
         For Each row In rows

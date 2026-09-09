@@ -135,6 +135,36 @@ Public Class ForwardWindowJoiner
         Return dow <> DayOfWeek.Saturday AndAlso dow <> DayOfWeek.Sunday
     End Function
 
+    ' ── [WD-SEMANTICS] Row classification helper ────────────────────────────────────
+    ' Extracted from AnalysisRunner so the harness can exercise the classification
+    ' directly (AnalysisRunner.vb is excluded from OrderCheck because its Run() method
+    ' makes a live Deribit OHLC fetch). This method is the only change in step 3 of the
+    ' WD-SEMANTICS build; ForwardWindowJoiner already owns IsWeekdayRow and CsvRow.
+    '
+    ' ⛔ The MinValue guard MUST come first: DateTime.MinValue.DayOfWeek is Monday, so a
+    ' naive IsWeekdayRow call would route every unparsed row into the weekend bucket.
+    ' Pinned by A71c.
+    ''' <summary>
+    ''' Classify <paramref name="loadedRows"/> into three buckets. Populates
+    ''' <paramref name="report"/>.TotalRows, WeekendExcluded, and UnparsedExcluded.
+    ''' Returns the kept (weekday, parseable) rows.
+    ''' </summary>
+    Public Shared Function ClassifyLoadedRows(loadedRows As List(Of CsvRow),
+                                              report As AnalysisReport) As List(Of CsvRow)
+        Dim kept As New List(Of CsvRow)()
+        For Each r In loadedRows
+            If r.Timestamp = DateTime.MinValue Then
+                report.UnparsedExcluded += 1    ' data defect — MinValue guard FIRST (Trap 2)
+            ElseIf Not IsWeekdayRow(r.Timestamp) Then
+                report.WeekendExcluded += 1     ' out of scope
+            Else
+                kept.Add(r)
+            End If
+        Next
+        report.TotalRows = kept.Count
+        Return kept
+    End Function
+
     Public Shared Function Load(csvPath As String) As List(Of CsvRow)
         Dim lines As String() = File.ReadAllLines(csvPath)
         If lines.Length <= 1 Then Return New List(Of CsvRow)()

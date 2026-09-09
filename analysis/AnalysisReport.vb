@@ -15,10 +15,18 @@ Public Class AnalysisReport
     ''' [weekday filter, 2026-09-07] Rows dropped from this report because they fell on a
     ''' Saturday or Sunday (UTC). Counted rather than silently discarded — the same discipline
     ''' as CeilingAudit's stats.WeekendExcluded and the perf strip's WindowAggregate counter.
-    ''' ⚠ TotalRows is the POST-filter count, so TotalRows + WeekendExcluded = rows loaded.
+    ''' ⚠ TotalRows is the POST-filter count, so TotalRows + WeekendExcluded + UnparsedExcluded = rows loaded.
     ''' A report that silently shrank would otherwise be indistinguishable from a short book.
     ''' </summary>
     Public Property WeekendExcluded     As Integer
+
+    ''' <summary>
+    ''' [WD-SEMANTICS] Rows dropped because their timestamp parsed to DateTime.MinValue —
+    ''' a data defect (broken timestamp in the tape), not a scope exclusion.
+    ''' Counted separately from WeekendExcluded so a corrupt tape entry is not
+    ''' indistinguishable from a Saturday.
+    ''' </summary>
+    Public Property UnparsedExcluded    As Integer
     Public Property VerdictCounts       As New Dictionary(Of String, Integer)()
 
     ' -------------------------------------------------------------------

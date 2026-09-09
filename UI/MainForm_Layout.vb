@@ -1742,6 +1742,12 @@ Partial Public Class MainForm
                 tip &= Environment.NewLine &
                        String.Format("Weekend excl.: n={0}", w.WeekendExcluded)
             End If
+            ' [WD-SEMANTICS] Unparsed rows are a data defect, not a scope exclusion.
+            ' Rendered when > 0 only — a zero tripwire is not shown to avoid noise.
+            If w IsNot Nothing AndAlso w.UnparsedExcluded > 0 Then
+                tip &= Environment.NewLine &
+                       String.Format("Unparsed excl.: n={0}", w.UnparsedExcluded)
+            End If
 
             lbl.Text      = text
             lbl.ForeColor = fgColor

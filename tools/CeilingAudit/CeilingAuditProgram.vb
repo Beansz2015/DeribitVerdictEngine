@@ -136,6 +136,7 @@ Public Class CeilingAuditProgram
             Console.WriteLine("PREFLIGHT_REPEATED_HEADERS_SKIPPED=" & stats.RepeatedHeadersSkipped)
             Console.WriteLine("PREFLIGHT_NON_V08_EXCLUDED=" & stats.NonV08Excluded)
             Console.WriteLine("PREFLIGHT_WEEKEND_EXCLUDED=" & stats.WeekendExcluded)
+            Console.WriteLine("PREFLIGHT_UNPARSED_EXCLUDED=" & stats.UnparsedExcluded)
             Console.WriteLine("PREFLIGHT_NON_DIRECTIONAL_EXCLUDED=" & stats.NonDirectionalExcluded)
             Console.WriteLine("PREFLIGHT_BURST_INSTANCE_PREFIX_EXCLUDED=" & stats.BurstInstancePrefixExcluded)
             Console.WriteLine("PREFLIGHT_BURST_CADENCE_INSTANCES_EXCLUDED=" & stats.BurstCadenceInstancesExcluded)

@@ -188,7 +188,12 @@ Public Class MarkdownReportWriter
     Private Shared Sub AppendGlobalSummary(sb As StringBuilder, r As AnalysisReport)
         sb.AppendLine("## 1. Global Summary")
         sb.AppendLine()
-        sb.AppendLine(String.Format("- Rows in CSV: **{0}**", r.TotalRows))
+        ' [WD-SEMANTICS] Show the pre-filter total so the arithmetic closes on screen.
+        ' TotalRows is the post-filter (weekday, parseable) count; the two exclusion
+        ' counters explain the gap between what the CSV held and what was analysed.
+        Dim totalCsvRows As Integer = r.TotalRows + r.WeekendExcluded + r.UnparsedExcluded
+        sb.AppendLine(String.Format("- Rows in CSV: {0}  (weekday-scoped: {1} analysed · {2} weekend excl. · {3} unparsed excl.)",
+                                    totalCsvRows, r.TotalRows, r.WeekendExcluded, r.UnparsedExcluded))
         sb.AppendLine("- Forward data source: **Deribit OHLC bulk fetch** (replaces v1 CSV-close ±30s lookup)")
         If r.VerdictCounts.Count > 0 Then
             Dim parts As New List(Of String)()
