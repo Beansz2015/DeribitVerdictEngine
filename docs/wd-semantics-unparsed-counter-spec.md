@@ -1,6 +1,18 @@
 # `WD-SEMANTICS` — separate the unparsed count from the weekend count, and fix the report's row label
 
-✅✅ **RULED (c) 2026-09-09 (UTC), trader. BUILD-AUTHORIZED.** Queue row: [`trader-tick-queue.md`](trader-tick-queue.md) §2. Raised by the `WD-TIDY` build (`5996f01`) and deliberately not folded into it.
+> ## ✅✅ BUILT 2026-09-09 (UTC), commit `ab5600f`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Verified in the tree 2026-09-09 (UTC), not carried:** `UnparsedExcluded` is live on all three carriers — `analysis/AnalysisReport.vb:29` · `LivePerformanceTracker.vb:100` · `tools/CeilingAudit/CsvFeatureBuilder.vb:83`. The report row label is fixed at `analysis/MarkdownReportWriter.vb:194-196`. Fixtures `A71a`–`A71c` are present in `verify/ordercheck/Program.vb`. The version-history entry is at [`DeribitIndicatorProject.md`](DeribitIndicatorProject.md) §15.
+>
+> **Harness 346 → 349, ALL PASS.** Release `-t:Rebuild` 0 errors 0 warnings. `verify-gate.ps1` GATE PASSED. `settings.json` untouched at **v68** — no config key added.
+>
+> ⛔⛔ **THIS BANNER WAS MISSING FOR ONE DAY, AND THAT IS THE FINDING.** The sweep at `7163802` fixed five specs that read as available work. **`WD-SEMANTICS` shipped AFTER that sweep and reproduced the exact defect the sweep existed to prevent.** ⭐ **The standing rule is in [`seat-handover-2026-09-09.md`](seat-handover-2026-09-09.md) §6: write the BUILT banner in the SAME commit that ships the build. Never leave it for a later sweep.**
+>
+> **Spec-back: [`wd-semantics-spec-back.md`](wd-semantics-spec-back.md).**
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+~~✅✅ **RULED (c) 2026-09-09 (UTC), trader. BUILD-AUTHORIZED.**~~ Queue row: [`trader-tick-queue.md`](trader-tick-queue.md) §2. Raised by the `WD-TIDY` build (`5996f01`) and deliberately not folded into it.
 
 **Baseline commit: `7163802`.** Every line number here was read at that commit. ⛔ **Re-read if `HEAD` has moved.**
 
