@@ -49,12 +49,12 @@
 | # | Doc | Reads as | Verification handle — run it | Commit |
 |---|---|---|---|---|
 | **`DS-1`** | [`a54a-json-poco-drift-guard-spec.md`](a54a-json-poco-drift-guard-spec.md) | `BUILD-AUTHORIZED` | `grep -rq 'WalkPocoVsJson' --include=*.vb .` | see §1.3 |
-| **`DS-2`** | [`a54a-r2-r3-followup-spec.md`](a54a-r2-r3-followup-spec.md) | `BUILD-AUTHORIZED` | `git log --oneline --grep='R-2 residual' -i` → `1ad7d6d` | `1ad7d6d` |
+| **`DS-2`** | [`a54a-r2-r3-followup-spec.md`](a54a-r2-r3-followup-spec.md) | `BUILD-AUTHORIZED` | ⛔ **CORRECTED 2026-09-09 (UTC).** Use `git log --oneline --grep='R-2 dict completeness' -i` → `cc44e9f` | **`cc44e9f`** |
 | **`DS-3`** | [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md) | `BUILD-AUTHORIZED 2026-08-25` | queue §2 row records `DONE 2026-08-26` | see §1.3 |
 | **`DS-4`** | [`s2-2-calcspread-split-proposal.md`](s2-2-calcspread-split-proposal.md) | `BUILD-AUTHORIZED 2026-09-06` | `grep -rq 'CalcSpreadBps' --include=*.vb .` | `57b55f9` + `9e418e0` |
 | **`DS-5`** | [`trade-store-downtime-repair-proposal.md`](trade-store-downtime-repair-proposal.md) | *"Part A is authorised and ready to hand to an implementer"* | `grep -rn 'Hole-derived repair windows' --include=*.vb .` → `Core/TradeStoreWriter.vb:699` | `c6c6942` |
 | **`DS-6`** | [`downtime-repair-followups-implementer-briefs.md`](downtime-repair-followups-implementer-briefs.md) | *"DR-2 and DR-3 are ready to hand over as written"* | `grep -rq 'MinHoleMs' --include=*.vb .` and `git log --oneline --grep='DR-3'` → `5346bc0` | `5346bc0` |
-| **`DS-7`** | [`value-copy-guard-implementer-brief.md`](value-copy-guard-implementer-brief.md) | `BUILD-AUTHORIZED` | `grep -q 'A56b' verify/ordercheck/Program.vb` | see §1.3 |
+| **`DS-7`** | [`value-copy-guard-implementer-brief.md`](value-copy-guard-implementer-brief.md) | `BUILD-AUTHORIZED` | ⛔⛔ **THE HANDLE IN THIS ROW WAS WRONG AND IS WITHDRAWN — see §1.4. This doc is HALF built and needs a SPLIT banner, not a BUILT banner** | **`3a89093`** (guard half only) |
 | **`DS-8`** | [`coverage-split-hour-implementer-brief.md`](coverage-split-hour-implementer-brief.md) | `RULED AND READY TO BUILD` | queue §2 `SH-1` row | see §1.3 |
 | **`DS-9`** | [`w6-4-ceiling-audit-method-proposal.md`](w6-4-ceiling-audit-method-proposal.md) | `BUILD-AUTHORIZED` | `test -d tools/CeilingAudit` — built AND run; read executed 2026-09-09 | see §1.3 |
 | **`DS-10`** | [`wd-semantics-spec-back.md`](wd-semantics-spec-back.md) | `BUILD-AUTHORIZED` in its header line | it is a spec-back **of a shipped build** — `ab5600f` | `ab5600f` |
@@ -87,7 +87,31 @@ The orientation seat fixed these on 2026-09-09 (UTC). **They are the worked exam
 
 ⚠ **Where §1.1 says "see §1.3" for the commit:** find it with `git log --oneline --all --grep='<item>' -i` or `git log --oneline -S'<symbol>' -- <file>`. **If you cannot find a specific commit, write the tree evidence and say the commit was not identified.** ⛔ **Do not invent a sha. An unverified sha is worse than no sha.**
 
-### 1.4 Acceptance for session 1
+### 1.4 ⛔⛔ `DS-7` — the handle was wrong, the doc is HALF built, and there is a live ID collision
+
+⛔ **TWO handles in §1.1 as first written were trap `T-3` — they matched a NAME, not the property. Both were caught by the session-1 implementer, not by their author.** ⭐⭐ **This spec NAMED `T-3` and then broke it twice. The rule does not protect you; running the handle does.**
+
+| Handle as first written | Why it was wrong |
+|---|---|
+| `DS-2`: `git log --grep='R-2 residual'` → `1ad7d6d` | **`R-2` names two different findings.** `1ad7d6d` is `refactor(indicators): R-2 residual — extract ApplySpread` — the **`S2-2` spread seam**, touching `Core/Indicators_OrderFlow.vb`. The A54a follow-up is **`cc44e9f`**, touching `Core/Settings/EngineSettings.vb` |
+| `DS-7`: `grep -q 'A56b' verify/ordercheck/Program.vb` | **`A56b` names two different fixtures.** In the tree it is `A56b_CoveredStoreReturnsTailOnlyAndA48dHolds` — a **trade-store** fixture. It has nothing to do with the value-copy guard |
+
+#### ⛔⛔ The `A56` family collision — verified in the tree 2026-09-09 (UTC)
+
+- **`docs/value-copy-guard-implementer-brief.md` §5 PLANNED `A56a`–`A56d`** — trade-parse sites · **`A56b` = "the guard itself"** · `CalcCVD` slope · `CalcMicroCVD`.
+- **The tree holds `A56a`–`A56g`, and they are ALL trade-store / hole-detection** — e.g. `A56c_OutOfOrderStoreProducesNoPhantomHoles`, `A56d_AbsentSeqRowsProduceNoPhantomHoles`.
+- ⭐ **The guard actually shipped as the `A62` family — `A62a`–`A62g`, the `WalkPocoVsJson` reflection walk, commit `3a89093`** — under [`a54a-json-poco-drift-guard-spec.md`](a54a-json-poco-drift-guard-spec.md), which is `DS-1`.
+- ⛔⛔ **`CLAUDE.md` carries the BRIEF's meaning against a tree that holds the OTHER one.** Its fixture-literal provenance rule reads *"the value-copy guard (A56b) explicitly cannot cover this case"*. **A reader who greps `A56b` lands on a trade-store fixture and the paragraph stops making sense.** ⚠ **RAISED TO THE TRADER 2026-09-09 (UTC). Do NOT edit `CLAUDE.md` in this build — it encodes rulings and is the trader's file.**
+
+#### What to write for `DS-7`
+
+**A SPLIT banner, the same shape used on [`trade-store-downtime-repair-proposal.md`](trade-store-downtime-repair-proposal.md):**
+
+- **The guard half — BUILT BY SUPERSESSION**, commit `3a89093`, as `A62a`–`A62g`, **not** as the planned `A56b`. Say so explicitly.
+- **The probe-parse-site half — DEFERRED, not built.** Ruling of record: [`trader-tick-queue.md`](trader-tick-queue.md) ITEM 6, `S-1` ruled **(a) as the direction, NOT NOW**, 2026-09-07. ✅ **Verified in the tree: `tools/WsTradeProbe/WsTradeProbeProgram.vb` still parses independently — no shared-reader call.**
+- ⛔ **Record the `A56` collision in the banner itself.** Without it the next reader repeats exactly this mistake — the doc's own fixture numbers point at other people's fixtures.
+
+### 1.5 Acceptance for session 1
 
 ⭐ **Every handle below was RUN on 2026-09-09 (UTC) against the working tree, not written from memory.** ⚠ **`AC-1` exits non-zero because `grep -c` returns 1 when a count is 0 — read the printed counts, not the exit code.**
 
@@ -160,6 +184,39 @@ The orientation seat fixed these on 2026-09-09 (UTC). **They are the worked exam
 | **`D-1`** | What does the live [`trader-tick-queue.md`](trader-tick-queue.md) keep for an archived item? | **(a)** a one-line index row — title, commit, `→ archive` · **(b)** nothing; the archive is the only record · **(c)** keep the full row and archive a copy | ⭐ **(a).** **(b) re-opens the exact defect §5 was built to close** — an item nobody can see gets re-raised, and this repo has done that at least three times. **(c)** saves nothing and creates a second copy that will drift, which is the multi-copy class the `A54a` arc spent two sessions removing |
 
 ⚠ **Session 1 needs no tick. Start it whether or not `D-1` is answered.**
+
+---
+
+## 3a. ⭐ Answers to the session-1 implementer's three questions — 2026-09-09 (UTC)
+
+**Both of your corrections are ACCEPTED. I re-ran them in the tree rather than take them on report, and both hold.**
+
+| Your finding | My independent check | Verdict |
+|---|---|---|
+| `DS-2`'s `1ad7d6d` is a false match | `git show --stat 1ad7d6d` → `refactor(indicators): R-2 residual — extract ApplySpread`, touching `Core/Indicators_OrderFlow.vb`. **That is the `S2-2` spread seam.** `cc44e9f` touches `Core/Settings/EngineSettings.vb` | ✅ **You are right** |
+| `A56b` is not the value-copy guard | `A56b_CoveredStoreReturnsTailOnlyAndA48dHolds` — a trade-store fixture. **The whole `A56a`–`A56g` family in the tree is trade-store / hole-detection** | ✅ **You are right, and it is worse than one ID — see §1.4** |
+
+### `Q-1` — `DS-7` split banner: ⭐ **YES. Write it.**
+
+**Your proposed shape is correct.** Three additions, all in §1.4 of this document:
+
+- **Cite `3a89093` and name the fixture family `A62a`–`A62g`.** ⛔ **Say explicitly that the guard did NOT ship as the planned `A56b`** — otherwise the doc's own §5 fixture table keeps pointing at other people's fixtures.
+- **Record the `A56` collision inside the banner.** ⚠ **The next reader will otherwise repeat exactly the mistake this spec's author made.**
+- **The deferred half:** ✅ **I verified it independently — `tools/WsTradeProbe/WsTradeProbeProgram.vb` still parses independently, no shared-reader call.** Cite the `S-1` ruling, (a) as direction, **NOT NOW**, 2026-09-07.
+
+### `Q-2` — session 2: ⛔ **HOLD. Do not start it.**
+
+**`D-1` is the trader's tick and I will not take it on their behalf.** The repo rule is explicit — *"implement only approved specs; do not invent design decisions unilaterally"* — and this one restructures their primary state document. **It is in front of them now.** ⭐ **My read is unchanged and recorded in §3: (a).** ⚠ **Session 1 is unaffected — finish it.**
+
+### `Q-3` — commit session 1: ✅ **YES, commit now.**
+
+**I verified your nine edits in the shared working tree before saying so, rather than taking the gate result on report:**
+
+- **`AC-1`** — mojibake scan over your nine files: **0 on every one.**
+- **`AC-2`** — un-struck authorization strings: **9 of 10 now return `0`.** `value-copy-guard-implementer-brief.md` still returns `1`, correctly, because you left `DS-7` for this ruling.
+- **Tag `[no-engine-change]`.** No `settings.json` bump, no [`DeribitIndicatorProject.md`](DeribitIndicatorProject.md) §15 entry.
+
+⭐ **Commit `DS-7` separately once you have written the split banner** — it carries a finding, not just a status fix, and it deserves its own message.
 
 ---
 
