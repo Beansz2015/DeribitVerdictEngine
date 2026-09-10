@@ -21,13 +21,20 @@
 ' order = the §3 schema order.
 '
 ' TryWrite is the repo's standard atomic write (temp + atomic replace — the
-' SettingsLoader/OhlcCache pattern). NOTE the existence guard is load-bearing:
-' File.Replace THROWS when the destination does not exist, which is exactly the
-' first-write case, so TryWrite falls back to File.Move there. Naming the API
-' alone would pin something that cannot serve the requirement unaided —
-' atomicity is the requirement, File.Replace is only half of how it is met.
-' (Wording aligned 2026-08-04 with the order-app seat's §8.1 correction; the
-' CODE already had the guard, only this comment was imprecise.)
+' SettingsLoader/OhlcCache pattern). Since 2026-09-10 it uses ONE call:
+' File.Move(..., overwrite:=True), a TOTAL primitive that works whether or not the
+' destination exists. Atomicity holds because the .tmp is a SIBLING — same volume,
+' which is what Win32 MoveFileEx needs to replace rather than copy-then-delete.
+' Harness: A72a/A72b/A72c.
+' ⛔ The lesson the old form taught SURVIVES the change and is the reason this
+' paragraph is still here: ATOMICITY IS THE REQUIREMENT; NAMING AN API IS NOT THE
+' SAME AS MEETING IT. Superseded text, kept because it explains what changed:
+'   "NOTE the existence guard is load-bearing: File.Replace THROWS when the
+'    destination does not exist, which is exactly the first-write case, so TryWrite
+'    falls back to File.Move there. File.Replace is only half of how it is met."
+'   (Wording aligned 2026-08-04 with the order-app seat's §8.1 correction.)
+' A guard is what you OWE when the primitive is PARTIAL. Choosing a total primitive
+' removes the obligation rather than satisfying it.
 ' Creates the target directory if missing
 ' (§1 never-throw discipline), and NEVER throws (catch + console log).
 '
@@ -559,22 +566,28 @@ Public NotInheritable Class SignalEmitter
     ''' <summary>Atomic write (temp + atomic replace — the repo pattern), creating the
     ''' target directory if missing. NEVER throws (§2 emitter discipline): failures
     ''' are console-logged and reported via the return value.
-    ''' <para>The <c>File.Exists</c> guard below is LOAD-BEARING, not defensive:
-    ''' <c>File.Replace</c> THROWS when the destination does not exist, which is exactly
-    ''' the first-write case, so this falls back to <c>File.Move</c> there. Naming the API
-    ''' alone would pin something that cannot serve the requirement unaided — atomicity is
-    ''' the requirement, <c>File.Replace</c> is only half of how it is met.</para></summary>
+    ''' <para>⭐ <c>File.Move(..., overwrite:=True)</c> is a TOTAL primitive — it works
+    ''' whether or not the destination exists, so the first-write case needs no special
+    ''' handling. The earlier form paired <c>File.Replace</c> with a LOAD-BEARING
+    ''' <c>File.Exists</c> guard, because <c>File.Replace</c> THROWS on a missing
+    ''' destination. ⛔ The lesson that guard taught still stands and is worth keeping:
+    ''' <b>atomicity is the requirement; naming an API is not the same as meeting it.</b>
+    ''' The requirement is now met by ONE call instead of a call plus an obligation.
+    ''' Atomicity is preserved because the .tmp is a SIBLING — same volume, which is what
+    ''' Win32 MoveFileEx needs to replace atomically rather than copy-then-delete.</para>
+    ''' <para>⚠ One deliberate behaviour change: <c>File.Replace</c> preserved the
+    ''' DESTINATION's ACLs and creation time, <c>File.Move</c> carries the SOURCE's.
+    ''' Inert here — the .tmp is created in the same directory, so it inherits the same
+    ''' ACLs the destination had, and nothing in this repo reads CreationTime (verified
+    ''' 2026-09-10). It would matter only for a file carrying EXPLICIT, non-inherited
+    ''' ACLs.</para></summary>
     Public Shared Function TryWrite(json As String, path As String) As Boolean
         Dim tmpPath As String = path & ".tmp"
         Try
             Dim dir As String = IO.Path.GetDirectoryName(path)
             If Not String.IsNullOrEmpty(dir) Then Directory.CreateDirectory(dir)
             File.WriteAllText(tmpPath, json)
-            If File.Exists(path) Then
-                File.Replace(tmpPath, path, Nothing)
-            Else
-                File.Move(tmpPath, path)
-            End If
+            File.Move(tmpPath, path, overwrite:=True)
             Return True
         Catch ex As Exception
             Console.WriteLine("[SignalEmitter] write failed: " & ex.Message)

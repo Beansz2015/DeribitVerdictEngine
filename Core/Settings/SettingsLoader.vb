@@ -349,16 +349,20 @@ Public Class SettingsLoader
     ''' NTFS rename is atomic — a mid-write crash leaves either the original file
     ''' intact (rename never happened) or the new file in place (rename completed),
     ''' never a truncated settings.json. Mirrors TweakerState.Save.
+    ''' <para>Uses <c>File.Move(..., overwrite:=True)</c>, a TOTAL primitive: it works
+    ''' whether or not the destination exists. The previous form paired
+    ''' <c>File.Replace</c> with an <c>If File.Exists</c> guard, because
+    ''' <c>File.Replace</c> THROWS on a missing destination — that guard was an
+    ''' obligation the primitive imposed, not a safety measure, and choosing a total
+    ''' primitive removes the obligation rather than satisfying it. Still atomic: the
+    ''' .tmp is a SIBLING, so source and destination are always on the same volume,
+    ''' which is the condition Win32 MoveFileEx needs for an atomic replace.</para>
     ''' </summary>
     Private Shared Sub AtomicWriteAllText(path As String, content As String)
         Dim tmpPath As String = path & ".tmp"
         Try
             File.WriteAllText(tmpPath, content)
-            If File.Exists(path) Then
-                File.Replace(tmpPath, path, Nothing)
-            Else
-                File.Move(tmpPath, path)
-            End If
+            File.Move(tmpPath, path, overwrite:=True)
         Catch
             Try : File.Delete(tmpPath) : Catch : End Try
             Throw

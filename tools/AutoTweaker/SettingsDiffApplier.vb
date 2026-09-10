@@ -354,15 +354,17 @@ Public Class SettingsDiffApplier
     ' can't truncate settings.json. NTFS rename is atomic at the filesystem level.
     ' Mirrors TweakerState.Save — duplicated here rather than coupling the
     ' AutoTweaker project to the engine assembly (host-agnostic constraint).
+    ' ⭐ File.Move(..., overwrite:=True) is a TOTAL primitive: no File.Exists guard is
+    ' needed, unlike File.Replace which throws on a missing destination. Still atomic —
+    ' the .tmp is a sibling, so always the same volume.
+    ' ⚠ This is one of THREE copies of this helper (SettingsLoader, TweakerState, here).
+    ' They are duplicated deliberately for the host-agnostic constraint; keep them in
+    ' step by hand — changing one and not the others is the drift this repo keeps finding.
     Private Shared Sub AtomicWriteAllText(path As String, content As String)
         Dim tmpPath As String = path & ".tmp"
         Try
             File.WriteAllText(tmpPath, content)
-            If File.Exists(path) Then
-                File.Replace(tmpPath, path, Nothing)
-            Else
-                File.Move(tmpPath, path)
-            End If
+            File.Move(tmpPath, path, overwrite:=True)
         Catch
             Try : File.Delete(tmpPath) : Catch : End Try
             Throw

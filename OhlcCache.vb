@@ -95,11 +95,10 @@ Public Class OhlcCache
                     sw.WriteLine(FormatBar(bar))
                 Next
             End Using
-            If File.Exists(path) Then
-                File.Replace(tmpPath, path, Nothing)
-            Else
-                File.Move(tmpPath, path)
-            End If
+            ' File.Move(..., overwrite:=True) is TOTAL — no File.Exists guard is needed,
+            ' unlike File.Replace which throws on a missing destination. Still atomic:
+            ' the .tmp is a sibling, so it is always on the same volume.
+            File.Move(tmpPath, path, overwrite:=True)
         Catch ex As Exception
             Console.WriteLine("[OhlcCache] WriteAll failed: " & ex.Message)
             Try : File.Delete(tmpPath) : Catch : End Try
@@ -131,17 +130,22 @@ Public Class OhlcCache
             result.AddRange(kept)
 
             ' Atomic write — see WriteAll comment.
-            ' NOTE: unlike WriteAll (and every other File.Replace site in this repo) there is
-            ' deliberately NO File.Exists guard here — File.Replace THROWS on a missing
-            ' destination, and the ONLY reason that is safe is the `If Not File.Exists(path)
-            ' Then Return` early-out at the top of this method. That precondition is DISTANT,
-            ' so if this write is ever extracted, or that early-out removed or moved below
-            ' this point, ADD THE GUARD. Recorded 2026-08-05 because a reader comparing this
-            ' against WriteAll would reasonably conclude one of the two is wrong.
+            ' ⭐ 2026-09-10: this site NO LONGER DEPENDS ON A DISTANT PRECONDITION.
+            ' File.Move(..., overwrite:=True) is TOTAL — it works whether or not the
+            ' destination exists — so the `If Not File.Exists(path) Then Return` early-out
+            ' at the top of this method is no longer load-bearing FOR THIS WRITE. It is
+            ' still correct and still wanted (trimming an absent cache is meaningless), but
+            ' moving or removing it can no longer make this line throw.
+            ' Superseded note, kept because it explains why this site once looked wrong:
+            '   "unlike WriteAll there is deliberately NO File.Exists guard here —
+            '    File.Replace THROWS on a missing destination, and the ONLY reason that is
+            '    safe is the early-out above. That precondition is DISTANT, so if this write
+            '    is ever extracted, ADD THE GUARD." (recorded 2026-08-05)
+            ' ⛔ Do NOT re-add a guard: with a total primitive it would be dead code.
             Dim tmpPath As String = path & ".tmp"
             Try
                 File.WriteAllLines(tmpPath, result)
-                File.Replace(tmpPath, path, Nothing)
+                File.Move(tmpPath, path, overwrite:=True)
             Catch
                 Try : File.Delete(tmpPath) : Catch : End Try
                 Throw

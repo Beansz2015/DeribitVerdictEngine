@@ -1,4 +1,4 @@
-' verify/ordercheck/Program.vb
+﻿' verify/ordercheck/Program.vb
 ' Acceptance fixtures for the engine correctness pass
 ' (docs/engine-correctness-pass-proposal.md §11, tests A1–A9).
 '
@@ -625,6 +625,13 @@ Module Program
         '  A71a extends A68a in place (same Sub, second Check call). A71b/A71c are new Subs.]
         A71b_AuditUnparsedCountedSeparatelyFromWeekend()
         A71c_AnalysisRunnerClassificationIdentity()
+
+        ' [Atomic-write total-primitive swap — six File.Replace sites became
+        '  File.Move(..., overwrite:=True). A72a is the one with teeth: it writes to an
+        '  ABSENT destination, the case File.Replace throws on.]
+        A72a_FirstWriteToAbsentDestinationSucceeds()
+        A72b_OverwriteOfExistingDestinationReplacesContent()
+        A72c_RepeatedWritesLeaveExactlyOneFile()
 
         ' [S-4 — eval-cache backfill dedup keyed on identity, docs/s4-eval-cache-identity-
         ' proposal.md §5. Placed before the A50/A58c settings-mutating block, same reason as
@@ -13121,6 +13128,97 @@ Module Program
                                 stats.NonDirectionalExcluded, stats.BurstCadenceRowsExcluded, eligible, derived))
         Finally
             Try : System.IO.File.Delete(path) : Catch : End Try
+        End Try
+    End Sub
+
+    ' ══ A72 — atomic writes use a TOTAL primitive: File.Move(..., overwrite:=True) ═════════
+    '
+    ' [Queue item: the atomic-write total-primitive swap, ruled in docs/trader-tick-queue.md
+    '  §2. Six File.Replace call sites became File.Move(..., overwrite:=True).]
+    '
+    ' ⭐ WHY THESE ASSERT THROUGH SignalEmitter.TryWrite: it is Public, it is one of the six
+    ' swapped sites, and its own doc comment previously called the File.Exists guard
+    ' "LOAD-BEARING". It is the most meaningful place to prove the guard is now unnecessary.
+    ' The two AutoTweaker copies live in a separate project the harness does not link, and
+    ' SettingsLoader.AtomicWriteAllText is Private — both are covered by review, not here.
+    '
+    ' ⛔ THE MUTATION THAT MUST FAIL A72a: revert TryWrite to a bare
+    '   File.Replace(tmpPath, path, Nothing)
+    ' with no File.Exists guard. A72a writes to a destination that does NOT exist, which is
+    ' exactly the case File.Replace throws on.
+    ' ⭐ MUTATION RUN 2026-09-10, actual results pasted rather than predicted:
+    '   A72a FAIL  - "absentBefore=True returned=False exists=False content= noTmpOrphan=True"
+    '   A72b PASS  - it only ever exercises the existing-destination branch
+    '   A72c FAIL  - and it originally ABORTED THE RUN with FileNotFoundException.
+    ' ⚠ My first draft of this comment claimed A72c would PASS under the mutation. It does
+    ' not. The claim was written from reasoning and was wrong; running it is what showed
+    ' that, and A72c now fails CLEANLY instead of aborting (see its guarded read below).
+    ' ⛔ A fixture that throws instead of failing hides every fixture after it in the run.
+
+    Private Sub A72a_FirstWriteToAbsentDestinationSucceeds()
+        Dim dir As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a72a_" & Guid.NewGuid().ToString("N"))
+        System.IO.Directory.CreateDirectory(dir)
+        Dim path As String = System.IO.Path.Combine(dir, "signal.json")
+        Try
+            ' The destination deliberately does NOT exist. This is the first-write case.
+            Dim absentBefore As Boolean = Not System.IO.File.Exists(path)
+            Dim ok As Boolean = SignalEmitter.TryWrite("{""a"":1}", path)
+            Dim exists As Boolean = System.IO.File.Exists(path)
+            Dim content As String = If(exists, System.IO.File.ReadAllText(path), "")
+            Dim noTmp As Boolean = Not System.IO.File.Exists(path & ".tmp")
+
+            Check("A72a atomic write — FIRST write to an ABSENT destination succeeds (the case File.Replace throws on); content correct, no .tmp orphan",
+                  absentBefore AndAlso ok AndAlso exists AndAlso content = "{""a"":1}" AndAlso noTmp,
+                  String.Format("absentBefore={0} returned={1} exists={2} content={3} noTmpOrphan={4}",
+                                absentBefore, ok, exists, content, noTmp))
+        Finally
+            Try : System.IO.Directory.Delete(dir, True) : Catch : End Try
+        End Try
+    End Sub
+
+    Private Sub A72b_OverwriteOfExistingDestinationReplacesContent()
+        Dim dir As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a72b_" & Guid.NewGuid().ToString("N"))
+        System.IO.Directory.CreateDirectory(dir)
+        Dim path As String = System.IO.Path.Combine(dir, "signal.json")
+        Try
+            System.IO.File.WriteAllText(path, "{""old"":true}")
+            Dim existedBefore As Boolean = System.IO.File.Exists(path)
+            Dim ok As Boolean = SignalEmitter.TryWrite("{""new"":true}", path)
+            Dim content As String = System.IO.File.ReadAllText(path)
+            Dim noTmp As Boolean = Not System.IO.File.Exists(path & ".tmp")
+
+            Check("A72b atomic write — overwrite of an EXISTING destination replaces content wholly (no append, no partial), no .tmp orphan",
+                  existedBefore AndAlso ok AndAlso content = "{""new"":true}" AndAlso noTmp,
+                  String.Format("existedBefore={0} returned={1} content={2} noTmpOrphan={3}",
+                                existedBefore, ok, content, noTmp))
+        Finally
+            Try : System.IO.Directory.Delete(dir, True) : Catch : End Try
+        End Try
+    End Sub
+
+    Private Sub A72c_RepeatedWritesLeaveExactlyOneFile()
+        Dim dir As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a72c_" & Guid.NewGuid().ToString("N"))
+        System.IO.Directory.CreateDirectory(dir)
+        Dim path As String = System.IO.Path.Combine(dir, "signal.json")
+        Try
+            ' Absent -> present -> present. Both branches of the OLD guard, back to back,
+            ' now served by one call. The directory must end with exactly one file.
+            Dim r1 As Boolean = SignalEmitter.TryWrite("{""n"":1}", path)
+            Dim r2 As Boolean = SignalEmitter.TryWrite("{""n"":2}", path)
+            Dim r3 As Boolean = SignalEmitter.TryWrite("{""n"":3}", path)
+            Dim files As Integer = System.IO.Directory.GetFiles(dir).Length
+            ' Guarded: if any write above failed the file is absent, and an unguarded
+            ' ReadAllText would ABORT the harness and hide every later fixture. Fail, don't throw.
+            Dim content As String = If(System.IO.File.Exists(path), System.IO.File.ReadAllText(path), "<<absent>>")
+
+            Check("A72c atomic write — absent→present→present in sequence; exactly ONE file remains and it holds the LAST write",
+                  r1 AndAlso r2 AndAlso r3 AndAlso files = 1 AndAlso content = "{""n"":3}",
+                  String.Format("r1={0} r2={1} r3={2} fileCount={3} content={4}", r1, r2, r3, files, content))
+        Finally
+            Try : System.IO.Directory.Delete(dir, True) : Catch : End Try
         End Try
     End Sub
 

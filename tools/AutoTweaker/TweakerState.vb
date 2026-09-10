@@ -155,14 +155,14 @@ Public Class TweakerState
         ' intact (rename never happened) or the new file in place (rename completed).
         ' Avoids the failure mode where File.WriteAllText is killed mid-write and
         ' leaves a partial state.json that triggers a defaults reset on Load.
+        ' ⭐ File.Move(..., overwrite:=True) is a TOTAL primitive: no File.Exists guard is
+        ' needed, unlike File.Replace which throws on a missing destination — and the
+        ' first-write case IS the missing-destination case. Still atomic: the .tmp is a
+        ' sibling, so always the same volume.
         Dim tmpPath As String = path & ".tmp"
         Try
             File.WriteAllText(tmpPath, JsonSerializer.Serialize(state, opts))
-            If File.Exists(path) Then
-                File.Replace(tmpPath, path, Nothing)
-            Else
-                File.Move(tmpPath, path)
-            End If
+            File.Move(tmpPath, path, overwrite:=True)
         Catch
             Try : File.Delete(tmpPath) : Catch : End Try
             Throw
