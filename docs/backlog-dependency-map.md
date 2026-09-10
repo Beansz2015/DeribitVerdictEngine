@@ -1,4 +1,4 @@
-# Backlog Dependency Map
+﻿# Backlog Dependency Map
 
 **Created:** 2026-07-22 (trader-directed). **Restructured 2026-08-07.**
 
@@ -126,7 +126,7 @@ Listed here so nobody looks for a blocker that does not exist. Sizing and curren
 
 | Item | State, verified in the tree 2026-09-10 (UTC) |
 |---|---|
-| **atomic-write total-primitive swap** | ✅ **STILL OPEN — the only one.** ⛔ **"(5 sites)" below is an UNDERCOUNT: there are SIX `File.Replace` call sites.** The uncounted one is `OhlcCache.vb:144`. Handle: `grep -rn 'File\.Replace(' --include=*.vb . \| grep -v '/obj/'` → 6 |
+| ~~atomic-write total-primitive swap~~ | ⛔ **SHIPPED 2026-09-10, commit `5b0f8cc` — and there were SIX sites, not five. NOTHING IN THIS LIST REMAINS OPEN.** ⛔ **"(5 sites)" below is an UNDERCOUNT: there are SIX `File.Replace` call sites.** The uncounted one is `OhlcCache.vb:144`. Handle: `grep -rn 'File\.Replace(' --include=*.vb . \| grep -v '/obj/'` → 6 |
 | ~~weekday filters~~ · ~~**C1-coverage F1**~~ · ~~**F2**~~ · ~~**F3**~~ · ~~**G12**~~ · ~~**CeilingAudit version constant**~~ | ⛔ **ALL SHIPPED.** Records are in [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) — the queue was split 2026-09-10 and keeps only a one-line index per archived item. Per-item commits: [`roadmap.md`](roadmap.md)'s corrected table and [`seat-handover-2026-09-10.md`](seat-handover-2026-09-10.md) §7.1 |
 
 ⚠ **The `AutoTweaker`-first edge in §2b of this document is spent for the weekday filters, but its REASON generalises: AutoTweaker is the only surface that WRITES `settings.json`.** Keep that ordering rule for any future change touching a `settings.json` writer.
