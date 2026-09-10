@@ -250,10 +250,55 @@
 
 ---
 
-## 11. Collector health — CARRIED AND STALE, re-read before quoting
+## 11. Collector health — ✅ READ 2026-09-10 18:22 UTC. **This is a real read, not carried.**
 
-⛔ **NOT read this session.** The last real read was **2026-09-09 14:05 UTC** ([`seat-handover-2026-09-09.md`](seat-handover-2026-09-09.md) §9): one process, live `analysis_log.csv` at 7,250 rows, `.bak` closed at 33,911, **`unparsed=0` on both**, settings v68.
+**Instrument: `tools/ops/collector.ps1 status -InstanceId i-0d6c133058876273e`.** ✅ **The box was confirmed from AWS itself (`aws ec2 describe-instances`), not from a doc: ONE running instance, `i-0d6c133058876273e`, tag `DeribitEngine`, t2.micro, eu-west-2.**
 
-⚠ **That is over a day old. Re-read it before quoting any figure.**
+| Reading | Value |
+|---|---|
+| Host / OS | `EC2AMAZ-P0OPH8J` · Server 2019 Datacenter · **host uptime 21d 03:02** |
+| App | `C:\DeribitEngine` · exe built **2026-09-01 15:48** · **app uptime 9d 02:32** · overlay **False** |
+| Settings on the box | ✅ **v68** — matches tracked |
+| Live `analysis_log.csv` | **8,427 rows**, `2026-09-01 15:50:01 → 2026-09-10 18:22:04` |
+| Freshness | ⭐ **gap now-to-last-row 0.3 min — collecting right now** |
+| Rate | **38.6 rows/hour** (box's own figure) |
+| Store | `trades_2026-07.csv` 128 KB · `trades_2026-08.csv` 123,420 KB · `trades_2026-09.csv` 65,707 KB |
 
-⚠ **Accrual was running well below the ~13–14 weekday STRONG per day model: 09-07 = 13 · 09-08 = 5 · 09-09 = 3 at 14:04 UTC. Do not quote the model as current.**
+### 11.1 ⛔ NEW FINDING — the box is thrashing, and its own tool says so
+
+| Memory | Value |
+|---|---|
+| total / avail / in use | **1,024 MB / 124 MB / 899 MB** |
+| app working set / private | 75 MB / 118 MB |
+| **`pagesOUT/s` — 30 s sustained** | ⛔ **289.3 avg · 4,339.9 max** |
+| pagefile | 36.0 / 36.8 % |
+
+⛔ **`collector.ps1`'s own annotation on that line reads *"eviction pressure; sustained >0 = thrashing."* A 30-second average of 289.3/s is sustained by any reading.** ⚠ **`pagesIN/s` (921.7 avg) carries the tool's *"noisy: counts mapped-file reads too"* caveat; `pagesOUT/s` does NOT.** So the outbound figure is the meaningful one.
+
+⚠ **Do NOT jump to a conclusion from one 30-second sample.** The memory `feedback-same-window-is-not-a-bigger-sample` records that this box's burst rate is **time-of-day dependent** (NY 1.83 % vs non-NY 14.29 %), and **this read landed at 18:22 UTC, inside the NY session.** ⭐ **A single window cannot separate "thrashing now" from "thrashing always." It wants a segmented read before anyone sizes an instance change.**
+
+⚠ **Also unexplained and worth one look: host uptime 21d but app uptime 9d.** The app restarted ~2026-09-01, matching the exe build stamp — **so it looks like a deploy, not a crash. Not verified.**
+
+### 11.2 ⭐ The 2026-09-05 DEGRADED event now has EXACT bounds
+
+⭐ **Unchecked across FIVE handovers, always as *"~32 minutes"*. The `ws_health` tail gives it precisely:**
+
+| Event | Window | Duration |
+|---|---|---|
+| **2026-09-05** | `09:04:28.214Z DEGRADED → 09:36:50.789Z OK` | ⛔ **32 min 22.6 s** |
+| **2026-09-06** (not previously recorded here) | `15:43:43.049Z DEGRADED → 15:43:59.547Z OK` | ✅ **16.5 s — negligible** |
+
+⛔ **THE TAPE COST IS STILL NOT VERIFIED, and this read cannot settle it.** `collector.ps1 status` reports the **verdict log**, not the tape. **A DEGRADED WebSocket does not necessarily stop analysis runs, so the `analysis_log.csv` row density is the WRONG instrument.** ⭐ **The standing instruction is unchanged and now has a precise window to test: verify from `trade_seq` completeness in `trades_2026-09.csv` across `09:04:28Z–09:36:51Z`.** That needs a `fetch`, and it is a separate job.
+
+### 11.3 Accrual — the carried model is confirmed as NOT current
+
+- **Row accrual: 7,250 (09-09 14:05 UTC) → 8,427 (09-10 18:22 UTC) = +1,177 over 28.3 h = 41.6 rows/h.** ✅ Consistent with the box's own 38.6 rows/h.
+- **Verdict mix in the live file:** `NO TRADE` 5,459 · `WEAK SHORT` 709 · `NO TRADE [WEAK LONG]` 568 · `NO TRADE [WEAK SHORT]` 553 · `WEAK LONG` 543 · `SHORT` 330 · `LONG` 162 · **`STRONG SHORT` 63 · `STRONG LONG` 29** · `NO TRADE [TIE]` 11.
+- ⛔⛔ **DO NOT COMPARE THAT 92 STRONG AGAINST THE KELLY GATE.** **92 is ALL-DAY STRONG in the live file only. The Kelly trigger counts WEEKDAY STRONG across the pooled book (`.bak` + live), which read 407.** ⚠ **This is exactly the two-gates-on-different-bases trap in [`seat-handover-2026-09-09.md`](seat-handover-2026-09-09.md) §4.2, where an orchestrator compared raw rows and was wrong.**
+- **For the weekday-STRONG figure use the committed instrument: `tools/ops/kelly-trigger-read.ps1 -Mode Box`.** ⚠ **NOT run this session.**
+
+### 11.4 What this read did NOT cover
+
+- ⚠ **`unparsed=0` — NOT confirmed.** The `status` verb does not report it. The carried 2026-09-09 reading said 0 on both files.
+- ⚠ **The `.bak` row count — NOT reported** by `status`. Carried figure: closed at 33,911 rows.
+- ⚠ **Weekday STRONG — NOT read.** See §11.3 of this document.
