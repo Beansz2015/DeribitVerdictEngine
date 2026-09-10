@@ -44,7 +44,7 @@
 | Pick | Item | Notes |
 |---|---|---|
 | ⭐ **1st** | **Nothing is owed and no build slot is open.** | ⛔ **Verify before offering work** — read [`trader-tick-queue.md`](trader-tick-queue.md) §0a, then §2's **12 live rows**. Everything else in §2 is now a one-line index pointing at the archive |
-| **2nd** | **Two verified defects are ready to spec** — see §7.1 of this document | Both found by tree-checking carried claims. Neither is urgent |
+| **2nd** | **THREE verified defects are ready to spec** — see §7.1 of this document | ⭐ **`RM-1` is the biggest: [`roadmap.md`](roadmap.md)'s *"Ready to build"* list offers five items and FOUR have shipped.** All three found by tree-checking a carried claim. None is urgent |
 
 ⛔ **Do NOT offer any recent spec as work. ALL are BUILT** — see §6 of this document.
 
@@ -145,6 +145,20 @@
 
 ⚠ **The WORK is unaffected — every `File.Replace` call still exists. Only the line numbers rotted.** Handle: `grep -rn 'File\.Replace(' --include=*.vb . | grep -v '/obj/'` → exactly 6.
 
+**`RM-1` — ⛔⛔ [`roadmap.md`](roadmap.md)'s "Ready to build" list is FOUR-FIFTHS STALE. Found by the session-2 implementer while widening the link check; verified by me 2026-09-10 (UTC).**
+
+**Both `roadmap.md` line 203 and line 211 name five items as *"Ready to build, no decision needed"*:**
+
+| Item | Real state |
+|---|---|
+| the three weekday filters | ⛔ **SHIPPED 2026-09-07** |
+| the atomic-write total-primitive swap | ✅ **genuinely open** — the only one |
+| `C1-coverage F1` | ⛔ **SHIPPED 2026-08-26, `4032f9c`** |
+| `G12` | ⛔ **SHIPPED 2026-09-07** |
+| the CeilingAudit expected-version constant | ⛔ **SHIPPED 2026-08-25** |
+
+⛔ **[`roadmap.md`](roadmap.md) is the EXECUTION-ORDER authority — `CLAUDE.md` says so — and four of the five things it offers are done.** ⚠ **Worse: its own line 205 records a *"CORRECTED 2026-08-12"* note about that very list, and `C1-coverage F1` survived the correction and then shipped two weeks later.** ⭐ **Same defect class this whole arc removed from the spec headers and the queue, now found in two more documents — [`roadmap.md`](roadmap.md) and [`backlog-dependency-map.md`](backlog-dependency-map.md).** **Deliberately NOT fixed: it is outside the sweep spec's scope and wants its own short pass.**
+
 ### 7.2 Carried from [`seat-handover-2026-09-09.md`](seat-handover-2026-09-09.md) §7 — unchanged
 
 - **Coverage-report cluster — 3 rows, all still LIVE in [`trader-tick-queue.md`](trader-tick-queue.md) §2:** `gapMs` as a TIME tolerance · an up-interval starting at the `DOWN` line · intentional-downtime scoping. All need short specs.
@@ -189,9 +203,23 @@
 
 ⛔ **And their classification was BETTER than the spec author's in two places:** they read `gapMs` as LIVE (correct — it is one of the three open coverage rows) and `S2-1` as finished (correct — *"IMPLEMENTED 2026-09-05"*). **The author's classifier had both wrong.**
 
-### 8.4 ⚠ A report can describe a better artifact than the one that shipped
+### 8.4 ⛔⛔ A TRUNCATED READ MANUFACTURED A FALSE FINDING — and this section originally WAS that false finding
 
-**The implementer's message described `N-2`'s fix as a `grep -c 'Private Sub F1[a-f]_TrailingEdge'` handle returning 6. It does return 6 — but that handle was NOT in the file;** a different (also valid) declaration assertion had landed. **The reviewer would have accepted the description without checking.** ⛔ **Same class as [`seat-handover-2026-09-09.md`](seat-handover-2026-09-09.md) §8.2 — honest about its input, wrong about its output. Check the artifact, not the report.**
+⛔ **RETRACTED 2026-09-10 (UTC). The finding that stood here was WRONG, and the correction is the lesson.**
+
+**What this section claimed:** that the implementer's report described an `N-2` handle — `grep -c 'Private Sub F1[a-f]_TrailingEdge'` → 6 — which *"was NOT in the file"*, and billed it as the *"honest about its input, wrong about its output"* class.
+
+⛔ **It WAS in the file, and had been since `71aa14c`.** ✅ **Verified: `docs/coverage-trailing-edge-f1-proposal.md` line 5 carries the declaration sentence AND the runnable handle; `git log -S` puts it in `71aa14c`.**
+
+⭐⭐ **The cause was the reviewer's own instrument: the line was read with `cut -c1-420`, and the handle sits past character 420.** **A truncated read of a long line reported ABSENCE where there was only truncation.**
+
+⛔ **This is the FIFTH instance of the measure-the-right-thing class in this one arc, and the SECOND caused by the reviewer's own tooling** — after the gate run whose `FAIL: 1` was its own echo line (§8.1 of this document, instance 4). ⭐ **The implementer pushed back with evidence rather than accepting the correction, and was right to.**
+
+⚠ **Practical rule: never conclude a string is ABSENT from a `cut`/`head`-truncated read. Use `grep -c` on the whole file, or `fold` the line.** These docs routinely carry 2,000-character table cells and banner lines.
+
+### 8.4a ⭐ The genuine version of that lesson still stands
+
+**Check the artifact, not the report — but check it with an instrument that can see the whole artifact.** The original instinct was right; only the execution was wrong.
 
 ### 8.5 ⭐ Archive for AGE; collapse for SPRAWL — and MEASURE which you have
 
