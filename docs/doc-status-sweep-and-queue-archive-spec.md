@@ -1,6 +1,14 @@
 # Doc-status sweep + `trader-tick-queue.md` archive split — implementation spec
 
-**Status:** ✅✅ **BUILD-AUTHORIZED — BOTH SESSIONS. `D-1` ticked (a) by the trader, 2026-09-09 (UTC).** Nothing is owed. ⛔ **Build session 1 first, then session 2 — the order is a dependency, not a preference (§0).**
+> ## ✅✅ BUILT, BOTH SESSIONS — 2026-09-09/2026-09-10 (UTC). **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
+>
+> **Session 1 — verified in the tree:** all ten `DS-1`…`DS-10` docs carry a `✅✅ BUILT` banner (`DS-7` a split banner, per §1.4), committed `6cc4d8f` + `e8ea9af`, with two tidy fixes `71aa14c`. `AC-1`–`AC-5` all passed, `verify-gate.ps1 -Mode local-fast` GATE PASSED.
+>
+> **Session 2 — verified in the tree:** [`trader-tick-queue.md`](trader-tick-queue.md) §2's 39 finished rows and all of former §5 moved byte-identical to [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md); 12 live §2 rows plus 35 one-line index entries remain; line 330's stray separator dropped; 10 of 12 dangling `§2` pointers retargeted to the archive (2 — the stale-claim special cases named in §3a's ruling — corrected in a following commit); §0's authority table now names the archive. `AC-6`–`AC-11` run below.
+>
+> *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
+
+**Status:** ~~✅✅ **BUILD-AUTHORIZED — BOTH SESSIONS. `D-1` ticked (a) by the trader, 2026-09-09 (UTC).** Nothing is owed. ⛔ **Build session 1 first, then session 2 — the order is a dependency, not a preference (§0).**~~
 
 **Author seat:** Opus, 2026-09-09 (UTC). **Baseline commit: `74aeb60` plus the three uncommitted edits described in §1.2.** ⛔ **Re-read every line number if `HEAD` has moved.**
 
