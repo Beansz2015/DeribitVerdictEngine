@@ -163,7 +163,7 @@
 
 - **Coverage-report cluster — 3 rows, all still LIVE in [`trader-tick-queue.md`](trader-tick-queue.md) §2:** `gapMs` as a TIME tolerance · an up-interval starting at the `DOWN` line · intentional-downtime scoping. All need short specs.
 - **`ws_health.log` under-reports an outage** — it and the tape disagree by ~34 minutes.
-- ⚠ **The 2026-09-05 DEGRADED event — STILL unchecked across FIVE handovers.** 32 minutes; nobody has verified whether it cost tape. **Verify from `trade_seq` completeness, NOT the repair log.**
+- ✅✅ **The 2026-09-05 DEGRADED event — CLOSED 2026-09-10 (UTC). It cost ZERO tape.** `TradeSeq` is contiguous across the hole (delta 1), five controls show 0 missing, and the day was a Saturday. **Full measurement in §11.2a of this document. Do not re-raise it.** ⭐ **No `fetch` was needed — the data was already in `AWS-copybacks/aws-copyback-2026-09-06/`.**
 - **Absorption** — date-gated, `D-2` read ~2026-09-15.
 - **`S-1`** — ruled (a) as direction, **NOT NOW**. Nothing is owed.
 - **Fills-import** — LATER. **S0 `--verify-venue`** — SUSPENDED.
@@ -288,7 +288,45 @@
 | **2026-09-05** | `09:04:28.214Z DEGRADED → 09:36:50.789Z OK` | ⛔ **32 min 22.6 s** |
 | **2026-09-06** (not previously recorded here) | `15:43:43.049Z DEGRADED → 15:43:59.547Z OK` | ✅ **16.5 s — negligible** |
 
-⛔ **THE TAPE COST IS STILL NOT VERIFIED, and this read cannot settle it.** `collector.ps1 status` reports the **verdict log**, not the tape. **A DEGRADED WebSocket does not necessarily stop analysis runs, so the `analysis_log.csv` row density is the WRONG instrument.** ⭐ **The standing instruction is unchanged and now has a precise window to test: verify from `trade_seq` completeness in `trades_2026-09.csv` across `09:04:28Z–09:36:51Z`.** That needs a `fetch`, and it is a separate job.
+### 11.2a ✅✅ RESOLVED 2026-09-10 (UTC) — THE 2026-09-05 EVENT COST **ZERO** TAPE
+
+⭐⭐ **The item that survived FIVE handovers is CLOSED. It cost nothing.**
+
+⭐ **NO `fetch` WAS NEEDED — the data was already on disk.** `AWS-copybacks/aws-copyback-2026-09-06/aws_fetch/20260906-155831/backtest_data/trades_2026-09.csv` — **600,395 rows spanning 2026-09-01 00:00:01 → 2026-09-06 15:58:26**, which brackets the window. ⛔ **Check the existing copy-backs before spending on a fetch; five handovers deferred this for a fetch that was never required.**
+
+**First, the instrument was validated — a contiguous sequence only proves something if the venue assigns it.** ✅ **`TradeSeq` is Deribit's own `trade_seq`, a per-instrument monotonic sequence read straight off the payload** — `DeribitClient.vb:344` documents it, `TradeRecord.ReadTradeSeq` reads `t.TryGetProperty("trade_seq")`, and **both capture paths use the same reader** (`DeribitClient.vb:290` REST, `DeribitWsFeed.vb:494` WebSocket). **It is not generated locally, so contiguity is evidence and not a tautology.**
+
+**The decisive measurement:**
+
+| | Value |
+|---|---|
+| Last row **before** the hole | `2026-09-05 08:59:35.333` · seq **298,507,369** |
+| First row **after** the hole | `2026-09-05 09:44:45.553` · seq **298,507,370** |
+| Wall-clock hole | **45.2 min** |
+| ⭐⭐ **`TradeSeq` delta** | **1** |
+| ⭐⭐ **Trades lost** | ✅ **ZERO** |
+
+**Five control windows of the same length, none overlapping the event — a positive record, not a baseline derived from the behaviour being judged:**
+
+| Control | Rows | Missing seq |
+|---|---|---|
+| 09-05 08:32–09:04 (just before) | 1,217 | ✅ **0** |
+| 09-05 09:36–10:09 (just after) | 1,513 | ✅ **0** |
+| 09-04 09:04–09:37 (Friday) | 3,922 | ✅ **0** |
+| 09-03 09:04–09:37 (Thursday) | 1,725 | ✅ **0** |
+| 09-02 09:04–09:37 (Wednesday) | 2,486 | ✅ **0** |
+
+⭐ **`trade_seq` is contiguous with ZERO gaps whenever capture is healthy — so the instrument has teeth, and it says nothing was missed here either.**
+
+### 11.2b ⚠ THREE RIDERS — each changes how the next reader should think
+
+⛔ **1. The tape hole does NOT align with the DEGRADED window, so the event did not cause it.** Hole `08:59:35 → 09:44:45`; the `ws_health` markers are `09:04:28 → 09:36:50`. **The hole starts ~5 min BEFORE the DEGRADED marker and ends ~8 min AFTER the OK marker.** ⭐ **This is a genuine market quiet period that OVERLAPS the event, not a consequence of it.**
+
+⭐⭐ **2. `trade_id` would have given a FALSE POSITIVE of two lost trades.** Across the same hole, **`TradeId` delta is 3 while `TradeSeq` delta is 1.** Consistent with `trade_id` being broader than one instrument while `trade_seq` is per-instrument. ⛔ **The standing instruction — *"verify from `trade_seq` completeness, NOT the repair log"* — was RIGHT, and `trade_id` is also the wrong instrument. Use `trade_seq`.**
+
+⭐ **3. 2026-09-05 is a SATURDAY, and the hole is the ONLY >30 min hole in all 600,395 rows.** So the duration genuinely is anomalous — but **it is anomalous market quiet, not anomalous capture**, and a weekend hole falls outside the weekday-scoped Kelly population regardless.
+
+⚠ **What this does NOT settle:** the separate open item that **`ws_health.log` under-reports an outage.** ⭐ **This case is evidence for that item and points the OPPOSITE way to how it is currently worded — here the tape hole is LONGER than the DEGRADED window, not shorter.** **A `ws_health` DEGRADED marker is not a reliable proxy for tape loss in either direction.**
 
 ### 11.3 Accrual — the carried model is confirmed as NOT current
 
