@@ -275,7 +275,59 @@
 
 ⛔ **`collector.ps1`'s own annotation on that line reads *"eviction pressure; sustained >0 = thrashing."* A 30-second average of 289.3/s is sustained by any reading.** ⚠ **`pagesIN/s` (921.7 avg) carries the tool's *"noisy: counts mapped-file reads too"* caveat; `pagesOUT/s` does NOT.** So the outbound figure is the meaningful one.
 
-⚠ **Do NOT jump to a conclusion from one 30-second sample.** The memory `feedback-same-window-is-not-a-bigger-sample` records that this box's burst rate is **time-of-day dependent** (NY 1.83 % vs non-NY 14.29 %), and **this read landed at 18:22 UTC, inside the NY session.** ⭐ **A single window cannot separate "thrashing now" from "thrashing always." It wants a segmented read before anyone sizes an instance change.**
+⚠ **Do NOT judge that against a session average.** [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) §1.1a rules the comparison basis: **compare against the PER-HOUR row, never a session average** — the NY/non-NY split is itself too coarse. **This read landed at 18:22 UTC, so hour 18 is the only relevant baseline.** ✅ **Segmented read done — see §11.1a of this document.**
+
+### 11.1a ✅ SEGMENTED MEMORY READ — done 2026-09-10 (UTC) from a SECOND detached 24 h sample
+
+⭐ **No new instrument was built and nothing was perturbed.** The box already carries a **detached** `logman` counter set — **`RIPPerfBaseline`, currently Stopped, owned by the COLOCATED HOSTEL APP** (`C:\RedInnPricing\logs\perf\`), sampling `\Memory\Pages Output/sec`, `\Memory\Available MBytes` and `\Paging File(_Total)\% Usage` at **10 s**. ⚠ **It is another team's instrument in another team's directory — READ ONLY. Do not start, stop or reconfigure it.**
+
+⭐⭐ **It holds TWO 24-hour runs, and [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) only ever analysed the first:**
+
+| File | Span (UTC) | Analysed before? |
+|---|---|---|
+| `baseline_08241501.csv` | 2026-08-24 15:01 → 08-25 15:01 | ✅ yes — every figure in [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) §1.1 |
+| **`soak_08271509.csv`** | **2026-08-27 15:09 → 08-28 15:09** | ⛔ **NO — analysed here for the first time** |
+
+**Aggregated on the box (8,640 usable samples; the first row's rate field is blank by construction and was excluded):**
+
+| Metric | 08-24 baseline | **08-27 soak** |
+|---|---|---|
+| Overall burst rate | 9.10 % | ⛔ **14.20 %** |
+| `availMB` min / median | 31 / 168 | **31 / 152** |
+| Page-file max | 74.79 % | ⛔ **79.77 %** (hour 15) |
+
+### 11.1b ⭐⭐ THE SHAPE REPRODUCES; THE RATES DO NOT
+
+| Band | 08-24 | 08-27 | Verdict |
+|---|---|---|---|
+| **Busy, 00–12 UTC** | 15.34 % | **22.50 %** | ⛔ **+47 % — NOT stable** |
+| **Near-silent, 16–23 UTC** | 0.38 % | **0.24 %** | ✅ **stable, both ≈ zero** |
+
+⛔ **So the per-hour table that the stop conditions depend on is NOT a fixed baseline. Its busy half moved by half again in three days** — hours 13 and 14 went 5.56 % → 18.61 % / 18.89 %, a **3.3×** move, and hours 05 and 07 roughly doubled. ⚠ **Anyone judging a future reading against [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) §1.1a's busy-hour numbers is comparing against one day, not a baseline. Re-measure that half.**
+
+⛔ **Two of that document's three stop conditions are already broken by its own sibling sample:** *"availMB routine floor 55 MB"* — the soak reads **31 MB** at hours 05 and 14 and under 55 in **seven** hours; *"page-file routine max 42.9 %"* — the soak reaches **79.77 %**.
+
+### 11.1c ⭐ HOUR 18 IS THE STABLE PART — so the 09-10 observation IS anomalous
+
+| Hour 18 | Samples | Bursts |
+|---|---|---|
+| 08-24 baseline | 360 | **0** |
+| 08-27 soak | 360 | **0** |
+| **Combined** | **720** | ⭐⭐ **ZERO** |
+
+⭐ **Hour 18 reads 0.00 % on two independent detached days over 720 samples. The 2026-09-10 18:22 UTC reading of `pagesOUT/s` 289.3 sustained average, 4,339.9 max, is a genuine departure from that — not a wrong-denominator artefact.** ⭐ **And it is the trustworthy half of the model: the silent band reproduced while the busy band did not.**
+
+### 11.1d ⛔⛔ WHAT THIS STILL CANNOT SETTLE — the attached-instrument confound
+
+⛔ **I cannot separate "the box thrashes at hour 18 now" from "my own read caused it," and neither can this data.**
+
+- **My 09-10 reading came through an SSM-attached PowerShell session.** [`seat-handover-2026-08-25.md`](seat-handover-2026-08-25.md) §1.1 measured that cost: **an SSM-attached session costs this box 30–50 MB**, and names *"it is detached, so it does not perturb what it measures"* as the reason the `logman` collector is the better instrument.
+- **Both zero-burst hour-18 samples are DETACHED. My bursting hour-18 sample is ATTACHED.** ⛔ **That is exactly the shape a measurement artefact takes.**
+- ⭐ **The clean test is cheap and needs no new tooling: one DETACHED 24 h counter run of our own, then read hour 18.** ⚠ **Do not reuse `RIPPerfBaseline` for it — it is the hostel app's.**
+
+⚠ **This is the SIXTH instance of the measure-the-right-thing class in this arc, and it is unresolved rather than wrong.** Naming it beats reporting a thrashing box on evidence that cannot distinguish the box from the probe.
+
+⚠ **Also still unexplained: host uptime 21d against app uptime 9d.** The restart matches the exe build stamp, so it **looks** like a deploy. **Not verified.**
 
 ⚠ **Also unexplained and worth one look: host uptime 21d but app uptime 9d.** The app restarted ~2026-09-01, matching the exe build stamp — **so it looks like a deploy, not a crash. Not verified.**
 
