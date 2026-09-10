@@ -122,7 +122,18 @@ Kept because "this is now available" is the half of a dependency map people forg
 
 Listed here so nobody looks for a blocker that does not exist. Sizing and current state live in **queue §2**.
 
-`AutoTweaker` / `LivePerformanceTracker` / `AnalysisRunner` / `WhatIfRunner` weekday filters (AutoTweaker first — see the tweaker edge in §2b) · the **atomic-write total-primitive swap** (5 sites) · **C1-coverage F1** trailing-edge fix · **F2** `ResetBufferState` race · **F3** collector User-Agent · **G12** three manual-content gaps · the **CeilingAudit expected-version constant**.
+⛔⛔ **ANNOTATED 2026-09-10 (UTC): SIX OF THE SEVEN ITEMS BELOW HAVE SHIPPED.** ⚠ **This document is authoritative for what BLOCKS what, not for current state — `CLAUDE.md` says so, and §4's own preamble defers state to the queue. So this list was not WRONG about dependencies. It is annotated rather than rewritten because a present-tense "these are build slots" still misleads.**
+
+| Item | State, verified in the tree 2026-09-10 (UTC) |
+|---|---|
+| **atomic-write total-primitive swap** | ✅ **STILL OPEN — the only one.** ⛔ **"(5 sites)" below is an UNDERCOUNT: there are SIX `File.Replace` call sites.** The uncounted one is `OhlcCache.vb:144`. Handle: `grep -rn 'File\.Replace(' --include=*.vb . \| grep -v '/obj/'` → 6 |
+| ~~weekday filters~~ · ~~**C1-coverage F1**~~ · ~~**F2**~~ · ~~**F3**~~ · ~~**G12**~~ · ~~**CeilingAudit version constant**~~ | ⛔ **ALL SHIPPED.** Records are in [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) — the queue was split 2026-09-10 and keeps only a one-line index per archived item. Per-item commits: [`roadmap.md`](roadmap.md)'s corrected table and [`seat-handover-2026-09-10.md`](seat-handover-2026-09-10.md) §7.1 |
+
+⚠ **The `AutoTweaker`-first edge in §2b of this document is spent for the weekday filters, but its REASON generalises: AutoTweaker is the only surface that WRITES `settings.json`.** Keep that ordering rule for any future change touching a `settings.json` writer.
+
+*(The original line follows, kept per the quote-and-label convention.)*
+
+~~`AutoTweaker` / `LivePerformanceTracker` / `AnalysisRunner` / `WhatIfRunner` weekday filters (AutoTweaker first — see the tweaker edge in §2b) · the **atomic-write total-primitive swap** (5 sites) · **C1-coverage F1** trailing-edge fix · **F2** `ResetBufferState` race · **F3** collector User-Agent · **G12** three manual-content gaps · the **CeilingAudit expected-version constant**.~~
 
 ---
 

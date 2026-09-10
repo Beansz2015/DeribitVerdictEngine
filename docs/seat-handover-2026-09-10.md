@@ -176,7 +176,7 @@
 
 ## 8. ⭐ The lessons — the count IS the finding, again
 
-### 8.1 ⛔⛔ TRAP `T-3` FIRED FOUR TIMES IN ONE ARC — TWICE ON THE AUTHOR OF THE RULE
+### 8.1 ⛔⛔ TRAP `T-3` FIRED **SEVEN** TIMES IN ONE ARC — TWICE ON THE AUTHOR OF THE RULE, AND **FOUR TIMES THE INSTRUMENT ITSELF WAS THE FAULT**
 
 **`T-3` is a named trap in [`doc-status-sweep-and-queue-archive-spec.md`](doc-status-sweep-and-queue-archive-spec.md) §0.1 — *"counting a NAME is not testing a property."*** ⛔ **Its author wrote it into the spec and then broke it twice in that same spec.**
 
@@ -187,7 +187,11 @@
 | **3** | *"is `HC29` used?"* — a grep found it in four files | **Every hit was a sentence declaring it FREE.** `HC29` is free; a false defect was nearly reported |
 | **4** | ⭐⭐ **A gate run reported `FAIL: 1`** | **The instrument's own echo line, written into the file it was measuring.** The harness said `ALL PASS`. **349 PASS, 0 FAIL** |
 
-⭐⭐ **Instance 4 is the purest of the class and the one to remember: the measurement contaminated its own input.** ⛔ **Findings 1 and 2 were caught by the IMPLEMENTER, not by their author.** **The rule does not protect you; the execution does.**
+| **5** | *"the implementer's handle is NOT in the file"* | ⛔ **It was.** A `cut -c1-420` read truncated before it. **RETRACTED — see §8.4 of this document** |
+| **6** | *"the box is thrashing at hour 18"* | ⚠ **UNRESOLVED, not wrong.** The bursting sample is SSM-**attached**; both zero-burst baselines are **detached**, and an attached session costs this box 30–50 MB. **See §11.1d of this document** |
+| **7** | *"four markdown tables have broken pipe counts"* | ⛔ **None did.** The checker counted ALL pipes; a properly escaped `` `\|` `` is valid cell content. **The memory `feedback-markdown-tables-do-not-protect-pipes` predicts this exact false positive — *"a raw count blames the wrong row."*** |
+
+⭐⭐ **Instances 4, 5 and 7 are the purest of the class and the ones to remember: FOUR of the seven misses were the INSTRUMENT, not the subject.** **A gate log polluted by its own echo · a truncated read reporting absence · a raw pipe count flagging correct rows · and an attached probe measuring its own cost.** ⛔ **Before reporting a defect, ask what the instrument would say if there were NO defect.** ⛔ **Findings 1 and 2 were caught by the IMPLEMENTER, not by their author.** **The rule does not protect you; the execution does.**
 
 ### 8.2 ⭐⭐ The escalation trigger EARNED ITS PLACE — it fired and it was right
 

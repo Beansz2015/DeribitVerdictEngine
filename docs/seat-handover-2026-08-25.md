@@ -115,8 +115,34 @@
 | Metric | Baseline | Investigate |
 |---|---|---|
 | Burst rate | **the per-hour row above** | above ~1.5× that hour |
-| availMB routine floor | 55 MB | below 55 |
-| Page file routine max | 42.9 % | above 43 % |
+| availMB routine floor | ~~55 MB~~ ⛔ **see the annotation below** | ~~below 55~~ |
+| Page file routine max | ~~42.9 %~~ ⛔ **see the annotation below** | ~~above 43 %~~ |
+
+---
+
+### ⛔⛔ ANNOTATION ADDED 2026-09-10 (UTC) — TWO OF THESE THREE STOP CONDITIONS ARE BROKEN BY THIS BOX'S OWN SIBLING SAMPLE, AND THE BUSY HALF OF THE PER-HOUR TABLE IS NOT A BASELINE
+
+⛔ **Everything above was measured from ONE 24-hour file, `baseline_08241501.csv`. The same collector wrote a SECOND file, `soak_08271509.csv` (2026-08-27 15:09 → 08-28 15:09 UTC, 8,640 usable samples), and nobody analysed it until 2026-09-10.** **Full working: [`seat-handover-2026-09-10.md`](seat-handover-2026-09-10.md) §11.1a–§11.1d.**
+
+⭐⭐ **THE THREE-BAND SHAPE REPRODUCES. THE RATES DO NOT.**
+
+| Band | This document (08-24) | `soak_08271509.csv` (08-27) | Verdict |
+|---|---|---|---|
+| **Busy, 00–12 UTC** | 15.34 % | **22.50 %** | ⛔ **+47 % — NOT a baseline** |
+| **Near-silent, 16–23 UTC** | 0.38 % | **0.24 %** | ✅ **stable, both ≈ zero** |
+
+⛔ **Hours 13 and 14 moved 5.56 % → 18.61 % / 18.89 % — a 3.3× change in THREE DAYS.** Hours 05 and 07 roughly doubled. Overall burst rate 9.10 % → **14.20 %**.
+
+⛔ **Two stop conditions are already broken, by a sample from the same instrument on the same box three days later:**
+
+| This document said | `soak_08271509.csv` actual |
+|---|---|
+| *"availMB routine floor 55 MB"* | ⛔ **31 MB minimum; UNDER 55 MB in SEVEN separate hours** (04, 05, 06, 07, 08, 13, 14) |
+| *"page-file routine max 42.9 %"*, with 74.79 % called *"absolute"* | ⛔ **79.77 % at hour 15** |
+
+⚠ **DO NOT INHERIT THE BUSY HALF OF THE PER-HOUR TABLE (hours 00–15). Re-measure it.** ✅ **The near-silent half (16–23) DID reproduce and is safe to use** — hour 18 in particular reads **0.00 % on both days, 720 combined samples, zero bursts.**
+
+⭐ **The lesson this document already teaches applies to this document.** Its own §1.1 says *"a bigger sample from the same window does not fix a time-of-day confound"*, and §1.1a says *"segmenting once is not segmenting correctly."* ⛔ **This is the third turn of the same screw: 80 minutes → one 24-hour day → and one day is not a baseline either.** **The shape was stable; the levels were not, and only a second day could show that.**
 
 ### 1.1b ⛔ THREE OF OUR OWN OBSERVATIONS WERE WRONG — corrected 2026-08-27, all re-verified from raw
 

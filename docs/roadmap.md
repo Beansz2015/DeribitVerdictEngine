@@ -200,7 +200,21 @@ First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry
 
 ⚠ **An empty decision table is not an empty board.** Three of these four turned into scheduled work. The queue's §2 is where the board now lives.
 
-**Ready to build, no decision needed** — queue §2: the three weekday filters (**AutoTweaker first**) · the atomic-write total-primitive swap · **C1-coverage F1** · G12 · the CeilingAudit version constant.
+**Ready to build, no decision needed** — ⛔⛔ **CORRECTED 2026-09-10 (UTC): FOUR OF THE FIVE ITEMS BELOW HAVE SHIPPED. Only the atomic-write swap is still open.**
+
+| Item | State, verified in the tree 2026-09-10 (UTC) |
+|---|---|
+| **the atomic-write total-primitive swap** | ✅ **STILL OPEN — the only one.** ⚠ **And its size is understated everywhere: it is billed as "5 sites" and there are SIX `File.Replace` call sites.** Handle: `grep -rn 'File\.Replace(' --include=*.vb . \| grep -v '/obj/'` → 6. See [`seat-handover-2026-09-10.md`](seat-handover-2026-09-10.md) §7.1 |
+| ~~the three weekday filters~~ | ⛔ **SHIPPED 2026-09-07** — all three surfaces, ruling discharged |
+| ~~**C1-coverage F1**~~ | ⛔ **SHIPPED 2026-08-26, `4032f9c`** |
+| ~~G12~~ | ⛔ **SHIPPED 2026-09-07** |
+| ~~the CeilingAudit version constant~~ | ⛔ **SHIPPED 2026-08-25** — bumped 59 → 68 |
+
+⛔ **Why this mattered more here than in a spec header: `CLAUDE.md` designates THIS document the EXECUTION-ORDER authority, and four-fifths of what it offered was done.** ⚠ **Their full records are now in [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md), not in [`trader-tick-queue.md`](trader-tick-queue.md) §2 — the queue was split 2026-09-10 and keeps only a one-line index per archived item.**
+
+*(The original line follows, kept per the quote-and-label convention.)*
+
+~~**Ready to build, no decision needed** — queue §2: the three weekday filters (**AutoTweaker first**) · the atomic-write total-primitive swap · **C1-coverage F1** · G12 · the CeilingAudit version constant.~~
 
 > ⚠ **CORRECTED 2026-08-12 — this line used to read "C1-coverage F1 · F2 · F3", and both extra IDs were wrong.** The C1-coverage report has **only F1 and F2**; there is no C1-coverage F3. **F2 is a DECISION, not a build slot** (it is in the open-decisions line above), and the **F3** meant here is the **B4b observational watch**, which is also a decision. ⚠ **`F3` names two unrelated things in this project's docs** — the B4b watch, and a finding ID reused in other spec-backs. Always name the document.
 
@@ -208,7 +222,13 @@ First live fire stays data-gated (>40%-failure NY×1 window) and supervised (dry
 
 **Sequenced now:** ~~D1+D2 bundled at one ⚠ boundary once the D3 watch reads~~ ⛔ **that bundle no longer exists — D2 SHIPPED as v66 and D1 is PARKED** (its *unit* is wrong, not its value) · **absorption mechanism proposal — WRITTEN and blind-checked; its §6 D-table awaits a trader tick, and that is the only thing outstanding on it** ⛔ **do not open an implementer session until it is ticked** · A4 whenever the market delivers a cascade · A5 at 30 dates *if* it clears the W6 bar · then the W6 tail (W6-5/W6-7) **only if** a re-run of W6-4 shows a prize · **CLI port last — ⚠ pending the unwritten reversal flagged above.**
 
-**Ready to build with no decision owed** (from [`trader-tick-queue.md`](trader-tick-queue.md) §2): the three weekday filters — **AutoTweaker first, because it is the only surface that WRITES `settings.json`** and it has verifiably never fired · the atomic-write total-primitive swap · **C1-coverage F1** · the CeilingAudit expected-version constant · G12.
+**Ready to build with no decision owed** — ⛔⛔ **CORRECTED 2026-09-10 (UTC). SAME FOUR-OF-FIVE STALENESS as the list earlier in this document; see that table for the per-item evidence.** ✅ **Only the atomic-write total-primitive swap remains, and it is SIX call sites, not the five it is billed as.**
+
+⚠ **The `AutoTweaker`-first sequencing note attached to the weekday filters is now spent, and is kept only because its REASON generalises:** *AutoTweaker was to go first because it is the only surface that WRITES `settings.json`, and it had verifiably never fired.* ⭐ **That ordering rule still applies to any future change touching a `settings.json` writer — the weekday filters themselves shipped 2026-09-07.**
+
+*(The original line follows, kept per the quote-and-label convention.)*
+
+~~**Ready to build with no decision owed** (from [`trader-tick-queue.md`](trader-tick-queue.md) §2): the three weekday filters — **AutoTweaker first, because it is the only surface that WRITES `settings.json`** and it has verifiably never fired · the atomic-write total-primitive swap · **C1-coverage F1** · the CeilingAudit expected-version constant · G12.~~
 
 ---
 
