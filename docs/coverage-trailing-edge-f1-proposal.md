@@ -2,7 +2,7 @@
 
 > ## ✅✅ BUILT 2026-08-26 (UTC), commit `4032f9c`, with two follow-ups `5cd7269` and `6a6f93e`. **THIS DOCUMENT IS A RECORD, NOT AN INSTRUCTION. DO NOT HAND IT TO AN IMPLEMENTER.**
 >
-> **Verified in the tree 2026-09-09 (UTC), not carried:** [`trader-tick-queue.md`](trader-tick-queue.md) §2's `C1-coverage F1` row records `DONE 2026-08-26` with the tree check `grep -c "TrailingEdge" tools/BacktestRunner/CoverageReport.vb` → **26**.
+> **Verified in the tree 2026-09-09 (UTC), not carried:** commit `4032f9c` adds `HourClass.TrailingEdge` (declared at `tools/BacktestRunner/CoverageReport.vb:64`) and six mutation-proofed fixtures. ⚠ **`grep -c "TrailingEdge" tools/BacktestRunner/CoverageReport.vb` → 26 (carried from [`trader-tick-queue.md`](trader-tick-queue.md) §2's `C1-coverage F1` row) is a T-3 count-a-name handle — true today, but it drifts the moment a comment mentions the name.** The property-testing replacement: `grep -c 'Private Sub F1[a-f]_TrailingEdge' verify/ordercheck/Program.vb` → **6** (fixtures `F1a`–`F1f`, all declared).
 >
 > *(The build-authorization banner follows, kept per the quote-and-label convention. It was true when written.)*
 
