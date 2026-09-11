@@ -677,6 +677,13 @@ Module Program
         A75a_TwoDifferentRpcCodesProduceTwoDistinguishableLines()
         A75b_ErrorObjectWithNoReadableCodeLogsUnknown()
 
+        ' [C-3b Part A — recovery marker (docs/c3b-venue-scoping-spec.md §1):
+        '   A76b is the live-defect assertion: error→ok→same-error must write THREE lines.
+        '   A76c confirms V-1 holds after the recovery path is added.]
+        A76a_VenueErrorThenSuccessWritesTwoLines()
+        A76b_RepeatOutageWithSameCodeWritesThreeLines()
+        A76c_V1HoldsAfterRecoveryMarkerAddedTimeoutWritesNothing()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -13813,6 +13820,143 @@ Module Program
               h.Classification = HourClass.OutOfScopeWeekend AndAlso
               h.Classification <> HourClass.OutOfScopeDeclared,
               "class=" & h.Classification.ToString())
+    End Sub
+
+    ' ══ A76 — C-3b Part A: recovery marker (docs/c3b-venue-scoping-spec.md §1) ══════════════
+
+    ' -- A76a: venue error then success writes two lines --------------------------------
+    ' ⛔ THE MUTATION THAT MUST FAIL A76a: remove the ElseIf code=200 arm (RecordOkIfRecovery
+    '    call) from DeribitClient.RecordVenueIfNeeded.
+    '    Without it the success call writes nothing → only 1 line → A76a FAIL (count=False).
+    Private Sub A76a_VenueErrorThenSuccessWritesTwoLines()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            ' Simulate a 503 (Shape A venue error) then a clean 200 success.
+            DeribitClient.RecordVenueIfNeeded(503, "", "iid-A76a")
+            DeribitClient.RecordVenueIfNeeded(200, "{}", "iid-A76a")   ' clean 200 — no RPC error
+
+            Dim lines() As String = If(File.Exists(path), File.ReadAllLines(path),
+                                       Array.Empty(Of String)())
+            Dim countOk As Boolean = lines.Length = 2
+
+            ' First line: VENUE_503; second line: VENUE_OK
+            Dim shapeOk As Boolean = False
+            If lines.Length = 2 Then
+                Dim p0() = lines(0).Split(New String() {" | "}, StringSplitOptions.None)
+                Dim p1() = lines(1).Split(New String() {" | "}, StringSplitOptions.None)
+                shapeOk = p0.Length = 3 AndAlso p0(1) = "VENUE_503" AndAlso
+                          p1.Length = 3 AndAlso p1(1) = "VENUE_OK"
+            End If
+
+            Check("A76a venue error then success writes two lines: VENUE_503 then VENUE_OK",
+                  countOk AndAlso shapeOk,
+                  String.Format("count={0} shape={1} lines={2}",
+                                countOk, shapeOk, lines.Length))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A76b: repeat outage with the same code writes THREE lines ----------------------
+    ' ⛔⛔ THE LIVE DEFECT, ASSERTED. THE MUTATION THAT MUST FAIL A76b: remove the
+    '    _lastState = Nothing reset from VenueStatusLog.RecordOkIfRecovery.
+    '    Without that reset, _lastState still equals VENUE_RPC_11051 after the success,
+    '    so the second VENUE_RPC_11051 call hits the transition-only guard (same state →
+    '    no write) → only 2 lines instead of 3 → A76b FAIL (count=False).
+    ' ⭐ This is the regression that shipped: the collector ran 9 days; without the reset
+    '    a repeat outage with the same code is SILENT for the life of the process.
+    ' Code literals 11051 and 10009 are MECHANISM — off-ever-shipped, used here only to
+    ' construct a VENUE_RPC_* state string; not a settings-derived threshold.
+    Private Sub A76b_RepeatOutageWithSameCodeWritesThreeLines()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            ' Simulate: VENUE_RPC_11051 → recovery → VENUE_RPC_11051 again (repeat outage).
+            Dim rpc11051Body As String = "{""error"":{""code"":11051,""message"":""system_maintenance""}}"
+            DeribitClient.RecordVenueIfNeeded(200, rpc11051Body, "iid-A76b")   ' first outage
+            DeribitClient.RecordVenueIfNeeded(200, "{}", "iid-A76b")           ' recovery → VENUE_OK
+            DeribitClient.RecordVenueIfNeeded(200, rpc11051Body, "iid-A76b")   ' repeat outage
+
+            Dim lines() As String = If(File.Exists(path), File.ReadAllLines(path),
+                                       Array.Empty(Of String)())
+            Dim countOk As Boolean = lines.Length = 3
+
+            ' Expected: VENUE_RPC_11051 | VENUE_OK | VENUE_RPC_11051
+            Dim shapeOk As Boolean = False
+            If lines.Length = 3 Then
+                Dim states(2) As String
+                For i As Integer = 0 To 2
+                    Dim p() = lines(i).Split(New String() {" | "}, StringSplitOptions.None)
+                    states(i) = If(p.Length >= 2, p(1), "")
+                Next
+                shapeOk = states(0) = "VENUE_RPC_11051" AndAlso
+                          states(1) = "VENUE_OK" AndAlso
+                          states(2) = "VENUE_RPC_11051"
+            End If
+
+            Check("A76b repeat outage same code writes THREE lines (live defect asserted)",
+                  countOk AndAlso shapeOk,
+                  String.Format("count={0} shape={1} lines={2} states={3}",
+                                countOk, shapeOk, lines.Length,
+                                If(lines.Length > 0, String.Join("|", lines.Length), "none")))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A76c: V-1 holds after the recovery marker is added ----------------------------
+    ' ⛔ THE MUTATION THAT MUST FAIL A76c: change `ElseIf code = 200` to
+    '    `ElseIf Not VenueStatusLog.ShouldRecord(code, body)` in RecordVenueIfNeeded.
+    '    With that mutation RecordVenueIfNeeded(404, ...) also calls RecordOkIfRecovery
+    '    → VENUE_OK written after the 404 → 2 lines instead of 1 → A76c FAIL (count=False).
+    ' ⚠ Shape C (timeout): GetAsync throws before RecordVenueIfNeeded is reached, so the
+    '    real production path never calls anything. We simulate the guard by passing a 4xx —
+    '    the closest test-accessible approximation of "not a successful HTTP response".
+    Private Sub A76c_V1HoldsAfterRecoveryMarkerAddedTimeoutWritesNothing()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            ' Log a venue error (1 line).
+            DeribitClient.RecordVenueIfNeeded(503, "", "iid-A76c")
+
+            ' Simulate Shape C (timeout / 4xx — not a genuine 200 success).
+            ' The V-1 guard in ShouldRecord rejects null statusCode; RecordVenueIfNeeded is
+            ' never called for Shape C in production. Calling with 408 (Request Timeout)
+            ' verifies that a non-200 code does NOT trigger RecordOkIfRecovery.
+            DeribitClient.RecordVenueIfNeeded(408, "", "iid-A76c")
+
+            Dim lines() As String = If(File.Exists(path), File.ReadAllLines(path),
+                                       Array.Empty(Of String)())
+
+            ' File must still have exactly 1 line (the VENUE_503 error) — no VENUE_OK.
+            Dim countOk As Boolean = lines.Length = 1
+            Dim noOkLine As Boolean = Not lines.Any(Function(l) l.Contains("VENUE_OK"))
+
+            Check("A76c V-1 holds: 4xx/timeout does not write VENUE_OK after a venue error",
+                  countOk AndAlso noOkLine,
+                  String.Format("lines={0} noOkLine={1}", lines.Length, noOkLine))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
     End Sub
 
 End Module

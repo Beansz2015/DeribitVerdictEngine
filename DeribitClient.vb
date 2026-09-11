@@ -70,6 +70,12 @@ Public Class DeribitClient
                 state = "VENUE_" & code.ToString(CultureInfo.InvariantCulture)
             End If
             VenueStatusLog.LogTransition(state, instanceId)
+        ElseIf code = 200 Then
+            ' Successful 200 with no RPC error — write VENUE_OK if we are leaving a
+            ' venue-error state (C-3b recovery marker). No-op when no error was logged.
+            ' ⛔ Shape C (no response): GetAsync throws before this method is reached, so
+            ' this branch is never entered on a timeout. The V-1 guard holds unchanged.
+            VenueStatusLog.RecordOkIfRecovery(instanceId)
         End If
         Return body
     End Function
