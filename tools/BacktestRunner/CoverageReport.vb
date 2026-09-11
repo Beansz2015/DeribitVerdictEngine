@@ -79,6 +79,12 @@ Public Enum HourClass
     ' mirroring OutOfScopeWeekend. ClassifySpan never emits this class — it is a
     ' ClassifyHour gate only. Ordinal position is inert.
     OutOfScopeDeclared
+    ' [C-3b] The hour falls inside a venue-outage window: a venue_status.log error line
+    ' opened it and the next VENUE_OK (or end of the read range) closes it. ONLY when the
+    ' opening code is in CoverageReport.VenueSideCodes — our-fault and unknown codes leave
+    ' the hour as Defect (B-1/B-2 guard). Checked in ClassifyHour after OutOfScopeDeclared
+    ' and before every uptime/store test. ClassifySpan never emits this class. Ordinal inert.
+    OutOfScopeVenue
 End Enum
 
 ''' <summary>[C-3a] One declared intentional-downtime window from declared_schedule.txt.
@@ -91,6 +97,32 @@ Public Structure DeclaredWindow
     Public Sub New(startMs As Long, endMs As Long)
         Me.StartMs = startMs
         Me.EndMs = endMs
+    End Sub
+End Structure
+
+''' <summary>[C-3b] One venue-outage window derived from venue_status.log.
+''' A venue-error line opens the window; the next VENUE_OK (or the end of the read range)
+''' closes it. An hour whose UTC start falls within [StartMs, EndMs) is a candidate for
+''' OutOfScopeVenue — but ONLY when IsVenueSide is True (opening code is in
+''' CoverageReport.VenueSideCodes). A non-venue-side code leaves the hour as Defect,
+''' with Code carried in the Reason string so it is visible rather than lost (B-1/B-2).</summary>
+Public Structure VenueWindow
+    ''' <summary>UTC ms of the venue-error line that opened this window (inclusive).</summary>
+    Public StartMs As Long
+    ''' <summary>UTC ms of the VENUE_OK line that closed this window (exclusive).
+    ''' Set to the end of the read range when the window was not closed before the range ended.</summary>
+    Public EndMs As Long
+    ''' <summary>State that opened the window (e.g. "VENUE_503", "VENUE_RPC_11051").
+    ''' Carried in the Defect Reason when IsVenueSide is False so our-fault codes are visible.</summary>
+    Public Code As String
+    ''' <summary>True only when Code is in CoverageReport.VenueSideCodes.
+    ''' False for our-fault and unknown codes — those leave the hour as Defect (B-1/B-2 guard).</summary>
+    Public IsVenueSide As Boolean
+    Public Sub New(startMs As Long, endMs As Long, code As String, isVenueSide As Boolean)
+        Me.StartMs = startMs
+        Me.EndMs = endMs
+        Me.Code = code
+        Me.IsVenueSide = isVenueSide
     End Sub
 End Structure
 
@@ -312,6 +344,16 @@ Public NotInheritable Class CoverageReport
 
     Public Const HourMs As Long = 3600000L
 
+    ' [C-3b, D-5] Venue-side error codes that cause ClassifyHour to emit OutOfScopeVenue.
+    ' Public per the standing ruling: a Private const forces fixtures to restate the literal.
+    ' NOT a settings.json key (D-5 rejects it) — this is an empirically-observed set, not
+    ' operational configuration. An unrecognised code fails safe toward Defect (B-2).
+    ' ⚠ 11051 is carried from the 2026-08-11 observation, NOT verified against Deribit docs.
+    ' The design tolerates that: an unknown code fails safe toward Defect (never a false excuse).
+    Public Shared ReadOnly VenueSideCodes As New HashSet(Of String)(StringComparer.Ordinal) From {
+        "VENUE_500", "VENUE_502", "VENUE_503", "VENUE_504",
+        "VENUE_RPC_11051"}
+
     ' ── Evidence parsing ──────────────────────────────────────────────────────────────
 
     ''' <summary>Parse ws_health.log lines ("utc | state | instance_id") into evidence
@@ -410,6 +452,61 @@ Public NotInheritable Class CoverageReport
                 New DateTimeOffset(DateTime.SpecifyKind(startDt, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
                 New DateTimeOffset(DateTime.SpecifyKind(endDt, DateTimeKind.Utc)).ToUnixTimeMilliseconds()))
         Next
+        Return result
+    End Function
+
+    ''' <summary>[C-3b] Parse venue_status.log lines ("utc | state | instance_id") into
+    ''' VenueWindow instances. A venue-error state line opens a window; VENUE_OK closes it.
+    ''' An unterminated window (no VENUE_OK before the end of the read range) closes at
+    ''' rangeEndMs (A77d). Non-VENUE_* lines and malformed lines are silently skipped.
+    ''' Consecutive error lines close the previous window and open a new one.
+    ''' Returns an empty list when lines is Nothing or empty — no change to output (AC-6).</summary>
+    Public Shared Function ParseVenueWindows(lines As IEnumerable(Of String),
+                                              rangeEndMs As Long) As List(Of VenueWindow)
+        Dim result As New List(Of VenueWindow)
+        If lines Is Nothing Then Return result
+
+        Dim openStart As Long = 0
+        Dim openCode As String = Nothing
+        Dim openVenueSide As Boolean = False
+        Dim inWindow As Boolean = False
+
+        For Each line In lines
+            If String.IsNullOrWhiteSpace(line) Then Continue For
+            Dim parts() As String = line.Split(New String() {" | "}, StringSplitOptions.None)
+            If parts.Length < 2 Then Continue For
+
+            Dim dt As DateTimeOffset
+            If Not DateTimeOffset.TryParseExact(parts(0).Trim(),
+                                                "yyyy-MM-ddTHH:mm:ss.fffZ",
+                                                CultureInfo.InvariantCulture,
+                                                DateTimeStyles.AssumeUniversal, dt) Then Continue For
+            Dim utcMs As Long = dt.ToUnixTimeMilliseconds()
+            Dim state As String = parts(1).Trim()
+
+            If state = "VENUE_OK" Then
+                If inWindow Then
+                    result.Add(New VenueWindow(openStart, utcMs, openCode, openVenueSide))
+                    inWindow = False
+                    openCode = Nothing
+                End If
+            ElseIf state.StartsWith("VENUE_", StringComparison.Ordinal) Then
+                ' A new error line: close any previous open window, then open a new one.
+                If inWindow Then
+                    result.Add(New VenueWindow(openStart, utcMs, openCode, openVenueSide))
+                End If
+                openStart = utcMs
+                openCode = state
+                openVenueSide = VenueSideCodes.Contains(state)
+                inWindow = True
+            End If
+        Next
+
+        ' Unterminated window: close at the end of the read range (A77d).
+        If inWindow Then
+            result.Add(New VenueWindow(openStart, rangeEndMs, openCode, openVenueSide))
+        End If
+
         Return result
     End Function
 
@@ -768,7 +865,8 @@ Public NotInheritable Class CoverageReport
                                         gapMs As Long,
                                         Optional spanStats As Dictionary(Of Long, HourStoreStats) = Nothing,
                                         Optional observedBoundMs As Long = Long.MaxValue,
-                                        Optional declaredWindows As List(Of DeclaredWindow) = Nothing) As HourResult
+                                        Optional declaredWindows As List(Of DeclaredWindow) = Nothing,
+                                        Optional venueWindows As List(Of VenueWindow) = Nothing) As HourResult
         Dim result As New HourResult With {.HourUtc = hourStartUtc}
 
         ' hourStartMs is computed before the weekend/declared checks so both gates can reuse it.
@@ -791,6 +889,26 @@ Public NotInheritable Class CoverageReport
             Next
         End If
 
+        ' [C-3b] Venue-outage window: checked after OutOfScopeDeclared, before every
+        ' uptime/store test. ClassifySpan never emits OutOfScopeVenue (B-4).
+        ' ⛔ B-1/B-2 guard: ONLY venue-side codes scope out. Our-fault and unknown codes
+        ' leave the hour for normal classification; their code is collected here and appended
+        ' to the Reason string so it is visible rather than lost.
+        Dim nonVenueCode As String = Nothing
+        If venueWindows IsNot Nothing Then
+            For Each vw In venueWindows
+                If hourStartMs >= vw.StartMs AndAlso hourStartMs < vw.EndMs Then
+                    If vw.IsVenueSide Then
+                        result.Classification = HourClass.OutOfScopeVenue
+                        Return result
+                    Else
+                        nonVenueCode = vw.Code   ' annotate Defect reason below (B-1/B-2)
+                        Exit For
+                    End If
+                End If
+            Next
+        End If
+
         Dim hourEndMs As Long = hourStartMs + HourMs - 1
 
         Dim splitMarkers = If(markers, New List(Of CaptureMarkerLog.MarkerRecord)).
@@ -805,6 +923,12 @@ Public NotInheritable Class CoverageReport
             result.InstanceId = only.InstanceId
             result.Reason = only.Reason
             result.TrailingMsForHour = only.TrailingMs
+            ' [C-3b] Annotate non-venue-side code so it is visible in the Reason (B-1/B-2).
+            If nonVenueCode IsNot Nothing Then
+                result.Reason = If(String.IsNullOrEmpty(result.Reason),
+                                   nonVenueCode,
+                                   result.Reason & " [" & nonVenueCode & "]")
+            End If
             Return result
         End If
 
@@ -912,6 +1036,10 @@ Public NotInheritable Class CoverageReport
             spanParts.Add("[" & spanTimeUtc.ToString("HH:mm") & "] " & s.Classification.ToString() & reasonSuffix)
         Next
         result.Reason = "split@" & String.Join(",", markerTimes) & " :: " & String.Join(" | ", spanParts)
+        ' [C-3b] Annotate non-venue-side code in the split-hour reason too (B-1/B-2).
+        If nonVenueCode IsNot Nothing Then
+            result.Reason = result.Reason & " [" & nonVenueCode & "]"
+        End If
         Return result
     End Function
 
@@ -1167,9 +1295,13 @@ Public NotInheritable Class CoverageReport
     Public Shared Function BuildResult(opts As CoverageOptions, storeDir As String,
                                        analysisLogPath As String, wsHealthPath As String,
                                        markerPath As String,
-                                       Optional schedulePath As String = "") As CoverageResult
+                                       Optional schedulePath As String = "",
+                                       Optional venueLogPath As String = "") As CoverageResult
         Dim result As New CoverageResult With {.FromUtc = opts.FromUtc, .ToUtc = opts.ToUtc, .GapMs = opts.GapMs}
         Dim declaredWindows As List(Of DeclaredWindow) = ParseDeclaredSchedule(schedulePath)
+        Dim toUtcMs As Long = New DateTimeOffset(
+            DateTime.SpecifyKind(opts.ToUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim venueWindows As List(Of VenueWindow) = ParseVenueWindows(SafeReadAllLines(venueLogPath), toUtcMs)
 
         Dim captureBegins = ResolveCaptureBeginsUtc(storeDir, opts.FromUtc, opts.ToUtc)
         result.CaptureBeginsUtc = captureBegins
@@ -1261,7 +1393,7 @@ Public NotInheritable Class CoverageReport
             Dim stats As HourStoreStats = Nothing
             hourStats.TryGetValue(hourStartMs, stats)
             Dim hr = ClassifyHour(cursor, markers, upIntervals, result.S1Skipped, stats, opts.GapMs,
-                                  splitSpanStats, observedBoundMs, declaredWindows)
+                                  splitSpanStats, observedBoundMs, declaredWindows, venueWindows)
             result.Hours.Add(hr)
             If stats IsNot Nothing Then
                 If stats.LongestGapMs > result.ObservedLongestGapMs Then result.ObservedLongestGapMs = stats.LongestGapMs
@@ -1321,6 +1453,7 @@ Public NotInheritable Class CoverageReport
         sb.AppendLine(String.Format("  unknown-scope        {0}", result.CountByClass(HourClass.UnknownScope)))
         sb.AppendLine(String.Format("  out-of-scope-weekend   {0}", result.CountByClass(HourClass.OutOfScopeWeekend)))
         sb.AppendLine(String.Format("  out-of-scope-declared  {0}", result.CountByClass(HourClass.OutOfScopeDeclared)))
+        sb.AppendLine(String.Format("  out-of-scope-venue     {0}", result.CountByClass(HourClass.OutOfScopeVenue)))
         If result.S1Skipped Then
             sb.AppendLine("  S1 (uptime)         SKIPPED — " & result.S1SkipReason)
         End If
@@ -1433,7 +1566,8 @@ Public NotInheritable Class CoverageReport
         For Each h In result.Hours
             If h.Classification = HourClass.Captured OrElse
                h.Classification = HourClass.OutOfScopeWeekend OrElse
-               h.Classification = HourClass.OutOfScopeDeclared Then Continue For
+               h.Classification = HourClass.OutOfScopeDeclared OrElse
+               h.Classification = HourClass.OutOfScopeVenue Then Continue For
             sb.AppendLine(String.Format("| {0:yyyy-MM-dd HH:00} | {1} | {2} | {3} |",
                                         h.HourUtc, h.Classification.ToString(), h.InstanceId, h.Reason))
         Next

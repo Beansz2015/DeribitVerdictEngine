@@ -59,6 +59,24 @@ Public NotInheritable Class VenueStatusLog
         End SyncLock
     End Sub
 
+    ''' <summary>Writes a VENUE_OK line when this is the FIRST successful response after a
+    ''' venue-error state, then clears the baseline so a repeat outage logs again.
+    ''' ⛔ No-op when _lastState is Nothing (no error has been written this process lifetime).
+    ''' ⛔ Must NOT be called on Shape C (no response — timeout/DNS/TCP): the helper
+    ''' GetStringOrRecordAsync in DeribitClient never reaches RecordVenueIfNeeded when GetAsync
+    ''' throws, so this is never triggered by a timeout. The V-1 guard holds unchanged.
+    ''' Called from DeribitClient.RecordVenueIfNeeded on the code=200 success branch only.</summary>
+    Public Shared Sub RecordOkIfRecovery(instanceId As String)
+        SyncLock _lock
+            If _lastState Is Nothing Then Return   ' no prior error — nothing to recover from
+            ' Leaving a venue-error state: write VENUE_OK and clear the baseline.
+            ' Clear before TryAppend so a failed write still resets state — the process has
+            ' recovered regardless of whether the diagnostic line reached disk.
+            _lastState = Nothing
+            TryAppend("VENUE_OK", instanceId)
+        End SyncLock
+    End Sub
+
     ''' <summary>Test-only — reset the in-process transition baseline (does NOT touch
     ''' the sidecar file). Harness A74 uses this between sub-cases.</summary>
     Public Shared Sub ResetForTest()
