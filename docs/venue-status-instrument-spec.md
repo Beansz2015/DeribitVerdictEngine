@@ -1,8 +1,8 @@
 ﻿# Venue-status instrument — the recorded source `C-3b` needs
 
-**Status:** ⛔ **ONE DECISION OPEN (`D-1`). Everything else is ruled.** Build after `C-3a` ships.
+**Status:** ✅✅ **BUILD-AUTHORIZED IN FULL. `D-1` ticked (d) by the trader, 2026-09-11 (UTC). Nothing is owed.** Build after `C-3a` ships.
 
-⚠ **`D-1` was REFRAMED 2026-09-11 (UTC) after the trader observed that the venue can fail in ways other than a 503. §2.0 is the reframing, §2.1 adds option (d), and (c) is now DOMINATED. Read §2.0 before ruling.**
+⭐ **`D-1` was REFRAMED 2026-09-11 (UTC) after the trader observed the venue can fail in ways other than a 503 — and the reframing changed the answer. §2.0 is the class model, §2.1 is the ruled option (d). ⛔ Options (a) and (c) are DEAD: both are triggered by a status code and are BLIND to a venue that declares maintenance in an HTTP-200 body.**
 
 **Author seat:** Opus, 2026-09-11 (UTC). **Baseline commit: `e84c0bf`.**
 
@@ -59,7 +59,7 @@
 
 ---
 
-## 2. ⛔ The one open decision
+## 2. ✅ `D-1` — RULED (d), 2026-09-11 (UTC)
 
 ### 2.0 ⛔⛔ REFRAMED 2026-09-11 (UTC), trader-raised: **the trigger is not "503"**
 
@@ -78,9 +78,9 @@
 
 | # | Decision | Options | My read |
 |---|---|---|---|
-| **`D-1`** | **How is the venue's declaration obtained?** | **(a) HTTP 503 status alone**, logged at the existing catch site `DeribitClient.vb:38-51`. One line, zero change to the request path · **(b)** change `GetStringAsync` → `GetAsync` + read the body, giving the real `11051` / `system_maintenance` code · **(c)** on seeing a 503, fire ONE extra probe read to recover the body | ⚠⚠ **RESERVED — and I am flagging it under the ruling's own last class rather than taking it.** ⭐ **My read is (a), and I believe it is ADEQUATE rather than merely cheap:** a 503 **is** the venue's own response, so it is a positive record of the venue's state, not an inference from ours — which is all J-B requires. **For scoping an hour, "the venue was not serving" is sufficient; whether it was planned maintenance or an unplanned outage does not change whose defect it is.** ⛔ **But (a) IS the less-information option, and the ruling reserves exactly that, so it is yours.** ⚠ **(b) is the only one that yields `11051`, and it touches EVERY market-data fetch — the highest-blast-radius code in the app. I would not pay that for a diagnostic.** ⚠ **(c) adds a network call during an outage and recovers the same answer (b) does, for less risk and more moving parts** |
+| **`D-1`** | **How is the venue's declaration obtained?** | **(a) HTTP 503 status alone**, logged at the existing catch site `DeribitClient.vb:38-51`. One line, zero change to the request path · **(b)** change `GetStringAsync` → `GetAsync` + read the body, giving the real `11051` / `system_maintenance` code · **(c)** on seeing a 503, fire ONE extra probe read to recover the body | ✅✅ **RULED (d) 2026-09-11 (UTC), trader — NOT any of the three options originally offered. ⭐ The reserving was worth it: I offered (a) as my read, the trader's question about non-503 failures reframed the problem, and the answer became an option nobody had written down. ⛔ Superseded reasoning follows, kept per the quote-and-label convention.** ~~RESERVED under the ruling's own last class.~~ ⭐ **My read is (a), and I believe it is ADEQUATE rather than merely cheap:** a 503 **is** the venue's own response, so it is a positive record of the venue's state, not an inference from ours — which is all J-B requires. **For scoping an hour, "the venue was not serving" is sufficient; whether it was planned maintenance or an unplanned outage does not change whose defect it is.** ⛔ **But (a) IS the less-information option, and the ruling reserves exactly that, so it is yours.** ⚠ **(b) is the only one that yields `11051`, and it touches EVERY market-data fetch — the highest-blast-radius code in the app. I would not pay that for a diagnostic.** ⚠ **(c) adds a network call during an outage and recovers the same answer (b) does, for less risk and more moving parts** |
 
-### 2.1 ⭐⭐ OPTION (d) — added 2026-09-11, and it is now my read
+### 2.1 ✅✅ OPTION (d) — RULED. THIS IS THE BUILD.
 
 **One private drop-in helper in `DeribitClient`**, e.g. `GetStringOrRecord(url)`: issues `GetAsync`, inspects the status, **records a venue line when the answer falls in class 1 or 2**, then either returns the body string or throws **the same `HttpRequestException` the callers already expect.**
 
