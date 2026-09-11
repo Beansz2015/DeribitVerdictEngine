@@ -665,12 +665,17 @@ Module Program
         '   VenueStatusLog sidecar: transition-only, never-throws, V-1 guard (no log on timeout /
         '   network failure / 4xx), shape-B HTTP-200 JSON-RPC error both logs AND returns body
         '   unchanged (the drop-in property that distinguishes option (d) from option (b)).
-        '   A74b (V-1 guard) and A74e (shape B + drop-in) are the two with teeth.]
+        '   A74b (V-1 guard) and A74e (shape B + drop-in) are the two with teeth.
+        '   VENUE_RPC fix (A75 — docs/venue-status-rpc-code-fix-spec.md):
+        '   A75a (the residual asserted — two codes produce two distinguishable lines) and
+        '   A75b (VENUE_RPC_UNKNOWN on missing code, D-3 guard) complete the coverage.]
         A74a_VenueNon2xxWritesOneShapedLine()
         A74b_TimeoutNetworkAnd4xxWriteNothing()
         A74c_TransitionOnlyNConsecutiveWriteOneLine()
         A74d_LogPathNeverThrows()
         A74e_ShapeBLogsAndReturnsBodyUnchanged()
+        A75a_TwoDifferentRpcCodesProduceTwoDistinguishableLines()
+        A75b_ErrorObjectWithNoReadableCodeLogsUnknown()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -13591,16 +13596,20 @@ Module Program
         End Try
     End Sub
 
-    ' -- A74e: shape B — HTTP 200 with JSON-RPC error body logs AND body unchanged --
+    ' -- A74e: shape B — HTTP 200 with JSON-RPC error body logs VENUE_RPC_<code> AND body --
     ' ⭐ ASSERTS THE DROP-IN PROPERTY: the helper must NOT throw on a 200, and must NOT
     '    alter the body. The whole case for option (d) over option (b) is that caller
     '    semantics are identical to GetStringAsync on every response shape.
     '
     ' ⛔ THE MUTATION THAT MUST FAIL A74e (two independent mutations):
-    '    (1) Remove IsRpcError detection from ShouldRecord — shape B is never logged.
-    '        loggedOk becomes False → A74e FAIL.
+    '    (1) Revert the state string to "VENUE_200" in RecordVenueIfNeeded — stateOk
+    '        becomes False → A74e FAIL. The drop-in half (bodyOk) still passes,
+    '        proving the two assertions are independent.
     '    (2) Return "" instead of body inside RecordVenueIfNeeded — body is altered.
     '        bodyOk becomes False → A74e FAIL.
+    ' RPC code 11051 is ILLUSTRATIVE — MECHANISM literal (fixture-literal provenance rule):
+    ' it is not a shipped behaviour threshold; any code that differs from the HTTP status
+    ' serves to prove state composition uses the RPC code, not the HTTP code.
     Private Sub A74e_ShapeBLogsAndReturnsBodyUnchanged()
         Dim path As String = VenueStatusLog.GetPath()
         Try
@@ -13615,13 +13624,13 @@ Module Program
             ' the body unchanged so the caller receives exactly what the venue sent.
             Dim returned As String = DeribitClient.RecordVenueIfNeeded(200, rpcErrorBody, "iid-A74e")
 
-            ' (a) log written
+            ' (a) log written with VENUE_RPC_11051 (not the HTTP status code)
             Dim loggedOk As Boolean = File.Exists(path) AndAlso File.ReadAllLines(path).Length = 1
             Dim stateOk As Boolean = False
             If loggedOk Then
                 Dim parts() As String = File.ReadAllLines(path)(0).Split(
                                                 New String() {" | "}, StringSplitOptions.None)
-                stateOk = parts.Length = 3 AndAlso parts(1) = "VENUE_200"
+                stateOk = parts.Length = 3 AndAlso parts(1) = "VENUE_RPC_11051"
             End If
 
             ' (b) body returned unchanged — drop-in property
@@ -13636,10 +13645,105 @@ Module Program
                                            File.ReadAllLines(path).Length = 0
             Dim cleanBodyOk As Boolean = returnedClean = cleanBody
 
-            Check("A74e shape B — HTTP 200 + JSON-RPC error logs VENUE_200 AND body returned unchanged; clean 200 not logged",
+            Check("A74e shape B — HTTP 200 + JSON-RPC error logs VENUE_RPC_11051 AND body returned unchanged; clean 200 not logged",
                   loggedOk AndAlso stateOk AndAlso bodyOk AndAlso noLogForClean AndAlso cleanBodyOk,
                   String.Format("logged={0} state={1} body={2} noLogClean={3} cleanBody={4}",
                                 loggedOk, stateOk, bodyOk, noLogForClean, cleanBodyOk))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A75a: two different RPC codes produce two DISTINGUISHABLE lines ------------------
+    ' ⛔⛔ THE ONE WITH TEETH — asserts the residual: VENUE_RPC_11051 and VENUE_RPC_10009
+    '    are distinct so the consumer can tell maintenance from our own bad request.
+    '
+    ' ⛔ THE MUTATION THAT MUST FAIL A75a: compose the state from the HTTP status instead
+    '    of the RPC code (i.e. use "VENUE_" & code for every response including 200) →
+    '    both lines read "VENUE_200" → linesDistinct = False → A75a FAIL.
+    ' RPC codes 11051 / 10009 are ILLUSTRATIVE — MECHANISM literals: they exist to be
+    ' different from each other and different from the HTTP status code (200); the fixture
+    ' does not depend on these being real Deribit codes.
+    Private Sub A75a_TwoDifferentRpcCodesProduceTwoDistinguishableLines()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            Dim body1 As String = "{""error"":{""code"":11051,""message"":""system_maintenance""}}"
+            Dim body2 As String = "{""error"":{""code"":10009,""message"":""request_limit_exceeded""}}"
+
+            DeribitClient.RecordVenueIfNeeded(200, body1, "iid-A75a-1")
+            ' Reset transition baseline so the second call also writes.
+            VenueStatusLog.ResetForTest()
+            DeribitClient.RecordVenueIfNeeded(200, body2, "iid-A75a-2")
+
+            Dim lines() As String = If(File.Exists(path), File.ReadAllLines(path),
+                                       Array.Empty(Of String)())
+            Dim twoLines As Boolean = lines.Length = 2
+            Dim linesDistinct As Boolean = False
+            Dim state1 As String = ""
+            Dim state2 As String = ""
+            If twoLines Then
+                Dim parts1() As String = lines(0).Split(
+                                             New String() {" | "}, StringSplitOptions.None)
+                Dim parts2() As String = lines(1).Split(
+                                             New String() {" | "}, StringSplitOptions.None)
+                If parts1.Length = 3 AndAlso parts2.Length = 3 Then
+                    state1 = parts1(1)
+                    state2 = parts2(1)
+                    linesDistinct = state1 <> state2 AndAlso
+                                    state1 = "VENUE_RPC_11051" AndAlso
+                                    state2 = "VENUE_RPC_10009"
+                End If
+            End If
+
+            Check("A75a two different RPC codes produce two distinguishable lines",
+                  twoLines AndAlso linesDistinct,
+                  String.Format("lines={0} state1={1} state2={2}",
+                                lines.Length, state1, state2))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A75b: error object with no readable code logs VENUE_RPC_UNKNOWN (D-3) -----------
+    ' ⛔ THE MUTATION THAT MUST FAIL A75b: return Nothing / skip when the code field is
+    '    absent (i.e. do not log VENUE_RPC_UNKNOWN) → no file / no line → stateOk False
+    '    → A75b FAIL. A silent hole rather than a tripwire, which is the D-3 defect.
+    Private Sub A75b_ErrorObjectWithNoReadableCodeLogsUnknown()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            ' "error" object present but no "code" field — unreadable code.
+            Dim noCodeBody As String = "{""error"":{""message"":""unknown error""}}"
+            DeribitClient.RecordVenueIfNeeded(200, noCodeBody, "iid-A75b")
+
+            Dim loggedOk As Boolean = File.Exists(path) AndAlso File.ReadAllLines(path).Length = 1
+            Dim stateOk As Boolean = False
+            If loggedOk Then
+                Dim parts() As String = File.ReadAllLines(path)(0).Split(
+                                             New String() {" | "}, StringSplitOptions.None)
+                stateOk = parts.Length = 3 AndAlso parts(1) = "VENUE_RPC_UNKNOWN"
+            End If
+
+            Check("A75b error object with no readable code logs VENUE_RPC_UNKNOWN not nothing (D-3)",
+                  loggedOk AndAlso stateOk,
+                  String.Format("logged={0} state={1}",
+                                loggedOk, If(loggedOk AndAlso File.ReadAllLines(path).Length = 1,
+                                             File.ReadAllLines(path)(0).Split(
+                                                 New String() {" | "}, StringSplitOptions.None)(1),
+                                             "<no line>")))
         Finally
             Try
                 If File.Exists(path) Then File.Delete(path)

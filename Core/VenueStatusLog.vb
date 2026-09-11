@@ -12,7 +12,15 @@
 ' Contract mirrors WsHealthLog (Core/WsHealthLog.vb): never throws, path =
 ' AppDomain BaseDirectory + "venue_status.log", one line per event:
 '   utc | state | instance_id
-' where state is "VENUE_<http-status-code>", e.g. "VENUE_503" or "VENUE_200".
+' where state is:
+'   Shape A (non-2xx)               "VENUE_<http-status-code>"  e.g. "VENUE_503"
+'   Shape B (200 + JSON-RPC error)  "VENUE_RPC_<rpc-code>"      e.g. "VENUE_RPC_11051"
+'                                   "VENUE_RPC_UNKNOWN"          when the error object
+'                                                                carries no readable code
+' ⚠ A shape-B line records a response the venue returned. Some RPC codes (e.g. an
+' invalid_params or request-level error) reflect OUR bug, not a venue outage. Telling
+' them apart is the consumer's job — this log records every code so that distinction
+' can be made later.
 '
 ' Transition-only: N consecutive failures write ONE line. No start line (unlike
 ' WsHealthLog the venue state is not meaningful at process start — only a real
@@ -97,6 +105,33 @@ Public NotInheritable Class VenueStatusLog
         Catch
             Return False
         End Try
+    End Function
+
+    ''' <summary>Composes the shape-B state string from the RPC error body.
+    ''' Returns "VENUE_RPC_&lt;code&gt;" when the error object carries a readable integer code,
+    ''' or "VENUE_RPC_UNKNOWN" when the code field is absent or unparseable (D-3).
+    ''' Called only after IsRpcError has returned True for this body.
+    ''' Never throws — an unparseable body yields VENUE_RPC_UNKNOWN.</summary>
+    Friend Shared Function ComposeRpcState(body As String) As String
+        If Not String.IsNullOrEmpty(body) Then
+            Try
+                Using doc As JsonDocument = JsonDocument.Parse(body)
+                    Dim errorEl As JsonElement = Nothing
+                    If doc.RootElement.TryGetProperty("error", errorEl) Then
+                        Dim codeEl As JsonElement = Nothing
+                        If errorEl.TryGetProperty("code", codeEl) AndAlso
+                           codeEl.ValueKind = JsonValueKind.Number Then
+                            Dim n As Integer
+                            If codeEl.TryGetInt32(n) Then
+                                Return "VENUE_RPC_" & n.ToString(CultureInfo.InvariantCulture)
+                            End If
+                        End If
+                    End If
+                End Using
+            Catch
+            End Try
+        End If
+        Return "VENUE_RPC_UNKNOWN"
     End Function
 
     ' -- private ───────────────────────────────────────────────────────────────────────────────
