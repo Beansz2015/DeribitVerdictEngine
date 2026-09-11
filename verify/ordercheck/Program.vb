@@ -653,6 +653,12 @@ Module Program
         A73d_SpanBeforeCaptureCapableFromMsIsStartupWindow()
         A73e_T2GuardFirstUtcMsUntouchedNoExpectedMissingCreep()
 
+        ' [C-3a — coverage-report-cluster-spec.md Session 2: declared operating schedule.
+        '   A73f (declared window) and A73g (boundary exclusivity) are the two with teeth.]
+        A73f_HourInsideDeclaredWindowIsOutOfScopeDeclared()
+        A73g_HourAtWindowEndIsNotDeclared()
+        A73h_WeekendTakesPrecedenceOverDeclared()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -13374,6 +13380,68 @@ Module Program
                             h10.Classification,
                             If(iv IsNot Nothing, iv.FirstUtcMs.ToString(), "nil"),
                             If(iv IsNot Nothing, iv.CaptureCapableFromMs.ToString(), "nil")))
+    End Sub
+
+    ' ══ A73f–A73h — C-3a declared operating schedule (Session 2) ═════════════════════════
+
+    ' -- A73f: hour inside a declared window ⇒ OutOfScopeDeclared -------------------------
+    ' ⛔ THE MUTATION THAT MUST FAIL A73f: remove (or comment out) the declaredWindows loop
+    '    inside ClassifyHour. Without the loop the hour falls through to Defect (no uptime
+    '    evidence, empty store stats). With the loop it returns OutOfScopeDeclared immediately.
+    Private Sub A73f_HourInsideDeclaredWindowIsOutOfScopeDeclared()
+        ' Tuesday 2026-01-06 10:00 UTC — strictly inside the 09:00–11:00 window.
+        Dim hourUtc As New DateTime(2026, 1, 6, 10, 0, 0, DateTimeKind.Utc)
+        Dim winStart As Long = New DateTimeOffset(New DateTime(2026, 1, 6, 9, 0, 0, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim winEnd As Long = New DateTimeOffset(New DateTime(2026, 1, 6, 11, 0, 0, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim windows As New List(Of DeclaredWindow) From {
+            New DeclaredWindow(winStart, winEnd)}
+        Dim h = CoverageReport.ClassifyHour(hourUtc, Nothing,
+                                            New List(Of UpInterval),
+                                            False, Nothing, 300000L, Nothing, Long.MaxValue, windows)
+        Check("A73f hour inside declared window ⇒ OutOfScopeDeclared, not Defect",
+              h.Classification = HourClass.OutOfScopeDeclared,
+              "class=" & h.Classification.ToString())
+    End Sub
+
+    ' -- A73g: hour at window EndMs boundary is NOT in window (EndMs is exclusive) ---------
+    ' ⛔ THE MUTATION THAT MUST FAIL A73g: change `hourStartMs < w.EndMs` to
+    '    `hourStartMs <= w.EndMs` in ClassifyHour. With that change the hour sitting exactly
+    '    at the window end is incorrectly classified OutOfScopeDeclared instead of falling
+    '    through to the uptime/store tests.
+    Private Sub A73g_HourAtWindowEndIsNotDeclared()
+        ' Tuesday 2026-01-06 11:00 UTC — window ends here (exclusive); hour is NOT in window.
+        Dim hourUtc As New DateTime(2026, 1, 6, 11, 0, 0, DateTimeKind.Utc)
+        Dim hourMs As Long = New DateTimeOffset(hourUtc).ToUnixTimeMilliseconds()
+        ' winEnd = hourMs so [winStart, hourMs) excludes this hour by the `<` boundary rule.
+        Dim winStart As Long = New DateTimeOffset(New DateTime(2026, 1, 6, 9, 0, 0, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim windows As New List(Of DeclaredWindow) From {
+            New DeclaredWindow(winStart, hourMs)}
+        Dim h = CoverageReport.ClassifyHour(hourUtc, Nothing,
+                                            New List(Of UpInterval),
+                                            False, Nothing, 300000L, Nothing, Long.MaxValue, windows)
+        Check("A73g hour at window EndMs (exclusive boundary) is NOT OutOfScopeDeclared",
+              h.Classification <> HourClass.OutOfScopeDeclared,
+              "class=" & h.Classification.ToString())
+    End Sub
+
+    ' -- A73h: weekend check runs before declared — Saturday inside declared window ⇒ OutOfScopeWeekend
+    ' ⛔ THE MUTATION THAT MUST FAIL A73h: move the declared check BEFORE the weekend check
+    '    in ClassifyHour. With that ordering a Saturday inside a declared window returns
+    '    OutOfScopeDeclared instead of OutOfScopeWeekend.
+    Private Sub A73h_WeekendTakesPrecedenceOverDeclared()
+        ' Saturday 2026-01-03 10:00 UTC — inside the 09:00–11:00 declared window.
+        Dim hourUtc As New DateTime(2026, 1, 3, 10, 0, 0, DateTimeKind.Utc)
+        Dim winStart As Long = New DateTimeOffset(New DateTime(2026, 1, 3, 9, 0, 0, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim winEnd As Long = New DateTimeOffset(New DateTime(2026, 1, 3, 11, 0, 0, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        Dim windows As New List(Of DeclaredWindow) From {
+            New DeclaredWindow(winStart, winEnd)}
+        Dim h = CoverageReport.ClassifyHour(hourUtc, Nothing,
+                                            New List(Of UpInterval),
+                                            False, Nothing, 300000L, Nothing, Long.MaxValue, windows)
+        Check("A73h weekend check precedes declared check — Saturday inside declared window ⇒ OutOfScopeWeekend, not OutOfScopeDeclared",
+              h.Classification = HourClass.OutOfScopeWeekend AndAlso
+              h.Classification <> HourClass.OutOfScopeDeclared,
+              "class=" & h.Classification.ToString())
     End Sub
 
 End Module

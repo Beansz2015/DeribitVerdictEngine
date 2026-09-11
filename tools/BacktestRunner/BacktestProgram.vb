@@ -329,6 +329,12 @@ Public Class BacktestProgram
                     storeDir = storeDirOverride
                 End If
 
+                ' [C-3a] Declared schedule: look in the evidence dir first, then the repo root.
+                ' Absence is not an error — most runs will have no declared windows.
+                Dim schedulePath As String = Path.Combine(
+                    If(Not String.IsNullOrEmpty(evidenceDir), evidenceDir, repoRoot),
+                    "declared_schedule.txt")
+
                 Console.WriteLine(String.Format("[BacktestRunner] Coverage {0:yyyy-MM-dd} → {1:yyyy-MM-dd} UTC (gap-ms={2})",
                                                 fromUtc, toUtc, gapMs))
 
@@ -346,8 +352,11 @@ Public Class BacktestProgram
                 Console.WriteLine("[BacktestRunner] evidence: " &
                                   Path.GetFullPath(If(String.IsNullOrEmpty(evidenceDir), repoRoot, evidenceDir)) &
                                   "   [" & aimNote & "]")
+                Console.WriteLine("[BacktestRunner] schedule: " & Path.GetFullPath(schedulePath) &
+                                  If(File.Exists(schedulePath), "", "   [not found — no declared windows]"))
 
-                Dim covResult = CoverageReport.BuildResult(opts, storeDir, analysisLogPath, wsHealthPath, markerPath)
+                Dim covResult = CoverageReport.BuildResult(opts, storeDir, analysisLogPath, wsHealthPath,
+                                                           markerPath, schedulePath)
 
                 If verifyVenue Then
                     Dim windowStartMs As Long = New DateTimeOffset(toUtc.AddHours(-24), TimeSpan.Zero).ToUnixTimeMilliseconds()

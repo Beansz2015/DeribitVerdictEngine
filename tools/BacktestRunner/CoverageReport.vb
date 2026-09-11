@@ -2,9 +2,10 @@
 ' The `coverage` verb (docs/trade-store-coverage-report-proposal.md, BUILD-AUTHORIZED
 ' 2026-08-03 — see docs/trade-store-coverage-report-implementer-brief.md).
 '
-' Reports capture health for the raw-trade store: eight classes per weekday UTC hour
+' Reports capture health for the raw-trade store: nine classes per weekday UTC hour
 ' (captured / defect / trailing-edge / expected-missing / startup-window / not-capturing /
-' unknown-scope / out-of-scope-weekend — docs/j-b-scoping-ruling-2026-08-02.md +
+' unknown-scope / out-of-scope-weekend / out-of-scope-declared —
+' docs/j-b-scoping-ruling-2026-08-02.md +
 ' docs/weekday-scope-ruling-2026-08-03.md + docs/coverage-trailing-edge-f1-proposal.md
 ' §4b), plus S4 candle/funding completeness and an optional S0 venue diff. Tools-only,
 ' read-only, no settings keys, no version bump.
@@ -73,7 +74,25 @@ Public Enum HourClass
     NotCapturing
     UnknownScope
     OutOfScopeWeekend
+    ' [C-3a] The hour falls inside a declared intentional-downtime window
+    ' (declared_schedule.txt). Checked in ClassifyHour ahead of every uptime/store test,
+    ' mirroring OutOfScopeWeekend. ClassifySpan never emits this class — it is a
+    ' ClassifyHour gate only. Ordinal position is inert.
+    OutOfScopeDeclared
 End Enum
+
+''' <summary>[C-3a] One declared intentional-downtime window from declared_schedule.txt.
+''' An hour whose UTC start falls within [StartMs, EndMs) is classified OutOfScopeDeclared
+''' ahead of every uptime/store test in ClassifyHour.</summary>
+Public Structure DeclaredWindow
+    Public StartMs As Long
+    ''' <summary>Exclusive: an hour at StartMs is in-window; one at EndMs is not.</summary>
+    Public EndMs As Long
+    Public Sub New(startMs As Long, endMs As Long)
+        Me.StartMs = startMs
+        Me.EndMs = endMs
+    End Sub
+End Structure
 
 Public Class HourResult
     Public Property HourUtc As DateTime
@@ -359,6 +378,37 @@ Public NotInheritable Class CoverageReport
             result.Add(New EvidencePoint(
                 New DateTimeOffset(DateTime.SpecifyKind(ts, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
                 parts(iidIdx), EvidenceKind.CaptureCapable))
+        Next
+        Return result
+    End Function
+
+    ''' <summary>[C-3a] Parse a declared_schedule.txt file into DeclaredWindow instances.
+    ''' Format: comment lines begin with '#'; data lines are "YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM"
+    ''' (start inclusive, end exclusive, both UTC). Malformed lines are silently skipped.
+    ''' Returns an empty list when path is Nothing/empty or the file does not exist.</summary>
+    Public Shared Function ParseDeclaredSchedule(path As String) As List(Of DeclaredWindow)
+        Dim result As New List(Of DeclaredWindow)
+        If String.IsNullOrEmpty(path) OrElse Not File.Exists(path) Then Return result
+        For Each line In File.ReadAllLines(path)
+            Dim trimmed As String = line.Trim()
+            If String.IsNullOrEmpty(trimmed) OrElse trimmed.StartsWith("#") Then Continue For
+            Dim sep As Integer = trimmed.IndexOf("|"c)
+            If sep < 0 Then Continue For
+            Dim startStr As String = trimmed.Substring(0, sep).Trim()
+            Dim endStr As String = trimmed.Substring(sep + 1).Trim()
+            Dim startDt, endDt As DateTime
+            If Not DateTime.TryParseExact(startStr, "yyyy-MM-dd HH:mm",
+                                          CultureInfo.InvariantCulture,
+                                          DateTimeStyles.AssumeUniversal Or DateTimeStyles.AdjustToUniversal,
+                                          startDt) Then Continue For
+            If Not DateTime.TryParseExact(endStr, "yyyy-MM-dd HH:mm",
+                                          CultureInfo.InvariantCulture,
+                                          DateTimeStyles.AssumeUniversal Or DateTimeStyles.AdjustToUniversal,
+                                          endDt) Then Continue For
+            If endDt <= startDt Then Continue For
+            result.Add(New DeclaredWindow(
+                New DateTimeOffset(DateTime.SpecifyKind(startDt, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
+                New DateTimeOffset(DateTime.SpecifyKind(endDt, DateTimeKind.Utc)).ToUnixTimeMilliseconds()))
         Next
         Return result
     End Function
@@ -688,7 +738,7 @@ Public NotInheritable Class CoverageReport
         Return (HourClass.Defect, up.InstanceId, reason, Nothing)
     End Function
 
-    ''' <summary>[SH-1] The seven-class per-hour verdict. Positive store evidence (clean rows)
+    ''' <summary>[SH-1] The nine-class per-hour verdict. Positive store evidence (clean rows)
     ''' always wins as Captured, regardless of how ambiguous the uptime read is. See the
     ''' file-header note for the ExpectedMissing / S1-skipped design decisions.
     '''
@@ -717,16 +767,30 @@ Public NotInheritable Class CoverageReport
                                         hourStats As HourStoreStats,
                                         gapMs As Long,
                                         Optional spanStats As Dictionary(Of Long, HourStoreStats) = Nothing,
-                                        Optional observedBoundMs As Long = Long.MaxValue) As HourResult
+                                        Optional observedBoundMs As Long = Long.MaxValue,
+                                        Optional declaredWindows As List(Of DeclaredWindow) = Nothing) As HourResult
         Dim result As New HourResult With {.HourUtc = hourStartUtc}
+
+        ' hourStartMs is computed before the weekend/declared checks so both gates can reuse it.
+        Dim hourStartMs As Long =
+            New DateTimeOffset(DateTime.SpecifyKind(hourStartUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
 
         If hourStartUtc.DayOfWeek = DayOfWeek.Saturday OrElse hourStartUtc.DayOfWeek = DayOfWeek.Sunday Then
             result.Classification = HourClass.OutOfScopeWeekend
             Return result
         End If
 
-        Dim hourStartMs As Long =
-            New DateTimeOffset(DateTime.SpecifyKind(hourStartUtc, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+        ' [C-3a] Declared intentional-downtime window: checked after weekend (weekend is more
+        ' fundamental) but before every uptime/store test. ClassifySpan never emits this class.
+        If declaredWindows IsNot Nothing Then
+            For Each w In declaredWindows
+                If hourStartMs >= w.StartMs AndAlso hourStartMs < w.EndMs Then
+                    result.Classification = HourClass.OutOfScopeDeclared
+                    Return result
+                End If
+            Next
+        End If
+
         Dim hourEndMs As Long = hourStartMs + HourMs - 1
 
         Dim splitMarkers = If(markers, New List(Of CaptureMarkerLog.MarkerRecord)).
@@ -803,9 +867,9 @@ Public NotInheritable Class CoverageReport
             finalCls = HourClass.StartupWindow
         Else
             ' [coverage-trailing-split-span-spec.md R8, RULED 2026-09-03] Reached only because
-            ' ClassifySpan never emits OutOfScopeWeekend — the eighth HourClass, handled by no
-            ' branch here. If that ever changes, this Else and the combine's exhaustiveness must
-            ' be revisited together.
+            ' ClassifySpan never emits OutOfScopeWeekend or OutOfScopeDeclared — the eighth and
+            ' ninth HourClasses, both handled before this function's span logic. If that ever
+            ' changes, this Else and the combine's exhaustiveness must be revisited together.
             finalCls = HourClass.NotCapturing
         End If
 
@@ -1102,8 +1166,10 @@ Public NotInheritable Class CoverageReport
     ''' returned CoverageResult separately when --verify-venue is passed.</summary>
     Public Shared Function BuildResult(opts As CoverageOptions, storeDir As String,
                                        analysisLogPath As String, wsHealthPath As String,
-                                       markerPath As String) As CoverageResult
+                                       markerPath As String,
+                                       Optional schedulePath As String = "") As CoverageResult
         Dim result As New CoverageResult With {.FromUtc = opts.FromUtc, .ToUtc = opts.ToUtc, .GapMs = opts.GapMs}
+        Dim declaredWindows As List(Of DeclaredWindow) = ParseDeclaredSchedule(schedulePath)
 
         Dim captureBegins = ResolveCaptureBeginsUtc(storeDir, opts.FromUtc, opts.ToUtc)
         result.CaptureBeginsUtc = captureBegins
@@ -1195,7 +1261,7 @@ Public NotInheritable Class CoverageReport
             Dim stats As HourStoreStats = Nothing
             hourStats.TryGetValue(hourStartMs, stats)
             Dim hr = ClassifyHour(cursor, markers, upIntervals, result.S1Skipped, stats, opts.GapMs,
-                                  splitSpanStats, observedBoundMs)
+                                  splitSpanStats, observedBoundMs, declaredWindows)
             result.Hours.Add(hr)
             If stats IsNot Nothing Then
                 If stats.LongestGapMs > result.ObservedLongestGapMs Then result.ObservedLongestGapMs = stats.LongestGapMs
@@ -1253,7 +1319,8 @@ Public NotInheritable Class CoverageReport
         sb.AppendLine(String.Format("  startup-window       {0}", result.CountByClass(HourClass.StartupWindow)))
         sb.AppendLine(String.Format("  not-capturing        {0}", result.CountByClass(HourClass.NotCapturing)))
         sb.AppendLine(String.Format("  unknown-scope        {0}", result.CountByClass(HourClass.UnknownScope)))
-        sb.AppendLine(String.Format("  out-of-scope-weekend {0}", result.CountByClass(HourClass.OutOfScopeWeekend)))
+        sb.AppendLine(String.Format("  out-of-scope-weekend   {0}", result.CountByClass(HourClass.OutOfScopeWeekend)))
+        sb.AppendLine(String.Format("  out-of-scope-declared  {0}", result.CountByClass(HourClass.OutOfScopeDeclared)))
         If result.S1Skipped Then
             sb.AppendLine("  S1 (uptime)         SKIPPED — " & result.S1SkipReason)
         End If
@@ -1364,7 +1431,9 @@ Public NotInheritable Class CoverageReport
         sb.AppendLine("| Hour (UTC) | Class | Instance | Reason |")
         sb.AppendLine("|---|---|---|---|")
         For Each h In result.Hours
-            If h.Classification = HourClass.Captured OrElse h.Classification = HourClass.OutOfScopeWeekend Then Continue For
+            If h.Classification = HourClass.Captured OrElse
+               h.Classification = HourClass.OutOfScopeWeekend OrElse
+               h.Classification = HourClass.OutOfScopeDeclared Then Continue For
             sb.AppendLine(String.Format("| {0:yyyy-MM-dd HH:00} | {1} | {2} | {3} |",
                                         h.HourUtc, h.Classification.ToString(), h.InstanceId, h.Reason))
         Next
