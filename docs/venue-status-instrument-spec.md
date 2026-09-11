@@ -51,6 +51,22 @@
 | **Frequency** | **Transition-only**, plus nothing at start. Mirrors `WsHealthLog`; keeps the file tiny and needs no rotation |
 | **Settings** | ⛔ **NONE. No key, no version bump.** The template is explicit that this class of sidecar takes none |
 
+### 1.2 ⛔⛔ BOTH SHAPES ARE IN SCOPE — trader-directed 2026-09-11 (UTC). Do NOT build for 503 alone.
+
+⛔ **The implementer must handle TWO shapes, and must NOT assume the venue signals maintenance with a 503.**
+
+| Shape | What it looks like | In scope? |
+|---|---|---|
+| **A. Non-2xx** | any 5xx — 500, 502, **503**, 504 | ✅ **YES** |
+| **B. HTTP 200 carrying a JSON-RPC error** | a 200 whose body holds an `error` object, e.g. `{"error": {"code": 11051, "message": "system_maintenance"}}` | ✅✅ **YES — and this is the one that would be MISSED if you build for status codes alone** |
+| **C. No response at all** | timeout · DNS · TCP refusal | ⛔⛔ **NO — NEVER. This is `V-1`** |
+
+⭐ **This is exactly why `D-1` was ruled (d): the helper sees the status AND the body on every response, so both shapes are reachable from one place.** ⛔ **Options (a) and (c) were killed precisely because they are triggered by a status code and are structurally blind to shape B.**
+
+⛔⛔ **THE CONSTRAINT THAT KEEPS (d) A DROP-IN — do not break it:** on shape B the helper **LOGS and still returns the body unchanged.** ⚠ **It must NOT start throwing on a 200, and must NOT alter what any caller receives.** **The whole case for (d) over (b) is that caller semantics are identical; turning a 200 into an exception would throw that away and change engine behaviour.**
+
+⚠ **Shape A is unchanged too: log, then throw the same `HttpRequestException` the callers already expect.**
+
 ### 1.1 ⭐ REST only — the WS path is already covered, and duplicating it would be worse
 
 ✅ **Verified: `DeribitWsFeed.vb`'s error handling is generic (`Catch ex As Exception` → `Log(...)`, lines 129/142/185/215-217) with no venue-specific arm.** **A maintenance window makes the socket fail, and `ws_health.log` ALREADY records that as `DOWN`/`DEGRADED`.**
@@ -163,6 +179,6 @@
 
 ## 7. What I did NOT verify
 
-- ⚠ **I did not confirm Deribit returns HTTP 503 specifically for `system_maintenance`.** The code `11051` and the 503 pairing are **carried from the queue row's 2026-08-11 observation**, not reproduced. ⛔ **`D-1` (a) depends on it — if the venue returns 200 with an error body during maintenance, (a) does not work at all and the ruling must be (b) or (c).** **Check this first; it is the spec's load-bearing assumption.**
+- ✅ **RESOLVED 2026-09-11 (UTC), trader-directed: this is no longer an open assumption — BOTH SHAPES ARE IN SCOPE. See §1.2 of this document.** *(Superseded text follows, kept per the quote-and-label convention.)* ~~I did not confirm Deribit returns HTTP 503 specifically for `system_maintenance`.~~ ⚠ **Original wording:** The code `11051` and the 503 pairing are **carried from the queue row's 2026-08-11 observation**, not reproduced. ⛔ **`D-1` (a) depends on it — if the venue returns 200 with an error body during maintenance, (a) does not work at all and the ruling must be (b) or (c).** **Check this first; it is the spec's load-bearing assumption.**
 - ⚠ **I did not read `Core/AlertsTracker.vb`**, which `WsHealthLog` names as its own contract mirror. **A third copy of this sidecar shape may make it worth extracting one** — flagged, not ruled.
 - ⚠ **I did not verify how `_http` handles a 503 under retry** — whether all attempts are exhausted first, which would change where the transition is detected.
