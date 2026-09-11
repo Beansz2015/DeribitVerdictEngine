@@ -150,7 +150,7 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 | **Anything that moves a rendered value** | The display-string parity rule already treats these as special |
 | **Writes to the live collector or trade store** | Tape is permanent. Not revertible |
 | **Any schema or CSV-header change** | The five parked riders exist because these cannot be forced |
-| ⭐⭐ **Any decision where YOUR recommendation is the CHEAPER or LESS-INFORMATION option** | **The measured bias — see below. This is the precise class you get wrong** |
+| ⭐⭐ **Any decision where YOUR recommendation is CHEAPER **AND** LESS TRUTHFUL than an available alternative** | **The measured bias — see below. This is the precise class you get wrong.** ⛔ **`AND`, not `or` — tightened 2026-09-11; see the three-step test below** |
 
 ⚠ **SCORING AND RENDERED-VALUE ARE TWO DISTINCT SETS. Neither contains the other — do not collapse them.** `VerdictContext` and Kelly sizing are **rendered with ZERO scoring impact** (§"Key design invariants" says so). And a scoring threshold moved where no current row crosses it **renders identically, passes the display-parity gate, and is still a live scoring change.** ⛔ **A scoring change that is invisible today is exactly the one that must not auto-proceed.**
 
@@ -166,6 +166,25 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 | `WD-SEMANTICS` | **(b)** let the row drop silently | **(c)** add the separate counter |
 
 ⛔ **Every one: the recommendation optimised for ECONOMY — less code, less work, don't buy a field, defer. The ruling optimised for NOT LOSING INFORMATION and NOT DEFERRING A SCHEMA COST.** ⭐ **When you notice your pick is the cheaper or the less-informative one, that is the signal to stop and ask — not to proceed confidently.**
+
+#### ⛔⛔ WHAT "CHEAPER" MEANS — the three-step test (trader-asked and settled 2026-09-11)
+
+⛔ **The trigger is NOT a cost ranking. It is the presence of a TRADE: are you giving up information, truthfulness or a guarantee in exchange for less work?**
+
+| Step | Ask | Then |
+|---|---|---|
+| **1** | Is there an option that **records more, guarantees more, or is more self-describing** than yours? | **No → TAKE YOURS.** Cheapness is irrelevant |
+| **2** | Yes, and you are not picking it — **why not?** If the answer is *"it costs more and mine is adequate"* | ⛔⛔ **RESERVE IT** |
+| **3** | If the answer is *"the richer option is mechanically WRONG, uninterpretable, or forbidden by a prior ruling"* | ✅ **TAKE YOURS, and NAME WHICH.** No trade exists, so there is nothing to reserve |
+
+⛔ **TWO READINGS THAT ARE WRONG, and the record decides both:**
+
+- ⛔ **"It is the CHEAPEST of all options" — WRONG.** `A54a`'s recommendation reads verbatim *"My read: (b). **Bigger diff**, removes the class instead of monitoring it."* **It was the MORE expensive option and still the failure this class exists to catch.** A cost ranking misses it entirely.
+- ⛔ **"It is cheaper at all, by any margin" — WRONG, and it would destroy the rule.** **Cheaper AND gives up nothing is simply the correct pick.** Flagging that fires the tripwire on nearly every decision, and **a tripwire that fires constantly gets ignored — the alarm-fatigue reasoning that retired the `F3` watch.**
+
+⭐⭐ **THE TELL IS THE WORD, NOT THE COST: "adequate" · "good enough" · "buys nothing" · "defer until something forces it".** **Every one of the four overrules above carries that phrasing.** ⭐ **It fired correctly in real time on the venue instrument's `D-1`: the read was written as *"(a) … I believe it is ADEQUATE rather than merely cheap"*, it was reserved on that basis, the trader's question reframed the problem, and the answer became an option (d) that nobody had written down.** **That is the class working.**
+
+⭐ **Worked example of step 3, so it is not treated as an escape hatch:** the coverage cluster's `D-2` (the mixed-era span) TOOK the less precise option — fall back wholly to the time tolerance — **correctly, because the richer alternative computes an UNINTERPRETABLE number: a sequence gap across a legacy row cannot distinguish a dropped row from a row that never carried a sequence.** **Mechanism argument, not a cost argument. The expensive option was not better, it was meaningless.**
 
 ### ⭐⭐ THE PRIOR, STATED BY THE TRADER 2026-09-11 — and the REASON is the part that generalises
 
