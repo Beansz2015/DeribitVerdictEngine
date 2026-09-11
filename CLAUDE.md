@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -165,7 +165,17 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 | `S-4` identity key | **defer** it | **do it now** |
 | `WD-SEMANTICS` | **(b)** let the row drop silently | **(c)** add the separate counter |
 
-⛔ **Every one: the recommendation optimised for ECONOMY — less code, less work, don't buy a field, defer. The ruling optimised for NOT LOSING INFORMATION and NOT DEFERRING A SCHEMA COST.** ⭐ **When you notice your pick is the cheaper or the less-informative one, that is the signal to stop and ask — not to proceed confidently.** Two standing memories say why: *"defer a schema fix and it accretes"*, and `WD-SEMANTICS`'s ruling that **a counter reading 0 is the tripwire, not waste.**
+⛔ **Every one: the recommendation optimised for ECONOMY — less code, less work, don't buy a field, defer. The ruling optimised for NOT LOSING INFORMATION and NOT DEFERRING A SCHEMA COST.** ⭐ **When you notice your pick is the cheaper or the less-informative one, that is the signal to stop and ask — not to proceed confidently.**
+
+### ⭐⭐ THE PRIOR, STATED BY THE TRADER 2026-09-11 — and the REASON is the part that generalises
+
+> **"My default choice is usually the more truthful choice, because it logically tracks if future orchestrators lose track in the docs and can't deduce it reliably from code."**
+
+⛔ **This does NOT unreserve the class — it tells you which way to lean and what to argue about.** **Lead with the more truthful option as your read; if you are recommending the cheaper one, you are arguing against the prior and must say why explicitly.**
+
+⭐⭐ **The REASON is stronger than the preference, and it is the thing to carry: DOCS ROT, CODE SURVIVES.** **A behaviour that is truthful is SELF-DESCRIBING — a future seat reads the code and learns what is true. A behaviour that quietly tolerates a known-bad state is a lie that the same seat CANNOT detect from the code, because nothing in it says what was being tolerated or why.** ⛔ **This project's whole failure record is docs drifting from reality. Every convenience that lives only in a doc is one doc-rot away from being invisible.**
+
+**The worked example, ruled the same day.** The coverage report's `trade_seq` arm made 24 hours move `Captured` → `Defect`. **My read was to revert to the specced rescue-only behaviour — the cheaper, less-information option.** ⛔ **The trader ruled KEEP IT: those hours genuinely hold missing trades, and a report calling provably-incomplete tape `Captured` is the silent-hole class this repo already rejects.** ⭐ **A future seat reading `storeClean = seqContiguous` learns the truth. Reading a rescue-only version, they would learn nothing about the tape being incomplete.** Two standing memories say why: *"defer a schema fix and it accretes"*, and `WD-SEMANTICS`'s ruling that **a counter reading 0 is the tripwire, not waste.**
 
 ### The obligation that comes with it
 

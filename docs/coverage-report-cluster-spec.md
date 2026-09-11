@@ -33,7 +33,10 @@
 
 ### 0.2 ⛔ Escalation trigger — stop and ask
 
-- **Any change that makes an hour classify `Captured` where it previously classified `Defect` on tape you have NOT proved complete.** Both fixes must only remove FALSE defects.
+- ⛔⛔ **BIDIRECTIONAL — corrected 2026-09-11 after this trigger FAILED. Report ANY hour that changes class in EITHER direction, with a before/after count.**
+  - `Captured` where it was `Defect`, on tape you have NOT proved complete.
+  - ⛔ **`Defect` where it was `Captured`.** ⚠ **The original trigger named only the first direction, so the build moved 24 hours the second way and had nothing to trip. A one-directional trigger is half a trigger.**
+- ⭐ **The cheap way to satisfy this: run the report at the PRE-change commit and at yours over the same window, and diff the summary counts.** A `git worktree add --detach <base>` does it without disturbing your tree.
 - **`C-2`: any hour that moves from `Defect` to `ExpectedMissing` rather than to the new startup class.** That is `T-2` firing.
 - **Any need to add a `settings.json` key.** That is a reserved class — see `D-6`.
 
@@ -62,6 +65,20 @@
 ## 2. Design
 
 ### 2.1 `C-1` — `trade_seq` completeness as a SECOND signal
+
+> ## ⛔⛔ `D-7` RULED (b) 2026-09-11 (UTC), trader — **A SEQUENCE GAP CONDEMNS. THIS IS A DELIBERATE SCOPE EXPANSION, NOT A BUG FIX.**
+>
+> **Measured, same command and same data, at `08758e4` against `HEAD`:** captured **92 → 68**, DEFECT **4 → 28**. ⛔ **24 hours moved `Captured` → `Defect` and that is now the INTENDED behaviour.**
+>
+> **What it means:** for a span where EVERY row carries `trade_seq`, the sequence is the verdict — `storeClean = seqContiguous`, and the time tolerance is not consulted. **A non-contiguous sequence is a capture defect even if the 300 s tolerance would have passed it.**
+>
+> ⭐ **Why (b) and not the specced rescue-only behaviour:** those 24 hours genuinely hold missing trades — this copy-back's era is short **17,707** of them. ⛔ **A report calling provably-incomplete tape `Captured` is the silent-hole class this repo already rejects.** ⭐⭐ **And the general reason, now in `CLAUDE.md`: DOCS ROT, CODE SURVIVES. A future seat reading `storeClean = seqContiguous` learns the tape was incomplete. Reading a rescue-only version they learn nothing, and nothing in the code would tell them what was being tolerated or why.**
+>
+> ⚠ **THE HISTORICAL CONSEQUENCE, STATED SO IT IS NOT DISCOVERED LATER: every past coverage report over the incomplete era is now superseded.** Hours previously reported `Captured` will re-report `Defect`. **That is a re-classification of history and it is correct — but do not compare an old report against a new one and read the difference as a regression.**
+>
+> ⛔ **MY READ WAS (a), rescue-only, AND IT WAS DEFEATED.** It was the cheaper, less-information option — the reserved class doing its job for the second time in one day.
+
+
 
 **`storeClean` gains a prior arm.** For a span whose rows ALL carry `trade_seq`, completeness is measured directly: the sequence is contiguous or it is not. **A contiguous span is `Captured` regardless of `LongestGapMs`.** For any other span, the existing time tolerance is unchanged.
 
@@ -155,6 +172,7 @@
 | **`A73c`** | A legacy span with **no** sequences anywhere behaves **exactly as today** | Any change → a regression in the legacy path |
 | **`A73d`** | A span entirely before `CaptureCapableFromMs` inside an up-interval is a **startup window**, not `Defect` | Seed `CaptureCapableFromMs` from the `DOWN` line → `Defect` returns |
 | **`A73e`** | ⛔ **`T-2` GUARD** — an hour BEFORE the first `OK` but inside the interval must **NOT** become `ExpectedMissing` | Move `FirstUtcMs` instead of adding the second timestamp → this fixture fails |
+| ⛔ **`A73i`** | **OWED — the case that changed and has NO fixture.** A span where EVERY row carries `trade_seq` and the sequence is **NOT contiguous**, with `LongestGapMs` **BELOW** the tolerance ⇒ **`Defect`**. **This is the 24-hour reclassification, and nothing currently asserts it** | Revert to rescue-only (`timeTolerancePass OrElse seqContiguous`) → the span reads `Captured` |
 
 ⭐ **`A73b` and `A73e` are the two with teeth. If only two are written, write those.**
 
