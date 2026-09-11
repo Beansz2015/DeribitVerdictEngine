@@ -2,6 +2,8 @@
 
 **Status:** ⛔ **ONE DECISION OPEN (`D-1`). Everything else is ruled.** Build after `C-3a` ships.
 
+⚠ **`D-1` was REFRAMED 2026-09-11 (UTC) after the trader observed that the venue can fail in ways other than a 503. §2.0 is the reframing, §2.1 adds option (d), and (c) is now DOMINATED. Read §2.0 before ruling.**
+
 **Author seat:** Opus, 2026-09-11 (UTC). **Baseline commit: `e84c0bf`.**
 
 ⚠ **`tools/BacktestRunner/CoverageReport.vb` IS BEING EDITED RIGHT NOW by the coverage-cluster implementer, so this document deliberately cites NO line numbers in that file.** Re-anchor the consumer half after [`coverage-report-cluster-spec.md`](coverage-report-cluster-spec.md) lands.
@@ -59,9 +61,40 @@
 
 ## 2. ⛔ The one open decision
 
+### 2.0 ⛔⛔ REFRAMED 2026-09-11 (UTC), trader-raised: **the trigger is not "503"**
+
+⭐ **The trader asked: Deribit can go down for reasons other than a 503. That is correct, and it changes the decision.** **The right trigger is not a status code — it is: *the venue ANSWERED, and its answer says it is not serving.*** **Three classes, and only the third is genuinely unusable:**
+
+| Class | Example | Log it? |
+|---|---|---|
+| **1. Venue answered AND declared a problem** | any 5xx with a body · **HTTP 200 carrying a JSON-RPC error** | ✅ **YES — the strongest positive record** |
+| **2. Venue answered, bare status, no usable body** | a naked 502 / 503 / 504 | ✅ **Yes, coarser — something at their edge still answered** |
+| **3. NO response at all** | timeout · DNS failure · TCP refusal | ⛔⛔ **NEVER — indistinguishable from OUR box being broken. This is `V-1`** |
+
+⛔⛔ **THIS KILLS OPTION (c), and the reason is not obvious: (c) is TRIGGERED BY a 503, so it inherits (a)'s blind spot exactly.** **It can only enrich cases (a) already catches — it widens coverage by NOTHING.** ⚠ **In particular neither (a) nor (c) can ever see class 1's HTTP-200-with-error-body case**, which §7 of this document flags as a real possibility and which may be the shape Deribit actually uses.
+
+⛔ **And it narrows (a):** 503-only misses every other 5xx in class 2, for no principled reason.
+
+
 | # | Decision | Options | My read |
 |---|---|---|---|
 | **`D-1`** | **How is the venue's declaration obtained?** | **(a) HTTP 503 status alone**, logged at the existing catch site `DeribitClient.vb:38-51`. One line, zero change to the request path · **(b)** change `GetStringAsync` → `GetAsync` + read the body, giving the real `11051` / `system_maintenance` code · **(c)** on seeing a 503, fire ONE extra probe read to recover the body | ⚠⚠ **RESERVED — and I am flagging it under the ruling's own last class rather than taking it.** ⭐ **My read is (a), and I believe it is ADEQUATE rather than merely cheap:** a 503 **is** the venue's own response, so it is a positive record of the venue's state, not an inference from ours — which is all J-B requires. **For scoping an hour, "the venue was not serving" is sufficient; whether it was planned maintenance or an unplanned outage does not change whose defect it is.** ⛔ **But (a) IS the less-information option, and the ruling reserves exactly that, so it is yours.** ⚠ **(b) is the only one that yields `11051`, and it touches EVERY market-data fetch — the highest-blast-radius code in the app. I would not pay that for a diagnostic.** ⚠ **(c) adds a network call during an outage and recovers the same answer (b) does, for less risk and more moving parts** |
+
+### 2.1 ⭐⭐ OPTION (d) — added 2026-09-11, and it is now my read
+
+**One private drop-in helper in `DeribitClient`**, e.g. `GetStringOrRecord(url)`: issues `GetAsync`, inspects the status, **records a venue line when the answer falls in class 1 or 2**, then either returns the body string or throws **the same `HttpRequestException` the callers already expect.**
+
+✅ **VERIFIED DROP-IN: all six sites are byte-identical in shape** — `Dim json As String = Await _http.GetStringAsync(<url>)` at `DeribitClient.vb:98,152,197,216,233,267`. **Six one-word call-site edits.**
+
+| | (b) rewrite the error path | **(d) drop-in helper** |
+|---|---|---|
+| Gets the real body | ✅ | ✅ |
+| Sees class 1's HTTP-200 error case | ✅ | ✅ |
+| Retry semantics | ⛔ **restructured** — `GetAsync` does not throw, so every non-200 must be re-handled | ✅ **IDENTICAL** — the helper throws the same exception, so `ExecuteWithRetry` is untouched |
+| Success path | ⛔ rewritten | ✅ **unchanged** |
+| Blast radius | 6 sites **+ the retry helper's control flow** | 6 sites, **mechanical** |
+
+⭐ **(d) buys everything (b) buys and leaves the error semantics alone, which was my only real objection to (b).**
 
 ⭐ **Whatever is ruled, record the STATUS CODE in the log line** — e.g. state `VENUE_503` rather than a bare `DOWN`. **That keeps a slot for a richer signal later without a format change, and it is free under every option.**
 
