@@ -646,12 +646,14 @@ Module Program
         ' [C-1 + C-2 — coverage-report-cluster-spec.md Session 1:
         '   C-1: trade_seq completeness as a second storeClean signal.
         '   C-2: startup-window class for spans before CaptureCapableFromMs.
-        '   A73b (mixed span) and A73e (T-2 guard) are the two with teeth.]
+        '   A73b (mixed span), A73e (T-2 guard) and A73i (non-contiguous seq, gap below tolerance)
+        '   are the three with teeth.]
         A73a_SequenceContiguousAboveGapThresholdIsCapured()
         A73b_MixedSpanFallsBackToTimeTolerance()
         A73c_LegacySpanBehavesExactlyAsBeforeC1()
         A73d_SpanBeforeCaptureCapableFromMsIsStartupWindow()
         A73e_T2GuardFirstUtcMsUntouchedNoExpectedMissingCreep()
+        A73i_FullySequencedNonContiguousGapBelowToleranceIsDefect()
 
         ' [C-3a — coverage-report-cluster-spec.md Session 2: declared operating schedule.
         '   A73f (declared window) and A73g (boundary exclusivity) are the two with teeth.]
@@ -13380,6 +13382,39 @@ Module Program
                             h10.Classification,
                             If(iv IsNot Nothing, iv.FirstUtcMs.ToString(), "nil"),
                             If(iv IsNot Nothing, iv.CaptureCapableFromMs.ToString(), "nil")))
+    End Sub
+
+    ' ══ A73i — C-1 owed fixture: fully-sequenced non-contiguous span below time tolerance ══
+
+    ' -- A73i: ALL rows have trade_seq, sequence is NOT contiguous, LongestGapMs < gapMs ⇒ Defect
+    ' This is the 24-hour reclassification case. The sequence gap proves missing trades; the
+    ' time tolerance would have passed (1 s << 300 s) but the sequence arm preempts it.
+    ' ⛔ THE MUTATION THAT MUST FAIL A73i: revert to rescue-only —
+    '    storeClean = (stats.RowCount > 0 AndAlso stats.LongestGapMs <= gapMs) OrElse seqContiguous
+    '    Under that mutation timeTolerancePass is True (1000 <= 300000) so storeClean = True ⇒ Captured.
+    '    A73i must FAIL.
+    ' ⚠ Guard stats Is Nothing in ClassifySpan is not reached here — stats is a fully-populated
+    '    HourStoreStats, not Nothing. The fixture does NOT throw.
+    Private Sub A73i_FullySequencedNonContiguousGapBelowToleranceIsDefect()
+        Dim day = A49Monday()
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(0)),
+                                 .LastUtcMs = A49Ms(day.AddHours(12)), .IsTrailing = True,
+                                 .CaptureCapableFromMs = A49Ms(day.AddHours(0))}
+        }
+        ' Every row has a trade_seq (RowsWithoutSeq = 0); Seqs = [100, 101, 103, 104] has a gap
+        ' at 102 — non-contiguous. LongestGapMs = 1000 ms, well below the 300 s tolerance.
+        ' The sequence arm preempts time tolerance and must return Defect.
+        Dim stats As New HourStoreStats With {.RowCount = 4, .LongestGapMs = 1000L, .RowsWithoutSeq = 0}
+        stats.Seqs.AddRange({100L, 101L, 103L, 104L})
+
+        Dim h = CoverageReport.ClassifyHour(day.AddHours(5), markers, upIntervals, False, stats, 300000L)
+        Check("A73i fully-sequenced non-contiguous span with gap below time tolerance ⇒ Defect, not Captured",
+              h.Classification = HourClass.Defect,
+              String.Format("class={0} reason={1}", h.Classification, h.Reason))
     End Sub
 
     ' ══ A73f–A73h — C-3a declared operating schedule (Session 2) ═════════════════════════
