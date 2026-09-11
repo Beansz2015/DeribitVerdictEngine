@@ -83,13 +83,48 @@
 
 **Same order, and the direction of the residual is the one a right-skewed duration distribution predicts** — the mean episode outlives the median, and flow is not uniform in time. ⚠ **This is ARITHMETIC CONSISTENCY, NOT PROOF.** It is the reason Stage 1 exists.
 
-### 2.2 ⭐⭐ And it explains a result `D-2` already recorded without explaining
+### 2.2 ⛔⛔ MEASURED 2026-09-11 (UTC) — AND IT REFUTES THIS SPEC'S OWN FIRST DRAFT
 
-[`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6's `D-2` cell says the first `D-1` reading *"points AGAINST §4.1 — median `EpisodeSec` 1.7 s, so episode-cumulative would SHORTEN the span, not extend it."*
+> ## THE FIRST DRAFT OF THIS SUBSECTION SAID ***"ON THE MEDIAN EPISODE, `D-2` IS A NO-OP."*** **THAT IS LITERALLY TRUE AND IT IS A MISLEADING SUMMARY. `D-2` IS NOT A NO-OP.**
 
-⛔ **The mechanism above says something sharper: on the median episode, `D-2` IS A NO-OP.** `PressSum` is already the sum over `min(10 s, episode age)` because `CloseEpisode` clears the queue. **Episode-cumulative and 10-second-rolling are the same number on every episode younger than 10 seconds — which is most of them.** `D-2` can only bind on episodes that outlive the window.
+**Instrument: `AbsorptionEpisodeSec`, shipped 2026-09-01, read off `analysis_log_aws.csv` (the 2026-09-09 fetch). Weekday-scoped per the [weekday-scope ruling](weekday-scope-ruling-2026-08-03.md); 5,454 weekday rows, 1,830 weekend excluded, 0 unparsed; span 2026-09-01 15:50:01 → 2026-09-09 14:39:04 UTC, ~6 weekday-days; 840 absorption-active reads.**
 
-⭐ **So `D-6d` is not merely larger than `D-2`. It is `D-2`'s precondition.** Widening or re-basing the window buys nothing while the queue is wiped every 1.7 s. **Sequence `D-6d` first.**
+| Statistic | Value |
+|---|---|
+| p25 | 0.70 s |
+| **p50** | **2.15 s** — the published 1.7 s came from 2 weekdays; this is the same answer on a bigger sample, not a contradiction |
+| **p75** | **10.38 s** — *at* the window |
+| p90 · p95 · p99 | 26.92 s · 42.50 s · 71.04 s |
+| mean · max | **9.50 s** · 253.10 s |
+| ⭐ **Reads on an episode OLDER than `window_sec` (10 s)** | **218 / 840 = 26.0 %** |
+| ⭐⭐ **Share of ALL logged `AbsorptionAggrUsd` sitting on those reads** | **48.6 %** (442,070 of 909,850 USD) |
+| `D-2` span multiplier on them (age ÷ 10) | p50 **2.25×** · p75 3.80× · p90 5.39× · mean 3.01× · max 25.31× |
+| `AbsorptionSignal` over the whole window | `NONE` 837 · `ABSORB_BELOW` 2 · `ABSORB_ABOVE` 1 — **3 fires in 6 weekday-days** |
+
+⭐ **`AbsorptionEpisodeSec` is age AT THE READ INSTANT, which is exactly the deciding variable — no lifetime correction is needed.** Whether `PressSum` is window-limited or episode-limited is decided at the read, and that is what this column records.
+
+⛔ **THE ERROR AND ITS SHAPE, recorded because it is the one this project keeps making: the median was the CHEAPER statistic and it was the LESS INFORMATIVE one.** The distribution is right-skewed enough that **the mean (9.50 s) sits at the window while the median (2.15 s) sits a fifth of the way to it**, and **half the pressing the engine records lives above the window.** **A percentile was quoted where a mass was needed.**
+
+### 2.2a ⛔⛔ THE SHIPPED CODE ALREADY VIOLATES §6's INVARIANT, AND `D-2` IS THE REPAIR
+
+**Read the ratio's two terms against each other:**
+
+| Term | Span it covers |
+|---|---|
+| `PressSum` (numerator) | **`min(window_sec, episode age)` — WINDOW-scoped** |
+| `SizeStart − SizeMin` (denominator) | `SizeStart` sampled at open, `SizeMin` the running minimum ⇒ **the WHOLE EPISODE — EPISODE-scoped** |
+
+⛔ **So on every read where the episode is older than 10 s — 26.0 % of them, carrying 48.6 % of the pressing — `absorbRatio` divides TEN SECONDS of pressing by the WHOLE EPISODE's depletion.** **It systematically UNDERSTATES the ratio on exactly the episodes that matter most.**
+
+⭐⭐ **That is the OPPOSITE direction to the artefact §6 warns about, and it reverses `D-2`'s character: `D-2` does not risk breaking the same-span invariant, it RESTORES it.** Episode-cumulative press over episode-scoped depletion is one span on both sides.
+
+### 2.2b ⛔ THE ORDERING CONSEQUENCE — AND IT IS THE OPPOSITE OF THE FIRST DRAFT'S
+
+⛔⛔ **SHIPPING `D-6d` STAGE 2 WITHOUT `D-2` WOULD MAKE `absorbRatio` FALL.** Stage 2 lengthens episodes by stopping spurious closes. On a longer episode the denominator keeps growing (more chances for `SizeMin` to drop) **while the numerator saturates at the 10-second cap.** **The fix would read as a regression.**
+
+⭐ **So the two changes are not merely compounding — `D-2` is what CONVERTS `D-6d`'s gain into signal.** The safe orders are **`D-2` first**, or **both in one commit**. ⛔ **`D-6d` Stage 2 first is the one order that is measurably wrong.**
+
+✅ **Stage 1 is unaffected by all of this — it is behaviour-neutral, so it can ship at any point, including alongside `D-2`.**
 
 ### 2.3 ⚠ Why episodes are short is NOT KNOWN, and that is the whole problem
 
@@ -120,7 +155,7 @@
 | **R-2** | ⛔ **The instrument measures the DROP, not the CLOSE.** Trap `T-2`. The loss happens at `:170` while the side is idle; a close-time record is blind to it |
 | **R-3** | **Stage 1 is behaviour-neutral by construction** — a separate accumulator, never `PressSum`, never `absorbRatio`, never a rendered field. `scoring_enabled` stays `false` throughout both stages |
 | **R-4** | **Fixture family `A78`** — measured free at `828d868` (`A77e` is high-water). No new hard constraint: no `settings.json` key is added by Stage 1 |
-| **R-5** | ⛔ **`D-2` is RE-SEQUENCED BEHIND `D-6d`, not cancelled.** §2.2 shows `D-2` is a no-op on the median episode. It becomes measurable only after episodes survive |
+| **R-5** | ⛔⛔ **WITHDRAWN AND REPLACED 2026-09-11 on the §2.2 measurement. THE NEW RULING: `D-2` SHIPS FIRST OR IN THE SAME COMMIT AS `D-6d` STAGE 2 — NEVER AFTER IT.** §2.2b: Stage 2 without `D-2` makes `absorbRatio` **fall**, because the denominator grows with episode length while the numerator saturates at the 10 s cap. *(Superseded: ~~"`D-2` is RE-SEQUENCED BEHIND `D-6d`, not cancelled. §2.2 shows `D-2` is a no-op on the median episode."~~ **The median was the cheaper statistic and the less informative one.**)* |
 | **R-6** | **The engine display-string parity rule DOES NOT FIRE for Stage 1.** The live strip renders `ABS↑ <level> (<ratio>×)` from `AbsorptionSignal` / `AbsorptionLevel` / `AbsorptionRatio` only ([`UI/MainForm_LiveStrip.vb:270`](../UI/MainForm_LiveStrip.vb)). Stage 1 adds no field any surface reads. ⚠ **State this in the commit message; do not leave it to be inferred** |
 
 ---
@@ -183,6 +218,19 @@
 
 ⛔ **So the obvious-looking fix — "just let `Press` survive the close" — is FORBIDDEN.** It gives a numerator spanning two episodes over a denominator spanning one. **The ratio rises, the flag rate climbs toward the 3–8 % design band, and it is pure artefact.**
 
+> ### ⛔⛔ AMENDED 2026-09-11 (UTC) — THE INVARIANT IS ALREADY BROKEN IN THE SHIPPED CODE, IN THE OTHER DIRECTION
+>
+> **This section was drafted as though the invariant held today and a fix might break it. §2.2a measures otherwise: `PressSum` is WINDOW-scoped and `SizeStart − SizeMin` is EPISODE-scoped, so the ratio already divides 10 seconds of pressing by a whole episode's depletion on 26.0 % of reads — the reads carrying 48.6 % of all recorded pressing.**
+>
+> ⭐ **The invariant is the right rule and it stands unchanged. What changes is which direction it currently fails in, and therefore what counts as a violation:**
+>
+> | Direction | Effect on `absorbRatio` | Verdict |
+> |---|---|---|
+> | **Numerator wider than denominator** (press survives a close, `SizeStart` restarts) | **Inflates** | ⛔ **FORBIDDEN — the artefact. Unchanged** |
+> | ⚠ **Numerator NARROWER than denominator** (shipped today, on long episodes) | **Understates** | ⛔ **ALSO A VIOLATION. It is conservative, which is why nobody caught it** |
+>
+> ⛔ **Conservative is not the same as correct, and this repo has already ruled on that once** — [`trader-tick-queue.md`](trader-tick-queue.md) §0a records `D-7` moving 24 hours from `Captured` to `Defect` because *"a report calling provably-incomplete tape `Captured` is the silent-hole class this repo rejects."* **A ratio that under-measures on half its own pressing is the same shape.**
+
 ⭐ **This is the same argument that killed collapsing the proximity shells in `D-6a`, and it should be recognised as the same argument:** *"you would get more flags by weakening the measurement, which is the pattern [`trader-profile.md`](trader-profile.md) rejects."* **`D-6d`'s tempting fix fails for the identical reason.**
 
 ⭐ **The legitimate shape is therefore to fix EPISODE CONTINUITY, never the press queue.** If an episode is not spuriously closed, `Press` and `SizeStart` survive **together** and the ratio stays honest by construction rather than by care.
@@ -197,7 +245,7 @@
 |---|---|---|
 | **`D-6d.1`** | **Sidecar `absorption_episodes.log`, or five new `analysis_log.csv` columns?** | ⭐ **(a) SIDECAR.** ⛔ **Reserved rather than auto-proceeded, because the CSV is the richer-sounding option and "a rotation is expensive" is the exact tell `CLAUDE.md`'s three-step test names.** **My reason is mechanical, not economic: a CSV column can carry ONE scalar per run, where the loss is a distribution over six close reasons across two sides. The column is not richer — it is narrower. Carrying `InstanceId` + `SignalId` makes the sidecar join losslessly, so nothing is given up.** ⚠ **And a rotation drags in five parked riders under a *"NEVER FORCE ONE"* rule** |
 | **`D-6d.2`** | **Does Stage 1 ship alone and read for ~2 weekday-weeks, or do both stages ship together?** | ⭐ **(a) ALONE.** The §2 diagnosis is inference. **[`absorption-blind-rederivation-2026-08-19.md`](absorption-blind-rederivation-2026-08-19.md) §6.3 already charged one wrong mechanism-from-code hypothesis in this exact feature, and its direction was inverted** |
-| **`D-6d.3`** | **Does `D-2` (`window_sec` → episode-cumulative) stay scheduled for ~2026-09-15, or move behind `D-6d`?** | ⭐ **(b) MOVE BEHIND.** §2.2: on the median 1.7 s episode `D-2` is arithmetically a **no-op**. Building it first spends a session to move nothing and adds a dataset boundary for it |
+| **`D-6d.3`** | **Does `D-2` (`window_sec` → episode-cumulative) stay scheduled for ~2026-09-15, or move behind `D-6d`?** | ⛔⛔ **MY (b) IS WITHDRAWN — MEASURED WRONG 2026-09-11, see §2.2. ⭐ NEW READ: (c) — SHIP `D-2` AND `D-6d` STAGE 1 TOGETHER AT THE GATE, STAGE 2 AFTER THE READ.** **(c) was on nobody's list and it dominates both originals.** **`D-2` is NOT a no-op: it binds on 26.0 % of reads carrying 48.6 % of all logged pressing, median span multiplier 2.25×, and §2.2a shows it REPAIRS a live span mismatch rather than risking one.** **Stage 1 is behaviour-neutral, so it rides along for ZERO extra dataset boundary and makes `D-2`'s own post-ship read instrumented instead of confounded.** ⛔ **And (b) was not merely weak, it was BACKWARDS: §2.2b shows Stage 2 without `D-2` makes `absorbRatio` FALL, because the denominator grows with episode length while the numerator saturates at the 10 s cap.** *(Superseded read follows, per the quote-and-label convention.)* ~~⭐ **(b) MOVE BEHIND.** §2.2: on the median 1.7 s episode `D-2` is arithmetically a **no-op**. Building it first spends a session to move nothing and adds a dataset boundary for it~~ |
 | **`D-6d.4`** | **`ShadowPressUsd` — measurement only, or eventually the numerator?** | ⭐ **(a) MEASUREMENT ONLY, permanently.** ⛔ **Promoting it is trap `T-1` wearing a different hat** — shadow flow accrued while no episode was live has **no matching denominator at all.** Recorded here so a future seat does not rediscover it as an idea |
 
 ⚠ **`D-6d.3` is the one with a live consequence for your 15th-of-September framing.** Ticking (b) means the absorption build that starts then is **Stage 1 of this spec**, not `D-2`.
@@ -235,9 +283,11 @@
 
 ## 10. ⚠ What I did NOT verify
 
-- ⛔⛔ **THE CENTRAL CLAIM IS INFERENCE, NOT MEASUREMENT.** §2 reads the code and reconciles it against two existing numbers (1.7 s median episode, 31 % counting rate). **I did not measure which of the six close paths actually fires, and it cannot be measured from stored data.** Stage 1 exists precisely because of this. **Do not let §2 be quoted as a finding.**
+- ⛔⛔ **THE CENTRAL MECHANISM CLAIM IS INFERENCE, NOT MEASUREMENT.** §2 reads the code and reconciles it against the 31 % counting rate. **I did not measure which of the six close paths actually fires, and it cannot be measured from stored data.** Stage 1 exists precisely because of this. **Do not let §2's mechanism be quoted as a finding.** ⭐ **§2.2 is the exception — the episode-age distribution there IS measured, weekday-scoped, off `analysis_log_aws.csv`, and it is reproducible.**
 - ⚠ **The visible top-10 ladder span was NEVER measured against `0.30 × ATR`.** Path 3 is the suspect on a structural reading of `:366` plus the ten-level subscription at [`DeribitWsFeed.vb:27`](../DeribitWsFeed.vb) — **not on any observation.** If the ladder is routinely wider than the proximity shell, `F-1` and `F-3` are both dead and `F-2` or `F-4` wins.
-- ⚠ **The 1.7 s median rests on TWO weekdays of a ruled ~10**, per `D-2`'s own cell. It is preliminary.
+- ✅ **The 1.7 s median NO LONGER rests on two weekdays — §2.2 re-measures it at 2.15 s over ~6 weekday-days (840 absorption-active reads).** ⚠ **Still short of `D-1`'s ruled ~10 weekday-days**, so the percentiles will move; **the 26.0 % / 48.6 % split is the load-bearing part and both would have to move a long way to change `D-6d.3`.**
+- ⚠ **`AbsorptionEpisodeSec` records age AT THE READ, so §2.2 measures the engine's own read population — NOT the episode-lifetime distribution.** That is the right variable for `D-2` and the wrong one for "how long does an episode live"; **do not quote §2.2's percentiles as episode lifetimes.**
+- ⚠ **The 48.6 % pressing share is computed on `AbsorptionAggrUsd` AS LOGGED — i.e. already truncated by the `D-6d` defect.** If Stage 1 confirms spurious truncation, the true share on long episodes is **higher**, not lower.
 - ⚠ **I did not re-run the 2026-08-19 replay.** The 22 / 72 / 31 % figures are carried from [`absorption-blind-rederivation-2026-08-19.md`](absorption-blind-rederivation-2026-08-19.md) §5.2(b).
 - ⚠ **Sidecar volume is estimated, not measured** — ~1,400 lines/day from the collector's ~38.3 rows/hour. The ~100k/day figure that rules out a per-close log is arithmetic from the 1.7 s median.
 
