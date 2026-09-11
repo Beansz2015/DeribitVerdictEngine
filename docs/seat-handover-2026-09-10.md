@@ -27,6 +27,25 @@
 
 ---
 
+## 0a. ⭐⭐ READ THIS BEFORE YOUR FIRST DECISION — the default has FLIPPED
+
+⛔⛔ **ADDED 2026-09-11 (UTC), after this handover was written. A STANDING RULING CHANGED HOW YOU WORK. It is in `CLAUDE.md` under *"AUTO-PROCEED ON YOUR OWN RECOMMENDATION"* — READ IT THERE, this is only the pointer.**
+
+**The short form:**
+
+- ⭐ **When a decision has an option you can recommend, TAKE IT.** Record it and keep working. **Do not stop and ask.** This covers D-tables and one-off decisions alike.
+- ⛔ **The gate is REVERSIBILITY AND BLAST RADIUS — explicitly NOT *"can I recommend"*.** You can almost always produce a recommendation, so that test filters nothing, and it is self-assessed.
+- ⛔ **SIX classes are RESERVED and still go to the trader every time:** `settings.json` changes · **anything that affects SCORING** · anything that moves a rendered value · writes to the live collector or trade store · schema and CSV-header changes · **any decision where your own pick is the CHEAPER or LESS-INFORMATION option.**
+- ⚠ **Scoring and rendered-value are DISTINCT sets — neither contains the other.** `VerdictContext` and Kelly are rendered with zero scoring impact; a scoring threshold moved where no current row crosses it renders identically and is still a live scoring change. ⛔ **A scoring change that is invisible today is exactly the one that must not auto-proceed** — a code revert does not un-write the `analysis_log.csv` rows logged under it.
+- ⭐⭐ **The measured bias, and why the last reserved class exists: 39 D-tables ticked *"as recommended"* against 8 overruled — but the eight are not random.** Four read in full all share one shape: **the recommendation optimised for ECONOMY, the ruling optimised for NOT LOSING INFORMATION.** **When you notice your pick is the cheaper one, that is the signal to ask.**
+- **Obligation attached: log every auto-proceeded decision in ONE line** — decision, options, pick, why — in the spec's D-table or the batch summary.
+
+⚠ **This ruling post-dates everything else in this document. Where an older section says a decision "needs a trader tick", re-read it against the six reserved classes above.**
+
+✅ **Already re-read for you — the ONE tick actually pending is STILL RESERVED, so nothing changes for it:** the **Absorption mechanism revision (Path B), §6**. It unblocks the *"Absorption Step-2 penalty wire-in"*, which is **a scoring change** — reserved class 2. ⛔ **It stays with the trader. Do not auto-proceed on it, and do not open an implementer session until it is ticked.** ⚠ **It has been outstanding since 2026-08-14 — about four weeks — so it is worth raising rather than inheriting silently.**
+
+---
+
 ## 1. ⛔ THE CLOCK TRAP HAS NOW FIRED IN EIGHT CONSECUTIVE SESSIONS
 
 ⛔⛔ **The workstation is GMT+8. The harness announces the LOCAL date. All project dates are UTC.**
