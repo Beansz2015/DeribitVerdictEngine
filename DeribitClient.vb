@@ -22,9 +22,10 @@ Public Class DeribitClient
     ' Three shapes, exactly two get logged:
     '   A. Non-2xx (any 5xx) → log VENUE_<code>, then throw the SAME HttpRequestException
     '      that GetStringAsync would throw so ExecuteWithRetry's control flow is untouched.
-    '   B. HTTP 200 with a JSON-RPC error body → log VENUE_200, return body unchanged.
-    '      ⛔ Must NOT throw and must NOT alter the body — caller semantics are identical
-    '      to GetStringAsync (the whole point of option (d) over option (b)).
+    '   B. HTTP 200 with a JSON-RPC error body → log VENUE_RPC_<rpc-code> (or
+    '      VENUE_RPC_UNKNOWN when the error object carries no readable code), return body
+    '      unchanged. ⛔ Must NOT throw and must NOT alter the body — caller semantics are
+    '      identical to GetStringAsync (the whole point of option (d) over option (b)).
     '   C. No response (timeout / DNS / TCP refusal) → exception propagates out of GetAsync
     '      before this method records anything. NEVER logged. That is the V-1 guard.
     '
@@ -48,16 +49,27 @@ Public Class DeribitClient
     End Function
 
     ''' <summary>Applies the venue-status logging policy and returns the body unchanged.
-    ''' Friend visibility so fixture A74e can call it directly to prove the drop-in property
-    ''' (body returned = body passed in, regardless of whether a log line was written).</summary>
+    ''' Friend visibility so fixtures A74e/A75a/A75b can call it directly to prove the
+    ''' drop-in property (body returned = body passed in, regardless of whether a log
+    ''' line was written).
+    ''' Shape A (non-2xx): logs VENUE_&lt;http-code&gt;.
+    ''' Shape B (200 + JSON-RPC error): logs VENUE_RPC_&lt;rpc-code&gt; or VENUE_RPC_UNKNOWN.
+    ''' Shape C (no response): never reaches here — V-1 guard.</summary>
     Friend Shared Function RecordVenueIfNeeded(
             code As Integer,
             body As String,
             instanceId As String) As String
         If VenueStatusLog.ShouldRecord(code, body) Then
-            VenueStatusLog.LogTransition(
-                "VENUE_" & code.ToString(CultureInfo.InvariantCulture),
-                instanceId)
+            Dim state As String
+            If code = 200 Then
+                ' Shape B — compose VENUE_RPC_<rpc-code> (or VENUE_RPC_UNKNOWN).
+                ' ShouldRecord already confirmed this is an RPC error body.
+                state = VenueStatusLog.ComposeRpcState(body)
+            Else
+                ' Shape A — VENUE_<http-code>, e.g. VENUE_503.
+                state = "VENUE_" & code.ToString(CultureInfo.InvariantCulture)
+            End If
+            VenueStatusLog.LogTransition(state, instanceId)
         End If
         Return body
     End Function
