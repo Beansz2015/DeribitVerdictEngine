@@ -1,6 +1,8 @@
 ﻿# Coverage-report cluster — three defects, one spec
 
-**Status:** ✅ **BUILD-AUTHORIZED for `C-1` and `C-2`.** ⛔ **`C-3a` needs ONE trader tick (`D-6`); `C-3b` is NOT BUILDABLE and is specced as a prerequisite, not a build.**
+**Status:** ✅✅ **BUILD-AUTHORIZED IN FULL — `C-1`, `C-2` AND `C-3a`. `D-4` ticked (b) and `D-6` ticked (b) by the trader, 2026-09-11 (UTC). Nothing is owed.**
+
+⛔ **`C-3b` remains NOT BUILDABLE — blocked on an instrument that does not exist (§1.1 of this document). It is NOT part of this build.**
 
 **Author seat:** Opus, 2026-09-11 (UTC). **Baseline commit: `4f95ac3`.** ⛔ **Every line number here was read at that commit. Re-read if `HEAD` has moved.**
 
@@ -11,7 +13,9 @@
 ## 0. Model and effort
 
 > ### Model: **Sonnet** · Effort: **MEDIUM**
-> ### Two sessions. `C-1` + `C-2` in session 1; `C-3a` in session 2 once `D-6` is ticked.
+> ### Two sessions, SAME implementer, SEQUENTIAL. `C-1` + `C-2` in session 1; `C-3a` in session 2.
+>
+> ⛔ **Do NOT parallelise them. All three touch `tools/BacktestRunner/CoverageReport.vb`, and two agents editing one file is merge pain for no gain.**
 
 **Why MEDIUM.** The judgment is done here and every measurement is already taken on real tape. **What lifts it above LOW is that `C-1` and `C-2` both modify the classifier's decision path, and each has a documented way of trading one wrong answer for a different wrong answer.** The queue rows say so in their own words, and both warnings are reproduced below.
 
@@ -109,12 +113,12 @@
 | **`D-3`** | `C-2`'s shape | (a) move `FirstUtcMs` to the first capture-capable evidence · **(b) add a second timestamp** | ✅ **(b).** (a) is `T-2` — it shrinks the interval and trades a false defect for a possibly missed one |
 | **`D-5`** | Build `C-3b` (venue outage) in this spec? | (a) yes · **(b) no — specify the missing instrument instead** | ✅ **(b).** §1.1 of this document proves there is no recorded source. **A consumer built against absent data would silently never fire** |
 
-### ⛔ Decisions RESERVED — these come to the trader
+### ✅ Decisions RESERVED — BOTH TICKED 2026-09-11 (UTC), both as recommended
 
 | # | Decision | Options | My read |
 |---|---|---|---|
-| **`D-4`** | What class does a startup window get? | (a) reuse `ExpectedMissing` · **(b) a NEW `HourClass.StartupWindow`** | ⚠⚠ **RESERVED BY THE RULING'S OWN LAST CLASS, and I am flagging it rather than taking it.** My first instinct was **(a)** — fewer classes, no precedence work. ⛔ **That is the CHEAPER, LESS-INFORMATION option, which is the exact class the ruling reserves**, and it conflates *"before we ever ran"* with *"during startup"*. ⭐ **So my considered read is (b)** — but the ruling says a pick arrived at this way goes to you. ⚠ **If (b): state the worst-of precedence explicitly (`T-4`); it must NOT outrank `Defect`** |
-| **`D-6`** | Where does the declared operating schedule live? | (a) a `settings.json` block · (b) a separate declared file read by `BacktestRunner` · (c) a CLI option | ⛔ **RESERVED — (a) is a `settings.json` change, a reserved class in its own right.** **My read: (b)** — it is operational intent, not engine configuration, and it keeps the tweaker fence out of it. ⚠ **`C-3a` does not start until this is ticked** |
+| **`D-4`** | What class does a startup window get? | (a) reuse `ExpectedMissing` · **(b) a NEW `HourClass.StartupWindow`** | ✅✅ **TICKED (b) 2026-09-11 (UTC), trader — as recommended.** A new `HourClass.StartupWindow`. ⛔ **STATE THE WORST-OF PRECEDENCE EXPLICITLY AT `CoverageReport.vb:695-707` (`T-4`): it must NOT outrank `Defect`.** ⭐ **Place it adjacent to `ExpectedMissing` in that chain — a startup window and a not-yet-running window are both "absence we expected", and neither may mask a real `Defect` elsewhere in the hour.** ⚠ **The enum's own comment says ordinal position is inert; that is TRUE of the enum and FALSE of the combine. Do not rely on declaration order** |
+| **`D-6`** | Where does the declared operating schedule live? | (a) a `settings.json` block · **(b) a separate declared file read by `BacktestRunner`** · (c) a CLI option | ✅✅ **TICKED (b) 2026-09-11 (UTC), trader — as recommended.** A separate declared file. ⭐ **It is operational INTENT, not engine configuration — so it stays out of `settings.json`, needs no version bump, and the auto-tweaker fence never has to reason about it.** ⛔ **`settings.json` MUST remain untouched at v68 — that is `AC-7`.** ⚠ **The file is a POSITIVE RECORD OF INTENT, which is what J-B asks for. It must be declared, never derived from observed uptime — a schedule inferred from behaviour is the rejected baseline wearing a new hat** |
 
 ---
 
