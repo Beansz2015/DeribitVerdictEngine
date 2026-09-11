@@ -643,6 +643,16 @@ Module Program
         A69e_LegacyCacheBlocksIdentityBearingRow()
         A70a_LoadStatsExclusionIdentityHolds()
 
+        ' [C-1 + C-2 — coverage-report-cluster-spec.md Session 1:
+        '   C-1: trade_seq completeness as a second storeClean signal.
+        '   C-2: startup-window class for spans before CaptureCapableFromMs.
+        '   A73b (mixed span) and A73e (T-2 guard) are the two with teeth.]
+        A73a_SequenceContiguousAboveGapThresholdIsCapured()
+        A73b_MixedSpanFallsBackToTimeTolerance()
+        A73c_LegacySpanBehavesExactlyAsBeforeC1()
+        A73d_SpanBeforeCaptureCapableFromMsIsStartupWindow()
+        A73e_T2GuardFirstUtcMsUntouchedNoExpectedMissingCreep()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -13220,6 +13230,150 @@ Module Program
         Finally
             Try : System.IO.Directory.Delete(dir, True) : Catch : End Try
         End Try
+    End Sub
+
+    ' ══ A73 — C-1 + C-2 coverage-report-cluster-spec.md Session 1 ════════════════════════
+    ' C-1: trade_seq completeness as a second storeClean signal (D-1/D-2).
+    ' C-2: startup-window class for spans inside an up-interval but before CaptureCapableFromMs.
+    '
+    ' A73b (mixed span) and A73e (T-2 guard) are the two with teeth; the other three cover
+    ' the outer-edge paths and the legacy-path identity.
+
+    ' -- A73a: sequence contiguous + gap above threshold ⇒ Captured (not Defect) --------------
+    ' ⛔ THE MUTATION THAT MUST FAIL A73a: remove the sequence arm — revert storeClean to
+    ' "stats.RowCount > 0 AndAlso stats.LongestGapMs <= gapMs" alone. Then LongestGapMs
+    ' (400 s) > gapMs (300 s) ⇒ storeClean = False ⇒ Defect(gap-breach).
+    Private Sub A73a_SequenceContiguousAboveGapThresholdIsCapured()
+        Dim day = A49Monday()
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(0)),
+                                 .LastUtcMs = A49Ms(day.AddHours(12)), .IsTrailing = True,
+                                 .CaptureCapableFromMs = A49Ms(day.AddHours(0))}
+        }
+        ' All rows carry trade_seq with contiguous values; LongestGapMs exceeds the 300 s
+        ' threshold. The sequence signal must override the time tolerance and give Captured.
+        Dim stats As New HourStoreStats With {.RowCount = 3, .LongestGapMs = 400000L, .RowsWithoutSeq = 0}
+        stats.Seqs.AddRange({100L, 101L, 102L})
+
+        Dim h = CoverageReport.ClassifyHour(day.AddHours(5), markers, upIntervals, False, stats, 300000L)
+        Check("A73a sequence contiguous with LongestGapMs above threshold ⇒ Captured, not Defect",
+              h.Classification = HourClass.Captured,
+              String.Format("class={0} reason={1}", h.Classification, h.Reason))
+    End Sub
+
+    ' -- A73b: mixed span (T-1) falls back wholly to time tolerance -------------------------
+    ' ⛔⛔ THE MIXED SPAN (T-1). Some rows carry trade_seq, some do not.
+    ' ⛔ THE MUTATION THAT MUST FAIL A73b: evaluate the sequence over only the rows that have
+    ' it (i.e. remove the RowsWithoutSeq guard). Seqs = [100, 101, 102] are contiguous ⇒ the
+    ' span wrongly reads complete ⇒ Captured — trading a false defect for a MISSED one.
+    Private Sub A73b_MixedSpanFallsBackToTimeTolerance()
+        Dim day = A49Monday()
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(0)),
+                                 .LastUtcMs = A49Ms(day.AddHours(12)), .IsTrailing = True,
+                                 .CaptureCapableFromMs = A49Ms(day.AddHours(0))}
+        }
+        ' One row lacks trade_seq (the mixed-era legacy row). The sequenced rows are
+        ' contiguous. Because RowsWithoutSeq > 0, the sequence arm must NOT fire — fall back
+        ' to the time tolerance, which fails (400 s > 300 s) ⇒ Defect.
+        Dim stats As New HourStoreStats With {.RowCount = 4, .LongestGapMs = 400000L, .RowsWithoutSeq = 1}
+        stats.Seqs.AddRange({100L, 101L, 102L})
+
+        Dim h = CoverageReport.ClassifyHour(day.AddHours(5), markers, upIntervals, False, stats, 300000L)
+        Check("A73b mixed span (some rows without trade_seq) falls back wholly to time tolerance; " &
+              "tolerance fails ⇒ Defect, not Captured from the sequenced subset",
+              h.Classification = HourClass.Defect,
+              String.Format("class={0} reason={1}", h.Classification, h.Reason))
+    End Sub
+
+    ' -- A73c: legacy span (no sequences anywhere) classifies identically to pre-C1 ----------
+    ' Mutation: any change → regression in the legacy path.
+    Private Sub A73c_LegacySpanBehavesExactlyAsBeforeC1()
+        Dim day = A49Monday()
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(-1)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {.InstanceId = "iid-1", .FirstUtcMs = A49Ms(day.AddHours(0)),
+                                 .LastUtcMs = A49Ms(day.AddHours(12)), .IsTrailing = True,
+                                 .CaptureCapableFromMs = A49Ms(day.AddHours(0))}
+        }
+        ' Pure legacy span: every row lacks trade_seq; Seqs is empty by default.
+        ' cleanStats: LongestGapMs < gapMs ⇒ time tolerance passes ⇒ Captured (pre-C1 path)
+        ' badStats:   LongestGapMs > gapMs ⇒ time tolerance fails ⇒ Defect  (pre-C1 path)
+        Dim cleanStats As New HourStoreStats With {.RowCount = 5, .LongestGapMs = 100000L, .RowsWithoutSeq = 5}
+        Dim badStats As New HourStoreStats With {.RowCount = 5, .LongestGapMs = 400000L, .RowsWithoutSeq = 5}
+        Dim hClean = CoverageReport.ClassifyHour(day.AddHours(5), markers, upIntervals, False, cleanStats, 300000L)
+        Dim hBad = CoverageReport.ClassifyHour(day.AddHours(5), markers, upIntervals, False, badStats, 300000L)
+        Dim ok As Boolean = hClean.Classification = HourClass.Captured AndAlso
+                            hBad.Classification = HourClass.Defect
+        Check("A73c legacy span (no trade_seq on any row) classifies identically to pre-C1: " &
+              "clean time tolerance ⇒ Captured, gap breach ⇒ Defect",
+              ok,
+              String.Format("clean={0} bad={1}", hClean.Classification, hBad.Classification))
+    End Sub
+
+    ' -- A73d: span before CaptureCapableFromMs inside up-interval ⇒ StartupWindow ----------
+    ' ⛔ THE MUTATION THAT MUST FAIL A73d: treat DOWN lines as CaptureCapable (ignore state in
+    ' ParseWsHealthEvidence). Then CaptureCapableFromMs = FirstUtcMs = 10:00. Hour 10's end
+    ' (10:59:59) >= 10:00 ⇒ startup-window check skips ⇒ Defect(empty).
+    Private Sub A73d_SpanBeforeCaptureCapableFromMsIsStartupWindow()
+        Dim day = A49Monday()
+        ' DOWN line at 10:00 — liveness only, socket not yet connected (CaptureCapableFromMs unset).
+        ' OK  line at 11:00 — feed active, CaptureCapableFromMs = 11:00.
+        Dim lines As New List(Of String) From {
+            A49WsLine(day.AddHours(10), "DOWN", "iid-1"),
+            A49WsLine(day.AddHours(11), "OK", "iid-1")
+        }
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(9)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals = CoverageReport.BuildUpIntervals(CoverageReport.ParseWsHealthEvidence(lines))
+        ' Hour 10 spans [10:00, 10:59:59]. It overlaps the interval (FirstUtcMs=10:00), so
+        ' ClassifyUptimeSpan returns "up". But the entire hour ends before CaptureCapableFromMs
+        ' (11:00) ⇒ startup window, not defect.  Store is empty ⇒ storeClean = False.
+        Dim h10 = CoverageReport.ClassifyHour(day.AddHours(10), markers, upIntervals, False, Nothing, 300000L)
+        Check("A73d span ending before CaptureCapableFromMs inside up-interval ⇒ StartupWindow, not Defect",
+              h10.Classification = HourClass.StartupWindow,
+              String.Format("class={0} reason={1}", h10.Classification, h10.Reason))
+    End Sub
+
+    ' -- A73e: T-2 guard — hour before first OK but inside interval ⇒ StartupWindow, never ExpectedMissing
+    ' ⛔ THE MUTATION THAT MUST FAIL A73e: move FirstUtcMs to the first OK line (use only
+    ' capture-capable evidence for the interval's start). Then hour 10 is BEFORE FirstUtcMs
+    ' (11:00) ⇒ ClassifyUptimeSpan returns "before-first" ⇒ ExpectedMissing — T-2 fires.
+    Private Sub A73e_T2GuardFirstUtcMsUntouchedNoExpectedMissingCreep()
+        Dim day = A49Monday()
+        Dim lines As New List(Of String) From {
+            A49WsLine(day.AddHours(10), "DOWN", "iid-1"),
+            A49WsLine(day.AddHours(11), "OK", "iid-1")
+        }
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {.UtcMs = A49Ms(day.AddHours(9)), .Enabled = True, .InstanceId = "iid-1"}
+        }
+        Dim upIntervals = CoverageReport.BuildUpIntervals(CoverageReport.ParseWsHealthEvidence(lines))
+        Dim iv = upIntervals.FirstOrDefault(Function(x) x.InstanceId = "iid-1")
+        ' Verify BuildUpIntervals anchored FirstUtcMs on the DOWN line, not on the OK line.
+        ' If FirstUtcMs were moved to 11:00, hour 10 would fall "before-first" ⇒ ExpectedMissing.
+        Dim ivOk As Boolean = iv IsNot Nothing AndAlso
+                              iv.FirstUtcMs = A49Ms(day.AddHours(10)) AndAlso
+                              iv.CaptureCapableFromMs = A49Ms(day.AddHours(11))
+        Dim h10 = CoverageReport.ClassifyHour(day.AddHours(10), markers, upIntervals, False, Nothing, 300000L)
+        Check("A73e T-2 guard — hour before first OK but inside interval is StartupWindow, " &
+              "never ExpectedMissing; FirstUtcMs anchored on DOWN line, not moved to OK",
+              h10.Classification = HourClass.StartupWindow AndAlso
+              h10.Classification <> HourClass.ExpectedMissing AndAlso
+              ivOk,
+              String.Format("class={0} firstMs={1} captureMs={2}",
+                            h10.Classification,
+                            If(iv IsNot Nothing, iv.FirstUtcMs.ToString(), "nil"),
+                            If(iv IsNot Nothing, iv.CaptureCapableFromMs.ToString(), "nil")))
     End Sub
 
 End Module

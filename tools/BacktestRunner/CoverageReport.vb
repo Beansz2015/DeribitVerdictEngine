@@ -2,9 +2,9 @@
 ' The `coverage` verb (docs/trade-store-coverage-report-proposal.md, BUILD-AUTHORIZED
 ' 2026-08-03 — see docs/trade-store-coverage-report-implementer-brief.md).
 '
-' Reports capture health for the raw-trade store: seven classes per weekday UTC hour
-' (captured / defect / trailing-edge / expected-missing / not-capturing / unknown-scope /
-' out-of-scope-weekend — docs/j-b-scoping-ruling-2026-08-02.md +
+' Reports capture health for the raw-trade store: eight classes per weekday UTC hour
+' (captured / defect / trailing-edge / expected-missing / startup-window / not-capturing /
+' unknown-scope / out-of-scope-weekend — docs/j-b-scoping-ruling-2026-08-02.md +
 ' docs/weekday-scope-ruling-2026-08-03.md + docs/coverage-trailing-edge-f1-proposal.md
 ' §4b), plus S4 candle/funding completeness and an optional S0 venue diff. Tools-only,
 ' read-only, no settings keys, no version bump.
@@ -63,6 +63,13 @@ Public Enum HourClass
     ' never by ordinal), so the insertion point is free to match that precedence.
     TrailingEdge
     ExpectedMissing
+    ' [C-2] The span is inside an up-interval but before the first capture-capable evidence
+    ' for that interval — the process was alive (socket not yet established) so it could not
+    ' yet capture trades. Sits adjacent to ExpectedMissing in the combine's worst-of chain:
+    ' neither class may mask a real Defect elsewhere in the hour, and neither asserts that
+    ' capture was possible. ⛔ Ordinal position is inert — the combine checks by name, not
+    ' by ordinal; do not rely on declaration order for precedence.
+    StartupWindow
     NotCapturing
     UnknownScope
     OutOfScopeWeekend
@@ -95,12 +102,27 @@ Public Class CoverageOptions
     Public Property VerifyVenue As Boolean = False
 End Class
 
+''' <summary>[C-2] Whether evidence proves capture capability or mere liveness.
+''' A DOWN ws_health line proves the app was alive to write it (WsHealthLog.LogStart fires
+''' before the socket connects) but NOT that it was capturing (socket disconnected, feed
+''' inactive). OK/DEGRADED/REST lines prove the feed was active. Analysis log rows are
+''' capture-capable by construction — a completed analysis run implies capture.</summary>
+Public Enum EvidenceKind
+    ''' <summary>App was alive — enough to anchor FirstUtcMs. Socket was NOT connected.</summary>
+    Liveness
+    ''' <summary>App was actively capturing — anchors both FirstUtcMs and CaptureCapableFromMs.</summary>
+    CaptureCapable
+End Enum
+
 Public Structure EvidencePoint
     Public UtcMs As Long
     Public InstanceId As String
-    Public Sub New(utcMs As Long, instanceId As String)
+    ''' <summary>[C-2] Whether this point proves capture capability or only liveness.</summary>
+    Public Kind As EvidenceKind
+    Public Sub New(utcMs As Long, instanceId As String, kind As EvidenceKind)
         Me.UtcMs = utcMs
         Me.InstanceId = If(instanceId, "")
+        Me.Kind = kind
     End Sub
 End Structure
 
@@ -113,6 +135,12 @@ Public Class UpInterval
     Public Property FirstUtcMs As Long
     Public Property LastUtcMs As Long
     Public Property IsTrailing As Boolean = False
+    ''' <summary>[C-2] Earliest evidence that the process was actively capturing (socket up /
+    ''' analysis log row). Long.MaxValue when no capture-capable evidence was seen for this
+    ''' instance — a span whose end is before this value and which overlaps this interval is
+    ''' a startup window (connect phase), not a defect. Guard: only fire when this is not
+    ''' Long.MaxValue, i.e. capture-capable evidence actually exists for this interval.</summary>
+    Public Property CaptureCapableFromMs As Long = Long.MaxValue
 End Class
 
 Public Class HourStoreStats
@@ -123,6 +151,15 @@ Public Class HourStoreStats
     ''' that never sets it (coverage-trailing-edge-f1-proposal.md §4a.4). Nothing ⇒ the
     ''' trailing-edge check is skipped, never evaluated against a phantom epoch.</summary>
     Public Property LastTsMs As Long?
+    ''' <summary>[C-1] Count of rows in this bucket that carry no trade_seq. Non-zero forces
+    ''' ClassifySpan to fall back wholly to the time tolerance — a gap across a legacy row is
+    ''' uninterpretable (D-2(a)). Zero with Seqs non-empty means every row has a sequence.</summary>
+    Public Property RowsWithoutSeq As Integer = 0
+    ''' <summary>[C-1] trade_seq values seen in this bucket, for the contiguity check in
+    ''' ClassifySpan. Populated during AccumulateHourStats / AccumulateSplitSpanStats.
+    ''' Sorted on demand by ClassifySpan (accumulation walks in timestamp order, which only
+    ''' correlates with sequence order). Empty when no rows carry trade_seq.</summary>
+    Public Property Seqs As New List(Of Long)()
 End Class
 
 Public Class CoverageResult
@@ -259,10 +296,13 @@ Public NotInheritable Class CoverageReport
     ' ── Evidence parsing ──────────────────────────────────────────────────────────────
 
     ''' <summary>Parse ws_health.log lines ("utc | state | instance_id") into evidence
-    ''' points. The STATE value is deliberately IGNORED — even a DOWN line proves the app
-    ''' was alive to write it (WsHealthLog.LogStart fires before the socket connects), so
-    ''' every line is equally valid "app was up at this instant" evidence regardless of
-    ''' state. Malformed lines are skipped, never throws.</summary>
+    ''' points. For interval MEMBERSHIP (FirstUtcMs), the STATE value is deliberately
+    ''' IGNORED — even a DOWN line proves the app was alive to write it (WsHealthLog.LogStart
+    ''' fires before the socket connects), so every line is equally valid "app was up at this
+    ''' instant" evidence regardless of state. For CAPTURE CAPABILITY (CaptureCapableFromMs),
+    ''' the state IS consulted: OK/DEGRADED/REST carry EvidenceKind.CaptureCapable (the feed
+    ''' was active); DOWN carries EvidenceKind.Liveness only (socket disconnected, not
+    ''' capturing). Malformed lines are skipped, never throws.</summary>
     Public Shared Function ParseWsHealthEvidence(lines As IEnumerable(Of String)) As List(Of EvidencePoint)
         Dim result As New List(Of EvidencePoint)
         If lines Is Nothing Then Return result
@@ -275,9 +315,14 @@ Public NotInheritable Class CoverageReport
                                      DateTimeStyles.AssumeUniversal Or DateTimeStyles.AdjustToUniversal, utc) Then
                 Continue For
             End If
+            ' DOWN means the socket is disconnected — the process was alive to write the line
+            ' (liveness only), but was not capturing. Every other state (OK/DEGRADED/REST)
+            ' means the feed was active and the process was capture-capable.
+            Dim kind As EvidenceKind = If(parts(1).Trim() = "DOWN",
+                                          EvidenceKind.Liveness, EvidenceKind.CaptureCapable)
             result.Add(New EvidencePoint(
                 New DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
-                parts(2).Trim()))
+                parts(2).Trim(), kind))
         Next
         Return result
     End Function
@@ -309,9 +354,11 @@ Public NotInheritable Class CoverageReport
                                      DateTimeStyles.AssumeUniversal Or DateTimeStyles.AdjustToUniversal, ts) Then
                 Continue For
             End If
+            ' Analysis log rows are capture-capable by construction — a completed analysis
+            ' run implies the collection feed was active at that timestamp.
             result.Add(New EvidencePoint(
                 New DateTimeOffset(DateTime.SpecifyKind(ts, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
-                parts(iidIdx)))
+                parts(iidIdx), EvidenceKind.CaptureCapable))
         Next
         Return result
     End Function
@@ -329,12 +376,18 @@ Public NotInheritable Class CoverageReport
             If String.IsNullOrEmpty(key) Then Continue For
             Dim iv As UpInterval = Nothing
             If Not byInstance.TryGetValue(key, iv) Then
-                iv = New UpInterval With {.InstanceId = key, .FirstUtcMs = e.UtcMs, .LastUtcMs = e.UtcMs}
+                iv = New UpInterval With {
+                    .InstanceId = key, .FirstUtcMs = e.UtcMs, .LastUtcMs = e.UtcMs,
+                    .CaptureCapableFromMs = If(e.Kind = EvidenceKind.CaptureCapable, e.UtcMs, Long.MaxValue)}
                 byInstance(key) = iv
                 result.Add(iv)
             Else
                 If e.UtcMs < iv.FirstUtcMs Then iv.FirstUtcMs = e.UtcMs
                 If e.UtcMs > iv.LastUtcMs Then iv.LastUtcMs = e.UtcMs
+                ' [C-2] Track the earliest capture-capable evidence for this interval.
+                If e.Kind = EvidenceKind.CaptureCapable AndAlso e.UtcMs < iv.CaptureCapableFromMs Then
+                    iv.CaptureCapableFromMs = e.UtcMs
+                End If
             End If
         Next
         result.Sort(Function(a, b) a.FirstUtcMs.CompareTo(b.FirstUtcMs))
@@ -464,6 +517,8 @@ Public NotInheritable Class CoverageReport
                 End If
                 stats.RowCount += 1
                 stats.LastTsMs = t.Timestamp
+                ' [C-1] Track sequences for per-hour contiguity check in ClassifySpan.
+                If t.HasSeq Then stats.Seqs.Add(t.TradeSeq) Else stats.RowsWithoutSeq += 1
                 If havePrev Then
                     Dim gap As Long = t.Timestamp - prevTs
                     If gap > stats.LongestGapMs Then stats.LongestGapMs = gap
@@ -513,6 +568,8 @@ Public NotInheritable Class CoverageReport
                     End If
                     stats.RowCount += 1
                     stats.LastTsMs = t.Timestamp
+                    ' [C-1] Track sequences for per-span contiguity check in ClassifySpan.
+                    If t.HasSeq Then stats.Seqs.Add(t.TradeSeq) Else stats.RowsWithoutSeq += 1
                     If havePrev Then
                         Dim gap As Long = t.Timestamp - prevTs
                         If gap > stats.LongestGapMs Then stats.LongestGapMs = gap
@@ -566,7 +623,30 @@ Public NotInheritable Class CoverageReport
         End If
 
         Dim stats As HourStoreStats = If(spanStats, New HourStoreStats())
-        Dim storeClean As Boolean = stats.RowCount > 0 AndAlso stats.LongestGapMs <= gapMs
+
+        ' [C-1] storeClean: prefer the sequence signal when ALL rows carry trade_seq (D-1/D-2).
+        ' If ANY row lacks a sequence, fall back wholly to the time tolerance — a gap across a
+        ' legacy row is uninterpretable; evaluating only the sequenced subset would compute a
+        ' number that means nothing (D-2(a): MECHANISM argument, not simplicity).
+        Dim storeClean As Boolean
+        If stats.RowsWithoutSeq = 0 AndAlso stats.Seqs.Count > 0 Then
+            ' Every row has trade_seq — check contiguity directly. A contiguous span is
+            ' Captured regardless of LongestGapMs (the single confirmed false defect: a 302 s
+            ' quiet period with zero missing sequences on 2026-08-13 21:00).
+            Dim sortedSeqs = stats.Seqs.OrderBy(Function(s) s).ToList()
+            Dim seqContiguous As Boolean = True
+            For i As Integer = 1 To sortedSeqs.Count - 1
+                If sortedSeqs(i) - sortedSeqs(i - 1) > 1 Then
+                    seqContiguous = False
+                    Exit For
+                End If
+            Next
+            storeClean = seqContiguous  ' RowCount > 0 is implied by Seqs.Count > 0
+        Else
+            ' Mixed or legacy span: fall back to the time tolerance.
+            storeClean = stats.RowCount > 0 AndAlso stats.LongestGapMs <= gapMs
+        End If
+
         If storeClean Then
             Dim observedEndMs As Long = Math.Min(spanEndMsInclusive, boundMs)
             If stats.LastTsMs.HasValue AndAlso observedEndMs > stats.LastTsMs.Value Then
@@ -587,6 +667,20 @@ Public NotInheritable Class CoverageReport
         Dim up = ClassifyUptimeSpan(spanStartMs, spanEndMsInclusive, upIntervals)
         If up.Kind = "before-first" Then
             Return (HourClass.ExpectedMissing, up.InstanceId, "", Nothing)
+        End If
+
+        ' [C-2] Startup window: span is inside an up-interval but ends before the first
+        ' capture-capable evidence in that interval — the process was alive (a DOWN line anchors
+        ' the interval's start) but the feed had not yet established. Not a defect: absence was
+        ' expected during the connect phase. Guard: CaptureCapableFromMs < Long.MaxValue ensures
+        ' we fire only when capture-capable evidence actually exists for this interval.
+        If up.Kind = "up" AndAlso upIntervals IsNot Nothing Then
+            Dim matchIv = upIntervals.FirstOrDefault(Function(iv) iv.InstanceId = up.InstanceId)
+            If matchIv IsNot Nothing AndAlso
+               matchIv.CaptureCapableFromMs < Long.MaxValue AndAlso
+               spanEndMsInclusive < matchIv.CaptureCapableFromMs Then
+                Return (HourClass.StartupWindow, up.InstanceId, "startup-window", Nothing)
+            End If
         End If
 
         Dim reason As String = If(up.Kind <> "up", "ambiguous-uptime(" & up.Kind & ")",
@@ -691,6 +785,9 @@ Public NotInheritable Class CoverageReport
         ' BEFORE off on the single-scope path. ExpectedMissing > NotCapturing stands —
         ' NotCapturing asserts a deliberate off-state that a span with no such record cannot
         ' honestly claim.
+        ' [C-2, D-4] StartupWindow sits adjacent to ExpectedMissing — both are "absence we
+        ' expected" — and neither may mask a real Defect elsewhere in the hour. ⛔ It must NOT
+        ' outrank Defect, TrailingEdge, Captured, or UnknownScope. Ordinal position is inert.
         Dim finalCls As HourClass
         If spans.Any(Function(s) s.Classification = HourClass.Defect) Then
             finalCls = HourClass.Defect
@@ -702,9 +799,11 @@ Public NotInheritable Class CoverageReport
             finalCls = HourClass.UnknownScope
         ElseIf spans.Any(Function(s) s.Classification = HourClass.ExpectedMissing) Then
             finalCls = HourClass.ExpectedMissing
+        ElseIf spans.Any(Function(s) s.Classification = HourClass.StartupWindow) Then
+            finalCls = HourClass.StartupWindow
         Else
             ' [coverage-trailing-split-span-spec.md R8, RULED 2026-09-03] Reached only because
-            ' ClassifySpan never emits OutOfScopeWeekend — the seventh HourClass, handled by no
+            ' ClassifySpan never emits OutOfScopeWeekend — the eighth HourClass, handled by no
             ' branch here. If that ever changes, this Else and the combine's exhaustiveness must
             ' be revisited together.
             finalCls = HourClass.NotCapturing
@@ -1151,6 +1250,7 @@ Public NotInheritable Class CoverageReport
         sb.AppendLine(String.Format("  DEFECT              {0}   ← capture defects", result.CountByClass(HourClass.Defect)))
         sb.AppendLine(String.Format("  trailing-edge        {0}   ← silence to the observed edge, not a gap between trades", result.CountByClass(HourClass.TrailingEdge)))
         sb.AppendLine(String.Format("  expected-missing     {0}", result.CountByClass(HourClass.ExpectedMissing)))
+        sb.AppendLine(String.Format("  startup-window       {0}", result.CountByClass(HourClass.StartupWindow)))
         sb.AppendLine(String.Format("  not-capturing        {0}", result.CountByClass(HourClass.NotCapturing)))
         sb.AppendLine(String.Format("  unknown-scope        {0}", result.CountByClass(HourClass.UnknownScope)))
         sb.AppendLine(String.Format("  out-of-scope-weekend {0}", result.CountByClass(HourClass.OutOfScopeWeekend)))
