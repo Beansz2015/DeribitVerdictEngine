@@ -17,6 +17,11 @@
     <!-- v36 Phase-2a: shared session-bucket matcher (engine-identical boundary)
          for the (session × resolution) population filter. -->
     <Compile Include="..\..\Core\ExecutionResolution.vb" />
+    <!-- ProcessIdentity and VenueStatusLog are needed because DeribitClient now calls
+         ProcessIdentity.InstanceId and VenueStatusLog.ShouldRecord/LogTransition inside
+         GetStringOrRecordAsync (venue-status instrument, A74). -->
+    <Compile Include="..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\Core\VenueStatusLog.vb" />
     <Compile Include="..\..\DeribitClient.vb" />
     <Compile Include="..\..\analysis\AnalysisConstants.vb" />
     <Compile Include="..\..\analysis\AnalysisReport.vb" />

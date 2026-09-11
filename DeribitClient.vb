@@ -15,6 +15,53 @@ Public Class DeribitClient
         _http.Timeout = TimeSpan.FromSeconds(SettingsLoader.Current.Network.RequestTimeoutSeconds)
     End Sub
 
+    ' ── Venue-status helper ───────────────────────────────────────────────────────────────────
+    ' Drop-in replacement for _http.GetStringAsync that additionally records a venue-status
+    ' log entry when Deribit itself returns a response declaring it is unavailable.
+    '
+    ' Three shapes, exactly two get logged:
+    '   A. Non-2xx (any 5xx) → log VENUE_<code>, then throw the SAME HttpRequestException
+    '      that GetStringAsync would throw so ExecuteWithRetry's control flow is untouched.
+    '   B. HTTP 200 with a JSON-RPC error body → log VENUE_200, return body unchanged.
+    '      ⛔ Must NOT throw and must NOT alter the body — caller semantics are identical
+    '      to GetStringAsync (the whole point of option (d) over option (b)).
+    '   C. No response (timeout / DNS / TCP refusal) → exception propagates out of GetAsync
+    '      before this method records anything. NEVER logged. That is the V-1 guard.
+    '
+    ' RecordVenueIfNeeded is Friend (not Private) so A74e can call it directly to prove the
+    ' drop-in property: body-in = body-out regardless of whether a log line was written.
+    Private Shared Async Function GetStringOrRecordAsync(url As String) As Task(Of String)
+        Dim response As HttpResponseMessage = Await _http.GetAsync(url)
+        Dim body As String = Await response.Content.ReadAsStringAsync()
+        Dim code As Integer = CInt(response.StatusCode)
+        RecordVenueIfNeeded(code, body, ProcessIdentity.InstanceId)
+        If Not response.IsSuccessStatusCode Then
+            ' Throw the same HttpRequestException shape GetStringAsync throws for non-2xx,
+            ' preserving the StatusCode so ExecuteWithRetry's 4xx/5xx routing is unchanged.
+            Throw New HttpRequestException(
+                String.Format("Response status code does not indicate success: {0} ({1})",
+                              code, response.ReasonPhrase),
+                Nothing,
+                response.StatusCode)
+        End If
+        Return body
+    End Function
+
+    ''' <summary>Applies the venue-status logging policy and returns the body unchanged.
+    ''' Friend visibility so fixture A74e can call it directly to prove the drop-in property
+    ''' (body returned = body passed in, regardless of whether a log line was written).</summary>
+    Friend Shared Function RecordVenueIfNeeded(
+            code As Integer,
+            body As String,
+            instanceId As String) As String
+        If VenueStatusLog.ShouldRecord(code, body) Then
+            VenueStatusLog.LogTransition(
+                "VENUE_" & code.ToString(CultureInfo.InvariantCulture),
+                instanceId)
+        End If
+        Return body
+    End Function
+
     ' ── Retry helper ─────────────────────────────────────────────────────────────────────────
     ' Executes an async HTTP fetch with bounded retry on transient failures.
     ' Returns the parsed result or Nothing if all retries exhausted.
@@ -95,7 +142,7 @@ Public Class DeribitClient
                                     "&start_timestamp=" & startTs &
                                     "&end_timestamp=" & endTs
 
-                Dim json As String = Await _http.GetStringAsync(url)
+                Dim json As String = Await GetStringOrRecordAsync(url)
                 Dim doc As JsonDocument = JsonDocument.Parse(json)
                 Dim result As JsonElement = doc.RootElement.GetProperty("result")
 
@@ -149,7 +196,7 @@ Public Class DeribitClient
                                     "&start_timestamp=" & startTimestampMs &
                                     "&end_timestamp=" & endTimestampMs
 
-                Dim json As String = Await _http.GetStringAsync(url)
+                Dim json As String = Await GetStringOrRecordAsync(url)
                 Dim doc As JsonDocument = JsonDocument.Parse(json)
                 Dim result As JsonElement = doc.RootElement.GetProperty("result")
 
@@ -194,7 +241,7 @@ Public Class DeribitClient
         Return Await ExecuteWithRetry(Of Double?)(
             Async Function() As Task(Of Double?)
                 Dim tickerUrl As String = BaseUrl & "/public/ticker?instrument_name=BTC-PERPETUAL"
-                Dim json As String = Await _http.GetStringAsync(tickerUrl)
+                Dim json As String = Await GetStringOrRecordAsync(tickerUrl)
                 Dim doc As JsonDocument = JsonDocument.Parse(json)
                 Dim result As JsonElement = doc.RootElement.GetProperty("result")
                 Dim fundingEl As JsonElement = Nothing
@@ -213,7 +260,7 @@ Public Class DeribitClient
             Async Function() As Task(Of (OI As Double, MarkPrice As Double)?)
                 Dim url As String = BaseUrl & "/public/get_book_summary_by_instrument" &
                                     "?instrument_name=BTC-PERPETUAL"
-                Dim json As String = Await _http.GetStringAsync(url)
+                Dim json As String = Await GetStringOrRecordAsync(url)
                 Dim doc As JsonDocument = JsonDocument.Parse(json)
                 Dim result As JsonElement = doc.RootElement.GetProperty("result")
                 Dim item As JsonElement = result(0)
@@ -230,7 +277,7 @@ Public Class DeribitClient
             Async Function() As Task(Of OrderBookSnapshot)
                 Dim url As String = BaseUrl & "/public/get_order_book" &
                                     "?instrument_name=BTC-PERPETUAL&depth=" & depth
-                Dim json As String = Await _http.GetStringAsync(url)
+                Dim json As String = Await GetStringOrRecordAsync(url)
                 Dim doc As JsonDocument = JsonDocument.Parse(json)
                 Dim result As JsonElement = doc.RootElement.GetProperty("result")
 
@@ -264,7 +311,7 @@ Public Class DeribitClient
             Async Function() As Task(Of List(Of TradeRecord))
                 Dim url As String = BaseUrl & "/public/get_last_trades_by_instrument" &
                                     "?instrument_name=BTC-PERPETUAL&count=" & count & "&sorting=desc"
-                Dim json As String = Await _http.GetStringAsync(url)
+                Dim json As String = Await GetStringOrRecordAsync(url)
                 Dim doc As JsonDocument = JsonDocument.Parse(json)
                 Dim trades As JsonElement = doc.RootElement.GetProperty("result").GetProperty("trades")
 

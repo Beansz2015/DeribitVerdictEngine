@@ -114,7 +114,7 @@ $OptionalPdb = 'DeribitVerdictEngine.pdb'
 # KNOWN RESIDUAL, named rather than silent: timestamped .bak files from a SECOND rotation
 # are still not fetched. Fetching every historical .bak grows without bound, so that wants
 # its own ruling if a second rotation ever happens. See trader-tick-queue.md §2 OPS-1.
-$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'capture_marker.log', 'analysis_eval_cache.csv')
+$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'analysis_eval_cache.csv')
 $FetchDirs  = @('backtest_data', 'settings_snapshots')
 
 # [FIX 8a, live-execution finding] `aws` does not reliably resolve by name inside an SSM
