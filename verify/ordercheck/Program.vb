@@ -684,6 +684,15 @@ Module Program
         A76b_RepeatOutageWithSameCodeWritesThreeLines()
         A76c_V1HoldsAfterRecoveryMarkerAddedTimeoutWritesNothing()
 
+        ' [C-3b Part B — OutOfScopeVenue consumer (docs/c3b-venue-scoping-spec.md §2):
+        '   A77b is the one with teeth: VENUE_RPC_10009 (our-fault) must NOT scope an hour out.
+        '   A77e confirms the new class is visible in BuildConsoleSummary counts.]
+        A77a_HourInsideVenue503WindowIsOutOfScopeVenue()
+        A77b_HourInsideVenueRpc10009WindowStaysDefect()
+        A77c_VenueRpcUnknownWindowStaysDefect()
+        A77d_UnterminatedWindowClosesAtRangeEndNotBeyond()
+        A77e_NewClassAppearsInConsoleSummaryCounts()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -13957,6 +13966,186 @@ Module Program
             End Try
             VenueStatusLog.ResetForTest()
         End Try
+    End Sub
+
+    ' -- A77a: hour inside a VENUE_503 → VENUE_OK window is OutOfScopeVenue ----------------
+    ' ⛔ MUTATION THAT MUST FAIL A77a: remove `result.Classification = HourClass.OutOfScopeVenue :
+    '    Return result` from the venue-window loop in ClassifyHour. Without that arm the hour
+    '    falls through to ClassifySpan → UnknownScope (no markers) → A77a FAIL.
+    ' Code literal 503 is MECHANISM — a venue-side HTTP status, not a settings threshold.
+    Private Sub A77a_HourInsideVenue503WindowIsOutOfScopeVenue()
+        ' Two-line log: error opens at 09:30, VENUE_OK closes at 11:30.
+        ' Hour 2025-01-08T10:00Z falls inside the window [09:30, 11:30) → must scope out.
+        Dim logLines() As String = {
+            "2025-01-08T09:30:00.000Z | VENUE_503 | iid-A77a",
+            "2025-01-08T11:30:00.000Z | VENUE_OK | iid-A77a"}
+        Dim rangeEndMs As Long = New DateTimeOffset(
+            New DateTime(2025, 1, 8, 23, 59, 59), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim windows = CoverageReport.ParseVenueWindows(logLines, rangeEndMs)
+
+        ' ClassifyHour for a Wednesday (no weekend skip) with no declared windows.
+        ' Venue check fires before ClassifySpan, so markers/upIntervals are not needed here.
+        Dim hr = CoverageReport.ClassifyHour(
+            New DateTime(2025, 1, 8, 10, 0, 0),
+            Nothing,             ' markers
+            Nothing,             ' upIntervals
+            False,               ' s1Skipped
+            New HourStoreStats(), ' hourStats
+            300000L,             ' gapMs
+            venueWindows:=windows)
+
+        Check("A77a hour inside VENUE_503 window → OutOfScopeVenue",
+              hr.Classification = HourClass.OutOfScopeVenue,
+              String.Format("cls={0}", hr.Classification))
+    End Sub
+
+    ' -- A77b: VENUE_RPC_10009 (our-fault) window leaves hour as Defect with code in Reason
+    ' ⛔⛔ THE B-1 TRAP — THIS FIXTURE HAS TEETH. MUTATION THAT MUST FAIL A77b: remove the
+    '    `If vw.IsVenueSide Then` guard and treat all VENUE_* codes as venue-side →
+    '    Classification = OutOfScopeVenue → A77b FAIL (cls <> Defect, no reason annotation).
+    ' Code literal 10009 is MECHANISM — an RPC code Deribit returns for our-side errors,
+    '    deliberately NOT in VenueSideCodes. It has never appeared in settings.json.
+    Private Sub A77b_HourInsideVenueRpc10009WindowStaysDefect()
+        ' VENUE_RPC_10009 is NOT in CoverageReport.VenueSideCodes → IsVenueSide=False.
+        ' Hour falls inside the (unterminated) window → should stay Defect, not OutOfScopeVenue.
+        Dim logLines() As String = {
+            "2025-01-08T09:30:00.000Z | VENUE_RPC_10009 | iid-A77b"}
+        Dim rangeEndMs As Long = New DateTimeOffset(
+            New DateTime(2025, 1, 8, 12, 0, 0), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim windows = CoverageReport.ParseVenueWindows(logLines, rangeEndMs)
+
+        ' Need a valid marker + upInterval so ClassifySpan returns Defect (not UnknownScope).
+        ' No store rows → storeClean=False → empty → Defect.
+        Dim refDayMs As Long = New DateTimeOffset(
+            New DateTime(2025, 1, 8, 0, 0, 0), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {
+                .UtcMs = refDayMs, .Enabled = True, .InstanceId = "iid-A77b"}}
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {
+                .InstanceId = "iid-A77b",
+                .FirstUtcMs = refDayMs,
+                .LastUtcMs = rangeEndMs,
+                .CaptureCapableFromMs = Long.MaxValue}}   ' Long.MaxValue suppresses StartupWindow
+
+        Dim hr = CoverageReport.ClassifyHour(
+            New DateTime(2025, 1, 8, 10, 0, 0),
+            markers, upIntervals,
+            False,               ' s1Skipped
+            New HourStoreStats(), ' hourStats — no rows → Defect
+            300000L,             ' gapMs
+            venueWindows:=windows)
+
+        Dim notScopedOut As Boolean = hr.Classification <> HourClass.OutOfScopeVenue
+        Dim isDefect     As Boolean = hr.Classification = HourClass.Defect
+        Dim codeInReason As Boolean = If(hr.Reason, "").Contains("VENUE_RPC_10009")
+
+        Check("A77b VENUE_RPC_10009 window: stays Defect with code in Reason (B-1 trap)",
+              notScopedOut AndAlso isDefect AndAlso codeInReason,
+              String.Format("cls={0} reason=""{1}""", hr.Classification, hr.Reason))
+    End Sub
+
+    ' -- A77c: VENUE_RPC_UNKNOWN window stays Defect (B-2 fail-safe toward Defect) ------
+    ' ⛔ MUTATION THAT MUST FAIL A77c: add "VENUE_RPC_UNKNOWN" to CoverageReport.VenueSideCodes →
+    '    IsVenueSide=True → Classification = OutOfScopeVenue → A77c FAIL.
+    Private Sub A77c_VenueRpcUnknownWindowStaysDefect()
+        ' VENUE_RPC_UNKNOWN is not in VenueSideCodes → unrecognised code fails safe (B-2).
+        Dim logLines() As String = {
+            "2025-01-08T09:30:00.000Z | VENUE_RPC_UNKNOWN | iid-A77c"}
+        Dim rangeEndMs As Long = New DateTimeOffset(
+            New DateTime(2025, 1, 8, 12, 0, 0), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim windows = CoverageReport.ParseVenueWindows(logLines, rangeEndMs)
+
+        Dim refDayMs As Long = New DateTimeOffset(
+            New DateTime(2025, 1, 8, 0, 0, 0), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim markers As New List(Of CaptureMarkerLog.MarkerRecord) From {
+            New CaptureMarkerLog.MarkerRecord With {
+                .UtcMs = refDayMs, .Enabled = True, .InstanceId = "iid-A77c"}}
+        Dim upIntervals As New List(Of UpInterval) From {
+            New UpInterval With {
+                .InstanceId = "iid-A77c",
+                .FirstUtcMs = refDayMs,
+                .LastUtcMs = rangeEndMs,
+                .CaptureCapableFromMs = Long.MaxValue}}
+
+        Dim hr = CoverageReport.ClassifyHour(
+            New DateTime(2025, 1, 8, 10, 0, 0),
+            markers, upIntervals,
+            False, New HourStoreStats(), 300000L,
+            venueWindows:=windows)
+
+        Dim notScopedOut As Boolean = hr.Classification <> HourClass.OutOfScopeVenue
+        Dim codeInReason As Boolean = If(hr.Reason, "").Contains("VENUE_RPC_UNKNOWN")
+
+        Check("A77c VENUE_RPC_UNKNOWN window: not scoped out, code in Reason (B-2 fail-safe)",
+              notScopedOut AndAlso codeInReason,
+              String.Format("cls={0} reason=""{1}""", hr.Classification, hr.Reason))
+    End Sub
+
+    ' -- A77d: unterminated window closes at rangeEndMs; hours AT or beyond are not scoped out
+    ' ⛔ MUTATION THAT MUST FAIL A77d: when no VENUE_OK is found, use Long.MaxValue as EndMs
+    '    instead of rangeEndMs → hour at 11:00 also falls inside [09:30, ∞) → outsideOk=False
+    '    → A77d FAIL.
+    ' Code literal 503 is MECHANISM — a venue-side HTTP status, not a settings threshold.
+    Private Sub A77d_UnterminatedWindowClosesAtRangeEndNotBeyond()
+        ' Single VENUE_503 line, no following VENUE_OK → unterminated.
+        ' rangeEndMs = 11:00 UTC → ParseVenueWindows closes the window at 11:00.
+        ' Window is [09:30, 11:00) — strict less-than.
+        Dim logLines() As String = {
+            "2025-01-08T09:30:00.000Z | VENUE_503 | iid-A77d"}
+        Dim rangeEndMs As Long = New DateTimeOffset(
+            New DateTime(2025, 1, 8, 11, 0, 0), TimeSpan.Zero).ToUnixTimeMilliseconds()
+        Dim windows = CoverageReport.ParseVenueWindows(logLines, rangeEndMs)
+
+        ' Hour at 10:00 is INSIDE [09:30, 11:00) → OutOfScopeVenue.
+        Dim hr1 = CoverageReport.ClassifyHour(
+            New DateTime(2025, 1, 8, 10, 0, 0),
+            Nothing, Nothing, False, New HourStoreStats(), 300000L,
+            venueWindows:=windows)
+        Dim insideOk As Boolean = hr1.Classification = HourClass.OutOfScopeVenue
+
+        ' Hour at 11:00: hourStartMs = rangeEndMs → check is hourStartMs < vw.EndMs →
+        ' rangeEndMs < rangeEndMs → False → falls through → NOT OutOfScopeVenue.
+        Dim hr2 = CoverageReport.ClassifyHour(
+            New DateTime(2025, 1, 8, 11, 0, 0),
+            Nothing, Nothing, False, New HourStoreStats(), 300000L,
+            venueWindows:=windows)
+        Dim outsideOk As Boolean = hr2.Classification <> HourClass.OutOfScopeVenue
+
+        Check("A77d unterminated window closes at rangeEndMs (10:00 in, 11:00 out)",
+              insideOk AndAlso outsideOk,
+              String.Format("inside cls={0} outside cls={1}", hr1.Classification, hr2.Classification))
+    End Sub
+
+    ' -- A77e: OutOfScopeVenue counter is visible in BuildConsoleSummary output ----------
+    ' ⛔ MUTATION THAT MUST FAIL A77e: remove the out-of-scope-venue AppendLine from
+    '    BuildConsoleSummary → summary does not contain "out-of-scope-venue" → A77e FAIL.
+    Private Sub A77e_NewClassAppearsInConsoleSummaryCounts()
+        ' Build a minimal CoverageResult with two OutOfScopeVenue hours and one Defect.
+        Dim r As New CoverageResult With {
+            .FromUtc = New DateTime(2025, 1, 8, 0, 0, 0),
+            .ToUtc   = New DateTime(2025, 1, 9, 0, 0, 0),
+            .GapMs   = 300000L}
+        r.Hours.Add(New HourResult With {
+            .HourUtc = New DateTime(2025, 1, 8, 9, 0, 0),
+            .Classification = HourClass.OutOfScopeVenue})
+        r.Hours.Add(New HourResult With {
+            .HourUtc = New DateTime(2025, 1, 8, 10, 0, 0),
+            .Classification = HourClass.OutOfScopeVenue})
+        r.Hours.Add(New HourResult With {
+            .HourUtc = New DateTime(2025, 1, 8, 11, 0, 0),
+            .Classification = HourClass.Defect})
+
+        Dim summary = CoverageReport.BuildConsoleSummary(r)
+        ' Format: "  out-of-scope-venue     {count}" (5 spaces before count)
+        Dim hasLabel As Boolean = summary.Contains("out-of-scope-venue")
+        Dim countTwo  As Boolean = summary.Contains("out-of-scope-venue     2")
+
+        Check("A77e out-of-scope-venue counter visible in BuildConsoleSummary",
+              hasLabel AndAlso countTwo,
+              String.Format("hasLabel={0} countTwo={1} summary={2}",
+                            hasLabel, countTwo,
+                            summary.Replace(vbCr, "").Replace(vbLf, "|")))
     End Sub
 
 End Module
