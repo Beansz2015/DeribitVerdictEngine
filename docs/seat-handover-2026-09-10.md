@@ -4,7 +4,11 @@
 >
 > ⭐ **What still BINDS in this document, and is not repeated in the successor:** **§11.1a–§11.1d** (the segmented memory read, the three-band model, and the **attached-probe confound** that is still unresolved) and **§8.1**'s lesson table. **Open it for those.**
 >
-> ⛔ **What is STALE here:** everything in §2 FIRST TASKS, §3, §6 and §7 — **38 commits landed after it**, including the whole coverage/venue arc and the auto-proceed ruling that changed how decisions are made.
+> ⛔ **What is STALE here — corrected 2026-09-11, my first pass over-flagged it:** **§2 FIRST TASKS** and **§7 What is OPEN**. **38 commits landed after this document**, including the whole coverage/venue arc.
+>
+> ⛔⛔ **§7 IS THE ONE THAT CAN MISLEAD A GREP: its §7.1 opens with *"TWO VERIFIED DEFECTS"* and BOTH have shipped.** A marker sits at §7 itself, because a banner at the top protects a top-down reader and **does NOT protect someone who lands mid-document from a search — which is how every stale-row incident in this project has actually happened.**
+>
+> ✅ **NOT stale, and I wrongly listed them as such in the first pass: §3** (*"What shipped — 8 commits"*) **is a TRUE historical record of that session and does not rot**, and **§6** (*"every recent spec is BUILT"*) **is still true, merely incomplete.** ⚠ **Flagging an accurate record as stale teaches a reader to distrust it — that is its own defect.**
 
 **Read after** `CLAUDE.md`'s session-start protocol and [`trader-tick-queue.md`](trader-tick-queue.md) §0a. **This is the STATE read.**
 
@@ -149,6 +153,13 @@
 ---
 
 ## 7. ⚠ What is OPEN
+
+> ⛔⛔ **STALE AS OF 2026-09-11 (UTC) — DO NOT TAKE WORK FROM THIS SECTION.** **Current open items: [`seat-handover-2026-09-11.md`](seat-handover-2026-09-11.md) §6.**
+>
+> **Both "verified defects" in §7.1 below have SHIPPED:** `AW-1` (the atomic-writes 5-vs-6 undercount) at **`5b0f8cc`** — and there were indeed SIX sites · `RM-1` ([`roadmap.md`](roadmap.md)'s ready-list, four of five already built) at **`aa979a8`** and **`8e47715`**.
+>
+> ⭐ **The FINDINGS below are still worth reading — the undercount and the stale ready-list are both instructive. It is only their STATUS that has moved.**
+
 
 ### 7.1 ⛔ TWO VERIFIED DEFECTS, both found by tree-checking a carried claim
 
