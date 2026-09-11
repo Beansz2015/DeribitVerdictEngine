@@ -125,7 +125,55 @@ The engine polls the Deribit REST API, computes technical indicators, scores the
 - Explicitly banned patterns: double-counting (funding must not appear in Step 2 scoring), non-directional padding (e.g. BBW NONE = +1 was removed in v0.18), fixed % targets, flat penalties instead of ADX-proximity scale
 - Conservative false-positive tolerance (Section 6) — the engine should say NO TRADE rather than output a weak directional signal
 
-**Spec-first workflow.** Novel features require a proposal `.md` file committed to `/docs` before coding begins. Implement only approved specs — do not invent design decisions unilaterally.
+**Spec-first workflow.** Novel features require a proposal `.md` file committed to `/docs` before coding begins. Implement only approved specs — do not invent design decisions unilaterally. ⚠ **Scoped by the auto-proceed ruling immediately below: "do not invent design decisions unilaterally" now means the RESERVED classes. Everything else you decide and record.**
+
+---
+
+## ⭐⭐ AUTO-PROCEED ON YOUR OWN RECOMMENDATION (RULED 2026-09-11, trader-directed)
+
+**Default: when a decision has an option you can recommend, TAKE IT. Do not stop and ask.** This covers D-tables and one-off decisions alike. **Record it, then keep working.**
+
+⛔ **THE GATE IS REVERSIBILITY AND BLAST RADIUS — NOT "can I recommend".** The trader proposed gating on whether a recommendation exists; that gate was rejected **by me, against my own interest**, for a measured reason: **you can almost always produce a recommendation, so that test is nearly always true and filters nothing.** Worse, it is self-assessed — and self-assessment is the faculty that fails. **Reversibility is observable. Use it.**
+
+### Auto-proceed — decide it, record it, move on
+
+- Documentation, spec authoring, analysis, measurement.
+- Refactors where parity is **proved**, not asserted. Fixtures and harness work.
+- **Anything undone by ONE revert with no live-surface and no data effect.**
+
+### ⛔ RESERVED — these still come to the trader, every time
+
+| Class | Why it is reserved |
+|---|---|
+| **`settings.json` changes** | It hot-reloads onto a live collector. The version edge lands mid-`InstanceId` and becomes unfilterable |
+| ⛔⛔ **ANYTHING THAT AFFECTS SCORING** | **A code revert does NOT undo it.** The `analysis_log.csv` rows already written under the old scoring persist and must be split on the version edge forever — see v66's OBV `trend_gate` row, *"live scoring change and a dataset boundary"*. **It fails the reversibility gate on the gate's own logic** |
+| **Anything that moves a rendered value** | The display-string parity rule already treats these as special |
+| **Writes to the live collector or trade store** | Tape is permanent. Not revertible |
+| **Any schema or CSV-header change** | The five parked riders exist because these cannot be forced |
+| ⭐⭐ **Any decision where YOUR recommendation is the CHEAPER or LESS-INFORMATION option** | **The measured bias — see below. This is the precise class you get wrong** |
+
+⚠ **SCORING AND RENDERED-VALUE ARE TWO DISTINCT SETS. Neither contains the other — do not collapse them.** `VerdictContext` and Kelly sizing are **rendered with ZERO scoring impact** (§"Key design invariants" says so). And a scoring threshold moved where no current row crosses it **renders identically, passes the display-parity gate, and is still a live scoring change.** ⛔ **A scoring change that is invisible today is exactly the one that must not auto-proceed.**
+
+### ⭐⭐ The measured bias — why the last reserved row exists
+
+**Verified against `docs/` 2026-09-10 (UTC): 39 D-tables ticked *"as recommended"* against 8 recorded as DEFEATED or overruled.** Five in six were adopted unchanged — **which is why this ruling is right in general.** ⛔ **But the eight are not random.** Four read in full:
+
+| Decision | The recommendation | The ruling |
+|---|---|---|
+| `A54a` scope | **(b)** delete the method defaults — less code | **(d)** build a reflection guard |
+| Seeded session buckets | empty the seed — simpler | **keep it and guard it** |
+| `S-4` identity key | **defer** it | **do it now** |
+| `WD-SEMANTICS` | **(b)** let the row drop silently | **(c)** add the separate counter |
+
+⛔ **Every one: the recommendation optimised for ECONOMY — less code, less work, don't buy a field, defer. The ruling optimised for NOT LOSING INFORMATION and NOT DEFERRING A SCHEMA COST.** ⭐ **When you notice your pick is the cheaper or the less-informative one, that is the signal to stop and ask — not to proceed confidently.** Two standing memories say why: *"defer a schema fix and it accretes"*, and `WD-SEMANTICS`'s ruling that **a counter reading 0 is the tripwire, not waste.**
+
+### The obligation that comes with it
+
+⭐ **Log every auto-proceeded decision in ONE line** — the decision, the options, what you picked, why. Put it in the spec's own D-table or the batch summary. **Without this the trader loses sight of exactly the calls they currently catch, and the bias above becomes invisible instead of merely uncorrected.**
+
+⚠ **Not verified when this was written:** whether the other four of the eight share the economy-bias shape. Four were read in full; four were not.
+
+---
 
 **Every spec or implementer brief handed to a new implementer MUST carry a model + effort recommendation (RULED 2026-08-03, trader-directed).** The seat that wrote the spec has just done the hardest read of it and is the only one positioned to judge what building it needs; making the trader ask is making the wrong person estimate. Put it at the **top** of the brief, not the end. A bare "Sonnet, high" is not enough — it must carry:
 
