@@ -1,4 +1,10 @@
-# Seat handover — 2026-09-10 (UTC)
+﻿# Seat handover — 2026-09-10 (UTC)
+
+> ## ⛔ SUPERSEDED FOR STATE 2026-09-11 (UTC) — read [`seat-handover-2026-09-11.md`](seat-handover-2026-09-11.md) FIRST.
+>
+> ⭐ **What still BINDS in this document, and is not repeated in the successor:** **§11.1a–§11.1d** (the segmented memory read, the three-band model, and the **attached-probe confound** that is still unresolved) and **§8.1**'s lesson table. **Open it for those.**
+>
+> ⛔ **What is STALE here:** everything in §2 FIRST TASKS, §3, §6 and §7 — **38 commits landed after it**, including the whole coverage/venue arc and the auto-proceed ruling that changed how decisions are made.
 
 **Read after** `CLAUDE.md`'s session-start protocol and [`trader-tick-queue.md`](trader-tick-queue.md) §0a. **This is the STATE read.**
 
