@@ -183,7 +183,14 @@
 >
 > ⛔⛔ **`D-6d.3` CHANGES THE ABSORPTION BUILD ORDER AND IS THE ONE TO READ FIRST — AND ITS RECOMMENDATION WAS WITHDRAWN AND REPLACED THE SAME DAY, ON A MEASUREMENT.** **The first read said `D-2` was a no-op on the median episode. Measured weekday-scoped off `analysis_log_aws.csv` (840 absorption-active reads, 2026-09-01 → 09-09 UTC): `D-2` binds on 26.0 % of reads carrying 48.6 % of ALL logged `AbsorptionAggrUsd`, median span multiplier 2.25×. THE MEDIAN WAS THE CHEAPER STATISTIC AND THE LESS INFORMATIVE ONE.**
 >
-> ✅✅ **RULED (c) BY THE TRADER, 2026-09-11 (UTC) — `D-2` AND `D-6d` STAGE 1 SHIP TOGETHER AT THE ~2026-09-15 GATE; Stage 2 follows the read. `D-6d.2` is subsumed by it.** ⛔ **`D-6d.1` (sidecar vs CSV columns) IS STILL OWED and it gates the build spec.** **Stage 1 is behaviour-neutral, so it rides for ZERO extra dataset boundary and makes `D-2`'s post-ship read instrumented rather than confounded.** ⛔ **And the withdrawn (b) was BACKWARDS, not merely weak: the spec's §2.2b shows Stage 2 shipped WITHOUT `D-2` makes `absorbRatio` FALL, because the denominator grows with episode length while the numerator saturates at the 10 s cap.**
+> ✅✅✅ **`D-6d` IS FULLY RULED AS OF 2026-09-11 (UTC) AND IS NO LONGER A DECISION. NOTHING IS OWED ON IT.**
+>
+> - **`D-6d.3` = (c)** — `D-2` and `D-6d` Stage 1 ship **together** at the ~2026-09-15 gate; Stage 2 follows the read. **`D-6d.2` is subsumed by it.**
+> - **`D-6d.1` = (c)** — sidecar **and** one CSV column (`AbsorptionShadowAggrUsd`).
+>
+> ⛔⛔ **`D-6d.1` (c) FORCES AN `analysis_log.csv` HEADER ROTATION, DELIBERATELY — SO THE FIVE RIDERS IN §3 OF THIS FILE TRAVEL WITH IT AND MUST BE TAKEN OFF THE PARKED LIST WHEN IT SHIPS.** ⚠ **Rider 1 (the stale `.bak` name at [`AnalysisLogger.vb`](../AnalysisLogger.vb)`:159`) MUST land in the SAME commit as the header change — once the rotation runs, the mislabelled file exists.**
+>
+> ⭐ **BUILD SPEC: [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md). Opus, effort HIGH, TWO sessions, ONE deploy at the end.** ⚠ **Still date-gated — do not build before ~2026-09-15.** **Stage 1 is behaviour-neutral, so it rides for ZERO extra dataset boundary and makes `D-2`'s post-ship read instrumented rather than confounded.** ⛔ **And the withdrawn (b) was BACKWARDS, not merely weak: the spec's §2.2b shows Stage 2 shipped WITHOUT `D-2` makes `absorbRatio` FALL, because the denominator grows with episode length while the numerator saturates at the 10 s cap.**
 >
 > ⭐⭐ **WHY IT WAS INVISIBLE, AND IT IS THE §1b CLASS WEARING A NEW FACE: every OTHER part of that D-table really was ruled, so every summary of it reads CLOSED.** **`D-1`–`D-5` TICKED 2026-09-01 · `D-6a` RULED · `D-6b` RULED · `D-6c` OPEN BUT GATED ON DATA, NOT ON A TICK** (*"no stored data can answer it, and none can be made to"* — a tick cannot unblock it). ⛔ **`D-6d` was raised in the same 2026-09-01 pass and given no row, so it inherited the table's closed appearance. A decision with no row is invisible to every instrument that counts rows.**
 >
