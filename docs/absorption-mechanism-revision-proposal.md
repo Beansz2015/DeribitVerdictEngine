@@ -180,7 +180,19 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 > n = 289    min = 0 s    median = 1.7 s    max = 135.2 s
 > ```
 >
-> ⛔ **§4.1's premise is that 10 seconds is TOO SHORT. If the median episode is observed at 1.7 s old, episode-cumulative accumulation gives a SHORTER span than the 10-second rolling window, not a longer one — so §4.1 as designed would SHRINK the numerator, not extend it.**
+> ⛔⛔ **THE LINE BELOW IS WRONG AND IT WOULD HAVE KILLED `D-2` AT THE 2026-09-15 READ. REFUTED 2026-09-11 (UTC) FROM THE CODE, AND SEPARATELY CONFIRMED BY MEASUREMENT.**
+>
+> ~~⛔ **§4.1's premise is that 10 seconds is TOO SHORT. If the median episode is observed at 1.7 s old, episode-cumulative accumulation gives a SHORTER span than the 10-second rolling window, not a longer one — so §4.1 as designed would SHRINK the numerator, not extend it.**~~
+>
+> ⛔ **THE ERROR: it assumes the 10-second rolling window is FULL. It cannot be.** [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb)`:117` (`CloseEpisode`) and `:315` (episode open) BOTH run `Press.Clear() : PressSum = 0.0`. **So the press queue only ever holds prints added since the CURRENT episode opened. `PressSum` is already the sum over `[max(episodeOpen, now − 10 s), now]`.**
+>
+> ⭐⭐ **EPISODE-CUMULATIVE IS THE SUM OVER `[episodeOpen, now]` — A SUPERSET. IT IS NEVER SMALLER, AT ANY EPISODE AGE.** **Below 10 s the two are IDENTICAL; above 10 s cumulative is strictly larger. `D-2` cannot shrink the numerator. It has no downside branch.**
+>
+> ✅ **MEASURED, weekday-scoped off `analysis_log_aws.csv` (840 absorption-active reads, 2026-09-01 15:50 → 09-09 14:39 UTC, ~6 weekday-days) — and it answers the *"unquantified, deliberately"* line above, which was true when written and stopped being true when `AbsorptionEpisodeSec` shipped:** p50 **2.15 s**, p75 **10.38 s**, mean **9.50 s**. **26.0 % of reads sit on an episode older than the window, and those reads carry 48.6 % of ALL logged `AbsorptionAggrUsd`** (442,070 of 909,850 USD). **Span multiplier there: p50 2.25×, p75 3.80×, mean 3.01×.**
+>
+> ⚠ **The length-bias warning below still stands and does not rescue the struck line** — both biases move the *median episode lifetime*, and **`D-2`'s deciding variable is age AT THE READ**, which is what this column records directly. **No lifetime correction applies.**
+>
+> ⭐ **So the 09-15 read's first question is answered ahead of time: §4.1's premise SURVIVES.** Full working: [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §2.2–§2.2b.
 >
 > ⚠ **And the true episodes are shorter still than 1.7 s.** The reading is length-biased twice over: a poll is more likely to land inside a long episode than a short one, **and an episode that opens and closes between two polls is never seen at all.** Both biases push the observed median above the truth.
 >
