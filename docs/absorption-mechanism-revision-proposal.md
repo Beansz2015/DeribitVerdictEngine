@@ -298,11 +298,15 @@ Of the 14 episodes clearing both anchors, **9 are vetoed** by `pullFrac > 0.75`.
 > | **D-6a** | Is the 0.30 / 0.10 pair intended? | ✅ **RULED — YES, INTENDED.** Arm-early / measure-tight. **The mechanism is written up at §4.3a**, which is this ruling's deliverable. No code, no settings |
 > | **D-6b** | Is it "the largest single leak in the funnel"? | ✅ **RULED — CLAIM WITHDRAWN.** The annulus presses at 2.6–2.8 % on both books, so collapsing the shells recovers almost nothing. **The D-6 row's cell is struck through and re-grounded in place** |
 > | **D-6c** | Is 3× the right ratio? | ⛔ **OPEN until §5 ships.** It needs `SizeStart` / `SizeMin` logged; **no stored data can answer it, and none can be made to** |
-> | **D-6d** | The §4.3 box (b) counting gap — 31 % of admitted flow | ⚠ **RAISED, NOT RULED.** The spec-back offers **no read** on the fix. **It has no row of its own and it is larger than both the geometry and `window_sec`** |
+> | **D-6d** | The §4.3 box (b) counting gap — 31 % of admitted flow | ⭐ **IT HAS A SPEC NOW — [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md), written 2026-09-11 (UTC), and its §7 carries the four decisions this row was missing.** ⛔ **STILL NOT RULED — the spec is written, not ticked.** *(Superseded status follows, per the quote-and-label convention.)* ~~⚠ **RAISED, NOT RULED.** The spec-back offers **no read** on the fix. **It has no row of its own and it is larger than both the geometry and `window_sec`**~~ |
 >
 > ⚠ **D-6c is the only part the "leave it open until §5" condition ever covered.** The trader's condition was *"if D-6 cannot be determined yet until §5 is done"* — true for D-6c alone, which is why the other two were ruled on their merits instead of inheriting the wait.
 >
-> ⛔ **D-6d is the live one now.** It is unruled, it has no row, and by §4.3 box (b)'s own numbers it is the largest of the three causes. **Whoever picks it up: Opus, effort high, and it is a different session from the §5 build.**
+> ⛔ **D-6d is the live one now.** It is unruled, and by §4.3 box (b)'s own numbers it is the largest of the three causes. **Whoever picks it up: Opus, effort high, and it is a different session from the §5 build.**
+>
+> ⭐⭐ **SPECCED 2026-09-11 (UTC) — [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md). Read its §2 before this §4.1, because it changes what D-2 is worth.** **The mechanism is now named from the code: `CloseEpisode()` at [`../Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb)`:117` clears the press queue, and `FoldTradeSide` at `:170` DROPS any print arriving while the side is idle — so the effective press window is `min(window_sec, episode age)`, not `window_sec`.** ⭐ **Against a measured median `AbsorptionEpisodeSec` of 1.7 s and a shipped `window_sec` of 10 s, that predicts ~17 % against the measured 31 % — same order, which is why the spec calls it arithmetic consistency and instruments it rather than building on it.**
+>
+> ⛔⛔ **THE CONSEQUENCE FOR THIS PROPOSAL'S OWN §4.1: ON THE MEDIAN EPISODE, D-2 IS ARITHMETICALLY A NO-OP.** **`PressSum` is ALREADY the sum over `min(10 s, episode age)`, so episode-cumulative and 10-second-rolling return the same number on every episode younger than the window — which is most of them.** ⭐ **D-6d is therefore not merely larger than D-2; it is D-2's PRECONDITION. The spec's `D-6d.3` asks for D-2 to be re-sequenced behind it.**
 >
 > *Superseded status text follows, per the quote-and-label convention:*
 >
