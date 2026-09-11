@@ -69,6 +69,11 @@
          (LogWsHealthTransitionForRun in MainForm_SignalBridge) stays OUT — same
          live-socket/WinForms boundary as A22/A37. -->
     <Compile Include="..\..\Core\WsHealthLog.vb" />
+    <!-- venue_status.log (A74): the REST-side venue-declaration sidecar. Records when
+         Deribit itself returns a response saying it is unavailable (5xx or HTTP-200
+         JSON-RPC error). Never logs on timeout/network failure (V-1 guard).
+         See docs/venue-status-instrument-spec.md. -->
+    <Compile Include="..\..\Core\VenueStatusLog.vb" />
     <!-- [v64] Trade-store writer/parser seam — A48a-h. Network-free BY DESIGN: this is the
          half of the §2 split that exists so the fixture project never links an HttpClient
          (HistoricalStore owns one and is deliberately NOT here). -->

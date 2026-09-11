@@ -24,6 +24,10 @@
     <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
     <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
     <Compile Include="..\..\Core\ExecutionResolution.vb" />
+    <!-- ProcessIdentity and VenueStatusLog are needed because DeribitClient now calls
+         ProcessIdentity.InstanceId and VenueStatusLog in GetStringOrRecordAsync. -->
+    <Compile Include="..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\Core\VenueStatusLog.vb" />
     <Compile Include="..\..\DeribitClient.vb" />
     <Compile Include="..\..\analysis\AnalysisConstants.vb" />
     <Compile Include="..\..\analysis\AnalysisReport.vb" />

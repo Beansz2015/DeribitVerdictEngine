@@ -661,6 +661,17 @@ Module Program
         A73g_HourAtWindowEndIsNotDeclared()
         A73h_WeekendTakesPrecedenceOverDeclared()
 
+        ' [C-3b prerequisite — venue-status instrument (A74 — docs/venue-status-instrument-spec.md):
+        '   VenueStatusLog sidecar: transition-only, never-throws, V-1 guard (no log on timeout /
+        '   network failure / 4xx), shape-B HTTP-200 JSON-RPC error both logs AND returns body
+        '   unchanged (the drop-in property that distinguishes option (d) from option (b)).
+        '   A74b (V-1 guard) and A74e (shape B + drop-in) are the two with teeth.]
+        A74a_VenueNon2xxWritesOneShapedLine()
+        A74b_TimeoutNetworkAnd4xxWriteNothing()
+        A74c_TransitionOnlyNConsecutiveWriteOneLine()
+        A74d_LogPathNeverThrows()
+        A74e_ShapeBLogsAndReturnsBodyUnchanged()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -13415,6 +13426,227 @@ Module Program
         Check("A73i fully-sequenced non-contiguous span with gap below time tolerance ⇒ Defect, not Captured",
               h.Classification = HourClass.Defect,
               String.Format("class={0} reason={1}", h.Classification, h.Reason))
+    End Sub
+
+    ' ══ A74 — venue-status instrument (docs/venue-status-instrument-spec.md) ══════════════
+
+    ' -- A74a: a venue 503 writes exactly one correctly-shaped line ---------------
+    ' ⛔ THE MUTATION THAT MUST FAIL A74a: remove the GetStringOrRecordAsync hook so
+    '    VenueStatusLog.LogTransition is never called. Without the hook the log file is
+    '    absent; the fixture reads zero lines and fails.
+    '    Mutation here: delete the VenueStatusLog.LogTransition call inside
+    '    RecordVenueIfNeeded → no line written → A74a FAIL.
+    Private Sub A74a_VenueNon2xxWritesOneShapedLine()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            ' Simulate a 503: RecordVenueIfNeeded is the Friend seam called by the helper.
+            DeribitClient.RecordVenueIfNeeded(503, "", "iid-A74a")
+            ' Guard: if the mutation removed the log call the file won't exist; read zero lines
+            ' rather than throwing FileNotFoundException and aborting the harness.
+            Dim lines() As String = If(File.Exists(path), File.ReadAllLines(path),
+                                       Array.Empty(Of String)())
+            Dim countOk As Boolean = lines.Length = 1
+
+            ' Shape: "<utc> | VENUE_503 | iid-A74a"
+            Dim shapeOk As Boolean = False
+            If lines.Length > 0 Then
+                Dim parts() As String = lines(0).Split(New String() {" | "}, StringSplitOptions.None)
+                shapeOk = parts.Length = 3 AndAlso
+                          parts(0).EndsWith("Z") AndAlso
+                          parts(1) = "VENUE_503" AndAlso
+                          parts(2).TrimEnd(vbLf.ToCharArray()) = "iid-A74a"
+            End If
+
+            Check("A74a venue 503 writes exactly one correctly-shaped line",
+                  countOk AndAlso shapeOk,
+                  String.Format("count={0} shape={1} row0='{2}'",
+                                countOk, shapeOk, If(lines.Length > 0, lines(0).TrimEnd(), "")))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A74b: V-1 guard — timeout, network failure and 4xx write NOTHING ----------
+    ' ⛔⛔ THE ONE WITH TEETH. THE MUTATION THAT MUST FAIL A74b:
+    '    Change VenueStatusLog.ShouldRecord to always return True (log on any failure).
+    '    With that mutation RecordVenueIfNeeded(404, ...) writes a line → file is non-empty
+    '    → A74b FAIL. And ShouldRecord(Nothing, "") = True → noStatusOk FAIL.
+    Private Sub A74b_TimeoutNetworkAnd4xxWriteNothing()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            ' V-1 guard: no statusCode (timeout / DNS / TCP refusal) → ShouldRecord = False.
+            ' In the real helper, GetAsync throws before RecordVenueIfNeeded is called.
+            ' Test the policy function directly so the mutation "always return True" is caught.
+            Dim noStatusOk As Boolean = Not VenueStatusLog.ShouldRecord(
+                                                CType(Nothing, Integer?), "")
+
+            ' 4xx: hard client error, not a venue declaration → no log.
+            DeribitClient.RecordVenueIfNeeded(404, "", "iid-A74b")
+            DeribitClient.RecordVenueIfNeeded(408, "", "iid-A74b")
+            DeribitClient.RecordVenueIfNeeded(400, "", "iid-A74b")
+            Dim noLine As Boolean = Not File.Exists(path) OrElse File.ReadAllLines(path).Length = 0
+
+            Check("A74b timeout / network / 4xx each write NOTHING (V-1 guard)",
+                  noStatusOk AndAlso noLine,
+                  String.Format("noStatus={0} noLine={1}", noStatusOk, noLine))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A74c: transition-only — N consecutive venue failures write ONE line -------
+    ' ⛔ THE MUTATION THAT MUST FAIL A74c: remove the transition check inside
+    '    VenueStatusLog.LogTransition (log every call regardless of previous state).
+    '    With that mutation N calls write N lines → A74c FAIL.
+    Private Sub A74c_TransitionOnlyNConsecutiveWriteOneLine()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            ' Five consecutive 503s — transition-only logic must suppress the duplicates.
+            For i As Integer = 1 To 5
+                DeribitClient.RecordVenueIfNeeded(503, "", "iid-A74c")
+            Next
+            Dim afterRepeat As Integer = If(File.Exists(path), File.ReadAllLines(path).Length, 0)
+
+            ' A real transition to a different status writes one more line.
+            DeribitClient.RecordVenueIfNeeded(502, "", "iid-A74c")
+            Dim afterFlip As Integer = If(File.Exists(path), File.ReadAllLines(path).Length, 0)
+
+            ' Back to 503 — yet another transition writes a third line.
+            DeribitClient.RecordVenueIfNeeded(503, "", "iid-A74c")
+            Dim afterBack As Integer = If(File.Exists(path), File.ReadAllLines(path).Length, 0)
+
+            Dim ok As Boolean = afterRepeat = 1 AndAlso afterFlip = 2 AndAlso afterBack = 3
+            Check("A74c transition-only: N consecutive 503s → one line; each real transition adds one",
+                  ok,
+                  String.Format("afterRepeat={0} afterFlip={1} afterBack={2}",
+                                afterRepeat, afterFlip, afterBack))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A74d: the log path never throws — IOException on a locked file is swallowed --
+    ' ⛔ THE MUTATION THAT MUST FAIL A74d: remove the Try/Catch in VenueStatusLog.TryAppend.
+    '    With that mutation File.AppendAllText on the locked file throws IOException →
+    '    the exception propagates out of TryAppend → out of LogTransition →
+    '    out of RecordVenueIfNeeded → A74d's inner Catch catches it → threw=True → FAIL.
+    ' ⚠ Guard: the fixture wraps its body in a Try/Finally so that even if RecordVenueIfNeeded
+    '    throws, the harness records a clear FAIL rather than aborting the whole run.
+    '
+    ' Technique: we prime the file (one RecordVenueIfNeeded call creates it), then open
+    ' it with FileStream(FileShare.None) — an exclusive hold that prevents File.AppendAllText
+    ' from opening the same path.  On Windows this raises IOException (sharing violation).
+    ' TryAppend's Try/Catch swallows that; without Try/Catch it propagates.
+    Private Sub A74d_LogPathNeverThrows()
+        Dim path As String = VenueStatusLog.GetPath()
+        Dim threw As Boolean = False
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            ' Prime: create the file so we can lock it.
+            DeribitClient.RecordVenueIfNeeded(503, "", "iid-A74d-pre")
+
+            ' Hold an exclusive lock while calling RecordVenueIfNeeded.
+            ' File.AppendAllText will fail with IOException (sharing violation).
+            Using fs As New FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+                VenueStatusLog.ResetForTest()   ' clear _lastState → TryAppend will be called
+                Try
+                    DeribitClient.RecordVenueIfNeeded(503, "", "iid-A74d")
+                Catch ex As Exception
+                    threw = True
+                End Try
+            End Using
+
+            Check("A74d log path never throws — IOException on locked file swallowed by TryAppend",
+                  Not threw,
+                  If(threw, "IOException escaped TryAppend: " & threw.ToString(), "ok"))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
+    End Sub
+
+    ' -- A74e: shape B — HTTP 200 with JSON-RPC error body logs AND body unchanged --
+    ' ⭐ ASSERTS THE DROP-IN PROPERTY: the helper must NOT throw on a 200, and must NOT
+    '    alter the body. The whole case for option (d) over option (b) is that caller
+    '    semantics are identical to GetStringAsync on every response shape.
+    '
+    ' ⛔ THE MUTATION THAT MUST FAIL A74e (two independent mutations):
+    '    (1) Remove IsRpcError detection from ShouldRecord — shape B is never logged.
+    '        loggedOk becomes False → A74e FAIL.
+    '    (2) Return "" instead of body inside RecordVenueIfNeeded — body is altered.
+    '        bodyOk becomes False → A74e FAIL.
+    Private Sub A74e_ShapeBLogsAndReturnsBodyUnchanged()
+        Dim path As String = VenueStatusLog.GetPath()
+        Try
+            If File.Exists(path) Then File.Delete(path)
+            VenueStatusLog.ResetForTest()
+
+            Dim rpcErrorBody As String =
+                "{""error"":{""code"":11051,""message"":""system_maintenance""}}"
+
+            ' RecordVenueIfNeeded is the Friend seam that GetStringOrRecordAsync calls
+            ' on every HTTP response. It must: (a) log a line for shape B, (b) return
+            ' the body unchanged so the caller receives exactly what the venue sent.
+            Dim returned As String = DeribitClient.RecordVenueIfNeeded(200, rpcErrorBody, "iid-A74e")
+
+            ' (a) log written
+            Dim loggedOk As Boolean = File.Exists(path) AndAlso File.ReadAllLines(path).Length = 1
+            Dim stateOk As Boolean = False
+            If loggedOk Then
+                Dim parts() As String = File.ReadAllLines(path)(0).Split(
+                                                New String() {" | "}, StringSplitOptions.None)
+                stateOk = parts.Length = 3 AndAlso parts(1) = "VENUE_200"
+            End If
+
+            ' (b) body returned unchanged — drop-in property
+            Dim bodyOk As Boolean = returned = rpcErrorBody
+
+            ' (c) a clean 200 (no "error" key) does NOT log
+            VenueStatusLog.ResetForTest()
+            If File.Exists(path) Then File.Delete(path)
+            Dim cleanBody As String = "{""result"":{""status"":""ok""}}"
+            Dim returnedClean As String = DeribitClient.RecordVenueIfNeeded(200, cleanBody, "iid-A74e-clean")
+            Dim noLogForClean As Boolean = Not File.Exists(path) OrElse
+                                           File.ReadAllLines(path).Length = 0
+            Dim cleanBodyOk As Boolean = returnedClean = cleanBody
+
+            Check("A74e shape B — HTTP 200 + JSON-RPC error logs VENUE_200 AND body returned unchanged; clean 200 not logged",
+                  loggedOk AndAlso stateOk AndAlso bodyOk AndAlso noLogForClean AndAlso cleanBodyOk,
+                  String.Format("logged={0} state={1} body={2} noLogClean={3} cleanBody={4}",
+                                loggedOk, stateOk, bodyOk, noLogForClean, cleanBodyOk))
+        Finally
+            Try
+                If File.Exists(path) Then File.Delete(path)
+            Catch
+            End Try
+            VenueStatusLog.ResetForTest()
+        End Try
     End Sub
 
     ' ══ A73f–A73h — C-3a declared operating schedule (Session 2) ═════════════════════════
