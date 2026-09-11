@@ -63,7 +63,21 @@
 |---|---|---|
 | ⭐ **1st** | **Read [`trader-tick-queue.md`](trader-tick-queue.md) §0a and verify before offering work** | **Nothing is owed. No ruled build slot is open** |
 | **2nd** | ⛔ **Do NOT offer any spec from this session as work** — every one is BUILT | See §3 of this document |
-| **3rd** | ⚠ **The absorption Path B §6 tick is the ONE thing waiting on the trader** | Outstanding since 2026-08-14 — **about four weeks.** It unblocks a SCORING change, so it is correctly reserved. **Raise it; do not inherit it silently** |
+| **3rd** | ~~⚠ **The absorption Path B §6 tick is the ONE thing waiting on the trader**~~ ⛔⛔ **WRONG IN THREE WAYS — CORRECTED 2026-09-11 (UTC) by the incoming seat, which READ the D-table instead of inheriting it** | ~~Outstanding since 2026-08-14 — **about four weeks.** It unblocks a SCORING change, so it is correctly reserved. **Raise it; do not inherit it silently**~~ **See the box below. The row told the next seat to raise it rather than inherit it, and reading it is what showed the row itself was stale — which is the finding, not an aside.** |
+
+> ### ⛔⛔ THE ABSORPTION ROW ABOVE WAS STALE. What [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 ACTUALLY says, read 2026-09-11 (UTC)
+>
+> | Row | True state | Why the handover row was wrong |
+> |---|---|---|
+> | **`D-1` … `D-5`** | ✅ **TICKED 2026-09-01 by the trader** — *"ticked means follow as recommended"* | **Ten days ago, not four weeks outstanding** |
+> | **`D-6a`** (is the 0.30 / 0.10 pair intended?) | ✅ **RULED 2026-09-01 — YES, arm-early / measure-tight** | Ruled, not waiting |
+> | **`D-6b`** (is it the largest single leak?) | ✅ **RULED 2026-09-01 — CLAIM WITHDRAWN** | Ruled, not waiting |
+> | **`D-6c`** (is 3× the right ratio?) | ⛔ **OPEN — but gated on DATA, not on a trader tick** | ⚠ **The proposal's own words: it needs `SizeStart` / `SizeMin` logged, and *"no stored data can answer it, and none can be made to."* A tick cannot unblock it** |
+> | ⛔ **`D-6d`** (the §4.3 box (b) counting gap — the engine counts only **31 %** of the in-band flow its own 10 s window admits) | ⛔⛔ **THE LIVE ONE. Unruled, and it HAS NO ROW OF ITS OWN** | **Never named in the handover at all.** The proposal calls it *"larger than both the geometry and `window_sec`"* and its spec-back offers **no read** on the fix |
+>
+> ⛔ **AND A DATE GATE THE ROW OMITTED, which binds before any of this:** `D-2`'s cell reads **_"Do not build against this row before ~2026-09-15"_** — `D-1` shipped 2026-09-01 and its first reading points AGAINST §4.1 (median `AbsorptionEpisodeSec` **1.7 s**, so episode-cumulative would SHORTEN the span, not extend it), on **2 weekdays of a ruled ~10**. **Today is 2026-09-11 UTC. The read is four days short.**
+>
+> ⭐ **So the honest statement of what the trader owes on absorption is `D-6d` — a decision that does not yet exist as a row — and NOT a four-week-old tick.** **Recommended when it is picked up: Opus, effort high, its own session, separate from the §5 build** (the proposal's own sizing).
 
 ---
 
@@ -90,7 +104,13 @@
 
 **Harness 349 → 376.** `GATE PASSED` throughout. **Settings v68 untouched.**
 
-**Measured at close:** next free fixture family **`A78`** (`A77e` is high-water) · `HourClass` has **10** members · `DeribitIndicatorProject.md` §15 holds **24** rows.
+**Measured at close:** next free fixture family **`A78`** (`A77e` is high-water) · `HourClass` has **10** members · ~~`DeribitIndicatorProject.md` §15 holds **24** rows~~ ⛔ **CORRECTED 2026-09-11 (UTC) by the incoming seat — §15 holds TWENTY-ONE rows, lines 396–416. `24` was wrong.**
+
+> ⛔ **THE OTHER THREE SURVIVED AND THE FOURTH DID NOT, so state which instrument each was run with.** ✅ **Re-verified at `88d1a7b`:** `A77e` high-water (`grep -oE '\bA7[0-9][a-z]\b'` on [`verify/ordercheck/Program.vb`](../verify/ordercheck/Program.vb), `A78` free) · `HourClass` **10** members (enum walk on [`tools/BacktestRunner/CoverageReport.vb`](../tools/BacktestRunner/CoverageReport.vb):57, comment lines filtered) · **harness 376 ALL PASS, 0 FAIL, `GATE PASSED`** (`verify-gate.ps1 -Mode local-fast`, run — not carried).
+>
+> ⚠⚠ **A RAW `grep -c 'Check('` PRINTS 390 AND IS THE WRONG INSTRUMENT** — it counts six comment lines and the `Private Sub Check(` definition at `Program.vb:725`. **The §7.1 lesson of this document, reached from a fresh direction: counting a NAME is a copy of the property.** ⭐ **The harness's own `ALL PASS` tail is the instrument; run it.**
+>
+> ⭐⭐ **AND THE CORRECTED COUNT SETTLES WHICH REMEDY APPLIES: NEITHER.** ✅ **Both halves of [`DeribitIndicatorProject.md`](DeribitIndicatorProject.md) §15's own retention rule are OBEYED — five settings versions (v68 · v67 · v66 · v65 · v64) at the cap, and all sixteen settings-untouched rows dated 2026-08-05 or later, every one newer than v64's 2026-07-31 (that second half is the rule box at its line 422).** **No item holds two rows.** ⛔ **An archive sweep would recover ZERO rows and a collapse pass has nothing to collapse.** **The growth is CELL CONTENT — ~9,200 B per row, the 2026-09-11 venue-status row alone past 9,000 tokens — and cell length is the one dimension no rule caps. Folded into [`CLAUDE.md`](../CLAUDE.md)'s session-start item 1 in the same pass.**
 
 ---
 

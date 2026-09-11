@@ -8,9 +8,15 @@
 
 ---
 
-> ## ⛔ STATE BANNER — 2026-08-25. Read this before believing any row below.
+> ## ⛔ STATE BANNER — REFRESHED 2026-09-11 (UTC). Read this before believing any row below.
 >
-> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-07.md`](seat-handover-2026-09-07.md).** Settings **v68**. ⛔ **Run `git status -sb` — never inherit a push state.** ⛔ **FIRST TASK: the Kelly trigger read, and it is dated to a TIME OF DAY now — LATE in the Tuesday 2026-09-08 UTC day, NOT at 00:01.** ⚠⚠ **The GMT+8 clock trap fired THREE times in one session, once in a claim made to the trader. Run `date -u`.** ✅ **Nothing is owed by the trader; nothing is blocked.** ⭐ **Harness 328 → 337 across 17 commits, `settings.json` in NONE of them. The spread seam is CLOSED and the weekday-scope ruling is FULLY DISCHARGED.**
+> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-11.md`](seat-handover-2026-09-11.md).** Settings **v68** (tracked repo-root `settings.json` line 2, read). ⛔ **Run `git status -sb` — never inherit a push state.** ✅ **Verified at `88d1a7b`: clean, in sync with `origin/master`, 0 unpushed, no worktrees. Harness 376 ALL PASS · 0 FAIL · `GATE PASSED` (`verify-gate.ps1 -Mode local-fast`, RUN this session).** ⚠⚠ **The GMT+8 clock trap has now fired in ELEVEN consecutive sessions — the harness announced 2026-09-12 while UTC was 2026-09-11. RUN `date -u` BEFORE YOUR FIRST DATED CLAIM.**
+>
+> ⛔⛔ **THE BANNER THIS REPLACES WAS FOUR DAYS AND THREE HANDOVERS STALE, IN THE DOCUMENT §0 OF THIS FILE DESIGNATES AS THE STATE READ. That is the worst place in the repo for a stale pointer, and it is the §1b class for the third time.** **It pointed at [`seat-handover-2026-09-07.md`](seat-handover-2026-09-07.md), carried a harness figure of 337 against a live 376, and named a `FIRST TASK` — the Kelly trigger read dated to 2026-09-08 — that was COMPLETED on 2026-09-09 (407 pooled weekday STRONG against ≥406; the ladder did not separate).** *(Superseded text follows, per the quote-and-label convention.)*
+>
+> ~~⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-07.md`](seat-handover-2026-09-07.md).** Settings **v68**. ⛔ **Run `git status -sb` — never inherit a push state.** ⛔ **FIRST TASK: the Kelly trigger read, and it is dated to a TIME OF DAY now — LATE in the Tuesday 2026-09-08 UTC day, NOT at 00:01.** ⚠⚠ **The GMT+8 clock trap fired THREE times in one session, once in a claim made to the trader. Run `date -u`.** ✅ **Nothing is owed by the trader; nothing is blocked.** ⭐ **Harness 328 → 337 across 17 commits, `settings.json` in NONE of them. The spread seam is CLOSED and the weekday-scope ruling is FULLY DISCHARGED.**~~
+>
+> ⚠ **ONE THING IS OWED AND §0a OF THIS FILE STILL SAYS OTHERWISE — see the correction box at the head of §0a.** **It is `D-6d` of [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6: unruled, and it has no row of its own.**
 >
 > ⚠⚠ **KELLY — PROGRESS SAMPLE 2026-09-07 18:49 UTC. ⛔ THIS IS NOT THE TRIGGER READ AND MUST NEVER BE QUOTED AS ONE.** `337` (the closed `.bak`) `+ 62` (live `analysis_log.csv`) = **399 against ≥406. Shortfall 7.** Taken deliberately one day EARLY, and labelled, to test whether the ~14/weekday rate was real. ⭐ **IT IS — the 2026-09-06 projection said *"Mon 09-07 ends ≈ 400"* and it read 399 with ~5 h of the UTC day still to run.** Live-file weekdays: 09-01 = 4 (partial, post-rotation) · 09-02 = 14 · 09-03 = 21 · 09-04 = 10 · **09-07 = 13 so far**. Book 5,692 rows, `2026-09-01 15:50:01 → 2026-09-07 18:48:01`; one process; collector healthy.
 >
@@ -169,6 +175,16 @@
 
 **§1 records history with strikethrough, so "what is actually owed" is not answerable at a glance. This is.** ✅ **Re-verified against the tree 2026-08-07** — re-verify rather than inherit.
 
+> ## ⛔⛔ CORRECTION — 2026-09-11 (UTC). **THE BANNER BELOW READS "NOTHING IS OWED" AND ONE THING IS OWED.**
+>
+> **It is `D-6d` of [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 — the §4.3 box (b) counting gap: the absorption engine counts only 31 % of the in-band flow its own 10 s window already admits.** ⛔ **It is UNRULED, it HAS NO ROW OF ITS OWN in that proposal's D-table, and the proposal calls it larger than both the geometry cause and `window_sec`.** ⚠ **[`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) offers NO READ on the fix, so this is a decision with nothing pre-chewed behind it.** **Sizing, from the proposal itself: Opus, effort high, its own session.**
+>
+> ⭐⭐ **WHY IT WAS INVISIBLE, AND IT IS THE §1b CLASS WEARING A NEW FACE: every OTHER part of that D-table really was ruled, so every summary of it reads CLOSED.** **`D-1`–`D-5` TICKED 2026-09-01 · `D-6a` RULED · `D-6b` RULED · `D-6c` OPEN BUT GATED ON DATA, NOT ON A TICK** (*"no stored data can answer it, and none can be made to"* — a tick cannot unblock it). ⛔ **`D-6d` was raised in the same 2026-09-01 pass and given no row, so it inherited the table's closed appearance. A decision with no row is invisible to every instrument that counts rows.**
+>
+> ⚠ **[`seat-handover-2026-09-11.md`](seat-handover-2026-09-11.md) §2 described this as *"the absorption Path B §6 tick … outstanding since 2026-08-14, about four weeks"*. That was WRONG in three ways and is corrected in place there.** ⛔ **AND A DATE GATE BINDS FIRST EITHER WAY: `D-2`'s cell reads _"Do not build against this row before ~2026-09-15"_ — `D-1`'s post-ship read stands at 2 weekdays of a ruled ~10.**
+>
+> *(The 2026-09-09 banner follows unchanged, per the quote-and-label convention. Its `WD-SEMANTICS` evidence still binds; only its "nothing is owed" claim is superseded.)*
+>
 > ## ✅✅ NOTHING IS OWED **AND NO BUILD SLOT IS OPEN**, AS OF 2026-09-09 (UTC). **`WD-SEMANTICS` IS BUILT — commit `ab5600f`.**
 >
 > ⛔ **DO NOT HAND [`wd-semantics-unparsed-counter-spec.md`](wd-semantics-unparsed-counter-spec.md) TO AN IMPLEMENTER — it is a RECORD, not an instruction.** **Verified in the tree 2026-09-09 (UTC), not carried:** `UnparsedExcluded` live on all three carriers (`analysis/AnalysisReport.vb:29` · `LivePerformanceTracker.vb:100` · `tools/CeilingAudit/CsvFeatureBuilder.vb:83`), the report row label fixed at `analysis/MarkdownReportWriter.vb:194-196`, fixtures `A71a`–`A71c` present, version-history entry in [`DeribitIndicatorProject.md`](DeribitIndicatorProject.md) §15. **Harness 346 → 349.** Settings untouched at **v68**.
