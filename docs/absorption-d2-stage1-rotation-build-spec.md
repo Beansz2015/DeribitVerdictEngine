@@ -2,7 +2,7 @@
 
 > ## ✅ AUTHORISED. Every decision behind this build is ruled.
 >
-> **Written 2026-09-11 (UTC).** ⛔ **NOT BUILT.** ⚠ **`D-2` is date-gated: do not build before ~2026-09-15** ([`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6, `D-2`'s cell — `D-1`'s post-ship read needs ~10 weekday-days and stands at ~6).
+> **Written 2026-09-11 (UTC).** ⛔ **NOT BUILT.** ⚠ **`D-2` is date-gated: do not build before ~2026-09-15** ([`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6, `D-2`'s cell — `D-1`'s post-ship read needs ~10 weekday-days; it stands at **8**, read 2026-09-13 in [`absorption-episode-age-read-2026-09-13.md`](absorption-episode-age-read-2026-09-13.md), and the final re-run is one command from 2026-09-16 UTC).
 >
 > | Ruling | Where |
 > |---|---|
@@ -86,7 +86,7 @@
 
 ⭐ **This has NO downside branch at any episode age, and that is worth stating because [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §4.1's 2026-09-03 box said the opposite before it was refuted:** `PressSum` is *already* the sum over `[max(episodeOpen, now − 10 s), now]` because both close paths clear the queue. **Episode-cumulative is the sum over `[episodeOpen, now]` — a superset. Identical below 10 s, strictly larger above it.**
 
-**Measured effect** (weekday-scoped, `analysis_log_aws.csv`, 840 absorption-active reads): binds on **26.0 %** of reads carrying **48.6 %** of all logged `AbsorptionAggrUsd`; span multiplier p50 **2.25×**.
+**Measured effect** (weekday-scoped, `analysis_log_aws.csv`, 840 absorption-active reads): binds on **26.0 %** of reads carrying **48.6 %** of all logged `AbsorptionAggrUsd`; span multiplier p50 **2.25×**. ⚠ **8-weekday-day re-read 2026-09-13 (UTC): the read share HOLDS (26.5 %, day-block 95 % 21.5–32.2 %) but the pressing share is LUMPY, not a rate — 36.4 % pooled, day-block 95 % 25.8–55.4 %, because 10 of 1,159 reads carry 56 % of all logged pressing. Quote the interval, never 48.6 %. [`absorption-episode-age-read-2026-09-13.md`](absorption-episode-age-read-2026-09-13.md).**
 
 ⚠ **`PressQueueCap` is 4096 and was sized against a 10-second window.** A 253-second episode at a busy moment can exceed it. **Either raise it or state why 4096 still holds — do not leave it unexamined**, because the overflow arm silently drops the OLDEST presses, which under episode-cumulative is a silent truncation of exactly the thing being measured.
 
