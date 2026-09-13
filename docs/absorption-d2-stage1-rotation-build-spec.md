@@ -10,6 +10,7 @@
 > | `D-6d.3` = **(c)**, trader 2026-09-11 — `D-2` + Stage 1 together, Stage 2 after the read | [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §7 |
 > | `D-6d.1` = **(c)**, trader 2026-09-11 — sidecar **and** one CSV column | [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §7 |
 > | `J-E` RATIFIED — effective-source stamp rides the next rotation | [`fable-seat-close-handover-2026-08-01.md`](fable-seat-close-handover-2026-08-01.md) §2 |
+> | `RD-1` = **(b)**, trader 2026-09-13 — a separate `SettingsLoadError` column | §9 of this spec |
 >
 > ⛔⛔ **`D-6d.1` (c) FORCES A HEADER ROTATION. That is deliberate and it is what makes this build big: the FIVE riders parked in [`trader-tick-queue.md`](trader-tick-queue.md) §3 travel with it.** **The 2026-09-01 rotation went past without them — see §8.**
 
@@ -64,8 +65,9 @@
 | **7** | **Rider 3** — new column **`TriggerMode`** | Schema | ruled at the pre-Aug-1 batch double-check, `D3` |
 | **8** | **Rider 4** — new column **`WsHealth`** (`DeriveWsHealth`'s per-run value — `J-E`'s "effective-source stamp") | Schema. ⛔ **`T-1`** | `J-E` RATIFIED |
 | **9** | **Rider 5** — new column **`SettingsVersion`** | Schema | [`trader-tick-queue.md`](trader-tick-queue.md) §3 |
+| **10** | **`RD-1`** — new column **`SettingsLoadError`** (`0` / `1`) | Schema | `RD-1` = (b), trader 2026-09-13 — §9 |
 
-**Four new columns — five if §9's `RD-1` ticks (b). One rotation. One deploy.**
+**Five new columns (`RD-1` ruled (b) 2026-09-13). One rotation. One deploy.**
 
 ---
 
@@ -73,7 +75,7 @@
 
 | # | Ruling |
 |---|---|
-| **R-1** | ⛔ **APPEND AT THE END OF THE HEADER, after `AbsorptionSizeMin`, in exactly this order: `AbsorptionShadowAggrUsd` · `TriggerMode` · `WsHealth` · `SettingsVersion` (· `SettingsLoadError` if `RD-1` ticks (b)).** Same rule the 2026-09-01 rotation used (its `R1`): **no existing column moves, so every pre-rotation row keeps both its position and its meaning.** The four are simply empty on older rows |
+| **R-1** | ⛔ **APPEND AT THE END OF THE HEADER, after `AbsorptionSizeMin`, in exactly this order: `AbsorptionShadowAggrUsd` · `TriggerMode` · `WsHealth` · `SettingsVersion` · `SettingsLoadError`.** Same rule the 2026-09-01 rotation used (its `R1`): **no existing column moves, so every pre-rotation row keeps both its position and its meaning.** The four are simply empty on older rows |
 | **R-2** | ⛔ **`D-2` IS A DATASET BOUNDARY AND MUST BE DECLARED AS ONE.** The 2026-09-01 rotation could say *"not a comparability boundary"* because it only appended. **This one cannot** — `AbsorptionAggrUsd` and `AbsorptionRatio` change meaning at the edge. ⚠ **Do not copy that row's wording** |
 | **R-3** | ⛔⛔ **THE DISPLAY-STRING PARITY RULE FIRES.** `D-2` moves `AbsorptionRatio`, which the live strip renders as `ABS↑ <level> (<ratio>×)` via `ComposeAbsorption` at [`UI/MainForm_LiveStrip.vb:270`](../UI/MainForm_LiveStrip.vb). ⚠ **That is a STRIP-only surface — the #3/#5/#6 precedent — so `BuildPlaintextSnapshot` and `MainForm_Render_Cards.vb` are NOT affected. State that explicitly in the commit message rather than leaving the gate to imply it** |
 | **R-4** | **NO `settings.json` key. NO version bump. Settings stays v68.** `D-2` replaces the use of `window_sec`, it does not retune it. ⚠ **`window_sec` becomes UNUSED by the press path — do not delete the key in this build; say so in a comment and leave it** |
@@ -118,7 +120,7 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 | 2 | `TriggerMode` | `MANUAL` · `INTERVAL` · `ON_CLOSE` · `BACKSTOP` — what FIRED this run | `r.TriggerMode`, consumed at run start | `REPLAY` | `Meta` |
 | 3 | `WsHealth` | pinned enum `OK` · `DEGRADED` · `DOWN` · `REST` | `r.WsHealth`, derived ONCE before `LogRun` | empty — no feed | `Meta` |
 | 4 | `SettingsVersion` | integer, invariant culture | the run's own `cfg.Version` | the replay cfg's `Version` | `Meta` |
-| 5 | `SettingsLoadError` — **only if `RD-1` ticks (b)** | `0` / `1` | `SettingsLoader.LastLoadError` non-empty | `0` | `Meta` |
+| 5 | `SettingsLoadError` — **ruled `RD-1` (b), 2026-09-13** | `0` / `1`; empty when not stamped | `r.SettingsLoadError`, captured at run start beside `cfg` | `0` | `Meta` |
 
 ⚠ **Empty means "not stamped", never a default.** `r.TriggerMode` and `r.WsHealth` default to `Nothing`. **A code path that forgets to stamp writes an empty cell, not `MANUAL` or `OK`** — a default that reads as a real value is the silent-lie class. *(`IndicatorResults` is a `Class` — verified at [`Core/IndicatorResults.vb:5`](../Core/IndicatorResults.vb) — so new `String` fields cannot trip the `BC42109` warning the `S-4` build hit on a `Structure`.)*
 
@@ -158,7 +160,10 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 **Rider 5 — `SettingsVersion`.**
 
 - ✅ **The source is already right:** `cfg` is captured once at [`UI/MainForm_Analysis.vb:53`](../UI/MainForm_Analysis.vb) and passed to `LogRun`, so the version is the one that scored the run, even across a hot reload.
-- ⛔ **The one lie:** a startup parse failure runs the engine on POCO defaults, whose `Version` is `1` ([`Core/Settings/EngineSettings.vb:73`](../Core/Settings/EngineSettings.vb)), **so the row reads "v1".** `SettingsLoader.LastLoadError` is non-empty in that state and cleared on the next good load. After a mid-run failure the engine keeps the last good settings — the version is then true, but the file on disk is not what runs. **→ `RD-1`, §9.**
+- ⛔ **The one lie:** a startup parse failure runs the engine on POCO defaults, whose `Version` is `1` ([`Core/Settings/EngineSettings.vb:73`](../Core/Settings/EngineSettings.vb)), **so the row reads "v1".** `SettingsLoader.LastLoadError` is non-empty in that state and cleared on the next good load. After a mid-run failure the engine keeps the last good settings — the version is then true, but the file on disk is not what runs. **→ `RD-1`, §9 — RULED (b) 2026-09-13.**
+- ✅ **RULED (`RD-1` (b)): a separate `SettingsLoadError` column.** Capture `SettingsLoader.LastLoadError` non-empty into **`r.SettingsLoadError As Boolean?` beside the `cfg` capture at `:53`** — ⛔ **not inside `LogRun`**, where a hot reload between `:53` and `:643` could pair one load state with a different settings snapshot. `Nothing` writes an empty cell.
+- ⚠ **The column's comment must say what `1` means: the most recent disk load FAILED, so the running settings are the last good load or, at startup, the POCO defaults.** The status-bar banner reads *"running on code defaults"* in both cases; **the column must not copy that wording**, because after a mid-run failure it is false.
+- *Implementation call logged (§9.1): capture at run start rather than read in `LogRun`.*
 
 ---
 
@@ -171,7 +176,7 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 | **`A79b`** | ⛔ **`D-2` is a NO-OP below 10 s** — an episode younger than the window returns byte-identical `AggrUsd` before and after | — (this is the parity half; it must pass on both) |
 | **`A79c`** | `LogRun` writes `r.WsHealth` and `r.TriggerMode` verbatim, and writes **EMPTY** — never `OK` or `MANUAL` — when either is unset | Default either field to a real enum value ⇒ fails alone. ⚠ **The one-derivation half of `T-1` and rider 3's trigger plumbing live in `MainForm_*.vb`, which `OrderCheck` cannot compile: REVIEW-ONLY, stated** |
 | **`A79d`** | **Rider 1: `RotatedBakName` returns `analysis_log.csv.<N>col-<h8>.<stamp>.bak` computed from THE SUPERSEDED header** — two headers with the same column count get different names, and a pre-existing target is never overwritten | Restore the `v0.7` literal ⇒ fails alone. Drop the hash ⇒ the same-count case fails alone |
-| **`A79e`** | **Rider 5: `LogRun` writes the PASSED `cfg.Version`** as an invariant-culture integer | Read `SettingsLoader.Current.Version` inside `LogRun` instead ⇒ fails alone when the two differ |
+| **`A79e`** | **Rider 5 + `RD-1`: `LogRun` writes the PASSED `cfg.Version`** as an invariant-culture integer, and `SettingsLoadError` as `1` / `0` / empty for `r.SettingsLoadError` = `True` / `False` / `Nothing` | Read `SettingsLoader.Current.Version` or `SettingsLoader.LastLoadError` inside `LogRun` instead ⇒ fails alone when they differ from what the run captured |
 | **`A60e` EXTENDED** | **`T-4`: all three schema copies carry the four new columns** — including `OverlapValidator`'s `ColSpec` list | Break any one copy ⇒ `A60e` fails while `A43e` still passes |
 
 ⛔ **Every mutation RUN, with the actual output pasted. A prediction is not a run.**
@@ -210,11 +215,11 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 
 ---
 
-## 9. ⛔ RESERVED — one decision owed before S2
+## 9. ✅ The reserved decision — RULED 2026-09-13 (UTC)
 
 | # | Decision | Options | My read |
 |---|---|---|---|
-| **`RD-1`** | **How a row records that `settings.json` failed to load** | **(a)** `SettingsVersion` only — a startup failure logs `1`, indistinguishable from a real v1 · **(b)** a fifth column `SettingsLoadError` (`0`/`1`) · **(c)** a suffix inside `SettingsVersion`, e.g. `68:LOAD_ERROR` | ⭐ **(b).** (a) loses the state. **(c) carries the same information in the cheaper shape — and a mixed-type column silently fails any integer reader on exactly the anomalous rows, the silent-drop class `WD-SEMANTICS` was ruled against.** ⚠ **Reserved because (b) adds a column beyond the ruled set — the schema class `CLAUDE.md` reserves.** Marginal rotation cost is zero: the rotation already happens |
+| **`RD-1`** | **How a row records that `settings.json` failed to load** — ✅ **RULED (b) by the trader, 2026-09-13 (UTC), as recommended** | **(a)** `SettingsVersion` only — a startup failure logs `1`, indistinguishable from a real v1 · **(b)** a fifth column `SettingsLoadError` (`0`/`1`) · **(c)** a suffix inside `SettingsVersion`, e.g. `68:LOAD_ERROR` | ⭐ **(b).** (a) loses the state. **(c) carries the same information in the cheaper shape — and a mixed-type column silently fails any integer reader on exactly the anomalous rows, the silent-drop class `WD-SEMANTICS` was ruled against.** ⚠ **Reserved because (b) adds a column beyond the ruled set — the schema class `CLAUDE.md` reserves.** Marginal rotation cost is zero: the rotation already happens |
 
 ### 9.1 Auto-proceeded 2026-09-13 (UTC), one line each
 
@@ -222,6 +227,7 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 - **Rider 2 scope** — doc only (the queue's wording) · doc + both ops scripts. **Took both: doc-only leaves the Kelly read silently short after the deploy.**
 - **Rider 3 value** — `cfg.AutoRun.TriggerMode` · the trigger that fired the run. **Took the fired trigger: the cfg value is false after a hot reload and on every backstop fire.**
 - **Rider 4 name and sampling** — `EffectiveSource` · `WsHealth`; derive per consumer · derive once. **Took `WsHealth`, derived once: the enum is not a source, and three derivations at two instants let the CSV and the payload disagree.**
-- **Provenance `ColKind`** — `Meta` for `TriggerMode` / `WsHealth` / `SettingsVersion`, `Muted` for `AbsorptionShadowAggrUsd`. **The first three differ live vs replay by construction.**
+- **Provenance `ColKind`** — `Meta` for `TriggerMode` / `WsHealth` / `SettingsVersion` / `SettingsLoadError`, `Muted` for `AbsorptionShadowAggrUsd`. **The provenance columns differ live vs replay by construction.**
+- **`SettingsLoadError` capture point** — read the global inside `LogRun` · capture at run start beside `cfg`. **Took run start: `LogRun` runs after the scoring pass, so reading the global there can pair one load state with a different settings snapshot.**
 
 ⭐ **Every one took the option that records more, so none meets the reserved test. Each is listed so the trader can overrule it.**
