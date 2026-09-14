@@ -693,6 +693,11 @@ Module Program
         A77d_UnterminatedWindowClosesAtRangeEndNotBeyond()
         A77e_NewClassAppearsInConsoleSummaryCounts()
 
+        ' [venue-log CLI wiring (docs/venue-check-plan-review-2026-09-14.md §2): A78a runs the
+        '   CLI's OWN path resolution and BuildResult overload, not BuildResult with a hand-built
+        '   path — the shape that let the C-3b omission through.]
+        A78a_CliPathResolutionForwardsVenueLogAndScopesOutAVenueHour()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -14146,6 +14151,60 @@ Module Program
               String.Format("hasLabel={0} countTwo={1} summary={2}",
                             hasLabel, countTwo,
                             summary.Replace(vbCr, "").Replace(vbLf, "|")))
+    End Sub
+
+    ' -- A78a: the CLI's own path resolution reaches venue_status.log ------------------------
+    ' ⛔ MUTATION THAT MUST FAIL A78a: drop `paths.VenueLog` from the forwarding call in
+    '    CoverageReport.BuildResult(opts, paths) — the exact omission BacktestProgram shipped
+    '    with. The 10:00 hour then falls through to the store/uptime walk and is not
+    '    OutOfScopeVenue. Also fails if ResolveCoveragePaths stops pointing VenueLog beside the
+    '    evidence. Code literal 503 is MECHANISM — a venue-side HTTP status, not a threshold.
+    ' ⚠ Not covered: the single CLI line in BacktestProgram that calls this overload. The
+    '    harness does not link BacktestProgram.vb (it has a Main of its own).
+    Private Sub A78a_CliPathResolutionForwardsVenueLogAndScopesOutAVenueHour()
+        Dim dir As String = Path.Combine(Path.GetTempPath(), "ordercheck_a78a_" & Guid.NewGuid().ToString("N"))
+        Try
+            Directory.CreateDirectory(dir)
+            Dim day = A49Monday()
+            Dim paths = CoverageReport.ResolveCoveragePaths("C:\a78a-no-such-root", dir, "")
+
+            ' Store trades either side of the venue window, so the walk has hours to classify.
+            TradeStoreWriter.AppendRows(paths.StoreDir, New List(Of TradeRecord) From {
+                A49Trade(A49Ms(day.AddHours(8).AddMinutes(10)), 64000),
+                A49Trade(A49Ms(day.AddHours(8).AddMinutes(40)), 64010),
+                A49Trade(A49Ms(day.AddHours(12).AddMinutes(10)), 64020),
+                A49Trade(A49Ms(day.AddHours(12).AddMinutes(40)), 64030)})
+            File.WriteAllLines(paths.WsHealth, {
+                A49WsLine(day.AddHours(8), "OK", "iid-a78a"),
+                A49WsLine(day.AddHours(13), "OK", "iid-a78a")})
+            ' venue_status.log: VENUE_503 opens 09:30, VENUE_OK closes 11:30 → hour 10:00 inside.
+            File.WriteAllLines(Path.Combine(dir, "venue_status.log"), {
+                A49WsLine(day.AddHours(9).AddMinutes(30), "VENUE_503", "iid-a78a"),
+                A49WsLine(day.AddHours(11).AddMinutes(30), "VENUE_OK", "iid-a78a")})
+
+            Dim opts As New CoverageOptions With {.FromUtc = day.AddHours(8), .ToUtc = day.AddHours(13)}
+            Dim result = CoverageReport.BuildResult(opts, paths)
+            Dim hour10 = result.Hours.FirstOrDefault(Function(h) h.HourUtc = day.AddHours(10))
+            Dim scopedOut As Boolean = hour10 IsNot Nothing AndAlso hour10.Classification = HourClass.OutOfScopeVenue
+
+            Dim resolvedOk As Boolean = paths.VenueLog = Path.Combine(dir, "venue_status.log")
+            Dim defaultOk As Boolean =
+                CoverageReport.ResolveCoveragePaths("R", "", "").VenueLog = Path.Combine("R", "venue_status.log")
+            Dim storeOverrideKeepsVenue As Boolean =
+                CoverageReport.ResolveCoveragePaths("R", dir, "S").VenueLog = Path.Combine(dir, "venue_status.log")
+
+            Check("A78a CLI path resolution forwards venue_status.log — the venue hour is OutOfScopeVenue, default and --store-dir resolve it beside the evidence",
+                  scopedOut AndAlso resolvedOk AndAlso defaultOk AndAlso storeOverrideKeepsVenue,
+                  String.Format("hour10={0} resolved={1} default={2} storeOverride={3} hours={4}",
+                                If(hour10 Is Nothing, "absent", hour10.Classification.ToString()),
+                                resolvedOk, defaultOk, storeOverrideKeepsVenue,
+                                String.Join(",", result.Hours.Select(Function(h) h.HourUtc.Hour & ":" & h.Classification.ToString()))))
+        Finally
+            Try
+                If Directory.Exists(dir) Then Directory.Delete(dir, True)
+            Catch
+            End Try
+        End Try
     End Sub
 
 End Module

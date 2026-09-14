@@ -300,40 +300,24 @@ Public Class BacktestProgram
                     .FromUtc = fromUtc, .ToUtc = toUtc, .GapMs = gapMs,
                     .Strict = strict, .VerifyVenue = verifyVenue
                 }
-                Dim storeDir As String = HistoricalStore.StoreDir
                 Dim repoRoot As String = Directory.GetCurrentDirectory()
-                Dim analysisLogPath As String = Path.Combine(repoRoot, "analysis_log.csv")
-                Dim wsHealthPath As String = Path.Combine(repoRoot, "ws_health.log")
-                Dim markerPath As String = Path.Combine(repoRoot, "capture_marker.log")
 
-                ' R1: --evidence-dir aims all four paths at a copy-back's aws_fetch/<stamp>/
-                ' directory, which already carries this exact layout. Absent, all four stay
-                ' byte-identical to the pre-existing defaults above.
-                If Not String.IsNullOrEmpty(evidenceDir) Then
-                    If Not Directory.Exists(evidenceDir) Then
-                        Console.Error.WriteLine("[BacktestRunner] --evidence-dir not found: " & Path.GetFullPath(evidenceDir))
-                        Return 1
-                    End If
-                    storeDir = Path.Combine(evidenceDir, HistoricalStore.StoreDir)
-                    analysisLogPath = Path.Combine(evidenceDir, "analysis_log.csv")
-                    wsHealthPath = Path.Combine(evidenceDir, "ws_health.log")
-                    markerPath = Path.Combine(evidenceDir, "capture_marker.log")
+                ' R1: --evidence-dir aims every evidence path at a copy-back's aws_fetch/<stamp>/
+                ' directory, which already carries this exact layout. R2: --store-dir is an
+                ' independent override, applied AFTER R1. [C-3a] The declared schedule and
+                ' [venue-log wiring] venue_status.log resolve beside the other evidence; absence
+                ' of either is not an error. Resolution lives in CoverageReport.ResolveCoveragePaths
+                ' so the harness (A78a) exercises the same code this CLI runs.
+                If Not String.IsNullOrEmpty(evidenceDir) AndAlso Not Directory.Exists(evidenceDir) Then
+                    Console.Error.WriteLine("[BacktestRunner] --evidence-dir not found: " & Path.GetFullPath(evidenceDir))
+                    Return 1
                 End If
-
-                ' R2: --store-dir is an independent override, applied AFTER R1.
-                If Not String.IsNullOrEmpty(storeDirOverride) Then
-                    If Not Directory.Exists(storeDirOverride) Then
-                        Console.Error.WriteLine("[BacktestRunner] --store-dir not found: " & Path.GetFullPath(storeDirOverride))
-                        Return 1
-                    End If
-                    storeDir = storeDirOverride
+                If Not String.IsNullOrEmpty(storeDirOverride) AndAlso Not Directory.Exists(storeDirOverride) Then
+                    Console.Error.WriteLine("[BacktestRunner] --store-dir not found: " & Path.GetFullPath(storeDirOverride))
+                    Return 1
                 End If
-
-                ' [C-3a] Declared schedule: look in the evidence dir first, then the repo root.
-                ' Absence is not an error — most runs will have no declared windows.
-                Dim schedulePath As String = Path.Combine(
-                    If(Not String.IsNullOrEmpty(evidenceDir), evidenceDir, repoRoot),
-                    "declared_schedule.txt")
+                Dim paths = CoverageReport.ResolveCoveragePaths(repoRoot, evidenceDir, storeDirOverride)
+                Dim storeDir As String = paths.StoreDir
 
                 Console.WriteLine(String.Format("[BacktestRunner] Coverage {0:yyyy-MM-dd} → {1:yyyy-MM-dd} UTC (gap-ms={2})",
                                                 fromUtc, toUtc, gapMs))
@@ -352,11 +336,14 @@ Public Class BacktestProgram
                 Console.WriteLine("[BacktestRunner] evidence: " &
                                   Path.GetFullPath(If(String.IsNullOrEmpty(evidenceDir), repoRoot, evidenceDir)) &
                                   "   [" & aimNote & "]")
-                Console.WriteLine("[BacktestRunner] schedule: " & Path.GetFullPath(schedulePath) &
-                                  If(File.Exists(schedulePath), "", "   [not found — no declared windows]"))
+                Console.WriteLine("[BacktestRunner] schedule: " & Path.GetFullPath(paths.Schedule) &
+                                  If(File.Exists(paths.Schedule), "", "   [not found — no declared windows]"))
+                ' A missing venue log must be visible: without it no hour can be scoped
+                ' OutOfScopeVenue, so venue outages read as capture defects.
+                Console.WriteLine("[BacktestRunner] venue:    " & Path.GetFullPath(paths.VenueLog) &
+                                  If(File.Exists(paths.VenueLog), "", "   [not found — no venue windows]"))
 
-                Dim covResult = CoverageReport.BuildResult(opts, storeDir, analysisLogPath, wsHealthPath,
-                                                           markerPath, schedulePath)
+                Dim covResult = CoverageReport.BuildResult(opts, paths)
 
                 If verifyVenue Then
                     Dim windowStartMs As Long = New DateTimeOffset(toUtc.AddHours(-24), TimeSpan.Zero).ToUnixTimeMilliseconds()

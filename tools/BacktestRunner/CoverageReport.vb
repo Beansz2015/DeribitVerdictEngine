@@ -1289,6 +1289,49 @@ Public NotInheritable Class CoverageReport
         End Try
     End Function
 
+    ''' <summary>[venue-log wiring, 2026-09-14] The evidence paths the `coverage` CLI reads,
+    ''' resolved in ONE place. Before this, BacktestProgram resolved five paths inline and never
+    ''' resolved venue_status.log at all, so BuildResult's optional venueLogPath stayed "" and
+    ''' OutOfScopeVenue could never fire from the CLI (docs/venue-check-plan-review-2026-09-14.md
+    ''' §2). Extracted so the harness can exercise the CLI's own resolution and forwarding
+    ''' instead of calling BuildResult with a hand-built path — which is the exact shape that let
+    ''' the omission through (the C-3b fixtures pass the path directly).</summary>
+    Public Class CoveragePaths
+        Public Property StoreDir As String = ""
+        Public Property AnalysisLog As String = ""
+        Public Property WsHealth As String = ""
+        Public Property Marker As String = ""
+        Public Property Schedule As String = ""
+        Public Property VenueLog As String = ""
+    End Class
+
+    ''' <summary>Pure path arithmetic — no existence checks (the CLI reports a missing
+    ''' --evidence-dir / --store-dir itself). Defaults sit beside the store under
+    ''' <paramref name="repoRoot"/>; --evidence-dir moves all six to a copy-back's
+    ''' aws_fetch/&lt;stamp&gt;/ layout; --store-dir then overrides the store alone.</summary>
+    Public Shared Function ResolveCoveragePaths(repoRoot As String, evidenceDir As String,
+                                                storeDirOverride As String) As CoveragePaths
+        Dim baseDir As String = If(String.IsNullOrEmpty(evidenceDir), repoRoot, evidenceDir)
+        Dim p As New CoveragePaths With {
+            .StoreDir = If(String.IsNullOrEmpty(evidenceDir), HistoricalStore.StoreDir,
+                           Path.Combine(evidenceDir, HistoricalStore.StoreDir)),
+            .AnalysisLog = Path.Combine(baseDir, "analysis_log.csv"),
+            .WsHealth = Path.Combine(baseDir, "ws_health.log"),
+            .Marker = Path.Combine(baseDir, "capture_marker.log"),
+            .Schedule = Path.Combine(baseDir, "declared_schedule.txt"),
+            .VenueLog = Path.Combine(baseDir, "venue_status.log")   ' = VenueStatusLog.FileName (Private in Core; not widened, engine-binary file)
+        }
+        If Not String.IsNullOrEmpty(storeDirOverride) Then p.StoreDir = storeDirOverride
+        Return p
+    End Function
+
+    ''' <summary>The CLI's entry point: forwards EVERY resolved path. Fixture A78a runs through
+    ''' this overload, so dropping a path here fails the harness.</summary>
+    Public Shared Function BuildResult(opts As CoverageOptions, paths As CoveragePaths) As CoverageResult
+        Return BuildResult(opts, paths.StoreDir, paths.AnalysisLog, paths.WsHealth, paths.Marker,
+                           paths.Schedule, paths.VenueLog)
+    End Function
+
     ''' <summary>Read-only: builds the full seven-class hourly walk + S4 completeness. S0 is
     ''' NOT run here (it needs live HTTP) — the CLI wires RunVenueDiffAsync's result onto the
     ''' returned CoverageResult separately when --verify-venue is passed.</summary>
