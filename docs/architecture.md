@@ -5,6 +5,8 @@
 
 > **Trimmed 2026-09-14 (UTC).** Superseded and history text in this file moved verbatim to [`architecture-archive.md`](architecture-archive.md) §A. Every moved block leaves a pointer carrying its `trim-2026-09-14-NN` id. Ledger: [`doc-trim-log.md`](doc-trim-log.md). Pre-trim original: git tag `doc-trim-2026-09-14-pre`; byte copy under `docs/archive/doc-trim-2026-09-14/originals/`.
 
+> **Second trim pass 2026-09-14 (UTC):** per-file build narratives in the Directory Layout moved verbatim to [`architecture-archive.md`](architecture-archive.md) §B, ids `trim-2026-09-14b-NN`, same ledger. Pre-pass original: git tag `doc-trim-2026-09-14b-pre`.
+
 > **Trade-stream contract (v31).** `DeribitClient.GetRecentTradesAsync` returns trades in **chronological ascending** order (oldest first, most recent last) — the HTTP request keeps `sorting=desc` to guarantee the latest trades, and the parsed list is reversed before return. Window-consuming indicators (TFI, MicroCVD) take their window from the **end** of the list via `IndicatorEngine.LastN`; `Take(n)` on a trade list selects the OLDEST n and is a bug. CalcCVD's positional thirds (early/mid/late) are chronologically truthful under this contract.
 
 > **Auto-tweaker windowing (v29).** `tools/AutoTweaker/AutoTweakerCore.RunAsync` reads `TweakerConfig.WindowMode`. In `fixed` mode (default), a "round" is a disjoint slice `allRows[LastEvaluatedRowIndex .. +WindowSize-1]`; the index advances by exactly `WindowSize` after every completed terminal branch (including the new `SKIPPED_INSUFFICIENT_TIER` / `SKIPPED_SESSION_BOUNDARY` outcomes — which do **not** tick the BELOW_THRESHOLD streak). `cooldown_rows` is a no-op in fixed mode. MinTier resolves through `TweakerConfig.EffectiveMinTier(windowSize)` — null in JSON auto-scales as `max(15, ceil(WindowSize × 0.5))`. Sliding mode is retained behind the `Else` arm for legacy comparison and is documented as deprecated.
@@ -15,6 +17,8 @@ Update whenever files are added, moved, or significantly changed.
 ---
 
 ## Directory Layout
+
+> Each compacted entry below ends with the id of its archived original entry (`[trim-2026-09-14b-NN]`, full text in [`architecture-archive.md`](architecture-archive.md) §B). Entries marked `(added 2026-09-14)` were missing from this map; each was checked against the tree that day. This map lists the main files; for anything else, check the tree.
 
 ```
 DeribitVerdictEngine/
@@ -29,218 +33,128 @@ DeribitVerdictEngine/
 │                                       ExecuteWithRetry wrapper: retry-once on 5xx/timeout,
 │                                       return Nothing on hard failure. GetFundingRateAsync →
 │                                       Double?; GetBookSummaryAsync → nullable value tuple.
-├── IMarketDataSource.vb                [WS-P1] Transport contract mirroring DeribitClient's 5
-│                                       live call shapes. DORMANT until P2 routes RunAnalysisAsync
-│                                       through it by network.transport. Host-agnostic.
+├── IMarketDataSource.vb                Transport contract for the live data calls.
+│                                       RestMarketDataSource and WsMarketDataSource implement it;
+│                                       RunAnalysisAsync picks one per run through ResolveSource()
+│                                       (network.transport). Host-agnostic. [trim-2026-09-14b-29]
 ├── RestMarketDataSource.vb             [WS-P1] Pass-through to DeribitClient (the fallback path).
 ├── WsMarketDataSource.vb               [WS-P1] Serves the 5 shapes from MarketState; staleness-
 │                                       gated (book/trades/ticker); candles defer to IsFresh.
-├── MarketState.vb                      [WS-P1] Thread-safe snapshot store (1 SyncLock, copy-on-
-│                                       read): 4 candle series 1/3/5/15, 5000 ascending trade
-│                                       ring, top-10 ladder, ticker (funding_8h/OI/mark). Also
-│                                       owns the OFI + aggressor-velocity accumulators and
-│                                       [v54 #6] the dual-fed LevelAbsorptionTracker (folds,
-│                                       reads, resets all under the same lock).
-├── DeribitWsFeed.vb                    [WS-P1] One public ClientWebSocket — REST-seed →
-│                                       [v64] ApplyTrades also buffers every streamed trade
-│                                       into the trade store via TradeStoreWriter (a WRITE,
-│                                       not a fetch — the stream is already in hand); D2 dual
-│                                       flush trigger (count checked per batch, a
-│                                       System.Threading.Timer covering the quiet-hour case
-│                                       a per-batch check cannot); SeedAsync FLUSHES then
-│                                       un-seeds the monotonic guard so the REST re-seed is
-│                                       idempotent; Stop() flushes the tail.
-│                                       set_heartbeat → subscribe 1/3/5/15 chart + trades +
-│                                       ticker + depth-limited book → receive loop → backoff
-│                                       reconnect. Answers heartbeat test_request. DORMANT
-│                                       (only the standalone soak constructs it). Host-agnostic.
-├── ShadowParityComparer.vb             [WS-P2] When network.shadow_parity=true, compares the
-│                                       WS source vs the authoritative REST results each run and
-│                                       logs a field diff to ws_parity_log.txt + console — NEVER
-│                                       the CSV/scoring. The proposal §7 acceptance instrument.
-│                                       Host-agnostic. (RunAnalysisAsync routes the 8 live fetches
-│                                       through IMarketDataSource via ResolveSource() since P2.)
-├── TradeStoreGapRepair.vb              [v64] In-app trade-store gap repair (§1.2 / D5) — the
-│                                       SECONDARY capture mechanism and, under D1's AWS-only
-│                                       ruling, the ONLY recovery mechanism. Plain
-│                                       System.Threading.Timer: one pass IMMEDIATELY on start
-│                                       (§7.1 — a restart is precisely when a gap exists),
-│                                       then every gap_repair_interval_hours over a
-│                                       gap_repair_lookback_hours window. Calls
-│                                       HistoricalStore.BackfillTradeMonthAsync with the
-│                                       exe-resolved store dir and clampToSegStart:=True (the
-│                                       clamp keeps the fetch inside Deribit's ~24h trade
-│                                       retention). Started INDEPENDENTLY of transport —
-│                                       transport="rest" has no stream, so repair alone
-│                                       carries the store. Host-agnostic, never throws.
-├── MtfRefreshPolicy.vb                 [WS-P3] Pure host-agnostic predicate — whether to (re)fetch
-│                                       15m this run. transport="ws" → always (15m is in-memory; the
-│                                       60s TTL only spares the REST HTTP call, so it's moot);
-│                                       "rest" → the original TTL gate, byte-identical. §4 15m-TTL
-│                                       collapse; harness-tested A16d/e.
+├── MarketState.vb                      Thread-safe snapshot store fed by the WS feed: candle
+│                                       series, trade ring, top-10 book, ticker. Owns the OFI and
+│                                       aggressor-velocity accumulators and the
+│                                       LevelAbsorptionTracker, all under one lock. [trim-2026-09-14b-30]
+├── DeribitWsFeed.vb                    The live WebSocket feed (primary transport since the v42
+│                                       cutover): REST seed, chart/trades/ticker/book
+│                                       subscriptions, receive loop, backoff reconnect, heartbeat
+│                                       replies. Buffers every streamed trade into the trade store
+│                                       via TradeStoreWriter. Host-agnostic. [trim-2026-09-14b-31]
+├── ShadowParityComparer.vb             With network.shadow_parity=true, diffs the WS source
+│                                       against REST each run into ws_parity_log.txt. Never
+│                                       touches the CSV or scoring. Host-agnostic. [trim-2026-09-14b-32]
+├── TradeStoreGapRepair.vb              In-app trade-store gap repair: one pass at start, then
+│                                       every gap_repair_interval_hours over
+│                                       gap_repair_lookback_hours, filling trade_seq holes through
+│                                       HistoricalStore. Runs on either transport. Host-agnostic,
+│                                       never throws. [trim-2026-09-14b-33]
+├── MtfRefreshPolicy.vb                 Decides whether to re-fetch 15m candles this run: always
+│                                       on ws, the 60 s TTL gate on rest. Fixtures A16d/e. [trim-2026-09-14b-34]
 ├── DynamicNorms.vb                     Live adaptive thresholds (ATR scale, vol, VWAP dev);
 │                                       now also applies session-aware volume multipliers
 ├── AnalysisLogger.vb                   CSV run logger + CalibrationReport
 ├── AutoRunTimer.vb                     IAutoRunTimer interface + WinFormsAutoRunTimer impl
 ├── OiSnapshot.vb                       OI ring-buffer snapshot struct
-├── settings.json                       All tunable parameters (version: see line 1 of the file; no recompile needed)
+├── LivePerformanceTracker.vb           Live perf strip: the eval cache (analysis_eval_cache.csv)
+│                                       and window aggregates; resolves PENDING rows as windows
+│                                       complete. Host-agnostic. (added 2026-09-14)
+├── OhlcCache.vb                        Rolling 7-day on-disk 1m OHLC cache. Host-agnostic. (added
+│                                       2026-09-14)
+├── LiveMicrostructureEvaluator.vb      Live TAPE strip evaluator on a MarketState snapshot;
+│                                       display only, never a verdict. (added 2026-09-14)
+├── ExitGuardEvaluator.vb               Realtime exit guard: fast microstructure exit checks on a
+│                                       live snapshot; display and alert only. (added 2026-09-14)
+├── settings.json                       All tunable parameters; live version on line 2; hot-
+│                                       reloaded, no recompile. [trim-2026-09-14b-35]
 │
 ├── Core/
 │   ├── Settings/
-│   │   ├── EngineSettings.vb           Strongly-typed POCO for settings.json
-│   │   │                               Includes KellySettings + FundingSettings +
-│   │   │                               OiCvdSettings + SessionVolumeSettings +
-│   │   │                               RegimeWeightSettings + SwingSettings +
-│   │   │                               RegimeMaxScoreSettings + TierFloorSettings +
-│   │   │                               ContextTagThresholds blocks
-│   │   └── SettingsLoader.vb           JSON loader — SettingsLoader.Current singleton;
-│   │                                   FileSystemWatcher hot-reload; Save(... bumpVersion)
-│   │                                   — operational/UI saves pass False (v36 §10a).
-│   │                                   [settings.local.json overlay 2026-08-02] Deep
-│   │                                   per-key merge of a gitignored per-box overlay
-│   │                                   over the tracked base (AWS captures the tape,
-│   │                                   the local box does not — same binary, same
-│   │                                   settings.json). Allow-list BY CONSTRUCTION:
-│   │                                   trade_store / signal_bridge / live_strip /
-│   │                                   exit_guard / performance_display /
-│   │                                   analysis_logging whole + four network keys;
-│   │                                   everything else rejected + logged, non-fatal.
-│   │                                   Save() writes the BASE, never the merge — an
-│   │                                   override can never be promoted into the shared
-│   │                                   file and from there onto AWS. Absent overlay ⇒
-│   │                                   byte-identical to the pre-overlay engine.
-│   │                                   Second watcher (incl. Created/Deleted) so
-│   │                                   dropping the overlay in and deleting it both
-│   │                                   take effect live. OverlayActive drives the
-│   │                                   title-bar "+local" marker. Fixtures A50a–j.
+│   │   ├── EngineSettings.vb           Strongly-typed POCO contract for settings.json, one class
+│   │   │                               per settings block. JSON-to-POCO drift guard: fixtures
+│   │   │                               A62a-A62g. [trim-2026-09-14b-36]
+│   │   └── SettingsLoader.vb           Loader: SettingsLoader.Current singleton,
+│   │                                   FileSystemWatcher hot-reload, Save(... bumpVersion).
+│   │                                   Merges the gitignored per-box settings.local.json over the
+│   │                                   tracked base through an allow-list
+│   │                                   (AdmittedBlocks/AdmittedKeys); Save() writes the base,
+│   │                                   never the merge. Fixtures A50a-j. [trim-2026-09-14b-37]
 │   │
-│   ├── ExecutionResolution.vb          [v36] Host-agnostic session-conditional execution
-│   │                                   resolver. MatchSessionBucket (shared by
-│   │                                   DynamicNorms.ApplySessionVolume + the display
-│   │                                   ResolveSessionLabel), ResolveResolution,
-│   │                                   ResolveRocMagnitude / ResolveRocSlopeDelta, +
-│   │                                   ResolveRocMagnitudeForHour (v40 (B) re-baseline —
-│   │                                   per-session 3-min ROC magnitude ASIA 0.17 / LONDON
-│   │                                   0.11; slope shared in resolution_profiles).
+│   ├── ExecutionResolution.vb          Session-conditional execution resolver:
+│   │                                   MatchSessionBucket, ResolveResolution, per-session ROC
+│   │                                   magnitude and slope resolution. Host-agnostic. [trim-2026-09-14b-38]
 │   │
-│   ├── ProcessIdentity.vb              [Signal Bridge v1] Shared process-identity
-│   │                                   primitive: instance_id GUID per process start +
-│   │                                   signal_id ticked once per completed run (skips
-│   │                                   included) in RunAnalysisAsync, BEFORE the CSV
-│   │                                   write. Consumed by SignalEmitter now and by the
-│   │                                   CSV InstanceId/SignalId attribution columns at
-│   │                                   the #5 v0.8 rotation. Host-agnostic.
-│   ├── SignalEmitter.vb                [Signal Bridge v1] verdict_signal.json emitter
-│   │                                   (signal-bridge-v1-proposal.md §3 — schema v1
-│   │                                   FROZEN 2026-07-03). Pure BuildOk/BuildSkipped map
-│   │                                   the SAME VerdictResult/IndicatorResults fields
-│   │                                   the snapshot renders (incl. sub-tick cap-noise
-│   │                                   suppression) — the THIRD parity surface. Pinned
-│   │                                   DeriveDirection (NONE on all NO TRADE*) +
-│   │                                   DeriveWsHealth (OK/DEGRADED/DOWN/REST). Atomic
-│   │                                   TryWrite (temp + atomic replace — the
-│                                   File.Exists guard is load-bearing: File.Replace
-│                                   THROWS when the destination is absent, so the
-│                                   first write falls back to File.Move; create-dir,
-│   │                                   never-throws). Host-agnostic; harness A22.
-│   │                                   [v51 B4b] ComputeSideLevels IS the structural-
-│   │                                   first arbitration (target ladder swing→HVN→
-│   │                                   POC→session-resolved ATR fallback, bound 3.5×;
-│   │                                   stop min(structural, 1.6×ATR) ≥ 4-tick floor;
-│   │                                   labels SWING_STOP/STOP_CLAMPED/FALLBACK_ATR,
-│   │                                   reason "PLACED @ p (LABEL)"). Consumed by
-│   │                                   Step 5b + snapshot + card + payload + CSV
-│   │                                   Placed* — FOUR parity surfaces, one seam.
-│   │                                   enabled:false ⇒ v50 legacy geometry verbatim.
-│   ├── ScoringEngine_Types.vb          Enums + result types: SignalBreakdownItem,
-│   │                                   VerdictResult (incl. AdjustedLongTarget,
-│   │                                   AdjustedShortTarget, TargetCapReason,
-│   │                                   VerdictContext, Kelly fields),
-│   │                                   PositionState, SignalCategory, ScoreState
-│   ├── ScoringEngine_Helpers.vb        Pure functions: RegimeMaxScore (reads cfg
-│   │                                   scoring.regime_max_score), Threshold,
-│   │                                   TierFloor (reads cfg scoring.tier_floor),
-│   │                                   AddFull, HasCrossConfirm, BuildNote,
-│   │                                   CalcHoldStatus (Layer 1 microstructure,
-│   │                                   Layer 1.5 structural-break exit,
-│   │                                   Layer 2 OBV div, Layer 3 RSI/ROC)
+│   ├── ProcessIdentity.vb              instance_id GUID per process start and signal_id per
+│   │                                   completed run; used by SignalEmitter and the CSV
+│   │                                   InstanceId/SignalId columns. Host-agnostic. [trim-2026-09-14b-39]
+│   ├── SignalEmitter.vb                verdict_signal.json emitter for the order app (schema v1):
+│   │                                   BuildOk/BuildSkipped, DeriveDirection, DeriveWsHealth,
+│   │                                   atomic TryWrite. ComputeSideLevels is the one structural-
+│   │                                   first placed-level seam for Step 5b, snapshot, card,
+│   │                                   payload and CSV. Host-agnostic; fixtures A22. [trim-2026-09-14b-40]
+│   ├── ScoringEngine_Types.vb          Result types and enums: VerdictResult,
+│   │                                   SignalBreakdownItem, PositionState, SignalCategory,
+│   │                                   ScoreState. [trim-2026-09-14b-41]
+│   ├── ScoringEngine_Helpers.vb        Pure helpers: RegimeMaxScore, Threshold, TierFloor,
+│   │                                   AddFull, HasCrossConfirm, BuildNote, CalcHoldStatus
+│   │                                   (layered exit guidance). [trim-2026-09-14b-42]
 │   ├── ScoringEngine_Calculate_Scoring.vb
-│   │                                   AppendLean(), CalcVerdictContext()
-│   │                                   (incl. swing structural-target check);
-│   │                                   RunScoringPipeline() — Steps 2/Pass 2/
-│   │                                   Pass 2b/Pass 2c/3/3b: signal scoring,
-│   │                                   partial upgrades, OI×CVD cross-confirm,
-│   │                                   regime alignment, funding modifiers,
-│   │                                   all breakdown note rows.
+│   │                                   RunScoringPipeline (Step 2, Pass 2/2b/2c, Steps 3/3b),
+│   │                                   CalcVerdictContext, breakdown notes. [trim-2026-09-14b-43]
 │   ├── ScoringEngine_Calculate_Verdict.vb
-│   │                                   Calculate() entry point — assembles verdict;
-│   │                                   Step 4: regime veto / TRANSITIONAL ADX penalty;
-│   │                                   Step 4b: MTF gate veto;
-│   │                                   Step 5: threshold comparison → verdict string;
-│   │                                   Step 5b [v51 B4b]: placed-level arbitration —
-│   │                                   with structural_levels.enabled DELEGATES to
-│   │                                   SignalEmitter.ComputeSideLevels (structural-
-│   │                                   first target ladder + DG1 stop) and copies onto
-│   │                                   Adjusted*/TargetCapReason*; enabled:false =
-│   │                                   the legacy 3-tier closest-wins cap verbatim.
-│   │                                   Step 5c (v35 min-move gate) evaluates the
-│   │                                   PLACED target. + VerdictContext tag.
-│   ├── ScoringEngine_Kelly.vb          CalcKellySizing() — display-only Kelly Criterion
-│   │                                   sizing. Called from MainForm_Render after ATR levels,
-│   │                                   not from ScoringEngine.Calculate(). Zero scoring impact.
+│   │                                   Calculate() entry: Step 4 regime veto, Step 4b MTF veto,
+│   │                                   Step 5 verdict, Step 5b placed levels via
+│   │                                   SignalEmitter.ComputeSideLevels, Step 5c min-move gate,
+│   │                                   VerdictContext. [trim-2026-09-14b-44]
+│   ├── ScoringEngine_Kelly.vb          CalcKellySizing(): display-only Kelly sizing, called
+│   │                                   inline from BuildPlaintextSnapshot. Zero scoring impact.
+│   │                                   [trim-2026-09-14b-45]
 │   │
-│   ├── IndicatorResults.vb             IndicatorResults struct — all indicator output fields
-│   │                                   incl. FundingMomentum, SpreadBps, OFIMomentum,
-│   │                                   VPFR-v2 fields (VPFRNearestHvnAbove/Below,
-│   │                                   VPFRVAH, VPFRVAL), swing pivot fields
-│   │                                   (LastSwingHigh/Low5m/15m, SwingTargetLong/Short,
-│   │                                   SwingStopLong/Short)
+│   ├── IndicatorResults.vb             IndicatorResults: every indicator output field one run
+│   │                                   produces. [trim-2026-09-14b-46]
 │   ├── Indicators_Momentum.vb          CalcDMI, CalcATR, CalcEMA, CalcRSI,
 │   │                                   CalcRSISeries, CalcRSIDivergence, CalcROCSeries,
 │   │                                   CalcVolumeSMA
-│   ├── Indicators_Volatility.vb        CalcVWAP (dual-session auto-anchor),
-│   │                                   CalcVWAPBands,
-│   │                                   CalcBBW (seriesWindowMultiplier + squeezePercentile
-│   │                                   Optional params, wired from cfg in v17),
-│   │                                   CalcTTMSqueeze (smaPeriod + linRegPeriod Optional
-│   │                                   params, wired from cfg in v17)
-│   ├── Indicators_OrderFlow.vb         CalcOFI (bookDepth param, dynamic descending weights),
-│   │                                   CalcOFIMomentum (RISING/FALLING/FLAT),
-│   │                                   CalcCVD (lateSegmentWeight + earlySegmentWeight from
-│   │                                   cfg), CalcMicroCVD (dynamic accelThreshold),
-│   │                                   CalcTFI, CalcLiquidations,
-│   │                                   CalcFundingMomentum + AppendFundingSample
-│   │                                   (v53 time-anchored window + ring eviction),
-│   │                                   ClassifyAbsorption (v54 #6 — pure classifier
-│   │                                   over the LevelAbsorptionTracker read)
-│   ├── TradeStoreWriter.vb             [v64] The ONE trade-store seam — host-agnostic and
-│   │                                   deliberately NETWORK-FREE (that split is why the
-│   │                                   app's feed path and the fixture project never link
-│   │                                   HistoricalStore's HttpClient). Owns file naming,
-│   │                                   monthly rollover, buffered append + monotonic guard,
-│   │                                   the row FORMAT and the row PARSE, LastTradeTimestamp,
-│   │                                   ResolveStoreDir (exe-relative, D3/A48h) and
-│   │                                   ResolveResumeCursorMs (the by-construction overlap
-│   │                                   no-op, A48d). Three consumers: DeribitWsFeed's
-│   │                                   streaming capture, HistoricalStore's network backfill,
-│   │                                   and LoadTradeRange's per-file read — so writer and
-│   │                                   reader cannot drift. One process-wide append lock
-│   │                                   (streaming + repair append to the same file). Never
-│   │                                   throws. Fixtures A48a–h.
-│   ├── LevelAbsorptionTracker.vb       [P4 #6 v54] Level-scoped absorption episode
-│   │                                   tracker (book-absorption-proposal.md §4) —
-│   │                                   the first DUAL-FED tracker: owned by
-│   │                                   MarketState under its ONE lock, folded from
-│   │                                   BOTH the ~100ms book snapshots (proximity
-│   │                                   gate on the nearest CARRIED level, band-size
-│   │                                   trajectory, D8 ΔSize=Posts−Pulls−Fills
-│   │                                   conservation w/ visibility mask) AND the
-│   │                                   trades stream (rolling pressing USD, band
-│   │                                   fills, break-through test). absorbRatio =
-│   │                                   pressing USD per USD net band depletion;
-│   │                                   pullFrac = provable pulls / provable posts
-│   │                                   (spoof veto). Reset on SeedAsync. Display/
-│   │                                   CSV only at the build (scoring_enabled:false).
+│   ├── Indicators_Volatility.vb        CalcVWAP (dual-session anchor), CalcVWAPBands, CalcBBW,
+│   │                                   CalcTTMSqueeze; parameters passed from cfg by name. [trim-2026-09-14b-47]
+│   ├── Indicators_OrderFlow.vb         CalcOFI, CalcOFIMomentum, CalcCVD, CalcMicroCVD, CalcTFI,
+│   │                                   CalcLiquidations, CalcFundingMomentum +
+│   │                                   AppendFundingSample (time-anchored), ClassifyAbsorption,
+│   │                                   CalcSpreadBps + ClassifySpread + ApplySpread. [trim-2026-09-14b-48]
+│   ├── TradeStoreWriter.vb             The one network-free trade-store seam: file naming,
+│   │                                   monthly rollover, buffered append behind the identity-
+│   │                                   keyed write guard, row format and parse, DedupTrades,
+│   │                                   ResolveRepairWindowsMs. Used by DeribitWsFeed,
+│   │                                   HistoricalStore and LoadTradeRange. Never throws. [trim-2026-09-14b-49]
+│   ├── LevelAbsorptionTracker.vb       Level-scoped absorption episode tracker fed by both book
+│   │                                   snapshots and trades under MarketState's lock; produces
+│   │                                   absorbRatio and pullFrac. Display/CSV only
+│   │                                   (scoring_enabled false). [trim-2026-09-14b-50]
+│   ├── AggressorVelocityAccumulator.vb
+│   │                                   Time-decayed taker USD sums at a fast and a norm horizon
+│   │                                   (aggressor velocity). (added 2026-09-14)
+│   ├── AlertsTracker.vb                Liquidation-cascade alarm and level-approach alerts;
+│   │                                   display and alert only. (added 2026-09-14)
+│   ├── BarCloseDetector.vb             Detects an execution-resolution bar close for on_close
+│   │                                   firing. (added 2026-09-14)
+│   ├── CaptureMarkerLog.vb             Per-process capture-scope marker read by the coverage
+│   │                                   report. (added 2026-09-14)
+│   ├── OfiAccumulator.vb               Time-averaged OFI, fed by each streaming book update.
+│   │                                   (added 2026-09-14)
+│   ├── StoreFiles.vb                   Network-free file layer for the candle and funding halves
+│   │                                   of the backtest store. (added 2026-09-14)
+│   ├── VenueStatusLog.vb               Transition-only venue_status.log: venue 5xx and JSON-RPC
+│   │                                   errors, VENUE_OK on recovery. (added 2026-09-14)
+│   ├── WsHealthLog.vb                  Transition-only ws_health.log of the OK/DEGRADED/DOWN/REST
+│   │                                   state. (added 2026-09-14)
 │   └── Indicators_Structure.vb         CalcDonchian (quartilePct from cfg),
 │                                       CalcOBV,
 │                                       CalcVPFRLite v2 (VAH/VAL + nearest HVN/LVN,
@@ -249,116 +163,81 @@ DeribitVerdictEngine/
 │                                       CalcMTFGate
 │
 ├── UI/
-│   ├── MainForm_Layout.vb              Constants, DllImport/RECT, constructor (New()),
-│   │                                   ResizeControls(), SetOutputMargins(),
-│   │                                   OnFormHandleCreated(), CentreNudText();
-│   │                                   shared fields: C_* colour palette, _oiHistory,
-│   │                                   _autoRunTimer, _countdownTimer, CHAR_PLAY/STOP;
-│   │                                   MTF TTL: _mtfCandles15m, _mtfLastFetchTime,
-│   │                                   MTF_TTL_SECONDS (const=60);
-│   │                                   _prevRegime (regime hysteresis);
-│   │                                   _fundingHistory (List(Of (UtcMs, Rate)) — v53
-│   │                                   timestamped ring, age-evicted at 30 min, no count cap);
-│   │                                   _ofiHistory (List(Of Double), OFIHistoryMax=10)
+│   ├── MainForm_Layout.vb              Constructor and layout; shared form fields and run-state
+│   │                                   history (_oiHistory, _fundingHistory, _ofiHistory, 15m MTF
+│   │                                   cache, _prevRegime); status bar and perf strip. [trim-2026-09-14b-51]
 │   ├── MainForm_AutoRun.vb             Auto-run timer: InitAutoRunControls(),
 │   │                                   btnStartStop_Click, StartAutoRun(), StopAutoRun(),
 │   │                                   RunAutoAnalysis(), OnCountdownTick(),
 │   │                                   UpdateCountdownLabel()
-│   ├── MainForm_Analysis.vb            btnAnalyze_Click, RunAnalysisAsync() —
-│   │                                   fetches data, calls all indicators + scoring engine,
-│   │                                   logs result, calls RenderOutput;
-│   │                                   MTF TTL refresh; Donchian quartile signal;
-│   │                                   regime hysteresis logic; OFI BookDepth wiring;
-│   │                                   AppendFundingSample(_fundingHistory, nowTs, rate);
-│   │                                   calls CalcFundingMomentum → r.FundingMomentum;
-│   │                                   appends OFI to _ofiHistory;
-│   │                                   calls CalcOFIMomentum → r.OFIMomentum;
-│   │                                   computes SpreadBps from order book;
-│   │                                   calls CalcSwingPivots (5m + 15m);
-│   │                                   computes SwingTarget/Stop bookkeeping
-│   ├── MainForm_PlaintextSnapshot.vb   [P5b] BuildPlaintextSnapshot() — the engine's
-│   │                                   ONLY text renderer (replaced the deleted
-│   │                                   MainForm_Render_Header.vb /
-│   │                                   MainForm_Render_Sections.vb): verdict header
-│   │                                   block (VERDICT / CONTEXT / SCORE / TIME /
-│   │                                   LAST TRANSACTED PRICE / HOLD \ EXIT /
-│   │                                   ATR ENTRY LEVELS / structural rows / KELLY
-│   │                                   SIZING) + all indicator sections + signal
-│   │                                   breakdown. Feeds the output dump; its inline
-│   │                                   CalcKellySizing call (the sole surviving
-│   │                                   invocation) populates v.Kelly* BEFORE the
-│   │                                   card binds.
-│   ├── MainForm_Render_Cards.vb        [P5b] card-based UI render — BindCard*
-│   │                                   bindings (score, verdict, last price, ATR
-│   │                                   levels, structural, breakdown, OI×CVD, MTF,
-│   │                                   Kelly, …). The card is the SECOND rendered
-│   │                                   surface; the display-string parity rule holds
-│   │                                   it in lockstep with the plaintext snapshot.
-│   ├── MainForm_SignalBridge.vb        [Signal Bridge v1] Thin WinForms glue: the two
-│   │                                   RunAnalysisAsync emission call sites (success →
-│   │                                   full payload AFTER snapshot + card binds; skip →
-│   │                                   reduced SKIPPED payload), both try/catch-hardened
-│   │                                   (never throw into the run), gated on
-│   │                                   signal_bridge.enabled. Owns the ARM AUTOTRADE
-│   │                                   checkbox state (runtime-only, default OFF every
-│   │                                   start, never persisted — dual-arm interlock D7;
-│   │                                   emitted as engine.autotrade_armed, emission
-│   │                                   unconditional on arming).
+│   ├── MainForm_Analysis.vb            RunAnalysisAsync(): fetch through ResolveSource(),
+│   │                                   indicators, scoring, CSV log, renders; funding/OFI history
+│   │                                   and swing bookkeeping. [trim-2026-09-14b-52]
+│   ├── MainForm_PlaintextSnapshot.vb   BuildPlaintextSnapshot(): the only text renderer (header,
+│   │                                   levels, Kelly, indicator sections, breakdown). Feeds the
+│   │                                   output dump; runs CalcKellySizing before the card binds.
+│   │                                   [trim-2026-09-14b-53]
+│   ├── MainForm_Render_Cards.vb        BindCard* card bindings, the second rendered surface; the
+│   │                                   display-string parity rule keeps it in step with the
+│   │                                   snapshot. [trim-2026-09-14b-54]
+│   ├── MainForm_SignalBridge.vb        Signal-bridge glue: success and skip emission call sites
+│   │                                   (never throw into the run); runtime-only ARM AUTOTRADE
+│   │                                   state (default OFF, never persisted). [trim-2026-09-14b-55]
 │   ├── OutputDumpSettingsForm.vb       Non-modal dialog: Enabled toggle, max-runs
 │   │                                   textbox, file path + size, Clear + Save + Close.
 │   │                                   Save routes through SettingsLoader.Save.
-│   ├── WhatIfLauncherForm.vb           [offline-whatif-replay W7] Non-modal launcher —
-│   │                                   whitelisted-knob grid (value-or-sweep), constraint
-│   │                                   field, span, Run. Writes overlay JSON + Process.Start's
-│   │                                   tools/WhatIfRunner, opens the report in AnalysisReportForm.
-│   │                                   A launcher only — zero replay logic, no tools-project ref.
+│   ├── WhatIfLauncherForm.vb           Launcher for tools/WhatIfRunner: knob grid, span, Run;
+│   │                                   opens the report. No replay logic. [trim-2026-09-14b-56]
+│   ├── MainForm_ExitGuard.vb           Exit-guard host timer. (added 2026-09-14)
+│   ├── MainForm_LiveStrip.vb           Live TAPE strip host timer. (added 2026-09-14)
+│   ├── MainForm_TapeStoreStatus.vb     TAPE STORE status strip host timer. (added 2026-09-14)
+│   ├── RoundStatsForm.vb               Last five auto-tweaker rounds with per-tier accuracy.
+│   │                                   (added 2026-09-14)
+│   ├── TweakSettingsForm.vb            Auto-tweaker settings and status dialog. (added
+│   │                                   2026-09-14)
+│   ├── Controls/                       Custom WinForms controls (cards, gauges, pills, meters).
+│   │                                   (added 2026-09-14)
+│   ├── Theme/                          Theme.vb palette tokens. (added 2026-09-14)
 │   └── MainForm_Calibration.vb         BuildCalibrationReport() + calibration link
 │                                       handlers (UpdateLogInfo lives in
 │                                       MainForm_Layout.vb).
 │
-├── analysis/                          Host-agnostic offline analysis (Bundle 1).
-│                                       NO System.Windows.Forms references except
-│                                       AnalysisReportForm (thin viewer).
-│                                       AnalysisRunner, ForwardReturnJoiner,
-│                                       FailureRateMatrix, FundingMomentumDiagnostic,
-│                                       OutlierAudit, MarkdownReportWriter,
-│                                       AnalysisReport, AnalysisConstants.
-│                                       Reusable from future Linux CLI port.
-│                                       Report is segmented per (session ×
-│                                       resolution) — AnalysisRunner partitions rows
-│                                       into NY×1 / LONDON×3 / ASIA×3 populations and
-│                                       runs FailureRateMatrix.Compute once each;
-│                                       MarkdownReportWriter renders tier-major
-│                                       (offline-analysis-report-audit-proposal.md).
-│                                       [placed-target migration 2026-07-21] BOTH eval
-│                                       barriers are the row's logged placed geometry:
-│                                       adverse = PlacedStop* (D6), favourable =
-│                                       PlacedTarget* (ResolveFavourableBarrier, the
-│                                       mirror of ResolveAdverseBarrier). The per-tier
-│                                       ATR grid retired, so the cell space is
-│                                       (tier × window) — one placed-geometry cell.
-│                                       Pre-v0.8 rows keep the legacy formula on both
-│                                       sides in a LEGACY_YARDSTICK population.
+├── analysis/                           Host-agnostic offline analysis (only AnalysisReportForm, a
+│                                       thin viewer, uses WinForms): AnalysisRunner,
+│                                       ForwardWindowJoiner, FailureRateMatrix (tier x window on
+│                                       placed geometry), BandLadder, FundingMomentumDiagnostic,
+│                                       OutlierAudit, MarkdownReportWriter, DeribitOhlcFetcher.
+│                                       The report is segmented by session x resolution; pre-v0.8
+│                                       rows form the LEGACY_YARDSTICK population. [trim-2026-09-14b-57]
 │
 ├── tools/
-│   ├── AutoTweaker/                    Host-agnostic console app (Bundle 2).
-│   │                                   AutoTweaker.vbproj — separate .NET 8 project.
-│   │                                   Zero WinForms references. Runs unmodified
-│   │                                   on Linux via `dotnet AutoTweaker.dll`.
-│   │                                   AutoTweakerProgram, AutoTweakerCore,
-│   │                                   PromptBuilder, ClaudeApiClient,
-│   │                                   SettingsDiffApplier, TweakerConfig, TweakerState.
-│   └── WhatIfRunner/                   Offline What-If replay runner (analysis-only;
-│                                       zero scoring impact, never writes settings.json).
-│                                       WhatIfRunner.vbproj — separate .NET 8, zero WinForms.
-│                                       Links the SHIPPED SignalEmitter.ComputeSideLevels +
-│                                       FailureRateMatrix (one seam, no copies): applies a
-│                                       whitelisted settings overlay, re-derives placed levels
-│                                       + verdict tier per logged CSV row, re-walks 1m-OHLC
-│                                       outcomes, prints baseline-vs-overlay + EV-in-ATR grid
-│                                       ranking with split-half validation. WhatIfOverlay,
-│                                       WhatIfSettings, WhatIfReplay, WhatIfReport, WhatIfProgram.
-│                                       docs/offline-whatif-replay-proposal.md.
+│   ├── AutoTweaker/                    Auto-tweaker console app (own .vbproj, zero WinForms, runs
+│   │                                   on Linux): AutoTweakerCore, PromptBuilder,
+│   │                                   ClaudeApiClient, SettingsDiffApplier, ConditionsExtractor,
+│   │                                   TweakerConfig, TweakerState. [trim-2026-09-14b-58]
+│   ├── BacktestRunner/                 Backtest CLI (own .vbproj): fetch, replay, validate,
+│   │                                   report, coverage; HistoricalStore, CoverageReport. (added
+│   │                                   2026-09-14)
+│   ├── CeilingAudit/                   W6-4 offline ceiling-audit runner (own .vbproj). (added
+│   │                                   2026-09-14)
+│   ├── WsTradeProbe/                   Standalone trade-feed delivery probe; writes no collector
+│   │                                   files. (added 2026-09-14)
+│   ├── checks/                         verify-gate.ps1 (pre-push, CI, Stop hook), rotation-
+│   │                                   riders.ps1, doc-trim-verify.ps1, hook installers. (added
+│   │                                   2026-09-14)
+│   ├── ops/                            collector.ps1 (SSM status, fetch, deploy), kelly-trigger-
+│   │                                   read.ps1, absorption-episode-age-read.ps1. (added
+│   │                                   2026-09-14)
+│   ├── *.ps1                           UI automation for the running MainForm (screenshot, click,
+│   │                                   inspect, resize) and build-manual-pdfs.ps1. (added
+│   │                                   2026-09-14)
+│   └── WhatIfRunner/                   Offline what-if replay (own .vbproj, zero WinForms, never
+│                                       writes settings.json): whitelisted overlay, placed levels
+│                                       re-derived through the shipped ComputeSideLevels, outcomes
+│                                       re-walked, EV ranked with split-half validation. [trim-2026-09-14b-59]
+│
+├── verify/ordercheck/                  Fixture harness (OrderCheck.vbproj) linking the shipped
+│                                       sources; run by verify-gate.ps1. (added 2026-09-14)
 │
 └── docs/                               ~380 docs. Session start reads
                                         DeribitIndicatorProject.md, architecture.md,

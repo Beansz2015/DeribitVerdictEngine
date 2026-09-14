@@ -66,3 +66,79 @@ One row per block moved out of an always-read doc. **History only - no row here 
 | trim-2026-09-14-54 | docs/architecture.md | 682-682 | Design Decisions row - MainForm_Render split into _Header + _Sections (files deleted in P5b) | docs/architecture-archive.md | 241 | fbb745a6181c0cb32f5b9bdcfdf25adba21e21acf49ab96470b5fa49638617ae |
 | trim-2026-09-14-55 | docs/architecture.md | 684-684 | Design Decisions row - v15 cleanup pass (historical audit) | docs/architecture-archive.md | 665 | f90afd2951b48f1542978de60ca50fe6f1a96fb47538fde820fb992d72a480f5 |
 | trim-2026-09-14-56 | docs/architecture.md | 693-693 | Design Decisions row - Settings exposure pass (spec 6), whose method-default pattern A54a later removed | docs/architecture-archive.md | 557 | 995b30a06b2da312c4863dd03aa8a9856587fe6511548fba52348af6a269c735 |
+
+---
+
+## Pass 2 - 2026-09-14 (second pass)
+
+- **Pre-pass originals:** git tag `doc-trim-2026-09-14b-pre` (commit `521f4e7`). Byte copies: `docs/archive/doc-trim-2026-09-14b/originals/` (manifest: that folder's `README.md`).
+- **Scope (trader-directed):** a stale-state sweep of `DeribitIndicatorProject.md` and of `trader-tick-queue.md` §2 and §4; the `architecture.md` Directory Layout (per-file build narratives moved, missing files added); the `trader-profile.md` layout reformat.
+- Same hash definition and verifier as pass 1. The verifier derives each row's tag from its ID.
+
+| ID | Source | Lines at tag | What moved | Destination | Bytes | SHA-256 |
+|---|---|---|---|---|---:|---|
+| trim-2026-09-14b-01 | docs/DeribitIndicatorProject.md | 172-172 | §7 CalcKellySizing line (said called from RenderOutputHeader) | docs/history-archive.md | 111 | 088b3b49ad92e535efae6c193e3640a976f023c2defc6b23e55664b033271bca |
+| trim-2026-09-14b-02 | docs/DeribitIndicatorProject.md | 187-187 | §8 Kelly Sizing block line (said CAL returns when backtesting ships) | docs/history-archive.md | 341 | d03a8d9937e86bd7bd27b22a362a8c5fbcf2c10e42dcb8f6f968e4ddff2a4374 |
+| trim-2026-09-14b-03 | docs/DeribitIndicatorProject.md | 204-204 | §10 CSV logging line (said v0.4 schema, 87 columns) | docs/history-archive.md | 105 | e583bc398683238bd68a87f74ccc7840f1fcbe0683e28d6883f251f8c704d288 |
+| trim-2026-09-14b-04 | docs/DeribitIndicatorProject.md | 231-231 | §12 row - TFI threshold (said BLOCKED, TFI not logged) | docs/history-archive.md | 293 | 0a26955312a08c0927d55cae90c18eea1320227f1ff6d9d6240bddce7b2a83be |
+| trim-2026-09-14b-05 | docs/DeribitIndicatorProject.md | 340-340 | §16 intro line (said KIV post-v30) | docs/history-archive.md | 208 | f53f0d05f0c08cf9e7baa1744865747b4a3d6943074cb339132b5ebe10810ef2 |
+| trim-2026-09-14b-06 | docs/DeribitIndicatorProject.md | 364-364 | §16.2 WinForms-coupled rendering line (said MainForm_Render_* RTF) | docs/history-archive.md | 130 | 460075e6ebadf1d915197e7e1cb10c5438b0e8f31fb94e06ad914da2d43eed2e |
+| trim-2026-09-14b-07 | docs/DeribitIndicatorProject.md | 397-399 | §16.6 P2 - funding momentum threshold v23+ tuning (superseded by v53) | docs/history-archive.md | 397 | 25601df7477cf6ab797b26742b873a5467d2813d0689c7e8b97a56502bd31c5a |
+| trim-2026-09-14b-08 | docs/DeribitIndicatorProject.md | 403-405 | §16.6 P4 - STRONG/MEDIUM tier collapse in the failure-rate matrix (condition unevaluable) | docs/history-archive.md | 291 | 0dbb4ca57861f0ea375fb298a8d1bdb1153239ac57a38709070a2189ccdc43c1 |
+| trim-2026-09-14b-09 | docs/DeribitIndicatorProject.md | 417-419 | §16.6 P8 - live performance display WEAK tier filtering (resolved by E2a) | docs/history-archive.md | 439 | efcb2cb74aa1c5d7ee35f5565a70f1515dd840f6df76f09753dc4c535f370a1d |
+| trim-2026-09-14b-10 | docs/DeribitIndicatorProject.md | 425-427 | §16.6 P10 - POC tier never fires (pre-v51 CAPPED wording) | docs/history-archive.md | 436 | 7abb25e46bee4c965d426bfa2c7e87632b06482661a4ceb2a0526df9dea1c996 |
+| trim-2026-09-14b-11 | docs/DeribitIndicatorProject.md | 435-437 | §16.6 P13 - settings ownership tiers in the User Manual (resolved) | docs/history-archive.md | 1212 | b19b24fcea0570495d5984c5cea3004ad2e8c93def39b02be8937614b0b9ff0b |
+| trim-2026-09-14b-12 | docs/trader-tick-queue.md | 135-135 | §2 intro line (said verified present 2026-08-07) | docs/trader-tick-queue-archive.md | 93 | 1b93a1faac2379849d8b6b5a1486e179e93803c1475cdb292a9d34ee938ffb6e |
+| trim-2026-09-14b-13 | docs/trader-tick-queue.md | 141-150 | §2 closed pointer rows, run 1 (WD-TIDY to the trade_seq skip claim) | docs/trader-tick-queue-archive.md | 1752 | b1fa072734673f7c88584fd200d561c6b06ebc674605a45715dcd9264a9dee4e |
+| trim-2026-09-14b-14 | docs/trader-tick-queue.md | 151-151 | §2 row - the absorption population is bimodal (2026-08-20 measurement) | docs/trader-tick-queue-archive.md | 1956 | a52407a3ab8dec6d989ead84c574faf569da0380cc3f13a2d6a98f276636cbae |
+| trim-2026-09-14b-15 | docs/trader-tick-queue.md | 153-154 | §2 closed pointer rows, run 2 (v67 skip gate, ForwardWindowJoiner guard) | docs/trader-tick-queue-archive.md | 349 | c4e49bc4d8046cfa8f704055031cd4e513b5c1fcc343d7df8ec778b919bf31d9 |
+| trim-2026-09-14b-16 | docs/trader-tick-queue.md | 156-162 | §2 closed pointer rows, run 3 (streaming capture drop to DR-3) | docs/trader-tick-queue-archive.md | 1179 | 1b10ac04d126799c5f4f0ff6611c1ce46d2ee0e89c658fe29248507938a0e617 |
+| trim-2026-09-14b-17 | docs/trader-tick-queue.md | 163-163 | §2 row - up-interval starts at the DOWN line (built as coverage C-2) | docs/trader-tick-queue-archive.md | 1841 | eed5b4ecae52cc32f148216b0e8ba46827c8db2b059b611feeade301b9ca0c26 |
+| trim-2026-09-14b-18 | docs/trader-tick-queue.md | 164-164 | §2 row - CoverageReport gapMs time tolerance (built as coverage C-1) | docs/trader-tick-queue-archive.md | 1515 | 6d94adb3264b5e0af4bd4cfa67978f7d785b5893830e8c98d4fcbe4688eeca75 |
+| trim-2026-09-14b-19 | docs/trader-tick-queue.md | 167-170 | §2 closed pointer rows, run 4 (WD-SEMANTICS to BuildResolutionCfg) | docs/trader-tick-queue-archive.md | 761 | dd8049f7ce35bf9f3f588c973fa681d8520c6559684ab0243849bf8883717368 |
+| trim-2026-09-14b-20 | docs/trader-tick-queue.md | 171-171 | §2 row - absorption mechanism revision, full cell with superseded status text | docs/trader-tick-queue-archive.md | 4131 | dfcdb9b7f88f71e4d1a699c08c644ce319414b2ddaa16aa2c49e2f82ee986a6d |
+| trim-2026-09-14b-21 | docs/trader-tick-queue.md | 172-172 | §2 closed pointer row, run 5 (two seam-audit doc corrections) | docs/trader-tick-queue-archive.md | 186 | e830b2ffee0169aed6891af0d01e3f01839c182c3b641ea33a56a7bf0331276a |
+| trim-2026-09-14b-22 | docs/trader-tick-queue.md | 173-173 | §2 row - S0 verify-venue cadence SUSPENDED (its resume condition has since been met) | docs/trader-tick-queue-archive.md | 979 | dd42e17817a1b4cf65002dab8639d1df2142ca1b09ee583ec5ec1c74d4da8b21 |
+| trim-2026-09-14b-23 | docs/trader-tick-queue.md | 175-175 | §2 row - intentional-downtime and venue-outage scoping (built as coverage C-3a and C-3b Part B) | docs/trader-tick-queue-archive.md | 2826 | 58e7cfd1d4d17fa5cd9d44330ae207cf558f2a00f52274383bb8e62c9d4bf953 |
+| trim-2026-09-14b-24 | docs/trader-tick-queue.md | 176-187 | §2 closed pointer rows, run 6 (weekday filters to G12) | docs/trader-tick-queue-archive.md | 2411 | 6c2545c0c7763bc916068d82ade91581e4316f8d6b4fddd25e120aac03214a32 |
+| trim-2026-09-14b-25 | docs/trader-tick-queue.md | 189-189 | §2 row - roadmap.md box-footprint figures stale (closed: roadmap.md updated 2026-09-14) | docs/trader-tick-queue-archive.md | 544 | d75619faffc09c8172b2f17a35dfb0d545c16bfa2f077dd4987444c93eb4b1b3 |
+| trim-2026-09-14b-26 | docs/trader-tick-queue.md | 204-204 | §4 standing-watch list line (named the spent STRONG accrual watch and a blocked F3 arm) | docs/trader-tick-queue-archive.md | 260 | 4e659e1302cf98c6ad9e59d9b81f266b42bc00b5c796afdf82810bdbdefa9e2f |
+| trim-2026-09-14b-27 | docs/trader-tick-queue.md | 208-208 | §4 D3 ASIA watch tolerance paragraph (said next read about 2026-08-17) | docs/trader-tick-queue-archive.md | 785 | 3ada25df46a9d07d63832ea35bfb57d538ec262fa8fb571619a8809b7133b1ff |
+| trim-2026-09-14b-28 | docs/trader-tick-queue.md | 212-212 | §4 data-gate line - A5 VPFR shape (reading from 2026-08-07) | docs/trader-tick-queue-archive.md | 337 | f86308fae7769db1a6f5d340fbb344e6c675f1616d283d07714c0fae809afaa3 |
+| trim-2026-09-14b-29 | docs/architecture.md | 32-34 | Directory Layout - IMarketDataSource.vb entry (said DORMANT until P2) | docs/architecture-archive.md | 292 | d589f08628f26cf45b80c9ed1cb0dbfbf48dbca5a17f0ab23f797ff188272b5e |
+| trim-2026-09-14b-30 | docs/architecture.md | 38-43 | Directory Layout - MarketState.vb entry | docs/architecture-archive.md | 566 | 043655a87705cac966efc64307dfd57a0d408b3f38e00de7ae61bf1bde8021b4 |
+| trim-2026-09-14b-31 | docs/architecture.md | 44-56 | Directory Layout - DeribitWsFeed.vb entry (said DORMANT) | docs/architecture-archive.md | 1215 | b604496c164e760ecbaf2d7b2320f53c49e76b1ce1de69bc7d626eafbbba3fa0 |
+| trim-2026-09-14b-32 | docs/architecture.md | 57-62 | Directory Layout - ShadowParityComparer.vb entry | docs/architecture-archive.md | 599 | 8ee903cb120af09094f47860d12073b5b4feaed552d60fdaacbf0af4293e6a56 |
+| trim-2026-09-14b-33 | docs/architecture.md | 63-75 | Directory Layout - TradeStoreGapRepair.vb entry | docs/architecture-archive.md | 1195 | 3e923e8ee839033922a6db6ac23700d4e84e5d3ab9b08947feb96a1c3f61ac31 |
+| trim-2026-09-14b-34 | docs/architecture.md | 76-80 | Directory Layout - MtfRefreshPolicy.vb entry | docs/architecture-archive.md | 489 | fee214e10c080587af72fd5c22e18ffd2c71d13e4c4d44db264440d76235de83 |
+| trim-2026-09-14b-35 | docs/architecture.md | 86-86 | Directory Layout - settings.json entry (said version on line 1) | docs/architecture-archive.md | 124 | f907549bf637f579ae92e461b3629902ec8e86c8c19a96252cccb7cc4b4d3e05 |
+| trim-2026-09-14b-36 | docs/architecture.md | 90-95 | Directory Layout - EngineSettings.vb entry | docs/architecture-archive.md | 513 | 7e9a4385fd66cb881684e87e742b5422bbd04ac75c35e3fe95be53e7828c5db6 |
+| trim-2026-09-14b-37 | docs/architecture.md | 96-115 | Directory Layout - SettingsLoader.vb entry (overlay narrative) | docs/architecture-archive.md | 1793 | c2fc6f8d01a425279473ba88d700cb0ffe9d5ea3ed5e43d9ad9820a0c246ccf5 |
+| trim-2026-09-14b-38 | docs/architecture.md | 117-124 | Directory Layout - ExecutionResolution.vb entry | docs/architecture-archive.md | 726 | af417b3a1a54fed68482b8b4cf1f669091870c93ea1f792f8b5e956895a841bf |
+| trim-2026-09-14b-39 | docs/architecture.md | 126-132 | Directory Layout - ProcessIdentity.vb entry (said columns land at the v0.8 rotation) | docs/architecture-archive.md | 628 | 27bea2ba8a2c96103028f9506c6f4da2542282b1976c0bbc0d6fe31c44f3628a |
+| trim-2026-09-14b-40 | docs/architecture.md | 133-154 | Directory Layout - SignalEmitter.vb entry (File.Replace guard narrative, broken tree prefixes) | docs/architecture-archive.md | 1973 | eefeb5dfe9327b2bdee54a877d61a721e37d7e97f44066f27bb057c80712670f |
+| trim-2026-09-14b-41 | docs/architecture.md | 155-159 | Directory Layout - ScoringEngine_Types.vb entry | docs/architecture-archive.md | 419 | d2ea5decccb315f8a8e2aa298cbc11e649b2d6c3b8dee8452d9fb833786f3d83 |
+| trim-2026-09-14b-42 | docs/architecture.md | 160-166 | Directory Layout - ScoringEngine_Helpers.vb entry | docs/architecture-archive.md | 578 | 94086bb75584937276e748406052ba10f4810e008f60e0b043a64c47fd069800 |
+| trim-2026-09-14b-43 | docs/architecture.md | 167-174 | Directory Layout - ScoringEngine_Calculate_Scoring.vb entry | docs/architecture-archive.md | 615 | 2abe90336cb8ab3782aa749e0ed05a7c9e69ecd08f055cb591442698afb83916 |
+| trim-2026-09-14b-44 | docs/architecture.md | 175-187 | Directory Layout - ScoringEngine_Calculate_Verdict.vb entry | docs/architecture-archive.md | 1100 | 64513e7f8fe1c2af5e1d7e89fba85285b69f7e0980df706162a4962e2478c5dd |
+| trim-2026-09-14b-45 | docs/architecture.md | 188-190 | Directory Layout - ScoringEngine_Kelly.vb entry (said called from MainForm_Render) | docs/architecture-archive.md | 298 | 988243f3db1a05e5ebeb7b61f91eb38119185c7a4738016fb56eef781e0132a1 |
+| trim-2026-09-14b-46 | docs/architecture.md | 192-197 | Directory Layout - IndicatorResults.vb entry | docs/architecture-archive.md | 522 | dc7db4a2832878eff5f549dcc35a171883da83d2426921f9c312554340921e07 |
+| trim-2026-09-14b-47 | docs/architecture.md | 201-206 | Directory Layout - Indicators_Volatility.vb entry (said Optional params) | docs/architecture-archive.md | 494 | 9ae9d1a475132130c45cfe33a78eaf580e8a5d3f5e73dc7e40d2f10aa81463ad |
+| trim-2026-09-14b-48 | docs/architecture.md | 207-215 | Directory Layout - Indicators_OrderFlow.vb entry | docs/architecture-archive.md | 790 | d6e06c9e0bbadbf0f6b4f667e25889c2eb808cdede691e83f255722463704646 |
+| trim-2026-09-14b-49 | docs/architecture.md | 216-229 | Directory Layout - TradeStoreWriter.vb entry (monotonic-guard narrative) | docs/architecture-archive.md | 1308 | 6e0ff79059cde3524fa30de414e016a714babee68992c448545b11e7b66a0015 |
+| trim-2026-09-14b-50 | docs/architecture.md | 230-243 | Directory Layout - LevelAbsorptionTracker.vb entry | docs/architecture-archive.md | 1221 | 148d73f6f48358fec5440d4514aa91b7b7f83b215b79afa7fd072a64f40d8b7c |
+| trim-2026-09-14b-51 | docs/architecture.md | 252-262 | Directory Layout - MainForm_Layout.vb entry | docs/architecture-archive.md | 966 | e74236356a6c707920bab5f5ac72ccdbf8b46a386b252f5d83f734d533fa3708 |
+| trim-2026-09-14b-52 | docs/architecture.md | 267-278 | Directory Layout - MainForm_Analysis.vb entry (said calls RenderOutput) | docs/architecture-archive.md | 1026 | 6849b5c81a836d9fc6be38a155e08cfce1838789dc0424135855fd5ff8aad557 |
+| trim-2026-09-14b-53 | docs/architecture.md | 279-290 | Directory Layout - MainForm_PlaintextSnapshot.vb entry | docs/architecture-archive.md | 999 | 922e5b828be2d75a5096729a91346f46072fa0224929edbf32eeb4adbaba1e1e |
+| trim-2026-09-14b-54 | docs/architecture.md | 291-296 | Directory Layout - MainForm_Render_Cards.vb entry | docs/architecture-archive.md | 531 | e39af876f39de2d9c10b767d7ebf1f652891fb5be9613d1d2007a2196ab62758 |
+| trim-2026-09-14b-55 | docs/architecture.md | 297-306 | Directory Layout - MainForm_SignalBridge.vb entry | docs/architecture-archive.md | 893 | a0f6325e797f71e1822fe12b811ad92a6ee61cba855ccc25d5d5d9f77c81ff60 |
+| trim-2026-09-14b-56 | docs/architecture.md | 310-314 | Directory Layout - WhatIfLauncherForm.vb entry | docs/architecture-archive.md | 502 | 72a6a2f9ba4930fe28f44db06eeb93f5d3a83579c5f0ccb85a62b1d06c2c11a4 |
+| trim-2026-09-14b-57 | docs/architecture.md | 319-341 | Directory Layout - analysis/ entry (placed-target migration narrative) | docs/architecture-archive.md | 1937 | b029c1692135bdf233803d5be4367e67b763351ab0d8ca973508e753fca77745 |
+| trim-2026-09-14b-58 | docs/architecture.md | 344-350 | Directory Layout - tools/AutoTweaker/ entry | docs/architecture-archive.md | 598 | 815104d4c6f27acd7a98572d002516808f2744da2e6489889e68c42b40302a36 |
+| trim-2026-09-14b-59 | docs/architecture.md | 351-361 | Directory Layout - tools/WhatIfRunner/ entry | docs/architecture-archive.md | 1034 | 1f6dcfdd40c115d9fc00a6e4427f37b5ae61498f5be0357bd3599347dcff416b |
+
+### Reformats (layout changed, content kept - not moves)
+
+| File | Change | Original | Content check |
+|---|---|---|---|
+| `docs/trader-profile.md` | Indented plain-text blocks converted to compact markdown (bullets plus three tables: indicators, rejected approaches, ATR bands). No content change | git tag `doc-trim-2026-09-14b-pre`; byte copy `docs/archive/doc-trim-2026-09-14b/originals/trader-profile.md` | Word-multiset diff, old against new. Added words are layout only (the header layout note, table column labels). Removed: "this document captures" (intro rephrased) and one each of "low", "normal", "high" (the ATR table header is now shared by both rows) |

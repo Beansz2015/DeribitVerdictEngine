@@ -9,6 +9,8 @@
 
 > **Trimmed 2026-09-14 (UTC).** Superseded and history text in this file moved verbatim to [`history-archive.md`](history-archive.md) §I. Every moved block leaves a pointer carrying its `trim-2026-09-14-NN` id. Ledger: [`doc-trim-log.md`](doc-trim-log.md). Pre-trim original: git tag `doc-trim-2026-09-14-pre`; byte copy under `docs/archive/doc-trim-2026-09-14/originals/`.
 
+> **Second trim pass 2026-09-14 (UTC):** stale state in this file's §7, §8, §10, §12 and §16 moved verbatim to [`history-archive.md`](history-archive.md) §J, ids `trim-2026-09-14b-NN`, same ledger. Pre-pass original: git tag `doc-trim-2026-09-14b-pre`.
+
 Operational reference for any AI conversation continuing this project. Historical content — pre-v27 settings change rationale, full version history back to v0.33, completed spec bundles, resolved parked observations — lives in `docs/history-archive.md`.
 
 **Session start checklist:**
@@ -169,7 +171,7 @@ Pre-v22 settings change rationale and earlier audit-trail commentary lives in `d
 - **Step 5b (VerdictContext):** FLOW_UNCONFIRMED / MOMENTUM_FADING / STRUCTURALLY_WEAK / CONFIRMED. **NO TRADE special case (v30):** CONFIRMED relabels to ALIGNED. Decay ratios + count thresholds from `cfg.Scoring.ContextTagThresholds.*`.
 - **Step 6 (CalcHoldStatus — layered exit):** Layer 1 microstructure (2+ adverse → fast EXIT) → Layer 1.5 structural break (prior swing breached) → Layer 2 momentum break (ROC crosses 0) then OBV divergence → Layer 3 RSI divergence / single adverse / RSI+ROC structural. Only renders when `posState ≠ None`.
 - **Step 7:** placed levels rendered from `ComputeSideLevels` (fallback multipliers `cfg.Scoring.AtrTargetMultiplier`/`AtrStopMultiplier` 1.75/1.6 + `structural_levels` bounds/sessions — see §8). **Structural rows** rendered in UI alongside (cyan when both target+stop exist, dim when partial). v30 `FormatRR` uses `< 0.1` literal for sub-1dp ratios.
-- **CalcKellySizing():** called from `RenderOutputHeader` after ATR levels. Display-only, zero scoring impact.
+- **CalcKellySizing():** called inline from `BuildPlaintextSnapshot` (`UI/MainForm_PlaintextSnapshot.vb`) before the card binds. Display-only, zero scoring impact. Original line: [`history-archive.md` §J, `trim-2026-09-14b-01`](history-archive.md#trim-2026-09-14b-01)
 
 For full annotated `Calculate()` pipeline detail, see `docs/architecture.md`.
 
@@ -184,7 +186,7 @@ For full annotated `Calculate()` pipeline detail, see `docs/architecture.md`.
 - **Structural placement display:** fallback target shown ahead of an arrow to the placed value with reason label (e.g. `PLACED @ 95200.0 (SWING_HIGH_5M)`; legacy path renders `CAPPED @ …`). **v30 sub-tick suppression:** when `|fallback − placed| < max(0.5, ATR × 0.02)`, the label is hidden; target renders as a normal value (CSV `TargetCapReason` still populated for analytics).
 - **Multipliers read from cfg** — labels and R:R display are dynamic, not hardcoded.
 - **Structural rows** below ATR block: `Long structural: Stop X | Entry X | Target X  R:R 1:N  (risk X / rwd X)` in cyan when both target+stop exist; dim with per-side missing-data note when only one side (v30 F12 wording). Mirror for short.
-- **Kelly Sizing block** rendered after ATR levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. Advisory label notes R:R is ATR-basis (not structural). EST mode only — CAL mode will return when backtesting module ships empirical per-tier win rates. Suppressed when KellyF = 0. v30 plural fix: `1 contract` / `N contracts`.
+- **Kelly Sizing block** rendered after ATR levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. An advisory line notes R:R is ATR-basis (not structural). EST mode only; CAL mode is parked because the 2026-09-09 calibration read did not separate the tiers (this file's §15, row dated 2026-09-08). Suppressed when KellyF = 0. v30 plural fix: `1 contract` / `N contracts`. Original line: [`history-archive.md` §J, `trim-2026-09-14b-02`](history-archive.md#trim-2026-09-14b-02)
 - **Funding display** (FUNDING section): rate row + momentum row. v30 negative-zero clamp at both display sites.
 
 ---
@@ -201,7 +203,7 @@ All RSI/ROC thresholds read from cfg (`HoldRoc*`, `HoldRsi*`).
 
 ## 10. CSV Logging & Auto-Run
 
-- `AnalysisLogger.LogRun(r, verdict)` → `analysis_log.csv` in exe directory. v0.4 schema (87 columns).
+- `AnalysisLogger.LogRun(r, verdict)` → `analysis_log.csv` in exe directory. The header carries 116 columns (counted from `AnalysisLogger.Header` on 2026-09-14). A header change rotates the book to a `.bak`, and every rotation rider is listed in [`csv-rotation-riders.md`](csv-rotation-riders.md). Original line: [`history-archive.md` §J, `trim-2026-09-14b-03`](history-archive.md#trim-2026-09-14b-03)
 - `CalibrationReport` summarises recent directional accuracy.
 - Auto-run timer driven by `MainForm_AutoRun.vb`; interval configurable from UI (min 10s).
 - `VerdictContext` column may carry `ALIGNED` on post-v30 NO TRADE rows.
@@ -228,7 +230,7 @@ Currently-open items pending live-data review. **Roadmap absorption (2026-07-02)
 | **v52 aggressor-velocity wire-in post-ship watch (S5.2)** | NY-by-1-min watch: burst fire rate 8-12 %, same-side share (TFI on the burst side) at least 85 %, TFI-modifier engagement about 5-10 % of NY directional votes. Trigger: out of band on 2 consecutive weekday sessions, then re-run the derivation in `aggressor-velocity-s52-derivation-2026-07-13.md` §5.2 and §7. The res-3 display-only clause is spent (LONDON armed v60, ASIA v65). Full cell: [`history-archive.md` §I, `trim-2026-09-14-03`](history-archive.md#trim-2026-09-14-03) | Medium (watch) |
 | **Funding momentum — time-anchored window post-ship watch** (v53, SHIPPED 2026-07-15) | Per-resolution check on post-v53 rows: FLAT 60-70 % and Step-3b engagement 15-25 %, with res-1 AND res-3 both in band. Trigger for a T re-fit: both resolutions out of band in the same direction across 2 weekday sessions, not one hot week. Pre-v53 rows are not comparable. Spec: `funding-momentum-time-anchored-window-proposal.md`. Full cell: [`history-archive.md` §I, `trim-2026-09-14-04`](history-archive.md#trim-2026-09-14-04) | Medium (watch) |
 | **Session volume multipliers** | **PARKED 2026-07-31 behind the D3 forming-bar ruling (JOB 2 decision D-C).** The volume vote's numerator is the in-progress bar that the threshold excludes, so the vote fires on 0.69 % of NY runs and 2.66 % at ExecRes 3; a multiplier tuned now tunes a dial on nothing. The `auto_run.trigger_mode` rider now travels as the `TriggerMode` column in the next rotation ([`csv-rotation-riders.md`](csv-rotation-riders.md)). Full cell: [`history-archive.md` §I, `trim-2026-09-14-05`](history-archive.md#trim-2026-09-14-05) | Blocked (D3) |
-| TFI threshold | BLOCKED — the W1 audit (2026-07-03, F11) found TFI is **not logged at all** (no CSV column), so the sweep has no data. `TFIValue`/`TFISignal` columns ride #5's v0.7→v0.8 rotation (retune spec C1, APPROVED); becomes measurable at the next audit re-run. | Blocked (data) |
+| TFI threshold | UNBLOCKED: `TFIValue` and `TFISignal` are CSV columns now (present in `AnalysisLogger.Header`, checked 2026-09-14), so the sweep has data at the next W1 audit re-run. Original row: [`history-archive.md` §J, `trim-2026-09-14b-04`](history-archive.md#trim-2026-09-14b-04) | Waiting on the W1 audit re-run |
 | **v51 placed-geometry post-ship watch (B4b)** | Read 2026-07-31 ([`w6-1-london-ruling-2026-07-31.md`](w6-1-london-ruling-2026-07-31.md) §3): STOP_CLAMPED binds on 95-100 % of structural-stop rows, so stops are de facto ATR stops and the live question moves to the L9 un-clamp (gated on L3). BELOW_MIN_MOVE NY 23.35 % / LONDON 15.16 % / ASIA 18.28 % is the recorded baseline. The reach-rate and LONDON structural-TARGET arms (the B4b F3 watch) have no instrument; that watch was RETIRED 2026-08-12 (`trader-tick-queue.md` §0a). Full cell: [`history-archive.md` §I, `trim-2026-09-14-06`](history-archive.md#trim-2026-09-14-06) | Medium (watch - F3 arm retired 2026-08-12) |
 | **TTM flatThreshold** | **Re-derived 2026-07-31, then PARKED 2026-08-02.** The shipped 0.5 sits below the 1st percentile of the 7-bar drift, so the FLAT band is inert (recorded and deliberate). The unit is wrong, not the value: the fix is ATR-relative (k about 0.25-0.30), a code change with its own spec and dataset boundary. Do not inherit the 25.0/40.0 ladder or the 1.45 ratio (measured 1.774). See `trader-tick-queue.md` §0a "Explicitly NOT owed". Full cell: [`history-archive.md` §I, `trim-2026-09-14-07`](history-archive.md#trim-2026-09-14-07) | Medium (parked) |
 | VPFR numBuckets | Default 50; review POC resolution on quiet sessions. | Low |
@@ -337,7 +339,7 @@ Older entries are **not** deleted — **v63 down to v27** live verbatim in [`his
 
 > **Sequencing authority: `docs/roadmap.md`** — adds a third strategic objective alongside the CLI port (16.2): the **signal bridge to DeribitOrderPlacementApp** (verdict/score/direction/ATR feeding its autotrade function; human display stays the primary output, the machine contract is additive).
 
-Longer-arc plans. **All items here are KIV** while the team is in the live-data accumulation phase post-v30. Recorded so architectural prerequisites stay visible and groundwork can be laid opportunistically.
+Longer-arc plans. **All items here are KIV** while live data accumulates. Recorded so architectural prerequisites stay visible and groundwork can be laid opportunistically. Original line: [`history-archive.md` §J, `trim-2026-09-14b-05`](history-archive.md#trim-2026-09-14b-05)
 
 ### 16.1 Auto-Tweaking via Frontier-LLM API
 
@@ -361,7 +363,7 @@ When the engine's analysis fails to predict outcomes at a defined rate, the engi
 **Architecture status — partly satisfied.** Most of the codebase is already host-agnostic: scoring engine, indicators, settings, `DeribitClient`, `DynamicNorms`, `AnalysisLogger`, `OiSnapshot`, `AnalysisOutputDump`, `LivePerformanceTracker`, `OhlcCache`, the entire `tools/AutoTweaker/` and `analysis/` subtrees.
 
 **Still WinForms-coupled:**
-- Output rendering (`MainForm_Render_*.vb`) is RTF-based. CLI host needs a parallel renderer (ANSI plaintext or structured JSON).
+- Output rendering. `BuildPlaintextSnapshot` (`UI/MainForm_PlaintextSnapshot.vb`) already builds plaintext (P5b), but it is a `MainForm` partial, so a CLI host needs it lifted out. The card surface (`UI/MainForm_Render_Cards.vb`) is WinForms-only. Original line: [`history-archive.md` §J, `trim-2026-09-14b-06`](history-archive.md#trim-2026-09-14b-06)
 - State plumbing (`_oiHistory`, `_fundingHistory`, `_ofiHistory`, MTF cache, `_prevRegime`, `_metricMode`) on `MainForm`. CLI host needs an equivalent state container.
 - Auto-run scheduling. `WinFormsAutoRunTimer` uses `Control.Invoke`; CLI variant uses `System.Threading.Timer` callbacks (interface already defined).
 
@@ -394,15 +396,11 @@ Items not currently scheduled but with concrete promotion conditions.
 *Condition:* CalibrationReport's `BEST VOLUME PIVOT DISTRIBUTION` shows "best is also most-recent" rate < 50% AND auto-tweaker output shows volume-weighted pivots correlate with target-hit rate. Both required.
 *Action:* re-spec `d2-volume-weighted-pivots-v2-proposal.md`. Promote to 4th cap tier above swing.
 
-**P2. Funding momentum threshold v23+ tuning.**
-*Condition:* offline analysis `FundingMomentumDiagnostic` shows FundingDelta percentiles such that a threshold below 1 bp would meaningfully change the RISING/FALLING/FLAT distribution.
-*Action:* simple settings-only follow-up pass. If percentiles show 1 bp is genuinely above all observed deltas at REST cadence, accept as polling-cadence ceiling.
+**P2.** SUPERSEDED 2026-07-15. The v53 time-anchored funding window replaced the count window this item tuned, and its threshold was re-derived; the live check is the funding-momentum watch in this file's §12. Original text: [`history-archive.md` §J, `trim-2026-09-14b-07`](history-archive.md#trim-2026-09-14b-07)
 
 **P3.** RESOLVED 2026-05-08 — OI×CVD asymmetry (`priceUp` was biased by 1bp against `MarkPrice`). See `history-archive.md` §D.
 
-**P4. STRONG/MEDIUM tier collapse in failure-rate matrix.**
-*Condition:* after 1000+ tier-eligible rows, both STRONG and MEDIUM matrices pick (window, threshold) combinations within 1 cell of each other.
-*Action:* revise `failure-definition-v2-proposal.md` to a single tier-agnostic matrix.
+**P4.** SUPERSEDED 2026-07-21. The placed-target migration retired the matrix's threshold axis, so the condition cannot be evaluated. Tier separation is now read by the band ladder (`analysis/BandLadder.vb`); the 2026-09-09 read found the tiers do not separate (this file's §15, row dated 2026-09-08). Original text: [`history-archive.md` §J, `trim-2026-09-14b-08`](history-archive.md#trim-2026-09-14b-08)
 
 **P5. Liquidation count window.**
 *Condition:* CalibrationReport still shows 0 liquidation events 1000+ rows after Bundle 1 ships.
@@ -414,17 +412,15 @@ Items not currently scheduled but with concrete promotion conditions.
 
 **P7.** RESOLVED 2026-05-13 — Live per-analysis success/fail display shipped as v26. See `history-archive.md` §D.
 
-**P8. Live performance display — WEAK tier filtering.**
-*Condition:* after ~1 week of live data, if `WEAK LONG`/`WEAK SHORT` inclusion produces visibly different headline rates vs STRONG+MEDIUM-only filter AND trader observes the WEAK-included rate is misleading.
-*Action:* small spec changing `LivePerformanceTracker`'s eligibility filter. Optionally expose as `performance_display.tier_filter` (`all_directional` | `actionable_only`).
+**P8.** RESOLVED 2026-07-21. WEAK LONG / WEAK SHORT rows are excluded from the perf-strip rates at display time (E2a, `LivePerformanceTracker.vb`), and the tooltip shows the excluded count. Original text: [`history-archive.md` §J, `trim-2026-09-14b-09`](history-archive.md#trim-2026-09-14b-09)
 
 **P9. Auto-tweaker SKIPPED_SESSION_BOUNDARY waste.**
 *Condition:* v29 fixed-mode advances `LastEvaluatedRowIndex` by full WindowSize on session-boundary skip, losing up to `WindowSize-1` rows. If RoundHistory shows lots of SKIPPED_SESSION_BOUNDARY after a week of running, the boundary-aware skip could be smartened to advance only up to the boundary itself.
 *Action:* small follow-up patch in `AutoTweakerCore`.
 
-**P10. POC tier 3 of target cap never fires.**
-*Condition:* if 1000+ runs with `CAPPED @` events show 0 POC selections AND the `hvnAbove`/`hvnBelow` gate on POC is the bottleneck (rather than POC just being geometrically dominated by HVN). Investigation 2026-05-17 showed code path is reachable but conditions are narrow.
-*Action:* consider removing the HVN gate so POC fires as a true "no swing + no HVN" fallback. Re-spec if pursued.
+**P10. POC tier of the target ladder rarely places.**
+*Condition:* if 1000+ directional runs show 0 rows whose `TargetCapReason` is the POC tier, AND the HVN-proximity gate on POC is the bottleneck (rather than a swing or HVN candidate taking priority). Since v51 the ladder is structural-first and POC keeps the legacy HVN gate (`SignalEmitter.ComputeSideLevels`). The 2026-05-17 investigation (before v51) found the path reachable but narrow.
+*Action:* consider removing the HVN gate so POC places as a true "no swing + no HVN" fallback. Re-spec if pursued. Original text: [`history-archive.md` §J, `trim-2026-09-14b-10`](history-archive.md#trim-2026-09-14b-10)
 
 **P11. ATR-band recalibration for the current price regime.** RESOLVED 2026-06-17 (settings v37): `static_ref` 115 to 38, and the trader-profile ATR bands recalibrated (current bands: `trader-profile.md` §5, the ATR thresholds block, which is their single home). Full text: [`history-archive.md` §I, `trim-2026-09-14-34`](history-archive.md#trim-2026-09-14-34).
 
@@ -432,9 +428,7 @@ Items not currently scheduled but with concrete promotion conditions.
 *Condition:* trader-profile §6 says "Transitional = reduced size, extra caution." The engine honors the caution via the Step-4 ADX-proximity *score* penalty (fewer/weaker verdicts) but applies no *size* haircut — a transitional trade that passes is Kelly-sized like a clean trend. Display-only (Kelly is advisory). **Design tension to resolve first:** competes with the profile's vol-normalization (`Base × AvgATR/CurrATR` → low ATR = *bigger* size); a transitional/low-vol caution multiplier would layer *on top* and the interaction must be specified (which signal wins when). Backlogged 2026-06-14.
 *Action:* if transitional trades that pass still size too aggressively in practice, spec a regime/vol caution multiplier on the Kelly advisory. Display-only; low priority.
 
-**P13. Document the tweaker-tunable vs hand-tuned settings split in the User Manual.**
-*Condition:* `settings.json` keys fall into three de-facto ownership tiers that today are only encoded developer-facing (in `PromptBuilder` HARD CONSTRAINTs 11–16 + `SettingsDiffApplier` rejects), never documented for the trader: **(1) auto-tweaker-tunable** failure-rate levers (verdict thresholds, `OFI.avg_window_sec` + dominance ratios, etc.); **(2) hand-tuned re-baseline overrides** — the per-session / per-resolution keys (`session_volume.sessions[].roc_magnitude_threshold`, `resolution_profiles.*`, and the future `aggressor_velocity.sessions[].*`), set by manual firing-rate-match, never auto-tuned; **(3) hand-toggle feature switches** (`OFI.averaging_enabled`, `exit_guard.*`, `network.*`, `aggressor_velocity.enabled`/`scoring_enabled`). Raised 2026-07-01 during the P4 #5 spec (trader asked which knobs the tweaker owns).
-*Action:* add a UserManual section/table listing each `settings.json` block's keys by tier (tweaker-tunable / hand-tuned re-baseline / hand-toggle switch), sourced from the `PromptBuilder` HC 11–16 + `SettingsDiffApplier` reject lists. Doc-only, ~30-min pass. Backlogged 2026-07-01.
+**P13.** RESOLVED in commit `9b54daa`. `docs/UserManual.md` carries the table "Settings ownership tiers (P13 — who tunes what)". Original text: [`history-archive.md` §J, `trim-2026-09-14b-11`](history-archive.md#trim-2026-09-14b-11)
 
 **P14. Auto-tweaker Phase-2b — per-population auto-tuning (workstream C).** Draft spec exists: `auto-tweaker-phase2b-per-population-autotuning-proposal.md` (DRAFT, living). Lifts the tweaker from **one** designated population (NY×1, Phase-2a) to **many** `(session × resolution)` populations — each with its own evaluated-row cursor / window / MinTier / picked-cell history and its own tunable home, so an Asia/London tune lands in `resolution_profiles` and never overwrites the global keys NY depends on. Not part of the P4/WebSocket upgrade catalogue — this is the *auto-tweaker* arc's workstream (C), which is why it doesn't appear in the P4 list.
 *Condition:* build only if the manual (B) Asia/London re-baseline cadence proves heavy enough to be worth automating. Blocked on three gates (spec §1): (A) population filter shipped ✅; ≥50 weekday-3-min rows per session (Asia/London separately); (B) the manual `resolution_profiles["3"]` re-baseline done + the §3 schema-home decision signed off. **Lowest-priority in the v36 arc — may never be built.**

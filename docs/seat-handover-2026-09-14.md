@@ -14,7 +14,7 @@
 - **Decision rule:** `CLAUDE.md` *"AUTO-PROCEED ON YOUR OWN RECOMMENDATION"*. Take reversible calls and log them one line each. **Reserve** settings, scoring, rendered values, collector writes, schema changes, and any pick that is cheaper AND less truthful.
 - ⛔ **Clock trap: GMT+8 workstation, UTC project.** This session the harness announced 09-12, 09-13 and 09-14 while UTC was a day behind twice. **Run `date -u` before your first dated claim.**
 - **Trader profile:** read [`trader-profile.md`](trader-profile.md) in full at every session start (ruled 2026-09-14, trader-directed). It was re-synced 2026-09-14 (trader-ruled); strategy is owned by the current Claude orchestrator, and its §5 is the single home of the ATR bands.
-- **Doc trim 2026-09-14 (UTC):** superseded and history text moved out of `DeribitIndicatorProject.md`, `trader-tick-queue.md` and `architecture.md` into their archives. Every moved block is listed in [`doc-trim-log.md`](doc-trim-log.md); re-check with `tools/checks/doc-trim-verify.ps1`. The full-read rule is unchanged.
+- **Doc trim 2026-09-14 (UTC):** superseded and history text moved out of `DeribitIndicatorProject.md`, `trader-tick-queue.md` and `architecture.md` into their archives. Every moved block is listed in [`doc-trim-log.md`](doc-trim-log.md); re-check with `tools/checks/doc-trim-verify.ps1`. The full-read rule is unchanged. A second pass the same day swept stale state (the coverage cluster rows are closed, the S0 `--verify-venue` suspension condition is met, the ASIA burst watch read is overdue), compacted the `architecture.md` Directory Layout and reformatted `trader-profile.md`; tag `doc-trim-2026-09-14b-pre`.
 
 ---
 

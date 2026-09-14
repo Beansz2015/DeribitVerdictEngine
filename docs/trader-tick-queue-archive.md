@@ -507,3 +507,192 @@ Source: `docs/trader-tick-queue.md` lines 429-429 at git tag `doc-trim-2026-09-1
 <!-- trim-2026-09-14-51 begin -->
 **⭐ Dated trigger — the only watch with a computed date.** The Kelly EST advisory renders *"Actual numbers after next book doubling"* — a **forward promise on screen**. **Trigger: ≥406 pooled weekday STRONG** (double the 201 at the F1 read), **ETA ~2026-08-30** at the measured two-box rate of **12.4 STRONG/weekday**. **Bundle with the W6-4 re-run**, which lands in the same window on its own basis — one pooled freeze, one session, both instruments, and the overfit counter stays honest because they consume the same span. **If the ladder still does not separate, the line must be re-worded or the block suppressed — it must not silently promise another doubling.** ⚠ **Blocked on the §2 copy-back:** as of 2026-08-07 the local book holds **149** weekday STRONG (2026-07-03 → 2026-08-06) and the AWS copy stops 07-31, so **the pooled figure cannot be read at all right now.** [`kelly-est-honesty-decision-2026-08-02.md`](kelly-est-honesty-decision-2026-08-02.md) §2.1.
 <!-- trim-2026-09-14-51 end -->
+
+---
+
+## D. Trimmed from `trader-tick-queue.md` (2026-09-14, second pass)
+
+Moved verbatim by the second 2026-09-14 trim pass. Each block sits between `begin`/`end` markers and is byte-identical (LF form) to the stated line range at git tag `doc-trim-2026-09-14b-pre`. Ledger and hashes: [`doc-trim-log.md`](doc-trim-log.md). Re-check with `tools/checks/doc-trim-verify.ps1`. **History only - not current state.**
+
+<a id="trim-2026-09-14b-12"></a>
+### trim-2026-09-14b-12 - §2 intro line (said verified present 2026-08-07)
+
+Source: `docs/trader-tick-queue.md` lines 135-135 at git tag `doc-trim-2026-09-14b-pre` - 93 B - SHA-256 `1b93a1faac2379849d8b6b5a1486e179e93803c1475cdb292a9d34ee938ffb6e`.
+
+<!-- trim-2026-09-14b-12 begin -->
+Ordered by what each one prevents. **Verified present in the tree 2026-08-07** unless noted.
+<!-- trim-2026-09-14b-12 end -->
+
+<a id="trim-2026-09-14b-13"></a>
+### trim-2026-09-14b-13 - §2 closed pointer rows, run 1 (WD-TIDY to the trade_seq skip claim)
+
+Source: `docs/trader-tick-queue.md` lines 141-150 at git tag `doc-trim-2026-09-14b-pre` - 1752 B - SHA-256 `b1fa072734673f7c88584fd200d561c6b06ebc674605a45715dcd9264a9dee4e`.
+
+<!-- trim-2026-09-14b-13 begin -->
+| **`WD-TIDY`** — four weekday-predicate sites converged | `5996f01` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`D3-RESIDUAL`** — live-strip fabricated `0.0 bps` fixed | `4ab0b25` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`R-2` residual** — `ApplySpread` extraction closes the spread seam | `1ad7d6d` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`OPS-1`** — `collector.ps1 fetch` collects the rotated `.bak` by literal name | `124e154` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`I17-A6`** — `A6`'s stale `trendGate:=10.0` made synthetic | `98ed4fd` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`I17-SWEEP`** — 26 MECHANISM literals measured; 17 made synthetic | `1b2adbe` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`S2-2`** — `CalcSpread` deleted; `CalcSpreadBps` + `ClassifySpread` replace it | `57b55f9` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`S2-1`** — `CalcSpread` exclusion's false reason corrected | `57b55f9` (rode with `S2-2`) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`F-1`** — reverse (POCO-only) dictionary direction reported as `Orphans` | `a86a0cf` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`trade_seq` skip claim** — RESOLVED, unsourced, do not re-open without a measurement | — (ruling only) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+<!-- trim-2026-09-14b-13 end -->
+
+<a id="trim-2026-09-14b-14"></a>
+### trim-2026-09-14b-14 - §2 row - the absorption population is bimodal (2026-08-20 measurement)
+
+Source: `docs/trader-tick-queue.md` lines 151-151 at git tag `doc-trim-2026-09-14b-pre` - 1956 B - SHA-256 `a52407a3ab8dec6d989ead84c574faf569da0380cc3f13a2d6a98f276636cbae`.
+
+<!-- trim-2026-09-14b-14 begin -->
+| ⚠⚠ **THE ABSORPTION POPULATION IS BIMODAL AND THE TWO HALVES HAVE DIFFERENT BINDING GATES — measured 2026-08-20, and it outranks every anchor question** | Medium; changes what a mechanism fix must target | **MEASURED, both books, weekday, since v61 (2026-07-23). n=232 active episodes with `ratio>0`.** The denominator is recoverable from the CSV without new columns — `absorbRatio = aggrUsd / max(sizeStart − sizeMin, depletion_floor_usd)`, so **`den = AbsorptionAggrUsd / AbsorptionRatio`**. **`depletion_floor_usd` is 5000** (rescaled from 25000 at v61 — do not quote the v54 value). **THE SPLIT, and both books agree within 1.6 pp:** **FLOOR-BOUND** (den on the 5000 clamp ⇒ true depletion < 5000) **48.7 %** · **REAL DEPLETION** (den ≥ 5000, mean ~50k, max 788k) **51.3 %**. ⚠ **THE TWO HALVES ARE KILLED BY DIFFERENT GATES, so any single-anchor fix helps one and not the other:** **FLOOR half (n=113)** — `min_aggr_usd` is the SOLE binding gate: `aggr≥20k` **8.8 %** and both-gates **8.8 %**, *identical*, because den=5000 makes `aggr≥20000 ⇒ ratio≥4.0` pass `absorb_ratio` **automatically**. **REAL half (n=119)** — `absorb_ratio` binds hard: **twice** the money-gate pass rate (**17.6 %**) but ratio≥1.5 only **5.9 %**, because the large denominator kills it. ⚠⚠ **AND THE D8 PULL VETO OUTRANKS BOTH IN BOTH HALVES — REAL 77.3 %, FLOOR 56.6 %.** `pullFrac>1.0` alone is **50.4 %** of the REAL half; the FLOOR half carries a **12.4 % spike at EXACTLY 1.000**, the degenerate signature. **All three gates together: 5 survivors of 232 (1 REAL, 4 FLOOR)** — which reconciles exactly with the 5 fired signals in the 08-19 blind pass. **CONSEQUENCE FOR THE MECHANISM SPEC: the pull veto, not the anchors and not `window_sec`, is the dominant killer** — and `roadmap.md` already named its mechanism (*"D8 pullFrac inflation on sparse postLB"*) without knowing it was the top term. **Attack pullFrac first.** |
+<!-- trim-2026-09-14b-14 end -->
+
+<a id="trim-2026-09-14b-15"></a>
+### trim-2026-09-14b-15 - §2 closed pointer rows, run 2 (v67 skip gate, ForwardWindowJoiner guard)
+
+Source: `docs/trader-tick-queue.md` lines 153-154 at git tag `doc-trim-2026-09-14b-pre` - 349 B - SHA-256 `c4e49bc4d8046cfa8f704055031cd4e513b5c1fcc343d7df8ec778b919bf31d9`.
+
+<!-- trim-2026-09-14b-15 begin -->
+| **Degraded-feed audit / thin-trade-window skip gate (v67)** — MinTradesForScoring | `613cf1e` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`ForwardWindowJoiner`** — embedded-header-line guard added | `5b8515e` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+<!-- trim-2026-09-14b-15 end -->
+
+<a id="trim-2026-09-14b-16"></a>
+### trim-2026-09-14b-16 - §2 closed pointer rows, run 3 (streaming capture drop to DR-3)
+
+Source: `docs/trader-tick-queue.md` lines 156-162 at git tag `doc-trim-2026-09-14b-pre` - 1179 B - SHA-256 `1b10ac04d126799c5f4f0ff6611c1ce46d2ee0e89c658fe29248507938a0e617`.
+
+<!-- trim-2026-09-14b-16 begin -->
+| **Streaming capture ~50 % drop** — identity-keyed write guard, deployed | `1cec1ea` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **AWS copy-back — CSV and store** — DONE and INSTALLED 2026-08-14 | — (ops event) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`trade_id` + `trade_seq`** — schema built and deployed to AWS | `64d41e7` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **Gap repair Part A** — hole-derived resume cursor, built and deployed | `c6c6942` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`DR-1`** — `MinHoleMs` width floor removed | `91942d6` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`DR-2`** — repair scan truncation made time-contiguous | `91942d6` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`DR-3`** — `TotalRowsRepaired` reports rows appended, not the whole file | `5346bc0` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+<!-- trim-2026-09-14b-16 end -->
+
+<a id="trim-2026-09-14b-17"></a>
+### trim-2026-09-14b-17 - §2 row - up-interval starts at the DOWN line (built as coverage C-2)
+
+Source: `docs/trader-tick-queue.md` lines 163-163 at git tag `doc-trim-2026-09-14b-pre` - 1841 B - SHA-256 `eed5b4ecae52cc32f148216b0e8ba46827c8db2b059b611feeade301b9ca0c26`.
+
+<!-- trim-2026-09-14b-17 begin -->
+| ⚠ **An up-interval starts at the `DOWN` line, so a CONNECT WINDOW reads as capture time — and any span inside it with no rows reads `Defect`** | needs a spec; ⚠ **the obvious fix trades a false defect for a missed one** | ⚠ **NEW 2026-08-14, observed in the first real coverage run after SH-1 shipped, mechanism read in the code.** `CoverageReport.BuildUpIntervals` sets `FirstUtcMs` to the **earliest evidence** for an instance, and for a restart that is the **`DOWN`** line. But the checklist's own reading rule says *"a lone `DOWN` means the app started and nothing else has happened"* while *"an `OK` line is positive evidence that at least one analysis run completed"* — **so `DOWN` evidences that the process EXISTS, not that it can CAPTURE.** ✅ **Confirmed instance:** hour **2026-08-10 09:00** classified `Defect`, with the report's own Reason reading *split@09:59 — first span `Captured`, second span `Defect(empty)`*. That second sub-span is **3.4 seconds** long (marker 09:59:56.601 → hour end), and `ws_health` shows the process connected at **10:00:03.328** — so it was still starting up and **zero rows was correct behaviour, not a defect.** **That was 1 of the 4 defects in the window.** ⚠ **Rare — it needs a marker in the last few seconds of an hour** — but it fired on the very first production run. ⚠⚠ **Do NOT just seed from `OK` instead:** that SHRINKS the up-interval, so hours before the `OK` fall to `before-first` ⇒ `ExpectedMissing` — **trading a false defect for a possibly missed one, the wrong direction under J-B.** Connect latency is real and measured: **4.7 s, 5.5 s, 5.8 s, 6.7 s, 18 s, 20 s, 44.3 s** across the six recorded deploys. **The likely shape is a distinct "starting" state for the `DOWN`→`OK` window, not a boundary move.** **Model: Sonnet, effort: medium** |
+<!-- trim-2026-09-14b-17 end -->
+
+<a id="trim-2026-09-14b-18"></a>
+### trim-2026-09-14b-18 - §2 row - CoverageReport gapMs time tolerance (built as coverage C-1)
+
+Source: `docs/trader-tick-queue.md` lines 164-164 at git tag `doc-trim-2026-09-14b-pre` - 1515 B - SHA-256 `6d94adb3264b5e0af4bd4cfa67978f7d785b5893830e8c98d4fcbe4688eeca75`.
+
+<!-- trim-2026-09-14b-18 begin -->
+| **`CoverageReport`'s `gapMs` is a TIME tolerance standing in for a COMPLETENESS check — the DR-1 pattern, third instance** | one classifier arm; needs a short spec | ⚠ **NEW 2026-08-14, measured on the copy-back.** `ClassifyHour` reads `storeClean = stats.RowCount > 0 AndAlso stats.LongestGapMs <= gapMs`. **`gapMs` (300,000 ms) is a time tolerance** — exactly what D-2 of the downtime spec forbids for hole detection and what DR-1 removed from `ResolveRepairWindowsMs`. ✅ **Measured, so the severity is not guessed: over 63.1 h of tape that `trade_seq` proves 100.000 % complete (134,204 rows, ZERO missing), exactly ONE gap exceeds the threshold — 302,145 ms at 2026-08-13 21:46:50 UTC, beating it by 2.1 s.** That hour would classify **`Defect`** on provably complete tape. ✅ **CONFIRMED BY THE REPORT ITSELF 2026-08-14** — the coverage run classified hour **2026-08-13 21:00** as `Defect` under instance `e551f15e…` with reason `gap-breach(302145ms)`, **the exact figure predicted before the run.** ⚠ **Severity is LOW and the direction is SAFE** — it errs toward flagging, which is J-B's cheaper error, and it is one false defect in 63 hours. **Not urgent.** ⚠ **But `trade_seq` now makes completeness directly measurable per hour, so the tolerance is redundant where sequences are present.** The spec must handle the mixed store: **legacy hours have no sequence and still need the time heuristic**, so this is a *second* signal, not a replacement. **Model: Sonnet, effort: medium** |
+<!-- trim-2026-09-14b-18 end -->
+
+<a id="trim-2026-09-14b-19"></a>
+### trim-2026-09-14b-19 - §2 closed pointer rows, run 4 (WD-SEMANTICS to BuildResolutionCfg)
+
+Source: `docs/trader-tick-queue.md` lines 167-170 at git tag `doc-trim-2026-09-14b-pre` - 761 B - SHA-256 `dd8049f7ce35bf9f3f588c973fa681d8520c6559684ab0243849bf8883717368`.
+
+<!-- trim-2026-09-14b-19 begin -->
+| **`WD-SEMANTICS`** — `UnparsedExcluded` split from `WeekendExcluded` | `ab5600f` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`S-4`** — eval-cache backfill keyed on `(InstanceId, SignalId)` identity | `1aeae5a` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **Pooled minute-key dedup** — bound, KEEP the minute key (ruling reversed the recommendation) | — (ops procedure) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`BuildResolutionCfg`** — second stale fixture literal ruled MECHANISM + built | — (2026-09-03, no sha cited) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+<!-- trim-2026-09-14b-19 end -->
+
+<a id="trim-2026-09-14b-20"></a>
+### trim-2026-09-14b-20 - §2 row - absorption mechanism revision, full cell with superseded status text
+
+Source: `docs/trader-tick-queue.md` lines 171-171 at git tag `doc-trim-2026-09-14b-pre` - 4131 B - SHA-256 `dfcdb9b7f88f71e4d1a699c08c644ce319414b2ddaa16aa2c49e2f82ee986a6d`.
+
+<!-- trim-2026-09-14b-20 begin -->
+| **Absorption mechanism revision — the Path B proposal** | ⛔ **SHARPENED 2026-09-11 (UTC): what awaits a tick is `D-6d` ALONE, not "§6".** `D-1`–`D-5` were TICKED 2026-09-01 · `D-6a`/`D-6b` RULED · `D-6c` OPEN but gated on DATA, not on a tick. ⭐ **`D-6d` now has its own spec — [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md), whose §7 carries four decisions. Opus, effort HIGH, two separate sessions.** ⛔⛔ **AND IT RE-ORDERS THIS ROW — read the spec's §2.2 and §2.2b, not this cell's first draft, which claimed `D-2` was a no-op and was MEASURED WRONG the same day.** **`D-2` binds on 26.0 % of absorption-active reads carrying roughly a quarter to a half of all logged pressing (48.6 % on 6 weekday-days, 36.4 % on 8 — a lumpy sum; see [`absorption-episode-age-read-2026-09-13.md`](absorption-episode-age-read-2026-09-13.md)). The standing read is (c): `D-2` + `D-6d` Stage 1 together at the gate, Stage 2 after the read. Stage 2 BEFORE `D-2` is the one order that is measurably wrong.** *(Superseded status follows, per the quote-and-label convention.)* ~~✅ **WRITTEN 2026-08-14 and BLIND-CHECKED 2026-08-19. §6 STILL AWAITS A TRADER TICK — that is the only thing outstanding on this row.**~~ ⚠ **Do NOT open an implementer session until it is ticked.** ✅ **The embargo is SPENT** — [`seat-handover-2026-08-14.md`](seat-handover-2026-08-14.md) §0's blind re-derivation has run: [`absorption-blind-rederivation-2026-08-19.md`](absorption-blind-rederivation-2026-08-19.md), committed `8485173` before the proposal was opened. **Outcome: the population is CONFIRMED (pressed/active 10.76 % / 10.05 %, and `active/rows` 14.68 % / 14.71 % — a second ratio the original pass did not use), so Path A stays dead.** ❌ **Two of the four load-bearing claims FAILED:** `pullFrac` **does** carry a point mass at exactly 1.000 (200–380× local density, both books) and §8's residual **is** diagnosable from the shipped book (`postLB` floored on ~27 % of non-zero rows, 5.4× chance). ⚠ **Two arithmetic corrections:** the "~49 % arming rate" is **11.78 %** (all-row numerator over a directional-only denominator, and that denominator counted `NO TRADE [WEAK *]` as directional), and §3.1's tape-scale argument uses a mean where the median is **15×** smaller. ⭐ **The observation loss SEPARATES from logged data — ≈ 77 % is GEOMETRIC** (`proximity_atr_frac` 0.30 admits into a shell 3× the `band_atr_frac` 0.10 that measures), **plus a third cause nobody listed: the engine counts only 31 % of the in-band flow its own 10 s window admits.** ⚠ **A new D-6 is proposed in that D-table (reconcile proximity with band) and is UNTICKED like the rest.** ⚠ **D-3 and D-4's ACTIONS survive; their stated REASONS do not and are re-grounded in place** | ⚠ **NEW 2026-08-12 — this is what ticking E5 Path B bought.** Re-open the book-absorption proposal's **§8 residuals** with the evidence that the v61 geometry rescale alone did not lift flag rates into the 3–8 % design band: **`window_sec` too short** · **episode-cumulative pressing** · **D8 `pullFrac` inflation on sparse `postLB`**. Evidence base: [`absorption-anchor-rederivation-2026-07-30.md`](absorption-anchor-rederivation-2026-07-30.md) §4–§5 (208 episode rows, 6 weekday days) and [`absorption-engagement-derivation-2026-07-23.md`](absorption-engagement-derivation-2026-07-23.md). ⚠ **Do NOT re-derive anchors in this pass** — E5 ruled they hold, and the finding is that no anchor set on the observable population reaches the band. ⚠ **Read that doc's §5c sanity note first:** every projected flag rate assumes 208 rows over 6 weekday days are representative, and they may not be. **A fresh population count on the post-2026-08-11 book is the honest first step**, not an assumption carried forward. `scoring_enabled` stays **false** throughout; this is a display-only surface. **Model: Opus, effort: high** — it is a derivation against a mechanism nobody has yet shown to observe what it claims, and the prior pass already produced one wrong answer by re-tuning instead of re-mechanising |
+<!-- trim-2026-09-14b-20 end -->
+
+<a id="trim-2026-09-14b-21"></a>
+### trim-2026-09-14b-21 - §2 closed pointer row, run 5 (two seam-audit doc corrections)
+
+Source: `docs/trader-tick-queue.md` lines 172-172 at git tag `doc-trim-2026-09-14b-pre` - 186 B - SHA-256 `e830b2ffee0169aed6891af0d01e3f01839c182c3b641ea33a56a7bf0331276a`.
+
+<!-- trim-2026-09-14b-21 begin -->
+| **Two doc corrections found by the seam audit** — both parts DONE 2026-08-25 | — (doc edits) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+<!-- trim-2026-09-14b-21 end -->
+
+<a id="trim-2026-09-14b-22"></a>
+### trim-2026-09-14b-22 - §2 row - S0 verify-venue cadence SUSPENDED (its resume condition has since been met)
+
+Source: `docs/trader-tick-queue.md` lines 173-173 at git tag `doc-trim-2026-09-14b-pre` - 979 B - SHA-256 `dd42e17817a1b4cf65002dab8639d1df2142ca1b09ee583ec5ec1c74d4da8b21`.
+
+<!-- trim-2026-09-14b-22 begin -->
+| ⛔ **Run S0 `--verify-venue` on a cadence — SUSPENDED, do not schedule** | was an ops slot; now blocked | ⚠ **SUSPENDED 2026-08-08, pending `trade_id` above.** The design work is done and recorded below, but scheduling it now would produce a daily report whose central number cannot be interpreted — S0 matches on the same identity-blind five-field row. **Resume once `trade_id` ships.** Settled design, for when it does: **AWS only** (trader) · output to a folder under the app root · window **ends on the previous whole hour**, never "now", to clear the 30 s `trade_store.flush_seconds` lag · the run is a background scheduled task needing no interactive login, but **the reading is manual**, so fold a one-line verdict into the §3 daily glance · ⚠ **`--strict` grades on Defect hours only** (`BacktestProgram.vb:321`) and never reads the venue result, so **the exit code cannot signal venue loss** — parse the output, or extend `--strict` in the same spec |
+<!-- trim-2026-09-14b-22 end -->
+
+<a id="trim-2026-09-14b-23"></a>
+### trim-2026-09-14b-23 - §2 row - intentional-downtime and venue-outage scoping (built as coverage C-3a and C-3b Part B)
+
+Source: `docs/trader-tick-queue.md` lines 175-175 at git tag `doc-trim-2026-09-14b-pre` - 2826 B - SHA-256 `58e7cfd1d4d17fa5cd9d44330ae207cf558f2a00f52274383bb8e62c9d4bf953`.
+
+<!-- trim-2026-09-14b-23 begin -->
+| ⚠ **Intentional-downtime scoping for the coverage report** | a build behind a short spec | ⚠ **NEW 2026-08-08**, from the AWS cost review — it blocks nothing today and blocks the coverage report the moment AWS goes part-time. ✅ **WEEKENDS ARE ALREADY HANDLED — no work there.** `CoverageReport.vb:629-630` classifies Saturday and Sunday as `OutOfScopeWeekend` ahead of every other test ⛔ **(this cell read `430-431` until 2026-09-11 and that was WRONG — line 430 is an unrelated `StoreEndMs` doc comment. Corrected by running it while writing [`coverage-report-cluster-spec.md`](coverage-report-cluster-spec.md), which had already copied the bad anchor once)**, and the 2026-08-07 run reported 48 such hours. **The gap is WEEKDAY downtime.** A part-time box creates a **cross-GUID restart gap every single day**, and the C1 build resolves those to **`defect`** per [`j-b-scoping-ruling-2026-08-02.md`](j-b-scoping-ruling-2026-08-02.md) §3.1 — so a part-time box would report a defect daily and the report becomes noise. ⚠ **J-B rejected an expected-uptime BASELINE and that rejection still binds** — a baseline built from observed behaviour cannot, even in principle, flag that behaviour as wrong. **But a DECLARED OPERATING SCHEDULE is not a baseline. It is a positive record of intent, which is precisely what J-B asks for.** That distinction is the whole spec. ⚠ **Prefer a declared schedule over a marker line written at shutdown** — an EC2 stop can kill the process without running any shutdown code, so a shutdown marker is unreliable by construction. ⚠⚠ **SCOPE WIDENED 2026-08-11 by a live instance: the report cannot distinguish a VENUE outage from our own box dying.** Deribit entered system maintenance on 2026-08-11 (`system_maintenance`, code 11051, HTTP 503 on every endpoint). During it the box is **up and healthy** — `analysis_log.csv` and `ws_health.log` both show life — while the store is empty, which resolves to **`defect`** under [`j-b-scoping-ruling-2026-08-02.md`](j-b-scoping-ruling-2026-08-02.md) §3.1. **It is not our defect and the report will say it is.** This is the same failure as unscoped intentional downtime and wants the same fix, so spec them together rather than twice: **a positive record of why an hour is out of scope.** ⚠ **But note the asymmetry** — a declared schedule is known in advance, whereas a venue outage is not, so the venue arm needs a *recorded* source rather than a declared one. `ws_health.log` already distinguishes `DOWN` (our socket) from a healthy socket returning nothing; a venue-maintenance hour is the second shape and is detectable. **Do not invent an uptime baseline for it** — J-B's rejection still binds. **Model: Sonnet, effort: medium** — one new class or scope source, and the judgment is already made here |
+<!-- trim-2026-09-14b-23 end -->
+
+<a id="trim-2026-09-14b-24"></a>
+### trim-2026-09-14b-24 - §2 closed pointer rows, run 6 (weekday filters to G12)
+
+Source: `docs/trader-tick-queue.md` lines 176-187 at git tag `doc-trim-2026-09-14b-pre` - 2411 B - SHA-256 `6c2545c0c7763bc916068d82ade91581e4316f8d6b4fddd25e120aac03214a32`.
+
+<!-- trim-2026-09-14b-24 begin -->
+| **Weekday filters** — all three surfaces shipped, ruling fully discharged | `A67a`/`A67b`, harness 334→337 | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **Atomic writes** - `File.Replace` swapped for `File.Move(..., overwrite:=True)` at all six sites | `5b0f8cc` | → archive - see [`trader-tick-queue-archive.md` §C, `trim-2026-09-14-50`](trader-tick-queue-archive.md#trim-2026-09-14-50) |
+| **C1-coverage F1** — trailing-edge gap mis-attribution fixed | `4032f9c` + `5cd7269` + `6a6f93e` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **A54a JSON↔POCO drift guard** — whole arc built and closed | `3a89093` + `cc44e9f` + `a86a0cf` + `fded077` + `94b68d5` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **CeilingAudit expected-version constant** — bumped 59 → 68 | — (2026-08-25, no sha cited) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **CeilingAudit version check** — WARN replaced with a provenance record | — (2026-08-25, no sha cited) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`F2`** (`ResetBufferState` lock gap) — FIXED | `e082844` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`F3`** (collector `User-Agent`) — FIXED | `e082844` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **F3-watch tooling** — CANCELLED 2026-08-12, watch retired (⚠ this `F3` is the B4b watch, a different sense than the row above — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) §A for both) | — (decision, no build) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`SH-1`** — split the coverage hour at the capture-state marker, confirmed in production | `c19f0ef` | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`DeribitIndicatorProject.md` §15** — C1's three rows collapsed to one | — (2026-08-14 trim) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+| **`G12`** — three manual gaps closed, both tracked PDFs regenerated | — (2026-09-07) | → archive — see [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) |
+<!-- trim-2026-09-14b-24 end -->
+
+<a id="trim-2026-09-14b-25"></a>
+### trim-2026-09-14b-25 - §2 row - roadmap.md box-footprint figures stale (closed: roadmap.md updated 2026-09-14)
+
+Source: `docs/trader-tick-queue.md` lines 189-189 at git tag `doc-trim-2026-09-14b-pre` - 544 B - SHA-256 `d75619faffc09c8172b2f17a35dfb0d545c16bfa2f077dd4987444c93eb4b1b3`.
+
+<!-- trim-2026-09-14b-25 begin -->
+| ⚠ **[`roadmap.md`](roadmap.md)'s box-footprint figures are stale** (moved from `trader-tick-queue.md` §0 on 2026-09-14) | Trivial doc edit; the measurement is done | Measured 2026-08-21: the production app runs about 121-144 MB, not the 86 MB `roadmap.md` records; Server 2019 runs about 350 MB lighter than Server 2025. ✅ **Re-checked 2026-09-14: `roadmap.md` line 256 still reads "~1474 MB Windows / 86 MB app".** Full text: [`trader-tick-queue-archive.md` §C, `trim-2026-09-14-36`](trader-tick-queue-archive.md#trim-2026-09-14-36) |
+<!-- trim-2026-09-14b-25 end -->
+
+<a id="trim-2026-09-14b-26"></a>
+### trim-2026-09-14b-26 - §4 standing-watch list line (named the spent STRONG accrual watch and a blocked F3 arm)
+
+Source: `docs/trader-tick-queue.md` lines 204-204 at git tag `doc-trim-2026-09-14b-pre` - 260 B - SHA-256 `4e659e1302cf98c6ad9e59d9b81f266b42bc00b5c796afdf82810bdbdefa9e2f`.
+
+<!-- trim-2026-09-14b-26 begin -->
+liq_events CASCADE ⇒ A4 · §9 STRONG accrual · burst-watch spot-checks · funding calm-week re-read · absorption episode accrual under Path B · **v48 §4a OFI dominance** · **B4b §12** (its F3 arm is blocked — §2) · **pullFrac distribution (W4)**.
+<!-- trim-2026-09-14b-26 end -->
+
+<a id="trim-2026-09-14b-27"></a>
+### trim-2026-09-14b-27 - §4 D3 ASIA watch tolerance paragraph (said next read about 2026-08-17)
+
+Source: `docs/trader-tick-queue.md` lines 208-208 at git tag `doc-trim-2026-09-14b-pre` - 785 B - SHA-256 `3ada25df46a9d07d63832ea35bfb57d538ec262fa8fb571619a8809b7133b1ff`.
+
+<!-- trim-2026-09-14b-27 begin -->
+⚠ **The watch stays LIVE, on the ruled tolerance — which is NOT the one in the derivation.** Reference **11.0 %**, band **8–14 %**, read length **≥10 weekday session-days**, same-side **≥85 %** (T-1…T-5, ruled 2026-08-11; they supersede row D3-5 of [`asia-burst-threshold-derivation-2026-08-01.md`](asia-burst-threshold-derivation-2026-08-01.md) §5). **A trigger fires a re-derivation READ, not a threshold change.** ⚠ **Do not quote the derivation's 9.7 % or its "~106 AggrVel rows/day"** — both come from a partially-covered book; fully covered, ASIA carries **~158–160 rows/day**, which makes the small-sample argument ~50 % weaker than recorded. **Next band-eligible read ~2026-08-17**, since 2026-08-10's ASIA was lost to the intentional weekend instance stop.
+<!-- trim-2026-09-14b-27 end -->
+
+<a id="trim-2026-09-14b-28"></a>
+### trim-2026-09-14b-28 - §4 data-gate line - A5 VPFR shape (reading from 2026-08-07)
+
+Source: `docs/trader-tick-queue.md` lines 212-212 at git tag `doc-trim-2026-09-14b-pre` - 337 B - SHA-256 `f86308fae7769db1a6f5d340fbb344e6c675f1616d283d07714c0fae809afaa3`.
+
+<!-- trim-2026-09-14b-28 begin -->
+**Data gates worth watching, with fresh readings 2026-08-07:** **A5 VPFR shape — 28 of 30 distinct calendar dates** (2026-07-03 → 2026-08-06), up from 15 on 07-22, so **~2 dates out**. ⚠ Meeting it does not authorize the build: A5 must still clear the **W6 new-indicator bar** as a VPFR refinement rather than an orthogonal class.
+<!-- trim-2026-09-14b-28 end -->

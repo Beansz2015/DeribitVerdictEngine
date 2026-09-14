@@ -21,7 +21,8 @@
 [CmdletBinding()]
 param(
     [string]$Ledger = 'docs/doc-trim-log.md',
-    [string]$Tag    = 'doc-trim-2026-09-14-pre'
+    # Empty = derive each row's tag from its ID: trim-2026-09-14b-07 -> doc-trim-2026-09-14b-pre
+    [string]$Tag    = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = (& git rev-parse --show-toplevel).Trim()
@@ -66,8 +67,10 @@ foreach ($r in $rows) {
     $s = [int]($range.Split('-')[0]); $e = [int]($range.Split('-')[1])
     $bad = @()
 
-    if (-not $tagCache.ContainsKey($src)) { $tagCache[$src] = Get-LfLines (Get-GitBlobBytes "${Tag}:$src") }
-    $tagLines = $tagCache[$src]
+    $rowTag = if ($Tag) { $Tag } else { 'doc-' + ($id -replace '-\d+$', '') + '-pre' }
+    $tagKey = "${rowTag}:$src"
+    if (-not $tagCache.ContainsKey($tagKey)) { $tagCache[$tagKey] = Get-LfLines (Get-GitBlobBytes $tagKey) }
+    $tagLines = $tagCache[$tagKey]
     $tagSha = Get-BlockSha @($tagLines[($s - 1)..($e - 1)])
     if ($tagSha -ne $want) { $bad += 'TAG' }
 

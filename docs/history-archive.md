@@ -716,3 +716,118 @@ Source: `docs/DeribitIndicatorProject.md` lines 541-543 at git tag `doc-trim-202
 *Condition:* trader-profile §5 ATR bands (Low<80 / Normal 80–150 / High>150) were calibrated for BTC ~$80k–$100k (Q1 2026). BTC is now ~$62k with ATR running 13–68 — everything reads "Low" by the old bands. Surfaced by the 2026-06-13 ATR-confound finding. **Low impact:** the engine's live ATR reference (`DynamicNorms.ComputeATRRef`) is a recent-average, self-calibrating; only the cold-start fallback `indicators.ATR.static_ref = 115` (set as the old Normal-band midpoint, v14) and the profile's reference bands are stale. Mostly profile-doc + fallback-anchor housekeeping, not a scoring knob.
 *Action:* update profile §5 bands + `static_ref` to the current regime; ~10-min settings/doc edit. Backlogged 2026-06-14.
 <!-- trim-2026-09-14-34 end -->
+
+---
+
+## J. Trimmed from `DeribitIndicatorProject.md` (2026-09-14, second pass)
+
+Moved verbatim by the second 2026-09-14 trim pass. Each block sits between `begin`/`end` markers and is byte-identical (LF form) to the stated line range at git tag `doc-trim-2026-09-14b-pre`. Ledger and hashes: [`doc-trim-log.md`](doc-trim-log.md). Re-check with `tools/checks/doc-trim-verify.ps1`. **History only - not current state.**
+
+<a id="trim-2026-09-14b-01"></a>
+### trim-2026-09-14b-01 - §7 CalcKellySizing line (said called from RenderOutputHeader)
+
+Source: `docs/DeribitIndicatorProject.md` lines 172-172 at git tag `doc-trim-2026-09-14b-pre` - 111 B - SHA-256 `088b3b49ad92e535efae6c193e3640a976f023c2defc6b23e55664b033271bca`.
+
+<!-- trim-2026-09-14b-01 begin -->
+- **CalcKellySizing():** called from `RenderOutputHeader` after ATR levels. Display-only, zero scoring impact.
+<!-- trim-2026-09-14b-01 end -->
+
+<a id="trim-2026-09-14b-02"></a>
+### trim-2026-09-14b-02 - §8 Kelly Sizing block line (said CAL returns when backtesting ships)
+
+Source: `docs/DeribitIndicatorProject.md` lines 187-187 at git tag `doc-trim-2026-09-14b-pre` - 341 B - SHA-256 `d03a8d9937e86bd7bd27b22a362a8c5fbcf2c10e42dcb8f6f968e4ddff2a4374`.
+
+<!-- trim-2026-09-14b-02 begin -->
+- **Kelly Sizing block** rendered after ATR levels. Half-Kelly, 5% hard cap, $1,000 account, $10 contract face. Advisory label notes R:R is ATR-basis (not structural). EST mode only — CAL mode will return when backtesting module ships empirical per-tier win rates. Suppressed when KellyF = 0. v30 plural fix: `1 contract` / `N contracts`.
+<!-- trim-2026-09-14b-02 end -->
+
+<a id="trim-2026-09-14b-03"></a>
+### trim-2026-09-14b-03 - §10 CSV logging line (said v0.4 schema, 87 columns)
+
+Source: `docs/DeribitIndicatorProject.md` lines 204-204 at git tag `doc-trim-2026-09-14b-pre` - 105 B - SHA-256 `e583bc398683238bd68a87f74ccc7840f1fcbe0683e28d6883f251f8c704d288`.
+
+<!-- trim-2026-09-14b-03 begin -->
+- `AnalysisLogger.LogRun(r, verdict)` → `analysis_log.csv` in exe directory. v0.4 schema (87 columns).
+<!-- trim-2026-09-14b-03 end -->
+
+<a id="trim-2026-09-14b-04"></a>
+### trim-2026-09-14b-04 - §12 row - TFI threshold (said BLOCKED, TFI not logged)
+
+Source: `docs/DeribitIndicatorProject.md` lines 231-231 at git tag `doc-trim-2026-09-14b-pre` - 293 B - SHA-256 `0a26955312a08c0927d55cae90c18eea1320227f1ff6d9d6240bddce7b2a83be`.
+
+<!-- trim-2026-09-14b-04 begin -->
+| TFI threshold | BLOCKED — the W1 audit (2026-07-03, F11) found TFI is **not logged at all** (no CSV column), so the sweep has no data. `TFIValue`/`TFISignal` columns ride #5's v0.7→v0.8 rotation (retune spec C1, APPROVED); becomes measurable at the next audit re-run. | Blocked (data) |
+<!-- trim-2026-09-14b-04 end -->
+
+<a id="trim-2026-09-14b-05"></a>
+### trim-2026-09-14b-05 - §16 intro line (said KIV post-v30)
+
+Source: `docs/DeribitIndicatorProject.md` lines 340-340 at git tag `doc-trim-2026-09-14b-pre` - 208 B - SHA-256 `f53f0d05f0c08cf9e7baa1744865747b4a3d6943074cb339132b5ebe10810ef2`.
+
+<!-- trim-2026-09-14b-05 begin -->
+Longer-arc plans. **All items here are KIV** while the team is in the live-data accumulation phase post-v30. Recorded so architectural prerequisites stay visible and groundwork can be laid opportunistically.
+<!-- trim-2026-09-14b-05 end -->
+
+<a id="trim-2026-09-14b-06"></a>
+### trim-2026-09-14b-06 - §16.2 WinForms-coupled rendering line (said MainForm_Render_* RTF)
+
+Source: `docs/DeribitIndicatorProject.md` lines 364-364 at git tag `doc-trim-2026-09-14b-pre` - 130 B - SHA-256 `460075e6ebadf1d915197e7e1cb10c5438b0e8f31fb94e06ad914da2d43eed2e`.
+
+<!-- trim-2026-09-14b-06 begin -->
+- Output rendering (`MainForm_Render_*.vb`) is RTF-based. CLI host needs a parallel renderer (ANSI plaintext or structured JSON).
+<!-- trim-2026-09-14b-06 end -->
+
+<a id="trim-2026-09-14b-07"></a>
+### trim-2026-09-14b-07 - §16.6 P2 - funding momentum threshold v23+ tuning (superseded by v53)
+
+Source: `docs/DeribitIndicatorProject.md` lines 397-399 at git tag `doc-trim-2026-09-14b-pre` - 397 B - SHA-256 `25601df7477cf6ab797b26742b873a5467d2813d0689c7e8b97a56502bd31c5a`.
+
+<!-- trim-2026-09-14b-07 begin -->
+**P2. Funding momentum threshold v23+ tuning.**
+*Condition:* offline analysis `FundingMomentumDiagnostic` shows FundingDelta percentiles such that a threshold below 1 bp would meaningfully change the RISING/FALLING/FLAT distribution.
+*Action:* simple settings-only follow-up pass. If percentiles show 1 bp is genuinely above all observed deltas at REST cadence, accept as polling-cadence ceiling.
+<!-- trim-2026-09-14b-07 end -->
+
+<a id="trim-2026-09-14b-08"></a>
+### trim-2026-09-14b-08 - §16.6 P4 - STRONG/MEDIUM tier collapse in the failure-rate matrix (condition unevaluable)
+
+Source: `docs/DeribitIndicatorProject.md` lines 403-405 at git tag `doc-trim-2026-09-14b-pre` - 291 B - SHA-256 `0dbb4ca57861f0ea375fb298a8d1bdb1153239ac57a38709070a2189ccdc43c1`.
+
+<!-- trim-2026-09-14b-08 begin -->
+**P4. STRONG/MEDIUM tier collapse in failure-rate matrix.**
+*Condition:* after 1000+ tier-eligible rows, both STRONG and MEDIUM matrices pick (window, threshold) combinations within 1 cell of each other.
+*Action:* revise `failure-definition-v2-proposal.md` to a single tier-agnostic matrix.
+<!-- trim-2026-09-14b-08 end -->
+
+<a id="trim-2026-09-14b-09"></a>
+### trim-2026-09-14b-09 - §16.6 P8 - live performance display WEAK tier filtering (resolved by E2a)
+
+Source: `docs/DeribitIndicatorProject.md` lines 417-419 at git tag `doc-trim-2026-09-14b-pre` - 439 B - SHA-256 `efcb2cb74aa1c5d7ee35f5565a70f1515dd840f6df76f09753dc4c535f370a1d`.
+
+<!-- trim-2026-09-14b-09 begin -->
+**P8. Live performance display — WEAK tier filtering.**
+*Condition:* after ~1 week of live data, if `WEAK LONG`/`WEAK SHORT` inclusion produces visibly different headline rates vs STRONG+MEDIUM-only filter AND trader observes the WEAK-included rate is misleading.
+*Action:* small spec changing `LivePerformanceTracker`'s eligibility filter. Optionally expose as `performance_display.tier_filter` (`all_directional` | `actionable_only`).
+<!-- trim-2026-09-14b-09 end -->
+
+<a id="trim-2026-09-14b-10"></a>
+### trim-2026-09-14b-10 - §16.6 P10 - POC tier never fires (pre-v51 CAPPED wording)
+
+Source: `docs/DeribitIndicatorProject.md` lines 425-427 at git tag `doc-trim-2026-09-14b-pre` - 436 B - SHA-256 `7abb25e46bee4c965d426bfa2c7e87632b06482661a4ceb2a0526df9dea1c996`.
+
+<!-- trim-2026-09-14b-10 begin -->
+**P10. POC tier 3 of target cap never fires.**
+*Condition:* if 1000+ runs with `CAPPED @` events show 0 POC selections AND the `hvnAbove`/`hvnBelow` gate on POC is the bottleneck (rather than POC just being geometrically dominated by HVN). Investigation 2026-05-17 showed code path is reachable but conditions are narrow.
+*Action:* consider removing the HVN gate so POC fires as a true "no swing + no HVN" fallback. Re-spec if pursued.
+<!-- trim-2026-09-14b-10 end -->
+
+<a id="trim-2026-09-14b-11"></a>
+### trim-2026-09-14b-11 - §16.6 P13 - settings ownership tiers in the User Manual (resolved)
+
+Source: `docs/DeribitIndicatorProject.md` lines 435-437 at git tag `doc-trim-2026-09-14b-pre` - 1212 B - SHA-256 `b19b24fcea0570495d5984c5cea3004ad2e8c93def39b02be8937614b0b9ff0b`.
+
+<!-- trim-2026-09-14b-11 begin -->
+**P13. Document the tweaker-tunable vs hand-tuned settings split in the User Manual.**
+*Condition:* `settings.json` keys fall into three de-facto ownership tiers that today are only encoded developer-facing (in `PromptBuilder` HARD CONSTRAINTs 11–16 + `SettingsDiffApplier` rejects), never documented for the trader: **(1) auto-tweaker-tunable** failure-rate levers (verdict thresholds, `OFI.avg_window_sec` + dominance ratios, etc.); **(2) hand-tuned re-baseline overrides** — the per-session / per-resolution keys (`session_volume.sessions[].roc_magnitude_threshold`, `resolution_profiles.*`, and the future `aggressor_velocity.sessions[].*`), set by manual firing-rate-match, never auto-tuned; **(3) hand-toggle feature switches** (`OFI.averaging_enabled`, `exit_guard.*`, `network.*`, `aggressor_velocity.enabled`/`scoring_enabled`). Raised 2026-07-01 during the P4 #5 spec (trader asked which knobs the tweaker owns).
+*Action:* add a UserManual section/table listing each `settings.json` block's keys by tier (tweaker-tunable / hand-tuned re-baseline / hand-toggle switch), sourced from the `PromptBuilder` HC 11–16 + `SettingsDiffApplier` reject lists. Doc-only, ~30-min pass. Backlogged 2026-07-01.
+<!-- trim-2026-09-14b-11 end -->
