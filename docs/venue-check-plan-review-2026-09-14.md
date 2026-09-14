@@ -85,12 +85,13 @@ Confirm `aws_fetch/` is gitignored before writing the ledger there. If it is not
 
 **Due on or after 2026-10-05 UTC, AND only once at least 5 valid samples exist** (ledger rows whose verdict is `CLEAN` or `LOSS`, from builds at or after `6509a0f`, the `V-1` commit). If fewer exist on that date, re-date the reminder; do not review a thin sample.
 
-⚠ **Pending trader ruling `R-2`** (`venue-check-build-spec-back.md` §2 — a missing trade at the window's edge sits outside the store's `trade_seq` span, so `seq_contiguous = true` alone does not prove the assumption false). If ruled (a), the key read below becomes **`missing_inside_seq_span > 0`**, not `seq_contiguous = true`.
+✅ **Trader ruling `R-2` (a), 2026-09-14 UTC** (`venue-check-build-spec-back.md` §2). A missing trade at the window's edge sits outside the store's `trade_seq` span, so `seq_contiguous = true` alone does not prove the assumption false. The key read is **`missing_inside_seq_span > 0`**: missing venue trades whose `trade_seq` lies strictly inside the store's first..last `trade_seq` for the window. The field reads `na` when the check did not run.
 
 | Samples show | Meaning | Next |
 |---|---|---|
 | All `CLEAN`, `seq_contiguous = true` | The `trade_seq` assumption holds on this sample | Keep the hook: it costs about a minute per fetch. No option B |
-| Any `LOSS` with `seq_contiguous = true` | ⛔ **The assumption is false.** Repair and the coverage report can both miss loss | Spec option B, the comparison inside the app's repair timer |
+| Any `LOSS` with `missing_inside_seq_span > 0` | ⛔ **The assumption is false.** Repair and the coverage report can both miss loss | Spec option B, the comparison inside the app's repair timer |
+| `LOSS` with `missing_inside_seq_span = 0` | Edge effect, not decisive: the lost trades sit outside the store's `trade_seq` span, which the sequence walk cannot see | Not evidence against the assumption; read the next sample |
 | `LOSS` with `seq_contiguous = false` | Loss that `trade_seq` does see. A repair problem, not an assumption problem | Investigate repair |
 | `NOT_RUN` or `INEXACT` | The tool or the evidence failed | Fix the tool before counting samples |
 | `VENUE_SHORT` (ruled `R-1` (a), orchestrator, 2026-09-14) | Deribit's list did not cover the window, usually because the window is past its ~24 h retention. Its missing count proves nothing | **Not a valid sample.** It does not count toward the 5. If it appears on a fresh fetch, check the hook's window timing |

@@ -1319,6 +1319,12 @@ Public NotInheritable Class CoverageReport
         ''' last. Non-zero means the venue list does not cover the window (retention, or a fetch
         ''' that ended early), whatever the missing count says.</summary>
         Public Property StoreOutsideVenueSpan As Integer
+        ''' <summary>[R-2, trader-ruled 2026-09-14] Missing venue trades whose trade_seq lies
+        ''' STRICTLY inside the store's first..last trade_seq for the window. Only these can
+        ''' disprove the gap-free trade_seq assumption: the store's sequence walk cannot see a
+        ''' trade lost before its first or after its last sequence (an edge effect). 0 when the
+        ''' store has no sequence span. Nothing when the check did not run.</summary>
+        Public Property MissingInsideSeqSpan As Integer?
         Public Property Pages As Integer
         Public Property VenueFirstTs As Long?
         Public Property VenueLastTs As Long?
@@ -1578,11 +1584,23 @@ Public NotInheritable Class CoverageReport
                                                   t.Timestamp < firstTs.Value OrElse
                                                   t.Timestamp > lastTs.Value).Count()
         c.Diff = ComputeVenueDiff(store, fetch.Trades)
-        Dim v = ComputeVenueVerdict(True, "", True, "", c.VenueTrades, c.StoreTrades,
+        c.MissingInsideSeqSpan = CountMissingInsideSeqSpan(store, c.Diff.MissingTrades)
+        Dim v =ComputeVenueVerdict(True, "", True, "", c.VenueTrades, c.StoreTrades,
                                     c.StoreOutsideVenueSpan, c.Diff.MissingTrades.Count, c.Diff.StoreLegacyOnly)
         c.Verdict = v.Verdict
         c.Reason = v.Reason
         Return c
+    End Function
+
+    ''' <summary>[R-2] See <see cref="VenueCheckResult.MissingInsideSeqSpan"/>. Pure, so fixture
+    ''' A78f pins the edge/inside split.</summary>
+    Public Shared Function CountMissingInsideSeqSpan(storeTrades As IEnumerable(Of TradeRecord),
+                                                     missingTrades As IEnumerable(Of TradeRecord)) As Integer
+        Dim seqs = storeTrades.Where(Function(t) t.HasSeq).Select(Function(t) t.TradeSeq).ToList()
+        If seqs.Count < 2 Then Return 0
+        Dim firstSeq As Long = seqs.Min()
+        Dim lastSeq As Long = seqs.Max()
+        Return missingTrades.Where(Function(t) t.HasSeq AndAlso t.TradeSeq > firstSeq AndAlso t.TradeSeq < lastSeq).Count()
     End Function
 
     ''' <summary>"true" only when the store's trade_seq walk is checkable, gap-free, fully
@@ -1640,7 +1658,8 @@ Public NotInheritable Class CoverageReport
         Dim na As Func(Of Integer, String) = Function(n) If(d Is Nothing, "na", n.ToString(CultureInfo.InvariantCulture))
         Dim reason As String = If(c.Reason, "").Replace("""", "'").Replace(vbCr, " ").Replace(vbLf, " ")
         Return String.Format(CultureInfo.InvariantCulture,
-            "VENUE_CHECK verdict={0} from={1} to={2} venue={3} identity={4} fallback={5} missing={6} legacy={7} " &
+            "VENUE_CHECK verdict={0} from={1} to={2} venue={3} identity={4} fallback={5} missing={6} " &
+            "missing_inside_seq_span={17} legacy={7} " &
             "store={8} store_outside_venue_span={9} pages={10} first={11} last={12} seq_contiguous={13} " &
             "tool_commit={14} dump={15} reason=""{16}""",
             c.Verdict, IsoMs(c.WindowStartMs), IsoMs(c.WindowEndMs), c.VenueTrades,
@@ -1648,7 +1667,8 @@ Public NotInheritable Class CoverageReport
             na(If(d Is Nothing, 0, d.MissingTrades.Count)), na(If(d Is Nothing, 0, d.StoreLegacyOnly)),
             c.StoreTrades, c.StoreOutsideVenueSpan, c.Pages, IsoMs(c.VenueFirstTs), IsoMs(c.VenueLastTs),
             If(seqContiguous, "unknown"), If(String.IsNullOrEmpty(toolCommit), "unknown", toolCommit),
-            If(String.IsNullOrEmpty(dumpState), "off", dumpState), reason)
+            If(String.IsNullOrEmpty(dumpState), "off", dumpState), reason,
+            If(c.MissingInsideSeqSpan.HasValue, c.MissingInsideSeqSpan.Value.ToString(CultureInfo.InvariantCulture), "na"))
     End Function
 
     ''' <summary>--venue-dump: every response body fetched for the window, gzipped JSON. Bodies

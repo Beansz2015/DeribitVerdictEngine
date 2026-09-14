@@ -4,6 +4,8 @@
 
 ⚠ **Top-placed finding:** the build added a fifth venue verdict, `VENUE_SHORT`. The sample-review table in `venue-check-plan-review-2026-09-14.md` §5 does not list it. A ruling is queued in the spec-back (R-1 there).
 
+✅ **Rulings, 2026-09-14 (UTC):** all four spec-back rulings (R-1 to R-4 in `venue-check-build-spec-back.md` §2) took option (a). R-2 and R-3 were trader-ruled; R-1 and R-4 were orchestrator-agreed. R-1 was applied by the orchestrator in `8c65176`. R-2 (`missing_inside_seq_span`, fixture `A78f`) and R-3 (three more ledger columns) were built in a follow-up commit (see the git log). The ledger still holds zero real rows.
+
 ## Outcome per step
 
 | Step (review brief §1) | Commit | Outcome |

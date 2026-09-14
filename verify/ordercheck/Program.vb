@@ -705,6 +705,7 @@ Module Program
         A78c_VenueVerdictArmsExitCodesAndLabels()
         A78d_VenueCheckReadsStoreBesideAnOpenWriterAndEmitsMachineLine()
         A78e_VenueDumpIsGzippedJsonKeepingNonJsonBodies()
+        A78f_MissingInsideSeqSpanSeparatesEdgeLossFromInsideLoss()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -14439,6 +14440,65 @@ Module Program
             End Try
         End Try
         Check("A78e venue dump is gzipped JSON; a failed fetch's non-JSON body survives verbatim as response_text", ok, detail)
+    End Sub
+
+    ' -- A78f: [R-2] only a loss INSIDE the store's trade_seq span counts ----------------------
+    ' ⛔ MUTATION THAT MUST FAIL A78f: drop the span filter in CountMissingInsideSeqSpan (count
+    '    every missing trade). The edge case — seq 99, before the store's first sequence 100 —
+    '    then counts 1, not 0, and would read as "the trade_seq assumption is false".
+    ' Sequence numbers and offsets are MECHANISM — arbitrary, no settings key involved.
+    Private Sub A78f_MissingInsideSeqSpanSeparatesEdgeLossFromInsideLoss()
+        Dim dir As String = Path.Combine(Path.GetTempPath(), "ordercheck_a78f_" & Guid.NewGuid().ToString("N"))
+        Try
+            Dim day = A49Monday()
+            Dim startMs As Long = A49Ms(day.AddHours(6))
+            Dim endMs As Long = A49Ms(day.AddHours(7))
+            ' A78IdTrade(ts, i) → trade_seq 700000 + i. i = 99..104 below.
+            Dim t = Function(i As Integer) A78IdTrade(startMs + i * 1000L, i)
+
+            ' Edge: store holds 100..104, the venue also has 99 (earlier) → missing 1, inside 0.
+            Dim edgeStore = Enumerable.Range(100, 5).Select(t).ToList()
+            Dim edgeVenue = Enumerable.Range(99, 6).Select(t).ToList()
+            ' Inside: store holds 100,101,103,104, the venue has 100..104 → missing 1, inside 1.
+            Dim insideStore = {100, 101, 103, 104}.Select(t).ToList()
+            Dim insideVenue = Enumerable.Range(100, 5).Select(t).ToList()
+
+            Dim edgeDir As String = Path.Combine(dir, "edge")
+            Dim insideDir As String = Path.Combine(dir, "inside")
+            TradeStoreWriter.AppendRows(edgeDir, edgeStore)
+            TradeStoreWriter.AppendRows(insideDir, insideStore)
+            Dim edgeFetch As New CoverageReport.VenueFetchResult With {.Ok = True, .Pages = 1}
+            edgeFetch.Trades.AddRange(edgeVenue)
+            Dim insideFetch As New CoverageReport.VenueFetchResult With {.Ok = True, .Pages = 1}
+            insideFetch.Trades.AddRange(insideVenue)
+
+            Dim edge = CoverageReport.BuildVenueCheck(edgeDir, startMs, endMs, edgeFetch)
+            Dim inside = CoverageReport.BuildVenueCheck(insideDir, startMs, endMs, insideFetch)
+            Dim notRun = CoverageReport.BuildVenueCheck(edgeDir, startMs, endMs,
+                             New CoverageReport.VenueFetchResult With {.Ok = False, .FailReason = "x"})
+
+            Dim edgeLine = CoverageReport.BuildVenueCheckLine(edge, "true", "abc123", "off")
+            Dim insideLine = CoverageReport.BuildVenueCheckLine(inside, "false", "abc123", "off")
+            Dim notRunLine = CoverageReport.BuildVenueCheckLine(notRun, "unknown", "abc123", "off")
+
+            Dim ok As Boolean =
+                edge.Verdict = "LOSS" AndAlso edge.Diff.MissingTrades.Count = 1 AndAlso edge.MissingInsideSeqSpan = 0 AndAlso
+                inside.Verdict = "LOSS" AndAlso inside.Diff.MissingTrades.Count = 1 AndAlso inside.MissingInsideSeqSpan = 1 AndAlso
+                Not notRun.MissingInsideSeqSpan.HasValue AndAlso
+                edgeLine.Contains(" missing_inside_seq_span=0 ") AndAlso insideLine.Contains(" missing_inside_seq_span=1 ") AndAlso
+                notRunLine.Contains(" missing_inside_seq_span=na ")
+
+            Check("A78f missing_inside_seq_span — an edge loss (seq before the store span) counts 0, an inside loss counts 1, not run reads na",
+                  ok, String.Format("edge={0}/{1}/{2} inside={3}/{4}/{5} notRunHas={6} | {7} | {8}",
+                                    edge.Verdict, edge.Diff?.MissingTrades.Count, edge.MissingInsideSeqSpan,
+                                    inside.Verdict, inside.Diff?.MissingTrades.Count, inside.MissingInsideSeqSpan,
+                                    notRun.MissingInsideSeqSpan.HasValue, edgeLine, notRunLine))
+        Finally
+            Try
+                If Directory.Exists(dir) Then Directory.Delete(dir, True)
+            Catch
+            End Try
+        End Try
     End Sub
 
 End Module

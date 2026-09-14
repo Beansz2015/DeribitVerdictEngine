@@ -13,7 +13,8 @@
 
   What the sample is for: testing the assumption the in-app gap repair and the coverage report
   share -- that trade_seq is a gap-free counter on Deribit's public tape. A LOSS row with
-  seq_contiguous=true disproves it. The dated review lives in docs/trader-tick-queue.md §4.
+  missing_inside_seq_span > 0 is the decisive read (R-2, trader-ruled 2026-09-14); a LOSS with
+  it at 0 is an edge effect, not decisive. The dated review lives in docs/trader-tick-queue.md §4.
 
   ABSENCE OF EVIDENCE IS RECORDED AS NOT_RUN, NEVER AS CLEAN: no binary, a failed build, a
   missing folder, or output without a VENUE_CHECK line each write a NOT_RUN row.
@@ -42,9 +43,12 @@ $ErrorActionPreference = 'Continue'   # native stderr foot-gun -- see verify-gat
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not $LedgerPath) { $LedgerPath = Join-Path $repo 'aws_fetch\venue_check_ledger.csv' }
 
+# [R-2, R-3 trader-ruled 2026-09-14] missing_inside_seq_span, store_trades,
+# store_outside_venue_span and dump added while the ledger held zero rows.
 $Columns = @('run_utc', 'fetch_folder', 'window_from_utc', 'window_to_utc', 'verdict', 'venue_trades',
-             'identity_matched', 'fallback_matched', 'missing', 'store_legacy_only', 'pages',
-             'venue_first_ts', 'venue_last_ts', 'seq_contiguous', 'tool_commit', 'exit_code', 'reason')
+             'identity_matched', 'fallback_matched', 'missing', 'missing_inside_seq_span', 'store_legacy_only',
+             'store_trades', 'store_outside_venue_span', 'pages', 'venue_first_ts', 'venue_last_ts',
+             'seq_contiguous', 'tool_commit', 'dump', 'exit_code', 'reason')
 
 $runUtc = (Get-Date).ToUniversalTime()
 $inv = [System.Globalization.CultureInfo]::InvariantCulture
@@ -154,9 +158,12 @@ $row = @{
     run_utc = (Iso $runUtc); fetch_folder = (Split-Path $FetchFolder -Leaf)
     window_from_utc = $window.From; window_to_utc = $window.To
     verdict = $kv['verdict']; venue_trades = $kv['venue']; identity_matched = $kv['identity']
-    fallback_matched = $kv['fallback']; missing = $kv['missing']; store_legacy_only = $kv['legacy']
+    fallback_matched = $kv['fallback']; missing = $kv['missing']
+    missing_inside_seq_span = $kv['missing_inside_seq_span']; store_legacy_only = $kv['legacy']
+    store_trades = $kv['store']; store_outside_venue_span = $kv['store_outside_venue_span']
     pages = $kv['pages']; venue_first_ts = $kv['first']; venue_last_ts = $kv['last']
-    seq_contiguous = $kv['seq_contiguous']; tool_commit = $kv['tool_commit']; exit_code = "$exitCode"
+    seq_contiguous = $kv['seq_contiguous']; tool_commit = $kv['tool_commit']; dump = $kv['dump']
+    exit_code = "$exitCode"
     reason = $kv['reason']
 }
 if (-not (Write-LedgerRow $row)) { exit 1 }
@@ -165,8 +172,12 @@ $color = if ($kv['verdict'] -eq 'CLEAN') { 'Green' } elseif ($kv['verdict'] -eq 
 Write-Host ("{0,-6}venue check {1} -- missing={2} venue={3} pages={4} seq_contiguous={5} tool_commit={6}" -f '', $kv['verdict'],
             $kv['missing'], $kv['venue'], $kv['pages'], $kv['seq_contiguous'], $kv['tool_commit']) -ForegroundColor $color
 if ($kv['reason']) { Write-Host "      reason: $($kv['reason'])" -ForegroundColor $color }
-if ($kv['verdict'] -eq 'LOSS' -and $kv['seq_contiguous'] -eq 'true') {
-    Write-Host '      !!! LOSS WITH seq_contiguous=true -- the trade_seq assumption may be FALSE. See docs/venue-check-plan-review-2026-09-14.md §5.' -ForegroundColor Red
+# [R-2] Only a loss INSIDE the store's trade_seq span is decisive; an edge loss is not.
+$insideN = 0
+if ($kv['verdict'] -eq 'LOSS' -and [int]::TryParse([string]$kv['missing_inside_seq_span'], [ref]$insideN) -and $insideN -gt 0) {
+    Write-Host "      !!! LOSS WITH missing_inside_seq_span=$insideN (seq_contiguous=$($kv['seq_contiguous'])) -- see docs/venue-check-plan-review-2026-09-14.md §5." -ForegroundColor Red
+} elseif ($kv['verdict'] -eq 'LOSS') {
+    Write-Host '      LOSS with missing_inside_seq_span=0 -- edge effect, not decisive.' -ForegroundColor Yellow
 }
 Write-Host "      report $md"
 Write-Host "      ledger row appended: $LedgerPath"

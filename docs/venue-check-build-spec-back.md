@@ -22,6 +22,15 @@
 
 ## 2. Rulings requested
 
+> ✅ **RULED 2026-09-14 (UTC)** — relayed by the orchestrator seat. The request table below is kept as written.
+>
+> | # | Ruling | By | Done in |
+> |---|---|---|---|
+> | **R-1** | (a) `VENUE_SHORT` is not a valid sample, like `NOT_RUN` | Orchestrator | `8c65176` (review brief §5 row, queue §4 wording) |
+> | **R-2** | (a) add `missing_inside_seq_span` to the `VENUE_CHECK` line and the ledger; `na` when not run | **Trader** | this build: field, ledger column, fixture `A78f`; key read in review brief §5 and queue §4 changed to `missing_inside_seq_span > 0` |
+> | **R-3** | (a) add `store_trades`, `store_outside_venue_span`, `dump` to the ledger | **Trader** | this build: ledger columns in `tools/ops/venue-check.ps1` |
+> | **R-4** | (a) first live sample at the next routine fetch, 2026-09-16 UTC; no dedicated fetch | Orchestrator | nothing to do now |
+
 | # | Question | Options | My read | Class |
 |---|---|---|---|---|
 | **R-1** | How does the dated sample review (review brief §5) treat `VENUE_SHORT`? | (a) like `NOT_RUN` — not a valid sample · (b) count it | **(a).** It means the venue list did not cover the window, so its missing count proves nothing. Needs one row added to the review brief §5 table and the `trader-tick-queue.md` §4 reminder's "valid samples" wording | Orchestrator doc — I did not edit either, per the brief |
