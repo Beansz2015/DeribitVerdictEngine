@@ -698,6 +698,14 @@ Module Program
         '   path — the shape that let the C-3b omission through.]
         A78a_CliPathResolutionForwardsVenueLogAndScopesOutAVenueHour()
 
+        ' [V-1 / V-4 venue check (docs/venue-check-schedule-plan.md §2): A78b pagination across a
+        '   same-millisecond page boundary, A78c every verdict arm and exit code, A78d the store
+        '   read against an open writer plus the machine line, A78e the raw-page dump.]
+        A78b_VenueFetchPaginatesAcrossSameMillisecondBoundary()
+        A78c_VenueVerdictArmsExitCodesAndLabels()
+        A78d_VenueCheckReadsStoreBesideAnOpenWriterAndEmitsMachineLine()
+        A78e_VenueDumpIsGzippedJsonKeepingNonJsonBodies()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -14205,6 +14213,232 @@ Module Program
             Catch
             End Try
         End Try
+    End Sub
+
+    ' -- A78 helpers: a Deribit-shaped page source over a stub tape --------------------------
+    ' Honours the venue contract verified live 2026-09-14: start_timestamp INCLUSIVE, end
+    ' inclusive, `count` cap, `has_more` when more remain. includeHasMore:=False omits the flag.
+    Private Function A78VenueStub(tape As List(Of TradeRecord), includeHasMore As Boolean) _
+            As Func(Of Long, Long, Integer, Task(Of String))
+        Return Function(startMs As Long, endMs As Long, count As Integer) As Task(Of String)
+                   Dim inRange = tape.Where(Function(t) t.Timestamp >= startMs AndAlso t.Timestamp <= endMs).ToList()
+                   Dim page = inRange.Take(count).ToList()
+                   Dim hasMore As Boolean? = Nothing
+                   If includeHasMore Then hasMore = inRange.Count > count
+                   Return Task.FromResult(A78PageJson(page, hasMore))
+               End Function
+    End Function
+
+    Private Function A78PageJson(trades As IEnumerable(Of TradeRecord), hasMore As Boolean?) As String
+        Dim sb As New System.Text.StringBuilder("{""jsonrpc"":""2.0"",""result"":{""trades"":[")
+        Dim first As Boolean = True
+        For Each t In trades
+            If Not first Then sb.Append(",")
+            first = False
+            sb.Append(String.Format(CultureInfo.InvariantCulture,
+                "{{""timestamp"":{0},""price"":{1},""amount"":{2},""direction"":""{3}"",""trade_seq"":{4},""trade_id"":""{5}""}}",
+                t.Timestamp, t.Price, t.Amount, t.Direction, t.TradeSeq, t.TradeId))
+        Next
+        sb.Append("]")
+        If hasMore.HasValue Then sb.Append(",""has_more"":" & If(hasMore.Value, "true", "false"))
+        sb.Append("}}")
+        Return sb.ToString()
+    End Function
+
+    Private Function A78IdTrade(tsMs As Long, i As Integer) As TradeRecord
+        Return New TradeRecord With {
+            .Timestamp = tsMs, .Price = 64000 + i, .Amount = 10.0, .Direction = "buy", .Liquidation = "none",
+            .TradeId = (500000 + i).ToString(CultureInfo.InvariantCulture), .TradeSeq = 700000 + i}
+    End Function
+
+    ' -- A78b: the venue fetch paginates, and a same-millisecond pair straddling a page survives
+    ' ⛔ MUTATION THAT MUST FAIL A78b: `cursor = newest + 1` (HistoricalStore's backfill cursor)
+    '    — trade index 1000 shares index 999's millisecond, does not fit on page 1, and is
+    '    skipped: 2,499 of 2,500. The pre-V-1 single call fails it harder (1,000 of 2,500).
+    ' Page size 1000 is MECHANISM — Deribit's documented per-call cap, CoverageReport.VenuePageSize.
+    Private Sub A78b_VenueFetchPaginatesAcrossSameMillisecondBoundary()
+        Dim baseTs As Long = A49Ms(A49Monday().AddHours(5))
+        Dim tape As New List(Of TradeRecord)
+        For i As Integer = 0 To 2499
+            Dim ts As Long = baseTs + i * 10L
+            If i = 1000 Then ts = baseTs + 999 * 10L
+            tape.Add(A78IdTrade(ts, i))
+        Next
+        Dim endMs As Long = baseTs + 2499 * 10L
+
+        Dim full = CoverageReport.FetchVenueWindowAsync(baseTs, endMs, A78VenueStub(tape, True), 0).GetAwaiter().GetResult()
+        Dim fullOk As Boolean = full.Ok AndAlso full.Trades.Count = 2500 AndAlso
+                                full.Trades.Select(Function(t) t.TradeId).Distinct().Count() = 2500 AndAlso
+                                full.Pages >= 3 AndAlso full.RawPages.Count = full.Pages
+
+        ' No has_more in the response: a full page still means "fetch again".
+        Dim noFlag = CoverageReport.FetchVenueWindowAsync(baseTs, endMs, A78VenueStub(tape, False), 0).GetAwaiter().GetResult()
+        Dim noFlagOk As Boolean = noFlag.Ok AndAlso noFlag.Trades.Count = 2500
+
+        ' A failing second page fails the whole fetch — a partial list is never returned as Ok.
+        Dim good = A78VenueStub(tape, True)
+        Dim failingSource As Func(Of Long, Long, Integer, Task(Of String)) =
+            Function(s As Long, e As Long, c As Integer) If(s = baseTs, good(s, e, c), Task.FromResult(Of String)(Nothing))
+        Dim failing = CoverageReport.FetchVenueWindowAsync(baseTs, endMs, failingSource, 0).GetAwaiter().GetResult()
+        Dim failOk As Boolean = Not failing.Ok AndAlso failing.Pages = 1 AndAlso failing.FailReason.Contains("fetch failed")
+
+        ' 1,001 trades in ONE millisecond cannot be paged by timestamp: fail loudly, never loop.
+        Dim stallTape As New List(Of TradeRecord)
+        For i As Integer = 0 To 1000
+            stallTape.Add(A78IdTrade(baseTs, i))
+        Next
+        Dim stall = CoverageReport.FetchVenueWindowAsync(baseTs, baseTs + 1000, A78VenueStub(stallTape, True), 0).GetAwaiter().GetResult()
+        Dim stallOk As Boolean = Not stall.Ok AndAlso stall.FailReason.StartsWith("stall")
+
+        Check("A78b venue fetch paginates — 2,500 of 2,500 across a same-ms page boundary, with and without has_more; a failed page or a one-ms stall is not Ok",
+              fullOk AndAlso noFlagOk AndAlso failOk AndAlso stallOk,
+              String.Format("full={0}/{1} pages={2} noFlag={3}/{4} failOk={5} ({6}) stallOk={7} ({8})",
+                            full.Ok, full.Trades.Count, full.Pages, noFlag.Ok, noFlag.Trades.Count,
+                            failOk, failing.FailReason, stallOk, stall.FailReason))
+    End Sub
+
+    ' -- A78c: every venue verdict arm, its --strict exit code, and the two derived labels ------
+    ' ⛔ MUTATION THAT MUST FAIL A78c: delete the storeOutsideVenueSpan arm of
+    '    ComputeVenueVerdict. The retention case (venue returns [] while the store holds 500
+    '    rows — observed live 2026-09-14 on a 30 h-old window) then reads CLEAN.
+    ' Counts are MECHANISM — arbitrary distinct values, no settings key involved.
+    Private Sub A78c_VenueVerdictArmsExitCodesAndLabels()
+        Dim fails As New List(Of String)
+        Dim expect = Sub(name As String, got As String, want As String)
+                         If got <> want Then fails.Add(name & ": got " & got & " want " & want)
+                     End Sub
+        expect("fetch failed", CoverageReport.ComputeVenueVerdict(False, "x", True, "", 0, 0, 0, 0, 0).Verdict, "NOT_RUN")
+        expect("store read failed", CoverageReport.ComputeVenueVerdict(True, "", False, "STORE_READ x", 10, 0, 0, 0, 0).Verdict, "NOT_RUN")
+        expect("no trades either side", CoverageReport.ComputeVenueVerdict(True, "", True, "", 0, 0, 0, 0, 0).Verdict, "NOT_RUN")
+        expect("retention: venue empty, store 500", CoverageReport.ComputeVenueVerdict(True, "", True, "", 0, 500, 500, 0, 0).Verdict, "VENUE_SHORT")
+        expect("short venue outranks loss", CoverageReport.ComputeVenueVerdict(True, "", True, "", 900, 1000, 5, 3, 0).Verdict, "VENUE_SHORT")
+        expect("loss", CoverageReport.ComputeVenueVerdict(True, "", True, "", 1003, 1000, 0, 3, 0).Verdict, "LOSS")
+        expect("loss outranks inexact", CoverageReport.ComputeVenueVerdict(True, "", True, "", 1003, 1000, 0, 3, 2).Verdict, "LOSS")
+        expect("inexact", CoverageReport.ComputeVenueVerdict(True, "", True, "", 1000, 1000, 0, 0, 2).Verdict, "INEXACT")
+        expect("clean", CoverageReport.ComputeVenueVerdict(True, "", True, "", 1000, 1000, 0, 0, 0).Verdict, "CLEAN")
+
+        expect("exit CLEAN", CoverageReport.VenueExitCode("CLEAN").ToString(), "0")
+        expect("exit LOSS", CoverageReport.VenueExitCode("LOSS").ToString(), "3")
+        expect("exit NOT_RUN", CoverageReport.VenueExitCode("NOT_RUN").ToString(), "4")
+        expect("exit INEXACT", CoverageReport.VenueExitCode("INEXACT").ToString(), "5")
+        expect("exit VENUE_SHORT", CoverageReport.VenueExitCode("VENUE_SHORT").ToString(), "6")
+
+        expect("commit full sha", CoverageReport.ToolCommitFromInformationalVersion("1.0.0+fb780d83631dbc7b212a931a5fe78f5de3280312"), "fb780d83631d")
+        expect("commit dirty", CoverageReport.ToolCommitFromInformationalVersion("1.0.0+fb780d83631dbc7b212a931a5fe78f5de3280312-dirty"), "fb780d83631d-dirty")
+        expect("commit absent", CoverageReport.ToolCommitFromInformationalVersion("1.0.0"), "unknown")
+        expect("commit nothing", CoverageReport.ToolCommitFromInformationalVersion(Nothing), "unknown")
+
+        expect("seq nothing", CoverageReport.SeqContiguousLabel(Nothing), "unknown")
+        expect("seq clean", CoverageReport.SeqContiguousLabel(New SequenceGapResult With {.RowsWithSeq = 10}), "true")
+        expect("seq gap", CoverageReport.SeqContiguousLabel(New SequenceGapResult With {.RowsWithSeq = 10, .MissingCount = 1}), "false")
+        expect("seq partial", CoverageReport.SeqContiguousLabel(New SequenceGapResult With {.RowsWithSeq = 10, .RowsWithoutSeq = 1}), "unknown")
+        expect("seq backwards", CoverageReport.SeqContiguousLabel(New SequenceGapResult With {.RowsWithSeq = 10, .Discontinuities = 1}), "unknown")
+
+        Check("A78c venue verdict arms (NOT_RUN ×3, VENUE_SHORT ×2, LOSS ×2, INEXACT, CLEAN), exit codes 0/3/4/5/6, tool_commit and seq_contiguous labels",
+              fails.Count = 0, String.Join("; ", fails))
+    End Sub
+
+    ' -- A78d: the store read works beside an open writer, fails loudly on a lock, feeds the line
+    ' ⛔ MUTATION THAT MUST FAIL A78d: open the month file in ReadStoreWindow with a plain
+    '    `New StreamReader(monthPath)` (share Read). Against the writer handle held below —
+    '    opened exactly as TradeStoreWriter.AppendRows opens it — that throws, and the check
+    '    reads NOT_RUN instead of LOSS.
+    Private Sub A78d_VenueCheckReadsStoreBesideAnOpenWriterAndEmitsMachineLine()
+        Dim dir As String = Path.Combine(Path.GetTempPath(), "ordercheck_a78d_" & Guid.NewGuid().ToString("N"))
+        Try
+            Directory.CreateDirectory(dir)
+            Dim day = A49Monday()
+            Dim startMs As Long = A49Ms(day.AddHours(6))
+            Dim endMs As Long = A49Ms(day.AddHours(7))
+            Dim inside = New List(Of TradeRecord) From {
+                A78IdTrade(startMs + 60000, 1), A78IdTrade(startMs + 120000, 2), A78IdTrade(startMs + 240000, 4)}
+            Dim storeRows As New List(Of TradeRecord)(inside)
+            storeRows.Add(A78IdTrade(startMs - 60000, 0))   ' before the window
+            storeRows.Add(A78IdTrade(endMs + 60000, 9))     ' after the window
+            TradeStoreWriter.AppendRows(dir, storeRows)
+
+            ' The venue holds the three store trades plus one the store lacks, inside their span.
+            Dim fetch As New CoverageReport.VenueFetchResult With {.Ok = True, .Pages = 2}
+            fetch.Trades.AddRange(inside)
+            fetch.Trades.Add(A78IdTrade(startMs + 180000, 3))
+
+            Dim monthPath As String = TradeStoreWriter.TradeFileFor(dir, day.Year, day.Month)
+            Dim vcheck As CoverageReport.VenueCheckResult
+            Using held As New StreamWriter(monthPath, append:=True)
+                vcheck = CoverageReport.BuildVenueCheck(dir, startMs, endMs, fetch)
+            End Using
+            Dim checkOk As Boolean = vcheck.Verdict = "LOSS" AndAlso vcheck.StoreTrades = 3 AndAlso
+                                     vcheck.VenueTrades = 4 AndAlso vcheck.StoreOutsideVenueSpan = 0 AndAlso
+                                     vcheck.Diff IsNot Nothing AndAlso vcheck.Diff.MissingTrades.Count = 1 AndAlso
+                                     vcheck.Diff.IdentityMatched = 3
+
+            Dim line As String = CoverageReport.BuildVenueCheckLine(vcheck, "true", "abc123", "off")
+            Dim lineOk As Boolean = line.StartsWith("VENUE_CHECK verdict=LOSS ") AndAlso line.Contains(" missing=1 ") AndAlso
+                                    line.Contains(" identity=3 ") AndAlso line.Contains(" store=3 ") AndAlso
+                                    line.Contains(" seq_contiguous=true ") AndAlso line.Contains(" tool_commit=abc123 ") AndAlso
+                                    line.Contains(" dump=off ") AndAlso line.EndsWith("""")
+
+            ' An exclusive lock makes the read fail: NOT_RUN with a STORE_READ reason, never a short list.
+            Dim locked As CoverageReport.VenueCheckResult
+            Using exclusive As New FileStream(monthPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+                locked = CoverageReport.BuildVenueCheck(dir, startMs, endMs, fetch)
+            End Using
+            Dim lockedLine As String = CoverageReport.BuildVenueCheckLine(locked, "unknown", "abc123", "off")
+            Dim lockedOk As Boolean = locked.Verdict = "NOT_RUN" AndAlso locked.Reason.StartsWith("STORE_READ") AndAlso
+                                      locked.Diff Is Nothing AndAlso lockedLine.Contains(" missing=na ")
+
+            Check("A78d venue check beside an open writer → LOSS 1 of 4 with 3 identity matches; machine line carries the fields; an exclusive lock → NOT_RUN STORE_READ with na counts",
+                  checkOk AndAlso lineOk AndAlso lockedOk,
+                  String.Format("verdict={0} ({1}) store={2} venue={3} outside={4} lineOk={5} locked={6} ({7}) line={8}",
+                                vcheck.Verdict, vcheck.Reason, vcheck.StoreTrades, vcheck.VenueTrades, vcheck.StoreOutsideVenueSpan,
+                                lineOk, locked.Verdict, locked.Reason, line))
+        Finally
+            Try
+                If Directory.Exists(dir) Then Directory.Delete(dir, True)
+            Catch
+            End Try
+        End Try
+    End Sub
+
+    ' -- A78e: --venue-dump is gzipped JSON and keeps a non-JSON body verbatim ------------------
+    ' ⛔ MUTATION THAT MUST FAIL A78e: write the dump through the FileStream without the
+    '    GZipStream. Decompression then throws.
+    Private Sub A78e_VenueDumpIsGzippedJsonKeepingNonJsonBodies()
+        Dim dumpPath As String = Path.Combine(Path.GetTempPath(), "ordercheck_a78e_" & Guid.NewGuid().ToString("N") & ".json.gz")
+        Dim detail As String = ""
+        Dim ok As Boolean = False
+        Try
+            Dim fetch As New CoverageReport.VenueFetchResult With {.Ok = False, .Pages = 1, .FailReason = "fetch failed at cursor 3"}
+            fetch.RawPages.Add((1L, 4L, "{""result"":{""trades"":[],""has_more"":true}}"))
+            fetch.RawPages.Add((3L, 4L, "<html>503 \ ""quoted""</html>"))
+            CoverageReport.WriteVenueDump(dumpPath, fetch, 1, 4, "abc123")
+
+            Dim text As String
+            Using fs As New FileStream(dumpPath, FileMode.Open, FileAccess.Read),
+                  gz As New System.IO.Compression.GZipStream(fs, System.IO.Compression.CompressionMode.Decompress),
+                  sr As New StreamReader(gz)
+                text = sr.ReadToEnd()
+            End Using
+            Using doc = JsonDocument.Parse(text)
+                Dim root = doc.RootElement
+                Dim pages = root.GetProperty("pages")
+                ok = root.GetProperty("window_start_ms").GetInt64() = 1 AndAlso
+                     root.GetProperty("tool_commit").GetString() = "abc123" AndAlso
+                     root.GetProperty("fetch_ok").GetBoolean() = False AndAlso
+                     pages.GetArrayLength() = 2 AndAlso
+                     pages(1).GetProperty("response_text").GetString() = "<html>503 \ ""quoted""</html>" AndAlso
+                     pages(0).GetProperty("start_ms").GetInt64() = 1
+                detail = "pages=" & pages.GetArrayLength()
+            End Using
+        Catch ex As Exception
+            detail = ex.GetType().Name & ": " & ex.Message
+        Finally
+            Try
+                If File.Exists(dumpPath) Then File.Delete(dumpPath)
+            Catch
+            End Try
+        End Try
+        Check("A78e venue dump is gzipped JSON; a failed fetch's non-JSON body survives verbatim as response_text", ok, detail)
     End Sub
 
 End Module

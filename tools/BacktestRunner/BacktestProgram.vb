@@ -14,6 +14,7 @@
 '   BacktestRunner report   --csv <analysisLogCsv> [--settings <settings.json>]
 '   BacktestRunner coverage --from yyyy-MM-dd --to yyyy-MM-dd
 '                            [--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue]
+'                            [--venue-hours <1-24>] [--venue-dump <path.json.gz>]
 '                            [--evidence-dir <dir>] [--store-dir <dir>]
 '
 ' The `coverage` verb reports raw-trade capture health (docs/trade-store-coverage-report
@@ -81,6 +82,8 @@ Public Class BacktestProgram
         Dim verifyVenue As Boolean = False
         Dim evidenceDir As String = ""
         Dim storeDirOverride As String = ""
+        Dim venueHoursText As String = ""
+        Dim venueDumpPath As String = ""
 
         Dim i As Integer = 1
         While i < args.Length
@@ -128,6 +131,12 @@ Public Class BacktestProgram
                 Case "--store-dir"
                     i += 1
                     If i < args.Length Then storeDirOverride = args(i)
+                Case "--venue-hours"
+                    i += 1
+                    If i < args.Length Then venueHoursText = args(i) Else venueHoursText = "(missing)"
+                Case "--venue-dump"
+                    i += 1
+                    If i < args.Length Then venueDumpPath = args(i)
             End Select
             i += 1
         End While
@@ -345,31 +354,76 @@ Public Class BacktestProgram
 
                 Dim covResult = CoverageReport.BuildResult(opts, paths)
 
-                If verifyVenue Then
-                    Dim windowStartMs As Long = New DateTimeOffset(toUtc.AddHours(-24), TimeSpan.Zero).ToUnixTimeMilliseconds()
-                    Dim windowEndMs As Long = New DateTimeOffset(toUtc, TimeSpan.Zero).ToUnixTimeMilliseconds()
-                    Dim venueDiff = Await CoverageReport.RunVenueDiffAsync(storeDir, windowStartMs, windowEndMs)
-                    If venueDiff IsNot Nothing Then
-                        covResult.VenueRan = True
-                        covResult.VenueDiff = venueDiff
-                        covResult.VenueCoveredFromUtc = toUtc.AddHours(-24)
-                        covResult.VenueCoveredToUtc = toUtc
-                    Else
-                        Console.Error.WriteLine("[BacktestRunner] --verify-venue fetch failed — S0 not run.")
+                ' [V-1 / V-4] Venue window = [--to − --venue-hours, --to]; default 24 keeps the
+                ' interactive behaviour. A scheduled or post-fetch run passes 13 so the window
+                ' start stays well inside Deribit's ~24 h retention (docs/venue-check-plan-review-
+                ' 2026-09-14.md §3).
+                Dim venueHours As Integer = 24
+                If venueHoursText <> "" Then
+                    If Not Integer.TryParse(venueHoursText, NumberStyles.Integer, CultureInfo.InvariantCulture, venueHours) OrElse
+                       venueHours < 1 OrElse venueHours > 24 Then
+                        Console.Error.WriteLine("[BacktestRunner] --venue-hours must be an integer 1-24, got: " & venueHoursText)
+                        Return 1
                     End If
+                End If
+
+                Dim venueLine As String = Nothing
+                Dim venueExit As Integer = 0
+                If verifyVenue Then
+                    Dim windowFromUtc As DateTime = toUtc.AddHours(-venueHours)
+                    Dim windowStartMs As Long = New DateTimeOffset(windowFromUtc, TimeSpan.Zero).ToUnixTimeMilliseconds()
+                    Dim windowEndMs As Long = New DateTimeOffset(toUtc, TimeSpan.Zero).ToUnixTimeMilliseconds()
+                    Dim toolCommit As String = CoverageReport.ResolveToolCommit()
+                    Dim fetch = Await CoverageReport.FetchVenueWindowAsync(windowStartMs, windowEndMs,
+                                                                         AddressOf CoverageReport.FetchVenuePageJsonAsync)
+                    ' The dump is written whatever the fetch did — failed pages are evidence too.
+                    Dim dumpState As String = "off"
+                    If Not String.IsNullOrEmpty(venueDumpPath) Then
+                        Try
+                            CoverageReport.WriteVenueDump(venueDumpPath, fetch, windowStartMs, windowEndMs, toolCommit)
+                            dumpState = "written"
+                            Console.WriteLine("[BacktestRunner] venue pages: " & Path.GetFullPath(venueDumpPath) &
+                                              " (" & fetch.RawPages.Count & " response(s))")
+                        Catch ex As Exception
+                            dumpState = "failed"
+                            Console.Error.WriteLine("[BacktestRunner] --venue-dump write failed: " & ex.Message)
+                        End Try
+                    End If
+
+                    Dim check = CoverageReport.BuildVenueCheck(storeDir, windowStartMs, windowEndMs, fetch)
+                    covResult.VenueRan = True
+                    covResult.VenueCheck = check
+                    covResult.VenueDiff = check.Diff
+                    covResult.VenueCoveredFromUtc = windowFromUtc
+                    covResult.VenueCoveredToUtc = toUtc
+                    If check.Verdict = CoverageReport.VerdictNotRun Then
+                        Console.Error.WriteLine("[BacktestRunner] --verify-venue did not run: " & check.Reason)
+                    End If
+                    venueLine = CoverageReport.BuildVenueCheckLine(check, CoverageReport.SeqContiguousLabel(covResult.SequenceGaps),
+                                                                   toolCommit, dumpState)
+                    venueExit = CoverageReport.VenueExitCode(check.Verdict)
                 End If
 
                 Console.WriteLine("")
                 Console.Write(CoverageReport.BuildConsoleSummary(covResult))
                 If Not String.IsNullOrEmpty(outPath) Then
                     Dim md As String = CoverageReport.BuildMarkdown(covResult)
+                    If venueLine IsNot Nothing Then md &= Environment.NewLine & "```" & Environment.NewLine & venueLine & Environment.NewLine & "```" & Environment.NewLine
                     Dim outDirCov As String = Path.GetDirectoryName(Path.GetFullPath(outPath))
                     If Not String.IsNullOrEmpty(outDirCov) Then Directory.CreateDirectory(outDirCov)
                     File.WriteAllText(outPath, md)
                     Console.WriteLine("[BacktestRunner] Markdown: " & Path.GetFullPath(outPath))
                 End If
+                ' Printed last, on its own line, so a reader or script finds it without parsing
+                ' the human summary.
+                If venueLine IsNot Nothing Then Console.WriteLine(venueLine)
 
-                If strict AndAlso covResult.CountByClass(HourClass.Defect) > 0 Then Return 1
+                ' [V-4] Under --strict a venue verdict outranks DEFECT hours: 3 LOSS · 4 NOT_RUN ·
+                ' 5 INEXACT · 6 VENUE_SHORT (CoverageReport.VenueExitCode). 1 stays DEFECT / bad args.
+                If strict Then
+                    If venueExit <> 0 Then Return venueExit
+                    If covResult.CountByClass(HourClass.Defect) > 0 Then Return 1
+                End If
                 Return 0
 
             Case Else
@@ -390,6 +444,7 @@ Public Class BacktestProgram
         Console.Error.WriteLine("  BacktestRunner report   --csv <analysisLogCsv> [--settings <path>]")
         Console.Error.WriteLine("  BacktestRunner coverage --from yyyy-MM-dd --to yyyy-MM-dd " &
                                 "[--gap-ms <ms>] [--out <path>] [--strict] [--verify-venue] " &
+                                "[--venue-hours <1-24>] [--venue-dump <path.json.gz>] " &
                                 "[--evidence-dir <dir>] [--store-dir <dir>]")
     End Sub
 

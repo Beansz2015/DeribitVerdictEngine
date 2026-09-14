@@ -41,9 +41,10 @@
 '     ExpectedMissing, since there is no positive evidence to justify calling it a clean
 '     "down" period.
 '
-' Host-agnostic (tools-only). No live HTTP except the optional --verify-venue path, which
-' reuses HistoricalStore.FetchTradesByTimeAsync (§10 — no second HTTP path) and is injected
-' behind a pure diff function so fixtures never need a live call.
+' Host-agnostic (tools-only). No live HTTP except the optional --verify-venue path. Since
+' V-1 (2026-09-14) that path has its OWN page fetch (FetchVenuePageJsonAsync), injected
+' behind FetchVenueWindowAsync so fixtures never need a live call — HistoricalStore is linked
+' into the engine binary and could not be touched by a no-engine-change build.
 '
 ' Fixtures: A49a–l in verify/ordercheck (A49m — Part B's weekday+liveness pairing — is
 ' Session 2, per the implementer brief's session split).
@@ -243,6 +244,9 @@ Public Class CoverageResult
     Public Property VenueDiff As VenueDiffResult = Nothing
     Public Property VenueCoveredFromUtc As DateTime?
     Public Property VenueCoveredToUtc As DateTime?
+    ''' <summary>[V-4] The paginated check's verdict and counts. Nothing when --verify-venue was
+    ''' not passed.</summary>
+    Public Property VenueCheck As CoverageReport.VenueCheckResult = Nothing
 
     ''' <summary>[trade identity §3.3] Sequence-gap read over the same window the hourly walk
     ''' covers. Nothing when not computed.</summary>
@@ -1258,25 +1262,421 @@ Public NotInheritable Class CoverageReport
         Return r
     End Function
 
-    ''' <summary>CLI-side wiring for S0 — reuses HistoricalStore.FetchTradesByTimeAsync (§10:
-    ''' no second HTTP path), never writes to the store. Nothing ⇒ the fetch failed; the
-    ''' caller reports "not run", distinct from an empty (zero-missing) result.</summary>
-    Public Shared Async Function RunVenueDiffAsync(storeDir As String, windowStartMs As Long, windowEndMs As Long) _
-            As Task(Of VenueDiffResult)
-        Dim venueTrades = Await HistoricalStore.FetchTradesByTimeAsync(windowStartMs, windowEndMs, 1000)
-        If venueTrades Is Nothing Then Return Nothing
+    ' ── S0 venue check — paginated fetch, windowed store read, verdict ─────────────────
+    ' [V-1 / V-4, docs/venue-check-schedule-plan.md §2; ruling docs/venue-check-plan-review-
+    ' 2026-09-14.md] The previous RunVenueDiffAsync made ONE call with count=1000. Measured
+    ' 2026-09-14: a 24 h window came back as exactly 1,000 trades and the report printed
+    ' "0 missing" for the whole day. Two venue facts, both verified live 2026-09-14, shape the
+    ' loop below: `start_timestamp` is INCLUSIVE for this endpoint, and a window past Deribit's
+    ' ~24 h retention returns `trades: []` with `has_more: false` — so an EMPTY or SHORT venue
+    ' list is not evidence of a complete store. VerdictVenueShort exists for exactly that.
+    '
+    ' ⚠ A second HTTP path, deliberately. HistoricalStore.vb is linked into the ENGINE binary
+    ' (DeribitVerdictEngine.vbproj, for TradeStoreGapRepair) and this build is ruled
+    ' no-engine-change. Trade fields parse as HistoricalStore parses them, through the same
+    ' shared TradeRecord.ReadTradeId / ReadTradeSeq readers.
 
-        Dim storeTrades As New List(Of TradeRecord)
-        Dim startUtc = DateTimeOffset.FromUnixTimeMilliseconds(windowStartMs).UtcDateTime
-        Dim endUtc = DateTimeOffset.FromUnixTimeMilliseconds(windowEndMs).UtcDateTime
-        For Each m In HistoricalStore.EnumerateMonths(startUtc, endUtc.AddMilliseconds(1))
-            Dim rows = TradeStoreWriter.ReadTradeFile(TradeStoreWriter.TradeFileFor(storeDir, m.Year, m.Month))
-            For Each r In rows
-                If r.Timestamp >= windowStartMs AndAlso r.Timestamp <= windowEndMs Then storeTrades.Add(r)
-            Next
-        Next
-        Return ComputeVenueDiff(storeTrades, venueTrades)
+    Public Const VerdictClean As String = "CLEAN"
+    Public Const VerdictLoss As String = "LOSS"
+    Public Const VerdictInexact As String = "INEXACT"
+    Public Const VerdictVenueShort As String = "VENUE_SHORT"
+    Public Const VerdictNotRun As String = "NOT_RUN"
+
+    ''' <summary>Deribit's documented cap for get_last_trades_*.</summary>
+    Public Const VenuePageSize As Integer = 1000
+    ''' <summary>Runaway guard. ~25 pages cover a normal 13 h window.</summary>
+    Public Const VenueMaxPages As Integer = 5000
+
+    Public Class VenuePage
+        Public Property Trades As New List(Of TradeRecord)
+        ''' <summary>Deribit's `has_more`. Nothing when the response omitted it.</summary>
+        Public Property HasMore As Boolean?
+    End Class
+
+    Public Class VenueFetchResult
+        ''' <summary>True only when every page was fetched and parsed. A partial list is never
+        ''' diffed: it would under-report loss and read as clean.</summary>
+        Public Property Ok As Boolean
+        Public Property FailReason As String = ""
+        ''' <summary>De-duplicated, inside [start, end], ascending by (timestamp, trade_seq).</summary>
+        Public Property Trades As New List(Of TradeRecord)
+        Public Property Pages As Integer
+        ''' <summary>Every response body exactly as received, for --venue-dump. Kept on failure
+        ''' too: the venue's history is gone after ~24 h, so these are the only copy.</summary>
+        Public Property RawPages As New List(Of (StartMs As Long, EndMs As Long, Json As String))
+    End Class
+
+    Public Class VenueCheckResult
+        Public Property WindowStartMs As Long
+        Public Property WindowEndMs As Long
+        Public Property Verdict As String = VerdictNotRun
+        Public Property Reason As String = ""
+        ''' <summary>Nothing when the check did not run — never a zero-filled diff.</summary>
+        Public Property Diff As VenueDiffResult
+        Public Property VenueTrades As Integer
+        Public Property StoreTrades As Integer
+        ''' <summary>Store rows in the window that fall before the venue's first trade or after its
+        ''' last. Non-zero means the venue list does not cover the window (retention, or a fetch
+        ''' that ended early), whatever the missing count says.</summary>
+        Public Property StoreOutsideVenueSpan As Integer
+        Public Property Pages As Integer
+        Public Property VenueFirstTs As Long?
+        Public Property VenueLastTs As Long?
+    End Class
+
+    ''' <summary>Parse one get_last_trades_by_instrument_and_time response. Nothing on any
+    ''' malformed body.</summary>
+    Public Shared Function ParseVenueTradesPage(json As String) As VenuePage
+        If String.IsNullOrEmpty(json) Then Return Nothing
+        Try
+            Using doc = System.Text.Json.JsonDocument.Parse(json)
+                Dim result = doc.RootElement.GetProperty("result")
+                Dim page As New VenuePage()
+                Dim hm As System.Text.Json.JsonElement = Nothing
+                If result.TryGetProperty("has_more", hm) AndAlso
+                   (hm.ValueKind = System.Text.Json.JsonValueKind.True OrElse
+                    hm.ValueKind = System.Text.Json.JsonValueKind.False) Then
+                    page.HasMore = hm.GetBoolean()
+                End If
+                For Each t In result.GetProperty("trades").EnumerateArray()
+                    Dim rec As New TradeRecord()
+                    rec.Price = t.GetProperty("price").GetDouble()
+                    rec.Amount = t.GetProperty("amount").GetDouble()
+                    rec.Direction = t.GetProperty("direction").GetString()
+                    rec.Timestamp = t.GetProperty("timestamp").GetInt64()
+                    Dim liqEl As System.Text.Json.JsonElement = Nothing
+                    rec.Liquidation = If(t.TryGetProperty("liquidation", liqEl), liqEl.GetString(), "none")
+                    rec.TradeId = TradeRecord.ReadTradeId(t)
+                    rec.TradeSeq = TradeRecord.ReadTradeSeq(t)
+                    page.Trades.Add(rec)
+                Next
+                Return page
+            End Using
+        Catch
+            Return Nothing
+        End Try
     End Function
+
+    ''' <summary>
+    ''' Fetch every venue trade in [startMs, endMs]. <paramref name="fetchPage"/> returns one
+    ''' response body, or Nothing on failure — injected so fixtures A78b run with no network.
+    '''
+    ''' ⛔ The cursor restarts AT the newest millisecond of the previous page, never one past it.
+    ''' HistoricalStore.BackfillTradeMonthAsync uses `newestMs + 1`, which skips any trade that
+    ''' shares the last page's final millisecond but did not fit on it. The re-fetched overlap is
+    ''' removed by trade_id. A full page that never leaves one millisecond cannot advance and
+    ''' fails loudly rather than looping or silently dropping trades.
+    ''' </summary>
+    Public Shared Async Function FetchVenueWindowAsync(startMs As Long, endMs As Long,
+            fetchPage As Func(Of Long, Long, Integer, Task(Of String)),
+            Optional pageDelayMs As Integer = 200) As Task(Of VenueFetchResult)
+        Dim r As New VenueFetchResult()
+        Dim seen As New HashSet(Of String)(StringComparer.Ordinal)
+        Dim cursor As Long = startMs
+        Do
+            If r.Pages >= VenueMaxPages Then
+                r.FailReason = "page cap of " & VenueMaxPages & " hit at cursor " & cursor
+                Return r
+            End If
+            Dim json As String = Await fetchPage(cursor, endMs, VenuePageSize)
+            If json Is Nothing Then
+                r.FailReason = "fetch failed at cursor " & cursor & " after " & r.Pages & " page(s)"
+                Return r
+            End If
+            r.RawPages.Add((cursor, endMs, json))
+            Dim page = ParseVenueTradesPage(json)
+            If page Is Nothing Then
+                r.FailReason = "unparseable response at cursor " & cursor
+                Return r
+            End If
+            r.Pages += 1
+
+            Dim newest As Long = cursor
+            For Each t In page.Trades
+                If t.Timestamp > newest Then newest = t.Timestamp
+                If t.Timestamp < startMs OrElse t.Timestamp > endMs Then Continue For
+                Dim key As String = If(t.HasIdentity, "ID|" & t.TradeId, "LK|" & TradeStoreWriter.LegacyRowKey(t))
+                If seen.Add(key) Then r.Trades.Add(t)
+            Next
+
+            If page.Trades.Count = 0 Then Exit Do
+            ' Prefer the venue's own flag; fall back to "a full page means there may be more".
+            Dim more As Boolean = If(page.HasMore.HasValue, page.HasMore.Value, page.Trades.Count >= VenuePageSize)
+            If Not more Then Exit Do
+            If newest <= cursor Then
+                r.FailReason = "stall: a full page inside one millisecond at cursor " & cursor
+                Return r
+            End If
+            cursor = newest
+            If pageDelayMs > 0 Then Await Task.Delay(pageDelayMs)
+        Loop
+
+        r.Trades.Sort(Function(a, b) If(a.Timestamp <> b.Timestamp,
+                                        a.Timestamp.CompareTo(b.Timestamp),
+                                        a.TradeSeq.CompareTo(b.TradeSeq)))
+        r.Ok = True
+        Return r
+    End Function
+
+    Private Shared ReadOnly _venueHttp As System.Net.Http.HttpClient = CreateVenueHttp()
+
+    Private Shared Function CreateVenueHttp() As System.Net.Http.HttpClient
+        Dim c As New System.Net.Http.HttpClient() With {.Timeout = TimeSpan.FromSeconds(30)}
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("BacktestRunner-coverage/1.0")
+        Return c
+    End Function
+
+    ''' <summary>The production page source for <see cref="FetchVenueWindowAsync"/>. Retries once
+    ''' on a 5xx or a timeout (HistoricalStore's discipline); Nothing on any other failure.</summary>
+    Public Shared Async Function FetchVenuePageJsonAsync(startMs As Long, endMs As Long, count As Integer) _
+            As Task(Of String)
+        Dim url As String = "https://www.deribit.com/api/v2/public/get_last_trades_by_instrument_and_time" &
+                            "?instrument_name=" & HistoricalStore.InstrumentName &
+                            "&start_timestamp=" & startMs &
+                            "&end_timestamp=" & endMs &
+                            "&count=" & count &
+                            "&sorting=asc"
+        For attempt As Integer = 1 To 2
+            Try
+                Return Await _venueHttp.GetStringAsync(url)
+            Catch ex As System.Net.Http.HttpRequestException When attempt < 2 AndAlso
+                    ex.StatusCode.HasValue AndAlso CInt(ex.StatusCode.Value) >= 500
+                ' fall through to the retry delay
+            Catch ex As TaskCanceledException When attempt < 2
+                ' fall through to the retry delay
+            Catch ex As Exception
+                Console.Error.WriteLine("[CoverageReport] venue page fetch failed: " & ex.Message)
+                Return Nothing
+            End Try
+            Await Task.Delay(500)
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' Store rows in [startMs, endMs], streamed month by month — never a whole month held in
+    ''' memory. <paramref name="ok"/> is False on ANY read exception: the shipped
+    ''' TradeStoreWriter.ReadTradeFile swallows those and returns a short list, which here would
+    ''' report false loss or a false clean.
+    '''
+    ''' ⛔ Opens with FileShare.ReadWrite. The live writer (TradeStoreWriter.AppendRows) holds its
+    ''' StreamWriter with share Read; a plain StreamReader both fails against an open writer AND,
+    ''' while it holds the file, makes the writer's own open fail — and the writer drops that
+    ''' batch (B-3, docs/venue-check-schedule-plan.md). Tools-side only: the Core readers are
+    ''' unchanged (V-3 is held).
+    ''' </summary>
+    Public Shared Function ReadStoreWindow(storeDir As String, startMs As Long, endMs As Long,
+                                           ByRef ok As Boolean, ByRef failReason As String) As List(Of TradeRecord)
+        Dim rows As New List(Of TradeRecord)
+        ok = True
+        failReason = ""
+        Dim startUtc = DateTimeOffset.FromUnixTimeMilliseconds(startMs).UtcDateTime
+        Dim endUtc = DateTimeOffset.FromUnixTimeMilliseconds(endMs).UtcDateTime
+        For Each m In HistoricalStore.EnumerateMonths(startUtc, endUtc.AddMilliseconds(1))
+            Dim monthPath As String = TradeStoreWriter.TradeFileFor(storeDir, m.Year, m.Month)
+            If Not File.Exists(monthPath) Then Continue For
+            Try
+                Using fs As New FileStream(monthPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite),
+                      sr As New StreamReader(fs)
+                    sr.ReadLine()   ' header
+                    Do
+                        Dim line As String = sr.ReadLine()
+                        If line Is Nothing Then Exit Do
+                        Dim rec As New TradeRecord()
+                        If TradeStoreWriter.TryParseRow(line, rec) AndAlso
+                           rec.Timestamp >= startMs AndAlso rec.Timestamp <= endMs Then rows.Add(rec)
+                    Loop
+                End Using
+            Catch ex As Exception
+                ok = False
+                failReason = "STORE_READ " & Path.GetFileName(monthPath) & ": " & ex.Message
+                Return rows
+            End Try
+        Next
+        Return rows
+    End Function
+
+    ''' <summary>
+    ''' THE verdict mapping, most severe first. Pure, so fixture A78c pins every arm.
+    ''' NOT_RUN — the fetch or the store read failed, or neither side holds a trade.
+    ''' VENUE_SHORT — store rows lie outside the venue's span: the venue list does not cover the
+    '''   window, so a zero missing count proves nothing. Outranks LOSS; the line keeps the count.
+    ''' LOSS — venue trades absent from the store. INEXACT — store rows without trade_id, so
+    ''' fallback matching is ambiguous. CLEAN — none of the above.
+    ''' </summary>
+    Public Shared Function ComputeVenueVerdict(fetchOk As Boolean, fetchFailReason As String,
+                                               storeReadOk As Boolean, storeFailReason As String,
+                                               venueTrades As Integer, storeTrades As Integer,
+                                               storeOutsideVenueSpan As Integer, missing As Integer,
+                                               storeLegacyOnly As Integer) As (Verdict As String, Reason As String)
+        If Not fetchOk Then Return (VerdictNotRun, "VENUE_FETCH " & fetchFailReason)
+        If Not storeReadOk Then Return (VerdictNotRun, storeFailReason)
+        If venueTrades = 0 AndAlso storeTrades = 0 Then
+            Return (VerdictNotRun, "NO_TRADES neither the venue nor the store holds a trade in the window")
+        End If
+        If storeOutsideVenueSpan > 0 Then
+            Return (VerdictVenueShort, String.Format(CultureInfo.InvariantCulture,
+                "venue history does not cover the window: {0} store row(s) outside the venue span; {1} missing inside it",
+                storeOutsideVenueSpan, missing))
+        End If
+        If missing > 0 Then
+            Return (VerdictLoss, String.Format(CultureInfo.InvariantCulture,
+                "{0} venue trade(s) absent from the store", missing))
+        End If
+        If storeLegacyOnly > 0 Then
+            Return (VerdictInexact, String.Format(CultureInfo.InvariantCulture,
+                "{0} store row(s) carry no trade_id; fallback matching is ambiguous", storeLegacyOnly))
+        End If
+        Return (VerdictClean, "")
+    End Function
+
+    ''' <summary>--strict exit codes for a venue verdict. 1 stays "bad args / DEFECT hours".</summary>
+    Public Shared Function VenueExitCode(verdict As String) As Integer
+        Select Case verdict
+            Case VerdictClean : Return 0
+            Case VerdictLoss : Return 3
+            Case VerdictNotRun : Return 4
+            Case VerdictInexact : Return 5
+            Case VerdictVenueShort : Return 6
+            Case Else : Return 4
+        End Select
+    End Function
+
+    Public Shared Function BuildVenueCheck(storeDir As String, startMs As Long, endMs As Long,
+                                           fetch As VenueFetchResult) As VenueCheckResult
+        Dim c As New VenueCheckResult With {.WindowStartMs = startMs, .WindowEndMs = endMs}
+        If fetch Is Nothing OrElse Not fetch.Ok Then
+            c.Pages = If(fetch Is Nothing, 0, fetch.Pages)
+            Dim nr = ComputeVenueVerdict(False, If(fetch Is Nothing, "no fetch result", fetch.FailReason),
+                                         True, "", 0, 0, 0, 0, 0)
+            c.Verdict = nr.Verdict
+            c.Reason = nr.Reason
+            Return c
+        End If
+
+        c.Pages = fetch.Pages
+        c.VenueTrades = fetch.Trades.Count
+        If c.VenueTrades > 0 Then
+            c.VenueFirstTs = fetch.Trades.Min(Function(t) t.Timestamp)
+            c.VenueLastTs = fetch.Trades.Max(Function(t) t.Timestamp)
+        End If
+
+        Dim readOk As Boolean
+        Dim readWhy As String = ""
+        Dim store = ReadStoreWindow(storeDir, startMs, endMs, readOk, readWhy)
+        If Not readOk Then
+            Dim sr = ComputeVenueVerdict(True, "", False, readWhy, c.VenueTrades, 0, 0, 0, 0)
+            c.Verdict = sr.Verdict
+            c.Reason = sr.Reason
+            Return c
+        End If
+
+        c.StoreTrades = store.Count
+        Dim firstTs As Long? = c.VenueFirstTs
+        Dim lastTs As Long? = c.VenueLastTs
+        c.StoreOutsideVenueSpan = store.Where(Function(t) Not firstTs.HasValue OrElse
+                                                  t.Timestamp < firstTs.Value OrElse
+                                                  t.Timestamp > lastTs.Value).Count()
+        c.Diff = ComputeVenueDiff(store, fetch.Trades)
+        Dim v = ComputeVenueVerdict(True, "", True, "", c.VenueTrades, c.StoreTrades,
+                                    c.StoreOutsideVenueSpan, c.Diff.MissingTrades.Count, c.Diff.StoreLegacyOnly)
+        c.Verdict = v.Verdict
+        c.Reason = v.Reason
+        Return c
+    End Function
+
+    ''' <summary>"true" only when the store's trade_seq walk is checkable, gap-free, fully
+    ''' sequenced and never steps backwards; "false" when it found missing sequence numbers;
+    ''' "unknown" otherwise. The column the option-A sample review turns on: LOSS with
+    ''' seq_contiguous=true disproves the gap-free-counter assumption.</summary>
+    Public Shared Function SeqContiguousLabel(sg As SequenceGapResult) As String
+        If sg Is Nothing Then Return "unknown"
+        If sg.MissingCount > 0 Then Return "false"
+        If sg.Checkable AndAlso sg.RowsWithoutSeq = 0 AndAlso sg.Discontinuities = 0 Then Return "true"
+        Return "unknown"
+    End Function
+
+    ''' <summary>The build's commit, from AssemblyInformationalVersion ("1.0.0+&lt;sha&gt;[-dirty]",
+    ''' stamped by the SDK plus BacktestRunner.vbproj's MarkToolCommitDirty target).</summary>
+    Public Shared Function ResolveToolCommit() As String
+        Try
+            Dim asm = System.Reflection.Assembly.GetEntryAssembly()
+            If asm Is Nothing Then Return "unknown"
+            Dim attr = CType(Attribute.GetCustomAttribute(asm, GetType(System.Reflection.AssemblyInformationalVersionAttribute)),
+                             System.Reflection.AssemblyInformationalVersionAttribute)
+            Return ToolCommitFromInformationalVersion(If(attr Is Nothing, Nothing, attr.InformationalVersion))
+        Catch
+            Return "unknown"
+        End Try
+    End Function
+
+    Public Shared Function ToolCommitFromInformationalVersion(v As String) As String
+        If String.IsNullOrEmpty(v) Then Return "unknown"
+        Dim plus As Integer = v.IndexOf("+"c)
+        If plus < 0 OrElse plus = v.Length - 1 Then Return "unknown"
+        Dim rev As String = v.Substring(plus + 1)
+        Dim suffix As String = ""
+        Dim dash As Integer = rev.IndexOf("-"c)
+        If dash >= 0 Then
+            suffix = rev.Substring(dash)
+            rev = rev.Substring(0, dash)
+        End If
+        If rev.Length > 12 Then rev = rev.Substring(0, 12)
+        Return rev & suffix
+    End Function
+
+    Private Shared Function IsoMs(ms As Long?) As String
+        If Not ms.HasValue Then Return "none"
+        Return DateTimeOffset.FromUnixTimeMilliseconds(ms.Value).UtcDateTime.ToString(
+            "yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)
+    End Function
+
+    ''' <summary>The one machine-readable line tools/ops/venue-check.ps1 records. Key=value,
+    ''' space-separated, `reason` last and quoted. Diff counts read "na" when the check did not
+    ''' run — never 0, which would read as a measured zero.</summary>
+    Public Shared Function BuildVenueCheckLine(c As VenueCheckResult, seqContiguous As String,
+                                               toolCommit As String, dumpState As String) As String
+        Dim d = c.Diff
+        Dim na As Func(Of Integer, String) = Function(n) If(d Is Nothing, "na", n.ToString(CultureInfo.InvariantCulture))
+        Dim reason As String = If(c.Reason, "").Replace("""", "'").Replace(vbCr, " ").Replace(vbLf, " ")
+        Return String.Format(CultureInfo.InvariantCulture,
+            "VENUE_CHECK verdict={0} from={1} to={2} venue={3} identity={4} fallback={5} missing={6} legacy={7} " &
+            "store={8} store_outside_venue_span={9} pages={10} first={11} last={12} seq_contiguous={13} " &
+            "tool_commit={14} dump={15} reason=""{16}""",
+            c.Verdict, IsoMs(c.WindowStartMs), IsoMs(c.WindowEndMs), c.VenueTrades,
+            na(If(d Is Nothing, 0, d.IdentityMatched)), na(If(d Is Nothing, 0, d.FallbackMatched)),
+            na(If(d Is Nothing, 0, d.MissingTrades.Count)), na(If(d Is Nothing, 0, d.StoreLegacyOnly)),
+            c.StoreTrades, c.StoreOutsideVenueSpan, c.Pages, IsoMs(c.VenueFirstTs), IsoMs(c.VenueLastTs),
+            If(seqContiguous, "unknown"), If(String.IsNullOrEmpty(toolCommit), "unknown", toolCommit),
+            If(String.IsNullOrEmpty(dumpState), "off", dumpState), reason)
+    End Function
+
+    ''' <summary>--venue-dump: every response body fetched for the window, gzipped JSON. Bodies
+    ''' are embedded as JSON STRINGS (`response_text`), so a non-JSON error body is kept verbatim
+    ''' and the file always parses.</summary>
+    Public Shared Sub WriteVenueDump(dumpPath As String, fetch As VenueFetchResult,
+                                     startMs As Long, endMs As Long, toolCommit As String)
+        Dim dir As String = Path.GetDirectoryName(Path.GetFullPath(dumpPath))
+        If Not String.IsNullOrEmpty(dir) Then Directory.CreateDirectory(dir)
+        Dim js As Func(Of String, String) = Function(s) System.Text.Json.JsonSerializer.Serialize(If(s, ""))
+        Using fs As New FileStream(dumpPath, FileMode.Create, FileAccess.Write),
+              gz As New System.IO.Compression.GZipStream(fs, System.IO.Compression.CompressionLevel.Optimal),
+              sw As New StreamWriter(gz, New Text.UTF8Encoding(False))
+            sw.Write(String.Format(CultureInfo.InvariantCulture,
+                "{{""window_start_ms"":{0},""window_end_ms"":{1},""tool_commit"":{2},""fetch_ok"":{3},""fail_reason"":{4},""pages"":[",
+                startMs, endMs, js(toolCommit), If(fetch IsNot Nothing AndAlso fetch.Ok, "true", "false"),
+                js(If(fetch Is Nothing, "no fetch result", fetch.FailReason))))
+            If fetch IsNot Nothing Then
+                For i As Integer = 0 To fetch.RawPages.Count - 1
+                    Dim p = fetch.RawPages(i)
+                    sw.Write(String.Format(CultureInfo.InvariantCulture,
+                        "{0}{{""start_ms"":{1},""end_ms"":{2},""response_text"":{3}}}",
+                        If(i > 0, ",", ""), p.StartMs, p.EndMs, js(p.Json)))
+                Next
+            End If
+            sw.Write("]}")
+        End Using
+    End Sub
 
     ' ── Top-level orchestration ───────────────────────────────────────────────────────
 
@@ -1549,6 +1949,14 @@ Public NotInheritable Class CoverageReport
         Else
             sb.AppendLine("  venue diff (S0)     not run — pass --verify-venue")
         End If
+        If result.VenueCheck IsNot Nothing Then
+            Dim vc = result.VenueCheck
+            sb.AppendLine(String.Format("  venue check         {0}{1}", vc.Verdict,
+                                        If(String.IsNullOrEmpty(vc.Reason), "", " — " & vc.Reason)))
+            sb.AppendLine(String.Format("                      venue trades {0} across {1} page(s), span {2} → {3}; store rows {4}, {5} outside the venue span",
+                                        vc.VenueTrades, vc.Pages, IsoMs(vc.VenueFirstTs), IsoMs(vc.VenueLastTs),
+                                        vc.StoreTrades, vc.StoreOutsideVenueSpan))
+        End If
 
         ' [§3.3] Local completeness from trade_seq. Costs no network and is not bound by
         ' Deribit's ~24 h retention, so unlike S0 it stays readable on a month-old file.
@@ -1583,13 +1991,17 @@ Public NotInheritable Class CoverageReport
         Dim defectCount As Integer = result.CountByClass(HourClass.Defect)
         Dim trailingEdgeCount As Integer = result.CountByClass(HourClass.TrailingEdge)
         Dim fundingBad As Boolean = result.FundingExpected > 0 AndAlso result.FundingHave < result.FundingExpected
-        If defectCount = 0 AndAlso trailingEdgeCount = 0 AndAlso candleOk AndAlso Not fundingBad Then
+        ' [V-4] A venue verdict other than CLEAN keeps the report off `clean` — before this the
+        ' line read "0 defect hour(s)" beside 1,000 missing venue trades (measured 2026-09-14).
+        Dim venueBad As Boolean = result.VenueCheck IsNot Nothing AndAlso result.VenueCheck.Verdict <> VerdictClean
+        If defectCount = 0 AndAlso trailingEdgeCount = 0 AndAlso candleOk AndAlso Not fundingBad AndAlso Not venueBad Then
             sb.AppendLine("  VERDICT: clean — no capture defects, candles + funding complete")
         Else
             Dim trailingNote As String = If(trailingEdgeCount > 0,
                 String.Format(" + {0} trailing-edge hour(s)", trailingEdgeCount), "")
-            sb.AppendLine(String.Format("  VERDICT: {0} defect hour(s){1}{2}", defectCount, trailingNote,
-                                        If(Not candleOk OrElse fundingBad, " + store gaps above", "")))
+            sb.AppendLine(String.Format("  VERDICT: {0} defect hour(s){1}{2}{3}", defectCount, trailingNote,
+                                        If(Not candleOk OrElse fundingBad, " + store gaps above", ""),
+                                        If(venueBad, " + venue " & result.VenueCheck.Verdict, "")))
         End If
         Return sb.ToString()
     End Function

@@ -69,6 +69,22 @@
     <Compile Include="..\..\analysis\AnalysisRunner.vb" />
   </ItemGroup>
 
+  <!-- [V-4 tool_commit] The SDK's Source Link already stamps the commit into
+       AssemblyInformationalVersion ("1.0.0+<sha>"); CoverageReport.ResolveToolCommit reads it
+       for the VENUE_CHECK line. The SDK does not say when the tree was DIRTY, so a build of
+       uncommitted code would name a commit it does not match. This appends "-dirty" when
+       tracked files differ from HEAD. No git, or no stamp: the line reads tool_commit=unknown. -->
+  <Target Name="MarkToolCommitDirty" AfterTargets="InitializeSourceControlInformation"
+          BeforeTargets="AddSourceRevisionToInformationalVersion" Condition="'$(SourceRevisionId)' != ''">
+    <Exec Command="git status --porcelain --untracked-files=no" ConsoleToMSBuild="true" IgnoreExitCode="true"
+          StandardOutputImportance="low" WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_ToolTreeChanges" />
+    </Exec>
+    <PropertyGroup Condition="'$(_ToolTreeChanges)' != ''">
+      <SourceRevisionId>$(SourceRevisionId)-dirty</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
+
   <!-- HistoricalStore.vb, BacktestRowWriter.vb, ReplayLoop.vb, BacktestProgram.vb
        are auto-included by the SDK glob (they live in this directory). -->
 
