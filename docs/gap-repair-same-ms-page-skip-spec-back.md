@@ -211,3 +211,11 @@ Each is logged in [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-pa
 - ⚠ **[`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) §0's deploy row does not yet record `GR-5` (b).** Your edit, not this seat's.
 - **The spec's §8 now names a hypothesis, not verified, for the 298,934 duplicate rows:** the repair tail bypasses the streaming writer's `AlreadyCommitted` window. Magnitude alone cannot explain the count.
 - ⚠ **This packet's handle numbers (§1) differ from the spec's (§10).** Cite the document with the number.
+
+### 5.5 ✅ Orchestrator review — ACCEPTED 2026-09-14 (UTC)
+
+- **Amendment `79dcfe0` + `291111f` accepted.** All six decisions in this packet's §5.3 agreed.
+- **Decision 6 rider:** keep the 4-field list stated in [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-page-skip-spec.md) §4.4, so a future consumer does not reuse the 3-field `ws_health.log` / `venue_status.log` parser.
+- **One reporting condition for the build's spec-back, no scope change:** measure whether a seq-tail pass appends seqs the streaming writer already committed. Recorded in [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-page-skip-spec.md) §0 and §7. The fix stays with the duplicate-rows task.
+- **Done by the orchestrator:** [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) §0's deploy row records `GR-5` (b) (`74279fd`).
+- ⛔ **The build does not start until the trader says go.** Branch stays local; no merge, no push.

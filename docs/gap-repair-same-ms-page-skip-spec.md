@@ -80,6 +80,8 @@
 
 Report back with a summary and a spec-back per [`batch-review-packet-convention.md`](batch-review-packet-convention.md). Do not push.
 
+⛔ **Reporting condition — set by the orchestrator 2026-09-14 (UTC) at acceptance. No scope change.** The seq tail starts at `max.seq + 1` while the streaming writer is live, so one pass can fetch seqs that streaming commits during the same pass. `AppendRows` and `DedupTrades` stay untouched. **The build's spec-back must MEASURE and report whether a seq-tail pass appends seqs the streaming writer already committed** — by a fixture, or with a stated reason it cannot. Readers dedupe, so this is file growth, not data loss. ⛔ **Do not fix it in this build**; the fix belongs to the separate duplicate-rows task (this spec's §8).
+
 ---
 
 ## 1. The defect — verified
@@ -352,6 +354,7 @@ Found by an unanchored scan of `verify/ordercheck/Program.vb:10540`–`10960` fo
 - ✅ Whole harness `ALL PASS`, including `A79a`–`A79f` and the remapped `A56` fixtures.
 - ✅ Each new fixture's named mutation run once from a scratch backup; output recorded; file restored with an identical MD5 (the practice in [`venue-check-build-spec-back.md`](venue-check-build-spec-back.md) §1, `E-1`). Each mutation is named in a comment above its fixture.
 - ✅ `A79a`'s fail-first run (this spec's §0 step 2) pasted as evidence.
+- ✅ **The orchestrator's reporting condition (this spec's §0):** the spec-back states, by fixture or with a reason it cannot, whether a seq-tail pass appends seqs the streaming writer already committed.
 - ✅ `dotnet build DeribitVerdictEngine.sln -c Release`: 0 errors. `tools/checks/verify-gate.ps1` passes.
 - ✅ `grep -n "repair_status.log" tools/ops/collector.ps1` shows the `$FetchFiles` line.
 - ✅ **A settings-untouched row in [`DeribitIndicatorProject.md`](DeribitIndicatorProject.md) §15:** engine-binary behaviour change on the tape path · repair now keyed by `trade_seq` · new `repair_status.log` sidecar · no scoring impact · not an `analysis_log.csv` dataset boundary · a store-completeness edge at the deploy's `InstanceId`.
