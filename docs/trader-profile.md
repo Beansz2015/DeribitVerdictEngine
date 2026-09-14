@@ -6,6 +6,23 @@ new conversation (coding or strategy) to bootstrap full context instantly.
 
 Last updated: 2026-04-11
 
+> ⚠ **DRIFT NOTICE - added 2026-09-14 (UTC).** This file is now read in full at every session start (trader-directed). A check on 2026-09-14 found it stale against the engine docs and against the `crypto-trading-context` skill's copy of the profile. **It has NOT been re-synced; that needs the trader.** Until then, `CLAUDE.md` wins on process and the engine docs win on engine facts. Verified conflicts:
+>
+> | In `trader-profile.md` | Current source | What is true now |
+> |---|---|---|
+> | §3 Funding Rate and §7: funding momentum "not yet implemented" | `DeribitIndicatorProject.md` §4 | Shipped; time-anchored window since v53 |
+> | §3 Liquidations and §7: default `dominanceRatio` 1.0 | `DeribitIndicatorProject.md` §4 | 2.0 |
+> | §3 VPFR-lite: "HVN wall triggers ATR target cap" | `DeribitIndicatorProject.md` §7 | v51 structural-first target ladder |
+> | §5 Max position size: "Low ATR day (< 80)", "High ATR day (> 150)" | `trader-profile.md` §5 ATR thresholds | v37 bands: 1-min 20/55, 3-min ~42/115 |
+> | §6 Score thresholds: regime MaxScore 19/18/15 | `DeribitIndicatorProject.md` §7 | 20/19/15 with regime weights enabled |
+> | §7: OI x CVD cross-confirm "identified as an upgrade" | `DeribitIndicatorProject.md` §7 | Shipped as Pass 2b |
+> | §7: MicroCVD static 5000 USD threshold | `DeribitIndicatorProject.md` §4 | Dynamic threshold shipped |
+> | §7: "engine currently uses REST polling" | `architecture.md` Design Decisions | WebSocket since v42; REST is the fallback |
+> | §8: novel questions go to a Perplexity strategy conversation | the skill copy's §7; `CLAUDE.md` auto-proceed ruling | No external review conversation; Claude takes reversible calls and reserves the rest |
+> | §8: session handover reads `DeribitIndicatorProject.md` and `architecture.md` only | `CLAUDE.md` Session Start Protocol | The full protocol, including this file and the queue |
+> | §8: version history in `DeribitIndicatorProject.md` Section 14 | `DeribitIndicatorProject.md` | §15 |
+> | (absent) the commit workflow | the skill copy's §8 | Commit locally; push only after a clean compile and the trader's test |
+
 ---
 
 ## 1. Background
