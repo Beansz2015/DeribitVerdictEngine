@@ -11,7 +11,7 @@
 > | `D-6d.1` = **(c)**, trader 2026-09-11 — sidecar **and** one CSV column | [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §7 |
 > | `J-E` RATIFIED — effective-source stamp rides the next rotation | [`fable-seat-close-handover-2026-08-01.md`](fable-seat-close-handover-2026-08-01.md) §2 |
 > | `RD-1` = **(b)**, trader 2026-09-13 — a separate `SettingsLoadError` column | §9 of this spec |
-> | `D-5` (thin-trade gate) — the trade-count column rides a rotation; carried to THIS one 2026-09-13 | [`thin-trade-window-skip-gate-proposal.md`](thin-trade-window-skip-gate-proposal.md) §5 · [`csv-rotation-riders.md`](csv-rotation-riders.md) `RIDER-7` |
+> | `D-5` (thin-trade gate) — the trade-count column rides a rotation; carried to THIS one 2026-09-13, **confirmed by the trader 2026-09-14** | [`thin-trade-window-skip-gate-proposal.md`](thin-trade-window-skip-gate-proposal.md) §5 · [`csv-rotation-riders.md`](csv-rotation-riders.md) `RIDER-7` |
 >
 > ⛔⛔ **`D-6d.1` (c) FORCES A HEADER ROTATION. That is deliberate and it is what makes this build big: every rider marked TRAVELLING in the ledger [`csv-rotation-riders.md`](csv-rotation-riders.md) goes with it — seven, including `RIDER-7`, which the 2026-09-01 rotation lost without anyone noticing.** **The 2026-09-01 rotation went past without them — see §8.**
 
@@ -241,6 +241,6 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 - **Rider 4 name and sampling** — `EffectiveSource` · `WsHealth`; derive per consumer · derive once. **Took `WsHealth`, derived once: the enum is not a source, and three derivations at two instants let the CSV and the payload disagree.**
 - **Provenance `ColKind`** — `Meta` for `TriggerMode` / `WsHealth` / `SettingsVersion` / `SettingsLoadError`, `Muted` for `AbsorptionShadowAggrUsd`. **The provenance columns differ live vs replay by construction.**
 - **`SettingsLoadError` capture point** — read the global inside `LogRun` · capture at run start beside `cfg`. **Took run start: `LogRun` runs after the scoring pass, so reading the global there can pair one load state with a different settings snapshot.**
-- **`RIDER-7` carried to this rotation** — leave it parked · carry it now. **Took carry: `D-5` already ruled it onto a rotation, and the rotation it named passed without it.** ⚠ **The trader can overrule this before S2.**
+- **`RIDER-7` carried to this rotation** — leave it parked · carry it now. **Took carry: `D-5` already ruled it onto a rotation, and the rotation it named passed without it.** ✅ **CONFIRMED by the trader 2026-09-14 (UTC): `RIDER-7` carries with S2.**
 
 ⭐ **Every one took the option that records more, so none meets the reserved test. Each is listed so the trader can overrule it.**

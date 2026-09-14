@@ -10,7 +10,7 @@
 
 > ## ⛔ STATE BANNER — REFRESHED 2026-09-14 (UTC). Read this before believing any row below.
 >
-> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-14.md`](seat-handover-2026-09-14.md)** — clean at `1f005be`, harness 376, settings v68. **Next: S1 of [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) from 2026-09-15 UTC; trader owes a confirm on `RIDER-7`.** *(The 2026-09-11 banner text follows, superseded for state.)*
+> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-14.md`](seat-handover-2026-09-14.md)** — clean at `1f005be`, harness 376, settings v68. **Next: S1 of [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) from 2026-09-15 UTC. `RIDER-7` CONFIRMED by the trader 2026-09-14 — nothing is owed.** *(The 2026-09-11 banner text follows, superseded for state.)*
 >
 > ~~⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-11.md`](seat-handover-2026-09-11.md).**~~ Settings **v68** (tracked repo-root `settings.json` line 2, read). ⛔ **Run `git status -sb` — never inherit a push state.** ✅ **Verified at `88d1a7b`: clean, in sync with `origin/master`, 0 unpushed, no worktrees. Harness 376 ALL PASS · 0 FAIL · `GATE PASSED` (`verify-gate.ps1 -Mode local-fast`, RUN this session).** ⚠⚠ **The GMT+8 clock trap has now fired in ELEVEN consecutive sessions — the harness announced 2026-09-12 while UTC was 2026-09-11. RUN `date -u` BEFORE YOUR FIRST DATED CLAIM.**
 >

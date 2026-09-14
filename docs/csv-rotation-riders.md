@@ -27,7 +27,7 @@
 | `RIDER-4` | `WsHealth` column — `DeriveWsHealth`'s pinned enum, derived once | `J-E`, [`fable-seat-close-handover-2026-08-01.md`](fable-seat-close-handover-2026-08-01.md) §2 | ⭐ **TRAVELLING** — S2 | header |
 | `RIDER-5` | `SettingsVersion` column | queue §3 | ⭐ **TRAVELLING** — S2 | header |
 | `RIDER-6` | `SettingsLoadError` column | `RD-1` = (b), trader 2026-09-13 — build spec §9 | ⭐ **TRAVELLING** — S2 | header |
-| `RIDER-7` | `RecentTradeCount` column | [`thin-trade-window-skip-gate-proposal.md`](thin-trade-window-skip-gate-proposal.md) `D-5` (ticked) | ⛔ **LOST on the 2026-09-01 rotation — never listed anywhere. Found 2026-09-13 by sweeping specs for deferrals.** ⭐ **TRAVELLING** — S2 | header |
+| `RIDER-7` | `RecentTradeCount` column | [`thin-trade-window-skip-gate-proposal.md`](thin-trade-window-skip-gate-proposal.md) `D-5` (ticked) | ⛔ **LOST on the 2026-09-01 rotation — never listed anywhere. Found 2026-09-13 by sweeping specs for deferrals.** ⭐ **TRAVELLING** — S2, **confirmed by the trader 2026-09-14** | header |
 | `RIDER-8` | Cross-venue lead-lag CSV columns | [`cross-venue-lead-lag-proposal.md`](cross-venue-lead-lag-proposal.md) `D6` | ⏸ **CONDITIONAL — does NOT ride S2.** The feature is not scheduled, and its column names are not specified. **If roadmap item W6-7 is scheduled, its spec names the columns and they ride the next rotation after that** | — |
 | ~~`change_log` v64 reversibility wording~~ | A settings-touch rider, not a CSV rider | queue §3 | ✅ **CONSUMED 2026-08-02** with D3 / v65 — kept for history | — |
 
@@ -55,7 +55,7 @@
 - **Ledger home** — queue §3 · a dedicated file. **Took the file: `trader-tick-queue.md` changes in nearly every commit range, so a gate requiring it to change on a rotation would pass by accident.** A check that is mechanically vacuous is not a check.
 - **Mechanism** — a doc rule only · a harness fixture pinning the header hash · a gate check "header changed ⇒ ledger changed". **Took the gate check plus the doc rule: the ledger change becomes part of git history. A hash pin fires on the same event and records nothing new.**
 - **Strictness** — WARN on `local-fast`, FAIL on `prepush` / `ci`, the display-parity precedent. ⛔ **A header the checker cannot extract FAILS on `prepush` — a check that silently switches itself off after a refactor is exactly the hole it exists to close.**
-- **`RIDER-7` carried to THIS rotation** — leave it parked · carry it now. **Took carry: `D-5` already ruled it onto a rotation, and the rotation it named passed without it.** ⚠ **The trader can overrule this before S2.**
+- **`RIDER-7` carried to THIS rotation** — leave it parked · carry it now. **Took carry: `D-5` already ruled it onto a rotation, and the rotation it named passed without it.** ✅ **CONFIRMED by the trader 2026-09-14 (UTC): `RIDER-7` carries with S2.**
 - **`RIDER-8`** — reserve now · conditional. **Took conditional: reserving column names nobody has specified would invent design.**
 
 ---

@@ -20,7 +20,7 @@
 
 | # | Task | When | Notes |
 |---|---|---|---|
-| **1** | ⚠ **Get the trader's confirm or overrule on `RIDER-7`** | Before S2 | The trade-count column carried into this rotation under `D-5` (see §3) |
+| **1** | ~~⚠ **Get the trader's confirm or overrule on `RIDER-7`**~~ ✅ **DONE — the trader CONFIRMED `RIDER-7` carries with S2, 2026-09-14 (UTC)** | — | **Nothing is owed by the trader** |
 | **2** | **Build S1** of [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) | From **2026-09-15 UTC** | **Opus, effort HIGH.** `D-2` + Stage 1 instrument + sidecar. **Commit locally, do NOT deploy** |
 | **3** | **Final `D-1` episode-age read** | From **2026-09-16 UTC** (after Tue 09-15 closes) | Commands in §4. Expect the over-window share to stay ~21–32 % |
 | **4** | **Build S2** — the rotation, 6 new columns, riders `RIDER-1`–`RIDER-7` | After S1 | **Opus, effort HIGH.** Must mark riders `CONSUMED` in [`csv-rotation-riders.md`](csv-rotation-riders.md) — the gate fails the push otherwise |
@@ -55,7 +55,7 @@
 | **`D-6d.3`** | **(c)** — `D-2` and `D-6d` Stage 1 ship together; Stage 2 after the read | [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §7 |
 | **`D-6d.1`** | **(c)** — sidecar `absorption_episodes.log` AND column `AbsorptionShadowAggrUsd` (forces the rotation) | same |
 | **`RD-1`** | **(b)** — separate `SettingsLoadError` column | build spec §9 |
-| ⚠ **`RIDER-7`** | **Carried** under `D-5` — `RecentTradeCount` column. **Flagged for trader overrule** | [`csv-rotation-riders.md`](csv-rotation-riders.md) |
+| ✅ **`RIDER-7`** | **Carried** under `D-5` — `RecentTradeCount` column. **CONFIRMED by the trader 2026-09-14** | [`csv-rotation-riders.md`](csv-rotation-riders.md) |
 
 **The rotation adds six columns:** `AbsorptionShadowAggrUsd` · `TriggerMode` · `WsHealth` · `SettingsVersion` · `SettingsLoadError` · `RecentTradeCount`.
 
