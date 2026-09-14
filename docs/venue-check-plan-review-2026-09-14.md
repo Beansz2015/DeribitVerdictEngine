@@ -59,6 +59,8 @@
 
 **Step 3 — post-fetch hook in `collector.ps1 fetch`:**
 
+*Revised 2026-09-14 after rulings R-2 and R-3 (`venue-check-build-spec-back.md` §2): ledger schema and key read below updated to the shipped build (`a86fd08`).*
+
 | Item | Value |
 |---|---|
 | When | At the end of every successful `fetch`, after the copy-back verifies |
@@ -67,8 +69,8 @@
 | Window | `--venue-hours 13`, `--from` = `--to` − 13 h. The window start is about 13–14 h old at run time, inside Deribit's ~24 h retention |
 | Evidence | `--evidence-dir <the dated aws_fetch folder>` |
 | Outputs, all inside the dated fetch folder | `venue_check_<to:yyyyMMdd-HH>Z.md` (report) · `.log` (stdout, stderr, `EXIT=<n>`) · `venue_pages_<to>Z.json.gz` (raw pages) |
-| Ledger | Append one row to `aws_fetch/venue_check_ledger.csv`: `run_utc, fetch_folder, window_from_utc, window_to_utc, verdict, venue_trades, identity_matched, fallback_matched, missing, store_legacy_only, pages, venue_first_ts, venue_last_ts, seq_contiguous, tool_commit, exit_code, reason` |
-| `seq_contiguous` | Whether the coverage report found the store's `trade_seq` contiguous over the same window. **This column is the point of option A:** `LOSS` with `seq_contiguous = true` disproves the assumption |
+| Ledger | Append one row to `aws_fetch/venue_check_ledger.csv` (21 columns, shipped order): `run_utc, fetch_folder, window_from_utc, window_to_utc, verdict, venue_trades, identity_matched, fallback_matched, missing, missing_inside_seq_span, store_legacy_only, store_trades, store_outside_venue_span, pages, venue_first_ts, venue_last_ts, seq_contiguous, tool_commit, dump, exit_code, reason` |
+| `seq_contiguous` | Context: whether the coverage report found the store's `trade_seq` contiguous over the same window. **The decisive read of option A is `LOSS` with `missing_inside_seq_span > 0`** — a lost trade strictly inside the store's `trade_seq` span, which the sequence walk should have seen. A `LOSS` with `missing_inside_seq_span = 0` is an edge effect, not decisive. See §5 |
 | No binary, or no `VENUE_CHECK` line | Write a `NOT_RUN` ledger row with the reason, and print it loudly. **Absence of evidence is recorded as not-run, never as clean** |
 
 Confirm `aws_fetch/` is gitignored before writing the ledger there. If it is not, put the ledger in a gitignored location and say where.
