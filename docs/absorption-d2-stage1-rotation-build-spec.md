@@ -11,8 +11,9 @@
 > | `D-6d.1` = **(c)**, trader 2026-09-11 — sidecar **and** one CSV column | [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §7 |
 > | `J-E` RATIFIED — effective-source stamp rides the next rotation | [`fable-seat-close-handover-2026-08-01.md`](fable-seat-close-handover-2026-08-01.md) §2 |
 > | `RD-1` = **(b)**, trader 2026-09-13 — a separate `SettingsLoadError` column | §9 of this spec |
+> | `D-5` (thin-trade gate) — the trade-count column rides a rotation; carried to THIS one 2026-09-13 | [`thin-trade-window-skip-gate-proposal.md`](thin-trade-window-skip-gate-proposal.md) §5 · [`csv-rotation-riders.md`](csv-rotation-riders.md) `RIDER-7` |
 >
-> ⛔⛔ **`D-6d.1` (c) FORCES A HEADER ROTATION. That is deliberate and it is what makes this build big: the FIVE riders parked in [`trader-tick-queue.md`](trader-tick-queue.md) §3 travel with it.** **The 2026-09-01 rotation went past without them — see §8.**
+> ⛔⛔ **`D-6d.1` (c) FORCES A HEADER ROTATION. That is deliberate and it is what makes this build big: every rider marked TRAVELLING in the ledger [`csv-rotation-riders.md`](csv-rotation-riders.md) goes with it — seven, including `RIDER-7`, which the 2026-09-01 rotation lost without anyone noticing.** **The 2026-09-01 rotation went past without them — see §8.**
 
 ---
 
@@ -45,7 +46,7 @@
 | Session | Scope | Header touched? | Effort |
 |---|---|---|---|
 | **S1** | `D-2` + Stage 1 tracker instrumentation + the sidecar. §3, §4.1–§4.3 | **NO** | **Opus, high** |
-| **S2** | The rotation: the new columns × 3 schema copies, riders 1–5 **including the two ops scripts (rider 2b)**, fixtures. §4.4–§5 | **YES, once** | **Opus, high** |
+| **S2** | The rotation: the new columns × 3 schema copies, **`RIDER-1` to `RIDER-7` from [`csv-rotation-riders.md`](csv-rotation-riders.md)**, **including the two ops scripts (`RIDER-2`b)**, fixtures, **and marking every carried rider `CONSUMED` in that ledger** (the gate fails the push otherwise). §4.4–§5 | **YES, once** | **Opus, high** |
 | **deploy** | ⛔ **ONE stop → swap → start, AFTER S2 — and NOT before rider 2b's two scripts are merged (`T-7`).** Record the `InstanceId` in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5a | — | — |
 
 ⭐ **Why the split is safe even though `D-2` is a behaviour change: the dataset boundary is created by the DEPLOY, not by the commit.** The trader's workflow is local-first ([`trader-profile.md`](trader-profile.md) §8) — **S1 commits locally and does not deploy.** One deploy ⇒ one edge ⇒ one `InstanceId` to split on.
@@ -66,8 +67,9 @@
 | **8** | **Rider 4** — new column **`WsHealth`** (`DeriveWsHealth`'s per-run value — `J-E`'s "effective-source stamp") | Schema. ⛔ **`T-1`** | `J-E` RATIFIED |
 | **9** | **Rider 5** — new column **`SettingsVersion`** | Schema | [`trader-tick-queue.md`](trader-tick-queue.md) §3 |
 | **10** | **`RD-1`** — new column **`SettingsLoadError`** (`0` / `1`) | Schema | `RD-1` = (b), trader 2026-09-13 — §9 |
+| **11** | **`RIDER-7`** — new column **`RecentTradeCount`** | Schema | `D-5`, carried 2026-09-13 — §4.5 |
 
-**Five new columns (`RD-1` ruled (b) 2026-09-13). One rotation. One deploy.**
+**Six new columns (`RD-1` ruled (b); `RIDER-7` carried under `D-5`; both 2026-09-13). One rotation. One deploy.**
 
 ---
 
@@ -75,7 +77,7 @@
 
 | # | Ruling |
 |---|---|
-| **R-1** | ⛔ **APPEND AT THE END OF THE HEADER, after `AbsorptionSizeMin`, in exactly this order: `AbsorptionShadowAggrUsd` · `TriggerMode` · `WsHealth` · `SettingsVersion` · `SettingsLoadError`.** Same rule the 2026-09-01 rotation used (its `R1`): **no existing column moves, so every pre-rotation row keeps both its position and its meaning.** The four are simply empty on older rows |
+| **R-1** | ⛔ **APPEND AT THE END OF THE HEADER, after `AbsorptionSizeMin`, in exactly this order: `AbsorptionShadowAggrUsd` · `TriggerMode` · `WsHealth` · `SettingsVersion` · `SettingsLoadError` · `RecentTradeCount`.** Same rule the 2026-09-01 rotation used (its `R1`): **no existing column moves, so every pre-rotation row keeps both its position and its meaning.** The four are simply empty on older rows |
 | **R-2** | ⛔ **`D-2` IS A DATASET BOUNDARY AND MUST BE DECLARED AS ONE.** The 2026-09-01 rotation could say *"not a comparability boundary"* because it only appended. **This one cannot** — `AbsorptionAggrUsd` and `AbsorptionRatio` change meaning at the edge. ⚠ **Do not copy that row's wording** |
 | **R-3** | ⛔⛔ **THE DISPLAY-STRING PARITY RULE FIRES.** `D-2` moves `AbsorptionRatio`, which the live strip renders as `ABS↑ <level> (<ratio>×)` via `ComposeAbsorption` at [`UI/MainForm_LiveStrip.vb:270`](../UI/MainForm_LiveStrip.vb). ⚠ **That is a STRIP-only surface — the #3/#5/#6 precedent — so `BuildPlaintextSnapshot` and `MainForm_Render_Cards.vb` are NOT affected. State that explicitly in the commit message rather than leaving the gate to imply it** |
 | **R-4** | **NO `settings.json` key. NO version bump. Settings stays v68.** `D-2` replaces the use of `window_sec`, it does not retune it. ⚠ **`window_sec` becomes UNUSED by the press path — do not delete the key in this build; say so in a comment and leave it** |
@@ -121,10 +123,11 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 | 3 | `WsHealth` | pinned enum `OK` · `DEGRADED` · `DOWN` · `REST` | `r.WsHealth`, derived ONCE before `LogRun` | empty — no feed | `Meta` |
 | 4 | `SettingsVersion` | integer, invariant culture | the run's own `cfg.Version` | the replay cfg's `Version` | `Meta` |
 | 5 | `SettingsLoadError` — **ruled `RD-1` (b), 2026-09-13** | `0` / `1`; empty when not stamped | `r.SettingsLoadError`, captured at run start beside `cfg` | `0` | `Meta` |
+| 6 | `RecentTradeCount` — **`RIDER-7`, carried under `D-5`** | integer — the size of the trade window this run scored on | `recentTrades.Count`, the list the thin-trade gate tested at `:143`, assigned when `r` is created at `:207` | the replay's own window count | `NumLoose` — the kind every other trade-window-edge numeric uses (`CVDValue`, `LiqLongSize`, `MicroCVDEarly`) |
 
 ⚠ **Empty means "not stamped", never a default.** `r.TriggerMode` and `r.WsHealth` default to `Nothing`. **A code path that forgets to stamp writes an empty cell, not `MANUAL` or `OK`** — a default that reads as a real value is the silent-lie class. *(`IndicatorResults` is a `Class` — verified at [`Core/IndicatorResults.vb:5`](../Core/IndicatorResults.vb) — so new `String` fields cannot trip the `BC42109` warning the `S-4` build hit on a `Structure`.)*
 
-### 4.5 The five riders — ruled, with the evidence that forced each ruling
+### 4.5 The riders — ruled, with the evidence that forced each ruling
 
 **Rider 1 — the `.bak` name.**
 
@@ -165,6 +168,13 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 - ⚠ **The column's comment must say what `1` means: the most recent disk load FAILED, so the running settings are the last good load or, at startup, the POCO defaults.** The status-bar banner reads *"running on code defaults"* in both cases; **the column must not copy that wording**, because after a mid-run failure it is false.
 - *Implementation call logged (§9.1): capture at run start rather than read in `LogRun`.*
 
+**`RIDER-7` — `RecentTradeCount`. ⛔ The rider that was lost.**
+
+- ✅ **Already ruled:** [`thin-trade-window-skip-gate-proposal.md`](thin-trade-window-skip-gate-proposal.md) `D-5` (ticked) — *"propose it as a third rider on that rotation"*, meaning the 2026-09-01 absorption rotation. **It never shipped and was never in any rider list.** Found 2026-09-13 by sweeping specs for deferrals; recorded as `RIDER-7` in [`csv-rotation-riders.md`](csv-rotation-riders.md).
+- **Why it matters:** the thin-trade gate SKIPS runs below `MinTradesForScoring`, so a skipped run writes no row — but a scored run on a window just above the minimum looks normal. That spec's own words: *"There is no trade-count column, so the row looks entirely normal in the book."*
+- ✅ **Value:** `recentTrades.Count` — the same list the gate tested at [`UI/MainForm_Analysis.vb:143`](../UI/MainForm_Analysis.vb), assigned when `r` is created at `:207`. **No second count: the gate and the column read one list.**
+- ⚠ **`MinTradesForScoring` is not logged beside it.** It is recoverable from `SettingsVersion` — the larger of the TFI and MicroCVD window sizes, or the override — which rides the same rotation.
+
 ---
 
 ## 5. Fixtures
@@ -177,6 +187,7 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 | **`A79c`** | `LogRun` writes `r.WsHealth` and `r.TriggerMode` verbatim, and writes **EMPTY** — never `OK` or `MANUAL` — when either is unset | Default either field to a real enum value ⇒ fails alone. ⚠ **The one-derivation half of `T-1` and rider 3's trigger plumbing live in `MainForm_*.vb`, which `OrderCheck` cannot compile: REVIEW-ONLY, stated** |
 | **`A79d`** | **Rider 1: `RotatedBakName` returns `analysis_log.csv.<N>col-<h8>.<stamp>.bak` computed from THE SUPERSEDED header** — two headers with the same column count get different names, and a pre-existing target is never overwritten | Restore the `v0.7` literal ⇒ fails alone. Drop the hash ⇒ the same-count case fails alone |
 | **`A79e`** | **Rider 5 + `RD-1`: `LogRun` writes the PASSED `cfg.Version`** as an invariant-culture integer, and `SettingsLoadError` as `1` / `0` / empty for `r.SettingsLoadError` = `True` / `False` / `Nothing` | Read `SettingsLoader.Current.Version` or `SettingsLoader.LastLoadError` inside `LogRun` instead ⇒ fails alone when they differ from what the run captured |
+| **`A79f`** | **`RIDER-7`: `LogRun` writes `r.RecentTradeCount` verbatim, and EMPTY when it is `Nothing`** | Write `0` for `Nothing` ⇒ fails alone — a zero-trade window is a real value and must never be fabricated |
 | **`A60e` EXTENDED** | **`T-4`: all three schema copies carry the four new columns** — including `OverlapValidator`'s `ColSpec` list | Break any one copy ⇒ `A60e` fails while `A43e` still passes |
 
 ⛔ **Every mutation RUN, with the actual output pasted. A prediction is not a run.**
@@ -187,12 +198,13 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 
 1. Solution + `AutoTweaker` + `WhatIfRunner` + `CeilingAudit` + `BacktestRunner` + `OrderCheck` Release **`-t:Rebuild`** 0 errors 0 warnings, each run separately. ⚠ **Rebuild, not incremental** — an incremental build hid a `BC42109` in the `S-4` build.
 2. `tools/checks/verify-gate.ps1 -Mode local-fast` ⇒ **`GATE PASSED`**, harness **ALL PASS**.
-3. Harness **376 → ~387** (`A78a`–`A78f`, `A79a`–`A79e`; `A60e` extends in place). ⚠ An approximation — one fixture `Sub` may carry two `Check()`s, as `A69d` did.
+3. Harness **376 → ~388** (`A78a`–`A78f`, `A79a`–`A79f`; `A60e` extends in place). ⚠ An approximation — one fixture `Sub` may carry two `Check()`s, as `A69d` did.
 4. `git diff --stat -- settings.json` **EMPTY**. Settings **v68**.
 5. ⛔ **Display parity: the gate must report `no snapshot/card drift detected`, AND the commit message must state `R-3` — the strip moves, the snapshot and cards do not.**
 6. ⭐ **A real run emits at least TWO `absorption_episodes.log` lines spanning more than one run interval.** ⛔ **Two, not one** — the v68 auto-run defect passed its own acceptance on a single row while the box had stopped collecting.
 7. ⛔ **After the rotation fires on the box, verify the new `.bak` is named `analysis_log.csv.116col-<h8>.<stamp>.bak`** and that `analysis_log.csv.v0.7.bak` is untouched — `T-3`'s only real check is post-deploy.
 7a. ⛔ **Before the deploy (`T-7`):** `tools/ops/kelly-trigger-read.ps1 -Mode Calibrate` still passes, and a `fetch` lists every `analysis_log.csv*.bak` on the box by name, each size-verified.
+7b. ⛔ **The rotation commit updates [`csv-rotation-riders.md`](csv-rotation-riders.md)** — `RIDER-1` to `RIDER-7` marked `CONSUMED` with the commit hash. `tools/checks/verify-gate.ps1` FAILS a pushed header change that does not touch that file.
 8. A version-history row in [`DeribitIndicatorProject.md`](DeribitIndicatorProject.md) §15 declaring the **dataset boundary** (`R-2`), and the **BUILT banner written into this file and into [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) in the SAME commit**.
 
 ---
@@ -229,5 +241,6 @@ Per [`d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4.1: `S
 - **Rider 4 name and sampling** — `EffectiveSource` · `WsHealth`; derive per consumer · derive once. **Took `WsHealth`, derived once: the enum is not a source, and three derivations at two instants let the CSV and the payload disagree.**
 - **Provenance `ColKind`** — `Meta` for `TriggerMode` / `WsHealth` / `SettingsVersion` / `SettingsLoadError`, `Muted` for `AbsorptionShadowAggrUsd`. **The provenance columns differ live vs replay by construction.**
 - **`SettingsLoadError` capture point** — read the global inside `LogRun` · capture at run start beside `cfg`. **Took run start: `LogRun` runs after the scoring pass, so reading the global there can pair one load state with a different settings snapshot.**
+- **`RIDER-7` carried to this rotation** — leave it parked · carry it now. **Took carry: `D-5` already ruled it onto a rotation, and the rotation it named passed without it.** ⚠ **The trader can overrule this before S2.**
 
 ⭐ **Every one took the option that records more, so none meets the reserved test. Each is listed so the trader can overrule it.**

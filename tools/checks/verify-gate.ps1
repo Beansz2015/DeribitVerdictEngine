@@ -144,6 +144,31 @@ if ($engineChanged) {
     Ok 'no engine-path change'
 }
 
+# --- 3c analysis_log.csv header-rotation riders (added 2026-09-13) ---
+# The 2026-09-01 rotation fired and none of its parked riders travelled. When the
+# AnalysisLogger.Header STRING changes in range, docs/csv-rotation-riders.md must change
+# too. WARN on local-fast, FAIL on prepush/ci (the display-parity precedent). The logic
+# lives in rotation-riders.ps1 so it can be tested without a build.
+Section 'rotation-riders'
+$rrArgs = $null
+if ($Mode -eq 'local-fast') {
+    $rrArgs = @{ BeforeRev = 'HEAD'; AfterRev = ''; Changed = $changed; Strict = $false }
+} elseif ($null -ne $base) {
+    $rrArgs = @{ BeforeRev = $base; AfterRev = 'HEAD'; Changed = $changed; Strict = $true }
+}
+if ($null -eq $rrArgs) {
+    Ok 'no diff range - rotation-riders check has nothing to compare'
+} else {
+    $rr = @(& (Join-Path $PSScriptRoot 'rotation-riders.ps1') @rrArgs)
+    $st = (($rr | Where-Object { $_ -like 'ROTATION_STATUS=*' } | Select-Object -First 1) -replace '^ROTATION_STATUS=', '')
+    $dt = (($rr | Where-Object { $_ -like 'ROTATION_DETAIL=*' } | Select-Object -First 1) -replace '^ROTATION_DETAIL=', '')
+    switch ($st) {
+        'OK'    { Ok $dt }
+        'WARN'  { Warn $dt }
+        default { Fail ("rotation-riders: " + $(if ($dt) { $dt } else { 'no status returned' })) }
+    }
+}
+
 # --- result ---
 Section 'result'
 if ($warnings.Count -gt 0) { Write-Host ("{0} warning(s)" -f $warnings.Count) -ForegroundColor Yellow }
