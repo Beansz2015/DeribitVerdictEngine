@@ -203,7 +203,7 @@ Each is logged in [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-pa
 | 3 | **A tail from an old `last.seq` commits every trade the venue still serves**, up to ~4 h older than the 20 h lookback | Measured: the venue serves from its 24 h edge (`H-9`). Exact by seq, so no duplicate risk |
 | 4 | **A tail stops at `segEndInclMs`** | Mechanism: otherwise a month-boundary pass double-writes the next month (`GT-3`) |
 | 5 | ⚠ **One `PASS_*` line per pass, even when clean.** This goes beyond "transition/outcome-only" | A clean pass writing nothing is indistinguishable from a dead timer — the exact gap this spec could not close for 2026-08-17. ~4 lines/day |
-| 6 | **The log line has 4 fields** (`utc \| state \| instance_id \| detail`); the two existing logs have 3 | A new file; nothing parses it yet |
+| 6 | **The log line has 4 pipe-separated fields** — `utc`, `state`, `instance_id`, `detail`; the two existing logs have 3 | A new file; nothing parses it yet |
 
 ### 5.4 For the orchestrator — not blocking
 
