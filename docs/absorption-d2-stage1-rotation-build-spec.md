@@ -47,7 +47,7 @@
 |---|---|---|---|
 | **S1** | `D-2` + Stage 1 tracker instrumentation + the sidecar. §3, §4.1–§4.3 | **NO** | **Opus, high** |
 | **S2** | The rotation: the new columns × 3 schema copies, **`RIDER-1` to `RIDER-7` from [`csv-rotation-riders.md`](csv-rotation-riders.md)**, **including the two ops scripts (`RIDER-2`b)**, fixtures, **and marking every carried rider `CONSUMED` in that ledger** (the gate fails the push otherwise). §4.4–§5 | **YES, once** | **Opus, high** |
-| **deploy** | ⛔ **ONE stop → swap → start, AFTER S2 — and NOT before rider 2b's two scripts are merged (`T-7`).** Record the `InstanceId` in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5a | — | — |
+| **deploy** | ⛔ **ONE stop → swap → start, AFTER S2 — and NOT before rider 2b's two scripts are merged (`T-7`).** ⛔ **Also NOT before the gap-repair same-millisecond fix is built and accepted:** the same deploy carries it (`GR-5` (b), trader-ruled 2026-09-14 UTC, [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-page-skip-spec.md) §3.2). Re-rule only if that build stalls. Record the `InstanceId` in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5a | — | — |
 
 ⭐ **Why the split is safe even though `D-2` is a behaviour change: the dataset boundary is created by the DEPLOY, not by the commit.** The trader's workflow is local-first ([`trader-profile.md`](trader-profile.md) §8) — **S1 commits locally and does not deploy.** One deploy ⇒ one edge ⇒ one `InstanceId` to split on.
 
