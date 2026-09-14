@@ -20,7 +20,7 @@
 | `DR-3` | Same brief, a ruled follow-up | `BackfillTradeMonthAsync` returns rows appended, not the file's row count |
 | `e3781e57…` | AWS `InstanceId`, [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5a | The restart at 2026-08-17 16:23:05 UTC |
 | `E-1` to `E-3`, `H-1` to `H-5` | This spec's §10 | `H-n` = a handle the reader can run. `E-n` = evidence the reader cannot re-run as-is |
-| `GT-1` to `GT-5` | This spec's §0, implementer traps | Where the build will slip. `GT` = gap-repair trap; chosen because `GT-1` and `S-4` already name other items in this repo |
+| `GT-1` to `GT-5` | This spec's §0, implementer traps | Where the build will slip. `GT` = gap-repair trap; chosen because `S-1` and `S-4` already name other items in this repo |
 
 ---
 
