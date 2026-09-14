@@ -1,0 +1,4 @@
+# ripgrep ignore file (also honoured by the Grep tool). Git still tracks these paths.
+# Byte-exact backups of trimmed docs. They carry superseded state prose, so they stay
+# out of default searches. Ledger: docs/doc-trim-log.md
+originals/
