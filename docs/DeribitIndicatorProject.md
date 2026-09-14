@@ -13,7 +13,7 @@ Operational reference for any AI conversation continuing this project. Historica
 
 **Session start checklist:**
 1. Read this file + `docs/architecture.md`.
-2. Load the `crypto-trading-context` skill (writing style + a generic trader-profile copy), **then read `docs/trader-profile.md` in full** — ruled 2026-09-14. Its header lists the known drift against the skill's copy.
+2. Load the `crypto-trading-context` skill (writing style + a generic trader-profile copy), **then read `docs/trader-profile.md` in full** — ruled 2026-09-14. It was re-synced 2026-09-14 (trader-ruled) and its §5 is the single home of the ATR bands.
 3. Do NOT read individual `.vb` files at session start — only open them when a specific edit is required.
 
 ---
@@ -426,7 +426,7 @@ Items not currently scheduled but with concrete promotion conditions.
 *Condition:* if 1000+ runs with `CAPPED @` events show 0 POC selections AND the `hvnAbove`/`hvnBelow` gate on POC is the bottleneck (rather than POC just being geometrically dominated by HVN). Investigation 2026-05-17 showed code path is reachable but conditions are narrow.
 *Action:* consider removing the HVN gate so POC fires as a true "no swing + no HVN" fallback. Re-spec if pursued.
 
-**P11. ATR-band recalibration for the current price regime.** RESOLVED 2026-06-17 (settings v37): `static_ref` 115 to 38, and the trader-profile ATR bands recalibrated (1-min 20/55, 3-min about 42/115). Full text: [`history-archive.md` §I, `trim-2026-09-14-34`](history-archive.md#trim-2026-09-14-34).
+**P11. ATR-band recalibration for the current price regime.** RESOLVED 2026-06-17 (settings v37): `static_ref` 115 to 38, and the trader-profile ATR bands recalibrated (current bands: `trader-profile.md` §5, the ATR thresholds block, which is their single home). Full text: [`history-archive.md` §I, `trim-2026-09-14-34`](history-archive.md#trim-2026-09-14-34).
 
 **P12. Reduced size in TRANSITIONAL / low-vol (sizing-advisory).**
 *Condition:* trader-profile §6 says "Transitional = reduced size, extra caution." The engine honors the caution via the Step-4 ADX-proximity *score* penalty (fewer/weaker verdicts) but applies no *size* haircut — a transitional trade that passes is Kelly-sized like a clean trend. Display-only (Kelly is advisory). **Design tension to resolve first:** competes with the profile's vol-normalization (`Base × AvgATR/CurrATR` → low ATR = *bigger* size); a transitional/low-vol caution multiplier would layer *on top* and the interaction must be specified (which signal wins when). Backlogged 2026-06-14.

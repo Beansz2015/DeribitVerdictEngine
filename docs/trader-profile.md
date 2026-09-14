@@ -1,31 +1,17 @@
 # Trader Profile
 
 This document captures the trader's style, preferences, and strategic context
-for the Deribit Verdict Engine project. Attach this file at the start of any
-new conversation (coding or strategy) to bootstrap full context instantly.
+for the Deribit Verdict Engine project. Read it in full at the start of every
+Claude session (CLAUDE.md Session Start Protocol).
 
-Last updated: 2026-04-11
+Last updated: 2026-09-14 -- re-synced against settings.json v68, the code and the
+engine docs; 16 stale items corrected (trader-ruled 2026-09-14). The pre-sync text,
+including the drift notice that listed the 16 items, is at commit 4958d1f:
+`git show 4958d1f:docs/trader-profile.md`
 
-> ⚠ **DRIFT NOTICE - added 2026-09-14 (UTC), updated the same day.** This file is now read in full at every session start (trader-directed). A check on 2026-09-14 found it stale against the engine docs, `settings.json`, the code and the `crypto-trading-context` skill's copy of the profile. **It has NOT been re-synced; each fix waits for the trader's ruling.** Until then, `CLAUDE.md` wins on process and the engine docs win on engine facts. The strategy-owner text in `trader-profile.md` §8 was corrected 2026-09-14 (trader-directed): all strategy is done by the current Claude orchestrator. Verified conflicts still open:
->
-> | # | In `trader-profile.md` | What is true now | Source checked |
-> |---|---|---|---|
-> | 1 | §3 Funding Rate and §7: funding momentum "not yet implemented" | Shipped (Step 3b); time-anchored window since v53 | `DeribitIndicatorProject.md` §4 |
-> | 2 | §3 Liquidations and §7: default `dominanceRatio` 1.0, "consider raising to 1.2-1.5" | `dominance_ratio` = 2.0 | `settings.json` `indicators.Liquidations` |
-> | 3 | §3 Liquidations and §7: "-1 for > 50 BTC, -2 for > 200 BTC" | No 50 BTC threshold exists. On a `LONG LIQS` / `SHORT LIQS` signal the penalty is `liq_standard_penalty` = 1, or `liq_large_penalty` = 2 above `large_liq_size` = 200 | `settings.json`; `Core/ScoringEngine_Calculate_Scoring.vb:399-406` |
-> | 4 | §3 Bollinger/BBW: "Squeeze = ACTIVE (-1 both)" | `bbw_squeeze_penalty` = 2, applied to both sides | `settings.json`; `Core/ScoringEngine_Calculate_Scoring.vb:256-257` |
-> | 5 | §3 VPFR-lite: "HVN wall triggers ATR target cap" | v51 structural-first target ladder: swing, then HVN, then POC, then ATR fallback | `DeribitIndicatorProject.md` §7 |
-> | 6 | §3 MTF Gate: "TTL cache 60s" | On `transport = ws` the 15m data refreshes every run; the 60 s TTL applies only on REST | `architecture.md` Directory Layout (`MtfRefreshPolicy.vb`) |
-> | 7 | §5 Max position size: "Low ATR day (< 80)", "High ATR day (> 150)" | v37 bands: 1-min 20/55, 3-min ~42/115 (already in the same section's ATR thresholds) | `trader-profile.md` §5 |
-> | 8 | §6 Score thresholds: MaxScore 19/18/15; percentages "approx 63%/47%/32%" | MaxScore 20/19/15 with regime weights enabled; `verdict_strong_pct` 0.70, `verdict_med_pct` 0.53, `verdict_weak_pct` 0.35 | `DeribitIndicatorProject.md` §7; `settings.json` `scoring` |
-> | 9 | §6 Config philosophy: "settings.json (v6, Commit 5)" | The version tag is stale; the live version is `settings.json` line 2 | `settings.json` |
-> | 10 | §7: OI x CVD cross-confirm "identified as an upgrade" | Shipped as Pass 2b | `DeribitIndicatorProject.md` §7 |
-> | 11 | §7: MicroCVD static 5000 USD threshold | Dynamic threshold shipped | `DeribitIndicatorProject.md` §4 |
-> | 12 | §7: "engine currently uses REST polling" | WebSocket since v42; REST is the fallback | `architecture.md` Design Decisions |
-> | 13 | §7: AWS London (LD4) deployment "not yet confirmed" | The collector runs on AWS; the ops script's default region is `eu-west-2` (London) | `tools/ops/collector.ps1:54` |
-> | 14 | §8 Session handover: read `DeribitIndicatorProject.md` and `architecture.md` only | The full `CLAUDE.md` Session Start Protocol, including this file and the queue | `CLAUDE.md` |
-> | 15 | §8 Version history: `DeribitIndicatorProject.md` Section 14 | `DeribitIndicatorProject.md` §15 | `DeribitIndicatorProject.md` |
-> | 16 | (absent) the commit workflow | Commit locally; push only after a clean compile and the trader's test | the skill copy's §8 |
+Settings values below are quoted with their key and the version they were read at
+("2 at v68"). The key is the source of truth; re-read settings.json before relying
+on a quoted value.
 
 ---
 
@@ -116,8 +102,9 @@ Last updated: 2026-04-11
 
     Bollinger/BBW:   PREFERRED | Used via BBW (Bandwidth) for squeeze detection.
                                Not used for overbought/oversold bands directly.
-                               Squeeze = ACTIVE (-1 both), RELEASING = directional
-                               via ROC, NONE = no score.
+                               Squeeze = ACTIVE (penalty on both sides:
+                               scoring.bbw_squeeze_penalty, 2 at v68),
+                               RELEASING = directional via ROC, NONE = no score.
 
     EMA Ribbon       PREFERRED | 9/21/50 on 1m for dynamic trend structure.
     (9/21/50):                 Provides price-based support/resistance that DMI
@@ -128,8 +115,10 @@ Last updated: 2026-04-11
                                confidence modifier in Step 3 only (NOT Step 2
                                scoring -- removed in v0.17 to prevent
                                double-counting).
-                               NOTE: Funding momentum (rising vs falling rate)
-                               identified as future upgrade -- not yet implemented.
+                               Funding momentum (rising vs falling rate) is
+                               SHIPPED as the Step 3b modifier, on a
+                               time-anchored window since v53. Preferred over
+                               the absolute rate.
 
     Open Interest:   PREFERRED | OI change direction + price direction = quality
     (OI Delta):                of trend signal. Rising OI + rising price =
@@ -141,9 +130,12 @@ Last updated: 2026-04-11
                                moves.
 
     Liquidations:    PREFERRED | Cascade detection. Penalty-only signal (v0.17).
-                               -1 for > 50 BTC, -2 for > 200 BTC on affected side.
-                               NOTE: default dominanceRatio 1.0 = equal-or-greater;
-                               consider raising to 1.2-1.5 after live calibration.
+                               On a LONG LIQS / SHORT LIQS signal the affected
+                               side loses scoring.liq_standard_penalty (1 at v68),
+                               or scoring.liq_large_penalty (2 at v68) above
+                               indicators.Liquidations.large_liq_size (200 at v68).
+                               Dominance: indicators.Liquidations.dominance_ratio
+                               (2.0 at v68).
 
     CVD:             PREFERRED | Cumulative volume delta. 3-segment weighted slope
                                (late x2 - early x1). Divergence triggers -1 penalty.
@@ -160,7 +152,9 @@ Last updated: 2026-04-11
 
     MTF Gate (15m):  PREFERRED | Hard veto gate. Forces NO TRADE on BLOCK.
                                15m DMI/ADX + EMA confluence alignment required.
-                               TTL cache 60s; 1-bar regime hysteresis.
+                               15m data refreshes every run on WebSocket (the
+                               60 s TTL applies only on the REST fallback);
+                               1-bar regime hysteresis.
 
     OBV:             NEUTRAL   | Volume trend confirmation. Useful for divergence
                                but slower signal. Tier 3 -- nice to have.
@@ -172,8 +166,9 @@ Last updated: 2026-04-11
 
     VPFR-lite:       PREFERRED | Volume Profile (Fixed Range) -- fully implemented
     (Engine):                  in engine as Tier 3. NOT visual-only.
-                               POC proximity scoring. HVN wall triggers ATR
-                               target cap.
+                               POC proximity scoring. HVN walls feed the v51
+                               structural-first target ladder (swing, then HVN,
+                               then POC, then ATR fallback).
 
     VPVR             VISUAL    | Visual use only on TradingView/Deribit chart.
     (TradingView):   ONLY      | Used to identify swing targets and stops on screen.
@@ -228,8 +223,8 @@ Last updated: 2026-04-11
 
     Max position size:      Not specified in absolute terms. Scaled dynamically
                             via ATR multiplier: Base x (20d AvgATR / CurrATR).
-                            Low ATR day (< 80) = larger size.
-                            High ATR day (> 150) = smaller size.
+                            Low ATR day = larger size; High ATR day = smaller
+                            size, as classified by the ATR thresholds below.
 
     Stop-loss approach:     STRUCTURAL -- always placed below previous swing low
                             (longs) or above previous swing high (shorts).
@@ -263,6 +258,10 @@ Last updated: 2026-04-11
                             these are display / cold-start reference bands only.)
                             Review against CSV log if BTC price moves
                             significantly.
+                            THIS BLOCK IS THE SINGLE HOME OF THE ATR BANDS. They
+                            are not in settings.json or the code (only the
+                            cold-start anchor indicators.ATR.static_ref is).
+                            Change the bands HERE; every other mention points here.
 
 ---
 
@@ -280,9 +279,12 @@ Last updated: 2026-04-11
                                 TRANSITIONAL = reduced size, extra caution.
                                 Will not override regime veto rules.
 
-    Score thresholds:           Percentage-based against regime MaxScore (19/18/15).
-                                Computed as Math.Ceiling(regimeMax x verdictStrong/Med/WeakPct).
-                                Default pcts produce approx 63%/47%/32% of MaxScore.
+    Score thresholds:           Percentage-based against regime MaxScore
+                                (20/19/15 with regime weights enabled; base
+                                19/18/15). Computed as
+                                Math.Ceiling(regimeMax x verdictStrong/Med/WeakPct).
+                                scoring.verdict_strong_pct / verdict_med_pct /
+                                verdict_weak_pct = 0.70 / 0.53 / 0.35 at v68.
                                 All pcts configurable via settings.json.
 
     False positive tolerance:   Low. Prefers engine to say NO TRADE rather
@@ -298,43 +300,40 @@ Last updated: 2026-04-11
                                 headline verdict should be prominent.
 
     Config philosophy:          All scoring thresholds and indicator parameters
-                                externalised to settings.json (v6, Commit 5).
-                                No hardcoded magic numbers remain in engine.
-                                Hot-reloadable without recompile.
+                                externalised to settings.json (live version:
+                                its line 2). No hardcoded magic numbers remain
+                                in engine. Hot-reloadable without recompile.
 
 ---
 
 ## 7. Open Questions / Known Limitations
 
-    Liq dominanceRatio (default 1.0) -- configurable. Review false LONG/SHORT
-    LIQS signals after 2-4 weeks live data. Consider raising to 1.2-1.5 to require
-    the dominant side to be proportionally larger before signalling.
+    Liq large-penalty threshold -- monitoring. Review
+    indicators.Liquidations.large_liq_size (200 at v68) against the ~90th
+    percentile of observed LiqLongSize/LiqShortSize in the CSV log.
 
-    Liq penalty thresholds (50/200 BTC) -- monitoring. Review 200 BTC threshold
-    against ~90th percentile of observed LiqLongSize/LiqShortSize in CSV log.
+    ATR bands -- review if BTC price moves significantly. The AvgATR/CurrATR
+    ratio approach is self-calibrating, but the absolute Low/Normal/High bands
+    may need updating. The bands live in the ATR thresholds block in section 5.
 
-    ATR thresholds recalibrated v37 (2026-06-17): 1-min 20/55, 3-min ~42/115
-    (resolution-dependent since v36; was 80/150 for BTC ~$80k-$100k Q1 2026). Review
-    if BTC price moves significantly. AvgATR/CurrATR ratio approach is
-    self-calibrating but the absolute Low/Normal/High bands may need updating.
+  Resolved in the 2026-09-14 re-sync (kept so they are not re-raised):
 
-    MicroCVD accelThreshold (5000 USD default) -- consider dynamic scaling vs
-    VolumeSMA on quiet sessions where 5K delta is noise.
+    Liq dominanceRatio -- raised beyond the 1.2-1.5 once considered;
+    indicators.Liquidations.dominance_ratio is 2.0 at v68.
 
-    Funding momentum -- absolute rate currently used. Rising vs falling rate
-    direction identified as higher-quality signal. Not yet implemented.
+    MicroCVD accelThreshold -- dynamic scaling shipped (static floor plus a
+    share of window USD).
 
-    OI x CVD cross-confirm -- OI (NEW LONGS/SHORTS) and CVD direction are
-    currently scored independently. A combined multiplier (e.g. NEW LONGS +
-    CVD RISING = full score) identified as a meaningful Tier 1 upgrade.
+    Funding momentum -- shipped as the Step 3b modifier; time-anchored window
+    since v53.
 
-    Websocket upgrade -- engine currently uses REST polling (snapshot-based).
-    Moving to Deribit websocket API would provide real-time order book and
-    trade stream, removing the fundamental REST latency constraint.
-    Most impactful non-code upgrade available.
+    OI x CVD cross-confirm -- shipped as Pass 2b.
 
-    AWS London (LD4) deployment -- recommended for minimal latency to
-    Deribit API. Not yet confirmed as deployment target.
+    WebSocket upgrade -- shipped; live on WebSocket since v42, REST is the
+    fallback.
+
+    AWS London deployment -- the collector runs on AWS; the ops script
+    tools/ops/collector.ps1 defaults to region eu-west-2 (London).
 
 ---
 
@@ -357,6 +356,12 @@ Last updated: 2026-04-11
                             commits them to the repo; implementation follows
                             the approved spec.
                             All docs live in /docs folder of DeribitVerdictEngine repo.
+
+    Commit workflow:        Local-first. Commit locally as work progresses.
+                            Push to remote only after the change compiles
+                            cleanly AND the trader has tested it. Remote holds
+                            tested milestones only; failed compiles or failed
+                            tests stay local.
 
     Review preference:      Always show what changed and why. Changelog entries
                             for every version. Breaking changes flagged explicitly.
@@ -381,10 +386,12 @@ Last updated: 2026-04-11
                             handover) owns strategy. There is no external
                             strategy conversation.
 
-    Session handover:       Start new sessions by reading DeribitIndicatorProject.md
-                            and architecture.md only. Do NOT read entire codebase --
-                            individual .vb files only when a specific edit is needed.
-                            This preserves context budget for actual work.
+    Session handover:       Follow the CLAUDE.md Session Start Protocol (it
+                            includes this file). Do NOT read the entire
+                            codebase -- open individual .vb files only when a
+                            specific edit is needed. This preserves context
+                            budget for actual work.
 
-    Version history:        See DeribitIndicatorProject.md Section 14 for the
-                            full version history and design decisions scorecard.
+    Version history:        See DeribitIndicatorProject.md §15 (most recent five
+                            settings versions) and history-archive.md §E (older).
+                            Design rationale: architecture.md Design Decisions.

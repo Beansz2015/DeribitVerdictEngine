@@ -13,7 +13,7 @@
 - **Output format:** `C:\Users\user\.claude\CLAUDE.md` + memory `feedback_output_format_is_a_standing_rule`. Point form, tables, **never a bare section number or bare ID**, verified vs carried.
 - **Decision rule:** `CLAUDE.md` *"AUTO-PROCEED ON YOUR OWN RECOMMENDATION"*. Take reversible calls and log them one line each. **Reserve** settings, scoring, rendered values, collector writes, schema changes, and any pick that is cheaper AND less truthful.
 - ⛔ **Clock trap: GMT+8 workstation, UTC project.** This session the harness announced 09-12, 09-13 and 09-14 while UTC was a day behind twice. **Run `date -u` before your first dated claim.**
-- **Trader profile:** read [`trader-profile.md`](trader-profile.md) in full at every session start (ruled 2026-09-14, trader-directed). Its header lists the verified drift against the skill's copy.
+- **Trader profile:** read [`trader-profile.md`](trader-profile.md) in full at every session start (ruled 2026-09-14, trader-directed). It was re-synced 2026-09-14 (trader-ruled); strategy is owned by the current Claude orchestrator, and its §5 is the single home of the ATR bands.
 - **Doc trim 2026-09-14 (UTC):** superseded and history text moved out of `DeribitIndicatorProject.md`, `trader-tick-queue.md` and `architecture.md` into their archives. Every moved block is listed in [`doc-trim-log.md`](doc-trim-log.md); re-check with `tools/checks/doc-trim-verify.ps1`. The full-read rule is unchanged.
 
 ---
