@@ -16,6 +16,11 @@
   Out of scope, named so it is never assumed back in (proposal §2.7):
     - No pooling/dedup/analysis in `fetch` -- it moves bytes. The §3b minute-key dedup in
       aws-collector-deploy-checklist.md stays a separate, deliberate manual step.
+      [2026-09-14] ONE exception, on the LOCAL copy only: after a verified fetch, `fetch` calls
+      tools/ops/venue-check.ps1 on the downloaded folder (the option-A venue sample,
+      docs/venue-check-plan-review-2026-09-14.md §3). It runs on this machine, never on the
+      box, and never changes the downloaded files' contents -- it only adds its own report,
+      log and page dump beside them. -SkipVenueCheck opts out.
     - No settings editing on the box -- settings travel as the tracked file or not at all.
     - No store manipulation, in either direction -- backtest_data\ is read-only to this tool.
     - No collector-REPLACEMENT / cutover automation. §5 of the proposal is a manual, ordered
@@ -62,7 +67,10 @@ param(
 
     # deploy only: print the plan and pre-flight results, then stop before the y/n prompt.
     # Nothing changes under -DryRun, by construction -- it returns before Step 3's prompt.
-    [switch]$DryRun
+    [switch]$DryRun,
+
+    # fetch only: skip the post-fetch venue sample (tools/ops/venue-check.ps1).
+    [switch]$SkipVenueCheck
 )
 
 $ErrorActionPreference = 'Continue'  # native aws.exe stderr foot-gun -- see verify-gate.ps1
@@ -279,7 +287,10 @@ function Invoke-Status {
 # ===========================================================================
 function Invoke-Fetch {
     Section "fetch -- $InstanceId ($Region) -> s3://$Bucket -> $OutDir"
-    $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
+    # Captured BEFORE anything is snapshotted: the venue sample's window ends on the whole UTC
+    # hour before this instant, so every trade in it was flushed (30 s) before the snapshot.
+    $fetchStartUtc = (Get-Date).ToUniversalTime()
+    $stamp = $fetchStartUtc.ToString('yyyyMMdd-HHmmss')
     $prefix = "fetch/$InstanceId/$stamp"
 
     # -- Step 1: on the box, resolve $dir and SNAPSHOT every target into a staging dir FIRST,
@@ -412,6 +423,20 @@ function Invoke-Fetch {
     Warn 'no pooling, dedup or merge performed -- see aws-collector-deploy-checklist.md §3b for the manual minute-key dedup step'
     if ($mismatch) { Fail 'one or more transfers did not verify -- treat this fetch as INCOMPLETE'; exit 1 }
     Ok 'fetch complete, all transfers verified'
+
+    # -- Step 5: the option-A venue sample, on the verified LOCAL copy only. -----------------
+    # Its verdict never changes this verb's exit code: the fetch succeeded. The script prints
+    # loudly and records every outcome, NOT_RUN included, in aws_fetch\venue_check_ledger.csv.
+    if ($SkipVenueCheck) {
+        Warn '-SkipVenueCheck: no venue sample recorded for this fetch'
+        return
+    }
+    Section 'venue check (option-A sample -- runs on THIS machine, nothing on the box)'
+    $venueTo = New-Object DateTime ($fetchStartUtc.Year, $fetchStartUtc.Month, $fetchStartUtc.Day,
+                                    $fetchStartUtc.Hour, 0, 0, [DateTimeKind]::Utc)
+    & (Join-Path $PSScriptRoot 'venue-check.ps1') -FetchFolder $localDest `
+        -ToUtc $venueTo.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
+    if ($LASTEXITCODE -eq 1) { Warn 'venue check could not even write its ledger row -- see the output above' }
 }
 
 # ===========================================================================
