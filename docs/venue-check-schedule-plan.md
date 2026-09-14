@@ -2,6 +2,20 @@
 
 **Written:** 2026-09-14 (UTC), by a scoped seat working [`venue-check-schedule-plan-brief-2026-09-14.md`](venue-check-schedule-plan-brief-2026-09-14.md). **Status:** PLAN. Nothing was created on the collector box.
 
+> ⭐⭐ **SUPERSEDED IN PART — TRADER RULING 2026-09-14 (UTC): OPTION A.** The venue check runs on the **dev machine, after each `tools/ops/collector.ps1 fetch`**, against the verified local copy-back. **Nothing runs on, or is installed on, the AWS box.** Ruling and build instructions: [`venue-check-plan-review-2026-09-14.md`](venue-check-plan-review-2026-09-14.md) (its §0 has the ruling, its §3 the hook).
+>
+> | Item in this plan | Status under option A |
+> |---|---|
+> | Section 1, P1–P5 (box binary, box task, box output, glance line) | ⛔ **DROPPED.** Kept below as the record of what was weighed |
+> | Section 1, P6 (`--strict` gap) and P7 (failure modes) | Still apply to the tool; P7's box-specific rows do not |
+> | B-1 (fetch truncation) | ✅ **FIXED** by `V-1`, commit `6509a0f` |
+> | B-2 (memory) and B-3 (share mode) | Box-side hazards; no longer reached, because nothing new reads the store on the box. B-3's reader-side conflict **was reproduced** on 2026-09-14 by fixture `A78d`'s mutation (a plain `StreamReader` beside an open `StreamWriter` threw *"The process cannot access the file"*) |
+> | Spec `V-1` (pagination) · `V-4` (`--venue-hours`, `VENUE_CHECK` line, `--strict` exit codes) | ✅ **BUILT** `6509a0f`, with the review's two additions (`--venue-dump`, `tool_commit`) and one addition of this seat's: the `VENUE_SHORT` verdict (see the section 2 note) |
+> | Spec `V-2` (windowed streaming store read) · `V-3` (reader share mode in `Core/TradeStoreWriter.vb`) | ⏸ **HELD, not built.** `V-3` stays the correct fix for **any future box-side reader** of the store. The tools-only venue path already reads windowed with `FileShare.ReadWrite` (`CoverageReport.ReadStoreWindow`); the Core readers are unchanged |
+> | `venue_status.log` CLI wiring (the "noticed, out of scope" item in section 5) | ✅ **FIXED** `dc02219` |
+> | Post-fetch hook | ✅ **BUILT** `9b6fd0b` — `tools/ops/venue-check.ps1`, called by `fetch`, `-SkipVenueCheck` opts out; ledger `aws_fetch/venue_check_ledger.csv` |
+> | D-table rows | See the status column added to section 3 |
+
 ⛔⛔ **Headline: the check cannot be scheduled as the tool stands. Three defects block it, and two of them are measured, not suspected.**
 
 | # | Blocker | How it was found | Effect if scheduled today |
@@ -125,6 +139,14 @@ Logged as an auto-proceeded decision (tool code, one revert, no live surface). S
 
 ## 2. Spec — `--verify-venue` fixes and `--strict` option (b)
 
+> **Build status (2026-09-14, after the option-A ruling):** `V-1` and `V-4` ✅ BUILT `6509a0f` (fixtures `A78b`–`A78e`, each failed under a named mutation first). `V-2` and `V-3` ⏸ HELD. The "ride the S2 deploy" instruction below is void: nothing here ships to the box.
+>
+> **Deviations from the spec text below, recorded by the building seat:**
+> - **`VENUE_SHORT` verdict added** (exit 6), ranked above `LOSS`. Verified live 2026-09-14: a window past Deribit's retention returns `trades: []` with `has_more: false`. Without this verdict that reads as `CLEAN`. It fires when any store row in the window falls outside the venue's first-to-last trade span.
+> - **Pagination cursor is the newest millisecond, inclusive.** `start_timestamp` was verified inclusive live 2026-09-14, and `has_more` was verified present, so both "not verified" notes in `V-1` are closed.
+> - **The venue path has its own HTTP fetch** in `CoverageReport.vb`. `HistoricalStore.vb` is linked into the engine binary (`DeribitVerdictEngine.vbproj`), and the build was ruled no-engine-change.
+> - **`V-4`'s store-read failure → `NOT_RUN`** is implemented by a tools-only windowed reader (`CoverageReport.ReadStoreWindow`), not by `V-2`'s Core reader.
+
 **Do not build in this seat. Build before the S2 deploy, from the same commit.**
 
 **Model / effort: Opus, high.**
@@ -154,6 +176,19 @@ Sample `PrivateMemorySize64` every 100 ms. Baseline before the fix: **789 MB pea
 ---
 
 ## 3. D-table
+
+**Status under option A (2026-09-14), added after the ruling; the original rows below are unchanged:**
+
+| # | Status |
+|---|---|
+| **D-1** (deploy verb) | ⛔ **DROPPED** — nothing ships to the box |
+| **D-2** (run on the box) | ⛔ **DROPPED** — runs on the dev machine |
+| **D-3** (reader share mode) | ⏸ **HELD** as spec `V-3`; correct for any future box-side reader |
+| **D-4** (cadence and window) | 🔁 **REPLACED** by "after every fetch", 13 h window ending on the whole UTC hour before the fetch started |
+| **D-5** (run-as account) | ⛔ **DROPPED** — no scheduled task |
+| **D-6** (`--strict` gap) | ✅ **BUILT** as option (b), `6509a0f` |
+| **D-7** (ledger schema) | 🔁 **REPLACED** by the local ledger in [`venue-check-plan-review-2026-09-14.md`](venue-check-plan-review-2026-09-14.md) §3 |
+| D-8 (raw pages on the box) | ⛔ **DROPPED.** ⚠ This plan never carried a D-8 row; the question was raised in the review's first version (commit `cc42ffd`). Raw pages are now kept locally via `--venue-dump` |
 
 | # | Decision | Options | Read | Class |
 |---|---|---|---|---|
