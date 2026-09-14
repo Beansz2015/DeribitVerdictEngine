@@ -6,22 +6,26 @@ new conversation (coding or strategy) to bootstrap full context instantly.
 
 Last updated: 2026-04-11
 
-> ⚠ **DRIFT NOTICE - added 2026-09-14 (UTC).** This file is now read in full at every session start (trader-directed). A check on 2026-09-14 found it stale against the engine docs and against the `crypto-trading-context` skill's copy of the profile. **It has NOT been re-synced; that needs the trader.** Until then, `CLAUDE.md` wins on process and the engine docs win on engine facts. Verified conflicts:
+> ⚠ **DRIFT NOTICE - added 2026-09-14 (UTC), updated the same day.** This file is now read in full at every session start (trader-directed). A check on 2026-09-14 found it stale against the engine docs, `settings.json`, the code and the `crypto-trading-context` skill's copy of the profile. **It has NOT been re-synced; each fix waits for the trader's ruling.** Until then, `CLAUDE.md` wins on process and the engine docs win on engine facts. The strategy-owner text in `trader-profile.md` §8 was corrected 2026-09-14 (trader-directed): all strategy is done by the current Claude orchestrator. Verified conflicts still open:
 >
-> | In `trader-profile.md` | Current source | What is true now |
-> |---|---|---|
-> | §3 Funding Rate and §7: funding momentum "not yet implemented" | `DeribitIndicatorProject.md` §4 | Shipped; time-anchored window since v53 |
-> | §3 Liquidations and §7: default `dominanceRatio` 1.0 | `DeribitIndicatorProject.md` §4 | 2.0 |
-> | §3 VPFR-lite: "HVN wall triggers ATR target cap" | `DeribitIndicatorProject.md` §7 | v51 structural-first target ladder |
-> | §5 Max position size: "Low ATR day (< 80)", "High ATR day (> 150)" | `trader-profile.md` §5 ATR thresholds | v37 bands: 1-min 20/55, 3-min ~42/115 |
-> | §6 Score thresholds: regime MaxScore 19/18/15 | `DeribitIndicatorProject.md` §7 | 20/19/15 with regime weights enabled |
-> | §7: OI x CVD cross-confirm "identified as an upgrade" | `DeribitIndicatorProject.md` §7 | Shipped as Pass 2b |
-> | §7: MicroCVD static 5000 USD threshold | `DeribitIndicatorProject.md` §4 | Dynamic threshold shipped |
-> | §7: "engine currently uses REST polling" | `architecture.md` Design Decisions | WebSocket since v42; REST is the fallback |
-> | §8: novel questions go to a Perplexity strategy conversation | the skill copy's §7; `CLAUDE.md` auto-proceed ruling | No external review conversation; Claude takes reversible calls and reserves the rest |
-> | §8: session handover reads `DeribitIndicatorProject.md` and `architecture.md` only | `CLAUDE.md` Session Start Protocol | The full protocol, including this file and the queue |
-> | §8: version history in `DeribitIndicatorProject.md` Section 14 | `DeribitIndicatorProject.md` | §15 |
-> | (absent) the commit workflow | the skill copy's §8 | Commit locally; push only after a clean compile and the trader's test |
+> | # | In `trader-profile.md` | What is true now | Source checked |
+> |---|---|---|---|
+> | 1 | §3 Funding Rate and §7: funding momentum "not yet implemented" | Shipped (Step 3b); time-anchored window since v53 | `DeribitIndicatorProject.md` §4 |
+> | 2 | §3 Liquidations and §7: default `dominanceRatio` 1.0, "consider raising to 1.2-1.5" | `dominance_ratio` = 2.0 | `settings.json` `indicators.Liquidations` |
+> | 3 | §3 Liquidations and §7: "-1 for > 50 BTC, -2 for > 200 BTC" | No 50 BTC threshold exists. On a `LONG LIQS` / `SHORT LIQS` signal the penalty is `liq_standard_penalty` = 1, or `liq_large_penalty` = 2 above `large_liq_size` = 200 | `settings.json`; `Core/ScoringEngine_Calculate_Scoring.vb:399-406` |
+> | 4 | §3 Bollinger/BBW: "Squeeze = ACTIVE (-1 both)" | `bbw_squeeze_penalty` = 2, applied to both sides | `settings.json`; `Core/ScoringEngine_Calculate_Scoring.vb:256-257` |
+> | 5 | §3 VPFR-lite: "HVN wall triggers ATR target cap" | v51 structural-first target ladder: swing, then HVN, then POC, then ATR fallback | `DeribitIndicatorProject.md` §7 |
+> | 6 | §3 MTF Gate: "TTL cache 60s" | On `transport = ws` the 15m data refreshes every run; the 60 s TTL applies only on REST | `architecture.md` Directory Layout (`MtfRefreshPolicy.vb`) |
+> | 7 | §5 Max position size: "Low ATR day (< 80)", "High ATR day (> 150)" | v37 bands: 1-min 20/55, 3-min ~42/115 (already in the same section's ATR thresholds) | `trader-profile.md` §5 |
+> | 8 | §6 Score thresholds: MaxScore 19/18/15; percentages "approx 63%/47%/32%" | MaxScore 20/19/15 with regime weights enabled; `verdict_strong_pct` 0.70, `verdict_med_pct` 0.53, `verdict_weak_pct` 0.35 | `DeribitIndicatorProject.md` §7; `settings.json` `scoring` |
+> | 9 | §6 Config philosophy: "settings.json (v6, Commit 5)" | The version tag is stale; the live version is `settings.json` line 2 | `settings.json` |
+> | 10 | §7: OI x CVD cross-confirm "identified as an upgrade" | Shipped as Pass 2b | `DeribitIndicatorProject.md` §7 |
+> | 11 | §7: MicroCVD static 5000 USD threshold | Dynamic threshold shipped | `DeribitIndicatorProject.md` §4 |
+> | 12 | §7: "engine currently uses REST polling" | WebSocket since v42; REST is the fallback | `architecture.md` Design Decisions |
+> | 13 | §7: AWS London (LD4) deployment "not yet confirmed" | The collector runs on AWS; the ops script's default region is `eu-west-2` (London) | `tools/ops/collector.ps1:54` |
+> | 14 | §8 Session handover: read `DeribitIndicatorProject.md` and `architecture.md` only | The full `CLAUDE.md` Session Start Protocol, including this file and the queue | `CLAUDE.md` |
+> | 15 | §8 Version history: `DeribitIndicatorProject.md` Section 14 | `DeribitIndicatorProject.md` §15 | `DeribitIndicatorProject.md` |
+> | 16 | (absent) the commit workflow | Commit locally; push only after a clean compile and the trader's test | the skill copy's §8 |
 
 ---
 
@@ -341,17 +345,17 @@ Last updated: 2026-04-11
                             background and trading exchange experience.
                             Use correct terminology without over-explaining.
 
-    Decision process:       Spec-first workflow. Novel questions go to the
-                            strategy conversation (Perplexity) for analysis.
-                            Decisions are documented in .md files and committed
-                            to GitHub before coding begins. Coding Claude
-                            implements approved specs -- does not invent design
+    Decision process:       Spec-first workflow. All strategy and design analysis
+                            is done by the current Claude orchestrator (the active
+                            seat until the next handover). Decisions are
+                            documented in .md files and committed to GitHub
+                            before coding begins. Implementer seats build
+                            approved specs -- they do not invent design
                             decisions unilaterally.
 
-    GitHub workflow:        Proposal .md files are written by the coding Claude,
-                            reviewed by strategy Claude (Perplexity), response
-                            .md files committed to repo, then link passed back
-                            to coding Claude for implementation.
+    GitHub workflow:        The orchestrator writes proposal .md files and
+                            commits them to the repo; implementation follows
+                            the approved spec.
                             All docs live in /docs folder of DeribitVerdictEngine repo.
 
     Review preference:      Always show what changed and why. Changelog entries
@@ -371,11 +375,11 @@ Last updated: 2026-04-11
                             that increase indicator correlation (signals should
                             remain as independent as possible).
 
-    Conversation split:     Novel strategy questions and spec decisions go to
-                            Perplexity strategy conversation.
-                            Implementation, code review, debugging go to
-                            Claude coding conversation.
-                            This profile bridges both conversations.
+    Strategy owner:         All strategy, spec decisions, implementation, code
+                            review and debugging are done in Claude. The current
+                            orchestrator (the active seat until the next
+                            handover) owns strategy. There is no external
+                            strategy conversation.
 
     Session handover:       Start new sessions by reading DeribitIndicatorProject.md
                             and architecture.md only. Do NOT read entire codebase --
