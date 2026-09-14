@@ -1,6 +1,8 @@
 # Gap repair — same-millisecond page skip — spec-back
 
-**Written:** 2026-09-14 (UTC) by the scoped spec seat. **For:** the orchestrator seat that wrote the brief. **Record:** the spec itself, [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-page-skip-spec.md) (commits `3c2cdd2`, `a8b9d27`). No separate summary: this was one spec, not a multi-lane batch ([`batch-review-packet-convention.md`](batch-review-packet-convention.md)). **Handles pinned to:** `a8b9d27`.
+**Written:** 2026-09-14 (UTC) by the scoped spec seat. **For:** the orchestrator seat that wrote the brief.
+
+> ⚠ **ROUTING, 2026-09-14 (UTC):** this packet was sent to session `deribitverdictengine-f1` in error. That session is the ASIA burst-watch read seat, not the orchestrator. It declined to rule and passed `GR-1` to `GR-5` to the trader. ⛔ **No ruling is recorded yet.** **Record:** the spec itself, [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-page-skip-spec.md) (commits `3c2cdd2`, `a8b9d27`). No separate summary: this was one spec, not a multi-lane batch ([`batch-review-packet-convention.md`](batch-review-packet-convention.md)). **Handles pinned to:** `a8b9d27`.
 
 **Review recommendation**
 Model / effort: **Opus · high.** `GR-1` amends a ruled decision (`DR-1`, see below), and CLAUDE.md puts anything correcting a prior ruling at high.
@@ -150,6 +152,7 @@ grep -rn 'Console.SetOut\|Console.SetError' --include=*.vb .
 ## 4. What I did not verify
 
 - **That the 70 lost trades shared their left row's millisecond.** The venue history is gone. The inference rests on the exact 1,000-row spacing and on the rate (16 of about 30 boundaries, against 48.8 % simulated).
+- **The cause of the outage before the `e3781e57…` restart.** Cross-link from the ASIA burst-watch seat: [`d3-asia-burst-watch-read-2026-09-14.md`](d3-asia-burst-watch-read-2026-09-14.md) §4 (commit `e66da61` on `master`, local only) records a ~48 h `analysis_log.csv` hole. `e551f15e…`'s last row is 2026-08-15 16:11:19 UTC and `e3781e57…`'s first row is 2026-08-17 16:23:13 UTC. ✅ **Consistent with the store:** its last trade before the gap is 16:11:48 UTC (`H-1`). The repair clamps to a 20 h lookback, so the 14,405-trade hole is the part of that outage past retention. **That hole is not this defect; only the 16 small holes are.** Neither that doc nor the deploy ledger records the cause.
 - **That later 6-hourly passes ran after 2026-08-17 16:23 UTC.** No durable repair log exists. The app was alive through 2026-08-18 (`ws_health.log` entries, carried from [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5a).
 - **That `trade_seq` order always agrees with timestamp order.** The shipped walk assumes it too.
 - **How the AWS app's standard output is launched or captured.** Only the in-tree absence is verified.
