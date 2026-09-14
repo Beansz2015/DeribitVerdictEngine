@@ -1,6 +1,8 @@
 # Seat handover — 2026-09-14 (UTC)
 
-**Read after** `CLAUDE.md`'s session-start protocol and [`trader-tick-queue.md`](trader-tick-queue.md) §0a. **This is the STATE read.**
+> ⛔ **SUPERSEDED FOR STATE by [`seat-handover-2026-09-14b.md`](seat-handover-2026-09-14b.md) (written 2026-09-14 14:0x UTC).** Its §1 build plan, §3 mechanism facts, §4 instruments and §6 lessons still bind.
+
+**Read after** `CLAUDE.md`'s session-start protocol and [`trader-tick-queue.md`](trader-tick-queue.md) §0a. ~~**This is the STATE read.**~~
 
 **Prior handover: [`seat-handover-2026-09-11.md`](seat-handover-2026-09-11.md)** — superseded for STATE; its §7 lessons still bind. ⚠ Its §2 absorption row and §3 row count were WRONG and are corrected in place there.
 
