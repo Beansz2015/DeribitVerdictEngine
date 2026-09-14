@@ -160,3 +160,54 @@ grep -rn 'Console.SetOut\|Console.SetError' --include=*.vb .
 - **The S2 deploy date.** Not read.
 - **No build and no harness run.** This was a spec. The `A56` line references are from `2fa22da`; the spec commits touched no `.vb` file.
 - **Scoped seat:** I did not read `docs/DeribitIndicatorProject.md`, `docs/architecture.md` or `docs/trader-profile.md`.
+
+---
+
+## 5. Response to rulings — 2026-09-14 (UTC)
+
+**Rulings** — trader-ruled on the orchestrator's reads, relayed by the orchestrator seat `deribitverdictengine-87`. Recorded in [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-page-skip-spec.md) §3.2.
+
+| Row | Ruling |
+|---|---|
+| `GR-1` | **(d) NEW** — repair a hole by fetching `[L.seq + 1, R.seq − 1]` via `get_last_trades_by_instrument`; repair the tail from `max.seq + 1`. Amends `DR-1`. The brief's "no third contract" constraint is withdrawn for the repair path |
+| `GR-2` | **(b)** two fetchers plus a contract fixture |
+| `GR-3` | **Closed by `GR-1` (d)**, not ruled (a) |
+| `GR-4` | **(b)** durable outcome-only repair log, added to `collector.ps1` `$FetchFiles` |
+| `GR-5` | **(b)** the S2 deploy waits for this fix |
+
+### 5.1 Measured before amending — the stop condition did NOT fire
+
+Handles are the spec's own numbering, in [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-page-skip-spec.md) §10, run 2026-09-14 19:03–19:06 UTC.
+
+| Orchestrator's item | Result | Spec handle |
+|---|---|---|
+| (a) paging above the count limit | **Exact.** 2,501-seq range in 3 pages via `start_seq = last + 1`: 2,501 rows, 2,501 distinct, 0 duplicates, 0 missing. `has_more` = more trades remain inside the requested range (exactly 1,000 seqs → `false`; 1,001 → `true`) | `H-6` |
+| (b) count cap | **1,000.** `count=1001` → `-32602 "value is too high"` | `H-7` |
+| (c) a seq with no trade | **None found** in 12,501 recent seqs. Future, inverted and wholly-past-retention ranges all return 0 trades, `has_more: false` | `H-8`, `H-9` |
+| (d) the tail | `start_seq` with no `end_seq` is accepted; bounded by `count` and by the latest trade. **Nothing stops it at `segEnd` — the fetcher must.** ⚠ **A `start_seq` older than retention returns from the ~24 h edge, not empty** | `H-9` |
+
+### 5.2 What changed in the spec
+
+- `docs/gap-repair-same-ms-page-skip-spec.md` §0 brief rewritten for (d): Opus, high, one session, three commits; traps `GT-1`–`GT-7`; the contract-mismatch escalation trigger.
+- `docs/gap-repair-same-ms-page-skip-spec.md` §4 rewritten: the measured seq contract (§4.1), `RepairWindow` seq ranges (§4.2), the seq fetcher and its window states (§4.3), `repair_status.log` (§4.4).
+- `docs/gap-repair-same-ms-page-skip-spec.md` §6 rewritten: fixtures `A79a`–`A79f`, each with a named mutation; the `A56` remap for (d), not (c).
+
+### 5.3 ⚠ Decisions this seat took under the rulings — review these
+
+Each is logged in [`gap-repair-same-ms-page-skip-spec.md`](gap-repair-same-ms-page-skip-spec.md) §3.3. None trades away information; each is the richer or the mechanically required option.
+
+| # | Decision | Why |
+|---|---|---|
+| 1 | **The time pager is deleted, the offline path included.** One fetch path: at most one time call with `count=1` as an anchor, then seq pages | Closes `GR-3` everywhere. Keeping a time pager for the offline path keeps a second contract alive |
+| 2 | **Hole seq ranges get no time clamp** | `ScanForRepair` already scopes holes; the venue's retention edge is reported as `not_served` |
+| 3 | **A tail from an old `last.seq` commits every trade the venue still serves**, up to ~4 h older than the 20 h lookback | Measured: the venue serves from its 24 h edge (`H-9`). Exact by seq, so no duplicate risk |
+| 4 | **A tail stops at `segEndInclMs`** | Mechanism: otherwise a month-boundary pass double-writes the next month (`GT-3`) |
+| 5 | ⚠ **One `PASS_*` line per pass, even when clean.** This goes beyond "transition/outcome-only" | A clean pass writing nothing is indistinguishable from a dead timer — the exact gap this spec could not close for 2026-08-17. ~4 lines/day |
+| 6 | **The log line has 4 fields** (`utc \| state \| instance_id \| detail`); the two existing logs have 3 | A new file; nothing parses it yet |
+
+### 5.4 For the orchestrator — not blocking
+
+- **Nothing needs a re-ruling.** (c) stays the named fallback if the build finds the venue contract inexact.
+- ⚠ **[`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) §0's deploy row does not yet record `GR-5` (b).** Your edit, not this seat's.
+- **The spec's §8 now names a hypothesis, not verified, for the 298,934 duplicate rows:** the repair tail bypasses the streaming writer's `AlreadyCommitted` window. Magnitude alone cannot explain the count.
+- ⚠ **This packet's handle numbers (§1) differ from the spec's (§10).** Cite the document with the number.
