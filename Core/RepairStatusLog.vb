@@ -140,6 +140,10 @@ Public NotInheritable Class RepairStatusLog
                 sb.AppendFormat(CultureInfo.InvariantCulture, " kind=hole seq={0}..{1}", w.FirstSeq, w.LastSeq)
             Case TradeStoreWriter.RepairWindowKind.Tail
                 sb.AppendFormat(CultureInfo.InvariantCulture, " kind=tail seq={0}..open", w.FirstSeq)
+            Case TradeStoreWriter.RepairWindowKind.ScanFailure
+                sb.Append(" kind=scan")                                   ' [DUP-2] reason carries the exception
+            Case TradeStoreWriter.RepairWindowKind.SeedReadFailure
+                sb.Append(" kind=seed_read")                              ' [DUP-2] the F-1 previous-month read
             Case Else
                 sb.Append(" kind=anchored_tail seq=")
                 sb.Append(If(o.StartSeq >= 0, o.StartSeq.ToString(CultureInfo.InvariantCulture), "none")).Append("..open")

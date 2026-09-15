@@ -365,6 +365,14 @@ Public Class HistoricalStore
         Dim isHole As Boolean = win.Kind = TradeStoreWriter.RepairWindowKind.Hole
         Dim endSeq As Long? = If(win.LastSeq >= 0, CType(win.LastSeq, Long?), Nothing)
 
+        ' ⛔ [DUP-2] A failed store read fetches NOTHING and says so; the next pass retries.
+        If win.Kind = TradeStoreWriter.RepairWindowKind.ScanFailure Then
+            Return Finish(o, TradeStoreWriter.RepairWindowOutcome.ScanFailed, win.Failure)
+        End If
+        If win.Kind = TradeStoreWriter.RepairWindowKind.SeedReadFailure Then
+            Return Finish(o, TradeStoreWriter.RepairWindowOutcome.SeedReadFailed, win.Failure)
+        End If
+
         ' ── 1. Resolve the first sequence ─────────────────────────────────────────────
         Dim startSeq As Long
         If win.Kind = TradeStoreWriter.RepairWindowKind.AnchoredTail Then
