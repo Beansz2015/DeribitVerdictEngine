@@ -1368,8 +1368,8 @@ Public NotInheritable Class CoverageReport
     ''' response body, or Nothing on failure — injected so fixtures A78b run with no network.
     '''
     ''' ⛔ The cursor restarts AT the newest millisecond of the previous page, never one past it.
-    ''' HistoricalStore.BackfillTradeMonthAsync uses `newestMs + 1`, which skips any trade that
-    ''' shares the last page's final millisecond but did not fit on it. The re-fetched overlap is
+    ''' HistoricalStore's old time pager used `newestMs + 1`, which skipped any trade that shared
+    ''' the last page's final millisecond but did not fit on it (repair pages by trade_seq since edd4539). The re-fetched overlap is
     ''' removed by trade_id. A full page that never leaves one millisecond cannot advance and
     ''' fails loudly rather than looping or silently dropping trades.
     ''' </summary>

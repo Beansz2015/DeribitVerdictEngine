@@ -26,9 +26,14 @@
 ' first pass fires ONCE ON START rather than waiting a full interval — a restart is precisely
 ' when a gap exists. That is a build requirement, not a nicety.
 '
-' Overlap is a no-op BY CONSTRUCTION: HistoricalStore's trade backfill resumes from the last
-' on-disk timestamp, which after streaming is seconds old, so a repay pass over already-
-' captured ground fetches nothing (A48d).
+' Overlap is a no-op for STORED rows: every window is a trade_seq range that starts past what
+' the store holds (GR-1 (d), docs/gap-repair-same-ms-page-skip-spec.md). ⚠ Not for UNFLUSHED
+' streaming trades: the tail can fetch seqs the streaming writer holds in its buffer, and both
+' then write them — duplicates, which the readers remove (measured by A79g; the fix belongs to
+' the duplicate-rows task, not here).
+'
+' [GR-4 (b)] Every pass writes repair_status.log (Core/RepairStatusLog.vb): one line per window
+' that did not finish cleanly and one PASS line per pass, clean passes included.
 '
 ' Host-agnostic — no WinForms, no Control.Invoke, no MainForm. Runs on a plain
 ' System.Threading.Timer so the Linux CLI port drives it unchanged. NEVER THROWS.
@@ -107,32 +112,45 @@ Public NotInheritable Class TradeStoreGapRepair
     ''' That clamp is why `clampToSegStart:=True` is passed here and nowhere else.
     ''' </summary>
     Public Shared Async Function RepairOnceAsync(cfg As EngineSettings) As Task(Of Integer)
+        Dim outcomes As New List(Of TradeStoreWriter.RepairWindowOutcome)()
+        Dim lookbackHours As Double = 0
+        Dim passStarted As Boolean = False
         Try
             If cfg Is Nothing Then Return 0
             Dim ts = cfg.TradeStore
             If Not TradeStoreWriter.ShouldGapRepair(ts) Then Return 0
+            passStarted = True
 
             Dim storeDir As String = TradeStoreWriter.ResolveStoreDir(ts.StoreDir)
+            lookbackHours = Math.Max(0.5, ts.GapRepairLookbackHours)
             Dim toUtc As DateTime = DateTime.UtcNow
-            Dim fromUtc As DateTime = toUtc.AddHours(-Math.Max(0.5, ts.GapRepairLookbackHours))
+            Dim fromUtc As DateTime = toUtc.AddHours(-lookbackHours)
 
             Dim total As Integer = 0
+            ' ⛔ [F-1] Months MUST run in ascending order, one after another: a month file with no row
+            ' below its segment start seeds its hole bracket from the previous month's newest row,
+            ' which is only disjoint from that month's tail once the tail has run (TradeStoreWriter
+            ' ResolveRepairWindowsCore, the ORDER INVARIANT note). Do not parallelise this loop.
             For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
                 ' [downtime repair Part A, D-1/D-5] repairHoles:=True is what makes this pass
-                ' able to heal an outage the app RODE THROUGH. Without it the fetch resumes from
-                ' the file's last written row, which streaming makes current again within
-                ' seconds of reconnecting — so every hole behind it reads as already covered and
-                ' is never fetched. This is the ONLY caller that opts in; the historical backfill
-                ' keeps the default False and is byte-identical.
+                ' able to heal an outage the app RODE THROUGH: it fetches the trade_seq holes
+                ' BEHIND the tail as well as the tail. This is the ONLY caller that opts in.
                 total += Await HistoricalStore.BackfillTradeMonthAsync(
                              m.Year, m.Month, m.StartUtc, m.EndUtcExcl,
-                             storeDir:=storeDir, clampToSegStart:=True, repairHoles:=True)
+                             storeDir:=storeDir, clampToSegStart:=True, repairHoles:=True,
+                             outcomes:=outcomes)
             Next
+            RepairStatusLog.WritePass(outcomes, lookbackHours, ProcessIdentity.InstanceId)
             Console.WriteLine(String.Format(
                 "[TradeStoreGapRepair] pass complete — {0} row(s) appended to {1}", total, storeDir))
             Return total
         Catch ex As Exception
             Console.Error.WriteLine("[TradeStoreGapRepair] RepairOnceAsync error: " & ex.Message)
+            ' A pass that threw is recorded, never silent. WritePass never throws.
+            If passStarted Then
+                RepairStatusLog.WritePass(outcomes, lookbackHours, ProcessIdentity.InstanceId,
+                                          "exception: " & ex.Message)
+            End If
             Return 0
         End Try
     End Function

@@ -74,6 +74,9 @@
          JSON-RPC error). Never logs on timeout/network failure (V-1 guard).
          See docs/venue-status-instrument-spec.md. -->
     <Compile Include="..\..\Core\VenueStatusLog.vb" />
+    <!-- repair_status.log (A79f): the gap-repair outcome sidecar, GR-4 (b).
+         See docs/gap-repair-same-ms-page-skip-spec.md §4.4. -->
+    <Compile Include="..\..\Core\RepairStatusLog.vb" />
     <!-- [v64] Trade-store writer/parser seam — A48a-h. Network-free BY DESIGN: this is the
          half of the §2 split that exists so the fixture project never links an HttpClient
          (HistoricalStore owns one and is deliberately NOT here). -->

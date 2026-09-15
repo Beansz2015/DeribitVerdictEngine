@@ -1,6 +1,6 @@
 # Gap repair — same-millisecond page skip — SPEC
 
-> ⛔ **SPEC ONLY. NOT BUILT. The orchestrator reviews this amendment before any build.**
+> ✅ **BUILT 2026-09-14 (UTC) on the trader's go — local only, not deployed, awaiting orchestrator review.** Build record and review packet: [`gap-repair-same-ms-page-skip-build-spec-back.md`](gap-repair-same-ms-page-skip-build-spec-back.md). The text below is the spec as accepted; deviations are listed in that packet, not edited in here.
 >
 > **Written** 2026-09-14 (UTC) by a scoped Opus/high seat. **AMENDED** 2026-09-14 (UTC) for the rulings below. Code handles pinned to `19e356b`. Venue measurements run live 2026-09-14 19:03–19:06 UTC.
 >
