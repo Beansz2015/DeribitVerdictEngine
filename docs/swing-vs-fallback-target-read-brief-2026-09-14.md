@@ -62,7 +62,9 @@ STRONG cells: NY fallback 51.2 % (n = 205), net edge −5.6 pp, net EV −0.7 bp
 
 ### 3.1 Population
 
-- **Weekday signals only.** A signal is excluded if its `Timestamp` falls on Saturday or Sunday **UTC**. The trader does not trade weekends. Use `ForwardWindowJoiner.IsWeekdayRow` semantics.
+- **Trading-week signals only (trader-ruled 2026-09-14).** The trading week runs from **the start of Monday's ASIA session to the end of Friday's NY session**. A signal outside that span is excluded. The trader does not trade weekends.
+  - Read the session hours from `session_volume.sessions` in `settings.json`; never hardcode them. At v68 ASIA is hours 0–7 and NY is hours 13–23 UTC, inclusive, so the span is Monday 00:00:00 to Friday 23:59:59 UTC.
+  - At v68 this equals the calendar-weekday filter `ForwardWindowJoiner.IsWeekdayRow`. If the session hours ever move, the session rule wins.
 - Directional verdicts with placed levels.
 - Split every result by **session (NY · LONDON · ASIA separately) × `TargetCapReason` × tier**, and by side where n ≥ 30.
 
@@ -76,7 +78,7 @@ STRONG cells: NY fallback 51.2 % (n = 205), net edge −5.6 pp, net EV −0.7 bp
 **Rules for the carried walk:**
 
 1. **Same-bar ambiguity** (target and stop both inside one 1-minute bar) counts as a stop hit, matching `FailureRateMatrix`.
-2. **Hard cap: the earlier of 24 h after the signal, or Friday 23:59:59 UTC.** A trade is never carried across a weekend. A trade still open at the cap is marked to the cap-bar close and counted as **UNRESOLVED**. Report the UNRESOLVED share per cell.
+2. **Hard cap: the earlier of 24 h after the signal, or the end of Friday's NY session** (trader-ruled 2026-09-14; from `session_volume.sessions`, 23:59:59 UTC at v68). A trade is never carried across a weekend; the next week starts fresh at Monday's ASIA session open. A trade still open at the cap is marked to the cap-bar close and counted as **UNRESOLVED**. Report the UNRESOLVED share per cell.
 3. **A session-end variant as well:** cap at the end of the signal's session (the trader is "always flat at end of session", `trader-profile.md` §2). Report it beside the 24 h cap.
 4. **Funding:** a hold that crosses a Deribit funding settlement pays or receives funding. Report its effect in bps per cell; include it in net EV if it moves any cell by more than 0.5 bps.
 5. **Time to resolution:** report p50 and p90 minutes per cell. This shows whether a signal's resolution fits a 2–15 min hold at all.
