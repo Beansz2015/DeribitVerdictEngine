@@ -719,6 +719,7 @@ Module Program
         A79e_SeqRepairAndTheVenueCheckAgreeOnOneTape()
         A79f_RepairStatusLogLinesAndStates()
         A79g_MeasuredSeqTailBesideAnUnflushedStreamingWriter()
+        A79h_MeasuredCrossMonthLeadingGapIsNotRepaired()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -14781,6 +14782,87 @@ Module Program
         Finally
             A48Cleanup(dA)
             A48Cleanup(dB)
+        End Try
+    End Sub
+
+    ' -- A79h: ⚠ MEASUREMENT PIN, not a guard — orchestrator finding F-1, a cross-month leading gap
+    ' F-1 (2026-09-14, non-blocking). ⚠ PRE-EXISTING: verified by reading 2d52fb8, where the same
+    ' three facts held for the time windows. ScanForRepair scans ONE month file and brackets only
+    ' against rows below segStartMs IN THAT FILE. So when an outage crosses 00:00 UTC on the 1st:
+    '   • the August tail stops at August's segment end (GT-3, required — see A79c part 4);
+    '   • the September scan holds no August row, so August's last seq → September's first stored
+    '     seq is not a hole in the September scan;
+    '   • the September tail starts after September's NEWEST row.
+    ' Seqs S+1..S+k-1 dated September are therefore fetched by nobody.
+    '   Part 1 (pinned loss): streaming already wrote September's first rows ⇒ the gap stays.
+    '   Part 2 (the race that heals it): the September file is still EMPTY at pass time ⇒ the
+    '   AnchoredTail at September's segStart fetches the gap.
+    ' ⛔ Not fixed here — docs/trader-tick-queue.md §2 "Cross-month leading gap not repaired". When
+    ' that fix lands, part 1 flips BY DESIGN; update it there, with the new behaviour.
+    Private Sub A79h_MeasuredCrossMonthLeadingGapIsNotRepaired()
+        Dim d1 As String = A48TempStore("79h1")
+        Dim d2 As String = A48TempStore("79h2")
+        Try
+            Dim sepStart As Long = New DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim s As Long = 930000L
+            Dim tape As New List(Of TradeRecord) From {A79Trade(sepStart - 10000L, s)}      ' Aug 31 23:59:50
+            For k As Integer = 1 To 9
+                tape.Add(A79Trade(sepStart + CLng(k) * 60000L, s + k))                    ' Sep 1 00:01–00:09: the gap
+            Next
+            For k As Integer = 10 To 14
+                tape.Add(A79Trade(sepStart + 600000L + CLng(k - 10) * 1000L, s + k))      ' Sep 1 00:10: streaming wrote these
+            Next
+            Dim fromUtc As New DateTime(2026, 8, 31, 20, 0, 0, DateTimeKind.Utc)
+            Dim toUtc As New DateTime(2026, 9, 1, 1, 0, 0, DateTimeKind.Utc)
+            Dim toInclMs As Long = New DateTimeOffset(toUtc).ToUnixTimeMilliseconds() - 1L
+            Dim gapIds As New HashSet(Of String)()
+            For k As Integer = 1 To 9
+                gapIds.Add(tape(k).TradeId)
+            Next
+
+            ' Part 1 — ⚠ PINNED LOSS. August holds S; September already holds S+10..S+14.
+            TradeStoreWriter.AppendRows(d1, New List(Of TradeRecord) From {tape(0)})
+            TradeStoreWriter.AppendRows(d1, tape.GetRange(10, 5))
+            Dim sepWin = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d1, 2026, 9), sepStart, toInclMs, True)
+            Dim augWin = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d1, 2026, 8),
+                                                               New DateTimeOffset(fromUtc).ToUnixTimeMilliseconds(), sepStart - 1L, True)
+            ' No window covers the gap: September offers only a tail after S+14; August's tail stops
+            ' at August's end, before the first gap trade.
+            Dim windowsOk As Boolean = sepWin.Count = 1 AndAlso sepWin(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
+                                       sepWin(0).FirstSeq = s + 15L AndAlso
+                                       augWin.Count = 1 AndAlso augWin(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
+                                       augWin(0).FirstSeq = s + 1L AndAlso augWin(0).StopAfterMs = sepStart - 1L
+            Dim anc1(0) As Integer
+            Dim out1 As New List(Of TradeStoreWriter.RepairWindowOutcome)()
+            For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
+                HistoricalStore.BackfillTradeMonthCoreAsync(m.Year, m.Month, m.StartUtc, m.EndUtcExcl, d1, True, True,
+                                                            A79SeqStub(tape, 0L), A79AnchorStub(tape, anc1), 0, out1).GetAwaiter().GetResult()
+            Next
+            Dim sep1 = A79Rows(d1, 2026, 9)
+            Dim gapFound1 As Integer = sep1.Where(Function(t) gapIds.Contains(t.TradeId)).Count()
+            Dim p1 As Boolean = windowsOk AndAlso A79Rows(d1, 2026, 8).Count = 1 AndAlso sep1.Count = 5 AndAlso gapFound1 = 0 AndAlso
+                                out1.All(Function(o) o.State = TradeStoreWriter.RepairWindowOutcome.TailOk)
+
+            ' Part 2 — the race that heals it: September is still EMPTY when the pass runs.
+            TradeStoreWriter.AppendRows(d2, New List(Of TradeRecord) From {tape(0)})
+            Dim anc2(0) As Integer
+            Dim out2 As New List(Of TradeStoreWriter.RepairWindowOutcome)()
+            For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
+                HistoricalStore.BackfillTradeMonthCoreAsync(m.Year, m.Month, m.StartUtc, m.EndUtcExcl, d2, True, True,
+                                                            A79SeqStub(tape, 0L), A79AnchorStub(tape, anc2), 0, out2).GetAwaiter().GetResult()
+            Next
+            Dim sep2 = A79Rows(d2, 2026, 9)
+            Dim gapFound2 As Integer = sep2.Where(Function(t) gapIds.Contains(t.TradeId)).Count()
+            Dim p2 As Boolean = sep2.Count = 14 AndAlso gapFound2 = 9 AndAlso anc2(0) = 1
+
+            Check("A79h ⚠ MEASUREMENT PIN (finding F-1, pre-existing, not a guard) — an outage across 00:00 UTC on the 1st: with September already written, 0 of 9 leading-gap trades are repaired · with September still empty, the anchored tail repairs 9 of 9",
+                  p1 AndAlso p2,
+                  String.Format("p1={0}(windows={1} sepRows={2} gapFound={3} states={4}) p2={5}(sepRows={6} gapFound={7} anchorCalls={8})",
+                                p1, windowsOk, sep1.Count, gapFound1, String.Join(",", out1.Select(Function(o) o.State)),
+                                p2, sep2.Count, gapFound2, anc2(0)))
+        Finally
+            A48Cleanup(d1)
+            A48Cleanup(d2)
         End Try
     End Sub
 
