@@ -7,7 +7,8 @@
 ' Endpoints:
 '   Candles  — public/get_tradingview_chart_data     (via DeribitClient.GetCandlesAsync range,
 '                                                     inherits ExecuteWithRetry)
-'   Trades   — public/get_last_trades_by_instrument_and_time  (local HTTP; not in DeribitClient)
+'   Trades   — public/get_last_trades_by_instrument by trade_seq, with one count=1 anchor call
+'              to public/get_last_trades_by_instrument_and_time (local HTTP; not in DeribitClient)
 '   Funding  — public/get_funding_rate_history       (local HTTP; not in DeribitClient)
 '
 ' Host-agnostic (no WinForms). Polite: 200ms delay between paginated calls; retry-once on
@@ -40,8 +41,10 @@ Public Class HistoricalStore
     ' months-long backfill from ever tripping them.
     Private Const PoliteDelayMs As Integer = 200
 
-    ' Trades: max 1000 per call is Deribit's documented cap for get_last_trades_*.
-    Private Const TradesPerPage As Integer = 1000
+    ' Trades: max 1000 per call is Deribit's cap for get_last_trades_* — measured on both the
+    ' time and the seq endpoint (count=1001 ⇒ -32602 "value is too high"). Public so fixtures
+    ' read the production number instead of restating it.
+    Public Const TradesPerPage As Integer = 1000
 
     ' Guard against runaway loops on inverted ranges / bad cursors.
     Private Const MaxTradePages As Integer = 200000
@@ -225,10 +228,12 @@ Public Class HistoricalStore
     ' ── Trades backfill ───────────────────────────────────────────────────────────────
 
     ''' <summary>
-    ''' Fetch trades for one calendar-month segment [segStart, segEndExcl), appending
-    ''' to the month file. Resumable: if the month file already exists, we resume from
-    ''' the last recorded timestamp + 1 ms. Rows are written in ascending order (the
-    ''' F1 contract).
+    ''' Fetch trades for one calendar-month segment [segStart, segEndExcl), appending to the month
+    ''' file. ⛔ [GR-1 (d), docs/gap-repair-same-ms-page-skip-spec.md §4.3] Every window is fetched
+    ''' BY trade_seq through <see cref="FetchRepairWindowAsync"/>; the time pager and its
+    ''' `newestMs + 1` cursor are gone, including on the offline path. That cursor skipped any
+    ''' trade sharing a full page's last millisecond, and the time hole windows could never fetch
+    ''' it back: 16 permanent holes (70 trades) in the 2026-08-17 start-up repair.
     '''
     ''' [v64] Rows are committed through TradeStoreWriter.AppendRows — the SAME seam the
     ''' streaming capture writes through — so format, header-on-create and monthly rollover
@@ -244,31 +249,46 @@ Public Class HistoricalStore
     ''' that are still served. False (the default) preserves the historical-backfill
     ''' behaviour exactly: resume from disk and fill any hole between there and segEnd.</param>
     ''' <param name="repairHoles">[downtime repair Part A, D-5] True ⇒ resolve the fetch windows
-    ''' through TradeStoreWriter.ResolveRepairWindowsMs, which returns the trade_seq-bracketed
-    ''' HOLES behind the tail as well as the tail itself. OPT-IN so this shared function's
-    ''' historical-backfill path is byte-identical: TradeStoreGapRepair.RepairOnceAsync is the
-    ''' only caller that passes True. Mirrors how clampToSegStart was added and keeps the blast
-    ''' radius at one caller.</param>
+    ''' through TradeStoreWriter.ResolveRepairWindows, which returns the trade_seq holes behind the
+    ''' tail as well as the tail itself. TradeStoreGapRepair.RepairOnceAsync is the only caller
+    ''' that passes True. False ⇒ one AnchoredTail at ResolveResumeCursorMs (the offline path).</param>
+    ''' <param name="outcomes">[GR-4 (b)] Receives one outcome per window, for repair_status.log.</param>
     Public Shared Async Function BackfillTradeMonthAsync(
             year As Integer, month As Integer,
             segStart As DateTime, segEndExcl As DateTime,
             Optional storeDir As String = Nothing,
             Optional clampToSegStart As Boolean = False,
-            Optional repairHoles As Boolean = False) As Task(Of Integer)
+            Optional repairHoles As Boolean = False,
+            Optional outcomes As List(Of TradeStoreWriter.RepairWindowOutcome) = Nothing) As Task(Of Integer)
+        Return Await BackfillTradeMonthCoreAsync(year, month, segStart, segEndExcl, storeDir, clampToSegStart,
+                                                 repairHoles, AddressOf FetchSeqPageJsonAsync,
+                                                 AddressOf FetchTimeAnchorJsonAsync, PoliteDelayMs, outcomes)
+    End Function
+
+    ''' <summary>The month loop with the two venue calls injected, so A79c can drive a
+    ''' month boundary with no network. Production goes through
+    ''' <see cref="BackfillTradeMonthAsync"/>.</summary>
+    Friend Shared Async Function BackfillTradeMonthCoreAsync(
+            year As Integer, month As Integer,
+            segStart As DateTime, segEndExcl As DateTime,
+            storeDir As String, clampToSegStart As Boolean, repairHoles As Boolean,
+            fetchSeq As Func(Of Long, Long?, Integer, Task(Of String)),
+            fetchAnchor As Func(Of Long, Long, Task(Of String)),
+            pageDelayMs As Integer,
+            outcomes As List(Of TradeStoreWriter.RepairWindowOutcome)) As Task(Of Integer)
         Dim dir As String = If(String.IsNullOrWhiteSpace(storeDir), StoreDir, storeDir)
         Directory.CreateDirectory(dir)
         Dim path As String = TradeStoreWriter.TradeFileFor(dir, year, month)
         Dim segStartMs As Long = New DateTimeOffset(segStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
         Dim endMs As Long = New DateTimeOffset(segEndExcl, TimeSpan.Zero).ToUnixTimeMilliseconds() - 1
 
-        ' Both resume decisions live on the shared seam (A48d and A56a–f exercise these exact
-        ' calls). The single-window branch below is today's behaviour, unchanged.
-        Dim windows As New List(Of TradeStoreWriter.LongRange)()
+        ' Both resume decisions live on the shared seam (A48d and A56a–f exercise these exact calls).
+        Dim windows As New List(Of TradeStoreWriter.RepairWindow)()
         If repairHoles Then
-            windows = TradeStoreWriter.ResolveRepairWindowsMs(path, segStartMs, endMs, clampToSegStart)
+            windows = TradeStoreWriter.ResolveRepairWindows(path, segStartMs, endMs, clampToSegStart)
         Else
             Dim cursor0 As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartMs, endMs, clampToSegStart)
-            If cursor0 >= 0 Then windows.Add(New TradeStoreWriter.LongRange(cursor0, endMs))
+            If cursor0 >= 0 Then windows.Add(TradeStoreWriter.RepairWindow.ForAnchoredTail(cursor0, endMs))
         End If
         ' [DR-3] Nothing to fetch ⇒ this pass appended 0 rows. Returning the file's total row
         ' count here (as before) meant TradeStoreGapRepair.RepairOnceAsync summed the WHOLE
@@ -280,92 +300,262 @@ Public Class HistoricalStore
 
         Dim total As Integer = 0
         Dim page As Integer = 0
-        Dim aborted As Boolean = False
+        Dim failed As Integer = 0
+        Dim fileName As String = System.IO.Path.GetFileName(path)
 
         For w As Integer = 0 To windows.Count - 1
-            If aborted Then Exit For
-            Dim win As TradeStoreWriter.LongRange = windows(w)
-            If w > 0 Then Await Task.Delay(PoliteDelayMs)
-            Dim cursorMs As Long = win.StartMs
-
-            Do
-                If page >= MaxTradePages Then
-                    Console.Error.WriteLine("[HistoricalStore] Trade page cap hit — aborting month " &
-                                            String.Format("{0:D4}-{1:D2}", year, month))
-                    aborted = True
-                    Exit Do
-                End If
-
-                Dim trades As List(Of TradeRecord) =
-                    Await FetchTradesByTimeAsync(cursorMs, win.EndInclMs, TradesPerPage)
-                If trades Is Nothing Then
-                    Console.Error.WriteLine("[HistoricalStore] Trade fetch failed at cursor " & cursorMs)
-                    ' A failed fetch abandons THIS window only. The next one is independent
-                    ' ground and a transient 503 on one hole must not cost the others.
-                    Exit Do
-                End If
-                If trades.Count = 0 Then Exit Do
-
-                total += TradeStoreWriter.AppendRows(dir, trades)
-
-                Dim newestMs As Long = trades(trades.Count - 1).Timestamp
-                ' newestMs <= cursorMs means Deribit returned a full page all stamped the same
-                ' ms; the +1 nudge is what stops that from looping forever.
-                cursorMs = newestMs + 1
-                page += 1
-
-                If trades.Count < TradesPerPage Then
-                    ' Fewer than a full page ⇒ no more trades in the window.
-                    Exit Do
-                End If
-
-                Await Task.Delay(PoliteDelayMs)
-            Loop
+            If w > 0 AndAlso pageDelayMs > 0 Then Await Task.Delay(pageDelayMs)
+            Dim o As TradeStoreWriter.RepairWindowOutcome =
+                Await FetchRepairWindowAsync(windows(w), fetchSeq, fetchAnchor,
+                                             Function(rows) TradeStoreWriter.AppendRows(dir, rows),
+                                             TradesPerPage, MaxTradePages - page, pageDelayMs)
+            o.FileName = fileName
+            outcomes?.Add(o)
+            total += o.Committed
+            page += o.Pages
+            If o.IsFailure OrElse o.NotServed > 0 Then
+                failed += If(o.IsFailure, 1, 0)
+                Console.Error.WriteLine(String.Format(
+                    "[HistoricalStore] {0} {1}: {2} committed={3} not_served={4} {5}",
+                    fileName, o.Window.Kind, o.State, o.Committed, o.NotServed, o.Reason))
+            End If
+            ' A failed window abandons THAT window only; the page cap stops the month.
+            If o.State = TradeStoreWriter.RepairWindowOutcome.PageCap Then Exit For
         Next
 
         Console.WriteLine(String.Format(
-            "[HistoricalStore] Trades {0:D4}-{1:D2}: appended {2} rows across {3} page(s) in {4} window(s)",
-            year, month, total, page, windows.Count))
+            "[HistoricalStore] Trades {0:D4}-{1:D2}: appended {2} rows across {3} request(s) in {4} window(s), {5} failed",
+            year, month, total, page, windows.Count, failed))
         Return total
     End Function
 
-    ''' <summary>One paginated call to get_last_trades_by_instrument_and_time. Ascending
-    ''' order guaranteed by sorting=asc. Local retry-once on transient failures (the
-    ''' ExecuteWithRetry discipline reproduced here so DeribitClient can stay untouched).</summary>
-    Public Shared Async Function FetchTradesByTimeAsync(startMs As Long, endMs As Long, count As Integer) _
-            As Task(Of List(Of TradeRecord))
-        Dim url As String = "https://www.deribit.com/api/v2/public/get_last_trades_by_instrument_and_time" &
-                            "?instrument_name=" & InstrumentName &
-                            "&start_timestamp=" & startMs &
-                            "&end_timestamp=" & endMs &
-                            "&count=" & count &
-                            "&sorting=asc"
-        For attempt As Integer = 1 To 2
-            Dim needsRetry As Boolean = False
-            Try
-                Dim json = Await _http.GetStringAsync(url)
-                Dim doc  = JsonDocument.Parse(json)
-                Dim result = doc.RootElement.GetProperty("result")
-                Dim tradesEl = result.GetProperty("trades")
-                Dim list As New List(Of TradeRecord)()
+    ' ── Seq-range fetcher (GR-1 (d), docs/gap-repair-same-ms-page-skip-spec.md §4.1 and §4.3) ──
+    '
+    ' The venue contract this relies on — MEASURED live 2026-09-14, not documented:
+    '   • get_last_trades_by_instrument: start_seq and end_seq are both INCLUSIVE;
+    '   • paging with start_seq = last + 1 is exact (2,501 of 2,501, 0 duplicates, 0 missing);
+    '   • has_more = more trades remain INSIDE the requested range after this page;
+    '   • count caps at 1,000; an open end_seq runs to the latest trade;
+    '   • ⚠ a start_seq older than the ~24 h retention returns trades FROM THE RETENTION EDGE,
+    '     not an empty list; a range wholly past retention returns nothing.
+    ' ⛔ If the venue ever breaks this contract (a trade outside the requested range, a skipped
+    ' or repeated seq across pages), that is the spec's escalation trigger, not a local patch.
+
+    ''' <summary>One parsed trades page: the trades and the venue's `has_more` (Nothing when absent).</summary>
+    Friend NotInheritable Class TradePage
+        Public ReadOnly Property Trades As New List(Of TradeRecord)()
+        Public Property HasMore As Boolean?
+    End Class
+
+    ''' <summary>
+    ''' Fetch one repair window by trade_seq and commit what the venue serves. Never throws a
+    ''' venue problem at the caller: every failure is a state on the returned outcome. The two
+    ''' venue calls return a response body or Nothing — injected, so A79a–A79e run with no network.
+    ''' </summary>
+    Friend Shared Async Function FetchRepairWindowAsync(win As TradeStoreWriter.RepairWindow,
+            fetchSeq As Func(Of Long, Long?, Integer, Task(Of String)),
+            fetchAnchor As Func(Of Long, Long, Task(Of String)),
+            commit As Func(Of List(Of TradeRecord), Integer),
+            pageSize As Integer, pagesLeft As Integer, pageDelayMs As Integer) _
+            As Task(Of TradeStoreWriter.RepairWindowOutcome)
+        Dim o As New TradeStoreWriter.RepairWindowOutcome With {.Window = win}
+        Dim isHole As Boolean = win.Kind = TradeStoreWriter.RepairWindowKind.Hole
+        Dim endSeq As Long? = If(win.LastSeq >= 0, CType(win.LastSeq, Long?), Nothing)
+
+        ' ── 1. Resolve the first sequence ─────────────────────────────────────────────
+        Dim startSeq As Long
+        If win.Kind = TradeStoreWriter.RepairWindowKind.AnchoredTail Then
+            If pagesLeft <= 0 Then Return Finish(o, TradeStoreWriter.RepairWindowOutcome.PageCap, "page cap before the anchor")
+            Dim aj As String = Await fetchAnchor(win.AnchorMs, win.StopAfterMs)
+            o.Pages += 1
+            If aj Is Nothing Then Return Finish(o, TradeStoreWriter.RepairWindowOutcome.FetchFailed, "anchor fetch failed at " & win.AnchorMs)
+            Dim ap As TradePage = ParseTradesPage(aj)
+            If ap Is Nothing Then Return Finish(o, TradeStoreWriter.RepairWindowOutcome.FetchFailed, "unparseable anchor response at " & win.AnchorMs)
+            Dim first As TradeRecord = Nothing
+            For Each t In ap.Trades
+                If t.HasSeq AndAlso t.Timestamp >= win.AnchorMs AndAlso t.Timestamp <= win.StopAfterMs Then
+                    first = t
+                    Exit For
+                End If
+                o.Rejected += 1
+            Next
+            ' No trade at or after the anchor inside the window: nothing to repair.
+            If first Is Nothing Then Return Finish(o, TradeStoreWriter.RepairWindowOutcome.TailEmpty, "")
+            startSeq = first.TradeSeq
+        Else
+            startSeq = win.FirstSeq
+        End If
+        o.StartSeq = startSeq
+
+        ' ── 2–8. Page by sequence ─────────────────────────────────────────────────────
+        Dim cursor As Long = startSeq
+        Dim expected As Long = startSeq
+        Dim served As Boolean = False
+        Dim seen As New HashSet(Of Long)()
+        Do
+            If endSeq.HasValue AndAlso cursor > endSeq.Value Then Exit Do
+            If o.Pages >= pagesLeft Then Return Finish(o, TradeStoreWriter.RepairWindowOutcome.PageCap, "page cap at start_seq " & cursor)
+            Dim json As String = Await fetchSeq(cursor, endSeq, pageSize)
+            o.Pages += 1
+            If json Is Nothing Then Return Finish(o, TradeStoreWriter.RepairWindowOutcome.FetchFailed, "seq fetch failed at start_seq " & cursor)
+            Dim page As TradePage = ParseTradesPage(json)
+            If page Is Nothing Then Return Finish(o, TradeStoreWriter.RepairWindowOutcome.FetchFailed, "unparseable response at start_seq " & cursor)
+
+            If page.Trades.Count = 0 Then
+                ' ⛔ has_more with nothing on the page cannot advance — never loop on it.
+                If page.HasMore.GetValueOrDefault(False) Then
+                    Return Finish(o, TradeStoreWriter.RepairWindowOutcome.NoProgress, "has_more with an empty page at start_seq " & cursor)
+                End If
+                Exit Do
+            End If
+
+            ' Sequence order is the walk order; the venue sends ascending, this does not rely on it.
+            Dim ordered As New List(Of TradeRecord)(page.Trades)
+            ordered.Sort(Function(a, b) a.TradeSeq.CompareTo(b.TradeSeq))
+
+            Dim kept As New List(Of TradeRecord)()
+            Dim reachedStop As Boolean = False
+            Dim maxSeqOnPage As Long = TradeStoreWriter.AbsentSeq
+            For Each t In ordered
+                If t.HasSeq AndAlso t.TradeSeq > maxSeqOnPage Then maxSeqOnPage = t.TradeSeq
+                If reachedStop Then Continue For
+                If Not t.HasSeq OrElse t.TradeSeq < cursor OrElse
+                   (endSeq.HasValue AndAlso t.TradeSeq > endSeq.Value) Then
+                    o.Rejected += 1
+                    Continue For
+                End If
+                ' ⛔ GT-3: a tail stops at its segment end, or a month-boundary pass double-writes
+                ' the next month's already-captured trades.
+                If Not isHole AndAlso t.Timestamp > win.StopAfterMs Then
+                    reachedStop = True
+                    Continue For
+                End If
+                If Not seen.Add(t.TradeSeq) Then
+                    o.Rejected += 1
+                    Continue For
+                End If
+                ' ⛔ GT-1: a gap before the first served trade is the venue's retention edge, not a
+                ' clean start. Count it; never take the first served seq as the start.
+                If t.TradeSeq > expected Then
+                    If served Then
+                        o.NotServedInside += t.TradeSeq - expected
+                    Else
+                        o.NotServedBefore += t.TradeSeq - expected
+                    End If
+                End If
+                kept.Add(t)
+                served = True
+                expected = t.TradeSeq + 1L
+                o.LastServedSeq = t.TradeSeq
+            Next
+            If kept.Count > 0 Then o.Committed += commit(kept)
+            If reachedStop Then Exit Do
+
+            Dim more As Boolean = If(page.HasMore.HasValue, page.HasMore.Value, page.Trades.Count >= pageSize)
+            If Not more Then Exit Do
+            ' ⛔ A page that reports more but holds no sequence at or past the cursor cannot advance.
+            If maxSeqOnPage < cursor Then
+                Return Finish(o, TradeStoreWriter.RepairWindowOutcome.NoProgress, "no trade_seq at or after start_seq " & cursor & " on a page reporting more")
+            End If
+            cursor = maxSeqOnPage + 1L
+            If pageDelayMs > 0 Then Await Task.Delay(pageDelayMs)
+        Loop
+
+        ' ── 9–10. Close the window ────────────────────────────────────────────────────
+        If isHole AndAlso expected <= win.LastSeq Then o.NotServedAfter += win.LastSeq - expected + 1L
+        Dim state As String
+        If isHole Then
+            If o.NotServed = 0 Then
+                state = TradeStoreWriter.RepairWindowOutcome.HoleRepaired
+            ElseIf served Then
+                state = TradeStoreWriter.RepairWindowOutcome.HolePartial
+            Else
+                state = TradeStoreWriter.RepairWindowOutcome.HoleNotServed
+            End If
+        ElseIf o.NotServedBefore > 0 Then
+            state = TradeStoreWriter.RepairWindowOutcome.TailPastRetention
+        ElseIf o.NotServedInside > 0 Then
+            state = TradeStoreWriter.RepairWindowOutcome.TailGap
+        Else
+            state = TradeStoreWriter.RepairWindowOutcome.TailOk
+        End If
+        Return Finish(o, state, "")
+    End Function
+
+    Private Shared Function Finish(o As TradeStoreWriter.RepairWindowOutcome, state As String,
+                                   reason As String) As TradeStoreWriter.RepairWindowOutcome
+        o.State = state
+        o.Reason = If(reason, "")
+        Return o
+    End Function
+
+    ''' <summary>Parse one get_last_trades_* response. Nothing on a malformed body, a JSON-RPC
+    ''' error, or a missing trades array — never throws.</summary>
+    Friend Shared Function ParseTradesPage(json As String) As TradePage
+        If String.IsNullOrEmpty(json) Then Return Nothing
+        Try
+            Using doc As JsonDocument = JsonDocument.Parse(json)
+                Dim result As JsonElement = Nothing
+                If Not doc.RootElement.TryGetProperty("result", result) Then Return Nothing
+                Dim tradesEl As JsonElement = Nothing
+                If Not result.TryGetProperty("trades", tradesEl) OrElse
+                   tradesEl.ValueKind <> JsonValueKind.Array Then Return Nothing
+                Dim page As New TradePage()
+                Dim hm As JsonElement = Nothing
+                If result.TryGetProperty("has_more", hm) AndAlso
+                   (hm.ValueKind = JsonValueKind.True OrElse hm.ValueKind = JsonValueKind.False) Then
+                    page.HasMore = hm.GetBoolean()
+                End If
                 For Each t In tradesEl.EnumerateArray()
                     Dim rec As New TradeRecord()
-                    rec.Price     = t.GetProperty("price").GetDouble()
-                    rec.Amount    = t.GetProperty("amount").GetDouble()
+                    rec.Price = t.GetProperty("price").GetDouble()
+                    rec.Amount = t.GetProperty("amount").GetDouble()
                     rec.Direction = t.GetProperty("direction").GetString()
                     rec.Timestamp = t.GetProperty("timestamp").GetInt64()
                     Dim liqEl As JsonElement = Nothing
                     rec.Liquidation = If(t.TryGetProperty("liquidation", liqEl), liqEl.GetString(), "none")
-                    ' [trade identity] The REST half of the capture path — gap repair and the S0
-                    ' venue fetch both land here. Same two shared readers the WS feed uses.
-                    ' Verified at the §1 gate that get_last_trades_by_instrument_and_time (THIS
-                    ' endpoint) carries both fields, not only the count-based endpoint the spec
-                    ' §1 table named.
+                    ' [trade identity] The same two shared readers the WS feed and the venue
+                    ' check use, so the three parse sites cannot disagree about identity.
                     rec.TradeId = TradeRecord.ReadTradeId(t)
                     rec.TradeSeq = TradeRecord.ReadTradeSeq(t)
-                    list.Add(rec)
+                    page.Trades.Add(rec)
                 Next
-                Return list
+                Return page
+            End Using
+        Catch
+            Return Nothing
+        End Try
+    End Function
+
+    ''' <summary>One seq-endpoint page. <paramref name="endSeq"/> Nothing ⇒ open-ended.</summary>
+    Friend Shared Function FetchSeqPageJsonAsync(startSeq As Long, endSeq As Long?, count As Integer) As Task(Of String)
+        Dim url As String = "https://www.deribit.com/api/v2/public/get_last_trades_by_instrument" &
+                            "?instrument_name=" & InstrumentName &
+                            "&start_seq=" & startSeq.ToString(CultureInfo.InvariantCulture) &
+                            If(endSeq.HasValue, "&end_seq=" & endSeq.Value.ToString(CultureInfo.InvariantCulture), "") &
+                            "&count=" & count.ToString(CultureInfo.InvariantCulture) &
+                            "&sorting=asc"
+        Return GetWithRetryAsync(url)
+    End Function
+
+    ''' <summary>The time endpoint with count=1: the first trade at or after
+    ''' <paramref name="startMs"/>. The only time-endpoint use left in this file.</summary>
+    Friend Shared Function FetchTimeAnchorJsonAsync(startMs As Long, endMs As Long) As Task(Of String)
+        Dim url As String = "https://www.deribit.com/api/v2/public/get_last_trades_by_instrument_and_time" &
+                            "?instrument_name=" & InstrumentName &
+                            "&start_timestamp=" & startMs.ToString(CultureInfo.InvariantCulture) &
+                            "&end_timestamp=" & endMs.ToString(CultureInfo.InvariantCulture) &
+                            "&count=1&sorting=asc"
+        Return GetWithRetryAsync(url)
+    End Function
+
+    ''' <summary>GET with retry-once on a 5xx or a timeout (the ExecuteWithRetry discipline
+    ''' reproduced here so DeribitClient can stay untouched). Nothing on any other failure.</summary>
+    Private Shared Async Function GetWithRetryAsync(url As String) As Task(Of String)
+        For attempt As Integer = 1 To 2
+            Dim needsRetry As Boolean = False
+            Try
+                Return Await _http.GetStringAsync(url)
             Catch ex As HttpRequestException
                 If attempt < 2 AndAlso ex.StatusCode.HasValue AndAlso CInt(ex.StatusCode.Value) >= 500 Then
                     needsRetry = True
