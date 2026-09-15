@@ -12,7 +12,9 @@ Abbreviations used in tables: **S+M** = STRONG and MEDIUM tiers together (the ba
 
 ## 1. Verdict
 
-**No. Swing targets do not earn a better net EV per trade than ATR-fallback targets in any session, in either outcome mode.** No cell with n ≥ 30 has a net EV per trade whose CI lies above zero.
+**No. Swing targets do not earn a meaningfully better net EV per trade than ATR-fallback targets in any session, in either outcome mode.** No cell with n ≥ 30 has a net EV per trade whose CI lies above zero.
+
+⚠ **Precision added by the orchestrator, 2026-09-15 (trader question):** at **ALL tiers**, swing's point estimate IS less negative in NY (by 0.4–0.6 bps) and ASIA (by 0.3–0.6 bps). Both gaps sit well inside the CIs. In the **tradeable tiers (S+M)** the sign flips: swing is worse in all three sessions. The ALL-tier gap comes from the WEAK tier, which is 69 % of NY swing rows against 58 % of NY fallback rows. Read "does not beat" as "no session shows a separable swing advantage", not as "swing's point estimate is lower everywhere".
 
 | Session | Tiers | ATR fallback, main window | Swing, main window | ATR fallback, carried 24 h | Swing, carried 24 h |
 |---|---|---|---|---|---|
