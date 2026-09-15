@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- tools/ops/SwingFallbackRead — the swing-vs-ATR-fallback target read instrument
+       (docs/swing-vs-fallback-target-read-brief-2026-09-14.md, session 1 / Part A).
+       Read-only: it reads analysis_log.csv copies, the eval cache and a COPY of settings.json,
+       and GETs public Deribit 1-minute candles + funding history into a gitignored cache.
+       It writes nothing inside the tracked tree. Host-agnostic, no WinForms. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>SwingFallbackRead</AssemblyName>
+    <Nullable>enable</Nullable>
+    <StartupObject>DeribitVerdictEngine.SwingFallbackReadProgram</StartupObject>
+  </PropertyGroup>
+
+  <!-- Same shared host-agnostic set WhatIfRunner links (known to build together). The read
+       uses ForwardWindowJoiner.Load (header-name CSV parsing), DeribitOhlcFetcher (candles),
+       ExecutionResolution.MatchSessionBucket / ResolveFallbackTargetMultiplier (session and
+       fallback geometry from settings) and AnalysisConstants.HoldWindowsForResolution. -->
+  <ItemGroup>
+    <Compile Include="..\..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\..\Core\Settings\SettingsLoader.vb" />
+    <Compile Include="..\..\..\Core\ExecutionResolution.vb" />
+    <Compile Include="..\..\..\Core\IndicatorResults.vb" />
+    <Compile Include="..\..\..\Core\Indicators_Momentum.vb" />
+    <Compile Include="..\..\..\Core\LevelAbsorptionTracker.vb" />
+    <Compile Include="..\..\..\Core\Indicators_OrderFlow.vb" />
+    <Compile Include="..\..\..\Core\Indicators_Structure.vb" />
+    <Compile Include="..\..\..\Core\Indicators_Volatility.vb" />
+    <Compile Include="..\..\..\Core\ScoringEngine_Types.vb" />
+    <Compile Include="..\..\..\Core\SignalEmitter.vb" />
+    <Compile Include="..\..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\..\Core\VenueStatusLog.vb" />
+    <Compile Include="..\..\..\DeribitClient.vb" />
+    <Compile Include="..\..\..\DynamicNorms.vb" />
+    <Compile Include="..\..\..\analysis\AnalysisConstants.vb" />
+    <Compile Include="..\..\..\analysis\AnalysisReport.vb" />
+    <Compile Include="..\..\..\analysis\ForwardWindowJoiner.vb" />
+    <Compile Include="..\..\..\analysis\FailureRateMatrix.vb" />
+    <Compile Include="..\..\..\analysis\DeribitOhlcFetcher.vb" />
+    <Compile Include="..\..\..\analysis\BandLadder.vb" />
+  </ItemGroup>
+
+</Project>
