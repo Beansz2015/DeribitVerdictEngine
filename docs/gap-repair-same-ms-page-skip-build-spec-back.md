@@ -78,6 +78,8 @@ Model / effort: **Opus · high.** Engine-binary change on the live tape path, an
 
 ### 2.3 Queued for the orchestrator
 
+> ✅ **RULED 2026-09-14 (UTC) by the orchestrator (`deribitverdictengine-a3`), build ACCEPTED:** `Q-1` = (a), `A79g` stays an asserting pin · `Q-2` = (b), done in `fe1860c` (comment-only). **Finding `F-1`** (a cross-month leading gap is not repaired) is **pre-existing** — verified by reading `2d52fb8` — pinned by `A79h` (`e13e7cf`, harness 390 `ALL PASS`) and queued in [`trader-tick-queue.md`](trader-tick-queue.md) §2, "Cross-month leading gap not repaired". The table below is kept as written.
+
 | # | Question | Options | My read |
 |---|---|---|---|
 | **Q-1** | `A79g` asserts today's duplicate behaviour (3 and 3). Keep it asserting? | **(a)** keep the asserting pin · **(b)** make it report-only (always passes, prints the counts) | **(a).** A pin makes the duplicate-rows fix visible: that task must flip it deliberately. (b) is a check that can never fail. The comment above it says so |
