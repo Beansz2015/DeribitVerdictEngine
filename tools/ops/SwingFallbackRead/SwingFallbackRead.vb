@@ -354,6 +354,13 @@ Public Module SwingFallbackReadProgram
             s.Res("CSE") = Walk(s, s.TargetPx, s.StopPx, s.RowMin.AddMinutes(1), cse, bars, fund)
         Next
 
+        ' ---- --mode stability: the tier-order stability check (TierOrderStability.vb). Default mode unchanged.
+        If ArgOr(a, "mode", "swing").Equals("stability", StringComparison.OrdinalIgnoreCase) Then
+            Dim refPath As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "reference", Path.Combine("docs", "swing-vs-fallback-target-read-2026-09-15-output.md"))))
+            Dim stabOut As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "tier-order-stability-output.md"))))
+            Return RunStability(o, sigs, fees, refPath, stabOut)
+        End If
+
         ' ================================================================== report
         AppendJoin(o, evalRows, boxLog, sigs, bars, weekOpenHour, weekCloseHourExcl, collectorStart)
 
