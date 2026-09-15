@@ -109,6 +109,7 @@ The trader's style, preferences and strategic context for the Deribit Verdict En
 - **Regime preference:** both TRENDING and RANGE_BOUND are acceptable. TRANSITIONAL = reduced size, extra caution. Will not override regime veto rules.
 - **Score thresholds:** percentage-based against regime MaxScore (20/19/15 with regime weights enabled; base 19/18/15). Computed as Math.Ceiling(regimeMax x verdictStrong/Med/WeakPct). scoring.verdict_strong_pct / verdict_med_pct / verdict_weak_pct = 0.70 / 0.53 / 0.35 at v68. All pcts configurable via settings.json.
 - **False positive tolerance:** low. Prefers engine to say NO TRADE rather than output a weak directional verdict that tempts entry on marginal setups. However, a display (that does not affect scoring) showing this weak directional bias must still be rendered, to help form a future opinion.
+- **Performance vocabulary (ruled 2026-09-14):** success rate · gross breakeven rate · net breakeven rate · gross edge · net edge · net EV per trade. Definitions and rules: DeribitIndicatorProject.md §5a. Net EV per trade after fees is the number that decides whether a signal is worth trading.
 - **Display preference:** verdict output should be clean, scannable, and fast to interpret at a glance. Not cluttered. Show score breakdown for transparency but headline verdict should be prominent.
 - **Config philosophy:** all scoring thresholds and indicator parameters externalised to settings.json (live version: its line 2). No hardcoded magic numbers remain in engine. Hot-reloadable without recompile.
 

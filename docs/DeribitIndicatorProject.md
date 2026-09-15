@@ -119,6 +119,29 @@ Windows Forms (VB.NET / .NET 8) desktop app. Polls Deribit REST for BTC-PERPETUA
 
 ---
 
+## 5a. Performance Vocabulary (trader-ruled 2026-09-14)
+
+Standard names for the numbers that say whether a signal makes money. Use these words exactly, in every doc and every reply.
+
+| Name | Definition | Formula |
+|---|---|---|
+| **Success rate** | Share of signals whose placed target is hit before the placed stop inside the eval window. A timeout or a same-bar ambiguity counts as failure. Code label `SUCCESS` (`analysis/FailureRateMatrix.vb`, `analysis/BandLadder.vb`) | measured |
+| **Gross breakeven rate** | Success rate needed to break even before fees. It equals the success rate of a random entry on a driftless market (the retired term "coin-flip rate") | Σ stopᵢ ÷ Σ (targetᵢ + stopᵢ) |
+| **Net breakeven rate** | Success rate needed to break even after round-trip fees | Σ (stopᵢ + feeᵢ) ÷ Σ (targetᵢ + stopᵢ) |
+| **Gross edge** | Success rate − gross breakeven rate, in pp. Diagnostic: does direction alone carry an edge? | — |
+| **Net edge** | Success rate − net breakeven rate, in pp | — |
+| **Net EV per trade** | Mean realised result per signal after fees, in bps. **The headline number** | mean of: +targetᵢ − feeᵢ on success · −stopᵢ − feeᵢ on a stop hit or ambiguity · markᵢ − feeᵢ on a timeout |
+
+**Rules**
+
+1. **Distances are per signal**, in bps of entry, from the placed levels in `analysis_log.csv` (`Price`, `PlacedTarget*`, `PlacedStop*`). Pool breakeven rates with the Σ formulas above: distance-weighted. Never a simple average of per-signal rates, and never medians.
+2. **Fees follow `scoring.trade_costs`** in `settings.json` (maker/maker, 3 bps round trip at v68) unless another fee case is named.
+3. **Always state the population and the window:** tier × session × resolution, and the window (NY 15 min, LONDON and ASIA 45 min in the band ladder).
+4. **Net EV per trade decides; the rates and edges explain it.** The breakeven formulas assume every signal ends at its target or its stop. With timeouts, or when success correlates with distance, an edge in pp can mislead. Net EV per trade cannot.
+5. ⚠ **The "47.76 % breakeven" in the Kelly calibration reads is none of the above.** It is 1 ÷ (1 + 1.75/1.6), from the ATR fallback multipliers, with no fees. Do not compare a success rate against it.
+
+---
+
 ## 6. settings.json — operational pointer
 
 **Source of truth:** `settings.json` itself + its inline `change_log` array.
