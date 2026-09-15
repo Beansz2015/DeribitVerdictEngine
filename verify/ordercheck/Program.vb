@@ -719,7 +719,10 @@ Module Program
         A79e_SeqRepairAndTheVenueCheckAgreeOnOneTape()
         A79f_RepairStatusLogLinesAndStates()
         A79g_MeasuredSeqTailBesideAnUnflushedStreamingWriter()
-        A79h_MeasuredCrossMonthLeadingGapIsNotRepaired()
+        A79h_CrossMonthLeadingGapIsRepaired()
+        A79i_NoUsablePreviousMonthBracketMeansNoCrossMonthHole()
+        A79j_CrossMonthHoleCommitsAndCountsEachSeqOnce()
+        A79k_TruncatedScanIsNotSeededFromThePreviousMonth()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -14530,6 +14533,8 @@ Module Program
             Dim allIds = aug.Concat(sep).Select(Function(t) t.TradeId).ToList()
             Dim p4 As Boolean = aug.Count = 11 AndAlso sep.Count = 10 AndAlso allIds.Distinct().Count() = 21 AndAlso
                                 aug.All(Function(t) t.Timestamp < sepStart) AndAlso outcomes4.Count = 2
+            ' [F-1] Still two windows: August's tail runs FIRST and repairs up to 920010, so September's
+            ' seed is 920010 and the step to 920011 is no hole (the ORDER INVARIANT, A79j part 1).
 
             Check("A79c ⛔ GT-1 tail below the retention edge ⇒ TAIL_PAST_RETENTION with 499 not served · hole wholly past retention ⇒ HOLE_NOT_SERVED, file unchanged · one missing venue seq ⇒ HOLE_PARTIAL · ⛔ GT-3 a month-end tail stops at segEnd, no row written twice",
                   p1 AndAlso p2 AndAlso p3 AndAlso p4,
@@ -14785,21 +14790,19 @@ Module Program
         End Try
     End Sub
 
-    ' -- A79h: ⚠ MEASUREMENT PIN, not a guard — orchestrator finding F-1, a cross-month leading gap
-    ' F-1 (2026-09-14, non-blocking). ⚠ PRE-EXISTING: verified by reading 2d52fb8, where the same
-    ' three facts held for the time windows. ScanForRepair scans ONE month file and brackets only
-    ' against rows below segStartMs IN THAT FILE. So when an outage crosses 00:00 UTC on the 1st:
-    '   • the August tail stops at August's segment end (GT-3, required — see A79c part 4);
-    '   • the September scan holds no August row, so August's last seq → September's first stored
-    '     seq is not a hole in the September scan;
-    '   • the September tail starts after September's NEWEST row.
-    ' Seqs S+1..S+k-1 dated September are therefore fetched by nobody.
-    '   Part 1 (pinned loss): streaming already wrote September's first rows ⇒ the gap stays.
-    '   Part 2 (the race that heals it): the September file is still EMPTY at pass time ⇒ the
-    '   AnchoredTail at September's segStart fetches the gap.
-    ' ⛔ Not fixed here — docs/trader-tick-queue.md §2 "Cross-month leading gap not repaired". When
-    ' that fix lands, part 1 flips BY DESIGN; update it there, with the new behaviour.
-    Private Sub A79h_MeasuredCrossMonthLeadingGapIsNotRepaired()
+    ' -- A79h: ⛔ F-1 GUARD — a cross-month leading gap is repaired ----------------------------
+    ' Flipped 2026-09-14 from the measurement pin of e13e7cf (docs/gap-repair-cross-month-gap-spec.md).
+    ' ScanForRepair reads ONE month file, so when an outage crosses 00:00 UTC on the 1st and
+    ' streaming has written September's first rows, August's last stored seq → September's first
+    ' stored seq was a hole in neither scan. Pre-existing (verified by reading 2d52fb8).
+    '   Part 1: September already written ⇒ the cross-month hole, seeded from August's newest row,
+    '           repairs 9 of 9 and writes nothing twice.
+    '   Part 2: September still empty ⇒ the anchored tail repairs 9 of 9 (unchanged).
+    ' ⛔ FAIL-FIRST, run 2026-09-14 against the resolver at 6c87e19 (edd4539's code):
+    '    p1=False(sepRows=5 gapFound=0).
+    ' ⛔ MUTATION THAT MUST FAIL A79h: `If haveSeed Then rows.Add(seed)` → skip the add in
+    '    ResolveRepairWindowsCore — part 1 falls back to 0 of 9.
+    Private Sub A79h_CrossMonthLeadingGapIsRepaired()
         Dim d1 As String = A48TempStore("79h1")
         Dim d2 As String = A48TempStore("79h2")
         Try
@@ -14820,16 +14823,19 @@ Module Program
                 gapIds.Add(tape(k).TradeId)
             Next
 
-            ' Part 1 — ⚠ PINNED LOSS. August holds S; September already holds S+10..S+14.
+            ' Part 1 — August holds S; September already holds S+10..S+14.
             TradeStoreWriter.AppendRows(d1, New List(Of TradeRecord) From {tape(0)})
             TradeStoreWriter.AppendRows(d1, tape.GetRange(10, 5))
-            Dim sepWin = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d1, 2026, 9), sepStart, toInclMs, True)
+            Dim sepWin = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d1, 2026, 9), sepStart, toInclMs, True,
+                                                               TradeStoreWriter.TradeFileFor(d1, 2026, 8))
             Dim augWin = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d1, 2026, 8),
                                                                New DateTimeOffset(fromUtc).ToUnixTimeMilliseconds(), sepStart - 1L, True)
-            ' No window covers the gap: September offers only a tail after S+14; August's tail stops
-            ' at August's end, before the first gap trade.
-            Dim windowsOk As Boolean = sepWin.Count = 1 AndAlso sepWin(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
-                                       sepWin(0).FirstSeq = s + 15L AndAlso
+            ' September now opens with the cross-month hole [S+1, S+9], bracketed by August's newest
+            ' row; August's tail still stops at August's end (GT-3).
+            Dim windowsOk As Boolean = sepWin.Count = 2 AndAlso sepWin(0).Kind = TradeStoreWriter.RepairWindowKind.Hole AndAlso
+                                       sepWin(0).FirstSeq = s + 1L AndAlso sepWin(0).LastSeq = s + 9L AndAlso
+                                       sepWin(0).LeftTsMs = sepStart - 10000L AndAlso
+                                       sepWin(1).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso sepWin(1).FirstSeq = s + 15L AndAlso
                                        augWin.Count = 1 AndAlso augWin(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
                                        augWin(0).FirstSeq = s + 1L AndAlso augWin(0).StopAfterMs = sepStart - 1L
             Dim anc1(0) As Integer
@@ -14840,8 +14846,11 @@ Module Program
             Next
             Dim sep1 = A79Rows(d1, 2026, 9)
             Dim gapFound1 As Integer = sep1.Where(Function(t) gapIds.Contains(t.TradeId)).Count()
-            Dim p1 As Boolean = windowsOk AndAlso A79Rows(d1, 2026, 8).Count = 1 AndAlso sep1.Count = 5 AndAlso gapFound1 = 0 AndAlso
-                                out1.All(Function(o) o.State = TradeStoreWriter.RepairWindowOutcome.TailOk)
+            ' ⛔ THE GUARD: 9 of 9 repaired, nothing written twice.
+            Dim p1 As Boolean = windowsOk AndAlso A79Rows(d1, 2026, 8).Count = 1 AndAlso sep1.Count = 14 AndAlso gapFound1 = 9 AndAlso
+                                sep1.Select(Function(t) t.TradeId).Distinct().Count() = 14 AndAlso
+                                out1.Exists(Function(o) o.Window.Kind = TradeStoreWriter.RepairWindowKind.Hole AndAlso o.Committed = 9 AndAlso
+                                                        o.State = TradeStoreWriter.RepairWindowOutcome.HoleRepaired)
 
             ' Part 2 — the race that heals it: September is still EMPTY when the pass runs.
             TradeStoreWriter.AppendRows(d2, New List(Of TradeRecord) From {tape(0)})
@@ -14855,7 +14864,7 @@ Module Program
             Dim gapFound2 As Integer = sep2.Where(Function(t) gapIds.Contains(t.TradeId)).Count()
             Dim p2 As Boolean = sep2.Count = 14 AndAlso gapFound2 = 9 AndAlso anc2(0) = 1
 
-            Check("A79h ⚠ MEASUREMENT PIN (finding F-1, pre-existing, not a guard) — an outage across 00:00 UTC on the 1st: with September already written, 0 of 9 leading-gap trades are repaired · with September still empty, the anchored tail repairs 9 of 9",
+            Check("A79h ⛔ F-1 GUARD — an outage across 00:00 UTC on the 1st: with September already written, the cross-month hole repairs 9 of 9 leading-gap trades and writes none twice · with September still empty, the anchored tail repairs 9 of 9",
                   p1 AndAlso p2,
                   String.Format("p1={0}(windows={1} sepRows={2} gapFound={3} states={4}) p2={5}(sepRows={6} gapFound={7} anchorCalls={8})",
                                 p1, windowsOk, sep1.Count, gapFound1, String.Join(",", out1.Select(Function(o) o.State)),
@@ -14863,6 +14872,226 @@ Module Program
         Finally
             A48Cleanup(d1)
             A48Cleanup(d2)
+        End Try
+    End Sub
+
+    ' -- A79i: F-1 edges (1) and (2) — no usable previous-month bracket, no cross-month hole ----
+    ' ⛔ MUTATION THAT MUST FAIL A79i (part 2, trap X-2): replace the seed read
+    '    `ScanForRepair(previousMonthPath, …)` with the previous file's SEQ-CARRYING rows
+    '    (`ReadTradeFile(previousMonthPath).Where(Function(t) t.HasSeq)…`) — the seed becomes August's
+    '    newest seq-carrying row, the walk brackets across the newer legacy row, and a phantom hole
+    '    appears. (Skipping `Seq < 0` inside the seed LOOP does not fail it, and is not a real
+    '    alternative: ScanForRepair returns only the previous file's single newest row — run 2026-09-14.)
+    Private Sub A79i_NoUsablePreviousMonthBracketMeansNoCrossMonthHole()
+        Dim d1 As String = A48TempStore("79i1")
+        Dim d2 As String = A48TempStore("79i2")
+        Try
+            Dim sepStart As Long = New DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim segEnd As Long = sepStart + 3600000L
+            Dim sepRows As New List(Of TradeRecord) From {A79Trade(sepStart + 600000L, 940010L), A79Trade(sepStart + 601000L, 940011L)}
+
+            ' Part 1 — edge (1): no August file at all ⇒ September's tail only.
+            TradeStoreWriter.AppendRows(d1, sepRows)
+            Dim w1 = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d1, 2026, 9), sepStart, segEnd, True,
+                                                           TradeStoreWriter.TradeFileFor(d1, 2026, 8))
+            Dim p1 As Boolean = w1.Count = 1 AndAlso w1(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso w1(0).FirstSeq = 940012L
+
+            ' Part 2 — edge (2): August's NEWEST row is legacy (a seq row sits before it) ⇒ the walk breaks.
+            TradeStoreWriter.AppendRows(d2, New List(Of TradeRecord) From {
+                A79Trade(sepStart - 20000L, 940000L), A53Trade(sepStart - 10000L, 64000, 10, "buy")})
+            TradeStoreWriter.AppendRows(d2, sepRows)
+            Dim w2 = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d2, 2026, 9), sepStart, segEnd, True,
+                                                           TradeStoreWriter.TradeFileFor(d2, 2026, 8))
+            Dim p2 As Boolean = w2.Count = 1 AndAlso w2(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso w2(0).FirstSeq = 940012L
+
+            Check("A79i F-1 edges — no previous-month file ⇒ tail only · the previous file's newest row is legacy ⇒ the walk breaks, no phantom cross-month hole",
+                  p1 AndAlso p2,
+                  String.Format("p1={0}(n={1}) p2={2}(n={3} firstKind={4})", p1, w1.Count, p2, w2.Count,
+                                If(w2.Count > 0, w2(0).Kind.ToString(), "none")))
+        Finally
+            A48Cleanup(d1)
+            A48Cleanup(d2)
+        End Try
+    End Sub
+
+    ' -- A79j: F-1 edges (4) and (3) — each seq committed once, each gap counted once; unclamped
+    '    when the previous month is outside the pass
+    ' The ORDER INVARIANT (TradeStoreWriter.ResolveRepairWindowsCore): August's tail runs first, so
+    ' September's seed is August's newest row AFTER repair and the two ranges are disjoint.
+    ' ⛔ MUTATION THAT MUST FAIL A79j (part 1, trap X-3): replace the seed read with the previous
+    '    file's OLDEST row (`ReadTradeFile(previousMonthPath).OrderBy(Function(t) t.Timestamp).Take(1)…`)
+    '    — the cross-month hole reaches back over August's freshly repaired trades and writes them a
+    '    second time. (Flipping the seed loop's `>` does not fail it: ScanForRepair already returns only
+    '    the newest row — run 2026-09-14.) Part 5 pins the same hazard from the caller's side.
+    Private Sub A79j_CrossMonthHoleCommitsAndCountsEachSeqOnce()
+        Dim d1 As String = A48TempStore("79j1")
+        Dim d2 As String = A48TempStore("79j2")
+        Dim d3 As String = A48TempStore("79j3")
+        Dim d4 As String = A48TempStore("79j4")
+        Dim d5 As String = A48TempStore("79j5")
+        Try
+            Dim sepStart As Long = New DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim s As Long = 950000L
+            ' S Aug 31 23:59:50 · S+1..S+3 Aug 23:59:52–54 · S+4..S+6 Sep 00:01–00:03 · S+7..S+9 Sep 00:10 (stored)
+            Dim tape As New List(Of TradeRecord) From {A79Trade(sepStart - 10000L, s)}
+            For k As Integer = 1 To 3
+                tape.Add(A79Trade(sepStart - 10000L + CLng(k + 1) * 1000L, s + k))
+            Next
+            For k As Integer = 4 To 6
+                tape.Add(A79Trade(sepStart + CLng(k - 3) * 60000L, s + k))
+            Next
+            For k As Integer = 7 To 9
+                tape.Add(A79Trade(sepStart + 600000L + CLng(k - 7) * 1000L, s + k))
+            Next
+            Dim fromUtc As New DateTime(2026, 8, 31, 20, 0, 0, DateTimeKind.Utc)
+            Dim toUtc As New DateTime(2026, 9, 1, 1, 0, 0, DateTimeKind.Utc)
+
+            ' Runs a whole pass (both months, ascending) over a store and a venue.
+            Dim runPass = Function(dir As String, seqFn As Func(Of Long, Long?, Integer, Task(Of String)),
+                                   venue As List(Of TradeRecord)) As List(Of TradeStoreWriter.RepairWindowOutcome)
+                              TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {tape(0)})
+                              TradeStoreWriter.AppendRows(dir, tape.GetRange(7, 3))
+                              Dim anc(0) As Integer
+                              Dim outs As New List(Of TradeStoreWriter.RepairWindowOutcome)()
+                              For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
+                                  HistoricalStore.BackfillTradeMonthCoreAsync(m.Year, m.Month, m.StartUtc, m.EndUtcExcl, dir, True, True,
+                                                                              seqFn, A79AnchorStub(venue, anc), 0, outs).GetAwaiter().GetResult()
+                              Next
+                              Return outs
+                          End Function
+
+            ' Part 1 — edge (4): August's tail repairs S+1..S+3; September's cross-month hole starts
+            ' at S+4 and repairs S+4..S+6. Every seq stored once.
+            Dim out1 = runPass(d1, A79SeqStub(tape, 0L), tape)
+            Dim aug1 = A79Rows(d1, 2026, 8)
+            Dim sep1 = A79Rows(d1, 2026, 9)
+            Dim ids1 = aug1.Concat(sep1).Select(Function(t) t.TradeId).ToList()
+            Dim hole1 = out1.Find(Function(o) o.Window.Kind = TradeStoreWriter.RepairWindowKind.Hole)
+            Dim p1 As Boolean = aug1.Count = 4 AndAlso sep1.Count = 6 AndAlso ids1.Count = 10 AndAlso ids1.Distinct().Count() = 10 AndAlso
+                                hole1 IsNot Nothing AndAlso hole1.Window.FirstSeq = s + 4L AndAlso hole1.Window.LastSeq = s + 6L AndAlso
+                                hole1.Committed = 3 AndAlso out1.Sum(Function(o) o.NotServed) = 0L
+
+            ' Part 2 — ⛔ trap X-4: the venue lacks S+2 (August-dated) and S+5 (September-dated).
+            ' Each gap is counted by exactly one window: the pass total is 2, not 3 or 4.
+            Dim venue2 = tape.Where(Function(t) t.TradeSeq <> s + 2L AndAlso t.TradeSeq <> s + 5L).ToList()
+            Dim out2 = runPass(d2, A79SeqStub(venue2, 0L), venue2)
+            Dim rows2 = A79Rows(d2, 2026, 8).Concat(A79Rows(d2, 2026, 9)).ToList()
+            Dim p2 As Boolean = rows2.Count = 8 AndAlso rows2.Select(Function(t) t.TradeId).Distinct().Count() = 8 AndAlso
+                                out2.Sum(Function(o) o.NotServed) = 2L
+
+            ' Part 4 — August's tail FAILS: September's seed is August's unrepaired newest row (S), so
+            ' the cross-month hole [S+1, S+6] commits the August-dated trades itself, once.
+            Dim seqCalls(0) As Integer
+            Dim good4 = A79SeqStub(tape, 0L)
+            Dim failFirst As Func(Of Long, Long?, Integer, Task(Of String)) =
+                Function(st As Long, en As Long?, c As Integer) As Task(Of String)
+                    seqCalls(0) += 1
+                    If seqCalls(0) = 1 Then Return Task.FromResult(Of String)(Nothing)
+                    Return good4(st, en, c)
+                End Function
+            Dim out4 = runPass(d4, failFirst, tape)
+            Dim aug4 = A79Rows(d4, 2026, 8)
+            Dim sep4 = A79Rows(d4, 2026, 9)
+            Dim hole4 = out4.Find(Function(o) o.Window.Kind = TradeStoreWriter.RepairWindowKind.Hole)
+            Dim p4 As Boolean = out4.Count >= 1 AndAlso out4(0).State = TradeStoreWriter.RepairWindowOutcome.FetchFailed AndAlso
+                                hole4 IsNot Nothing AndAlso hole4.Window.FirstSeq = s + 1L AndAlso hole4.Committed = 6 AndAlso
+                                aug4.Count = 4 AndAlso sep4.Count = 6 AndAlso
+                                aug4.Concat(sep4).Select(Function(t) t.TradeId).Distinct().Count() = 10
+
+            ' Part 3 — edge (3): the lookback starts INSIDE September (06:00), so August is not in the
+            ' pass. August holds an internal gap (S-10, S-5) that must NOT be emitted; the cross-month
+            ' hole keeps its full seq range and commits it all (decision 2).
+            Dim segStart3 As Long = sepStart + 6L * 3600000L
+            Dim tape3 As New List(Of TradeRecord) From {A79Trade(sepStart - 30000L, s - 10L), A79Trade(sepStart - 20000L, s - 5L),
+                                                        A79Trade(sepStart - 10000L, s)}
+            tape3.Add(A79Trade(sepStart - 5000L, s + 1L))                       ' August-dated
+            tape3.Add(A79Trade(sepStart - 4000L, s + 2L))                       ' August-dated
+            For k As Integer = 3 To 19
+                tape3.Add(A79Trade(sepStart + CLng(k) * 60000L, s + k))         ' September, before the lookback
+            Next
+            tape3.Add(A79Trade(segStart3 + 1800000L, s + 20L))
+            tape3.Add(A79Trade(segStart3 + 1801000L, s + 21L))
+            TradeStoreWriter.AppendRows(d3, tape3.GetRange(0, 3))
+            TradeStoreWriter.AppendRows(d3, tape3.GetRange(tape3.Count - 2, 2))
+            Dim w3 = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d3, 2026, 9), segStart3, segStart3 + 3600000L, True,
+                                                           TradeStoreWriter.TradeFileFor(d3, 2026, 8))
+            Dim o3 As TradeStoreWriter.RepairWindowOutcome = Nothing
+            If w3.Count = 2 Then o3 = A79Fetch(w3(0), tape3, 0L, Function(rows) TradeStoreWriter.AppendRows(d3, rows))
+            Dim p3 As Boolean = w3.Count = 2 AndAlso w3(0).Kind = TradeStoreWriter.RepairWindowKind.Hole AndAlso
+                                w3(0).FirstSeq = s + 1L AndAlso w3(0).LastSeq = s + 19L AndAlso
+                                w3(0).LeftTsMs = sepStart - 10000L AndAlso
+                                o3 IsNot Nothing AndAlso o3.Committed = 19 AndAlso
+                                A79Rows(d3, 2026, 8).Count = 5
+
+            ' Part 5 — ⚠ HAZARD PIN for the ORDER INVARIANT: resolve September BEFORE August's tail has
+            ' run, as a parallel or out-of-order caller would. The seed is then August's UNREPAIRED
+            ' newest row, the hole overlaps August's tail, and 3 rows are written twice. This is why
+            ' TradeStoreGapRepair's month loop must stay ascending and sequential.
+            TradeStoreWriter.AppendRows(d5, New List(Of TradeRecord) From {tape(0)})
+            TradeStoreWriter.AppendRows(d5, tape.GetRange(7, 3))
+            Dim sepWin5 = TradeStoreWriter.ResolveRepairWindows(TradeStoreWriter.TradeFileFor(d5, 2026, 9), sepStart,
+                                                                New DateTimeOffset(toUtc).ToUnixTimeMilliseconds() - 1L, True,
+                                                                TradeStoreWriter.TradeFileFor(d5, 2026, 8))
+            Dim anc5(0) As Integer
+            HistoricalStore.BackfillTradeMonthCoreAsync(2026, 8, fromUtc, New DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), d5,
+                                                        True, True, A79SeqStub(tape, 0L), A79AnchorStub(tape, anc5), 0, Nothing).GetAwaiter().GetResult()
+            Dim o5 As TradeStoreWriter.RepairWindowOutcome = Nothing
+            If sepWin5.Count >= 1 Then o5 = A79Fetch(sepWin5(0), tape, 0L, Function(rows) TradeStoreWriter.AppendRows(d5, rows))
+            Dim rows5 = A79Rows(d5, 2026, 8).Concat(A79Rows(d5, 2026, 9)).ToList()
+            Dim dup5 As Integer = rows5.Count - rows5.Select(Function(t) t.TradeId).Distinct().Count()
+            Dim p5 As Boolean = sepWin5.Count = 2 AndAlso sepWin5(0).FirstSeq = s + 1L AndAlso o5 IsNot Nothing AndAlso dup5 = 3
+
+            Check("A79j F-1 edges — both months in the pass ⇒ August's tail repairs 3, September's cross-month hole starts after it and repairs 3, every seq stored once · one missing seq each side ⇒ pass not_served = 2 · August's tail fails ⇒ the cross-month hole repairs all 6, once · lookback inside September ⇒ hole unclamped, all 19 committed, August's internal gap not emitted · ⚠ hazard pin: resolving September before August's tail runs writes 3 twice",
+                  p1 AndAlso p2 AndAlso p3 AndAlso p4 AndAlso p5,
+                  String.Format("p1={0}(aug={1} sep={2} distinct={3} hole=[{4},{5}] committed={6}) p2={7}(rows={8} notServed={9}) p4={10}(aug={11} sep={12} holeCommitted={13}) p3={14}(n={15} first={16} last={17} committed={18}) p5={19}(dup={20})",
+                                p1, aug1.Count, sep1.Count, ids1.Distinct().Count(),
+                                If(hole1 Is Nothing, -1L, hole1.Window.FirstSeq), If(hole1 Is Nothing, -1L, hole1.Window.LastSeq),
+                                If(hole1 Is Nothing, -1, hole1.Committed),
+                                p2, rows2.Count, out2.Sum(Function(o) o.NotServed),
+                                p4, aug4.Count, sep4.Count, If(hole4 Is Nothing, -1, hole4.Committed),
+                                p3, w3.Count, If(w3.Count > 0, w3(0).FirstSeq, -1L), If(w3.Count > 0, w3(0).LastSeq, -1L),
+                                If(o3 Is Nothing, -1, o3.Committed), p5, dup5))
+        Finally
+            A48Cleanup(d1)
+            A48Cleanup(d2)
+            A48Cleanup(d3)
+            A48Cleanup(d4)
+            A48Cleanup(d5)
+        End Try
+    End Sub
+
+    ' -- A79k: F-1 edge (5) — a truncated current scan is never seeded ---------------------------
+    ' ⛔ MUTATION THAT MUST FAIL A79k (trap X-1): drop `Not truncated AndAlso` from the seed
+    '    condition in ResolveRepairWindowsCore — the seed brackets across the rows the cap dropped
+    '    and reports a phantom hole over ground the store holds.
+    Private Sub A79k_TruncatedScanIsNotSeededFromThePreviousMonth()
+        Dim dir As String = A48TempStore("79k")
+        Try
+            Dim sepStart As Long = New DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim s As Long = 960000L
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {A79Trade(sepStart - 10000L, s)})
+            Dim sepRows As New List(Of TradeRecord)
+            For k As Integer = 1 To 16
+                sepRows.Add(A79Trade(sepStart + CLng(k) * 1000L, s + k))       ' contiguous with August: no real gap
+            Next
+            TradeStoreWriter.AppendRows(dir, sepRows)
+            Dim sepPath As String = TradeStoreWriter.TradeFileFor(dir, 2026, 9)
+            Dim augPath As String = TradeStoreWriter.TradeFileFor(dir, 2026, 8)
+            Dim segEnd As Long = sepStart + 3600000L
+
+            ' Control — no truncation: the seed is taken, and with no real gap there is no hole.
+            Dim wFull = TradeStoreWriter.ResolveRepairWindowsCore(sepPath, sepStart, segEnd, True, augPath, TradeStoreWriter.MaxScanRows)
+            ' Truncated at a cap of 10: the cut drops September's oldest rows; no seed may bridge them.
+            Dim wCut = TradeStoreWriter.ResolveRepairWindowsCore(sepPath, sepStart, segEnd, True, augPath, 10)
+
+            Dim fullOk As Boolean = wFull.Count = 1 AndAlso wFull(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso wFull(0).FirstSeq = s + 17L
+            Dim cutOk As Boolean = wCut.Count = 1 AndAlso wCut(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso wCut(0).FirstSeq = s + 17L
+            Check("A79k F-1 edge (5) — a truncated September scan is not seeded from August: no phantom cross-month hole over the rows the cap dropped (control: untruncated, contiguous ⇒ no hole either)",
+                  fullOk AndAlso cutOk,
+                  String.Format("full={0}(n={1}) cut={2}(n={3} firstKind={4} firstSeq={5})", fullOk, wFull.Count, cutOk, wCut.Count,
+                                If(wCut.Count > 0, wCut(0).Kind.ToString(), "none"), If(wCut.Count > 0, wCut(0).FirstSeq, -1L)))
+        Finally
+            A48Cleanup(dir)
         End Try
     End Sub
 

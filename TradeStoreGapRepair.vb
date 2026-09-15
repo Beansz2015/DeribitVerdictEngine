@@ -127,6 +127,10 @@ Public NotInheritable Class TradeStoreGapRepair
             Dim fromUtc As DateTime = toUtc.AddHours(-lookbackHours)
 
             Dim total As Integer = 0
+            ' ⛔ [F-1] Months MUST run in ascending order, one after another: a month file with no row
+            ' below its segment start seeds its hole bracket from the previous month's newest row,
+            ' which is only disjoint from that month's tail once the tail has run (TradeStoreWriter
+            ' ResolveRepairWindowsCore, the ORDER INVARIANT note). Do not parallelise this loop.
             For Each m In HistoricalStore.EnumerateMonths(fromUtc, toUtc)
                 ' [downtime repair Part A, D-1/D-5] repairHoles:=True is what makes this pass
                 ' able to heal an outage the app RODE THROUGH: it fetches the trade_seq holes

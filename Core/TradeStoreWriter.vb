@@ -905,15 +905,71 @@ Public NotInheritable Class TradeStoreWriter
     ''' <param name="clampToSegStart">Applies only to a legacy AnchoredTail's anchor. Sequence
     ''' windows need no clamp: the venue serves from its own retention edge and the fetcher counts
     ''' the rest as not served.</param>
+    ''' <param name="previousMonthPath">[F-1] The previous month's file. When given, and this file has
+    ''' rows but none below segStartMs, that file's newest row seeds the bracket — so the gap across
+    ''' 00:00 UTC on the 1st is a hole. Nothing ⇒ single-file behaviour.</param>
     Public Shared Function ResolveRepairWindows(path As String,
                                                 segStartMs As Long,
                                                 segEndInclMs As Long,
-                                                clampToSegStart As Boolean) As List(Of RepairWindow)
+                                                clampToSegStart As Boolean,
+                                                Optional previousMonthPath As String = Nothing) As List(Of RepairWindow)
+        Return ResolveRepairWindowsCore(path, segStartMs, segEndInclMs, clampToSegStart, previousMonthPath, MaxScanRows)
+    End Function
+
+    ''' <summary>ResolveRepairWindows with the scan cap as a parameter, so A79k reaches the truncation
+    ''' path without 500,000 rows (the ScanForRepair precedent). Production passes MaxScanRows.</summary>
+    Friend Shared Function ResolveRepairWindowsCore(path As String,
+                                                    segStartMs As Long,
+                                                    segEndInclMs As Long,
+                                                    clampToSegStart As Boolean,
+                                                    previousMonthPath As String,
+                                                    maxScanRows As Integer) As List(Of RepairWindow)
         Dim result As New List(Of RepairWindow)()
 
         ' ── 1. Scan ───────────────────────────────────────────────────────────────────
         Dim truncated As Boolean = False
-        Dim rows As List(Of SeqPoint) = ScanForRepair(path, segStartMs, MaxScanRows, truncated)
+        Dim rows As List(Of SeqPoint) = ScanForRepair(path, segStartMs, maxScanRows, truncated)
+
+        ' ── 1b. [F-1] Seed a cross-month bracket (docs/gap-repair-cross-month-gap-spec.md §2) ──
+        ' ⛔ WHY. ScanForRepair reads ONE month file, and a September file never holds an August
+        ' row. So once streaming has written September's first rows, the range from August's last
+        ' stored seq to September's first stored seq was a hole in NEITHER scan: August's tail stops
+        ' at August's end (GT-3) and September's tail starts after September's newest row.
+        '
+        ' Seeded only when ALL hold, each for a reason:
+        '   • not truncated — the rows a cut dropped sit between the seed and the survivors, and the
+        '     walk would report ground the store holds as a hole (the same-file bracket rule);
+        '   • this file has rows — an EMPTY file already gets the anchored tail at segStartMs, which
+        '     fetches every trade from there (CF-3);
+        '   • this file has no row below segStartMs — a same-file bracket wins.
+        ' The seed is the previous file's NEWEST row, legacy or not (CF-2): a legacy seed breaks the
+        ' walk exactly as trap 2 does, where the newest SEQ-CARRYING row would bracket across a newer
+        ' legacy row and invent a phantom. ScanForRepair is called unchanged: every previous-month row
+        ' sits below segStartMs, so it returns that file's single bracket and nothing to walk.
+        '
+        ' ⛔ ORDER INVARIANT — no double-write needs no partition. A repair pass resolves months in
+        ' ASCENDING order (HistoricalStore.EnumerateMonths, walked sequentially by
+        ' TradeStoreGapRepair.RepairOnceAsync). So the previous month's tail has ALREADY committed
+        ' its trades when this seed is read, and the seed is that month's newest row AFTER its
+        ' repair: this hole starts exactly where the previous month's tail stopped. Each seq is
+        ' committed — and each gap counted — by one window. If the previous month's tail failed,
+        ' the seed is its unrepaired newest row, and this hole commits those trades itself, once.
+        ' A caller that resolves months out of order breaks this; A79j part 1 pins it.
+        If Not truncated AndAlso rows.Count > 0 AndAlso Not String.IsNullOrWhiteSpace(previousMonthPath) AndAlso
+           Not rows.Exists(Function(r) r.TsMs < segStartMs) Then
+            Dim prevTruncated As Boolean = False
+            Dim prevRows As List(Of SeqPoint) = ScanForRepair(previousMonthPath, segStartMs, maxScanRows, prevTruncated)
+            Dim haveSeed As Boolean = False
+            Dim seed As SeqPoint
+            For Each p In prevRows
+                If p.TsMs >= segStartMs Then Continue For
+                If Not haveSeed OrElse p.TsMs > seed.TsMs OrElse (p.TsMs = seed.TsMs AndAlso p.Seq > seed.Seq) Then
+                    seed = p
+                    haveSeed = True
+                End If
+            Next
+            If haveSeed Then rows.Add(seed)
+        End If
 
         ' ── 2. Sort. ⚠ TRAP 1, AND IT IS NON-NEGOTIABLE ───────────────────────────────
         ' The store is NOT sorted, and LastTradeTimestamp's own summary records why: repair

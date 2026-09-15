@@ -285,7 +285,10 @@ Public Class HistoricalStore
         ' Both resume decisions live on the shared seam (A48d and A56a–f exercise these exact calls).
         Dim windows As New List(Of TradeStoreWriter.RepairWindow)()
         If repairHoles Then
-            windows = TradeStoreWriter.ResolveRepairWindows(path, segStartMs, endMs, clampToSegStart)
+            ' [F-1] The previous month's file seeds a cross-month bracket when this file has none.
+            Dim prevMonth As DateTime = New DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-1)
+            windows = TradeStoreWriter.ResolveRepairWindows(path, segStartMs, endMs, clampToSegStart,
+                                                            TradeStoreWriter.TradeFileFor(dir, prevMonth.Year, prevMonth.Month))
         Else
             Dim cursor0 As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartMs, endMs, clampToSegStart)
             If cursor0 >= 0 Then windows.Add(TradeStoreWriter.RepairWindow.ForAnchoredTail(cursor0, endMs))
