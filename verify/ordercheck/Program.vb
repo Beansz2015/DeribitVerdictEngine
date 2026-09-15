@@ -723,6 +723,13 @@ Module Program
         A79i_NoUsablePreviousMonthBracketMeansNoCrossMonthHole()
         A79j_CrossMonthHoleCommitsAndCountsEachSeqOnce()
         A79k_TruncatedScanIsNotSeededFromThePreviousMonth()
+        ' [DUP-1/DUP-2 — a failed store scan is loud and fetches nothing; repair-path readers share
+        '   the file (docs/gap-repair-scan-failure-spec.md).]
+        A79l_ScanFailureIsLoudAndFetchesNothing()
+        A79m_ScanSucceedsBesideAHeldStreamingWriter()
+        A79n_SeedReadFailureIsLoudWithNoPhantomHole()
+        A79o_StreamingFlushIsNotDroppedBesideAHeldRepairScan()
+        A79p_TornFinalRowIsNotReadAsATinySeq()
 
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
@@ -10931,7 +10938,8 @@ Module Program
 
             Dim smallCap As Integer = 10
             Dim truncated As Boolean = False
-            Dim scanned = TradeStoreWriter.ScanForRepair(A56Path(dir), A56Ms(0), smallCap, truncated)
+            Dim scanFailure As String = Nothing
+            Dim scanned = TradeStoreWriter.ScanForRepair(A56Path(dir), A56Ms(0), smallCap, truncated, scanFailure)
 
             scanned.Sort(Function(a, b)
                              Dim c As Integer = a.TsMs.CompareTo(b.TsMs)
@@ -10950,7 +10958,7 @@ Module Program
                                      scanned(scanned.Count - 1).Seq = 15L
 
             Check("A56g DR-2 ⚠ truncation cut is TIME-contiguous, not file-order — an out-of-order store's cap truncation produces ZERO phantom holes and reports truncated",
-                  truncated AndAlso genuinelyUnsorted AndAlso countOk AndAlso rangeOk AndAlso noPhantom,
+                  truncated AndAlso genuinelyUnsorted AndAlso countOk AndAlso rangeOk AndAlso noPhantom AndAlso scanFailure Is Nothing,
                   String.Format("truncated={0} unsorted={1} count={2}(want {3}) firstSeq={4}(want 6) lastSeq={5}(want 15) noPhantom={6}",
                                 truncated, genuinelyUnsorted, scanned.Count, smallCap,
                                 If(scanned.Count > 0, scanned(0).Seq, -1L),
@@ -15090,6 +15098,229 @@ Module Program
                   fullOk AndAlso cutOk,
                   String.Format("full={0}(n={1}) cut={2}(n={3} firstKind={4} firstSeq={5})", fullOk, wFull.Count, cutOk, wCut.Count,
                                 If(wCut.Count > 0, wCut(0).Kind.ToString(), "none"), If(wCut.Count > 0, wCut(0).FirstSeq, -1L)))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A79l: ⛔ DUP GUARD — a store scan that throws is loud and fetches nothing ---------------
+    ' The September duplicate-rows read (docs/trade-store-duplicate-rows-read-2026-09-15.md): three
+    ' passes rewrote the whole 20 h lookback because ScanForRepair swallowed an exception and the
+    ' pass read the store as EMPTY. Built the way that fails: the month file is held exclusively,
+    ' and the first venue call releases the lock, so a pass that does fetch CAN append.
+    ' ⛔ FAIL-FIRST, run 2026-09-15 against 346c6d1: see the build spec-back (rows doubled).
+    ' ⛔ MUTATION THAT MUST FAIL A79l: in ScanForRepair's Catch, leave `failure = Nothing` — the pass
+    '    reads the store as empty and re-appends the whole lookback.
+    Private Sub A79l_ScanFailureIsLoudAndFetchesNothing()
+        Dim dir As String = A48TempStore("79l")
+        Dim exclusive As FileStream = Nothing
+        Try
+            Dim tape As New List(Of TradeRecord)
+            For k As Integer = 0 To 49
+                tape.Add(A79Trade(A56Ms(CLng(k) * 1000L), 970000L + k))
+            Next
+            TradeStoreWriter.AppendRows(dir, tape)
+            exclusive = New FileStream(A56Path(dir), FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+
+            Dim calls(0) As Integer
+            Dim seqInner = A79SeqStub(tape, 0L)
+            Dim ancCalls(0) As Integer
+            Dim ancInner = A79AnchorStub(tape, ancCalls)
+            Dim release As Action = Sub()
+                                        If exclusive IsNot Nothing Then
+                                            exclusive.Dispose()
+                                            exclusive = Nothing
+                                        End If
+                                    End Sub
+            Dim seqFn As Func(Of Long, Long?, Integer, Task(Of String)) =
+                Function(st As Long, en As Long?, c As Integer) As Task(Of String)
+                    calls(0) += 1
+                    release()
+                    Return seqInner(st, en, c)
+                End Function
+            Dim ancFn As Func(Of Long, Long, Task(Of String)) =
+                Function(a As Long, b As Long) As Task(Of String)
+                    calls(0) += 1
+                    release()
+                    Return ancInner(a, b)
+                End Function
+
+            Dim outs As New List(Of TradeStoreWriter.RepairWindowOutcome)()
+            HistoricalStore.BackfillTradeMonthCoreAsync(2026, 8, DateTimeOffset.FromUnixTimeMilliseconds(A56Ms(0)).UtcDateTime,
+                                                        DateTimeOffset.FromUnixTimeMilliseconds(A56Ms(3600000)).UtcDateTime,
+                                                        dir, True, True, seqFn, ancFn, 0, outs).GetAwaiter().GetResult()
+            release()
+
+            Dim rows = A79Rows(dir, 2026, 8)
+            Dim lines = RepairStatusLog.ComposePassLines(outs, 20, "iid", New DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc))
+            Dim passState As String = lines(lines.Count - 1).Split("|"c)(1).Trim()
+            Dim scanLine As String = lines.Find(Function(l) l.Split("|"c)(1).Trim() = "SCAN_FAILED")
+            Dim ok As Boolean = calls(0) = 0 AndAlso rows.Count = 50 AndAlso
+                                outs.Count = 1 AndAlso outs(0).State = "SCAN_FAILED" AndAlso outs(0).Committed = 0 AndAlso
+                                passState = RepairStatusLog.PassFailed AndAlso
+                                scanLine IsNot Nothing AndAlso scanLine.Contains("IOException")
+
+            Check("A79l ⛔ DUP guard — a store scan that throws ⇒ SCAN_FAILED with the exception type, no venue call, 0 rows appended, PASS_FAILED (today: the pass reads the store as empty and re-appends the whole lookback)",
+                  ok,
+                  String.Format("venueCalls={0} rows={1}(want 50) outcomes={2} state={3} pass={4} scanLine={5}",
+                                calls(0), rows.Count, outs.Count, If(outs.Count > 0, outs(0).State, "none"), passState,
+                                If(scanLine, "none")))
+        Finally
+            If exclusive IsNot Nothing Then exclusive.Dispose()
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A79m: the repair scan succeeds beside a held streaming writer (share mode ReadWrite) ------
+    ' The streaming writer's AppendRows opens the month file with a StreamWriter, which shares Read
+    ' only. A plain StreamReader (share Read) cannot open beside it — shown in-fixture below — and
+    ' that was the leading candidate trigger of the September rewrites.
+    ' ⛔ FAIL-FIRST, run 2026-09-15 against 346c6d1: the scan failed silently and the store read as empty.
+    ' ⛔ MUTATION THAT MUST FAIL A79m: TradeStoreWriter.OpenStoreForScan opens with FileShare.Read.
+    Private Sub A79m_ScanSucceedsBesideAHeldStreamingWriter()
+        Dim dir As String = A48TempStore("79m")
+        Try
+            Dim tape As New List(Of TradeRecord)
+            For k As Integer = 0 To 9
+                tape.Add(A79Trade(A56Ms(CLng(k) * 1000L), 971000L + k))
+            Next
+            TradeStoreWriter.AppendRows(dir, tape)
+            Dim path As String = A56Path(dir)
+
+            Dim oldOpenFailed As Boolean = False
+            Dim w As List(Of TradeStoreWriter.RepairWindow)
+            Using held As New StreamWriter(path, append:=True)
+                Try
+                    Using old As New StreamReader(path)
+                        old.ReadLine()
+                    End Using
+                Catch ex As IOException
+                    oldOpenFailed = True
+                End Try
+                w = TradeStoreWriter.ResolveRepairWindows(path, A56Ms(0), A56Ms(3600000), True)
+            End Using
+
+            Dim ok As Boolean = oldOpenFailed AndAlso w.Count = 1 AndAlso
+                                w(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso w(0).FirstSeq = 971010L
+            Check("A79m DUP-2 share mode — beside a held streaming writer the old plain StreamReader open fails, and the repair scan succeeds: a normal tail from seq 971010, not an empty store",
+                  ok,
+                  String.Format("oldOpenFailed={0} windows={1} firstKind={2} firstSeq={3}", oldOpenFailed, w.Count,
+                                If(w.Count > 0, w(0).Kind.ToString(), "none"), If(w.Count > 0, w(0).FirstSeq, -1L)))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A79n: ⛔ the F-1 seed read failing is loud, with no phantom hole ------------------------
+    ' The previous month's file is held exclusively while September's pass runs. The seed read
+    ' fails; the pass must say so (SEED_READ_FAILED, PASS_FAILED), still repair September's own
+    ' tail, and emit no cross-month hole.
+    ' ⛔ FAIL-FIRST, run 2026-09-15 against 346c6d1: the seed read failed silently (TAIL_OK only).
+    ' ⛔ MUTATION THAT MUST FAIL A79n: in ResolveRepairWindowsCore, drop the seed failure instead of
+    '    adding the SeedReadFailure window.
+    Private Sub A79n_SeedReadFailureIsLoudWithNoPhantomHole()
+        Dim dir As String = A48TempStore("79n")
+        Dim exclusive As FileStream = Nothing
+        Try
+            Dim sepStart As Long = New DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+            Dim s As Long = 972000L
+            Dim tape As New List(Of TradeRecord) From {A79Trade(sepStart - 10000L, s)}
+            For k As Integer = 1 To 4
+                tape.Add(A79Trade(sepStart + CLng(k) * 60000L, s + k))
+            Next
+            tape.Add(A79Trade(sepStart + 600000L, s + 5L))
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {tape(0)})
+            TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {tape(5)})
+            exclusive = New FileStream(TradeStoreWriter.TradeFileFor(dir, 2026, 8), FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+
+            Dim anc(0) As Integer
+            Dim outs As New List(Of TradeStoreWriter.RepairWindowOutcome)()
+            HistoricalStore.BackfillTradeMonthCoreAsync(2026, 9, New DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+                                                        New DateTime(2026, 9, 1, 1, 0, 0, DateTimeKind.Utc), dir, True, True,
+                                                        A79SeqStub(tape, 0L), A79AnchorStub(tape, anc), 0, outs).GetAwaiter().GetResult()
+            exclusive.Dispose()
+            exclusive = Nothing
+
+            Dim lines = RepairStatusLog.ComposePassLines(outs, 20, "iid", New DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc))
+            Dim passState As String = lines(lines.Count - 1).Split("|"c)(1).Trim()
+            Dim ok As Boolean = outs.Exists(Function(o) o.State = "SEED_READ_FAILED" AndAlso o.Reason.Contains("IOException")) AndAlso
+                                Not outs.Exists(Function(o) o.Window.Kind = TradeStoreWriter.RepairWindowKind.Hole) AndAlso
+                                outs.Exists(Function(o) o.Window.Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
+                                                        o.State = TradeStoreWriter.RepairWindowOutcome.TailOk) AndAlso
+                                passState = RepairStatusLog.PassFailed AndAlso
+                                A79Rows(dir, 2026, 9).Count = 1
+            Check("A79n ⛔ F-1 seed read failing ⇒ SEED_READ_FAILED with the exception type, no cross-month hole, September's own tail still runs, PASS_FAILED (today: a silent fallback to single-file behaviour)",
+                  ok,
+                  String.Format("states={0} pass={1} sepRows={2}", String.Join(",", outs.Select(Function(o) o.State)),
+                                passState, A79Rows(dir, 2026, 9).Count))
+        Finally
+            If exclusive IsNot Nothing Then exclusive.Dispose()
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A79o: a streaming flush is not dropped while a repair scan holds the file ----------------
+    ' The other half of B-3. ScanForRepair holds its handle for the whole scan — seconds on a
+    ' 1.5 M-row month. With the old plain StreamReader, a streaming flush in that window could not
+    ' open the file and AppendRows DROPPED the batch (shown in-fixture). With OpenStoreForScan's
+    ' share mode the batch is written.
+    ' ⛔ MUTATION THAT MUST FAIL A79o: TradeStoreWriter.OpenStoreForScan opens with FileShare.Read.
+    Private Sub A79o_StreamingFlushIsNotDroppedBesideAHeldRepairScan()
+        Dim dir As String = A48TempStore("79o")
+        Try
+            Dim tape As New List(Of TradeRecord)
+            For k As Integer = 0 To 9
+                tape.Add(A79Trade(A56Ms(CLng(k) * 1000L), 973000L + k))
+            Next
+            TradeStoreWriter.AppendRows(dir, tape)
+            Dim path As String = A56Path(dir)
+
+            Dim wroteBesideOld As Integer
+            Using old As New StreamReader(path)
+                wroteBesideOld = TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {A79Trade(A56Ms(20000), 973100L)})
+            End Using
+            Dim wroteBesideScan As Integer
+            Using scan As FileStream = TradeStoreWriter.OpenStoreForScan(path)
+                wroteBesideScan = TradeStoreWriter.AppendRows(dir, New List(Of TradeRecord) From {A79Trade(A56Ms(21000), 973101L)})
+            End Using
+            Dim rows = A79Rows(dir, 2026, 8)
+
+            Dim ok As Boolean = wroteBesideOld = 0 AndAlso wroteBesideScan = 1 AndAlso rows.Count = 11 AndAlso
+                                rows.Exists(Function(t) t.TradeSeq = 973101L)
+            Check("A79o DUP-2 other half of B-3 — beside an old plain StreamReader the streaming flush is DROPPED (0 written); beside the repair scan's handle it is written (1)",
+                  ok,
+                  String.Format("besideOld={0}(want 0) besideScan={1}(want 1) rows={2}(want 11)", wroteBesideOld, wroteBesideScan, rows.Count))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A79p: a torn final row is not read as a tiny trade_seq -----------------------------------
+    ' Reading with share mode ReadWrite means a scan can meet a row the writer is still appending;
+    ' a crash mid-write leaves the same shape on disk. A row torn inside its trade_seq parses as a
+    ' TINY sequence ("…,98"), and the tail would then start at seq 99 — a re-fetch from the venue's
+    ' retention edge, the whole-lookback rewrite again. The scan reads only up to the last complete
+    ' line at open time.
+    ' ⛔ FAIL-FIRST, run 2026-09-15 against 346c6d1: tail FirstSeq=99.
+    ' ⛔ MUTATION THAT MUST FAIL A79p: bound the scan at the file length instead of the last line feed.
+    Private Sub A79p_TornFinalRowIsNotReadAsATinySeq()
+        Dim dir As String = A48TempStore("79p")
+        Try
+            Dim tape As New List(Of TradeRecord)
+            For k As Integer = 0 To 9
+                tape.Add(A79Trade(A56Ms(CLng(k) * 1000L), 980000L + k))
+            Next
+            TradeStoreWriter.AppendRows(dir, tape)
+            Dim path As String = A56Path(dir)
+            ' The row for seq 980010, torn two digits into its trade_seq, with no line end.
+            File.AppendAllText(path, A56Ms(11000).ToString(CultureInfo.InvariantCulture) & ",64010.00,10.00,buy,none,q-980010,98")
+
+            Dim w = TradeStoreWriter.ResolveRepairWindows(path, A56Ms(0), A56Ms(3600000), True)
+            Dim ok As Boolean = w.Count = 1 AndAlso w(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso w(0).FirstSeq = 980010L
+            Check("A79p a torn final row (trade_seq cut to '98') is not read: the tail starts at seq 980010, not at 99 (a retention-edge rewrite)",
+                  ok,
+                  String.Format("windows={0} firstKind={1} firstSeq={2}", w.Count,
+                                If(w.Count > 0, w(0).Kind.ToString(), "none"), If(w.Count > 0, w(0).FirstSeq, -1L)))
         Finally
             A48Cleanup(dir)
         End Try

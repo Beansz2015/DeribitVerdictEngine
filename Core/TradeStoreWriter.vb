@@ -756,6 +756,12 @@ Public NotInheritable Class TradeStoreWriter
         ''' legacy last row, or the offline backfill's resume point): ONE time-endpoint call with
         ''' count=1 at AnchorMs resolves the first sequence, then it pages by sequence.</summary>
         AnchoredTail
+        ''' <summary>[DUP-2] The month file's scan FAILED. Carries the failure text; nothing is
+        ''' fetched for the file, and the pass reads PASS_FAILED. Never treat it as an empty store.</summary>
+        ScanFailure
+        ''' <summary>[DUP-2] The F-1 previous-month seed read FAILED. Emitted first; the current
+        ''' file's own holes and tail follow, with no cross-month hole.</summary>
+        SeedReadFailure
     End Enum
 
     ''' <summary>
@@ -779,6 +785,8 @@ Public NotInheritable Class TradeStoreWriter
         ''' fetching.</summary>
         Public LeftTsMs As Long
         Public RightTsMs As Long
+        ''' <summary>[DUP-2] Failure kinds only: "&lt;ExceptionType&gt;: &lt;message&gt;".</summary>
+        Public Failure As String
 
         ''' <summary>Holes only: sequences the hole is missing — the MaxHolesPerPass ranking key.
         ''' 0 for a tail.</summary>
@@ -791,7 +799,7 @@ Public NotInheritable Class TradeStoreWriter
 
         Public Shared Function ForHole(prevSeq As Long, prevTsMs As Long,
                                        curSeq As Long, curTsMs As Long) As RepairWindow
-            Dim w As RepairWindow
+            Dim w As New RepairWindow()
             w.Kind = RepairWindowKind.Hole
             w.FirstSeq = prevSeq + 1L
             w.LastSeq = curSeq - 1L
@@ -801,7 +809,7 @@ Public NotInheritable Class TradeStoreWriter
         End Function
 
         Public Shared Function ForTail(lastStoredSeq As Long, stopAfterMs As Long) As RepairWindow
-            Dim w As RepairWindow
+            Dim w As New RepairWindow()
             w.Kind = RepairWindowKind.Tail
             w.FirstSeq = lastStoredSeq + 1L
             w.LastSeq = AbsentSeq
@@ -810,12 +818,30 @@ Public NotInheritable Class TradeStoreWriter
         End Function
 
         Public Shared Function ForAnchoredTail(anchorMs As Long, stopAfterMs As Long) As RepairWindow
-            Dim w As RepairWindow
+            Dim w As New RepairWindow()
             w.Kind = RepairWindowKind.AnchoredTail
             w.FirstSeq = AbsentSeq
             w.LastSeq = AbsentSeq
             w.AnchorMs = anchorMs
             w.StopAfterMs = stopAfterMs
+            Return w
+        End Function
+
+        Public Shared Function ForScanFailure(failure As String) As RepairWindow
+            Dim w As New RepairWindow()
+            w.Kind = RepairWindowKind.ScanFailure
+            w.FirstSeq = AbsentSeq
+            w.LastSeq = AbsentSeq
+            w.Failure = failure
+            Return w
+        End Function
+
+        Public Shared Function ForSeedReadFailure(failure As String) As RepairWindow
+            Dim w As New RepairWindow()
+            w.Kind = RepairWindowKind.SeedReadFailure
+            w.FirstSeq = AbsentSeq
+            w.LastSeq = AbsentSeq
+            w.Failure = failure
             Return w
         End Function
     End Structure
@@ -841,6 +867,8 @@ Public NotInheritable Class TradeStoreWriter
         Public Const FetchFailed As String = "FETCH_FAILED"
         Public Const PageCap As String = "PAGE_CAP"
         Public Const NoProgress As String = "NO_PROGRESS"
+        Public Const ScanFailed As String = "SCAN_FAILED"
+        Public Const SeedReadFailed As String = "SEED_READ_FAILED"
 
         ''' <summary>The month file this window repaired (file name only).</summary>
         Public Property FileName As String = ""
@@ -872,7 +900,8 @@ Public NotInheritable Class TradeStoreWriter
 
         Public ReadOnly Property IsFailure As Boolean
             Get
-                Return State = FetchFailed OrElse State = PageCap OrElse State = NoProgress
+                Return State = FetchFailed OrElse State = PageCap OrElse State = NoProgress OrElse
+                       State = ScanFailed OrElse State = SeedReadFailed
             End Get
         End Property
     End Class
@@ -928,7 +957,16 @@ Public NotInheritable Class TradeStoreWriter
 
         ' ── 1. Scan ───────────────────────────────────────────────────────────────────
         Dim truncated As Boolean = False
-        Dim rows As List(Of SeqPoint) = ScanForRepair(path, segStartMs, maxScanRows, truncated)
+        Dim scanFailure As String = Nothing
+        Dim rows As List(Of SeqPoint) = ScanForRepair(path, segStartMs, maxScanRows, truncated, scanFailure)
+        ' ⛔ [DUP-1/DUP-2] A FAILED scan is not an empty store. Reading it as one made three September
+        ' passes re-fetch and re-append the whole 20 h lookback (298,932 duplicate rows,
+        ' docs/trade-store-duplicate-rows-read-2026-09-15.md). Fetch nothing for this file, say so,
+        ' and let the next pass retry.
+        If scanFailure IsNot Nothing Then
+            result.Add(RepairWindow.ForScanFailure(scanFailure))
+            Return result
+        End If
 
         ' ── 1b. [F-1] Seed a cross-month bracket (docs/gap-repair-cross-month-gap-spec.md §2) ──
         ' ⛔ WHY. ScanForRepair reads ONE month file, and a September file never holds an August
@@ -958,17 +996,25 @@ Public NotInheritable Class TradeStoreWriter
         If Not truncated AndAlso rows.Count > 0 AndAlso Not String.IsNullOrWhiteSpace(previousMonthPath) AndAlso
            Not rows.Exists(Function(r) r.TsMs < segStartMs) Then
             Dim prevTruncated As Boolean = False
-            Dim prevRows As List(Of SeqPoint) = ScanForRepair(previousMonthPath, segStartMs, maxScanRows, prevTruncated)
-            Dim haveSeed As Boolean = False
-            Dim seed As SeqPoint
-            For Each p In prevRows
-                If p.TsMs >= segStartMs Then Continue For
-                If Not haveSeed OrElse p.TsMs > seed.TsMs OrElse (p.TsMs = seed.TsMs AndAlso p.Seq > seed.Seq) Then
-                    seed = p
-                    haveSeed = True
-                End If
-            Next
-            If haveSeed Then rows.Add(seed)
+            Dim prevFailure As String = Nothing
+            Dim prevRows As List(Of SeqPoint) = ScanForRepair(previousMonthPath, segStartMs, maxScanRows, prevTruncated, prevFailure)
+            If prevFailure IsNot Nothing Then
+                ' ⛔ [DUP-2, SF-3] A failed seed read is LOUD, never a silent fall back to single-file
+                ' behaviour. This file's own holes and tail still run — without a seed there is no
+                ' cross-month hole, so nothing phantom — and the pass reads PASS_FAILED.
+                result.Add(RepairWindow.ForSeedReadFailure(prevFailure))
+            Else
+                Dim haveSeed As Boolean = False
+                Dim seed As SeqPoint
+                For Each p In prevRows
+                    If p.TsMs >= segStartMs Then Continue For
+                    If Not haveSeed OrElse p.TsMs > seed.TsMs OrElse (p.TsMs = seed.TsMs AndAlso p.Seq > seed.Seq) Then
+                        seed = p
+                        haveSeed = True
+                    End If
+                Next
+                If haveSeed Then rows.Add(seed)
+            End If
         End If
 
         ' ── 2. Sort. ⚠ TRAP 1, AND IT IS NON-NEGOTIABLE ───────────────────────────────
@@ -1105,9 +1151,11 @@ Public NotInheritable Class TradeStoreWriter
     ''' Missing / unreadable file ⇒ empty list, never throws — the ReadTradeFile discipline.
     ''' </summary>
     Friend Shared Function ScanForRepair(path As String, segStartMs As Long, maxScanRows As Integer,
-                                         ByRef truncated As Boolean) As List(Of SeqPoint)
+                                         ByRef truncated As Boolean, ByRef failure As String) As List(Of SeqPoint)
         Dim inWindow As New List(Of SeqPoint)()
         truncated = False
+        failure = Nothing
+        ' A missing file is NOT a failure: a month file does not exist before its first trade (SF-6).
         If String.IsNullOrWhiteSpace(path) OrElse Not File.Exists(path) Then Return inWindow
 
         Dim haveBracket As Boolean = False
@@ -1117,7 +1165,13 @@ Public NotInheritable Class TradeStoreWriter
         Dim floorMs As Long? = Nothing
 
         Try
-            Using sr As New StreamReader(path)
+            ' [DUP-2] Share mode ReadWrite (OpenStoreForScan), so this scan opens beside a streaming
+            ' flush and the flush opens beside this scan. ⛔ SF-8: read only to the last line feed
+            ' present at open — a row still being appended, or torn by a crash, is not read. A row
+            ' torn inside its trade_seq would parse as a TINY seq and start a tail at the venue's
+            ' retention edge.
+            Using fs As FileStream = OpenStoreForScan(path),
+                  sr As New StreamReader(New BoundedReadStream(fs, LastCompleteLineEnd(fs)))
                 sr.ReadLine()   ' header
                 Dim line As String
                 Do
@@ -1162,7 +1216,13 @@ Public NotInheritable Class TradeStoreWriter
                 Loop
             End Using
         Catch ex As Exception
-            Console.Error.WriteLine("[TradeStoreWriter] ScanForRepair failed: " & ex.Message)
+            ' ⛔ [DUP-1/DUP-2, SF-4] Report it, and discard EVERYTHING read so far. The rows before the
+            ' exception are no rows or an old bracket — exactly what made a pass re-fetch its whole
+            ' lookback. The caller turns this into SCAN_FAILED; it must never look like an empty store.
+            failure = ex.GetType().Name & ": " & ex.Message
+            Console.Error.WriteLine("[TradeStoreWriter] ScanForRepair failed: " & failure)
+            truncated = False
+            Return New List(Of SeqPoint)()
         End Try
 
         ' ⚠ A truncated scan invalidates the bracket. The rows the cap discarded sit BELOW the
@@ -1172,6 +1232,103 @@ Public NotInheritable Class TradeStoreWriter
         If haveBracket AndAlso Not truncated Then inWindow.Add(bracket)
         Return inWindow
     End Function
+
+    ''' <summary>[DUP-2] How the repair path opens a store file: read access, share mode ReadWrite.
+    ''' A plain StreamReader shares Read only — it cannot open while the streaming writer holds the
+    ''' file, and while it is open the writer's own open fails and AppendRows drops the batch (B-3,
+    ''' both halves). Friend so A79o holds exactly this handle.</summary>
+    Friend Shared Function OpenStoreForScan(path As String) As FileStream
+        Return New FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)
+    End Function
+
+    ''' <summary>[DUP-2, SF-8] Bytes up to and including the last line feed present now. Rows are
+    ''' ~60 bytes, so the last 64 KB always holds one unless the file has no complete row there.</summary>
+    Friend Shared Function LastCompleteLineEnd(fs As FileStream) As Long
+        Dim len As Long = fs.Length
+        If len <= 0 Then Return 0L
+        Dim block As Integer = CInt(Math.Min(65536L, len))
+        fs.Position = len - block
+        Dim buf(block - 1) As Byte
+        Dim got As Integer = 0
+        While got < block
+            Dim n As Integer = fs.Read(buf, got, block - got)
+            If n <= 0 Then Exit While
+            got += n
+        End While
+        fs.Position = 0
+        For i As Integer = got - 1 To 0 Step -1
+            If buf(i) = 10 Then Return len - block + i + 1
+        Next
+        Return len - block
+    End Function
+
+    ' A read-only view of the first `limit` bytes of a stream. It never disposes the inner stream.
+    Private NotInheritable Class BoundedReadStream
+        Inherits Stream
+
+        Private ReadOnly _inner As Stream
+        Private _remaining As Long
+
+        Public Sub New(inner As Stream, limit As Long)
+            _inner = inner
+            _remaining = Math.Max(0L, limit)
+        End Sub
+
+        Public Overrides ReadOnly Property CanRead As Boolean
+            Get
+                Return True
+            End Get
+        End Property
+
+        Public Overrides ReadOnly Property CanSeek As Boolean
+            Get
+                Return False
+            End Get
+        End Property
+
+        Public Overrides ReadOnly Property CanWrite As Boolean
+            Get
+                Return False
+            End Get
+        End Property
+
+        Public Overrides ReadOnly Property Length As Long
+            Get
+                Throw New NotSupportedException()
+            End Get
+        End Property
+
+        Public Overrides Property Position As Long
+            Get
+                Throw New NotSupportedException()
+            End Get
+            Set(value As Long)
+                Throw New NotSupportedException()
+            End Set
+        End Property
+
+        Public Overrides Sub Flush()
+        End Sub
+
+        Public Overrides Function Read(buffer() As Byte, offset As Integer, count As Integer) As Integer
+            If _remaining <= 0 OrElse count <= 0 Then Return 0
+            Dim n As Integer = _inner.Read(buffer, offset, CInt(Math.Min(CLng(count), _remaining)))
+            If n > 0 Then _remaining -= n
+            Return n
+        End Function
+
+        Public Overrides Function Seek(offset As Long, origin As SeekOrigin) As Long
+            Throw New NotSupportedException()
+        End Function
+
+        Public Overrides Sub SetLength(value As Long)
+            Throw New NotSupportedException()
+        End Sub
+
+        Public Overrides Sub Write(buffer() As Byte, offset As Integer, count As Integer)
+            Throw New NotSupportedException()
+        End Sub
+    End Class
 
     ''' <summary>
     ''' Append rows to the store, splitting by calendar month so a batch straddling a month
