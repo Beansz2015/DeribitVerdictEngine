@@ -326,6 +326,13 @@ Public Module SwingFallbackReadProgram
             sigs.Add(s)
         Next
 
+        ' ---- --mode pocgate: the POC-tier gate defect measurement (PocGateDefect.vb). Default mode unchanged.
+        If ArgOr(a, "mode", "swing").Equals("pocgate", StringComparison.OrdinalIgnoreCase) Then
+            Dim pgOut As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "poc-gate-defect-output.md"))))
+            Return Await RunPocGateAsync(o, cfg, root, cacheDir, pooledPath, livePath, merged, sigs, collectorStart, collectorIds,
+                                         weekOpenHour, weekCloseHourExcl, pgOut)
+        End If
+
         ' ---- candles + funding
         Dim spanStart As DateTime = sigs.Min(Function(x) x.RowMin)
         Dim spanEnd As DateTime = sigs.Max(Function(x) x.WeekEnd)

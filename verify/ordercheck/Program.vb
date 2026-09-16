@@ -731,6 +731,12 @@ Module Program
         A79o_StreamingFlushIsNotDroppedBesideAHeldRepairScan()
         A79p_TornFinalRowIsNotReadAsATinySeq()
 
+        ' [A80 — VPFR NEAR_HVN label geometry vs the POC-tier gate that reads it (MEDIUM-tier bug hunt,
+        '   docs/medium-tier-bug-hunt-2026-09-16.md). A80a pins the producer's label geometry. A80b is a
+        '   KNOWN-DEFECT REPRO: it runs only with ORDERCHECK_KNOWN_DEFECTS=1 and FAILS on the shipped gate.]
+        A80a_VpfrNearHvnLabelsPinnedToPocSide()
+        A80b_PocGateOpensOnTheWallSideItsSpecNames()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -15527,6 +15533,159 @@ Module Program
             Catch
             End Try
         End Try
+    End Sub
+
+    ' =======================================================================
+    ' A80 — VPFR NEAR_HVN label geometry vs the POC-tier gate that reads it.
+    ' MEDIUM-tier bug hunt, session 1: docs/medium-tier-bug-hunt-2026-09-16.md.
+    '
+    ' The label producer and the gate disagree on what NEAR_HVN_SUPPORT / NEAR_HVN_RESIST mean:
+    '   * CalcVPFRLite (Core/Indicators_Structure.vb:171-176) and its spec at introduction
+    '     (508f33d): NEAR_HVN_SUPPORT = price within proximity BELOW the POC, so the POC sits ABOVE
+    '     price; NEAR_HVN_RESIST = price at or ABOVE the POC, so the POC sits BELOW price.
+    '   * The POC-tier gate (Core/SignalEmitter.vb:330-332; legacy twin at
+    '     Core/ScoringEngine_Calculate_Verdict.vb:223-224) and its spec at introduction (721882e):
+    '     "Long: NEAR_HVN_RESIST or IN_LVN_BEAR (wall above price)". So the long gate opens on the
+    '     NEAR_HVN label that puts the POC BELOW price, where pocDist <= 0 and the tier can never
+    '     place, and stays shut on the label that puts the POC ABOVE price. Mirror for short.
+    ' A26b does not see this: it hand-sets VPFRSignal = "NEAR_HVN_RESIST" with the POC above price,
+    ' a state CalcVPFRLite never emits. Both A80 fixtures build r from the REAL producer.
+    '
+    ' A80a PINS the producer geometry (passes on the shipped code).
+    ' A80b is a KNOWN-DEFECT REPRO of the gate's documented intent. It FAILS on the shipped code and
+    ' runs only with ORDERCHECK_KNOWN_DEFECTS=1, so the default gate run stays ALL PASS while the
+    ' trader rules. Reverse mutation (docs/medium-tier-bug-hunt-spec-back.md): swapping
+    ' NEAR_HVN_SUPPORT and NEAR_HVN_RESIST in a scratch copy of SignalEmitter.vb lines 331-332 makes
+    ' A80b PASS, so the fixture can pass as well as fail.
+    '
+    ' [Fixture-literal provenance, CLAUDE.md RULED 2026-08-11]
+    '   SHIPPED BEHAVIOUR: every settings value (the six VPFR keys, structural_levels.enabled and
+    '   target_max_atr_mult, the fallback target multiplier) is read from the TRACKED settings.json.
+    '   MECHANISM: the candle profile (range 99000-101000, volume 10 on 30 bars in the middle
+    '   bucket), the price offsets (0.375 of a bucket either side of the POC) and ATR (half a bucket)
+    '   only place price inside the POC bucket on a chosen side, inside the target bound and clear of
+    '   the fallback target. They are expressed in bucket units derived from cfg, and A80b checks that
+    '   geometry loudly instead of assuming it.
+    ' =======================================================================
+
+    Private Function A80ShippedCfg(ByRef errorMsg As String) As EngineSettings
+        Dim root As String = A62RequireSettingsRoot(AppContext.BaseDirectory, errorMsg)
+        If root Is Nothing Then Return Nothing
+        Return JsonSerializer.Deserialize(Of EngineSettings)(
+            File.ReadAllText(Path.Combine(root, "settings.json")),
+            New JsonSerializerOptions With {.PropertyNameCaseInsensitive = True})
+    End Function
+
+    ''' <summary>MECHANISM profile: nearly all decayed volume sits in the middle bucket, so that bucket
+    ''' is the POC and the only HVN. Two near-zero-volume bars pin the price range.</summary>
+    Private Function A80Profile(cfg As EngineSettings, ByRef bucketSize As Double, ByRef pocCentre As Double) As List(Of Candle)
+        Const RangeLow As Double = 99000.0
+        Const RangeHigh As Double = 101000.0
+        Dim nb As Integer = cfg.Indicators.VPFR.NumBuckets
+        bucketSize = (RangeHigh - RangeLow) / nb
+        pocCentre = RangeLow + (nb \ 2 + 0.5) * bucketSize
+        Dim cs As New List(Of Candle) From {
+            New Candle With {.Timestamp = 0L, .Open = RangeLow + 1, .High = RangeLow + 2, .Low = RangeLow, .Close = RangeLow + 1, .Volume = 0.0001},
+            New Candle With {.Timestamp = 60000L, .Open = RangeHigh - 1, .High = RangeHigh, .Low = RangeHigh - 2, .Close = RangeHigh - 1, .Volume = 0.0001}}
+        For i As Integer = 0 To 29
+            cs.Add(New Candle With {.Timestamp = 120000L + i * 60000L, .Open = pocCentre,
+                                    .High = pocCentre + bucketSize / 4, .Low = pocCentre - bucketSize / 4,
+                                    .Close = pocCentre, .Volume = 10.0})
+        Next
+        Return cs
+    End Function
+
+    ''' <summary>Runs the shipped CalcVPFRLite with the tracked VPFR keys and copies every output onto
+    ''' a fresh IndicatorResults at the given price.</summary>
+    Private Function A80RunVpfr(cfg As EngineSettings, candles As List(Of Candle), price As Double) As IndicatorResults
+        Dim poc As Double = 0, nearPoc As Boolean = False, sig As String = ""
+        Dim vah As Double = 0, vaLow As Double = 0, vaSig As String = ""
+        Dim hvnA As Double = 0, hvnB As Double = 0, lvnA As Double = 0, lvnB As Double = 0
+        Dim vols As Double() = Nothing, bLow As Double = 0, bSize As Double = 0
+        Dim v = cfg.Indicators.VPFR
+        IndicatorEngine.CalcVPFRLite(candles, price, poc, nearPoc, sig, vah, vaLow, vaSig,
+                                     hvnA, hvnB, lvnA, lvnB, vols, bLow, bSize,
+                                     numBuckets:=v.NumBuckets, hvnVolPct:=v.HvnVolPct, lvnVolPct:=v.LvnVolPct,
+                                     hvnProximityPct:=v.HvnProximityPct, decayBase:=v.DecayBase,
+                                     valueAreaPct:=v.ValueAreaPct)
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = price
+        r.VPFRPoc = poc : r.VPFRHVNearPoc = nearPoc : r.VPFRSignal = sig
+        r.VPFRVah = vah : r.VPFRVal = vaLow : r.VPFRValueAreaSignal = vaSig
+        r.VPFRNearestHvnAbove = hvnA : r.VPFRNearestHvnBelow = hvnB
+        r.VPFRNearestLvnAbove = lvnA : r.VPFRNearestLvnBelow = lvnB
+        Return r
+    End Function
+
+    Private Sub A80a_VpfrNearHvnLabelsPinnedToPocSide()
+        Dim errorMsg As String = ""
+        Dim cfg = A80ShippedCfg(errorMsg)
+        If cfg Is Nothing Then
+            Check("A80a tracked settings.json located", False, errorMsg)
+            Return
+        End If
+        Dim bs As Double = 0, poc As Double = 0
+        Dim candles = A80Profile(cfg, bs, poc)
+
+        Dim rBelow = A80RunVpfr(cfg, candles, poc - 0.375 * bs)
+        Check("A80a price inside the POC bucket BELOW the POC → NEAR_HVN_SUPPORT, and the POC sits ABOVE price",
+              rBelow.VPFRSignal = "NEAR_HVN_SUPPORT" AndAlso rBelow.VPFRPoc > rBelow.CurrentPrice AndAlso
+              Math.Abs(rBelow.VPFRPoc - poc) < 0.000001 AndAlso
+              rBelow.VPFRNearestHvnAbove = 0 AndAlso rBelow.VPFRNearestHvnBelow = 0,
+              String.Format(CultureInfo.InvariantCulture, "signal={0} poc={1} price={2} hvnAbove={3} hvnBelow={4}",
+                            rBelow.VPFRSignal, rBelow.VPFRPoc, rBelow.CurrentPrice, rBelow.VPFRNearestHvnAbove, rBelow.VPFRNearestHvnBelow))
+
+        Dim rAbove = A80RunVpfr(cfg, candles, poc + 0.375 * bs)
+        Check("A80a price inside the POC bucket ABOVE the POC → NEAR_HVN_RESIST, and the POC sits BELOW price",
+              rAbove.VPFRSignal = "NEAR_HVN_RESIST" AndAlso rAbove.VPFRPoc < rAbove.CurrentPrice AndAlso
+              Math.Abs(rAbove.VPFRPoc - poc) < 0.000001 AndAlso
+              rAbove.VPFRNearestHvnAbove = 0 AndAlso rAbove.VPFRNearestHvnBelow = 0,
+              String.Format(CultureInfo.InvariantCulture, "signal={0} poc={1} price={2} hvnAbove={3} hvnBelow={4}",
+                            rAbove.VPFRSignal, rAbove.VPFRPoc, rAbove.CurrentPrice, rAbove.VPFRNearestHvnAbove, rAbove.VPFRNearestHvnBelow))
+    End Sub
+
+    Private Sub A80b_PocGateOpensOnTheWallSideItsSpecNames()
+        If Environment.GetEnvironmentVariable("ORDERCHECK_KNOWN_DEFECTS") <> "1" Then
+            Console.WriteLine("SKIP  A80b known-defect repro (the POC-tier gate reads the NEAR_HVN labels with inverted geometry) — set ORDERCHECK_KNOWN_DEFECTS=1 to run; docs/medium-tier-bug-hunt-2026-09-16.md")
+            Return
+        End If
+        Dim errorMsg As String = ""
+        Dim cfg = A80ShippedCfg(errorMsg)
+        If cfg Is Nothing Then
+            Check("A80b tracked settings.json located", False, errorMsg)
+            Return
+        End If
+        Dim bs As Double = 0, poc As Double = 0
+        Dim candles = A80Profile(cfg, bs, poc)
+        Dim sl = cfg.Scoring.StructuralLevels
+
+        For Each isLong As Boolean In {True, False}
+            Dim side As String = If(isLong, "long", "short")
+            Dim r = A80RunVpfr(cfg, candles, If(isLong, poc - 0.375 * bs, poc + 0.375 * bs))
+            r.ATR = bs / 2.0
+            r.SessionUtcHour = -1
+            Dim pocDist As Double = Math.Abs(poc - r.CurrentPrice)
+            Dim fallbackDist As Double = r.ATR * ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, r.SessionUtcHour)
+            Dim bound As Double = If(sl Is Nothing, 0.0, sl.TargetMaxAtrMult * r.ATR)
+            Dim geometryOk As Boolean = sl IsNot Nothing AndAlso sl.Enabled AndAlso pocDist <= bound AndAlso
+                                        Math.Abs(fallbackDist - pocDist) >= Math.Max(SignalEmitter.TickSize, r.ATR * 0.02) AndAlso
+                                        r.VPFRNearestHvnAbove = 0 AndAlso r.VPFRNearestHvnBelow = 0
+            If Not geometryOk Then
+                Check("A80b " & side & " fixture geometry valid under the tracked structural_levels", False,
+                      String.Format(CultureInfo.InvariantCulture, "pocDist={0} bound={1} fallbackDist={2} hvnAbove={3} hvnBelow={4}",
+                                    pocDist, bound, fallbackDist, r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow))
+                Continue For
+            End If
+            Dim lv = SignalEmitter.ComputeSideLevels(New VerdictResult(), r, cfg, isLong)
+            Check(String.Format(CultureInfo.InvariantCulture,
+                    "A80b {0}: the POC is the only structure on the target side ({1:F1} vs entry {2:F1}, label {3}) → the HVN-gated POC tier places at it, as 721882e specifies ('{4}')",
+                    side, poc, r.CurrentPrice, r.VPFRSignal, If(isLong, "wall above price", "floor below price")),
+                  lv.TargetReason = "POC" AndAlso Math.Abs(lv.Target - poc) < 0.000001,
+                  String.Format(CultureInfo.InvariantCulture,
+                    "KNOWN DEFECT: got target {0:F1} ({1}). Core/SignalEmitter.vb:{2} opens the {3} POC tier only on {4}, which CalcVPFRLite emits when the POC sits on the OTHER side of price",
+                    lv.Target, lv.TargetReason, If(isLong, 331, 332), side,
+                    If(isLong, "NEAR_HVN_RESIST or IN_LVN_BEAR", "NEAR_HVN_SUPPORT or IN_LVN_BULL")))
+        Next
     End Sub
 
 End Module
