@@ -29,9 +29,10 @@
 | `RIDER-6` | `SettingsLoadError` column | `RD-1` = (b), trader 2026-09-13 — build spec §9 | ⭐ **TRAVELLING** — S2 | header |
 | `RIDER-7` | `RecentTradeCount` column | [`thin-trade-window-skip-gate-proposal.md`](thin-trade-window-skip-gate-proposal.md) `D-5` (ticked) | ⛔ **LOST on the 2026-09-01 rotation — never listed anywhere. Found 2026-09-13 by sweeping specs for deferrals.** ⭐ **TRAVELLING** — S2, **confirmed by the trader 2026-09-14** | header |
 | `RIDER-8` | Cross-venue lead-lag CSV columns | [`cross-venue-lead-lag-proposal.md`](cross-venue-lead-lag-proposal.md) `D6` | ⏸ **CONDITIONAL — does NOT ride S2.** The feature is not scheduled, and its column names are not specified. **If roadmap item W6-7 is scheduled, its spec names the columns and they ride the next rotation after that** | — |
+| `RIDER-9` | `VPFRSignal` and `VPFRPoc` columns: the volume-profile label and POC the scoring vote and the placed-target POC tier read | Trader-ruled 2026-09-16 on the orchestrator's read; source finding [`medium-tier-bug-hunt-spec-back.md`](medium-tier-bug-hunt-spec-back.md) §R.6.4 (the main unlogged input behind the re-score mismatches, driven by the forming bar) | ⭐ **TRAVELLING** — S2 | header |
 | ~~`change_log` v64 reversibility wording~~ | A settings-touch rider, not a CSV rider | queue §3 | ✅ **CONSUMED 2026-08-02** with D3 / v65 — kept for history | — |
 
-⚠ **The S2 commit must mark `RIDER-1` to `RIDER-7` `CONSUMED`, with its commit hash.**
+⚠ **The S2 commit must mark `RIDER-1` to `RIDER-7` and `RIDER-9` `CONSUMED`, with its commit hash.**
 
 ---
 
