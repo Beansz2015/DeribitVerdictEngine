@@ -444,7 +444,8 @@ Items not currently scheduled but with concrete promotion conditions.
 
 **P10. POC tier of the target ladder rarely places.**
 *Condition:* if 1000+ directional runs show 0 rows whose `TargetCapReason` is the POC tier, AND the HVN-proximity gate on POC is the bottleneck (rather than a swing or HVN candidate taking priority). Since v51 the ladder is structural-first and POC keeps the legacy HVN gate (`SignalEmitter.ComputeSideLevels`). The 2026-05-17 investigation (before v51) found the path reachable but narrow.
-*Action:* consider removing the HVN gate so POC places as a true "no swing + no HVN" fallback. Re-spec if pursued. Original text: [`history-archive.md` §J, `trim-2026-09-14b-10`](history-archive.md#trim-2026-09-14b-10)
+*Action:* consider removing the HVN gate so POC places as a true "no swing + no HVN" fallback. Re-spec if pursued.
+⛔ **2026-09-16: condition met, and the cause is a DEFECT, not narrowness.** The gate reads the VPFR labels inverted, so the POC tier placed 0 targets in 38,665 verified rows. Evidence: [`medium-tier-bug-hunt-2026-09-16.md`](medium-tier-bug-hunt-2026-09-16.md). Fix options (follow the spec · remove the gate · keep and document) are trader ruling `D-1` in [`medium-tier-bug-hunt-spec-back.md`](medium-tier-bug-hunt-spec-back.md) §3. Original text: [`history-archive.md` §J, `trim-2026-09-14b-10`](history-archive.md#trim-2026-09-14b-10)
 
 **P11. ATR-band recalibration for the current price regime.** RESOLVED 2026-06-17 (settings v37): `static_ref` 115 to 38, and the trader-profile ATR bands recalibrated (current bands: `trader-profile.md` §5, the ATR thresholds block, which is their single home). Full text: [`history-archive.md` §I, `trim-2026-09-14-34`](history-archive.md#trim-2026-09-14-34).
 
