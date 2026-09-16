@@ -209,3 +209,175 @@ ORDERCHECK_KNOWN_DEFECTS=1 dotnet run --project verify/ordercheck/OrderCheck.vbp
 ```
 
 - The instrument reads the gitignored inputs and writes `backtest_data/swing-fallback-read/poc-gate-defect-output.md`. A first run without the candle cache fetches about 83,000 bars from Deribit.
+
+---
+
+## R. Resumed session — STOPPED AGAIN: the live liquidation flag never reaches scoring
+
+**Resumed:** 2026-09-16 (UTC) on the orchestrator's D-3 ruling (resume session 1), with three carry-ins: the corrected era list, a label-consumer audit in place of the vote-site audit, and the tier-floor statement for the census. Decisions D-1 and D-2 of the stop record stay with the trader; this seat did not act on them. **Full instrument output:** [`docs/medium-tier-bug-hunt-2026-09-16-liquidation-output.md`](medium-tier-bug-hunt-2026-09-16-liquidation-output.md) ("liquidation output §N" below).
+
+**Legend. IDs added in this section:**
+
+| ID | Source and kind | Meaning |
+|---|---|---|
+| `L-1` | This section, stop-class finding | The WebSocket trade stream never delivers the `liquidation` flag, so the liquidation penalty never fires |
+| `L-2` | This section, stop-class finding | `CalcLiquidations` books a maker-side (`M`) liquidation on the taker's side |
+| `L-3` | This section, documentation finding | `large_liq_size` is written as BTC in the manual but compared with USD sums |
+| `DOC-1`, `DOC-3` | This section, documentation findings | `docs/UserManual.md` line 1200 (spread side rule) and line 967 (VPFR geometry, already the stop record's D-2) contradict their specs |
+| `ALERT-1` | This section, display/alert finding | The liquidation cascade alarm inherits `L-1` and `L-2` |
+| `DESIGN-1` | This section, design-claim finding | `docs/websocket-migration-proposal.md` line 43 says the trade fields, liquidation included, "map 1:1" |
+| `DATA-1` | This section, data finding | The trade store holds two copies of 93 liquidation trades that differ only in the flag |
+| `A81a` / `A81b` | Harness fixtures, `verify/ordercheck/Program.vb` (added by this seat) | `A81a` pins the taker-side (`T`) mapping. `A81b` is the known-defect repro for the maker-side (`M`) flag; it runs only with `ORDERCHECK_KNOWN_DEFECTS=1` |
+
+### R.1 Verdict
+
+- **Stopped again**, under the orchestrator's rule: a label consumer that feeds scores disagrees with its producer. Two findings qualify: `L-1` and `L-2`.
+- **`L-1`, the material one:** on the live WebSocket path every liquidation trade reaches `CalcLiquidations` with flag `none`. `LiqSignal` is `NONE` on **51,107 of 51,107** merged rows since the v51 edge and **8,810 of 8,810** population rows. The liquidation penalty, a PREFERRED signal in `docs/trader-profile.md` ("Cascade detection. Penalty-only signal"), has never applied in the book.
+- **`L-2`, latent:** `CalcLiquidations` books a maker-side liquidation on the wrong side. 1 such trade in the store span; **0** rows affected.
+- **Not started (stopped):** the re-score reconstruction, the mirror-symmetry fixtures and the demotion census (`docs/medium-tier-diagnosis-brief-2026-09-16.md` §2.1, §2.2, §2.4).
+- **Done before the stop:** the whole label-consumer audit (section R.4 of this doc), the era confirmation (R.6) and the tier-floor statement (R.7).
+- **My read (hypothesis): neither finding explains the MEDIUM gap.** The liquidation vote is absent from every tier alike.
+
+### R.2 `L-1` — the live stream drops the liquidation flag
+
+| Evidence (liquidation output §1-§3, §5) | Result |
+|---|---|
+| Liquidation-flagged rows in the collector's trade store (2026-07-31 21:49 to 2026-09-13 15:36 UTC) | 97 (T buy 14, T sell 82, M buy 1) |
+| ... with an identical copy (same timestamp, price, amount, direction) flagged `none` | 93 |
+| ... where the `none` copy was appended EARLIER in the same file, i.e. the streamed copy | 93 |
+| ... where both copies carry a trade id, and the ids are equal | 91 of 91 |
+| Collector log rows in the store span | 36,327 |
+| ... whose 500-trade window holds at least one liquidation trade (copies collapsed) | **32** (19 directional verdicts, 13 NO TRADE) |
+| ... that logged `LiqSignal` other than `NONE`, or a non-zero liquidation size | **0** |
+| Merged rows since the v51 edge with `LiqSignal` other than `NONE` | 0 of 51,107 |
+
+- **Mechanism, verified in code:** `DeribitWsFeed.vb:488` reads `liquidation` from each streamed trade and writes `none` when the key is absent. `MarketState.AppendTrade`, `MarketState.GetTrades` and `WsMarketDataSource.GetRecentTradesAsync` pass that same record to `CalcLiquidations` unchanged. So the streamed copies carrying `none` are what scoring saw.
+- **Where the real flags came from:** a later REST copy of the same trade (same trade id), appended to the store after the streamed one. Deribit's REST trade endpoint documents the `liquidation` field.
+- **Not verified:** whether Deribit's `trades.BTC-PERPETUAL.100ms` channel never sends the field or sends it under another name. The channel page could not be fetched. The data shows only that the stream parse never kept it.
+- **Share of rows:** 32 of 36,327 collector rows in the store span (0.09 %) had a liquidation to score. Before 2026-07-31 21:49 UTC there is no store to measure. `NONE` on every earlier row is consistent with the same defect, but that is inferred, not measured.
+- **What each row lost is not measured:** the penalty side depends on which side was liquidated, and whether a verdict would change needs the re-score, which is not started.
+- **No failing harness fixture is possible:** `DeribitWsFeed` needs a live socket and is not linked into `verify/ordercheck`. The failing check is the data instrument `--mode liqflag` (section R.8 of this doc).
+
+### R.3 `L-2` — a maker-side liquidation is booked on the taker's side
+
+- **Producer contract, verified:** Deribit `public/get_last_trades_by_instrument` says `direction` is the "Trade direction of the taker", and `liquidation` is "M" when the maker side of the trade was under liquidation, "T" when the taker side was, "MT" when both.
+- **Consumer:** `Core/Indicators_OrderFlow.vb:268-272` books every flagged trade by the taker's direction. That is right for `T` and wrong for `M`: a taker buy against a liquidated maker is a long being sold out, but it lands on `liqShortSize`.
+- **Failing fixture:** `A81b` fails for both sides. A scratch copy that books by the liquidated side (`(t.Direction = "buy") <> (t.Liquidation = "M")` on line 268) makes `A81b` pass. The tracked file was not edited: blob `1f8dd1060c686b3d1db3dda4b1485b0118f90f51` equals `HEAD`.
+- **Share of rows:** 1 maker-side liquidation in the store span (2026-09-11 12:30:07 UTC, taker buy, 20 USD); **0** collector rows had it in their window (liquidation output §4). `MT` is not handled either; 0 occurrences.
+
+### R.4 Label-consumer audit
+
+- **Scope:** every read of a direction-bearing label or signal string in `Core/ScoringEngine_Calculate_Scoring.vb`, `Core/ScoringEngine_Calculate_Verdict.vb`, `Core/ScoringEngine_Helpers.vb`, `Core/SignalEmitter.vb`, `ExitGuardEvaluator.vb`, `Core/AlertsTracker.vb` and `LiveMicrostructureEvaluator.vb`, plus the two places that turn the exchange's trade fields into labels.
+- **Method:** each consumer's reading is checked against the **producer function's emission geometry**, read in the producer's code, and then against the consumer's own spec where one exists.
+- **Class:** **S** = feeds scores, tiers, placed levels or the bridge payload (stop-and-report). **D** = display or alert only.
+
+| # | Consumer (file:line) | Label and what the consumer does with it | Producer (file:line): what the label means | Class | Result |
+|---|---|---|---|---|---|
+| 1 | `Core/ScoringEngine_Calculate_Scoring.vb:170-177` | `ROCSlope` RISING with ROC > 0 → long vote; partial above the magnitude | `UI/MainForm_Analysis.vb:235-239`: RISING = bar-to-bar ROC delta above the slope threshold | S | AGREES (`docs/UserManual.md` 566-569) |
+| 2 | `...Scoring.vb:193-200` | `RSIDivergence` BEARISH with RSI > 65 → −1 long; BULLISH with RSI < 35 → −1 short | `Core/Indicators_Momentum.vb:223-270`: BEARISH = price at or above an overbought swing high with lower RSI | S | AGREES (manual 597) |
+| 3 | `...Scoring.vb:254-277` | `SqueezeStatus` ACTIVE → −2 both sides; else `TTMSignal` BULL_BUILDING → +1 long, BEAR_BUILDING → +1 short | `Core/Indicators_Volatility.vb:137-143` (ACTIVE = BBW at or below the squeeze percentile); `:195-205` (BULL_BUILDING = histogram > 0 and rising) | S | AGREES (manual 768) |
+| 4 | `...Scoring.vb:280-281` | `EMAAlignment` BULL → long vote | `UI/MainForm_Analysis.vb:303-309`: 9 > 21 > 50 | S | AGREES (manual 813) |
+| 5 | `...Scoring.vb:286-289` | `OISignal` NEW LONGS / NEW SHORTS full; COVERING long partial; CAPITULATION short partial | `UI/MainForm_Analysis.vb:373-383`: OI up + price up = NEW LONGS; OI down + price up = COVERING | S | AGREES (manual 1142-1145) |
+| 6 | `...Scoring.vb:298-299` | `OFISignal` BUY DOMINANT → long vote | `Core/Indicators_OrderFlow.vb:153-163`: weighted bid ÷ ask above the buy ratio | S | AGREES (manual 1233) |
+| 7 | `...Scoring.vb:308-325` | `OFIMomentum` confirms or suppresses the OFI vote (disabled since v49) | `Core/Indicators_OrderFlow.vb:556-569`: ratio rising = RISING | S | AGREES (inert) |
+| 8 | `...Scoring.vb:328-333` | `CVDSlope` RISING with CVD > 0 → long vote; `CVDDivergence` BEARISH → −1 long | `Core/Indicators_OrderFlow.vb:335-351`: BEARISH = last bar up with net CVD < 0 | S | AGREES (manual 1313-1315) |
+| 9 | `...Scoring.vb:336-337` | `TFISignal` BUY PRESSURE → long vote | `Core/Indicators_OrderFlow.vb:385-393`: (buy − sell) ÷ total above the threshold | S | AGREES (manual 1344) |
+| 10 | `...Scoring.vb:356-373` | `AggrVelSignal` BURST_BUY same side → +1; opposite → −1 | `Core/Indicators_OrderFlow.vb:178-181` + `Core/AggressorVelocityAccumulator.vb:139`: lean = (buy − sell) ÷ gross; lean ≥ floor = BURST_BUY | S | AGREES (`docs/history-archive.md` §E, v52 row) |
+| 11 | `...Scoring.vb:376-381` | `MicroCVDSignal` ACCEL → vote; BULL_DECEL → −1 short; BEAR_DECEL → −1 long | `Core/Indicators_OrderFlow.vb:451-482`: BULL_* = net window flow > 0 | S | AGREES (manual 1386-1390) |
+| 12 | `...Scoring.vb:385-393` | MicroCVD FLAT stall: price above VWAP with CVD ≤ 0 → −1 long | numeric inputs | S | AGREES (manual 1391-1393) |
+| 13 | `...Scoring.vb:399-407` | `LiqSignal` LONG LIQS → long penalty | `Core/Indicators_OrderFlow.vb:259-282` | S | Consumer AGREES with producer (manual 1452, 1464). **The producer's inputs are wrong: rows 41 and 42** |
+| 14 | `...Scoring.vb:417-432` | `SpreadStatus` WIDE → penalty on the ROC side; both sides when ROC is flat | `Core/Indicators_OrderFlow.vb:615-626` | S | AGREES with `docs/bid-ask-spread-proposal.md` §3b. **DOC-1:** `docs/UserManual.md` line 1200 says "dominant-side only" |
+| 15 | `...Scoring.vb:441-444`, `:606-608` | `DonchianSignal` LONG (+ PARTIAL) → vote and Pass 2c range alignment | `UI/MainForm_Analysis.vb:534-547`: close ≥ prior upper = LONG | S | AGREES (manual 883; `docs/adaptive-regime-weights-proposal.md` line 74) |
+| 16 | `...Scoring.vb:449-452`, `:511-512` | `OBVTrend` RISING without BEARISH divergence → vote; BEARISH blocks the upgrade | `Core/Indicators_Structure.vb:68-83`: BEARISH = price up, OBV down | S | AGREES (manual 916-919) |
+| 17 | `...Scoring.vb:457-458` | `VPFRSignal` NEAR_HVN_SUPPORT / IN_LVN_BULL → long vote | `Core/Indicators_Structure.vb:171-185` | S | AGREES with its own spec (commit `3afb674`). **DOC-3:** `docs/UserManual.md` line 967 (stop record D-2) |
+| 18 | `...Scoring.vb:469-473` | `VPFRValueAreaSignal` ABOVE_VAH → long partial (disabled in every era) | `Core/Indicators_Structure.vb:220-226` | S | AGREES (inert) |
+| 19 | `...Scoring.vb:528-547` | Pass 2b: OI long + CVD bullish → +1; OI long + CVD bearish → −1 | rows 5 and 8 | S | AGREES |
+| 20 | `...Scoring.vb:564-573` | Pass 2c trending: `Regime`, EMA BULL, ROC > 0, CVD bullish align with long | `UI/MainForm_Analysis.vb:256-273` (TRENDING_UP = ADX above threshold with +DI > −DI); rows 4, 8 | S | AGREES (`docs/adaptive-regime-weights-proposal.md`) |
+| 21 | `...Scoring.vb:602-605` | Pass 2c range: price above VWAP and RSI above 50 align with long | numeric inputs | S | AGREES (`docs/adaptive-regime-weights-proposal.md` lines 72-73) |
+| 22 | `...Scoring.vb:648-698` | `TrendStructure` UPTREND with long dominant → +1 | `Core/Indicators_Structure.vb:422-428`: HH + HL | S | AGREES |
+| 23 | `...Scoring.vb:714-729` | Step 3 funding thresholds: high positive → −2 long, +1 short | numeric; `FundingBias` uses the same thresholds (`UI/MainForm_Analysis.vb:314-324`) | S | AGREES (`docs/architecture.md` Step 3) |
+| 24 | `...Scoring.vb:737-764` | Step 3b: longs crowded + momentum RISING → −1 long; FALLING → +1 long; mirrors; NEUTRAL cases | `UI/MainForm_Analysis.vb:314-324`; `Core/Indicators_OrderFlow.vb:502-527` (delta above threshold = RISING) | S | AGREES (`docs/architecture.md` Step 3b) |
+| 25 | `...Scoring.vb:46-113` | `CalcVerdictContext` (payload `verdict_context`): BULL_DECEL and BULL_FADING count as long fading; swing target and stop; breakdown hit labels | rows 3, 11; `UI/MainForm_Analysis.vb:581-584` | S | AGREES (`docs/verdict-context-tag-proposal.md` 50-53) |
+| 26 | `Core/ScoringEngine_Calculate_Verdict.vb:33-78` | `Regime` veto: TRENDING_UP with short dominant → NO TRADE; TRANSITIONAL penalty | row 20 producer | S | AGREES |
+| 27 | `...Verdict.vb:99-118` | Dominant LONG reads `MTFGatePassLong` | `Core/Indicators_Structure.vb:519-520`: pass long = 15m trend not BEAR | S | AGREES |
+| 28 | `...Verdict.vb:223-224` | Legacy POC cap gate | `Core/Indicators_Structure.vb:171-176` | S | **DISAGREES** (the stop record; legacy path inactive) |
+| 29 | `Core/ScoringEngine_Helpers.vb:136-169` | Fast-exit primitives: BEAR_ACCEL / BEAR_DECEL, SELL DOMINANT, SELL PRESSURE, CVD falling and negative are adverse to a long | rows 6, 8, 9, 11 | S (payload `hold_status`) | AGREES |
+| 30 | `...Helpers.vb:189-243` | `CalcHoldStatus`: OBV BEARISH → EXIT long; RSI BEARISH → EVALUATE long; mirrors | rows 2, 16 | S (payload `hold_status`) | AGREES |
+| 31 | `Core/SignalEmitter.vb:91-96` | `DeriveDirection`: NO TRADE prefix before the direction words | verdict strings | S (payload `direction`) | AGREES |
+| 32 | `...SignalEmitter.vb:327-332` | Swing target and nearest HVN by side; `pocGated` | `UI/MainForm_Analysis.vb:581-584`; `Core/Indicators_Structure.vb:171-176` | S | Swing and HVN AGREE; **`pocGated` DISAGREES** (the stop record) |
+| 33 | `...SignalEmitter.vb:457` | Swing stop by side | `UI/MainForm_Analysis.vb:581-584` | S | AGREES |
+| 34 | `ExitGuardEvaluator.vb:120`, `:157-160` | Shared primitives; strip wording "OFI SELL" for a long | rows 6, 9, 29 | D | AGREES |
+| 35 | `Core/AlertsTracker.vb:114-169`, `:203-211` | Liquidation cascade: buy-side liquidations = "SHORTS getting stopped out" | rows 41, 42 | D | **DISAGREES** (`ALERT-1`: never fires on the stream; `M` trades on the wrong side) |
+| 36 | `Core/AlertsTracker.vb:295-317` | Nearest carried level above and below by price | price only | D | AGREES |
+| 37 | `LiveMicrostructureEvaluator.vb:161-167` | Imbalance side "bid" when ratio > 1 | row 6 producer | D | AGREES |
+| 38 | `LiveMicrostructureEvaluator.vb:187-190` | Burst tag | row 10 producer | D | AGREES |
+| 39 | `LiveMicrostructureEvaluator.vb:207-212` | Absorption tag ABSORB_ABOVE / ABSORB_BELOW | `Core/Indicators_OrderFlow.vb:208-224` | D | AGREES |
+| 40 | `LiveMicrostructureEvaluator.vb:249-280` | Bracketing levels by price | price only | D | AGREES |
+| 41 | `DeribitWsFeed.vb:488` | Streamed trade `liquidation` → `TradeRecord.Liquidation` | Deribit: flag T / M / MT on liquidation trades (REST copies carry it) | S (feeds `CalcLiquidations`) | **DISAGREES in effect: `L-1`** |
+| 42 | `Core/Indicators_OrderFlow.vb:268-272` | Flagged trade booked by taker direction | Deribit: M = maker side liquidated | S | **DISAGREES for M: `L-2`** |
+
+- **Stop-class disagreements:** rows 28 and 32 (the POC-tier gate, already reported), 41 (`L-1`) and 42 (`L-2`).
+- **Display-only disagreement:** row 35 (`ALERT-1`).
+- **Documentation and data findings, not stop-class:**
+  - `DOC-1`: `docs/UserManual.md` line 1200 contradicts `docs/bid-ask-spread-proposal.md` §3b; the code follows the spec.
+  - `DOC-3`: `docs/UserManual.md` line 967 (already stop-record D-2).
+  - `L-3`: `docs/UserManual.md` lines 1452 and 1463 call `large_liq_size` "200 BTC" (about 15 M USD). The code compares it with USD sums; every store amount is a whole 10 USD contract (liquidation output §6), and the median liquidation trade is 6,000 USD. `docs/trader-profile.md` gives the value without a unit and says to calibrate it against the logged sizes, which are USD. So the manual's unit is the error. Once `L-1` is fixed, almost every liquidation window would take the large penalty (2) instead of the standard one (1).
+  - `DESIGN-1`: `docs/websocket-migration-proposal.md` line 43 says the trade fields "map 1:1 (price, amount, direction, timestamp, liquidation)". The data contradicts that for `liquidation`.
+  - `DATA-1`: the store kept two copies of 93 liquidation trades, 91 with the same trade id, differing only in the flag. Not investigated; it belongs to the trade-store owners.
+- **Not audited:** `UI/MainForm_Render_Cards.vb` and `UI/MainForm_PlaintextSnapshot.vb` label renderings.
+
+### R.5 Producer tie asymmetries (exemptions for the mirror fixtures, when resumed)
+
+| Producer (file:line) | Exact tie | Resolves to |
+|---|---|---|
+| `Core/Indicators_OrderFlow.vb:452` `CalcMicroCVD` | net window flow = 0 | the bear branch |
+| `UI/MainForm_Analysis.vb:370` `OISignal` | price equal to the close 15 bars back | "not up" → NEW SHORTS or CAPITULATION |
+| `Core/Indicators_OrderFlow.vb:275-278` `CalcLiquidations` | long size exactly dominance × short size | LONG LIQS (≥ against >) |
+| `Core/Indicators_Structure.vb:471`, `:485-496` `CalcMTFGate` | 15m +DI = −DI | a bear vote (and the ADX-strong vote goes bear) |
+| `Core/Indicators_Structure.vb:172-182` `CalcVPFRLite` | price = POC | NEAR_HVN_RESIST (short vote); IN_LVN_BEAR in an LVN |
+| `UI/MainForm_Analysis.vb:522-524` `PriceVsEMA200` | price = EMA200 | BELOW (display only; scoring uses the number) |
+| `Core/ScoringEngine_Calculate_Scoring.vb:46` `CalcVerdictContext` | long score = short score | read as long |
+
+### R.6 Era confirmation (carry-in 1)
+
+| Version | Commit, UTC | Scoring change | Evidence |
+|---|---|---|---|
+| v52 | `3bc2a1e`, 2026-07-14 14:19 | NY aggressor-velocity TFI modifier armed | `docs/history-archive.md` §E v52 row: "#5 aggressor-velocity TFI-modifier scoring WIRE-IN — its own ⚠ dataset boundary" |
+| v53 | `1811b8d`, 2026-07-15 15:07 | Funding momentum window; changes a logged input (`FundingMomentum`), not the scoring code | `docs/history-archive.md` §E v53 row ("BUNDLED at the v52 boundary") |
+| v58 | `bd31a1a`, 2026-07-22 09:35 | ASIA volume multipliers 1.10 / 1.05 → 1.00 / 1.00; moves the ASIA Volume vote thresholds | `settings.json` change_log v58 entry; `docs/history-archive.md` §G line 235. ⚠ §E has no v58 row |
+| v60 | `631a3f5`, 2026-07-22 17:35 | LONDON burst threshold 5.5 arms the LONDON TFI modifier | `docs/history-archive.md` §I line 420 ("LONDON was armed at v60"); settings diff. ⚠ §E has no v60 row |
+| v65 | `970087b`, 2026-08-01 18:45 | ASIA burst threshold 5.5 arms the ASIA TFI modifier | `docs/DeribitIndicatorProject.md` §15 v65 row |
+| v66 | `fd52299`, 2026-08-10 18:06 (deployed 18:35) | OBV `trend_gate` 18 → 23; changes a logged input (`OBVTrend`) | `docs/DeribitIndicatorProject.md` §15 v66 row |
+
+- The re-score will run each row under the settings of its commit-time era, and test the adjacent eras on a mismatch. Not started.
+
+### R.7 Tier floor (carry-in 3)
+
+- At the shipped penalties (2 below ADX 22.5, 1 up to 25) the tier floor never binds for raw ≥ 3: `raw − penalty` always beats the floor (12→9, 9→6, 6→3). The TRANSITIONAL demotion is the ADX penalty alone. The census will state this with the logged `RegimePenalty` check; the census is not started.
+
+### R.8 Re-run
+
+```
+dotnet tools/ops/SwingFallbackRead/bin/Release/net8.0/SwingFallbackRead.dll --root . --mode liqflag --fetch aws_fetch/20260913-153704 --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv
+ORDERCHECK_KNOWN_DEFECTS=1 dotnet run --project verify/ordercheck/OrderCheck.vbproj -c Release
+```
+
+### R.9 What I verified, and what I did not (resumed session)
+
+| Verified claim | How |
+|---|---|
+| Deribit's `direction` and `liquidation` field meanings | WebFetch of `docs.deribit.com` `public/get_last_trades_by_instrument`, quoted |
+| Streamed copies of liquidation trades carry `none` | `--mode liqflag` output §2: 93 of 97 twins, streamed copy first, 91 of 91 same trade id |
+| Scoring never saw a liquidation | Output §3 and §5: 32 rows with a liquidation in their window, 0 logged; 51,107 of 51,107 rows `NONE` |
+| The record path from the stream to `CalcLiquidations` passes the flag through unchanged | Read `DeribitWsFeed.vb:470-507`, `MarketState.vb:127-134`, `:248-252`, `WsMarketDataSource.vb:91-106` |
+| `A81b` fails on shipped code and passes on the booked-by-liquidated-side variant | Harness runs with the environment variable; scratch mutation; tracked file blob unchanged |
+| The default gate stays ALL PASS | Default harness run: `A81a` PASS ×2, `A81b` SKIP, ALL PASS |
+| The swing read's default mode is still unchanged | Re-run after adding `--mode liqflag`; identical apart from the timestamp |
+
+- **Not verified:**
+  - The Deribit WebSocket channel's field list (the page could not be fetched).
+  - The side each of the 32 rows would have penalised, and whether any verdict would change.
+  - Rows before 2026-07-31 21:49 UTC (no store).
+  - Why the store admitted same-id duplicates (`DATA-1`).
+  - The UI renderers' label readings.
+  - Whether `MT` ever occurs on this instrument.

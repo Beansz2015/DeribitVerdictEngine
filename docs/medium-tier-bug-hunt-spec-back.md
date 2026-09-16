@@ -211,3 +211,135 @@ D-table row, **no values chosen**:
   - **`docs/medium-tier-diagnosis-brief-2026-09-16.md` §2.1-§2.4** were not done (stopped), including the full audit; only the MicroCVD decel site and the VPFR vote were checked against intent.
   - **The brief's "33 vote and mutation sites"** count was not checked.
 - **Carried over without checking:** the swing read's population funnel and trading-week rule; the v66 collector deploy time (2026-08-10 18:36:01 UTC) from `tools/ops/SwingFallbackRead/SwingFallbackRead.vb`.
+
+---
+
+## R. Resumed session (2026-09-16 UTC) — stopped again on `L-1` and `L-2`
+
+**Ruling acted on:** the orchestrator's D-3 = resume session 1, with the era, label-consumer-audit and tier-floor carry-ins. D-1 and D-2 were not touched. **Outcome record:** `docs/medium-tier-bug-hunt-2026-09-16.md` section R.
+
+**IDs added here:**
+
+| ID | Source and kind | Meaning |
+|---|---|---|
+| `L-1` | The read, section R.2 (stop-class finding) | The WebSocket trade stream never delivers the `liquidation` flag; the liquidation penalty has never fired |
+| `L-2` | The read, section R.3 (stop-class finding) | `CalcLiquidations` books a maker-side (`M`) liquidation on the taker's side |
+| `L-3` | The read, section R.4 (documentation finding) | `large_liq_size` is "200 BTC" in the manual but compared with USD sums |
+| `A81a` / `A81b` | Harness fixtures, `verify/ordercheck/Program.vb` | Taker-side mapping pin / maker-side known-defect repro (runs only with `ORDERCHECK_KNOWN_DEFECTS=1`) |
+| `D-4`, `D-5`, `D-6` | This packet, decisions | Queued in section R.3 of this packet |
+
+### R.1 Ranked handles
+
+**If you only run one, run `H-6`.** It shows the dead liquidation vote on the collector's own data.
+
+**H-6 — `L-1` on the collector's data** (`tools/ops/SwingFallbackRead --mode liqflag`; full output `docs/medium-tier-bug-hunt-2026-09-16-liquidation-output.md`)
+
+```
+dotnet tools/ops/SwingFallbackRead/bin/Release/net8.0/SwingFallbackRead.dll --root . --mode liqflag --fetch aws_fetch/20260913-153704 --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv
+```
+
+```
+| Liquidation-flagged store rows | 97 |
+| ... with an identical copy (same timestamp, price, amount, direction) whose flag is `none` | 93 |
+| ... where that `none` copy was appended EARLIER in the same file (the streamed copy) | 93 |
+| ... carrying a trade id on both copies | 91 |
+| ... where the `none` copy has the SAME trade id | 91 |
+| Collector log rows inside the store span | 36327 |
+| ... whose 500-trade window holds at least one liquidation trade | 32 |
+| ... of which the collector logged LiqSignal other than NONE | 0 |
+| ... of which the collector logged a non-zero liquidation size | 0 |
+| All merged rows from the v51 edge (pooled book + box live log) | 51107 | 51107 | 0 | 0 | 0 |
+| Swing read population rows | 8810 | 8810 | 0 | 0 | 0 |
+```
+
+- **Load-bearing values:** 93 streamed-first `none` copies **and** 32 rows with a liquidation in their window **and** 0 logged. Any one alone could be a store or window artefact.
+- **Identity:** 93 + 4 unpaired = 97 flagged rows. The 4 without a streamed copy are the 2026-08-17 rows; the stream missed those trades, which repair then filled.
+
+**H-7 — `L-2` failing fixture, and the default gate**
+
+```
+ORDERCHECK_KNOWN_DEFECTS=1 dotnet run --project verify/ordercheck/OrderCheck.vbproj -c Release
+```
+
+```
+PASS  A81a taker-side liquidation (flag T, taker buy) books the TAKER's position → SHORT LIQS
+PASS  A81a taker-side liquidation (flag T, taker sell) books the TAKER's position → LONG LIQS
+FAIL  A81b maker-side liquidation (flag M, taker buy): the liquidated maker held a LONG → LONG LIQS, per Deribit's `liquidation` field — KNOWN DEFECT: got signal=SHORT LIQS long=0 short=1000. Core/Indicators_OrderFlow.vb:268-272 books every flagged trade by the taker's direction
+FAIL  A81b maker-side liquidation (flag M, taker sell): the liquidated maker held a SHORT → SHORT LIQS, per Deribit's `liquidation` field — KNOWN DEFECT: got signal=LONG LIQS long=1000 short=0. Core/Indicators_OrderFlow.vb:268-272 books every flagged trade by the taker's direction
+4 FAILURE(S)
+```
+
+- The 4 failures are `A81b` ×2 and `A80b` ×2 (the POC-tier gate from the stop record). The default run prints `A81a` PASS ×2, `A81b` SKIP, `A80b` SKIP and ALL PASS, exit 0.
+
+**H-8 — the record path passes the flag through unchanged**
+
+```
+$ grep -n "liquidation" DeribitWsFeed.vb
+488:            rec.Liquidation = If(t.TryGetProperty("liquidation", liqEl), liqEl.GetString(), "none")
+$ grep -n "Sub AppendTrade\|_trades.Add(rec)\|Function GetTrades\|Return New List(Of TradeRecord)(_trades)" MarketState.vb
+127:    Public Sub AppendTrade(rec As TradeRecord, nowUtc As DateTime)
+130:            _trades.Add(rec)
+248:    Public Function GetTrades() As List(Of TradeRecord)
+250:            Return New List(Of TradeRecord)(_trades)
+```
+
+- **What it proves:** the flag scoring sees is exactly what line 488 parsed from the stream. No later step clears it.
+
+**E-2 — reverse mutation for `A81b`** (scratch project; not committed)
+
+- **Recipe:** the section 1 `E-1` recipe of this packet, with the `Core\Indicators_OrderFlow.vb` include pointed at a scratch copy edited by `sed '268s/If t.Direction = "buy" Then/If (t.Direction = "buy") <> (t.Liquidation = "M") Then/'`.
+- **Result:** `A81b` PASS for both sides. The run showed 2 failures, both `A80b`. Tracked `Core/Indicators_OrderFlow.vb` blob `1f8dd1060c686b3d1db3dda4b1485b0118f90f51` equals `HEAD`.
+
+### R.2 Decisions taken (one line each)
+
+- **Stop again:** `L-1` and `L-2` are consumers feeding scores that disagree with their producer → stop-and-report under the orchestrator's rule. No materiality threshold exists in that rule, so the 0-row `L-2` counts as well.
+- **Finish the audit before stopping:** a static read with no new build risk. One report then covers every stop-class row, instead of one stop per row.
+- **`L-3` classified as documentation, not stop-class:** the only unit claim is the manual's. `docs/trader-profile.md` gives "200" with no unit and says to calibrate against logged USD sizes. The code is not contradicting an authoritative intent; the manual is wrong.
+- **`L-1` failing check = a data instrument, not a fixture:** `DeribitWsFeed` needs a live socket and is not linked into the harness. Reaching it would take an engine refactor, which is reserved.
+- **`A81b` gated like `A80b`:** same reason as section 2 of this packet; a permanently red gate would hide the next regression.
+- **Window rule in `--mode liqflag`:** trade copies collapsed before counting 500. Not collapsing would double-count 93 trades and shrink every window, which understates `L-1`.
+- **Era evidence for v58 and v60 from the `settings.json` change log and `docs/history-archive.md` §G and §I:** `docs/history-archive.md` §E has no v57, v58 or v60 rows. Using the change log is the more complete source, not a cheaper one.
+
+### R.3 Decisions queued
+
+**D-4 — the live liquidation flag, `L-1`** (trader ruling; ⚠ reserved: scoring change and a dataset boundary)
+
+| Option | What changes | Measured effect |
+|---|---|---|
+| (a) Find the stream's liquidation field (or subscribe to a channel that carries it) and parse it | The liquidation penalty starts firing live | 32 of 36,327 collector rows in the store span had a liquidation to score; which side each would penalise is not measured |
+| (b) Enrich streamed trades from REST when a liquidation is suspected | Same end state, more moving parts | Not measured |
+| (c) Retire the liquidation vote as "never live" and record it | Nothing in behaviour | 0 rows; `docs/trader-profile.md` lists it PREFERRED, so this contradicts the profile |
+
+- **Read (hypothesis):** (c) is the cheapest and the least truthful. The book was scored without a PREFERRED signal and nothing in the code says so. Between (a) and (b) I have no read: the first step is confirming what Deribit's `trades.BTC-PERPETUAL.100ms` notification actually carries, which this seat could not fetch.
+- **Shares a root with `D-5` and `D-6`:** all three concern a vote that has never run on live data. Rule them together, or a fix of `L-1` goes live with the wrong maker-side attribution and a threshold in the wrong unit.
+- **Scoping information:** the parse is one line (`DeribitWsFeed.vb:488`); the unknown is the exchange's field name, not the code.
+
+**D-5 — maker-side attribution, `L-2`** (trader ruling; ⚠ reserved: scoring)
+
+- **Options:** (a) book by the liquidated side: `M` → the maker's side, `T` → the taker's side; (b) book `MT` to both sides or split it; (c) keep taker-side booking and document it.
+- **Read (hypothesis):** (a) for `M`. It is what Deribit's field means, and `A81b` already asserts it. I have **no read** on `MT` (0 occurrences, and no spec).
+
+**D-6 — the unit of `large_liq_size`, `L-3`** (trader ruling on the value; the manual correction is documentation)
+
+- **Facts:** the manual says 200 BTC (about 15 M USD, "a genuine cascade event"). The code compares 200 with USD sums; the median liquidation trade in the store is 6,000 USD.
+- **Read (hypothesis):** correct the manual's unit now. The threshold value is a calibration question for after `D-4`, against the logged size distribution, as `docs/trader-profile.md` already says.
+
+**D-7 — resume session 1 again? (orchestrator)**
+
+- **Read (hypothesis): resume.** The liquidation vote is absent from every row, so it adds nothing to the tier comparison. The re-score reconstruction should treat `LiqSignal` as logged (`NONE`), which reproduces what the engine scored.
+
+### R.4 Feedback on the orchestrator's carry-ins
+
+- ⭐ **The label-consumer framing found what a vote-site audit would not.** Every scoring consumer of `LiqSignal` is correct; the defect is two layers down, where the exchange's fields become the label. **Add "exchange contract → first label" to the producer side of the audit.** The contract lives in the exchange docs, not in any repo function.
+- **"Check the reading against the producer's emission geometry, not another consumer's comment"** did real work twice: for the POC gate, and here, where `docs/UserManual.md` line 1443 documents the taker-side booking as if it were Deribit's meaning.
+- **A data check beats a code read for transport claims.** `docs/websocket-migration-proposal.md` line 43 asserted the liquidation field maps 1:1; only the store's duplicate copies showed it does not. Any other "fields map 1:1" claim in that spec is unverified to the same degree.
+- **`docs/history-archive.md` §E is not a complete era index:** v57, v58 and v60 have no rows. The `settings.json` change log was the complete source.
+
+### R.5 What I did not verify (resumed session)
+
+- Full list: the read, section R.9. The items that change a decision:
+  - **What Deribit's WebSocket trade notification carries** (`D-4` depends on it).
+  - **The penalty side and verdict effect for the 32 rows** (needs the re-score, not started).
+  - **Rows before 2026-07-31 21:49 UTC** (no trade store; `NONE` there is consistent with `L-1` but not measured).
+  - **Why the store admitted same-id duplicate rows** (`DATA-1` in the read).
+  - **The re-score reconstruction, the mirror fixtures and the demotion census** (not started: stopped).

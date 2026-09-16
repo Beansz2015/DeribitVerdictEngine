@@ -737,6 +737,12 @@ Module Program
         A80a_VpfrNearHvnLabelsPinnedToPocSide()
         A80b_PocGateOpensOnTheWallSideItsSpecNames()
 
+        ' [A81 — liquidation attribution against Deribit's `liquidation` flag (MEDIUM-tier bug hunt label-consumer
+        '   audit, docs/medium-tier-bug-hunt-2026-09-16.md). A81a pins the taker-side ("T") mapping. A81b is a
+        '   KNOWN-DEFECT REPRO for the maker-side ("M") flag: it runs only with ORDERCHECK_KNOWN_DEFECTS=1.]
+        A81a_TakerSideLiquidationBooksTheTakersPosition()
+        A81b_MakerSideLiquidationBooksTheMakersPosition()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -15685,6 +15691,79 @@ Module Program
                     "KNOWN DEFECT: got target {0:F1} ({1}). Core/SignalEmitter.vb:{2} opens the {3} POC tier only on {4}, which CalcVPFRLite emits when the POC sits on the OTHER side of price",
                     lv.Target, lv.TargetReason, If(isLong, 331, 332), side,
                     If(isLong, "NEAR_HVN_RESIST or IN_LVN_BEAR", "NEAR_HVN_SUPPORT or IN_LVN_BULL")))
+        Next
+    End Sub
+
+    ' =======================================================================
+    ' A81 — liquidation attribution against Deribit's `liquidation` flag.
+    ' MEDIUM-tier bug hunt, label-consumer audit: docs/medium-tier-bug-hunt-2026-09-16.md (resumed session).
+    '
+    ' Deribit public/get_last_trades_by_instrument: `direction` is "Trade direction of the taker";
+    ' `liquidation` is "M" when the maker side of the trade was under liquidation, "T" when the taker
+    ' side was, "MT" when both. CalcLiquidations (Core/Indicators_OrderFlow.vb:266-274) books every
+    ' flagged trade by the TAKER's direction: a buy lands on liqShortSize, a sell on liqLongSize.
+    '   * "T" + buy = a short being force-bought: liqShortSize is right. A81a pins it (passes).
+    '   * "M" + buy = the MAKER sold, and the maker is the liquidated account, so a LONG is being
+    '     force-sold: it belongs on liqLongSize. A81b asserts that and FAILS on the shipped code.
+    '     Known-defect repro, runs only with ORDERCHECK_KNOWN_DEFECTS=1 (the A80b convention).
+    ' "MT" is not asserted: both sides were liquidated, and no spec says how to split one amount.
+    ' ⚠ This fixture cannot reach finding L-1 (the live WebSocket stream never delivers the flag):
+    '   DeribitWsFeed needs a live socket and is not linked here. L-1's failing check is the data
+    '   instrument `tools/ops/SwingFallbackRead --mode liqflag`.
+    '
+    ' [Fixture-literal provenance, CLAUDE.md RULED 2026-08-11]
+    '   SHIPPED BEHAVIOUR: dominance_ratio is read from the TRACKED settings.json.
+    '   MECHANISM: the 1,000 USD amount and the timestamps only make one flagged trade the whole
+    '   liquidation window; any positive amount serves.
+    ' =======================================================================
+
+    Private Function A81Liq(direction As String, flag As String, amount As Double) As TradeRecord
+        Return New TradeRecord With {.Price = 100000, .Amount = amount, .Direction = direction,
+                                     .Liquidation = flag, .Timestamp = 1000}
+    End Function
+
+    Private Sub A81a_TakerSideLiquidationBooksTheTakersPosition()
+        Dim errorMsg As String = ""
+        Dim cfg = A80ShippedCfg(errorMsg)
+        If cfg Is Nothing Then
+            Check("A81a tracked settings.json located", False, errorMsg)
+            Return
+        End If
+        Dim dom As Double = cfg.Indicators.Liquidations.DominanceRatio
+        For Each c In {Tuple.Create("buy", "SHORT LIQS"), Tuple.Create("sell", "LONG LIQS")}
+            Dim lng As Double = 0, sht As Double = 0, sig As String = ""
+            IndicatorEngine.CalcLiquidations(New List(Of TradeRecord) From {A81Liq(c.Item1, "T", 1000.0)},
+                                             lng, sht, sig, dominanceRatio:=dom)
+            Dim expectLong As Boolean = (c.Item2 = "LONG LIQS")
+            Check(String.Format("A81a taker-side liquidation (flag T, taker {0}) books the TAKER's position → {1}", c.Item1, c.Item2),
+                  sig = c.Item2 AndAlso If(expectLong, lng = 1000.0 AndAlso sht = 0, sht = 1000.0 AndAlso lng = 0),
+                  String.Format(CultureInfo.InvariantCulture, "signal={0} long={1} short={2}", sig, lng, sht))
+        Next
+    End Sub
+
+    Private Sub A81b_MakerSideLiquidationBooksTheMakersPosition()
+        If Environment.GetEnvironmentVariable("ORDERCHECK_KNOWN_DEFECTS") <> "1" Then
+            Console.WriteLine("SKIP  A81b known-defect repro (CalcLiquidations books a maker-side liquidation on the taker's side) — set ORDERCHECK_KNOWN_DEFECTS=1 to run; docs/medium-tier-bug-hunt-2026-09-16.md")
+            Return
+        End If
+        Dim errorMsg As String = ""
+        Dim cfg = A80ShippedCfg(errorMsg)
+        If cfg Is Nothing Then
+            Check("A81b tracked settings.json located", False, errorMsg)
+            Return
+        End If
+        Dim dom As Double = cfg.Indicators.Liquidations.DominanceRatio
+        ' taker direction, the liquidated maker's position, expected signal
+        For Each c In {Tuple.Create("buy", "LONG", "LONG LIQS"), Tuple.Create("sell", "SHORT", "SHORT LIQS")}
+            Dim lng As Double = 0, sht As Double = 0, sig As String = ""
+            IndicatorEngine.CalcLiquidations(New List(Of TradeRecord) From {A81Liq(c.Item1, "M", 1000.0)},
+                                             lng, sht, sig, dominanceRatio:=dom)
+            Dim expectLong As Boolean = (c.Item2 = "LONG")
+            Check(String.Format("A81b maker-side liquidation (flag M, taker {0}): the liquidated maker held a {1} → {2}, per Deribit's `liquidation` field", c.Item1, c.Item2, c.Item3),
+                  sig = c.Item3 AndAlso If(expectLong, lng = 1000.0 AndAlso sht = 0, sht = 1000.0 AndAlso lng = 0),
+                  String.Format(CultureInfo.InvariantCulture,
+                    "KNOWN DEFECT: got signal={0} long={1} short={2}. Core/Indicators_OrderFlow.vb:268-272 books every flagged trade by the taker's direction",
+                    sig, lng, sht))
         Next
     End Sub
 

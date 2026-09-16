@@ -326,6 +326,12 @@ Public Module SwingFallbackReadProgram
             sigs.Add(s)
         Next
 
+        ' ---- --mode liqflag: the liquidation flag and attribution evidence (LiquidationFlagCheck.vb). Default mode unchanged.
+        If ArgOr(a, "mode", "swing").Equals("liqflag", StringComparison.OrdinalIgnoreCase) Then
+            Dim lfOut As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "liquidation-flag-output.md"))))
+            Return RunLiqFlag(o, fetchDir, pooledPath, bakPath, livePath, sigs, lfOut)
+        End If
+
         ' ---- --mode pocgate: the POC-tier gate defect measurement (PocGateDefect.vb). Default mode unchanged.
         If ArgOr(a, "mode", "swing").Equals("pocgate", StringComparison.OrdinalIgnoreCase) Then
             Dim pgOut As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "poc-gate-defect-output.md"))))
