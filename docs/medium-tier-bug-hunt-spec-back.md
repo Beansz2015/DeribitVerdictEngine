@@ -143,7 +143,9 @@ PASS  A80b short: the POC is the only structure on the target side (100020.0 vs 
 
 ### D-1 — the POC-tier gate (trader ruling; ⚠ reserved: moves placed levels on a live surface and verdicts through Step 5c)
 
-D-table row, **no values chosen**:
+**RULED (trader), 2026-09-16 UTC: (a).** The POC-tier gate follows its spec: swap the NEAR_HVN labels in both copies (`Core/SignalEmitter.vb` and the legacy twin in `Core/ScoringEngine_Calculate_Verdict.vb`). Trader's reason: volume-profile scoring is core to the strategy. Not implemented in this session; the orchestrator specs a separate fix build.
+
+D-table row as queued, **no values chosen**:
 
 | Option | What changes | Measured effect |
 |---|---|---|
@@ -156,6 +158,8 @@ D-table row, **no values chosen**:
 
 ### D-2 — the VPFR score vote's documentation (trader ruling on the doc; not a stop)
 
+**RULED (trader), 2026-09-16 UTC: (a).** Correct `docs/UserManual.md` line 967 to the code's geometry. Not done in this session; the orchestrator owns the edit.
+
 - **Facts:** the vote at `Core/ScoringEngine_Calculate_Scoring.vb:457-458` matches its own spec (`3afb674`: price near the POC from below → LONG). `docs/UserManual.md` line 967 says `NEAR_HVN_RESIST` is "price ... just below a high-volume node acting as resistance", the opposite geometry.
 - **Options:** (a) correct `docs/UserManual.md` line 967 to the code's geometry; (b) treat line 967 as the intended thesis and re-spec the vote (a scoring change, reserved).
 - **Read (hypothesis):** (a). The two specs written with the code agree with the code; line 967 is a reader's gloss that contradicts the same manual's own table (lines 950-951).
@@ -163,6 +167,8 @@ D-table row, **no values chosen**:
 - **Shares a root with `D-1`:** the label names. `SUPPORT` names a POC above price. Both misreadings trace to that name. Renaming the labels would be a CSV-free, display-visible change (the card shows the label), so reserved.
 
 ### D-3 — resume session 1? (orchestrator)
+
+**RULED (orchestrator), 2026-09-16 UTC: resume** session 1, with the era, label-consumer-audit and tier-floor carry-ins (section R of this packet).
 
 - **Read (hypothesis): resume.** Scores, the re-score reconstruction, the mirror fixtures and the tier walk do not read this gate. The census couples to it only through Step 5c on 1.68 % of population rows, and MEDIUM is not over-exposed (1.45 % against WEAK 1.84 %).
 - **If resumed, carry these into the resumed brief:** the corrected era list and the mirror-test limit in section 4 of this packet.
@@ -222,7 +228,7 @@ D-table row, **no values chosen**:
 
 | ID | Source and kind | Meaning |
 |---|---|---|
-| `L-1` | The read, section R.2 (stop-class finding) | The WebSocket trade stream never delivers the `liquidation` flag; the liquidation penalty has never fired |
+| `L-1` | The read, section R.2 (stop-class finding) | The live trade stream (`trades.BTC-PERPETUAL.100ms`, `DeribitWsFeed.vb:28`) never delivers a `liquidation` flag that the parse at `DeribitWsFeed.vb:488` can read, so the liquidation penalty has never fired. The parse itself does read the field; whether the channel omits it is unverified (wording corrected by the orchestrator, 2026-09-16) |
 | `L-2` | The read, section R.3 (stop-class finding) | `CalcLiquidations` books a maker-side (`M`) liquidation on the taker's side |
 | `L-3` | The read, section R.4 (documentation finding) | `large_liq_size` is "200 BTC" in the manual but compared with USD sums |
 | `A81a` / `A81b` | Harness fixtures, `verify/ordercheck/Program.vb` | Taker-side mapping pin / maker-side known-defect repro (runs only with `ORDERCHECK_KNOWN_DEFECTS=1`) |
@@ -304,6 +310,8 @@ $ grep -n "Sub AppendTrade\|_trades.Add(rec)\|Function GetTrades\|Return New Lis
 
 **D-4 — the live liquidation flag, `L-1`** (trader ruling; ⚠ reserved: scoring change and a dataset boundary)
 
+**RULED (trader), 2026-09-16 UTC: measure first.** Capture raw `trades.BTC-PERPETUAL.100ms` messages until a liquidation passes (read-only, dev machine). Then (a) parse the field if it is present under another name, else (b) enrich from REST. Never (c) retire the vote. Not implemented in this session; the orchestrator specs the fix build.
+
 | Option | What changes | Measured effect |
 |---|---|---|
 | (a) Find the stream's liquidation field (or subscribe to a channel that carries it) and parse it | The liquidation penalty starts firing live | 32 of 36,327 collector rows in the store span had a liquidation to score; which side each would penalise is not measured |
@@ -312,19 +320,25 @@ $ grep -n "Sub AppendTrade\|_trades.Add(rec)\|Function GetTrades\|Return New Lis
 
 - **Read (hypothesis):** (c) is the cheapest and the least truthful. The book was scored without a PREFERRED signal and nothing in the code says so. Between (a) and (b) I have no read: the first step is confirming what Deribit's `trades.BTC-PERPETUAL.100ms` notification actually carries, which this seat could not fetch.
 - **Shares a root with `D-5` and `D-6`:** all three concern a vote that has never run on live data. Rule them together, or a fix of `L-1` goes live with the wrong maker-side attribution and a threshold in the wrong unit.
-- **Scoping information:** the parse is one line (`DeribitWsFeed.vb:488`); the unknown is the exchange's field name, not the code.
+- **Scoping information:** the parse is one line (`DeribitWsFeed.vb:488`) and it already reads `liquidation`; the unknown is what the subscribed channel (`DeribitWsFeed.vb:28`) delivers, not the parse. The cascade alarm reads the same flag at `DeribitWsFeed.vb:506`.
 
 **D-5 — maker-side attribution, `L-2`** (trader ruling; ⚠ reserved: scoring)
+
+**RULED (trader), 2026-09-16 UTC:** book `M` to the maker's side, `T` to the taker's side, `MT` to both sides. Not implemented in this session.
 
 - **Options:** (a) book by the liquidated side: `M` → the maker's side, `T` → the taker's side; (b) book `MT` to both sides or split it; (c) keep taker-side booking and document it.
 - **Read (hypothesis):** (a) for `M`. It is what Deribit's field means, and `A81b` already asserts it. I have **no read** on `MT` (0 occurrences, and no spec).
 
 **D-6 — the unit of `large_liq_size`, `L-3`** (trader ruling on the value; the manual correction is documentation)
 
+**RULED (trader), 2026-09-16 UTC:** correct the manual's unit to USD; re-derive the value from real liquidation sizes after the fix. Not done in this session.
+
 - **Facts:** the manual says 200 BTC (about 15 M USD, "a genuine cascade event"). The code compares 200 with USD sums; the median liquidation trade in the store is 6,000 USD.
 - **Read (hypothesis):** correct the manual's unit now. The threshold value is a calibration question for after `D-4`, against the logged size distribution, as `docs/trader-profile.md` already says.
 
 **D-7 — resume session 1 again? (orchestrator)**
+
+**RULED (orchestrator), 2026-09-16 UTC: resume** session 1 (`docs/medium-tier-diagnosis-brief-2026-09-16.md` §2.1-§2.4), treating `LiqSignal` as logged (`NONE`), under a narrowed stop rule (section R.6 of this packet).
 
 - **Read (hypothesis): resume.** The liquidation vote is absent from every row, so it adds nothing to the tier comparison. The re-score reconstruction should treat `LiqSignal` as logged (`NONE`), which reproduces what the engine scored.
 
@@ -343,3 +357,205 @@ $ grep -n "Sub AppendTrade\|_trades.Add(rec)\|Function GetTrades\|Return New Lis
   - **Rows before 2026-07-31 21:49 UTC** (no trade store; `NONE` there is consistent with `L-1` but not measured).
   - **Why the store admitted same-id duplicate rows** (`DATA-1` in the read).
   - **The re-score reconstruction, the mirror fixtures and the demotion census** (not started: stopped).
+
+### R.6 Resumed again (2026-09-16 UTC) — no new stop; session 1 complete
+
+**Rulings acted on:** the orchestrator's D-7 = resume session 1 (`docs/medium-tier-diagnosis-brief-2026-09-16.md` §2.1–§2.4) with `LiqSignal` as logged. **The narrowed stop rule** (orchestrator, 2026-09-16 UTC):
+
+- Findings in an already-reported class (POC gate, liquidation flag or attribution) are recorded without stopping.
+- Stop only for a NEW defect that changes the score, tier or placed level of rows actually in the population, measured, not latent.
+- Latent defects are recorded, not stopped on.
+
+The trader's rulings on D-1, D-2 and D-4 to D-6 are recorded in section 3 and section R.3 of this packet. None was implemented: no engine `.vb`, `settings.json` or `docs/UserManual.md` edit. **Outcome record:** `docs/medium-tier-bug-hunt-2026-09-16.md` section R.10.
+
+**IDs added here:**
+
+| ID | Source and kind | Meaning |
+|---|---|---|
+| `A82a`, `A82b`, `A82c` | Harness fixtures, `verify/ordercheck/Program.vb` | Mirror completeness guard; mirrored market → mirrored scores, breakdown, verdict and levels; every vote site reached |
+| `M1`, `M2` | Scratch mutations (not committed) | `M1` moves the `BULL_DECEL` penalty to the long score; `M2` swaps both decel arms |
+| `K1`–`K4` | Census comparisons, `tools/ops/SwingFallbackRead/TierDemotionCensus.vb` header | Demoted rows against native rows of their new tier; `K3`, `K4` TRANSITIONAL-only |
+| `EVAL-1`, `DISP-1`, `TOOL-1` | The read, section R.10.4 (findings) | Analysis report admits lean NO TRADE rows; card funding-momentum colour ignores the funding sign; offline validator compares `OISignal` with labels it never takes |
+| `D-8`, `D-9`, `D-10` | This packet, decisions | Queued in section R.6.3 of this packet |
+
+#### R.6.1 Ranked handles
+
+**If you only run one, run `H-9`.** It shows the reconstruction headline and that no mismatch lacks an input-uncertainty explanation.
+
+**H-9 — re-score reconstruction** (`--mode rescore`; full output `docs/medium-tier-bug-hunt-2026-09-16-rescore-output.md`)
+
+```
+dotnet tools/ops/SwingFallbackRead/bin/Release/net8.0/SwingFallbackRead.dll --root . --mode rescore --fetch aws_fetch/20260913-153704 --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv | grep -E "^\| \*\*All six\*\*|^### 5\.4|^- None\.|^\| Burst modifier applied|^\| No burst modifier"
+```
+
+```
+| **All six** | 8749 of 8810 | 99.31 | 39331 of 39594 | 99.34 |
+| Burst modifier applied | 3101 | 76 | 2.45 | 59 | 68 | 25 |
+| No burst modifier | 36493 | 187 | 0.51 | 101 | 154 | 0 |
+### 5.4 Rows no input-uncertainty kind explains (the defect candidates)
+- None.
+```
+
+- **Columns:** "All six" = population rows matching, %, all trading-week rows matching, %. The burst rows = rows, re-scored, mismatching, %, explained by F (forming-bar VPFR volume), by V (another VPFR label), by B (burst modifier not applied).
+- **Load-bearing values:** 99.31 **and** "- None.". A high match rate alone could hide a small defect class; the empty candidate list rules that out.
+- **Build first:** `dotnet build tools/ops/SwingFallbackRead/SwingFallbackRead.vbproj -c Release`.
+
+**H-10 — mirror fixtures and the default gate**
+
+```
+dotnet run --project verify/ordercheck/OrderCheck.vbproj 2>/dev/null | grep -E "A82|^ALL PASS|FAILURE"
+```
+
+```
+PASS  A82a every IndicatorResults property (116) sits in exactly one mirror class
+PASS  A82a every label map is a set of disjoint swap pairs
+PASS  A82a mirroring twice returns the original state, and mirroring once changes every non-kept property
+PASS  A82b the tracked RSI zones and funding bands are side-symmetric (the mirror of RSI and funding is exact)
+PASS  A82b a mirrored market gives the mirrored scores, breakdown, verdict and placed levels (7524 states: 2088 single-site, 5400 joint, 3 cfgs x 4 regimes x 3 session hours)
+PASS  A82c the A82b runs reached every vote and mutation site, every tier in every regime and every placed-level tier (72 markers)
+PASS  A82c the OBV partial never upgrades across the same runs (v0.42 adverse-divergence block; the partial is that state)
+ALL PASS
+```
+
+- **`A82c` is load-bearing for `A82b`:** a property test over states that never reach a site proves nothing about that site.
+
+**H-11 — tier-demotion census** (`--mode census`; full output `docs/medium-tier-bug-hunt-2026-09-16-census-output.md`)
+
+```
+dotnet tools/ops/SwingFallbackRead/bin/Release/net8.0/SwingFallbackRead.dll --root . --mode census --fetch aws_fetch/20260913-153704 --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv | grep -E "^\| ALL \(counts only|TierFloor arm wins|^- (main window|carried 24 h) \| NY \| K[13] "
+```
+
+```
+| TRANSITIONAL rows where the TierFloor arm wins with a floor above zero (either side) | 7965 TRANSITIONAL rows | 0 |
+| ALL (counts only, never pooled for outcomes) | 8810 | 882 | 538 | 95 | 2362 | 360 | 5455 | 0 | 5.2 | 51.6 |
+- main window | NY | K1 demoted-to-WEAK vs native WEAK | NO DIFFERENCE SHOWN
+- main window | NY | K3 demoted-to-WEAK vs native WEAK, TRANSITIONAL only | NO DIFFERENCE SHOWN
+- carried 24 h | NY | K1 demoted-to-WEAK vs native WEAK | NO DIFFERENCE SHOWN
+- carried 24 h | NY | K3 demoted-to-WEAK vs native WEAK, TRANSITIONAL only | NO DIFFERENCE SHOWN
+```
+
+- **ALL row columns:** rows, TRANSITIONAL rows, native STRONG, demoted-to-MEDIUM, native MEDIUM, demoted-to-WEAK, native WEAK, demoted two tiers, demoted % of all rows, demoted % of TRANSITIONAL rows.
+- Every other comparison (NY `K2`, `K4`; all LONDON and ASIA) is NOT READABLE.
+
+**H-12 — the four existing instrument modes are unchanged by the new code**
+
+```
+for pair in swing:swing-vs-fallback-target-read-2026-09-15-output.md pocgate:medium-tier-bug-hunt-2026-09-16-poc-gate-output.md stability:tier-order-stability-read-2026-09-15-output.md liqflag:medium-tier-bug-hunt-2026-09-16-liquidation-output.md; do m=${pair%%:*}; d=${pair#*:}; dotnet tools/ops/SwingFallbackRead/bin/Release/net8.0/SwingFallbackRead.dll --root . --fetch aws_fetch/20260913-153704 --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv --mode $m --out backtest_data/swing-fallback-read/identity-$m.md > /dev/null; diff -q <(grep -v "Run at (UTC)" docs/$d) <(grep -v "Run at (UTC)" backtest_data/swing-fallback-read/identity-$m.md) > /dev/null && echo "$m: identical to docs/$d apart from the run timestamp" || echo "$m: DIFFERS from docs/$d"; done
+```
+
+```
+swing: identical to docs/swing-vs-fallback-target-read-2026-09-15-output.md apart from the run timestamp
+pocgate: identical to docs/medium-tier-bug-hunt-2026-09-16-poc-gate-output.md apart from the run timestamp
+stability: identical to docs/tier-order-stability-read-2026-09-15-output.md apart from the run timestamp
+liqflag: identical to docs/medium-tier-bug-hunt-2026-09-16-liquidation-output.md apart from the run timestamp
+```
+
+- Covers the project-file change (three `Core/ScoringEngine_*.vb` includes) and the `PgRecomputeVpfr` refactor in `PocGateDefect.vb`.
+
+**H-13 — `EVAL-1`, the filter and its size**
+
+```
+sed -n 278,284p analysis/AnalysisRunner.vb
+python -c "
+import csv,collections
+seen=set();c=collections.Counter()
+for p in ['AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv','aws_fetch/20260913-153704/analysis_log.csv']:
+    r=csv.reader(open(p,encoding='utf-8'));h=next(r);iv,ic,ia=h.index('Verdict'),h.index('VerdictContext'),h.index('ATR')
+    for x in r:
+        if not x or x[0] in seen or len(x)<=ic: continue
+        seen.add(x[0]);v=x[iv].strip().upper()
+        if x[ic].strip().upper() in ('CONFIRMED','ALIGNED','FLOW_UNCONFIRMED','MOMENTUM_FADING','STRUCTURALLY_WEAK') and float(x[ia] or 0)>0 and v not in ('','NO TRADE') and not v.startswith('WEAK'):
+            c[v if v.startswith('NO TRADE') else 'STRONG or MEDIUM verdict']+=1
+print(dict(sorted(c.items())))
+"
+```
+
+```
+            Dim ctxRows = popRows.Where(Function(r)
+                Return String.Equals(r.VerdictContext, ctx, StringComparison.OrdinalIgnoreCase) AndAlso
+                       r.ATR > 0 AndAlso
+                       r.Verdict <> "" AndAlso
+                       r.Verdict.ToUpper() <> "NO TRADE" AndAlso
+                       Not r.Verdict.ToUpper().StartsWith("WEAK")
+            End Function).ToList()
+{'NO TRADE [TIE]': 59, 'NO TRADE [WEAK LONG]': 3019, 'NO TRADE [WEAK SHORT]': 4117, 'STRONG or MEDIUM verdict': 3305}
+```
+
+- The count mirrors the filter over the merged book only; the report's own population cut is not applied (not verified).
+
+**H-14 — no engine, settings, UI, analysis or manual file changed**
+
+```
+git diff --stat 920de06 -- Core UI analysis settings.json docs/UserManual.md DeribitWsFeed.vb AnalysisLogger.vb DynamicNorms.vb MarketState.vb
+```
+
+```
+(no output)
+```
+
+**E-3 — reverse mutation for `A82b`** (scratch projects; not committed)
+
+- **Recipe:** the section 1 `E-1` recipe of this packet (scratch copy of `verify/ordercheck/OrderCheck.vbproj`, absolute includes, output under `verify/ordercheck/bin/<name>-proof/`), with the `Core\ScoringEngine_Calculate_Scoring.vb` include pointed at a scratch copy.
+- **`M1`:** line 380 `state.ShortScore = Math.Max(0, state.ShortScore - …)` → `state.LongScore = Math.Max(0, state.LongScore - …)`. Result: `FAIL A82b … 847 asymmetries`; first asymmetry `[tracked | TRENDING_UP | hour 0 | MicroCVD bull decel against a short vote] breakdown rows 22 vs mirror 21`; `1 FAILURE(S)`.
+- **`M2`:** lines 380 and 381 both swapped. Result: `ALL PASS`, which demonstrates that a mirror test cannot see a symmetric inversion.
+- **Tracked file:** MD5 `5ad308a0876d03e3a9ea4aea822b357f` before and after; blob `f0c4ac4059d7ba64418f4c8e3a8104bb619e0ad5` equals `HEAD`. Scratch outputs deleted.
+
+#### R.6.2 Decisions taken (one line each)
+
+- **Re-score every trading-week row, NO TRADE included, and report the population separately:** more rows checked, nothing lost; the two coincide for directional rows (0 invalid placed levels).
+- **Record every explanation per mismatch, not the first match:** the first-match run labelled 25 burst rows "settings era" when F, V or P explained them too. Sets keep the ambiguity visible.
+- **Accept a forming-bar (F) explanation only when the four logged VPFR fields still verify:** stricter than a bare label swap (V), which is kept as its own weaker kind.
+- **`VPFRValueAreaSignal` from the recompute, not from a price-versus-VAH comparison:** the producer's own rule.
+- **Mirror cfgs add every optional modifier ON and arbitration mode 1:** reaches the sites the tracked flags disable (OFI momentum, value-area scoring, best pivot).
+- **Pin the OBV partial upgrade as never reached instead of dropping the marker:** a change to the partial or the v0.42 gate becomes visible.
+- **`M1` moves one arm, and `M2` swaps both:** the brief's "flip one vote's side" is ambiguous. A both-arm flip passes, so the packet shows the limit instead of hiding it.
+- **Census rules written into the instrument header before the first run:** pre-registration, per `docs/medium-tier-diagnosis-brief-2026-09-16.md` §4.
+- **Census ALL-sessions row is counts only:** the brief's §4 keeps sessions separate for outcomes.
+- **The attribution CSV stays gitignored:** it is row-level data derived from logs that are gitignored by design (brief §5). A prior convention keeps row data out of git; the re-run regenerates it in about 12 s.
+- **`EVAL-1`, `DISP-1`, `TOOL-1` recorded and queued, none fixed:** `EVAL-1` and `DISP-1` move rendered values (reserved); `TOOL-1` is outside this seat's scope.
+
+#### R.6.3 Decisions queued
+
+**D-8 — `EVAL-1`, the analysis report's context table** (⚠ reserved: moves a rendered report value)
+
+| Option | What changes |
+|---|---|
+| (a) Filter with the directional test the tier matrices already use (`IsDirectionalVerdict`, `analysis/AnalysisRunner.vb:197`) and print the excluded lean-row count | The table shows trades only; the count keeps the exclusion visible |
+| (b) Keep lean rows as a separate "NO TRADE lean" column | The table shows both, labelled |
+| (c) Leave it | Lean rows keep counting as trades; "[TIE]" keeps counting as short |
+
+- **Read (hypothesis): (a).** ⚠ (b) records more, and my pick is the cheaper one. So this needs the trader under the reserved "cheaper and less truthful" class. For (a): the table's frame is trade outcomes, and a lean NO TRADE row is not a trade.
+
+**D-9 — `DISP-1`, the card's funding-momentum colour** (⚠ reserved: rendered value)
+
+| Option | What changes |
+|---|---|
+| (a) Make the word and colour bias-aware (read `FundingBias`) | FALLING with shorts crowded renders as crowding, RISING as de-crowding |
+| (b) Render Step 3b's actual effect from the breakdown (the signed points and side) | The card shows what scoring did, with no heuristic |
+| (c) Leave it and document | No change |
+
+- **Read (hypothesis): (b).** It is the more truthful option: it cannot drift from Step 3b, because it reads Step 3b's output.
+
+**D-10 — `TOOL-1`, the offline overlap validator** (not reserved: an offline tool; outside this seat's scope)
+
+- **Options:** (a) compare `OISignal` with the OI producer's labels (NEW LONGS and NEW SHORTS full; COVERING and CAPITULATION partial); (b) leave it.
+- **Read: (a).** The orchestrator schedules it.
+
+#### R.6.4 Feedback on the brief and the carry-ins
+
+- ⭐ **The brief's mismatch classes (unlogged input · settings era · unexplained) are not exclusive.** 25 rows fit "settings era" and "unlogged input" at once. A first-match classifier then reports a settings problem that has no mechanism. **Ask for explanation SETS.**
+- ⭐ **The forming bar is the hidden unlogged input.** `CalcVPFRLite` gives it the top decay weight, and the CSV logs neither `VPFRSignal` nor `VPFRPoc`. Burst rows mismatch 4.8 times as often. A future CSV rider (log `VPFRSignal` and `VPFRPoc`) would close it. That is a schema change for `docs/csv-rotation-riders.md`, not for this seat.
+- **"Flip one vote's side" in the brief's §2.2 needs "one ARM".** A both-arm flip is invisible to any mirror test (`M2`).
+- **Coverage should be a machine check, not a claim.** `A82c` found the unreachable OBV upgrade on its first run. A hand-written site list would have listed it as covered.
+- **The census frame misses the larger flow.** The brief's §2.4 counts raw MEDIUM → WEAK and raw STRONG → MEDIUM. The penalty also pushes 1,856 rows from WEAK to NO TRADE (NY 1,376), and those rows sit outside the population, so no outcome exists for them.
+- **Readability:** TRANSITIONAL demotion cells clear n ≥ 100 only for NY WEAK. LONDON and ASIA need more data before the census can answer for them.
+- **The narrowed stop rule worked as written:** `EVAL-1` is a real defect in a rendered report, recorded without a stop, because it changes no score, tier or placed level.
+
+#### R.6.5 What I did not verify (resumed again)
+
+- Full list: the read, section R.10.8. The items that change a decision:
+  - **`EVAL-1`'s size inside the report** after its own population cut (`D-8`).
+  - **The intended semantics of the funding-momentum colour** (`D-9`): no card spec was read.
+  - **LONDON and ASIA demotion outcomes:** NOT READABLE at n < 100.
+  - **The effect of the missing liquidation vote (`L-1`) on the 32 rows:** the re-score reproduces the logged `NONE`; it does not score the liquidations the stream dropped.
+  - **Mirror symmetry of the indicator producers** (`Core/Indicators_*.vb`): `A82` covers `ScoringEngine.Calculate` and `SignalEmitter.ComputeSideLevels` only.

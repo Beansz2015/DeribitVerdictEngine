@@ -220,7 +220,7 @@ ORDERCHECK_KNOWN_DEFECTS=1 dotnet run --project verify/ordercheck/OrderCheck.vbp
 
 | ID | Source and kind | Meaning |
 |---|---|---|
-| `L-1` | This section, stop-class finding | The WebSocket trade stream never delivers the `liquidation` flag, so the liquidation penalty never fires |
+| `L-1` | This section, stop-class finding | The live trade stream (`trades.BTC-PERPETUAL.100ms`, `DeribitWsFeed.vb:28`) never delivers a `liquidation` flag that the parse at `DeribitWsFeed.vb:488` can read, so the liquidation penalty never fires. The parse itself reads the field; whether the channel omits it is unverified |
 | `L-2` | This section, stop-class finding | `CalcLiquidations` books a maker-side (`M`) liquidation on the taker's side |
 | `L-3` | This section, documentation finding | `large_liq_size` is written as BTC in the manual but compared with USD sums |
 | `DOC-1`, `DOC-3` | This section, documentation findings | `docs/UserManual.md` line 1200 (spread side rule) and line 967 (VPFR geometry, already the stop record's D-2) contradict their specs |
@@ -238,7 +238,9 @@ ORDERCHECK_KNOWN_DEFECTS=1 dotnet run --project verify/ordercheck/OrderCheck.vbp
 - **Done before the stop:** the whole label-consumer audit (section R.4 of this doc), the era confirmation (R.6) and the tier-floor statement (R.7).
 - **My read (hypothesis): neither finding explains the MEDIUM gap.** The liquidation vote is absent from every tier alike.
 
-### R.2 `L-1` — the live stream drops the liquidation flag
+### R.2 `L-1` — the live stream never delivers a liquidation flag the parse can read
+
+⚠ **Wording corrected (orchestrator, 2026-09-16 UTC).** An earlier draft said the stream parse "never kept" the flag. The parse does read it: `DeribitWsFeed.vb:488` calls `TryGetProperty("liquidation", …)`. The defect is that the subscribed channel (`trades.BTC-PERPETUAL.100ms`, `DeribitWsFeed.vb:28`) never delivered a flag the parse could read. Whether the channel omits the field is unverified. The measured evidence below is unchanged.
 
 | Evidence (liquidation output §1-§3, §5) | Result |
 |---|---|
@@ -251,9 +253,9 @@ ORDERCHECK_KNOWN_DEFECTS=1 dotnet run --project verify/ordercheck/OrderCheck.vbp
 | ... that logged `LiqSignal` other than `NONE`, or a non-zero liquidation size | **0** |
 | Merged rows since the v51 edge with `LiqSignal` other than `NONE` | 0 of 51,107 |
 
-- **Mechanism, verified in code:** `DeribitWsFeed.vb:488` reads `liquidation` from each streamed trade and writes `none` when the key is absent. `MarketState.AppendTrade`, `MarketState.GetTrades` and `WsMarketDataSource.GetRecentTradesAsync` pass that same record to `CalcLiquidations` unchanged. So the streamed copies carrying `none` are what scoring saw.
+- **Mechanism, verified in code:** `DeribitWsFeed.vb:488` reads `liquidation` from each streamed trade (`TryGetProperty`) and writes `none` when no readable value arrives. `MarketState.AppendTrade`, `MarketState.GetTrades` and `WsMarketDataSource.GetRecentTradesAsync` pass that same record to `CalcLiquidations` unchanged. So the streamed copies carrying `none` are what scoring saw. The liquidation cascade alarm reads the same flag at `DeribitWsFeed.vb:506`.
 - **Where the real flags came from:** a later REST copy of the same trade (same trade id), appended to the store after the streamed one. Deribit's REST trade endpoint documents the `liquidation` field.
-- **Not verified:** whether Deribit's `trades.BTC-PERPETUAL.100ms` channel never sends the field or sends it under another name. The channel page could not be fetched. The data shows only that the stream parse never kept it.
+- **Not verified:** whether Deribit's `trades.BTC-PERPETUAL.100ms` channel never sends the field or sends it under another name. The channel page could not be fetched. The data shows only that no streamed liquidation trade carried a flag the parse could read.
 - **Share of rows:** 32 of 36,327 collector rows in the store span (0.09 %) had a liquidation to score. Before 2026-07-31 21:49 UTC there is no store to measure. `NONE` on every earlier row is consistent with the same defect, but that is inferred, not measured.
 - **What each row lost is not measured:** the penalty side depends on which side was liquidated, and whether a verdict would change needs the re-score, which is not started.
 - **No failing harness fixture is possible:** `DeribitWsFeed` needs a live socket and is not linked into `verify/ordercheck`. The failing check is the data instrument `--mode liqflag` (section R.8 of this doc).
@@ -313,7 +315,7 @@ ORDERCHECK_KNOWN_DEFECTS=1 dotnet run --project verify/ordercheck/OrderCheck.vbp
 | 38 | `LiveMicrostructureEvaluator.vb:187-190` | Burst tag | row 10 producer | D | AGREES |
 | 39 | `LiveMicrostructureEvaluator.vb:207-212` | Absorption tag ABSORB_ABOVE / ABSORB_BELOW | `Core/Indicators_OrderFlow.vb:208-224` | D | AGREES |
 | 40 | `LiveMicrostructureEvaluator.vb:249-280` | Bracketing levels by price | price only | D | AGREES |
-| 41 | `DeribitWsFeed.vb:488` | Streamed trade `liquidation` → `TradeRecord.Liquidation` | Deribit: flag T / M / MT on liquidation trades (REST copies carry it) | S (feeds `CalcLiquidations`) | **DISAGREES in effect: `L-1`** |
+| 41 | `DeribitWsFeed.vb:488` | Streamed trade `liquidation` (read with `TryGetProperty`; absent → `none`) → `TradeRecord.Liquidation` | The subscribed channel `trades.BTC-PERPETUAL.100ms` (`DeribitWsFeed.vb:28`): no streamed liquidation trade delivered a readable flag; the REST copies of the same trades carry T / M | S (feeds `CalcLiquidations`) | **DISAGREES in effect: `L-1`.** The parse reads the field; the channel never delivered it |
 | 42 | `Core/Indicators_OrderFlow.vb:268-272` | Flagged trade booked by taker direction | Deribit: M = maker side liquidated | S | **DISAGREES for M: `L-2`** |
 
 - **Stop-class disagreements:** rows 28 and 32 (the POC-tier gate, already reported), 41 (`L-1`) and 42 (`L-2`).
@@ -381,3 +383,223 @@ ORDERCHECK_KNOWN_DEFECTS=1 dotnet run --project verify/ordercheck/OrderCheck.vbp
   - Why the store admitted same-id duplicates (`DATA-1`).
   - The UI renderers' label readings.
   - Whether `MT` ever occurs on this instrument.
+
+### R.10 Resumed again — NO NEW STOP: session 1 complete
+
+**Resumed again:** 2026-09-16 (UTC) on the orchestrator's D-7 ruling (resume session 1, `docs/medium-tier-diagnosis-brief-2026-09-16.md` §2.1–§2.4, `LiqSignal` taken as logged). **Narrowed stop rule** (orchestrator, same day): findings in an already-reported class (the POC-tier gate, the liquidation flag or attribution) are recorded without stopping; a stop needs a NEW defect that changes the score, tier or placed level of population rows, measured, not latent. The trader's rulings D-1, D-2 and D-4 to D-6 are recorded in `docs/medium-tier-bug-hunt-spec-back.md`; this seat implemented none of them.
+
+**Instrument outputs (committed):** [`docs/medium-tier-bug-hunt-2026-09-16-rescore-output.md`](medium-tier-bug-hunt-2026-09-16-rescore-output.md) ("rescore output §N" below) and [`docs/medium-tier-bug-hunt-2026-09-16-census-output.md`](medium-tier-bug-hunt-2026-09-16-census-output.md) ("census output §N" below).
+
+**Legend. IDs added in this section:**
+
+| ID | Source and kind | Meaning |
+|---|---|---|
+| `A82a`, `A82b`, `A82c` | Harness fixtures, `verify/ordercheck/Program.vb` (added by this seat) | `A82a` guards the mirror's completeness; `A82b` asserts a mirrored market gives the mirrored scores, breakdown, verdict and placed levels; `A82c` asserts the same runs reached every vote site |
+| `M1`, `M2` | This section, scratch mutations of `Core/ScoringEngine_Calculate_Scoring.vb` (never committed) | `M1` moves the `BULL_DECEL` penalty from the short score to the long score; `M2` swaps both decel arms |
+| `K1`–`K4` | This section, pre-registered census comparisons (`tools/ops/SwingFallbackRead/TierDemotionCensus.vb` header) | Demoted rows against native rows of their new tier; `K3` and `K4` are TRANSITIONAL-only |
+| `EVAL-1` | This section, analysis-report finding | The analysis report's VerdictContext outcome table admits "NO TRADE [WEAK LONG]" and "[WEAK SHORT]" rows as trades |
+| `DISP-1` | This section, display finding | The card's funding-momentum colour ignores the funding sign |
+| `TOOL-1` | This section, offline-tool finding | `OverlapValidator` compares `OISignal` with labels the OI producer never emits |
+| P, H, F, V, N, VN, EA, B, E | Rescore output §5, explanation kinds | P logged precision · H run started in the previous UTC hour · F VPFR forming-bar volume · V another VPFR label · N volume thresholds · VN V and N together · EA adjacent settings era within 72 h · B burst modifier not applied · E other settings era |
+
+#### R.10.1 Verdict
+
+- **No new stop.** All four tests ran. No new defect changes the score, tier or placed level of a population row.
+- **Re-score reconstruction** (`docs/medium-tier-diagnosis-brief-2026-09-16.md` §2.1): all six fields match on **8,749 of 8,810 population rows (99.31 %)** and on 39,331 of 39,594 trading-week rows (99.34 %). Every one of the 263 mismatches has an input-uncertainty explanation. **0 unexplained.** 0 rows are explained only by a settings era or a skipped burst modifier.
+- **Mirror fixtures** (brief §2.2): `A82b` passes on 7,524 states, and `A82c` reached all 72 site markers. The reverse mutation `M1` fails `A82b` with 847 asymmetries. `M2` passes, which is the mirror test's stated limit.
+- **Rest of the label-consumer audit** (orchestrator carry-in 2): rows 43–57 below. **0 stop-class.** Three findings, none on a scoring path: `EVAL-1` (analysis report, live), `DISP-1` (card colour), `TOOL-1` (offline validator).
+- **Tier-demotion census** (brief §2.4): **455 of 8,810 population rows are demoted (5.2 %)**, all in TRANSITIONAL: 360 MEDIUM → WEAK, 95 STRONG → MEDIUM, 0 two tiers. The tier floor binds on **0** of 7,965 TRANSITIONAL rows. The only readable comparisons, NY `K1` and NY `K3`, read **NO DIFFERENCE SHOWN**. Every other comparison is NOT READABLE (n < 100).
+- **My read (hypothesis, for session 2):** no live scoring bug explains the MEDIUM gap. Demoted STRONG rows are 95 of the 2,457 effective-MEDIUM rows (3.9 %); 360 raw-MEDIUM rows left for WEAK. In NY the gap sits in **native** MEDIUM: main-window net EV −4.1 [−5.3, −3.1] bps, against native WEAK −3.2 [−4.1, −2.3] and native STRONG −3.2 [−5.3, −1.4] (census output §4.1). Session 2 can work from the logged scores; the per-vote attribution file is in section R.10.2 of this doc.
+
+#### R.10.2 Re-score reconstruction (brief §2.1)
+
+**Instrument:** `tools/ops/SwingFallbackRead/MediumTierRescore.vb`, `--mode rescore`. It runs the shipped `ScoringEngine.Calculate` under each row's era settings (`git show <commit>:settings.json`, loaded through `SettingsLoader.Initialise`).
+
+| Input the CSV does not log | How the instrument supplies it |
+|---|---|
+| `VPFRSignal`, `VPFRPoc`, `VPFRValueAreaSignal`, nearest LVNs | The shipped `CalcVPFRLite` on exchange candles. A row counts as verified when the recompute reproduces the four logged VPFR fields within 0.006 USD: 38,665 of 39,594 rows (97.7 %), 8,508 of 8,810 population rows |
+| `DynamicNorms` volume thresholds | The shipped `DynamicNorms.Compute` on the same 100 closed bars, under the era's settings (two distinct norms settings groups: before and from v58) |
+| `SpreadStatus` | The shipped `ClassifySpread` on the logged `SpreadBps` |
+| `RocMagnitudeThreshold`, `SessionUtcHour` | The shipped resolvers on the row's UTC hour |
+| `LiqSignal` | As logged (`NONE` on every row: finding `L-1`, ruling D-7) |
+| `LastTwoHighs5m`, `LastTwoLows5m`, `MTFGateDetails` | Not set: they reach only note text, never points (read in `Core/ScoringEngine_Calculate_Scoring.vb:648-698`) |
+
+| Field (rescore output §4) | Population rows matching | % | All trading-week rows matching | % |
+|---|---|---|---|---|
+| `LongScore` | 8,773 of 8,810 | 99.58 | 39,438 of 39,594 | 99.61 |
+| `ShortScore` | 8,777 | 99.63 | 39,445 | 99.62 |
+| `EffectiveLongScore` | 8,772 | 99.57 | 39,424 | 99.57 |
+| `EffectiveShortScore` | 8,775 | 99.60 | 39,425 | 99.57 |
+| `RegimePenalty` | 8,808 | 99.98 | 39,572 | 99.94 |
+| `Verdict` | 8,792 | 99.80 | 39,562 | 99.92 |
+| **All six** | **8,749** | **99.31** | **39,331** | **99.34** |
+
+- **Secondary fields (all rows):** `MaxScore` and `OiCvdOutcome` 100 %. `VerdictContext` differs on 24 rows (22 of them also mismatch a primary field; 0 population rows). Placed levels differ on 3 rows, 0 in the population: one row 21 s after the v51 commit (probably still v50 geometry on the box; not verified), and two rows where the recomputed POC differs.
+- **Ledger guard (`CheckLedger`):** 0 mismatches.
+- **"Directional row" and "population" coincide:** every trading-week directional row since the v51 edge has valid placed levels (census output §3), so the 8,810 population rows are all the directional rows the brief names.
+
+**Mismatch explanations.** Every single-cause test runs on every mismatching row (rescore output §5). A test explains a row when it reproduces all six fields.
+
+| Explaining kinds (rescore output §5.2) | Population rows | All rows |
+|---|---|---|
+| F + V | 31 | 128 |
+| V | 12 | 50 |
+| P | 4 | 32 |
+| F + V + B + E | 3 | 16 |
+| F + V + N | 4 | 11 |
+| P + N, P + V | 2 | 12 |
+| V + N | 3 | 4 |
+| F + V + N + B + E | 0 | 4 |
+| P + B + E, V + B + E, P + VN + B + E | 1 | 5 |
+| F + V + N + EA + E | 1 | 1 |
+| **Explained by no input-uncertainty kind** | **0** | **0** |
+
+- **A first-match classifier mislabelled 25 rows. The fix records every explanation.** The first run tested settings eras first. It labelled 25 burst rows "settings era": v51 settings without the burst modifier, a month after v51. All 25 carry `AggrVelSignal` BURST_BUY or BURST_SELL. Every input the burst gate reads is logged from the same `IndicatorResults` object that scoring used (`UI/MainForm_Analysis.vb:447-470`, `:626`, `:643`). So a live skip of the modifier has no mechanism. Every one of the 25 is also explained by F, V or P.
+- **Why burst rows mismatch more (2.45 % against 0.51 %, rescore output §5.3):** `CalcVPFRLite` gives the forming bar the largest decay weight (age 0, `Core/Indicators_Structure.vb:138-146`). The recompute's forming bar carries zero volume. A burst puts real volume into the current price bucket, and that can flip `IN_LVN_*` to NEUTRAL. Kind F rebuilds the forming bar from the final exchange bar (a share of its volume) and is accepted only when the four logged VPFR fields still verify. F explains 59 of the 76 burst-row mismatches.
+- **Precision (P):** 47 rows, mostly ADX and RSI printed at two decimals sitting on a threshold.
+
+**Attribution file for session 2** (brief §2.1 "keep the rebuilt `SignalBreakdown`"): `backtest_data/swing-fallback-read/rescore-attribution.csv`, gitignored, 11.9 MB, one line per re-scored row. It carries identity, era, VPFR verification, logged and re-scored verdict, match flag and class, the six scores, signed long and short points for each of the 22 breakdown labels, and mutation flags read from the breakdown notes. Regenerate it with the re-run command in section R.10.7 of this doc.
+
+#### R.10.3 Mirror-symmetry fixtures (brief §2.2)
+
+**The directional fields, enumerated from `Core/IndicatorResults.vb` by reflection** (116 public properties; `A82a` fails if a property sits in no class or in two):
+
+| Mirror class | Transform | Properties |
+|---|---|---|
+| Price level (9) | x → 2C − x; 0 stays 0 | `CurrentPrice`, `VWAP`, `EMA9`, `EMA21`, `EMA50`, `EMA200_5m`, `VPFRPoc`, `BestPivotByVolume5m`, `AbsorptionLevel` |
+| Price pair (22) | each takes the other's reflection | `VWAPSigma1Upper`/`Lower`, `VWAPSigma2Upper`/`Lower`, `DonchianUpper`/`Lower`, `VPFRVah`/`VPFRVal`, `VPFRNearestHvnAbove`/`Below`, `VPFRNearestLvnAbove`/`Below`, `LastSwingHigh5m`/`LastSwingLow5m`, `LastSwingHigh15m`/`LastSwingLow15m`, `SwingTargetLong`/`Short`, `SwingStopLong`/`Short`, `LastTwoHighs5m`/`LastTwoLows5m` |
+| Signed flow (12) | sign flips | `ROC`, `VWAPDevPct`, `TTMHistogram`, `FundingRate`, `FundingDelta`, `CVDValue`, `TFIValue`, `AggrVelNet`, `MicroCVDEarly`, `MicroCVDMid`, `MicroCVDLate`, `CVDWeightedSlope` |
+| Side pair (8) | values swap | `PlusDI`/`MinusDI`, `OFIBidVol`/`OFIAskVol`, `LiqLongSize`/`LiqShortSize`, `MTFGatePassLong`/`MTFGatePassShort` |
+| Special (6) | own rule | `RSI` → 100 − RSI; `OFIRatio` → 1 ÷ ratio; `VPFRBucketVolumes` reversed; `VPFRBucketPriceLow` reflected grid; `TrendStructure` UPTREND ↔ DOWNTREND; `BestPivotIsHigh5m` negated |
+| Side label (26) | value pairs swap | `ROCSlope`, `RSIDivergence`, `Regime`, `TTMDirection`, `TTMSignal`, `EMAAlignment`, `FundingBias`, `FundingMomentum`, `OISignal`, `OFISignal`, `OFIMomentum`, `LiqSignal`, `PriceVsEMA200`, `CVDSlope`, `CVDDivergence`, `TFISignal`, `AggrVelSignal`, `AbsorptionSignal`, `MicroCVDSignal`, `MTF15mTrend`, `MTF15mEMAAlignment`, `DonchianSignal`, `OBVTrend`, `OBVDivergence`, `VPFRSignal`, `VPFRValueAreaSignal` |
+| Side-free, kept (33) | unchanged | `ATR`, `ATRSizeMultiplier`, `VolumeSMA9`, `CurrentVolume`, `CurrentVolumeUSD`, `VolumeRatio`, `ADX`, `VWAPSessionCandles`, `BBW`, `SqueezeStatus`, `OI_Current`, `OIChange15m`, `OIChange60m`, `SpreadBps`, `SpreadStatus`, `AggrVelBurstRatio`, the eight absorption numerics, `MicroCVDMomentum` (measured relative to the net-flow side), `MTF15mADX`, `MTFGateDetails`, `VPFRHVNearPoc`, `VPFRBucketSize`, `BestPivotVolumeRatio5m`, `ExecResolution`, `RocMagnitudeThreshold`, `SessionUtcHour` |
+
+- **`A82a` also asserts** that each label map is a set of disjoint swap pairs, that mirroring twice returns the original state, and that mirroring once changes every property outside the kept class.
+- **States (`A82b`):** 58 single-site states, each a LONG-side setting of one vote site with the rest neutral (a penalty site also sets the votes it penalises), plus 150 seeded joint states per cell. They run in every regime, at one hour per session bucket (0, 8, 13 UTC), under three cfgs. The cfgs are the tracked `settings.json`; the same with every optional modifier on (OFI momentum, value-area scoring, best-pivot candidate, funding momentum, OI × CVD, regime weights, trend structure, burst scoring, MTF gate); and target and stop arbitration mode 1.
+- **Asserted per state:** raw and effective scores swap; `RegimePenalty` and `MaxScore` are equal; the verdict mirrors; `MTFGateBlocked` is equal; `OiCvdOutcome` mirrors; every breakdown row's long and short points and hits swap; the adjusted targets and both sides' placed target, stop, raw target, reasons and cap flag are the 2C − x reflection.
+- **Coverage (`A82c`):** 72 markers, all reached. They cover points on each of the 22 breakdown labels; six partial upgrades; the value-area upgrade; every penalty and bonus note (RSI divergence, squeeze, OFI momentum confirm and suppress, CVD divergence, burst confirm and contra, MicroCVD decel and stall, liquidation, spread, OI × CVD confirm and conflict, Pass 2c align and conflict in TRENDING and RANGE, trend structure, Step 3, Step 3b amplify, soften and neutral); both TRANSITIONAL penalties; the MTF veto; `BELOW_MIN_MOVE`; STRONG, MEDIUM and WEAK in TRENDING, RANGE_BOUND and TRANSITIONAL; and every placed target and stop tier.
+- **Precondition checked, not assumed:** the tracked RSI zones sum to 100 (60/40, 55/45, 65/35, midline 50) and the funding bands are negatives of each other, so the mirror of an RSI or funding crossing is exact.
+
+| Exemption (by design) | Why |
+|---|---|
+| `VerdictContext` on a raw long-short tie | `CalcVerdictContext` takes the long side when `LongScore >= ShortScore` (`Core/ScoringEngine_Calculate_Scoring.vb:46`). Display and payload tag only |
+| Free text (breakdown notes, `MTFGateReason`, `TargetCapReason*`) | It carries side words and prices; the numbers are asserted instead |
+| `HoldStatus` | Every run is `PositionState.None` |
+| Producer tie rules (section R.5 of this doc) | Not reached: the fixture sets `IndicatorResults` directly |
+
+- **The OBV partial upgrade is unreachable by design, not a defect.** `A82c` first reported it as unreached. The partial IS the adverse-divergence state (`Core/ScoringEngine_Calculate_Scoring.vb:451-452`). The v0.42 gate blocks the upgrade on adverse divergence (`:511-512`), as `docs/DeribitIndicatorProject.md` documents: "OBV upgrade blocked on adverse divergence". At `9193e45` (2026-03-11) this partial could upgrade; v0.42 closed it deliberately. `A82c` now pins it as never reached.
+- **⚠ Limit: the mirror test cannot see a symmetric inversion.** A vote with both arms reversed is its own mirror. The POC-tier gate defect (`A80b`) has that shape. Semantics come from the label-consumer audit, not from `A82`.
+
+**Reverse mutation (scratch builds, engine file untouched):**
+
+| Mutation | Change at `Core/ScoringEngine_Calculate_Scoring.vb:380-381` | Harness result |
+|---|---|---|
+| `M1` | `BULL_DECEL` penalises the LONG score (`BEAR_DECEL` still penalises LONG) | `A82b` **FAIL**, 847 asymmetries; the only failure in the harness (`1 FAILURE(S)`) |
+| `M2` | Both arms swapped | **ALL PASS** (the limit above) |
+
+- Tracked file before and after: MD5 `5ad308a0876d03e3a9ea4aea822b357f`; git blob `f0c4ac4059d7ba64418f4c8e3a8104bb619e0ad5`, equal to `HEAD`. The scratch outputs under `verify/ordercheck/bin/` were deleted.
+- **Harness:** default run ALL PASS, 409 PASS lines (402 before `A82`). With `ORDERCHECK_KNOWN_DEFECTS=1`: the same 4 failures as before (`A80b` ×2, `A81b` ×2), and `A82` passes.
+
+#### R.10.4 Label-consumer audit, the rest (rows 43–57)
+
+- **Scope:** every remaining comparison against a direction-bearing label or verdict word in tracked `.vb` files outside those in section R.4 of this doc (`git ls-files` sweep; `verify/` and this seat's instruments excluded).
+- **Class:** **S** = feeds scores, tiers, placed levels or the bridge payload. **D** = display. **EV** = evaluation or analysis report. **OFF** = offline tool.
+
+| # | Consumer (file:line) | Label and use | Producer | Class | Result |
+|---|---|---|---|---|---|
+| 43 | `UI/MainForm_Render_Cards.vb` (36 label sites: regime `:959`, `:2343`; verdict side `:1085`; VPFR `:1838`, `:3440`; value area `:1852`; EMA `:2412`, `:3165`; OI `:2521`, `:3240`; MicroCVD `:2537`, `:3343`; liquidations `:2555`, `:3301`; OFI `:3271`, `:3282`; CVD `:3319`; TFI `:3356`; EMA200 `:3368`; Donchian `:3386`; OBV `:3417`; ROC `:3015`; RSI divergence `:3049`; VWAP deviation `:3105`) | Colour and state word by side | Rows 1–24 producers | D | AGREES. VPFR is coloured by the score vote's side, which matches the vote's own spec (row 17) |
+| 44 | `UI/MainForm_Render_Cards.vb:2112-2117`, `:3222-3226`, `:3567-3571` | `FundingMomentum` RISING → caution colour; FALLING → long colour, "de-crowding" | `Core/Indicators_OrderFlow.vb:502-527` (rate delta, sign-free) and Step 3b (row 24), which reads the bias | D | **DISAGREES in wording: `DISP-1`.** With shorts crowded, FALLING is shorts crowding more (Step 3b −1 short) and RISING is de-crowding (+1 short); the card calls FALLING "de-crowding" and paints RISING as caution |
+| 45 | `UI/MainForm_PlaintextSnapshot.vb` | Renders label strings verbatim | — | D | No comparison; nothing to disagree |
+| 46 | `UI/MainForm_LiveStrip.vb:227`, `:271`, `:307-310`, `:329-330` | Absorption arrow (guarded by `HasAbsorption`), burst tag, TFI word | Rows 10, 9; `Core/Indicators_OrderFlow.vb:208-224` | D | AGREES |
+| 47 | `UI/TweakSettingsForm.vb:467-468`, `UI/Controls/MtfRow.vb:21`, `UI/MainForm_Calibration.vb:48`, `:80` | Counts STRONG and MEDIUM verdicts; default direction; dictionary keys | verdict strings | D | No geometry claim |
+| 48 | `AnalysisLogger.vb:199-206`, `tools/BacktestRunner/BacktestRowWriter.vb:93-95` | CSV `TargetCapReason` side from the verdict words; a lean NO TRADE takes the lean side | verdict strings | EV (a logged column) | AGREES |
+| 49 | `LivePerformanceTracker.vb:1446-1456`; `analysis/BandLadder.vb:50`, `:88-91`; `analysis/FailureRateMatrix.vb:59-67` | Directional filter first, then side from the verdict words | verdict strings | EV | AGREES |
+| 50 | `analysis/AnalysisRunner.vb:278-297` (`ComputeContextOutcomes`) | Excludes only an exact "NO TRADE", then reads the side with `Contains("LONG")` | `Core/ScoringEngine_Calculate_Scoring.vb:17-26` `AppendLean` writes "NO TRADE [WEAK LONG]", "[WEAK SHORT]", "[TIE]" | EV (analysis report §6 context table) | **DISAGREES: `EVAL-1`.** Lean NO TRADE rows count as trades, and "[TIE]" counts as short |
+| 51 | `tools/BacktestRunner/ReplayLoop.vb:376-445`, `:532-549` | Offline copies of the Regime, EMA alignment, `FundingBias` and Donchian producers | `UI/MainForm_Analysis.vb:250-324`, `:530-547` | OFF | AGREES (read side by side; the Donchian blocks diff empty) |
+| 52 | `tools/BacktestRunner/OverlapValidator.vb:509-512` | "Muted vote" when `OISignal` is LONG_PARTIAL, SHORT_PARTIAL, LONG_FULL or SHORT_FULL | `UI/MainForm_Analysis.vb:373-383` emits NEW LONGS, NEW SHORTS, COVERING, CAPITULATION, NEUTRAL | OFF | **DISAGREES: `TOOL-1`.** The OI arm can never match |
+| 53 | `tools/WhatIfRunner/WhatIfReplay.vb:67-140` | Offline Steps 4, 4b, 5: veto on raw scores, dominance on effective, MTF gate, tiers | `Core/ScoringEngine_Calculate_Verdict.vb:33-176` | OFF | AGREES. Its POC tier is closed (VPFR unlogged); the POC-gate measurement found 0 POC placements, so no row differs |
+| 54 | `tools/CeilingAudit/CeilingAuditProgram.vb:308-361`, `CsvFeatureBuilder.vb:432-434` | Absorption and burst side; verdict side | Rows 10, 39 producers | OFF | AGREES |
+| 55 | `tools/AutoTweaker/AutoTweakerCore.vb:288-289`, `:376-377`; `ConditionsExtractor.vb:308-356`; `RoundStatsBuilder.vb:263`, `:338-350` | Tier and side codes from verdict strings | verdict strings | OFF | AGREES |
+| 56 | `Core/LevelAbsorptionTracker.vb:495` | Comment naming the absorption labels | — | — | Not a consumer |
+| 57 | `Core/ScoringEngine_Calculate_Scoring.vb:451-452`, `:511-512` (row 16 re-read by `A82c`) | OBV partial upgrade | row 16 producer | S | AGREES: unreachable by design (section R.10.3 of this doc) |
+
+- **`EVAL-1`, measured:** over the merged book, the filter admits 7,195 lean rows (3,019 "NO TRADE [WEAK LONG]", 4,117 "[WEAK SHORT]", 59 "[TIE]") against 3,305 STRONG or MEDIUM verdicts. The report's own population cut is not applied in that count. The inline comment at `analysis/AnalysisRunner.vb:273-276` says the NO TRADE rows are "masked by the inner NO TRADE filter"; that holds only for an exact "NO TRADE". The report only: no score, tier, placed level or payload reads it.
+- **`DISP-1`:** display wording and colour only. Queued in `docs/medium-tier-bug-hunt-spec-back.md` section R.6.
+- **`TOOL-1`:** it under-counts OI-only muted-vote disagreements in the offline overlap report. Queued in the spec-back section R.6.
+
+#### R.10.5 Tier-demotion census (brief §2.4)
+
+**Instrument:** `tools/ops/SwingFallbackRead/TierDemotionCensus.vb`, `--mode census`. The rules were fixed in its header before the first run (comparisons `K1`–`K4`, bootstrap, readability, label order).
+
+| Self-check (census output §1) | Result |
+|---|---|
+| Effective tier from the logged effective score = the logged verdict tier | 0 mismatches in 8,810 rows |
+| Verdict side: effective = raw − `RegimePenalty` | 0 rows differ |
+| TRANSITIONAL rows where the `TierFloor` arm wins with a floor above zero | **0 of 7,965** |
+| TRANSITIONAL side scores held at 0 because raw < penalty (the `Max(…, 0)` arm) | 2,235 side scores |
+| Side scores matching neither raw − penalty, the floor, nor 0 | 0 |
+| Non-TRANSITIONAL directional rows with a non-zero `RegimePenalty` | 0 of 7,928 |
+
+- **Tier floor inert (orchestrator carry-in 3), stated and measured:** the floor binds only when `TierFloor(raw) > raw − penalty`. For every raw ≥ 6, `TierFloor(raw) ≤ raw − 3`, and the tracked penalty is at most 2. The census confirms 0 binding rows. **The demotion is the ADX penalty alone.**
+
+| Session (census output §3) | Rows | TRANSITIONAL | native STRONG | demoted-to-MEDIUM | native MEDIUM | demoted-to-WEAK | native WEAK | Demoted % of TRANSITIONAL |
+|---|---|---|---|---|---|---|---|---|
+| NY | 5,417 | 549 | 342 | 66 | 1,486 | 220 | 3,303 | 52.1 |
+| LONDON | 1,665 | 152 | 131 | 18 | 467 | 65 | 984 | 54.6 |
+| ASIA | 1,728 | 181 | 65 | 11 | 409 | 75 | 1,168 | 47.5 |
+
+- **Counts only, not in the population:** the penalty also pushes rows out of WEAK into NO TRADE: NY 1,376, LONDON 183, ASIA 297 (census output §2).
+
+| Comparison, main window (census output §4.1) | FULL d, bps [95 % CI] (n) | H1 d (n) | H2 d (n) | Label |
+|---|---|---|---|---|
+| NY `K1` demoted-to-WEAK − native WEAK | +0.2 [−2.6, +3.0] (220 / 3,303) | +1.1 [−3.6, +6.6] (89 / 1,304) | −0.5 [−3.9, +2.6] (131 / 1,999) | NO DIFFERENCE SHOWN |
+| NY `K3` same, TRANSITIONAL only | −1.2 [−5.4, +3.0] (220 / 107) | −2.3 (89 / 33) | −1.0 (131 / 74) | NO DIFFERENCE SHOWN (halves not readable) |
+| NY `K2`, `K4` (demoted-to-MEDIUM) | −1.3 and −0.9 | — | — | NOT READABLE (66 rows) |
+| LONDON and ASIA `K1`–`K4` | — | — | — | NOT READABLE |
+
+- Carried 24 h gives the same labels (census output §4.2).
+- **Reading, under the pre-registered rule:** no readable cell shows demoted rows beating native rows of their new tier. The census gives **no evidence that the TRANSITIONAL penalty or the tier floor is miscalibrated**, and it cannot rule that out outside NY `K1` and `K3`. No D-table row is raised.
+
+#### R.10.6 Stop-rule record (narrowed rule)
+
+| Finding | Class | Stop? | Why |
+|---|---|---|---|
+| 263 re-score mismatches | Input uncertainty (P, H, F, V, N) | No | Every row explained; 0 defect candidates |
+| 25 burst rows first classed "settings era" | Classifier artefact | No | All also explained by F, V or P; no mechanism for a live skip |
+| OBV partial upgrade unreachable | Design (v0.42) | No | Agrees with the documented intent |
+| `EVAL-1` | Analysis report | No | Changes no score, tier or placed level |
+| `DISP-1` | Display | No | Display only |
+| `TOOL-1` | Offline tool | No | Offline only |
+
+#### R.10.7 Re-run
+
+```
+dotnet build tools/ops/SwingFallbackRead/SwingFallbackRead.vbproj -c Release
+dotnet tools/ops/SwingFallbackRead/bin/Release/net8.0/SwingFallbackRead.dll --root . --mode rescore --fetch aws_fetch/20260913-153704 --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv
+dotnet tools/ops/SwingFallbackRead/bin/Release/net8.0/SwingFallbackRead.dll --root . --mode census --fetch aws_fetch/20260913-153704 --pooled AWS-copybacks/pooled-book-2026-09-09/analysis_log_pooled.csv
+dotnet run --project verify/ordercheck/OrderCheck.vbproj
+```
+
+#### R.10.8 What I verified, and what I did not (resumed again)
+
+| Verified claim | How |
+|---|---|
+| Re-score match rates and the explanation sets | `--mode rescore`, rescore output §4 and §5 (handle H-9 in the spec-back section R.6) |
+| The burst gate's inputs are the logged values scoring saw | Read `UI/MainForm_Analysis.vb:447-470`, `:626-643` and `AnalysisLogger.vb:306-310` |
+| The mirror property on 7,524 states, with coverage of every site | Harness run, `A82a`–`A82c` PASS |
+| The mirror fixture can fail | Scratch mutations `M1` (FAIL, 847 asymmetries) and `M2` (PASS); tracked blob unchanged |
+| The OBV upgrade is closed by design | `git show 9193e45`; the v0.42 gate; `docs/DeribitIndicatorProject.md` Pass 2 line |
+| Census counts, floor inertness and labels | `--mode census`, census output §1–§5 |
+| `EVAL-1` lean-row counts | Python count over the merged book (spec-back handle H-13) |
+| The four existing instrument modes are unchanged by the new code | Each re-run diffed against its committed output: identical apart from the timestamp |
+| No engine, settings, UI or manual file changed | `git diff --stat 920de06` over `Core`, `UI`, `analysis`, `settings.json`, `docs/UserManual.md` and the root engine files: empty |
+
+- **Not verified:**
+  - The live forming bar's real volume. Kind F models it as a share of the final bar; it proves a consistent explanation, not the value.
+  - Which settings the non-collector instances loaded before the collector era. The era comes from the commit time.
+  - Full parity of `tools/WhatIfRunner/WhatIfReplay.vb` and `tools/BacktestRunner/ReplayLoop.vb`: only their label sites were read.
+  - `EVAL-1`'s size inside the report after its own population cut.
+  - Whether the STRONG-and-MEDIUM-only counts in `UI/TweakSettingsForm.vb` and `tools/AutoTweaker/AutoTweakerCore.vb` are intended.
+  - Mirror symmetry of the producers (`Core/Indicators_*.vb`): `A82` tests `ScoringEngine.Calculate` and `SignalEmitter.ComputeSideLevels` only.
+  - The intended colour semantics for `DISP-1`: no card spec was read.
+  - LONDON and ASIA demotion outcomes: below the readability floor.

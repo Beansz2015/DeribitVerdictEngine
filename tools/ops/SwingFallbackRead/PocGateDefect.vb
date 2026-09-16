@@ -165,29 +165,9 @@ Partial Module SwingFallbackReadProgram
                 pr.Kind = "OTHER"
             End If
 
-            Dim poc As Double = 0, sig As String = ""
-            For vi As Integer = 0 To PgVariants.Length - 1
-                Dim forming As Integer = PgVariants(vi).Item2
-                If forming = 2 AndAlso iForm < 0 Then Continue For
-                Dim candles = PgWindow(bars, iPrev, PgVariants(vi).Item1, forming, formOpen, r.Price, iForm)
-                Dim vp As Double = 0, near As Boolean = False, vs As String = ""
-                Dim vah As Double = 0, vaLow As Double = 0, vaSig As String = ""
-                Dim hA As Double = 0, hB As Double = 0, lA As Double = 0, lB As Double = 0
-                Dim vols As Double() = Nothing, bLow As Double = 0, bSize As Double = 0
-                IndicatorEngine.CalcVPFRLite(candles, r.Price, vp, near, vs, vah, vaLow, vaSig, hA, hB, lA, lB, vols, bLow, bSize,
-                                             numBuckets:=vc.NumBuckets, hvnVolPct:=vc.HvnVolPct, lvnVolPct:=vc.LvnVolPct,
-                                             hvnProximityPct:=vc.HvnProximityPct, decayBase:=vc.DecayBase, valueAreaPct:=vc.ValueAreaPct)
-                Dim ok As Boolean = Math.Abs(vah - logged.Item1) <= PgTol AndAlso Math.Abs(vaLow - logged.Item2) <= PgTol AndAlso
-                                    Math.Abs(hA - r.VpfrNearestHvnAbove) <= PgTol AndAlso Math.Abs(hB - r.VpfrNearestHvnBelow) <= PgTol
-                If ok Then
-                    variantHits(vi) += 1
-                    If pr.WindowVariant < 0 Then
-                        pr.WindowVariant = vi
-                        poc = vp
-                        sig = vs
-                    End If
-                End If
-            Next
+            Dim vr = PgRecomputeVpfr(bars, iPrev, iForm, formOpen, r, logged.Item1, logged.Item2, cfg, variantHits)
+            pr.WindowVariant = vr.WindowVariant
+            Dim poc As Double = vr.Poc, sig As String = vr.Signal
 
             If pr.WindowVariant >= 0 Then
                 pr.Signal = sig
@@ -377,6 +357,58 @@ Partial Module SwingFallbackReadProgram
     End Function
 
     ' ------------------------------------------------------------------ helpers
+
+    ''' <summary>One CalcVPFRLite recompute for a logged row. WindowVariant is the first window variant
+    ''' whose profile reproduces the four logged VPFR fields, or -1 when none does; the POC, label and
+    ''' window are then the first applicable variant's (UNVERIFIED). Shared by --mode pocgate and
+    ''' --mode rescore.</summary>
+    Private Class PgVpfr
+        Public WindowVariant As Integer = -1
+        Public Poc As Double
+        Public Signal As String = ""
+        Public NearPoc As Boolean
+        Public Vah As Double
+        Public Val As Double
+        Public VaSignal As String = ""
+        Public HvnAbove As Double
+        Public HvnBelow As Double
+        Public LvnAbove As Double
+        Public LvnBelow As Double
+        Public Window As List(Of Candle)
+    End Class
+
+    ''' <summary>Tries the window variants in order (PgVariants). hits(vi) counts every variant that
+    ''' verifies, the first verifying variant is returned; when none verifies, the first applicable
+    ''' variant's recompute is returned with WindowVariant = -1.</summary>
+    Private Function PgRecomputeVpfr(bars As PgBars, iPrev As Integer, iForm As Integer, formOpen As Long,
+                                     row As CsvRow, loggedVah As Double, loggedVal As Double,
+                                     cfg As EngineSettings, hits As Integer()) As PgVpfr
+        Dim vc = cfg.Indicators.VPFR
+        Dim best As PgVpfr = Nothing
+        Dim fallback As PgVpfr = Nothing
+        For vi As Integer = 0 To PgVariants.Length - 1
+            Dim forming As Integer = PgVariants(vi).Item2
+            If forming = 2 AndAlso iForm < 0 Then Continue For
+            Dim candles = PgWindow(bars, iPrev, PgVariants(vi).Item1, forming, formOpen, row.Price, iForm)
+            Dim x As New PgVpfr With {.Window = candles}
+            Dim vols As Double() = Nothing, bLow As Double = 0, bSize As Double = 0
+            IndicatorEngine.CalcVPFRLite(candles, row.Price, x.Poc, x.NearPoc, x.Signal, x.Vah, x.Val, x.VaSignal,
+                                         x.HvnAbove, x.HvnBelow, x.LvnAbove, x.LvnBelow, vols, bLow, bSize,
+                                         numBuckets:=vc.NumBuckets, hvnVolPct:=vc.HvnVolPct, lvnVolPct:=vc.LvnVolPct,
+                                         hvnProximityPct:=vc.HvnProximityPct, decayBase:=vc.DecayBase, valueAreaPct:=vc.ValueAreaPct)
+            If fallback Is Nothing Then fallback = x
+            Dim ok As Boolean = Math.Abs(x.Vah - loggedVah) <= PgTol AndAlso Math.Abs(x.Val - loggedVal) <= PgTol AndAlso
+                                Math.Abs(x.HvnAbove - row.VpfrNearestHvnAbove) <= PgTol AndAlso Math.Abs(x.HvnBelow - row.VpfrNearestHvnBelow) <= PgTol
+            If ok Then
+                If hits IsNot Nothing Then hits(vi) += 1
+                If best Is Nothing Then
+                    x.WindowVariant = vi
+                    best = x
+                End If
+            End If
+        Next
+        Return If(best, fallback)
+    End Function
 
     Private Function PgPct(k As Integer, n As Integer) As String
         If n = 0 Then Return "n/a"

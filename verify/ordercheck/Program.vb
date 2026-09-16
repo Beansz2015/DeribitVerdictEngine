@@ -743,6 +743,13 @@ Module Program
         A81a_TakerSideLiquidationBooksTheTakersPosition()
         A81b_MakerSideLiquidationBooksTheMakersPosition()
 
+        ' [A82 — mirror-symmetry property test (MEDIUM-tier bug hunt, docs/medium-tier-diagnosis-brief-2026-09-16.md
+        '   section 2.2; read docs/medium-tier-bug-hunt-2026-09-16.md). A82a guards the mirror's completeness,
+        '   A82b asserts a mirrored market gives the mirrored verdict and levels, and emits A82c (every vote
+        '   site was reached by the same runs).]
+        A82a_MirrorCoversEveryIndicatorResultsProperty()
+        A82b_MirroredMarketGivesMirroredVerdictAndLevels()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -15764,6 +15771,768 @@ Module Program
                   String.Format(CultureInfo.InvariantCulture,
                     "KNOWN DEFECT: got signal={0} long={1} short={2}. Core/Indicators_OrderFlow.vb:268-272 books every flagged trade by the taker's direction",
                     sig, lng, sht))
+        Next
+    End Sub
+
+    ' =======================================================================
+    ' A82 — mirror-symmetry property test.
+    ' MEDIUM-tier bug hunt: docs/medium-tier-diagnosis-brief-2026-09-16.md section 2.2; results in
+    ' docs/medium-tier-bug-hunt-2026-09-16.md.
+    '
+    ' Property. Reflect the market about the entry price C: every price level x becomes 2C - x (and an
+    ' above/below pair swaps), every signed flow value changes sign, RSI becomes 100 - RSI, the OFI
+    ' bid/ask ratio inverts, every side-bearing label swaps (BULL <-> BEAR, BUY <-> SELL, ...), and every
+    ' side-free value is kept. Then ScoringEngine.Calculate must return the mirrored result: long and
+    ' short scores swap (raw and effective), RegimePenalty and MaxScore are equal, the verdict mirrors
+    ' (STRONG LONG <-> STRONG SHORT, NO TRADE [WEAK LONG] <-> NO TRADE [WEAK SHORT]), every breakdown
+    ' row's long and short points and hits swap, and the placed levels of each side are the 2C - x
+    ' reflection of the other side's.
+    '
+    ' A82a guards the mirror: every public IndicatorResults property must sit in exactly one class of
+    ' the table below (a new field fails the guard until someone decides how it mirrors), every label
+    ' map must be an involution, and mirroring twice must return the original state.
+    ' A82b runs the property over single-site states (one vote site's inputs set, the rest neutral) and
+    ' seeded joint states, in every regime, one hour per session bucket, and three cfgs: the tracked
+    ' settings.json; the same with every optional modifier switched on (OFI momentum, value-area
+    ' scoring, best-pivot candidate, funding momentum, OI x CVD, regime weights, trend structure, burst
+    ' scoring, MTF gate); and target and stop arbitration mode 1. A82c (emitted by A82b) asserts the runs
+    ' reached every vote and mutation site, MEDIUM and STRONG in every regime, both TRANSITIONAL
+    ' penalties, the MTF veto, BELOW_MIN_MOVE and every placed-level tier.
+    '
+    ' Exemptions, each by design:
+    '   * VerdictContext on a raw long-short TIE: CalcVerdictContext takes the long side when
+    '     LongScore >= ShortScore (Core/ScoringEngine_Calculate_Scoring.vb:46). Display only.
+    '   * Free text (breakdown notes, MTFGateReason, TargetCapReason*): it carries side words and prices.
+    '     The numbers it describes are asserted instead.
+    '   * HoldStatus: every run is PositionState.None.
+    '   * Producer tie rules (CalcVPFRLite labels price AT the POC as NEAR_HVN_RESIST): not reached,
+    '     because the fixture sets IndicatorResults directly.
+    ' ⚠ LIMIT: a mirror test cannot see a SYMMETRIC inversion. A vote whose two arms are both reversed
+    '   (long state scores short AND short state scores long) is its own mirror and passes. The POC-tier
+    '   gate defect (A80b) is that shape. Semantics come from the vote-site audit, not from A82.
+    ' Reverse mutation (docs/medium-tier-bug-hunt-spec-back.md): moving the BULL_DECEL penalty at
+    '   Core/ScoringEngine_Calculate_Scoring.vb:380 from ShortScore to LongScore in a scratch copy makes
+    '   A82b FAIL; swapping BOTH decel arms makes it PASS (the limit above).
+    '
+    ' [Fixture-literal provenance, CLAUDE.md RULED 2026-08-11]
+    '   SHIPPED BEHAVIOUR: every threshold a state crosses (RSI zones, ROC magnitude per hour, ADX trend
+    '   threshold, TRANSITIONAL penalty bands, funding bands, large_liq_size, spread wide threshold,
+    '   structural bounds, the min-move floor, the session hours) is read from the tracked settings.json.
+    '   MECHANISM: C = 100000, ATR = 100, the norms (volume high 3, mid 1.5), the flow magnitudes, the
+    '   level offsets and the RNG seed only place a state on one side of a threshold; the property is
+    '   what is asserted, so any values that reach the sites serve. The optional-modifier and
+    '   arbitration-mode cfgs switch flags ON to reach sites the tracked flags disable.
+    ' =======================================================================
+
+    Private Const A82C As Double = 100000.0
+
+    ' Price levels reflected about C (0 or Nothing = "no level" stays).
+    Private ReadOnly A82PriceLevels As String() = {"CurrentPrice", "VWAP", "EMA9", "EMA21", "EMA50", "EMA200_5m", "VPFRPoc",
+                                                   "BestPivotByVolume5m", "AbsorptionLevel"}
+    ' Price-level pairs: each takes the reflection of the other.
+    Private ReadOnly A82PricePairs As String() = {"VWAPSigma1Upper", "VWAPSigma1Lower", "VWAPSigma2Upper", "VWAPSigma2Lower",
+                                                  "DonchianUpper", "DonchianLower", "VPFRVah", "VPFRVal",
+                                                  "VPFRNearestHvnAbove", "VPFRNearestHvnBelow", "VPFRNearestLvnAbove", "VPFRNearestLvnBelow",
+                                                  "LastSwingHigh5m", "LastSwingLow5m", "LastSwingHigh15m", "LastSwingLow15m",
+                                                  "SwingTargetLong", "SwingTargetShort", "SwingStopLong", "SwingStopShort",
+                                                  "LastTwoHighs5m", "LastTwoLows5m"}
+    ' Signed flow values: sign flips.
+    Private ReadOnly A82Negated As String() = {"ROC", "VWAPDevPct", "TTMHistogram", "FundingRate", "FundingDelta", "CVDValue",
+                                               "TFIValue", "AggrVelNet", "MicroCVDEarly", "MicroCVDMid", "MicroCVDLate", "CVDWeightedSlope"}
+    ' Side pairs that are not prices: values swap.
+    Private ReadOnly A82SidePairs As String() = {"PlusDI", "MinusDI", "OFIBidVol", "OFIAskVol", "LiqLongSize", "LiqShortSize",
+                                                 "MTFGatePassLong", "MTFGatePassShort"}
+    ' Special transforms.
+    Private ReadOnly A82Special As String() = {"RSI", "OFIRatio", "VPFRBucketVolumes", "VPFRBucketPriceLow", "TrendStructure", "BestPivotIsHigh5m"}
+    ' Side-bearing labels: value pairs swap, every other value is kept.
+    Private ReadOnly A82LabelMaps As New Dictionary(Of String, String()) From {
+        {"ROCSlope", {"RISING", "FALLING"}},
+        {"RSIDivergence", {"BULLISH", "BEARISH"}},
+        {"Regime", {"TRENDING_UP", "TRENDING_DOWN"}},
+        {"TTMDirection", {"RISING", "FALLING"}},
+        {"TTMSignal", {"BULL_BUILDING", "BEAR_BUILDING", "BULL_FADING", "BEAR_FADING"}},
+        {"EMAAlignment", {"BULL", "BEAR"}},
+        {"FundingBias", {"LONGS HEAVILY CROWDED", "SHORTS HEAVILY CROWDED", "LONGS CROWDED", "SHORTS CROWDED"}},
+        {"FundingMomentum", {"RISING", "FALLING"}},
+        {"OISignal", {"NEW LONGS", "NEW SHORTS", "COVERING", "CAPITULATION"}},
+        {"OFISignal", {"BUY DOMINANT", "SELL DOMINANT"}},
+        {"OFIMomentum", {"RISING", "FALLING"}},
+        {"LiqSignal", {"LONG LIQS", "SHORT LIQS"}},
+        {"PriceVsEMA200", {"ABOVE", "BELOW"}},
+        {"CVDSlope", {"RISING", "FALLING"}},
+        {"CVDDivergence", {"BULLISH", "BEARISH"}},
+        {"TFISignal", {"BUY PRESSURE", "SELL PRESSURE"}},
+        {"AggrVelSignal", {"BURST_BUY", "BURST_SELL"}},
+        {"AbsorptionSignal", {"ABSORB_ABOVE", "ABSORB_BELOW"}},
+        {"MicroCVDSignal", {"BULL_ACCEL", "BEAR_ACCEL", "BULL_DECEL", "BEAR_DECEL"}},
+        {"MTF15mTrend", {"BULL", "BEAR"}},
+        {"MTF15mEMAAlignment", {"BULL", "BEAR"}},
+        {"DonchianSignal", {"LONG", "SHORT", "LONG_PARTIAL", "SHORT_PARTIAL"}},
+        {"OBVTrend", {"RISING", "FALLING"}},
+        {"OBVDivergence", {"BULLISH", "BEARISH"}},
+        {"VPFRSignal", {"NEAR_HVN_SUPPORT", "NEAR_HVN_RESIST", "IN_LVN_BULL", "IN_LVN_BEAR"}},
+        {"VPFRValueAreaSignal", {"ABOVE_VAH", "BELOW_VAL"}}}
+    ' Side-free: kept as is.
+    Private ReadOnly A82Kept As String() = {"ATR", "ATRSizeMultiplier", "VolumeSMA9", "CurrentVolume", "CurrentVolumeUSD", "VolumeRatio",
+                                            "ADX", "VWAPSessionCandles", "BBW", "SqueezeStatus", "OI_Current", "OIChange15m", "OIChange60m",
+                                            "SpreadBps", "SpreadStatus", "AggrVelBurstRatio", "AbsorptionRatio", "AbsorptionAggrUsd",
+                                            "AbsorptionPullFrac", "AbsorptionEpisodeSec", "AbsorptionPullLB", "AbsorptionPostLB",
+                                            "AbsorptionSizeStart", "AbsorptionSizeMin", "MicroCVDMomentum", "MTF15mADX", "MTFGateDetails",
+                                            "VPFRHVNearPoc", "VPFRBucketSize", "BestPivotVolumeRatio5m", "ExecResolution",
+                                            "RocMagnitudeThreshold", "SessionUtcHour"}
+
+    Private Function A82Props() As PropertyInfo()
+        Return GetType(IndicatorResults).GetProperties(BindingFlags.Public Or BindingFlags.Instance)
+    End Function
+
+    Private Function A82SwapLabel(map As String(), value As String) As String
+        If value Is Nothing Then Return Nothing
+        For i As Integer = 0 To map.Length - 1 Step 2
+            If value = map(i) Then Return map(i + 1)
+            If value = map(i + 1) Then Return map(i)
+        Next
+        Return value
+    End Function
+
+    Private Function A82Reflect(x As Double) As Double
+        Return If(x = 0.0, 0.0, 2.0 * A82C - x)
+    End Function
+
+    Private Function A82ReflectBoxed(v As Object) As Object
+        If v Is Nothing Then Return Nothing
+        If TypeOf v Is Double Then Return A82Reflect(CDbl(v))
+        Throw New InvalidOperationException("A82 cannot reflect a " & v.GetType().Name)
+    End Function
+
+    ''' <summary>The mirrored market. LastTwoHighs5m / LastTwoLows5m are (Older, Newer) price pairs: the
+    ''' reflection keeps each element's age, so (Older, Newer) of the lows becomes (Older, Newer) of the
+    ''' highs with each price reflected.</summary>
+    Private Function A82Mirror(r As IndicatorResults) As IndicatorResults
+        Dim m As New IndicatorResults()
+        Dim props = A82Props().ToDictionary(Function(p) p.Name)
+        For Each p In props.Values
+            If p.CanWrite Then p.SetValue(m, p.GetValue(r))
+        Next
+        For Each n In A82PriceLevels
+            props(n).SetValue(m, A82ReflectBoxed(props(n).GetValue(r)))
+        Next
+        For i As Integer = 0 To A82PricePairs.Length - 1 Step 2
+            Dim a = props(A82PricePairs(i)), b = props(A82PricePairs(i + 1))
+            If a.PropertyType Is GetType(ValueTuple(Of Double, Double)) Then
+                Dim ta = DirectCast(a.GetValue(r), ValueTuple(Of Double, Double))
+                Dim tb = DirectCast(b.GetValue(r), ValueTuple(Of Double, Double))
+                a.SetValue(m, (A82Reflect(tb.Item1), A82Reflect(tb.Item2)))
+                b.SetValue(m, (A82Reflect(ta.Item1), A82Reflect(ta.Item2)))
+            Else
+                Dim va = a.GetValue(r), vb = b.GetValue(r)
+                a.SetValue(m, A82ReflectBoxed(vb))
+                b.SetValue(m, A82ReflectBoxed(va))
+            End If
+        Next
+        For Each n In A82Negated
+            Dim v = props(n).GetValue(r)
+            If v IsNot Nothing Then props(n).SetValue(m, -CDbl(v))
+        Next
+        For i As Integer = 0 To A82SidePairs.Length - 1 Step 2
+            Dim a = props(A82SidePairs(i)), b = props(A82SidePairs(i + 1))
+            Dim va = a.GetValue(r), vb = b.GetValue(r)
+            a.SetValue(m, vb)
+            b.SetValue(m, va)
+        Next
+        For Each kv In A82LabelMaps
+            props(kv.Key).SetValue(m, A82SwapLabel(kv.Value, CStr(props(kv.Key).GetValue(r))))
+        Next
+        m.RSI = 100.0 - r.RSI
+        m.OFIRatio = If(r.OFIRatio > 0, 1.0 / r.OFIRatio, r.OFIRatio)
+        Dim vols = If(r.VPFRBucketVolumes, Array.Empty(Of Double)())
+        m.VPFRBucketVolumes = vols.Reverse().ToArray()
+        m.VPFRBucketPriceLow = If(vols.Length = 0 OrElse r.VPFRBucketPriceLow = 0, r.VPFRBucketPriceLow,
+                                  2.0 * A82C - (r.VPFRBucketPriceLow + vols.Length * r.VPFRBucketSize))
+        m.TrendStructure = If(r.TrendStructure = TrendStructure.UPTREND, TrendStructure.DOWNTREND,
+                              If(r.TrendStructure = TrendStructure.DOWNTREND, TrendStructure.UPTREND, r.TrendStructure))
+        m.BestPivotIsHigh5m = Not r.BestPivotIsHigh5m
+        Return m
+    End Function
+
+    Private Function A82MirrorVerdict(v As String) As String
+        If v Is Nothing Then Return Nothing
+        Return v.Replace("LONG", ChrW(1)).Replace("SHORT", "LONG").Replace(ChrW(1), "SHORT")
+    End Function
+
+    Private Function A82MirrorReason(reason As String) As String
+        Select Case reason
+            Case "SWING_HIGH_5M" : Return "SWING_LOW_5M"
+            Case "SWING_LOW_5M" : Return "SWING_HIGH_5M"
+            Case "NEAREST_HVN_ABOVE" : Return "NEAREST_HVN_BELOW"
+            Case "NEAREST_HVN_BELOW" : Return "NEAREST_HVN_ABOVE"
+        End Select
+        Return reason
+    End Function
+
+    Private Function A82Same(a As Object, b As Object) As Boolean
+        If a Is Nothing OrElse b Is Nothing Then Return a Is Nothing AndAlso b Is Nothing
+        If TypeOf a Is Double Then Return Math.Abs(CDbl(a) - CDbl(b)) <= 0.000001
+        If TypeOf a Is Double() Then
+            Dim x = DirectCast(a, Double()), y = DirectCast(b, Double())
+            Return x.Length = y.Length AndAlso Enumerable.Range(0, x.Length).All(Function(i) Math.Abs(x(i) - y(i)) <= 0.000001)
+        End If
+        If TypeOf a Is ValueTuple(Of Double, Double) Then
+            Dim x = DirectCast(a, ValueTuple(Of Double, Double)), y = DirectCast(b, ValueTuple(Of Double, Double))
+            Return Math.Abs(x.Item1 - y.Item1) <= 0.000001 AndAlso Math.Abs(x.Item2 - y.Item2) <= 0.000001
+        End If
+        Return a.Equals(b)
+    End Function
+
+    Private Sub A82a_MirrorCoversEveryIndicatorResultsProperty()
+        ' 1. every property in exactly one class
+        Dim classes As New Dictionary(Of String, List(Of String))()
+        Dim add = Sub(cls As String, ids As IEnumerable(Of String))
+                      For Each n In ids
+                          If Not classes.ContainsKey(n) Then classes(n) = New List(Of String)()
+                          classes(n).Add(cls)
+                      Next
+                  End Sub
+        add("price level", A82PriceLevels)
+        add("price pair", A82PricePairs)
+        add("negated", A82Negated)
+        add("side pair", A82SidePairs)
+        add("special", A82Special)
+        add("label", A82LabelMaps.Keys)
+        add("kept", A82Kept)
+        Dim names = A82Props().Select(Function(p) p.Name).ToList()
+        Dim unclassified = names.Where(Function(n) Not classes.ContainsKey(n)).ToList()
+        Dim doubled = classes.Where(Function(kv) kv.Value.Count > 1).Select(Function(kv) kv.Key & " (" & String.Join(", ", kv.Value) & ")").ToList()
+        Dim unknown = classes.Keys.Where(Function(n) Not names.Contains(n)).ToList()
+        Check(String.Format("A82a every IndicatorResults property ({0}) sits in exactly one mirror class", names.Count),
+              unclassified.Count = 0 AndAlso doubled.Count = 0 AndAlso unknown.Count = 0,
+              "unclassified: " & String.Join(", ", unclassified) & " | in two classes: " & String.Join(", ", doubled) &
+              " | named but absent: " & String.Join(", ", unknown))
+
+        ' 2. every label map is an involution with distinct values
+        Dim badMaps = A82LabelMaps.Where(Function(kv) kv.Value.Length Mod 2 <> 0 OrElse kv.Value.Distinct().Count() <> kv.Value.Length).Select(Function(kv) kv.Key).ToList()
+        Check("A82a every label map is a set of disjoint swap pairs", badMaps.Count = 0, "bad maps: " & String.Join(", ", badMaps))
+
+        ' 3. mirroring twice returns the original, on a state that sets every property to a non-default value
+        Dim r As New IndicatorResults()
+        Dim k As Integer = 0
+        For Each p In A82Props()
+            k += 1
+            Dim t = p.PropertyType
+            If t Is GetType(Double) Then
+                p.SetValue(r, If(A82PriceLevels.Contains(p.Name) OrElse A82PricePairs.Contains(p.Name), A82C + 7.25 * k, 0.37 * k))
+            ElseIf t Is GetType(Double?) Then
+                p.SetValue(r, CType(0.41 * k, Double?))
+            ElseIf t Is GetType(Integer) Then
+                p.SetValue(r, k)
+            ElseIf t Is GetType(Boolean) Then
+                p.SetValue(r, k Mod 2 = 0)
+            ElseIf t Is GetType(String) Then
+                p.SetValue(r, If(A82LabelMaps.ContainsKey(p.Name), A82LabelMaps(p.Name)(0), "X" & k.ToString(CultureInfo.InvariantCulture)))
+            ElseIf t Is GetType(Double()) Then
+                p.SetValue(r, New Double() {1.0, 2.0, 5.0})
+            ElseIf t Is GetType(TrendStructure) Then
+                p.SetValue(r, TrendStructure.UPTREND)
+            ElseIf t Is GetType(ValueTuple(Of Double, Double)) Then
+                p.SetValue(r, (A82C - 3.5 * k, A82C + 1.5 * k))
+            End If
+        Next
+        Dim twice = A82Mirror(A82Mirror(r))
+        Dim differs = A82Props().Where(Function(p) Not A82Same(p.GetValue(r), p.GetValue(twice))).Select(Function(p) p.Name).ToList()
+        Dim once = A82Mirror(r)
+        Dim unchanged = A82Props().Where(Function(p) Not A82Kept.Contains(p.Name) AndAlso A82Same(p.GetValue(r), p.GetValue(once))).Select(Function(p) p.Name).ToList()
+        Check("A82a mirroring twice returns the original state, and mirroring once changes every non-kept property",
+              differs.Count = 0 AndAlso unchanged.Count = 0,
+              "changed by a double mirror: " & String.Join(", ", differs) & " | not changed by one mirror: " & String.Join(", ", unchanged))
+    End Sub
+
+    Private Function A82Base(cfg As EngineSettings, regime As String, hour As Integer) As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = A82C : r.ATR = 100 : r.ATRSizeMultiplier = 1
+        r.Regime = regime : r.SessionUtcHour = hour : r.ExecResolution = 1
+        r.RocMagnitudeThreshold = ExecutionResolution.ResolveRocMagnitudeForHour(cfg, hour)
+        r.ROC = 0 : r.ROCSlope = "FLAT"
+        r.RSI = (cfg.Indicators.RSI.Overbought + cfg.Indicators.RSI.Oversold) / 2.0 : r.RSIDivergence = "NONE"
+        r.PlusDI = 20 : r.MinusDI = 20 : r.ADX = 15
+        r.VolumeRatio = 1
+        r.VWAP = A82C : r.VWAPSessionCandles = cfg.Indicators.VWAP.WarmupCandles + 10
+        r.VWAPSigma1Upper = A82C + 100 : r.VWAPSigma1Lower = A82C - 100 : r.VWAPSigma2Upper = A82C + 200 : r.VWAPSigma2Lower = A82C - 200
+        r.BBW = 0.01 : r.SqueezeStatus = "NONE" : r.TTMSignal = "FLAT" : r.TTMDirection = "FLAT"
+        r.EMA9 = A82C : r.EMA21 = A82C : r.EMA50 = A82C : r.EMAAlignment = "MIXED"
+        r.EMA200_5m = A82C : r.PriceVsEMA200 = "AT"
+        r.FundingRate = 0 : r.FundingBias = "NEUTRAL" : r.FundingMomentum = "FLAT"
+        r.OI_Current = 1000000000 : r.OISignal = "NEUTRAL"
+        r.OFIRatio = 1 : r.OFIBidVol = 100 : r.OFIAskVol = 100 : r.OFISignal = "BALANCED" : r.OFIMomentum = "FLAT"
+        r.SpreadBps = 1 : r.SpreadStatus = "NORMAL"
+        r.LiqSignal = "NONE"
+        r.CVDSlope = "FLAT" : r.CVDDivergence = "NONE"
+        r.TFISignal = "NEUTRAL" : r.AggrVelSignal = "NORMAL"
+        r.MicroCVDMomentum = "FLAT" : r.MicroCVDSignal = "FLAT"
+        r.MTF15mTrend = "FLAT" : r.MTF15mEMAAlignment = "MIXED" : r.MTFGatePassLong = True : r.MTFGatePassShort = True : r.MTFGateDetails = "A82"
+        r.DonchianUpper = A82C + 300 : r.DonchianLower = A82C - 300 : r.DonchianSignal = "NONE"
+        r.OBVTrend = "FLAT" : r.OBVDivergence = "NONE"
+        r.VPFRSignal = "NEUTRAL" : r.VPFRValueAreaSignal = "INSIDE_VA" : r.VPFRVah = A82C + 400 : r.VPFRVal = A82C - 400
+        r.TrendStructure = TrendStructure.UNDEFINED
+        r.AbsorptionSignal = "NONE"
+        Return r
+    End Function
+
+    ''' <summary>Single-site states, each written for the LONG side (the mirror supplies the SHORT side).
+    ''' A penalty site also sets the votes that give the penalised side points, so the penalty moves a score.</summary>
+    Private Function A82Sites(cfg As EngineSettings) As List(Of Tuple(Of String, Action(Of IndicatorResults)))
+        Dim rsi = cfg.Indicators.RSI
+        Dim sl = cfg.Scoring.StructuralLevels
+        Dim floorDist As Double = cfg.Scoring.TradeCosts.EffectiveMinMovePct * A82C
+        Dim longVotes As Action(Of IndicatorResults) =
+            Sub(r)
+                r.EMAAlignment = "BULL" : r.EMA9 = A82C - 10 : r.EMA21 = A82C - 20 : r.EMA50 = A82C - 30
+                r.PlusDI = 25 : r.MinusDI = 15
+                r.EMA200_5m = A82C - 500 : r.PriceVsEMA200 = "ABOVE"
+            End Sub
+        Dim s As New List(Of Tuple(Of String, Action(Of IndicatorResults)))()
+        Dim add = Sub(name As String, act As Action(Of IndicatorResults)) s.Add(Tuple.Create(name, act))
+        add("ROC full", Sub(r)
+                            r.ROC = 2 * r.RocMagnitudeThreshold + 0.01
+                            r.ROCSlope = "RISING"
+                        End Sub)
+        add("ROC partial", Sub(r)
+                            r.ROC = 1.5 * r.RocMagnitudeThreshold + 0.01
+                            r.ROCSlope = "FLAT"
+                        End Sub)
+        add("RSI full", Sub(r) r.RSI = rsi.Overbought + 3)
+        add("RSI partial", Sub(r) r.RSI = (rsi.PartialOverbought + rsi.Overbought) / 2.0)
+        add("RSI bearish divergence penalty", Sub(r)
+                            r.RSI = Math.Max(rsi.Overbought, rsi.DivPenaltyRsiHigh) + 2
+                            r.RSIDivergence = "BEARISH"
+                        End Sub)
+        add("DMI", Sub(r)
+                            r.PlusDI = 25
+                            r.MinusDI = 15
+                        End Sub)
+        add("ADX trend with DMI", Sub(r)
+                            r.PlusDI = 25
+                            r.MinusDI = 15
+                            r.ADX = cfg.Indicators.ADX.TrendThreshold + 5
+                        End Sub)
+        add("Volume full", Sub(r)
+                            r.VolumeRatio = 4
+                            r.ROC = 0.001
+                            r.VWAP = A82C - 20
+                        End Sub)
+        add("Volume mid partial", Sub(r)
+                            r.VolumeRatio = 2
+                            r.ROC = 0.001
+                            r.VWAP = A82C - 20
+                        End Sub)
+        add("VWAP full", Sub(r)
+                            r.VWAP = A82C - 50
+                            r.VWAPSigma1Upper = A82C + 50
+                            r.VWAPSigma1Lower = A82C - 150
+                            r.VWAPSigma2Upper = A82C + 150
+                            r.VWAPSigma2Lower = A82C - 250
+                        End Sub)
+        add("VWAP partial", Sub(r)
+                            r.VWAP = A82C - 150
+                            r.VWAPSigma1Upper = A82C - 50
+                            r.VWAPSigma1Lower = A82C - 250
+                            r.VWAPSigma2Upper = A82C + 50
+                            r.VWAPSigma2Lower = A82C - 350
+                        End Sub)
+        add("VWAP warmup", Sub(r)
+                            r.VWAP = A82C - 50
+                            r.VWAPSessionCandles = 0
+                        End Sub)
+        add("TTM building", Sub(r)
+                            r.TTMSignal = "BULL_BUILDING"
+                            r.TTMDirection = "RISING"
+                            r.TTMHistogram = 5
+                        End Sub)
+        add("Squeeze active", Sub(r)
+                                  longVotes(r)
+                                  r.SqueezeStatus = "ACTIVE" : r.MinusDI = 30 : r.PlusDI = 10
+                              End Sub)
+        add("EMA ribbon", Sub(r)
+                            r.EMAAlignment = "BULL"
+                            r.EMA9 = A82C - 10
+                            r.EMA21 = A82C - 20
+                            r.EMA50 = A82C - 30
+                        End Sub)
+        add("OI new longs", Sub(r)
+                            r.OISignal = "NEW LONGS"
+                            r.OIChange15m = 0.5
+                        End Sub)
+        add("OI covering partial", Sub(r)
+                            r.OISignal = "COVERING"
+                            r.OIChange15m = -0.5
+                        End Sub)
+        add("OFI buy dominant", Sub(r)
+                            r.OFISignal = "BUY DOMINANT"
+                            r.OFIRatio = 2
+                            r.OFIBidVol = 200
+                            r.OFIAskVol = 100
+                        End Sub)
+        add("OFI momentum confirm", Sub(r)
+                            r.OFISignal = "BUY DOMINANT"
+                            r.OFIRatio = 2
+                            r.OFIMomentum = "RISING"
+                        End Sub)
+        add("OFI momentum suppress", Sub(r)
+                            r.OFISignal = "BUY DOMINANT"
+                            r.OFIRatio = 2
+                            r.OFIMomentum = "FALLING"
+                        End Sub)
+        add("CVD rising", Sub(r)
+                            r.CVDSlope = "RISING"
+                            r.CVDValue = 50000
+                        End Sub)
+        add("CVD bearish divergence penalty", Sub(r)
+                            r.CVDSlope = "RISING"
+                            r.CVDValue = 50000
+                            r.CVDDivergence = "BEARISH"
+                        End Sub)
+        add("TFI buy", Sub(r)
+                            r.TFISignal = "BUY PRESSURE"
+                            r.TFIValue = 0.4
+                        End Sub)
+        add("Burst confirm", Sub(r)
+                            r.TFISignal = "BUY PRESSURE"
+                            r.TFIValue = 0.4
+                            r.AggrVelSignal = "BURST_BUY"
+                            r.AggrVelBurstRatio = 8
+                            r.AggrVelNet = 50000
+                        End Sub)
+        add("Burst contra", Sub(r)
+                            r.TFISignal = "BUY PRESSURE"
+                            r.TFIValue = 0.4
+                            r.AggrVelSignal = "BURST_SELL"
+                            r.AggrVelBurstRatio = 8
+                            r.AggrVelNet = -50000
+                        End Sub)
+        add("MicroCVD accel", Sub(r)
+                            r.MicroCVDSignal = "BULL_ACCEL"
+                            r.MicroCVDMomentum = "ACCELERATING"
+                            r.MicroCVDEarly = 1000
+                            r.MicroCVDMid = 2000
+                            r.MicroCVDLate = 4000
+                        End Sub)
+        add("MicroCVD bull decel against a short vote", Sub(r)
+                            r.MicroCVDSignal = "BULL_DECEL"
+                            r.MicroCVDMomentum = "DECELERATING"
+                            r.MicroCVDEarly = 4000
+                            r.MicroCVDLate = 1000
+                            r.PlusDI = 15
+                            r.MinusDI = 25
+                        End Sub)
+        add("MicroCVD flat stall", Sub(r)
+                                       longVotes(r)
+                                       r.MicroCVDSignal = "FLAT" : r.VWAP = A82C - 50 : r.CVDValue = -1000
+                                   End Sub)
+        add("Liquidations standard", Sub(r)
+                                         longVotes(r)
+                                         r.LiqSignal = "LONG LIQS" : r.LiqLongSize = cfg.Indicators.Liquidations.LargeLiqSize / 2.0 : r.LiqShortSize = 1
+                                     End Sub)
+        add("Liquidations large", Sub(r)
+                                      longVotes(r)
+                                      r.LiqSignal = "LONG LIQS" : r.LiqLongSize = cfg.Indicators.Liquidations.LargeLiqSize * 2.0 : r.LiqShortSize = 1
+                                  End Sub)
+        add("Spread wide with ROC up", Sub(r)
+                                           longVotes(r)
+                                           r.SpreadStatus = "WIDE" : r.SpreadBps = cfg.Indicators.Spread.WideThresholdBps + 1 : r.ROC = 2 * r.RocMagnitudeThreshold + 0.01
+                                       End Sub)
+        add("Spread wide flat ROC", Sub(r)
+                                        longVotes(r)
+                                        r.SpreadStatus = "WIDE" : r.SpreadBps = cfg.Indicators.Spread.WideThresholdBps + 1 : r.ROC = 0 : r.MinusDI = 30 : r.PlusDI = 10
+                                    End Sub)
+        add("EMA200 anchor", Sub(r)
+                            r.EMA200_5m = A82C - 500
+                            r.PriceVsEMA200 = "ABOVE"
+                        End Sub)
+        add("Donchian full", Sub(r)
+                            r.DonchianSignal = "LONG"
+                            r.DonchianUpper = A82C
+                            r.DonchianLower = A82C - 300
+                        End Sub)
+        add("Donchian partial", Sub(r)
+                            r.DonchianSignal = "LONG_PARTIAL"
+                            r.DonchianUpper = A82C + 10
+                            r.DonchianLower = A82C - 300
+                        End Sub)
+        add("OBV rising", Sub(r) r.OBVTrend = "RISING")
+        add("OBV rising with bearish divergence", Sub(r)
+                            r.OBVTrend = "RISING"
+                            r.OBVDivergence = "BEARISH"
+                        End Sub)
+        add("VPFR near HVN support", Sub(r)
+                            r.VPFRSignal = "NEAR_HVN_SUPPORT"
+                            r.VPFRPoc = A82C + 40
+                            r.VPFRHVNearPoc = True
+                        End Sub)
+        add("VPFR in LVN bull", Sub(r)
+                            r.VPFRSignal = "IN_LVN_BULL"
+                            r.VPFRPoc = A82C - 400
+                        End Sub)
+        add("Value area breakout", Sub(r)
+                                       r.VPFRValueAreaSignal = "ABOVE_VAH" : r.VPFRVah = A82C - 50 : r.VPFRVal = A82C - 600
+                                       r.ROC = 0.001 : r.VolumeRatio = 2 : r.EMAAlignment = "BULL"
+                                   End Sub)
+        add("OI x CVD confirm", Sub(r)
+                            r.OISignal = "NEW LONGS"
+                            r.CVDSlope = "RISING"
+                            r.CVDValue = 50000
+                        End Sub)
+        add("OI x CVD conflict", Sub(r)
+                            r.OISignal = "NEW LONGS"
+                            r.CVDSlope = "FALLING"
+                            r.CVDValue = -50000
+                        End Sub)
+        add("Funding high positive", Sub(r)
+                            r.FundingRate = cfg.Scoring.FundingHighPositive * 2
+                            r.FundingBias = "LONGS HEAVILY CROWDED"
+                        End Sub)
+        add("Funding low positive", Sub(r)
+                                        longVotes(r)
+                                        r.FundingRate = (cfg.Scoring.FundingLowPositive + cfg.Scoring.FundingHighPositive) / 2.0 : r.FundingBias = "LONGS CROWDED"
+                                    End Sub)
+        add("Funding momentum amplify", Sub(r)
+                                            longVotes(r)
+                                            r.FundingBias = "LONGS CROWDED" : r.FundingMomentum = "RISING" : r.FundingRate = cfg.Scoring.FundingLowPositive / 2.0
+                                        End Sub)
+        add("Funding momentum soften", Sub(r)
+                                           longVotes(r)
+                                           r.FundingBias = "LONGS CROWDED" : r.FundingMomentum = "FALLING" : r.FundingRate = cfg.Scoring.FundingLowPositive / 2.0
+                                       End Sub)
+        add("Funding neutral to crowding", Sub(r)
+                                               longVotes(r)
+                                               r.FundingBias = "NEUTRAL" : r.FundingMomentum = "RISING" : r.FundingRate = cfg.Scoring.FundingLowPositive / 2.0
+                                           End Sub)
+        add("MTF gate blocks the long", Sub(r)
+                                            longVotes(r)
+                                            r.MTFGatePassLong = False : r.MTF15mTrend = "BEAR"
+                                        End Sub)
+        add("Trend structure uptrend", Sub(r)
+                                           longVotes(r)
+                                           r.TrendStructure = TrendStructure.UPTREND : r.LastTwoHighs5m = (A82C - 100, A82C - 50) : r.LastTwoLows5m = (A82C - 300, A82C - 200)
+                                       End Sub)
+        add("Swing levels", Sub(r)
+                                r.LastSwingHigh5m = A82C + 150 : r.LastSwingLow5m = A82C - 120
+                                r.SwingTargetLong = A82C + 150 : r.SwingStopLong = A82C - 120
+                                r.SwingTargetShort = A82C - 120 : r.SwingStopShort = A82C + 150
+                            End Sub)
+        add("Nearest HVN levels", Sub(r)
+                            r.VPFRNearestHvnAbove = A82C + 130
+                            r.VPFRNearestHvnBelow = A82C - 170
+                        End Sub)
+        add("POC tier gate label", Sub(r)
+                            r.VPFRSignal = "NEAR_HVN_RESIST"
+                            r.VPFRPoc = A82C + 160
+                        End Sub)
+        add("Best pivot", Sub(r)
+                            r.BestPivotByVolume5m = A82C + 110
+                            r.BestPivotVolumeRatio5m = 2
+                            r.BestPivotIsHigh5m = True
+                        End Sub)
+        add("Swing stop beyond the stop bound", Sub(r)
+                            r.SwingStopLong = A82C - r.ATR * (sl.StopMaxAtrMult + 1)
+                            r.SwingTargetLong = A82C + 150
+                        End Sub)
+        add("Swing target inside the min-move floor", Sub(r)
+                                                          longVotes(r)
+                                                          r.SwingTargetLong = A82C + floorDist / 2.0
+                                                      End Sub)
+        add("TRANSITIONAL ADX mid band", Sub(r) r.ADX = (cfg.RegimeGates.TransitionalAdxPenaltyMid + cfg.RegimeGates.TransitionalAdxPenaltyHigh) / 2.0)
+        add("TRANSITIONAL ADX above the bands", Sub(r) r.ADX = cfg.RegimeGates.TransitionalAdxPenaltyHigh + 1)
+        add("Absorption below (display only)", Sub(r)
+                            r.AbsorptionSignal = "ABSORB_BELOW"
+                            r.AbsorptionLevel = A82C - 30
+                            r.AbsorptionRatio = 3
+                        End Sub)
+        Return s
+    End Function
+
+    Private Sub A82b_MirroredMarketGivesMirroredVerdictAndLevels()
+        Dim errorMsg As String = ""
+        Dim shipped = A80ShippedCfg(errorMsg)
+        If shipped Is Nothing Then
+            Check("A82b tracked settings.json located", False, errorMsg)
+            Return
+        End If
+
+        ' The mirror of a threshold crossing is exact only when the tracked thresholds are symmetric.
+        Dim rsi = shipped.Indicators.RSI, sc = shipped.Scoring
+        Dim symOk As Boolean = rsi.Overbought + rsi.Oversold = 100 AndAlso rsi.PartialOverbought + rsi.PartialOversold = 100 AndAlso
+                               rsi.DivPenaltyRsiHigh + rsi.DivPenaltyRsiLow = 100 AndAlso rsi.Pass2cMidline = 50 AndAlso
+                               sc.FundingHighPositive = -sc.FundingHighNegative AndAlso sc.FundingLowPositive = -sc.FundingLowNegative
+        Check("A82b the tracked RSI zones and funding bands are side-symmetric (the mirror of RSI and funding is exact)", symOk,
+              String.Format(CultureInfo.InvariantCulture, "RSI {0}/{1} partial {2}/{3} div {4}/{5} midline {6}; funding high {7}/{8} low {9}/{10}. A side-asymmetric setting is a design choice, not a code defect: exempt those states before reading A82b",
+                            rsi.Overbought, rsi.Oversold, rsi.PartialOverbought, rsi.PartialOversold, rsi.DivPenaltyRsiHigh, rsi.DivPenaltyRsiLow,
+                            rsi.Pass2cMidline, sc.FundingHighPositive, sc.FundingHighNegative, sc.FundingLowPositive, sc.FundingLowNegative))
+
+        Dim cfgs As New List(Of Tuple(Of String, EngineSettings))()
+        cfgs.Add(Tuple.Create("tracked", shipped))
+        Dim allOn = A80ShippedCfg(errorMsg)
+        allOn.Indicators.OFI.MomentumEnabled = True
+        allOn.Indicators.VPFR.ValueAreaScoringEnabled = True
+        allOn.Scoring.StructuralLevels.UseBestPivotCandidate = True
+        allOn.Indicators.Funding.MomentumEnabled = True
+        allOn.Indicators.OiCvd.Enabled = True
+        allOn.RegimeWeights.Enabled = True
+        allOn.Indicators.TrendStructure.Enabled = True
+        allOn.Indicators.AggressorVelocity.ScoringEnabled = True
+        allOn.MTFGate.Enabled = True
+        cfgs.Add(Tuple.Create("every optional modifier on", allOn))
+        Dim mode1 = A80ShippedCfg(errorMsg)
+        mode1.Scoring.StructuralLevels.TargetArbitrationMode = 1
+        mode1.Scoring.StructuralLevels.StopArbitrationMode = 1
+        mode1.Scoring.StructuralLevels.UseBestPivotCandidate = True
+        cfgs.Add(Tuple.Create("arbitration mode 1", mode1))
+
+        Dim norms As New DynamicNorms With {.VolHighThreshold = 3, .VolMidThreshold = 1.5, .VolMean = 100, .VolStdDev = 50,
+                                            .VWAPDevThreshold = 1, .ATRScaleFactor = 1, .ATRRef = 100, .IsLive = True}
+        Dim regimes As String() = {"TRENDING_UP", "TRENDING_DOWN", "RANGE_BOUND", "TRANSITIONAL"}
+        Dim hours = shipped.SessionVolume.Sessions.Select(Function(b) b.StartHour).Distinct().ToList()
+
+        Dim problems As New List(Of String)()
+        Dim nStates As Integer = 0, nSingle As Integer = 0, nJoint As Integer = 0
+        Dim seen As New HashSet(Of String)(StringComparer.Ordinal)
+        Dim rng As New Random(20260916)
+
+        For Each c In cfgs
+            Dim sites = A82Sites(c.Item2)
+            For Each regime In regimes
+                For Each utcHour In hours
+                    Dim states As New List(Of Tuple(Of String, IndicatorResults))()
+                    states.Add(Tuple.Create("neutral base", A82Base(c.Item2, regime, utcHour)))
+                    For Each site In sites
+                        Dim r = A82Base(c.Item2, regime, utcHour)
+                        site.Item2.Invoke(r)
+                        states.Add(Tuple.Create(site.Item1, r))
+                        nSingle += 1
+                    Next
+                    For j As Integer = 1 To 150
+                        Dim r = A82Base(c.Item2, regime, utcHour)
+                        Dim k As Integer = rng.Next(3, 22)
+                        Dim picked As New List(Of String)()
+                        For i As Integer = 1 To k
+                            Dim site = sites(rng.Next(sites.Count))
+                            site.Item2.Invoke(r)
+                            picked.Add(site.Item1)
+                        Next
+                        states.Add(Tuple.Create("joint: " & String.Join(" + ", picked), r))
+                        nJoint += 1
+                    Next
+                    For Each st In states
+                        nStates += 1
+                        Dim tag As String = String.Format(CultureInfo.InvariantCulture, "[{0} | {1} | hour {2} | {3}]", c.Item1, regime, utcHour, st.Item1)
+                        A82CheckOne(c.Item2, norms, st.Item2, tag, problems, seen)
+                    Next
+                Next
+            Next
+        Next
+
+        Check(String.Format(CultureInfo.InvariantCulture,
+                "A82b a mirrored market gives the mirrored scores, breakdown, verdict and placed levels ({0} states: {1} single-site, {2} joint, {3} cfgs x {4} regimes x {5} session hours)",
+                nStates, nSingle, nJoint, cfgs.Count, regimes.Length, hours.Count),
+              problems.Count = 0,
+              String.Format(CultureInfo.InvariantCulture, "{0} asymmetries; first: {1}", problems.Count, String.Join(" || ", problems.Take(4))))
+
+        ' A82c: the same runs reached every site
+        Dim required As New List(Of String) From {
+            "points:ROC(9)", "points:RSI(9)", "points:DMI +/-DI", "points:ADX>", "points:Volume", "points:VWAP", "points:BBW/TTM",
+            "points:EMA 9/21/50", "points:Funding (info)", "points:OI Delta", "points:OFI", "points:CVD", "points:TFI", "points:MicroCVD",
+            "points:Liq Penalty", "points:Spread", "points:5m EMA(200)", "points:Donchian(20)", "points:OBV", "points:VPFR-lite",
+            "points:Regime Align (2c)", "points:Trend Structure",
+            "upgrade:ROC(9)", "upgrade:RSI(9)", "upgrade:Volume", "upgrade:VWAP", "upgrade:OI Delta", "upgrade:Donchian(20)",
+            "vpfr:value-area upgrade",
+            "note:RSI(9):PENALTY -1", "note:BBW/TTM:ACTIVE -- penalty", "note:OFI:confirmed", "note:OFI:suppressed", "note:CVD:PENALTY -",
+            "note:TFI:confirmed", "note:TFI:contra", "note:MicroCVD:opposing", "note:MicroCVD:STALL PENALTY", "note:Liq Penalty:PENALTY -",
+            "note:Spread:PENALTY -", "note:OI Delta:OI×CVD confirmed", "note:OI Delta:OI×CVD conflict",
+            "note:Regime Align (2c):REGIME ALIGN [TRENDING", "note:Regime Align (2c):REGIME CONFLICT [TRENDING",
+            "note:Regime Align (2c):REGIME ALIGN [RANGE", "note:Regime Align (2c):REGIME CONFLICT [RANGE", "note:Trend Structure:TREND STRUCTURE [",
+            "note:Funding (info):STEP3: -", "note:Funding (info):STEP3b: -", "note:Funding (info):STEP3b: +", "note:Funding (info):] neutral",
+            "penalty:2", "penalty:1", "mtf:blocked", "context:BELOW_MIN_MOVE",
+            "target:SWING", "target:NEAREST_HVN", "target:POC", "target:BEST_PIVOT_5M", "target:FALLBACK_ATR",
+            "stop:SWING_STOP", "stop:STOP_CLAMPED", "stop:FALLBACK_ATR"}
+        For Each regime In {"TRENDING", "RANGE_BOUND", "TRANSITIONAL"}
+            For Each tier In {"STRONG", "MEDIUM", "WEAK"}
+                required.Add("tier:" & regime & ":" & tier)
+            Next
+        Next
+        Dim missing = required.Where(Function(x) Not seen.Contains(x)).ToList()
+        Check(String.Format(CultureInfo.InvariantCulture, "A82c the A82b runs reached every vote and mutation site, every tier in every regime and every placed-level tier ({0} markers)", required.Count),
+              missing.Count = 0, "not reached: " & String.Join(", ", missing))
+        ' The OBV partial upgrade is unreachable BY DESIGN: the partial IS the adverse-divergence state
+        ' (Core/ScoringEngine_Calculate_Scoring.vb:451-452) and the v0.42 gate blocks the upgrade on adverse
+        ' divergence (line 511-512; docs/DeribitIndicatorProject.md "OBV upgrade blocked on adverse divergence").
+        ' Pinned as never reached, so a change to either definition is seen.
+        Check("A82c the OBV partial never upgrades across the same runs (v0.42 adverse-divergence block; the partial is that state)",
+              Not seen.Contains("upgrade:OBV"), "an OBV partial upgraded: the partial definition or the v0.42 gate changed")
+    End Sub
+
+    Private Sub A82CheckOne(cfg As EngineSettings, norms As DynamicNorms, r As IndicatorResults, tag As String,
+                            problems As List(Of String), seen As HashSet(Of String))
+        Dim v = ScoringEngine.Calculate(r, PositionState.None, norms, cfg)
+        Dim rm = A82Mirror(r)
+        Dim w = ScoringEngine.Calculate(rm, PositionState.None, norms, cfg)
+        Dim p As New List(Of String)()
+        If w.LongScore <> v.ShortScore OrElse w.ShortScore <> v.LongScore Then p.Add(String.Format("raw {0}/{1} vs mirror {2}/{3}", v.LongScore, v.ShortScore, w.LongScore, w.ShortScore))
+        If w.EffectiveLongScore <> v.EffectiveShortScore OrElse w.EffectiveShortScore <> v.EffectiveLongScore Then p.Add(String.Format("effective {0}/{1} vs mirror {2}/{3}", v.EffectiveLongScore, v.EffectiveShortScore, w.EffectiveLongScore, w.EffectiveShortScore))
+        If w.RegimePenalty <> v.RegimePenalty OrElse w.MaxScore <> v.MaxScore Then p.Add(String.Format("penalty/max {0}/{1} vs mirror {2}/{3}", v.RegimePenalty, v.MaxScore, w.RegimePenalty, w.MaxScore))
+        If w.Verdict <> A82MirrorVerdict(v.Verdict) Then p.Add(String.Format("verdict '{0}' vs mirror '{1}'", v.Verdict, w.Verdict))
+        If w.MTFGateBlocked <> v.MTFGateBlocked Then p.Add("MTFGateBlocked differs")
+        If w.OiCvdOutcome <> A82MirrorVerdict(v.OiCvdOutcome) Then p.Add(String.Format("OiCvdOutcome '{0}' vs mirror '{1}'", v.OiCvdOutcome, w.OiCvdOutcome))
+        If v.LongScore <> v.ShortScore AndAlso w.VerdictContext <> v.VerdictContext Then p.Add(String.Format("VerdictContext '{0}' vs mirror '{1}'", v.VerdictContext, w.VerdictContext))
+        If v.LedgerMismatch OrElse w.LedgerMismatch Then p.Add("ledger mismatch")
+        If v.SignalBreakdown.Count <> w.SignalBreakdown.Count Then
+            p.Add(String.Format("breakdown rows {0} vs mirror {1}", v.SignalBreakdown.Count, w.SignalBreakdown.Count))
+        Else
+            For i As Integer = 0 To v.SignalBreakdown.Count - 1
+                Dim a = v.SignalBreakdown(i), b = w.SignalBreakdown(i)
+                If a.Label <> b.Label OrElse a.LongPoints <> b.ShortPoints OrElse a.ShortPoints <> b.LongPoints OrElse a.LongHit <> b.ShortHit OrElse a.ShortHit <> b.LongHit Then
+                    p.Add(String.Format("breakdown '{0}' L{1}/S{2} hit {3}/{4} vs mirror '{5}' L{6}/S{7} hit {8}/{9}", a.Label, a.LongPoints, a.ShortPoints, a.LongHit, a.ShortHit,
+                                        b.Label, b.LongPoints, b.ShortPoints, b.LongHit, b.ShortHit))
+                End If
+            Next
+        End If
+        If Math.Abs(A82Reflect(v.AdjustedLongTarget) - w.AdjustedShortTarget) > 0.000001 OrElse Math.Abs(A82Reflect(v.AdjustedShortTarget) - w.AdjustedLongTarget) > 0.000001 Then
+            p.Add(String.Format(CultureInfo.InvariantCulture, "adjusted targets {0}/{1} vs mirror {2}/{3}", v.AdjustedLongTarget, v.AdjustedShortTarget, w.AdjustedLongTarget, w.AdjustedShortTarget))
+        End If
+        For Each isLong In {True, False}
+            Dim a = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong)
+            Dim b = SignalEmitter.ComputeSideLevels(w, rm, cfg, Not isLong)
+            If Math.Abs(A82Reflect(a.Target) - b.Target) > 0.000001 OrElse Math.Abs(A82Reflect(a.StopPx) - b.StopPx) > 0.000001 OrElse
+               Math.Abs(A82Reflect(a.RawTarget) - b.RawTarget) > 0.000001 OrElse A82MirrorReason(a.TargetReason) <> b.TargetReason OrElse
+               a.StopReason <> b.StopReason OrElse a.Capped <> b.Capped Then
+                p.Add(String.Format(CultureInfo.InvariantCulture, "{0} levels target {1} ({2}) stop {3} ({4}) vs mirror target {5} ({6}) stop {7} ({8})",
+                                    If(isLong, "long", "short"), a.Target, a.TargetReason, a.StopPx, a.StopReason, b.Target, b.TargetReason, b.StopPx, b.StopReason))
+            End If
+            seen.Add("target:" & If(a.TargetReason Is Nothing, "", If(a.TargetReason.StartsWith("SWING", StringComparison.Ordinal), "SWING",
+                                     If(a.TargetReason.StartsWith("NEAREST_HVN", StringComparison.Ordinal), "NEAREST_HVN", a.TargetReason))))
+            seen.Add("stop:" & a.StopReason)
+        Next
+        If p.Count > 0 Then problems.Add(tag & " " & String.Join("; ", p))
+
+        ' coverage markers, from both runs
+        For Each pair In {Tuple.Create(v, r), Tuple.Create(w, rm)}
+            Dim x = pair.Item1, rx = pair.Item2
+            For Each it In x.SignalBreakdown
+                Dim lbl As String = If(it.Label.StartsWith("ADX>", StringComparison.Ordinal), "ADX>", it.Label)
+                Dim note As String = If(it.Note, "")
+                If it.LongPoints <> 0 OrElse it.ShortPoints <> 0 Then seen.Add("points:" & lbl)
+                If note.Contains("PARTIAL->UPGRADED") Then seen.Add("upgrade:" & lbl)
+                If lbl = "VPFR-lite" AndAlso (it.LongPoints <> 0 OrElse it.ShortPoints <> 0) AndAlso rx.VPFRSignal = "NEUTRAL" Then seen.Add("vpfr:value-area upgrade")
+                For Each marker In {"PENALTY -1", "ACTIVE -- penalty", "confirmed", "suppressed", "PENALTY -", "contra", "opposing", "STALL PENALTY",
+                                    "OI×CVD confirmed", "OI×CVD conflict", "REGIME ALIGN [TRENDING", "REGIME CONFLICT [TRENDING", "REGIME ALIGN [RANGE",
+                                    "REGIME CONFLICT [RANGE", "TREND STRUCTURE [", "STEP3: -", "STEP3b: -", "STEP3b: +", "] neutral"}
+                    If note.Contains(marker) Then seen.Add("note:" & lbl & ":" & marker)
+                Next
+            Next
+            If x.RegimePenalty > 0 AndAlso x.EffectiveLongScore + x.EffectiveShortScore < x.LongScore + x.ShortScore Then seen.Add("penalty:" & x.RegimePenalty.ToString(CultureInfo.InvariantCulture))
+            If x.MTFGateBlocked Then seen.Add("mtf:blocked")
+            If x.VerdictContext = "BELOW_MIN_MOVE" Then seen.Add("context:BELOW_MIN_MOVE")
+            If x.Verdict IsNot Nothing AndAlso Not x.Verdict.StartsWith("NO TRADE", StringComparison.Ordinal) Then
+                Dim reg As String = If(rx.Regime.StartsWith("TRENDING", StringComparison.Ordinal), "TRENDING", rx.Regime)
+                Dim tier As String = If(x.Verdict.StartsWith("STRONG", StringComparison.Ordinal), "STRONG", If(x.Verdict.StartsWith("WEAK", StringComparison.Ordinal), "WEAK", "MEDIUM"))
+                seen.Add("tier:" & reg & ":" & tier)
+            End If
         Next
     End Sub
 

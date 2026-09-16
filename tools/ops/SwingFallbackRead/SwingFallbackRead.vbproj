@@ -29,6 +29,10 @@
     <Compile Include="..\..\..\Core\Indicators_Structure.vb" />
     <Compile Include="..\..\..\Core\Indicators_Volatility.vb" />
     <Compile Include="..\..\..\Core\ScoringEngine_Types.vb" />
+    <!-- The shipped scoring pipeline, for the re-score reconstruction (MediumTierRescore.vb, mode rescore). -->
+    <Compile Include="..\..\..\Core\ScoringEngine_Helpers.vb" />
+    <Compile Include="..\..\..\Core\ScoringEngine_Calculate_Scoring.vb" />
+    <Compile Include="..\..\..\Core\ScoringEngine_Calculate_Verdict.vb" />
     <Compile Include="..\..\..\Core\SignalEmitter.vb" />
     <Compile Include="..\..\..\Core\ProcessIdentity.vb" />
     <Compile Include="..\..\..\Core\VenueStatusLog.vb" />

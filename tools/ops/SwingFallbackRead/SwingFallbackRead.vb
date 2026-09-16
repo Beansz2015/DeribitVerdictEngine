@@ -339,6 +339,13 @@ Public Module SwingFallbackReadProgram
                                          weekOpenHour, weekCloseHourExcl, pgOut)
         End If
 
+        ' ---- --mode rescore: the re-score reconstruction (MediumTierRescore.vb). Default mode unchanged.
+        If ArgOr(a, "mode", "swing").Equals("rescore", StringComparison.OrdinalIgnoreCase) Then
+            Dim rsOut As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "rescore-output.md"))))
+            Return Await RunRescoreAsync(o, cfg, root, cacheDir, pooledPath, livePath, settingsCopy, merged, sigs, collectorStart, collectorIds,
+                                         weekOpenHour, weekCloseHourExcl, rsOut)
+        End If
+
         ' ---- candles + funding
         Dim spanStart As DateTime = sigs.Min(Function(x) x.RowMin)
         Dim spanEnd As DateTime = sigs.Max(Function(x) x.WeekEnd)
@@ -372,6 +379,12 @@ Public Module SwingFallbackReadProgram
             Dim refPath As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "reference", Path.Combine("docs", "swing-vs-fallback-target-read-2026-09-15-output.md"))))
             Dim stabOut As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "tier-order-stability-output.md"))))
             Return RunStability(o, sigs, fees, refPath, stabOut)
+        End If
+
+        ' ---- --mode census: the tier-demotion census (TierDemotionCensus.vb). Default mode unchanged.
+        If ArgOr(a, "mode", "swing").Equals("census", StringComparison.OrdinalIgnoreCase) Then
+            Dim cnOut As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "tier-demotion-census-output.md"))))
+            Return RunCensus(o, cfg, sigs, fees, merged, pooledPath, livePath, collectorStart, collectorIds, weekOpenHour, weekCloseHourExcl, cnOut)
         End If
 
         ' ================================================================== report
