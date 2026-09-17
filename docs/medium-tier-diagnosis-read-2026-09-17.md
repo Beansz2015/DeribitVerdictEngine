@@ -9,7 +9,7 @@
 | ID or term | Source and kind | Meaning |
 |---|---|---|
 | `D-1` … `D-12` | Questions in `docs/medium-tier-diagnosis-brief-2026-09-16.md` §3 | The twelve diagnosis questions |
-| `F-1` … `F-4` | This doc, candidate fix classes (section 3) | D-table rows with no values chosen |
+| `F-1` … `F-3`, `F-4a`, `F-4b` | This doc, candidate fix classes (section 3) | D-table rows with no values chosen. `F-4a` = Kelly sizing only; `F-4b` = the payload `confidence` field, which drives order placement |
 | H1, H2 | The stability read's chronological halves | H1 = the first 24 UTC trading days (before 2026-08-10 00:00 UTC); H2 = the other 25 |
 | CONFIRMED | Label rule in `tools/ops/medium_tier_diagnosis.py` header (the census rule) | Both halves readable (n ≥ 100 per cell), both 95 % CIs exclude 0, same sign |
 | DISCOVERY ONLY (H2) | Same rule | Significant in H2 only. Not a cause |
@@ -214,7 +214,10 @@
 | `F-1` | **Do not re-cut the tier thresholds or the tier floor** | Rank 1 (`D-1`, `D-2`, `D-4`) | Nothing. Records that a cut-off change cannot create a monotone ladder | None to choose |
 | `F-2` | **Re-weight or gate votes by measured predictive value per session**, starting with the momentum votes (ROC, BBW/TTM, funding) and the order-flow votes (OFI, TFI) | Rank 2, rank 5; ASIA OFI carried CONFIRMED | Scoring weights (reserved) | Not chosen |
 | `F-3` | **Make the VPFR vote side-aware in NY** (the long arm is predictive; the short arm shows nothing) | NY VPFR LONG-only CONFIRMED | One vote's arms (reserved) | Not chosen |
-| `F-4` | **Collapse the tier ladder for sizing** (treat WEAK, MEDIUM and STRONG as one class for Kelly and the bridge until a score ranks outcomes) | Rank 1 | Kelly sizing and the payload tier (display and bridge; reserved) | Not chosen |
+| `F-4a` | **Collapse the tier ladder for Kelly sizing only** (Kelly stops picking its win probability from the tier until a score ranks outcomes). `v.Confidence` and the payload `confidence` field stay unchanged | Rank 1 | Kelly's win-probability lookup (`Core/ScoringEngine_Kelly.vb:65-69`), so the Kelly display and the payload's advisory `kelly` block. No order-app input changes: the `kelly` block is advisory and never used for sizing in v1 (`Core/SignalEmitter.vb:172-178`). Reserved: rendered value | Not chosen |
+| `F-4b` | **Collapse or re-map the payload `confidence` field** (HIGH / MEDIUM / LOW) | Rank 1 | ⛔ **Actual order placement.** The order app enters only on its configured confidence tiers (default HIGH + MEDIUM, refuses LOW; `docs/signal-bridge-v1-proposal.md` line 99). Any change to the tier-to-confidence mapping needs a coordinated pass across both repos and a `schema_version` bump (same doc, line 74, 2026-07-21 addendum). Reserved | Not chosen |
+
+- ⚠ **Correction, 2026-09-17 (UTC), trader-directed.** This table first carried one row, `F-4`: "treat WEAK, MEDIUM and STRONG as one class for Kelly and the bridge". "The bridge" there meant the payload `confidence` field, the payload's only tier field. The single row hid that it would change what the order app acts on. It is now split: `F-4a` touches Kelly only; `F-4b` is the order-placement change. **Neither is implemented; no engine file changed.**
 
 - **Not a fix class, a measurement gap:** success rate rises at the top score bins while net EV does not. Whether target geometry by tier offsets it is not measured (section 5 of this doc).
 
@@ -251,7 +254,7 @@
 
 ### Not verified
 
-- **Why success rate rises at the top score bins while net EV does not.** Target and stop distance by tier were not cut. This decides whether `F-4` is right or whether the ladder carries information that the target geometry spends.
+- **Why success rate rises at the top score bins while net EV does not.** Target and stop distance by tier were not cut. This decides whether `F-4a` or `F-4b` is right or whether the ladder carries information that the target geometry spends.
 - **Which clamps bind for RSI divergence, OI × CVD and burst:** nominal magnitudes, not applied points.
 - **The 302 unverified VPFR rows:** excluded from the VPFR analysis only.
 - **Mechanism of the NY VPFR long finding** (for example whether the POC acts as a magnet above price). The POC value is not in the attribution file.

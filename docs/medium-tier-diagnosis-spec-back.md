@@ -12,7 +12,7 @@
 | `E-n` | This packet, build-time evidence | A check the reader cannot re-run as committed |
 | `Q-n` | This packet, decision queued | A decision for the trader or the orchestrator (section 3). Named `Q-` so it does not collide with the brief's question IDs `D-1` … `D-12` |
 | `D-1` … `D-12` | Questions in `docs/medium-tier-diagnosis-brief-2026-09-16.md` §3 | The diagnosis questions |
-| `F-1` … `F-4` | Candidate fix classes, the read section 3 | D-table rows with no values chosen |
+| `F-1` … `F-3`, `F-4a`, `F-4b` | Candidate fix classes, the read section 3 | D-table rows with no values chosen. `F-4a` = Kelly sizing only; `F-4b` = the payload `confidence` field (order placement) |
 | `L-1` | Finding in `docs/medium-tier-bug-hunt-2026-09-16.md` section R.2 | The liquidation vote never fires live |
 | `A82b` | Harness fixture, `verify/ordercheck/Program.vb` (session 1) | Mirror fixture: a mirrored market gives mirrored scores and verdicts |
 | `TOOL-2` | This packet, tool finding | `tools/ops/SwingFallbackRead/MediumTierRescore.vb` writes the Class field of `rescore-attribution.csv` unquoted; 56 rows carry a comma in it |
@@ -156,10 +156,12 @@ git diff --stat 14e2e80 -- Core UI analysis settings.json docs/UserManual.md Der
 |---|---|---|
 | (a) `F-1` only: record that thresholds and the tier floor are not re-cut | Nothing | NY: one tier step is worth at most about +0.35 bps (slope CI upper bound) |
 | (b) `F-2`: re-weight or gate votes by measured per-session value, via `tools/WhatIfRunner` split-half | Scoring weights | Only DISCOVERY-ONLY or H1-only vote effects in NY; ASIA OFI carried CONFIRMED |
-| (c) `F-4`: treat all tiers as one class for Kelly sizing and the bridge tier until a score ranks outcomes | Sizing and payload | Rank 1 null |
+| (c) `F-4a`: treat all tiers as one class for Kelly sizing only; the payload `confidence` field stays unchanged | Kelly display and the advisory `kelly` payload block. No order-app input changes | Rank 1 null |
+| (e) `F-4b`: collapse or re-map the payload `confidence` field | ⛔ Actual order placement: the order app's confidence gate (default HIGH + MEDIUM). Needs a coordinated cross-repo pass and a `schema_version` bump (`docs/signal-bridge-v1-proposal.md` line 74) | Rank 1 null |
 | (d) First measure why success rate rises at the top score bins while net EV does not (target and stop distance by tier) | Nothing yet | Not measured |
 
-- **Read (hypothesis): (d) first, then (a).** (d) is cheap, and it decides whether the ladder carries information that the target geometry spends. That changes whether (c) is right. ⚠ (a) alone is the cheaper option; I recommend it only after (d) because (d) records more.
+- **Read (hypothesis): (d) first, then (a).** (d) is cheap, and it decides whether the ladder carries information that the target geometry spends. That changes whether (c) or (e) is right. I have no read on (e): it moves live order placement, so the criterion is yours. ⚠ (a) alone is the cheaper option; I recommend it only after (d) because (d) records more.
+- ⚠ **Correction, 2026-09-17 (UTC), trader-directed:** option (c) first read "one class for Kelly sizing and the bridge tier". "Bridge tier" meant the payload `confidence` field, so (c) silently included an order-placement change. It is now split into (c) Kelly only and (e) the `confidence` field. Neither is implemented; no engine file changed.
 - **Shares a root with `Q-2`:** both are vote-weight questions under one split-half test.
 
 ### Q-2 — the VPFR score vote in NY (trader; ⚠ reserved: scoring)
