@@ -80,7 +80,7 @@ Source: `backtest_data/swing-fallback-read/diagnosis-rows.csv` (`SwingFallbackRe
 
 ### K-3 — sequencing with the win-probability problem (trader)
 
-- **Fact:** with a correct b, Kelly still takes its win probability from the tier label. Measured success rates (40–48 %) sit below the NY net breakeven at the median (58.5 %), so a correct b makes Kelly suppress on most rows.
+- **Fact:** with a correct b, Kelly still takes its win probability from the tier label. At the NY median net b (0.71): HIGH (0.65) still sizes (f* = +0.157, half-Kelly capped at 5 %); MEDIUM (0.55) and LOW (0.45) suppress (f* −0.084 and −0.325). Measured success rates (40–48 %) sit below that breakeven (58.5 %) in every readable tier, so with a measured win probability Kelly would suppress on most rows.
 - **Options:** (a) ship this change alone now; (b) ship it together with `F-4a` (one flat, measured win probability) after `Q-1` option (d) measures payoff and success rate by tier; (c) wait.
 - **Read (hypothesis): (a).** It removes an error that is measured and independent of the tier question. The display becomes more conservative, not less. ⚠ (b) records more in one step; I pick (a) because (b) is gated on a measurement that has not started, and waiting leaves a known overstatement on screen.
 
