@@ -212,3 +212,19 @@ git diff --stat 14e2e80 -- Core UI analysis settings.json docs/UserManual.md Der
   - **Era effects against half effects:** the split sits on the v66 edge.
   - **Exact clamp binding** for RSI divergence, OI × CVD and burst (nominal magnitudes).
 - **Carried over without checking:** the swing read's population funnel and candle walk; session 1's re-score attribution as re-run by the orchestrator on commit `85e11d5`.
+
+---
+
+## Trader rulings (2026-09-18 UTC), recorded by the orchestrator
+
+The trader agreed to every orchestrator recommendation, **except `F-4b`, which is rejected.**
+
+| Item | Ruling |
+|---|---|
+| `Q-1` (the tier ladder) | **(d) first:** measure target and stop distance by tier. Then decide (a) (`F-1`, no threshold or tier-floor re-cut) and (c) (`F-4a`, flatten tiers for Kelly sizing only) on that result |
+| `F-2` (weight votes by measured value) | Accepted as a direction, **only through a pre-registered vote-value study** that respects the settings eras and validates on forward data |
+| `Q-2` / `F-3` (the NY VPFR vote) | **Retest after the POC-gate fix and the liquidation fix ship** |
+| `F-4a` | Accepted in principle; gated on `Q-1` (d) |
+| `F-4b` / `Q-1` option (e) | ⛔ **REJECTED.** The payload `confidence` field is not collapsed or re-mapped |
+| `Q-3` (quote the attribution CSV `Class` field) | Scheduled by the orchestrator; tools only, low priority |
+| The Kelly placed-payoff proposal (`docs/kelly-placed-payoff-proposal.md`) | **Parked:** pending spec writing and `K-1` to `K-4` ticks, to be folded into the trader's later app-wide fee revamp |

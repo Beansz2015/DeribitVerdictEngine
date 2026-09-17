@@ -1,6 +1,6 @@
 # Proposal — Kelly payoff ratio from the placed levels, net of fees
 
-**Written:** 2026-09-17 (UTC) by the MEDIUM-tier diagnosis session 2 seat, trader-directed. **Status:** PROPOSAL, for orchestrator review and queueing. Nothing is built. **Context:** [`docs/medium-tier-diagnosis-read-2026-09-17.md`](medium-tier-diagnosis-read-2026-09-17.md) section 3, fix class `F-4a`; [`docs/kelly-est-honesty-decision-2026-08-02.md`](kelly-est-honesty-decision-2026-08-02.md); [`docs/kelly-w6-4-batch-summary.md`](kelly-w6-4-batch-summary.md) (the per-session payoff correction of 2026-09-09).
+**Written:** 2026-09-17 (UTC) by the MEDIUM-tier diagnosis session 2 seat, trader-directed. **Status:** ⏸ **PARKED 2026-09-18 (trader): pending spec writing and ticks on `K-1` to `K-4`.** It will be folded into the trader's later app-wide revamp that makes every function fee-aware, once the queue is shorter. Reviewed by the orchestrator 2026-09-17 (code claims verified). Nothing is built. **Context:** [`docs/medium-tier-diagnosis-read-2026-09-17.md`](medium-tier-diagnosis-read-2026-09-17.md) section 3, fix class `F-4a`; [`docs/kelly-est-honesty-decision-2026-08-02.md`](kelly-est-honesty-decision-2026-08-02.md); [`docs/kelly-w6-4-batch-summary.md`](kelly-w6-4-batch-summary.md) (the per-session payoff correction of 2026-09-09).
 
 **Legend. IDs used in this doc:**
 
