@@ -387,6 +387,12 @@ Public Module SwingFallbackReadProgram
             Return RunCensus(o, cfg, sigs, fees, merged, pooledPath, livePath, collectorStart, collectorIds, weekOpenHour, weekCloseHourExcl, cnOut)
         End If
 
+        ' ---- --mode diagexport: the MEDIUM-tier diagnosis per-row export (MediumTierDiagnosisExport.vb). Default mode unchanged.
+        If ArgOr(a, "mode", "swing").Equals("diagexport", StringComparison.OrdinalIgnoreCase) Then
+            Dim dxCsv As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "diagnosis-rows.csv"))))
+            Return RunDiagExport(o, sigs, fees, pooledPath, livePath, dxCsv, Path.ChangeExtension(dxCsv, ".md"))
+        End If
+
         ' ================================================================== report
         AppendJoin(o, evalRows, boxLog, sigs, bars, weekOpenHour, weekCloseHourExcl, collectorStart)
 
