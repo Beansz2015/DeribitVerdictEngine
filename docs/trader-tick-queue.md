@@ -12,9 +12,9 @@
 
 ---
 
-> ## ⛔ STATE BANNER — REFRESHED 2026-09-14 (UTC). Read this before believing any row below.
+> ## ⛔ STATE BANNER — REFRESHED 2026-09-17 (UTC). Read this before believing any row below.
 >
-> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-14b.md`](seat-handover-2026-09-14b.md)** (supersedes [`seat-handover-2026-09-14.md`](seat-handover-2026-09-14.md) for state). Settings v68 (tracked repo-root `settings.json` line 2). ⛔ **Run `git status -sb` - never inherit a push state.** **First, per the trader: the overdue ASIA burst-watch read, and a plan to schedule the `--verify-venue` trade check (handover §1). Then S1 of [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) from 2026-09-15 UTC. Nothing is owed by the trader.**
+> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-17.md`](seat-handover-2026-09-17.md)** (supersedes [`seat-handover-2026-09-14b.md`](seat-handover-2026-09-14b.md) for state). Settings v68 (tracked repo-root `settings.json` line 2). ⛔ **Run `git status -sb` - never inherit a push state. At close `master` was 63 commits ahead of `origin`, unpushed, including gap-repair engine fixes.** **First (handover §1): spec and build the ruled engine fixes (POC gate, liquidation flag); then absorption S1/S2 and ONE deploy, before 2026-10-01 00:00 UTC; then `Q-1` (d). Nothing is owed by the trader.**
 >
 > **Standing facts carried from the superseded banners.** Each one still binds. The banners themselves moved verbatim: [`trader-tick-queue-archive.md` §C, `trim-2026-09-14-35`](trader-tick-queue-archive.md#trim-2026-09-14-35).
 >
@@ -39,7 +39,8 @@
 | [`trader-tick-queue-archive.md`](trader-tick-queue-archive.md) | ⛔ **History only, never current state.** The 39 finished §2 rows and all of former §5, moved byte-identical 2026-09-10 (UTC) so closed items are not re-investigated | **Available work — nothing in it is a build slot.** Current state — this doc's §2/§5 are current; the archive is not |
 | [`roadmap.md`](roadmap.md) | **The strategic board** — every workstream, done and outstanding, at altitude; execution order; the **binding sequencing rules** (§5) | The immediate slice — it points here |
 | [`backlog-dependency-map.md`](backlog-dependency-map.md) | **What blocks what** — edges, and a pointer to where each item's state lives | **State. It carries none, deliberately** (restructured 2026-08-07 after 7 stale cells) |
-| [`seat-handover-2026-09-14b.md`](seat-handover-2026-09-14b.md) | ⭐ **THE current seat handover - the STATE read.** Its §1 is the FIRST TASKS table | A task list beyond its §1; it points here |
+| [`seat-handover-2026-09-17.md`](seat-handover-2026-09-17.md) | ⭐ **THE current seat handover - the STATE read.** Its §1 is the FIRST TASKS table | A task list beyond its §1; it points here |
+| [`seat-handover-2026-09-14b.md`](seat-handover-2026-09-14b.md) | Superseded 2026-09-17 for state; its §6 lessons still bind | Current state |
 | Superseded handovers, 2026-07-18 to 2026-09-14 (the first 2026-09-14 handover's §1 build plan, §3 absorption facts, §4 instruments and §6 lessons still bind) | **Their rulings and conventions still bind; none is current state.** Detail still worth opening: [`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md) §6 (`_evalCache`), §7 (local-time taxonomy), §8 (AMI relaunch parameters); [`seat-handover-2026-08-24.md`](seat-handover-2026-08-24.md) §1.1a (memory baseline); [`seat-handover-2026-07-18.md`](seat-handover-2026-07-18.md) §3 (standing rules); [`fable-seat-close-handover-2026-08-01.md`](fable-seat-close-handover-2026-08-01.md) (the 2026-07-31 rulings). The per-handover rows moved verbatim: [`trader-tick-queue-archive.md` §C, `trim-2026-09-14-37`](trader-tick-queue-archive.md#trim-2026-09-14-37) | Current state |
 | each spec's own D-table | **The decision text** — where this queue disagrees, the spec wins | — |
 
