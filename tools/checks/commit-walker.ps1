@@ -49,6 +49,11 @@
 [CmdletBinding()]
 param(
     [int]$Count = 300,
+    # Commits to skip before walking, so an ACCEPTANCE window and a MEASURED first-run
+    # window can be made disjoint. A build's acceptance dry run reports verdicts back and
+    # contaminates the seat on that window; the measured run must use another one.
+    # See docs/harness-shadow-mode-protocol.md section 4a.
+    [int]$Skip = 0,
     [string]$BaselinePath = 'commit-walker-baseline.json',
     [string]$OutPath = 'commit-walker-report.md'
 )
@@ -84,7 +89,9 @@ function Test-EngineTouch([string[]]$paths) {
 # --no-renames keeps numstat output as plain add/delete pairs per path, never the
 # "{old => new}" compact rename form, which is simpler and safer to classify against.
 # ---------------------------------------------------------------------------------------
-$raw = [string[]](& git -C $repo log --no-merges --no-renames -$Count --numstat --format="COMMITSTART`t%H`t%s")
+$skipArgs = @()
+if ($Skip -gt 0) { $skipArgs = @("--skip=$Skip") }
+$raw = [string[]](& git -C $repo log --no-merges --no-renames @skipArgs -$Count --numstat --format="COMMITSTART`t%H`t%s")
 
 $commits = New-Object System.Collections.Generic.List[object]
 $cur = $null

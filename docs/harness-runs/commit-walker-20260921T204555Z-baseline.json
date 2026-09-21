@@ -1,0 +1,10 @@
+{
+  "_harness": "commit-walker",
+  "_window": "-Skip 300 -Count 40 (2026-08-13..2026-08-22, post tag-adoption, outside the spent acceptance window)",
+  "_written_utc": "20260921T204555Z",
+  "_by": "orchestrator seat, by hand, BEFORE any detector output was seen",
+  "_protocol": "docs/harness-shadow-mode-protocol.md",
+  "504442e29ea0b68d431d4719f4f7be6626a8e057": "tag_correct",
+  "91942d673993f6f6725af9dff51e83190258e8a7": "tag_wrong",
+  "c6c6942d8a70e7e2702cb1eef125153facad8230": "tag_wrong"
+}
