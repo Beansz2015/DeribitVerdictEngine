@@ -12,10 +12,13 @@
 | Session | Model | Effort | Why that tier |
 |---|---|---|---|
 | **A** — the POC-tier gate (`D-1`, `D-2`) | **Opus** | **high** | Four lines of code and two doc lines, but the build is a **live scoring-outcome change and a dataset boundary**. The judgment is done; the risk is that "swap the labels" is read too widely and the `IN_LVN_*` halves get swapped too — a half that is already correct. Two fixtures must change meaning, not just values |
-| **B** — the liquidation flag (`D-4`, `D-5`, `D-6`) | **Opus** | **high** | The fix cannot be designed until a live measurement returns. The instrument is new code against a live venue feed, and the fix that follows is a scoring change on a vote that has never fired once. `D-5` carries an `MT` case with no live example anywhere |
+| **B1** — the liquidation MEASUREMENT (the probe only) | **Opus** | **medium** | ⭐ **SPLIT OUT of Session B on 2026-09-21 (UTC); see this spec §0a.** The code is mechanical and `tools/WsTradeProbe/WsTradeProbeProgram.vb` already does the WebSocket half. **The tier is for the asymmetry, not the difficulty: there is no way to test the probe except by running it, and a silent mistake costs a full day of wall-clock** |
+| **B2** — the liquidation FIX (`D-4`, `D-5`, `D-6`) | **Opus** | **high** | The fix cannot be designed until B1's measurement returns. It is a scoring change on a vote that has never fired once, and `D-5` carries an `MT` case with no live example anywhere |
 | **C** — the report column and the card colour (`D-8`, `D-9`) | **Opus** | **high** | ⛔ **RAISED from Sonnet/medium on 2026-09-21 (UTC), because `EF-4` was ruled (a).** The text surface is now in scope, so the build re-formats a line emitted by `BuildPlaintextSnapshot` and engages the display-string parity hard rule. It also adds two `VerdictResult` properties and rewires three card sites. **This session's own escalation trigger fired before the session started — that is the trigger working, not a mis-sizing** |
 
-**Sequence by dependency, not by size.** Session A and Session C are independent of each other and of Session B. **Session B cannot finish until its measurement returns**, so start Session B's measurement FIRST and let it run while Session A is built.
+**Sequence by dependency, not by size.** Session A and Session C are independent of each other and of Session B. **Session B cannot finish until its measurement returns**, so start the measurement FIRST and let it run while Session A is built.
+
+⛔ **That is the DEPENDENCY order. It is not the seat allocation** — three sessions that are independent still share one fixture file. **The seat allocation is this spec §0a, and it is one implementer for Sessions A, C and B2.**
 
 ### Where each model will slip — the concrete traps, not a general warning
 
@@ -31,6 +34,48 @@
 - **Session A:** the re-run of handle `H-3` (in [`docs/medium-tier-bug-hunt-spec-back.md`](medium-tier-bug-hunt-spec-back.md) §1) does not reproduce 143 flipped population rows and 1,288 moved placed targets at the base commit. A different number means the counterfactual and the fix disagree, and the fix is not understood.
 - **Session B:** the measurement shows the stream DOES carry a readable liquidation flag on some trades. That contradicts `L-1`'s 51,107-of-51,107 measurement, and the whole fix design changes.
 - **Session C:** carrying Step 3b's effect onto the snapshot needs a line ADDED or REMOVED rather than the existing `Momentum:` line re-formatted. `EF-4` (a) authorises a re-format of one line on both surfaces; it does not authorise a new line. A new line is a larger parity event and a separate rendered-value decision.
+
+---
+
+## 0a. ⭐ Implementation sequence — ruled 2026-09-21 (UTC)
+
+⛔ **NOT three parallel implementers. ONE implementer, sequential, with the probe split out and started first.**
+
+| Step | Scope | Seat | When | Model / effort |
+|---|---|---|---|---|
+| **1** | **B1** — build the probe in `tools/WsTradeProbe/`, start it, leave it running | **Its own seat** | **First. It is the only item on a hard external clock** | Opus, medium |
+| **2** | **A** — `D-1` POC gate and `D-2` manual lines | Seat 2 | Starts as soon as step 1 is running | Opus, high |
+| **3** | **C** — `D-8` lean column and `D-9` on both surfaces | **Seat 2, same conversation** | After step 2 merges | Opus, high |
+| **4** | **B2** — `D-4`, `D-5`, `D-6` | **Seat 2, same conversation** | When the probe pairs a liquidation | Opus, high |
+
+### Why one seat for steps 2, 3 and 4 — the evidence, not a preference
+
+| Collision | Measured at `5e42327` |
+|---|---|
+| ⛔ **The fixture dispatcher** — `verify/ordercheck/Program.vb:737-750` | Every session adds its call there. `A80a` is line 737, `A81a` is 743, `A82a` is 750. **Three seats editing a 14-line block conflict by construction** |
+| Adjacent fixture bodies | Session A rewrites `A80b` (15660-15730); Session B2 rewrites `A81b` (15751 onward). **About 20 lines apart in a 16,539-line file** |
+| Tail appends | Session A's new `A83a` and Session C's new fixtures both land after `A82` |
+| `docs/UserManual.md` | Session A at lines 961 and 967, Session B2 at 1436-1463. Lower risk, same file |
+| The harness count | It is ONE number. Parallel seats each report "409 to N" and each is wrong about the others |
+| Fixture ID allocation | `A83a` is a suggestion, not checked. **This repo already carries the `A56b` ID-collision scar** |
+
+⚠ **Precedent:** [`docs/seat-handover-2026-09-17.md`](seat-handover-2026-09-17.md) §5 lesson 7 recorded this shape from the scan-failure merge — two seats on adjacent rows produced conflicts. Lesson 6 of the same section records that usage-limit stops kill background agents mid-task.
+
+### Why the probe is the exception
+
+It runs **unattended for 24 hours or more** while step 2 is built. It is the only item on an external clock, and serialising it behind steps 2 and 3 wastes the one resource that cannot be bought back.
+
+### Order — step 2 before step 3
+
+Session A is the dataset boundary and sits on the deploy critical path. Session C's `D-8` is the offline report and **never deploys at all**; `D-9` is cosmetic on the collector.
+
+⚠ **Rebase rule for step 4.** B2 lands after steps 2 and 3 have merged, so that seat rebases before it touches `verify/ordercheck/Program.vb`. Its `A81b` rewrite sits about 20 lines from Session A's `A80b` rewrite.
+
+⚠ **Seat 2 owns fixture ID allocation and the harness count** for all three of its sessions. Seat 1 allocates no fixture ids — the probe is a `tools/` instrument and adds none.
+
+### What each seat is handed
+
+The **whole spec**, plus one line naming its scope. **A seat given only its own section will re-derive the rest and get trap `EFT-1` wrong.** The two briefs are [`engine-fix-session-b1-probe-brief.md`](engine-fix-session-b1-probe-brief.md) and [`engine-fix-sessions-a-c-b2-brief.md`](engine-fix-sessions-a-c-b2-brief.md).
 
 ---
 
@@ -474,12 +519,11 @@ The card reads those. The colour then follows the SIGN of the effect on the rele
 
 ⛔ **UPDATED 2026-09-21 (UTC) for `EF-1` (a).** The earlier draft of this section said *"keep the absorption S1 and S2 build and its deploy on their own track"*. **That is superseded: the trader ruled ONE deploy**, so Session A, Session C's card half, the gap-repair fixes and absorption S1 and S2 all fire together.
 
-**The order that satisfies both the ruling and the deadline:**
+⛔ **The seat order is in this spec §0a and is NOT repeated here** — two lists of the same order is how a doc rots. What belongs here is only what the DEADLINE adds to it:
 
-1. **Now** — start Session B's measurement. It is unattended and costs no build time.
-2. **Now, in parallel** — build Session A and Session C. Both are short.
-3. **By about 2026-09-28** — build absorption S1 and S2, then deploy everything that is ready, as one deploy.
-4. **Session B rides that deploy only if its measurement has returned.** If it has not, Session B ships later on its own boundary — see the scope consequence under `EF-1` in this spec §6.
+- **Absorption S1 and S2 stay on their own track, beside steps 2 and 3.** They are a separate build with their own spec, [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md). If absorption slips, the deploy slips, and **that** is what costs trades — not this build.
+- **By about 2026-09-28: deploy everything that is ready, as one deploy**, per `EF-1` (a).
+- **Session B2 rides that deploy only if the probe has paired a liquidation by then.** If it has not, B2 ships later on its own boundary — the scope consequence under `EF-1` in this spec §6.
 
 ⛔ **The deadline outranks the single-boundary preference.** Holding the deploy for Session B would push the gap-repair fixes past 2026-10-01 00:00 UTC, and an outage across that instant loses trades for good.
 
