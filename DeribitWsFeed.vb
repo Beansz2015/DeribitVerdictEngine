@@ -639,8 +639,17 @@ Public NotInheritable Class DeribitWsFeed
         End Get
     End Property
 
+    ''' <summary>The feed's ONE logging seam. Every call site routes here, which is why the
+    ''' durable sidecar hooks here rather than at 14 individual sites.
+    ''' ⛔ Console.WriteLine alone was the defect: the collector is a WinForms app launched into
+    ''' an interactive session, so nothing captures its Console. On 2026-09-21 the feed was down
+    ''' for hours and "connection error: &lt;msg&gt;" — the only line that could have said why —
+    ''' went nowhere. ws_health.log records the STATE, never the CAUSE.
+    ''' WsFeedLog rate-limits repeats so a reconnect loop cannot grow the file without bound,
+    ''' and never throws, so this stays safe to call from the run loop.</summary>
     Private Shared Sub Log(msg As String)
         Console.WriteLine("[WS] " & msg)
+        WsFeedLog.Write(msg)
     End Sub
 
 End Class

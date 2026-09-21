@@ -757,6 +757,12 @@ Module Program
         '   RENDERED value is computed, on a mechanism argument with no test. A84 pins it.]
         A84_CountDataRowsMatchesReadAllLinesSemantics()
 
+        ' [A85 — WsFeedLog repeat suppression. The WS feed's only logging seam wrote to a
+        '   Console nothing captures, so a multi-hour outage on 2026-09-21 left NO record of
+        '   why the feed was down. A85 pins the rate limit that makes the durable sidecar
+        '   safe to leave on through an outage.]
+        A85_WsFeedLogRateLimitsRepeatsWithoutGoingSilent()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -15636,6 +15642,99 @@ Module Program
         r.VPFRNearestLvnAbove = lvnA : r.VPFRNearestLvnBelow = lvnB
         Return r
     End Function
+
+    ' =======================================================================
+    ' A85 — WsFeedLog: a repeating feed error must be BOUNDED but never SILENT.
+    '
+    ' WHY IT EXISTS. DeribitWsFeed.Log wrote to Console.WriteLine only, and the collector is a
+    ' WinForms app launched into an interactive session — nothing captures that stream. On
+    ' 2026-09-21 the feed sat down for hours and the cause was structurally unreadable:
+    ' ws_health.log carries the STATE (OK/DEGRADED/DOWN/REST) and never the REASON.
+    '
+    ' THE DESIGN THIS PINS. A reconnect cycle emits THREE different messages in rotation, so a
+    ' consecutive-duplicate filter — the WsHealthLog shape — would never fire and the file would
+    ' grow without bound. A "collapse until the message changes" filter is worse: it is silent
+    ' for exactly as long as the problem lasts. WsFeedLog instead rate-limits each DISTINCT
+    ' message to one line per RepeatWindowMinutes, carrying the suppressed count. A85d is the
+    ' arm that proves the consecutive-duplicate design would have failed here.
+    '
+    ' [Fixture-literal provenance, CLAUDE.md RULED 2026-08-11]
+    '   SHIPPED BEHAVIOUR: the window and the map cap are READ from
+    '   WsFeedLog.RepeatWindowMinutes / MaxTrackedMessages, never restated — they are
+    '   Public Const precisely so this fixture can read the production numbers.
+    '   MECHANISM: the message strings and the injected clock offsets are invented to drive
+    '   the window; nothing about them is settings-derived.
+    ' =======================================================================
+    Private Sub A85_WsFeedLogRateLimitsRepeatsWithoutGoingSilent()
+        Dim t0 As New DateTime(2026, 9, 21, 10, 0, 0, DateTimeKind.Utc)
+        Dim win As Double = WsFeedLog.RepeatWindowMinutes
+
+        ' A85a — first occurrence writes, and a line really reaches the file.
+        WsFeedLog.ResetForTests()
+        Dim before As Long = 0
+        Try
+            If System.IO.File.Exists(WsFeedLog.GetPath()) Then before = New System.IO.FileInfo(WsFeedLog.GetPath()).Length
+        Catch
+        End Try
+        Dim firstWrote As Boolean = WsFeedLog.WriteAt("connection error: unit-test", t0)
+        Dim after As Long = 0
+        Try
+            If System.IO.File.Exists(WsFeedLog.GetPath()) Then after = New System.IO.FileInfo(WsFeedLog.GetPath()).Length
+        Catch
+        End Try
+        Check("A85a first occurrence of a message writes a line to ws_feed.log",
+              firstWrote AndAlso after > before,
+              String.Format(CultureInfo.InvariantCulture, "wrote={0} bytesBefore={1} bytesAfter={2}",
+                            firstWrote, before, after))
+
+        ' A85b — a repeat INSIDE the window is suppressed, not written.
+        Dim suppressed As Integer = 0
+        For i As Integer = 1 To 40
+            If Not WsFeedLog.WriteAt("connection error: unit-test", t0.AddSeconds(i)) Then suppressed += 1
+        Next
+        Check("A85b repeats inside the window are suppressed, every one of them",
+              suppressed = 40,
+              String.Format(CultureInfo.InvariantCulture, "suppressed={0} of 40", suppressed))
+
+        ' A85c — crossing the window re-emits AND reports how many it swallowed.
+        ' ⛔ This is the arm that separates "bounded" from "silent".
+        Dim reWrote As Boolean = WsFeedLog.WriteAt("connection error: unit-test",
+                                                   t0.AddMinutes(win).AddSeconds(1))
+        Check("A85c the same message re-emits once the repeat window passes",
+              reWrote,
+              "expected a write after " & win.ToString(CultureInfo.InvariantCulture) & " minutes")
+
+        ' A85d — the real reconnect cycle: three DIFFERENT messages in rotation. Every one
+        ' writes, because none repeats CONSECUTIVELY. A consecutive-duplicate filter would
+        ' have emitted all of them too and never bounded anything — which is precisely why
+        ' this class rate-limits per distinct message instead.
+        WsFeedLog.ResetForTests()
+        Dim cycle = {"connecting to wss://test", "connection error: boom", "reconnecting in 8s"}
+        Dim firstPass As Integer = 0
+        For Each m In cycle
+            If WsFeedLog.WriteAt(m, t0) Then firstPass += 1
+        Next
+        Dim secondPass As Integer = 0
+        For Each m In cycle
+            If WsFeedLog.WriteAt(m, t0.AddSeconds(8)) Then secondPass += 1
+        Next
+        Check("A85d a 3-message reconnect cycle writes once each, then is fully suppressed on the next lap",
+              firstPass = 3 AndAlso secondPass = 0,
+              String.Format(CultureInfo.InvariantCulture, "firstPass={0} secondPass={1}", firstPass, secondPass))
+
+        ' A85e — the tracked-message map is BOUNDED. A feed error embedding varying detail
+        ' mints a new key every time; without a cap that map is the _evalCache defect again.
+        WsFeedLog.ResetForTests()
+        For i As Integer = 1 To WsFeedLog.MaxTrackedMessages + 25
+            WsFeedLog.WriteAt("varying detail " & i.ToString(CultureInfo.InvariantCulture), t0)
+        Next
+        Check("A85e the tracked-message map never exceeds its cap",
+              WsFeedLog.TrackedCount <= WsFeedLog.MaxTrackedMessages,
+              String.Format(CultureInfo.InvariantCulture, "tracked={0} cap={1}",
+                            WsFeedLog.TrackedCount, WsFeedLog.MaxTrackedMessages))
+
+        WsFeedLog.ResetForTests()
+    End Sub
 
     ' =======================================================================
     ' A84 — AnalysisLogger.CountDataRows line semantics.

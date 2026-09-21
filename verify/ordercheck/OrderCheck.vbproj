@@ -69,6 +69,7 @@
          (LogWsHealthTransitionForRun in MainForm_SignalBridge) stays OUT — same
          live-socket/WinForms boundary as A22/A37. -->
     <Compile Include="..\..\Core\WsHealthLog.vb" />
+    <Compile Include="..\..\Core\WsFeedLog.vb" />
     <!-- venue_status.log (A74): the REST-side venue-declaration sidecar. Records when
          Deribit itself returns a response saying it is unavailable (5xx or HTTP-200
          JSON-RPC error). Never logs on timeout/network failure (V-1 guard).
