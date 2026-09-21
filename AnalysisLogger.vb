@@ -129,10 +129,42 @@ Public Class AnalysisLogger
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
     End Function
 
+    ''' <summary>Row count for the LOG display line. Streams the file and counts lines instead
+    ''' of materialising them.
+    ''' ⛔ WHY THIS IS NOT File.ReadAllLines ANY MORE (2026-09-21). This runs on the WinForms UI
+    ''' thread — UpdateLogInfo calls it, and UpdateLogInfo runs on EVERY completed run AND every
+    ''' SKIPPED run (six call sites). ReadAllLines on the live 13.5 MB book allocated an array of
+    ''' ~100,000 strings and held them all at once, on a 1 GiB collector box. When disk IO slowed
+    ''' — Windows Defender's 02:00 scan on 2026-09-18 — that call pushed the UI thread past one
+    ''' second per run, which is slower than the two ~1 Hz auto-run timers tick. Those timers then
+    ''' parked a thread-pool thread per tick and the pool injected a replacement about once a
+    ''' second: 10 threads → 11,630 in four hours, commit exhausted, box down. The re-entrancy
+    ''' gates in UI/MainForm_AutoRun.vb and AutoRunTimer.vb stop the pile-up; this stops the UI
+    ''' thread falling behind in the first place. Both are needed — the gates bound the damage,
+    ''' this removes the cause.
+    ''' ⚠ ReadLine is used deliberately rather than counting newline bytes: it reproduces
+    ''' ReadAllLines' line semantics EXACTLY (\r\n, bare \r and bare \n all terminate; a trailing
+    ''' terminator does not add an empty final line), so the displayed number cannot drift. Each
+    ''' line is collected immediately instead of being retained in an array.
+    ''' ⚠ FileShare.ReadWrite so a concurrent append by this same logger cannot make the display
+    ''' throw — the same sharing lesson the repair-scan fix recorded.</summary>
     Public Shared Function GetRowCount() As Integer
         Dim path As String = GetLogPath()
         If Not File.Exists(path) Then Return 0
-        Return Math.Max(0, File.ReadAllLines(path).Length - 1)
+        Try
+            Dim lines As Integer = 0
+            Using fs As New FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)
+                Using sr As New StreamReader(fs)
+                    While sr.ReadLine() IsNot Nothing
+                        lines += 1
+                    End While
+                End Using
+            End Using
+            Return Math.Max(0, lines - 1)
+        Catch
+            ' Display-only. A transient sharing or IO error must never surface into a render.
+            Return 0
+        End Try
     End Function
 
     ' Called once per LogRun. Handles log rotation: if the existing file has a
