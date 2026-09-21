@@ -105,6 +105,11 @@ Namespace Global.DeribitVerdictEngine
         Private Const StreamAheadMs As Long = 5000
         Private Const PendGraceSec As Integer = 120
         Private Const RawDumpRotateBytes As Long = 64L * 1024L * 1024L
+        ' The status loop ticks often enough to notice a STOP file quickly, but only prints
+        ' every StatusEveryTicks-th tick, so an unattended multi-day log stays readable.
+        Private Const StatusTickSec As Integer = 30
+        Private Const StatusEveryTicks As Integer = 10
+        Private Const StopFileName As String = "STOP"
 
         Private ReadOnly _gate As New Object()
 
@@ -200,7 +205,7 @@ Namespace Global.DeribitVerdictEngine
 
                 Dim wsTask As Task = WsSupervisorAsync(cts.Token)
                 Dim restTask As Task = RestPollLoopAsync(restPollSec, cts.Token)
-                Dim statusTask As Task = StatusLoopAsync(cts.Token)
+                Dim statusTask As Task = StatusLoopAsync(cts, cts.Token)
                 Try
                     Await Task.WhenAll(wsTask, restTask, statusTask)
                 Catch ex As OperationCanceledException
@@ -603,13 +608,30 @@ Namespace Global.DeribitVerdictEngine
         End Sub
 
         ' ── status + report ──────────────────────────────────────────────────────────────
-        Private Async Function StatusLoopAsync(ct As CancellationToken) As Task
+        Private Async Function StatusLoopAsync(stopper As CancellationTokenSource, ct As CancellationToken) As Task
+            Dim tick As Integer = 0
             While Not ct.IsCancellationRequested
                 Try
-                    Await Task.Delay(TimeSpan.FromSeconds(300), ct)
+                    Await Task.Delay(TimeSpan.FromSeconds(StatusTickSec), ct)
                 Catch ex As OperationCanceledException
                     Return
                 End Try
+
+                ' ⭐ A detached, windowless run cannot be sent Ctrl+C, and killing the process
+                ' skips Report() — the run summary would be lost even though the data files
+                ' survive. Dropping a file named STOP in the working directory ends the run
+                ' the same way Ctrl+C does, so the summary is always printed.
+                Try
+                    If File.Exists(StopFileName) Then
+                        Console.WriteLine("[" & NowUtc() & "] STOP file seen — finishing and writing the summary…")
+                        stopper.Cancel()
+                        Return
+                    End If
+                Catch
+                End Try
+
+                tick += 1
+                If tick Mod StatusEveryTicks <> 0 Then Continue While
                 SyncLock _gate
                     If _rawDump IsNot Nothing Then _rawDump.Flush()
                     Dim c1 As Long = 0
