@@ -74,9 +74,25 @@ The protocol comes from a run on 2026-09-21 (UTC): stale-row detection over [`tr
 
 ---
 
+## 4a. ⛔⛔ The acceptance dry run CONTAMINATES the window it runs on
+
+**Found the hard way on harness 2, 2026-09-21 (UTC), and it is a defect in how the specs were written, not in any build.**
+
+A build spec asks its implementer for a live dry run as an acceptance item — rightly, because an unrun handle is a guess. ⛔ **But the implementer then reports what it saw, and the seat reads that report. The seat is now contaminated on that window before it has written a single baseline line.** On harness 2 the report named an aggregate — *"6 of 10 came back `tag_wrong`"* — plus one commit by hash. That is enough to anchor a baseline, which is exactly what §5 forbids.
+
+**The rule, from now on:**
+
+1. **A build spec's acceptance dry run names a window RESERVED FOR ACCEPTANCE.** The tool must take a parameter that lets the two windows be disjoint — an offset, a date range, a path filter.
+2. **The measured first run uses a DIFFERENT window the seat has seen no output for.**
+3. **The implementer reports counters, timings and token counts freely. It reports per-item VERDICTS only for the acceptance window**, never for the reserved one.
+
+⚠ **This cost harness 2 its clean first run.** Commits 1 to 300 are now a demonstration; the measurement moves to a fresh window. **Cheap to fix here, and it would have been expensive to discover on harness 5.**
+
+---
+
 ## 5. ⛔ What invalidates a first run
 
-- **The seat saw any detector output before writing its baseline.** The run is then a demonstration, not a measurement, and must be labelled as one.
+- **The seat saw any detector output before writing its baseline.** The run is then a demonstration, not a measurement, and must be labelled as one. ⚠ **Including output relayed second-hand in an implementer's report** — see §4a.
 - **The baseline was filled with guesses** rather than `unsure` where the seat could not tell.
 - **The harness reported zero candidates and was read as a pass.** A zero count is an error exit, not a clean bill. The repo's own ruling: a counter reading 0 is the tripwire, not waste.
 

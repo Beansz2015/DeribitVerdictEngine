@@ -89,6 +89,7 @@ Auto-proceeded under `CLAUDE.md`'s auto-proceed ruling and recorded. **None is R
 | Parameter | Meaning |
 |---|---|
 | `-Count` | How many commits back to walk. Default 300 |
+| `-Skip` | ⭐ **ADDED 2026-09-21 after the build.** Commits to skip before walking, so the acceptance window and the measured first-run window can be made disjoint. See [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4a. Default 0 |
 | `-BaselinePath` | The seat's hand-written read. Default `commit-walker-baseline.json` |
 | `-OutPath` | Default `commit-walker-report.md` |
 
@@ -199,6 +200,20 @@ Criteria must describe concrete situations, and must state the asymmetry explici
 8. A live dry run over 300 commits at `HEAD`, with a throwaway baseline: counters within sight of §4.3's anchors, and actual `usage.input_tokens`, cost and wall time reported.
 
 ⚠ **Not acceptance:** the measured comparison against a real hand baseline. That is the first live use, per [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md), and it is the seat's job, not the implementer's.
+
+⛔⛔ **Item 8's window is RESERVED FOR ACCEPTANCE and is now spent.** The 2026-09-21 build ran it over commits 1 to 300 at `HEAD` and reported verdict aggregates back, so **the seat is contaminated on that window and it can never carry the measured first run.** The measurement moves to `-Skip 300 -Count 300`. Protocol rule and the reasoning: [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4a.
+
+---
+
+## 7a. Post-build corrections, 2026-09-21 (UTC)
+
+| Item | Correction |
+|---|---|
+| ⛔ **Pricing IS documented — the build was wrong to say otherwise** | The build reported *"no pricing page in the docs index"* and declined to compute a cost. ⭐ **The caution was exactly right — refusing to invent a rate is this repo's own rule about derived numbers.** But the source exists: `docs.typesafe.ai/models.md`, listed in `docs.typesafe.ai/llms.txt`, states **$42 per Btok / $0.042 per Mtok, charged on INPUT tokens, output tokens free.** So the build's 15,255 input tokens cost **$0.00064**. Any future spec asking for a cost must cite this line so the implementer has the rate |
+| `EXIT_REASON` for the over-25% case | The build invented `RESIDUAL_TOO_HIGH`. **Adopted** — it matches `CLASSIFIER_SUSPECT`'s style |
+| Baseline key format | The build used the full 40-char SHA and printed 10-char short hashes in the candidate list. ⚠ **A seat writing a baseline by hand copies what it sees printed, so the two must not disagree.** **Ruled: accept a full SHA or any unambiguous prefix of at least 7 characters; error on an ambiguous prefix rather than guessing** |
+| §4.3 anchors 258/20/10/12 | ⭐ **Superseded, and the reason is informative.** They were measured before the merge-exclusion trap was understood, so the `RESIDUAL_UNTAGGED_NO_ENGINE_PATH` anchor of 12 was inflated by merges a correct build excludes. **Live, correct values: 262 / 21 / 10 / 7, residual 17, `RESIDUAL_PCT` 5.7.** The old anchor documented the buggy-before state |
+| ⚠ PowerShell 5.1 array concatenation | Found by the build, worth carrying: `@($listA) + @($listB)` on two non-empty `List[object]` throws *"Argument types do not match"* in Windows PowerShell 5.1. Fixed with `.ToArray()`. **It would have crashed the first live run past the point acceptance item 2 alone catches** |
 
 ---
 
