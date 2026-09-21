@@ -438,3 +438,12 @@ tools/mem-probe.csv
 # Ignored 2026-09-09 after a fetch left them loose in the working tree.
 analysis_log_aws.csv
 aws_fetch/
+
+# TypeSafe / Jev API credentials (added 2026-09-21 UTC). The System One API key is a
+# SECRET and this repo is PUBLIC — a committed key is a published key. The SDKs and the
+# HTTP API both read TYPESAFE_API_KEY from the environment; this file is the per-box
+# source for it, never a tracked value. Both the exact name and a defensive glob are
+# ignored so a stray copy cannot be committed by a different name.
+typesafe.local.env
+*.typesafe.env
+*.typesafe.key
