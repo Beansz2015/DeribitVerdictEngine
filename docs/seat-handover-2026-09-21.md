@@ -103,11 +103,36 @@ The deploy acceptance gate is **unchanged** across all three attempts on 2026-09
 | **1** | **Push `d7637ba`** | One command |
 | **2** | **The two scheduled checks** (§0) | On the trader's greenlight |
 | **3** | ⭐ **The engine-fix build** — [`engine-fix-build-spec-2026-09-21.md`](engine-fix-build-spec-2026-09-21.md) | **Written today and UNTOUCHED.** Sessions A/C/B2 one seat, B1 (probe) its own. All of `EF-1`–`EF-4` RULED. **This is the real queue** |
-| **4** | **Absorption S1/S2** — [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) | ⭐ **No longer deadline-pressured** — the gap-repair fixes shipped today |
+| **4** | **Absorption S1/S2** — [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) | ⭐ **No longer deadline-pressured, and that changes MORE than the date. Read §4a — do not just move it down the list** |
 | **5** | The UI-thread liveness heartbeat | **Gated on the 09-24 check.** Read §0's caveat before deciding |
 | **6** | A fixture for the timer gates | ⚠ **Could not be built cheaply** — it needs a real `Control` and a running message pump, which the harness does not have. Said rather than implied |
 | **7** | `collector.ps1` cannot deploy to a box whose app is DOWN | It resolves the install dir from the running process. Needs a `-RemoteDir` override. ⛔ **I deliberately did NOT patch this mid-incident** — its safety properties are what saved us |
 | **8** | `Q-1` option (d), the postponed reads | From the prior handover. Untouched |
+
+### 4a. ⭐ What discharging the 2026-10-01 deadline does to ABSORPTION
+
+⛔ **Absorption never had a deadline of its own. It had one because it was the CARRIER for the gap-repair deploy.** That deploy happened today, on its own, so the carrier role is spent.
+
+**Its deploy had FOUR preconditions** ([`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md), the `deploy` row of its session-split table). **Three fell this afternoon:**
+
+| Precondition | Status |
+|---|---|
+| Rider 2b — both ops scripts must see a SECOND rotated book (`T-7`) | ⚠ **STILL OPEN — and now the ONLY gate** |
+| Same-millisecond gap-repair fix (`GR-5` (b)) | ✅ shipped 2026-09-21 |
+| Cross-month leading-gap fix (`F-1`) | ✅ shipped 2026-09-21 |
+| Repair scan-failure fix (`DUP-1` / `DUP-2`) | ✅ shipped 2026-09-21 |
+
+⛔ **The 2026-09-28 fallback trigger in [`seat-handover-2026-09-17.md`](seat-handover-2026-09-17.md) §1 is DEAD.** It existed only to force a separate gap-repair deploy if absorption slipped. It cannot fire and must not be inherited.
+
+**What follows from that:**
+
+1. **The natural task order is restored.** The deadline was the only force that could push absorption ahead of the engine-fix build. [`seat-handover-2026-09-17.md`](seat-handover-2026-09-17.md) §1 already ordered engine fixes first; **that ordering now stands unopposed.**
+2. ⭐ **`EF-1` is UNTOUCHED and still binds.** It ruled the POC-gate fix rides the absorption S2 deploy. Neither is built, so nothing changed — and its mechanism survives: **`RIDER-9` puts `VPFRSignal` and `VPFRPoc` into the header AT the S2 rotation, which is what makes the POC gate auditable per row.** S2 should still land with or before the POC-gate deploy.
+3. ⛔⛔ **EIGHT riders still wait on S2, and that is the pressure that remains.** `RIDER-1`–`RIDER-7` plus `RIDER-9`, all `TRAVELLING` in [`csv-rotation-riders.md`](csv-rotation-riders.md). **`RIDER-7` was already LOST once**, on the 2026-09-01 rotation, because nothing checked the list. ⚠ **"No deadline" must not become "no urgency" — that is precisely how these riders accumulated.** Standing memory: defer a schema fix and it accretes.
+4. **`T-7` is now the whole gate**, where it used to be one of four. Price it properly rather than treating it as a footnote: it blocks a rotation eight riders are queued behind.
+5. ⛔ **A NEW complication from 2026-09-21 that NOBODY has assessed.** The book now carries a **three-day hole** — rows to 2026-09-18 02:00:07, nothing, then rows from 2026-09-21 15:38. Two consequences:
+   - **The rotation folds that hole into the `.bak`**, which makes `RIDER-1` (derived `.bak` name) and `RIDER-2` (pooled reads must include `.bak`) more load-bearing, not less — the pre-rotation book is now discontinuous.
+   - ⚠ **The absorption episode-age read may have lost population.** Its 10-weekday data gate passed 2026-09-16, **before** the hole, so the gate is probably still met — but the row count behind it is smaller than whoever passed it assumed. **CHECK THIS BEFORE RUNNING THAT READ, not after.** Not verified by this seat.
 
 ---
 
