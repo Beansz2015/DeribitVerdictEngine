@@ -750,6 +750,13 @@ Module Program
         A82a_MirrorCoversEveryIndicatorResultsProperty()
         A82b_MirroredMarketGivesMirroredVerdictAndLevels()
 
+        ' [A84 — AnalysisLogger.CountDataRows line semantics. The 2026-09-21 collector outage
+        '   fix replaced File.ReadAllLines with a streaming ReadLine loop because the old call
+        '   allocated ~100,000 strings on the UI thread per run and pushed it past 1 Hz, which
+        '   is what let the ~1 Hz auto-run timers park thread-pool threads. That changed how a
+        '   RENDERED value is computed, on a mechanism argument with no test. A84 pins it.]
+        A84_CountDataRowsMatchesReadAllLinesSemantics()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -15629,6 +15636,100 @@ Module Program
         r.VPFRNearestLvnAbove = lvnA : r.VPFRNearestLvnBelow = lvnB
         Return r
     End Function
+
+    ' =======================================================================
+    ' A84 — AnalysisLogger.CountDataRows line semantics.
+    '
+    ' WHY IT EXISTS. GetRowCount used File.ReadAllLines(path).Length - 1. On the live collector
+    ' that book is 13.5 MB, so the call allocated ~100,000 strings AT ONCE on the WinForms UI
+    ' thread, on every completed AND every skipped run. When Defender's 02:00 scan slowed disk IO
+    ' on 2026-09-18 it pushed the UI thread past one second per run — slower than the two ~1 Hz
+    ' auto-run timers tick — and each undrained tick parked a thread-pool thread while the pool
+    ' injected a replacement about once a second. 10 threads to 11,630 in four hours; the box
+    ' went down. The fix streams with ReadLine instead. See docs/ and the commit that added this.
+    '
+    ' THE PROPERTY, not a copy of it. The contract is "identical to ReadAllLines". So every case
+    ' asserts CountDataRows against File.ReadAllLines(...).Length - 1 computed IN THE FIXTURE,
+    ' and ALSO against an explicit expected number. The equivalence arm catches a drift in either
+    ' implementation; the explicit arm catches both being wrong the same way, which equivalence
+    ' alone cannot see.
+    '
+    ' [Fixture-literal provenance, CLAUDE.md RULED 2026-08-11]
+    '   MECHANISM. Every literal here is file CONTENT and its arithmetic consequence, invented to
+    '   exercise a line-terminator rule. Nothing is settings-derived and there is no shipped value
+    '   to drift against.
+    ' =======================================================================
+    Private Sub A84_CountDataRowsMatchesReadAllLinesSemantics()
+        Dim dir As String = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "ordercheck_a84_" & Guid.NewGuid().ToString("N"))
+        System.IO.Directory.CreateDirectory(dir)
+        Try
+            ' name, file content, expected data-row count
+            Dim cases = New List(Of Tuple(Of String, String, Integer)) From {
+                Tuple.Create("header + 2 rows, trailing LF", "h" & vbLf & "a" & vbLf & "b" & vbLf, 2),
+                Tuple.Create("header + 2 rows, NO trailing newline", "h" & vbLf & "a" & vbLf & "b", 2),
+                Tuple.Create("header + 2 rows, CRLF throughout", "h" & vbCrLf & "a" & vbCrLf & "b" & vbCrLf, 2),
+                Tuple.Create("mixed terminators CRLF / LF / bare CR", "h" & vbCrLf & "a" & vbLf & "b" & vbCr & "c" & vbLf, 3),
+                Tuple.Create("header only, trailing LF", "h" & vbLf, 0),
+                Tuple.Create("header only, no newline", "h", 0),
+                Tuple.Create("empty file", "", 0)
+            }
+
+            For i As Integer = 0 To cases.Count - 1
+                Dim c = cases(i)
+                Dim p As String = System.IO.Path.Combine(dir, "case" & i.ToString(CultureInfo.InvariantCulture) & ".csv")
+                System.IO.File.WriteAllText(p, c.Item2)
+
+                Dim viaReadAllLines As Integer = Math.Max(0, System.IO.File.ReadAllLines(p).Length - 1)
+                Dim actual As Integer = AnalysisLogger.CountDataRows(p)
+
+                Check(String.Format(CultureInfo.InvariantCulture,
+                                    "A84a {0} → {1} data row(s), and identical to ReadAllLines", c.Item1, c.Item3),
+                      actual = c.Item3 AndAlso actual = viaReadAllLines,
+                      String.Format(CultureInfo.InvariantCulture,
+                                    "CountDataRows={0} expected={1} ReadAllLines={2}",
+                                    actual, c.Item3, viaReadAllLines))
+            Next
+
+            ' Absent and unusable paths are 0, never an exception into a render.
+            Check("A84b a missing file counts 0",
+                  AnalysisLogger.CountDataRows(System.IO.Path.Combine(dir, "nope.csv")) = 0,
+                  "expected 0")
+            Check("A84c a null or whitespace path counts 0 and does not throw",
+                  AnalysisLogger.CountDataRows(Nothing) = 0 AndAlso AnalysisLogger.CountDataRows("   ") = 0,
+                  "expected 0 for both")
+
+            ' The reason FileShare.ReadWrite is there: a concurrent writer must not make the
+            ' display throw. An exclusive-write handle held open is exactly the live shape.
+            Dim sharedPath As String = System.IO.Path.Combine(dir, "shared.csv")
+            System.IO.File.WriteAllText(sharedPath, "h" & vbLf & "a" & vbLf)
+            Using w As New System.IO.FileStream(sharedPath, System.IO.FileMode.Append,
+                                                System.IO.FileAccess.Write, System.IO.FileShare.Read)
+                Check("A84d counts while another handle holds the file open for append",
+                      AnalysisLogger.CountDataRows(sharedPath) = 1,
+                      "expected 1 with a concurrent writer")
+            End Using
+
+            ' A 20,000-line file: the case the streaming change exists for. Still exact.
+            Dim big As String = System.IO.Path.Combine(dir, "big.csv")
+            Dim sb As New System.Text.StringBuilder()
+            sb.Append("h").Append(vbLf)
+            For i As Integer = 1 To 20000
+                sb.Append("r").Append(i.ToString(CultureInfo.InvariantCulture)).Append(vbLf)
+            Next
+            System.IO.File.WriteAllText(big, sb.ToString())
+            Dim bigExpected As Integer = Math.Max(0, System.IO.File.ReadAllLines(big).Length - 1)
+            Check("A84e 20,000-row file counts exactly, and identical to ReadAllLines",
+                  AnalysisLogger.CountDataRows(big) = 20000 AndAlso AnalysisLogger.CountDataRows(big) = bigExpected,
+                  String.Format(CultureInfo.InvariantCulture, "CountDataRows={0} ReadAllLines={1}",
+                                AnalysisLogger.CountDataRows(big), bigExpected))
+        Finally
+            Try
+                System.IO.Directory.Delete(dir, True)
+            Catch
+            End Try
+        End Try
+    End Sub
 
     Private Sub A80a_VpfrNearHvnLabelsPinnedToPocSide()
         Dim errorMsg As String = ""

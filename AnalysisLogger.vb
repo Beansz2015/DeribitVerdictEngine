@@ -149,7 +149,16 @@ Public Class AnalysisLogger
     ''' ⚠ FileShare.ReadWrite so a concurrent append by this same logger cannot make the display
     ''' throw — the same sharing lesson the repair-scan fix recorded.</summary>
     Public Shared Function GetRowCount() As Integer
-        Dim path As String = GetLogPath()
+        Return CountDataRows(GetLogPath())
+    End Function
+
+    ''' <summary>The testable seam behind <see cref="GetRowCount"/>. Same contract, explicit path:
+    ''' total lines minus the header, floored at 0; a missing file is 0.
+    ''' Extracted 2026-09-21 because GetRowCount reads AppDomain.BaseDirectory and a fixture
+    ''' cannot point it anywhere — the change above altered how a RENDERED value is computed and
+    ''' shipped on a mechanism argument with no test. Fixtures A84a-A84e pin it.</summary>
+    Friend Shared Function CountDataRows(path As String) As Integer
+        If String.IsNullOrWhiteSpace(path) Then Return 0
         If Not File.Exists(path) Then Return 0
         Try
             Dim lines As Integer = 0
