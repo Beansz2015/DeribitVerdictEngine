@@ -38,31 +38,14 @@ param(
 $ErrorActionPreference = 'Continue'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
+# Get-HeaderText lives in lib/HeaderText.ps1, shared with tools/checks/rider-travel.ps1
+# (docs/rider-travel-check-spec.md D-2). Do not re-inline it here -- a second copy is
+# the exact drift class CLAUDE.md rules against for fixture literals.
+. (Join-Path $PSScriptRoot 'lib\HeaderText.ps1')
+
 function Emit([string]$status, [string]$detail) {
     "ROTATION_STATUS=$status"
     "ROTATION_DETAIL=$detail"
-}
-
-# Concatenate the string literals of `Shared ReadOnly Header As String =` up to the first
-# continuation line that does not end in `&`. Returns $null when it cannot be found.
-function Get-HeaderText([string[]]$lines) {
-    if ($null -eq $lines) { return $null }
-    $decl = -1
-    for ($i = 0; $i -lt $lines.Length; $i++) {
-        if ($lines[$i] -match 'Shared\s+ReadOnly\s+Header\s+As\s+String\s*=') { $decl = $i; break }
-    }
-    if ($decl -lt 0) { return $null }
-    $sb = New-Object System.Text.StringBuilder
-    $found = $false
-    for ($j = $decl + 1; $j -lt $lines.Length; $j++) {
-        $t = $lines[$j].Trim()
-        if ($t -eq '' -or $t.StartsWith("'")) { continue }
-        $lits = [regex]::Matches($t, '"((?:[^"]|"")*)"')
-        foreach ($m in $lits) { [void]$sb.Append($m.Groups[1].Value.Replace('""', '"')); $found = $true }
-        if (-not $t.EndsWith('&')) { break }
-    }
-    if (-not $found) { return $null }
-    return $sb.ToString()
 }
 
 function Read-AtRev([string]$rev, [string]$path) {

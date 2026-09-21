@@ -447,3 +447,9 @@ aws_fetch/
 typesafe.local.env
 *.typesafe.env
 *.typesafe.key
+
+# tools/checks/rider-travel.ps1 (docs/rider-travel-check-spec.md) -- the operator's
+# hand-written baseline read and the tool's generated comparison report. Both are
+# per-run local artefacts, never a tracked deliverable, default to the repo root.
+rider-travel-baseline.json
+rider-travel-report.md
