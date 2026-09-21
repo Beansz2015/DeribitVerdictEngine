@@ -13,7 +13,7 @@
 |---|---|---|---|
 | **A** — the POC-tier gate (`D-1`, `D-2`) | **Opus** | **high** | Four lines of code and two doc lines, but the build is a **live scoring-outcome change and a dataset boundary**. The judgment is done; the risk is that "swap the labels" is read too widely and the `IN_LVN_*` halves get swapped too — a half that is already correct. Two fixtures must change meaning, not just values |
 | **B** — the liquidation flag (`D-4`, `D-5`, `D-6`) | **Opus** | **high** | The fix cannot be designed until a live measurement returns. The instrument is new code against a live venue feed, and the fix that follows is a scoring change on a vote that has never fired once. `D-5` carries an `MT` case with no live example anywhere |
-| **C** — the report column and the card colour (`D-8`, `D-9`) | **Sonnet** | **medium** | Mechanical against settled rulings, with an in-repo template for each. ⚠ Escalate to Opus if decision `EF-4` below is ruled to change the text surface as well — that engages the display-string parity hard rule |
+| **C** — the report column and the card colour (`D-8`, `D-9`) | **Opus** | **high** | ⛔ **RAISED from Sonnet/medium on 2026-09-21 (UTC), because `EF-4` was ruled (a).** The text surface is now in scope, so the build re-formats a line emitted by `BuildPlaintextSnapshot` and engages the display-string parity hard rule. It also adds two `VerdictResult` properties and rewires three card sites. **This session's own escalation trigger fired before the session started — that is the trigger working, not a mis-sizing** |
 
 **Sequence by dependency, not by size.** Session A and Session C are independent of each other and of Session B. **Session B cannot finish until its measurement returns**, so start Session B's measurement FIRST and let it run while Session A is built.
 
@@ -30,7 +30,7 @@
 
 - **Session A:** the re-run of handle `H-3` (in [`docs/medium-tier-bug-hunt-spec-back.md`](medium-tier-bug-hunt-spec-back.md) §1) does not reproduce 143 flipped population rows and 1,288 moved placed targets at the base commit. A different number means the counterfactual and the fix disagree, and the fix is not understood.
 - **Session B:** the measurement shows the stream DOES carry a readable liquidation flag on some trades. That contradicts `L-1`'s 51,107-of-51,107 measurement, and the whole fix design changes.
-- **Session C:** any change to `UI/MainForm_PlaintextSnapshot.vb` becomes necessary. That is a text-surface change under the display-string parity hard rule, and it is a rendered value, so it is reserved.
+- **Session C:** carrying Step 3b's effect onto the snapshot needs a line ADDED or REMOVED rather than the existing `Momentum:` line re-formatted. `EF-4` (a) authorises a re-format of one line on both surfaces; it does not authorise a new line. A new line is a larger parity event and a separate rendered-value decision.
 
 ---
 
@@ -246,6 +246,13 @@ End If
 
 ⚠ **`MT` has zero occurrences in the store and no prior spec.** The ruling names it, so build it — but the implementer has no live example to check against. Say so plainly in the spec-back.
 
+✅ **`EF-3` RULED (trader), 2026-09-21 (UTC): option (b) — skip an unrecognised value and COUNT it.** An unrecognised `liquidation` value is never booked to a side. Deribit documents exactly three values today, so the counter is expected to read 0 forever; **a counter reading 0 is the tripwire, not waste** (the `WD-SEMANTICS` precedent).
+
+- **The count goes to a LOG LINE now, not a CSV column.** A column is a schema change and would become another rotation rider on S2, for a case with no observed instance.
+- **Escalate to a CSV column only if the count is ever non-zero.** Record that condition in [`docs/csv-rotation-riders.md`](csv-rotation-riders.md) only at that point — this build adds NO rider.
+- ⛔ The value must still be treated as flagged for nothing else: it is neither long nor short, so both sizes stay untouched.
+- **Fixture:** assert that an unrecognised value leaves `liqLongSize`, `liqShortSize` and `liqSignal` exactly as an unflagged trade would, and that the counter increments once.
+
 **Fixtures:** `A81a` stays as it is — it pins the `T` mapping and passes today. `A81b` flips from a known-defect repro to an always-on guard, exactly as `A80b` does in Session A. Add a new sub-case for `MT`.
 
 ### 4.4 `D-6` — the unit of `large_liq_size`
@@ -289,7 +296,13 @@ Documentation only, for now.
 
 ⭐ **A correct precedent already exists in the same file.** `ComputeLeanContextCounts` (`analysis/AnalysisRunner.vb:329`) uses `v.StartsWith("NO TRADE")` and gets it right. Reuse that test rather than writing a third one.
 
-⚠ **`NO TRADE [TIE]` has no lean direction.** The outcome walk derives side from `row.Verdict.ToUpper().Contains("LONG")`, so a tie currently walks as a SHORT. **Decision `EF-2` below.**
+⚠ **`NO TRADE [TIE]` has no lean direction.** The outcome walk derives side from `row.Verdict.ToUpper().Contains("LONG")`, so a tie currently walks as a SHORT.
+
+✅ **`EF-2` RULED (trader), 2026-09-21 (UTC): option (a) — exclude ties from the lean outcome walk, and count them in their own tally.** A tie has no lean direction, so walking it as a short fabricates one. Dropping it silently was rejected: this repo does not accept silent holes.
+
+- The tie tally is **rendered**, not discarded. A reader must be able to see that 59 rows exist and were not walked.
+- ⛔ Detect the tie on the verdict TEXT (`NO TRADE [TIE]`), not by the absence of `LONG` — the absence test is the defect being fixed.
+- **Fixture:** a row set holding directional, lean-long, lean-short and tie rows. Assert the three counts land in the right columns and that no tie reaches the outcome walk.
 
 ⚠ **`analysis/` is host-agnostic** under the Linux CLI port rule in `CLAUDE.md`. No `System.Windows.Forms` reference, no `Control.Invoke`, no `MainForm` coupling.
 
@@ -325,22 +338,38 @@ The card reads those. The colour then follows the SIGN of the effect on the rele
 
 ⚠ **Adding properties that default to 0 does not by itself alter rendered output**, so the `VerdictResult` field-default clause of the parity rule is not tripped by the addition. **The CARD change is the rendered-value change**, and that is what `D-9` already rules.
 
-⚠ **The text surface currently prints the CONFIG, not the effect** — `UI/MainForm_PlaintextSnapshot.vb:474-480` renders `Momentum: <state> | Enabled: <yes/no> | Soften: +<n> | Amplify: -<n>`. After `D-9` (b), the two surfaces would describe the same step differently. **Decision `EF-4` below.**
+⚠ **The text surface currently prints the CONFIG, not the effect** — `UI/MainForm_PlaintextSnapshot.vb:474-480` renders `Momentum: <state> | Enabled: <yes/no> | Soften: +<n> | Amplify: -<n>`. That is what the step COULD do, not what it DID — the same defect `D-9` exists to fix, on the other surface.
+
+✅ **`EF-4` RULED (trader), 2026-09-21 (UTC): option (a) — the snapshot changes too.** Both surfaces render Step 3b's actual effect, from the same two new properties.
+
+- ⛔ **This engages the display-string parity hard rule in earnest.** The snapshot's `Momentum:` line is RE-FORMATTED, so the matching card bindings must move **in the same commit**, and the commit message must name every binding that changed.
+- ⭐ **Re-format that ONE line. Do not add a line and do not remove one.** Adding a line is the Session C escalation trigger in this spec §0 — stop and raise it rather than proceeding.
+- **What replaces the config values is the effect**, in the same shape the breakdown already uses: the signed points and the side. Keep `Enabled: <yes/no>` — it explains a zero effect that would otherwise read as "nothing happened".
+- ⚠ **The `Soften` and `Amplify` cfg values leave the rendered line.** They are reachable from `settings.json` and from the breakdown note; nothing that needs them loses them. Confirm that by reading, and say so in the commit message.
+- **Fixture:** pin the rendered `Momentum:` text and the matching card state for all four Step 3b arms. ⚠ The P5-test text-parity harness diffs legacy against snapshot and **cannot** catch card drift — the card is the unchecked third surface. Pin both explicitly.
 
 ### 5.3 Session C acceptance
 
 1. `dotnet build` succeeds. The harness reads `ALL PASS`, at or above the Session A count.
-2. New fixtures: one pinning `FundingStep3bLongPoints` and `FundingStep3bShortPoints` against each Step 3b arm (crowded-and-rising, crowded-and-falling, neutral-into-crowding, disabled); one pinning the report's lean column against a row set holding lean, directional and tie rows.
-3. **State in the commit message which card bindings changed, and why the text surface did or did not move**, per the display-string parity hard rule.
+2. New fixtures: one pinning `FundingStep3bLongPoints` and `FundingStep3bShortPoints` against each Step 3b arm (crowded-and-rising, crowded-and-falling, neutral-into-crowding, disabled); one pinning the rendered `Momentum:` text **and** the matching card state across the same four arms; one pinning the report's lean column and the separate tie tally against a row set holding directional, lean-long, lean-short and tie rows.
+3. ⛔ **Under `EF-4` (a) the text surface DOES move.** The commit must carry the snapshot change and every matching card binding **together**, and the commit message must name each binding. A commit that moves one surface and not the other breaks the display-string parity hard rule.
 4. `settings.json` unchanged.
+5. ⚠ **`analysis/` stays host-agnostic.** No `System.Windows.Forms` reference reaches `D-8`'s files — the Linux CLI port depends on it.
 
 ---
 
-## 6. Decisions queued for the trader
+## 6. Decisions — ALL FOUR RULED 2026-09-21 (UTC)
 
-⚠ **All four are reserved.** Each is a rendered value, a deploy, or a schema question. None is auto-proceedable.
+✅ **The trader ruled `EF-1` to `EF-4` on 2026-09-21 (UTC), all as recommended.** They were reserved when queued — each is a rendered value, a deploy, or a schema question — and they are now settled. **The D-tables below are kept verbatim so a later reader sees what was weighed, not only what was picked.**
 
-### `EF-1` — does the POC-gate fix ride the absorption S2 deploy, or take its own?
+| Id | Ruled | Effect on this spec |
+|---|---|---|
+| `EF-1` | **(a)** one deploy | This spec §8 and §9. ⚠ **Carries a scope consequence — see `EF-1` below** |
+| `EF-2` | **(a)** exclude ties, count them | This spec §5.1 |
+| `EF-3` | **(b)** skip and count unknown flag values, to a log line | This spec §4.3 |
+| `EF-4` | **(a)** the snapshot changes too | This spec §5.2, **and it RAISED Session C to Opus/high in this spec §0** |
+
+### `EF-1` — does the POC-gate fix ride the absorption S2 deploy, or take its own? ✅ RULED (a)
 
 | Option | What happens | The trade |
 |---|---|---|
@@ -350,9 +379,22 @@ The card reads those. The colour then follows the SIGN of the effect on the rele
 
 - **My read: (a) — and I am arguing against the standing prior, so here is the mechanism rather than a cost argument.** `RIDER-9` puts `VPFRSignal` and `VPFRPoc` into the header on the S2 rotation. **Rows written after that rotation can reconstruct the POC gate's decision per row from their own columns.** Rows written between an earlier engine-fix deploy and S2 could not. So (a) does not lose information: the new behaviour and the inputs needed to audit it arrive together.
 - ⚠ **What (a) genuinely costs:** the `TargetCapReason` shift from zero POC placements to non-zero happens at the same instant as the header change, so a reader cannot attribute a change in placement mix to one or the other **without** relying on the new columns. If the trader wants that attributable independently of `RIDER-9`, (b) is right.
-- **This is a deploy decision, it is reserved, and it interacts with this spec §9.**
+✅ **RULED (trader), 2026-09-21 (UTC): (a) — one deploy.**
 
-### `EF-2` — how should the report's lean column treat `NO TRADE [TIE]`?
+⛔⛔ **THE SCOPE CONSEQUENCE, named rather than decided silently.** One deploy can only carry code that is BUILT when it fires, and this spec §9 shows that Session B is blocked on a measurement that may not return before the 2026-09-28 fallback trigger. **So (a) binds as follows:**
+
+| Session | Rides the S2 deploy | Why |
+|---|---|---|
+| **A** (`D-1`, `D-2`) | ✅ yes | Short. Built well inside the window |
+| **C** (`D-8`) | **not a deploy item at all** | `analysis/` is the OFFLINE report. It never runs on the collector, so it has no deploy and no boundary |
+| **C** (`D-9`) | ✅ yes | A card change. It deploys with the app and moves no collected value |
+| **B** (`D-4`, `D-5`, `D-6`) | ⚠ **only if its measurement has returned in time** | It cannot be built before it is designed, and it cannot be designed before the measurement pairs a liquidation |
+
+⭐ **If Session B misses the deploy it takes its own later boundary, and that is correct, not a failure.** The alternative is holding the deploy for it, which pushes the gap-repair fixes past 2026-10-01 00:00 UTC and loses trades permanently — **exactly what `EF-1` option (c) was rejected for.** No trade exists here: the richer single-boundary option is forbidden by a prior ruling, so the split boundary is taken and named. **Auto-proceeded on that basis; record it in the spec-back's decisions-taken list.**
+
+⚠ **If Session B DOES make it, nothing changes** — all three ride one deploy and there is one boundary, as ruled.
+
+### `EF-2` — how should the report's lean column treat `NO TRADE [TIE]`? ✅ RULED (a)
 
 | Option | What changes |
 |---|---|
@@ -362,7 +404,7 @@ The card reads those. The colour then follows the SIGN of the effect on the rele
 
 - **My read: (a).** A tie has no lean direction, so walking it as a short fabricates one. (c) is a silent hole, which this repo already rejects. **(a) records more than the alternatives, so no information is being traded for less work here.**
 
-### `EF-3` — what should `CalcLiquidations` do with an unrecognised `liquidation` value?
+### `EF-3` — what should `CalcLiquidations` do with an unrecognised `liquidation` value? ✅ RULED (b)
 
 | Option | What changes |
 |---|---|
@@ -374,7 +416,7 @@ The card reads those. The colour then follows the SIGN of the effect on the rele
 - ⚠ **(b) needs somewhere to put the count.** A CSV column is a schema change and would become another rotation rider on S2; a log line is free. **I recommend the log line now, and a rider only if the count is ever non-zero.**
 - ⚠ Deribit documents exactly three values today, so (b) is cheap insurance rather than a response to an observed problem.
 
-### `EF-4` — does `D-9` (b) change the text surface as well as the card?
+### `EF-4` — does `D-9` (b) change the text surface as well as the card? ✅ RULED (a)
 
 | Option | What changes |
 |---|---|
@@ -413,6 +455,7 @@ The card reads those. The colour then follows the SIGN of the effect on the rele
 |---|---|
 | `docs/DeribitIndicatorProject.md` §15 | One row per shipped item, under the one-item-one-row rule. ⚠ **Keep each cell under about 1,000 B** — the build narrative belongs in the spec-back, not the version table |
 | Deploy ledger | Record the deploy instant in [`docs/aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5. **Rows either side are not comparable** for `TargetCapReason`, `PlacedTarget*`, `LiqSignal`, `LiqLongSize` and `LiqShortSize`, and for the verdict on roughly 1.68 % of population rows |
+| ⭐ Boundary count, per `EF-1` (a) | **ONE boundary if Session B makes the deploy; TWO if it does not.** Write down which happened, at the ledger entry, in the same sentence as the deploy instant. ⛔ **A later reader must not have to infer the boundary count from what shipped** — that inference is exactly what the `RIDER-9` columns were meant to remove, and it is cheap to state |
 | `settings.json` | **Not bumped.** No key added or changed. Say so explicitly in every commit message |
 | `docs/csv-rotation-riders.md` | **Not touched by this build** — `AnalysisLogger.Header` does not change, so the rider check in `tools/checks/verify-gate.ps1` does not fire. ⚠ Confirm by reading the diff rather than assuming |
 | [`docs/trader-tick-queue.md`](trader-tick-queue.md) §2 | Close the POC-gate row and the liquidation-flag row against the tree as each ships. ⛔ Re-open row `E7` — the A4 liquidation-by-OFI gate stops being defect-blocked the moment `D-4` ships |
@@ -427,9 +470,18 @@ The card reads those. The colour then follows the SIGN of the effect on the rele
 
 - The gap-repair fixes are **built, reviewed, merged and pushed**. Only the deploy is missing.
 - ⚠ **This engine-fix build competes with that deploy for the same days.** Session A and Session C are short. **Session B is not** — it is blocked on a live measurement that needs at least 24 hours, and possibly several days, before its fix can even be designed.
-- ⭐ **Recommendation: do not let Session B gate the deploy.** Start Session B's measurement immediately and let it run unattended. Build Session A and Session C beside it. Keep the absorption S1 and S2 build and its deploy on their own track.
+- ⭐ **Do not let Session B gate the deploy.** Start Session B's measurement immediately and let it run unattended. Build Session A and Session C beside it.
 
-**This is a sequencing recommendation, not a decision taken. The deploy is reserved.**
+⛔ **UPDATED 2026-09-21 (UTC) for `EF-1` (a).** The earlier draft of this section said *"keep the absorption S1 and S2 build and its deploy on their own track"*. **That is superseded: the trader ruled ONE deploy**, so Session A, Session C's card half, the gap-repair fixes and absorption S1 and S2 all fire together.
+
+**The order that satisfies both the ruling and the deadline:**
+
+1. **Now** — start Session B's measurement. It is unattended and costs no build time.
+2. **Now, in parallel** — build Session A and Session C. Both are short.
+3. **By about 2026-09-28** — build absorption S1 and S2, then deploy everything that is ready, as one deploy.
+4. **Session B rides that deploy only if its measurement has returned.** If it has not, Session B ships later on its own boundary — see the scope consequence under `EF-1` in this spec §6.
+
+⛔ **The deadline outranks the single-boundary preference.** Holding the deploy for Session B would push the gap-repair fixes past 2026-10-01 00:00 UTC, and an outage across that instant loses trades for good.
 
 ---
 
