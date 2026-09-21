@@ -7,7 +7,20 @@ Imports System.Net.Http
 Imports System.Text.Json
 
 Public Class DeribitClient
-    Private Shared ReadOnly _http As New HttpClient()
+    ''' <summary>⛔ UseProxy:=False IS LOad-BEARING, NOT TIDINESS.
+    ''' On the collector box (2026-09-21) WPAD proxy auto-detect is ON machine-wide
+    ''' (DefaultConnectionSettings bit 0x08). A default HttpClient resolves the system proxy
+    ''' BEFORE it issues the request, and that resolution HUNG indefinitely — measured by the
+    ''' co-tenant seat in-process: UseProxy:=False returned HTTP 200 in 1,003 ms while the
+    ''' default client timed out past 25,000 ms against the same endpoint.
+    ''' ⛔⛔ HttpClient.Timeout DOES NOT BOUND THIS. The request timeout only starts once the
+    ''' request is issued, so a hang in proxy resolution is unbounded by construction — which
+    ''' is why the engine did not fail fast and skip, it simply stopped.
+    ''' This engine talks to one public venue over the internet and has never had a proxy to
+    ''' use; nothing anywhere in the tree configured one. Disabling auto-detect restores the
+    ''' intent rather than removing a capability. If a deployment ever genuinely needs a proxy,
+    ''' that is a settings key and a D-table, not a silent default.</summary>
+    Private Shared ReadOnly _http As New HttpClient(New HttpClientHandler With {.UseProxy = False})
     Private Const BaseUrl As String = "https://www.deribit.com/api/v2"
 
     Shared Sub New()

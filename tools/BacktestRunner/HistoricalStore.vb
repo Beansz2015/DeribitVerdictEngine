@@ -49,7 +49,11 @@ Public Class HistoricalStore
     ' Guard against runaway loops on inverted ranges / bad cursors.
     Private Const MaxTradePages As Integer = 200000
 
-    Private Shared ReadOnly _http As New HttpClient() With {.Timeout = TimeSpan.FromSeconds(30)}
+    ' ⛔ UseProxy:=False — same WPAD hazard as DeribitClient.vb, and this client matters on the
+    ' box too: TradeStoreGapRepair links this file, so in-app gap repair fetches through it.
+    ' A hang in proxy resolution is NOT bounded by .Timeout (the request timeout starts after
+    ' the request is issued), so the 30 s below would not have saved it. See DeribitClient.vb.
+    Private Shared ReadOnly _http As New HttpClient(New HttpClientHandler With {.UseProxy = False}) With {.Timeout = TimeSpan.FromSeconds(30)}
 
     ' [F2/F3 sweep, 2026-09-07] The User-Agent now names the ACTUAL host process, resolved from
     ' the entry assembly, instead of the hardcoded "DeribitBacktestRunner/1.0".

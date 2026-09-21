@@ -125,7 +125,11 @@ $OptionalPdb = 'DeribitVerdictEngine.pdb'
 # [GR-4 (b), 2026-09-14] repair_status.log -- the gap-repair outcome sidecar
 # (docs/gap-repair-same-ms-page-skip-spec.md §4.4). Absent until the first repair pass, which
 # the absent-on-box arm below already handles.
-$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv')
+# [2026-09-21] ws_feed.log added. It is the WS feed's own narrative (Core/WsFeedLog.vb) and it
+# is the file that answers "why is the feed down" — the question the 2026-09-21 outage could
+# not answer, because the feed logged only to a Console nothing captures. A fetch list that
+# omits it leaves the answer stranded on the box.
+$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv', 'ws_feed.log')
 $FetchDirs  = @('backtest_data', 'settings_snapshots')
 
 # [FIX 8a, live-execution finding] `aws` does not reliably resolve by name inside an SSM

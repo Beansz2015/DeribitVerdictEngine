@@ -101,6 +101,11 @@ Namespace Global.DeribitVerdictEngine
             Using cts As New CancellationTokenSource(TimeSpan.FromSeconds(seconds))
                 Try
                     Using ws As New ClientWebSocket()
+                        ' ⛔ Match DeribitWsFeed: WPAD proxy auto-detect on the collector box
+                        ' hangs the connect before any socket opens. A probe that reproduces
+                        ' the production hang instead of the production BEHAVIOUR is useless
+                        ' as a delivery gate. See DeribitClient.vb for the measurement.
+                        ws.Options.Proxy = Nothing
                         ' Connect with a short backoff. Deribit's edge can answer 503 to
                         ' everything (REST and WS alike) from a given network — measured
                         ' 2026-08-11 from the local box, 0.26s responses, with and without a

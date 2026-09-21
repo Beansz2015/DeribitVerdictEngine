@@ -199,6 +199,17 @@ Public NotInheritable Class DeribitWsFeed
             Dim connectedThisCycle As Boolean = False
             Try
                 Using ws As New ClientWebSocket()
+                    ' ⛔ Same WPAD hazard as DeribitClient's HttpClient, and this is the path
+                    ' that actually took the collector down. ClientWebSocket resolves the
+                    ' system proxy before it opens a socket, so a hang here opens NO
+                    ' connection at all — which is exactly what the box showed on 2026-09-21:
+                    ' Get-NetTCPConnection for the process returned NOTHING, with CPU flat.
+                    ' The connect call runs on the path that stalls the UI thread, and a
+                    ' stalled UI thread is what let the ~1 Hz timers park pool threads.
+                    ' ⚠ .NET 5+ semantics: a null Proxy means NO proxy (it is not "use the
+                    ' default"). VERIFY ON THE BOX — the acceptance test is simply whether the
+                    ' feed connects; docs/ carries no second source for this.
+                    ws.Options.Proxy = Nothing
                     Log("connecting to " & _wsUrl)
                     Await ws.ConnectAsync(New Uri(_wsUrl), ct)
                     Log("connected; seeding via REST…")
