@@ -48,6 +48,12 @@ Public Class WinFormsAutoRunTimer
     Private _isRunning         As Boolean = False
     Private _repeat            As Boolean = True
     Private _intervalMs        As Integer
+    ' ⛔ Re-entrancy gate for OnTick's marshal. Same defect class as the two ~1 Hz timers in
+    ' UI/MainForm_AutoRun.vb — a BLOCKING Control.Invoke with no gate parks a thread-pool
+    ' thread forever whenever the UI thread stops pumping, and the pool injects a replacement.
+    ' This timer fires at the auto-run interval (≥ 10 s), so it leaks far slower than those
+    ' two, but the mechanism is identical and so is the fix. 0 = idle, 1 = in flight.
+    Private _tickInFlight      As Integer
 
     ''' <param name="owner">The WinForms control used for thread marshalling (typically MainForm).</param>
     Public Sub New(owner As Control)
@@ -101,12 +107,23 @@ Public Class WinFormsAutoRunTimer
         If Not _repeat Then [Stop]()
         ' Marshal onto WinForms UI thread
         If _owner.IsDisposed OrElse Not _owner.IsHandleCreated Then Return
+        ' Gate BEFORE marshalling: a tick still in flight means the UI thread has not drained
+        ' the previous one. Drop this tick rather than park another thread-pool thread.
+        If Threading.Interlocked.CompareExchange(_tickInFlight, 1, 0) <> 0 Then Return
         Try
-            _owner.Invoke(Sub()
-                              If _callback IsNot Nothing Then _callback()
+            _owner.BeginInvoke(Sub()
+                              Try
+                                  If _callback IsNot Nothing Then _callback()
+                              Finally
+                                  Threading.Interlocked.Exchange(_tickInFlight, 0)
+                              End Try
                           End Sub)
         Catch ex As ObjectDisposedException
-            ' Form closed mid-tick -- silently ignore
+            ' Form closed mid-tick -- silently ignore. The post never happened, so nothing
+            ' will release the gate; release it here.
+            Threading.Interlocked.Exchange(_tickInFlight, 0)
+        Catch
+            Threading.Interlocked.Exchange(_tickInFlight, 0)
         End Try
     End Sub
 

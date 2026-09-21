@@ -14,6 +14,21 @@ Imports System.Windows.Forms
 
 Partial Public Class MainForm
 
+    ' ⛔ RE-ENTRANCY GATES for the two ~1 Hz Threading.Timer callbacks below.
+    ' Both callbacks marshal onto the UI thread. They used a BLOCKING Control.Invoke with no
+    ' gate, so whenever the UI thread stopped pumping, every tick parked a thread-pool thread
+    ' FOREVER and the pool injected a replacement about once a second. Measured on the live
+    ' collector 2026-09-18: 10 threads → 11,630 in four hours, all in Wait, which exhausted
+    ' commit on a 1 GiB box and took the machine down. Reproduced on relaunch 2026-09-21:
+    ' 16 → 223 threads in three minutes at the same 1 Hz signature.
+    ' 0 = idle, 1 = a tick is still in flight on the UI thread. A tick that finds 1 is DROPPED.
+    ' Dropping is correct for both: a countdown label has no value in arrears, and a bar-close
+    ' fire that is already running must not be stacked.
+    ' ⚠ BeginInvoke ALONE is not the fix — it converts parked threads into an unbounded message
+    ' queue. The gate is what bounds it; BeginInvoke is what stops the timer thread parking.
+    Private _countdownTickInFlight As Integer
+    Private _onCloseTickInFlight As Integer
+
     Private Sub InitAutoRunControls()
         _autoRunTimer = New WinFormsAutoRunTimer(Me)
         Dim cfg As EngineSettings = SettingsLoader.Current
@@ -146,8 +161,12 @@ Partial Public Class MainForm
 
     Private Sub OnCountdownTick(state As Object)
         If Me.IsDisposed OrElse Not Me.IsHandleCreated Then Return
+        ' Gate BEFORE marshalling: a tick still in flight means the UI thread has not drained
+        ' the previous one. Drop this tick rather than park another thread-pool thread.
+        If Interlocked.CompareExchange(_countdownTickInFlight, 1, 0) <> 0 Then Return
         Try
-            Me.Invoke(Sub()
+            Me.BeginInvoke(Sub()
+                          Try
                           If Not AutoRunEngaged() Then Return
                           If _onCloseActive Then
                               UpdateCountdownLabel(BuildOnCloseCountdownText())
@@ -163,8 +182,16 @@ Partial Public Class MainForm
                               If _onCloseFellBackToInterval Then txt &= "  [on-close: WS only]"
                               UpdateCountdownLabel(txt)
                           End If
+                          Finally
+                              ' Release on EVERY exit path, including the early Return above.
+                              Interlocked.Exchange(_countdownTickInFlight, 0)
+                          End Try
                       End Sub)
         Catch ex As ObjectDisposedException
+            ' The post never happened, so nothing will release the gate. Release it here.
+            Interlocked.Exchange(_countdownTickInFlight, 0)
+        Catch
+            Interlocked.Exchange(_countdownTickInFlight, 0)
         End Try
     End Sub
 
@@ -260,7 +287,25 @@ Partial Public Class MainForm
 
             If fire Then
                 _onCloseLastFireUtc = nowUtc   ' set on EVERY fire → double-fire guard for the backstop
-                Me.Invoke(Sub() RunAutoAnalysis())
+                ' Gate the marshal only — the detection above is lock-guarded, cheap and must keep
+                ' running. If the previous fire is still on the UI thread, DROP this bar close
+                ' rather than park another thread-pool thread. _onCloseLastFireUtc is still set, so
+                ' the backstop does not immediately retry into a UI thread that is already busy.
+                If Interlocked.CompareExchange(_onCloseTickInFlight, 1, 0) = 0 Then
+                    Try
+                        Me.BeginInvoke(Sub()
+                                           Try
+                                               RunAutoAnalysis()
+                                           Finally
+                                               Interlocked.Exchange(_onCloseTickInFlight, 0)
+                                           End Try
+                                       End Sub)
+                    Catch
+                        ' The post never happened, so nothing will release the gate.
+                        Interlocked.Exchange(_onCloseTickInFlight, 0)
+                        Throw
+                    End Try
+                End If
             End If
         Catch ex As ObjectDisposedException
         Catch
