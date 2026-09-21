@@ -448,8 +448,17 @@ typesafe.local.env
 *.typesafe.env
 *.typesafe.key
 
-# tools/checks/rider-travel.ps1 (docs/rider-travel-check-spec.md) -- the operator's
-# hand-written baseline read and the tool's generated comparison report. Both are
-# per-run local artefacts, never a tracked deliverable, default to the repo root.
+# tools/checks/rider-travel.ps1 (docs/rider-travel-check-spec.md) -- the scratch paths
+# at the repo root for routine re-runs.
+#
+# WARNING, and it is not symmetric between these two files. The REPORT is regenerable:
+# re-run the tool. The hand-written BASELINE is NOT, and it is the only
+# non-reproducible artefact in the whole harness programme -- once a seat has seen
+# detector output on a body of data it can never write an uncontaminated read of that
+# data again. There is no second first run.
+#
+# So a FIRST-RUN baseline does NOT belong at these paths. It is copied to
+# docs/harness-runs/<harness>-<UTC-stamp>-baseline.json, which is tracked, BEFORE the
+# detector is run. See docs/harness-shadow-mode-protocol.md (trader-ruled 2026-09-21).
 rider-travel-baseline.json
 rider-travel-report.md
