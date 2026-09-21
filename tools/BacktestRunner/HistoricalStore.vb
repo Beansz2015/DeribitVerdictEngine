@@ -276,7 +276,14 @@ Public Class HistoricalStore
             fetchAnchor As Func(Of Long, Long, Task(Of String)),
             pageDelayMs As Integer,
             outcomes As List(Of TradeStoreWriter.RepairWindowOutcome)) As Task(Of Integer)
-        Dim dir As String = If(String.IsNullOrWhiteSpace(storeDir), StoreDir, storeDir)
+        ' ⛔ VB IS CASE-INSENSITIVE: the parameter `storeDir` and the class const `StoreDir`
+        ' (line 36) are THE SAME IDENTIFIER inside this body, so an unqualified `StoreDir`
+        ' here resolves to the PARAMETER and the fallback silently returned Nothing.
+        ' Found 2026-09-21 when `BacktestRunner fetch` crashed with
+        ' ArgumentNullException(path) at the CreateDirectory below. The class-qualified form
+        ' cannot bind to a local. Core/TradeStoreWriter.vb avoids this by naming its own
+        ' fallback const DefaultStoreDir — the only reason it never collided.
+        Dim dir As String = If(String.IsNullOrWhiteSpace(storeDir), HistoricalStore.StoreDir, storeDir)
         Directory.CreateDirectory(dir)
         Dim path As String = TradeStoreWriter.TradeFileFor(dir, year, month)
         Dim segStartMs As Long = New DateTimeOffset(segStart, TimeSpan.Zero).ToUnixTimeMilliseconds()
