@@ -49,6 +49,11 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 # declaration is refactored.
 . (Join-Path $PSScriptRoot 'lib\HeaderText.ps1')
 
+# Invoke-Jev is shared with tools/checks/commit-walker.ps1 (docs/commit-walker-check-spec.md
+# section 6). Do not re-implement it here -- see tools/checks/lib/InvokeJev.ps1's header
+# comment for why the manual UTF-8 body encoding is load-bearing, not cosmetic.
+. (Join-Path $PSScriptRoot 'lib\InvokeJev.ps1')
+
 # The git path used to read the BEFORE header. Matches rotation-riders.ps1's own default;
 # not exposed as a parameter because the spec's §4.1 input table does not list one --
 # -AfterFile is how a proposed header (possibly a scratch copy) is supplied.
@@ -127,25 +132,6 @@ function Write-Coverage([int]$inLedger, [int]$travelling, [int]$judged, [int]$co
     "HEADER_COLUMNS_AFTER=$colAfter"
     "COLUMNS_ADDED=$added"
     "COLUMNS_REMOVED=$removed"
-}
-
-function Invoke-Jev([string]$apiKey, [hashtable]$body) {
-    $json = $body | ConvertTo-Json -Depth 12
-    # The ledger's prose is full of non-ASCII markup (star/prohibited/middle-dot/section/
-    # em-dash etc). PowerShell 5.1's Invoke-RestMethod does NOT UTF-8-encode a plain
-    # [string] -Body -- it silently mis-encodes anything outside Latin-1, which corrupts
-    # the JSON bytes on the wire and the API returns 400 Bad Request (reproduced against
-    # RIDER-2's real row: string body -> 400, identical JSON as explicit UTF-8 bytes -> 200).
-    # Encoding the body ourselves is the fix, not a retry or a fallback.
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
-    try {
-        $resp = Invoke-RestMethod -Uri 'https://api.typesafe.ai/v1/systemone' -Method Post `
-            -Headers @{ Authorization = "Bearer $apiKey" } -ContentType 'application/json; charset=utf-8' `
-            -Body $bytes -TimeoutSec 30
-        return @{ Ok = $true; Response = $resp; Error = $null }
-    } catch {
-        return @{ Ok = $false; Response = $null; Error = $_.Exception.Message }
-    }
 }
 
 # ---------------------------------------------------------------------------------------

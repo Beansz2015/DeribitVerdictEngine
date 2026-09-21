@@ -462,3 +462,14 @@ typesafe.local.env
 # detector is run. See docs/harness-shadow-mode-protocol.md (trader-ruled 2026-09-21).
 rider-travel-baseline.json
 rider-travel-report.md
+
+# tools/checks/commit-walker.ps1 (docs/commit-walker-check-spec.md) -- the scratch paths
+# at the repo root for ROUTINE re-runs, same asymmetry and same reasoning as the
+# rider-travel pair immediately above: the REPORT is regenerable (re-run the tool), the
+# hand-written BASELINE is NOT (there is no second first run).
+#
+# A FIRST-RUN baseline does NOT belong at this path either. It is copied to
+# docs/harness-runs/commit-walker-<UTC-stamp>-baseline.json, which is tracked, BEFORE the
+# detector is run. See docs/harness-shadow-mode-protocol.md section 2 step 3.
+commit-walker-baseline.json
+commit-walker-report.md
