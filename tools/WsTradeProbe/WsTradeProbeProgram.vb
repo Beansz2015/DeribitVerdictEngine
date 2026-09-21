@@ -65,6 +65,19 @@ Namespace Global.DeribitVerdictEngine
         Private _nextId As Integer = 1
 
         Public Function Main(args As String()) As Integer
+            ' Second instrument in the same project: `WsTradeProbe liq [seconds] [restPollSec]`
+            ' runs LiqFlagProbe, the liquidation-flag measurement (engine-fix build spec, the
+            ' Session B1 section). Every other argument form reaches the original delivery
+            ' gate below unchanged.
+            If args IsNot Nothing AndAlso args.Length > 0 AndAlso
+               String.Equals(args(0), "liq", StringComparison.OrdinalIgnoreCase) Then
+                Dim rest As New List(Of String)()
+                For i As Integer = 1 To args.Length - 1
+                    rest.Add(args(i))
+                Next
+                Return LiqFlagProbe.Run(rest.ToArray())
+            End If
+
             Dim seconds As Integer = 300
             If args IsNot Nothing AndAlso args.Length > 0 Then
                 Dim parsed As Integer
