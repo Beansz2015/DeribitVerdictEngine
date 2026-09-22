@@ -2135,10 +2135,13 @@ Module Program
     ' transport="ws" ⇒ ShouldRefresh is always True, even with a 0s-old present
     ' cache — the §4 collapse (15m is in-memory, the TTL buys nothing). Case-
     ' insensitive on the transport string.
+    ' SHIPPED BEHAVIOUR — the TTL is read from MtfRefreshPolicy.TtlSeconds, the production
+    ' constant MainForm uses, never restated (CLAUDE.md "Public Const" rule; item 8e, 2026-09-22).
     Private Sub A16d_Mtf15mWsReadsEveryRun()
+        Dim ttl As Integer = MtfRefreshPolicy.TtlSeconds
         Check("A16d WS-path 15m reads every run (fresh present cache still refreshes; case-insensitive)",
-              MtfRefreshPolicy.ShouldRefresh("ws", haveCached:=True, secondsSinceLastFetch:=0, ttlSeconds:=60) = True AndAlso
-              MtfRefreshPolicy.ShouldRefresh("WS", haveCached:=True, secondsSinceLastFetch:=1, ttlSeconds:=60) = True,
+              MtfRefreshPolicy.ShouldRefresh("ws", haveCached:=True, secondsSinceLastFetch:=0, ttlSeconds:=ttl) = True AndAlso
+              MtfRefreshPolicy.ShouldRefresh("WS", haveCached:=True, secondsSinceLastFetch:=1, ttlSeconds:=ttl) = True,
               "expected ShouldRefresh=True on the WS path even with a 0s-old cache")
     End Sub
 
@@ -2146,12 +2149,17 @@ Module Program
     ' transport="rest" ⇒ the original TTL gate exactly: a fresh cache (<TTL) skips
     ' the fetch; an at/over-TTL cache refreshes; an absent cache refreshes. This is
     ' the predicate's REST arm proving the §4 change is WS-path-only.
+    ' SHIPPED BEHAVIOUR — the TTL is read from MtfRefreshPolicy.TtlSeconds (item 8e, 2026-09-22),
+    ' and the three probe ages are placed relative to it (half, exactly at, one and a half), so
+    ' the boundary under test moves with the constant. Pinning them to 30/60/90 would silently
+    ' test the wrong edge the day the TTL changed.
     Private Sub A16e_Mtf15mRestRetainsTtl()
+        Dim ttl As Integer = MtfRefreshPolicy.TtlSeconds
         Check("A16e REST-path 15m retains TTL (<TTL skips; >=TTL refreshes; no-cache refreshes)",
-              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=30, ttlSeconds:=60) = False AndAlso
-              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=60, ttlSeconds:=60) = True AndAlso
-              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=90, ttlSeconds:=60) = True AndAlso
-              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=False, secondsSinceLastFetch:=0, ttlSeconds:=60) = True,
+              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=ttl \ 2, ttlSeconds:=ttl) = False AndAlso
+              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=ttl, ttlSeconds:=ttl) = True AndAlso
+              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=True, secondsSinceLastFetch:=ttl + ttl \ 2, ttlSeconds:=ttl) = True AndAlso
+              MtfRefreshPolicy.ShouldRefresh("rest", haveCached:=False, secondsSinceLastFetch:=0, ttlSeconds:=ttl) = True,
               "expected REST TTL semantics: <TTL skips, >=TTL refreshes, no-cache refreshes")
     End Sub
 

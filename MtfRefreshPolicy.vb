@@ -20,6 +20,14 @@
 '                      pre-P3 REST path, so transport="rest" is unchanged (the key safety prop).
 Public NotInheritable Class MtfRefreshPolicy
 
+    ''' <summary>The REST-path 15m cache TTL, in seconds. The ONE home of this number: MainForm
+    ''' reads it (MTF_TTL_SECONDS) and so do the A16 fixtures. Public Const, not a settings key:
+    ''' a constant ruled untunable (DeribitIndicatorProject.md §16.1 keeps the MTF cache TTL off
+    ''' the tuning surface), made Public so a fixture reads it instead of restating it
+    ''' (CLAUDE.md, "A value ruled into a CONSTANT goes Public Const"; item 8e,
+    ''' docs/fixture-parser-check-spec.md §8.4).</summary>
+    Public Const TtlSeconds As Integer = 60
+
     Private Sub New()
     End Sub
 

@@ -68,8 +68,9 @@ Partial Public Class MainForm
     Private rbModeInterval  As RadioButton
     Private rbModeOnClose   As RadioButton
 
-    ' MTF 15m candle TTL cache (P1 upgrade v0.47)
-    Private Const MTF_TTL_SECONDS As Integer = 60
+    ' MTF 15m candle TTL cache (P1 upgrade v0.47). The number lives in MtfRefreshPolicy.TtlSeconds
+    ' so the A16 fixtures read it rather than restate it (item 8e, 2026-09-22).
+    Private Const MTF_TTL_SECONDS As Integer = MtfRefreshPolicy.TtlSeconds
     Private _mtfCandles15m     As List(Of Candle) = Nothing
     Private _mtfLastFetchTime  As DateTime = DateTime.MinValue
 
