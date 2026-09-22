@@ -48,8 +48,56 @@
     primary question N times and report whether verdict/confidence moved.
   =======================================================================================
 
+  ============================== REVISION 2 (2026-09-22) ==============================
+  docs/commit-walker-check-spec.md section 10, written after
+  docs/harness-shadow-mode-protocol.md section 4b measured the detector FLIP a verdict
+  on IDENTICAL input: c6c6942d8a's three -Repeat calls returned changes_writes /
+  no_app_change / changes_writes, confidences 0.32 / 0.32 / 0.27. A single call's verdict
+  is not reproducible near the threshold. Self-consistency
+  (docs.typesafe.ai/cookbooks/consistency_choice_cookbook.md) is the documented fix: ask
+  each residual commit's primary question $SELF_CONSISTENCY_SAMPLES times (default 5, a
+  named constant beside the others below), with a FRESH `uid` per sample in the STATE
+  (never the questions) so each sample is an independent draw, and use label agreement
+  across the samples as the signal.
+
+  -Repeat is RETIRED as a separate flag -- self-consistency is now the default path and
+  -Repeat was its prototype (section 10.3 item 6). -Samples N is the override, still
+  defaulting to $SELF_CONSISTENCY_SAMPLES.
+
+  Every residual row now ALWAYS reports (section 10.3 item 3): the plurality verdict,
+  the AGREEMENT RATE (samples on the plurality / N -- on every row, not only unstable
+  ones), and the mean and min TOP PROBABILITY (max(probabilities) on the `verdict`
+  Choice answer, per sample, per section 10.1 detail 2).
+
+  ⛔⛔ THE TRAP THIS REVISION IS NAMED FOR (section 10.1 detail 2): the uncertainty band
+  ($MIN_TOP_PROBABILITY = 0.60) is on that TOP PROBABILITY -- a different statistic on a
+  different scale from `confidence` (docs.typesafe.ai/confidence.md). Revision 1's
+  $LOW_CONFIDENCE_ESCALATION_THRESHOLD was a CONFIDENCE threshold and is RETIRED below,
+  not reused or renamed into the new band.
+
+  Section 10.2's decision matrix replaces revision 1's confidence-only escalation trigger:
+    - N samples AGREE, top probability HIGH -> confident and stable. Report the verdict.
+    - N samples AGREE, top probability LOW  -> stable but under-informed -> ESCALATE
+      (same diff-carrying second call as revision 1's cascade, engine-touched files only).
+    - N samples DISAGREE                    -> genuinely on the fence -> report UNSTABLE.
+      NEVER escalated, NEVER auto-resolved, whatever the plurality says (section 10.3
+      item 7). Escalation is structurally unreachable from a disagreeing row: see the
+      `if (-not $stable) { ... } elseif (...) { escalate }` shape in the main loop below
+      -- there is no path from the first branch into the second.
+  Auto-proceeded design call, recorded here per CLAUDE.md's auto-proceed obligation: the
+  spec asks for "mean and min top probability" to be REPORTED on every row but does not
+  say which statistic the escalation decision itself reads. This build uses the MEAN
+  top probability across the N agreeing samples for that decision (min is reported
+  alongside as a diagnostic, never as a second gate) -- consistent with "agree" already
+  meaning every sample landed on the same label, so mean is the representative read of
+  how informed that stable answer was. A stricter min-based gate was the richer/more
+  conservative alternative; not taken because the spec's own matrix names a single
+  condition ("top probability low"), not a two-statistic AND, and this build declined to
+  invent a second implicit band the spec does not ask for.
+  =======================================================================================
+
   THE TRAPS THAT STILL APPLY (docs/commit-walker-check-spec.md section 0, unchanged by
-  the revision):
+  either revision):
     1. Merge commits return an EMPTY file list from `git show --name-only`, so they look
        like "touched no engine path" and pollute the residual. Filtered at the `git log`
        step with --no-merges, never only at a later `show` step.
@@ -57,8 +105,8 @@
        score 0 of 8 against a single Choice's 4 of 8. The verdict below is read from the
        `verdict` Choice answer ALONE -- see the line marked TRAP 2.
     3. Sending diff bodies as state for the 93% the path rule already settles. Only the
-       residual gets a Jev call at all; only a LOW-CONFIDENCE residual commit gets a
-       diff, and only for its shipped-app files (item 5 above).
+       residual gets a Jev call at all; only a LOW-TOP-PROBABILITY residual commit gets a
+       diff, and only for its shipped-app files (item 5 above / revision 2's matrix).
     4. Judging all commits instead of the residual. Jev sees ONLY the residual class
        (RESIDUAL_TAGGED_BUT_ENGINE_PATH + RESIDUAL_UNTAGGED_NO_ENGINE_PATH), and now
        excludes PRE_ERA_EXCLUDED first.
@@ -75,12 +123,15 @@
     powershell -NoProfile -File tools/checks/commit-walker.ps1 `
       -Count 300 -BaselinePath <path to your own pre-written read, see the shadow-mode
       protocol at docs/harness-shadow-mode-protocol.md section 2 step 3> `
-      [-Skip N] [-Repeat N]
+      [-Skip N] [-Samples N]
 
   EXIT CODES:
-    0 - every residual commit judged with no disagreement and no `ambiguous` verdict
+    0 - every residual commit judged CONSISTENT or N/A_UNTAGGED, no `ambiguous` verdict,
+        and no UNSTABLE row (self-consistency agreement rate below 1.0)
     1 - at least one residual commit is a DISAGREEMENT (tagged [no-engine-change], but
-        verdict != no_app_change) or judged `ambiguous`
+        verdict != no_app_change), judged `ambiguous`, or UNSTABLE. Revision 2: an
+        unresolved self-consistency disagreement is reported to the seat and never
+        auto-resolved (section 10.3 item 7), so that non-resolution must not exit 0.
     2 - baseline missing, classifier suspect, all-pre-era window, residual over 25%, or
         API failure
     (Restated from the original section 4.5 for the new five-way verdict vocabulary --
@@ -98,34 +149,62 @@ param(
     [int]$Skip = 0,
     [string]$BaselinePath = 'commit-walker-baseline.json',
     [string]$OutPath = 'commit-walker-report.md',
-    # REVISION 1, section 9.4 item 4: ask each residual commit's primary question this
-    # many times and report whether the verdict or confidence moved. Default 1 preserves
-    # the original single-call behaviour. When >1, low-confidence escalation is skipped
-    # for that commit (see the ESCALATION comment below) -- Repeat is a determinism probe
-    # of the PRIMARY question, not a combined probe of the cascade.
-    [int]$Repeat = 1
+    # REVISION 2, section 10.3 items 1 and 6: self-consistency sample count, replacing the
+    # retired -Repeat. -1 is a sentinel meaning "use the named constant
+    # $SELF_CONSISTENCY_SAMPLES below" -- kept out of the param default itself because the
+    # constant is defined beside its siblings further down, not buried in the signature.
+    [int]$Samples = -1,
+    # Acceptance-only instrumentation for section 10.6 item 2 ("show two sample states,
+    # key names and the differing uid only"): prints each call's state KEY NAMES and its
+    # sample_uid to the host as the calls happen. Off by default -- adds console noise on
+    # every call otherwise. Never prints subject/body/diff content or the API key.
+    [switch]$DebugState,
+    # docs/harness-shadow-mode-protocol.md section 4a: an acceptance dry run over a
+    # RESERVED window (section 10.6 item 6 spends -Skip 0 -Count 300) contaminates the
+    # seat on that window if per-commit verdicts or any aggregate are ever seen, even
+    # relayed second-hand in a report. Rather than trust discipline after the fact, this
+    # switch makes the harness itself withhold that content: PER_COMMIT_RESULTS,
+    # SELF_CONSISTENCY, DISAGREEMENTS/UNSTABLE counts and their *_LIST blocks are all
+    # suppressed from console AND from the written report. Coverage, token usage and wall
+    # time still print -- section 10.6 item 6 asks for exactly those and nothing else.
+    [switch]$CountersOnly
 )
 
 $ErrorActionPreference = 'Continue'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-if ($Repeat -lt 1) { $Repeat = 1 }
 
 # ---------------------------------------------------------------------------------------
-# REVISION 1 constants (section 9.4 item 3): NAMED, not buried, because both are guesses
-# from a tiny sample and will be re-tuned once a real population exists.
+# REVISION 2 constants (section 10.3 items 1 and 4): NAMED, not buried, beside the
+# REVISION 1 constant that survives ($MAX_ESCALATION_DIFF_CHARS). Both are guesses that
+# will be re-tuned once a real population exists.
 # ---------------------------------------------------------------------------------------
 
-# Below this Jev `verdict` confidence, a second request is sent carrying the diff of the
-# commit's SHIPPED-APP files only (section 9.4 item 3 / the sde_cascade.md pattern).
-# 0.3 is the run-2026-09-21 guess (docs/harness-runs/commit-walker-run-2026-09-21.md
-# section 4): the one genuinely ambiguous commit in that run landed at 0.14.
-$LOW_CONFIDENCE_ESCALATION_THRESHOLD = 0.3
+# How many times each residual commit's primary question is sampled. Default 5 -- the
+# cookbook (docs.typesafe.ai/cookbooks/consistency_choice_cookbook.md) uses 15; 5 is this
+# repo's starting point (section 10.3 item 1, section 10.4's cost estimate is built on 5).
+$SELF_CONSISTENCY_SAMPLES = 5
+if ($Samples -lt 1) { $Samples = $SELF_CONSISTENCY_SAMPLES }
+
+# The uncertainty band on the TOP PROBABILITY -- max(probabilities) on a single sample's
+# `verdict` Choice answer -- NOT on `confidence`. Section 10.1 detail 2: these are
+# different statistics on different scales; a `confidence` of 0.3 is roughly a top
+# probability of 0.44 for a five-option Choice. See "THE BAND" below for the one line
+# this threshold is applied on.
+$MIN_TOP_PROBABILITY = 0.60
+
+# RETIRED, REVISION 2 (section 10.1 detail 2 / section 10.3 item 5): revision 1's
+# $LOW_CONFIDENCE_ESCALATION_THRESHOLD = 0.3 was a CONFIDENCE threshold, a different
+# statistic on a different scale from $MIN_TOP_PROBABILITY above. It is deliberately NOT
+# defined here and MUST NOT be reused or renamed into the probability band -- the
+# confidence-only escalation trigger it drove is deleted, replaced by the section 10.2
+# matrix (agree-but-low-probability only; never on a disagreeing row).
 
 # Defensive cap on the escalation diff's size, in characters. Not specced -- added because
 # a single commit's engine-path diff can run to hundreds of lines (measured: c6c6942d8a's
 # Core/ diff alone is 300 lines) and the brief's own escalation trigger is "any request
 # nears the 32k state limit". Truncated, not refused, so escalation still adds SOME signal
 # on an oversized commit rather than silently downgrading to the un-escalated read.
+# KEPT per section 10.5's ruling ("sensible, and it was right to add it unspecced").
 $MAX_ESCALATION_DIFF_CHARS = 20000
 
 # ---------------------------------------------------------------------------------------
@@ -409,9 +488,10 @@ if ($null -ne $baselineRaw) {
 }
 
 # ---------------------------------------------------------------------------------------
-# Step 5 (section 4.2, section 6/9.3): one Jev request per RESIDUAL commit (trap 4), times
-# $Repeat. REVISION 1's question set: three Nouls (diagnostics only) plus the `verdict`
-# Choice, which is the ONLY answer code reads (TRAP 2, marked below).
+# Step 5 (section 4.2, section 6/9.3/10.3): one Jev request per RESIDUAL commit (trap 4),
+# times $Samples (REVISION 2 self-consistency, replacing the retired $Repeat). REVISION
+# 1's question set: three Nouls (diagnostics only) plus the `verdict` Choice, which is the
+# ONLY answer code reads (TRAP 2, marked below).
 # ---------------------------------------------------------------------------------------
 $apiKey = $env:TYPESAFE_API_KEY
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
@@ -429,10 +509,10 @@ $verdictCriteria = @{
 }
 
 # Builds and sends one Jev request for a commit, optionally carrying a shipped-app diff
-# (the low-confidence escalation pass). Centralised so the primary call, the escalated
-# call, and every -Repeat call all use the IDENTICAL question set -- one place to check
-# for trap 2, not three.
-function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtable]$criteria) {
+# (the low-top-probability escalation pass) and a per-sample `uid` (REVISION 2, section
+# 10.1 detail 1). Centralised so the primary calls, the escalated call, and every sample
+# all use the IDENTICAL question set -- one place to check for trap 2, not several.
+function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtable]$criteria, [string]$uid) {
     $commitState = @{
         subject = $c.Subject
         body    = $c.Body
@@ -447,6 +527,14 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
         per_file_line_counts  = @($c.LineCounts | ForEach-Object { @{ path = $_.Path; added = $_.Added; deleted = $_.Deleted } })
     }
     if ($diffText) { $state.shipped_app_diff = $diffText }
+    # REVISION 2, section 10.1 detail 1: a fresh throwaway uid per sample, in STATE, never
+    # in the questions -- makes each self-consistency sample "a distinct, independent
+    # draw" per the cookbook. Never read by any question's criteria.
+    if ($uid) { $state.sample_uid = $uid }
+
+    if ($DebugState) {
+        Write-Host "STATE_DEBUG hash=$($c.Hash.Substring(0,10)) keys=[$($state.Keys -join ',')] sample_uid=$($state.sample_uid)"
+    }
 
     $body = @{
         model = 'jev-latest'
@@ -482,6 +570,19 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
     # the one line a reviewer checks.
     $verdict = $ans.verdict.choice
 
+    # REVISION 2 / section 10.1 detail 2: the per-option PROBABILITIES, not `confidence`.
+    # docs.typesafe.ai/cookbooks/consistency_choice_cookbook.md: `response.answers[key].
+    # probabilities` is a dict keyed by option label. Read every value and take the max --
+    # that IS "the top probability" this revision's band is applied to.
+    $probs = @{}
+    $topProbability = $null
+    if ($ans.verdict.probabilities) {
+        foreach ($p in $ans.verdict.probabilities.PSObject.Properties) {
+            $probs[$p.Name] = [double]$p.Value
+        }
+        if ($probs.Count -gt 0) { $topProbability = ($probs.Values | Measure-Object -Maximum).Maximum }
+    }
+
     $usageIn = 0; $usageOut = 0
     if ($call.Response.usage) {
         if ($call.Response.usage.input_tokens)  { $usageIn  = [int]$call.Response.usage.input_tokens }
@@ -491,6 +592,11 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
     return @{
         Ok                = $true
         Verdict           = $verdict
+        Probabilities     = $probs
+        TopProbability    = $topProbability
+        # Confidence travels only as a side diagnostic -- REVISION 2 never reads it for
+        # any decision (section 10.1 detail 2). Kept so a reviewer can see the gap between
+        # it and TopProbability on the same call, the exact confusion this revision closes.
         Confidence        = $ans.verdict.confidence
         ComputationNoul   = $ans.changes_computation.noul
         DisplayNoul       = $ans.changes_display.noul
@@ -508,41 +614,84 @@ $usageOutputTokens = 0
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
 foreach ($c in $residualAll) {
-    $callResults = New-Object System.Collections.Generic.List[object]
-    for ($i = 0; $i -lt $Repeat; $i++) {
-        $r = Invoke-CommitVerdict $apiKey $c $null $verdictCriteria
+    $sampleResults = New-Object System.Collections.Generic.List[object]
+    for ($i = 0; $i -lt $Samples; $i++) {
+        $uid = "$($c.Hash.Substring(0,10)):$i`:$([guid]::NewGuid().ToString('N').Substring(0,8))"
+        $r = Invoke-CommitVerdict $apiKey $c $null $verdictCriteria $uid
         if (-not $r.Ok) {
             $apiFailed = $true
-            $apiFailMsg = "Jev request failed for $($c.Hash.Substring(0,10)) (repeat $($i+1)/$Repeat): $($r.Error)"
+            $apiFailMsg = "Jev request failed for $($c.Hash.Substring(0,10)) (sample $($i+1)/$Samples): $($r.Error)"
             break
         }
         $usageInputTokens  += $r.UsageInputTokens
         $usageOutputTokens += $r.UsageOutputTokens
-        $callResults.Add($r)
+        $sampleResults.Add($r)
     }
     if ($apiFailed) { break }
 
-    $primary = $callResults[0]
+    # -------------------------------------------------------------------------------
+    # REVISION 2 self-consistency aggregation (section 10.3 items 2-3, section 10.2's
+    # matrix). Plurality by raw vote count; ties broken by first-seen order among the
+    # samples, matching the cookbook's Counter.most_common tie behaviour.
+    # -------------------------------------------------------------------------------
+    $verdictCounts = @{}
+    foreach ($sr in $sampleResults) {
+        if (-not $verdictCounts.ContainsKey($sr.Verdict)) { $verdictCounts[$sr.Verdict] = 0 }
+        $verdictCounts[$sr.Verdict] += 1
+    }
+    $pluralityVerdict = $null
+    $pluralityCount = -1
+    foreach ($sr in $sampleResults) {
+        $v = $sr.Verdict
+        if ($verdictCounts[$v] -gt $pluralityCount) {
+            $pluralityCount = $verdictCounts[$v]
+            $pluralityVerdict = $v
+        }
+    }
+    $agreementRate = [math]::Round(($pluralityCount / $sampleResults.Count), 3)
+    $stable = ($agreementRate -ge 1.0)
+
+    $topProbs = @($sampleResults | Where-Object { $null -ne $_.TopProbability } | ForEach-Object { $_.TopProbability })
+    $meanTopProbability = if ($topProbs.Count -gt 0) { [math]::Round((($topProbs | Measure-Object -Average).Average), 3) } else { $null }
+    $minTopProbability  = if ($topProbs.Count -gt 0) { [math]::Round((($topProbs | Measure-Object -Minimum).Minimum), 3) } else { $null }
+
+    $meanComputationNoul = [math]::Round((($sampleResults | ForEach-Object { [double]$_.ComputationNoul } | Measure-Object -Average).Average), 3)
+    $meanDisplayNoul     = [math]::Round((($sampleResults | ForEach-Object { [double]$_.DisplayNoul } | Measure-Object -Average).Average), 3)
+    $meanWritesNoul      = [math]::Round((($sampleResults | ForEach-Object { [double]$_.WritesNoul } | Measure-Object -Average).Average), 3)
+
     $escalated = $false
     $escalationNote = $null
     $preEscalationVerdict = $null
-    $preEscalationConfidence = $null
+    $preEscalationAgreementRate = $null
+    $preEscalationMeanTopProbability = $null
+    $finalVerdict = $pluralityVerdict
 
-    # ESCALATION (section 9.4 item 3): only on a single-pass run (Repeat -eq 1) --
-    # -Repeat is a determinism probe of the PRIMARY question and is kept orthogonal to
-    # the cascade rather than compounding two different kinds of repeated calls.
-    if ($Repeat -eq 1 -and [double]$primary.Confidence -lt $LOW_CONFIDENCE_ESCALATION_THRESHOLD) {
+    # --- THE BAND (section 10.1 detail 2 / section 10.3 item 4): applied to the MEAN
+    # top probability across the agreeing samples, never to `confidence`. This is the one
+    # line acceptance item 3 asks for -- $MIN_TOP_PROBABILITY compared against
+    # $meanTopProbability, both derived from $ans.verdict.probabilities above, never from
+    # $ans.verdict.confidence.
+    if (-not $stable) {
+        # DISAGREE cell (section 10.2): genuinely on the fence. NEVER escalated, NEVER
+        # auto-resolved (section 10.3 item 7) -- structurally unreachable from here into
+        # the escalation branch below.
+        $status = 'UNSTABLE'
+    } elseif ($null -ne $meanTopProbability -and $meanTopProbability -lt $MIN_TOP_PROBABILITY) {
+        # AGREE, top probability LOW: stable but under-informed -- ESCALATE.
         $engineFiles = Get-EngineTouchedPaths $c.Paths
         if ($engineFiles.Count -gt 0) {
             $diffText = Get-ShippedAppDiff $repo $c.Hash $engineFiles $MAX_ESCALATION_DIFF_CHARS
-            $escResult = Invoke-CommitVerdict $apiKey $c $diffText $verdictCriteria
+            $escUid = "$($c.Hash.Substring(0,10)):esc:$([guid]::NewGuid().ToString('N').Substring(0,8))"
+            $escResult = Invoke-CommitVerdict $apiKey $c $diffText $verdictCriteria $escUid
             if ($escResult.Ok) {
                 $usageInputTokens  += $escResult.UsageInputTokens
                 $usageOutputTokens += $escResult.UsageOutputTokens
                 $escalated = $true
-                $preEscalationVerdict = $primary.Verdict
-                $preEscalationConfidence = $primary.Confidence
-                $primary = $escResult
+                $preEscalationVerdict = $pluralityVerdict
+                $preEscalationAgreementRate = $agreementRate
+                $preEscalationMeanTopProbability = $meanTopProbability
+                $finalVerdict = $escResult.Verdict
+                $status = 'CONFIDENT_AFTER_ESCALATION'
             } else {
                 $apiFailed = $true
                 $apiFailMsg = "Jev escalation request failed for $($c.Hash.Substring(0,10)): $($escResult.Error)"
@@ -553,41 +702,53 @@ foreach ($c in $residualAll) {
             # paths -- there is no shipped-app diff to send, so escalation is skipped
             # rather than sent empty.
             $escalationNote = 'SKIPPED_NO_ENGINE_FILES'
+            $status = 'AGREE_LOW_PROBABILITY_NO_ESCALATION_TARGET'
         }
+    } else {
+        # AGREE, top probability HIGH: confident and stable.
+        $status = 'CONFIDENT'
     }
     if ($apiFailed) { break }
 
-    $finalVerdict = $primary.Verdict
     # Section 9.3: code, not the model, compares verdict to tag. A DISAGREEMENT exists
     # only in the tagged direction -- an untagged commit makes no claim to contradict
     # (section 9.2: the tag is inconsistent at source, so "should this have been tagged"
-    # is not a question this harness answers).
-    $disagreement = if ($c.Tagged) { if ($finalVerdict -ne 'no_app_change') { 'DISAGREEMENT' } else { 'CONSISTENT' } } else { 'N/A_UNTAGGED' }
+    # is not a question this harness answers). UNSTABLE overrides both directions: an
+    # unresolved row is reported as unresolved, never coerced into CONSISTENT/
+    # DISAGREEMENT by a plurality the harness itself will not stand behind.
+    $disagreement =
+        if ($status -eq 'UNSTABLE') { 'UNSTABLE' }
+        elseif ($c.Tagged) { if ($finalVerdict -ne 'no_app_change') { 'DISAGREEMENT' } else { 'CONSISTENT' } }
+        else { 'N/A_UNTAGGED' }
 
-    $repeatVerdicts    = @($callResults | ForEach-Object { $_.Verdict })
-    $repeatConfidences = @($callResults | ForEach-Object { [math]::Round([double]$_.Confidence, 2) })
-    $repeatStable = ($repeatVerdicts | Select-Object -Unique).Count -le 1
+    $sampleVerdicts = @($sampleResults | ForEach-Object { $_.Verdict })
+    $sampleTopProbs = @($sampleResults | ForEach-Object { if ($null -ne $_.TopProbability) { [math]::Round([double]$_.TopProbability, 3) } else { $null } })
 
     $results.Add([PSCustomObject]@{
-        Hash                     = $c.Hash
-        Subject                  = $c.Subject
-        Class                    = if ($c.Tagged) { 'TAGGED_BUT_ENGINE_PATH' } else { 'UNTAGGED_NO_ENGINE_PATH' }
-        Tagged                   = $c.Tagged
-        Verdict                  = $finalVerdict
-        VerdictConfidence        = $primary.Confidence
-        ComputationNoul          = $primary.ComputationNoul
-        DisplayNoul              = $primary.DisplayNoul
-        WritesNoul               = $primary.WritesNoul
-        Disagreement             = $disagreement
-        Escalated                = $escalated
-        EscalationNote           = $escalationNote
-        PreEscalationVerdict     = $preEscalationVerdict
-        PreEscalationConfidence  = $preEscalationConfidence
-        RepeatCount              = $callResults.Count
-        RepeatVerdicts           = ($repeatVerdicts -join ',')
-        RepeatConfidences        = ($repeatConfidences -join ',')
-        RepeatStable             = $repeatStable
-        Baseline                 = if ($baseline.ContainsKey($c.Hash)) { $baseline[$c.Hash] } else { $null }
+        Hash                             = $c.Hash
+        Subject                          = $c.Subject
+        Class                            = if ($c.Tagged) { 'TAGGED_BUT_ENGINE_PATH' } else { 'UNTAGGED_NO_ENGINE_PATH' }
+        Tagged                           = $c.Tagged
+        Verdict                          = $finalVerdict
+        PluralityVerdict                 = $pluralityVerdict
+        Status                           = $status
+        AgreementRate                    = $agreementRate
+        Stable                           = $stable
+        MeanTopProbability                = $meanTopProbability
+        MinTopProbability                = $minTopProbability
+        ComputationNoul                  = $meanComputationNoul
+        DisplayNoul                      = $meanDisplayNoul
+        WritesNoul                       = $meanWritesNoul
+        Disagreement                     = $disagreement
+        Escalated                        = $escalated
+        EscalationNote                   = $escalationNote
+        PreEscalationVerdict             = $preEscalationVerdict
+        PreEscalationAgreementRate       = $preEscalationAgreementRate
+        PreEscalationMeanTopProbability  = $preEscalationMeanTopProbability
+        SampleCount                      = $sampleResults.Count
+        SampleVerdicts                   = ($sampleVerdicts -join ',')
+        SampleTopProbabilities           = ($sampleTopProbs -join ',')
+        Baseline                         = if ($baseline.ContainsKey($c.Hash)) { $baseline[$c.Hash] } else { $null }
     })
 }
 $sw.Stop()
@@ -610,32 +771,48 @@ Write-Coverage $commitsWalked $mergesExcluded $preEra.Count $agreeTagged.Count $
 "USAGE_OUTPUT_TOKENS=$usageOutputTokens"
 "WALL_TIME_SEC=$([math]::Round($sw.Elapsed.TotalSeconds,2))"
 
-"PER_COMMIT_RESULTS:"
-foreach ($res in $results) {
-    $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
-             elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
-             elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
-             else { 'DISAGREE' }
-    $escTxt = if ($res.Escalated) { "escalated=true (pre-escalation verdict=$($res.PreEscalationVerdict) conf=$([math]::Round([double]$res.PreEscalationConfidence,2)))" }
-              elseif ($res.EscalationNote) { "escalated=false ($($res.EscalationNote))" }
-              else { "escalated=false" }
-    "  $($res.Hash.Substring(0,10)) [$($res.Class)] verdict=$($res.Verdict) (confidence=$([math]::Round([double]$res.VerdictConfidence,2))) disagreement=$($res.Disagreement) baseline=$($res.Baseline) [$agree] $escTxt computation_noul=$([math]::Round([double]$res.ComputationNoul,2)) display_noul=$([math]::Round([double]$res.DisplayNoul,2)) writes_noul=$([math]::Round([double]$res.WritesNoul,2))"
-}
-
-if ($Repeat -gt 1) {
-    "REPEAT_STABILITY (-Repeat $Repeat -- raw sequence per commit, not interpreted):"
-    foreach ($res in $results) {
-        $stableTxt = if ($res.RepeatStable) { 'STABLE' } else { 'UNSTABLE' }
-        "  $($res.Hash.Substring(0,10)) [$stableTxt] verdicts=[$($res.RepeatVerdicts)] confidences=[$($res.RepeatConfidences)]"
-    }
-}
-
+# docs/harness-shadow-mode-protocol.md section 4a: -CountersOnly withholds every
+# per-commit and aggregate line from a RESERVED window's dry run (section 10.6 item 6).
+# $disagreementCount/$unstableCount are computed either way -- the exit code (bottom of
+# file) reads $results directly and must not depend on what got printed.
 $disagreementCount = @($results | Where-Object { $_.Disagreement -eq 'DISAGREEMENT' }).Count
-"DISAGREEMENTS=$disagreementCount"
-if ($disagreementCount -gt 0) {
-    "DISAGREEMENT_LIST (tagged [no-engine-change] but verdict != no_app_change -- for the seat to adjudicate):"
-    foreach ($res in ($results | Where-Object { $_.Disagreement -eq 'DISAGREEMENT' })) {
-        "  $($res.Hash.Substring(0,10)) verdict=$($res.Verdict) $($res.Subject)"
+$unstableCount = @($results | Where-Object { $_.Disagreement -eq 'UNSTABLE' }).Count
+
+if ($CountersOnly) {
+    "COUNTERS_ONLY=true (per-commit verdicts and aggregates withheld -- docs/harness-shadow-mode-protocol.md section 4a)"
+} else {
+    "PER_COMMIT_RESULTS:"
+    foreach ($res in $results) {
+        $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
+                 elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
+                 elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
+                 else { 'DISAGREE' }
+        $escTxt = if ($res.Escalated) { "escalated=true (pre-escalation plurality=$($res.PreEscalationVerdict) agreement=$($res.PreEscalationAgreementRate) mean_top_prob=$($res.PreEscalationMeanTopProbability))" }
+                  elseif ($res.EscalationNote) { "escalated=false ($($res.EscalationNote))" }
+                  else { "escalated=false" }
+        # REVISION 2, section 10.3 item 3: agreement rate on EVERY row, not only unstable ones.
+        "  $($res.Hash.Substring(0,10)) [$($res.Class)] status=$($res.Status) verdict=$($res.Verdict) agreement_rate=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability) min_top_prob=$($res.MinTopProbability) disagreement=$($res.Disagreement) baseline=$($res.Baseline) [$agree] $escTxt computation_noul=$($res.ComputationNoul) display_noul=$($res.DisplayNoul) writes_noul=$($res.WritesNoul)"
+    }
+
+    "SELF_CONSISTENCY (-Samples $Samples -- raw sample sequence per commit, not interpreted):"
+    foreach ($res in $results) {
+        $stableTxt = if ($res.Stable) { 'STABLE' } else { 'UNSTABLE' }
+        "  $($res.Hash.Substring(0,10)) [$stableTxt] n=$($res.SampleCount) plurality=$($res.PluralityVerdict) agreement_rate=$($res.AgreementRate) verdicts=[$($res.SampleVerdicts)] top_probs=[$($res.SampleTopProbabilities)]"
+    }
+
+    "DISAGREEMENTS=$disagreementCount"
+    "UNSTABLE=$unstableCount"
+    if ($disagreementCount -gt 0) {
+        "DISAGREEMENT_LIST (tagged [no-engine-change] but verdict != no_app_change -- for the seat to adjudicate):"
+        foreach ($res in ($results | Where-Object { $_.Disagreement -eq 'DISAGREEMENT' })) {
+            "  $($res.Hash.Substring(0,10)) verdict=$($res.Verdict) $($res.Subject)"
+        }
+    }
+    if ($unstableCount -gt 0) {
+        "UNSTABLE_LIST (self-consistency agreement rate below 1.0 -- never auto-resolved, for the seat to adjudicate):"
+        foreach ($res in ($results | Where-Object { $_.Disagreement -eq 'UNSTABLE' })) {
+            "  $($res.Hash.Substring(0,10)) agreement_rate=$($res.AgreementRate) verdicts=[$($res.SampleVerdicts)] $($res.Subject)"
+        }
     }
 }
 
@@ -643,7 +820,7 @@ if ($disagreementCount -gt 0) {
 $reportLines = New-Object System.Collections.Generic.List[string]
 $reportLines.Add('# Commit-walker check report')
 $reportLines.Add('')
-$reportLines.Add("Generated by ``tools/checks/commit-walker.ps1`` against ``-Skip $Skip -Count $Count -Repeat $Repeat`` at ``HEAD``.")
+$reportLines.Add("Generated by ``tools/checks/commit-walker.ps1`` against ``-Skip $Skip -Count $Count -Samples $Samples`` at ``HEAD``.")
 $reportLines.Add('')
 $reportLines.Add('## Coverage')
 $reportLines.Add('')
@@ -661,31 +838,38 @@ $reportLines.Add("| RESIDUAL_UNTAGGED_NO_ENGINE_PATH | $($residualUntaggedNoEngi
 $reportLines.Add("| RESIDUAL_TOTAL | $residualTotal |")
 $reportLines.Add("| RESIDUAL_PCT | $residualPct |")
 $reportLines.Add("| COMMITS_JUDGED | $($results.Count) |")
-$reportLines.Add("| DISAGREEMENTS | $disagreementCount |")
+if (-not $CountersOnly) {
+    $reportLines.Add("| DISAGREEMENTS | $disagreementCount |")
+    $reportLines.Add("| UNSTABLE | $unstableCount |")
+}
 $reportLines.Add("| USAGE_INPUT_TOKENS | $usageInputTokens |")
 $reportLines.Add("| USAGE_OUTPUT_TOKENS | $usageOutputTokens |")
 $reportLines.Add("| WALL_TIME_SEC | $([math]::Round($sw.Elapsed.TotalSeconds,2)) |")
 $reportLines.Add('')
-$reportLines.Add('## Per-commit verdicts (residual only -- the two agreeing classes above are counts only, never judged)')
-$reportLines.Add('')
-$reportLines.Add('| Hash | Class | Verdict | Confidence | Disagreement | Escalated | Baseline | Agreement | computation (noul) | display (noul) | writes (noul) | Subject |')
-$reportLines.Add('|---|---|---|---|---|---|---|---|---|---|---|---|')
-foreach ($res in $results) {
-    $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
-             elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
-             elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
-             else { 'DISAGREE' }
-    $subjEsc = $res.Subject -replace '\|', '\|'
-    $reportLines.Add("| $($res.Hash.Substring(0,10)) | $($res.Class) | $($res.Verdict) | $([math]::Round([double]$res.VerdictConfidence,2)) | $($res.Disagreement) | $($res.Escalated) | $($res.Baseline) | $agree | $([math]::Round([double]$res.ComputationNoul,2)) | $([math]::Round([double]$res.DisplayNoul,2)) | $([math]::Round([double]$res.WritesNoul,2)) | $subjEsc |")
-}
-if ($Repeat -gt 1) {
+if ($CountersOnly) {
+    $reportLines.Add('## Per-commit detail withheld')
     $reportLines.Add('')
-    $reportLines.Add("## Repeat stability (-Repeat $Repeat)")
+    $reportLines.Add('Run with `-CountersOnly` over a RESERVED window (docs/harness-shadow-mode-protocol.md section 4a). Per-commit verdicts and every aggregate (DISAGREEMENTS, UNSTABLE) are withheld from both console and this report so the window is not contaminated for its eventual measured first run.')
+} else {
+    $reportLines.Add('## Per-commit verdicts (residual only -- the two agreeing classes above are counts only, never judged)')
     $reportLines.Add('')
-    $reportLines.Add('| Hash | Stable | Verdicts | Confidences |')
-    $reportLines.Add('|---|---|---|---|')
+    $reportLines.Add('| Hash | Class | Status | Verdict | Agreement rate | Mean top prob | Min top prob | Disagreement | Escalated | Baseline | Agreement | computation (noul) | display (noul) | writes (noul) | Subject |')
+    $reportLines.Add('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     foreach ($res in $results) {
-        $reportLines.Add("| $($res.Hash.Substring(0,10)) | $($res.RepeatStable) | $($res.RepeatVerdicts) | $($res.RepeatConfidences) |")
+        $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
+                 elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
+                 elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
+                 else { 'DISAGREE' }
+        $subjEsc = $res.Subject -replace '\|', '\|'
+        $reportLines.Add("| $($res.Hash.Substring(0,10)) | $($res.Class) | $($res.Status) | $($res.Verdict) | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.MinTopProbability) | $($res.Disagreement) | $($res.Escalated) | $($res.Baseline) | $agree | $($res.ComputationNoul) | $($res.DisplayNoul) | $($res.WritesNoul) | $subjEsc |")
+    }
+    $reportLines.Add('')
+    $reportLines.Add("## Self-consistency (-Samples $Samples)")
+    $reportLines.Add('')
+    $reportLines.Add('| Hash | Stable | N | Plurality | Agreement rate | Verdicts | Top probabilities |')
+    $reportLines.Add('|---|---|---|---|---|---|---|')
+    foreach ($res in $results) {
+        $reportLines.Add("| $($res.Hash.Substring(0,10)) | $($res.Stable) | $($res.SampleCount) | $($res.PluralityVerdict) | $($res.AgreementRate) | $($res.SampleVerdicts) | $($res.SampleTopProbabilities) |")
     }
 }
 if ($preEra.Count -gt 0) {
@@ -703,5 +887,8 @@ $reportFull = Resolve-RepoPath $OutPath
 Set-Content -Encoding UTF8 -Path $reportFull -Value ($reportLines -join "`r`n")
 "Report written to $OutPath"
 
-$anyBad = @($results | Where-Object { $_.Verdict -eq 'ambiguous' -or $_.Disagreement -eq 'DISAGREEMENT' }).Count -gt 0
+# REVISION 2: an UNSTABLE row is, by section 10.3 item 7, never auto-resolved -- so it
+# must not be swallowed into a 0 exit either. Joins `ambiguous` and DISAGREEMENT as the
+# three non-zero conditions.
+$anyBad = @($results | Where-Object { $_.Verdict -eq 'ambiguous' -or $_.Disagreement -eq 'DISAGREEMENT' -or $_.Disagreement -eq 'UNSTABLE' }).Count -gt 0
 if ($anyBad) { exit 1 } else { exit 0 }
