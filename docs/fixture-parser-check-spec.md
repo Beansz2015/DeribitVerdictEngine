@@ -173,8 +173,8 @@ MATCHED_ZERO_KEYS=90     SITES_WITH_PROVENANCE_COMMENT=15   SITES_JUDGED=15
 
 | # | Item | State |
 |---|---|---|
-| **1** | ⛔ **Fix `FP-D2` key matching.** 90 unmatched. Likely needs the enclosing method's parameter list read from the shipped source, not name normalisation alone | **Open — blocks the measurement** |
-| **2** | ⛔ **Give `FP-D2` a real question with criteria.** It is a Decision with no Question; the build had to design a third question type from one line | **Open** |
+| **1** | ⛔ **Fix `FP-D2` key matching.** 90 unmatched. Likely needs the enclosing method's parameter list read from the shipped source, not name normalisation alone | ⭐ **Open, but now DIAGNOSED and no longer blocking.** §8 measured `FP-Q1` and named the two gaps precisely: **A** the fixture-local cfg builder, **B** the one-hop forwarding wrapper. Both are code, both mechanical |
+| **2** | ⛔ **Give `FP-D2` a real question with criteria.** It is a Decision with no Question; the build had to design a third question type from one line | ✅ **Answered by revision 1's `FP-Q1`, and MEASURED 2026-09-22** — [`harness-runs/fixture-parser-scope-run-2026-09-22.md`](harness-runs/fixture-parser-scope-run-2026-09-22.md). ⛔ The question is not the problem; see §8 |
 | **3** | **Rule how far a shared comment block extends.** `A6_ObvNormalisation` calls `CalcOBV` twice under one comment; the parser attaches it to the first only, silently dropping the second call's literals | **Open — needs a decision, not a guess** |
 | **4** | Adjudicate the two remaining disagreements from the first run | **Open** |
 | **5** | ⭐ **Consider rewording the past-tense provenance comments.** The `A3` prose misled a careful reader; the detector read it correctly | **Open — trader's call** |
@@ -236,6 +236,51 @@ Measured: **only 43 of the 118 passes (22 of 41 parameters) are plausibly settin
 6. Self-consistency at 5 samples, agreement on every row. Verdict reads the `verdict` Choice alone.
 7. ⛔⛔ **DO NOT WRITE A BASELINE.** [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4c: the seat writes it. **Run the tool to the point it refuses, paste that, and stop.** ⭐ **The newly-opened sites are the clean population this programme has not yet had — reporting one verdict on them spends it.**
 8. Counters, tokens and timings only. **No verdicts, no aggregates.**
+
+---
+
+## 8. ⭐⭐ `FP-Q1` MEASURED, 2026-09-22 (UTC) — the second detector under-scopes
+
+**Full record: [`harness-runs/fixture-parser-scope-run-2026-09-22.md`](harness-runs/fixture-parser-scope-run-2026-09-22.md).** Seat baseline [`harness-runs/fixture-parser-scope-20260922T152622Z-baseline.json`](harness-runs/fixture-parser-scope-20260922T152622Z-baseline.json), committed at `9f0e1c3` **before** the run.
+
+**23 parameters. Agreement 17 of 23 (73.9 %), and 12 of 18 (66.7 %) once the five spec-anchored parameters are removed.**
+
+⛔ **All SIX disagreements run ONE way — the seat says `threshold`, the detector says `input`.** The detector found **1** of the **7** settings-derived thresholds in its own population. It is **stable**: three identical harness runs, identical output.
+
+⛔⛔ **What the under-scoping hides, concretely: fixture `A23a` (`verify/ordercheck/Program.vb:3029-3032`) passes FOUR literals that all equal shipped values** — `tauFastSec:=5.0` · `tauNormSec:=120.0` · `grossFloorUsdPerSec:=50.0` · `minCoverageSec:=120.0` — **every one scoped OUT, so `FP-1` never judged any of them and none declares a class.** Same shape as the `A43b` breach, four at once.
+
+### 8.1 ⛔ The cause was measured and the first answer was WRONG
+
+The one hit, `staleAfterSec`, was the ONLY parameter whose mapping class read `NO_SIGNATURE_FOUND`; all 22 others asserted a negative. A perfect 1-for-1 correspondence across 23. **A controlled probe swapping ONLY `production_mapping_classes`, 5 samples a cell, refuted it:** both controls reproduced the harness (0/5 and 5/5) and **neither test cell flipped** (0/5 and 4/5).
+
+⚠ **The correspondence was perfect across 23 items and still wrong, because the deciding class held exactly ONE item.** It was `n=1` dressed as `n=23`.
+
+### 8.2 ⭐ What to fix — the enumeration, not the question
+
+Every miss has a **mechanically derivable** cfg path the code failed to find. Once `FP-Q3` derives it the parameter is in scope by construction and `FP-Q1` is never asked. **This fix holds whatever drives Jev.**
+
+| Gap | Covers | Shape |
+|---|---|---|
+| **A** fixture-local cfg builder | `fundingBoost` · `upgradeBonus` | Callee is a fixture helper whose body does `cfg.<path> = <param>` (`BuildA8Cfg`, `BuildBurstCfg`). `FP-Q3` reads production call sites and never opens it |
+| **B** one-hop forwarding wrapper | `tauFastSec` · `tauNormSec` · `grossFloorUsdPerSec` · `minCoverageSec` | Fixture calls the inner method (`Fold`, `Snapshot`); production calls a forwarding wrapper (`MarketState.FoldAggressorVelocity`, `MarketState.GetAggressorVelocity`) |
+
+⛔ **`NOT_CFG_SOURCED` is an assertion the code has not earned** — it is emitted when the SEARCH failed and it reads as a finding. Split it from *"could not search"*.
+
+⭐⭐ **Programme finding 3 for the FOURTH time, and now positively evidenced:** improving the judge's input framing measured **zero** effect; the constraint is enumeration.
+
+### 8.3 ⛔ `FP-Q1` sits OUTSIDE the baseline refusal
+
+`FP-D11` places its Jev calls **before** the baseline gate. [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §2 step 1 makes that refusal structural *"not a convention"* — **and the second detector is not covered by it.** That is exactly how a detector shaped a measured population while itself unmeasured. **A harness with two detectors needs two gates.**
+
+### 8.4 Also owed, opened by this run
+
+| # | Item | State |
+|---|---|---|
+| **8a** | Build gaps A and B into `FP-Q3`; re-run and re-measure | **Open** |
+| **8b** | Split `NOT_CFG_SOURCED` into *searched-and-negative* vs *could-not-search* | **Open** |
+| **8c** | Extend the baseline refusal to cover `FP-Q1` | **Open** |
+| **8d** | Declare a class on `staleAfterSec:=10` and on `A23a`'s four literals | **Open — a real provenance-rule breach either way** |
+| **8e** | `MTF_TTL_SECONDS` is `Private Const`; `CLAUDE.md` rules it `Public Const` so the fixture reads it instead of restating `60` | **Open** |
 
 ---
 

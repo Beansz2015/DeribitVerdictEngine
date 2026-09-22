@@ -150,6 +150,26 @@ A build spec asks its implementer for a live dry run as an acceptance item — r
 
 ---
 
+## 4e. ⛔⛔ A HARNESS WITH TWO DETECTORS NEEDS TWO GATES — measured 2026-09-22
+
+**From [`harness-runs/fixture-parser-scope-run-2026-09-22.md`](harness-runs/fixture-parser-scope-run-2026-09-22.md).**
+
+Harness 3 carries **two** Jev detectors. `FP-1` was measured clean on 2026-09-22. **`FP-Q1`, the scope filter, decided WHICH sites `FP-1` ever saw — and it was itself unmeasured**, because `FP-D11` puts its calls **before** the baseline gate. §2 step 1 makes that refusal *"structural, not a convention"*, and the second detector simply sat outside it.
+
+⛔ **So the clean run's population was chosen by an unmeasured judge.** When it was finally measured: **17 of 23, all six disagreements one-directional, the detector finding 1 of 7 real thresholds** — and it had silently dropped four shipped-value literals in a single fixture.
+
+**The rule: count the detectors in a harness, and gate every one of them.** A filter that shapes the population is a detector, not plumbing.
+
+### ⭐⭐ And a second finding, which is the more useful one
+
+The seat proposed a cause — the state's mapping-class label steering the verdict — backed by a **perfect 1-for-1 correspondence across all 23 items**. A controlled probe swapping only that field, 5 samples a cell, with two cells as controls that both reproduced the harness: **neither test cell flipped. The hypothesis was refuted.**
+
+⚠ **A correspondence can be perfect across the whole population and still be `n=1`.** The deciding class held exactly one item; the other 22 were all on one side and carried no information about it. **Count the items in the arm that decides, not the items in the table.**
+
+⭐ **What the refutation buys is a redirect that holds regardless:** every miss had a mechanically derivable path the enumeration failed to find, so the fix is enumeration, not the question. **Trying to improve the judge's input framing measured ZERO effect.** That is §4 finding 3 for the fourth time, and the first time it has positive evidence rather than an inference.
+
+---
+
 ## 5. ⛔ What invalidates a first run
 
 - **The seat saw any detector output before writing its baseline.** The run is then a demonstration, not a measurement, and must be labelled as one. ⚠ **Including output relayed second-hand in an implementer's report** — see §4a.
