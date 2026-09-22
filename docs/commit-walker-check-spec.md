@@ -217,6 +217,78 @@ Criteria must describe concrete situations, and must state the asymmetry explici
 
 ---
 
+## 9. ⭐⭐ REVISION 1, 2026-09-21 (UTC) — after the first run
+
+**Supersedes §6's question set. §2's path rule, §4's mechanics and §0's traps all STAND.** Run record: [`harness-runs/commit-walker-run-2026-09-21.md`](harness-runs/commit-walker-run-2026-09-21.md).
+
+### 9.1 ⛔ A correction I owe, first
+
+**Immediately after the first run I claimed the path rule's `tools/` exclusion was "manufacturing false residual, 7 times out of 7" and needed re-deriving. THAT WAS WRONG**, and it was an overreach from a one-sided sample — 7 rows in one direction, with the other direction unchecked.
+
+Measured properly against all **339 post-adoption non-merge commits**:
+
+| Path rule | Agreement with the tag | Residual |
+|---|---|---|
+| ⭐ **§2's rule as written** | **94%** | 19 |
+| + `tools/` | 85% | 51 |
+| + `tools/` + `verify/` | 83% | 56 |
+| any non-docs file | 74% | 87 |
+
+**Adding `tools/` creates 50 false positives to remove 6.** §2's rule is the best fit of every candidate tested. **It stands unchanged.** The 7 untagged `tools/`-only commits are genuine residual, and the detector judged all 7 correctly.
+
+### 9.2 The tag is INCONSISTENT AT SOURCE, and that changes the harness's purpose
+
+Two commits, same shape — a new log-writing instrument under `Core/` plus the client file that feeds it:
+
+| Commit | Files | Tag |
+|---|---|---|
+| `88538d7023` venue-status instrument | `Core/VenueStatusLog.vb`, `DeribitClient.vb` | ⭐ **tagged** `[no-engine-change]` |
+| `92191a377d` `ws_feed.log` | `Core/WsFeedLog.vb`, `DeribitWsFeed.vb` | ⛔ **untagged** |
+
+⛔ **There is no consistent convention to audit against.** "Is the tag correct?" presumes one exists. It does not — it lives in authors' heads and it varies at the margin.
+
+⭐⭐ **So the harness's job changes: apply a STATED criterion, and report where it disagrees with the tag.** The disagreements are a list for the seat to adjudicate, and over time they let the convention be **written down** instead of re-decided per commit. That is a better deliverable than an agreement percentage.
+
+### 9.3 The revised question set — replaces §6
+
+⛔ **The old `changes_runtime_behaviour` Noul asked whether a commit alters what the app "computes, decides, logs or displays". That wording is mine and it is too broad** — it sweeps every instrument, display string and tool fix into one bucket, which is exactly what produced 7 `tag_wrong` verdicts on a 10-commit residual. **The model answered my question correctly. My question was wrong.**
+
+**The stated criterion:** does this commit change the behaviour of the **shipped Windows application** — the code inside the `.exe` — when it runs? `tools/` and `verify/` are separate projects and are NOT the shipped app.
+
+**Separate the dimensions rather than merging them.** These map onto `CLAUDE.md`'s own RESERVED classes, which is what makes the margin decidable:
+
+| ID | Type | Asks |
+|---|---|---|
+| `changes_computation` | noul | Whether it alters what the app computes or decides — scores, verdicts, gates, placed levels |
+| `changes_display` | noul | Whether it alters any text or value the app renders on screen |
+| `changes_writes` | noul | Whether it alters what the app writes to disk — CSV columns or values, log lines, the trade store |
+| `verdict` | choice | `no_app_change` · `changes_computation` · `changes_display` · `changes_writes` · `ambiguous` |
+
+⛔ **`verdict` remains the ONLY answer read by code. The three Nouls are diagnostics and are never combined — §0 trap 2 is unchanged and still the trap that matters.**
+
+**Code, not the model, compares the verdict to the tag:** tagged `[no-engine-change]` with a verdict other than `no_app_change` is a DISAGREEMENT, reported for the seat. ⭐ **A multi-class verdict is far more useful than `tag_correct`/`tag_wrong` — it says WHICH kind of change the tag missed.**
+
+### 9.4 Also build
+
+| # | Item | Why |
+|---|---|---|
+| **1** | ⛔ **Era guard.** Refuse, or classify separately, any commit before **2026-08-13** | Measured: that is the first `[no-engine-change]` commit (`c6c6942d8a`). **Zero of the 788 non-merge commits from March to July carry it.** A window straddling it returned `RESIDUAL_PCT=73` — the classifier was right and the population was wrong |
+| **2** | **Send the commit BODY as well as the subject** | The one genuinely ambiguous case returned confidence **0.14**, and its body said *"No behaviour changes … mutation-proved"* in plain English. We sent only the subject |
+| **3** | **Low-confidence escalation.** Under ~0.3, a second request carrying the diff of the shipped-app files only | Three parity-proved refactors all landed at or below 0.29. From paths and line counts a proven-identical refactor is indistinguishable from a rewrite. Pattern: `docs.typesafe.ai/cookbooks/sde_cascade.md`. ⚠ **0.3 is a guess from one observation. Print it as a tunable constant at the top of the file; do not bury it** |
+| **4** | **Determinism probe.** A `-Repeat N` flag that asks the same commit N times and reports whether verdict or confidence moved | ⚠ The build reported *"6 of 10 `tag_wrong`"*; a later run of the same window gave **7**. Either the build miscounted or the model varies run to run. **Unresolved, and it must be pinned before any measurement** |
+
+### 9.5 Acceptance for this revision
+
+1. The four §9.3 questions are sent; the old `changes_runtime_behaviour` / `is_refactor_only` pair is gone.
+2. The verdict expression still reads `verdict` alone. One line, confirmable by reading.
+3. Era guard: a window reaching before 2026-08-13 is refused or separately classified. Output pasted.
+4. Commit bodies are sent. Show one request's state, key names only, **no key material**.
+5. The escalation threshold is a named constant near the top of the file.
+6. `-Repeat 3` on the three commits in [`harness-runs/commit-walker-20260921T204555Z-baseline.json`](harness-runs/commit-walker-20260921T204555Z-baseline.json). **Report whether verdicts and confidences were stable. Do not interpret the result — report it.**
+7. A dry run over `-Skip 0 -Count 300` with a throwaway baseline. ⛔ **Report counters, tokens and timings ONLY. Do NOT report per-commit verdicts** — that window is already spent, but the habit is what [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4a exists to enforce.
+
+---
+
 ## 8. What this spec does NOT verify
 
 - **That the path rule's engine/non-engine split is correct.** It is a convention chosen here, measured to agree with the tag 93% of the time. Agreement is not proof it is right.
