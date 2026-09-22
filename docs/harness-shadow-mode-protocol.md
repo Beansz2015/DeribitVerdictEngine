@@ -170,6 +170,18 @@ The seat proposed a cause — the state's mapping-class label steering the verdi
 
 ---
 
+## 4f. ⛔⛔ §4d DOES NOT CARRY ACROSS DETECTORS — an AGREEING row that is UNSTABLE, 2026-09-23
+
+**§4d measured, on `FP-1`, 25 items: agreements 23, *all* stable 5 of 5; disagreements 2, *both* unstable.** A clean separation, and easy to read as a law: **agreement implies stable.**
+
+⛔ **`FP-Q1` breaks it.** `ttlSeconds` was an **agreement** row — seat and detector both said `input` — and it **flips**: excluded on five runs, in scope on a sixth, `IN_SCOPE_PARAMS` 25 / `IN_SCOPE_SITES` 63 against 24 / 57, a delta of exactly that one parameter's six sites. Record: [`harness-runs/fixture-parser-scope-run-2026-09-22.md`](harness-runs/fixture-parser-scope-run-2026-09-22.md) §2.
+
+**So §4d is a finding about one detector on one population, not a property of Jev.** Agreement remains the right **trust gate** — §4d's actual ruling is untouched. What does not hold is the inference *"this row agreed, therefore it is stable"*.
+
+⭐ **The practical rule: a detector that is not sampled has no stability evidence, whatever its agreement rate.** `FP-Q1` runs unsampled by design (`FP-D14`), so nothing in the harness can see a flip — the flip above was found only because two seats happened to run it and compare counters. **Sample every detector, or state plainly that its stability is unmeasured.**
+
+---
+
 ## 5. ⛔ What invalidates a first run
 
 - **The seat saw any detector output before writing its baseline.** The run is then a demonstration, not a measurement, and must be labelled as one. ⚠ **Including output relayed second-hand in an implementer's report** — see §4a.

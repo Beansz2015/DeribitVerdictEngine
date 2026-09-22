@@ -48,6 +48,16 @@
 
 ⭐ **This matters because [`harness-shadow-mode-protocol.md`](../harness-shadow-mode-protocol.md) §4d makes the agreement rate the trust gate, and `FP-Q1` HAS NO AGREEMENT RATE** — `tools/checks/fixture-parser.ps1` calls it once per parameter and never 5×-samples it (`FP-D14`, line ~960). **Before this run there was no way to tell a stable miss from a flip.** The six misses are stable, so they are an evidence gap, not noise.
 
+### ⛔⛔ CORRECTED 2026-09-23 (UTC) — this heading over-claims, and the quoted text above is kept rather than edited
+
+**The heading says "It is STABLE". That is true of THE SIX MISSES and FALSE of `FP-Q1` in general.**
+
+⛔ **`ttlSeconds` flips.** It was excluded on all three runs above and on both review runs, and **in scope** on one of the 8a implementer's runs — `IN_SCOPE_PARAMS` 25 and `IN_SCOPE_SITES` 63 there against **24 and 57** measured twice on review. **The delta is exactly `ttlSeconds`: one parameter, six sites.** Logged as `8h` in [`../fixture-parser-check-spec.md`](../fixture-parser-check-spec.md) §8.4.
+
+⛔⛔ **And `ttlSeconds` was an AGREEMENT row in §1 — both judges called it `input`.** So **an agreeing row can be unstable.** [`harness-shadow-mode-protocol.md`](../harness-shadow-mode-protocol.md) §4d found the opposite on `FP-1` (*"agreements 23, all STABLE 5 of 5"*) and that finding does **not** carry across detectors. See the new §4f there.
+
+⚠ **What survives, and what does not.** The six misses held across five runs and two 5-sample probe cells (0/5 and 5/5), so **calling them an evidence gap rather than noise still stands.** What does not stand is reading this section as *"`FP-Q1` is stable"*. It is not, it is unsampled, and nothing in the harness would detect a flip.
+
 ---
 
 ## 3. ⛔⛔ The cause I proposed was WRONG — measured and refuted
