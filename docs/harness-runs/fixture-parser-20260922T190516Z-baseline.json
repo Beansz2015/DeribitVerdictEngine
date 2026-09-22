@@ -1,0 +1,15 @@
+{
+  "_harness": "fixture-parser",
+  "_detectors": "FP-1 only. The one site is inside a Function (SeededWsSource), and FP-2 judges Subs only, so there is no FP-2 item. No -ScopeBaselinePath: FP-Q1 makes zero calls.",
+  "_window": "-SubFilter '^SeededWsSource$' -- 1 FP-1 site, opened by revision 3 (FP-D21, item 8f): staleAfterSec now resolves network.ws_stale_after_sec via DEFAULT_FALLBACK_BODY, so it is in scope by construction and, carrying the item-8d MECHANISM marker, joins the residual. It has never been in the FP-1 residual before: in scope pre-8d via FP-Q1 but unmarked; marked after 8d but scoped out (item 8i).",
+  "_by": "orchestrator seat (Opus 5.5), by hand, BEFORE any FP-1 detector output on this site",
+  "_written_utc": "2026-09-22T19:05:16Z",
+  "_harness_state": "tools/checks/fixture-parser.ps1 at ed3e487 (revision 3: FP-D21, FP-D22); Program.vb unchanged since 2f0381b",
+  "_protocol": "docs/harness-shadow-mode-protocol.md",
+  "_input_seen": "Same as the detector: the exact FP-1 state fields, dumped from a scratch copy of the harness with Invoke-Jev replaced by a throw, TYPESAFE_API_KEY stripped.",
+  "_CONFLICT_DECLARED": "The seat read docs/fixture-parser-check-spec.md section 8.6 (the item-8d ruling: staleAfterSec is MECHANISM, and why) and saw two lines of this comment in a grep before writing this. The intended class was known before the comment was read in full. No FP-1 output on this site exists (grep of docs/ and tools/ for 'SeededWsSource#' finds nothing). The seat has seen FP-Q1's earlier scope answers on this PARAMETER (docs/harness-runs/fixture-parser-scope-run-2026-09-22.md) -- a different detector and question.",
+  "_notes": {
+    "SeededWsSource#2088#staleAfterSec": "Comment opens 'MECHANISM -- staleAfterSec:=10'. Reason: the property under test needs only staleAfterSec << tradesAgeSeconds, any tight value serves, 'not a copy of network.ws_stale_after_sec'. Acknowledges equality with ever-shipped {10} and licenses it. Says deriving from cfg would be WRONG. The reasoning rejects tracking matched_key, so no contradiction. High confidence. Side note, not a class issue: the comment cites 'the A20a/A20b refactor-equivalence precedent', and A20a/A20b are themselves unmarked sites whose literals equal ever-shipped values (docs/harness-runs/fixture-parser-a23a-run-2026-09-22.md section 5.1)."
+  },
+  "SeededWsSource#2088#staleAfterSec": "mechanism_declared_ok"
+}
