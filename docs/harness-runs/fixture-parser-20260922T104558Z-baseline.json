@@ -1,0 +1,22 @@
+{
+  "A1_CvdSlopeRising#861#slopeMinUsd": "mechanism_declared_ok",
+  "A1_CvdSlopeRising#861#slopePctOfValue": "mechanism_declared_ok",
+  "A1_CvdSlopeRising#862#divergencePriceGate": "mechanism_declared_ok",
+  "A1_CvdSlopeRising#863#lateSegmentWeight": "mechanism_declared_ok",
+  "A1_CvdSlopeRising#863#earlySegmentWeight": "mechanism_declared_ok",
+  "A3_MicroCvdWindowFromEnd#982#microWindowSize": "mechanism_declared_ok",
+  "A3_MicroCvdWindowFromEnd#982#accelThreshold": "mechanism_declared_ok",
+  "A3_MicroCvdWindowFromEnd#983#dynamicPct": "mechanism_declared_ok",
+  "A3_MicroCvdWindowFromEnd#983#floorPct": "mechanism_declared_ok",
+  "A4_TfiWindowFromEnd#1016#tfiWindowSize": "mechanism_declared_ok",
+  "A4_TfiWindowFromEnd#1016#threshold": "mechanism_declared_ok",
+  "A6_ObvNormalisation#1083#trendGate": "mechanism_declared_ok",
+  "A6_ObvNormalisation#1083#divergenceGate": "mechanism_declared_ok",
+  "A43b_SliceTradesAscendingAndLastN#7399#tfiWindowSize": "mechanism_declared_ok",
+  "A43b_SliceTradesAscendingAndLastN#7399#threshold": "mechanism_declared_ok",
+  "A1_CvdSlopeRising": "name_matches",
+  "A3_MicroCvdWindowFromEnd": "name_matches",
+  "A4_TfiWindowFromEnd": "name_matches",
+  "A6_ObvNormalisation": "unsure",
+  "A43b_SliceTradesAscendingAndLastN": "name_understates"
+}

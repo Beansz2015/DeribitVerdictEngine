@@ -473,3 +473,17 @@ rider-travel-report.md
 # detector is run. See docs/harness-shadow-mode-protocol.md section 2 step 3.
 commit-walker-baseline.json
 commit-walker-report.md
+
+# tools/checks/fixture-parser.ps1 (docs/fixture-parser-check-spec.md) -- the scratch paths
+# at the repo root for ROUTINE re-runs, same asymmetry and same reasoning as the
+# rider-travel / commit-walker pairs immediately above: the REPORT and the SETTINGS-WALK
+# CACHE are both regenerable (re-run the tool; the walked history is immutable so the
+# cache just gets rebuilt), the hand-written BASELINE is NOT (there is no second first
+# run).
+#
+# A FIRST-RUN baseline does NOT belong at this path either. It is copied to
+# docs/harness-runs/fixture-parser-<UTC-stamp>-baseline.json, which is tracked, BEFORE the
+# detector is run. See docs/harness-shadow-mode-protocol.md section 2 step 3.
+fixture-parser-baseline.json
+fixture-parser-report.md
+fixture-parser-settings-cache.json
