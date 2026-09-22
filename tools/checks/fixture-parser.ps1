@@ -563,7 +563,19 @@ foreach ($cs in $callSites) {
 # FP-Q3 (section 7.2/7.3, FP-D11/FP-D12/FP-D13 above): DERIVED mapping from production
 # call sites. Code only -- no Jev. This is now the AUTHORITATIVE source for ResolvedKey.
 # ---------------------------------------------------------------------------------------
-$prodDirNames = @('Core', 'UI', 'analysis')
+# [2026-09-22] 'tools' ADDED. docs/fixture-parser-check-spec.md section 7.3 listed only
+# Core/UI/analysis/root, and that was a spec defect: a fixture calling L2Logistic.Fit or
+# PromptBuilder.Build has its PRODUCTION call site under tools/CeilingAudit, tools/
+# AutoTweaker or tools/WhatIfRunner. Excluding tools/ made those read
+# NO_PRODUCTION_CALL_SITE and dropped them from scope, which is part of why the in-scope
+# count came in under the expected band.
+#
+# ⚠ This does NOT contradict docs/commit-walker-check-spec.md section 2, which
+# deliberately treats tools/ as NOT an engine path. That spec asks "did this change the
+# SHIPPED APP". This one asks "where is this method actually called in production" -- and
+# an offline analysis tool is a production caller of its own helpers. Different question,
+# different answer, both correct.
+$prodDirNames = @('Core', 'UI', 'analysis', 'tools')
 $prodFiles = New-Object System.Collections.Generic.List[string]
 foreach ($d in $prodDirNames) {
     $full = Resolve-RepoPath $d
@@ -1066,6 +1078,29 @@ function Write-Coverage([int]$judged) {
     "SITES_GAINED_COVERAGE=$sitesGainedCoverage"
     "SITES_WITH_COMMENT_BEFORE=$sitesWithCommentBefore"
     "SITES_WITH_COMMENT_AFTER=$sitesWithCommentAfter"
+
+    # [2026-09-22] THE SILENT-HOLE FIX. FP-Q1's scope filter decides WHICH sites the seat
+    # ever writes a baseline line for, so an over-eager exclusion shapes the measured
+    # population and NOTHING would say so -- the seat would judge a set Jev chose and read
+    # the agreement as its own. Printing every exclusion with its REASON makes the filter
+    # reviewable and overrulable instead of silent. The repo's own ruling: a counter
+    # reading 0 is the tripwire, not waste.
+    #
+    # This is a per-parameter listing, NOT a per-item verdict: it names what was dropped
+    # and why, never a provenance judgment. The reporting discipline in
+    # docs/harness-shadow-mode-protocol.md section 4a is about FP-1/FP-2 verdicts.
+    "EXCLUDED_PARAMS (FP-Q1 dropped these from scope -- review before trusting IN_SCOPE_SITES):"
+    $exParams = $callSites | Where-Object { -not $_.InScope } |
+        Group-Object -Property Param |
+        Sort-Object -Property @{Expression = { $_.Count }; Descending = $true }, Name
+    foreach ($g in $exParams) {
+        $one = $g.Group[0]
+        $why = if ($one.DerivedKey) { 'HAS_KEY_BUT_SCOPED_OUT' }
+               elseif ($one.MappingClass) { $one.MappingClass }
+               else { 'NO_DERIVED_KEY' }
+        $callees = @($g.Group | ForEach-Object { $_.Callee } | Select-Object -Unique) -join ','
+        "  {0,-26} x{1,-3} why={2} callees=[{3}]" -f $g.Name, $g.Count, $why, $callees
+    }
 }
 
 # ---------------------------------------------------------------------------------------
