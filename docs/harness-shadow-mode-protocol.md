@@ -119,6 +119,20 @@ A build spec asks its implementer for a live dry run as an acceptance item — r
 
 ---
 
+## 4c. ⛔ WHO writes the baseline — the seat, always
+
+**Added 2026-09-21 (UTC), after harness 3. A second form of the §4a failure, and the spec gap was mine.**
+
+[`fixture-parser-check-spec.md`](fixture-parser-check-spec.md) §4.4 said WHERE a first-run baseline goes and never said WHO writes it. The implementer reasonably wrote one itself, ran the comparison and reported it — contaminating the seat on all 20 items.
+
+⛔ **A build spec NAMES who writes the baseline. For a first run it is ALWAYS the seat. An implementer that finds no baseline STOPS and says so — it must never supply one.**
+
+⚠ **And what an implementer-written baseline measures is inter-reader agreement between two models, not detector-versus-seat.** That is a real measurement of something; it is not the one this protocol specifies.
+
+⭐ **The harness-3 run shows why the distinction is not pedantry: on the one row adjudicated against the tree, the DETECTOR was right and the implementer's baseline was WRONG** — it read a past-tense clause in a code comment as a present-tense claim. Record: [`harness-runs/fixture-parser-run-2026-09-21.md`](harness-runs/fixture-parser-run-2026-09-21.md) §3.
+
+---
+
 ## 5. ⛔ What invalidates a first run
 
 - **The seat saw any detector output before writing its baseline.** The run is then a demonstration, not a measurement, and must be labelled as one. ⚠ **Including output relayed second-hand in an implementer's report** — see §4a.
