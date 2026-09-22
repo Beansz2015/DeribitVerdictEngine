@@ -394,6 +394,35 @@ The build reported that 5× sampling raised calls 4× but tokens only **2.49×**
 
 ---
 
+### 10.10 ⚠ NOTED, NOT BUILT — status fires on the five-way label, but the audit only asks a two-way question
+
+**Found by the seat re-running the correction on 2026-09-21 (UTC). The correction itself is sound; this is a refinement, and it errs in the SAFE direction.**
+
+The three adjudicated commits, against the hand baseline:
+
+| Commit | Baseline | Primary plurality | Escalated | Status | ⭐ Agrees with the baseline **at the tag level**? |
+|---|---|---|---|---|---|
+| `504442e29e` | `tag_correct` | `no_app_change` (5/5) | — | `CONFIDENT` | ✅ **Yes** |
+| `91942d6739` | `tag_wrong` | `changes_computation` (5/5) | `changes_writes` (0.667) | `CONFLICT` | ✅ **Yes — BOTH sides mean the tag is wrong** |
+| `c6c6942d8a` | `tag_wrong` | `changes_writes` (0.6) | — | `UNSTABLE` | ✅ Yes on the plurality, but 2 of 5 samples said `no_app_change` |
+
+⭐⭐ **The detector agrees with the hand baseline on all three at the tag level, which is the only question this harness audits.**
+
+⛔ **But `91942d6739` was flagged `CONFLICT` on a disagreement that does not affect the audit.** `changes_computation` and `changes_writes` are different categories that carry the **same tag verdict**: the `[no-engine-change]` tag is wrong either way. The status is computed on the five-way label, so category wobble is reported as audit uncertainty.
+
+**The distinction, and it is real:**
+
+- `91942d6739` — **immaterial.** Every sample and the escalation agree the tag is wrong; they differ only on which kind of change it is.
+- `c6c6942d8a` — **material.** Two of five samples say `no_app_change` and three say `changes_writes`. Those are opposite answers to the audit's question.
+
+**The fix, when this is next opened:** compute `UNSTABLE` and `CONFLICT` on the **tag-level collapse** — `no_app_change` versus anything-else — and report five-way category disagreement as a separate, non-blocking note. The five-way verdict stays; it is more informative and §9.3 keeps it. Only the *status* moves to the collapsed axis.
+
+⚠ **Not built now, deliberately.** The current behaviour **over-flags**, which is the safe direction for an advisory tool, and harness 2 cannot get its real measurement until a post-adoption window the seat has not seen accrues — weeks away. **Fix it with that measurement, not before.**
+
+⛔ **One consequence to know meanwhile: the `[DISAGREE]` on all three rows is a VOCABULARY ARTEFACT, not a disagreement.** The baseline file was written in the old `tag_correct`/`tag_wrong` words; §10.5 moved baselines to the five-way set and that file predates the ruling. **Do not read those three `[DISAGREE]` markers as the detector missing.**
+
+---
+
 ## 8. What this spec does NOT verify
 
 - **That the path rule's engine/non-engine split is correct.** It is a convention chosen here, measured to agree with the tag 93% of the time. Agreement is not proof it is right.
