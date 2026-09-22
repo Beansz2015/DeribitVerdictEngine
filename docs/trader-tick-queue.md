@@ -14,7 +14,9 @@
 
 > ## ⛔ STATE BANNER — REFRESHED 2026-09-17 (UTC). Read this before believing any row below.
 >
-> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-21.md`](seat-handover-2026-09-21.md)** — the WPAD outage seat. ⭐ **The collector was down 3 d 13 h and is BACK; the 2026-10-01 cross-month deadline is DISCHARGED.** ⛔ **Two scheduled checks (2026-09-22 and 2026-09-24 06:00 UTC) were agreed and NEVER SET UP.** Older banner follows.
+> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-22.md`](seat-handover-2026-09-22.md)** — the Jev harness seat. ⛔ **THE ENGINE QUEUE IS ON HOLD by trader direction until the Jev programme CLOSES** (handover §7); next up is harness 4. ✅ `master` clean against `origin`, trader-tested and pushed. Settings v68, harness 425 PASS, nothing deployed. ⛔ The **2026-09-24 06:00 UTC** collector check is owed (handover §6). Older banner follows.
+>
+> ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-21.md`](seat-handover-2026-09-21.md)** — the WPAD outage seat. ⭐ **The collector was down 3 d 13 h and is BACK; the 2026-10-01 cross-month deadline is DISCHARGED.** ⛔ **Two scheduled checks (2026-09-22 and 2026-09-24 06:00 UTC) were agreed and NEVER SET UP.** Older banner follows.
 >
 > ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-17.md`](seat-handover-2026-09-17.md)** (superseded for state 2026-09-21; **its §1 task list is still the work queue — none of it was touched on 09-21**). Settings v68 (tracked repo-root `settings.json` line 2). ⛔ **Run `git status -sb` - never inherit a push state. At close `master` was 63 commits ahead of `origin`, unpushed, including gap-repair engine fixes.** **First (handover §1): spec and build the ruled engine fixes (POC gate, liquidation flag); then absorption S1/S2 and ONE deploy, before 2026-10-01 00:00 UTC; then `Q-1` (d). Nothing is owed by the trader.**
 >
