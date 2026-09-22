@@ -96,6 +96,34 @@
   invent a second implicit band the spec does not ask for.
   =======================================================================================
 
+  ============================== REVISION 2 CORRECTION (2026-09-22) ==============================
+  docs/commit-walker-check-spec.md sections 10.7-10.9, found empirically by THIS build on
+  91942d6739: revision 2's escalation call was itself a SINGLE, unsampled call -- exactly
+  the single-call instability the self-consistency design exists to remove. 5 of 5 primary
+  samples agreed on changes_computation (matching the hand baseline); the mean top
+  probability was 0.414, under the band, so it escalated; the one unsampled escalation call
+  returned no_app_change and SILENTLY REPLACED the unanimous plurality (the old
+  `$finalVerdict = $escResult.Verdict` line). A system built on sampling must not exempt
+  its own tie-breaker, and on the one case observed the unsampled call moved the answer
+  AWAY from the baseline the sampled primary matched -- so escalated is not assumed better-
+  informed.
+
+  Two changes, both required (section 10.7):
+    1. The escalation call now runs in a LOOP of $ESCALATION_SAMPLES (named constant,
+       default 3, beside $SELF_CONSISTENCY_SAMPLES and $MIN_TOP_PROBABILITY below), with a
+       fresh `uid` per escalation sample same as the primary. Its plurality, agreement
+       rate, and mean/min top probability are computed by the SAME function the primary
+       uses (Get-SelfConsistencyAggregate) -- not a second copy of the same arithmetic that
+       can drift from the first.
+    2. A new CONFLICT status: when the escalated plurality disagrees with the primary
+       plurality, the tool reports BOTH verdicts, BOTH agreement rates, and BOTH
+       probability ranges, and exits non-zero. It does NOT pick a winner -- see the
+       `-ne $pluralityVerdict` comparison marked CONFLICT below.
+    CONFIDENT_AFTER_ESCALATION now means escalated AND the escalated plurality AGREED with
+    the primary plurality. Escalation still cannot fire on an UNSTABLE row -- unchanged;
+    same `if (-not $stable) { ... } elseif (...) { escalate }` shape as revision 2.
+  ===================================================================================================
+
   THE TRAPS THAT STILL APPLY (docs/commit-walker-check-spec.md section 0, unchanged by
   either revision):
     1. Merge commits return an EMPTY file list from `git show --name-only`, so they look
@@ -129,9 +157,12 @@
     0 - every residual commit judged CONSISTENT or N/A_UNTAGGED, no `ambiguous` verdict,
         and no UNSTABLE row (self-consistency agreement rate below 1.0)
     1 - at least one residual commit is a DISAGREEMENT (tagged [no-engine-change], but
-        verdict != no_app_change), judged `ambiguous`, or UNSTABLE. Revision 2: an
-        unresolved self-consistency disagreement is reported to the seat and never
+        verdict != no_app_change), judged `ambiguous`, UNSTABLE, or CONFLICT. Revision 2:
+        an unresolved self-consistency disagreement is reported to the seat and never
         auto-resolved (section 10.3 item 7), so that non-resolution must not exit 0.
+        Revision 2 correction (section 10.7): an escalated plurality that disagrees with
+        the primary plurality is CONFLICT, reported to the seat with neither side picked
+        as the winner, and must not exit 0 either.
     2 - baseline missing, classifier suspect, all-pre-era window, residual over 25%, or
         API failure
     (Restated from the original section 4.5 for the new five-way verdict vocabulary --
@@ -191,6 +222,12 @@ if ($Samples -lt 1) { $Samples = $SELF_CONSISTENCY_SAMPLES }
 # probability of 0.44 for a five-option Choice. See "THE BAND" below for the one line
 # this threshold is applied on.
 $MIN_TOP_PROBABILITY = 0.60
+
+# REVISION 2 CORRECTION (section 10.7 item 1): how many times the escalation call itself
+# is sampled, once it fires. Escalation measures ~8,090 tokens against a primary's ~1,605
+# (section 10.8), so 3 samples of it is roughly $0.001 per escalated commit -- "not a
+# reason to skip it" per the spec. Named beside its siblings, not buried.
+$ESCALATION_SAMPLES = 3
 
 # RETIRED, REVISION 2 (section 10.1 detail 2 / section 10.3 item 5): revision 1's
 # $LOW_CONFIDENCE_ESCALATION_THRESHOLD = 0.3 was a CONFIDENCE threshold, a different
@@ -606,6 +643,48 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
     }
 }
 
+# REVISION 2 CORRECTION (section 10.7 item 2): shared by the primary sample loop AND the
+# escalation sample loop below, so "computing its plurality and agreement rate exactly as
+# the primary does" is true by construction -- one function, not two copies of the same
+# arithmetic that can silently drift apart. Plurality by raw vote count; ties broken by
+# first-seen order among the samples, matching the cookbook's Counter.most_common tie
+# behaviour (unchanged from revision 2).
+function Get-SelfConsistencyAggregate([object[]]$sampleResultsIn) {
+    $verdictCounts = @{}
+    foreach ($sr in $sampleResultsIn) {
+        if (-not $verdictCounts.ContainsKey($sr.Verdict)) { $verdictCounts[$sr.Verdict] = 0 }
+        $verdictCounts[$sr.Verdict] += 1
+    }
+    $pluralityVerdict = $null
+    $pluralityCount = -1
+    foreach ($sr in $sampleResultsIn) {
+        $v = $sr.Verdict
+        if ($verdictCounts[$v] -gt $pluralityCount) {
+            $pluralityCount = $verdictCounts[$v]
+            $pluralityVerdict = $v
+        }
+    }
+    $agreementRate = [math]::Round(($pluralityCount / $sampleResultsIn.Count), 3)
+
+    $topProbs = @($sampleResultsIn | Where-Object { $null -ne $_.TopProbability } | ForEach-Object { $_.TopProbability })
+    $meanTopProbability = if ($topProbs.Count -gt 0) { [math]::Round((($topProbs | Measure-Object -Average).Average), 3) } else { $null }
+    $minTopProbability  = if ($topProbs.Count -gt 0) { [math]::Round((($topProbs | Measure-Object -Minimum).Minimum), 3) } else { $null }
+
+    $sampleVerdicts = @($sampleResultsIn | ForEach-Object { $_.Verdict })
+    $sampleTopProbs = @($sampleResultsIn | ForEach-Object { if ($null -ne $_.TopProbability) { [math]::Round([double]$_.TopProbability, 3) } else { $null } })
+
+    return [PSCustomObject]@{
+        PluralityVerdict       = $pluralityVerdict
+        AgreementRate          = $agreementRate
+        Stable                  = ($agreementRate -ge 1.0)
+        MeanTopProbability      = $meanTopProbability
+        MinTopProbability       = $minTopProbability
+        SampleCount             = $sampleResultsIn.Count
+        SampleVerdicts          = ($sampleVerdicts -join ',')
+        SampleTopProbabilities  = ($sampleTopProbs -join ',')
+    }
+}
+
 $results = New-Object System.Collections.Generic.List[object]
 $apiFailed = $false
 $apiFailMsg = ''
@@ -631,29 +710,15 @@ foreach ($c in $residualAll) {
 
     # -------------------------------------------------------------------------------
     # REVISION 2 self-consistency aggregation (section 10.3 items 2-3, section 10.2's
-    # matrix). Plurality by raw vote count; ties broken by first-seen order among the
-    # samples, matching the cookbook's Counter.most_common tie behaviour.
+    # matrix), via the shared Get-SelfConsistencyAggregate (revision 2 correction, section
+    # 10.7 item 2) so the escalation loop below computes its own stats the SAME way.
     # -------------------------------------------------------------------------------
-    $verdictCounts = @{}
-    foreach ($sr in $sampleResults) {
-        if (-not $verdictCounts.ContainsKey($sr.Verdict)) { $verdictCounts[$sr.Verdict] = 0 }
-        $verdictCounts[$sr.Verdict] += 1
-    }
-    $pluralityVerdict = $null
-    $pluralityCount = -1
-    foreach ($sr in $sampleResults) {
-        $v = $sr.Verdict
-        if ($verdictCounts[$v] -gt $pluralityCount) {
-            $pluralityCount = $verdictCounts[$v]
-            $pluralityVerdict = $v
-        }
-    }
-    $agreementRate = [math]::Round(($pluralityCount / $sampleResults.Count), 3)
-    $stable = ($agreementRate -ge 1.0)
-
-    $topProbs = @($sampleResults | Where-Object { $null -ne $_.TopProbability } | ForEach-Object { $_.TopProbability })
-    $meanTopProbability = if ($topProbs.Count -gt 0) { [math]::Round((($topProbs | Measure-Object -Average).Average), 3) } else { $null }
-    $minTopProbability  = if ($topProbs.Count -gt 0) { [math]::Round((($topProbs | Measure-Object -Minimum).Minimum), 3) } else { $null }
+    $agg = Get-SelfConsistencyAggregate $sampleResults
+    $pluralityVerdict  = $agg.PluralityVerdict
+    $agreementRate     = $agg.AgreementRate
+    $stable            = $agg.Stable
+    $meanTopProbability = $agg.MeanTopProbability
+    $minTopProbability  = $agg.MinTopProbability
 
     $meanComputationNoul = [math]::Round((($sampleResults | ForEach-Object { [double]$_.ComputationNoul } | Measure-Object -Average).Average), 3)
     $meanDisplayNoul     = [math]::Round((($sampleResults | ForEach-Object { [double]$_.DisplayNoul } | Measure-Object -Average).Average), 3)
@@ -661,10 +726,15 @@ foreach ($c in $residualAll) {
 
     $escalated = $false
     $escalationNote = $null
-    $preEscalationVerdict = $null
-    $preEscalationAgreementRate = $null
-    $preEscalationMeanTopProbability = $null
     $finalVerdict = $pluralityVerdict
+    $escPluralityVerdict = $null
+    $escAgreementRate = $null
+    $escStable = $null
+    $escMeanTopProbability = $null
+    $escMinTopProbability = $null
+    $escSampleCount = 0
+    $escSampleVerdicts = ''
+    $escSampleTopProbabilities = ''
 
     # --- THE BAND (section 10.1 detail 2 / section 10.3 item 4): applied to the MEAN
     # top probability across the agreeing samples, never to `confidence`. This is the one
@@ -674,28 +744,60 @@ foreach ($c in $residualAll) {
     if (-not $stable) {
         # DISAGREE cell (section 10.2): genuinely on the fence. NEVER escalated, NEVER
         # auto-resolved (section 10.3 item 7) -- structurally unreachable from here into
-        # the escalation branch below.
+        # the escalation branch below. UNCHANGED by the revision 2 correction (section
+        # 10.9 item 5).
         $status = 'UNSTABLE'
     } elseif ($null -ne $meanTopProbability -and $meanTopProbability -lt $MIN_TOP_PROBABILITY) {
         # AGREE, top probability LOW: stable but under-informed -- ESCALATE.
         $engineFiles = Get-EngineTouchedPaths $c.Paths
         if ($engineFiles.Count -gt 0) {
             $diffText = Get-ShippedAppDiff $repo $c.Hash $engineFiles $MAX_ESCALATION_DIFF_CHARS
-            $escUid = "$($c.Hash.Substring(0,10)):esc:$([guid]::NewGuid().ToString('N').Substring(0,8))"
-            $escResult = Invoke-CommitVerdict $apiKey $c $diffText $verdictCriteria $escUid
-            if ($escResult.Ok) {
+
+            # ---------------------------------------------------------------------------
+            # REVISION 2 CORRECTION (section 10.7 items 1-2): the escalation call is now
+            # SAMPLED, $ESCALATION_SAMPLES times, with a fresh `uid` per sample exactly
+            # like the primary loop above -- an unsampled tie-breaker was the defect this
+            # correction exists to fix. Its plurality/agreement/probability stats are
+            # computed by the SAME Get-SelfConsistencyAggregate function the primary used.
+            # ---------------------------------------------------------------------------
+            $escSampleResultsList = New-Object System.Collections.Generic.List[object]
+            for ($j = 0; $j -lt $ESCALATION_SAMPLES; $j++) {
+                $escUid = "$($c.Hash.Substring(0,10)):esc:$j`:$([guid]::NewGuid().ToString('N').Substring(0,8))"
+                $escResult = Invoke-CommitVerdict $apiKey $c $diffText $verdictCriteria $escUid
+                if (-not $escResult.Ok) {
+                    $apiFailed = $true
+                    $apiFailMsg = "Jev escalation request failed for $($c.Hash.Substring(0,10)) (escalation sample $($j+1)/$ESCALATION_SAMPLES): $($escResult.Error)"
+                    break
+                }
                 $usageInputTokens  += $escResult.UsageInputTokens
                 $usageOutputTokens += $escResult.UsageOutputTokens
-                $escalated = $true
-                $preEscalationVerdict = $pluralityVerdict
-                $preEscalationAgreementRate = $agreementRate
-                $preEscalationMeanTopProbability = $meanTopProbability
-                $finalVerdict = $escResult.Verdict
-                $status = 'CONFIDENT_AFTER_ESCALATION'
+                $escSampleResultsList.Add($escResult)
+            }
+            if ($apiFailed) { break }
+
+            $escAgg = Get-SelfConsistencyAggregate $escSampleResultsList
+            $escPluralityVerdict       = $escAgg.PluralityVerdict
+            $escAgreementRate          = $escAgg.AgreementRate
+            $escStable                 = $escAgg.Stable
+            $escMeanTopProbability     = $escAgg.MeanTopProbability
+            $escMinTopProbability      = $escAgg.MinTopProbability
+            $escSampleCount            = $escAgg.SampleCount
+            $escSampleVerdicts         = $escAgg.SampleVerdicts
+            $escSampleTopProbabilities = $escAgg.SampleTopProbabilities
+            $escalated = $true
+
+            # --- CONFLICT (section 10.7 item 2): the escalated plurality disagrees with
+            # the PRIMARY plurality ($pluralityVerdict, from the sampled primary above).
+            # The tool does NOT pick a winner -- $finalVerdict is left at $pluralityVerdict
+            # (its pre-escalation value) only as a display fallback; the CONFLICT status
+            # below, not this assignment, is what a caller must act on. Report BOTH.
+            if ($escPluralityVerdict -ne $pluralityVerdict) {
+                $status = 'CONFLICT'
             } else {
-                $apiFailed = $true
-                $apiFailMsg = "Jev escalation request failed for $($c.Hash.Substring(0,10)): $($escResult.Error)"
-                break
+                # CONFIDENT_AFTER_ESCALATION (section 10.7 item 4): escalated AND agreed
+                # with the primary.
+                $finalVerdict = $escPluralityVerdict
+                $status = 'CONFIDENT_AFTER_ESCALATION'
             }
         } else {
             # RESIDUAL_UNTAGGED_NO_ENGINE_PATH commits touch, by definition, zero engine
@@ -713,42 +815,47 @@ foreach ($c in $residualAll) {
     # Section 9.3: code, not the model, compares verdict to tag. A DISAGREEMENT exists
     # only in the tagged direction -- an untagged commit makes no claim to contradict
     # (section 9.2: the tag is inconsistent at source, so "should this have been tagged"
-    # is not a question this harness answers). UNSTABLE overrides both directions: an
-    # unresolved row is reported as unresolved, never coerced into CONSISTENT/
-    # DISAGREEMENT by a plurality the harness itself will not stand behind.
+    # is not a question this harness answers). UNSTABLE and CONFLICT both override the
+    # tagged/untagged split: an unresolved row (self-consistency disagreement, OR an
+    # escalated plurality disagreeing with the primary) is reported as unresolved, never
+    # coerced into CONSISTENT/DISAGREEMENT by a read the harness itself will not stand
+    # behind.
     $disagreement =
         if ($status -eq 'UNSTABLE') { 'UNSTABLE' }
+        elseif ($status -eq 'CONFLICT') { 'CONFLICT' }
         elseif ($c.Tagged) { if ($finalVerdict -ne 'no_app_change') { 'DISAGREEMENT' } else { 'CONSISTENT' } }
         else { 'N/A_UNTAGGED' }
 
-    $sampleVerdicts = @($sampleResults | ForEach-Object { $_.Verdict })
-    $sampleTopProbs = @($sampleResults | ForEach-Object { if ($null -ne $_.TopProbability) { [math]::Round([double]$_.TopProbability, 3) } else { $null } })
-
     $results.Add([PSCustomObject]@{
-        Hash                             = $c.Hash
-        Subject                          = $c.Subject
-        Class                            = if ($c.Tagged) { 'TAGGED_BUT_ENGINE_PATH' } else { 'UNTAGGED_NO_ENGINE_PATH' }
-        Tagged                           = $c.Tagged
-        Verdict                          = $finalVerdict
-        PluralityVerdict                 = $pluralityVerdict
-        Status                           = $status
-        AgreementRate                    = $agreementRate
-        Stable                           = $stable
-        MeanTopProbability                = $meanTopProbability
-        MinTopProbability                = $minTopProbability
-        ComputationNoul                  = $meanComputationNoul
-        DisplayNoul                      = $meanDisplayNoul
-        WritesNoul                       = $meanWritesNoul
-        Disagreement                     = $disagreement
-        Escalated                        = $escalated
-        EscalationNote                   = $escalationNote
-        PreEscalationVerdict             = $preEscalationVerdict
-        PreEscalationAgreementRate       = $preEscalationAgreementRate
-        PreEscalationMeanTopProbability  = $preEscalationMeanTopProbability
-        SampleCount                      = $sampleResults.Count
-        SampleVerdicts                   = ($sampleVerdicts -join ',')
-        SampleTopProbabilities           = ($sampleTopProbs -join ',')
-        Baseline                         = if ($baseline.ContainsKey($c.Hash)) { $baseline[$c.Hash] } else { $null }
+        Hash                       = $c.Hash
+        Subject                    = $c.Subject
+        Class                      = if ($c.Tagged) { 'TAGGED_BUT_ENGINE_PATH' } else { 'UNTAGGED_NO_ENGINE_PATH' }
+        Tagged                     = $c.Tagged
+        Verdict                    = $finalVerdict
+        PluralityVerdict           = $pluralityVerdict
+        Status                     = $status
+        AgreementRate              = $agreementRate
+        Stable                     = $stable
+        MeanTopProbability          = $meanTopProbability
+        MinTopProbability          = $minTopProbability
+        ComputationNoul            = $meanComputationNoul
+        DisplayNoul                = $meanDisplayNoul
+        WritesNoul                 = $meanWritesNoul
+        Disagreement               = $disagreement
+        Escalated                  = $escalated
+        EscalationNote             = $escalationNote
+        EscalatedPluralityVerdict  = $escPluralityVerdict
+        EscalatedAgreementRate     = $escAgreementRate
+        EscalatedStable            = $escStable
+        EscalatedMeanTopProbability = $escMeanTopProbability
+        EscalatedMinTopProbability = $escMinTopProbability
+        EscalatedSampleCount       = $escSampleCount
+        EscalatedSampleVerdicts    = $escSampleVerdicts
+        EscalatedSampleTopProbabilities = $escSampleTopProbabilities
+        SampleCount                = $agg.SampleCount
+        SampleVerdicts             = $agg.SampleVerdicts
+        SampleTopProbabilities     = $agg.SampleTopProbabilities
+        Baseline                   = if ($baseline.ContainsKey($c.Hash)) { $baseline[$c.Hash] } else { $null }
     })
 }
 $sw.Stop()
@@ -773,10 +880,13 @@ Write-Coverage $commitsWalked $mergesExcluded $preEra.Count $agreeTagged.Count $
 
 # docs/harness-shadow-mode-protocol.md section 4a: -CountersOnly withholds every
 # per-commit and aggregate line from a RESERVED window's dry run (section 10.6 item 6).
-# $disagreementCount/$unstableCount are computed either way -- the exit code (bottom of
-# file) reads $results directly and must not depend on what got printed.
+# $disagreementCount/$unstableCount/$conflictCount are computed either way -- the exit
+# code (bottom of file) reads $results directly and must not depend on what got printed.
 $disagreementCount = @($results | Where-Object { $_.Disagreement -eq 'DISAGREEMENT' }).Count
 $unstableCount = @($results | Where-Object { $_.Disagreement -eq 'UNSTABLE' }).Count
+# REVISION 2 CORRECTION (section 10.7 item 2): CONFLICT is its own count, alongside
+# DISAGREEMENT and UNSTABLE, never folded into either.
+$conflictCount = @($results | Where-Object { $_.Disagreement -eq 'CONFLICT' }).Count
 
 if ($CountersOnly) {
     "COUNTERS_ONLY=true (per-commit verdicts and aggregates withheld -- docs/harness-shadow-mode-protocol.md section 4a)"
@@ -787,7 +897,11 @@ if ($CountersOnly) {
                  elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
                  elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
                  else { 'DISAGREE' }
-        $escTxt = if ($res.Escalated) { "escalated=true (pre-escalation plurality=$($res.PreEscalationVerdict) agreement=$($res.PreEscalationAgreementRate) mean_top_prob=$($res.PreEscalationMeanTopProbability))" }
+        # REVISION 2 CORRECTION (section 10.7 item 2 / section 10.9 item 3): when escalated,
+        # report BOTH the primary plurality+agreement rate+probability range AND the
+        # escalated plurality+agreement rate+probability range -- never only the primary's
+        # pre-escalation snapshot, and never a single blended number.
+        $escTxt = if ($res.Escalated) { "escalated=true primary=[plurality=$($res.PluralityVerdict) agreement=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability) min_top_prob=$($res.MinTopProbability)] escalated=[plurality=$($res.EscalatedPluralityVerdict) agreement=$($res.EscalatedAgreementRate) mean_top_prob=$($res.EscalatedMeanTopProbability) min_top_prob=$($res.EscalatedMinTopProbability)]" }
                   elseif ($res.EscalationNote) { "escalated=false ($($res.EscalationNote))" }
                   else { "escalated=false" }
         # REVISION 2, section 10.3 item 3: agreement rate on EVERY row, not only unstable ones.
@@ -802,6 +916,7 @@ if ($CountersOnly) {
 
     "DISAGREEMENTS=$disagreementCount"
     "UNSTABLE=$unstableCount"
+    "CONFLICT=$conflictCount"
     if ($disagreementCount -gt 0) {
         "DISAGREEMENT_LIST (tagged [no-engine-change] but verdict != no_app_change -- for the seat to adjudicate):"
         foreach ($res in ($results | Where-Object { $_.Disagreement -eq 'DISAGREEMENT' })) {
@@ -812,6 +927,12 @@ if ($CountersOnly) {
         "UNSTABLE_LIST (self-consistency agreement rate below 1.0 -- never auto-resolved, for the seat to adjudicate):"
         foreach ($res in ($results | Where-Object { $_.Disagreement -eq 'UNSTABLE' })) {
             "  $($res.Hash.Substring(0,10)) agreement_rate=$($res.AgreementRate) verdicts=[$($res.SampleVerdicts)] $($res.Subject)"
+        }
+    }
+    if ($conflictCount -gt 0) {
+        "CONFLICT_LIST (escalated plurality disagrees with the primary plurality -- the tool does NOT pick a winner, for the seat to adjudicate):"
+        foreach ($res in ($results | Where-Object { $_.Disagreement -eq 'CONFLICT' })) {
+            "  $($res.Hash.Substring(0,10)) primary=[plurality=$($res.PluralityVerdict) agreement=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability)] escalated=[plurality=$($res.EscalatedPluralityVerdict) agreement=$($res.EscalatedAgreementRate) mean_top_prob=$($res.EscalatedMeanTopProbability)] $($res.Subject)"
         }
     }
 }
@@ -841,6 +962,7 @@ $reportLines.Add("| COMMITS_JUDGED | $($results.Count) |")
 if (-not $CountersOnly) {
     $reportLines.Add("| DISAGREEMENTS | $disagreementCount |")
     $reportLines.Add("| UNSTABLE | $unstableCount |")
+    $reportLines.Add("| CONFLICT | $conflictCount |")
 }
 $reportLines.Add("| USAGE_INPUT_TOKENS | $usageInputTokens |")
 $reportLines.Add("| USAGE_OUTPUT_TOKENS | $usageOutputTokens |")
@@ -849,7 +971,7 @@ $reportLines.Add('')
 if ($CountersOnly) {
     $reportLines.Add('## Per-commit detail withheld')
     $reportLines.Add('')
-    $reportLines.Add('Run with `-CountersOnly` over a RESERVED window (docs/harness-shadow-mode-protocol.md section 4a). Per-commit verdicts and every aggregate (DISAGREEMENTS, UNSTABLE) are withheld from both console and this report so the window is not contaminated for its eventual measured first run.')
+    $reportLines.Add('Run with `-CountersOnly` over a RESERVED window (docs/harness-shadow-mode-protocol.md section 4a). Per-commit verdicts and every aggregate (DISAGREEMENTS, UNSTABLE, CONFLICT) are withheld from both console and this report so the window is not contaminated for its eventual measured first run.')
 } else {
     $reportLines.Add('## Per-commit verdicts (residual only -- the two agreeing classes above are counts only, never judged)')
     $reportLines.Add('')
@@ -871,6 +993,17 @@ if ($CountersOnly) {
     foreach ($res in $results) {
         $reportLines.Add("| $($res.Hash.Substring(0,10)) | $($res.Stable) | $($res.SampleCount) | $($res.PluralityVerdict) | $($res.AgreementRate) | $($res.SampleVerdicts) | $($res.SampleTopProbabilities) |")
     }
+    $escRows = @($results | Where-Object { $_.Escalated })
+    if ($escRows.Count -gt 0) {
+        $reportLines.Add('')
+        $reportLines.Add("## Escalation (revision 2 correction, section 10.7 -- escalation sampled `\$ESCALATION_SAMPLES` times, primary plurality never silently overridden)")
+        $reportLines.Add('')
+        $reportLines.Add('| Hash | Status | Primary plurality | Primary agreement | Primary mean top prob | Escalated plurality | Escalated agreement | Escalated mean top prob | Escalated verdicts |')
+        $reportLines.Add('|---|---|---|---|---|---|---|---|---|')
+        foreach ($res in $escRows) {
+            $reportLines.Add("| $($res.Hash.Substring(0,10)) | $($res.Status) | $($res.PluralityVerdict) | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.EscalatedPluralityVerdict) | $($res.EscalatedAgreementRate) | $($res.EscalatedMeanTopProbability) | $($res.EscalatedSampleVerdicts) |")
+        }
+    }
 }
 if ($preEra.Count -gt 0) {
     $reportLines.Add('')
@@ -888,7 +1021,10 @@ Set-Content -Encoding UTF8 -Path $reportFull -Value ($reportLines -join "`r`n")
 "Report written to $OutPath"
 
 # REVISION 2: an UNSTABLE row is, by section 10.3 item 7, never auto-resolved -- so it
-# must not be swallowed into a 0 exit either. Joins `ambiguous` and DISAGREEMENT as the
-# three non-zero conditions.
-$anyBad = @($results | Where-Object { $_.Verdict -eq 'ambiguous' -or $_.Disagreement -eq 'DISAGREEMENT' -or $_.Disagreement -eq 'UNSTABLE' }).Count -gt 0
+# must not be swallowed into a 0 exit either. REVISION 2 CORRECTION (section 10.7 item 2):
+# CONFLICT joins it on the same basis -- an escalated plurality that disagrees with the
+# primary is unresolved by construction (the tool does not pick a winner), so it must not
+# exit 0 either. Four non-zero conditions total: `ambiguous`, DISAGREEMENT, UNSTABLE,
+# CONFLICT.
+$anyBad = @($results | Where-Object { $_.Verdict -eq 'ambiguous' -or $_.Disagreement -eq 'DISAGREEMENT' -or $_.Disagreement -eq 'UNSTABLE' -or $_.Disagreement -eq 'CONFLICT' }).Count -gt 0
 if ($anyBad) { exit 1 } else { exit 0 }
