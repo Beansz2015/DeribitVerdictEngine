@@ -192,6 +192,8 @@ The detector answered `declared_but_contradicted` on **all 5 samples**, `mean_to
 
 ⭐ **What this does NOT overturn:** §4d's ruling that the agreement rate, not a probability band, is the trust GATE. An unstable row is still not to be trusted. What falls is the converse: **a stable row is not thereby trustworthy.** The only thing that caught this one was the seat's hand read, written first. **Nothing in this programme holds a verdict** (§4 finding 2), and this is why.
 
+⛔ **Same day, two more:** `A23b#3164#tauFastSec` and `#tauNormSec` came back `shipped_declared_ok`, STABLE 5/5, on a comment that declares MECHANISM ([`harness-runs/fixture-parser-a20-a23b-run-2026-09-22.md`](harness-runs/fixture-parser-a20-a23b-run-2026-09-22.md)). **Three stable-and-wrong `FP-1` rows in 16 judged today.** ⛔ **And the harness exited 0 on that run**, because it counts `shipped_declared_ok` as a pass — so for this error class the exit code is blind and only the hand baseline sees it.
+
 ---
 
 ## 5. ⛔ What invalidates a first run
