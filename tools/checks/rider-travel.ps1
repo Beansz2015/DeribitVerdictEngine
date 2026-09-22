@@ -28,9 +28,24 @@
       -BaselinePath <path to your own pre-written read, see §4.4>
 
   EXIT CODES (§4.6):
-    0 - every TRAVELLING rider judged arrived or not_a_header_column
-    1 - at least one rider judged missing or ambiguous
-    2 - parse failure, baseline missing, or API failure (D-5, fail loud)
+    0 - every TRAVELLING rider judged arrived or not_a_header_column, every Jev row STABLE
+    1 - at least one rider judged missing or ambiguous, or any Jev row UNSTABLE
+    2 - parse failure, NO_ROTATION, baseline missing or incomplete, or API failure (D-5)
+
+  ============================== REVISION 1 (2026-09-22 UTC) ==============================
+  docs/jev-harnesses-adversarial-review-2026-09-22.md finding 2 (HIGH) and finding 5; trader
+  "go". Made BEFORE the first run, which is this harness's only measurement.
+    RT-R1-1: CODE decides every rider whose column is NAMED (Lands in = `header`, and a
+      backticked identifier before the first "column"/"columns" word). Exact membership in
+      the proposed header; no Jev call. At the 2026-09-22 ledger: 6 of 8 travelling riders.
+    RT-R1-2: the rest go to Jev $Samples times (default 5), a fresh uid each; plurality,
+      agreement rate and top probability on every row; a split vote is UNSTABLE, exit 1.
+    RT-R1-3: RIDER_CANDIDATES printed before the gate, with how each will be decided.
+    RT-R1-4: EXIT_REASON=NO_ROTATION when the proposed header adds no column, so a run
+      made before the rotation cannot spend the riders on an unrotated header.
+    RT-R1-5: item-level refusal (BASELINE_INCOMPLETE) when any travelling rider has no
+      baseline line; -AllowUnbaselinedItems for routine re-runs.
+  ==========================================================================================
 #>
 [CmdletBinding()]
 param(
@@ -38,7 +53,13 @@ param(
     [string]$BeforeRev = 'HEAD',
     [string]$LedgerPath = 'docs/csv-rotation-riders.md',
     [string]$BaselinePath = 'rider-travel-baseline.json',
-    [string]$OutPath = 'rider-travel-report.md'
+    [string]$OutPath = 'rider-travel-report.md',
+    # REVISION 1 (adversarial review finding 2a): self-consistency draws per Jev-judged
+    # rider (docs/harness-shadow-mode-protocol.md section 4b).
+    [int]$Samples = 5,
+    # REVISION 1 (finding 2b): refuse when any travelling rider has no baseline line,
+    # unless this is passed -- for a routine re-run of riders measured once.
+    [switch]$AllowUnbaselinedItems
 )
 
 $ErrorActionPreference = 'Continue'
@@ -184,13 +205,58 @@ if ($others.Count -gt 0) {
 }
 
 # ---------------------------------------------------------------------------------------
+# REVISION 1 (docs/jev-harnesses-adversarial-review-2026-09-22.md finding 5): CODE decides
+# every rider whose column is NAMED. Set membership is exact arithmetic, and the Jev docs'
+# first anti-pattern is asking the model something code can compute. A rider is
+# code-decided when its "Lands in" cell is exactly `header` AND its description names at
+# least one backticked identifier BEFORE its first "column"/"columns" word -- the ledger's
+# own convention (`TriggerMode` column; `VPFRSignal` and `VPFRPoc` columns). Identifiers
+# AFTER that word are prose (RIDER-4 names `DeriveWsHealth`, a method, after "column").
+# Everything else goes to Jev. The extraction is printed per rider, so a wrong parse is
+# visible before anything is judged.
+# ---------------------------------------------------------------------------------------
+function Get-NamedColumns([string]$riderText) {
+    $m = [regex]::Match($riderText, '(?i)\bcolumns?\b')
+    if (-not $m.Success) { return @() }
+    $head = $riderText.Substring(0, $m.Index)
+    return @([regex]::Matches($head, '`([A-Za-z][A-Za-z0-9_]*)`') | ForEach-Object { $_.Groups[1].Value })
+}
+foreach ($r in $travelling) {
+    $named = @()
+    if ($r.LandsIn.Trim() -ieq 'header') { $named = @(Get-NamedColumns $r.Rider) }
+    $r | Add-Member -NotePropertyName NamedColumns -NotePropertyValue $named
+    $r | Add-Member -NotePropertyName DecidedBy -NotePropertyValue $(if ($named.Count -gt 0) { 'CODE' } else { 'JEV' })
+}
+$codeRiders = @($travelling | Where-Object { $_.DecidedBy -eq 'CODE' })
+$jevRiders  = @($travelling | Where-Object { $_.DecidedBy -eq 'JEV' })
+"RIDERS_DECIDED_BY_CODE=$($codeRiders.Count)"
+"RIDERS_JUDGED_BY_JEV=$($jevRiders.Count)"
+
+# REVISION 1 (finding 2d): protocol step 2 -- print the judged candidates, with no
+# judgments, so the seat labels exactly what will be judged, keyed by the IDs shown.
+"RIDER_CANDIDATES (no judgments, for baseline labelling -- key each by the ID shown):"
+foreach ($r in $travelling) {
+    $how = if ($r.DecidedBy -eq 'CODE') { "CODE checks [$($r.NamedColumns -join ', ')] against the proposed header" } else { 'JEV judges it (no column named before the word "column")' }
+    "  $($r.Id)  lands_in=$($r.LandsIn)  -> $how"
+}
+
+# REVISION 1 (finding 2c): a run against a header that adds nothing is not a rotation.
+# Without this, a run made before the rotation -- to "try the tool" -- judges every rider
+# against the unrotated header and spends the one-shot first run on a meaningless window.
+if ($addedCols.Count -eq 0) {
+    "EXIT_REASON=NO_ROTATION"
+    "COLUMNS_ADDED=0 -- -AfterFile '$AfterFile' adds no column over -BeforeRev '$BeforeRev'. Nothing was judged. Point -AfterFile at the PROPOSED rotated AnalysisLogger.vb."
+    exit 2
+}
+
+# ---------------------------------------------------------------------------------------
 # Step 4.4 (D-4): refuse to call the API without an operator-written baseline.
 # ---------------------------------------------------------------------------------------
 $baselineFull = Resolve-RepoPath $BaselinePath
 if (-not (Test-Path $baselineFull)) {
     "EXIT_REASON=BASELINE_MISSING"
-    "No baseline file at '$BaselinePath'. Write your OWN read of each TRAVELLING rider BEFORE running this tool, as JSON, one key per rider ID, values one of arrived|missing|not_a_header_column|unsure. Example:"
-    '{ "RIDER-1": "arrived", "RIDER-2": "not_a_header_column", "RIDER-3": "missing" }'
+    "No baseline file at '$BaselinePath'. Write your OWN read of each RIDER_CANDIDATES item above BEFORE running this tool, as JSON, one key per rider ID exactly as printed, values one of arrived|missing|not_a_header_column|ambiguous|unsure. Example:"
+    '{ "RIDER-1": "not_a_header_column", "RIDER-3": "arrived", "RIDER-4": "missing" }'
     "The whole point of the first run is comparing an independent human read against Jev's; looking first makes that comparison worthless permanently."
     exit 2
 }
@@ -200,12 +266,21 @@ if ($null -ne $baselineRaw) {
     foreach ($p in $baselineRaw.PSObject.Properties) { $baseline[$p.Name] = [string]$p.Value }
 }
 
-# ---------------------------------------------------------------------------------------
-# Step 6 (§4.2, §5): one Jev request per TRAVELLING rider. D-5: any API/parse failure
-# fails loud and stops the run rather than degrading to a partial "all clear".
-# ---------------------------------------------------------------------------------------
+# REVISION 1 (finding 2b): ITEM-level refusal (the fixture-parser FP-D24 pattern). Every
+# travelling rider needs a baseline line -- code-decided ones too, because the baseline is
+# compared against them. A rotation commit edits the ledger, so a rider can appear between
+# the seat's read and the run.
+$unbaselined = @($travelling | Where-Object { -not $baseline.ContainsKey($_.Id) })
+if ($unbaselined.Count -gt 0 -and -not $AllowUnbaselinedItems) {
+    "EXIT_REASON=BASELINE_INCOMPLETE"
+    "UNBASELINED_ITEMS=$($unbaselined.Count) -- no line in '$BaselinePath' for:"
+    foreach ($u in $unbaselined) { "  $($u.Id)" }
+    "Nothing was judged. Add your own read for each rider above. For a routine re-run of riders measured once, pass -AllowUnbaselinedItems."
+    exit 2
+}
+
 $apiKey = $env:TYPESAFE_API_KEY
-if ([string]::IsNullOrWhiteSpace($apiKey)) {
+if ($jevRiders.Count -gt 0 -and [string]::IsNullOrWhiteSpace($apiKey)) {
     "EXIT_REASON=API_FAILED"
     "TYPESAFE_API_KEY is not set in the environment. Load typesafe.local.env first: set -a; . ./typesafe.local.env; set +a"
     exit 2
@@ -218,11 +293,7 @@ $verdictCriteria = @{
     ambiguous            = "The rider's description does not name its column(s) precisely enough to decide arrived vs missing against `all_columns_after`."
 }
 
-$results = New-Object System.Collections.Generic.List[object]
-$apiFailed = $false
-$apiFailMsg = ''
-
-foreach ($r in $travelling) {
+function Invoke-RiderVerdict([string]$apiKeyIn, $r, [string]$uid) {
     $state = @{
         rider = @{
             id          = $r.Id
@@ -232,6 +303,9 @@ foreach ($r in $travelling) {
         }
         columns_added_by_this_rotation = @($addedCols)
         all_columns_after              = @($afterCols)
+        # REVISION 1 (finding 2a): a fresh uid per sample so the samples are independent
+        # draws (docs/harness-shadow-mode-protocol.md section 4b).
+        sample_uid                     = $uid
     }
     $body = @{
         model = 'jev-latest'
@@ -252,27 +326,68 @@ foreach ($r in $travelling) {
             }
         }
     }
-
-    $call = Invoke-Jev $apiKey $body
-    if (-not $call.Ok) {
-        $apiFailed = $true
-        $apiFailMsg = "Jev request failed for $($r.Id): $($call.Error)"
-        break
-    }
-
+    $call = Invoke-Jev $apiKeyIn $body
+    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error } }
     $ans = $call.Response.answers
     # --- TRAP 1 (docs/rider-travel-check-spec.md §0): the verdict comes from the `verdict`
-    # Choice answer ALONE. The two Noul answers below are diagnostics ONLY -- never combine
-    # them with `-and`/`-or` into a derived verdict. This is the one line a reviewer checks.
+    # Choice answer ALONE. The two Noul answers are diagnostics ONLY -- never combined.
     $verdict = $ans.verdict.choice
+    $top = $null
+    if ($ans.verdict.probabilities) {
+        $vals = @($ans.verdict.probabilities.PSObject.Properties | ForEach-Object { [double]$_.Value })
+        if ($vals.Count -gt 0) { $top = ($vals | Measure-Object -Maximum).Maximum }
+    }
+    $usageIn = 0
+    if ($call.Response.usage -and $call.Response.usage.input_tokens) { $usageIn = [int]$call.Response.usage.input_tokens }
+    return @{ Ok = $true; Verdict = $verdict; TopProbability = $top; LandsInHeaderNoul = $ans.lands_in_header.noul; ColumnPresentNoul = $ans.column_present.noul; UsageIn = $usageIn }
+}
 
+# ---------------------------------------------------------------------------------------
+# Step 6 (§4.2, §5). CODE riders: exact membership. JEV riders: $Samples draws each
+# (REVISION 1, finding 2a); plurality, agreement rate and top probability on every row; a
+# split vote is UNSTABLE and never auto-resolved. D-5: any API failure fails loud.
+# ---------------------------------------------------------------------------------------
+$results = New-Object System.Collections.Generic.List[object]
+$apiFailed = $false
+$apiFailMsg = ''
+$usageInputTokens = 0
+
+foreach ($r in $codeRiders) {
+    $absent = @($r.NamedColumns | Where-Object { $afterCols -notcontains $_ })
     $results.Add([PSCustomObject]@{
-        Id                 = $r.Id
-        Verdict            = $verdict
-        VerdictConfidence  = $ans.verdict.confidence
-        LandsInHeaderNoul  = $ans.lands_in_header.noul
-        ColumnPresentNoul  = $ans.column_present.noul
-        Baseline           = if ($baseline.ContainsKey($r.Id)) { $baseline[$r.Id] } else { $null }
+        Id = $r.Id; DecidedBy = 'CODE'
+        Verdict = $(if ($absent.Count -eq 0) { 'arrived' } else { 'missing' })
+        Detail = $(if ($absent.Count -eq 0) { "all of [$($r.NamedColumns -join ', ')] present" } else { "absent: [$($absent -join ', ')]" })
+        AgreementRate = $null; Stable = $true; MeanTopProbability = $null; SampleVerdicts = ''
+        LandsInHeaderNoul = $null; ColumnPresentNoul = $null
+        Baseline = if ($baseline.ContainsKey($r.Id)) { $baseline[$r.Id] } else { $null }
+    })
+}
+
+foreach ($r in $jevRiders) {
+    $draws = New-Object System.Collections.Generic.List[object]
+    for ($i = 0; $i -lt $Samples; $i++) {
+        $uid = "$($r.Id):${i}:$([guid]::NewGuid().ToString('N').Substring(0,8))"
+        $s = Invoke-RiderVerdict $apiKey $r $uid
+        if (-not $s.Ok) { $apiFailed = $true; $apiFailMsg = "Jev request failed for $($r.Id) (sample $($i+1)/$Samples): $($s.Error)"; break }
+        $usageInputTokens += $s.UsageIn
+        $draws.Add($s)
+    }
+    if ($apiFailed) { break }
+    $counts = @{}
+    foreach ($s in $draws) { if (-not $counts.ContainsKey($s.Verdict)) { $counts[$s.Verdict] = 0 }; $counts[$s.Verdict]++ }
+    $plurality = $null; $pc = -1
+    foreach ($s in $draws) { if ($counts[$s.Verdict] -gt $pc) { $pc = $counts[$s.Verdict]; $plurality = $s.Verdict } }
+    $rate = [math]::Round($pc / $draws.Count, 3)
+    $tops = @($draws | Where-Object { $null -ne $_.TopProbability } | ForEach-Object { $_.TopProbability })
+    $results.Add([PSCustomObject]@{
+        Id = $r.Id; DecidedBy = 'JEV'; Verdict = $plurality; Detail = ''
+        AgreementRate = $rate; Stable = ($rate -ge 1.0)
+        MeanTopProbability = $(if ($tops.Count -gt 0) { [math]::Round((($tops | Measure-Object -Average).Average), 3) } else { $null })
+        SampleVerdicts = (@($draws | ForEach-Object { $_.Verdict }) -join ',')
+        LandsInHeaderNoul = [math]::Round((($draws | ForEach-Object { [double]$_.LandsInHeaderNoul } | Measure-Object -Average).Average), 3)
+        ColumnPresentNoul = [math]::Round((($draws | ForEach-Object { [double]$_.ColumnPresentNoul } | Measure-Object -Average).Average), 3)
+        Baseline = if ($baseline.ContainsKey($r.Id)) { $baseline[$r.Id] } else { $null }
     })
 }
 
@@ -287,21 +402,30 @@ if ($apiFailed) {
 # Step 7 (§4.2, §4.6): emit the report and decide the exit code from `verdict` alone.
 # ---------------------------------------------------------------------------------------
 Write-Coverage $ridersInLedger $ridersTravelling $results.Count $beforeCols.Count $afterCols.Count $addedCols.Count $removedCols.Count
+"USAGE_INPUT_TOKENS=$usageInputTokens"
+
+function Get-AgreeText($res) {
+    if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
+    elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
+    elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
+    else { 'DISAGREE' }
+}
 
 "PER_RIDER_RESULTS:"
 foreach ($res in $results) {
-    $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
-             elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
-             elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
-             else { 'DISAGREE' }
-    "  $($res.Id) verdict=$($res.Verdict) (confidence=$([math]::Round([double]$res.VerdictConfidence,2))) baseline=$($res.Baseline) [$agree] lands_in_header_noul=$([math]::Round([double]$res.LandsInHeaderNoul,2)) column_present_noul=$([math]::Round([double]$res.ColumnPresentNoul,2))"
+    $stableTxt = if ($res.Stable) { 'STABLE' } else { 'UNSTABLE' }
+    if ($res.DecidedBy -eq 'CODE') {
+        "  $($res.Id) [CODE] verdict=$($res.Verdict) ($($res.Detail)) baseline=$($res.Baseline) [$(Get-AgreeText $res)]"
+    } else {
+        "  $($res.Id) [JEV $stableTxt] verdict=$($res.Verdict) agreement_rate=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability) verdicts=[$($res.SampleVerdicts)] baseline=$($res.Baseline) [$(Get-AgreeText $res)] lands_in_header_noul=$($res.LandsInHeaderNoul) column_present_noul=$($res.ColumnPresentNoul)"
+    }
 }
 
 # Write the markdown report (§4.1 -OutPath: "where the comparison lands").
 $reportLines = New-Object System.Collections.Generic.List[string]
 $reportLines.Add('# Rider-travel check report')
 $reportLines.Add('')
-$reportLines.Add("Generated by ``tools/checks/rider-travel.ps1`` against ``-BeforeRev $BeforeRev`` / ``-AfterFile $AfterFile``.")
+$reportLines.Add("Generated by ``tools/checks/rider-travel.ps1`` against ``-BeforeRev $BeforeRev`` / ``-AfterFile $AfterFile``, -Samples $Samples.")
 $reportLines.Add('')
 $reportLines.Add('## Coverage')
 $reportLines.Add('')
@@ -309,24 +433,23 @@ $reportLines.Add('| Metric | Value |')
 $reportLines.Add('|---|---|')
 $reportLines.Add("| RIDERS_IN_LEDGER | $ridersInLedger |")
 $reportLines.Add("| RIDERS_TRAVELLING | $ridersTravelling |")
-$reportLines.Add("| RIDERS_JUDGED | $($results.Count) |")
+$reportLines.Add("| RIDERS_DECIDED_BY_CODE | $($codeRiders.Count) |")
+$reportLines.Add("| RIDERS_JUDGED_BY_JEV | $($jevRiders.Count) |")
 $reportLines.Add("| HEADER_COLUMNS_BEFORE | $($beforeCols.Count) |")
 $reportLines.Add("| HEADER_COLUMNS_AFTER | $($afterCols.Count) |")
 $reportLines.Add("| COLUMNS_ADDED | $($addedCols.Count) |")
 $reportLines.Add("| COLUMNS_REMOVED | $($removedCols.Count) |")
+$reportLines.Add("| USAGE_INPUT_TOKENS | $usageInputTokens |")
 $reportLines.Add('')
 if ($addedCols.Count -gt 0) { $reportLines.Add('**Added:** ' + ($addedCols -join ', ')); $reportLines.Add('') }
 if ($removedCols.Count -gt 0) { $reportLines.Add('**Removed:** ' + ($removedCols -join ', ')); $reportLines.Add('') }
 $reportLines.Add('## Per-rider verdicts')
 $reportLines.Add('')
-$reportLines.Add('| ID | Verdict | Confidence | Baseline | Agreement | lands_in_header (noul) | column_present (noul) |')
-$reportLines.Add('|---|---|---|---|---|---|---|')
+$reportLines.Add('| ID | Decided by | Verdict | Detail / sample verdicts | Agreement rate | Mean top prob | Baseline | Agreement |')
+$reportLines.Add('|---|---|---|---|---|---|---|---|')
 foreach ($res in $results) {
-    $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
-             elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
-             elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
-             else { 'DISAGREE' }
-    $reportLines.Add("| $($res.Id) | $($res.Verdict) | $([math]::Round([double]$res.VerdictConfidence,2)) | $($res.Baseline) | $agree | $([math]::Round([double]$res.LandsInHeaderNoul,2)) | $([math]::Round([double]$res.ColumnPresentNoul,2)) |")
+    $d = if ($res.DecidedBy -eq 'CODE') { $res.Detail } else { $res.SampleVerdicts }
+    $reportLines.Add("| $($res.Id) | $($res.DecidedBy) | $($res.Verdict) | $d | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.Baseline) | $(Get-AgreeText $res) |")
 }
 if ($others.Count -gt 0) {
     $reportLines.Add('')
@@ -340,5 +463,7 @@ $reportFull = Resolve-RepoPath $OutPath
 Set-Content -Encoding UTF8 -Path $reportFull -Value ($reportLines -join "`r`n")
 "Report written to $OutPath"
 
-$anyBad = @($results | Where-Object { $_.Verdict -eq 'missing' -or $_.Verdict -eq 'ambiguous' }).Count -gt 0
+# Exit 1 on missing / ambiguous, and (REVISION 1) on any UNSTABLE Jev row -- a split vote is
+# unresolved and must not read as a pass.
+$anyBad = @($results | Where-Object { $_.Verdict -eq 'missing' -or $_.Verdict -eq 'ambiguous' -or -not $_.Stable }).Count -gt 0
 if ($anyBad) { exit 1 } else { exit 0 }

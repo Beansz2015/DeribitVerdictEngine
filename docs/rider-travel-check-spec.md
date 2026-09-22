@@ -208,3 +208,21 @@ The question shape, the single-Choice verdict and the coverage requirement all c
 - **That the ledger is complete.** [`csv-rotation-riders.md`](csv-rotation-riders.md) §4 already records that its own sweep may have missed deferrals phrased another way. This tool checks riders that are ON the list; it cannot find one that was never written down, which is exactly how `RIDER-7` was lost.
 - **That an arrived column is CORRECT** — right name, right position, right value. Presence only.
 - **Settings-touch riders.** Out of the ledger's scope and out of this tool's.
+
+---
+
+## 9. ⭐ REVISION 1, 2026-09-22 (UTC) — after the adversarial review, before the first run
+
+**Source:** [`jev-harnesses-adversarial-review-2026-09-22.md`](jev-harnesses-adversarial-review-2026-09-22.md) findings 2 (HIGH) and 5; trader "go". Decision records `RT-R1-1` to `RT-R1-5` in the script header. **The first run is this harness's only measurement, so every change was made before it.**
+
+| Change | Why | Verified |
+|---|---|---|
+| **`RT-R1-1`** Code decides every rider whose column is named: `Lands in` is `header`, and a backticked identifier sits before the first "column(s)" word. Exact membership in the proposed header | Set membership is exact arithmetic; the Jev docs' first anti-pattern is asking the model what code can compute. **At today's ledger: 6 of 8 travelling riders.** `RIDER-4`'s `DeriveWsHealth` (a method named after the word "column") is correctly NOT taken as a column | Key-stripped run on the real ledger: 6 CODE, 2 JEV, extraction printed per rider |
+| **`RT-R1-2`** The other riders go to Jev 5 times each, fresh `uid`; plurality, agreement rate and top probability on every row; UNSTABLE exits 1 | [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4b requires sampling of every harness; this one predated the rule | Synthetic keyed run: STABLE 5/5 on the one Jev rider |
+| **`RT-R1-3`** `RIDER_CANDIDATES` printed before the gate | Protocol §2 step 2 | As above |
+| **`RT-R1-4`** `EXIT_REASON=NO_ROTATION` when the proposed header adds nothing | A run before the rotation would have spent all 8 riders on an unrotated header | Real ledger, today's header: `NO_ROTATION`, nothing judged |
+| **`RT-R1-5`** Item-level refusal, `BASELINE_INCOMPLETE`; `-AllowUnbaselinedItems` for routine re-runs | A rotation commit edits the ledger, so a rider can appear after the seat's read | Synthetic ledger, partial baseline: refused, the missing rider listed |
+
+⛔ **Caught while testing, before commit:** the local list `$samples` overwrote the `-Samples` parameter, because PowerShell variable names are case-insensitive. The Jev row came back empty while tokens were spent. Renamed to `$draws`; re-run clean. The same trap is recorded for VB in this repo's memory.
+
+⚠ **All keyed tests used a synthetic ledger and header** (`SYN-1`–`SYN-3`, scratch files). **No real rider was judged**; the first run is still unspent. Its baseline now needs 8 lines — the code-decided riders are compared too.
