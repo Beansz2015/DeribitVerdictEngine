@@ -1191,6 +1191,18 @@ Module Program
             .VWAPDevThreshold = 1, .ATRScaleFactor = 1, .ATRRef = 50, .IsLive = True}
     End Function
 
+    ' MECHANISM — fundingBoost:=3 here and fundingBoost:=7 in the tie call below (CLAUDE.md
+    ' fixture-literal provenance rule, declared 2026-09-22). BuildA8Cfg writes the literal to
+    ' cfg.Scoring.FundingHighBoost and zeroes FundingHighPenalty, and BuildA8Indicators sets
+    ' FundingRate -0.0002 < FundingHighNegative. So Step 3 only adds the literal to the long
+    ' side's 4 raw votes, and the short side stays at 11. The asserted pairs ARE functions of
+    ' the literal: 4 + 3 = 7 (SHORT) and 4 + 7 = 11 (the 11/11 tie).
+    '   Both LOAD-BEARING exactly, and under the test's own control. Mutation-checked: both
+    '   calls → 1 FAIL (each got 'SHORT' with eff 5/11).
+    ' Off ever-shipped: scoring.funding_high_boost = {1} in all 82 of the 87 tracked
+    ' settings.json revisions that carry the key (JSON-parsed per revision 2026-09-22). NOT
+    ' SHIPPED BEHAVIOUR, and deriving from cfg would be WRONG: the shipped 1 gives 5/11, and
+    ' this fixture needs two chosen scores, one of them a tie.
     Private Sub A8_DominantSideCascade()
         Dim v = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.None,
                                         BuildA8Norms(), BuildA8Cfg(fundingBoost:=3))
@@ -1199,6 +1211,8 @@ Module Program
               String.Format("expected SHORT with eff 7/11, got '{0}' with eff {1}/{2}",
                             v.Verdict, v.EffectiveLongScore, v.EffectiveShortScore))
 
+        ' MECHANISM — fundingBoost:=7 is LOAD-BEARING exactly (4 + 7 = 11 ties short 11);
+        ' declared and mutation-checked in the block above this Sub.
         Dim vTie = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.None,
                                            BuildA8Norms(), BuildA8Cfg(fundingBoost:=7))
         Check("A8 tie (11/11 above weak → NO TRADE [TIE])",
@@ -1373,6 +1387,12 @@ Module Program
     End Function
 
     Private Sub A12_LinearLevels()
+        ' MECHANISM — fundingBoost:=0 (CLAUDE.md fixture-literal provenance rule, declared
+        ' 2026-09-22). With FundingHighPenalty also 0 in BuildA8Cfg, 0 makes Step 3 score-neutral.
+        ' A12 asserts only AdjustedLongTarget on the legacy-geometry path, so the literal is
+        ' INERT here. Mutation-checked: 0 → 1 (the shipped value), 0 → 7 (A8's tie boost) and
+        ' 0 → 20 each PASS. An inert value asserts nothing, so it cannot be SHIPPED BEHAVIOUR.
+        ' Off ever-shipped: scoring.funding_high_boost = {1} (82 of 87 revisions carry the key).
         Dim cfg = BuildA8Cfg(fundingBoost:=0)
         cfg.Scoring.StructuralLevels.Enabled = False   ' legacy-geometry pin (B4b rollback path)
         cfg.Scoring.AtrTargetMultiplier = 2.0          ' pre-B4b multipliers, pinned
@@ -1422,6 +1442,16 @@ Module Program
         ' [B4b] Runs on the live geometry (structural-first enabled, fallback ×1.75 —
         ' the fixtures carry no swing/HVN levels except A13c, so the placed target is
         ' the ATR fallback). The gate now evaluates the PLACED target from Step 5b.
+        ' MECHANISM — fundingBoost:=0 here and on cfgLow below (CLAUDE.md fixture-literal
+        ' provenance rule, declared 2026-09-22). With FundingHighPenalty also 0 in BuildA8Cfg,
+        ' 0 makes Step 3 score-neutral: the long side keeps its 4 raw votes against 11 short, so
+        ' the verdict is the directional SHORT that the min-move gate vetoes or lets stand.
+        ' LOAD-BEARING only as an upper edge. Mutation-checked: 0 → 1 (the shipped value) PASSES
+        ' on both calls; 0 → 7 FAILS A13a/b/c (this cfg) and A13d (cfgLow), each with 'NO TRADE
+        ' [TIE]' / FLOW_UNCONFIRMED — a tie is not a directional verdict, and the gate did not fire.
+        ' NOT SHIPPED BEHAVIOUR: the fixture cannot tell 0 from the shipped 1, so a cfg read
+        ' would assert nothing more and would tie a gate test to a funding knob. Off
+        ' ever-shipped: scoring.funding_high_boost = {1} (82 of 87 revisions carry the key).
         Dim cfg = BuildA8Cfg(fundingBoost:=0)   ' SHORT dominant; floor = POCO default 0.0008
 
         ' A13a — low ATR: fallback short target 13×1.75=22.75 < floor 49.6 → gate fires.
@@ -1454,6 +1484,8 @@ Module Program
         ' which collapses the floor onto the pure round-trip fee 0.0003 (18.6) — the same
         ' number this fixture has always pinned. A13a's 22.75-pt target now clears → the
         ' shared resolver drives the gate (hot-reloadable in-app via the SETTINGS & TOOLS row).
+        ' MECHANISM — fundingBoost:=0 keeps SHORT directional (upper edge: 7 FAILS A13d);
+        ' declared and mutation-checked at the top of this Sub.
         Dim cfgLow = BuildA8Cfg(fundingBoost:=0)
         cfgLow.Scoring.TradeCosts.MinNetMovePct = 0.0
         Dim vEdit = ScoringEngine.Calculate(BuildGateIndicators(atr:=13, price:=62000),
@@ -1542,6 +1574,12 @@ Module Program
         Dim atr1m As Double = IndicatorEngine.CalcATR(FlatRangeCandles(30, 62000, 13), 7)
         Dim atr3m As Double = IndicatorEngine.CalcATR(FlatRangeCandles(30, 62000, 32), 7)
 
+        ' MECHANISM — fundingBoost:=0 (CLAUDE.md fixture-literal provenance rule, declared
+        ' 2026-09-22). With FundingHighPenalty also 0 in BuildA8Cfg, 0 makes Step 3 score-neutral,
+        ' so both runs reach the directional SHORT that the min-move gate acts on. LOAD-BEARING
+        ' only as an upper edge. Mutation-checked: 0 → 1 (the shipped value) PASSES; 0 → 7 FAILS
+        ' (both runs 'NO TRADE [TIE]'). NOT SHIPPED BEHAVIOUR: the fixture cannot tell 0 from the
+        ' shipped 1. Off ever-shipped: scoring.funding_high_boost = {1} (82 of 87 revisions).
         Dim cfg = BuildA8Cfg(fundingBoost:=0)
         Dim vLow = ScoringEngine.Calculate(BuildGateIndicators(atr1m, 62000),
                                            PositionState.None, BuildA8Norms(), cfg)
@@ -2264,6 +2302,12 @@ Module Program
     ' declared LONG position. The A8 indicators carry all four adverse signals
     ' (MicroCVD BEAR_ACCEL / OFI SELL / TFI SELL / CVD FALLING<0), so Layer 1 fires
     ' and the exact terse string must match the pre-refactor output.
+    ' MECHANISM — fundingBoost:=0 (CLAUDE.md fixture-literal provenance rule, declared
+    ' 2026-09-22). 0 makes Step 3 score-neutral, but A17g asserts only the HoldStatus string,
+    ' which names the four microstructure signals, so the literal is INERT here.
+    ' Mutation-checked: 0 → 1 (the shipped value), 0 → 7 and 0 → 20 each PASS. An inert value
+    ' asserts nothing, so it cannot be SHIPPED BEHAVIOUR. Off ever-shipped:
+    ' scoring.funding_high_boost = {1} (82 of 87 tracked settings.json revisions carry the key).
     Private Sub A17g_CalcHoldStatusByteIdentical()
         Dim v = ScoringEngine.Calculate(BuildA8Indicators(), PositionState.InLong,
                                         BuildA8Norms(), BuildA8Cfg(fundingBoost:=0))
@@ -3366,10 +3410,24 @@ Module Program
     End Function
 
     Private Sub A25a_OfiMomentumRetireByteIdentical()
+        ' MECHANISM — fundingBoost:=3 on cfgA, cfgB and cfgC (CLAUDE.md fixture-literal provenance
+        ' rule, declared 2026-09-22). It is A8's first-call boost (long 4 + 3 = 7 against short
+        ' 11), carried over with the A8 harness; A25a asserts the OFI modifier, not a funding value.
+        '   cfgA / cfgB — LOAD-BEARING only as a PAIR. The first check compares vA with vB on the
+        '     long score, so the two must carry the same boost, but any shared value serves.
+        '     Mutation-checked: cfgA alone 3 → 0 FAILS (A 4/11 against B 7/11); all three → 1
+        '     PASSES.
+        '   cfgC — INERT. Its check reads ShortScore and the OFI note, and Step 3 adds the boost
+        '     to the long side only. Mutation-checked: cfgC alone 3 → 0 PASSES.
+        ' NOT SHIPPED BEHAVIOUR: the pair cannot tell 3 from the shipped 1, so a cfg read would
+        ' assert nothing more. Off ever-shipped: scoring.funding_high_boost = {1} (82 of 87 tracked
+        ' settings.json revisions carry the key).
         Dim rA = BuildA8Indicators() : rA.OFIMomentum = "FALLING"
         Dim cfgA = BuildA8Cfg(fundingBoost:=3)            ' MomentumEnabled=False already
         Dim vA = ScoringEngine.Calculate(rA, PositionState.None, BuildA8Norms(), cfgA)
 
+        ' MECHANISM — cfgB's fundingBoost:=3 must equal cfgA's (the pair); declared and
+        ' mutation-checked at the top of this Sub.
         Dim rB = BuildA8Indicators()                       ' OFIMomentum FLAT
         Dim cfgB = BuildA8Cfg(fundingBoost:=3)
         cfgB.Indicators.OFI.MomentumEnabled = True
@@ -3386,6 +3444,8 @@ Module Program
                             vA.Verdict, vA.EffectiveLongScore, vA.EffectiveShortScore, OfiNote(vA),
                             vB.Verdict, vB.EffectiveLongScore, vB.EffectiveShortScore))
 
+        ' MECHANISM — cfgC's fundingBoost:=3 is INERT (3 → 0 PASSES); declared and
+        ' mutation-checked at the top of this Sub.
         Dim rC = BuildA8Indicators() : rC.OFIMomentum = "FALLING"
         Dim cfgC = BuildA8Cfg(fundingBoost:=3)
         cfgC.Indicators.OFI.MomentumEnabled = True
@@ -3550,6 +3610,14 @@ Module Program
     ' dist 60 (≤ bound 70) PLACES → the directional verdict STANDS. Same r with
     ' structural levels disabled gates — the difference is placed geometry, and
     ' Step 5b's copy-out (Adjusted*/TargetCapReason*) carries the placed values.
+    ' MECHANISM — fundingBoost:=0 on cfg and cfgOff (CLAUDE.md fixture-literal provenance rule,
+    ' declared 2026-09-22). With FundingHighPenalty also 0 in BuildA8Cfg, 0 makes Step 3
+    ' score-neutral: long keeps 4 raw votes against 11 short, so both runs carry the
+    ' directional SHORT that the min-move gate acts on. LOAD-BEARING only as an upper edge.
+    ' Mutation-checked: both → 1 (the shipped value) PASS; 0 → 7 FAILS each check (cfg → the
+    ' first, cfgOff → the second), both with 'NO TRADE [TIE]' / FLOW_UNCONFIRMED. NOT SHIPPED
+    ' BEHAVIOUR: the fixture cannot tell 0 from the shipped 1. Off ever-shipped:
+    ' scoring.funding_high_boost = {1} (82 of 87 tracked settings.json revisions carry the key).
     Private Sub A26d_MinMoveGateReadsPlacedTarget()
         Dim cfg = BuildA8Cfg(fundingBoost:=0)              ' SHORT dominant; floor 0.0008
         Dim rGate = BuildGateIndicators(atr:=20, price:=62000)
@@ -3564,6 +3632,8 @@ Module Program
                             vStand.Verdict, vStand.VerdictContext,
                             vStand.AdjustedShortTarget, vStand.TargetCapReasonShort))
 
+        ' MECHANISM — fundingBoost:=0 keeps SHORT directional (upper edge: 7 FAILS this check);
+        ' declared and mutation-checked in the block above this Sub.
         Dim cfgOff = BuildA8Cfg(fundingBoost:=0)
         cfgOff.Scoring.StructuralLevels.Enabled = False
         Dim rGate2 = BuildGateIndicators(atr:=20, price:=62000)
@@ -3823,6 +3893,16 @@ Module Program
     ''' <summary>A8 cascade cfg with the aggressor-velocity modifier armed (scoring on).</summary>
     Private Function BuildBurstCfg(Optional upgradeBonus As Integer = 1,
                                    Optional contraPenalty As Integer = 1) As EngineSettings
+        ' MECHANISM — fundingBoost:=0 (CLAUDE.md fixture-literal provenance rule, declared
+        ' 2026-09-22). With FundingHighPenalty also 0 in BuildA8Cfg, 0 makes Step 3 score-neutral,
+        ' so the long side keeps its 4 raw votes. Step 3 adds the boost to the long side only.
+        '   A28a — LOAD-BEARING only as an upper edge: its Verdict = "SHORT" terms need long
+        '     below short at ss 10, 11 and 12.
+        '   A28b / A28c — INERT: they assert EffectiveShortScore only.
+        ' Mutation-checked: 0 → 1 (the shipped value) PASSES A28a/b/c; 0 → 7 FAILS A28a
+        ' (normal=11/NO TRADE [TIE], down=10/LONG) while A28b and A28c PASS. NOT SHIPPED
+        ' BEHAVIOUR: no A28 check can tell 0 from the shipped 1. Off ever-shipped:
+        ' scoring.funding_high_boost = {1} (82 of 87 tracked settings.json revisions carry the key).
         Dim cfg = BuildA8Cfg(fundingBoost:=0)   ' RangeBound cascade; Pass2b/2c/MTF/OFImom/Step3b off
         cfg.Indicators.AggressorVelocity.ScoringEnabled = True   ' explicit (POCO default is also True)
         cfg.Indicators.AggressorVelocity.UpgradeBonus  = upgradeBonus
@@ -3863,6 +3943,16 @@ Module Program
 
     ' -- A28b: same-side upgrade caps at regimeMax (Math.Min site) ------------------
     Private Sub A28b_TfiBurstUpgradeCapsAtRegimeMax()
+        ' MECHANISM — upgradeBonus:=20 (CLAUDE.md fixture-literal provenance rule, declared
+        ' 2026-09-22). BuildBurstCfg writes it to cfg.Indicators.AggressorVelocity.UpgradeBonus.
+        ' The short score is 10 at the TFI site, and the check pins 18 = regimeMax.
+        '   LOAD-BEARING as a LOWER edge. Mutation-checked: 20 → 7 FAILS (got 17); 20 → 8 PASSES.
+        '   ⚠ At 8 the sum is exactly 18, so the Math.Min has nothing to clamp (arithmetic, not a
+        '   mutation). Only a value above 8 makes the cap do work; 20 gives 30 → 18.
+        ' Off ever-shipped: indicators.aggressor_velocity.upgrade_bonus = {1} in all 26 of the
+        ' 87 tracked settings.json revisions that carry the block (JSON-parsed per revision
+        ' 2026-09-22). NOT SHIPPED BEHAVIOUR, and deriving from cfg would be WRONG: the shipped 1
+        ' gives 11, and this fixture exists to reach the cap.
         Dim cfg = BuildBurstCfg(upgradeBonus:=20)   ' absurd bonus to force the cap
         ' Neutralise the post-TFI MicroCVD short vote so EffectiveShortScore isolates the
         ' capped Step-2 value: short = 10 at the TFI site, +20 → min(30, regimeMax 18) = 18.
@@ -5919,11 +6009,20 @@ Module Program
         ' gate stands (60 > floor 49.6). With −40% target buffer: placed' = 62000 + 60×0.60
         ' = 62036 → dist 36 < 49.6 ⇒ BELOW_MIN_MOVE. This proves the buffered price flows
         ' through Step 5b onto Adjusted* and the gate reads it.
+        ' MECHANISM — fundingBoost:=0 here and on cfgGateBuf below (CLAUDE.md fixture-literal
+        ' provenance rule, declared 2026-09-22). With FundingHighPenalty also 0 in BuildA8Cfg, 0
+        ' makes Step 3 score-neutral, so both runs carry the directional SHORT that the gate acts
+        ' on. LOAD-BEARING only as an upper edge. Mutation-checked: both → 1 (the shipped value)
+        ' PASS; cfgStandGate alone 0 → 7 FAILS (stand='NO TRADE [TIE]'); cfgGateBuf alone 0 → 7
+        ' FAILS (gated='NO TRADE [TIE]'). NOT SHIPPED BEHAVIOUR: the check cannot tell 0 from the
+        ' shipped 1. Off ever-shipped: scoring.funding_high_boost = {1} (82 of 87 revisions).
         Dim cfgStandGate = BuildA8Cfg(fundingBoost:=0)
         Dim rGate1 = BuildGateIndicators(atr:=20, price:=62000)
         rGate1.SwingTargetShort = 61940.0                  ' dist 60 ≤ bound 70 → places
         Dim vStand = ScoringEngine.Calculate(rGate1, PositionState.None, BuildA8Norms(), cfgStandGate)
 
+        ' MECHANISM — fundingBoost:=0 keeps SHORT directional (upper edge: 7 FAILS); declared
+        ' and mutation-checked in the (c) block above.
         Dim cfgGateBuf = BuildA8Cfg(fundingBoost:=0)
         cfgGateBuf.Scoring.StructuralLevels.TargetBufferPct = -40.0
         Dim rGate2 = BuildGateIndicators(atr:=20, price:=62000)
@@ -6758,9 +6857,20 @@ Module Program
     ' default cfg reaches the same floor by a different composition (0.0003 + 0.0005), so
     ' identical engine output across the A13 gate case set — including a BELOW_MIN_MOVE
     ' case — proves the restructure is behaviour-neutral at ship.
+    ' MECHANISM — fundingBoost:=0 on cfgV62 and cfgV61 (CLAUDE.md fixture-literal provenance
+    ' rule, declared 2026-09-22). With FundingHighPenalty also 0 in BuildA8Cfg, 0 makes Step 3
+    ' score-neutral, so every case carries the directional SHORT: the A13a case must reach
+    ' BELOW_MIN_MOVE (sawBelowMin), and the v61/v62 verdicts must match. LOAD-BEARING only as
+    ' an upper edge. Mutation-checked: both → 1 (the shipped value) PASS; cfgV62 alone 0 → 7
+    ' FAILS (v62 'NO TRADE [TIE]', sawBelowMin=False); cfgV61 alone 0 → 7 FAILS (v61 'NO TRADE
+    ' [TIE]' against v62 'NO TRADE'/BELOW_MIN_MOVE). NOT SHIPPED BEHAVIOUR: the check cannot tell
+    ' 0 from the shipped 1. Off ever-shipped: scoring.funding_high_boost = {1} (82 of 87 tracked
+    ' settings.json revisions carry the key).
     Private Sub A40b_DefaultsByteIdenticalToV61Floor()
         Dim cfgV62 = BuildA8Cfg(fundingBoost:=0)     ' POCO defaults ⇒ composed 0.0008
 
+        ' MECHANISM — fundingBoost:=0 keeps SHORT directional (upper edge: 7 FAILS); declared
+        ' and mutation-checked in the block above this Sub.
         Dim cfgV61 = BuildA8Cfg(fundingBoost:=0)     ' the retired flat-key semantics
         cfgV61.Scoring.TradeCosts.MakerFeeBps = 0.0
         cfgV61.Scoring.TradeCosts.TakerFeeBps = 0.0
@@ -6831,6 +6941,14 @@ Module Program
     ' (the same live-network boundary that keeps A16–A31 stubbed), so what is pinned here
     ' is the input the trigger consumes: the composed delta produced by a knob turn is
     ' non-zero and comfortably exceeds that epsilon.
+    ' MECHANISM — fundingBoost:=0 on cfgBase and cfgRaised (CLAUDE.md fixture-literal provenance
+    ' rule, declared 2026-09-22). With FundingHighPenalty also 0 in BuildA8Cfg, 0 makes Step 3
+    ' score-neutral, so both runs carry the directional SHORT that the gate stands or vetoes.
+    ' LOAD-BEARING only as an upper edge. Mutation-checked: both → 1 (the shipped value) PASS;
+    ' cfgBase alone 0 → 7 FAILS (base='NO TRADE [TIE]'); cfgRaised alone 0 → 7 FAILS
+    ' (raised='NO TRADE [TIE]'). NOT SHIPPED BEHAVIOUR: the check cannot tell 0 from the shipped
+    ' 1. Off ever-shipped: scoring.funding_high_boost = {1} (82 of 87 tracked settings.json
+    ' revisions carry the key).
     Private Sub A40c_KnobChangeMovesTheGate()
         Dim cfgBase = BuildA8Cfg(fundingBoost:=0)
         Dim vBase = ScoringEngine.Calculate(BuildGateIndicators(atr:=30, price:=62000),
@@ -6838,6 +6956,8 @@ Module Program
         Dim okBaseStands As Boolean = Not vBase.Verdict.StartsWith("NO TRADE") AndAlso
                                       vBase.VerdictContext <> "BELOW_MIN_MOVE"
 
+        ' MECHANISM — fundingBoost:=0 keeps SHORT directional (upper edge: 7 FAILS); declared
+        ' and mutation-checked in the block above this Sub.
         Dim cfgRaised = BuildA8Cfg(fundingBoost:=0)
         cfgRaised.Scoring.TradeCosts.MinNetMovePct = 0.0010
         Dim vRaised = ScoringEngine.Calculate(BuildGateIndicators(atr:=30, price:=62000),
@@ -7232,6 +7352,12 @@ Module Program
         ' through the REAL Calculate() (byte-identity to a run with pivot=0). The
         ' pivot at 62050 would be the closest qualifying candidate under NEAREST +
         ' the ladder-first pick under the flag; here it must NOT alter the output.
+        ' MECHANISM — fundingBoost:=0 (CLAUDE.md fixture-literal provenance rule, declared
+        ' 2026-09-22). 0 makes Step 3 score-neutral, but both runs share cfgReal and ok7 only
+        ' compares them with each other, so the literal is INERT here. Mutation-checked: 0 → 1
+        ' (the shipped value), 0 → 7 and 0 → 20 each PASS. An inert value asserts nothing, so it
+        ' cannot be SHIPPED BEHAVIOUR. Off ever-shipped: scoring.funding_high_boost = {1} (82 of
+        ' 87 tracked settings.json revisions carry the key).
         Dim cfgReal = BuildA8Cfg(fundingBoost:=0)
         Dim rReal0 = BuildGateIndicators(atr:=20, price:=62000)
         rReal0.SwingTargetShort = 61940.0
@@ -7604,6 +7730,12 @@ Module Program
     ' OI NEUTRAL, absorption NONE); once with those same fields wiped to POCO
     ' defaults. The verdict + effective scores must be IDENTICAL — the muted signals
     ' contribute zero, which is the whole D2 contract.
+    ' MECHANISM — fundingBoost:=3 (CLAUDE.md fixture-literal provenance rule, declared
+    ' 2026-09-22). It is A8's first-call boost, carried over with the A8 harness. Both runs share
+    ' this one cfg and the check only compares them with each other, so the literal is INERT.
+    ' Mutation-checked: 3 → 0, 3 → 1 (the shipped value) and 3 → 7 each PASS. An inert value
+    ' asserts nothing, so it cannot be SHIPPED BEHAVIOUR. Off ever-shipped:
+    ' scoring.funding_high_boost = {1} (82 of 87 tracked settings.json revisions carry the key).
     Private Sub A43d_MutedVoteInertness()
         Dim cfg = BuildA8Cfg(fundingBoost:=3)
         Dim norms = BuildA8Norms()
@@ -7687,6 +7819,12 @@ Module Program
             Dim v As New VerdictResult() With {.Verdict = "NO TRADE", .Confidence = "LOW", .MaxScore = 18}
             Dim r = BuildA8Indicators()   ' any populated fixture will do; header shape doesn't depend on values
             r.ATR = 50
+            ' MECHANISM — fundingBoost:=0 (CLAUDE.md fixture-literal provenance rule, declared
+            ' 2026-09-22). The cfg only feeds WriteRow; A43e asserts the header, the "BACKTEST-"
+            ' InstanceId and the SignalId step, so the literal is INERT. Mutation-checked: 0 → 1
+            ' (the shipped value), 0 → 7 and 0 → 20 each PASS. An inert value asserts nothing, so
+            ' it cannot be SHIPPED BEHAVIOUR. Off ever-shipped: scoring.funding_high_boost = {1}
+            ' (82 of 87 tracked settings.json revisions carry the key).
             Dim cfg = BuildA8Cfg(fundingBoost:=0)
             writer.WriteRow(r, v, cfg, New DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc))
             writer.WriteRow(r, v, cfg, New DateTime(2026, 7, 30, 12, 1, 0, DateTimeKind.Utc))
