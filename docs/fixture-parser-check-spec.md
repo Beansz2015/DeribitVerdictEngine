@@ -183,6 +183,62 @@ MATCHED_ZERO_KEYS=90     SITES_WITH_PROVENANCE_COMMENT=15   SITES_JUDGED=15
 
 ---
 
+## 7. ⭐⭐ REVISION 1, 2026-09-21 (UTC) — three trader rulings, and a correction to §5a
+
+**Supersedes `FP-D2` and §5a's diagnosis. §0's traps, §2's corrected counts and §4's mechanics stand.**
+
+### 7.1 ⛔ Correcting §5a before the rulings
+
+**§5a said "90 of 118 literals match NO settings key, so 76% can never be judged" and called the matcher the binding constraint. That overstates it, and the larger gap was mine.**
+
+Measured: **only 43 of the 118 passes (22 of 41 parameters) are plausibly settings-derived.** The other 75 are **fixture inputs** — `price:=62000` is a BTC price, `lr` a learning rate, `epochs:=200` an iteration count, `nowUtcMs` a clock.
+
+⛔ **`CLAUDE.md`'s rule governs a *"settings-derived THRESHOLD"*. This spec dropped that scoping word and treated every named-argument literal as a candidate.** So most of the 90 are correctly unmatched. **The matcher's real miss is about 15 of 43 in-scope passes, not 90 of 118** — weaker than wanted, not broken.
+
+⚠ **Recorded because it is the second time in one session the seat called a one-sided number a binding constraint.** The first was claiming the commit walker's `tools/` exclusion was wrong; measuring the other direction refuted it ([`commit-walker-check-spec.md`](commit-walker-check-spec.md) §9.1).
+
+### 7.2 The rulings — all three as recommended, trader, 2026-09-21 (UTC)
+
+| # | Question | Ruled |
+|---|---|---|
+| `FP-Q1` | What is in scope for the rule? | **(b)** Scope in code, then **Jev adjudicates** *"is this parameter a settings-derived threshold, or a fixture input?"*. Name matching alone both over-matches (`atr:=20` hits the ATR block but is an input) and under-matches |
+| `FP-Q2` | How far does one comment block extend? | **(b) Until the next blank line.** ⛔ Current behaviour — immediately-following statement only — **silently drops** `A6_ObvNormalisation`'s second `CalcOBV` call and its two literals. A silent hole is the class this repo rejects |
+| `FP-Q3` | What resolves an ambiguous parameter name? | **(b) Read the PRODUCTION call site**, and the called method's signature where needed. ⛔ **(c), letting Jev pick from a shortlist, was rejected on MECHANISM not cost:** the parameter-to-key mapping is a fact in the source, and `docs.typesafe.ai/model-jaggedness/jev-1.13.md` names *"asking the model something code can compute exactly"* as its first anti-pattern |
+
+### 7.3 `FP-Q3` is buildable — three shapes, all mechanical
+
+**Verified against the tree before speccing:**
+
+| Production call site | Shape | How the mapping is derived |
+|---|---|---|
+| `UI/MainForm_Analysis.vb:447` `CalcTFI` | `tfiWindowSize:=cfg.Indicators.TFI.WindowSize` | **Named — parameter to cfg path directly** |
+| `UI/MainForm_Analysis.vb:409` `CalcOFI` | `buyDominantRatio:=ofiCfg.BuyDominantRatio` | Named via a **local alias**; resolve `ofiCfg` back to its cfg path, one hop |
+| `UI/MainForm_Analysis.vb:549` `CalcOBV` | `cfg.Indicators.OBV.TrendGate, …` — **positional, no `:=`** | Read the method signature from `Core/Indicators_*.vb`, map **position to parameter name**, then to the cfg path |
+
+⭐⭐ **The production call site is the right ground truth, and it makes the harness self-correcting: if production changes which key feeds a parameter, the mapping follows automatically.** A hand-kept table would be a fourth copy that drifts — the shape `CLAUDE.md` rejects elsewhere.
+
+⚠ **A method with NO production call site has no derivable mapping.** Report those as their own class; never guess one.
+
+### 7.4 What to build
+
+1. **Mapping table, derived** (`FP-Q3`): for each method a fixture calls with a literal, locate its production call site(s), resolve named / aliased / positional forms, and emit `parameter → cfg path`. **Report methods with no production call site separately.**
+2. **Scope filter** (`FP-Q1`): a parameter with a derived cfg path is in scope. One with none goes to Jev — *threshold or input?* — and only the thresholds join the residual.
+3. **Comment extent** (`FP-Q2`): a block covers every statement down to the next blank line. **Print how many sites gained coverage**; `A6_ObvNormalisation`'s second call must appear.
+4. Everything else in §4 unchanged, including self-consistency at 5 samples and the baseline refusal.
+
+### 7.5 Acceptance
+
+1. The derived mapping resolves all three §7.3 shapes. **Paste the resolved `parameter → cfg path` for `CalcTFI`, `CalcOFI` and `CalcOBV`** — named, aliased, positional.
+2. Methods with no production call site are reported in their own class, not guessed.
+3. `FP-Q2`: `A6_ObvNormalisation`'s **second** `CalcOBV` call appears in the population. Show the before and after site count.
+4. `FP-Q1`: the in-scope count lands near **43**, not 118. `price`, `epochs`, `lr` and `nowUtcMs` must NOT be in scope.
+5. ⛔ **`atr:=20` must be ruled OUT of scope** despite name-matching the ATR block. It is the worked over-match case.
+6. Self-consistency at 5 samples, agreement on every row. Verdict reads the `verdict` Choice alone.
+7. ⛔⛔ **DO NOT WRITE A BASELINE.** [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4c: the seat writes it. **Run the tool to the point it refuses, paste that, and stop.** ⭐ **The newly-opened sites are the clean population this programme has not yet had — reporting one verdict on them spends it.**
+8. Counters, tokens and timings only. **No verdicts, no aggregates.**
+
+---
+
 ## 6. What this spec does NOT verify
 
 - **That the parameter-to-key matching is right.** `FP-D2` is a naming convention, not a contract. A wrong match produces a confidently wrong value set.
