@@ -793,6 +793,29 @@ foreach ($k in $headFlat.Keys) {
 #                                             not match any HEAD settings.json leaf
 #   NO_SIGNATURE_FOUND / CALL_PARSE_FAILED / PARAM_NOT_IN_SIGNATURE /
 #   PARAM_NOT_PASSED_AT_CALL_SITE         -- mechanical parse failures, reported not guessed
+# ---------------------------------------------------------------------------------------
+# [2026-09-22] FP-D13 SUPERSEDED -- trader-approved. It read `$site = $sites[0]`, "first
+# found wins", and that is WRONG whenever the first-found call is an INTERNAL FORWARDING
+# call rather than a cfg source.
+#
+# MEASURED INSTANCE, not hypothetical. ClassifySpread has three production call sites.
+# The first found, Core/Indicators_OrderFlow.vb:663, sits inside ApplySpread and forwards
+# ApplySpread's OWN `wide`/`tight` parameters -- so it resolves NOT_CFG_SOURCED and the
+# lookup stopped there. But tools/ops/SwingFallbackRead/MediumTierRescore.vb:767 passes
+# `cfg.Indicators.Spread.WideThresholdBps` positionally and resolves cleanly. Under
+# FP-D13 both wideThresholdBps and tightThresholdBps silently dropped out of scope,
+# despite indicators.spread.wide_threshold_bps being a real settings key.
+#
+# NOW: try EVERY production call site and return the FIRST that resolves to a real
+# settings key. A forwarding call can no longer mask a cfg-sourced one. When NO site
+# resolves, the FIRST site's failure class is returned unchanged, so the diagnostic for a
+# genuinely non-cfg-sourced parameter reads exactly as it did before.
+#
+# ⚠ Ordering is still deterministic (file-list then line), so the answer is stable; what
+# changed is that a non-resolving site no longer ends the search. The build's own note
+# that FP-D13 was "never exercised against a real multi-site disagreement" was wrong --
+# it was exercised, and it lost.
+# ---------------------------------------------------------------------------------------
 function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
     if (-not $calleeName) {
         return [PSCustomObject]@{ Class = 'NO_CALLEE_IDENTIFIED'; ResolvedKey = $null; Shape = $null; ProdFile = $null; ProdLine = $null; ResolvedExpr = $null }
@@ -801,7 +824,20 @@ function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
     if ($sites.Count -eq 0) {
         return [PSCustomObject]@{ Class = 'NO_PRODUCTION_CALL_SITE'; ResolvedKey = $null; Shape = $null; ProdFile = $null; ProdLine = $null; ResolvedExpr = $null }
     }
-    $site = $sites[0]   # FP-D13: first found, deterministic file-list-then-line order
+    $firstFailure = $null
+    foreach ($s in $sites) {
+        $attempt = Resolve-FpQ3MappingAtSite $s $calleeName $paramName
+        if ($attempt.ResolvedKey) { return $attempt }
+        if ($null -eq $firstFailure) { $firstFailure = $attempt }
+    }
+    return $firstFailure
+}
+
+# [2026-09-22] The PER-SITE resolver. Was the whole of Resolve-FpQ3Mapping, which took
+# $sites[0] under FP-D13 ("first found wins"). That is now superseded -- see the wrapper
+# immediately above for why and for the measured instance. This function's body is
+# UNCHANGED apart from receiving $site instead of choosing it.
+function Resolve-FpQ3MappingAtSite($site, [string]$calleeName, [string]$paramName) {
     $sigNames = Get-MethodSignatureParams $calleeName
     if ($null -eq $sigNames -or $sigNames.Count -eq 0) {
         return [PSCustomObject]@{ Class = 'NO_SIGNATURE_FOUND'; ResolvedKey = $null; Shape = $null; ProdFile = $site.File; ProdLine = $site.Line; ResolvedExpr = $null }
