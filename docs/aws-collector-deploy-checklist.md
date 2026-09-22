@@ -325,6 +325,49 @@ The box owes nothing at end-of-life beyond a final copy-back of `analysis_log.cs
 
 ⚠ **The v64→v65 edge is a SCORING boundary.** ASIA rows under a v64 id carry an *unarmed* TFI burst vote; ASIA rows under a v65 id carry an armed one, and the two are byte-identical in shape. **Any ASIA read spanning 2026-08-01/02 must split on this table**, or the D3 watch reads its own contamination.
 
+### 5c. ⭐⭐ FIRST `ws_feed.log` READ — 2026-09-22 (UTC). It sees four reconnects that §5b's instrument CANNOT
+
+**The 2026-09-22 06:00 UTC scheduled check, run 8 h late at 14:05 UTC** ([`seat-handover-2026-09-21.md`](seat-handover-2026-09-21.md) §0). ⭐ **First read of `ws_feed.log` since it was built and deployed 2026-09-21 15:38.**
+
+⛔ **The check as written could not be completed by `collector.ps1 status`.** The handover says each check reads `ws_feed.log`; `status` never displays it. It is in `$FetchFiles` ([`../tools/ops/collector.ps1:132`](../tools/ops/collector.ps1)), so **only `fetch` retrieves it**. Fix the handover's wording, or surface it in `status`.
+
+**Health, instance `ee159d03…`, 22.5 h since the WPAD recovery:**
+
+| Criterion | Reading | Verdict |
+|---|---|---|
+| Threads | **12** | ✅ band is ~10–20; the 2026-09-18 leak reached 11,630 in four hours |
+| `analysis_log.csv` | last row 14:10:01, gap **0.7 min**, 16,075 rows | ✅ advancing |
+| `ws_health.log` | `OK` 2026-09-21 15:39:49, **no transition since** | ⚠ see below |
+| Settings / overlay | **v68** / `False` | ✅ correct for AWS |
+
+#### ⛔ The finding: four reconnects, none of them in `ws_health.log`
+
+| # | UTC | Signature |
+|---|---|---|
+| 1 | 2026-09-21 22:28:33 | `remote party closed the WebSocket without completing the close handshake` → `reconnecting in 1s` → connected → `subscribed to 7 channels` |
+| 2 | 2026-09-22 04:50:28 | identical |
+| 3 | 2026-09-22 06:04:52 | identical |
+| 4 | 2026-09-22 06:38:41 | identical |
+
+**291 lines in the file, 267 of them heartbeats. Every non-heartbeat line is above.**
+
+⭐ **This is §5b's mechanism box confirmed by a second instrument.** `DeriveWsHealth`'s four inputs do not include trade flow or a store write, so a sub-second reconnect that re-seeds successfully never moves the health state. **`ws_health.log` is not wrong — it is measuring something else, and `ws_feed.log` is what closes the gap.** Relevant to the open `ws_health.log` under-reporting row in [`trader-tick-queue.md`](trader-tick-queue.md) §2.
+
+⭐⭐ **NO TAPE WAS LOST, and that is independently corroborated, not assumed.** The post-fetch venue check over 2026-09-22 01:00→14:00 UTC returned **`CLEAN — missing=0, venue=109704, pages=110, seq_contiguous=true`**. Four reconnects, each re-seeding via REST, zero missing trades. **The reconnect-and-reseed design works and can now be seen working.**
+
+#### ⚠ `pagesOUT/s` — UNRESOLVED, deliberately not called either way
+
+| Reading (UTC) | avg / max | avail | app PVT |
+|---|---|---|---|
+| 14:05 | 773.1 / 4,276.6 | 101 MB | 92 MB |
+| 14:07 | 449.4 / 2,453.1 | 87 MB | 119 MB |
+
+⛔ **This is NOT §5b-era's recorded false alarm**, which read 726.8 / 5,108 and then **0 across 15/15 samples** four minutes later ([`seat-handover-2026-08-23.md`](seat-handover-2026-08-23.md)). Mine stayed non-zero across both.
+
+⛔ **But it cannot be called thrashing either.** [`hostel-app-colocation-assessment.md`](hostel-app-colocation-assessment.md) §10.1 records a burst *"caused by the measuring probe itself"*, and the box has 87–101 MB free of 1,024 MB. **Two readings from the same probe cannot separate box pressure from probe-induced pressure.** Resolving it needs a detached instrument. **Neither alarmed nor cleared — recorded.**
+
+---
+
 ### 5a. v64 deploy — trader-executed 2026-08-01, verified
 
 **This is the moment raw-trade capture began, anywhere.** Under D1 (AWS-only) this box is the sole capturer, and tape older than ~24 h is unobtainable at any price — so everything before 2026-08-01 17:50 UTC is permanently absent from the store, by design and not by defect. That gap is the argument the v64 build was written on.
