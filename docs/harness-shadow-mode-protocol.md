@@ -182,6 +182,18 @@ The seat proposed a cause — the state's mapping-class label steering the verdi
 
 ---
 
+## 4g. ⛔⛔ STABLE AND WRONG — a disagreement at agreement rate 1.0, on `FP-1`, 2026-09-22 (UTC)
+
+**Record: [`harness-runs/fixture-parser-stale-run-2026-09-22.md`](harness-runs/fixture-parser-stale-run-2026-09-22.md).** One site, `SeededWsSource#2088#staleAfterSec`, seat baseline committed first.
+
+The detector answered `declared_but_contradicted` on **all 5 samples**, `mean_top_prob` 0.526. The seat answered `mechanism_declared_ok`, and the adjudication against the tree upholds the seat: the comment declares MECHANISM and names the key only to argue against deriving from it.
+
+⛔ **§4d's *"zero confident-and-wrong rows"* was a fact about 25 items. It is not a property of `FP-1`.** §4f showed an agreeing row can be unstable; this shows a **wrong** row can be stable. On `FP-1` now, **neither the agreement rate nor the top probability separates right from wrong on its own** — this row's 0.526 sits above the clean run's agreeing 0.434.
+
+⭐ **What this does NOT overturn:** §4d's ruling that the agreement rate, not a probability band, is the trust GATE. An unstable row is still not to be trusted. What falls is the converse: **a stable row is not thereby trustworthy.** The only thing that caught this one was the seat's hand read, written first. **Nothing in this programme holds a verdict** (§4 finding 2), and this is why.
+
+---
+
 ## 5. ⛔ What invalidates a first run
 
 - **The seat saw any detector output before writing its baseline.** The run is then a demonstration, not a measurement, and must be labelled as one. ⚠ **Including output relayed second-hand in an implementer's report** — see §4a.
