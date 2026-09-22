@@ -48,7 +48,7 @@
 
 ⭐ **This matters because [`harness-shadow-mode-protocol.md`](../harness-shadow-mode-protocol.md) §4d makes the agreement rate the trust gate, and `FP-Q1` HAS NO AGREEMENT RATE** — `tools/checks/fixture-parser.ps1` calls it once per parameter and never 5×-samples it (`FP-D14`, line ~960). **Before this run there was no way to tell a stable miss from a flip.** The six misses are stable, so they are an evidence gap, not noise.
 
-### ⛔⛔ CORRECTED 2026-09-23 (UTC) — this heading over-claims, and the quoted text above is kept rather than edited
+### ⛔⛔ CORRECTED 2026-09-22 (UTC, 18:40) — this heading over-claims, and the quoted text above is kept rather than edited
 
 **The heading says "It is STABLE". That is true of THE SIX MISSES and FALSE of `FP-Q1` in general.**
 

@@ -170,7 +170,7 @@ The seat proposed a cause — the state's mapping-class label steering the verdi
 
 ---
 
-## 4f. ⛔⛔ §4d DOES NOT CARRY ACROSS DETECTORS — an AGREEING row that is UNSTABLE, 2026-09-23
+## 4f. ⛔⛔ §4d DOES NOT CARRY ACROSS DETECTORS — an AGREEING row that is UNSTABLE, 2026-09-22 (UTC)
 
 **§4d measured, on `FP-1`, 25 items: agreements 23, *all* stable 5 of 5; disagreements 2, *both* unstable.** A clean separation, and easy to read as a law: **agreement implies stable.**
 

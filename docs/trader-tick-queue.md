@@ -14,7 +14,9 @@
 
 > ## ⛔ STATE BANNER — REFRESHED 2026-09-17 (UTC). Read this before believing any row below.
 >
-> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-22.md`](seat-handover-2026-09-22.md)** — the Jev harness seat. ⛔ **THE ENGINE QUEUE IS ON HOLD by trader direction until the Jev programme CLOSES** (handover §7); next up is harness 4. ✅ `master` clean against `origin`, trader-tested and pushed. Settings v68, harness 425 PASS, nothing deployed. ⛔ The **2026-09-24 06:00 UTC** collector check is owed (handover §6). Older banner follows.
+> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-22b.md`](seat-handover-2026-09-22b.md)** — the `FP-Q1` measurement seat. ⛔ **THE ENGINE QUEUE IS ON HOLD by trader direction until the Jev programme CLOSES** (its §4). ⛔ **`master` is 6 commits AHEAD of `origin`, UNPUSHED**, all `[no-engine-change]`. Settings v68, harness 425 PASS, nothing deployed, collector not touched. ⛔⛔ **FIRST ACTION is the `8a` RE-MEASURE — the six newly-opened `FP-1` sites are the most perishable thing in the repo and one careless run spends them for ever.** Then the **2026-09-24 06:00 UTC** collector check. Older banner follows.
+>
+> ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-22.md`](seat-handover-2026-09-22.md)** — the Jev harness seat, superseded for state. **Its §1 (what Jev is), §2 (the three harnesses), §5 (the failure patterns) and §6 (the collector read) still bind.** Older banner follows.
 >
 > ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-21.md`](seat-handover-2026-09-21.md)** — the WPAD outage seat. ⭐ **The collector was down 3 d 13 h and is BACK; the 2026-10-01 cross-month deadline is DISCHARGED.** ⛔ **Two scheduled checks (2026-09-22 and 2026-09-24 06:00 UTC) were agreed and NEVER SET UP.** Older banner follows.
 >
