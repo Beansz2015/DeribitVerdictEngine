@@ -127,12 +127,12 @@ Scan of today's tree (`cbc2c91`, 417 non-archive `.md`): **2,113 distinct flagge
 |---|---|---|
 | `DeribitIndicatorProject.md` §4, Tier 2 OFI row | `BuyDominantRatio (2.0) / SellDominantRatio (0.5)`; shipped **1.6 / 0.625** since v48 | `E2` |
 | `UserManual.md`, ten lines under current-feature sections | RSI `DivergenceRsiDelta=2.0` (live 5.0) · OBV `trend_gate (0.001)` (live 23.0) · OI `ChangeThresholdPct (0.01)` (live 0.002) · OFI 2.0 / 0.5 ×2 · CVD `slope_pct_of_value (0.01)` (live 0.1) · the four funding thresholds (0.0003 / 0.00005, live 8e-05 / 1e-05) | `E2` |
-| `trader-tick-queue.md` §0 authority table | Names `seat-handover-2026-09-17.md` *"THE current seat handover - the STATE read"*; the same doc's banner names `seat-handover-2026-09-22b.md` | `E6` |
+| `trader-tick-queue.md` §0 authority table | Names `seat-handover-2026-09-17.md` *"THE current seat handover - the STATE read"*; the same doc's banner names `seat-handover-2026-09-22b.md`. ✅ **FIXED 2026-09-22 (UTC), trader-ruled** — the row now points to the banner and names no file. The other five stay unfixed as known positives for the first run | `E6` |
 | `roadmap.md` state snapshot | *"Next free fixture family: A73 as of 2026-09-10"*; `Program.vb`'s highest family is **A85**. **The same row was corrected once before for exactly this** | `E5` |
 | `roadmap.md` and `backlog-dependency-map.md` | `A5`: *"28 of 30 dates as of 2026-08-07, ~2 dates out"*, 47 days on — and the map says it *"carries no state"* | `E5` |
 | `roadmap.md` §2 | The whole state snapshot is dated 2026-08-24, 30 days old | `E5` |
 
-⚠ **Fix now, or keep them as known positives for harness 4's first run?** Keeping them buys a recall measurement on real, current rot. Fixing them keeps the state read honest today. **That is a trade between truthfulness and information, so it is the trader's call** (`CLAUDE.md`, the reserved class). The `trader-tick-queue.md` pointer is the one that can misdirect a seat.
+✅ **RULED 2026-09-22 (UTC), trader: fix the `trader-tick-queue.md` pointer now (it can misdirect a seat); keep the other five unfixed as known positives for harness 4's first run.** ⛔ **Do not fix those five before that run** — they are the only current rot with a pre-written seat label (`harness-runs/doc-scanner-20260922T193818Z-prelabels.json`).
 
 ---
 

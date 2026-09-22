@@ -243,6 +243,14 @@
   Now any residual item absent from the baseline stops the run (EXIT_REASON=
   BASELINE_INCOMPLETE, exit 2) before any FP-1/FP-2 call. -AllowUnbaselinedItems opts out
   for a routine re-run of items already measured once.
+
+  FP-D25 (item 8m, trader-agreed 2026-09-22): shipped_declared_ok leaves the OK set for
+  FP-1 and counts in FP1_BAD_VERDICTS, printed on its own as FP1_SHIPPED_ON_LITERAL. Every
+  FP-1 site is a hardcoded literal, and CLAUDE.md forbids hardcoding SHIPPED BEHAVIOUR, so
+  the verdict is a breach or a misread. Measured: the A23b run
+  (docs/harness-runs/fixture-parser-a20-a23b-run-2026-09-22.md) exited 0 with two misreads.
+  Only the SCORING changed; the Jev criteria text is untouched, so earlier measurements
+  stay comparable.
   ==========================================================================================
 
   FP-D2 (retained, now informational only): the ORIGINAL camelCase-to-snake_case name
@@ -302,12 +310,13 @@
       [-SubFilter <regex on enclosing sub name>] [-Samples N] [-CountersOnly]
 
   EXIT CODES:
-    0 - every judged FP-1 call site verdict is mechanism_declared_ok or
-        shipped_declared_ok, every judged FP-2 sub verdict is name_matches, and no row is
-        UNSTABLE (self-consistency agreement rate below 1.0)
+    0 - every judged FP-1 call site verdict is mechanism_declared_ok, every judged FP-2 sub
+        verdict is name_matches, and no row is UNSTABLE (self-consistency agreement rate
+        below 1.0)
     1 - at least one judged FP-1 verdict is undeclared / declared_but_contradicted /
-        ambiguous, at least one judged FP-2 verdict is name_overclaims / name_understates /
-        ambiguous, or any judged row is UNSTABLE (never auto-resolved)
+        ambiguous / shipped_declared_ok (FP-D25: on a literal site that last one is a breach
+        or a misread, never a pass), at least one judged FP-2 verdict is name_overclaims /
+        name_understates / ambiguous, or any judged row is UNSTABLE (never auto-resolved)
     2 - baseline missing, parser suspect (docs/fixture-parser-check-spec.md section 4.2),
         or API failure (now possibly raised EARLIER than the baseline gate, by FP-Q1's
         scope-classification step -- see FP-D11 above)
@@ -2177,7 +2186,13 @@ Write-Coverage ($fp1Results.Count + $fp2Results.Count)
 
 $fp1Unstable = @($fp1Results | Where-Object { -not $_.Stable }).Count
 $fp2Unstable = @($fp2Results | Where-Object { -not $_.Stable }).Count
-$fp1Bad = @($fp1Results | Where-Object { $_.Verdict -in @('undeclared', 'declared_but_contradicted', 'ambiguous') }).Count
+# FP-D25 (revision 3, item 8m): shipped_declared_ok is NOT a pass on an FP-1 site. CLAUDE.md's
+# provenance rule says SHIPPED BEHAVIOUR "must derive the value from cfg, never hardcode it",
+# and every FP-1 site is a named-argument LITERAL. So the verdict means a rule breach or a
+# misread -- measured: two misreads on A23b passed a run with exit 0. The question sent to
+# Jev is unchanged (changing it would need a fresh measurement); only the scoring moves.
+$fp1ShippedOnLiteral = @($fp1Results | Where-Object { $_.Verdict -eq 'shipped_declared_ok' }).Count
+$fp1Bad = @($fp1Results | Where-Object { $_.Verdict -in @('undeclared', 'declared_but_contradicted', 'ambiguous', 'shipped_declared_ok') }).Count
 $fp2Bad = @($fp2Results | Where-Object { $_.Verdict -in @('name_overclaims', 'name_understates', 'ambiguous') }).Count
 
 if ($CountersOnly) {
@@ -2198,6 +2213,7 @@ if ($CountersOnly) {
     "FP1_UNSTABLE=$fp1Unstable"
     "FP2_UNSTABLE=$fp2Unstable"
     "FP1_BAD_VERDICTS=$fp1Bad"
+    "FP1_SHIPPED_ON_LITERAL=$fp1ShippedOnLiteral (counted in FP1_BAD_VERDICTS -- FP-D25: a hardcoded literal cannot be valid SHIPPED BEHAVIOUR; a breach or a misread)"
     "FP2_BAD_VERDICTS=$fp2Bad"
 }
 
