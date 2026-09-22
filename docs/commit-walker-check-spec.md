@@ -348,6 +348,52 @@ I said last turn that self-consistency partly supersedes escalation. **That was 
 
 ---
 
+### 10.7 ⛔⛔ CORRECTION, same day — an unsampled escalation call must not override a sampled plurality
+
+**A defect in §10.2/§10.3, found empirically by the revision-2 build. The build was faithful to the spec; the spec was wrong.**
+
+**What happened on `91942d6739`:**
+
+| Stage | Result |
+|---|---|
+| 5 primary samples | **5 of 5 agreed** on `changes_computation` |
+| My hand baseline | `tag_wrong` — **agrees** |
+| Revision 1's single call | `changes_computation` — **agrees** |
+| Mean top probability | 0.414, under the 0.60 band → **escalated** |
+| ⛔ **The single, unsampled escalation call** | **`no_app_change`** — and it **became the final verdict** |
+
+⛔ **One unsampled call overrode a unanimous five-sample plurality, and moved the answer AWAY from the hand baseline.** Verified in the tree: the primary runs in a loop, the escalation is a single call at `tools/checks/commit-walker.ps1:685`, and `$finalVerdict = $escResult.Verdict` replaces the plurality outright.
+
+⭐ **The escalation call inherits exactly the single-call instability this whole revision exists to remove.** A system built on sampling that exempts its own tie-breaker is incoherent.
+
+**The fix — both halves, not either:**
+
+1. ⭐ **Sample the escalation too.** `$ESCALATION_SAMPLES = 3`, its own named constant. Consistency applies everywhere or it is not a principle. The escalation call measures ~8,090 tokens against a primary's ~1,605 (§10.8), so 3 samples of it is roughly $0.001 per escalated commit — **not a reason to skip it.**
+2. ⛔ **Escalation NEVER silently overrides.** When the escalated plurality disagrees with the primary plurality, that is a **`CONFLICT`** — report both verdicts, both agreement rates, both probability ranges, and **flag for the seat. The tool does not pick.**
+
+**Why not just take the escalated answer as better-informed?** Because on the one case we have, it was **worse** — it disagreed with the baseline the primary matched. ⚠ **`n=1`, so that is not proof the escalated read is generally worse.** It is proof the tool cannot assume it is better, which is all the ruling needs.
+
+**Status vocabulary becomes:** `CONFIDENT` · `CONFIDENT_AFTER_ESCALATION` (escalated **and agreed** with the primary) · **`CONFLICT`** (escalated and disagreed) · `UNSTABLE` (primary samples disagreed). `CONFLICT` and `UNSTABLE` both exit non-zero.
+
+### 10.8 ⭐ The token ratio is arithmetic, not caching — resolved
+
+The build reported that 5× sampling raised calls 4× but tokens only **2.49×**, and honestly said it could not explain why, suspecting prompt caching. **It is not caching.** Solving the two measured runs as simultaneous equations:
+
+- `3P + E = 12,904` (revision 1) and `15P + E = 32,159` (revision 2)
+- → **primary ≈ 1,605 tokens, escalation ≈ 8,090 tokens.** Both equations then check to the token.
+
+**One fixed ~8k diff call is 1-of-4 in revision 1 and 1-of-16 in revision 2, so the per-call average falls by amortisation.** ⭐ **Recorded because an unexplained ratio becomes a believed mechanism: "Jev has prompt caching" would have entered these docs as a fact on the strength of one unexplained number.**
+
+### 10.9 Acceptance for the correction
+
+1. `$ESCALATION_SAMPLES = 3`, named, beside the others.
+2. The escalation runs in a loop, and its plurality and agreement rate are computed the same way as the primary's.
+3. `CONFLICT` exists, exits non-zero, and reports BOTH verdicts with both agreement rates.
+4. **Re-run `-Samples 5` on `91942d6739`.** Report what status it now lands on and both pluralities. That commit is adjudicated, so verdicts are reportable.
+5. Escalation still cannot fire on an `UNSTABLE` row — §10.2 unchanged.
+
+---
+
 ## 8. What this spec does NOT verify
 
 - **That the path rule's engine/non-engine split is correct.** It is a convention chosen here, measured to agree with the tag 93% of the time. Agreement is not proof it is right.
