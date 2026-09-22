@@ -116,6 +116,84 @@
   report reads per-item) and runs UNSAMPLED, once per distinct parameter name, following
   the pre-revision FP-D7 key-resolution call's own precedent.
 
+  ============================ REVISION 2 (2026-09-22 UTC) ===============================
+  docs/fixture-parser-check-spec.md section 8.2/8.4 items 8a, 8b, 8c. The FP-Q1 measured
+  run (docs/harness-runs/fixture-parser-scope-run-2026-09-22.md) found the detector
+  UNDER-scoping 6 of its 7 settings-derived thresholds, and every one of the six had a
+  MECHANICALLY DERIVABLE cfg path this code failed to look for. The fix is enumeration,
+  never the question: once FP-Q3 derives the path, the parameter is in scope BY
+  CONSTRUCTION and FP-Q1 is never consulted for it.
+
+  FP-D15 (item 8c, the SECOND baseline refusal): -ScopeBaselinePath. FP-Q1 is a detector
+  and docs/harness-shadow-mode-protocol.md section 2 step 1 makes the operator-written
+  baseline STRUCTURAL, "not a convention" -- but FP-D11 (below) deliberately puts FP-Q1's
+  calls BEFORE the FP-1 baseline gate so the coverage counters are real numbers. Both hold
+  at once because the refusal is scoped to the CALL, not to the run: with no scope
+  baseline FP-Q1 makes ZERO Jev calls and degrades exactly as the no-API-key path already
+  did (every unmapped parameter out of scope, a dedicated counter says how many), the
+  coverage block still prints first with real, CODE-ONLY numbers, and the run continues to
+  the FP-1 gate. Nothing is spent and no scope answer can be seen before the operator has
+  written their own read. ⚠ Residual tension, named rather than hidden: without a scope
+  baseline IN_SCOPE_* are code-derived only. SCOPE_BASELINE_STATE in the coverage block
+  says which of the two a given run produced, so the number is never silently ambiguous.
+
+  FP-D16 (item 8a gap A, the FIXTURE-LOCAL cfg builder): when a callee has NO production
+  call site, look for its declaration in -SourceFile and scan that body for the assignment
+  shape `<local>.<path> = <paramName>` (BuildA8Cfg: `cfg.Scoring.FundingHighBoost =
+  fundingBoost`; BuildBurstCfg: `cfg.Indicators.AggressorVelocity.UpgradeBonus =
+  upgradeBonus`). The path after the local's own identifier is normalised and must hit a
+  REAL settings leaf or the shape is refused -- membership does the validating, so a
+  coincidental `r.Foo = param` cannot invent a mapping. Fires ONLY on
+  NO_PRODUCTION_CALL_SITE, so it can never pre-empt real production evidence.
+
+  FP-D17 (item 8a gap B, the ONE-HOP FORWARDING WRAPPER): the fixture calls the inner
+  method (AggressorVelocityAccumulator.Fold / .Snapshot); production calls a wrapper
+  (MarketState.FoldAggressorVelocity / .GetAggressorVelocity) that forwards. The inner
+  name's own production call sites are then all INSIDE wrappers and resolve
+  NOT_CFG_SOURCED. So, only after EVERY direct site has failed, a site is treated as a
+  forwarding hop iff it is a PURE POSITIONAL PASS-THROUGH: argument count equals the
+  inner signature's, every argument is a bare identifier equal to the inner parameter name
+  at that position, and every one of those names is a parameter of the enclosing method.
+  ⛔ That triple test is not pedantry, it is the whole safety of the hop -- `Snapshot` and
+  `Fold` are declared on FOUR different classes in this tree and this parser matches
+  callees BY NAME, so MarketState.GetOfiAverage's `_ofiAcc.Snapshot(minCoverageSec)` is a
+  call to "Snapshot" whose sole argument is a bare parameter name. Without the test it
+  would hop and map the aggressor-velocity floor onto an OFI key: a confidently wrong
+  answer, the failure mode section 6 names. Arity (1 vs 2) and name equality both reject
+  it. ONE hop only; a renaming or reordering wrapper is reported unresolved, never guessed.
+
+  FP-D18 (item 8a, the RESOLVER-RETURN argument shape): needed by tauNormSec and
+  minCoverageSec, whose production argument is a local assigned from
+  ExecutionResolution.ResolveAggrVelNormWindow(cfg, utcHour) -- a cfg path behind a
+  session resolver, which neither the direct read nor the one alias hop can see. When the
+  argument's base identifier is a local `Dim x = SomeMethod(...)`, that method's body is
+  scanned for cfg-rooted Return expressions; the shape resolves ONLY when there is EXACTLY
+  ONE distinct one. ⚠ KNOWN UNDER-STATEMENT, recorded not hidden: ResolveAggrVelNormWindow
+  also returns a per-session override through a second hop, so the derived key is the
+  DEFAULT arm (indicators.aggressor_velocity.default.norm_window_sec, ever-shipped {120})
+  and the NY override key (norm_window_sec 60) is NOT in the derived ever-shipped set. A
+  literal of 60 at such a site would therefore read as never-shipped. That is a smaller
+  hole than the parameter being invisible altogether, but it IS a hole.
+
+  FP-D19 (item 8a, POCO->JSON name aliases): per-segment snake-casing cannot map
+  cfg.Indicators.AggressorVelocity.Defaults.NormWindowSec onto
+  indicators.aggressor_velocity.default.norm_window_sec -- the POCO property is `Defaults`,
+  the JSON key is `default`. The alias map is read from EngineSettings.vb's own
+  <JsonPropertyName> attributes, never hand-kept (section 7.3's "a hand-kept table would
+  be a fourth copy that drifts"); ten properties diverge that way and none carries two
+  different JSON names (measured 2026-09-22). The plain snake path is always tried FIRST,
+  so no mapping that resolved before revision 2 can change.
+
+  FP-D20 (item 8b, splitting NOT_CFG_SOURCED): that class used to be emitted whenever the
+  SEARCH failed, and it reads as a finding -- "this parameter is not settings-derived" --
+  which is an assertion the code had not earned (that is how grossFloorUsdPerSec was
+  written off). Now: NOT_CFG_SOURCED means SEARCHED AND NEGATIVE (the production argument,
+  or the local it names, is a terminal literal / New / boolean -- it provably does not come
+  from cfg). SOURCE_NOT_TRACEABLE means THE SEARCH DID NOT COMPLETE (the identifier is a
+  parameter, a class field, a Const, a member of some other object, or a compound
+  expression this parser will not reduce). Absence of evidence, never evidence of absence.
+  ==========================================================================================
+
   FP-D2 (retained, now informational only): the ORIGINAL camelCase-to-snake_case name
   matching against HEAD's settings.json shape. No longer authoritative for ResolvedKey
   (FP-Q3 is), but still computed and still feeds MATCHED_ONE_KEY/ZERO/MULTI (unchanged
@@ -168,6 +246,8 @@
     powershell -NoProfile -File tools/checks/fixture-parser.ps1 `
       -BaselinePath <path to your own pre-written read, see
       docs/harness-shadow-mode-protocol.md section 2 step 3> `
+      [-ScopeBaselinePath <the same, for the FP-Q1 scope detector -- FP-D15; without it
+       FP-Q1 makes no Jev call and the in-scope counters are CODE-ONLY>] `
       [-SubFilter <regex on enclosing sub name>] [-Samples N] [-CountersOnly]
 
   EXIT CODES:
@@ -186,6 +266,10 @@ param(
     [string]$SourceFile = 'verify/ordercheck/Program.vb',
     [string]$SettingsPath = 'settings.json',
     [string]$BaselinePath = 'fixture-parser-baseline.json',
+    # FP-D15 / docs/fixture-parser-check-spec.md section 8.4 item 8c: the operator-written
+    # baseline for the SECOND detector, FP-Q1's scope filter. Empty means "none supplied",
+    # and then FP-Q1 makes NO Jev call at all -- see the refusal below Step 4.
+    [string]$ScopeBaselinePath = '',
     [string]$OutPath = 'fixture-parser-report.md',
     [string]$SettingsCachePath = 'fixture-parser-settings-cache.json',
     # Restricts which residual (provenance-commented, IN-SCOPE) sites/subs are JUDGED -- a
@@ -747,6 +831,9 @@ function Get-ProductionCallSites([string]$calleeName) {
                 File = $pf; Line = $stmtStart + 1; StmtText = $stmtText; Ctx = $ctx
                 EnclosingProcStart = if ($proc) { $proc.Start } else { 0 }
                 EnclosingProcEnd   = if ($proc) { $proc.End } else { ($ctx.N - 1) }
+                # FP-D17 (revision 2): the forwarding hop needs the enclosing method's NAME,
+                # not just its line range.
+                EnclosingProcName  = if ($proc) { $proc.Name } else { $null }
             })
         }
     }
@@ -760,6 +847,130 @@ function Find-LocalAliasCfgAssignment($site, [string]$ident) {
     $aliasRe = "(?i)^\s*Dim\s+$([regex]::Escape($ident))\b(?:\s+As\s+[A-Za-z0-9_.\(\)]+)?\s*=\s*(cfg\.[A-Za-z0-9_.]+)"
     for ($k = $site.EnclosingProcStart; $k -le $site.EnclosingProcEnd; $k++) {
         if ($ctx.CodeOnly[$k] -match $aliasRe) { return $Matches[1] }
+    }
+    return $null
+}
+
+# ---- revision 2 helpers (FP-D16 / FP-D17 / FP-D18 / FP-D20) ----------------------------
+
+# The initialiser TEXT of a local `Dim ident [As T] = <expr>` inside the production call's
+# enclosing body, or $null when the identifier is not a local of that body (then it is a
+# parameter, a field, a Const or a member of another object -- FP-D20's "did not complete"
+# arm). Unanchored (trap 4), so a `Dim` reached through any single-line form still matches.
+function Find-LocalDimInitialiser($site, [string]$ident) {
+    $ctx = $site.Ctx
+    $dimRe = "(?i)(?:^|[\s:])Dim\s+$([regex]::Escape($ident))\b(?:\s+As\s+[A-Za-z0-9_.\(\)]+)?\s*=\s*(.+)$"
+    for ($k = $site.EnclosingProcStart; $k -le $site.EnclosingProcEnd; $k++) {
+        if ($ctx.CodeOnly[$k] -match $dimRe) { return $Matches[1].Trim() }
+    }
+    return $null
+}
+
+# FP-D20: is this expression a TERMINAL non-cfg value -- a literal, a boolean, Nothing or a
+# New? Then the search completed and the answer is genuinely negative. An identifier, a
+# member chain or a call means the trail continues and the search did NOT complete.
+function Test-TerminalNonCfgExpression([string]$expr) {
+    if ([string]::IsNullOrWhiteSpace($expr)) { return $false }
+    $t = $expr.Trim()
+    if ($t -match '^-?\d') { return $true }
+    if ($t.StartsWith('"')) { return $true }
+    if ($t -match '^(?i)(True|False|Nothing)\s*$') { return $true }
+    if ($t -match '^(?i)New\s') { return $true }
+    return $false
+}
+
+# The Sub/Function body range of a production method, found by bare name across the same
+# production file set the rest of FP-Q3 reads.
+function Find-ProdProcRange([string]$procName) {
+    $declRe3 = "^(?:Private|Public|Friend|Protected)?\s*(?:Shared\s+)?(?:Sub|Function)\s+$([regex]::Escape($procName))\s*\("
+    foreach ($pf in $prodFiles) {
+        $ctx = Get-FileParseContext $pf
+        if ($null -eq $ctx) { continue }
+        for ($i = 0; $i -lt $ctx.N; $i++) {
+            if ($ctx.CodeOnly[$i].TrimStart() -match $declRe3) {
+                $proc = Get-FileEnclosingProc $ctx $i
+                if ($proc) { return [PSCustomObject]@{ Ctx = $ctx; File = $pf; Name = $procName; Start = $proc.Start; End = $proc.End } }
+            }
+        }
+    }
+    return $null
+}
+
+# FP-D18: the argument is a local assigned from a resolver call (`Dim x = Resolve...(cfg,
+# hour)`). Open that method and take its cfg-rooted Return expression -- but ONLY when
+# there is exactly one distinct one, so an ambiguous resolver is reported unresolved
+# rather than guessed. The Return scan is UNANCHORED (trap 4): `If o IsNot Nothing
+# AndAlso ... Then Return o.NormWindowSec.Value` is the commonest form in this codebase and
+# a `^\s*Return` scan would miss it -- and that arm is exactly what OtherArms counts.
+function Find-ResolverReturnCfgPath($site, [string]$ident) {
+    $init = Find-LocalDimInitialiser $site $ident
+    if (-not $init) { return $null }
+    if ($init -notmatch '^([A-Za-z_][A-Za-z0-9_.]*)\s*\(') { return $null }
+    $segs = $Matches[1] -split '\.'
+    $callName = $segs[$segs.Length - 1]
+    $rng = Find-ProdProcRange $callName
+    if ($null -eq $rng) { return $null }
+    $paths = New-Object System.Collections.Generic.List[string]
+    $otherArms = 0
+    for ($k = $rng.Start; $k -le $rng.End; $k++) {
+        foreach ($m in [regex]::Matches($rng.Ctx.CodeOnly[$k], '(?i)(?<![A-Za-z0-9_])Return\s+([A-Za-z_][A-Za-z0-9_.]*)')) {
+            $rexpr = $m.Groups[1].Value
+            if ($rexpr -match '^(?i)cfg\.') {
+                if (-not $paths.Contains($rexpr)) { [void]$paths.Add($rexpr) }
+            } else {
+                $otherArms++
+            }
+        }
+    }
+    if ($paths.Count -ne 1) { return $null }
+    return [PSCustomObject]@{ CfgExpr = $paths[0]; Via = "$($rng.File):$callName"; OtherArms = $otherArms }
+}
+
+# FP-D17: is this production call site a PURE POSITIONAL PASS-THROUGH of its enclosing
+# method's own parameters? All three conditions must hold or the hop is refused -- see the
+# header for the MarketState.GetOfiAverage near-miss this rejects. Returns the wrapper's
+# name, never a guess.
+function Get-ForwardingWrapperName($site, [string]$calleeName, $sigNames) {
+    if (-not $site.EnclosingProcName) { return $null }
+    if ($site.EnclosingProcName -ieq $calleeName) { return $null }
+    $argTexts = Get-CallArguments $site.StmtText $calleeName
+    if ($null -eq $argTexts) { return $null }
+    if ($argTexts.Count -ne $sigNames.Count) { return $null }
+    for ($i = 0; $i -lt $argTexts.Count; $i++) {
+        $a = $argTexts[$i].Trim()
+        if ($a -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { return $null }
+        if ($a.ToLowerInvariant() -ne $sigNames[$i].ToLowerInvariant()) { return $null }
+    }
+    $wrapSig = Get-MethodSignatureParams $site.EnclosingProcName
+    if ($null -eq $wrapSig -or $wrapSig.Count -eq 0) { return $null }
+    $wrapLower = @($wrapSig | ForEach-Object { $_.ToLowerInvariant() })
+    foreach ($a in $argTexts) {
+        if ($wrapLower -notcontains $a.Trim().ToLowerInvariant()) { return $null }
+    }
+    return $site.EnclosingProcName
+}
+
+# FP-D16: the callee is a FIXTURE-LOCAL cfg builder -- its body assigns the parameter into
+# a cfg path. Read from -SourceFile's own parse (never a production file), and the derived
+# path must hit a real settings leaf or the shape is refused.
+function Resolve-FixtureLocalCfgBuilder([string]$calleeName, [string]$paramName) {
+    $r = $ranges | Where-Object { $_.Name -eq $calleeName } | Select-Object -First 1
+    if ($null -eq $r) { return $null }
+    $assignRe = "(?i)(?:^|[\s:])([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*=\s*$([regex]::Escape($paramName))\s*$"
+    for ($k = $r.Start; $k -le $r.End; $k++) {
+        if ($codeOnly[$k] -match $assignRe) {
+            $lhs = $Matches[1]
+            $segs = $lhs -split '\.'
+            if ($segs.Count -lt 2) { continue }
+            $pathAfterRoot = ($segs[1..($segs.Count - 1)]) -join '.'
+            $key = Resolve-SettingsLeafKey $pathAfterRoot
+            if ($key) {
+                return [PSCustomObject]@{
+                    Class = 'FIXTURE_LOCAL_CFG_BUILDER'; ResolvedKey = $key; Shape = 'fixture_cfg_builder'
+                    ProdFile = $SourceFile; ProdLine = ($k + 1); ResolvedExpr = $lhs
+                }
+            }
+        }
     }
     return $null
 }
@@ -778,6 +989,62 @@ $normalizedHeadFlat = @{}
 foreach ($k in $headFlat.Keys) {
     $nk = Get-NormalizedSettingsPath $k
     if (-not $normalizedHeadFlat.ContainsKey($nk)) { $normalizedHeadFlat[$nk] = $k }
+}
+
+# FP-D19 (revision 2): POCO->JSON segment aliases, read from the POCO's own
+# <JsonPropertyName> attributes. NOT a hand-kept table -- the attribute IS the mapping, so
+# this stays self-correcting the way section 7.3 demands of the whole derivation. A
+# missing or unreadable POCO file leaves the map empty and every lookup below falls back
+# to the plain snake-case path exactly as it did before revision 2.
+$pocoAliasFile = 'Core/Settings/EngineSettings.vb'
+$pocoSegAlias = @{}
+$pocoAliasFull = Resolve-RepoPath $pocoAliasFile
+if (Test-Path $pocoAliasFull) {
+    foreach ($pl in [string[]](Get-Content -Encoding UTF8 -Path $pocoAliasFull)) {
+        if ($pl -match '<JsonPropertyName\("([^"]+)"\)>\s*(?:Public|Friend)\s+Property\s+([A-Za-z_][A-Za-z0-9_]*)') {
+            $jsonSeg = ConvertTo-SnakeCase $Matches[1]
+            $propSeg = ConvertTo-SnakeCase $Matches[2]
+            if ($propSeg -ne $jsonSeg) {
+                if (-not $pocoSegAlias.ContainsKey($propSeg)) {
+                    $pocoSegAlias[$propSeg] = New-Object System.Collections.Generic.List[string]
+                }
+                if (-not $pocoSegAlias[$propSeg].Contains($jsonSeg)) { [void]$pocoSegAlias[$propSeg].Add($jsonSeg) }
+            }
+        }
+    }
+}
+$pocoAliasSegments = $pocoSegAlias.Count
+
+# Resolve a cfg-rooted dotted path (already stripped of its `cfg.` root) to a REAL
+# settings.json leaf key. The plain per-segment snake-case form is tried FIRST, so nothing
+# that resolved before revision 2 can change; only then are FP-D19's aliases substituted,
+# segment by segment, bounded and in order, so the answer stays deterministic. $null when
+# nothing matches -- the membership check is what validates every derived shape below.
+$MAX_ALIAS_COMBINATIONS = 64
+function Resolve-SettingsLeafKey([string]$pathAfterCfg) {
+    if ([string]::IsNullOrWhiteSpace($pathAfterCfg)) { return $null }
+    $plain = Get-NormalizedSettingsPath $pathAfterCfg
+    if ($normalizedHeadFlat.ContainsKey($plain)) { return $normalizedHeadFlat[$plain] }
+    if ($pocoSegAlias.Count -eq 0) { return $null }
+    $candidates = New-Object System.Collections.Generic.List[string]
+    [void]$candidates.Add('')
+    foreach ($s in @($plain -split '\.')) {
+        $opts = New-Object System.Collections.Generic.List[string]
+        [void]$opts.Add($s)
+        if ($pocoSegAlias.ContainsKey($s)) { foreach ($a in $pocoSegAlias[$s]) { [void]$opts.Add($a) } }
+        $next = New-Object System.Collections.Generic.List[string]
+        foreach ($c in $candidates) {
+            foreach ($o in $opts) {
+                if ($next.Count -ge $MAX_ALIAS_COMBINATIONS) { break }
+                if ($c -eq '') { [void]$next.Add($o) } else { [void]$next.Add("$c.$o") }
+            }
+        }
+        $candidates = $next
+    }
+    foreach ($c in $candidates) {
+        if ($normalizedHeadFlat.ContainsKey($c)) { return $normalizedHeadFlat[$c] }
+    }
+    return $null
 }
 
 # The FP-Q3 resolver proper. Returns a PSCustomObject with Class/ResolvedKey/Shape/
@@ -822,6 +1089,10 @@ function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
     }
     $sites = Get-ProductionCallSites $calleeName
     if ($sites.Count -eq 0) {
+        # GAP A (FP-D16, revision 2): no production call site, so the callee may be a
+        # FIXTURE-LOCAL cfg builder whose body assigns the parameter into a cfg path.
+        $fx = Resolve-FixtureLocalCfgBuilder $calleeName $paramName
+        if ($fx) { return $fx }
         return [PSCustomObject]@{ Class = 'NO_PRODUCTION_CALL_SITE'; ResolvedKey = $null; Shape = $null; ProdFile = $null; ProdLine = $null; ResolvedExpr = $null }
     }
     $firstFailure = $null
@@ -829,6 +1100,32 @@ function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
         $attempt = Resolve-FpQ3MappingAtSite $s $calleeName $paramName
         if ($attempt.ResolvedKey) { return $attempt }
         if ($null -eq $firstFailure) { $firstFailure = $attempt }
+    }
+    # GAP B (FP-D17, revision 2): every direct site failed. Some of them may be FORWARDING
+    # sites -- a wrapper passing its own parameters straight through -- in which case the
+    # cfg evidence lives at the WRAPPER's production call sites, one hop out. The
+    # pure-pass-through test inside Get-ForwardingWrapperName is what keeps this from
+    # hopping across two same-named methods on different classes.
+    $sigNamesForHop = Get-MethodSignatureParams $calleeName
+    if ($null -ne $sigNamesForHop -and $sigNamesForHop.Count -gt 0) {
+        $hopped = New-Object System.Collections.Generic.HashSet[string]
+        foreach ($s in $sites) {
+            $wrapper = Get-ForwardingWrapperName $s $calleeName $sigNamesForHop
+            if (-not $wrapper) { continue }
+            if (-not $hopped.Add($wrapper.ToLowerInvariant())) { continue }
+            foreach ($hs in (Get-ProductionCallSites $wrapper)) {
+                # ONE hop: the per-site resolver, never the hopping wrapper, so this cannot
+                # recurse.
+                $att = Resolve-FpQ3MappingAtSite $hs $wrapper $paramName
+                if ($att.ResolvedKey) {
+                    return [PSCustomObject]@{
+                        Class = 'WRAPPER_FORWARDED'; ResolvedKey = $att.ResolvedKey
+                        Shape = "wrapper($wrapper)->$($att.Class)"
+                        ProdFile = $att.ProdFile; ProdLine = $att.ProdLine; ResolvedExpr = $att.ResolvedExpr
+                    }
+                }
+            }
+        }
     }
     return $firstFailure
 }
@@ -872,6 +1169,8 @@ function Resolve-FpQ3MappingAtSite($site, [string]$calleeName, [string]$paramNam
     }
     $fullCfgExpr = $null
     $aliasHop = $false
+    $resolverHop = $false
+    $resolverVia = $null
     if ($baseIdent -and $baseIdent.ToLowerInvariant() -eq 'cfg') {
         $fullCfgExpr = $exprTrim
     } elseif ($baseIdent) {
@@ -879,17 +1178,36 @@ function Resolve-FpQ3MappingAtSite($site, [string]$calleeName, [string]$paramNam
         if ($aliasVal) {
             $aliasHop = $true
             $fullCfgExpr = if ($rest) { "$aliasVal.$rest" } else { $aliasVal }
+        } else {
+            # FP-D18 (revision 2): the local is assigned from a resolver call, not from cfg
+            # directly. Tried only after the direct read and the one alias hop have failed,
+            # so nothing that resolved before revision 2 can change.
+            $rr = Find-ResolverReturnCfgPath $site $baseIdent
+            if ($rr) {
+                $resolverHop = $true
+                $resolverVia = $rr.Via
+                $fullCfgExpr = if ($rest) { "$($rr.CfgExpr).$rest" } else { $rr.CfgExpr }
+            }
         }
     }
     if (-not $fullCfgExpr) {
-        return [PSCustomObject]@{ Class = 'NOT_CFG_SOURCED'; ResolvedKey = $null; Shape = $shape; ProdFile = $site.File; ProdLine = $site.Line; ResolvedExpr = $exprTrim }
+        # FP-D20 (revision 2): split the old catch-all. NOT_CFG_SOURCED is now an earned
+        # negative; SOURCE_NOT_TRACEABLE says the search did not complete and is NOT a
+        # finding.
+        $failClass = 'SOURCE_NOT_TRACEABLE'
+        if (-not $baseIdent) {
+            if (Test-TerminalNonCfgExpression $exprTrim) { $failClass = 'NOT_CFG_SOURCED' }
+        } else {
+            if (Test-TerminalNonCfgExpression (Find-LocalDimInitialiser $site $baseIdent)) { $failClass = 'NOT_CFG_SOURCED' }
+        }
+        return [PSCustomObject]@{ Class = $failClass; ResolvedKey = $null; Shape = $shape; ProdFile = $site.File; ProdLine = $site.Line; ResolvedExpr = $exprTrim }
     }
     $pathAfterCfg = $fullCfgExpr -replace '^[Cc][Ff][Gg]\.', ''
-    $normalized = Get-NormalizedSettingsPath $pathAfterCfg
-    if ($normalizedHeadFlat.ContainsKey($normalized)) {
-        $resolvedKey = $normalizedHeadFlat[$normalized]
-        $class = if ($shape -eq 'positional') { 'POSITIONAL' } elseif ($aliasHop) { 'ALIASED' } else { 'NAMED' }
-        return [PSCustomObject]@{ Class = $class; ResolvedKey = $resolvedKey; Shape = $shape; ProdFile = $site.File; ProdLine = $site.Line; ResolvedExpr = $fullCfgExpr }
+    $resolvedKey = Resolve-SettingsLeafKey $pathAfterCfg
+    if ($resolvedKey) {
+        $class = if ($resolverHop) { 'RESOLVER_RETURN' } elseif ($shape -eq 'positional') { 'POSITIONAL' } elseif ($aliasHop) { 'ALIASED' } else { 'NAMED' }
+        $shapeOut = if ($resolverHop) { "$shape via $resolverVia" } else { $shape }
+        return [PSCustomObject]@{ Class = $class; ResolvedKey = $resolvedKey; Shape = $shapeOut; ProdFile = $site.File; ProdLine = $site.Line; ResolvedExpr = $fullCfgExpr }
     } else {
         return [PSCustomObject]@{ Class = 'CFG_PATH_NOT_FOUND'; ResolvedKey = $null; Shape = $shape; ProdFile = $site.File; ProdLine = $site.Line; ResolvedExpr = $fullCfgExpr }
     }
@@ -912,8 +1230,15 @@ $mappingNamed = @($callSites | Where-Object { $_.MappingClass -eq 'NAMED' }).Cou
 $mappingAliased = @($callSites | Where-Object { $_.MappingClass -eq 'ALIASED' }).Count
 $mappingPositional = @($callSites | Where-Object { $_.MappingClass -eq 'POSITIONAL' }).Count
 $mappingNoProdSites = @($callSites | Where-Object { $_.MappingClass -eq 'NO_PRODUCTION_CALL_SITE' }).Count
+# revision 2 resolved shapes (FP-D16 / FP-D17 / FP-D18)
+$mappingFixtureLocal = @($callSites | Where-Object { $_.MappingClass -eq 'FIXTURE_LOCAL_CFG_BUILDER' }).Count
+$mappingWrapperFwd   = @($callSites | Where-Object { $_.MappingClass -eq 'WRAPPER_FORWARDED' }).Count
+$mappingResolverRet  = @($callSites | Where-Object { $_.MappingClass -eq 'RESOLVER_RETURN' }).Count
+# FP-D20: the two halves of the old NOT_CFG_SOURCED catch-all, counted apart.
+$mappingNotCfgSourced   = @($callSites | Where-Object { $_.MappingClass -eq 'NOT_CFG_SOURCED' }).Count
+$mappingNotTraceable    = @($callSites | Where-Object { $_.MappingClass -eq 'SOURCE_NOT_TRACEABLE' }).Count
 $mappingOtherUnresolvedSites = @($callSites | Where-Object {
-    $_.MappingClass -in @('NOT_CFG_SOURCED', 'CFG_PATH_NOT_FOUND', 'NO_SIGNATURE_FOUND', 'CALL_PARSE_FAILED', 'PARAM_NOT_IN_SIGNATURE', 'PARAM_NOT_PASSED_AT_CALL_SITE', 'NO_CALLEE_IDENTIFIED')
+    $_.MappingClass -in @('NOT_CFG_SOURCED', 'SOURCE_NOT_TRACEABLE', 'CFG_PATH_NOT_FOUND', 'NO_SIGNATURE_FOUND', 'CALL_PARSE_FAILED', 'PARAM_NOT_IN_SIGNATURE', 'PARAM_NOT_PASSED_AT_CALL_SITE', 'NO_CALLEE_IDENTIFIED')
 }).Count
 $methodsNoProdCallSite = @($callSites | Where-Object { $_.MappingClass -eq 'NO_PRODUCTION_CALL_SITE' } | ForEach-Object { $_.Callee } | Where-Object { $_ } | Select-Object -Unique)
 
@@ -1039,6 +1364,44 @@ $scopeUsageOut = 0
 $scopeJevSkippedNoKey = 0
 $apiKey = $env:TYPESAFE_API_KEY
 $scopeJevAvailable = -not [string]::IsNullOrWhiteSpace($apiKey)
+
+# FP-D15 (revision 2, item 8c): the SECOND baseline refusal. FP-Q1 is a detector, so
+# docs/harness-shadow-mode-protocol.md section 2 step 1 applies to it as much as to FP-1 --
+# and until revision 2 it sat outside the gate entirely. The refusal is scoped to the CALL,
+# not to the run, so FP-D11's ordering rationale still holds: the coverage block below
+# still prints real numbers before anything else, they are just CODE-ONLY numbers, and
+# SCOPE_BASELINE_STATE says which kind this run produced.
+$scopeJevSkippedNoBaseline = 0
+$scopeBaselineCovers = 0
+$scopeBaselineOk = $false
+$scopeBaselineState = 'MISSING_NOT_SUPPLIED'
+if (-not [string]::IsNullOrWhiteSpace($ScopeBaselinePath)) {
+    $scopeBaselineFull = Resolve-RepoPath $ScopeBaselinePath
+    if (-not (Test-Path $scopeBaselineFull)) {
+        $scopeBaselineState = 'MISSING_PATH_NOT_FOUND'
+    } else {
+        $sbRaw = Get-Content -Raw -Path $scopeBaselineFull | ConvertFrom-Json
+        $sbMap = @{}
+        if ($null -ne $sbRaw) {
+            # Accept either a flat { param: answer } map or the { judgments: {...} } shape
+            # the 2026-09-22 seat baseline uses.
+            $sbNode = $sbRaw
+            if ($sbRaw.PSObject.Properties.Name -contains 'judgments') { $sbNode = $sbRaw.judgments }
+            foreach ($p in $sbNode.PSObject.Properties) {
+                if ($p.Name -eq '_meta') { continue }
+                $sbMap[$p.Name.ToLowerInvariant()] = [string]$p.Value
+            }
+        }
+        foreach ($p in $needsJevParams) { if ($sbMap.ContainsKey($p.ToLowerInvariant())) { $scopeBaselineCovers++ } }
+        if ($needsJevParams.Count -gt 0 -and $scopeBaselineCovers -eq 0) {
+            # A file that names none of this run's candidates is not a read of them.
+            $scopeBaselineState = 'MISSING_COVERS_NO_CANDIDATE'
+        } else {
+            $scopeBaselineOk = $true
+            $scopeBaselineState = 'SUPPLIED'
+        }
+    }
+}
 $scopeApiFailed = $false
 $scopeApiFailMsg = ''
 # Named single-parameter proofs required by docs/fixture-parser-check-spec.md section 7.5:
@@ -1051,7 +1414,12 @@ $fpq1NamedProofItems = @('atr', 'price', 'epochs', 'lr', 'nowUtcMs')
 $fpq1NamedProofs = @{}
 $scopeSw = [System.Diagnostics.Stopwatch]::StartNew()
 
-if (-not $scopeJevAvailable) {
+if (-not $scopeBaselineOk) {
+    # FP-D15: structural. No operator-written scope baseline, so FP-Q1 asks Jev NOTHING and
+    # no scope answer can be seen before the operator has written their own read.
+    foreach ($p in $needsJevParams) { $paramInScope[$p.ToLowerInvariant()] = $false }
+    $scopeJevSkippedNoBaseline = $needsJevParams.Count
+} elseif (-not $scopeJevAvailable) {
     foreach ($p in $needsJevParams) { $paramInScope[$p.ToLowerInvariant()] = $false }
     $scopeJevSkippedNoKey = $needsJevParams.Count
 } else {
@@ -1101,10 +1469,23 @@ function Write-Coverage([int]$judged) {
     "MAPPING_NO_PRODUCTION_CALL_SITE_SITES=$mappingNoProdSites"
     "MAPPING_OTHER_UNRESOLVED_SITES=$mappingOtherUnresolvedSites"
     "METHODS_NO_PRODUCTION_CALL_SITE=$($methodsNoProdCallSite.Count)"
+    "--- revision 2 additions (docs/fixture-parser-check-spec.md section 8.4 items 8a-8c) ---"
+    "MAPPING_FIXTURE_LOCAL_CFG_BUILDER=$mappingFixtureLocal"
+    "MAPPING_WRAPPER_FORWARDED=$mappingWrapperFwd"
+    "MAPPING_RESOLVER_RETURN=$mappingResolverRet"
+    "POCO_JSON_ALIAS_SEGMENTS=$pocoAliasSegments"
+    # FP-D20: the old NOT_CFG_SOURCED catch-all, split. The first is an earned negative;
+    # the second says the search did not complete and must NOT be read as a finding.
+    "MAPPING_NOT_CFG_SOURCED_SITES=$mappingNotCfgSourced"
+    "MAPPING_SOURCE_NOT_TRACEABLE_SITES=$mappingNotTraceable"
+    "--- end revision 2 additions ---"
     "IN_SCOPE_SITES=$inScopeSites"
     "OUT_OF_SCOPE_SITES=$outOfScopeSites"
     "IN_SCOPE_PARAMS=$inScopeParams"
+    "SCOPE_BASELINE_STATE=$scopeBaselineState"
+    "SCOPE_BASELINE_COVERS_CANDIDATES=$scopeBaselineCovers"
     "SCOPE_JEV_CALLS=$scopeJevCalls"
+    "SCOPE_JEV_SKIPPED_NO_BASELINE=$scopeJevSkippedNoBaseline"
     "SCOPE_JEV_SKIPPED_NO_API_KEY=$scopeJevSkippedNoKey"
     "SCOPE_USAGE_INPUT_TOKENS=$scopeUsageIn"
     "SCOPE_USAGE_OUTPUT_TOKENS=$scopeUsageOut"
@@ -1182,7 +1563,15 @@ function Format-FpQ3Proof([string]$callee, [string]$param) {
     if ($mappingCache.ContainsKey($key)) {
         $r = $mappingCache[$key]
         if ($r.ResolvedKey) {
-            return "FPQ3_PROOF $callee $param -> $($r.ResolvedKey) [$($r.Class)] ($($r.ProdFile):$($r.ProdLine), expr=$($r.ResolvedExpr))"
+            # revision 2: the three section 7.3 proof lines keep their EXACT pre-revision
+            # format (an acceptance item diffs them), so the shape suffix is added only for
+            # the new classes -- where the Class alone hides which inner shape carried the
+            # evidence (`wrapper(X)->RESOLVER_RETURN` vs `wrapper(X)->ALIASED`).
+            $shapeNote = ''
+            if ($r.Class -in @('WRAPPER_FORWARDED', 'RESOLVER_RETURN', 'FIXTURE_LOCAL_CFG_BUILDER')) {
+                $shapeNote = " shape=$($r.Shape)"
+            }
+            return "FPQ3_PROOF $callee $param -> $($r.ResolvedKey) [$($r.Class)]$shapeNote ($($r.ProdFile):$($r.ProdLine), expr=$($r.ResolvedExpr))"
         } else {
             return "FPQ3_PROOF $callee $param -> UNRESOLVED [$($r.Class)]"
         }
@@ -1193,9 +1582,38 @@ function Format-FpQ3Proof([string]$callee, [string]$param) {
 (Format-FpQ3Proof 'CalcOFI' 'buyDominantRatio')
 (Format-FpQ3Proof 'CalcOBV' 'trendGate')
 
+# Revision 2 (section 8.2): the SIX parameters the 2026-09-22 FP-Q1 run found the
+# enumeration missing -- two by gap A (fixture-local cfg builder), four by gap B (one-hop
+# forwarding wrapper). Same footing as the three above: structural facts about the derived
+# mapping, never a verdict, so they print unconditionally and before the baseline gate.
+(Format-FpQ3Proof 'BuildA8Cfg' 'fundingBoost')
+(Format-FpQ3Proof 'BuildBurstCfg' 'upgradeBonus')
+(Format-FpQ3Proof 'Fold' 'tauFastSec')
+(Format-FpQ3Proof 'Fold' 'tauNormSec')
+(Format-FpQ3Proof 'Snapshot' 'grossFloorUsdPerSec')
+(Format-FpQ3Proof 'Snapshot' 'minCoverageSec')
+
 foreach ($namedP in $fpq1NamedProofItems) {
     if ($fpq1NamedProofs.ContainsKey($namedP)) { $fpq1NamedProofs[$namedP] }
-    else { "FPQ1_PROOF $namedP -> not classified this run (SCOPE_JEV_SKIPPED_NO_API_KEY=$scopeJevSkippedNoKey, already in scope via FP-Q3, or param not present in -SourceFile's population)" }
+    else { "FPQ1_PROOF $namedP -> not classified this run (SCOPE_BASELINE_STATE=$scopeBaselineState, SCOPE_JEV_SKIPPED_NO_BASELINE=$scopeJevSkippedNoBaseline, SCOPE_JEV_SKIPPED_NO_API_KEY=$scopeJevSkippedNoKey, already in scope via FP-Q3, or param not present in -SourceFile's population)" }
+}
+
+# FP-D15: the scope detector's own protocol step 2 -- print its candidate list, with zero
+# judgments, so the operator can write a baseline against it. Non-fatal: the run continues
+# to the FP-1 gate on a CODE-ONLY scope, which is smaller than the judged one and therefore
+# cannot smuggle an unbaselined detector's opinion into the measured population.
+if (-not $scopeBaselineOk -and $needsJevParams.Count -gt 0) {
+    "SCOPE_BASELINE_MISSING ($scopeBaselineState) -- FP-Q1 made NO Jev call this run."
+    "  docs/harness-shadow-mode-protocol.md section 2 step 1 / section 4c: the SEAT writes the"
+    "  baseline, always. Write your own threshold-or-input read of each SCOPE_CANDIDATES item"
+    "  below as JSON (a flat { param: answer } map, or { ""judgments"": { ... } }; vocabulary"
+    "  threshold | input | unsure), then re-run with -ScopeBaselinePath. IN_SCOPE_* above are"
+    "  CODE-ONLY until you do."
+    "SCOPE_CANDIDATES (no judgments, for scope-baseline labelling):"
+    foreach ($p in $needsJevParams) {
+        $ci = Get-ParamContext $p
+        "  {0,-26} x{1,-3} callees=[{2}] production_mapping=[{3}]" -f $p, $ci.Count, (@($ci.Callees) -join ','), (@($ci.MappingClasses) -join ',')
+    }
 }
 
 "METHODS_WITH_NO_PRODUCTION_CALL_SITE: $($methodsNoProdCallSite -join ', ')"

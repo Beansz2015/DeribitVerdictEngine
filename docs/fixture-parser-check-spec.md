@@ -276,11 +276,73 @@ Every miss has a **mechanically derivable** cfg path the code failed to find. On
 
 | # | Item | State |
 |---|---|---|
-| **8a** | Build gaps A and B into `FP-Q3`; re-run and re-measure | **Open** |
-| **8b** | Split `NOT_CFG_SOURCED` into *searched-and-negative* vs *could-not-search* | **Open** |
-| **8c** | Extend the baseline refusal to cover `FP-Q1` | **Open** |
-| **8d** | Declare a class on `staleAfterSec:=10` and on `A23a`'s four literals | **Open — a real provenance-rule breach either way** |
-| **8e** | `MTF_TTL_SECONDS` is `Private Const`; `CLAUDE.md` rules it `Public Const` so the fixture reads it instead of restating `60` | **Open** |
+| **8a** | Build gaps A and B into `FP-Q3`; re-run and re-measure | ✅ **BUILT 2026-09-22 (UTC)** — see §8.5. All six parameters now resolve a cfg path **by construction**. ⚠ The RE-MEASURE is NOT done and is the **seat's**, never the implementer's ([`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4c) |
+| **8b** | Split `NOT_CFG_SOURCED` into *searched-and-negative* vs *could-not-search* | ✅ **DONE** — `NOT_CFG_SOURCED` (earned negative) vs `SOURCE_NOT_TRACEABLE` (the search did not complete). ⛔ Measured **0 / 22**: not one site the old label wrote off was an earned negative |
+| **8c** | Extend the baseline refusal to cover `FP-Q1` | ✅ **DONE** — `-ScopeBaselinePath`, `FP-D15`. **No conflict with `FP-D11`**, because the refusal is scoped to the CALL, not the run |
+| **8d** | Declare a class on `staleAfterSec:=10` and on `A23a`'s four literals | ✅ **DONE** at `3c320b8` — all five ruled **MECHANISM**, decided per literal, both inertness claims mutation-checked. See §8.6 |
+| **8e** | `MTF_TTL_SECONDS` is `Private Const`; `CLAUDE.md` rules it `Public Const` so the fixture reads it instead of restating `60` | ⛔ **STOPPED — do not force it.** `MTF_TTL_SECONDS` lives in `UI/MainForm_Layout.vb`, a `MainForm` partial class, and `verify/ordercheck/OrderCheck.vbproj` links **no** `UI/*.vb` file by design. `Public Const` alone does **not** let the fixture read it; compiling `MainForm` into the fixture project would drag in `System.Windows.Forms` and break the host-agnostic boundary that vbproj asserts in six separate comments. ⭐ **The move that WOULD work, unbuilt and unruled: put the constant on the host-agnostic `MtfRefreshPolicy` (already linked) as `Public Const` and have `MainForm` read it there.** That edits a live-path file for a fixture's benefit, so it is the trader's call, not an implementer's |
+| **8f** | ⛔ **NEW.** A **constructor** callee with an `Optional` parameter production never passes is unresolvable: `New WsMarketDataSource(…, staleAfterSec:=10)` reads `NO_SIGNATURE_FOUND` (the declaration is `Sub New`, not `Sub WsMarketDataSource`), and even with the signature, production **omits** the argument — the real key is read inside the constructor body (`SettingsLoader.Current.Network.WsStaleAfterSec`, `WsMarketDataSource.vb:37-38`). **A fourth shape — "the callee's own default-fallback body" — would close it** | **Open.** `staleAfterSec` is the only instance in today's population |
+| **8g** | ⛔ **NEW, and it is a circularity.** `FP-Q1`'s Jev state carries `example_comment_block`. So **adding a MECHANISM declaration can push a site OUT of scope**, and `FP-1` then never judges the declaration that was just written. Sites in scope *by construction* (an `FP-Q3` key) are immune; only the Jev-scoped remainder is exposed | **Open** |
+| **8h** | ⛔ **NEW.** `FP-Q1` answered `ttlSeconds` differently on two runs whose state for that parameter was **identical** (§8.5). `FP-D14` runs it unsampled, so nothing detects this | **Open** |
+
+---
+
+## 8.5 ⭐⭐ REVISION 2 BUILT, 2026-09-22 (UTC) — items 8a, 8b, 8c
+
+**Tool:** [`../tools/checks/fixture-parser.ps1`](../tools/checks/fixture-parser.ps1), decisions `FP-D15`–`FP-D20` in its header. **No baseline was written and no `FP-1` verdict exists** — every run below stops at `EXIT_REASON=BASELINE_MISSING`, which is the correct outcome (§7.5 item 7).
+
+### The six, each resolved and each checked against the tree
+
+| Parameter | Derived cfg path | Shape |
+|---|---|---|
+| `fundingBoost` | `scoring.funding_high_boost` | `FIXTURE_LOCAL_CFG_BUILDER` — `Program.vb:1136` |
+| `upgradeBonus` | `indicators.aggressor_velocity.upgrade_bonus` | `FIXTURE_LOCAL_CFG_BUILDER` — `Program.vb:3748` |
+| `tauFastSec` | `indicators.aggressor_velocity.fast_window_sec` | `wrapper(FoldAggressorVelocity)->POSITIONAL` — `DeribitWsFeed.vb:508` |
+| `tauNormSec` | `indicators.aggressor_velocity.default.norm_window_sec` | `wrapper(FoldAggressorVelocity)->RESOLVER_RETURN` — `ReplayLoop.vb:279` |
+| `grossFloorUsdPerSec` | `indicators.aggressor_velocity.gross_floor_usd_per_sec` | `wrapper(GetAggressorVelocity)->POSITIONAL` — `UI/MainForm_Analysis.vb:461` |
+| `minCoverageSec` | `indicators.aggressor_velocity.default.norm_window_sec` | `wrapper(GetAggressorVelocity)->RESOLVER_RETURN` — `UI/MainForm_Analysis.vb:461` |
+
+### Counters, before → after (both with the seat's scope baseline supplied)
+
+| Counter | Before | After |
+|---|---|---|
+| `IN_SCOPE_PARAMS` | 19 | **25** |
+| `IN_SCOPE_SITES` | 29 | **63** |
+| `MAPPING_NO_PRODUCTION_CALL_SITE_SITES` | 58 | 35 |
+| `MAPPING_FIXTURE_LOCAL_CFG_BUILDER` | — | 23 |
+| `MAPPING_WRAPPER_FORWARDED` | — | 6 |
+| `MAPPING_NOT_CFG_SOURCED_SITES` / `MAPPING_SOURCE_NOT_TRACEABLE_SITES` | 32 pooled | **0 / 22** |
+| `LITERAL_CALL_SITES` · `PARAMS_DISTINCT` · `SETTINGS_REVISIONS_WALKED` | 118 · 41 · 87 | **118 · 41 · 87, unchanged** |
+
+⭐ **The three §7.3 proof lines are byte-identical**, by construction: every revision-2 shape is a **fallback** that runs only after the pre-revision resolution has already failed at every production call site.
+
+⛔ **The 8b split's own headline is `0 / 22`.** Every site the old `NOT_CFG_SOURCED` label wrote off was in fact *"the search did not complete"*. The label was never once an earned negative — a stronger result than §8.2 predicted.
+
+### ⚠ Three things this build measured but did NOT settle
+
+1. ⛔ **`FP-Q1` is not answer-stable, and it is still unsampled.** Two revision-2 runs differed on `ttlSeconds` (excluded on one, in scope on the other) **with an identical state for that parameter** — only the `-SourceFile` copy differed, and not in anything `ttlSeconds`'s state reads. That is item **8h**.
+2. ⚠ **`staleAfterSec` also moved** (in scope before §8.6's comment landed, excluded after). Its state DID change — the comment block is part of it — so the comment is a *plausible* cause. ⛔ **Not established:** with `ttlSeconds` proving the detector flips unprompted, one sample cannot separate the two. That is item **8g**, and the honest reading is the §8.1 lesson again: `n=1` is `n=1` however tidy the story.
+3. ⚠ **`FP-D18`'s derived key under-states the ever-shipped set.** `ResolveAggrVelNormWindow` reaches its per-session override through a second hop, so the derived key is the **default** arm (`norm_window_sec` {120}) and the NY override (60) is not in the set. A literal of `60` at such a site would read as never-shipped. Smaller than the parameter being invisible; still a hole.
+
+### ⛔ The newly-opened sites are a CLEAN population — do not spend it
+
+`FP1_CANDIDATES` grew from 13 to 23. `A23a`'s four are in it. **No verdict has ever been recorded on any of them** (§7.5 item 7). The next seat writes its own read FIRST.
+
+---
+
+## 8.6 ⭐ Item 8d — the five literals, decided one at a time (`3c320b8`, 2026-09-22 UTC)
+
+**All five ruled MECHANISM. None became SHIPPED BEHAVIOUR, so nothing is derived from `cfg` and no assertion value moved.** The decision was taken per literal; the reasons differ and are not interchangeable.
+
+| Literal | Role in the test | Why MECHANISM, and why deriving from `cfg` would be WRONG |
+|---|---|---|
+| `staleAfterSec:=10` (`SeededWsSource`) | isolates the connection-health gate from the age gate | Needs only `staleAfterSec << tradesAgeSeconds` (300). A `cfg`-read value ≥ 300 would make the age gate un-trippable and `A16a` **silently vacuous**. A hardcoded tight value cannot rot that way |
+| `tauFastSec:=5.0` · `tauNormSec:=120.0` (`A23a`) | **LOAD-BEARING** — the expected bands are analytic functions of the taus | **Mutation-checked:** 5.0 → 7.0 gives `grossFast` 107.31 and fails the 109–112 band, exactly as `A* = a/(1-e^(-1/7))/7` predicts. Reading them from `cfg` would let a settings change silently alter what an arithmetic test asserts |
+| `grossFloorUsdPerSec:=50.0` · `minCoverageSec:=120.0` (`A23a`) | **INERT** — `grossNorm ≈ 96.8` sits above the floor; coverage is 399 s against a 120 s bar | **Mutation-checked:** `(37.0, 83.0)` leaves `A23a` passing. An inert value asserts nothing, so it cannot be SHIPPED BEHAVIOUR |
+
+⚠ **Off-EVER-shipped, walked over all 87 tracked `settings.json` revisions, not today's file:** `ws_stale_after_sec` {10} · `fast_window_sec` {5} · `gross_floor_usd_per_sec` {50} · `norm_window_sec` {60, 120}. **All five DO equal a shipped value.**
+
+⛔ **The literals were deliberately NOT swapped for off-shipped values**, though that was on the table. Three reasons: §6 below says a legitimate literal that happens to equal a shipped value **is** the case the declaration exists to license; `A23b`/`A23c`/`A23d` pass the same taus **positionally**, so changing `A23a` alone would split the family for no test gain; and neutering the values would delete the hardest members of the very population `FP-1` exists to judge — the same "do not tune the input" error [`harness-runs/fixture-parser-scope-run-2026-09-22.md`](harness-runs/fixture-parser-scope-run-2026-09-22.md) §4 warns against for the question.
 
 ---
 
