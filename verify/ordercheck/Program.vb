@@ -7402,8 +7402,25 @@ Module Program
         '                            drops the signal to NEUTRAL. 0.42 is NOT a shipped value.
         '                            HISTORY, not a claim about the literal above: it replaced
         '                            0.15, which did equal shipped TFI.threshold.
-        '   tfiWindowSize 30         Pre-existing (NOT one of session 2's 26), swept for context:
-        '                            same band [1, 30] as A4, 31 breaks it. Left untouched.
+        '   tfiWindowSize 30         ⛔ MECHANISM, and DECLARED 2026-09-22 -- it was not before,
+        '                            and that was a real fixture-literal provenance violation:
+        '                            30 EQUALS the shipped indicators.TFI.window_size (ever-
+        '                            shipped set is {30}) while this parameter was explicitly
+        '                            excluded from the block header's declaration as "NOT one of
+        '                            session 2's 26". A literal equal to a shipped value with no
+        '                            class stated is exactly the confusable case the rule exists
+        '                            to catch.
+        '                            ⛔ KEPT, and the equality with the shipped window_size is
+        '                            INCIDENTAL -- identical reasoning to A4. The fixture builds
+        '                            30 sells then 30 buys, so 30 pins its OWN buy tail: at 31
+        '                            the window takes a sell and tfiVal stops being exactly 1.0,
+        '                            failing the ±1e-6 pin. Band [1, 30], 31 breaks it. A retune
+        '                            of indicators.TFI.window_size must NOT move this.
+        '                            ⛔ Do NOT derive it from cfg: that would couple an
+        '                            ordering/LastN contract test to a calibration knob it was
+        '                            never designed to track -- the A6 failure shape.
+        '                            Found by tools/checks/fixture-parser.ps1's first clean run;
+        '                            record docs/harness-runs/fixture-parser-clean-run-2026-09-22.md
         IndicatorEngine.CalcTFI(slice500, tfiVal, tfiSig, tfiWindowSize:=30, threshold:=0.42)
         Dim okTfi = (tfiSig = "BUY PRESSURE") AndAlso (Math.Abs(tfiVal - 1.0) < 0.000001)
 

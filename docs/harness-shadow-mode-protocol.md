@@ -133,6 +133,23 @@ A build spec asks its implementer for a live dry run as an acceptance item — r
 
 ---
 
+## 4d. ⛔ AGREEMENT RATE IS THE TRUST GATE. TOP PROBABILITY IS NOT — measured 2026-09-22
+
+**From the first protocol-clean run, [`harness-runs/fixture-parser-clean-run-2026-09-22.md`](harness-runs/fixture-parser-clean-run-2026-09-22.md). 25 items, seat baseline written first.**
+
+| Class | Count | Self-consistency |
+|---|---|---|
+| Agreed with the seat | 23 | **All STABLE, 5 of 5** |
+| Disagreed | 2 | **Both UNSTABLE, 4 of 5** |
+
+⭐ **Agreement rate separated the two classes perfectly. Top probability did not, and overlapped:** an agreeing row sat at `mean_top_prob` **0.434**, *lower* than a disagreeing row at **0.452**.
+
+⛔ **So a probability band must never be promoted into a decision about whether to TRUST a row.** Both harnesses already gate correctly — their exit conditions key on the agreement rate and on `UNSTABLE`/`CONFLICT`, never on the band. **This note exists so a later seat does not "simplify" by thresholding on probability instead.**
+
+⚠ **What this does NOT say.** It does not retire `$MIN_TOP_PROBABILITY` as an ESCALATION trigger. Escalation asks a different question — *would more state help?* — and this run did not test it. ⭐ **Over-escalation costs a fraction of a cent; a wrong trust gate costs a wrong verdict.** Keep them separate and do not let this finding leak across.
+
+---
+
 ## 5. ⛔ What invalidates a first run
 
 - **The seat saw any detector output before writing its baseline.** The run is then a demonstration, not a measurement, and must be labelled as one. ⚠ **Including output relayed second-hand in an implementer's report** — see §4a.
