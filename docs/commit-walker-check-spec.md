@@ -289,6 +289,65 @@ Two commits, same shape — a new log-writing instrument under `Core/` plus the 
 
 ---
 
+## 10. ⭐⭐ REVISION 2, 2026-09-21 (UTC) — self-consistency
+
+**Supersedes revision 1's escalation design. Everything else in §9 stands.** Cause: [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4b — the detector flipped a verdict on identical input.
+
+**Source pattern:** `docs.typesafe.ai/cookbooks/consistency_choice_cookbook.md`, read in full before writing this.
+
+### 10.1 ⛔ Three details from the cookbook that are easy to get wrong
+
+| # | Detail | Why it matters |
+|---|---|---|
+| **1** | **Each repeat carries a fresh `uid`** — a throwaway unique value in the state, so every sample is "a distinct, independent draw" | ⚠ **The cookbook is honest that this is a confound:** it *"cannot separate sensitivity to the irrelevant field from variation that would occur on identical requests."* ⭐ **Our own `-Repeat 3` used NO `uid` and still flipped a verdict — so our evidence is CLEANER than the cookbook's.** Include the `uid` to match the documented pattern, and record both facts |
+| **2** | ⛔⛔ **The uncertainty band is on `max(probabilities)` — the TOP PROBABILITY — NOT on `confidence`** | The cookbook uses `MIN_CHOICE_PROBABILITY = 0.60`. **These are different statistics on different scales.** `confidence` is derived from the distribution's shape (`docs.typesafe.ai/confidence.md`); for a five-option Choice a `confidence` of 0.3 is roughly a top probability of 0.44. **Revision 1's `0.3` threshold is on `confidence` and MUST NOT be reused as a probability band** |
+| **3** | **Below the band the label becomes `uncertain` and goes to human review** — not to an escalated call | The cookbook's own numbers: plurality label repeats **90.8%** of the time; applying the 0.60 band lifts agreement to **99.2%** while auto-labelling **74.2%** of answers |
+
+### 10.2 ⭐ Self-consistency and escalation are COMPLEMENTARY, not alternatives
+
+I said last turn that self-consistency partly supersedes escalation. **That was half right, and the correction is the useful part.** They address two different failure modes, and **self-consistency is what tells you WHICH one you have:**
+
+| Observation | Diagnosis | Response |
+|---|---|---|
+| N samples **agree**, top probability **high** | Confident and stable | Report the verdict |
+| N samples **agree**, top probability **low** | ⭐ **Stable but under-informed — the state is too thin** | **ESCALATE.** More state genuinely helps. This is `504442e29e`: confidence 0.14, and its commit body said *"No behaviour changes"* in plain English |
+| N samples **disagree** | ⛔ **Unstable — genuinely on the fence** | **Flag for the seat. Do NOT escalate.** More state will not fix a coin flip. This is `c6c6942d8a` |
+
+⛔ **So keep escalation, and re-gate it: it fires on AGREEMENT-WITH-LOW-PROBABILITY, never on a single call's confidence.**
+
+### 10.3 What to build
+
+1. **Every residual commit is sampled `$SELF_CONSISTENCY_SAMPLES` times.** Default **5** — the cookbook uses 15; 5 is this repo's starting point and is a named constant beside the others. ⚠ **A guess, to be re-tuned.**
+2. **Fresh `uid` per sample**, in the state. Never in the questions.
+3. **Compute and ALWAYS report, per commit:** plurality verdict · **agreement rate** (samples on the plurality ÷ N) · mean and min top probability. **The agreement rate appears on every row, not only unstable ones.**
+4. **Band:** `$MIN_TOP_PROBABILITY = 0.60`, on `max(probabilities)`, per §10.1 detail 2.
+5. **Apply the §10.2 matrix.** Escalation re-gated to the agree-but-low-probability cell; delete the confidence-only trigger.
+6. `-Repeat` is **retired** as a separate flag — self-consistency is now the default path and `-Repeat` was its prototype. Keep `-Samples N` as the override.
+7. ⛔ **Any row whose agreement rate is below 1.0 is reported as `UNSTABLE` and is NEVER auto-resolved**, whatever the plurality says.
+
+### 10.4 Cost — no reason to be stingy
+
+17 residual commits × 5 samples ≈ 85 calls ≈ **$0.006** at the `docs.typesafe.ai/models.md` rate. **Sampling is not the expensive thing here; a wrong verdict is.**
+
+### 10.5 The two open items I now rule
+
+| Item | Ruling |
+|---|---|
+| **Baseline vocabulary** — [`rider-travel-check-spec.md`](rider-travel-check-spec.md) §4.4's `tag_correct`/`tag_wrong`/`unsure` no longer matches the five-way verdict | **Baselines for this harness use the five verdict values plus `unsure`.** The seat writes what it thinks the commit DID, exactly as the model is asked to. `unsure` still excluded from scoring |
+| **`MAX_ESCALATION_DIFF_CHARS = 20000`**, the build's own defensive cap | **Kept.** Sensible, and it was right to add it unspecced. ⚠ Still untested against an oversized commit; leave it named |
+
+### 10.6 Acceptance
+
+1. `-Samples 5` is the default path; every residual row prints an agreement rate.
+2. A fresh `uid` is present per sample and differs across samples. Show two sample states, key names and the differing `uid` only.
+3. The band reads `max(probabilities)`, not `confidence`. **Confirmable by reading one line.**
+4. The §10.2 matrix is implemented; escalation cannot fire on a disagreeing row. Confirmable by reading.
+5. `-Samples 5` on the three commits in [`harness-runs/commit-walker-20260921T204555Z-baseline.json`](harness-runs/commit-walker-20260921T204555Z-baseline.json). **Report each one's plurality, agreement rate and top-probability range.** Those three are adjudicated already, so verdicts are reportable.
+6. A dry run over `-Skip 0 -Count 300`. ⛔ **Counters, tokens and timings ONLY. No per-commit verdicts, no aggregates** — [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4a.
+7. The verdict still reads the `verdict` Choice alone. §0 trap 2 is unchanged.
+
+---
+
 ## 8. What this spec does NOT verify
 
 - **That the path rule's engine/non-engine split is correct.** It is a convention chosen here, measured to agree with the tag 93% of the time. Agreement is not proof it is right.
