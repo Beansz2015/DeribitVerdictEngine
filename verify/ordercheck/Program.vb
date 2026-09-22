@@ -2072,6 +2072,19 @@ Module Program
             Trade("buy", 1000, 1), Trade("sell", 1000, 2), Trade("buy", 1000, 3)}
         ' Stamp TradesLastUpdate `tradesAgeSeconds` in the past.
         state.SeedTrades(trades, DateTime.UtcNow.AddSeconds(-tradesAgeSeconds))
+        ' MECHANISM — staleAfterSec:=10 (CLAUDE.md fixture-literal provenance rule, 2026-09-22).
+        ' The property under test is "connection health decides, last-trade age does not", and
+        ' it needs only staleAfterSec << tradesAgeSeconds (A16a/A16c pass 300). Any tight value
+        ' serves — the A20a/A20b refactor-equivalence precedent — so this is the fixture's own
+        ' gate setting, not a copy of network.ws_stale_after_sec.
+        ' ⚠ It DOES equal a shipped value: ever-shipped(network.ws_stale_after_sec) = {10} over
+        ' all 87 tracked settings.json revisions (git-walked 2026-09-22). That is the
+        ' "legitimate literal that happens to equal a shipped value" case the declaration
+        ' exists to license (docs/fixture-parser-check-spec.md §6), not an off-shipped literal.
+        ' NOT SHIPPED BEHAVIOUR, and deriving it from cfg would be WRONG: production omits the
+        ' argument (UI/MainForm_Layout.vb:537) and WsMarketDataSource.vb:37-38 falls back to the
+        ' setting, so a cfg-read value >= 300 would make the age-gate un-trippable and this
+        ' fixture silently vacuous. A hardcoded tight value cannot rot that way.
         Return New WsMarketDataSource(state, healthCheck, staleAfterSec:=10)
     End Function
 
@@ -3022,6 +3035,25 @@ Module Program
     ' USD/s (the ~10% discrete-arrival bias over the true 100/s is inherent to the
     ' EMA-sum construction and calibrated through by §5). Norm horizon at 400 s is
     ' 96.4% converged → grossNorm ≈ 96.8. All-buy tape → lean ≈ +1.
+    ' MECHANISM — all FOUR literals below (CLAUDE.md fixture-literal provenance rule, declared
+    ' 2026-09-22). This fixture asserts the accumulator's ARITHMETIC, never a shipped value:
+    '   tauFastSec:=5.0 / tauNormSec:=120.0 — LOAD-BEARING and under the test's own control.
+    '     The expected bands ARE functions of these taus (the derivation above). Mutation-
+    '     checked: tauFast 5.0 → 7.0 moves grossFast to 107.31 and FAILS the 109-112 band,
+    '     exactly as A* = a/(1-e^(-1/7))/7 predicts. Deriving them from cfg would be WRONG —
+    '     a settings change would then silently alter what this arithmetic test asserts.
+    '   grossFloorUsdPerSec:=50.0 / minCoverageSec:=120.0 — INERT here. grossNorm ≈ 96.8 sits
+    '     above the floor so Math.Max(grossNorm, floor) never selects it, and coverage is 399 s
+    '     against a 120 s warmup bar. Mutation-checked: (37.0, 83.0) leaves A23a passing. An
+    '     inert value asserts nothing, so it cannot be SHIPPED BEHAVIOUR; reading minCoverageSec
+    '     from cfg would add a live dependency for no gain and would fail this fixture
+    '     spuriously the day a session norm window went past the 399 s of tape it folds.
+    ' ⚠ Three of the four DO equal currently-shipped values, and the ever-shipped check is over
+    ' every tracked settings.json revision, not today's (git-walked 2026-09-22, 87 revisions):
+    ' fast_window_sec {5} · gross_floor_usd_per_sec {50} · norm_window_sec {60, 120}. Equality
+    ' is evidence, never a verdict (docs/fixture-parser-check-spec.md §6) — this declaration is
+    ' what licenses it. The values are NOT changed to off-shipped ones on purpose: A23b/A23c/
+    ' A23d pass the same taus positionally, so the family would diverge for no test gain.
     Private Sub A23a_AggrVelSteadyRate()
         Dim acc As New AggressorVelocityAccumulator()
         Dim ts As Long = 1_000_000
