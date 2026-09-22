@@ -1,0 +1,411 @@
+{
+ "_what": "Seat hand labels on doc-scanner (harness 4) CODE-ONLY candidates, written during the pre-spec measurement, before any detector exists. Pre-registered so a future first run on the same (path, line, revision) items has an uncontaminated seat read.",
+ "_revision": "cbc2c91",
+ "_scope": "12 living docs (see docs/doc-scanner-measurement-2026-09-22.md section 2)",
+ "_by": "orchestrator seat (Opus 5.5)",
+ "_written_utc": "20260922T193818Z",
+ "_vocabulary": "true_positive | false_positive | unsure",
+ "_sampling": "E1_weak_cue and E3_missing_file: 20 each, random.seed(20260922) over distinct (path,line,detail,text); every other kind: all living-set candidates",
+ "labels": {
+  "docs/DeribitIndicatorProject.md:2:E1_strong": {
+   "label": "false_positive",
+   "why": "fix note quoting the old rot"
+  },
+  "docs/architecture.md:2:E1_strong": {
+   "label": "false_positive",
+   "why": "fix note quoting the old rot"
+  },
+  "docs/architecture.md:467:E1_strong": {
+   "label": "false_positive",
+   "why": "fix note quoting the old rot"
+  },
+  "CLAUDE.md:21:E4_fixture_id_absent": {
+   "label": "false_positive",
+   "why": "A54a is a queue-item name, not a fixture; namespace overlap, no wrong referent"
+  },
+  "CLAUDE.md:171:E4_fixture_id_absent": {
+   "label": "false_positive",
+   "why": "A54a is a queue-item name, not a fixture; namespace overlap, no wrong referent"
+  },
+  "CLAUDE.md:190:E4_fixture_id_absent": {
+   "label": "false_positive",
+   "why": "A54a is a queue-item name, not a fixture; namespace overlap, no wrong referent"
+  },
+  "docs/DeribitIndicatorProject.md:333:E4_fixture_id_absent": {
+   "label": "false_positive",
+   "why": "A54a is a queue-item name, not a fixture; namespace overlap, no wrong referent"
+  },
+  "docs/DeribitIndicatorProject.md:342:E4_fixture_id_absent": {
+   "label": "false_positive",
+   "why": "A54a is a queue-item name, not a fixture; namespace overlap, no wrong referent"
+  },
+  "docs/architecture.md:566:E4_fixture_id_absent": {
+   "label": "false_positive",
+   "why": "A54a is a queue-item name, not a fixture; namespace overlap, no wrong referent"
+  },
+  "docs/trader-tick-queue.md:78:E4_fixture_id_absent": {
+   "label": "false_positive",
+   "why": "A54a is a queue-item name, not a fixture; namespace overlap, no wrong referent"
+  },
+  "docs/trader-tick-queue.md:150:E4_fixture_id_absent": {
+   "label": "false_positive",
+   "why": "A54a is a queue-item name, not a fixture; namespace overlap, no wrong referent"
+  },
+  "CLAUDE.md:273:E5_stale_state_section": {
+   "label": "false_positive",
+   "why": "dated illustrative example"
+  },
+  "docs/aws-collector-deploy-checklist.md:21:E5_stale_state_section": {
+   "label": "unsure",
+   "why": "list may still hold; not checked"
+  },
+  "docs/backlog-dependency-map.md:64:E5_stale_state_section": {
+   "label": "true_positive",
+   "why": "A5 \"28 as of 2026-08-07, ~2 dates out\" 47 days on, in a doc that says it carries no state"
+  },
+  "docs/backlog-dependency-map.md:127:E5_stale_state_section": {
+   "label": "unsure",
+   "why": "2026-09-10 verified table; not re-verified"
+  },
+  "docs/roadmap.md:31:E5_stale_state_section": {
+   "label": "true_positive",
+   "why": "2026-08-24 snapshot in the strategic board, 30 days old"
+  },
+  "docs/roadmap.md:43:E5_stale_state_section": {
+   "label": "true_positive",
+   "why": "\"Next free fixture family A73\"; Program.vb high-water family is A85"
+  },
+  "docs/roadmap.md:45:E5_stale_state_section": {
+   "label": "unsure",
+   "why": "defect status not re-checked"
+  },
+  "docs/roadmap.md:100:E5_stale_state_section": {
+   "label": "true_positive",
+   "why": "A5 \"28 of 30 dates as of 2026-08-07\", 47 days on"
+  },
+  "docs/roadmap.md:190:E5_stale_state_section": {
+   "label": "false_positive",
+   "why": "framed \"Previously closed\""
+  },
+  "docs/roadmap.md:205:E5_stale_state_section": {
+   "label": "unsure",
+   "why": "2026-09-10 verified table; not re-verified"
+  },
+  "docs/trader-tick-queue.md:5:E5_stale_state_section": {
+   "label": "unsure",
+   "why": "\"map carries no state\" vs its own A5 row; dated qualifier"
+  },
+  "docs/trader-tick-queue.md:43:E5_stale_state_section": {
+   "label": "false_positive",
+   "why": "a dated move record"
+  },
+  "CLAUDE.md:36:E6_stale_current_pointer": {
+   "label": "false_positive",
+   "why": "cites 07-18 for standing rules, deliberately"
+  },
+  "docs/roadmap.md:40:E6_stale_current_pointer": {
+   "label": "unsure",
+   "why": "pointer inside a stale snapshot row"
+  },
+  "docs/trader-tick-queue.md:21:E6_stale_current_pointer": {
+   "label": "false_positive",
+   "why": "labelled PREVIOUS state read"
+  },
+  "docs/trader-tick-queue.md:48:E6_stale_current_pointer": {
+   "label": "true_positive",
+   "why": "section 0 table calls 09-17 THE current state read; banner says 09-22b"
+  },
+  "docs/DeribitIndicatorProject.md:75:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "OFI 2.0/0.5 vs shipped 1.6/0.625"
+  },
+  "docs/UserManual.md:587:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:906:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:1128:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:1227:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:1228:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:1300:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:1598:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:1599:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:1600:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "docs/UserManual.md:1601:E2_value_was_shipped": {
+   "label": "true_positive",
+   "why": "current-feature section quotes a superseded value"
+  },
+  "CLAUDE.md:251:E2_value_was_shipped": {
+   "label": "false_positive",
+   "why": "history narrative, not a current-value claim"
+  },
+  "docs/DeribitIndicatorProject.md:196:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/DeribitIndicatorProject.md:342:E2_value_was_shipped": {
+   "label": "false_positive",
+   "why": "history narrative, not a current-value claim"
+  },
+  "docs/DeribitIndicatorProject.md:450:E2_value_was_shipped": {
+   "label": "false_positive",
+   "why": "history narrative, not a current-value claim"
+  },
+  "docs/UserManual.md:66:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/UserManual.md:250:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/UserManual.md:325:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/UserManual.md:731:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/UserManual.md:1253:E2_value_was_shipped": {
+   "label": "unsure",
+   "why": "inside a versioned (v46) section"
+  },
+  "docs/UserManual.md:1415:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/UserManual.md:1502:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/UserManual.md:1803:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/UserManual.md:2232:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/UserManual.md:2532:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/architecture.md:560:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/aws-collector-deploy-checklist.md:270:E2_value_was_shipped": {
+   "label": "false_positive",
+   "why": "history narrative, not a current-value claim"
+  },
+  "docs/backlog-dependency-map.md:47:E2_value_was_shipped": {
+   "label": "false_positive",
+   "why": "history narrative, not a current-value claim"
+  },
+  "docs/roadmap.md:39:E2_value_was_shipped": {
+   "label": "false_positive",
+   "why": "history narrative, not a current-value claim"
+  },
+  "docs/roadmap.md:85:E2_value_was_shipped": {
+   "label": "false_positive",
+   "why": "history narrative, not a current-value claim"
+  },
+  "docs/trader-profile.md:78:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/trader-profile.md:110:E2_value_never_shipped": {
+   "label": "false_positive",
+   "why": "parser misattributed the number"
+  },
+  "docs/trader-tick-queue.md:83:E2_value_was_shipped": {
+   "label": "false_positive",
+   "why": "history narrative, not a current-value claim"
+  },
+  "docs/trader-tick-queue.md:104:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/architecture.md:321:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/DeribitIndicatorProject.md:286:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/backlog-dependency-map.md:69:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "CLAUDE.md:25:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/backlog-dependency-map.md:104:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/DeribitIndicatorProject.md:165:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/roadmap.md:39:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/trader-profile.md:99:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/backlog-dependency-map.md:109:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "CLAUDE.md:269:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/DeribitIndicatorProject.md:149:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/trader-tick-queue.md:150:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/roadmap.md:99:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/aws-collector-deploy-checklist.md:272:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/trader-tick-queue.md:87:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/architecture.md:581:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/trader-tick-queue.md:152:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/DeribitIndicatorProject.md:54:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/roadmap.md:98:E1_weak_cue": {
+   "label": "false_positive",
+   "why": "historical mention"
+  },
+  "docs/aws-collector-deploy-checklist.md:21:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/DeribitIndicatorProject.md:421:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/aws-collector-deploy-checklist.md:276:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "CLAUDE.md:72:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/aws-collector-deploy-checklist.md:316:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/DeribitIndicatorProject.md:265:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/csv-rotation-riders.md:3:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/aws-collector-deploy-checklist.md:318:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "CLAUDE.md:238:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/DeribitIndicatorProject.md:229:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/aws-collector-deploy-checklist.md:214:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/aws-collector-deploy-checklist.md:187:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/DeribitIndicatorProject.md:137:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/trader-tick-queue.md:57:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/UserManual.md:2088:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/UserManual.md:1856:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/aws-collector-deploy-checklist.md:339:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/roadmap.md:240:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/trader-tick-queue.md:163:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  },
+  "docs/UserManual.md:2052:E3_missing_file": {
+   "label": "false_positive",
+   "why": "runtime/untracked file or a deliberate deleted-file mention"
+  }
+ }
+}
