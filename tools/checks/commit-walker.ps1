@@ -996,7 +996,7 @@ if ($CountersOnly) {
     $escRows = @($results | Where-Object { $_.Escalated })
     if ($escRows.Count -gt 0) {
         $reportLines.Add('')
-        $reportLines.Add("## Escalation (revision 2 correction, section 10.7 -- escalation sampled `\$ESCALATION_SAMPLES` times, primary plurality never silently overridden)")
+        $reportLines.Add("## Escalation (revision 2 correction, section 10.7 -- escalation sampled $ESCALATION_SAMPLES times per commit, primary plurality never silently overridden)")
         $reportLines.Add('')
         $reportLines.Add('| Hash | Status | Primary plurality | Primary agreement | Primary mean top prob | Escalated plurality | Escalated agreement | Escalated mean top prob | Escalated verdicts |')
         $reportLines.Add('|---|---|---|---|---|---|---|---|---|')
