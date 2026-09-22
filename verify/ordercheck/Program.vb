@@ -2530,10 +2530,34 @@ Module Program
     Private Sub A20a_CalcOfiRefactorEquivalence()
         Dim book = MakeBook(99990, 100010, 10, 1)
 
+        ' MECHANISM — buyDominantRatio:=2.0 / sellDominantRatio:=0.5 / bookDepth:=5 here, and the
+        ' positional 5 / 2.0 / 0.5 in the helper calls below (CLAUDE.md fixture-literal provenance
+        ' rule, declared 2026-09-22). This is a refactor-equivalence test: CalcOFI must equal the
+        ' extracted helpers on one input and reproduce the pre-extraction 150/15/10.0 arithmetic.
+        '   bookDepth 5 (both calls) — LOAD-BEARING and under the test's own control. The expected
+        '     150/15 are 10 and 1 times the weight sum {5,4,3,2,1} = 15 over MakeBook's 5 levels.
+        '     Mutation-checked: both depths 5 → 4 FAILS (bid 100.0 / ask 10.0); the helper's depth
+        '     alone 5 → 4 FAILS the path equality (h:100.0/10.0 against 150.0/15.0).
+        '   buyDominantRatio 2.0 — load-bearing only as an upper edge. The ratio is 10.0, so any
+        '     value below 10.0 gives BUY DOMINANT. Mutation-checked: this call's pair alone
+        '     2.0/0.5 → 3.7/0.37 PASSES (at this ratio the two paths need not even share
+        '     thresholds); both buy thresholds 2.0 → 12.0 FAIL (sig=BALANCED on both paths).
+        '   sellDominantRatio 0.5 — MASKED, so it asserts nothing: ratio 10.0 > buyDominantRatio
+        '     returns before ClassifyOfiRatio reads it. Mutation-checked: both 0.5 → 50.0 PASSES.
+        ' ⚠ All three DO equal ever-shipped values, over every tracked settings.json revision
+        ' (git-walked 2026-09-22, 87 revisions): buy_dominant_ratio {1.60, 2.0, 3.0}, where 2.0
+        ' shipped 2026-04-22 until v48 (2026-07-03) · sell_dominant_ratio {0.333, 0.5, 0.625} ·
+        ' book_depth {5}. Equality is evidence, never a verdict (docs/fixture-parser-check-spec.md
+        ' §6); this declaration is what licenses it. NOT SHIPPED BEHAVIOUR, and deriving from cfg
+        ' would be WRONG: a book_depth change would move 150/15 and fail this test for a reason
+        ' unrelated to the refactor, and the test cannot tell one threshold below 10.0 from another,
+        ' so a cfg-read threshold would add a live dependency and assert nothing more.
         Dim cRatio, cBid, cAsk As Double, cSig As String = Nothing
         IndicatorEngine.CalcOFI(book, cRatio, cSig, cBid, cAsk,
                                 buyDominantRatio:=2.0, sellDominantRatio:=0.5, bookDepth:=5)
 
+        ' MECHANISM — depth 5 (LOAD-BEARING, must equal the CalcOFI depth above) and 2.0 / 0.5
+        ' (buy an upper edge below ratio 10.0, sell masked); declared and mutation-checked above.
         Dim hBid, hAsk, hRatio As Double
         Dim ok = IndicatorEngine.ComputeOfiImbalance(book, 5, hBid, hAsk, hRatio)
         Dim hSig = IndicatorEngine.ClassifyOfiRatio(hRatio, 2.0, 0.5)
@@ -2550,6 +2574,17 @@ Module Program
     ' -- A20b: CalcOFI edge cases unchanged (Nothing book / zero-total book) ----
     ' Nothing → ratio 1.0, BALANCED, bid=ask=0; ComputeOfiImbalance returns False.
     ' Zero-size book → total 0 → same defaults, helper returns False (no fold).
+    ' MECHANISM — every settings-backed literal in this fixture (CLAUDE.md fixture-literal
+    ' provenance rule, declared 2026-09-22): buyDominantRatio:=2.0 / sellDominantRatio:=0.5 /
+    ' bookDepth:=5 on both CalcOFI calls, and the positional depth 5 on both ComputeOfiImbalance
+    ' calls. All are INERT. A Nothing book returns before bookDepth is read; a zero-size book
+    ' sums to 0 at any depth; in both cases CalcOFI returns before ClassifyOfiRatio runs.
+    ' Mutation-checked: 0.01 / 99.0 / depth 1 on all four calls PASSES. An inert value asserts
+    ' nothing, so it cannot be SHIPPED BEHAVIOUR.
+    ' ⚠ The values DO equal ever-shipped ones (git-walked 2026-09-22, 87 revisions):
+    ' buy_dominant_ratio {1.60, 2.0, 3.0} · sell_dominant_ratio {0.333, 0.5, 0.625} ·
+    ' book_depth {5}. Equality is evidence, never a verdict (docs/fixture-parser-check-spec.md
+    ' §6); this declaration is what licenses it. They are left equal to A20a's on purpose.
     Private Sub A20b_CalcOfiEdgeCasesUnchanged()
         Dim nRatio, nBid, nAsk As Double, nSig As String = Nothing
         IndicatorEngine.CalcOFI(Nothing, nRatio, nSig, nBid, nAsk,
@@ -2557,6 +2592,8 @@ Module Program
         Dim xBid, xAsk, xRatio As Double
         Dim nOk = IndicatorEngine.ComputeOfiImbalance(Nothing, 5, xBid, xAsk, xRatio)
 
+        ' MECHANISM — the zeroBook calls' 2.0 / 0.5 / 5 are INERT; declared and mutation-checked
+        ' in the block above this Sub.
         Dim zeroBook = MakeBook(99990, 100010, 0, 0)
         Dim zRatio, zBid, zAsk As Double, zSig As String = Nothing
         IndicatorEngine.CalcOFI(zeroBook, zRatio, zSig, zBid, zAsk,
@@ -3053,7 +3090,8 @@ Module Program
     ' fast_window_sec {5} · gross_floor_usd_per_sec {50} · norm_window_sec {60, 120}. Equality
     ' is evidence, never a verdict (docs/fixture-parser-check-spec.md §6) — this declaration is
     ' what licenses it. The values are NOT changed to off-shipped ones on purpose: A23b/A23c/
-    ' A23d pass the same taus positionally, so the family would diverge for no test gain.
+    ' A23d pass the same taus (A23c, A23d and A23b's baseline loop positionally, A23b's burst
+    ' loop by name), so the family would diverge for no test gain.
     Private Sub A23a_AggrVelSteadyRate()
         Dim acc As New AggressorVelocityAccumulator()
         Dim ts As Long = 1_000_000
@@ -3078,6 +3116,40 @@ Module Program
     ' horizons, lean ≈ 0), then 20 × 1000 USD BUY prints at 100 ms spacing (a 2 s
     ' 10k USD/s buy burst). The fast horizon jumps far above the slow norm →
     ' burstRatio ≫ 2.5 with a strong positive lean → BURST_BUY.
+    ' MECHANISM — every settings-backed literal below (CLAUDE.md fixture-literal provenance
+    ' rule, declared 2026-09-22). This fixture asserts the accumulator-to-classifier SHAPE: a
+    ' balanced baseline reads NORMAL and a one-sided firehose reads BURST_BUY. It asserts no
+    ' shipped value, and the tape is built with wide margins: pre-burst ratio 1.06 / lean -0.05,
+    ' post-burst ratio 12.91 / lean 0.98. (Post ratio, post lean and pre lean are printed by the
+    ' harness FAIL detail under the 20.0 mutation below; pre ratio and the grossNorm values are
+    ' computed by replicating the accumulator, which reproduces those printed values.)
+    '   Fold amounts 50.0 / 1000.0 are INPUTS (Fold's amountUsd, a trade size in USD), not
+    '     settings values. The 50.0 only coincides with gross_floor_usd_per_sec.
+    '   Fold taus 5.0 / 120.0 (positional in the baseline loop, by name in the burst loop) —
+    '     LOAD-BEARING only through their SEPARATION (fast << norm), not their values.
+    '     Mutation-checked: (7.0, 90.0) in both loops PASSES; tauFast 5.0 → 120.0 in both
+    '     loops (fast = norm) FAILS with post ratio 1.00.
+    '   Snapshot 50.0 / 120.0 (grossFloorUsdPerSec, minCoverageSec) — INERT here. grossNorm is
+    '     99.5 before and 262.9 after the burst, so Math.Max never selects the floor, and the
+    '     coverage is 599.5 s / 601.9 s against the 120 s warmup bar. Mutation-checked:
+    '     (37.0, 83.0) on both Snapshot calls PASSES.
+    '   ClassifyAggressorBurst 2.5 / 0.2 (burstRatioThreshold, directionLeanFloor) — load-
+    '     bearing only as band edges: any threshold between 1.06 and 12.91 serves.
+    '     Mutation-checked: (3.7, 0.37) on both calls PASSES; threshold 2.5 → 20.0 on both
+    '     calls FAILS (post ratio=12.91 lean=0.980 sig=NORMAL). In the preSig call the 0.2 is
+    '     MASKED by the ratio: 0.2 → 0.0 alone PASSES, and only the joint move threshold 1.0
+    '     AND floor 0.0 FAILS (pre sig=BURST_SELL).
+    ' ⚠ Every settings-backed literal here DOES equal an ever-shipped value, over every tracked
+    ' settings.json revision (git-walked 2026-09-22, 87 revisions): fast_window_sec {5} ·
+    ' norm_window_sec {60, 120} · gross_floor_usd_per_sec {50} · burst_ratio_threshold
+    ' {2.5, 4.5, 5.5} · direction_lean_floor {0.2}. Equality is evidence, never a verdict
+    ' (docs/fixture-parser-check-spec.md §6); this declaration is what licenses it. NOT
+    ' SHIPPED BEHAVIOUR: production resolves norm_window_sec and burst_ratio_threshold PER
+    ' SESSION (ExecutionResolution.ResolveAggrVelNormWindow / ResolveAggrVelBurstThreshold), so
+    ' "the shipped value" is not one number, and this fixture cannot tell 2.5 from 4.5 or 5.5
+    ' (mutation-checked: 4.5 and 5.5 on both calls each PASS). A cfg read would assert nothing
+    ' more. The assertion's own 2.5 / 0.2 bounds are assertion literals, not arguments, and
+    ' this block does not cover them.
     Private Sub A23b_AggrVelBurstDetection()
         Dim acc As New AggressorVelocityAccumulator()
         Dim ts As Long = 1_000_000
