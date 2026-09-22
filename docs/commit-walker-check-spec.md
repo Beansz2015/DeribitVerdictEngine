@@ -427,4 +427,20 @@ The three adjudicated commits, against the hand baseline:
 
 - **That the path rule's engine/non-engine split is correct.** It is a convention chosen here, measured to agree with the tag 93% of the time. Agreement is not proof it is right.
 - **That a `tag_correct` commit actually met its §15 and settings-bump obligations.** This checks the tag, not what the tag triggers.
-- **`tools/` changes.** Treated as non-engine by the path rule; that is a convention, and a `tools/` change can still be a real behaviour change in an offline analysis path.
+- **`tools/` changes.** Treated as non-engine by the path rule; that is a convention, and a `tools/` change can still be a real behaviour change in an offline analysis path. ⛔ **Superseded in part by §11: the 8 `tools/` files the app compiles ARE engine paths now.**
+
+---
+
+## 11. ⭐ REVISION 3, 2026-09-22 (UTC) — after the adversarial review
+
+**Source:** [`jev-harnesses-adversarial-review-2026-09-22.md`](jev-harnesses-adversarial-review-2026-09-22.md) findings 1, 3 and 10; trader "go". Decision records `CW-R3-1` to `CW-R3-3` in the script header.
+
+| Change | Why | Verified (key stripped unless stated) |
+|---|---|---|
+| **`CW-R3-1`** The engine-path rule adds, per commit, the `tools/` files THAT commit's own `DeribitVerdictEngine.vbproj` compiles, plus the vbproj itself. The state carries a code-computed `touched_app_paths`; every question and criterion now says *only files in `touched_app_paths` are app code* | The app compiles 8 `tools/` files, and the question text told Jev *"`tools/` … changes are NOT app changes, however large"*. `5346bc0` (tagged, changed a value the app logs) had filed itself as agreeing and was never judged | Over the full post-era span (384 classified commits), **exactly two move**: `5346bc0` enters the residual, `a6c205d` (untagged, touches `HistoricalStore.vb`) leaves it. Residual stays 21 (5.5 %) |
+| **`CW-R3-2`** Full hashes in `RESIDUAL_CANDIDATES`; the example uses the five-way vocabulary; an item-level refusal (`BASELINE_INCOMPLETE`) with `-AllowUnbaselinedItems` for routine re-runs | A baseline written from the old 10-character list matched nothing, and a file-level gate then judged every commit unbaselined — the unspent window spent | Empty baseline → `BASELINE_INCOMPLETE`, full hash listed, no call made |
+| **`CW-R3-3`** `-Since <sha>` walks `<sha>..HEAD`, exclusive, capped by `-Count` | The unspent window was a hand-computed `-Skip`/`-Count` | A bad sha → `BAD_SINCE`; `-Since 6f95e42` → exactly the 5 non-merge commits after it |
+
+**Keyed smoke test** (one seat-authored commit, `526ecf2`, conflicted for the seat anyway): the state carries `touched_app_paths`; 5 samples, `no_app_change`, STABLE, mean top probability 0.988, agrees with the seat's read written first. 7,542 input tokens.
+
+⚠ **The measured first run is still unspent.** Name its window with `-Since` at the last commit the seat has seen, and write the baseline from the full hashes printed.

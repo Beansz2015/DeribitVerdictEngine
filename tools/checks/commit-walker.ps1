@@ -124,6 +124,24 @@
     same `if (-not $stable) { ... } elseif (...) { escalate }` shape as revision 2.
   ===================================================================================================
 
+  ============================== REVISION 3 (2026-09-22 UTC) ==============================
+  docs/jev-harnesses-adversarial-review-2026-09-22.md findings 1, 3 and 10, trader "go".
+    CW-R3-1 (finding 1): "tools/ is never app" was false -- the app compiles 8 tools/ files
+      (DeribitVerdictEngine.vbproj <Compile Include="tools\...">). The engine-path rule now
+      adds, per commit, the tools/ files THAT commit's own vbproj compiles, plus the vbproj
+      itself; the state carries a code-computed `touched_app_paths`; and every question
+      and criterion that said "tools/ and verify/ are NOT app changes" now says "only
+      files in touched_app_paths are app code". Measured: 1 of 354 tagged post-era
+      commits (5346bc0) had slipped through as AGREE_TAGGED.
+    CW-R3-2 (finding 3): RESIDUAL_CANDIDATES prints FULL hashes (the baseline key); the
+      BASELINE_MISSING example uses the current five-way vocabulary; and an ITEM-level
+      refusal (EXIT_REASON=BASELINE_INCOMPLETE) stops the run before any Jev call when a
+      residual commit has no baseline line. -AllowUnbaselinedItems opts out for routine
+      re-runs.
+    CW-R3-3 (finding 10): -Since <sha> walks <sha>..HEAD (exclusive), still capped by
+      -Count, so the unspent measurement window is named by its boundary commit.
+  =======================================================================================
+
   THE TRAPS THAT STILL APPLY (docs/commit-walker-check-spec.md section 0, unchanged by
   either revision):
     1. Merge commits return an EMPTY file list from `git show --name-only`, so they look
@@ -198,7 +216,15 @@ param(
     # SELF_CONSISTENCY, DISAGREEMENTS/UNSTABLE counts and their *_LIST blocks are all
     # suppressed from console AND from the written report. Coverage, token usage and wall
     # time still print -- section 10.6 item 6 asks for exactly those and nothing else.
-    [switch]$CountersOnly
+    [switch]$CountersOnly,
+    # REVISION 3 (review finding 3): refuse when any residual commit has no line in the
+    # baseline, unless this is passed -- for a routine re-run of commits measured once.
+    [switch]$AllowUnbaselinedItems,
+    # REVISION 3 (review finding 10): walk only commits AFTER this one (git range
+    # <Since>..HEAD), still capped by -Count. Lets the unspent measurement window be named by
+    # its boundary commit instead of a hand-computed -Skip/-Count that can overlap the
+    # contaminated one.
+    [string]$Since = ''
 )
 
 $ErrorActionPreference = 'Continue'
@@ -288,24 +314,48 @@ function Resolve-RepoPath([string]$p) {
 # Engine-path rule, docs/commit-walker-check-spec.md section 2 (re-measured section 9.1,
 # stands unchanged). Git always reports paths with forward slashes, on every OS, so these
 # patterns need no separator translation.
-function Test-EngineTouch([string[]]$paths) {
-    foreach ($p in $paths) {
-        if ($p -eq 'settings.json') { return $true }
-        if ($p -match '^(Core|analysis|UI)/') { return $true }
-        if ($p -match '^[^/]+\.vb$') { return $true }
-    }
+# REVISION 3 (adversarial review 2026-09-22, finding 1): the shipped app COMPILES some
+# tools/ files -- DeribitVerdictEngine.vbproj lists them as explicit <Compile Include=
+# "tools\..."> entries (at HEAD: six tools/AutoTweaker/*.vb, HistoricalStore.vb and
+# BacktestFundingSample.vb). A blanket "tools/ is never app" let 5346bc0, a tagged commit
+# changing a value the app logs, file itself AGREE_TAGGED and never reach a judge. The set
+# is read from EACH COMMIT'S OWN vbproj (git show <hash>:DeribitVerdictEngine.vbproj),
+# cached by blob id, never hand-kept -- the project file IS the mapping. The vbproj itself
+# is an engine path too: changing it changes what compiles into the .exe.
+$AppProjectPath = 'DeribitVerdictEngine.vbproj'
+$appSetByBlob = @{}
+function Get-AppCompiledToolsFiles([string]$hash) {
+    $blob = (& git -C $repo rev-parse "${hash}:$AppProjectPath" 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($blob)) { return @() }
+    $blob = $blob.Trim()
+    if ($appSetByBlob.ContainsKey($blob)) { return $appSetByBlob[$blob] }
+    $text = ((& git -C $repo cat-file -p $blob 2>$null) -join "`n")
+    $set = @([regex]::Matches($text, '(?i)<Compile\s+Include="(tools\\[^"]+\.vb)"') | ForEach-Object { $_.Groups[1].Value.Replace('\', '/') })
+    $appSetByBlob[$blob] = $set
+    return $set
+}
+
+function Test-AppPath([string]$p, [string[]]$appToolsFiles) {
+    if ($p -eq 'settings.json') { return $true }
+    if ($p -eq $AppProjectPath) { return $true }
+    if ($p -match '^(Core|analysis|UI)/') { return $true }
+    if ($p -match '^[^/]+\.vb$') { return $true }
+    if ($appToolsFiles -contains $p) { return $true }
+    return $false
+}
+
+function Test-EngineTouch([string[]]$paths, [string[]]$appToolsFiles) {
+    foreach ($p in $paths) { if (Test-AppPath $p $appToolsFiles) { return $true } }
     return $false
 }
 
 # Same rule, returning the MATCHING paths instead of a bool -- used to scope the
-# low-confidence escalation diff to shipped-app files only (never tools/, never verify/).
-function Get-EngineTouchedPaths([string[]]$paths) {
+# low-confidence escalation diff to shipped-app files only, and (revision 3) sent to Jev
+# as `touched_app_paths` so the model is TOLD which files are app code instead of being
+# told "tools/ is never app".
+function Get-EngineTouchedPaths([string[]]$paths, [string[]]$appToolsFiles) {
     $out = New-Object System.Collections.Generic.List[string]
-    foreach ($p in $paths) {
-        if ($p -eq 'settings.json') { $out.Add($p); continue }
-        if ($p -match '^(Core|analysis|UI)/') { $out.Add($p); continue }
-        if ($p -match '^[^/]+\.vb$') { $out.Add($p); continue }
-    }
+    foreach ($p in $paths) { if (Test-AppPath $p $appToolsFiles) { $out.Add($p) } }
     return $out.ToArray()
 }
 
@@ -331,7 +381,18 @@ function Get-ShippedAppDiff([string]$repoPath, [string]$hash, [string[]]$paths, 
 # ---------------------------------------------------------------------------------------
 $skipArgs = @()
 if ($Skip -gt 0) { $skipArgs = @("--skip=$Skip") }
-$raw = [string[]](& git -C $repo log --no-merges --no-renames @skipArgs -$Count --numstat --format="COMMITSTART`t%H`t%cI`t%s%n@@CW_BODY@@%n%b%n@@CW_BODYEND@@")
+$rangeArgs = @()
+if ($Since) {
+    $sinceFull = (& git -C $repo rev-parse --verify --quiet "$Since^{commit}" 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sinceFull)) {
+        "EXIT_REASON=BAD_SINCE"
+        "-Since '$Since' does not name a commit in this repository."
+        exit 2
+    }
+    $rangeArgs = @("$($sinceFull.Trim())..HEAD")
+    "SINCE=$($sinceFull.Trim())  (walking $($sinceFull.Trim().Substring(0,10))..HEAD, exclusive of it)"
+}
+$raw = [string[]](& git -C $repo log --no-merges --no-renames @skipArgs -$Count --numstat --format="COMMITSTART`t%H`t%cI`t%s%n@@CW_BODY@@%n%b%n@@CW_BODYEND@@" @rangeArgs)
 
 $commits = New-Object System.Collections.Generic.List[object]
 $cur = $null
@@ -418,7 +479,9 @@ foreach ($c in $commits) {
     if ($isPreEra) { $preEra.Add($c); continue }
 
     $tagged = $c.Subject.Contains('[no-engine-change]')
-    $touchedEngine = Test-EngineTouch $c.Paths
+    $appTools = @(Get-AppCompiledToolsFiles $c.Hash)
+    $c | Add-Member -NotePropertyName AppToolsFiles -NotePropertyValue $appTools
+    $touchedEngine = Test-EngineTouch $c.Paths $appTools
     $c | Add-Member -NotePropertyName Tagged -NotePropertyValue $tagged
     $c | Add-Member -NotePropertyName TouchedEngine -NotePropertyValue $touchedEngine
 
@@ -462,7 +525,9 @@ if ($residualAll.Count -gt 0) {
     "RESIDUAL_CANDIDATES (no judgments, for baseline labelling):"
     foreach ($c in $residualAll) {
         $cls = if ($c.Tagged) { 'TAGGED_BUT_ENGINE_PATH' } else { 'UNTAGGED_NO_ENGINE_PATH' }
-        "  $($c.Hash.Substring(0,10)) [$cls] $($c.Subject)"
+        # REVISION 3 (review finding 3): the FULL hash -- the baseline is keyed by it, and a
+        # 10-character print invited a baseline that silently matched nothing.
+        "  $($c.Hash) [$cls] $($c.Subject)"
     }
 }
 
@@ -513,8 +578,8 @@ if ($residualPct -gt 25) {
 $baselineFull = Resolve-RepoPath $BaselinePath
 if (-not (Test-Path $baselineFull)) {
     "EXIT_REASON=BASELINE_MISSING"
-    "No baseline file at '$BaselinePath'. Write your OWN read of each RESIDUAL_CANDIDATES commit above BEFORE running this tool, as JSON, one key per full commit hash. Example:"
-    '{ "88538d7...": "tag_correct", "4ab0b25...": "tag_wrong" }'
+    "No baseline file at '$BaselinePath'. Write your OWN read of each RESIDUAL_CANDIDATES commit above BEFORE running this tool, as JSON, one key per FULL 40-character commit hash (as printed above), values one of no_app_change | changes_computation | changes_display | changes_writes | ambiguous | unsure. Example:"
+    '{ "<40-char hash>": "no_app_change", "<40-char hash>": "changes_writes" }'
     "The whole point of the first run is comparing an independent human read against Jev's; looking first makes that comparison worthless permanently. See docs/harness-shadow-mode-protocol.md."
     exit 2
 }
@@ -522,6 +587,18 @@ $baselineRaw = Get-Content -Raw -Path $baselineFull | ConvertFrom-Json
 $baseline = @{}
 if ($null -ne $baselineRaw) {
     foreach ($p in $baselineRaw.PSObject.Properties) { $baseline[$p.Name] = [string]$p.Value }
+}
+
+# REVISION 3 (review finding 3): ITEM-level refusal, the fixture-parser FP-D24 pattern. The
+# gate above is file-level, so a baseline keyed wrong (a short hash, a typo) let every
+# unmatched commit be judged with no seat line -- the measured window spent for ever.
+$unbaselined = @($residualAll | Where-Object { -not $baseline.ContainsKey($_.Hash) })
+if ($unbaselined.Count -gt 0 -and -not $AllowUnbaselinedItems) {
+    "EXIT_REASON=BASELINE_INCOMPLETE"
+    "UNBASELINED_ITEMS=$($unbaselined.Count) -- no line in '$BaselinePath' for:"
+    foreach ($u in $unbaselined) { "  $($u.Hash)" }
+    "Nothing was judged. Add your own read for each commit above (full hash), or narrow the window. For a routine re-run of commits already measured once, pass -AllowUnbaselinedItems."
+    exit 2
 }
 
 # ---------------------------------------------------------------------------------------
@@ -538,7 +615,7 @@ if ([string]::IsNullOrWhiteSpace($apiKey)) {
 }
 
 $verdictCriteria = @{
-    no_app_change       = 'These changes do NOT alter the shipped Windows application (the code inside the .exe) when it runs: no change to what it computes, decides, renders on screen, or writes to disk. Changes confined to `tools/`, `verify/`, documentation, tests, comments, or a proven output-identical refactor of app code all satisfy this.'
+    no_app_change       = 'These changes do NOT alter the shipped Windows application (the code inside the .exe) when it runs: no change to what it computes, decides, renders on screen, or writes to disk. Changes confined to files NOT listed in `touched_app_paths` (documentation, tests, `verify/`, and the `tools/` files the app does not compile), to comments, or to a proven output-identical refactor of app code all satisfy this.'
     changes_computation = 'These changes alter what the shipped application computes or decides while running -- a score, a verdict, a gate outcome, a threshold comparison, or a placed ATR/Kelly level -- regardless of whether display or writes also change.'
     changes_display      = 'These changes alter a text string or value the shipped application renders on screen (a card, the plaintext snapshot, a label) while running, regardless of whether the underlying computation also changes.'
     changes_writes       = 'These changes alter what the shipped application writes to disk while running -- an `analysis_log.csv` column or value, a log line, or a trade-store write -- regardless of whether computation or display also change.'
@@ -561,6 +638,9 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
     $state = @{
         commit                = $commitState
         touched_paths         = @($c.Paths)
+        # REVISION 3: code, not the model, decides which touched files are app code -- the
+        # engine-path rule plus the tools/ files THIS commit's vbproj compiles.
+        touched_app_paths     = @(Get-EngineTouchedPaths $c.Paths $c.AppToolsFiles)
         per_file_line_counts  = @($c.LineCounts | ForEach-Object { @{ path = $_.Path; added = $_.Added; deleted = $_.Deleted } })
     }
     if ($diffText) { $state.shipped_app_diff = $diffText }
@@ -579,7 +659,7 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
         questions = @{
             changes_computation = @{
                 type = 'noul'
-                instructions = "Does this commit alter what the SHIPPED Windows application (the code inside the .exe -- NOT `tools/` or `verify/`, which are separate offline projects) computes or decides while running: a score, a verdict, a gate outcome, a threshold comparison, or a placed ATR/Kelly level? Judge from `commit.subject`, `commit.body`, `touched_paths`, and `per_file_line_counts` (and `shipped_app_diff` when present)."
+                instructions = "Does this commit alter what the SHIPPED Windows application (the code inside the .exe -- exactly the files listed in `touched_app_paths`; every other touched file, including most of `tools/` and all of `verify/`, belongs to separate offline projects) computes or decides while running: a score, a verdict, a gate outcome, a threshold comparison, or a placed ATR/Kelly level? Judge from `commit.subject`, `commit.body`, `touched_paths`, `touched_app_paths` and `per_file_line_counts` (and `shipped_app_diff` when present)."
             }
             changes_display = @{
                 type = 'noul'
@@ -591,7 +671,7 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
             }
             verdict = @{
                 type = 'choice'
-                instructions = "Classify this commit's actual effect on the SHIPPED Windows application (the code inside the .exe) using `touched_paths`, `per_file_line_counts`, `commit.subject`, `commit.body`, and `shipped_app_diff` when present. `tools/` and `verify/` changes are NOT app changes, however large."
+                instructions = "Classify this commit's actual effect on the SHIPPED Windows application (the code inside the .exe) using `touched_paths`, `touched_app_paths`, `per_file_line_counts`, `commit.subject`, `commit.body`, and `shipped_app_diff` when present. Only files listed in `touched_app_paths` are app code -- the app compiles some `tools/` files, and those ARE app changes. Every other touched file is NOT an app change, however large."
                 criteria = $criteria
             }
         }
@@ -749,7 +829,7 @@ foreach ($c in $residualAll) {
         $status = 'UNSTABLE'
     } elseif ($null -ne $meanTopProbability -and $meanTopProbability -lt $MIN_TOP_PROBABILITY) {
         # AGREE, top probability LOW: stable but under-informed -- ESCALATE.
-        $engineFiles = Get-EngineTouchedPaths $c.Paths
+        $engineFiles = @(Get-EngineTouchedPaths $c.Paths $c.AppToolsFiles)
         if ($engineFiles.Count -gt 0) {
             $diffText = Get-ShippedAppDiff $repo $c.Hash $engineFiles $MAX_ESCALATION_DIFF_CHARS
 
