@@ -192,6 +192,37 @@
   from cfg). SOURCE_NOT_TRACEABLE means THE SEARCH DID NOT COMPLETE (the identifier is a
   parameter, a class field, a Const, a member of some other object, or a compound
   expression this parser will not reduce). Absence of evidence, never evidence of absence.
+
+  ============================== REVISION 3 (2026-09-22 UTC) ==============================
+  docs/fixture-parser-check-spec.md section 8.4 items 8f, 8i, 8j. From the seat's 8a
+  re-measure, docs/harness-runs/fixture-parser-a23a-run-2026-09-22.md.
+
+  FP-D21 (item 8f, closes 8i: the CALLEE'S OWN DEFAULT-FALLBACK BODY). Two parts, both
+  fallbacks that run only after every earlier shape has failed:
+    (1) A callee with no Sub/Function of its name may be a CLASS built with `New X(...)`.
+        Its signature is read from the class's single non-Shared `Sub New`. An overloaded
+        constructor is refused, never guessed.
+    (2) When a production call site OMITS the argument, production runs on whatever the
+        callee substitutes for the sentinel default. The callee body is scanned for
+        `If(p <cond>, p, <cfgExpr>)`, its inverse, or `If p <cond> Then p = <cfgExpr>`,
+        with <cfgExpr> rooted at `cfg.` or `SettingsLoader.Current.`. Resolves only on
+        exactly one distinct expression, and only for a constructor or a method name
+        declared ONCE in the production set (the FP-D17 same-name hazard).
+  Worked instance: `New WsMarketDataSource(..., staleAfterSec:=10)`. Production
+  (UI/MainForm_Layout.vb) omits it and WsMarketDataSource.vb:37 falls back to
+  SettingsLoader.Current.Network.WsStaleAfterSec -> network.ws_stale_after_sec. MEASURED:
+  that one parameter changes class and nothing else in the no-key output. MUTATION: a
+  literal fallback (`..., 10)`) makes the shape refuse. Closes 8i because a site with a
+  derived key is in scope BY CONSTRUCTION and never reaches FP-Q1, so a declaration
+  written on it can no longer push it out of scope.
+
+  FP-D22 (item 8j: in-scope sites with NO marker). The residual is marked AND in scope,
+  so an in-scope site with no MECHANISM/SHIPPED keyword is never judged. Before this,
+  nothing counted them and a run exited 0 while they sat there. Now
+  IN_SCOPE_UNMARKED_SITES and IN_SCOPE_UNMARKED_EQUALS_EVER_SHIPPED print in the coverage
+  block, and the second is listed by site. Code facts only -- keyword present or not,
+  literal in the ever-shipped set or not -- so nothing here is a judgment and nothing is
+  sent to Jev.
   ==========================================================================================
 
   FP-D2 (retained, now informational only): the ORIGINAL camelCase-to-snake_case name
@@ -804,7 +835,58 @@ function Get-MethodSignatureParams([string]$calleeName) {
             }
         }
     }
+    # FP-D21 (revision 3, item 8f): no Sub/Function of this name exists, so the callee may
+    # be a CLASS constructed with `New <callee>(...)`. Its signature is its `Sub New`.
+    # Reached only after the Sub/Function search above has found nothing, so no signature
+    # that resolved before revision 3 can change.
+    $ctor = Find-ConstructorRange $calleeName
+    if ($null -ne $ctor) { return ,@($ctor.SigNames) }
     return $null
+}
+
+# FP-D21 (revision 3, item 8f): the ONE instance constructor of production class
+# $className -- its file context, body range and declared parameter names. $null unless
+# exactly one non-Shared `Sub New` is found across every block declaring that class
+# (Partial classes included), so an overloaded constructor is reported unresolved, never
+# guessed. Nested classes are skipped by depth.
+$ctorRangeCache = @{}
+function Find-ConstructorRange([string]$className) {
+    if ($ctorRangeCache.ContainsKey($className)) { return $ctorRangeCache[$className] }
+    $classRe = "(?i)^(?:(?:Public|Friend|Private|Protected|Partial|NotInheritable|MustInherit)\s+)*Class\s+$([regex]::Escape($className))\b"
+    $anyClassRe = '(?i)^(?:(?:Public|Friend|Private|Protected|Partial|NotInheritable|MustInherit|Shadows)\s+)*Class\s+[A-Za-z_]'
+    $ctorRe = '(?i)^(?:(?:Public|Friend|Private|Protected|Overloads)\s+)*Sub\s+New\s*\('
+    $found = New-Object System.Collections.Generic.List[object]
+    foreach ($pf in $prodFiles) {
+        $ctx = Get-FileParseContext $pf
+        if ($null -eq $ctx) { continue }
+        for ($i = 0; $i -lt $ctx.N; $i++) {
+            if ($ctx.CodeOnly[$i].Trim() -notmatch $classRe) { continue }
+            $depth = 1
+            for ($k = $i + 1; $k -lt $ctx.N -and $depth -gt 0; $k++) {
+                $t = $ctx.CodeOnly[$k].Trim()
+                if ($t -match '(?i)^End\s+Class\b') { $depth--; continue }
+                if ($t -match $anyClassRe) { $depth++; continue }
+                if ($depth -eq 1 -and $t -match $ctorRe) { $found.Add([PSCustomObject]@{ Ctx = $ctx; File = $pf; Line = $k }) }
+            }
+        }
+    }
+    $result = $null
+    if ($found.Count -eq 1) {
+        $f = $found[0]
+        $stmtEnd = Get-FileStatementEnd $f.Ctx $f.Line
+        $stmtText = Get-FileStatementText $f.Ctx $f.Line $stmtEnd
+        $argTexts = Get-CallArguments $stmtText 'New'
+        $proc = Get-FileEnclosingProc $f.Ctx $f.Line
+        if ($null -ne $argTexts -and $null -ne $proc) {
+            $names = New-Object System.Collections.Generic.List[string]
+            foreach ($pt in $argTexts) {
+                if ($pt -match '^(?:ByRef\s+|ByVal\s+|Optional\s+|ParamArray\s+)*([A-Za-z_][A-Za-z0-9_]*)') { $names.Add($Matches[1]) }
+            }
+            $result = [PSCustomObject]@{ Ctx = $f.Ctx; File = $f.File; Name = "$className.New"; Start = $proc.Start; End = $proc.End; SigNames = @($names) }
+        }
+    }
+    $ctorRangeCache[$className] = $result
+    return $result
 }
 
 # Find every production CALL (not the declaration) of $calleeName under Core/UI/analysis/
@@ -975,6 +1057,70 @@ function Resolve-FixtureLocalCfgBuilder([string]$calleeName, [string]$paramName)
     return $null
 }
 
+# FP-D21 (revision 3, item 8f): the CALLEE'S OWN DEFAULT-FALLBACK BODY. Production omits
+# the argument, so the value it runs on is whatever the callee substitutes for the
+# sentinel default -- read from the callee's body, never guessed. Accepted forms, on the
+# body's statement text (continuation lines joined), case-insensitive:
+#   If(<p> <cond>, <p>, <cfgExpr>)      If(<p> <cond>, <cfgExpr>, <p>)
+#   If <p> <cond> Then <p> = <cfgExpr>
+# where <cfgExpr> is rooted at `cfg.` or `SettingsLoader.Current.`. Resolves ONLY when
+# exactly one distinct cfg expression is found, and the body is a constructor (via
+# Find-ConstructorRange) or a method whose name is declared EXACTLY ONCE in the production
+# set -- `Snapshot` and `Fold` are declared on four classes, and a by-name lookup would
+# read the wrong body (the FP-D17 hazard again).
+function Find-UniqueProdProcRange([string]$procName) {
+    $declRe3 = "^(?:Private|Public|Friend|Protected)?\s*(?:Shared\s+)?(?:Sub|Function)\s+$([regex]::Escape($procName))\s*\("
+    $hits = New-Object System.Collections.Generic.List[object]
+    foreach ($pf in $prodFiles) {
+        $ctx = Get-FileParseContext $pf
+        if ($null -eq $ctx) { continue }
+        for ($i = 0; $i -lt $ctx.N; $i++) {
+            if ($ctx.CodeOnly[$i].TrimStart() -match $declRe3) {
+                $proc = Get-FileEnclosingProc $ctx $i
+                if ($proc) { $hits.Add([PSCustomObject]@{ Ctx = $ctx; File = $pf; Name = $procName; Start = $proc.Start; End = $proc.End }) }
+            }
+        }
+    }
+    if ($hits.Count -eq 1) { return $hits[0] }
+    return $null
+}
+function Resolve-DefaultFallbackBody([string]$calleeName, [string]$paramName) {
+    $rng = Find-UniqueProdProcRange $calleeName
+    if ($null -eq $rng) { $rng = Find-ConstructorRange $calleeName }
+    if ($null -eq $rng) { return $null }
+    $p = [regex]::Escape($paramName)
+    $root = '((?:cfg|SettingsLoader\.Current)\.[A-Za-z0-9_.]+)'
+    $forms = @(
+        "(?i)(?<![A-Za-z0-9_])If\(\s*$p\b[^,]*,\s*$p\s*,\s*$root\s*\)",
+        "(?i)(?<![A-Za-z0-9_])If\(\s*$p\b[^,]*,\s*$root\s*,\s*$p\s*\)",
+        "(?i)(?<![A-Za-z0-9_])If\s+$p\b.*?\bThen\s+$p\s*=\s*$root"
+    )
+    $exprs = New-Object System.Collections.Generic.List[string]
+    $firstLine = $null
+    $ctx = $rng.Ctx
+    $k = $rng.Start
+    while ($k -le $rng.End) {
+        $stmtEnd = Get-FileStatementEnd $ctx $k
+        if ($stmtEnd -gt $rng.End) { $stmtEnd = $rng.End }
+        $text = Get-FileStatementText $ctx $k $stmtEnd
+        foreach ($f in $forms) {
+            foreach ($m in [regex]::Matches($text, $f)) {
+                $e = $m.Groups[1].Value
+                if (-not $exprs.Contains($e)) { [void]$exprs.Add($e); if ($null -eq $firstLine) { $firstLine = $k + 1 } }
+            }
+        }
+        $k = $stmtEnd + 1
+    }
+    if ($exprs.Count -ne 1) { return $null }
+    $pathAfterRoot = $exprs[0] -replace '(?i)^(?:cfg|SettingsLoader\.Current)\.', ''
+    $key = Resolve-SettingsLeafKey $pathAfterRoot
+    if (-not $key) { return $null }
+    return [PSCustomObject]@{
+        Class = 'DEFAULT_FALLBACK_BODY'; ResolvedKey = $key; Shape = "default_fallback($($rng.Name))"
+        ProdFile = $rng.File; ProdLine = $firstLine; ResolvedExpr = $exprs[0]
+    }
+}
+
 # Per-segment snake-case normalisation of a dotted settings path, so a VB PascalCase
 # property-access chain (cfg.Indicators.OBV.TrendGate) and the actual mixed-case JSON path
 # (indicators.OBV.trend_gate) compare equal without needing a hand-kept casing table.
@@ -1096,10 +1242,12 @@ function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
         return [PSCustomObject]@{ Class = 'NO_PRODUCTION_CALL_SITE'; ResolvedKey = $null; Shape = $null; ProdFile = $null; ProdLine = $null; ResolvedExpr = $null }
     }
     $firstFailure = $null
+    $anyOmitted = $false
     foreach ($s in $sites) {
         $attempt = Resolve-FpQ3MappingAtSite $s $calleeName $paramName
         if ($attempt.ResolvedKey) { return $attempt }
         if ($null -eq $firstFailure) { $firstFailure = $attempt }
+        if ($attempt.Class -eq 'PARAM_NOT_PASSED_AT_CALL_SITE') { $anyOmitted = $true }
     }
     # GAP B (FP-D17, revision 2): every direct site failed. Some of them may be FORWARDING
     # sites -- a wrapper passing its own parameters straight through -- in which case the
@@ -1126,6 +1274,13 @@ function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
                 }
             }
         }
+    }
+    # FP-D21 (revision 3, item 8f): at least one production site OMITS the argument, so that
+    # path runs on the callee's own default-fallback value. Tried last, after the direct
+    # sites and the wrapper hop have all failed, so nothing that resolved before can change.
+    if ($anyOmitted) {
+        $fb = Resolve-DefaultFallbackBody $calleeName $paramName
+        if ($fb) { return $fb }
     }
     return $firstFailure
 }
@@ -1234,6 +1389,8 @@ $mappingNoProdSites = @($callSites | Where-Object { $_.MappingClass -eq 'NO_PROD
 $mappingFixtureLocal = @($callSites | Where-Object { $_.MappingClass -eq 'FIXTURE_LOCAL_CFG_BUILDER' }).Count
 $mappingWrapperFwd   = @($callSites | Where-Object { $_.MappingClass -eq 'WRAPPER_FORWARDED' }).Count
 $mappingResolverRet  = @($callSites | Where-Object { $_.MappingClass -eq 'RESOLVER_RETURN' }).Count
+# revision 3 resolved shape (FP-D21)
+$mappingDefaultFallback = @($callSites | Where-Object { $_.MappingClass -eq 'DEFAULT_FALLBACK_BODY' }).Count
 # FP-D20: the two halves of the old NOT_CFG_SOURCED catch-all, counted apart.
 $mappingNotCfgSourced   = @($callSites | Where-Object { $_.MappingClass -eq 'NOT_CFG_SOURCED' }).Count
 $mappingNotTraceable    = @($callSites | Where-Object { $_.MappingClass -eq 'SOURCE_NOT_TRACEABLE' }).Count
@@ -1447,6 +1604,13 @@ foreach ($cs in $callSites) {
 $inScopeSites = @($callSites | Where-Object { $_.InScope }).Count
 $outOfScopeSites = @($callSites | Where-Object { -not $_.InScope }).Count
 $inScopeParams = @($callSites | Where-Object { $_.InScope } | ForEach-Object { $_.Param } | Select-Object -Unique).Count
+# FP-D22 (revision 3, item 8j): in-scope sites carrying NO provenance marker never join
+# the FP-1 residual, so FP-1 never judges them -- and before this counter nothing said
+# they existed. Code-only facts, no judgment: a site either has the MECHANISM/SHIPPED
+# keyword in its comment block or it does not, and its literal either equals an
+# ever-shipped value or it does not.
+$inScopeUnmarkedSites = @($callSites | Where-Object { $_.InScope -and -not $_.HasMarker })
+$inScopeUnmarkedEqShipped = @($inScopeUnmarkedSites | Where-Object { $_.LiteralEqualsEverShipped -eq $true })
 $scopeSw.Stop()
 $scopeWallTimeSec = [math]::Round($scopeSw.Elapsed.TotalSeconds, 2)
 
@@ -1479,6 +1643,14 @@ function Write-Coverage([int]$judged) {
     "MAPPING_NOT_CFG_SOURCED_SITES=$mappingNotCfgSourced"
     "MAPPING_SOURCE_NOT_TRACEABLE_SITES=$mappingNotTraceable"
     "--- end revision 2 additions ---"
+    "--- revision 3 additions (docs/fixture-parser-check-spec.md section 8.4 items 8f, 8j) ---"
+    "MAPPING_DEFAULT_FALLBACK_BODY=$mappingDefaultFallback"
+    # FP-D22: the residual is marked AND in scope. These are in scope and NOT marked, so
+    # FP-1 never sees them. A non-zero second counter is a list of literals that equal a
+    # shipped value and declare nothing -- the A43b breach shape.
+    "IN_SCOPE_UNMARKED_SITES=$($inScopeUnmarkedSites.Count)"
+    "IN_SCOPE_UNMARKED_EQUALS_EVER_SHIPPED=$($inScopeUnmarkedEqShipped.Count)"
+    "--- end revision 3 additions ---"
     "IN_SCOPE_SITES=$inScopeSites"
     "OUT_OF_SCOPE_SITES=$outOfScopeSites"
     "IN_SCOPE_PARAMS=$inScopeParams"
@@ -1517,6 +1689,15 @@ function Write-Coverage([int]$judged) {
                else { 'NO_DERIVED_KEY' }
         $callees = @($g.Group | ForEach-Object { $_.Callee } | Select-Object -Unique) -join ','
         "  {0,-26} x{1,-3} why={2} callees=[{3}]" -f $g.Name, $g.Count, $why, $callees
+    }
+
+    # FP-D22: name every in-scope, unmarked site whose literal equals a shipped value. A
+    # code fact about the file, not an FP-1 verdict, so it prints on every exit path.
+    if ($inScopeUnmarkedEqShipped.Count -gt 0) {
+        "IN_SCOPE_UNMARKED_EQUALS_EVER_SHIPPED_SITES (FP-1 never judges these -- no MECHANISM/SHIPPED marker):"
+        foreach ($u in ($inScopeUnmarkedEqShipped | Sort-Object Line, Param)) {
+            "  {0}#{1}#{2} literal={3} key={4} ever_shipped=[{5}]" -f $u.EnclosingSub, $u.Line, $u.Param, $u.LiteralValue, $u.ResolvedKey, (@($u.EverShipped) -join ',')
+        }
     }
 }
 
@@ -1568,7 +1749,7 @@ function Format-FpQ3Proof([string]$callee, [string]$param) {
             # the new classes -- where the Class alone hides which inner shape carried the
             # evidence (`wrapper(X)->RESOLVER_RETURN` vs `wrapper(X)->ALIASED`).
             $shapeNote = ''
-            if ($r.Class -in @('WRAPPER_FORWARDED', 'RESOLVER_RETURN', 'FIXTURE_LOCAL_CFG_BUILDER')) {
+            if ($r.Class -in @('WRAPPER_FORWARDED', 'RESOLVER_RETURN', 'FIXTURE_LOCAL_CFG_BUILDER', 'DEFAULT_FALLBACK_BODY')) {
                 $shapeNote = " shape=$($r.Shape)"
             }
             return "FPQ3_PROOF $callee $param -> $($r.ResolvedKey) [$($r.Class)]$shapeNote ($($r.ProdFile):$($r.ProdLine), expr=$($r.ResolvedExpr))"
@@ -1592,6 +1773,10 @@ function Format-FpQ3Proof([string]$callee, [string]$param) {
 (Format-FpQ3Proof 'Fold' 'tauNormSec')
 (Format-FpQ3Proof 'Snapshot' 'grossFloorUsdPerSec')
 (Format-FpQ3Proof 'Snapshot' 'minCoverageSec')
+
+# Revision 3 (item 8f): the constructor whose production call OMITS the argument, so the
+# value comes from the callee's own default-fallback body. Same footing as the lines above.
+(Format-FpQ3Proof 'WsMarketDataSource' 'staleAfterSec')
 
 foreach ($namedP in $fpq1NamedProofItems) {
     if ($fpq1NamedProofs.ContainsKey($namedP)) { $fpq1NamedProofs[$namedP] }
