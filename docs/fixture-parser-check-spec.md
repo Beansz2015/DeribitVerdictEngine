@@ -53,13 +53,15 @@ A fixture passing a settings-derived threshold as a literal is either **SHIPPED 
 | Quantity | Value |
 |---|---|
 | `verify/ordercheck/Program.vb` | 16,739 lines |
-| Fixture subs (`Sub A<n><x>_Name`) | **359** |
+| Fixture subs | **353** |
 | Harness checks reported at last run | 425 — **more checks than subs; do not conflate them** |
-| Named-argument literal passes | **120** |
-| Distinct parameter names among them | **43** |
-| Call sites carrying `MECHANISM` | 44 |
-| Call sites carrying `SHIPPED` | 18 |
+| Named-argument literal passes | **118** |
+| Distinct parameter names among them | **41** |
 | `settings.json` revisions to walk | **87** |
+
+⛔⛔ **CORRECTED 2026-09-21 after the build. This table first read 359 subs, 120 passes, 43 params — all measured with a raw regex that DID NOT STRIP VB COMMENTS.** The two phantom passes were `wide:=1.0` / `tight:=2.0` at `verify/ordercheck/Program.vb:12534`, which is **prose inside a MECHANISM comment block**. ⭐ **That comment is a CORRECT provenance declaration, so the seat counted the rule's own worked example as a violation candidate** — trap 4, the trap this spec itself carries, manifesting as comment-versus-code rather than line-anchoring.
+
+⛔ **Two further counts were REMOVED, not corrected: "call sites carrying `MECHANISM` 44" and "carrying `SHIPPED` 18".** They were whole-file marker counts over a **different population** than named-argument passes — a `MECHANISM` comment also sits above object-initializer assignments such as `.RocMagnitudeThreshold = 0.50`, which is not a `:=` call. **`SITES_WITH_PROVENANCE_COMMENT` is 15 and can never reproduce 62.** Listing them beside the call-site count implied one population where there are two.
 
 ⚠ **These move. Treat as smoke anchors, never assertions.**
 
@@ -149,6 +151,35 @@ SITES_JUDGED=<n>
 7. `Invoke-Jev` shared, not copied. One definition in the tree.
 8. **`FP-D3` mutation:** corrupt one fixture's name, show the detector flags it, restore, show it stops. ⛔ **Restore via `git checkout` on that file and prove the tree is clean afterwards.**
 9. A live acceptance run on a `-SubFilter` range. ⛔ **Counters, tokens and timings only. NO per-item verdicts, NO aggregates** — [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4a.
+
+---
+
+## 5a. ⛔⛔ OWED — the key matcher is the binding constraint, and it blocks the measurement
+
+**Measured on the built harness, 2026-09-21 (UTC):**
+
+```
+LITERAL_CALL_SITES=118   MATCHED_ONE_KEY=23   MATCHED_MULTI_KEYS=5
+MATCHED_ZERO_KEYS=90     SITES_WITH_PROVENANCE_COMMENT=15   SITES_JUDGED=15
+```
+
+⛔ **90 of 118 literals match NO settings key, so 76% of the population can never be judged.** `FP-D2`'s camelCase-to-snake_case normalisation carries far less than the spec assumed.
+
+⭐⭐ **This is the THIRD appearance of the same lesson in this programme** — [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4 finding 3: *"the binding constraint was evidence gathering, not judgment."* It was true of the git evidence in the pilot run, true of the residual definition in harness 2, and true of key matching here. **The next improvement on any harness is almost always better candidate enumeration, not a better question.**
+
+⚠ **And it is what blocks a clean first measurement.** The judged population is 15 and the seat is contaminated on all 15. **A working key matcher would open ~100 unseen sites — a genuinely fresh population, which is the fastest route to the clean measurement this programme still lacks.**
+
+### Owed, in priority order
+
+| # | Item | State |
+|---|---|---|
+| **1** | ⛔ **Fix `FP-D2` key matching.** 90 unmatched. Likely needs the enclosing method's parameter list read from the shipped source, not name normalisation alone | **Open — blocks the measurement** |
+| **2** | ⛔ **Give `FP-D2` a real question with criteria.** It is a Decision with no Question; the build had to design a third question type from one line | **Open** |
+| **3** | **Rule how far a shared comment block extends.** `A6_ObvNormalisation` calls `CalcOBV` twice under one comment; the parser attaches it to the first only, silently dropping the second call's literals | **Open — needs a decision, not a guess** |
+| **4** | Adjudicate the two remaining disagreements from the first run | **Open** |
+| **5** | ⭐ **Consider rewording the past-tense provenance comments.** The `A3` prose misled a careful reader; the detector read it correctly | **Open — trader's call** |
+| 6 | §2's counts | ✅ **Corrected above** |
+| 7 | Who writes a first-run baseline | ✅ **Fixed** — [`harness-shadow-mode-protocol.md`](harness-shadow-mode-protocol.md) §4c |
 
 ---
 
