@@ -115,6 +115,8 @@
   auxiliary call (it decides population MEMBERSHIP, never itself a verdict CODE or a
   report reads per-item) and runs UNSAMPLED, once per distinct parameter name, following
   the pre-revision FP-D7 key-resolution call's own precedent.
+  [SUPERSEDED for FP-Q1 by FP-D23, revision 3: an unsampled detector has no stability
+  evidence, and FP-Q1 was measured flipping -- docs/harness-shadow-mode-protocol.md 4f.]
 
   ============================ REVISION 2 (2026-09-22 UTC) ===============================
   docs/fixture-parser-check-spec.md section 8.2/8.4 items 8a, 8b, 8c. The FP-Q1 measured
@@ -223,6 +225,24 @@
   block, and the second is listed by site. Code facts only -- keyword present or not,
   literal in the ever-shipped set or not -- so nothing here is a judgment and nothing is
   sent to Jev.
+
+  FP-D23 (item 8h: SAMPLE FP-Q1; supersedes FP-D14 for FP-Q1). FP-Q1 answered ttlSeconds
+  differently on runs with identical state, and ran once per parameter, so nothing could
+  see it. It now draws $Samples times per parameter, each with a fresh sample_uid, and
+  prints SCOPE_UNSTABLE_PARAMS (the draws split). A parameter is IN SCOPE if ANY draw says
+  `threshold`. Why lean to over-scoping: the measured failure is UNDER-scoping (1 of 7
+  thresholds found, docs/harness-runs/fixture-parser-scope-run-2026-09-22.md), a majority
+  vote would silently drop an unstable parameter on some runs -- the ttlSeconds shape --
+  and an over-scoped parameter costs only extra FP-1 candidates, which the seat baselines.
+  Per-parameter answers still do not print (counts only), except the five named proofs.
+
+  FP-D24 (item-level baseline refusal). The FP-1 gate was file-level: any baseline file
+  let every residual item through. Because FP-Q1 runs earlier in the same process and is
+  nondeterministic, the residual can gain a marked site between the seat's no-key listing
+  and the keyed run -- and that site would be judged with no seat line, spent for ever.
+  Now any residual item absent from the baseline stops the run (EXIT_REASON=
+  BASELINE_INCOMPLETE, exit 2) before any FP-1/FP-2 call. -AllowUnbaselinedItems opts out
+  for a routine re-run of items already measured once.
   ==========================================================================================
 
   FP-D2 (retained, now informational only): the ORIGINAL camelCase-to-snake_case name
@@ -316,6 +336,11 @@ param(
     # every aggregate from a RESERVED window's dry run, console and report alike. Mirrors
     # tools/checks/commit-walker.ps1's -CountersOnly exactly.
     [switch]$CountersOnly,
+    # FP-D24 (revision 3): by default a run REFUSES when any residual item it would judge
+    # has no line in the -BaselinePath file -- an unbaselined item judged once is spent for
+    # ever (docs/harness-shadow-mode-protocol.md section 5). Pass this only for a routine
+    # re-run whose items were all measured before.
+    [switch]$AllowUnbaselinedItems,
     # Mirrors tools/checks/commit-walker.ps1's -DebugState: prints each call's state KEY
     # NAMES and sample_uid only, never content or the API key. Off by default.
     [switch]$DebugState
@@ -1477,7 +1502,7 @@ function Get-ParamContext([string]$paramName) {
     return [PSCustomObject]@{ FirstSite = $first; Callees = $callees; MappingClasses = $mappingClasses; Count = $sites.Count }
 }
 
-function Invoke-ScopeClassification([string]$apiKeyIn, [string]$paramName, $ctxInfo) {
+function Invoke-ScopeClassification([string]$apiKeyIn, [string]$paramName, $ctxInfo, [string]$uid) {
     $nameCands = Get-KeyCandidates $paramName
     $fuzzy = Get-FuzzyCandidates $paramName
     $state = @{
@@ -1490,7 +1515,10 @@ function Invoke-ScopeClassification([string]$apiKeyIn, [string]$paramName, $ctxI
         fuzzy_name_candidates = @($fuzzy)
         occurrence_count = $ctxInfo.Count
     }
-    if ($DebugState) { Write-Host "STATE_DEBUG scope param=$paramName keys=[$($state.Keys -join ',')]" }
+    # FP-D23: a fresh uid per sample so the samples are independent draws
+    # (docs/harness-shadow-mode-protocol.md section 4b, same as FP-1/FP-2).
+    if ($uid) { $state.sample_uid = $uid }
+    if ($DebugState) { Write-Host "STATE_DEBUG scope param=$paramName keys=[$($state.Keys -join ',')] sample_uid=$($state.sample_uid)" }
     $body = @{
         model = 'jev-latest'
         state = $state
@@ -1516,6 +1544,7 @@ function Invoke-ScopeClassification([string]$apiKeyIn, [string]$paramName, $ctxI
 }
 
 $scopeJevCalls = 0
+$scopeUnstableParams = 0
 $scopeUsageIn = 0
 $scopeUsageOut = 0
 $scopeJevSkippedNoKey = 0
@@ -1582,15 +1611,26 @@ if (-not $scopeBaselineOk) {
 } else {
     foreach ($p in $needsJevParams) {
         $ctxInfo = Get-ParamContext $p
-        $sc = Invoke-ScopeClassification $apiKey $p $ctxInfo
-        if (-not $sc.Ok) { $scopeApiFailed = $true; $scopeApiFailMsg = "Jev scope-classification failed for parameter '$p': $($sc.Error)"; break }
-        $scopeJevCalls++
-        $scopeUsageIn += $sc.UsageIn
-        $scopeUsageOut += $sc.UsageOut
-        $paramInScope[$p.ToLowerInvariant()] = ($sc.Scope -eq 'threshold')
+        # FP-D23 (revision 3, item 8h): $Samples draws per parameter, each with a fresh uid.
+        # In scope if ANY draw says `threshold` -- see the header for why the rule leans to
+        # over-scoping. A split vote is counted as UNSTABLE; the count prints, the
+        # per-parameter answer does not (same reporting discipline as before).
+        $thresholdVotes = 0
+        for ($si = 0; $si -lt $Samples; $si++) {
+            $suid = "scope:${p}:${si}:$([guid]::NewGuid().ToString('N').Substring(0,8))"
+            $sc = Invoke-ScopeClassification $apiKey $p $ctxInfo $suid
+            if (-not $sc.Ok) { $scopeApiFailed = $true; $scopeApiFailMsg = "Jev scope-classification failed for parameter '$p' (sample $($si+1)/$Samples): $($sc.Error)"; break }
+            $scopeJevCalls++
+            $scopeUsageIn += $sc.UsageIn
+            $scopeUsageOut += $sc.UsageOut
+            if ($sc.Scope -eq 'threshold') { $thresholdVotes++ }
+        }
+        if ($scopeApiFailed) { break }
+        if ($thresholdVotes -gt 0 -and $thresholdVotes -lt $Samples) { $scopeUnstableParams++ }
+        $paramInScope[$p.ToLowerInvariant()] = ($thresholdVotes -gt 0)
         foreach ($namedP in $fpq1NamedProofItems) {
             if ($p -ieq $namedP) {
-                $fpq1NamedProofs[$namedP] = "FPQ1_PROOF $namedP (callees=[$($ctxInfo.Callees -join ',')], production_mapping=[$($ctxInfo.MappingClasses -join ',')]) -> Jev classified '$($sc.Scope)' -> $(if ($sc.Scope -eq 'threshold') { 'IN SCOPE' } else { 'OUT OF SCOPE' })"
+                $fpq1NamedProofs[$namedP] = "FPQ1_PROOF $namedP (callees=[$($ctxInfo.Callees -join ',')], production_mapping=[$($ctxInfo.MappingClasses -join ',')]) -> Jev classified 'threshold' on $thresholdVotes/$Samples samples -> $(if ($thresholdVotes -gt 0) { 'IN SCOPE' } else { 'OUT OF SCOPE' })"
             }
         }
     }
@@ -1650,6 +1690,9 @@ function Write-Coverage([int]$judged) {
     # shipped value and declare nothing -- the A43b breach shape.
     "IN_SCOPE_UNMARKED_SITES=$($inScopeUnmarkedSites.Count)"
     "IN_SCOPE_UNMARKED_EQUALS_EVER_SHIPPED=$($inScopeUnmarkedEqShipped.Count)"
+    # FP-D23 (item 8h): FP-Q1 is now sampled. Unstable = the draws split.
+    "SCOPE_SAMPLES_PER_PARAM=$Samples"
+    "SCOPE_UNSTABLE_PARAMS=$scopeUnstableParams"
     "--- end revision 3 additions ---"
     "IN_SCOPE_SITES=$inScopeSites"
     "OUT_OF_SCOPE_SITES=$outOfScopeSites"
@@ -1873,6 +1916,22 @@ $baselineRaw = Get-Content -Raw -Path $baselineFull | ConvertFrom-Json
 $baseline = @{}
 if ($null -ne $baselineRaw) {
     foreach ($p in $baselineRaw.PSObject.Properties) { $baseline[$p.Name] = [string]$p.Value }
+}
+
+# FP-D24 (revision 3): the gate above is FILE-level -- any file lets every item through.
+# But the residual can grow between the no-key listing and the judged run: FP-Q1 is
+# nondeterministic (item 8h) and runs earlier in this same process, so a newly scoped-in,
+# marked site would be judged with no seat line and spent. Refuse, item by item, before
+# any FP-1/FP-2 call.
+$unbaselinedItems = New-Object System.Collections.Generic.List[string]
+foreach ($cs in $residualSites) { $bid = Get-Fp1Id $cs; if (-not $baseline.ContainsKey($bid)) { [void]$unbaselinedItems.Add($bid) } }
+foreach ($f2 in $fp2Items) { if (-not $baseline.ContainsKey($f2.SubName)) { [void]$unbaselinedItems.Add($f2.SubName) } }
+if ($unbaselinedItems.Count -gt 0 -and -not $AllowUnbaselinedItems) {
+    "EXIT_REASON=BASELINE_INCOMPLETE"
+    "UNBASELINED_ITEMS=$($unbaselinedItems.Count) -- no line in '$BaselinePath' for:"
+    foreach ($u in $unbaselinedItems) { "  $u" }
+    "Nothing was judged. Add your own read for each item above, or narrow -SubFilter. For a routine re-run of items already measured once, pass -AllowUnbaselinedItems."
+    exit 2
 }
 
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
