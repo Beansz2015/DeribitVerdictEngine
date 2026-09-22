@@ -1,0 +1,92 @@
+{
+  "_meta": {
+    "harness": "tools/checks/fixture-parser.ps1",
+    "detector": "FP-Q1 scope filter (threshold-or-input), docs/fixture-parser-check-spec.md section 7.2",
+    "written_utc": "2026-09-22T15:26:22Z",
+    "written_by": "seat (orchestrator), by hand, per docs/harness-shadow-mode-protocol.md section 4c",
+    "vocabulary": ["threshold", "input", "unsure"],
+    "population_source": "SCOPE_JEV_SKIPPED_NO_API_KEY=23 from a no-API-key run of the harness at commit fd2c38b; the EXCLUDED_PARAMS listing is the candidate list with zero judgments (protocol section 2 step 2)",
+    "population_size": 23,
+
+    "contamination_declaration": [
+      "NO FP-Q1 detector output has ever been recorded: grep -c FPQ1_PROOF returns 0 across every file in docs/harness-runs/. Verified before this file was written.",
+      "The candidate list was obtained with TYPESAFE_API_KEY unset, so SCOPE_JEV_CALLS=0 and no judgment existed to see.",
+      "PARTIAL CONTAMINATION, declared not discovered: five parameters are named in docs/fixture-parser-check-spec.md section 7.5 acceptance items 4 and 5, which PRESCRIBE their expected answers -- atr, price, epochs, lr, nowUtcMs must all be OUT of scope. The seat read that spec before writing this file. These five are anchored by spec text, not by detector output. Score them separately from the other eighteen.",
+      "The remaining eighteen are clean: no output, no spec prescription."
+    ],
+
+    "method": "Every parameter was traced to its callee's definition in the tree, and where the callee is a production method, to its production call site. A parameter is 'threshold' only where a settings.json key was found to feed it in production. settings.json was grepped for each candidate key. No judgment here is a name guess.",
+
+    "reservations_on_the_vocabulary": [
+      "ttlSeconds and maxKeysPerProposal are BOTH thresholds in nature but neither has a settings.json counterpart, so the harness's own criteria ('input = no settings.json counterpart') force 'input'. Recorded as 'input', not 'unsure' -- the seat is confident about the fact and is flagging the vocabulary, not the answer. If the detector calls either one 'threshold' that is a defensible reading of CLAUDE.md's intent rather than a plain miss, and should be adjudicated as such.",
+      "No row is recorded 'unsure'. Each of the 23 was resolved to a definition and checked against settings.json, so 'unsure' would misreport the seat's actual state. This is a claim the comparison can falsify."
+    ],
+
+    "side_findings_recorded_before_the_run": [
+      "FP-Q1 has NO baseline refusal. fixture-parser.ps1 FP-D11 makes its Jev calls BEFORE the baseline gate, by design (lines ~1147-1149). So the second detector can call the API with no baseline at all -- the structural safety in harness-shadow-mode-protocol.md section 2 step 1 does not cover it. That is why this detector shaped a measured population while itself unmeasured.",
+      "ttlSeconds:=60 at verify/ordercheck/Program.vb:2127-2141 restates production's Private Const MTF_TTL_SECONDS = 60 (UI/MainForm_Layout.vb:72). CLAUDE.md rules that a value ruled into a constant goes Public Const so the fixture can READ it; Private Const forces the fixture to restate the literal, which is the exact failure that rule names. Separate from FP-Q1's verdict.",
+      "staleAfterSec:=10 at verify/ordercheck/Program.vb:2075 equals the shipped network.ws_stale_after_sec = 10. Production omits the argument entirely (UI/MainForm_Layout.vb:537) and WsMarketDataSource.vb:37-38 falls back to SettingsLoader.Current.Network.WsStaleAfterSec. A settings-derived literal with no declared class -- the same shape as the A43b breach the clean run found.",
+      "The 2026-09-22 handover says upgradeBonus was excluded 'though indicators.OiCvd.upgrade_bonus is a real key'. It names the wrong block: BuildBurstCfg assigns cfg.Indicators.AggressorVelocity.UpgradeBonus. Both keys exist; the fixture feeds the aggressor_velocity one."
+    ],
+
+    "not_verified": [
+      "That 23 parameters generalise. It is the whole current population, not a sample, but one population is not a benchmark.",
+      "Whether FP-Q1 is self-consistent. The build calls it ONCE per parameter and never 5x-samples it (fixture-parser.ps1 line ~960), so protocol section 4b's instability finding is unmeasured for this detector. A single call's verdict is not reproducible near the threshold.",
+      "Whether any of these parameters was shipped only in an untracked settings.local.json overlay."
+    ]
+  },
+
+  "judgments": {
+    "fundingBoost": "threshold",
+    "price": "input",
+    "atr": "input",
+    "secondsSinceLastFetch": "input",
+    "ttlSeconds": "input",
+    "level10Size": "input",
+    "tradesAgeSeconds": "input",
+    "epochs": "input",
+    "lambda": "input",
+    "maxKeysPerProposal": "input",
+    "nowUtcMs": "input",
+    "tauFastSec": "threshold",
+    "tauNormSec": "threshold",
+    "closeBase": "input",
+    "currentATR": "input",
+    "entryPriceUsd": "input",
+    "grossFloorUsdPerSec": "threshold",
+    "lr": "input",
+    "minCoverageSec": "threshold",
+    "minTestDays": "input",
+    "staleAfterSec": "threshold",
+    "stopDistanceUsd": "input",
+    "upgradeBonus": "threshold"
+  },
+
+  "evidence": {
+    "fundingBoost": "BuildA8Cfg (Program.vb:1128) assigns cfg.Scoring.FundingHighBoost = fundingBoost. Key scoring.funding_high_boost = 1, settings.json:423.",
+    "price": "BuildGateIndicators (Program.vb:1407) assigns r.CurrentPrice and re-anchors VWAP/EMA around it. A market reading. No settings counterpart. Spec section 7.5 item 4 prescribes out-of-scope.",
+    "atr": "BuildGateIndicators assigns r.ATR. A raw indicator reading fed INTO scoring, not a tunable. Name-matches the ATR block, which is the spec's worked over-match case (section 7.5 item 5).",
+    "secondsSinceLastFetch": "MtfRefreshPolicy.ShouldRefresh (MtfRefreshPolicy.vb:28-33) compares it against ttlSeconds. An elapsed-time measurement, not a configured value.",
+    "ttlSeconds": "Production passes MTF_TTL_SECONDS, a Private Const = 60 at UI/MainForm_Layout.vb:72, from UI/MainForm_Analysis.vb:82. settings.json mtf_gate (lines 398-404) holds enabled/candle_lookback/adx_period/adx_min/min_of and NO ttl key; a whole-file grep for 'ttl' finds none. CLAUDE.md section 16.1 excludes 'MTF cache TTL' from the tunable surface deliberately. No settings.json counterpart, so 'input' under the stated criteria. See reservations.",
+    "level10Size": "AbsBandBook (Program.vb:4174) uses it as the size on one synthetic order-book level. A test-scenario value.",
+    "tradesAgeSeconds": "SeededWsSource (Program.vb:2068) stamps TradesLastUpdate that many seconds in the past. A test clock offset.",
+    "epochs": "L2Logistic.Fit (tools/CeilingAudit/L2Logistic.vb:70) gradient-descent iteration count, Optional default 500. Offline audit tool, no settings.json key.",
+    "lambda": "L2Logistic.Fit L2 regularisation strength, same file. Offline audit tool, no settings.json key.",
+    "maxKeysPerProposal": "SettingsDiffApplier.vb:87 states it outright: 'diff-scope cap; default 3, configurable from tweaker_config.json'. That is a DIFFERENT file from settings.json, so 'input' under the stated criteria. See reservations.",
+    "nowUtcMs": "A clock value. Spec section 7.5 item 4 prescribes out-of-scope.",
+    "tauFastSec": "AggressorVelocityAccumulator.Fold (Core/AggressorVelocityAccumulator.vb:76-97) uses it as the fast decay horizon; MarketState.vb:166-168 passes it through. settings.json v50 change_log: 'fast burst tau = fast_window_sec'. Key indicators.aggressor_velocity.fast_window_sec. The name differs from the key, which is why normalisation missed it.",
+    "tauNormSec": "Same Fold call, the rolling-norm decay horizon. Resolved per session by ExecutionResolution.ResolveAggrVelNormWindow over indicators.aggressor_velocity.default.norm_window_sec and .sessions.*.norm_window_sec.",
+    "closeBase": "A51Bars (Program.vb:9756) is the base close price of a synthetic candle series, Optional default 60000.0.",
+    "currentATR": "An ATR reading passed into DynamicNorms.Compute. A measurement, not a tunable.",
+    "entryPriceUsd": "Trade geometry passed into CalcKellySizing. A price.",
+    "grossFloorUsdPerSec": "AggressorVelocityAccumulator.Snapshot (Core/AggressorVelocityAccumulator.vb:127). Production feeds avCfg.GrossFloorUsdPerSec at UI/MainForm_Analysis.vb:461. Key indicators.aggressor_velocity.gross_floor_usd_per_sec = 50, settings.json:331; named on the tweaker surface in the v50 change_log.",
+    "lr": "L2Logistic.Fit learning rate, Optional default 0.5. Spec section 7.5 item 4 prescribes out-of-scope.",
+    "minCoverageSec": "Second parameter of AggressorVelocityAccumulator.Snapshot. Production passes avNormWin at UI/MainForm_Analysis.vb:461 -- the session-resolved norm_window_sec -- so it IS settings-derived even though no key is literally named min_coverage_sec.",
+    "minTestDays": "AuditMetrics.MakeChronologicalSplit (tools/CeilingAudit/AuditMetrics.vb:53), Optional default 7. Offline split-half parameter in an audit tool, no settings.json key.",
+    "staleAfterSec": "WsMarketDataSource.vb:32-39. Production constructs with TWO arguments only (UI/MainForm_Layout.vb:537), so staleAfterSec defaults to -1 and the ctor falls back to SettingsLoader.Current.Network.WsStaleAfterSec. Key network.ws_stale_after_sec = 10, settings.json:510.",
+    "stopDistanceUsd": "Trade geometry passed into CalcKellySizing. A computed distance.",
+    "upgradeBonus": "BuildBurstCfg (Program.vb:3712) assigns cfg.Indicators.AggressorVelocity.UpgradeBonus = upgradeBonus. Key indicators.aggressor_velocity.upgrade_bonus, named on the tweaker surface in the v50 change_log. The one fixture call passes 20 ('absurd bonus to force the cap', Program.vb:3754), far off the shipped 1."
+  },
+
+  "seat_totals": { "threshold": 7, "input": 16, "unsure": 0 }
+}
