@@ -90,6 +90,31 @@ A build spec asks its implementer for a live dry run as an acceptance item — r
 
 ---
 
+## 4b. ⛔⛔ THE DETECTOR IS NOT DETERMINISTIC — measured 2026-09-21 (UTC)
+
+**Three identical calls, same commit, same state, harness 2's `-Repeat 3` probe:**
+
+| Commit | Verdicts across 3 calls | Confidences |
+|---|---|---|
+| `504442e29e` | `no_app_change` ×3 | 0.46 · 0.53 · 0.54 |
+| `91942d6739` | `changes_computation` ×3 | 0.26 · 0.37 · 0.29 |
+| ⛔ `c6c6942d8a` | **`changes_writes` · `no_app_change` · `changes_writes`** | 0.32 · 0.32 · 0.27 |
+
+⛔ **The VERDICT flipped on identical input.** And confidence moved by up to ±0.1 even where the label held.
+
+⭐ **This resolves an open discrepancy:** harness 2's build reported *"6 of 10 came back `tag_wrong`"* and a later run of the same window gave **7**. Neither was a miscount. The detector varies.
+
+**What follows, for every harness:**
+
+1. ⛔ **A single call's verdict is not reproducible near the threshold.** Any measurement built on one call per item carries irreducible noise, and a first-run agreement score inherits it.
+2. ⭐ **The instability clusters where confidence is low** — the flip happened at 0.27–0.32, right at the escalation threshold. **Low confidence means UNSTABLE, not merely uncertain.** That is a stronger and more useful reading than "the model is unsure".
+3. ⭐ **The fix is documented and is not escalation:** self-consistency. `docs.typesafe.ai/cookbooks/consistency_choice_cookbook.md` and `.../consistency_noul_cookbook.md` ask the same question N times and use **label agreement** as the signal. **A low-confidence item should be asked N times and its agreement reported, not resolved by one more expensive call.**
+4. ⚠ **Do not quote a verdict from a single low-confidence call as if it were a finding.** Quote the agreement rate, or say the item was unstable.
+
+⚠ **Not verified: whether instability at HIGH confidence occurs at all.** Only three commits were probed, and only one flipped. `docs.typesafe.ai` describes Jev as "extremely consistent", which is not the same as deterministic, and this measurement says so too.
+
+---
+
 ## 5. ⛔ What invalidates a first run
 
 - **The seat saw any detector output before writing its baseline.** The run is then a demonstration, not a measurement, and must be labelled as one. ⚠ **Including output relayed second-hand in an implementer's report** — see §4a.
