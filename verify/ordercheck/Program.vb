@@ -925,9 +925,10 @@ Module Program
         '                            the 10/16/16/18 trade groups above are laid out around a
         '                            50-trade window and their own comments name it. Band width
         '                            licenses a change; it does not compel one.
-        '   accelThreshold 1234.0    BAND-INERT: band [0, 73999]; 74000 flips it to FLAT. Was
-        '                            10000, which EQUALLED shipped accel_threshold, so it is now
-        '                            obviously synthetic.
+        '   accelThreshold 1234.0    BAND-INERT: band [0, 73999]; 74000 flips it to FLAT. 1234.0
+        '                            is NOT a shipped value. HISTORY, not a claim about the
+        '                            literal above: it replaced 10000, which did equal shipped
+        '                            accel_threshold.
         '   dynamicPct 0.0           BAND-INERT: band [0, 0.53]; the SHIPPED 0.30 is inside it, so
         '                            the divergence session 2 hand-computed is confirmed by
         '                            measurement. 0.0 was never shipped (history 0.03, 0.30).
@@ -935,8 +936,9 @@ Module Program
         '                            WRONG. Its band reads [0, 1000] only because dynamicPct = 0.0
         '                            leaves the whole `If dynamicPct > 0.0` branch that floorPct
         '                            lives in unexecuted. Measured jointly, (accel 10000, dyn 0.30,
-        '                            floor 10) FAILS. Was 0.25, which EQUALLED shipped; now
-        '                            synthetic. Do not read its wide band as insensitivity.
+        '                            floor 10) FAILS. 0.375 is NOT a shipped value. HISTORY: it
+        '                            replaced 0.25, which did equal shipped. Do not read its wide
+        '                            band as insensitivity.
         ' ⚠ Measured joint dependency one-at-a-time misses entirely: microWindowSize 20 or 30 with
         ' the SHIPPED dynamicPct 0.30 FAILS, though each value passes alone.
         ' ⭐ That joint dependency is now PINNED by A64b, so it cannot silently return.
@@ -976,8 +978,10 @@ Module Program
         '   floorPct 0.375           full probe range [0, 1e12] / [0, 1e9], and the 125-point
         '                            accel x dyn x floor joint grid is 125/125 unbroken -- so
         '                            unlike A2, floorPct is genuinely inert here, not masked.
-        '                            accelThreshold and floorPct EQUALLED shipped, so both are now
-        '                            obviously synthetic; dynamicPct 0.0 was never shipped.
+        '                            accelThreshold 1234.0 and floorPct 0.375 are NOT shipped
+        '                            values, and dynamicPct 0.0 never was either. HISTORY, not a
+        '                            claim about the literals above: the first two each replaced
+        '                            a value that did equal shipped.
         IndicatorEngine.CalcMicroCVD(trades, e, m, l, momentum, signal,
                                      microWindowSize:=50, accelThreshold:=1234.0,
                                      dynamicPct:=0.0, floorPct:=0.375)
@@ -1011,8 +1015,9 @@ Module Program
         '                            is built around it, not because settings says 30.
         '   threshold 0.42           BAND-INERT: band [0, 1); at exactly 1.0 the signal drops to
         '                            NEUTRAL (the comparison is strict, and tfiValue is exactly
-        '                            1.0). Was 0.15, which EQUALLED shipped TFI.threshold; now an
-        '                            obviously synthetic mid-band value.
+        '                            1.0). 0.42 is NOT a shipped value -- an obviously synthetic
+        '                            mid-band one. HISTORY: it replaced 0.15, which did equal
+        '                            shipped TFI.threshold.
         IndicatorEngine.CalcTFI(trades, tfiValue, tfiSignal, tfiWindowSize:=30, threshold:=0.42)
 
         Check("A4 TFI window (first 30 sells excluded)",
@@ -1067,8 +1072,9 @@ Module Program
         '                            at all -- and Check() below asserts those only, never
         '                            divA/divB. Band is the full probe range [0, 1000], both call
         '                            sites swept independently, divA/divB constant at NONE
-        '                            throughout. Was 0.001, which EQUALLED shipped
-        '                            indicators.OBV.divergence_gate; now obviously synthetic.
+        '                            throughout. 0.0077 is NOT a shipped value. HISTORY, not a
+        '                            claim about the literal above: it replaced 0.001, which did
+        '                            equal shipped indicators.OBV.divergence_gate.
         ' [queue item 17 APPLIED 2026-09-05, I17-A6] trendGate is MECHANISM too, and its literal
         ' is now an obviously-synthetic 1.0. ObvRiseCandles builds 50 bars at volume 10 rising
         ' +10/bar, so obvChange = 48 on BOTH variants -- any gate below 48 gives RISING, which is
@@ -1259,7 +1265,8 @@ Module Program
         '                            and BEAR then comes from DMI+EMA alone -- while A9's own
         '                            docstring claims it exercises "ADX strong". So the synthetic
         '                            value is deliberately BELOW 30, not merely inside the band.
-        '                            Was 9, which EQUALLED shipped mtf_gate.adx_period.
+        '                            7 is NOT a shipped value. HISTORY: it replaced 9, which did
+        '                            equal shipped mtf_gate.adx_period.
         '   adxMin 7.5               ⚠ MASKED, NOT INERT. One-at-a-time band is unbounded
         '                            ([0, 1000] all pass) purely because of the spare vote: at
         '                            adxMin > 100 the ADX vote drops and Bear falls 3 -> 2, still
@@ -7392,8 +7399,9 @@ Module Program
         ' [A54a S2, MECHANISM -- bands MEASURED, not argued, by I17-SWEEP 2026-09-05]
         '   threshold 0.42           BAND-INERT: band [0, 1); the window's last 30 trades are all
         '                            buys so tfiVal is exactly 1.0, and only threshold >= 1.0
-        '                            drops the signal to NEUTRAL. Was 0.15, which EQUALLED shipped
-        '                            TFI.threshold; now obviously synthetic.
+        '                            drops the signal to NEUTRAL. 0.42 is NOT a shipped value.
+        '                            HISTORY, not a claim about the literal above: it replaced
+        '                            0.15, which did equal shipped TFI.threshold.
         '   tfiWindowSize 30         Pre-existing (NOT one of session 2's 26), swept for context:
         '                            same band [1, 30] as A4, 31 breaks it. Left untouched.
         IndicatorEngine.CalcTFI(slice500, tfiVal, tfiSig, tfiWindowSize:=30, threshold:=0.42)
