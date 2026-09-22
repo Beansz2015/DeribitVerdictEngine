@@ -1,0 +1,40 @@
+{
+  "_harness": "fixture-parser",
+  "_window": "full residual after FP-Q1/Q2/Q3 + the FP-D13 fix: 19 FP-1 sites, 6 FP-2 subs",
+  "_by": "orchestrator seat, by hand, BEFORE any detector output on this population",
+  "_protocol": "docs/harness-shadow-mode-protocol.md",
+  "_input_seen": "same as the detector: the call line, its comment block, and the ever-shipped set computed from all 87 settings.json revisions. No method bodies read beyond each sub's Check() title, which the detector also sees.",
+  "_CONFLICT_DECLARED": "I reworded 4 of these comment blocks earlier today (A3 accelThreshold/floorPct, A4 threshold, A6 divergenceGate, A43b threshold) under the trader-approved past-tense rewording. I am therefore judging prose I wrote. The detector judges the SAME text so the comparison stays symmetric, but this must be weighed when reading any agreement on those rows.",
+
+  "A1_CvdSlopeRising#861#slopeMinUsd": "mechanism_declared_ok",
+  "A1_CvdSlopeRising#861#slopePctOfValue": "mechanism_declared_ok",
+  "A1_CvdSlopeRising#862#divergencePriceGate": "mechanism_declared_ok",
+  "A1_CvdSlopeRising#863#lateSegmentWeight": "mechanism_declared_ok",
+  "A1_CvdSlopeRising#863#earlySegmentWeight": "mechanism_declared_ok",
+
+  "A3_MicroCvdWindowFromEnd#986#microWindowSize": "mechanism_declared_ok",
+  "A3_MicroCvdWindowFromEnd#986#accelThreshold": "mechanism_declared_ok",
+  "A3_MicroCvdWindowFromEnd#987#dynamicPct": "mechanism_declared_ok",
+  "A3_MicroCvdWindowFromEnd#987#floorPct": "mechanism_declared_ok",
+
+  "A4_TfiWindowFromEnd#1021#tfiWindowSize": "mechanism_declared_ok",
+  "A4_TfiWindowFromEnd#1021#threshold": "mechanism_declared_ok",
+
+  "A6_ObvNormalisation#1089#trendGate": "mechanism_declared_ok",
+  "A6_ObvNormalisation#1089#divergenceGate": "mechanism_declared_ok",
+  "A6_ObvNormalisation#1090#trendGate": "mechanism_declared_ok",
+  "A6_ObvNormalisation#1090#divergenceGate": "mechanism_declared_ok",
+
+  "A43b_SliceTradesAscendingAndLastN#7407#tfiWindowSize": "undeclared",
+  "A43b_SliceTradesAscendingAndLastN#7407#threshold": "mechanism_declared_ok",
+
+  "A65c_WideArmIsTestedFirst#12553#wideThresholdBps": "mechanism_declared_ok",
+  "A65c_WideArmIsTestedFirst#12553#tightThresholdBps": "mechanism_declared_ok",
+
+  "A1_CvdSlopeRising": "name_matches",
+  "A3_MicroCvdWindowFromEnd": "name_matches",
+  "A4_TfiWindowFromEnd": "name_matches",
+  "A6_ObvNormalisation": "name_matches",
+  "A43b_SliceTradesAscendingAndLastN": "name_understates",
+  "A65c_WideArmIsTestedFirst": "name_matches"
+}
