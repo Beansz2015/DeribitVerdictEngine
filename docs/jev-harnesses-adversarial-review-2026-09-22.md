@@ -6,6 +6,8 @@
 
 ---
 
+> ✅ **FIXED the same day (UTC), trader "go":** finding 1 and 10 and 3 → harness 2 revision 3, `90c0db1` ([`commit-walker-check-spec.md`](commit-walker-check-spec.md) §11). Findings 2 and 5 → harness 1 revision 1, `f4dd8c7` ([`rider-travel-check-spec.md`](rider-travel-check-spec.md) §9). **Open:** 4, 6, 7, 8, 9, 11.
+
 ## Findings, ranked
 
 | # | Sev | Harness | Finding | Evidence |
