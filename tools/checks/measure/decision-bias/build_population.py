@@ -2,6 +2,9 @@
 
     python tools/checks/measure/decision-bias/build_population.py            # check only
     python tools/checks/measure/decision-bias/build_population.py --write <UTC-stamp>
+    python tools/checks/measure/decision-bias/build_population.py --write <UTC-stamp> --out-dir <scratch dir>
+        (a reviewer's reproduction: the four files must be byte-identical to the committed ones)
+    python tools/checks/measure/decision-bias/build_population.py --show-hits   # list every leak hit left unexplained
 
 Reads manifest.py (the state spans) and manifest_outcomes.py (the rulings). Every text field is pulled VERBATIM from git; a span that is not found raises.
 Makes NO Jev call and NO network call.
@@ -131,6 +134,7 @@ def main(argv):
     write = '--write' in argv
     stamp = argv[argv.index('--write') + 1] if write else None
     show_hits = '--show-hits' in argv
+    out_dir = argv[argv.index('--out-dir') + 1] if '--out-dir' in argv else OUT_DIR   # a reviewer's scratch copy
     rev_full = L.full_sha(M.REV)
     pop, outs, unruled, errors = [], [], [], []
     seen = set()
@@ -223,11 +227,11 @@ def main(argv):
         'excluded': dict(meta, note='Every other candidate, with a reason code. No text and no outcome.', items=excluded),
     }
     for k, v in files.items():
-        p = os.path.join(OUT_DIR, 'decision-bias-%s-%s.json' % (stamp, k))
+        p = os.path.join(out_dir, 'decision-bias-%s-%s.json' % (stamp, k))
         with open(p, 'w', encoding='utf-8', newline='\n') as fh:
             json.dump(v, fh, ensure_ascii=False, indent=1)
             fh.write('\n')
-        print('WROTE %s (%d items)' % (os.path.relpath(p, L.REPO).replace('\\', '/'), len(v['items'])))
+        print('WROTE %s (%d items)' % (p.replace('\\', '/'), len(v['items'])))
     return 0
 
 
