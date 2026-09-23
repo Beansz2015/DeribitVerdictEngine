@@ -119,6 +119,8 @@ Scan of today's tree (`cbc2c91`, 417 non-archive `.md`): **2,113 distinct flagge
 
 ⭐⭐ **`E2` splits exactly along a TENSE question.** Every true `E2` hit is a line stating a superseded value as current; every false `was_shipped` hit narrates history. **That is the Jev question** — code computes the mismatch and the shipped history, Jev judges *"does this line assert the value as CURRENT?"*, code decides. `never_shipped` hits are parser errors: fix the pairing in code, never send them to a judge.
 
+> ⚠ **Corrected 2026-09-23 (UTC) by the harness 4 build.** Only 3 of the 13 `never_shipped` lines are pairing errors. 8 are NAME errors: the one-word keys `threshold` and `penalty` match ordinary prose. 1 is a sum expression that no pairing rule covers. 1 is a correct pairing of an enum option value that was never shipped. The claim above and the table row's *"a number paired with the wrong key"* are kept as written. Evidence: [`doc-scanner-build-spec-back.md`](doc-scanner-build-spec-back.md) §2.
+
 ---
 
 ## 5. ⛔ Live positives found — unfixed, pending a ruling

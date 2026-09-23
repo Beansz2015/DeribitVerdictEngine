@@ -27,7 +27,7 @@ A correction worth carrying, because it changes what run 1 is worth:
 | Rider travel | 8 riders — but that is the entire population | Adequate for the decision it feeds |
 | Commit walker | about 200 commits, roughly 24 positives | **Real catch rate** |
 | Fixture parser | 425 fixtures | **Real catch rate** |
-| Doc scanner | about 380 docs, many pairs | **Real catch rate** |
+| Doc scanner | about 94 line-level candidates in the 12-doc living set at `cbc2c91`, out of 420 top-level docs. Whole-doc and doc-pair states were ruled out ([`doc-scanner-measurement-2026-09-22.md`](doc-scanner-measurement-2026-09-22.md) §1). Corrected 2026-09-23 (UTC); this cell read *"about 380 docs, many pairs"* | **Real catch rate** |
 | Doc re-ranker | one query | ⚠ Genuinely one data point. Stays a trial, judged over sessions |
 
 So the baseline is cheap relative to what it buys on four of the five.
@@ -225,4 +225,4 @@ The detector answered `declared_but_contradicted` on **all 5 samples**, `mean_to
 
 - **That any of these harnesses generalise.** One task has been measured. One task is not a benchmark.
 - **That the threshold from one run holds on the next.** It is fitted to one population and must be re-checked.
-- **Harnesses 2 to 5 have not been built.** Their row in §6 is a plan, not a record.
+- **Harnesses 4 to 6 are not yet built.** Their rows in §6 are plans, not records. Corrected 2026-09-23 (UTC): this line said *"Harnesses 2 to 5"*, but harnesses 2 and 3 are built ([`seat-handover-2026-09-22.md`](seat-handover-2026-09-22.md) §2).
