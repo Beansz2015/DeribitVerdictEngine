@@ -1,0 +1,27 @@
+{
+ "_what": "IMPLEMENTER-written baseline for the doc scanner's ACCEPTANCE window only (docs/doc-scanner-check-spec.md section 5 item 7). NOT a seat baseline and NOT the measured window: every doc here is a historical handover outside the living set. It measures implementer-versus-detector agreement, not seat-versus-detector (docs/harness-shadow-mode-protocol.md section 4c). Written from the tool's own candidate state, before any Jev call.",
+ "_revision": "55de8fb",
+ "_by": "harness-4 implementer (claude-opus-5-5)",
+ "_written_utc": "20260923T135211Z",
+ "_window": "-Rev 55de8fb -Docs docs/seat-handover-2026-08-2*.md, docs/seat-handover-2026-08-10.md, docs/seat-handover-2026-08-12.md, docs/next-session-handover-2026-05-14.md, docs/next-session-handover-2026-05-18.md, docs/fable-continuation-2026-07-23.md",
+ "_notes": {
+  "VALUE|docs/seat-handover-2026-08-10.md|15@55de8fb": "unsure: `D2 (OBV trend_gate 18->~23)` names 18 as the from-value of a change not yet shipped, so 18 is in force at writing, but the line is a change label, not a statement of the current value. I cannot place it.",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-25.md|33@55de8fb": "the line gives A49u's asserted numbers in the gap-attribution argument; consistent with the Sub name, if thin."
+ },
+ "judgments": {
+  "VERSION|docs/next-session-handover-2026-05-14.md|317@55de8fb": "asserts_current",
+  "VERSION|docs/next-session-handover-2026-05-18.md|365@55de8fb": "asserts_current",
+  "VALUE|docs/seat-handover-2026-08-10.md|15@55de8fb": "unsure",
+  "VALUE|docs/seat-handover-2026-08-12.md|45@55de8fb": "history_or_quote",
+  "VALUE|docs/seat-handover-2026-08-12.md|61@55de8fb": "history_or_quote",
+  "POINTER|docs/fable-continuation-2026-07-23.md|3@55de8fb": "asserts_current",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-10.md|40@55de8fb": "no_description",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-12.md|48@55de8fb": "no_description",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-25.md|33@55de8fb": "describes_this_fixture",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-25.md|37@55de8fb": "no_description",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-25.md|37@55de8fb#2": "no_description",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-25.md|39@55de8fb": "describes_this_fixture",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-25.md|49@55de8fb": "no_description",
+  "FIXTURE_MEANING|docs/seat-handover-2026-08-25.md|227@55de8fb": "describes_this_fixture"
+ }
+}
