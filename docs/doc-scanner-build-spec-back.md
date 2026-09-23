@@ -339,3 +339,188 @@ This is code mechanics only: why a number got paired. It is **not** a tense read
 | `tools/checks/measure/doc-scanner/enumerators.py`, `rev_date()` (code) | Uses `%cs`, the GMT+8 commit date. Every `DATED_STATE` age is one day high at `cbc2c91` (`H-8`) |
 
 ⚠ The working tree held uncommitted edits to `docs/harness-shadow-mode-protocol.md` by another seat while I wrote this. The two rows above are read from `HEAD`, not from those edits.
+
+---
+
+## 7. ⛔ Resumed 2026-09-23 (UTC) — the orchestrator's rulings `DS-A` and `DS-B`: SECOND STOP
+
+**Appended below the stopped record; nothing above this line is rewritten.** The orchestrator ruled on both decisions this packet queued in §3:
+
+- `DS-A` (which E2 pairing to adopt). **Option (f)**, which was none of the five in §3: rule 1 without its backtick-span arm, plus the name rule as a **label** (`unqualified`), never a filter, with top-level keys exempt. (f) could be taken only if four named checks passed; otherwise stop and report.
+- `DS-B` (b): the tool dates `DATED_STATE` from the UTC commit date.
+
+Then the orchestrator asked for the spec amendment, `tools/checks/doc-scanner.ps1`, and `doc-scanner-check-spec.md` §5 items 5–7.
+
+| | Result |
+|---|---|
+| `DS-A` option (f) | ⛔ **NOT confirmed.** Checks 1, 2 and 4 PASS. Check 3: the span arm's gains hold **11 correct key-number pairings in 14 rows**, so the ruling says *"do NOT drop the arm"* |
+| `DS-A` fallback the ruling names: the span arm kept, but never inside a file name or a link target | ⛔ **Check 1 FAIL: 5 qualified `never_shipped` lines** (need ≤ 2) |
+| `DS-B` (b) | ✅ **BUILT** (`0891089`). `H-7` re-run: no removed-line result flips |
+| Spec amendment | **NOT written.** It would amend `doc-scanner-check-spec.md` §4.2 to option (f), which is not confirmed. I will write it as one block once `DS-A` is settled |
+| `tools/checks/doc-scanner.ps1`, items 5–7 | **NOT built, NOT run.** The ruling orders them after `DS-A` |
+| Jev calls | **0.** No key loaded, no baseline written, nothing over the living set |
+| Tool behaviour now | E2 pairing: still the spec-literal reading (`--e2 strict`). Dating: UTC |
+
+**Commits:**
+- `0891089`: the (f) measurement plus the `DS-B` build.
+- `9462b35`: an eighth reading, for information only (§7.4).
+- This section's own commit.
+
+### 7.1 Handles — run at `9462b35`, output pasted unedited
+
+The conventions are the same as `docs/doc-scanner-build-spec-back.md` §1. Documents are read at `cbc2c91`. Run `export PYTHONIOENCODING=utf-8` first, and pass file paths to `python -c` as arguments.
+
+**`H-10` — checks 1 and 4 (living set) for option (f), the restricted arm, and the information-only eighth reading.** ⭐ If you run only one, run this.
+
+```
+python tools/checks/measure/doc-scanner/pairing_variants.py cbc2c91 | grep -E '^(--- (ruled|restricted|no_span\+sep)|  QUALIFIED|===|CHECK)'
+```
+```
+--- ruled(f)
+  QUALIFIED_NEVER_SHIPPED_LINES=2  UNQUALIFIED_NEVER_SHIPPED_LINES=8  UNQUALIFIED_WAS_SHIPPED_LINES=0 []
+--- restricted_span+label
+  QUALIFIED_NEVER_SHIPPED_LINES=5  UNQUALIFIED_NEVER_SHIPPED_LINES=8  UNQUALIFIED_WAS_SHIPPED_LINES=0 []
+--- no_span+sep+label
+  QUALIFIED_NEVER_SHIPPED_LINES=2  UNQUALIFIED_NEVER_SHIPPED_LINES=8  UNQUALIFIED_WAS_SHIPPED_LINES=0 []
+=== DS-A checks for reading ruled(f)
+CHECK1 PASS living set: QUALIFIED never_shipped lines=2 (need <= 2), E2 TP flagged=11/11 (need all)
+CHECK4 PASS living set: was_shipped rows=22 lines=20 (need 22/20); same (path,line,key,value) rows as literal=True, as legacy=True
+=== DS-A checks for reading restricted_span+label
+CHECK1 FAIL living set: QUALIFIED never_shipped lines=5 (need <= 2), E2 TP flagged=11/11 (need all)
+CHECK4 PASS living set: was_shipped rows=22 lines=20 (need 22/20); same (path,line,key,value) rows as literal=True, as legacy=True
+=== DS-A checks for reading no_span+sep+label
+CHECK1 PASS living set: QUALIFIED never_shipped lines=2 (need <= 2), E2 TP flagged=11/11 (need all)
+CHECK4 PASS living set: was_shipped rows=22 lines=20 (need 22/20); same (path,line,key,value) rows as literal=True, as legacy=True
+```
+
+- Under (f), the 2 qualified lines are `UserManual.md:250` and `:325`, the same two §2 above called genuine and `+`-paired.
+- The 8 unqualified lines are the §2 `threshold`/`penalty` name errors, now kept in their own bucket and not dropped.
+- The restricted arm's 3 extra qualified lines are `UserManual.md:290` (`AtrStopMultiplier <= 0`), `:326` (`EstProbScale / 2`) and `:1264` (`MomentumWindow + 1`). Its file-name guard removes the 4 `threshold`-in-a-file-name lines as intended.
+- The five earlier readings still print exactly what `H-1` published. I checked this with an md5 of the first 17 lines of `H-1`'s grep, against the published text.
+
+**`H-11` — check 2 and the span-arm recovery, all 417 non-archive docs.**
+
+```
+python tools/checks/measure/doc-scanner/pairing_variants.py cbc2c91 --all > /tmp/all.txt
+grep -E '^(===|CHECK2|SPAN_ARM)' /tmp/all.txt | sed -E 's/(gained vs no_span=[0-9]+) \[[^]]*\]/\1 [list]/; s/(SPAN_ARM_ROWS_RECOVERED [0-9]+\/[0-9]+) .*/\1/'
+```
+```
+=== DS-A checks for reading ruled(f)
+SPAN_ARM_ROWS_RECOVERED 0/14
+CHECK2 PASS all docs: was_shipped lines lost vs no_span=0 [] (need 0), gained vs no_span=0 [list]; lines no_span+nq dropped=21, of them top-level `version`=21, present in ruled(f)=21
+=== DS-A checks for reading restricted_span+label
+SPAN_ARM_ROWS_RECOVERED 14/14
+CHECK2 PASS all docs: was_shipped lines lost vs no_span=0 [] (need 0), gained vs no_span=11 [list]; lines no_span+nq dropped=21, of them top-level `version`=21, present in restricted_span+label=21
+=== DS-A checks for reading no_span+sep+label
+SPAN_ARM_ROWS_RECOVERED 7/14
+CHECK2 PASS all docs: was_shipped lines lost vs no_span=0 [] (need 0), gained vs no_span=35 [list]; lines no_span+nq dropped=21, of them top-level `version`=21, present in no_span+sep+label=21
+```
+
+⚠ **Check 2 says 21, and the ruling says *"restore all 22 `version` lines"*.** See correction 1 in §7.3. I scored check 2 on its binding clause, *"lost against the no_span reading must be 0"*. If you meant 22 literally, check 2 fails on one line, and rule 1 causes that loss, not the name rule.
+
+**`H-12` — `DS-B`: the date source flips no replay result, and `H-2` still holds.**
+
+```
+python tools/checks/lib/doc_scanner_candidates.py replay --kinds kept --e2 legacy --dates instrument > /tmp/li.txt
+python tools/checks/lib/doc_scanner_candidates.py replay --kinds kept --e2 legacy --dates utc > /tmp/lu.txt
+python tools/checks/lib/doc_scanner_candidates.py replay --kinds kept --e2 strict --dates utc > /tmp/su.txt
+diff /tmp/li.txt /tmp/lu.txt && echo "DS-B ALONE: WHOLE KEPT REPLAY IDENTICAL"
+diff <(grep -E '^\s+(HIT|miss)' /tmp/li.txt) <(grep -E '^\s+(HIT|miss)' /tmp/su.txt) && echo "INSTRUMENT vs TOOL AS BUILT: REMOVED-LINE RESULTS IDENTICAL ($(grep -cE '^\s+(HIT|miss)' /tmp/su.txt) removed lines)"
+python tools/checks/lib/doc_scanner_candidates.py replay --kinds all --e2 legacy > /tmp/a.txt && python tools/checks/measure/doc-scanner/replay_recall.py > /tmp/b.txt && diff /tmp/a.txt /tmp/b.txt && echo "H-2 STILL IDENTICAL ($(wc -l < /tmp/a.txt) lines)"
+```
+```
+DS-B ALONE: WHOLE KEPT REPLAY IDENTICAL
+INSTRUMENT vs TOOL AS BUILT: REMOVED-LINE RESULTS IDENTICAL (40 removed lines)
+H-2 STILL IDENTICAL (52 lines)
+```
+
+- `replay --dates` defaults to `instrument`, so the published `H-2` command is unchanged.
+- The tool's `scan` defaults to `--dates utc`.
+- Only the ruled change: the instrument's `enumerators.py` is untouched (`H-5`).
+
+**`H-13` — `DS-B` at `cbc2c91`: the same 12 headers, each one day younger.**
+
+```
+python tools/checks/lib/doc_scanner_candidates.py scan --rev cbc2c91 --out /tmp/u.json
+python tools/checks/lib/doc_scanner_candidates.py scan --rev cbc2c91 --dates instrument --out /tmp/i.json
+python -c "import json,sys;u=json.load(open(sys.argv[1],encoding='utf-8'));i=json.load(open(sys.argv[2],encoding='utf-8'));print('source',u['dated_state_date_source'],'utc',u['rev_date_utc'],'instrument',u['rev_date_instrument']);[print(a['id'],'|',a['detail'].split(',')[0],'<- instrument:',b['detail'].split(',')[0]) for a,b in zip(u['code_only']['DATED_STATE_OVER_HORIZON'],i['code_only']['DATED_STATE_OVER_HORIZON'])]" /tmp/u.json /tmp/i.json
+```
+
+The two `SCAN_OK` lines are identical to `H-3`'s and are omitted here. The third command prints:
+
+```
+source utc utc 2026-09-22 instrument 2026-09-23
+DATED_STATE|CLAUDE.md|273@cbc2c91 | 2026-08-01 age 52d <- instrument: 2026-08-01 age 53d
+DATED_STATE|docs/trader-tick-queue.md|5@cbc2c91 | 2026-08-07 age 46d <- instrument: 2026-08-07 age 47d
+DATED_STATE|docs/trader-tick-queue.md|43@cbc2c91 | 2026-09-14 age 8d <- instrument: 2026-09-14 age 9d
+DATED_STATE|docs/roadmap.md|31@cbc2c91 | 2026-08-24 age 29d <- instrument: 2026-08-24 age 30d
+DATED_STATE|docs/roadmap.md|43@cbc2c91 | 2026-09-10 age 12d <- instrument: 2026-09-10 age 13d
+DATED_STATE|docs/roadmap.md|45@cbc2c91 | 2026-09-10 age 12d <- instrument: 2026-09-10 age 13d
+DATED_STATE|docs/roadmap.md|100@cbc2c91 | 2026-08-07 age 46d <- instrument: 2026-08-07 age 47d
+DATED_STATE|docs/roadmap.md|190@cbc2c91 | 2026-08-12 age 41d <- instrument: 2026-08-12 age 42d
+DATED_STATE|docs/roadmap.md|205@cbc2c91 | 2026-09-10 age 12d <- instrument: 2026-09-10 age 13d
+DATED_STATE|docs/backlog-dependency-map.md|64@cbc2c91 | 2026-08-07 age 46d <- instrument: 2026-08-07 age 47d
+DATED_STATE|docs/backlog-dependency-map.md|127@cbc2c91 | 2026-09-10 age 12d <- instrument: 2026-09-10 age 13d
+DATED_STATE|docs/aws-collector-deploy-checklist.md|21@cbc2c91 | 2026-08-07 age 46d <- instrument: 2026-08-07 age 47d
+```
+
+How it is built: `e5_dated()` calls the instrument's own `e5()` with `E.rev_date` swapped, for that one call only, for a UTC-date function, and restores it in `finally`. It reuses the measured logic, not a copy of it.
+
+### 7.2 Check 3 — the span arm's 14 rows, classified by MECHANISM only (no tense read)
+
+Source: `H-11`'s `/tmp/all.txt`. Print it with `sed -n '/^CHECK3/,$p' /tmp/all.txt`, which shows each row with the text from the key to the number. "Correct" means the text gives that number as a value of that key.
+
+| # | Line (all outside the living set) | Key | Number | Text from key to number | Mechanism |
+|---|---|---|---|---|---|
+| 1 | `a54a-drift-guard-batch-summary.md:57` | `indicators.CVD.slope_pct_of_value` | 0.01 | `slope_pct_of_value: poco=0.01` | ✅ correct: the POCO value of the key |
+| 2 | `a54a-drift-guard-batch-summary.md:58` | `indicators.MicroCVD.accel_threshold_dynamic_pct` | 0.03 | `accel_threshold_dynamic_pct: poco=0.03` | ✅ correct: same shape |
+| 3 | `absorption-engagement-derivation-2026-07-23.md:18` | `indicators.absorption.absorb_ratio` | 3.0 | `absorb_ratio ≥ 3.0` | ✅ correct: the threshold the key holds |
+| 4 | `absorption-engagement-derivation-2026-07-23.md:72` | `indicators.absorption.max_pull_frac` | 0.5 | `max_pull_frac ∈ {0.5` | ✅ correct, first member of a value set only |
+| 5 | `aws-redeploy-and-fee-knob-runbook-2026-07-31.md:101` | `version` | 63 | `"version": 63` | ✅ correct: a quoted JSON pair |
+| 6 | `aws-redeploy-and-fee-knob-runbook-2026-07-31.md:110` | `version` | 63 | `"version": 63` | ✅ correct |
+| 7 | `i17-sweep-batch-summary.md:184` | `indicators.CVD.slope_min_usd` | 1000 | `slope_min_usd {1000` | ✅ correct, first member of a sweep set |
+| 8 | `i17-sweep-batch-summary.md:184` | `indicators.CVD.slope_pct_of_value` | 0.01 | `slope_pct_of_value {0.01` | ✅ correct, first member |
+| 9 | `i17-sweep-batch-summary.md:186` | `indicators.MicroCVD.accel_threshold` | 5000 | `accel_threshold {5000` | ✅ correct, first member |
+| 10 | `i17-sweep-batch-summary.md:186` | `indicators.MicroCVD.accel_threshold_dynamic_pct` | 0.03 | `accel_threshold_dynamic_pct {0.03` | ✅ correct, first member |
+| 11 | `offline-whatif-replay-proposal.md:42` | `scoring.atr_stop_multiplier` | 1.0 | `atr_stop_multiplier"], "min": 1.0` | ❌ mis-pairing: 1.0 is the `min` bound of a ratio |
+| 12 | `trade-store-downtime-repair-proposal.md:234` | `version` | 1 | `version"' -TotalCount 1` | ❌ mis-pairing: 1 is a `Select-String` argument |
+| 13 | `trade-store-downtime-repair-spec-back.md:38` | `version` | 1 | `version"' -TotalCount 1` | ❌ mis-pairing: same |
+| 14 | `trade-store-downtime-repair-spec-back.md:38` | `version` | 66 | `"version": 66` | ✅ correct: a quoted JSON pair |
+
+- **11 correct, 3 mis-paired. 9 of the 11 lines hold at least one correct pairing.** Under the ruling's own branch, the arm must not be dropped.
+- Rows 4 and 7–10 pair only the first member of a set. The other members are never paired under any reading.
+- I read each row's key-to-number text and its line. I did not open the surrounding documents.
+
+### 7.3 ⛔ Corrections to my own record
+
+1. **`docs/doc-scanner-build-spec-back.md` §1 `H-6` says *"All 22 `was_shipped` lines that the name rule drops outside the living set are the top-level `version` key."* That is wrong as worded.** It was measured against `legacy`.
+   - 21 are dropped by the name rule.
+   - The 22nd, `absorption-d2-stage1-rotation-build-spec.md:166` (*"`Version` is `1`"*), is dropped by **rule 1** in every strict reading, because the legacy parser accepted the word `is`. `H-6` listed it separately under `no_span`.
+   - By mechanism it is a **correct** pairing, a POCO default. **So rule 1 itself loses one correct pairing outside the living set.**
+2. **Commit `0891089`'s message says the span arm's gains are *"13 rows"* with *"10 CORRECT"*.** They are **14 rows: 11 correct, 3 mis-paired** (§7.2).
+3. **Commit `9462b35`'s message says *"28 of those are outside the span-arm set"*.** It is **30 lines**: 35 gained lines, minus the 5 span-arm lines among them. I subtracted 7 rows from 35 lines.
+
+⭐ Two of these three errors are rows counted as lines, or lines as rows, which is the same shape both times. `H-6` and `H-11` print lines; `SPAN_ARM_ROWS_RECOVERED` prints rows. **Read the unit before quoting a number from either.**
+
+### 7.4 Decision queued — `DS-A`, third round
+
+Every reading gives the **same 22 judged `VALUE` rows on the living set at `cbc2c91`** (check 4 passes for all). **So this choice changes nothing about the seat's first measured run.** It changes only what the tool does on other docs and other revisions.
+
+| Reading | Check 1 (≤ 2) | Check 2 | Span-arm rows kept (of 14; 11 correct) | New lines outside that set, unexamined |
+|---|---|---|---|---|
+| Literal, as built | ⛔ 17 | — | 14 (all 3 mis-pairings too) | 0 |
+| (f) as ruled | ✅ 2 | ✅ | 0: loses all 11 correct | 0 |
+| Restricted span arm (the ruling's fallback) | ⛔ 5 | ✅ | 14 (all 3 mis-pairings too) | 0 |
+| No span arm, rule-1 separators plus `"` and `{` (**information only; not ruled; not adopted**) | ✅ 2 | ✅ | 7: 7 correct, 0 mis-pairings | **30** |
+
+- **Read, labelled a hypothesis:** the last row looks the most promising. It meets check 1, keeps no mis-pairing, and recovers 7 of the 11 correct rows. **But I cannot recommend it:** its 30 extra lines have not been classified. Classifying them would be the same mechanism read as §7.2, and it is the missing half of the both-directions test.
+- **The one reading that loses no correct row is the restricted span arm.** Its cost is 3 arithmetic lines in the code-only `never_shipped` bucket (`H-10`), plus 3 mis-paired rows outside the living set that would go to Jev as `VALUE` candidates.
+- ⭐ **Under `CLAUDE.md`'s three-step test**, (f) now gives up information: 11 correct pairings for check-1 precision. So it is a trade, and the ruling already reserves it. The choice is between noise in a code-only bucket and lost correct rows. **That criterion is yours.**
+- **Scoping:** whichever reading is ruled, the change is one `e2_strict()` argument set and one `pairing_variants.py` reading. Every reading is already implemented and measured, and the spec amendment and the PowerShell build do not depend on which is chosen.
+
+### 7.5 What I did NOT verify (additions)
+
+- **The 30 extra lines of the information-only eighth reading.** Unexamined, in both senses.
+- **§7.2's classification** reads the line text only, not the surrounding documents.
+- **Whether `E.rev_date`'s swap is safe under concurrency.** The tool is single-threaded, and the swap is restored in `finally`. I did not test a concurrent caller.
+- **`DS-B` at a revision where a dated header sits exactly on the 7-day boundary.** No replay case and no header at `cbc2c91` is on it. The effect there is one day by construction, and it is not observed.
