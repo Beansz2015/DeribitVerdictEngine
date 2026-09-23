@@ -50,9 +50,16 @@ def main(argv):
 
     a = ap.parse_args(argv)
     if a.cmd == 'score':
-        with open(a.ranked_json, encoding='utf-8') as f:
+        # utf-8-sig, not utf-8: PowerShell 5.1's `Set-Content -Encoding UTF8` (the writer of
+        # both these temp files, from tools/checks/doc-reranker.ps1) always emits a UTF-8 BOM
+        # -- unlike pwsh 7's UTF8NoBOM, PS 5.1 has no BOM-less UTF-8 option. Plain 'utf-8'
+        # chokes on the BOM (JSONDecodeError). Reproduced live: the first -AcceptanceRun
+        # (1191 real Jev calls, 1.1M input tokens, ~26 min) silently scored 0/8 on every
+        # column because every `score` subprocess call crashed on this before it could read
+        # the file -- the crash went to stderr, which the PS1 caller piped to Out-Null.
+        with open(a.ranked_json, encoding='utf-8-sig') as f:
             ranked = json.load(f)
-        with open(a.expected_json, encoding='utf-8') as f:
+        with open(a.expected_json, encoding='utf-8-sig') as f:
             expected = json.load(f)
         result = {k: query_hits_at_k(expected, ranked, k) for k in (1, 5, 10)}
         with open(a.out, 'w', encoding='utf-8', newline='\n') as f:

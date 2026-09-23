@@ -126,7 +126,10 @@ function Invoke-SectionNoul([string]$key, [string]$q, $cand, [int]$samples, [swi
     # underlying answer is a choice; here it is a continuous noul, so "agreement" is
     # "no draw crossed the decision boundary the others didn't."
     $sides = @($draws | ForEach-Object { $_ -ge 0.5 })
-    $agreeCount = ($sides | Where-Object { $_ -eq $sides[0] }).Count
+    # @() wrap is load-bearing: a bare (pipe).Count is $null, not 1, when exactly one item
+    # survives Where-Object -- the single-element-array-unwraps trap (CLAUDE.md, PS 5.1
+    # notes), reproduced live in Pct() below before this fix.
+    $agreeCount = (@($sides | Where-Object { $_ -eq $sides[0] })).Count
     # [double] cast is load-bearing, not style: when agreeCount/draws.Count divides evenly
     # (e.g. 1/1, 5/5) PowerShell's / operator returns an Int32, and [math]::Round has no
     # (Int32, Int32) overload -- an evenly-dividing sample count throws "Argument types do
@@ -276,8 +279,10 @@ foreach ($q in $acceptance) {
         ConvertTo-RankedJsonFile $cands $bm25RankedFile
         ConvertTo-RankedJsonFile ($ordered | ForEach-Object { $_.Cand }) $rerankedFile
         (ConvertTo-Json -InputObject @($q.expected) -Depth 6) | Set-Content -Encoding UTF8 -Path $expectedFile
-        & $Python (Join-Path $PSScriptRoot 'lib\doc_reranker_shortlist.py') score --ranked-json $bm25RankedFile --expected-json $expectedFile --out $bm25ScoreFile | Out-Null
-        & $Python (Join-Path $PSScriptRoot 'lib\doc_reranker_shortlist.py') score --ranked-json $rerankedFile --expected-json $expectedFile --out $rerankScoreFile | Out-Null
+        $bm25ScoreOut = & $Python (Join-Path $PSScriptRoot 'lib\doc_reranker_shortlist.py') score --ranked-json $bm25RankedFile --expected-json $expectedFile --out $bm25ScoreFile 2>&1
+        if ($LASTEXITCODE -ne 0) { Write-Host "EXIT_REASON=SCORE_FAILED ($($q.id), bm25)"; Write-Host ($bm25ScoreOut -join "`n"); exit 2 }
+        $rerankScoreOut = & $Python (Join-Path $PSScriptRoot 'lib\doc_reranker_shortlist.py') score --ranked-json $rerankedFile --expected-json $expectedFile --out $rerankScoreFile 2>&1
+        if ($LASTEXITCODE -ne 0) { Write-Host "EXIT_REASON=SCORE_FAILED ($($q.id), rerank)"; Write-Host ($rerankScoreOut -join "`n"); exit 2 }
         $bm25Score = Get-Content -Raw -Encoding UTF8 -Path $bm25ScoreFile | ConvertFrom-Json
         $rerankScore = Get-Content -Raw -Encoding UTF8 -Path $rerankScoreFile | ConvertFrom-Json
     } finally {
@@ -314,7 +319,12 @@ foreach ($q in $acceptance) {
 }
 $sw.Stop()
 
-function Pct($rows_, $field) { $n = ($rows_ | Where-Object { $_.$field -eq $true }).Count; "$n/$($rows_.Count) = $([math]::Round(100.0*$n/$rows_.Count,1))%" }
+function Pct($rows_, $field) {
+    # @() wrap is load-bearing: a bare (pipe).Count returns $null, not 1, when exactly one
+    # row survives Where-Object -- reproduced live (PS 5.1 single-element-array-unwrap trap).
+    $n = (@($rows_ | Where-Object { $_.$field -eq $true })).Count
+    "$n/$($rows_.Count) = $([math]::Round(100.0*$n/$rows_.Count,1))%"
+}
 Write-Host ""
 Write-Host "BM25 alone   top1=$(Pct $rows Bm25_1)  top5=$(Pct $rows Bm25_5)  top10=$(Pct $rows Bm25_10)"
 Write-Host "BM25 + Jev   top1=$(Pct $rows Rerank_1)  top5=$(Pct $rows Rerank_5)  top10=$(Pct $rows Rerank_10)"
