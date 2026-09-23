@@ -6,6 +6,21 @@
 
 ⛔ **NOT a gate.** Advisory, same three reasons as [`rider-travel-check-spec.md`](rider-travel-check-spec.md) `D-3`. Never wired into `verify-gate.ps1` or the pre-push hook.
 
+> ### ⛔ Amended 2026-09-23 (UTC), orchestrator rulings DS-A (g) and DS-B (b)
+>
+> **This block overrides the text below it where the two differ.** Record, measurements and handles: [`doc-scanner-build-spec-back.md`](doc-scanner-build-spec-back.md), sections 2, 7 and 8.
+>
+> - **The premise was wrong, as measured.** `DS-D4` and §0 trap 2 treat the 13 `never_shipped` hits as pairing errors. Only 3 of the 13 were. **8 were NAME errors:** the single-word keys `threshold` and `penalty` matched ordinary prose words. 1 was a `+` expression that no rule pairs, and 1 was a correct pairing of a never-shipped enum value. The rules in §4.2 as first written left 17, not ≤ 2.
+> - **§4.2 now reads, as ruling DS-A (g):** rules 1–3 as written, except that rule 1's second arm ("or sit inside the same backtick span") does not fire inside a file name or a markdown link target. A pairing there is mechanically wrong. Then two **labels**. A label never drops a row and never changes the judged set:
+>   - `unqualified`: the key is a single-word leaf, and its parent segment is not on the line as a word. Top-level keys (`version`) are exempt.
+>   - `operator_context`: the number directly follows, after optional whitespace, `+ - * / < > <= >= == !=`. A rule-3 slash-group pair is exempt, because its `/` is the group separator (an implementer decision; see the spec-back, section 8).
+>
+>   A labelled `never_shipped` row goes to its own code-only bucket. A row carrying both labels goes to `unqualified` only. A labelled `was_shipped` row is judged like any `VALUE` candidate.
+> - **Option (f) is withdrawn.** It dropped the span arm, and it lost 11 correct pairings (`"version": 63`, `absorb_ratio ≥ 3.0` and others) to meet the count. That was a trade, and (g) keeps them all.
+> - **§5 item 3 now reads:** the **unlabelled** living-set `never_shipped` rows, **itemised by cause**, with ≤ 2 **advisory, not a gate**. `never_shipped` rows are code-only and never judged, and the ≤ 2 target rested on the refuted premise. The both-directions half is unchanged: all 11 labelled `E2` true positives stay judged.
+> - **§4.5 coverage block, three lines added:** `VALUE_UNQUALIFIED_NEVER_SHIPPED=<n>` and `VALUE_OPERATOR_NEVER_SHIPPED=<n>` beside `VALUE_NEVER_SHIPPED_CODE_ONLY`, and `NEXT_FREE_FAMILY_CLAIMS=<n>` beside `NEXT_FREE_FAMILY_STALE`, so a claim that has gone missing is not read as fresh.
+> - **DS-B (b):** `DATED_STATE` ages are computed from the **UTC** commit date. The measurement instrument's `rev_date()` uses `%cs`, the committer's recorded timezone (GMT+8 here), and made every age one day high at `cbc2c91`. The instrument is left unchanged, so it still replays its own numbers.
+
 ---
 
 ## 0. ⭐ Model and effort (for the implementer)
