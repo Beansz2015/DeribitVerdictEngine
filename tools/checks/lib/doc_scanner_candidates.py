@@ -439,7 +439,9 @@ def context(rev, path, lineno, col):
     after = [window(lines[j], 0, MAX_CONTEXT_LINE_CHARS) for j in range(i + 1, min(len(lines), i + 1 + CONTEXT_LINES))]
     return {
         'heading_chain': doc_chains(rev, path)[i],
-        'line': window(lines[i], col, MAX_LINE_CHARS),
+        # 'line_text', never 'line': the item's 'line' is its 1-based line NUMBER, and this dict
+        # is merged into the item (a 'line' key here overwrote the number -- caught 2026-09-23).
+        'line_text': window(lines[i], col, MAX_LINE_CHARS),
         'lines_before': '\n'.join(before),
         'lines_after': '\n'.join(after),
         'line_truncated': len(lines[i]) > MAX_LINE_CHARS,
