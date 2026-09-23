@@ -175,7 +175,9 @@ function Get-LedgerRows([string]$fullPath) {
             LandsIn      = $cells[4]
         })
     }
-    return $rows
+    # Unary comma: without it the output pipeline enumerates the list, and a ONE-row
+    # ledger arrives at the caller as a bare PSCustomObject whose .Count is $null in 5.1.
+    return ,$rows
 }
 
 function Write-Coverage([int]$inLedger, [int]$travelling, [int]$judged, [int]$colBefore, [int]$colAfter, [int]$added, [int]$removed) {
@@ -198,8 +200,8 @@ $afterFull = Resolve-RepoPath $AfterFile
 $afterHeader = if (Test-Path $afterFull) { Get-HeaderText ([string[]](Get-Content -Encoding UTF8 -Path $afterFull)) } else { $null }
 
 $headerExtractOk = ($null -ne $beforeHeader) -and ($null -ne $afterHeader)
-$beforeCols = if ($null -ne $beforeHeader) { $beforeHeader.Split(',') } else { @() }
-$afterCols  = if ($null -ne $afterHeader)  { $afterHeader.Split(',') }  else { @() }
+$beforeCols = @(if ($null -ne $beforeHeader) { $beforeHeader.Split(',') })
+$afterCols  = @(if ($null -ne $afterHeader)  { $afterHeader.Split(',') })
 $addedCols   = @($afterCols  | Where-Object { $beforeCols -notcontains $_ })
 $removedCols = @($beforeCols | Where-Object { $afterCols  -notcontains $_ })
 
@@ -209,8 +211,10 @@ $removedCols = @($beforeCols | Where-Object { $afterCols  -notcontains $_ })
 $ledgerFull = Resolve-RepoPath $LedgerPath
 $allRows = Get-LedgerRows $ledgerFull
 $ridersInLedger = if ($null -eq $allRows) { 0 } else { $allRows.Count }
-$travelling = if ($null -eq $allRows) { @() } else { @($allRows | Where-Object { $_.Status -match 'TRAVELLING' }) }
-$others     = if ($null -eq $allRows) { @() } else { @($allRows | Where-Object { $_.Status -notmatch 'TRAVELLING' }) }
+# @() wraps the WHOLE if-expression: an if-expression's output is enumerated like a
+# function's, so an @() inside a branch does not survive a single match.
+$travelling = @(if ($null -ne $allRows) { $allRows | Where-Object { $_.Status -match 'TRAVELLING' } })
+$others     = @(if ($null -ne $allRows) { $allRows | Where-Object { $_.Status -notmatch 'TRAVELLING' } })
 $ridersTravelling = $travelling.Count
 
 # ---------------------------------------------------------------------------------------
