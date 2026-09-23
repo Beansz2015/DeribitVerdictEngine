@@ -219,6 +219,18 @@ The detector answered `declared_but_contradicted` on **all 5 samples**, `mean_to
 
 ⚠ **A harness that is never triggered is never validated.** If one sits unused for long enough that its trigger stops arriving, say so and either retire it or give it a dedicated test — do not let it accumulate in `tools/` as an unmeasured check.
 
+### 6a. ✅ When the programme counts as CLOSED — RULED 2026-09-23 (UTC), trader
+
+The trader directed that the Jev programme closes before the engine queue resumes. Three harnesses can only be run on inputs the engine work itself produces, so read literally the programme could never close:
+- Harness 1's trigger is the absorption S2 header rotation, which is an engine-queue item.
+- Harness 2's measured run needs commits no seat has seen, about 200 a month ([`seat-handover-2026-09-22.md`](seat-handover-2026-09-22.md) §4).
+- Harness 5 can only be judged over sessions of real use.
+
+**The ruling:**
+- **An item whose trigger lies in the engine work counts as closed when it is built and ARMED.** Armed means its baseline gate works and it is ready for its trigger. This covers harness 1, harness 2 and harness 5 (harness 5 is in trial).
+- **An item whose trigger does NOT lie in the engine work must be done.** The live list is the Jev-programme rows in [`trader-tick-queue.md`](trader-tick-queue.md) §2.
+- The first real runs of harnesses 1 and 2 still follow this protocol in full when their triggers arrive: seat baseline first, then the detector. Arming changes when the engine queue may start, not how a first run is done.
+
 ---
 
 ## 7. What is NOT verified
