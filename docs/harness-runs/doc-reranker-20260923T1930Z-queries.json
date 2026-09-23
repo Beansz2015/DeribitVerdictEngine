@@ -1,0 +1,376 @@
+{
+ "rev": "976729c",
+ "written_by": "orchestrator seat, claude-opus-5-5, 2026-09-23 UTC, before any shortlist or Jev output existed",
+ "note": "Expected answers were checked by reading or grep at rev. 'nowhere' = no doc answers the question; the tool must say so. Acceptance subset: the implementer may run Jev on it. Reserved subset: the seat runs it.",
+ "queries": [
+  {
+   "id": "Q01",
+   "query": "Where is the count of 39 adopted and 8 overruled D-table recommendations recorded?",
+   "expected": [
+    {
+     "path": "CLAUDE.md",
+     "section": "The measured bias — why the last reserved row exists"
+    },
+    {
+     "path": "docs/seat-handover-2026-09-10.md",
+     "section": "(state bullets near line 50)"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q02",
+   "query": "Has the fixture-name check FP-2 ever been run on a deliberately corrupted fixture name?",
+   "expected": [
+    {
+     "path": "docs/trader-tick-queue.md",
+     "section": "§2 row: Run harness 3's FP-2 mutation test"
+    },
+    {
+     "path": "docs/fixture-parser-check-spec.md",
+     "section": "§3 decision FP-D3"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q03",
+   "query": "Why was the semantic display-string parity check left out of the commit walker?",
+   "expected": [
+    {
+     "path": "docs/commit-walker-check-spec.md",
+     "section": "§5 Why the semantic display-parity check is NOT in this build"
+    }
+   ],
+   "kind": "found",
+   "subset": "acceptance"
+  },
+  {
+   "id": "Q04",
+   "query": "Where was it ruled that the MTF refresh TTL constant lives on MtfRefreshPolicy?",
+   "expected": [
+    {
+     "path": "docs/fixture-parser-check-spec.md",
+     "section": "§8.4 item 8e"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q05",
+   "query": "Where is the Jev use J-10 defined?",
+   "expected": [],
+   "kind": "nowhere",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q06",
+   "query": "Who writes the baseline for a Jev harness's first real run?",
+   "expected": [
+    {
+     "path": "docs/harness-shadow-mode-protocol.md",
+     "section": "§4c WHO writes the baseline — the seat, always"
+    }
+   ],
+   "kind": "found",
+   "subset": "acceptance"
+  },
+  {
+   "id": "Q07",
+   "query": "What did the trader rule for fixing the inverted POC-tier gate?",
+   "expected": [
+    {
+     "path": "docs/trader-tick-queue.md",
+     "section": "§2 row: POC-tier gate reads the VPFR labels inverted"
+    },
+    {
+     "path": "docs/engine-fix-build-spec-2026-09-21.md",
+     "section": "§3 (Session A)"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q08",
+   "query": "Why is trade capture switched off on the local dev box?",
+   "expected": [
+    {
+     "path": "docs/trader-tick-queue.md",
+     "section": "§0a Explicitly NOT owed: D1-a is REVERSED"
+    },
+    {
+     "path": "docs/trade-store-trade-identity-proposal.md",
+     "section": "row D7"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q09",
+   "query": "Which option did the trader pick for how the venue-status instrument learns the venue's state?",
+   "expected": [
+    {
+     "path": "docs/venue-status-instrument-spec.md",
+     "section": "§2 D-1 — RULED (d)"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q10",
+   "query": "Why is the funding momentum window anchored in time instead of a sample count?",
+   "expected": [
+    {
+     "path": "docs/architecture.md",
+     "section": "Design Decisions: Funding momentum window anchored in time (v53)"
+    },
+    {
+     "path": "docs/funding-momentum-time-anchored-window-proposal.md",
+     "section": "(whole proposal)"
+    }
+   ],
+   "kind": "found",
+   "subset": "acceptance"
+  },
+  {
+   "id": "Q11",
+   "query": "Where are the ATR low / normal / high bands defined?",
+   "expected": [
+    {
+     "path": "docs/trader-profile.md",
+     "section": "§5 ATR thresholds"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q12",
+   "query": "Why was absorption Path A rejected?",
+   "expected": [
+    {
+     "path": "docs/trader-tick-queue.md",
+     "section": "§0a table row E5 absorption Path B"
+    },
+    {
+     "path": "docs/trader-tick-queue-archive.md",
+     "section": "trim-2026-09-14-41"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q13",
+   "query": "When does a Jev harness count as closed if its trigger comes from engine work?",
+   "expected": [
+    {
+     "path": "docs/harness-shadow-mode-protocol.md",
+     "section": "§6a When the programme counts as CLOSED"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q14",
+   "query": "Where is the rule that a fixture literal must declare SHIPPED BEHAVIOUR or MECHANISM?",
+   "expected": [
+    {
+     "path": "CLAUDE.md",
+     "section": "Fixture-literal provenance rule (hard rule, RULED 2026-08-11)"
+    }
+   ],
+   "kind": "found",
+   "subset": "acceptance"
+  },
+  {
+   "id": "Q15",
+   "query": "Why does ws_health.log report OK while no trades are being captured?",
+   "expected": [
+    {
+     "path": "docs/aws-collector-deploy-checklist.md",
+     "section": "§5b (DeriveWsHealth inputs box)"
+    },
+    {
+     "path": "docs/trader-tick-queue.md",
+     "section": "§2 row: ws_health.log under-reports a capture outage"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q16",
+   "query": "Is the Kelly CAL mode in use, and why not?",
+   "expected": [
+    {
+     "path": "docs/DeribitIndicatorProject.md",
+     "section": "§12 row Kelly est_prob_floor/scale"
+    },
+    {
+     "path": "docs/kelly-est-honesty-decision-2026-08-02.md",
+     "section": "(whole decision)"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q17",
+   "query": "What are the steps when adding a new settings.json key?",
+   "expected": [
+    {
+     "path": "docs/DeribitIndicatorProject.md",
+     "section": "§6 Workflow when adding new config keys"
+    }
+   ],
+   "kind": "found",
+   "subset": "acceptance"
+  },
+  {
+   "id": "Q18",
+   "query": "Where was the weekday-only scope for performance reads ruled?",
+   "expected": [
+    {
+     "path": "docs/weekday-scope-ruling-2026-08-03.md",
+     "section": "§1 The principle"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q19",
+   "query": "Why was the 2026-10-01 gap-repair deadline no longer binding?",
+   "expected": [
+    {
+     "path": "docs/seat-handover-2026-09-21.md",
+     "section": "state at close (DISCHARGED bullet)"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q20",
+   "query": "Where is the list of riders waiting for the next analysis_log.csv header rotation?",
+   "expected": [
+    {
+     "path": "docs/csv-rotation-riders.md",
+     "section": "§1 the ledger"
+    }
+   ],
+   "kind": "found",
+   "subset": "acceptance"
+  },
+  {
+   "id": "Q21",
+   "query": "Where is it recorded that funding must not score in Step 2?",
+   "expected": [
+    {
+     "path": "docs/trader-profile.md",
+     "section": "§4 Explicitly Rejected: Funding OK in Step 2 scoring"
+    },
+    {
+     "path": "CLAUDE.md",
+     "section": "Key design invariants: Funding modifier is adjunct"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q22",
+   "query": "Was the seeded session-bucket default kept or emptied?",
+   "expected": [
+    {
+     "path": "docs/trader-tick-queue.md",
+     "section": "§0a table row Seeded session buckets"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q23",
+   "query": "What does a stable-and-wrong detector row mean in the Jev programme?",
+   "expected": [
+    {
+     "path": "docs/harness-shadow-mode-protocol.md",
+     "section": "§4g STABLE AND WRONG"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q24",
+   "query": "Where was the harness 6 decision-bias pilot result recorded?",
+   "expected": [
+    {
+     "path": "docs/harness-runs/decision-bias-pilot-run-2026-09-23.md",
+     "section": "(whole record)"
+    }
+   ],
+   "kind": "found",
+   "subset": "acceptance"
+  },
+  {
+   "id": "Q25",
+   "query": "Which docs does the doc scanner treat as its living set?",
+   "expected": [
+    {
+     "path": "docs/doc-scanner-check-spec.md",
+     "section": "§3 DS-D1 Scope"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q26",
+   "query": "Which pairing rule did the doc scanner adopt for settings values in prose?",
+   "expected": [
+    {
+     "path": "docs/doc-scanner-check-spec.md",
+     "section": "Amended 2026-09-23 (UTC), orchestrator rulings DS-A (g) and DS-B (b)"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q27",
+   "query": "Why did the AWS collector go down for three days in September?",
+   "expected": [
+    {
+     "path": "docs/seat-handover-2026-09-21.md",
+     "section": "§1 What actually happened — the two-fault day"
+    }
+   ],
+   "kind": "found",
+   "subset": "reserved"
+  },
+  {
+   "id": "Q28",
+   "query": "Where was a decision made to trade ETH-PERPETUAL?",
+   "expected": [],
+   "kind": "nowhere",
+   "subset": "acceptance"
+  },
+  {
+   "id": "Q29",
+   "query": "Where was the MACD indicator re-adopted after being rejected?",
+   "expected": [],
+   "kind": "nowhere_trap:trader-profile.md §4 records the rejection only",
+   "subset": "reserved"
+  }
+ ]
+}
