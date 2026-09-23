@@ -262,6 +262,66 @@
   continues, FP1_WAF_BLOCKED / FP2_WAF_BLOCKED print, and a blocked item exits 1 -- an
   unjudged item is never a pass. Rewording the fixture comment to dodge the firewall was
   rejected: it tunes the input, and the harness would still be blind to the next one.
+
+  ============================== REVISION 4 (2026-09-23 UTC) ==============================
+  docs/jev-harnesses-adversarial-review-2026-09-22.md findings 4, 8, 9, and
+  docs/fixture-parser-check-spec.md section 8.4 item 8o. Close-list item 4 of the Jev
+  programme. Batch record: docs/harness3-batch-spec-back.md.
+
+  FP-D27 (finding 4: signatures by DECLARATION, not by bare name). Every production
+  Sub/Function is indexed with its enclosing Class/Module/Structure/Interface. A name declared
+  once resolves exactly as before. A name declared several times resolves only when the
+  call's RECEIVER TYPE can be read from code -- a type-name qualifier, a local (`Dim x As
+  [New] T`, `Dim x = New T`), a parameter, or a field of the enclosing type -- and exactly
+  one declaration lives on that type. Otherwise the site is AMBIGUOUS_CALLEE: reported,
+  counted (MAPPING_AMBIGUOUS_CALLEE_SITES, also inside MAPPING_OTHER_UNRESOLVED_SITES), never
+  guessed. The same test filters a typed callee's PRODUCTION call sites (a site whose receiver
+  types to another class, or cannot be typed, is not evidence); if none survive and some were
+  untyped, the site is AMBIGUOUS_CALLEE too. An UNQUALIFIED call types to its enclosing class
+  only if that class declares the name. The forwarding hop reads the wrapper's signature from
+  its OWN declaration line. The resolver-return shape (FP-D18) finds its method the same way;
+  Find-ProdProcRange (first body of that name) is gone. The declaration index uses a BROAD
+  modifier set (Async, Overrides, Overloads...), because `Private Async Function
+  RunAnalysisAsync` holds most production call sites; Get-FileEnclosingProc and the
+  fixture's $ranges keep their narrower pre-revision form, because widening them could move
+  EnclosingSub and so change item IDs. MEASURED on Program.vb: exactly 3 sites changed class
+  -- A5#1042#currentATR PARAM_NOT_IN_SIGNATURE -> SOURCE_NOT_TRACEABLE (now read against
+  DynamicNorms.Compute; production passes r.ATR), A19c#2531 and A19d#2551 nowUtcMs
+  PARAM_NOT_IN_SIGNATURE -> PARAM_NOT_PASSED_AT_CALL_SITE (LiveMicrostructureEvaluator.
+  Evaluate; production omits it). Fold, Snapshot and Build now resolve BY TYPE to the same
+  declarations they hit by file order before. 0 AMBIGUOUS_CALLEE on the real file.
+
+  FP-D28 (finding 8: the marker is block-level). A LABEL, never a filter. Each marked site
+  is SITE_NAMED (the comment block names its parameter, whole word, case-insensitive) or
+  BLOCK_ONLY (the block's keyword marks it, the block never names it). Counted over all
+  marked sites and over the in-scope ones; in-scope BLOCK_ONLY sites are listed; the label
+  rides FP1_CANDIDATES and FP1_RESULTS. Every marked site is judged exactly as before.
+  Matched on the PARAMETER name only, not its settings key: the review's finding is about
+  the parameter, and the strict rule reproduces its count (8 of 58) exactly.
+
+  FP-D29 (finding 9: arrays). See Get-FlattenedSettings. Arrays of objects are walked by
+  their `name` field (`session_volume.sessions[name=ASIA].high_multiplier`); an element with
+  no usable name is ARRAY_UNKEYED, never an index. The settings cache carries a schema tag
+  and a pre-revision-4 cache is discarded and re-walked. Array keys join the revision walk and
+  FP-Q3's resolution index, NOT the FP-D2 name index or FP-Q1's fuzzy candidates: those feed
+  FP-Q1's Jev state, and changing a measured detector's input is item 8o's comparability
+  break. No real call site reaches an array key yet (a cfg expression indexes with `(`);
+  ARRAY_PROOF shows the walk now holds one.
+
+  FP-D30 (item 8o: FP-1 VERSION 2 BESIDE VERSION 1). A second choice question, verdict_v2,
+  in the SAME call: the same instructions, criteria identical except for the probe's one
+  sentence appended to mechanism_declared_ok and declared_but_contradicted -- verbatim, and
+  in the two criteria the controlled probe put it in. Version 1 alone drives the verdict,
+  the exit code and the baseline comparison. Version 2's plurality, agreement rate and
+  samples print beside it, plus FP1V2_ITEMS_SAME_PLURALITY_AS_V1 / FP1V2_SAMPLES_SAME_AS_V1.
+  This ARMS a re-measure on a fresh, baselined population; it measures nothing by itself.
+  NOT VERIFIED: whether asking verdict_v2 in the same call moves version 1's answers.
+
+  FP-D31 (seams). -TestTransportOverride forwards to every Invoke-Jev call (FP-Q1, FP-1,
+  FP-2), the same seam harnesses 1 and 2 carry. -SiteDumpPath writes per-site CODE FACTS.
+  -Fp2Only judges FP-2 names only (FP-1 sites neither judged nor gated), for the FP-D3
+  mutation test. Offline proof of all of revision 4:
+  tools/checks/selftest/fixture-parser-selftest.ps1 (no network, no key).
   ==========================================================================================
 
   FP-D2 (retained, now informational only): the ORIGINAL camelCase-to-snake_case name
@@ -319,6 +379,7 @@
       [-ScopeBaselinePath <the same, for the FP-Q1 scope detector -- FP-D15; without it
        FP-Q1 makes no Jev call and the in-scope counters are CODE-ONLY>] `
       [-SubFilter <regex on enclosing sub name>] [-Samples N] [-CountersOnly]
+      [-SiteDumpPath <tsv>] [-Fp2Only] [-TestTransportOverride <scriptblock, tests only>]
 
   EXIT CODES:
     0 - every judged FP-1 call site verdict is mechanism_declared_ok, every judged FP-2 sub
@@ -327,7 +388,8 @@
     1 - at least one judged FP-1 verdict is undeclared / declared_but_contradicted /
         ambiguous / shipped_declared_ok (FP-D25: on a literal site that last one is a breach
         or a misread, never a pass), at least one judged FP-2 verdict is name_overclaims /
-        name_understates / ambiguous, or any judged row is UNSTABLE (never auto-resolved)
+        name_understates / ambiguous, or any judged row is UNSTABLE (never auto-resolved).
+        FP-1 VERSION 1 only: FP-1v2 (FP-D30) never reaches the exit code
     2 - baseline missing, parser suspect (docs/fixture-parser-check-spec.md section 4.2),
         or API failure (now possibly raised EARLIER than the baseline gate, by FP-Q1's
         scope-classification step -- see FP-D11 above)
@@ -363,7 +425,22 @@ param(
     [switch]$AllowUnbaselinedItems,
     # Mirrors tools/checks/commit-walker.ps1's -DebugState: prints each call's state KEY
     # NAMES and sample_uid only, never content or the API key. Off by default.
-    [switch]$DebugState
+    [switch]$DebugState,
+    # REVISION 4: writes one tab-separated line per named-argument literal site -- CODE
+    # FACTS ONLY (callee, receiver type, mapping class, key, marker, scope), never a verdict
+    # and never anything a detector said. Lets a reviewer diff two revisions site by site.
+    # Written before any API call, on every exit path that reaches the coverage block.
+    [string]$SiteDumpPath = '',
+    # REVISION 4, TEST SEAM ONLY -- OFF BY DEFAULT ($null). Forwarded to every Invoke-Jev
+    # call (FP-Q1, FP-1, FP-2) in place of the real HTTP transport, exactly as
+    # tools/checks/commit-walker.ps1 and tools/checks/rider-travel.ps1 do. Exists so FP-1v2
+    # (item 8o) can be shown end to end on SYNTHETIC items with no real call. No caller
+    # passes this in a real run.
+    [scriptblock]$TestTransportOverride = $null,
+    # REVISION 4: judge FP-2 names only; FP-1 sites are neither judged nor gated. Exists for
+    # the FP-D3 mutation test (docs/fixture-parser-check-spec.md section 3), which corrupts
+    # fixture NAMES and must not spend FP-1 calls on the provenance sites under them.
+    [switch]$Fp2Only
 )
 
 $ErrorActionPreference = 'Continue'
@@ -534,10 +611,11 @@ function Get-EnclosingProc([int]$Lidx) {
 # ---- FP-Q3: which METHOD is this literal being passed to? ------------------------------
 # Walks backward from the literal's own position through the statement, tracking paren
 # depth, to find the nearest UNCLOSED '(' -- the call this literal is an argument of -- and
-# the identifier immediately before it. Handles a module-qualified call
-# ("IndicatorEngine.CalcOFI(") by returning only the LAST dotted segment, so it compares
-# equal to the callee's bare declaration name.
-function Get-EnclosingCallName([int]$stmtStart, [int]$matchLineIdx, [int]$matchCharPos) {
+# the identifier immediately before it. Returns the FULL dotted identifier
+# ("IndicatorEngine.CalcOFI", "acc.Fold"). The caller splits it: the LAST segment is the
+# callee's bare name (compared against declarations, as before), and the segments before it
+# are the RECEIVER qualifier that FP-D27 uses to pick between same-named declarations.
+function Get-EnclosingCallIdent([int]$stmtStart, [int]$matchLineIdx, [int]$matchCharPos) {
     $depth = 0
     for ($li = $matchLineIdx; $li -ge $stmtStart; $li--) {
         $text = $codeOnly[$li]
@@ -552,9 +630,7 @@ function Get-EnclosingCallName([int]$stmtStart, [int]$matchLineIdx, [int]$matchC
                     $endJ = $j
                     while ($j -ge 0 -and ($text[$j] -match '[A-Za-z0-9_.]')) { $j-- }
                     if ($endJ -lt 0 -or $endJ -le $j) { return $null }
-                    $ident = $text.Substring($j + 1, $endJ - $j)
-                    $segs = $ident -split '\.'
-                    return $segs[$segs.Length - 1]
+                    return $text.Substring($j + 1, $endJ - $j)
                 } else { $depth-- }
             }
         }
@@ -578,7 +654,16 @@ for ($i = 0; $i -lt $n; $i++) {
         $commentBlockOld = Get-CommentBlockOld $stmtStart
         $commentBlockNew = $commentCoverage[$stmtStart]
         $proc = Get-EnclosingProc $i
-        $callee = Get-EnclosingCallName $stmtStart $i $m.Index
+        $calleeIdent = Get-EnclosingCallIdent $stmtStart $i $m.Index
+        $callee = $null; $calleeQualifier = ''
+        if ($calleeIdent) {
+            $identSegs = @($calleeIdent -split '\.')
+            $callee = $identSegs[$identSegs.Length - 1]
+            if ($identSegs.Length -gt 1) { $calleeQualifier = ($identSegs[0..($identSegs.Length - 2)] -join '.') }
+            # `GetThing().Snapshot(` walks back to `.Snapshot` only: the receiver is an
+            # expression this parser does not type. Marked so it is never read as unqualified.
+            if ($calleeIdent.StartsWith('.')) { $calleeQualifier = '(expr)' }
+        }
         $callSites.Add([PSCustomObject]@{
             Line          = $i + 1
             StmtStart     = $stmtStart
@@ -591,8 +676,17 @@ for ($i = 0; $i -lt $n; $i++) {
             EnclosingSub  = if ($proc) { $proc.Name } else { '(module-level)' }
             EnclosingKind = if ($proc) { $proc.Kind } else { 'Unknown' }
             Callee        = $callee
+            # FP-D27: the receiver qualifier as written ('' for an unqualified call).
+            CalleeQualifier = $calleeQualifier
             HasMarkerOld  = [bool]($commentBlockOld -match '\bMECHANISM\b' -or $commentBlockOld -match '\bSHIPPED\b')
             HasMarker     = [bool]($commentBlockNew -match '\bMECHANISM\b' -or $commentBlockNew -match '\bSHIPPED\b')
+            # FP-D28 (revision 4, review finding 8): the marker is BLOCK-level -- one keyword
+            # marks every site under its comment block. A LABEL, never a filter: SITE_NAMED
+            # when the block names this site's parameter (whole word, case-insensitive, as
+            # VB is), BLOCK_ONLY when it does not. Every marked site is judged either way.
+            MarkerScope   = if ([bool]($commentBlockNew -match '\bMECHANISM\b' -or $commentBlockNew -match '\bSHIPPED\b')) {
+                                if ($commentBlockNew -match "(?i)(?<![A-Za-z0-9_])$([regex]::Escape($param))(?![A-Za-z0-9_])") { 'SITE_NAMED' } else { 'BLOCK_ONLY' }
+                            } else { '' }
         })
     }
 }
@@ -613,30 +707,74 @@ $sitesWithProvenanceAfter  = @($callSites | Where-Object { $_.HasMarker }).Count
 # before the pre-revision build). Cache per-revision flattening to a gitignored scratch
 # file: history below HEAD is immutable, so a hash already in cache is never re-walked.
 # ---------------------------------------------------------------------------------------
-function Get-FlattenedSettings($obj, [string]$prefix, [hashtable]$out) {
+# FP-D29 (revision 4, review finding 9): ARRAYS. The walk used to skip every JSON array,
+# and settings.json keeps per-session values in session_volume.sessions[] -- so an
+# array-backed key could never resolve. Now an array of OBJECTS is walked element by
+# element, each keyed by its own `name` field, giving a readable path:
+#   session_volume.sessions[name=ASIA].high_multiplier
+# The `name` field itself is the key, not a leaf, so it is not emitted. An element with no
+# usable `name` (absent, empty, a duplicate within the array, or holding one of . [ ] =)
+# is counted ARRAY_UNKEYED and skipped -- an INDEX is never guessed, because an index path
+# would silently re-point when an element is inserted. An array of scalars (change_log) is
+# skipped as before and counted apart. $stats is filled only for the HEAD walk.
+function Get-FlattenedSettings($obj, [string]$prefix, [hashtable]$out, [hashtable]$stats = $null) {
     if ($null -eq $obj) { return }
     if ($obj -is [System.Management.Automation.PSCustomObject]) {
         foreach ($p in $obj.PSObject.Properties) {
             $np = if ($prefix) { "$prefix.$($p.Name)" } else { $p.Name }
-            Get-FlattenedSettings $p.Value $np $out
+            Get-FlattenedSettings $p.Value $np $out $stats
         }
     } elseif ($obj -is [System.Array]) {
-        return
+        $objEls = @($obj | Where-Object { $_ -is [System.Management.Automation.PSCustomObject] })
+        if ($objEls.Count -eq 0) {
+            if ($null -ne $stats -and $obj.Count -gt 0) { $stats.ScalarArrays++ }
+            return
+        }
+        $nameCounts = @{}
+        foreach ($el in $objEls) {
+            if ($el.PSObject.Properties.Name -contains 'name') {
+                $nk = ([string]$el.name).ToLowerInvariant()
+                if ($nameCounts.ContainsKey($nk)) { $nameCounts[$nk]++ } else { $nameCounts[$nk] = 1 }
+            }
+        }
+        foreach ($el in $obj) {
+            $nm = $null
+            if ($el -is [System.Management.Automation.PSCustomObject] -and $el.PSObject.Properties.Name -contains 'name') { $nm = [string]$el.name }
+            $usable = (-not [string]::IsNullOrWhiteSpace($nm)) -and ($nm -notmatch '[.\[\]=]') -and ($nameCounts[$nm.ToLowerInvariant()] -eq 1)
+            if (-not $usable) {
+                if ($null -ne $stats) { $stats.UnkeyedElements++; $stats.UnkeyedPaths[$prefix] = $true }
+                continue
+            }
+            if ($null -ne $stats) { $stats.KeyedElements++ }
+            foreach ($p in $el.PSObject.Properties) {
+                if ($p.Name -eq 'name') { continue }
+                Get-FlattenedSettings $p.Value "$prefix[name=$nm].$($p.Name)" $out $stats
+            }
+        }
     } else {
         if ($prefix) { $out[$prefix] = $obj }
     }
 }
 
+# FP-D29: the cache holds FLATTENED revisions, so a change to the flattening makes every
+# cached entry stale even though the history below HEAD is immutable. The schema tag is
+# checked on load; a mismatch (including a pre-revision-4 cache, which has no tag) is
+# discarded and all revisions are walked again.
+$SETTINGS_CACHE_SCHEMA = 'fp-d29-arrays-keyed-by-name'
 $cacheFull = Resolve-RepoPath $SettingsCachePath
 $revisionCache = @{}
+$settingsCacheDiscarded = $false
 if (Test-Path $cacheFull) {
     try {
         $raw = Get-Content -Raw -Path $cacheFull | ConvertFrom-Json -ErrorAction Stop
-        foreach ($hp in $raw.PSObject.Properties) {
-            $inner = @{}
-            foreach ($kp in $hp.Value.PSObject.Properties) { $inner[$kp.Name] = $kp.Value }
-            $revisionCache[$hp.Name] = $inner
-        }
+        if (($raw.PSObject.Properties.Name -contains '_schema') -and ([string]$raw._schema -eq $SETTINGS_CACHE_SCHEMA)) {
+            foreach ($hp in $raw.PSObject.Properties) {
+                if ($hp.Name -eq '_schema') { continue }
+                $inner = @{}
+                foreach ($kp in $hp.Value.PSObject.Properties) { $inner[$kp.Name] = $kp.Value }
+                $revisionCache[$hp.Name] = $inner
+            }
+        } else { $settingsCacheDiscarded = $true }
     } catch { $revisionCache = @{} }
 }
 
@@ -655,11 +793,18 @@ foreach ($h in $settingsHashes) {
     $newlyWalked++
 }
 if ($newlyWalked -gt 0) {
-    $toSave = @{}
+    $toSave = @{ _schema = $SETTINGS_CACHE_SCHEMA }
     foreach ($hk in $revisionCache.Keys) { $toSave[$hk] = $revisionCache[$hk] }
     ($toSave | ConvertTo-Json -Depth 6) | Set-Content -Encoding UTF8 -Path $cacheFull
 }
 $settingsRevisionsWalked = @($settingsHashes | Where-Object { $revisionCache.ContainsKey($_) }).Count
+# FP-D29: distinct array-element keys across every walked revision (not just HEAD).
+$arrayKeysEverSet = New-Object System.Collections.Generic.HashSet[string]
+foreach ($h in $settingsHashes) {
+    if (-not $revisionCache.ContainsKey($h)) { continue }
+    foreach ($rk in $revisionCache[$h].Keys) { if ($rk.Contains('[name=')) { [void]$arrayKeysEverSet.Add($rk) } }
+}
+$settingsArrayKeysEver = $arrayKeysEverSet.Count
 
 # Ever-shipped value SET for one settings key path, across every walked revision. This is
 # the only source of truth for "ever shipped" -- never a doc (trap 3), never a recent
@@ -690,9 +835,16 @@ function Get-EverShippedSet([string]$keyPath) {
 # ---------------------------------------------------------------------------------------
 $headRaw = Get-Content -Raw -Path (Resolve-RepoPath $SettingsPath) | ConvertFrom-Json
 $headFlat = @{}
-Get-FlattenedSettings $headRaw '' $headFlat
+$headArrayStats = @{ ScalarArrays = 0; UnkeyedElements = 0; KeyedElements = 0; UnkeyedPaths = @{} }
+Get-FlattenedSettings $headRaw '' $headFlat $headArrayStats
+# FP-D29: array-element keys (they carry `[name=`) join the revision walk and FP-Q3's
+# resolution index below, but NOT the FP-D2 name index or FP-Q1's fuzzy candidates. Those
+# two feed FP-Q1's Jev STATE, and FP-Q1 was measured on the old key set; changing a
+# detector's input without a re-measure is the comparability break item 8o names.
+$headFlatNoArray = @($headFlat.Keys | Where-Object { -not $_.Contains('[name=') })
+$headArrayLeaves = $headFlat.Count - $headFlatNoArray.Count
 $leafIndex = @{}
-foreach ($k in $headFlat.Keys) {
+foreach ($k in $headFlatNoArray) {
     $leaf = $k.Split('.')[-1]
     if (-not $leafIndex.ContainsKey($leaf)) { $leafIndex[$leaf] = New-Object System.Collections.Generic.List[string] }
     $leafIndex[$leaf].Add($k)
@@ -855,38 +1007,210 @@ function Get-CallArguments([string]$stmtText, [string]$calleeName) {
     return ,@($argsList | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
 }
 
-# Read a callee's DECLARED parameter names, in signature order, from wherever in the
-# production file set its Sub/Function declaration lives (searched generically, not
-# hardcoded to Core/Indicators_*.vb, so this also works for a callee defined elsewhere).
-function Get-MethodSignatureParams([string]$calleeName) {
-    $declRe2 = "^(?:Private|Public|Friend|Protected)?\s*(?:Shared\s+)?(?:Sub|Function)\s+$([regex]::Escape($calleeName))\s*\("
-    foreach ($pf in $prodFiles) {
-        $ctx = Get-FileParseContext $pf
-        if ($null -eq $ctx) { continue }
-        for ($i = 0; $i -lt $ctx.N; $i++) {
-            $t = $ctx.CodeOnly[$i].TrimStart()
-            if ($t -match $declRe2) {
-                $stmtEnd = Get-FileStatementEnd $ctx $i
-                $stmtText = Get-FileStatementText $ctx $i $stmtEnd
-                $argTexts = Get-CallArguments $stmtText $calleeName
-                if ($null -eq $argTexts) { continue }
-                $names = New-Object System.Collections.Generic.List[string]
-                foreach ($pt in $argTexts) {
-                    if ($pt -match '^(?:ByRef\s+|ByVal\s+|Optional\s+|ParamArray\s+)*([A-Za-z_][A-Za-z0-9_]*)') {
-                        $names.Add($Matches[1])
-                    }
-                }
-                return ,@($names)
-            }
+# ---------------------------------------------------------------------------------------
+# FP-D27 (revision 4, review finding 4): SIGNATURES BY DECLARATION, NOT BY BARE NAME.
+# Before this, a callee's signature was the FIRST `Sub|Function <name>(` in production file
+# order. `Compute` is declared on five classes, `Snapshot` on four, `Evaluate` and `Build`
+# on three, `Fold` on two -- so a POSITIONAL mapping could be read off the wrong class's
+# parameter list and produce a confidently wrong key. Measured before the fix:
+# `DynamicNorms.Compute(..., currentATR:=50)` was read against analysis/BandLadder.vb and
+# reported PARAM_NOT_IN_SIGNATURE; `Fold`/`Snapshot` resolved correctly only because
+# Core/AggressorVelocityAccumulator.vb happened to sort first.
+#
+# Now every production method declaration is indexed with its ENCLOSING TYPE. A name with
+# one declaration behaves exactly as before. A name with several is resolved ONLY when the
+# call's RECEIVER TYPE can be read from the code -- a type-name qualifier
+# (`DynamicNorms.Compute`), a local (`Dim acc As New AggressorVelocityAccumulator()`), a
+# parameter, or a field of the enclosing class (`Private ReadOnly _aggrVelAcc As New
+# AggressorVelocityAccumulator()`) -- and exactly one declaration lives on that type.
+# Otherwise the site is AMBIGUOUS_CALLEE: reported and counted, never guessed. The same
+# rule filters a same-named callee's PRODUCTION call sites: a site whose receiver types to a
+# different class is not evidence for this one, and a site whose receiver cannot be typed
+# is not evidence either. VB is case-insensitive, so every name comparison here is too.
+# ---------------------------------------------------------------------------------------
+$methodDeclRe = '(?i)^(?:(?:Public|Private|Friend|Protected|Shared|Overrides|Overridable|NotOverridable|MustOverride|Overloads|Shadows|Async|Iterator|Static|Partial)\s+)*(?:Sub|Function)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\('
+$typeDeclRe = '(?i)^(?:(?:Public|Private|Friend|Protected|Partial|NotInheritable|MustInherit|Shadows|Shared)\s+)*(Class|Module|Structure|Interface)\s+([A-Za-z_][A-Za-z0-9_]*)'
+$typeEndRe = '(?i)^End\s+(Class|Module|Structure|Interface)\b'
+
+# Innermost enclosing Class/Module/Structure/Interface name per line, cached per file.
+$typeAtCache = @{}
+function Get-FileTypeAt($ctx) {
+    if ($typeAtCache.ContainsKey($ctx.Path)) { return $typeAtCache[$ctx.Path] }
+    $typeAt = New-Object string[] $ctx.N
+    $tstack = New-Object System.Collections.Generic.Stack[string]
+    for ($i = 0; $i -lt $ctx.N; $i++) {
+        $t = $ctx.CodeOnly[$i].Trim()
+        if ($t -match $typeEndRe) {
+            $typeAt[$i] = if ($tstack.Count -gt 0) { $tstack.Peek() } else { $null }
+            if ($tstack.Count -gt 0) { [void]$tstack.Pop() }
+            continue
+        }
+        if ($t -match $typeDeclRe) { $tstack.Push($Matches[2]) }
+        $typeAt[$i] = if ($tstack.Count -gt 0) { $tstack.Peek() } else { $null }
+    }
+    $typeAtCache[$ctx.Path] = $typeAt
+    return $typeAt
+}
+
+# The parameter names of the declaration whose statement starts at $lineIdx.
+function Get-DeclSignatureAt($ctx, [int]$lineIdx, [string]$name) {
+    $stmtEnd = Get-FileStatementEnd $ctx $lineIdx
+    $stmtText = Get-FileStatementText $ctx $lineIdx $stmtEnd
+    $argTexts = Get-CallArguments $stmtText $name
+    if ($null -eq $argTexts) { return $null }
+    $names = New-Object System.Collections.Generic.List[string]
+    foreach ($pt in $argTexts) {
+        if ($pt -match '^(?:ByRef\s+|ByVal\s+|Optional\s+|ParamArray\s+)*([A-Za-z_][A-Za-z0-9_]*)') { $names.Add($Matches[1]) }
+    }
+    return ,@($names)
+}
+
+# Index: lower-cased method name -> every production declaration of it, with its type.
+$methodDeclIndex = @{}
+$knownTypeNames = @{}
+foreach ($pf in $prodFiles) {
+    $ctx = Get-FileParseContext $pf
+    if ($null -eq $ctx) { continue }
+    $typeAt = Get-FileTypeAt $ctx
+    for ($i = 0; $i -lt $ctx.N; $i++) {
+        $t = $ctx.CodeOnly[$i].Trim()
+        if ($t -match $typeDeclRe) { $knownTypeNames[$Matches[2].ToLowerInvariant()] = $Matches[2]; continue }
+        if ($t -match $methodDeclRe) {
+            $mname = $Matches[1]
+            if ($mname -ieq 'New') { continue }   # constructors: Find-ConstructorRange
+            $key = $mname.ToLowerInvariant()
+            if (-not $methodDeclIndex.ContainsKey($key)) { $methodDeclIndex[$key] = New-Object System.Collections.Generic.List[object] }
+            $methodDeclIndex[$key].Add([PSCustomObject]@{ Ctx = $ctx; File = $pf; Line = $i; Name = $mname; TypeName = $typeAt[$i] })
         }
     }
-    # FP-D21 (revision 3, item 8f): no Sub/Function of this name exists, so the callee may
-    # be a CLASS constructed with `New <callee>(...)`. Its signature is its `Sub New`.
-    # Reached only after the Sub/Function search above has found nothing, so no signature
-    # that resolved before revision 3 can change.
-    $ctor = Find-ConstructorRange $calleeName
-    if ($null -ne $ctor) { return ,@($ctor.SigNames) }
+}
+
+# The type of a bare identifier at a line: a local of the enclosing procedure, a parameter
+# of it, or a field of the enclosing type. $null unless exactly one distinct type is found
+# at the first level that finds any. Unanchored where a statement can sit mid-line (trap 4).
+function Resolve-IdentifierType($ctx, [int]$lineIdx, [string]$ident) {
+    $e = [regex]::Escape($ident)
+    $typeCap = '([A-Za-z_][A-Za-z0-9_.]*)'
+    $proc = Get-FileEnclosingProcBroad $ctx $lineIdx
+    if ($proc) {
+        $localRes = @(
+            "(?i)(?:^|[\s:])(?:Dim|Using|Static)\s+$e\s+As\s+(?:New\s+)?$typeCap",
+            "(?i)(?:^|[\s:])(?:Dim|Using|Static)\s+$e\s*=\s*New\s+$typeCap",
+            "(?i)\bFor\s+Each\s+$e\s+As\s+$typeCap"
+        )
+        $found = New-Object System.Collections.Generic.HashSet[string]
+        for ($k = $proc.Start; $k -le $proc.End; $k++) {
+            foreach ($re in $localRes) { if ($ctx.CodeOnly[$k] -match $re) { [void]$found.Add((($Matches[1] -split '\.')[-1]).ToLowerInvariant()) } }
+        }
+        if ($found.Count -eq 1) { return @($found)[0] }
+        if ($found.Count -gt 1) { return $null }
+        $declText = Get-FileStatementText $ctx $proc.Start (Get-FileStatementEnd $ctx $proc.Start)
+        if ($declText -match "(?i)[\(,]\s*(?:(?:ByVal|ByRef|Optional|ParamArray)\s+)*$e\s+As\s+$typeCap") {
+            return (($Matches[1] -split '\.')[-1]).ToLowerInvariant()
+        }
+    }
+    $typeAt = Get-FileTypeAt $ctx
+    $here = $typeAt[$lineIdx]
+    if (-not $here) { return $null }
+    $fieldRes = @(
+        "(?i)^(?:Private|Public|Friend|Protected)\s+(?:(?:Shared|ReadOnly|WithEvents|Shadows)\s+)*$e\s+As\s+(?:New\s+)?$typeCap",
+        "(?i)^(?:Private|Public|Friend|Protected)\s+(?:(?:Shared|ReadOnly|WithEvents|Shadows)\s+)*$e\s*=\s*New\s+$typeCap"
+    )
+    $ffound = New-Object System.Collections.Generic.HashSet[string]
+    for ($k = 0; $k -lt $ctx.N; $k++) {
+        if ($typeAt[$k] -ne $here) { continue }
+        $t = $ctx.CodeOnly[$k].Trim()
+        foreach ($re in $fieldRes) { if ($t -match $re) { [void]$ffound.Add((($Matches[1] -split '\.')[-1]).ToLowerInvariant()) } }
+    }
+    if ($ffound.Count -eq 1) { return @($ffound)[0] }
     return $null
+}
+
+# The receiver TYPE (lower-cased) of a call written `<qualifier>.<name>(` at $lineIdx, or
+# $null when code cannot determine it. '' qualifier = unqualified = the enclosing type.
+function Resolve-ReceiverType($ctx, [int]$lineIdx, [string]$qualifier) {
+    $typeAt = Get-FileTypeAt $ctx
+    $here = $typeAt[$lineIdx]
+    $q = if ($null -eq $qualifier) { '' } else { $qualifier.Trim() }
+    $segs = @($q -split '\.' | Where-Object { $_ -ne '' })
+    if ($segs.Count -gt 0 -and ($segs[0] -ieq 'Me' -or $segs[0] -ieq 'MyClass')) { $segs = @($segs | Select-Object -Skip 1) }
+    if ($q -eq '(expr)' -or ($segs.Count -gt 0 -and $segs[0] -ieq 'MyBase')) { return $null }
+    foreach ($s in $segs) { if ($s -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { return $null } }
+    if ($segs.Count -eq 0) { if ($here) { return $here.ToLowerInvariant() } else { return $null } }
+    $varType = Resolve-IdentifierType $ctx $lineIdx $segs[0]
+    if ($segs.Count -eq 1) {
+        if ($varType) { return $varType }
+        if ($knownTypeNames.ContainsKey($segs[0].ToLowerInvariant())) { return $segs[0].ToLowerInvariant() }
+        return $null
+    }
+    # A dotted qualifier: a member chain on a variable is not typed; a namespace-qualified
+    # type name (`CeilingAudit.AuditMetrics`) is, by its last segment.
+    if ($varType) { return $null }
+    $last = $segs[$segs.Count - 1].ToLowerInvariant()
+    if ($knownTypeNames.ContainsKey($last)) { return $last }
+    return $null
+}
+
+# Which declaration a call to $calleeName resolves to, given the receiver type code found.
+#   NONE      -- no Sub/Function of the name (then FP-D21's constructor lookup may apply)
+#   UNIQUE    -- exactly one declaration: behaviour identical to before revision 4
+#   TYPED     -- several, and exactly one lives on $recvType
+#   AMBIGUOUS -- several, and code cannot say which. Never guessed.
+function Resolve-CalleeDeclaration([string]$calleeName, [string]$recvType) {
+    if (-not $calleeName) { return [PSCustomObject]@{ State = 'NONE'; Decl = $null; Count = 0 } }
+    $key = $calleeName.ToLowerInvariant()
+    if (-not $methodDeclIndex.ContainsKey($key)) { return [PSCustomObject]@{ State = 'NONE'; Decl = $null; Count = 0 } }
+    $decls = $methodDeclIndex[$key]
+    if ($decls.Count -eq 1) { return [PSCustomObject]@{ State = 'UNIQUE'; Decl = $decls[0]; Count = 1 } }
+    if ($recvType) {
+        $onType = @($decls | Where-Object { $_.TypeName -and $_.TypeName -ieq $recvType })
+        if ($onType.Count -eq 1) { return [PSCustomObject]@{ State = 'TYPED'; Decl = $onType[0]; Count = $decls.Count } }
+    }
+    return [PSCustomObject]@{ State = 'AMBIGUOUS'; Decl = $null; Count = $decls.Count }
+}
+
+# The callee's parameter names for a resolved declaration; for NONE, FP-D21's constructor.
+function Get-ResolvedSignature($declRes, [string]$calleeName) {
+    if ($declRes.Decl) {
+        # Unary comma on the way out: a one-parameter signature must stay an ARRAY, or a
+        # later `[0]` indexes the characters of a bare string (see Get-EverShippedSet).
+        $sig = Get-DeclSignatureAt $declRes.Decl.Ctx $declRes.Decl.Line $declRes.Decl.Name
+        if ($null -eq $sig) { return $null }
+        return ,@($sig)
+    }
+    if ($declRes.State -eq 'NONE') {
+        # FP-D21 (revision 3, item 8f): no Sub/Function of this name exists, so the callee
+        # may be a CLASS constructed with `New <callee>(...)`. Its signature is its `Sub New`.
+        $ctor = Find-ConstructorRange $calleeName
+        if ($null -ne $ctor) { return ,@($ctor.SigNames) }
+    }
+    return $null
+}
+
+# FP-D27: keep only the production call sites that are evidence for THIS declaration. A
+# name declared once keeps every site, exactly as before. Returns the kept sites and how
+# many were dropped because their receiver could not be typed.
+function Select-AttributableSites($sites, $declRes) {
+    if ($declRes.State -ne 'TYPED') { return [PSCustomObject]@{ Sites = $sites; Untyped = 0 } }
+    $kept = New-Object System.Collections.Generic.List[object]
+    $untyped = 0
+    $allDecls = $methodDeclIndex[$declRes.Decl.Name.ToLowerInvariant()]
+    foreach ($s in $sites) {
+        $rt = Resolve-ReceiverType $s.Ctx ($s.Line - 1) $s.Qualifier
+        # An UNQUALIFIED call types to its enclosing class only if that class declares the
+        # name; otherwise VB resolved it to some imported module's member, which is untyped.
+        if ($rt -and (Test-UnqualifiedQualifier $s.Qualifier)) {
+            if (-not @($allDecls | Where-Object { $_.TypeName -and $_.TypeName -ieq $rt }).Count) { $rt = $null }
+        }
+        if (-not $rt) { $untyped++; continue }
+        if ($rt -ieq $declRes.Decl.TypeName) { $kept.Add($s) }
+    }
+    return [PSCustomObject]@{ Sites = $kept; Untyped = $untyped }
+}
+function Test-UnqualifiedQualifier([string]$qualifier) {
+    if ($null -eq $qualifier) { return $false }
+    $segs = @($qualifier.Trim() -split '\.' | Where-Object { $_ -ne '' -and $_ -ine 'Me' -and $_ -ine 'MyClass' })
+    return ($qualifier.Trim() -ne '(expr)' -and $segs.Count -eq 0)
 }
 
 # FP-D21 (revision 3, item 8f): the ONE instance constructor of production class
@@ -954,8 +1278,19 @@ function Get-ProductionCallSites([string]$calleeName) {
             $stmtEnd = Get-FileStatementEnd $ctx $stmtStart
             $stmtText = Get-FileStatementText $ctx $stmtStart $stmtEnd
             $proc = Get-FileEnclosingProc $ctx $stmtStart
+            # FP-D27: the receiver qualifier of the FIRST call to the name in the statement
+            # (the same one Get-CallArguments parses). '(expr)' when the receiver is an
+            # expression such as `GetThing().Snapshot(` -- never read as unqualified.
+            $qualifier = '(expr)'
+            $cm = [regex]::Match($stmtText, "(?i)(?<![A-Za-z0-9_])$([regex]::Escape($calleeName))\s*\(")
+            if ($cm.Success) {
+                $pre = $stmtText.Substring(0, $cm.Index)
+                $qm = [regex]::Match($pre, '(?:^|[^A-Za-z0-9_.)\]])((?:[A-Za-z_][A-Za-z0-9_]*\.)*)$')
+                if ($qm.Success) { $qualifier = $qm.Groups[1].Value.TrimEnd('.') }
+            }
             $found.Add([PSCustomObject]@{
                 File = $pf; Line = $stmtStart + 1; StmtText = $stmtText; Ctx = $ctx
+                Qualifier = $qualifier
                 EnclosingProcStart = if ($proc) { $proc.Start } else { 0 }
                 EnclosingProcEnd   = if ($proc) { $proc.End } else { ($ctx.N - 1) }
                 # FP-D17 (revision 2): the forwarding hop needs the enclosing method's NAME,
@@ -1006,19 +1341,37 @@ function Test-TerminalNonCfgExpression([string]$expr) {
     return $false
 }
 
-# The Sub/Function body range of a production method, found by bare name across the same
-# production file set the rest of FP-Q3 reads.
-function Find-ProdProcRange([string]$procName) {
-    $declRe3 = "^(?:Private|Public|Friend|Protected)?\s*(?:Shared\s+)?(?:Sub|Function)\s+$([regex]::Escape($procName))\s*\("
-    foreach ($pf in $prodFiles) {
-        $ctx = Get-FileParseContext $pf
-        if ($null -eq $ctx) { continue }
+# [revision 4] Find-ProdProcRange (the resolver body found by BARE NAME, first in file
+# order) was removed by FP-D27. Find-ResolverReturnCfgPath now resolves by declaration.
+
+# FP-D27: procedure ranges built with the BROAD declaration form ($methodDeclRe), which
+# also admits `Async`, `Overrides`, `Overloads` and the like. Get-FileEnclosingProc keeps
+# its narrower pre-revision form on purpose -- widening it would move EnclosingSub on some
+# sites and so change item IDs. Used only by the revision-4 receiver typing and resolver
+# lookup. Nested non-method blocks are not tracked; methods do not nest in VB.
+$fileProcRangesBroadCache = @{}
+function Get-FileEnclosingProcBroad($ctx, [int]$lidx) {
+    if (-not $fileProcRangesBroadCache.ContainsKey($ctx.Path)) {
+        $stack3 = New-Object System.Collections.Generic.Stack[object]
+        $ranges3 = New-Object System.Collections.Generic.List[object]
         for ($i = 0; $i -lt $ctx.N; $i++) {
-            if ($ctx.CodeOnly[$i].TrimStart() -match $declRe3) {
-                $proc = Get-FileEnclosingProc $ctx $i
-                if ($proc) { return [PSCustomObject]@{ Ctx = $ctx; File = $pf; Name = $procName; Start = $proc.Start; End = $proc.End } }
+            $t = $ctx.CodeOnly[$i].Trim()
+            if ($t -match $methodDeclRe -and $t -notmatch '(?i)\bMustOverride\b') {
+                # Methods never nest, so an unclosed frame here is a bodiless declaration (an
+                # Interface member): discard it rather than let it swallow the next End.
+                if ($stack3.Count -gt 0) { [void]$stack3.Pop() }
+                $stack3.Push([PSCustomObject]@{ Name = $Matches[1]; Start = $i })
+            } elseif ($t -match $endRe) {
+                if ($stack3.Count -gt 0) {
+                    $top = $stack3.Pop()
+                    $ranges3.Add([PSCustomObject]@{ Name = $top.Name; Start = $top.Start; End = $i })
+                }
             }
         }
+        $fileProcRangesBroadCache[$ctx.Path] = $ranges3
+    }
+    foreach ($r in $fileProcRangesBroadCache[$ctx.Path]) {
+        if ($r.Start -le $lidx -and $lidx -le $r.End) { return $r }
     }
     return $null
 }
@@ -1035,8 +1388,14 @@ function Find-ResolverReturnCfgPath($site, [string]$ident) {
     if ($init -notmatch '^([A-Za-z_][A-Za-z0-9_.]*)\s*\(') { return $null }
     $segs = $Matches[1] -split '\.'
     $callName = $segs[$segs.Length - 1]
-    $rng = Find-ProdProcRange $callName
-    if ($null -eq $rng) { return $null }
+    # FP-D27: the resolver is found by DECLARATION, typed by its qualifier when its name is
+    # declared more than once -- no longer the first body of that name in file order.
+    $rqual = if ($segs.Length -gt 1) { ($segs[0..($segs.Length - 2)] -join '.') } else { '' }
+    $rdr = Resolve-CalleeDeclaration $callName (Resolve-ReceiverType $site.Ctx ($site.Line - 1) $rqual)
+    if (-not $rdr.Decl) { return $null }
+    $rproc = Get-FileEnclosingProcBroad $rdr.Decl.Ctx $rdr.Decl.Line
+    if ($null -eq $rproc -or $rproc.Start -ne $rdr.Decl.Line) { return $null }
+    $rng = [PSCustomObject]@{ Ctx = $rdr.Decl.Ctx; File = $rdr.Decl.File; Name = $callName; Start = $rproc.Start; End = $rproc.End }
     $paths = New-Object System.Collections.Generic.List[string]
     $otherArms = 0
     for ($k = $rng.Start; $k -le $rng.End; $k++) {
@@ -1055,9 +1414,13 @@ function Find-ResolverReturnCfgPath($site, [string]$ident) {
 
 # FP-D17: is this production call site a PURE POSITIONAL PASS-THROUGH of its enclosing
 # method's own parameters? All three conditions must hold or the hop is refused -- see the
-# header for the MarketState.GetOfiAverage near-miss this rejects. Returns the wrapper's
-# name, never a guess.
-function Get-ForwardingWrapperName($site, [string]$calleeName, $sigNames) {
+# header for the MarketState.GetOfiAverage near-miss this rejects. Returns the wrapper --
+# its name, its signature and its declaration -- never a guess.
+# FP-D27 (revision 4): the wrapper's signature is read from ITS OWN declaration (the
+# enclosing procedure's first line), not from the first method of that name in file order,
+# and the wrapper's declaration travels with it so its production call sites can be
+# filtered by receiver type when its name is declared more than once.
+function Get-ForwardingWrapper($site, [string]$calleeName, $sigNames) {
     if (-not $site.EnclosingProcName) { return $null }
     if ($site.EnclosingProcName -ieq $calleeName) { return $null }
     $argTexts = Get-CallArguments $site.StmtText $calleeName
@@ -1068,13 +1431,23 @@ function Get-ForwardingWrapperName($site, [string]$calleeName, $sigNames) {
         if ($a -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { return $null }
         if ($a.ToLowerInvariant() -ne $sigNames[$i].ToLowerInvariant()) { return $null }
     }
-    $wrapSig = Get-MethodSignatureParams $site.EnclosingProcName
+    $wrapKey = $site.EnclosingProcName.ToLowerInvariant()
+    if (-not $methodDeclIndex.ContainsKey($wrapKey)) { return $null }
+    $wrapAll = $methodDeclIndex[$wrapKey]
+    $wrapDecl = @($wrapAll | Where-Object { $_.File -eq $site.File -and $_.Line -eq $site.EnclosingProcStart })
+    if ($wrapDecl.Count -ne 1) { return $null }
+    $wrapSig = Get-DeclSignatureAt $wrapDecl[0].Ctx $wrapDecl[0].Line $wrapDecl[0].Name
     if ($null -eq $wrapSig -or $wrapSig.Count -eq 0) { return $null }
     $wrapLower = @($wrapSig | ForEach-Object { $_.ToLowerInvariant() })
     foreach ($a in $argTexts) {
         if ($wrapLower -notcontains $a.Trim().ToLowerInvariant()) { return $null }
     }
-    return $site.EnclosingProcName
+    $wrapState = if ($wrapAll.Count -eq 1) { 'UNIQUE' } elseif ($wrapDecl[0].TypeName) { 'TYPED' } else { 'AMBIGUOUS' }
+    if ($wrapState -eq 'AMBIGUOUS') { return $null }
+    return [PSCustomObject]@{
+        Name = $site.EnclosingProcName; Sig = $wrapSig
+        DeclRes = [PSCustomObject]@{ State = $wrapState; Decl = $wrapDecl[0]; Count = $wrapAll.Count }
+    }
 }
 
 # FP-D16: the callee is a FIXTURE-LOCAL cfg builder -- its body assigns the parameter into
@@ -1274,11 +1647,26 @@ function Resolve-SettingsLeafKey([string]$pathAfterCfg) {
 # that FP-D13 was "never exercised against a real multi-site disagreement" was wrong --
 # it was exercised, and it lost.
 # ---------------------------------------------------------------------------------------
-function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
+function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName, [string]$recvType) {
     if (-not $calleeName) {
         return [PSCustomObject]@{ Class = 'NO_CALLEE_IDENTIFIED'; ResolvedKey = $null; Shape = $null; ProdFile = $null; ProdLine = $null; ResolvedExpr = $null }
     }
+    # FP-D27 (revision 4): which declaration is this call? A name declared once resolves
+    # exactly as before. A name declared on several types needs the receiver type, and
+    # without it the site is AMBIGUOUS_CALLEE -- reported, never guessed.
+    $declRes = Resolve-CalleeDeclaration $calleeName $recvType
+    if ($declRes.State -eq 'AMBIGUOUS') {
+        return [PSCustomObject]@{ Class = 'AMBIGUOUS_CALLEE'; ResolvedKey = $null; Shape = "declared_$($declRes.Count)x_receiver_untyped"; ProdFile = $null; ProdLine = $null; ResolvedExpr = $null }
+    }
+    $sigNames = Get-ResolvedSignature $declRes $calleeName
     $sites = Get-ProductionCallSites $calleeName
+    $attr = Select-AttributableSites $sites $declRes
+    if ($attr.Sites.Count -eq 0 -and $attr.Untyped -gt 0) {
+        # Production calls this name, but none of them can be attributed to the declaration
+        # the fixture calls. That is not "no production call site"; it is not knowable here.
+        return [PSCustomObject]@{ Class = 'AMBIGUOUS_CALLEE'; ResolvedKey = $null; Shape = "production_sites_untyped_$($attr.Untyped)"; ProdFile = $null; ProdLine = $null; ResolvedExpr = $null }
+    }
+    $sites = $attr.Sites
     if ($sites.Count -eq 0) {
         # GAP A (FP-D16, revision 2): no production call site, so the callee may be a
         # FIXTURE-LOCAL cfg builder whose body assigns the parameter into a cfg path.
@@ -1289,7 +1677,7 @@ function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
     $firstFailure = $null
     $anyOmitted = $false
     foreach ($s in $sites) {
-        $attempt = Resolve-FpQ3MappingAtSite $s $calleeName $paramName
+        $attempt = Resolve-FpQ3MappingAtSite $s $calleeName $paramName $sigNames
         if ($attempt.ResolvedKey) { return $attempt }
         if ($null -eq $firstFailure) { $firstFailure = $attempt }
         if ($attempt.Class -eq 'PARAM_NOT_PASSED_AT_CALL_SITE') { $anyOmitted = $true }
@@ -1297,19 +1685,23 @@ function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
     # GAP B (FP-D17, revision 2): every direct site failed. Some of them may be FORWARDING
     # sites -- a wrapper passing its own parameters straight through -- in which case the
     # cfg evidence lives at the WRAPPER's production call sites, one hop out. The
-    # pure-pass-through test inside Get-ForwardingWrapperName is what keeps this from
-    # hopping across two same-named methods on different classes.
-    $sigNamesForHop = Get-MethodSignatureParams $calleeName
+    # pure-pass-through test inside Get-ForwardingWrapper is what keeps this from hopping
+    # across two same-named methods on different classes; FP-D27 (revision 4) adds that
+    # the direct sites were already filtered to this declaration's receiver type, and the
+    # wrapper's own sites are filtered the same way when its name is declared twice.
+    $sigNamesForHop = $sigNames
     if ($null -ne $sigNamesForHop -and $sigNamesForHop.Count -gt 0) {
         $hopped = New-Object System.Collections.Generic.HashSet[string]
         foreach ($s in $sites) {
-            $wrapper = Get-ForwardingWrapperName $s $calleeName $sigNamesForHop
-            if (-not $wrapper) { continue }
+            $wrapperObj = Get-ForwardingWrapper $s $calleeName $sigNamesForHop
+            if (-not $wrapperObj) { continue }
+            $wrapper = $wrapperObj.Name
             if (-not $hopped.Add($wrapper.ToLowerInvariant())) { continue }
-            foreach ($hs in (Get-ProductionCallSites $wrapper)) {
+            $wrapSites = (Select-AttributableSites (Get-ProductionCallSites $wrapper) $wrapperObj.DeclRes).Sites
+            foreach ($hs in $wrapSites) {
                 # ONE hop: the per-site resolver, never the hopping wrapper, so this cannot
                 # recurse.
-                $att = Resolve-FpQ3MappingAtSite $hs $wrapper $paramName
+                $att = Resolve-FpQ3MappingAtSite $hs $wrapper $paramName $wrapperObj.Sig
                 if ($att.ResolvedKey) {
                     return [PSCustomObject]@{
                         Class = 'WRAPPER_FORWARDED'; ResolvedKey = $att.ResolvedKey
@@ -1333,9 +1725,10 @@ function Resolve-FpQ3Mapping([string]$calleeName, [string]$paramName) {
 # [2026-09-22] The PER-SITE resolver. Was the whole of Resolve-FpQ3Mapping, which took
 # $sites[0] under FP-D13 ("first found wins"). That is now superseded -- see the wrapper
 # immediately above for why and for the measured instance. This function's body is
-# UNCHANGED apart from receiving $site instead of choosing it.
-function Resolve-FpQ3MappingAtSite($site, [string]$calleeName, [string]$paramName) {
-    $sigNames = Get-MethodSignatureParams $calleeName
+# UNCHANGED apart from receiving $site instead of choosing it -- and, since FP-D27
+# (revision 4), receiving the callee's signature from its RESOLVED declaration instead of
+# looking the first declaration of that name up itself.
+function Resolve-FpQ3MappingAtSite($site, [string]$calleeName, [string]$paramName, $sigNames) {
     if ($null -eq $sigNames -or $sigNames.Count -eq 0) {
         return [PSCustomObject]@{ Class = 'NO_SIGNATURE_FOUND'; ResolvedKey = $null; Shape = $null; ProdFile = $site.File; ProdLine = $site.Line; ResolvedExpr = $null }
     }
@@ -1413,11 +1806,27 @@ function Resolve-FpQ3MappingAtSite($site, [string]$calleeName, [string]$paramNam
     }
 }
 
+# FP-D27 (revision 4): the cache key carries the fixture call's RECEIVER TYPE, because two
+# calls to the same bare name on different receivers are different methods. $mappingCache
+# keeps its old "callee|param" key for the proof lines below, holding the FIRST site's
+# result in file order -- the entry the pre-revision-4 cache held.
+$fixtureCtx = Get-FileParseContext $SourceFile
 $mappingCache = @{}
+$mappingCacheTyped = @{}
 foreach ($cs in $callSites) {
-    $mkey = "$($cs.Callee)|$($cs.Param)"
-    if (-not $mappingCache.ContainsKey($mkey)) { $mappingCache[$mkey] = Resolve-FpQ3Mapping $cs.Callee $cs.Param }
-    $res = $mappingCache[$mkey]
+    $recvType = $null
+    $calleeDeclState = 'NONE'
+    if ($cs.Callee -and $null -ne $fixtureCtx) {
+        $recvType = Resolve-ReceiverType $fixtureCtx ($cs.Line - 1) $cs.CalleeQualifier
+        $calleeDeclState = (Resolve-CalleeDeclaration $cs.Callee $recvType).State
+    }
+    $cs | Add-Member -NotePropertyName ReceiverType -NotePropertyValue $recvType
+    $cs | Add-Member -NotePropertyName CalleeDeclState -NotePropertyValue $calleeDeclState
+    $mkey = "$($cs.Callee)|$recvType|$($cs.Param)"
+    if (-not $mappingCacheTyped.ContainsKey($mkey)) { $mappingCacheTyped[$mkey] = Resolve-FpQ3Mapping $cs.Callee $cs.Param $recvType }
+    $res = $mappingCacheTyped[$mkey]
+    $proofKey = "$($cs.Callee)|$($cs.Param)"
+    if (-not $mappingCache.ContainsKey($proofKey)) { $mappingCache[$proofKey] = $res }
     $cs | Add-Member -NotePropertyName MappingClass -NotePropertyValue $res.Class
     $cs | Add-Member -NotePropertyName DerivedKey -NotePropertyValue $res.ResolvedKey
     $cs | Add-Member -NotePropertyName MappingShape -NotePropertyValue $res.Shape
@@ -1440,8 +1849,15 @@ $mappingDefaultFallback = @($callSites | Where-Object { $_.MappingClass -eq 'DEF
 $mappingNotCfgSourced   = @($callSites | Where-Object { $_.MappingClass -eq 'NOT_CFG_SOURCED' }).Count
 $mappingNotTraceable    = @($callSites | Where-Object { $_.MappingClass -eq 'SOURCE_NOT_TRACEABLE' }).Count
 $mappingOtherUnresolvedSites = @($callSites | Where-Object {
-    $_.MappingClass -in @('NOT_CFG_SOURCED', 'SOURCE_NOT_TRACEABLE', 'CFG_PATH_NOT_FOUND', 'NO_SIGNATURE_FOUND', 'CALL_PARSE_FAILED', 'PARAM_NOT_IN_SIGNATURE', 'PARAM_NOT_PASSED_AT_CALL_SITE', 'NO_CALLEE_IDENTIFIED')
+    $_.MappingClass -in @('NOT_CFG_SOURCED', 'SOURCE_NOT_TRACEABLE', 'CFG_PATH_NOT_FOUND', 'NO_SIGNATURE_FOUND', 'CALL_PARSE_FAILED', 'PARAM_NOT_IN_SIGNATURE', 'PARAM_NOT_PASSED_AT_CALL_SITE', 'NO_CALLEE_IDENTIFIED', 'AMBIGUOUS_CALLEE')
 }).Count
+# FP-D27 (revision 4): same-named callees. AMBIGUOUS_CALLEE is also inside
+# MAPPING_OTHER_UNRESOLVED_SITES above; it prints on its own line as well.
+$mappingAmbiguousCallee = @($callSites | Where-Object { $_.MappingClass -eq 'AMBIGUOUS_CALLEE' }).Count
+$sitesCalleeMultiDeclared = @($callSites | Where-Object { $_.CalleeDeclState -in @('TYPED', 'AMBIGUOUS') }).Count
+$sitesCalleeTypedByReceiver = @($callSites | Where-Object { $_.CalleeDeclState -eq 'TYPED' }).Count
+$calleesMultiDeclared = @($callSites | Where-Object { $_.CalleeDeclState -in @('TYPED', 'AMBIGUOUS') } | ForEach-Object { $_.Callee } | Select-Object -Unique)
+$prodMethodNamesMultiDeclared = @($methodDeclIndex.Keys | Where-Object { $methodDeclIndex[$_].Count -gt 1 }).Count
 $methodsNoProdCallSite = @($callSites | Where-Object { $_.MappingClass -eq 'NO_PRODUCTION_CALL_SITE' } | ForEach-Object { $_.Callee } | Where-Object { $_ } | Select-Object -Unique)
 
 # ---------------------------------------------------------------------------------------
@@ -1499,7 +1915,7 @@ foreach ($cs in $callSites) {
 
 # Fuzzy (substring-token) name-match candidates -- informational context ONLY for the
 # FP-Q1 Jev call and for the atr:=20 worked-example proof below. Never authoritative.
-$allLeafPaths = @($headFlat.Keys)
+$allLeafPaths = @($headFlatNoArray)   # FP-D29: frozen to the pre-revision-4 key set
 function Get-FuzzyCandidates([string]$paramName) {
     $snake = ConvertTo-SnakeCase $paramName
     $tokens = @($snake -split '_' | Where-Object { $_.Length -ge 4 })
@@ -1553,7 +1969,7 @@ function Invoke-ScopeClassification([string]$apiKeyIn, [string]$paramName, $ctxI
             }
         }
     }
-    $call = Invoke-Jev $apiKeyIn $body
+    $call = Invoke-Jev $apiKeyIn $body 3 1 $TestTransportOverride
     if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked } }
     $usageIn = 0; $usageOut = 0
     if ($call.Response.usage) {
@@ -1714,6 +2130,39 @@ function Write-Coverage([int]$judged) {
     "SCOPE_SAMPLES_PER_PARAM=$Samples"
     "SCOPE_UNSTABLE_PARAMS=$scopeUnstableParams"
     "--- end revision 3 additions ---"
+    "--- revision 4 additions (docs/jev-harnesses-adversarial-review-2026-09-22.md findings 4, 8, 9) ---"
+    # FP-D27 (finding 4): same-named callees resolved by receiver type, or reported.
+    "PROD_METHOD_NAMES_MULTI_DECLARED=$prodMethodNamesMultiDeclared"
+    "SITES_CALLEE_MULTI_DECLARED=$sitesCalleeMultiDeclared"
+    "SITES_CALLEE_TYPED_BY_RECEIVER=$sitesCalleeTypedByReceiver"
+    "MAPPING_AMBIGUOUS_CALLEE_SITES=$mappingAmbiguousCallee"
+    foreach ($mc in $calleesMultiDeclared) {
+        $g = @($callSites | Where-Object { $_.Callee -eq $mc })
+        $rts = @($g | ForEach-Object { if ($_.ReceiverType) { $_.ReceiverType } else { '(untyped)' } } | Select-Object -Unique) -join ','
+        "  CALLEE_MULTI_DECLARED {0} declared={1} sites={2} typed={3} ambiguous={4} receiver_types=[{5}] mapping=[{6}]" -f $mc, $methodDeclIndex[$mc.ToLowerInvariant()].Count, $g.Count, @($g | Where-Object { $_.CalleeDeclState -eq 'TYPED' }).Count, @($g | Where-Object { $_.CalleeDeclState -eq 'AMBIGUOUS' }).Count, $rts, (@($g | ForEach-Object { $_.MappingClass } | Select-Object -Unique) -join ',')
+    }
+    # FP-D28 (finding 8): a LABEL on every marked site. Nothing is dropped from the residual.
+    "MARKED_SITES_SITE_NAMED=$(@($callSites | Where-Object { $_.MarkerScope -eq 'SITE_NAMED' }).Count)"
+    "MARKED_SITES_BLOCK_ONLY=$(@($callSites | Where-Object { $_.MarkerScope -eq 'BLOCK_ONLY' }).Count)"
+    $inScopeBlockOnly = @($callSites | Where-Object { $_.InScope -and $_.MarkerScope -eq 'BLOCK_ONLY' })
+    "IN_SCOPE_MARKED_SITE_NAMED=$(@($callSites | Where-Object { $_.InScope -and $_.MarkerScope -eq 'SITE_NAMED' }).Count)"
+    "IN_SCOPE_MARKED_BLOCK_ONLY=$($inScopeBlockOnly.Count)"
+    if ($inScopeBlockOnly.Count -gt 0) {
+        "IN_SCOPE_MARKED_BLOCK_ONLY_SITES (the block's keyword marks them; the block never names the parameter -- still judged):"
+        foreach ($b in ($inScopeBlockOnly | Sort-Object Line, Param)) { "  {0}#{1}#{2}" -f $b.EnclosingSub, $b.Line, $b.Param }
+    }
+    # FP-D29 (finding 9): arrays in the settings walk. WITHOUT_ARRAYS is the key set the
+    # walk saw before revision 4; the difference is exactly the array-element leaves.
+    "SETTINGS_CACHE_DISCARDED_STALE_SCHEMA=$settingsCacheDiscarded"
+    "SETTINGS_HEAD_LEAVES=$($headFlat.Count)"
+    "SETTINGS_HEAD_LEAVES_WITHOUT_ARRAYS=$($headFlatNoArray.Count)"
+    "SETTINGS_HEAD_ARRAY_KEYED_LEAVES=$headArrayLeaves"
+    "SETTINGS_HEAD_ARRAY_KEYED_ELEMENTS=$($headArrayStats.KeyedElements)"
+    "ARRAY_UNKEYED=$($headArrayStats.UnkeyedElements)"
+    if ($headArrayStats.UnkeyedElements -gt 0) { "  ARRAY_UNKEYED_PATHS: $(@($headArrayStats.UnkeyedPaths.Keys | Sort-Object) -join ', ')" }
+    "SETTINGS_HEAD_SCALAR_ARRAYS_SKIPPED=$($headArrayStats.ScalarArrays)"
+    "SETTINGS_ARRAY_KEYS_EVER_WALKED=$settingsArrayKeysEver"
+    "--- end revision 4 additions ---"
     "IN_SCOPE_SITES=$inScopeSites"
     "OUT_OF_SCOPE_SITES=$outOfScopeSites"
     "IN_SCOPE_PARAMS=$inScopeParams"
@@ -1773,6 +2222,15 @@ function Write-Coverage([int]$judged) {
 # block -- see FP-D11 in the header for why that ordering is a deliberate, narrow exception
 # to "no API key needed before this gate", scoped to FP-Q1 only, never to FP-1/FP-2).
 # ---------------------------------------------------------------------------------------
+if ($SiteDumpPath) {
+    $dumpLines = New-Object System.Collections.Generic.List[string]
+    $dumpLines.Add((@('sub', 'line', 'param', 'callee', 'qualifier', 'receiver_type', 'callee_decl_state', 'mapping_class', 'key', 'equals_ever_shipped', 'has_marker', 'marker_scope', 'in_scope') -join "`t"))
+    foreach ($cs in $callSites) {
+        $dumpLines.Add((@($cs.EnclosingSub, $cs.Line, $cs.Param, $cs.Callee, $cs.CalleeQualifier, $cs.ReceiverType, $cs.CalleeDeclState, $cs.MappingClass, $cs.ResolvedKey, $cs.LiteralEqualsEverShipped, $cs.HasMarker, $cs.MarkerScope, $cs.InScope) -join "`t"))
+    }
+    Set-Content -Encoding UTF8 -Path (Resolve-RepoPath $SiteDumpPath) -Value $dumpLines
+}
+
 if ($scopeApiFailed) {
     Write-Coverage 0
     "EXIT_REASON=API_FAILED"
@@ -1798,6 +2256,11 @@ if ($everShippedByKey.ContainsKey('indicators.OBV.trend_gate')) {
     $obvOnDemand = Get-EverShippedSet 'indicators.OBV.trend_gate'
     "TRAP1_PROOF indicators.OBV.trend_gate ever-shipped = {$($obvOnDemand -join ', ')}"
 }
+# FP-D29 proof line (review finding 9): an ARRAY-backed key now has a value history. Same
+# footing as TRAP1_PROOF -- a structural fact about the walk, never a verdict.
+$arrayProofKey = 'session_volume.sessions[name=ASIA].high_multiplier'
+$arrayProofSet = Get-EverShippedSet $arrayProofKey
+"ARRAY_PROOF $arrayProofKey ever-shipped = {$($arrayProofSet -join ', ')} (revisions carrying the key: $(@($settingsHashes | Where-Object { $revisionCache.ContainsKey($_) -and $revisionCache[$_].ContainsKey($arrayProofKey) }).Count) of $settingsRevisionsWalked)"
 
 # FP-Q3 acceptance item 1 proof lines: structural facts about the derived mapping (which
 # cfg path, which production file/line, which of the three shapes) -- never a "verdict" in
@@ -1892,7 +2355,7 @@ function Get-Fp1Id($cs) { "$($cs.EnclosingSub)#$($cs.Line)#$($cs.Param)" }
 if ($residualSites.Count -gt 0) {
     "FP1_CANDIDATES (no judgments, for baseline labelling):"
     foreach ($cs in $residualSites) {
-        "  $(Get-Fp1Id $cs) matchClass=$($cs.MatchClass) key=$(if ($cs.ResolvedKey) { $cs.ResolvedKey } else { '(unresolved)' }) mappingClass=$($cs.MappingClass)"
+        "  $(Get-Fp1Id $cs) matchClass=$($cs.MatchClass) key=$(if ($cs.ResolvedKey) { $cs.ResolvedKey } else { '(unresolved)' }) mappingClass=$($cs.MappingClass) marker=$($cs.MarkerScope)"
     }
 }
 
@@ -1944,7 +2407,9 @@ if ($null -ne $baselineRaw) {
 # marked site would be judged with no seat line and spent. Refuse, item by item, before
 # any FP-1/FP-2 call.
 $unbaselinedItems = New-Object System.Collections.Generic.List[string]
-foreach ($cs in $residualSites) { $bid = Get-Fp1Id $cs; if (-not $baseline.ContainsKey($bid)) { [void]$unbaselinedItems.Add($bid) } }
+# -Fp2Only (revision 4): FP-1 sites are not judged this run, so they are not gated either.
+$fp1JudgedSites = if ($Fp2Only) { @() } else { $residualSites }
+foreach ($cs in $fp1JudgedSites) { $bid = Get-Fp1Id $cs; if (-not $baseline.ContainsKey($bid)) { [void]$unbaselinedItems.Add($bid) } }
 foreach ($f2 in $fp2Items) { if (-not $baseline.ContainsKey($f2.SubName)) { [void]$unbaselinedItems.Add($f2.SubName) } }
 if ($unbaselinedItems.Count -gt 0 -and -not $AllowUnbaselinedItems) {
     "EXIT_REASON=BASELINE_INCOMPLETE"
@@ -1971,6 +2436,20 @@ $fp1Criteria = @{
     declared_but_contradicted = 'The comment declares a class, but it is inconsistent with the evidence -- e.g. it claims SHIPPED BEHAVIOUR while `literal_equals_ever_shipped` is false, or it claims MECHANISM while its own reasoning ties the value to tracking `matched_key`.'
     ambiguous                 = '`comment_block`, `matched_key`, and `ever_shipped_values` together do not give enough information to place this call site in one of the classes above.'
 }
+# FP-D30 (revision 4, item 8o): FP-1 VERSION 2, asked BESIDE version 1 in the SAME call.
+# Identical to $fp1Criteria except for ONE sentence, appended to the two criteria it
+# concerns. The sentence and its placement are copied VERBATIM from the controlled probe
+# that measured it (docs/harness-runs/fixture-parser-funding-run-2026-09-23.md section 5;
+# the probe script appended $extra to mechanism_declared_ok AND declared_but_contradicted).
+# Version 1 alone drives the verdict, the exit code and the baseline comparison -- so every
+# earlier measurement stays comparable. Version 2 is REPORTED only, to arm a re-measure on
+# a fresh, baselined population. It is NOT a fix until that re-measure says so.
+$FP1_V2_EXTRA_SENTENCE = ' Naming `matched_key` or its shipped value ONLY to explain why the literal is NOT derived from it, or to show the literal differs from it or does not depend on it, is consistent with MECHANISM and is NOT a contradiction.'
+$fp1CriteriaV2 = @{}
+foreach ($ck in $fp1Criteria.Keys) { $fp1CriteriaV2[$ck] = $fp1Criteria[$ck] }
+$fp1CriteriaV2.mechanism_declared_ok     = $fp1Criteria.mechanism_declared_ok + $FP1_V2_EXTRA_SENTENCE
+$fp1CriteriaV2.declared_but_contradicted = $fp1Criteria.declared_but_contradicted + $FP1_V2_EXTRA_SENTENCE
+
 $fp2Criteria = @{
     name_matches     = "The fixture Sub's body asserts exactly the property its name claims to test -- no more, no less."
     name_overclaims  = "The fixture Sub's name claims to test a broader or different property than what its body actually asserts."
@@ -2013,9 +2492,16 @@ function Invoke-Fp1Verdict([string]$apiKeyIn, $cs, [string]$uid) {
                 instructions = "Classify this call site using `comment_block`, `matched_key`, `ever_shipped_values`, and `literal_equals_ever_shipped`. Do not recompute set membership -- `literal_equals_ever_shipped` is already the authoritative answer to that question."
                 criteria = $fp1Criteria
             }
+            # FP-D30 (item 8o): version 2 -- the SAME instructions, criteria differing by the
+            # one probe sentence. Reported beside version 1; never read by the exit code.
+            verdict_v2 = @{
+                type = 'choice'
+                instructions = "Classify this call site using `comment_block`, `matched_key`, `ever_shipped_values`, and `literal_equals_ever_shipped`. Do not recompute set membership -- `literal_equals_ever_shipped` is already the authoritative answer to that question."
+                criteria = $fp1CriteriaV2
+            }
         }
     }
-    $call = Invoke-Jev $apiKeyIn $body
+    $call = Invoke-Jev $apiKeyIn $body 3 1 $TestTransportOverride
     if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked } }
     $ans = $call.Response.answers
     $verdict = $ans.verdict.choice
@@ -2025,6 +2511,15 @@ function Invoke-Fp1Verdict([string]$apiKeyIn, $cs, [string]$uid) {
         foreach ($p in $ans.verdict.probabilities.PSObject.Properties) { $probs[$p.Name] = [double]$p.Value }
         if ($probs.Count -gt 0) { $topProbability = ($probs.Values | Measure-Object -Maximum).Maximum }
     }
+    $v2Verdict = $null
+    $v2TopProbability = $null
+    if ($ans.verdict_v2) {
+        $v2Verdict = $ans.verdict_v2.choice
+        if ($ans.verdict_v2.probabilities) {
+            $v2Probs = @($ans.verdict_v2.probabilities.PSObject.Properties | ForEach-Object { [double]$_.Value })
+            if ($v2Probs.Count -gt 0) { $v2TopProbability = ($v2Probs | Measure-Object -Maximum).Maximum }
+        }
+    }
     $usageIn = 0; $usageOut = 0
     if ($call.Response.usage) {
         if ($call.Response.usage.input_tokens) { $usageIn = [int]$call.Response.usage.input_tokens }
@@ -2032,6 +2527,7 @@ function Invoke-Fp1Verdict([string]$apiKeyIn, $cs, [string]$uid) {
     }
     return @{
         Ok = $true; Verdict = $verdict; TopProbability = $topProbability
+        V2Verdict = $v2Verdict; V2TopProbability = $v2TopProbability
         DeclaresClassNoul = $ans.comment_declares_class.noul
         MatchesEvidenceNoul = $ans.class_matches_evidence.noul
         UsageInputTokens = $usageIn; UsageOutputTokens = $usageOut
@@ -2057,7 +2553,7 @@ function Invoke-Fp2Verdict([string]$apiKeyIn, $f2, [string]$uid) {
             }
         }
     }
-    $call = Invoke-Jev $apiKeyIn $body
+    $call = Invoke-Jev $apiKeyIn $body 3 1 $TestTransportOverride
     if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked } }
     $ans = $call.Response.answers
     $verdict = $ans.verdict.choice
@@ -2121,7 +2617,7 @@ $sw = [System.Diagnostics.Stopwatch]::StartNew()
 # in-scope) call site. FP-Q3 already resolved matched_key/ever_shipped -- no per-site Jev
 # key-resolution call any more (FP-D7 superseded, see header).
 # ---------------------------------------------------------------------------------------
-foreach ($cs in $residualSites) {
+foreach ($cs in $fp1JudgedSites) {   # -Fp2Only empties this (revision 4)
     $sampleResults = New-Object System.Collections.Generic.List[object]
     $itemBlocked = $false
     for ($i = 0; $i -lt $Samples; $i++) {
@@ -2144,10 +2640,13 @@ foreach ($cs in $residualSites) {
             Id = $idB; EnclosingSub = $cs.EnclosingSub; Param = $cs.Param; Line = $cs.Line
             MatchedKey = $cs.ResolvedKey; EverShipped = ($cs.EverShipped -join ',')
             LiteralValue = $cs.LiteralValue; LiteralEqualsEverShipped = $cs.LiteralEqualsEverShipped
+            MarkerScope = $cs.MarkerScope
             Verdict = 'WAF_BLOCKED'; AgreementRate = $null; Stable = $true
             MeanTopProbability = $null; MinTopProbability = $null
             DeclaresClassNoul = $null; MatchesEvidenceNoul = $null
             SampleCount = 0; SampleVerdicts = ''; SampleTopProbabilities = ''
+            V2Verdict = $null; V2AgreementRate = $null; V2Stable = $null; V2MeanTopProbability = $null
+            V2SampleVerdicts = ''; SamplesV1EqV2 = 0
             Baseline = if ($baseline.ContainsKey($idB)) { $baseline[$idB] } else { $null }
         })
         continue
@@ -2156,15 +2655,24 @@ foreach ($cs in $residualSites) {
     $agg = Get-SelfConsistencyAggregate $sampleResults
     $meanDeclares = [math]::Round((($sampleResults | ForEach-Object { [double]$_.DeclaresClassNoul } | Measure-Object -Average).Average), 3)
     $meanMatches = [math]::Round((($sampleResults | ForEach-Object { [double]$_.MatchesEvidenceNoul } | Measure-Object -Average).Average), 3)
+    # FP-D30: version 2's own self-consistency over the SAME samples, computed by the same
+    # aggregation function. Reported only -- nothing below reads it for the exit code.
+    $v2Samples = @($sampleResults | ForEach-Object { [PSCustomObject]@{ Verdict = $(if ($_.V2Verdict) { $_.V2Verdict } else { 'NO_V2_ANSWER' }); TopProbability = $_.V2TopProbability } })
+    $agg2 = Get-SelfConsistencyAggregate $v2Samples
+    $samplesV1EqV2 = @($sampleResults | Where-Object { $_.V2Verdict -and $_.V2Verdict -eq $_.Verdict }).Count
     $id = Get-Fp1Id $cs
     $fp1Results.Add([PSCustomObject]@{
         Id = $id; EnclosingSub = $cs.EnclosingSub; Param = $cs.Param; Line = $cs.Line
         MatchedKey = $cs.ResolvedKey; EverShipped = ($cs.EverShipped -join ',')
         LiteralValue = $cs.LiteralValue; LiteralEqualsEverShipped = $cs.LiteralEqualsEverShipped
+        MarkerScope = $cs.MarkerScope
         Verdict = $agg.PluralityVerdict; AgreementRate = $agg.AgreementRate; Stable = $agg.Stable
         MeanTopProbability = $agg.MeanTopProbability; MinTopProbability = $agg.MinTopProbability
         DeclaresClassNoul = $meanDeclares; MatchesEvidenceNoul = $meanMatches
         SampleCount = $agg.SampleCount; SampleVerdicts = $agg.SampleVerdicts; SampleTopProbabilities = $agg.SampleTopProbabilities
+        V2Verdict = $agg2.PluralityVerdict; V2AgreementRate = $agg2.AgreementRate; V2Stable = $agg2.Stable
+        V2MeanTopProbability = $agg2.MeanTopProbability; V2SampleVerdicts = $agg2.SampleVerdicts
+        SamplesV1EqV2 = $samplesV1EqV2
         Baseline = if ($baseline.ContainsKey($id)) { $baseline[$id] } else { $null }
     })
 }
@@ -2249,7 +2757,9 @@ if ($CountersOnly) {
     foreach ($res in $fp1Results) {
         $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' } elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
         $stableTxt = if ($res.Stable) { 'STABLE' } else { 'UNSTABLE' }
-        "  $($res.Id) [$stableTxt] verdict=$($res.Verdict) agreement_rate=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability) min_top_prob=$($res.MinTopProbability) key=$($res.MatchedKey) ever_shipped=[$($res.EverShipped)] literal=$($res.LiteralValue) equals_shipped=$($res.LiteralEqualsEverShipped) baseline=$($res.Baseline) [$agree] declares_class_noul=$($res.DeclaresClassNoul) matches_evidence_noul=$($res.MatchesEvidenceNoul) verdicts=[$($res.SampleVerdicts)] top_probs=[$($res.SampleTopProbabilities)]"
+        "  $($res.Id) [$stableTxt] verdict=$($res.Verdict) agreement_rate=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability) min_top_prob=$($res.MinTopProbability) key=$($res.MatchedKey) ever_shipped=[$($res.EverShipped)] literal=$($res.LiteralValue) equals_shipped=$($res.LiteralEqualsEverShipped) baseline=$($res.Baseline) [$agree] declares_class_noul=$($res.DeclaresClassNoul) matches_evidence_noul=$($res.MatchesEvidenceNoul) verdicts=[$($res.SampleVerdicts)] top_probs=[$($res.SampleTopProbabilities)] marker=$($res.MarkerScope)"
+        # FP-D30: version 2 beside it. Informational; the [AGREE]/[DISAGREE] tag above is v1's.
+        "      v2: verdict=$($res.V2Verdict) agreement_rate=$($res.V2AgreementRate) mean_top_prob=$($res.V2MeanTopProbability) verdicts=[$($res.V2SampleVerdicts)] samples_v1_eq_v2=$($res.SamplesV1EqV2)/$($res.SampleCount)"
     }
     "FP2_RESULTS:"
     foreach ($res in $fp2Results) {
@@ -2264,7 +2774,14 @@ if ($CountersOnly) {
     "FP2_BAD_VERDICTS=$fp2Bad"
     "FP1_WAF_BLOCKED=$fp1WafBlocked"
     "FP2_WAF_BLOCKED=$fp2WafBlocked"
+    # FP-D30 (item 8o): version 1 against version 2. Informational only -- none of these
+    # reaches $anyBad below.
+    $fp1Judged = @($fp1Results | Where-Object { $_.Verdict -ne 'WAF_BLOCKED' })
+    "FP1V2_ITEMS_SAME_PLURALITY_AS_V1=$(@($fp1Judged | Where-Object { $_.V2Verdict -eq $_.Verdict }).Count) of $($fp1Judged.Count)"
+    "FP1V2_SAMPLES_SAME_AS_V1=$(($fp1Judged | Measure-Object -Property SamplesV1EqV2 -Sum).Sum) of $(($fp1Judged | Measure-Object -Property SampleCount -Sum).Sum)"
+    "FP1V2_UNSTABLE=$(@($fp1Judged | Where-Object { $_.V2Stable -eq $false }).Count) (informational -- version 1 alone drives the exit code)"
 }
+if ($Fp2Only) { "FP2_ONLY=true (FP-1 sites listed above were NOT judged and NOT gated this run)" }
 
 # Markdown report.
 $reportLines = New-Object System.Collections.Generic.List[string]
@@ -2309,11 +2826,11 @@ $reportLines.Add('')
 if (-not $CountersOnly) {
     $reportLines.Add('## FP-1 (fixture-literal provenance)')
     $reportLines.Add('')
-    $reportLines.Add('| Id | Verdict | Agreement | Mean top prob | Key | Ever shipped | Literal | Equals shipped | Baseline | Agreement |')
-    $reportLines.Add('|---|---|---|---|---|---|---|---|---|---|')
+    $reportLines.Add('| Id | Verdict | Agreement | Mean top prob | Key | Ever shipped | Literal | Equals shipped | Baseline | Agreement | Marker | v2 verdict (informational) | v2 agreement |')
+    $reportLines.Add('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     foreach ($res in $fp1Results) {
         $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' } elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
-        $reportLines.Add("| $($res.Id) | $($res.Verdict) | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.MatchedKey) | $($res.EverShipped) | $($res.LiteralValue) | $($res.LiteralEqualsEverShipped) | $($res.Baseline) | $agree |")
+        $reportLines.Add("| $($res.Id) | $($res.Verdict) | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.MatchedKey) | $($res.EverShipped) | $($res.LiteralValue) | $($res.LiteralEqualsEverShipped) | $($res.Baseline) | $agree | $($res.MarkerScope) | $($res.V2Verdict) | $($res.V2AgreementRate) |")
     }
     $reportLines.Add('')
     $reportLines.Add('## FP-2 (fixture name vs. assertion)')
