@@ -231,6 +231,11 @@ The trader directed that the Jev programme closes before the engine queue resume
 - **An item whose trigger does NOT lie in the engine work must be done.** The live list is the Jev-programme rows in [`trader-tick-queue.md`](trader-tick-queue.md) §2.
 - The first real runs of harnesses 1 and 2 still follow this protocol in full when their triggers arrive: seat baseline first, then the detector. Arming changes when the engine queue may start, not how a first run is done.
 
+**Widened the same day (trader):** *"if it can be done on-the-go, meaning if the circumstances arise while doing other items in the development of this project, then only shadow-test it. Building it and arming it alone should be enough to consider it closed."*
+- **On the go:** built and armed means closed. Shadow-test when the circumstance arises, under this protocol. This covers harness 4's first measured run and every re-measure.
+- **Not on the go:** a one-off that no development event will trigger, such as a retrospective pilot or a mutation test. Do it before the engine queue.
+- The re-ordered list, with both halves: the Jev close-list row in [`trader-tick-queue.md`](trader-tick-queue.md) §2.
+
 ---
 
 ## 7. What is NOT verified
