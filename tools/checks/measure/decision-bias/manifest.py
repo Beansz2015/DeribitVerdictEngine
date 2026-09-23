@@ -311,3 +311,233 @@ unrec('docs/engine-tier-d-hygiene-proposal.md', 'D1', 'first commit 43cc949 alre
 unrec('docs/clean-data-rebaseline-v34-proposal.md', 'S3.1', 'ASIA multipliers; the only committed text (61b4532) already records the trader choice')
 unrec('docs/clean-data-rebaseline-v34-proposal.md', 'S3.2', 'funding momentum_threshold 0.00001 -> 5e-8; doc first committed APPROVED & APPLIED')
 unrec('docs/clean-data-rebaseline-v34-proposal.md', 'S3.4', 'CVD slope_pct_of_value 0.05 -> 0.10; doc first committed APPROVED & APPLIED')
+
+# ---- docs/signal-bridge-v1-proposal.md: D1-D10 are single-design "Yes" rows
+for _q in ('D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10'):
+    excl('docs/signal-bridge-v1-proposal.md', _q, 'options_not_explicit')
+excl('docs/fable5-audit-2026-07-02.md', 'F3', 'mirror', 'decision item with no recommendation; decided as audit-fixes-2026-07-02-proposal.md D3')
+
+# ---- docs/d6-eval-placed-stop-migration-proposal.md
+add('docs/d6-eval-placed-stop-migration-proposal.md', 'D1', '7b62b95', C(25, 2),
+    [('(1)', E(25, 'Replace')), ('(2)', E(25, 'dual-track'))], '(1)', C(25, 3))
+for _q in ('D2', 'D3', 'D4', 'D5'):
+    excl('docs/d6-eval-placed-stop-migration-proposal.md', _q, 'options_not_explicit')
+
+# ---- docs/aggressor-velocity-s52-derivation-2026-07-13.md (S-table)
+add('docs/aggressor-velocity-s52-derivation-2026-07-13.md', 'S1', '542cb92', C(60, 2),
+    [('(1)', E(60, '**4.5**')), ('(2)', E(60, '4.0 looser')), ('(3)', E(60, '5.0 tighter'))], '(1)', [C(60, 3), ('line', 37)])
+add('docs/aggressor-velocity-s52-derivation-2026-07-13.md', 'S2', '542cb92', C(61, 2),
+    [('(a)', S(49, 'the wire-in modifier applies only')), ('(b)', S(50, 'simpler-but-blunt'))], '(a)', [C(61, 3), ('line', 49)])
+for _q in ('S3', 'S4', 'S5'):
+    excl('docs/aggressor-velocity-s52-derivation-2026-07-13.md', _q, 'options_not_explicit')
+
+# ---- what-if W-table, matrix M-table: no named alternatives
+for _q in ('W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'):
+    excl('docs/offline-whatif-replay-proposal.md', _q, 'options_not_explicit')
+for _q in ('M1', 'M2', 'M3', 'M4', 'M5'):
+    excl('docs/offline-matrix-placed-target-proposal.md', _q, 'options_not_explicit')
+
+# ---- docs/session-policy-gate-proposal.md
+add('docs/session-policy-gate-proposal.md', 'P1', 'ce601f6', C(39, 2),
+    [('(1)', E(39, '**Consumer-side**')), ('(2)', E(39, 'Engine-side per-session thresholds'))], '(1)', C(39, 3))
+for _q in ('P2', 'P3', 'P4', 'P5'):
+    excl('docs/session-policy-gate-proposal.md', _q, 'options_not_explicit')
+
+# ---- docs/eval-no-data-outcome-proposal.md (N-table) and eval-display-semantics (E-table)
+add('docs/eval-no-data-outcome-proposal.md', 'N4', 'e722ad7', C(26, 2),
+    [('(1)', E(26, 'Migrate to placed geometry')), ('(2)', E(26, 'keep a fixed yardstick'))], '(1)', [C(26, 3), ('line', 17)])
+for _q in ('N1', 'N2', 'N3', 'N5'):
+    excl('docs/eval-no-data-outcome-proposal.md', _q, 'options_not_explicit')
+for _q in ('E1', 'E2a', 'E2b', 'E3a', 'E3b', 'E4', 'E5'):
+    excl('docs/eval-display-semantics-proposal.md', _q, 'options_not_explicit')
+
+# ---- docs/geometry-arbitration-modes-proposal.md (G-table)
+add('docs/geometry-arbitration-modes-proposal.md', 'G2', '8f72f7f', C(35, 2),
+    [('(1)', E(35, '**% of placed distance**')), ('(2)', E(35, 'ATR-fraction'))], '(1)', C(35, 3))
+for _q in ('G1', 'G3', 'G4', 'G5', 'G6'):
+    excl('docs/geometry-arbitration-modes-proposal.md', _q, 'options_not_explicit')
+
+# ---- docs/w6-4-ceiling-audit-method-proposal.md (K-table)
+for _q in ('K1', 'K2', 'K3', 'K4', 'K5', 'K6'):
+    excl('docs/w6-4-ceiling-audit-method-proposal.md', _q, 'options_not_explicit')
+
+
+# ==========================================================================================
+# LEAK_NOTES: every leak-check hit on a population text field, explained. Key = (id, field,
+# marker). A hit with no note is UNEXPLAINED and blocks --write. Each note says why the hit is
+# pre-ruling text and carries no ruling. Kept HERE (state side): no note names an outcome.
+# ==========================================================================================
+LEAK_NOTES = {}
+
+
+def leak(doc, label, field, marker, why):
+    LEAK_NOTES[('%s|%s@%s' % (doc, label, REV), field, marker)] = why
+
+
+_PRE = 'pre-ruling text addressed to the trader as the future decider; conditional, carries no ruling'
+leak('docs/session-policy-gate-proposal.md', 'P1', 'rationale', 'ticked', _PRE + " ('if ticked')")
+leak('docs/eval-no-data-outcome-proposal.md', 'N4', 'rationale', 'trader', _PRE + " ('trader may overrule', 'if the trader prefers')")
+leak('docs/eval-no-data-outcome-proposal.md', 'N4', 'rationale', 'overrul', _PRE + " ('trader may overrule')")
+leak('docs/geometry-arbitration-modes-proposal.md', 'G2', 'rationale', 'ticked', _PRE + " ('record whichever is ticked')")
+leak('docs/geometry-arbitration-modes-proposal.md', 'G2', 'rationale', 'trader', "names the trader's earlier framing of the buffer, an input to the recommendation, not a ruling on it")
+
+# ---- docs/liq-cascade-level-alerts-proposal.md (H-table)
+add('docs/liq-cascade-level-alerts-proposal.md', 'H1', '74eff4b', C(22, 2),
+    [('(1)', E(22, '**TAPE-strip tag + status-bar flash**')), ('(2)', E(22, 'modal/banner'))], '(1)', C(22, 3))
+for _q in ('H2', 'H3', 'H4', 'H5'):
+    excl('docs/liq-cascade-level-alerts-proposal.md', _q, 'options_not_explicit')
+
+# ---- docs/absorption-geometry-rescale-proposal.md (V-table; single commit, table pre-tick)
+add('docs/absorption-geometry-rescale-proposal.md', 'V2', '309b0fc', C(18, 2),
+    [('(1)', E(18, 'Retire tick keys (unresolvable)')), ('(2)', E(18, 'keep-with-null'))], '(1)', C(18, 3))
+for _q in ('V1', 'V3', 'V4'):
+    excl('docs/absorption-geometry-rescale-proposal.md', _q, 'options_not_explicit')
+
+# ---- docs/aggr-vel-s52-london-derivation-2026-07-23.md (S-table; ruling recorded in a commit message only)
+add('docs/aggr-vel-s52-london-derivation-2026-07-23.md', 'S1', '8b7cc38', C(82, 2),
+    [('(1)', E(82, '**5.5**')), ('(2)', E(82, '5.0 looser')), ('(3)', E(82, '6.0 tighter'))], '(1)', C(82, 3))
+for _q in ('S2', 'S3', 'S4', 'S5'):
+    excl('docs/aggr-vel-s52-london-derivation-2026-07-23.md', _q, 'options_not_explicit')
+
+# ---- single-design D-tables with no named alternative
+for _q in ('D1', 'D2', 'D3', 'D4', 'D5', 'D6'):
+    excl('docs/fee-aware-min-move-proposal.md', _q, 'options_not_explicit')
+for _q in ('D1', 'D2', 'D3', 'D4', 'D5', 'D6'):
+    excl('docs/d2v2-whatif-candidate-mode-proposal.md', _q, 'options_not_explicit')
+for _q in ('D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'):
+    excl('docs/backtest-synthesizer-proposal.md', _q, 'options_not_explicit')
+for _q in ('J1a', 'J1b', 'J1c', 'J1d', 'J2', 'J3'):
+    excl('docs/absorption-engagement-derivation-2026-07-23.md', _q, 'options_not_explicit')
+excl('docs/absorption-engagement-derivation-2026-07-23.md', 'J1e', 'superseded_before_ruling',
+     'Path A vs Path B: the seat later moved its own recommendation before any ruling; the ruled decision is the queue row E5 (trader-tick-queue-archive.md)')
+excl('docs/forming-bar-live-investigation-2026-07.md', 'S4', 'no_explicit_recommendation', 'section 4 options are enumerated, explicitly not recommended')
+
+excl('docs/liq-cascade-level-alerts-spec-back.md', 'S5-open-options', 'no_explicit_recommendation', 'four open decisions ruled by the trader; the pre-ruling section 4 carried no recommendation on them')
+
+# ---- docs/in-app-trade-store-capture-proposal.md
+add('docs/in-app-trade-store-capture-proposal.md', 'D1', '5ea86f7', C(133, 2),
+    [('(1)', E(133, 'Both boxes capture')), ('(2)', E(133, 'AWS only'))], '(1)', C(133, 3))
+for _q in ('D2', 'D3', 'D4', 'D5'):
+    excl('docs/in-app-trade-store-capture-proposal.md', _q, 'options_not_explicit')
+excl('docs/in-app-trade-store-capture-proposal.md', 'D1-a', 'no_explicit_recommendation', 'first committed already ruled (4ab1824); no recommendation text precedes it')
+
+# ---- docs/settings-local-overlay-proposal.md (Decision | Options | My read)
+for _q, _ln in (('D1', 187), ('D2', 188), ('D3', 189), ('D4', 190), ('D5', 191), ('D6', 192)):
+    add('docs/settings-local-overlay-proposal.md', _q, '00a8478', C(_ln, 2), ('parse', C(_ln, 3)), '(a)', C(_ln, 4))
+excl('docs/settings-local-overlay-proposal.md', 'D7', 'no_trader_ruling', 'answered by the orchestrator seat, not the trader')
+excl('docs/settings-local-overlay-review-2026-07-31.md', 'S5', 'mirror', 'a reviewing seat read of the same D1-D7')
+
+# ---- docs/trade-store-coverage-report-proposal.md (Decision | Options | My read), last pre-tick rev 34f074f
+_d = 'docs/trade-store-coverage-report-proposal.md'
+for _q, _ln in (('D1', 258), ('D2', 259), ('D3', 260), ('D7', 262), ('D6', 264)):
+    add(_d, _q, '34f074f', C(_ln, 2), ('parse', C(_ln, 3)), '(a)', C(_ln, 4))
+add(_d, 'D4', '34f074f', C(261, 2), [('(1)', S(261, '300,000 ms (1.85×', 'max)')), ('(2)', E(261, 'another value'))], '(1)', C(261, 4))
+excl(_d, 'D5', 'recommendation_not_single', 'the read recommends "(a) or (b), not (c)"')
+
+# ---- docs/asia-burst-threshold-derivation-2026-08-01.md: the D-table was co-committed with its
+# ticks at the build (970087b); the recommendation and candidates are read from 1fc221b.
+_d = 'docs/asia-burst-threshold-derivation-2026-08-01.md'
+add(_d, 'D3-1', '1fc221b', ('line', 1),
+    [('(1)', C(21, 1)), ('(2)', C(22, 1)), ('(3)', C(23, 1)), ('(4)', C(24, 1)), ('(5)', C(25, 1)), ('(6)', C(26, 1)), ('(7)', C(27, 1)), ('(8)', C(28, 1))],
+    '(7)', [('line', 9), ('lines', 31, 35)])
+excl(_d, 'D3-2', 'options_not_explicit', 'pre-ruling text argues one value; the ASIA-vs-LONDON framing exists only in the co-committed D-table')
+for _q in ('D3-3', 'D3-4', 'D3-5', 'D3-6'):
+    excl(_d, _q, 'options_not_explicit', 'rows exist only in the D-table co-committed with its ruling')
+
+# ---- docs/ttm-flat-threshold-rederivation-2026-08-02.md (Question | Options | Recommendation)
+_d = 'docs/ttm-flat-threshold-rederivation-2026-08-02.md'
+add(_d, 'D1-a', 'bec076f', C(84, 2), ('parse', C(84, 3)), '(a)', C(84, 4))
+add(_d, 'D1-d', 'bec076f', C(87, 2), ('parse', C(87, 3)), '(b)', C(87, 4))
+excl(_d, 'D1-b', 'recommendation_not_single', 'recommends a range 0.25-0.30')
+excl(_d, 'D1-c', 'not_a_decision', 'records a value for completeness, explicitly not recommended')
+
+for _q in ('T-1', 'T-2', 'T-3', 'T-4', 'T-5'):
+    excl('docs/d3-asia-burst-watch-read-2026-08-10.md', _q, 'options_not_explicit')
+for _q in ('D-C', 'D-D', 'D-E'):
+    excl('docs/job2-read-2026-07-31.md', _q, 'no_trader_ruling', 'ruled by the orchestrator seat on an implementer packet, not by the trader')
+excl('docs/candle-store-derivation-batch-spec-back.md', 'S2', 'no_trader_ruling', 'decisions queued to the orchestrator; ruled in job2-read by the orchestrator')
+excl('docs/pre-aug1-batch-spec-back.md', 'S2+S6', 'no_trader_ruling', 'queued decisions ruled by the reviewing Fable seat, not the trader')
+excl('docs/trade-store-arc-spec-back-2026-07-31.md', 'S2', 'no_trader_ruling', 'decisions queued to the reviewing seat; no trader ruling recorded')
+leak('docs/asia-burst-threshold-derivation-2026-08-01.md', 'D3-1', 'question', 'date>2026-07-31',
+     "the doc's own title date, written in the GMT+8 local date of the same commit that carries the recommendation (committed 2026-07-31T17:09Z); not a ruling date")
+
+# ---- docs/trade-store-trade-identity-proposal.md (Question | Recommendation), pre-tick 9fa6450
+_d = 'docs/trade-store-trade-identity-proposal.md'
+add(_d, 'D1', '9fa6450', C(151, 2), [('(1)', E(151, '`trade_id`')), ('(2)', E(151, '`trade_seq`')), ('(3)', E(151, 'both?'))], '(3)', C(151, 3))
+add(_d, 'D5', '9fa6450', C(155, 2), [('(1)', E(155, 'Append at end')), ('(2)', E(155, 'version the file'))], '(1)', C(155, 3))
+add(_d, 'D6', '9fa6450', C(156, 2), [('(1)', E(156, 'replace S0')), ('(2)', E(156, 'supplement it'))], '(2)', C(156, 3))
+for _q in ('D2', 'D3', 'D4'):
+    excl(_d, _q, 'options_not_explicit')
+excl(_d, 'D7', 'no_explicit_recommendation', "the read says the choice is the trader's")
+
+# ---- docs/trade-store-write-guard-identity-proposal.md (Decision | Options | My read), pre-tick b7ae9a5
+_d = 'docs/trade-store-write-guard-identity-proposal.md'
+for _q, _ln in (('D-1', 172), ('D-3', 174), ('D-4', 175), ('D-5', 176)):
+    add(_d, _q, 'b7ae9a5', C(_ln, 2), ('parse', C(_ln, 3)), '(a)', C(_ln, 4))
+add(_d, 'D-2', 'b7ae9a5', C(173, 2), [('(1)', CS(173, 3, 'ratify', 'ratify')), ('(2)', CS(173, 3, 'overrule', 'overrule'))], '(1)', C(173, 4))
+add(_d, 'D-6', 'b7ae9a5', C(177, 2), [('(1)', CS(177, 3, 'bump', 'bump')), ('(2)', CS(177, 3, 'not', 'not'))], '(2)', C(177, 4))
+add(_d, 'D-7', 'b7ae9a5', C(178, 2), [('(1)', CS(178, 3, 'yes', 'yes')), ('(2)', CS(178, 3, 'no', 'no'))], '(1)', C(178, 4))
+leak(_d, 'D-2', 'option(2)', 'overrul', 'the option is literally named "overrule" in the pre-ruling Options column; it is an option, not a ruling')
+leak(_d, 'D-2', 'rationale', 'overrul', 'conditional "If overruled, the build must first verify..." written before the ruling')
+
+# ---- docs/trade-store-downtime-repair-proposal.md: D-table first committed already ticked (c6c6942);
+# and no row names an alternative as an option
+for _q in ('D-1', 'D-2', 'D-3', 'D-4', 'D-5', 'D-6'):
+    excl('docs/trade-store-downtime-repair-proposal.md', _q, 'options_not_explicit', 'also first committed already ticked (c6c6942)')
+excl('docs/trade-store-downtime-repair-spec-back.md', 'Q1-Q5', 'no_trader_ruling', 'ruled by the reviewing orchestrator seat, not the trader')
+
+unrec('docs/downtime-repair-followups-implementer-briefs.md', 'S1.2', 'width-floor removal; the brief was first committed (91942d6) together with the build that followed the ruling')
+for _q in ('D-1', 'D-2'):
+    excl('docs/coverage-split-hour-implementer-brief.md', _q, 'no_trader_ruling', 'reads taken by the implementer as written; no trader ruling')
+excl('docs/coverage-split-hour-implementer-brief.md', 'D-3', 'no_explicit_recommendation', 'the implementer built one order; no recommendation among options preceded the ruling')
+
+# ---- docs/absorption-mechanism-revision-proposal.md section 6
+for _q in ('D-1', 'D-2', 'D-3', 'D-4', 'D-5'):
+    excl('docs/absorption-mechanism-revision-proposal.md', _q, 'options_not_explicit')
+excl('docs/absorption-mechanism-revision-proposal.md', 'D-6', 'no_explicit_recommendation', 'carried no recommendation; split into D-6a..D-6d, entered under absorption-d6-spec-back.md and d6d-episode-continuity-spec.md')
+
+# ---- docs/absorption-d6-spec-back.md section 2 (option tables + "My read"), pre-ruling 98af629
+_d = 'docs/absorption-d6-spec-back.md'
+add(_d, 'D-6a', '98af629', ('line', 151), [('(a)', C(155, 2)), ('(b)', C(156, 2)), ('(c)', C(157, 2))], '(a)', ('line', 159))
+add(_d, 'D-6b', '98af629', ('line', 161), [('(a)', C(165, 2)), ('(b)', C(166, 2))], '(a)', ('line', 168))
+add(_d, 'D-6c', '98af629', ('line', 170), [('(a)', C(174, 2)), ('(b)', C(175, 2))], '(a)', ('line', 177),
+    status='unruled', reason='open_never_ruled', note='left OPEN until the section 5 instrumentation ships')
+leak(_d, 'D-6a', 'rationale', 'trader', 'a link to docs/trader-profile.md (a file name)')
+
+# ---- docs/d6d-episode-continuity-spec.md section 7
+_d = 'docs/d6d-episode-continuity-spec.md'
+add(_d, 'D-6d.1', 'b2ebae8', C(248, 2), [('(a)', E(248, 'Sidecar `absorption_episodes.log`')), ('(b)', E(248, 'five new `analysis_log.csv` columns'))], '(a)', C(248, 3))
+add(_d, 'D-6d.2', '4ce5a10', C(247, 2), [('(a)', E(247, 'Stage 1 ship alone and read for ~2 weekday-weeks')), ('(b)', E(247, 'both stages ship together'))], '(a)', C(247, 3))
+add(_d, 'D-6d.3', '4ce5a10', C(248, 2),
+    [('(a)', E(248, 'stay scheduled for ~2026-09-15')), ('(b)', E(248, 'move behind `D-6d`')), ('(c)', S(248, 'SHIP `D-2` AND `D-6d` STAGE 1 TOGETHER AT THE GATE', 'AFTER THE READ'))],
+    '(c)', C(248, 3), note='the recommendation was revised from (b) to (c) before the ruling; the state is the last pre-ruling revision')
+add(_d, 'D-6d.4', 'b5000c9', C(251, 2), [('(a)', E(251, 'measurement only')), ('(b)', E(251, 'eventually the numerator'))], '(a)', C(251, 3),
+    status='unruled', reason='open_never_ruled', note='section 7 still reads owed by the trader at REV')
+_FUT = 'a PLANNED future date (a scheduled gate) written before the ruling, not the date of any ruling'
+leak('docs/d6d-episode-continuity-spec.md', 'D-6d.3', 'question', 'date>2026-09-11', _FUT)
+leak('docs/d6d-episode-continuity-spec.md', 'D-6d.3', 'option(a)', 'date>2026-09-11', _FUT)
+
+# ---- docs/thin-trade-window-skip-gate-proposal.md (single commit; ruling in the spec-back)
+_d = 'docs/thin-trade-window-skip-gate-proposal.md'
+add(_d, 'D-1', '821b689', C(163, 2), [('(1)', S(163, '**SKIP the run**', 'SKIPPED bridge payload)')), ('(2)', E(163, 'proceed with trade-derived signals forced neutral'))], '(1)', C(163, 3))
+for _q in ('D-2', 'D-3', 'D-4', 'D-5'):
+    excl(_d, _q, 'options_not_explicit')
+
+# ---- docs/collector-ops-tooling-proposal.md (Decision | Recommendation), pre-tick cf13daf
+_d = 'docs/collector-ops-tooling-proposal.md'
+add(_d, 'D-7', 'cf13daf', C(152, 2), [('(1)', E(152, 'the t2.micro test box too')), ('(2)', E(152, 'production only'))], '(1)', C(152, 3))
+add(_d, 'D-9', 'cf13daf', C(154, 2), [('(1)', E(154, 'run on a schedule (e.g. daily)')), ('(2)', E(154, 'on demand'))], '(2)', C(154, 3))
+for _q in ('D-1', 'D-2', 'D-5'):
+    excl(_d, _q, 'options_not_explicit')
+for _q in ('D-3', 'D-4', 'D-6'):
+    excl(_d, _q, 'options_not_explicit', 'also first committed already trader-chosen')
+excl(_d, 'D-8', 'no_explicit_recommendation', 'trader input required; no recommendation')
+
+for _q in ('D-1', 'D-2', 'D-3', 'D-4'):
+    excl('docs/deploy-acceptance-gate-cadence-spec.md', _q, 'no_trader_ruling', 'handed to the trader, then built as recommended; no trader ruling is recorded')
+excl('docs/seat-handover-2026-08-23.md', 'S7.4', 'no_explicit_recommendation', 'asks for a ruling; names no options')
+
+# ---- docs/autotweaker-weekday-filter-proposal.md: first committed already ruled (81c54a8)
+for _q in ('D-1', 'D-2', 'D-3', 'D-4'):
+    unrec('docs/autotweaker-weekday-filter-proposal.md', _q, 'the D-table was first committed with its RULED column filled (81c54a8)')
+excl('docs/autotweaker-weekday-filter-proposal.md', 'D-5', 'options_not_explicit')

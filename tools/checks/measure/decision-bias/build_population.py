@@ -30,7 +30,8 @@ OUT_DIR = os.path.join(L.REPO, 'docs', 'harness-runs')
 LEAK_PATTERNS = [
     ('RULED', re.compile(r'RULED')),
     ('ruled', re.compile(r'\bruled\b')),
-    ('ticked', re.compile(r'(?i)\bticked\b|\bTICK(?:ED)?\b')),
+    ('ticked', re.compile(r'(?i)\bticked\b')),
+    ('TICK', re.compile(r'\bTICK\b')),   # upper-case only: lower-case "tick" is a price unit in this repo
     ('trader', re.compile(r'(?i)trader')),
     ('overrul', re.compile(r'(?i)overrul')),
     ('DEFEAT', re.compile(r'(?i)defeat')),

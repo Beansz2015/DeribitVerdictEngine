@@ -69,6 +69,7 @@ def resolve(span, rev, path):
       ('line', line)                            whole line, stripped
       ('lines', a, b)                           lines a..b inclusive, joined with newlines
       ('at', rev2, path2, <span>)               the inner span, read at another revision/path
+      ('commitmsg', sha, start, end)            a substring of a commit MESSAGE (newlines -> spaces)
     start: the substring begins at the first occurrence of `start` (None = line/cell start).
     end:   the substring ends after the first occurrence of `end` at or after `start`
            (None = to the end of the line/cell).
@@ -76,6 +77,11 @@ def resolve(span, rev, path):
     kind = span[0]
     if kind == 'at':
         return resolve(span[3], span[1], span[2])
+    if kind == 'commitmsg':
+        # ('commitmsg', sha, start, end): a ruling recorded only in a commit message.
+        msg = git('show', '-s', '--format=%B', full_sha(span[1]))
+        loc = 'commit-message:%s' % full_sha(span[1])[:7]
+        return _substr(' '.join(msg.split()), span[2], span[3], loc), loc
     L = file_lines(rev, path)
     if kind in ('cell', 'cellsub', 'sub', 'line'):
         n = span[1]
