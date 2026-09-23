@@ -1,0 +1,3473 @@
+{
+    "rev":  "b5000c99cd30a6b0899ba3ebde0cc4420b9fa12b",
+    "population":  "docs/harness-runs/decision-bias-20260923T140527Z-population.json",
+    "baseline":  "docs/harness-runs/decision-bias-20260923T140527Z-baseline.json",
+    "samples":  5,
+    "model":  "jev-latest",
+    "question":  {
+                     "id":  "verdict",
+                     "type":  "choice",
+                     "instructions":  "The state holds one design decision: its options, the option the author recommended, and the author\u0027s stated reasons. Classify why the author did not pick the other options.",
+                     "criteria":  {
+                                      "gives_up_for_economy":  "Another option records more information, guarantees more, or is more self-describing than the recommended option, and the author\u0027s reason for not picking it is that it costs more work or code, or that the recommended option is adequate or good enough, or that the cost can be deferred until later.",
+                                      "richer_option_wrong":  "Another option records more information or guarantees more, and the author\u0027s reason for not picking it is that it would be incorrect, meaningless or uninterpretable, or is forbidden by an earlier ruling.",
+                                      "no_richer_option":  "No other option records more information, guarantees more, or is more self-describing than the recommended option.",
+                                      "ambiguous":  "The stated reasons do not make clear which of the other three applies."
+                                  }
+                 },
+    "calls":  750,
+    "usage_input_tokens":  571103,
+    "wall_time_sec":  257.95,
+    "items":  [
+                  {
+                      "id":  "docs/bid-ask-spread-proposal.md|Q2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.472,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.43,
+                                                       0.48,
+                                                       0.49,
+                                                       0.53,
+                                                       0.43
+                                                   ],
+                      "usage_input_tokens":  3235,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/ofi-momentum-proposal.md|Q2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.892,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.88,
+                                                       0.89,
+                                                       0.89,
+                                                       0.9,
+                                                       0.9
+                                                   ],
+                      "usage_input_tokens":  3817,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/swing-pivot-proposal.md|Q1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.994,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       1,
+                                                       0.99,
+                                                       1,
+                                                       0.99,
+                                                       0.99
+                                                   ],
+                      "usage_input_tokens":  3457,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/swing-pivot-proposal.md|Q2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.486,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.56,
+                                                       0.45,
+                                                       0.46,
+                                                       0.48,
+                                                       0.48
+                                                   ],
+                      "usage_input_tokens":  3447,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/vpfr-lite-v2-proposal.md|Q1@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.574,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.51,
+                                                       0.58,
+                                                       0.56,
+                                                       0.62,
+                                                       0.6
+                                                   ],
+                      "usage_input_tokens":  3218,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/vpfr-lite-v2-proposal.md|Q2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.402,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.39,
+                                                       0.47,
+                                                       0.38,
+                                                       0.38,
+                                                       0.39
+                                                   ],
+                      "usage_input_tokens":  3226,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/vpfr-lite-v2-proposal.md|Q6@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.746,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.76,
+                                                       0.75,
+                                                       0.74,
+                                                       0.72,
+                                                       0.76
+                                                   ],
+                      "usage_input_tokens":  3307,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/dynamic-microcvd-accel-proposal.md|Q1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.904,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.92,
+                                                       0.91,
+                                                       0.9,
+                                                       0.9,
+                                                       0.89
+                                                   ],
+                      "usage_input_tokens":  3463,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/dynamic-microcvd-accel-proposal.md|Q2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.574,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.51,
+                                                       0.57,
+                                                       0.57,
+                                                       0.61,
+                                                       0.61
+                                                   ],
+                      "usage_input_tokens":  3485,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/dynamic-microcvd-accel-proposal.md|Q3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.588,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.55,
+                                                       0.61,
+                                                       0.59,
+                                                       0.6,
+                                                       0.59
+                                                   ],
+                      "usage_input_tokens":  3543,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/settings-exposure-pass-proposal.md|Q2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.83,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.83,
+                                                       0.83,
+                                                       0.83,
+                                                       0.85,
+                                                       0.81
+                                                   ],
+                      "usage_input_tokens":  3360,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/analysis-log-csv-expansion-proposal.md|Q1@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  0.8,
+                      "stable":  false,
+                      "mean_top_probability":  0.51,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.49,
+                                                       0.54,
+                                                       0.52,
+                                                       0.52,
+                                                       0.48
+                                                   ],
+                      "usage_input_tokens":  3476,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/analysis-log-csv-expansion-proposal.md|Q2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.698,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.65,
+                                                       0.69,
+                                                       0.74,
+                                                       0.74,
+                                                       0.67
+                                                   ],
+                      "usage_input_tokens":  3471,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/analysis-log-csv-expansion-proposal.md|Q3@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.546,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.54,
+                                                       0.54,
+                                                       0.52,
+                                                       0.58,
+                                                       0.55
+                                                   ],
+                      "usage_input_tokens":  3350,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/analysis-log-csv-expansion-proposal.md|Q6@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.73,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.75,
+                                                       0.74,
+                                                       0.66,
+                                                       0.72,
+                                                       0.78
+                                                   ],
+                      "usage_input_tokens":  3549,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/v17-followup-fixes-proposal.md|Q6@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.644,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.6,
+                                                       0.66,
+                                                       0.64,
+                                                       0.68,
+                                                       0.64
+                                                   ],
+                      "usage_input_tokens":  3407,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/v19-calibration-tuning-pass-proposal.md|Q3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.972,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.97,
+                                                       0.97,
+                                                       0.97,
+                                                       0.98
+                                                   ],
+                      "usage_input_tokens":  3389,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q9@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.94,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.93,
+                                                       0.94,
+                                                       0.96,
+                                                       0.94,
+                                                       0.93
+                                                   ],
+                      "usage_input_tokens":  3473,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/api-resilience-pass-proposal.md|Q1@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  1,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       1
+                                                   ],
+                      "usage_input_tokens":  3365,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/api-resilience-pass-proposal.md|Q2@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.84,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.81,
+                                                       0.87,
+                                                       0.83,
+                                                       0.84,
+                                                       0.85
+                                                   ],
+                      "usage_input_tokens":  3333,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/on-close-analysis-mode-proposal.md|S9.1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.944,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.96,
+                                                       0.93,
+                                                       0.95,
+                                                       0.94,
+                                                       0.94
+                                                   ],
+                      "usage_input_tokens":  3594,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/realtime-exit-guard-proposal.md|S9.1@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.446,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.48,
+                                                       0.4,
+                                                       0.46,
+                                                       0.43,
+                                                       0.46
+                                                   ],
+                      "usage_input_tokens":  3315,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/realtime-exit-guard-proposal.md|S9.3@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.638,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.69,
+                                                       0.6,
+                                                       0.63,
+                                                       0.65,
+                                                       0.62
+                                                   ],
+                      "usage_input_tokens":  3365,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/realtime-exit-guard-proposal.md|S9.5@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.4,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.42,
+                                                       0.4,
+                                                       0.4,
+                                                       0.38,
+                                                       0.4
+                                                   ],
+                      "usage_input_tokens":  3303,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/realtime-exit-guard-proposal.md|S9.6@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.504,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.51,
+                                                       0.49,
+                                                       0.5,
+                                                       0.51,
+                                                       0.51
+                                                   ],
+                      "usage_input_tokens":  3421,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/live-microstructure-strip-proposal.md|S9.2@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.682,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.67,
+                                                       0.67,
+                                                       0.64,
+                                                       0.69,
+                                                       0.74
+                                                   ],
+                      "usage_input_tokens":  3426,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/live-microstructure-strip-proposal.md|S9.4@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.924,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.92,
+                                                       0.93,
+                                                       0.91,
+                                                       0.93,
+                                                       0.93
+                                                   ],
+                      "usage_input_tokens":  3333,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/live-microstructure-strip-proposal.md|S9.5@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.704,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.68,
+                                                       0.7,
+                                                       0.7,
+                                                       0.72,
+                                                       0.72
+                                                   ],
+                      "usage_input_tokens":  3357,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/auto-tweaker-session-resolution-filter-proposal.md|S5.2@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  1,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       1
+                                                   ],
+                      "usage_input_tokens":  3535,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/offline-analysis-report-audit-proposal.md|D1@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  0.6,
+                      "stable":  false,
+                      "mean_top_probability":  0.492,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.52,
+                                                       0.5,
+                                                       0.51,
+                                                       0.47,
+                                                       0.46
+                                                   ],
+                      "usage_input_tokens":  3820,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/offline-analysis-report-audit-proposal.md|D3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.776,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.73,
+                                                       0.83,
+                                                       0.76,
+                                                       0.74,
+                                                       0.82
+                                                   ],
+                      "usage_input_tokens":  3628,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/time-averaged-ofi-proposal.md|S10.1@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  0.6,
+                      "stable":  false,
+                      "mean_top_probability":  0.508,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.51,
+                                                       0.47,
+                                                       0.49,
+                                                       0.55,
+                                                       0.52
+                                                   ],
+                      "usage_input_tokens":  3439,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/time-averaged-ofi-proposal.md|S10.2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.632,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.62,
+                                                       0.64,
+                                                       0.63,
+                                                       0.65,
+                                                       0.62
+                                                   ],
+                      "usage_input_tokens":  3564,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/time-averaged-ofi-proposal.md|S10.3@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.822,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.82,
+                                                       0.78,
+                                                       0.84,
+                                                       0.83,
+                                                       0.84
+                                                   ],
+                      "usage_input_tokens":  3409,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/time-averaged-ofi-proposal.md|S10.4@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.404,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.37,
+                                                       0.39,
+                                                       0.47,
+                                                       0.45,
+                                                       0.34
+                                                   ],
+                      "usage_input_tokens":  3585,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/time-averaged-ofi-proposal.md|S10.5@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  0.8,
+                      "stable":  false,
+                      "mean_top_probability":  0.506,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.54,
+                                                       0.5,
+                                                       0.5,
+                                                       0.5,
+                                                       0.49
+                                                   ],
+                      "usage_input_tokens":  3571,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/dev-workflow-automation-proposal.md|B@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.516,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.5,
+                                                       0.54,
+                                                       0.52,
+                                                       0.5,
+                                                       0.52
+                                                   ],
+                      "usage_input_tokens":  3440,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/dev-workflow-automation-proposal.md|C@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.674,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.69,
+                                                       0.7,
+                                                       0.63,
+                                                       0.66,
+                                                       0.69
+                                                   ],
+                      "usage_input_tokens":  3360,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/dev-workflow-automation-proposal.md|D@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.584,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.58,
+                                                       0.64,
+                                                       0.58,
+                                                       0.54,
+                                                       0.58
+                                                   ],
+                      "usage_input_tokens":  3374,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/dev-workflow-automation-proposal.md|E@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.976,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.97,
+                                                       0.98,
+                                                       0.98,
+                                                       0.98
+                                                   ],
+                      "usage_input_tokens":  3441,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/dev-workflow-automation-proposal.md|F@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.824,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.83,
+                                                       0.85,
+                                                       0.8,
+                                                       0.81,
+                                                       0.83
+                                                   ],
+                      "usage_input_tokens":  3358,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/audit-fixes-2026-07-02-proposal.md|D1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.608,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.66,
+                                                       0.54,
+                                                       0.62,
+                                                       0.61,
+                                                       0.61
+                                                   ],
+                      "usage_input_tokens":  3309,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/audit-fixes-2026-07-02-proposal.md|D2@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.348,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.35,
+                                                       0.32,
+                                                       0.37,
+                                                       0.38,
+                                                       0.32
+                                                   ],
+                      "usage_input_tokens":  3626,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/audit-fixes-2026-07-02-proposal.md|D3@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.44,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.48,
+                                                       0.4,
+                                                       0.44,
+                                                       0.42,
+                                                       0.46
+                                                   ],
+                      "usage_input_tokens":  3297,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/signal-health-retune-proposal.md|D2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.516,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.53,
+                                                       0.49,
+                                                       0.47,
+                                                       0.51,
+                                                       0.58
+                                                   ],
+                      "usage_input_tokens":  5216,
+                      "seat_label":  "unsure"
+                  },
+                  {
+                      "id":  "docs/placed-geometry-structural-first-proposal.md|D3@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.384,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.4,
+                                                       0.34,
+                                                       0.41,
+                                                       0.39,
+                                                       0.38
+                                                   ],
+                      "usage_input_tokens":  3571,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/placed-geometry-derivation-2026-07-06.md|DG2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.39,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.4,
+                                                       0.38,
+                                                       0.4,
+                                                       0.37,
+                                                       0.4
+                                                   ],
+                      "usage_input_tokens":  4830,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/placed-geometry-derivation-2026-07-06.md|DG3@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.512,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.52,
+                                                       0.54,
+                                                       0.47,
+                                                       0.5,
+                                                       0.53
+                                                   ],
+                      "usage_input_tokens":  3413,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/funding-momentum-time-anchored-window-proposal.md|D4@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  0.8,
+                      "stable":  false,
+                      "mean_top_probability":  0.45,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "gives_up_for_economy",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.44,
+                                                       0.47,
+                                                       0.43,
+                                                       0.46,
+                                                       0.45
+                                                   ],
+                      "usage_input_tokens":  3456,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/d6-eval-placed-stop-migration-proposal.md|D1@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.992,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.99,
+                                                       1,
+                                                       0.99,
+                                                       0.99,
+                                                       0.99
+                                                   ],
+                      "usage_input_tokens":  3639,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S1@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.646,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.66,
+                                                       0.64,
+                                                       0.66,
+                                                       0.68,
+                                                       0.59
+                                                   ],
+                      "usage_input_tokens":  4375,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.786,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.78,
+                                                       0.8,
+                                                       0.81,
+                                                       0.76,
+                                                       0.78
+                                                   ],
+                      "usage_input_tokens":  4057,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/session-policy-gate-proposal.md|P1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.804,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.77,
+                                                       0.8,
+                                                       0.79,
+                                                       0.86,
+                                                       0.8
+                                                   ],
+                      "usage_input_tokens":  3317,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/eval-no-data-outcome-proposal.md|N4@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.44,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.43,
+                                                       0.42,
+                                                       0.45,
+                                                       0.44,
+                                                       0.46
+                                                   ],
+                      "usage_input_tokens":  3797,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/geometry-arbitration-modes-proposal.md|G2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.698,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.7,
+                                                       0.7,
+                                                       0.67,
+                                                       0.69,
+                                                       0.73
+                                                   ],
+                      "usage_input_tokens":  3417,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/liq-cascade-level-alerts-proposal.md|H1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.744,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.71,
+                                                       0.81,
+                                                       0.7,
+                                                       0.76,
+                                                       0.74
+                                                   ],
+                      "usage_input_tokens":  3372,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/absorption-geometry-rescale-proposal.md|V2@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  0.8,
+                      "stable":  false,
+                      "mean_top_probability":  0.48,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "richer_option_wrong",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.45,
+                                                       0.46,
+                                                       0.55,
+                                                       0.46,
+                                                       0.48
+                                                   ],
+                      "usage_input_tokens":  3274,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/aggr-vel-s52-london-derivation-2026-07-23.md|S1@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.636,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.64,
+                                                       0.68,
+                                                       0.59,
+                                                       0.67,
+                                                       0.6
+                                                   ],
+                      "usage_input_tokens":  3502,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/in-app-trade-store-capture-proposal.md|D1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.592,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.55,
+                                                       0.62,
+                                                       0.61,
+                                                       0.6,
+                                                       0.58
+                                                   ],
+                      "usage_input_tokens":  3459,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/settings-local-overlay-proposal.md|D1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.906,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.9,
+                                                       0.9,
+                                                       0.92,
+                                                       0.92
+                                                   ],
+                      "usage_input_tokens":  4009,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/settings-local-overlay-proposal.md|D2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.636,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.68,
+                                                       0.61,
+                                                       0.61,
+                                                       0.64,
+                                                       0.64
+                                                   ],
+                      "usage_input_tokens":  3511,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/settings-local-overlay-proposal.md|D3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.724,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.72,
+                                                       0.74,
+                                                       0.74,
+                                                       0.69,
+                                                       0.73
+                                                   ],
+                      "usage_input_tokens":  3394,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/settings-local-overlay-proposal.md|D4@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.508,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.53,
+                                                       0.5,
+                                                       0.49,
+                                                       0.54,
+                                                       0.48
+                                                   ],
+                      "usage_input_tokens":  3383,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/settings-local-overlay-proposal.md|D5@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  1,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       1
+                                                   ],
+                      "usage_input_tokens":  3437,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/settings-local-overlay-proposal.md|D6@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.922,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.92,
+                                                       0.93,
+                                                       0.93,
+                                                       0.9,
+                                                       0.93
+                                                   ],
+                      "usage_input_tokens":  3341,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-coverage-report-proposal.md|D1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.712,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.72,
+                                                       0.72,
+                                                       0.7,
+                                                       0.69,
+                                                       0.73
+                                                   ],
+                      "usage_input_tokens":  3413,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-coverage-report-proposal.md|D2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.862,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.86,
+                                                       0.88,
+                                                       0.86,
+                                                       0.86,
+                                                       0.85
+                                                   ],
+                      "usage_input_tokens":  3808,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-coverage-report-proposal.md|D3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.544,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.55,
+                                                       0.52,
+                                                       0.51,
+                                                       0.57,
+                                                       0.57
+                                                   ],
+                      "usage_input_tokens":  3391,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-coverage-report-proposal.md|D7@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.948,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.95,
+                                                       0.95,
+                                                       0.95,
+                                                       0.94,
+                                                       0.95
+                                                   ],
+                      "usage_input_tokens":  4535,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-coverage-report-proposal.md|D6@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.752,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.73,
+                                                       0.76,
+                                                       0.77,
+                                                       0.75,
+                                                       0.75
+                                                   ],
+                      "usage_input_tokens":  3339,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/trade-store-coverage-report-proposal.md|D4@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.652,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.67,
+                                                       0.62,
+                                                       0.67,
+                                                       0.63,
+                                                       0.67
+                                                   ],
+                      "usage_input_tokens":  3621,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/asia-burst-threshold-derivation-2026-08-01.md|D3-1@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.622,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.67,
+                                                       0.62,
+                                                       0.61,
+                                                       0.62,
+                                                       0.59
+                                                   ],
+                      "usage_input_tokens":  5354,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/ttm-flat-threshold-rederivation-2026-08-02.md|D1-a@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.932,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.94,
+                                                       0.94,
+                                                       0.94,
+                                                       0.91,
+                                                       0.93
+                                                   ],
+                      "usage_input_tokens":  3575,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/ttm-flat-threshold-rederivation-2026-08-02.md|D1-d@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.768,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.71,
+                                                       0.76,
+                                                       0.78,
+                                                       0.82,
+                                                       0.77
+                                                   ],
+                      "usage_input_tokens":  3487,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/trade-store-trade-identity-proposal.md|D1@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.756,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.75,
+                                                       0.79,
+                                                       0.68,
+                                                       0.78,
+                                                       0.78
+                                                   ],
+                      "usage_input_tokens":  3556,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-trade-identity-proposal.md|D5@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.664,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.63,
+                                                       0.74,
+                                                       0.67,
+                                                       0.7,
+                                                       0.58
+                                                   ],
+                      "usage_input_tokens":  3341,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/trade-store-trade-identity-proposal.md|D6@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.682,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.7,
+                                                       0.68,
+                                                       0.59,
+                                                       0.7,
+                                                       0.74
+                                                   ],
+                      "usage_input_tokens":  3573,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-write-guard-identity-proposal.md|D-1@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.394,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.43,
+                                                       0.41,
+                                                       0.38,
+                                                       0.36,
+                                                       0.39
+                                                   ],
+                      "usage_input_tokens":  3503,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/trade-store-write-guard-identity-proposal.md|D-3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.646,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.7,
+                                                       0.62,
+                                                       0.63,
+                                                       0.63,
+                                                       0.65
+                                                   ],
+                      "usage_input_tokens":  3661,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/trade-store-write-guard-identity-proposal.md|D-4@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.578,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.52,
+                                                       0.73,
+                                                       0.56,
+                                                       0.56,
+                                                       0.52
+                                                   ],
+                      "usage_input_tokens":  3417,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-write-guard-identity-proposal.md|D-5@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  1,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       1
+                                                   ],
+                      "usage_input_tokens":  3547,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/trade-store-write-guard-identity-proposal.md|D-2@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.768,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.78,
+                                                       0.76,
+                                                       0.8,
+                                                       0.71,
+                                                       0.79
+                                                   ],
+                      "usage_input_tokens":  3476,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/trade-store-write-guard-identity-proposal.md|D-6@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.506,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.53,
+                                                       0.49,
+                                                       0.53,
+                                                       0.54,
+                                                       0.44
+                                                   ],
+                      "usage_input_tokens":  3392,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-write-guard-identity-proposal.md|D-7@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  0.6,
+                      "stable":  false,
+                      "mean_top_probability":  0.464,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.44,
+                                                       0.52,
+                                                       0.52,
+                                                       0.42,
+                                                       0.42
+                                                   ],
+                      "usage_input_tokens":  4139,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/absorption-d6-spec-back.md|D-6a@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.906,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.92,
+                                                       0.87,
+                                                       0.93,
+                                                       0.93,
+                                                       0.88
+                                                   ],
+                      "usage_input_tokens":  4265,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/absorption-d6-spec-back.md|D-6b@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.77,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.74,
+                                                       0.81,
+                                                       0.74,
+                                                       0.77,
+                                                       0.79
+                                                   ],
+                      "usage_input_tokens":  3766,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/d6d-episode-continuity-spec.md|D-6d.1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.834,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.82,
+                                                       0.83,
+                                                       0.85,
+                                                       0.85,
+                                                       0.82
+                                                   ],
+                      "usage_input_tokens":  4070,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/d6d-episode-continuity-spec.md|D-6d.2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.95,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.94,
+                                                       0.95,
+                                                       0.96,
+                                                       0.94,
+                                                       0.96
+                                                   ],
+                      "usage_input_tokens":  3730,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/d6d-episode-continuity-spec.md|D-6d.3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.85,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.84,
+                                                       0.88,
+                                                       0.82,
+                                                       0.83,
+                                                       0.88
+                                                   ],
+                      "usage_input_tokens":  5405,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/thin-trade-window-skip-gate-proposal.md|D-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.972,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.97,
+                                                       0.98,
+                                                       0.97,
+                                                       0.97
+                                                   ],
+                      "usage_input_tokens":  3569,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/collector-ops-tooling-proposal.md|D-7@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.902,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.86,
+                                                       0.92,
+                                                       0.91,
+                                                       0.91,
+                                                       0.91
+                                                   ],
+                      "usage_input_tokens":  3432,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/collector-ops-tooling-proposal.md|D-9@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.59,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.59,
+                                                       0.56,
+                                                       0.6,
+                                                       0.62,
+                                                       0.58
+                                                   ],
+                      "usage_input_tokens":  3455,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.892,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.92,
+                                                       0.89,
+                                                       0.87,
+                                                       0.87,
+                                                       0.91
+                                                   ],
+                      "usage_input_tokens":  3576,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.99,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.99,
+                                                       0.99,
+                                                       0.99,
+                                                       0.99,
+                                                       0.99
+                                                   ],
+                      "usage_input_tokens":  3643,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.968,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.96,
+                                                       0.97,
+                                                       0.97,
+                                                       0.97
+                                                   ],
+                      "usage_input_tokens":  3598,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-5@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.48,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.44,
+                                                       0.55,
+                                                       0.47,
+                                                       0.49,
+                                                       0.45
+                                                   ],
+                      "usage_input_tokens":  3945,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-6@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.892,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.9,
+                                                       0.86,
+                                                       0.92,
+                                                       0.89
+                                                   ],
+                      "usage_input_tokens":  3566,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-4@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.956,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.95,
+                                                       0.94,
+                                                       0.96,
+                                                       0.96
+                                                   ],
+                      "usage_input_tokens":  3674,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-5.1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.998,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       1,
+                                                       1,
+                                                       1,
+                                                       0.99,
+                                                       1
+                                                   ],
+                      "usage_input_tokens":  3939,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-5.2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.622,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.66,
+                                                       0.67,
+                                                       0.59,
+                                                       0.6,
+                                                       0.59
+                                                   ],
+                      "usage_input_tokens":  3614,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-5.3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.862,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.87,
+                                                       0.9,
+                                                       0.86,
+                                                       0.83,
+                                                       0.85
+                                                   ],
+                      "usage_input_tokens":  3646,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-5.4@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.938,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.95,
+                                                       0.95,
+                                                       0.94,
+                                                       0.91,
+                                                       0.94
+                                                   ],
+                      "usage_input_tokens":  3407,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-5.5@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.976,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.98,
+                                                       0.97,
+                                                       0.98,
+                                                       0.98
+                                                   ],
+                      "usage_input_tokens":  3621,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-6r@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.982,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.98,
+                                                       0.98,
+                                                       0.99,
+                                                       0.99
+                                                   ],
+                      "usage_input_tokens":  6427,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-trailing-edge-f1-proposal.md|D-3r@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.588,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.56,
+                                                       0.57,
+                                                       0.59,
+                                                       0.59,
+                                                       0.63
+                                                   ],
+                      "usage_input_tokens":  5199,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trader-tick-queue-archive.md|A54a-scope@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.594,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.62,
+                                                       0.61,
+                                                       0.57,
+                                                       0.57,
+                                                       0.6
+                                                   ],
+                      "usage_input_tokens":  5299,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/trader-tick-queue-archive.md|seeded-session-buckets@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.966,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.97,
+                                                       0.97,
+                                                       0.96,
+                                                       0.97,
+                                                       0.96
+                                                   ],
+                      "usage_input_tokens":  4577,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/a54a-json-poco-drift-guard-spec.md|D-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.952,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.94,
+                                                       0.95,
+                                                       0.96,
+                                                       0.97,
+                                                       0.94
+                                                   ],
+                      "usage_input_tokens":  4184,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/a54a-json-poco-drift-guard-spec.md|D-4@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.906,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.93,
+                                                       0.91,
+                                                       0.88,
+                                                       0.9,
+                                                       0.91
+                                                   ],
+                      "usage_input_tokens":  3482,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/a54a-json-poco-drift-guard-spec.md|D-5@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.866,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.84,
+                                                       0.88,
+                                                       0.86,
+                                                       0.86
+                                                   ],
+                      "usage_input_tokens":  3472,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/a54a-r2-r3-followup-spec.md|D-R3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.642,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.68,
+                                                       0.62,
+                                                       0.58,
+                                                       0.63,
+                                                       0.7
+                                                   ],
+                      "usage_input_tokens":  4596,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/a54a-session2-step1-measurement-2026-09-05.md|S2-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.79,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.78,
+                                                       0.81,
+                                                       0.78,
+                                                       0.78,
+                                                       0.8
+                                                   ],
+                      "usage_input_tokens":  4184,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/s2-2-calcspread-split-proposal.md|D-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.736,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.71,
+                                                       0.74,
+                                                       0.73,
+                                                       0.79,
+                                                       0.71
+                                                   ],
+                      "usage_input_tokens":  4870,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/s2-2-calcspread-split-proposal.md|D-2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.564,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.54,
+                                                       0.55,
+                                                       0.55,
+                                                       0.6,
+                                                       0.58
+                                                   ],
+                      "usage_input_tokens":  3730,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/s2-2-calcspread-split-proposal.md|D-3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.89,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.88,
+                                                       0.89,
+                                                       0.89,
+                                                       0.9
+                                                   ],
+                      "usage_input_tokens":  4368,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/s2-2-calcspread-split-proposal.md|D-4@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.64,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.6,
+                                                       0.65,
+                                                       0.65,
+                                                       0.64,
+                                                       0.66
+                                                   ],
+                      "usage_input_tokens":  3614,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/s2-2-calcspread-split-proposal.md|D-5@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.864,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.88,
+                                                       0.87,
+                                                       0.86,
+                                                       0.84,
+                                                       0.87
+                                                   ],
+                      "usage_input_tokens":  3974,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trader-tick-queue-archive.md|pooled-minute-key-dedup@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.898,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.9,
+                                                       0.87,
+                                                       0.89,
+                                                       0.91,
+                                                       0.92
+                                                   ],
+                      "usage_input_tokens":  4828,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trader-tick-queue-archive.md|E5-absorption-path@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  0.8,
+                      "stable":  false,
+                      "mean_top_probability":  0.412,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "ambiguous",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.42,
+                                                       0.37,
+                                                       0.35,
+                                                       0.45,
+                                                       0.47
+                                                   ],
+                      "usage_input_tokens":  3792,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trader-tick-queue-archive.md|WD-SEMANTICS@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.862,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.86,
+                                                       0.86,
+                                                       0.87,
+                                                       0.86,
+                                                       0.86
+                                                   ],
+                      "usage_input_tokens":  4373,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/s4-eval-cache-identity-proposal.md|D-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.474,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.51,
+                                                       0.48,
+                                                       0.46,
+                                                       0.46,
+                                                       0.46
+                                                   ],
+                      "usage_input_tokens":  3645,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/s4-eval-cache-identity-proposal.md|D-2@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.59,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.57,
+                                                       0.64,
+                                                       0.59,
+                                                       0.55,
+                                                       0.6
+                                                   ],
+                      "usage_input_tokens":  4196,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/s4-eval-cache-identity-proposal.md|D-3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.996,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.99,
+                                                       1,
+                                                       0.99,
+                                                       1,
+                                                       1
+                                                   ],
+                      "usage_input_tokens":  3868,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md|S-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.616,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.6,
+                                                       0.62,
+                                                       0.6,
+                                                       0.62,
+                                                       0.64
+                                                   ],
+                      "usage_input_tokens":  6030,
+                      "seat_label":  "ambiguous"
+                  },
+                  {
+                      "id":  "docs/absorption-d2-stage1-rotation-build-spec.md|RD-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.892,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.91,
+                                                       0.88,
+                                                       0.88,
+                                                       0.89,
+                                                       0.9
+                                                   ],
+                      "usage_input_tokens":  4048,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/kelly-w6-4-spec-back.md|D-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.802,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.79,
+                                                       0.8,
+                                                       0.82,
+                                                       0.79,
+                                                       0.81
+                                                   ],
+                      "usage_input_tokens":  5105,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/kelly-w6-4-spec-back.md|D-3@b5000c9",
+                      "verdict":  "ambiguous",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.5,
+                      "sample_verdicts":  [
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous",
+                                              "ambiguous"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.5,
+                                                       0.51,
+                                                       0.54,
+                                                       0.49,
+                                                       0.46
+                                                   ],
+                      "usage_input_tokens":  4438,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/doc-status-sweep-and-queue-archive-spec.md|D-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.968,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.96,
+                                                       0.97,
+                                                       0.97,
+                                                       0.97,
+                                                       0.97
+                                                   ],
+                      "usage_input_tokens":  3865,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/coverage-report-cluster-spec.md|D-4@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.934,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.95,
+                                                       0.93,
+                                                       0.92,
+                                                       0.92,
+                                                       0.95
+                                                   ],
+                      "usage_input_tokens":  3962,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/coverage-report-cluster-spec.md|D-6@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.892,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.9,
+                                                       0.89,
+                                                       0.88,
+                                                       0.9
+                                                   ],
+                      "usage_input_tokens":  3697,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/venue-status-instrument-spec.md|D-1@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.97,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.98,
+                                                       0.96,
+                                                       0.96,
+                                                       0.97,
+                                                       0.98
+                                                   ],
+                      "usage_input_tokens":  4858,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/gap-repair-same-ms-page-skip-spec.md|GR-2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.89,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.9,
+                                                       0.88,
+                                                       0.89,
+                                                       0.89,
+                                                       0.89
+                                                   ],
+                      "usage_input_tokens":  3897,
+                      "seat_label":  "richer_option_wrong"
+                  },
+                  {
+                      "id":  "docs/gap-repair-same-ms-page-skip-spec.md|GR-4@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.902,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.9,
+                                                       0.94,
+                                                       0.9,
+                                                       0.88
+                                                   ],
+                      "usage_input_tokens":  3780,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/gap-repair-same-ms-page-skip-spec.md|GR-5@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.504,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.5,
+                                                       0.51,
+                                                       0.52,
+                                                       0.49,
+                                                       0.5
+                                                   ],
+                      "usage_input_tokens":  3753,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/gap-repair-same-ms-page-skip-spec.md|GR-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.772,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.77,
+                                                       0.81,
+                                                       0.7,
+                                                       0.77,
+                                                       0.81
+                                                   ],
+                      "usage_input_tokens":  4405,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/trade-store-duplicate-rows-read-2026-09-15.md|DUP-1@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.592,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.61,
+                                                       0.6,
+                                                       0.6,
+                                                       0.55,
+                                                       0.6
+                                                   ],
+                      "usage_input_tokens":  3799,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/trade-store-duplicate-rows-read-2026-09-15.md|DUP-2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.724,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.72,
+                                                       0.73,
+                                                       0.73,
+                                                       0.73,
+                                                       0.71
+                                                   ],
+                      "usage_input_tokens":  3671,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/venue-check-build-spec-back.md|R-2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.618,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.57,
+                                                       0.59,
+                                                       0.65,
+                                                       0.59,
+                                                       0.69
+                                                   ],
+                      "usage_input_tokens":  4049,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/venue-check-build-spec-back.md|R-3@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.496,
+                      "sample_verdicts":  [
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.47,
+                                                       0.5,
+                                                       0.48,
+                                                       0.57,
+                                                       0.46
+                                                   ],
+                      "usage_input_tokens":  3507,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/venue-check-schedule-plan.md|D-2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.912,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.9,
+                                                       0.91,
+                                                       0.92,
+                                                       0.91,
+                                                       0.92
+                                                   ],
+                      "usage_input_tokens":  4106,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/medium-tier-bug-hunt-spec-back.md|D-2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.946,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.94,
+                                                       0.95,
+                                                       0.95,
+                                                       0.94,
+                                                       0.95
+                                                   ],
+                      "usage_input_tokens":  3680,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/medium-tier-bug-hunt-spec-back.md|D-5@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.858,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.89,
+                                                       0.81,
+                                                       0.87,
+                                                       0.86,
+                                                       0.86
+                                                   ],
+                      "usage_input_tokens":  3793,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/medium-tier-bug-hunt-spec-back.md|D-8@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.682,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.67,
+                                                       0.7,
+                                                       0.57,
+                                                       0.74,
+                                                       0.73
+                                                   ],
+                      "usage_input_tokens":  4146,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/medium-tier-bug-hunt-spec-back.md|D-9@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.89,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.88,
+                                                       0.88,
+                                                       0.9,
+                                                       0.9,
+                                                       0.89
+                                                   ],
+                      "usage_input_tokens":  3873,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/medium-tier-diagnosis-spec-back.md|Q-1@b5000c9",
+                      "verdict":  "gives_up_for_economy",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.328,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy",
+                                              "gives_up_for_economy"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.33,
+                                                       0.33,
+                                                       0.35,
+                                                       0.32,
+                                                       0.31
+                                                   ],
+                      "usage_input_tokens":  5271,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/medium-tier-diagnosis-spec-back.md|Q-2@b5000c9",
+                      "verdict":  "no_richer_option",
+                      "agreement_rate":  0.6,
+                      "stable":  false,
+                      "mean_top_probability":  0.284,
+                      "sample_verdicts":  [
+                                              "gives_up_for_economy",
+                                              "richer_option_wrong",
+                                              "no_richer_option",
+                                              "no_richer_option",
+                                              "no_richer_option"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.27,
+                                                       0.31,
+                                                       0.27,
+                                                       0.28,
+                                                       0.29
+                                                   ],
+                      "usage_input_tokens":  4130,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/engine-fix-build-spec-2026-09-21.md|EF-1@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.83,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.83,
+                                                       0.84,
+                                                       0.85,
+                                                       0.82,
+                                                       0.81
+                                                   ],
+                      "usage_input_tokens":  5194,
+                      "seat_label":  "gives_up_for_economy"
+                  },
+                  {
+                      "id":  "docs/engine-fix-build-spec-2026-09-21.md|EF-2@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.89,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.88,
+                                                       0.88,
+                                                       0.89,
+                                                       0.91,
+                                                       0.89
+                                                   ],
+                      "usage_input_tokens":  3925,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/engine-fix-build-spec-2026-09-21.md|EF-3@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.56,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.51,
+                                                       0.62,
+                                                       0.52,
+                                                       0.58,
+                                                       0.57
+                                                   ],
+                      "usage_input_tokens":  4186,
+                      "seat_label":  "no_richer_option"
+                  },
+                  {
+                      "id":  "docs/engine-fix-build-spec-2026-09-21.md|EF-4@b5000c9",
+                      "verdict":  "richer_option_wrong",
+                      "agreement_rate":  1,
+                      "stable":  true,
+                      "mean_top_probability":  0.926,
+                      "sample_verdicts":  [
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong",
+                                              "richer_option_wrong"
+                                          ],
+                      "sample_top_probabilities":  [
+                                                       0.92,
+                                                       0.94,
+                                                       0.93,
+                                                       0.93,
+                                                       0.91
+                                                   ],
+                      "usage_input_tokens":  4197,
+                      "seat_label":  "no_richer_option"
+                  }
+              ]
+}
