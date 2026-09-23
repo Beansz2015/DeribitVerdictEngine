@@ -158,6 +158,12 @@ def main(argv):
         if rid in seen:
             errors.append('duplicate id %s (unrecoverable)' % rid)
         seen.add(rid)
+    for doc, label, reason, note in getattr(M, 'UNRULED', []):
+        rid = '%s|%s@%s' % (doc, label, rev_full[:7])
+        if rid in seen:
+            errors.append('duplicate id %s (unruled)' % rid)
+        seen.add(rid)
+        unruled.append({'id': rid, 'reason': reason, 'note': note})
     excluded = []
     for doc, label, reason, note in M.EXCLUDED:
         rid = '%s|%s@%s' % (doc, label, rev_full[:7])

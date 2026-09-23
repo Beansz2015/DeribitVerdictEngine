@@ -44,6 +44,15 @@ def unrec(doc, label, note):
     UNRECOVERABLE.append((doc, label, note))
 
 
+UNRULED = []   # (doc, label, reason, note): a recommendation with options but NO trader ruling.
+               # reason 'auto_proceeded' = taken by a seat under the 2026-09-11 auto-proceed ruling;
+               # 'open_never_ruled' = still awaiting the trader at REV. Listed, count reported only.
+
+
+def unruled(doc, label, reason, note=''):
+    UNRULED.append((doc, label, reason, note))
+
+
 def S(line, start, end=None):
     return ('sub', line, start, end)
 
@@ -655,3 +664,95 @@ add(_d, 'S-1', '30b0c3f', ('line', 119), [('(a)', C(125, 2)), ('(b)', C(126, 2))
 _d = 'docs/absorption-d2-stage1-rotation-build-spec.md'
 add(_d, 'RD-1', '3fb6eda', C(217, 2), ('parse', C(217, 3)), '(b)', C(217, 4))
 leak('docs/absorption-d2-stage1-rotation-build-spec.md', 'RD-1', 'rationale', 'ruled', _PRIOR + ' (the WD-SEMANTICS ruling, and the already-ruled column set of this rotation)')
+
+# ---- docs/kelly-w6-4-spec-back.md section 2a: the implementer's queued decisions, kept verbatim
+# "per the quote-and-label convention" inside the single commit that also records the rulings.
+_d = 'docs/kelly-w6-4-spec-back.md'
+add(_d, 'D-1', 'd5ce4a5', ('line', 44), ('parse', ('line', 46)), '(a)', ('line', 48), provenance='preserved_verbatim_copy',
+    note='section 2a is labelled as the implementer original, kept per the quote-and-label convention; no earlier revision holds it')
+add(_d, 'D-3', 'd5ce4a5', ('line', 56), ('parse', ('line', 58)), '(a)', ('line', 60), provenance='preserved_verbatim_copy',
+    note='the read is a weak lean toward (a)')
+excl(_d, 'D-2', 'no_explicit_recommendation', 'the read hands the choice to the trader or orchestrator')
+excl('docs/ceiling-audit-preflight-flag-spec.md', 'S-all', 'mirror', 'post-ruling spec for kelly-w6-4-spec-back.md D-1')
+excl('docs/kelly-est-advisory-reword-spec.md', 'S-all', 'mirror', 'post-ruling spec for kelly-w6-4-spec-back.md D-2')
+
+# ---- docs/doc-status-sweep-and-queue-archive-spec.md D-1, pre-tick 62631dd
+add('docs/doc-status-sweep-and-queue-archive-spec.md', 'D-1', '62631dd', C(184, 2), ('parse', C(184, 3)), '(a)', C(184, 4))
+
+# ---- auto-proceeded tables (taken by a seat under the 2026-09-11 ruling, no trader ruling)
+for _l in ('D-1', 'D-2', 'D-3', 'D-4', 'D-5', 'D-6'):
+    unruled('docs/c3b-venue-scoping-spec.md', _l, 'auto_proceeded')
+for _l in ('D-1', 'D-2', 'D-3', 'D-4', 'D-5'):
+    unruled('docs/venue-status-rpc-code-fix-spec.md', _l, 'auto_proceeded')
+for _l in ('D-1', 'D-2', 'D-3', 'D-5'):
+    unruled('docs/coverage-report-cluster-spec.md', _l, 'auto_proceeded')
+for _l in ('D-2', 'D-3', 'D-4', 'D-5'):
+    unruled('docs/venue-status-instrument-spec.md', _l, 'auto_proceeded')
+for _l in ('D-1', 'D-2', 'D-3', 'D-4', 'D-5'):
+    unruled('docs/rider-travel-check-spec.md', _l, 'auto_proceeded')
+for _l in ('CW-1', 'CW-2', 'CW-3', 'CW-4', 'CW-5'):
+    unruled('docs/commit-walker-check-spec.md', _l, 'auto_proceeded')
+for _l in ('DS-D1', 'DS-D2', 'DS-D3', 'DS-D4', 'DS-D5', 'DS-D6', 'DS-D7', 'DS-D8', 'DS-D9'):
+    unruled('docs/doc-scanner-check-spec.md', _l, 'auto_proceeded')
+for _l in ('FP-D1', 'FP-D2', 'FP-D3', 'FP-D4', 'FP-D5'):
+    unruled('docs/fixture-parser-check-spec.md', _l, 'auto_proceeded')
+for _l in ('CF-1', 'CF-2', 'CF-3', 'CF-4', 'CF-5'):
+    unruled('docs/gap-repair-cross-month-gap-spec.md', _l, 'auto_proceeded')
+for _l in ('SF-1', 'SF-3', 'SF-4', 'SF-6', 'SF-8'):
+    unruled('docs/gap-repair-scan-failure-spec.md', _l, 'auto_proceeded')
+for _l in ('SF-2', 'SF-5', 'SF-7'):
+    excl('docs/gap-repair-scan-failure-spec.md', _l, 'mirror', 'marked Ruled: carries the DUP-1/DUP-2 rulings, entered under trade-store-duplicate-rows-read-2026-09-15.md')
+
+# ---- docs/coverage-report-cluster-spec.md reserved rows, pre-tick 072cee8
+_d = 'docs/coverage-report-cluster-spec.md'
+add(_d, 'D-4', '072cee8', C(116, 2), ('parse', C(116, 3)), '(b)', C(116, 4))
+add(_d, 'D-6', '072cee8', C(117, 2), ('parse', C(117, 3)), '(b)', C(117, 4))
+unrec(_d, 'D-7', 'the read and its options exist only in the ruling commit b4e35f1')
+
+# ---- docs/venue-status-instrument-spec.md D-1, pre-ruling 08758e4
+add('docs/venue-status-instrument-spec.md', 'D-1', '08758e4', C(81, 2), ('parse', C(81, 3)), '(a)', C(81, 4))
+
+# ---- harness specs whose trader rulings were co-committed with their options
+for _l in ('D-6', 'D-7'):
+    unrec('docs/rider-travel-check-spec.md', _l, 'rows first committed already trader-ruled (e5a29d5)')
+for _l in ('FP-Q1', 'FP-Q2', 'FP-Q3'):
+    unrec('docs/fixture-parser-check-spec.md', _l, 'questions first committed already trader-ruled (a96622e)')
+
+# ---- docs/gap-repair-same-ms-page-skip-spec.md section 3.2, pre-ruling 3c2cdd2 (Question | Options | My read | Class)
+_d = 'docs/gap-repair-same-ms-page-skip-spec.md'
+for _l, _ln, _r in (('GR-2', 146, '(b)'), ('GR-4', 148, '(a)'), ('GR-5', 149, '(a)')):
+    add(_d, _l, '3c2cdd2', C(_ln, 2), ('parse', C(_ln, 3)), _r, C(_ln, 4))
+add(_d, 'GR-1', '3c2cdd2', C(145, 2),
+    [('(a)', CS(145, 3, 'pager fix only', '`max.ts + 1`')), ('(b)', CS(145, 3, 'hole windows become', 'tail unchanged')),
+     ('(c)', CS(145, 3, '(b), plus the tail becomes', '`seq > max.seq`'))], '(c)', C(145, 4))
+leak('docs/kelly-w6-4-spec-back.md', 'D-3', 'rationale', 'trader', _PRE + " ('closer to the trader's/orchestrator's judgment call')")
+leak('docs/doc-status-sweep-and-queue-archive-spec.md', 'D-1', 'question', 'trader', 'a link to docs/trader-tick-queue.md (a file name)')
+leak('docs/coverage-report-cluster-spec.md', 'D-6', 'rationale', 'ticked', _PRE + " ('does not start until this is ticked')")
+leak('docs/venue-check-schedule-plan.md', 'D-2', 'rationale', 'trader', _PRE + " ('a separate question the trader should see anyway')")
+excl(_d, 'GR-3', 'mooted_by_other_ruling', 'closed by the GR-1 ruling; never ruled on its own options')
+for _l in ('GR-1', 'GR-2', 'GR-3', 'GR-4', 'GR-5'):
+    excl('docs/gap-repair-same-ms-page-skip-spec-back.md', _l, 'mirror', 'same rows as the spec section 3.2')
+for _l in ('Q-1', 'Q-2'):
+    excl('docs/gap-repair-same-ms-page-skip-build-spec-back.md', _l, 'no_trader_ruling', 'ruled by the orchestrator seat')
+
+# ---- docs/trade-store-duplicate-rows-read-2026-09-15.md section 7 (single commit, pre-ruling)
+_d = 'docs/trade-store-duplicate-rows-read-2026-09-15.md'
+add(_d, 'DUP-1', '1ba9815', C(95, 2), ('parse', C(95, 3)), '(b)', C(95, 4))
+add(_d, 'DUP-2', '1ba9815', C(96, 2), ('parse', C(96, 3)), '(iii)', C(96, 4))
+
+# ---- docs/venue-check-build-spec-back.md section 2, pre-ruling 8994e28
+_d = 'docs/venue-check-build-spec-back.md'
+add(_d, 'R-2', '8994e28', C(28, 2), ('parse', C(28, 3)), '(a)', C(28, 4))
+add(_d, 'R-3', '8994e28', C(29, 2), ('parse', C(29, 3)), '(a)', C(29, 4))
+for _l in ('R-1', 'R-4'):
+    excl(_d, _l, 'no_trader_ruling', 'ruled by the orchestrator seat')
+
+# ---- docs/venue-check-schedule-plan.md section 3, pre-ruling c0fbd5e
+_d = 'docs/venue-check-schedule-plan.md'
+add(_d, 'D-2', 'c0fbd5e', C(161, 2), ('parse', C(161, 3)), '(a)', C(161, 4))
+for _l in ('D-1', 'D-4', 'D-5'):
+    excl(_d, _l, 'mooted_by_other_ruling', 'dropped or replaced as a consequence of the option A ruling on where the check runs')
+unruled(_d, 'D-3', 'open_never_ruled', 'held as spec V-3')
+unruled(_d, 'D-6', 'auto_proceeded')
+excl(_d, 'D-7', 'options_not_explicit')
+excl('docs/venue-check-plan-review-2026-09-14.md', 'D-8', 'mooted_by_other_ruling', 'raw pages on the box; dropped under option A')

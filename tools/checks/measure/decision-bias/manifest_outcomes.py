@@ -131,3 +131,22 @@ OUT[(_s4, 'D-2')] = ('OVERRULED', '(b)', [(_s4, CS(117, 3, '✅ **(b) — the tr
 OUT[(_s4, 'D-3')] = ('ADOPTED', '(a)', [(_s4, CS(118, 3, '✅ **(a) — null identity, FALL BACK TO `Timestamp` for those rows only**')), (_s4, CS(118, 4, "⭐ **The orchestrator's read, upheld.**"))], '2026-09-08', 'row', '')
 OUT[('docs/item6-wstradeprobe-s1-recheck-2026-09-07.md', 'S-1')] = ('ADOPTED', '(a)', [(_ar, CS(481, 1, '✅ **`S-1` — THE DECISION IS TAKEN. RULED 2026-09-07 (trader): (a) split `TradeRecord` into `Core/`, AS THE DIRECTION, **NOT NOW**.'))], '2026-09-07', 'row', 'the read was (a) as the direction, not now; ruled the same')
 OUT[('docs/absorption-d2-stage1-rotation-build-spec.md', 'RD-1')] = ('ADOPTED', '(b)', [('docs/absorption-d2-stage1-rotation-build-spec.md', CS(234, 2, '✅ **RULED (b) by the trader, 2026-09-13 (UTC), as recommended**'))], '2026-09-13', 'row', '')
+_k = 'docs/kelly-w6-4-spec-back.md'
+OUT[(_k, 'D-1')] = ('PARTIAL', '(a) with a scope change', [(_k, S(28, '> ### ✅ `D-1` → **(a) ADD THE FLAG**', 'did not propose.'))], '2026-09-09', 'row', 'the recommended option with one scope change the packet did not propose')
+OUT[(_k, 'D-3')] = ('OVERRULED', '(c)', [(_k, S(30, '> ### ✅ `D-3` → **(c) DO NOTHING**'))], '2026-09-09', 'row', '')
+OUT[('docs/doc-status-sweep-and-queue-archive-spec.md', 'D-1')] = ('ADOPTED', '(a)', [('docs/doc-status-sweep-and-queue-archive-spec.md', S(190, '> ## ✅✅ `D-1` RULED **(a)** — 2026-09-09 (UTC), trader.'))], '2026-09-09', 'row', '')
+_c = 'docs/coverage-report-cluster-spec.md'
+OUT[(_c, 'D-4')] = ('ADOPTED', '(b)', [(_c, CS(137, 4, '✅✅ **TICKED (b) 2026-09-11 (UTC), trader — as recommended.**'))], '2026-09-11', 'row', '')
+OUT[(_c, 'D-6')] = ('ADOPTED', '(b)', [(_c, CS(138, 4, '✅✅ **TICKED (b) 2026-09-11 (UTC)'))], '2026-09-11', 'row', '')
+OUT[('docs/venue-status-instrument-spec.md', 'D-1')] = ('OVERRULED', '(d) a new option', [('docs/venue-status-instrument-spec.md', S(97, 'RULED (d) 2026-09-11 (UTC), trader', 'originally offered.'))], '2026-09-11', 'row', '')
+_g = 'docs/gap-repair-same-ms-page-skip-spec.md'
+OUT[(_g, 'GR-1')] = ('OVERRULED', '(d) a new option', [(_g, CS(158, 5, '✅ **(d) NEW — trader-ruled 2026-09-14 (UTC).**'))], '2026-09-14', 'row', '')
+OUT[(_g, 'GR-2')] = ('ADOPTED', '(b)', [(_g, CS(159, 5, '✅ **(b) — ruled 2026-09-14 (UTC).**'))], '2026-09-14', 'row', 'the seat had taken (b) under the auto-proceed ruling; the trader then ruled it')
+OUT[(_g, 'GR-4')] = ('OVERRULED', '(b)', [(_g, CS(161, 5, '✅ **(b) — ruled 2026-09-14 (UTC).**'))], '2026-09-14', 'row', 'the read was (a) now plus a queue row for (b)')
+OUT[(_g, 'GR-5')] = ('OVERRULED', '(b)', [(_g, CS(162, 5, '✅ **(b) — ruled 2026-09-14 (UTC).**'))], '2026-09-14', 'row', '')
+_gs = 'docs/gap-repair-scan-failure-spec.md'
+OUT[('docs/trade-store-duplicate-rows-read-2026-09-15.md', 'DUP-1')] = ('OVERRULED', '(a)', [(_gs, S(3, '> ✅ **RULED 2026-09-15 (UTC), trader via the orchestrator', 'the S2 deploy WAITS for it.'))], '2026-09-15', 'row', '')
+OUT[('docs/trade-store-duplicate-rows-read-2026-09-15.md', 'DUP-2')] = ('ADOPTED', '(iii)', [(_gs, S(3, '> ✅ **RULED 2026-09-15 (UTC), trader via the orchestrator', '`DUP-2` = both directions'))], '2026-09-15', 'row', '')
+OUT[('docs/venue-check-build-spec-back.md', 'R-2')] = ('ADOPTED', '(a)', [('docs/venue-check-build-summary.md', S(7, '✅ **Rulings, 2026-09-14 (UTC):**', 'were trader-'))], '2026-09-14', 'row', '')
+OUT[('docs/venue-check-build-spec-back.md', 'R-3')] = ('ADOPTED', '(a)', [('docs/venue-check-build-summary.md', S(7, '✅ **Rulings, 2026-09-14 (UTC):**', 'were trader-'))], '2026-09-14', 'row', '')
+OUT[('docs/venue-check-schedule-plan.md', 'D-2')] = ('OVERRULED', '(c)', [('docs/venue-check-schedule-plan.md', S(5, '> ⭐⭐ **SUPERSEDED IN PART — TRADER RULING 2026-09-14 (UTC): OPTION A.**', 'against the verified local copy-back.'))], '2026-09-14', 'row', 'option A = run on the dev machine after each fetch, the plan option (c); the orchestrator review had agreed (a)')
