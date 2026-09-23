@@ -23,6 +23,13 @@ from collections import Counter
 # by the Phase A brief, from CLAUDE.md's four tell phrases.
 REGEX = re.compile(r'adequate|good enough|buys nothing|defer', re.IGNORECASE)
 FLAG = 'gives_up_for_economy'
+# CLAUDE.md "The measured bias" names these four as overruled, so no seat can label them blind.
+NAMED_IN_CLAUDE_MD = (
+    'docs/trader-tick-queue-archive.md|A54a-scope@',
+    'docs/trader-tick-queue-archive.md|seeded-session-buckets@',
+    'docs/s4-eval-cache-identity-proposal.md|D-2@',
+    'docs/trader-tick-queue-archive.md|WD-SEMANTICS@',
+)
 
 
 def load(path):
@@ -81,6 +88,9 @@ def main(argv):
     ap.add_argument('--runner')
     ap.add_argument('--out')
     ap.add_argument('--provenance', default='all', help="'all' or one provenance value, e.g. pre_ruling_revision")
+    ap.add_argument('--exclude-granularity', default='', help="drop items whose ruling granularity is this value, e.g. 'doc'")
+    ap.add_argument('--exclude-named', action='store_true',
+                    help='drop the four decisions CLAUDE.md names as overruled (the seat cannot be blind to them)')
     a = ap.parse_args(argv)
 
     pop = load(a.population)
@@ -88,6 +98,11 @@ def main(argv):
     items = pop['items']
     if a.provenance != 'all':
         items = [it for it in items if it.get('provenance', 'pre_ruling_revision') == a.provenance]
+    if a.exclude_granularity:
+        drop = {o['id'] for o in outs['items'] if o.get('ruling_granularity') == a.exclude_granularity}
+        items = [it for it in items if it['id'] not in drop]
+    if a.exclude_named:
+        items = [it for it in items if not any(it['id'].startswith(n) for n in NAMED_IN_CLAUDE_MD)]
     ids = [it['id'] for it in items]
     outcome = {o['id']: o['outcome'] for o in outs['items'] if o['id'] in set(ids)}
     missing_out = [i for i in ids if i not in outcome]
