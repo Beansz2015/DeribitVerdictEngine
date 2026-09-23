@@ -495,3 +495,11 @@ fixture-parser-settings-cache.json
 # (docs/harness-shadow-mode-protocol.md section 2 step 3).
 doc-scanner-baseline.json
 doc-scanner-report.md
+
+# tools/checks/doc-reranker.ps1 (docs/doc-reranker-measurement-plan.md) -- harness 5. This tool
+# is advisory-only and has no baseline/report pair (it never adjudicates against a hand-written
+# baseline; a query either finds a section or it doesn't, judged by the reader, not gated). The
+# one local artefact is the on-the-go trial log (measurement plan section 4): every LIVE -Query
+# run appends one JSONL line here. It is not tracked -- unlike a first-run baseline, this is a
+# running per-box log, not a one-time measurement the repo needs to keep.
+doc-reranker-query-log.jsonl
