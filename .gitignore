@@ -487,3 +487,11 @@ commit-walker-report.md
 fixture-parser-baseline.json
 fixture-parser-report.md
 fixture-parser-settings-cache.json
+
+# tools/checks/doc-scanner.ps1 (docs/doc-scanner-check-spec.md) -- scratch paths at the repo root
+# for ROUTINE re-runs, same asymmetry and reasoning as the three harness pairs above: the REPORT
+# regenerates; the hand-written BASELINE does not. A FIRST-RUN baseline is TRACKED instead, at
+# docs/harness-runs/doc-scanner-<UTC-stamp>-baseline.json, written BEFORE the detector runs
+# (docs/harness-shadow-mode-protocol.md section 2 step 3).
+doc-scanner-baseline.json
+doc-scanner-report.md
