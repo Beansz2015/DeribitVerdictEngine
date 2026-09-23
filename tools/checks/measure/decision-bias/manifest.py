@@ -102,7 +102,7 @@ add('docs/vpfr-lite-v2-proposal.md', 'Q6', '67508fe', ('cell', 394, 2), [('(1)',
 # ---- docs/dynamic-microcvd-accel-proposal.md
 add('docs/dynamic-microcvd-accel-proposal.md', 'Q1', 'f544095', ('cell', 365, 2), [('(1)', ('sub', 365, 'total window USD flow', 'total window USD flow')), ('(2)', ('sub', 365, 'VolumeSMA9 × price', 'VolumeSMA9 × price'))], '(1)', ('cell', 365, 3))
 add('docs/dynamic-microcvd-accel-proposal.md', 'Q2', 'f544095', ('cell', 366, 2), [('(1)', ('sub', 366, 'reference `accel_threshold`', '(static anchor)')), ('(2)', ('sub', 366, 'an absolute USD value', 'an absolute USD value'))], '(1)', ('cell', 366, 3))
-add('docs/dynamic-microcvd-accel-proposal.md', 'Q3', 'f544095', ('cell', 367, 2), [('(1)', ('sub', 367, '0.0 or', '0.0 or')), ('(2)', ('sub', 367, '0.03?', '0.03?'))], '(1)', ('cell', 367, 3))
+add('docs/dynamic-microcvd-accel-proposal.md', 'Q3', 'f544095', ('cell', 367, 2), [('(1)', ('sub', 367, '0.0 or', '0.0')), ('(2)', ('sub', 367, '0.03?', '0.03'))], '(1)', ('cell', 367, 3))
 
 # ---- docs/settings-exposure-pass-proposal.md
 add('docs/settings-exposure-pass-proposal.md', 'Q2', '47a4535', ('cell', 443, 2), [('(1)', ('sub', 443, 'derived from `RegimeMaxScore`', 'derived from `RegimeMaxScore`')), ('(2)', ('sub', 443, 'independent', 'independent'))], '(2)', ('cell', 443, 3))
@@ -624,8 +624,11 @@ for _q2 in ('Q-4', 'Q-5'):
 
 # ---- docs/s2-2-calcspread-split-proposal.md section 4, pre-tick 368c17a
 _d = 'docs/s2-2-calcspread-split-proposal.md'
-for _q2, _ln, _r in (('D-1', 160, '(a)'), ('D-2', 161, '(a)'), ('D-3', 162, '(b)'), ('D-4', 163, '(a)'), ('D-5', 164, '(a)')):
+for _q2, _ln, _r in (('D-1', 160, '(a)'), ('D-2', 161, '(a)'), ('D-3', 162, '(b)'), ('D-4', 163, '(a)')):
     add(_d, _q2, '368c17a', C(_ln, 2), ('parse', C(_ln, 3)), _r, C(_ln, 4))
+add(_d, 'D-5', '368c17a', C(164, 2),
+    [('(a)', CS(164, 3, '`CalcSpreadBps` + `ClassifySpread`, as', 'names them')), ('(b)', CS(164, 3, '`CalcSpreadBps` + `ClassifySpreadStatus`'))],
+    '(a)', C(164, 4))
 _PRIOR = 'cites an EARLIER ruling of a DIFFERENT decision as precedent for this read; says nothing of how this decision was ruled'
 leak('docs/a54a-json-poco-drift-guard-spec.md', 'D-1', 'rationale', 'trader', _PRIOR + ' (two earlier trader decisions the rejected option would reverse)')
 leak('docs/a54a-json-poco-drift-guard-spec.md', 'D-1', 'option(a)', 'ruled', 'describes what each allow-list entry must carry ("the doc that ruled it"); a design property of the option, not a ruling')
@@ -756,3 +759,131 @@ unruled(_d, 'D-3', 'open_never_ruled', 'held as spec V-3')
 unruled(_d, 'D-6', 'auto_proceeded')
 excl(_d, 'D-7', 'options_not_explicit')
 excl('docs/venue-check-plan-review-2026-09-14.md', 'D-8', 'mooted_by_other_ruling', 'raw pages on the box; dropped under option A')
+
+# ---- docs/medium-tier-bug-hunt-spec-back.md (three pre-ruling revisions)
+_d = 'docs/medium-tier-bug-hunt-spec-back.md'
+excl(_d, 'D-1', 'recommendation_not_single', 'the read rejects (c) and has no read between (a) and (b)')
+add(_d, 'D-2', 'c49dc1f', ('line', 157), ('parse', ('line', 160)), '(a)', ('line', 161))
+excl(_d, 'D-3', 'no_trader_ruling', 'ruled by the orchestrator')
+excl(_d, 'D-4', 'recommendation_not_single', 'the read rejects (c) and has no read between (a) and (b)')
+add(_d, 'D-5', '58ac811', ('line', 317), ('parse', ('line', 319)), '(a)', ('line', 320),
+    note='the read covers the M flag only and states no read on MT')
+excl(_d, 'D-6', 'options_not_explicit')
+excl(_d, 'D-7', 'no_trader_ruling', 'ruled by the orchestrator')
+add(_d, 'D-8', '85e11d5', ('line', 519), [('(a)', C(523, 1)), ('(b)', C(524, 1)), ('(c)', C(525, 1))], '(a)',
+    [C(523, 2), C(524, 2), C(525, 2), ('line', 527)])
+add(_d, 'D-9', '85e11d5', ('line', 529), [('(a)', C(533, 1)), ('(b)', C(534, 1)), ('(c)', C(535, 1))], '(b)',
+    [C(533, 2), C(534, 2), C(535, 2), ('line', 537)])
+excl(_d, 'D-10', 'no_trader_ruling', 'scheduled by the orchestrator')
+
+# ---- docs/medium-tier-diagnosis-spec-back.md section 3, pre-ruling 70a4483
+_d = 'docs/medium-tier-diagnosis-spec-back.md'
+add(_d, 'Q-1', '70a4483', ('line', 153),
+    [('(a)', C(157, 1)), ('(b)', C(158, 1)), ('(c)', C(159, 1)), ('(e)', C(160, 1)), ('(d)', C(161, 1))], '(d)',
+    [C(157, 2), C(157, 3), C(158, 2), C(158, 3), C(159, 2), C(159, 3), C(160, 2), C(160, 3), C(161, 2), C(161, 3), ('line', 163)])
+add(_d, 'Q-2', '70a4483', ('line', 167), [('(a)', C(171, 1)), ('(b)', C(172, 1)), ('(c)', C(173, 1))], '(c)',
+    [C(171, 2), C(172, 2), C(173, 2), ('line', 175)])
+excl(_d, 'Q-3', 'no_trader_ruling', 'orchestrator-scheduled')
+leak(_d, 'Q-2', 'rationale', 'trader', "cites the trader's earlier rating of volume profile as core, an input to the read")
+leak(_d, 'Q-2', 'option(c)', 'ruled', 'names an EARLIER ruling of a different decision (session 1 D-1) as the precondition of this option')
+
+# ---- docs/engine-fix-build-spec-2026-09-21.md section 6, pre-ruling 7fb4768
+_d = 'docs/engine-fix-build-spec-2026-09-21.md'
+add(_d, 'EF-1', '7fb4768', ('line', 343), [('(a)', C(347, 1)), ('(b)', C(348, 1)), ('(c)', C(349, 1))], '(a)',
+    [C(347, 2), C(347, 3), C(348, 2), C(348, 3), C(349, 2), C(349, 3), ('lines', 351, 353)])
+add(_d, 'EF-2', '7fb4768', ('line', 355), [('(a)', C(359, 1)), ('(b)', C(360, 1)), ('(c)', C(361, 1))], '(a)',
+    [C(359, 2), C(360, 2), C(361, 2), ('line', 363)])
+add(_d, 'EF-3', '7fb4768', ('line', 365), [('(a)', C(369, 1)), ('(b)', C(370, 1)), ('(c)', C(371, 1))], '(b)',
+    [C(369, 2), C(370, 2), C(371, 2), ('lines', 373, 375)])
+add(_d, 'EF-4', '7fb4768', ('line', 377), [('(a)', C(381, 1)), ('(b)', C(382, 1))], '(a)',
+    [C(381, 2), C(382, 2), ('lines', 384, 386)])
+leak(_d, 'EF-4', 'rationale', 'ruled', _PRE + " ('If (b) is ruled')")
+
+for _l in ('K-1', 'K-2', 'K-3', 'K-4'):
+    unruled('docs/kelly-placed-payoff-proposal.md', _l, 'open_never_ruled', 'proposal parked before any tick')
+
+_ROUTE = 'a routing tag written when the decision was queued, naming WHO must rule it (trader or orchestrator); carries no ruling'
+leak('docs/medium-tier-bug-hunt-spec-back.md', 'D-2', 'question', 'trader', _ROUTE)
+leak('docs/medium-tier-bug-hunt-spec-back.md', 'D-5', 'question', 'trader', _ROUTE)
+leak('docs/medium-tier-diagnosis-spec-back.md', 'Q-1', 'question', 'trader', _ROUTE)
+leak('docs/medium-tier-diagnosis-spec-back.md', 'Q-2', 'question', 'trader', _ROUTE)
+leak('docs/medium-tier-bug-hunt-spec-back.md', 'D-8', 'rationale', 'trader', _PRE + " ('So this needs the trader under the reserved class')")
+leak('docs/engine-fix-build-spec-2026-09-21.md', 'EF-1', 'rationale', 'trader', _PRE + " ('If the trader wants that attributable independently')")
+leak('docs/engine-fix-build-spec-2026-09-21.md', 'EF-1', 'rationale', 'date>2026-09-21', 'a FUTURE deadline (the 2026-10-01 cross-month repair deadline) named as a constraint, not a ruling date')
+
+# ---- docs/wd-tidy-weekday-predicate-convergence-spec.md: first committed with the build (5996f01), rulings in place
+unrec('docs/wd-tidy-weekday-predicate-convergence-spec.md', 'D-1', 'scope 2 vs 4 sites; the table was first committed already ruled, with no pre-ruling read')
+unrec('docs/wd-tidy-weekday-predicate-convergence-spec.md', 'D-2', 'MinValue handling; first committed already ruled')
+for _l in ('D-3', 'D-4', 'D-5'):
+    excl('docs/wd-tidy-weekday-predicate-convergence-spec.md', _l, 'options_not_explicit')
+excl('docs/fable-seat-close-handover-2026-08-01.md', 'J-B/J-C/J-E/D-F', 'no_trader_ruling', 'ruled by the Fable orchestrator seat')
+excl('docs/job1-outstanding-2026-08-01.md', 'J-A', 'no_trader_ruling', 'ratified by the orchestrator seat')
+excl('docs/realtime-exit-guard-spec-back.md', 'D1-D8', 'no_trader_ruling', 'coordinator rulings on implementer decisions')
+excl('docs/trade-store-write-guard-spec-back.md', 'Q1-Q5', 'no_trader_ruling', 'reviewer rulings')
+
+# ---- auto-proceeded analysis choices ("Decision | Options | Picked | Why"), no trader ruling
+for _l in ('slice', 'sub-slices'):
+    unruled('docs/d3-asia-burst-watch-read-2026-09-14.md', _l, 'auto_proceeded')
+excl('docs/d3-asia-burst-watch-read-2026-09-14.md', 'next-read-date', 'not_a_decision', 'follows an earlier ruling')
+for _l in ('outcome-source', 'pre-v51-rows', 'pre-collector-runs', 'non-collector-rows', 'funding-model', 'CIs', 'distance-buckets'):
+    unruled('docs/swing-vs-fallback-target-read-2026-09-15.md', _l, 'auto_proceeded')
+unruled('docs/cross-venue-lead-lag-proposal.md', 'D1', 'open_never_ruled', 'section 7: tick when scheduled, not now; never ticked at REV')
+for _l in ('D2', 'D3', 'D4', 'D5', 'D6'):
+    excl('docs/cross-venue-lead-lag-proposal.md', _l, 'options_not_explicit', 'also never ruled')
+
+
+# ==========================================================================================
+# DOC_TRIAGE: every CANDIDATE doc (enumerate_candidates.py rules R1/R2) that has NO manifest
+# entry, with the reason. The method column is honest about depth:
+#   'scan'  = only the marker-line scan was run on the doc (lines holding a recommendation or a
+#             ruling marker, plus decision-shaped tables); it was NOT read row by row.
+#   'read'  = the decision sections were read in this build.
+# ==========================================================================================
+DOC_TRIAGE = {}
+
+
+def triage(category, method, docs, note=''):
+    for d in docs:
+        DOC_TRIAGE['docs/' + d + '.md'] = (category, method, note)
+
+
+triage('mirror_or_status', 'scan', (
+    'UserManual', 'architecture', 'aws-collector-deploy-checklist', 'batch-review-packet-convention', 'csv-rotation-riders',
+    'fable-handover-2026-07-31', 'harness-shadow-mode-protocol', 'history-archive', 'jev-harnesses-adversarial-review-2026-09-22',
+    'next-session-handover-2026-06-18', 'next-session-handover-2026-06-19', 'next-session-handover-2026-06-30', 'next-session-handover-2026-07-03',
+    'pre-aug1-batch-summary', 'candle-store-derivation-batch-summary-2026-07-31', 'downtime-repair-followups-batch-summary',
+    'i17-sweep-batch-summary', 'roadmap', 'seat-close-handover-gap-audit-2026-07-31', 'seat-handover-2026-07-18', 'seat-handover-2026-08-02',
+    'seat-handover-2026-08-10', 'seat-handover-2026-08-12', 'seat-handover-2026-08-14', 'seat-handover-2026-08-25', 'seat-handover-2026-08-29',
+    'seat-handover-2026-09-03', 'seat-handover-2026-09-06', 'seat-handover-2026-09-07', 'seat-handover-2026-09-09', 'seat-handover-2026-09-10',
+    'seat-handover-2026-09-11', 'seat-handover-2026-09-14', 'seat-handover-2026-09-14b', 'seat-handover-2026-09-17', 'trader-tick-queue',
+    'ui-reskin-handover-2026-05-27'),
+    'restates rulings whose home doc is entered, or holds status/reference text; the rulings found by the scan all trace to an entered or excluded home decision')
+triage('spec_back_not_trader_ruled', 'scan', (
+    'a54a-r2-r3-followup-spec-back', 'absorption-geometry-rescale-spec-back', 'audit-fixes-2026-07-02-spec-back',
+    'auto-tweaker-session-resolution-filter-spec-back', 'autotweaker-weekday-filter-spec-back', 'backtest-synthesizer-spec-back',
+    'ceiling-audit-preflight-flag-spec-back', 'clean-data-rebaseline-v34-spec-back', 'collector-ops-tooling-spec-back',
+    'coverage-split-hour-sh1-spec-back', 'd2v2-whatif-candidate-mode-spec-back', 'deploy-acceptance-gate-cadence-spec-back',
+    'downtime-repair-followups-spec-back', 'eval-display-semantics-spec-back', 'fee-aware-min-move-spec-back',
+    'gap-repair-scan-failure-build-spec-back', 'geometry-arbitration-modes-spec-back', 'in-app-trade-store-capture-spec-back',
+    'live-microstructure-strip-spec-back', 'offline-analysis-report-audit-implementer-spec-back', 'offline-matrix-placed-target-spec-back',
+    'queue-17-18-batch-spec-back', 'sc-column-total-parity-spec-back', 'session-timeframe-resolution-phase1-spec-back',
+    'session-timeframe-resolution-spec-back', 'settings-local-overlay-spec-back', 'thin-trade-window-skip-gate-spec-back',
+    'three-min-hold-window-recalibration-spec-back', 'time-averaged-ofi-spec-back', 'trade-store-coverage-report-spec-back',
+    'trade-store-trade-identity-spec-back', 'v48-ofi-dominance-rebaseline-spec-back', 'websocket-migration-p1-spec-back'),
+    'implementer decisions inside an approved spec, taken by the implementer or ruled by a reviewing seat; trader rulings they cite are entered under the home spec')
+triage('reads_briefs_data_tables', 'scan', (
+    'absorption-blind-rederivation-2026-08-19', 'absorption-episode-age-read-2026-09-13', 'aggressor-velocity-correlation-gate-verdict-2026-07-13',
+    'asia-burst-rederivation-read-brief-2026-09-14', 'asia-session-volume-reverify-2026-07-22', 'backtest-overlap-validation-2026-07-30',
+    'c1-session1-review-2026-08-04', 'candle-store-derivations-2026-07-31', 'fee-aware-order-app-relay-2026-07-27',
+    'harness-runs/fixture-parser-funding-run-2026-09-23', 'liquidation-probe-run-2026-09-21', 'medium-tier-bug-hunt-2026-09-16-poc-gate-output',
+    'medium-tier-bug-hunt-2026-09-16-rescore-output', 'medium-tier-diagnosis-brief-2026-09-16', 'overlay-whitelist-reaudit-2026-07-31',
+    'screenshot-reliability-kickoff', 'session-timeframe-resolution-spec-writer-brief', 'settings-local-overlay-implementer-brief',
+    'signal-health-audit-2026-07-03', 'trade-store-capture-review-2026-07-31', 'trade-store-coverage-report-implementer-brief',
+    'trade-store-coverage-report-review-2026-07-31', 'ui-reskin-consolidated-fix-kickoff', 'ui-reskin-p5-test-gap-fixes-proposal',
+    'ui-reskin-p5-test-visual-review-handoff', 'ui-reskin-p5a-kickoff', 'ui-reskin-p5b-kickoff', 'ui-reskin-proposal',
+    'venue-check-schedule-plan-brief-2026-09-14', 'websocket-migration-proposal'),
+    'measurement reads, briefs, kickoffs and data tables; no recommendation-plus-trader-ruling pair found by the scan')
+triage('ruled_before_or_without_options', 'read', (
+    'absorption-anchor-rederivation-2026-07-30', 'asia-london-roc-rebaseline-proposal', 'funding-rate-momentum-proposal',
+    'absorption-instrumentation-spec'),
+    'V-table values conditional on the Path A choice entered as E5 / measured values signed off with no alternative named / old Question-Resolution table / a build spec whose own rulings are its design, authorised by an entered tick')
