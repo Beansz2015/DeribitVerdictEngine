@@ -4,6 +4,8 @@ STATUS 2026-09-23 (UTC): the PowerShell side (tools/checks/doc-scanner.ps1) is N
 The build STOPPED at docs/doc-scanner-check-spec.md section 0's escalation trigger: that spec's
 section 4.2 rules, as written, leave 17 never_shipped lines at cbc2c91 against the <= 2 its
 section 5 item 3 requires. Record and measured options: docs/doc-scanner-build-spec-back.md.
+Second stop, same day: the orchestrator's ruling DS-A option (f) was measured and NOT
+confirmed (see e2_strict). Ruling DS-B (b) IS built: DATED_STATE ages use the UTC commit date.
 
 Spec: docs/doc-scanner-check-spec.md. Called by tools/checks/doc-scanner.ps1, which owns the
 gates, the Jev calls and the report (spec decision DS-D2). This file owns only CODE facts:
@@ -76,6 +78,29 @@ def _utc_date(rev):
     import datetime as _dt
     ts = int(E.git('log', '-1', '--format=%ct', rev).strip())
     return _dt.datetime.fromtimestamp(ts, _dt.timezone.utc).strftime('%Y-%m-%d')
+
+
+def e5_dated(path, text, rev, horizon=None, dates='utc'):
+    """DATED_STATE via the instrument's own e5(), with the date it measures age from chosen here.
+
+    Ruling DS-B (b), 2026-09-23 (UTC): the TOOL computes ages from the UTC commit date (`%ct`
+    converted to UTC). The instrument's rev_date() reads `%cs`, the committer's recorded timezone
+    (GMT+8 on this workstation), and stays unchanged so it still replays its own numbers.
+
+    Mechanism: E.e5 looks up the module global E.rev_date at call time, so it is swapped for the
+    duration of one call and restored in `finally`. This reuses e5's logic exactly -- a copy of
+    the function could drift from the measured one. dates='instrument' runs it untouched."""
+    if horizon is None:
+        horizon = DATED_STATE_HORIZON_DAYS
+    if dates == 'instrument':
+        return E.e5(path, text, rev, horizon=horizon)
+    import datetime as _dt
+    orig = E.rev_date
+    E.rev_date = lambda r: _dt.date.fromisoformat(_utc_date(r))
+    try:
+        return E.e5(path, text, rev, horizon=horizon)
+    finally:
+        E.rev_date = orig
 
 
 def rev_full(rev):
@@ -180,11 +205,29 @@ def _resolve(idx, nm, line):
     return next(iter(paths))
 
 
+# A key occurrence inside a FILE NAME: the run of path characters around it ends in a file
+# extension (`asia-burst-threshold-derivation-2026-08-01.md`). A LINK TARGET: the `(...)` of a
+# markdown link. Used only by span_arm='restricted' -- measured for ruling DS-A, not adopted.
+FILE_EXT_TOKEN = re.compile(r'[\w.\-/\\]+\.(?:md|vb|ps1|psm1|json|py|csv|txt|log|vbproj|sln|yml|yaml|html|exe|dll)(?![\w])', re.I)
+LINK_TARGET = re.compile(r'\]\(([^)\s]*)\)')
+
+
+def _in_file_or_link(line, pos):
+    for m in FILE_EXT_TOKEN.finditer(line):
+        if m.start() <= pos < m.end():
+            return True
+    for m in LINK_TARGET.finditer(line):
+        if m.start(1) <= pos < m.end(1):
+            return True
+    return False
+
+
 def pair_line(line, rx, idx, span_arm=True):
     """Return [(key_match, number_start, number_text)] pairs for one line under rules 1-3.
-    span_arm=False drops rule 1's second arm ("or sits inside the same backtick span"); it
-    exists ONLY so tools/checks/measure/doc-scanner/pairing_variants.py can measure that
-    reading. The tool itself always runs the spec-literal default."""
+    span_arm=False drops rule 1's second arm ("or sits inside the same backtick span");
+    span_arm='restricted' keeps it except where the key sits inside a file name or a link
+    target. Both exist so tools/checks/measure/doc-scanner/pairing_variants.py can measure
+    those readings for ruling DS-A."""
     keys = list(rx.finditer(line))
     if not keys:
         return []
@@ -234,6 +277,8 @@ def pair_line(line, rx, idx, span_arm=True):
         # Rule 1, second arm: the number sits inside the same backtick span as the key.
         if not span_arm:
             continue
+        if span_arm == 'restricted' and _in_file_or_link(line, km.start()):
+            continue
         sp = _span_of(spans, km.start())
         if not sp:
             continue
@@ -260,12 +305,34 @@ def _name_rx(rev):
     return idx, rx
 
 
-def e2_strict(path, text, rev, span_arm=True, name_qualify=False):
+def _is_qualified(p, line):
+    """The DS-A name rule. A key is QUALIFIED when its leaf has an underscore (a compound name),
+    or it is a top-level key (no parent segment -- `version`; exempt by the ruling), or its
+    parent segment appears on the line as a whole word. Otherwise it is UNQUALIFIED: a
+    single-word leaf (`threshold`, `penalty`, `period`) with nothing on the line tying it to
+    its block."""
+    segs = re.sub(r'\[\d+\]', '', p).split('.')
+    if '_' in segs[-1] or len(segs) < 2:
+        return True
+    return bool(re.search(r'(?<![\w])' + re.escape(segs[-2]) + r'(?![\w])', line, re.I))
+
+
+def e2_strict(path, text, rev, span_arm=True, name_qualify=False, name_label=False):
     """Same tuple shape as enumerators.e2, plus a trailing dict of computed facts.
-    The tool calls this with the defaults, which are the spec-literal rules 1-3. span_arm and
-    name_qualify are measurement switches for pairing_variants.py ONLY -- name_qualify is NOT
-    in docs/doc-scanner-check-spec.md section 4.2: it requires a single-word leaf name
-    (`threshold`, `penalty`, `period`...) to have its parent segment on the line as a word."""
+
+    The tool's scan STILL runs the spec-literal reading: span_arm=True, name_label=False
+    (docs/doc-scanner-check-spec.md section 4.2 as first written; `--e2 strict`, the default).
+
+    The orchestrator's ruling DS-A option (f) -- span_arm=False, name_label=True, available as
+    e2_ruled() -- was measured on 2026-09-23 (UTC) and NOT confirmed. Its checks 1, 2 and 4
+    passed, but check 3 found CORRECT key-number pairings among the span arm's 11 gained lines,
+    and the ruling then forbids dropping the arm. The restricted arm (span_arm='restricted')
+    failed check 1. Awaiting a further ruling: docs/doc-scanner-build-spec-back.md.
+    Under name_label every pair is kept; each carries facts['qualified'] (see _is_qualified).
+
+    name_qualify is the rejected FILTER reading (`nq`), kept only so
+    tools/checks/measure/doc-scanner/pairing_variants.py reproduces its published numbers: it
+    DROPS an unqualified pair, and -- unlike _is_qualified -- also drops top-level keys."""
     ver, flat = E.settings_at(rev)
     hist = E.settings_history(rev)
     idx, rx = _name_rx(rev)
@@ -289,10 +356,18 @@ def e2_strict(path, text, rev, span_arm=True, name_qualify=False):
                 continue
             ever = hist.get(p, set())
             kind = 'E2_value_was_shipped' if any(abs(val - e) < 1e-9 for e in ever) else 'E2_value_never_shipped'
-            out.append((path, i, kind, f'{p}: doc {val:g} vs current {cur}', line,
-                        {'key_path': p, 'key_name': nm, 'doc_value_text': numtxt, 'doc_value': val,
-                         'live_value': cur, 'key_col': km.start(), 'value_col': col}))
+            facts = {'key_path': p, 'key_name': nm, 'doc_value_text': numtxt, 'doc_value': val,
+                     'live_value': cur, 'key_col': km.start(), 'value_col': col}
+            if name_label:
+                facts['qualified'] = _is_qualified(p, line)
+            out.append((path, i, kind, f'{p}: doc {val:g} vs current {cur}', line, facts))
     return out
+
+
+def e2_ruled(path, text, rev):
+    """The tool's E2: DS-A option (f) -- rule 1 without its backtick-span arm, rule 3, and the
+    name rule as a LABEL, never a filter."""
+    return e2_strict(path, text, rev, span_arm=False, name_label=True)
 
 
 def e2_legacy(path, text, rev):
@@ -538,7 +613,7 @@ CODE_ONLY_ID_PREFIX = {
 }
 
 
-def scan(rev_in, doc_patterns, e2mode):
+def scan(rev_in, doc_patterns, e2mode, dates='utc'):
     rev = rev_full(rev_in)
     rev7 = rev[:7]
     living, living_missing = living_set(rev)
@@ -585,7 +660,7 @@ def scan(rev_in, doc_patterns, e2mode):
                 code_only['CFG_MEMBER_MISSING'].append({'path': p, 'line': h[1], 'detail': h[3]})
             elif h[2] == 'E3_line_past_eof':
                 code_only['LINE_PAST_EOF'].append({'path': p, 'line': h[1], 'detail': h[3]})
-        for h in E.e5(p, t, rev, horizon=DATED_STATE_HORIZON_DAYS):
+        for h in e5_dated(p, t, rev, dates=dates):
             if h[2] == 'E5_stale_state_section':
                 code_only['DATED_STATE_OVER_HORIZON'].append({'path': p, 'line': h[1], 'detail': h[3]})
         for c in next_free_claims(p, t, rev):
@@ -620,6 +695,7 @@ def scan(rev_in, doc_patterns, e2mode):
         'docs_in_living_set': [d for d in docs if d in living],
         'highest_fixture_family': highest_fixture_family(rev),
         'dated_state_horizon_days': DATED_STATE_HORIZON_DAYS,
+        'dated_state_date_source': dates,
         'counts': {
             'CANDIDATES_VERSION': counts['VERSION'], 'CANDIDATES_VALUE': counts['VALUE'],
             'CANDIDATES_POINTER': counts['POINTER'], 'CANDIDATES_FIXTURE_MEANING': counts['FIXTURE_MEANING'],
@@ -665,8 +741,9 @@ def removed_lines(fix, path):
     return out
 
 
-def run_all_tool(rev, paths, e2mode, kinds):
-    """enumerators.run_all's loop, same order, with the E2 function switchable."""
+def run_all_tool(rev, paths, e2mode, kinds, dates='instrument'):
+    """enumerators.run_all's loop, same order, with the E2 function and the E5 date source
+    switchable. dates='instrument' with e2mode='legacy' is run_all exactly."""
     ver, flat = E.settings_at(rev)
     hist = E.settings_history(rev)
     toks = E.vb_tokens_at(rev)
@@ -679,17 +756,17 @@ def run_all_tool(rev, paths, e2mode, kinds):
         res += [h[:5] for h in (e2_strict(p, t, rev) if e2mode == 'strict' else E.e2(p, t, flat, hist))]
         res += E.e3(p, t, rev, toks)
         res += E.e4(p, t, rev)
-        res += E.e5(p, t, rev)
+        res += e5_dated(p, t, rev, dates=dates)
         res += E.e6(p, t, rev)
     if kinds == 'kept':
         res = [r for r in res if r[2] in KEPT_KINDS]
     return res
 
 
-def replay(kinds, e2mode):
+def replay(kinds, e2mode, dates='instrument'):
     for fix, paths in REPLAY_CASES:
         pre = fix + '^'
-        res = run_all_tool(pre, paths, e2mode, kinds)
+        res = run_all_tool(pre, paths, e2mode, kinds, dates)
         flagged = {(p, i) for (p, i, *_) in res}
         tot_rm = hit_rm = 0
         print(f'=== fix {fix} (replay at {pre})')
@@ -725,19 +802,23 @@ def main(argv):
     s.add_argument('--docs', nargs='*', default=None)
     s.add_argument('--e2', choices=['strict', 'legacy'], default='strict')
     s.add_argument('--out', required=True)
+    # DS-B (b): the tool dates from UTC. 'instrument' reproduces the measurement's GMT+8 ages.
+    s.add_argument('--dates', choices=['utc', 'instrument'], default='utc')
     r = sub.add_parser('replay')
     r.add_argument('--kinds', choices=['kept', 'all'], default='kept')
     r.add_argument('--e2', choices=['strict', 'legacy'], default='strict')
+    # Default 'instrument' so the replay reproduces replay_recall.py; the tool passes 'utc'.
+    r.add_argument('--dates', choices=['utc', 'instrument'], default='instrument')
     a = ap.parse_args(argv)
     if a.cmd == 'scan':
-        doc = scan(a.rev, a.docs, a.e2)
+        doc = scan(a.rev, a.docs, a.e2, a.dates)
         with open(a.out, 'w', encoding='utf-8', newline='\n') as f:
             json.dump(doc, f, ensure_ascii=False, indent=1)
         c = doc['counts']
         print(f"SCAN_OK rev={doc['rev7']} docs={len(doc['docs_scanned'])} " +
               ' '.join(f'{k}={v}' for k, v in c.items()))
     else:
-        replay(a.kinds, a.e2)
+        replay(a.kinds, a.e2, a.dates)
 
 
 if __name__ == '__main__':
