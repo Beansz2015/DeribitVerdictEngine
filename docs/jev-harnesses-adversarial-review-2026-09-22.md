@@ -12,6 +12,12 @@
 > - **Finding 11** (`Invoke-Jev` never retries): bounded retries (default 3, exponential backoff) for HTTP 5xx or no-response failures only; a 403/other 4xx is never retried. `RetryCount` travels on every call; both harnesses sum it into a printed `RETRY_COUNT`. Harnesses 3 and 4 share the fix unchanged (verified: their baseline-refusal output is byte-identical before/after, aside from an inherent wall-clock timing field).
 > - **Item `8n`'s sibling in harnesses 1 and 2** (same firewall-block pattern as `FP-D26`): a blocked rider/commit is recorded `WAF_BLOCKED` / `NOT_JUDGED`, the run continues, and a blocked item makes the exit code 1. Harness 2's escalation call gets the same treatment (`ESCALATION_WAF_BLOCKED`, informational, primary verdict stands).
 > - **Finding 6**, done DIFFERENTLY from `8m`: `not_a_header_column`/`CONSISTENT` are not provably always-wrong (unlike an `FP-1` hardcoded literal), so flipping the exit code on them would fail on nearly every normal run. Instead: `RIDERS_NOT_A_HEADER_COLUMN` / `CONSISTENT_COUNT` print as reportable-only counters, never touching the exit code. **Open:** 4, 7, 8, 9.
+>
+> ✅ **FIXED 2026-09-23 (UTC), harness 3 revision 4 at `ca566c5` — findings 4, 8 and 9** (close-list item 4). Record: [`harness3-batch-spec-back.md`](harness3-batch-spec-back.md); spec rows `8p`–`8r` in [`fixture-parser-check-spec.md`](fixture-parser-check-spec.md) §8.4.
+> - **Finding 4** → `FP-D27`: a same-named callee now resolves by its receiver type. It reports `AMBIGUOUS_CALLEE` when the type cannot be read; it never guesses. The measured instances moved as this finding predicted: `currentATR` is now read against `DynamicNorms.Compute`, and `nowUtcMs` against `LiveMicrostructureEvaluator.Evaluate`. `Fold`/`Snapshot` now resolve by type, not by file order. 0 `AMBIGUOUS_CALLEE` on the real file.
+> - **Finding 8** → `FP-D28`: every marked site is labelled `SITE_NAMED` or `BLOCK_ONLY`. It is a label, not a filter. In scope: 50 / 8, which reproduces this finding's "8 of 58".
+> - **Finding 9** → `FP-D29`: arrays of objects are walked by their `name` field. `ARRAY_UNKEYED` is counted, and no index is ever guessed.
+> - Same batch, spec item `8o` armed (`FP-1v2` beside version 1), and the `FP-2` mutation test run for the first time: 6 of 6 flagged ([`harness-runs/fixture-parser-fp2-mutation-2026-09-23.md`](harness-runs/fixture-parser-fp2-mutation-2026-09-23.md)). **Open:** 7.
 
 ## Findings, ranked
 

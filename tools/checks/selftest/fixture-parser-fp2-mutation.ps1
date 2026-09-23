@@ -87,19 +87,21 @@ try {
     $txt | Where-Object { $_ -match '^(EXIT_REASON|FP2_ONLY|USAGE_INPUT_TOKENS|USAGE_OUTPUT_TOKENS|WALL_TIME_SEC|SCOPE_JEV_CALLS|FP2_UNSTABLE|FP2_BAD_VERDICTS|FP2_WAF_BLOCKED|SITES_JUDGED)=?' } | Select-Object -Unique
     "HARNESS_EXIT=$exitCode"
     ''
-    '| Original name | Mutated name | Verdict (plurality of 5) | Agreement rate | Mean top prob | Min top prob | Flagged |'
-    '|---|---|---|---|---|---|---|'
+    '| Original name | Mutated name | Verdict (plurality of 5) | Agreement rate | Mean top prob | Min top prob | Sample verdicts | Flagged |'
+    '|---|---|---|---|---|---|---|---|'
     $flagged = 0; $named = 0
     foreach ($orig in $mutations.Keys) {
         $new = $mutations[$orig]
         $row = $txt | Where-Object { $_ -match "^  $([regex]::Escape($new)) \[" } | Select-Object -First 1
-        if (-not $row) { "| $orig | $new | NOT_JUDGED | | | | no |"; continue }
+        if (-not $row) { "| $orig | $new | NOT_JUDGED | | | | | no |"; continue }
         $v = if ($row -match ' verdict=(\S+)') { $Matches[1] } else { '?' }
         $ar = if ($row -match ' agreement_rate=(\S+)') { $Matches[1] } else { '?' }
         $mp = if ($row -match ' mean_top_prob=(\S+)') { $Matches[1] } else { '?' }
         $np = if ($row -match ' min_top_prob=(\S+)') { $Matches[1] } else { '?' }
+        # Added after the 2026-09-23 run, whose one UNSTABLE row could not show its split.
+        $sv = if ($row -match ' verdicts=\[([^\]]*)\]') { $Matches[1] } else { '?' }
         $f = if ($v -in @('name_overclaims', 'name_understates')) { 'yes'; $flagged++; $named++ } elseif ($v -eq 'ambiguous') { 'exit-code only (ambiguous)'; $flagged++ } else { 'NO' }
-        "| $orig | $new | $v | $ar | $mp | $np | $f |"
+        "| $orig | $new | $v | $ar | $mp | $np | $sv | $f |"
     }
     ''
     "MUTATIONS_FLAGGED=$flagged of $($mutations.Count) (named the mismatch: $named; ambiguous counted as flagged by the exit code only)"
