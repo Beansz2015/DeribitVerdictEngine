@@ -1,0 +1,368 @@
+{
+ "rev": "b5000c99cd30a6b0899ba3ebde0cc4420b9fa12b",
+ "rev7": "b5000c9",
+ "stamp_utc": "20260923T140527Z",
+ "builder": "tools/checks/measure/decision-bias/build_population.py",
+ "note": "Recommendations with no trader ruling. Excluded from scoring; count reported only.",
+ "items": [
+  {
+   "id": "docs/absorption-d6-spec-back.md|D-6c@b5000c9",
+   "reason": "open_never_ruled",
+   "question": "### D-6c — the sizing question",
+   "question_src": "docs/absorption-d6-spec-back.md:170@98af629",
+   "note": "left OPEN until the section 5 instrumentation ships"
+  },
+  {
+   "id": "docs/d6d-episode-continuity-spec.md|D-6d.4@b5000c9",
+   "reason": "open_never_ruled",
+   "question": "**`ShadowPressUsd` — measurement only, or eventually the numerator?**",
+   "question_src": "docs/d6d-episode-continuity-spec.md:251@b5000c9",
+   "note": "section 7 still reads owed by the trader at REV"
+  },
+  {
+   "id": "docs/c3b-venue-scoping-spec.md|D-1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/c3b-venue-scoping-spec.md|D-2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/c3b-venue-scoping-spec.md|D-3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/c3b-venue-scoping-spec.md|D-4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/c3b-venue-scoping-spec.md|D-5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/c3b-venue-scoping-spec.md|D-6@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-rpc-code-fix-spec.md|D-1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-rpc-code-fix-spec.md|D-2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-rpc-code-fix-spec.md|D-3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-rpc-code-fix-spec.md|D-4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-rpc-code-fix-spec.md|D-5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-instrument-spec.md|D-2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-instrument-spec.md|D-3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-instrument-spec.md|D-4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-instrument-spec.md|D-5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/rider-travel-check-spec.md|D-1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/rider-travel-check-spec.md|D-2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/rider-travel-check-spec.md|D-3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/rider-travel-check-spec.md|D-4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/rider-travel-check-spec.md|D-5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/commit-walker-check-spec.md|CW-1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/commit-walker-check-spec.md|CW-2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/commit-walker-check-spec.md|CW-3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/commit-walker-check-spec.md|CW-4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/commit-walker-check-spec.md|CW-5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D6@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D7@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D8@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-scanner-check-spec.md|DS-D9@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/fixture-parser-check-spec.md|FP-D1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/fixture-parser-check-spec.md|FP-D2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/fixture-parser-check-spec.md|FP-D3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/fixture-parser-check-spec.md|FP-D4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/fixture-parser-check-spec.md|FP-D5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-cross-month-gap-spec.md|CF-1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-cross-month-gap-spec.md|CF-2@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-cross-month-gap-spec.md|CF-3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-cross-month-gap-spec.md|CF-4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-cross-month-gap-spec.md|CF-5@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-scan-failure-spec.md|SF-1@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-scan-failure-spec.md|SF-3@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-scan-failure-spec.md|SF-4@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-scan-failure-spec.md|SF-6@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-scan-failure-spec.md|SF-8@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-check-schedule-plan.md|D-3@b5000c9",
+   "reason": "open_never_ruled",
+   "note": "held as spec V-3"
+  },
+  {
+   "id": "docs/venue-check-schedule-plan.md|D-6@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/kelly-placed-payoff-proposal.md|K-1@b5000c9",
+   "reason": "open_never_ruled",
+   "note": "proposal parked before any tick"
+  },
+  {
+   "id": "docs/kelly-placed-payoff-proposal.md|K-2@b5000c9",
+   "reason": "open_never_ruled",
+   "note": "proposal parked before any tick"
+  },
+  {
+   "id": "docs/kelly-placed-payoff-proposal.md|K-3@b5000c9",
+   "reason": "open_never_ruled",
+   "note": "proposal parked before any tick"
+  },
+  {
+   "id": "docs/kelly-placed-payoff-proposal.md|K-4@b5000c9",
+   "reason": "open_never_ruled",
+   "note": "proposal parked before any tick"
+  },
+  {
+   "id": "docs/d3-asia-burst-watch-read-2026-09-14.md|slice@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/d3-asia-burst-watch-read-2026-09-14.md|sub-slices@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-vs-fallback-target-read-2026-09-15.md|outcome-source@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-vs-fallback-target-read-2026-09-15.md|pre-v51-rows@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-vs-fallback-target-read-2026-09-15.md|pre-collector-runs@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-vs-fallback-target-read-2026-09-15.md|non-collector-rows@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-vs-fallback-target-read-2026-09-15.md|funding-model@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-vs-fallback-target-read-2026-09-15.md|CIs@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-vs-fallback-target-read-2026-09-15.md|distance-buckets@b5000c9",
+   "reason": "auto_proceeded",
+   "note": ""
+  },
+  {
+   "id": "docs/cross-venue-lead-lag-proposal.md|D1@b5000c9",
+   "reason": "open_never_ruled",
+   "note": "section 7: tick when scheduled, not now; never ticked at REV"
+  }
+ ]
+}

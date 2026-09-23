@@ -1,0 +1,4103 @@
+{
+ "rev": "b5000c99cd30a6b0899ba3ebde0cc4420b9fa12b",
+ "rev7": "b5000c9",
+ "stamp_utc": "20260923T140527Z",
+ "builder": "tools/checks/measure/decision-bias/build_population.py",
+ "note": "STATE ONLY. No ruling is in this file. Label from this file without opening outcomes.json.",
+ "items": [
+  {
+   "id": "docs/bid-ask-spread-proposal.md|Q2@b5000c9",
+   "question": "Penalty when ROC near zero — both sides or neither?",
+   "question_src": "docs/bid-ask-spread-proposal.md:308@67508fe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "both sides",
+     "src": "docs/bid-ask-spread-proposal.md:308@67508fe"
+    },
+    {
+     "label": "(2)",
+     "text": "neither",
+     "src": "docs/bid-ask-spread-proposal.md:308@67508fe"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "Both — execution risk is symmetric when there's no directional bias",
+   "rationale_src": [
+    "docs/bid-ask-spread-proposal.md:308@67508fe"
+   ],
+   "state_rev": "67508fe3fcde4031a315f4c7e3579aa61806b8bf",
+   "state_rev_committed_utc": "2026-04-27T15:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/ofi-momentum-proposal.md|Q2@b5000c9",
+   "question": "When suppressing OFI, should we always remove `Microstructure` from `FullLongCategories` set, or only when OFI was sole contributor?",
+   "question_src": "docs/ofi-momentum-proposal.md:333@67508fe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "always remove `Microstructure` from `FullLongCategories` set",
+     "src": "docs/ofi-momentum-proposal.md:333@67508fe"
+    },
+    {
+     "label": "(2)",
+     "text": "only when OFI was sole contributor",
+     "src": "docs/ofi-momentum-proposal.md:333@67508fe"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**Only when sole contributor.** Implementation: before suppression, check whether *any* other Microstructure-category signal had fired in this run (`vwapLong`, `cvdLong`, etc.). If yes, leave the set membership alone. If no, remove. The implementation should track this via a small bookkeeping check, not by re-evaluating each signal.",
+   "rationale_src": [
+    "docs/ofi-momentum-proposal.md:333@67508fe"
+   ],
+   "state_rev": "67508fe3fcde4031a315f4c7e3579aa61806b8bf",
+   "state_rev_committed_utc": "2026-04-27T15:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q1@b5000c9",
+   "question": "Should swing pivots score (e.g. award a structural-aligned bonus) or only inform display + arbitration?",
+   "question_src": "docs/swing-pivot-proposal.md:548@67508fe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "score (e.g. award a structural-aligned bonus)",
+     "src": "docs/swing-pivot-proposal.md:548@67508fe"
+    },
+    {
+     "label": "(2)",
+     "text": "only inform display + arbitration",
+     "src": "docs/swing-pivot-proposal.md:548@67508fe"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**Display + arbitration + exit only.** Scoring overlap with EMA/Donchian/VPFR is real and would double-count structural signals",
+   "rationale_src": [
+    "docs/swing-pivot-proposal.md:548@67508fe"
+   ],
+   "state_rev": "67508fe3fcde4031a315f4c7e3579aa61806b8bf",
+   "state_rev_committed_utc": "2026-04-27T15:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q2@b5000c9",
+   "question": "Pivot wing on 5m — 2, 3, or 4?",
+   "question_src": "docs/swing-pivot-proposal.md:549@67508fe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "2",
+     "src": "docs/swing-pivot-proposal.md:549@67508fe"
+    },
+    {
+     "label": "(2)",
+     "text": "3",
+     "src": "docs/swing-pivot-proposal.md:549@67508fe"
+    },
+    {
+     "label": "(3)",
+     "text": "4",
+     "src": "docs/swing-pivot-proposal.md:549@67508fe"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**3** is the standard scalping default. Wing 2 catches noise; wing 4 misses fresh swings during fast moves. Tunable",
+   "rationale_src": [
+    "docs/swing-pivot-proposal.md:549@67508fe"
+   ],
+   "state_rev": "67508fe3fcde4031a315f4c7e3579aa61806b8bf",
+   "state_rev_committed_utc": "2026-04-27T15:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q1@b5000c9",
+   "question": "Should VAH/VAL use bucket centres or bucket edges?",
+   "question_src": "docs/vpfr-lite-v2-proposal.md:389@67508fe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "bucket centres",
+     "src": "docs/vpfr-lite-v2-proposal.md:389@67508fe"
+    },
+    {
+     "label": "(2)",
+     "text": "bucket edges",
+     "src": "docs/vpfr-lite-v2-proposal.md:389@67508fe"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "Bucket centres — matches existing POC convention",
+   "rationale_src": [
+    "docs/vpfr-lite-v2-proposal.md:389@67508fe"
+   ],
+   "state_rev": "67508fe3fcde4031a315f4c7e3579aa61806b8bf",
+   "state_rev_committed_utc": "2026-04-27T15:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q2@b5000c9",
+   "question": "Greedy expansion tie-breaker (higher vs lower bucket equal volume)",
+   "question_src": "docs/vpfr-lite-v2-proposal.md:390@67508fe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "higher",
+     "src": "docs/vpfr-lite-v2-proposal.md:390@67508fe"
+    },
+    {
+     "label": "(2)",
+     "text": "lower bucket",
+     "src": "docs/vpfr-lite-v2-proposal.md:390@67508fe"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "Lower — bias toward conservative VAL extension",
+   "rationale_src": [
+    "docs/vpfr-lite-v2-proposal.md:390@67508fe"
+   ],
+   "state_rev": "67508fe3fcde4031a315f4c7e3579aa61806b8bf",
+   "state_rev_committed_utc": "2026-04-27T15:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q6@b5000c9",
+   "question": "Activate `value_area_scoring_enabled` immediately or after observation?",
+   "question_src": "docs/vpfr-lite-v2-proposal.md:394@67508fe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "immediately",
+     "src": "docs/vpfr-lite-v2-proposal.md:394@67508fe"
+    },
+    {
+     "label": "(2)",
+     "text": "after observation",
+     "src": "docs/vpfr-lite-v2-proposal.md:394@67508fe"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "After observation — ship display + cap first, scoring later. Avoids over-fitting to noisy initial data",
+   "rationale_src": [
+    "docs/vpfr-lite-v2-proposal.md:394@67508fe"
+   ],
+   "state_rev": "67508fe3fcde4031a315f4c7e3579aa61806b8bf",
+   "state_rev_committed_utc": "2026-04-27T15:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q1@b5000c9",
+   "question": "Why total window USD flow vs VolumeSMA9 × price?",
+   "question_src": "docs/dynamic-microcvd-accel-proposal.md:365@f544095",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "total window USD flow",
+     "src": "docs/dynamic-microcvd-accel-proposal.md:365@f544095"
+    },
+    {
+     "label": "(2)",
+     "text": "VolumeSMA9 × price",
+     "src": "docs/dynamic-microcvd-accel-proposal.md:365@f544095"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "Cleaner semantic match — same window, same units, no time-horizon mismatch (50 trades vs 9 candles). VolumeSMA9 is a candle-bar metric; MicroCVD operates on a trade window",
+   "rationale_src": [
+    "docs/dynamic-microcvd-accel-proposal.md:365@f544095"
+   ],
+   "state_rev": "f5440953f13959f2082f28b36c19d32a0d59ffa8",
+   "state_rev_committed_utc": "2026-04-28T14:10:26Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q2@b5000c9",
+   "question": "Should `floorPct` reference `accel_threshold` (static anchor) or be an absolute USD value?",
+   "question_src": "docs/dynamic-microcvd-accel-proposal.md:366@f544095",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "reference `accel_threshold` (static anchor)",
+     "src": "docs/dynamic-microcvd-accel-proposal.md:366@f544095"
+    },
+    {
+     "label": "(2)",
+     "text": "an absolute USD value",
+     "src": "docs/dynamic-microcvd-accel-proposal.md:366@f544095"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Reference accel_threshold.** Tying the floor to the existing tunable means moving one number (`accel_threshold`) shifts both the dynamic floor and the static fallback together — fewer independent moving parts",
+   "rationale_src": [
+    "docs/dynamic-microcvd-accel-proposal.md:366@f544095"
+   ],
+   "state_rev": "f5440953f13959f2082f28b36c19d32a0d59ffa8",
+   "state_rev_committed_utc": "2026-04-28T14:10:26Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q3@b5000c9",
+   "question": "Should the function default for `dynamicPct` be 0.0 or 0.03?",
+   "question_src": "docs/dynamic-microcvd-accel-proposal.md:367@f544095",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "0.0",
+     "src": "docs/dynamic-microcvd-accel-proposal.md:367@f544095"
+    },
+    {
+     "label": "(2)",
+     "text": "0.03",
+     "src": "docs/dynamic-microcvd-accel-proposal.md:367@f544095"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**0.0 at the function level**, 0.03 at the settings.json level. This way any direct caller of `CalcMicroCVD` (test code, future CLI host) gets unchanged behaviour unless they explicitly opt in. The engine default via cfg is dynamic",
+   "rationale_src": [
+    "docs/dynamic-microcvd-accel-proposal.md:367@f544095"
+   ],
+   "state_rev": "f5440953f13959f2082f28b36c19d32a0d59ffa8",
+   "state_rev_committed_utc": "2026-04-28T14:10:26Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q2@b5000c9",
+   "question": "Should `TierFloor` be derived from `RegimeMaxScore` instead of independent?",
+   "question_src": "docs/settings-exposure-pass-proposal.md:443@47a4535",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "derived from `RegimeMaxScore`",
+     "src": "docs/settings-exposure-pass-proposal.md:443@47a4535"
+    },
+    {
+     "label": "(2)",
+     "text": "independent",
+     "src": "docs/settings-exposure-pass-proposal.md:443@47a4535"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**No** — they serve different purposes (regime ceiling vs penalty graceful degradation). Keep independent",
+   "rationale_src": [
+    "docs/settings-exposure-pass-proposal.md:443@47a4535"
+   ],
+   "state_rev": "47a453590d42d748d230f6dfa04d1c4d915ad04d",
+   "state_rev_committed_utc": "2026-04-28T13:51:02Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q1@b5000c9",
+   "question": "Should new columns be inserted at a logical position in the header, or appended at end?",
+   "question_src": "docs/analysis-log-csv-expansion-proposal.md:339@bcd2bd2",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "inserted at a logical position in the header",
+     "src": "docs/analysis-log-csv-expansion-proposal.md:339@bcd2bd2"
+    },
+    {
+     "label": "(2)",
+     "text": "appended at end",
+     "src": "docs/analysis-log-csv-expansion-proposal.md:339@bcd2bd2"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**Appended at end.** Preserves existing column positions for any external readers (Excel, scripts, downstream parsers). Header is read by name in CalibrationReport so position doesn't matter internally",
+   "rationale_src": [
+    "docs/analysis-log-csv-expansion-proposal.md:339@bcd2bd2"
+   ],
+   "state_rev": "bcd2bd2bd26a8041b3e352d4dcc41c040fc63346",
+   "state_rev_committed_utc": "2026-04-29T05:58:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q2@b5000c9",
+   "question": "Should `OiCvdOutcome` distinguish confirmed/conflict by direction (LONG/SHORT), or just by category?",
+   "question_src": "docs/analysis-log-csv-expansion-proposal.md:340@bcd2bd2",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "distinguish confirmed/conflict by direction (LONG/SHORT)",
+     "src": "docs/analysis-log-csv-expansion-proposal.md:340@bcd2bd2"
+    },
+    {
+     "label": "(2)",
+     "text": "just by category",
+     "src": "docs/analysis-log-csv-expansion-proposal.md:340@bcd2bd2"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**By direction.** Auto-tweaker analysis benefits from knowing whether a confirmation was on the long or short side. 5 values is fine — small enum",
+   "rationale_src": [
+    "docs/analysis-log-csv-expansion-proposal.md:340@bcd2bd2"
+   ],
+   "state_rev": "bcd2bd2bd26a8041b3e352d4dcc41c040fc63346",
+   "state_rev_committed_utc": "2026-04-29T05:58:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q3@b5000c9",
+   "question": "Should `OiCvdOutcome` default to `\"NONE\"` or empty string?",
+   "question_src": "docs/analysis-log-csv-expansion-proposal.md:341@bcd2bd2",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "`\"NONE\"`",
+     "src": "docs/analysis-log-csv-expansion-proposal.md:341@bcd2bd2"
+    },
+    {
+     "label": "(2)",
+     "text": "empty string",
+     "src": "docs/analysis-log-csv-expansion-proposal.md:341@bcd2bd2"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**`\"NONE\"`.** Property default initializer is cleaner than null guards everywhere. Calibration parser dictionary handles `\"NONE\"` natively",
+   "rationale_src": [
+    "docs/analysis-log-csv-expansion-proposal.md:341@bcd2bd2"
+   ],
+   "state_rev": "bcd2bd2bd26a8041b3e352d4dcc41c040fc63346",
+   "state_rev_committed_utc": "2026-04-29T05:58:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q6@b5000c9",
+   "question": "Should the `VerdictContext` value `\"CONFIRMED\"` be logged or be left blank (since CONFIRMED is the \"no warning\" case in display)?",
+   "question_src": "docs/analysis-log-csv-expansion-proposal.md:344@bcd2bd2",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "logged",
+     "src": "docs/analysis-log-csv-expansion-proposal.md:344@bcd2bd2"
+    },
+    {
+     "label": "(2)",
+     "text": "left blank (since CONFIRMED is the \"no warning\" case in display)",
+     "src": "docs/analysis-log-csv-expansion-proposal.md:344@bcd2bd2"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Logged as `\"CONFIRMED\"`.** The CSV is for analysis, not display. Empty strings make distribution counting harder. The display-side suppression of CONFIRMED is a separate concern",
+   "rationale_src": [
+    "docs/analysis-log-csv-expansion-proposal.md:344@bcd2bd2"
+   ],
+   "state_rev": "bcd2bd2bd26a8041b3e352d4dcc41c040fc63346",
+   "state_rev_committed_utc": "2026-04-29T05:58:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/v17-followup-fixes-proposal.md|Q6@b5000c9",
+   "question": "Does the doc fix need its own commit or can it ride with the code fix?",
+   "question_src": "docs/v17-followup-fixes-proposal.md:254@d368d30",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "its own commit",
+     "src": "docs/v17-followup-fixes-proposal.md:254@d368d30"
+    },
+    {
+     "label": "(2)",
+     "text": "ride with the code fix",
+     "src": "docs/v17-followup-fixes-proposal.md:254@d368d30"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "Either is fine — small enough to ride. Recommend including in the same commit as the code fix, since both are v17-followup items and the spec covers both",
+   "rationale_src": [
+    "docs/v17-followup-fixes-proposal.md:254@d368d30"
+   ],
+   "state_rev": "d368d3035113ecc214f16a9ffed55d4a54c750f2",
+   "state_rev_committed_utc": "2026-04-29T06:16:53Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q3@b5000c9",
+   "question": "Should we reset the existing log or keep it?",
+   "question_src": "docs/v19-calibration-tuning-pass-proposal.md:334@8ac9a1f",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "reset the existing log",
+     "src": "docs/v19-calibration-tuning-pass-proposal.md:334@8ac9a1f"
+    },
+    {
+     "label": "(2)",
+     "text": "keep it",
+     "src": "docs/v19-calibration-tuning-pass-proposal.md:334@8ac9a1f"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Reset.** 618 rows with 100% degenerate values in 5 columns are not useful for the auto-tweaker. Cleaner to start fresh post-v19",
+   "rationale_src": [
+    "docs/v19-calibration-tuning-pass-proposal.md:334@8ac9a1f"
+   ],
+   "state_rev": "8ac9a1fafdc5b1df878e02bf9c028ff5a1420cb3",
+   "state_rev_committed_utc": "2026-04-30T09:52:02Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q9@b5000c9",
+   "question": "Should we ship before or after v19?",
+   "question_src": "docs/v20-rsi-roc-algorithm-fixes-proposal.md:591@7d378ea",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "before",
+     "src": "docs/v20-rsi-roc-algorithm-fixes-proposal.md:591@7d378ea"
+    },
+    {
+     "label": "(2)",
+     "text": "after v19",
+     "src": "docs/v20-rsi-roc-algorithm-fixes-proposal.md:591@7d378ea"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**After v19.** v19's `slope_sensitivity = 0.05` is the migration source for v20's `slope_delta_threshold = 0.05`. If v20 ships first, v19's reference becomes invalid",
+   "rationale_src": [
+    "docs/v20-rsi-roc-algorithm-fixes-proposal.md:591@7d378ea"
+   ],
+   "state_rev": "7d378ea419f5eb368a8dba1e04667165fbb147bd",
+   "state_rev_committed_utc": "2026-04-30T10:04:27Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q1@b5000c9",
+   "question": "Skip-on-any-failure vs degraded-mode?",
+   "question_src": "docs/api-resilience-pass-proposal.md:537@54f01a9",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Skip-on-any-failure",
+     "src": "docs/api-resilience-pass-proposal.md:537@54f01a9"
+    },
+    {
+     "label": "(2)",
+     "text": "degraded-mode",
+     "src": "docs/api-resilience-pass-proposal.md:537@54f01a9"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Skip-on-any-failure for v0.4.** Cleaner CSV. Simpler implementation. Re-evaluate post-launch if skip rate >10%",
+   "rationale_src": [
+    "docs/api-resilience-pass-proposal.md:537@54f01a9"
+   ],
+   "state_rev": "54f01a9d4918af2de707b8f4c0971b13935a1130",
+   "state_rev_committed_utc": "2026-04-29T13:37:38Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q2@b5000c9",
+   "question": "Retry once vs exponential backoff?",
+   "question_src": "docs/api-resilience-pass-proposal.md:538@54f01a9",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Retry once",
+     "src": "docs/api-resilience-pass-proposal.md:538@54f01a9"
+    },
+    {
+     "label": "(2)",
+     "text": "exponential backoff",
+     "src": "docs/api-resilience-pass-proposal.md:538@54f01a9"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Retry once with fixed 1s backoff.** Catches genuinely transient flakes. Configurable via `retry_count` if user wants more",
+   "rationale_src": [
+    "docs/api-resilience-pass-proposal.md:538@54f01a9"
+   ],
+   "state_rev": "54f01a9d4918af2de707b8f4c0971b13935a1130",
+   "state_rev_committed_utc": "2026-04-29T13:37:38Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/on-close-analysis-mode-proposal.md|S9.1@b5000c9",
+   "question": "Fire at exec-resolution close vs always 1-min",
+   "question_src": "docs/on-close-analysis-mode-proposal.md:137@ae0b59d",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "exec-resolution close",
+     "src": "docs/on-close-analysis-mode-proposal.md:137@ae0b59d"
+    },
+    {
+     "label": "(2)",
+     "text": "always 1-min",
+     "src": "docs/on-close-analysis-mode-proposal.md:137@ae0b59d"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend **exec-resolution close** (resolution-consistent: NY fires on the 1-min close the §11 text describes; Asia/London fire on the 3-min bar the engine actually evaluates, not a forming-bar mid-point). Always-1-min would fire NY identically but evaluate Asia/London on a 1/3-formed 3-min bar — provisional/noisy.",
+   "rationale_src": [
+    "docs/on-close-analysis-mode-proposal.md:137@ae0b59d"
+   ],
+   "state_rev": "ae0b59d3c1ae70f6e9d3ab676291f3996cd6dbb6",
+   "state_rev_committed_utc": "2026-06-25T09:13:52Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.1@b5000c9",
+   "question": "Default `enabled`",
+   "question_src": "docs/realtime-exit-guard-proposal.md:185@ce700a8",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**true**",
+     "src": "docs/realtime-exit-guard-proposal.md:185@ce700a8"
+    },
+    {
+     "label": "(2)",
+     "text": "Alternative: false until explicitly toggled.",
+     "src": "docs/realtime-exit-guard-proposal.md:185@ce700a8"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend **true** (harmless when flat; the value is automatic once a position is declared). Alternative: false until explicitly toggled.",
+   "rationale_src": [
+    "docs/realtime-exit-guard-proposal.md:185@ce700a8"
+   ],
+   "state_rev": "ce700a8ca3ba14da37fd961a156ad2f64f499656",
+   "state_rev_committed_utc": "2026-06-24T14:51:10Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.3@b5000c9",
+   "question": "`debounce_evals`",
+   "question_src": "docs/realtime-exit-guard-proposal.md:187@ce700a8",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**2**",
+     "src": "docs/realtime-exit-guard-proposal.md:187@ce700a8"
+    },
+    {
+     "label": "(2)",
+     "text": "Set 1 for immediate-fire if you'd rather not wait",
+     "src": "docs/realtime-exit-guard-proposal.md:187@ce700a8"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend **2** (~6 s confirmation at 3 s). Set 1 for immediate-fire if you'd rather not wait; higher to further suppress jitter.",
+   "rationale_src": [
+    "docs/realtime-exit-guard-proposal.md:187@ce700a8"
+   ],
+   "state_rev": "ce700a8ca3ba14da37fd961a156ad2f64f499656",
+   "state_rev_committed_utc": "2026-06-24T14:51:10Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.5@b5000c9",
+   "question": "Surface the single-adverse Warn state?",
+   "question_src": "docs/realtime-exit-guard-proposal.md:189@ce700a8",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**yes**",
+     "src": "docs/realtime-exit-guard-proposal.md:189@ce700a8"
+    },
+    {
+     "label": "(2)",
+     "text": "EXIT-only",
+     "src": "docs/realtime-exit-guard-proposal.md:189@ce700a8"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend **yes** (informational, no sound) as the \"watch\" precursor. Say so if you want EXIT-only.",
+   "rationale_src": [
+    "docs/realtime-exit-guard-proposal.md:189@ce700a8"
+   ],
+   "state_rev": "ce700a8ca3ba14da37fd961a156ad2f64f499656",
+   "state_rev_committed_utc": "2026-06-24T14:51:10Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.6@b5000c9",
+   "question": "Latch behaviour",
+   "question_src": "docs/realtime-exit-guard-proposal.md:190@ce700a8",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "auto-clear after the condition resolves for `debounce_evals` ticks (self-healing) + immediate clear on position-flat",
+     "src": "docs/realtime-exit-guard-proposal.md:190@ce700a8"
+    },
+    {
+     "label": "(2)",
+     "text": "require a manual ack",
+     "src": "docs/realtime-exit-guard-proposal.md:190@ce700a8"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend auto-clear after the condition resolves for `debounce_evals` ticks (self-healing) + immediate clear on position-flat. Alternative: require a manual ack.",
+   "rationale_src": [
+    "docs/realtime-exit-guard-proposal.md:190@ce700a8"
+   ],
+   "state_rev": "ce700a8ca3ba14da37fd961a156ad2f64f499656",
+   "state_rev_committed_utc": "2026-06-24T14:51:10Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.2@b5000c9",
+   "question": "Placement",
+   "question_src": "docs/live-microstructure-strip-proposal.md:138@df9dc4c",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "a thin full-width line **under the verdict header**",
+     "src": "docs/live-microstructure-strip-proposal.md:138@df9dc4c"
+    },
+    {
+     "label": "(2)",
+     "text": "Alt: beside the exit-guard row in the SETTINGS & TOOLS card.",
+     "src": "docs/live-microstructure-strip-proposal.md:138@df9dc4c"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend a thin full-width line **under the verdict header** (verdict + live tape read together). Alt: beside the exit-guard row in the SETTINGS & TOOLS card.",
+   "rationale_src": [
+    "docs/live-microstructure-strip-proposal.md:138@df9dc4c"
+   ],
+   "state_rev": "df9dc4c43e9714e306afacffdacb1e3a76696c0a",
+   "state_rev_committed_utc": "2026-06-25T17:07:04Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.4@b5000c9",
+   "question": "Nearest level: single nearest vs above+below",
+   "question_src": "docs/live-microstructure-strip-proposal.md:140@df9dc4c",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**single nearest**",
+     "src": "docs/live-microstructure-strip-proposal.md:140@df9dc4c"
+    },
+    {
+     "label": "(2)",
+     "text": "Alt: show both nearest-above and nearest-below.",
+     "src": "docs/live-microstructure-strip-proposal.md:140@df9dc4c"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend **single nearest** (compact). Alt: show both nearest-above and nearest-below.",
+   "rationale_src": [
+    "docs/live-microstructure-strip-proposal.md:140@df9dc4c"
+   ],
+   "state_rev": "df9dc4c43e9714e306afacffdacb1e3a76696c0a",
+   "state_rev_committed_utc": "2026-06-25T17:07:04Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.5@b5000c9",
+   "question": "Tape speed metric",
+   "question_src": "docs/live-microstructure-strip-proposal.md:141@df9dc4c",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**both** `tr/s` and `$/s`",
+     "src": "docs/live-microstructure-strip-proposal.md:141@df9dc4c"
+    },
+    {
+     "label": "(2)",
+     "text": "Or pick one.",
+     "src": "docs/live-microstructure-strip-proposal.md:141@df9dc4c"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend show **both** `tr/s` and `$/s` (both cheap; `$/s` is the richer flow read). Or pick one.",
+   "rationale_src": [
+    "docs/live-microstructure-strip-proposal.md:141@df9dc4c"
+   ],
+   "state_rev": "df9dc4c43e9714e306afacffdacb1e3a76696c0a",
+   "state_rev_committed_utc": "2026-06-25T17:07:04Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/auto-tweaker-session-resolution-filter-proposal.md|S5.2@b5000c9",
+   "question": "Accept GLOBAL-apply scoping (§3) + `resolution_profiles.*` off-surface (§4)?",
+   "question_src": "docs/auto-tweaker-session-resolution-filter-proposal.md:115@18155a0",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "GLOBAL-apply scoping (§3) + `resolution_profiles.*` off-surface (§4)",
+     "src": "docs/auto-tweaker-session-resolution-filter-proposal.md:115@18155a0"
+    },
+    {
+     "label": "(2)",
+     "text": "per-session tunable targets",
+     "src": "docs/auto-tweaker-session-resolution-filter-proposal.md:115@18155a0"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "*(Recommend YES.)* Matches the global tunable surface and the provisional-Asia/London design; the alternative (per-session tunable targets) is a larger calibration-design change deferred to Phase-2b.",
+   "rationale_src": [
+    "docs/auto-tweaker-session-resolution-filter-proposal.md:115@18155a0"
+   ],
+   "state_rev": "18155a0f40e3f22b0deb56afb9ae51c3daf28a0c",
+   "state_rev_committed_utc": "2026-06-16T20:32:22Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/offline-analysis-report-audit-proposal.md|D1@b5000c9",
+   "question": "D1 — Segmentation granularity.",
+   "question_src": "docs/offline-analysis-report-audit-proposal.md:172@fd0efdf",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**`(session × resolution)`** → NY×1, ASIA×3, LONDON×3",
+     "src": "docs/offline-analysis-report-audit-proposal.md:172@fd0efdf"
+    },
+    {
+     "label": "(2)",
+     "text": "Alternative: `(resolution only)` → res1, res3 (merges Asia+London; coarser but fewer thin cells)",
+     "src": "docs/offline-analysis-report-audit-proposal.md:172@fd0efdf"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "Recommend **`(session × resolution)`** → NY×1, ASIA×3, LONDON×3 (consistency with the Phase-2a tweaker filter; ASIA≠LONDON regimes). Alternative: `(resolution only)` → res1, res3 (merges Asia+London; coarser but fewer thin cells). *Recommend D1 = session × resolution.*",
+   "rationale_src": [
+    "docs/offline-analysis-report-audit-proposal.md:172@fd0efdf"
+   ],
+   "state_rev": "fd0efdf283dfe883b7fa00d53e616805b84d7013",
+   "state_rev_committed_utc": "2026-06-18T09:57:39Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/offline-analysis-report-audit-proposal.md|D3@b5000c9",
+   "question": "D3 — Pooled view.",
+   "question_src": "docs/offline-analysis-report-audit-proposal.md:174@fd0efdf",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**Drop** the old pooled matrix entirely (it is the bug); keep only the global verdict-count summary + global diagnostics",
+     "src": "docs/offline-analysis-report-audit-proposal.md:174@fd0efdf"
+    },
+    {
+     "label": "(2)",
+     "text": "Alternative: also render a clearly-labelled \"ALL (pooled — diagnostic only)\" block for continuity",
+     "src": "docs/offline-analysis-report-audit-proposal.md:174@fd0efdf"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Drop** the old pooled matrix entirely (it is the bug); keep only the global verdict-count summary + global diagnostics. Alternative: also render a clearly-labelled \"ALL (pooled — diagnostic only)\" block for continuity. *Recommend D3 = drop the pooled matrix.*",
+   "rationale_src": [
+    "docs/offline-analysis-report-audit-proposal.md:174@fd0efdf"
+   ],
+   "state_rev": "fd0efdf283dfe883b7fa00d53e616805b84d7013",
+   "state_rev_committed_utc": "2026-06-18T09:57:39Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.1@b5000c9",
+   "question": "Averaging mechanism",
+   "question_src": "docs/time-averaged-ofi-proposal.md:124@00b876c",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "feed-side rolling accumulator** (true per-update time-weighting, O(1))",
+     "src": "docs/time-averaged-ofi-proposal.md:124@00b876c"
+    },
+    {
+     "label": "(b)",
+     "text": "sampled ring (simpler, coarser)",
+     "src": "docs/time-averaged-ofi-proposal.md:124@00b876c"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "recommend **(a) feed-side rolling accumulator** (true per-update time-weighting, O(1)). Alt: (b) sampled ring (simpler, coarser).",
+   "rationale_src": [
+    "docs/time-averaged-ofi-proposal.md:124@00b876c"
+   ],
+   "state_rev": "00b876c32d4724c9edcf3cb117b89c6262a14cc9",
+   "state_rev_committed_utc": "2026-06-29T14:46:32Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.2@b5000c9",
+   "question": "Window / weighting",
+   "question_src": "docs/time-averaged-ofi-proposal.md:125@00b876c",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**EMA over `avg_window_sec` = 10s** (smooth, recency-weighted)",
+     "src": "docs/time-averaged-ofi-proposal.md:125@00b876c"
+    },
+    {
+     "label": "(2)",
+     "text": "a flat mean of the window",
+     "src": "docs/time-averaged-ofi-proposal.md:125@00b876c"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend an **EMA over `avg_window_sec` = 10s** (smooth, recency-weighted) vs a flat mean of the window. (10s ≈ a third of the old 30s cadence / aligns with the tape-window in #3.)",
+   "rationale_src": [
+    "docs/time-averaged-ofi-proposal.md:125@00b876c"
+   ],
+   "state_rev": "00b876c32d4724c9edcf3cb117b89c6262a14cc9",
+   "state_rev_committed_utc": "2026-06-29T14:46:32Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.3@b5000c9",
+   "question": "Re-baseline method",
+   "question_src": "docs/time-averaged-ofi-proposal.md:126@00b876c",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**firing-rate-match to snapshot-OFI history** (v40/v41 precedent)",
+     "src": "docs/time-averaged-ofi-proposal.md:126@00b876c"
+    },
+    {
+     "label": "(2)",
+     "text": "a distribution-percentile anchor",
+     "src": "docs/time-averaged-ofi-proposal.md:126@00b876c"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend **firing-rate-match to snapshot-OFI history** (v40/v41 precedent) vs a distribution-percentile anchor.",
+   "rationale_src": [
+    "docs/time-averaged-ofi-proposal.md:126@00b876c"
+   ],
+   "state_rev": "00b876c32d4724c9edcf3cb117b89c6262a14cc9",
+   "state_rev_committed_utc": "2026-06-29T14:46:32Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.4@b5000c9",
+   "question": "REST-fallback OFI",
+   "question_src": "docs/time-averaged-ofi-proposal.md:127@00b876c",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**keep snapshot OFI** on fallback runs (never silent) + accept the minor cadence heterogeneity (calibrate on the WS-averaged majority)",
+     "src": "docs/time-averaged-ofi-proposal.md:127@00b876c"
+    },
+    {
+     "label": "(2)",
+     "text": "Alt: skip OFI scoring on fallback runs.",
+     "src": "docs/time-averaged-ofi-proposal.md:127@00b876c"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend **keep snapshot OFI** on fallback runs (never silent) + accept the minor cadence heterogeneity (calibrate on the WS-averaged majority). Alt: skip OFI scoring on fallback runs.",
+   "rationale_src": [
+    "docs/time-averaged-ofi-proposal.md:127@00b876c"
+   ],
+   "state_rev": "00b876c32d4724c9edcf3cb117b89c6262a14cc9",
+   "state_rev_committed_utc": "2026-06-29T14:46:32Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.5@b5000c9",
+   "question": "Build/re-baseline split",
+   "question_src": "docs/time-averaged-ofi-proposal.md:128@00b876c",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**two versions** (v46 build behind the boundary → collect → v47 re-baselined thresholds), mirroring v36→v40",
+     "src": "docs/time-averaged-ofi-proposal.md:128@00b876c"
+    },
+    {
+     "label": "(2)",
+     "text": "vs waiting",
+     "src": "docs/time-averaged-ofi-proposal.md:128@00b876c"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "recommend **two versions** (v46 build behind the boundary → collect → v47 re-baselined thresholds), mirroring v36→v40. Confirm you want the build to land first (data starts accumulating immediately) vs waiting.",
+   "rationale_src": [
+    "docs/time-averaged-ofi-proposal.md:128@00b876c"
+   ],
+   "state_rev": "00b876c32d4724c9edcf3cb117b89c6262a14cc9",
+   "state_rev_committed_utc": "2026-06-29T14:46:32Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|B@b5000c9",
+   "question": "`Stop` hook event + scope (Stop+fast / PostToolUse / advisory-only)?",
+   "question_src": "docs/dev-workflow-automation-proposal.md:197@c3d71cc",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Stop+fast",
+     "src": "docs/dev-workflow-automation-proposal.md:197@c3d71cc"
+    },
+    {
+     "label": "(2)",
+     "text": "PostToolUse",
+     "src": "docs/dev-workflow-automation-proposal.md:197@c3d71cc"
+    },
+    {
+     "label": "(3)",
+     "text": "advisory-only",
+     "src": "docs/dev-workflow-automation-proposal.md:197@c3d71cc"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Stop, harness-only, advisory-or-blocking your call**\nControls inner-loop friction.",
+   "rationale_src": [
+    "docs/dev-workflow-automation-proposal.md:197@c3d71cc",
+    "docs/dev-workflow-automation-proposal.md:197@c3d71cc"
+   ],
+   "state_rev": "c3d71cce11edccec7f9b095844cb5e469924b7d9",
+   "state_rev_committed_utc": "2026-06-30T07:30:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|C@b5000c9",
+   "question": "Share `.claude/settings.json` + `agents/` (un-ignore) vs local-only?",
+   "question_src": "docs/dev-workflow-automation-proposal.md:198@c3d71cc",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Share `.claude/settings.json` + `agents/` (un-ignore)",
+     "src": "docs/dev-workflow-automation-proposal.md:198@c3d71cc"
+    },
+    {
+     "label": "(2)",
+     "text": "local-only",
+     "src": "docs/dev-workflow-automation-proposal.md:198@c3d71cc"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Share**\nReproducible workflow across seats/machines.",
+   "rationale_src": [
+    "docs/dev-workflow-automation-proposal.md:198@c3d71cc",
+    "docs/dev-workflow-automation-proposal.md:198@c3d71cc"
+   ],
+   "state_rev": "c3d71cce11edccec7f9b095844cb5e469924b7d9",
+   "state_rev_committed_utc": "2026-06-30T07:30:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|D@b5000c9",
+   "question": "Parity check: hard-fail-without-token vs warn-only in CI?",
+   "question_src": "docs/dev-workflow-automation-proposal.md:199@c3d71cc",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "hard-fail-without-token",
+     "src": "docs/dev-workflow-automation-proposal.md:199@c3d71cc"
+    },
+    {
+     "label": "(2)",
+     "text": "warn-only in CI",
+     "src": "docs/dev-workflow-automation-proposal.md:199@c3d71cc"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Fail-without-token**\nDirectly closes the documented 3×-drift gap; token preserves the existing escape hatch.",
+   "rationale_src": [
+    "docs/dev-workflow-automation-proposal.md:199@c3d71cc",
+    "docs/dev-workflow-automation-proposal.md:199@c3d71cc"
+   ],
+   "state_rev": "c3d71cce11edccec7f9b095844cb5e469924b7d9",
+   "state_rev_committed_utc": "2026-06-30T07:30:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|E@b5000c9",
+   "question": "Build item 4 `implementer.md` too, or `coordinator-review.md` only?",
+   "question_src": "docs/dev-workflow-automation-proposal.md:200@c3d71cc",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Build item 4 `implementer.md` too",
+     "src": "docs/dev-workflow-automation-proposal.md:200@c3d71cc"
+    },
+    {
+     "label": "(2)",
+     "text": "`coordinator-review.md` only",
+     "src": "docs/dev-workflow-automation-proposal.md:200@c3d71cc"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**coordinator-review only**\nHigher value; respects the budget; implementer ≈ the main session already.",
+   "rationale_src": [
+    "docs/dev-workflow-automation-proposal.md:200@c3d71cc",
+    "docs/dev-workflow-automation-proposal.md:200@c3d71cc"
+   ],
+   "state_rev": "c3d71cce11edccec7f9b095844cb5e469924b7d9",
+   "state_rev_committed_utc": "2026-06-30T07:30:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|F@b5000c9",
+   "question": "CI runner: `windows-latest` only, or split (Windows solution + Linux harness)?",
+   "question_src": "docs/dev-workflow-automation-proposal.md:201@c3d71cc",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "`windows-latest` only",
+     "src": "docs/dev-workflow-automation-proposal.md:201@c3d71cc"
+    },
+    {
+     "label": "(2)",
+     "text": "split (Windows solution + Linux harness)",
+     "src": "docs/dev-workflow-automation-proposal.md:201@c3d71cc"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**windows-latest only**\nOne runner is simpler; the WinForms build forces Windows anyway.",
+   "rationale_src": [
+    "docs/dev-workflow-automation-proposal.md:201@c3d71cc",
+    "docs/dev-workflow-automation-proposal.md:201@c3d71cc"
+   ],
+   "state_rev": "c3d71cce11edccec7f9b095844cb5e469924b7d9",
+   "state_rev_committed_utc": "2026-06-30T07:30:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/audit-fixes-2026-07-02-proposal.md|D1@b5000c9",
+   "question": "F1: remove key+POCO vs fence-only",
+   "question_src": "docs/audit-fixes-2026-07-02-proposal.md:91@ff23bfe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "remove key+POCO",
+     "src": "docs/audit-fixes-2026-07-02-proposal.md:91@ff23bfe"
+    },
+    {
+     "label": "(2)",
+     "text": "fence-only",
+     "src": "docs/audit-fixes-2026-07-02-proposal.md:91@ff23bfe"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Remove** (v15 dead-key precedent; C-6 then closes the tweaker path automatically)",
+   "rationale_src": [
+    "docs/audit-fixes-2026-07-02-proposal.md:91@ff23bfe"
+   ],
+   "state_rev": "ff23bfe01ae9ed488bec71779469228a1a9b8114",
+   "state_rev_committed_utc": "2026-07-02T07:56:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/audit-fixes-2026-07-02-proposal.md|D2@b5000c9",
+   "question": "Version numbering: this pass takes the next version (making the OFI threshold re-baseline the one after), or fold F1/F2 into the re-baseline commit",
+   "question_src": "docs/audit-fixes-2026-07-02-proposal.md:92@ff23bfe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "this pass takes the next version (making the OFI threshold re-baseline the one after)",
+     "src": "docs/audit-fixes-2026-07-02-proposal.md:92@ff23bfe"
+    },
+    {
+     "label": "(2)",
+     "text": "fold F1/F2 into the re-baseline commit",
+     "src": "docs/audit-fixes-2026-07-02-proposal.md:92@ff23bfe"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Take the next version now** — the re-baseline was always \"v47-ish\", versions are cheap, and F1 should not wait on a data-gated pass",
+   "rationale_src": [
+    "docs/audit-fixes-2026-07-02-proposal.md:92@ff23bfe"
+   ],
+   "state_rev": "ff23bfe01ae9ed488bec71779469228a1a9b8114",
+   "state_rev_committed_utc": "2026-07-02T07:56:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/audit-fixes-2026-07-02-proposal.md|D3@b5000c9",
+   "question": "F3: exit guard keeps snapshot OFI vs aligns to averaged",
+   "question_src": "docs/audit-fixes-2026-07-02-proposal.md:93@ff23bfe",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "exit guard keeps snapshot OFI",
+     "src": "docs/audit-fixes-2026-07-02-proposal.md:93@ff23bfe"
+    },
+    {
+     "label": "(2)",
+     "text": "aligns to averaged",
+     "src": "docs/audit-fixes-2026-07-02-proposal.md:93@ff23bfe"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Keep snapshot + document** (rationale + observational fallback in §4)",
+   "rationale_src": [
+    "docs/audit-fixes-2026-07-02-proposal.md:93@ff23bfe"
+   ],
+   "state_rev": "ff23bfe01ae9ed488bec71779469228a1a9b8114",
+   "state_rev_committed_utc": "2026-07-02T07:56:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/signal-health-retune-proposal.md|D2@b5000c9",
+   "question": "R2 threshold: 2e-7 vs 3e-7 vs keep 5e-8",
+   "question_src": "docs/signal-health-retune-proposal.md:82@21d1b7f",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "2e-7",
+     "src": "docs/signal-health-retune-proposal.md:82@21d1b7f"
+    },
+    {
+     "label": "(2)",
+     "text": "3e-7",
+     "src": "docs/signal-health-retune-proposal.md:82@21d1b7f"
+    },
+    {
+     "label": "(3)",
+     "text": "keep 5e-8",
+     "src": "docs/signal-health-retune-proposal.md:82@21d1b7f"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**2e-7**\n### R2 — Re-derive the funding momentum threshold for the WS funding feed ⚠\n\n`indicators.funding.momentum_threshold: 5e-8 → 2e-7` (settings-only). `momentum_window`, `momentum_amplify`, `momentum_soften` unchanged.\n\n**Why.** The v34 threshold was derived when REST funding was sticky (a 3-*change* window spanned hours). On WS, `funding_8h` changes on 96.5% of runs, so the same window now spans ~3 minutes and Step 3b moves scores on **36.8%** of runs (REST era: 16.0%) — the \"funding modifier is adjunct\" invariant is violated by drift, not by design. The signal's *direction* remains informative (flagged runs 45.3% vs 56.6% SUCC), so this is a retune, not a retire. At 2e-7 on the reconstructed WS window-delta distribution (95.1% validation agreement): FLAT becomes modal (67.6%) and 3b engagement lands at 18.8% ≈ the REST-era adjunct profile. Conservative alternative: 3e-7 → 14.3% (D2).\n\n**Residual defect, deferred.** The 3-change window is cadence-dependent (30 s vs 60 s vs on-close spacing changes its wall-clock span). The clean fix is a time-anchored comparison (rate vs the sample ≥N minutes back) — small code change, own mini-spec, not this pass (§7).",
+   "rationale_src": [
+    "docs/signal-health-retune-proposal.md:82@21d1b7f",
+    "docs/signal-health-retune-proposal.md:27-33@21d1b7f"
+   ],
+   "state_rev": "21d1b7f3dd15196ec3b625b323838460d9bfa1bc",
+   "state_rev_committed_utc": "2026-07-02T17:39:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D3@b5000c9",
+   "question": "Too-loose stop handling: **(a) clamp** to `stop_max_atr_mult×ATR` with `STOP_CLAMPED` surfaced, or (b) skip (new no-trade gate)",
+   "question_src": "docs/placed-geometry-structural-first-proposal.md:100@69441b5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "clamp** to `stop_max_atr_mult×ATR` with `STOP_CLAMPED` surfaced",
+     "src": "docs/placed-geometry-structural-first-proposal.md:100@69441b5"
+    },
+    {
+     "label": "(b)",
+     "text": "skip (new no-trade gate)",
+     "src": "docs/placed-geometry-structural-first-proposal.md:100@69441b5"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) clamp** — availability + bounded risk; bound derived to bind rarely; (b) is the conservative alternative",
+   "rationale_src": [
+    "docs/placed-geometry-structural-first-proposal.md:100@69441b5"
+   ],
+   "state_rev": "69441b5d5c55d60b0b2dd1f592e1f9e54b4a366d",
+   "state_rev_committed_utc": "2026-07-03T08:42:24Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/placed-geometry-derivation-2026-07-06.md|DG2@b5000c9",
+   "question": "Fallback stop 1.2 → **1.6** (vs keep-1.2 vs p90-2.2)",
+   "question_src": "docs/placed-geometry-derivation-2026-07-06.md:53@0ce68ad",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**1.6**",
+     "src": "docs/placed-geometry-derivation-2026-07-06.md:53@0ce68ad"
+    },
+    {
+     "label": "(2)",
+     "text": "keep-1.2",
+     "src": "docs/placed-geometry-derivation-2026-07-06.md:53@0ce68ad"
+    },
+    {
+     "label": "(3)",
+     "text": "p90-2.2",
+     "src": "docs/placed-geometry-derivation-2026-07-06.md:53@0ce68ad"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**1.6**\n**F2 — The current 1.2×ATR stop does bleed winners, mostly in LONDON.** Winners-MAE p75: NY ~0.95 (1.2 survives ~78% of NY winners), but LONDON 1.63 — today's stop stops ~30% of eventual London winners before their target. The p90 design point from the spec recipe is **~2.2×ATR** globally — but at a 1.75 target that's a 0.8:1 fallback R:R, and touch-EV does not clearly favor it (fat tail vs doubled loss size). §4 recommends the balanced middle; the p90-per-recipe and keep-1.2 options are listed.\n| `scoring.atr_stop_multiplier` (= fallback stop) | 1.2 | **1.6** global (≈ survives ~80–85% of winners pooled; covers LONDON's p75 1.63; fallback R:R 1.09) | 1.2 keep (R:R 1.46 at 1.75 target; bleeds ~30% of London winners) · 2.2 (the literal p90 recipe; R:R 0.80) |",
+   "rationale_src": [
+    "docs/placed-geometry-derivation-2026-07-06.md:53@0ce68ad",
+    "docs/placed-geometry-derivation-2026-07-06.md:27@0ce68ad",
+    "docs/placed-geometry-derivation-2026-07-06.md:41@0ce68ad"
+   ],
+   "state_rev": "0ce68adad2136d1db19ac4b505bee5702d852fb0",
+   "state_rev_committed_utc": "2026-07-06T07:24:05Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/placed-geometry-derivation-2026-07-06.md|DG3@b5000c9",
+   "question": "Fallback target 2.0 → **1.75** global + LONDON 2.0 + ASIA 1.25 session overrides",
+   "question_src": "docs/placed-geometry-derivation-2026-07-06.md:54@0ce68ad",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "2.0",
+     "src": "docs/placed-geometry-derivation-2026-07-06.md:54@0ce68ad"
+    },
+    {
+     "label": "(2)",
+     "text": "**1.75** global + LONDON 2.0 + ASIA 1.25 session overrides",
+     "src": "docs/placed-geometry-derivation-2026-07-06.md:54@0ce68ad"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**Yes**",
+   "rationale_src": [
+    "docs/placed-geometry-derivation-2026-07-06.md:54@0ce68ad"
+   ],
+   "state_rev": "0ce68adad2136d1db19ac4b505bee5702d852fb0",
+   "state_rev_committed_utc": "2026-07-06T07:24:05Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/funding-momentum-time-anchored-window-proposal.md|D4@b5000c9",
+   "question": "Boundary: bundle at B4b vs own boundary post-#5-gate",
+   "question_src": "docs/funding-momentum-time-anchored-window-proposal.md:90@595a519",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "bundle at B4b",
+     "src": "docs/funding-momentum-time-anchored-window-proposal.md:90@595a519"
+    },
+    {
+     "label": "(2)",
+     "text": "own boundary post-#5-gate",
+     "src": "docs/funding-momentum-time-anchored-window-proposal.md:90@595a519"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**Own boundary post-#5-gate** — B4b is geometry-only and already reviewed as such; keep its diff clean. Bundle only if B4b slips past the #5 gate anyway",
+   "rationale_src": [
+    "docs/funding-momentum-time-anchored-window-proposal.md:90@595a519"
+   ],
+   "state_rev": "595a51918b0d3535cc8be11d4b8bbfb6a20e9121",
+   "state_rev_committed_utc": "2026-07-06T18:53:11Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/d6-eval-placed-stop-migration-proposal.md|D1@b5000c9",
+   "question": "Replace vs dual-track the swing-stop metric",
+   "question_src": "docs/d6-eval-placed-stop-migration-proposal.md:25@7b62b95",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Replace",
+     "src": "docs/d6-eval-placed-stop-migration-proposal.md:25@7b62b95"
+    },
+    {
+     "label": "(2)",
+     "text": "dual-track",
+     "src": "docs/d6-eval-placed-stop-migration-proposal.md:25@7b62b95"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Replace in live code; continuity via a one-shot offline comparison** — D4 re-walks the same v0.8 rows under BOTH barrier sets and reports the deltas side-by-side, then the code runs single-track on placed levels. Permanent dual-track (extra cache columns, two report spines) buys little once the delta is quantified; the discretionary swing lens remains reconstructible offline from the logged `SwingStop*` columns any time",
+   "rationale_src": [
+    "docs/d6-eval-placed-stop-migration-proposal.md:25@7b62b95"
+   ],
+   "state_rev": "7b62b956048ab5e7f010976c27a906302bd1e996",
+   "state_rev_committed_utc": "2026-07-12T20:01:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S1@b5000c9",
+   "question": "NY `burst_ratio_threshold`",
+   "question_src": "docs/aggressor-velocity-s52-derivation-2026-07-13.md:60@542cb92",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**4.5**",
+     "src": "docs/aggressor-velocity-s52-derivation-2026-07-13.md:60@542cb92"
+    },
+    {
+     "label": "(2)",
+     "text": "4.0 looser",
+     "src": "docs/aggressor-velocity-s52-derivation-2026-07-13.md:60@542cb92"
+    },
+    {
+     "label": "(3)",
+     "text": "5.0 tighter",
+     "src": "docs/aggressor-velocity-s52-derivation-2026-07-13.md:60@542cb92"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**4.5** (p90, ~10%); alternatives 4.0 looser / 5.0 tighter\n**Recommendation: NY `burst_ratio_threshold` = 4.5** (the p90 knee). Reasoning: (a) ~10% fire rate reads as \"genuine impulse\" on a 1-min tape (~35 upgraded moments/day) while staying far from the always-on failure mode; (b) same-side agreement improves with T (86→90%) — higher bursts are cleaner; (c) day-to-day stability ±2pp on full days; (d) the contra-soften arm (2.2/day) survives — at T≥5 it effectively dies (≤1.4/day), and that arm is the §4.5 \"genuine warning\" half of the design. T=5.0 is the defensible tighter alternative if you want single-digit fires with maximal agreement; T=4.0 the looser one.",
+   "rationale_src": [
+    "docs/aggressor-velocity-s52-derivation-2026-07-13.md:60@542cb92",
+    "docs/aggressor-velocity-s52-derivation-2026-07-13.md:37@542cb92"
+   ],
+   "state_rev": "542cb92e07965889028c32d08e41a95ff2515a2f",
+   "state_rev_committed_utc": "2026-07-13T16:54:15Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S2@b5000c9",
+   "question": "Res-3 activation shape",
+   "question_src": "docs/aggressor-velocity-s52-derivation-2026-07-13.md:61@542cb92",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "the wire-in modifier applies only to sessions with a derived threshold (NY at activation). LONDON/ASIA keep the exploratory default for **display** (TAPE strip burst tags stay alive and keep collecting), but the scoring modifier is inert there until their own §5.2 pass.",
+     "src": "docs/aggressor-velocity-s52-derivation-2026-07-13.md:49@542cb92"
+    },
+    {
+     "label": "(b)",
+     "text": "simpler-but-blunt: sentinel-high `burst_ratio_threshold` in the LONDON/ASIA session overrides — one mechanism, but it kills the res-3 TAPE display and stops accumulating classified fires.",
+     "src": "docs/aggressor-velocity-s52-derivation-2026-07-13.md:50@542cb92"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a)** modifier scoped to derived sessions; res-3 display + collection unchanged\n- **(a) — recommended:** the wire-in modifier applies only to sessions with a derived threshold (NY at activation). LONDON/ASIA keep the exploratory default for **display** (TAPE strip burst tags stay alive and keep collecting), but the scoring modifier is inert there until their own §5.2 pass.",
+   "rationale_src": [
+    "docs/aggressor-velocity-s52-derivation-2026-07-13.md:61@542cb92",
+    "docs/aggressor-velocity-s52-derivation-2026-07-13.md:49@542cb92"
+   ],
+   "state_rev": "542cb92e07965889028c32d08e41a95ff2515a2f",
+   "state_rev_committed_utc": "2026-07-13T16:54:15Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/session-policy-gate-proposal.md|P1@b5000c9",
+   "question": "Home",
+   "question_src": "docs/session-policy-gate-proposal.md:39@ce601f6",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**Consumer-side**",
+     "src": "docs/session-policy-gate-proposal.md:39@ce601f6"
+    },
+    {
+     "label": "(2)",
+     "text": "Engine-side per-session thresholds",
+     "src": "docs/session-policy-gate-proposal.md:39@ce601f6"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Consumer-side** (R1-native; engine book stays whole). Engine-side per-session thresholds rejected for the subset use-case — record as decision-of-record if ticked",
+   "rationale_src": [
+    "docs/session-policy-gate-proposal.md:39@ce601f6"
+   ],
+   "state_rev": "ce601f605130c2f635d1c2fefd11f61da18a1d0a",
+   "state_rev_committed_utc": "2026-07-18T08:26:26Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/eval-no-data-outcome-proposal.md|N4@b5000c9",
+   "question": "RoundStatsBuilder (F9)",
+   "question_src": "docs/eval-no-data-outcome-proposal.md:26@e722ad7",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Migrate to placed geometry",
+     "src": "docs/eval-no-data-outcome-proposal.md:26@e722ad7"
+    },
+    {
+     "label": "(2)",
+     "text": "keep a fixed yardstick",
+     "src": "docs/eval-no-data-outcome-proposal.md:26@e722ad7"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Migrate to placed geometry** (consistency; it feeds tweaker context) — trader may overrule to keep a fixed yardstick\n- **R2 (F9, decision N4):** `RoundStatsBuilder` is the last synthetic-yardstick measurement (private `FavAtrThreshold = 0.5`). Recommendation: migrate it onto `ResolveFavourableBarrier`/placed geometry for consistency — OR document the fixed yardstick inline if the trader prefers round-stats stable across re-bases.",
+   "rationale_src": [
+    "docs/eval-no-data-outcome-proposal.md:26@e722ad7",
+    "docs/eval-no-data-outcome-proposal.md:17@e722ad7"
+   ],
+   "state_rev": "e722ad790a22f8a13a12ab8c0325e5e569fe9c72",
+   "state_rev_committed_utc": "2026-07-21T11:28:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/geometry-arbitration-modes-proposal.md|G2@b5000c9",
+   "question": "Buffer units",
+   "question_src": "docs/geometry-arbitration-modes-proposal.md:35@8f72f7f",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**% of placed distance**",
+     "src": "docs/geometry-arbitration-modes-proposal.md:35@8f72f7f"
+    },
+    {
+     "label": "(2)",
+     "text": "ATR-fraction",
+     "src": "docs/geometry-arbitration-modes-proposal.md:35@8f72f7f"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**% of placed distance** (the trader's stated framing; scale-free across regimes). Alternative: ATR-fraction (the W6-1 swing-buffer note's preference) — record whichever is ticked; the study sweeps the same either way",
+   "rationale_src": [
+    "docs/geometry-arbitration-modes-proposal.md:35@8f72f7f"
+   ],
+   "state_rev": "8f72f7f02202ba92305ce883d09d38a1fe91e47e",
+   "state_rev_committed_utc": "2026-07-21T15:52:06Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/liq-cascade-level-alerts-proposal.md|H1@b5000c9",
+   "question": "Alert surface",
+   "question_src": "docs/liq-cascade-level-alerts-proposal.md:22@74eff4b",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**TAPE-strip tag + status-bar flash**",
+     "src": "docs/liq-cascade-level-alerts-proposal.md:22@74eff4b"
+    },
+    {
+     "label": "(2)",
+     "text": "modal/banner",
+     "src": "docs/liq-cascade-level-alerts-proposal.md:22@74eff4b"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**TAPE-strip tag + status-bar flash** (the exit-guard/ABS pattern); `sound_enabled` optional, default OFF. Alternative: modal/banner — rejected rec: interrupts the discretionary read",
+   "rationale_src": [
+    "docs/liq-cascade-level-alerts-proposal.md:22@74eff4b"
+   ],
+   "state_rev": "74eff4b3d18935948f435f03c499b7ef4ad6d4eb",
+   "state_rev_committed_utc": "2026-07-21T18:08:04Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/absorption-geometry-rescale-proposal.md|V2@b5000c9",
+   "question": "Retire tick keys (unresolvable) vs keep-with-null",
+   "question_src": "docs/absorption-geometry-rescale-proposal.md:18@309b0fc",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Retire tick keys (unresolvable)",
+     "src": "docs/absorption-geometry-rescale-proposal.md:18@309b0fc"
+    },
+    {
+     "label": "(2)",
+     "text": "keep-with-null",
+     "src": "docs/absorption-geometry-rescale-proposal.md:18@309b0fc"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "Retire (v53 pattern)",
+   "rationale_src": [
+    "docs/absorption-geometry-rescale-proposal.md:18@309b0fc"
+   ],
+   "state_rev": "309b0fc4a945aa8854639c5cb692b01c0fb92ce3",
+   "state_rev_committed_utc": "2026-07-22T17:37:51Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/aggr-vel-s52-london-derivation-2026-07-23.md|S1@b5000c9",
+   "question": "LONDON `burst_ratio_threshold`",
+   "question_src": "docs/aggr-vel-s52-london-derivation-2026-07-23.md:82@8b7cc38",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**5.5**",
+     "src": "docs/aggr-vel-s52-london-derivation-2026-07-23.md:82@8b7cc38"
+    },
+    {
+     "label": "(2)",
+     "text": "5.0 looser",
+     "src": "docs/aggr-vel-s52-london-derivation-2026-07-23.md:82@8b7cc38"
+    },
+    {
+     "label": "(3)",
+     "text": "6.0 tighter",
+     "src": "docs/aggr-vel-s52-london-derivation-2026-07-23.md:82@8b7cc38"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**5.5** (p90 knee, ~10% fire rate, same-side 93.1%); alternatives 5.0 looser / 6.0 tighter",
+   "rationale_src": [
+    "docs/aggr-vel-s52-london-derivation-2026-07-23.md:82@8b7cc38"
+   ],
+   "state_rev": "8b7cc38b4d56d7f0786d5370e6da69899cdabb62",
+   "state_rev_committed_utc": "2026-07-22T17:06:36Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/in-app-trade-store-capture-proposal.md|D1@b5000c9",
+   "question": "Both boxes capture, or AWS only?",
+   "question_src": "docs/in-app-trade-store-capture-proposal.md:133@5ea86f7",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Both boxes capture",
+     "src": "docs/in-app-trade-store-capture-proposal.md:133@5ea86f7"
+    },
+    {
+     "label": "(2)",
+     "text": "AWS only",
+     "src": "docs/in-app-trade-store-capture-proposal.md:133@5ea86f7"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Both.** Redundancy is the point — a gap on one box is covered by the other, and merging is the concat+dedup you already do for the CSVs (§4.3b). AWS-only saves nothing meaningful and reintroduces a single point of loss.",
+   "rationale_src": [
+    "docs/in-app-trade-store-capture-proposal.md:133@5ea86f7"
+   ],
+   "state_rev": "5ea86f7a8ec95a8d6c3c614328ae9bb457aeef78",
+   "state_rev_committed_utc": "2026-07-30T17:57:49Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D1@b5000c9",
+   "question": "Whitelist the overridable blocks, or allow anything?",
+   "question_src": "docs/settings-local-overlay-proposal.md:187@00a8478",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "whitelist, **key-granular per the redrawn §2.2**",
+     "src": "docs/settings-local-overlay-proposal.md:187@00a8478"
+    },
+    {
+     "label": "(b)",
+     "text": "unrestricted",
+     "src": "docs/settings-local-overlay-proposal.md:187@00a8478"
+    },
+    {
+     "label": "(c)",
+     "text": "whitelist just `trade_store.`",
+     "src": "docs/settings-local-overlay-proposal.md:187@00a8478"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a), as redrawn.** The review was right that the first draft's list admitted scoring-relevant keys; six blocks are now admitted whole, `network.` is split per key, `auto_run.` is rejected outright. (b) breaks pooling invisibly — two boxes disagreeing on scoring while stamping the same settings version is an unfilterable straddle, worse than the chore this removes. (c) solves today and gets re-opened at the next key. **Reviewer position: (a) with the list redrawn — agreed and done.**",
+   "rationale_src": [
+    "docs/settings-local-overlay-proposal.md:187@00a8478"
+   ],
+   "state_rev": "00a8478bc3c7950d54884f29326731ac79d63ccd",
+   "state_rev_committed_utc": "2026-07-31T15:23:44Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D2@b5000c9",
+   "question": "File name / location.",
+   "question_src": "docs/settings-local-overlay-proposal.md:188@00a8478",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "`settings.local.json` beside `settings.json` in the exe dir",
+     "src": "docs/settings-local-overlay-proposal.md:188@00a8478"
+    },
+    {
+     "label": "(b)",
+     "text": "a `--settings` CLI arg",
+     "src": "docs/settings-local-overlay-proposal.md:188@00a8478"
+    },
+    {
+     "label": "(c)",
+     "text": "an env var",
+     "src": "docs/settings-local-overlay-proposal.md:188@00a8478"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** It survives builds, which is the actual requirement; (b)/(c) do not survive a Startup-folder shortcut or a reboot, which is how the collector runs.",
+   "rationale_src": [
+    "docs/settings-local-overlay-proposal.md:188@00a8478"
+   ],
+   "state_rev": "00a8478bc3c7950d54884f29326731ac79d63ccd",
+   "state_rev_committed_utc": "2026-07-31T15:23:44Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D3@b5000c9",
+   "question": "Whitelist violation: ignore-and-log, or refuse to start?",
+   "question_src": "docs/settings-local-overlay-proposal.md:189@00a8478",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "ignore + log loudly",
+     "src": "docs/settings-local-overlay-proposal.md:189@00a8478"
+    },
+    {
+     "label": "(b)",
+     "text": "fatal",
+     "src": "docs/settings-local-overlay-proposal.md:189@00a8478"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** A box that will not boot loses more data than a box running shared settings — and on AWS, \"will not boot\" means silent tape loss, the exact failure D1 is about.",
+   "rationale_src": [
+    "docs/settings-local-overlay-proposal.md:189@00a8478"
+   ],
+   "state_rev": "00a8478bc3c7950d54884f29326731ac79d63ccd",
+   "state_rev_committed_utc": "2026-07-31T15:23:44Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D4@b5000c9",
+   "question": "Show the overlay in the title bar?",
+   "question_src": "docs/settings-local-overlay-proposal.md:190@00a8478",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "`settings v{N} +local`",
+     "src": "docs/settings-local-overlay-proposal.md:190@00a8478"
+    },
+    {
+     "label": "(b)",
+     "text": "console only",
+     "src": "docs/settings-local-overlay-proposal.md:190@00a8478"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) plus console.** Every defect chased in the last two days was silent divergence; an override mechanism that hides itself is one more. Parity-exempt as a live status element.",
+   "rationale_src": [
+    "docs/settings-local-overlay-proposal.md:190@00a8478"
+   ],
+   "state_rev": "00a8478bc3c7950d54884f29326731ac79d63ccd",
+   "state_rev_committed_utc": "2026-07-31T15:23:44Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D5@b5000c9",
+   "question": "Does the auto-tweaker need to know about the overlay?",
+   "question_src": "docs/settings-local-overlay-proposal.md:191@00a8478",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "no — it reads/writes the base, unchanged",
+     "src": "docs/settings-local-overlay-proposal.md:191@00a8478"
+    },
+    {
+     "label": "(b)",
+     "text": "make it overlay-aware",
+     "src": "docs/settings-local-overlay-proposal.md:191@00a8478"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** Its whole surface is scoring keys, which §2 forbids overriding, so a tweaker-visible overlay is impossible by construction. Worth re-checking if D1 goes to (b).",
+   "rationale_src": [
+    "docs/settings-local-overlay-proposal.md:191@00a8478"
+   ],
+   "state_rev": "00a8478bc3c7950d54884f29326731ac79d63ccd",
+   "state_rev_committed_utc": "2026-07-31T15:23:44Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D6@b5000c9",
+   "question": "Apply the same overlay to `tweaker_config.json`?",
+   "question_src": "docs/settings-local-overlay-proposal.md:192@00a8478",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "no, out of scope",
+     "src": "docs/settings-local-overlay-proposal.md:192@00a8478"
+    },
+    {
+     "label": "(b)",
+     "text": "yes",
+     "src": "docs/settings-local-overlay-proposal.md:192@00a8478"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** The tweaker runs on one box. Adding a second overlay surface with no demonstrated need is how a small feature becomes a subsystem.",
+   "rationale_src": [
+    "docs/settings-local-overlay-proposal.md:192@00a8478"
+   ],
+   "state_rev": "00a8478bc3c7950d54884f29326731ac79d63ccd",
+   "state_rev_committed_utc": "2026-07-31T15:23:44Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D1@b5000c9",
+   "question": "New `coverage` verb, or a section inside the existing `report`?",
+   "question_src": "docs/trade-store-coverage-report-proposal.md:258@34f074f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "new verb",
+     "src": "docs/trade-store-coverage-report-proposal.md:258@34f074f"
+    },
+    {
+     "label": "(b)",
+     "text": "fold into `report`",
+     "src": "docs/trade-store-coverage-report-proposal.md:258@34f074f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) new verb.** `report` consumes a logged CSV and answers a different question; folding store health in makes neither runnable alone, and a schedulable exit code needs its own entry point.",
+   "rationale_src": [
+    "docs/trade-store-coverage-report-proposal.md:258@34f074f"
+   ],
+   "state_rev": "34f074f368624dfa3b651c0b6052e1012ac3516f",
+   "state_rev_committed_utc": "2026-08-02T16:10:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D2@b5000c9",
+   "question": "Does the report consume the uptime records — which means they must be copied back alongside the store?",
+   "question_src": "docs/trade-store-coverage-report-proposal.md:259@34f074f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "yes, degrade gracefully when absent",
+     "src": "docs/trade-store-coverage-report-proposal.md:259@34f074f"
+    },
+    {
+     "label": "(b)",
+     "text": "store-only signals",
+     "src": "docs/trade-store-coverage-report-proposal.md:259@34f074f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** S1 is what separates \"quiet market\" from \"we broke\". **Naming the paths explicitly, per the review's C4, because the natural copy-back action misses them:** the store is `<exe>\\backtest_data\\`, but **both** `analysis_log.csv` and `ws_health.log` sit in `<exe>\\` — the store's *parent*, not inside it. Copying `backtest_data\\` alone silently drops S1. The CSV is already routinely copied back, which is a further reason to make it the primary record.",
+   "rationale_src": [
+    "docs/trade-store-coverage-report-proposal.md:259@34f074f"
+   ],
+   "state_rev": "34f074f368624dfa3b651c0b6052e1012ac3516f",
+   "state_rev_committed_utc": "2026-08-02T16:10:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D3@b5000c9",
+   "question": "`--gap-ms` as a CLI flag, or a settings key?",
+   "question_src": "docs/trade-store-coverage-report-proposal.md:260@34f074f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "CLI flag",
+     "src": "docs/trade-store-coverage-report-proposal.md:260@34f074f"
+    },
+    {
+     "label": "(b)",
+     "text": "`trade_store.coverage_gap_ms`",
+     "src": "docs/trade-store-coverage-report-proposal.md:260@34f074f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) CLI flag.** Keeps Part A tools-only — no POCO, no bump, no fence question. It is an analysis parameter, not engine configuration.",
+   "rationale_src": [
+    "docs/trade-store-coverage-report-proposal.md:260@34f074f"
+   ],
+   "state_rev": "34f074f368624dfa3b651c0b6052e1012ac3516f",
+   "state_rev_committed_utc": "2026-08-02T16:10:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D7@b5000c9",
+   "question": "How does the report tell a capture **defect** from capture being **switched off**? **⚠ Cross-spec:** once `settings-local-overlay-proposal.md` is built, `trade_store.enabled` on the local box lives in `settings.local.json`, so any settings-reading answer here **must read the MERGED value, not the base file** — reading the base sees `true` and reports every local up-hour as a defect, the exact false alarm this D exists to prevent. (`trade_store.enabled:false` produces S1's exact defect signature — and the v64 review's F6 recommends setting it false on the local box.)",
+   "question_src": "docs/trade-store-coverage-report-proposal.md:262@34f074f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "one marker line per process recording the flag + store_dir",
+     "src": "docs/trade-store-coverage-report-proposal.md:262@34f074f"
+    },
+    {
+     "label": "(b)",
+     "text": "read `trade_store.enabled` from the `settings.json` beside the exe",
+     "src": "docs/trade-store-coverage-report-proposal.md:262@34f074f"
+    },
+    {
+     "label": "(c)",
+     "text": "scope the verb to AWS copy-backs and say so",
+     "src": "docs/trade-store-coverage-report-proposal.md:262@34f074f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) marker line.** (b) tells you the flag's value *now*, not during the historical window, so a single flip misreads all of history. **The cost of (a) is that Part A stops being tools-only — but that cost is zero if D5 is (a)**, since Part B already takes a bump. If D5 is (b)/(c), (c) here is the honest fallback: state the assumption rather than fake the signal.",
+   "rationale_src": [
+    "docs/trade-store-coverage-report-proposal.md:262@34f074f"
+   ],
+   "state_rev": "34f074f368624dfa3b651c0b6052e1012ac3516f",
+   "state_rev_committed_utc": "2026-08-02T16:10:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D6@b5000c9",
+   "question": "Should `--strict` be the default rather than opt-in?",
+   "question_src": "docs/trade-store-coverage-report-proposal.md:264@34f074f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "opt-in as specced",
+     "src": "docs/trade-store-coverage-report-proposal.md:264@34f074f"
+    },
+    {
+     "label": "(b)",
+     "text": "strict by default",
+     "src": "docs/trade-store-coverage-report-proposal.md:264@34f074f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) opt-in.** Interactive runs during a study should not fail on a known historical hole; the scheduled use passes the flag.",
+   "rationale_src": [
+    "docs/trade-store-coverage-report-proposal.md:264@34f074f"
+   ],
+   "state_rev": "34f074f368624dfa3b651c0b6052e1012ac3516f",
+   "state_rev_committed_utc": "2026-08-02T16:10:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D4@b5000c9",
+   "question": "Default gap threshold, and what to re-anchor it on.",
+   "question_src": "docs/trade-store-coverage-report-proposal.md:261@34f074f",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "300,000 ms (1.85× the observed max)",
+     "src": "docs/trade-store-coverage-report-proposal.md:261@34f074f"
+    },
+    {
+     "label": "(2)",
+     "text": "another value",
+     "src": "docs/trade-store-coverage-report-proposal.md:261@34f074f"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**300,000 ms, explicitly provisional**, re-anchored on a **REST-backfilled** window extended to include a weekend — **not** on streamed data (C5 accepted; streamed data would fold capture loss into the \"natural\" baseline and inflate the threshold). §0 is why this is looser than intuition wants.",
+   "rationale_src": [
+    "docs/trade-store-coverage-report-proposal.md:261@34f074f"
+   ],
+   "state_rev": "34f074f368624dfa3b651c0b6052e1012ac3516f",
+   "state_rev_committed_utc": "2026-08-02T16:10:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/asia-burst-threshold-derivation-2026-08-01.md|D3-1@b5000c9",
+   "question": "# res-3 §5.2 — ASIA aggressor-velocity threshold derivation (2026-08-01)",
+   "question_src": "docs/asia-burst-threshold-derivation-2026-08-01.md:1@1fc221b",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "2.5 (current default)",
+     "src": "docs/asia-burst-threshold-derivation-2026-08-01.md:21@1fc221b"
+    },
+    {
+     "label": "(2)",
+     "text": "3.0",
+     "src": "docs/asia-burst-threshold-derivation-2026-08-01.md:22@1fc221b"
+    },
+    {
+     "label": "(3)",
+     "text": "3.5",
+     "src": "docs/asia-burst-threshold-derivation-2026-08-01.md:23@1fc221b"
+    },
+    {
+     "label": "(4)",
+     "text": "4.0",
+     "src": "docs/asia-burst-threshold-derivation-2026-08-01.md:24@1fc221b"
+    },
+    {
+     "label": "(5)",
+     "text": "4.5",
+     "src": "docs/asia-burst-threshold-derivation-2026-08-01.md:25@1fc221b"
+    },
+    {
+     "label": "(6)",
+     "text": "5.0",
+     "src": "docs/asia-burst-threshold-derivation-2026-08-01.md:26@1fc221b"
+    },
+    {
+     "label": "(7)",
+     "text": "**5.5 (rec)**",
+     "src": "docs/asia-burst-threshold-derivation-2026-08-01.md:27@1fc221b"
+    },
+    {
+     "label": "(8)",
+     "text": "6.0",
+     "src": "docs/asia-burst-threshold-derivation-2026-08-01.md:28@1fc221b"
+    }
+   ],
+   "recommended": "(7)",
+   "rationale": "> **RECOMMENDATION: `indicators.aggressor_velocity.sessions.ASIA.burst_ratio_threshold` = 5.5** — the same value LONDON carries, arrived at independently.\n- **(a) Fire rate.** 9.7% is the closest cell to the ~10% \"genuine impulse\" design point and sits inside the 8–12% band. The current default 2.5 fires on **21.7%** of ASIA rows — one bar in five, the always-on failure mode the audit retired OFIMomentum for.\n- **(b) The p90 knee.** ASIA's p90 is **5.35**; 5.5 is the nearest grid value. Identical construction to NY (p90 4.51 → 4.5) and LONDON (p90 5.69 → 5.5).\n- **(c) Same-side agreement.** 91.0%, comfortably over the ≥85% bar — but see §3: it does **not** discriminate here.\n- **(d) The contra-soften arm.** See §3 — it cannot discriminate either, and that is itself a finding.",
+   "rationale_src": [
+    "docs/asia-burst-threshold-derivation-2026-08-01.md:9@1fc221b",
+    "docs/asia-burst-threshold-derivation-2026-08-01.md:31-35@1fc221b"
+   ],
+   "state_rev": "1fc221bf3986b8bf95f1bac2a6dbd232f72a22bc",
+   "state_rev_committed_utc": "2026-07-31T17:09:48Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/ttm-flat-threshold-rederivation-2026-08-02.md|D1-a@b5000c9",
+   "question": "Fix the **unit** or just the **value**?",
+   "question_src": "docs/ttm-flat-threshold-rederivation-2026-08-02.md:84@bec076f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "ATR-relative multiple, replacing the USD constant",
+     "src": "docs/ttm-flat-threshold-rederivation-2026-08-02.md:84@bec076f"
+    },
+    {
+     "label": "(b)",
+     "text": "new USD constant",
+     "src": "docs/ttm-flat-threshold-rederivation-2026-08-02.md:84@bec076f"
+    },
+    {
+     "label": "(c)",
+     "text": "no change",
+     "src": "docs/ttm-flat-threshold-rederivation-2026-08-02.md:84@bec076f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** It is the only option that survives a volatility regime change, it collapses the per-resolution ladder, and the measured stability gain is **2–4×**. (b) buys a number that is ~26 % wrong within months.",
+   "rationale_src": [
+    "docs/ttm-flat-threshold-rederivation-2026-08-02.md:84@bec076f"
+   ],
+   "state_rev": "bec076fe7dd7f07fa87500c44a7183967dfc89c7",
+   "state_rev_committed_utc": "2026-08-02T15:38:41Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/ttm-flat-threshold-rederivation-2026-08-02.md|D1-d@b5000c9",
+   "question": "Ship it at all?",
+   "question_src": "docs/ttm-flat-threshold-rederivation-2026-08-02.md:87@bec076f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "build now",
+     "src": "docs/ttm-flat-threshold-rederivation-2026-08-02.md:87@bec076f"
+    },
+    {
+     "label": "(b)",
+     "text": "park",
+     "src": "docs/ttm-flat-threshold-rederivation-2026-08-02.md:87@bec076f"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "⚠ **Genuinely open — see §6.** The unit argument is a correctness argument and it is solid. The *benefit* is unmeasured, the knob is low-leverage, and the standing instruction from W6-4 is \"no spend meanwhile.\" **My read: park the build, bank the finding.**",
+   "rationale_src": [
+    "docs/ttm-flat-threshold-rederivation-2026-08-02.md:87@bec076f"
+   ],
+   "state_rev": "bec076fe7dd7f07fa87500c44a7183967dfc89c7",
+   "state_rev_committed_utc": "2026-08-02T15:38:41Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D1@b5000c9",
+   "question": "Capture `trade_id`, `trade_seq`, or both?",
+   "question_src": "docs/trade-store-trade-identity-proposal.md:151@9fa6450",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "`trade_id`",
+     "src": "docs/trade-store-trade-identity-proposal.md:151@9fa6450"
+    },
+    {
+     "label": "(2)",
+     "text": "`trade_seq`",
+     "src": "docs/trade-store-trade-identity-proposal.md:151@9fa6450"
+    },
+    {
+     "label": "(3)",
+     "text": "both?",
+     "src": "docs/trade-store-trade-identity-proposal.md:151@9fa6450"
+    }
+   ],
+   "recommended": "(3)",
+   "rationale": "**Both.** `trade_id` fixes dedup and merging. `trade_seq` adds local gap detection and **retires the ~24 h completeness clock** (§3.3). The marginal cost over taking one is two characters of parse",
+   "rationale_src": [
+    "docs/trade-store-trade-identity-proposal.md:151@9fa6450"
+   ],
+   "state_rev": "9fa64503346914d301f6603f0bb649401fa28194",
+   "state_rev_committed_utc": "2026-08-07T16:59:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D5@b5000c9",
+   "question": "Append at end, or version the file?",
+   "question_src": "docs/trade-store-trade-identity-proposal.md:155@9fa6450",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "Append at end",
+     "src": "docs/trade-store-trade-identity-proposal.md:155@9fa6450"
+    },
+    {
+     "label": "(2)",
+     "text": "version the file",
+     "src": "docs/trade-store-trade-identity-proposal.md:155@9fa6450"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Append.** `TryParseRow`'s `< 5` guard already makes it backward-compatible, so no rotation and no rewrite (§3.1)",
+   "rationale_src": [
+    "docs/trade-store-trade-identity-proposal.md:155@9fa6450"
+   ],
+   "state_rev": "9fa64503346914d301f6603f0bb649401fa28194",
+   "state_rev_committed_utc": "2026-08-07T16:59:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D6@b5000c9",
+   "question": "Does `trade_seq` gap detection replace S0, or supplement it?",
+   "question_src": "docs/trade-store-trade-identity-proposal.md:156@9fa6450",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "replace S0",
+     "src": "docs/trade-store-trade-identity-proposal.md:156@9fa6450"
+    },
+    {
+     "label": "(2)",
+     "text": "supplement it",
+     "src": "docs/trade-store-trade-identity-proposal.md:156@9fa6450"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**Supplement, and re-scope S0.** Local gap detection is cheaper, unbounded in time and needs no network. S0 keeps one job the sequence cannot do: proving the store agrees with the venue on *content*, not just on continuity. **The suspended daily S0 job should be re-specified after this ships, not before**",
+   "rationale_src": [
+    "docs/trade-store-trade-identity-proposal.md:156@9fa6450"
+   ],
+   "state_rev": "9fa64503346914d301f6603f0bb649401fa28194",
+   "state_rev_committed_utc": "2026-08-07T16:59:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-1@b5000c9",
+   "question": "The guard's key",
+   "question_src": "docs/trade-store-write-guard-identity-proposal.md:172@b7ae9a5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "identity set, read-path relation",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:172@b7ae9a5"
+    },
+    {
+     "label": "(b)",
+     "text": "`trade_seq` high-water",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:172@b7ae9a5"
+    },
+    {
+     "label": "(c)",
+     "text": "composite",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:172@b7ae9a5"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** §3.1's asymmetry and §3.3's tolerance-vs-existence argument both point here, and (a) reuses a relation that already exists and is already fixture-covered",
+   "rationale_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:172@b7ae9a5"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-3@b5000c9",
+   "question": "Window size",
+   "question_src": "docs/trade-store-write-guard-identity-proposal.md:174@b7ae9a5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "20,000 entries",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:174@b7ae9a5"
+    },
+    {
+     "label": "(b)",
+     "text": "smaller",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:174@b7ae9a5"
+    },
+    {
+     "label": "(c)",
+     "text": "settings key",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:174@b7ae9a5"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) 20,000, as a CONSTANT.** ≈4 h of tape at the measured true rate, ~1 MB. Not a settings key: it has no failure-rate linkage, nobody will ever tune it, and a key means a version bump and a boundary question for nothing. If it must be configurable it goes under `trade_store.`, already fenced by HC27",
+   "rationale_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:174@b7ae9a5"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-4@b5000c9",
+   "question": "Restart behaviour",
+   "question_src": "docs/trade-store-write-guard-identity-proposal.md:175@b7ae9a5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "seed the window from the file tail",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:175@b7ae9a5"
+    },
+    {
+     "label": "(b)",
+     "text": "start empty",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:175@b7ae9a5"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** Cheap (`ReadTradeFile` exists) and it stops a restart re-writing the tail. ⚠ **Either way the failure mode must be duplicates, never drops** — if the window cannot be seeded, admit and let the read path dedup",
+   "rationale_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:175@b7ae9a5"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-5@b5000c9",
+   "question": "Existing half-tape",
+   "question_src": "docs/trade-store-write-guard-identity-proposal.md:176@b7ae9a5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "leave it",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:176@b7ae9a5"
+    },
+    {
+     "label": "(b)",
+     "text": "attempt recovery",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:176@b7ae9a5"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) leave it.** Past ~24 h retention nothing recovers it. ⚠ **Do not attempt a wide historical backfill to \"repair\" it** — it would write REST rows over a window the store already half-holds, and with no identity on the old rows the result is uninterpretable, which is the 2026-08-08 lesson exactly",
+   "rationale_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:176@b7ae9a5"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-2@b5000c9",
+   "question": "Ratify rejecting `trade_seq` as a high-water mark",
+   "question_src": "docs/trade-store-write-guard-identity-proposal.md:173@b7ae9a5",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "ratify",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:173@b7ae9a5"
+    },
+    {
+     "label": "(2)",
+     "text": "overrule",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:173@b7ae9a5"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Ratify.** It is the obvious fix and it rests on an unverified monotonic. If overruled, the build must first verify that Deribit never resets `trade_seq` and that batches never arrive out of sequence order — both are gate work, not build work",
+   "rationale_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:173@b7ae9a5"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-6@b5000c9",
+   "question": "Settings / version",
+   "question_src": "docs/trade-store-write-guard-identity-proposal.md:177@b7ae9a5",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "bump",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:177@b7ae9a5"
+    },
+    {
+     "label": "(2)",
+     "text": "not",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:177@b7ae9a5"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**No settings key, no version bump — stays v66.** Code-only. ⚠ The verify-gate's version-bump guard may still WARN on an engine-path change; that warning is expected and non-blocking, same as the C1 sessions",
+   "rationale_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:177@b7ae9a5"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-7@b5000c9",
+   "question": "Measure §5b before shipping?",
+   "question_src": "docs/trade-store-write-guard-identity-proposal.md:178@b7ae9a5",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "yes",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:178@b7ae9a5"
+    },
+    {
+     "label": "(2)",
+     "text": "no",
+     "src": "docs/trade-store-write-guard-identity-proposal.md:178@b7ae9a5"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Take the measurement — but it does NOT gate the ship.** ⚠ **CORRECTED 2026-08-11: an earlier draft of this row claimed shipping first would destroy the experiment. That was wrong.** The repaired band is written to disk and bounded by an outage window recoverable from `ws_health.log`, and the streaming bands either side are **pre-fix and therefore still ~50 %** — so the contrast survives on disk permanently and the fix does not rewrite history. **The only real deadline is upstream of the measurement:** gap repair has to *run* after the venue returns, within its 20 h lookback and Deribit's ~24 h retention. If the collector is down or stopped across the return, the hole is never filled and there is no band to measure. **So: keep the collector up when Deribit comes back. The analysis itself can wait for any later copy-back**",
+   "rationale_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:178@b7ae9a5"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/absorption-d6-spec-back.md|D-6a@b5000c9",
+   "question": "### D-6a — how to answer the \"reconcile … or state why\" branch",
+   "question_src": "docs/absorption-d6-spec-back.md:151@98af629",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "**Rule the pair INTENDED and document the mechanism** — arm-early / measure-tight, citing [`Core/LevelAbsorptionTracker.vb`](../Core/LevelAbsorptionTracker.vb) `:251` and `:295`. No code, no settings, no wait",
+     "src": "docs/absorption-d6-spec-back.md:155@98af629"
+    },
+    {
+     "label": "(b)",
+     "text": "Rule it intended but leave it undocumented",
+     "src": "docs/absorption-d6-spec-back.md:156@98af629"
+    },
+    {
+     "label": "(c)",
+     "text": "Rule it a defect and reconcile the two fractions to one value",
+     "src": "docs/absorption-d6-spec-back.md:157@98af629"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**My read — a, and I hold it firmly.** The code shows two different jobs, not one job done twice. ⚠ **Option c is the dangerous one: reconciling to 0.10 truncates the `SizeStart` baseline and biases `absorbRatio` UP**, which manufactures flags rather than finding them. **That is the shape [`trader-profile.md`](trader-profile.md) rejects — a change that raises the signal count by weakening its denominator.**",
+   "rationale_src": [
+    "docs/absorption-d6-spec-back.md:159@98af629"
+   ],
+   "state_rev": "98af62965db86052cf182ac93d45b3a697a1d6ef",
+   "state_rev_committed_utc": "2026-09-01T14:00:57Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/absorption-d6-spec-back.md|D-6b@b5000c9",
+   "question": "### D-6b — the \"largest single leak\" claim",
+   "question_src": "docs/absorption-d6-spec-back.md:161@98af629",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "**Withdraw it and re-ground the row** on §0.2 above — the annulus presses at 2.8 %, so there is little there to recover",
+     "src": "docs/absorption-d6-spec-back.md:165@98af629"
+    },
+    {
+     "label": "(b)",
+     "text": "Keep it and note the dispute",
+     "src": "docs/absorption-d6-spec-back.md:166@98af629"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**My read — a, and it is a hypothesis I would like attacked.** The claim and my rebuttal use the same table, so we are not disagreeing about data. We are disagreeing about which denominator the ≈ 77 % belongs to. **If my reading of the denominator is wrong, D-6b inverts and the geometry does become the primary target.**",
+   "rationale_src": [
+    "docs/absorption-d6-spec-back.md:168@98af629"
+   ],
+   "state_rev": "98af62965db86052cf182ac93d45b3a697a1d6ef",
+   "state_rev_committed_utc": "2026-09-01T14:00:57Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/d6d-episode-continuity-spec.md|D-6d.1@b5000c9",
+   "question": "**Sidecar `absorption_episodes.log`, or five new `analysis_log.csv` columns?**",
+   "question_src": "docs/d6d-episode-continuity-spec.md:248@b2ebae8",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Sidecar `absorption_episodes.log`",
+     "src": "docs/d6d-episode-continuity-spec.md:248@b2ebae8"
+    },
+    {
+     "label": "(b)",
+     "text": "five new `analysis_log.csv` columns",
+     "src": "docs/d6d-episode-continuity-spec.md:248@b2ebae8"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a) SIDECAR.** ⛔ **Reserved rather than auto-proceeded, because the CSV is the richer-sounding option and \"a rotation is expensive\" is the exact tell `CLAUDE.md`'s three-step test names.** **My reason is mechanical, not economic: a CSV column can carry ONE scalar per run, where the loss is a distribution over six close reasons across two sides. The column is not richer — it is narrower. Carrying `InstanceId` + `SignalId` makes the sidecar join losslessly, so nothing is given up.** ⚠ **And a rotation drags in five parked riders under a *\"NEVER FORCE ONE\"* rule**",
+   "rationale_src": [
+    "docs/d6d-episode-continuity-spec.md:248@b2ebae8"
+   ],
+   "state_rev": "b2ebae80bba1ca98799851d07187782fc4af65ca",
+   "state_rev_committed_utc": "2026-09-11T20:00:47Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/d6d-episode-continuity-spec.md|D-6d.2@b5000c9",
+   "question": "**Does Stage 1 ship alone and read for ~2 weekday-weeks, or do both stages ship together?**",
+   "question_src": "docs/d6d-episode-continuity-spec.md:247@4ce5a10",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Stage 1 ship alone and read for ~2 weekday-weeks",
+     "src": "docs/d6d-episode-continuity-spec.md:247@4ce5a10"
+    },
+    {
+     "label": "(b)",
+     "text": "both stages ship together",
+     "src": "docs/d6d-episode-continuity-spec.md:247@4ce5a10"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a) ALONE.** The §2 diagnosis is inference. **[`absorption-blind-rederivation-2026-08-19.md`](absorption-blind-rederivation-2026-08-19.md) §6.3 already charged one wrong mechanism-from-code hypothesis in this exact feature, and its direction was inverted**",
+   "rationale_src": [
+    "docs/d6d-episode-continuity-spec.md:247@4ce5a10"
+   ],
+   "state_rev": "4ce5a109c09463f71f2cb0fa2a23bf84378f9d34",
+   "state_rev_committed_utc": "2026-09-11T19:42:37Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/d6d-episode-continuity-spec.md|D-6d.3@b5000c9",
+   "question": "**Does `D-2` (`window_sec` → episode-cumulative) stay scheduled for ~2026-09-15, or move behind `D-6d`?**",
+   "question_src": "docs/d6d-episode-continuity-spec.md:248@4ce5a10",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "stay scheduled for ~2026-09-15",
+     "src": "docs/d6d-episode-continuity-spec.md:248@4ce5a10"
+    },
+    {
+     "label": "(b)",
+     "text": "move behind `D-6d`",
+     "src": "docs/d6d-episode-continuity-spec.md:248@4ce5a10"
+    },
+    {
+     "label": "(c)",
+     "text": "SHIP `D-2` AND `D-6d` STAGE 1 TOGETHER AT THE GATE, STAGE 2 AFTER THE READ",
+     "src": "docs/d6d-episode-continuity-spec.md:248@4ce5a10"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "⛔⛔ **MY (b) IS WITHDRAWN — MEASURED WRONG 2026-09-11, see §2.2. ⭐ NEW READ: (c) — SHIP `D-2` AND `D-6d` STAGE 1 TOGETHER AT THE GATE, STAGE 2 AFTER THE READ.** **(c) was on nobody's list and it dominates both originals.** **`D-2` is NOT a no-op: it binds on 26.0 % of reads carrying 48.6 % of all logged pressing, median span multiplier 2.25×, and §2.2a shows it REPAIRS a live span mismatch rather than risking one.** **Stage 1 is behaviour-neutral, so it rides along for ZERO extra dataset boundary and makes `D-2`'s own post-ship read instrumented instead of confounded.** ⛔ **And (b) was not merely weak, it was BACKWARDS: §2.2b shows Stage 2 without `D-2` makes `absorbRatio` FALL, because the denominator grows with episode length while the numerator saturates at the 10 s cap.** *(Superseded read follows, per the quote-and-label convention.)* ~~⭐ **(b) MOVE BEHIND.** §2.2: on the median 1.7 s episode `D-2` is arithmetically a **no-op**. Building it first spends a session to move nothing and adds a dataset boundary for it~~",
+   "rationale_src": [
+    "docs/d6d-episode-continuity-spec.md:248@4ce5a10"
+   ],
+   "state_rev": "4ce5a109c09463f71f2cb0fa2a23bf84378f9d34",
+   "state_rev_committed_utc": "2026-09-11T19:42:37Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/thin-trade-window-skip-gate-proposal.md|D-1@b5000c9",
+   "question": "Thin window ⇒ **SKIP the run** (no CSV row, SKIPPED bridge payload) rather than proceed with trade-derived signals forced neutral",
+   "question_src": "docs/thin-trade-window-skip-gate-proposal.md:163@821b689",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "**SKIP the run** (no CSV row, SKIPPED bridge payload)",
+     "src": "docs/thin-trade-window-skip-gate-proposal.md:163@821b689"
+    },
+    {
+     "label": "(2)",
+     "text": "proceed with trade-derived signals forced neutral",
+     "src": "docs/thin-trade-window-skip-gate-proposal.md:163@821b689"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**SKIP.** Consistent with how every other insufficient shape is already handled, and a forced-neutral row is silently degraded in the book — the same invisibility this spec exists to remove",
+   "rationale_src": [
+    "docs/thin-trade-window-skip-gate-proposal.md:163@821b689"
+   ],
+   "state_rev": "821b6898c2bec05a205655c07bd94c7cb142e39d",
+   "state_rev_committed_utc": "2026-08-20T13:52:21Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-7@b5000c9",
+   "question": "⚠ **Does `deploy` target the t2.micro test box too, or production only?**",
+   "question_src": "docs/collector-ops-tooling-proposal.md:152@cf13daf",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "the t2.micro test box too",
+     "src": "docs/collector-ops-tooling-proposal.md:152@cf13daf"
+    },
+    {
+     "label": "(2)",
+     "text": "production only",
+     "src": "docs/collector-ops-tooling-proposal.md:152@cf13daf"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "**Both, with the box named explicitly on every invocation and no default.** A tool that defaults to a target is a tool that deploys to the wrong one",
+   "rationale_src": [
+    "docs/collector-ops-tooling-proposal.md:152@cf13daf"
+   ],
+   "state_rev": "cf13dafb2bfc48121a9b10b7f771bb3752066576",
+   "state_rev_committed_utc": "2026-08-20T17:21:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-9@b5000c9",
+   "question": "Should `fetch` run on a schedule (e.g. daily) rather than on demand?",
+   "question_src": "docs/collector-ops-tooling-proposal.md:154@cf13daf",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "run on a schedule (e.g. daily)",
+     "src": "docs/collector-ops-tooling-proposal.md:154@cf13daf"
+    },
+    {
+     "label": "(2)",
+     "text": "on demand",
+     "src": "docs/collector-ops-tooling-proposal.md:154@cf13daf"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "**On demand only, this build.** A scheduled copy-back is a second thing to monitor, and §2.4 deliberately does not pool — an unattended transfer with no consumer earns nothing",
+   "rationale_src": [
+    "docs/collector-ops-tooling-proposal.md:154@cf13daf"
+   ],
+   "state_rev": "cf13dafb2bfc48121a9b10b7f771bb3752066576",
+   "state_rev_committed_utc": "2026-08-20T17:21:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-1@b5000c9",
+   "question": "Where does the rule live?",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:87@1bd268f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "in `ClassifySpan` — both paths for free",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:87@1bd268f"
+    },
+    {
+     "label": "(b)",
+     "text": "only the non-split branch of `ClassifyHour`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:87@1bd268f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** (b) leaves split hours carrying the original defect, and SH-1 exists precisely because split hours were being mis-scoped. ⚠ **But (a) applies an absolute 300 s threshold to spans as narrow as 60 s** — see D-5's coupling",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:87@1bd268f"
+   ],
+   "state_rev": "1bd268f1dc9a2d3847f2b60601d90a2f0f86b8ac",
+   "state_rev_committed_utc": "2026-08-25T09:31:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-2@b5000c9",
+   "question": "New field, or widen `LongestGapMs`?",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:88@1bd268f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "new `LastTsMs` field",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:88@1bd268f"
+    },
+    {
+     "label": "(b)",
+     "text": "fold the trailing gap into `LongestGapMs`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:88@1bd268f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a), and the choice is FORCED, not aesthetic.** `A49u` asserts `span0.LongestGapMs = 0` exactly; (b) breaks it. **Keeping the two separable also keeps \"gap between trades\" and \"silence to the edge\" distinguishable in the reason string, which is the whole reader-facing point**",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:88@1bd268f"
+   ],
+   "state_rev": "1bd268f1dc9a2d3847f2b60601d90a2f0f86b8ac",
+   "state_rev_committed_utc": "2026-08-25T09:31:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-3@b5000c9",
+   "question": "Default for the new field",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:89@1bd268f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "sentinel `-1` = \"unknown, do not evaluate\"",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:89@1bd268f"
+    },
+    {
+     "label": "(b)",
+     "text": "`0` and update the four fixtures",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:89@1bd268f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a) sentinel.** `0` means 1970-01-01 — a 56-year trailing gap — on all four hand-built fixtures, and it fails **silently and in the alarming direction**. A sentinel forces an explicit guard, which is the fail-closed posture the AutoTweaker F1 review just settled",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:89@1bd268f"
+   ],
+   "state_rev": "1bd268f1dc9a2d3847f2b60601d90a2f0f86b8ac",
+   "state_rev_committed_utc": "2026-08-25T09:31:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5@b5000c9",
+   "question": "What does a trailing-edge hour BECOME?",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:91@1bd268f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "`Defect`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:91@1bd268f"
+    },
+    {
+     "label": "(b)",
+     "text": "`Captured` + a reason",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:91@1bd268f"
+    },
+    {
+     "label": "(c)",
+     "text": "a new `HourClass`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:91@1bd268f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⚠ **(a), reluctantly, and this is the one I am least sure of.** (b) is **invisible** — `BuildMarkdown:1127` drops every `Captured` row (trap 4). (c) is honest but adds a class to a six-value enum, the D-3 combine, and every count surface. ⛔ **(a) changes `--strict`'s exit code**, so it can fail a scheduled job the first time it runs. **If that is unacceptable, (c) is the answer and this spec grows**",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:91@1bd268f"
+   ],
+   "state_rev": "1bd268f1dc9a2d3847f2b60601d90a2f0f86b8ac",
+   "state_rev_committed_utc": "2026-08-25T09:31:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-6@b5000c9",
+   "question": "Coherence with the header counters",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:92@1bd268f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "fold trailing gaps into `ObservedLongestGapMs`/`GapBreachHours`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:92@1bd268f"
+    },
+    {
+     "label": "(b)",
+     "text": "leave them",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:92@1bd268f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** Those read only from `hourStats` (`:975-976`). Leaving them makes the console report a *smaller* longest-gap and *fewer* breaches than its own defect count implies — **a visible internal contradiction in one report**, which is worse than either number alone",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:92@1bd268f"
+   ],
+   "state_rev": "1bd268f1dc9a2d3847f2b60601d90a2f0f86b8ac",
+   "state_rev_committed_utc": "2026-08-25T09:31:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-4@b5000c9",
+   "question": "⛔ **Which bound?** — §3",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:90@1bd268f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "evidence boundary only",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:90@1bd268f"
+    },
+    {
+     "label": "(b)",
+     "text": "evidence boundary **AND** store-end",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:90@1bd268f"
+    },
+    {
+     "label": "(c)",
+     "text": "(b) plus hour-aligning the partial final hour",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:90@1bd268f"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "⭐ **(b) at minimum; (c) is correct but larger.** (a) alone flags the final hour of most manual runs — a false defect on the instrument whose credibility is the point. ⚠ **If (c) is deferred, say so in the report note rather than leaving it silent**",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:90@1bd268f"
+   ],
+   "state_rev": "1bd268f1dc9a2d3847f2b60601d90a2f0f86b8ac",
+   "state_rev_committed_utc": "2026-08-25T09:31:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.1@b5000c9",
+   "question": "⛔ **Where does the new class sit in the D-3 residual combine?** (`CoverageReport.vb:609-624`)",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:132@3d0b8e1",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "between `Defect` and `Captured`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:132@3d0b8e1"
+    },
+    {
+     "label": "(b)",
+     "text": "below `Captured`, with the residual classes",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:132@3d0b8e1"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a), and it is FORCED.** Today's order is `Defect > Captured > UnknownScope > ExpectedMissing > NotCapturing`. Under (b), a split hour with one clean span and one trailing-edge span reports **`Captured`** — **SH-1's own defect reproduced in miniature**, which is the exact argument [`coverage-split-hour-implementer-brief.md`](coverage-split-hour-implementer-brief.md) was built on. ⚠ **Wrong here is SILENT**",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:132@3d0b8e1"
+   ],
+   "state_rev": "3d0b8e1772e31dc243b5dc07829b13198c17475c",
+   "state_rev_committed_utc": "2026-08-25T15:10:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.2@b5000c9",
+   "question": "Does `--strict` exit non-zero on the new class?",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:133@3d0b8e1",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "no — leave `BacktestProgram.vb:321` keyed on `Defect` alone",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:133@3d0b8e1"
+    },
+    {
+     "label": "(b)",
+     "text": "yes",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:133@3d0b8e1"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** Not moving `--strict` is the whole reason (c) beat (a) at D-5. ⚠ **But make it a STATED decision, not an accident of where that line happens to key** — otherwise the next person to tidy it changes the exit-code contract without knowing it was one",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:133@3d0b8e1"
+   ],
+   "state_rev": "3d0b8e1772e31dc243b5dc07829b13198c17475c",
+   "state_rev_committed_utc": "2026-08-25T15:10:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.3@b5000c9",
+   "question": "⛔ **The VERDICT line** (`:1092-1098`)",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:134@3d0b8e1",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "count the new class in the verdict",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:134@3d0b8e1"
+    },
+    {
+     "label": "(b)",
+     "text": "leave it",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:134@3d0b8e1"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a) — this is the hole §4 never mentions.** `defectCount` reads `HourClass.Defect` only and prints **`VERDICT: clean — no capture defects`** at zero. **Under D-5(c), a report carrying ten 54-minute trailing silences prints \"clean\".** That is strictly worse than the placeholder note being deleted",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:134@3d0b8e1"
+   ],
+   "state_rev": "3d0b8e1772e31dc243b5dc07829b13198c17475c",
+   "state_rev_committed_utc": "2026-08-25T15:10:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.4@b5000c9",
+   "question": "The console count line (`:1009-1014`)",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:135@3d0b8e1",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "add a seventh line",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:135@3d0b8e1"
+    },
+    {
+     "label": "(b)",
+     "text": "fold into an existing one",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:135@3d0b8e1"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** Those six lines are hardcoded one-per-class. A seventh class with no line is counted **nowhere** in the console — trap 4 in a new costume",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:135@3d0b8e1"
+   ],
+   "state_rev": "3d0b8e1772e31dc243b5dc07829b13198c17475c",
+   "state_rev_committed_utc": "2026-08-25T15:10:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.5@b5000c9",
+   "question": "What is the class called?",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:136@3d0b8e1",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "`TrailingEdge`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:136@3d0b8e1"
+    },
+    {
+     "label": "(b)",
+     "text": "`TrailingSilence`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:136@3d0b8e1"
+    },
+    {
+     "label": "(c)",
+     "text": "`PartiallyCaptured`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:136@3d0b8e1"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a) `TrailingEdge`** — the name every document in this arc already uses. ⚠ **Not (c)** — `PartiallyCaptured` invites the reader to treat it as a flavour of `Captured`, which is precisely the precedence error D-5.1 forbids",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:136@3d0b8e1"
+   ],
+   "state_rev": "3d0b8e1772e31dc243b5dc07829b13198c17475c",
+   "state_rev_committed_utc": "2026-08-25T15:10:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-6r@b5000c9",
+   "question": "### 4a.3 ⛔ D-6 — RE-OPENED. Its stated rationale does not survive the code",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:138@3d0b8e1",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "**(a) as originally offered** — fold both",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:156@3d0b8e1"
+    },
+    {
+     "label": "(b)",
+     "text": "**(b) leave both alone**",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:157@3d0b8e1"
+    },
+    {
+     "label": "(c)",
+     "text": "⭐ **(c) NEW — leave `ObservedLongestGapMs` and `GapBreachHours` untouched; report the trailing edge as its own pair beside them (`TrailingEdgeHours`, `ObservedLongestTrailingMs`)**",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:158@3d0b8e1"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "**D-6(a)'s argument is:** *\"leaving them makes the console report a smaller longest-gap and fewer breaches than its own defect count implies.\"*\n\n⛔ **The longest-gap half is false, and false by construction.** For any hour whose trailing edge flags, the silence runs on to the next trade, and `AccumulateHourStats` charges that **whole** gap to the hour containing the **ending** trade (`:415-420`). The full gap is therefore **always ≥ the trailing edge** — the same silence plus the part spilling into the next hour — and is **already** in `ObservedLongestGapMs`.\n\n**Worked, on this spec's own fixture.** `A49u` puts a trade at :25 and the next at :32. The straddling gap is **420,000 ms**; span 0's trailing edge to :29:59.999 is **299,999 ms**. The larger number is already recorded.\n\n⭐ **So folding trailing edges into `ObservedLongestGapMs` is a strict NO-OP wherever a trailing flag fires.** The only cases where it would not be are those whose gap-ending trade falls outside the walked range — **and D-4's bounds exempt exactly those hours from flagging.**\n\n⚠ **The `GapBreachHours` half is not a no-op — it is a double-count.** The following hour already counts the breach; adding the trailing hour counts one incident twice, silently changing the metric from *\"hours where a breaching gap ended\"* to *\"hours touched by a breaching gap\"*.\n\n⚠ **And D-6(a) contradicts D-2(a).** D-2 was ticked to keep *\"gap between trades\"* and *\"silence to the edge\"* separable **because they are different quantities**. D-6(a) then merges them in the header counter — discarding in the summary exactly what D-2 preserved in the stats.\n⛔ **Not recommended.** No-op on one counter, double-count on the other, and it undoes D-2's distinction\nDefensible — both counters are already correct as they stand. The new class's count then carries the trailing-edge story alone\n**My read.** The reader gets both quantities, each correctly labelled, with no double-count and no no-op. **It is also the only option consistent with D-2(a)**",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:140-150@3d0b8e1",
+    "docs/coverage-trailing-edge-f1-proposal.md:156@3d0b8e1",
+    "docs/coverage-trailing-edge-f1-proposal.md:157@3d0b8e1",
+    "docs/coverage-trailing-edge-f1-proposal.md:158@3d0b8e1"
+   ],
+   "state_rev": "3d0b8e1772e31dc243b5dc07829b13198c17475c",
+   "state_rev_committed_utc": "2026-08-25T15:10:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-3r@b5000c9",
+   "question": "### 4a.4 ⚠ D-3 — RE-OPENED with a third option, strictly better than the sentinel",
+   "question_src": "docs/coverage-trailing-edge-f1-proposal.md:162@3d0b8e1",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) sentinel — `Public Property LastTsMs As Long = -1`",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:170@3d0b8e1"
+    },
+    {
+     "label": "(c)",
+     "text": "⭐ **(c) NEW — `Public Property LastTsMs As Long?`**",
+     "src": "docs/coverage-trailing-edge-f1-proposal.md:171@3d0b8e1"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "**D-3(a)'s reasoning is right and is not in question.** A default of `0` reads as 1970-01-01 on the four hand-built fixtures — `verify/ordercheck/Program.vb:7757`, `:7791`, `:8094`, `:8311`, **all four verified to use `With { … }` property initialisers** — which fails silently in the alarming direction. **A default meaning \"unknown\" is required.**\n\n**But `-1` is a magic number, and this file already has the idiomatic form:**\nWorks. The guard is `If stats.LastTsMs >= 0 Then`, and every reader must know `-1` is magic\n**My read.** Identical fail-closed behaviour — `Nothing` is the default the four fixtures inherit — but absence lives **in the type**, the guard is `If stats.LastTsMs.HasValue Then`, and the **compiler** enforces the check instead of a convention. **In-idiom:** `CoverageResult` already carries `CaptureBeginsUtc As DateTime?` and `VenueCoveredFromUtc`/`ToUtc As DateTime?` (`:96-118`)\n⚠ **This is a form change, not a semantics change.** If the implementer prefers the sentinel for symmetry with `HourStoreStats`'s two existing non-nullable fields, that is defensible — **but say which and why, rather than defaulting to `-1` because §4 said so.**",
+   "rationale_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:164-166@3d0b8e1",
+    "docs/coverage-trailing-edge-f1-proposal.md:170@3d0b8e1",
+    "docs/coverage-trailing-edge-f1-proposal.md:171@3d0b8e1",
+    "docs/coverage-trailing-edge-f1-proposal.md:173@3d0b8e1"
+   ],
+   "state_rev": "3d0b8e1772e31dc243b5dc07829b13198c17475c",
+   "state_rev_committed_utc": "2026-08-25T15:10:25Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|A54a-scope@b5000c9",
+   "question": "A54a scope — GUARD the third copy, or DELETE it?",
+   "question_src": "docs/trader-tick-queue.md:38@b7ae9a5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Guard three copies** — the audit's Row 2.",
+     "src": "docs/trader-tick-queue.md:38@b7ae9a5"
+    },
+    {
+     "label": "(b)",
+     "text": "Delete the method defaults, make the parameters required** — reduces three copies to two rather than watching three.",
+     "src": "docs/trader-tick-queue.md:38@b7ae9a5"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "⚠ **NEW 2026-08-11**, from [`seam-audit-2026-08-11.md`](seam-audit-2026-08-11.md) S-2. Every indicator threshold exists in **three code copies plus the JSON**: the method `Optional` default, the POCO default, the fixture literal, and `settings.json`. **11 of 42 method defaults disagree with shipped JSON.** **(a) Guard three copies** — the audit's Row 2. ⚠ **My concern with (a):** the guard needs to map a method parameter to a JSON key (`CalcOBV.trendGate` → `indicators.OBV.trend_gate`), which is not mechanical, so it wants a table — **and a hand-maintained table is itself a fourth copy that can drift.** That is guarding the class with an instance of the class. **(b) Delete the method defaults, make the parameters required** — reduces three copies to two rather than watching three. ⚠ **The audit verified every production call site already passes the cfg value by name**, so the defaults serve *only fixtures* — and fixtures pinning stale literals is the defect. **My read: (b).** Bigger diff, removes the class instead of monitoring it. The counter-argument is the settings-exposure spec's stated \"caller convenience\", which is weak when no caller uses it. ⚠ **Whichever is picked, scope it by the rule the audit derived, not a hand-listed key set: a key with a concrete POCO default can drift; a `Double?` = Nothing nullable override cannot** — that is why v40/v41/v48 produced no drift while v33/v34/v36/v58 did",
+   "rationale_src": [
+    "docs/trader-tick-queue.md:38@b7ae9a5"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|seeded-session-buckets@b5000c9",
+   "question": "Seeded session buckets — does the code-defaults path exist at all?",
+   "question_src": "docs/trader-tick-queue.md:39@b7ae9a5",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "re-sync AND guard it",
+     "src": "docs/trader-tick-queue.md:39@b7ae9a5"
+    },
+    {
+     "label": "(2)",
+     "text": "an empty list is honest",
+     "src": "docs/trader-tick-queue.md:39@b7ae9a5"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "⚠ **NEW 2026-08-11**, [`seam-audit-2026-08-11.md`](seam-audit-2026-08-11.md) S-3. `Core/Settings/EngineSettings.vb:668-671` seeds ASIA/LONDON/NY with a comment reading *\"aligned to live **v30**\"*. Live is **v66**. ASIA `high_multiplier` 0.8 vs 1.00 · ASIA `mid_multiplier` 0.85 vs 1.00 · ASIA and LONDON `execution_resolution` 1 vs 3. **NY is clean.** The seed's stated purpose is that *\"an empty default would not silently skip all session scaling on the code-defaults path\"*. **Either that path matters — re-sync AND guard it — or it does not, and an empty list is honest.** ⚠ **Re-syncing without picking one just resets the clock**, which is exactly what happened between v30 and now\n*\"wrong values are worse than absent values, because absent is detectable and wrong is not.\"*\nempty the seed",
+   "rationale_src": [
+    "docs/trader-tick-queue.md:39@b7ae9a5",
+    "docs/seam-audit-decisions-second-opinion-2026-08-11.md:106@ee16d03",
+    "docs/seam-audit-decisions-second-opinion-2026-08-11.md:140@ee16d03"
+   ],
+   "state_rev": "b7ae9a51759e9a7cb2cd47c4c2bc4a40224c8c0f",
+   "state_rev_committed_utc": "2026-08-11T14:56:03Z",
+   "provenance": "quoted_in_pre_ruling_review"
+  },
+  {
+   "id": "docs/a54a-json-poco-drift-guard-spec.md|D-1@b5000c9",
+   "question": "**How is a DELIBERATE divergence declared?**",
+   "question_src": "docs/a54a-json-poco-drift-guard-spec.md:231@6e1753b",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "a small explicit allow-list of paths in the guard, each carrying its reason and the doc that ruled it",
+     "src": "docs/a54a-json-poco-drift-guard-spec.md:231@6e1753b"
+    },
+    {
+     "label": "(b)",
+     "text": "a `<PocoDefaultDiffers(\"reason\")>` attribute on the POCO property itself",
+     "src": "docs/a54a-json-poco-drift-guard-spec.md:231@6e1753b"
+    },
+    {
+     "label": "(c)",
+     "text": "no distinction — every inequality fails, and rows 7–9 get their POCO defaults flipped to match",
+     "src": "docs/a54a-json-poco-drift-guard-spec.md:231@6e1753b"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a)** — three entries, each citing its ruling. **(b) is cleaner but edits the POCO for a test's benefit**, and this project's own rule is that guards do not reshape the thing they guard. ⛔ **(c) is wrong and must not be taken quietly: it reverses two trader decisions (D3 on the bridge, §1.4 on `start_engaged`) to make a fixture green**\n(c) turns the signal bridge and hands-off collector start ON by POCO default. That is a behaviour change on the parse-failure path, decided by a test",
+   "rationale_src": [
+    "docs/a54a-json-poco-drift-guard-spec.md:231@6e1753b",
+    "docs/a54a-json-poco-drift-guard-spec.md:231@6e1753b"
+   ],
+   "state_rev": "6e1753b18af15602a71a85b6abacfab0adf716a6",
+   "state_rev_committed_utc": "2026-09-03T19:06:18Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/a54a-json-poco-drift-guard-spec.md|D-4@b5000c9",
+   "question": "**Does a drift FAIL the harness or WARN?**",
+   "question_src": "docs/a54a-json-poco-drift-guard-spec.md:234@6e1753b",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "FAIL the harness",
+     "src": "docs/a54a-json-poco-drift-guard-spec.md:234@6e1753b"
+    },
+    {
+     "label": "(2)",
+     "text": "WARN",
+     "src": "docs/a54a-json-poco-drift-guard-spec.md:234@6e1753b"
+    }
+   ],
+   "recommended": "(1)",
+   "rationale": "⭐ **FAIL** — a warning in a 317-check run is not read. ⛔ **But only after D-2/D-3 land in the SAME commit**, or the harness ships red\nWARN reproduces the defect this item exists to close: a signal nobody acts on",
+   "rationale_src": [
+    "docs/a54a-json-poco-drift-guard-spec.md:234@6e1753b",
+    "docs/a54a-json-poco-drift-guard-spec.md:234@6e1753b"
+   ],
+   "state_rev": "6e1753b18af15602a71a85b6abacfab0adf716a6",
+   "state_rev_committed_utc": "2026-09-03T19:06:18Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/a54a-json-poco-drift-guard-spec.md|D-5@b5000c9",
+   "question": "**Does scoped-(b) ship here or as its own session?**",
+   "question_src": "docs/a54a-json-poco-drift-guard-spec.md:235@6e1753b",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "ship here",
+     "src": "docs/a54a-json-poco-drift-guard-spec.md:235@6e1753b"
+    },
+    {
+     "label": "(2)",
+     "text": "as its own session",
+     "src": "docs/a54a-json-poco-drift-guard-spec.md:235@6e1753b"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "⭐ **Its own session, second** (§0). (b) is dead-code removal across production indicator signatures; session 1's guard is the instrument that proves it changed nothing\nBundling makes one commit that both adds an instrument and edits the code it measures",
+   "rationale_src": [
+    "docs/a54a-json-poco-drift-guard-spec.md:235@6e1753b",
+    "docs/a54a-json-poco-drift-guard-spec.md:235@6e1753b"
+   ],
+   "state_rev": "6e1753b18af15602a71a85b6abacfab0adf716a6",
+   "state_rev_committed_utc": "2026-09-03T19:06:18Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/a54a-r2-r3-followup-spec.md|D-R3@b5000c9",
+   "question": "**Do the per-session nullable ROC overrides get seeded too?**",
+   "question_src": "docs/a54a-r2-r3-followup-spec.md:125@778364e",
+   "options": [
+    {
+     "label": "(i)",
+     "text": "Seed `SessionBucketSettings.RocMagnitudeThreshold` — ASIA **0.17**, LONDON **0.11**, NY left `Nothing` (shipped has no NY override). Degraded path then matches shipped exactly.",
+     "src": "docs/a54a-r2-r3-followup-spec.md:125@778364e"
+    },
+    {
+     "label": "(ii)",
+     "text": "Do (b) only; accept LONDON getting worse; record it.",
+     "src": "docs/a54a-r2-r3-followup-spec.md:125@778364e"
+    },
+    {
+     "label": "(iii)",
+     "text": "Seed only the slope profile, skip magnitude — arbitrary",
+     "src": "docs/a54a-r2-r3-followup-spec.md:125@778364e"
+    }
+   ],
+   "recommended": "(i)",
+   "rationale": "⭐ **(i).** It is the only option that leaves the degraded path equal to shipped, and ⭐ **there is direct in-file precedent twelve lines from the edit:** `AggressorVelocitySessionOverride.BurstRatioThreshold` is a `Double?` seeded with **real values** (NY 4.5, LONDON 5.5, ASIA 5.5), and its own comment reads *\"**MUST mirror settings.json** — the harness builds cfgs from these defaults.\"* **The rule already exists in this file; `session_volume` is the exception.** ⚠ **The honest counter:** (i) seeds a nullable, and the guard's scoping rule says nullables are out of scope — so this fix is **outside** what A54a can protect, and will rot silently unless the §4 fixture pins it",
+   "rationale_src": [
+    "docs/a54a-r2-r3-followup-spec.md:125@778364e"
+   ],
+   "state_rev": "778364e2a0cb088ac005a8173dd383d17292d739",
+   "state_rev_committed_utc": "2026-09-04T15:52:33Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/a54a-session2-step1-measurement-2026-09-05.md|S2-1@b5000c9",
+   "question": "### 7.3 The disposition is small — one decision, and it is not urgent",
+   "question_src": "docs/a54a-session2-step1-measurement-2026-09-05.md:255@9d6bec0",
+   "options": [
+    {
+     "label": "(A)",
+     "text": "**(A)** Keep `CalcSpread` excluded — leave both `Optional` defaults, session 2 skips this one method",
+     "src": "docs/a54a-session2-step1-measurement-2026-09-05.md:264@9d6bec0"
+    },
+    {
+     "label": "(B)",
+     "text": "**(B)** Include it — make both required, pass `cfg.Indicators.Spread.*` at the one call site",
+     "src": "docs/a54a-session2-step1-measurement-2026-09-05.md:265@9d6bec0"
+    }
+   ],
+   "recommended": "(A)",
+   "rationale": "⭐ Session 2 stays **pure dead-code removal** everywhere it applies, which is its whole ruled framing. In-scope population 42 → unchanged; production omissions genuinely 0\nRemoves the last method carrying the three-copies problem, at the cost of one **production** edit — so (b) is no longer purely dead-code removal\n**Reviewer's read: (A)** — session 2's ruled framing is dead-code removal, and (B) trades that\nfor one line of tidiness. ⛔ **But whichever is taken, the exclusion note must be REWRITTEN\nwith a true reason.** *\"No settings counterpart\"* is false for these two parameters and will",
+   "rationale_src": [
+    "docs/a54a-session2-step1-measurement-2026-09-05.md:264@9d6bec0",
+    "docs/a54a-session2-step1-measurement-2026-09-05.md:265@9d6bec0",
+    "docs/a54a-session2-step1-measurement-2026-09-05.md:266-269@9d6bec0"
+   ],
+   "state_rev": "9d6bec02721198f788d79caffac4b3226e3be5a2",
+   "state_rev_committed_utc": "2026-09-04T16:49:22Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-1@b5000c9",
+   "question": "**How does `CalcSpreadBps` signal \"no measurable spread\"?** This is §3's crux and every other row depends on it",
+   "question_src": "docs/s2-2-calcspread-split-proposal.md:160@368c17a",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "⭐ `CalcSpreadBps(orderBook) As Double?` — `Nothing` on any of the five degenerate shapes, a real `Double` otherwise",
+     "src": "docs/s2-2-calcspread-split-proposal.md:160@368c17a"
+    },
+    {
+     "label": "(b)",
+     "text": "`CalcSpreadBps(orderBook, ByRef hasTopOfBook As Boolean) As Double`",
+     "src": "docs/s2-2-calcspread-split-proposal.md:160@368c17a"
+    },
+    {
+     "label": "(c)",
+     "text": "keep it `As Double` and make each **caller** guard before classifying",
+     "src": "docs/s2-2-calcspread-split-proposal.md:160@368c17a"
+    },
+    {
+     "label": "(d)",
+     "text": "sentinel `-1.0`",
+     "src": "docs/s2-2-calcspread-split-proposal.md:160@368c17a"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** `Double?` is this repo's established idiom for *\"no measurement\"* — the absorption instrumentation build ruled exactly this (`Double?` + `InvOpt`, *\"a no-episode row renders EMPTY, never `0`\"*), and `HourStoreStats.LastTsMs` was re-ruled from a sentinel to `Long?` for the same reason (`D-3` (c), [`coverage-trailing-edge-f1-proposal.md`](coverage-trailing-edge-f1-proposal.md) §4a.4). ⛔ **(c) is the one to refuse: it puts the invariant back in the caller, which is the thing this split exists to remove**, and it re-opens the divergence in a new place. **(d)** re-introduces a magic value the type system already models. **(b)** works but needs a `ByRef` at every call site — the pattern being deleted",
+   "rationale_src": [
+    "docs/s2-2-calcspread-split-proposal.md:160@368c17a"
+   ],
+   "state_rev": "368c17ad3d9f716cbbe2ce8bb2ab0fa983890324",
+   "state_rev_committed_utc": "2026-09-06T16:26:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-2@b5000c9",
+   "question": "**Where does the `\"NORMAL\"` degenerate answer live?**",
+   "question_src": "docs/s2-2-calcspread-split-proposal.md:161@368c17a",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "⭐ inside `ClassifySpread(bps As Double?, wide, tight) As String` — returns `\"NORMAL\"` on `Nothing`",
+     "src": "docs/s2-2-calcspread-split-proposal.md:161@368c17a"
+    },
+    {
+     "label": "(b)",
+     "text": "each caller assigns `\"NORMAL\"` when the bps is absent",
+     "src": "docs/s2-2-calcspread-split-proposal.md:161@368c17a"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a) — ONE seam.** Under (b) the answer is restated at two call sites and a third caller can forget it, which is §3's defect re-created by hand. Under (a) the degenerate contract is unreachable-by-mistake: a caller that has a `Double?` gets the right string or a compile error",
+   "rationale_src": [
+    "docs/s2-2-calcspread-split-proposal.md:161@368c17a"
+   ],
+   "state_rev": "368c17ad3d9f716cbbe2ce8bb2ab0fa983890324",
+   "state_rev_committed_utc": "2026-09-06T16:26:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-3@b5000c9",
+   "question": "**Does `LiveMicrostructureEvaluator.HasSpread` move onto the new nullable?** ⚠ **They are NOT equivalent** — `HasTopOfBook` (`:303-307`) tests three conditions, `CalcSpreadBps` tests six (§5.3)",
+   "question_src": "docs/s2-2-calcspread-split-proposal.md:162@368c17a",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "`snap.HasSpread = bps.HasValue` — collapses the third copy of the predicate, but **changes live-strip behaviour** on a zero-priced top-of-book",
+     "src": "docs/s2-2-calcspread-split-proposal.md:162@368c17a"
+    },
+    {
+     "label": "(b)",
+     "text": "⭐ leave `HasTopOfBook` alone; record the divergence as a residual",
+     "src": "docs/s2-2-calcspread-split-proposal.md:162@368c17a"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "⭐ **(b) for this build.** `S2-2`'s whole claim is *zero behaviour change*, provable on every surface; **(a) breaks that claim for a cosmetic gain and hides a real behaviour change inside a refactor.** ⚠ **(a) is defensible on the merits** — it is strictly more truthful, and a zero-priced top-of-book genuinely is *no spread* — but it belongs in its own one-line change with its own line in the record, not smuggled in here. ⛔ **This row exists because an implementer WILL be tempted to collapse them**",
+   "rationale_src": [
+    "docs/s2-2-calcspread-split-proposal.md:162@368c17a"
+   ],
+   "state_rev": "368c17ad3d9f716cbbe2ce8bb2ab0fa983890324",
+   "state_rev_committed_utc": "2026-09-06T16:26:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-4@b5000c9",
+   "question": "**Does `CalcSpread` survive as a wrapper?**",
+   "question_src": "docs/s2-2-calcspread-split-proposal.md:163@368c17a",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "⭐ **delete it** — both call sites move to the pair",
+     "src": "docs/s2-2-calcspread-split-proposal.md:163@368c17a"
+    },
+    {
+     "label": "(b)",
+     "text": "keep it as a thin `Sub` wrapper over the pair",
+     "src": "docs/s2-2-calcspread-split-proposal.md:163@368c17a"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** (b) reinstates precisely what the split removes: a threshold-taking entry point a future caller reaches for by habit, and a **third** place the composition can drift. There is nothing to keep it for — **zero fixtures call it** (§2.1), and both callers are in this repo",
+   "rationale_src": [
+    "docs/s2-2-calcspread-split-proposal.md:163@368c17a"
+   ],
+   "state_rev": "368c17ad3d9f716cbbe2ce8bb2ab0fa983890324",
+   "state_rev_committed_utc": "2026-09-06T16:26:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-5@b5000c9",
+   "question": "**Naming**",
+   "question_src": "docs/s2-2-calcspread-split-proposal.md:164@368c17a",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "`CalcSpreadBps` + `ClassifySpread`, as [`a54a-session2-step1-measurement-2026-09-05.md`](a54a-session2-step1-measurement-2026-09-05.md) §9.2 (i) names them",
+     "src": "docs/s2-2-calcspread-split-proposal.md:164@368c17a"
+    },
+    {
+     "label": "(b)",
+     "text": "`CalcSpreadBps` + `ClassifySpreadStatus`",
+     "src": "docs/s2-2-calcspread-split-proposal.md:164@368c17a"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** The analysis already used these names and the queue row quotes them; renaming now costs greppability against three documents for no gain. **`ClassifySpread` returns the `SpreadStatus` string — the `Classify*` prefix already matches `ClassifyAbsorption` / `ClassifyTrendStructure`**",
+   "rationale_src": [
+    "docs/s2-2-calcspread-split-proposal.md:164@368c17a"
+   ],
+   "state_rev": "368c17ad3d9f716cbbe2ce8bb2ab0fa983890324",
+   "state_rev_committed_utc": "2026-09-06T16:26:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|pooled-minute-key-dedup@b5000c9",
+   "question": "Bound the pooled minute-key dedup — before the next pooled read",
+   "question_src": "docs/trader-tick-queue.md:133@ee16d03",
+   "options": [
+    {
+     "label": "(1)",
+     "text": "AWS-preferred **minute-key** dedup for pooling",
+     "src": "docs/trader-tick-queue.md:133@ee16d03"
+    },
+    {
+     "label": "(2)",
+     "text": "fix the key first: second-resolution, or `InstanceId` + timestamp",
+     "src": "docs/trader-tick-queue.md:133@ee16d03"
+    }
+   ],
+   "recommended": "(2)",
+   "rationale": "⚠ **NEW 2026-08-11**, [`seam-audit-2026-08-11.md`](seam-audit-2026-08-11.md) S-5. [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §3b specifies an AWS-preferred **minute-key** dedup for pooling. Measured against the books in hand it would drop **548 local rows (5.08 %)** and **25 AWS rows (0.16 %)**. ⚠ **The AWS losses are not random — they cluster at `13:00` UTC**, the NY `session_volume` boundary where `execution_resolution` switches 3 → 1, so the cadence changes and two runs land in one minute. **A session-correlated loss is the same \"biased, and worse than its size\" property that made the same-millisecond drop serious.** **The Kelly dated trigger and the W6-4 re-run are both scheduled to consume one pooled freeze**, so fix the key first: second-resolution, or `InstanceId` + timestamp, costs nothing extra. ⚠ **No minute-key dedup exists in any `.vb` file** — this is a documented ops procedure, so the fix is a doc edit. **Model: Sonnet, effort: low**",
+   "rationale_src": [
+    "docs/trader-tick-queue.md:133@ee16d03"
+   ],
+   "state_rev": "ee16d03e82abf0691404bb76d3c0c4024c3411e4",
+   "state_rev_committed_utc": "2026-08-11T15:08:28Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|E5-absorption-path@b5000c9",
+   "question": "**E5** absorption **Path B**",
+   "question_src": "docs/trader-tick-queue.md:36@c38ea02",
+   "options": [
+    {
+     "label": "(A)",
+     "text": "Path A's V-table",
+     "src": "docs/trader-tick-queue.md:36@c38ea02"
+    },
+    {
+     "label": "(B)",
+     "text": "Path B (hold v61 anchors, spec a mechanism revision — `window_sec` / episode-cumulative pressing / D8 sparse handling, display-only, no ⚠)",
+     "src": "docs/trader-tick-queue.md:36@c38ea02"
+    }
+   ],
+   "recommended": "(B)",
+   "rationale": "Coordinator ratified Path B (hold v61 anchors, spec a mechanism revision — `window_sec` / episode-cumulative pressing / D8 sparse handling, display-only, no ⚠). The path itself is unticked. Path A's V-table is on file but projects NY 0.000% and ~10–15 weeks to the gate — **not recommended.** Activation slips past mid-Aug on any path",
+   "rationale_src": [
+    "docs/trader-tick-queue.md:36@c38ea02"
+   ],
+   "state_rev": "c38ea02d2334fb9cefaadff23a33eda8b54c5964",
+   "state_rev_committed_utc": "2026-08-11T17:41:32Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|WD-SEMANTICS@b5000c9",
+   "question": "`WD-SEMANTICS` — `WeekendExcluded` means THREE DIFFERENT THINGS on three surfaces",
+   "question_src": "docs/trader-tick-queue.md:344@a6cfb8d",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "unify on \"MinValue counts as weekend\" (matches `AnalysisRunner`, one call per site, changes two rendered numbers)",
+     "src": "docs/trader-tick-queue.md:344@a6cfb8d"
+    },
+    {
+     "label": "(b)",
+     "text": "unify on \"MinValue drops silently\" (matches the two counter sites, changes `AnalysisRunner`'s number)",
+     "src": "docs/trader-tick-queue.md:344@a6cfb8d"
+    },
+    {
+     "label": "(c)",
+     "text": "add a separate `UnparsedExcluded` counter — most honest, but a NEW rendered field on two surfaces, so the engine display-string parity rule fires.",
+     "src": "docs/trader-tick-queue.md:344@a6cfb8d"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "⚠ **My read: (c) is right in principle and (b) is right in practice — the unparsed count is ~always zero (measured `unparsed=0` on both the live book and the `.bak`, 2026-09-08), so (c) buys a new display field for a number that is always 0.** ⚠ **NOT MEASURED, and it is the premise: `AnalysisRunner.vb:46`'s subtraction behaviour is READ, not run. Verify it before ruling.**",
+   "rationale_src": [
+    "docs/trader-tick-queue.md:344@a6cfb8d"
+   ],
+   "state_rev": "a6cfb8d032b4882f7eeb403571547fc22c83e1fe",
+   "state_rev_committed_utc": "2026-09-08T14:42:45Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/s4-eval-cache-identity-proposal.md|D-1@b5000c9",
+   "question": "Build the loop fix (half A) independently of the key fix (half B)?",
+   "question_src": "docs/s4-eval-cache-identity-proposal.md:100@edd77b7",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "yes — ship A now, decide B separately",
+     "src": "docs/s4-eval-cache-identity-proposal.md:100@edd77b7"
+    },
+    {
+     "label": "(b)",
+     "text": "no — they land together or not at all",
+     "src": "docs/s4-eval-cache-identity-proposal.md:100@edd77b7"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** A is a real bug with a zero-schema fix and is strictly an improvement whatever B becomes. Holding it hostage to a schema decision buys nothing. ⚠ **The queue row's *\"Both halves, or state why only one\"* is SATISFIED by this document** — that is what §2.3 and `D-2` are",
+   "rationale_src": [
+    "docs/s4-eval-cache-identity-proposal.md:100@edd77b7"
+   ],
+   "state_rev": "edd77b7e5d1591dc70db2df0a16a55b5e77667a1",
+   "state_rev_committed_utc": "2026-09-08T14:45:49Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/s4-eval-cache-identity-proposal.md|D-2@b5000c9",
+   "question": "What is the dedup key?",
+   "question_src": "docs/s4-eval-cache-identity-proposal.md:101@edd77b7",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "keep `Timestamp`, fix only the loop",
+     "src": "docs/s4-eval-cache-identity-proposal.md:101@edd77b7"
+    },
+    {
+     "label": "(b)",
+     "text": "true `(InstanceId, SignalId)` pair + v6→v7 migration",
+     "src": "docs/s4-eval-cache-identity-proposal.md:101@edd77b7"
+    },
+    {
+     "label": "(c)",
+     "text": "composite of already-persisted fields — `(Timestamp, Verdict, ExecResolution, EntryPrice)`",
+     "src": "docs/s4-eval-cache-identity-proposal.md:101@edd77b7"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a) NOW, (b) as the DIRECTION — and defer (b) until something else forces an eval-cache migration.** The measured duplicate rate is **zero on every sample ever taken**, so (b) buys correctness against a collision nobody has observed, at the cost of a persisted-schema change. ⛔ **(c) is REJECTED and should not be re-proposed: it is a HEURISTIC dressed as an identity.** Two genuinely distinct runs at the same second on the same verdict, resolution and entry price would still collide — and a key that is *nearly* unique invites exactly the \"held safe by an assumption\" failure this project has hit repeatedly",
+   "rationale_src": [
+    "docs/s4-eval-cache-identity-proposal.md:101@edd77b7"
+   ],
+   "state_rev": "edd77b7e5d1591dc70db2df0a16a55b5e77667a1",
+   "state_rev_committed_utc": "2026-09-08T14:45:49Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/s4-eval-cache-identity-proposal.md|D-3@b5000c9",
+   "question": "Under (b), what happens to legacy eval-cache rows that have no identity?",
+   "question_src": "docs/s4-eval-cache-identity-proposal.md:102@edd77b7",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "null identity, **fall back to `Timestamp`** for those rows only",
+     "src": "docs/s4-eval-cache-identity-proposal.md:102@edd77b7"
+    },
+    {
+     "label": "(b)",
+     "text": "re-derive identity by matching back to `analysis_log.csv` on `Timestamp`",
+     "src": "docs/s4-eval-cache-identity-proposal.md:102@edd77b7"
+    },
+    {
+     "label": "(c)",
+     "text": "rotate the eval cache and rebuild from scratch",
+     "src": "docs/s4-eval-cache-identity-proposal.md:102@edd77b7"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** ⛔ **(b) is CIRCULAR — it matches on the very key the change exists to distrust — and must be rejected explicitly so it is not proposed as a \"completeness\" improvement.** (c) throws away the perf strip's history for a latent defect, which is a bad trade the pre-v5 rotate already made once for a real reason",
+   "rationale_src": [
+    "docs/s4-eval-cache-identity-proposal.md:102@edd77b7"
+   ],
+   "state_rev": "edd77b7e5d1591dc70db2df0a16a55b5e77667a1",
+   "state_rev_committed_utc": "2026-09-08T14:45:49Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md|S-1@b5000c9",
+   "question": "## 5. ⛔ THE DECISION — one question, three options",
+   "question_src": "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:119@30b0c3f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "⭐ **Split `TradeRecord` into `Core/TradeRecord.vb`, then route the probe through it** — the structural treatment the trigger names",
+     "src": "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:125@30b0c3f"
+    },
+    {
+     "label": "(b)",
+     "text": "**Accept `S-1` and record why** — the divergence cannot fire at `trade_seq` ≈ 296 M; document the assumption at both sites and close the row",
+     "src": "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:126@30b0c3f"
+    },
+    {
+     "label": "(c)",
+     "text": "Link the three files as originally scoped",
+     "src": "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:127@30b0c3f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "1 file move · 6 `.vbproj` one-line edits · 0 call-site changes · a spec with a D-table\n⭐ **This is the right END STATE and the trigger pre-authorises its direction**\n~30 minutes, doc-only\n⭐ **Defensible, and cheaper than (a) by a wide margin**\n⛔ **Rejected — §2.3.** Trades a benign divergence for a latent settings-write on the production box, and falsifies a stated guarantee\n⛔ **Do not take this**\n### ⭐ My read: **(a), but NOT NOW — and I want to say why the sequencing matters more than the choice.**\n\n**(a) is right on the merits.** It removes the class rather than guarding it, it is the same one-seam pattern as `ComputeSideLevels` and `TradeStoreWriter`, and — ⭐ **the part that makes it worth more than this one probe** — a dependency-free `Core/TradeRecord.vb` means *any* future tool can parse a Deribit trade without importing an HTTP client and a settings loader. **The probe is the first caller to need that, not the only one.**\n\n⚠ **But nothing is bought today.** `S-1` cannot fire, the write-guard fix it gates has long since shipped and been verified on a 2,033× sample, and the probe has not been run since 2026-08-11. **(a) is a correctness-preserving refactor whose only current beneficiary is an instrument nobody is using.**\n\n⛔ **So the honest recommendation is: rule (a) as the direction, and schedule it behind anything with a live consumer.** ⭐ **If a slot is wanted now, `D3-RESIDUAL` has a real if small user-visible effect and this does not.**\n\n⚠ **What I would NOT do is (b).** Not because it is wrong — it is defensible — but because *\"held safe by an assumption in a comment\"* is the precise wording of the defect class this project has now hit four times, and writing the assumption down a fifth time is what (b) amounts to.",
+   "rationale_src": [
+    "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:125@30b0c3f",
+    "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:125@30b0c3f",
+    "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:126@30b0c3f",
+    "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:126@30b0c3f",
+    "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:127@30b0c3f",
+    "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:127@30b0c3f",
+    "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md:129-137@30b0c3f"
+   ],
+   "state_rev": "30b0c3f0fa3a93ef3608213b30d58678e572bc3d",
+   "state_rev_committed_utc": "2026-09-07T17:44:12Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/absorption-d2-stage1-rotation-build-spec.md|RD-1@b5000c9",
+   "question": "**How a row records that `settings.json` failed to load**",
+   "question_src": "docs/absorption-d2-stage1-rotation-build-spec.md:217@3fb6eda",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "`SettingsVersion` only — a startup failure logs `1`, indistinguishable from a real v1",
+     "src": "docs/absorption-d2-stage1-rotation-build-spec.md:217@3fb6eda"
+    },
+    {
+     "label": "(b)",
+     "text": "a fifth column `SettingsLoadError` (`0`/`1`)",
+     "src": "docs/absorption-d2-stage1-rotation-build-spec.md:217@3fb6eda"
+    },
+    {
+     "label": "(c)",
+     "text": "a suffix inside `SettingsVersion`, e.g. `68:LOAD_ERROR`",
+     "src": "docs/absorption-d2-stage1-rotation-build-spec.md:217@3fb6eda"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "⭐ **(b).** (a) loses the state. **(c) carries the same information in the cheaper shape — and a mixed-type column silently fails any integer reader on exactly the anomalous rows, the silent-drop class `WD-SEMANTICS` was ruled against.** ⚠ **Reserved because (b) adds a column beyond the ruled set — the schema class `CLAUDE.md` reserves.** Marginal rotation cost is zero: the rotation already happens",
+   "rationale_src": [
+    "docs/absorption-d2-stage1-rotation-build-spec.md:217@3fb6eda"
+   ],
+   "state_rev": "3fb6edac393f37416e65173a032894eaf1dc6517",
+   "state_rev_committed_utc": "2026-09-13T16:13:12Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/kelly-w6-4-spec-back.md|D-1@b5000c9",
+   "question": "### D-1 — Should `CeilingAudit` gain a committed `--preflight` flag?",
+   "question_src": "docs/kelly-w6-4-spec-back.md:44@d5ce4a5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "add a flag to `CeilingAuditProgram.vb` that runs `LoadAndBuild` + prints `LoadStats`, then exits before the OHLC fetch",
+     "src": "docs/kelly-w6-4-spec-back.md:46@d5ce4a5"
+    },
+    {
+     "label": "(b)",
+     "text": "leave it as-is (a throwaway harness each time)",
+     "src": "docs/kelly-w6-4-spec-back.md:46@d5ce4a5"
+    },
+    {
+     "label": "(c)",
+     "text": "accept the small \"spend\" of letting the real OHLC fetch run and treat `P-4`'s number as whatever the real run's first line says, abandoning the pre-flight-before-spend discipline entirely.",
+     "src": "docs/kelly-w6-4-spec-back.md:46@d5ce4a5"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**My read (hypothesis, not a ruling):** (a). The spec itself says *\"P-4 is the whole reason this spec has a pre-flight section... measurable in one run of CsvFeatureBuilder without spending anything\"* — that's a standing requirement, not a one-off for this session, since the next `W6-4` re-run (per §4's \"next book doubling\" instruction) will hit the identical need. A committed flag is maybe 10 lines in `CeilingAuditProgram.vb` (an early `Return 0` after the existing `Console.WriteLine(\"[CeilingAudit] Loaded \" & …)` line, gated on a new `--preflight` switch) and removes the throwaway-harness step from every future run of this recipe. This is analysis-only tooling (already host-agnostic, zero WinForms), so it carries none of the engine-behaviour-change weight — no version bump, no D-table needed. **Scoping note:** narrowest version touches only `CeilingAuditProgram.vb`'s argument parser and adds one early-return branch; no change to `CsvFeatureBuilder.vb`, `LoadStats`, or any fixture.",
+   "rationale_src": [
+    "docs/kelly-w6-4-spec-back.md:48@d5ce4a5"
+   ],
+   "state_rev": "d5ce4a583ed237072d21bb0ce5bd217dbb0f784e",
+   "state_rev_committed_utc": "2026-09-09T16:22:11Z",
+   "provenance": "preserved_verbatim_copy"
+  },
+  {
+   "id": "docs/kelly-w6-4-spec-back.md|D-3@b5000c9",
+   "question": "### D-3 — Does ASIA's new CI (52–75%, entirely above breakeven) warrant its own watch?",
+   "question_src": "docs/kelly-w6-4-spec-back.md:56@d5ce4a5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "open a new named watch on ASIA STRONG specifically (n≥150, matching F1's own original bar for \"usable\"), since it just crossed a threshold no STRONG-band CI in this project has crossed before",
+     "src": "docs/kelly-w6-4-spec-back.md:58@d5ce4a5"
+    },
+    {
+     "label": "(b)",
+     "text": "fold it into whatever `D-2` decides, as a footnote",
+     "src": "docs/kelly-w6-4-spec-back.md:58@d5ce4a5"
+    },
+    {
+     "label": "(c)",
+     "text": "do nothing until the next scheduled re-read, on the grounds that ASIA was never the decisive `W6-4` population and one session's crossing could reverse.",
+     "src": "docs/kelly-w6-4-spec-back.md:58@d5ce4a5"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**My read:** weak lean toward (a), but I hold this loosely — n=62 is still under the n≥150 bar the *same* F1 method used to declare ASIA's original STRONG (n=15) \"unusable,\" and a session's worth of new rows moving a CI from spanning-breakeven to clearing it is exactly the kind of small-n volatility that bar exists to guard against. I have low confidence here; this is closer to the trader's/orchestrator's judgment call than mine, given it touches the same sizing-policy territory as `D-2`.",
+   "rationale_src": [
+    "docs/kelly-w6-4-spec-back.md:60@d5ce4a5"
+   ],
+   "state_rev": "d5ce4a583ed237072d21bb0ce5bd217dbb0f784e",
+   "state_rev_committed_utc": "2026-09-09T16:22:11Z",
+   "provenance": "preserved_verbatim_copy"
+  },
+  {
+   "id": "docs/doc-status-sweep-and-queue-archive-spec.md|D-1@b5000c9",
+   "question": "What does the live [`trader-tick-queue.md`](trader-tick-queue.md) keep for an archived item?",
+   "question_src": "docs/doc-status-sweep-and-queue-archive-spec.md:184@62631dd",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "a one-line index row — title, commit, `→ archive`",
+     "src": "docs/doc-status-sweep-and-queue-archive-spec.md:184@62631dd"
+    },
+    {
+     "label": "(b)",
+     "text": "nothing; the archive is the only record",
+     "src": "docs/doc-status-sweep-and-queue-archive-spec.md:184@62631dd"
+    },
+    {
+     "label": "(c)",
+     "text": "keep the full row and archive a copy",
+     "src": "docs/doc-status-sweep-and-queue-archive-spec.md:184@62631dd"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⭐ **(a).** **(b) re-opens the exact defect §5 was built to close** — an item nobody can see gets re-raised, and this repo has done that at least three times. **(c)** saves nothing and creates a second copy that will drift, which is the multi-copy class the `A54a` arc spent two sessions removing",
+   "rationale_src": [
+    "docs/doc-status-sweep-and-queue-archive-spec.md:184@62631dd"
+   ],
+   "state_rev": "62631dd31735b8795f97695de9490653672390be",
+   "state_rev_committed_utc": "2026-09-09T21:12:00Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-4@b5000c9",
+   "question": "What class does a startup window get?",
+   "question_src": "docs/coverage-report-cluster-spec.md:116@072cee8",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "reuse `ExpectedMissing`",
+     "src": "docs/coverage-report-cluster-spec.md:116@072cee8"
+    },
+    {
+     "label": "(b)",
+     "text": "a NEW `HourClass.StartupWindow`**",
+     "src": "docs/coverage-report-cluster-spec.md:116@072cee8"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "⚠⚠ **RESERVED BY THE RULING'S OWN LAST CLASS, and I am flagging it rather than taking it.** My first instinct was **(a)** — fewer classes, no precedence work. ⛔ **That is the CHEAPER, LESS-INFORMATION option, which is the exact class the ruling reserves**, and it conflates *\"before we ever ran\"* with *\"during startup\"*. ⭐ **So my considered read is (b)** — but the ruling says a pick arrived at this way goes to you. ⚠ **If (b): state the worst-of precedence explicitly (`T-4`); it must NOT outrank `Defect`**",
+   "rationale_src": [
+    "docs/coverage-report-cluster-spec.md:116@072cee8"
+   ],
+   "state_rev": "072cee874f91dc860c4c85b2cd5b27015fc4a9ea",
+   "state_rev_committed_utc": "2026-09-11T08:52:39Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-6@b5000c9",
+   "question": "Where does the declared operating schedule live?",
+   "question_src": "docs/coverage-report-cluster-spec.md:117@072cee8",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "a `settings.json` block",
+     "src": "docs/coverage-report-cluster-spec.md:117@072cee8"
+    },
+    {
+     "label": "(b)",
+     "text": "a separate declared file read by `BacktestRunner`",
+     "src": "docs/coverage-report-cluster-spec.md:117@072cee8"
+    },
+    {
+     "label": "(c)",
+     "text": "a CLI option",
+     "src": "docs/coverage-report-cluster-spec.md:117@072cee8"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "⛔ **RESERVED — (a) is a `settings.json` change, a reserved class in its own right.** **My read: (b)** — it is operational intent, not engine configuration, and it keeps the tweaker fence out of it. ⚠ **`C-3a` does not start until this is ticked**",
+   "rationale_src": [
+    "docs/coverage-report-cluster-spec.md:117@072cee8"
+   ],
+   "state_rev": "072cee874f91dc860c4c85b2cd5b27015fc4a9ea",
+   "state_rev_committed_utc": "2026-09-11T08:52:39Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/venue-status-instrument-spec.md|D-1@b5000c9",
+   "question": "**How is the venue's declaration obtained?**",
+   "question_src": "docs/venue-status-instrument-spec.md:81@08758e4",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "HTTP 503 status alone**, logged at the existing catch site `DeribitClient.vb:38-51`. One line, zero change to the request path",
+     "src": "docs/venue-status-instrument-spec.md:81@08758e4"
+    },
+    {
+     "label": "(b)",
+     "text": "change `GetStringAsync` → `GetAsync` + read the body, giving the real `11051` / `system_maintenance` code",
+     "src": "docs/venue-status-instrument-spec.md:81@08758e4"
+    },
+    {
+     "label": "(c)",
+     "text": "on seeing a 503, fire ONE extra probe read to recover the body",
+     "src": "docs/venue-status-instrument-spec.md:81@08758e4"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "⚠⚠ **RESERVED — and I am flagging it under the ruling's own last class rather than taking it.** ⭐ **My read is (a), and I believe it is ADEQUATE rather than merely cheap:** a 503 **is** the venue's own response, so it is a positive record of the venue's state, not an inference from ours — which is all J-B requires. **For scoping an hour, \"the venue was not serving\" is sufficient; whether it was planned maintenance or an unplanned outage does not change whose defect it is.** ⛔ **But (a) IS the less-information option, and the ruling reserves exactly that, so it is yours.** ⚠ **(b) is the only one that yields `11051`, and it touches EVERY market-data fetch — the highest-blast-radius code in the app. I would not pay that for a diagnostic.** ⚠ **(c) adds a network call during an outage and recovers the same answer (b) does, for less risk and more moving parts**",
+   "rationale_src": [
+    "docs/venue-status-instrument-spec.md:81@08758e4"
+   ],
+   "state_rev": "08758e45d55d64f728a87eed4e58bf64d9bca760",
+   "state_rev_committed_utc": "2026-09-11T09:17:51Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-2@b5000c9",
+   "question": "One shared pager, or two?",
+   "question_src": "docs/gap-repair-same-ms-page-skip-spec.md:146@3c2cdd2",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "one pager in engine-linked code; `CoverageReport` calls it",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:146@3c2cdd2"
+    },
+    {
+     "label": "(b)",
+     "text": "two pagers; `A79e` runs both over the same stub tapes",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:146@3c2cdd2"
+    },
+    {
+     "label": "(c)",
+     "text": "share only a pure page-step function in `Core/`",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:146@3c2cdd2"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "**(b)** — see this spec's §5. Each option guarantees a different thing: (a) guarantees no drift, (b) guarantees an independent audit. **(a) is mechanically wrong for an audit instrument:** a pager defect becomes common-mode, both lists miss the same trade, and the venue check reads `CLEAN`. (c) has the same flaw inside the step. Step 3 of the CLAUDE.md three-step test",
+   "rationale_src": [
+    "docs/gap-repair-same-ms-page-skip-spec.md:146@3c2cdd2"
+   ],
+   "state_rev": "3c2cdd29215920346e27289ecc1016ce6b874500",
+   "state_rev_committed_utc": "2026-09-14T18:45:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-4@b5000c9",
+   "question": "Does a failed or stalled window need a durable record?",
+   "question_src": "docs/gap-repair-same-ms-page-skip-spec.md:148@3c2cdd2",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "Console only, as for today's fetch failures; the durable record is the `trade_seq` hole in the store",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:148@3c2cdd2"
+    },
+    {
+     "label": "(b)",
+     "text": "a durable repair log line for every window outcome",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:148@3c2cdd2"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a) for this build, plus a new queue row for (b).** ⚠ **Console is not durable here: no `Console.SetOut` or `SetError` exists in the tree (`H-3`).** But the gap is not new — every repair failure reason (fetch failure, page cap) has it today. A log format for all of them is its own spec. ⚠ **\"Defer\" is the reserved tell, named**",
+   "rationale_src": [
+    "docs/gap-repair-same-ms-page-skip-spec.md:148@3c2cdd2"
+   ],
+   "state_rev": "3c2cdd29215920346e27289ecc1016ce6b874500",
+   "state_rev_committed_utc": "2026-09-14T18:45:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-5@b5000c9",
+   "question": "What if this build is not accepted before the S2 deploy?",
+   "question_src": "docs/gap-repair-same-ms-page-skip-spec.md:149@3c2cdd2",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "S2 deploys without it; the next deploy carries it",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:149@3c2cdd2"
+    },
+    {
+     "label": "(b)",
+     "text": "the S2 deploy waits",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:149@3c2cdd2"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** The absorption spec's single-edge trap (`T-2`, two deploys make three eras — [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) §0) is about `analysis_log.csv`, which this build does not touch. **The trade:** (a) accepts permanent loss on any outage longer than ~15 min before the fix ships. September shows 0 such holes",
+   "rationale_src": [
+    "docs/gap-repair-same-ms-page-skip-spec.md:149@3c2cdd2"
+   ],
+   "state_rev": "3c2cdd29215920346e27289ecc1016ce6b874500",
+   "state_rev_committed_utc": "2026-09-14T18:45:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-1@b5000c9",
+   "question": "Do the repair windows move to inclusive bracket milliseconds?",
+   "question_src": "docs/gap-repair-same-ms-page-skip-spec.md:145@3c2cdd2",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "pager fix only; hole windows stay `[L.ts + 1, R.ts − 1]` and the tail stays `max.ts + 1`",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:145@3c2cdd2"
+    },
+    {
+     "label": "(b)",
+     "text": "hole windows become `[L.ts, R.ts]`, bounded by `L.seq < seq < R.seq`; tail unchanged",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:145@3c2cdd2"
+    },
+    {
+     "label": "(c)",
+     "text": "(b), plus the tail becomes `[max.ts, segEnd]`, bounded by `seq > max.seq`",
+     "src": "docs/gap-repair-same-ms-page-skip-spec.md:145@3c2cdd2"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "⭐ **(c).** (a) leaves this spec's §2.4 class unrepairable by construction. `DR-1` item 3 kept the inverted drop because \"there is no sub-millisecond query\". **Both bounds are measured inclusive (`E-1` P1, P4), so `[T, T]` is a valid query and the premise is false.** (b) heals a tail same-ms loss only one pass later, and loses it if `T` leaves retention first. **Cost of (c):** `A56b`'s \"tail start equals `ResolveResumeCursorMs`\" and \"covered store gives an empty list\" stop holding; they are restated, not deleted",
+   "rationale_src": [
+    "docs/gap-repair-same-ms-page-skip-spec.md:145@3c2cdd2"
+   ],
+   "state_rev": "3c2cdd29215920346e27289ecc1016ce6b874500",
+   "state_rev_committed_utc": "2026-09-14T18:45:54Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-duplicate-rows-read-2026-09-15.md|DUP-1@b5000c9",
+   "question": "Fix the whole-lookback rewrite, and does the S2 deploy wait for it?",
+   "question_src": "docs/trade-store-duplicate-rows-read-2026-09-15.md:95@1ba9815",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "spec a fix now; S2 waits",
+     "src": "docs/trade-store-duplicate-rows-read-2026-09-15.md:95@1ba9815"
+    },
+    {
+     "label": "(b)",
+     "text": "spec a fix now; S2 does not wait",
+     "src": "docs/trade-store-duplicate-rows-read-2026-09-15.md:95@1ba9815"
+    },
+    {
+     "label": "(c)",
+     "text": "leave it",
+     "src": "docs/trade-store-duplicate-rows-read-2026-09-15.md:95@1ba9815"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "**(b).** It is not data loss, readers dedupe, and the deploy makes nothing worse except the ~24 h size. The fix touches `ScanForRepair`, which the gap-repair builds froze, so it needs its own spec. ⚠ Holding the deploy would record more — S2 would not ship with a known silent rewrite — so this read is the cheaper option; flagged as the reserved pattern",
+   "rationale_src": [
+    "docs/trade-store-duplicate-rows-read-2026-09-15.md:95@1ba9815"
+   ],
+   "state_rev": "1ba981541c7abb6e51a75841bbbf9886f68c238e",
+   "state_rev_committed_utc": "2026-09-15T12:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/trade-store-duplicate-rows-read-2026-09-15.md|DUP-2@b5000c9",
+   "question": "The fix direction",
+   "question_src": "docs/trade-store-duplicate-rows-read-2026-09-15.md:96@1ba9815",
+   "options": [
+    {
+     "label": "(i)",
+     "text": "a scan exception fails the pass loudly (a `SCAN_FAILED` line in `repair_status.log`, no fetch) instead of reading as an empty store",
+     "src": "docs/trade-store-duplicate-rows-read-2026-09-15.md:96@1ba9815"
+    },
+    {
+     "label": "(ii)",
+     "text": "open the scan with share mode ReadWrite, as `CoverageReport.ReadStoreWindow` already does",
+     "src": "docs/trade-store-duplicate-rows-read-2026-09-15.md:96@1ba9815"
+    },
+    {
+     "label": "(iii)",
+     "text": "both",
+     "src": "docs/trade-store-duplicate-rows-read-2026-09-15.md:96@1ba9815"
+    }
+   ],
+   "recommended": "(iii)",
+   "rationale": "**(iii).** (ii) removes the leading candidate trigger; (i) makes any remaining failure truthful, and without it the new log still reads `PASS_CLEAN`",
+   "rationale_src": [
+    "docs/trade-store-duplicate-rows-read-2026-09-15.md:96@1ba9815"
+   ],
+   "state_rev": "1ba981541c7abb6e51a75841bbbf9886f68c238e",
+   "state_rev_committed_utc": "2026-09-15T12:58:59Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/venue-check-build-spec-back.md|R-2@b5000c9",
+   "question": "⛔ **A `LOSS` row with `seq_contiguous = true` can be an edge effect, not a false assumption.** The store's `trade_seq` walk only sees holes **between** the store's first and last sequence in the window. A trade lost in the first or last seconds of the window sits outside that span, so the walk cannot see it",
+   "question_src": "docs/venue-check-build-spec-back.md:28@8994e28",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "add a field `missing_inside_seq_span` (missing venue trades whose `trade_seq` lies strictly inside the store's first..last sequence) to the `VENUE_CHECK` line and the ledger",
+     "src": "docs/venue-check-build-spec-back.md:28@8994e28"
+    },
+    {
+     "label": "(b)",
+     "text": "leave it; the reviewer checks the dump by hand",
+     "src": "docs/venue-check-build-spec-back.md:28@8994e28"
+    },
+    {
+     "label": "(c)",
+     "text": "leave it",
+     "src": "docs/venue-check-build-spec-back.md:28@8994e28"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** Only a missing trade inside the span disproves the assumption. Under (b) the ledger carries a row that looks decisive but may not be. The ledger has zero rows, so a column costs nothing now",
+   "rationale_src": [
+    "docs/venue-check-build-spec-back.md:28@8994e28"
+   ],
+   "state_rev": "8994e28ceb0a6409473e2d668e6d5106556c207e",
+   "state_rev_committed_utc": "2026-09-14T16:36:38Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/venue-check-build-spec-back.md|R-3@b5000c9",
+   "question": "Should the ledger carry `store_trades`, `store_outside_venue_span` and `dump`? They are on the `VENUE_CHECK` line and in the `.log`, not in the ledger",
+   "question_src": "docs/venue-check-build-spec-back.md:29@8994e28",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "add them",
+     "src": "docs/venue-check-build-spec-back.md:29@8994e28"
+    },
+    {
+     "label": "(b)",
+     "text": "keep the brief's 17 columns",
+     "src": "docs/venue-check-build-spec-back.md:29@8994e28"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** A `VENUE_SHORT` row is otherwise explained only by free text in `reason`. Same zero-row timing argument as R-2",
+   "rationale_src": [
+    "docs/venue-check-build-spec-back.md:29@8994e28"
+   ],
+   "state_rev": "8994e28ceb0a6409473e2d668e6d5106556c207e",
+   "state_rev_committed_utc": "2026-09-14T16:36:38Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/venue-check-schedule-plan.md|D-2@b5000c9",
+   "question": "Run on the box at all, given 90 MB available and existing paging (re-opens the \"AWS only\" ruling with new data)",
+   "question_src": "docs/venue-check-schedule-plan.md:161@c0fbd5e",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "keep AWS-only, after V-2, with `DOTNET_GCHeapHardLimit` and a recorded low-memory skip",
+     "src": "docs/venue-check-schedule-plan.md:161@c0fbd5e"
+    },
+    {
+     "label": "(b)",
+     "text": "resize the instance",
+     "src": "docs/venue-check-schedule-plan.md:161@c0fbd5e"
+    },
+    {
+     "label": "(c)",
+     "text": "run locally against a scheduled `fetch`",
+     "src": "docs/venue-check-schedule-plan.md:161@c0fbd5e"
+    },
+    {
+     "label": "(d)",
+     "text": "run on the box as the tool stands",
+     "src": "docs/venue-check-schedule-plan.md:161@c0fbd5e"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "**(a).** (d) is mechanically wrong: 789 MB into a 90 MB margin risks the live tape. (c) breaks the AWS-only ruling and the local machine is not 24/7. ⚠ **(b) is a separate question the trader should see anyway:** the box already pages out at 160 pages/s average with a 2,413 peak, before this task exists",
+   "rationale_src": [
+    "docs/venue-check-schedule-plan.md:161@c0fbd5e"
+   ],
+   "state_rev": "c0fbd5ed8b7b4947c44de0bcc52c00a6193393f8",
+   "state_rev_committed_utc": "2026-09-14T15:26:11Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-2@b5000c9",
+   "question": "### D-2 — the VPFR score vote's documentation (trader ruling on the doc; not a stop)",
+   "question_src": "docs/medium-tier-bug-hunt-spec-back.md:157@c49dc1f",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "correct `docs/UserManual.md` line 967 to the code's geometry",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:160@c49dc1f"
+    },
+    {
+     "label": "(b)",
+     "text": "treat line 967 as the intended thesis and re-spec the vote (a scoring change, reserved).",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:160@c49dc1f"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "- **Read (hypothesis):** (a). The two specs written with the code agree with the code; line 967 is a reader's gloss that contradicts the same manual's own table (lines 950-951).",
+   "rationale_src": [
+    "docs/medium-tier-bug-hunt-spec-back.md:161@c49dc1f"
+   ],
+   "state_rev": "c49dc1f22b0b14bf491f3808e1432d5186f1d94d",
+   "state_rev_committed_utc": "2026-09-16T09:21:20Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-5@b5000c9",
+   "question": "**D-5 — maker-side attribution, `L-2`** (trader ruling; ⚠ reserved: scoring)",
+   "question_src": "docs/medium-tier-bug-hunt-spec-back.md:317@58ac811",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "book by the liquidated side: `M` → the maker's side, `T` → the taker's side",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:319@58ac811"
+    },
+    {
+     "label": "(b)",
+     "text": "book `MT` to both sides or split it",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:319@58ac811"
+    },
+    {
+     "label": "(c)",
+     "text": "keep taker-side booking and document it.",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:319@58ac811"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "- **Read (hypothesis):** (a) for `M`. It is what Deribit's field means, and `A81b` already asserts it. I have **no read** on `MT` (0 occurrences, and no spec).",
+   "rationale_src": [
+    "docs/medium-tier-bug-hunt-spec-back.md:320@58ac811"
+   ],
+   "state_rev": "58ac8118b3fb6baa86b15af51c8857d38c4391b1",
+   "state_rev_committed_utc": "2026-09-16T09:43:03Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-8@b5000c9",
+   "question": "**D-8 — `EVAL-1`, the analysis report's context table** (⚠ reserved: moves a rendered report value)",
+   "question_src": "docs/medium-tier-bug-hunt-spec-back.md:519@85e11d5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) Filter with the directional test the tier matrices already use (`IsDirectionalVerdict`, `analysis/AnalysisRunner.vb:197`) and print the excluded lean-row count",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:523@85e11d5"
+    },
+    {
+     "label": "(b)",
+     "text": "(b) Keep lean rows as a separate \"NO TRADE lean\" column",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:524@85e11d5"
+    },
+    {
+     "label": "(c)",
+     "text": "(c) Leave it",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:525@85e11d5"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The table shows trades only; the count keeps the exclusion visible\nThe table shows both, labelled\nLean rows keep counting as trades; \"[TIE]\" keeps counting as short\n- **Read (hypothesis): (a).** ⚠ (b) records more, and my pick is the cheaper one. So this needs the trader under the reserved \"cheaper and less truthful\" class. For (a): the table's frame is trade outcomes, and a lean NO TRADE row is not a trade.",
+   "rationale_src": [
+    "docs/medium-tier-bug-hunt-spec-back.md:523@85e11d5",
+    "docs/medium-tier-bug-hunt-spec-back.md:524@85e11d5",
+    "docs/medium-tier-bug-hunt-spec-back.md:525@85e11d5",
+    "docs/medium-tier-bug-hunt-spec-back.md:527@85e11d5"
+   ],
+   "state_rev": "85e11d58ec70fa532c1e0d38d18b4c6f2fb3d6d0",
+   "state_rev_committed_utc": "2026-09-16T20:02:13Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-9@b5000c9",
+   "question": "**D-9 — `DISP-1`, the card's funding-momentum colour** (⚠ reserved: rendered value)",
+   "question_src": "docs/medium-tier-bug-hunt-spec-back.md:529@85e11d5",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) Make the word and colour bias-aware (read `FundingBias`)",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:533@85e11d5"
+    },
+    {
+     "label": "(b)",
+     "text": "(b) Render Step 3b's actual effect from the breakdown (the signed points and side)",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:534@85e11d5"
+    },
+    {
+     "label": "(c)",
+     "text": "(c) Leave it and document",
+     "src": "docs/medium-tier-bug-hunt-spec-back.md:535@85e11d5"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "FALLING with shorts crowded renders as crowding, RISING as de-crowding\nThe card shows what scoring did, with no heuristic\nNo change\n- **Read (hypothesis): (b).** It is the more truthful option: it cannot drift from Step 3b, because it reads Step 3b's output.",
+   "rationale_src": [
+    "docs/medium-tier-bug-hunt-spec-back.md:533@85e11d5",
+    "docs/medium-tier-bug-hunt-spec-back.md:534@85e11d5",
+    "docs/medium-tier-bug-hunt-spec-back.md:535@85e11d5",
+    "docs/medium-tier-bug-hunt-spec-back.md:537@85e11d5"
+   ],
+   "state_rev": "85e11d58ec70fa532c1e0d38d18b4c6f2fb3d6d0",
+   "state_rev_committed_utc": "2026-09-16T20:02:13Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/medium-tier-diagnosis-spec-back.md|Q-1@b5000c9",
+   "question": "### Q-1 — what to do with the tier ladder (trader; ⚠ reserved: scoring and sizing)",
+   "question_src": "docs/medium-tier-diagnosis-spec-back.md:153@70a4483",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) `F-1` only: record that thresholds and the tier floor are not re-cut",
+     "src": "docs/medium-tier-diagnosis-spec-back.md:157@70a4483"
+    },
+    {
+     "label": "(b)",
+     "text": "(b) `F-2`: re-weight or gate votes by measured per-session value, via `tools/WhatIfRunner` split-half",
+     "src": "docs/medium-tier-diagnosis-spec-back.md:158@70a4483"
+    },
+    {
+     "label": "(c)",
+     "text": "(c) `F-4a`: treat all tiers as one class for Kelly sizing only; the payload `confidence` field stays unchanged",
+     "src": "docs/medium-tier-diagnosis-spec-back.md:159@70a4483"
+    },
+    {
+     "label": "(e)",
+     "text": "(e) `F-4b`: collapse or re-map the payload `confidence` field",
+     "src": "docs/medium-tier-diagnosis-spec-back.md:160@70a4483"
+    },
+    {
+     "label": "(d)",
+     "text": "(d) First measure why success rate rises at the top score bins while net EV does not (target and stop distance by tier)",
+     "src": "docs/medium-tier-diagnosis-spec-back.md:161@70a4483"
+    }
+   ],
+   "recommended": "(d)",
+   "rationale": "Nothing\nNY: one tier step is worth at most about +0.35 bps (slope CI upper bound)\nScoring weights\nOnly DISCOVERY-ONLY or H1-only vote effects in NY; ASIA OFI carried CONFIRMED\nKelly display and the advisory `kelly` payload block. No order-app input changes\nRank 1 null\n⛔ Actual order placement: the order app's confidence gate (default HIGH + MEDIUM). Needs a coordinated cross-repo pass and a `schema_version` bump (`docs/signal-bridge-v1-proposal.md` line 74)\nRank 1 null\nNothing yet\nNot measured\n- **Read (hypothesis): (d) first, then (a).** (d) is cheap, and it decides whether the ladder carries information that the target geometry spends. That changes whether (c) or (e) is right. I have no read on (e): it moves live order placement, so the criterion is yours. ⚠ (a) alone is the cheaper option; I recommend it only after (d) because (d) records more.",
+   "rationale_src": [
+    "docs/medium-tier-diagnosis-spec-back.md:157@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:157@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:158@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:158@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:159@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:159@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:160@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:160@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:161@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:161@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:163@70a4483"
+   ],
+   "state_rev": "70a44830a9ac16817a7285b61df195316ad28151",
+   "state_rev_committed_utc": "2026-09-17T15:57:42Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/medium-tier-diagnosis-spec-back.md|Q-2@b5000c9",
+   "question": "### Q-2 — the VPFR score vote in NY (trader; ⚠ reserved: scoring)",
+   "question_src": "docs/medium-tier-diagnosis-spec-back.md:167@70a4483",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) Keep the vote as shipped",
+     "src": "docs/medium-tier-diagnosis-spec-back.md:171@70a4483"
+    },
+    {
+     "label": "(b)",
+     "text": "(b) `F-3`: keep the long arm, test removing or reversing the short arm in NY",
+     "src": "docs/medium-tier-diagnosis-spec-back.md:172@70a4483"
+    },
+    {
+     "label": "(c)",
+     "text": "(c) Retest after the POC-tier gate fix (session 1 decision D-1, ruled (a)) and the liquidation fix (`L-1`) ship, on new data",
+     "src": "docs/medium-tier-diagnosis-spec-back.md:173@70a4483"
+    }
+   ],
+   "recommended": "(c)",
+   "rationale": "Nothing\nOne vote arm, NY\nNothing now\n- **Read (hypothesis): (c), then (b) if the LONG-only result replicates.** The finding is one of two outcome CONFIRMED labels in 445 readable comparisons (0.56 expected false). The trader rated volume profile core, so a replication on post-fix data is worth the wait. I have no read on the mechanism: the POC value is not in the attribution file.",
+   "rationale_src": [
+    "docs/medium-tier-diagnosis-spec-back.md:171@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:172@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:173@70a4483",
+    "docs/medium-tier-diagnosis-spec-back.md:175@70a4483"
+   ],
+   "state_rev": "70a44830a9ac16817a7285b61df195316ad28151",
+   "state_rev_committed_utc": "2026-09-17T15:57:42Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/engine-fix-build-spec-2026-09-21.md|EF-1@b5000c9",
+   "question": "### `EF-1` — does the POC-gate fix ride the absorption S2 deploy, or take its own?",
+   "question_src": "docs/engine-fix-build-spec-2026-09-21.md:343@7fb4768",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) One deploy — absorption S1 and S2, the gap-repair fixes and this build together",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:347@7fb4768"
+    },
+    {
+     "label": "(b)",
+     "text": "(b) Two deploys — gap repair and absorption first, the engine fixes after",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:348@7fb4768"
+    },
+    {
+     "label": "(c)",
+     "text": "(c) Engine fixes first, absorption after",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:349@7fb4768"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "One era edge in `analysis_log.csv`\nFewer deploys on a 24/7 collector, but the POC boundary and the rotation boundary land at the same instant and cannot be separated later\nTwo clean era edges, each attributable to one change\nA second deploy, and the engine fixes land later\nThe POC boundary is clean and early\n⛔ **Pushes the gap-repair deploy past the 2026-10-01 cross-month deadline. Rejected on that ground alone**\n- **My read: (a) — and I am arguing against the standing prior, so here is the mechanism rather than a cost argument.** `RIDER-9` puts `VPFRSignal` and `VPFRPoc` into the header on the S2 rotation. **Rows written after that rotation can reconstruct the POC gate's decision per row from their own columns.** Rows written between an earlier engine-fix deploy and S2 could not. So (a) does not lose information: the new behaviour and the inputs needed to audit it arrive together.\n- ⚠ **What (a) genuinely costs:** the `TargetCapReason` shift from zero POC placements to non-zero happens at the same instant as the header change, so a reader cannot attribute a change in placement mix to one or the other **without** relying on the new columns. If the trader wants that attributable independently of `RIDER-9`, (b) is right.\n- **This is a deploy decision, it is reserved, and it interacts with this spec §9.**",
+   "rationale_src": [
+    "docs/engine-fix-build-spec-2026-09-21.md:347@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:347@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:348@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:348@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:349@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:349@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:351-353@7fb4768"
+   ],
+   "state_rev": "7fb476829477bf2b5c1e97933e3c185a4e1d56e6",
+   "state_rev_committed_utc": "2026-09-21T08:38:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/engine-fix-build-spec-2026-09-21.md|EF-2@b5000c9",
+   "question": "### `EF-2` — how should the report's lean column treat `NO TRADE [TIE]`?",
+   "question_src": "docs/engine-fix-build-spec-2026-09-21.md:355@7fb4768",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) Exclude ties from the lean outcome walk, and count them in their own tally",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:359@7fb4768"
+    },
+    {
+     "label": "(b)",
+     "text": "(b) Keep walking ties as shorts, as today",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:360@7fb4768"
+    },
+    {
+     "label": "(c)",
+     "text": "(c) Drop ties entirely",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:361@7fb4768"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "The 59 tie rows stop being walked as shorts, and the count stays visible\nThe defect survives inside the new column\nSilent\n- **My read: (a).** A tie has no lean direction, so walking it as a short fabricates one. (c) is a silent hole, which this repo already rejects. **(a) records more than the alternatives, so no information is being traded for less work here.**",
+   "rationale_src": [
+    "docs/engine-fix-build-spec-2026-09-21.md:359@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:360@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:361@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:363@7fb4768"
+   ],
+   "state_rev": "7fb476829477bf2b5c1e97933e3c185a4e1d56e6",
+   "state_rev_committed_utc": "2026-09-21T08:38:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/engine-fix-build-spec-2026-09-21.md|EF-3@b5000c9",
+   "question": "### `EF-3` — what should `CalcLiquidations` do with an unrecognised `liquidation` value?",
+   "question_src": "docs/engine-fix-build-spec-2026-09-21.md:365@7fb4768",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) Treat it as taker-side, as today",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:369@7fb4768"
+    },
+    {
+     "label": "(b)",
+     "text": "(b) Skip it and count it, with the count surfaced",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:370@7fb4768"
+    },
+    {
+     "label": "(c)",
+     "text": "(c) Skip it silently",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:371@7fb4768"
+    }
+   ],
+   "recommended": "(b)",
+   "rationale": "An unknown value books silently, and wrongly\nAn unknown value becomes visible rather than guessed\nSilent loss\n- **My read: (b).** The `WD-SEMANTICS` ruling settled the same shape: **a counter reading 0 is the tripwire, not waste.**\n- ⚠ **(b) needs somewhere to put the count.** A CSV column is a schema change and would become another rotation rider on S2; a log line is free. **I recommend the log line now, and a rider only if the count is ever non-zero.**\n- ⚠ Deribit documents exactly three values today, so (b) is cheap insurance rather than a response to an observed problem.",
+   "rationale_src": [
+    "docs/engine-fix-build-spec-2026-09-21.md:369@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:370@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:371@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:373-375@7fb4768"
+   ],
+   "state_rev": "7fb476829477bf2b5c1e97933e3c185a4e1d56e6",
+   "state_rev_committed_utc": "2026-09-21T08:38:09Z",
+   "provenance": "pre_ruling_revision"
+  },
+  {
+   "id": "docs/engine-fix-build-spec-2026-09-21.md|EF-4@b5000c9",
+   "question": "### `EF-4` — does `D-9` (b) change the text surface as well as the card?",
+   "question_src": "docs/engine-fix-build-spec-2026-09-21.md:377@7fb4768",
+   "options": [
+    {
+     "label": "(a)",
+     "text": "(a) Card and snapshot both render Step 3b's actual effect",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:381@7fb4768"
+    },
+    {
+     "label": "(b)",
+     "text": "(b) Card only; the snapshot keeps printing the config",
+     "src": "docs/engine-fix-build-spec-2026-09-21.md:382@7fb4768"
+    }
+   ],
+   "recommended": "(a)",
+   "rationale": "Both surfaces say the same thing\nTwo surfaces describe one step differently\n- **My read: (a).** The snapshot's `Momentum:` row prints `Soften` and `Amplify` from `cfg` — what the step COULD do, not what it DID. That is the same defect `D-9` exists to fix, on the other surface.\n- ⛔ **It is reserved twice over:** it re-formats a line emitted by `BuildPlaintextSnapshot`, which engages the display-string parity hard rule, and it moves a rendered value.\n- ⚠ **If (b) is ruled**, record the divergence deliberately and in writing, the way the `MEDIUM LONG` versus `LONG` divergence was recorded — otherwise the next parity review reads it as drift.",
+   "rationale_src": [
+    "docs/engine-fix-build-spec-2026-09-21.md:381@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:382@7fb4768",
+    "docs/engine-fix-build-spec-2026-09-21.md:384-386@7fb4768"
+   ],
+   "state_rev": "7fb476829477bf2b5c1e97933e3c185a4e1d56e6",
+   "state_rev_committed_utc": "2026-09-21T08:38:09Z",
+   "provenance": "pre_ruling_revision"
+  }
+ ]
+}

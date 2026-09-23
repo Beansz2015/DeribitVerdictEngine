@@ -1,0 +1,1884 @@
+{
+ "rev": "b5000c99cd30a6b0899ba3ebde0cc4420b9fa12b",
+ "rev7": "b5000c9",
+ "stamp_utc": "20260923T140527Z",
+ "builder": "tools/checks/measure/decision-bias/build_population.py",
+ "note": "Every other candidate, with a reason code. No text and no outcome.",
+ "items": [
+  {
+   "id": "docs/bid-ask-spread-proposal.md|Q4@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "status reads Open - calibration"
+  },
+  {
+   "id": "docs/bid-ask-spread-proposal.md|Q1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/bid-ask-spread-proposal.md|Q3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/bid-ask-spread-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/ofi-momentum-proposal.md|Q3@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "status reads Open - calibration"
+  },
+  {
+   "id": "docs/ofi-momentum-proposal.md|Q1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/ofi-momentum-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/ofi-momentum-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/ofi-momentum-proposal.md|Q6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q9@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v17-followup-fixes-proposal.md|Q1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v17-followup-fixes-proposal.md|Q2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v17-followup-fixes-proposal.md|Q3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v17-followup-fixes-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v17-followup-fixes-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q10@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q11@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q9@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q10@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v22-funding-calibration-pass-proposal.md|Q1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already APPROVED (fad236a)"
+  },
+  {
+   "id": "docs/v22-funding-calibration-pass-proposal.md|Q2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already APPROVED (fad236a)"
+  },
+  {
+   "id": "docs/v22-funding-calibration-pass-proposal.md|Q3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already APPROVED (fad236a)"
+  },
+  {
+   "id": "docs/v22-funding-calibration-pass-proposal.md|Q4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already APPROVED (fad236a)"
+  },
+  {
+   "id": "docs/v22-funding-calibration-pass-proposal.md|Q5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already APPROVED (fad236a)"
+  },
+  {
+   "id": "docs/v22-funding-calibration-pass-proposal.md|Q6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already APPROVED (fad236a)"
+  },
+  {
+   "id": "docs/v22-funding-calibration-pass-proposal.md|Q7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already APPROVED (fad236a)"
+  },
+  {
+   "id": "docs/v22-funding-calibration-pass-proposal.md|Q8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already APPROVED (fad236a)"
+  },
+  {
+   "id": "docs/on-close-analysis-mode-proposal.md|S9.2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/on-close-analysis-mode-proposal.md|S9.3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/on-close-analysis-mode-proposal.md|S9.4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/on-close-analysis-mode-proposal.md|S9.5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/display-polish-pass-proposal.md|version-bump@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "recommendation implemented in the same commit; no ruling recorded"
+  },
+  {
+   "id": "docs/next-session-handover-2026-05-01.md|8a@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "explicitly left undecided"
+  },
+  {
+   "id": "docs/ui-reskin-handover-2026-05-22.md|P4f-overlay@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "surface choice to the user; later kickoff builds option 1 with no recorded ruling"
+  },
+  {
+   "id": "docs/ui-reskin-handover-2026-05-22.md|P5-calib-viewer@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "implemented per recommendation; no recorded ruling"
+  },
+  {
+   "id": "docs/auto-tweaker-session-resolution-filter-proposal.md|S5.1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/auto-tweaker-session-resolution-filter-proposal.md|S5.3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-analysis-report-audit-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|A@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "KEEP rows, no alternative named as a choice"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "KEEP rows, no alternative named as a choice"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "KEEP rows, no alternative named as a choice"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "KEEP rows, no alternative named as a choice"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.10@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "KEEP rows, no alternative named as a choice"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.8@b5000c9",
+   "reason": "not_a_decision",
+   "note": "sanity pass / watching, no choice made"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.9@b5000c9",
+   "reason": "not_a_decision",
+   "note": "sanity pass / watching, no choice made"
+  },
+  {
+   "id": "docs/min-tradeable-move-gate-proposal.md|S2-alt@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "the approval-in-principle predates the (A)/(B) design options; no ruling on them is recorded"
+  },
+  {
+   "id": "docs/next-session-handover-2026-06-24.md|P3-cutover@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "(a)/(b) offered; the text calls the cutover data-justified but records no recommendation"
+  },
+  {
+   "id": "docs/websocket-migration-p2-spec-back.md|S5.2@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "coordinator recommendation recorded; deferred to P3 with no trader ruling in this doc"
+  },
+  {
+   "id": "docs/auto-tweaker-phase2b-per-population-autotuning-proposal.md|S3-schema-home@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "data-gated proposal, never ruled"
+  },
+  {
+   "id": "docs/next-session-handover-fable-2026-06-10.md|S6@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "open strategic decisions handed to the next seat; rulings not recorded here"
+  },
+  {
+   "id": "docs/audit-fixes-2026-07-02-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v48-ofi-dominance-rebaseline-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v48-ofi-dominance-rebaseline-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v48-ofi-dominance-rebaseline-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/v48-ofi-dominance-rebaseline-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-health-retune-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-health-retune-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-health-retune-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-health-retune-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-health-retune-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/book-absorption-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/book-absorption-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/book-absorption-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/book-absorption-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/book-absorption-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/book-absorption-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/book-absorption-proposal.md|D7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/book-absorption-proposal.md|D8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-derivation-2026-07-06.md|DG1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-derivation-2026-07-06.md|DG4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-derivation-2026-07-06.md|DG5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/cli-port-run-state-extraction-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/cli-port-run-state-extraction-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/cli-port-run-state-extraction-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/cli-port-run-state-extraction-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/cli-port-run-state-extraction-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/cli-port-run-state-extraction-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/cli-port-run-state-extraction-proposal.md|D7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/funding-momentum-time-anchored-window-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/funding-momentum-time-anchored-window-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/funding-momentum-time-anchored-window-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/funding-momentum-time-anchored-window-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D9@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-bridge-v1-proposal.md|D10@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/fable5-audit-2026-07-02.md|F3@b5000c9",
+   "reason": "mirror",
+   "note": "decision item with no recommendation; decided as audit-fixes-2026-07-02-proposal.md D3"
+  },
+  {
+   "id": "docs/d6-eval-placed-stop-migration-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d6-eval-placed-stop-migration-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d6-eval-placed-stop-migration-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d6-eval-placed-stop-migration-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-whatif-replay-proposal.md|W1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-whatif-replay-proposal.md|W2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-whatif-replay-proposal.md|W3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-whatif-replay-proposal.md|W4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-whatif-replay-proposal.md|W5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-whatif-replay-proposal.md|W6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-whatif-replay-proposal.md|W7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-matrix-placed-target-proposal.md|M1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-matrix-placed-target-proposal.md|M2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-matrix-placed-target-proposal.md|M3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-matrix-placed-target-proposal.md|M4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-matrix-placed-target-proposal.md|M5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/session-policy-gate-proposal.md|P2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/session-policy-gate-proposal.md|P3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/session-policy-gate-proposal.md|P4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/session-policy-gate-proposal.md|P5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-no-data-outcome-proposal.md|N1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-no-data-outcome-proposal.md|N2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-no-data-outcome-proposal.md|N3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-no-data-outcome-proposal.md|N5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-display-semantics-proposal.md|E1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-display-semantics-proposal.md|E2a@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-display-semantics-proposal.md|E2b@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-display-semantics-proposal.md|E3a@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-display-semantics-proposal.md|E3b@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-display-semantics-proposal.md|E4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-display-semantics-proposal.md|E5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/geometry-arbitration-modes-proposal.md|G1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/geometry-arbitration-modes-proposal.md|G3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/geometry-arbitration-modes-proposal.md|G4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/geometry-arbitration-modes-proposal.md|G5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/geometry-arbitration-modes-proposal.md|G6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/w6-4-ceiling-audit-method-proposal.md|K1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/w6-4-ceiling-audit-method-proposal.md|K2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/w6-4-ceiling-audit-method-proposal.md|K3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/w6-4-ceiling-audit-method-proposal.md|K4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/w6-4-ceiling-audit-method-proposal.md|K5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/w6-4-ceiling-audit-method-proposal.md|K6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/liq-cascade-level-alerts-proposal.md|H2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/liq-cascade-level-alerts-proposal.md|H3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/liq-cascade-level-alerts-proposal.md|H4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/liq-cascade-level-alerts-proposal.md|H5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-geometry-rescale-proposal.md|V1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-geometry-rescale-proposal.md|V3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-geometry-rescale-proposal.md|V4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/aggr-vel-s52-london-derivation-2026-07-23.md|S2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/aggr-vel-s52-london-derivation-2026-07-23.md|S3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/aggr-vel-s52-london-derivation-2026-07-23.md|S4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/aggr-vel-s52-london-derivation-2026-07-23.md|S5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/fee-aware-min-move-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/fee-aware-min-move-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/fee-aware-min-move-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/fee-aware-min-move-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/fee-aware-min-move-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/fee-aware-min-move-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d2v2-whatif-candidate-mode-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d2v2-whatif-candidate-mode-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d2v2-whatif-candidate-mode-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d2v2-whatif-candidate-mode-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d2v2-whatif-candidate-mode-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d2v2-whatif-candidate-mode-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/backtest-synthesizer-proposal.md|D1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/backtest-synthesizer-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/backtest-synthesizer-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/backtest-synthesizer-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/backtest-synthesizer-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/backtest-synthesizer-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/backtest-synthesizer-proposal.md|D7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/backtest-synthesizer-proposal.md|D8@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-engagement-derivation-2026-07-23.md|J1a@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-engagement-derivation-2026-07-23.md|J1b@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-engagement-derivation-2026-07-23.md|J1c@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-engagement-derivation-2026-07-23.md|J1d@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-engagement-derivation-2026-07-23.md|J2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-engagement-derivation-2026-07-23.md|J3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-engagement-derivation-2026-07-23.md|J1e@b5000c9",
+   "reason": "superseded_before_ruling",
+   "note": "Path A vs Path B: the seat later moved its own recommendation before any ruling; the ruled decision is the queue row E5 (trader-tick-queue-archive.md)"
+  },
+  {
+   "id": "docs/forming-bar-live-investigation-2026-07.md|S4@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "section 4 options are enumerated, explicitly not recommended"
+  },
+  {
+   "id": "docs/liq-cascade-level-alerts-spec-back.md|S5-open-options@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "four open decisions ruled by the trader; the pre-ruling section 4 carried no recommendation on them"
+  },
+  {
+   "id": "docs/in-app-trade-store-capture-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/in-app-trade-store-capture-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/in-app-trade-store-capture-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/in-app-trade-store-capture-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/in-app-trade-store-capture-proposal.md|D1-a@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "first committed already ruled (4ab1824); no recommendation text precedes it"
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D7@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "answered by the orchestrator seat, not the trader"
+  },
+  {
+   "id": "docs/settings-local-overlay-review-2026-07-31.md|S5@b5000c9",
+   "reason": "mirror",
+   "note": "a reviewing seat read of the same D1-D7"
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D5@b5000c9",
+   "reason": "recommendation_not_single",
+   "note": "the read recommends \"(a) or (b), not (c)\""
+  },
+  {
+   "id": "docs/asia-burst-threshold-derivation-2026-08-01.md|D3-2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "pre-ruling text argues one value; the ASIA-vs-LONDON framing exists only in the co-committed D-table"
+  },
+  {
+   "id": "docs/asia-burst-threshold-derivation-2026-08-01.md|D3-3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "rows exist only in the D-table co-committed with its ruling"
+  },
+  {
+   "id": "docs/asia-burst-threshold-derivation-2026-08-01.md|D3-4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "rows exist only in the D-table co-committed with its ruling"
+  },
+  {
+   "id": "docs/asia-burst-threshold-derivation-2026-08-01.md|D3-5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "rows exist only in the D-table co-committed with its ruling"
+  },
+  {
+   "id": "docs/asia-burst-threshold-derivation-2026-08-01.md|D3-6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "rows exist only in the D-table co-committed with its ruling"
+  },
+  {
+   "id": "docs/ttm-flat-threshold-rederivation-2026-08-02.md|D1-b@b5000c9",
+   "reason": "recommendation_not_single",
+   "note": "recommends a range 0.25-0.30"
+  },
+  {
+   "id": "docs/ttm-flat-threshold-rederivation-2026-08-02.md|D1-c@b5000c9",
+   "reason": "not_a_decision",
+   "note": "records a value for completeness, explicitly not recommended"
+  },
+  {
+   "id": "docs/d3-asia-burst-watch-read-2026-08-10.md|T-1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d3-asia-burst-watch-read-2026-08-10.md|T-2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d3-asia-burst-watch-read-2026-08-10.md|T-3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d3-asia-burst-watch-read-2026-08-10.md|T-4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/d3-asia-burst-watch-read-2026-08-10.md|T-5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/job2-read-2026-07-31.md|D-C@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator seat on an implementer packet, not by the trader"
+  },
+  {
+   "id": "docs/job2-read-2026-07-31.md|D-D@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator seat on an implementer packet, not by the trader"
+  },
+  {
+   "id": "docs/job2-read-2026-07-31.md|D-E@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator seat on an implementer packet, not by the trader"
+  },
+  {
+   "id": "docs/candle-store-derivation-batch-spec-back.md|S2@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "decisions queued to the orchestrator; ruled in job2-read by the orchestrator"
+  },
+  {
+   "id": "docs/pre-aug1-batch-spec-back.md|S2+S6@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "queued decisions ruled by the reviewing Fable seat, not the trader"
+  },
+  {
+   "id": "docs/trade-store-arc-spec-back-2026-07-31.md|S2@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "decisions queued to the reviewing seat; no trader ruling recorded"
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D7@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "the read says the choice is the trader's"
+  },
+  {
+   "id": "docs/trade-store-downtime-repair-proposal.md|D-1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already ticked (c6c6942)"
+  },
+  {
+   "id": "docs/trade-store-downtime-repair-proposal.md|D-2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already ticked (c6c6942)"
+  },
+  {
+   "id": "docs/trade-store-downtime-repair-proposal.md|D-3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already ticked (c6c6942)"
+  },
+  {
+   "id": "docs/trade-store-downtime-repair-proposal.md|D-4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already ticked (c6c6942)"
+  },
+  {
+   "id": "docs/trade-store-downtime-repair-proposal.md|D-5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already ticked (c6c6942)"
+  },
+  {
+   "id": "docs/trade-store-downtime-repair-proposal.md|D-6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already ticked (c6c6942)"
+  },
+  {
+   "id": "docs/trade-store-downtime-repair-spec-back.md|Q1-Q5@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the reviewing orchestrator seat, not the trader"
+  },
+  {
+   "id": "docs/coverage-split-hour-implementer-brief.md|D-1@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "reads taken by the implementer as written; no trader ruling"
+  },
+  {
+   "id": "docs/coverage-split-hour-implementer-brief.md|D-2@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "reads taken by the implementer as written; no trader ruling"
+  },
+  {
+   "id": "docs/coverage-split-hour-implementer-brief.md|D-3@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "the implementer built one order; no recommendation among options preceded the ruling"
+  },
+  {
+   "id": "docs/absorption-mechanism-revision-proposal.md|D-1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-mechanism-revision-proposal.md|D-2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-mechanism-revision-proposal.md|D-3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-mechanism-revision-proposal.md|D-4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-mechanism-revision-proposal.md|D-5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-mechanism-revision-proposal.md|D-6@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "carried no recommendation; split into D-6a..D-6d, entered under absorption-d6-spec-back.md and d6d-episode-continuity-spec.md"
+  },
+  {
+   "id": "docs/thin-trade-window-skip-gate-proposal.md|D-2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/thin-trade-window-skip-gate-proposal.md|D-3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/thin-trade-window-skip-gate-proposal.md|D-4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/thin-trade-window-skip-gate-proposal.md|D-5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-1@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already trader-chosen"
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already trader-chosen"
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also first committed already trader-chosen"
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-8@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "trader input required; no recommendation"
+  },
+  {
+   "id": "docs/deploy-acceptance-gate-cadence-spec.md|D-1@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "handed to the trader, then built as recommended; no trader ruling is recorded"
+  },
+  {
+   "id": "docs/deploy-acceptance-gate-cadence-spec.md|D-2@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "handed to the trader, then built as recommended; no trader ruling is recorded"
+  },
+  {
+   "id": "docs/deploy-acceptance-gate-cadence-spec.md|D-3@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "handed to the trader, then built as recommended; no trader ruling is recorded"
+  },
+  {
+   "id": "docs/deploy-acceptance-gate-cadence-spec.md|D-4@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "handed to the trader, then built as recommended; no trader ruling is recorded"
+  },
+  {
+   "id": "docs/seat-handover-2026-08-23.md|S7.4@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "asks for a ruling; names no options"
+  },
+  {
+   "id": "docs/autotweaker-weekday-filter-proposal.md|D-5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/seam-audit-decisions-second-opinion-2026-08-11.md|Decisions-1-2@b5000c9",
+   "reason": "mirror",
+   "note": "second-opinion review of the two queue decisions entered under trader-tick-queue-archive.md"
+  },
+  {
+   "id": "docs/a54a-json-poco-drift-guard-spec.md|D-2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/a54a-json-poco-drift-guard-spec.md|D-3@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "the spec abstains: \"I do not have a read and will not invent one\""
+  },
+  {
+   "id": "docs/a54a-drift-guard-escalation-2026-09-04.md|S5@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "the ruling it asked for already existed; resolved the same day with no new ruling"
+  },
+  {
+   "id": "docs/a54a-drift-guard-spec-back.md|R-2@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "three dispositions named, no read given"
+  },
+  {
+   "id": "docs/i17-sweep-spec-back.md|D1@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "D-table ruled by the reviewing seat (section 5), not the trader"
+  },
+  {
+   "id": "docs/i17-sweep-spec-back.md|D2@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "D-table ruled by the reviewing seat (section 5), not the trader"
+  },
+  {
+   "id": "docs/i17-sweep-spec-back.md|D3@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "D-table ruled by the reviewing seat (section 5), not the trader"
+  },
+  {
+   "id": "docs/i17-sweep-spec-back.md|D4@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "D-table ruled by the reviewing seat (section 5), not the trader"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-spec-back.md|Q-1@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the reviewing seat"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-spec-back.md|Q-2@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the reviewing seat"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-spec-back.md|Q-3@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the reviewing seat"
+  },
+  {
+   "id": "docs/s2-2-r1-r2-remediation-spec-back.md|Q-4@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the reviewing seat"
+  },
+  {
+   "id": "docs/s2-2-r1-r2-remediation-spec-back.md|Q-5@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the reviewing seat"
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|F3-watch@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "two courses named (offline tooling or retirement); the row asks only that the watch not stay live"
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|C1-coverage-F2@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "the pre-ruling row names no options; the options not taken are introduced in the ruling text"
+  },
+  {
+   "id": "docs/wd-semantics-unparsed-counter-spec.md|S-all@b5000c9",
+   "reason": "mirror",
+   "note": "the post-ruling spec for the decision entered under trader-tick-queue-archive.md WD-SEMANTICS"
+  },
+  {
+   "id": "docs/kelly-w6-4-spec-back.md|D-2@b5000c9",
+   "reason": "no_explicit_recommendation",
+   "note": "the read hands the choice to the trader or orchestrator"
+  },
+  {
+   "id": "docs/ceiling-audit-preflight-flag-spec.md|S-all@b5000c9",
+   "reason": "mirror",
+   "note": "post-ruling spec for kelly-w6-4-spec-back.md D-1"
+  },
+  {
+   "id": "docs/kelly-est-advisory-reword-spec.md|S-all@b5000c9",
+   "reason": "mirror",
+   "note": "post-ruling spec for kelly-w6-4-spec-back.md D-2"
+  },
+  {
+   "id": "docs/gap-repair-scan-failure-spec.md|SF-2@b5000c9",
+   "reason": "mirror",
+   "note": "marked Ruled: carries the DUP-1/DUP-2 rulings, entered under trade-store-duplicate-rows-read-2026-09-15.md"
+  },
+  {
+   "id": "docs/gap-repair-scan-failure-spec.md|SF-5@b5000c9",
+   "reason": "mirror",
+   "note": "marked Ruled: carries the DUP-1/DUP-2 rulings, entered under trade-store-duplicate-rows-read-2026-09-15.md"
+  },
+  {
+   "id": "docs/gap-repair-scan-failure-spec.md|SF-7@b5000c9",
+   "reason": "mirror",
+   "note": "marked Ruled: carries the DUP-1/DUP-2 rulings, entered under trade-store-duplicate-rows-read-2026-09-15.md"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-3@b5000c9",
+   "reason": "mooted_by_other_ruling",
+   "note": "mooted by the ruling on a related row; never ruled on its own options"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec-back.md|GR-1@b5000c9",
+   "reason": "mirror",
+   "note": "same rows as the spec section 3.2"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec-back.md|GR-2@b5000c9",
+   "reason": "mirror",
+   "note": "same rows as the spec section 3.2"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec-back.md|GR-3@b5000c9",
+   "reason": "mirror",
+   "note": "same rows as the spec section 3.2"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec-back.md|GR-4@b5000c9",
+   "reason": "mirror",
+   "note": "same rows as the spec section 3.2"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec-back.md|GR-5@b5000c9",
+   "reason": "mirror",
+   "note": "same rows as the spec section 3.2"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-build-spec-back.md|Q-1@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator seat"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-build-spec-back.md|Q-2@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator seat"
+  },
+  {
+   "id": "docs/venue-check-build-spec-back.md|R-1@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator seat"
+  },
+  {
+   "id": "docs/venue-check-build-spec-back.md|R-4@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator seat"
+  },
+  {
+   "id": "docs/venue-check-schedule-plan.md|D-1@b5000c9",
+   "reason": "mooted_by_other_ruling",
+   "note": "mooted by the ruling on a related row; never ruled on its own options"
+  },
+  {
+   "id": "docs/venue-check-schedule-plan.md|D-4@b5000c9",
+   "reason": "mooted_by_other_ruling",
+   "note": "mooted by the ruling on a related row; never ruled on its own options"
+  },
+  {
+   "id": "docs/venue-check-schedule-plan.md|D-5@b5000c9",
+   "reason": "mooted_by_other_ruling",
+   "note": "mooted by the ruling on a related row; never ruled on its own options"
+  },
+  {
+   "id": "docs/venue-check-schedule-plan.md|D-7@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-check-plan-review-2026-09-14.md|D-8@b5000c9",
+   "reason": "mooted_by_other_ruling",
+   "note": "mooted by the ruling on a related row; never ruled on its own options"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-1@b5000c9",
+   "reason": "recommendation_not_single",
+   "note": "the read rejects (c) and has no read between (a) and (b)"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-3@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-4@b5000c9",
+   "reason": "recommendation_not_single",
+   "note": "the read rejects (c) and has no read between (a) and (b)"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-7@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the orchestrator"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-10@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "scheduled by the orchestrator"
+  },
+  {
+   "id": "docs/medium-tier-diagnosis-spec-back.md|Q-3@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "orchestrator-scheduled"
+  },
+  {
+   "id": "docs/wd-tidy-weekday-predicate-convergence-spec.md|D-3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/wd-tidy-weekday-predicate-convergence-spec.md|D-4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/wd-tidy-weekday-predicate-convergence-spec.md|D-5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": ""
+  },
+  {
+   "id": "docs/fable-seat-close-handover-2026-08-01.md|J-B/J-C/J-E/D-F@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ruled by the Fable orchestrator seat"
+  },
+  {
+   "id": "docs/job1-outstanding-2026-08-01.md|J-A@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "ratified by the orchestrator seat"
+  },
+  {
+   "id": "docs/realtime-exit-guard-spec-back.md|D1-D8@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "coordinator rulings on implementer decisions"
+  },
+  {
+   "id": "docs/trade-store-write-guard-spec-back.md|Q1-Q5@b5000c9",
+   "reason": "no_trader_ruling",
+   "note": "reviewer rulings"
+  },
+  {
+   "id": "docs/d3-asia-burst-watch-read-2026-09-14.md|next-read-date@b5000c9",
+   "reason": "not_a_decision",
+   "note": "follows an earlier ruling"
+  },
+  {
+   "id": "docs/cross-venue-lead-lag-proposal.md|D2@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also never ruled"
+  },
+  {
+   "id": "docs/cross-venue-lead-lag-proposal.md|D3@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also never ruled"
+  },
+  {
+   "id": "docs/cross-venue-lead-lag-proposal.md|D4@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also never ruled"
+  },
+  {
+   "id": "docs/cross-venue-lead-lag-proposal.md|D5@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also never ruled"
+  },
+  {
+   "id": "docs/cross-venue-lead-lag-proposal.md|D6@b5000c9",
+   "reason": "options_not_explicit",
+   "note": "also never ruled"
+  },
+  {
+   "id": "docs/engine-tier-d-hygiene-proposal.md|D1@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "first commit 43cc949 already carries the user confirmation"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.1@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "ASIA multipliers; the only committed text (61b4532) already records the trader choice"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.2@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "funding momentum_threshold 0.00001 -> 5e-8; doc first committed APPROVED & APPLIED"
+  },
+  {
+   "id": "docs/clean-data-rebaseline-v34-proposal.md|S3.4@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "CVD slope_pct_of_value 0.05 -> 0.10; doc first committed APPROVED & APPLIED"
+  },
+  {
+   "id": "docs/downtime-repair-followups-implementer-briefs.md|S1.2@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "width-floor removal; the brief was first committed (91942d6) together with the build that followed the ruling"
+  },
+  {
+   "id": "docs/autotweaker-weekday-filter-proposal.md|D-1@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "the D-table was first committed with its RULED column filled (81c54a8)"
+  },
+  {
+   "id": "docs/autotweaker-weekday-filter-proposal.md|D-2@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "the D-table was first committed with its RULED column filled (81c54a8)"
+  },
+  {
+   "id": "docs/autotweaker-weekday-filter-proposal.md|D-3@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "the D-table was first committed with its RULED column filled (81c54a8)"
+  },
+  {
+   "id": "docs/autotweaker-weekday-filter-proposal.md|D-4@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "the D-table was first committed with its RULED column filled (81c54a8)"
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-7@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "the read and its options exist only in the ruling commit b4e35f1"
+  },
+  {
+   "id": "docs/rider-travel-check-spec.md|D-6@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "rows first committed already trader-ruled (e5a29d5)"
+  },
+  {
+   "id": "docs/rider-travel-check-spec.md|D-7@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "rows first committed already trader-ruled (e5a29d5)"
+  },
+  {
+   "id": "docs/fixture-parser-check-spec.md|FP-Q1@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "questions first committed already trader-ruled (a96622e)"
+  },
+  {
+   "id": "docs/fixture-parser-check-spec.md|FP-Q2@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "questions first committed already trader-ruled (a96622e)"
+  },
+  {
+   "id": "docs/fixture-parser-check-spec.md|FP-Q3@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "questions first committed already trader-ruled (a96622e)"
+  },
+  {
+   "id": "docs/wd-tidy-weekday-predicate-convergence-spec.md|D-1@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "scope 2 vs 4 sites; the table was first committed already ruled, with no pre-ruling read"
+  },
+  {
+   "id": "docs/wd-tidy-weekday-predicate-convergence-spec.md|D-2@b5000c9",
+   "reason": "rationale_unrecoverable",
+   "note": "MinValue handling; first committed already ruled"
+  }
+ ]
+}

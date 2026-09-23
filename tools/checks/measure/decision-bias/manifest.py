@@ -732,7 +732,7 @@ leak('docs/kelly-w6-4-spec-back.md', 'D-3', 'rationale', 'trader', _PRE + " ('cl
 leak('docs/doc-status-sweep-and-queue-archive-spec.md', 'D-1', 'question', 'trader', 'a link to docs/trader-tick-queue.md (a file name)')
 leak('docs/coverage-report-cluster-spec.md', 'D-6', 'rationale', 'ticked', _PRE + " ('does not start until this is ticked')")
 leak('docs/venue-check-schedule-plan.md', 'D-2', 'rationale', 'trader', _PRE + " ('a separate question the trader should see anyway')")
-excl(_d, 'GR-3', 'mooted_by_other_ruling', 'closed by the GR-1 ruling; never ruled on its own options')
+excl(_d, 'GR-3', 'mooted_by_other_ruling', 'mooted by the ruling on a related row; never ruled on its own options')
 for _l in ('GR-1', 'GR-2', 'GR-3', 'GR-4', 'GR-5'):
     excl('docs/gap-repair-same-ms-page-skip-spec-back.md', _l, 'mirror', 'same rows as the spec section 3.2')
 for _l in ('Q-1', 'Q-2'):
@@ -754,11 +754,11 @@ for _l in ('R-1', 'R-4'):
 _d = 'docs/venue-check-schedule-plan.md'
 add(_d, 'D-2', 'c0fbd5e', C(161, 2), ('parse', C(161, 3)), '(a)', C(161, 4))
 for _l in ('D-1', 'D-4', 'D-5'):
-    excl(_d, _l, 'mooted_by_other_ruling', 'dropped or replaced as a consequence of the option A ruling on where the check runs')
+    excl(_d, _l, 'mooted_by_other_ruling', 'mooted by the ruling on a related row; never ruled on its own options')
 unruled(_d, 'D-3', 'open_never_ruled', 'held as spec V-3')
 unruled(_d, 'D-6', 'auto_proceeded')
 excl(_d, 'D-7', 'options_not_explicit')
-excl('docs/venue-check-plan-review-2026-09-14.md', 'D-8', 'mooted_by_other_ruling', 'raw pages on the box; dropped under option A')
+excl('docs/venue-check-plan-review-2026-09-14.md', 'D-8', 'mooted_by_other_ruling', 'mooted by the ruling on a related row; never ruled on its own options')
 
 # ---- docs/medium-tier-bug-hunt-spec-back.md (three pre-ruling revisions)
 _d = 'docs/medium-tier-bug-hunt-spec-back.md'

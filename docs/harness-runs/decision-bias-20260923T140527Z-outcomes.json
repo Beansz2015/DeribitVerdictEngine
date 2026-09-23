@@ -1,0 +1,2337 @@
+{
+ "rev": "b5000c99cd30a6b0899ba3ebde0cc4420b9fa12b",
+ "rev7": "b5000c9",
+ "stamp_utc": "20260923T140527Z",
+ "builder": "tools/checks/measure/decision-bias/build_population.py",
+ "note": "The trader rulings. Do NOT open before the seat baseline is written and committed.",
+ "items": [
+  {
+   "id": "docs/bid-ask-spread-proposal.md|Q2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-28"
+   ],
+   "ruling_src": [
+    "docs/bid-ask-spread-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-28",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/ofi-momentum-proposal.md|Q2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/ofi-momentum-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED"
+   ],
+   "ruling_src": [
+    "docs/swing-pivot-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-28",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/swing-pivot-proposal.md|Q2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED"
+   ],
+   "ruling_src": [
+    "docs/swing-pivot-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-28",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/vpfr-lite-v2-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/vpfr-lite-v2-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/vpfr-lite-v2-proposal.md|Q6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/vpfr-lite-v2-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/dynamic-microcvd-accel-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/dynamic-microcvd-accel-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/dynamic-microcvd-accel-proposal.md|Q3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/dynamic-microcvd-accel-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/settings-exposure-pass-proposal.md|Q2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED"
+   ],
+   "ruling_src": [
+    "docs/settings-exposure-pass-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-28",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/analysis-log-csv-expansion-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/analysis-log-csv-expansion-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/analysis-log-csv-expansion-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/analysis-log-csv-expansion-proposal.md|Q6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/analysis-log-csv-expansion-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/v17-followup-fixes-proposal.md|Q6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/v17-followup-fixes-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/v19-calibration-tuning-pass-proposal.md|Q3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-30"
+   ],
+   "ruling_src": [
+    "docs/v19-calibration-tuning-pass-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-30",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/v20-rsi-roc-algorithm-fixes-proposal.md|Q9@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-30"
+   ],
+   "ruling_src": [
+    "docs/v20-rsi-roc-algorithm-fixes-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-04-30",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/api-resilience-pass-proposal.md:3@ea2da7b"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/api-resilience-pass-proposal.md|Q2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED 2026-04-29"
+   ],
+   "ruling_src": [
+    "docs/api-resilience-pass-proposal.md:3@ea2da7b"
+   ],
+   "ruling_date_utc": "2026-04-29",
+   "ruling_granularity": "doc",
+   "note": "doc status moved from PROPOSED - pending user approval to APPROVED; the Q-table is byte-identical first commit -> REV"
+  },
+  {
+   "id": "docs/on-close-analysis-mode-proposal.md|S9.1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All five confirmed **as recommended** — final:",
+    "1. **Fire at exec-resolution close**"
+   ],
+   "ruling_src": [
+    "docs/on-close-analysis-mode-proposal.md:137@b5000c9",
+    "docs/on-close-analysis-mode-proposal.md:139@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-25",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All six confirmed **as recommended** — the §5 config defaults are final. Rationale retained for the implementer:",
+    "1. **`enabled` = true**"
+   ],
+   "ruling_src": [
+    "docs/realtime-exit-guard-proposal.md:185@b5000c9",
+    "docs/realtime-exit-guard-proposal.md:187@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-24",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All six confirmed **as recommended** — the §5 config defaults are final. Rationale retained for the implementer:",
+    "3. **`debounce_evals` = 2**"
+   ],
+   "ruling_src": [
+    "docs/realtime-exit-guard-proposal.md:185@b5000c9",
+    "docs/realtime-exit-guard-proposal.md:189@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-24",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All six confirmed **as recommended** — the §5 config defaults are final. Rationale retained for the implementer:",
+    "5. **Single-adverse Warn state surfaced**"
+   ],
+   "ruling_src": [
+    "docs/realtime-exit-guard-proposal.md:185@b5000c9",
+    "docs/realtime-exit-guard-proposal.md:191@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-24",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/realtime-exit-guard-proposal.md|S9.6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All six confirmed **as recommended** — the §5 config defaults are final. Rationale retained for the implementer:",
+    "6. **Latch = auto-clear**"
+   ],
+   "ruling_src": [
+    "docs/realtime-exit-guard-proposal.md:185@b5000c9",
+    "docs/realtime-exit-guard-proposal.md:192@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-24",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 9. Settled decisions (trader-approved 2026-06-25)",
+    "2. **Placement** = a thin full-width line **under the verdict header**"
+   ],
+   "ruling_src": [
+    "docs/live-microstructure-strip-proposal.md:135@b5000c9",
+    "docs/live-microstructure-strip-proposal.md:140@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-25",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.4@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(2)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 9. Settled decisions (trader-approved 2026-06-25)",
+    "4. **Nearest levels = BOTH above & below** ⟳ — show the bracketing nearest-above and nearest-below (not the single nearest); trader confirms the two-level rendering after implementation."
+   ],
+   "ruling_src": [
+    "docs/live-microstructure-strip-proposal.md:135@b5000c9",
+    "docs/live-microstructure-strip-proposal.md:142@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-25",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/live-microstructure-strip-proposal.md|S9.5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 9. Settled decisions (trader-approved 2026-06-25)",
+    "5. **Tape speed = both** `tr/s` and `$/s`."
+   ],
+   "ruling_src": [
+    "docs/live-microstructure-strip-proposal.md:135@b5000c9",
+    "docs/live-microstructure-strip-proposal.md:143@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-25",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/auto-tweaker-session-resolution-filter-proposal.md|S5.2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Trader sign-off 2026-06-17 — AGREED to all three defaults below** (Q1 NY×1, Q2 global-apply + `resolution_profiles.*` off-surface"
+   ],
+   "ruling_src": [
+    "docs/auto-tweaker-session-resolution-filter-proposal.md:114@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-17",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-analysis-report-audit-proposal.md|D1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 5. Design decisions — ALL APPROVED (trader, 2026-06-18)",
+    "- **D1 — Segmentation granularity: `(session × resolution)`** ✓ → NY×1, ASIA×3, LONDON×3."
+   ],
+   "ruling_src": [
+    "docs/offline-analysis-report-audit-proposal.md:194@b5000c9",
+    "docs/offline-analysis-report-audit-proposal.md:196@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-18",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/offline-analysis-report-audit-proposal.md|D3@b5000c9",
+   "outcome": "PARTIAL",
+   "ruled": "(1)+trader refinement",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 5. Design decisions — ALL APPROVED (trader, 2026-06-18)",
+    "- **D3 — Pooled view: DROP the single pooled matrix** ✓, **replaced with a tier-major per-session expansion** (trader refinement)"
+   ],
+   "ruling_src": [
+    "docs/offline-analysis-report-audit-proposal.md:194@b5000c9",
+    "docs/offline-analysis-report-audit-proposal.md:198@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-18",
+   "ruling_granularity": "row",
+   "note": "the recommended drop is kept and REPLACED by a tier-major per-session expansion the trader added; neither offered option alone"
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "All five confirmed **as recommended** below."
+   ],
+   "ruling_src": [
+    "docs/time-averaged-ofi-proposal.md:134@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-29",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All five confirmed **as recommended** below."
+   ],
+   "ruling_src": [
+    "docs/time-averaged-ofi-proposal.md:134@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-29",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All five confirmed **as recommended** below."
+   ],
+   "ruling_src": [
+    "docs/time-averaged-ofi-proposal.md:134@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-29",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All five confirmed **as recommended** below."
+   ],
+   "ruling_src": [
+    "docs/time-averaged-ofi-proposal.md:134@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-29",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/time-averaged-ofi-proposal.md|S10.5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "All five confirmed **as recommended** below."
+   ],
+   "ruling_src": [
+    "docs/time-averaged-ofi-proposal.md:134@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-29",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|B@b5000c9",
+   "outcome": "PARTIAL",
+   "ruled": "(1)+(3)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Decisions taken (trader, 2026-06-30):** A — commit `verify/ordercheck` (yes). B — Stop hook advisory-only. C — un-ignore `.claude/settings.json` + `agents/`. D — parity fail-without-token (prepush/ci), version warn-only. E — coordinator-review/implementer subagents **not built** (budget). F — CI windows-latest only (repo is public → Actions free)."
+   ],
+   "ruling_src": [
+    "docs/dev-workflow-automation-proposal.md:8@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-30",
+   "ruling_granularity": "row",
+   "note": "ruled Stop hook advisory-only: the recommended Stop event combined with the advisory-only option; the recommendation left advisory-or-blocking to the trader"
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|C@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Decisions taken (trader, 2026-06-30):** A — commit `verify/ordercheck` (yes). B — Stop hook advisory-only. C — un-ignore `.claude/settings.json` + `agents/`. D — parity fail-without-token (prepush/ci), version warn-only. E — coordinator-review/implementer subagents **not built** (budget). F — CI windows-latest only (repo is public → Actions free)."
+   ],
+   "ruling_src": [
+    "docs/dev-workflow-automation-proposal.md:8@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-30",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|D@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Decisions taken (trader, 2026-06-30):** A — commit `verify/ordercheck` (yes). B — Stop hook advisory-only. C — un-ignore `.claude/settings.json` + `agents/`. D — parity fail-without-token (prepush/ci), version warn-only. E — coordinator-review/implementer subagents **not built** (budget). F — CI windows-latest only (repo is public → Actions free)."
+   ],
+   "ruling_src": [
+    "docs/dev-workflow-automation-proposal.md:8@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-30",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|E@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "neither (not built)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Decisions taken (trader, 2026-06-30):** A — commit `verify/ordercheck` (yes). B — Stop hook advisory-only. C — un-ignore `.claude/settings.json` + `agents/`. D — parity fail-without-token (prepush/ci), version warn-only. E — coordinator-review/implementer subagents **not built** (budget). F — CI windows-latest only (repo is public → Actions free)."
+   ],
+   "ruling_src": [
+    "docs/dev-workflow-automation-proposal.md:8@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-30",
+   "ruling_granularity": "row",
+   "note": "ruled: coordinator-review/implementer subagents not built (budget) - an option not offered"
+  },
+  {
+   "id": "docs/dev-workflow-automation-proposal.md|F@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Decisions taken (trader, 2026-06-30):** A — commit `verify/ordercheck` (yes). B — Stop hook advisory-only. C — un-ignore `.claude/settings.json` + `agents/`. D — parity fail-without-token (prepush/ci), version warn-only. E — coordinator-review/implementer subagents **not built** (budget). F — CI windows-latest only (repo is public → Actions free)."
+   ],
+   "ruling_src": [
+    "docs/dev-workflow-automation-proposal.md:8@b5000c9"
+   ],
+   "ruling_date_utc": "2026-06-30",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/audit-fixes-2026-07-02-proposal.md|D1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 7. Sign-off decisions — ✅ ALL APPROVED AS RECOMMENDED (trader, 2026-07-02)",
+    "✅ **Remove**"
+   ],
+   "ruling_src": [
+    "docs/audit-fixes-2026-07-02-proposal.md:89@b5000c9",
+    "docs/audit-fixes-2026-07-02-proposal.md:93@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-02",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/audit-fixes-2026-07-02-proposal.md|D2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 7. Sign-off decisions — ✅ ALL APPROVED AS RECOMMENDED (trader, 2026-07-02)"
+   ],
+   "ruling_src": [
+    "docs/audit-fixes-2026-07-02-proposal.md:89@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-02",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/audit-fixes-2026-07-02-proposal.md|D3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 7. Sign-off decisions — ✅ ALL APPROVED AS RECOMMENDED (trader, 2026-07-02)"
+   ],
+   "ruling_src": [
+    "docs/audit-fixes-2026-07-02-proposal.md:89@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-02",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/signal-health-retune-proposal.md|D2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 6. Sign-off decisions — ALL TICKED by the trader 2026-07-03"
+   ],
+   "ruling_src": [
+    "docs/signal-health-retune-proposal.md:77@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-03",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-structural-first-proposal.md|D3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 9. Sign-off decisions — ALL TICKED by the trader 2026-07-03 (D3 = clamp)"
+   ],
+   "ruling_src": [
+    "docs/placed-geometry-structural-first-proposal.md:96@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-03",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-derivation-2026-07-06.md|DG2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED — trader ticked DG1–DG5, 2026-07-06, all recommended values"
+   ],
+   "ruling_src": [
+    "docs/placed-geometry-derivation-2026-07-06.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-06",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/placed-geometry-derivation-2026-07-06.md|DG3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Status:** APPROVED — trader ticked DG1–DG5, 2026-07-06, all recommended values"
+   ],
+   "ruling_src": [
+    "docs/placed-geometry-derivation-2026-07-06.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-06",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/funding-momentum-time-anchored-window-proposal.md|D4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "## 8. Sign-off decisions — ALL TICKED by the trader 2026-07-07 (as recommended)"
+   ],
+   "ruling_src": [
+    "docs/funding-momentum-time-anchored-window-proposal.md:86@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-07",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/d6-eval-placed-stop-migration-proposal.md|D1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**APPROVED 2026-07-14 — trader ticked D1–D5 (D1 = Replace; D2–D5 as recommended).**"
+   ],
+   "ruling_src": [
+    "docs/d6-eval-placed-stop-migration-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-14",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 7. S-table — **ALL TICKED 2026-07-14: S1 = 4.5** (after the plain-terms explanation), S2 = option (a), S3–S5 as recommended."
+   ],
+   "ruling_src": [
+    "docs/aggressor-velocity-s52-derivation-2026-07-13.md:56@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-14",
+   "ruling_granularity": "row",
+   "note": "ticked after the trader asked for a plain-terms explanation of the burst ratio"
+  },
+  {
+   "id": "docs/aggressor-velocity-s52-derivation-2026-07-13.md|S2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 7. S-table — **ALL TICKED 2026-07-14: S1 = 4.5** (after the plain-terms explanation), S2 = option (a)"
+   ],
+   "ruling_src": [
+    "docs/aggressor-velocity-s52-derivation-2026-07-13.md:56@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-14",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/session-policy-gate-proposal.md|P1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**APPROVED — P1–P5 ALL TICKED 2026-07-18 (as recommended)."
+   ],
+   "ruling_src": [
+    "docs/session-policy-gate-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-18",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/eval-no-data-outcome-proposal.md|N4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "✅ **TICKED 2026-07-21: migrate to placed geometry**",
+    "**N1–N5 ALL TICKED 2026-07-21 (N1–N3, N5 as recommended; N4 migrate) — BUILD-AUTHORIZED.**"
+   ],
+   "ruling_src": [
+    "docs/eval-no-data-outcome-proposal.md:28@b5000c9",
+    "docs/eval-no-data-outcome-proposal.md:31@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-21",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/geometry-arbitration-modes-proposal.md|G2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Status:** APPROVED — **G1–G6 ALL TICKED (G1/G2/G3/G5/G6 2026-07-21; G4 2026-07-22 after the write-fence-not-blindfold clarification), BUILD-AUTHORIZED**"
+   ],
+   "ruling_src": [
+    "docs/geometry-arbitration-modes-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-21",
+   "ruling_granularity": "table",
+   "note": "the row itself was never rewritten; ticked = follow as recommended, the trader definition recorded in absorption-mechanism-revision-proposal.md"
+  },
+  {
+   "id": "docs/liq-cascade-level-alerts-proposal.md|H1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**SHIPPED as v59 · 2026-07-22** (H1–H5 all ticked and built, H4 AMENDED to the persistent sidecar shape as approved)"
+   ],
+   "ruling_src": [
+    "docs/liq-cascade-level-alerts-proposal.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-22",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-geometry-rescale-proposal.md|V2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "V1–V4 all ticked"
+   ],
+   "ruling_src": [
+    "docs/absorption-geometry-rescale-spec-back.md:9@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-23",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/aggr-vel-s52-london-derivation-2026-07-23.md|S1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "calib(v60): LONDON aggressor-velocity burst arming - sessions.LONDON.burst_ratio_threshold 5.5 (S1-S5 ticked)"
+   ],
+   "ruling_src": [
+    "commit-message:631a3f5"
+   ],
+   "ruling_date_utc": "2026-07-22",
+   "ruling_granularity": "table",
+   "note": "the ruling is recorded only in the v60 commit message, not in any doc at REV"
+  },
+  {
+   "id": "docs/in-app-trade-store-capture-proposal.md|D1@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(2)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**AWS ONLY — ruled against the recommendation, on a better reason than the one I offered.**"
+   ],
+   "ruling_src": [
+    "docs/in-app-trade-store-capture-proposal.md:135@b5000c9"
+   ],
+   "ruling_date_utc": "2026-07-31",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "Previously: ✅ APPROVED 2026-08-01 — D1–D6 ALL TICKED all-as-recommended (trader)"
+   ],
+   "ruling_src": [
+    "docs/settings-local-overlay-proposal.md:4@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-01",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "Previously: ✅ APPROVED 2026-08-01 — D1–D6 ALL TICKED all-as-recommended (trader)"
+   ],
+   "ruling_src": [
+    "docs/settings-local-overlay-proposal.md:4@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-01",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "Previously: ✅ APPROVED 2026-08-01 — D1–D6 ALL TICKED all-as-recommended (trader)"
+   ],
+   "ruling_src": [
+    "docs/settings-local-overlay-proposal.md:4@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-01",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "Previously: ✅ APPROVED 2026-08-01 — D1–D6 ALL TICKED all-as-recommended (trader)"
+   ],
+   "ruling_src": [
+    "docs/settings-local-overlay-proposal.md:4@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-01",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "Previously: ✅ APPROVED 2026-08-01 — D1–D6 ALL TICKED all-as-recommended (trader)"
+   ],
+   "ruling_src": [
+    "docs/settings-local-overlay-proposal.md:4@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-01",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/settings-local-overlay-proposal.md|D6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "Previously: ✅ APPROVED 2026-08-01 — D1–D6 ALL TICKED all-as-recommended (trader)"
+   ],
+   "ruling_src": [
+    "docs/settings-local-overlay-proposal.md:4@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-01",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ✅ **TICKED 2026-08-03 (trader), all as recommended:"
+   ],
+   "ruling_src": [
+    "docs/trade-store-coverage-report-proposal.md:245@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-03",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ✅ **TICKED 2026-08-03 (trader), all as recommended:"
+   ],
+   "ruling_src": [
+    "docs/trade-store-coverage-report-proposal.md:245@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-03",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ✅ **TICKED 2026-08-03 (trader), all as recommended:"
+   ],
+   "ruling_src": [
+    "docs/trade-store-coverage-report-proposal.md:245@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-03",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D7@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ✅ **TICKED 2026-08-03 (trader), all as recommended:"
+   ],
+   "ruling_src": [
+    "docs/trade-store-coverage-report-proposal.md:245@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-03",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ✅ **TICKED 2026-08-03 (trader), all as recommended:"
+   ],
+   "ruling_src": [
+    "docs/trade-store-coverage-report-proposal.md:245@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-03",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-coverage-report-proposal.md|D4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "> ✅ **TICKED 2026-08-03 (trader), all as recommended: D1 (a) new verb · D2 (a) consume the uptime records · D3 (a) CLI flag · D4 300,000 ms"
+   ],
+   "ruling_src": [
+    "docs/trade-store-coverage-report-proposal.md:245@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-03",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/asia-burst-threshold-derivation-2026-08-01.md|D3-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(7)",
+   "recommended": "(7)",
+   "ruling_text": [
+    "## 5. D-table — **TICKED 2026-08-02 (trader). SHIPPED as settings v65.**",
+    "**`sessions.ASIA.burst_ratio_threshold` = 5.5**, as recommended"
+   ],
+   "ruling_src": [
+    "docs/asia-burst-threshold-derivation-2026-08-01.md:79@b5000c9",
+    "docs/asia-burst-threshold-derivation-2026-08-01.md:85@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-02",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/ttm-flat-threshold-rederivation-2026-08-02.md|D1-a@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**D1-a/b/c are answered in principle but not scheduled** — when this is built it goes ATR-relative"
+   ],
+   "ruling_src": [
+    "docs/ttm-flat-threshold-rederivation-2026-08-02.md:89@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-02",
+   "ruling_granularity": "row",
+   "note": "answered in principle within the D1-d park ruling"
+  },
+  {
+   "id": "docs/ttm-flat-threshold-rederivation-2026-08-02.md|D1-d@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(b)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅ **RULED 2026-08-02 (trader): (b) PARK.**"
+   ],
+   "ruling_src": [
+    "docs/ttm-flat-threshold-rederivation-2026-08-02.md:89@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-02",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(3)",
+   "recommended": "(3)",
+   "ruling_text": [
+    "## 7. D-table — ✅ **ALL TICKED 2026-08-08 (trader), every row as recommended**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-trade-identity-proposal.md:149@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-08",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 7. D-table — ✅ **ALL TICKED 2026-08-08 (trader), every row as recommended**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-trade-identity-proposal.md:149@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-08",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-trade-identity-proposal.md|D6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "## 7. D-table — ✅ **ALL TICKED 2026-08-08 (trader), every row as recommended**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-trade-identity-proposal.md:149@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-08",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 4. D-table — ✅ RULED 2026-08-11, trader-directed",
+    "> **All seven rows ruled AS RECOMMENDED. No option was overruled and no row was deferred.**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:168@b5000c9",
+    "docs/trade-store-write-guard-identity-proposal.md:170@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 4. D-table — ✅ RULED 2026-08-11, trader-directed",
+    "> **All seven rows ruled AS RECOMMENDED. No option was overruled and no row was deferred.**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:168@b5000c9",
+    "docs/trade-store-write-guard-identity-proposal.md:170@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 4. D-table — ✅ RULED 2026-08-11, trader-directed",
+    "> **All seven rows ruled AS RECOMMENDED. No option was overruled and no row was deferred.**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:168@b5000c9",
+    "docs/trade-store-write-guard-identity-proposal.md:170@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 4. D-table — ✅ RULED 2026-08-11, trader-directed",
+    "> **All seven rows ruled AS RECOMMENDED. No option was overruled and no row was deferred.**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:168@b5000c9",
+    "docs/trade-store-write-guard-identity-proposal.md:170@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 4. D-table — ✅ RULED 2026-08-11, trader-directed",
+    "> **All seven rows ruled AS RECOMMENDED. No option was overruled and no row was deferred.**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:168@b5000c9",
+    "docs/trade-store-write-guard-identity-proposal.md:170@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "## 4. D-table — ✅ RULED 2026-08-11, trader-directed",
+    "> **All seven rows ruled AS RECOMMENDED. No option was overruled and no row was deferred.**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:168@b5000c9",
+    "docs/trade-store-write-guard-identity-proposal.md:170@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-write-guard-identity-proposal.md|D-7@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "## 4. D-table — ✅ RULED 2026-08-11, trader-directed",
+    "> **All seven rows ruled AS RECOMMENDED. No option was overruled and no row was deferred.**"
+   ],
+   "ruling_src": [
+    "docs/trade-store-write-guard-identity-proposal.md:168@b5000c9",
+    "docs/trade-store-write-guard-identity-proposal.md:170@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-d6-spec-back.md|D-6a@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> | **D-6a** | Is the 0.30 / 0.10 pair intended? | ✅ **RULED — YES, INTENDED.** Arm-early / measure-tight.",
+    "Trader ruled both as recommended in absorption-d6-spec-back.md section 2."
+   ],
+   "ruling_src": [
+    "docs/absorption-mechanism-revision-proposal.md:310@b5000c9",
+    "commit-message:a2a51e3"
+   ],
+   "ruling_date_utc": "2026-09-01",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/absorption-d6-spec-back.md|D-6b@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> | **D-6b** | Is it \"the largest single leak in the funnel\"? | ✅ **RULED — CLAIM WITHDRAWN.**",
+    "Trader ruled both as recommended in absorption-d6-spec-back.md section 2."
+   ],
+   "ruling_src": [
+    "docs/absorption-mechanism-revision-proposal.md:311@b5000c9",
+    "commit-message:a2a51e3"
+   ],
+   "ruling_date_utc": "2026-09-01",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/d6d-episode-continuity-spec.md|D-6d.1@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(c) sidecar AND one CSV column",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅✅ **RULED (c) BY THE TRADER, 2026-09-11 (UTC): SIDECAR *AND* ONE CSV COLUMN (`AbsorptionShadowAggrUsd`).**",
+    "**THIRD DEFEAT OF A CHEAPER READ IN ONE SESSION"
+   ],
+   "ruling_src": [
+    "docs/d6d-episode-continuity-spec.md:248@b5000c9",
+    "docs/d6d-episode-continuity-spec.md:248@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-11",
+   "ruling_granularity": "row",
+   "note": "a combined option, but the doc records the recommendation as defeated, so OVERRULED takes precedence over PARTIAL"
+  },
+  {
+   "id": "docs/d6d-episode-continuity-spec.md|D-6d.2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "⭐ **`D-6d.2` is SUBSUMED by this ruling — (c) places Stage 2 after the read, which is what `D-6d.2` (a) asked.**"
+   ],
+   "ruling_src": [
+    "docs/d6d-episode-continuity-spec.md:250@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-11",
+   "ruling_granularity": "row",
+   "note": "subsumed by the D-6d.3 ruling, which the doc says delivers what (a) asked"
+  },
+  {
+   "id": "docs/d6d-episode-continuity-spec.md|D-6d.3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(c)",
+   "recommended": "(c)",
+   "ruling_text": [
+    "✅✅ **RULED (c) BY THE TRADER, 2026-09-11 (UTC): `D-2` AND `D-6d` STAGE 1 SHIP TOGETHER AT THE ~2026-09-15 GATE; STAGE 2 FOLLOWS THE READ.**"
+   ],
+   "ruling_src": [
+    "docs/d6d-episode-continuity-spec.md:250@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-11",
+   "ruling_granularity": "row",
+   "note": "ADOPTED against the LAST pre-ruling read (c); the first read (b) was withdrawn by the seat on measurement after a trader question (seat-handover-2026-09-14.md bias register)"
+  },
+  {
+   "id": "docs/thin-trade-window-skip-gate-proposal.md|D-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "D1–D5 all ticked as recommended, trader-directed."
+   ],
+   "ruling_src": [
+    "docs/thin-trade-window-skip-gate-spec-back.md:4@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-20",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-7@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(2)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "✅ **TICKED 2026-08-21 — PRODUCTION ONLY.**"
+   ],
+   "ruling_src": [
+    "docs/collector-ops-tooling-proposal.md:160@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-20",
+   "ruling_granularity": "row",
+   "note": "the box date label reads 2026-08-21 local; commit 462ac12 is 2026-08-20T17:36Z"
+  },
+  {
+   "id": "docs/collector-ops-tooling-proposal.md|D-9@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "✅ **TICKED 2026-08-21 — ON DEMAND ONLY.**"
+   ],
+   "ruling_src": [
+    "docs/collector-ops-tooling-proposal.md:162@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-20",
+   "ruling_granularity": "row",
+   "note": "the box date label reads 2026-08-21 local; commit 462ac12 is 2026-08-20T17:36Z"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**Ruling history, in one line:** first tick **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)**"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**Ruling history, in one line:** first tick **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)**"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**Ruling history, in one line:** first tick **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)**"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "row",
+   "note": "first tick followed the read; the seat later re-opened it with a new option, recorded as D-3r"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(c)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**Ruling history, in one line:** first tick **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)**"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**Ruling history, in one line:** first tick **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)**"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "row",
+   "note": "first tick followed the read; the seat later re-opened it with a new option, recorded as D-6r"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-4@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(c)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "**Ruling history, in one line:** first tick **D-1 (a) · D-2 (a) · D-3 (a) · D-4 (c) · D-5 (c) · D-6 (a)**"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "row",
+   "note": "the read was \"(b) at minimum; (c) is correct but larger\"; taken as recommending (b). Trader direction recorded with the tick: do this properly instead of the minimum"
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**",
+    "### 4a.2 ✅ D-5(c)'s five follow-on decisions — ALL RULED as recommended, 2026-08-25"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9",
+    "docs/coverage-trailing-edge-f1-proposal.md:160@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**",
+    "### 4a.2 ✅ D-5(c)'s five follow-on decisions — ALL RULED as recommended, 2026-08-25"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9",
+    "docs/coverage-trailing-edge-f1-proposal.md:160@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**",
+    "### 4a.2 ✅ D-5(c)'s five follow-on decisions — ALL RULED as recommended, 2026-08-25"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9",
+    "docs/coverage-trailing-edge-f1-proposal.md:160@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**",
+    "### 4a.2 ✅ D-5(c)'s five follow-on decisions — ALL RULED as recommended, 2026-08-25"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9",
+    "docs/coverage-trailing-edge-f1-proposal.md:160@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-5.5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**",
+    "### 4a.2 ✅ D-5(c)'s five follow-on decisions — ALL RULED as recommended, 2026-08-25"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9",
+    "docs/coverage-trailing-edge-f1-proposal.md:160@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-6r@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(c)",
+   "recommended": "(c)",
+   "ruling_text": [
+    "second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-trailing-edge-f1-proposal.md|D-3r@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(c)",
+   "recommended": "(c)",
+   "ruling_text": [
+    "second tick **D-3 (c) · D-6 (c) · D-5.1…D-5.5 all (a)**"
+   ],
+   "ruling_src": [
+    "docs/coverage-trailing-edge-f1-proposal.md:12@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-25",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|A54a-scope@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(d) reflection guard + scoped (b) as dead-code removal",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅ **RULED 2026-08-11 — option (d) + scoped (b)**",
+    "the orchestrator's recommendation was DEFEATED on evidence.**"
+   ],
+   "ruling_src": [
+    "docs/trader-tick-queue-archive.md:373@b5000c9",
+    "docs/trader-tick-queue-archive.md:373@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "row",
+   "note": "combined ruling, but the doc records the recommendation as DEFEATED, so OVERRULED takes precedence over PARTIAL"
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|seeded-session-buckets@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(1)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "✅ **RULED 2026-08-11 — DO NOT empty the seed. Guard it via (d)**",
+    "the orchestrator's recommendation was DEFEATED on a factual error.**"
+   ],
+   "ruling_src": [
+    "docs/trader-tick-queue-archive.md:375@b5000c9",
+    "docs/trader-tick-queue-archive.md:375@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/a54a-json-poco-drift-guard-spec.md|D-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**Four as recommended; D-3 ruled against the spec's abstention.**"
+   ],
+   "ruling_src": [
+    "docs/a54a-json-poco-drift-guard-spec.md:254@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-03",
+   "ruling_granularity": "table",
+   "note": "doc says 2026-09-04; tick commit d3a054f is 2026-09-03T19:17Z"
+  },
+  {
+   "id": "docs/a54a-json-poco-drift-guard-spec.md|D-4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(1)",
+   "recommended": "(1)",
+   "ruling_text": [
+    "**Four as recommended; D-3 ruled against the spec's abstention.**",
+    "✅ **FAIL, as recommended** — a warning inside a 317-check run is not read. ⛔ **All THREE re-syncs must land in the SAME commit as the guard**, or the harness ships red"
+   ],
+   "ruling_src": [
+    "docs/a54a-json-poco-drift-guard-spec.md:254@b5000c9",
+    "docs/a54a-json-poco-drift-guard-spec.md:261@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-03",
+   "ruling_granularity": "table",
+   "note": "doc says 2026-09-04; tick commit d3a054f is 2026-09-03T19:17Z"
+  },
+  {
+   "id": "docs/a54a-json-poco-drift-guard-spec.md|D-5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(2)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "**Four as recommended; D-3 ruled against the spec's abstention.**",
+    "✅ **Its own session, second, as recommended.** Session 1's guard is the instrument that proves a (b) edit changed nothing"
+   ],
+   "ruling_src": [
+    "docs/a54a-json-poco-drift-guard-spec.md:254@b5000c9",
+    "docs/a54a-json-poco-drift-guard-spec.md:262@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-03",
+   "ruling_granularity": "table",
+   "note": "doc says 2026-09-04; tick commit d3a054f is 2026-09-03T19:17Z"
+  },
+  {
+   "id": "docs/a54a-r2-r3-followup-spec.md|D-R3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(i)",
+   "recommended": "(i)",
+   "ruling_text": [
+    "✅ **(i) — SEED THE NULLABLES, as recommended.** `SessionBucketSettings.RocMagnitudeThreshold`: **ASIA = 0.17**, **LONDON = 0.11**, ⛔ **NY stays `Nothing`** — the shipped file carries no NY override, and seeding one would be inventing a value, not mirroring. Precedent, twelve lines from the edit: `AggressorVelocitySessionOverride.BurstRatioThreshold` is a `Double?` seeded with real values under a comment reading *\"**MUST mirror settings.json** — the harness builds cfgs from these defaults.\"* **The rule already exists in this file; `session_volume` was the exception.** ⛔ **(ii) rejected — it would have shipped LONDON knowingly 10× further off shipped than it is today.** (iii) was arbitrary"
+   ],
+   "ruling_src": [
+    "docs/a54a-r2-r3-followup-spec.md:159@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-04",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/a54a-session2-step1-measurement-2026-09-05.md|S2-1@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(B)",
+   "recommended": "(A)",
+   "ruling_text": [
+    "## 8. ⛔ §7.3's recommendation is FLIPPED to (B) — trader-directed 2026-09-05"
+   ],
+   "ruling_src": [
+    "docs/a54a-session2-step1-measurement-2026-09-05.md:281@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-04",
+   "ruling_granularity": "row",
+   "note": "doc says 2026-09-05; ruling commit f9f8fdf is 2026-09-04T18:55Z"
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 4. D-table — ✅ TICKED IN FULL 2026-09-06, every row as recommended. ⛔ **Build from §4b, not this table**"
+   ],
+   "ruling_src": [
+    "docs/s2-2-calcspread-split-proposal.md:162@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-06",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 4. D-table — ✅ TICKED IN FULL 2026-09-06, every row as recommended. ⛔ **Build from §4b, not this table**"
+   ],
+   "ruling_src": [
+    "docs/s2-2-calcspread-split-proposal.md:162@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-06",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(b)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "## 4. D-table — ✅ TICKED IN FULL 2026-09-06, every row as recommended. ⛔ **Build from §4b, not this table**"
+   ],
+   "ruling_src": [
+    "docs/s2-2-calcspread-split-proposal.md:162@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-06",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 4. D-table — ✅ TICKED IN FULL 2026-09-06, every row as recommended. ⛔ **Build from §4b, not this table**"
+   ],
+   "ruling_src": [
+    "docs/s2-2-calcspread-split-proposal.md:162@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-06",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/s2-2-calcspread-split-proposal.md|D-5@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "## 4. D-table — ✅ TICKED IN FULL 2026-09-06, every row as recommended. ⛔ **Build from §4b, not this table**"
+   ],
+   "ruling_src": [
+    "docs/s2-2-calcspread-split-proposal.md:162@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-06",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|pooled-minute-key-dedup@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(1)",
+   "recommended": "(2)",
+   "ruling_text": [
+    "✅ **DONE 2026-08-11 — and the ruling REVERSED the recommendation**",
+    "⚠ **KEEP the minute key; do NOT change it for the Kelly/W6-4 freeze.** The measurement did not support the original \"fix it first\" call: of the **573** rows a minute key drops (AWS 25 = 0.16 % · local 548 = 5.08 %), **exactly ONE is a weekday STRONG**, against **281** across both books — so it costs the Kelly dated trigger **0.36 %**. Against that, changing the key breaks §3b's own reproducibility note: **every pooled figure published since 2026-07-31 was built on the minute key.** ⚠ **The clustering is real and is recorded for reads that do not exist yet: 21 of the 25 AWS losses sit at 13:00 UTC**, the `execution_resolution` 3 → 1 handover. **Any future pooled read segmented by session, resolution, or the 13:00 boundary must switch to second-resolution or `InstanceId`+`SignalId`+timestamp keying and say the figures will not reconcile with earlier pooled reads.** Not code — no minute-key dedup exists in any `.vb` file"
+   ],
+   "ruling_src": [
+    "docs/trader-tick-queue-archive.md:39@b5000c9",
+    "docs/trader-tick-queue-archive.md:39@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-11",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|E5-absorption-path@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(B)",
+   "recommended": "(B)",
+   "ruling_text": [
+    "✅ **TICKED 2026-08-12 — PATH B**",
+    "✅ **DECIDED, as the coordinator recommended.** **Anchors HOLD at their v61 provisional values** — `absorb_ratio`, `default.min_aggr_usd`, `max_pull_frac` and `depletion_floor_usd` all stay put, `scoring_enabled` stays **false**. ⚠ **Path A is DEAD — do not re-propose its V-table** (0.5 / 5 000 / 1.0). It is on file at [`absorption-anchor-rederivation-2026-07-30.md`](absorption-anchor-rederivation-2026-07-30.md) §5a and it projects **NY 0.000 %**, POOLED 0.064 %, and ~10–15 weekday-weeks to reach the n ≥ 30 activation gate. **No settings change, no version bump, and no ⚠ boundary in this pass.** ✅ **WHAT PATH B OWES — a new proposal file**, re-opening the book-absorption proposal's §8 residuals with the evidence that the v61 geometry rescale alone did not lift flag rates into the 3–8 % design band: **`window_sec` too short** · **episode-cumulative pressing** · **D8 `pullFrac` inflation on sparse `postLB`**. **That proposal is now a §2 build slot** — see the absorption mechanism-revision row. ⚠ **The reasoning, so it is not re-litigated:** no anchor set reachable from the observable v61 population lands NY in-band — loosening moves the problem sideways. The honest failure mode is *\"the tracker does not observe enough real pressing\"*, not *\"the thresholds are one tick too high\"*, which is the trader-profile conservative-false-positive posture applied correctly. **The §5 activation clock does NOT restart** — no knob turned, so the §12 watch convention's re-collection reset does not fire"
+   ],
+   "ruling_src": [
+    "docs/trader-tick-queue-archive.md:370@b5000c9",
+    "docs/trader-tick-queue-archive.md:370@b5000c9"
+   ],
+   "ruling_date_utc": "2026-08-12",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/trader-tick-queue-archive.md|WD-SEMANTICS@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(c)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅✅ **RULED (c) 2026-09-09 (UTC), trader.",
+    "⭐ **Why (c) and not the cheaper (b).** Under (b) — \"unparsed drops silently everywhere\" — an unparsed row would vanish with **no record on any surface**. `UI/MainForm_Layout.vb:1735` already names that failure in the project's own words: *\"a count that is dropped without being shown is a silent hole.\"* [`trader-tick-queue.md`](trader-tick-queue.md) rejected a coverage-report option on the same basis. **A counter that reads `0` is not waste — it is the tripwire.**"
+   ],
+   "ruling_src": [
+    "docs/wd-semantics-unparsed-counter-spec.md:15@b5000c9",
+    "docs/wd-semantics-unparsed-counter-spec.md:57@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-09",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/s4-eval-cache-identity-proposal.md|D-1@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(b)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **(b) — THEY LAND TOGETHER.** ⛔ No \"safe pair first\", no separate session",
+    "⚠ **The orchestrator read (a) and was DEFEATED** — see §3.1. **The queue row's *\"Both halves, or state why only one\"* is satisfied by building both**"
+   ],
+   "ruling_src": [
+    "docs/s4-eval-cache-identity-proposal.md:116@b5000c9",
+    "docs/s4-eval-cache-identity-proposal.md:116@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-08",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/s4-eval-cache-identity-proposal.md|D-2@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(b)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **(b) — the true `(InstanceId, SignalId)` PAIR, with the v6 → v7 migration, NOW**",
+    "⚠ **The orchestrator read (a)-now-(b)-later and was DEFEATED** — §3.1. ⛔ **(c) STAYS REJECTED and must not be re-proposed: it is a HEURISTIC dressed as an identity.** Two genuinely distinct runs at the same second, same verdict, same resolution and same entry price still collide — and a key that is *nearly* unique invites the \"held safe by an assumption\" failure this project has hit repeatedly"
+   ],
+   "ruling_src": [
+    "docs/s4-eval-cache-identity-proposal.md:117@b5000c9",
+    "docs/s4-eval-cache-identity-proposal.md:117@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-08",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/s4-eval-cache-identity-proposal.md|D-3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **(a) — null identity, FALL BACK TO `Timestamp` for those rows only**",
+    "⭐ **The orchestrator's read, upheld.** ⛔ **(b) is CIRCULAR — it matches on the very key this change exists to distrust — and is rejected explicitly so it is not re-proposed as a \"completeness\" improvement.** (c) throws away the perf strip's history for a latent defect"
+   ],
+   "ruling_src": [
+    "docs/s4-eval-cache-identity-proposal.md:118@b5000c9",
+    "docs/s4-eval-cache-identity-proposal.md:118@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-08",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/item6-wstradeprobe-s1-recheck-2026-09-07.md|S-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **`S-1` — THE DECISION IS TAKEN. RULED 2026-09-07 (trader): (a) split `TradeRecord` into `Core/`, AS THE DIRECTION, **NOT NOW**. NOTHING IS OWED**"
+   ],
+   "ruling_src": [
+    "docs/trader-tick-queue-archive.md:481@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-07",
+   "ruling_granularity": "row",
+   "note": "the read was (a) as the direction, not now; ruled the same"
+  },
+  {
+   "id": "docs/absorption-d2-stage1-rotation-build-spec.md|RD-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(b)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅ **RULED (b) by the trader, 2026-09-13 (UTC), as recommended**"
+   ],
+   "ruling_src": [
+    "docs/absorption-d2-stage1-rotation-build-spec.md:234@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-13",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/kelly-w6-4-spec-back.md|D-1@b5000c9",
+   "outcome": "PARTIAL",
+   "ruled": "(a) with a scope change",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ### ✅ `D-1` → **(a) ADD THE FLAG**, with one scope change the packet did not propose."
+   ],
+   "ruling_src": [
+    "docs/kelly-w6-4-spec-back.md:28@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-09",
+   "ruling_granularity": "row",
+   "note": "the recommended option with one scope change the packet did not propose"
+  },
+  {
+   "id": "docs/kelly-w6-4-spec-back.md|D-3@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(c)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ### ✅ `D-3` → **(c) DO NOTHING**, and ⛔ **its premise was FALSE** — see the correction in [`kelly-w6-4-batch-summary.md`](kelly-w6-4-batch-summary.md)."
+   ],
+   "ruling_src": [
+    "docs/kelly-w6-4-spec-back.md:30@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-09",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/doc-status-sweep-and-queue-archive-spec.md|D-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ## ✅✅ `D-1` RULED **(a)** — 2026-09-09 (UTC), trader."
+   ],
+   "ruling_src": [
+    "docs/doc-status-sweep-and-queue-archive-spec.md:190@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-09",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(b)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅✅ **TICKED (b) 2026-09-11 (UTC), trader — as recommended.** A new `HourClass.StartupWindow`. ⛔ **STATE THE WORST-OF PRECEDENCE EXPLICITLY AT `CoverageReport.vb:695-707` (`T-4`): it must NOT outrank `Defect`.** ⭐ **Place it adjacent to `ExpectedMissing` in that chain — a startup window and a not-yet-running window are both \"absence we expected\", and neither may mask a real `Defect` elsewhere in the hour.** ⚠ **The enum's own comment says ordinal position is inert; that is TRUE of the enum and FALSE of the combine. Do not rely on declaration order**"
+   ],
+   "ruling_src": [
+    "docs/coverage-report-cluster-spec.md:137@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-11",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/coverage-report-cluster-spec.md|D-6@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(b)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅✅ **TICKED (b) 2026-09-11 (UTC), trader — as recommended.** A separate declared file. ⭐ **It is operational INTENT, not engine configuration — so it stays out of `settings.json`, needs no version bump, and the auto-tweaker fence never has to reason about it.** ⛔ **`settings.json` MUST remain untouched at v68 — that is `AC-7`.** ⚠ **The file is a POSITIVE RECORD OF INTENT, which is what J-B asks for. It must be declared, never derived from observed uptime — a schedule inferred from behaviour is the rejected baseline wearing a new hat**"
+   ],
+   "ruling_src": [
+    "docs/coverage-report-cluster-spec.md:138@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-11",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-status-instrument-spec.md|D-1@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(d) a new option",
+   "recommended": "(a)",
+   "ruling_text": [
+    "RULED (d) 2026-09-11 (UTC), trader — NOT any of the three options originally offered."
+   ],
+   "ruling_src": [
+    "docs/venue-status-instrument-spec.md:97@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-11",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(b)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅ **(b) — ruled 2026-09-14 (UTC).** Under (d) independence is stronger: repair fetches by `trade_seq`, the venue check by time"
+   ],
+   "ruling_src": [
+    "docs/gap-repair-same-ms-page-skip-spec.md:159@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-14",
+   "ruling_granularity": "row",
+   "note": "the seat had taken (b) under the auto-proceed ruling; the trader then ruled it"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-4@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(b)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **(b) — ruled 2026-09-14 (UTC).** An outcome-only sidecar in the `ws_health.log` / `venue_status.log` pattern, added to `collector.ps1` `$FetchFiles`. Console is captured nowhere in the tree (`H-3`)"
+   ],
+   "ruling_src": [
+    "docs/gap-repair-same-ms-page-skip-spec.md:161@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-14",
+   "ruling_granularity": "row",
+   "note": "the read was (a) now plus a queue row for (b)"
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-5@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(b)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **(b) — ruled 2026-09-14 (UTC).** Both are one-session builds. Re-rule only if this build stalls"
+   ],
+   "ruling_src": [
+    "docs/gap-repair-same-ms-page-skip-spec.md:162@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-14",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/gap-repair-same-ms-page-skip-spec.md|GR-1@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(d) a new option",
+   "recommended": "(c)",
+   "ruling_text": [
+    "✅ **(d) NEW — trader-ruled 2026-09-14 (UTC).** Hole = `[L.seq + 1, R.seq − 1]`; tail = from `max.seq + 1`. A hole IS a missing sequence range, so this is exact and self-describing. Amends `DR-1`: time is no longer the repair key. **Measured viable before amending (`H-6`–`H-9`); the stop condition did not fire.** (c) is the named fallback if the contract ever proves inexact"
+   ],
+   "ruling_src": [
+    "docs/gap-repair-same-ms-page-skip-spec.md:158@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-14",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-duplicate-rows-read-2026-09-15.md|DUP-1@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(a)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "> ✅ **RULED 2026-09-15 (UTC), trader via the orchestrator (`deribitverdictengine-b6`):** `DUP-1` = (a), fix now, and the S2 deploy WAITS for it."
+   ],
+   "ruling_src": [
+    "docs/gap-repair-scan-failure-spec.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-15",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/trade-store-duplicate-rows-read-2026-09-15.md|DUP-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(iii)",
+   "recommended": "(iii)",
+   "ruling_text": [
+    "> ✅ **RULED 2026-09-15 (UTC), trader via the orchestrator (`deribitverdictengine-b6`):** `DUP-1` = (a), fix now, and the S2 deploy WAITS for it. `DUP-2` = both directions"
+   ],
+   "ruling_src": [
+    "docs/gap-repair-scan-failure-spec.md:3@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-15",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-check-build-spec-back.md|R-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **Rulings, 2026-09-14 (UTC):** all four spec-back rulings (R-1 to R-4 in `venue-check-build-spec-back.md` §2) took option (a). R-2 and R-3 were trader-"
+   ],
+   "ruling_src": [
+    "docs/venue-check-build-summary.md:7@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-14",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-check-build-spec-back.md|R-3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **Rulings, 2026-09-14 (UTC):** all four spec-back rulings (R-1 to R-4 in `venue-check-build-spec-back.md` §2) took option (a). R-2 and R-3 were trader-"
+   ],
+   "ruling_src": [
+    "docs/venue-check-build-summary.md:7@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-14",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/venue-check-schedule-plan.md|D-2@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(c)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "> ⭐⭐ **SUPERSEDED IN PART — TRADER RULING 2026-09-14 (UTC): OPTION A.** The venue check runs on the **dev machine, after each `tools/ops/collector.ps1 fetch`**, against the verified local copy-back."
+   ],
+   "ruling_src": [
+    "docs/venue-check-schedule-plan.md:5@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-14",
+   "ruling_granularity": "row",
+   "note": "option A = run on the dev machine after each fetch, the plan option (c); the orchestrator review had agreed (a)"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**RULED (trader), 2026-09-16 UTC: (a).** Correct `docs/UserManual.md` line 967 to the code's geometry. Not done in this session; the orchestrator owns the edit."
+   ],
+   "ruling_src": [
+    "docs/medium-tier-bug-hunt-spec-back.md:161@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-16",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-5@b5000c9",
+   "outcome": "PARTIAL",
+   "ruled": "(a) for M and T, plus (b) for MT",
+   "recommended": "(a)",
+   "ruling_text": [
+    "**RULED (trader), 2026-09-16 UTC:** book `M` to the maker's side, `T` to the taker's side, `MT` to both sides."
+   ],
+   "ruling_src": [
+    "docs/medium-tier-bug-hunt-spec-back.md:327@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-16",
+   "ruling_granularity": "row",
+   "note": "combines (a) for M/T with (b) for MT; the read had no read on MT"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-8@b5000c9",
+   "outcome": "OVERRULED",
+   "ruled": "(b)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **RULED 2026-09-16 (trader), as the orchestrator recommended:** **`D-8` = (b)** show the lean rows as a separate labelled column"
+   ],
+   "ruling_src": [
+    "docs/trader-tick-queue.md:168@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-16",
+   "ruling_granularity": "row",
+   "note": "the recorded pre-ruling read is the implementer (a); the orchestrator recommendation (b) that the trader followed is not recorded before the ruling"
+  },
+  {
+   "id": "docs/medium-tier-bug-hunt-spec-back.md|D-9@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(b)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅ **RULED 2026-09-16 (trader), as the orchestrator recommended:** **`D-8` = (b)** show the lean rows as a separate labelled column · **`D-9` = (b)** render what the funding-momentum step actually did"
+   ],
+   "ruling_src": [
+    "docs/trader-tick-queue.md:168@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-16",
+   "ruling_granularity": "row",
+   "note": ""
+  },
+  {
+   "id": "docs/medium-tier-diagnosis-spec-back.md|Q-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(d)",
+   "recommended": "(d)",
+   "ruling_text": [
+    "## Trader rulings (2026-09-18 UTC), recorded by the orchestrator",
+    "| `Q-1` (the tier ladder) | **(d) first:** measure target and stop distance by tier. Then decide (a) (`F-1`, no threshold or tier-floor re-cut) and (c) (`F-4a`, flatten tiers for Kelly sizing only) on that result |"
+   ],
+   "ruling_src": [
+    "docs/medium-tier-diagnosis-spec-back.md:218@b5000c9",
+    "docs/medium-tier-diagnosis-spec-back.md:224@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-17",
+   "ruling_granularity": "row",
+   "note": "heading dates 2026-09-18; the ruling commit 3d3925d is 2026-09-17T16:38Z"
+  },
+  {
+   "id": "docs/medium-tier-diagnosis-spec-back.md|Q-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(c)",
+   "recommended": "(c)",
+   "ruling_text": [
+    "| `Q-2` / `F-3` (the NY VPFR vote) | **Retest after the POC-gate fix and the liquidation fix ship** |"
+   ],
+   "ruling_src": [
+    "docs/medium-tier-diagnosis-spec-back.md:226@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-17",
+   "ruling_granularity": "row",
+   "note": "heading dates 2026-09-18; the ruling commit 3d3925d is 2026-09-17T16:38Z"
+  },
+  {
+   "id": "docs/engine-fix-build-spec-2026-09-21.md|EF-1@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **The trader ruled `EF-1` to `EF-4` on 2026-09-21 (UTC), all as recommended.** They were reserved when queued — each is a rendered value, a deploy, or a schema question — and they are now settled. **The D-tables below are kept verbatim so a later reader sees what was weighed, not only what was picked.**"
+   ],
+   "ruling_src": [
+    "docs/engine-fix-build-spec-2026-09-21.md:408@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-21",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/engine-fix-build-spec-2026-09-21.md|EF-2@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **The trader ruled `EF-1` to `EF-4` on 2026-09-21 (UTC), all as recommended.** They were reserved when queued — each is a rendered value, a deploy, or a schema question — and they are now settled. **The D-tables below are kept verbatim so a later reader sees what was weighed, not only what was picked.**"
+   ],
+   "ruling_src": [
+    "docs/engine-fix-build-spec-2026-09-21.md:408@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-21",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/engine-fix-build-spec-2026-09-21.md|EF-3@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(b)",
+   "recommended": "(b)",
+   "ruling_text": [
+    "✅ **The trader ruled `EF-1` to `EF-4` on 2026-09-21 (UTC), all as recommended.** They were reserved when queued — each is a rendered value, a deploy, or a schema question — and they are now settled. **The D-tables below are kept verbatim so a later reader sees what was weighed, not only what was picked.**"
+   ],
+   "ruling_src": [
+    "docs/engine-fix-build-spec-2026-09-21.md:408@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-21",
+   "ruling_granularity": "table",
+   "note": ""
+  },
+  {
+   "id": "docs/engine-fix-build-spec-2026-09-21.md|EF-4@b5000c9",
+   "outcome": "ADOPTED",
+   "ruled": "(a)",
+   "recommended": "(a)",
+   "ruling_text": [
+    "✅ **The trader ruled `EF-1` to `EF-4` on 2026-09-21 (UTC), all as recommended.** They were reserved when queued — each is a rendered value, a deploy, or a schema question — and they are now settled. **The D-tables below are kept verbatim so a later reader sees what was weighed, not only what was picked.**"
+   ],
+   "ruling_src": [
+    "docs/engine-fix-build-spec-2026-09-21.md:408@b5000c9"
+   ],
+   "ruling_date_utc": "2026-09-21",
+   "ruling_granularity": "table",
+   "note": ""
+  }
+ ]
+}
