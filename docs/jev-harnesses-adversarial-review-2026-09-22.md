@@ -7,6 +7,11 @@
 ---
 
 > ✅ **FIXED the same day (UTC), trader "go":** finding 1 and 10 and 3 → harness 2 revision 3, `90c0db1` ([`commit-walker-check-spec.md`](commit-walker-check-spec.md) §11). Findings 2 and 5 → harness 1 revision 1, `f4dd8c7` ([`rider-travel-check-spec.md`](rider-travel-check-spec.md) §9). **Open:** 4, 6, 7, 8, 9, 11.
+>
+> ✅ **FIXED 2026-09-23/24 (UTC), the "arm harnesses 1 and 2" batch — findings 6, 8n and 11**, all in `tools/checks/lib/InvokeJev.ps1` / `tools/checks/rider-travel.ps1` / `tools/checks/commit-walker.ps1` (uncommitted at write time; see `docs/harnesses-1-2-arming-spec-back.md`).
+> - **Finding 11** (`Invoke-Jev` never retries): bounded retries (default 3, exponential backoff) for HTTP 5xx or no-response failures only; a 403/other 4xx is never retried. `RetryCount` travels on every call; both harnesses sum it into a printed `RETRY_COUNT`. Harnesses 3 and 4 share the fix unchanged (verified: their baseline-refusal output is byte-identical before/after, aside from an inherent wall-clock timing field).
+> - **Item `8n`'s sibling in harnesses 1 and 2** (same firewall-block pattern as `FP-D26`): a blocked rider/commit is recorded `WAF_BLOCKED` / `NOT_JUDGED`, the run continues, and a blocked item makes the exit code 1. Harness 2's escalation call gets the same treatment (`ESCALATION_WAF_BLOCKED`, informational, primary verdict stands).
+> - **Finding 6**, done DIFFERENTLY from `8m`: `not_a_header_column`/`CONSISTENT` are not provably always-wrong (unlike an `FP-1` hardcoded literal), so flipping the exit code on them would fail on nearly every normal run. Instead: `RIDERS_NOT_A_HEADER_COLUMN` / `CONSISTENT_COUNT` print as reportable-only counters, never touching the exit code. **Open:** 4, 7, 8, 9.
 
 ## Findings, ranked
 
