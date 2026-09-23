@@ -108,7 +108,8 @@ def main(argv):
     missing_out = [i for i in ids if i not in outcome]
 
     lines = ['# Decision-bias tripwire — score', '']
-    lines.append('- population rev `%s`, items scored: %d (provenance filter: %s)' % (pop.get('rev', '?')[:7], len(ids), a.provenance))
+    lines.append('- population rev `%s`, items scored: %d (provenance filter: %s; excluded granularity: %s; CLAUDE.md-named four excluded: %s)'
+                 % (pop.get('rev', '?')[:7], len(ids), a.provenance, a.exclude_granularity or 'none', 'yes' if a.exclude_named else 'no'))
     lines.append('- outcomes: ' + ', '.join('%s %d' % kv for kv in sorted(Counter(outcome.values()).items())))
     if missing_out:
         lines.append('- ⛔ %d population ids have no outcome' % len(missing_out))

@@ -1,6 +1,6 @@
 # Decision-bias tripwire — score
 
-- population rev `b5000c9`, items scored: 4 (provenance filter: all)
+- population rev `b5000c9`, items scored: 4 (provenance filter: all; excluded granularity: none; CLAUDE.md-named four excluded: no)
 - outcomes: ADOPTED 2, OVERRULED 1, PARTIAL 1
 
 ### Regex arm — pattern `adequate|good enough|buys nothing|defer` on the rationale, pre-registered
