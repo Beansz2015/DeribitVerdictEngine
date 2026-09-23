@@ -65,6 +65,9 @@ VARIANTS = [
     # Seventh reading: the branch the DS-A ruling names for its check 3 -- if the span arm's gains
     # include a correct pairing, keep the arm but stop it firing inside a file name or a link target.
     ('restricted_span+label', dict(span_arm='restricted', name_label=True)),
+    # Eighth reading, INFORMATION ONLY, not ruled and not adopted: no span arm, and rule 1's
+    # separator set extended with `"` and `{` -- the shapes of the span arm's correct pairings.
+    ('no_span+sep+label', dict(span_arm=False, name_label=True, extra_sep=True)),
 ]
 
 print(f'REV={rev[:7]} {"ALL_NON_ARCHIVE_DOCS" if ALL_DOCS else "LIVING_DOCS"}={len(docs)} living_missing={missing}')
@@ -141,8 +144,18 @@ def was_rows_key(name):
     return sorted(out)
 
 
-for f in ('ruled(f)', 'restricted_span+label'):
+def was_rows_set(name):
+    return {(r[0], r[1], r[5]['key_path'], r[5]['doc_value']) for r in ROWS[name]
+            if r[2] == 'E2_value_was_shipped' and len(r) > 5}
+
+
+for f in ('ruled(f)', 'restricted_span+label', 'no_span+sep+label'):
   print(f'=== DS-A checks for reading {f}')
+  if ALL_DOCS:
+    span_rows = was_rows_set('literal') - was_rows_set('no_span')
+    got = sorted(span_rows & was_rows_set(f))
+    print(f'SPAN_ARM_ROWS_RECOVERED {len(got)}/{len(span_rows)} (the literal reading\'s was_shipped rows that '
+          f'no_span loses): {[f"{p}:{l}={v:g}" for p, l, k, v in got]}')
   if not ALL_DOCS:
     q = {(h[0], h[1]) for h in ROWS[f] if h[2] == 'E2_value_never_shipped' and h[5]['qualified']}
     tp_ok = sum(1 for pl in tp_lines if pl in was_set(f))

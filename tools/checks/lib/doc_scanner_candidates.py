@@ -163,6 +163,10 @@ def expand_docs(rev, patterns):
 # followed by a further ".digit". A sentence-final full stop ("threshold: 4.") still ends a token.
 NUM_TOKEN = re.compile(r'(?<![\w.])-?\d+(?:\.\d+)?(?!\w)(?!\.\d)')
 GAP_RULE1 = re.compile(r'[`*(=:\s]*')
+# NOT in the spec and NOT adopted: rule 1's separator set plus `"` and `{`, measured on
+# 2026-09-23 (UTC) only as information for ruling DS-A -- the span arm's correct pairings use
+# `"version": 63` and `key {1000, 12000}` shapes. pair_line(extra_sep=True) selects it.
+GAP_RULE1_EXTRA = re.compile(r'[`*(=:\s"{]*')
 # Between two key NAMES of one slash group: a slash, optionally wrapped in backticks, asterisks
 # or whitespace, and optionally followed by the next key's dotted prefix (`cfg.Scoring.X`/`Y`).
 SLASH_BETWEEN_KEYS = re.compile(r'[`*\s]*/[`*\s]*(?:[A-Za-z_]\w*\.)*')
@@ -222,12 +226,14 @@ def _in_file_or_link(line, pos):
     return False
 
 
-def pair_line(line, rx, idx, span_arm=True):
+def pair_line(line, rx, idx, span_arm=True, extra_sep=False):
     """Return [(key_match, number_start, number_text)] pairs for one line under rules 1-3.
     span_arm=False drops rule 1's second arm ("or sits inside the same backtick span");
     span_arm='restricted' keeps it except where the key sits inside a file name or a link
-    target. Both exist so tools/checks/measure/doc-scanner/pairing_variants.py can measure
-    those readings for ruling DS-A."""
+    target. extra_sep=True uses GAP_RULE1_EXTRA. All three exist so
+    tools/checks/measure/doc-scanner/pairing_variants.py can measure those readings for
+    ruling DS-A; the tool runs the defaults."""
+    gap_rx = GAP_RULE1_EXTRA if extra_sep else GAP_RULE1
     keys = list(rx.finditer(line))
     if not keys:
         return []
@@ -250,7 +256,7 @@ def pair_line(line, rx, idx, span_arm=True):
         if len(group) >= 2:
             for g in group:
                 in_group.add(g.start())
-            gap = GAP_RULE1.match(line, group[-1].end())
+            gap = gap_rx.match(line, group[-1].end())
             ng = NUM_GROUP.match(line, gap.end())
             if ng:
                 nums = [ng.group(1)] + re.findall(r'-?\d+(?:\.\d+)?', ng.group(2))
@@ -269,7 +275,7 @@ def pair_line(line, rx, idx, span_arm=True):
         if km.start() in in_group:
             continue
         # Rule 1: only ` * ( = : whitespace between the key and a number token.
-        gap = GAP_RULE1.match(line, km.end())
+        gap = gap_rx.match(line, km.end())
         nm = NUM_TOKEN.match(line, gap.end())
         if nm:
             pairs.append((km, nm.start(), nm.group(0)))
@@ -317,7 +323,7 @@ def _is_qualified(p, line):
     return bool(re.search(r'(?<![\w])' + re.escape(segs[-2]) + r'(?![\w])', line, re.I))
 
 
-def e2_strict(path, text, rev, span_arm=True, name_qualify=False, name_label=False):
+def e2_strict(path, text, rev, span_arm=True, name_qualify=False, name_label=False, extra_sep=False):
     """Same tuple shape as enumerators.e2, plus a trailing dict of computed facts.
 
     The tool's scan STILL runs the spec-literal reading: span_arm=True, name_label=False
@@ -340,7 +346,7 @@ def e2_strict(path, text, rev, span_arm=True, name_qualify=False, name_label=Fal
     if not rx:
         return out
     for i, line in enumerate(text.splitlines(), 1):
-        for km, col, numtxt in pair_line(line, rx, idx, span_arm=span_arm):
+        for km, col, numtxt in pair_line(line, rx, idx, span_arm=span_arm, extra_sep=extra_sep):
             nm = km.group(1)
             p = _resolve(idx, nm, line)
             if p is None:
