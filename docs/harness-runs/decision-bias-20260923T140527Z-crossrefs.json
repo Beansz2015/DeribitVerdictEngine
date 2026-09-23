@@ -1,0 +1,49 @@
+{
+ "rev": "b5000c99cd30a6b0899ba3ebde0cc4420b9fa12b",
+ "rev7": "b5000c9",
+ "stamp_utc": "20260923T140527Z",
+ "builder": "tools/checks/measure/decision-bias/build_population.py",
+ "note": "Pairs where a later item's own text states or implies the ruling of an earlier item. Ids only. The scorer drops the sources with --exclude-revealed.",
+ "items": [
+  {
+   "dependent": "docs/coverage-trailing-edge-f1-proposal.md|D-5.2@b5000c9",
+   "reveals_ruling_of": "docs/coverage-trailing-edge-f1-proposal.md|D-5@b5000c9"
+  },
+  {
+   "dependent": "docs/coverage-trailing-edge-f1-proposal.md|D-5.3@b5000c9",
+   "reveals_ruling_of": "docs/coverage-trailing-edge-f1-proposal.md|D-5@b5000c9"
+  },
+  {
+   "dependent": "docs/coverage-trailing-edge-f1-proposal.md|D-6r@b5000c9",
+   "reveals_ruling_of": "docs/coverage-trailing-edge-f1-proposal.md|D-2@b5000c9"
+  },
+  {
+   "dependent": "docs/coverage-trailing-edge-f1-proposal.md|D-6r@b5000c9",
+   "reveals_ruling_of": "docs/coverage-trailing-edge-f1-proposal.md|D-6@b5000c9"
+  },
+  {
+   "dependent": "docs/coverage-trailing-edge-f1-proposal.md|D-3r@b5000c9",
+   "reveals_ruling_of": "docs/coverage-trailing-edge-f1-proposal.md|D-3@b5000c9"
+  },
+  {
+   "dependent": "docs/s2-2-calcspread-split-proposal.md|D-1@b5000c9",
+   "reveals_ruling_of": "docs/coverage-trailing-edge-f1-proposal.md|D-3r@b5000c9"
+  },
+  {
+   "dependent": "docs/a54a-r2-r3-followup-spec.md|D-R3@b5000c9",
+   "reveals_ruling_of": "docs/trader-tick-queue-archive.md|A54a-scope@b5000c9"
+  },
+  {
+   "dependent": "docs/a54a-session2-step1-measurement-2026-09-05.md|S2-1@b5000c9",
+   "reveals_ruling_of": "docs/trader-tick-queue-archive.md|A54a-scope@b5000c9"
+  },
+  {
+   "dependent": "docs/absorption-d2-stage1-rotation-build-spec.md|RD-1@b5000c9",
+   "reveals_ruling_of": "docs/trader-tick-queue-archive.md|WD-SEMANTICS@b5000c9"
+  },
+  {
+   "dependent": "docs/engine-fix-build-spec-2026-09-21.md|EF-3@b5000c9",
+   "reveals_ruling_of": "docs/trader-tick-queue-archive.md|WD-SEMANTICS@b5000c9"
+  }
+ ]
+}

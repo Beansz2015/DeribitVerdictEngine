@@ -14,6 +14,8 @@ Writes (with --write), all under docs/harness-runs/:
   decision-bias-<stamp>-outcomes.json     the trader's rulings. The seat labels WITHOUT opening this
   decision-bias-<stamp>-unruled.json      recommendations with no trader ruling, count-reported only
   decision-bias-<stamp>-excluded.json     every other candidate, with a reason code (no text, no outcome)
+  decision-bias-<stamp>-crossrefs.json    (dependent, source) id pairs where a later item's own text
+                                          states or implies an earlier item's ruling (ids only)
 
 The leak check (always run) scans every population text field for ruling markers and for any
 date later than the recommendation's own date. A hit must be explained in manifest.LEAK_NOTES
@@ -220,8 +222,19 @@ def main(argv):
         return 2
     meta = {'rev': rev_full, 'rev7': rev_full[:7], 'stamp_utc': stamp,
             'builder': 'tools/checks/measure/decision-bias/build_population.py'}
+    pop_ids = {r['id'] for r in pop}
+    xrefs = [{'dependent': a, 'reveals_ruling_of': b} for a, b in getattr(M, 'CROSSREFS', [])]
+    order = {r['id']: k for k, r in enumerate(pop)}
+    for x in xrefs:
+        if x['dependent'] not in pop_ids or x['reveals_ruling_of'] not in pop_ids:
+            print('REFUSED: CROSSREFS names an id outside the population: %r' % x)
+            return 2
+        if order[x['reveals_ruling_of']] >= order[x['dependent']]:
+            print('REFUSED: CROSSREFS source does not precede its dependent in file order: %r' % x)
+            return 2
     files = {
-        'population': dict(meta, note='STATE ONLY. No ruling is in this file. Label from this file without opening outcomes.json.', items=pop),
+        'population': dict(meta, note='STATE ONLY. No ruling is in this file. Label from this file without opening outcomes.json. Label in FILE ORDER and do not read ahead: see crossrefs.json.', items=pop),
+        'crossrefs': dict(meta, note='Pairs where a later item\'s own text states or implies the ruling of an earlier item. Ids only. The scorer drops the sources with --exclude-revealed.', items=xrefs),
         'outcomes': dict(meta, note='The trader rulings. Do NOT open before the seat baseline is written and committed.', items=outs),
         'unruled': dict(meta, note='Recommendations with no trader ruling. Excluded from scoring; count reported only.', items=unruled),
         'excluded': dict(meta, note='Every other candidate, with a reason code. No text and no outcome.', items=excluded),

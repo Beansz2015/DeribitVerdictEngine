@@ -3,7 +3,7 @@
  "rev7": "b5000c9",
  "stamp_utc": "20260923T140527Z",
  "builder": "tools/checks/measure/decision-bias/build_population.py",
- "note": "STATE ONLY. No ruling is in this file. Label from this file without opening outcomes.json.",
+ "note": "STATE ONLY. No ruling is in this file. Label from this file without opening outcomes.json. Label in FILE ORDER and do not read ahead: see crossrefs.json.",
  "items": [
   {
    "id": "docs/bid-ask-spread-proposal.md|Q2@b5000c9",

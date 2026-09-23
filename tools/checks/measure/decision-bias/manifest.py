@@ -566,7 +566,7 @@ for _q, _ln, _r in (('D-1', 87, '(a)'), ('D-2', 88, '(a)'), ('D-3', 89, '(a)'), 
 add(_d, 'D-4', '1bd268f', C(90, 2),
     [('(a)', CS(90, 3, 'evidence boundary only', 'only')), ('(b)', CS(90, 3, 'evidence boundary **AND** store-end', 'store-end')), ('(c)', CS(90, 3, '(b) plus hour-aligning', 'final hour'))],
     '(b)', C(90, 4))
-leak(_d, 'D-6r', 'rationale', 'ticked', 'cites the earlier tick of a DIFFERENT decision (D-2) as the premise of the re-opening; says nothing of how D-6r was ruled')
+leak(_d, 'D-6r', 'rationale', 'ticked', 'cites the earlier tick of ANOTHER POPULATION ITEM (D-2) as the premise of the re-opening; recorded as a CROSSREFS pair; says nothing of how D-6r was ruled')
 for _q, _ln in (('D-5.1', 132), ('D-5.2', 133), ('D-5.3', 134), ('D-5.4', 135), ('D-5.5', 136)):
     add(_d, _q, '3d0b8e1', C(_ln, 2), ('parse', C(_ln, 3)), '(a)', C(_ln, 4))
 add(_d, 'D-6r', '3d0b8e1', ('line', 138),
@@ -632,7 +632,7 @@ add(_d, 'D-5', '368c17a', C(164, 2),
 _PRIOR = 'cites an EARLIER ruling of a DIFFERENT decision as precedent for this read; says nothing of how this decision was ruled'
 leak('docs/a54a-json-poco-drift-guard-spec.md', 'D-1', 'rationale', 'trader', _PRIOR + ' (two earlier trader decisions the rejected option would reverse)')
 leak('docs/a54a-json-poco-drift-guard-spec.md', 'D-1', 'option(a)', 'ruled', 'describes what each allow-list entry must carry ("the doc that ruled it"); a design property of the option, not a ruling')
-leak('docs/s2-2-calcspread-split-proposal.md', 'D-1', 'rationale', 'ruled', _PRIOR)
+leak('docs/s2-2-calcspread-split-proposal.md', 'D-1', 'rationale', 'ruled', 'cites the earlier re-ruling of ANOTHER POPULATION ITEM as precedent; recorded as a CROSSREFS pair, not hidden')
 
 # ---- more queue-only decisions (trader-tick-queue.md rows, archived at REV)
 _q = 'docs/trader-tick-queue.md'
@@ -887,3 +887,26 @@ triage('ruled_before_or_without_options', 'read', (
     'absorption-anchor-rederivation-2026-07-30', 'asia-london-roc-rebaseline-proposal', 'funding-rate-momentum-proposal',
     'absorption-instrumentation-spec'),
     'V-table values conditional on the Path A choice entered as E5 / measured values signed off with no alternative named / old Question-Resolution table / a build spec whose own rulings are its design, authorised by an entered tick')
+
+
+# ==========================================================================================
+# CROSSREFS: a population item whose own pre-ruling text states or implies the RULING of ANOTHER
+# population item (later decisions build on earlier rulings). Found by a code scan for another
+# item's label next to an option letter, plus 're-ruled', 'RE-OPENED', 'beat (a)' and the named
+# decisions, then read by hand. (dependent_id, revealed_source_id). In every pair the source comes
+# EARLIER in population.json, so a seat labelling strictly in file order labels the source before
+# it can read the dependent. The scorer's --exclude-revealed drops the SOURCES as a sensitivity.
+# ==========================================================================================
+_R = '@' + REV
+CROSSREFS = [
+    ('docs/coverage-trailing-edge-f1-proposal.md|D-5.2' + _R, 'docs/coverage-trailing-edge-f1-proposal.md|D-5' + _R),
+    ('docs/coverage-trailing-edge-f1-proposal.md|D-5.3' + _R, 'docs/coverage-trailing-edge-f1-proposal.md|D-5' + _R),
+    ('docs/coverage-trailing-edge-f1-proposal.md|D-6r' + _R, 'docs/coverage-trailing-edge-f1-proposal.md|D-2' + _R),
+    ('docs/coverage-trailing-edge-f1-proposal.md|D-6r' + _R, 'docs/coverage-trailing-edge-f1-proposal.md|D-6' + _R),
+    ('docs/coverage-trailing-edge-f1-proposal.md|D-3r' + _R, 'docs/coverage-trailing-edge-f1-proposal.md|D-3' + _R),
+    ('docs/s2-2-calcspread-split-proposal.md|D-1' + _R, 'docs/coverage-trailing-edge-f1-proposal.md|D-3r' + _R),
+    ('docs/a54a-r2-r3-followup-spec.md|D-R3' + _R, 'docs/trader-tick-queue-archive.md|A54a-scope' + _R),
+    ('docs/a54a-session2-step1-measurement-2026-09-05.md|S2-1' + _R, 'docs/trader-tick-queue-archive.md|A54a-scope' + _R),
+    ('docs/absorption-d2-stage1-rotation-build-spec.md|RD-1' + _R, 'docs/trader-tick-queue-archive.md|WD-SEMANTICS' + _R),
+    ('docs/engine-fix-build-spec-2026-09-21.md|EF-3' + _R, 'docs/trader-tick-queue-archive.md|WD-SEMANTICS' + _R),
+]

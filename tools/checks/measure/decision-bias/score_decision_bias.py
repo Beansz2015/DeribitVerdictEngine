@@ -89,6 +89,7 @@ def main(argv):
     ap.add_argument('--out')
     ap.add_argument('--provenance', default='all', help="'all' or one provenance value, e.g. pre_ruling_revision")
     ap.add_argument('--exclude-granularity', default='', help="drop items whose ruling granularity is this value, e.g. 'doc'")
+    ap.add_argument('--exclude-revealed', default='', help='a crossrefs.json: drop every item whose ruling a later item reveals')
     ap.add_argument('--exclude-named', action='store_true',
                     help='drop the four decisions CLAUDE.md names as overruled (the seat cannot be blind to them)')
     a = ap.parse_args(argv)
@@ -103,13 +104,17 @@ def main(argv):
         items = [it for it in items if it['id'] not in drop]
     if a.exclude_named:
         items = [it for it in items if not any(it['id'].startswith(n) for n in NAMED_IN_CLAUDE_MD)]
+    if a.exclude_revealed:
+        rev_ids = {x['reveals_ruling_of'] for x in load(a.exclude_revealed)['items']}
+        items = [it for it in items if it['id'] not in rev_ids]
     ids = [it['id'] for it in items]
     outcome = {o['id']: o['outcome'] for o in outs['items'] if o['id'] in set(ids)}
     missing_out = [i for i in ids if i not in outcome]
 
     lines = ['# Decision-bias tripwire — score', '']
-    lines.append('- population rev `%s`, items scored: %d (provenance filter: %s; excluded granularity: %s; CLAUDE.md-named four excluded: %s)'
-                 % (pop.get('rev', '?')[:7], len(ids), a.provenance, a.exclude_granularity or 'none', 'yes' if a.exclude_named else 'no'))
+    lines.append('- population rev `%s`, items scored: %d (provenance filter: %s; excluded granularity: %s; CLAUDE.md-named four excluded: %s; revealed sources excluded: %s)'
+                 % (pop.get('rev', '?')[:7], len(ids), a.provenance, a.exclude_granularity or 'none', 'yes' if a.exclude_named else 'no',
+                    'yes' if a.exclude_revealed else 'no'))
     lines.append('- outcomes: ' + ', '.join('%s %d' % kv for kv in sorted(Counter(outcome.values()).items())))
     if missing_out:
         lines.append('- ⛔ %d population ids have no outcome' % len(missing_out))
