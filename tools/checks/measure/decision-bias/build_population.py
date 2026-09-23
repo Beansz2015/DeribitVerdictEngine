@@ -32,7 +32,7 @@ LEAK_PATTERNS = [
     ('ruled', re.compile(r'\bruled\b')),
     ('ticked', re.compile(r'(?i)\bticked\b')),
     ('TICK', re.compile(r'\bTICK\b')),   # upper-case only: lower-case "tick" is a price unit in this repo
-    ('trader', re.compile(r'(?i)trader')),
+    ('trader', re.compile(r'\b[Tt]rader|\bTRADER')),   # not (?i): that matched the type name TradeRecord
     ('overrul', re.compile(r'(?i)overrul')),
     ('DEFEAT', re.compile(r'(?i)defeat')),
     ('check-mark', re.compile('✅')),
@@ -87,6 +87,7 @@ def build_record(e):
         'rationale_src': rlocs,
         'state_rev': L.full_sha(rev),
         'state_rev_committed_utc': when.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'provenance': e.get('provenance', 'pre_ruling_revision'),
     }
 
 

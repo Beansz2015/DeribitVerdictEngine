@@ -26,9 +26,14 @@ UNRECOVERABLE = []   # (doc, label, note): meets all three population criteria, 
                      # holds the recommendation text WITHOUT the ruling (co-committed). Count only.
 
 
-def add(doc, label, src, q, opts, rec, rat, src_path=None, status='pop', reason='', note=''):
+def add(doc, label, src, q, opts, rec, rat, src_path=None, status='pop', reason='', note='',
+        provenance='pre_ruling_revision'):
+    """provenance: 'pre_ruling_revision' (default) = every state span is read at a revision that
+    predates the ruling. 'quoted_in_pre_ruling_review' = the recommendation survives only as a
+    verbatim QUOTATION inside a review written for the decision, before it was ruled, but that
+    review was committed in the same commit as the ruling."""
     ENTRIES.append(dict(doc=doc, label=label, src=src, src_path=src_path or doc, q=q, opts=opts,
-                        rec=rec, rat=rat, status=status, reason=reason, note=note))
+                        rec=rec, rat=rat, status=status, reason=reason, note=note, provenance=provenance))
 
 
 def excl(doc, label, reason, note=''):
@@ -541,3 +546,112 @@ excl('docs/seat-handover-2026-08-23.md', 'S7.4', 'no_explicit_recommendation', '
 for _q in ('D-1', 'D-2', 'D-3', 'D-4'):
     unrec('docs/autotweaker-weekday-filter-proposal.md', _q, 'the D-table was first committed with its RULED column filled (81c54a8)')
 excl('docs/autotweaker-weekday-filter-proposal.md', 'D-5', 'options_not_explicit')
+
+# ---- docs/coverage-trailing-edge-f1-proposal.md
+# Two ruling events. First tick on the original D-table (state 1bd268f). Then the seat re-opened
+# D-3 and D-6 with a NEW option (c) and raised D-5.1..D-5.5 (state 3d0b8e1); second tick. Each
+# recommendation -> ruling pair is its own record: the re-opened rows are D-3r and D-6r.
+_d = 'docs/coverage-trailing-edge-f1-proposal.md'
+for _q, _ln, _r in (('D-1', 87, '(a)'), ('D-2', 88, '(a)'), ('D-3', 89, '(a)'), ('D-5', 91, '(a)'), ('D-6', 92, '(a)')):
+    add(_d, _q, '1bd268f', C(_ln, 2), ('parse', C(_ln, 3)), _r, C(_ln, 4))
+add(_d, 'D-4', '1bd268f', C(90, 2),
+    [('(a)', CS(90, 3, 'evidence boundary only', 'only')), ('(b)', CS(90, 3, 'evidence boundary **AND** store-end', 'store-end')), ('(c)', CS(90, 3, '(b) plus hour-aligning', 'final hour'))],
+    '(b)', C(90, 4))
+leak(_d, 'D-6r', 'rationale', 'ticked', 'cites the earlier tick of a DIFFERENT decision (D-2) as the premise of the re-opening; says nothing of how D-6r was ruled')
+for _q, _ln in (('D-5.1', 132), ('D-5.2', 133), ('D-5.3', 134), ('D-5.4', 135), ('D-5.5', 136)):
+    add(_d, _q, '3d0b8e1', C(_ln, 2), ('parse', C(_ln, 3)), '(a)', C(_ln, 4))
+add(_d, 'D-6r', '3d0b8e1', ('line', 138),
+    [('(a)', C(156, 1)), ('(b)', C(157, 1)), ('(c)', C(158, 1))], '(c)',
+    [('lines', 140, 150), C(156, 2), C(157, 2), C(158, 2)])
+add(_d, 'D-3r', '3d0b8e1', ('line', 162),
+    [('(a)', C(170, 1)), ('(c)', C(171, 1))], '(c)',
+    [('lines', 164, 166), C(170, 2), C(171, 2), ('line', 173)])
+
+# ---- Queue-only decisions, now archived in docs/trader-tick-queue-archive.md. State read from
+# docs/trader-tick-queue.md at b7ae9a5, the last revision before the ruling commit ee16d03.
+_q = 'docs/trader-tick-queue.md'
+_a = 'docs/trader-tick-queue-archive.md'
+add(_a, 'A54a-scope', 'b7ae9a5', CS(38, 1, 'A54a scope — GUARD the third copy, or DELETE it?', 'DELETE it?'),
+    [('(a)', S(38, 'Guard three copies', "the audit's Row 2.")), ('(b)', S(38, 'Delete the method defaults, make the parameters required', 'rather than watching three.'))],
+    '(b)', C(38, 3), src_path=_q)
+add(_a, 'seeded-session-buckets', 'b7ae9a5', CS(39, 1, 'Seeded session buckets — does the code-defaults path exist at all?', 'at all?'),
+    [('(1)', S(39, 're-sync AND guard it', 'guard it')), ('(2)', S(39, 'an empty list is honest', 'honest'))],
+    '(2)',
+    [C(39, 3),
+     AT('ee16d03', 'docs/seam-audit-decisions-second-opinion-2026-08-11.md', S(106, '*"wrong values are worse than absent values', 'wrong is not."*')),
+     AT('ee16d03', 'docs/seam-audit-decisions-second-opinion-2026-08-11.md', CS(140, 2, 'empty the seed'))],
+    src_path=_q, provenance='quoted_in_pre_ruling_review',
+    note='the queue row names the options but carries no read; the requester recommendation survives as the verbatim quotation and the "Requester\'s call" cell of the second-opinion review written for this decision')
+excl('docs/seam-audit-decisions-second-opinion-2026-08-11.md', 'Decisions-1-2', 'mirror', 'second-opinion review of the two queue decisions entered under trader-tick-queue-archive.md')
+
+# ---- docs/a54a-json-poco-drift-guard-spec.md section 4, pre-tick 6e1753b
+_d = 'docs/a54a-json-poco-drift-guard-spec.md'
+add(_d, 'D-1', '6e1753b', CS(231, 2, '**How is a DELIBERATE divergence declared?**', 'declared?**'), ('parse', CS(231, 2, '(a) a small explicit allow-list')), '(a)', [C(231, 3), C(231, 4)])
+add(_d, 'D-4', '6e1753b', C(234, 2), [('(1)', E(234, 'FAIL the harness')), ('(2)', E(234, 'WARN'))], '(1)', [C(234, 3), C(234, 4)])
+add(_d, 'D-5', '6e1753b', C(235, 2), [('(1)', E(235, 'ship here')), ('(2)', E(235, 'as its own session'))], '(2)', [C(235, 3), C(235, 4)])
+excl(_d, 'D-2', 'options_not_explicit')
+excl(_d, 'D-3', 'no_explicit_recommendation', 'the spec abstains: "I do not have a read and will not invent one"')
+excl('docs/a54a-drift-guard-escalation-2026-09-04.md', 'S5', 'no_trader_ruling', 'the ruling it asked for already existed; resolved the same day with no new ruling')
+excl('docs/a54a-drift-guard-spec-back.md', 'R-2', 'no_explicit_recommendation', 'three dispositions named, no read given')
+
+# ---- docs/a54a-r2-r3-followup-spec.md D-R3, pre-tick 778364e
+_d = 'docs/a54a-r2-r3-followup-spec.md'
+add(_d, 'D-R3', '778364e', C(125, 2),
+    [('(i)', CS(125, 3, 'Seed `SessionBucketSettings.RocMagnitudeThreshold`', 'matches shipped exactly.')),
+     ('(ii)', CS(125, 3, 'Do (b) only', 'record it.')),
+     ('(iii)', CS(125, 3, 'Seed only the slope profile', 'arbitrary'))], '(i)', C(125, 4))
+
+# ---- docs/a54a-session2-step1-measurement-2026-09-05.md section 7.3 (S2-1), reviewer read at 9d6bec0
+_d = 'docs/a54a-session2-step1-measurement-2026-09-05.md'
+add(_d, 'S2-1', '9d6bec0', ('line', 255), [('(A)', C(264, 1)), ('(B)', C(265, 1))], '(A)', [C(264, 2), C(265, 2), ('lines', 266, 269)])
+leak(_d, 'S2-1', 'rationale', 'ruled', "cites the EARLIER ruling that framed session 2 as dead-code removal; a premise of this read, not its ruling")
+
+for _q2 in ('D1', 'D2', 'D3', 'D4'):
+    excl('docs/i17-sweep-spec-back.md', _q2, 'no_trader_ruling', 'D-table ruled by the reviewing seat (section 5), not the trader')
+for _q2 in ('Q-1', 'Q-2', 'Q-3'):
+    excl('docs/s2-2-calcspread-split-spec-back.md', _q2, 'no_trader_ruling', 'ruled by the reviewing seat')
+for _q2 in ('Q-4', 'Q-5'):
+    excl('docs/s2-2-r1-r2-remediation-spec-back.md', _q2, 'no_trader_ruling', 'ruled by the reviewing seat')
+
+# ---- docs/s2-2-calcspread-split-proposal.md section 4, pre-tick 368c17a
+_d = 'docs/s2-2-calcspread-split-proposal.md'
+for _q2, _ln, _r in (('D-1', 160, '(a)'), ('D-2', 161, '(a)'), ('D-3', 162, '(b)'), ('D-4', 163, '(a)'), ('D-5', 164, '(a)')):
+    add(_d, _q2, '368c17a', C(_ln, 2), ('parse', C(_ln, 3)), _r, C(_ln, 4))
+_PRIOR = 'cites an EARLIER ruling of a DIFFERENT decision as precedent for this read; says nothing of how this decision was ruled'
+leak('docs/a54a-json-poco-drift-guard-spec.md', 'D-1', 'rationale', 'trader', _PRIOR + ' (two earlier trader decisions the rejected option would reverse)')
+leak('docs/a54a-json-poco-drift-guard-spec.md', 'D-1', 'option(a)', 'ruled', 'describes what each allow-list entry must carry ("the doc that ruled it"); a design property of the option, not a ruling')
+leak('docs/s2-2-calcspread-split-proposal.md', 'D-1', 'rationale', 'ruled', _PRIOR)
+
+# ---- more queue-only decisions (trader-tick-queue.md rows, archived at REV)
+_q = 'docs/trader-tick-queue.md'
+_a = 'docs/trader-tick-queue-archive.md'
+add(_a, 'pooled-minute-key-dedup', 'ee16d03', CS(133, 1, 'Bound the pooled minute-key dedup — before the next pooled read', 'pooled read'),
+    [('(1)', E(133, 'AWS-preferred **minute-key** dedup for pooling')), ('(2)', S(133, 'fix the key first', '+ timestamp'))],
+    '(2)', C(133, 3), src_path=_q)
+add(_a, 'E5-absorption-path', 'c38ea02', CS(36, 1, '**E5** absorption **Path B**'),
+    [('(A)', E(36, "Path A's V-table")), ('(B)', S(36, 'Path B (hold v61 anchors', 'no ⚠)'))], '(B)', C(36, 3), src_path=_q)
+excl(_a, 'F3-watch', 'no_explicit_recommendation', 'two courses named (offline tooling or retirement); the row asks only that the watch not stay live')
+excl(_a, 'C1-coverage-F2', 'no_explicit_recommendation', 'the pre-ruling row names no options; the options not taken are introduced in the ruling text')
+add(_a, 'WD-SEMANTICS', 'a6cfb8d',
+    S(344, '`WD-SEMANTICS` — `WeekendExcluded` means THREE DIFFERENT THINGS on three surfaces', 'on three surfaces'),
+    [('(a)', S(344, 'unify on "MinValue counts as weekend"', 'changes two rendered numbers)')),
+     ('(b)', S(344, 'unify on "MinValue drops silently"', "changes `AnalysisRunner`'s number)")),
+     ('(c)', S(344, 'add a separate `UnparsedExcluded` counter', 'parity rule fires.'))],
+    '(b)', S(344, '⚠ **My read: (c) is right in principle', 'Verify it before ruling.**'), src_path=_q,
+    note='the read calls (c) right in principle and (b) right in practice, then argues against paying for (c); taken as recommending (b)')
+excl('docs/wd-semantics-unparsed-counter-spec.md', 'S-all', 'mirror', 'the post-ruling spec for the decision entered under trader-tick-queue-archive.md WD-SEMANTICS')
+
+# ---- docs/s4-eval-cache-identity-proposal.md section 3, pre-tick edd77b7 (Decision | Options | My read)
+_d = 'docs/s4-eval-cache-identity-proposal.md'
+for _l, _ln in (('D-1', 100), ('D-2', 101), ('D-3', 102)):
+    add(_d, _l, 'edd77b7', C(_ln, 2), ('parse', C(_ln, 3)), '(a)', C(_ln, 4))
+
+# ---- docs/item6-wstradeprobe-s1-recheck-2026-09-07.md section 5 (S-1), pre-ruling 30b0c3f
+_d = 'docs/item6-wstradeprobe-s1-recheck-2026-09-07.md'
+add(_d, 'S-1', '30b0c3f', ('line', 119), [('(a)', C(125, 2)), ('(b)', C(126, 2)), ('(c)', C(127, 2))], '(a)',
+    [C(125, 3), C(125, 4), C(126, 3), C(126, 4), C(127, 3), C(127, 4), ('lines', 129, 137)])
+
+# ---- docs/absorption-d2-stage1-rotation-build-spec.md section 9 (RD-1), pre-tick 3fb6eda
+_d = 'docs/absorption-d2-stage1-rotation-build-spec.md'
+add(_d, 'RD-1', '3fb6eda', C(217, 2), ('parse', C(217, 3)), '(b)', C(217, 4))
+leak('docs/absorption-d2-stage1-rotation-build-spec.md', 'RD-1', 'rationale', 'ruled', _PRIOR + ' (the WD-SEMANTICS ruling, and the already-ruled column set of this rotation)')
