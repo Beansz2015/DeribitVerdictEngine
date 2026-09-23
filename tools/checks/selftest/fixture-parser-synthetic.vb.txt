@@ -1,0 +1,37 @@
+' SYNTHETIC input for tools/checks/selftest/fixture-parser-selftest.ps1. NOT a real fixture,
+' never compiled (the .vb.txt extension keeps it out of every .vbproj glob AND out of
+' fixture-parser.ps1's own production-file scan, which reads *.vb under tools/). Line numbers
+' are part of the self-test's expected item IDs: edit this file and update the test with it.
+Module SyntheticFixtureParserChecks
+
+    ' This block carries no provenance keyword, so neither site below is marked. Revision 4
+    ' (FP-D27) must report both as AMBIGUOUS_CALLEE: Snapshot and Compute are each declared
+    ' on several production types, and neither receiver here can be typed from the code.
+    Private Sub A901_SyntheticAmbiguousCallee()
+        Dim s = GetThing()
+        Dim snap = s.Snapshot(minCoverageSec:=120.0)
+        Dim n = Compute(currentATR:=50)
+    End Sub
+
+    ' MECHANISM -- synthetic: tfiWindowSize:=37 is chosen for this fixture's own arithmetic.
+    Private Sub A902_SyntheticTfiNamed()
+        Dim r = IndicatorEngine.CalcTFI(trades, tfiWindowSize:=37, threshold:=0.61)
+        Check("A902 synthetic TFI window", r.TFIValue > 0, "synthetic")
+    End Sub
+
+    Private Sub A903_SyntheticFiller()
+        Filler(f00:=1) : Filler(f01:=1) : Filler(f02:=1) : Filler(f03:=1) : Filler(f04:=1)
+        Filler(f05:=1) : Filler(f06:=1) : Filler(f07:=1) : Filler(f08:=1) : Filler(f09:=1)
+        Filler(f10:=1) : Filler(f11:=1) : Filler(f12:=1) : Filler(f13:=1) : Filler(f14:=1)
+        Filler(f15:=1) : Filler(f16:=1) : Filler(f17:=1) : Filler(f18:=1) : Filler(f19:=1)
+        Filler(f20:=1) : Filler(f21:=1) : Filler(f22:=1) : Filler(f23:=1) : Filler(f24:=1)
+        Filler(f25:=1) : Filler(f26:=1) : Filler(f27:=1) : Filler(f28:=1) : Filler(f29:=1)
+        Filler(f30:=1) : Filler(f31:=1) : Filler(f32:=1) : Filler(f33:=1) : Filler(f34:=1)
+        Filler(f35:=1) : Filler(f36:=1) : Filler(f37:=1) : Filler(f38:=1) : Filler(f39:=1)
+        Filler(f40:=1) : Filler(f41:=1) : Filler(f42:=1) : Filler(f43:=1) : Filler(f44:=1)
+        Filler(f45:=1) : Filler(f46:=1) : Filler(f47:=1) : Filler(f48:=1) : Filler(f49:=1)
+        Filler(f50:=1) : Filler(f51:=1) : Filler(f52:=1) : Filler(f53:=1) : Filler(f54:=1)
+        Filler(f55:=1) : Filler(f56:=1) : Filler(f57:=1) : Filler(f58:=1) : Filler(f59:=1)
+    End Sub
+
+End Module
