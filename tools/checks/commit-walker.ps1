@@ -142,6 +142,30 @@
       -Count, so the unspent measurement window is named by its boundary commit.
   =======================================================================================
 
+  ============================== REVISION 4 (2026-09-23 UTC) ==============================
+  Arming batch: docs/jev-harnesses-adversarial-review-2026-09-22.md findings 6, 8n, 11.
+    CW-R4-1 (item 8n, the FP-D26 pattern): a web-firewall block on either the PRIMARY or
+      the ESCALATION call no longer aborts the whole run. A blocked primary sample records
+      the commit verdict WAF_BLOCKED / disagreement NOT_JUDGED and moves to the next
+      commit; a blocked escalation sample leaves the primary's own stable plurality
+      standing (status AGREE_LOW_PROBABILITY_ESCALATION_WAF_BLOCKED, ESCALATION_WAF_BLOCKED
+      counted separately, informational only). COMMITS_WAF_BLOCKED prints, and any
+      WAF_BLOCKED commit makes the exit code 1 -- an unjudged commit is never a pass.
+    CW-R4-2 (finding 11): tools/checks/lib/InvokeJev.ps1 now retries transient failures
+      (HTTP 5xx, or no response at all) with bounded backoff; a 403/other 4xx is never
+      retried. RETRY_COUNT sums RetryCount across every Jev call this run makes (primary
+      and escalation both), printed beside USAGE_INPUT_TOKENS/USAGE_OUTPUT_TOKENS.
+    CW-R4-3 (finding 6, "an OK-class misread passes the exit code"): unlike fixture-
+      parser's FP-D25 (item 8m), CONSISTENT is NOT moved into the bad-verdict set. That
+      class is provably always wrong wherever it fires (an FP-1 site is always a hardcoded
+      literal); CONSISTENT is not provably anything -- most of the residual really is
+      correctly tagged, so folding it into the exit code would make a normal run exit 1 by
+      construction. Instead: CONSISTENT_COUNT prints as its own reportable line, never
+      touching $anyBad -- docs/harness-shadow-mode-protocol.md section 4g's point ("a
+      stable OK is not evidence") made visible without inventing a verdict that always
+      fails.
+  ==========================================================================================
+
   THE TRAPS THAT STILL APPLY (docs/commit-walker-check-spec.md section 0, unchanged by
   either revision):
     1. Merge commits return an EMPTY file list from `git show --name-only`, so they look
@@ -171,16 +195,20 @@
       protocol at docs/harness-shadow-mode-protocol.md section 2 step 3> `
       [-Skip N] [-Samples N]
 
-  EXIT CODES:
+  EXIT CODES (REVISION 4):
     0 - every residual commit judged CONSISTENT or N/A_UNTAGGED, no `ambiguous` verdict,
-        and no UNSTABLE row (self-consistency agreement rate below 1.0)
+        no UNSTABLE row (self-consistency agreement rate below 1.0), and no commit was
+        WAF_BLOCKED
     1 - at least one residual commit is a DISAGREEMENT (tagged [no-engine-change], but
-        verdict != no_app_change), judged `ambiguous`, UNSTABLE, or CONFLICT. Revision 2:
+        verdict != no_app_change), judged `ambiguous`, UNSTABLE, CONFLICT, or WAF_BLOCKED
+        (item 8n -- an unjudged commit is never a pass). Revision 2:
         an unresolved self-consistency disagreement is reported to the seat and never
         auto-resolved (section 10.3 item 7), so that non-resolution must not exit 0.
         Revision 2 correction (section 10.7): an escalated plurality that disagrees with
         the primary plurality is CONFLICT, reported to the seat with neither side picked
-        as the winner, and must not exit 0 either.
+        as the winner, and must not exit 0 either. CONSISTENT does NOT flip the exit code
+        (finding 6, revision 4) -- it is a legitimate, common outcome; CONSISTENT_COUNT
+        reports it instead (section 4g: a stable OK is not evidence).
     2 - baseline missing, classifier suspect, all-pre-era window, residual over 25%, or
         API failure
     (Restated from the original section 4.5 for the new five-way verdict vocabulary --
@@ -224,7 +252,14 @@ param(
     # <Since>..HEAD), still capped by -Count. Lets the unspent measurement window be named by
     # its boundary commit instead of a hand-computed -Skip/-Count that can overlap the
     # contaminated one.
-    [string]$Since = ''
+    [string]$Since = '',
+    # REVISION 4, TEST SEAM ONLY -- OFF BY DEFAULT ($null). Forwarded verbatim to every
+    # Invoke-Jev call (primary and escalation alike) in place of the real HTTP transport
+    # (see tools/checks/lib/InvokeJev.ps1's own -TransportOverride). Exists so item 8n's
+    # WAF-block handling and finding 11's retry accounting can be exercised end-to-end,
+    # through this actual script, on synthetic commits -- never against the real,
+    # never-yet-seen measurement window. No caller passes this in a real run.
+    [scriptblock]$TestTransportOverride = $null
 )
 
 $ErrorActionPreference = 'Continue'
@@ -677,8 +712,8 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
         }
     }
 
-    $call = Invoke-Jev $apiKeyIn $body
-    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error } }
+    $call = Invoke-Jev $apiKeyIn $body 3 1 $TestTransportOverride
+    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked; RetryCount = $call.RetryCount } }
 
     $ans = $call.Response.answers
     # --- TRAP 2 (docs/commit-walker-check-spec.md section 0 / section 9.3): the verdict
@@ -720,6 +755,7 @@ function Invoke-CommitVerdict([string]$apiKeyIn, $c, [string]$diffText, [hashtab
         WritesNoul        = $ans.changes_writes.noul
         UsageInputTokens  = $usageIn
         UsageOutputTokens = $usageOut
+        RetryCount        = $call.RetryCount
     }
 }
 
@@ -770,23 +806,54 @@ $apiFailed = $false
 $apiFailMsg = ''
 $usageInputTokens = 0
 $usageOutputTokens = 0
+# REVISION 4 (finding 11): retries actually spent across every Jev call this run makes
+# (primary AND escalation samples), summed the same way USAGE_INPUT_TOKENS already is.
+$usageRetries = 0
+# REVISION 4 (item 8n, the FP-D26 pattern): commits recorded WAF_BLOCKED instead of
+# aborting the run.
+$commitsWafBlocked = 0
+$escalationWafBlocked = 0
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
 foreach ($c in $residualAll) {
     $sampleResults = New-Object System.Collections.Generic.List[object]
+    $itemBlocked = $false
     for ($i = 0; $i -lt $Samples; $i++) {
         $uid = "$($c.Hash.Substring(0,10)):$i`:$([guid]::NewGuid().ToString('N').Substring(0,8))"
         $r = Invoke-CommitVerdict $apiKey $c $null $verdictCriteria $uid
         if (-not $r.Ok) {
+            # REVISION 4 (item 8n): a web-firewall block is about THIS commit's subject/body
+            # text, not the API. Record it as unjudgeable and move to the next commit; any
+            # other failure still aborts the whole run (unchanged).
+            if ($r.WafBlocked) { $itemBlocked = $true; $usageRetries += $r.RetryCount; break }
             $apiFailed = $true
             $apiFailMsg = "Jev request failed for $($c.Hash.Substring(0,10)) (sample $($i+1)/$Samples): $($r.Error)"
             break
         }
         $usageInputTokens  += $r.UsageInputTokens
         $usageOutputTokens += $r.UsageOutputTokens
+        $usageRetries      += $r.RetryCount
         $sampleResults.Add($r)
     }
     if ($apiFailed) { break }
+    if ($itemBlocked) {
+        $commitsWafBlocked++
+        $results.Add([PSCustomObject]@{
+            Hash = $c.Hash; Subject = $c.Subject
+            Class = if ($c.Tagged) { 'TAGGED_BUT_ENGINE_PATH' } else { 'UNTAGGED_NO_ENGINE_PATH' }
+            Tagged = $c.Tagged; Verdict = 'WAF_BLOCKED'; PluralityVerdict = 'WAF_BLOCKED'
+            Status = 'WAF_BLOCKED'; AgreementRate = $null; Stable = $true
+            MeanTopProbability = $null; MinTopProbability = $null
+            ComputationNoul = $null; DisplayNoul = $null; WritesNoul = $null
+            Disagreement = 'NOT_JUDGED'; Escalated = $false; EscalationNote = $null
+            EscalatedPluralityVerdict = $null; EscalatedAgreementRate = $null; EscalatedStable = $null
+            EscalatedMeanTopProbability = $null; EscalatedMinTopProbability = $null
+            EscalatedSampleCount = 0; EscalatedSampleVerdicts = ''; EscalatedSampleTopProbabilities = ''
+            SampleCount = 0; SampleVerdicts = ''; SampleTopProbabilities = ''
+            Baseline = if ($baseline.ContainsKey($c.Hash)) { $baseline[$c.Hash] } else { $null }
+        })
+        continue
+    }
 
     # -------------------------------------------------------------------------------
     # REVISION 2 self-consistency aggregation (section 10.3 items 2-3, section 10.2's
@@ -841,20 +908,36 @@ foreach ($c in $residualAll) {
             # computed by the SAME Get-SelfConsistencyAggregate function the primary used.
             # ---------------------------------------------------------------------------
             $escSampleResultsList = New-Object System.Collections.Generic.List[object]
+            $escBlocked = $false
             for ($j = 0; $j -lt $ESCALATION_SAMPLES; $j++) {
                 $escUid = "$($c.Hash.Substring(0,10)):esc:$j`:$([guid]::NewGuid().ToString('N').Substring(0,8))"
                 $escResult = Invoke-CommitVerdict $apiKey $c $diffText $verdictCriteria $escUid
                 if (-not $escResult.Ok) {
+                    # REVISION 4 (item 8n): the escalation call also carries commit text (now
+                    # plus a diff), so it can trip the firewall too. Same treatment as the
+                    # primary loop -- record and move on, never abort the run over it. The
+                    # PRIMARY verdict is already fully sampled and stable, so it stands as
+                    # $finalVerdict; only the escalation enrichment is skipped.
+                    if ($escResult.WafBlocked) { $escBlocked = $true; $usageRetries += $escResult.RetryCount; break }
                     $apiFailed = $true
                     $apiFailMsg = "Jev escalation request failed for $($c.Hash.Substring(0,10)) (escalation sample $($j+1)/$ESCALATION_SAMPLES): $($escResult.Error)"
                     break
                 }
                 $usageInputTokens  += $escResult.UsageInputTokens
                 $usageOutputTokens += $escResult.UsageOutputTokens
+                $usageRetries      += $escResult.RetryCount
                 $escSampleResultsList.Add($escResult)
             }
             if ($apiFailed) { break }
-
+            if ($escBlocked) {
+                # REVISION 4 (item 8n): escalation could not run at all -- never aggregate,
+                # never compare pluralities. The primary's own stable plurality/verdict
+                # stands ($finalVerdict is already $pluralityVerdict from above), only
+                # informationally flagged as an escalation that could not be attempted.
+                $escalationWafBlocked++
+                $escalationNote = 'SKIPPED_WAF_BLOCKED'
+                $status = 'AGREE_LOW_PROBABILITY_ESCALATION_WAF_BLOCKED'
+            } else {
             $escAgg = Get-SelfConsistencyAggregate $escSampleResultsList
             $escPluralityVerdict       = $escAgg.PluralityVerdict
             $escAgreementRate          = $escAgg.AgreementRate
@@ -878,6 +961,7 @@ foreach ($c in $residualAll) {
                 # with the primary.
                 $finalVerdict = $escPluralityVerdict
                 $status = 'CONFIDENT_AFTER_ESCALATION'
+            }
             }
         } else {
             # RESIDUAL_UNTAGGED_NO_ENGINE_PATH commits touch, by definition, zero engine
@@ -943,6 +1027,7 @@ $sw.Stop()
 if ($apiFailed) {
     Write-Coverage $commitsWalked $mergesExcluded $preEra.Count $agreeTagged.Count $agreeUntagged.Count `
         $residualTaggedButEngine.Count $residualUntaggedNoEngine.Count $residualTotal $residualPct $results.Count
+    "RETRY_COUNT=$usageRetries"
     "EXIT_REASON=API_FAILED"
     $apiFailMsg
     exit 2
@@ -956,7 +1041,11 @@ Write-Coverage $commitsWalked $mergesExcluded $preEra.Count $agreeTagged.Count $
 
 "USAGE_INPUT_TOKENS=$usageInputTokens"
 "USAGE_OUTPUT_TOKENS=$usageOutputTokens"
+"RETRY_COUNT=$usageRetries"
 "WALL_TIME_SEC=$([math]::Round($sw.Elapsed.TotalSeconds,2))"
+# REVISION 4 (item 8n): commits/escalations recorded WAF_BLOCKED instead of aborting the run.
+"COMMITS_WAF_BLOCKED=$commitsWafBlocked"
+"ESCALATION_WAF_BLOCKED=$escalationWafBlocked (informational -- the primary's own stable verdict still stands; only the escalation enrichment was skipped)"
 
 # docs/harness-shadow-mode-protocol.md section 4a: -CountersOnly withholds every
 # per-commit and aggregate line from a RESERVED window's dry run (section 10.6 item 6).
@@ -967,13 +1056,24 @@ $unstableCount = @($results | Where-Object { $_.Disagreement -eq 'UNSTABLE' }).C
 # REVISION 2 CORRECTION (section 10.7 item 2): CONFLICT is its own count, alongside
 # DISAGREEMENT and UNSTABLE, never folded into either.
 $conflictCount = @($results | Where-Object { $_.Disagreement -eq 'CONFLICT' }).Count
+# REVISION 4 (finding 6, "an OK-class misread passes the exit code"). CONSISTENT (tagged,
+# stable, verdict=no_app_change) is a LEGITIMATE, common outcome -- most of the residual
+# really is correctly tagged, just touching an engine path in a way that turned out not to
+# matter -- so, unlike fixture-parser's FP-D25 (item 8m), it is NOT moved into the bad set:
+# that would make a normal run exit 1 by construction. Reportable-only (the FP-D22/8j
+# shape), never folded into $anyBad below. docs/harness-shadow-mode-protocol.md section 4g:
+# "a stable OK is not evidence" -- printed so a reader sees the count instead of it
+# disappearing into an undifferentiated pass.
+$consistentCount = @($results | Where-Object { $_.Disagreement -eq 'CONSISTENT' }).Count
+"CONSISTENT_COUNT=$consistentCount (reported per docs/harness-shadow-mode-protocol.md section 4g; a stable OK is not evidence, not folded into the exit code)"
 
 if ($CountersOnly) {
     "COUNTERS_ONLY=true (per-commit verdicts and aggregates withheld -- docs/harness-shadow-mode-protocol.md section 4a)"
 } else {
     "PER_COMMIT_RESULTS:"
     foreach ($res in $results) {
-        $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
+        $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' }
+                 elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
                  elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
                  elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
                  else { 'DISAGREE' }
@@ -1015,6 +1115,12 @@ if ($CountersOnly) {
             "  $($res.Hash.Substring(0,10)) primary=[plurality=$($res.PluralityVerdict) agreement=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability)] escalated=[plurality=$($res.EscalatedPluralityVerdict) agreement=$($res.EscalatedAgreementRate) mean_top_prob=$($res.EscalatedMeanTopProbability)] $($res.Subject)"
         }
     }
+    if ($commitsWafBlocked -gt 0) {
+        "WAF_BLOCKED_LIST (item 8n -- unjudged, never a pass, makes the exit code 1):"
+        foreach ($res in ($results | Where-Object { $_.Verdict -eq 'WAF_BLOCKED' })) {
+            "  $($res.Hash.Substring(0,10)) $($res.Subject)"
+        }
+    }
 }
 
 # Write the markdown report.
@@ -1043,7 +1149,11 @@ if (-not $CountersOnly) {
     $reportLines.Add("| DISAGREEMENTS | $disagreementCount |")
     $reportLines.Add("| UNSTABLE | $unstableCount |")
     $reportLines.Add("| CONFLICT | $conflictCount |")
+    $reportLines.Add("| CONSISTENT_COUNT | $consistentCount (reported, not folded into the exit code -- section 4g) |")
 }
+$reportLines.Add("| COMMITS_WAF_BLOCKED | $commitsWafBlocked |")
+$reportLines.Add("| ESCALATION_WAF_BLOCKED | $escalationWafBlocked |")
+$reportLines.Add("| RETRY_COUNT | $usageRetries |")
 $reportLines.Add("| USAGE_INPUT_TOKENS | $usageInputTokens |")
 $reportLines.Add("| USAGE_OUTPUT_TOKENS | $usageOutputTokens |")
 $reportLines.Add("| WALL_TIME_SEC | $([math]::Round($sw.Elapsed.TotalSeconds,2)) |")
@@ -1058,7 +1168,8 @@ if ($CountersOnly) {
     $reportLines.Add('| Hash | Class | Status | Verdict | Agreement rate | Mean top prob | Min top prob | Disagreement | Escalated | Baseline | Agreement | computation (noul) | display (noul) | writes (noul) | Subject |')
     $reportLines.Add('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     foreach ($res in $results) {
-        $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
+        $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' }
+                 elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
                  elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
                  elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
                  else { 'DISAGREE' }
@@ -1104,7 +1215,10 @@ Set-Content -Encoding UTF8 -Path $reportFull -Value ($reportLines -join "`r`n")
 # must not be swallowed into a 0 exit either. REVISION 2 CORRECTION (section 10.7 item 2):
 # CONFLICT joins it on the same basis -- an escalated plurality that disagrees with the
 # primary is unresolved by construction (the tool does not pick a winner), so it must not
-# exit 0 either. Four non-zero conditions total: `ambiguous`, DISAGREEMENT, UNSTABLE,
-# CONFLICT.
-$anyBad = @($results | Where-Object { $_.Verdict -eq 'ambiguous' -or $_.Disagreement -eq 'DISAGREEMENT' -or $_.Disagreement -eq 'UNSTABLE' -or $_.Disagreement -eq 'CONFLICT' }).Count -gt 0
+# exit 0 either. REVISION 4 (item 8n): a WAF_BLOCKED commit joins them too -- an unjudged
+# item is never a pass. Five non-zero conditions total: `ambiguous`, DISAGREEMENT, UNSTABLE,
+# CONFLICT, WAF_BLOCKED. CONSISTENT is deliberately EXCLUDED (see CONSISTENT_COUNT above,
+# finding 6) -- it is a legitimate, common outcome, and folding it in would make a normal
+# run exit 1 by construction, which is not a meaningful signal.
+$anyBad = @($results | Where-Object { $_.Verdict -eq 'ambiguous' -or $_.Verdict -eq 'WAF_BLOCKED' -or $_.Disagreement -eq 'DISAGREEMENT' -or $_.Disagreement -eq 'UNSTABLE' -or $_.Disagreement -eq 'CONFLICT' }).Count -gt 0
 if ($anyBad) { exit 1 } else { exit 0 }
