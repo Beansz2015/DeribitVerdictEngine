@@ -35,8 +35,26 @@ function Invoke-Jev([string]$apiKey, [hashtable]$body) {
         $resp = Invoke-RestMethod -Uri 'https://api.typesafe.ai/v1/systemone' -Method Post `
             -Headers @{ Authorization = "Bearer $apiKey" } -ContentType 'application/json; charset=utf-8' `
             -Body $bytes -TimeoutSec 30
-        return @{ Ok = $true; Response = $resp; Error = $null }
+        return @{ Ok = $true; Response = $resp; Error = $null; Status = 200; WafBlocked = $false }
     } catch {
-        return @{ Ok = $false; Response = $null; Error = $_.Exception.Message }
+        # 2026-09-22 (UTC): the API sits behind a web firewall. A request whose TEXT matches an
+        # attack signature (measured: the comment phrase "and 4 + 7 = 11" reads as an SQL
+        # "AND x=y" tautology) gets a 403 with an HTML block page, not a JSON error.
+        # WafBlocked lets a caller record that ONE item as unjudgeable and carry on, instead
+        # of treating a content block as an outage. Callers that ignore the new fields behave
+        # exactly as before.
+        $status = $null; $blocked = $false
+        $resp = $_.Exception.Response
+        if ($null -ne $resp) {
+            try { $status = [int]$resp.StatusCode } catch { }
+            if ($status -eq 403) {
+                try {
+                    $rd = New-Object System.IO.StreamReader($resp.GetResponseStream())
+                    $txt = $rd.ReadToEnd()
+                    $blocked = ($txt -match '(?i)<!DOCTYPE html|<html')
+                } catch { }
+            }
+        }
+        return @{ Ok = $false; Response = $null; Error = $_.Exception.Message; Status = $status; WafBlocked = $blocked }
     }
 }

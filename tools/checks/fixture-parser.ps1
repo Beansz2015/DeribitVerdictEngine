@@ -251,6 +251,17 @@
   (docs/harness-runs/fixture-parser-a20-a23b-run-2026-09-22.md) exited 0 with two misreads.
   Only the SCORING changed; the Jev criteria text is untouched, so earlier measurements
   stay comparable.
+
+  FP-D26 (2026-09-23 UTC, found by the first run on the 23 fundingBoost/upgradeBonus
+  sites): the API sits behind a web firewall. A request whose TEXT matches an attack
+  signature gets a 403 with an HTML block page. Measured: 1 of 37 items --
+  A8_DominantSideCascade's comment phrase "and 4 + 7 = 11" reads as an SQL "AND x=y"
+  tautology; swapping VB's leading apostrophe for REM did NOT clear it. Before this, the
+  403 aborted the WHOLE run as API_FAILED on its first item. Now lib/InvokeJev.ps1 flags
+  WafBlocked, the item is recorded as verdict WAF_BLOCKED (agreement NOT_JUDGED), the run
+  continues, FP1_WAF_BLOCKED / FP2_WAF_BLOCKED print, and a blocked item exits 1 -- an
+  unjudged item is never a pass. Rewording the fixture comment to dodge the firewall was
+  rejected: it tunes the input, and the harness would still be blind to the next one.
   ==========================================================================================
 
   FP-D2 (retained, now informational only): the ORIGINAL camelCase-to-snake_case name
@@ -1543,7 +1554,7 @@ function Invoke-ScopeClassification([string]$apiKeyIn, [string]$paramName, $ctxI
         }
     }
     $call = Invoke-Jev $apiKeyIn $body
-    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error } }
+    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked } }
     $usageIn = 0; $usageOut = 0
     if ($call.Response.usage) {
         if ($call.Response.usage.input_tokens) { $usageIn = [int]$call.Response.usage.input_tokens }
@@ -2005,7 +2016,7 @@ function Invoke-Fp1Verdict([string]$apiKeyIn, $cs, [string]$uid) {
         }
     }
     $call = Invoke-Jev $apiKeyIn $body
-    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error } }
+    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked } }
     $ans = $call.Response.answers
     $verdict = $ans.verdict.choice
     $probs = @{}
@@ -2047,7 +2058,7 @@ function Invoke-Fp2Verdict([string]$apiKeyIn, $f2, [string]$uid) {
         }
     }
     $call = Invoke-Jev $apiKeyIn $body
-    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error } }
+    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked } }
     $ans = $call.Response.answers
     $verdict = $ans.verdict.choice
     $probs = @{}
@@ -2112,15 +2123,35 @@ $sw = [System.Diagnostics.Stopwatch]::StartNew()
 # ---------------------------------------------------------------------------------------
 foreach ($cs in $residualSites) {
     $sampleResults = New-Object System.Collections.Generic.List[object]
+    $itemBlocked = $false
     for ($i = 0; $i -lt $Samples; $i++) {
         $uid = "$(Get-Fp1Id $cs):$i`:$([guid]::NewGuid().ToString('N').Substring(0,8))"
         $r = Invoke-Fp1Verdict $apiKey $cs $uid
-        if (-not $r.Ok) { $apiFailed = $true; $apiFailMsg = "Jev FP-1 request failed for $(Get-Fp1Id $cs) (sample $($i+1)/$Samples): $($r.Error)"; break }
+        if (-not $r.Ok) {
+            # FP-D26: a web-firewall block is about THIS item's text, not the API. Record the
+            # item as unjudgeable and move on; any other failure still aborts the run.
+            if ($r.WafBlocked) { $itemBlocked = $true; break }
+            $apiFailed = $true; $apiFailMsg = "Jev FP-1 request failed for $(Get-Fp1Id $cs) (sample $($i+1)/$Samples): $($r.Error)"; break
+        }
         $usageInputTokens += $r.UsageInputTokens
         $usageOutputTokens += $r.UsageOutputTokens
         $sampleResults.Add($r)
     }
     if ($apiFailed) { break }
+    if ($itemBlocked) {
+        $idB = Get-Fp1Id $cs
+        $fp1Results.Add([PSCustomObject]@{
+            Id = $idB; EnclosingSub = $cs.EnclosingSub; Param = $cs.Param; Line = $cs.Line
+            MatchedKey = $cs.ResolvedKey; EverShipped = ($cs.EverShipped -join ',')
+            LiteralValue = $cs.LiteralValue; LiteralEqualsEverShipped = $cs.LiteralEqualsEverShipped
+            Verdict = 'WAF_BLOCKED'; AgreementRate = $null; Stable = $true
+            MeanTopProbability = $null; MinTopProbability = $null
+            DeclaresClassNoul = $null; MatchesEvidenceNoul = $null
+            SampleCount = 0; SampleVerdicts = ''; SampleTopProbabilities = ''
+            Baseline = if ($baseline.ContainsKey($idB)) { $baseline[$idB] } else { $null }
+        })
+        continue
+    }
 
     $agg = Get-SelfConsistencyAggregate $sampleResults
     $meanDeclares = [math]::Round((($sampleResults | ForEach-Object { [double]$_.DeclaresClassNoul } | Measure-Object -Average).Average), 3)
@@ -2144,15 +2175,28 @@ foreach ($cs in $residualSites) {
 if (-not $apiFailed) {
     foreach ($f2 in $fp2Items) {
         $sampleResults = New-Object System.Collections.Generic.List[object]
+        $itemBlocked = $false
         for ($i = 0; $i -lt $Samples; $i++) {
             $uid = "$($f2.SubName):$i`:$([guid]::NewGuid().ToString('N').Substring(0,8))"
             $r = Invoke-Fp2Verdict $apiKey $f2 $uid
-            if (-not $r.Ok) { $apiFailed = $true; $apiFailMsg = "Jev FP-2 request failed for $($f2.SubName) (sample $($i+1)/$Samples): $($r.Error)"; break }
+            if (-not $r.Ok) {
+                if ($r.WafBlocked) { $itemBlocked = $true; break }   # FP-D26
+                $apiFailed = $true; $apiFailMsg = "Jev FP-2 request failed for $($f2.SubName) (sample $($i+1)/$Samples): $($r.Error)"; break
+            }
             $usageInputTokens += $r.UsageInputTokens
             $usageOutputTokens += $r.UsageOutputTokens
             $sampleResults.Add($r)
         }
         if ($apiFailed) { break }
+        if ($itemBlocked) {
+            $fp2Results.Add([PSCustomObject]@{
+                SubName = $f2.SubName; Verdict = 'WAF_BLOCKED'; AgreementRate = $null; Stable = $true
+                MeanTopProbability = $null; MinTopProbability = $null; NameMatchesNoul = $null
+                SampleCount = 0; SampleVerdicts = ''; SampleTopProbabilities = ''
+                Baseline = if ($baseline.ContainsKey($f2.SubName)) { $baseline[$f2.SubName] } else { $null }
+            })
+            continue
+        }
         $agg = Get-SelfConsistencyAggregate $sampleResults
         $meanNameMatches = [math]::Round((($sampleResults | ForEach-Object { [double]$_.NameMatchesNoul } | Measure-Object -Average).Average), 3)
         $fp2Results.Add([PSCustomObject]@{
@@ -2194,19 +2238,22 @@ $fp2Unstable = @($fp2Results | Where-Object { -not $_.Stable }).Count
 $fp1ShippedOnLiteral = @($fp1Results | Where-Object { $_.Verdict -eq 'shipped_declared_ok' }).Count
 $fp1Bad = @($fp1Results | Where-Object { $_.Verdict -in @('undeclared', 'declared_but_contradicted', 'ambiguous', 'shipped_declared_ok') }).Count
 $fp2Bad = @($fp2Results | Where-Object { $_.Verdict -in @('name_overclaims', 'name_understates', 'ambiguous') }).Count
+# FP-D26: an unjudged item is not a pass. Counted apart, and folded into the exit code below.
+$fp1WafBlocked = @($fp1Results | Where-Object { $_.Verdict -eq 'WAF_BLOCKED' }).Count
+$fp2WafBlocked = @($fp2Results | Where-Object { $_.Verdict -eq 'WAF_BLOCKED' }).Count
 
 if ($CountersOnly) {
     "COUNTERS_ONLY=true (per-item verdicts and aggregates withheld -- docs/harness-shadow-mode-protocol.md section 4a)"
 } else {
     "FP1_RESULTS:"
     foreach ($res in $fp1Results) {
-        $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
+        $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' } elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
         $stableTxt = if ($res.Stable) { 'STABLE' } else { 'UNSTABLE' }
         "  $($res.Id) [$stableTxt] verdict=$($res.Verdict) agreement_rate=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability) min_top_prob=$($res.MinTopProbability) key=$($res.MatchedKey) ever_shipped=[$($res.EverShipped)] literal=$($res.LiteralValue) equals_shipped=$($res.LiteralEqualsEverShipped) baseline=$($res.Baseline) [$agree] declares_class_noul=$($res.DeclaresClassNoul) matches_evidence_noul=$($res.MatchesEvidenceNoul) verdicts=[$($res.SampleVerdicts)] top_probs=[$($res.SampleTopProbabilities)]"
     }
     "FP2_RESULTS:"
     foreach ($res in $fp2Results) {
-        $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
+        $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' } elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
         $stableTxt = if ($res.Stable) { 'STABLE' } else { 'UNSTABLE' }
         "  $($res.SubName) [$stableTxt] verdict=$($res.Verdict) agreement_rate=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability) min_top_prob=$($res.MinTopProbability) name_matches_noul=$($res.NameMatchesNoul) baseline=$($res.Baseline) [$agree] verdicts=[$($res.SampleVerdicts)] top_probs=[$($res.SampleTopProbabilities)]"
     }
@@ -2215,6 +2262,8 @@ if ($CountersOnly) {
     "FP1_BAD_VERDICTS=$fp1Bad"
     "FP1_SHIPPED_ON_LITERAL=$fp1ShippedOnLiteral (counted in FP1_BAD_VERDICTS -- FP-D25: a hardcoded literal cannot be valid SHIPPED BEHAVIOUR; a breach or a misread)"
     "FP2_BAD_VERDICTS=$fp2Bad"
+    "FP1_WAF_BLOCKED=$fp1WafBlocked"
+    "FP2_WAF_BLOCKED=$fp2WafBlocked"
 }
 
 # Markdown report.
@@ -2263,7 +2312,7 @@ if (-not $CountersOnly) {
     $reportLines.Add('| Id | Verdict | Agreement | Mean top prob | Key | Ever shipped | Literal | Equals shipped | Baseline | Agreement |')
     $reportLines.Add('|---|---|---|---|---|---|---|---|---|---|')
     foreach ($res in $fp1Results) {
-        $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
+        $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' } elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
         $reportLines.Add("| $($res.Id) | $($res.Verdict) | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.MatchedKey) | $($res.EverShipped) | $($res.LiteralValue) | $($res.LiteralEqualsEverShipped) | $($res.Baseline) | $agree |")
     }
     $reportLines.Add('')
@@ -2272,7 +2321,7 @@ if (-not $CountersOnly) {
     $reportLines.Add('| Sub | Verdict | Agreement | Mean top prob | Baseline | Agreement |')
     $reportLines.Add('|---|---|---|---|---|---|')
     foreach ($res in $fp2Results) {
-        $agree = if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
+        $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' } elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
         $reportLines.Add("| $($res.SubName) | $($res.Verdict) | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.Baseline) | $agree |")
     }
 } else {
@@ -2284,5 +2333,5 @@ $reportFull = Resolve-RepoPath $OutPath
 Set-Content -Encoding UTF8 -Path $reportFull -Value ($reportLines -join "`r`n")
 "Report written to $OutPath"
 
-$anyBad = ($fp1Bad -gt 0) -or ($fp2Bad -gt 0) -or ($fp1Unstable -gt 0) -or ($fp2Unstable -gt 0)
+$anyBad = ($fp1Bad -gt 0) -or ($fp2Bad -gt 0) -or ($fp1Unstable -gt 0) -or ($fp2Unstable -gt 0) -or ($fp1WafBlocked -gt 0) -or ($fp2WafBlocked -gt 0)
 if ($anyBad) { exit 1 } else { exit 0 }

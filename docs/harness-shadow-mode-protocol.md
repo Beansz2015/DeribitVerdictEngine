@@ -194,6 +194,8 @@ The detector answered `declared_but_contradicted` on **all 5 samples**, `mean_to
 
 ⛔ **Same day, two more:** `A23b#3164#tauFastSec` and `#tauNormSec` came back `shipped_declared_ok`, STABLE 5/5, on a comment that declares MECHANISM ([`harness-runs/fixture-parser-a20-a23b-run-2026-09-22.md`](harness-runs/fixture-parser-a20-a23b-run-2026-09-22.md)). **Three stable-and-wrong `FP-1` rows in 16 judged today.** ⛔ **And the harness exited 0 on that run**, because it counts `shipped_declared_ok` as a pass — so for this error class the exit code is blind and only the hand baseline sees it.
 
+⛔⛔ **2026-09-23 (UTC): 15 stable wrong rows in ONE run** — the `fundingBoost`/`upgradeBonus` window, `FP-1` agreeing on 4 of 22 ([`harness-runs/fixture-parser-funding-run-2026-09-23.md`](harness-runs/fixture-parser-funding-run-2026-09-23.md)). The same detector agreed on 23 of 25 and 12 of 14 in earlier windows. **A detector's accuracy is a property of the population it meets, not a constant** — one clean measurement does not certify the next population.
+
 ---
 
 ## 5. ⛔ What invalidates a first run
