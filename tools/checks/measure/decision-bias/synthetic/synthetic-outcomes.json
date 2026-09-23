@@ -1,0 +1,10 @@
+{
+ "rev": "b5000c99cd30a6b0899ba3ebde0cc4420b9fa12b",
+ "note": "MADE-UP outcomes for the synthetic acceptance window. They exist only to drive the scorer end to end.",
+ "items": [
+  {"id": "synthetic/S1-unparsed-counter", "outcome": "OVERRULED", "ruled": "(a)", "recommended": "(b)"},
+  {"id": "synthetic/S2-mixed-sequence-span", "outcome": "ADOPTED", "ruled": "(b)", "recommended": "(b)"},
+  {"id": "synthetic/S3-class-name", "outcome": "ADOPTED", "ruled": "(a)", "recommended": "(a)"},
+  {"id": "synthetic/S4-vague", "outcome": "PARTIAL", "ruled": "(a) with changes", "recommended": "(a)"}
+ ]
+}

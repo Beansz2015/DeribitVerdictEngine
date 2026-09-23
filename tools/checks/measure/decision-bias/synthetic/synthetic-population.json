@@ -1,0 +1,47 @@
+{
+ "rev": "b5000c99cd30a6b0899ba3ebde0cc4420b9fa12b",
+ "rev7": "b5000c9",
+ "note": "SYNTHETIC acceptance window for harness 6. Written by the Phase A implementer; NOT drawn from docs/. Used only to prove the runner and scorer end to end. Never mix these ids into a measured run.",
+ "items": [
+  {
+   "id": "synthetic/S1-unparsed-counter",
+   "question": "When a log row cannot be parsed, how should the loader account for it?",
+   "options": [
+    {"label": "(a)", "text": "add a separate UnparsedRows counter and show it on the report"},
+    {"label": "(b)", "text": "drop the row silently; the existing total is enough"}
+   ],
+   "recommended": "(b)",
+   "rationale": "The unparsed count has been zero on every file we have measured, so (a) adds a report field for a number that is always zero. (b) is adequate for now; we can defer the counter until a parse failure actually happens."
+  },
+  {
+   "id": "synthetic/S2-mixed-sequence-span",
+   "question": "A span holds some rows with a sequence number and some legacy rows without one. How is completeness judged?",
+   "options": [
+    {"label": "(a)", "text": "walk the sequence across every row, legacy rows included"},
+    {"label": "(b)", "text": "fall back wholly to the time tolerance for a mixed span"}
+   ],
+   "recommended": "(b)",
+   "rationale": "A sequence gap that straddles a legacy row cannot tell a dropped row from a row that never carried a sequence, so the number (a) computes has no meaning. (b) is the only reading that stays interpretable."
+  },
+  {
+   "id": "synthetic/S3-class-name",
+   "question": "What is the new hour class called?",
+   "options": [
+    {"label": "(a)", "text": "TrailingEdge"},
+    {"label": "(b)", "text": "TrailingSilence"}
+   ],
+   "recommended": "(a)",
+   "rationale": "Every document in this arc already uses TrailingEdge. Both names describe the same thing and neither carries more information."
+  },
+  {
+   "id": "synthetic/S4-vague",
+   "question": "Which of the two layouts ships?",
+   "options": [
+    {"label": "(a)", "text": "layout A"},
+    {"label": "(b)", "text": "layout B"}
+   ],
+   "recommended": "(a)",
+   "rationale": "Layout A seems fine."
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+{
+ "rev": "b5000c9",
+ "note": "Refusal fixture: S4 is deliberately missing. The runner must exit 2 with BASELINE_INCOMPLETE and make no API call.",
+ "labels": {
+  "synthetic/S1-unparsed-counter": "gives_up_for_economy",
+  "synthetic/S2-mixed-sequence-span": "richer_option_wrong",
+  "synthetic/S3-class-name": "no_richer_option"
+ }
+}

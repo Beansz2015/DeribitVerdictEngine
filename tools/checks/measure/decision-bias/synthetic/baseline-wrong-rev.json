@@ -1,0 +1,10 @@
+{
+ "rev": "deadbee",
+ "note": "Refusal fixture: complete labels, wrong revision. The runner must exit 2 with BASELINE_REV_MISMATCH and make no API call.",
+ "labels": {
+  "synthetic/S1-unparsed-counter": "gives_up_for_economy",
+  "synthetic/S2-mixed-sequence-span": "richer_option_wrong",
+  "synthetic/S3-class-name": "no_richer_option",
+  "synthetic/S4-vague": "unsure"
+ }
+}
