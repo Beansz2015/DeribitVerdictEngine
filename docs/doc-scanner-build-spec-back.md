@@ -524,3 +524,159 @@ Every reading gives the **same 22 judged `VALUE` rows on the living set at `cbc2
 - **§7.2's classification** reads the line text only, not the surrounding documents.
 - **Whether `E.rev_date`'s swap is safe under concurrency.** The tool is single-threaded, and the swap is restored in `finally`. I did not test a concurrent caller.
 - **`DS-B` at a revision where a dated header sits exactly on the 7-day boundary.** No replay case and no header at `cbc2c91` is on it. The effect there is one day by construction, and it is not observed.
+
+---
+
+## 8. ✅ Third round, 2026-09-23 (UTC) — the orchestrator's ruling `DS-A` (g): BUILT, and the tool is complete
+
+**Appended below §7; §7 and everything above it are unchanged.**
+
+The ruling, **`DS-A` option (g)**, has two parts:
+- The span arm is kept, but blocked inside file names and link targets.
+- Two report **labels**, which never drop a row and never change the judged set: `unqualified` (from option (f); top-level keys exempt), and `operator_context` (the number directly follows `+ - * / < > <= >= == !=`).
+
+Labelled `never_shipped` rows get their own code-only buckets. The orchestrator made the ≤ 2 target advisory. The stop conditions were checks G2 and G4 only.
+
+| Commit | What |
+|---|---|
+| `6226765` | The (g) pairing in `e2_ruled()` (now the scan default), the two labels and buckets, and the ninth reading in `pairing_variants.py` with checks G1–G4 |
+| `55de8fb` | The dated amendment block in `docs/doc-scanner-check-spec.md`. Additive only: 15 lines added, 0 removed |
+| `b51f797` | `tools/checks/doc-scanner.ps1`, plus the `.gitignore` scratch paths |
+| `83fe0a6` | The implementer's acceptance baseline, committed **before** the live run |
+| this commit | The run record [`harness-runs/doc-scanner-acceptance-run-2026-09-23.md`](harness-runs/doc-scanner-acceptance-run-2026-09-23.md), and this section |
+
+### 8.1 The four (g) checks — run at `6226765`, output pasted
+
+```
+python tools/checks/measure/doc-scanner/pairing_variants.py cbc2c91 | sed -n '/^=== DS-A option (g)/,$p'
+python tools/checks/measure/doc-scanner/pairing_variants.py cbc2c91 --all | sed -n '/^=== DS-A option (g)/,$p'
+```
+```
+=== DS-A option (g) checks
+G1 (advisory) living set: UNLABELLED never_shipped lines=2  unqualified bucket=8  operator_context bucket=3 ['docs/UserManual.md:290', 'docs/UserManual.md:326', 'docs/UserManual.md:1264']
+    unlabelled docs/UserManual.md:250 scoring.structural_levels.target_arbitration_mode: doc 1 vs current 0
+    unlabelled docs/UserManual.md:325 kelly.est_prob_scale: doc 0.45 vs current 0.2
+G4 PASS living set: was_shipped rows=22 lines=20 (need 22/20); rows identical to literal and legacy=True; VALUE item ids identical to --e2 strict=True (22 ids)
+=== DS-A option (g) checks
+G2 PASS all docs: was_shipped rows lost vs literal=0 []; correct span-arm rows present=11/11; `version` lines present=21/21; rows gained vs literal=0
+G3 (report) mis-pairing docs/offline-whatif-replay-proposal.md:42 scoring.atr_stop_multiplier=1: still JUDGED as E2_value_was_shipped, labels qualified=True operator_context=False
+G3 (report) mis-pairing docs/trade-store-downtime-repair-proposal.md:234 version=1: still JUDGED as E2_value_was_shipped, labels qualified=True operator_context=False
+G3 (report) mis-pairing docs/trade-store-downtime-repair-spec-back.md:38 version=1: still JUDGED as E2_value_was_shipped, labels qualified=True operator_context=False
+```
+
+**G1, the unlabelled living-set `never_shipped` rows, itemised by cause (advisory; 2 against a target of ≤ 2):**
+- `UserManual.md:250` pairs the right key with an enum option that never shipped, `target_arbitration_mode: 1`, describing the NEAREST mode. It is not a parser error.
+- `UserManual.md:325` is a sum expression: in `EstProbFloor + EstProbScale` = 0.45 + 0.20, no rule pairs across `+`, so 0.45 lands on `EstProbScale`.
+
+**G3:** all 3 span-arm mis-pairings are **still judged**, unlabelled. None sits in a file name or a link target, and none follows an operator (`"min": 1.0`, `-TotalCount 1`). All 3 are outside the living set. Report only.
+
+### 8.2 `doc-scanner-check-spec.md` §5 acceptance — all seven
+
+| Item | Result | Handle |
+|---|---|---|
+| 1 — replay matches the measurement, kept arms | ✅ **PASS** through the tool: the `-Replay` removed-line results equal the instrument's on all 40 lines. Kept-arm recall is 26/32 · 1/6 · 1/1 · 0/1 | `H-14` |
+| 2 — `cbc2c91`: 3 · 4 · 0 · 0 | ✅ **PASS**, unchanged under (g) | `H-15` (the item-5a output) |
+| 3 — as amended: the unlabelled `never_shipped` rows itemised; ≤ 2 advisory; 11 of 11 true positives judged | ✅ **2**, itemised in §8.1; **11 of 11** (G4: the same 22 ids) | §8.1 |
+| 4 — the seeded positives surface | ✅ **PASS**: 12 `VALUE` ids (11 lines), `NEXT_FREE_FAMILY_STALE=1`, three `DATED_STATE` headers. The judged ids are unchanged under (g) (G4); the item-5a output lists them | `H-9` in `docs/doc-scanner-build-spec-back.md` §1, and `H-15` |
+| 5 — refusals: no baseline (no API call) · incomplete · revision mismatch | ✅ **PASS**, all exit 2 with `JEV_CALLS=0` | `H-15`, `H-16` |
+| 6 — `verdict` is the only answer read; `Invoke-Jev` is shared | ✅ **PASS**: 1 executable `.answers` read, no second HTTP call, the dot-source present | `H-17` |
+| 7 — live run on historical docs only | ✅ **PASS**: 14 items, 70 calls, 60,593 input tokens, **$0.0025**, 23.19 s in the Jev loop. **10 of 13 scored items agree** with the implementer baseline. The living set **stopped at the refusal with no key in the environment** | `H-18`, and the run record |
+
+### 8.3 Handles — H-14 to H-18, output pasted as it ran
+
+**`H-14` — item 1 through the PowerShell switch** (run at `b51f797`):
+
+```
+powershell -NoProfile -File tools/checks/doc-scanner.ps1 -Replay > /tmp/psr.txt
+python tools/checks/lib/doc_scanner_candidates.py replay --kinds kept --e2 legacy --dates instrument > /tmp/li.txt
+diff <(grep -E '^\s+(HIT|miss)' /tmp/li.txt) <(grep -E '^\s+(HIT|miss)' /tmp/psr.txt | tr -d '\r') && echo "PS -Replay vs instrument (kept arms): REMOVED-LINE RESULTS IDENTICAL ($(grep -cE '^\s+(HIT|miss)' /tmp/psr.txt) removed lines)"
+```
+```
+PS -Replay vs instrument (kept arms): REMOVED-LINE RESULTS IDENTICAL (40 removed lines)
+```
+
+**`H-15` — item 5a: the living set at `cbc2c91`, no baseline, NO key in the environment** (run at `b51f797`). ⭐ **If you run only one handle in this section, run this.** It is the living-set refusal, and it cannot spend anything, because the key is absent.
+
+```
+env -u TYPESAFE_API_KEY powershell -NoProfile -File tools/checks/doc-scanner.ps1 -Rev cbc2c91 -BaselinePath /no/such/file.json
+```
+
+The coverage block, then the refusal. The 94 candidate lines and 26 code-only lines are omitted from this paste.
+
+```
+REV=cbc2c91
+LIVING_DOCS=12  (list: CLAUDE.md docs/DeribitIndicatorProject.md docs/architecture.md docs/trader-profile.md docs/trader-tick-queue.md docs/roadmap.md docs/backlog-dependency-map.md docs/csv-rotation-riders.md docs/harness-shadow-mode-protocol.md docs/UserManual.md docs/aws-collector-deploy-checklist.md docs/seat-handover-2026-09-22b.md)
+DOCS_SCANNED=12  source=living  in_living_set=12
+E2_PAIRING=ruled  DATED_STATE_DATES=utc  LIVE_SETTINGS_VERSION=v68
+CANDIDATES_VERSION=3  CANDIDATES_VALUE=22  CANDIDATES_POINTER=4  CANDIDATES_FIXTURE_MEANING=65
+VALUE_NEVER_SHIPPED_CODE_ONLY=2  VALUE_UNQUALIFIED_NEVER_SHIPPED=8  VALUE_OPERATOR_NEVER_SHIPPED=3
+CFG_MEMBER_MISSING=0  LINE_PAST_EOF=0  DATED_STATE_OVER_HORIZON=12  NEXT_FREE_FAMILY_STALE=1  NEXT_FREE_FAMILY_CLAIMS=1
+ITEMS_JUDGED=0  JEV_CALLS=0  USAGE_INPUT_TOKENS=0  WALL_TIME_SEC=0
+...
+EXIT_REASON=BASELINE_MISSING
+No baseline file at '...'. Nothing was judged and no API call was made. Write your OWN read of every CANDIDATES item above first, as:
+  { "_revision": "cbc2c91", "judgments": { "<item id>": "<verdict or unsure>" } }
+```
+
+It exited 2. The candidate list printed 94 items (3 + 22 + 4 + 65) and the code-only list 26 rows (2 + 8 + 3 + 12 + 1).
+
+**`H-16` — items 5b, 5c and 5d on the acceptance window** (`-Rev 55de8fb -Docs <the window in the run record>`). 5b ran **with the key loaded**; 5c and 5d used scratch files that hold no judgments. All three exited 2.
+
+```
+5b  no baseline, key loaded:  ITEMS_JUDGED=0  JEV_CALLS=0  USAGE_INPUT_TOKENS=0  WALL_TIME_SEC=0 / EXIT_REASON=BASELINE_MISSING
+5c  _revision "cbc2c91":      EXIT_REASON=BASELINE_REVISION_MISMATCH / ... Nothing was judged.  ITEMS_JUDGED=0  JEV_CALLS=0
+5d  "judgments": {}:          EXIT_REASON=BASELINE_INCOMPLETE / UNBASELINED_ITEMS=14 -- no line in '...' for: ...
+```
+
+These three are condensed to one line each. The full commands and outputs are in this session's transcript, and each is one invocation of the run record's re-run command with a different `-BaselinePath`.
+
+**`H-17` — item 6** (run at `b51f797`):
+
+```
+grep -nE '\.answers' tools/checks/doc-scanner.ps1 | grep -vE '^[0-9]+:\s*#'
+grep -nE '\$v\.[a-z]' tools/checks/doc-scanner.ps1
+grep -nE 'Invoke-RestMethod|Invoke-WebRequest|function Invoke-Jev|HttpClient' tools/checks/doc-scanner.ps1 || echo NONE
+grep -nF "lib\InvokeJev.ps1')" tools/checks/doc-scanner.ps1
+```
+```
+276:    $v = $call.Response.answers.verdict   # THE one read of an answer. Code decides from $v only.
+278:    if ($v.probabilities) { $top = (@($v.probabilities.PSObject.Properties | ForEach-Object { [double]$_.Value }) | Measure-Object -Maximum).Maximum }
+281:    return @{ Ok = $true; Verdict = [string]$v.choice; TopProbability = $top; InputTokens = $inTok }
+NONE
+90:. (Join-Path $PSScriptRoot 'lib\InvokeJev.ps1')
+```
+
+The question sets define only `verdict`. `$v.probabilities` is that same answer's distribution; it feeds only the reported top probability, never a decision.
+
+**`H-18` — item 7:** see the run record's *Re-run* command. It needs the key, and the detector is not deterministic, so unstable rows will move.
+
+### 8.4 Auto-proceeded decisions — one line each
+
+1. **`operator_context` on rule-3 pairs** · label them / exempt them · **exempt** · step 3: in a slash group `/` is the separator rule 3 pairs across, so labelling it as division is mechanically wrong.
+2. **A row carrying both labels** · count it in both buckets / one bucket · **one, `unqualified` first** · the bucket counts then sum to the total `never_shipped`. The row keeps both label facts in the JSON, so nothing is lost.
+3. **The three `never_shipped` buckets and the exit code** · exit 1 on them / report only · **report only** · the ruling calls them code-only and parser-class, not rot. Every row is printed. ⚠ Counting them would make the living set exit 1 on every run for that reason alone.
+4. **`ambiguous` and `WAF_BLOCKED`** · pass / exit 1 · **exit 1** · an undecided or unjudged item is never a pass (the fixture-parser's `FP-D26` precedent).
+5. **Refusal order** · the spec's (missing → incomplete → mismatch) / missing → mismatch → incomplete · **mismatch before incomplete** · at another revision every id differs, so "incomplete" would name the wrong cause.
+6. **`BASELINE_INVALID_VALUE`** (not specced) · none / refuse · **refuse** · a misspelt verdict would otherwise read as DISAGREE and corrupt the score silently.
+7. **The labels in the Jev state** · include them / leave them out · **out** · `doc-scanner-check-spec.md` §4.3 lists the state fields, and the ruling says labels never change the judged set. Adding them would be a question change, not mine to make.
+8. **The report's per-item block** · a table / a list · **a list** · item ids contain `|`, which splits a markdown table cell even inside backticks.
+9. **The acceptance window** · the spec's example (`seat-handover-2026-08-2*.md`) alone / widened · **widened**, with five more historical handovers · the example alone yields 6 `FIXTURE_MEANING` items and **zero Q-TENSE items**, so it could not exercise the tense question.
+10. **Extra coverage lines** · the spec's block only / plus `DOCS_SCANNED` (with `in_living_set`), `E2_PAIRING`, `DATED_STATE_DATES` and `LIVE_SETTINGS_VERSION` · **plus** · a reader sees which pairing, which date source and how much of the living set a run touched.
+11. **`-Docs` input** · an array only / comma-split too · **both** · `powershell -File` passes `-Docs a,b` as one string.
+
+⭐ **The cheaper or less-informative option, anywhere?** Decision 3 reports a class without failing on it; the rows are all printed. Decision 7 keeps information out of the judge's state because the spec fixes that state. **Both are named so the reviewer can overrule them.**
+
+### 8.5 Feedback on the spec
+
+- ⭐ **The amendment made §5 item 3 honest.** The old count rested on a refuted premise. The labels turned 13 undifferentiated "errors" into three itemised buckets (2 · 8 · 3) without dropping a row.
+- ⚠ **`doc-scanner-check-spec.md` §5 item 7's example window cannot test Q-TENSE.** `seat-handover-2026-08-2*.md` has no `VERSION`, `VALUE` or `POINTER` candidate at `55de8fb`. A future acceptance item should name a window by what it must exercise, not by a file glob.
+- ⚠ **For the seat's first measured run:** run at **`-Rev cbc2c91`**. The pre-registered labels are pinned there. At `HEAD` the living set's newest handover is `seat-handover-2026-09-23.md`, not `…-22b.md`, so ids and one living doc differ.
+- ⚠ **The pre-registered labels are LINE-level; the tool's ids are candidate-level.** Two living lines hold two `VALUE` ids each (`DeribitIndicatorProject.md:75` and `UserManual.md:1253`). One line label maps to both ids, as `doc-scanner-check-spec.md` §6 anticipates. **`FIXTURE_MEANING` (65) has no labels yet.**
+
+### 8.6 What I did NOT verify
+
+- ⛔ **Detector accuracy on the living set.** No keyed pass ran there, by design. The acceptance numbers are **14 items against an implementer baseline**. That is inter-reader agreement on a different window, not the measurement.
+- **The web firewall on living-set content.** No living-set text was sent.
+- **The (g) labels at any revision other than `cbc2c91`,** and the `operator_context` pattern's false-hit rate over all docs. Only the living set's 3 hits were read.
+- **PowerShell 5.1's `ConvertFrom-Json` on a very large `-Docs` set.** The living set (94 items) and the window (14) both parsed.
+- **Items 5b–5d** are pasted condensed, not verbatim (`H-16`).
