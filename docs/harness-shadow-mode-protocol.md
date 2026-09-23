@@ -215,6 +215,7 @@ The detector answered `declared_but_contradicted` on **all 5 samples**, `mean_to
 | 3 | Fixture parser | fixture-literal provenance · fixture name against assertion | Next fixture review. ⭐ **Keep the mutation step here** — it is the only route to positives for the name check, and this repo already requires fixtures be mutation-proven |
 | 4 | Doc scanner | version rot · identifier collision · cross-doc contradiction | Next state read or handover |
 | 5 | Doc re-ranker | finding which doc answers a question | Continuous; judged on whether it speeds the seat up |
+| 6 | Decision-bias tripwire (added 2026-09-23, trader-agreed) | a recommendation that is cheaper AND less truthful than an available option (`CLAUDE.md` "The measured bias") | A retrospective measurement over the trader-ruled D-tables, scored against the rulings. The seat writes the shape baseline; the implementer never does (this file's §4c) |
 
 ⚠ **A harness that is never triggered is never validated.** If one sits unused for long enough that its trigger stops arriving, say so and either retire it or give it a dedicated test — do not let it accumulate in `tools/` as an unmeasured check.
 
