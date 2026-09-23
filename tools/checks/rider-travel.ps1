@@ -27,9 +27,11 @@
       -AfterFile <path to the proposed AnalysisLogger.vb> `
       -BaselinePath <path to your own pre-written read, see §4.4>
 
-  EXIT CODES (§4.6):
-    0 - every TRAVELLING rider judged arrived or not_a_header_column, every Jev row STABLE
-    1 - at least one rider judged missing or ambiguous, or any Jev row UNSTABLE
+  EXIT CODES (§4.6, REVISION 2):
+    0 - every TRAVELLING rider judged arrived or not_a_header_column, every Jev row STABLE,
+        and no rider was WAF_BLOCKED
+    1 - at least one rider judged missing or ambiguous, any Jev row UNSTABLE, or any rider
+        WAF_BLOCKED (item 8n -- an unjudged item is never a pass)
     2 - parse failure, NO_ROTATION, baseline missing or incomplete, or API failure (D-5)
 
   ============================== REVISION 1 (2026-09-22 UTC) ==============================
@@ -46,6 +48,30 @@
     RT-R1-5: item-level refusal (BASELINE_INCOMPLETE) when any travelling rider has no
       baseline line; -AllowUnbaselinedItems for routine re-runs.
   ==========================================================================================
+
+  ============================== REVISION 2 (2026-09-23 UTC) ==============================
+  Arming batch: docs/jev-harnesses-adversarial-review-2026-09-22.md findings 6, 8n, 11.
+    RT-R2-1 (item 8n, the FP-D26 pattern): a web-firewall block on a rider's Jev call no
+      longer aborts the whole run. The rider is recorded verdict WAF_BLOCKED (agreement
+      NOT_JUDGED), the run continues to the remaining riders, RIDERS_WAF_BLOCKED prints,
+      and any blocked rider makes the exit code 1 -- an unjudged item is never a pass.
+      Harness 1's first run is one-shot on 8 riders; without this, one blocked rider used
+      to spend the whole population on an aborted run.
+    RT-R2-2 (finding 11): tools/checks/lib/InvokeJev.ps1 now retries transient failures
+      (HTTP 5xx, or no response at all) with bounded backoff; a 403/other 4xx is never
+      retried. RETRY_COUNT sums RetryCount across every Jev call this run makes, printed
+      beside USAGE_INPUT_TOKENS.
+    RT-R2-3 (finding 6, "an OK-class misread passes the exit code"): unlike fixture-
+      parser's FP-D25 (item 8m), not_a_header_column is NOT moved into the bad-verdict set.
+      That class is provably always wrong wherever it fires (an FP-1 site is always a
+      hardcoded literal); not_a_header_column is not provably anything -- at the current
+      ledger RIDER-1 and RIDER-2 are CORRECTLY not_a_header_column (they land in code / an
+      ops doc, never the header), so folding it into the exit code would make a normal run
+      exit 1 by construction. Instead: RIDERS_NOT_A_HEADER_COLUMN (with a STABLE sub-count)
+      prints as its own reportable line, never touching $anyBad -- the docs/harness-
+      shadow-mode-protocol.md section 4g point ("a stable OK is not evidence") made visible
+      without inventing a verdict that always fails.
+  ==========================================================================================
 #>
 [CmdletBinding()]
 param(
@@ -59,7 +85,14 @@ param(
     [int]$Samples = 5,
     # REVISION 1 (finding 2b): refuse when any travelling rider has no baseline line,
     # unless this is passed -- for a routine re-run of riders measured once.
-    [switch]$AllowUnbaselinedItems
+    [switch]$AllowUnbaselinedItems,
+    # REVISION 2, TEST SEAM ONLY -- OFF BY DEFAULT ($null). Forwarded verbatim to every
+    # Invoke-Jev call in this run in place of the real HTTP transport (see
+    # tools/checks/lib/InvokeJev.ps1's own -TransportOverride). Exists so item 8n's
+    # WAF-block handling and finding 11's retry accounting can be exercised end-to-end,
+    # through this actual script, on synthetic riders -- never against the real 8-rider
+    # one-shot population. No caller passes this in a real run.
+    [scriptblock]$TestTransportOverride = $null
 )
 
 $ErrorActionPreference = 'Continue'
@@ -326,8 +359,8 @@ function Invoke-RiderVerdict([string]$apiKeyIn, $r, [string]$uid) {
             }
         }
     }
-    $call = Invoke-Jev $apiKeyIn $body
-    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error } }
+    $call = Invoke-Jev $apiKeyIn $body 3 1 $TestTransportOverride
+    if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked; RetryCount = $call.RetryCount } }
     $ans = $call.Response.answers
     # --- TRAP 1 (docs/rider-travel-check-spec.md §0): the verdict comes from the `verdict`
     # Choice answer ALONE. The two Noul answers are diagnostics ONLY -- never combined.
@@ -339,7 +372,7 @@ function Invoke-RiderVerdict([string]$apiKeyIn, $r, [string]$uid) {
     }
     $usageIn = 0
     if ($call.Response.usage -and $call.Response.usage.input_tokens) { $usageIn = [int]$call.Response.usage.input_tokens }
-    return @{ Ok = $true; Verdict = $verdict; TopProbability = $top; LandsInHeaderNoul = $ans.lands_in_header.noul; ColumnPresentNoul = $ans.column_present.noul; UsageIn = $usageIn }
+    return @{ Ok = $true; Verdict = $verdict; TopProbability = $top; LandsInHeaderNoul = $ans.lands_in_header.noul; ColumnPresentNoul = $ans.column_present.noul; UsageIn = $usageIn; RetryCount = $call.RetryCount }
 }
 
 # ---------------------------------------------------------------------------------------
@@ -351,6 +384,9 @@ $results = New-Object System.Collections.Generic.List[object]
 $apiFailed = $false
 $apiFailMsg = ''
 $usageInputTokens = 0
+# REVISION 2 (finding 11): retries actually spent across every Jev call this run makes,
+# summed the same way USAGE_INPUT_TOKENS already is -- see tools/checks/lib/InvokeJev.ps1.
+$usageRetries = 0
 
 foreach ($r in $codeRiders) {
     $absent = @($r.NamedColumns | Where-Object { $afterCols -notcontains $_ })
@@ -364,16 +400,36 @@ foreach ($r in $codeRiders) {
     })
 }
 
+$ridersWafBlocked = 0
 foreach ($r in $jevRiders) {
     $draws = New-Object System.Collections.Generic.List[object]
+    $itemBlocked = $false
     for ($i = 0; $i -lt $Samples; $i++) {
         $uid = "$($r.Id):${i}:$([guid]::NewGuid().ToString('N').Substring(0,8))"
         $s = Invoke-RiderVerdict $apiKey $r $uid
-        if (-not $s.Ok) { $apiFailed = $true; $apiFailMsg = "Jev request failed for $($r.Id) (sample $($i+1)/$Samples): $($s.Error)"; break }
+        if (-not $s.Ok) {
+            # REVISION 2 (item 8n, docs/jev-harnesses-adversarial-review-2026-09-22.md finding
+            # 6's sibling): a web-firewall block is about THIS rider's text, not the API. Record
+            # the rider as unjudgeable and move on to the next one; any other failure still
+            # aborts the whole run (unchanged).
+            if ($s.WafBlocked) { $itemBlocked = $true; $usageRetries += $s.RetryCount; break }
+            $apiFailed = $true; $apiFailMsg = "Jev request failed for $($r.Id) (sample $($i+1)/$Samples): $($s.Error)"; break
+        }
         $usageInputTokens += $s.UsageIn
+        $usageRetries += $s.RetryCount
         $draws.Add($s)
     }
     if ($apiFailed) { break }
+    if ($itemBlocked) {
+        $ridersWafBlocked++
+        $results.Add([PSCustomObject]@{
+            Id = $r.Id; DecidedBy = 'JEV'; Verdict = 'WAF_BLOCKED'; Detail = ''
+            AgreementRate = $null; Stable = $true; MeanTopProbability = $null; SampleVerdicts = ''
+            LandsInHeaderNoul = $null; ColumnPresentNoul = $null
+            Baseline = if ($baseline.ContainsKey($r.Id)) { $baseline[$r.Id] } else { $null }
+        })
+        continue
+    }
     $counts = @{}
     foreach ($s in $draws) { if (-not $counts.ContainsKey($s.Verdict)) { $counts[$s.Verdict] = 0 }; $counts[$s.Verdict]++ }
     $plurality = $null; $pc = -1
@@ -393,6 +449,7 @@ foreach ($r in $jevRiders) {
 
 if ($apiFailed) {
     Write-Coverage $ridersInLedger $ridersTravelling $results.Count $beforeCols.Count $afterCols.Count $addedCols.Count $removedCols.Count
+    "RETRY_COUNT=$usageRetries"
     "EXIT_REASON=API_FAILED"
     $apiFailMsg
     exit 2
@@ -403,9 +460,26 @@ if ($apiFailed) {
 # ---------------------------------------------------------------------------------------
 Write-Coverage $ridersInLedger $ridersTravelling $results.Count $beforeCols.Count $afterCols.Count $addedCols.Count $removedCols.Count
 "USAGE_INPUT_TOKENS=$usageInputTokens"
+"RETRY_COUNT=$usageRetries"
+"RIDERS_WAF_BLOCKED=$ridersWafBlocked"
+
+# REVISION 2 (finding 6, docs/jev-harnesses-adversarial-review-2026-09-22.md: "an OK-class
+# misread passes the exit code"). not_a_header_column is a LEGITIMATE, common verdict --
+# RIDER-1 and RIDER-2 in the current ledger are correctly not_a_header_column (they land in
+# code / an ops doc, never the CSV header) -- so it must NOT flip the exit code the way
+# FP-D25 did for fixture-parser's shipped_declared_ok (that class is provably always wrong
+# on a hardcoded-literal site; this one is not provably anything). Reportable-only, the
+# fixture-parser FP-D22/8j shape (a code-computed counter with zero exit-code effect), never
+# folded into $anyBad below. docs/harness-shadow-mode-protocol.md section 4g: "a stable OK
+# is not evidence" -- this print is what lets a reader see how many stable OKs there were,
+# instead of them disappearing into an undifferentiated pass.
+$notAHeaderColumn = @($results | Where-Object { $_.Verdict -eq 'not_a_header_column' }).Count
+$notAHeaderColumnStable = @($results | Where-Object { $_.Verdict -eq 'not_a_header_column' -and $_.Stable }).Count
+"RIDERS_NOT_A_HEADER_COLUMN=$notAHeaderColumn (of which STABLE=$notAHeaderColumnStable -- reported per docs/harness-shadow-mode-protocol.md section 4g; a stable OK is not evidence, not folded into the exit code)"
 
 function Get-AgreeText($res) {
-    if ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
+    if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' }
+    elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' }
     elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' }
     elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' }
     else { 'DISAGREE' }
@@ -440,6 +514,9 @@ $reportLines.Add("| HEADER_COLUMNS_AFTER | $($afterCols.Count) |")
 $reportLines.Add("| COLUMNS_ADDED | $($addedCols.Count) |")
 $reportLines.Add("| COLUMNS_REMOVED | $($removedCols.Count) |")
 $reportLines.Add("| USAGE_INPUT_TOKENS | $usageInputTokens |")
+$reportLines.Add("| RETRY_COUNT | $usageRetries |")
+$reportLines.Add("| RIDERS_WAF_BLOCKED | $ridersWafBlocked |")
+$reportLines.Add("| RIDERS_NOT_A_HEADER_COLUMN | $notAHeaderColumn (STABLE=$notAHeaderColumnStable) |")
 $reportLines.Add('')
 if ($addedCols.Count -gt 0) { $reportLines.Add('**Added:** ' + ($addedCols -join ', ')); $reportLines.Add('') }
 if ($removedCols.Count -gt 0) { $reportLines.Add('**Removed:** ' + ($removedCols -join ', ')); $reportLines.Add('') }
@@ -463,7 +540,12 @@ $reportFull = Resolve-RepoPath $OutPath
 Set-Content -Encoding UTF8 -Path $reportFull -Value ($reportLines -join "`r`n")
 "Report written to $OutPath"
 
-# Exit 1 on missing / ambiguous, and (REVISION 1) on any UNSTABLE Jev row -- a split vote is
-# unresolved and must not read as a pass.
-$anyBad = @($results | Where-Object { $_.Verdict -eq 'missing' -or $_.Verdict -eq 'ambiguous' -or -not $_.Stable }).Count -gt 0
+# Exit 1 on missing / ambiguous, on any UNSTABLE Jev row (REVISION 1) -- a split vote is
+# unresolved and must not read as a pass -- and (REVISION 2, item 8n) on any WAF_BLOCKED
+# rider: an unjudged item is never a pass either. not_a_header_column is deliberately
+# EXCLUDED from this list (see RIDERS_NOT_A_HEADER_COLUMN above) -- it is a legitimate,
+# common verdict, and folding it in here would make a normal run (most rotations carry a
+# rider or two that never touches the header) exit 1 by construction, which is not a
+# meaningful signal.
+$anyBad = @($results | Where-Object { $_.Verdict -eq 'missing' -or $_.Verdict -eq 'ambiguous' -or $_.Verdict -eq 'WAF_BLOCKED' -or -not $_.Stable }).Count -gt 0
 if ($anyBad) { exit 1 } else { exit 0 }
