@@ -6,6 +6,8 @@ section 4.2 rules, as written, leave 17 never_shipped lines at cbc2c91 against t
 section 5 item 3 requires. Record and measured options: docs/doc-scanner-build-spec-back.md.
 Second stop, same day: the orchestrator's ruling DS-A option (f) was measured and NOT
 confirmed (see e2_strict). Ruling DS-B (b) IS built: DATED_STATE ages use the UTC commit date.
+Third round, same day: the orchestrator RULED DS-A option (g) -- the tool's E2 is now e2_ruled()
+(`--e2 ruled`, the scan default). docs/doc-scanner-check-spec.md carries the dated amendment.
 
 Spec: docs/doc-scanner-check-spec.md. Called by tools/checks/doc-scanner.ps1, which owns the
 gates, the Jev calls and the report (spec decision DS-D2). This file owns only CODE facts:
@@ -24,7 +26,7 @@ Every regex below is a raw string (spec section 0, trap 4: a non-raw \\b or \\1 
 control byte into a file).
 
 Subcommands:
-  scan    --rev REV [--docs PATTERN ...] [--e2 strict|legacy] --out FILE
+  scan    --rev REV [--docs PATTERN ...] [--e2 ruled|strict|legacy] [--dates utc|instrument] --out FILE
           Enumerate candidates at REV (read with `git show REV:path`, never the working tree --
           decision DS-D7) and write a JSON document of candidates plus computed facts.
   replay  [--kinds kept|all] [--e2 strict|legacy]
@@ -167,6 +169,9 @@ GAP_RULE1 = re.compile(r'[`*(=:\s]*')
 # 2026-09-23 (UTC) only as information for ruling DS-A -- the span arm's correct pairings use
 # `"version": 63` and `key {1000, 12000}` shapes. pair_line(extra_sep=True) selects it.
 GAP_RULE1_EXTRA = re.compile(r'[`*(=:\s"{]*')
+# DS-A (g) `operator_context`: the text before the number ends, after optional whitespace, in one
+# of + - * / < > <= >= == != (and the Unicode ≤ ≥). A single `=` is assignment, not listed.
+OP_BEFORE = re.compile(r'(?:<=|>=|==|!=|[+\-*/<>≤≥])\s*$')
 # Between two key NAMES of one slash group: a slash, optionally wrapped in backticks, asterisks
 # or whitespace, and optionally followed by the next key's dotted prefix (`cfg.Scoring.X`/`Y`).
 SLASH_BETWEEN_KEYS = re.compile(r'[`*\s]*/[`*\s]*(?:[A-Za-z_]\w*\.)*')
@@ -265,7 +270,7 @@ def pair_line(line, rx, idx, span_arm=True, extra_sep=False):
                     pos = ng.start()
                     for g, num in zip(group, nums):
                         at = line.find(num, pos)
-                        pairs.append((g, at, num))
+                        pairs.append((g, at, num, 'rule3'))
                         pos = at + len(num)
             k = j + 1
         else:
@@ -278,7 +283,7 @@ def pair_line(line, rx, idx, span_arm=True, extra_sep=False):
         gap = gap_rx.match(line, km.end())
         nm = NUM_TOKEN.match(line, gap.end())
         if nm:
-            pairs.append((km, nm.start(), nm.group(0)))
+            pairs.append((km, nm.start(), nm.group(0), 'rule1'))
             continue
         # Rule 1, second arm: the number sits inside the same backtick span as the key.
         if not span_arm:
@@ -297,7 +302,7 @@ def pair_line(line, rx, idx, span_arm=True, extra_sep=False):
         # Rule 2: a second key name between the key and the number cancels the pair.
         if any(km.end() <= o.start() < first_num.start() for o in keys if o is not km):
             continue
-        pairs.append((km, first_num.start(), first_num.group(0)))
+        pairs.append((km, first_num.start(), first_num.group(0), 'span'))
     pairs.sort(key=lambda t: t[0].start())
     return pairs
 
@@ -323,18 +328,16 @@ def _is_qualified(p, line):
     return bool(re.search(r'(?<![\w])' + re.escape(segs[-2]) + r'(?![\w])', line, re.I))
 
 
-def e2_strict(path, text, rev, span_arm=True, name_qualify=False, name_label=False, extra_sep=False):
+def e2_strict(path, text, rev, span_arm=True, name_qualify=False, name_label=False, extra_sep=False,
+              op_label=False):
     """Same tuple shape as enumerators.e2, plus a trailing dict of computed facts.
 
-    The tool's scan STILL runs the spec-literal reading: span_arm=True, name_label=False
-    (docs/doc-scanner-check-spec.md section 4.2 as first written; `--e2 strict`, the default).
-
-    The orchestrator's ruling DS-A option (f) -- span_arm=False, name_label=True, available as
-    e2_ruled() -- was measured on 2026-09-23 (UTC) and NOT confirmed. Its checks 1, 2 and 4
-    passed, but check 3 found CORRECT key-number pairings among the span arm's 11 gained lines,
-    and the ruling then forbids dropping the arm. The restricted arm (span_arm='restricted')
-    failed check 1. Awaiting a further ruling: docs/doc-scanner-build-spec-back.md.
-    Under name_label every pair is kept; each carries facts['qualified'] (see _is_qualified).
+    The TOOL calls this through e2_ruled() -- the orchestrator's ruling DS-A option (g):
+    span_arm='restricted', name_label=True, op_label=True. The defaults here (span_arm=True, no
+    labels) are the spec's section 4.2 as first written (`--e2 strict`). Option (f)
+    (span_arm=False, name_label=True) was measured and withdrawn: it lost 11 correct pairings.
+    Under the labels every pair is kept; each carries facts['qualified'] and
+    facts['operator_context']. facts['pair_rule'] names the rule that paired it.
 
     name_qualify is the rejected FILTER reading (`nq`), kept only so
     tools/checks/measure/doc-scanner/pairing_variants.py reproduces its published numbers: it
@@ -346,7 +349,7 @@ def e2_strict(path, text, rev, span_arm=True, name_qualify=False, name_label=Fal
     if not rx:
         return out
     for i, line in enumerate(text.splitlines(), 1):
-        for km, col, numtxt in pair_line(line, rx, idx, span_arm=span_arm, extra_sep=extra_sep):
+        for km, col, numtxt, via in pair_line(line, rx, idx, span_arm=span_arm, extra_sep=extra_sep):
             nm = km.group(1)
             p = _resolve(idx, nm, line)
             if p is None:
@@ -364,16 +367,31 @@ def e2_strict(path, text, rev, span_arm=True, name_qualify=False, name_label=Fal
             kind = 'E2_value_was_shipped' if any(abs(val - e) < 1e-9 for e in ever) else 'E2_value_never_shipped'
             facts = {'key_path': p, 'key_name': nm, 'doc_value_text': numtxt, 'doc_value': val,
                      'live_value': cur, 'key_col': km.start(), 'value_col': col}
+            facts['pair_rule'] = via
             if name_label:
                 facts['qualified'] = _is_qualified(p, line)
+            if op_label:
+                facts['operator_context'] = _operator_context(line, col, via)
             out.append((path, i, kind, f'{p}: doc {val:g} vs current {cur}', line, facts))
     return out
 
 
+def _operator_context(line, value_col, via):
+    """The DS-A (g) `operator_context` label: the number is directly preceded, after optional
+    whitespace, by an arithmetic or comparison operator. A rule-3 slash-group pair is exempt:
+    its `/` is the group separator rule 3 pairs across, not division."""
+    if via == 'rule3':
+        return False
+    return bool(OP_BEFORE.search(line[:value_col]))
+
+
 def e2_ruled(path, text, rev):
-    """The tool's E2: DS-A option (f) -- rule 1 without its backtick-span arm, rule 3, and the
-    name rule as a LABEL, never a filter."""
-    return e2_strict(path, text, rev, span_arm=False, name_label=True)
+    """The tool's E2 -- the orchestrator's ruling DS-A option (g), 2026-09-23 (UTC): rules 1-3,
+    with rule 1's backtick-span arm kept but blocked inside a file name or a link target (a
+    pairing there is mechanically wrong), plus two LABELS that never drop a row and never change
+    the judged set: `qualified` (see _is_qualified) and `operator_context` (_operator_context).
+    The labels only route never_shipped rows into their own code-only report buckets."""
+    return e2_strict(path, text, rev, span_arm='restricted', name_label=True, op_label=True)
 
 
 def e2_legacy(path, text, rev):
@@ -612,6 +630,8 @@ def claim_for(it):
 
 CODE_ONLY_ID_PREFIX = {
     'VALUE_NEVER_SHIPPED': 'VALUE_NEVER_SHIPPED',
+    'VALUE_UNQUALIFIED_NEVER_SHIPPED': 'VALUE_UNQUALIFIED_NEVER_SHIPPED',
+    'VALUE_OPERATOR_NEVER_SHIPPED': 'VALUE_OPERATOR_NEVER_SHIPPED',
     'CFG_MEMBER_MISSING': 'CFG_MEMBER',
     'LINE_PAST_EOF': 'LINE_PAST_EOF',
     'DATED_STATE_OVER_HORIZON': 'DATED_STATE',
@@ -630,9 +650,10 @@ def scan(rev_in, doc_patterns, e2mode, dates='utc'):
         docs, unmatched, source = list(living), [], 'living'
     ver, flat = E.settings_at(rev)
     toks = E.vb_tokens_at(rev)
-    items, code_only = [], {'VALUE_NEVER_SHIPPED': [], 'CFG_MEMBER_MISSING': [], 'LINE_PAST_EOF': [],
+    items, code_only = [], {'VALUE_NEVER_SHIPPED': [], 'VALUE_UNQUALIFIED_NEVER_SHIPPED': [],
+                            'VALUE_OPERATOR_NEVER_SHIPPED': [], 'CFG_MEMBER_MISSING': [], 'LINE_PAST_EOF': [],
                             'DATED_STATE_OVER_HORIZON': [], 'NEXT_FREE_FAMILY': []}
-    e2fn = e2_strict if e2mode == 'strict' else e2_legacy
+    e2fn = {'ruled': e2_ruled, 'strict': e2_strict, 'legacy': e2_legacy}[e2mode]
     fixture_mention_count = 0
     for p in docs:
         t = E.show(rev, p)
@@ -644,7 +665,15 @@ def scan(rev_in, doc_patterns, e2mode, dates='utc'):
             (pp, i, kind, det, line) = h[:5]
             facts = h[5] if len(h) > 5 else {'key_path': det.split(':')[0], 'value_col': 0}
             if kind == 'E2_value_never_shipped':
-                code_only['VALUE_NEVER_SHIPPED'].append({'path': p, 'line': i, 'detail': det})
+                # DS-A (g): a label routes the row to its own report bucket; it is never dropped.
+                # One bucket per row: `unqualified` first, then `operator_context`.
+                if facts.get('qualified') is False:
+                    bucket = 'VALUE_UNQUALIFIED_NEVER_SHIPPED'
+                elif facts.get('operator_context'):
+                    bucket = 'VALUE_OPERATOR_NEVER_SHIPPED'
+                else:
+                    bucket = 'VALUE_NEVER_SHIPPED'
+                code_only[bucket].append({'path': p, 'line': i, 'detail': det, 'col': facts.get('value_col', 0)})
                 continue
             it = dict(facts, arm='VALUE', path=p, line=i, question='Q-TENSE', col=facts.get('value_col', 0))
             if 'doc_value' in facts:
@@ -706,6 +735,8 @@ def scan(rev_in, doc_patterns, e2mode, dates='utc'):
             'CANDIDATES_VERSION': counts['VERSION'], 'CANDIDATES_VALUE': counts['VALUE'],
             'CANDIDATES_POINTER': counts['POINTER'], 'CANDIDATES_FIXTURE_MEANING': counts['FIXTURE_MEANING'],
             'VALUE_NEVER_SHIPPED_CODE_ONLY': len(code_only['VALUE_NEVER_SHIPPED']),
+            'VALUE_UNQUALIFIED_NEVER_SHIPPED': len(code_only['VALUE_UNQUALIFIED_NEVER_SHIPPED']),
+            'VALUE_OPERATOR_NEVER_SHIPPED': len(code_only['VALUE_OPERATOR_NEVER_SHIPPED']),
             'CFG_MEMBER_MISSING': len(code_only['CFG_MEMBER_MISSING']),
             'LINE_PAST_EOF': len(code_only['LINE_PAST_EOF']),
             'DATED_STATE_OVER_HORIZON': len(code_only['DATED_STATE_OVER_HORIZON']),
@@ -759,7 +790,8 @@ def run_all_tool(rev, paths, e2mode, kinds, dates='instrument'):
         if not t:
             continue
         res += E.e1(p, t, ver)
-        res += [h[:5] for h in (e2_strict(p, t, rev) if e2mode == 'strict' else E.e2(p, t, flat, hist))]
+        res += [h[:5] for h in (e2_strict(p, t, rev) if e2mode == 'strict' else
+                                e2_ruled(p, t, rev) if e2mode == 'ruled' else E.e2(p, t, flat, hist))]
         res += E.e3(p, t, rev, toks)
         res += E.e4(p, t, rev)
         res += e5_dated(p, t, rev, dates=dates)
@@ -806,13 +838,14 @@ def main(argv):
     s = sub.add_parser('scan')
     s.add_argument('--rev', default='HEAD')
     s.add_argument('--docs', nargs='*', default=None)
-    s.add_argument('--e2', choices=['strict', 'legacy'], default='strict')
+    # 'ruled' = DS-A (g), the tool's pairing. 'strict' = the spec's section 4.2 as first written.
+    s.add_argument('--e2', choices=['ruled', 'strict', 'legacy'], default='ruled')
     s.add_argument('--out', required=True)
     # DS-B (b): the tool dates from UTC. 'instrument' reproduces the measurement's GMT+8 ages.
     s.add_argument('--dates', choices=['utc', 'instrument'], default='utc')
     r = sub.add_parser('replay')
     r.add_argument('--kinds', choices=['kept', 'all'], default='kept')
-    r.add_argument('--e2', choices=['strict', 'legacy'], default='strict')
+    r.add_argument('--e2', choices=['ruled', 'strict', 'legacy'], default='strict')
     # Default 'instrument' so the replay reproduces replay_recall.py; the tool passes 'utc'.
     r.add_argument('--dates', choices=['utc', 'instrument'], default='instrument')
     a = ap.parse_args(argv)

@@ -15,11 +15,13 @@ i.e. E2_value_was_shipped). This script measures that for:
                    with the name rule as a LABEL (nothing dropped; top-level keys exempt)
   restricted_span+label -- the ruling's fallback: the span arm kept, but never inside a file name
                    or a link target; name rule as a label
-After the readings it prints the ruling's four checks (CHECK1/CHECK4 on the living set, CHECK2 and
-the CHECK3 listing with --all) for ruled(f) and for restricted_span+label.
+  no_span+sep+label -- information only, never ruled
+  ruled(g)      -- THE RULED READING (DS-A option (g), 2026-09-23 UTC) and the tool's behaviour: the
+                   restricted span arm plus the `unqualified` and `operator_context` labels
+After the readings it prints the (f)-round checks (CHECK1-CHECK4) and the (g)-round checks (G1-G4).
 
-Only `literal` is the tool's behaviour. The other readings are measured so a ruling can be made
-from numbers; none of them is adopted by this build. Record: docs/doc-scanner-build-spec-back.md.
+Only `ruled(g)` is the tool's behaviour (doc_scanner_candidates.e2_ruled). The other readings are
+kept so their published numbers stay reproducible. Record: docs/doc-scanner-build-spec-back.md.
 
 Run: PYTHONIOENCODING=utf-8 python tools/checks/measure/doc-scanner/pairing_variants.py [REV] [--all]
   --all  scan every non-archive doc (scan_head.py's population) instead of the living set, to see
@@ -68,7 +70,15 @@ VARIANTS = [
     # Eighth reading, INFORMATION ONLY, not ruled and not adopted: no span arm, and rule 1's
     # separator set extended with `"` and `{` -- the shapes of the span arm's correct pairings.
     ('no_span+sep+label', dict(span_arm=False, name_label=True, extra_sep=True)),
+    # Ninth reading: the RULED one, DS-A option (g), 2026-09-23 (UTC) -- the restricted span arm
+    # plus the `unqualified` and `operator_context` labels. This is what the tool runs.
+    ('ruled(g)', dict(span_arm='restricted', name_label=True, op_label=True)),
 ]
+# The span arm's three MIS-pairings, classified by hand in docs/doc-scanner-build-spec-back.md
+# section 7.2 (rows 11-13). Every other span-arm row there is a correct pairing.
+SPAN_MISPAIRINGS = {('docs/offline-whatif-replay-proposal.md', 42, 'scoring.atr_stop_multiplier', 1.0),
+                    ('docs/trade-store-downtime-repair-proposal.md', 234, 'version', 1.0),
+                    ('docs/trade-store-downtime-repair-spec-back.md', 38, 'version', 1.0)}
 
 print(f'REV={rev[:7]} {"ALL_NON_ARCHIVE_DOCS" if ALL_DOCS else "LIVING_DOCS"}={len(docs)} living_missing={missing}')
 print(f'E2 true_positive lines in the pre-registered labels: {len(tp_lines)}')
@@ -197,3 +207,43 @@ if ALL_DOCS:
                 pre = line[max(0, fx['key_col'] - 40):fx['key_col']]
                 print(f'  {p}:{l} key={fx["key_path"]} doc={fx["doc_value_text"]} live={fx["live_value"]}')
                 print(f'      ...{pre}[[{seg}]]{line[fx["value_col"] + len(fx["doc_value_text"]):][:40]}...')
+
+
+# ---------------------------------------------------------------------------------------------
+# The checks the orchestrator's ruling DS-A option (g) names. STOP conditions: G2 and G4 only.
+# ---------------------------------------------------------------------------------------------
+g = 'ruled(g)'
+print(f'=== DS-A option (g) checks')
+if not ALL_DOCS:
+    rows_g = [h for h in ROWS[g] if h[2] == 'E2_value_never_shipped']
+    unl = sorted({(h[0], h[1], h[3]) for h in rows_g if h[5]['qualified'] and not h[5]['operator_context']})
+    unq = sorted({(h[0], h[1]) for h in rows_g if not h[5]['qualified']})
+    opc = sorted({(h[0], h[1]) for h in rows_g if h[5]['qualified'] and h[5]['operator_context']})
+    print(f'G1 (advisory) living set: UNLABELLED never_shipped lines={len({(a, b) for a, b, c in unl})}  '
+          f'unqualified bucket={len(unq)}  operator_context bucket={len(opc)} {[f"{p}:{l}" for p, l in opc]}')
+    for p, l, det in unl:
+        print(f'    unlabelled {p}:{l} {det}')
+    n_rows, n_lines = len(was_rows_key(g)), len(was_set(g))
+    same_rows = was_rows_key(g) == was_rows_key('literal') == was_rows_key('legacy')
+    ids_g = [it['id'] for it in D.scan(rev, None, 'ruled')['items'] if it['arm'] == 'VALUE']
+    ids_s = [it['id'] for it in D.scan(rev, None, 'strict')['items'] if it['arm'] == 'VALUE']
+    ok4 = same_rows and n_rows == 22 and n_lines == 20 and ids_g == ids_s
+    print(f'G4 {"PASS" if ok4 else "FAIL"} living set: was_shipped rows={n_rows} lines={n_lines} (need 22/20); '
+          f'rows identical to literal and legacy={same_rows}; VALUE item ids identical to --e2 strict='
+          f'{ids_g == ids_s} ({len(ids_g)} ids)')
+else:
+    lit, gg = was_rows_set('literal'), was_rows_set(g)
+    lost = sorted(lit - gg)
+    span_rows = was_rows_set('literal') - was_rows_set('no_span')
+    correct_span = span_rows - SPAN_MISPAIRINGS
+    ver_lines = sorted(was_set('no_span') - was_set('no_span+nq'))
+    ok2 = not lost and correct_span <= gg and all(v in was_set(g) for v in ver_lines)
+    print(f'G2 {"PASS" if ok2 else "FAIL"} all docs: was_shipped rows lost vs literal={len(lost)} {lost}; '
+          f'correct span-arm rows present={len(correct_span & gg)}/{len(correct_span)}; '
+          f'`version` lines present={sum(1 for v in ver_lines if v in was_set(g))}/{len(ver_lines)}; '
+          f'rows gained vs literal={len(gg - lit)}')
+    for r in sorted(SPAN_MISPAIRINGS):
+        hs = [h for h in ROWS[g] if (h[0], h[1], h[5]['key_path'], h[5]['doc_value']) == r]
+        state = (f'still JUDGED as {hs[0][2]}, labels qualified={hs[0][5]["qualified"]} '
+                 f'operator_context={hs[0][5]["operator_context"]}') if hs else 'BLOCKED (no pair)'
+        print(f'G3 (report) mis-pairing {r[0]}:{r[1]} {r[2]}={r[3]:g}: {state}')
