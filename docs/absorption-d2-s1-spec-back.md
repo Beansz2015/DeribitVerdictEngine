@@ -158,6 +158,8 @@ GATE PASSED
 | **Q-2** | `TouchCrossed` has no Stage 2 option in `docs/d6d-episode-continuity-spec.md` §5 | (a) add a row when Stage 1's read shows its share · (b) add it now | **(a).** Adding a fix option before any data is the design-invention the spec warns against. I have no read on whether crossing without a break should keep an episode open |
 | **Q-3** | Acceptance item 6 (two real sidecar lines) | (a) check on the collector after the deploy · (b) run the app locally first | ⭐ **(a).** The tracked `settings.json` has `signal_bridge.enabled: true` with an output path under `C:\Dev\DeribitBridge\`. A local run writes the live bridge file. I did not run it |
 
+✅ **RULED 2026-09-24 (UTC), trader, all as read:** `Q-1` = (a): leave `window_sec`; fence and delete it in ONE later settings change (reserved; not scheduled). `Q-2` = (a): add a `TouchCrossed` option only after the Stage 1 read. `Q-3` = (a): check the two sidecar lines on the collector after the deploy.
+
 ---
 
 ## 3. Spec-back proper

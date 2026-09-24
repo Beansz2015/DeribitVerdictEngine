@@ -180,6 +180,8 @@ A clean folder (three books, spans in order) printed `BOOKS = 3`, two `no overla
 | **Q-4** | The advisory rider-travel check's first run (`docs/rider-travel-check-spec.md` §1: "runs before that commit") | (a) run it now, before the push, against the pre-rotation ledger · (b) skip it for this rotation | ⭐ **(a), before the push.** It is still possible: `-BeforeRev 14b6179 -AfterFile AnalysisLogger.vb -LedgerPath <the ledger as of 14b6179>`. The baseline must be written first, by whoever runs it. Not run by me: its first run is a one-time measurement |
 | ~~**Q-5**~~ | `absorption_episodes.log` was not in `collector.ps1`'s `$FetchFiles` | (a) add it · (b) leave it | ✅ **AUTO-PROCEEDED (a)** in the follow-up commit: one line in `tools/ops`, undone by one revert, no live surface. Without it the Stage 1 read could not be fetched. Listed so you can overrule it |
 
+✅ **RULED 2026-09-24 (UTC), trader, all as read:** `Q-1` = (a): the three `tools/BacktestRunner/` schema edits are accepted (orchestrator checked: gap-repair files are not in the diff). `Q-2`: as the S1 packet's `Q-1`. `Q-3` = (a): keep `-1`. `Q-4` = (a): run the rider-travel check before the push; the orchestrator runs it, baseline first. `Q-5`: auto-proceed not overruled. ⛔ **The deploy is HELD by the trader** (2026-09-24).
+
 ---
 
 ## 3. Spec-back proper
