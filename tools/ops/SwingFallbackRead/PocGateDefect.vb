@@ -7,6 +7,16 @@ Option Infer On
 ' MEDIUM-tier bug hunt, session 1 (docs/medium-tier-bug-hunt-2026-09-16.md). The default mode
 ' and --mode stability are untouched.
 '
+' ⛔ READS BACKWARDS FROM a6b33fe ON (2026-09-24, trader-ruled Q-1 in
+' docs/engine-fix-session-a-spec-back.md). This mode was written against the DEFECTIVE gate.
+' a6b33fe fixed the gate in SignalEmitter, so on a tree at or after it:
+'   * "as shipped"        = the FIXED gate (it reproduces the logged Placed* only on rows
+'                           written by a pre-fix build where the fix changes nothing);
+'   * "swapped" / counterfactual = the OLD, DEFECTIVE gate.
+' The flip and move counts keep their size; their direction label inverts. The fix's own
+' verification is in docs/engine-fix-session-a-spec-back.md (handle H-3 at base a3c9079).
+' The method notes below describe the pre-fix tree and are kept as written.
+'
 ' The defect. CalcVPFRLite labels price inside hvn_proximity_pct BELOW the POC as
 ' NEAR_HVN_SUPPORT and at or ABOVE the POC as NEAR_HVN_RESIST (Core/Indicators_Structure.vb:171-176,
 ' and its spec at introduction, 508f33d). The POC-tier gate in
@@ -93,7 +103,8 @@ Partial Module SwingFallbackReadProgram
                                            weekOpenHour As Integer, weekCloseHourExcl As Integer,
                                            outPath As String) As Task(Of Integer)
         Dim o As New StringBuilder()
-        o.Append(header.ToString().Replace("# SwingFallbackRead output", "# SwingFallbackRead output: --mode pocgate (POC-tier gate defect, share of rows affected)"))
+        o.Append(header.ToString().Replace("# SwingFallbackRead output", "# SwingFallbackRead output: --mode pocgate (POC-tier gate defect, share of rows affected)" & vbLf & vbLf &
+            "> NOTE: from a6b33fe on, 'as shipped' is the FIXED gate and the swap is the OLD defect. See the header of tools/ops/SwingFallbackRead/PocGateDefect.vb."))
         o.AppendLine("- Read: docs/medium-tier-bug-hunt-2026-09-16.md. Stop rule: docs/medium-tier-diagnosis-brief-2026-09-16.md section 0.")
         o.AppendLine(String.Format(Inv, "- Tolerance for every logged-versus-recomputed comparison: {0} USD (the CSV prints F2).", PgTol))
         o.AppendLine(String.Format(Inv, "- Step 5c floor: scoring.trade_costs EffectiveMinMovePct = {0} of price.", cfg.Scoring.TradeCosts.EffectiveMinMovePct))

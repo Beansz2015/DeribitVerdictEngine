@@ -166,11 +166,15 @@ GATE PASSED
 
 ### `Q-C1` — should the card also show the effect as TEXT on the three colour sites?
 
+✅ **RULED 2026-09-24 (UTC), trader: NO.** The card keeps its words; only the colours follow the effect.
+
 - **Fact:** the meter, the signal row and the footer show the momentum word plus a colour. Only the FUNDING group row shows `Effect=-1[L]` as text.
 - **Options:** (a) leave as built · (b) add the effect to the signal row's note (`step 3b` → `3b -1[L]`) and the footer tag.
 - **My read (hypothesis): (a).** The ruling is colour; the text is one card group away. (b) moves more rendered text for no new information. I have no strong view; it is a display preference.
 
 ### `Q-C2` — unpinned card colour map (`E-1`)
+
+✅ **RULED 2026-09-24 (UTC), trader: ACCEPTED.** The three-line Tone→colour map stays covered by review only.
 
 - **Options:** (a) accept review-only cover · (b) move the Tone → colour choice behind an enum-to-name map in Core so a fixture can pin it.
 - **My read: (a).** Three lines, one owner file, and the accents are the same ones the old rule used. Flagged so it is a choice, not an accident.

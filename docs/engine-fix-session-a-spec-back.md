@@ -166,6 +166,8 @@ GATE PASSED
 
 ### `Q-1` — `tools/ops/SwingFallbackRead --mode pocgate` now reads backwards
 
+✅ **RULED 2026-09-24 (UTC), trader: YES, add the note.** Done by the orchestrator: a header note in `tools/ops/SwingFallbackRead/PocGateDefect.vb` and a one-line note in the mode's output header. No change to the method.
+
 - **Fact:** the mode swaps the `NEAR_HVN_*` labels and calls the shipped `ComputeSideLevels`. It calls the swapped result "the gate its spec describes". After `a6b33fe` the shipped gate IS the spec's gate, so the swap now reproduces the OLD gate. The report's headings are now wrong, and its flip tables read 0 (`H-2`).
 - **Options:** (a) leave the tool; the 2026-09-16 output doc stays the record · (b) add a one-line header note in the mode's output · (c) invert the mode so it compares the fixed gate against the pre-fix gate explicitly.
 - **My read (hypothesis): (b).** Tools-only, reversible, no data effect, so auto-proceed class — but it is outside Session A's four-file touch list, so I did not do it. It is also the instrument behind `H-2` and bug-hunt `H-3`, so a wrong heading could mislead a later reviewer.
