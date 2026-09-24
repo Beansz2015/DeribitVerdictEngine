@@ -46,7 +46,12 @@ param(
     # Withholds every per-item verdict from the console (the output file still holds them).
     [switch]$CountersOnly,
     # Prints each call's state KEY NAMES and uid only -- never content, never the API key.
-    [switch]$DebugState
+    [switch]$DebugState,
+    # TEST SEAM ONLY (added 2026-09-24 UTC by the second reader, the pattern the other four
+    # harnesses already carry): forwarded to Invoke-Jev's -TransportOverride, so the WAF and
+    # retry paths can be exercised with synthetic answers and zero spend. A real run never
+    # passes it.
+    [scriptblock]$TestTransportOverride = $null
 )
 
 $ErrorActionPreference = 'Stop'
@@ -152,7 +157,7 @@ function Invoke-Verdict([string]$key, $it) {
             }
         }
     }
-    $call = Invoke-Jev $key $body
+    $call = Invoke-Jev $key $body 3 1 $TestTransportOverride
     if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked } }
     $ans = $call.Response.answers
     $probs = @{}
@@ -188,9 +193,13 @@ foreach ($it in $items) {
         $sampleResults.Add($r)
     }
     if ($blocked) {
+        # A loop, not Measure-Object -Property: PS 5.1's Measure-Object cannot see hashtable
+        # keys, so a block on sample 2+ threw under ErrorActionPreference=Stop and aborted the
+        # whole run (second-reader finding, 2026-09-24 UTC).
+        $blockedIn = 0; foreach ($s in $sampleResults) { $blockedIn += $s.UsageIn }
         $results.Add([ordered]@{ id = [string]$it.id; verdict = 'WAF_BLOCKED'; agreement_rate = $null; stable = $null
                                  mean_top_probability = $null; sample_verdicts = @(); sample_top_probabilities = @()
-                                 usage_input_tokens = ($sampleResults | Measure-Object -Property UsageIn -Sum).Sum; seat_label = $labels[[string]$it.id] })
+                                 usage_input_tokens = $blockedIn; seat_label = $labels[[string]$it.id] })
         continue
     }
     $counts = @{}
@@ -218,6 +227,7 @@ $sw.Stop()
 "USAGE_INPUT_TOKENS=$totalIn"
 "COST_USD_AT_0.042_PER_MTOK_INPUT=$([math]::Round($totalIn * 0.042 / 1000000, 6))"
 "WALL_TIME_SEC=$([math]::Round($sw.Elapsed.TotalSeconds, 2))"
+Get-JevModelLine
 "ITEMS_JUDGED=$(@($results | Where-Object { $_.verdict -ne 'WAF_BLOCKED' }).Count) WAF_BLOCKED=$(@($results | Where-Object { $_.verdict -eq 'WAF_BLOCKED' }).Count) UNSTABLE=$(@($results | Where-Object { $_.stable -eq $false }).Count)"
 if (-not $CountersOnly) {
     "ID | VERDICT (modal) | AGREEMENT | MEAN_TOP_P | INPUT_TOKENS"
@@ -226,6 +236,7 @@ if (-not $CountersOnly) {
 if (-not [string]::IsNullOrWhiteSpace($OutPath)) {
     $out = [ordered]@{
         rev = $popRev; population = $Population; baseline = $Baseline; samples = $Samples; model = 'jev-latest'
+        jev_model = ((Get-JevModelLine) -replace '^JEV_MODEL ', '')
         question = [ordered]@{ id = 'verdict'; type = 'choice'; instructions = $QUESTION_INSTRUCTIONS; criteria = $CRITERIA }
         calls = $calls; usage_input_tokens = $totalIn; wall_time_sec = [math]::Round($sw.Elapsed.TotalSeconds, 2)
         items = $results

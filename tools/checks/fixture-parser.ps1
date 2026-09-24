@@ -1034,8 +1034,12 @@ $typeEndRe = '(?i)^End\s+(Class|Module|Structure|Interface)\b'
 
 # Innermost enclosing Class/Module/Structure/Interface name per line, cached per file.
 $typeAtCache = @{}
+# Unary comma on BOTH returns (second-reader sweep RT-U4, 2026-09-24 UTC): a one-line file
+# gives a one-element string[], which a bare `return` unwraps to a [string]; `$typeAt[$i]`
+# would then index its CHARACTERS. Every caller assigns directly (`$typeAt = Get-FileTypeAt`)
+# and never wraps in @(), which would nest the array.
 function Get-FileTypeAt($ctx) {
-    if ($typeAtCache.ContainsKey($ctx.Path)) { return $typeAtCache[$ctx.Path] }
+    if ($typeAtCache.ContainsKey($ctx.Path)) { return ,$typeAtCache[$ctx.Path] }
     $typeAt = New-Object string[] $ctx.N
     $tstack = New-Object System.Collections.Generic.Stack[string]
     for ($i = 0; $i -lt $ctx.N; $i++) {
@@ -1049,7 +1053,7 @@ function Get-FileTypeAt($ctx) {
         $typeAt[$i] = if ($tstack.Count -gt 0) { $tstack.Peek() } else { $null }
     }
     $typeAtCache[$ctx.Path] = $typeAt
-    return $typeAt
+    return ,$typeAt
 }
 
 # The parameter names of the declaration whose statement starts at $lineIdx.
@@ -2179,6 +2183,7 @@ function Write-Coverage([int]$judged) {
     "SITES_GAINED_COVERAGE=$sitesGainedCoverage"
     "SITES_WITH_COMMENT_BEFORE=$sitesWithCommentBefore"
     "SITES_WITH_COMMENT_AFTER=$sitesWithCommentAfter"
+    Get-JevModelLine
 
     # [2026-09-22] THE SILENT-HOLE FIX. FP-Q1's scope filter decides WHICH sites the seat
     # ever writes a baseline line for, so an over-eager exclusion shapes the measured
@@ -2408,7 +2413,9 @@ if ($null -ne $baselineRaw) {
 # any FP-1/FP-2 call.
 $unbaselinedItems = New-Object System.Collections.Generic.List[string]
 # -Fp2Only (revision 4): FP-1 sites are not judged this run, so they are not gated either.
-$fp1JudgedSites = if ($Fp2Only) { @() } else { $residualSites }
+# @() around the WHOLE if-expression (sweep RT-U4): one residual site would otherwise unwrap
+# to a bare PSCustomObject, whose .Count is $null in PS 5.1.
+$fp1JudgedSites = @(if (-not $Fp2Only) { $residualSites })
 foreach ($cs in $fp1JudgedSites) { $bid = Get-Fp1Id $cs; if (-not $baseline.ContainsKey($bid)) { [void]$unbaselinedItems.Add($bid) } }
 foreach ($f2 in $fp2Items) { if (-not $baseline.ContainsKey($f2.SubName)) { [void]$unbaselinedItems.Add($f2.SubName) } }
 if ($unbaselinedItems.Count -gt 0 -and -not $AllowUnbaselinedItems) {
@@ -2821,6 +2828,7 @@ if (-not $CountersOnly) {
 }
 $reportLines.Add("| USAGE_INPUT_TOKENS | $usageInputTokens |")
 $reportLines.Add("| USAGE_OUTPUT_TOKENS | $usageOutputTokens |")
+$reportLines.Add("| JEV_MODEL | $((Get-JevModelLine) -replace '^JEV_MODEL ', '') |")
 $reportLines.Add("| WALL_TIME_SEC | $([math]::Round($sw.Elapsed.TotalSeconds,2)) |")
 $reportLines.Add('')
 if (-not $CountersOnly) {

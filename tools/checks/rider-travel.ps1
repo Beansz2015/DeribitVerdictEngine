@@ -454,6 +454,7 @@ foreach ($r in $jevRiders) {
 if ($apiFailed) {
     Write-Coverage $ridersInLedger $ridersTravelling $results.Count $beforeCols.Count $afterCols.Count $addedCols.Count $removedCols.Count
     "RETRY_COUNT=$usageRetries"
+    Get-JevModelLine
     "EXIT_REASON=API_FAILED"
     $apiFailMsg
     exit 2
@@ -466,6 +467,7 @@ Write-Coverage $ridersInLedger $ridersTravelling $results.Count $beforeCols.Coun
 "USAGE_INPUT_TOKENS=$usageInputTokens"
 "RETRY_COUNT=$usageRetries"
 "RIDERS_WAF_BLOCKED=$ridersWafBlocked"
+Get-JevModelLine
 
 # REVISION 2 (finding 6, docs/jev-harnesses-adversarial-review-2026-09-22.md: "an OK-class
 # misread passes the exit code"). not_a_header_column is a LEGITIMATE, common verdict --
@@ -520,6 +522,7 @@ $reportLines.Add("| COLUMNS_REMOVED | $($removedCols.Count) |")
 $reportLines.Add("| USAGE_INPUT_TOKENS | $usageInputTokens |")
 $reportLines.Add("| RETRY_COUNT | $usageRetries |")
 $reportLines.Add("| RIDERS_WAF_BLOCKED | $ridersWafBlocked |")
+$reportLines.Add("| JEV_MODEL | $((Get-JevModelLine) -replace '^JEV_MODEL ', '') |")
 $reportLines.Add("| RIDERS_NOT_A_HEADER_COLUMN | $notAHeaderColumn (STABLE=$notAHeaderColumnStable) |")
 $reportLines.Add('')
 if ($addedCols.Count -gt 0) { $reportLines.Add('**Added:** ' + ($addedCols -join ', ')); $reportLines.Add('') }

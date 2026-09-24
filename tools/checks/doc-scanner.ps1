@@ -136,6 +136,7 @@ function Write-Coverage([int]$itemsJudged, [int]$jevCalls, [long]$usageIn, [doub
     "VALUE_NEVER_SHIPPED_CODE_ONLY=$($counts.VALUE_NEVER_SHIPPED_CODE_ONLY)  VALUE_UNQUALIFIED_NEVER_SHIPPED=$($counts.VALUE_UNQUALIFIED_NEVER_SHIPPED)  VALUE_OPERATOR_NEVER_SHIPPED=$($counts.VALUE_OPERATOR_NEVER_SHIPPED)"
     "CFG_MEMBER_MISSING=$($counts.CFG_MEMBER_MISSING)  LINE_PAST_EOF=$($counts.LINE_PAST_EOF)  DATED_STATE_OVER_HORIZON=$($counts.DATED_STATE_OVER_HORIZON)  NEXT_FREE_FAMILY_STALE=$($counts.NEXT_FREE_FAMILY_STALE)  NEXT_FREE_FAMILY_CLAIMS=$($counts.NEXT_FREE_FAMILY_CLAIMS)"
     "ITEMS_JUDGED=$itemsJudged  JEV_CALLS=$jevCalls  USAGE_INPUT_TOKENS=$usageIn  WALL_TIME_SEC=$([math]::Round($wallSec, 2))"
+    Get-JevModelLine
 }
 
 # ---------------------------------------------------------------------------------------------

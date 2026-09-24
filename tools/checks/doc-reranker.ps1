@@ -27,11 +27,14 @@
   winner is never reordered by date.
 
   ACCEPTANCE / RESERVED (harness-shadow-mode-protocol.md section 4a): a judged RESERVED
-  query is spent for good. -AcceptanceRun refuses to run unless the question set names
-  exactly 8 acceptance-subset queries, and only ever reads that subset -- it never touches
-  a reserved-subset row. -Query (live, single free-text question) is unrestricted, because
-  a live query is not one of the 29 measured questions and carries no baseline to
-  contaminate.
+  query is spent for good. -AcceptanceRun (default -Subset acceptance) refuses to run unless
+  the question set names exactly 8 acceptance-subset queries, and reads only that subset.
+  -Subset reserved (added 474c2e1) is the seat's measured run. Since 2026-09-24 (second
+  reader) it is gated by the tracked ledger docs/harness-runs/doc-reranker-spent-queries.json:
+  it refuses if any selected id is already there (RESERVED_QUERY_SPENT, exit 2, before the key
+  is read) and records each id there before that id's first Jev call. -Query is unrestricted,
+  but it warns loudly (WARNING_RESERVED_QUERY=) when its text is a reserved query verbatim,
+  and records that id as spent.
 
   SAMPLING: the acceptance measurement samples the per-(query,candidate) Noul 5 times
   (self-consistency, harness-shadow-mode-protocol.md section 4b -- every harness in this
@@ -61,7 +64,16 @@ param(
     [string]$QueryFile = 'docs/harness-runs/doc-reranker-20260923T1930Z-queries.json',
     [string]$Python = 'python',
     [ValidateSet('acceptance', 'reserved')][string]$Subset = 'acceptance',
-    [string[]]$ExcludeIds = @()
+    # Comma-separated values are split: `powershell -File` passes `-ExcludeIds Q11,Q12` as ONE
+    # string, which before 2026-09-24 excluded nothing.
+    [string[]]$ExcludeIds = @(),
+    # The tracked SPENT-QUERY LEDGER (second reader, 2026-09-24 UTC). A reserved query judged
+    # once is spent for good (harness-shadow-mode-protocol.md section 4a). -Subset reserved
+    # refuses any spent id, and appends each id it judges BEFORE its first Jev call.
+    [string]$SpentLedger = 'docs/harness-runs/doc-reranker-spent-queries.json',
+    # TEST SEAM ONLY, the pattern harnesses 1-4 carry: forwarded to Invoke-Jev's
+    # -TransportOverride. A real run never passes it.
+    [scriptblock]$TestTransportOverride = $null
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,6 +86,30 @@ function Resolve-RepoPath([string]$p) {
     return (Join-Path $repo $p)
 }
 
+$ExcludeIds = @($ExcludeIds | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+
+# ---- The spent-query ledger. Read and written as UTF-8 without a BOM. ----
+function Read-SpentLedger {
+    $full = Resolve-RepoPath $SpentLedger
+    if (-not (Test-Path $full)) { return $null }
+    $obj = [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    $ids = @{}
+    foreach ($e in @($obj.spent)) { if ($null -ne $e -and $e.id) { $ids[[string]$e.id] = $e } }
+    return $ids
+}
+function Add-SpentLedgerEntry([string]$id, [string]$how) {
+    $full = Resolve-RepoPath $SpentLedger
+    $obj = [PSCustomObject]@{ _note = 'Reserved doc-reranker queries already judged by Jev. Never re-judge one.'; spent = @() }
+    if (Test-Path $full) { $obj = [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8) | ConvertFrom-Json }
+    $list = New-Object System.Collections.Generic.List[object]
+    foreach ($e in @($obj.spent)) { if ($null -ne $e) { $list.Add($e) } }
+    if (@($list | Where-Object { $_.id -eq $id }).Count -gt 0) { return }
+    $list.Add([PSCustomObject]([ordered]@{ id = $id; spent_utc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd'); by = $how }))
+    $out = [ordered]@{ _note = [string]$obj._note; spent = $list.ToArray() }
+    [System.IO.File]::WriteAllText($full, ((ConvertTo-Json -InputObject $out -Depth 5) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+}
+function ConvertTo-QueryKey([string]$t) { (($t -replace '\s+', ' ').Trim()).ToLowerInvariant() }
+
 if (-not $Query -and -not $AcceptanceRun) {
     Write-Host "EXIT_REASON=NO_MODE"
     Write-Host "Pass -Query '<question>' for a live single query, or -AcceptanceRun for the M4 acceptance measurement (8 acceptance-subset queries only)."
@@ -85,12 +121,72 @@ if ($Query -and $AcceptanceRun) {
     exit 2
 }
 
+# ---- -Query: warn LOUDLY when the text is a reserved query verbatim (case and whitespace
+# folded). All code, before the key is read, so it is provable with no key.
+$reservedMatch = $null
+if ($Query) {
+    $qfFullW = Resolve-RepoPath $QueryFile
+    if (Test-Path $qfFullW) {
+        $qsetW = Get-Content -Raw -Encoding UTF8 -Path $qfFullW | ConvertFrom-Json
+        $qk = ConvertTo-QueryKey $Query
+        $reservedMatch = @($qsetW.queries | Where-Object { $_.subset -eq 'reserved' -and (ConvertTo-QueryKey $_.query) -eq $qk }) | Select-Object -First 1
+    }
+    if ($reservedMatch) {
+        $ledgerW = Read-SpentLedger
+        $wasSpent = ($null -ne $ledgerW) -and $ledgerW.ContainsKey([string]$reservedMatch.id)
+        Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        Write-Host "WARNING_RESERVED_QUERY=$($reservedMatch.id) already_spent=$wasSpent"
+        Write-Host "  This -Query text is reserved query $($reservedMatch.id) of $QueryFile, verbatim."
+        Write-Host "  Judging it spends it for good (harness-shadow-mode-protocol.md section 4a)."
+        if (-not $wasSpent) { Write-Host "  It is NOT yet in $SpentLedger. This run records it there before the first Jev call." }
+        Write-Host "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    }
+}
+
+# ---- -AcceptanceRun: every gate runs here, before the key is read.
+$acceptance = @()
+if ($AcceptanceRun) {
+    $qfFull = Resolve-RepoPath $QueryFile
+    $qset = Get-Content -Raw -Encoding UTF8 -Path $qfFull | ConvertFrom-Json
+    if ($Subset -eq 'reserved') {
+        # -Subset reserved: the SEAT's measured run (doc-reranker-measurement-plan.md step M4).
+        $ledger = Read-SpentLedger
+        if ($null -eq $ledger) {
+            Write-Host "EXIT_REASON=SPENT_LEDGER_MISSING"
+            Write-Host "No spent-query ledger at '$SpentLedger'. A reserved run cannot prove it re-judges nothing. Nothing was judged."
+            exit 2
+        }
+        $acceptance = @($qset.queries | Where-Object { $_.subset -eq 'reserved' -and $ExcludeIds -notcontains $_.id })
+        $spentSel = @($acceptance | Where-Object { $ledger.ContainsKey([string]$_.id) } | ForEach-Object { [string]$_.id })
+        Write-Host "SUBSET=reserved  QUERIES=$($acceptance.Count)  EXCLUDED=$($ExcludeIds -join ',')  SPENT_IN_SELECTION=$($spentSel.Count)"
+        if ($spentSel.Count -gt 0) {
+            Write-Host "EXIT_REASON=RESERVED_QUERY_SPENT"
+            Write-Host "These reserved ids are already in '$SpentLedger' and can never be judged again: $($spentSel -join ',')"
+            Write-Host "Nothing was judged. Pass them in -ExcludeIds to run the rest."
+            exit 2
+        }
+        if ($acceptance.Count -eq 0) {
+            Write-Host "EXIT_REASON=NO_QUERIES"
+            Write-Host "No unspent reserved query is selected. Nothing was judged."
+            exit 2
+        }
+    } else {
+        $acceptance = @($qset.queries | Where-Object { $_.subset -eq 'acceptance' })
+        if ($acceptance.Count -ne 8) {
+            Write-Host "EXIT_REASON=ACCEPTANCE_SET_UNEXPECTED"
+            Write-Host "Expected 8 acceptance-subset queries in $QueryFile, found $($acceptance.Count). Refusing -- this run's numbers are specced against exactly 8."
+            exit 2
+        }
+    }
+}
+
 $apiKey = $env:TYPESAFE_API_KEY
 if ([string]::IsNullOrWhiteSpace($apiKey)) {
     Write-Host "EXIT_REASON=API_FAILED"
     Write-Host "TYPESAFE_API_KEY is not set. Load it first: set -a; . ./typesafe.local.env; set +a"
     exit 2
 }
+if ($Query -and $reservedMatch) { Add-SpentLedgerEntry ([string]$reservedMatch.id) "-Query verbatim match, $((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))" }
 
 $answerCriteria = [ordered]@{
     true  = 'The section states, describes, or directly implies the specific fact, ruling, value, or reason the query asks about -- a reader who reads only this section would learn the answer.'
@@ -115,7 +211,7 @@ function Invoke-SectionNoul([string]$key, [string]$q, $cand, [int]$samples, [swi
         # single probability directly under .noul, not a labelled .choice + .probabilities.
         $qdef = @{ type = 'noul'; criteria = $answerCriteria
                    instructions = 'Read the query and this one document section. Does this section answer the query -- does it state the specific fact, ruling, value or reason asked about?' }
-        $call = Invoke-Jev $key @{ model = 'jev-latest'; state = $state; questions = @{ answers = $qdef } }
+        $call = Invoke-Jev $key @{ model = 'jev-latest'; state = $state; questions = @{ answers = $qdef } } 3 1 $TestTransportOverride
         if (-not $call.Ok) { return @{ Ok = $false; Error = $call.Error; WafBlocked = $call.WafBlocked } }
         $v = $call.Response.answers.answers
         $noul = [double]$v.noul
@@ -180,12 +276,13 @@ if ($Query) {
 
     $cands = @($sl.shortlist)
     $means = New-Object System.Collections.Generic.List[double]
-    $jevCalls = 0; $usageIn = [long]0
+    $jevCalls = 0; $usageIn = [long]0; $sectionsWaf = 0
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     foreach ($c in $cands) {
         $r = Invoke-SectionNoul $apiKey $Query $c $Samples
         if (-not $r.Ok) {
-            if ($r.WafBlocked) { $means.Add(-1.0); continue }
+            # A blocked section ranks LAST (noul -1) and is COUNTED -- it was silent before 2026-09-24.
+            if ($r.WafBlocked) { $means.Add(-1.0); $sectionsWaf++; continue }
             Write-Host "EXIT_REASON=API_FAILED"; Write-Host "Jev request failed for $($c.id): $($r.Error)"; exit 2
         }
         $means.Add($r.MeanNoul); $jevCalls += $r.Calls; $usageIn += $r.InputTokens
@@ -200,7 +297,7 @@ if ($Query) {
                             $naState["candidate_$i`_excerpt"] = ($t.Cand.text.Substring(0, [Math]::Min(600, $t.Cand.text.Length))) }
     $naQ = @{ type = 'noul'; criteria = $noAnswerCriteria
               instructions = 'Read the query and the listed candidate sections (path, heading, excerpt). Does ANY of them answer the query?' }
-    $naCall = Invoke-Jev $apiKey @{ model = 'jev-latest'; state = $naState; questions = @{ any_answer = $naQ } }
+    $naCall = Invoke-Jev $apiKey @{ model = 'jev-latest'; state = $naState; questions = @{ any_answer = $naQ } } 3 1 $TestTransportOverride
     $sw.Stop()
     $noAnswerVerdict = 'API_FAILED'
     if ($naCall.Ok) {
@@ -211,7 +308,8 @@ if ($Query) {
     }
 
     Write-Host "NO_ANSWER_NOUL(any_answer)=$noAnswerVerdict"
-    Write-Host "JEV_CALLS=$jevCalls  USAGE_INPUT_TOKENS=$usageIn  WALL_TIME_SEC=$([math]::Round($sw.Elapsed.TotalSeconds,2))"
+    Write-Host "JEV_CALLS=$jevCalls  USAGE_INPUT_TOKENS=$usageIn  WALL_TIME_SEC=$([math]::Round($sw.Elapsed.TotalSeconds,2))  SECTIONS_WAF_BLOCKED=$sectionsWaf"
+    Write-Host (Get-JevModelLine)
     Write-Host "TOP $($top5.Count):"
     $rank = 0
     foreach ($t in $top5) {
@@ -225,7 +323,8 @@ if ($Query) {
     $logEntry = [ordered]@{
         ts_utc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
         query = $Query; rev = $sl.rev7; sampled_once = ($Samples -eq 1)
-        no_answer_verdict = $noAnswerVerdict
+        no_answer_verdict = $noAnswerVerdict; sections_waf_blocked = $sectionsWaf
+        jev_model = ((Get-JevModelLine) -replace '^JEV_MODEL ', '')
         top5 = @($top5 | ForEach-Object { @{ path = $_.Cand.path; heading_chain = $_.Cand.heading_chain; noul = $_.Noul } })
     }
     $logFull = Resolve-RepoPath $LogPath
@@ -235,44 +334,37 @@ if ($Query) {
 }
 
 # =================================================================================================
-# MODE 2: -AcceptanceRun (M4). Acceptance-subset queries ONLY -- never the reserved subset
-# (harness-shadow-mode-protocol.md section 4a: a reserved query judged once is spent for good).
+# MODE 2: -AcceptanceRun (M4). -Subset acceptance (default) reads the 8 acceptance-subset
+# queries only. -Subset reserved is the SEAT's measured run; every gate for it ran above,
+# before the key was read (harness-shadow-mode-protocol.md section 4a: a reserved query
+# judged once is spent for good).
 # =================================================================================================
-$qfFull = Resolve-RepoPath $QueryFile
-$qset = Get-Content -Raw -Encoding UTF8 -Path $qfFull | ConvertFrom-Json
-# -Subset reserved: the SEAT's measured run (doc-reranker-measurement-plan.md step M4). Spent
-# query ids (judged by Jev before this run) are passed in -ExcludeIds and never re-judged.
-if ($Subset -eq 'reserved') {
-    $acceptance = @($qset.queries | Where-Object { $_.subset -eq 'reserved' -and $ExcludeIds -notcontains $_.id })
-    Write-Host "SUBSET=reserved  QUERIES=$($acceptance.Count)  EXCLUDED=$($ExcludeIds -join ',')"
-} else {
-    $acceptance = @($qset.queries | Where-Object { $_.subset -eq 'acceptance' })
-}
-if ($Subset -ne 'reserved' -and $acceptance.Count -ne 8) {
-    Write-Host "EXIT_REASON=ACCEPTANCE_SET_UNEXPECTED"
-    Write-Host "Expected 8 acceptance-subset queries in $QueryFile, found $($acceptance.Count). Refusing -- this run's numbers are specced against exactly 8."
-    exit 2
-}
 if ($Samples -lt 1) { $Samples = 5 }
 
 $rows = New-Object System.Collections.Generic.List[object]
-$totalJevCalls = 0; $totalUsageIn = [long]0
+$totalJevCalls = 0; $totalUsageIn = [long]0; $sectionsWaf = 0
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
-$noAnswerReport = $null
+# EVERY no-answer query gets its own check and its own report line. Before 2026-09-24 one
+# variable held one report, and the kind test was `-eq 'nowhere'`, so `nowhere_trap:...`
+# (Q29) was never checked at all.
+$noAnswerReports = New-Object System.Collections.Generic.List[object]
+$runRev7 = $null
 
 foreach ($q in $acceptance) {
+    if ($Subset -eq 'reserved') { Add-SpentLedgerEntry ([string]$q.id) "-AcceptanceRun -Subset reserved, $((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))" }
     $slFile = [System.IO.Path]::GetTempFileName()
     & $Python (Join-Path $PSScriptRoot 'lib\doc_reranker_shortlist.py') shortlist --rev $Rev --query $q.query --k $K --out $slFile | Out-Null
     if ($LASTEXITCODE -ne 0) { Write-Host "EXIT_REASON=SHORTLIST_FAILED ($($q.id))"; exit 2 }
     $sl = Get-Content -Raw -Encoding UTF8 -Path $slFile | ConvertFrom-Json
     Remove-Item -Force $slFile -ErrorAction SilentlyContinue
+    if (-not $runRev7) { $runRev7 = [string]$sl.rev7 }
     $cands = @($sl.shortlist)
 
     $means = New-Object System.Collections.Generic.List[double]
     foreach ($c in $cands) {
         $r = Invoke-SectionNoul $apiKey $q.query $c $Samples
         if (-not $r.Ok) {
-            if ($r.WafBlocked) { $means.Add(-1.0); continue }
+            if ($r.WafBlocked) { $means.Add(-1.0); $sectionsWaf++; continue }
             Write-Host "EXIT_REASON=API_FAILED"; Write-Host "Jev request failed for $($q.id)/$($c.id): $($r.Error)"; exit 2
         }
         $means.Add($r.MeanNoul); $totalJevCalls += $r.Calls; $totalUsageIn += $r.InputTokens
@@ -298,13 +390,14 @@ foreach ($q in $acceptance) {
         Remove-Item -Force $bm25RankedFile, $rerankedFile, $expectedFile, $bm25ScoreFile, $rerankScoreFile -ErrorAction SilentlyContinue
     }
 
+    $isNoAnswer = ([string]$q.kind) -like 'nowhere*'
     $rows.Add([PSCustomObject]@{
-        Id = $q.id; Kind = $q.kind
+        Id = $q.id; Kind = $q.kind; Answerable = (-not $isNoAnswer)
         Bm25_1 = $bm25Score.'1'; Bm25_5 = $bm25Score.'5'; Bm25_10 = $bm25Score.'10'
         Rerank_1 = $rerankScore.'1'; Rerank_5 = $rerankScore.'5'; Rerank_10 = $rerankScore.'10'
     })
 
-    if ($q.kind -eq 'nowhere') {
+    if ($isNoAnswer) {
         $top5 = @($ordered | Select-Object -First $NoAnswerTopN)
         $naState = [ordered]@{ query = $q.query; sample_uid = [guid]::NewGuid().ToString('N').Substring(0,8) }
         $i = 0
@@ -312,17 +405,19 @@ foreach ($q in $acceptance) {
                                 $naState["candidate_$i`_excerpt"] = ($t.Cand.text.Substring(0, [Math]::Min(600, $t.Cand.text.Length))) }
         $naQ = @{ type = 'noul'; criteria = $noAnswerCriteria
                   instructions = 'Read the query and the listed candidate sections (path, heading, excerpt). Does ANY of them answer the query?' }
-        $naCall = Invoke-Jev $apiKey @{ model = 'jev-latest'; state = $naState; questions = @{ any_answer = $naQ } }
+        $naCall = Invoke-Jev $apiKey @{ model = 'jev-latest'; state = $naState; questions = @{ any_answer = $naQ } } 3 1 $TestTransportOverride
+        $naTop5 = @($top5 | ForEach-Object { "$($_.Cand.path) :: $($_.Cand.heading_chain)" })
         if ($naCall.Ok) {
             $totalJevCalls++
             if ($naCall.Response.usage.input_tokens) { $totalUsageIn += [long]$naCall.Response.usage.input_tokens }
             $naNoul = [double]$naCall.Response.answers.any_answer.noul
             $naVerdict = "noul=$([math]::Round($naNoul,3)) ($(if ($naNoul -ge 0.5) {'yes, an answer exists'} else {'no, none answers it'}))"
-            $noAnswerReport = [PSCustomObject]@{ Id = $q.id; Query = $q.query; Verdict = $naVerdict
-                                                  Top5 = @($top5 | ForEach-Object { "$($_.Cand.path) :: $($_.Cand.heading_chain)" }) }
+        } elseif ($naCall.WafBlocked) {
+            $naVerdict = 'WAF_BLOCKED'
         } else {
-            $noAnswerReport = [PSCustomObject]@{ Id = $q.id; Query = $q.query; Verdict = 'API_FAILED'; Top5 = @() }
+            $naVerdict = 'API_FAILED'
         }
+        $noAnswerReports.Add([PSCustomObject]@{ Id = $q.id; Kind = $q.kind; Query = $q.query; Verdict = $naVerdict; Top5 = $naTop5 })
     }
     Write-Host "DONE $($q.id)  bm25[1/5/10]=$($bm25Score.'1')/$($bm25Score.'5')/$($bm25Score.'10')  rerank[1/5/10]=$($rerankScore.'1')/$($rerankScore.'5')/$($rerankScore.'10')"
 }
@@ -331,45 +426,57 @@ $sw.Stop()
 function Pct($rows_, $field) {
     # @() wrap is load-bearing: a bare (pipe).Count returns $null, not 1, when exactly one
     # row survives Where-Object -- reproduced live (PS 5.1 single-element-array-unwrap trap).
-    $n = (@($rows_ | Where-Object { $_.$field -eq $true })).Count
-    "$n/$($rows_.Count) = $([math]::Round(100.0*$n/$rows_.Count,1))%"
+    # Piped, never @($rows_): in this PS 5.1 host @() of a New-Object List[object] throws
+    # "Argument types do not match" (reproduced 2026-09-24 UTC).
+    $all = @($rows_ | ForEach-Object { $_ })
+    if ($all.Count -eq 0) { return '0/0' }
+    $n = (@($all | Where-Object { $_.$field -eq $true })).Count
+    "$n/$($all.Count) = $([math]::Round(100.0*$n/$all.Count,1))%"
 }
+$answerableRows = @($rows | Where-Object { $_.Answerable })
 Write-Host ""
 Write-Host "BM25 alone   top1=$(Pct $rows Bm25_1)  top5=$(Pct $rows Bm25_5)  top10=$(Pct $rows Bm25_10)"
 Write-Host "BM25 + Jev   top1=$(Pct $rows Rerank_1)  top5=$(Pct $rows Rerank_5)  top10=$(Pct $rows Rerank_10)"
-Write-Host "JEV_CALLS=$totalJevCalls  USAGE_INPUT_TOKENS=$totalUsageIn  WALL_TIME_SEC=$([math]::Round($sw.Elapsed.TotalSeconds,2))"
-if ($noAnswerReport) {
-    Write-Host "NO_ANSWER_QUERY $($noAnswerReport.Id): verdict=$($noAnswerReport.Verdict)"
-    Write-Host "  top5 shown to the no-answer Noul: $($noAnswerReport.Top5 -join ' | ')"
+Write-Host "ANSWERABLE ONLY ($($answerableRows.Count)): BM25 top1=$(Pct $answerableRows Bm25_1) top10=$(Pct $answerableRows Bm25_10)  +Jev top1=$(Pct $answerableRows Rerank_1) top10=$(Pct $answerableRows Rerank_10)"
+Write-Host "JEV_CALLS=$totalJevCalls  USAGE_INPUT_TOKENS=$totalUsageIn  WALL_TIME_SEC=$([math]::Round($sw.Elapsed.TotalSeconds,2))  SECTIONS_WAF_BLOCKED=$sectionsWaf"
+Write-Host (Get-JevModelLine)
+Write-Host "NO_ANSWER_QUERIES=$($noAnswerReports.Count)"
+foreach ($na in $noAnswerReports) {
+    Write-Host "NO_ANSWER_QUERY $($na.Id): verdict=$($na.Verdict)"
+    Write-Host "  top5 shown to the no-answer Noul: $($na.Top5 -join ' | ')"
 }
 
 if (-not $OutPath) {
     $stamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
-    $OutPath = "docs/harness-runs/doc-reranker-acceptance-run-$stamp.md"
+    $OutPath = "docs/harness-runs/doc-reranker-$Subset-run-$stamp.md"
 }
 $rl = New-Object System.Collections.Generic.List[string]
-$rl.Add('# Doc re-ranker (harness 5) -- acceptance run (M4)')
+$rl.Add("# Doc re-ranker (harness 5) -- $Subset run (M4)")
 $rl.Add('')
-$rl.Add("Generated by ``tools/checks/doc-reranker.ps1 -AcceptanceRun`` at revision ``$Rev``, ``-Samples $Samples``, ``-K $K``.")
+$rl.Add("Generated by ``tools/checks/doc-reranker.ps1 -AcceptanceRun -Subset $Subset`` at revision ``$runRev7`` (``-Rev $Rev``), ``-Samples $Samples``, ``-K $K``.")
+if ($ExcludeIds.Count -gt 0) { $rl.Add(''); $rl.Add("Excluded ids: $($ExcludeIds -join ', ').") }
 $rl.Add('')
 $rl.Add('## Per query')
 $rl.Add('')
-$rl.Add('| Query | BM25 top1 | BM25 top5 | BM25 top10 | +Jev top1 | +Jev top5 | +Jev top10 |')
-$rl.Add('|---|---|---|---|---|---|---|')
-foreach ($r in $rows) { $rl.Add("| ``$($r.Id)`` | $($r.Bm25_1) | $($r.Bm25_5) | $($r.Bm25_10) | $($r.Rerank_1) | $($r.Rerank_5) | $($r.Rerank_10) |") }
+$rl.Add('| Query | Kind | BM25 top1 | BM25 top5 | BM25 top10 | +Jev top1 | +Jev top5 | +Jev top10 |')
+$rl.Add('|---|---|---|---|---|---|---|---|')
+foreach ($r in $rows) { $rl.Add("| ``$($r.Id)`` | $($r.Kind) | $($r.Bm25_1) | $($r.Bm25_5) | $($r.Bm25_10) | $($r.Rerank_1) | $($r.Rerank_5) | $($r.Rerank_10) |") }
 $rl.Add('')
-$rl.Add('## Totals (8 acceptance queries)')
+$rl.Add("## Totals ($($rows.Count) $Subset queries; $($answerableRows.Count) have an answer)")
 $rl.Add('')
-$rl.Add("- BM25 alone: top1 $(Pct $rows Bm25_1), top5 $(Pct $rows Bm25_5), top10 $(Pct $rows Bm25_10)")
-$rl.Add("- BM25 + Jev: top1 $(Pct $rows Rerank_1), top5 $(Pct $rows Rerank_5), top10 $(Pct $rows Rerank_10)")
+$rl.Add("- All $($rows.Count), BM25 alone: top1 $(Pct $rows Bm25_1), top5 $(Pct $rows Bm25_5), top10 $(Pct $rows Bm25_10)")
+$rl.Add("- All $($rows.Count), BM25 + Jev: top1 $(Pct $rows Rerank_1), top5 $(Pct $rows Rerank_5), top10 $(Pct $rows Rerank_10)")
+$rl.Add("- Answerable $($answerableRows.Count), BM25 alone: top1 $(Pct $answerableRows Bm25_1), top5 $(Pct $answerableRows Bm25_5), top10 $(Pct $answerableRows Bm25_10)")
+$rl.Add("- Answerable $($answerableRows.Count), BM25 + Jev: top1 $(Pct $answerableRows Rerank_1), top5 $(Pct $answerableRows Rerank_5), top10 $(Pct $answerableRows Rerank_10)")
 $rl.Add('')
-$rl.Add('## No-answer Noul, the one acceptance "nowhere" query')
+$rl.Add("## No-answer Noul, every no-answer query ($($noAnswerReports.Count))")
 $rl.Add('')
-if ($noAnswerReport) {
-    $rl.Add("- ``$($noAnswerReport.Id)``: *$($noAnswerReport.Query)* -- verdict ``$($noAnswerReport.Verdict)``")
-    $rl.Add("- top 5 shown: $($noAnswerReport.Top5 -join ' | ')")
-} else {
-    $rl.Add('- none found in the acceptance subset (unexpected -- check the question set).')
+if ($noAnswerReports.Count -eq 0) {
+    $rl.Add("- none found in the $Subset subset.")
+}
+foreach ($na in $noAnswerReports) {
+    $rl.Add("- ``$($na.Id)`` ($($na.Kind)): *$($na.Query)* -- verdict ``$($na.Verdict)``")
+    $rl.Add("  - top 5 shown: $($na.Top5 -join ' | ')")
 }
 $rl.Add('')
 $rl.Add('## Jev spend')
@@ -377,6 +484,8 @@ $rl.Add('')
 $rl.Add("- Jev calls: $totalJevCalls")
 $rl.Add("- Input tokens: $totalUsageIn")
 $rl.Add("- Wall time: $([math]::Round($sw.Elapsed.TotalSeconds,2)) s")
+$rl.Add("- Sections WAF-blocked (ranked last, never judged): $sectionsWaf")
+$rl.Add("- Model: $((Get-JevModelLine) -replace '^JEV_MODEL ', '')")
 Set-Content -Encoding UTF8 -Path (Resolve-RepoPath $OutPath) -Value ($rl -join "`r`n")
 Write-Host "Report written to $OutPath"
 exit 0

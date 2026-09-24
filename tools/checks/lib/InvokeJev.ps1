@@ -57,6 +57,32 @@
   ==========================================================================================
 #>
 
+#  ============================== REVISION 2 (2026-09-24 UTC) ==============================
+#  Second-reader item 3: every harness requests the alias `jev-latest`, which moves
+#  silently, so a run record could not say which model answered. Invoke-Jev now tallies the
+#  REQUESTED model (the body's `model`) and the RESOLVED model (the response's own `model`
+#  field) for every call, per run. Each harness prints Get-JevModelLine in its coverage block
+#  and writes it into its output file. The tally lives in the dot-sourcing script's scope,
+#  so one harness run = one tally.
+#  ==========================================================================================
+if ($null -eq $script:JevModelTally) { $script:JevModelTally = @{ requested = @{}; resolved = @{} } }
+function Add-JevModelTally([string]$kind, [string]$name) {
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = 'UNSET' }
+    $t = $script:JevModelTally[$kind]
+    if (-not $t.ContainsKey($name)) { $t[$name] = 0 }
+    $t[$name]++
+}
+function Format-JevModelTally([string]$kind) {
+    $t = $script:JevModelTally[$kind]
+    if ($t.Count -eq 0) { return 'none' }
+    return (@($t.Keys | Sort-Object | ForEach-Object { "$_ x$($t[$_])" }) -join ', ')
+}
+# One line, the same on every harness. `resolved` counts SUCCESSFUL calls only; `none`
+# means no call succeeded (or none was made). UNAVAILABLE means a response carried no model.
+function Get-JevModelLine {
+    "JEV_MODEL requested=[$(Format-JevModelTally 'requested')] resolved=[$(Format-JevModelTally 'resolved')] run_utc=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))"
+}
+
 function Invoke-Jev([string]$apiKey, [hashtable]$body, [int]$MaxRetries = 3, [double]$RetryBackoffBaseSec = 1, [scriptblock]$TransportOverride = $null) {
     $json = $body | ConvertTo-Json -Depth 12
     # See header comment above -- encoding the body ourselves is the fix, not a retry
@@ -96,10 +122,23 @@ function Invoke-Jev([string]$apiKey, [hashtable]$body, [int]$MaxRetries = 3, [do
         }
     }
 
+    [void](Add-JevModelTally 'requested' ([string]$body.model))
     $attempt = 0
     while ($true) {
         $result = Invoke-JevOneAttempt
-        if ($result.Ok) { $result.RetryCount = $attempt; return $result }
+        if ($result.Ok) {
+            $result.RetryCount = $attempt
+            # REVISION 2: the RESOLVED model. docs.typesafe.ai/api.md "Response body": `model`
+            # is required and names "the model that performed the evaluation" (e.g.
+            # jev-1.13.0). The request alias jev-latest moves silently, so this is the only
+            # record of which model answered. A response without it is tallied UNAVAILABLE.
+            $m = $null
+            if ($null -ne $result.Response) { $m = [string]$result.Response.model }
+            if ([string]::IsNullOrWhiteSpace($m)) { $m = 'UNAVAILABLE' }
+            $result.Model = $m
+            [void](Add-JevModelTally 'resolved' $m)
+            return $result
+        }
 
         # REVISION 1: transient iff HTTP 5xx, or no HTTP response reached at all (timeout /
         # connection reset / DNS failure -- Status stays $null on those). A WAF block is a

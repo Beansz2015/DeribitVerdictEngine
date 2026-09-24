@@ -541,6 +541,7 @@ function Write-Coverage([int]$walked, [int]$merges, [int]$preEraN, [int]$agreeT,
     "RESIDUAL_TOTAL=$resTotal"
     "RESIDUAL_PCT=$resPct"
     "COMMITS_JUDGED=$judged"
+    Get-JevModelLine
 }
 
 # ---------------------------------------------------------------------------------------
@@ -1156,6 +1157,7 @@ $reportLines.Add("| ESCALATION_WAF_BLOCKED | $escalationWafBlocked |")
 $reportLines.Add("| RETRY_COUNT | $usageRetries |")
 $reportLines.Add("| USAGE_INPUT_TOKENS | $usageInputTokens |")
 $reportLines.Add("| USAGE_OUTPUT_TOKENS | $usageOutputTokens |")
+$reportLines.Add("| JEV_MODEL | $((Get-JevModelLine) -replace '^JEV_MODEL ', '') |")
 $reportLines.Add("| WALL_TIME_SEC | $([math]::Round($sw.Elapsed.TotalSeconds,2)) |")
 $reportLines.Add('')
 if ($CountersOnly) {

@@ -20,8 +20,10 @@
 
   Usage (repo root; the key comes from the gitignored typesafe.local.env):
     set -a; . ./typesafe.local.env; set +a
-    powershell -NoProfile -File tools/checks/selftest/fixture-parser-fp2-mutation.ps1
-  Cost as measured 2026-09-23 (UTC): 30 calls. See the run record in
+    powershell -NoProfile -File tools/checks/selftest/fixture-parser-fp2-mutation.ps1 [-RenameTitles]
+  Cost as measured 2026-09-23 (UTC): 30 calls. -RenameTitles (2026-09-24) also rewrites each
+  mutated Sub's Check titles to the new name; run record
+  docs/harness-runs/fixture-parser-fp2-mutation-titles-2026-09-24.md. See the run record in
   docs/harness-runs/fixture-parser-fp2-mutation-2026-09-23.md.
 #>
 [CmdletBinding()]
@@ -29,7 +31,13 @@ param(
     # TEST SEAM ONLY -- forwarded to the harness's own -TestTransportOverride, so the
     # mutation plumbing can be dry-run with synthetic answers and zero spend. A real
     # mutation run never passes it.
-    [scriptblock]$TestTransportOverride = $null
+    [scriptblock]$TestTransportOverride = $null,
+    # TITLE RENAME (second reader, 2026-09-24 UTC; close-list step 6). The 2026-09-23 run left
+    # each body's Check("...") title carrying the ORIGINAL name, so a detector that only
+    # compared the Sub name against the title would score the same as one that read the
+    # assertions. With this switch each mutated Sub's Check titles are rewritten to match the
+    # NEW (wrong) name, so the only evidence against the name is the body's code.
+    [switch]$RenameTitles
 )
 $ErrorActionPreference = 'Continue'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
@@ -69,6 +77,30 @@ try {
         }
         if ($hits -ne 1) { "EXIT_REASON=MUTATION_MISSED -- '$orig' declaration found $hits times, need exactly 1."; exit 2 }
     }
+    if ($RenameTitles) {
+        # Titles in ASCII on purpose: PS 5.1 reads a BOM-less .ps1 as ANSI. Each keeps the ID
+        # prefix and spells out the new name's descriptive part.
+        $newTitles = @{
+            'A1_KellyInverseLeverage'                       = 'A1 Kelly inverse leverage'
+            'A3_MonthRolloverSplitsAndHeadersOnCreateOnly'  = 'A3 month rollover splits and headers on create only'
+            'A20a_HotReloadReMergesAndDeleteReverts'        = 'A20a hot reload re-merges and delete reverts'
+            'A20b_SequenceGapDetection'                     = 'A20b sequence gap detection'
+            'A23a_FundingMergeClipsOverreachButKeepsStored' = 'A23a funding merge clips overreach but keeps stored'
+            'A65c_AbsorptionEpisodeLifecycle'               = 'A65c absorption episode lifecycle'
+        }
+        foreach ($new in $mutations.Values) {
+            $decl = -1
+            for ($i = 0; $i -lt $lines.Length; $i++) { if ($lines[$i] -match "^\s*(?:Private|Public|Friend)?\s*Sub\s+$([regex]::Escape($new))\s*\(") { $decl = $i; break } }
+            $renamed = 0
+            for ($i = $decl + 1; $i -lt $lines.Length -and $lines[$i] -notmatch '^\s*End\s+Sub\b'; $i++) {
+                if ($lines[$i] -match '^(\s*Check\(")([^"]*)(".*)$') {
+                    "TITLE_RENAMED $new line $($i + 1): [$($Matches[2])] -> [$($newTitles[$new])]"
+                    $lines[$i] = $Matches[1] + $newTitles[$new] + $Matches[3]; $renamed++
+                }
+            }
+            if ($renamed -lt 1) { "EXIT_REASON=TITLE_RENAME_MISSED -- no Check(`"...`") title found in '$new'."; exit 2 }
+        }
+    }
     $copy = Join-Path $tmp 'Program.mutated.vb'
     [System.IO.File]::WriteAllLines($copy, $lines, (New-Object System.Text.UTF8Encoding($false)))
     "MUTATED_COPY_LINES=$($lines.Length) (real file lines: $(([System.IO.File]::ReadAllLines($real)).Length))"
@@ -84,7 +116,7 @@ try {
     $out = & $tool -SourceFile $copy -BaselinePath $baseline -SubFilter $filter -Fp2Only -Samples 5 -OutPath (Join-Path $tmp 'report.md') -TestTransportOverride $TestTransportOverride 2>&1
     $exitCode = $LASTEXITCODE
     $txt = @($out | ForEach-Object { [string]$_ })
-    $txt | Where-Object { $_ -match '^(EXIT_REASON|FP2_ONLY|USAGE_INPUT_TOKENS|USAGE_OUTPUT_TOKENS|WALL_TIME_SEC|SCOPE_JEV_CALLS|FP2_UNSTABLE|FP2_BAD_VERDICTS|FP2_WAF_BLOCKED|SITES_JUDGED)=?' } | Select-Object -Unique
+    $txt | Where-Object { $_ -match '^(EXIT_REASON|FP2_ONLY|USAGE_INPUT_TOKENS|USAGE_OUTPUT_TOKENS|WALL_TIME_SEC|SCOPE_JEV_CALLS|FP2_UNSTABLE|FP2_BAD_VERDICTS|FP2_WAF_BLOCKED|SITES_JUDGED|JEV_MODEL)=?' } | Select-Object -Unique
     "HARNESS_EXIT=$exitCode"
     ''
     '| Original name | Mutated name | Verdict (plurality of 5) | Agreement rate | Mean top prob | Min top prob | Sample verdicts | Flagged |'

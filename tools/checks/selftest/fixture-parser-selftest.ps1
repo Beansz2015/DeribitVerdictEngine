@@ -106,6 +106,23 @@ try {
     Assert-That 'C exits 1 (version 1 alone drives the exit code)' ($exitC -eq 1) "exit=$exitC"
     Assert-That 'C FP1_BAD_VERDICTS=1 while v2 said mechanism_declared_ok' (($txtC -match '(?m)^FP1_BAD_VERDICTS=1$') -and ($txtC -match '#18#threshold \[STABLE\] verdict=undeclared') -and ($txtC -match 'v2: verdict=mechanism_declared_ok')) 'C lines wrong'
 
+    # ---- D (second reader, 2026-09-24 UTC): ONE residual FP-1 site, and the model line ----
+    # A copy of the synthetic source with `threshold:=0.61` removed from line 18, so exactly
+    # one FP-1 site remains -- the single-element path of $fp1JudgedSites (sweep RT-U4). The
+    # line count is unchanged, so the item id keeps `#18#`. The synthetic transport's JSON
+    # carries no `model`, so JEV_MODEL must say UNAVAILABLE, never invent a version.
+    $oneSite = Join-Path $tmp 'synthetic-one-site.vb.txt'
+    $synLines = [System.IO.File]::ReadAllLines($synthetic, [System.Text.Encoding]::UTF8)
+    $synLines[17] = $synLines[17].Replace(', threshold:=0.61', '')
+    [System.IO.File]::WriteAllLines($oneSite, $synLines, (New-Object System.Text.UTF8Encoding($false)))
+    $global:FpSelftestCalls = 0; $global:FpSelftestMode = 'B'
+    $outD = & $tool -SourceFile $oneSite -BaselinePath $baselinePath -OutPath (Join-Path $tmp 'rD.md') -TestTransportOverride $transport 2>&1
+    $exitD = $LASTEXITCODE
+    $txtD = ($outD | ForEach-Object { [string]$_ }) -join "`n"
+    Assert-That 'D one residual site: exit 0, 10 calls (1 FP-1 + 1 FP-2 item, 5 samples each)' (($exitD -eq 0) -and ($global:FpSelftestCalls -eq 10)) "exit=$exitD calls=$($global:FpSelftestCalls)"
+    Assert-That 'D exactly one FP-1 row judged' (@($outD | Where-Object { [string]$_ -match '^  A902_SyntheticTfiNamed#18#.* verdict=' }).Count -eq 1) 'expected 1 FP-1 row'
+    Assert-That 'D JEV_MODEL line: 10 requested, resolved UNAVAILABLE' ($txtD -match '(?m)^JEV_MODEL requested=\[jev-latest x10\] resolved=\[UNAVAILABLE x10\] run_utc=') (($outD | ForEach-Object { [string]$_ } | Where-Object { $_ -like 'JEV_MODEL*' }) -join ' / ')
+
     ''
     'Selected harness output, check B:'
     $outB | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^(MAPPING_AMBIGUOUS_CALLEE_SITES|  CALLEE_MULTI_DECLARED|MARKED_SITES_|IN_SCOPE_MARKED_|  A902_\S+ \[|      v2:|FP1_BAD_VERDICTS|FP1V2_)' } | Select-Object -Unique
