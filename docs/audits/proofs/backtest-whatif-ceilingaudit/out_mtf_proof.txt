@@ -1,0 +1,11 @@
+seed  7: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed  1: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed  2: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed  3: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed  4: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed  5: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed  6: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed  8: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed  9: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+seed 10: mtfTrend disagreements  0/60, gatePassShort flips  0/60  []
+TOTAL mtfTrend disagreements 0/600, gatePassShort flips 0/600
