@@ -97,9 +97,18 @@ Namespace Global.DeribitVerdictEngine
         Private Const ChanAgg2 As String = "trades.BTC-PERPETUAL.agg2"
         Private Const HeartbeatSec As Integer = 30
 
-        ' Index cap. BTC-PERPETUAL runs well under 200k trades/day per channel; 400k entries
-        ' covers both channels for far longer than any REST poll needs to reach back.
-        Private Const IndexCap As Integer = 400000
+        ' Index cap. ⛔ Was 400,000 until 2026-09-24. MEASURED that day: ~0.9 KB per entry
+        ' (raw JSON string + key + record), about 48k entries per 29 min across 100ms + agg2,
+        ' so 400k would hold ~370 MB after ~5 h - more than the whole free RAM on the
+        ' 1 GB collector box this probe now runs beside. 40k = ~37 MB, about 24 min of tape
+        ' at that rate. A REST poll (every 10 s) and the 120 s pending grace reach back
+        ' seconds, not minutes, so 24 min is ample.
+        Private Const IndexCap As Integer = 40000
+        ' Raw-dump retention: keep the newest N rotated files and delete older ones, so an
+        ' unattended multi-day run cannot fill the collector box's disk (~320 MB/day
+        ' measured on 2026-09-21). Pairings carry both raw objects, so old dumps are not
+        ' needed for the answer.
+        Private Const RawDumpKeepFiles As Integer = 8
         ' A REST-flagged trade is only called MISSING once the stream is stamped this far
         ' past it AND this much wall clock has elapsed. Absence declared early is a lie.
         Private Const StreamAheadMs As Long = 5000
@@ -728,6 +737,17 @@ Namespace Global.DeribitVerdictEngine
             _rawDumpSeq += 1
             _rawDumpBytes = 0
             _rawDump = New StreamWriter(RawDumpPath(), True, New UTF8Encoding(False))
+            ' Retention: delete this run's dump number (seq - RawDumpKeepFiles), if present.
+            Dim dropSeq As Integer = _rawDumpSeq - RawDumpKeepFiles
+            If dropSeq >= 1 Then
+                Dim old As String = Path.GetFullPath("liq_probe_raw_" & _runStamp & "_" &
+                                    dropSeq.ToString("00", CultureInfo.InvariantCulture) & ".jsonl")
+                Try
+                    If File.Exists(old) Then File.Delete(old)
+                Catch ex As Exception
+                    Console.Error.WriteLine("[" & NowUtc() & "] raw dump retention: " & ex.Message)
+                End Try
+            End If
         End Sub
 
         Private Function RawDumpPath() As String
