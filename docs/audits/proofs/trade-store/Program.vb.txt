@@ -1,0 +1,96 @@
+Imports System.IO
+Imports System.Diagnostics
+
+Module Program
+    Const T0 As Long = 1790816400000L   ' 2026-10-01 01:00:00Z
+    Function Rec(i As Integer) As TradeRecord
+        Return New TradeRecord With {.Timestamp = T0 + i, .Price = 63000 + i, .Amount = 100, .Direction = "buy",
+                                     .Liquidation = "none", .TradeId = (500000000 + i).ToString(), .TradeSeq = 300000000L + i}
+    End Function
+
+    Sub TornCase(label As String, keepChars As Integer)
+        Dim dir = Path.Combine(Path.GetTempPath(), "torn_" & label) : If Directory.Exists(dir) Then Directory.Delete(dir, True)
+        Dim first As New List(Of TradeRecord) : For i = 1 To 5 : first.Add(Rec(i)) : Next
+        TradeStoreWriter.AppendRows(dir, first)
+        Dim p = TradeStoreWriter.TradeFileFor(dir, 2026, 10)
+        ' Simulate a kill mid-write of row 5: keep only the first keepChars chars of its line, no newline.
+        Dim txt = File.ReadAllText(p)
+        Dim row5 = TradeStoreWriter.FormatRow(Rec(5))
+        Dim start = txt.IndexOf(row5)
+        File.WriteAllText(p, txt.Substring(0, start + keepChars))
+        Console.WriteLine("  torn tail on disk : '" & txt.Substring(start, keepChars) & "'")
+        Dim rest As New List(Of TradeRecord) : For i = 6 To 10 : rest.Add(Rec(i)) : Next
+        TradeStoreWriter.AppendRows(dir, rest)
+        Dim rows = TradeStoreWriter.ReadTradeFile(p)
+        Console.WriteLine("  parsed rows       : " & rows.Count & " (10 trades were sent)")
+        For Each r In rows
+            If r.Timestamp = T0 + 5 OrElse r.Timestamp > 99999999999999L Then Console.WriteLine("  merged row        : ts=" & r.Timestamp & " amt=" & r.Amount & " dir=" & r.Direction & " liq=" & r.Liquidation & " id=" & r.TradeId & " seq=" & r.TradeSeq)
+        Next
+        Console.WriteLine("  seq 300000006 present? " & rows.Exists(Function(r) r.TradeSeq = 300000006L))
+        Dim w = TradeStoreWriter.ResolveRepairWindows(p, T0 - 3600000L, T0 + 3600000L, True)
+        For Each x In w
+            Console.WriteLine(String.Format("  repair window     : {0} first={1} last={2} missing={3}", x.Kind, x.FirstSeq, x.LastSeq, x.MissingSeqs))
+        Next
+    End Sub
+
+    Sub Main()
+        Console.WriteLine("T1a torn inside trade_seq (3 digits survive):")
+        Dim full = TradeStoreWriter.FormatRow(Rec(5))
+        TornCase("seq", full.Length - 6)
+        Console.WriteLine("T1b torn inside trade_id:")
+        TornCase("id", full.IndexOf(",500000005") + 5)
+        Console.WriteLine("T1c torn exactly at end of row (only newline missing):")
+        TornCase("nl", full.Length)
+
+        Console.WriteLine("T1d torn inside the timestamp (5 chars survive):")
+        TornCase("ts", 5)
+        Console.WriteLine("T2 hole fetch where the append commits nothing:")
+        Dim hole = TradeStoreWriter.RepairWindow.ForHole(100, T0, 105, T0 + 5)
+        Dim json = "{""result"":{""has_more"":false,""trades"":[" &
+            String.Join(",", Enumerable.Range(101, 4).Select(Function(s) "{""price"":1,""amount"":10,""direction"":""buy"",""timestamp"":" & (T0 + s - 100) & ",""trade_id"":""" & s & """,""trade_seq"":" & s & "}")) & "]}}"
+        Dim o = HistoricalStore.FetchRepairWindowAsync(hole,
+            Function(a, b, c) Task.FromResult(json), Function(a, b) Task.FromResult(Of String)(Nothing),
+            Function(rows) 0, 1000, 10, 0).Result
+        Console.WriteLine("  state=" & o.State & " committed=" & o.Committed & " notServed=" & o.NotServed & " isFailure=" & o.IsFailure)
+        Console.WriteLine("  pass line: " & RepairStatusLogShim(o))
+
+        Console.WriteLine("T3 funding coverage check (24 hourly samples expected):")
+        For Each have In {12, 11}
+            If Directory.Exists("backtest_data") Then Directory.Delete("backtest_data", True)
+            Directory.CreateDirectory("backtest_data")
+            Dim segS As New DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc)
+            Dim lines As New List(Of String) From {"Timestamp,Rate"}
+            For h = 0 To have - 1 : lines.Add((New DateTimeOffset(segS.AddHours(h)).ToUnixTimeMilliseconds()) & ",0.0001") : Next
+            File.WriteAllLines(HistoricalStore.FundingFileFor(2026, 8), lines)
+            Dim sw = Stopwatch.StartNew()
+            Console.WriteLine("  stored=" & have & " -> (calling BackfillFundingMonthAsync; a fetch attempt logs to stderr)")
+            Dim n = HistoricalStore.BackfillFundingMonthAsync(2026, 8, segS, segS.AddDays(1)).Result
+            Console.WriteLine("  stored=" & have & " returned=" & n & " elapsedMs=" & sw.ElapsedMilliseconds)
+        Next
+
+        Console.WriteLine("T4 AppendRows against a failing device:")
+        Dim d4 = Path.Combine(Path.GetTempPath(), "full4") : If Directory.Exists(d4) Then Directory.Delete(d4, True)
+        Directory.CreateDirectory(d4)
+        Dim link = TradeStoreWriter.TradeFileFor(d4, 2026, 10)
+        File.CreateSymbolicLink(link, "/dev/full")
+        Dim batch As New List(Of TradeRecord) : For i = 1 To 500 : batch.Add(Rec(i)) : Next
+        Console.WriteLine("  written reported = " & TradeStoreWriter.AppendRows(d4, batch) & " (disk accepted 0)")
+
+        Console.WriteLine("T5 ReadTradeFileTail cost on a full month (1.8M rows):")
+        Dim d5 = Path.Combine(Path.GetTempPath(), "month5") : If Directory.Exists(d5) Then Directory.Delete(d5, True)
+        Dim p5 = TradeStoreWriter.TradeFileFor(d5, 2026, 10)
+        Dim big As New List(Of TradeRecord)
+        For i = 1 To 1800000 : big.Add(Rec(i)) : Next
+        TradeStoreWriter.AppendRows(d5, big)
+        Console.WriteLine("  file MB = " & (New FileInfo(p5).Length \ 1048576))
+        For k = 1 To 2
+            Dim sw5 = Stopwatch.StartNew()
+            Dim tail = TradeStoreWriter.ReadTradeFileTail(p5, TradeStoreWriter.RecentWindowCapacity)
+            Console.WriteLine("  run " & k & ": " & tail.Count & " rows in " & sw5.ElapsedMilliseconds & " ms")
+        Next
+    End Sub
+
+    Function RepairStatusLogShim(o As TradeStoreWriter.RepairWindowOutcome) As String
+        Return If(o.IsFailure, "PASS_FAILED", If(o.NotServed > 0, "PASS_LOSS", "PASS_CLEAN"))
+    End Function
+End Module
