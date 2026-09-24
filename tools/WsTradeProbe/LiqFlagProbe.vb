@@ -237,6 +237,9 @@ Namespace Global.DeribitVerdictEngine
                 Dim failure As String = Nothing          ' VB forbids Await inside Catch
                 Try
                     Using ws As New ClientWebSocket()
+                        ' ⛔ Match DeribitWsFeed: WPAD proxy auto-detect hangs the connect
+                        ' before any socket opens (584c616). That commit missed this file.
+                        ws.Options.Proxy = Nothing
                         Await ws.ConnectAsync(New Uri(WsUrl), ct)
                         SyncLock _gate
                             _reconnectGen += 1
@@ -381,7 +384,9 @@ Namespace Global.DeribitVerdictEngine
 
         ' ── ARM 2: REST poll and pairing ─────────────────────────────────────────────────
         Private Async Function RestPollLoopAsync(everySec As Integer, ct As CancellationToken) As Task
-            Using http As New HttpClient()
+            ' ⛔ UseProxy = False for the same WPAD reason: HttpClient.Timeout does not bound
+            ' proxy resolution, which happens before the request starts (584c616).
+            Using http As New HttpClient(New HttpClientHandler() With {.UseProxy = False})
                 http.Timeout = TimeSpan.FromSeconds(20)
                 While Not ct.IsCancellationRequested
                     Dim body As String = Nothing                ' VB forbids Await inside Catch
