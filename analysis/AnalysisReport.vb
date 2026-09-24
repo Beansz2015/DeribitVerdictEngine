@@ -92,7 +92,16 @@ Public Class PopulationReport
     ' barrier (FailureCells above use the migrated placed adverse). The delta between the
     ' two is the continuity bridge — the first honest read of executed stop-out risk.
     Public Property LegacyFailureCells  As New List(Of FailureCellResult)()
+    ' [D-8 (b)] Directional TRADES only (AnalysisRunner.ClassifyContextRow = Directional).
     Public Property ContextOutcomes     As New Dictionary(Of String, FailureCellResult)()
+    ' [D-8 (b), docs/engine-fix-build-spec-2026-09-21.md §5.1] The same walk on LEAN NO TRADE
+    ' rows ("NO TRADE [WEAK LONG]" / "[WEAK SHORT]"), each on its lean side as if taken. These
+    ' rows were NOT traded; the report renders them in their own labelled column beside
+    ' ContextOutcomes, never pooled with it. Key = VerdictContext.
+    Public Property LeanContextOutcomes As New Dictionary(Of String, FailureCellResult)()
+    ' [EF-2 (a)] "NO TRADE [TIE]" rows per VerdictContext: no lean side, so COUNTED and
+    ' never walked. Rendered, so a reader sees they exist and were not walked.
+    Public Property LeanTieCounts       As New Dictionary(Of String, Integer)()
     ' [D7 spin-off 2 — smalls-2026-07-22 item 2] Per-tag row counts on NO-TRADE
     ' rows in this population. Lean rows have NO barrier / NO outcome (NO-TRADE runs
     ' are logged EXCLUDED_NO_PREDICTION), so we surface counts only. Key = the row's

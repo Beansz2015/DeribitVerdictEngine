@@ -59,6 +59,16 @@ Public Class MarkdownReportWriter
     Private Shared Function SuccessPct(failureRate As Double) As Double
         Return 1.0 - failureRate
     End Function
+
+    ' [D-8 (b)] One §6 (a) table cell: success, n and CI, or "—" when the column has no rows
+    ' for that context, or "insufficient sample" when its rows carried no forward bars.
+    Private Shared Function FormatContextCell(c As FailureCellResult) As String
+        If c Is Nothing Then Return "—"
+        If c.SampleSize <= 0 Then Return "insufficient sample"
+        Return String.Format("{0:P1} success  n={1}  CI [{2:P0}–{3:P0}]",
+                             SuccessPct(c.FailureRate), c.SampleSize,
+                             SuccessCiLow(c.CiHigh), SuccessCiHigh(c.CiLow))
+    End Function
     Private Shared Function SuccessCiLow(ciHighFailure As Double) As Double
         ' Wilson CI complement: success CI low = 1 - failure CI high.
         Return 1.0 - ciHighFailure
@@ -445,33 +455,50 @@ Public Class MarkdownReportWriter
     Private Shared Sub AppendContextOutcomes(sb As StringBuilder, r As AnalysisReport)
         sb.AppendLine("## 6. Verdict Context Tag × Outcome — per session")
         sb.AppendLine()
-        sb.AppendLine("_Two sub-tables per session — **NOT comparable**. (a) measures " &
-                      "committed-directional outcomes on their own placed geometry at that " &
-                      "session's recommended hold window. (b) counts lean-drift on rows that " &
-                      "never traded (NO-TRADE rows have no barrier — the eval cache logs them " &
-                      "`EXCLUDED_NO_PREDICTION`). Juxtaposing the two produced the D7 " &
-                      "CONFIRMED-inversion twice (2026-06-24, 2026-07-21) — the sub-tables " &
-                      "are split so that comparison cannot recur._")
+        sb.AppendLine("_Two sub-tables per session. (a) measures committed-directional outcomes " &
+                      "on their own placed geometry at that session's recommended hold window, and " &
+                      "beside them, in a separate column, the same walk on lean NO-TRADE rows as if " &
+                      "taken. (b) counts the tags on every NO-TRADE row (the eval cache logs these rows " &
+                      "`EXCLUDED_NO_PREDICTION`: they never traded). Traded and not-traded figures are " &
+                      "**NOT comparable** as one number. Juxtaposing them produced the D7 " &
+                      "CONFIRMED-inversion twice (2026-06-24, 2026-07-21) — so they never share a " &
+                      "cell or a column._")
         sb.AppendLine()
         For Each pop In r.Populations
             sb.AppendLine("### " & PopLabel(pop))
             sb.AppendLine()
 
             ' (a) DIRECTIONAL — committed-trade outcomes on tag-carrying directional verdicts.
-            sb.AppendLine("**(a) DIRECTIONAL verdicts — success rate on placed geometry**")
+            ' [D-8 (b) + EF-2 (a), docs/engine-fix-build-spec-2026-09-21.md §5.1] Lean NO TRADE
+            ' rows sit in their OWN labelled column beside the trades, and tie rows in a count
+            ' column. Before this split the lean rows were counted inside the trade figure and a
+            ' tie was walked as a short.
+            sb.AppendLine("**(a) DIRECTIONAL verdicts beside LEAN NO-TRADE rows — success rate on placed geometry**")
             sb.AppendLine()
-            If pop.ContextOutcomes.Count = 0 Then
+            sb.AppendLine("_DIRECTIONAL = STRONG / MEDIUM verdicts, the rows that traded. " &
+                          "LEAN NO TRADE = `NO TRADE [WEAK LONG]` / `NO TRADE [WEAK SHORT]` rows, walked on " &
+                          "their lean side's placed geometry AS IF taken — **they were NOT traded; never " &
+                          "add the two columns together**. TIE = `NO TRADE [TIE]` rows: no lean side, so " &
+                          "they are counted and NOT walked._")
+            sb.AppendLine()
+            Dim ctxKeys As New List(Of String)()
+            For Each k In pop.ContextOutcomes.Keys.Concat(pop.LeanContextOutcomes.Keys).Concat(pop.LeanTieCounts.Keys)
+                If Not ctxKeys.Contains(k) Then ctxKeys.Add(k)
+            Next
+            If ctxKeys.Count = 0 Then
                 sb.AppendLine("_Insufficient data to compute per-context success rates._")
             Else
-                For Each kvp In pop.ContextOutcomes
-                    Dim c = kvp.Value
-                    If c.SampleSize > 0 Then
-                        sb.AppendLine(String.Format("- **{0}**: {1:P1} success  n={2}  CI [{3:P0}–{4:P0}]",
-                                                    kvp.Key, SuccessPct(c.FailureRate), c.SampleSize,
-                                                    SuccessCiLow(c.CiHigh), SuccessCiHigh(c.CiLow)))
-                    Else
-                        sb.AppendLine("- **" & kvp.Key & "**: insufficient sample")
-                    End If
+                sb.AppendLine("| Context | DIRECTIONAL (traded) | LEAN NO TRADE (not traded) | TIE (not walked) |")
+                sb.AppendLine("|---|---|---|---|")
+                For Each k In ctxKeys
+                    Dim tradeCell As FailureCellResult = Nothing
+                    Dim leanCell As FailureCellResult = Nothing
+                    Dim ties As Integer = 0
+                    pop.ContextOutcomes.TryGetValue(k, tradeCell)
+                    pop.LeanContextOutcomes.TryGetValue(k, leanCell)
+                    pop.LeanTieCounts.TryGetValue(k, ties)
+                    sb.AppendLine(String.Format("| **{0}** | {1} | {2} | {3} |",
+                                                k, FormatContextCell(tradeCell), FormatContextCell(leanCell), ties))
                 Next
             End If
             sb.AppendLine()

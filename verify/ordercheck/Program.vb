@@ -769,6 +769,14 @@ Module Program
         '   safe to leave on through an outage.]
         A85_WsFeedLogRateLimitsRepeatsWithoutGoingSilent()
 
+        ' [A86 — D-9 (b) + EF-4 (a): Step 3b's actual effect on VerdictResult, and the snapshot
+        '   "Momentum:" line and card "Step 3b:" row / tone built from it
+        '   (docs/engine-fix-build-spec-2026-09-21.md §5.2).]
+        A86_FundingStep3bEffectAndBothSurfaces()
+        ' [A87 — D-8 (b) + EF-2 (a): the analysis report's §6 context table keeps trades, lean
+        '   NO TRADE rows and ties apart (docs/engine-fix-build-spec-2026-09-21.md §5.1).]
+        A87_ContextTableSplitsTradesLeanAndTies()
+
         ' [settings.local.json overlay — A50, docs/settings-local-overlay-proposal.md §5 with
         ' the corrections in docs/overlay-whitelist-reaudit-2026-07-31.md]
         ' DELIBERATELY LAST in the run order: these are the only fixtures that call
@@ -17219,6 +17227,242 @@ Module Program
                 seen.Add("tier:" & reg & ":" & tier)
             End If
         Next
+    End Sub
+
+    ' =======================================================================
+    ' A86 — Step 3b's actual effect on VerdictResult, and what both surfaces render from it.
+    ' [D-9 (b) + EF-4 (a), docs/engine-fix-build-spec-2026-09-21.md §5.2]
+    '
+    ' A86a pins FundingStep3bLongPoints / FundingStep3bShortPoints on every Step 3b arm through
+    '   the real ScoringEngine.Calculate, two ways: against the arm's effect DERIVED FROM cfg, and
+    '   against the Funding (info) breakdown row's points with Step 3b enabled MINUS the same run
+    '   with it disabled (a property cross-check that never reads the note's text — trap EFT-7).
+    ' A86b pins the ACTUAL-not-nominal choice: longs crowded + RISING with the long score already
+    '   at 0 — the note still says -1[L], but Step 3b moved nothing, so the effect is 0.
+    ' A86c pins the RENDERED text of both surfaces for the same arms: the snapshot's "Momentum:"
+    '   line (FundingStep3bDisplay.MomentumLine — AppendFunding calls exactly this), the card's
+    '   "Step 3b:" row value (CardValue) and the tone every card colour site maps (Tone).
+    '   ⚠ The Tone → Theme colour map lives in UI/MainForm_Render_Cards.vb
+    '   (ResolveFundStep3bColour), which the harness cannot link (WinForms). It is a three-arm
+    '   Select Case read by review only.
+    '
+    ' [Fixture-literal provenance, CLAUDE.md RULED 2026-08-11]
+    '   SHIPPED BEHAVIOUR: the arm effects are DERIVED from the tracked settings.json
+    '   (momentum_amplify, momentum_soften, funding_high_penalty); the funding rates are derived
+    '   from the tracked funding_low_positive / funding_low_negative (half of each, so Step 3
+    '   never fires and only Step 3b moves the score).
+    '   MECHANISM: the vote picture (BuildA8Indicators: 4 long, 11 short) only keeps both scores
+    '   away from the 0 floor and the regime cap; A86a checks that loudly from the disabled run.
+    ' =======================================================================
+    Private Function A86Run(cfg As EngineSettings, bias As String, mom As String, rate As Double,
+                            Optional stripLongVotes As Boolean = False) As VerdictResult
+        Dim r = BuildA8Indicators()
+        r.FundingBias = bias : r.FundingMomentum = mom : r.FundingRate = rate
+        If stripLongVotes Then
+            ' MECHANISM — remove the four long votes (BBW/TTM, Donchian, OBV, EMA200 anchor).
+            r.TTMSignal = "NONE" : r.TTMDirection = "FLAT"
+            r.DonchianSignal = "NONE"
+            r.OBVTrend = "FALLING"
+            r.EMA200_5m = r.CurrentPrice + 10000
+        End If
+        Return ScoringEngine.Calculate(r, PositionState.None, BuildA8Norms(), cfg)
+    End Function
+
+    Private Function A86FundingItem(v As VerdictResult) As SignalBreakdownItem
+        Return v.SignalBreakdown.FirstOrDefault(Function(it) it.Label = "Funding (info)")
+    End Function
+
+    Private Sub A86_FundingStep3bEffectAndBothSurfaces()
+        Dim errorMsg As String = ""
+        Dim cfgOn = A80ShippedCfg(errorMsg)
+        Dim cfgOff = A80ShippedCfg(errorMsg)
+        If cfgOn Is Nothing OrElse cfgOff Is Nothing Then
+            Check("A86 tracked settings.json located", False, errorMsg)
+            Return
+        End If
+        cfgOn.Indicators.Funding.MomentumEnabled = True
+        cfgOff.Indicators.Funding.MomentumEnabled = False
+        Dim pen As Integer = Math.Min(cfgOn.Indicators.Funding.MomentumAmplify, cfgOn.Scoring.FundingHighPenalty)
+        Dim soften As Integer = cfgOn.Indicators.Funding.MomentumSoften
+        Dim posRate As Double = cfgOn.Scoring.FundingLowPositive / 2.0
+        Dim negRate As Double = cfgOn.Scoring.FundingLowNegative / 2.0
+
+        ' arm, bias, momentum, rate, expected long effect, expected short effect, expected line tail
+        Dim arms As New List(Of Tuple(Of String, String, String, Double, Integer, Integer))() From {
+            Tuple.Create("longs crowded + RISING (crowding penalty)", "LONGS CROWDED", "RISING", posRate, -pen, 0),
+            Tuple.Create("longs crowded + FALLING (de-crowding soften)", "LONGS CROWDED", "FALLING", posRate, soften, 0),
+            Tuple.Create("shorts crowded + FALLING (crowding penalty)", "SHORTS CROWDED", "FALLING", negRate, 0, -pen),
+            Tuple.Create("shorts crowded + RISING (de-crowding soften)", "SHORTS CROWDED", "RISING", negRate, 0, soften),
+            Tuple.Create("neutral into crowding, RISING with positive funding", "NEUTRAL", "RISING", posRate, -pen, 0),
+            Tuple.Create("neutral into crowding, FALLING with negative funding", "NEUTRAL", "FALLING", negRate, 0, -pen)}
+
+        For Each a In arms
+            Dim vOn = A86Run(cfgOn, a.Item2, a.Item3, a.Item4)
+            Dim vOff = A86Run(cfgOff, a.Item2, a.Item3, a.Item4)
+            Dim itOn = A86FundingItem(vOn), itOff = A86FundingItem(vOff)
+            ' Loud geometry: the disabled run's scores ARE the scores entering Step 3b.
+            Dim clear As Boolean = vOff.LongScore >= pen AndAlso vOff.ShortScore >= pen AndAlso
+                                   vOff.LongScore + soften <= vOff.MaxScore AndAlso vOff.ShortScore + soften <= vOff.MaxScore
+            Dim deltaL As Integer = If(itOn Is Nothing OrElse itOff Is Nothing, Integer.MinValue, itOn.LongPoints - itOff.LongPoints)
+            Dim deltaS As Integer = If(itOn Is Nothing OrElse itOff Is Nothing, Integer.MinValue, itOn.ShortPoints - itOff.ShortPoints)
+            Check("A86a " & a.Item1 & ": FundingStep3b points = the cfg-derived effect = the breakdown delta (enabled minus disabled)",
+                  clear AndAlso vOn.FundingStep3bLongPoints = a.Item5 AndAlso vOn.FundingStep3bShortPoints = a.Item6 AndAlso
+                  deltaL = a.Item5 AndAlso deltaS = a.Item6 AndAlso
+                  vOff.FundingStep3bLongPoints = 0 AndAlso vOff.FundingStep3bShortPoints = 0,
+                  String.Format(CultureInfo.InvariantCulture,
+                                "want L{0}/S{1}; got L{2}/S{3}; breakdown delta L{4}/S{5}; disabled L{6}/S{7}; scores entering 3b {8}/{9} of max {10} (clear={11})",
+                                a.Item5, a.Item6, vOn.FundingStep3bLongPoints, vOn.FundingStep3bShortPoints, deltaL, deltaS,
+                                vOff.FundingStep3bLongPoints, vOff.FundingStep3bShortPoints, vOff.LongScore, vOff.ShortScore, vOff.MaxScore, clear))
+
+            ' A86c — both surfaces, same arm.
+            Dim wantTail As String = FundingStep3bDisplay.EffectText(vOn)
+            Dim wantText As String = If(a.Item5 <> 0, If(a.Item5 > 0, "+", "") & a.Item5.ToString(CultureInfo.InvariantCulture) & "[L]",
+                                        If(a.Item6 > 0, "+", "") & a.Item6.ToString(CultureInfo.InvariantCulture) & "[S]")
+            Dim wantTone As FundingStep3bTone = If(a.Item5 + a.Item6 < 0, FundingStep3bTone.Caution, FundingStep3bTone.Relief)
+            Dim rShown = BuildA8Indicators() : rShown.FundingMomentum = a.Item3
+            Dim line As String = FundingStep3bDisplay.MomentumLine(rShown, vOn, cfgOn)
+            Dim card As String = FundingStep3bDisplay.CardValue(vOn, cfgOn)
+            Check("A86c " & a.Item1 & ": snapshot line, card Step 3b row and card tone all carry the effect " & wantText,
+                  line = "  Momentum: " & a.Item3 & "  |  Enabled: YES  |  Effect: " & wantText AndAlso
+                  card = "Enabled=Y | Effect=" & wantText AndAlso
+                  FundingStep3bDisplay.Tone(vOn) = wantTone AndAlso wantTail = wantText AndAlso
+                  Not line.Contains("Soften") AndAlso Not line.Contains("Amplify"),
+                  String.Format(CultureInfo.InvariantCulture, "line='{0}' card='{1}' tone={2} (want {3})",
+                                line, card, FundingStep3bDisplay.Tone(vOn), wantTone))
+        Next
+
+        ' Disabled arm — the same crowding state that penalises when enabled.
+        Dim vDis = A86Run(cfgOff, "LONGS CROWDED", "RISING", posRate)
+        Dim rDis = BuildA8Indicators() : rDis.FundingMomentum = "RISING"
+        Dim lineDis As String = FundingStep3bDisplay.MomentumLine(rDis, vDis, cfgOff)
+        Dim cardDis As String = FundingStep3bDisplay.CardValue(vDis, cfgOff)
+        Check("A86a disabled: longs crowded + RISING with Step 3b off → effect 0 on both sides",
+              vDis.FundingStep3bLongPoints = 0 AndAlso vDis.FundingStep3bShortPoints = 0,
+              String.Format(CultureInfo.InvariantCulture, "got L{0}/S{1}", vDis.FundingStep3bLongPoints, vDis.FundingStep3bShortPoints))
+        Check("A86c disabled: snapshot line reads Enabled: NO | Effect: none, card reads Enabled=N | Effect=none, tone neutral",
+              lineDis = "  Momentum: RISING  |  Enabled: NO  |  Effect: none" AndAlso
+              cardDis = "Enabled=N | Effect=none" AndAlso FundingStep3bDisplay.Tone(vDis) = FundingStep3bTone.Neutral,
+              String.Format(CultureInfo.InvariantCulture, "line='{0}' card='{1}' tone={2}", lineDis, cardDis, FundingStep3bDisplay.Tone(vDis)))
+
+        ' A86b — actual, not nominal: the long score is already 0 when Step 3b's penalty arm fires.
+        Dim vClampOff = A86Run(cfgOff, "LONGS CROWDED", "RISING", posRate, stripLongVotes:=True)
+        Dim vClamp = A86Run(cfgOn, "LONGS CROWDED", "RISING", posRate, stripLongVotes:=True)
+        Dim itClamp = A86FundingItem(vClamp)
+        Dim noteFired As Boolean = itClamp IsNot Nothing AndAlso itClamp.Note IsNot Nothing AndAlso itClamp.Note.Contains("STEP3b: -")
+        Check("A86b the penalty arm fires on a long score already at 0 → the ACTUAL effect is 0 (the note still names the arm), tone neutral",
+              vClampOff.LongScore = 0 AndAlso noteFired AndAlso
+              vClamp.FundingStep3bLongPoints = 0 AndAlso vClamp.FundingStep3bShortPoints = 0 AndAlso
+              FundingStep3bDisplay.EffectText(vClamp) = "none" AndAlso FundingStep3bDisplay.Tone(vClamp) = FundingStep3bTone.Neutral,
+              String.Format(CultureInfo.InvariantCulture, "long score entering 3b={0} (must be 0) noteFired={1} got L{2}/S{3}",
+                            vClampOff.LongScore, noteFired, vClamp.FundingStep3bLongPoints, vClamp.FundingStep3bShortPoints))
+    End Sub
+
+    ' =======================================================================
+    ' A87 — the analysis report's §6 context table: trades, lean NO TRADE rows and ties apart.
+    ' [D-8 (b) + EF-2 (a), docs/engine-fix-build-spec-2026-09-21.md §5.1; finding EVAL-1]
+    '
+    ' Before the fix the table's filter admitted every verdict except exactly "NO TRADE" and
+    ' "WEAK …", so lean rows were counted as TRADES and "NO TRADE [TIE]" was walked as a SHORT.
+    ' A87a pins the classifier on every verdict shape. A87b runs the shipped
+    ' AnalysisRunner.ComputeContextOutcomes on a row set holding directional, lean-long,
+    ' lean-short, tie, plain NO TRADE and WEAK-tier rows, and asserts each lands in its own field
+    ' with no tie walked. A87c pins the rendered §6 (a) table: the three labelled columns.
+    '
+    ' [Fixture-literal provenance, CLAUDE.md RULED 2026-08-11]
+    '   MECHANISM throughout: prices, ATR, placed levels and the one forward bar are invented so a
+    '   LONG walk succeeds and a SHORT walk hits its stop on the same bar. Every row carries
+    '   placed levels (HasPlaced), so no settings value reaches a barrier; cfg is POCO defaults
+    '   and is read only on the legacy path, which no row takes. No recommended cell exists, so
+    '   the walk uses ComputeContextOutcomes' own default window (10).
+    ' =======================================================================
+    Private Function A87Row(verdict As String, ctx As String) As CsvRow
+        Dim row As New CsvRow With {
+            .Verdict = verdict, .VerdictContext = ctx, .Price = 100000.0, .ATR = 100.0,
+            .HasPlaced = True,
+            .PlacedTargetLong = 100150.0, .PlacedStopLong = 99900.0,
+            .PlacedTargetShort = 99850.0, .PlacedStopShort = 100100.0}
+        ' One bar: up to 100200 (long target hit), never down to 99900 (long stop safe). For a
+        ' short the same bar hits the 100100 stop and never reaches the 99850 target.
+        row.ForwardBars(10) = New List(Of OhlcBar) From {
+            New OhlcBar With {.Open = 100000.0, .High = 100200.0, .Low = 99950.0, .Close = 100180.0}}
+        Return row
+    End Function
+
+    Private Sub A87_ContextTableSplitsTradesLeanAndTies()
+        ' A87a — the classifier.
+        Dim cases As New List(Of Tuple(Of String, AnalysisRunner.ContextRowKind)) From {
+            Tuple.Create("STRONG LONG", AnalysisRunner.ContextRowKind.Directional),
+            Tuple.Create("LONG", AnalysisRunner.ContextRowKind.Directional),
+            Tuple.Create("STRONG SHORT", AnalysisRunner.ContextRowKind.Directional),
+            Tuple.Create("SHORT", AnalysisRunner.ContextRowKind.Directional),
+            Tuple.Create("NO TRADE [WEAK LONG]", AnalysisRunner.ContextRowKind.LeanLong),
+            Tuple.Create("NO TRADE [WEAK SHORT]", AnalysisRunner.ContextRowKind.LeanShort),
+            Tuple.Create("NO TRADE [TIE]", AnalysisRunner.ContextRowKind.LeanTie),
+            Tuple.Create("NO TRADE", AnalysisRunner.ContextRowKind.Excluded),
+            Tuple.Create("WEAK LONG", AnalysisRunner.ContextRowKind.Excluded),
+            Tuple.Create("WEAK SHORT", AnalysisRunner.ContextRowKind.Excluded),
+            Tuple.Create("", AnalysisRunner.ContextRowKind.Excluded)}
+        Dim bad As New List(Of String)()
+        For Each c In cases
+            Dim got = AnalysisRunner.ClassifyContextRow(c.Item1)
+            If got <> c.Item2 Then bad.Add(String.Format("'{0}' → {1} (want {2})", c.Item1, got, c.Item2))
+        Next
+        Check("A87a ClassifyContextRow: directional, lean long, lean short, tie and excluded verdicts each classify as their own kind (ties on the TEXT)",
+              bad.Count = 0, String.Join("; ", bad))
+
+        ' A87b — the shipped cross-tab on a mixed row set.
+        Dim rows As New List(Of CsvRow) From {
+            A87Row("STRONG LONG", "CONFIRMED"),              ' trade, long  → success
+            A87Row("SHORT", "CONFIRMED"),                    ' trade, short → stop hit
+            A87Row("NO TRADE [WEAK LONG]", "CONFIRMED"),     ' lean long    → success
+            A87Row("NO TRADE [WEAK LONG]", "CONFIRMED"),
+            A87Row("NO TRADE [WEAK LONG]", "CONFIRMED"),
+            A87Row("NO TRADE [WEAK SHORT]", "CONFIRMED"),    ' lean short   → stop hit
+            A87Row("NO TRADE [TIE]", "CONFIRMED"),           ' tie → counted, never walked
+            A87Row("NO TRADE [TIE]", "CONFIRMED"),
+            A87Row("NO TRADE", "CONFIRMED"),                 ' no lean → excluded
+            A87Row("WEAK LONG", "CONFIRMED"),                ' WEAK tier → excluded (as before)
+            A87Row("NO TRADE [WEAK LONG]", "FLOW_UNCONFIRMED")}
+        Dim pr As New PopulationReport With {.PopulationKey = "NY|1", .SessionName = "NY", .Resolution = 1,
+                                             .BarrierLabel = "PLACED", .RowCount = rows.Count}
+        AnalysisRunner.ComputeContextOutcomes(rows, New List(Of FailureCellResult)(), New EngineSettings(), pr)
+        Dim t As FailureCellResult = Nothing, l As FailureCellResult = Nothing, lf As FailureCellResult = Nothing
+        Dim ties As Integer = -1, tiesF As Integer = 0
+        pr.ContextOutcomes.TryGetValue("CONFIRMED", t)
+        pr.LeanContextOutcomes.TryGetValue("CONFIRMED", l)
+        pr.LeanContextOutcomes.TryGetValue("FLOW_UNCONFIRMED", lf)
+        pr.LeanTieCounts.TryGetValue("CONFIRMED", ties)
+        Check("A87b CONFIRMED: trades n=2 (1 fail), lean n=4 (1 fail: the short lean), ties 2 counted and not walked; FLOW_UNCONFIRMED: lean only",
+              t IsNot Nothing AndAlso t.SampleSize = 2 AndAlso t.Failures = 1 AndAlso
+              l IsNot Nothing AndAlso l.SampleSize = 4 AndAlso l.Failures = 1 AndAlso
+              ties = 2 AndAlso Not pr.LeanTieCounts.ContainsKey("FLOW_UNCONFIRMED") AndAlso
+              lf IsNot Nothing AndAlso lf.SampleSize = 1 AndAlso lf.Failures = 0 AndAlso
+              Not pr.ContextOutcomes.ContainsKey("FLOW_UNCONFIRMED"),
+              String.Format(CultureInfo.InvariantCulture,
+                            "trade n={0} f={1}; lean n={2} f={3}; ties={4}; flowLean n={5}; flowTrade={6}",
+                            If(t Is Nothing, -1, t.SampleSize), If(t Is Nothing, -1, t.Failures),
+                            If(l Is Nothing, -1, l.SampleSize), If(l Is Nothing, -1, l.Failures), ties,
+                            If(lf Is Nothing, -1, lf.SampleSize), pr.ContextOutcomes.ContainsKey("FLOW_UNCONFIRMED")))
+
+        ' A87c — the rendered §6 (a) table.
+        Dim rep As New AnalysisReport()
+        rep.Populations.Add(pr)
+        Dim md As String = MarkdownReportWriter.BuildFullMarkdownForHarness(rep)
+        Dim hdr As Boolean = md.Contains("| Context | DIRECTIONAL (traded) | LEAN NO TRADE (not traded) | TIE (not walked) |")
+        Dim confirmedLine As String = md.Split({vbCrLf, vbLf}, StringSplitOptions.None).
+                                         FirstOrDefault(Function(x) x.StartsWith("| **CONFIRMED** |", StringComparison.Ordinal))
+        Dim cells As String() = If(confirmedLine, "").Split("|"c)
+        ' "| **CONFIRMED** | <trade> | <lean> | <ties> |" splits to: "", ctx, trade, lean, ties, ""
+        Dim rowOk As Boolean = cells.Length = 6 AndAlso cells(2).Contains("n=2") AndAlso
+                               cells(3).Contains("n=4") AndAlso cells(4).Trim() = "2"
+        Dim flowLine As String = md.Split({vbCrLf, vbLf}, StringSplitOptions.None).
+                                    FirstOrDefault(Function(x) x.StartsWith("| **FLOW_UNCONFIRMED** |", StringComparison.Ordinal))
+        Dim flowCells As String() = If(flowLine, "").Split("|"c)
+        Dim flowOk As Boolean = flowCells.Length = 6 AndAlso flowCells(2).Trim() = "—" AndAlso
+                                flowCells(3).Contains("n=1") AndAlso flowCells(4).Trim() = "0"
+        Check("A87c §6 (a) renders DIRECTIONAL, LEAN NO TRADE and TIE as three labelled columns, with the not-traded caption",
+              hdr AndAlso rowOk AndAlso flowOk AndAlso md.Contains("they were NOT traded"),
+              String.Format("hdr={0} confirmed='{1}' flow='{2}'", hdr, confirmedLine, flowLine))
     End Sub
 
 End Module

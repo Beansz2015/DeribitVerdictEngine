@@ -2067,11 +2067,12 @@ Partial Public Class MainForm
         }
         stack.Controls.Add(BuildBadgeRow(badge, ResolveOiCvdNote(outcomeKey)))
 
-        ' Funding Mom MiniMeter.
+        ' Funding Mom MiniMeter. [D-9 (b)] The colour follows Step 3b's ACTUAL effect
+        ' (v.FundingStep3b*Points), not the momentum direction alone.
         Dim fm As String = If(r.FundingMomentum, "FLAT")
         stack.Controls.Add(BuildMiniMeter("Funding Mom", fm,
                                           ResolveFundMomMagnitude(fm),
-                                          ResolveFundMomColour(fm)))
+                                          ResolveFundStep3bColour(v)))
 
         ' Spread MiniMeter — pct = bps / wide-threshold, clamped to 100.
         Dim wideThresh As Double = SettingsLoader.Current.Indicators.Spread.WideThresholdBps
@@ -2109,11 +2110,17 @@ Partial Public Class MainForm
         End Select
     End Function
 
-    Private Shared Function ResolveFundMomColour(m As String) As Color
-        Select Case If(m, "").ToUpperInvariant()
-            Case "RISING"  : Return Theme.ACC_WARN          ' rising into crowded → caution
-            Case "FALLING" : Return Theme.ACC_STRONG_LONG   ' de-crowding
-            Case Else      : Return Theme.FG_TERTIARY
+    ''' <summary>[D-9 (b), docs/engine-fix-build-spec-2026-09-21.md §5.2] The ONE colour rule for
+    ''' the three funding-momentum card sites (this MiniMeter, BuildRowFundingMom and the
+    ''' breakdown footer). It follows the SIGN of Step 3b's actual effect: a penalty renders as
+    ''' caution, a soften as relief, no effect as neutral. It replaced a rule keyed on the
+    ''' momentum direction alone, which painted FALLING as de-crowding even when shorts were
+    ''' crowded and Step 3b had applied a PENALTY (finding DISP-1).</summary>
+    Private Shared Function ResolveFundStep3bColour(v As VerdictResult) As Color
+        Select Case FundingStep3bDisplay.Tone(v)
+            Case FundingStep3bTone.Caution : Return Theme.ACC_WARN          ' crowding penalty
+            Case FundingStep3bTone.Relief  : Return Theme.ACC_STRONG_LONG   ' de-crowding soften
+            Case Else                      : Return Theme.FG_TERTIARY       ' no effect
         End Select
     End Function
 
@@ -2239,7 +2246,7 @@ Partial Public Class MainForm
         BuildGroupMtfGate(grid, 1, 1, r, v)
         ' Row 2: EMA RIBBON | FUNDING
         BuildGroupEmaRibbon(grid, 2, 0, r)
-        BuildGroupFunding(grid, 2, 1, r, cfg)
+        BuildGroupFunding(grid, 2, 1, r, v, cfg)
         ' Row 3: BBW/TTM  | OPEN INTEREST
         BuildGroupBbwTtm(grid, 3, 0, r)
         BuildGroupOpenInterest(grid, 3, 1, r)
@@ -2500,17 +2507,17 @@ Partial Public Class MainForm
     End Sub
 
     Private Shared Sub BuildGroupFunding(parent As TableLayoutPanel, row As Integer, col As Integer,
-                                         r As IndicatorResults, cfg As EngineSettings)
+                                         r As IndicatorResults, v As VerdictResult, cfg As EngineSettings)
         Dim g = BuildGroupInline("FUNDING", Theme.FG_TERTIARY)
         ' GAP-30: v30 negative-zero clamp at display.
         Dim ratePct As Double = If(Math.Abs(r.FundingRate) < 0.00000001, 0.0, r.FundingRate * 100.0)
         AddKv(g.body, "Rate:",     String.Format("{0:+0.0000;-0.0000;0.0000}%  ·  {1}", ratePct, If(r.FundingBias, "—")))
         AddKv(g.body, "Momentum:", If(r.FundingMomentum, "—"))
-        Dim cfgFm = cfg.Indicators.Funding
-        Dim enFlag As String = If(cfgFm.MomentumEnabled, "Y", "N")
-        ' C3h.i: reformat per G3 ("=" pairs, "|" between) + G5 (full names "Enabled" / "Soften" / "Amplify").
-        Dim cfgStr As String = $"Enabled={enFlag} | Soften=+{cfgFm.MomentumSoften} | Amplify=-{cfgFm.MomentumAmplify}"
-        AddKv(g.body, "Config:",   cfgStr, valueColour:=Theme.FG_QUATERNARY)
+        ' [D-9 (b) + EF-4 (a)] Card twin of the snapshot's re-formatted "Momentum:" line. This
+        ' row was "Config: Enabled=Y | Soften=+1 | Amplify=-1" — what Step 3b COULD do. It is
+        ' now "Step 3b: Enabled=Y | Effect=-1[L]" — what it DID — in the C3h.i "=" / "|"
+        ' style, coloured by the effect's sign. Same row, relabelled; no row added or removed.
+        AddKv(g.body, "Step 3b:",  FundingStep3bDisplay.CardValue(v, cfg), valueColour:=ResolveFundStep3bColour(v))
         parent.Controls.Add(g.host, col, row)
     End Sub
 
@@ -2706,7 +2713,7 @@ Partial Public Class MainForm
         leftCol.Controls.Add(BuildRowEmaRibbon(r, items))
         leftCol.Controls.Add(BuildRowTrendStr(r, items))
         leftCol.Controls.Add(BuildRowFunding(r, items))
-        leftCol.Controls.Add(BuildRowFundingMom(r, items))
+        leftCol.Controls.Add(BuildRowFundingMom(r, v, items))
         leftCol.Controls.Add(BuildRowOiChange(r, items))
 
         ' --- Right column: TIER 2 + TIER 3 ---
@@ -3218,13 +3225,16 @@ Partial Public Class MainForm
         Return MakeSignalRow("Funding", state, colour, note, CType(Nothing, Integer?))
     End Function
 
-    Private Shared Function BuildRowFundingMom(r As IndicatorResults, items As List(Of SignalBreakdownItem)) As Control
-        Dim state As String, colour As Color
+    Private Shared Function BuildRowFundingMom(r As IndicatorResults, v As VerdictResult,
+                                               items As List(Of SignalBreakdownItem)) As Control
+        Dim state As String
         Select Case If(r.FundingMomentum, "")
-            Case "RISING"  : state = "RISE"  : colour = Theme.ACC_WARN
-            Case "FALLING" : state = "FALL"  : colour = Theme.ACC_STRONG_LONG
-            Case Else      : state = "FLAT"  : colour = Theme.FG_TERTIARY
+            Case "RISING"  : state = "RISE"
+            Case "FALLING" : state = "FALL"
+            Case Else      : state = "FLAT"
         End Select
+        ' [D-9 (b)] The word stays the momentum state; the colour is Step 3b's actual effect.
+        Dim colour As Color = ResolveFundStep3bColour(v)
         ' Funding Mom is a Step 3b adjunct, not a standalone vote — non-
         ' voting display row (SC "—").
         Return MakeSignalRow("Funding Mom", state, colour, "step 3b", CType(Nothing, Integer?))
@@ -3564,12 +3574,14 @@ Partial Public Class MainForm
 
         ' Funding Mom
         Dim fmDir As String = If(r.FundingMomentum, "FLAT").ToUpper()
-        Dim fmState As String, fmColour As Color
+        Dim fmState As String
         Select Case fmDir
-            Case "RISING"  : fmState = "↑ RISING"  : fmColour = Theme.ACC_WARN
-            Case "FALLING" : fmState = "↓ FALLING" : fmColour = Theme.ACC_STRONG_LONG
-            Case Else      : fmState = "— FLAT"    : fmColour = Theme.FG_TERTIARY
+            Case "RISING"  : fmState = "↑ RISING"
+            Case "FALLING" : fmState = "↓ FALLING"
+            Case Else      : fmState = "— FLAT"
         End Select
+        ' [D-9 (b)] The word stays the momentum state; the colour is Step 3b's actual effect.
+        Dim fmColour As Color = ResolveFundStep3bColour(v)
         panel.Controls.Add(MakeFooterAggregate("Funding Mom", fmState, fmColour, "step 3b"), 0, 3)
 
         panel.Controls.Add(NewDivider(), 0, 4)

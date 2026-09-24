@@ -731,6 +731,10 @@ Partial Public Class ScoringEngine
         ss = Math.Max(0, ss)
 
         ' -- Step 3b: Funding Momentum Modifier -------------------------------
+        ' [D-9 (b)] Scores entering Step 3b, so its ACTUAL effect (after the clamps) can be
+        ' carried on res.FundingStep3b*Points. Pure read: no score changes here.
+        Dim pre3bL As Integer = ls
+        Dim pre3bS As Integer = ss
         Dim fundingStep3bNote As String = "STEP3b: disabled"
         If cfg.Indicators.Funding.MomentumEnabled Then
             fundingStep3bNote = "STEP3b: none"
@@ -765,6 +769,8 @@ Partial Public Class ScoringEngine
         End If
         ls = Math.Max(0, ls)
         ss = Math.Max(0, ss)
+        res.FundingStep3bLongPoints = ls - pre3bL
+        res.FundingStep3bShortPoints = ss - pre3bS
         fundLP = ls - fundBaseL : fundSP = ss - fundBaseS
 
         ' -- Breakdown notes --------------------------------------------------

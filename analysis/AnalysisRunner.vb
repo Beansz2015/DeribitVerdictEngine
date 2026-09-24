@@ -179,9 +179,12 @@ Public Class AnalysisRunner
                                                               popRes(popKey), AdverseBarrierMode.Legacy)
 
             ' ── 5b. VerdictContext cross-tab (this population only) ───────────────────
-            pr.ContextOutcomes = ComputeContextOutcomes(popRows, pr.FailureCells, cfg)
+            ' [D-8 (b) + EF-2 (a)] Directional trades, lean NO TRADE rows and tie rows land in
+            ' three separate fields (docs/engine-fix-build-spec-2026-09-21.md §5.1).
+            ComputeContextOutcomes(popRows, pr.FailureCells, cfg, pr)
             ' [D7 spin-off 2 — smalls-2026-07-22 item 2] NO-TRADE lean-tag counts,
-            ' rendered as the §6 (b) sub-table. Lean rows have NO barrier — counts only.
+            ' rendered as the §6 (b) sub-table — counts only. (The lean rows' as-if-taken WALK
+            ' is the separate LEAN column of §6 (a), filled by ComputeContextOutcomes above.)
             pr.LeanContextCounts = ComputeLeanContextCounts(popRows)
 
             ' ── 5b2. Band ladder (E5, diagnostic — includes untraded WEAK) ────────────
@@ -258,66 +261,113 @@ Public Class AnalysisRunner
         Return sorted(lo) * (1 - frac) + sorted(hi) * frac
     End Function
 
+    ' [D-8 (b) + EF-2 (a), docs/engine-fix-build-spec-2026-09-21.md §5.1] How a row enters
+    ' the §6 context table. Before this split the table's filter admitted every verdict
+    ' that was not exactly "NO TRADE" and did not start with "WEAK", so a lean row
+    ' ("NO TRADE [WEAK LONG]") was walked as a TRADE, and "NO TRADE [TIE]" was walked as a
+    ' SHORT because it does not contain "LONG" (finding EVAL-1: 7,195 lean rows beside
+    ' 3,305 directional ones on the merged book).
+    '   Directional — IsDirectionalVerdict, the same test the tier matrices use.
+    '   LeanLong / LeanShort — a NO TRADE row carrying a [WEAK LONG] / [WEAK SHORT] tag.
+    '     The StartsWith("NO TRADE") test is the one ComputeLeanContextCounts already uses.
+    '   LeanTie — NO TRADE [TIE]. Detected on the verdict TEXT, never by the absence of
+    '     "LONG" (that absence test IS the defect). A tie has no lean side, so it is
+    '     COUNTED and never walked.
+    '   Excluded — everything else, including a plain "NO TRADE" with no lean tag.
+    Friend Enum ContextRowKind
+        Excluded
+        Directional
+        LeanLong
+        LeanShort
+        LeanTie
+    End Enum
+
+    Friend Shared Function ClassifyContextRow(verdict As String) As ContextRowKind
+        If IsDirectionalVerdict(verdict) Then Return ContextRowKind.Directional
+        Dim v As String = If(verdict, "").Trim().ToUpper()
+        If Not v.StartsWith("NO TRADE") Then Return ContextRowKind.Excluded
+        If v.Contains("[WEAK LONG]") Then Return ContextRowKind.LeanLong
+        If v.Contains("[WEAK SHORT]") Then Return ContextRowKind.LeanShort
+        If v.Contains("[TIE]") Then Return ContextRowKind.LeanTie
+        Return ContextRowKind.Excluded
+    End Function
+
     ' VerdictContext × outcome cross-tab for ONE population's rows, using that
     ' population's recommended cell's HOLD WINDOW as the horizon. Barrier geometry is
     ' the row's own placed target/stop (placed-target migration) — the recommended cell
     ' no longer carries a threshold to borrow. Failure classification uses v2 barrier-hit
     ' logic (same as FailureRateMatrix). cfg supplies the legacy fallback multipliers for
     ' any pre-v0.8 row.
-    Private Shared Function ComputeContextOutcomes(popRows As List(Of CsvRow),
-                                                   failureCells As List(Of FailureCellResult),
-                                                   cfg As EngineSettings) _
-                                                   As Dictionary(Of String, FailureCellResult)
-        Dim outcomes As New Dictionary(Of String, FailureCellResult)()
+    ' [D-8 (b)] Fills THREE fields on pr: ContextOutcomes (directional trades only),
+    ' LeanContextOutcomes (lean NO TRADE rows, walked on their lean side as if taken — they
+    ' were NOT traded) and LeanTieCounts (tie rows, counted, never walked).
+    Friend Shared Sub ComputeContextOutcomes(popRows As List(Of CsvRow),
+                                             failureCells As List(Of FailureCellResult),
+                                             cfg As EngineSettings,
+                                             pr As PopulationReport)
         Dim recCell = failureCells.Where(Function(c) c.IsRecommended).FirstOrDefault()
+        Dim w As Integer = 10
+        If recCell IsNot Nothing Then w = recCell.WindowMin
         ' "ALIGNED" added 2026-05-17 (audit cleanup pass): post-v30 NO TRADE rows
         ' carry VerdictContext="ALIGNED". Currently masked by the inner "NO TRADE"
         ' filter so the row renders as n=0, but the addition removes enum/filter
         ' divergence if a future change writes ALIGNED on directional verdicts.
         For Each ctx In {"CONFIRMED", "ALIGNED", "FLOW_UNCONFIRMED", "MOMENTUM_FADING", "STRUCTURALLY_WEAK"}
-            Dim ctxRows = popRows.Where(Function(r)
-                Return String.Equals(r.VerdictContext, ctx, StringComparison.OrdinalIgnoreCase) AndAlso
-                       r.ATR > 0 AndAlso
-                       r.Verdict <> "" AndAlso
-                       r.Verdict.ToUpper() <> "NO TRADE" AndAlso
-                       Not r.Verdict.ToUpper().StartsWith("WEAK")
-            End Function).ToList()
-            If ctxRows.Count = 0 Then Continue For
-
-            Dim cell As New FailureCellResult() With {.VerdictTier = ctx}
-            Dim w As Integer = 10
-            If recCell IsNot Nothing Then w = recCell.WindowMin
-
-            Dim n As Integer = 0, f As Integer = 0
-            For Each row In ctxRows
-                Dim bars As List(Of OhlcBar) = Nothing
-                If Not row.ForwardBars.TryGetValue(w, bars) OrElse bars Is Nothing OrElse bars.Count = 0 Then
-                    Continue For
-                End If
-                Dim isLong   As Boolean = row.Verdict.ToUpper().Contains("LONG")
-                Dim entry    As Double  = row.Price
-                Dim atr      As Double  = row.ATR
-                ' Placed target vs placed stop when the row carries them, else the legacy
-                ' formula on both sides — the same routing the main matrix uses.
-                Dim ctxStruct As Integer = 0, ctxFb As Integer = 0
-                Dim ctxPlaced As Integer = 0, ctxLegacyFav As Integer = 0
-                Dim favBar    As Double  = FailureRateMatrix.ResolveFavourableBarrier(
-                    row, isLong, entry, atr, AdverseBarrierMode.Placed,
-                    cfg.Scoring.AtrTargetMultiplier, cfg.Scoring.TradeCosts.EffectiveMinMovePct,
-                    ctxPlaced, ctxLegacyFav)
-                Dim advBar    As Double  = FailureRateMatrix.ResolveAdverseBarrier(
-                    row, isLong, entry, atr, AdverseBarrierMode.Placed, ctxStruct, ctxFb)
-                Dim outcome   As String  = FailureRateMatrix.WalkBars(bars, favBar, advBar, isLong)
-                n += 1
-                If outcome <> "SUCCESS" Then f += 1
+            Dim tradeRows As New List(Of CsvRow)()
+            Dim leanRows As New List(Of CsvRow)()
+            Dim ties As Integer = 0
+            For Each row In popRows
+                If Not String.Equals(row.VerdictContext, ctx, StringComparison.OrdinalIgnoreCase) OrElse
+                   Not (row.ATR > 0) Then Continue For
+                Select Case ClassifyContextRow(row.Verdict)
+                    Case ContextRowKind.Directional : tradeRows.Add(row)
+                    Case ContextRowKind.LeanLong, ContextRowKind.LeanShort : leanRows.Add(row)
+                    Case ContextRowKind.LeanTie : ties += 1
+                End Select
             Next
-            cell.SampleSize  = n
-            cell.Failures    = f
-            cell.FailureRate = If(n > 0, CDbl(f) / n, 0)
-            If n > 0 Then FailureRateMatrix.WilsonCI(f, n, cell.CiLow, cell.CiHigh)
-            outcomes(ctx) = cell
+            If tradeRows.Count > 0 Then pr.ContextOutcomes(ctx) = WalkContextCell(ctx, tradeRows, w, cfg)
+            If leanRows.Count > 0 Then pr.LeanContextOutcomes(ctx) = WalkContextCell(ctx, leanRows, w, cfg)
+            If ties > 0 Then pr.LeanTieCounts(ctx) = ties
         Next
-        Return outcomes
+    End Sub
+
+    ' One context cell: walk each row at hold window w on its own side's barriers.
+    ' The side comes from ClassifyContextRow: a directional row by its verdict text, a lean
+    ' row by its lean tag. A tie never reaches here (ComputeContextOutcomes counts it).
+    Private Shared Function WalkContextCell(ctx As String, rows As List(Of CsvRow), w As Integer,
+                                            cfg As EngineSettings) As FailureCellResult
+        Dim cell As New FailureCellResult() With {.VerdictTier = ctx}
+        Dim n As Integer = 0, f As Integer = 0
+        For Each row In rows
+            Dim bars As List(Of OhlcBar) = Nothing
+            If Not row.ForwardBars.TryGetValue(w, bars) OrElse bars Is Nothing OrElse bars.Count = 0 Then
+                Continue For
+            End If
+            Dim kind     As ContextRowKind = ClassifyContextRow(row.Verdict)
+            Dim isLong   As Boolean = If(kind = ContextRowKind.Directional,
+                                         row.Verdict.ToUpper().Contains("LONG"),
+                                         kind = ContextRowKind.LeanLong)
+            Dim entry    As Double  = row.Price
+            Dim atr      As Double  = row.ATR
+            ' Placed target vs placed stop when the row carries them, else the legacy
+            ' formula on both sides — the same routing the main matrix uses.
+            Dim ctxStruct As Integer = 0, ctxFb As Integer = 0
+            Dim ctxPlaced As Integer = 0, ctxLegacyFav As Integer = 0
+            Dim favBar    As Double  = FailureRateMatrix.ResolveFavourableBarrier(
+                row, isLong, entry, atr, AdverseBarrierMode.Placed,
+                cfg.Scoring.AtrTargetMultiplier, cfg.Scoring.TradeCosts.EffectiveMinMovePct,
+                ctxPlaced, ctxLegacyFav)
+            Dim advBar    As Double  = FailureRateMatrix.ResolveAdverseBarrier(
+                row, isLong, entry, atr, AdverseBarrierMode.Placed, ctxStruct, ctxFb)
+            Dim outcome   As String  = FailureRateMatrix.WalkBars(bars, favBar, advBar, isLong)
+            n += 1
+            If outcome <> "SUCCESS" Then f += 1
+        Next
+        cell.SampleSize  = n
+        cell.Failures    = f
+        cell.FailureRate = If(n > 0, CDbl(f) / n, 0)
+        If n > 0 Then FailureRateMatrix.WilsonCI(f, n, cell.CiLow, cell.CiHigh)
+        Return cell
     End Function
 
     ' [D7 spin-off 2] Per-tag row counts on NO-TRADE rows in this population — the

@@ -71,6 +71,18 @@ Public Class VerdictResult
     ''' </summary>
     Public Property OiCvdOutcome As String = "NONE"
 
+    ''' <summary>
+    ''' [D-9 (b), docs/engine-fix-build-spec-2026-09-21.md §5.2] Step 3b's OWN signed effect on
+    ''' each side's score: the ACTUAL delta Step 3b applied (after its floor at 0 and its cap
+    ''' at the regime max), not the configured soften / amplify value. Negative = a crowding
+    ''' penalty, positive = a de-crowding soften, 0 = no effect (disabled, no arm fired, or
+    ''' the clamp absorbed it). Step 3b moves at most one side per run.
+    ''' Set by RunScoringPipeline at Step 3b. Display-only: the card and the snapshot read it
+    ''' (through FundingStep3bDisplay) instead of parsing the breakdown note's text. Not logged.
+    ''' </summary>
+    Public Property FundingStep3bLongPoints As Integer
+    Public Property FundingStep3bShortPoints As Integer
+
     ' ---------------------------------------------------------------------------
     ' Kelly sizing outputs
     ' Populated by CalcKellySizing() in MainForm_Render -- display-only, no scoring impact.

@@ -1574,10 +1574,10 @@ Rendered as `MTF Gate (15m)` in the signal breakdown table. `[L]` / `[S]` hit:
 ```
 FUNDING:
   Rate: 0.0007%  |  NEUTRAL
-  Momentum: FLAT  |  Enabled: YES  |  Soften: +1  |  Amplify: -1
+  Momentum: FLAT  |  Enabled: YES  |  Effect: none
 ```
 
-Two-row funding block: the raw rate + crowd bias on the first row, and momentum metadata (Step 3b inputs) on the second.
+Two-row funding block: the raw rate + crowd bias on the first row, and the momentum state plus what Step 3b actually did on the second.
 
 ### Row 1 — Rate / Bias
 
@@ -1616,14 +1616,14 @@ Score is post-clamped to `max(0, ...)`.
 - Funding is adjunct — it never votes in Step 2 scoring (rejected pattern; would double-count). Row 1 breakdown appears as `Funding (info)` with no `[L]` / `[S]` hit marker, carrying the STEP3 + STEP3b notes as informational text only.
 - The rate displayed `0.0007%` = raw `0.000007`, well below any threshold — `STEP3: none` is correct.
 
-### Row 2 — Momentum / Enabled / Soften / Amplify
+### Row 2 — Momentum / Enabled / Effect
 
 **What:**
 
 - `Momentum` — `r.FundingMomentum`, one of `RISING` / `FALLING` / `FLAT`.
-- `Enabled` — `YES` / `NO`, from `cfg.Indicators.Funding.MomentumEnabled`.
-- `Soften` — displayed as `+N`, from `cfg.Indicators.Funding.MomentumSoften` (default 1).
-- `Amplify` — displayed as `-N`, from `cfg.Indicators.Funding.MomentumAmplify` (default 1).
+- `Enabled` — `YES` / `NO`, from `cfg.Indicators.Funding.MomentumEnabled`. It explains an `Effect: none` that would otherwise read as "nothing happened".
+- `Effect` — Step 3b's ACTUAL signed effect on this run, in the breakdown's shape: `-1[L]`, `+1[S]`, or `none`. It reads `VerdictResult.FundingStep3bLongPoints` / `FundingStep3bShortPoints`: the score change Step 3b really applied, after the floor at 0 and the `regimeMax` cap. So a penalty arm that fires on a long score already at 0 shows `none`, while the breakdown note still names the arm (`STEP3b: -1[L] crowding↑`).
+- ⚠ **Changed 2026-09-24 (UTC), ruling `D-9` (b) with `EF-4` (a) of `docs/engine-fix-build-spec-2026-09-21.md`.** This row used to print `Soften: +N | Amplify: -N` — the configured sizes, i.e. what Step 3b COULD do. Those sizes stay in `settings.json` (`indicators.funding.momentum_soften` / `momentum_amplify`) and in the breakdown note. The card's FUNDING group shows the same effect on its `Step 3b:` row (`Enabled=Y | Effect=-1[L]`), which was the `Config:` row.
 
 **Calculation (`CalcFundingMomentum` in `Indicators_OrderFlow.vb`) — time-anchored since v53:**
 
@@ -1654,15 +1654,17 @@ Applied on top of Step 3. Behaviour depends on `FundingBias` + `FundingMomentum`
 
 Enabled gate: entire Step 3b skipped if `cfg.Indicators.Funding.MomentumEnabled = false`. Note: `STEP3b: disabled`.
 
-**Display colour (Row 2):**
+**Display colour (card: the `Step 3b:` row, the Funding Mom meter, the Funding Mom signal row and the breakdown footer's Funding Mom aggregate):**
 
-- Amber — `RISING` (penalty-amplifying direction).
-- Green — `FALLING` (de-crowding direction).
-- Grey — `FLAT`.
+- Amber — Step 3b applied a crowding PENALTY (negative effect) on either side.
+- Green — Step 3b applied a de-crowding SOFTEN (positive effect) on either side.
+- Grey — no effect (disabled, no arm fired, or a clamp absorbed it).
+- The word (`RISE` / `FALL` / `FLAT`, `↑ RISING` / `↓ FALLING` / `— FLAT`) still shows the momentum state; only the colour follows the effect.
+- ⚠ **Before 2026-09-24 (UTC) the colour followed the momentum direction alone** (amber `RISING`, green `FALLING`). That painted `FALLING` as de-crowding even when shorts were crowded and Step 3b had applied a PENALTY (bug-hunt finding `DISP-1`).
 
-**Display convention for Soften / Amplify:**
+**Display convention for the effect sign:**
 
-- Displayed as `Soften: +N` and `Amplify: -N` even though both are stored as positive magnitudes in config. The sign convention reflects their **effect on score** — soften *adds back*, amplify *deducts further*. This is a readability choice, not a sign error.
+- `Effect: -1[L]` means Step 3b deducted 1 from the long score; `+1[S]` means it added 1 back to the short score. The sign is the effect on score, the same convention the `STEP3b:` breakdown note uses.
 
 **Interpretation:**
 
@@ -1870,7 +1872,7 @@ Since the resolution-segmentation fix (`offline-analysis-report-audit-proposal.m
 - **2. Failure-Rate Matrix** — per tier, one sub-table per session: hold window (5/10/15 min) × ATR threshold. Each cell shows `rate% n=sample [ci_low–ci_high]` (95% Wilson). Each sub-table is headed with that session's resolution + directional-row ATR caption (`p50`, `p25–p75`) + the `$` move-floor, so `× ATR` reads in dollars. `★` = lowest CI width, `◆` = lowest failure rate (both need `n ≥ 30`), picked **within** each sub-table.
 - **3. Recommended (window, threshold)** — per tier × session: `★` most-precise + `◆` lowest-failure picks.
 - **4a. Barrier-Hit Decomposition** — per tier × session: success / adverse-hit / window-expiry / ambiguous counts.
-- **4. Verdict Context Tag × Outcome** — per session: failure rate per VerdictContext at that session's recommended cell.
+- **4. Verdict Context Tag × Outcome** — per session: failure rate per VerdictContext at that session's recommended cell. Since 2026-09-24 (UTC, ruling `D-8` (b) of `docs/engine-fix-build-spec-2026-09-21.md`) the table has three labelled columns: **DIRECTIONAL (traded)** — STRONG / MEDIUM verdicts only; **LEAN NO TRADE (not traded)** — `NO TRADE [WEAK LONG]` / `[WEAK SHORT]` rows walked on their lean side as if taken; **TIE (not walked)** — a count of `NO TRADE [TIE]` rows, which have no lean side. Never add the first two columns together. Before this change the lean rows were counted as trades and a tie was walked as a short.
 - **8. Hold Window Selection Stats** — per tier × session: the `★`/`◆` recommended hold window.
 - **9. Pending data** — per tier × session: cells with `n < 30` (insufficient sample).
 - **Global Diagnostics** (not segmented — book-wide, resolution-independent): **5. Funding Momentum** (empirical FundingDelta distribution + percentiles; the "current threshold" now reads the live `momentum_threshold`), **6. OFI Outlier Audit** (`OFIRatio > 100` / `> 1000` + top-10), **7. OI×CVD Asymmetry Audit** (confirmed-long vs -short by Regime and Funding Bias).

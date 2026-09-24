@@ -60,7 +60,7 @@ Partial Public Class MainForm
         AppendOrderFlow(sb, r)
         AppendLiquidations(sb, r)
         AppendMtfGate(sb, r, v)
-        AppendFunding(sb, r, cfg)
+        AppendFunding(sb, r, v, cfg)
         AppendSignalBreakdown(sb, v)
 
         Return sb.ToString()
@@ -471,16 +471,15 @@ Partial Public Class MainForm
         sb.AppendLine("  Reason: " & v.MTFGateReason)
     End Sub
 
-    Private Sub AppendFunding(sb As StringBuilder, r As IndicatorResults, cfg As EngineSettings)
+    Private Sub AppendFunding(sb As StringBuilder, r As IndicatorResults, v As VerdictResult, cfg As EngineSettings)
         sb.AppendLine()
         sb.AppendLine("FUNDING:")
         Dim fundDisplayRate As Double = If(Math.Abs(r.FundingRate) < 0.00000001, 0.0, r.FundingRate)
         sb.AppendLine(String.Format("  Rate: {0:F4}%  |  {1}", fundDisplayRate * 100, r.FundingBias))
-        sb.AppendLine(String.Format("  Momentum: {0}  |  Enabled: {1}  |  Soften: +{2}  |  Amplify: -{3}",
-                                     r.FundingMomentum,
-                                     If(cfg.Indicators.Funding.MomentumEnabled, "YES", "NO"),
-                                     cfg.Indicators.Funding.MomentumSoften,
-                                     cfg.Indicators.Funding.MomentumAmplify))
+        ' [D-9 (b) + EF-4 (a)] Re-formatted, not added: this line printed the configured
+        ' Soften / Amplify values (what Step 3b COULD do). It now prints Step 3b's actual
+        ' effect. Card twin: BuildGroupFunding's "Step 3b:" row (same FundingStep3bDisplay).
+        sb.AppendLine(FundingStep3bDisplay.MomentumLine(r, v, cfg))
     End Sub
 
     Private Sub AppendSignalBreakdown(sb As StringBuilder, v As VerdictResult)

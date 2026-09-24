@@ -28,6 +28,8 @@
     <Compile Include="..\..\Core\ScoringEngine_Calculate_Scoring.vb" />
     <Compile Include="..\..\Core\ScoringEngine_Calculate_Verdict.vb" />
     <Compile Include="..\..\Core\ScoringEngine_Kelly.vb" />
+    <!-- D-9 (A86): Step 3b's display text and tone, shared by the snapshot and the card. -->
+    <Compile Include="..\..\Core\FundingStep3bDisplay.vb" />
     <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
     <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
     <!-- WS-P3 (A16): the stub-testable, host-agnostic WS source classes so the §3
@@ -113,9 +115,15 @@
          MarkdownReportWriter §9 render and the ladder-eligibility harness. -->
     <Compile Include="..\..\analysis\BandLadder.vb" />
     <!-- D6 A27c: the offline report writer's D4 before/after section (BuildD4Section).
-         Host-agnostic (StringBuilder only); AnalysisRunner stays OUT — it needs a live
-         Deribit OHLC fetch. -->
+         Host-agnostic (StringBuilder only). -->
     <Compile Include="..\..\analysis\MarkdownReportWriter.vb" />
+    <!-- D-8 (A87): AnalysisRunner is now LINKED so the context-table split
+         (ClassifyContextRow / ComputeContextOutcomes) runs as the shipped code. Run() still
+         needs a live Deribit OHLC fetch and is never CALLED here; the two diagnostics are
+         linked only because Run() references them. -->
+    <Compile Include="..\..\analysis\AnalysisRunner.vb" />
+    <Compile Include="..\..\analysis\FundingMomentumDiagnostic.vb" />
+    <Compile Include="..\..\analysis\OutlierAudit.vb" />
     <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
     <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
     <!-- offline-whatif-replay (A30): the host-agnostic overlay whitelist + the replay core
