@@ -1,6 +1,33 @@
 # Liquidation-flag probe — run record, 2026-09-21 (UTC)
 
-**Status: RUNNING. The measurement has NOT returned yet.**
+**Status: RUN 1 DIED. RUN 2 RUNNING since 2026-09-24 13:28 UTC. The measurement has NOT returned yet.**
+
+## 0. ⛔ Run 1 died unnoticed — read before §1 (added 2026-09-24 UTC)
+
+| Item | Value | How checked |
+|---|---|---|
+| Run 1 last status line | 2026-09-21 11:13:47 UTC, `up 110m`, `flagged 0`, `paired 0` | `probe-console.log` tail |
+| Run 1 last raw write | 2026-09-21 11:16:18 UTC, **cut mid-line** | tail of `liq_probe_raw_20260921-092345_01.jsonl` |
+| Run 1 summary | **None.** The process was killed, not stopped through `STOP` | no summary in the console log |
+| Run 1 process 7368 | not running on 2026-09-24 | `tasklist` |
+| Pairings | 0 (the file is empty) | `wc -l` |
+
+- **Cause: not verified.** The machine never sleeps (power plan `High performance`, standby 0). The likeliest cause is that the launching seat's process tree was killed. A usage-limit stop does this to background agents (`seat-handover-2026-09-17.md` §5 lesson 6).
+- ⛔ **Three handovers passed without noticing.** `seat-handover-2026-09-24.md` says "nothing is running", which was true but did not name the dead probe.
+- **Also found:** `584c616` (the WPAD fix) missed this probe. Its WebSocket and HTTP clients stayed at the defaults. Fixed in `a3c9079` before run 2.
+
+### Run 2
+
+| Item | Value |
+|---|---|
+| Working directory | `C:\Dev\probe-runs\liq-2026-09-24\` |
+| Started (UTC) | 2026-09-24 13:28:03 |
+| Launch | `Win32_Process.Create` (WMI), so the process is not a child of any Claude session. `cmd.exe` (9556) runs `dotnet …WsTradeProbe.dll liq 0 10` (PID 25032, also in `probe.pid`) |
+| Subscriptions at start | `100ms` ACCEPTED · `raw` REFUSED (`13778`, as finding `PB-1` in §2 below) · `agg2` ACCEPTED |
+
+⚠ **Check it is alive at every seat start:** `tail -3 /c/Dev/probe-runs/liq-2026-09-24/probe-console.log`. The status line prints every 5 minutes, so a timestamp older than about 10 minutes means the probe is dead.
+
+The §1 table below describes run 1. For run 2, replace the directory with `liq-2026-09-24`.
 **Written:** 2026-09-21, `date -u` = `Mon Sep 21 09:06:19 UTC 2026` at session start.
 **Session:** B1 of [`docs/engine-fix-build-spec-2026-09-21.md`](engine-fix-build-spec-2026-09-21.md) §4.1, under [`docs/engine-fix-session-b1-probe-brief.md`](engine-fix-session-b1-probe-brief.md).
 **Instrument commits:** `951cde0` (the probe) and `bb924c8` (the STOP-file shutdown). Both committed **before** the run started, per the brief's §3 order of work.
