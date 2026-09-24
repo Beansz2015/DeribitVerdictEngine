@@ -157,6 +157,8 @@ awk '/^## 11\./,/^## 12\./' docs/q1d-tier-geometry-2026-09-24-output.md | grep -
 
 ## 3. Decisions queued
 
+✅ **RULED 2026-09-24 (UTC), trader, as recommended:** `QD-1` = record (a) AND adopt (c): tiers are not re-cut, and Kelly sizing treats all tiers as one class. `QD-2` = (a): p = the measured pooled success rate, so the Kelly block is silent on every signal until the book supports an edge. `QD-3` = (a), orchestrator: add the NY STRONG fallback-target comparison to the pre-registered vote-value study when it is specced. **Not built yet:** the (c) change is a rendered-value build (Kelly display, and the payload's advisory `kelly` block reads 0) and needs its own small spec; consider settling it with the parked `K-1`–`K-4` payoff proposal in one pass. Kelly has zero scoring impact (checked 2026-09-24: no `Kelly` reference in the scoring files; the payload comment reads *"Advisory context only — never sizing in v1"*).
+
 ### QD-1 — `Q-1` (a) against (c) (trader; ⚠ reserved: (c) moves a rendered value)
 
 | Option | What changes | Measured basis (the read §1, §6) |
