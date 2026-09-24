@@ -12,6 +12,7 @@
 | Run 3 summary | 181 polls, 181,000 REST trades, **0 flagged**, 0 pairings. Inconclusive |
 | Run 3 memory | probe private 38 MB at +10 min, 111 MB at +170 min; box commit free 1,611 then 1,569 MB of 3,313; the collector wrote a row every minute throughout |
 | Run 3 raw dump | file `_01` rotated at 64 MB. A `Get-ChildItem` listing showed 0 bytes while the file was open: a stale directory entry, not an empty file |
+| ✅ Run 4 fix confirmed live | 17:38 UTC (+45 min): 257 REST polls, **`rest errors 1`**, and polling carried on past the error. That is the exact failure that ended run 3's arm. Probe private 38 MB (index 13,782), box commit free 1,625 MB, collector writing every minute |
 | Run 4 | started 16:53 UTC, PID 11248, BelowNormal, built from `eff6def`. `run.cmd` now sets `DOTNET_GCHeapHardLimit=0xC800000` (200 MB), so a runaway heap kills the probe, not the box. Run 3's logs are kept as `run3-probe-console.log` and `run3-probe-stderr.log` |
 
 ## 00. ⭐ Run 3 — on the collector box (trader-ruled 2026-09-24 UTC)
