@@ -366,6 +366,25 @@ The box owes nothing at end-of-life beyond a final copy-back of `analysis_log.cs
 
 ⛔ **But it cannot be called thrashing either.** [`hostel-app-colocation-assessment.md`](hostel-app-colocation-assessment.md) §10.1 records a burst *"caused by the measuring probe itself"*, and the box has 87–101 MB free of 1,024 MB. **Two readings from the same probe cannot separate box pressure from probe-induced pressure.** Resolving it needs a detached instrument. **Neither alarmed nor cleared — recorded.**
 
+### 5d. The 2026-09-24 decision-point check — HEALTHY (run 08:45 UTC, 2 h 45 m late)
+
+Run by a scheduled read-only session; the app was not open at 06:00. Fetch `aws_fetch\20260924-084613`. Nothing deployed, restarted or edited.
+
+| Criterion | Reading | Verdict |
+|---|---|---|
+| Threads | 13 (a single reading) | ✅ |
+| `analysis_log.csv` | last row 08:45:01, gap 1.0 min, 17,752 rows | ✅ advancing |
+| Settings / overlay | v68 / `False` | ✅ |
+| Restarts | none: `ee159d03…` since 2026-09-21 15:39 in both `analysis_log.csv` and `ws_health.log` | ✅ |
+| Defender 02:00 windows, 2026-09-22 to 09-24 | 15 rows each at a steady 3-min cadence; no gap and no reconnect in any window | ✅ |
+| Venue check | `CLEAN — missing=0 venue=110502 pages=111 seq_contiguous=true` | ✅ |
+| `ws_feed.log` | 4 more sub-2 s reconnects (8 in about 65 h), none seen by `ws_health.log` | ⚠ as §5c |
+| `pagesOUT/s` | 0.0 / 0.0 over 30 s | recorded |
+
+⛔ **A clean read does not prove the re-entrancy gates work under load.** No scan produced a stall to test them against, and there is no thread series through the 02:00 windows. This bears on whether the UI-thread liveness heartbeat is still worth building ([`seat-handover-2026-09-21.md`](seat-handover-2026-09-21.md) §0).
+
+⚠ **New observation, not investigated: the same `trade_seq` holes are repaired on several passes.** For example, `300377526..300377528` was repaired at 2026-09-22 15:39, 21:39 and 2026-09-23 03:39, each pass `PASS_CLEAN`. Either the repair does not persist, or detection finds the same hole again inside `lookback_h=20`. Tape is complete (venue check `CLEAN`). Queued in [`trader-tick-queue.md`](trader-tick-queue.md) §2.
+
 ---
 
 ### 5a. v64 deploy — trader-executed 2026-08-01, verified
