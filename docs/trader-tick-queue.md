@@ -14,7 +14,9 @@
 
 > ## ⛔ STATE BANNER — REFRESHED 2026-09-17 (UTC). Read this before believing any row below.
 >
-> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-23.md`](seat-handover-2026-09-23.md)** — the seat that closed items `8a`, `8e`, `8f`, `8h`, `8j`, `8m`, measured and specced harness 4, and reviewed harnesses 1–3. ⛔ **`master` is 29 commits AHEAD of `origin`, UNPUSHED**, all `[no-engine-change]`. Settings v68, harness 425 PASS, nothing deployed, collector not touched. ⛔ **First: the 2026-09-24 06:00 UTC collector check.** The engine queue is still ON HOLD. Older banner follows.
+> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-24.md`](seat-handover-2026-09-24.md)** — the Jev close-list seat. ✅ **The Jev programme is CLOSED; the ENGINE QUEUE RESUMES**, first with the engine-fix build. `master` = `origin` at `49fb10d` (pushed). Settings v68, no engine code changed, collector HEALTHY at the 2026-09-24 check. Older banner follows.
+>
+> ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-23.md`](seat-handover-2026-09-23.md)** — the seat that closed items `8a`, `8e`, `8f`, `8h`, `8j`, `8m`, measured and specced harness 4, and reviewed harnesses 1–3. ⛔ **`master` is 29 commits AHEAD of `origin`, UNPUSHED**, all `[no-engine-change]`. Settings v68, harness 425 PASS, nothing deployed, collector not touched. ⛔ **First: the 2026-09-24 06:00 UTC collector check.** The engine queue is still ON HOLD. Older banner follows.
 >
 > ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-22b.md`](seat-handover-2026-09-22b.md)** — the `FP-Q1` measurement seat, superseded for state. ⛔ **THE ENGINE QUEUE IS ON HOLD by trader direction until the Jev programme CLOSES** (its §4). ⛔ **`master` is 6 commits AHEAD of `origin`, UNPUSHED**, all `[no-engine-change]`. Settings v68, harness 425 PASS, nothing deployed, collector not touched. ⛔⛔ **FIRST ACTION is the `8a` RE-MEASURE — the six newly-opened `FP-1` sites are the most perishable thing in the repo and one careless run spends them for ever.** Then the **2026-09-24 06:00 UTC** collector check. Older banner follows.
 >
