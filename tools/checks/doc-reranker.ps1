@@ -59,7 +59,9 @@ param(
     [string]$LogPath = 'doc-reranker-query-log.jsonl',
     [string]$OutPath = '',
     [string]$QueryFile = 'docs/harness-runs/doc-reranker-20260923T1930Z-queries.json',
-    [string]$Python = 'python'
+    [string]$Python = 'python',
+    [ValidateSet('acceptance', 'reserved')][string]$Subset = 'acceptance',
+    [string[]]$ExcludeIds = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -238,8 +240,15 @@ if ($Query) {
 # =================================================================================================
 $qfFull = Resolve-RepoPath $QueryFile
 $qset = Get-Content -Raw -Encoding UTF8 -Path $qfFull | ConvertFrom-Json
-$acceptance = @($qset.queries | Where-Object { $_.subset -eq 'acceptance' })
-if ($acceptance.Count -ne 8) {
+# -Subset reserved: the SEAT's measured run (doc-reranker-measurement-plan.md step M4). Spent
+# query ids (judged by Jev before this run) are passed in -ExcludeIds and never re-judged.
+if ($Subset -eq 'reserved') {
+    $acceptance = @($qset.queries | Where-Object { $_.subset -eq 'reserved' -and $ExcludeIds -notcontains $_.id })
+    Write-Host "SUBSET=reserved  QUERIES=$($acceptance.Count)  EXCLUDED=$($ExcludeIds -join ',')"
+} else {
+    $acceptance = @($qset.queries | Where-Object { $_.subset -eq 'acceptance' })
+}
+if ($Subset -ne 'reserved' -and $acceptance.Count -ne 8) {
     Write-Host "EXIT_REASON=ACCEPTANCE_SET_UNEXPECTED"
     Write-Host "Expected 8 acceptance-subset queries in $QueryFile, found $($acceptance.Count). Refusing -- this run's numbers are specced against exactly 8."
     exit 2
