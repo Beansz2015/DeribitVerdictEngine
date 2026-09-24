@@ -1,0 +1,275 @@
+// Isolated audit probes against the built AutoTweaker.dll. Nothing here touches the repo.
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using DeribitVerdictEngine;
+
+static class P
+{
+    const string Repo = "/home/user/DeribitVerdictEngine";
+    static readonly string Scratch = AppContext.BaseDirectory;
+
+    static void Main()
+    {
+        var settingsJson = File.ReadAllText(Path.Combine(Repo, "settings.json"));
+        P1_ParseDiff();
+        P2_Validate(settingsJson);
+        P3_Apply(settingsJson);
+        P4_SnapshotIntegrity(settingsJson);
+        P5_AggregateZero();
+        P6_RecommendedBias();
+        P7_StreakTruncation();
+        P8_SpreadBucketZeroThresholds();
+        P9_Watcher();
+    }
+
+    // ---------------------------------------------------------------- P1
+    static void P1_ParseDiff()
+    {
+        Console.WriteLine("=== P1 ParseDiff: malformed responses ===");
+        var valid = "{\"action\":\"tweak\",\"reasoning\":\"widen\",\"diff\":[{\"path\":\"scoring.atr_stop_multiplier\",\"old_value\":1.6,\"new_value\":2.4,\"justification\":\"x\"}]}";
+        var cases = new (string name, string text)[] {
+            ("valid", valid),
+            ("truncated at max_tokens", valid.Substring(0, 110)),
+            ("prose before JSON", "Here is my proposal:\n" + valid),
+            ("fence + trailing prose", "```json\n" + valid + "\n```\nNote: conservative step."),
+            ("action:null", "{\"action\":null,\"reasoning\":\"r\",\"diff\":[{\"path\":\"scoring.atr_stop_multiplier\",\"old_value\":1.6,\"new_value\":2.4}]}"),
+            ("revert w/o target", "{\"action\":\"revert\",\"reasoning\":\"r\"}"),
+        };
+        foreach (var (name, text) in cases)
+        {
+            var r = SettingsDiffApplier.ParseDiff(text);
+            Console.WriteLine($"  {name,-26} items={r.Items.Count} action='{r.Action}' revertTarget='{r.RevertTarget}'");
+        }
+    }
+
+    // ---------------------------------------------------------------- P2
+    static JsonElement J(string raw) => JsonDocument.Parse(raw).RootElement.Clone();
+
+    static DiffItem Item(string path, string oldRaw, string newRaw)
+    {
+        var d = new DiffItem { Path = path, Justification = "" };
+        if (oldRaw != null) d.OldValue = J(oldRaw);
+        if (newRaw != null) d.NewValue = J(newRaw);
+        return d;
+    }
+
+    static string Compact(string settingsJson, string path)
+    {
+        JsonNode n = JsonNode.Parse(settingsJson);
+        foreach (var p in path.Split('.')) n = n[p];
+        return n.ToJsonString();
+    }
+
+    // Patch the JSON the way Apply would (overwrite existing leaf/object), then deserialise the
+    // way SettingsLoader does, to see what the live engine would do on hot reload.
+    static string HotReload(string settingsJson, DiffItem d, Func<EngineSettings, string> probe)
+    {
+        var root = JsonNode.Parse(settingsJson);
+        var parts = d.Path.Split('.');
+        JsonNode parent = root;
+        for (int i = 0; i < parts.Length - 1; i++) parent = parent[parts[i]];
+        ((JsonObject)parent)[parts[^1]] = JsonNode.Parse(d.NewValue.GetRawText());
+        try
+        {
+            var s = JsonSerializer.Deserialize<EngineSettings>(root.ToJsonString(),
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return "reload OK -> " + probe(s);
+        }
+        catch (Exception ex) { return "reload THROWS " + ex.GetType().Name + ": " + ex.Message.Split('.')[0]; }
+    }
+
+    static void P2_Validate(string settingsJson)
+    {
+        Console.WriteLine("=== P2 Validate: the one value check and the path fences ===");
+        var mtfCompact = Compact(settingsJson, "mtf_gate");
+        var kellyCompact = Compact(settingsJson, "kelly");
+        var costsCompact = Compact(settingsJson, "scoring.trade_costs");
+        var bridgeCompact = Compact(settingsJson, "signal_bridge");
+        var slCompact = Compact(settingsJson, "scoring.structural_levels");
+
+        var cases = new (string name, DiffItem d, Func<EngineSettings, string> probe)[] {
+            ("mtf_gate.enabled -> null",  Item("mtf_gate.enabled", "true", "null"), s => "mtf.enabled=" + s.MTFGate.Enabled),
+            ("mtf_gate.enabled -> 0.0",   Item("mtf_gate.enabled", "true", "0.0"),  s => "mtf.enabled=" + s.MTFGate.Enabled),
+            ("mtf_gate.enabled -> \"off\"", Item("mtf_gate.enabled", "true", "\"off\""), s => "mtf.enabled=" + s.MTFGate.Enabled),
+            ("bbw_squeeze_penalty 2->1.5 (Integer POCO; prompt's own example shape)",
+                Item("scoring.bbw_squeeze_penalty", "2", "1.5"), s => "bbw=" + s.Scoring.BbwSqueezePenalty),
+            ("atr_stop_multiplier -> \"2.4\" (string)",
+                Item("scoring.atr_stop_multiplier", "1.6", "\"2.4\""), s => "stopMult=" + s.Scoring.AtrStopMultiplier),
+            ("atr_stop_multiplier, old_value OMITTED",
+                Item("scoring.atr_stop_multiplier", null, "2.4"), s => "stopMult=" + s.Scoring.AtrStopMultiplier),
+            ("atr_stop_multiplier old 1.60 (file has 1.6)",
+                Item("scoring.atr_stop_multiplier", "1.60", "2.4"), s => "n/a"),
+            ("PARENT 'mtf_gate' -> enabled:false",
+                Item("mtf_gate", mtfCompact, mtfCompact.Replace("\"enabled\":true", "\"enabled\":false")), s => "mtf.enabled=" + s.MTFGate.Enabled),
+            ("PARENT 'kelly' -> max_risk 0.5",
+                Item("kelly", kellyCompact, kellyCompact.Replace("\"max_risk_fraction\":0.05", "\"max_risk_fraction\":0.5")), s => "kelly.maxRisk=" + s.Kelly.MaxRiskFraction),
+            ("PARENT 'scoring.trade_costs' -> fees 0",
+                Item("scoring.trade_costs", costsCompact, costsCompact.Replace("\"maker_fee_bps\":1.5", "\"maker_fee_bps\":0").Replace("\"min_net_move_pct\":0.0005", "\"min_net_move_pct\":0")),
+                s => "floorPct=" + s.Scoring.TradeCosts.EffectiveMinMovePct),
+            ("PARENT 'signal_bridge' -> new output_path",
+                Item("signal_bridge", bridgeCompact, bridgeCompact.Replace("verdict_signal.json", "x.json")), s => "bridge.path=" + s.SignalBridge.OutputPath),
+            ("PARENT 'scoring.structural_levels' -> enabled:false",
+                Item("scoring.structural_levels", slCompact, slCompact.Replace("{\"enabled\":true", "{\"enabled\":false")), s => "sl.enabled=" + s.Scoring.StructuralLevels.Enabled),
+        };
+        foreach (var (name, d, probe) in cases)
+        {
+            var v = SettingsDiffApplier.Validate(new List<DiffItem> { d }, settingsJson, 3);
+            var tail = v.IsValid ? " | " + HotReload(settingsJson, d, probe) : "";
+            Console.WriteLine($"  {name,-62} valid={v.IsValid} {(v.IsValid ? "" : "(" + v.ErrorReason + ")")}{tail}");
+        }
+        // What the Core does next with a missing old_value (AutoTweakerCore.vb:677-681, outside any Try).
+        try { var _ = Item("scoring.atr_stop_multiplier", null, "2.4").OldValue.GetRawText(); Console.WriteLine("  diffSummary OK"); }
+        catch (Exception ex) { Console.WriteLine("  Core diffSummary on missing old_value -> " + ex.GetType().Name); }
+    }
+
+    // ---------------------------------------------------------------- P3
+    static void P3_Apply(string settingsJson)
+    {
+        Console.WriteLine("=== P3 Apply (pre-existing finding; only establishing WHERE it stops for the trace) ===");
+        var tmp = Path.Combine(Scratch, "settings_apply.json");
+        File.WriteAllText(tmp, settingsJson);
+        var before = File.ReadAllText(tmp);
+        try
+        {
+            var v = SettingsDiffApplier.Apply(new List<DiffItem> { Item("scoring.atr_stop_multiplier", "1.6", "2.4") }, tmp, "probe");
+            Console.WriteLine("  Apply returned v" + v);
+        }
+        catch (Exception ex) { Console.WriteLine("  Apply threw " + ex.GetType().Name + ": " + ex.Message.Split('\n')[0]); }
+        Console.WriteLine("  file unchanged: " + (before == File.ReadAllText(tmp)) + "; .tmp left behind: " + File.Exists(tmp + ".tmp"));
+    }
+
+    // ---------------------------------------------------------------- P4
+    static void P4_SnapshotIntegrity(string settingsJson)
+    {
+        Console.WriteLine("=== P4 ValidateSnapshotContent on a snapshot that differs in trader-owned keys ===");
+        var snap = JsonNode.Parse(settingsJson);
+        snap["kelly"]["max_risk_fraction"] = 0.5;
+        snap["scoring"]["trade_costs"]["taker_fee_bps"] = 0.0;
+        snap["indicators"]["absorption"]["scoring_enabled"] = true;
+        snap["scoring"]["structural_levels"]["enabled"] = false;
+        snap["signal_bridge"]["enabled"] = true;
+        snap["scoring"]["hold_rsi_hold_long"] = 99;
+        ((JsonObject)snap["scoring"]).Remove("min_trades_for_scoring_override"); // a key added after the snapshot
+        var m = typeof(SettingsDiffApplier).GetMethod("ValidateSnapshotContent", BindingFlags.NonPublic | BindingFlags.Static);
+        var res = (DiffValidationResult)m.Invoke(null, new object[] { snap });
+        Console.WriteLine($"  integrity IsValid={res.IsValid} reason='{res.ErrorReason}'");
+    }
+
+    // ---------------------------------------------------------------- P5/P6 helpers
+    static OhlcBar Bar(DateTime close, double lo, double hi) => new OhlcBar { CloseTime = close, Open = (lo + hi) / 2, Close = (lo + hi) / 2, High = hi, Low = lo };
+
+    // A long row, entry 64000, placed target +245 / stop -224 (1.75 / 1.6 x ATR 140).
+    // hitMinute: bar close minute (3..15) at which the target prints; 0 = stop prints at minute 3; -1 = nothing (expiry).
+    static CsvRow Row(int idx, string verdict, int hitMinute)
+    {
+        var t0 = new DateTime(2026, 9, 22, 14, 0, 0).AddMinutes(idx);
+        var r = new CsvRow
+        {
+            Index = idx, Timestamp = t0, Price = 64000, ATR = 140, Verdict = verdict,
+            HasPlaced = true, PlacedTargetLong = 64245, PlacedStopLong = 63776,
+            PlacedTargetShort = 63755, PlacedStopShort = 64224, ExecResolution = 1
+        };
+        bool isLong = verdict.EndsWith("LONG");
+        var map = new Dictionary<DateTime, OhlcBar>();
+        var rowMin = new DateTime(t0.Year, t0.Month, t0.Day, t0.Hour, t0.Minute, 0, DateTimeKind.Utc);
+        for (int m = 1; m <= 16; m++)
+        {
+            double lo = 63950, hi = 64050;
+            if (hitMinute == 0 && m == 3) { if (isLong) lo = 63700; else hi = 64300; }
+            if (hitMinute > 0 && m == hitMinute) { if (isLong) hi = 64300; else lo = 63700; }
+            map[rowMin.AddMinutes(m)] = Bar(rowMin.AddMinutes(m), lo, hi);
+        }
+        ForwardWindowJoiner.PopulateForwardBars(new List<CsvRow> { r }, map);
+        return r;
+    }
+
+    static (List<FailureCellResult> cells, double agg) Matrix(List<CsvRow> rows)
+    {
+        int a = 0, b = 0, c = 0, d = 0, e = 0, f = 0;
+        var cells = FailureRateMatrix.Compute(rows, ref a, ref b, ref c, ref d, ref e, ref f, 0.0008, 1.75, 1, AdverseBarrierMode.Placed);
+        var rec = cells.Where(x => x.IsRecommended).ToList();
+        int n = rec.Sum(x => x.SampleSize), fl = rec.Sum(x => x.Failures);
+        return (cells, n > 0 ? 100.0 * fl / n : 0); // AutoTweakerCore.vb:461 verbatim
+    }
+
+    static void P5_AggregateZero()
+    {
+        Console.WriteLine("=== P5 every row a stop-out, 64 tier-eligible rows split 16/16/16/16 ===");
+        var rows = new List<CsvRow>();
+        int i = 0;
+        foreach (var v in new[] { "STRONG LONG", "LONG", "STRONG SHORT", "SHORT" })
+            for (int k = 0; k < 16; k++) rows.Add(Row(i++, v, 0));
+        var (cells, agg) = Matrix(rows);
+        Console.WriteLine($"  tier-eligible={rows.Count} (min tier for 120-row window = {TweakerConfig.ComputeDefaultMinTier(120)}); " +
+                          $"raw failure={cells.Where(x => x.WindowMin == 5).Sum(x => x.Failures)}/{cells.Where(x => x.WindowMin == 5).Sum(x => x.SampleSize)}; " +
+                          $"recommended cells={cells.Count(x => x.IsRecommended)}; aggregateRatePct={agg:F1} -> {(agg < 40 ? "BELOW_THRESHOLD, streak+1" : "trigger")}");
+    }
+
+    static void P6_RecommendedBias()
+    {
+        Console.WriteLine("=== P6 which window the trigger reads (narrowest Wilson CI) ===");
+        foreach (var (label, A, B, C, D) in new[] { ("high-fail tier", 12, 9, 9, 30), ("moderate tier", 55, 7, 8, 30) })
+        {
+            var rows = new List<CsvRow>();
+            int i = 0;
+            for (int k = 0; k < A; k++) rows.Add(Row(i++, "SHORT", 4));
+            for (int k = 0; k < B; k++) rows.Add(Row(i++, "SHORT", 8));
+            for (int k = 0; k < C; k++) rows.Add(Row(i++, "SHORT", 13));
+            for (int k = 0; k < D; k++) rows.Add(Row(i++, "SHORT", -1));
+            var (cells, agg) = Matrix(rows);
+            var t = cells.Where(x => x.VerdictTier == "MEDIUM_SHORT").ToList();
+            Console.WriteLine($"  {label}: " + string.Join("  ", t.Select(x => $"{x.WindowMin}m fail={x.FailureRate:P0} ciW={x.CiWidth:F3}{(x.IsRecommended ? "*" : "")}")) + $"  -> aggregate {agg:F1}%");
+        }
+    }
+
+    // ---------------------------------------------------------------- P7
+    static void P7_StreakTruncation()
+    {
+        Console.WriteLine("=== P7 SuccessfulRoundsForCurrentStreak with a skip inside the streak ===");
+        var st = new TweakerState { CurrentBelowThresholdStreak = 3 };
+        foreach (var o in new[] { "BELOW_THRESHOLD", "BELOW_THRESHOLD", "SKIPPED_SESSION_BOUNDARY", "BELOW_THRESHOLD" })
+            st.RoundHistory.Add(new RoundSummary { Outcome = o });
+        var m = typeof(AutoTweakerCore).GetMethod("SuccessfulRoundsForCurrentStreak", BindingFlags.NonPublic | BindingFlags.Static);
+        var got = (List<RoundSummary>)m.Invoke(null, new object[] { st });
+        Console.WriteLine($"  streak counter=3, rounds returned={got.Count}");
+    }
+
+    // ---------------------------------------------------------------- P8
+    static void P8_SpreadBucketZeroThresholds()
+    {
+        Console.WriteLine("=== P8 ConditionsExtractor spread bucket: core call vs snapshot call ===");
+        var csv = Path.Combine(Scratch, "cond.csv");
+        File.WriteAllLines(csv, new[] {
+            "Timestamp,Price,ATRMultiplier,Regime,Verdict,SpreadBps",
+            "2026-09-22 14:00:00,64000,1.0,TRENDING_DOWN,SHORT,0.08",
+            "2026-09-22 14:01:00,63990,1.0,TRENDING_DOWN,SHORT,0.5",
+            "2026-09-22 14:02:00,63980,1.0,TRENDING_DOWN,SHORT,3.0" });
+        var rounds = new List<RoundSummary> { new RoundSummary { WindowStartRow = 0, WindowEndRow = 2 } };
+        var core = ConditionsExtractor.Extract(csv, rounds, 0.2, 2.0);
+        var snap = ConditionsExtractor.Extract(csv, rounds, 0.0, 0.0);
+        Console.WriteLine($"  core (0.2/2.0): {core.SpreadRegimeMix}   snapshot path (0/0): {snap.SpreadRegimeMix}");
+    }
+
+    // ---------------------------------------------------------------- P9
+    static void P9_Watcher()
+    {
+        Console.WriteLine("=== P9 FileSystemWatcher(LastWrite|Size) vs the applier's tmp+rename write (Linux inotify run) ===");
+        var dir = Path.Combine(Scratch, "watch");
+        Directory.CreateDirectory(dir);
+        var target = Path.Combine(dir, "settings.json");
+        File.WriteAllText(target, "{\"version\":1}");
+        int changed = 0;
+        using var w = new FileSystemWatcher(dir, "settings.json") { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size, EnableRaisingEvents = true };
+        w.Changed += (_, __) => Interlocked.Increment(ref changed);
+        Thread.Sleep(300);
+        File.WriteAllText(target + ".tmp", "{\"version\":2, \"x\":1}");
+        File.Move(target + ".tmp", target, overwrite: true);
+        Thread.Sleep(1000);
+        Console.WriteLine($"  atomic tmp+rename: Changed events={changed}");
+        changed = 0;
+        File.WriteAllText(target, "{\"version\":3, \"x\":22}");
+        Thread.Sleep(1000);
+        Console.WriteLine($"  in-place write (control): Changed events={changed}");
+    }
+}
