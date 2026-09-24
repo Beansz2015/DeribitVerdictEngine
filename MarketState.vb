@@ -285,6 +285,19 @@ Public NotInheritable Class MarketState
         End SyncLock
     End Function
 
+    ''' <summary>[D-6d Stage 1] The RUN path's absorption read: the same Snapshot the strip
+    ''' reads, plus the drained Stage 1 instrument, taken under ONE lock acquisition so
+    ''' the sidecar's PressSum is the CSV row's AggrUsd source at the same instant. The
+    ''' live strip keeps calling GetAbsorption, which never drains the instrument.</summary>
+    Friend Function GetAbsorptionForRun(nowMs As Long, cfg As AbsorptionSettings,
+                                        ByRef instrument As AbsorptionInstrumentRead) As AbsorptionSnapshot
+        SyncLock _lock
+            Dim snap As AbsorptionSnapshot = _absorptionTracker.Snapshot(nowMs, cfg)
+            instrument = _absorptionTracker.TakeInstrument(nowMs)
+            Return snap
+        End SyncLock
+    End Function
+
     ''' <summary>[#7 + #8 v59] Refresh the alerts tracker's carried candidate levels
     ''' from a completed full run (the same carry #6 uses). Called at the
     ''' _lastSuccessfulIndicators capture site. The 15m swings extend the candidate set

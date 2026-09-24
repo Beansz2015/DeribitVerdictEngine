@@ -548,7 +548,11 @@ Public Class AbsorptionSettings
     ''' <summary>[v61] Level band width as a fraction of ATR — resting-size tracking +
     ''' fill assignment. Default 0.10 (≈$4.4 at ATR 44).</summary>
     <JsonPropertyName("band_atr_frac")>       Public Property BandAtrFrac       As Double = 0.10
-    ''' <summary>Rolling pressing-volume window (seconds). Default 10.</summary>
+    ''' <summary>Rolling pressing-volume window (seconds). Default 10.
+    ''' ⚠ [D-2, docs/absorption-d2-stage1-rotation-build-spec.md R-4] UNUSED by the press
+    ''' path since D-2: pressing is episode-cumulative, so nothing in the tracker reads
+    ''' this value any more. The key is deliberately KEPT (deleting it is a separate,
+    ''' reserved settings change); a tweaker diff on it now changes nothing.</summary>
     <JsonPropertyName("window_sec")>          Public Property WindowSec         As Double = 10.0
     ''' <summary>[v61] Progress tolerance as a fraction of ATR — a print past level±(ATR ×
     ''' BreakTolAtrFrac) ends the episode instantly (a broken level never carries a stale

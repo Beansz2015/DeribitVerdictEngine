@@ -1,6 +1,10 @@
 # `D-6d` — the absorption counting gap · SPEC
 
-> ## ⛔ STATUS: **NOT BUILT. NOT TICKED.** The §7 D-table is owed by the trader.
+> ## ✅ STAGE 1 BUILT 2026-09-24 (UTC), with `D-2`, as S1 of [`absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md). ⛔ NOT DEPLOYED — it rides the single deploy after S2. Stage 2 is NOT built and stays gated on Stage 1's read.
+>
+> **Deviations from this spec, each recorded in [`absorption-d2-s1-spec-back.md`](absorption-d2-s1-spec-back.md):** fixture ids are `A88a`–`A88f` (the `A78` family was taken in the tree); the close-reason enum has a seventh member `TouchCrossed`, and `LadderSpanLost` / `ProximityShut` split on geometry, not on `lvl = 0` (§4.2's split does not match the code path); a Break-class print against the last level ends the shadow for that idle interval. The §7 D-table rows `D-6d.1` and `D-6d.3` are ruled; `D-6d.2` is subsumed; `D-6d.4` stands as written.
+>
+> *Status line as written 2026-09-11, kept for history:* ⛔ STATUS: **NOT BUILT. NOT TICKED.** The §7 D-table is owed by the trader.
 >
 > **Written 2026-09-11 (UTC).** `D-6d` is a decision row in [`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6 — **the only part of that D-table that is neither ruled nor data-gated.** It was raised 2026-09-01 by [`absorption-d6-spec-back.md`](absorption-d6-spec-back.md) §2 and given **no row of its own**, which is why every summary of that table reads CLOSED.
 >

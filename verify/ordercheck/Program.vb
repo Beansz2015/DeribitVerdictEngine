@@ -242,6 +242,20 @@ Module Program
         A60c_EpisodeSecMeasuresAndResets()
         A60d_ExistingColumnPositionsUnmoved()
 
+        ' [A88 — D-6d Stage 1: the absorption counting-gap instrument (shadow press + close-
+        '   reason attribution + absorption_episodes.log), docs/d6d-episode-continuity-spec.md
+        '   §8. The spec's family was "A78"; A78 and A79 were taken in the tree by other
+        '   builds before this one, so Stage 1 is A88 and D-2 + the rotation are A89.]
+        A88a_ShadowHoldsTheFlowAnIdleSideDrops()
+        A88b_ShadowAndLiveShareOnePredicate()
+        A88c_CloseReasonsAreDistinguishable()
+        A88d_InstrumentIsBehaviourNeutral()
+        A88e_LastLevelPriceSurvivesClose()
+        A88f_SidecarNeverThrowsAndWritesOneKeyedLine()
+        ' [A89a/b — D-2: episode-cumulative pressing, build spec §5.]
+        A89a_D2AccumulatesAcrossTheRetiredWindow()
+        A89b_D2IsANoOpBelowTheWindow()
+
         ' Offline matrix placed-target migration (docs/offline-matrix-placed-target
         ' -proposal.md §5 acceptance): the favourable barrier routes to the logged
         ' PlacedTarget* (v0.8 rows) vs the legacy formula (pre-v0.8), the tweaker picks on
@@ -5096,6 +5110,396 @@ Module Program
               unmoved AndAlso appended,
               String.Format("iSig={0} iPull={1} iIid={2} iSid={3} width={4} appended={5}",
                             iSig, iPull, iIid, iSid, header.Length, appended))
+    End Sub
+
+    ' =======================================================================
+    ' A88 — D-6d Stage 1: the absorption counting-gap instrument
+    ' (docs/d6d-episode-continuity-spec.md §4 + §8; build spec
+    ' docs/absorption-d2-stage1-rotation-build-spec.md §4.1-§4.3).
+    ' FIXTURE-LITERAL PROVENANCE: every price, size and clock offset below is a
+    ' MECHANISM literal — test-book geometry (the A31 AbsBook ladder, level 100010,
+    ' AbsProxUsd 6 / AbsBandUsd 2 / AbsBreakTolUsd 1, all passed to SetLevels as the
+    ' v61 carry site would), chosen to put a print or a ladder edge on a named side of
+    ' a predicate. None is a settings-derived threshold: the tracker consumes dollars
+    ' from SetLevels, never cfg, for all three distances.
+    ' =======================================================================
+
+    ''' <summary>A10-level ask ladder at an arbitrary step (A88c needs a sparse ladder
+    ''' whose span exceeds the proximity gate). Bids mirror just below.</summary>
+    Private Function AbsStepBook(askStart As Double, stepUsd As Double) As OrderBookSnapshot
+        Dim snap As New OrderBookSnapshot()
+        For i As Integer = 0 To 9
+            snap.Asks.Add((askStart + i * stepUsd, 5000.0))
+            snap.Bids.Add((askStart - stepUsd - i * stepUsd, 5000.0))
+        Next
+        Return snap
+    End Function
+
+    ''' <summary>Round-trip text of every AbsorptionSideRead field, for byte-identity checks.</summary>
+    Private Function AbsSideText(s As AbsorptionSideRead) As String
+        Return String.Join(";", {s.Active.ToString(), s.LevelPrice.ToString("R", CultureInfo.InvariantCulture),
+            s.AggrUsd.ToString("R", CultureInfo.InvariantCulture), s.AbsorbRatio.ToString("R", CultureInfo.InvariantCulture),
+            s.PullFrac.ToString("R", CultureInfo.InvariantCulture), s.EpisodeSec.ToString("R", CultureInfo.InvariantCulture),
+            s.PullLB.ToString("R", CultureInfo.InvariantCulture), s.PostLB.ToString("R", CultureInfo.InvariantCulture),
+            s.SizeStart.ToString("R", CultureInfo.InvariantCulture), s.SizeMin.ToString("R", CultureInfo.InvariantCulture)})
+    End Function
+
+    ''' <summary>Round-trip text of an instrument side's LIVE-derived fields only (no shadow
+    ''' fields): PressSum, PressAccruedUsd and each reason's Count / DiscardedUsd / LifeSec.</summary>
+    Private Function AbsInstrLiveText(s As AbsorptionSideInstrument) As String
+        Dim inv = CultureInfo.InvariantCulture
+        Dim parts As New List(Of String) From {
+            s.Active.ToString(), s.PressSum.ToString("R", inv), s.PressAccruedUsd.ToString("R", inv)}
+        For Each t In s.Tally
+            parts.Add(t.Count.ToString(inv) & "/" & t.DiscardedUsd.ToString("R", inv) & "/" & t.LifeSec.ToString("R", inv))
+        Next
+        Return String.Join(";", parts)
+    End Function
+
+    ' -- A88a: the defect itself — an idle side drops flow; the shadow holds it ----
+    ' ⚠ SHAPE (d6d spec §8): a REAL close is driven between the two press batches — the
+    ' ladder shifts so the level falls off the far edge of the visible book while still
+    ' within proximity (LadderSpanLost, the suspect path) — never a direct call on the
+    ' accumulator. Then the side re-opens and PressSum restarts at zero.
+    Private Sub A88a_ShadowHoldsTheFlowAnIdleSideDrops()
+        Dim ab As New AbsorptionSettings()
+        Dim tr As New LevelAbsorptionTracker()
+        Dim t0 As Long = 1700000000000L
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+
+        tr.FoldBook(AbsBandBook(), t0, ab)                                   ' open @100010
+        tr.FoldTrade(100009.0, 40000.0, isBuy:=True, tsMs:=t0 + 50, cfg:=ab)  ' live press
+        tr.FoldBook(AbsBook(100005.0), t0 + 100, ab)   ' asks 100005..100009.5: level off the far edge, 5 ≤ 6 from the touch
+        Dim sIdle = tr.Snapshot(t0 + 150, ab)
+        tr.FoldTrade(100009.0, 25000.0, isBuy:=True, tsMs:=t0 + 200, cfg:=ab) ' DROPPED live — shadow press
+        tr.FoldTrade(100009.5, 5000.0, isBuy:=False, tsMs:=t0 + 210, cfg:=ab) ' a sell: not pressing ABOVE
+        tr.FoldBook(AbsBandBook(), t0 + 300, ab)                             ' re-open @100010
+        Dim sReopen = tr.Snapshot(t0 + 300, ab)
+        Dim ins = tr.TakeInstrument(t0 + 300)
+        Dim ins2 = tr.TakeInstrument(t0 + 1300)                              ' drained ⇒ zeros
+
+        Dim lsl = ins.Above.Tally(CInt(AbsorptionCloseReason.LadderSpanLost))
+        Dim ok As Boolean =
+            Not sIdle.Above.Active AndAlso
+            sReopen.Above.Active AndAlso sReopen.Above.AggrUsd = 0.0 AndAlso
+            ins.Above.ShadowPressUsd = 25000.0 AndAlso ins.Above.ShadowPressCount = 1 AndAlso
+            ins.Above.PressAccruedUsd = 40000.0 AndAlso
+            lsl.Count = 1 AndAlso lsl.DiscardedUsd = 40000.0 AndAlso lsl.ShadowUsd = 25000.0 AndAlso
+            Not ins.IntervalSec.HasValue AndAlso
+            ins2.Above.ShadowPressUsd = 0.0 AndAlso ins2.Above.PressAccruedUsd = 0.0 AndAlso
+            ins2.Above.Tally(CInt(AbsorptionCloseReason.LadderSpanLost)).Count = 0 AndAlso
+            ins2.IntervalSec.HasValue AndAlso ins2.IntervalSec.Value = 1.0
+        Check("A88a the defect: live press 40000 is wiped by a LadderSpanLost close, the 25000 printed while idle is DROPPED live (re-opened AggrUsd 0) and HELD by the shadow, attributed to LadderSpanLost; a second take reads zeros",
+              ok,
+              String.Format(CultureInfo.InvariantCulture,
+                            "idleActive={0} reopenAggr={1} shadow={2}/{3} accrued={4} lsl={5}/{6}/{7} int1={8} take2 shadow={9} accrued={10} lslCount={11} int2={12}",
+                            sIdle.Above.Active, sReopen.Above.AggrUsd, ins.Above.ShadowPressUsd, ins.Above.ShadowPressCount,
+                            ins.Above.PressAccruedUsd, lsl.Count, lsl.DiscardedUsd, lsl.ShadowUsd,
+                            If(ins.IntervalSec.HasValue, ins.IntervalSec.Value.ToString(CultureInfo.InvariantCulture), "Nothing"),
+                            ins2.Above.ShadowPressUsd, ins2.Above.PressAccruedUsd,
+                            ins2.Above.Tally(CInt(AbsorptionCloseReason.LadderSpanLost)).Count,
+                            If(ins2.IntervalSec.HasValue, ins2.IntervalSec.Value.ToString(CultureInfo.InvariantCulture), "Nothing")))
+    End Sub
+
+    ' -- A88b: the shadow and live arms share ONE predicate ------------------------
+    ' A sweep across both edges of the band and the break tolerance, for buys and sells,
+    ' on the ABOVE side (level 100010) and the BELOW side (level 99990). At every price
+    ' the live arm's outcome (press / break / nothing) must equal the shadow arm's, and
+    ' both must equal ClassifyPrint. A copied predicate that drifts by one tick fails here.
+    Private Sub A88b_ShadowAndLiveShareOnePredicate()
+        Dim ab As New AbsorptionSettings()
+        Dim t0 As Long = 1700000000000L
+        Dim mismatches As New List(Of String)
+        Dim seen As New HashSet(Of AbsorptionPrintClass)
+
+        For Each isAbove In {True, False}
+            Dim level As Double = If(isAbove, 100010.0, 99990.0)
+            ' Books: open (touch 2 from the level) and LadderSpanLost (level just off the far edge).
+            Dim openBook = If(isAbove, AbsBandBook(), AbsBook(99992.5))
+            Dim lslBook = If(isAbove, AbsBook(100005.0), AbsBook(99995.5))
+            For k As Integer = -16 To 16
+                Dim price As Double = level + k * 0.25
+                For Each isBuy In {True, False}
+                    ' Live arm.
+                    Dim trL As New LevelAbsorptionTracker()
+                    If isAbove Then
+                        trL.SetLevels(level, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+                    Else
+                        trL.SetLevels(0, level, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+                    End If
+                    trL.FoldBook(openBook, t0, ab)
+                    trL.FoldTrade(price, 1000.0, isBuy, t0 + 10, ab)
+                    Dim insL = trL.TakeInstrument(t0 + 20)
+                    Dim sideL = If(isAbove, insL.Above, insL.Below)
+                    Dim liveCls As AbsorptionPrintClass =
+                        If(sideL.Tally(CInt(AbsorptionCloseReason.BreakThrough)).Count = 1, AbsorptionPrintClass.Break,
+                           If(sideL.PressAccruedUsd > 0, AbsorptionPrintClass.Press, AbsorptionPrintClass.Ignore))
+
+                    ' Shadow arm: same level, closed via LadderSpanLost, then the same print.
+                    Dim trS As New LevelAbsorptionTracker()
+                    If isAbove Then
+                        trS.SetLevels(level, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+                    Else
+                        trS.SetLevels(0, level, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+                    End If
+                    trS.FoldBook(openBook, t0, ab)
+                    trS.FoldBook(lslBook, t0 + 5, ab)
+                    trS.FoldTrade(price, 1000.0, isBuy, t0 + 10, ab)
+                    Dim insS = trS.TakeInstrument(t0 + 20)
+                    Dim sideS = If(isAbove, insS.Above, insS.Below)
+                    Dim shadowCls As AbsorptionPrintClass =
+                        If(sideS.ShadowBreaks = 1, AbsorptionPrintClass.Break,
+                           If(sideS.ShadowPressUsd > 0, AbsorptionPrintClass.Press, AbsorptionPrintClass.Ignore))
+
+                    Dim direct = LevelAbsorptionTracker.ClassifyPrint(level, price, AbsBandUsd, AbsBreakTolUsd, isBuy, isAbove)
+                    seen.Add(direct)
+                    Dim closedLsl As Boolean = sideS.Tally(CInt(AbsorptionCloseReason.LadderSpanLost)).Count = 1
+                    If liveCls <> shadowCls OrElse liveCls <> direct OrElse Not closedLsl Then
+                        mismatches.Add(String.Format(CultureInfo.InvariantCulture, "{0}/{1}/{2}: live={3} shadow={4} direct={5} lsl={6}",
+                                                     If(isAbove, "ABOVE", "BELOW"), price, If(isBuy, "buy", "sell"),
+                                                     liveCls, shadowCls, direct, closedLsl))
+                    End If
+                Next
+            Next
+        Next
+
+        Check("A88b ONE predicate: across ±4 USD of each level (0.25 steps, buys and sells, ABOVE and BELOW) the live arm, the shadow arm and ClassifyPrint agree at every price, and the sweep crosses all three classes",
+              mismatches.Count = 0 AndAlso seen.Count = 3,
+              String.Format("mismatches={0} seen={1} first=[{2}]", mismatches.Count, seen.Count,
+                            String.Join(" | ", mismatches.Take(4))))
+    End Sub
+
+    ' -- A88c: the close reasons are distinguishable ------------------------------
+    ' Five routes out of an episode at level 100010, one fresh tracker each. The
+    ' decisive pair is LadderSpanLost (level off the far edge of the ten-deep book but
+    ' still within proximity) vs ProximityShut (price genuinely left).
+    Private Sub A88c_CloseReasonsAreDistinguishable()
+        Dim ab As New AbsorptionSettings()
+        Dim t0 As Long = 1700000000000L
+        Dim results As New List(Of String)
+        Dim allOk As Boolean = True
+
+        Dim run = Sub(label As String, second As OrderBookSnapshot, remapTo As Double,
+                      expected As AbsorptionCloseReason)
+                      Dim tr As New LevelAbsorptionTracker()
+                      tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+                      tr.FoldBook(AbsBandBook(), t0, ab)
+                      If remapTo > 0 Then tr.SetLevels(remapTo, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+                      tr.FoldBook(second, t0 + 100, ab)
+                      Dim ins = tr.TakeInstrument(t0 + 200)
+                      Dim counts = ins.Above.Tally.Select(Function(t) t.Count).ToArray()
+                      Dim ok As Boolean = counts(CInt(expected)) = 1 AndAlso counts.Sum() = 1
+                      If Not ok Then allOk = False
+                      results.Add(label & "=" & String.Join(",", counts))
+                  End Sub
+
+        ' Level 100010 beyond worst ask 100009.5, 5 ≤ 6 from the touch ⇒ only the book closed it.
+        run("LSL", AbsBook(100005.0), 0, AbsorptionCloseReason.LadderSpanLost)
+        ' Level beyond worst ask 100004.5 AND 10 > 6 from the touch ⇒ price left.
+        run("PSfar", AbsBook(100000.0), 0, AbsorptionCloseReason.ProximityShut)
+        ' Sparse $1 ladder 100003..100012: level still visible and selected, 7 > 6 ⇒ the gate test.
+        run("PSgate", AbsStepBook(100003.0, 1.0), 0, AbsorptionCloseReason.ProximityShut)
+        ' Asks from 100010.5: the touch traded through the level (best bid 100010 ≤ level + 1: no break).
+        run("TC", AbsBook(100010.5), 0, AbsorptionCloseReason.TouchCrossed)
+        ' Carried level moves to 100011, old level still in span ⇒ a re-map.
+        run("RM", AbsBandBook(), 100011.0, AbsorptionCloseReason.LevelRemap)
+
+        Check("A88c close reasons distinguishable (LadderSpanLost / ProximityShut far and at the gate / TouchCrossed / LevelRemap each tally exactly their own counter)",
+              allOk, String.Join(" ", results))
+    End Sub
+
+    ' -- A88d: behaviour neutrality — trap T-3's only guard -----------------------
+    ' Tracker A folds a scripted sequence; tracker B folds the SAME sequence minus every
+    ' print that arrives while the side is idle. The live engine drops those prints, so
+    ' every Snapshot, and every LIVE-derived instrument field, must be byte-identical.
+    ' Only A's shadow fields may differ — and the script must make them non-zero, or the
+    ' check is vacuous.
+    Private Sub A88d_InstrumentIsBehaviourNeutral()
+        Dim ab As New AbsorptionSettings()
+        Dim t0 As Long = 1700000000000L
+        Dim trA As New LevelAbsorptionTracker()
+        Dim trB As New LevelAbsorptionTracker()
+        For Each tr In {trA, trB}
+            tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+        Next
+        Dim diffs As New List(Of String)
+        Dim compare = Sub(label As String, nowMs As Long)
+                          Dim sa = trA.Snapshot(nowMs, ab), sb = trB.Snapshot(nowMs, ab)
+                          If AbsSideText(sa.Above) <> AbsSideText(sb.Above) OrElse
+                             AbsSideText(sa.Below) <> AbsSideText(sb.Below) Then
+                              diffs.Add(label & ": snap A=" & AbsSideText(sa.Above) & " B=" & AbsSideText(sb.Above))
+                          End If
+                      End Sub
+        Dim bothBook = Sub(b As OrderBookSnapshot, ts As Long)
+                           trA.FoldBook(b, ts, ab) : trB.FoldBook(b, ts, ab)
+                       End Sub
+        Dim bothTrade = Sub(p As Double, usd As Double, buy As Boolean, ts As Long)
+                            trA.FoldTrade(p, usd, buy, ts, ab) : trB.FoldTrade(p, usd, buy, ts, ab)
+                        End Sub
+        Dim idleTradeAOnly = Sub(p As Double, usd As Double, buy As Boolean, ts As Long)
+                                 trA.FoldTrade(p, usd, buy, ts, ab)
+                             End Sub
+
+        bothBook(AbsBandBook(), t0) : compare("open1", t0)
+        bothTrade(100009.0, 30000.0, True, t0 + 50) : bothTrade(100010.0, 90000.0, True, t0 + 60)
+        bothBook(AbsBandBook(level10Size:=40000.0), t0 + 100) : compare("fold1", t0 + 100)
+        bothBook(AbsBook(100005.0), t0 + 200) : compare("lsl", t0 + 200)                 ' LadderSpanLost
+        idleTradeAOnly(100009.0, 25000.0, True, t0 + 250)                                  ' shadow press
+        idleTradeAOnly(100008.5, 15000.0, True, t0 + 260)                                  ' shadow press
+        compare("idle", t0 + 300)
+        Dim insA1 = trA.TakeInstrument(t0 + 300), insB1 = trB.TakeInstrument(t0 + 300)
+        bothBook(AbsBandBook(), t0 + 400) : compare("open2", t0 + 400)
+        bothTrade(100009.5, 50000.0, True, t0 + 450)
+        bothBook(AbsBandBook(level10Size:=60000.0), t0 + 500) : compare("fold2", t0 + 500)
+        bothBook(AbsBook(100000.0), t0 + 600) : compare("ps", t0 + 600)                   ' ProximityShut
+        idleTradeAOnly(100011.5, 1000.0, True, t0 + 650)                                   ' shadow break
+        idleTradeAOnly(100009.0, 9000.0, True, t0 + 660)                                   ' after break: not shadow
+        bothBook(AbsBandBook(), t0 + 700) : compare("open3", t0 + 700)
+        bothTrade(100009.0, 12000.0, True, t0 + 750)
+        compare("final", t0 + 800)
+        Dim insA2 = trA.TakeInstrument(t0 + 800), insB2 = trB.TakeInstrument(t0 + 800)
+
+        For Each pair In {(insA1, insB1, "take1"), (insA2, insB2, "take2")}
+            If AbsInstrLiveText(pair.Item1.Above) <> AbsInstrLiveText(pair.Item2.Above) OrElse
+               AbsInstrLiveText(pair.Item1.Below) <> AbsInstrLiveText(pair.Item2.Below) Then
+                diffs.Add(pair.Item3 & ": instr A=" & AbsInstrLiveText(pair.Item1.Above) &
+                          " B=" & AbsInstrLiveText(pair.Item2.Above))
+            End If
+        Next
+        Dim shadowExercised As Boolean =
+            insA1.Above.ShadowPressUsd = 40000.0 AndAlso insA2.Above.ShadowBreaks = 1 AndAlso
+            insA2.Above.ShadowPressUsd = 0.0 AndAlso insB1.Above.ShadowPressUsd = 0.0
+
+        Check("A88d behaviour neutrality: with idle prints (A) and without (B), every Snapshot field and every live-derived instrument field is byte-identical across a two-close script; A's shadow is exercised (40000 held, one shadow break stops accrual)",
+              diffs.Count = 0 AndAlso shadowExercised,
+              String.Format(CultureInfo.InvariantCulture, "diffs={0} shadowExercised={1} (A1 shadow={2} A2 breaks={3} A2 shadow={4}) first=[{5}]",
+                            diffs.Count, shadowExercised, insA1.Above.ShadowPressUsd, insA2.Above.ShadowBreaks,
+                            insA2.Above.ShadowPressUsd, String.Join(" | ", diffs.Take(3))))
+    End Sub
+
+    ' -- A88e: LastLevelPrice survives CloseEpisode while LevelPrice is zeroed ----
+    Private Sub A88e_LastLevelPriceSurvivesClose()
+        Dim ab As New AbsorptionSettings()
+        Dim tr As New LevelAbsorptionTracker()
+        Dim t0 As Long = 1700000000000L
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+        tr.FoldBook(AbsBandBook(), t0, ab)
+        Dim insOpen = tr.TakeInstrument(t0)
+        tr.FoldBook(AbsBook(100000.0), t0 + 100, ab)      ' ProximityShut
+        Dim insIdle = tr.TakeInstrument(t0 + 100)
+        tr.Reset()                                          ' a Reset close of an idle side too
+        Dim insReset = tr.TakeInstrument(t0 + 200)
+
+        Dim ok As Boolean =
+            insOpen.Above.Active AndAlso insOpen.Above.LevelPrice = 100010.0 AndAlso insOpen.Above.LastLevelPrice = 100010.0 AndAlso
+            Not insIdle.Above.Active AndAlso insIdle.Above.LevelPrice = 0.0 AndAlso insIdle.Above.LastLevelPrice = 100010.0 AndAlso
+            Not insIdle.Above.EpisodeSec.HasValue AndAlso
+            insReset.Above.LastLevelPrice = 100010.0
+        Check("A88e LastLevelPrice survives CloseEpisode (and Reset) while LevelPrice is zeroed — the shadow arm keeps a level to test against",
+              ok,
+              String.Format(CultureInfo.InvariantCulture, "open={0}/{1}/{2} idle={3}/{4}/{5} epSec={6} reset.last={7}",
+                            insOpen.Above.Active, insOpen.Above.LevelPrice, insOpen.Above.LastLevelPrice,
+                            insIdle.Above.Active, insIdle.Above.LevelPrice, insIdle.Above.LastLevelPrice,
+                            insIdle.Above.EpisodeSec.HasValue, insReset.Above.LastLevelPrice))
+    End Sub
+
+    ' -- A88f: the sidecar never throws, and one run writes one keyed line -------
+    Private Sub A88f_SidecarNeverThrowsAndWritesOneKeyedLine()
+        Dim dir As String = Path.Combine(Path.GetTempPath(), "ordercheck_a88f_" & Guid.NewGuid().ToString("N").Substring(0, 8))
+        Dim path1 As String = Path.Combine(dir, "absorption_episodes.log")
+        Dim threw As Boolean = False
+        Dim lockedResult As Boolean = True
+        Dim okResult As Boolean = False
+        Dim lines() As String = Array.Empty(Of String)()
+        Try
+            Directory.CreateDirectory(dir)
+            Dim ab As New AbsorptionSettings()
+            Dim tr As New LevelAbsorptionTracker()
+            tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+            tr.FoldBook(AbsBandBook(), 1700000000000L, ab)
+            Dim ins = tr.TakeInstrument(1700000000500L)
+            Dim line = AbsorptionEpisodeLog.FormatLine(ins, "iid-a88f", 4242L, New DateTime(2026, 9, 24, 0, 0, 0, DateTimeKind.Utc))
+            Try
+                Using fs As New FileStream(path1, FileMode.Create, FileAccess.ReadWrite, FileShare.None)
+                    lockedResult = AbsorptionEpisodeLog.TryAppend(path1, line)
+                End Using
+            Catch
+                threw = True
+            End Try
+            File.Delete(path1)
+            okResult = AbsorptionEpisodeLog.TryAppend(path1, line)
+            lines = File.ReadAllLines(path1)
+        Finally
+            Try : Directory.Delete(dir, True) : Catch : End Try
+        End Try
+
+        Dim lineOk As Boolean = lines.Length = 1 AndAlso
+            lines(0).StartsWith("2026-09-24T00:00:00.000Z | v1 | iid=iid-a88f | sid=4242 | interval_sec= | ABOVE active=1 level=100010.00", StringComparison.Ordinal) AndAlso
+            lines(0).Contains(" | BELOW active=0 ") AndAlso lines(0).Contains(" LadderSpanLost=0/0/0.000/0") AndAlso
+            lines(0).Contains(" TouchCrossed=0/0/0.000/0")
+        Check("A88f sidecar: a locked path returns False without throwing; an open path gets exactly ONE line carrying iid + sid and every close reason",
+              Not threw AndAlso Not lockedResult AndAlso okResult AndAlso lineOk,
+              String.Format("threw={0} locked={1} ok={2} lines={3} line0=[{4}]",
+                            threw, lockedResult, okResult, lines.Length, If(lines.Length > 0, lines(0), "")))
+    End Sub
+
+    ' =======================================================================
+    ' A89a/b — D-2: episode-cumulative pressing (build spec §3, §5).
+    ' FIXTURE-LITERAL PROVENANCE: the retired window is DERIVED from cfg (ab.WindowSec,
+    ' MECHANISM for the gap — the fixture only needs a span longer than the window the
+    ' press path used to prune by). Prices and sizes are MECHANISM (A31 test geometry).
+    ' =======================================================================
+
+    ' -- A89a: an episode older than the window keeps press from before the window mark --
+    Private Sub A89a_D2AccumulatesAcrossTheRetiredWindow()
+        Dim ab As New AbsorptionSettings()
+        Dim tr As New LevelAbsorptionTracker()
+        Dim t0 As Long = 1700000000000L
+        Dim winMs As Long = CLng(ab.WindowSec * 1000.0)
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+        tr.FoldBook(AbsBandBook(), t0, ab)
+        tr.FoldTrade(100009.0, 30000.0, isBuy:=True, tsMs:=t0 + 1000, cfg:=ab)
+        ' Keep the episode alive across the old window with in-proximity snapshots.
+        For k As Integer = 1 To 3
+            tr.FoldBook(AbsBandBook(), t0 + k * (winMs \ 2), ab)
+        Next
+        Dim tSecond As Long = t0 + 1000 + winMs + 5000
+        tr.FoldTrade(100009.0, 20000.0, isBuy:=True, tsMs:=tSecond, cfg:=ab)
+        Dim s = tr.Snapshot(tSecond + 500, ab)
+        Check("A89a D-2: two press batches (30000, then 20000 one window + 5 s later) in ONE episode are BOTH counted (AggrUsd 50000; the retired window would keep only 20000)",
+              s.Above.Active AndAlso s.Above.AggrUsd = 50000.0 AndAlso s.Above.EpisodeSec > ab.WindowSec,
+              String.Format(CultureInfo.InvariantCulture, "active={0} aggr={1} epSec={2}", s.Above.Active, s.Above.AggrUsd, s.Above.EpisodeSec))
+    End Sub
+
+    ' -- A89b: below the window D-2 is byte-identical to the old rolling sum ------
+    ' The old code pruned only presses stamped before (now − window); on an episode
+    ' younger than the window nothing is pruned, so the old PressSum is the plain
+    ' sequential sum. The reference below is that sum, in fold order, so the compare is
+    ' bitwise ("R"), not approximate. This is the parity half: it must pass on the old
+    ' code too (run as a mutation, output in the spec-back).
+    Private Sub A89b_D2IsANoOpBelowTheWindow()
+        Dim ab As New AbsorptionSettings()
+        Dim tr As New LevelAbsorptionTracker()
+        Dim t0 As Long = 1700000000000L
+        Dim winMs As Long = CLng(ab.WindowSec * 1000.0)
+        tr.SetLevels(100010.0, 0, 0, 0, AbsProxUsd, AbsBandUsd, AbsBreakTolUsd)
+        tr.FoldBook(AbsBandBook(), t0, ab)
+        Dim amounts = {12345.67, 0.1, 0.2, 98765.4321, 3333.33, 7.77}
+        Dim reference As Double = 0.0
+        Dim readsOk As Boolean = True
+        Dim detail As New List(Of String)
+        For i As Integer = 0 To amounts.Length - 1
+            Dim ts As Long = t0 + 100 + i * ((winMs - 1000) \ amounts.Length)
+            tr.FoldTrade(100009.0, amounts(i), isBuy:=True, tsMs:=ts, cfg:=ab)
+            reference += amounts(i)
+            Dim s = tr.Snapshot(ts + 10, ab)
+            Dim a = s.Above.AggrUsd.ToString("R", CultureInfo.InvariantCulture)
+            Dim b = reference.ToString("R", CultureInfo.InvariantCulture)
+            If a <> b Then readsOk = False
+            detail.Add(a & "=" & b)
+        Next
+        Check("A89b D-2 is a NO-OP below the window: at every read of an episode younger than window_sec, AggrUsd is bitwise the sequential sum the rolling window held",
+              readsOk, String.Join(" ", detail))
     End Sub
 
     ' =======================================================================

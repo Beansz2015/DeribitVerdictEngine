@@ -1,5 +1,9 @@
 # `D-2` + `D-6d` Stage 1 + the rotation — BUILD SPEC
 
+> ## ✅ S1 BUILT 2026-09-24 (UTC) — `D-2` + Stage 1 + the sidecar. S2 (the rotation) follows. ⛔ NOT DEPLOYED.
+>
+> Record: [`absorption-d2-s1-batch-summary.md`](absorption-d2-s1-batch-summary.md) · review packet: [`absorption-d2-s1-spec-back.md`](absorption-d2-s1-spec-back.md). ⚠ Fixture ids moved: this spec's `A78` family is built as `A88`, and `A79` as `A89` — both families were taken in the tree before this build.
+
 > ## ✅ AUTHORISED. Every decision behind this build is ruled.
 >
 > **Written 2026-09-11 (UTC).** ⛔ **NOT BUILT.** ⚠ **`D-2` is date-gated: do not build before ~2026-09-15** ([`absorption-mechanism-revision-proposal.md`](absorption-mechanism-revision-proposal.md) §6, `D-2`'s cell — `D-1`'s post-ship read needs ~10 weekday-days; it stands at **8**, read 2026-09-13 in [`absorption-episode-age-read-2026-09-13.md`](absorption-episode-age-read-2026-09-13.md), and the final re-run is one command from 2026-09-16 UTC).

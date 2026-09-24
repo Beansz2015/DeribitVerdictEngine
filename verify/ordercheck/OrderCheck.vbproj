@@ -60,6 +60,9 @@
          writes into the harness bin dir; the fixture cleans up). The feed-side folds +
          run-path routing stay OUT — same live-socket/WinForms boundary as A16-A23. -->
     <Compile Include="..\..\Core\LevelAbsorptionTracker.vb" />
+    <!-- D-6d Stage 1 (A88f): the absorption_episodes.log sidecar — host-agnostic,
+         never-throws. The run-path write in MainForm_Analysis stays OUT. -->
+    <Compile Include="..\..\Core\AbsorptionEpisodeLog.vb" />
     <!-- #7 liq-cascade alarm + #8 level-approach alerts (A37 — docs/liq-cascade-level
          -alerts-proposal.md §4 H5): the host-agnostic tracker (owned by MarketState,
          above) + sidecar utility (append-only liq_events.log — H4 amended). The feed-

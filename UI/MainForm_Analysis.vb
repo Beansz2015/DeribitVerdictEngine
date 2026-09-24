@@ -476,10 +476,16 @@ Partial Public Class MainForm
         ' penalty wire-in is a later, twice-evidence-gated activation, proposal §5).
         ' Numerics populate for ANY active episode (pullFrac logs on vetoed episodes
         ' too — D8); no episode / disabled / REST ⇒ NONE + Nothing (§4.3).
+        ' [D-6d Stage 1] absInstr carries the drained counting-gap instrument to the
+        ' absorption_episodes.log write after LogRun; Nothing on every run that did not
+        ' read the tracker (REST / fallback / disabled), which then writes no line.
         Dim absCfg = cfg.Indicators.Absorption
+        Dim absInstr As AbsorptionInstrumentRead = Nothing
         If absCfg IsNot Nothing AndAlso absCfg.Enabled AndAlso (src Is _wsSource) AndAlso _marketState IsNot Nothing Then
-            Dim absSnap = _marketState.GetAbsorption(
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), absCfg)
+            ' GetAbsorptionForRun = the strip's Snapshot + the instrument drain, under one
+            ' MarketState lock. Only this run path drains; the strip never does.
+            Dim absSnap = _marketState.GetAbsorptionForRun(
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), absCfg, absInstr)
             Dim absRead = IndicatorEngine.ClassifyAbsorption(
                               absSnap,
                               ExecutionResolution.ResolveAbsorptionMinAggrUsd(cfg, utcHour),
@@ -641,6 +647,13 @@ Partial Public Class MainForm
         ' v0.8: cfg rides along for the shared placed-level arbitration (the Placed*
         ' columns must equal this run's bridge payload levels — same function).
         AnalysisLogger.LogRun(r, verdict, cfg)
+        ' [D-6d Stage 1] One absorption_episodes.log line per run that read the tracker,
+        ' keyed by the SAME (InstanceId, SignalId) the CSV row just carried, so the join
+        ' is exact. Never throws. A run that throws between the read and here loses the
+        ' tallies it drained: the sidecar then has no line for that interval.
+        If absInstr IsNot Nothing Then
+            AbsorptionEpisodeLog.LogRun(absInstr, ProcessIdentity.InstanceId, runSignalId)
+        End If
         UpdateLogInfo()
 
         ' P5b — BuildPlaintextSnapshot is the engine's only text renderer.
