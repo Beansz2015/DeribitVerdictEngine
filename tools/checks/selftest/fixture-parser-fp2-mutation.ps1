@@ -25,6 +25,12 @@
   mutated Sub's Check titles to the new name; run record
   docs/harness-runs/fixture-parser-fp2-mutation-titles-2026-09-24.md. See the run record in
   docs/harness-runs/fixture-parser-fp2-mutation-2026-09-23.md.
+
+  FP-2t (second reader, 2026-09-24 UTC, SR-D6, docs/jev-harnesses-second-reader-2026-09-24.md
+  section 6): the harness itself (tools/checks/fixture-parser.ps1, FP-D33) now asks a
+  title-stripped variant beside FP-2 in the SAME -Fp2Only run -- 10 calls per fixture (5 FP-2
+  + 5 FP-2t) instead of 5, so a run of all six is 60 calls, not 30. This script needs no
+  extra flag or invocation for it; the table below reads both from one run's output.
 #>
 [CmdletBinding()]
 param(
@@ -116,27 +122,33 @@ try {
     $out = & $tool -SourceFile $copy -BaselinePath $baseline -SubFilter $filter -Fp2Only -Samples 5 -OutPath (Join-Path $tmp 'report.md') -TestTransportOverride $TestTransportOverride 2>&1
     $exitCode = $LASTEXITCODE
     $txt = @($out | ForEach-Object { [string]$_ })
-    $txt | Where-Object { $_ -match '^(EXIT_REASON|FP2_ONLY|USAGE_INPUT_TOKENS|USAGE_OUTPUT_TOKENS|WALL_TIME_SEC|SCOPE_JEV_CALLS|FP2_UNSTABLE|FP2_BAD_VERDICTS|FP2_WAF_BLOCKED|SITES_JUDGED|JEV_MODEL)=?' } | Select-Object -Unique
+    $txt | Where-Object { $_ -match '^(EXIT_REASON|FP2_ONLY|USAGE_INPUT_TOKENS|USAGE_OUTPUT_TOKENS|WALL_TIME_SEC|SCOPE_JEV_CALLS|FP2_UNSTABLE|FP2_BAD_VERDICTS|FP2_WAF_BLOCKED|FP2T_ITEMS_SAME_PLURALITY_AS_FP2|FP2T_WAF_BLOCKED|SITES_JUDGED|JEV_MODEL)=?' } | Select-Object -Unique
     "HARNESS_EXIT=$exitCode"
     ''
-    '| Original name | Mutated name | Verdict (plurality of 5) | Agreement rate | Mean top prob | Min top prob | Sample verdicts | Flagged |'
-    '|---|---|---|---|---|---|---|---|'
+    # FP-D33 (SR-D6, second reader 2026-09-24): FP-2t rides along automatically -- the
+    # harness now asks it beside FP-2 in the same -Fp2Only run, one indented "      t: ..."
+    # line right after each SubName's own row. No second harness invocation needed.
+    '| Original name | Mutated name | FP-2 verdict (of 5) | FP-2 agreement | FP-2 mean top prob | FP-2t verdict (of 5) | FP-2t agreement | FP-2t mean top prob | Flagged (FP-2) |'
+    '|---|---|---|---|---|---|---|---|---|'
     $flagged = 0; $named = 0
     foreach ($orig in $mutations.Keys) {
         $new = $mutations[$orig]
-        $row = $txt | Where-Object { $_ -match "^  $([regex]::Escape($new)) \[" } | Select-Object -First 1
-        if (-not $row) { "| $orig | $new | NOT_JUDGED | | | | | no |"; continue }
+        $rowIdx = -1
+        for ($ri = 0; $ri -lt $txt.Count; $ri++) { if ($txt[$ri] -match "^  $([regex]::Escape($new)) \[") { $rowIdx = $ri; break } }
+        if ($rowIdx -lt 0) { "| $orig | $new | NOT_JUDGED | | | | | | no |"; continue }
+        $row = $txt[$rowIdx]
+        $rowT = if ($rowIdx + 1 -lt $txt.Count -and $txt[$rowIdx + 1] -match '^\s+t: ') { $txt[$rowIdx + 1] } else { $null }
         $v = if ($row -match ' verdict=(\S+)') { $Matches[1] } else { '?' }
         $ar = if ($row -match ' agreement_rate=(\S+)') { $Matches[1] } else { '?' }
         $mp = if ($row -match ' mean_top_prob=(\S+)') { $Matches[1] } else { '?' }
-        $np = if ($row -match ' min_top_prob=(\S+)') { $Matches[1] } else { '?' }
-        # Added after the 2026-09-23 run, whose one UNSTABLE row could not show its split.
-        $sv = if ($row -match ' verdicts=\[([^\]]*)\]') { $Matches[1] } else { '?' }
+        $vT = if ($rowT -and $rowT -match 'verdict=(\S+)') { $Matches[1] } else { '?' }
+        $arT = if ($rowT -and $rowT -match 'agreement_rate=(\S+)') { $Matches[1] } else { '?' }
+        $mpT = if ($rowT -and $rowT -match 'mean_top_prob=(\S+)') { $Matches[1] } else { '?' }
         $f = if ($v -in @('name_overclaims', 'name_understates')) { 'yes'; $flagged++; $named++ } elseif ($v -eq 'ambiguous') { 'exit-code only (ambiguous)'; $flagged++ } else { 'NO' }
-        "| $orig | $new | $v | $ar | $mp | $np | $sv | $f |"
+        "| $orig | $new | $v | $ar | $mp | $vT | $arT | $mpT | $f |"
     }
     ''
-    "MUTATIONS_FLAGGED=$flagged of $($mutations.Count) (named the mismatch: $named; ambiguous counted as flagged by the exit code only)"
+    "MUTATIONS_FLAGGED=$flagged of $($mutations.Count) (named the mismatch: $named; ambiguous counted as flagged by the exit code only; FP-2 column only -- FP-2t is informational)"
     if ($flagged -lt [math]::Ceiling($mutations.Count / 2)) { 'ESCALATE: FP-2 flagged fewer than half of the mutations. A finding for the seat -- do not tune it away.' }
 } finally {
     Remove-Item -Recurse -Force -Path $tmp -ErrorAction SilentlyContinue

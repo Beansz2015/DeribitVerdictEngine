@@ -20,6 +20,13 @@
        exactly the two criteria the probe put it in, and nowhere in version 1.
     C  Same, but version 1 says undeclared on one item while version 2 says
        mechanism_declared_ok: exit 1 -- version 1 alone drives the exit code.
+    D  One residual FP-1 site (second reader, 2026-09-24): exit 0, 15 calls (1 FP-1 item +
+       1 FP-2 item judged as FP-2 and FP-2t, 5 samples each -- FP-D33/SR-D6), and the
+       JEV_MODEL line.
+    E  FP-Q1's OWN item-level baseline gate (second reader, 2026-09-24, SR-D1/FP-D32): a
+       scope baseline covering one of two candidates refuses the whole run before any
+       FP-Q1 call (BASELINE_INCOMPLETE, zero transport calls); -AllowUnbaselinedItems
+       opts out and the run proceeds (30 calls: 10 scope + 10 FP-1 + 10 FP-2/FP-2t).
 
   Usage (from the repo root):
     powershell -NoProfile -File tools/checks/selftest/fixture-parser-selftest.ps1
@@ -87,7 +94,9 @@ try {
     $exitB = $LASTEXITCODE
     $txtB = ($outB | ForEach-Object { [string]$_ }) -join "`n"
     Assert-That 'B exits 0 (v2 disagreement does not reach the exit code)' ($exitB -eq 0) "exit=$exitB"
-    Assert-That 'B made 15 transport calls (2 FP-1 items + 1 FP-2 item, 5 samples each)' ($global:FpSelftestCalls -eq 15) "calls=$($global:FpSelftestCalls)"
+    # FP-D33 (SR-D6, second reader 2026-09-24): FP-2t now rides beside FP-2 in the same run,
+    # so the 1 FP-2 item costs 10 calls (5 FP-2 + 5 FP-2t), not 5 -- 20 total, not 15.
+    Assert-That 'B made 20 transport calls (2 FP-1 items x5 + 1 FP-2 item x5 FP-2 + x5 FP-2t)' ($global:FpSelftestCalls -eq 20) "calls=$($global:FpSelftestCalls)"
     Assert-That 'B MAPPING_AMBIGUOUS_CALLEE_SITES=2' ($txtB -match '(?m)^MAPPING_AMBIGUOUS_CALLEE_SITES=2$') 'counter missing or not 2'
     Assert-That 'B Snapshot and Compute listed as ambiguous' (($txtB -match 'CALLEE_MULTI_DECLARED Snapshot .*ambiguous=1 .*AMBIGUOUS_CALLEE') -and ($txtB -match 'CALLEE_MULTI_DECLARED Compute .*ambiguous=1 .*AMBIGUOUS_CALLEE')) 'CALLEE_MULTI_DECLARED lines wrong'
     Assert-That 'B IN_SCOPE_MARKED_SITE_NAMED=1 and IN_SCOPE_MARKED_BLOCK_ONLY=1' (($txtB -match '(?m)^IN_SCOPE_MARKED_SITE_NAMED=1$') -and ($txtB -match '(?m)^IN_SCOPE_MARKED_BLOCK_ONLY=1$')) 'marker counters wrong'
@@ -119,9 +128,46 @@ try {
     $outD = & $tool -SourceFile $oneSite -BaselinePath $baselinePath -OutPath (Join-Path $tmp 'rD.md') -TestTransportOverride $transport 2>&1
     $exitD = $LASTEXITCODE
     $txtD = ($outD | ForEach-Object { [string]$_ }) -join "`n"
-    Assert-That 'D one residual site: exit 0, 10 calls (1 FP-1 + 1 FP-2 item, 5 samples each)' (($exitD -eq 0) -and ($global:FpSelftestCalls -eq 10)) "exit=$exitD calls=$($global:FpSelftestCalls)"
+    # FP-D33 (SR-D6): the 1 FP-2 item now costs 10 calls (FP-2 + FP-2t), so 1 FP-1 (5) + 1
+    # FP-2 item (10) = 15 total, and JEV_MODEL now tallies 15 requests, not 10.
+    Assert-That 'D one residual site: exit 0, 15 calls (1 FP-1 + 1 FP-2 item as FP-2/FP-2t, 5 samples each)' (($exitD -eq 0) -and ($global:FpSelftestCalls -eq 15)) "exit=$exitD calls=$($global:FpSelftestCalls)"
     Assert-That 'D exactly one FP-1 row judged' (@($outD | Where-Object { [string]$_ -match '^  A902_SyntheticTfiNamed#18#.* verdict=' }).Count -eq 1) 'expected 1 FP-1 row'
-    Assert-That 'D JEV_MODEL line: 10 requested, resolved UNAVAILABLE' ($txtD -match '(?m)^JEV_MODEL requested=\[jev-latest x10\] resolved=\[UNAVAILABLE x10\] run_utc=') (($outD | ForEach-Object { [string]$_ } | Where-Object { $_ -like 'JEV_MODEL*' }) -join ' / ')
+    Assert-That 'D JEV_MODEL line: 15 requested, resolved UNAVAILABLE' ($txtD -match '(?m)^JEV_MODEL requested=\[jev-latest x15\] resolved=\[UNAVAILABLE x15\] run_utc=') (($outD | ForEach-Object { [string]$_ } | Where-Object { $_ -like 'JEV_MODEL*' }) -join ' / ')
+
+    # ---- E (second reader, 2026-09-24 UTC, SR-D1): FP-Q1's OWN item-level baseline gate --
+    # the FP-D24 pattern applied to the scope filter (docs/jev-harnesses-second-reader-
+    # 2026-09-24.md section 6). The synthetic source's needsJevParams population is 62:
+    # minCoverageSec + currentATR (A901, ambiguous callees) plus f00..f59 (A903's Filler
+    # padding, no production call site) -- probed directly (SCOPE_CANDIDATES) rather than
+    # assumed. The baseline below covers 61 of the 62, missing ONLY currentATR, so this is
+    # a clean single-item-missing probe. No key needed for the refusal itself.
+    $scopeBaselinePartial = Join-Path $tmp 'scope-baseline-partial.json'
+    $sbCovered = @{ minCoverageSec = 'input' }
+    for ($fi = 0; $fi -lt 60; $fi++) { $sbCovered["f$($fi.ToString('00'))"] = 'input' }
+    ($sbCovered | ConvertTo-Json) | Set-Content -Encoding UTF8 -Path $scopeBaselinePartial
+
+    # E1: covers 61 of 62 candidates (missing currentATR only) -> refuse before any FP-Q1 call.
+    $global:FpSelftestCalls = 0
+    $outE1 = & $tool -SourceFile $synthetic -BaselinePath (Join-Path $tmp 'no-such-baseline-e1.json') -ScopeBaselinePath $scopeBaselinePartial -OutPath (Join-Path $tmp 'rE1.md') -TestTransportOverride $transport 2>&1
+    $exitE1 = $LASTEXITCODE
+    $txtE1 = ($outE1 | ForEach-Object { [string]$_ }) -join "`n"
+    Assert-That 'E1 exits 2' ($exitE1 -eq 2) "exit=$exitE1"
+    Assert-That 'E1 says BASELINE_INCOMPLETE' ([bool]($outE1 -match '^EXIT_REASON=BASELINE_INCOMPLETE$')) 'no EXIT_REASON=BASELINE_INCOMPLETE line'
+    Assert-That 'E1 SCOPE_UNBASELINED_ITEMS=1, names currentATR' (($txtE1 -match '(?m)^SCOPE_UNBASELINED_ITEMS=1 ') -and ($txtE1 -match '(?m)^\s+currentATR\s')) 'counter or named param missing'
+    Assert-That 'E1 made zero transport calls' ($global:FpSelftestCalls -eq 0) "calls=$($global:FpSelftestCalls)"
+
+    # E2: -AllowUnbaselinedItems opts out -- FP-Q1 then DOES call every one of the 62
+    # candidates (62 x 5 samples = 310), and the run proceeds past the scope gate to
+    # FP-1/FP-2 (baseline.json from check B already covers A902's items, so those gates
+    # pass too): 310 scope + 10 FP-1 + 10 FP-2/FP-2t = 330.
+    $global:FpSelftestCalls = 0; $global:FpSelftestMode = 'B'
+    $outE2 = & $tool -SourceFile $synthetic -BaselinePath $baselinePath -ScopeBaselinePath $scopeBaselinePartial -AllowUnbaselinedItems -OutPath (Join-Path $tmp 'rE2.md') -TestTransportOverride $transport 2>&1
+    $exitE2 = $LASTEXITCODE
+    $txtE2 = ($outE2 | ForEach-Object { [string]$_ }) -join "`n"
+    Assert-That 'E2 -AllowUnbaselinedItems opts out (no BASELINE_INCOMPLETE)' (-not ($outE2 -match '^EXIT_REASON=BASELINE_INCOMPLETE$')) 'refusal fired anyway'
+    Assert-That 'E2 SCOPE_JEV_CALLS=310 (62 candidates x 5 samples)' ($txtE2 -match '(?m)^SCOPE_JEV_CALLS=310$') 'scope call count wrong'
+    Assert-That 'E2 exits 0 (mode B: v1 clean)' ($exitE2 -eq 0) "exit=$exitE2"
+    Assert-That 'E2 made 330 transport calls (310 scope + 10 FP-1 + 10 FP-2/FP-2t)' ($global:FpSelftestCalls -eq 330) "calls=$($global:FpSelftestCalls)"
 
     ''
     'Selected harness output, check B:'

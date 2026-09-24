@@ -324,6 +324,36 @@
   tools/checks/selftest/fixture-parser-selftest.ps1 (no network, no key).
   ==========================================================================================
 
+  ============================== REVISION 5 (2026-09-24 UTC) ==============================
+  docs/jev-harnesses-second-reader-2026-09-24.md section 6 -- SR-D1 and SR-D6, both RULED
+  YES by the trader 2026-09-24:
+
+  FP-D32 (SR-D1: FP-Q1 item-level baseline gate, the FP-D24 pattern applied to the SECOND
+  detector). Finding SR-4: the scope-baseline gate above (FP-D15) is FILE-level -- a file
+  naming ONE needsJevParams candidate set $scopeBaselineOk=$true and let EVERY OTHER
+  candidate reach Jev with no seat line. Now every needsJevParams item absent from a
+  SUPPLIED, FOUND baseline file stops FP-Q1 cold: it takes the same no-Jev-call branch
+  FP-D15's own missing-baseline case already used, and the run then exits 2
+  (EXIT_REASON=BASELINE_INCOMPLETE, SCOPE_UNBASELINED_ITEMS) after Write-Coverage prints
+  (section 4.2 step 5's "coverage prints on every exit path" invariant, unchanged).
+  -AllowUnbaselinedItems opts out, shared with FP-1/FP-2's own gate (FP-D24) rather than a
+  second flag -- SR-D1's own ruling. Unchanged: a $ScopeBaselinePath that is empty or not
+  found still degrades to CODE-ONLY scope, non-fatally (FP-D15's original, deliberate
+  design for "no baseline was ever supplied"; SR-D1 is scoped to a baseline that WAS
+  supplied and found but does not cover every candidate).
+
+  FP-D33 (SR-D6: FP-2t, a title-stripped FP-2 arm beside FP-2). The 2026-09-23/24 mutation
+  runs (docs/harness-runs/fixture-parser-fp2-mutation-2026-09-23.md,
+  fixture-parser-fp2-mutation-titles-2026-09-24.md) found FP-2 partly reads the fixture's
+  own Check(...) title strings, not only the body: A23a flipped from a stable detection to
+  a stable miss once its title stopped contradicting the wrong name. FP-2t asks the SAME
+  question over the SAME Sub body, except every Check("...") title literal in that body is
+  replaced with a neutral placeholder before the call, so Jev has only the code and
+  comments to judge against the name. FP-2 alone still drives FP2_BAD_VERDICTS and the
+  exit code, exactly as FP-1v2 (FP-D30) sits beside FP-1 without touching it. FP-2t's
+  plurality, agreement and mean top probability print beside FP-2's, never combined.
+  ==========================================================================================
+
   FP-D2 (retained, now informational only): the ORIGINAL camelCase-to-snake_case name
   matching against HEAD's settings.json shape. No longer authoritative for ResolvedKey
   (FP-Q3 is), but still computed and still feeds MATCHED_ONE_KEY/ZERO/MULTI (unchanged
@@ -2001,6 +2031,9 @@ $scopeJevSkippedNoBaseline = 0
 $scopeBaselineCovers = 0
 $scopeBaselineOk = $false
 $scopeBaselineState = 'MISSING_NOT_SUPPLIED'
+# SR-D1: item-level scope baseline gate (see below). Declared here, unconditionally, so
+# an empty list is always the right answer when no -ScopeBaselinePath file was found.
+$scopeUnbaselinedParams = New-Object System.Collections.Generic.List[string]
 if (-not [string]::IsNullOrWhiteSpace($ScopeBaselinePath)) {
     $scopeBaselineFull = Resolve-RepoPath $ScopeBaselinePath
     if (-not (Test-Path $scopeBaselineFull)) {
@@ -2026,8 +2059,19 @@ if (-not [string]::IsNullOrWhiteSpace($ScopeBaselinePath)) {
             $scopeBaselineOk = $true
             $scopeBaselineState = 'SUPPLIED'
         }
+        # SR-D1 (docs/jev-harnesses-second-reader-2026-09-24.md section 6, from finding
+        # SR-4): the two counters above are FILE-level -- a baseline naming ONE candidate
+        # set $scopeBaselineOk=$true and let EVERY OTHER needsJevParams item through with
+        # no seat line. List every one this file does not cover, item by item, the FP-D24
+        # pattern.
+        foreach ($p in $needsJevParams) { if (-not $sbMap.ContainsKey($p.ToLowerInvariant())) { [void]$scopeUnbaselinedParams.Add($p) } }
     }
 }
+# SR-D1: refusing item-by-item means NO scope item may reach Invoke-ScopeClassification
+# this run once one is missing -- never a partial call list -- so this is computed once,
+# before the classify/skip branch below, and reused by both that branch and the exit gate
+# printed later (after Write-Coverage, so coverage still prints on every exit path).
+$scopeItemIncomplete = ($scopeUnbaselinedParams.Count -gt 0 -and -not $AllowUnbaselinedItems)
 $scopeApiFailed = $false
 $scopeApiFailMsg = ''
 # Named single-parameter proofs required by docs/fixture-parser-check-spec.md section 7.5:
@@ -2040,9 +2084,12 @@ $fpq1NamedProofItems = @('atr', 'price', 'epochs', 'lr', 'nowUtcMs')
 $fpq1NamedProofs = @{}
 $scopeSw = [System.Diagnostics.Stopwatch]::StartNew()
 
-if (-not $scopeBaselineOk) {
+if (-not $scopeBaselineOk -or $scopeItemIncomplete) {
     # FP-D15: structural. No operator-written scope baseline, so FP-Q1 asks Jev NOTHING and
     # no scope answer can be seen before the operator has written their own read.
+    # SR-D1: a supplied-but-incomplete baseline takes this same no-call branch -- refusing
+    # item by item still means NOT ONE needsJevParams item reaches Jev this run, never a
+    # partial list. The hard exit is printed later, after coverage (below).
     foreach ($p in $needsJevParams) { $paramInScope[$p.ToLowerInvariant()] = $false }
     $scopeJevSkippedNoBaseline = $needsJevParams.Count
 } elseif (-not $scopeJevAvailable) {
@@ -2251,6 +2298,23 @@ if ($literalCallSites -lt 60 -or $settingsRevisionsWalked -lt 80) {
     exit 2
 }
 
+# SR-D1 (docs/jev-harnesses-second-reader-2026-09-24.md section 6, finding SR-4): FP-Q1's
+# own item-level baseline gate, the FP-D24 pattern applied to the SECOND detector. Placed
+# after Write-Coverage/PARSER_SUSPECT so coverage still prints on every exit path (section
+# 4.2 step 5), matching the invariant FP-1/FP-2's own gates keep. FP-Q1 already made ZERO
+# Jev calls this run when $scopeItemIncomplete is true -- the classify/skip branch above
+# took the no-call path -- so this is purely the refusal, never a second skip.
+if ($scopeItemIncomplete) {
+    "EXIT_REASON=BASELINE_INCOMPLETE"
+    "SCOPE_UNBASELINED_ITEMS=$($scopeUnbaselinedParams.Count) -- no line in '$ScopeBaselinePath' for:"
+    foreach ($u in $scopeUnbaselinedParams) {
+        $ci = Get-ParamContext $u
+        "  {0,-26} x{1,-3} callees=[{2}] production_mapping=[{3}]" -f $u, $ci.Count, (@($ci.Callees) -join ','), (@($ci.MappingClasses) -join ',')
+    }
+    "FP-Q1 made no Jev call this run (nothing was judged). Write your own threshold-or-input read for each item above as JSON in '$ScopeBaselinePath' (vocabulary threshold | input | unsure), or pass -AllowUnbaselinedItems for a routine re-run of items already measured once."
+    exit 2
+}
+
 # Trap-1 proof line, always printed once revisions are walked and BEFORE the baseline gate,
 # so it is visible even on a BASELINE_MISSING exit (docs/fixture-parser-check-spec.md
 # section 5 acceptance item 1).
@@ -2372,7 +2436,13 @@ foreach ($sn in $residualSubNames) {
     $bodyLines = $lines[$r.Start..$r.End]
     $body = ($bodyLines -join "`n")
     if ($body.Length -gt $MAX_SUB_BODY_CHARS) { $body = $body.Substring(0, $MAX_SUB_BODY_CHARS) + "`n... [truncated at $MAX_SUB_BODY_CHARS chars]" }
-    $fp2Items.Add([PSCustomObject]@{ SubName = $sn; Body = $body })
+    # FP-D33 (SR-D6, revision 5): FP-2t's own body. Every Check("...") call's leading
+    # title-string argument becomes a neutral placeholder -- only the title, never the
+    # condition or detail arguments after it, so the body still type-checks in spirit
+    # (irrelevant here, it is never compiled) and Jev is left with only code and comments
+    # to judge the name against.
+    $bodyTitleStripped = [regex]::Replace($body, '(Check\(\s*)"[^"]*"', '$1"check"')
+    $fp2Items.Add([PSCustomObject]@{ SubName = $sn; Body = $body; BodyTitleStripped = $bodyTitleStripped })
 }
 if ($fp2Items.Count -gt 0) {
     "FP2_CANDIDATES (no judgments, for baseline labelling):"
@@ -2541,10 +2611,16 @@ function Invoke-Fp1Verdict([string]$apiKeyIn, $cs, [string]$uid) {
     }
 }
 
-function Invoke-Fp2Verdict([string]$apiKeyIn, $f2, [string]$uid) {
-    $state = @{ fixture_sub = $f2.SubName; sub_body = $f2.Body }
+function Invoke-Fp2Verdict([string]$apiKeyIn, $f2, [string]$uid, [switch]$TitleStripped) {
+    # FP-D33 (SR-D6, revision 5): -TitleStripped selects $f2.BodyTitleStripped (every
+    # Check("...") title replaced with a neutral placeholder) instead of $f2.Body. Same
+    # question, same criteria, same fixture_sub -- only sub_body differs. A SEPARATE call
+    # (unlike FP-1v2's second question in the SAME call): the STATE itself differs here,
+    # and Invoke-Jev's state is one call's whole request.
+    $bodyText = if ($TitleStripped) { $f2.BodyTitleStripped } else { $f2.Body }
+    $state = @{ fixture_sub = $f2.SubName; sub_body = $bodyText }
     if ($uid) { $state.sample_uid = $uid }
-    if ($DebugState) { Write-Host "STATE_DEBUG fp2 sub=$($f2.SubName) keys=[$($state.Keys -join ',')] sample_uid=$($state.sample_uid)" }
+    if ($DebugState) { Write-Host "STATE_DEBUG $(if ($TitleStripped) { 'fp2t' } else { 'fp2' }) sub=$($f2.SubName) keys=[$($state.Keys -join ',')] sample_uid=$($state.sample_uid)" }
     $body = @{
         model = 'jev-latest'
         state = $state
@@ -2690,6 +2766,9 @@ foreach ($cs in $fp1JudgedSites) {   # -Fp2Only empties this (revision 4)
 if (-not $apiFailed) {
     foreach ($f2 in $fp2Items) {
         $sampleResults = New-Object System.Collections.Generic.List[object]
+        # FP-D33 (SR-D6): FP-2t's own samples, collected beside FP-2's in the same loop.
+        $sampleResultsT = New-Object System.Collections.Generic.List[object]
+        $fp2tWafBlocked = $false
         $itemBlocked = $false
         for ($i = 0; $i -lt $Samples; $i++) {
             $uid = "$($f2.SubName):$i`:$([guid]::NewGuid().ToString('N').Substring(0,8))"
@@ -2701,6 +2780,22 @@ if (-not $apiFailed) {
             $usageInputTokens += $r.UsageInputTokens
             $usageOutputTokens += $r.UsageOutputTokens
             $sampleResults.Add($r)
+
+            # FP-D33 (SR-D6): FP-2t, reported beside FP-2, never read by the exit code or
+            # FP2_BAD_VERDICTS -- the same footing FP-1v2 (FP-D30) holds beside FP-1. A WAF
+            # block on the titled call is recorded (FP2T_WAF_BLOCKED) and that one sample
+            # dropped; it does not break this loop, because FP-2's own samples must not be
+            # shortened by FP-2t's failure.
+            $uidT = "$($f2.SubName):t:$i`:$([guid]::NewGuid().ToString('N').Substring(0,8))"
+            $rt = Invoke-Fp2Verdict $apiKey $f2 $uidT -TitleStripped
+            if (-not $rt.Ok) {
+                if ($rt.WafBlocked) { $fp2tWafBlocked = $true }
+                else { $apiFailed = $true; $apiFailMsg = "Jev FP-2t request failed for $($f2.SubName) (sample $($i+1)/$Samples): $($rt.Error)"; break }
+            } else {
+                $usageInputTokens += $rt.UsageInputTokens
+                $usageOutputTokens += $rt.UsageOutputTokens
+                $sampleResultsT.Add($rt)
+            }
         }
         if ($apiFailed) { break }
         if ($itemBlocked) {
@@ -2708,18 +2803,30 @@ if (-not $apiFailed) {
                 SubName = $f2.SubName; Verdict = 'WAF_BLOCKED'; AgreementRate = $null; Stable = $true
                 MeanTopProbability = $null; MinTopProbability = $null; NameMatchesNoul = $null
                 SampleCount = 0; SampleVerdicts = ''; SampleTopProbabilities = ''
+                Fp2tVerdict = $null; Fp2tAgreementRate = $null; Fp2tStable = $null
+                Fp2tMeanTopProbability = $null; Fp2tSampleVerdicts = ''; Fp2tWafBlocked = $false
                 Baseline = if ($baseline.ContainsKey($f2.SubName)) { $baseline[$f2.SubName] } else { $null }
             })
             continue
         }
         $agg = Get-SelfConsistencyAggregate $sampleResults
         $meanNameMatches = [math]::Round((($sampleResults | ForEach-Object { [double]$_.NameMatchesNoul } | Measure-Object -Average).Average), 3)
+        # FP-D33: FP-2t's own aggregate, over whatever samples survived a WAF block. All
+        # blocked (zero survivors) reports Fp2tVerdict=WAF_BLOCKED, the same vocabulary
+        # FP-2's own item-level block uses.
+        $aggT = if ($sampleResultsT.Count -gt 0) { Get-SelfConsistencyAggregate $sampleResultsT } else { $null }
         $fp2Results.Add([PSCustomObject]@{
             SubName = $f2.SubName
             Verdict = $agg.PluralityVerdict; AgreementRate = $agg.AgreementRate; Stable = $agg.Stable
             MeanTopProbability = $agg.MeanTopProbability; MinTopProbability = $agg.MinTopProbability
             NameMatchesNoul = $meanNameMatches
             SampleCount = $agg.SampleCount; SampleVerdicts = $agg.SampleVerdicts; SampleTopProbabilities = $agg.SampleTopProbabilities
+            Fp2tVerdict = if ($aggT) { $aggT.PluralityVerdict } else { 'WAF_BLOCKED' }
+            Fp2tAgreementRate = if ($aggT) { $aggT.AgreementRate } else { $null }
+            Fp2tStable = if ($aggT) { $aggT.Stable } else { $true }
+            Fp2tMeanTopProbability = if ($aggT) { $aggT.MeanTopProbability } else { $null }
+            Fp2tSampleVerdicts = if ($aggT) { $aggT.SampleVerdicts } else { '' }
+            Fp2tWafBlocked = $fp2tWafBlocked
             Baseline = if ($baseline.ContainsKey($f2.SubName)) { $baseline[$f2.SubName] } else { $null }
         })
     }
@@ -2773,6 +2880,8 @@ if ($CountersOnly) {
         $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' } elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
         $stableTxt = if ($res.Stable) { 'STABLE' } else { 'UNSTABLE' }
         "  $($res.SubName) [$stableTxt] verdict=$($res.Verdict) agreement_rate=$($res.AgreementRate) mean_top_prob=$($res.MeanTopProbability) min_top_prob=$($res.MinTopProbability) name_matches_noul=$($res.NameMatchesNoul) baseline=$($res.Baseline) [$agree] verdicts=[$($res.SampleVerdicts)] top_probs=[$($res.SampleTopProbabilities)]"
+        # FP-D33 (SR-D6): FP-2t beside it. Informational; the [AGREE]/[DISAGREE] tag above is FP-2's.
+        "      t: verdict=$($res.Fp2tVerdict) agreement_rate=$($res.Fp2tAgreementRate) mean_top_prob=$($res.Fp2tMeanTopProbability) verdicts=[$($res.Fp2tSampleVerdicts)] waf_blocked=$($res.Fp2tWafBlocked)"
     }
     "FP1_UNSTABLE=$fp1Unstable"
     "FP2_UNSTABLE=$fp2Unstable"
@@ -2787,6 +2896,10 @@ if ($CountersOnly) {
     "FP1V2_ITEMS_SAME_PLURALITY_AS_V1=$(@($fp1Judged | Where-Object { $_.V2Verdict -eq $_.Verdict }).Count) of $($fp1Judged.Count)"
     "FP1V2_SAMPLES_SAME_AS_V1=$(($fp1Judged | Measure-Object -Property SamplesV1EqV2 -Sum).Sum) of $(($fp1Judged | Measure-Object -Property SampleCount -Sum).Sum)"
     "FP1V2_UNSTABLE=$(@($fp1Judged | Where-Object { $_.V2Stable -eq $false }).Count) (informational -- version 1 alone drives the exit code)"
+    # FP-D33 (SR-D6): FP-2 against FP-2t. Informational only -- none of these reaches $anyBad.
+    $fp2Judged = @($fp2Results | Where-Object { $_.Verdict -ne 'WAF_BLOCKED' })
+    "FP2T_ITEMS_SAME_PLURALITY_AS_FP2=$(@($fp2Judged | Where-Object { $_.Fp2tVerdict -eq $_.Verdict }).Count) of $($fp2Judged.Count)"
+    "FP2T_WAF_BLOCKED=$(@($fp2Judged | Where-Object { $_.Fp2tWafBlocked }).Count)"
 }
 if ($Fp2Only) { "FP2_ONLY=true (FP-1 sites listed above were NOT judged and NOT gated this run)" }
 
@@ -2843,11 +2956,11 @@ if (-not $CountersOnly) {
     $reportLines.Add('')
     $reportLines.Add('## FP-2 (fixture name vs. assertion)')
     $reportLines.Add('')
-    $reportLines.Add('| Sub | Verdict | Agreement | Mean top prob | Baseline | Agreement |')
-    $reportLines.Add('|---|---|---|---|---|---|')
+    $reportLines.Add('| Sub | Verdict | Agreement | Mean top prob | Baseline | Agreement | t verdict (informational) | t agreement | t mean top prob |')
+    $reportLines.Add('|---|---|---|---|---|---|---|---|---|')
     foreach ($res in $fp2Results) {
         $agree = if ($res.Verdict -eq 'WAF_BLOCKED') { 'NOT_JUDGED' } elseif ($null -eq $res.Baseline) { 'NO_BASELINE_VALUE' } elseif ($res.Baseline -eq 'unsure') { 'OPERATOR_UNSURE' } elseif ($res.Baseline -eq $res.Verdict) { 'AGREE' } else { 'DISAGREE' }
-        $reportLines.Add("| $($res.SubName) | $($res.Verdict) | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.Baseline) | $agree |")
+        $reportLines.Add("| $($res.SubName) | $($res.Verdict) | $($res.AgreementRate) | $($res.MeanTopProbability) | $($res.Baseline) | $agree | $($res.Fp2tVerdict) | $($res.Fp2tAgreementRate) | $($res.Fp2tMeanTopProbability) |")
     }
 } else {
     $reportLines.Add('## Per-item detail withheld')
