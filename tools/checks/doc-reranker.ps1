@@ -50,6 +50,8 @@
     set -a; . ./typesafe.local.env; set +a
     powershell -NoProfile -File tools/checks/doc-reranker.ps1 -Query "<question>" [-Rev <rev>] [-K 30] [-Samples 1]
     powershell -NoProfile -File tools/checks/doc-reranker.ps1 -AcceptanceRun [-Rev <rev>] [-OutPath <file>]
+    powershell -NoProfile -File tools/checks/doc-reranker.ps1 -NoAnswerOnly Q29 -Rev af5d6af -Samples 5 `
+        [-AllowSpentOnce Q29 -Reason "<why>"]   # SR-D2: needed only when the id is already spent
 #>
 [CmdletBinding()]
 param(
@@ -71,6 +73,17 @@ param(
     # once is spent for good (harness-shadow-mode-protocol.md section 4a). -Subset reserved
     # refuses any spent id, and appends each id it judges BEFORE its first Jev call.
     [string]$SpentLedger = 'docs/harness-runs/doc-reranker-spent-queries.json',
+    # SR-D2 (docs/jev-harnesses-second-reader-2026-09-24.md section 6): a third mode. Runs
+    # ONLY the no-answer Noul for one query id, over a freshly rebuilt re-ranked top 5 (the
+    # id's own section Nouls are re-scored to reconstruct that order -- about K x -Samples
+    # calls -- then ONE more call is the actual new measurement). If the id is already in
+    # $SpentLedger (Q29's own case: its section Nouls were judged, its no-answer check never
+    # was), this refuses unless -AllowSpentOnce names the SAME id with a -Reason, an
+    # explicit, logged, one-time exception recorded in the ledger's own "exceptions" list --
+    # never silently re-judged, and never a second entry in "spent".
+    [string]$NoAnswerOnly = '',
+    [string]$AllowSpentOnce = '',
+    [string]$Reason = '',
     # TEST SEAM ONLY, the pattern harnesses 1-4 carry: forwarded to Invoke-Jev's
     # -TransportOverride. A real run never passes it.
     [scriptblock]$TestTransportOverride = $null
@@ -109,15 +122,38 @@ function Add-SpentLedgerEntry([string]$id, [string]$how) {
     [System.IO.File]::WriteAllText($full, ((ConvertTo-Json -InputObject $out -Depth 5) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 }
 function ConvertTo-QueryKey([string]$t) { (($t -replace '\s+', ' ').Trim()).ToLowerInvariant() }
+# SR-D2: the one-time, logged exception. Separate "exceptions" array -- "spent" keeps its
+# one-line-per-id, never-duplicated shape; this never touches or duplicates that entry.
+function Add-SpentLedgerException([string]$id, [string]$reason) {
+    $full = Resolve-RepoPath $SpentLedger
+    $obj = [PSCustomObject]@{ _note = 'Reserved doc-reranker queries already judged by Jev. Never re-judge one.'; spent = @() }
+    if (Test-Path $full) { $obj = [System.IO.File]::ReadAllText($full, [System.Text.Encoding]::UTF8) | ConvertFrom-Json }
+    $spentList = New-Object System.Collections.Generic.List[object]
+    foreach ($e in @($obj.spent)) { if ($null -ne $e) { $spentList.Add($e) } }
+    $excList = New-Object System.Collections.Generic.List[object]
+    if ($obj.PSObject.Properties.Name -contains 'exceptions') { foreach ($e in @($obj.exceptions)) { if ($null -ne $e) { $excList.Add($e) } } }
+    $excList.Add([PSCustomObject]([ordered]@{
+        id = $id
+        utc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        reason = $reason
+        what = 'no-answer Noul only, over a freshly rebuilt re-ranked top 5 (SR-D2) -- the section Nouls used to rebuild that order were already spent for this id; this call is the one measurement that id never got, never a re-judge of the reserved population''s own scored rows'
+    }))
+    $out = [ordered]@{ _note = [string]$obj._note; spent = $spentList.ToArray(); exceptions = $excList.ToArray() }
+    [System.IO.File]::WriteAllText($full, ((ConvertTo-Json -InputObject $out -Depth 5) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+}
 
-if (-not $Query -and -not $AcceptanceRun) {
+$modeCount = 0
+if ($Query) { $modeCount++ }
+if ($AcceptanceRun) { $modeCount++ }
+if ($NoAnswerOnly) { $modeCount++ }
+if ($modeCount -eq 0) {
     Write-Host "EXIT_REASON=NO_MODE"
-    Write-Host "Pass -Query '<question>' for a live single query, or -AcceptanceRun for the M4 acceptance measurement (8 acceptance-subset queries only)."
+    Write-Host "Pass -Query '<question>' for a live single query, -AcceptanceRun for the M4 acceptance measurement (8 acceptance-subset queries only), or -NoAnswerOnly <id> for SR-D2's one-query no-answer-check-alone mode."
     exit 2
 }
-if ($Query -and $AcceptanceRun) {
+if ($modeCount -gt 1) {
     Write-Host "EXIT_REASON=AMBIGUOUS_MODE"
-    Write-Host "-Query and -AcceptanceRun are mutually exclusive."
+    Write-Host "-Query, -AcceptanceRun and -NoAnswerOnly are mutually exclusive."
     exit 2
 }
 
@@ -177,6 +213,31 @@ if ($AcceptanceRun) {
             Write-Host "Expected 8 acceptance-subset queries in $QueryFile, found $($acceptance.Count). Refusing -- this run's numbers are specced against exactly 8."
             exit 2
         }
+    }
+}
+
+# ---- -NoAnswerOnly (SR-D2): every gate runs here too, before the key is read.
+$noAnswerOnlyQuery = $null
+if ($NoAnswerOnly) {
+    $qfFullN = Resolve-RepoPath $QueryFile
+    $qsetN = Get-Content -Raw -Encoding UTF8 -Path $qfFullN | ConvertFrom-Json
+    $noAnswerOnlyQuery = @($qsetN.queries | Where-Object { [string]$_.id -eq $NoAnswerOnly }) | Select-Object -First 1
+    if (-not $noAnswerOnlyQuery) {
+        Write-Host "EXIT_REASON=QUERY_ID_NOT_FOUND"
+        Write-Host "'$NoAnswerOnly' names no query in '$QueryFile'. Nothing was judged."
+        exit 2
+    }
+    $ledgerN = Read-SpentLedger
+    $noAnswerOnlySpent = ($null -ne $ledgerN) -and $ledgerN.ContainsKey($NoAnswerOnly)
+    if ($noAnswerOnlySpent -and (($AllowSpentOnce -ne $NoAnswerOnly) -or [string]::IsNullOrWhiteSpace($Reason))) {
+        Write-Host "EXIT_REASON=RESERVED_QUERY_SPENT"
+        Write-Host "'$NoAnswerOnly' is already in '$SpentLedger'. Pass -AllowSpentOnce $NoAnswerOnly -Reason '<why>' for a one-time, logged exception (SR-D2). Nothing was judged."
+        exit 2
+    }
+    if ($AllowSpentOnce -and -not $noAnswerOnlySpent) {
+        Write-Host "EXIT_REASON=ALLOW_SPENT_ONCE_UNUSED"
+        Write-Host "-AllowSpentOnce was passed but '$NoAnswerOnly' is not in '$SpentLedger' -- an ordinary run records it there as usual, no exception needed. Nothing was judged; drop -AllowSpentOnce/-Reason and re-run."
+        exit 2
     }
 }
 
@@ -330,6 +391,81 @@ if ($Query) {
     $logFull = Resolve-RepoPath $LogPath
     (ConvertTo-Json -InputObject $logEntry -Depth 6 -Compress) | Add-Content -Encoding UTF8 -Path $logFull
     Write-Host "Logged to $LogPath"
+    exit 0
+}
+
+# =================================================================================================
+# MODE 3: -NoAnswerOnly <id> (SR-D2, second reader 2026-09-24). Rebuilds the id's own
+# re-ranked top 5 (BM25 shortlist, then Jev section Nouls at -Samples -- the SAME
+# candidates that id's reserved run already scored, re-scored here only as the means to
+# reconstruct the order the no-answer check is asked over), then asks the ONE no-answer
+# question that id never got. Every gate above already ran before the key was read.
+# =================================================================================================
+if ($NoAnswerOnly) {
+    if ($Samples -lt 1) { $Samples = 5 }
+    $slFile3 = [System.IO.Path]::GetTempFileName()
+    try {
+        & $Python (Join-Path $PSScriptRoot 'lib\doc_reranker_shortlist.py') shortlist --rev $Rev --query $noAnswerOnlyQuery.query --k $K --out $slFile3 | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-Host "EXIT_REASON=SHORTLIST_FAILED"; exit 2 }
+        $sl3 = Get-Content -Raw -Encoding UTF8 -Path $slFile3 | ConvertFrom-Json
+    } finally { Remove-Item -Force $slFile3 -ErrorAction SilentlyContinue }
+
+    Write-Host "NO_ANSWER_ONLY id=$NoAnswerOnly  REV=$($sl3.rev7)  DOC_SCOPE=$($sl3.doc_scope_count) docs  SECTIONS=$($sl3.section_count)  SHORTLIST_K=$($sl3.shortlist.Count)  SAMPLES=$Samples"
+    if ($noAnswerOnlySpent) { Write-Host "ALLOW_SPENT_ONCE=$NoAnswerOnly reason=[$Reason]" }
+
+    $cands3 = @($sl3.shortlist)
+    $means3 = New-Object System.Collections.Generic.List[double]
+    $jevCalls3 = 0; $usageIn3 = [long]0; $sectionsWaf3 = 0
+    $sw3 = [System.Diagnostics.Stopwatch]::StartNew()
+    foreach ($c in $cands3) {
+        $r = Invoke-SectionNoul $apiKey $noAnswerOnlyQuery.query $c $Samples
+        if (-not $r.Ok) {
+            if ($r.WafBlocked) { $means3.Add(-1.0); $sectionsWaf3++; continue }
+            Write-Host "EXIT_REASON=API_FAILED"; Write-Host "Jev request failed for $($c.id): $($r.Error)"; exit 2
+        }
+        $means3.Add($r.MeanNoul); $jevCalls3 += $r.Calls; $usageIn3 += $r.InputTokens
+    }
+    $ordered3 = @(Get-RerankedOrder $cands3 $means3)
+    $top5_3 = @($ordered3 | Select-Object -First $NoAnswerTopN)
+
+    $naState3 = [ordered]@{ query = $noAnswerOnlyQuery.query; sample_uid = [guid]::NewGuid().ToString('N').Substring(0,8) }
+    $i3 = 0
+    foreach ($t in $top5_3) { $i3++; $naState3["candidate_$i3`_path"] = $t.Cand.path; $naState3["candidate_$i3`_heading"] = $t.Cand.heading_chain
+                              $naState3["candidate_$i3`_excerpt"] = ($t.Cand.text.Substring(0, [Math]::Min(600, $t.Cand.text.Length))) }
+    $naQ3 = @{ type = 'noul'; criteria = $noAnswerCriteria
+               instructions = 'Read the query and the listed candidate sections (path, heading, excerpt). Does ANY of them answer the query?' }
+    $naCall3 = Invoke-Jev $apiKey @{ model = 'jev-latest'; state = $naState3; questions = @{ any_answer = $naQ3 } } 3 1 $TestTransportOverride
+    $sw3.Stop()
+    if (-not $naCall3.Ok) {
+        if ($naCall3.WafBlocked) { Write-Host "EXIT_REASON=WAF_BLOCKED"; Write-Host "The no-answer call itself was blocked. Nothing recorded as an answer; the ledger exception below still applies (the section scoring above still spent real calls)." }
+        else { Write-Host "EXIT_REASON=API_FAILED"; Write-Host "Jev no-answer request failed: $($naCall3.Error)"; exit 2 }
+    }
+    $noAnswerVerdict3 = 'API_FAILED'
+    if ($naCall3.Ok) {
+        $naNoul3 = [double]$naCall3.Response.answers.any_answer.noul
+        $noAnswerVerdict3 = "noul=$([math]::Round($naNoul3,3)) ($(if ($naNoul3 -ge 0.5) {'yes, an answer exists'} else {'no, none answers it'}))"
+        $jevCalls3++
+        if ($naCall3.Response.usage.input_tokens) { $usageIn3 += [long]$naCall3.Response.usage.input_tokens }
+    }
+
+    Write-Host "NO_ANSWER_NOUL(any_answer)=$noAnswerVerdict3"
+    Write-Host "JEV_CALLS=$jevCalls3  USAGE_INPUT_TOKENS=$usageIn3  WALL_TIME_SEC=$([math]::Round($sw3.Elapsed.TotalSeconds,2))  SECTIONS_WAF_BLOCKED=$sectionsWaf3"
+    Write-Host (Get-JevModelLine)
+    Write-Host "TOP $($top5_3.Count) (the re-ranked order this no-answer check was asked over):"
+    $rank3 = 0
+    foreach ($t in $top5_3) {
+        $rank3++
+        $arch3 = if ($t.Cand.is_archive) { ' [ARCHIVE]' } else { '' }
+        Write-Host "  $rank3. noul=$([math]::Round($t.Noul,3)) $($t.Cand.path)$arch3  ::  $($t.Cand.heading_chain)"
+    }
+
+    if ($noAnswerOnlySpent) {
+        Add-SpentLedgerException $NoAnswerOnly $Reason
+        Write-Host "Exception recorded in $SpentLedger (id already in 'spent'; this call is logged in the new 'exceptions' list, not a duplicate 'spent' entry)."
+    } else {
+        Add-SpentLedgerEntry $NoAnswerOnly "-NoAnswerOnly, $((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))"
+        Write-Host "Recorded $NoAnswerOnly as spent in $SpentLedger (-NoAnswerOnly)."
+    }
     exit 0
 }
 

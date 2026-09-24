@@ -1,26 +1,118 @@
 {
-  "_note": "Reserved doc-reranker (harness 5) queries already judged by Jev, keyed by the id in doc-reranker-20260923T1930Z-queries.json. A spent query can never be judged again: tools/checks/doc-reranker.ps1 -Subset reserved refuses it. Seeded 2026-09-24 (UTC) by the second reader from doc-reranker-build-spec-back.md section 1 H-4 (Q11) and harness-runs/doc-reranker-reserved-run-2026-09-24.md (the other 20). Q29 had its section Nouls judged but never its no-answer check (its kind is nowhere_trap, which the old code did not test); it is spent all the same.",
-  "spent": [
-    { "id": "Q11", "spent_utc": "2026-09-23", "by": "doc-reranker-build-spec-back.md H-4, -Query 'Where are the ATR low / normal / high bands defined?'" },
-    { "id": "Q01", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q02", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q04", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q05", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q07", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q08", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q09", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q12", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q13", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q15", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q16", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q18", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q19", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q21", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q22", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q23", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q25", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q26", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q27", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md" },
-    { "id": "Q29", "spent_utc": "2026-09-24", "by": "harness-runs/doc-reranker-reserved-run-2026-09-24.md (section Nouls only; no-answer check never run)" }
-  ]
+    "_note":  "Reserved doc-reranker (harness 5) queries already judged by Jev, keyed by the id in doc-reranker-20260923T1930Z-queries.json. A spent query can never be judged again: tools/checks/doc-reranker.ps1 -Subset reserved refuses it. Seeded 2026-09-24 (UTC) by the second reader from doc-reranker-build-spec-back.md section 1 H-4 (Q11) and harness-runs/doc-reranker-reserved-run-2026-09-24.md (the other 20). Q29 had its section Nouls judged but never its no-answer check (its kind is nowhere_trap, which the old code did not test); it is spent all the same.",
+    "spent":  [
+                  {
+                      "id":  "Q11",
+                      "spent_utc":  "2026-09-23",
+                      "by":  "doc-reranker-build-spec-back.md H-4, -Query \u0027Where are the ATR low / normal / high bands defined?\u0027"
+                  },
+                  {
+                      "id":  "Q01",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q02",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q04",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q05",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q07",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q08",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q09",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q12",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q13",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q15",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q16",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q18",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q19",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q21",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q22",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q23",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q25",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q26",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q27",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md"
+                  },
+                  {
+                      "id":  "Q29",
+                      "spent_utc":  "2026-09-24",
+                      "by":  "harness-runs/doc-reranker-reserved-run-2026-09-24.md (section Nouls only; no-answer check never run)"
+                  }
+              ],
+    "exceptions":  [
+                       {
+                           "id":  "Q29",
+                           "utc":  "2026-09-24T12:15:25Z",
+                           "reason":  "SR-D2 (docs/jev-harnesses-second-reader-2026-09-24.md section 6): Q29 section Nouls were judged in the 2026-09-24 reserved run, but its no-answer check was never run (SR-2, the nowhere_trap kind test bug). One-time exception, ruled YES by the trader 2026-09-24.",
+                           "what":  "no-answer Noul only, over a freshly rebuilt re-ranked top 5 (SR-D2) -- the section Nouls used to rebuild that order were already spent for this id; this call is the one measurement that id never got, never a re-judge of the reserved population\u0027s own scored rows"
+                       }
+                   ]
 }

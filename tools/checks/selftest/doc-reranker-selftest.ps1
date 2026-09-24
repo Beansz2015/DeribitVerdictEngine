@@ -21,6 +21,12 @@
        leaves exactly 1 query; -K 1 gives a 1-candidate shortlist; the run completes, exit 0,
        and the totals read 1/1 or 0/1, never blank.
     F  -Query with a reserved query's text (case and spaces changed): the loud warning prints.
+    G  -NoAnswerOnly on an id already in the ledger (S1, spent by check E), no
+       -AllowSpentOnce: refuses RESERVED_QUERY_SPENT, zero calls (SR-D2).
+    H  Same id, -AllowSpentOnce S1 -Reason: runs (rebuild-shortlist call + the one no-answer
+       call), records an "exceptions" entry in the ledger, never a duplicate "spent" entry.
+    I  -AllowSpentOnce on an id that is NOT spent: refuses ALLOW_SPENT_ONCE_UNUSED, zero calls.
+    J  -NoAnswerOnly on an unknown id: refuses QUERY_ID_NOT_FOUND, zero calls.
 
   Usage (repo root):  powershell -NoProfile -File tools/checks/selftest/doc-reranker-selftest.ps1
   Exit 0 when every check passes, 1 otherwise.
@@ -114,6 +120,39 @@ try {
     # ---- F: -Query with reserved text ----
     $out = @(& $tool -Query '  where are the ATR LOW normal high   bands defined? ' -QueryFile $qf -SpentLedger $ledger -K 1 -LogPath (Join-Path $tmp 'log.jsonl') -TestTransportOverride $transport *>&1 | ForEach-Object { [string]$_ })
     Assert-That 'F reserved text in -Query warns loudly' (@($out | Where-Object { $_ -like 'WARNING_RESERVED_QUERY=S1 *' }).Count -eq 1) (($out | Select-Object -First 3) -join ' / ')
+
+    # ---- G (second reader, 2026-09-24, SR-D2): -NoAnswerOnly on an already-spent id (S1,
+    # spent by check E above), no -AllowSpentOnce -- refuse, zero calls.
+    $global:DrCalls = 0
+    $out = @(& $tool -NoAnswerOnly S1 -QueryFile $qf -SpentLedger $ledger -K 1 -Samples 1 -TestTransportOverride $transport *>&1 | ForEach-Object { [string]$_ })
+    $rc = $LASTEXITCODE
+    Assert-That 'G -NoAnswerOnly on a spent id with no exception refuses' ($rc -eq 2 -and ($out -contains 'EXIT_REASON=RESERVED_QUERY_SPENT') -and $global:DrCalls -eq 0) "exit=$rc calls=$global:DrCalls"
+
+    # ---- H: -AllowSpentOnce S1 -Reason opts out -- runs (1 rebuild call + 1 no-answer call
+    # at -K 1 -Samples 1), and the ledger gets an "exceptions" entry, not a duplicate "spent".
+    $global:DrCalls = 0
+    $out = @(& $tool -NoAnswerOnly S1 -QueryFile $qf -SpentLedger $ledger -K 1 -Samples 1 -AllowSpentOnce S1 -Reason 'selftest exception' -TestTransportOverride $transport *>&1 | ForEach-Object { [string]$_ })
+    $rc = $LASTEXITCODE
+    $txt = $out -join "`n"
+    $ledgerObj = [System.IO.File]::ReadAllText($ledger) | ConvertFrom-Json
+    $spentAfterH = @($ledgerObj.spent | ForEach-Object { $_.id })
+    $excAfterH = @($ledgerObj.exceptions | ForEach-Object { $_.id })
+    Assert-That 'H exits 0 and makes 2 calls (1 rebuild + 1 no-answer)' ($rc -eq 0 -and $global:DrCalls -eq 2) "exit=$rc calls=$global:DrCalls"
+    Assert-That 'H prints the ALLOW_SPENT_ONCE line and the no-answer verdict' ($txt.Contains('ALLOW_SPENT_ONCE=S1 reason=[selftest exception]') -and $txt.Contains('NO_ANSWER_NOUL(any_answer)=noul=0.3 (no, none answers it)')) 'lines missing'
+    Assert-That 'H spent list unchanged (still just S1, no duplicate)' ((($spentAfterH | Sort-Object) -join ',') -eq 'S1') "spent=[$($spentAfterH -join ',')]"
+    Assert-That 'H exceptions list gains exactly one S1 entry' ((($excAfterH | Sort-Object) -join ',') -eq 'S1') "exceptions=[$($excAfterH -join ',')]"
+
+    # ---- I: -AllowSpentOnce on an id that is NOT spent (S4) -- refuse, zero calls.
+    $global:DrCalls = 0
+    $out = @(& $tool -NoAnswerOnly S4 -QueryFile $qf -SpentLedger $ledger -K 1 -Samples 1 -AllowSpentOnce S4 -Reason 'unnecessary' -TestTransportOverride $transport *>&1 | ForEach-Object { [string]$_ })
+    $rc = $LASTEXITCODE
+    Assert-That 'I -AllowSpentOnce on an unspent id refuses' ($rc -eq 2 -and ($out -contains 'EXIT_REASON=ALLOW_SPENT_ONCE_UNUSED') -and $global:DrCalls -eq 0) "exit=$rc calls=$global:DrCalls"
+
+    # ---- J: -NoAnswerOnly on an unknown id -- refuse, zero calls.
+    $global:DrCalls = 0
+    $out = @(& $tool -NoAnswerOnly S99 -QueryFile $qf -SpentLedger $ledger -K 1 -Samples 1 -TestTransportOverride $transport *>&1 | ForEach-Object { [string]$_ })
+    $rc = $LASTEXITCODE
+    Assert-That 'J -NoAnswerOnly on an unknown id refuses' ($rc -eq 2 -and ($out -contains 'EXIT_REASON=QUERY_ID_NOT_FOUND') -and $global:DrCalls -eq 0) "exit=$rc calls=$global:DrCalls"
 } finally {
     $env:TYPESAFE_API_KEY = $savedKey
     Remove-Item -Recurse -Force -Path $tmp -ErrorAction SilentlyContinue
