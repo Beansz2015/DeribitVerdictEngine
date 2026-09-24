@@ -2,7 +2,7 @@
 
 **Written:** 2026-09-24 (UTC). **Seat:** implementer, Opus, high.
 **Spec:** [`docs/absorption-d2-stage1-rotation-build-spec.md`](absorption-d2-stage1-rotation-build-spec.md) §3 and §4.1–§4.3, with [`docs/d6d-episode-continuity-spec.md`](d6d-episode-continuity-spec.md) §4 and §8.
-**Review packet:** [`docs/absorption-d2-s1-spec-back.md`](absorption-d2-s1-spec-back.md). **Build commit:** `549b2c3`. **Base:** `ddebc96`.
+**Review packet:** [`docs/absorption-d2-s1-spec-back.md`](absorption-d2-s1-spec-back.md). **Build commit:** `549b2c3`. **Base:** `ddebc96`. ⚠ *Corrected in the S2 docs commit:* the parent of `549b2c3` is `dd45eca`, because two docs-only commits by another seat (`d6ad3a9`, `dd45eca`, gap-repair reads) landed on `master` between the base and the build. Neither touches a file this build touched.
 
 ## 0. Read this first
 

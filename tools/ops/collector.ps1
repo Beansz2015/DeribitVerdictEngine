@@ -139,7 +139,10 @@ $OptionalPdb = 'DeribitVerdictEngine.pdb'
 # is the file that answers "why is the feed down" — the question the 2026-09-21 outage could
 # not answer, because the feed logged only to a Console nothing captures. A fetch list that
 # omits it leaves the answer stranded on the box.
-$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv', 'ws_feed.log')
+# [D-6d Stage 1, 2026-09-24] absorption_episodes.log -- the counting-gap sidecar
+# (Core/AbsorptionEpisodeLog.vb), one line per run. Stage 1's read needs it on this machine;
+# absent until the first post-deploy run, which the absent-on-box arm already handles.
+$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv', 'ws_feed.log', 'absorption_episodes.log')
 # [RIDER-2b] Every rotated analysis_log book on the box matches this. Discovered at fetch time.
 $BakFilter = 'analysis_log.csv*.bak'
 $FetchDirs  = @('backtest_data', 'settings_snapshots')
