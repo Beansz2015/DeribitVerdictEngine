@@ -3,11 +3,22 @@
   Kelly trigger read - counts weekday STRONG rows and compares the total against the gate.
 
 .DESCRIPTION
-  The Kelly activation gate needs >= 406 pooled weekday STRONG rows. The pool is TWO files
-  on the collector box, and the read is their sum:
+  The Kelly activation gate needs >= 406 pooled weekday STRONG rows. The pool is EVERY
+  rotated book on the collector box plus the live file, and the read is their sum:
 
-      C:\DeribitEngine\analysis_log.csv.v0.7.bak   (closed at the v0.7 rotation)
+      C:\DeribitEngine\analysis_log.csv*.bak       (every rotated book, discovered on the box)
     + C:\DeribitEngine\analysis_log.csv            (live)
+
+  [RIDER-2b, docs/absorption-d2-stage1-rotation-build-spec.md 4.5 - build trap T-7] Until
+  the 2026-09 rotation this pooled exactly two files, the live one and the literal
+  analysis_log.csv.v0.7.bak. That .bak closed at the 2026-09-01 rotation (it holds the
+  111-column book, 2026-07-22 -> 2026-09-01 15:48:01 UTC), NOT at "the v0.7 rotation" as
+  this line used to say. The 2026-09 rotation files the 116-column book under a new name
+  (analysis_log.csv.<N>col-<h8>.<utc>.bak, AnalysisLogger.RotatedBakName), so a
+  two-file read would silently drop 2026-09-01 -> the deploy. The read now DISCOVERS every
+  analysis_log.csv*.bak on the box, counts each, sums all, and checks the span of every
+  adjacent pair in time order for overlap. The counting algorithm and the calibration are
+  unchanged.
 
   This script existed as a throwaway in three consecutive seats' scratchpads before being
   committed. It is READ ONLY: it sends no write of any kind to the box.
@@ -42,29 +53,40 @@
   "the identical query" is enforced by construction rather than by care.
 
 .PARAMETER Mode
-  Box       (default) calibrate locally, then read BOTH files on the collector and sum.
+  Box       (default) calibrate locally, then read EVERY rotated book + the live file on
+            the collector and sum.
   Calibrate run the calibration reference only and report pass/fail.
   Local     count one local CSV given by -Path.
+  LocalDir  the Box pool, on a LOCAL folder given by -Dir (for example an aws_fetch\<stamp>
+            folder): every analysis_log.csv*.bak in it + its analysis_log.csv, same sum,
+            same overlap check. Network-free, so the pooling itself can be reviewed.
 
 .EXAMPLE
   pwsh tools/ops/kelly-trigger-read.ps1
 .EXAMPLE
   pwsh tools/ops/kelly-trigger-read.ps1 -Mode Local -Path .\analysis_log.csv
+.EXAMPLE
+  pwsh tools/ops/kelly-trigger-read.ps1 -Mode LocalDir -Dir .\aws_fetch\20260924-084613
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Box', 'Calibrate', 'Local')]
+    [ValidateSet('Box', 'Calibrate', 'Local', 'LocalDir')]
     [string]$Mode = 'Box',
 
     # -Mode Local only.
     [string]$Path,
+
+    # -Mode LocalDir only.
+    [string]$Dir,
 
     # Deliberately no default that points at a box. Pass it explicitly.
     [string]$InstanceId = 'i-0d6c133058876273e',
     [string]$Region     = 'eu-west-2',
 
     [string]$RemoteLive = 'C:\DeribitEngine\analysis_log.csv',
-    [string]$RemoteBak  = 'C:\DeribitEngine\analysis_log.csv.v0.7.bak',
+    # [RIDER-2b] Every rotated book beside the live file matches this filter. It replaced
+    # the literal -RemoteBak 'C:\DeribitEngine\analysis_log.csv.v0.7.bak'.
+    [string]$BakFilter  = 'analysis_log.csv*.bak',
 
     # The activation gate. Not a settings.json key - it comes from the Kelly activation
     # rule, so it is a literal here by intent, not by omission.
@@ -156,7 +178,99 @@ function Invoke-CountRemote {
     )
     $body = '$Path = "__KELLY_PATH__"' + "`n" + $CountScript
     $body = $body.Replace('__KELLY_PATH__', $RemotePath)
-    $commands = $body -split "`r?`n"
+    return Invoke-RemoteScript -Body $body -InstanceId $InstanceId -Region $Region -TimeoutSec $TimeoutSec
+}
+
+<#
+  [RIDER-2b] List every rotated book beside the live file ON THE BOX. READ ONLY: a
+  directory listing. Emits one KELLY_BAK=<full path> line per match, sorted by name.
+#>
+function Get-RemoteBooks {
+    param(
+        [Parameter(Mandatory = $true)][string]$LivePath,
+        [Parameter(Mandatory = $true)][string]$Filter,
+        [Parameter(Mandatory = $true)][string]$InstanceId,
+        [Parameter(Mandatory = $true)][string]$Region,
+        [int]$TimeoutSec = 600
+    )
+    $dir = Split-Path -Parent $LivePath
+    $body = "Get-ChildItem -LiteralPath '__KELLY_DIR__' -Filter '__KELLY_FILTER__' -File | Sort-Object Name | ForEach-Object { 'KELLY_BAK=' + `$_.FullName }"
+    $body = $body.Replace('__KELLY_DIR__', $dir).Replace('__KELLY_FILTER__', $Filter)
+    $r = Invoke-RemoteScript -Body $body -InstanceId $InstanceId -Region $Region -TimeoutSec $TimeoutSec
+    return @($r.Lines | Where-Object { $_ -like 'KELLY_BAK=*' } | ForEach-Object { $_.Substring(10) })
+}
+
+<#
+  [RIDER-2b] The pooled read, shared by -Mode Box and -Mode LocalDir so the two cannot
+  disagree. $Books is a list of @{ Label; Lines; CommandId } - one per book, live included -
+  each Lines being $CountScript's output for that file. Sorts the books by their FIRST
+  timestamp, checks every ADJACENT pair for overlap (the rotation is clean only if the later
+  book starts strictly after the earlier one ends), sums, and compares to the threshold.
+  KELLY_SPAN is first-line -> last-line of the file; within one book the collector appends
+  in time order, so that is the book's span.
+#>
+function Show-PooledRead {
+    param([Parameter(Mandatory = $true)][object[]]$Books, [int]$Threshold)
+    $rowsOut = @()
+    foreach ($b in $Books) {
+        $n = [int](Get-CountValue -Lines $b.Lines -Key 'KELLY_WEEKDAY_STRONG')
+        $span = Get-CountValue -Lines $b.Lines -Key 'KELLY_SPAN'
+        $parts = $span -split ' -> '
+        $rowsOut += [pscustomobject]@{ Label = $b.Label; N = $n; First = $parts[0].Trim(); Last = $parts[1].Trim(); Span = $span; CommandId = $b.CommandId; Lines = $b.Lines }
+    }
+    # Empty books (no data row) have an empty span; they add 0 and join no overlap pair.
+    $ordered = @($rowsOut | Sort-Object First)
+    Write-Host ""
+    foreach ($o in $ordered) {
+        $o.Lines | ForEach-Object { "  $($o.Label) | $_" }
+        Write-Host ""
+    }
+    $total = 0
+    foreach ($o in $ordered) {
+        Write-Host ("  {0,-60} span {1}" -f $o.Label, $o.Span)
+        Write-Host ("  {0,-60} weekday STRONG = {1}" -f '', $o.N)
+        $total += $o.N
+    }
+    Write-Host ("  BOOKS                = {0}" -f $ordered.Count)
+    Write-Host "  TOTAL                = $total   against >= $Threshold"
+
+    $withRows = @($ordered | Where-Object { $_.First -ne '' })
+    $overlap = $false
+    for ($i = 1; $i -lt $withRows.Count; $i++) {
+        $prev = $withRows[$i - 1]; $cur = $withRows[$i]
+        if ([string]::Compare($cur.First, $prev.Last, [System.StringComparison]::Ordinal) -le 0) {
+            Write-Warning "SPANS OVERLAP - $($prev.Label) ends $($prev.Last) but $($cur.Label) starts $($cur.First). The sum DOUBLE-COUNTS."
+            $overlap = $true
+        } else {
+            Write-Host "  no overlap: $($prev.Label) ends $($prev.Last), $($cur.Label) starts $($cur.First)"
+        }
+    }
+    if (-not $overlap) { Write-Host "  every adjacent pair is clean - sum is sound" }
+
+    Write-Host ""
+    if ($total -ge $Threshold) {
+        Write-Host "  TRIGGER MET - $total >= $Threshold" -ForegroundColor Green
+    } else {
+        Write-Host "  TRIGGER NOT MET - $total, shortfall $($Threshold - $total)" -ForegroundColor Yellow
+        Write-Host "  Do NOT fire the bundled W6-4 re-run: it would freeze on a below-trigger span."
+    }
+    $ids = @($ordered | Where-Object { $_.CommandId } | ForEach-Object { "$($_.Label)=$($_.CommandId)" })
+    if ($ids.Count -gt 0) { Write-Host ""; Write-Host "  CommandIds: $($ids -join ' ')" }
+}
+
+<#
+  Send one PowerShell body to the box and return its stdout lines. Payload shape and
+  BOM-less write mirror tools/ops/collector.ps1's Invoke-RemotePs (see the note above
+  Invoke-CountRemote). Extracted 2026-09 so the book listing and the count share it.
+#>
+function Invoke-RemoteScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$Body,
+        [Parameter(Mandatory = $true)][string]$InstanceId,
+        [Parameter(Mandatory = $true)][string]$Region,
+        [int]$TimeoutSec = 600
+    )
+    $commands = $Body -split "`r?`n"
 
     $tmp = [System.IO.Path]::GetTempFileName()
     try {
@@ -249,45 +363,36 @@ switch ($Mode) {
         Write-Host ""
         Write-Host "reading $InstanceId ($Region) - READ ONLY" -ForegroundColor Cyan
 
-        $bak = Invoke-CountRemote -RemotePath $RemoteBak  -InstanceId $InstanceId -Region $Region -TimeoutSec $TimeoutSec
+        # [RIDER-2b] Discover every rotated book, then count each and the live file.
+        $bakPaths = @(Get-RemoteBooks -LivePath $RemoteLive -Filter $BakFilter -InstanceId $InstanceId -Region $Region -TimeoutSec $TimeoutSec)
+        Write-Host "  rotated books found on the box: $($bakPaths.Count)"
+        $bakPaths | ForEach-Object { Write-Host "    $_" }
+        $books = @()
+        foreach ($bp in $bakPaths) {
+            $c = Invoke-CountRemote -RemotePath $bp -InstanceId $InstanceId -Region $Region -TimeoutSec $TimeoutSec
+            $books += @{ Label = (Split-Path -Leaf $bp); Lines = $c.Lines; CommandId = $c.CommandId }
+        }
         $live = Invoke-CountRemote -RemotePath $RemoteLive -InstanceId $InstanceId -Region $Region -TimeoutSec $TimeoutSec
+        $books += @{ Label = (Split-Path -Leaf $RemoteLive) + ' (live)'; Lines = $live.Lines; CommandId = $live.CommandId }
+        Show-PooledRead -Books $books -Threshold $Threshold
+    }
 
-        $bakN  = [int](Get-CountValue -Lines $bak.Lines  -Key 'KELLY_WEEKDAY_STRONG')
-        $liveN = [int](Get-CountValue -Lines $live.Lines -Key 'KELLY_WEEKDAY_STRONG')
-        $bakSpan  = Get-CountValue -Lines $bak.Lines  -Key 'KELLY_SPAN'
-        $liveSpan = Get-CountValue -Lines $live.Lines -Key 'KELLY_SPAN'
-        $total = $bakN + $liveN
-
-        Write-Host ""
-        $bak.Lines  | ForEach-Object { "  bak  | $_" }
-        Write-Host ""
-        $live.Lines | ForEach-Object { "  live | $_" }
-        Write-Host ""
-        Write-Host "  .bak  span $bakSpan"
-        Write-Host "  live  span $liveSpan"
-        Write-Host ""
-        Write-Host "  .bak  weekday STRONG = $bakN"
-        Write-Host "  live  weekday STRONG = $liveN"
-        Write-Host "  TOTAL                = $total   against >= $Threshold"
-
-        # An overlap would double-count. Compare the .bak's last stamp against the live
-        # file's first: the rotation is only clean if the live file starts strictly after.
-        $bakLast   = ($bakSpan  -split ' -> ')[1]
-        $liveFirst = ($liveSpan -split ' -> ')[0]
-        if ([string]::Compare($liveFirst, $bakLast) -le 0) {
-            Write-Warning "SPANS OVERLAP - .bak ends $bakLast but live starts $liveFirst. The sum DOUBLE-COUNTS."
-        } else {
-            Write-Host "  spans do not overlap (.bak ends $bakLast, live starts $liveFirst) - sum is sound"
+    'LocalDir' {
+        if (-not $Dir) { throw "-Mode LocalDir requires -Dir" }
+        if (-not (Test-Path $Dir)) { throw "folder not found: $Dir" }
+        $liveLocal = Join-Path $Dir 'analysis_log.csv'
+        $bakFiles = @(Get-ChildItem -LiteralPath $Dir -Filter $BakFilter -File | Sort-Object Name)
+        Write-Host "  rotated books found in ${Dir}: $($bakFiles.Count)"
+        $bakFiles | ForEach-Object { Write-Host "    $($_.Name)" }
+        $books = @()
+        foreach ($bf in $bakFiles) {
+            $books += @{ Label = $bf.Name; Lines = (Invoke-CountLocal -CsvPath $bf.FullName); CommandId = $null }
         }
-
-        Write-Host ""
-        if ($total -ge $Threshold) {
-            Write-Host "  TRIGGER MET - $total >= $Threshold" -ForegroundColor Green
+        if (Test-Path $liveLocal) {
+            $books += @{ Label = 'analysis_log.csv (live)'; Lines = (Invoke-CountLocal -CsvPath $liveLocal); CommandId = $null }
         } else {
-            Write-Host "  TRIGGER NOT MET - $total, shortfall $($Threshold - $total)" -ForegroundColor Yellow
-            Write-Host "  Do NOT fire the bundled W6-4 re-run: it would freeze on a below-trigger span."
+            Write-Warning "no analysis_log.csv in $Dir - pooling the rotated books only"
         }
-        Write-Host ""
-        Write-Host "  CommandIds: bak=$($bak.CommandId) live=$($live.CommandId)"
+        Show-PooledRead -Books $books -Threshold $Threshold
     }
 }

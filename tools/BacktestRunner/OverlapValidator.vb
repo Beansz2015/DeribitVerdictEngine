@@ -72,6 +72,15 @@ Public Class OverlapValidator
     ' writers' order byte-for-byte, and are Muted for the same reason the five existing
     ' Absorption* entries are: the tracker is WS-live-only, so every synthetic row
     ' carries them empty. Fixture A60e pins the two writer headers against each other.
+    ' [2026-09 rotation, build spec §4.4 + trap T-6] Eight more appended in the writers'
+    ' order. The provenance columns (TriggerMode, WsHealth, SettingsVersion,
+    ' SettingsLoadError) differ live vs replay BY CONSTRUCTION (a live trigger vs REPLAY,
+    ' a feed vs none, two settings snapshots), so they are Meta like InstanceId /
+    ' SignalId — a compared kind would flag every row as a replay defect. The shadow
+    ' column is Muted like the other Absorption* (no book on replay). RecentTradeCount is
+    ' NumLoose, the kind every trade-window-edge numeric uses. RIDER-9: VPFRSignal is a
+    ' label (Categorical, like every other signal label) and VPFRPoc is NumLoose like
+    ' VPFRVAH / VPFRVAL / the HVN levels — both are the inputs RIDER-9 makes auditable.
     Public Shared ReadOnly Cols As New List(Of ColSpec) From {
         New ColSpec("Timestamp",                ColKind.Meta),
         New ColSpec("Price",                    ColKind.NumTight),
@@ -188,7 +197,15 @@ Public Class OverlapValidator
         New ColSpec("AbsorptionPullLB",         ColKind.Muted),
         New ColSpec("AbsorptionPostLB",         ColKind.Muted),
         New ColSpec("AbsorptionSizeStart",      ColKind.Muted),
-        New ColSpec("AbsorptionSizeMin",        ColKind.Muted)
+        New ColSpec("AbsorptionSizeMin",        ColKind.Muted),
+        New ColSpec("AbsorptionShadowAggrUsd",  ColKind.Muted),
+        New ColSpec("TriggerMode",              ColKind.Meta),
+        New ColSpec("WsHealth",                 ColKind.Meta),
+        New ColSpec("SettingsVersion",          ColKind.Meta),
+        New ColSpec("SettingsLoadError",        ColKind.Meta),
+        New ColSpec("RecentTradeCount",         ColKind.NumLoose),
+        New ColSpec("VPFRSignal",               ColKind.Categorical),
+        New ColSpec("VPFRPoc",                  ColKind.NumLoose)
     }
 
     ' ── Row model ────────────────────────────────────────────────────────────────────

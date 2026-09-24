@@ -478,6 +478,17 @@ Public Class ReplayLoop
             r.AbsorptionPostLB      = Nothing
             r.AbsorptionSizeStart   = Nothing
             r.AbsorptionSizeMin     = Nothing
+            ' [2026-09 rotation, build spec §4.4] The appended columns on the replay path.
+            ' Shadow press and WsHealth need the live feed, so Nothing (empty, never 0/OK).
+            ' TriggerMode says what produced the row; SettingsLoadError is False as the
+            ' build spec §4.4 table rules for replay (0); RecentTradeCount is the
+            ' replay's OWN trade window — the list this row scored on. SettingsVersion is
+            ' written from the cfg passed to WriteRow. VPFRSignal / VPFRPoc are stamped below.
+            r.AbsorptionShadowAggrUsd = Nothing
+            r.TriggerMode             = "REPLAY"
+            r.WsHealth                = Nothing
+            r.SettingsLoadError       = False
+            r.RecentTradeCount        = sliceTrades.Count
 
             ' -- Trade-derived signals (reconstructable at full fidelity) --
             IndicatorEngine.CalcLiquidations(sliceTrades, r.LiqLongSize, r.LiqShortSize, r.LiqSignal,

@@ -62,14 +62,18 @@ Partial Public Class MainForm
         ' [ws_health.log W4 row] Persist a WS-health line only on transition. Runs
         ' UNCONDITIONALLY (not gated by signal_bridge.enabled) so the sidecar records
         ' feed history even for the pure-REST configuration. Never throws.
-        LogWsHealthTransitionForRun(cfg)
+        ' [RIDER-4, trap T-1] The stamp was derived ONCE into r.WsHealth before LogRun;
+        ' the log and the payload read that value, so CSV ≡ log ≡ payload by construction.
+        ' The fallback only guards a path that forgot to stamp (the CSV cell is then empty).
+        Dim wsHealth As String = If(r.WsHealth, CurrentBridgeWsHealth(cfg))
+        LogWsHealthTransitionForRun(wsHealth)
         Try
             SyncArmToggleVisibility(cfg)
             If Not cfg.SignalBridge.Enabled Then Return
             Dim payload = SignalEmitter.BuildOk(v, r, cfg,
                                                 ProcessIdentity.InstanceId, signalId,
                                                 _autotradeArmed,
-                                                CurrentBridgeWsHealth(cfg),
+                                                wsHealth,
                                                 _wsDegradedThisRun,
                                                 DateTime.UtcNow)
             SignalEmitter.TryWrite(SignalEmitter.Serialize(payload),
@@ -85,14 +89,17 @@ Partial Public Class MainForm
     Private Sub EmitBridgeSkipped(skipReason As String, cfg As EngineSettings, signalId As Long)
         ' [ws_health.log W4 row] Same transition-log discipline on the skip path — a
         ' skip run still carries a valid feed-health reading. Never throws.
-        LogWsHealthTransitionForRun(cfg)
+        ' [RIDER-4] Derived once here too, so the log line and the SKIPPED payload agree.
+        ' No CSV row on a skip, so there is no r to stamp.
+        Dim wsHealth As String = CurrentBridgeWsHealth(cfg)
+        LogWsHealthTransitionForRun(wsHealth)
         Try
             SyncArmToggleVisibility(cfg)
             If Not cfg.SignalBridge.Enabled Then Return
             Dim payload = SignalEmitter.BuildSkipped(skipReason, cfg,
                                                      ProcessIdentity.InstanceId, signalId,
                                                      _autotradeArmed,
-                                                     CurrentBridgeWsHealth(cfg),
+                                                     wsHealth,
                                                      _wsDegradedThisRun,
                                                      DateTime.UtcNow)
             SignalEmitter.TryWrite(SignalEmitter.Serialize(payload),
@@ -104,9 +111,9 @@ Partial Public Class MainForm
 
     ' Transition-only WS-health sidecar append (Core/WsHealthLog). Runs for EVERY
     ' completed run (success + skip), regardless of signal_bridge.enabled. Never throws.
-    Private Sub LogWsHealthTransitionForRun(cfg As EngineSettings)
+    Private Sub LogWsHealthTransitionForRun(wsHealth As String)
         Try
-            WsHealthLog.LogTransition(CurrentBridgeWsHealth(cfg), ProcessIdentity.InstanceId)
+            WsHealthLog.LogTransition(wsHealth, ProcessIdentity.InstanceId)
         Catch ex As Exception
             Console.WriteLine("[WsHealthLog] transition-log failed: " & ex.Message)
         End Try

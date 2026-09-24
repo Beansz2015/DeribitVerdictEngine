@@ -51,6 +51,14 @@ Partial Public Class MainForm
 
     Private Async Function RunAnalysisAsync() As Task
         Dim cfg As EngineSettings = SettingsLoader.Current
+        ' [RD-1 (b), RIDER-6] Capture the load state BESIDE the cfg snapshot, never inside
+        ' LogRun: a hot reload between here and LogRun could pair one load state with a
+        ' different settings snapshot. True = the most recent disk load failed.
+        Dim runSettingsLoadError As Boolean = Not String.IsNullOrEmpty(SettingsLoader.LastLoadError)
+        ' [RIDER-3] Consume what fired this run and reset to MANUAL (MainForm_AutoRun.vb).
+        ' Synchronous with btnAnalyze_Click on the UI thread — see _pendingTrigger.
+        Dim runTrigger As String = _pendingTrigger
+        _pendingTrigger = TriggerManual
 
         ' [v36] Resolve the active session's execution resolution (1/3/5 min) from the
         ' UTC hour. ASIA/LONDON → 3-min, NY → 1-min (config-driven). The execution stack
@@ -205,6 +213,11 @@ Partial Public Class MainForm
                                           recentTrades(recentTrades.Count - 1).Price, 0)
 
         Dim r As New IndicatorResults()
+        ' [2026-09 rotation] Run provenance, stamped once, at r's creation.
+        r.TriggerMode       = runTrigger              ' RIDER-3
+        r.SettingsLoadError = runSettingsLoadError    ' RIDER-6 / RD-1 (b)
+        ' RIDER-7: the SAME list the thin-trade gate tested above — one list, no second count.
+        r.RecentTradeCount  = recentTrades.Count
         ' [v36] Stamp the resolution BEFORE scoring so the ROC magnitude override
         ' resolves via r.ExecResolution at its scoring read sites (no new Calculate param).
         r.ExecResolution = execRes
@@ -491,6 +504,13 @@ Partial Public Class MainForm
                               ExecutionResolution.ResolveAbsorptionMinAggrUsd(cfg, utcHour),
                               absCfg.AbsorbRatio, absCfg.MaxPullFrac)
             r.AbsorptionSignal = absRead.Signal
+            ' [D-6d.1 (c)] The shadow column is sourced from the drained instrument, NOT from
+            ' absRead: absRead is gated on HasEpisode and built from the primary ACTIVE side,
+            ' while shadow press exists only on IDLE sides — that source would be empty
+            ' exactly when the value is non-zero. Both sides summed; per side in the sidecar.
+            If absInstr IsNot Nothing Then
+                r.AbsorptionShadowAggrUsd = absInstr.Above.ShadowPressUsd + absInstr.Below.ShadowPressUsd
+            End If
             If absRead.HasEpisode Then
                 r.AbsorptionLevel    = absRead.LevelPrice
                 r.AbsorptionRatio    = absRead.AbsorbRatio
@@ -644,8 +664,16 @@ Partial Public Class MainForm
         ' every run so it self-clears once the guard is quiet again.
         _ledgerWarn = If(verdict.LedgerMismatch, "SC LEDGER MISMATCH — see console · ", "")
 
+        ' [RIDER-4, build spec trap T-1] Derive the WS-health stamp ONCE, here, before
+        ' LogRun. The CSV row, ws_health.log and the bridge payload's health.ws all read
+        ' r.WsHealth (EmitBridgeSignal below), so a feed flip between LogRun and the emit
+        ' cannot make the row and the payload disagree.
+        r.WsHealth = CurrentBridgeWsHealth(cfg)
+
         ' v0.8: cfg rides along for the shared placed-level arbitration (the Placed*
         ' columns must equal this run's bridge payload levels — same function).
+        ' [2026-09 rotation] It also supplies SettingsVersion: the snapshot that scored
+        ' this run, captured at the top, never SettingsLoader.Current.
         AnalysisLogger.LogRun(r, verdict, cfg)
         ' [D-6d Stage 1] One absorption_episodes.log line per run that read the tracker,
         ' keyed by the SAME (InstanceId, SignalId) the CSV row just carried, so the join

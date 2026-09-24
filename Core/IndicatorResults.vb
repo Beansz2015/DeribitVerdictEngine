@@ -91,7 +91,7 @@ Public Class IndicatorResults
     Public Property AbsorptionSignal As String = "NONE"  ' "ABSORB_ABOVE" / "ABSORB_BELOW" / "NONE"
     Public Property AbsorptionLevel As Double?           ' the watched level price; Nothing = no episode
     Public Property AbsorptionRatio As Double?           ' pressing USD per USD net band depletion
-    Public Property AbsorptionAggrUsd As Double?         ' rolling window_sec pressing USD
+    Public Property AbsorptionAggrUsd As Double?         ' [D-2] episode-cumulative pressing USD (was a rolling window_sec sum)
     Public Property AbsorptionPullFrac As Double?        ' D8 pullLB / max(postLB, floor)
 
     ' [absorption instrumentation, docs/absorption-instrumentation-spec.md] Five
@@ -198,4 +198,39 @@ Public Class IndicatorResults
     ' the global scoring.atr_target_multiplier — so harness fixtures and any path that
     ' doesn't set it behave session-neutrally.
     Public Property SessionUtcHour As Integer = -1
+
+    ' ── [2026-09 rotation, docs/absorption-d2-stage1-rotation-build-spec.md §4.4] ──────
+    ' The appended CSV columns that have no other home on r. ⚠ EMPTY MEANS "NOT STAMPED",
+    ' NEVER A DEFAULT: every field is Nothing until a code path stamps it, and Nothing
+    ' writes an empty cell. A default that reads as a real value (MANUAL, OK, 0) is the
+    ' silent-lie class — fixtures A89c and A89f pin it.
+
+    ' [D-6d.1 (c)] Shadow press: USD the absorption tracker DROPPED while a side was idle
+    ' that the live predicate would have counted against the level it last watched,
+    ' summed over both sides since the previous run's drain. Measurement only — never
+    ' scoring, never rendered. Nothing on every run that did not read the tracker
+    ' (REST / fallback / disabled / replay). Detail per side: absorption_episodes.log.
+    Public Property AbsorptionShadowAggrUsd As Double?
+
+    ' [RIDER-3] What FIRED this run: MANUAL · INTERVAL · ON_CLOSE · BACKSTOP (REPLAY on
+    ' the backtest path). NOT cfg.AutoRun.TriggerMode — no hot-reload handler touches
+    ' auto-run, so the cfg value is false after a settings change and on every backstop.
+    Public Property TriggerMode As String
+
+    ' [RIDER-4, J-E] SignalEmitter.DeriveWsHealth's pinned enum (OK · DEGRADED · DOWN ·
+    ' REST), derived ONCE per run before LogRun and shared with the bridge payload's
+    ' health.ws and ws_health.log, so the three cannot disagree. ⚠ OK means the socket
+    ' is up and this run did not fall back to REST. It has NO trade-flow input and must
+    ' never be read as capture health.
+    Public Property WsHealth As String
+
+    ' [RD-1 (b), RIDER-6] True = the most recent settings.json load FAILED, so this run
+    ' scored on the last good load or, at startup, the POCO defaults (whose Version is
+    ' 1). Captured at run start beside the cfg snapshot, never inside LogRun.
+    Public Property SettingsLoadError As Boolean?
+
+    ' [RIDER-7, thin-trade gate D-5] The size of the trade window this run scored on —
+    ' the SAME list the thin-trade skip gate tested. Nothing = not stamped; 0 is never
+    ' fabricated for Nothing.
+    Public Property RecentTradeCount As Integer?
 End Class

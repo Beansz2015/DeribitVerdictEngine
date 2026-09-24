@@ -1,7 +1,29 @@
-' AnalysisLogger.vb  v0.8
+' AnalysisLogger.vb  v0.8 (+ two appended blocks: 2026-09-01 and 2026-09 rotation)
 ' Appends one row per analysis run to a local CSV file.
 ' File location: same directory as the executable.
 ' Reset: truncates file back to header only.
+'
+' ⚠ The "v0.8" label now names THREE different headers (111, 116 and 124 columns),
+' because neither appended block was ruled a schema version bump. So rotated books are
+' no longer named by a version label: see RotatedBakName below (RIDER-1).
+'
+' 2026-09 rotation (docs/absorption-d2-stage1-rotation-build-spec.md §4.4-§4.5; the
+'       rider ledger docs/csv-rotation-riders.md): 8 columns APPENDED at 117-124, after
+'       AbsorptionSizeMin, so no existing column moves (spec R-1):
+'         AbsorptionShadowAggrUsd (D-6d.1 (c)) · TriggerMode (RIDER-3) · WsHealth
+'         (RIDER-4) · SettingsVersion (RIDER-5) · SettingsLoadError (RIDER-6 / RD-1) ·
+'         RecentTradeCount (RIDER-7) · VPFRSignal · VPFRPoc (RIDER-9).
+'       ⛔ A DATASET BOUNDARY, unlike 2026-09-01 (spec R-2): D-2 changed the MEANING of
+'       AbsorptionAggrUsd and AbsorptionRatio (episode-cumulative pressing). Rows either
+'       side of the deploy that carries this header are not comparable on those two.
+'       ⚠ Empty means "not stamped", never a default — see IndicatorResults.
+'       RIDER-1: the superseded book is renamed from ITS OWN header (RotatedBakName).
+'
+' ⚠ WHAT THE EXISTING analysis_log.csv.v0.7.bak REALLY HOLDS (verified 2026-09-13 from
+'   the production box's fetched file): the 111-column v0.8 book, 33,911 rows,
+'   2026-07-22 16:24:54 → 2026-09-01 15:48:01 UTC — NOT the v0.7 schema. The 2026-09-01
+'   rotation wrote it under the stale literal this rider removes. It keeps that name for
+'   ever: two tools and a dozen docs key on it. Never renamed, never deleted.
 '
 ' 2026-09-01 (absorption instrumentation, docs/absorption-instrumentation-spec.md):
 '       5 columns APPENDED at 112-116 — AbsorptionEpisodeSec, AbsorptionPullLB,
@@ -13,10 +35,9 @@
 '       every column keeps its position AND its meaning, and rows written before and
 '       after this change stay fully comparable. The five are simply empty on every
 '       pre-change row — the same shape a no-episode row writes.
-'       ⚠ EnsureLogFile still rotates on the header change, and the .bak name is the
-'       hardcoded "v0.7" string below. That name was already wrong for the v0.8 book
-'       and is left alone deliberately (renaming it is a behaviour change no ruling
-'       covers, and the file it names is NEVER deleted). Recorded in the spec-back.
+'       ⚠ EnsureLogFile rotated on that header change under the then-hardcoded "v0.7"
+'       .bak name, which mislabelled the 111-column book (see the box above). The
+'       literal is gone since the 2026-09 rotation (RIDER-1).
 '
 ' v0.8 (#5 aggressor-velocity boundary, ONE rotation for the whole wave —
 '       roadmap §5 item 3 manifest): 16 columns appended (96-111):
@@ -39,8 +60,9 @@
 '         signal_id per run; SKIPPED runs burn an id with no CSV row — expected).
 '       Same pass (retune C2): FundingRate format F6→F8 (same column, no header
 '       change — the WS funding feed's finer deltas were rounding away).
-'       Superseded v0.7 files rotate to analysis_log.csv.v0.7.bak (kept — the
-'       v48 §4a fire-rate watch reads it; NEVER delete).
+'       Superseded v0.7 files rotated to analysis_log.csv.v0.7.bak (kept — the
+'       v48 §4a fire-rate watch reads it; NEVER delete). ⚠ STALE on the production
+'       box: that name there holds the 111-column v0.8 book, not v0.7 (box above).
 '       LogRun now takes cfg (the run's EngineSettings) for the placed-level
 '       arbitration multipliers.
 '
@@ -123,7 +145,9 @@ Public Class AnalysisLogger
         "AbsorptionSignal,AbsorptionLevel,AbsorptionRatio,AbsorptionAggrUsd,AbsorptionPullFrac," &
         "PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort," &
         "InstanceId,SignalId," &
-        "AbsorptionEpisodeSec,AbsorptionPullLB,AbsorptionPostLB,AbsorptionSizeStart,AbsorptionSizeMin"
+        "AbsorptionEpisodeSec,AbsorptionPullLB,AbsorptionPostLB,AbsorptionSizeStart,AbsorptionSizeMin," &
+        "AbsorptionShadowAggrUsd,TriggerMode,WsHealth,SettingsVersion,SettingsLoadError,RecentTradeCount," &
+        "VPFRSignal,VPFRPoc"
 
     Public Shared Function GetLogPath() As String
         Return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FileName)
@@ -193,15 +217,13 @@ Public Class AnalysisLogger
             End Using
 
             If firstLine Is Nothing OrElse firstLine.Trim() <> Header Then
-                ' Schema mismatch — rotate old file (named for the superseded schema).
-                ' The .bak is NEVER deleted: the v48 §4a per-session fire-rate watch
-                ' reads the rotated v0.7 book.
+                ' Schema mismatch — rotate the old file. [RIDER-1] The .bak is named from
+                ' the SUPERSEDED header itself (its column count + a hash of its text +
+                ' the UTC instant), never from a literal: a literal named the 111-column
+                ' book "v0.7" on 2026-09-01. Rotated books are NEVER deleted — every
+                ' pooled read concatenates them (RIDER-2).
                 Dim dir As String = System.IO.Path.GetDirectoryName(path)
-                Dim bakPath As String = System.IO.Path.Combine(dir, "analysis_log.csv.v0.7.bak")
-                If File.Exists(bakPath) Then
-                    Dim ts As String = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")
-                    bakPath = System.IO.Path.Combine(dir, "analysis_log.csv.v0.7." & ts & ".bak")
-                End If
+                Dim bakPath As String = UniqueBakPath(dir, RotatedBakName(firstLine, DateTime.UtcNow))
                 File.Move(path, bakPath)
                 WriteHeader(path)
             End If
@@ -209,6 +231,38 @@ Public Class AnalysisLogger
             ' Silent fail — if we can't rotate, we'll catch the schema mismatch at read time
         End Try
     End Sub
+
+    ''' <summary>[RIDER-1, build spec §4.5] The rotated book's file name, derived from the
+    ''' header it SUPERSEDES: analysis_log.csv.&lt;N&gt;col-&lt;h8&gt;.&lt;yyyyMMdd_HHmmss&gt;.bak.
+    ''' N = that header's column count, for a human reader. h8 = the first 8 lowercase hex
+    ''' digits of the MD5 of that header line (UTF-8, trimmed): it separates two headers of
+    ''' the same width (the v0.5 rotation replaced columns without changing the count).
+    ''' The stamp is the UTC rotation instant and makes every name unique. Pure — fixture
+    ''' A89d asserts it without the file system. A Nothing header (an empty file) is N = 0.</summary>
+    Friend Shared Function RotatedBakName(supersededHeader As String, utcNow As DateTime) As String
+        Dim h As String = If(supersededHeader, "").Trim()
+        Dim n As Integer = If(h.Length = 0, 0, h.Split(","c).Length)
+        Dim hash() As Byte = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(h))
+        Dim h8 As String = Convert.ToHexString(hash).ToLowerInvariant().Substring(0, 8)
+        Return String.Format(CultureInfo.InvariantCulture, "analysis_log.csv.{0}col-{1}.{2}.bak",
+                             n, h8, utcNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture))
+    End Function
+
+    ''' <summary>[RIDER-1] dir + name, or — when that file already exists — the same name
+    ''' with -2, -3, … inserted before ".bak". Never returns an existing path, so a rotation
+    ''' can never overwrite an earlier book.</summary>
+    Friend Shared Function UniqueBakPath(dir As String, name As String) As String
+        Dim candidate As String = System.IO.Path.Combine(dir, name)
+        If Not File.Exists(candidate) Then Return candidate
+        Dim stem As String = If(name.EndsWith(".bak", StringComparison.Ordinal),
+                                name.Substring(0, name.Length - 4), name)
+        Dim k As Integer = 2
+        Do
+            candidate = System.IO.Path.Combine(dir, stem & "-" & k.ToString(CultureInfo.InvariantCulture) & ".bak")
+            If Not File.Exists(candidate) Then Return candidate
+            k += 1
+        Loop
+    End Function
 
     Private Shared Sub WriteHeader(path As String)
         Try
@@ -364,12 +418,34 @@ Public Class AnalysisLogger
                     InvOpt(r.AbsorptionPullLB, "F0"),
                     InvOpt(r.AbsorptionPostLB, "F0"),
                     InvOpt(r.AbsorptionSizeStart, "F0"),
-                    InvOpt(r.AbsorptionSizeMin, "F0")))
+                    InvOpt(r.AbsorptionSizeMin, "F0")) &
+                    "," & String.Join(",", RotationCells(r, cfg)))
             End Using
         Catch
             ' Silent fail — logging must never crash the main pipeline
         End Try
     End Sub
+
+    ''' <summary>[2026-09 rotation] The eight appended cells, in header order. ONE copy,
+    ''' called by BOTH writers (this LogRun and tools/BacktestRunner/BacktestRowWriter), so
+    ''' the live and replay rows format them identically by construction; the values differ
+    ''' only because ReplayLoop stamps r differently (REPLAY, no feed, its own window).
+    ''' ⚠ Empty means "not stamped": every Nothing writes "", never MANUAL / OK / 0.
+    ''' SettingsVersion is the PASSED cfg's version — the snapshot that scored this run —
+    ''' never SettingsLoader.Current (fixture A89e).</summary>
+    Friend Shared Function RotationCells(r As IndicatorResults, cfg As EngineSettings) As String()
+        ' ⚠ Not named "inv": VB is case-insensitive and a local "inv" shadows Inv() below.
+        Dim ic As CultureInfo = CultureInfo.InvariantCulture
+        Return {
+            InvOpt(r.AbsorptionShadowAggrUsd, "F0"),
+            If(r.TriggerMode, ""),
+            If(r.WsHealth, ""),
+            If(cfg Is Nothing, "", cfg.Version.ToString(ic)),
+            If(r.SettingsLoadError.HasValue, If(r.SettingsLoadError.Value, "1", "0"), ""),
+            If(r.RecentTradeCount.HasValue, r.RecentTradeCount.Value.ToString(ic), ""),
+            If(r.VPFRSignal, ""),
+            Inv(r.VPFRPoc, "F2")}
+    End Function
 
     ' Format a numeric field with InvariantCulture so a comma-decimal host locale
     ' can't split a value across CSV columns. Every parser in the repo reads with

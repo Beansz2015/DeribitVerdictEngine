@@ -255,6 +255,14 @@ Module Program
         ' [A89a/b — D-2: episode-cumulative pressing, build spec §5.]
         A89a_D2AccumulatesAcrossTheRetiredWindow()
         A89b_D2IsANoOpBelowTheWindow()
+        ' [A89c-h — the 2026-09 rotation, build spec §4.4-§4.5 + §5. They write
+        '   analysis_log.csv through the REAL LogRun and clean up after themselves.]
+        A89c_TriggerModeAndWsHealthVerbatimOrEmpty()
+        A89d_RotatedBakNameFromTheSupersededHeader()
+        A89e_SettingsVersionFromPassedCfgAndLoadError()
+        A89f_RecentTradeCountVerbatimOrEmpty()
+        A89g_EightColumnsAppendAt117To124()
+        A89h_ReplayWriterSharesTheRotationCells()
 
         ' Offline matrix placed-target migration (docs/offline-matrix-placed-target
         ' -proposal.md §5 acceptance): the favourable barrier routes to the logged
@@ -4865,6 +4873,31 @@ Module Program
               String.Format("okTwin={0} okCols={1} okOnce={2} okMuted={3} liveLen={4} twinLen={5} colsLen={6}",
                             okTwin, okCols, okOnce, okMuted,
                             live.Length, twin.Length, colsJoined.Length))
+
+        ' [2026-09 rotation, build spec T-4 + T-6 — EXTENDED IN PLACE, spec §5] The eight
+        ' appended names: once each in the (already byte-equal) three copies, and each with
+        ' its RULED ColKind. ⚠ Kind is the trap T-6 half: Categorical compiles and then
+        ' flags every overlap row. MECHANISM literals: the kinds are the ruling itself
+        ' (build spec §4.4 table + RIDER-9), not a settings value.
+        Dim rotKinds As New Dictionary(Of String, OverlapValidator.ColKind) From {
+            {"AbsorptionShadowAggrUsd", OverlapValidator.ColKind.Muted},
+            {"TriggerMode", OverlapValidator.ColKind.Meta},
+            {"WsHealth", OverlapValidator.ColKind.Meta},
+            {"SettingsVersion", OverlapValidator.ColKind.Meta},
+            {"SettingsLoadError", OverlapValidator.ColKind.Meta},
+            {"RecentTradeCount", OverlapValidator.ColKind.NumLoose},
+            {"VPFRSignal", OverlapValidator.ColKind.Categorical},
+            {"VPFRPoc", OverlapValidator.ColKind.NumLoose}}
+        Dim rotOnce As Boolean = rotKinds.Keys.All(Function(n) hdrFields.Count(Function(h) h = n) = 1)
+        Dim twinFields = twin.Split(","c)
+        Dim rotTwinOnce As Boolean = rotKinds.Keys.All(Function(n) twinFields.Count(Function(h) h = n) = 1)
+        Dim badKinds = rotKinds.Where(
+            Function(kv) Not OverlapValidator.Cols.Any(Function(c) c.Name = kv.Key AndAlso c.Kind = kv.Value)).
+            Select(Function(kv) kv.Key).ToList()
+        Check("A60e (2026-09 rotation) the eight appended columns sit once each in all three copies, each with its ruled ColKind (4 provenance Meta, shadow Muted, RecentTradeCount + VPFRPoc NumLoose, VPFRSignal Categorical)",
+              okTwin AndAlso okCols AndAlso rotOnce AndAlso rotTwinOnce AndAlso badKinds.Count = 0,
+              String.Format("okTwin={0} okCols={1} rotOnce={2} rotTwinOnce={3} badKinds=[{4}]",
+                            okTwin, okCols, rotOnce, rotTwinOnce, String.Join(",", badKinds)))
     End Sub
 
     ' -- A60a: round-trip — all five values travel SideState → CSV row unchanged ----
@@ -5101,7 +5134,11 @@ Module Program
         ' contiguously and in spec order — R1's append, stated as a position.
         Dim newNames = {"AbsorptionEpisodeSec", "AbsorptionPullLB", "AbsorptionPostLB",
                         "AbsorptionSizeStart", "AbsorptionSizeMin"}
-        Dim appended As Boolean = header.Length = PreBuildIdxSignalId + 1 + newNames.Length
+        ' [2026-09 rotation] The header now carries eight MORE columns after these five,
+        ' appended under the same rule (spec R-1 of the 2026-09 build). So the width test is
+        ' "at least", and A89g pins the eight at 117-124. The five's POSITIONS below stay
+        ' exact — that is this fixture's whole claim and it is unchanged.
+        Dim appended As Boolean = header.Length >= PreBuildIdxSignalId + 1 + newNames.Length
         For k As Integer = 0 To newNames.Length - 1
             If Array.IndexOf(header, newNames(k)) <> PreBuildIdxSignalId + 1 + k Then appended = False
         Next
@@ -5500,6 +5537,217 @@ Module Program
         Next
         Check("A89b D-2 is a NO-OP below the window: at every read of an episode younger than window_sec, AggrUsd is bitwise the sequential sum the rolling window held",
               readsOk, String.Join(" ", detail))
+    End Sub
+
+    ' =======================================================================
+    ' A89c-h — the 2026-09 analysis_log.csv rotation (build spec §4.4-§4.5, §5).
+    ' ⚠ REVIEW-ONLY halves, stated per the spec: the ONE derivation of WsHealth before
+    ' LogRun (trap T-1) and the trigger plumbing (RIDER-3) live in MainForm_*.vb, which
+    ' OrderCheck does not compile. These fixtures pin only what LogRun WRITES.
+    ' =======================================================================
+
+    ''' <summary>Write rows through the REAL LogRun into a cleared book and return the
+    ''' header plus one cell-getter per row. Cleans the book afterwards.</summary>
+    Private Function LogRowsAndRead(cfg As EngineSettings, rows As IEnumerable(Of IndicatorResults)) _
+            As (Header As String(), Rows As List(Of String()))
+        Dim lines() As String = Array.Empty(Of String)()
+        Try
+            ClearAnalysisLog()
+            Dim v As New VerdictResult With {.Verdict = "NO TRADE", .Confidence = "N/A"}
+            For Each r In rows
+                AnalysisLogger.LogRun(r, v, cfg)
+            Next
+            lines = File.ReadAllLines(AnalysisLogger.GetLogPath())
+        Finally
+            Try : ClearAnalysisLog() : Catch : End Try
+        End Try
+        Dim hdr = If(lines.Length > 0, lines(0).Split(","c), Array.Empty(Of String)())
+        Dim out As New List(Of String())
+        For i As Integer = 1 To lines.Length - 1
+            out.Add(lines(i).Split(","c))
+        Next
+        Return (hdr, out)
+    End Function
+
+    Private Function CellOf(hdr As String(), row As String(), name As String) As String
+        Dim i = Array.IndexOf(hdr, name)
+        If i < 0 OrElse i >= row.Length Then Return "<missing>"
+        Return row(i)
+    End Function
+
+    Private Function PlainRow() As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = 62000.0 : r.ATR = 40.0   ' MECHANISM literals: any positive price / ATR
+        Return r
+    End Function
+
+    ' -- A89c: TriggerMode + WsHealth verbatim, EMPTY when unstamped ---------------
+    Private Sub A89c_TriggerModeAndWsHealthVerbatimOrEmpty()
+        Dim stamped = PlainRow()
+        stamped.TriggerMode = "BACKSTOP" : stamped.WsHealth = "DEGRADED"   ' MECHANISM: two members of the ruled enums
+        Dim unstamped = PlainRow()                                           ' neither field set
+        Dim res = LogRowsAndRead(New EngineSettings(), {stamped, unstamped})
+        Dim ok As Boolean = res.Rows.Count = 2 AndAlso
+            res.Rows.All(Function(rw) rw.Length = res.Header.Length) AndAlso
+            CellOf(res.Header, res.Rows(0), "TriggerMode") = "BACKSTOP" AndAlso
+            CellOf(res.Header, res.Rows(0), "WsHealth") = "DEGRADED" AndAlso
+            CellOf(res.Header, res.Rows(1), "TriggerMode") = "" AndAlso
+            CellOf(res.Header, res.Rows(1), "WsHealth") = ""
+        Check("A89c LogRun writes r.TriggerMode and r.WsHealth verbatim, and EMPTY — never MANUAL or OK — when either is unstamped",
+              ok,
+              String.Format("rows={0} stamped=[{1}|{2}] unstamped=[{3}|{4}]", res.Rows.Count,
+                            If(res.Rows.Count > 0, CellOf(res.Header, res.Rows(0), "TriggerMode"), "-"),
+                            If(res.Rows.Count > 0, CellOf(res.Header, res.Rows(0), "WsHealth"), "-"),
+                            If(res.Rows.Count > 1, CellOf(res.Header, res.Rows(1), "TriggerMode"), "-"),
+                            If(res.Rows.Count > 1, CellOf(res.Header, res.Rows(1), "WsHealth"), "-")))
+    End Sub
+
+    ' -- A89d: RIDER-1 — the .bak name comes from the SUPERSEDED header -----------
+    ' Pure half: the name's shape, count and hash; two same-width headers get different
+    ' names; the collision path never overwrites. End-to-end half: a real EnsureLogFile
+    ' rotation through LogRun files an old book under its own header's name and leaves a
+    ' pre-existing analysis_log.csv.v0.7.bak byte-identical.
+    Private Sub A89d_RotatedBakNameFromTheSupersededHeader()
+        Dim at As New DateTime(2026, 9, 24, 17, 5, 9, DateTimeKind.Utc)   ' MECHANISM: fixed clock
+        Dim hA As String = "Timestamp,Price,Verdict"          ' MECHANISM: two 3-column headers
+        Dim hB As String = "Timestamp,Price,Confidence"       ' that differ only in one name
+        Dim nameA = AnalysisLogger.RotatedBakName(hA, at)
+        Dim nameB = AnalysisLogger.RotatedBakName(hB, at)
+        Dim nameATrim = AnalysisLogger.RotatedBakName("  " & hA & "  ", at)
+        ' The expected hash is computed here from the definition (MD5 of the UTF-8 trimmed
+        ' header, first 8 lowercase hex), not pasted from a run.
+        Dim h8 = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(
+                     System.Text.Encoding.UTF8.GetBytes(hA))).ToLowerInvariant().Substring(0, 8)
+        Dim shapeOk As Boolean = nameA = "analysis_log.csv.3col-" & h8 & ".20260924_170509.bak" AndAlso
+                                 nameA <> nameB AndAlso nameB.StartsWith("analysis_log.csv.3col-", StringComparison.Ordinal) AndAlso
+                                 nameATrim = nameA
+
+        ' Collision: never overwrite.
+        Dim dir As String = Path.Combine(Path.GetTempPath(), "ordercheck_a89d_" & Guid.NewGuid().ToString("N").Substring(0, 8))
+        Dim collisionOk As Boolean = False
+        Dim collisionDetail As String = ""
+        Try
+            Directory.CreateDirectory(dir)
+            File.WriteAllText(Path.Combine(dir, nameA), "first")
+            Dim p2 = AnalysisLogger.UniqueBakPath(dir, nameA)
+            File.WriteAllText(p2, "second")
+            Dim p3 = AnalysisLogger.UniqueBakPath(dir, nameA)
+            collisionOk = Path.GetFileName(p2) = nameA.Substring(0, nameA.Length - 4) & "-2.bak" AndAlso
+                          Path.GetFileName(p3) = nameA.Substring(0, nameA.Length - 4) & "-3.bak" AndAlso
+                          File.ReadAllText(Path.Combine(dir, nameA)) = "first"
+            collisionDetail = Path.GetFileName(p2) & "|" & Path.GetFileName(p3)
+        Finally
+            Try : Directory.Delete(dir, True) : Catch : End Try
+        End Try
+
+        ' End-to-end: a book under an old header rotates to ITS OWN name.
+        Dim e2eOk As Boolean = False
+        Dim e2eDetail As String = ""
+        Dim logPath As String = AnalysisLogger.GetLogPath()
+        Dim logDir As String = Path.GetDirectoryName(logPath)
+        Try
+            ClearAnalysisLog()
+            Dim oldHeader As String = "Timestamp,Price,Verdict,Confidence"   ' MECHANISM: any superseded header
+            File.WriteAllText(logPath, oldHeader & vbLf & "2026-09-01 15:48:01,1,NO TRADE,N/A" & vbLf)
+            Dim legacyBak As String = Path.Combine(logDir, "analysis_log.csv.v0.7.bak")
+            File.WriteAllText(legacyBak, "legacy-book")
+            AnalysisLogger.LogRun(PlainRow(), New VerdictResult With {.Verdict = "NO TRADE", .Confidence = "N/A"}, New EngineSettings())
+            Dim baks = Directory.GetFiles(logDir, "analysis_log.csv*.bak").Select(Function(p) Path.GetFileName(p)).ToList()
+            Dim rotated = baks.Where(Function(b) b.StartsWith("analysis_log.csv.4col-", StringComparison.Ordinal)).ToList()
+            Dim oldH8 = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(
+                            System.Text.Encoding.UTF8.GetBytes(oldHeader))).ToLowerInvariant().Substring(0, 8)
+            e2eOk = rotated.Count = 1 AndAlso rotated(0).StartsWith("analysis_log.csv.4col-" & oldH8 & ".", StringComparison.Ordinal) AndAlso
+                    File.ReadAllText(Path.Combine(logDir, rotated(0))).StartsWith(oldHeader, StringComparison.Ordinal) AndAlso
+                    File.ReadAllText(legacyBak) = "legacy-book" AndAlso baks.Count = 2 AndAlso
+                    File.ReadAllLines(logPath)(0) = LiveCsvHeader()
+            e2eDetail = String.Join("|", baks)
+        Finally
+            Try : ClearAnalysisLog() : Catch : End Try
+        End Try
+
+        Check("A89d RIDER-1: the .bak is named <N>col-<h8>.<utc>.bak from the SUPERSEDED header — same-width headers differ, a taken name gets -2/-3 and is never overwritten, and a real rotation leaves analysis_log.csv.v0.7.bak untouched",
+              shapeOk AndAlso collisionOk AndAlso e2eOk,
+              String.Format("shapeOk={0} ({1} / {2}) collisionOk={3} ({4}) e2eOk={5} ({6})",
+                            shapeOk, nameA, nameB, collisionOk, collisionDetail, e2eOk, e2eDetail))
+    End Sub
+
+    ' -- A89e: SettingsVersion from the PASSED cfg; SettingsLoadError 1 / 0 / empty --
+    Private Sub A89e_SettingsVersionFromPassedCfgAndLoadError()
+        ' MECHANISM literal: 4242 is off every version settings.json has ever carried
+        ' (1..68), so it cannot equal whatever SettingsLoader.Current holds in this process.
+        Dim cfg As New EngineSettings With {.Version = 4242}
+        Dim rTrue = PlainRow() : rTrue.SettingsLoadError = True
+        Dim rFalse = PlainRow() : rFalse.SettingsLoadError = False
+        Dim rNone = PlainRow()
+        Dim res = LogRowsAndRead(cfg, {rTrue, rFalse, rNone})
+        Dim cur As Integer = If(SettingsLoader.Current Is Nothing, -1, SettingsLoader.Current.Version)
+        Dim ok As Boolean = res.Rows.Count = 3 AndAlso cur <> 4242 AndAlso
+            res.Rows.All(Function(rw) CellOf(res.Header, rw, "SettingsVersion") = "4242") AndAlso
+            CellOf(res.Header, res.Rows(0), "SettingsLoadError") = "1" AndAlso
+            CellOf(res.Header, res.Rows(1), "SettingsLoadError") = "0" AndAlso
+            CellOf(res.Header, res.Rows(2), "SettingsLoadError") = ""
+        Check("A89e RIDER-5 + RD-1: SettingsVersion is the PASSED cfg's version (4242, not SettingsLoader.Current's) and SettingsLoadError writes 1 / 0 / empty for True / False / Nothing",
+              ok,
+              String.Format("rows={0} current={1} ver=[{2}] err=[{3}]", res.Rows.Count, cur,
+                            String.Join("|", res.Rows.Select(Function(rw) CellOf(res.Header, rw, "SettingsVersion"))),
+                            String.Join("|", res.Rows.Select(Function(rw) CellOf(res.Header, rw, "SettingsLoadError")))))
+    End Sub
+
+    ' -- A89f: RIDER-7 — RecentTradeCount verbatim, EMPTY for Nothing (never 0) -----
+    Private Sub A89f_RecentTradeCountVerbatimOrEmpty()
+        Dim rCount = PlainRow() : rCount.RecentTradeCount = 57   ' MECHANISM: any count
+        Dim rZero = PlainRow() : rZero.RecentTradeCount = 0      ' a real zero stays "0"
+        Dim rNone = PlainRow()
+        Dim res = LogRowsAndRead(New EngineSettings(), {rCount, rZero, rNone})
+        Dim cells = res.Rows.Select(Function(rw) CellOf(res.Header, rw, "RecentTradeCount")).ToList()
+        Check("A89f RIDER-7: LogRun writes r.RecentTradeCount verbatim (57, and a real 0 as 0) and EMPTY when it is Nothing — a zero-trade window is never fabricated",
+              cells.Count = 3 AndAlso cells(0) = "57" AndAlso cells(1) = "0" AndAlso cells(2) = "",
+              "cells=[" & String.Join("|", cells) & "]")
+    End Sub
+
+    ' -- A89g: R-1 guard — the eight columns append at 117-124 in the ruled order ---
+    ' ⚠ FIXTURE-LITERAL PROVENANCE: 116 is a MECHANISM literal, a FROZEN PRE-BUILD
+    ' BASELINE (the header width before this rotation, the A60d pattern). Deriving it from
+    ' the header under test would agree with any header at all.
+    Private Sub A89g_EightColumnsAppendAt117To124()
+        Const PreRotationWidth As Integer = 116
+        Dim header() As String = LiveCsvHeader().Split(","c)
+        Dim ruled = {"AbsorptionShadowAggrUsd", "TriggerMode", "WsHealth", "SettingsVersion",
+                     "SettingsLoadError", "RecentTradeCount", "VPFRSignal", "VPFRPoc"}
+        Dim ok As Boolean = header.Length = PreRotationWidth + ruled.Length AndAlso
+                            Array.IndexOf(header, "AbsorptionSizeMin") = PreRotationWidth - 1
+        For k As Integer = 0 To ruled.Length - 1
+            If Array.IndexOf(header, ruled(k)) <> PreRotationWidth + k Then ok = False
+        Next
+        Check("A89g R-1 guard: the eight new columns append contiguously at 117-124 (1-based) in the ruled order, after AbsorptionSizeMin at 116 — no existing column moved",
+              ok, String.Format("width={0} tail=[{1}]", header.Length,
+                                String.Join(",", header.Skip(Math.Max(0, header.Length - 9)))))
+    End Sub
+
+    ' -- A89h: T-4 on VALUES — the replay writer formats the eight cells with the SAME code --
+    Private Sub A89h_ReplayWriterSharesTheRotationCells()
+        Dim cfg As New EngineSettings With {.Version = 4242}   ' MECHANISM, off ever-shipped (see A89e)
+        Dim r = PlainRow()
+        r.AbsorptionShadowAggrUsd = 12345.6 : r.TriggerMode = "REPLAY" : r.WsHealth = Nothing
+        r.SettingsLoadError = False : r.RecentTradeCount = 321
+        r.VPFRSignal = "NEAR_HVN_SUPPORT" : r.VPFRPoc = 61234.567   ' MECHANISM: a label + a price
+        Dim live = LogRowsAndRead(cfg, {r})
+        Dim tmp As String = Path.Combine(Path.GetTempPath(), "ordercheck_a89h_" & Guid.NewGuid().ToString("N") & ".csv")
+        Dim twinTail As String = "", liveTail As String = ""
+        Try
+            Dim w As New BacktestRowWriter(tmp)
+            w.WriteRow(r, New VerdictResult With {.Verdict = "NO TRADE", .Confidence = "N/A"}, cfg,
+                       New DateTime(2026, 9, 24, 0, 0, 0, DateTimeKind.Utc))
+            Dim tl = File.ReadAllLines(tmp)(1).Split(","c)
+            twinTail = String.Join(",", tl.Skip(tl.Length - 8))
+        Finally
+            Try : File.Delete(tmp) : Catch : End Try
+        End Try
+        If live.Rows.Count = 1 Then liveTail = String.Join(",", live.Rows(0).Skip(live.Rows(0).Length - 8))
+        Dim expected As String = "12346,REPLAY,,4242,0,321,NEAR_HVN_SUPPORT,61234.57"
+        Check("A89h T-4 on values + RIDER-9: the replay writer's eight appended cells equal LogRun's byte-for-byte (one shared formatter), and VPFRSignal / VPFRPoc carry r's label and POC",
+              liveTail = expected AndAlso twinTail = expected,
+              "live=[" & liveTail & "] twin=[" & twinTail & "] expected=[" & expected & "]")
     End Sub
 
     ' =======================================================================
@@ -16971,7 +17219,12 @@ Module Program
                                             "AbsorptionPullFrac", "AbsorptionEpisodeSec", "AbsorptionPullLB", "AbsorptionPostLB",
                                             "AbsorptionSizeStart", "AbsorptionSizeMin", "MicroCVDMomentum", "MTF15mADX", "MTFGateDetails",
                                             "VPFRHVNearPoc", "VPFRBucketSize", "BestPivotVolumeRatio5m", "ExecResolution",
-                                            "RocMagnitudeThreshold", "SessionUtcHour"}
+                                            "RocMagnitudeThreshold", "SessionUtcHour",
+                                            "AbsorptionShadowAggrUsd", "TriggerMode", "WsHealth", "SettingsLoadError",
+                                            "RecentTradeCount"}
+    ' [2026-09 rotation] The five fields added for the appended CSV columns are side-free
+    ' provenance and measurement (shadow press is summed over BOTH sides; the rest name the
+    ' run, not a direction), and no scoring code reads any of them — so they are Kept.
 
     Private Function A82Props() As PropertyInfo()
         Return GetType(IndicatorResults).GetProperties(BindingFlags.Public Or BindingFlags.Instance)

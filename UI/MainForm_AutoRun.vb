@@ -120,9 +120,9 @@ Partial Public Class MainForm
             ' Bar-close watcher in place of the interval timer; honours SINGLE/REPEAT in RunAutoAnalysis.
             StartOnCloseWatcher()
         ElseIf rbSingle.Checked Then
-            CType(_autoRunTimer, WinFormsAutoRunTimer).StartOnce(_intervalMs, AddressOf RunAutoAnalysis)
+            CType(_autoRunTimer, WinFormsAutoRunTimer).StartOnce(_intervalMs, Sub() RunAutoAnalysis(TriggerInterval))
         Else
-            _autoRunTimer.Start(_intervalMs, AddressOf RunAutoAnalysis)
+            _autoRunTimer.Start(_intervalMs, Sub() RunAutoAnalysis(TriggerInterval))
         End If
         ' [P4 #1] The exit-guard tick is NOT tied to auto-run (D6) — it runs from form load and
         ' self-gates on posState + feed health, so a declared position is watched even when auto-run
@@ -145,7 +145,24 @@ Partial Public Class MainForm
         ' bought nothing but settings.json churn.
     End Sub
 
-    Private Sub RunAutoAnalysis()
+    ' ── [RIDER-3] What fired the run (CSV column TriggerMode) ────────────────────────────
+    ' The cfg value auto_run.trigger_mode is NOT what fired: no hot-reload handler touches
+    ' auto-run, so after a settings change the cfg reads the new mode while the old one
+    ' keeps firing, and a backstop fire would read on_close. So the firing site names
+    ' itself: timer callbacks pass INTERVAL, the on-close watcher ON_CLOSE on a real bar
+    ' roll and BACKSTOP otherwise. RunAutoAnalysis parks it in _pendingTrigger right before
+    ' btnAnalyze_Click; RunAnalysisAsync consumes it beside its cfg capture and resets it
+    ' to MANUAL, so a later click reads MANUAL. All on the UI thread: RunAutoAnalysis is
+    ' marshalled there, and btnAnalyze_Click runs RunAnalysisAsync synchronously up to its
+    ' first Await — the consume happens before any other message can be processed.
+    ' ⚠ Not harness-reachable (OrderCheck compiles no MainForm_*.vb); verified by review.
+    Private Const TriggerManual As String = "MANUAL"
+    Private Const TriggerInterval As String = "INTERVAL"
+    Private Const TriggerOnClose As String = "ON_CLOSE"
+    Private Const TriggerBackstop As String = "BACKSTOP"
+    Private _pendingTrigger As String = TriggerManual
+
+    Private Sub RunAutoAnalysis(trigger As String)
         If Not btnAnalyze.Enabled Then Return
         _countdownSecs = _intervalMs \ 1000
         If rbSingle.Checked Then
@@ -156,6 +173,7 @@ Partial Public Class MainForm
             btnStartStop.BackColor = Color.FromArgb(0, 140, 60)
             SetAutoRunInputsEnabled(True)
         End If
+        _pendingTrigger = trigger
         btnAnalyze_Click(Me, EventArgs.Empty)
     End Sub
 
@@ -277,6 +295,8 @@ Partial Public Class MainForm
 
             Dim nowUtc As DateTime = DateTime.UtcNow
             Dim fire As Boolean = roll.Fired
+            ' [RIDER-3] Only the watcher knows a bar roll from a backstop fire; name it here.
+            Dim trigger As String = If(roll.Fired, TriggerOnClose, TriggerBackstop)
             ' Backstop: never go silent if the WS-fed series stops rolling (feed stall). A real roll
             ' resets _onCloseLastFireUtc, so the backstop only fires after a full silent interval.
             ' EffectiveBackstopMs floors it to one bar + 1 min so a too-short NUD can't pre-empt the
@@ -295,7 +315,7 @@ Partial Public Class MainForm
                     Try
                         Me.BeginInvoke(Sub()
                                            Try
-                                               RunAutoAnalysis()
+                                               RunAutoAnalysis(trigger)
                                            Finally
                                                Interlocked.Exchange(_onCloseTickInFlight, 0)
                                            End Try

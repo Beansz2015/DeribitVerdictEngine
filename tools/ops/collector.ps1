@@ -122,6 +122,16 @@ $OptionalPdb = 'DeribitVerdictEngine.pdb'
 # KNOWN RESIDUAL, named rather than silent: timestamped .bak files from a SECOND rotation
 # are still not fetched. Fetching every historical .bak grows without bound, so that wants
 # its own ruling if a second rotation ever happens. See trader-tick-queue.md §2 OPS-1.
+# [RIDER-2b, RULED 2026-09-13 in docs/absorption-d2-stage1-rotation-build-spec.md section 4.5
+# -- SUPERSEDES the residual above] The second rotation is the 2026-09 build: AnalysisLogger no
+# longer names rotated books by a literal (RotatedBakName: analysis_log.csv.<N>col-<h8>.
+# <utc>.bak). So fetch now DISCOVERS every $BakFilter match on the box and expands each into
+# an explicit name key (the box-side $files list), which keeps OPS-1's two mechanisms intact:
+# the manifest stays keyed by one name per file, and the local verification loop walks the
+# box-reported manifest keys, so a discovered book is size-verified like every literal. The
+# literal v0.7 entry stays in $FetchFiles so its absence is still reported by name. The
+# unbounded-growth concern is accepted: rotated books are never deleted, the rotation rate
+# is a handful per year, and the Kelly read needs every one of them (build trap T-7).
 # [GR-4 (b), 2026-09-14] repair_status.log -- the gap-repair outcome sidecar
 # (docs/gap-repair-same-ms-page-skip-spec.md §4.4). Absent until the first repair pass, which
 # the absent-on-box arm below already handles.
@@ -130,6 +140,8 @@ $OptionalPdb = 'DeribitVerdictEngine.pdb'
 # not answer, because the feed logged only to a Console nothing captures. A fetch list that
 # omits it leaves the answer stranded on the box.
 $FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv', 'ws_feed.log')
+# [RIDER-2b] Every rotated analysis_log book on the box matches this. Discovered at fetch time.
+$BakFilter = 'analysis_log.csv*.bak'
 $FetchDirs  = @('backtest_data', 'settings_snapshots')
 
 # [FIX 8a, live-execution finding] `aws` does not reliably resolve by name inside an SSM
@@ -325,8 +337,14 @@ function Invoke-Fetch {
         "`$snap = Join-Path `$dir '_fetch_snapshot'",
         "Remove-Item -Recurse -Force `$snap -ErrorAction SilentlyContinue",
         "New-Item -ItemType Directory -Force `$snap | Out-Null",
+        # [RIDER-2b] Discover every rotated book ON THE BOX and expand it into explicit NAME
+        # KEYS beside the literal list, so every downstream use (snapshot, manifest, upload,
+        # local verification) still handles one name at a time. -File + a name filter only:
+        # nothing outside $dir, no recursion. Each discovered name is printed.
+        "`$files = @(@($fileList) + @(Get-ChildItem -LiteralPath `$dir -Filter '$BakFilter' -File | Sort-Object Name | ForEach-Object { `$_.Name }) | Select-Object -Unique)",
+        "`$files | Where-Object { `$_ -like '$BakFilter' } | ForEach-Object { 'DISCOVERED_BAK=' + `$_ }",
         "try {",
-        "  foreach (`$f in @($fileList)) {",
+        "  foreach (`$f in `$files) {",
         "    `$fp = Join-Path `$dir `$f",
         "    if (Test-Path `$fp) { Copy-Item `$fp (Join-Path `$snap `$f) -Force -ErrorAction Stop }",
         "  }",
@@ -339,7 +357,7 @@ function Invoke-Fetch {
         "  Remove-Item -Recurse -Force `$snap -ErrorAction SilentlyContinue",
         "  exit 1",
         "}",
-        "foreach (`$f in @($fileList)) {",
+        "foreach (`$f in `$files) {",
         "  `$fp = Join-Path `$snap `$f",
         "  if (Test-Path `$fp) {",
         "    `$sz = (Get-Item `$fp).Length",
@@ -374,12 +392,19 @@ function Invoke-Fetch {
     }
     Section 'box-side manifest'
     $manifest = @{}
+    # [RIDER-2b] The FILE keys the box actually reported. The verification loop below walks
+    # these (plus $FetchFiles), NOT $FetchFiles alone: a book discovered on the box is not in
+    # $FetchFiles, and walking only $FetchFiles would download it and never verify it.
+    $manifestFiles = New-Object System.Collections.Generic.List[string]
     foreach ($line in ($r.StdOut -split "`r?`n")) {
         Info $line
         if ($line -match '^MANIFEST_(FILE|DIR)=([^|]+)\|([^|]*)\|([^|]*)$') {
             $manifest[$Matches[2]] = @{ Size = $Matches[3]; Count = $Matches[4] }
+            if ($Matches[1] -eq 'FILE') { $manifestFiles.Add($Matches[2]) }
         }
     }
+    $discoveredBaks = @($manifestFiles | Where-Object { $_ -like $BakFilter })
+    Info "rotated books on the box: $($discoveredBaks.Count) -- $($discoveredBaks -join ', ')"
 
     # -- Step 2: local download.
     $localDest = Join-Path (Join-Path $OutDir 'aws_fetch') $stamp
@@ -396,7 +421,8 @@ function Invoke-Fetch {
     # -- Step 4: verify what landed against the box-side manifest. Fail loudly on mismatch.
     Section 'transfer verification (box manifest vs local download)'
     $mismatch = $false
-    foreach ($f in $FetchFiles) {
+    $verifyFiles = @(@($FetchFiles) + @($manifestFiles) | Select-Object -Unique)
+    foreach ($f in $verifyFiles) {
         $box = $manifest[$f]
         $local = Join-Path $localDest $f
         if (-not $box -or $box.Size -eq 'ABSENT') { Info "$f -- absent on box, skipped"; continue }

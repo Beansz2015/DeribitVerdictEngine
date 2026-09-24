@@ -17,9 +17,9 @@ Imports System.IO
 
 Public Class BacktestRowWriter
 
-    ' Byte-verbatim clone of AnalysisLogger.Header (v0.8). A43e reads AnalysisLogger's
-    ' private Header via reflection and asserts equality — any drift on either side
-    ' fails the harness immediately.
+    ' Byte-verbatim clone of AnalysisLogger.Header (v0.8 + the 2026-09-01 and 2026-09
+    ' appended blocks, 124 columns). A43e / A60e read AnalysisLogger's private Header via
+    ' reflection and assert equality — any drift on either side fails the harness.
     Public Shared ReadOnly Header As String =
         "Timestamp,Price,Verdict,Confidence," &
         "LongScore,ShortScore,EffectiveLongScore,EffectiveShortScore,MaxScore,RegimePenalty," &
@@ -54,7 +54,9 @@ Public Class BacktestRowWriter
         "AbsorptionSignal,AbsorptionLevel,AbsorptionRatio,AbsorptionAggrUsd,AbsorptionPullFrac," &
         "PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort," &
         "InstanceId,SignalId," &
-        "AbsorptionEpisodeSec,AbsorptionPullLB,AbsorptionPostLB,AbsorptionSizeStart,AbsorptionSizeMin"
+        "AbsorptionEpisodeSec,AbsorptionPullLB,AbsorptionPostLB,AbsorptionSizeStart,AbsorptionSizeMin," &
+        "AbsorptionShadowAggrUsd,TriggerMode,WsHealth,SettingsVersion,SettingsLoadError,RecentTradeCount," &
+        "VPFRSignal,VPFRPoc"
 
     Private ReadOnly _path As String
     Private ReadOnly _instanceId As String
@@ -218,7 +220,12 @@ Public Class BacktestRowWriter
                 InvOpt(r.AbsorptionPullLB, "F0"),
                 InvOpt(r.AbsorptionPostLB, "F0"),
                 InvOpt(r.AbsorptionSizeStart, "F0"),
-                InvOpt(r.AbsorptionSizeMin, "F0")))
+                InvOpt(r.AbsorptionSizeMin, "F0")) &
+                "," & String.Join(",", AnalysisLogger.RotationCells(r, cfg)))
+            ' [2026-09 rotation] The eight appended cells come from the LIVE writer's own
+            ' formatter, not a copy — only the header above is a twin. ReplayLoop stamps
+            ' TriggerMode=REPLAY, SettingsLoadError=False, its own RecentTradeCount, and
+            ' leaves WsHealth / AbsorptionShadowAggrUsd Nothing (no feed on replay).
         End Using
     End Sub
 

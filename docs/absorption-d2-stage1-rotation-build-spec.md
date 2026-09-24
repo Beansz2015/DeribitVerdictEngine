@@ -1,8 +1,8 @@
 # `D-2` + `D-6d` Stage 1 + the rotation — BUILD SPEC
 
-> ## ✅ S1 BUILT 2026-09-24 (UTC) — `D-2` + Stage 1 + the sidecar. S2 (the rotation) follows. ⛔ NOT DEPLOYED.
+> ## ✅ BUILT 2026-09-24 (UTC) — S1 (`D-2` + Stage 1 + the sidecar) and S2 (the rotation, eight riders). ⛔ NOT DEPLOYED — the single deploy is reserved to the trader; its plan is in [`absorption-d2-s2-batch-summary.md`](absorption-d2-s2-batch-summary.md) §5.
 >
-> Record: [`absorption-d2-s1-batch-summary.md`](absorption-d2-s1-batch-summary.md) · review packet: [`absorption-d2-s1-spec-back.md`](absorption-d2-s1-spec-back.md). ⚠ Fixture ids moved: this spec's `A78` family is built as `A88`, and `A79` as `A89` — both families were taken in the tree before this build.
+> Records: [`absorption-d2-s1-batch-summary.md`](absorption-d2-s1-batch-summary.md), [`absorption-d2-s2-batch-summary.md`](absorption-d2-s2-batch-summary.md) · review packets: [`absorption-d2-s1-spec-back.md`](absorption-d2-s1-spec-back.md), [`absorption-d2-s2-spec-back.md`](absorption-d2-s2-spec-back.md). ⚠ Fixture ids moved: this spec's `A78` family is built as `A88`, and `A79` as `A89` — both families were taken in the tree before this build. ⚠ The header gained EIGHT columns, not six: `RIDER-9` (`VPFRSignal`, `VPFRPoc`) was added to the ledger 2026-09-16, after this spec.
 
 > ## ✅ AUTHORISED. Every decision behind this build is ruled.
 >
