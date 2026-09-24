@@ -1,6 +1,37 @@
 # Liquidation-flag probe — run record, 2026-09-21 (UTC)
 
-**Status: RUN 1 DIED. RUN 2 RUNNING since 2026-09-24 13:28 UTC. The measurement has NOT returned yet.**
+**Status: RUN 1 DIED. RUN 2 (dev machine) STOPPED. RUN 3 (box) STOPPED — its REST arm froze. ⭐ RUN 4 RUNNING ON THE AWS COLLECTOR BOX since 2026-09-24 16:53 UTC (PID 11248). The measurement has NOT returned yet.**
+
+## 000. Run 3's defect and run 4 (added 2026-09-24 UTC)
+
+| Item | Value |
+|---|---|
+| Run 3 window | 2026-09-24 13:58:49 → about 16:52 UTC, stopped through `STOP` |
+| ⛔ Defect | **Arm 2 froze at 181 REST polls, about 31 min in, with no log line.** `HttpClient.Timeout` throws `TaskCanceledException`, an `OperationCanceledException`. The loop's cancel arm caught it and returned. The slow, paging box made a poll exceed 20 s; the fast dev machine never did |
+| Fix | `eff6def`: only a real stop request ends the loop. Timeouts and ingest errors are logged and counted. The 5-minute status line adds `rest errors`, `index` and `priv MB` |
+| Run 3 summary | 181 polls, 181,000 REST trades, **0 flagged**, 0 pairings. Inconclusive |
+| Run 3 memory | probe private 38 MB at +10 min, 111 MB at +170 min; box commit free 1,611 then 1,569 MB of 3,313; the collector wrote a row every minute throughout |
+| Run 3 raw dump | file `_01` rotated at 64 MB. A `Get-ChildItem` listing showed 0 bytes while the file was open: a stale directory entry, not an empty file |
+| Run 4 | started 16:53 UTC, PID 11248, BelowNormal, built from `eff6def`. `run.cmd` now sets `DOTNET_GCHeapHardLimit=0xC800000` (200 MB), so a runaway heap kills the probe, not the box. Run 3's logs are kept as `run3-probe-console.log` and `run3-probe-stderr.log` |
+
+## 00. ⭐ Run 3 — on the collector box (trader-ruled 2026-09-24 UTC)
+
+⛔ **This overrides the build spec's "dev machine only, never the collector box" line** (`engine-fix-build-spec-2026-09-21.md` §4.1). **Trader ruling, 2026-09-24:** the dev machine shuts down daily, so the probe runs on the box, *"guarded — allow probe to run unless memory is predicted to almost completely run out by the time it is predicted to complete."*
+
+| Item | Value |
+|---|---|
+| Box | `i-0d6c133058876273e`: 1,024 MB RAM, 1 vCPU; before launch 156 MB free, 1,648 MB commit free, 7.63 GB disk free |
+| Directory | `C:\probe-runs\liq-2026-09-24\` on the box, outside `C:\DeribitEngine` |
+| Binary | built from `951a36c`, copied through `s3://deribit-engine-bucket/probe/liq-2026-09-24/bin/` |
+| Launch | a SYSTEM one-shot scheduled task `LiqProbe` (created, run, deleted), so there is no window and no tie to SSM. PID 42392 in `probe.pid`, priority **BelowNormal** |
+| Guards built first (`951a36c`) | `IndexCap` 400,000 → 40,000. **The old cap would have held about 370 MB, more than the box's free RAM.** Measured on run 2: about 0.9 KB per entry. Raw dumps: keep the newest 8 files (about 512 MB) |
+| Memory checks | at +10 min and +1 h after launch; results below |
+
+**How to check it (from the dev machine):** send an SSM command that tails `C:\probe-runs\liq-2026-09-24\probe-console.log` and reads the probe's private MB. A status line prints every 5 minutes.
+**How to stop it:** SSM `New-Item C:\probe-runs\liq-2026-09-24\STOP`. The probe prints its summary and exits within 30 s.
+**How to fetch the result:** SSM `aws s3 cp` of `liq_probe_pairings_*.jsonl` and `probe-console.log` to `s3://deribit-engine-bucket/probe/liq-2026-09-24/out/`, then pull it down.
+
+**Run 2 (dev machine), stopped 2026-09-24 about 14:00 UTC through `STOP`:** 185 REST polls, 185,000 REST trades scanned, **0 flagged**, 0 pairings. `liquidation` never present on `100ms` (25,949 trades). Inconclusive, as expected with no liquidation in the window.
 
 ## 0. ⛔ Run 1 died unnoticed — read before §1 (added 2026-09-24 UTC)
 
