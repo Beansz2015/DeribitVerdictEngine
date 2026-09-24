@@ -6,7 +6,9 @@
 
 ⛔ **Run `date -u` first.** This seat ran 2026-09-24 13:19 → about 18:35 UTC. The workstation shows GMT+8.
 
-**State at close:**
+⭐ **UPDATE 2026-09-24 18:50 UTC: THE TRADER PUSHED, AND THE ONE DEPLOY IS DONE.** New instance `25951567-9721-4644-86e4-b486840dfbf4` from 18:46:06 UTC, commit `55788bb`, all post-deploy checks passed (ledger row in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5). **§0 action 2 is DONE; the "unpushed" and "deploy HELD" lines below are history.** Still owed from the deploy: a second `fetch` showing two `DISCOVERED_BAK=` lines. Post-deploy watch: the flagged absorption rate rising while the ratio shifts left means STOP; the Stage 1 read after about two weekday-weeks.
+
+**State at close (before the update above):**
 - ⛔ **`master` is 25 commits AHEAD of `origin`, UNPUSHED.** They include engine code (engine-fix A and C, absorption S1 and S2). The trader pushes after compiling and testing.
 - Settings **v68**, untouched.
 - Fixtures **468 PASS, `ALL PASS`**; the only SKIP is `A81b` (engine-fix B2's fixture). Re-run by this seat.

@@ -16,7 +16,7 @@
 >
 > ⚠ **2026-09-24 13:30 UTC, the next seat:** `master` is AHEAD of `origin` again (the handover commit and later work, unpushed). BUILT, local, NOT DEPLOYED: engine-fix Sessions A (`a6b33fe`) and C (`ea32818`), and absorption S1 (`549b2c3`) and S2 (`5dfc91a`). Fixtures 468 `ALL PASS`. They go out as ONE deploy, reserved to the trader ([`absorption-d2-s2-batch-summary.md`](absorption-d2-s2-batch-summary.md) §5). The liquidation probe (Session B1) now runs ON THE AWS COLLECTOR BOX (trader ruling 2026-09-24). Its first run died on 2026-09-21 after 110 minutes, and no handover noticed. See the liquidation-flag row in `trader-tick-queue.md` §2.
 >
-> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-24b.md`](seat-handover-2026-09-24b.md)** — the engine-fix and absorption build seat. `master` 25 ahead of `origin`, UNPUSHED; the ONE deploy is HELD by the trader; a liquidation probe runs on the collector box. Older banner follows.
+> ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-24b.md`](seat-handover-2026-09-24b.md)** — the engine-fix and absorption build seat. ✅ **Pushed, and the ONE deploy is DONE 2026-09-24 18:46 UTC** (instance `25951567…`, engine-fix A + C and absorption S1 + S2; ledger in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5). A liquidation probe runs on the collector box; engine-fix B2 waits for it. Older banner follows.
 >
 > ⭐ **PREVIOUS STATE READ: [`seat-handover-2026-09-24.md`](seat-handover-2026-09-24.md)** — the Jev close-list seat. ✅ **The Jev programme is CLOSED; the ENGINE QUEUE RESUMES**, first with the engine-fix build. `master` = `origin` at `49fb10d` (pushed). Settings v68, no engine code changed, collector HEALTHY at the 2026-09-24 check. Older banner follows.
 >
