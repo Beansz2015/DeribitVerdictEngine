@@ -99,14 +99,14 @@ awk '/^## 9\./,/^## 10\./' docs/q1d-tier-geometry-2026-09-24-output.md | grep -E
 ### H-5 — no engine, settings, UI or harness file changed
 
 ```
-git diff --stat HEAD~1 -- Core UI analysis settings.json DeribitWsFeed.vb AnalysisLogger.vb DynamicNorms.vb MarketState.vb verify tools/ops/SwingFallbackRead
+git show --stat --format= 5c91cca -- Core UI analysis settings.json DeribitWsFeed.vb AnalysisLogger.vb DynamicNorms.vb MarketState.vb verify tools/ops/SwingFallbackRead; echo "(end)"
 ```
 
 ```
-(no output)
+(end)
 ```
 
-- Run after the commit; `HEAD~1` is the base `48e367a`.
+- `5c91cca` is this read's commit. It is pinned by hash, not `HEAD~1`: another seat committed `b1cfb1f` and `33d5ee1` between this seat's base `48e367a` and `5c91cca`.
 
 ### H-6 — the extended export regenerates byte-identical
 
@@ -187,7 +187,7 @@ awk '/^## 11\./,/^## 12\./' docs/q1d-tier-geometry-2026-09-24-output.md | grep -
 
 ## 4. Rows for `docs/trader-tick-queue.md` (for the orchestrator; I did not edit it)
 
-- The MEDIUM-tier row (the one that names `Q-1`): add "✅ `Q-1` (d) DONE 2026-09-24 (`<this commit>`): the top-tier success-rate rise is a payoff shift plus fewer timeouts; no tier outcome gap CONFIRMED. Read: `docs/q1d-tier-geometry-read-2026-09-24.md`. Next: trader rules `Q-1` (a) and (c), and the single-class p value (spec-back `QD-2`)."
+- The MEDIUM-tier row (the one that names `Q-1`): add "✅ `Q-1` (d) DONE 2026-09-24 (`5c91cca`): the top-tier success-rate rise is a payoff shift plus fewer timeouts; no tier outcome gap CONFIRMED. Read: `docs/q1d-tier-geometry-read-2026-09-24.md`. Next: trader rules `Q-1` (a) and (c), and the single-class p value (spec-back `QD-2`)."
 - The same row's `F-4a` note ("gated on `Q-1` (d)"): the gate is discharged; the decision is now the trader's.
 - The shipped-state-sweep row names `Q-1` (d) as a predecessor; that predecessor is done.
 
