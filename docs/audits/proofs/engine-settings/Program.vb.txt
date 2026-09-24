@@ -1,0 +1,496 @@
+' Isolated settings-audit proofs for docs/audits/2026-09-24-engine-settings.md.
+' Links the REAL shipped sources (see Audit.vbproj.txt, a path-parameterised copy of
+' verify/ordercheck/OrderCheck.vbproj). Nothing in the repo is modified; every temp
+' settings file is written under <build output>/work, outside the repo.
+Imports System.Globalization
+Imports System.IO
+Imports System.Reflection
+Imports System.Text.Json
+Imports System.Text.Json.Nodes
+Imports System.Threading
+
+Module Program
+    Dim RepoSettings As String   ' <repo root>/settings.json -- the repo root is the first command-line argument
+    ReadOnly Inv As CultureInfo = CultureInfo.InvariantCulture
+    Dim workRoot As String
+
+    Sub Main(args As String())
+        If args.Length < 1 Then
+            Console.WriteLine("usage: Audit <absolute repo root>")
+            Return
+        End If
+        RepoSettings = Path.Combine(args(0), "settings.json")
+        workRoot = Path.Combine(AppContext.BaseDirectory, "work")
+        If Directory.Exists(workRoot) Then Directory.Delete(workRoot, True)
+        Directory.CreateDirectory(workRoot)
+
+        Run("P1 null block", AddressOf P1_NullBlocks)
+        Run("P2 partial dictionaries / lists replace wholesale", AddressOf P2_PartialCollections)
+        Run("P3 session rename disarms scoring", AddressOf P3_SessionRename)
+        Run("P4 inverted clamp bounds throw every run", AddressOf P4_ClampThrows)
+        Run("P5 mtf_gate.min_of semantics", AddressOf P5_MinOf)
+        Run("P6 Kelly payload risk_usd vs contracts; max_leverage 0", AddressOf P6_Kelly)
+        Run("P7 maker rebate disables Step 5c", AddressOf P7_RebateDisablesGate)
+        Run("P8 torn run across hot-reload", AddressOf P8_TornRun)
+        Run("P9 hot-reload parse failure keeps last-good (status says code defaults)", AddressOf P9_HotReloadParseFail)
+        Run("P10 base parse failure at startup drops the overlay", AddressOf P10_OverlayDroppedOnParseFail)
+        Run("P11 integer key written as 4.0 rejects the whole file", AddressOf P11_IntAsFloat)
+        Run("P12 duplicate block: overlay vs no-overlay diverge", AddressOf P12_DuplicateBlock)
+        Run("P13 funding sign slip = permanent long bias", AddressOf P13_FundingSignSlip)
+        Run("P14 negative squeeze penalty = non-directional padding", AddressOf P14_NegativeSqueezePenalty)
+        Run("P15 stop_max_atr_mult != atr_stop_multiplier is non-monotonic", AddressOf P15_StopKeysDecoupled)
+        Run("P16 4-tick structural stop vs fees", AddressOf P16_TickFloorVsFees)
+        Run("P17 high-vol flush trace (shipped cfg)", AddressOf P17_FlushTrace)
+        Run("P18 wrap-around / gapped session buckets", AddressOf P18_SessionGaps)
+        Run("P19 request_timeout_seconds 0 poisons DeribitClient for the process", AddressOf P19_TimeoutZero)
+    End Sub
+
+    Sub P19_TimeoutZero()
+        LoadFresh("p19", Mutated(Sub(o) o("network")("request_timeout_seconds") = 0))
+        For attempt = 1 To 2
+            Try
+                DeribitClient.GetCandlesAsync("1", 5).GetAwaiter().GetResult()
+                Console.WriteLine("  attempt " & attempt & ": returned")
+            Catch ex As Exception
+                Console.WriteLine("  attempt " & attempt & " (timeout key now " & SettingsLoader.Current.Network.RequestTimeoutSeconds & "): " &
+                                  ex.GetType().Name & " <- " & If(ex.InnerException?.GetType().Name, "") & ": " & If(ex.InnerException?.Message, ex.Message).Split(ChrW(10))(0))
+            End Try
+            LoadFresh("p19b", File.ReadAllText(RepoSettings))   ' fix the file: 15 s
+        Next
+    End Sub
+
+    Sub Run(name As String, body As Action)
+        Console.WriteLine()
+        Console.WriteLine("=== " & name & " ===")
+        Try
+            body()
+        Catch ex As Exception
+            Console.WriteLine("  UNCAUGHT " & ex.GetType().Name & ": " & ex.Message)
+        End Try
+    End Sub
+
+    ' ---------------------------------------------------------------- helpers
+    Function Mutated(action As Action(Of JsonObject)) As String
+        Dim root = JsonNode.Parse(File.ReadAllText(RepoSettings)).AsObject()
+        action(root)
+        Return root.ToJsonString(New JsonSerializerOptions With {.WriteIndented = True})
+    End Function
+
+    Function Dir(name As String) As String
+        Dim d = Path.Combine(workRoot, name)
+        Directory.CreateDirectory(d)
+        Return d
+    End Function
+
+    ' Simulates a fresh process: the loader's _current is a New EngineSettings() at startup.
+    Sub ResetLoaderToProcessStart()
+        Dim t = GetType(SettingsLoader)
+        t.GetField("_current", BindingFlags.NonPublic Or BindingFlags.Static).SetValue(Nothing, New EngineSettings())
+        t.GetField("_lastLoadError", BindingFlags.NonPublic Or BindingFlags.Static).SetValue(Nothing, "")
+    End Sub
+
+    Function LoadFresh(dirName As String, baseJson As String, Optional overlayJson As String = Nothing) As EngineSettings
+        Dim d = Dir(dirName)
+        File.WriteAllText(Path.Combine(d, "settings.json"), baseJson)
+        Dim ov = Path.Combine(d, "settings.local.json")
+        If overlayJson IsNot Nothing Then File.WriteAllText(ov, overlayJson) Else If File.Exists(ov) Then File.Delete(ov)
+        ResetLoaderToProcessStart()
+        SettingsLoader.Initialise(Path.Combine(d, "settings.json"))
+        Return SettingsLoader.Current
+    End Function
+
+    Function Candles(n As Integer, startPx As Double, stepFn As Func(Of Integer, Double),
+                     rangeFn As Func(Of Integer, Double), Optional barSec As Integer = 60,
+                     Optional volFn As Func(Of Integer, Double) = Nothing) As List(Of Candle)
+        Dim res As New List(Of Candle)
+        Dim px As Double = startPx
+        Dim t0 As Long = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - CLng(n) * barSec * 1000
+        For i = 0 To n - 1
+            Dim o As Double = px
+            Dim c As Double = px + stepFn(i)
+            Dim rg As Double = rangeFn(i)
+            res.Add(New Candle With {.Timestamp = t0 + CLng(i) * barSec * 1000, .Open = o, .Close = c,
+                                     .High = Math.Max(o, c) + rg / 2, .Low = Math.Min(o, c) - rg / 2,
+                                     .Volume = If(volFn Is Nothing, 10 + (i Mod 7) * 3, volFn(i))})
+            px = c
+        Next
+        Return res
+    End Function
+
+    ' Harness builders copied verbatim from verify/ordercheck/Program.vb (BuildA8* / BuildGateIndicators)
+    Function BuildA8Cfg(fundingBoost As Integer) As EngineSettings
+        Dim cfg As New EngineSettings()
+        cfg.RegimeWeights.Enabled = False
+        cfg.MTFGate.Enabled = False
+        cfg.Indicators.OiCvd.Enabled = False
+        cfg.Indicators.OFI.MomentumEnabled = False
+        cfg.Indicators.Funding.MomentumEnabled = False
+        cfg.Scoring.FundingHighPenalty = 0
+        cfg.Scoring.FundingHighBoost = fundingBoost
+        Return cfg
+    End Function
+
+    Function BuildA8Indicators() As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.Regime = "RANGE_BOUND"
+        r.CurrentPrice = 100000
+        r.ATR = 50
+        r.ROC = -0.5 : r.ROCSlope = "FALLING"
+        r.RSI = 30 : r.RSIDivergence = "NONE"
+        r.PlusDI = 10 : r.MinusDI = 25 : r.ADX = 15
+        r.VolumeRatio = 5
+        r.VWAP = 100100 : r.VWAPSigma1Lower = 99000 : r.VWAPSigma1Upper = 101000
+        r.VWAPSigma2Lower = 98000 : r.VWAPSigma2Upper = 102000
+        r.VWAPSessionCandles = 30
+        r.EMAAlignment = "BEAR"
+        r.OISignal = "NEW SHORTS"
+        r.OFISignal = "SELL DOMINANT" : r.OFIMomentum = "FLAT"
+        r.CVDSlope = "FALLING" : r.CVDValue = -50000 : r.CVDDivergence = "NONE"
+        r.TFISignal = "SELL PRESSURE"
+        r.MicroCVDSignal = "BEAR_ACCEL" : r.MicroCVDMomentum = "ACCELERATING"
+        r.SqueezeStatus = "NONE" : r.TTMSignal = "BULL_BUILDING" : r.TTMDirection = "RISING"
+        r.DonchianSignal = "LONG"
+        r.OBVTrend = "RISING" : r.OBVDivergence = "NONE"
+        r.EMA200_5m = 90000
+        r.FundingRate = -0.0002 : r.FundingBias = "SHORTS HEAVILY CROWDED"
+        r.FundingMomentum = "FLAT"
+        r.SpreadStatus = "NORMAL"
+        r.LiqSignal = "NONE"
+        r.VPFRSignal = "NEUTRAL" : r.VPFRValueAreaSignal = "INSIDE_VA"
+        r.MTF15mTrend = "FLAT" : r.MTFGatePassLong = True : r.MTFGatePassShort = True
+        r.MTFGateDetails = "fixture"
+        Return r
+    End Function
+
+    Function BuildA8Norms() As DynamicNorms
+        Return New DynamicNorms With {
+            .VolHighThreshold = 3, .VolMidThreshold = 1.5,
+            .VolMean = 100, .VolStdDev = 50,
+            .VWAPDevThreshold = 1, .ATRScaleFactor = 1, .ATRRef = 50, .IsLive = True}
+    End Function
+
+    Function BuildGateIndicators(atr As Double, price As Double) As IndicatorResults
+        Dim r = BuildA8Indicators()
+        r.CurrentPrice = price
+        r.ATR = atr
+        r.VWAP = price + 100
+        r.VWAPSigma1Lower = price - 1000 : r.VWAPSigma1Upper = price + 1000
+        r.VWAPSigma2Lower = price - 2000 : r.VWAPSigma2Upper = price + 2000
+        r.EMA200_5m = price - 10000
+        Return r
+    End Function
+
+    Function Lv(r As IndicatorResults, cfg As EngineSettings, isLong As Boolean) As SideLevels
+        Return SignalEmitter.ComputeSideLevels(New VerdictResult(), r, cfg, isLong)
+    End Function
+
+    Function Bps(dist As Double, px As Double) As String
+        Return (dist / px * 10000.0).ToString("F1", Inv) & " bps"
+    End Function
+
+    ' ---------------------------------------------------------------- proofs
+    Sub P1_NullBlocks()
+        Dim cfg = LoadFresh("p1a", Mutated(Sub(o) o("scoring")("structural_levels") = Nothing))
+        Console.WriteLine("  structural_levels:null  -> LastLoadError='" & SettingsLoader.LastLoadError &
+                          "'  StructuralLevels Is Nothing=" & (cfg.Scoring.StructuralLevels Is Nothing))
+        Dim r As New IndicatorResults With {.CurrentPrice = 62000, .ATR = 40, .SessionUtcHour = 3,
+                                            .SwingStopLong = 61990, .SwingTargetLong = 62100}
+        Dim a = Lv(r, cfg, True)
+        Dim b = Lv(r, New EngineSettings(), True)
+        Console.WriteLine(String.Format(Inv, "  ASIA long, swing stop $10 below: null-block stop={0} ({1}) target={2}  | shipped stop={3} ({4}) target={5} ({6})",
+                                        a.StopPx, If(a.StopReason, "legacy/Nothing"), a.Target, b.StopPx, b.StopReason, b.Target, b.TargetReason))
+
+        cfg = LoadFresh("p1b", Mutated(Sub(o) o("scoring")("trade_costs") = Nothing))
+        Console.WriteLine("  trade_costs:null        -> LastLoadError='" & SettingsLoader.LastLoadError & "'  TradeCosts Is Nothing=" & (cfg.Scoring.TradeCosts Is Nothing))
+        Try
+            Dim c2 = BuildA8Cfg(0) : c2.Scoring.TradeCosts = cfg.Scoring.TradeCosts
+            ScoringEngine.Calculate(BuildGateIndicators(30, 62000), PositionState.None, BuildA8Norms(), c2)
+            Console.WriteLine("  Calculate returned (no throw)")
+        Catch ex As Exception
+            Console.WriteLine("  Calculate THROWS " & ex.GetType().Name)
+        End Try
+    End Sub
+
+    Sub P2_PartialCollections()
+        Dim cfg = LoadFresh("p2a", Mutated(Sub(o) o("scoring")("structural_levels")("sessions") = New JsonObject()))
+        Console.WriteLine(String.Format(Inv, "  structural_levels.sessions:{{}} -> err='{0}' ASIA fallback mult={1} (shipped {2}), LONDON={3} (shipped {4})",
+                          SettingsLoader.LastLoadError,
+                          ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, 3), ExecutionResolution.ResolveFallbackTargetMultiplier(New EngineSettings(), 3),
+                          ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, 10), ExecutionResolution.ResolveFallbackTargetMultiplier(New EngineSettings(), 10)))
+
+        cfg = LoadFresh("p2b", Mutated(Sub(o)
+                                           Dim arr = o("session_volume")("sessions").AsArray()
+                                           Dim ny = JsonNode.Parse(arr(2).ToJsonString())
+                                           o("session_volume")("sessions") = New JsonArray(ny)
+                                       End Sub))
+        For Each h In {3, 10}
+            Console.WriteLine(String.Format(Inv, "  sessions=[NY only] hour {0}: bucket={1} execRes={2} rocMag={3} fallbackMult={4} aggrVelArmed={5}  | shipped execRes={6} rocMag={7} fallbackMult={8} armed={9}",
+                h, If(ExecutionResolution.MatchSessionBucket(cfg, h)?.Name, "<none>"),
+                ExecutionResolution.ResolveResolution(cfg, h), ExecutionResolution.ResolveRocMagnitudeForHour(cfg, h),
+                ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, h), ExecutionResolution.HasExplicitAggrVelBurstThreshold(cfg, h),
+                ExecutionResolution.ResolveResolution(New EngineSettings(), h), ExecutionResolution.ResolveRocMagnitudeForHour(New EngineSettings(), h),
+                ExecutionResolution.ResolveFallbackTargetMultiplier(New EngineSettings(), h), ExecutionResolution.HasExplicitAggrVelBurstThreshold(New EngineSettings(), h)))
+        Next
+        cfg = LoadFresh("p2c", Mutated(Sub(o) o("resolution_profiles") = New JsonObject From {{"1", New JsonObject()}}))
+        Console.WriteLine(String.Format(Inv, "  resolution_profiles:{{""1"":{{}}}} -> 3-min slope delta={0} (shipped {1})",
+                          ExecutionResolution.ResolveRocSlopeDelta(cfg, 3), ExecutionResolution.ResolveRocSlopeDelta(New EngineSettings(), 3)))
+    End Sub
+
+    Sub P3_SessionRename()
+        Dim cfg = LoadFresh("p3", Mutated(Sub(o) o("session_volume")("sessions")(2)("name") = "NEW_YORK"))
+        Console.WriteLine(String.Format(Inv, "  session_volume NY->NEW_YORK, hour 15: armed={0} normWindow={1} burstThr={2}  | shipped armed={3} normWindow={4} burstThr={5}",
+            ExecutionResolution.HasExplicitAggrVelBurstThreshold(cfg, 15), ExecutionResolution.ResolveAggrVelNormWindow(cfg, 15), ExecutionResolution.ResolveAggrVelBurstThreshold(cfg, 15),
+            ExecutionResolution.HasExplicitAggrVelBurstThreshold(New EngineSettings(), 15), ExecutionResolution.ResolveAggrVelNormWindow(New EngineSettings(), 15), ExecutionResolution.ResolveAggrVelBurstThreshold(New EngineSettings(), 15)))
+        Console.WriteLine("  LastLoadError='" & SettingsLoader.LastLoadError & "' (no warning)")
+    End Sub
+
+    Sub P4_ClampThrows()
+        Dim cs = Candles(120, 62000, Function(i) If(i Mod 2 = 0, 8.0, -6.0), Function(i) 20.0 + (i Mod 5) * 6,
+                         volFn:=Function(i) If(i Mod 9 = 0, 60.0, 8.0 + (i Mod 4)))
+        Dim cases As New List(Of (String, Action(Of JsonObject))) From {
+            ("indicators.ATR.scale_min 5 > scale_max 4 (display-only keys)", Sub(o) o("indicators")("ATR")("scale_min") = 5.0),
+            ("indicators.VWAPDynamic.dev_clamp_min 3.5 > dev_clamp_max 3.0", Sub(o) o("indicators")("VWAPDynamic")("dev_clamp_min") = 3.5),
+            ("indicators.Volume.dynamic_mid_clamp_min 5 > dynamic_mid_clamp_max 4", Sub(o) o("indicators")("Volume")("dynamic_mid_clamp_min") = 5.0)}
+        Dim k = 0
+        For Each c In cases
+            k += 1
+            LoadFresh("p4" & k, Mutated(c.Item2))
+            Try
+                Dim n = DynamicNorms.Compute(cs, 40.0, 15)
+                Console.WriteLine("  " & c.Item1 & " -> loaded (err='" & SettingsLoader.LastLoadError & "'), DynamicNorms.Compute returned")
+            Catch ex As Exception
+                Console.WriteLine("  " & c.Item1 & " -> loaded (err='" & SettingsLoader.LastLoadError & "'), DynamicNorms.Compute THROWS " & ex.GetType().Name & ": " & ex.Message.Split(ChrW(10))(0))
+            End Try
+        Next
+    End Sub
+
+    Sub P5_MinOf()
+        ' 15m series: long steady uptrend, then a sharp 5-bar drop. Target state: DMI bearish,
+        ' ADX strong, EMA 9>21>50 stack still bullish.
+        Dim cs = Candles(70, 60000, Function(i) If(i < 65, 40.0, -140.0), Function(i) If(i < 65, 30.0, 90.0), barSec:=900)
+        For Each minOf In {0, 1, 2, 3, 4}
+            Dim tr As String = "", ema As String = "", det As String = ""
+            Dim adx As Double, pl As Boolean, ps As Boolean
+            IndicatorEngine.CalcMTFGate(cs, tr, adx, ema, pl, ps, det, adxPeriod:=9, adxMin:=20.0, minOf:=minOf, candleLookback:=60)
+            Console.WriteLine(String.Format(Inv, "  min_of={0}: trend={1,-4} passLong={2,-5} passShort={3,-5} | {4}", minOf, tr, pl, ps, det))
+        Next
+        ' Hard veto fails OPEN on thin data
+        Dim thin = Candles(10, 60000, Function(i) -50.0, Function(i) 40.0, barSec:=900)
+        Dim t2 As String = "", e2 As String = "", d2 As String = "" : Dim a2 As Double, l2 As Boolean, s2 As Boolean
+        IndicatorEngine.CalcMTFGate(thin, t2, a2, e2, l2, s2, d2, 9, 20.0, 2, 60)
+        Console.WriteLine(String.Format("  10 candles (< adx_period+2): passLong={0} passShort={1} | {2}", l2, s2, d2))
+        ' candle_lookback < 50: EMA50 = 0 → EMA leg can vote BULL but never BEAR
+        Dim down = Candles(70, 60000, Function(i) -30.0, Function(i) 30.0, barSec:=900)
+        For Each lb In {60, 40}
+            Dim t3 As String = "", e3 As String = "", d3 As String = "" : Dim a3 As Double, l3 As Boolean, s3 As Boolean
+            IndicatorEngine.CalcMTFGate(down, t3, a3, e3, l3, s3, d3, 9, 20.0, 2, lb)
+            Console.WriteLine(String.Format("  steady DOWNtrend, candle_lookback={0}: EMA leg={1} trend={2} | {3}", lb, e3, t3, d3))
+        Next
+        Dim up = Candles(70, 60000, Function(i) 30.0, Function(i) 30.0, barSec:=900)
+        For Each lb In {60, 40}
+            Dim t4 As String = "", e4 As String = "", d4 As String = "" : Dim a4 As Double, l4 As Boolean, s4 As Boolean
+            IndicatorEngine.CalcMTFGate(up, t4, a4, e4, l4, s4, d4, 9, 20.0, 2, lb)
+            Console.WriteLine(String.Format("  steady UPtrend,   candle_lookback={0}: EMA leg={1} trend={2} | {3}", lb, e4, t4, d4))
+        Next
+    End Sub
+
+    Sub P6_Kelly()
+        Dim cfg As New EngineSettings()
+        Dim px As Double = 60000, stopD As Double = 1.6 * 135.5
+        For Each conf In {"HIGH", "MEDIUM"}
+            Dim v As New VerdictResult With {.Verdict = If(conf = "HIGH", "STRONG SHORT", "SHORT"), .Confidence = conf}
+            ScoringEngine.CalcKellySizing(v, stopD, px, cfg)
+            Dim realRisk = v.KellyContracts * cfg.Kelly.ContractFaceUsd * stopD / px
+            Console.WriteLine(String.Format(Inv, "  {0}: f*={1:F3} contracts={2} risk_usd(payload)={3:F2} lev_capped={4}  | risk of those contracts over the stop={5:F2} USD (+ fees maker in/taker out on {6:F0} USD notional = {7:F2})",
+                conf, v.KellyF, v.KellyContracts, v.KellyRiskUsd, v.KellyLevCapped, realRisk, v.KellyContracts * 10.0, v.KellyContracts * 10.0 * (1.5 + 3.5) / 10000.0))
+        Next
+        cfg.Kelly.MaxLeverage = 0
+        Dim v0 As New VerdictResult With {.Verdict = "STRONG SHORT", .Confidence = "HIGH"}
+        ScoringEngine.CalcKellySizing(v0, stopD, px, cfg)
+        Console.WriteLine(String.Format(Inv, "  max_leverage=0: contracts={0} lev_capped={1} notional={2:F0} USD = {3:F1}x a {4:F0} USD account",
+            v0.KellyContracts, v0.KellyLevCapped, v0.KellyContracts * 10.0, v0.KellyContracts * 10.0 / cfg.Kelly.AccountSizeUsd, cfg.Kelly.AccountSizeUsd))
+        Dim cfgF As New EngineSettings() : cfgF.Kelly.ContractFaceUsd = 0
+        Dim vf As New VerdictResult With {.Verdict = "STRONG SHORT", .Confidence = "HIGH"}
+        ScoringEngine.CalcKellySizing(vf, stopD, px, cfgF)
+        Console.WriteLine(String.Format(Inv, "  contract_face_usd=0: contracts={0} risk_usd={1:F2}", vf.KellyContracts, vf.KellyRiskUsd))
+    End Sub
+
+    Sub P7_RebateDisablesGate()
+        Dim cfg = BuildA8Cfg(0)
+        Dim r = BuildGateIndicators(atr:=13, price:=62000)
+        Dim v1 = ScoringEngine.Calculate(r, PositionState.None, BuildA8Norms(), cfg)
+        cfg.Scoring.TradeCosts.MakerFeeBps = -2.5
+        Dim v2 = ScoringEngine.Calculate(BuildGateIndicators(atr:=13, price:=62000), PositionState.None, BuildA8Norms(), cfg)
+        Dim lvS = Lv(BuildGateIndicators(13, 62000), cfg, False)
+        Console.WriteLine(String.Format(Inv, "  maker 1.5 bps : floor={0:F5} verdict='{1}' ctx={2}", New TradeCostSettings().EffectiveMinMovePct, v1.Verdict, v1.VerdictContext))
+        Console.WriteLine(String.Format(Inv, "  maker -2.5 bps: floor={0:F5} verdict='{1}' ctx={2}  target dist={3:F2} USD ({4}), stop dist={5:F2} USD ({6})",
+            cfg.Scoring.TradeCosts.EffectiveMinMovePct, v2.Verdict, v2.VerdictContext,
+            Math.Abs(lvS.Target - 62000), Bps(Math.Abs(lvS.Target - 62000), 62000), Math.Abs(lvS.StopPx - 62000), Bps(Math.Abs(lvS.StopPx - 62000), 62000)))
+        cfg.Scoring.TradeCosts.MakerFeeBps = 1.5 : cfg.Scoring.TradeCosts.MinNetMovePct = -0.0003
+        Console.WriteLine(String.Format(Inv, "  min_net_move_pct -0.0003 (file edit; UI rejects <0): floor={0:F5}", cfg.Scoring.TradeCosts.EffectiveMinMovePct))
+        cfg.Scoring.TradeCosts.MinNetMovePct = 0.05
+        Console.WriteLine(String.Format(Inv, "  min_net_move_pct 0.05 (someone meaning 0.05 %): floor={0:F4} = {1:F0} USD at 62k", cfg.Scoring.TradeCosts.EffectiveMinMovePct, cfg.Scoring.TradeCosts.EffectiveMinMovePct * 62000))
+    End Sub
+
+    Sub P8_TornRun()
+        Dim d = Dir("p8")
+        Dim p = Path.Combine(d, "settings.json")
+        File.WriteAllText(p, File.ReadAllText(RepoSettings))
+        ResetLoaderToProcessStart()
+        SettingsLoader.Initialise(p)
+        Dim cfgHeldByRun = SettingsLoader.Current           ' RunAnalysisAsync line 53
+        File.WriteAllText(p, Mutated(Sub(o)
+                                         o("version") = 69
+                                         o("indicators")("VWAPDynamic")("static_fallback") = 2.7
+                                     End Sub))
+        Thread.Sleep(1500)
+        Dim n = DynamicNorms.Compute(Candles(12, 62000, Function(i) 1.0, Function(i) 10.0), 40.0, 15)
+        Console.WriteLine(String.Format(Inv, "  run cfg: version={0} static_fallback={1}  | DynamicNorms (reads SettingsLoader.Current) VWAPDevThreshold={2}, Current.version={3}",
+            cfgHeldByRun.Version, cfgHeldByRun.Indicators.VWAPDynamic.StaticFallback, n.VWAPDevThreshold, SettingsLoader.Current.Version))
+    End Sub
+
+    Sub P9_HotReloadParseFail()
+        Dim d = Dir("p9")
+        Dim p = Path.Combine(d, "settings.json")
+        File.WriteAllText(p, File.ReadAllText(RepoSettings))
+        ResetLoaderToProcessStart()
+        SettingsLoader.Initialise(p)
+        File.WriteAllText(p, File.ReadAllText(RepoSettings).Replace("""min_of"": 2", """min_of"": 2,"))  ' trailing-comma slip
+        Thread.Sleep(1500)
+        Dim cur = SettingsLoader.Current
+        Console.WriteLine(String.Format("  after bad edit: LastLoadError set={0} | running version={1} signal_bridge.enabled={2} start_engaged={3}",
+            Not String.IsNullOrEmpty(SettingsLoader.LastLoadError), cur.Version, cur.SignalBridge.Enabled, cur.AutoRun.StartEngaged))
+        Dim poco As New EngineSettings()
+        Console.WriteLine(String.Format("  status bar would read 'running on code defaults' = version {0}, signal_bridge.enabled {1} — which is NOT what is running",
+            poco.Version, poco.SignalBridge.Enabled))
+    End Sub
+
+    Sub P10_OverlayDroppedOnParseFail()
+        Dim bad = File.ReadAllText(RepoSettings).Replace("""min_of"": 2", """min_of"": 2,")
+        Dim cfg = LoadFresh("p10", bad, "{""trade_store"":{""enabled"":false},""signal_bridge"":{""enabled"":false}}")
+        Console.WriteLine(String.Format("  base broken + overlay {{trade_store.enabled:false}}: err set={0} OverlayActive={1} trade_store.enabled={2} (overlay asked false) transport={3}",
+            Not String.IsNullOrEmpty(SettingsLoader.LastLoadError), SettingsLoader.OverlayActive, cfg.TradeStore.Enabled, cfg.Network.Transport))
+    End Sub
+
+    Sub P11_IntAsFloat()
+        Dim txt = File.ReadAllText(RepoSettings).Replace("""stop_min_floor_ticks"": 4,", """stop_min_floor_ticks"": 4.0,")
+        LoadFresh("p11", txt)
+        Console.WriteLine("  stop_min_floor_ticks: 4.0 -> LastLoadError='" & SettingsLoader.LastLoadError.Split(ChrW(10))(0) & "' version=" & SettingsLoader.Current.Version)
+    End Sub
+
+    Sub P12_DuplicateBlock()
+        Dim txt = File.ReadAllText(RepoSettings)
+        Dim idx = txt.LastIndexOf("}"c)
+        Dim dup = txt.Substring(0, idx).TrimEnd() & "," & vbLf & "  ""mtf_gate"": { ""enabled"": true, ""candle_lookback"": 60, ""adx_period"": 9, ""adx_min"": 20.0, ""min_of"": 0 }" & vbLf & "}"
+        Dim a = LoadFresh("p12a", dup)
+        Console.WriteLine(String.Format("  duplicate mtf_gate (2nd has min_of 0), NO overlay:   err='{0}' min_of={1}", SettingsLoader.LastLoadError, a.MTFGate.RequiredConfirms))
+        Dim b = LoadFresh("p12b", dup, "{""live_strip"":{""refresh_sec"":3}}")
+        Console.WriteLine(String.Format("  same file WITH an overlay present:                 err='{0}' min_of={1} version={2}", SettingsLoader.LastLoadError.Split(ChrW(10))(0), b.MTFGate.RequiredConfirms, b.Version))
+        ' what A62's case-insensitive FIRST-match lookup sees
+        Dim root = JsonDocument.Parse(dup).RootElement
+        For Each prop In root.EnumerateObject()
+            If String.Equals(prop.Name, "mtf_gate", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine("  A62-style first match sees min_of=" & prop.Value.GetProperty("min_of").GetInt32())
+                Exit For
+            End If
+        Next
+    End Sub
+
+    Sub P13_FundingSignSlip()
+        Dim mk = Function(highNeg As Double) As EngineSettings
+                     Dim c = BuildA8Cfg(1) : c.Scoring.FundingHighPenalty = 2 : c.Scoring.FundingHighBoost = 1
+                     c.Scoring.FundingHighNegative = highNeg
+                     Return c
+                 End Function
+        For Each fr In {0.0, 0.000005, -0.00003}
+            Dim r = BuildGateIndicators(60, 62000) : r.FundingRate = fr : r.FundingBias = "NEUTRAL"
+            Dim ok = ScoringEngine.Calculate(r, PositionState.None, BuildA8Norms(), mk(-0.00008))
+            Dim r2 = BuildGateIndicators(60, 62000) : r2.FundingRate = fr : r2.FundingBias = "NEUTRAL"
+            Dim slip = ScoringEngine.Calculate(r2, PositionState.None, BuildA8Norms(), mk(0.00008))
+            Console.WriteLine(String.Format(Inv, "  funding {0,9:0.000000}: correct L/S={1}/{2} '{3}'   | high_negative sign-slipped to +8e-5: L/S={4}/{5} '{6}'",
+                fr, ok.LongScore, ok.ShortScore, ok.Verdict, slip.LongScore, slip.ShortScore, slip.Verdict))
+        Next
+    End Sub
+
+    Sub P14_NegativeSqueezePenalty()
+        For Each pen In {2, -2}
+            Dim c = BuildA8Cfg(0) : c.Scoring.BbwSqueezePenalty = pen
+            Dim r = BuildGateIndicators(60, 62000) : r.SqueezeStatus = "ACTIVE" : r.FundingRate = 0 : r.FundingBias = "NEUTRAL"
+            Dim v = ScoringEngine.Calculate(r, PositionState.None, BuildA8Norms(), c)
+            Console.WriteLine(String.Format("  bbw_squeeze_penalty={0,2}: L/S={1}/{2} max={3} verdict='{4}' ledgerMismatch={5}", pen, v.LongScore, v.ShortScore, v.MaxScore, v.Verdict, v.LedgerMismatch))
+        Next
+    End Sub
+
+    Sub P15_StopKeysDecoupled()
+        Dim c As New EngineSettings()
+        c.Scoring.StructuralLevels.StopMaxAtrMult = 1.2       ' tweaker-surface key (HC21: ON)
+        Dim far As New IndicatorResults With {.CurrentPrice = 62000, .ATR = 40, .SessionUtcHour = 15, .SwingStopLong = 61500}
+        Dim none As New IndicatorResults With {.CurrentPrice = 62000, .ATR = 40, .SessionUtcHour = 15, .SwingStopLong = 0}
+        Dim a = Lv(far, c, True) : Dim b = Lv(none, c, True)
+        Console.WriteLine(String.Format(Inv, "  stop_max 1.2 / atr_stop 1.6: swing stop $500 away -> {0} at {1:F1} USD; NO swing stop -> {2} at {3:F1} USD; Kelly sizes on {4:F1} USD",
+            a.StopReason, 62000 - a.StopPx, b.StopReason, 62000 - b.StopPx, 40 * c.Scoring.AtrStopMultiplier))
+    End Sub
+
+    Sub P16_TickFloorVsFees()
+        Dim c As New EngineSettings()
+        Dim r As New IndicatorResults With {.CurrentPrice = 62000, .ATR = 40, .SessionUtcHour = 15, .SwingStopLong = 61997.5, .SwingTargetLong = 0}
+        Dim l = Lv(r, c, True)
+        Dim stopD = 62000 - l.StopPx, tgtD = l.Target - 62000
+        Dim feeWin = 62000 * 2 * 1.5 / 10000.0, feeLoss = 62000 * (1.5 + 3.5) / 10000.0
+        Console.WriteLine(String.Format(Inv, "  swing low 5 ticks under price: stop={0} {1:F1} USD ({2}), target={3} {4:F1} USD; gross R:R={5:F1}",
+            l.StopReason, stopD, Bps(stopD, 62000), l.TargetReason, tgtD, tgtD / stopD))
+        Console.WriteLine(String.Format(Inv, "  per 1 BTC notional: loss if stopped = {0:F1} + taker/maker fees {1:F1} = {2:F1} USD; win = {3:F1} - {4:F1} = {5:F1} USD; net R:R={6:F2}; fees are {7:F0}% of the stop-out loss",
+            stopD, feeLoss, stopD + feeLoss, tgtD, feeWin, tgtD - feeWin, (tgtD - feeWin) / (stopD + feeLoss), feeLoss / (stopD + feeLoss) * 100))
+    End Sub
+
+    Sub P17_FlushTrace()
+        ' NY 1-min: 240 quiet bars (TR ~40) then a 2-bar flush of ~400 each.
+        Dim cs = Candles(250, 62700, Function(i) If(i >= 248, -350.0, If(i Mod 2 = 0, 6.0, -6.0)),
+                         Function(i) If(i >= 248, 60.0, 34.0))
+        Dim atr = IndicatorEngine.CalcATR(cs, 7)
+        Dim px = cs.Last().Close
+        Dim cfg As New EngineSettings()
+        Dim r As New IndicatorResults With {.CurrentPrice = px, .ATR = atr, .SessionUtcHour = 14,
+                                            .SwingStopShort = px + 900, .SwingTargetShort = 0,
+                                            .SwingStopLong = 0, .SwingTargetLong = px + 900}
+        Dim s = Lv(r, cfg, False) : Dim l = Lv(r, cfg, True)
+        Console.WriteLine(String.Format(Inv, "  price {0:F1}  ATR(7,1m) after flush={1:F1} ({2})  floor={3:F1} USD",
+            px, atr, Bps(atr, px), cfg.Scoring.TradeCosts.EffectiveMinMovePct * px))
+        Console.WriteLine(String.Format(Inv, "  SHORT: stop {0} +{1:F1} ({2}) target {3} -{4:F1} ({5}) | LONG: stop {6} -{7:F1} target {8} +{9:F1}",
+            s.StopReason, s.StopPx - px, Bps(s.StopPx - px, px), s.TargetReason, px - s.Target, Bps(px - s.Target, px),
+            l.StopReason, px - l.StopPx, l.TargetReason, l.Target - px))
+        Dim v As New VerdictResult With {.Verdict = "STRONG SHORT", .Confidence = "HIGH"}
+        ScoringEngine.CalcKellySizing(v, atr * cfg.Scoring.AtrStopMultiplier, px, cfg)
+        Dim realRisk = v.KellyContracts * 10.0 * (s.StopPx - px) / px
+        Dim fees = v.KellyContracts * 10.0 * 5 / 10000.0
+        Console.WriteLine(String.Format(Inv, "  Kelly HIGH: contracts={0} risk_usd={1:F2} lev_capped={2}; actual stop-out = {3:F2} + fees {4:F2} = {5:F2} USD",
+            v.KellyContracts, v.KellyRiskUsd, v.KellyLevCapped, realRisk, fees, realRisk + fees))
+        Dim grossB = (px - s.Target) / (s.StopPx - px)
+        Dim netB = ((px - s.Target) - px * 3 / 10000.0) / ((s.StopPx - px) + px * 5 / 10000.0)
+        Console.WriteLine(String.Format(Inv, "  b: Kelly uses {0:F3}; placed gross {1:F3}; placed net (maker/maker win, maker/taker loss) {2:F3}; breakeven p: {3:P1} vs {4:P1}",
+            cfg.Scoring.AtrTargetMultiplier / cfg.Scoring.AtrStopMultiplier, grossB, netB, 1 / (1 + cfg.Scoring.AtrTargetMultiplier / cfg.Scoring.AtrStopMultiplier), 1 / (1 + netB)))
+        For Each p In {0.55, 0.65}
+            Console.WriteLine(String.Format(Inv, "    p={0}: f* Kelly-shown={1:F3}  f* net={2:F3}", p,
+                ((cfg.Scoring.AtrTargetMultiplier / cfg.Scoring.AtrStopMultiplier) * p - (1 - p)) / (cfg.Scoring.AtrTargetMultiplier / cfg.Scoring.AtrStopMultiplier), (netB * p - (1 - p)) / netB))
+        Next
+        ' Same thing on a quiet NY tape (ATR 40)
+        Dim q As New IndicatorResults With {.CurrentPrice = 62000, .ATR = 40, .SessionUtcHour = 14}
+        Dim qs = Lv(q, cfg, False)
+        Dim qNet = ((62000 - qs.Target) - 62000 * 3 / 10000.0) / ((qs.StopPx - 62000) + 62000 * 5 / 10000.0)
+        Console.WriteLine(String.Format(Inv, "  quiet NY (ATR 40): placed net b={0:F3}; p=0.55 f* net={1:F3}; p=0.65 f* net={2:F3} (Kelly shows 0.139 / 0.330, both capped to 5 %)",
+            qNet, (qNet * 0.55 - 0.45) / qNet, (qNet * 0.65 - 0.35) / qNet))
+    End Sub
+
+    Sub P18_SessionGaps()
+        Dim cfg = LoadFresh("p18", Mutated(Sub(o)
+                                               Dim arr = o("session_volume")("sessions").AsArray()
+                                               arr(0)("start_hour") = 22 : arr(0)("end_hour") = 7   ' ASIA written as a wrap
+                                           End Sub))
+        For Each h In {23, 0, 5}
+            Console.WriteLine(String.Format("  ASIA 22..7 (wrap), hour {0}: bucket={1} execRes={2} aggrVelArmed={3}", h,
+                If(ExecutionResolution.MatchSessionBucket(cfg, h)?.Name, "<none>"), ExecutionResolution.ResolveResolution(cfg, h),
+                ExecutionResolution.HasExplicitAggrVelBurstThreshold(cfg, h)))
+        Next
+        Console.WriteLine("  LastLoadError='" & SettingsLoader.LastLoadError & "'")
+    End Sub
+End Module
