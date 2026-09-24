@@ -141,6 +141,7 @@ Namespace Global.DeribitVerdictEngine
         Private _maxVenueTs100ms As Long = 0
         Private _batchIndex As Long = 0
         Private _restPolls As Long = 0
+        Private _restErrors As Long = 0
         Private _restTradesSeen As Long = 0
         Private _restFlagged As Long = 0
         Private _pairFound As Long = 0
@@ -402,12 +403,23 @@ Namespace Global.DeribitVerdictEngine
                     Try
                         Dim url As String = RestUrl & "?instrument_name=" & Instrument & "&count=1000&sorting=desc"
                         body = Await http.GetStringAsync(url, ct)
-                    Catch ex As OperationCanceledException
+                    Catch ex As OperationCanceledException When ct.IsCancellationRequested
                         Return
                     Catch ex As Exception
-                        Console.Error.WriteLine("[" & NowUtc() & "] rest error: " & ex.Message)
+                        ' ⛔ An HttpClient.Timeout is ALSO an OperationCanceledException
+                        ' (TaskCanceledException). Until 2026-09-24 the arm above caught it and
+                        ' returned, so ONE slow poll silently ended arm 2 for the whole run -
+                        ' measured on the collector box, polls froze at 181 after ~31 min.
+                        ' Only a real stop request ends the loop; a timeout is logged and retried.
+                        _restErrors += 1
+                        Console.Error.WriteLine("[" & NowUtc() & "] rest error (" & ex.GetType().Name & "): " & ex.Message)
                     End Try
-                    If body IsNot Nothing Then IngestRest(body)
+                    Try
+                        If body IsNot Nothing Then IngestRest(body)
+                    Catch ex As Exception
+                        _restErrors += 1
+                        Console.Error.WriteLine("[" & NowUtc() & "] rest ingest error (" & ex.GetType().Name & "): " & ex.Message)
+                    End Try
                     Try
                         Await Task.Delay(TimeSpan.FromSeconds(everySec), ct)
                     Catch ex As OperationCanceledException
@@ -654,7 +666,9 @@ Namespace Global.DeribitVerdictEngine
                     _tradeCount.TryGetValue(ChanRaw, c2)
                     Console.WriteLine("[" & NowUtc() & "] up " &
                         CInt((DateTime.UtcNow - _startUtc).TotalMinutes) & "m | 100ms " & c1 &
-                        " | raw " & c2 & " | rest polls " & _restPolls &
+                        " | raw " & c2 & " | rest polls " & _restPolls & " | rest errors " & _restErrors &
+                        " | index " & _index.Count & " | priv MB " &
+                        CLng(Process.GetCurrentProcess().PrivateMemorySize64 \ (1024L * 1024L)) &
                         " | flagged " & _restFlagged & " | paired " & _pairFound &
                         " | missing " & _pairMissing & " | untrusted " & _pairUntrusted &
                         " | pending " & _pending.Count)
