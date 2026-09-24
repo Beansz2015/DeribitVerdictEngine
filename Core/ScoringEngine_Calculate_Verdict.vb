@@ -219,9 +219,15 @@ Partial Public Class ScoringEngine
             placedShortTarget = placedS.Target
         Else
             ' Legacy 3-tier closest-wins TARGET CAP (VPFR HVN) — the enabled:false
-            ' rollback path, byte-identical to v50.
-            Dim hvnAbove As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR")
-            Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL")
+            ' rollback path, byte-identical to v50 EXCEPT the D-1 POC-gate fix below.
+            ' [D-1 fix, docs/engine-fix-build-spec-2026-09-21.md §3] hvnAbove = "the label says
+            ' the POC sits ABOVE price" (CalcVPFRLite: NEAR_HVN_SUPPORT is price < POC,
+            ' IN_LVN_BEAR is price <= POC); hvnBelow is the mirror. The two NEAR_HVN_* literals
+            ' were swapped before this fix; the IN_LVN_* halves were already right. Kept in
+            ' step with SignalEmitter.ComputeStructuralSideLevels' pocGated, so the rollback
+            ' path does not diverge from the live path on this gate.
+            Dim hvnAbove As Boolean = (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BEAR")
+            Dim hvnBelow As Boolean = (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BULL")
 
             ' 3-tier cap arbitration (long): swing target → nearest HVN → POC.
             ' Fires when any qualifier is closer than the raw ATR target.

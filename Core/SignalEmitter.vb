@@ -326,10 +326,21 @@ Public NotInheritable Class SignalEmitter
 
         Dim swingTarget As Double = If(isLong, r.SwingTargetLong, r.SwingTargetShort)
         Dim nearestHvn As Double = If(isLong, r.VPFRNearestHvnAbove, r.VPFRNearestHvnBelow)
-        ' POC tier keeps the legacy HVN-proximity gate (VPFRSignal flags the side).
+        ' POC tier keeps the legacy HVN-proximity gate: the tier opens only on a VPFRSignal
+        ' label whose PRODUCER geometry puts the POC on this side's target side of price.
+        ' CalcVPFRLite (Core/Indicators_Structure.vb) emits:
+        '   NEAR_HVN_SUPPORT  price near the POC, price < POC  -> POC ABOVE price -> LONG target
+        '   IN_LVN_BEAR       thin bucket,         price <= POC -> POC ABOVE price -> LONG target
+        '   NEAR_HVN_RESIST   price near the POC, price >= POC -> POC BELOW price -> SHORT target
+        '   IN_LVN_BULL       thin bucket,         price > POC  -> POC BELOW price -> SHORT target
+        ' [D-1 fix, docs/engine-fix-build-spec-2026-09-21.md §3] Before this fix the two
+        ' NEAR_HVN_* literals were swapped (the IN_LVN_* halves were already right), so the
+        ' HVN half of the tier never placed. Harness A80a pins the producer geometry; A80b
+        ' (NEAR_HVN_*) and A83a (IN_LVN_*) pin this gate against it. The legacy twin in
+        ' ScoringEngine_Calculate_Verdict.vb (hvnAbove/hvnBelow) must stay in step.
         Dim pocGated As Boolean = If(isLong,
-            (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BEAR"),
-            (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BULL"))
+            (r.VPFRSignal = "NEAR_HVN_SUPPORT" OrElse r.VPFRSignal = "IN_LVN_BEAR"),
+            (r.VPFRSignal = "NEAR_HVN_RESIST" OrElse r.VPFRSignal = "IN_LVN_BULL"))
 
         ' [D2-v2 v63] Best-pivot candidate — gated on use_best_pivot_candidate (default False ⇒
         ' candidate absent ⇒ every downstream branch below is byte-identical to v56). Side is
