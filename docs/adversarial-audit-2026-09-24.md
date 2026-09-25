@@ -2,6 +2,11 @@
 
 **Scope:** every line of code that sits between Deribit and `verdict_signal.json`, the file the order app trades from. **Base commit:** `6e74181` (2026-09-22). **Settings:** tracked `settings.json` v68 (`signal_bridge.enabled: true`, `transport: ws`, `trigger_mode: on_close`). **Method:** line-level read, then every finding that can run was turned into a proof against the shipped sources (`verify/auditproofs/`, 22 cases, all confirmed). Findings that need WinForms or a live socket are marked **code-read** and cite exact lines.
 
+**⚠ Superseded in part by the follow-up reviews (2026-09-25).** The 12 reviews that §7's prompts produced are folded in under `docs/audits/`. Their consolidated verdicts are in [`audits/2026-09-24-review-batch-summary.md`](audits/2026-09-24-review-batch-summary.md), which is the current ranked list. Three things there change how this report reads:
+- **There is an S0.** §3 says none was found. The order app's side (M9) shows AUD-05 reaching the exchange with the stop at or above the fill.
+- **AUD-15 is S3.** The order app never reads `kelly.*`.
+- **M8's prompt was broken.** I shipped it with an unfilled `<RANGE>` placeholder, so the harness audit is effectively not done.
+
 **Status: REPORT ONLY.** No engine source was changed. Every fix below is a recommendation; the scoring-affecting and payload-affecting ones fall in the CLAUDE.md reserved classes and need trader rulings.
 
 ---
@@ -66,6 +71,8 @@ A synthetic but realistic NY 1-min tape: 240 calm bars around 60,000 (ATR(7) 29.
 Severity: **S0** can put a wrong-side, unprotected or unbounded order on the exchange under shipped config · **S1** systematic negative-EV or stale-data orders, or a silent total outage from a supported state · **S2** realistic trigger, bounded impact, or a contract gap that moves risk to the consumer · **S3** edge case, latent path, or advisory inconsistency · **S4** nit.
 
 Evidence: **H-n** = a case in `verify/auditproofs` the reader can run · **code-read** = WinForms or live-socket path, lines cited.
+
+> **Superseded 2026-09-25.** The sentence below was right about what this audit could see, and wrong once the consumer was read. M9 shows the order app places its entry at its own bid, lets it drift up to 0.6 × ATR from the first bid it saw, and never checks the stop's side against the fill. So AUD-05's 2-USD `SWING_STOP` becomes a long whose stop trigger sits at or above the fill, under shipped config. That is S0 by this report's own scale. See [`audits/2026-09-24-review-batch-summary.md`](audits/2026-09-24-review-batch-summary.md) §0.1 and §1 A1.
 
 No S0 was found. Several S1s become S0 depending on consumer behaviour this audit could not see (§6).
 
