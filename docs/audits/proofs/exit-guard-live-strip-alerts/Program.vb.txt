@@ -1,0 +1,512 @@
+' Audit proof harness for docs/audits/2026-09-24-exit-guard-live-strip-alerts.md.
+' Stored as Program.vb.txt so the root DeribitVerdictEngine.vbproj (which compiles **/*.vb outside
+' tools/ and verify/) never picks it up. Run instructions: README.md beside this file.
+' Links the REAL shipped sources (see FlushAudit.vbproj.txt; repo root comes from env var DVE_REPO)
+' and replays a -1.5% liquidation flush against a declared LONG through:
+'   ExitGuardEvaluator.Evaluate (real)  +  a hand mirror of MainForm_ExitGuard's debounce/latch (WinForms, unlinkable)
+'   LiveMicrostructureEvaluator.Evaluate (real)  -> TAPE strip fields (NEAR / LIQ / ABS / tape speed)
+'   MarketState + AlertsTracker + LevelAbsorptionTracker folds (real)
+'   IndicatorEngine.CalcSwingPivots (real) recomputed at each 1m full-run close = the carried 5m swing
+Imports System.IO
+
+Module Program
+
+    Dim cfg As EngineSettings
+    Const T_BAR As Long = 1790258400000L          ' 2026-09-24 14:00:00Z  (NY session) — forming 5m bar open
+    Const T0 As Long = T_BAR + 90000L             ' flush start = 90 s into the forming 5m bar
+    Const FLUSH_MS As Long = 40000L
+    Const P0 As Double = 100000.0
+    Const P_BOTTOM As Double = 98500.0            ' -1.5 %
+    Const P_BOUNCE As Double = 99300.0
+    Const ATR_EXEC As Double = 60.0               ' assumed 1m ATR, feeds the absorption geometry carry
+    Const HVN_ABOVE As Double = 100150.0, HVN_BELOW As Double = 99550.0
+    Const SH15 As Double = 100900.0, SL15 As Double = 99100.0
+
+    Enum FlushKind
+        CleanFlush     ' every flush batch is a sell sweep, book sell-dominant every frame (guard-favourable)
+        ChoppyFlush    ' 30 % covering batches, 30 % bid-refill frames (what a real flush tape looks like)
+    End Enum
+
+    Class GuardTick
+        Public TRel As Double, Price As Double, Kind As ExitGuardKind, Micro As Boolean, Ofi As Boolean
+        Public Tfi As Boolean, Cvd As Boolean, Brk As Boolean, SwingLow As Double, Latched As Boolean
+        Public Render As String, TfiSpanMs As Long, MicroSpanMs As Long, CvdSpanMs As Long
+    End Class
+
+    Class RunResult
+        Public Ticks As New List(Of GuardTick)
+        Public StripLines As New List(Of String)
+        Public CarryLines As New List(Of String)
+        Public FirstLatchT As Double = Double.NaN, FirstLatchPx As Double
+        Public UnlatchT As Double = Double.NaN, UnlatchPx As Double
+        Public LatchEpisodes As Integer, FailedConfirms As Integer
+        Public ApproachSeenAtStrip As Integer, ApproachExistedSteps As Integer
+        Public CascadeEvents As New List(Of String)
+        Public LatchedAtT0 As Boolean, PostBottomUnlatchT As Double = Double.NaN, PostBottomUnlatchPx As Double, FlushLatchT As Double = Double.NaN, FlushLatchPx As Double
+    End Class
+
+    Sub Main(args As String())
+        Dim here = AppContext.BaseDirectory
+        Dim repo = Environment.GetEnvironmentVariable("DVE_REPO")
+        If String.IsNullOrEmpty(repo) Then Console.WriteLine("set DVE_REPO to the repo root") : Environment.Exit(2)
+        File.Copy(Path.Combine(repo, "settings.json"), Path.Combine(here, "settings.json"), True)
+        Dim sidecar = Path.Combine(here, "liq_events.log")
+        If File.Exists(sidecar) Then File.Delete(sidecar)
+        SettingsLoader.Initialise(Path.Combine(here, "settings.json"))
+        cfg = SettingsLoader.Current
+        Console.WriteLine($"settings v{cfg.Version}  exit_guard interval={cfg.ExitGuard.IntervalSec}s debounce={cfg.ExitGuard.DebounceEvals}  strip={cfg.LiveStrip.RefreshSec}s  alerts level_ticks={cfg.Alerts.LevelTicks} cascade={cfg.Alerts.CascadeMinTrades}/{cfg.Alerts.CascadeWindowSec}s  TFI n={cfg.Indicators.TFI.WindowSize} Micro n={cfg.Indicators.MicroCVD.WindowSize}  wing5m={cfg.Indicators.Swing.PivotWing5m}")
+
+        Dim mode = If(args.Length > 0, args(0), "all")
+
+        If mode = "all" OrElse mode = "trace" Then
+            Console.WriteLine() : Console.WriteLine("===== TRACE A: CLEAN flush (guard-favourable), seed 1, carried swing live =====")
+            PrintTrace(RunSim(FlushKind.CleanFlush, 1, useSwing:=True, liqFlag:="none", recvLagMs:=50))
+            Console.WriteLine() : Console.WriteLine("===== TRACE B: CHOPPY flush, seed 7, carried swing live =====")
+            PrintTrace(RunSim(FlushKind.ChoppyFlush, 7, useSwing:=True, liqFlag:="none", recvLagMs:=50))
+        End If
+
+        If mode = "all" OrElse mode = "stats" Then
+            Console.WriteLine() : Console.WriteLine("===== MONTE CARLO (500 seeds each) =====")
+            For Each v In {FlushKind.CleanFlush, FlushKind.ChoppyFlush}
+                For Each sw In {True, False}
+                    Stats(v, sw)
+                Next
+            Next
+        End If
+
+        If mode = "all" OrElse mode = "units" Then Units()
+        If mode = "all" OrElse mode = "noise" Then
+            Console.WriteLine() : Console.WriteLine("===== CONTROL: balanced tape, NO flush, 30 min per seed, long declared, swing 1% away =====")
+            For Each sigma In {0.9, 1.5}
+                Dim latches = 0, latchedTicks = 0, ticks = 0, tfiA = 0, cvdA = 0, micA = 0, ofiA = 0, two = 0
+                For seed = 1 To 40
+                    Dim o = NoiseRun(seed, 1800, sigma)
+                    latches += o(0) : latchedTicks += o(1) : ticks += o(2) : tfiA += o(3) : cvdA += o(4) : micA += o(5) : ofiA += o(6) : two += o(7)
+                Next
+                Console.WriteLine($"  size sigma {sigma}: {latches} false EXIT latches in {40 * 30} min ({latches / (40 * 30.0) * 60:F1}/hour), latched {100.0 * latchedTicks / ticks:F1}% of ticks;" &
+                                  $" per-tick adverse rate TFI {100.0 * tfiA / ticks:F0}% CVD {100.0 * cvdA / ticks:F0}% Micro {100.0 * micA / ticks:F0}% OFI {100.0 * ofiA / ticks:F0}%  2+ adverse {100.0 * two / ticks:F0}%")
+            Next
+        End If
+    End Sub
+
+    ' ─────────────────────────────────────────────────────────────────────────────
+    Function RunSim(v As FlushKind, seed As Integer, useSwing As Boolean, liqFlag As String, recvLagMs As Long,
+                    Optional probeApproach As Boolean = True) As RunResult
+        Dim rng As New Random(seed)
+        Dim res As New RunResult()
+        Dim ms As New MarketState()
+        Dim ab = cfg.Indicators.Absorption
+        Dim al = cfg.Alerts
+        Dim hour As Integer = 14
+        Dim tauNorm = ExecutionResolution.ResolveAggrVelNormWindow(cfg, hour)
+
+        ' 5m history: 40 closed bars + forming bar (index 40). Pivot low at 37 = 99,700 is "confirmed"
+        ' only because its right wing includes the forming bar. Older confirmed pivot low at 28 = 98,900.
+        Dim lows As Double() = New Double(40) {}
+        For i = 0 To 24 : lows(i) = 98000 + i * 30 : Next
+        lows(25) = 99000 : lows(26) = 99050 : lows(27) = 99020 : lows(28) = 98900
+        lows(29) = 98950 : lows(30) = 99050 : lows(31) = 99150 : lows(32) = 99250 : lows(33) = 99350
+        lows(34) = 99780 : lows(35) = 99820 : lows(36) = 99760 : lows(37) = 99700
+        lows(38) = 99800 : lows(39) = 99850 : lows(40) = 99950
+        Dim c5 As New List(Of Candle)
+        For i = 0 To 40
+            Dim hi = lows(i) + 300 : If i = 35 Then hi = 100400
+            c5.Add(New Candle With {.Timestamp = T_BAR - (40 - i) * 300000L, .Open = lows(i) + 150, .High = hi,
+                                    .Low = lows(i), .Close = lows(i) + 150, .Volume = 100})
+        Next
+        Dim forming = c5(40) : forming.Open = 100000 : forming.High = 100050 : forming.Low = 99950 : forming.Close = 100000
+
+        ' Seed ring: 500 balanced trades over the 5 minutes before the bar (the REST seed shape).
+        Dim seedList As New List(Of TradeRecord)
+        For k = 0 To 499
+            seedList.Add(New TradeRecord With {.Price = 100000 + (rng.NextDouble() - 0.5) * 60, .Amount = LogN(rng, 5000),
+                         .Direction = If(rng.NextDouble() < 0.5, "buy", "sell"), .Liquidation = "none",
+                         .Timestamp = T_BAR - 300000L + k * 600L})
+        Next
+        ms.SeedTrades(seedList, D(T_BAR))
+
+        Dim price As Double = P0
+        Dim swingLow As Double = 0, swingHigh As Double = 0
+        Dim lastRun As IndicatorResults = Nothing
+        Dim consecExit = 0, consecClear = 0, latched = False, debounce = Math.Max(1, cfg.ExitGuard.DebounceEvals)
+
+        Dim tStart As Long = T_BAR - 180000L, tEnd As Long = T_BAR + 300000L
+        For t As Long = tStart To tEnd Step 100L
+            Dim rel = (t - T0) / 1000.0
+            ' ── trades for this 100 ms batch ───────────────────────────────────
+            Dim batch As New List(Of TradeRecord)
+            If t < T0 Then
+                If rng.NextDouble() < 0.3 Then
+                    For k = 1 To rng.Next(1, 4) : batch.Add(Tr(price, LogN(rng, 5000), rng.NextDouble() < 0.5, t + k)) : Next
+                End If
+                price = Math.Min(100040, Math.Max(99960, price + (rng.Next(0, 3) - 1) * 0.5))
+            ElseIf t < T0 + FLUSH_MS Then
+                Dim target = P0 - (P0 - P_BOTTOM) * (t - T0 + 100) / CDbl(FLUSH_MS)
+                Dim cover = (v = FlushKind.ChoppyFlush AndAlso rng.NextDouble() < 0.3)
+                If cover Then
+                    Dim n = rng.Next(3, 13)
+                    For k = 1 To n : batch.Add(Tr(price + k * 0.5, LogN(rng, 6000), True, t + k)) : Next
+                    price += n * 0.5
+                Else
+                    Dim n = rng.Next(4, 16)
+                    Dim stepPx = Math.Max(0.5, Math.Round((price - target) / n * 2) / 2)
+                    For k = 1 To n
+                        price -= stepPx
+                        batch.Add(Tr(price, LogN(rng, 30000), False, t + k, liqFlag, rng))
+                    Next
+                End If
+            ElseIf t < T0 + FLUSH_MS + 5000 Then
+                For k = 1 To rng.Next(2, 9) : batch.Add(Tr(P_BOTTOM + (rng.NextDouble() - 0.5) * 20, LogN(rng, 20000), rng.NextDouble() < 0.5, t + k)) : Next
+                price = P_BOTTOM + (rng.NextDouble() - 0.5) * 20
+            ElseIf t < T0 + 120000 Then
+                Dim target = P_BOTTOM + (P_BOUNCE - P_BOTTOM) * (t - (T0 + FLUSH_MS + 5000)) / 75000.0
+                If rng.NextDouble() < 0.6 Then
+                    For k = 1 To rng.Next(3, 11) : price = Math.Max(price, target) + 0.5 : batch.Add(Tr(price, LogN(rng, 15000), True, t + k)) : Next
+                Else
+                    For k = 1 To rng.Next(2, 7) : price -= 0.5 : batch.Add(Tr(price, LogN(rng, 8000), False, t + k)) : Next
+                End If
+            Else
+                If rng.NextDouble() < 0.4 Then
+                    For k = 1 To rng.Next(1, 5) : batch.Add(Tr(price, LogN(rng, 6000), rng.NextDouble() < 0.5, t + k)) : Next
+                End If
+                price = Math.Min(P_BOUNCE + 50, Math.Max(P_BOUNCE - 50, price + (rng.Next(0, 3) - 1) * 0.5))
+            End If
+
+            Dim recv = D(t + recvLagMs)
+            For Each rec In batch
+                ms.AppendTrade(rec, recv)
+                ms.FoldAggressorVelocity(rec.Amount, rec.Direction = "buy", rec.Timestamp, cfg.Indicators.AggressorVelocity.FastWindowSec, tauNorm)
+                ms.FoldAbsorptionTrade(rec.Price, rec.Amount, rec.Direction = "buy", rec.Timestamp, ab)
+                ms.FoldAlertsTrade(rec.Price, rec.Amount, rec.Direction = "buy",
+                                   rec.Liquidation IsNot Nothing AndAlso rec.Liquidation <> "none", rec.Timestamp, al, "sim")
+                forming.High = Math.Max(forming.High, rec.Price) : forming.Low = Math.Min(forming.Low, rec.Price) : forming.Close = rec.Price
+            Next
+            If batch.Count > 0 Then price = batch(batch.Count - 1).Price
+
+            ' ── book frame (top-10, replaced per frame) ─────────────────────────
+            Dim bb = Math.Floor(price * 2) / 2 - 0.5, ba = bb + 0.5
+            Dim inFlush = t >= T0 AndAlso t < T0 + FLUSH_MS
+            Dim refill = inFlush AndAlso v = FlushKind.ChoppyFlush AndAlso rng.NextDouble() < 0.3
+            Dim book As New OrderBookSnapshot()
+            For k = 0 To 9
+                Dim bs, asz As Double
+                If inFlush AndAlso Not refill Then
+                    bs = 3000 + rng.NextDouble() * 22000 : asz = 20000 + rng.NextDouble() * 130000
+                ElseIf refill Then
+                    bs = 50000 + rng.NextDouble() * 150000 : asz = 20000 + rng.NextDouble() * 60000
+                ElseIf t >= T0 + FLUSH_MS AndAlso t < T0 + 120000 Then
+                    bs = 30000 + rng.NextDouble() * 100000 : asz = 10000 + rng.NextDouble() * 50000
+                Else
+                    bs = 10000 + rng.NextDouble() * 70000 : asz = 10000 + rng.NextDouble() * 70000
+                End If
+                book.Bids.Add((bb - k * 0.5, bs)) : book.Asks.Add((ba + k * 0.5, asz))
+            Next
+            ms.UpdateBook(book, recv)
+            ms.FoldAbsorptionBook(book, t + recvLagMs, ab)
+
+            ' Probe: did an approach episode EXIST at this 100 ms step (strip or not)?
+            If probeApproach Then
+                Dim pa = ms.GetAlerts(t + recvLagMs, al)
+                If pa.ApproachBelowActive OrElse pa.ApproachAboveActive Then res.ApproachExistedSteps += 1
+                For Each ev In pa.PendingEvents : res.CascadeEvents.Add($"{(ev.UtcMs - T0) / 1000.0:+0.0;-0.0}s {ev.Kind} {ev.Side} ${ev.UsdAmount:F0} (drained by PROBE, strip never sees it)") : Next
+            End If
+
+            ' ── full run at each 1m close: recompute the carried 5m swing (real CalcSwingPivots) ──
+            If (t - T_BAR) Mod 60000L = 0 AndAlso t > T_BAR Then
+                Dim sh As Double = 0, sl As Double = 0
+                IndicatorEngine.CalcSwingPivots(c5, sh, sl, pivotWing:=cfg.Indicators.Swing.PivotWing5m,
+                                                lookbackBars:=cfg.Indicators.Swing.LookbackBars5m)
+                res.CarryLines.Add($"  full run @ {rel:+0.0;-0.0}s  px={price:F1}  forming5m.low={forming.Low:F1}  -> LastSwingLow5m={sl:F1}  LastSwingHigh5m={sh:F1}")
+                swingLow = sl : swingHigh = sh
+                lastRun = New IndicatorResults With {.LastSwingHigh5m = sh, .LastSwingLow5m = sl,
+                    .VPFRNearestHvnAbove = HVN_ABOVE, .VPFRNearestHvnBelow = HVN_BELOW, .LastSwingHigh15m = SH15, .LastSwingLow15m = SL15}
+                ms.SetAbsorptionLevels(sh, sl, HVN_ABOVE, HVN_BELOW, ATR_EXEC * ab.ProximityAtrFrac, ATR_EXEC * ab.BandAtrFrac, ATR_EXEC * ab.BreakTolAtrFrac)
+                ms.SetAlertsLevels(sh, sl, HVN_ABOVE, HVN_BELOW, SH15, SL15)
+            End If
+
+            Dim nowLocal = t + recvLagMs
+            ' ── exit-guard tick (3 s) — host mirror of MainForm_ExitGuard.OnExitGuardTick ──
+            If lastRun IsNot Nothing AndAlso (t - (T_BAR + 61000L)) Mod (cfg.ExitGuard.IntervalSec * 1000L) = 0 AndAlso t >= T_BAR + 61000L Then
+                Dim stale = (nowLocal - ToMs(ms.TradesLastUpdate)) > cfg.Network.WsStaleAfterSec * 1000L OrElse
+                            (nowLocal - ToMs(ms.BookLastUpdate)) > cfg.Network.WsStaleAfterSec * 1000L
+                If rel >= 0 AndAlso rel < 3 Then res.LatchedAtT0 = latched
+                Dim g As New GuardTick With {.TRel = rel, .Price = price, .SwingLow = If(useSwing, swingLow, 0)}
+                If stale Then
+                    consecExit = 0 : consecClear = 0 : latched = False : g.Render = "paused (feed stale)"
+                Else
+                    Dim r = ExitGuardEvaluator.Evaluate(ms, PositionState.InLong, If(useSwing, swingLow, 0), If(useSwing, swingHigh, 0), cfg)
+                    Dim p = Prims(ms, If(useSwing, swingLow, 0), g)
+                    g.Kind = r.Kind : g.Micro = p.MicroAdverse : g.Ofi = p.OfiAdverse : g.Tfi = p.TfiAdverse : g.Cvd = p.CvdAdverse : g.Brk = p.StructuralBreak
+                    If r.Kind = ExitGuardKind.Exit Then
+                        consecExit += 1 : consecClear = 0
+                        If Not latched AndAlso consecExit >= debounce Then
+                            latched = True : res.LatchEpisodes += 1
+                            If Double.IsNaN(res.FirstLatchT) Then res.FirstLatchT = rel : res.FirstLatchPx = price
+                            If rel >= 0 AndAlso Double.IsNaN(res.FlushLatchT) AndAlso Not res.LatchedAtT0 Then res.FlushLatchT = rel : res.FlushLatchPx = price
+                        End If
+                    Else
+                        If consecExit > 0 AndAlso consecExit < debounce AndAlso Not latched Then res.FailedConfirms += 1
+                        consecClear += 1 : consecExit = 0
+                        If latched AndAlso consecClear >= debounce Then
+                            latched = False
+                            If Double.IsNaN(res.UnlatchT) Then res.UnlatchT = rel : res.UnlatchPx = price
+                            If rel > 40 AndAlso Double.IsNaN(res.PostBottomUnlatchT) Then res.PostBottomUnlatchT = rel : res.PostBottomUnlatchPx = price
+                        End If
+                    End If
+                    g.Latched = latched
+                    g.Render = If(latched, "⚠ EXIT — " & r.Reason,
+                               If(r.Kind = ExitGuardKind.Exit, $"⚠ EXIT? confirming {consecExit}/{debounce}", "clear"))
+                End If
+                res.Ticks.Add(g)
+            End If
+
+            ' ── TAPE strip tick (2 s) — real LiveMicrostructureEvaluator, host colour/tag logic mirrored ──
+            If (t - (T_BAR + 60500L)) Mod (cfg.LiveStrip.RefreshSec * 1000L) = 0 AndAlso t >= T_BAR + 60500L AndAlso rel >= -6 AndAlso rel <= 60 Then
+                Dim s = LiveMicrostructureEvaluator.Evaluate(ms, lastRun, cfg, nowLocal)
+                Dim tags As New List(Of String)
+                If s.HasAbsorption Then tags.Add($"ABS{If(s.AbsorptionSignal = "ABSORB_ABOVE", "↑", "↓")} {s.AbsorptionLevel:F0} ({s.AbsorptionRatio:F1}×)")
+                If s.CascadeSignal <> "NONE" Then tags.Add($"LIQ {s.CascadeSignal} {s.CascadeCount}×")
+                If s.ApproachAboveActive Then tags.Add($"NEAR↑ {s.ApproachAboveLevel:F0}")
+                If s.ApproachBelowActive Then tags.Add($"NEAR↓ {s.ApproachBelowLevel:F0}")
+                If s.ApproachAboveActive OrElse s.ApproachBelowActive Then res.ApproachSeenAtStrip += 1
+                For Each ev In s.PendingEvents : res.CascadeEvents.Add($"strip saw {ev.Kind} {ev.Side}") : Next
+                Dim lv = If(s.Below.Has, $"{s.Below.Label} {s.Below.Price:F0}", "--") & " | " & If(s.Above.Has, $"{s.Above.Label} {s.Above.Price:F0}", "--")
+                res.StripLines.Add($"  strip {rel,6:+0.0;-0.0}s  {s.LastPrice,8:F1}  [{lv}]  TFI {s.TfiSignal,-13} {s.TradesPerSec,5:F1} tr/s {s.UsdPerSec / 1000,7:F0}k/s  burst={If(s.HasBurst, s.BurstSignal & " " & s.BurstRatio.ToString("0.0") & "x", "(no warmup)"),-17} tags: {String.Join(" · ", tags)}")
+            End If
+        Next
+        Return res
+    End Function
+
+    ' Recompute the shared primitive exactly as Evaluate does (for the per-signal breakdown + window spans).
+    Function Prims(ms As MarketState, swingLow As Double, g As GuardTick) As FastExitPrimitives
+        Dim all = ms.GetTrades()
+        Dim w = If(all.Count > 500, all.GetRange(all.Count - 500, 500), all)
+        Dim r As New IndicatorResults With {.CurrentPrice = w(w.Count - 1).Price, .LastSwingLow5m = swingLow}
+        IndicatorEngine.CalcMicroCVD(w, r.MicroCVDEarly, r.MicroCVDMid, r.MicroCVDLate, r.MicroCVDMomentum, r.MicroCVDSignal,
+            microWindowSize:=cfg.Indicators.MicroCVD.WindowSize, accelThreshold:=cfg.Indicators.MicroCVD.AccelThreshold,
+            dynamicPct:=cfg.Indicators.MicroCVD.AccelThresholdDynamicPct, floorPct:=cfg.Indicators.MicroCVD.AccelThresholdFloorPct)
+        IndicatorEngine.CalcTFI(w, r.TFIValue, r.TFISignal, tfiWindowSize:=cfg.Indicators.TFI.WindowSize, threshold:=cfg.Indicators.TFI.Threshold)
+        IndicatorEngine.CalcOFI(ms.GetBook(), r.OFIRatio, r.OFISignal, r.OFIBidVol, r.OFIAskVol,
+            buyDominantRatio:=cfg.Indicators.OFI.BuyDominantRatio, sellDominantRatio:=cfg.Indicators.OFI.SellDominantRatio, bookDepth:=cfg.Indicators.OFI.BookDepth)
+        IndicatorEngine.CalcCVD(w, New List(Of Candle), r.CVDValue, r.CVDSlope, r.CVDDivergence,
+            slopeMinUsd:=cfg.Indicators.CVD.SlopeMinUsd, slopePctOfValue:=cfg.Indicators.CVD.SlopePctOfValue,
+            divergencePriceGate:=cfg.Indicators.CVD.DivergencePriceGate, lateSegmentWeight:=cfg.Indicators.CVD.LateSegmentWeight,
+            earlySegmentWeight:=cfg.Indicators.CVD.EarlySegmentWeight)
+        g.TfiSpanMs = w(w.Count - 1).Timestamp - w(w.Count - cfg.Indicators.TFI.WindowSize).Timestamp
+        g.MicroSpanMs = w(w.Count - 1).Timestamp - w(w.Count - cfg.Indicators.MicroCVD.WindowSize).Timestamp
+        g.CvdSpanMs = w(w.Count - 1).Timestamp - w(0).Timestamp
+        Return ScoringEngine.ComputeFastExitPrimitives(r, PositionState.InLong)
+    End Function
+
+    Sub PrintTrace(r As RunResult)
+        Console.WriteLine("  carried-level updates (1m full runs):")
+        For Each l In r.CarryLines : Console.WriteLine(l) : Next
+        Console.WriteLine("  exit-guard ticks (t rel. flush start):   M=MicroCVD O=OFI T=TFI C=CVD B=struct.break")
+        For Each g In r.Ticks
+            If g.TRel < -8 OrElse g.TRel > 150 Then Continue For
+            Dim flags = $"{If(g.Micro, "M", ".")}{If(g.Ofi, "O", ".")}{If(g.Tfi, "T", ".")}{If(g.Cvd, "C", ".")}{If(g.Brk, "B", ".")}"
+            Console.WriteLine($"  guard {g.TRel,6:+0.0;-0.0}s  px={g.Price,8:F1} ({(g.Price / P0 - 1) * 100,5:+0.00;-0.00}%)  SL={g.SwingLow,7:F0}  [{flags}]  win TFI={g.TfiSpanMs,5}ms Micro={g.MicroSpanMs,5}ms CVD={g.CvdSpanMs / 1000.0,6:F1}s  => {g.Render}")
+        Next
+        Console.WriteLine("  TAPE strip ticks (-6s .. +60s):")
+        For Each l In r.StripLines : Console.WriteLine(l) : Next
+        Console.WriteLine($"  approach episode existed on {r.ApproachExistedSteps} of the 100ms steps; strip showed NEAR on {r.ApproachSeenAtStrip} ticks")
+        Console.WriteLine($"  alert events: {If(r.CascadeEvents.Count = 0, "(none)", String.Join("; ", r.CascadeEvents))}")
+        Console.WriteLine($"  first latch: {If(Double.IsNaN(r.FirstLatchT), "NEVER", $"{r.FirstLatchT:+0.0;-0.0}s at {r.FirstLatchPx:F1} ({(r.FirstLatchPx / P0 - 1) * 100:F2}%)")}" &
+                          $"   first unlatch: {If(Double.IsNaN(r.UnlatchT), "never", $"{r.UnlatchT:+0.0;-0.0}s at {r.UnlatchPx:F1} ({(r.UnlatchPx / P0 - 1) * 100:F2}%)")}" &
+                          $"   latch episodes={r.LatchEpisodes}  un-confirmed EXIT? ticks={r.FailedConfirms}")
+    End Sub
+
+    Sub Stats(v As FlushKind, useSwing As Boolean)
+        Dim n = 500, preLatched = 0, neverInFlush = 0
+        Dim lat As New List(Of Double), dd As New List(Of Double), unl As New List(Of Double), unlPx As New List(Of Double)
+        Dim exitTicksFlow = 0, exitTicksTapeOnly = 0, microInFlush = 0, flushTicks = 0, apE = 0, apS = 0, noUnl = 0
+        For seed = 1 To n
+            Dim r = RunSim(v, seed, useSwing, "none", 50, probeApproach:=True)
+            apE += r.ApproachExistedSteps : apS += r.ApproachSeenAtStrip
+            If r.LatchedAtT0 Then
+                preLatched += 1
+            ElseIf Double.IsNaN(r.FlushLatchT) Then
+                neverInFlush += 1
+            Else
+                lat.Add(r.FlushLatchT) : dd.Add((r.FlushLatchPx / P0 - 1) * 100)
+            End If
+            If Double.IsNaN(r.PostBottomUnlatchT) Then noUnl += 1 Else unl.Add(r.PostBottomUnlatchT) : unlPx.Add((r.PostBottomUnlatchPx / P0 - 1) * 100)
+            For Each g In r.Ticks
+                Dim cnt = If(g.Micro, 1, 0) + If(g.Ofi, 1, 0) + If(g.Tfi, 1, 0) + If(g.Cvd, 1, 0)
+                If cnt >= 2 Then
+                    exitTicksFlow += 1
+                    If Not g.Ofi Then exitTicksTapeOnly += 1
+                End If
+                If g.TRel >= 0 AndAlso g.TRel < 40 Then flushTicks += 1 : If g.Micro Then microInFlush += 1
+            Next
+        Next
+        Console.WriteLine($"  {v,-12} swing arm {If(useSwing, "ON ", "OFF")}: already latched by NOISE at flush start {preLatched}/{n}; never latched in flush {neverInFlush}" &
+            If(lat.Count > 0, $" | fresh latch median {Med(lat):+0.0}s at {Med(dd):F2}% (p90 {Pct(lat, 0.9):+0.0}s, worst {dd.Min():F2}%)", "") &
+            If(unl.Count > 0, $" | clears after bottom: median {Med(unl):+0.0}s at {Med(unlPx):F2}% (p10 {Pct(unlPx, 0.1):F2}%), still latched at +210s in {noUnl}", "") &
+            $" | tape-only 2-of-4 EXIT ticks {exitTicksTapeOnly}/{exitTicksFlow} | MicroCVD adverse {microInFlush}/{flushTicks} flush ticks | NEAR existed {apE / 10.0:F0}s total, strip saw {apS} ticks")
+    End Sub
+
+    ' ─────────────────────────────────────────────────────────────────────────────
+    Sub Units()
+        Console.WriteLine() : Console.WriteLine("===== UNIT PROOFS (real code) =====")
+
+        ' U1 MicroCVD: steady one-way selling reads FLAT (not adverse); a DEcelerating sell-off reads adverse.
+        Dim flat As New List(Of TradeRecord), decel As New List(Of TradeRecord)
+        For i = 0 To 49 : flat.Add(Tr(100000 - i, 50000, False, i)) : Next
+        For i = 0 To 49 : decel.Add(Tr(100000 - i, If(i < 17, 80000, 20000), False, i)) : Next
+        For Each pair In {("steady $2.5M one-way sell", flat), ("sell-off that is FADING", decel)}
+            Dim e, m, l As Double, mom, sig As String
+            IndicatorEngine.CalcMicroCVD(pair.Item2, e, m, l, mom, sig, microWindowSize:=cfg.Indicators.MicroCVD.WindowSize,
+                accelThreshold:=cfg.Indicators.MicroCVD.AccelThreshold, dynamicPct:=cfg.Indicators.MicroCVD.AccelThresholdDynamicPct,
+                floorPct:=cfg.Indicators.MicroCVD.AccelThresholdFloorPct)
+            Dim rr As New IndicatorResults With {.MicroCVDSignal = sig}
+            Console.WriteLine($"  U1 MicroCVD {pair.Item1,-28}: early={e / 1000:F0}k mid={m / 1000:F0}k late={l / 1000:F0}k -> {sig,-10} MicroAdverse(long)={ScoringEngine.ComputeFastExitPrimitives(rr, PositionState.InLong).MicroAdverse}")
+        Next
+
+        ' U2 Long declared while price already sits below the carried swing low -> permanent structural EXIT.
+        Dim ms2 As New MarketState()
+        Dim l2 As New List(Of TradeRecord)
+        For i = 0 To 99 : l2.Add(Tr(99650 + (i Mod 3) * 0.5, 5000, i Mod 2 = 0, i * 500L)) : Next
+        ms2.SeedTrades(l2, DateTime.UtcNow)
+        Dim r2 = ExitGuardEvaluator.Evaluate(ms2, PositionState.InLong, 99700, 100400, cfg)
+        Console.WriteLine($"  U2 long opened at 99,650 under carried SL 99,700 (balanced tape, no book): Kind={r2.Kind} Reason=""{r2.Reason}""")
+
+        ' U3 Fail-open: any exception / thin buffer returns the SAME payload a genuine clear does.
+        Dim r3a = ExitGuardEvaluator.Evaluate(ms2, PositionState.InLong, 99700, 100400, Nothing)
+        Dim ms3 As New MarketState() : ms3.SeedTrades(l2.GetRange(0, 10), DateTime.UtcNow)
+        Dim r3b = ExitGuardEvaluator.Evaluate(ms3, PositionState.InLong, 99700, 100400, cfg)
+        Console.WriteLine($"  U3 exception path: Kind={r3a.Kind} Reason=""{r3a.Reason}""  |  thin buffer (10 trades, price UNDER swing low): Kind={r3b.Kind} Reason=""{r3b.Reason}""  -> host renders both as ""EXIT GUARD · clear""")
+
+        ' U4 Cascade side attribution + count-not-size threshold.
+        For Each flag In {"T", "M"}
+            Dim ms4 As New MarketState()
+            ms4.SetAlertsLevels(0, 0, 0, 0, 0, 0)
+            ' A LONG is being liquidated. Taker-side liq ("T"): the liquidation order SELLS into bids -> aggressor=sell.
+            ' Maker-side liq ("M"): the resting liquidation SELL is lifted by a buyer -> aggressor=buy.
+            Dim aggrBuy = (flag = "M")
+            For k = 1 To 3 : ms4.FoldAlertsTrade(99000 - k * 0.5, 100, aggrBuy, True, T0 + k, cfg.Alerts, "u4") : Next
+            Dim s4 = ms4.GetAlerts(T0 + 10, cfg.Alerts)
+            Console.WriteLine($"  U4 3 prints x $100 of LONG liquidation, flag ""{flag}"": {s4.CascadeSignal} count={s4.CascadeCount} usd=${s4.CascadeUsdDominant:F0} events={String.Join(",", s4.PendingEvents.Select(Function(e) e.Kind & ":" & e.Side))}")
+        Next
+
+        ' U5 Clock domains: exchange-stamped trades pruned/windowed against the LOCAL clock.
+        Dim ms5 As New MarketState()
+        Dim l5 As New List(Of TradeRecord)
+        For i = 0 To 199 : l5.Add(Tr(100000, 10000, i Mod 2 = 0, T0 - 10000 + i * 50L)) : Next   ' 20 tr/s for the last 10 s
+        ms5.SeedTrades(l5, DateTime.UtcNow)
+        For Each lag In {0L, 2000L, 5000L, 11000L}
+            Dim s5 = LiveMicrostructureEvaluator.Evaluate(ms5, Nothing, cfg, T0 + lag)
+            Console.WriteLine($"  U5 true tape 20.0 tr/s; receive-loop lag / clock skew {lag / 1000.0,4:F1}s -> strip reads {s5.TradesPerSec:F1} tr/s")
+        Next
+        Dim ms6 As New MarketState() : ms6.SetAlertsLevels(0, 0, 0, 0, 0, 0)
+        For k = 1 To 5 : ms6.FoldAlertsTrade(99000, 50000, False, True, T0 + k * 100L, cfg.Alerts, "u5") : Next
+        Dim s6a = ms6.GetAlerts(T0 + 600, cfg.Alerts)
+        Dim ms7 As New MarketState() : ms7.SetAlertsLevels(0, 0, 0, 0, 0, 0)
+        For k = 1 To 5 : ms7.FoldAlertsTrade(99000, 50000, False, True, T0 + k * 100L, cfg.Alerts, "u5") : Next
+        Dim s7 = ms7.GetAlerts(T0 + 600 + 11000, cfg.Alerts)
+        Console.WriteLine($"  U5b 5 liq prints in 0.5 s; strip read with local clock = exchange: {s6a.CascadeSignal} ({s6a.CascadeCount}); local clock 11 s ahead: {s7.CascadeSignal} ({s7.CascadeCount}) events still delivered={s7.PendingEvents.Count}")
+
+        ' U7 Absorption: a support level genuinely EATEN (no refill) with a dense top-10 ladder ($4.5 deep).
+        Dim abc = cfg.Indicators.Absorption
+        Dim trk As New LevelAbsorptionTracker()
+        Dim lvl As Double = 99700
+        trk.SetLevels(0, lvl, 0, 0, ATR_EXEC * abc.ProximityAtrFrac, ATR_EXEC * abc.BandAtrFrac, ATR_EXEC * abc.BreakTolAtrFrac)
+        Dim sizeAt As New Dictionary(Of Double, Double)
+        For px = 99690.0 To 99710.0 Step 0.5 : sizeAt(px) = 40000 : Next
+        Dim bestBid As Double = 99704.0, tMs As Long = T0, eaten As Double = 0
+        Dim minAggr = ExecutionResolution.ResolveAbsorptionMinAggrUsd(cfg, 14)
+        For stepN = 0 To 14
+            Dim bk As New OrderBookSnapshot()
+            For k = 0 To 9 : bk.Bids.Add((bestBid - k * 0.5, sizeAt(bestBid - k * 0.5))) : bk.Asks.Add((bestBid + 0.5 + k * 0.5, 40000)) : Next
+            trk.FoldBook(bk, tMs, abc)
+            Dim rd = IndicatorEngine.ClassifyAbsorption(trk.Snapshot(tMs, abc), minAggr, abc.AbsorbRatio, abc.MaxPullFrac)
+            Dim sn = trk.Snapshot(tMs, abc)
+            If stepN Mod 2 = 0 OrElse stepN >= 12 Then Console.WriteLine($"  U7 bestBid={bestBid:F1} eaten so far=${eaten / 1000:F0}k  SizeStart={sn.Below.SizeStart / 1000:F0}k SizeMin={sn.Below.SizeMin / 1000:F0}k aggr={sn.Below.AggrUsd / 1000:F0}k ratio={sn.Below.AbsorbRatio:F1} pullFrac={sn.Below.PullFrac:F2} -> {rd.Signal}")
+            ' one taker SELL eats the whole best bid (no refill), next frame the ladder scrolls down a tick
+            Dim eatPx = If(stepN = 14, lvl - 3.5, bestBid)
+            trk.FoldTrade(eatPx, sizeAt(bestBid), False, tMs + 50, abc)
+            eaten += sizeAt(bestBid) : sizeAt(bestBid) = 0
+            bestBid -= 0.5 : tMs += 100
+        Next
+        Dim fin = IndicatorEngine.ClassifyAbsorption(trk.Snapshot(tMs, abc), minAggr, abc.AbsorbRatio, abc.MaxPullFrac)
+        Console.WriteLine($"  U7 after print at {lvl - 3.5:F1} (level - breakTol): {fin.Signal}")
+
+        ' U6 Pivot repaint in isolation.
+        Dim c As New List(Of Candle)
+        Dim lows = {99500.0, 99400, 99300, 99200, 99400, 99450, 99420, 99350, 99500, 99600, 99700}
+        For i = 0 To lows.Length - 1 : c.Add(New Candle With {.Timestamp = i, .Low = lows(i), .High = lows(i) + 200, .Close = lows(i) + 100, .Open = lows(i) + 100}) : Next
+        Dim sh, sl As Double
+        IndicatorEngine.CalcSwingPivots(c, sh, sl, pivotWing:=3, lookbackBars:=30)
+        Dim before = sl
+        c(c.Count - 1).Low = 99300 : c(c.Count - 1).Close = 99310   ' forming bar trades through the 99,350 pivot
+        IndicatorEngine.CalcSwingPivots(c, sh, sl, pivotWing:=3, lookbackBars:=30)
+        Console.WriteLine($"  U6 5m swing low (wing 3) while forming bar low is 99,700: {before:F0}; forming bar trades to 99,300 (through it), last=99,310: {sl:F0}  -> break test 'price<=SL' is {99310 <= sl}")
+    End Sub
+
+    Function NoiseRun(seed As Integer, durSec As Integer, sigma As Double) As Integer()
+        Dim rng As New Random(seed * 7919)
+        Dim ms As New MarketState()
+        Dim px = P0, t0 = T_BAR
+        Dim consecExit = 0, consecClear = 0, latched = False, deb = Math.Max(1, cfg.ExitGuard.DebounceEvals)
+        Dim o(7) As Integer
+        For t As Long = t0 To t0 + durSec * 1000L Step 100L
+            If rng.NextDouble() < 0.3 Then
+                For k = 1 To rng.Next(1, 4)
+                    Dim u1 = 1.0 - rng.NextDouble(), u2 = rng.NextDouble()
+                    Dim z = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2)
+                    ms.AppendTrade(New TradeRecord With {.Price = px, .Amount = Math.Max(10, Math.Round(5000 * Math.Exp(sigma * z) / 10) * 10),
+                                   .Direction = If(rng.NextDouble() < 0.5, "buy", "sell"), .Timestamp = t + k, .Liquidation = "none"}, D(t + 50))
+                Next
+            End If
+            px = Math.Min(P0 + 150, Math.Max(P0 - 150, px + (rng.Next(0, 3) - 1) * 0.5))
+            Dim bb = Math.Floor(px * 2) / 2 - 0.5
+            Dim book As New OrderBookSnapshot()
+            For k = 0 To 9 : book.Bids.Add((bb - k * 0.5, 10000 + rng.NextDouble() * 70000)) : book.Asks.Add((bb + 0.5 + k * 0.5, 10000 + rng.NextDouble() * 70000)) : Next
+            ms.UpdateBook(book, D(t + 50))
+            If t >= t0 + 120000 AndAlso (t - t0) Mod 3000 = 0 Then
+                Dim r = ExitGuardEvaluator.Evaluate(ms, PositionState.InLong, P0 - 1000, P0 + 1000, cfg)
+                Dim g As New GuardTick()
+                Dim p = Prims(ms, P0 - 1000, g)
+                o(2) += 1
+                If p.TfiAdverse Then o(3) += 1
+                If p.CvdAdverse Then o(4) += 1
+                If p.MicroAdverse Then o(5) += 1
+                If p.OfiAdverse Then o(6) += 1
+                If r.Kind = ExitGuardKind.Exit Then
+                    o(7) += 1 : consecExit += 1 : consecClear = 0
+                    If Not latched AndAlso consecExit >= deb Then latched = True : o(0) += 1
+                Else
+                    consecClear += 1 : consecExit = 0
+                    If latched AndAlso consecClear >= deb Then latched = False
+                End If
+                If latched Then o(1) += 1
+            End If
+        Next
+        Return o
+    End Function
+
+    ' ─────────────────────────────────────────────────────────────────────────────
+    Function Tr(px As Double, usd As Double, isBuy As Boolean, ts As Long, Optional liq As String = "none", Optional rng As Random = Nothing) As TradeRecord
+        Dim flag = "none"
+        If liq <> "none" AndAlso rng IsNot Nothing AndAlso rng.NextDouble() < 0.4 Then flag = liq
+        Return New TradeRecord With {.Price = px, .Amount = Math.Round(usd / 10) * 10, .Direction = If(isBuy, "buy", "sell"), .Timestamp = ts, .Liquidation = flag}
+    End Function
+    Function LogN(rng As Random, median As Double) As Double
+        Dim u1 = 1.0 - rng.NextDouble(), u2 = rng.NextDouble()
+        Dim z = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2)
+        Return Math.Max(10, median * Math.Exp(0.9 * z))
+    End Function
+    Function D(msEpoch As Long) As DateTime
+        Return DateTimeOffset.FromUnixTimeMilliseconds(msEpoch).UtcDateTime
+    End Function
+    Function ToMs(dt As DateTime) As Long
+        Return New DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+    End Function
+    Function Med(xs As List(Of Double)) As Double
+        Return Pct(xs, 0.5)
+    End Function
+    Function Pct(xs As List(Of Double), q As Double) As Double
+        Dim s = xs.OrderBy(Function(x) x).ToList()
+        Return s(CInt(Math.Floor(q * (s.Count - 1))))
+    End Function
+End Module

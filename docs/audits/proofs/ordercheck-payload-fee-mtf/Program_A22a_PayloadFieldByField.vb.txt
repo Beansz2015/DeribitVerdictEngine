@@ -1,0 +1,126 @@
+' PROOF EXCERPT — verbatim source, not a standalone runnable file.
+' Source: verify/ordercheck/Program.vb, lines 2756-2871
+' Captured via the Read tool during the audit session (2026-09-24).
+' Purpose: A22a, the fixture closest to the actual order payload — asserts
+' the emitted SignalEmitter JSON field-by-field against ONE frozen
+' price/ATR/structural snapshot (price=59012.5, ATR=41.3) plus three
+' hand-picked variant cases (bare fallback, noise-suppressed, held-position).
+' All expected numbers are typed-in literals, not derived from cfg.
+' -----------------------------------------------------------------------
+
+    Private Sub A22a_PayloadFieldByField()
+        Dim root = BridgeOkJson(BuildBridgeVerdict(), BuildBridgeIndicators()).RootElement
+
+        Check("A22a head (schema_version/signal_id/generated_at_utc/instrument/signal_state/skip_reason)",
+              root.GetProperty("schema_version").GetInt32() = 1 AndAlso
+              root.GetProperty("signal_id").GetInt64() = 7 AndAlso
+              root.GetProperty("generated_at_utc").GetString() = "2026-07-03T14:31:02Z" AndAlso
+              root.GetProperty("instrument").GetString() = "BTC-PERPETUAL" AndAlso
+              root.GetProperty("signal_state").GetString() = "OK" AndAlso
+              root.GetProperty("skip_reason").ValueKind = JsonValueKind.Null,
+              "head fields mismatch: " & root.GetRawText())
+
+        Dim eng = root.GetProperty("engine")
+        Check("A22a engine block (app/settings_version/instance_id/autotrade_armed)",
+              eng.GetProperty("app").GetString() = "DeribitVerdictEngine" AndAlso
+              eng.GetProperty("settings_version").GetInt32() = 51 AndAlso
+              eng.GetProperty("instance_id").GetString() = "fixture-instance" AndAlso
+              eng.GetProperty("autotrade_armed").GetBoolean() = False,
+              "engine block mismatch: " & eng.GetRawText())
+
+        Dim sc = root.GetProperty("scores")
+        Check("A22a verdict/confidence/direction/context/mtf/scores",
+              root.GetProperty("verdict").GetString() = "STRONG SHORT" AndAlso
+              root.GetProperty("confidence").GetString() = "HIGH" AndAlso
+              root.GetProperty("direction").GetString() = "SHORT" AndAlso
+              root.GetProperty("verdict_context").GetString() = "CONFIRMED" AndAlso
+              Not root.GetProperty("mtf_blocked").GetBoolean() AndAlso
+              sc.GetProperty("long").GetInt32() = 4 AndAlso sc.GetProperty("short").GetInt32() = 13 AndAlso
+              sc.GetProperty("eff_long").GetInt32() = 4 AndAlso sc.GetProperty("eff_short").GetInt32() = 13 AndAlso
+              sc.GetProperty("max").GetInt32() = 20,
+              "verdict/scores mismatch: " & root.GetRawText())
+
+        Check("A22a price/exec_resolution_min/trigger_mode/atr",
+              Math.Abs(JNum(root, "price") - 59012.5) < 0.0001 AndAlso
+              root.GetProperty("exec_resolution_min").GetInt32() = 1 AndAlso
+              root.GetProperty("trigger_mode").GetString() = "interval" AndAlso
+              Math.Abs(JNum(root, "atr") - 41.3) < 0.0001,
+              "price/atr block mismatch")
+
+        Dim lng = root.GetProperty("levels").GetProperty("long")
+        Dim sht = root.GetProperty("levels").GetProperty("short")
+        Check("A22a structural-first levels (long swing PLACED + clamp; short fallback + clamp)",
+              Math.Abs(JNum(lng, "entry") - 59012.5) < 0.0001 AndAlso
+              Math.Abs(JNum(lng, "stop") - (59012.5 - 41.3 * 1.6)) < 0.0001 AndAlso
+              Math.Abs(JNum(lng, "target") - 59095.0) < 0.0001 AndAlso
+              lng.GetProperty("target_capped").GetBoolean() AndAlso
+              lng.GetProperty("cap_reason").GetString() = "PLACED @ 59095.0 (SWING_HIGH_5M)" AndAlso
+              Math.Abs(JNum(lng, "raw_target") - (59012.5 + 41.3 * 1.75)) < 0.0001 AndAlso
+              Math.Abs(JNum(sht, "stop") - (59012.5 + 41.3 * 1.6)) < 0.0001 AndAlso
+              Math.Abs(JNum(sht, "target") - (59012.5 - 41.3 * 1.75)) < 0.0001 AndAlso
+              Not sht.GetProperty("target_capped").GetBoolean() AndAlso
+              sht.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
+              Math.Abs(JNum(sht, "raw_target") - JNum(sht, "target")) < 0.0001,
+              String.Format("levels mismatch: long={0} short={1}", lng.GetRawText(), sht.GetRawText()))
+
+        Dim st = root.GetProperty("structural")
+        Check("A22a structural verbatim (zeros = unset semantics ride the raw values)",
+              Math.Abs(JNum(st, "swing_target_long") - 59095.0) < 0.0001 AndAlso
+              Math.Abs(JNum(st, "swing_stop_long") - 58860.0) < 0.0001 AndAlso
+              Math.Abs(JNum(st, "swing_target_short") - 58860.0) < 0.0001 AndAlso
+              Math.Abs(JNum(st, "swing_stop_short") - 59095.0) < 0.0001,
+              "structural mismatch: " & st.GetRawText())
+
+        Dim kel = root.GetProperty("kelly")
+        Check("A22a hold_status null (no-position sentinel) + kelly + health",
+              root.GetProperty("hold_status").ValueKind = JsonValueKind.Null AndAlso
+              kel.GetProperty("contracts").GetInt32() = 2 AndAlso
+              Math.Abs(JNum(kel, "risk_usd") - 32.5) < 0.0001 AndAlso
+              Not kel.GetProperty("lev_capped").GetBoolean() AndAlso
+              root.GetProperty("health").GetProperty("ws").GetString() = "OK" AndAlso
+              Not root.GetProperty("health").GetProperty("degraded_this_run").GetBoolean() AndAlso
+              Not root.GetProperty("health").GetProperty("ledger_mismatch").GetBoolean(),
+              "hold/kelly/health mismatch: " & root.GetRawText())
+
+        ' Case 2 — no structure at all (fresh r): both sides fall back to the ATR
+        ' geometry — uncapped targets, cap_reason null, stops at the fallback distance.
+        Dim rBare As New IndicatorResults()
+        rBare.CurrentPrice = 59012.5
+        rBare.ATR = 41.3
+        rBare.ExecResolution = 1
+        Dim lvlBare = BridgeOkJson(BuildBridgeVerdict(), rBare).RootElement.GetProperty("levels")
+        Dim lngBare = lvlBare.GetProperty("long")
+        Dim shtBare = lvlBare.GetProperty("short")
+        Check("A22a fallback levels when no structure (capped=false, cap_reason=null, raw=target)",
+              Math.Abs(JNum(lngBare, "stop") - (59012.5 - 41.3 * 1.6)) < 0.0001 AndAlso
+              Math.Abs(JNum(lngBare, "target") - (59012.5 + 41.3 * 1.75)) < 0.0001 AndAlso
+              Not lngBare.GetProperty("target_capped").GetBoolean() AndAlso
+              lngBare.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
+              Math.Abs(JNum(lngBare, "raw_target") - JNum(lngBare, "target")) < 0.0001 AndAlso
+              Math.Abs(JNum(shtBare, "target") - (59012.5 - 41.3 * 1.75)) < 0.0001 AndAlso
+              Not shtBare.GetProperty("target_capped").GetBoolean(),
+              String.Format("fallback levels mismatch: long={0} short={1}", lngBare.GetRawText(), shtBare.GetRawText()))
+
+        ' Case 3 — sub-tick noise suppression survives the arbitration: a structural
+        ' swing target 0.225 from the fallback price (< floor max(0.5, ATR×0.02)=0.826)
+        ' PLACES the value but reports target_capped=false / cap_reason null (§3 field
+        ' sourcing — the display renders it uncapped too).
+        Dim rNoise = BuildBridgeIndicators()
+        rNoise.SwingTargetLong = 59085.0          ' fallback = 59012.5 + 72.275 = 59084.775
+        Dim lngNoise = BridgeOkJson(BuildBridgeVerdict(), rNoise).RootElement _
+                           .GetProperty("levels").GetProperty("long")
+        Check("A22a cap-noise-suppressed long (target=placed swing, capped=FALSE, cap_reason null)",
+              Math.Abs(JNum(lngNoise, "target") - 59085.0) < 0.0001 AndAlso
+              Not lngNoise.GetProperty("target_capped").GetBoolean() AndAlso
+              lngNoise.GetProperty("cap_reason").ValueKind = JsonValueKind.Null AndAlso
+              Math.Abs(JNum(lngNoise, "raw_target") - (59012.5 + 41.3 * 1.75)) < 0.0001,
+              "noise-suppressed long mismatch: " & lngNoise.GetRawText())
+
+        ' Held position: hold_status rides verbatim (informational free string).
+        Dim vHold = BuildBridgeVerdict()
+        vHold.HoldStatus = "HOLD -- momentum intact"
+        Check("A22a hold_status verbatim when a position is declared",
+              BridgeOkJson(vHold, BuildBridgeIndicators()).RootElement _
+                  .GetProperty("hold_status").GetString() = "HOLD -- momentum intact",
+              "hold_status pass-through failed")
+    End Sub

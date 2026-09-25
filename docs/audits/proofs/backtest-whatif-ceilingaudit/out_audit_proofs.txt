@@ -1,0 +1,33 @@
+=== P1  1m ATR(7): replay stub vs live forming bar (execRes=1, flush hour) ===
+max |ATR_replay - ATR_live| over 59 closes = 0.000000  (identical series => convention matches)
+14:12 ATR stub=75.09 closed-bars=86.11 ratio=0.872 (6/7=0.857)
+
+=== P2  5m DMI(9) regime: replay stub vs live partial forming bar (execRes=1 closes 14:00-14:59) ===
+14:03  replay ADX= 27.1 -DI= 18.8 TRENDING_UP    | live ADX= 27.1 -DI= 17.9 TRENDING_UP
+14:07  replay ADX= 25.0 -DI= 30.1 TRENDING_DOWN  | live ADX= 25.2 -DI= 30.3 TRENDING_DOWN
+14:09  replay ADX= 27.8 -DI= 42.3 TRENDING_DOWN  | live ADX= 27.8 -DI= 42.2 TRENDING_DOWN
+14:12  replay ADX= 31.7 -DI= 55.2 TRENDING_DOWN  | live ADX= 31.7 -DI= 55.2 TRENDING_DOWN
+14:14  replay ADX= 32.5 -DI= 61.2 TRENDING_DOWN  | live ADX= 32.5 -DI= 61.2 TRENDING_DOWN
+14:18  replay ADX= 36.9 -DI= 64.1 TRENDING_DOWN  | live ADX= 37.0 -DI= 62.9 TRENDING_DOWN
+regime disagreements: 0/60 closes; aligned 5m closes (m%5==0) are identical by construction
+
+=== P3  15m terminal bar seen by the MTF gate (close price of last bar) ===
+14:03  replay last REAL 15m close=99,975 | live forming 15m o=99,981 l=99,957 c=99,987  -> replay blind to +0.01%
+14:09  replay last REAL 15m close=99,975 | live forming 15m o=99,981 l=99,564 c=99,568  -> replay blind to -0.41%
+14:14  replay last REAL 15m close=99,975 | live forming 15m o=99,981 l=99,018 c=99,018  -> replay blind to -0.96%
+
+=== P4  Funding momentum: hourly steps through a 5-min window, threshold 2e-7 ===
+replay non-FLAT 110/1320 (8.3%), all 110 of them in minutes :00-:04 | live-proxy non-FLAT 603/1320
+
+=== P5  What-if forward-window censoring (bars T+1,T+2 skipped, entry still at T) ===
+stop=0.6xATR  EV(from entry)=+0.019  EV(what-if window)=+0.205  bias=+0.186 ATR
+stop=1.0xATR  EV(from entry)=+0.020  EV(what-if window)=+0.128  bias=+0.108 ATR
+stop=1.6xATR  EV(from entry)=-0.010  EV(what-if window)=+0.008  bias=+0.018 ATR
+
+=== P6  CoverageReport.ClassifySpan seq path: outage 09:40 -> 10:25, no repair ===
+hour 09:00  rows=1600 longestGapMs=1500 -> TrailingEdge
+hour 10:00  rows=1400 longestGapMs=2701500 -> Captured
+trades missing from store: 1800 (~1800)
+
+=== P7  tier_floor knob vs what-if DeriveVerdict (TRANSITIONAL, ADX 21 => penalty 2) ===
+logged EffLS=10 -> MED | engine under high_floor=11: EffLS=11 -> STRONG | what-if under high_floor=11 reads logged 10 -> MED  (knob is a no-op)

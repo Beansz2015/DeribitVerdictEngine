@@ -1,0 +1,6 @@
+rewrite #1: 90,000 rows 10.9 MB 181 ms
+rewrite #2: 90,000 rows 10.9 MB 338 ms
+rewrite #3: 90,000 rows 10.9 MB 177 ms
+rewrite #4: 90,000 rows 10.9 MB 110 ms
+rewrite #5: 90,000 rows 10.9 MB 108 ms
+rewrite #6: 90,000 rows 10.9 MB 160 ms

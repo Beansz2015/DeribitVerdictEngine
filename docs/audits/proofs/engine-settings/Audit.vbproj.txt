@@ -1,0 +1,181 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Target Name="RequireRepoRoot" BeforeTargets="CoreCompile" Condition="'$(RepoRoot)' == ''">
+    <Error Text="Pass -p:RepoRoot=&lt;absolute repo root&gt; (see README.md)." />
+  </Target>
+
+  <!-- Settings-audit proof project (docs/audits/2026-09-24-engine-settings.md).
+       A path-parameterised copy of verify/ordercheck/OrderCheck.vbproj: it links the
+       SAME real shipped sources, with a different Program (Program.vb.txt beside this
+       file). Stored as .vbproj.txt / .vb.txt on purpose: the root
+       DeribitVerdictEngine.vbproj compiles every *.vb outside tools/ and verify/, so
+       this must never be built in place under docs/. Copy it out first; see README.md.
+       RepoRoot is REQUIRED: pass -p:RepoRoot=<absolute path to the repo root>. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>SettingsAudit</RootNamespace>
+    <AssemblyName>Audit</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(RepoRoot)/DeribitClient.vb" />
+    <Compile Include="$(RepoRoot)/DynamicNorms.vb" />
+    <Compile Include="$(RepoRoot)/Core/ExecutionResolution.vb" />
+    <Compile Include="$(RepoRoot)/Core/IndicatorResults.vb" />
+    <Compile Include="$(RepoRoot)/Core/Indicators_Momentum.vb" />
+    <Compile Include="$(RepoRoot)/Core/Indicators_OrderFlow.vb" />
+    <Compile Include="$(RepoRoot)/Core/Indicators_Structure.vb" />
+    <Compile Include="$(RepoRoot)/Core/Indicators_Volatility.vb" />
+    <Compile Include="$(RepoRoot)/Core/ScoringEngine_Types.vb" />
+    <Compile Include="$(RepoRoot)/Core/ScoringEngine_Helpers.vb" />
+    <Compile Include="$(RepoRoot)/Core/ScoringEngine_Calculate_Scoring.vb" />
+    <Compile Include="$(RepoRoot)/Core/ScoringEngine_Calculate_Verdict.vb" />
+    <Compile Include="$(RepoRoot)/Core/ScoringEngine_Kelly.vb" />
+    <Compile Include="$(RepoRoot)/Core/Settings/EngineSettings.vb" />
+    <Compile Include="$(RepoRoot)/Core/Settings/SettingsLoader.vb" />
+    <!-- WS-P3 (A16): the stub-testable, host-agnostic WS source classes so the §3
+         connection-health trades gate runs as the REAL shipped code, plus the §4
+         15m-refresh policy. The feed (DeribitWsFeed) + the integrated live path stay
+         OUT — they need a live socket and are validated by the live shadow-parity gate
+         (P3 spec hard constraint). WsMarketDataSource is decoupled from the feed via a
+         Func(Of Boolean) delegate, so it compiles + stub-tests without it. -->
+    <Compile Include="$(RepoRoot)/IMarketDataSource.vb" />
+    <Compile Include="$(RepoRoot)/MarketState.vb" />
+    <Compile Include="$(RepoRoot)/WsMarketDataSource.vb" />
+    <Compile Include="$(RepoRoot)/MtfRefreshPolicy.vb" />
+    <!-- P4 #4 time-averaged OFI (A20): the host-agnostic accumulator (owned by MarketState,
+         above) + the extracted IndicatorEngine.ComputeOfiImbalance/ClassifyOfiRatio helpers
+         (in Indicators_OrderFlow, already linked). The feed-side fold + the run-path routing
+         stay OUT (they need the live socket / WinForms host — same boundary as A16/A17). -->
+    <Compile Include="$(RepoRoot)/Core/OfiAccumulator.vb" />
+    <!-- P4 #5 aggressor velocity (A23): the host-agnostic two-horizon accumulator
+         (owned by MarketState, above) + ClassifyAggressorBurst (in Indicators_OrderFlow,
+         already linked) + the per-session resolution helpers (in ExecutionResolution,
+         already linked). The feed-side fold + run-path routing stay OUT — same live-
+         socket/WinForms boundary as A16-A22. -->
+    <Compile Include="$(RepoRoot)/Core/AggressorVelocityAccumulator.vb" />
+    <!-- P4 #6 book absorption (A31): the host-agnostic dual-fed episode tracker
+         (owned by MarketState, above) + ClassifyAbsorption (in Indicators_OrderFlow,
+         already linked) + ResolveAbsorptionMinAggrUsd (in ExecutionResolution, already
+         linked) + AnalysisLogger for the A31f reserved-column population proof (LogRun
+         writes into the harness bin dir; the fixture cleans up). The feed-side folds +
+         run-path routing stay OUT — same live-socket/WinForms boundary as A16-A23. -->
+    <Compile Include="$(RepoRoot)/Core/LevelAbsorptionTracker.vb" />
+    <!-- #7 liq-cascade alarm + #8 level-approach alerts (A37 — docs/liq-cascade-level
+         -alerts-proposal.md §4 H5): the host-agnostic tracker (owned by MarketState,
+         above) + sidecar utility (append-only liq_events.log — H4 amended). The feed-
+         side fold + strip render stay OUT (same live-socket / WinForms boundary as
+         A16-A31). -->
+    <Compile Include="$(RepoRoot)/Core/AlertsTracker.vb" />
+    <!-- ws_health.log W4 row (A38): the host-agnostic transition-only sidecar
+         (append-only, never-throws — the AlertsSidecar pattern). WinForms glue
+         (LogWsHealthTransitionForRun in MainForm_SignalBridge) stays OUT — same
+         live-socket/WinForms boundary as A22/A37. -->
+    <Compile Include="$(RepoRoot)/Core/WsHealthLog.vb" />
+    <Compile Include="$(RepoRoot)/Core/WsFeedLog.vb" />
+    <!-- venue_status.log (A74): the REST-side venue-declaration sidecar. Records when
+         Deribit itself returns a response saying it is unavailable (5xx or HTTP-200
+         JSON-RPC error). Never logs on timeout/network failure (V-1 guard).
+         See docs/venue-status-instrument-spec.md. -->
+    <Compile Include="$(RepoRoot)/Core/VenueStatusLog.vb" />
+    <!-- repair_status.log (A79f): the gap-repair outcome sidecar, GR-4 (b).
+         See docs/gap-repair-same-ms-page-skip-spec.md §4.4. -->
+    <Compile Include="$(RepoRoot)/Core/RepairStatusLog.vb" />
+    <!-- [v64] Trade-store writer/parser seam — A48a-h. Network-free BY DESIGN: this is the
+         half of the §2 split that exists so the fixture project never links an HttpClient
+         (HistoricalStore owns one and is deliberately NOT here). -->
+    <Compile Include="$(RepoRoot)/Core/TradeStoreWriter.vb" />
+    <!-- [C1 / D7] The per-process capture-scope marker (A49k, A49l). -->
+    <Compile Include="$(RepoRoot)/Core/CaptureMarkerLog.vb" />
+    <!-- Candle/funding store file layer — the merge invariant that, unguarded, cost a
+         month of June data. A51. -->
+    <Compile Include="$(RepoRoot)/Core/StoreFiles.vb" />
+    <Compile Include="$(RepoRoot)/AnalysisLogger.vb" />
+    <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
+         exercised against a real MarketState (already linked above). -->
+    <Compile Include="$(RepoRoot)/Core/BarCloseDetector.vb" />
+    <!-- P4 #1 realtime-exit-guard (A17): the host-agnostic evaluator + the shared
+         ComputeFastExitPrimitives (in ScoringEngine_Helpers, already linked above). -->
+    <Compile Include="$(RepoRoot)/ExitGuardEvaluator.vb" />
+    <!-- Signal Bridge v1 (A22): the host-agnostic emitter (pure Build/Serialize +
+         the pinned enum derivations) + the shared process-identity primitive. The
+         WinForms glue (MainForm_SignalBridge) stays OUT — same boundary as A16–A19. -->
+    <Compile Include="$(RepoRoot)/Core/ProcessIdentity.vb" />
+    <Compile Include="$(RepoRoot)/Core/SignalEmitter.vb" />
+    <!-- P4 #3 live-microstructure-strip (A19): the host-agnostic evaluator, exercised against a
+         real MarketState (already linked) + the existing pure indicator fns. -->
+    <Compile Include="$(RepoRoot)/LiveMicrostructureEvaluator.vb" />
+    <!-- v36 A14e/A14f: the live perf tracker + its compile-time deps so the
+         resolution-filtered AggregateRange is exercised directly. -->
+    <Compile Include="$(RepoRoot)/LivePerformanceTracker.vb" />
+    <Compile Include="$(RepoRoot)/OhlcCache.vb" />
+    <Compile Include="$(RepoRoot)/analysis/FailureRateMatrix.vb" />
+    <Compile Include="$(RepoRoot)/analysis/AnalysisConstants.vb" />
+    <Compile Include="$(RepoRoot)/analysis/AnalysisReport.vb" />
+    <!-- [E5 — v55 addendum, A35a–d] BandLadder classifier + POCO used by
+         MarkdownReportWriter §9 render and the ladder-eligibility harness. -->
+    <Compile Include="$(RepoRoot)/analysis/BandLadder.vb" />
+    <!-- D6 A27c: the offline report writer's D4 before/after section (BuildD4Section).
+         Host-agnostic (StringBuilder only); AnalysisRunner stays OUT — it needs a live
+         Deribit OHLC fetch. -->
+    <Compile Include="$(RepoRoot)/analysis/MarkdownReportWriter.vb" />
+    <Compile Include="$(RepoRoot)/analysis/ForwardWindowJoiner.vb" />
+    <Compile Include="$(RepoRoot)/analysis/DeribitOhlcFetcher.vb" />
+    <!-- offline-whatif-replay (A30): the host-agnostic overlay whitelist + the replay core
+         (adapter → the shipped SignalEmitter.ComputeSideLevels + verdict re-derivation). The
+         report writer joins the harness in A41d (docs/fee-aware-min-move-proposal.md §6.1
+         rider) so the net-of-fees label + σ dispersion column are pinned; the console
+         Program stays OUT (it carries its own Main). docs/offline-whatif-replay-proposal.md §5. -->
+    <Compile Include="$(RepoRoot)/tools/WhatIfRunner/WhatIfOverlay.vb" />
+    <Compile Include="$(RepoRoot)/tools/WhatIfRunner/WhatIfReplay.vb" />
+    <Compile Include="$(RepoRoot)/tools/WhatIfRunner/WhatIfReport.vb" />
+    <!-- A36f (geometry-arbitration-modes v56): WhatIfSettings so the mode-1 overlay
+         round-trips through the runner's real Clone → ApplyKnob path (the WhatIfSettings
+         is where "the overlay actually reaches the new POCO fields" is proved). -->
+    <Compile Include="$(RepoRoot)/tools/WhatIfRunner/WhatIfSettings.vb" />
+    <!-- v36 Phase-2a (A15a–A15g): the AutoTweaker chain so MatchesPopulation,
+         the re-seed path (RunAsync), and SettingsDiffApplier.Validate run as the
+         real shipped code. AutoTweakerProgram.vb is excluded — it carries its own
+         Main, which would collide with the harness's Module Program. -->
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/TweakerConfig.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/TweakerState.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/SettingsDiffApplier.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/PromptBuilder.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/ClaudeApiClient.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/ConditionsExtractor.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/CompositeScorer.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/RoundStatsBuilder.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/SnapshotManager.vb" />
+    <Compile Include="$(RepoRoot)/tools/AutoTweaker/AutoTweakerCore.vb" />
+    <!-- W6-4 ceiling audit (A39 — docs/w6-4-ceiling-audit-method-proposal.md §5): the
+         hand-rolled L2 logistic + metrics + block bootstrap + feature matrix, exercised
+         against synthetic fixtures. The report writer + Program stay OUT (Program carries
+         its own Main; the report writer takes only a POCO). -->
+    <Compile Include="$(RepoRoot)/tools/CeilingAudit/L2Logistic.vb" />
+    <Compile Include="$(RepoRoot)/tools/CeilingAudit/CsvFeatureBuilder.vb" />
+    <Compile Include="$(RepoRoot)/tools/CeilingAudit/FeatureMatrix.vb" />
+    <Compile Include="$(RepoRoot)/tools/CeilingAudit/AuditMetrics.vb" />
+    <!-- Backtest synthesizer (A43 — docs/backtest-synthesizer-proposal.md §4):
+         the pure slicing helpers + the local CSV writer + the store (link-only for
+         type resolution; the harness never calls its HTTP paths — same idiom as
+         DeribitClient already linked above). BacktestProgram stays OUT — it carries
+         its own Main. -->
+    <Compile Include="$(RepoRoot)/tools/BacktestRunner/HistoricalStore.vb" />
+    <!-- [v64] The funding-sample struct moved out of ReplayLoop.vb into its own file so the
+         app could link HistoricalStore for gap repair without the replay pipeline. Still
+         network-free, so the harness links it exactly as before. -->
+    <Compile Include="$(RepoRoot)/tools/BacktestRunner/BacktestFundingSample.vb" />
+    <Compile Include="$(RepoRoot)/tools/BacktestRunner/ReplayLoop.vb" />
+    <Compile Include="$(RepoRoot)/tools/BacktestRunner/BacktestRowWriter.vb" />
+    <!-- Overlap validator (A44 — docs/backtest-synthesizer-proposal.md §4): the pure
+         join + comparison helpers (FloorToBucket + column tables). The validate CLI verb
+         lives in BacktestProgram, which stays OUT (its own Main). -->
+    <Compile Include="$(RepoRoot)/tools/BacktestRunner/OverlapValidator.vb" />
+    <!-- Trade-store coverage report (A49 — docs/trade-store-coverage-report-proposal.md):
+         the `coverage` verb's host-agnostic classification core. BacktestProgram stays
+         OUT — its own Main. -->
+    <Compile Include="$(RepoRoot)/tools/BacktestRunner/CoverageReport.vb" />
+  </ItemGroup>
+
+</Project>
