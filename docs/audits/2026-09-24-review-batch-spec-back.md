@@ -1,6 +1,6 @@
 # Adversarial audit follow-up: review batch spec-back (2026-09-24)
 
-The working document for whoever reviews the 12-lane follow-up batch. The record, with the ranked list and every verdict, is [`2026-09-24-review-batch-summary.md`](2026-09-24-review-batch-summary.md). The spec being reported against is §7 of [`../adversarial-audit-2026-09-24.md`](../adversarial-audit-2026-09-24.md).
+The working document for whoever reviews the 12-lane follow-up batch. **The full audit report is [`../adversarial-audit-2026-09-24.md`](../adversarial-audit-2026-09-24.md).** It holds the ranked list (§B), the decisions for the orchestrator (§C) and what's left (§D). The per-lane record and every verdict are in [`2026-09-24-review-batch-summary.md`](2026-09-24-review-batch-summary.md). The spec being reported against is §7 of the report.
 
 Everything is pinned to engine `6e74181` and order app `8232e9e`. The trader ruled newer master commits out of scope.
 
@@ -44,99 +44,9 @@ dotnet run -c Release --project "$W/M6aRun.vbproj"
 
 ---
 
-## 2. Decisions queued, with my read
+## 2. Decisions (moved)
 
-Each decision below is in a reserved class, so each is the trader's to make. The ones that aren't reserved are marked.
-
-**Shared roots.** Rule these together:
-- **D-1 and D-2** are both stop geometry.
-- **D-3, D-5 and C17** are all the fee model.
-- **D-4, D-5 and D-6** are all measurement.
-
-**D-1: where the stop-side check lives (A1).**
-- Options:
-  - (a) The engine refuses to emit, or emits NO TRADE, when the stop is on the wrong side or within N ticks of entry.
-  - (b) The app refuses, or cancels, when the stop is not strictly beyond the actual fill.
-  - (c) Both.
-- My read, a hypothesis: **(c).** Only the app can see the fill, and only the engine can tell a settings inversion from market drift. (b) alone is the cheaper option and gives up the engine-side signal, which is the trade this project's rulings reject.
-- Scope: in the engine, one check next to `SignalEmitter.ComputeSideLevels` plus a payload state. In the app, one check at the fill ack, before the OTOCO legs matter.
-- Reserved: yes, because it changes payload behaviour. The app side is under its own repo's rules.
-
-**D-2: the stop floor (A1, AUD-05, M2 F6).**
-- Options:
-  - (a) Keep the 4-tick floor.
-  - (b) Derive the floor from fees plus a fraction of ATR.
-  - (c) Make the floor at least the app's own entry-drift allowance.
-- My read: (b), with (c) as a hard lower bound. A floor measured in ticks ignores the two things that cost money on a stop: fees and noise.
-- Reserved: yes. It moves placed levels, which are scoring-adjacent and rendered.
-
-**D-3: price the loss path (A3).**
-- Options:
-  - (a) Keep the target-only floor.
-  - (b) Add a net R:R or EV floor, with taker on the stop path.
-  - (c) Change only the what-if and eval fee model.
-- My read: (b). It's the only option that stops sending the 0.15 R:R trades.
-- Rider: fixture A41 pins the uniform maker/maker drag (C17) and must change in the same commit.
-- Reserved: yes, it's scoring.
-
-**D-4: the stub cache (C1).**
-- Options:
-  - (a) Replace a stored bar when the incoming copy is complete.
-  - (b) Append only bars with CloseTime ≤ now.
-  - (c) Either of those, plus a one-time re-walk of resolved rows against refetched history.
-- My read: (c). The cache files on every box already hold stubs, so fixing only future bars leaves every existing strip number wrong with nothing to show it.
-- Reserved: yes, because it moves rendered values.
-
-**D-5: what the measurement surfaces report (C2–C4, C9, C10).**
-- Options:
-  - (a) Add per-episode, fee-inclusive EV with a fill model next to the success rate.
-  - (b) Replace the success rate as the headline.
-  - (c) Leave them as they are.
-- My read: (a) now and (b) after one comparison period, so the old and new numbers can be compared on the same rows.
-- Reserved: yes, rendered values.
-
-**D-6: past rulings that read these surfaces.**
-- I have no read here. Which rulings leaned on the strip, the matrix, the ladder, the what-if runner or the tweaker trigger is the trader's knowledge.
-- Scoping: grep the D-tables and `trader-tick-queue.md` for `FailureRateMatrix`, `BandLadder`, `WhatIf`, `perf strip` and `IsRecommended`.
-
-**D-7: missing or stale 15m data (A6).**
-- Options:
-  - (a) Fail closed: NO TRADE, or SKIPPED with a reason.
-  - (b) Keep failing open.
-  - (c) Fail closed only when the cache is older than the gate's lookback.
-- My read: (a), which follows from the conservative false-positive rule. (c) is the cheaper option and still passes a cold start.
-- Reserved: yes, scoring.
-
-**D-8: collector-halt fixes (B1–B4). Not reserved.**
-- The four fixes:
-  - check `Enabled` before the `_initTcs` await, or complete it when init is skipped;
-  - log and continue instead of the MessageBox;
-  - guard `LastFrameUtc = MinValue`;
-  - read the timeout per request.
-- None of them touches scoring, settings, CSV or a rendered value, and one revert undoes each. They qualify for auto-proceed, but I haven't built them, because this batch was report-only.
-- My read: do these first. They're the cheapest fixes with the highest availability payoff.
-
-**D-9: the AutoTweaker (C7, C8).**
-- Options:
-  - (a) Fix the `Apply` crash.
-  - (b) Keep it dormant, and fix the target file, the fences, value validation and revert scope first.
-  - (c) Retire `auto_commit`.
-- My read: (b), and **never (a) on its own**. The crash is the only thing keeping C8's three faults from writing live settings.
-- Reserved: yes. It writes `settings.json`.
-
-**D-10: the exit guard (D2).**
-- My read: measure first. M3's harness can replay the collector's trade store and count false latches on real tape. No design change until that number exists.
-- Not reserved, because it's a measurement.
-
-**D-11: tape store integrity (E1, E2).**
-- The fixes: M5 F1's three parser and append changes, plus a `COMMIT_FAILED` repair state.
-- My read: all of them. This is the silent-hole class the repo already rejects.
-- Reserved: yes, because they change store writes.
-
-**D-12: the order-app items (A2, A8, A9, A10, M9 F7).** These belong to the order app's owner and repo. A2 and M9 F7 need the four unread functions first (§4).
-
-**D-13: redo M8.**
-- My read: yes. Run it as three prompts with the ranges filled in, before any fix that leans on the harness lands.
+The decisions a fix needs now live in the full audit report, [`../adversarial-audit-2026-09-24.md`](../adversarial-audit-2026-09-24.md) §C. They are written for the project orchestrator, who decides and sequences the fixes, and each one says whether it also needs the trader's ruling. §C replaces the D-1 to D-13 list that stood here. Two of that list's items were audit work, not fix decisions, and they moved to the report's §D: redoing M8 (now lanes L-1 to L-3) and measuring the exit guard on real tape (now X-3).
 
 ---
 
@@ -164,7 +74,7 @@ Each decision below is in a reserved class, so each is the trader's to make. The
 
 ## 4. What I did not verify
 
-- **42 findings are marked N** in the summary's §3. They rest on their reviewers.
+- **Review findings.** None is left unchecked. On 2026-09-25 I checked the 42 the first pass had marked N; 41 hold as described. M9 F7 is confirmed only in part, and lane L-4 covers the rest.
 - **Deribit behaviour.** A1, A2 and A9 all turn on three things, and none was checked against the venue:
   - what happens to a sell stop whose trigger has already been crossed when the OTOCO legs are created;
   - what `trigger_offset` does on a `stop_limit` order;
