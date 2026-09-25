@@ -277,6 +277,40 @@ The two current lines become false: `UI/MainForm_PlaintextSnapshot.vb:251-252` a
 | `K-3` | Sequencing | (b) one pass (already directed) | No |
 | `K-4` | Wording | Candidates above; trader signs | No |
 
+### ✅ RULINGS — 2026-09-25 (UTC), trader
+
+| ID | Ruled | Note |
+|---|---|---|
+| `KO-1` | (a) runtime eval cache | as read |
+| `KO-2` | (a) current session | as read |
+| `KO-3` | (a) `kelly.min_book_rows` = 400 | settings v68 → v69 |
+| `KO-4` | **(b) compact `[NO EDGE]` block** | trader confirmed (b) explicitly |
+| `KO-5` | (a) remove `est_prob_*` | settings v69, same bump |
+| **`K-1`** | ⭐ **(g), NEW — measured p and b per geometry bucket** | Trader: *"what is the most truthful option? Pick that."* Defined below |
+| `K-2` | (a) no basis switch | as read |
+| `K-3` | (b) one pass with the one-class change | records the 2026-09-24 pairing |
+| `K-4` | the candidate strings above, **adjusted for (g)** | as read; the basis line and the book row must name the bucket (see below) |
+
+#### `K-1` (g) — why it is the most truthful option, and its definition
+
+**Why.** Every other option either pairs numbers that do not describe the same trades, or describes a trade other than this one:
+
+- (a) pairs a true per-row b with a pooled p that is wrong for far targets (`F-2`: those rows succeed at 0.20–0.30, not 0.40–0.48). It renders an edge the book contradicts.
+- (e) is internally consistent and fully measured, but it describes the session's AVERAGE trade, not this row's geometry.
+- (f) gives a per-row p from an untested assumption (a constant edge in pp across geometry). A modelled number rendered as if measured.
+- **(g) conditions on the variable that `docs/DeribitIndicatorProject.md` §5a rule 4 names — success correlates with distance — and uses only measured values for rows like this one.** It records more than (e), and it degrades to (e), never to a guess.
+
+**Definition** (the orchestrator's; the build seat must not re-open it, but may raise a mechanism problem):
+
+1. **Bucket key:** the row's placed net payoff b_row = (T − fee) ÷ (S + fee) for the Kelly side, from the same fields as the book rows (spec section 3.2).
+2. **Buckets:** TERCILES of b_row over the current session's book (`KO-2` (a)), recomputed from the book each run. No settings key and no fixed edges: equal row counts per bucket, self-updating as the book grows. The live row falls in the tercile whose b range holds its b_row (clamped to the end buckets).
+3. **Values:** p = the bucket's measured success rate; b = the bucket's pooled net payoff Σ(T − fee) ÷ Σ(S + fee). Same outcome classes and population rules as section 3.1.
+4. **Floor and fallback:** if the bucket holds fewer than `kelly.min_book_rows` rows, use the session-pooled p and b (option (e)) and render that the fallback applied. If the session book itself is below the floor, the "book below the floor" state in section 3.4 applies.
+5. **Rendering (`K-4` adjusted):** the basis line names the bucket, e.g. `Advisory — p and b are measured on the book's rows with a similar placed R:R (bucket k of 3, b ∈ [lo, hi]), net of the round-trip fee.`; the book row adds the bucket's n. The exact strings follow `K-4` as ruled; the build seat keeps them measured-number-free and reads every number from fields.
+6. **Fixtures (additions to section 6):** a book whose far-target bucket has a LOWER p than the near bucket must give the far-target row the lower p (the `F-2` shape); a bucket below the floor must fall back to (e) and say so; a tercile boundary row must land deterministically.
+
+⚠ **Not measured before this ruling:** the per-bucket p and b on the current book. Terciles give NY ~2,200, LONDON ~690, ASIA ~780 rows per bucket on the 2026-09-06 cache counts (`F-3`), all above the 400 floor. `F-2` shows the far-target rows lose, so f* is expected ≤ 0 in every bucket today; **acceptance item `AC-4` must now measure f* per session AND per bucket**, and the Opus escalation trigger in section 0 (f* > 0 anywhere) applies per bucket.
+
 - **At my reads: one settings bump, v68 → v69, carrying `KO-3` and `KO-5`.** If both go (b), settings stay untouched.
 
 ---
