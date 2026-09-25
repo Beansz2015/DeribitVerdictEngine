@@ -525,8 +525,13 @@ Public Class OverlapValidator
         Dim liveOi  = live.G("OISignal")
         Dim nonNeutralMuted As Boolean =
             (liveOfi = "BUY DOMINANT" OrElse liveOfi = "SELL DOMINANT") OrElse
-            (liveOi = "LONG_PARTIAL" OrElse liveOi = "SHORT_PARTIAL" OrElse
-             liveOi = "LONG_FULL" OrElse liveOi = "SHORT_FULL")
+            (liveOi = "NEW LONGS" OrElse liveOi = "NEW SHORTS" OrElse
+             liveOi = "COVERING" OrElse liveOi = "CAPITULATION")
+        ' [D-10 / TOOL-1, 2026-09-25] The OI labels above are the ones the producer emits
+        ' (UI/MainForm_Analysis.vb ~387-395; scoring reads the same four at
+        ' Core/ScoringEngine_Calculate_Scoring.vb ~286-289; NEUTRAL is the fifth). Until this
+        ' date the test compared against LONG_PARTIAL/SHORT_PARTIAL/LONG_FULL/SHORT_FULL, which
+        ' nothing ever writes, so every non-neutral OI row was counted as neutral.
 
         If Not vMatch Then
             rep.DisagreeCount += 1

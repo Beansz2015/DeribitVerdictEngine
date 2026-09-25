@@ -540,6 +540,7 @@ git diff --stat 920de06 -- Core UI analysis settings.json docs/UserManual.md Der
 
 - **Options:** (a) compare `OISignal` with the OI producer's labels (NEW LONGS and NEW SHORTS full; COVERING and CAPITULATION partial); (b) leave it.
 - **Read: (a).** The orchestrator schedules it.
+- ✅ **DONE 2026-09-25 (UTC), orchestrator, (a):** `tools/BacktestRunner/OverlapValidator.vb` now tests `NEW LONGS` / `NEW SHORTS` / `COVERING` / `CAPITULATION`. BacktestRunner builds 0/0. No stored validator report was re-run; the next run's OFI/OI-conditioned agree/disagree split will differ from earlier runs, which counted every OI row as neutral.
 
 #### R.6.4 Feedback on the brief and the carry-ins
 
