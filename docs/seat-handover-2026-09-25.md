@@ -83,7 +83,28 @@ Record: [`liquidation-probe-run-2026-09-21.md`](liquidation-probe-run-2026-09-21
 
 ## 4. ⚠ What I did NOT verify
 
-- Why the probe has seen no liquidation in 20 h (market quiet, or an instrument gap).
-- The RR-1 fixtures' corrected expected values (`D-1`/`D-2`), beyond seeing them pass and reading that each was mutation-proved.
-- Whether the 3.6-min WebSocket connect after the v69 deploy recurs.
-- Whether the order app shows or uses the payload's advisory `kelly` block (another repo).
+**Not checked at all:**
+
+| Item | Why it matters |
+|---|---|
+| Why the probe has seen no liquidation in 20+ h (a quiet market, or an instrument gap such as the REST endpoint not carrying the flag) | It gates engine-fix B2 |
+| **The RR-1 fix working live** — no `trade_seq` range repaired twice under instance `a19acc4d…` | Needs several 6-hourly passes; check at the next copy-back |
+| The live Kelly card and snapshot on the collector | Only the implementer's LOCAL screen check exists; the box's rendered `[NO EDGE]` block was never seen |
+| The gap between the live eval cache's p (NY 0.367) and the offline read's (0.404) | Kelly spec finding `F-3`; cause unknown. f* is negative on either, but the rendered number depends on it |
+| Whether the order app shows or uses the payload's advisory `kelly` block | Another repo |
+| The box's paging with NO probe running, at the same hour | Paging readings with the probe (300–1,275 `pagesOUT/s`) have no probe-free baseline to compare |
+| The probe's raw-dump retention path (delete files beyond 8) | Never exercised: a rotation takes ~5 h and only 2 files existed |
+| Whether the thread-leak re-entrancy gates hold under load | Carried from the 2026-09-24 handover, still open |
+
+**Carried from agents without re-running** (I re-ran only the named ones):
+
+| Claim | What I did check |
+|---|---|
+| RR-1: each new fixture fails on the old code and the wrong fixes; `A56c`/`A56d` unchanged; the corrected expected values of `A91b`/`A91c` (`D-1`/`D-2`) | Harness 486 PASS; read the comparator |
+| RR-1 read: 5 holes, 2 recurring, 19 duplicate rows, 5 extra fetches | One inverted pair checked in the store (seq `300377528` at `…804` ms) |
+| Kelly build: the 12 mutation runs, the local screen check, snapshot/card byte parity | Harness 483; the AC-4 table re-run via `ORDERCHECK_KELLY_BOOK` (identical); the render gate read in code |
+| Absorption S1/S2: 16 mutation runs, gate output | Harness 468; the post-deploy read-back shows every new column populated |
+| `Q-1` (d): every handle except `H-1`, incl. the 7-minute regeneration | `H-1` re-run, identical; the Kelly f* arithmetic |
+| Engine-fix A and C beyond `H-3` and the gate edit | Harness; the two `NEAR_HVN_*` literals read in both copies |
+
+**Now answered (was on this list):** the 3.6-min WebSocket connect after the v69 deploy did NOT recur — the RR-1 deploy connected in 1.4 s.
