@@ -639,6 +639,15 @@ Module Program
         A56f_HoleCountIsCappedKeepingTheLargest()
         A56g_TruncationCutIsTimeContiguousNotFileOrder()
 
+        ' [A91 — RR-1 phantom-hole sort order, docs/gap-repair-rr1-seq-order-spec.md §6] A
+        ' same-burst timestamp inversion between two seq-carrying rows split a fully contiguous
+        ' TradeSeq run into two phantom holes under the old (Timestamp, TradeSeq) sort. A91a is
+        ' the fail-first reproduction; A91b stacks it with A56d's interleaved-legacy shape; A91c
+        ' is the direct ST-1 comparator-validity regression guard.
+        A91a_TimestampInversionProducesNoPhantomHoles()
+        A91b_MixedLegacyAndInvertedIdentifiedTailProducesNoPhantomHoles()
+        A91c_ComparatorIsAValidTotalOrderOnInvariantRespectingInput()
+
         ' [A57 — thin-trade-window skip gate, docs/thin-trade-window-skip-gate-proposal.md §6]
         ' Every guard on the trade path tested Count = 0; nothing tested for a THIN list. A57c
         ' is the mutation proof: revert ScoringEngine.MinTradesForScoring to a hardcoded 50 and
@@ -12427,6 +12436,157 @@ Module Program
                                 truncated, genuinelyUnsorted, scanned.Count, smallCap,
                                 If(scanned.Count > 0, scanned(0).Seq, -1L),
                                 If(scanned.Count > 0, scanned(scanned.Count - 1).Seq, -1L), noPhantom))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' =======================================================================
+    ' A91 — RR-1 phantom-hole sort order (docs/gap-repair-rr1-seq-order-spec.md).
+    ' `RR-1` (docs/gap-repair-repeat-fills-read-2026-09-25.md): the old (Timestamp, TradeSeq)
+    ' sort splits a fully contiguous TradeSeq run into a phantom hole whenever the venue stamps
+    ' a HIGHER seq an EARLIER millisecond than a lower one — the same burst, not a store defect.
+    ' Fixture-literal provenance (CLAUDE.md hard rule): every timestamp/seq value below is
+    ' MECHANISM — small numbers chosen to reproduce the measured SHAPE, not production seq
+    ' values.
+    ' =======================================================================
+
+    ' -- A91a: ⭐ THE FAIL-FIRST REPRODUCTION — a timestamp inversion between two seq-carrying
+    ' rows produces ZERO phantom holes under the new comparator. Mirrors
+    ' gap-repair-repeat-fills-read-2026-09-25.md §4.2 exactly: seq N at t=100000, N+1/N+2 at
+    ' t=100001, N+3 at t=100000 (one ms EARLIER than N+1/N+2 despite the higher seq), N+4 at
+    ' t=100002.
+    ' ⚠ MUTATION PROOF: revert the comparator to the old (Timestamp, TradeSeq) sort and this
+    ' fixture MUST fail, reproducing RR-1's exact two-phantom-hole shape
+    ' ([N+1,N+2] and [N+3,N+3]). Session step 2 ran this against pre-fix code — see the
+    ' spec-back for the pasted failing output.
+    Private Sub A91a_TimestampInversionProducesNoPhantomHoles()
+        Dim dir As String = A48TempStore("91a")
+        Try
+            Dim n As Long = 9000L
+            A56Write(dir, New List(Of TradeRecord) From {
+                A53Trade(A56Ms(100000), 64000, 10, "buy", "none", "z-1", n),
+                A53Trade(A56Ms(100001), 64001, 10, "buy", "none", "z-2", n + 1L),
+                A53Trade(A56Ms(100001), 64002, 10, "buy", "none", "z-3", n + 2L),
+                A53Trade(A56Ms(100000), 64003, 10, "buy", "none", "z-4", n + 3L),
+                A53Trade(A56Ms(100002), 64004, 10, "buy", "none", "z-5", n + 4L)})
+
+            Dim segEnd As Long = A56Ms(600000)
+            Dim w = TradeStoreWriter.ResolveRepairWindows(A56Path(dir), A56Ms(0), segEnd, True)
+
+            Dim ok As Boolean = w.Count = 1 AndAlso w(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
+                                w(0).FirstSeq = n + 5L AndAlso w(0).StopAfterMs = segEnd
+
+            Dim detail As New System.Text.StringBuilder()
+            detail.AppendFormat("windows={0}(want 1)", w.Count)
+            For i As Integer = 0 To w.Count - 1
+                detail.AppendFormat(" [{0}]kind={1} first={2} last={3}", i, w(i).Kind, w(i).FirstSeq, w(i).LastSeq)
+            Next
+            detail.AppendFormat(" wantTailFirstSeq={0}", n + 5L)
+
+            Check("A91a ⭐ RR-1 fail-first — a same-burst timestamp inversion between two seq-carrying rows (N..N+4, N+3 stamped one ms EARLIER than N+1/N+2) produces ZERO phantom holes, exactly one Tail window",
+                  ok, detail.ToString())
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A91b: mixed population — an interleaved legacy block that TRULY reproduces A56d part
+    ' 2's phantom-hole shape (a wide seq gap bracketed by an early identified row, covered in
+    ' wall-clock time by interleaved legacy rows) STACKED with an RR-1 inversion in the
+    ' identified tail that follows, proven together rather than in isolation.
+    ' ⚠ Deviates from docs/gap-repair-rr1-seq-order-spec.md §6.2's own row table: that table put
+    ' both legacy rows chronologically BEFORE I1, and gave I1..I4 contiguous seqs (M..M+3) — under
+    ' that shape the category-partition mutant (§4.1) does NOT actually produce a phantom (no seq
+    ' gap exists for the legacy rows to "cover", and the legacy rows already sort before I1 by
+    ' true time, so partitioning changes nothing). Verified by running §6.2's literal table
+    ' against the category-partition mutant: it PASSED, i.e. did not catch the failure it claims
+    ' to catch. Rebuilt here with I1 EARLY (t=0, mirroring A56d R1) and a genuine wide seq gap
+    ' (M .. M+500) bracketed by the interleaved legacy rows, so the mutation actually fires.
+    ' Logged as a spec-back finding, not re-opened per the escalation trigger (A91b is new this
+    ' session, not an existing fixture whose expected value changed).
+    Private Sub A91b_MixedLegacyAndInvertedIdentifiedTailProducesNoPhantomHoles()
+        Dim dir As String = A48TempStore("91b")
+        Try
+            Dim m As Long = 7000L
+            A56Write(dir, New List(Of TradeRecord) From {
+                A53Trade(A56Ms(0), 64000, 10, "buy", "none", "y-1", m),
+                A53Trade(A56Ms(30000), 64001, 10, "buy"),
+                A53Trade(A56Ms(60000), 64002, 10, "buy"),
+                A53Trade(A56Ms(90000), 64003, 10, "buy", "none", "y-2", m + 500L),
+                A53Trade(A56Ms(89000), 64004, 10, "buy", "none", "y-3", m + 501L),
+                A53Trade(A56Ms(100000), 64005, 10, "buy", "none", "y-4", m + 502L)})
+
+            Dim segEnd As Long = A56Ms(600000)
+            Dim w = TradeStoreWriter.ResolveRepairWindows(A56Path(dir), A56Ms(0), segEnd, True)
+
+            Dim ok As Boolean = w.Count = 1 AndAlso w(0).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
+                                w(0).FirstSeq = m + 503L AndAlso w(0).StopAfterMs = segEnd
+
+            Dim detail As New System.Text.StringBuilder()
+            detail.AppendFormat("windows={0}(want 1)", w.Count)
+            For i As Integer = 0 To w.Count - 1
+                detail.AppendFormat(" [{0}]kind={1} first={2} last={3}", i, w(i).Kind, w(i).FirstSeq, w(i).LastSeq)
+            Next
+            detail.AppendFormat(" wantTailFirstSeq={0}", m + 503L)
+
+            Check("A91b mixed population — interleaved legacy rows (A56d shape) plus a seq/time inversion in the identified tail (A91a shape) together produce ZERO phantom holes, exactly one Tail window",
+                  ok, detail.ToString())
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A91c: ST-1 direct regression guard — the comparator is a VALID total order on an
+    ' adversarial-but-invariant-respecting input (one legacy row, timestamp strictly before two
+    ' seq/time-inverted identified rows, matching the real store's legacy-predates-cutover
+    ' invariant). Confirms List.Sort does not throw and the two identified rows land in ASCENDING
+    ' SEQ order (N+1 before N+3, since seq(N+1) < seq(N+3)) regardless of their inverted
+    ' timestamps.
+    ' ⚠ Deviates from docs/gap-repair-rr1-seq-order-spec.md §6.3's own prose, which reads
+    ' "same as A91a's no-hole result" — this fixture omits A91a's N and N+2 rows, so seq N+2 is
+    ' a GENUINE gap here, not a phantom one. The correct, mechanically-derived result is a REAL
+    ' Hole[N+2,N+2] plus a Tail from N+4 — proof the ascending-seq order is right (not reversed),
+    ' since a reversed or time-based order would instead swallow this real gap as a harmless
+    ' "discontinuity" (the OLD comparator's own failure mode, confirmed pre-fix: it produced ONE
+    ' window, Tail FirstSeq=N+2, silently never fetching the real N+2 loss). Logged as a spec-back
+    ' finding, not re-opened here per CLAUDE.md's escalation trigger (only an EXISTING fixture's
+    ' expected value changing would trigger it; A91c is new, written this session).
+    Private Sub A91c_ComparatorIsAValidTotalOrderOnInvariantRespectingInput()
+        Dim dir As String = A48TempStore("91c")
+        Try
+            Dim n As Long = 9000L
+            Dim rowsIn As New List(Of TradeRecord) From {
+                A53Trade(A56Ms(50000), 64000, 10, "buy"),
+                A53Trade(A56Ms(100001), 64001, 10, "buy", "none", "w-1", n + 1L),
+                A53Trade(A56Ms(100000), 64002, 10, "buy", "none", "w-2", n + 3L)}
+            A56Write(dir, rowsIn)
+
+            Dim threw As Boolean = False
+            Dim segEnd As Long = A56Ms(600000)
+            Dim w As List(Of TradeStoreWriter.RepairWindow) = Nothing
+            Try
+                w = TradeStoreWriter.ResolveRepairWindows(A56Path(dir), A56Ms(0), segEnd, True)
+            Catch ex As InvalidOperationException
+                threw = True
+            End Try
+
+            ' No throw, and the REAL gap at N+2 is correctly found (not swallowed) precisely
+            ' because the identified pair sorted by seq (N+1 before N+3) rather than by their
+            ' inverted timestamps; the legacy row (seq < 0) breaks the walk ahead of it without
+            ' inventing anything.
+            Dim ok As Boolean = Not threw AndAlso w IsNot Nothing AndAlso w.Count = 2 AndAlso
+                                w(0).Kind = TradeStoreWriter.RepairWindowKind.Hole AndAlso
+                                w(0).FirstSeq = n + 2L AndAlso w(0).LastSeq = n + 2L AndAlso
+                                w(1).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
+                                w(1).FirstSeq = n + 4L
+
+            Check("A91c ST-1 — comparator is a valid total order on invariant-respecting input (legacy row predates both inverted identified rows): List.Sort does not throw, and the REAL gap at N+2 is correctly found (ascending-seq order proven, not reversed)",
+                  ok, String.Format("threw={0}(want False) windows={1}(want 2) holeFirst={2}(want {3}) holeLast={4}(want {3}) tailFirst={5}(want {6})",
+                                    threw, If(w Is Nothing, -1, w.Count),
+                                    If(w IsNot Nothing AndAlso w.Count > 0, w(0).FirstSeq, -1L), n + 2L,
+                                    If(w IsNot Nothing AndAlso w.Count > 0, w(0).LastSeq, -1L),
+                                    If(w IsNot Nothing AndAlso w.Count > 1, w(1).FirstSeq, -1L), n + 4L))
         Finally
             A48Cleanup(dir)
         End Try

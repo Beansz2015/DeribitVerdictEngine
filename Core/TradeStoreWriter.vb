@@ -1023,11 +1023,23 @@ Public NotInheritable Class TradeStoreWriter
         ' holds one out-of-order block. Walking the file in append order reports a PHANTOM HOLE
         ' at every repair-block boundary, and each phantom costs a REST fetch.
         '
-        ' Sorted by (Timestamp, TradeSeq), not by Timestamp alone. List.Sort is unstable, and
-        ' same-millisecond siblings are the defining feature of this tape — a market order
-        ' sweeping several levels reports as several records sharing one millisecond. Ordering
-        ' those arbitrarily would manufacture negative deltas inside a millisecond.
+        ' [RR-1, docs/gap-repair-rr1-seq-order-spec.md] Sorted primarily by TradeSeq — the
+        ' venue's own assignment order, immune to the append-order problem above AND immune to
+        ' same-millisecond timestamp noise: a market order sweeping several levels reports as
+        ' several records sharing one millisecond, and occasionally stamps a HIGHER seq an
+        ' EARLIER millisecond than a lower one. The old (Timestamp, TradeSeq) sort let that
+        ' inversion split a fully contiguous seq run into two phantom holes (measured: 5 phantom
+        ' re-detections / 19 duplicate rows over 2.5 days). A seq-less (legacy, pre-2026-08-10)
+        ' row carries no TradeSeq to compare by, so it sorts by Timestamp against its neighbours
+        ' instead — this is what keeps an INTERLEAVED legacy row in its true chronological
+        ' position, which TRAP 2 below depends on (A56d part 2: skipping past a mis-sorted
+        ' legacy row reports covered ground as a hole). Valid as a total order because every
+        ' legacy row's timestamp precedes every identified row's timestamp in this store
+        ' (TradeSeq did not exist before the 2026-08-10 cutover) — see the spec's SO-2/ST-1 for
+        ' the proof and its one named, bounded residual risk (a post-cutover row whose TradeSeq
+        ' field is corrupted and indistinguishable from legacy).
         rows.Sort(Function(a, b)
+                      If a.Seq >= 0 AndAlso b.Seq >= 0 Then Return a.Seq.CompareTo(b.Seq)
                       Dim c As Integer = a.TsMs.CompareTo(b.TsMs)
                       If c <> 0 Then Return c
                       Return a.Seq.CompareTo(b.Seq)
