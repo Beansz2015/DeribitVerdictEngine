@@ -68,6 +68,8 @@ Record: [`liquidation-probe-run-2026-09-21.md`](liquidation-probe-run-2026-09-21
 
 ## 3. Lessons — each one cost something this seat
 
+✅ **Saved as memory files before handover (2026-09-25), indexed in `MEMORY.md`:** liveness checks for long runs, `HttpClient.Timeout` as a cancellation, byte-sized caps for the collector, verify a doc's behaviour claim in code before relaying it, the allow-listed read-back script, the harness running on POCO defaults, and "save lessons before handover" itself (the trader's catch).
+
 | Lesson | Where it bit |
 |---|---|
 | **A long-running process needs a liveness check at every seat start** | Probe run 1 died after 110 min; three handovers missed it |
