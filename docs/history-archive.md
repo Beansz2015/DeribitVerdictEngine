@@ -99,6 +99,12 @@ and had grown to 69 % of a file the session-start protocol reads IN FULL. Nothin
 verbatim rows. The §15 duplicate of **v26** was dropped rather than moved: it already existed below.
 **Keep applying the rule** — when §15 exceeds five settings versions, the oldest move here.
 
+**Seventh batch moved 2026-09-25 (UTC)** — **v64** displaced from `DeribitIndicatorProject.md` §15 by v69 (the Kelly one-class build). Its row as it stood in §15, verbatim; the full pre-trim cell is at §I `trim-2026-09-14-31`.
+
+| Version | Date | Key Changes |
+|---|---|---|
+| **v64 · in-app trade-store capture** (D1–D5) | 2026-07-31 | In-app trade-store capture: a streaming append off the WS trades stream (buffered; its monotonic guard was later replaced by the identity guard) plus an in-app gap-repair timer (fires on start, then every 6 h over a 20 h lookback). The network-free `Core/TradeStoreWriter.vb` was split out of `HistoricalStore`. D1 ruled AWS-ONLY. New top-level `trade_store` block; HARD CONSTRAINT 27. Zero scoring impact, no rendered surface, not a dataset boundary. Fixtures A48a-A48h. Spec: [`in-app-trade-store-capture-proposal.md`](in-app-trade-store-capture-proposal.md). Settings v63 to v64. Full cell: [`history-archive.md` §I, `trim-2026-09-14-31`](history-archive.md#trim-2026-09-14-31) |
+
 
 | Version | Date | Key Changes |
 |---|---|---|
