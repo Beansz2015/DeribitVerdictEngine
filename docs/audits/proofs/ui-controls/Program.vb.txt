@@ -1,0 +1,214 @@
+' Proof harness for the 2026-09-25 UI-controls audit (commit 6e74181).
+' Reproduces two code paths verbatim from the audited tree and drives them
+' with realistic values to show what actually happens (no WinForms app
+' needed to be running — this is an off-screen GDI test).
+
+Imports System.Drawing
+Imports System.Windows.Forms
+
+Module Program
+
+    Sub Main()
+        Console.WriteLine("=== Finding A: TapeStripLabel BURST-highlight over-reach ===")
+        FindingA_BurstHighlightOverreach()
+        Console.WriteLine()
+        Console.WriteLine("=== Finding A2: TapeStripLabel negative tailRect width when the strip overflows its column ===")
+        FindingA2_NegativeTailRectWidth()
+        Console.WriteLine()
+        Console.WriteLine("=== Finding B: MiniMeter.Pct NaN passthrough ===")
+        FindingB_MiniMeterNaNPassthrough()
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Finding A — reproduces MainForm_LiveStrip.vb's ComposeLiveStrip/ComposeTape
+    ' ordering (verified at 6e74181, MainForm_LiveStrip.vb:216-236 and :303-313)
+    ' together with TapeStripLabel.vb's OnPaint highlight logic (TapeStripLabel.vb:30-62).
+    ' Shows that when a BURST is active AND a trailing tag (absorption / cascade /
+    ' approach) is also present, the highlight painted in BurstColor is not just the
+    ' burst word — it is the burst word PLUS every tag appended after it.
+    ' -----------------------------------------------------------------------
+    Sub FindingA_BurstHighlightOverreach()
+        ' Minimal stand-in for MicrostructureSnapshot with just the fields
+        ' ComposeLiveStrip/ComposeTape/ComposeAbsorption touch for this scenario.
+        Dim hasBurst As Boolean = True
+        Dim burstSignal As String = "BURST_BUY"
+        Dim burstRatio As Double = 5.1
+        Dim tradesPerSec As Double = 12.3
+        Dim usdPerSec As Double = 84000.0
+        Dim hasAbsorption As Boolean = True
+        Dim absorptionSignal As String = "ABSORB_ABOVE"
+        Dim absorptionLevel As Double = 60510.0
+        Dim absorptionRatio As Double = 3.4
+
+        ' --- ComposeTape, copied verbatim (MainForm_LiveStrip.vb:303-313) ---
+        Dim tape As String = tradesPerSec.ToString("0.#") & " tr/s (" & FormatUsdPerSec(usdPerSec) & ")"
+        If hasBurst Then
+            Dim burst As String = burstRatio.ToString("0.0") & "×"
+            If burstSignal = "BURST_BUY" Then
+                burst &= " BURST↑"
+            ElseIf burstSignal = "BURST_SELL" Then
+                burst &= " BURST↓"
+            End If
+            tape = tape & " " & burst
+        End If
+
+        ' --- ComposeAbsorption, copied verbatim (MainForm_LiveStrip.vb:270-274) ---
+        Dim absArrow As String = If(absorptionSignal = "ABSORB_ABOVE", "↑", "↓")
+        Dim absorptionTag As String = "ABS" & absArrow & " " & absorptionLevel.ToString("0") &
+                                       " (" & absorptionRatio.ToString("0.0") & "×)"
+
+        ' --- ComposeLiveStrip ordering, copied verbatim (MainForm_LiveStrip.vb:216-236) ---
+        ' price/levels/TFI/spread/book are irrelevant to this test; the point is that
+        ' ComposeTape's return value (with BURST already inside it) is joined BEFORE
+        ' the conditional absorption/cascade/approach tags, all with the same " · " separator.
+        Dim parts As New List(Of String) From {
+            "60123", "SL 59860 (+56) | SH 60103 (+299)", "TFI BUY +1200.0", "1.2 bps", "book 1.4× bid",
+            tape
+        }
+        If hasAbsorption Then parts.Add(absorptionTag)
+        Dim fullStripText As String = String.Join(" · ", parts)
+
+        Console.WriteLine("Composed strip text (what lblLiveStrip.Text is set to):")
+        Console.WriteLine("  """ & fullStripText & """")
+
+        ' --- TapeStripLabel.OnPaint highlight-boundary logic, copied verbatim
+        '     (TapeStripLabel.vb:39-49) ---
+        Dim idx As Integer = fullStripText.IndexOf("BURST", StringComparison.Ordinal)
+        Dim prefix As String = fullStripText.Substring(0, idx)
+        Dim tail As String = fullStripText.Substring(idx)
+
+        Console.WriteLine()
+        Console.WriteLine("prefix (drawn in the DIM ForeColor):")
+        Console.WriteLine("  """ & prefix & """")
+        Console.WriteLine("tail (drawn ENTIRELY in BurstColor / ACC_WARN amber):")
+        Console.WriteLine("  """ & tail & """")
+        Console.WriteLine()
+        If tail.Contains("ABS") Then
+            Console.WriteLine("CONFIRMED: the absorption tag (""" & absorptionTag & """) is inside the " &
+                               "amber-highlighted tail, even though it is a wholly separate signal from the " &
+                               "burst call-out. The control's own header comment claims it highlights " &
+                               "'just the burst word' — it does not when anything is appended after the tape field.")
+        Else
+            Console.WriteLine("NOT reproduced in this run.")
+        End If
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Finding A2 — TapeStripLabel.OnPaint (TapeStripLabel.vb:54-61) computes
+    ' tailRect.Width as ClientRectangle.Width - pw with no lower bound, unlike
+    ' every sibling control in Controls/ (SectionGroup/FlatButton/Pill/
+    ' RoundedCardPanel/RegimeAnchorWarn all guard `Width <= 0 OrElse Height <= 0`
+    ' at the top of OnPaint). lblLiveStrip is docked into a fixed-width grid
+    ' cell (MainForm_Layout.vb:756-765, no AutoSize), while the composed strip
+    ' string has no length cap and grows with every optional tag. This drives
+    ' pw > ClientRectangle.Width under a long strip line.
+    ' -----------------------------------------------------------------------
+    Sub FindingA2_NegativeTailRectWidth()
+        Dim full As String = "60123 · SL 59860 (+56) | SH 60103 (+299) · TFI BUY +1200.0 · 1.2 bps · " &
+                              "book 1.4× bid · 12.3 tr/s ($84.0k/s) 5.1× BURST↑ · ABS↑ 60510 (3.4×) · " &
+                              "LIQ↑ 3× ($2.1M) · NEAR SH 60103 (7t)"
+        ' A realistic fixed strip-cell width: the row is 24px tall (MainForm_Layout.vb:789)
+        ' between two other controls (a checkbox and the ARM AUTOTRADE checkbox) in a
+        ' TableLayoutPanel row, so its column width is a few hundred px at most on a
+        ' laptop-width window — nowhere near enough for the string above at 9pt bold mono.
+        Dim clientWidth As Integer = 260
+        Dim clientHeight As Integer = 18
+        Dim clientRect As New Rectangle(0, 0, clientWidth, clientHeight)
+
+        Using bmp As New Bitmap(Math.Max(1, clientWidth), Math.Max(1, clientHeight))
+            Using g As Graphics = Graphics.FromImage(bmp)
+                Dim font As New Font("Consolas", 9.0F, FontStyle.Bold)
+                Dim flags As TextFormatFlags =
+                    TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or
+                    TextFormatFlags.NoPrefix Or TextFormatFlags.NoPadding
+
+                Dim idx As Integer = full.IndexOf("BURST", StringComparison.Ordinal)
+                Dim prefix As String = full.Substring(0, idx)
+                Dim tail As String = full.Substring(idx)
+
+                Dim pw As Integer = TextRenderer.MeasureText(
+                    g, prefix, font, New Size(Integer.MaxValue, clientRect.Height),
+                    TextFormatFlags.NoPrefix Or TextFormatFlags.NoPadding).Width
+
+                Console.WriteLine($"ClientRectangle.Width = {clientWidth}")
+                Console.WriteLine($"measured prefix width (pw) = {pw}")
+                Dim tailWidth As Integer = clientRect.Width - pw
+                Console.WriteLine($"tailRect.Width = ClientRectangle.Width - pw = {tailWidth}")
+
+                If tailWidth < 0 Then
+                    Console.WriteLine("CONFIRMED: tailRect.Width is negative (no clamp exists in TapeStripLabel.vb).")
+                Else
+                    Console.WriteLine("Not negative in this run — widen the test string or narrow clientWidth to reproduce.")
+                End If
+
+                Dim tailRect As New Rectangle(
+                    clientRect.X + pw, clientRect.Y, tailWidth, clientRect.Height)
+
+                Dim threw As Boolean = False
+                Try
+                    TextRenderer.DrawText(g, prefix, font, clientRect, Color.Gray, flags)
+                    TextRenderer.DrawText(g, tail, font, tailRect, Color.Orange, flags)
+                Catch ex As Exception
+                    threw = True
+                    Console.WriteLine("TextRenderer.DrawText THREW: " & ex.GetType().FullName & " - " & ex.Message)
+                End Try
+                If Not threw Then
+                    Console.WriteLine("TextRenderer.DrawText did NOT throw on a negative-width Rectangle " &
+                                       "(GDI DrawTextEx treats the invalid rect as clipped-to-nothing) — " &
+                                       "so this is a silent rendering defect (the highlighted tail is not drawn " &
+                                       "where the trader would look for it), not a crash.")
+                End If
+            End Using
+        End Using
+    End Sub
+
+    ' -----------------------------------------------------------------------
+    ' Finding B — MiniMeter.vb's Pct property (MiniMeter.vb:54-64) clamps with
+    ' `If v < 0 Then v = 0` / `If v > 100 Then v = 100`. Under IEEE-754, both
+    ' comparisons are false when v is NaN, so NaN is not clamped — it is stored
+    ' as-is. OnPaint (MiniMeter.vb:124-129) then computes fillW = width * (NaN/100)
+    ' = NaN, and `If fillW > 0` is false for NaN, so the fill rectangle is
+    ' silently skipped — no exception, but the bar renders as empty with no
+    ' error styling while the numeric label next to it (built in
+    ' MainForm_Render_Cards.vb:2083-2085 from the same r.SpreadBps) would print
+    ' "NaN bps" verbatim. NaN is reachable at the call site
+    ' (MainForm_Render_Cards.vb:2077-2081) whenever r.SpreadBps is NaN, which a
+    ' zero-mid order book (BestBid = BestAsk = 0) produces upstream via
+    ' (BestAsk - BestBid) / mid * 10000 = 0 / 0.
+    ' -----------------------------------------------------------------------
+    Sub FindingB_MiniMeterNaNPassthrough()
+        Dim v As Single = Single.NaN
+
+        ' Copied verbatim from MiniMeter.vb's Pct setter.
+        If v < 0 Then v = 0
+        If v > 100 Then v = 100
+        Dim pctAfterClamp As Single = v
+
+        Console.WriteLine($"input v = NaN")
+        Console.WriteLine($"pct after the setter's clamp = {pctAfterClamp} (IsNaN = {Single.IsNaN(pctAfterClamp)})")
+
+        Dim clientWidth As Single = 180.0F
+        Dim fillW As Single = clientWidth * (pctAfterClamp / 100.0F)
+        Console.WriteLine($"fillW = width * (pct/100) = {fillW} (IsNaN = {Single.IsNaN(fillW)})")
+
+        If fillW > 0 Then
+            Console.WriteLine("Fill rectangle WOULD be drawn (unexpected).")
+        Else
+            Console.WriteLine("`If fillW > 0` is False for NaN, so FillRectangle is never called: " &
+                               "the bar silently renders as fully empty, with no exception and no visual flag.")
+        End If
+
+        Dim spreadBps As Double = Double.NaN
+        Console.WriteLine("Meanwhile the adjacent numeric label text (MainForm_Render_Cards.vb:2084) " &
+                           "would read: """ & $"{spreadBps:F2} bps" & """ — a raw ""NaN bps"" shown to the trader " &
+                           "next to a progress bar that looks like a normal, healthy zero reading.")
+    End Sub
+
+    Private Function FormatUsdPerSec(v As Double) As String
+        Dim a As Double = Math.Abs(v)
+        If a >= 1000000.0 Then Return "$" & (v / 1000000.0).ToString("0.0") & "M/s"
+        If a >= 1000.0 Then Return "$" & (v / 1000.0).ToString("0.0") & "k/s"
+        Return "$" & v.ToString("0") & "/s"
+    End Function
+
+End Module
