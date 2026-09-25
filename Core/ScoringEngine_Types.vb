@@ -108,6 +108,48 @@ Public Class VerdictResult
     ''' <summary>True when the kelly.max_leverage cap (not the $ risk cap) set KellyContracts.</summary>
     Public Property KellyLevCapped As Boolean = False
 
+    ' ---------------------------------------------------------------------------
+    ' Kelly one-class + placed-payoff-book fields (v69, docs/kelly-one-class-
+    ' placed-payoff-spec.md §3.3 + the K-1 (g) ruling). Display-only, no scoring
+    ' impact. All default to their reset state: no side / book not read.
+    ' ---------------------------------------------------------------------------
+
+    ''' <summary>True when a Kelly side exists (verdict side, or the lean side on
+    ''' "NO TRADE [WEAK LONG]"/"[WEAK SHORT]"). False on plain NO TRADE and "[TIE]" —
+    ''' the render gate (KO-4): the Kelly block shows iff this is True, replacing the
+    ''' pre-v69 KellyPWin &gt; 0 gate that finding F-1 named as wrong.</summary>
+    Public Property KellyHasSide As Boolean = False
+    ''' <summary>Payoff ratio b actually used in f* — the book's (bucket, or session-pool
+    ''' on fallback) pooled net payoff Σ(target-fee)/Σ(stop+fee). NOT the live row's own
+    ''' placed R:R (that stays on the ATR ENTRY LEVELS rows) — see F-2.</summary>
+    Public Property KellyB As Double = 0.0
+    ''' <summary>Breakeven win rate at KellyB: 1 / (1 + KellyB).</summary>
+    Public Property KellyBreakevenP As Double = 0.0
+    ''' <summary>Row count backing KellyPWin/KellyB — the bucket's N, or the session
+    ''' pool's N when KellyBucketFallback is True, or the session pool's N in the
+    ''' "book below the floor" state (where it is also cfg.Kelly.MinBookRows-short).</summary>
+    Public Property KellyBookN As Integer = 0
+    ''' <summary>Session bucket name (ASIA/LONDON/NY) the book was pooled over (KO-2 (a):
+    ''' the current run's session, not all sessions).</summary>
+    Public Property KellyBookSession As String = ""
+    ''' <summary>True when the whole session book meets cfg.Kelly.MinBookRows. False ⇒
+    ''' the "book below the floor" render state (KO-4/§3.4): no p/b/f* computed.</summary>
+    Public Property KellyBookSufficient As Boolean = False
+    ''' <summary>Earliest weekday, in-population eval-cache row timestamp (UTC) in the
+    ''' session book — renders as "since YYYY-MM-DD" on the book row.</summary>
+    Public Property KellyBookSpanStartUtc As DateTime = DateTime.MinValue
+    ''' <summary>1-based tercile index (1..3) the live row's own placed net payoff falls
+    ''' into, by K-1 (g). 0 when no buckets exist (book below the floor, or no side).</summary>
+    Public Property KellyBucketIndex As Integer = 0
+    ''' <summary>Lower bound of KellyBucketIndex's b_row range, as measured on the current book.</summary>
+    Public Property KellyBucketLo As Double = 0.0
+    ''' <summary>Upper bound of KellyBucketIndex's b_row range, as measured on the current book.</summary>
+    Public Property KellyBucketHi As Double = 0.0
+    ''' <summary>True when KellyBucketIndex's own row count is below cfg.Kelly.MinBookRows,
+    ''' so KellyPWin/KellyB/KellyBookN fell back to the session-pooled values (K-1 (g) point 4).
+    ''' The basis line must say so on screen when True.</summary>
+    Public Property KellyBucketFallback As Boolean = False
+
     ''' <summary>Analysis run timestamp. Set in RunAnalysisAsync; used for TIME: line and dump header.</summary>
     Public Property Timestamp As DateTime = DateTime.MinValue
 

@@ -41,6 +41,18 @@ Module Program
         A8_DominantSideCascade()
         A9_MtfPerSideFlags()
         A10_KellyInverseLeverage()
+        ' [v69, docs/kelly-one-class-placed-payoff-spec.md §6] Kelly one-class + book.
+        A90a_BookPopulationFilter()
+        A90b_BookOutcomeClasses()
+        A90c_BookPooledPayoffFormula()
+        A90d_BookFloor()
+        A90e_OneClass()
+        A90f_NoEdge()
+        A90g_SizesOffPlacedStopNotAtr()
+        A90h_SideSelection()
+        A90i_BucketShapeFarTargetLowerP()
+        A90j_BucketFloorFallback()
+        A90k_TercileBoundaryDeterminism()
         A11_CandleFreshness()
         A12_LinearLevels()
         A13_MinTradeableMoveGate()
@@ -1343,23 +1355,424 @@ Module Program
     End Sub
 
     ' -- A10: Kelly inverse-contract sizing + leverage cap (D1/H4) --------------
-    ' STRONG LONG / HIGH / stop distance 60 / entry 62,900 / POCO defaults.
-    ' p=0.65, q=0.35, b=2.0/1.2=1.6667 → f*=0.44, half=0.22, applied=min(0.22,0.05)=0.05
-    '   → KellyRiskUsd = 1000 × 0.05 = $50.
-    ' riskPerContract = face×stop/entry = 10×60/62900 ≈ 0.009539 USD
-    '   → risk-derived = floor(50 / 0.009539) = 5241 contracts.
-    ' leverage cap = floor(account × maxLev / face) = floor(1000×5.0/10) = 500.
-    ' min(5241, 500) = 500, leverage-bound → notional $5,000, 5.0× lev, LEV CAPPED.
+    ' [v69 rewrite, F-4] MECHANISM: a book with an EXPLICIT p/b (not read from the
+    ' confidence-tier map, which is retired). The old comment's "b=2.0/1.2=1.6667"
+    ' geometry is gone with it (F-4) — this book uses the SAME stop distance (60)
+    ' and entry (62,900) as the pre-v69 fixture so the inverse-contract / leverage-
+    ' cap arithmetic below is directly comparable; b itself is now a MEASURED book
+    ' value, not a literal ratio.
+    ' Book: p=0.75, target 78.5/stop 60/fee = 0.0003*62900 = 18.87 (round-trip,
+    ' default trade_costs) -> b = (78.5-18.87)/(60+18.87) = 59.63/78.87 = 0.7561
+    ' (a single sufficient bucket built from 400 identical rows so bucket == pool).
+    ' f* = (b*p - q)/b = (0.7561*0.75-0.25)/0.7561 = 0.3171/0.7561 = 0.4194
+    ' half=0.2097, applied=min(0.2097,0.05)=0.05 -> KellyRiskUsd = 1000*0.05 = $50
+    ' (the 5% cap binds regardless of the exact b/f* above it, which is why the
+    ' leverage-cap arithmetic below is insensitive to the b hand-computation).
+    ' riskPerContract = face*stop/entry = 10*60/62900 ~= 0.009539 USD
+    '   -> risk-derived = floor(50 / 0.009539) = 5241 contracts.
+    ' leverage cap = floor(account*maxLev/face) = floor(1000*5.0/10) = 500.
+    ' min(5241, 500) = 500, leverage-bound -> notional $5,000, 5.0x lev, LEV CAPPED.
+    ' Mutation-proved (dropping the leverage-cap branch): 5241 contracts, not lev
+    ' capped — turns this Check red.
     Private Sub A10_KellyInverseLeverage()
         Dim cfg As New EngineSettings()
-        Dim v As New VerdictResult With {.Verdict = "STRONG LONG", .Confidence = "HIGH"}
-        ScoringEngine.CalcKellySizing(v, stopDistanceUsd:=60, entryPriceUsd:=62900, cfg:=cfg)
+        Const Entry As Double = 62900.0
+        Const StopPx As Double = 62840.0    ' stop distance 60
+        Const Target As Double = 62978.5    ' target distance 78.5
 
-        Check("A10 Kelly leverage-capped (inverse contract)",
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        Dim baseTs As New DateTime(2026, 9, 21, 15, 0, 0, DateTimeKind.Utc)   ' Monday, NY hour
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i < 300, "SUCCESS", "ADVERSE_HIT")   ' 300/400 = 0.75
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = baseTs.AddMinutes(i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Target, .AdvBar = StopPx, .EvalOutcome = outcome})
+        Next
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+
+        Dim v As New VerdictResult With {.Verdict = "STRONG LONG"}
+        Dim lv As New SideLevels With {.Entry = Entry, .StopPx = StopPx, .RawTarget = Target, .Target = Target}
+        ScoringEngine.CalcKellySizing(v, book, lvLong:=lv, lvShort:=New SideLevels(), cfg:=cfg)
+
+        Check("A10 Kelly leverage-capped (inverse contract, explicit book p/b)",
               v.KellyContracts = 500 AndAlso v.KellyLevCapped = True AndAlso
               Math.Abs(v.KellyRiskUsd - 50.0) < 0.001,
-              String.Format("expected 500 contracts / LEV CAPPED / risk $50, got {0} contracts / levCapped={1} / risk ${2:F2}",
-                            v.KellyContracts, v.KellyLevCapped, v.KellyRiskUsd))
+              String.Format("expected 500 contracts / LEV CAPPED / risk $50, got {0} contracts / levCapped={1} / risk ${2:F2} (book p={3:F4} b={4:F4})",
+                            v.KellyContracts, v.KellyLevCapped, v.KellyRiskUsd, book.P, book.NetPayoff))
+    End Sub
+
+    ' -- A90a: Kelly book population filter (v69, docs/kelly-one-class-placed-payoff-spec.md §3.1/§6) --
+    ' A mixed list: weekend / MinValue / NO TRADE / PENDING / NO_DATA / EXCLUDED_* / other-session /
+    ' WEAK rows. Only 4 rows are in population: WEAK LONG SUCCESS, STRONG LONG SUCCESS,
+    ' LONG (MEDIUM) ADVERSE_HIT, STRONG SHORT SUCCESS -> N=4, Successes=3. WEAK counts (QD-1 (c),
+    ' one class — the pre-v69 E2a WEAK exclusion does not apply here, that is a DISPLAY-time
+    ' filter on a different consumer, AggregateRange).
+    Private Sub A90a_BookPopulationFilter()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        Dim mon As New DateTime(2026, 9, 21, 0, 0, 0, DateTimeKind.Utc)     ' Monday
+        Dim sat As New DateTime(2026, 9, 19, 15, 0, 0, DateTimeKind.Utc)    ' Saturday, NY hour
+
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = sat, .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "SUCCESS"})           ' weekend
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = DateTime.MinValue, .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "SUCCESS"}) ' MinValue guard
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(15), .Verdict = "NO TRADE", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "SUCCESS"})     ' not eligible
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(16), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "PENDING"})  ' unresolved
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(17), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "NO_DATA"})  ' unresolved
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(18), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "EXCLUDED_BELOW_MIN_MOVE"}) ' unresolved
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(3), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "SUCCESS"})   ' ASIA, wrong session
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(19), .Verdict = "WEAK LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "SUCCESS"})    ' in population
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(20), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "SUCCESS"})  ' in population
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(21), .Verdict = "LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "ADVERSE_HIT"})     ' in population (MEDIUM), fails
+        rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(22), .Verdict = "STRONG SHORT", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "SUCCESS"}) ' in population
+
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+        Check("A90a book population filter (weekend/MinValue/NO TRADE/PENDING/NO_DATA/EXCLUDED_*/other-session out, WEAK+tiers in) -> N=4, Successes=3",
+              book.N = 4 AndAlso book.Successes = 3,
+              String.Format("got N={0} Successes={1}", book.N, book.Successes))
+    End Sub
+
+    ' -- A90b: Kelly book outcome classes -- SUCCESS is a success; ADVERSE_HIT, AMBIGUOUS and
+    ' WINDOW_EXPIRED are all failures (in population, denominator); PENDING/NO_DATA/EXCLUDED_* stay out.
+    Private Sub A90b_BookOutcomeClasses()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 15, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon, .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "SUCCESS"},
+            New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(1), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "ADVERSE_HIT"},
+            New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(2), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "AMBIGUOUS"},
+            New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(3), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = 100200, .AdvBar = 99900, .EvalOutcome = "WINDOW_EXPIRED"}
+        }
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+        Check("A90b book outcome classes: ADVERSE_HIT/AMBIGUOUS/WINDOW_EXPIRED all in population as failures -> N=4, Successes=1",
+              book.N = 4 AndAlso book.Successes = 1,
+              String.Format("got N={0} Successes={1}", book.N, book.Successes))
+    End Sub
+
+    ' -- A90c: Kelly book payoff -- pooled net b = sum(T-fee) / sum(S+fee), NOT the mean of
+    ' per-row ratios. Two rows with the SAME target distance but DIFFERENT stop distances make
+    ' the two formulas diverge (equal denominators would make them agree by coincidence).
+    ' fee = 0.0003 * 100000 = 30 (default trade_costs). Row1: T=100,S=50 -> ratio .875.
+    ' Row2: T=100,S=200 -> ratio .3043. Mean-of-ratios = .5897. Pooled = (70+70)/(80+230) = .4516.
+    Private Sub A90c_BookPooledPayoffFormula()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 15, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon, .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = Entry + 100, .AdvBar = Entry - 50, .EvalOutcome = "SUCCESS"},
+            New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = mon.AddHours(1), .Verdict = "STRONG LONG", .EntryPrice = Entry, .FavBar = Entry + 100, .AdvBar = Entry - 200, .EvalOutcome = "SUCCESS"}
+        }
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+        Const ExpectedPooled As Double = 140.0 / 310.0     ' .4516...
+        Const MeanOfRatios As Double = 0.5897
+        Check("A90c book payoff is pooled (sum/sum), not the mean of per-row ratios",
+              Math.Abs(book.NetPayoff - ExpectedPooled) < 0.0005 AndAlso Math.Abs(book.NetPayoff - MeanOfRatios) > 0.05,
+              String.Format("got NetPayoff={0:F4}, expected pooled={1:F4} (mean-of-ratios would be {2:F4})",
+                            book.NetPayoff, ExpectedPooled, MeanOfRatios))
+    End Sub
+
+    ' -- A90d: Kelly book floor -- N one below kelly.min_book_rows (400) -> not sufficient;
+    ' N at the floor -> sufficient.
+    Private Sub A90d_BookFloor()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 13, 0, 0, DateTimeKind.Utc)
+
+        Dim MakeRows = Function(n As Integer) As List(Of LivePerformanceTracker.EvalCacheEntry)
+                           Dim lst As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+                           For i As Integer = 0 To n - 1
+                               lst.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                                   .Timestamp = mon.AddMinutes(i), .Verdict = "STRONG LONG",
+                                   .EntryPrice = Entry, .FavBar = Entry + 200, .AdvBar = Entry - 100, .EvalOutcome = "SUCCESS"})
+                           Next
+                           Return lst
+                       End Function
+
+        Dim bookBelow = LivePerformanceTracker.ComputeKellyBook(MakeRows(399), "NY", cfg)
+        Dim bookAt = LivePerformanceTracker.ComputeKellyBook(MakeRows(400), "NY", cfg)
+        Check("A90d book floor: N=399 -> Not Sufficient, N=400 -> Sufficient",
+              bookBelow.Sufficient = False AndAlso bookAt.Sufficient = True,
+              String.Format("got 399-row Sufficient={0}, 400-row Sufficient={1}", bookBelow.Sufficient, bookAt.Sufficient))
+    End Sub
+
+    ' -- A90e: Kelly is one class -- the SAME book and SAME placed levels give IDENTICAL
+    ' Kelly* outputs for STRONG, MEDIUM (bare "LONG") and WEAK verdicts (QD-1 (c)).
+    ' 1200 rows, identical b_row (T=200/S=100/fee=30 -> b_row=170/130=1.3077), 60% success
+    ' (period-5 pattern, divides evenly into each 400-row tercile) -> every bucket P=0.60,
+    ' NetPayoff=1.3077, all three Sufficient (400>=400).
+    Private Sub A90e_OneClass()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 13, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        For i As Integer = 0 To 1199
+            Dim outcome As String = If(i Mod 5 < 3, "SUCCESS", "ADVERSE_HIT")   ' 60% success, period 5
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddSeconds(i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 200, .AdvBar = Entry - 100, .EvalOutcome = outcome})
+        Next
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+        Dim lv As New SideLevels With {.Entry = Entry, .StopPx = Entry - 100, .RawTarget = Entry + 200, .Target = Entry + 200}
+
+        Dim vStrong As New VerdictResult With {.Verdict = "STRONG LONG"}
+        Dim vMedium As New VerdictResult With {.Verdict = "LONG"}
+        Dim vWeak As New VerdictResult With {.Verdict = "WEAK LONG"}
+        ScoringEngine.CalcKellySizing(vStrong, book, lv, New SideLevels(), cfg)
+        ScoringEngine.CalcKellySizing(vMedium, book, lv, New SideLevels(), cfg)
+        ScoringEngine.CalcKellySizing(vWeak, book, lv, New SideLevels(), cfg)
+
+        Check("A90e one class: STRONG/MEDIUM/WEAK give identical Kelly* on the same book+levels",
+              vStrong.KellyPWin = vMedium.KellyPWin AndAlso vMedium.KellyPWin = vWeak.KellyPWin AndAlso
+              vStrong.KellyB = vMedium.KellyB AndAlso vMedium.KellyB = vWeak.KellyB AndAlso
+              vStrong.KellyF = vMedium.KellyF AndAlso vMedium.KellyF = vWeak.KellyF AndAlso
+              vStrong.KellyContracts = vMedium.KellyContracts AndAlso vMedium.KellyContracts = vWeak.KellyContracts AndAlso
+              vStrong.KellyContracts > 0,
+              String.Format("STRONG p={0:F4}/b={1:F4}/f*={2:F4}/contracts={3}  MEDIUM p={4:F4}/b={5:F4}/f*={6:F4}/contracts={7}  WEAK p={8:F4}/b={9:F4}/f*={10:F4}/contracts={11}",
+                            vStrong.KellyPWin, vStrong.KellyB, vStrong.KellyF, vStrong.KellyContracts,
+                            vMedium.KellyPWin, vMedium.KellyB, vMedium.KellyF, vMedium.KellyContracts,
+                            vWeak.KellyPWin, vWeak.KellyB, vWeak.KellyF, vWeak.KellyContracts))
+    End Sub
+
+    ' -- A90f: Kelly no edge -- book p below breakeven -> KellyF <= 0, KellyContracts = 0,
+    ' KellyRiskUsd = 0, KellyLevCapped = False. Same b_row/geometry as A90e but 20% success
+    ' (breakeven at b=1.3077 is 1/(1+1.3077) = 0.4333 > 0.20).
+    Private Sub A90f_NoEdge()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 13, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i Mod 5 = 0, "SUCCESS", "ADVERSE_HIT")   ' 20% success
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddMinutes(i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 200, .AdvBar = Entry - 100, .EvalOutcome = outcome})
+        Next
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+        Dim lv As New SideLevels With {.Entry = Entry, .StopPx = Entry - 100, .RawTarget = Entry + 200, .Target = Entry + 200}
+        Dim v As New VerdictResult With {.Verdict = "STRONG LONG"}
+        ScoringEngine.CalcKellySizing(v, book, lv, New SideLevels(), cfg)
+
+        Check("A90f no edge: book p (0.20) below breakeven (~0.4333) -> KellyF<=0, contracts/risk 0, not lev capped",
+              v.KellyF <= 0.0 AndAlso v.KellyContracts = 0 AndAlso v.KellyRiskUsd = 0.0 AndAlso v.KellyLevCapped = False,
+              String.Format("got f*={0:F4} contracts={1} riskUsd={2:F2} levCapped={3} (p={4:F4})",
+                            v.KellyF, v.KellyContracts, v.KellyRiskUsd, v.KellyLevCapped, v.KellyPWin))
+    End Sub
+
+    ' -- A90g: Kelly sizes off the PLACED stop distance (SideLevels.StopPx), not ATR x 1.6 --
+    ' the new CalcKellySizing signature does not even take an ATR parameter. cfg.Kelly.MaxLeverage
+    ' is raised so only the $ risk cap binds, isolating the stop-distance -> contracts formula:
+    ' halving the stop distance (500 -> 250) must exactly double the risk-derived contract count.
+    Private Sub A90g_SizesOffPlacedStopNotAtr()
+        Dim cfg As New EngineSettings()
+        cfg.Kelly.MaxLeverage = 1000.0    ' leverage cap must not bind in this fixture
+        Const Entry As Double = 50000.0
+        Dim mon As New DateTime(2026, 9, 21, 13, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i Mod 10 < 7, "SUCCESS", "ADVERSE_HIT")   ' 70%
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddMinutes(i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 1000, .AdvBar = Entry - 500, .EvalOutcome = outcome})
+        Next
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+
+        Dim vWide As New VerdictResult With {.Verdict = "STRONG LONG"}
+        Dim lvWide As New SideLevels With {.Entry = Entry, .StopPx = Entry - 500, .RawTarget = Entry + 1000, .Target = Entry + 1000}
+        ScoringEngine.CalcKellySizing(vWide, book, lvWide, New SideLevels(), cfg)
+
+        Dim vTight As New VerdictResult With {.Verdict = "STRONG LONG"}
+        Dim lvTight As New SideLevels With {.Entry = Entry, .StopPx = Entry - 250, .RawTarget = Entry + 1000, .Target = Entry + 1000}
+        ScoringEngine.CalcKellySizing(vTight, book, lvTight, New SideLevels(), cfg)
+
+        Check("A90g contracts scale off the placed stop distance: halving it doubles risk-derived contracts",
+              vWide.KellyContracts > 0 AndAlso vTight.KellyContracts = 2 * vWide.KellyContracts AndAlso Not vTight.KellyLevCapped,
+              String.Format("stop=500 -> {0} contracts; stop=250 -> {1} contracts (expected 2x)",
+                            vWide.KellyContracts, vTight.KellyContracts))
+    End Sub
+
+    ' -- A90h: Kelly side selection -- "NO TRADE [WEAK SHORT]" uses the SHORT placed levels;
+    ' "NO TRADE [WEAK LONG]" uses the LONG levels; plain "NO TRADE" and "NO TRADE [TIE]" have
+    ' no side (KellyHasSide = False, every Kelly* field stays at its reset value).
+    ' Book: 3 terciles of 400 rows each (1200 total) — bucket1 b_row~-0.02/p=0.20 (no edge),
+    ' bucket3 b_row~7.46/p=0.90 (edge). lvLong's own b_row lands in bucket1; lvShort's in bucket3.
+    Private Sub A90h_SideSelection()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 13, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        ' Group A (near-tie, low b_row ~0.3): 400 rows, p=0.20.
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i Mod 5 = 0, "SUCCESS", "ADVERSE_HIT")
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddSeconds(i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 60, .AdvBar = Entry - 100, .EvalOutcome = outcome})   ' T=60,S=100,fee=30 -> b=30/130=.2308
+        Next
+        ' Group B (middle, b_row ~1.3): 400 rows, p=0.50.
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i Mod 2 = 0, "SUCCESS", "ADVERSE_HIT")
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddSeconds(400 + i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 200, .AdvBar = Entry - 100, .EvalOutcome = outcome})  ' b=170/130=1.3077
+        Next
+        ' Group C (far, high b_row ~7.46): 400 rows, p=0.90.
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i Mod 10 < 9, "SUCCESS", "ADVERSE_HIT")
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddSeconds(800 + i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 1000, .AdvBar = Entry - 100, .EvalOutcome = outcome}) ' b=970/130=7.4615
+        Next
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+
+        ' lvLong: T=10,S=1000 -> b_row=(10-30)/1030 = -0.0194 -> clamps to bucket1 (no edge).
+        Dim lvLong As New SideLevels With {.Entry = Entry, .StopPx = Entry - 1000, .RawTarget = Entry + 10, .Target = Entry + 10}
+        ' lvShort: T=1000,S=100 -> b_row=(1000-30)/130 = 7.4615 -> clamps to bucket3 (edge).
+        Dim lvShort As New SideLevels With {.Entry = Entry, .StopPx = Entry + 100, .RawTarget = Entry - 1000, .Target = Entry - 1000}
+
+        Dim vShortLean As New VerdictResult With {.Verdict = "NO TRADE [WEAK SHORT]"}
+        ScoringEngine.CalcKellySizing(vShortLean, book, lvLong, lvShort, cfg)
+        Dim vLongLean As New VerdictResult With {.Verdict = "NO TRADE [WEAK LONG]"}
+        ScoringEngine.CalcKellySizing(vLongLean, book, lvLong, lvShort, cfg)
+        Dim vPlain As New VerdictResult With {.Verdict = "NO TRADE"}
+        ScoringEngine.CalcKellySizing(vPlain, book, lvLong, lvShort, cfg)
+        Dim vTie As New VerdictResult With {.Verdict = "NO TRADE [TIE]"}
+        ScoringEngine.CalcKellySizing(vTie, book, lvLong, lvShort, cfg)
+
+        Check("A90h side selection: [WEAK SHORT] uses short levels (bucket3, edge); [WEAK LONG] uses long levels (bucket1, no edge)",
+              vShortLean.KellyHasSide = True AndAlso vShortLean.KellyBucketIndex = 3 AndAlso vShortLean.KellyF > 0.0 AndAlso
+              vLongLean.KellyHasSide = True AndAlso vLongLean.KellyBucketIndex = 1 AndAlso vLongLean.KellyF <= 0.0,
+              String.Format("shortLean: hasSide={0} bucket={1} f*={2:F4}  |  longLean: hasSide={3} bucket={4} f*={5:F4}",
+                            vShortLean.KellyHasSide, vShortLean.KellyBucketIndex, vShortLean.KellyF,
+                            vLongLean.KellyHasSide, vLongLean.KellyBucketIndex, vLongLean.KellyF))
+
+        Check("A90h no side: plain NO TRADE and NO TRADE [TIE] -> KellyHasSide=False, every Kelly* at reset",
+              vPlain.KellyHasSide = False AndAlso vPlain.KellyF = 0.0 AndAlso vPlain.KellyContracts = 0 AndAlso vPlain.KellyPWin = 0.0 AndAlso
+              vTie.KellyHasSide = False AndAlso vTie.KellyF = 0.0 AndAlso vTie.KellyContracts = 0 AndAlso vTie.KellyPWin = 0.0,
+              String.Format("plain: hasSide={0} f*={1} contracts={2} p={3}  |  tie: hasSide={4} f*={5} contracts={6} p={7}",
+                            vPlain.KellyHasSide, vPlain.KellyF, vPlain.KellyContracts, vPlain.KellyPWin,
+                            vTie.KellyHasSide, vTie.KellyF, vTie.KellyContracts, vTie.KellyPWin))
+    End Sub
+
+    ' -- A90i: Kelly bucket shape (F-2 / K-1 (g) point 6) -- a far-target row (high b_row,
+    ' landing in the low-p bucket) gets that BUCKET's low p, not the session-pooled average.
+    ' Groups: near b_row=0.5/p=0.70 (280/400 success), middle b_row=1.5/p=0.45 (180/400),
+    ' far b_row=4.0/p=0.20 (80/400). Pooled p = (280+180+80)/1200 = 0.45.
+    Private Sub A90i_BucketShapeFarTargetLowerP()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 13, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        ' Near: T=140,S=100,fee=30 -> b=110/130=.8462. p=0.70 (280/400).
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i Mod 10 < 7, "SUCCESS", "ADVERSE_HIT")
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddSeconds(i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 140, .AdvBar = Entry - 100, .EvalOutcome = outcome})
+        Next
+        ' Middle: T=200,S=100 -> b=170/130=1.3077. p=0.45 (180/400).
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i Mod 20 < 9, "SUCCESS", "ADVERSE_HIT")   ' 9/20 = 0.45
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddSeconds(400 + i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 200, .AdvBar = Entry - 100, .EvalOutcome = outcome})
+        Next
+        ' Far: T=550,S=100 -> b=520/130=4.0. p=0.20 (80/400).
+        For i As Integer = 0 To 399
+            Dim outcome As String = If(i Mod 5 = 0, "SUCCESS", "ADVERSE_HIT")
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddSeconds(800 + i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 550, .AdvBar = Entry - 100, .EvalOutcome = outcome})
+        Next
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+        Check("A90i sanity: session-pooled p is 0.45 (the value a bucketless read would wrongly use)",
+              Math.Abs(book.P - 0.45) < 0.001, String.Format("got pooled p={0:F4}", book.P))
+
+        ' Far-target live row: T=550,S=100 -> same b_row as the far group -> bucket3.
+        Dim lv As New SideLevels With {.Entry = Entry, .StopPx = Entry - 100, .RawTarget = Entry + 550, .Target = Entry + 550}
+        Dim v As New VerdictResult With {.Verdict = "STRONG LONG"}
+        ScoringEngine.CalcKellySizing(v, book, lv, New SideLevels(), cfg)
+
+        Check("A90i far-target row gets its bucket's LOWER p (~0.20), not the pooled 0.45",
+              v.KellyBucketIndex = 3 AndAlso Math.Abs(v.KellyPWin - 0.20) < 0.001 AndAlso Math.Abs(v.KellyPWin - book.P) > 0.05,
+              String.Format("got bucket={0} p={1:F4} (pooled was {2:F4})", v.KellyBucketIndex, v.KellyPWin, book.P))
+    End Sub
+
+    ' -- A90j: Kelly bucket floor fallback -- a bucket below kelly.min_book_rows falls back to
+    ' the session-pooled p/b (K-1 (g) point 4) and flags it. 1199 identical-b_row rows split
+    ' 399/400/400 (index partition of 1199) -> bucket1 is ONE row short of the 400 floor.
+    ' First 399 inserted (== bucket1, by the tie-preserves-insertion-order stable sort) are ALL
+    ' SUCCESS; only 1 of the remaining 800 is SUCCESS -> pooled p = 400/1199 = 0.3336, sharply
+    ' different from bucket1's own (ignored) local p of 1.0.
+    Private Sub A90j_BucketFloorFallback()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 13, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        For i As Integer = 0 To 1198
+            Dim outcome As String
+            If i < 399 Then
+                outcome = "SUCCESS"
+            ElseIf i = 399 Then
+                outcome = "SUCCESS"    ' the +1 success among the trailing 800 (i=399..1198)
+            Else
+                outcome = "ADVERSE_HIT"
+            End If
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddSeconds(i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 200, .AdvBar = Entry - 100, .EvalOutcome = outcome})   ' identical b_row for every row
+        Next
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+        Check("A90j sanity: 1199 rows split 399/400/400 -> bucket1 insufficient, bucket2/3 sufficient",
+              book.Buckets.Count = 3 AndAlso book.Buckets(0).N = 399 AndAlso Not book.Buckets(0).Sufficient AndAlso
+              book.Buckets(1).N = 400 AndAlso book.Buckets(1).Sufficient AndAlso book.Buckets(2).N = 400 AndAlso book.Buckets(2).Sufficient,
+              String.Format("got bucket sizes {0}/{1}/{2}, sufficient {3}/{4}/{5}",
+                            book.Buckets(0).N, book.Buckets(1).N, book.Buckets(2).N,
+                            book.Buckets(0).Sufficient, book.Buckets(1).Sufficient, book.Buckets(2).Sufficient))
+
+        Dim lv As New SideLevels With {.Entry = Entry, .StopPx = Entry - 100, .RawTarget = Entry + 200, .Target = Entry + 200}
+        Dim v As New VerdictResult With {.Verdict = "STRONG LONG"}
+        ScoringEngine.CalcKellySizing(v, book, lv, New SideLevels(), cfg)
+
+        Dim expectedPooledP As Double = 400.0 / 1199.0
+        Check("A90j fallback: row lands in the insufficient bucket1, but reads the session-pooled p (~0.3336), not bucket1's own 1.0, and flags the fallback",
+              v.KellyBucketIndex = 1 AndAlso v.KellyBucketFallback = True AndAlso
+              Math.Abs(v.KellyPWin - expectedPooledP) < 0.001 AndAlso v.KellyBookN = 1199,
+              String.Format("got bucket={0} fallback={1} p={2:F4} (expected ~{3:F4}) bookN={4}",
+                            v.KellyBucketIndex, v.KellyBucketFallback, v.KellyPWin, expectedPooledP, v.KellyBookN))
+    End Sub
+
+    ' -- A90k: tercile boundary determinism -- 402 rows sharing the EXACT SAME b_row: the
+    ' partition is then decided PURELY by insertion order via a STABLE sort (never randomly).
+    ' First 134 inserted rows are all SUCCESS, the remaining 268 all ADVERSE_HIT -> bucket1
+    ' (index 0..133) must read P=1.0 exactly, buckets 2/3 P=0.0 exactly, every run.
+    ' SelectKellyBucket's own boundary rule (bRow <= HiB) then puts an exact-HiB-value row in
+    ' the FIRST matching bucket (1), and a row just above every HiB in the LAST bucket (3).
+    Private Sub A90k_TercileBoundaryDeterminism()
+        Dim cfg As New EngineSettings()
+        Const Entry As Double = 100000.0
+        Dim mon As New DateTime(2026, 9, 21, 13, 0, 0, DateTimeKind.Utc)
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        For i As Integer = 0 To 401
+            Dim outcome As String = If(i < 134, "SUCCESS", "ADVERSE_HIT")
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {
+                .Timestamp = mon.AddMinutes(i), .Verdict = "STRONG LONG",
+                .EntryPrice = Entry, .FavBar = Entry + 200, .AdvBar = Entry - 100, .EvalOutcome = outcome})   ' identical b_row = 1.3077 for every row
+        Next
+        Dim book = LivePerformanceTracker.ComputeKellyBook(rows, "NY", cfg)
+        Check("A90k tercile split on a full tie is decided by insertion order (stable sort), every run: bucket1 P=1.0, bucket2/3 P=0.0",
+              book.Buckets.Count = 3 AndAlso book.Buckets(0).N = 134 AndAlso book.Buckets(1).N = 134 AndAlso book.Buckets(2).N = 134 AndAlso
+              book.Buckets(0).P = 1.0 AndAlso book.Buckets(1).P = 0.0 AndAlso book.Buckets(2).P = 0.0,
+              String.Format("got sizes {0}/{1}/{2}, P {3:F2}/{4:F2}/{5:F2}",
+                            book.Buckets(0).N, book.Buckets(1).N, book.Buckets(2).N,
+                            book.Buckets(0).P, book.Buckets(1).P, book.Buckets(2).P))
+
+        Const Hi As Double = 1.3076923076923077   ' every bucket's HiB, exactly (170.0/130.0)
+        Dim atBoundary As Integer = LivePerformanceTracker.SelectKellyBucket(book, Hi)
+        Dim justAbove As Integer = LivePerformanceTracker.SelectKellyBucket(book, Hi + 0.0000001)
+        Dim repeat As Integer = LivePerformanceTracker.SelectKellyBucket(book, Hi)
+        Check("A90k SelectKellyBucket boundary rule: bRow = every HiB -> FIRST bucket (1), deterministically repeatable; bRow just above -> clamps to the LAST bucket (3)",
+              atBoundary = 1 AndAlso repeat = 1 AndAlso justAbove = 3,
+              String.Format("got atBoundary={0} repeat={1} justAbove={2}", atBoundary, repeat, justAbove))
     End Sub
 
     ' -- A11: candle freshness guard (D5/S-6) ----------------------------------

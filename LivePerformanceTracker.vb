@@ -144,6 +144,185 @@ Public Class LivePerformanceTracker
     End Class
 
     ' -----------------------------------------------------------------------
+    ' Kelly book (v69, docs/kelly-one-class-placed-payoff-spec.md §3.1/§3.2 +
+    ' the K-1 (g) ruling). Pure — ComputeKellyBook takes the entry list as a
+    ' parameter (not read from module state) so fixtures can pass their own,
+    ' the same pattern AggregateRange uses.
+    ' -----------------------------------------------------------------------
+
+    ''' <summary>One geometry tercile of the session book — rows grouped by their own
+    ''' placed net payoff b_row = (target-fee)/(stop+fee). K-1 (g): the live row's p and b
+    ''' come from whichever bucket its own b_row falls into, not the whole-session pool.</summary>
+    Public Class KellyBucket
+        ''' <summary>Lower bound of this bucket's b_row range, as measured on the book.</summary>
+        Public Property LoB As Double = 0.0
+        ''' <summary>Upper bound of this bucket's b_row range, as measured on the book.</summary>
+        Public Property HiB As Double = 0.0
+        Public Property N As Integer = 0
+        Public Property Successes As Integer = 0
+        ''' <summary>Successes / N. 0 when N = 0.</summary>
+        Public Property P As Double = 0.0
+        ''' <summary>Pooled net payoff over this bucket: Σ(targetᵢ-feeᵢ) / Σ(stopᵢ+feeᵢ).</summary>
+        Public Property NetPayoff As Double = 0.0
+        ''' <summary>True when N meets cfg.Kelly.MinBookRows. False ⇒ a row landing in this
+        ''' bucket falls back to the session-pooled P/NetPayoff (K-1 (g) point 4).</summary>
+        Public Property Sufficient As Boolean = False
+    End Class
+
+    ''' <summary>The session-scoped population CalcKellySizing reads p and b from (KO-1 (a):
+    ''' the live eval cache; KO-2 (a): the current run's session only). N/Successes/P/NetPayoff
+    ''' are the WHOLE-SESSION pool — the session-pooled fallback values (K-1 (g) option (e))
+    ''' and the "book below the floor" state test. Buckets are the 3 terciles of the pool's
+    ''' own b_row (K-1 (g)); empty when the session pool itself is below the floor.</summary>
+    Public Class KellyBook
+        Public Property Session As String = ""
+        Public Property N As Integer = 0
+        Public Property Successes As Integer = 0
+        ''' <summary>Session-pooled success rate. The K-1 (g) fallback (option (e)) value.</summary>
+        Public Property P As Double = 0.0
+        ''' <summary>Session-pooled net payoff Σ(target-fee)/Σ(stop+fee). The K-1 (g) fallback value.</summary>
+        Public Property NetPayoff As Double = 0.0
+        ''' <summary>Earliest weekday, in-population row timestamp (UTC) in the pool.
+        ''' DateTime.MinValue when N = 0.</summary>
+        Public Property SpanStartUtc As DateTime = DateTime.MinValue
+        ''' <summary>True when N meets cfg.Kelly.MinBookRows — gates the "book below the
+        ''' floor" render state (KO-4/§3.4). False ⇒ Buckets is empty; nothing else in this
+        ''' book is meaningful to render.</summary>
+        Public Property Sufficient As Boolean = False
+        ''' <summary>3 terciles, ascending by b_row range. Empty when Not Sufficient.</summary>
+        Public Property Buckets As New List(Of KellyBucket)
+    End Class
+
+    ''' <summary>One row's contribution to the book: its own success flag and placed net
+    ''' payoff. Kept as a private working record only — never exposed.</summary>
+    Private Structure KellyBookRow
+        Public Timestamp As DateTime
+        Public Success As Boolean
+        Public NetTarget As Double   ' targetᵢ - feeᵢ (the book-payoff numerator term)
+        Public NetStop As Double     ' stopᵢ + feeᵢ (the book-payoff denominator term)
+        Public BRow As Double        ' NetTarget / NetStop — the bucket key
+    End Structure
+
+    ''' <summary>
+    ''' [v69 KO-1 (a)/KO-2 (a), K-1 (g)] Pure fold of the eval cache into the session book
+    ''' CalcKellySizing reads p and b from. Population: weekday rows only (MinValue guard
+    ''' first, then ForwardWindowJoiner.IsWeekdayRow — the same order AggregateRange uses),
+    ''' all six directional verdicts pooled (IsEligibleVerdict — QD-1 (c), one class), a
+    ''' resolved outcome (SUCCESS / ADVERSE_HIT / AMBIGUOUS / WINDOW_EXPIRED — PENDING,
+    ''' NO_DATA and every EXCLUDED_* row stay out), and the row's own session bucket
+    ''' matching sessionName (KO-2 (a): the current run's session, not every session).
+    '''
+    ''' Fee and distances are PER ROW (fee scales with that row's own EntryPrice):
+    '''   T = |FavBar - EntryPrice|, S = |AdvBar - EntryPrice|, fee = feePct × EntryPrice,
+    '''   b_row = (T - fee) / (S + fee) — the same formula BuildNetRRLine uses, per-row.
+    ''' NetPayoff is Σ(T-fee)/Σ(S+fee) (pooled, NOT a mean of per-row ratios — the H-1
+    ''' handle's "pooled net b" definition, distance-weighted per DeribitIndicatorProject.md
+    ''' §5a rule 1).
+    '''
+    ''' Buckets: 3 terciles of b_row, built by INDEX partition over the b_row-sorted rows
+    ''' (deterministic — .NET's OrderBy is a stable sort, so a tie at a boundary always
+    ''' lands the same way for a fixed input order; no random or value-based cut). Skipped
+    ''' entirely (Buckets stays empty) when the session pool itself is below the floor —
+    ''' nothing in a sub-floor pool is worth bucketing.
+    ''' </summary>
+    Public Shared Function ComputeKellyBook(entries As List(Of EvalCacheEntry),
+                                            sessionName As String,
+                                            cfg As EngineSettings) As KellyBook
+        Dim book As New KellyBook With {.Session = sessionName}
+        If entries Is Nothing OrElse cfg Is Nothing Then Return book
+
+        Dim feePct As Double = cfg.Scoring.TradeCosts.RoundTripFeePct
+        Dim minRows As Integer = cfg.Kelly.MinBookRows
+
+        Dim rows As New List(Of KellyBookRow)()
+        For Each e In entries
+            If e Is Nothing Then Continue For
+            If e.Timestamp = DateTime.MinValue Then Continue For          ' MinValue guard first
+            If Not ForwardWindowJoiner.IsWeekdayRow(e.Timestamp) Then Continue For
+            If Not IsEligibleVerdict(e.Verdict) Then Continue For          ' all six tiers/sides, QD-1 (c)
+            Select Case e.EvalOutcome
+                Case "SUCCESS", "ADVERSE_HIT", "AMBIGUOUS", "WINDOW_EXPIRED"
+                    ' resolved — in population
+                Case Else
+                    Continue For                                          ' PENDING / NO_DATA / EXCLUDED_* / Nothing
+            End Select
+            Dim bucket = ExecutionResolution.MatchSessionBucket(cfg, e.Timestamp.Hour)
+            If bucket Is Nothing OrElse Not bucket.Name.Equals(sessionName, StringComparison.OrdinalIgnoreCase) Then
+                Continue For
+            End If
+            If e.EntryPrice <= 0 Then Continue For
+
+            Dim fee As Double = feePct * e.EntryPrice
+            Dim t As Double = Math.Abs(e.FavBar - e.EntryPrice)
+            Dim s As Double = Math.Abs(e.AdvBar - e.EntryPrice)
+            Dim netStop As Double = s + fee
+            If netStop <= 0 Then Continue For                             ' degenerate row, cannot pool
+
+            rows.Add(New KellyBookRow With {
+                .Timestamp = e.Timestamp,
+                .Success = (e.EvalOutcome = "SUCCESS"),
+                .NetTarget = t - fee,
+                .NetStop = netStop,
+                .BRow = (t - fee) / netStop
+            })
+        Next
+
+        book.N = rows.Count
+        If book.N = 0 Then Return book
+        book.Successes = Enumerable.Count(rows, Function(x) x.Success)
+        book.P = book.Successes / CDbl(book.N)
+        Dim sumTarget As Double = rows.Sum(Function(x) x.NetTarget)
+        Dim sumStop As Double = rows.Sum(Function(x) x.NetStop)
+        book.NetPayoff = If(sumStop > 0, sumTarget / sumStop, 0.0)
+        book.SpanStartUtc = rows.Min(Function(x) x.Timestamp)
+        book.Sufficient = book.N >= minRows
+        If Not book.Sufficient Then Return book
+
+        ' Terciles: stable sort by BRow ascending, then split by INDEX (n/3 boundaries) —
+        ' a tie at the cut lands wherever the stable sort left it, deterministically, for a
+        ' fixed input order (K-1 (g) point 6).
+        Dim sorted = rows.OrderBy(Function(x) x.BRow).ToList()
+        Dim n As Integer = sorted.Count
+        Dim cut1 As Integer = n \ 3
+        Dim cut2 As Integer = (2 * n) \ 3
+        Dim bounds As Integer() = {0, cut1, cut2, n}
+        For k As Integer = 0 To 2
+            Dim loIdx As Integer = bounds(k)
+            Dim hiIdx As Integer = bounds(k + 1)          ' exclusive
+            Dim slice = sorted.GetRange(loIdx, hiIdx - loIdx)
+            Dim bkt As New KellyBucket()
+            bkt.N = slice.Count
+            If bkt.N > 0 Then
+                bkt.Successes = Enumerable.Count(slice, Function(x) x.Success)
+                bkt.P = bkt.Successes / CDbl(bkt.N)
+                Dim bSumTarget As Double = slice.Sum(Function(x) x.NetTarget)
+                Dim bSumStop As Double = slice.Sum(Function(x) x.NetStop)
+                bkt.NetPayoff = If(bSumStop > 0, bSumTarget / bSumStop, 0.0)
+                bkt.LoB = slice(0).BRow
+                bkt.HiB = slice(slice.Count - 1).BRow
+                bkt.Sufficient = bkt.N >= minRows
+            End If
+            book.Buckets.Add(bkt)
+        Next
+
+        Return book
+    End Function
+
+    ''' <summary>
+    ''' [K-1 (g)] Which tercile a row's own b_row falls into: the first bucket (ascending)
+    ''' whose HiB is ≥ bRow, or the last bucket when bRow exceeds every HiB — "clamped to
+    ''' the end buckets" per the ruling. Returns a 1-based index, or 0 when the book has no
+    ''' buckets (session pool below the floor, or an empty book).
+    ''' </summary>
+    Public Shared Function SelectKellyBucket(book As KellyBook, bRow As Double) As Integer
+        If book Is Nothing OrElse book.Buckets Is Nothing OrElse book.Buckets.Count = 0 Then Return 0
+        For i As Integer = 0 To book.Buckets.Count - 1
+            If bRow <= book.Buckets(i).HiB Then Return i + 1
+        Next
+        Return book.Buckets.Count
+    End Function
+
+    ' -----------------------------------------------------------------------
     ' Module-level state (shared across calls)
     ' -----------------------------------------------------------------------
 

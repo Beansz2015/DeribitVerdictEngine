@@ -1,8 +1,18 @@
 ' Core/ScoringEngine_Kelly.vb
 ' ScoringEngine partial: Kelly sizing helper (display-only).
 ' No scoring impact. Computes recommended risk fraction / contracts for the
-' currently dominant verdict side using ATR stop distance and configured
+' currently dominant verdict side using the placed stop distance and configured
 ' account/contract assumptions.
+'
+' [v69, docs/kelly-one-class-placed-payoff-spec.md] REWRITTEN. p and b no longer
+' come from a confidence-tier map (QD-1 (c): one class, tiers not re-cut) — they
+' come from the live eval cache, folded into a LivePerformanceTracker.KellyBook by
+' the caller (KO-1 (a): the live cache; KO-2 (a): the current run's session only).
+' K-1 (g): p and b are the TERCILE bucket's measured values for rows with a similar
+' placed net payoff to this one, falling back to the session-pooled pair below
+' kelly.min_book_rows (K-1 (g) point 4). See docs/kelly-one-class-placed-payoff-spec.md
+' §3.1-§3.4 and §4 "RULINGS — 2026-09-25" for the full definition; this file
+' implements it, it does not re-derive it.
 
 Partial Public Class ScoringEngine
 
@@ -10,26 +20,29 @@ Partial Public Class ScoringEngine
     ' Kelly sizing (display-only)
     ' -----------------------------------------------------------------------
     ' Inputs:
-    '   v               = VerdictResult to populate
-    '   stopDistanceUsd = ATR-derived stop distance in price points (always > 0)
-    '   entryPriceUsd   = current price (denominator for inverse-contract risk)
-    '   cfg             = Engine settings (kelly block)
+    '   v      = VerdictResult to populate
+    '   book   = the current run's session book (LivePerformanceTracker.ComputeKellyBook)
+    '   lvLong = placed levels for the long side (SignalEmitter.ComputeSideLevels, isLong:=True)
+    '   lvShort= placed levels for the short side (isLong:=False)
+    '   cfg    = Engine settings (kelly + scoring.trade_costs blocks)
     '
-    ' Outputs written into v:
-    '   KellyF, KellyFHalf, KellyFApplied, KellyPWin, KellyPMode,
-    '   KellyCapped, KellyContracts, KellyRiskUsd, KellyLevCapped
+    ' Outputs written into v: see the "Kelly one-class + placed-payoff-book fields"
+    ' block in Core/ScoringEngine_Types.vb, plus the original KellyF/KellyFHalf/
+    ' KellyFApplied/KellyPWin/KellyPMode/KellyCapped/KellyContracts/KellyRiskUsd/
+    ' KellyLevCapped fields (unchanged shape, new source).
     '
     ' Notes:
-    ' - Uses EST mode only for now (pre-calibration).
-    ' - Silent / zeroed if no directional edge or invalid stop distance/price.
-    ' - Deribit BTC-PERPETUAL is an INVERSE contract: the USD loss on a
-    '   $face contract over a $Δ price move is face × Δ / price, not face × Δ
-    '   (D1/H4 fix — the old form was off by the entry price, ~1e4×, so contracts
-    '   were always 0). At correct sizing the $ risk cap is rarely binding, so a
-    '   leverage cap (kelly.max_leverage) is applied and surfaced via KellyLevCapped.
+    ' - Silent / zeroed (KellyHasSide = False) on a verdict with no Kelly side: plain
+    '   NO TRADE and NO TRADE [TIE] (§3.3). Every other output stays at its reset value.
+    ' - Deribit BTC-PERPETUAL is an INVERSE contract: the USD loss on a $face contract
+    '   over a $Δ price move is face × Δ / price, not face × Δ (D1/H4 fix — the old form
+    '   was off by the entry price, ~1e4×, so contracts were always 0). At correct sizing
+    '   the $ risk cap is rarely binding, so a leverage cap (kelly.max_leverage) is applied
+    '   and surfaced via KellyLevCapped.
     Public Shared Sub CalcKellySizing(v As VerdictResult,
-                                      stopDistanceUsd As Double,
-                                      entryPriceUsd As Double,
+                                      book As LivePerformanceTracker.KellyBook,
+                                      lvLong As SideLevels,
+                                      lvShort As SideLevels,
                                       cfg As EngineSettings)
 
         ' Reset all outputs first so suppression is deterministic.
@@ -43,48 +56,127 @@ Partial Public Class ScoringEngine
         v.KellyRiskUsd = 0.0
         v.KellyLevCapped = False
 
-        If v Is Nothing OrElse cfg Is Nothing Then Exit Sub
-        If stopDistanceUsd <= 0 Then Exit Sub
-        If entryPriceUsd <= 0 Then Exit Sub
+        v.KellyHasSide = False
+        v.KellyB = 0.0
+        v.KellyBreakevenP = 0.0
+        v.KellyBookN = 0
+        v.KellyBookSession = ""
+        v.KellyBookSufficient = False
+        v.KellyBookSpanStartUtc = DateTime.MinValue
+        v.KellyBucketIndex = 0
+        v.KellyBucketLo = 0.0
+        v.KellyBucketHi = 0.0
+        v.KellyBucketFallback = False
 
-        ' Empty verdict → no directional edge to size. (The old guard also tested
-        ' "NEUTRAL"/"WAIT" — verdict strings retired ~20 versions ago; dead, removed.
-        ' v30 intentionally renders the lean Kelly on NO TRADE, so NO TRADE is NOT
-        ' suppressed here.)
-        Dim verdict As String = If(v.Verdict, "").Trim().ToUpperInvariant()
-        If verdict = "" Then Exit Sub
-
-        ' ---------------------------------------------------------------
-        ' Step 1: Estimate p(win) from confidence tier (EST mode only).
-        ' Mapping per approved spec:
-        '   HIGH   -> 0.45 + 0.20 = 0.65
-        '   MEDIUM -> 0.45 + 0.10 = 0.55
-        '   LOW    -> 0.45 + 0.00 = 0.45
-        ' ---------------------------------------------------------------
-        Dim p As Double = cfg.Kelly.EstProbFloor
-        Select Case If(v.Confidence, "").Trim().ToUpperInvariant()
-            Case "HIGH"   : p += cfg.Kelly.EstProbScale
-            Case "MEDIUM" : p += (cfg.Kelly.EstProbScale / 2.0)
-            Case Else      : p += 0.0
-        End Select
-
-        Dim q As Double = 1.0 - p
+        If v Is Nothing OrElse cfg Is Nothing OrElse book Is Nothing Then Exit Sub
 
         ' ---------------------------------------------------------------
-        ' Step 2: Determine payoff ratio b using fixed ATR target/stop ratio.
-        ' From current spec/settings: targetMult / stopMult.
+        ' Step 1: which side (if any) Kelly bids for (spec §3.3).
+        ' The verdict side, or the lean side on "NO TRADE [WEAK LONG]"/"[WEAK SHORT]".
+        ' Plain NO TRADE and "NO TRADE [TIE]" have no side — Kelly is not computed.
+        ' Deliberately NOT SignalEmitter.DeriveDirection: that helper returns NONE on
+        ' every "NO TRADE*" verdict (the payload's actionability contract); Kelly's
+        ' bias-only contract (v30) intentionally keeps the lean side.
         ' ---------------------------------------------------------------
-        If cfg.Scoring.AtrStopMultiplier <= 0 Then Exit Sub
-        Dim b As Double = cfg.Scoring.AtrTargetMultiplier / cfg.Scoring.AtrStopMultiplier
-        If b <= 0 Then Exit Sub
+        Dim hasSide As Boolean = False
+        Dim isLong As Boolean = False
+        Dim verdict As String = If(v.Verdict, "").Trim()
+        If verdict = "" Then
+            hasSide = False
+        ElseIf verdict.StartsWith("NO TRADE", StringComparison.OrdinalIgnoreCase) Then
+            If verdict.Contains("WEAK LONG") Then
+                hasSide = True : isLong = True
+            ElseIf verdict.Contains("WEAK SHORT") Then
+                hasSide = True : isLong = False
+            End If
+            ' plain "NO TRADE" and "NO TRADE [TIE]" fall through with hasSide = False
+        ElseIf verdict.Contains("LONG") Then
+            hasSide = True : isLong = True
+        ElseIf verdict.Contains("SHORT") Then
+            hasSide = True : isLong = False
+        End If
 
-        ' Kelly fraction: f* = (b*p - q) / b
-        Dim fStar As Double = ((b * p) - q) / b
+        v.KellyHasSide = hasSide
+        If Not hasSide Then Exit Sub
+
+        Dim kellySide As SideLevels = If(isLong, lvLong, lvShort)
+
+        v.KellyBookSession = book.Session
+        v.KellyBookSufficient = book.Sufficient
+        v.KellyBookSpanStartUtc = book.SpanStartUtc
+
+        ' ---------------------------------------------------------------
+        ' Step 2: "book below the floor" state (§3.4) — the session pool itself
+        ' does not meet kelly.min_book_rows. Nothing else is computed.
+        ' ---------------------------------------------------------------
+        If Not book.Sufficient Then
+            v.KellyBookN = book.N
+            Exit Sub
+        End If
+
+        ' ---------------------------------------------------------------
+        ' Step 3: this row's own bucket key — its placed net payoff for the Kelly
+        ' side (K-1 (g) point 1), same formula as the book rows (spec §3.2).
+        ' ---------------------------------------------------------------
+        Dim entry As Double = kellySide.Entry
+        If entry <= 0 Then Exit Sub
+        Dim feeUsd As Double = cfg.Scoring.TradeCosts.RoundTripFeePct * entry
+        Dim t As Double = Math.Abs(kellySide.Target - entry)
+        Dim s As Double = Math.Abs(kellySide.StopPx - entry)
+        Dim netStop As Double = s + feeUsd
+        If netStop <= 0 Then Exit Sub
+        Dim bRow As Double = (t - feeUsd) / netStop
+
+        Dim bucketIdx As Integer = LivePerformanceTracker.SelectKellyBucket(book, bRow)
+
+        Dim usedP As Double
+        Dim usedB As Double
+        Dim usedN As Integer
+        Dim fallback As Boolean = False
+
+        If bucketIdx = 0 Then
+            ' No buckets on the book (defensive — book.Sufficient already guarantees
+            ' N >= min_book_rows >= 1, so ComputeKellyBook always built 3 buckets here;
+            ' kept as a fallback so a degenerate book cannot throw).
+            usedP = book.P
+            usedB = book.NetPayoff
+            usedN = book.N
+            fallback = True
+        Else
+            Dim bkt = book.Buckets(bucketIdx - 1)
+            v.KellyBucketIndex = bucketIdx
+            v.KellyBucketLo = bkt.LoB
+            v.KellyBucketHi = bkt.HiB
+            If bkt.Sufficient Then
+                usedP = bkt.P
+                usedB = bkt.NetPayoff
+                usedN = bkt.N
+            Else
+                ' K-1 (g) point 4: bucket below the floor -> fall back to the
+                ' session-pooled pair (option (e)), and say so on screen.
+                usedP = book.P
+                usedB = book.NetPayoff
+                usedN = book.N
+                fallback = True
+            End If
+        End If
+
+        v.KellyBucketFallback = fallback
+        v.KellyBookN = usedN
+        v.KellyPWin = usedP
+        v.KellyB = usedB
+        v.KellyPMode = "BOOK"
+        ' Breakeven p at ratio b: f*=0 => b*p - (1-p) = 0 => p = 1/(1+b). Guarded — a
+        ' pathological usedB <= -1 cannot occur with real data (NetStop is always > 0
+        ' and NetTarget cannot be pooled below -Σstop), but a defensive render beats a
+        ' divide-by-zero on a live box.
+        v.KellyBreakevenP = If(1.0 + usedB > 0, 1.0 / (1.0 + usedB), 1.0)
+
+        Dim q As Double = 1.0 - usedP
+        Dim fStar As Double = If(usedB > 0, ((usedB * usedP) - q) / usedB, -1.0)
         v.KellyF = fStar
-        v.KellyPWin = p
-        v.KellyPMode = "EST"
 
-        ' No edge -> silent block
+        ' [NO EDGE] state (KO-4 (b)) — p/b/breakeven/f* render; sizing rows do not.
         If fStar <= 0 Then Exit Sub
 
         ' Half-Kelly and hard cap
@@ -97,11 +189,13 @@ Partial Public Class ScoringEngine
         v.KellyRiskUsd = cfg.Kelly.AccountSizeUsd * fApplied
 
         ' ---------------------------------------------------------------
-        ' Step 3: Contract sizing (inverse contract)
+        ' Step 4: Contract sizing (inverse contract), off the PLACED stop distance
+        ' for the Kelly side (spec §3.3) — not ATR × stop multiplier.
         ' Risk per contract = face × stopDistance / entryPrice  (USD).
         ' Final contracts = min(risk-derived, leverage-derived); whole only.
         ' ---------------------------------------------------------------
-        Dim riskPerContractUsd As Double = cfg.Kelly.ContractFaceUsd * stopDistanceUsd / entryPriceUsd
+        If s <= 0 Then Exit Sub
+        Dim riskPerContractUsd As Double = cfg.Kelly.ContractFaceUsd * s / entry
         If riskPerContractUsd <= 0 Then Exit Sub
 
         Dim contractsByRisk As Integer = CInt(Math.Floor(v.KellyRiskUsd / riskPerContractUsd))

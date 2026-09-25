@@ -769,10 +769,13 @@ Public Class KellySettings
     <JsonPropertyName("max_risk_fraction")>         Public Property MaxRiskFraction       As Double  = 0.05
     ''' <summary>Deribit BTC-PERPETUAL contract face value in USD. Default $10.</summary>
     <JsonPropertyName("contract_face_usd")>         Public Property ContractFaceUsd       As Double  = 10.0
-    ''' <summary>Score-to-probability band floor (pre-calibration). Default 0.45.</summary>
-    <JsonPropertyName("est_prob_floor")>            Public Property EstProbFloor          As Double  = 0.45
-    ''' <summary>Score-to-probability band scale range (pre-calibration). Default 0.20 -> band [0.45, 0.65].</summary>
-    <JsonPropertyName("est_prob_scale")>            Public Property EstProbScale          As Double  = 0.20
+    ''' <summary>[v69, KO-3 (a)] Minimum eval-cache row count — for the whole session book AND
+    ''' for a single geometry tercile bucket — before its measured p/b are trusted. Below this,
+    ''' a bucket falls back to the session-pooled p/b; below it at the session level, the Kelly
+    ''' block renders "book below the floor" and does not size. Default 400: the standard error
+    ''' of p is at most 0.025 there (95% interval about ±5 pp), the width at which a 5-10 pp gap
+    ''' to breakeven reads cleanly. Spec: docs/kelly-one-class-placed-payoff-spec.md §4 KO-3.</summary>
+    <JsonPropertyName("min_book_rows")>             Public Property MinBookRows           As Integer = 400
     ''' <summary>[D1/H4] Max leverage on notional (contracts × face / account). Binds before the $ risk cap at correct inverse-contract sizing. Default 5.0 — conservative; the trader tunes (Deribit BTC perp allows far more).</summary>
     <JsonPropertyName("max_leverage")>              Public Property MaxLeverage           As Double  = 5.0
 End Class

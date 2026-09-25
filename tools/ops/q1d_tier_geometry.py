@@ -708,12 +708,19 @@ for s in SESSIONS:
 p()
 
 # ---- 11 Kelly assumption vs book
-p("## 11. What the Kelly EST mode assumes against what the book shows, P0, main window (descriptive)")
+p("## 11. What the Kelly EST mode assumed (through v68) against what the book shows, P0, main window (descriptive; v69 retired the EST tier map, see the note below)")
 p()
-kc = cfg["kelly"]
+# [F-6, v69] kelly.est_prob_floor/est_prob_scale were RETIRED in settings.json v69
+# (docs/kelly-one-class-placed-payoff-spec.md KO-5 (a) - Kelly p/b now come from the
+# live eval cache, not a confidence-tier map). This section is a HISTORICAL comparison
+# against the EST-mode tier map as it shipped through v68; the v68 values are carried
+# here as a documented literal of that version, not read from a key that no longer
+# exists in the tracked file.
 b_k = cfg["scoring"]["atr_target_multiplier"] / cfg["scoring"]["atr_stop_multiplier"]
-pk = {"STRONG": kc["est_prob_floor"] + kc["est_prob_scale"], "MEDIUM": kc["est_prob_floor"] + kc["est_prob_scale"] / 2.0, "WEAK": kc["est_prob_floor"]}
-p("- Kelly EST (Core/ScoringEngine_Kelly.vb): p from the confidence tier, b = atr_target_multiplier / atr_stop_multiplier = %.3f for every tier. f* = (b p - (1 - p)) / b." % b_k)
+EST_PROB_FLOOR_V68 = 0.45
+EST_PROB_SCALE_V68 = 0.20
+pk = {"STRONG": EST_PROB_FLOOR_V68 + EST_PROB_SCALE_V68, "MEDIUM": EST_PROB_FLOOR_V68 + EST_PROB_SCALE_V68 / 2.0, "WEAK": EST_PROB_FLOOR_V68}
+p("- Kelly EST as it shipped through v68 (Core/ScoringEngine_Kelly.vb): p from the confidence tier, b = atr_target_multiplier / atr_stop_multiplier = %.3f for every tier. f* = (b p - (1 - p)) / b. v69 replaced this with the book's own measured p/b (docs/kelly-one-class-placed-payoff-spec.md); the table below stays as the historical baseline this build compared against." % b_k)
 p()
 p("| Session | Tier | Kelly p | Kelly b | Kelly f* | Measured success rate | Measured payoff sum T / sum S | f* at measured p and b |")
 p("|---|---|---|---|---|---|---|---|")
