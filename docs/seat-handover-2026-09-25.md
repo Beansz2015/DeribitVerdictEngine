@@ -6,7 +6,9 @@
 
 ⛔ **Run `date -u` first.** This seat ran 2026-09-24 13:19 → 2026-09-25 ~13:30 UTC. The workstation shows GMT+8.
 
-**State at close:**
+⭐ **UPDATE 2026-09-25 13:32 UTC: the trader pushed and the RR-1 fix is DEPLOYED** — instance `a19acc4d-465f-446a-ad6f-479e0c6cb9a9` from 13:31:02 UTC, all read-back checks healthy (ledger row in [`aws-collector-deploy-checklist.md`](aws-collector-deploy-checklist.md) §5). **§0 action 2 is DONE**; what remains of it is the live proof: at the next copy-back, no `trade_seq` range should be repaired twice under this instance. The "AHEAD of origin" and "c1855035" lines below are history.
+
+**State at close (before the update above):**
 - `master` is AHEAD of `origin` by this handover plus 9 commits (docs, tools, and the RR-1 engine fix `72f262e`). **The trader pushes.**
 - Settings **v69** (tracked and on the box).
 - Fixtures **486 PASS, `ALL PASS`**; the only SKIP is `A81b` (engine-fix B2's fixture). Orchestrator re-run.
