@@ -1,0 +1,93 @@
+' PROOF EXCERPT — verbatim source, not a standalone runnable file.
+' Source: verify/ordercheck/Program.vb, lines 1210-1293
+' Captured via the Read tool during the audit session (2026-09-24).
+' Purpose: the ONLY CalcMTFGate fixture in the harness (A9). It always feeds
+' a full 70-candle synthetic series (MtfBearCandles()) — it never calls
+' CalcMTFGate with Nothing or a short list, so the fail-open branch shown in
+' CalcMTFGate.vb.txt (lines 455-459 there) has no fixture in this file.
+' -----------------------------------------------------------------------
+
+    ' == A9 / A14h / A64a — one shared 15m BEAR series and one shared invocation ====
+    ' [I17-SWEEP D1, 2026-09-06] A9 and A14h already carried BYTE-IDENTICAL copies of this
+    ' 70-candle builder and of these four literals; A64a would have made a third. It guards
+    ' A9's configuration, so it must exercise A9's ACTUAL configuration — a copy would let a
+    ' retune move A9 while the guard kept watching the old values, which is exactly the
+    ' copy-drift shape D1 rejected option (b) for. Collapsed to ONE builder, ONE set of
+    ' literals, three callers. Private Const is correct here: the constants and every reader
+    ' live in this file, so the F1 Public Const lesson (a fixture reading a PRODUCTION
+    ' constant across assemblies) does not apply.
+    ' ⭐ A64a asserts against MtfAdxMin directly, which is the second reason these are named
+    ' rather than inline — a literal it could not read would have to be restated.
+    Private Const MtfAdxPeriod      As Integer = 7
+    Private Const MtfAdxMin         As Double = 7.5
+    Private Const MtfMinOf          As Integer = 2
+    Private Const MtfCandleLookback As Integer = 55
+
+    ''' <summary>70 steadily falling 15m candles, −100/bar: DMI bearish, ADX strong, EMA
+    ''' stack bearish — all three bear votes cast.</summary>
+    Private Function MtfBearCandles() As List(Of Candle)
+        Dim candles As New List(Of Candle)
+        Dim p As Double = 110000
+        For i As Integer = 0 To 69
+            Dim c As New Candle With {
+                .Timestamp = i, .Open = p, .High = p + 20,
+                .Close = p - 100, .Low = p - 120, .Volume = 10}
+            candles.Add(c)
+            p = c.Close
+        Next
+        Return candles
+    End Function
+
+    Private Sub RunMtfBearGate(ByRef trend As String, ByRef adx As Double, ByRef emaAlign As String,
+                               ByRef passLong As Boolean, ByRef passShort As Boolean,
+                               ByRef details As String)
+        IndicatorEngine.CalcMTFGate(MtfBearCandles(), trend, adx, emaAlign,
+                                    passLong, passShort, details,
+                                    adxPeriod:=MtfAdxPeriod, adxMin:=MtfAdxMin,
+                                    minOf:=MtfMinOf, candleLookback:=MtfCandleLookback)
+    End Sub
+
+    ' -- A9: MTF per-side flags on a 15m BEAR fixture ---------------------------
+    ' 70 steadily falling 15m candles → DMI bearish, ADX strong, EMA stack
+    ' bearish → mtfTrend BEAR → long blocked, short passes.
+    Private Sub A9_MtfPerSideFlags()
+        Dim trend As String = "", emaAlign As String = "", details As String = ""
+        Dim adx As Double
+        Dim passLong As Boolean, passShort As Boolean
+        ' [A54a S2, MECHANISM -- bands MEASURED by I17-SWEEP 2026-09-05, and the measurement
+        ' CORRECTED session 2's reasoning here. See docs/i17-sweep-batch-summary.md §4.]
+        ' ⭐ The real mechanism is VOTE REDUNDANCY, not gate insensitivity. CalcMTFGate scores
+        ' three independent bear votes (DMI, ADX-strong, EMA stack) and needs `minOf`. This
+        ' fixture scores Bear:3 against need:2 -- ONE SPARE VOTE. That spare is the entire reason
+        ' adxPeriod and adxMin each read as inert one at a time: each can only remove one vote.
+        '   adxPeriod 7              ⚠ Assertion band is [1, 68], but the fixture goes PARTLY
+        '                            VACUOUS above 29: ADX collapses to 0.0, the ADX vote drops,
+        '                            and BEAR then comes from DMI+EMA alone -- while A9's own
+        '                            docstring claims it exercises "ADX strong". So the synthetic
+        '                            value is deliberately BELOW 30, not merely inside the band.
+        '                            7 is NOT a shipped value. HISTORY: it replaced 9, which did
+        '                            equal shipped mtf_gate.adx_period.
+        '   adxMin 7.5               ⚠ MASKED, NOT INERT. One-at-a-time band is unbounded
+        '                            ([0, 1000] all pass) purely because of the spare vote: at
+        '                            adxMin > 100 the ADX vote drops and Bear falls 3 -> 2, still
+        '                            clearing minOf 2. Measured jointly, (adxMin 101, minOf 3)
+        '                            FAILS. Synthetic value chosen LOW so adx 100 still clears it
+        '                            and the ADX vote is genuinely cast. Was 20.0 = shipped.
+        '   minOf 2                  ⛔ LOAD-BEARING, narrow band [1, 3]: at 0 the trend INVERTS to
+        '                            BULL, at 4+ it goes FLAT. ⛔ KEPT, and its equality with the
+        '                            shipped mtf_gate.min_of (2) is INCIDENTAL, not a claim.
+        '   candleLookback 55        Band [20, 1000+]; <= 12 breaks. Chosen >= 50 on purpose: below
+        '                            50 the EMA stack cannot form and emaAlign degrades to MIXED,
+        '                            dropping the third vote even though the assertion survives.
+        '                            Was 60 = shipped mtf_gate.candle_lookback.
+        ' ⛔ CONFIRMED by measurement, at these values: Bull:0 Bear:3 (need 2), ADX 100.0,
+        ' EMA:BEAR -- byte-identical to the pre-change diagnostics. All three votes still cast.
+        ' ⭐ And that "all three still cast" claim is now PINNED by A64a rather than merely
+        ' recorded here -- this Check() cannot see a dropped vote, which is finding F2.
+        RunMtfBearGate(trend, adx, emaAlign, passLong, passShort, details)
+
+        Check("A9 MTF per-side flags (15m BEAR)",
+              trend = "BEAR" AndAlso passLong = False AndAlso passShort = True,
+              String.Format("expected BEAR/blockL/passS, got {0}/passL={1}/passS={2} ({3})",
+                            trend, passLong, passShort, details))
+    End Sub
