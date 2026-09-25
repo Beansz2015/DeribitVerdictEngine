@@ -1,0 +1,510 @@
+OrderCheck — engine correctness pass acceptance fixtures
+
+PASS  A1 CVD slope (old sells → recent buys)
+PASS  A2 MicroCVD polarity (bull burst in tail)
+PASS  A3 MicroCVD window (huge old sells excluded)
+PASS  A4 TFI window (first 30 sells excluded)
+PASS  A5 DynamicNorms volume baseline (recent window)
+PASS  A6 OBV normalisation (first-pair-equal not dead)
+PASS  A7 Donchian prior-window channel
+PASS  A8 dominant-side cascade (ls7/ss11 → SHORT)
+PASS  A8 tie (11/11 above weak → NO TRADE [TIE])
+PASS  A9 MTF per-side flags (15m BEAR)
+PASS  A10 Kelly leverage-capped (inverse contract)
+PASS  A11 freshness (30s-old 1m bar → fresh)
+PASS  A11 staleness (3min-old 1m bar → stale)
+PASS  A11 empty list → not fresh
+PASS  A12 linear levels (swing 100099 inside linear target → capped)
+PASS  A12 linear levels (swing 100101 beyond linear target → uncapped)
+PASS  A13a low-ATR veto (placed target 22.75 < floor 49.6 → NO TRADE)
+PASS  A13b tradeable-ATR (placed target 52.5 > floor 49.6 → directional stands)
+PASS  A13c near-swing placed veto (placed target 30 < floor 49.6 → NO TRADE)
+PASS  A13d editability (floor 18.6 < target 22.75 → directional stands)
+PASS  A14a resolution selection (ASIA hr3/hr7→3, LONDON hr10→3, NY hr13/hr23→1)
+PASS  A14b ROC override (mag 3→0.50 / 1→0.1; slope 3→0.25 / 1→0.05)
+PASS  A14c ATR on 3-min clears the gate the 1-min ATR can't
+PASS  A14d NY byte-identical guard (res=1; ROC overrides == globals)
+PASS  A14e per-row stamp (ASIA→3, NY→1; container defaults 1)
+PASS  A14f resolution-filtered aggregation (3-min 2/1, 1-min 1/1, never blended)
+PASS  A14g freshness honours resolution (3m 5-min fresh / 7-min stale; 1m 3-min stale)
+PASS  A14h regime/MTF unchanged (15m gate resolution-independent)
+PASS  A14i resolution survives session_volume disabled (ASIA still 3)
+PASS  A14j per-session ROC magnitude (ASIA 6→0.17 / LONDON 10→0.11 / NY 15→base)
+PASS  A15a filter excludes non-matching (NY×1 keeps 3, no res-3 survives)
+PASS  A15b resolution homogeneity (all NY×1 survivors have ExecResolution=1)
+PASS  A15c legacy v0.6 row defaults ExecResolution=1 and passes NY×1
+PASS  A15d session derivation (hr7→ASIA, hr12→LONDON, hr13→NY)
+[AutoTweaker] INFO — window_mode=fixed; cooldown_rows ignored.
+[AutoTweaker] population filter NY×1m, weekday-only — 3/5 rows in population (0 of the otherwise-eligible rows excluded as weekend/unparsed).
+[AutoTweaker] INFO — population filter changed ('ASIA|3' → 'NY|1|WD'); re-seeding LastEvaluatedRowIndex to filtered.Count=3. Filtered rows preserved but not re-evaluated this round.
+PASS  A15e re-seed on filter change (ASIA|3 → NY|1|WD: index→3, INELIGIBLE, nothing evaluated)
+PASS  A15f Validate rejects resolution_profiles.* / kelly.* / scoring.trade_costs.*, passes OBV.trend_gate
+PASS  A15g session_volume.enabled HC22-fenced; array multiplier UNRESOLVED (not HC11-guarded)
+PASS  A15h Validate rejects network.transport / network.ws_url (HARD CONSTRAINT 12), passes OBV.trend_gate
+PASS  A59a weekday rows survive, Sat/Sun excluded (5 rows -> 3 kept)
+[AutoTweaker] INFO — window_mode=fixed; cooldown_rows ignored.
+[AutoTweaker] population filter NY×1m, weekday-only — 3/5 rows in population (2 of the otherwise-eligible rows excluded as weekend/unparsed).
+[AutoTweaker] INFO — population filter changed ('NY|1' → 'NY|1|WD'); re-seeding LastEvaluatedRowIndex to filtered.Count=3. Filtered rows preserved but not re-evaluated this round.
+PASS  A59b re-seed on weekday-key change (NY|1 -> NY|1|WD: index->3, INELIGIBLE, nothing evaluated)
+[AutoTweaker] INFO — window_mode=fixed; cooldown_rows ignored.
+[AutoTweaker] population filter NY×1m, weekday-only — 2/4 rows in population (2 of the otherwise-eligible rows excluded as weekend/unparsed).
+[AutoTweaker] SKIPPED_SESSION_BOUNDARY — fixed-mode round rows 0..3 crosses session at row 3.
+PASS  A59c weekend gap (Fri idx0 -> Mon idx3, filtered-adjacent) trips SKIPPED_SESSION_BOUNDARY
+PASS  A59d ConditionsExtractor excludes weekend rows from the regime mix (UP:100, not UP:50/RB:50)
+PASS  A59e malformed timestamp parses to MinValue and is excluded, not admitted as Monday
+PASS  A16a trades served when connected-but-quiet (300s-old buffer, healthCheck=True → returned)
+PASS  A16b trades withheld when connection down (fresh buffer, healthCheck=False → Nothing)
+PASS  A16c legacy age-gate without healthCheck (300s→Nothing, fresh→served)
+PASS  A16d WS-path 15m reads every run (fresh present cache still refreshes; case-insensitive)
+PASS  A16e REST-path 15m retains TTL (<TTL skips; >=TTL refreshes; no-cache refreshes)
+PASS  A17a primitive 2-adverse long (TFI+CVD → count 2, no break)
+PASS  A17b primitive structural break long (price 64200 <= swing low 64210)
+PASS  A17c primitive single-adverse long (MicroCVD only → count 1)
+PASS  A17d primitive clear long (bullish flow → count 0, no break)
+PASS  A17e primitive 2-adverse short (OFI+TFI buy → count 2)
+PASS  A17f evaluator end-to-end (heavy sells → Exit; empty buffer → Clear)
+PASS  A17g CalcHoldStatus byte-identical (Layer 1 exact string via Calculate/InLong)
+PASS  A17h evaluator single-adverse → Clear (D3: Warn tier dropped)
+PASS  A18a no roll on unchanged forming open (first adopts no-fire, second no-fire)
+PASS  A18b roll fires once on +1 interval, then quiesces
+PASS  A18c multi-bar gap fires exactly once (catch-up, not burst), adopts newest open
+PASS  A18d resolution switch: 3-min re-adopts no-fire, first new-resolution roll fires
+PASS  A18e backstop fires at (now − lastFire ≥ interval), not before
+PASS  A19a TFI/spread/imbalance (BUY PRESSURE, 2.0 bps, bid-heavy)
+PASS  A19b nearest levels bracket price (above=HVN↑ +20, below=HVN↓ −10)
+PASS  A19c tape-speed window (5 recent counted, 5 old excluded → 0.5 tr/s, $10000/s)
+PASS  A19d tape-speed lull (all trades older than window → 0)
+PASS  A19e empty buffer → blanks (no price/levels/TFI/spread/imbalance), no throw
+PASS  A20a CalcOFI byte-identical (150/15/10.0/BUY DOMINANT) + equals shared helpers
+PASS  A20b CalcOFI edge cases (Nothing + zero-total → 1.0/BALANCED/0/0, helper False)
+PASS  A20c accumulator steady state (constant 2.0 → avg 2.0, warmup armed)
+PASS  A20d accumulator time-aware geometric step (dt=tau → EMA 1.5500)
+PASS  A20e warmup gate (5s coverage → not warm; 10s coverage → warm)
+PASS  A20f Reset re-arms warmup (warm → reset → not warm, n=0, coverage=0)
+PASS  A20g Validate rejects indicators.OFI.averaging_enabled (HARD CONSTRAINT 16)
+PASS  A20h Validate accepts indicators.OFI.avg_window_sec (on the tweaker surface)
+PASS  A20i geometric symmetry (alternating 2.0/0.5 → Ratio in [0.95, 1.05])
+PASS  A21a Validate rejects removed regime_gates.transitional_adx_penalty_low (unresolvable) + accepts live sibling
+PASS  A21b Validate rejects scoring.hold_rsi_hold_long (HARD CONSTRAINT 17 fence) + accepts scoring.verdict_med_pct
+PASS  A22a head (schema_version/signal_id/generated_at_utc/instrument/signal_state/skip_reason)
+PASS  A22a engine block (app/settings_version/instance_id/autotrade_armed)
+PASS  A22a verdict/confidence/direction/context/mtf/scores
+PASS  A22a price/exec_resolution_min/trigger_mode/atr
+PASS  A22a structural-first levels (long swing PLACED + clamp; short fallback + clamp)
+PASS  A22a structural verbatim (zeros = unset semantics ride the raw values)
+PASS  A22a hold_status null (no-position sentinel) + kelly + health
+PASS  A22a fallback levels when no structure (capped=false, cap_reason=null, raw=target)
+PASS  A22a cap-noise-suppressed long (target=placed swing, capped=FALSE, cap_reason null)
+PASS  A22a hold_status verbatim when a position is declared
+PASS  A22b SKIPPED shape (state/reason/engine/health present; verdict/levels/price absent)
+PASS  A22c all NO TRADE* verdicts (incl. lean tags) ⇒ direction NONE
+PASS  A22c directional verdicts carry direction (WEAK included — tier gate is consumer-side)
+PASS  A22c payload: verdict keeps the lean text, direction NONE, confidence N/A
+PASS  A22d DeriveWsHealth pins (REST wins at transport=rest; DEGRADED > DOWN > OK on ws)
+PASS  A22d confidence pin pass-through (HIGH/MEDIUM/LOW/N-A)
+PASS  A22e autotrade_armed reflects the toggle in every payload
+PASS  A22e instance_id stable across reads; signal_id strictly monotonic
+PASS  A22f invariant culture under de-DE (dot decimals, numbers as JSON numbers, ISO-8601 Z)
+PASS  A22g Validate rejects signal_bridge.enabled (HARD CONSTRAINT 18 fence) + accepts scoring.verdict_med_pct
+PASS  A23a steady tape rate math (grossFast≈110, grossNorm≈97, lean≈+1, warm)
+PASS  A23b burst detection (balanced baseline NORMAL → one-sided burst BURST_BUY)
+PASS  A23c cold-start suppression (3 trades → cold; 60s coverage → cold; ≥120s → warm)
+PASS  A23d Reset re-arms warmup (warm → reset → cold, n=0, coverage=0)
+PASS  A23e ClassifyAggressorBurst edges (buy/sell fire; balanced firehose + trickle NORMAL; >= boundary)
+PASS  A23f per-session resolution (NY norm 60 / thr 4.5; LONDON/ASIA inherit norm 120; explicit override wins)
+PASS  A23g aggressor_velocity three-tier surface (switches + default./sessions. fenced; flat params tunable)
+PASS  A24a Placed* levels ≡ payload levels (shared ComputeSideLevels, 3 placement cases + pin)
+PASS  A25a R1 retire — disabled modifier ≡ no-modifier path (scores + verdict), MOM:state kept, no suffix
+PASS  A25a flag still gates (enabled + FALLING on SELL DOMINANT → +1[S] confirm)
+PASS  A25b Validate rejects indicators.OFI.momentum_* (HC20 fence) + accepts book_depth/dominance/avg_window_sec
+PASS  A26a long swing target farther than fallback still PLACES (62100, dist 100 ≤ bound 140)
+PASS  A26a short mirror (swing 61900 places, label SWING_LOW_5M, raw 61930)
+PASS  A26b swing too loose → NEAREST_HVN_ABOVE places (62120)
+PASS  A26b swing+HVN too loose → HVN-gated POC places (62050)
+PASS  A26b no tier survives → FALLBACK_ATR (62070, capped=false, reason=Nothing)
+PASS  A26c structural stop within bound → SWING_STOP (61950)
+PASS  A26c structural stop too loose → STOP_CLAMPED (61936 = entry − 64)
+PASS  A26c no structural stop → FALLBACK_ATR (61936)
+PASS  A26c sub-floor structural stop → FALLBACK_ATR (61936, not 61999)
+PASS  A26c short mirror structural stop → SWING_STOP (62050)
+PASS  A26d placed structural target 60 > floor 49.6 → directional stands (fallback 35 would gate)
+PASS  A26d same r, structural disabled → legacy effective target 35 < floor → NO TRADE
+PASS  A26e session multiplier (LONDON 2.0 / ASIA 1.25 / NY 1.75 / unstamped 1.75 / disabled 1.75)
+PASS  A26e ASIA-stamped fallback target = entry + 1.25×ATR (62050)
+PASS  A26f enabled:false byte-identical legacy trio (uncapped / capped / noise-suppressed, no labels)
+PASS  A26g structural_levels three-tier surface (switches + sessions. fenced; flat numerics + fallback mult tunable)
+PASS  A27a tracker barriers = ComputeSideLevels (fallback)
+PASS  A27a tracker barriers = ComputeSideLevels (structural placed)
+PASS  A27a tracker barriers = ComputeSideLevels (noise-suppressed structural)
+PASS  A27b offline adverse routing (placed / legacy-fallback / forced-legacy / ATR)
+PASS  A27c D4 report renders before→after (both barrier bases, success orientation)
+[LivePerformanceTracker] D6 eval-barrier migration: rotated pre-v5 eval cache → C:\Users\user\AppData\Local\Temp\d6_eval_3b9c7d4dcc8b451a86a98bedc6cfe191.csv.v4.bak (rebuilding on placed-level barriers; perf-strip history resets)
+PASS  A27d eval-cache v4→v5 rotate-and-rebuild
+PASS  A28a TFI burst modifier (NORMAL ss=11 / same-side +1 ss=12 / contra −1 ss=10; all SHORT)
+PASS  A28b burst upgrade caps at regimeMax (short 10 +20 → 18, not 30)
+PASS  A28c S2a scoping + disable inert (constructed un-armed ss=11; ASIA ARMED ss=12 [v65]; LONDON ss=12; off ss=11 == NORMAL)
+PASS  A28d HC22 fence (session_volume.enabled rejected; sibling OBV.trend_gate accepted)
+PASS  A29a anchored classification (+5e-7 RISING / −5e-7 FALLING / +1e-7 below T → FLAT)
+PASS  A29a threshold is strict (delta exactly T → FLAT)
+PASS  A29b anchor = newest ≥W (5-min sample → FLAT; oldest-in-ring would read RISING)
+PASS  A29b younger-than-W samples ineligible (anchor 5.5-min → RISING, not FLAT)
+PASS  A29c cold start (no sample ≥W old → FLAT even on a +4e-6 move)
+PASS  A29c empty / single-sample / Nothing rings → FLAT
+PASS  A29c post-gap (40-min outage → pre-gap ring evicted, no anchor → FLAT, count=1)
+PASS  A29d eviction at 30 min (31-min dropped, exactly-30 kept, count 4→3)
+PASS  A29d no count cap (120 samples @15s all retained by age; span 29.75 min > W)
+PASS  A29e CADENCE INVARIANCE (30s vs 180s over one funding path → identical states at identical instants)
+PASS  A29e states are the expected path reading (FLAT, FLAT, RISING, RISING)
+PASS  A30a adapter placements ≡ ComputeSideLevels (no copies)
+PASS  A30b whitelist rejects off-list (indicators.OFI.book_depth) + accepts listed (stop_max_atr_mult)
+PASS  A30c threshold overlay shifts population (WEAK LONG → LONG on med_pct 0.53→0.45)
+PASS  A30d replay ladder = swing→HVN→fallback (POC closed: VPFR unlogged → adapter zeroes it)
+PASS  A31a lifecycle (approach→ACTIVE @100010 / leave-proximity→IDLE / re-approach→ACTIVE)
+PASS  A31a level re-map mid-episode resets onto the new level (100010→100011, fresh episode)
+PASS  A31b analytic case (aggr 210000 / depletion 60000 → ratio 3.5; pullFrac 0 → ABSORB_ABOVE)
+PASS  A31b threshold edges (aggr < min → NONE; ratio < absorb_ratio → NONE; episode numerics still surfaced)
+PASS  A31c churn (pullLB 120000 / postLB 60000 → pullFrac 2.0 > 0.75 → D8 veto NONE; ratio 3.5 would have fired)
+PASS  A31d break-through (open → print 100011.5 > 100011 → instant NONE → parked idle → leave+re-approach re-arms)
+PASS  A31e cold NONE / degenerate never throws / reset clears + levels re-carry re-arms
+PASS  A31f reserved columns populate (episode row values / NONE row empties; header unrotated, no .bak)
+PASS  A31g session min_aggr_usd (NY override 250000 / LONDON inherits v61 default 20000 / unstamped 20000)
+PASS  A31g HC23 fences (enabled/scoring_enabled + default./sessions. rejected; proximity_atr_frac + absorb_ratio tunable)
+PASS  A31h two-ATR scale invariance (V3): ATR-fraction resolution doubles cleanly; tracker fires + breaks identically at 1× and 2×
+PASS  A60e writer-header parity across all THREE schema copies (AnalysisLogger == BacktestRowWriter byte-for-byte == OverlapValidator.Cols name order; five new names once each, all Muted)
+PASS  A60a round-trip (SideState → ClassifyAbsorption → CSV: episodeSec 1.5 / pullLB 0 / postLB 30000 / sizeStart 210000 / sizeMin 150000)
+PASS  A60b idle ⇒ the five instrumentation columns render EMPTY, not 0 (no-episode row + cold tracker read)
+PASS  A60c EpisodeSec measures (2.0 s then 5.0 s on one episode) and RESETS (close clears EpisodeStartMs to 0; re-open at the same level reads 0.5 s, not 7.5 s)
+PASS  A60d R1 guard — no existing column moved (AbsorptionSignal 101, AbsorptionPullFrac 105, InstanceId 110, SignalId 111, 1-based) and the five new columns append contiguously at 112-116
+PASS  A32a favourable routing (placed unfloored / short column / legacy / legacy-floored / forced-legacy)
+PASS  A32a favourable routing counters (placed 2 / legacy 3)
+PASS  A32a gate distance (placed exact 30 / legacy approx 100)
+PASS  A32b picked-cell history parse-tolerant (old row keeps threshold, new row omits it)
+PASS  A32b tweaker pick-space is (tier × window) only — 12 cells, no duplicates
+PASS  A32c before/after grid renders a single placed-geometry column (success orientation)
+PASS  A32d low-ATR rows produce DISTINCT outcomes (no floored-grid collapse)
+PASS  A32d exact gate keeps low-ATR placed rows the ATR approximation would have dropped
+PASS  A33a empty-bars ⇒ NO_DATA (covered still resolves; degenerate still WINDOW_EXPIRED)
+PASS  A33b NO_DATA excluded from success/failure counts; TotalRange counts it
+PASS  A33c v5→v6 sweep: uncovered → NO_DATA / covered → SUCCESS / degenerate preserved
+PASS  A34a report + CSV render as SUCCESS (matrix heading, D4 blurb, legend, CSV column+value)
+PASS  A34b tweaker trigger stays failure-oriented under success render (25% < 40 ⇒ BELOW_THRESHOLD)
+PASS  A34c WEAK excluded from Success/Failure counts; WeakBarrierRatePct tracks the WEAK aggregate
+PASS  A34d display helper renders MEDIUM prefix on bare LONG/SHORT; leaves STRONG/WEAK/NO TRADE untouched
+PASS  A34e stored-form pins — CSV/payload/eval-cache carry bare LONG; display renders MEDIUM LONG
+PASS  A34f §6 splits into (a) DIRECTIONAL + (b) NO-TRADE LEAN sub-tables with the D7 not-comparable caption
+PASS  A35a §9 band-ladder renders STRONG/MEDIUM/WEAK success/n/CI + pooled + diagnostic + F1 footnote
+PASS  A35b band classifier: WEAK LONG/SHORT → WEAK; every NO TRADE form → "" (WEAK ≠ NO TRADE)
+PASS  A35c matrix cell space stays (tier × window): 12 cells, no WEAK tier, WEAK rows excluded upstream
+PASS  A35d PromptBuilder omits ladder section + any WEAK band row; matrix tiers still rendered
+PASS  A36a defaults (mode 0/0, buffer 0/0) byte-identical to v51 B4b across the A26 case set
+PASS  A36b NEAREST target picks min-distance (fallback beats farther swing; closer swing wins; HVN wins over swing+fallback; short mirror)
+PASS  A36c WIDEST stop picks max + respects the 4-tick floor (wider swing wins; tighter loses to ATR bound; floor snaps buffered stop; short mirror)
+PASS  A36d signed buffers move each side + Step 5c min-move gate reads BUFFERED target
+PASS  A36e whitelist accepts 4 new keys (incl. int-mode sweep) + HC24 exact-match fence rejects them; sibling flat numeric still passes
+PASS  A36f mode-1 overlay round-trips through WhatIfSettings.BuildCellSettings and reproduces ComputeSideLevels via the WhatIfReplay adapter
+PASS  A37a cascade window math + edge-fires once + dominant side + re-arm
+PASS  A37b level-approach — enter within 12 ticks, re-arm on leave, close on level re-map, 15m in candidate set
+PASS  A37c sidecar append shape (utc | kind | side | usd | instance_id, append-only, null-safe)
+PASS  A37d Reset clears cascade state; disabled cfg makes Fold+Snapshot inert
+PASS  A37e HC25 fence rejects all 5 alerts.* keys; sibling scoring.verdict_med_pct still passes
+PASS  A38a transition-only: same state twice → one line; each real transition adds one line
+PASS  A38b LogStart unconditional + shape (utc | state | iid) + shared transition baseline
+PASS  A39a logistic loss monotone + separating direction recovered
+PASS  A39b label-shuffled AUC ≈ 0.5 (leakage canary)
+PASS  A39c chronological split — no test row precedes any train row
+PASS  A39d block-bootstrap blocks never straddle a session-hour boundary
+PASS  A39e informational Absorption / AggrVel-un-armed / TargetCapReason absent from decision matrix
+PASS  A40a resolver composition (maker_maker default == 0.0008 exactly; maker_taker/taker_taker; bps track; unrecognised style ⇒ maker_maker; derived props never serialise)
+PASS  A40b v62 defaults byte-identical to the retired v61 flat 0.0008 floor through the REAL Calculate() (incl. a BELOW_MIN_MOVE case)
+PASS  A40c min_net 0.0005→0.0010 flips a marginal directional to NO TRADE / BELOW_MIN_MOVE; composed delta clears the eval re-walk epsilon
+PASS  A40d HC26 rejects all four trade_costs keys; retired key unresolvable (not fragment-banned); sibling scoring tunable passes; what-if takes min_net only
+PASS  A40e min_net overlay round-trips through WhatIfSettings.BuildCellSettings and recomposes the floor (0.0003 + 0.0010 = 0.0013)
+PASS  A41a per-row fee drag subtracted on SUCCESS + ADVERSE_HIT arms (net = gross − round_trip_fee_pct × price / ATR)
+PASS  A41b WINDOW_EXPIRED arm also pays the round-trip fee drag (drag is unconditional across all three outcome arms)
+PASS  A41c fees-zero cfg (maker=taker=0) ⇒ net EV byte-identical to gross across SUCCESS + ADVERSE_HIT + WINDOW_EXPIRED (regression identity)
+PASS  A41d report ranking carries the net-of-fees label + σ dispersion column + not-comparable note (§6.1 rider)
+PASS  A42a defaults (use_best_pivot_candidate=false) byte-identical to v56 across the A26 case set + real-Calculate with pivot supplied
+PASS  A42b pivot enters ladder FIRST (beats closer swing) + NEAREST picks min-distance + short mirror + STOP untouched
+PASS  A42c looseness bound rejects too-far pivot (falls through to swing) + wrong-side rejected + absent/zero pivot ≡ default
+PASS  A42d HC24 fence rejects the key + whitelist accepts it + {0,1} sweep + BuildCellSettings round-trip reproduces ComputeSideLevels
+PASS  A43a slice candles at-or-before-close (boundary + last-N-from-end)
+PASS  A43b trades ascending + LastN-from-end + at-or-before-close
+PASS  A43c sequential state (funding ring anchors + regime hysteresis)
+PASS  A43d muted-vote inertness (OFI/spread/OI/absorption contribute zero)
+PASS  A43e header byte-parity + provenance (BACKTEST- prefix + monotonic SignalId)
+PASS  A43f forming-bar stub (§7.1) — OHLCV compaction · zero-trade fallback · stub-is-last-bar
+PASS  A44a FloorToBucket collapses same-bar timestamps + advances one bucket at the boundary + execRes<=0 guard
+PASS  A45a VWAP session anchor (§7.5) — default ≡ UtcNow (non-trivial) · post/pre-cutoff historical anchor · §8.6 wall-clock fallback
+PASS  A46a pooled CSV → report carries §2 matrix + §9 band ladder (real Load/matrix/ladder/writer chain)
+PASS  A47a closed-bar arm — equal window length · real terminal bar · stub arm keeps its stub · overlap identical (offset 1) · terminal volume gap
+PASS  A47b stub volume commensurate with the candle series — BTC in .Volume · USD in .VolumeUSD · pair agrees through price · 2s stub << 1m bar
+PASS  A48a store round-trip — 7-col header + F2 rows + liq flag + empty identity survive write→read
+PASS  A48b write guard — identical replay writes once · fresh writer re-seeds from disk · newer trades still land
+PASS  A48c month rollover — straddling batch splits across two files, header on create only
+PASS  A48d gap-repair overlap is a no-op — covered window ⇒ no fetch · gap resumes at last+1 · retention clamp · read-time dedup · DR-3 reports 0 rows appended
+[TradeStoreWriter] cannot create store dir 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_e_1e7c0154\not_a_dir': Cannot create 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_e_1e7c0154\not_a_dir' because a file or directory with the same name already exists.
+[TradeStoreWriter] append to 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_e_1e7c0154\locked\trades_2026-07.csv' failed: The process cannot access the file 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_e_1e7c0154\locked\trades_2026-07.csv' because it is being used by another process.
+PASS  A48e unwritable store never throws — blocked dir + locked file both return 0, fold keeps running
+PASS  A48f shipped capture/repair gates — enabled:false ⇒ no writer, no files; both repair switches independent; defaults pinned
+PASS  A48g HC27 rejects all seven trade_store.* keys, sibling scoring tunable passes, prompt rule 27 present
+PASS  A48h store_dir is exe-relative — same path from two working directories, never under cwd; absolute passes through
+PASS  A49a uptime parse — two process lives resolve to correct up-intervals; iid-1 closes on its last DEGRADED line (no DOWN needed); iid-2 is the open trailing interval
+PASS  A49b S1 join — before the app ever started ⇒ expected-missing (never defect); up but the store is silent ⇒ defect; up with a clean store ⇒ captured
+PASS  A49c DEGRADED/REST lines count as 'up' evidence exactly like OK — clean store ⇒ captured, silent store ⇒ defect, never expected-missing
+PASS  A49d capture-era self-bounding — reports from the store's first trade, not --from; pre-capture days counted, not walked as gaps
+PASS  A49e S3 threshold — observed max reported exactly; breach fires strictly above the threshold, not at it
+PASS  A49f S4 candle completeness — a 1m month file short by k=5 bars reports exactly 5 missing against the deterministic grid
+PASS  A49g absent ws_health.log + no analysis_log rows ⇒ S1 skipped with a stated reason; S2-S4 still run (a clean hour still reads captured)
+PASS  A49h --strict decision — a defect hour ⇒ exit 1; an expected-missing-only report ⇒ exit 0 under --strict; default (no --strict) always 0
+PASS  A49i S1 precedence — analysis_log.csv rows resolve UP even with ws_health.log silent; a cross-GUID gap with no evidence at all resolves DEFECT, never expected-missing
+PASS  A49j S0 venue diff — missing trades enumerated exactly (2 of 3), identical sets report zero, S0 never overrides the six-class result
+PASS  A49k not-capturing inversion trap — marker OFF over a silence ⇒ not-capturing (zero defects); the IDENTICAL silence with marker ON ⇒ defect
+PASS  A49l unknown-scope — no marker record at all classifies unknown-scope regardless of store state, distinct from not-capturing and expected-missing
+PASS  A49m weekday scope — a Saturday hour classifies out-of-scope-weekend and never defect, while Part B's liveness tier still reports RED on the identical silence
+PASS  A49n dead capture path escalates UNKNOWN → AMBER → RED on the SAME 3×/10× thresholds when no flush ever lands; a genuine cold start stays UNKNOWN inside the grace window; a stale/healthy flush is unaffected
+PASS  A49o split hour — flip ON at :30 with a clean ON-half store reads CAPTURED, not laundered into not-capturing by the OFF marker that governed the hour's start (mutation proof — pre-fix reads NotCapturing)
+PASS  A49p split hour — flip ON at :30 with a SILENT ON-half store reads DEFECT (up evidence present, zero rows) — the second mutation-proof case
+PASS  A49q split hour — flip OFF at :30 with a gap-breach entirely inside the ON (first) half still reads DEFECT, not laundered by the later off marker governing the rest of the hour
+PASS  A49r a marker landing EXACTLY at hourStartMs is ResolveScope's business (<=), not a split — no split-detail Reason, classification via the ordinary single-scope path
+PASS  A49s split hour — a marker at :59 still splits; a 50s gap inside the ~60s-wide last span (83% of the span's own width) does NOT breach the absolute 300,000ms threshold — not scaled to the sub-span length
+PASS  A49t split hour — two in-hour markers split it into THREE spans, all independently classified (off/captured/off); worst-of combine reads CAPTURED, D-2
+PASS  A49u split hour — a gap straddling the marker (starts in span0, ends in span1) is attributed to span1, the span containing the ending trade; span0's own first row carries no phantom gap; the straddling gap alone flips the hour to DEFECT
+PASS  A49w split hour D-3 — a first-ever marker landing mid-hour splits UnknownScope (before it) from NotCapturing (its own off record); the residual combine reads UnknownScope, never laundered into NotCapturing
+PASS  A49v BuildResult end-to-end — a day containing a split hour still returns exactly 24 HourResult rows (D-1 preserved, §7 handle 5); the split hour carries split detail in Reason
+PASS  F1-a trailing edge — trades early in an hour, silence to hour end, a later trade well into the next hour ⇒ TrailingEdge, not Captured (the canonical F1 shape)
+PASS  F1-b trailing edge bound — the SAME shape but hour 05 IS the last hour with any data ⇒ store-end exempts it, stays Captured
+PASS  F1-c trailing edge — the partial-final-hour case: --to lands mid-hour, must measure to the boundary instant, not :59:59.999 (D-4(c))
+PASS  F1-d trailing edge split-hour precedence — one span clean, one span trailing-edge ⇒ the hour reports TrailingEdge, never Captured (D-5.1)
+PASS  F1-e trailing edge store-end superset trap — a month file carrying trades PAST walkToUtc must not un-exempt the true last walked hour (storeEndMs from the walk's own filtered last trade, never Max() over the superset dictionary)
+PASS  F1-f trailing edge VERDICT line — a report with trailing-edge hours and zero Defect hours must NOT print clean (D-5.3)
+PASS  A61a ⭐ the defect reproduced — a split hour whose TrailingEdge span is NOT the last span reports the SPAN's own trailing gap (~25min), not a gap measured to the hour end (~55min, the pre-fix figure)
+PASS  A61b the fix — a split hour's TrailingEdge span (not the last span) reports ITS OWN trailing gap on HourResult.TrailingMsForHour, bounded by the span's own end, not the hour's
+PASS  A61c ⭐ R4 guard — an UNSPLIT TrailingEdge hour's per-span figure equals TODAY's whole-hour figure exactly (the span IS the hour)
+PASS  A61d no-trailing-span case — a split hour whose deciding span carries no LastTsMs classifies Captured (D-2/D-3(c) guard holds per-span) and TrailingMsForHour is Nothing
+PASS  A61e ⭐ F1 D-5.1 precedence untouched — a split hour with one clean span and one trailing-edge span still classifies TrailingEdge, never Captured, and TrailingMsForHour reports the TRAILING span's own figure
+PASS  A61f ⭐ R7 — an hour with TWO TrailingEdge spans reports the LARGER gap, not the first in span order; and a Defect span alongside a trailing span still reports TrailingMsForHour=Nothing (the invariant, asserted directly)
+PASS  A51a partial-segment fetch preserves the month — union complete · early bars keep original values · tail refreshed · ordered (the June-wipe trap)
+PASS  A51b coverage count is resolution-aware — complete month passes at 1/3/5/15m, a 400-bar month still fails
+PASS  A51c empty / Nothing / duplicate fetch never destroys — row count and values stable across all three
+PASS  A51d funding merge — previous-month over-reach clipped · boundary 00:00 sample recovered · stored rows kept · grid expectation 6
+PASS  A51e candle round-trip — shipped header + 7 columns + OHLCV survive write→read
+PASS  A52a ASIA arming JSON contract (present ⇒ armed @5.5 · absent ⇒ inert @2.5 · shipped POCO mirrors shipped JSON)
+PASS  A53a identity round-trip — 7-field row writes and parses back with trade_id (string) + trade_seq intact
+PASS  A53b legacy row — 5-col file still parses, identity reports ABSENT (Nothing/-1) not empty; 7-col empty columns also absent
+PASS  A53c ⚠ empty-identity collapse — 10 identity-less rows differing only in amount survive dedup as 10, not 1
+PASS  A53d equal trade_id — same identity, different content, dedups to one (identity beats content)
+PASS  A53e ⚠ silent no-op — 2 real trades identical in all 5 legacy fields but with different trade_id survive as 2
+PASS  A53f mixed-shape file — legacy + identified rows dedup under both branches (2 legacy + 2 identified), order-independently
+PASS  A53g venue diff — identity-matched and fallback-matched counted and reported SEPARATELY, never blended
+PASS  A53h trade_seq gap detection — 100/101/103 reports 102 missing · contiguous clean · no-sequence store reports NOT CHECKABLE not clean · scattered loss counted as 3 runs
+PASS  A55a ⭐ same-millisecond siblings — 2 REAL trades on one ms with distinct trade_id BOTH reach disk
+PASS  A55b reconnect re-seed — a batch holding same-ms siblings replays 3× and is written ONCE; new trades still land
+PASS  A55c mixed batch — 2 identified siblings + 2 identity-less rows all land, and a replay of the same batch adds none
+PASS  A55d ⚠ empty-identity collapse at the WRITE path — 10 identity-less rows on ONE ms differing only in amount all reach disk; an exact duplicate still drops
+PASS  A55e ⚠ window bias — a duplicate aged OUT of the window is ADMITTED (a dup on disk is harmless, a drop is not); one still inside is rejected
+PASS  A55f restart over a populated store — window seeds from the file tail: re-delivered rows drop, a NEW same-ms sibling of the tail still lands
+[TradeStoreWriter] cannot create store dir 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_55g_25ace932\not_a_dir': Cannot create 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_55g_25ace932\not_a_dir' because a file or directory with the same name already exists.
+PASS  A55g unwritable store — same-ms siblings both accepted, flush returns 0, never throws, fold keeps running, guard still rejects a dup
+PASS  A56a ⭐ the defect — a 60-min trade_seq-bracketed hole BEHIND the tail is returned as its own seq range [1003,1499], tail last
+PASS  A56b covered store ⇒ tail window only · already-covered ⇒ a tail that commits 0 rows (offline cursor still -1) · empty store ⇒ anchored tail at segStart · 3ms gap IS returned · ⛔ 1ms-apart gap is now RETURNED as [9101,9104]
+PASS  A56c ⚠ out-of-order store — repair block appended after newer streaming rows ⇒ ZERO phantom holes, tail starts past the MAX seq not the last line
+PASS  A56d ⚠ AbsentSeq — legacy rows at an era boundary AND interleaved between two identified rows both yield ZERO phantom holes; sentinel is negative
+PASS  A56e a hole straddling segStart keeps its full seq range [5001,5899] — the pre-segStart bracket row still makes it visible; no time clamp
+[TradeStoreWriter] repair scan 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_56f_ba634f2b\trades_2026-08.csv': 32 hole(s) returned, 5 dropped by the MaxHolesPerPass=32 cap
+PASS  A56f MaxHolesPerPass cap — 37 holes capped at the production constant, the smallest dropped, survivors in sequence order, tail last
+PASS  A56g DR-2 ⚠ truncation cut is TIME-contiguous, not file-order — an out-of-order store's cap truncation produces ZERO phantom holes and reports truncated
+PASS  A57a MinTradesForScoring derives to 50 at shipped defaults (Max(TFI 30, MicroCVD 50)) + ScoringEngine.ThinTradesSkipReason carries both numbers
+PASS  A57c ⚠ non-default MicroCVD.WindowSize=80 moves the derived minimum to 80 (fires at 79, passes at 80) — catches the hardcoded-50 trap
+PASS  A57d override: 0 == derived (50); positive value (100) takes precedence; HC28 rejects the override key while sibling scoring.verdict_med_pct still passes
+PASS  A57e ⚠ D-4: 40-trade heavy-sell buffer (< derived min 50) evaluates Clear at shipped defaults, despite the SAME buffer reading Exit/AdverseCount>=2 once the gate is bypassed
+PASS  A58a a pre-v68 settings.json with no start_engaged key deserialises AutoRun.StartEngaged to False — byte-identical on every box that has not been re-deployed
+PASS  A58b start_engaged:true round-trips True through JSON deserialisation (JSON-contract check only — see the A58 group comment for why §1.3's safety property is not, and cannot be, fixture-tested here)
+PASS  A62b JSON<->POCO drift guard -- mutation teeth (mutate ADX.trend_threshold in memory; the walk must name EXACTLY that path as new drift relative to the unmutated baseline, and no other)
+PASS  A62a the shipped tree is clean -- New EngineSettings() vs the tracked settings.json: unexplained drifts=0, orphans=0, JSON-only=0, Compared>=200
+PASS  A62g the D-1 allow-list is EXACTLY two named paths, not a type-based blanket -- a third Boolean mismatch (mtf_gate.enabled) is still reported as drift
+PASS  A62c nullable rule holds both arms -- ABSENT from JSON is Skipped, not an Orphan; PRESENT in JSON is Skipped, never compared or drifted
+PASS  A62d case-insensitive key resolution -- differently-cased JSON keys still resolve (0 orphans) and compare clean (Compared=3, 0 drifts)
+PASS  A62e the resolver fails loudly -- no DeribitVerdictEngine.sln/settings.json marker above the start dir returns Nothing and names the searched path in the failure message
+PASS  A62f structural exclusion -- trade_costs compares its four real keys and excludes RoundTripFeePct/EffectiveMinMovePct by SHAPE; an arbitrarily-named derived property on an unrelated local shape is excluded the same way, proving this cannot be a name list scoped to today's two known names
+PASS  A63a parse-failure path (bare New EngineSettings(), no JSON loaded) resolves the SAME ROC magnitude/slope as the tracked settings.json for an ASIA, LONDON and NY hour -- NY resolves through resolution_profiles->global (no bucket override), proving inheritance still works; resolution_profiles["3"].roc_magnitude_threshold is asserted directly since the ASIA/LONDON bucket overrides mask it in the per-hour path (D-R3 (i))
+PASS  A63b dictionary completeness, BOTH directions (R-2 (a) forward + F-1 reverse) -- a JSON dict key with no POCO counterpart (items.unknown) is JsonOnly; a POCO dict key with no JSON counterpart (items.pocoonly) is Orphans; the matching key (items.known) is neither, and is compared normally
+PASS  A64a MTF all three bear votes cast (spare vote real, not vacuous)
+PASS  A64b MicroCVD joint dependency (neither value alone breaks it; the pair does)
+PASS  A65a degenerate book -> CalcSpreadBps Nothing and ClassifySpread NORMAL (empty ladder + zero-priced top)
+PASS  A65b locked book (bestBid = bestAsk > 0) is a REAL 0.00 bps and classifies TIGHT, not NORMAL
+PASS  A65c inverted thresholds (wide 1.0 <= tight 2.0) resolve WIDE -- the >= wide arm runs first
+PASS  A65d ClassifySpread boundaries are inclusive on both arms (= wide -> WIDE, = tight -> TIGHT, between -> NORMAL)
+PASS  A66a degenerate book -> strip shows NO spread; the zero-priced top of book (case 2) is the one that moves
+PASS  A66b ApplySpread pairs bps+status — degenerate gives exactly 0.00/NORMAL (the unguarded fallback), a real book gives 10.00/WIDE
+PASS  A66c repair User-Agent names the RUNNING host, not a hardcoded foreign one
+PASS  A67a perf strip excludes weekend rows — TotalRange counts weekdays only, and WeekendExcluded reports what was dropped
+PASS  A67b IsWeekdayRow — Mon/Fri in, Sat/Sun out, and MinValue REJECTED despite its DayOfWeek being Monday
+PASS  A68a WD-TIDY counter fold — the MinValue row drops SILENTLY: WeekendExcluded=2 (the fold reads 3), TotalRange=1
+PASS  A71a WD-SEMANTICS — same AggregateRange batch: UnparsedExcluded=1 (MinValue routes to the new counter, not WeekendExcluded)
+PASS  A68b WD-TIDY counter fold (audit) — the unparseable row drops SILENTLY: WeekendExcluded=1 (the fold reads 2), 1 row kept off 3 parsed
+PASS  A71b WD-SEMANTICS (audit) — unparsed row in UnparsedExcluded=1, weekend in WeekendExcluded=1; neither absorbs the other
+PASS  A71c AnalysisRunner classification identity — TotalRows+WeekendExcluded+UnparsedExcluded=loaded; MinValue→unparsed, not weekend
+PASS  A72a atomic write — FIRST write to an ABSENT destination succeeds (the case File.Replace throws on); content correct, no .tmp orphan
+PASS  A72b atomic write — overwrite of an EXISTING destination replaces content wholly (no append, no partial), no .tmp orphan
+PASS  A72c atomic write — absent→present→present in sequence; exactly ONE file remains and it holds the LAST write
+PASS  A69a cold/warm backfill asymmetry is gone — a duplicate-identity batch yields the SAME total population whether the cache started cold or warm
+PASS  A69b the identity-key set is updated INSIDE the loop — a three-row batch with two colliding rows (rowA/rowB share inst-A|1) admits exactly two, not three
+PASS  A69c two rows sharing ONE Timestamp AND ONE SignalId but DIFFERENT InstanceId are BOTH admitted — the key is the (InstanceId,SignalId) pair, not Timestamp alone and not SignalId alone
+PASS  A69d D-3 (a) — an identity-less row falls back to Timestamp and still dedups against an existing identity-less row at the same Timestamp
+PASS  A69d AC-8 — v6→v7 migration is byte-identical on every pre-existing EvalOutcome/TargetEverHit/FavBar/AdvBar/ExecResolution; the schema comment gains the identity-pair marker
+PASS  A69e R-4 — an identity-BEARING log row is deduped against an identity-LESS cached row at the same Timestamp: 0 admitted, not 1 (a single-set key re-admits it and duplicates the cache)
+PASS  A70a LoadStats exclusion identity — TotalRows - burstRows - nonV08 - weekend - nonDirectional = eligible (the printed --preflight block is only a view of this arithmetic)
+PASS  A73a sequence contiguous with LongestGapMs above threshold ⇒ Captured, not Defect
+PASS  A73b mixed span (some rows without trade_seq) falls back wholly to time tolerance; tolerance fails ⇒ Defect, not Captured from the sequenced subset
+PASS  A73c legacy span (no trade_seq on any row) classifies identically to pre-C1: clean time tolerance ⇒ Captured, gap breach ⇒ Defect
+PASS  A73d span ending before CaptureCapableFromMs inside up-interval ⇒ StartupWindow, not Defect
+PASS  A73e T-2 guard — hour before first OK but inside interval is StartupWindow, never ExpectedMissing; FirstUtcMs anchored on DOWN line, not moved to OK
+PASS  A73i fully-sequenced non-contiguous span with gap below time tolerance ⇒ Defect, not Captured
+PASS  A73f hour inside declared window ⇒ OutOfScopeDeclared, not Defect
+PASS  A73g hour at window EndMs (exclusive boundary) is NOT OutOfScopeDeclared
+PASS  A73h weekend check precedes declared check — Saturday inside declared window ⇒ OutOfScopeWeekend, not OutOfScopeDeclared
+PASS  A74a venue 503 writes exactly one correctly-shaped line
+PASS  A74b timeout / network / 4xx each write NOTHING (V-1 guard)
+PASS  A74c transition-only: N consecutive 503s → one line; each real transition adds one
+[VenueStatusLog] append failed: The process cannot access the file 'C:\Dev\audit-6e74181\verify\ordercheck\bin\Release\net8.0\venue_status.log' because it is being used by another process.
+PASS  A74d log path never throws — IOException on locked file swallowed by TryAppend
+PASS  A74e shape B — HTTP 200 + JSON-RPC error logs VENUE_RPC_11051 AND body returned unchanged; clean 200 not logged
+PASS  A75a two different RPC codes produce two distinguishable lines
+PASS  A75b error object with no readable code logs VENUE_RPC_UNKNOWN not nothing (D-3)
+PASS  A76a venue error then success writes two lines: VENUE_503 then VENUE_OK
+PASS  A76b repeat outage same code writes THREE lines (live defect asserted)
+PASS  A76c V-1 holds: 4xx/timeout does not write VENUE_OK after a venue error
+PASS  A77a hour inside VENUE_503 window → OutOfScopeVenue
+PASS  A77b VENUE_RPC_10009 window: stays Defect with code in Reason (B-1 trap)
+PASS  A77c VENUE_RPC_UNKNOWN window: not scoped out, code in Reason (B-2 fail-safe)
+PASS  A77d unterminated window closes at rangeEndMs (10:00 in, 11:00 out)
+PASS  A77e out-of-scope-venue counter visible in BuildConsoleSummary
+PASS  A78a CLI path resolution forwards venue_status.log — the venue hour is OutOfScopeVenue, default and --store-dir resolve it beside the evidence
+PASS  A78b venue fetch paginates — 2,500 of 2,500 across a same-ms page boundary, with and without has_more; a failed page or a one-ms stall is not Ok
+PASS  A78c venue verdict arms (NOT_RUN ×3, VENUE_SHORT ×2, LOSS ×2, INEXACT, CLEAN), exit codes 0/3/4/5/6, tool_commit and seq_contiguous labels
+PASS  A78d venue check beside an open writer → LOSS 1 of 4 with 3 identity matches; machine line carries the fields; an exclusive lock → NOT_RUN STORE_READ with na counts
+PASS  A78e venue dump is gzipped JSON; a failed fetch's non-JSON body survives verbatim as response_text
+PASS  A78f missing_inside_seq_span — an edge loss (seq before the store span) counts 0, an inside loss counts 1, not run reads na
+PASS  A79a ⭐ seq repair keeps 2,500 of 2,500 across a same-ms page boundary (the +1 time pager kept 2,499) — one anchor call, TAIL_OK
+PASS  A79b hole of 2,599 seqs over 3 pages ⇒ exactly 2,599 committed, HOLE_REPAIRED, healed on re-resolve · has_more with an empty page ⇒ NO_PROGRESS after one request, never a loop
+[HistoricalStore] Trades 2026-08: appended 10 rows across 1 request(s) in 1 window(s), 0 failed
+[HistoricalStore] Trades 2026-09: appended 0 rows across 1 request(s) in 1 window(s), 0 failed
+PASS  A79c ⛔ GT-1 tail below the retention edge ⇒ TAIL_PAST_RETENTION with 499 not served · hole wholly past retention ⇒ HOLE_NOT_SERVED, file unchanged · one missing venue seq ⇒ HOLE_PARTIAL · ⛔ GT-3 a month-end tail stops at segEnd, no row written twice
+PASS  A79d repair windows are seq ranges — same-ms hole [1001,1001] · 1ms/5ms holes returned · tail from last seq+1 to segEnd · same-ms hole commits exactly its one missing trade · ⛔ GT-4 empty file anchors once · legacy newest row anchors at ts+1
+PASS  A79e GR-2 (b) one tape, two endpoints — the seq repair and the time-keyed venue check each equal the tape's in-window set, and so each other
+[RepairStatusLog] append failed: Cannot create 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_79f_f7cc7e0d\not-a-dir' because a file or directory with the same name already exists.
+PASS  A79f GR-4 (b) repair_status.log — clean pass ⇒ exactly one PASS_CLEAN line · failed window ⇒ its line + PASS_FAILED · past retention ⇒ PASS_LOSS with not_served · always 4 fields · exception ⇒ PASS_FAILED · unwritable path never throws
+PASS  A79g ⚠ MEASUREMENT PIN (reporting condition, not a guard) — a seq tail beside an unflushed streaming writer double-writes: buffered-then-repaired ⇒ 3 duplicate rows · repaired-then-received ⇒ 3 duplicate rows; readers dedupe; the fix is the duplicate-rows task
+[HistoricalStore] Trades 2026-08: appended 0 rows across 1 request(s) in 1 window(s), 0 failed
+[HistoricalStore] Trades 2026-09: appended 9 rows across 2 request(s) in 2 window(s), 0 failed
+[HistoricalStore] Trades 2026-08: appended 0 rows across 1 request(s) in 1 window(s), 0 failed
+[HistoricalStore] Trades 2026-09: appended 14 rows across 2 request(s) in 1 window(s), 0 failed
+PASS  A79h ⛔ F-1 GUARD — an outage across 00:00 UTC on the 1st: with September already written, the cross-month hole repairs 9 of 9 leading-gap trades and writes none twice · with September still empty, the anchored tail repairs 9 of 9
+PASS  A79i F-1 edges — no previous-month file ⇒ tail only · the previous file's newest row is legacy ⇒ the walk breaks, no phantom cross-month hole
+[HistoricalStore] Trades 2026-08: appended 3 rows across 1 request(s) in 1 window(s), 0 failed
+[HistoricalStore] Trades 2026-09: appended 3 rows across 2 request(s) in 2 window(s), 0 failed
+[HistoricalStore] trades_2026-08.csv Tail: TAIL_GAP committed=2 not_served=1 
+[HistoricalStore] Trades 2026-08: appended 2 rows across 1 request(s) in 1 window(s), 0 failed
+[HistoricalStore] trades_2026-09.csv Hole: HOLE_PARTIAL committed=2 not_served=1 
+[HistoricalStore] Trades 2026-09: appended 2 rows across 2 request(s) in 2 window(s), 0 failed
+[HistoricalStore] trades_2026-08.csv Tail: FETCH_FAILED committed=0 not_served=0 seq fetch failed at start_seq 950001
+[HistoricalStore] Trades 2026-08: appended 0 rows across 1 request(s) in 1 window(s), 1 failed
+[HistoricalStore] Trades 2026-09: appended 6 rows across 2 request(s) in 2 window(s), 0 failed
+[HistoricalStore] Trades 2026-08: appended 3 rows across 1 request(s) in 1 window(s), 0 failed
+PASS  A79j F-1 edges — both months in the pass ⇒ August's tail repairs 3, September's cross-month hole starts after it and repairs 3, every seq stored once · one missing seq each side ⇒ pass not_served = 2 · August's tail fails ⇒ the cross-month hole repairs all 6, once · lookback inside September ⇒ hole unclamped, all 19 committed, August's internal gap not emitted · ⚠ hazard pin: resolving September before August's tail runs writes 3 twice
+[TradeStoreWriter] repair scan 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_79k_5e68fa6b\trades_2026-09.csv': 0 hole(s) returned, 0 dropped by the MaxHolesPerPass=32 cap, scan TRUNCATED at MaxScanRows=10
+PASS  A79k F-1 edge (5) — a truncated September scan is not seeded from August: no phantom cross-month hole over the rows the cap dropped (control: untruncated, contiguous ⇒ no hole either)
+[TradeStoreWriter] ScanForRepair failed: IOException: The process cannot access the file 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_79l_36fa689c\trades_2026-08.csv' because it is being used by another process.
+[HistoricalStore] trades_2026-08.csv ScanFailure: SCAN_FAILED committed=0 not_served=0 IOException: The process cannot access the file 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_79l_36fa689c\trades_2026-08.csv' because it is being used by another process.
+[HistoricalStore] Trades 2026-08: appended 0 rows across 0 request(s) in 1 window(s), 1 failed
+PASS  A79l ⛔ DUP guard — a store scan that throws ⇒ SCAN_FAILED with the exception type, no venue call, 0 rows appended, PASS_FAILED (today: the pass reads the store as empty and re-appends the whole lookback)
+PASS  A79m DUP-2 share mode — beside a held streaming writer the old plain StreamReader open fails, and the repair scan succeeds: a normal tail from seq 971010, not an empty store
+[TradeStoreWriter] ScanForRepair failed: IOException: The process cannot access the file 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_79n_2e78c606\trades_2026-08.csv' because it is being used by another process.
+[HistoricalStore] trades_2026-09.csv SeedReadFailure: SEED_READ_FAILED committed=0 not_served=0 IOException: The process cannot access the file 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_79n_2e78c606\trades_2026-08.csv' because it is being used by another process.
+[HistoricalStore] Trades 2026-09: appended 0 rows across 1 request(s) in 2 window(s), 1 failed
+PASS  A79n ⛔ F-1 seed read failing ⇒ SEED_READ_FAILED with the exception type, no cross-month hole, September's own tail still runs, PASS_FAILED (today: a silent fallback to single-file behaviour)
+[TradeStoreWriter] append to 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_79o_c2b4c7a6\trades_2026-08.csv' failed: The process cannot access the file 'C:\Users\user\AppData\Local\Temp\ordercheck_a48_79o_c2b4c7a6\trades_2026-08.csv' because it is being used by another process.
+PASS  A79o DUP-2 other half of B-3 — beside an old plain StreamReader the streaming flush is DROPPED (0 written); beside the repair scan's handle it is written (1)
+PASS  A79p a torn final row (trade_seq cut to '98') is not read: the tail starts at seq 980010, not at 99 (a retention-edge rewrite)
+PASS  A80a price inside the POC bucket BELOW the POC → NEAR_HVN_SUPPORT, and the POC sits ABOVE price
+PASS  A80a price inside the POC bucket ABOVE the POC → NEAR_HVN_RESIST, and the POC sits BELOW price
+SKIP  A80b known-defect repro (the POC-tier gate reads the NEAR_HVN labels with inverted geometry) — set ORDERCHECK_KNOWN_DEFECTS=1 to run; docs/medium-tier-bug-hunt-2026-09-16.md
+PASS  A81a taker-side liquidation (flag T, taker buy) books the TAKER's position → SHORT LIQS
+PASS  A81a taker-side liquidation (flag T, taker sell) books the TAKER's position → LONG LIQS
+SKIP  A81b known-defect repro (CalcLiquidations books a maker-side liquidation on the taker's side) — set ORDERCHECK_KNOWN_DEFECTS=1 to run; docs/medium-tier-bug-hunt-2026-09-16.md
+PASS  A82a every IndicatorResults property (116) sits in exactly one mirror class
+PASS  A82a every label map is a set of disjoint swap pairs
+PASS  A82a mirroring twice returns the original state, and mirroring once changes every non-kept property
+PASS  A82b the tracked RSI zones and funding bands are side-symmetric (the mirror of RSI and funding is exact)
+PASS  A82b a mirrored market gives the mirrored scores, breakdown, verdict and placed levels (7524 states: 2088 single-site, 5400 joint, 3 cfgs x 4 regimes x 3 session hours)
+PASS  A82c the A82b runs reached every vote and mutation site, every tier in every regime and every placed-level tier (72 markers)
+PASS  A82c the OBV partial never upgrades across the same runs (v0.42 adverse-divergence block; the partial is that state)
+PASS  A84a header + 2 rows, trailing LF → 2 data row(s), and identical to ReadAllLines
+PASS  A84a header + 2 rows, NO trailing newline → 2 data row(s), and identical to ReadAllLines
+PASS  A84a header + 2 rows, CRLF throughout → 2 data row(s), and identical to ReadAllLines
+PASS  A84a mixed terminators CRLF / LF / bare CR → 3 data row(s), and identical to ReadAllLines
+PASS  A84a header only, trailing LF → 0 data row(s), and identical to ReadAllLines
+PASS  A84a header only, no newline → 0 data row(s), and identical to ReadAllLines
+PASS  A84a empty file → 0 data row(s), and identical to ReadAllLines
+PASS  A84b a missing file counts 0
+PASS  A84c a null or whitespace path counts 0 and does not throw
+PASS  A84d counts while another handle holds the file open for append
+PASS  A84e 20,000-row file counts exactly, and identical to ReadAllLines
+PASS  A85a first occurrence of a message writes a line to ws_feed.log
+PASS  A85b repeats inside the window are suppressed, every one of them
+PASS  A85c the same message re-emits once the repeat window passes
+PASS  A85d a 3-message reconnect cycle writes once each, then is fully suppressed on the next lap
+PASS  A85e the tracked-message map never exceeds its cap
+PASS  A50a absent overlay — loaded tree byte-identical to the base text and to a plain deserialise; overlay inactive
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabled: true -> false
+PASS  A50b deep merge — trade_store.enabled flips, every sibling and every other block survives; +local marker on
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabled: true -> false
+PASS  A50c Save writes the BASE — tracked trade_store.enabled stays TRUE, the unrelated edit persists, the overlay keeps winning in memory
+[SettingsLoader] settings.local.json: 'version' is not overridable — IGNORED (the base owns document metadata)
+[SettingsLoader] settings.local.json: 'scoring.bbw_squeeze_penalty' is not overridable — IGNORED (scoring path)
+[SettingsLoader] settings.local.json: 'indicators.RSI.pass2c_midline' is not overridable — IGNORED (scoring path)
+[SettingsLoader] settings.local.json: 'mtf_gate.enabled' is not overridable — IGNORED (the hard veto — BLOCK forces NO TRADE regardless of score)
+[SettingsLoader] settings.local.json: 'alerts.enabled' is not overridable — IGNORED (gates liq_events.log, the sole A4 gate instrument (both boxes pooled))
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabled: true -> false
+PASS  A50d whitelist rejects version / scoring.* / indicators.* / mtf_gate.* / alerts.* with base values intact; the admitted key still applies and startup succeeds
+[SettingsLoader] settings.local.json: parse error — IGNORED ('t' is an invalid start of a property name. Expected a '"'. LineNumber: 0 | BytePositionInLine: 2.)
+PASS  A50e malformed overlay — ignored, base settings load intact, overlay inactive, no throw
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabled: true -> false
+[SettingsLoader] Re-read settings.local.json — overlay present: True · active: True
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabled: true -> false
+[SettingsLoader] Re-read settings.local.json — overlay present: True · active: True
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabled: true -> false
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabled: true -> false
+[SettingsLoader] Re-read settings.local.json — overlay present: True · active: True
+[SettingsLoader] Re-read settings.local.json — overlay present: True · active: True
+[SettingsLoader] Re-read settings.local.json — overlay present: False · active: False
+PASS  A50f hot reload — dropping the overlay in re-merges without a restart; deleting it reverts to base
+[SettingsLoader] settings.local.json: 'change_log' is not overridable — IGNORED (the base owns document metadata)
+[SettingsLoader] settings.local.json: 'trade_store.probe_list' is admitted but the BASE HAS NO SUCH KEY — merged, but it will have NO EFFECT unless a POCO field matches. Check for a typo.
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabled: true -> false · trade_store.probe_list: (absent) -> [9,9] [NO EFFECT]  [1 admitted key(s) absent from the base — see the warning above]
+PASS  A50g arrays are single leaves — one applied path for an admitted array, one rejected path for change_log; siblings and the base array survive
+[SettingsLoader] settings.local.json: 'scoring.regime_max_score.trending' is not overridable — IGNORED (scoring path)
+[SettingsLoader] settings.local.json: 'scoring.regime_max_score.range_bound' is not overridable — IGNORED (scoring path)
+[SettingsLoader] settings.local.json: 'scoring.regime_max_score.transitional' is not overridable — IGNORED (scoring path)
+[SettingsLoader] settings.local.json: 'scoring.verdict_strong_pct' is not overridable — IGNORED (scoring path)
+[SettingsLoader] settings.local.json: 'indicators.RSI.pass2c_midline' is not overridable — IGNORED (scoring path)
+[SettingsLoader] settings.local.json present but overrode no key the base carries — base settings in force
+PASS  A50h scoring-surface pin — a scoring.*/indicators.* overlay leaves the verdict byte-identical through the real Calculate(), and the same values DO move it when applied directly
+[SettingsLoader] settings.local.json: 'network.transport' is not overridable — IGNORED (selects the data source — three run-path signals gate on it)
+[SettingsLoader] settings.local.json: 'auto_run.trigger_mode' is not overridable — IGNORED (cadence moves scoring and trigger_mode is not yet a CSV column)
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): network.request_timeout_seconds: 15 -> 45
+PASS  A50i network split is key-granular — request_timeout_seconds admitted, transport and auto_run.trigger_mode rejected, base values survive
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): live_strip.enabled: true -> false
+PASS  A50j whitelist ∩ UI-writeback — a click on an overlaid key writes the BASE and snaps back; an unrelated save never promotes the overlay value
+[SettingsLoader] settings.local.json: 'trade_store.enabledd' is admitted but the BASE HAS NO SUCH KEY — merged, but it will have NO EFFECT unless a POCO field matches. Check for a typo.
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): trade_store.enabledd: (absent) -> false [NO EFFECT] · live_strip.enabled: true -> false  [1 admitted key(s) absent from the base — see the warning above]
+[SettingsLoader] settings.local.json: 'trade_store.enabledd' is admitted but the BASE HAS NO SUCH KEY — merged, but it will have NO EFFECT unless a POCO field matches. Check for a typo.
+[SettingsLoader] settings.local.json present but overrode no key the base carries — base settings in force
+[SettingsLoader] Re-read settings.local.json — overlay present: True · active: False
+[SettingsLoader] settings.local.json: 'trade_store.enabledd' is admitted but the BASE HAS NO SUCH KEY — merged, but it will have NO EFFECT unless a POCO field matches. Check for a typo.
+[SettingsLoader] settings.local.json present but overrode no key the base carries — base settings in force
+PASS  A50k admitted-but-absent key — warned, excluded from +local, base untouched; a real sibling key still applies and still activates
+[SettingsLoader] settings.local.json ACTIVE — 1 override(s): auto_run.start_engaged: true -> false
+PASS  A58c overlay admits auto_run.start_engaged key-granular (base true -> overlaid false), and the tweaker fence still rejects it (auto_run. stays whole-block fenced)
+
+ALL PASS
