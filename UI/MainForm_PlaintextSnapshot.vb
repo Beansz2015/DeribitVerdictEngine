@@ -25,6 +25,7 @@
 ' string is passed as `renderedText` to AnalysisOutputDump.Append after
 ' UpdatePerformanceLabels so the perf-strip line reflects the current run.
 
+Imports System.Globalization
 Imports System.Text
 
 Partial Public Class MainForm
@@ -142,24 +143,34 @@ Partial Public Class MainForm
             sb.AppendLine("  HOLD / EXIT: " & v.HoldStatus)
         End If
 
+        ' [B4b placed-geometry] The rendered levels come from the ONE shared arbitration
+        ' (SignalEmitter.ComputeSideLevels — the same function the bridge payload, the
+        ' CSV Placed* columns, and the card read). structural_levels.enabled=false ⇒
+        ' StopReason is Nothing ⇒ the legacy branches below render byte-identical v50.
+        ' [v69] Computed here, BEFORE CalcKellySizing, so Kelly can read the placed levels
+        ' for its side (spec §3.2/§3.3) — moved up from its original position below the
+        ' ATR ENTRY LEVELS header; nothing between here and there reads v.Kelly*.
+        Dim lvLong As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
+        Dim lvShort As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
+        Dim structuralMode As Boolean = lvLong.StopReason IsNot Nothing
+
         ' P5b: the engine's ONLY CalcKellySizing call site. RunAnalysisAsync
         ' builds this snapshot BEFORE the card binds precisely so this call
         ' populates v.Kelly* for BindCardKelly — preserve that ordering when
         ' refactoring, or the KELLY card renders zeros.
-        ScoringEngine.CalcKellySizing(v, atrStop, r.CurrentPrice, cfg)
+        ' [v69, KO-1 (a)/KO-2 (a)] p and b come from the live eval cache, pooled over the
+        ' CURRENT RUN's session — the same session-bucket matcher the session label uses
+        ' (ExecutionResolution.MatchSessionBucket), so the book and the on-screen session
+        ' name can never disagree.
+        Dim kellySessionBucket = ExecutionResolution.MatchSessionBucket(cfg, r.SessionUtcHour)
+        Dim kellySessionName As String = If(kellySessionBucket IsNot Nothing, kellySessionBucket.Name, "—")
+        Dim kellyBook = LivePerformanceTracker.ComputeKellyBook(kellySessionName, cfg)
+        ScoringEngine.CalcKellySizing(v, kellyBook, lvLong, lvShort, cfg)
 
         ' ATR ENTRY LEVELS header (SectionHeader emits a leading blank line).
         ' D2 (S-1): displays AvgATR/CurrATR sizing factor — mirrors RenderOutputHeader.
         Dim sizeMult As Double = If(r.ATR > 0, norms.ATRRef / r.ATR, 1.0)
         sb.AppendLine()
-
-        ' [B4b placed-geometry] The rendered levels come from the ONE shared arbitration
-        ' (SignalEmitter.ComputeSideLevels — the same function the bridge payload, the
-        ' CSV Placed* columns, and the card read). structural_levels.enabled=false ⇒
-        ' StopReason is Nothing ⇒ the legacy branches below render byte-identical v50.
-        Dim lvLong As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
-        Dim lvShort As SideLevels = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=False)
-        Dim structuralMode As Boolean = lvLong.StopReason IsNot Nothing
         ' Session-resolved fallback-target multiplier (DG3: LONDON 2.0 / ASIA 1.25) —
         ' returns the plain cfg multiplier when structural levels are disabled.
         Dim headerTargetMult As Double = ExecutionResolution.ResolveFallbackTargetMultiplier(cfg, r.SessionUtcHour)
@@ -236,46 +247,90 @@ Partial Public Class MainForm
                                          r.SwingStopShort))
         End If
 
-        ' KELLY SIZING block — suppressed when KellyPWin = 0.
-        If v.KellyPWin > 0 Then
-            Dim isNoTradeBias As Boolean = v.Verdict.StartsWith("NO TRADE")
-            Dim capTag As String = If(v.KellyCapped, "  [CAPPED]", "")
-            ' Legacy emits an unconditional blank line before the KELLY header
-            ' (AppendRtf with Environment.NewLine, not a SectionHeader call).
-            sb.AppendLine()
-            If isNoTradeBias Then
-                sb.AppendLine(String.Format("KELLY SIZING  [BIAS ONLY — NO TRADE]{0}", capTag))
-            Else
-                sb.AppendLine(String.Format("KELLY SIZING{0}", capTag))
-            End If
-            sb.AppendLine("  Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.")
-            sb.AppendLine("  p(win) is ASSUMED from the confidence tier — the calibration read did not separate the tiers.")
-            sb.AppendLine("  Treat as directional bias indicator only.")
-            sb.AppendLine("  " & BuildNetRRLine(v, r, cfg))
-            sb.AppendLine(String.Format("  p(win) [{0}]:   {1:P1}", v.KellyPMode, v.KellyPWin))
-            sb.AppendLine(String.Format("  f* / Half-Kelly:  {0:P2}  /  {1:P2}", v.KellyF, v.KellyFHalf))
-            sb.AppendLine(String.Format("  Applied fraction: {0:P2}", v.KellyFApplied))
-            sb.AppendLine(String.Format("  Risk $:    ${0:F2}", v.KellyRiskUsd))
-            Dim contractStr As String
-            If isNoTradeBias Then
-                contractStr = If(v.KellyContracts >= 1,
-                                 String.Format("{0} {1}  (not a trade signal)", v.KellyContracts.ToString(), If(v.KellyContracts = 1, "contract", "contracts")),
-                                 "< 1 contract  (bias only; not a trade signal)")
-                sb.AppendLine("  Lean: " & contractStr)
-            Else
-                contractStr = If(v.KellyContracts >= 1,
-                                 v.KellyContracts.ToString() & " " & If(v.KellyContracts = 1, "contract", "contracts"),
-                                 "< 1 contract  (stop too wide for min size)")
-                sb.AppendLine("  Contracts: " & contractStr)
-            End If
+        ' KELLY SIZING block — [v69, KO-4 (b)] gated on KellyHasSide (F-1: the pre-v69
+        ' KellyPWin > 0 gate rendered the block on every non-empty verdict, including
+        ' f* <= 0 runs). Hidden entirely on plain NO TRADE / NO TRADE [TIE] (no side).
+        If v.KellyHasSide Then
+            AppendKellyBlock(sb, v, cfg)
+        End If
+    End Sub
 
-            ' D1: notional + implied leverage sanity line (mirrors RenderOutputHeader).
-            If v.KellyContracts >= 1 Then
-                Dim notional As Double = v.KellyContracts * cfg.Kelly.ContractFaceUsd
-                Dim lev As Double = If(cfg.Kelly.AccountSizeUsd > 0, notional / cfg.Kelly.AccountSizeUsd, 0.0)
-                Dim levTag As String = If(v.KellyLevCapped, "  [LEV CAPPED]", "")
-                sb.AppendLine(String.Format("  Notional:  ≈ ${0:N0} · {1:F1}× lev{2}", notional, lev, levTag))
-            End If
+    ' [v69, docs/kelly-one-class-placed-payoff-spec.md §3.4 + the K-1 (g) ruling §4]
+    ' Three render states, all reading only fields CalcKellySizing already populated —
+    ' no measured number is composed here, only formatted (K-1 (g) point 5).
+    '   1. Book below the floor (Not v.KellyBookSufficient): basis + a placeholder
+    '      p(win) row naming the shortfall. No sizing rows.
+    '   2. Computed, f* <= 0 (KO-4 (b) "[NO EDGE]"): basis + measured p/b/breakeven/f*.
+    '      No sizing rows.
+    '   3. Computed, f* > 0: as (2), plus the sizing rows (as pre-v69).
+    ' Mirrors UI/MainForm_Render_Cards.vb's BindCardKelly — BOTH surfaces move together
+    ' (engine display-string parity rule).
+    Private Sub AppendKellyBlock(sb As StringBuilder, v As VerdictResult, cfg As EngineSettings)
+        Dim isNoTradeBias As Boolean = v.Verdict.StartsWith("NO TRADE")
+        Dim capTag As String = If(v.KellyCapped, "  [CAPPED]", "")
+        ' Legacy emits an unconditional blank line before the KELLY header
+        ' (AppendRtf with Environment.NewLine, not a SectionHeader call).
+        sb.AppendLine()
+
+        If Not v.KellyBookSufficient Then
+            sb.AppendLine(String.Format("KELLY SIZING{0}", If(isNoTradeBias, "  [BIAS ONLY — NO TRADE]", "")))
+            sb.AppendLine("  Advisory — p and b are measured on the book's own rows, net of the round-trip fee.")
+            sb.AppendLine(String.Format("  Book: {0} rows, {1} — below the {2}-row floor.",
+                                         v.KellyBookN, v.KellyBookSession, cfg.Kelly.MinBookRows))
+            sb.AppendLine("  Treat as directional bias indicator only.")
+            sb.AppendLine(String.Format("  p(win) [{0}]:   — (book {1} rows, needs {2})",
+                                         v.KellyPMode, v.KellyBookN, cfg.Kelly.MinBookRows))
+            Return
+        End If
+
+        Dim noEdge As Boolean = (v.KellyF <= 0.0)
+        sb.AppendLine(String.Format("KELLY SIZING{0}{1}{2}",
+                                     If(isNoTradeBias, "  [BIAS ONLY — NO TRADE]", ""), capTag,
+                                     If(noEdge, "  [NO EDGE]", "")))
+
+        Dim bucketRange As String = String.Format(CultureInfo.InvariantCulture,
+                                                   "bucket {0} of 3, b {1:F2}-{2:F2}", v.KellyBucketIndex, v.KellyBucketLo, v.KellyBucketHi)
+        If v.KellyBucketFallback Then
+            sb.AppendLine(String.Format("  Advisory — {0} holds too few rows; using the session-pooled p and b instead, net of the round-trip fee.", bucketRange))
+        Else
+            sb.AppendLine(String.Format("  Advisory — p and b are measured on the book's rows with a similar placed R:R ({0}), net of the round-trip fee.", bucketRange))
+        End If
+        sb.AppendLine("  p(win) is the book's measured success rate, all tiers pooled.")
+        sb.AppendLine("  Treat as directional bias indicator only.")
+        sb.AppendLine(String.Format("  Net R:R (book): {0}", If(v.KellyB > 0, String.Format(CultureInfo.InvariantCulture, "1:{0:F2}", v.KellyB), "—")))
+        sb.AppendLine(String.Format("  Book: {0} rows, {1}, since {2}",
+                                     v.KellyBookN, v.KellyBookSession,
+                                     If(v.KellyBookSpanStartUtc = DateTime.MinValue, "—", v.KellyBookSpanStartUtc.ToString("yyyy-MM-dd"))))
+        sb.AppendLine(String.Format("  p(win) [{0}]:   {1:P1}", v.KellyPMode, v.KellyPWin))
+        sb.AppendLine(String.Format("  Breakeven p(win): {0:P1}", v.KellyBreakevenP))
+
+        If noEdge Then
+            sb.AppendLine(String.Format("  f*:  {0:P2}  — no size", v.KellyF))
+            Return
+        End If
+
+        sb.AppendLine(String.Format("  f* / Half-Kelly:  {0:P2}  /  {1:P2}", v.KellyF, v.KellyFHalf))
+        sb.AppendLine(String.Format("  Applied fraction: {0:P2}", v.KellyFApplied))
+        sb.AppendLine(String.Format("  Risk $:    ${0:F2}", v.KellyRiskUsd))
+        Dim contractStr As String
+        If isNoTradeBias Then
+            contractStr = If(v.KellyContracts >= 1,
+                             String.Format("{0} {1}  (not a trade signal)", v.KellyContracts.ToString(), If(v.KellyContracts = 1, "contract", "contracts")),
+                             "< 1 contract  (bias only; not a trade signal)")
+            sb.AppendLine("  Lean: " & contractStr)
+        Else
+            contractStr = If(v.KellyContracts >= 1,
+                             v.KellyContracts.ToString() & " " & If(v.KellyContracts = 1, "contract", "contracts"),
+                             "< 1 contract  (stop too wide for min size)")
+            sb.AppendLine("  Contracts: " & contractStr)
+        End If
+
+        ' D1: notional + implied leverage sanity line (mirrors RenderOutputHeader).
+        If v.KellyContracts >= 1 Then
+            Dim notional As Double = v.KellyContracts * cfg.Kelly.ContractFaceUsd
+            Dim lev As Double = If(cfg.Kelly.AccountSizeUsd > 0, notional / cfg.Kelly.AccountSizeUsd, 0.0)
+            Dim levTag As String = If(v.KellyLevCapped, "  [LEV CAPPED]", "")
+            sb.AppendLine(String.Format("  Notional:  ≈ ${0:N0} · {1:F1}× lev{2}", notional, lev, levTag))
         End If
     End Sub
 

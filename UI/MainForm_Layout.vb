@@ -226,10 +226,18 @@ Partial Public Class MainForm
     ' KELLY: header + 2-line advisory + up to SIX KV rows — p(win) / f* / Applied / Risk $ /
     ' Contracts|Lean / and the "Notional ≈ $X · N× lev" row that renders ONLY when
     ' KellyContracts >= 1. 196 was measured off a bias-only run (5 rows) and clipped that 6th
-    ' row on a real signal; 220 carries it. VOLUME PROFILE row-spans this pair, so it grows
-    ' with KELLY automatically and the bottoms stay aligned.
+    ' row on a real signal; 220 carried it through v68.
+    ' [v69, docs/kelly-one-class-placed-payoff-spec.md] The book rebuild adds TWO rows the
+    ' 220 px estimate above never carried: a 5-line advisory panel (was 4 — bucket basis /
+    ' p(win) explanation / bias / Net R:R (book) / Book: N rows...) and a new Breakeven
+    ' p(win) KV row, so the worst case (computed, f* > 0, contracts >= 1) is now header +
+    ' 5-line advisory + up to SEVEN KV rows (p(win) / Breakeven / f* / Applied / Risk $ /
+    ' Contracts|Lean / Notional). Raised to 280 px from a proportional estimate; a screen
+    ' check on a real signal is the acceptance criterion, not this arithmetic
+    ' (docs/kelly-one-class-placed-payoff-spec.md AC-5). VOLUME PROFILE row-spans this
+    ' pair, so it grows with KELLY automatically and the bottoms stay aligned.
     Friend Const OICVD_CARD_H As Integer = 132
-    Friend Const KELLY_CARD_H As Integer = 220
+    Friend Const KELLY_CARD_H As Integer = 280
 
     ' [2026-07-15] X of the Output-Dump settings cog inside the TOOLS box — sits just right
     ' of the "Output Dump" LinkRow's text (the row itself is a fixed 320 px hit area, wider

@@ -443,7 +443,9 @@ MainForm_Analysis.vb :: RunAnalysisAsync()
                     ├─ Long + Short structural rows (swing pivot R:R)
                     ├─ KELLY SIZING block
                     │          Contracts / USD risk / [LEV CAPPED] tag.
-                    │          EST mode only; suppressed when KellyF ≤ 0
+                    │          [v69] p/b from the live eval cache (BOOK mode), not a
+                    │          confidence tier; shown whenever a Kelly side exists —
+                    │          [NO EDGE] at f* ≤ 0, a below-floor state on a thin book
                     ├─ DYNAMIC NORMS / REGIME / CORE SIGNALS / VWAP /
                     │  BBW/TTM / EMA RIBBON / MARKET STRUCTURE /
                     │  OI / ORDER FLOW / LIQUIDATIONS / MTF GATE / FUNDING

@@ -276,31 +276,46 @@ A structural-placed target renders in the **arrow form** `Target <fallback> --> 
 
 ## 3. Kelly Sizing {#3-kelly-sizing}
 
+**[v69, `docs/kelly-one-class-placed-payoff-spec.md`]** p and b are no longer a confidence-tier assumption (`EST` mode, retired). They are BOOK mode: measured on the live eval cache, pooled per session, split into 3 terciles of the book's own placed net payoff (K-1 = (g), so a row's p and b come from the bucket of rows with a similar target-to-stop geometry, falling back to the session-pooled pair when its own bucket is too thin).
+
 ```
 KELLY SIZING  [CAPPED]
-  Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.
+  Advisory — p and b are measured on the book's rows with a similar placed R:R
+  (bucket 2 of 3, b 0.85-1.62), net of the round-trip fee.
+  p(win) is the book's measured success rate, all tiers pooled.
   Treat as directional bias indicator only.
-  p(win):   45.0%
-  f* / Half-Kelly:  12.00%  /  6.00%
+  Net R:R (book): 1:1.24
+  Book: 6717 rows, NY, since 2026-07-22
+  p(win) [BOOK]:   60.0%
+  Breakeven p(win): 43.3%
+  f* / Half-Kelly:  29.41%  /  14.71%
   Applied fraction: 5.00%
   Risk $:    $50.00
   Contracts: < 1 contract  (stop too wide for min size)
 ```
 
-**Rendering gate:** Block only appears when `v.KellyPWin > 0`. `CalcKellySizing` early-exits (leaving all Kelly fields at 0) when verdict is empty/`NEUTRAL`/`WAIT`, or `stopDistanceUsd <= 0`, or `AtrStopMultiplier <= 0`. Under normal operation this means the block renders for every real verdict, including `NO TRADE`.
+**Rendering gate:** the block appears whenever a Kelly side exists — the verdict's own side, or the lean side on `NO TRADE [WEAK LONG]` / `[WEAK SHORT]`. Hidden entirely on plain `NO TRADE` and `NO TRADE [TIE]` (no side to size). This replaced the pre-v69 `v.KellyPWin > 0` gate, which rendered on every non-empty verdict including a negative f*.
+
+### Three states
+
+1. **Book below the floor** — the session's eval-cache pool holds fewer than `kelly.min_book_rows` (default 400) weekday, in-population rows. The block shows the header and basis lines only; `p(win)` reads `— (book N rows, needs M)`. No sizing rows.
+2. **`[NO EDGE]`** — the book is sufficient but f* ≤ 0 at the row's bucket (or session-pooled fallback) p and b. Basis, `p(win)`, `Breakeven p(win)` and `f*` render; the f* row reads `f*: −N.NN%  — no size`. No sizing rows.
+3. **Full sizing** — f* > 0. Renders as the example above.
 
 ### Section Header
 
 **Format:**
 
-- Normal: `KELLY SIZING` (optionally `  [CAPPED]`)
-- NO TRADE: `KELLY SIZING  [BIAS ONLY — NO TRADE]` (optionally `  [CAPPED]`)
+- Normal: `KELLY SIZING` (optionally `  [CAPPED]`, optionally `  [NO EDGE]`)
+- NO TRADE lean: `KELLY SIZING  [BIAS ONLY — NO TRADE]` (optionally `  [CAPPED]`, optionally `  [NO EDGE]`)
 
 **`[CAPPED]` tag** appears when `KellyCapped = true`, which is true when half-Kelly exceeded `MaxRiskFraction` (default 5%) and the applied fraction was clamped down.
 
-**`[BIAS ONLY — NO TRADE]` tag** appears when `v.Verdict.StartsWith("NO TRADE")`. In this mode Kelly is computed but labelled as direction-only — do not trade.
+**`[NO EDGE]` tag** appears when f* ≤ 0 at the book's measured p and b (state 2 above).
 
-**Historic note:** Earlier versions also showed `[EST]` or `[CAL]` mode tags. CAL mode was removed (see v14 changelog); `KellyPMode` is still assigned `"EST"` internally but no longer rendered. Tag will return once a backtesting module supplies empirical win rates.
+**`[BIAS ONLY — NO TRADE]` tag** appears when `v.Verdict.StartsWith("NO TRADE")` — i.e. the lean case, `NO TRADE [WEAK LONG]` / `[WEAK SHORT]`. In this mode Kelly is computed but labelled as direction-only — do not trade.
+
+**Historic note:** pre-v69, `p(win)` was assumed from the confidence tier (`EST` mode) and rendered `p(win) [EST]:`. As of v69 the mode tag reads `p(win) [BOOK]:` — a measured value, not an assumption. `CAL` mode (a separate per-tier calibration) was considered and explicitly parked: the 2026-09-09 calibration read did not separate the tiers, and QD-1 (c) later ruled Kelly as one class rather than re-cutting the tiers, which retired the question.
 
 ### Advisory label (always present)
 

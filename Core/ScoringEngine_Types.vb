@@ -216,3 +216,58 @@ Public Class ScoreState
     Public Property LongScore As Integer
     Public Property ShortScore As Integer
 End Class
+
+' ---------------------------------------------------------------------------
+' Kelly book (v69, docs/kelly-one-class-placed-payoff-spec.md §3.1/§3.2 + the
+' K-1 (g) ruling). Plain data containers, deliberately homed HERE rather than
+' on LivePerformanceTracker (where the fold that BUILDS them, ComputeKellyBook,
+' lives) — Core/ScoringEngine_Kelly.vb's CalcKellySizing takes a KellyBook
+' parameter, and every project that links the ScoringEngine partial class
+' (e.g. tools/BacktestRunner.vbproj) must be able to compile that signature
+' without also pulling in LivePerformanceTracker.vb's OhlcCache dependency,
+' which BacktestRunner has no other reason to reference.
+' ---------------------------------------------------------------------------
+
+''' <summary>One geometry tercile of the session book — rows grouped by their own
+''' placed net payoff b_row = (target-fee)/(stop+fee). K-1 (g): the live row's p and b
+''' come from whichever bucket its own b_row falls into, not the whole-session pool.</summary>
+Public Class KellyBucket
+    ''' <summary>Lower bound of this bucket's b_row range, as measured on the book.</summary>
+    Public Property LoB As Double = 0.0
+    ''' <summary>Upper bound of this bucket's b_row range, as measured on the book.</summary>
+    Public Property HiB As Double = 0.0
+    Public Property N As Integer = 0
+    Public Property Successes As Integer = 0
+    ''' <summary>Successes / N. 0 when N = 0.</summary>
+    Public Property P As Double = 0.0
+    ''' <summary>Pooled net payoff over this bucket: Σ(targetᵢ-feeᵢ) / Σ(stopᵢ+feeᵢ).</summary>
+    Public Property NetPayoff As Double = 0.0
+    ''' <summary>True when N meets cfg.Kelly.MinBookRows. False ⇒ a row landing in this
+    ''' bucket falls back to the session-pooled P/NetPayoff (K-1 (g) point 4).</summary>
+    Public Property Sufficient As Boolean = False
+End Class
+
+''' <summary>The session-scoped population CalcKellySizing reads p and b from (KO-1 (a):
+''' the live eval cache; KO-2 (a): the current run's session only). N/Successes/P/NetPayoff
+''' are the WHOLE-SESSION pool — the session-pooled fallback values (K-1 (g) option (e))
+''' and the "book below the floor" state test. Buckets are the 3 terciles of the pool's
+''' own b_row (K-1 (g)); empty when the session pool itself is below the floor. Built by
+''' LivePerformanceTracker.ComputeKellyBook (a pure fold over its EvalCacheEntry list).</summary>
+Public Class KellyBook
+    Public Property Session As String = ""
+    Public Property N As Integer = 0
+    Public Property Successes As Integer = 0
+    ''' <summary>Session-pooled success rate. The K-1 (g) fallback (option (e)) value.</summary>
+    Public Property P As Double = 0.0
+    ''' <summary>Session-pooled net payoff Σ(target-fee)/Σ(stop+fee). The K-1 (g) fallback value.</summary>
+    Public Property NetPayoff As Double = 0.0
+    ''' <summary>Earliest weekday, in-population row timestamp (UTC) in the pool.
+    ''' DateTime.MinValue when N = 0.</summary>
+    Public Property SpanStartUtc As DateTime = DateTime.MinValue
+    ''' <summary>True when N meets cfg.Kelly.MinBookRows — gates the "book below the
+    ''' floor" render state (KO-4/§3.4). False ⇒ Buckets is empty; nothing else in this
+    ''' book is meaningful to render.</summary>
+    Public Property Sufficient As Boolean = False
+    ''' <summary>3 terciles, ascending by b_row range. Empty when Not Sufficient.</summary>
+    Public Property Buckets As New List(Of KellyBucket)
+End Class

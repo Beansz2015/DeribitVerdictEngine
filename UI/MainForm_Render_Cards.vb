@@ -1529,22 +1529,27 @@ Partial Public Class MainForm
 
     ' =======================================================================
     ' KELLY SIZING card (P4d commit 2). Gaps GAP-07..16.
-    ' Hidden entirely when v.KellyPWin <= 0. Otherwise renders header (with
-    ' optional [BIAS ONLY] / [CAPPED] tags) + 2-line ATR-basis advisory +
-    ' six KV rows ending in Contracts/Lean with singular/plural handling.
+    ' [v69, docs/kelly-one-class-placed-payoff-spec.md §3.4 + the K-1 (g) ruling]
+    ' Hidden entirely when Not v.KellyHasSide (F-1: the pre-v69 KellyPWin <= 0 gate
+    ' rendered on every non-empty verdict, including f* <= 0 runs — this replaces it).
+    ' Otherwise three states, mirrored 1:1 from MainForm_PlaintextSnapshot.vb's
+    ' AppendKellyBlock (engine display-string parity rule — BOTH surfaces read only
+    ' v.Kelly* fields, never compute a number of their own):
+    '   1. Book below the floor: header + basis + a placeholder p(win) row.
+    '   2. Computed, f* <= 0 ([NO EDGE]): basis + measured p/b/breakeven/f*, no sizing.
+    '   3. Computed, f* > 0: as (2) plus the sizing rows (as pre-v69).
     ' =======================================================================
-    ' r + cfg threaded in (net-R:R rider) rather than read from a captured field, so the
-    ' card composes from the SAME IndicatorResults the snapshot did — the BindCardSignal-
-    ' Breakdown / BindCardIndicatorDetails pattern, and the only way the two surfaces can
-    ' be guaranteed identical regardless of when _lastSuccessfulIndicators is captured.
+    ' r + cfg threaded in for signature parity with the pre-v69 call site; r is unused
+    ' now that the Kelly card's own Net R:R line reads v.KellyB instead of recomputing
+    ' from ATR (BuildNetRRLine remains the ATR-basis composer other callers still use).
     Public Sub BindCardKelly(v As VerdictResult, r As IndicatorResults, cfg As EngineSettings)
         If _cardKelly Is Nothing Then Return
 
         _cardKelly.SuspendLayout()
         _cardKelly.Controls.Clear()
 
-        ' GAP-15: hide entire card when there's no Kelly result.
-        If v.KellyPWin <= 0 Then
+        ' GAP-15: hide entire card when there's no Kelly side.
+        If Not v.KellyHasSide Then
             _cardKelly.Visible = False
             _cardKelly.ResumeLayout(True)
             Return
@@ -1553,6 +1558,7 @@ Partial Public Class MainForm
 
         Dim verdict As String = If(v.Verdict, "")
         Dim isNoTradeBias As Boolean = verdict.StartsWith("NO TRADE", StringComparison.OrdinalIgnoreCase)
+        Dim biasTag As String = If(isNoTradeBias, "  [BIAS ONLY — NO TRADE]", "")
 
         ' Vertical stack — header / advisory / KV rows.
         Dim stack As New FlowLayoutPanel() With {
@@ -1565,35 +1571,60 @@ Partial Public Class MainForm
             .Padding = New Padding(0)
         }
 
-        ' GAP-11, GAP-12: section header with optional bias / capped tags.
-        Dim biasTag As String = If(isNoTradeBias, "  [BIAS ONLY — NO TRADE]", "")
-        Dim capTag  As String = If(v.KellyCapped, "  [CAPPED]", "")
-        stack.Controls.Add(BuildCardHeaderWithTags("KELLY SIZING", biasTag, capTag))
+        If Not v.KellyBookSufficient Then
+            stack.Controls.Add(BuildCardHeaderWithTags("KELLY SIZING", biasTag, ""))
+            stack.Controls.Add(BuildCardAdvisory(
+                "Advisory — p and b are measured on the book's own rows, net of the round-trip fee.",
+                String.Format("Book: {0} rows, {1} — below the {2}-row floor.", v.KellyBookN, v.KellyBookSession, cfg.Kelly.MinBookRows),
+                "Treat as directional bias indicator only."))
+            stack.Controls.Add(BuildCardKvRow($"p(win) [{v.KellyPMode}]:",
+                                              String.Format("— (book {0} rows, needs {1})", v.KellyBookN, cfg.Kelly.MinBookRows)))
+            _cardKelly.Controls.Add(stack)
+            _cardKelly.ResumeLayout(True)
+            Return
+        End If
 
-        ' GAP-10: ATR-basis advisory. The p(win) assumption line was added 2026-08-02
-        ' (kelly-est-honesty-decision-2026-08-02.md) — F1's §9 read measured STRONG below
-        ' the 65% this tier map assumes, so the block says so on screen.
-        ' [D-2, 2026-09-09] RE-WORDED. The old line promised "Actual numbers after next
-        ' book doubling". The doubling HAPPENED — the Kelly trigger was met at 407 weekday
-        ' STRONG against ≥406 — and the numbers say the tier ladder still does not separate
-        ' and pooled STRONG still sits below breakeven. Leaving the promise standing would
-        ' have turned a pending statement into a false one, which the 2026-08-02 decision
-        ' explicitly forbids ("what it must not do is silently promise another doubling").
-        ' Spec + the three candidate strings: docs/kelly-est-advisory-reword-spec.md §3;
-        ' candidate A signed off by the trader 2026-09-09.
-        ' ⛔ Still deliberately carries no measured numbers: a string with "47.1%" in it goes
-        ' stale the moment the book grows. Mirrors MainForm_PlaintextSnapshot.vb — BOTH
-        ' surfaces move together or neither does (engine display-string parity rule).
+        Dim noEdge As Boolean = (v.KellyF <= 0.0)
+        Dim capTag As String = If(v.KellyCapped, "  [CAPPED]", "")
+        Dim edgeTag As String = If(noEdge, "  [NO EDGE]", "")
+        stack.Controls.Add(BuildCardHeaderWithTags("KELLY SIZING", biasTag, capTag & edgeTag))
+
+        ' [D-2, 2026-09-09] The old "p(win) is ASSUMED from the confidence tier" line and
+        ' its ATR-basis pairing were retired by the v69 one-class rebuild: p and b are now
+        ' the book's MEASURED values for a bucket of rows with a similar placed R:R to this
+        ' one (K-1 (g)), not a tier assumption. Still deliberately carries no measured
+        ' number IN THE STRING — every number below is its own field, read fresh each bind,
+        ' so nothing here goes stale as the book grows (docs/kelly-est-advisory-reword-spec.md
+        ' Trap 2, the same failure this rule exists to prevent for a value).
+        Dim bucketRange As String = String.Format(CultureInfo.InvariantCulture,
+                                                   "bucket {0} of 3, b {1:F2}-{2:F2}", v.KellyBucketIndex, v.KellyBucketLo, v.KellyBucketHi)
+        Dim basisLine As String
+        If v.KellyBucketFallback Then
+            basisLine = String.Format("Advisory — {0} holds too few rows; using the session-pooled p and b instead, net of the round-trip fee.", bucketRange)
+        Else
+            basisLine = String.Format("Advisory — p and b are measured on the book's rows with a similar placed R:R ({0}), net of the round-trip fee.", bucketRange)
+        End If
         stack.Controls.Add(BuildCardAdvisory(
-            "Advisory (ATR-basis) — R:R uses ATR multiples, not structural targets.",
-            "p(win) is ASSUMED from the confidence tier — the calibration read did not separate the tiers.",
+            basisLine,
+            "p(win) is the book's measured success rate, all tiers pooled.",
             "Treat as directional bias indicator only.",
-            BuildNetRRLine(v, r, cfg)))
+            String.Format("Net R:R (book): {0}", If(v.KellyB > 0, String.Format(CultureInfo.InvariantCulture, "1:{0:F2}", v.KellyB), "—")),
+            String.Format("Book: {0} rows, {1}, since {2}", v.KellyBookN, v.KellyBookSession,
+                          If(v.KellyBookSpanStartUtc = DateTime.MinValue, "—", v.KellyBookSpanStartUtc.ToString("yyyy-MM-dd")))))
 
-        ' KV rows: p(win), f*/Half-Kelly, Applied fraction, Risk $, Contracts/Lean.
-        ' The mode tag reads off KellyPMode rather than a literal, so when CAL ships it
-        ' renders "p(win) [CAL]:" on its own and only the advisory line needs retiring.
+        ' KV rows: p(win), breakeven, f*/Half-Kelly (or "f*: … — no size"), then the
+        ' sizing rows only when f* > 0. The mode tag reads off KellyPMode rather than a
+        ' literal, so a future mode only needs the advisory line retired.
         stack.Controls.Add(BuildCardKvRow($"p(win) [{v.KellyPMode}]:", v.KellyPWin.ToString("P1")))
+        stack.Controls.Add(BuildCardKvRow("Breakeven p(win):", v.KellyBreakevenP.ToString("P1")))
+
+        If noEdge Then
+            stack.Controls.Add(BuildCardKvRow("f*:", $"{v.KellyF:P2}  — no size", Theme.ACC_WARN))
+            _cardKelly.Controls.Add(stack)
+            _cardKelly.ResumeLayout(True)
+            Return
+        End If
+
         stack.Controls.Add(BuildCardKvRow("f* / Half-Kelly:", $"{v.KellyF:P2}  /  {v.KellyFHalf:P2}"))
         stack.Controls.Add(BuildCardKvRow("Applied fraction:", v.KellyFApplied.ToString("P2")))
         stack.Controls.Add(BuildCardKvRow("Risk $:",          $"${v.KellyRiskUsd:F2}"))

@@ -148,50 +148,12 @@ Public Class LivePerformanceTracker
     ' the K-1 (g) ruling). Pure — ComputeKellyBook takes the entry list as a
     ' parameter (not read from module state) so fixtures can pass their own,
     ' the same pattern AggregateRange uses.
+    ' KellyBucket/KellyBook TYPES live in Core/ScoringEngine_Types.vb, not here —
+    ' Core/ScoringEngine_Kelly.vb's CalcKellySizing takes a KellyBook parameter, and
+    ' every project that links ScoringEngine_Kelly.vb (e.g. tools/BacktestRunner, which
+    ' does not otherwise touch LivePerformanceTracker.vb or its OhlcCache dependency)
+    ' must be able to compile that signature without pulling in this whole file.
     ' -----------------------------------------------------------------------
-
-    ''' <summary>One geometry tercile of the session book — rows grouped by their own
-    ''' placed net payoff b_row = (target-fee)/(stop+fee). K-1 (g): the live row's p and b
-    ''' come from whichever bucket its own b_row falls into, not the whole-session pool.</summary>
-    Public Class KellyBucket
-        ''' <summary>Lower bound of this bucket's b_row range, as measured on the book.</summary>
-        Public Property LoB As Double = 0.0
-        ''' <summary>Upper bound of this bucket's b_row range, as measured on the book.</summary>
-        Public Property HiB As Double = 0.0
-        Public Property N As Integer = 0
-        Public Property Successes As Integer = 0
-        ''' <summary>Successes / N. 0 when N = 0.</summary>
-        Public Property P As Double = 0.0
-        ''' <summary>Pooled net payoff over this bucket: Σ(targetᵢ-feeᵢ) / Σ(stopᵢ+feeᵢ).</summary>
-        Public Property NetPayoff As Double = 0.0
-        ''' <summary>True when N meets cfg.Kelly.MinBookRows. False ⇒ a row landing in this
-        ''' bucket falls back to the session-pooled P/NetPayoff (K-1 (g) point 4).</summary>
-        Public Property Sufficient As Boolean = False
-    End Class
-
-    ''' <summary>The session-scoped population CalcKellySizing reads p and b from (KO-1 (a):
-    ''' the live eval cache; KO-2 (a): the current run's session only). N/Successes/P/NetPayoff
-    ''' are the WHOLE-SESSION pool — the session-pooled fallback values (K-1 (g) option (e))
-    ''' and the "book below the floor" state test. Buckets are the 3 terciles of the pool's
-    ''' own b_row (K-1 (g)); empty when the session pool itself is below the floor.</summary>
-    Public Class KellyBook
-        Public Property Session As String = ""
-        Public Property N As Integer = 0
-        Public Property Successes As Integer = 0
-        ''' <summary>Session-pooled success rate. The K-1 (g) fallback (option (e)) value.</summary>
-        Public Property P As Double = 0.0
-        ''' <summary>Session-pooled net payoff Σ(target-fee)/Σ(stop+fee). The K-1 (g) fallback value.</summary>
-        Public Property NetPayoff As Double = 0.0
-        ''' <summary>Earliest weekday, in-population row timestamp (UTC) in the pool.
-        ''' DateTime.MinValue when N = 0.</summary>
-        Public Property SpanStartUtc As DateTime = DateTime.MinValue
-        ''' <summary>True when N meets cfg.Kelly.MinBookRows — gates the "book below the
-        ''' floor" render state (KO-4/§3.4). False ⇒ Buckets is empty; nothing else in this
-        ''' book is meaningful to render.</summary>
-        Public Property Sufficient As Boolean = False
-        ''' <summary>3 terciles, ascending by b_row range. Empty when Not Sufficient.</summary>
-        Public Property Buckets As New List(Of KellyBucket)
-    End Class
 
     ''' <summary>One row's contribution to the book: its own success flag and placed net
     ''' payoff. Kept as a private working record only — never exposed.</summary>
@@ -309,18 +271,19 @@ Public Class LivePerformanceTracker
     End Function
 
     ''' <summary>
-    ''' [K-1 (g)] Which tercile a row's own b_row falls into: the first bucket (ascending)
-    ''' whose HiB is ≥ bRow, or the last bucket when bRow exceeds every HiB — "clamped to
-    ''' the end buckets" per the ruling. Returns a 1-based index, or 0 when the book has no
-    ''' buckets (session pool below the floor, or an empty book).
+    ''' [v69] Production entry point: folds the module's own _evalCache (the same list
+    ''' ComputeWindows/AggregateRange read) for the current run's session. Thin wrapper
+    ''' over the pure, fixture-testable ComputeKellyBook(entries, sessionName, cfg) above —
+    ''' the ComputeWindows/BuildAggregate/AggregateRange pattern.
     ''' </summary>
-    Public Shared Function SelectKellyBucket(book As KellyBook, bRow As Double) As Integer
-        If book Is Nothing OrElse book.Buckets Is Nothing OrElse book.Buckets.Count = 0 Then Return 0
-        For i As Integer = 0 To book.Buckets.Count - 1
-            If bRow <= book.Buckets(i).HiB Then Return i + 1
-        Next
-        Return book.Buckets.Count
+    Public Shared Function ComputeKellyBook(sessionName As String, cfg As EngineSettings) As KellyBook
+        Return ComputeKellyBook(_evalCache, sessionName, cfg)
     End Function
+
+    ' SelectKellyBucket (K-1 (g) bucket selection) lives in Core/ScoringEngine_Kelly.vb —
+    ' it depends only on the KellyBook/KellyBucket types (Core/ScoringEngine_Types.vb), so
+    ' it travels with CalcKellySizing rather than pulling this file's OhlcCache dependency
+    ' into every project that needs bucket selection but not the eval-cache fold.
 
     ' -----------------------------------------------------------------------
     ' Module-level state (shared across calls)

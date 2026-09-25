@@ -169,8 +169,11 @@ Public NotInheritable Class SignalEmitter
         If holdStatus = "N/A -- no open position" Then holdStatus = Nothing
         o("hold_status") = JStr(holdStatus)
 
-        ' Advisory context only — never sizing in v1 (§8 D5). Fields are 0/false
-        ' when the display suppresses the Kelly block (no edge).
+        ' Advisory context only — never sizing in v1 (§8 D5). Fields are 0/false on no
+        ' side (plain NO TRADE / [TIE]), on a book below kelly.min_book_rows, and on
+        ' [NO EDGE] (f* <= 0) — three distinct "not sizing" states as of v69
+        ' (docs/kelly-one-class-placed-payoff-spec.md §3.4); this payload does not
+        ' distinguish them, same as it never distinguished "no edge" from "no side" pre-v69.
         o("kelly") = New JsonObject From {
             {"contracts", v.KellyContracts},
             {"risk_usd", v.KellyRiskUsd},

@@ -6,7 +6,7 @@
 '
 ' [v69, docs/kelly-one-class-placed-payoff-spec.md] REWRITTEN. p and b no longer
 ' come from a confidence-tier map (QD-1 (c): one class, tiers not re-cut) — they
-' come from the live eval cache, folded into a LivePerformanceTracker.KellyBook by
+' come from the live eval cache, folded into a KellyBook by
 ' the caller (KO-1 (a): the live cache; KO-2 (a): the current run's session only).
 ' K-1 (g): p and b are the TERCILE bucket's measured values for rows with a similar
 ' placed net payoff to this one, falling back to the session-pooled pair below
@@ -40,7 +40,7 @@ Partial Public Class ScoringEngine
     '   the $ risk cap is rarely binding, so a leverage cap (kelly.max_leverage) is applied
     '   and surfaced via KellyLevCapped.
     Public Shared Sub CalcKellySizing(v As VerdictResult,
-                                      book As LivePerformanceTracker.KellyBook,
+                                      book As KellyBook,
                                       lvLong As SideLevels,
                                       lvShort As SideLevels,
                                       cfg As EngineSettings)
@@ -127,7 +127,7 @@ Partial Public Class ScoringEngine
         If netStop <= 0 Then Exit Sub
         Dim bRow As Double = (t - feeUsd) / netStop
 
-        Dim bucketIdx As Integer = LivePerformanceTracker.SelectKellyBucket(book, bRow)
+        Dim bucketIdx As Integer = ScoringEngine.SelectKellyBucket(book, bRow)
 
         Dim usedP As Double
         Dim usedB As Double
@@ -215,5 +215,21 @@ Partial Public Class ScoringEngine
             v.KellyContracts = contractsByRisk
         End If
     End Sub
+
+    ''' <summary>
+    ''' [K-1 (g)] Which tercile a row's own b_row falls into: the first bucket (ascending)
+    ''' whose HiB is ≥ bRow, or the last bucket when bRow exceeds every HiB — "clamped to
+    ''' the end buckets" per the ruling. Returns a 1-based index, or 0 when the book has no
+    ''' buckets (session pool below the floor, or an empty book). Depends only on the
+    ''' KellyBook/KellyBucket types (Core/ScoringEngine_Types.vb), so it lives beside its
+    ''' only caller, CalcKellySizing, rather than on LivePerformanceTracker.
+    ''' </summary>
+    Public Shared Function SelectKellyBucket(book As KellyBook, bRow As Double) As Integer
+        If book Is Nothing OrElse book.Buckets Is Nothing OrElse book.Buckets.Count = 0 Then Return 0
+        For i As Integer = 0 To book.Buckets.Count - 1
+            If bRow <= book.Buckets(i).HiB Then Return i + 1
+        Next
+        Return book.Buckets.Count
+    End Function
 
 End Class

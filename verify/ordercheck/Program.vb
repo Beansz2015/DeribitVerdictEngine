@@ -1767,9 +1767,9 @@ Module Program
                             book.Buckets(0).P, book.Buckets(1).P, book.Buckets(2).P))
 
         Const Hi As Double = 1.3076923076923077   ' every bucket's HiB, exactly (170.0/130.0)
-        Dim atBoundary As Integer = LivePerformanceTracker.SelectKellyBucket(book, Hi)
-        Dim justAbove As Integer = LivePerformanceTracker.SelectKellyBucket(book, Hi + 0.0000001)
-        Dim repeat As Integer = LivePerformanceTracker.SelectKellyBucket(book, Hi)
+        Dim atBoundary As Integer = ScoringEngine.SelectKellyBucket(book, Hi)
+        Dim justAbove As Integer = ScoringEngine.SelectKellyBucket(book, Hi + 0.0000001)
+        Dim repeat As Integer = ScoringEngine.SelectKellyBucket(book, Hi)
         Check("A90k SelectKellyBucket boundary rule: bRow = every HiB -> FIRST bucket (1), deterministically repeatable; bRow just above -> clamps to the LAST bucket (3)",
               atBoundary = 1 AndAlso repeat = 1 AndAlso justAbove = 3,
               String.Format("got atBoundary={0} repeat={1} justAbove={2}", atBoundary, repeat, justAbove))
