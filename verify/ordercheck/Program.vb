@@ -27,7 +27,58 @@ Module Program
 
     Private _failures As Integer = 0
 
+    ' The ORDERCHECK_KELLY_BOOK diagnostic (see Sub Main). Reads the cache through the
+    ' production loader and folds it through the production ComputeKellyBook, per session,
+    ' with the tracked settings (cfg.Kelly.MinBookRows, the round-trip fee). f* per cell uses
+    ' the same formula as CalcKellySizing: (b*p - (1-p)) / b.
+    Private Sub PrintKellyBooks(path As String)
+        ' ⛔ The harness's SettingsLoader.Current is the POCO defaults (Version = 1), not the
+        ' tracked file — fine for fixtures that pass literals, wrong for a measurement. Require the
+        ' settings file explicitly so the fee and the floor are the shipped values.
+        Dim settingsPath As String = Environment.GetEnvironmentVariable("ORDERCHECK_KELLY_SETTINGS")
+        If String.IsNullOrEmpty(settingsPath) OrElse Not IO.File.Exists(settingsPath) Then
+            Console.WriteLine("KELLY_BOOK refused: set ORDERCHECK_KELLY_SETTINGS to the tracked settings.json path")
+            Environment.ExitCode = 2
+            Return
+        End If
+        SettingsLoader.Initialise(settingsPath)
+        Dim cfg As EngineSettings = SettingsLoader.Current
+        Dim entries As List(Of LivePerformanceTracker.EvalCacheEntry) = LivePerformanceTracker.LoadEvalCache(path)
+        Console.WriteLine("KELLY_BOOK cache=" & path & " rows_loaded=" & entries.Count &
+                          " min_book_rows=" & cfg.Kelly.MinBookRows & " settings_version=" & cfg.Version)
+        Dim fStar = Function(p As Double, b As Double) As String
+                        If b <= 0 Then Return "n/a"
+                        Return ((b * p - (1.0 - p)) / b).ToString("F4", Globalization.CultureInfo.InvariantCulture)
+                    End Function
+        For Each sess As String In {"NY", "LONDON", "ASIA"}
+            Dim book As KellyBook = LivePerformanceTracker.ComputeKellyBook(entries, sess, cfg)
+            Console.WriteLine(String.Format(Globalization.CultureInfo.InvariantCulture,
+                "{0,-6} N={1,6} Successes={2,6} p={3:F4} b={4:F4} f*(pooled)={5} sufficient={6} span={7:yyyy-MM-dd}",
+                sess, book.N, book.Successes, book.P, book.NetPayoff, fStar(book.P, book.NetPayoff), book.Sufficient, book.SpanStartUtc))
+            Dim k As Integer = 0
+            For Each bk As KellyBucket In book.Buckets
+                k += 1
+                Console.WriteLine(String.Format(Globalization.CultureInfo.InvariantCulture,
+                    "  bucket{0} N={1,6} b in [{2:F3},{3:F3}] p={4:F4} b={5:F4} f*={6} sufficient={7}",
+                    k, bk.N, bk.LoB, bk.HiB, bk.P, bk.NetPayoff, fStar(bk.P, bk.NetPayoff), bk.Sufficient))
+            Next
+        Next
+    End Sub
+
     Sub Main()
+        ' DIAGNOSTIC MODE, not a fixture (added 2026-09-25): the Kelly one-class build's AC-4
+        ' measurement (docs/kelly-one-class-placed-payoff-batch-summary.md §4) was run by a Sub
+        ' that was deleted before commit, so no reader could re-run it. Set
+        ' ORDERCHECK_KELLY_BOOK=<path to analysis_eval_cache.csv> and
+        ' ORDERCHECK_KELLY_SETTINGS=<path to the tracked settings.json> to print the session books and
+        ' terciles from the PRODUCTION fold (LoadEvalCache + ComputeKellyBook), then exit
+        ' without running any fixture. Unset (the default), the harness runs as always.
+        Dim kellyBookPath As String = Environment.GetEnvironmentVariable("ORDERCHECK_KELLY_BOOK")
+        If Not String.IsNullOrEmpty(kellyBookPath) Then
+            PrintKellyBooks(kellyBookPath)
+            Return
+        End If
+
         Console.WriteLine("OrderCheck — engine correctness pass acceptance fixtures")
         Console.WriteLine()
 

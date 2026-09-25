@@ -65,7 +65,7 @@ ASIA   N=  3315 Successes=  1507 p=0.4546 b=0.7093 f*(pooled)=-0.3144 sufficient
   bucket3 N=  1105 b∈[0.733,6.623] p=0.3367 b=1.1604 f*=-0.2350 sufficient=True
 ```
 
-`E-4` (build-time evidence, not re-runnable as committed — the diagnostic Sub was written into `verify/ordercheck/Program.vb`, run, and deleted before the commit; a reader would need to re-add it against a current cache export to reproduce). All 9 session×bucket cells and all 3 pooled values are negative, matching the spec's own prediction (§4 "Not measured before this ruling" note).
+✅ **NOW RE-RUNNABLE (orchestrator, 2026-09-25):** the harness has a diagnostic mode that reproduces this table byte-for-byte from the production fold: `ORDERCHECK_KELLY_BOOK=<analysis_eval_cache.csv> ORDERCHECK_KELLY_SETTINGS=<tracked settings.json> dotnet run --project verify/ordercheck/OrderCheck.vbproj -c Release` (it runs no fixtures, and refuses without the settings path, because the harness otherwise runs on POCO defaults, `Version = 1`). Original note: `E-4` (build-time evidence, not re-runnable as committed — the diagnostic Sub was written into `verify/ordercheck/Program.vb`, run, and deleted before the commit; a reader would need to re-add it against a current cache export to reproduce). All 9 session×bucket cells and all 3 pooled values are negative, matching the spec's own prediction (§4 "Not measured before this ruling" note).
 
 ## 5. Session's own effort, model and escalation record
 
