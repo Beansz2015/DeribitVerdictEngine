@@ -1,0 +1,87 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Hostile-audit proof harness (docs/audits/2026-09-25-fixture-harness-a.md).
+       Scratch-only: links the SAME real shipped sources OrderCheck.vbproj links,
+       via the same relative paths, so the proofs below run against production
+       code, not copies. Never committed as a .vbproj (see the audit doc for why:
+       the root vbproj globs everything outside tools/ and verify/). -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>ProofCheck</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\DeribitClient.vb" />
+    <Compile Include="..\..\DynamicNorms.vb" />
+    <Compile Include="..\..\Core\ExecutionResolution.vb" />
+    <Compile Include="..\..\Core\IndicatorResults.vb" />
+    <Compile Include="..\..\Core\Indicators_Momentum.vb" />
+    <Compile Include="..\..\Core\Indicators_OrderFlow.vb" />
+    <Compile Include="..\..\Core\Indicators_Structure.vb" />
+    <Compile Include="..\..\Core\Indicators_Volatility.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Types.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Helpers.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Calculate_Scoring.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Calculate_Verdict.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Kelly.vb" />
+    <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
+    <Compile Include="..\..\IMarketDataSource.vb" />
+    <Compile Include="..\..\MarketState.vb" />
+    <Compile Include="..\..\WsMarketDataSource.vb" />
+    <Compile Include="..\..\MtfRefreshPolicy.vb" />
+    <Compile Include="..\..\Core\OfiAccumulator.vb" />
+    <Compile Include="..\..\Core\AggressorVelocityAccumulator.vb" />
+    <Compile Include="..\..\Core\LevelAbsorptionTracker.vb" />
+    <Compile Include="..\..\Core\AlertsTracker.vb" />
+    <Compile Include="..\..\Core\WsHealthLog.vb" />
+    <Compile Include="..\..\Core\WsFeedLog.vb" />
+    <Compile Include="..\..\Core\VenueStatusLog.vb" />
+    <Compile Include="..\..\Core\RepairStatusLog.vb" />
+    <Compile Include="..\..\Core\TradeStoreWriter.vb" />
+    <Compile Include="..\..\Core\CaptureMarkerLog.vb" />
+    <Compile Include="..\..\Core\StoreFiles.vb" />
+    <Compile Include="..\..\AnalysisLogger.vb" />
+    <Compile Include="..\..\Core\BarCloseDetector.vb" />
+    <Compile Include="..\..\ExitGuardEvaluator.vb" />
+    <Compile Include="..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\Core\SignalEmitter.vb" />
+    <Compile Include="..\..\LiveMicrostructureEvaluator.vb" />
+    <Compile Include="..\..\LivePerformanceTracker.vb" />
+    <Compile Include="..\..\OhlcCache.vb" />
+    <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
+    <Compile Include="..\..\analysis\AnalysisConstants.vb" />
+    <Compile Include="..\..\analysis\AnalysisReport.vb" />
+    <Compile Include="..\..\analysis\BandLadder.vb" />
+    <Compile Include="..\..\analysis\MarkdownReportWriter.vb" />
+    <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
+    <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
+    <Compile Include="..\..\tools\WhatIfRunner\WhatIfOverlay.vb" />
+    <Compile Include="..\..\tools\WhatIfRunner\WhatIfReplay.vb" />
+    <Compile Include="..\..\tools\WhatIfRunner\WhatIfReport.vb" />
+    <Compile Include="..\..\tools\WhatIfRunner\WhatIfSettings.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\TweakerConfig.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\TweakerState.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\SettingsDiffApplier.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\PromptBuilder.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\ClaudeApiClient.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\ConditionsExtractor.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\CompositeScorer.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\RoundStatsBuilder.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\SnapshotManager.vb" />
+    <Compile Include="..\..\tools\AutoTweaker\AutoTweakerCore.vb" />
+    <Compile Include="..\..\tools\CeilingAudit\L2Logistic.vb" />
+    <Compile Include="..\..\tools\CeilingAudit\CsvFeatureBuilder.vb" />
+    <Compile Include="..\..\tools\CeilingAudit\FeatureMatrix.vb" />
+    <Compile Include="..\..\tools\CeilingAudit\AuditMetrics.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\HistoricalStore.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\BacktestFundingSample.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\ReplayLoop.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\BacktestRowWriter.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\OverlapValidator.vb" />
+    <Compile Include="..\..\tools\BacktestRunner\CoverageReport.vb" />
+  </ItemGroup>
+
+</Project>

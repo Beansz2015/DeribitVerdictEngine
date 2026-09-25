@@ -1,0 +1,107 @@
+' Hostile-audit proof harness — docs/audits/2026-09-25-fixture-harness-a.md.
+' Links the REAL shipped sources (same Compile Include set as verify/ordercheck/
+' OrderCheck.vbproj) so these proofs exercise production code, not copies.
+' Not a fixture suite: each Sub prints its own finding and does not assert/fail
+' the process — the audit report is the judge, not this program's exit code.
+
+Imports System
+Imports System.Globalization
+
+Module Program
+
+    Sub Main()
+        Console.WriteLine("ProofCheck -- hostile-audit proofs for docs/audits/2026-09-25-fixture-harness-a.md")
+        Console.WriteLine()
+        Proof1_StopFloorIsFlatAndFeeBlindAcrossRisingAtr()
+        Console.WriteLine()
+        Proof2_ValidateAcceptsAnyNumericValueOnATunableKey()
+    End Sub
+
+    ' -- Proof 1 ----------------------------------------------------------------
+    ' Claim: SignalEmitter.ComputeSideLevels' DG1 stop floor (stop_min_floor_ticks
+    ' x TickSize = 4 x 0.5 = $2.00, SignalEmitter.vb line 455/231) is a FIXED DOLLAR
+    ' distance -- independent of ATR and of TradeCosts. A structural stop sitting
+    ' just above that floor is accepted as SWING_STOP verbatim at ANY ATR, including
+    ' the "-1.5% flush, ATR(7) 30->140" scenario the audit brief names. Expressed as
+    ' a fraction of price, that floor is far tighter than the round-trip fee the
+    ' engine's OWN TradeCostSettings says the position will pay if the stop executes
+    ' as taker (which TradeCostSettings' own doc comment says is the expected exit
+    ' style for "emergency SL repositioning"). No fixture in verify/ordercheck/
+    ' Program.vb lines 1-5600 varies ATR against a near-floor structural stop, or
+    ' compares the stop floor to TradeCosts at all -- A26c (stop shapes) fixes ATR at
+    ' 40.0 throughout (BuildPgIndicators, line ~3326) and never reads cfg.Scoring.
+    ' TradeCosts.
+    Private Sub Proof1_StopFloorIsFlatAndFeeBlindAcrossRisingAtr()
+        Const Entry As Double = 62000.0
+        Const StopDist As Double = 2.5   ' just above the $2.00 DG1 floor (4 ticks x $0.5)
+
+        Dim cfg As New EngineSettings()   ' POCO defaults = shipped values
+        Console.WriteLine("Proof 1 -- DG1 stop floor is flat-dollar and fee-blind across a 30->140 ATR spike")
+        Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
+            "  cfg: StopMinFloorTicks={0} TickSize={1} StopMaxAtrMult={2} " &
+            "TradeCosts(maker={3}bps taker={4}bps style={5} minNet={6})",
+            cfg.Scoring.StructuralLevels.StopMinFloorTicks, SignalEmitter.TickSize,
+            cfg.Scoring.StructuralLevels.StopMaxAtrMult,
+            cfg.Scoring.TradeCosts.MakerFeeBps, cfg.Scoring.TradeCosts.TakerFeeBps,
+            cfg.Scoring.TradeCosts.RoundTripStyle, cfg.Scoring.TradeCosts.MinNetMovePct))
+
+        For Each atr As Double In New Double() {30.0, 140.0}   ' the brief's own ATR(7) range
+            Dim r As New IndicatorResults()
+            r.CurrentPrice = Entry
+            r.ATR = atr
+            r.SwingStopLong = Entry - StopDist   ' 61997.50 -- a real structural stop pinned to the floor edge
+
+            Dim lv = SignalEmitter.ComputeSideLevels(New VerdictResult(), r, cfg, isLong:=True)
+            Dim actualStopDist As Double = Entry - lv.StopPx
+            Dim floorBps As Double = actualStopDist / Entry * 10000.0
+            Dim rtFeeBps As Double = cfg.Scoring.TradeCosts.RoundTripFeePct * 10000.0
+            Dim targetFloorBps As Double = cfg.Scoring.TradeCosts.EffectiveMinMovePct * 10000.0
+            Dim fallbackStopDist As Double = atr * cfg.Scoring.StructuralLevels.StopMaxAtrMult
+
+            Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
+                "  ATR={0,-6:F1}  StopReason={1,-13}  stopDist=${2:F2} ({3:F3} bps of price)  " &
+                "vs round-trip fee {4:F1} bps ({5}), vs TARGET floor {6:F1} bps, vs ATR-fallback stop dist ${7:F1}",
+                atr, lv.StopReason, actualStopDist, floorBps,
+                rtFeeBps, cfg.Scoring.TradeCosts.RoundTripStyle, targetFloorBps, fallbackStopDist))
+        Next
+
+        Console.WriteLine("  FINDING: stopDist/floorBps is IDENTICAL at ATR=30 and ATR=140 (the floor does not")
+        Console.WriteLine("  read ATR at all), and in both rows floorBps is ~0.40 bps -- roughly 1/7th of even the")
+        Console.WriteLine("  cheapest round-trip fee (maker_maker, 3.0 bps) and ~1/20th of the TARGET side's own")
+        Console.WriteLine("  fee-aware floor (8.0 bps). At ATR=140 the ATR-fallback stop the same call would have")
+        Console.WriteLine("  used absent structure is 89x wider than the accepted structural stop. No fixture in")
+        Console.WriteLine("  scope exercises this combination or reads TradeCosts from a stop-shape fixture.")
+    End Sub
+
+    ' -- Proof 2 ------------------------------------------------------------------
+    ' Claim: SettingsDiffApplier.Validate's job (per every A15/A20g/A21/A25b/A26g/
+    ' A28d/A31g fixture in scope) is checked ONLY for path resolvability and the
+    ' HARD CONSTRAINT prefix fences -- never for whether the proposed VALUE is a
+    ' sane number for the key. Demonstrated directly: a diff that turns a live,
+    ' tweakable, on-surface key into a negative multiplier is accepted.
+    Private Sub Proof2_ValidateAcceptsAnyNumericValueOnATunableKey()
+        Console.WriteLine("Proof 2 -- SettingsDiffApplier.Validate has no numeric-bounds check on a proposable key")
+        Dim s As String = "{""version"":61,""scoring"":{""structural_levels"":{""enabled"":true," &
+                          """target_max_atr_mult"":3.5,""stop_max_atr_mult"":1.6}}}"
+
+        Dim resp1 As String =
+            "{""action"":""tweak"",""reasoning"":""t"",""diff"":[{""path"":""scoring.structural_levels.stop_max_atr_mult""," &
+            """old_value"":1.6,""new_value"":-50.0,""justification"":""j""}]}"
+        Dim r1 = SettingsDiffApplier.Validate(SettingsDiffApplier.ParseDiff(resp1).Items, s, 3)
+
+        Dim resp2 As String =
+            "{""action"":""tweak"",""reasoning"":""t"",""diff"":[{""path"":""scoring.structural_levels.target_max_atr_mult""," &
+            """old_value"":3.5,""new_value"":999999.0,""justification"":""j""}]}"
+        Dim r2 = SettingsDiffApplier.Validate(SettingsDiffApplier.ParseDiff(resp2).Items, s, 3)
+
+        Console.WriteLine(String.Format("  stop_max_atr_mult 1.6 -> -50.0        : IsValid={0} ErrorReason='{1}'", r1.IsValid, r1.ErrorReason))
+        Console.WriteLine(String.Format("  target_max_atr_mult 3.5 -> 999999.0   : IsValid={0} ErrorReason='{1}'", r2.IsValid, r2.ErrorReason))
+        Console.WriteLine("  FINDING: both proposals are ACCEPTED (IsValid=True). A negative ATR multiplier and a")
+        Console.WriteLine("  six-figure ATR multiplier are both on-surface, resolvable, non-fenced diffs, so Validate")
+        Console.WriteLine("  passes them exactly like a sane retune. No A15/A20g/A21/A25b/A26g/A28d/A31g fixture in")
+        Console.WriteLine("  scope tests value-range rejection -- only path/prefix rejection. SettingsDiffApplier.Apply")
+        Console.WriteLine("  currently throws on .NET 8 (already reported), which is the ONLY thing stopping an")
+        Console.WriteLine("  AI-proposed diff like this from reaching the live settings.json today.")
+    End Sub
+
+End Module

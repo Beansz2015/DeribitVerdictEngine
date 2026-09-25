@@ -1,0 +1,22 @@
+ProofCheck -- hostile-audit proofs for docs/audits/2026-09-25-fixture-harness-a.md
+
+Proof 1 -- DG1 stop floor is flat-dollar and fee-blind across a 30->140 ATR spike
+  cfg: StopMinFloorTicks=4 TickSize=0.5 StopMaxAtrMult=1.6 TradeCosts(maker=1.5bps taker=3.5bps style=maker_maker minNet=0.0005)
+  ATR=30.0    StopReason=SWING_STOP     stopDist=$2.50 (0.403 bps of price)  vs round-trip fee 3.0 bps (maker_maker), vs TARGET floor 8.0 bps, vs ATR-fallback stop dist $48.0
+  ATR=140.0   StopReason=SWING_STOP     stopDist=$2.50 (0.403 bps of price)  vs round-trip fee 3.0 bps (maker_maker), vs TARGET floor 8.0 bps, vs ATR-fallback stop dist $224.0
+  FINDING: stopDist/floorBps is IDENTICAL at ATR=30 and ATR=140 (the floor does not
+  read ATR at all), and in both rows floorBps is ~0.40 bps -- roughly 1/7th of even the
+  cheapest round-trip fee (maker_maker, 3.0 bps) and ~1/20th of the TARGET side's own
+  fee-aware floor (8.0 bps). At ATR=140 the ATR-fallback stop the same call would have
+  used absent structure is 89x wider than the accepted structural stop. No fixture in
+  scope exercises this combination or reads TradeCosts from a stop-shape fixture.
+
+Proof 2 -- SettingsDiffApplier.Validate has no numeric-bounds check on a proposable key
+  stop_max_atr_mult 1.6 -> -50.0        : IsValid=True ErrorReason=''
+  target_max_atr_mult 3.5 -> 999999.0   : IsValid=True ErrorReason=''
+  FINDING: both proposals are ACCEPTED (IsValid=True). A negative ATR multiplier and a
+  six-figure ATR multiplier are both on-surface, resolvable, non-fenced diffs, so Validate
+  passes them exactly like a sane retune. No A15/A20g/A21/A25b/A26g/A28d/A31g fixture in
+  scope tests value-range rejection -- only path/prefix rejection. SettingsDiffApplier.Apply
+  currently throws on .NET 8 (already reported), which is the ONLY thing stopping an
+  AI-proposed diff like this from reaching the live settings.json today.
