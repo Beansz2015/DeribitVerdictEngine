@@ -143,10 +143,25 @@ Orchestrator review of 2026-09-25: both fixtures re-derived by hand, and one mut
 ⚠ **Note for `D-2` — verify later, before ruling.** Orchestrator findings of 2026-09-25, to check:
 
 1. The claim that the old comparator "silently never fetched" the real `N+2` gap is **false**: the old sort ends on `N+1`, so the `Tail` starts at `N+2` (`Core/TradeStoreWriter.vb:1122-1125`). In general the old walk only over-fetches. RR-1 improves precision, not recall. The `A91c` comment and this document's `D-2` text should not tell the trader otherwise.
-2. ⏳ **TO VERIFY:** `A91c` probably cannot surface `InvalidOperationException`. On 3 rows .NET sorts by insertion sort (≤16 elements), which never detects an inconsistent comparer, so the "no throw" check may be vacuous and `A91c` is not an `ST-1` guard. **Source: .NET runtime knowledge, not verified in this repo.** Verify by checking the runtime's introsort threshold, or by running an inconsistent comparer over a 3-row and a 17+-row list.
+2. ✅ **VERIFIED 2026-09-26 (UTC), and wider than stated.** Instrument: [`tools/checks/sort-consistency-probe/`](../tools/checks/sort-consistency-probe/) (the shipped comparator transcribed to C#, run on .NET 8.0.31; `dotnet run -c Release --project tools/checks/sort-consistency-probe/SortConsistencyProbe.csproj`). Output:
+   ```
+   random comparator, 2000 ints: trials=300 threw=40 lastType=ArgumentException
+   A91c shipped rows (3): trials=2000 outcomes=[none=2000] returnedOrderWithPairViolation=0
+   ST-1 cycle, 3 rows: trials=2000 outcomes=[none=2000] returnedOrderWithPairViolation=2000
+   ST-1 cycles repeated, 17 rows: trials=500 outcomes=[none=500] returnedOrderWithPairViolation=500
+   ST-1 cycles repeated, 40 rows: trials=500 outcomes=[none=500] returnedOrderWithPairViolation=500
+   ST-1 cycles repeated, 200 rows: trials=500 outcomes=[none=500] returnedOrderWithPairViolation=500
+   ST-1 cycles repeated, 2000 rows: trials=500 outcomes=[none=500] returnedOrderWithPairViolation=500
+   ```
+   - **On the `ST-1` cycle, `List.Sort` never threw, at any size from 3 to 2,000 rows.** It returned an order that violates the comparator in **every** trial. The 16-element insertion-sort threshold is not the reason; the cycle simply never trips the runtime's check.
+   - **The only throw seen is `ArgumentException`** (a fully random comparer, 40 of 300 trials). `A91c` catches `InvalidOperationException`, so even that would not register as `threw=True`.
+   - **So `A91c`'s "no throw" check can never fail, and the spec's escalation trigger ("`List.Sort` throws `InvalidOperationException`") names a symptom that does not occur.** The real symptom of `ST-1` is a silently wrong order.
+4. ⛔ **NEW, from item 2: the spec's residual-risk bound is false.** `docs/gap-repair-rr1-seq-order-spec.md` §4.2 says a corrupted modern row that breaks the invariant would become *"a loud, logged failed pass"* through `RepairOnceAsync`'s exception catch. **No exception is raised, so there is no loud failure.** The walk then runs over a wrongly ordered list and can emit a phantom hole or miss one, silently. The precondition is still narrow: a seq-less row timestamped inside a seq-inverted pair's span (`tsC < tsB ≤ tsA`), which in the live store needs a corrupted post-2026-08-10 row.
 3. **Measured:** no fixture guards the tie-break line. Deleting `If c <> 0 Then Return c` / `Return a.Seq.CompareTo(b.Seq)` in `Core/TradeStoreWriter.vb` left the harness at **486 PASS, ALL PASS**. The only cover was the reverted scratch test `E-1`.
 
-Orchestrator read for `D-2`: accept the values, fix the two false comments, and add `E-1`'s construction as a permanent part 2 of `A91c` (both insertion orders must give `Hole[5001,5004]`), plus narrow the code comment's legacy-before-identified invariant to the true condition (no legacy row with `tsC < tsB ≤ tsA` for a seq-inverted pair).
+Orchestrator read for `D-2` (updated 2026-09-26 after item 2): accept the values, fix the false comments, and add `E-1`'s construction as a permanent part 2 of `A91c` (both insertion orders must give `Hole[5001,5004]`). Replace `A91c`'s vacuous "no throw" check with a pairwise order check on its invariant-respecting rows. Narrow the code comment's invariant to the true condition (no seq-less row with `tsC < tsB ≤ tsA` for a seq-inverted pair), and correct the spec's §4.2 "loud failure" claim.
+
+**`D-2b` — NEW, queued: make the residual loud?** (a) Accept it as silent and document it · (b) in the repair pass, count seq-less rows timestamped at or after the 2026-08-10 cutover and write a `repair_status.log` line when the count is above 0. Inside the 20 h lookback any such row is a corrupted modern row, the only way into the `ST-1` precondition. **Orchestrator read: (b).** It is the self-describing option: a future seat learns from the log that the invariant broke, instead of from a phantom re-fetch nobody can trace. ⚠ Reserved: it changes collector code and its log output, so it needs a deploy.
 
 ## 3. Spec-back proper — feedback on the spec
 
