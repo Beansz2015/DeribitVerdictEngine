@@ -170,7 +170,9 @@ Run after all three deliverables were in place:
 
 ⭐ **New fact from `H-3`:** under the ATR-conditional reference, ASIA for 2026-09-14 → 09-25 is **inside its band** (observed 3.31 % vs expected 4.94 %, band 1.94–7.94 %). The miss that [`d3-asia-burst-watch-read-2026-09-26.md`](d3-asia-burst-watch-read-2026-09-26.md) reported on the fire rate is explained by volatility. What remains is length only (8 of 10 days).
 
-### `AVR-3` — how the NY watch is judged (queued for the trader)
+### `AVR-3` — how the NY watch is judged — ✅ RULED 2026-09-26 (UTC), trader: **(a)**
+
+**Build owed (tools only):** in `tools/ops/burst-watch-read.ps1`, judge NY like ASIA: the ±2 pp band applies to the slice mean over at least 10 covered weekdays, with same-side at least 85 %. The per-day in-band flags stay printed, for information only. Remove the 2-consecutive-pair verdict. Handle: re-run `H-2`; NY must read PASS on the reference window.
 
 | Option | What it does |
 |---|---|
