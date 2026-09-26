@@ -18,7 +18,8 @@
 
   COVERAGE (per covered weekday session-day, same rule as the ASIA template, applied per
   session): first row <= session start + MaxGapMin, last row >= session end hour :(60-MaxGapMin),
-  no gap > MaxGapMin minutes between consecutive population rows of that session-day. The
+  no gap > MaxGapMin minutes between consecutive RAW session rows of that session-day (every
+  row in the session's hours, population or not - the ASIA template's `asia` set). The
   coverage check runs over the same population used for the rate (AggrVelBurstRatio non-empty,
   ATR parses) -- the spec presents Rows as one population row, not two.
 

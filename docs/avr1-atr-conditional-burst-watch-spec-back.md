@@ -151,3 +151,31 @@ Run after all three deliverables were in place:
 - **The zero-population-day branch and the `-To`-default assumption** (§2) are untested against real data — no row in this fetch folder exercises either path.
 - **Whether the NY MISS (9 consecutive-pair violations) is itself correct** — I did not hand-verify any single pair's arithmetic beyond spot-checking that the band math (`expected ± 2pp`, clipped at 0) matches §5's rule; the MISS is a mechanical consequence of the per-day `inBand` flags printed in the table above, which are themselves visible and checkable in the pasted output.
 - **PowerShell version/locale sensitivity.** Not tested on a locale other than the one this box runs (culture-invariant parsing is used throughout, which should make this moot, but it was not tested under a different `$PSCulture`).
+
+---
+
+## 5. Orchestrator review — 2026-09-26 (UTC)
+
+**Verdict: ACCEPTED.** The build does what the spec says. Every finding below is in the spec or the ruling, except `R-3` and `R-4`, which are small and fixed in the review commit.
+
+**Re-run by the orchestrator** against `5c6e80c`: `H-1` exit 0, `RESULT: PASS`. `H-2`: identical slice lines for all three sessions. `H-3`: identical (42 / 1,269 / 3.31 % / expected 4.94 % / `MISS: length`). `H-4`: `git diff --stat bef0196 HEAD` shows only the three deliverables (queue `2 +-`, script 299 lines, this doc).
+
+| # | Finding | Class | Action |
+|---|---|---|---|
+| `R-1` | ⛔ **The NY rule as ruled fires on noise.** `H-2` runs over the very window the reference was measured on, and NY returns `MISS` with **9** out-of-band pairs. The daily sd of NY's diff is 2.09 pp against a per-day band of ±2 pp, so about a third of days fall outside the band by chance, and consecutive pairs follow | Ruling | Queued as **`AVR-3`** (below) |
+| `R-2` | NY pairs span uncovered weekdays: `2026-08-14/2026-08-18` skips 08-17, and `2026-09-17/2026-09-22` spans the 09-18 → 09-21 outage. The spec said "consecutive covered weekday session-days" without saying whether an uncovered day between them breaks the pair. **The spec's ambiguity, not the build's** | Spec | Moot if `AVR-3` = (a); otherwise rule it with `AVR-3` |
+| `R-3` | The script header (lines 20–21) said gaps are measured over "population rows"; the code measures raw session rows (line 103). The fix described in §3 above left the header behind | Code comment | ✅ Fixed in the review commit |
+| `R-4` | `H-4`'s pasted block is not real `git` output (`<new file>` placeholders, and "`1 +`" where git prints `2 +-`). The scope claim is true, but the handle rule is to paste actual output | Handle | Recorded here. The orchestrator's real output is in the re-run line above |
+| `R-5` | §0 named a population mismatch on `H-3` as an escalation trigger. The seat fixed it in place instead of stopping. The fix is right (exact reproduction on `H-2` and `H-3`), and it was fully disclosed, so it is accepted. **The trigger was still written to stop the seat, and next time it should** | Process | Noted |
+
+⭐ **New fact from `H-3`:** under the ATR-conditional reference, ASIA for 2026-09-14 → 09-25 is **inside its band** (observed 3.31 % vs expected 4.94 %, band 1.94–7.94 %). The miss that [`d3-asia-burst-watch-read-2026-09-26.md`](d3-asia-burst-watch-read-2026-09-26.md) reported on the fire rate is explained by volatility. What remains is length only (8 of 10 days).
+
+### `AVR-3` — how the NY watch is judged (queued for the trader)
+
+| Option | What it does |
+|---|---|
+| **(a) Judge NY like ASIA** | The ±2 pp band (width kept) applies to the slice mean over at least 10 covered weekdays. Per-day in-band flags are still printed, for information only. At the measured daily sd of 2.09 pp, a 10-day mean has sd ≈ 0.66 pp, so ±2 pp is about 3 sd |
+| (b) Keep the per-day, 2-consecutive trigger and widen the per-day band | About ±4 pp, roughly 2 × the measured daily sd. Keeps 2-day detection speed |
+| (c) Keep as ruled | Alarms on the reference window itself |
+
+**Orchestrator read: (a).** (b)'s only gain is detecting a shift in 2 days instead of 10. That gain is real only if NY is read daily, and watch reads run every couple of weeks, by hand. So (a) gives up nothing that is used (step 3 of the three-step test, `CLAUDE.md`: a mechanism argument, not cost). It also keeps the ruled band width and gives both watches one rule shape. ⚠ It re-rules the v52 NY trigger, so it is the trader's call.
