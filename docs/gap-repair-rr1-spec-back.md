@@ -138,7 +138,9 @@ Orchestrator review of 2026-09-25: both fixtures re-derived by hand, and one mut
 |---|---|---|
 | `D-1` | ✅ **ACCEPTED as the implementer read it** — the rebuilt `A91b` table stands | Orchestrator re-derived both tables by hand: the §6.2 literal table passes the category-partition mutant (no phantom), the rebuilt one fails it (`Hole[7001,7499]`) and fails the old comparator (`Hole[7501,7501]`); the shipped comparator gives one `Tail` at 7503 |
 | `D-3` | ✅ **(a) — the escalation trigger was not hit** | The trigger guards comparator drift from §4.3; the comparator is verbatim and `A56c`/`A56d` pass unchanged. The corrections were surfaced, not buried |
-| `D-2` | ⏸ **OPEN — decide after the check below** | The corrected expected value (`Hole[N+2,N+2]` + `Tail` from `N+4`) was re-derived and is correct. Three problems were found around it; see the note |
+| `D-2` | ✅ **RULED 2026-09-26 (trader): as the orchestrator's updated read below** — accept the values, add `E-1` as `A91c` part 2, replace the no-throw check with a pairwise order check, fix the false comments and the spec's §4.2 claim. **Build owed** (fixture and doc work) |
+| `D-2b` | ✅ **RULED 2026-09-26 (trader): (b)** — log seq-less rows timestamped at or after the 2026-08-10 cutover in each repair pass. **Build owed; the deploy is reserved to the trader** | See `D-2b` below |
+| ~~`D-2` (before 2026-09-26)~~ | ⏸ ~~OPEN — decide after the check below~~ | The corrected expected value (`Hole[N+2,N+2]` + `Tail` from `N+4`) was re-derived and is correct. Three problems were found around it; see the note |
 
 ⚠ **Note for `D-2` — verify later, before ruling.** Orchestrator findings of 2026-09-25, to check:
 
