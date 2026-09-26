@@ -145,7 +145,7 @@ Orchestrator review of 2026-09-25: both fixtures re-derived by hand, and one mut
 ⚠ **Note for `D-2` — verify later, before ruling.** Orchestrator findings of 2026-09-25, to check:
 
 1. The claim that the old comparator "silently never fetched" the real `N+2` gap is **false**: the old sort ends on `N+1`, so the `Tail` starts at `N+2` (`Core/TradeStoreWriter.vb:1122-1125`). In general the old walk only over-fetches. RR-1 improves precision, not recall. The `A91c` comment and this document's `D-2` text should not tell the trader otherwise.
-2. ✅ **VERIFIED 2026-09-26 (UTC), and wider than stated.** Instrument: [`tools/checks/sort-consistency-probe/`](../tools/checks/sort-consistency-probe/) (the shipped comparator transcribed to C#, run on .NET 8.0.31; `dotnet run -c Release --project tools/checks/sort-consistency-probe/SortConsistencyProbe.csproj`). Output:
+2. ✅ **VERIFIED 2026-09-26 (UTC), and wider than stated.** Instrument: [`tools/checks/sort-consistency-probe/`](../tools/checks/sort-consistency-probe/) (VB; the shipped comparator copied verbatim; run on .NET 8.0.31; `dotnet run -c Release --project tools/checks/sort-consistency-probe/SortConsistencyProbe.vbproj`. First written in C# and ported to VB the same day on the trader's ruling; the output is identical). Output:
    ```
    random comparator, 2000 ints: trials=300 threw=40 lastType=ArgumentException
    A91c shipped rows (3): trials=2000 outcomes=[none=2000] returnedOrderWithPairViolation=0
