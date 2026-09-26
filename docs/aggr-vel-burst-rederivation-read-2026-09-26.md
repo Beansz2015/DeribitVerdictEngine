@@ -125,6 +125,21 @@ Population: weekday rows from 2026-08-02 (all three sessions armed) to 2026-09-2
 
 ---
 
+### Rulings — 2026-09-26 (UTC), trader
+
+| Decision | Ruling | Follow-up |
+|---|---|---|
+| `AVR-1` | ✅ **(b) — the watch reference becomes ATR-conditional** (measured fire rate per ATR fifth, per session). It re-rules T-1 of `d3-asia-burst-watch-read-2026-08-10.md` §10 and applies to the NY watch in `DeribitIndicatorProject.md` §12 as well. T-2's band width stays | Build: the watch scripts read against the §2.2 per-fifth reference. Tools only |
+| `AVR-2` | ✅ **(a) — no threshold change until the outcome read**, taken on the condition that the outcome read is useful for (c). Orchestrator answer: **it is**, for three reasons below | ⏰ **REMINDER: when the outcome read is done, re-open (c)** (a volatility-conditional threshold) with its result |
+
+**Why the outcome read is useful for (c).** The trader asked this before ruling.
+
+1. **It decides whether (c) is worth doing at all.** (c) adds burst upgrades in high-volatility markets to hold the fire rate steady. If burst-upgraded rows earn no net EV in the high-ATR fifths, (c) adds upgrades exactly where they lose. If they earn it in every fifth, (c) captures more of it.
+2. **It gives (c) its target.** The per-fifth split shows which ATR range the burst carries edge in, so (c) can be shaped to fire where it pays, rather than to an engagement rate of ~10 %.
+3. **It gives (c) a clean before-and-after.** (c) is a live scoring change and a dataset boundary. With a pre-registered outcome read on the fixed threshold, the same read re-run after (c) ships measures what (c) changed.
+
+⚠ **Power risk, named so it is not a surprise.** Bursts are rare in the high-ATR fifths (about 1–3 % of rows since 2026-08-20). The outcome read may be underpowered there. If it is, it must say so, and the (c) decision then rests on the fifths it can read.
+
 ## 6. What I did not verify
 
 - The derivation p90 of 5.35 and its window's ATR range are carried from `asia-burst-threshold-derivation-2026-08-01.md` and the second watch read. Not re-counted.
