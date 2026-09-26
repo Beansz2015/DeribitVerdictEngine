@@ -142,7 +142,10 @@ Population: weekday rows from 2026-08-02 (all three sessions armed) to 2026-09-2
 
 ## 6. What I did not verify
 
-- The derivation p90 of 5.35 and its window's ATR range are carried from `asia-burst-threshold-derivation-2026-08-01.md` and the second watch read. Not re-counted.
-- That no NY watch read exists after 2026-08-20: based on `DeribitIndicatorProject.md` §12 and `trader-tick-queue.md` §4, which record none. I did not search every doc.
+✅ **Closed 2026-09-26 (UTC), after the first draft:**
+- **The derivation window's volatility, re-counted on the AWS book.** ASIA weekday rows 2026-07-22 … 07-31 (before arming): n = 1,113, ratio p90 **5.59**, median ATR **44.1**, fire rate 22.10 % at the old default 2.5. The derivation reported p90 5.35 and 21.7 % on a pooled book of n = 1,489 that also held local-box rows, so the two are not the same population, but they agree closely. §3's "fitted in a low-volatility window" stands: ATR 44 against ~70 now. Command: `tools/ops/aggr-vel-regime-read.ps1 -FetchFolder 'aws_fetch\20260925-085341' -From 2026-07-22 -StepAt 2026-08-01`.
+- **No NY watch read after 2026-08-20 exists in `docs/`.** A grep for an NY burst or `AggrVel` watch or fire-rate mention found only `aggressor-velocity-s52-derivation-2026-07-13.md` and `aggr-vel-wirein-implementer-brief.md`, which define the watch and predate the step.
+
+Still open:
 - LONDON's written band, if any. I found none in the docs I read this session.
 - Bin boundaries fall between equal-ATR rows arbitrarily; ties at a boundary go to whichever bin the sort puts them in.

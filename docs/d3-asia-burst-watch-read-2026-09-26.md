@@ -118,7 +118,11 @@ The full output also lists every InstanceId and every session-day from 2026-08-0
 
 ## 5. What I did not verify
 
-- The 2026-08-02 … 09-11 per-day table was not diffed line by line against the second read. Two days were spot-checked.
+✅ **Closed 2026-09-26 (UTC), after the first draft:**
+- The per-day table **is identical** to the second read's §2 table on all 39 shared days (2026-08-02 … 09-13), diffed line by line after whitespace normalisation. So the instrument change (pooling the rotated `116col` book) reproduces the second read exactly.
+- **No commit since v65 (`970087b`)** touches `Core/AggressorVelocityAccumulator.vb`, and none changes `ClassifyAggressorBurst`, `burst_ratio_threshold`, `norm_window_sec`, `fast_window_sec`, `direction_lean_floor` or `gross_floor_usd_per_sec` in `Core/`, `MarketState.vb`, `Core/Settings/EngineSettings.vb` or `settings.json` (`git log -G`). The deploys in §3 cannot have moved the burst classifier.
+
+Still open:
 - Whether the 2026-09-18 → 09-21 outage biases slice (b). It removes two sessions and adds none. Nothing links it to the rate.
 - The claim in §0 that no plausible 2 days lift the slice rests on the observed daily maximum (18.75 %), not on any model of future days.
 - The effect of this rate on outcomes. The watch measures fire rate and same-side share only.
