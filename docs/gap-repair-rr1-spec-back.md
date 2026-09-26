@@ -130,6 +130,24 @@ case, the two fixtures are already fixed and hand-walked twice each (once agains
 once against the shipped comparator) — no rebuild would be needed, only a different classification
 of what happened.
 
+### Rulings — 2026-09-26 (UTC), trader
+
+Orchestrator review of 2026-09-25: both fixtures re-derived by hand, and one mutation run (item 3 of the note below).
+
+| Decision | Ruling | Basis |
+|---|---|---|
+| `D-1` | ✅ **ACCEPTED as the implementer read it** — the rebuilt `A91b` table stands | Orchestrator re-derived both tables by hand: the §6.2 literal table passes the category-partition mutant (no phantom), the rebuilt one fails it (`Hole[7001,7499]`) and fails the old comparator (`Hole[7501,7501]`); the shipped comparator gives one `Tail` at 7503 |
+| `D-3` | ✅ **(a) — the escalation trigger was not hit** | The trigger guards comparator drift from §4.3; the comparator is verbatim and `A56c`/`A56d` pass unchanged. The corrections were surfaced, not buried |
+| `D-2` | ⏸ **OPEN — decide after the check below** | The corrected expected value (`Hole[N+2,N+2]` + `Tail` from `N+4`) was re-derived and is correct. Three problems were found around it; see the note |
+
+⚠ **Note for `D-2` — verify later, before ruling.** Orchestrator findings of 2026-09-25, to check:
+
+1. The claim that the old comparator "silently never fetched" the real `N+2` gap is **false**: the old sort ends on `N+1`, so the `Tail` starts at `N+2` (`Core/TradeStoreWriter.vb:1122-1125`). In general the old walk only over-fetches. RR-1 improves precision, not recall. The `A91c` comment and this document's `D-2` text should not tell the trader otherwise.
+2. ⏳ **TO VERIFY:** `A91c` probably cannot surface `InvalidOperationException`. On 3 rows .NET sorts by insertion sort (≤16 elements), which never detects an inconsistent comparer, so the "no throw" check may be vacuous and `A91c` is not an `ST-1` guard. **Source: .NET runtime knowledge, not verified in this repo.** Verify by checking the runtime's introsort threshold, or by running an inconsistent comparer over a 3-row and a 17+-row list.
+3. **Measured:** no fixture guards the tie-break line. Deleting `If c <> 0 Then Return c` / `Return a.Seq.CompareTo(b.Seq)` in `Core/TradeStoreWriter.vb` left the harness at **486 PASS, ALL PASS**. The only cover was the reverted scratch test `E-1`.
+
+Orchestrator read for `D-2`: accept the values, fix the two false comments, and add `E-1`'s construction as a permanent part 2 of `A91c` (both insertion orders must give `Hole[5001,5004]`), plus narrow the code comment's legacy-before-identified invariant to the true condition (no legacy row with `tsC < tsB ≤ tsA` for a seq-inverted pair).
+
 ## 3. Spec-back proper — feedback on the spec
 
 **What the spec got right, specifically.**
