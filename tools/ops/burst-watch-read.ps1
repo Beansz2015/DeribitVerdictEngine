@@ -29,8 +29,10 @@
   BANDS (docs/avr1-atr-conditional-burst-watch-spec.md section 5):
     ASIA   - expected +/- 3pp, same-side >= 85%, length >= 10 covered weekdays. PASS if all
              three hold, else MISS naming each failed criterion.
-    NY     - expected +/- 2pp (the v52 watch band, width kept), same-side >= 85%. Its own
-             trigger: MISS when 2 consecutive covered weekday session-days are out of band.
+    NY     - judged like ASIA (AVR-3 = (a), ruled 2026-09-26): expected +/- 2pp (the v52 watch
+             band, width kept) applies to the SLICE MEAN, same-side >= 85%, length >= 10
+             covered weekdays. PASS if all three hold, else MISS naming each failed criterion.
+             Per-day in-band flags stay printed in the per-day table, for information only.
     LONDON - no ruled band. Reported only ("no ruled band", no verdict).
 
 .PARAMETER FetchFolder
@@ -282,19 +284,14 @@ foreach ($sName in $sessNames) {
         if (-not $lengthOk) { $failed += 'length' }
         "verdict: $(if ($pass) { 'PASS' } else { 'MISS: ' + ($failed -join ', ') })"
     } elseif ($sName -eq 'NY') {
+        $inBand = ($obsSlice -ge $lowerAbs) -and ($obsSlice -le $upperAbs)
         $sameSideOk = $samePct -ge (100.0 * $band.sameSide)
-        $outPairs = @()
-        for ($i = 1; $i -lt $covered.Count; $i++) {
-            $dayLo = [Math]::Max(0.0, $covered[$i - 1][4] - 100.0 * $band.pp); $dayHi = $covered[$i - 1][4] + 100.0 * $band.pp
-            $prevOut = ($covered[$i - 1][3] -lt $dayLo) -or ($covered[$i - 1][3] -gt $dayHi)
-            $dayLo2 = [Math]::Max(0.0, $covered[$i][4] - 100.0 * $band.pp); $dayHi2 = $covered[$i][4] + 100.0 * $band.pp
-            $curOut = ($covered[$i][3] -lt $dayLo2) -or ($covered[$i][3] -gt $dayHi2)
-            if ($prevOut -and $curOut) { $outPairs += , @($covered[$i - 1][0], $covered[$i][0]) }
-        }
+        $lengthOk = $covered.Count -ge 10
+        $pass = $inBand -and $sameSideOk -and $lengthOk
         $failed = @()
-        if ($outPairs.Count -gt 0) { $failed += "2 consecutive out-of-band days: " + (($outPairs | ForEach-Object { "$($_[0])/$($_[1])" }) -join '; ') }
+        if (-not $inBand) { $failed += 'rate-in-band' }
         if (-not $sameSideOk) { $failed += 'same-side' }
-        $pass = ($outPairs.Count -eq 0) -and $sameSideOk
-        "verdict: $(if ($pass) { 'PASS' } else { 'MISS: ' + ($failed -join '; ') })"
+        if (-not $lengthOk) { $failed += 'length' }
+        "verdict: $(if ($pass) { 'PASS' } else { 'MISS: ' + ($failed -join ', ') })"
     }
 }

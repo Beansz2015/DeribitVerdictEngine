@@ -180,4 +180,104 @@ Run after all three deliverables were in place:
 | (b) Keep the per-day, 2-consecutive trigger and widen the per-day band | About ±4 pp, roughly 2 × the measured daily sd. Keeps 2-day detection speed |
 | (c) Keep as ruled | Alarms on the reference window itself |
 
+## 6. `AVR-3` build (tools only, 2026-09-26 UTC)
+
+**Change.** In `tools/ops/burst-watch-read.ps1`, the `elseif ($sName -eq 'NY')` verdict branch now
+matches the ASIA branch beside it: PASS when the slice observed % is within expected ± 2 pp
+(clipped at 0), same-side ≥ 85 %, and ≥ 10 covered weekday session-days hold; otherwise MISS
+naming each failed criterion (`rate-in-band`, `same-side`, `length`). The 2-consecutive-pair
+trigger and its pair list are removed. Per-day in-band flags stay in the per-day table
+(informational only, unchanged). The header's NY description (§1 of the script) is updated to
+say "judged like ASIA" instead of naming the 2-consecutive trigger. No other branch, the
+reference table, `-VerifyReference`, or any other file was touched.
+
+**`H-1`** — `powershell -NoProfile -File tools/ops/burst-watch-read.ps1 -FetchFolder 'aws_fetch\20260925-085341' -VerifyReference`
+
+```
+settings.json version=69  sessions: ASIA h0-7  LONDON h8-12  NY h13-23
+BOOK analysis_log.csv.v0.7.bak weekday session rows kept=25951
+BOOK analysis_log.csv.116col-83564b1b.20260924_184606.bak weekday session rows kept=14508
+BOOK analysis_log.csv weekday session rows kept=493
+total pooled weekday session rows=40952  (of which population rows=40756)
+--- -VerifyReference: recompute section 3 from raw data, 2026-08-02 .. 2026-09-25 08:51:01 (equal-row 5 bins, same method as aggr-vel-regime-read.ps1) ---
+ASIA : rows=5755
+  edge 1: literal=33.6 recomputed=33.6 diff=0.01 OK
+  edge 2: literal=51.2 recomputed=51.2 diff=0.03 OK
+  edge 3: literal=66.2 recomputed=66.2 diff=0.04 OK
+  edge 4: literal=83.9 recomputed=83.9 diff=0.00 OK
+  rate fifth 1: literal=15.46% recomputed=15.46% diff=0.00pp OK
+  rate fifth 2: literal=8.51% recomputed=8.51% diff=0.00pp OK
+  rate fifth 3: literal=5.13% recomputed=5.13% diff=0.00pp OK
+  rate fifth 4: literal=4.69% recomputed=4.69% diff=0.00pp OK
+  rate fifth 5: literal=2.87% recomputed=2.87% diff=0.00pp OK
+LONDON : rows=3489
+  edge 1: literal=31.9 recomputed=31.9 diff=0.03 OK
+  edge 2: literal=51.5 recomputed=51.5 diff=0.04 OK
+  edge 3: literal=68.4 recomputed=68.4 diff=0.02 OK
+  edge 4: literal=90.7 recomputed=90.7 diff=0.02 OK
+  rate fifth 1: literal=18.65% recomputed=18.65% diff=0.00pp OK
+  rate fifth 2: literal=10.03% recomputed=10.03% diff=0.00pp OK
+  rate fifth 3: literal=3.58% recomputed=3.58% diff=0.00pp OK
+  rate fifth 4: literal=3.72% recomputed=3.72% diff=0.00pp OK
+  rate fifth 5: literal=1.86% recomputed=1.86% diff=0.00pp OK
+NY : rows=24637
+  edge 1: literal=19.3 recomputed=19.3 diff=0.02 OK
+  edge 2: literal=30.9 recomputed=30.9 diff=0.01 OK
+  edge 3: literal=43.0 recomputed=43.0 diff=0.00 OK
+  edge 4: literal=62.9 recomputed=62.9 diff=0.01 OK
+  rate fifth 1: literal=18.55% recomputed=18.55% diff=0.00pp OK
+  rate fifth 2: literal=9.72% recomputed=9.72% diff=0.00pp OK
+  rate fifth 3: literal=5.78% recomputed=5.78% diff=0.00pp OK
+  rate fifth 4: literal=3.45% recomputed=3.45% diff=0.00pp OK
+  rate fifth 5: literal=1.48% recomputed=1.48% diff=0.00pp OK
+RESULT: PASS
+```
+
+**Pass.** Exit 0, unchanged from the pre-`AVR-3` build (this branch is not touched by
+`-VerifyReference`).
+
+**`H-2`** — `powershell -NoProfile -File tools/ops/burst-watch-read.ps1 -FetchFolder 'aws_fetch\20260925-085341' -From 2026-08-03 -To 2026-09-25`, slice blocks:
+
+```
+--- ASIA slice (36 covered weekday session-days) ---
+days=36  rows=5714  fires=420
+observed=7.35%  expected=7.34%  diff=+0.02pp
+same-side=90.00%  daily diff mean=+0.02pp sd=2.52pp
+band: expected 7.34%, band 4.34-10.34%
+verdict: PASS
+
+--- LONDON slice (31 covered weekday session-days) ---
+days=31  rows=3085  fires=218
+observed=7.07%  expected=7.15%  diff=-0.09pp
+same-side=88.07%  daily diff mean=-0.09pp sd=2.77pp
+band: no ruled band
+verdict: no ruled band (report only; same-side 88.07% >= 85% bar)
+
+--- NY slice (36 covered weekday session-days) ---
+days=36  rows=23685  fires=1849
+observed=7.81%  expected=7.74%  diff=+0.07pp
+same-side=86.05%  daily diff mean=+0.06pp sd=2.09pp
+band: expected 7.74%, band 5.74-9.74%
+verdict: PASS
+```
+
+**Pass, exact match to the acceptance numbers** (observed 7.81 %, expected 7.74 %, 36 days) —
+NY now reads PASS on the reference window; ASIA still PASS; LONDON still "no ruled band".
+
+**`H-3`** — `git diff --stat e69ebe2` (run before the doc edits, script only):
+
+```
+ tools/ops/burst-watch-read.ps1 | 23 ++++++++++-------------
+ 1 file changed, 10 insertions(+), 13 deletions(-)
+```
+
+Final diff scope, after the two doc edits: `tools/ops/burst-watch-read.ps1`,
+`docs/avr1-atr-conditional-burst-watch-spec-back.md`, `docs/trader-tick-queue.md` — no other file.
+
+**Not verified.** Whether NY's `sameSideOk`/`lengthOk` computation is exercised on a window where
+either fails on its own (no covered-day count below 10, and no same-side reading below 85 %,
+occurred in this fetch folder) — the branch is a direct copy of the ASIA branch's logic, already
+exercised by `H-2`'s ASIA and by the length-MISS case in `H-3` of §1 above, but not by an NY row
+set of its own.
+
 **Orchestrator read: (a).** (b)'s only gain is detecting a shift in 2 days instead of 10. That gain is real only if NY is read daily, and watch reads run every couple of weeks, by hand. So (a) gives up nothing that is used (step 3 of the three-step test, `CLAUDE.md`: a mechanism argument, not cost). It also keeps the ruled band width and gives both watches one rule shape. ⚠ It re-rules the v52 NY trigger, so it is the trader's call.
