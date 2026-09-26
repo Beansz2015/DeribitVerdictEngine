@@ -115,7 +115,13 @@ function New-Day { @{ asia = 0; pop = 0; fires = 0; same = 0; contra = 0; neutra
 
 function Get-Median($list) { if ($list.Count -eq 0) { return [double]::NaN }; $a = $list.ToArray(); [Array]::Sort($a); $m = [int][Math]::Floor($a.Length / 2); if ($a.Length % 2) { $a[$m] } else { ($a[$m - 1] + $a[$m]) / 2 } }
 
-foreach ($name in 'analysis_log.csv.v0.7.bak', 'analysis_log.csv') {
+# Every rotated book, oldest first, then the live file. The 2026-09-24 S2 rotation added a
+# header-named book (analysis_log.csv.<N>col-<hash>.<yyyyMMdd_HHmmss>.bak); its name sorts by
+# rotation time. A rotated book the list misses is a silent hole in the read.
+$bookNames = @('analysis_log.csv.v0.7.bak') +
+             @(Get-ChildItem -Path $folder -Filter 'analysis_log.csv.*col-*.bak' | Sort-Object { $_.Name.Split('.')[-2] } | ForEach-Object Name) +
+             @('analysis_log.csv')
+foreach ($name in $bookNames) {
     $path = Join-Path $folder $name
     if (-not (Test-Path $path)) { throw "file not found: $path" }
     $rows = 0; $badShape = 0; $unparsed = 0; $fFirst = $null; $fLast = $null
@@ -172,8 +178,10 @@ foreach ($name in 'analysis_log.csv.v0.7.bak', 'analysis_log.csv') {
     "FILE $name rows=$rows badShape=$badShape unparsed=$unparsed span=$($fFirst.ToString($fmt)) -> $($fLast.ToString($fmt))"
     $spans += , @($fFirst, $fLast)
 }
-if ($spans[1][0] -le $spans[0][1]) { Write-Warning "SPANS OVERLAP - .bak ends $($spans[0][1]) but live starts $($spans[1][0])" }
-else { "spans do not overlap (.bak ends $($spans[0][1].ToString($fmt)), live starts $($spans[1][0].ToString($fmt)))" }
+for ($i = 1; $i -lt $spans.Count; $i++) {
+    if ($spans[$i][0] -le $spans[$i - 1][1]) { Write-Warning "SPANS OVERLAP - $($bookNames[$i - 1]) ends $($spans[$i - 1][1]) but $($bookNames[$i]) starts $($spans[$i][0])" }
+    else { "spans do not overlap ($($bookNames[$i - 1]) ends $($spans[$i - 1][1].ToString($fmt)), $($bookNames[$i]) starts $($spans[$i][0].ToString($fmt)))" }
+}
 "duplicate ASIA timestamps skipped: $dupAsia"
 
 ""
