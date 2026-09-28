@@ -1,0 +1,25 @@
+=== P-CA1  side-blind design matrix vs side-aligned encoding (same rows, same labels) ===
+  rows=3120  success rate=0.738
+  SHIPPED encoding (BULLISH/BEARISH) baseAUC=0.6806 chalAUC=0.4429 pointΔ=-0.2378 printedΔ(bootstrap mean)=-0.2380 CI=[-0.3458,-0.1312] λ=1
+                                     **Decisive verdict (NY×1):** CEILING DECLARED
+  CONTROL encoding (ALIGNED/COUNTER) baseAUC=0.6806 chalAUC=0.8128 pointΔ=+0.1321 printedΔ(bootstrap mean)=+0.1340 CI=[+0.0580,+0.2161] λ=10
+                                     **Decisive verdict (NY×1):** B1 PRIZE MEASURED
+  shipped coef MTF15mTrend=BULLISH = +0.0134
+  shipped coef MTF15mTrend=OTHER = +0.0000
+
+=== P-CA3  GD convergence at the shipped 500 epochs (lr 0.5, decay 0.01) ===
+  control fit: loss[0]=0.693147 loss[499]=0.418070 non-monotone steps=0
+  control fit @20000 epochs: final loss=0.415054  chalAUC=0.8360 (500 epochs: 0.8128)
+
+=== P-CA2  a challenger that is WORSE than baseline declares the ceiling ===
+  CI=[-0.20,-0.100]  -> **Decisive verdict (NY×1):** CEILING DECLARED
+  CI=[-0.05,+0.020]  -> **Decisive verdict (NY×1):** CEILING DECLARED
+  CI=[+0.01,+0.029]  -> **Decisive verdict (NY×1):** CEILING DECLARED
+
+=== P-CA4  a short (truncated / older-schema) row is admitted as HasPlaced=True with zero placed levels ===
+  header columns=116  short row fields=66
+  eligible rows=2  NonV08Excluded=0  UnparsedExcluded=0
+  row 0: ts=10:08 HasPlaced=True PlacedTargetShort=64700 PlacedStopShort=64880 MTF15mTrend='BEARISH' OFIRatio=NaN SpreadBps=NaN
+  row 1: ts=10:09 HasPlaced=True PlacedTargetShort=0 PlacedStopShort=0 MTF15mTrend='BEARISH' OFIRatio=NaN SpreadBps=NaN
+  row 0 label=1  (settings v68)
+  row 1 label=1  (settings v68)

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Audit proof harness (2026-09-25 backtest-ceiling-remainder). Links the SAME shipped
+       sources CeilingAudit.vbproj links, plus every file in tools/CeilingAudit, so the
+       proofs run production code, not copies. Place at tools/proofceiling/ in a worktree
+       at 6e74181 (two levels below the repo root, like the real project). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>ProofCeiling</AssemblyName>
+    <Nullable>enable</Nullable>
+    <StartupObject>DeribitVerdictEngine.ProofCeiling</StartupObject>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
+    <Compile Include="..\..\Core\ExecutionResolution.vb" />
+    <Compile Include="..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\Core\VenueStatusLog.vb" />
+    <Compile Include="..\..\DeribitClient.vb" />
+    <Compile Include="..\..\analysis\AnalysisConstants.vb" />
+    <Compile Include="..\..\analysis\AnalysisReport.vb" />
+    <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
+    <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
+    <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
+    <Compile Include="..\..\analysis\BandLadder.vb" />
+    <Compile Include="..\CeilingAudit\*.vb" />
+  </ItemGroup>
+</Project>
