@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Audit proof harness (2026-09-25 backtest-ceiling-remainder): WhatIfRunner.vbproj's own item list
+       plus tools/WhatIfRunner/*.vb, so WhatIfReport.Build runs as shipped. Place at tools/proofwhatif/. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- net8.0 (no -windows suffix) ensures Linux portability -->
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DeribitVerdictEngine</RootNamespace>
+    <AssemblyName>ProofWhatIf</AssemblyName>
+    <Nullable>enable</Nullable>
+    <StartupObject>DeribitVerdictEngine.ProofWhatIf</StartupObject>
+  </PropertyGroup>
+
+  <!-- Host-agnostic shared files from the main project — no WinForms references in any of
+       these. The runner calls the ACTUAL shipped SignalEmitter.ComputeSideLevels (one seam,
+       no copies) + the shipped FailureRateMatrix outcome walk, so the replay arbitration
+       cannot drift from production. docs/offline-whatif-replay-proposal.md §3/§5. -->
+  <ItemGroup>
+    <Compile Include="..\..\Core\Settings\EngineSettings.vb" />
+    <Compile Include="..\..\Core\Settings\SettingsLoader.vb" />
+    <Compile Include="..\..\Core\ExecutionResolution.vb" />
+    <Compile Include="..\..\Core\IndicatorResults.vb" />
+    <!-- Indicators_* supply the TrendStructure enum + the IndicatorEngine partials
+         IndicatorResults / the adapter transitively need to compile (the runner does not
+         re-run any indicator; it only constructs an IndicatorResults for ComputeSideLevels). -->
+    <Compile Include="..\..\Core\Indicators_Momentum.vb" />
+    <!-- [v54 #6] Indicators_OrderFlow.ClassifyAbsorption consumes AbsorptionSnapshot /
+         AbsorptionRead, so this file is a hard dependency of the includes below. Missed
+         when #6 landed (ae6678c), which left this project un-buildable. -->
+    <Compile Include="..\..\Core\LevelAbsorptionTracker.vb" />
+    <Compile Include="..\..\Core\Indicators_OrderFlow.vb" />
+    <Compile Include="..\..\Core\Indicators_Structure.vb" />
+    <Compile Include="..\..\Core\Indicators_Volatility.vb" />
+    <Compile Include="..\..\Core\ScoringEngine_Types.vb" />
+    <Compile Include="..\..\Core\SignalEmitter.vb" />
+    <!-- ProcessIdentity and VenueStatusLog are needed because DeribitClient now calls
+         ProcessIdentity.InstanceId and VenueStatusLog in GetStringOrRecordAsync. -->
+    <Compile Include="..\..\Core\ProcessIdentity.vb" />
+    <Compile Include="..\..\Core\VenueStatusLog.vb" />
+    <Compile Include="..\..\DeribitClient.vb" />
+    <Compile Include="..\..\DynamicNorms.vb" />
+    <Compile Include="..\..\analysis\AnalysisConstants.vb" />
+    <Compile Include="..\..\analysis\AnalysisReport.vb" />
+    <Compile Include="..\..\analysis\ForwardWindowJoiner.vb" />
+    <Compile Include="..\..\analysis\FailureRateMatrix.vb" />
+    <Compile Include="..\..\analysis\DeribitOhlcFetcher.vb" />
+    <!-- [E5 — v55 addendum] BandLadderRow POCO referenced by AnalysisReport. -->
+    <Compile Include="..\..\analysis\BandLadder.vb" />
+      <Compile Include="..\WhatIfRunner\*.vb" />
+  </ItemGroup>
+
+  <!-- WhatIf*.vb (WhatIfOverlay, WhatIfSettings, WhatIfReplay, WhatIfReport, WhatIfProgram)
+       are auto-included by the SDK glob (they live in this directory). -->
+
+</Project>

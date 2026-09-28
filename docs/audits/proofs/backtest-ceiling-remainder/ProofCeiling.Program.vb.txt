@@ -1,0 +1,248 @@
+' Audit proof harness — CeilingAudit (2026-09-25 backtest-ceiling-remainder).
+' Every step below calls the SHIPPED classes in tools/CeilingAudit (FeatureMatrix,
+' L2Logistic, AuditMetrics, AuditReport, CsvFeatureBuilder). The only re-implementation is
+' the ~20-line EvaluatePopulation call sequence, which is Private in CeilingAuditProgram and
+' is mirrored here line for line (CeilingAuditProgram.vb:233-283 at 6e74181).
+
+Imports System.Collections.Generic
+Imports System.Globalization
+Imports System.IO
+Imports System.Linq
+Imports System.Text.RegularExpressions
+Imports DeribitVerdictEngine.CeilingAudit
+
+Public Module ProofCeiling
+
+    ' The 23 scored categoricals, verbatim from CsvFeatureBuilder.BuildFeatureBundle (6e74181).
+    ReadOnly ScoredCats As String() = {
+        "ROCSlope", "RSIDivergence", "SqueezeStatus", "TTMSignal", "EMAAlignment",
+        "FundingBias", "FundingMomentum", "OISignal", "OiCvdOutcome", "OFISignal",
+        "LiqSignal", "CVDSlope", "CVDDivergence", "MicroCVDSignal", "MicroCVDMomentum",
+        "TFISignal", "DonchianSignal", "OBVTrend", "OBVDivergence",
+        "TrendStructure5m", "PriceVsEMA200",
+        "MTF15mTrend", "MTF15mEMAAlignment"}
+    ReadOnly ScoredNums As String() = {"ATR", "VolumeRatio", "ADX", "VWAPDevPct", "SpreadBps", "OFIRatio"}
+    ' Twelve of them are side-signed market states (BULLISH/BEARISH-shaped).
+    ReadOnly Directional As String() = {
+        "ROCSlope", "EMAAlignment", "OFISignal", "CVDSlope", "MicroCVDSignal", "TFISignal",
+        "DonchianSignal", "OBVTrend", "TrendStructure5m", "PriceVsEMA200", "MTF15mTrend", "MTF15mEMAAlignment"}
+
+    Function Sigmoid(z As Double) As Double
+        Return 1.0 / (1.0 + Math.Exp(-z))
+    End Function
+
+    Class Synth
+        Public Bundles As New List(Of FeatureBundle)
+        Public AlignedBundles As New List(Of FeatureBundle)   ' same rows, side-aligned encoding
+        Public Ts As New List(Of DateTime)
+    End Class
+
+    ' Ground truth: success logit = 1.5·s(MTF15mTrend) + 0.1·Σ s(other directional) where
+    ' s = +1 when the signal agrees with the row's side, −1 when it opposes. Each signal
+    ' agrees with the side 75 % of the time (the pipeline voted FOR this side, so its inputs
+    ' lean its way). Baseline = the pipeline's own equal-weight vote share (aligned votes /
+    ' 19). A combiner that sees alignment can find the 1.5 weight — real headroom exists.
+    Function MakeSynth(seed As Integer) As Synth
+        Dim rng As New Random(seed)
+        Dim s As New Synth()
+        Dim day As New DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)
+        For d = 0 To 89
+            Dim dt = day.AddDays(d)
+            If dt.DayOfWeek = DayOfWeek.Saturday OrElse dt.DayOfWeek = DayOfWeek.Sunday Then Continue For
+            For h = 13 To 20
+                For m = 0 To 50 Step 10
+                    Dim ts = dt.AddHours(h).AddMinutes(m)
+                    Dim isLong As Boolean = rng.NextDouble() < 0.5
+                    Dim fb As New FeatureBundle(), fa As New FeatureBundle()
+                    fb.SessionHour = ts.Hour : fa.SessionHour = ts.Hour
+                    fb.Regime = "TRENDING" : fa.Regime = "TRENDING"
+                    Dim logit As Double = 0, aligned As Integer = 0
+                    For Each c In ScoredCats
+                        If Array.IndexOf(Directional, c) >= 0 Then
+                            Dim agrees As Boolean = rng.NextDouble() < 0.75
+                            Dim bull As Boolean = If(agrees, isLong, Not isLong)
+                            fb.ScoredCategoricals(c) = If(bull, "BULLISH", "BEARISH")      ' shipped encoding
+                            fa.ScoredCategoricals(c) = If(agrees, "ALIGNED", "COUNTER")    ' side-aligned control
+                            Dim sgn As Double = If(agrees, 1.0, -1.0)
+                            logit += If(c = "MTF15mTrend", 1.5, 0.1) * sgn
+                            If agrees Then aligned += 1
+                        Else
+                            fb.ScoredCategoricals(c) = "NEUTRAL" : fa.ScoredCategoricals(c) = "NEUTRAL"
+                        End If
+                    Next
+                    For Each n In ScoredNums
+                        Dim v = rng.NextDouble() * 2 - 1
+                        fb.ScoredNumerics(n) = v : fa.ScoredNumerics(n) = v
+                    Next
+                    Dim y As Integer = If(rng.NextDouble() < Sigmoid(logit), 1, 0)
+                    fb.Label = y : fa.Label = y
+                    fb.BaselineScore = aligned / 19.0 : fa.BaselineScore = fb.BaselineScore
+                    s.Bundles.Add(fb) : s.AlignedBundles.Add(fa) : s.Ts.Add(ts)
+                Next
+            Next
+        Next
+        Return s
+    End Function
+
+    ' Mirror of CeilingAuditProgram.EvaluatePopulation lines 233-283 (6e74181).
+    Function Evaluate(name As String, bundles As List(Of FeatureBundle), ts As List(Of DateTime),
+                      Optional epochs As Integer = 500) As AuditPopulationReport
+        Dim rep As New AuditPopulationReport With {.Name = name, .IsDecisive = (name = "NY×1"),
+                                                   .NRowsTotal = bundles.Count, .NRowsLabelled = bundles.Count}
+        Dim y = bundles.Select(Function(b) b.Label).ToList()
+        Dim baseline = bundles.Select(Function(b) b.BaselineScore).ToList()
+        Dim split = AuditMetrics.MakeChronologicalSplit(bundles, ts, 7)
+        rep.Split = split : rep.NTrain = split.TrainIdx.Count : rep.NTest = split.TestIdx.Count
+        Dim trainB = split.TrainIdx.Select(Function(i) bundles(i)).ToList()
+        Dim trainTs = split.TrainIdx.Select(Function(i) ts(i)).ToList()
+        Dim yTrain = split.TrainIdx.Select(Function(i) y(i)).ToArray()
+        Dim yTest = split.TestIdx.Select(Function(i) y(i)).ToArray()
+        Dim baseTest = split.TestIdx.Select(Function(i) baseline(i)).ToArray()
+        Dim schema = FeatureMatrix.FitSchema(trainB, False)
+        rep.Schema = schema
+        Dim Xtr = FeatureMatrix.Transform(schema, trainB)
+        Dim Xte = FeatureMatrix.Transform(schema, split.TestIdx.Select(Function(i) bundles(i)).ToList())
+        Dim tuned = AuditMetrics.TuneLambda(Xtr, yTrain, trainTs)
+        rep.BestLambda = tuned.BestLambda : rep.LambdaAucs = tuned.ValAucs
+        Dim model = L2Logistic.Fit(Xtr, yTrain, tuned.BestLambda, 0.5, epochs)
+        rep.Model = model
+        Dim chal = model.PredictAll(Xte)
+        Dim K = split.TestIdx.Count \ 2
+        rep.OperatingPointK = K
+        rep.BaselineTest = AuditMetrics.Evaluate(baseTest, yTest, K)
+        rep.ChallengerTest = AuditMetrics.Evaluate(chal, yTest, K)
+        Dim testTs = split.TestIdx.Select(Function(i) ts(i)).ToList()
+        rep.DeltaAucCi = AuditMetrics.BootstrapDeltaAucCi(chal, baseTest, yTest, AuditMetrics.AssignBlocks(testTs), 1000, 42)
+        Return rep
+    End Function
+
+    Function Decisive(rep As AuditPopulationReport) As String
+        Dim m As New AuditReportModel With {.StampUtc = DateTime.UtcNow, .CsvPath = "synthetic", .SettingsPath = "n/a",
+            .VersionCheck = "n/a", .MarginDelta = 0.03, .BootstrapB = 1000, .BootstrapSeed = 42, .MinTestDays = 7,
+            .LoadStats = New LoadStats(), .Populations = New List(Of AuditPopulationReport) From {rep}}
+        Dim md = AuditReport.Build(m)
+        Dim line = md.Split({vbLf}, StringSplitOptions.None).FirstOrDefault(Function(l) l.StartsWith("**Decisive verdict"))
+        Return If(line, "(none)").Trim()
+    End Function
+
+    Sub PrintRep(label As String, rep As AuditPopulationReport)
+        Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
+            "  {0,-34} baseAUC={1:F4} chalAUC={2:F4} pointΔ={3:+0.0000;-0.0000} printedΔ(bootstrap mean)={4:+0.0000;-0.0000} CI=[{5:+0.0000;-0.0000},{6:+0.0000;-0.0000}] λ={7}",
+            label, rep.BaselineTest.Auc, rep.ChallengerTest.Auc, rep.ChallengerTest.Auc - rep.BaselineTest.Auc,
+            rep.DeltaAucCi.DeltaMean, rep.DeltaAucCi.CiLow, rep.DeltaAucCi.CiHigh, rep.BestLambda))
+        Console.WriteLine("  " & New String(" "c, 34) & " " & Decisive(rep))
+    End Sub
+
+    Sub ProofSideBlind()
+        Console.WriteLine("=== P-CA1  side-blind design matrix vs side-aligned encoding (same rows, same labels) ===")
+        Dim s = MakeSynth(7)
+        Console.WriteLine("  rows=" & s.Bundles.Count & "  success rate=" & (s.Bundles.Average(Function(b) b.Label)).ToString("F3", CultureInfo.InvariantCulture))
+        Dim shipped = Evaluate("NY×1", s.Bundles, s.Ts)
+        PrintRep("SHIPPED encoding (BULLISH/BEARISH)", shipped)
+        Dim aligned = Evaluate("NY×1", s.AlignedBundles, s.Ts)
+        PrintRep("CONTROL encoding (ALIGNED/COUNTER)", aligned)
+        Dim w = shipped.Schema.Columns.Select(Function(c, j) (c, shipped.Model.Weights(j))).
+            Where(Function(t) t.c.StartsWith("MTF15mTrend=")).ToList()
+        For Each t In w
+            Console.WriteLine(String.Format(CultureInfo.InvariantCulture, "  shipped coef {0} = {1:+0.0000;-0.0000}", t.c, t.Item2))
+        Next
+
+        Console.WriteLine()
+        Console.WriteLine("=== P-CA3  GD convergence at the shipped 500 epochs (lr 0.5, decay 0.01) ===")
+        Dim trace = aligned.Model.LossTrace
+        Dim ups As Integer = 0
+        For i = 1 To trace.Count - 1
+            If trace(i) > trace(i - 1) + 1.0E-12 Then ups += 1
+        Next
+        Console.WriteLine(String.Format(CultureInfo.InvariantCulture, "  control fit: loss[0]={0:F6} loss[499]={1:F6} non-monotone steps={2}", trace(0), trace(trace.Count - 1), ups))
+        Dim long20k = Evaluate("NY×1", s.AlignedBundles, s.Ts, epochs:=20000)
+        Console.WriteLine(String.Format(CultureInfo.InvariantCulture, "  control fit @20000 epochs: final loss={0:F6}  chalAUC={1:F4} (500 epochs: {2:F4})",
+                                        long20k.Model.FinalLoss, long20k.ChallengerTest.Auc, aligned.ChallengerTest.Auc))
+    End Sub
+
+    Sub ProofNegativeCiDeclaresCeiling()
+        Console.WriteLine()
+        Console.WriteLine("=== P-CA2  a challenger that is WORSE than baseline declares the ceiling ===")
+        For Each ci In {(-0.2, -0.1), (-0.05, 0.02), (0.01, 0.029)}
+            Dim rep As New AuditPopulationReport With {.Name = "NY×1", .IsDecisive = True,
+                .Split = New ChronologicalSplit(), .BaselineTest = New MetricResult(), .ChallengerTest = New MetricResult(),
+                .DeltaAucCi = New BootstrapCi With {.CiLow = ci.Item1, .CiHigh = ci.Item2, .DeltaMean = (ci.Item1 + ci.Item2) / 2}}
+            Console.WriteLine(String.Format(CultureInfo.InvariantCulture, "  CI=[{0:+0.00;-0.00},{1:+0.000;-0.000}]  -> {2}", ci.Item1, ci.Item2, Decisive(rep)))
+        Next
+    End Sub
+
+    Function RepoRoot() As String
+        Dim dir As String = AppContext.BaseDirectory
+        For level = 1 To 10
+            dir = Path.GetFullPath(Path.Combine(dir, ".."))
+            If File.Exists(Path.Combine(dir, "DeribitVerdictEngine.sln")) Then Return dir
+        Next
+        Throw New Exception("repo root not found")
+    End Function
+
+    Sub ProofTruncatedRowAdmitted()
+        Console.WriteLine()
+        Console.WriteLine("=== P-CA4  a short (truncated / older-schema) row is admitted as HasPlaced=True with zero placed levels ===")
+        Dim root = RepoRoot()
+        ' The real header, read out of AnalysisLogger.vb at this commit (not retyped).
+        Dim src = File.ReadAllText(Path.Combine(root, "AnalysisLogger.vb"))
+        Dim blk = src.Substring(src.IndexOf("Private Shared ReadOnly Header As String ="))
+        blk = blk.Substring(0, blk.IndexOf("AbsorptionSizeMin""") + "AbsorptionSizeMin""".Length)
+        Dim header = String.Concat(Regex.Matches(blk, """([^""]*)""").Cast(Of Match)().Select(Function(m) m.Groups(1).Value))
+        Dim cols = header.Split(","c)
+        Dim vals As New Dictionary(Of String, String) From {
+            {"Timestamp", "2026-09-16 10:08:00"}, {"Price", "64800.00"}, {"Verdict", "STRONG SHORT"},
+            {"Confidence", "HIGH"}, {"LongScore", "3"}, {"ShortScore", "15"}, {"EffectiveLongScore", "3"},
+            {"EffectiveShortScore", "15"}, {"MaxScore", "19"}, {"Regime", "TRENDING"}, {"ATR", "60.00"},
+            {"ExecResolution", "1"}, {"MTF15mTrend", "BEARISH"},
+            {"PlacedTargetLong", "64900.00"}, {"PlacedStopLong", "64700.00"},
+            {"PlacedTargetShort", "64700.00"}, {"PlacedStopShort", "64880.00"},
+            {"InstanceId", "aaaaaaaa-0000-0000-0000-000000000001"}}
+        Dim full = String.Join(",", cols.Select(Function(c) If(vals.ContainsKey(c), vals(c), "")))
+        ' Row 2: the same run's line cut right after ATRMultiplier — what a process killed
+        ' mid-write (the 10:07 crash) leaves behind, or what a pre-placed-schema book
+        ' contributes when concatenated under a v0.8+ header.
+        Dim cutAt = Array.IndexOf(cols, "ATRMultiplier") + 1
+        Dim shortRow = String.Join(",", full.Split(","c).Take(cutAt)).Replace("10:08:00", "10:09:00")
+        Dim csvPath = IO.Path.Combine(IO.Path.GetTempPath(), "proof_truncated_row.csv")
+        File.WriteAllLines(csvPath, {header, full, shortRow})
+        Dim stats As LoadStats = Nothing
+        Dim res = CsvFeatureBuilder.LoadAndBuild(csvPath, stats)
+        Console.WriteLine("  header columns=" & cols.Length & "  short row fields=" & cutAt)
+        Console.WriteLine("  eligible rows=" & res.Item1.Count & "  NonV08Excluded=" & stats.NonV08Excluded & "  UnparsedExcluded=" & stats.UnparsedExcluded)
+        For i = 0 To res.Item1.Count - 1
+            Dim r = res.Item1(i), fb = res.Item2(i)
+            Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
+                "  row {0}: ts={1:HH:mm} HasPlaced={2} PlacedTargetShort={3} PlacedStopShort={4} MTF15mTrend='{5}' OFIRatio={6} SpreadBps={7}",
+                i, r.Timestamp, r.HasPlaced, r.PlacedTargetShort, r.PlacedStopShort,
+                fb.ScoredCategoricals("MTF15mTrend"), fb.ScoredNumerics("OFIRatio"), fb.ScoredNumerics("SpreadBps")))
+        Next
+        ' Label both with the SHIPPED AttachLabels over an identical falling forward path.
+        SettingsLoader.Initialise(IO.Path.Combine(root, "settings.json"))
+        Dim cfg = SettingsLoader.Current
+        Dim pop As New Population With {.Name = "NY×1"}
+        For i = 0 To res.Item1.Count - 1
+            Dim r = res.Item1(i)
+            Dim bars As New List(Of OhlcBar)
+            Dim p As Double = r.Price
+            For k = 1 To 15
+                Dim nx = p - 12
+                bars.Add(New OhlcBar With {.CloseTime = r.Timestamp.AddMinutes(k), .Open = p, .High = p + 1, .Low = nx - 1, .Close = nx})
+                p = nx
+            Next
+            r.ForwardBars(15) = bars
+            pop.Rows.Add(r) : pop.Features.Add(res.Item2(i))
+        Next
+        CsvFeatureBuilder.AttachLabels(pop, cfg)
+        For i = 0 To pop.Rows.Count - 1
+            Console.WriteLine("  row " & i & " label=" & pop.Features(i).Label & "  (settings v" & cfg.Version & ")")
+        Next
+    End Sub
+
+    Function Main(args As String()) As Integer
+        ProofSideBlind()
+        ProofNegativeCiDeclaresCeiling()
+        ProofTruncatedRowAdmitted()
+        Return 0
+    End Function
+End Module
