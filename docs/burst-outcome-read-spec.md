@@ -318,7 +318,7 @@ Run 2 upgrades or downgrades the run-1 reading by the replication rule in `docs/
 
 | ID (this spec) | Question | Options | My read |
 |---|---|---|---|
-| `BO-D1` | Which run re-opens `AVR-2` option (c)? | (a) Run 1 (2026-11-02 trigger) · (b) Run 2 (2027-01-04, after replication) | **(a).** Run 1 is what `AVR-2` ruled on. Run 2 can still veto: a run-1 finding that does not replicate is downgraded before any (c) spec ships. ⚠ (a) is the faster option; (b) waits for more information. I pick (a) because (c) needs its own spec and review before it ships, and run 2 lands inside that time. Not blocking: the spec is written to serve either |
+| `BO-D1` | Which run re-opens `AVR-2` option (c)? | (a) Run 1 (2026-11-02 trigger) · (b) Run 2 (2027-01-04, after replication) | **(a).** Run 1 is what `AVR-2` ruled on. Run 2 can still veto: a run-1 finding that does not replicate is downgraded before any (c) spec ships. ⚠ (a) is the faster option; (b) waits for more information. I pick (a) because (c) needs its own spec and review before it ships, and run 2 lands inside that time. Not blocking: the spec is written to serve either. ✅ **RULED 2026-09-28 (trader): (a) run 1.** Sequence of record: build (by ~2026-10-26) → run 1 (on or after 2026-11-02) → if §7 argues for (c), write the (c) spec while run 2 accrues → run 2 (on or after 2027-01-04) must replicate before the (c) build ships |
 
 No choice here touches `settings.json`, scoring, a rendered value or a CSV schema.
 
