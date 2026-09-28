@@ -648,6 +648,14 @@ Module Program
         A91b_MixedLegacyAndInvertedIdentifiedTailProducesNoPhantomHoles()
         A91c_ComparatorIsAValidTotalOrderOnInvariantRespectingInput()
 
+        ' [A92 — D-2b, docs/gap-repair-rr1-spec-back.md] A seq-less row at or after the
+        ' trade-identity cutover is a corrupted modern row and the only way into ST-1; the repair
+        ' pass logs it as SEQLESS_AFTER_CUTOVER. A92a: counted at the cutover and logged; A92b:
+        ' identified only ⇒ nothing; A92c: pre-cutover seq-less rows ⇒ nothing.
+        A92a_SeqlessRowAtCutoverIsCountedAndLogged()
+        A92b_IdentifiedRowsOnlyWriteNoSeqlessLine()
+        A92c_SeqlessRowsBeforeCutoverAreNotCounted()
+
         ' [A57 — thin-trade-window skip gate, docs/thin-trade-window-skip-gate-proposal.md §6]
         ' Every guard on the trade path tested Count = 0; nothing tested for a THIN list. A57c
         ' is the mutation proof: revert ScoringEngine.MinTradesForScoring to a hardcoded 50 and
@@ -12537,56 +12545,283 @@ Module Program
         End Try
     End Sub
 
-    ' -- A91c: ST-1 direct regression guard — the comparator is a VALID total order on an
-    ' adversarial-but-invariant-respecting input (one legacy row, timestamp strictly before two
-    ' seq/time-inverted identified rows, matching the real store's legacy-predates-cutover
-    ' invariant). Confirms List.Sort does not throw and the two identified rows land in ASCENDING
-    ' SEQ order (N+1 before N+3, since seq(N+1) < seq(N+3)) regardless of their inverted
-    ' timestamps.
-    ' ⚠ Deviates from docs/gap-repair-rr1-seq-order-spec.md §6.3's own prose, which reads
-    ' "same as A91a's no-hole result" — this fixture omits A91a's N and N+2 rows, so seq N+2 is
-    ' a GENUINE gap here, not a phantom one. The correct, mechanically-derived result is a REAL
-    ' Hole[N+2,N+2] plus a Tail from N+4 — proof the ascending-seq order is right (not reversed),
-    ' since a reversed or time-based order would instead swallow this real gap as a harmless
-    ' "discontinuity" (the OLD comparator's own failure mode, confirmed pre-fix: it produced ONE
-    ' window, Tail FirstSeq=N+2, silently never fetching the real N+2 loss). Logged as a spec-back
-    ' finding, not re-opened here per CLAUDE.md's escalation trigger (only an EXISTING fixture's
-    ' expected value changing would trigger it; A91c is new, written this session).
+    ' -- A91c: ST-1 direct regression guard — reworked 2026-09-28 (D-2, RULED 2026-09-26,
+    ' docs/gap-repair-rr1-spec-back.md). Three parts:
+    '
+    ' Part 1 — invariant-respecting input: one legacy row strictly before two seq/time-inverted
+    ' identified rows (N+1 at t=100001, N+3 at t=100000). The rows the walk actually sees
+    ' (ScanForRepair) are sorted with TradeStoreWriter.RepairSortCompare and checked PAIRWISE:
+    ' no i<j may have Compare(row_i, row_j) > 0. ⛔ This replaces a "List.Sort did not throw"
+    ' check that could never fail: .NET 8's List.Sort never throws on this comparator's ST-1
+    ' cycle — it returns a silently wrong order (tools/checks/sort-consistency-probe/). The
+    ' windows: N+2 is never present here, so it is a GENUINE one-wide gap → Hole[N+2,N+2], then
+    ' Tail from N+4. (Spec §6.3's "same as A91a's no-hole result" was wrong; D-2 accepted this.)
+    ' ⚠ CORRECTED: this comment used to say the OLD (Timestamp, TradeSeq) comparator "silently
+    ' never fetched" N+2. False — the old sort ends on N+1, so its Tail started AT N+2 and
+    ' fetched it (Core/TradeStoreWriter.vb, step 8: ForTail(newest.Seq)). RR-1 improves
+    ' PRECISION (no phantom re-fetch), not recall.
+    '
+    ' Part 1b — the pairwise check can FAIL: on the spec's ST-1 cycle (§4.2: A seq 100 t 500,
+    ' B legacy t 200, C seq 200 t 100) it must report a violation. Any linear order of a
+    ' 3-cycle violates one pair, so this is deterministic. Without it, part 1's check would be
+    ' as unproven as the no-throw check it replaces.
+    '
+    ' Part 2 — the tie-break (spec-back §1 E-1, made permanent): a legacy row and an identified
+    ' row (seq 5000) share one exact millisecond; an identified row five seqs later (5005)
+    ' follows. BOTH file orders must give Hole[5001,5004] then Tail from 5006. The tie-break puts
+    ' the legacy row (Seq −1) first, so the walk brackets 5000→5005. ⛔ MUTATION PROOF: replace
+    ' RepairSortCompare's last line (`Return a.Seq.CompareTo(b.Seq)`) with `Return 0` — the
+    ' tied pair then keeps its FILE order, order 2 puts the legacy row BETWEEN 5000 and 5005,
+    ' the walk breaks, and the real hole is lost → part 2 FAILS. Before this part no fixture
+    ' guarded that line (486 PASS with it deleted, measured 2026-09-26).
+    '
+    ' Fixture-literal provenance: every timestamp and seq here is MECHANISM (the family note
+    ' above) — constructed shapes, not production values.
     Private Sub A91c_ComparatorIsAValidTotalOrderOnInvariantRespectingInput()
         Dim dir As String = A48TempStore("91c")
+        Dim dirT1 As String = A48TempStore("91c-t1")
+        Dim dirT2 As String = A48TempStore("91c-t2")
         Try
+            Dim segEnd As Long = A56Ms(600000)
+
+            ' ── Part 1 ──
             Dim n As Long = 9000L
-            Dim rowsIn As New List(Of TradeRecord) From {
+            A56Write(dir, New List(Of TradeRecord) From {
                 A53Trade(A56Ms(50000), 64000, 10, "buy"),
                 A53Trade(A56Ms(100001), 64001, 10, "buy", "none", "w-1", n + 1L),
-                A53Trade(A56Ms(100000), 64002, 10, "buy", "none", "w-2", n + 3L)}
-            A56Write(dir, rowsIn)
+                A53Trade(A56Ms(100000), 64002, 10, "buy", "none", "w-2", n + 3L)})
+            Dim w = TradeStoreWriter.ResolveRepairWindows(A56Path(dir), A56Ms(0), segEnd, True)
+            Dim p1Windows As Boolean = w.Count = 2 AndAlso
+                                       w(0).Kind = TradeStoreWriter.RepairWindowKind.Hole AndAlso
+                                       w(0).FirstSeq = n + 2L AndAlso w(0).LastSeq = n + 2L AndAlso
+                                       w(1).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
+                                       w(1).FirstSeq = n + 4L
+            Dim p1Violations As Integer = A91cSortedPairViolations(A91cScan(A56Path(dir)))
 
-            Dim threw As Boolean = False
-            Dim segEnd As Long = A56Ms(600000)
-            Dim w As List(Of TradeStoreWriter.RepairWindow) = Nothing
-            Try
-                w = TradeStoreWriter.ResolveRepairWindows(A56Path(dir), A56Ms(0), segEnd, True)
-            Catch ex As InvalidOperationException
-                threw = True
-            End Try
+            ' ── Part 1b ── the ST-1 cycle, straight from the spec's §4.2 numbers.
+            Dim cycle As New List(Of TradeStoreWriter.SeqPoint) From {
+                New TradeStoreWriter.SeqPoint With {.TsMs = 500L, .Seq = 100L},
+                New TradeStoreWriter.SeqPoint With {.TsMs = 200L, .Seq = TradeStoreWriter.AbsentSeq},
+                New TradeStoreWriter.SeqPoint With {.TsMs = 100L, .Seq = 200L}}
+            Dim cycleViolations As Integer = A91cSortedPairViolations(cycle)
 
-            ' No throw, and the REAL gap at N+2 is correctly found (not swallowed) precisely
-            ' because the identified pair sorted by seq (N+1 before N+3) rather than by their
-            ' inverted timestamps; the legacy row (seq < 0) breaks the walk ahead of it without
-            ' inventing anything.
-            Dim ok As Boolean = Not threw AndAlso w IsNot Nothing AndAlso w.Count = 2 AndAlso
-                                w(0).Kind = TradeStoreWriter.RepairWindowKind.Hole AndAlso
-                                w(0).FirstSeq = n + 2L AndAlso w(0).LastSeq = n + 2L AndAlso
-                                w(1).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso
-                                w(1).FirstSeq = n + 4L
+            ' ── Part 2 ── the same three rows, the tied pair in both file orders.
+            Dim tieTs As Long = A56Ms(200000)
+            A56Write(dirT1, New List(Of TradeRecord) From {
+                A53Trade(tieTs, 64000, 10, "buy"),
+                A53Trade(tieTs, 64001, 10, "buy", "none", "v-1", 5000L),
+                A53Trade(A56Ms(200050), 64002, 10, "buy", "none", "v-2", 5005L)})
+            A56Write(dirT2, New List(Of TradeRecord) From {
+                A53Trade(tieTs, 64001, 10, "buy", "none", "v-1", 5000L),
+                A53Trade(tieTs, 64000, 10, "buy"),
+                A53Trade(A56Ms(200050), 64002, 10, "buy", "none", "v-2", 5005L)})
+            Dim wT1 = TradeStoreWriter.ResolveRepairWindows(A56Path(dirT1), A56Ms(0), segEnd, True)
+            Dim wT2 = TradeStoreWriter.ResolveRepairWindows(A56Path(dirT2), A56Ms(0), segEnd, True)
+            Dim tieOk As Func(Of List(Of TradeStoreWriter.RepairWindow), Boolean) =
+                Function(x) x.Count = 2 AndAlso
+                            x(0).Kind = TradeStoreWriter.RepairWindowKind.Hole AndAlso
+                            x(0).FirstSeq = 5001L AndAlso x(0).LastSeq = 5004L AndAlso
+                            x(1).Kind = TradeStoreWriter.RepairWindowKind.Tail AndAlso x(1).FirstSeq = 5006L
+            Dim p2Violations As Integer = A91cSortedPairViolations(A91cScan(A56Path(dirT1))) +
+                                          A91cSortedPairViolations(A91cScan(A56Path(dirT2)))
 
-            Check("A91c ST-1 — comparator is a valid total order on invariant-respecting input (legacy row predates both inverted identified rows): List.Sort does not throw, and the REAL gap at N+2 is correctly found (ascending-seq order proven, not reversed)",
-                  ok, String.Format("threw={0}(want False) windows={1}(want 2) holeFirst={2}(want {3}) holeLast={4}(want {3}) tailFirst={5}(want {6})",
-                                    threw, If(w Is Nothing, -1, w.Count),
-                                    If(w IsNot Nothing AndAlso w.Count > 0, w(0).FirstSeq, -1L), n + 2L,
-                                    If(w IsNot Nothing AndAlso w.Count > 0, w(0).LastSeq, -1L),
-                                    If(w IsNot Nothing AndAlso w.Count > 1, w(1).FirstSeq, -1L), n + 4L))
+            Dim ok As Boolean = p1Windows AndAlso p1Violations = 0 AndAlso cycleViolations > 0 AndAlso
+                                tieOk(wT1) AndAlso tieOk(wT2) AndAlso p2Violations = 0
+
+            Check("A91c ST-1 — RepairSortCompare yields a pairwise-consistent order on invariant-respecting rows and the REAL gap at N+2 is found; the pairwise check DOES flag the ST-1 cycle; a legacy/identified same-ms tie gives Hole[5001,5004] in BOTH file orders (tie-break guarded)",
+                  ok, String.Format("part1: {0} violations={1}(want 0) · part1b: cycleViolations={2}(want >0) · part2: order1={3} order2={4} (want Hole[5001,5004] Tail 5006 each) violations={5}(want 0)",
+                                    A91cWindows(w), p1Violations, cycleViolations, A91cWindows(wT1), A91cWindows(wT2), p2Violations))
+        Finally
+            A48Cleanup(dir)
+            A48Cleanup(dirT1)
+            A48Cleanup(dirT2)
+        End Try
+    End Sub
+
+    ' The rows the repair walk sees for one file — ScanForRepair, the same call ResolveRepairWindowsCore makes.
+    Private Function A91cScan(path As String) As List(Of TradeStoreWriter.SeqPoint)
+        Dim truncated As Boolean = False
+        Dim failure As String = Nothing
+        Return TradeStoreWriter.ScanForRepair(path, A56Ms(0), TradeStoreWriter.MaxScanRows, truncated, failure)
+    End Function
+
+    ' Sort with the production comparator, then count pairs i<j with Compare(i, j) > 0. A total
+    ' order gives 0; an inconsistent comparator gives > 0 without List.Sort throwing.
+    Private Function A91cSortedPairViolations(rows As List(Of TradeStoreWriter.SeqPoint)) As Integer
+        Dim l As New List(Of TradeStoreWriter.SeqPoint)(rows)
+        l.Sort(AddressOf TradeStoreWriter.RepairSortCompare)
+        Dim v As Integer = 0
+        For i As Integer = 0 To l.Count - 1
+            For j As Integer = i + 1 To l.Count - 1
+                If TradeStoreWriter.RepairSortCompare(l(i), l(j)) > 0 Then v += 1
+            Next
+        Next
+        Return v
+    End Function
+
+    Private Function A91cWindows(w As List(Of TradeStoreWriter.RepairWindow)) As String
+        Dim sb As New System.Text.StringBuilder("n=" & w.Count)
+        For i As Integer = 0 To w.Count - 1
+            sb.AppendFormat(" [{0}]{1} {2}..{3}", i, w(i).Kind, w(i).FirstSeq, w(i).LastSeq)
+        Next
+        Return sb.ToString()
+    End Function
+
+    ' =======================================================================
+    ' A92 — D-2b: seq-less rows after the trade-identity cutover are LOGGED
+    ' (docs/gap-repair-rr1-spec-back.md, D-2b RULED (b) 2026-09-26; spec-back
+    ' docs/gap-repair-rr1-d2-d2b-spec-back.md).
+    ' A seq-less row at or after TradeStoreWriter.TradeIdentityCutoverMs is a corrupted modern
+    ' row: the only way into ST-1, under which the repair sort is SILENTLY wrong (List.Sort does
+    ' not throw). The repair pass counts such rows per month file and writes ONE
+    ' SEQLESS_AFTER_CUTOVER line per affected file, before the PASS line; nothing when 0. It
+    ' changes no window and no pass state.
+    '
+    ' ⚠ FIXTURE-LITERAL PROVENANCE (CLAUDE.md hard rule), declared once for the family:
+    '   • The cutover is SHIPPED BEHAVIOUR — every timestamp is an offset from
+    '     TradeStoreWriter.TradeIdentityCutoverMs, READ, never restated; the expected first_ts is
+    '     formatted from the same constant.
+    '   • The line's state name and `file= count= first_ts=` layout are SHIPPED BEHAVIOUR — the
+    '     ruled contract, so they are spelled out literally on purpose: a rename must fail here.
+    '   • Offsets, prices, seqs, the instance id and the pass clock are MECHANISM — constructed
+    '     inputs; any consistent values serve.
+    '
+    ' ⛔ MUTATIONS, one per fixture, each run 2026-09-28 (see the D-2/D-2b spec-back, H-3):
+    '   M-a  CountSeqlessAfterCutover: `p.TsMs < TradeIdentityCutoverMs` → `<=` (the cutover
+    '        becomes exclusive)                          → A92a FAILS (its row sits exactly AT it)
+    '   M-b  CountSeqlessAfterCutover: drop `OrElse p.TsMs < TradeIdentityCutoverMs` (count every
+    '        seq-less row)                              → A92c FAILS (and A92a: count 2)
+    '   M-c  ResolveRepairWindowsCore: `If seqlessCount > 0` → `>= 0` (add a finding when there
+    '        is none)                                   → A92b FAILS
+    ' =======================================================================
+
+    Private Function A92Ms(offsetMs As Long) As Long
+        Return TradeStoreWriter.TradeIdentityCutoverMs + offsetMs
+    End Function
+
+    Private Function A92Iso(ms As Long) As String
+        Return DateTimeOffset.FromUnixTimeMilliseconds(ms).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture)
+    End Function
+
+    ' One repair pass's worth of evidence for a store: the findings, the windows with and without
+    ' the sink (they must match), and the composed repair_status.log lines for an empty pass.
+    Private Class A92Result
+        Public Findings As New List(Of TradeStoreWriter.SeqlessRowFinding)()
+        Public WindowsSame As Boolean
+        Public Lines As List(Of String)
+        Public PassLineSame As Boolean
+    End Class
+
+    Private ReadOnly A92Utc As New DateTime(2026, 9, 28, 12, 0, 0, DateTimeKind.Utc)
+    Private Const A92Instance As String = "a92-inst"
+
+    Private Function A92Run(dir As String) As A92Result
+        Dim r As New A92Result()
+        Dim segStart As Long = A92Ms(-120000)
+        Dim segEnd As Long = A92Ms(600000)
+        Dim withSink = TradeStoreWriter.ResolveRepairWindows(A56Path(dir), segStart, segEnd, True, Nothing, r.Findings)
+        Dim without = TradeStoreWriter.ResolveRepairWindows(A56Path(dir), segStart, segEnd, True)
+        r.WindowsSame = A91cWindows(withSink) = A91cWindows(without)
+        Dim empty As New List(Of TradeStoreWriter.RepairWindowOutcome)()
+        r.Lines = RepairStatusLog.ComposePassLines(empty, 20.0, A92Instance, A92Utc, Nothing, r.Findings)
+        Dim plain = RepairStatusLog.ComposePassLines(empty, 20.0, A92Instance, A92Utc)
+        r.PassLineSame = plain.Count = 1 AndAlso r.Lines.Count > 0 AndAlso r.Lines(r.Lines.Count - 1) = plain(0)
+        Return r
+    End Function
+
+    Private Function A92Describe(r As A92Result) As String
+        Dim sb As New System.Text.StringBuilder()
+        sb.AppendFormat("findings={0}", r.Findings.Count)
+        For Each f In r.Findings
+            sb.AppendFormat(" [{0} count={1} first={2}]", f.FileName, f.Count, A92Iso(f.FirstTsMs))
+        Next
+        sb.AppendFormat(" windowsSame={0} passLineSame={1} lines={2}", r.WindowsSame, r.PassLineSame, r.Lines.Count)
+        For Each l In r.Lines
+            sb.Append(" «").Append(l).Append("»")
+        Next
+        Return sb.ToString()
+    End Function
+
+    ' -- A92a: a seq-less row EXACTLY AT the cutover is counted and logged ----------------------
+    ' Store: a seq-less row thirty seconds BEFORE the cutover (legacy, not counted), an
+    ' identified row, a seq-less row AT the cutover (counted: the cutover is inclusive), another
+    ' identified row. Count 1, first_ts = the cutover, one SEQLESS_AFTER_CUTOVER line before an
+    ' unchanged PASS_CLEAN line, windows unchanged. Also driven through the production chain
+    ' (HistoricalStore.BackfillTradeMonthCoreAsync with stub fetchers) so the sink is proven
+    ' threaded to the caller that writes the log.
+    Private Sub A92a_SeqlessRowAtCutoverIsCountedAndLogged()
+        Dim dir As String = A48TempStore("92a")
+        Dim dirChain As String = A48TempStore("92a-chain")
+        Try
+            Dim rows As New List(Of TradeRecord) From {
+                A53Trade(A92Ms(-30000), 64000, 10, "buy"),
+                A53Trade(A92Ms(-20000), 64001, 10, "buy", "none", "s-1", 8000L),
+                A53Trade(A92Ms(0), 64002, 10, "buy"),
+                A53Trade(A92Ms(10000), 64003, 10, "buy", "none", "s-2", 8001L)}
+            A56Write(dir, rows)
+            Dim r = A92Run(dir)
+
+            Dim fileName As String = System.IO.Path.GetFileName(A56Path(dir))
+            Dim wantLine As String = A92Utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture) &
+                                     " | SEQLESS_AFTER_CUTOVER | " & A92Instance &
+                                     " | file=" & fileName & " count=1 first_ts=" & A92Iso(TradeStoreWriter.TradeIdentityCutoverMs)
+            Dim ok As Boolean = r.Findings.Count = 1 AndAlso r.Findings(0).Count = 1 AndAlso
+                                r.Findings(0).FirstTsMs = TradeStoreWriter.TradeIdentityCutoverMs AndAlso
+                                r.Findings(0).FileName = fileName AndAlso
+                                r.WindowsSame AndAlso r.PassLineSame AndAlso
+                                r.Lines.Count = 2 AndAlso r.Lines(0) = wantLine AndAlso
+                                RepairStatusLog.SeqlessAfterCutoverState = "SEQLESS_AFTER_CUTOVER"
+
+            ' The production chain: the same store through the month loop's own call.
+            A56Write(dirChain, rows)
+            Dim chain As New List(Of TradeStoreWriter.SeqlessRowFinding)()
+            Dim anc(0) As Integer
+            Dim tape = rows.Where(Function(t) t.HasSeq).ToList()
+            HistoricalStore.BackfillTradeMonthCoreAsync(2026, 8,
+                DateTimeOffset.FromUnixTimeMilliseconds(A92Ms(-120000)).UtcDateTime,
+                DateTimeOffset.FromUnixTimeMilliseconds(A92Ms(600000)).UtcDateTime,
+                dirChain, True, True, A79SeqStub(tape, 0L), A79AnchorStub(tape, anc), 0, Nothing, chain).GetAwaiter().GetResult()
+            Dim chainOk As Boolean = chain.Count = 1 AndAlso chain(0).Count = 1 AndAlso
+                                     chain(0).FirstTsMs = TradeStoreWriter.TradeIdentityCutoverMs
+
+            Check("A92a D-2b — a seq-less row AT the cutover (inclusive) is counted (1; a pre-cutover one is not), logged as ONE SEQLESS_AFTER_CUTOVER line with file/count/first_ts before an UNCHANGED PASS line, windows unchanged, and the finding reaches the caller through HistoricalStore",
+                  ok AndAlso chainOk, A92Describe(r) & String.Format(" chain={0}(want 1, count 1)", chain.Count))
+        Finally
+            A48Cleanup(dir)
+            A48Cleanup(dirChain)
+        End Try
+    End Sub
+
+    ' -- A92b: only identified rows ⇒ no finding and no line ------------------------------------
+    Private Sub A92b_IdentifiedRowsOnlyWriteNoSeqlessLine()
+        Dim dir As String = A48TempStore("92b")
+        Try
+            A56Write(dir, New List(Of TradeRecord) From {
+                A53Trade(A92Ms(-20000), 64001, 10, "buy", "none", "t-1", 8000L),
+                A53Trade(A92Ms(10000), 64002, 10, "buy", "none", "t-2", 8001L),
+                A53Trade(A92Ms(20000), 64003, 10, "buy", "none", "t-3", 8002L)})
+            Dim r = A92Run(dir)
+            Check("A92b D-2b — a store of identified rows only yields NO finding and NO SEQLESS_AFTER_CUTOVER line (the pass writes its PASS line alone)",
+                  r.Findings.Count = 0 AndAlso r.Lines.Count = 1 AndAlso r.PassLineSame AndAlso r.WindowsSame,
+                  A92Describe(r))
+        Finally
+            A48Cleanup(dir)
+        End Try
+    End Sub
+
+    ' -- A92c: seq-less rows only BEFORE the cutover ⇒ not counted -------------------------------
+    ' The legacy era is legitimate tape. The row one millisecond before the cutover is the edge.
+    Private Sub A92c_SeqlessRowsBeforeCutoverAreNotCounted()
+        Dim dir As String = A48TempStore("92c")
+        Try
+            A56Write(dir, New List(Of TradeRecord) From {
+                A53Trade(A92Ms(-30000), 64000, 10, "buy"),
+                A53Trade(A92Ms(-1), 64001, 10, "buy"),
+                A53Trade(A92Ms(10000), 64002, 10, "buy", "none", "u-1", 8000L)})
+            Dim r = A92Run(dir)
+            Check("A92c D-2b — seq-less rows only BEFORE the cutover (the last one 1 ms before it) are legacy tape: count 0, no line",
+                  r.Findings.Count = 0 AndAlso r.Lines.Count = 1 AndAlso r.PassLineSame AndAlso r.WindowsSame,
+                  A92Describe(r))
         Finally
             A48Cleanup(dir)
         End Try

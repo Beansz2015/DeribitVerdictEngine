@@ -18,8 +18,14 @@
 '
 ' What is written — outcome-only, never per page:
 '   • one WINDOW line for every window whose state is not TAIL_OK or TAIL_EMPTY;
+'   • [D-2b, docs/gap-repair-rr1-spec-back.md] one SEQLESS_AFTER_CUTOVER line per month file whose
+'     repair scan held seq-less rows at or after TradeStoreWriter.TradeIdentityCutoverMs —
+'     `file=<name> count=<n> first_ts=<ISO UTC>`. Such a row is a corrupted modern row and can
+'     make the repair sort silently wrong. It changes neither a window nor the pass state. None
+'     expected: the line's presence is the tripwire, its absence the normal case;
 '   • one PASS line for every pass, after its windows — ⚠ INCLUDING A CLEAN PASS. A clean pass
-'     that wrote nothing would be indistinguishable from a repair timer that has died.
+'     that wrote nothing would be indistinguishable from a repair timer that has died. The PASS
+'     line is always the pass's LAST line.
 ' ~4 pass lines a day; window lines only on real holes. No rotation.
 
 Imports System.Collections.Generic
@@ -34,6 +40,8 @@ Public NotInheritable Class RepairStatusLog
     Public Const PassClean As String = "PASS_CLEAN"
     Public Const PassLoss As String = "PASS_LOSS"
     Public Const PassFailed As String = "PASS_FAILED"
+    ''' <summary>[D-2b] Not a pass state — a finding line written before the PASS line.</summary>
+    Public Const SeqlessAfterCutoverState As String = "SEQLESS_AFTER_CUTOVER"
 
     Private Shared ReadOnly _lock As New Object()
 
@@ -48,21 +56,24 @@ Public NotInheritable Class RepairStatusLog
     ''' Never throws.</summary>
     ''' <param name="exceptionReason">Non-empty when the pass itself threw; the pass is then
     ''' PASS_FAILED whatever its windows said.</param>
+    ''' <param name="seqless">[D-2b] One SEQLESS_AFTER_CUTOVER line per finding.</param>
     Public Shared Sub WritePass(outcomes As IList(Of TradeStoreWriter.RepairWindowOutcome),
                                 lookbackHours As Double, instanceId As String,
-                                Optional exceptionReason As String = Nothing)
+                                Optional exceptionReason As String = Nothing,
+                                Optional seqless As IList(Of TradeStoreWriter.SeqlessRowFinding) = Nothing)
         Try
-            AppendTo(GetPath(), ComposePassLines(outcomes, lookbackHours, instanceId, DateTime.UtcNow, exceptionReason))
+            AppendTo(GetPath(), ComposePassLines(outcomes, lookbackHours, instanceId, DateTime.UtcNow, exceptionReason, seqless))
         Catch ex As Exception
             Console.WriteLine("[RepairStatusLog] write failed: " & ex.Message)
         End Try
     End Sub
 
-    ''' <summary>The lines one pass writes, in order: window lines, then the pass line. Pure —
-    ''' A79f drives it directly.</summary>
+    ''' <summary>The lines one pass writes, in order: window lines, then any [D-2b] seq-less finding
+    ''' lines, then the pass line. Pure — A79f and A92 drive it directly.</summary>
     Friend Shared Function ComposePassLines(outcomes As IList(Of TradeStoreWriter.RepairWindowOutcome),
                                             lookbackHours As Double, instanceId As String, utc As DateTime,
-                                            Optional exceptionReason As String = Nothing) As List(Of String)
+                                            Optional exceptionReason As String = Nothing,
+                                            Optional seqless As IList(Of TradeStoreWriter.SeqlessRowFinding) = Nothing) As List(Of String)
         Dim lines As New List(Of String)()
         Dim windows As Integer = 0, holes As Integer = 0, failed As Integer = 0, pages As Integer = 0
         Dim committed As Long = 0, notServed As Long = 0
@@ -80,6 +91,16 @@ Public NotInheritable Class RepairStatusLog
                    o.State <> TradeStoreWriter.RepairWindowOutcome.TailEmpty Then
                     lines.Add(FormatLine(utc, o.State, instanceId, WindowDetail(o)))
                 End If
+            Next
+        End If
+
+        ' [D-2b] Findings, not window outcomes: they feed no counter and no state below.
+        If seqless IsNot Nothing Then
+            For Each s In seqless
+                If s Is Nothing Then Continue For
+                lines.Add(FormatLine(utc, SeqlessAfterCutoverState, instanceId, String.Format(CultureInfo.InvariantCulture,
+                          "file={0} count={1} first_ts={2}",
+                          If(String.IsNullOrEmpty(s.FileName), "unknown", s.FileName), s.Count, Iso(s.FirstTsMs))))
             Next
         End If
 

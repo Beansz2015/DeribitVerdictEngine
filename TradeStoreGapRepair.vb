@@ -113,6 +113,9 @@ Public NotInheritable Class TradeStoreGapRepair
     ''' </summary>
     Public Shared Async Function RepairOnceAsync(cfg As EngineSettings) As Task(Of Integer)
         Dim outcomes As New List(Of TradeStoreWriter.RepairWindowOutcome)()
+        ' [D-2b] Seq-less rows at or after the trade-identity cutover, one finding per month file.
+        ' Logged as SEQLESS_AFTER_CUTOVER; they change no window and no pass state.
+        Dim seqless As New List(Of TradeStoreWriter.SeqlessRowFinding)()
         Dim lookbackHours As Double = 0
         Dim passStarted As Boolean = False
         Try
@@ -138,9 +141,9 @@ Public NotInheritable Class TradeStoreGapRepair
                 total += Await HistoricalStore.BackfillTradeMonthAsync(
                              m.Year, m.Month, m.StartUtc, m.EndUtcExcl,
                              storeDir:=storeDir, clampToSegStart:=True, repairHoles:=True,
-                             outcomes:=outcomes)
+                             outcomes:=outcomes, seqless:=seqless)
             Next
-            RepairStatusLog.WritePass(outcomes, lookbackHours, ProcessIdentity.InstanceId)
+            RepairStatusLog.WritePass(outcomes, lookbackHours, ProcessIdentity.InstanceId, seqless:=seqless)
             Console.WriteLine(String.Format(
                 "[TradeStoreGapRepair] pass complete — {0} row(s) appended to {1}", total, storeDir))
             Return total
@@ -149,7 +152,7 @@ Public NotInheritable Class TradeStoreGapRepair
             ' A pass that threw is recorded, never silent. WritePass never throws.
             If passStarted Then
                 RepairStatusLog.WritePass(outcomes, lookbackHours, ProcessIdentity.InstanceId,
-                                          "exception: " & ex.Message)
+                                          "exception: " & ex.Message, seqless)
             End If
             Return 0
         End Try

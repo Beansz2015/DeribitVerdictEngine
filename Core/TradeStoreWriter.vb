@@ -915,6 +915,51 @@ Public NotInheritable Class TradeStoreWriter
         Public Seq As Long
     End Structure
 
+    ''' <summary>The repair walk's sort order — the RR-1 comparator. See TRAP 1 in
+    ''' ResolveRepairWindowsCore for why each branch exists and the one condition under which it is
+    ''' NOT a total order. Named (not a lambda) so A91c checks the order against the comparator the
+    ''' walk actually uses, and tools/checks/sort-consistency-probe copies it from one place.</summary>
+    Friend Shared Function RepairSortCompare(a As SeqPoint, b As SeqPoint) As Integer
+        If a.Seq >= 0 AndAlso b.Seq >= 0 Then Return a.Seq.CompareTo(b.Seq)
+        Dim c As Integer = a.TsMs.CompareTo(b.TsMs)
+        If c <> 0 Then Return c
+        Return a.Seq.CompareTo(b.Seq)
+    End Function
+
+    ''' <summary>[D-2b, docs/gap-repair-rr1-spec-back.md] The first instant at which a seq-less row
+    ''' in the store is a DEFECT rather than legacy tape: 2026-08-11 00:00:00 UTC. The trade-identity
+    ''' build went live 2026-08-10 (instance d8678d2b…); the store's last seq-less row is
+    ''' 2026-08-10 14:07:37.001 UTC and its first seq-carrying row 14:07:37.120 UTC (measured
+    ''' 2026-09-28 over the collector's trades_2026-07/08/09.csv: 0 seq-less rows at or after this
+    ''' instant). The next midnight gives margin. Public Const, not a settings key: a fact about the
+    ''' store's history, not a tunable — and Public so fixtures read it rather than restate it.</summary>
+    Public Const TradeIdentityCutoverMs As Long = 1786406400000L
+
+    ''' <summary>[D-2b] Seq-less rows timestamped at or after <see cref="TradeIdentityCutoverMs"/>
+    ''' in one repair scan of one monthly file. Every such row is a corrupted modern row — the only
+    ''' way into the ST-1 precondition, under which RepairSortCompare is not a total order and the
+    ''' walk runs on a silently wrong order (TRAP 1). Observational: it changes no window.</summary>
+    Public NotInheritable Class SeqlessRowFinding
+        Public Property FileName As String = ""
+        Public Property Count As Integer
+        ''' <summary>The EARLIEST timestamp among the counted rows.</summary>
+        Public Property FirstTsMs As Long
+    End Class
+
+    ''' <summary>[D-2b] Count the seq-less rows at or after the cutover; the earliest one's
+    ''' timestamp goes to <paramref name="firstTsMs"/> (0 when the count is 0). Pure.</summary>
+    Friend Shared Function CountSeqlessAfterCutover(rows As List(Of SeqPoint), ByRef firstTsMs As Long) As Integer
+        Dim n As Integer = 0
+        firstTsMs = 0
+        If rows Is Nothing Then Return 0
+        For Each p In rows
+            If p.Seq >= 0 OrElse p.TsMs < TradeIdentityCutoverMs Then Continue For
+            If n = 0 OrElse p.TsMs < firstTsMs Then firstTsMs = p.TsMs
+            n += 1
+        Next
+        Return n
+    End Function
+
     ''' <summary>
     ''' Every window a repair pass should fetch for one monthly file — the trade_seq holes BEHIND
     ''' the tail, then the tail itself. An empty list means there is nothing to fetch.
@@ -941,18 +986,22 @@ Public NotInheritable Class TradeStoreWriter
                                                 segStartMs As Long,
                                                 segEndInclMs As Long,
                                                 clampToSegStart As Boolean,
-                                                Optional previousMonthPath As String = Nothing) As List(Of RepairWindow)
-        Return ResolveRepairWindowsCore(path, segStartMs, segEndInclMs, clampToSegStart, previousMonthPath, MaxScanRows)
+                                                Optional previousMonthPath As String = Nothing,
+                                                Optional seqless As List(Of SeqlessRowFinding) = Nothing) As List(Of RepairWindow)
+        Return ResolveRepairWindowsCore(path, segStartMs, segEndInclMs, clampToSegStart, previousMonthPath, MaxScanRows, seqless)
     End Function
 
     ''' <summary>ResolveRepairWindows with the scan cap as a parameter, so A79k reaches the truncation
     ''' path without 500,000 rows (the ScanForRepair precedent). Production passes MaxScanRows.</summary>
+    ''' <param name="seqless">[D-2b] When given, receives ONE finding for this file if its scan holds
+    ''' any seq-less row at or after TradeIdentityCutoverMs; nothing otherwise. Never changes a window.</param>
     Friend Shared Function ResolveRepairWindowsCore(path As String,
                                                     segStartMs As Long,
                                                     segEndInclMs As Long,
                                                     clampToSegStart As Boolean,
                                                     previousMonthPath As String,
-                                                    maxScanRows As Integer) As List(Of RepairWindow)
+                                                    maxScanRows As Integer,
+                                                    Optional seqless As List(Of SeqlessRowFinding) = Nothing) As List(Of RepairWindow)
         Dim result As New List(Of RepairWindow)()
 
         ' ── 1. Scan ───────────────────────────────────────────────────────────────────
@@ -966,6 +1015,19 @@ Public NotInheritable Class TradeStoreWriter
         If scanFailure IsNot Nothing Then
             result.Add(RepairWindow.ForScanFailure(scanFailure))
             Return result
+        End If
+
+        ' ── 1a. [D-2b] Make the ST-1 residual visible ─────────────────────────────────
+        ' A seq-less row at or after the cutover is a corrupted modern row, and it is the only way
+        ' into the precondition under which the sort below is not a total order (TRAP 1). That
+        ' failure is SILENT — List.Sort does not throw on it — so count such rows here, over this
+        ' file's scanned rows only (before the F-1 seed, which belongs to the previous file), and
+        ' let the caller log them. Counting changes nothing below.
+        Dim seqlessFirstTs As Long
+        Dim seqlessCount As Integer = CountSeqlessAfterCutover(rows, seqlessFirstTs)
+        If seqlessCount > 0 AndAlso seqless IsNot Nothing Then
+            seqless.Add(New SeqlessRowFinding() With {
+                .FileName = System.IO.Path.GetFileName(path), .Count = seqlessCount, .FirstTsMs = seqlessFirstTs})
         End If
 
         ' ── 1b. [F-1] Seed a cross-month bracket (docs/gap-repair-cross-month-gap-spec.md §2) ──
@@ -1033,17 +1095,29 @@ Public NotInheritable Class TradeStoreWriter
         ' row carries no TradeSeq to compare by, so it sorts by Timestamp against its neighbours
         ' instead — this is what keeps an INTERLEAVED legacy row in its true chronological
         ' position, which TRAP 2 below depends on (A56d part 2: skipping past a mis-sorted
-        ' legacy row reports covered ground as a hole). Valid as a total order because every
-        ' legacy row's timestamp precedes every identified row's timestamp in this store
-        ' (TradeSeq did not exist before the 2026-08-10 cutover) — see the spec's SO-2/ST-1 for
-        ' the proof and its one named, bounded residual risk (a post-cutover row whose TradeSeq
-        ' field is corrupted and indistinguishable from legacy).
-        rows.Sort(Function(a, b)
-                      If a.Seq >= 0 AndAlso b.Seq >= 0 Then Return a.Seq.CompareTo(b.Seq)
-                      Dim c As Integer = a.TsMs.CompareTo(b.TsMs)
-                      If c <> 0 Then Return c
-                      Return a.Seq.CompareTo(b.Seq)
-                  End Function)
+        ' legacy row reports covered ground as a hole).
+        '
+        ' ⚠ WHEN IT IS A TOTAL ORDER — exactly this condition, narrowed 2026-09-28 (D-2,
+        ' docs/gap-repair-rr1-spec-back.md). Take any seq-INVERTED identified pair: A with the
+        ' lower seq and the later timestamp, C with the higher seq and the earlier timestamp. The
+        ' order is valid iff NO seq-less row B has tsC < tsB <= tsA. Equality at the upper end
+        ' counts: B at exactly tsA ties A on time, the tie-break puts B (Seq −1) first, and
+        ' A < C < B < A is a cycle. (An earlier comment claimed "every legacy row precedes every
+        ' identified row"; that is sufficient, not necessary, and not what the proof needs.)
+        ' The store meets it because TradeSeq was written from 2026-08-10: a seq-less row at or
+        ' after TradeIdentityCutoverMs is a corrupted modern row — step 1a counts those and the
+        ' caller logs them (D-2b).
+        '
+        ' ⛔ A BROKEN ORDER DOES NOT THROW. .NET 8's List.Sort never raised on this comparator's
+        ' ST-1 cycle, at any size from 3 to 2,000 rows, and returned a comparator-violating order
+        ' every time (tools/checks/sort-consistency-probe/). The walk below then runs on that
+        ' order and can emit a phantom hole or miss one, SILENTLY — not the "loud failed pass"
+        ' the spec's §4.2 once promised. Step 1a's count is the only signal.
+        '
+        ' The tie-break (the last line of RepairSortCompare) is load-bearing: without it a legacy
+        ' row and an identified row sharing a millisecond keep their FILE order, and one of the
+        ' two orders hides a real hole (A91c part 2).
+        rows.Sort(AddressOf RepairSortCompare)
 
         ' ── 3–4. Walk the sequence-carrying rows and emit holes ───────────────────────
         Dim holes As New List(Of RepairWindow)()
@@ -1147,7 +1221,8 @@ Public NotInheritable Class TradeStoreWriter
     '''
     ''' <para>⚠ DR-2 (docs/downtime-repair-followups-implementer-briefs.md §2). After truncation
     ''' the retained rows must stay CONTIGUOUS IN TIME — no interior gaps — because the caller
-    ''' sorts by (Timestamp, TradeSeq) and walks brackets across whatever survives. A cut that
+    ''' sorts them (RepairSortCompare; (Timestamp, TradeSeq) before RR-1) and walks brackets
+    ''' across whatever survives. A cut that
     ''' removes rows by FILE POSITION rather than by TIME leaves interior gaps on an
     ''' out-of-order store (repair pages append after streaming, so file order and time order
     ''' differ), and the walk reports each gap as a PHANTOM hole with a huge missing-sequence

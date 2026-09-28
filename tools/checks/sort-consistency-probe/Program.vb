@@ -15,7 +15,8 @@ Module Program
         Return New SeqPoint With {.TsMs = ts, .Seq = seq}
     End Function
 
-    ' VERBATIM from Core/TradeStoreWriter.vb ResolveRepairWindowsCore (lines 1041-1046, 2026-09-26).
+    ' VERBATIM from Core/TradeStoreWriter.vb TradeStoreWriter.RepairSortCompare (extracted from the
+    ' ResolveRepairWindowsCore sort lambda 2026-09-28, D-2; body unchanged since 2026-09-26).
     ' If that comparator changes, copy it here again.
     ReadOnly Cmp As Comparison(Of SeqPoint) =
         Function(a, b)

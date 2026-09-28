@@ -257,16 +257,19 @@ Public Class HistoricalStore
     ''' tail as well as the tail itself. TradeStoreGapRepair.RepairOnceAsync is the only caller
     ''' that passes True. False ⇒ one AnchoredTail at ResolveResumeCursorMs (the offline path).</param>
     ''' <param name="outcomes">[GR-4 (b)] Receives one outcome per window, for repair_status.log.</param>
+    ''' <param name="seqless">[D-2b] Receives a finding when this month's repair scan holds seq-less
+    ''' rows at or after the trade-identity cutover, for repair_status.log. repairHoles only.</param>
     Public Shared Async Function BackfillTradeMonthAsync(
             year As Integer, month As Integer,
             segStart As DateTime, segEndExcl As DateTime,
             Optional storeDir As String = Nothing,
             Optional clampToSegStart As Boolean = False,
             Optional repairHoles As Boolean = False,
-            Optional outcomes As List(Of TradeStoreWriter.RepairWindowOutcome) = Nothing) As Task(Of Integer)
+            Optional outcomes As List(Of TradeStoreWriter.RepairWindowOutcome) = Nothing,
+            Optional seqless As List(Of TradeStoreWriter.SeqlessRowFinding) = Nothing) As Task(Of Integer)
         Return Await BackfillTradeMonthCoreAsync(year, month, segStart, segEndExcl, storeDir, clampToSegStart,
                                                  repairHoles, AddressOf FetchSeqPageJsonAsync,
-                                                 AddressOf FetchTimeAnchorJsonAsync, PoliteDelayMs, outcomes)
+                                                 AddressOf FetchTimeAnchorJsonAsync, PoliteDelayMs, outcomes, seqless)
     End Function
 
     ''' <summary>The month loop with the two venue calls injected, so A79c can drive a
@@ -279,7 +282,8 @@ Public Class HistoricalStore
             fetchSeq As Func(Of Long, Long?, Integer, Task(Of String)),
             fetchAnchor As Func(Of Long, Long, Task(Of String)),
             pageDelayMs As Integer,
-            outcomes As List(Of TradeStoreWriter.RepairWindowOutcome)) As Task(Of Integer)
+            outcomes As List(Of TradeStoreWriter.RepairWindowOutcome),
+            Optional seqless As List(Of TradeStoreWriter.SeqlessRowFinding) = Nothing) As Task(Of Integer)
         ' ⛔ VB IS CASE-INSENSITIVE: the parameter `storeDir` and the class const `StoreDir`
         ' (line 36) are THE SAME IDENTIFIER inside this body, so an unqualified `StoreDir`
         ' here resolves to the PARAMETER and the fallback silently returned Nothing.
@@ -299,7 +303,8 @@ Public Class HistoricalStore
             ' [F-1] The previous month's file seeds a cross-month bracket when this file has none.
             Dim prevMonth As DateTime = New DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-1)
             windows = TradeStoreWriter.ResolveRepairWindows(path, segStartMs, endMs, clampToSegStart,
-                                                            TradeStoreWriter.TradeFileFor(dir, prevMonth.Year, prevMonth.Month))
+                                                            TradeStoreWriter.TradeFileFor(dir, prevMonth.Year, prevMonth.Month),
+                                                            seqless)
         Else
             Dim cursor0 As Long = TradeStoreWriter.ResolveResumeCursorMs(path, segStartMs, endMs, clampToSegStart)
             If cursor0 >= 0 Then windows.Add(TradeStoreWriter.RepairWindow.ForAnchoredTail(cursor0, endMs))
