@@ -2,6 +2,25 @@
 
 **Status: RUN 1 DIED. RUN 2 (dev machine) STOPPED. RUN 3 (box) STOPPED — its REST arm froze. ⭐ RUN 4 RUNNING ON THE AWS COLLECTOR BOX since 2026-09-24 16:53 UTC (PID 11248). The measurement has NOT returned yet.**
 
+## 0000. ⛔ Run 4's zero is an INSTRUMENT MISS, not a quiet market (added 2026-09-28 UTC)
+
+**Finding.** Run 4 reported `flagged 0` after 5,442 min (2026-09-28 11:35 UTC). A seq-range scan of the probe's own endpoint, `public/get_last_trades_by_instrument`, over the 24 h to 2026-09-28 11:48 UTC returned **94 liquidation-flagged trades** in 221,321 trades, all inside run 4's uptime:
+
+| UTC | Flagged trades | Note |
+|---|---:|---|
+| 2026-09-28 01:xx | 1 | |
+| 2026-09-28 05:42 | 90 | One cascade, all `T`, all `buy` (shorts liquidated), about 15 s |
+| 2026-09-28 08:38 | 1 | |
+| 2026-09-28 09:45 | 2 | seq `301706656`/`301706657` |
+
+- **So the zero is not the weekend.** The flags exist on the endpoint; the probe did not see them.
+- **The probe's code is not the obvious cause.** `IngestRest` and `RawString` (`tools/WsTradeProbe/LiqFlagProbe.vb:432-477`, `:821-827`) flag any present, non-`none` `liquidation` value, and no commit touched the probe after `eff6def` (the run-4 build).
+- **Every call shape returns the flag now** for seq `301706656`/`657`: seq range asc, `end_seq` + `count` + desc (the probe's shape plus an end bound), and `historical=false` / `true`.
+- ⭐ **Leading hypothesis, NOT yet measured: the venue attaches `liquidation` LATE.** The probe sees a trade only while it sits in the latest 1,000 (about 6 minutes at the 24 h mean of ~2.6 trades/s). A flag attached after that never reaches it. The same shape explains `L-1` (engine-fix build spec §4): streamed copies read `none`, while repair copies fetched hours later carry `T`/`M`. **If true, it decides the engine-fix B2 design:** `D-4` option (a) (parse the stream's field) cannot work, and option (b) (enrich from REST) must re-fetch after a delay, not at trade time.
+- **Test running (2026-09-28 11:52 UTC, up to 6 h, dev machine, read-only):** a scratch watcher polls exactly like the probe and records each trade's flag at first sight. Every 60 s it re-checks by seq range the trades first seen 1-90 min ago, and logs `FLAG_AT_FIRST_SIGHT` or `LATE_FLAG` with the lag. Needs a liquidation during the window; result to be added here.
+- Scan script and watcher: scratchpad only (evidence, not handles). The scan is reproducible within ~24 h by paging `get_last_trades_by_instrument` with `start_seq`/`end_seq` back from the latest seq.
+- **Not verified:** run 4's `_restTradesSeen` (not in its status line), so a REST arm that polls but ingests nothing is not excluded; the 130 REST errors' timing; whether the box's binary matches `eff6def` byte for byte.
+
 ## 000. Run 3's defect and run 4 (added 2026-09-24 UTC)
 
 | Item | Value |
