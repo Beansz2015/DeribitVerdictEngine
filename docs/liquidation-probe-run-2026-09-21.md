@@ -18,6 +18,15 @@
 - **Every call shape returns the flag now** for seq `301706656`/`657`: seq range asc, `end_seq` + `count` + desc (the probe's shape plus an end bound), and `historical=false` / `true`.
 - ⭐ **Leading hypothesis, NOT yet measured: the venue attaches `liquidation` LATE.** The probe sees a trade only while it sits in the latest 1,000 (about 6 minutes at the 24 h mean of ~2.6 trades/s). A flag attached after that never reaches it. The same shape explains `L-1` (engine-fix build spec §4): streamed copies read `none`, while repair copies fetched hours later carry `T`/`M`. **If true, it decides the engine-fix B2 design:** `D-4` option (a) (parse the stream's field) cannot work, and option (b) (enrich from REST) must re-fetch after a delay, not at trade time.
 - **Test running (2026-09-28 11:52 UTC, up to 6 h, dev machine, read-only):** a scratch watcher polls exactly like the probe and records each trade's flag at first sight. Every 60 s it re-checks by seq range the trades first seen 1-90 min ago, and logs `FLAG_AT_FIRST_SIGHT` or `LATE_FLAG` with the lag. Needs a liquidation during the window; result to be added here.
+- ⭐ **RESULT 2026-09-28 17:52 UTC — the late flag is OBSERVED (n = 1).** The watcher ran 6 h (1,544 polls, 0 errors), probe-shaped polling plus a re-check every 60 s of trades first seen 1–90 min earlier. Log, verbatim:
+  ```
+  [2026-09-28 17:17:55] LATE_FLAG seq=301788740 flag=T first_seen_unflagged=16:17:41 venue_ts=16:17:36.772 detected_age_s=3,613
+  [2026-09-28 17:52:26] end polls=1544 flag_at_first_sight=0 late_flags=1 errors=0
+  ```
+  - The trade was served **without** `liquidation` 5 s after it printed, stayed unflagged at every 60 s re-check, and carried `T` from the re-check at 17:17:55: **the flag arrived about 60 minutes after the trade** (between ~59 and ~61 min).
+  - **No trade was flagged at first sight** (0 of the 6 h window).
+  - ⚠ **n = 1.** One liquidation in 6 h (the prior 24 h held 4 episodes). The lag's spread is unknown. The watcher could not see a lag above 90 min (its re-check window), and trades in its last 60 min were censored.
+  - **Consequence for engine-fix B2 — NEW DATA, so it goes back to the trader:** the `D-4` ruling (2026-09-16) says parse the stream's field (a), else enrich from REST (b), never retire the vote (c). If the flag always lags about an hour, (a) cannot work and (b) delivers an hour-old liquidation to a 1–3 minute scoring bar and to the cascade alarm. The ruling's premise, that the flag is obtainable in time to score, does not hold on this evidence.
 - Scan script and watcher: scratchpad only (evidence, not handles). The scan is reproducible within ~24 h by paging `get_last_trades_by_instrument` with `start_seq`/`end_seq` back from the latest seq.
 - **Not verified:** run 4's `_restTradesSeen` (not in its status line), so a REST arm that polls but ingests nothing is not excluded; the 130 REST errors' timing; whether the box's binary matches `eff6def` byte for byte.
 
