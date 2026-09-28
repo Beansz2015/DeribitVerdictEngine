@@ -223,3 +223,19 @@ right. The check would not have caught a missing bump, though. See §3.
   `tools/ops/collector-readback.ps1` (tail 3). Nothing outside the repo was checked.
 - **`ST-1` behaviour above 2,000 rows or on another .NET runtime.** Carried from the probe; not extended.
 - **Performance.** The count is one O(n) pass over rows already in memory. Not measured.
+
+---
+
+## 5. Orchestrator review — 2026-09-28 (UTC)
+
+**Verdict: ACCEPTED.** Re-run against `5071476`: `H-1` gives 489 `PASS`, 0 `FAIL`, 1 `SKIP` (`A81b`), `ALL PASS`; `A91a`–`A91c` and `A92a`–`A92c` pass. Diff scope matches `H-8`.
+
+| Item | Ruling |
+|---|---|
+| The narrowed invariant `tsC < tsB ≤ tsA` in the `TRAP 1` comment | ✅ **Correct, hand-checked.** `tsB = tsC`: time ties, the tie-break puts `B` (seq −1) before `C`, and `B` before `A` by time, so the order `B, A, C` is consistent — no cycle. `tsB = tsA`: the tie-break puts `B` before `A`, `C` before `B` by time and `A` before `C` by seq, so the cycle `C < B < A < C` forms. Lower end strict, upper end inclusive, as the comment says |
+| Decision 2 — one `SEQLESS_AFTER_CUTOVER` line per affected file, not per pass | ✅ **Accepted.** It is the richer option, and the brief's "one line per pass" did not foresee a pass that spans two month files. The brief was wrong, not the build |
+| Decision 11 — a new §15 row rather than extending `RR-1`'s row | ✅ **Accepted.** `D-2b` is a separate deploy with its own new behaviour (a log line), and folding it into `RR-1`'s row would push that cell far past §15's ~1,000 B cap. The brief ordered the new row; the tension with "one item gets ONE row" is noted, not resolved by merging |
+| §3 finding — `verify-gate.ps1` `prepush` `version-bump` test is range-wide | ⚠ **Real gap, queued, not fixed here.** Any `[no-engine-change]` commit in `origin/master..HEAD` masks an untagged engine commit in the same range. It is WARN-only today. Small tools fix; recorded in `trader-tick-queue.md` §2 |
+| §3 finding — `A56Ms` sits after the cutover | Noted. Harmless while those fixtures pass no sink |
+
+**Deploy:** `D-2b` changes collector code. The trader pushes, then a seat deploys and reads back. Per the pre-holiday plan (`trader-tick-queue.md` state banner), this goes out with a few days of read-backs **before 2026-10-14**. First live check: `repair_status.log` should show **no** `SEQLESS_AFTER_CUTOVER` line (the store has no such row, `H-6`), and every pass line unchanged in form.
