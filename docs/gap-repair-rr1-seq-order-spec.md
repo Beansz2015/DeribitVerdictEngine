@@ -67,6 +67,12 @@ each looks correct until walked against the specific fixture it breaks.
 - `List.Sort` throws `InvalidOperationException` ("inconsistent results") on any input, fixture or otherwise.
   That is the direct symptom of a non-total-order comparator (`ST-1`). Do not wrap it in `Try/Catch` to make it
   go away — come back and re-derive.
+  ⛔ **ANNOTATED 2026-09-28 (UTC) — this trigger CANNOT FIRE.** .NET 8's `List.Sort` never threw on this
+  comparator's `ST-1` cycle, at any size from 3 to 2,000 rows; it returned a comparator-violating order every
+  time. The only throw measured was `ArgumentException`, on a fully random comparer. Source:
+  [`gap-repair-rr1-spec-back.md`](gap-repair-rr1-spec-back.md) §2, "Note for `D-2`" item 2, instrument
+  [`tools/checks/sort-consistency-probe/`](../tools/checks/sort-consistency-probe/). The real symptom is a
+  silently wrong order; `A91c` now checks the sorted order pairwise instead.
 - The fix needs a `settings.json` key, or touches `ScanForRepair`, `AppendRows`, `DedupTrades`, or the
   bracket-selection logic in `ScanForRepair` (the "maximum timestamp below `segStartMs`" rule). None of those
   should need to change for this fix; needing to touch one is a sign the design has grown past this spec's scope.
@@ -219,6 +225,18 @@ inconsistent comparer. `RepairOnceAsync`'s existing top-level exception catch (n
 logged failed pass, not silent bad data or a process crash — an existing safety net, not one this spec adds.
 Not fixture-tested here beyond `A91c` (§6.3), which exercises the comparator on an adversarial but
 invariant-respecting input; a genuinely corrupted modern row is named in §8 as not verified.
+
+> ⛔ **ANNOTATED 2026-09-28 (UTC) — the "loud, logged failed pass" claim above is FALSE.** No exception is
+> raised: .NET 8's `List.Sort` sorts the `ST-1` cycle silently wrong, so `RepairOnceAsync`'s catch never runs.
+> The walk then emits a phantom hole or misses one with no log line. Source:
+> [`gap-repair-rr1-spec-back.md`](gap-repair-rr1-spec-back.md) §2, "Note for `D-2`" item 4 (measured in item 2).
+> Two more corrections to this subsection: (1) the invariant stated above ("every legacy row's timestamp
+> precedes every identified row's timestamp") is sufficient, not necessary — the exact condition is that no
+> seq-less row `B` has `tsC < tsB ≤ tsA` for a seq-inverted identified pair (`A` lower seq and later time, `C`
+> higher seq and earlier time), and equality at the upper end also forms a cycle; (2) `D-2b` (RULED (b)
+> 2026-09-26) makes the residual visible instead: each repair pass logs `SEQLESS_AFTER_CUTOVER` to
+> `repair_status.log` when a scanned file holds a seq-less row at or after `TradeStoreWriter.TradeIdentityCutoverMs`.
+> Build record: [`gap-repair-rr1-d2-d2b-spec-back.md`](gap-repair-rr1-d2-d2b-spec-back.md).
 
 ### 4.3 The comparator this spec specifies
 
