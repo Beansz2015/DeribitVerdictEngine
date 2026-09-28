@@ -281,3 +281,7 @@ exercised by `H-2`'s ASIA and by the length-MISS case in `H-3` of §1 above, but
 set of its own.
 
 **Orchestrator read: (a).** (b)'s only gain is detecting a shift in 2 days instead of 10. That gain is real only if NY is read daily, and watch reads run every couple of weeks, by hand. So (a) gives up nothing that is used (step 3 of the three-step test, `CLAUDE.md`: a mechanism argument, not cost). It also keeps the ruled band width and gives both watches one rule shape. ⚠ It re-rules the v52 NY trigger, so it is the trader's call.
+
+### AVR-3 build - orchestrator review, 2026-09-28 (UTC)
+
+**ACCEPTED.** Re-run against `0326db9`: `H-2` gives ASIA `PASS`, LONDON "no ruled band", **NY `PASS`** (expected 7.74 %, band 5.74-9.74 %, 36 days). Diff `e69ebe2..0326db9` touches only the script and the two docs. Checked beyond the handle: the NY branch reads its own band. `$lowerAbs` / `$upperAbs` are computed per session from that session's `$band` (script lines 273-274) before the verdict branches, so NY cannot inherit the ASIA band. `H-2` alone could not show this, because NY's 7.81 % sits inside both bands.
