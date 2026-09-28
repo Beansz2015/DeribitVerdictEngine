@@ -281,7 +281,7 @@ All tests are two-sided. "Not zero" in either sign is a result.
 | ATR regime step | 2026-08-20 00:00 | Not a scoring edge. Absorbed by the ATR-fifth strata |
 | **POC-gate fix** | **2026-09-24 18:46:06** (first row of id `25951567…`) | **Pooled, with the POC era as a stratum, plus a mandatory pre-edge-only sensitivity run.** If the sensitivity flips the sign of a labelled result, the label gains "EDGE-SENSITIVE" |
 
-**Why pooled plus a stratum (auto-proceeded, see `docs/burst-outcome-read-spec.md` §8):** the fix moves the placed target on a small share of verdicts (1.68 % per `docs/aws-collector-deploy-checklist.md` §5a; the brief quoted 3.33 %), through the VPFR POC tier. It does not read the burst state. So it shifts both arms alike and cancels in A − B inside a stratum. Dropping post-edge rows would discard about 30 % of arm A at run 1. The sensitivity run shows whether that assumption fails. Run 2 is wholly post-edge, so it is the post-edge replication too.
+**Why pooled plus a stratum (auto-proceeded, see `docs/burst-outcome-read-spec.md` §8):** the fix has two measured effects, both small (`DeribitIndicatorProject.md` §15, row dated 2026-09-24): it moves the placed target on **3.33 %** of rows (1,288 of 38,665 verified rows), and it turns **1.68 %** of directional population rows into NO TRADE through the Step 5c minimum-move gate (143 of 8,508). Both act through the VPFR POC tier. *(Corrected by the orchestrator review, 2026-09-28: this line first quoted 1.68 % as the placed-target share; the two figures measure different things.)* It does not read the burst state. So it shifts both arms alike and cancels in A − B inside a stratum. Dropping post-edge rows would discard about 30 % of arm A at run 1. The sensitivity run shows whether that assumption fails. Run 2 is wholly post-edge, so it is the post-edge replication too.
 
 ---
 
@@ -340,4 +340,4 @@ No choice here touches `settings.json`, scoring, a rendered value or a CSV schem
 - **Accrual rates assume the post-2026-08-20 regime continues.** A volatility change moves arm A's rate by fifth (that is the finding of the re-derivation read).
 - **Settings eras v67 (thin-trade skip gate) and v68/v69** were read from the `change_log` first lines as not touching scoring of written rows. Not traced in code.
 - **The `SwingFallbackRead` concurrent-instance trap** is read from the code (`SwingFallbackRead.vb` lines 255–288), not demonstrated by a run.
-- **The POC-fix share.** I quote 1.68 % from the deploy ledger; the brief quoted 3.33 %. Not re-measured.
+- **The POC-fix share.** ~~I quote 1.68 % from the deploy ledger; the brief quoted 3.33 %.~~ Resolved in review: both are right, for different effects (3.33 % placed target moved; 1.68 % flipped to NO TRADE). Neither re-measured.
