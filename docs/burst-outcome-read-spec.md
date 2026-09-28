@@ -268,6 +268,18 @@ All tests are two-sided. "Not zero" in either sign is a result.
 
 ### 6.1 Run date — dated trigger
 
+> ⛔ **RE-PLANNED 2026-09-28 (UTC), before any outcome was seen: the trader is away 2026-10-14 → 2026-11-25.** The dates below are superseded by this box. The original lines stay for the record.
+>
+> | Step | New date (UTC) | Model + effort |
+> |---|---|---|
+> | Build the read tools (§0, §5) | **Before 2026-10-14**, ideally the week of 2026-10-05 | Opus 5.5, medium |
+> | **Run 1** | **First seat after 2026-11-25, by 2026-12-04.** Data cut **fixed now at 2026-11-25 00:00:00 UTC**: run 1 reads rows before it, whenever it runs. The ≥ 100 arm-A gate is checked on those rows | Opus 5.5, high |
+> | Decide from run 1 (§7), then write the (c) spec if §7 argues for it | Right after run 1 | Trader + orchestrator |
+> | **Run 2** (replication) | **On or after 2027-01-27**: rows from 2026-11-25 00:00:00 UTC onward, about 9 weekday-weeks, the span the original plan gave run 2 | Opus 5.5, high |
+> | Build and ship (c) | Only after run 2 replicates | Build Opus 5.5, high; deploy by the trader |
+>
+> Why the fixed cut: the run date now depends on when a seat opens after the holiday. Fixing the cut keeps the two runs' populations pre-registered and disjoint, whatever the run date turns out to be.
+
 - **Run 1: on or after Monday 2026-11-02 (UTC).** Gate: `H-1` re-run on the fetch of that day shows session-pooled arm A ≥ 100 in all three sessions. Projection: ASIA 2026-10-14, LONDON 2026-10-28, NY already met. If the gate fails, re-check weekly. **Latest 2026-11-30:** run anyway and label the short session NOT READABLE.
 - **Run 2 — forward replication: on or after Monday 2027-01-04.** Rows strictly after run 1's data end, same code, no change. A run-1 finding counts as replicated when run 2 gives the same sign. Run 2 is also the first read where ASIA and LONDON `S_add` in fifths 4–5 pass 100 (projected 2026-11-24 and 2026-12-08, cumulative).
 - ⚠ **If option (c) ships before run 2,** run 2 becomes the before-and-after read: rows after the (c) edge are a new population, read separately with the same arms re-defined against the new threshold. That is reason 3 of the `AVR-2` ruling.

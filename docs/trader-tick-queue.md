@@ -14,6 +14,24 @@
 
 > ## ⛔ STATE BANNER — REFRESHED 2026-09-24 (UTC). Read this before believing any row below.
 >
+> ## ⛔⛔ TRADER AWAY 2026-10-14 → 2026-11-25 (UTC dates; added 2026-09-28). Plan every build, deploy and read around it.
+>
+> **Before 2026-10-14 — the pre-holiday list. Remind the trader of it at every seat start from 2026-10-01.**
+>
+> | # | Item | Model + effort | Why before |
+> |---|---|---|---|
+> | 1 | ⭐ **Build the burst outcome read tools** ([`burst-outcome-read-spec.md`](burst-outcome-read-spec.md) §0, §5, and its §6.1 re-plan box) | Opus 5.5, medium | Run 1 is the first seat after the holiday; the tools must be committed before any outcome is computed. **The trader asked to be reminded** |
+> | 2 | `D-2` + `D-2b` (RR-1 review) built, **pushed and deployed**, with a few days of read-back | Build Opus 5.5, high; deploy seat, medium | `D-2b` is collector code; do not leave an unwatched deploy running for 6 weeks |
+> | 3 | Dated reads that fall before: venue-check review (from 2026-10-05) · absorption Stage 1 read (~2026-10-08) · ASIA and NY burst-watch reads on the ATR-conditional reference (10 covered weekdays after 2026-09-25, so ~2026-10-09; `tools/ops/burst-watch-read.ps1`) | per row | They fall inside the window before the holiday |
+> | 4 | **Liquidation probe (run 4, on the collector box): decide stop or keep** before leaving. Its zero is an instrument miss ([`liquidation-probe-run-2026-09-21.md`](liquidation-probe-run-2026-09-21.md) §0000); a late-flag test ran 2026-09-28 | seat, low | An unattended probe for 6 weeks on a 1 GB box whose page-in rate rose at every read (681 → 1,344 → 2,535/s, 09-25 → 09-28) |
+> | 5 | **Final collector health check** (`tools/ops/collector-readback.ps1`) and a fetch, on or just before 2026-10-13 | seat, low | Last look before 6 weeks unattended |
+>
+> **During the holiday:** no builds, no deploys, no scoring or settings changes. A seat opened then does read-only checks only.
+>
+> **After 2026-11-25 — first seats back:** burst outcome **run 1** (data cut fixed at 2026-11-25 00:00:00 UTC, by 2026-12-04) → decide `AVR-2` (c) from it (`BO-D1` = run 1) → if it argues for (c), write the (c) spec → **run 2 on or after 2027-01-27** must replicate before (c) ships. Also: the next burst-watch reads, and whatever the holiday left.
+>
+> **Sequence of record for the burst outcome read** (trader-confirmed 2026-09-28): build tools → run 1 → decide → (c) spec only if run 1 argues for it → run 2 replicates → build and ship (c). Detail: [`burst-outcome-read-spec.md`](burst-outcome-read-spec.md) §6.1 and the `BO-D1` row.
+>
 > ⚠ **2026-09-24 13:30 UTC, the next seat:** `master` is AHEAD of `origin` again (the handover commit and later work, unpushed). BUILT, local, NOT DEPLOYED: engine-fix Sessions A (`a6b33fe`) and C (`ea32818`), and absorption S1 (`549b2c3`) and S2 (`5dfc91a`). Fixtures 468 `ALL PASS`. They go out as ONE deploy, reserved to the trader ([`absorption-d2-s2-batch-summary.md`](absorption-d2-s2-batch-summary.md) §5). The liquidation probe (Session B1) now runs ON THE AWS COLLECTOR BOX (trader ruling 2026-09-24). Its first run died on 2026-09-21 after 110 minutes, and no handover noticed. See the liquidation-flag row in `trader-tick-queue.md` §2.
 >
 > ⭐⭐ **CURRENT STATE READ: [`seat-handover-2026-09-25.md`](seat-handover-2026-09-25.md)** — settings v69 (Kelly one-class) deployed; the RR-1 gap-repair fix is DEPLOYED 2026-09-25 13:31 UTC (instance `a19acc4d…`; the live proof, no `trade_seq` range repaired twice under that instance, is still owed); the liquidation probe runs on the collector box with 0 flagged. Older banner follows.
