@@ -65,6 +65,8 @@
 
 ---
 
+✅ **RULED 2026-09-28 (trader): `HH-1` = (a), `HH-2` = (a), `HH-3` = (a) (hold B2).**
+
 ## 5. Next steps, holiday-aware (trader away 2026-10-14 → 2026-11-25)
 
 | Step | When | Model + effort |
@@ -75,6 +77,39 @@
 | Re-plan any study that waits on forward trade accrual (the burst outcome read's power problem is the first candidate: a replay could give it months more rows) | After the backfill exists | Orchestrator |
 
 ---
+
+## 5a. ✅ Validation read — DONE 2026-09-28 (UTC)
+
+**Instrument:** [`tools/ops/history_host_validate.py`](../tools/ops/history_host_validate.py) (read-only, Python stdlib). **Paging rule, measured:** the history host widens a `start_seq`/`end_seq` range to **whole milliseconds** — every trade sharing a ms with either bound is returned, unordered inside the ms. Nothing is lost at a page edge, but pages overlap and must be de-duplicated on `trade_seq`. (This is why the single-seq query in §1 row 4 returned neighbours.) Paging by timestamp with `+1 ms` would lose same-ms trades, the 2026-09-14 gap-repair lesson; do not use it.
+
+Command (Python output pasted; the separator was `·` in the run and garbled by the Windows console, since fixed to `|` in the script):
+```
+python tools/ops/history_host_validate.py --store aws_fetch/20260928-121255/backtest_data --from 2026-09-27T00:00:00Z --to 2026-09-28T12:00:00Z --old-day 2025-06-02 --flagged-seqs <94 seqs from the 24 h main-host scan>
+```
+```
+store window 2026-09-27T00:00:00Z -> 2026-09-28T12:00:00Z: rows=257185 seq 301465038..301722239 (span 257202, store gaps 17)
+A  history host in [301465038,301722239]: 257202 trades, missing 0
+B  seqs only in store: 0  only on history host: 17 (first [301702456, 301702457, ...])
+B  field mismatches on shared seqs: {'trade_id': 0, 'timestamp': 0, 'price': 0, 'amount': 0, 'direction': 0}
+C  liquidation-flagged: history host 94 | store 0 | store flagged but history not 0 | history flagged, store 'none' 94
+C  main-host scan flagged seqs in window: 94 | flagged on history host: 94 | not flagged there: []
+A  2025-06-02: seq 250755193..250852895 span 97703, got 97703, missing 0
+D  2020-01-02: ['amount', 'direction', 'index_price', 'instrument_name', 'mark_price', 'price', 'tick_direction', 'timestamp', 'trade_id', 'trade_seq']
+D  2022-01-03: [same as 2020]
+D  2024-01-02: [2020 fields + 'contracts']
+D  2026-06-01: [2020 fields + 'contracts']
+E  requests=451 errors=0 retries=0 has_more_splits=0 elapsed=425s rate=1.1/s
+```
+
+| Check | Result |
+|---|---|
+| **A — completeness** | **0 missing** over 36 h (257,202 trades) and over the full day 2025-06-02 (97,703 trades) |
+| **B — agreement with the store** | **0 mismatches** on `trade_id`, `timestamp`, `price`, `amount`, `direction` across all 257,185 shared trades; 0 trades only in the store. The history host holds the **17** trades the store still lacks from the 2026-09-28 09:20 outage (`301702456..472`) |
+| **C — liquidation flags** | History host flags **94**, the same set the main-host scan flagged in its 24 h (94 of 94). ⚠ **The store flags 0 in this window**: the streamed copies all read `none`, so the live store's liquidation column is empty wherever repair did not re-fetch |
+| **D — fields by era** | The same 10 fields from 2020; `contracts` added by 2024. `liquidation` appears only on liquidation trades |
+| **E — rate** | 451 requests, **0 errors**, ~1.1 req/s at a 150 ms pause (~880 trades/s). At that pace a year (~50M trades) is roughly 16 h of fetching. The venue's rate limits were not probed |
+
+**Verdict for `HH-1`: the history host is a complete, exact and flag-bearing source for BTC-PERPETUAL trades, in the windows tested.** The backfill and gap-repair spec can proceed on it.
 
 ## 6. What I did not verify
 
