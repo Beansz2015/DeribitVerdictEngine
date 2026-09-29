@@ -78,6 +78,18 @@ Namespace Global.DeribitVerdictEngine
                 Return LiqFlagProbe.Run(rest.ToArray())
             End If
 
+            ' Third instrument: `WsTradeProbe rawliq [collectSeconds] [judgeMinAgeMin]` runs
+            ' RawChannelProbe (HH-2): the AUTHENTICATED raw channel test. It needs the env vars
+            ' DERIBIT_RO_CLIENT_ID / DERIBIT_RO_CLIENT_SECRET and refuses to start without them.
+            If args IsNot Nothing AndAlso args.Length > 0 AndAlso
+               String.Equals(args(0), "rawliq", StringComparison.OrdinalIgnoreCase) Then
+                Dim rest As New List(Of String)()
+                For i As Integer = 1 To args.Length - 1
+                    rest.Add(args(i))
+                Next
+                Return RawChannelProbe.Run(rest.ToArray())
+            End If
+
             Dim seconds As Integer = 300
             If args IsNot Nothing AndAlso args.Length > 0 Then
                 Dim parsed As Integer
