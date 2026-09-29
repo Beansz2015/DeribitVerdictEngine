@@ -135,10 +135,34 @@ if ($engineChanged) {
     else                        { $sd = & git diff "$base" HEAD -- settings.json }
     if ($sd -match '^\+\s*"version"') {
         Ok 'engine-path change accompanied by a settings.json version bump'
-    } elseif ($msgs -match '\[no-engine-change\]') {
-        Ok 'engine path changed but [no-engine-change] token present'
+    } elseif ($Mode -eq 'local-fast' -or $null -eq $base) {
+        if ($msgs -match '\[no-engine-change\]') {
+            Ok 'engine path changed but [no-engine-change] token present'
+        } else {
+            Warn 'engine-path change without a settings.json version bump (nudge only)'
+        }
     } else {
-        Warn 'engine-path change without a settings.json version bump (nudge only)'
+        # Range modes: judge EACH engine-path commit by its OWN message. Until 2026-09-29 the
+        # token was matched against every message in the range at once, so one tagged docs
+        # commit excused an untagged engine commit beside it (found by the RR-1 D-2/D-2b build,
+        # docs/gap-repair-rr1-d2-d2b-spec-back.md section 3).
+        $untagged = @()
+        foreach ($c in @(& git rev-list "$base..HEAD")) {
+            $cf = @(& git diff-tree --no-commit-id --name-only -r $c)
+            $ce = $false
+            foreach ($f in $cf) {
+                foreach ($p in $enginePrefixes) { if ($f -like "$p*") { $ce = $true; break } }
+                if ($ce) { break }
+            }
+            if (-not $ce) { continue }
+            $cm = (& git log -1 --format=%B $c) -join "`n"
+            if ($cm -notmatch '\[no-engine-change\]') { $untagged += ((& git log -1 --format='%h %s' $c) -join '') }
+        }
+        if ($untagged.Count -eq 0) {
+            Ok 'engine path changed; every engine-path commit carries its own [no-engine-change] token'
+        } else {
+            Warn ('engine-path commit(s) with neither a settings.json version bump in range nor their own [no-engine-change] token (nudge only): ' + ($untagged -join ' | '))
+        }
     }
 } else {
     Ok 'no engine-path change'
