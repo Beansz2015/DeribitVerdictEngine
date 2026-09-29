@@ -47,7 +47,7 @@ Fill when the summary prints. Required content:
 - **Fields raw has that the history host lacks:** see the finding below; confirm it against the final tally.
 - **Rule:** if history-flagged trades judged is 0, the result is INCONCLUSIVE and the run is extended. It is not a "no".
 
-**One finding already in hand (smoke run 2026-09-29, 260 judged trades; repeated in the live run's sample file at 08:40 UTC: 15 of 15 sample objects carry `starbase_match_id`):** `starbase_match_id` and `starbase_timestamp` are present on all three channels and never on the history host. ⚠ They are on the **public** 100ms and agg2 channels too, so they are not a raw-only field. The engine parses neither. This answers the brief's second question, with a caveat: the stored copy of these fields was not compared, and their meaning is unknown to this seat.
+**One finding already in hand (smoke run 2026-09-29, 260 judged trades; repeated in the live run's sample file at 08:40 UTC: 15 of 15 sample objects carry `starbase_match_id`):** `starbase_match_id` and `starbase_timestamp` are present on all three channels and never on the history host. ⚠ They are on the **public** 100ms and agg2 channels too, so they are not a raw-only field. The engine parses neither. **Trader note 2026-09-29 (carried, not verified by this seat):** `starbase` appears to be a newer Deribit matching-engine feature, and using it needs institutional access, so it does not concern this project. This seat did not check that against Deribit's documentation. This answers the brief's second question, with a caveat: the stored copy of these fields was not compared, and their meaning is unknown to this seat.
 
 ---
 
