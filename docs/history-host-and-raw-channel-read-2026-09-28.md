@@ -67,6 +67,8 @@
 
 ✅ **RULED 2026-09-28 (trader): `HH-1` = (a), `HH-2` = (a), `HH-3` = (a) (hold B2).**
 
+✅ **`HH-2` SCOPE WIDENED 2026-09-29 (trader):** the read-only key (env vars `DERIBIT_RO_CLIENT_ID` / `DERIBIT_RO_CLIENT_SECRET`) may also be used for the **raw order-book absorption test** (`book.BTC-PERPETUAL.none.10.raw` against the 100 ms fold; the surviving test in `trader-tick-queue.md` §2's "REFUTED ON DIRECTION" row). Every other `HH-2` condition stands: **dev machine only**, env vars only, never on the collector box, never in the repo or a log.
+
 ## 5. Next steps, holiday-aware (trader away 2026-10-14 → 2026-11-25)
 
 | Step | When | Model + effort |
