@@ -116,3 +116,33 @@ Fill when the summary prints. Required content:
 | Brief feedback on the commit trailer | Correct: the orchestrator's brief hardcoded its own trailer. Future briefs: tell the seat to use its own session's attribution line |
 
 ⚠ **The dev machine must stay on, awake and logged in until ~17:55 UTC (01:55 GMT+8).** A sleep, logoff or restart ends the run.
+
+---
+
+## 7. ⭐ RESULT and orchestrator review — FINAL, 2026-09-29 19:25 UTC (§2 above was not filled by the build seat; this section is the record)
+
+**Result: NO. The authenticated raw channel does not carry `liquidation` at first delivery — 0 of 3 history-flagged trades, on raw, 100ms and agg2 alike.** Run completed cleanly; summary read from `C:\probe-runs\rawliq-run1\console.log` (verbatim excerpt):
+
+```
+window UTC        : 2026-09-29 08:24:15  ->  2026-09-29 17:54:32
+ws batches        : 77965   reconnects: 2   outages recorded: 2
+auth OK / refresh : 3 / 0
+trades.BTC-PERPETUAL.raw   trade objects / distinct ids : 90988 / 90988   `liquidation` present at first delivery : 0
+history trades judged              : 90885
+delivered trades absent on history : 0   (expected 0)
+unjudged entries expired / cap-evicted : 0 / 0   (expected 0 / 0)
+HISTORY-FLAGGED trades judged      : 3   (censored 0, never delivered 0)
+100ms / agg2 / raw   carried-at-delivery 0 · delivered-without-flag 3 · later-delivery-flagged 0
+=> RESULT: raw carried the flag at first delivery on 0 of 3 history-flagged trades
+```
+
+| Check | Result |
+|---|---|
+| The three flagged trades | seqs `301962622`, `301996201`, `301996818` (all `T`), each delivered on all three channels within ~0.7 s, **none flagged** |
+| `H-5` | delivered-absent-on-history 0; unjudged 0 / 0 — the judge compared like with like |
+| Reconnects | 2 outages, re-auth on each (auth 3); no flagged trade fell inside an outage |
+| `H-3` secrets, run-folder half, re-run | 0 files contain `access_token`, `refresh_token` or `client_secret` |
+| Raw's constant −8 deliveries vs 100ms | explained: `delivered absent on history` = 0 and `never-delivered` = 0 for flagged trades; a start offset, not loss |
+| Field comparison | channels carry `starbase_match_id` / `starbase_timestamp` (not on the history host); the history host carries `liquidation` (not on any channel). Unchanged from the interim |
+
+⚠ **n = 3** (one run, ~8 h). It agrees with every other measurement: the 2026-09-28 watcher (flag added ~60 min after the trade, n = 1), the 24 h main-host scan (94 flagged trades, 0 seen flagged on the stream), and `L-1` (stream copies `none`, repair copies `T`/`M`). **No public or authenticated source tested delivers the flag in time to score.** The `D-4` premise is false on this evidence — the re-ruling goes to the trader (`trader-tick-queue.md` §2, liquidation-flag row).
