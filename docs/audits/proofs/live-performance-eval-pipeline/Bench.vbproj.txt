@@ -1,0 +1,177 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Acceptance harness for the engine correctness pass
+       (docs/engine-correctness-pass-proposal.md §11).
+       Links the REAL shipped sources via Compile Include — no copies — so the
+       fixtures exercise exactly the code the app runs. Gitignored (verify/);
+       the root DeribitVerdictEngine.vbproj carries a Compile Remove for
+       verify/** so this nested project cannot break the solution build.
+       Run: dotnet run (from verify/ordercheck, or pass the project path). -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Bench</RootNamespace><Nullable>disable</Nullable><NoWarn>$(NoWarn);BC42016;BC42017;BC42018;BC42019;BC42020;BC42021;BC42022;BC42104;BC42105;BC42106;BC42107;BC42108;BC42109;BC40000;BC40008</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="/home/user/DeribitVerdictEngine/DeribitClient.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/DynamicNorms.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/ExecutionResolution.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/IndicatorResults.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/Indicators_Momentum.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/Indicators_OrderFlow.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/Indicators_Structure.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/Indicators_Volatility.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/ScoringEngine_Types.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/ScoringEngine_Helpers.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/ScoringEngine_Calculate_Scoring.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/ScoringEngine_Calculate_Verdict.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/ScoringEngine_Kelly.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/Settings/EngineSettings.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/Settings/SettingsLoader.vb" />
+    <!-- WS-P3 (A16): the stub-testable, host-agnostic WS source classes so the §3
+         connection-health trades gate runs as the REAL shipped code, plus the §4
+         15m-refresh policy. The feed (DeribitWsFeed) + the integrated live path stay
+         OUT — they need a live socket and are validated by the live shadow-parity gate
+         (P3 spec hard constraint). WsMarketDataSource is decoupled from the feed via a
+         Func(Of Boolean) delegate, so it compiles + stub-tests without it. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/IMarketDataSource.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/MarketState.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/WsMarketDataSource.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/MtfRefreshPolicy.vb" />
+    <!-- P4 #4 time-averaged OFI (A20): the host-agnostic accumulator (owned by MarketState,
+         above) + the extracted IndicatorEngine.ComputeOfiImbalance/ClassifyOfiRatio helpers
+         (in Indicators_OrderFlow, already linked). The feed-side fold + the run-path routing
+         stay OUT (they need the live socket / WinForms host — same boundary as A16/A17). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/OfiAccumulator.vb" />
+    <!-- P4 #5 aggressor velocity (A23): the host-agnostic two-horizon accumulator
+         (owned by MarketState, above) + ClassifyAggressorBurst (in Indicators_OrderFlow,
+         already linked) + the per-session resolution helpers (in ExecutionResolution,
+         already linked). The feed-side fold + run-path routing stay OUT — same live-
+         socket/WinForms boundary as A16-A22. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/AggressorVelocityAccumulator.vb" />
+    <!-- P4 #6 book absorption (A31): the host-agnostic dual-fed episode tracker
+         (owned by MarketState, above) + ClassifyAbsorption (in Indicators_OrderFlow,
+         already linked) + ResolveAbsorptionMinAggrUsd (in ExecutionResolution, already
+         linked) + AnalysisLogger for the A31f reserved-column population proof (LogRun
+         writes into the harness bin dir; the fixture cleans up). The feed-side folds +
+         run-path routing stay OUT — same live-socket/WinForms boundary as A16-A23. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/LevelAbsorptionTracker.vb" />
+    <!-- #7 liq-cascade alarm + #8 level-approach alerts (A37 — docs/liq-cascade-level
+         -alerts-proposal.md §4 H5): the host-agnostic tracker (owned by MarketState,
+         above) + sidecar utility (append-only liq_events.log — H4 amended). The feed-
+         side fold + strip render stay OUT (same live-socket / WinForms boundary as
+         A16-A31). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/AlertsTracker.vb" />
+    <!-- ws_health.log W4 row (A38): the host-agnostic transition-only sidecar
+         (append-only, never-throws — the AlertsSidecar pattern). WinForms glue
+         (LogWsHealthTransitionForRun in MainForm_SignalBridge) stays OUT — same
+         live-socket/WinForms boundary as A22/A37. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/WsHealthLog.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/WsFeedLog.vb" />
+    <!-- venue_status.log (A74): the REST-side venue-declaration sidecar. Records when
+         Deribit itself returns a response saying it is unavailable (5xx or HTTP-200
+         JSON-RPC error). Never logs on timeout/network failure (V-1 guard).
+         See docs/venue-status-instrument-spec.md. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/VenueStatusLog.vb" />
+    <!-- repair_status.log (A79f): the gap-repair outcome sidecar, GR-4 (b).
+         See docs/gap-repair-same-ms-page-skip-spec.md §4.4. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/RepairStatusLog.vb" />
+    <!-- [v64] Trade-store writer/parser seam — A48a-h. Network-free BY DESIGN: this is the
+         half of the §2 split that exists so the fixture project never links an HttpClient
+         (HistoricalStore owns one and is deliberately NOT here). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/TradeStoreWriter.vb" />
+    <!-- [C1 / D7] The per-process capture-scope marker (A49k, A49l). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/CaptureMarkerLog.vb" />
+    <!-- Candle/funding store file layer — the merge invariant that, unguarded, cost a
+         month of June data. A51. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/StoreFiles.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/AnalysisLogger.vb" /><Compile Include="/home/user/DeribitVerdictEngine/AnalysisOutputDump.vb" />
+    <!-- P4 #2 on-close analysis mode (A18): the host-agnostic bar-roll detector,
+         exercised against a real MarketState (already linked above). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/BarCloseDetector.vb" />
+    <!-- P4 #1 realtime-exit-guard (A17): the host-agnostic evaluator + the shared
+         ComputeFastExitPrimitives (in ScoringEngine_Helpers, already linked above). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/ExitGuardEvaluator.vb" />
+    <!-- Signal Bridge v1 (A22): the host-agnostic emitter (pure Build/Serialize +
+         the pinned enum derivations) + the shared process-identity primitive. The
+         WinForms glue (MainForm_SignalBridge) stays OUT — same boundary as A16–A19. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/ProcessIdentity.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/SignalEmitter.vb" />
+    <!-- P4 #3 live-microstructure-strip (A19): the host-agnostic evaluator, exercised against a
+         real MarketState (already linked) + the existing pure indicator fns. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/LiveMicrostructureEvaluator.vb" />
+    <!-- v36 A14e/A14f: the live perf tracker + its compile-time deps so the
+         resolution-filtered AggregateRange is exercised directly. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/LivePerformanceTracker.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/OhlcCache.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/analysis/FailureRateMatrix.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/analysis/AnalysisConstants.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/analysis/AnalysisReport.vb" />
+    <!-- [E5 — v55 addendum, A35a–d] BandLadder classifier + POCO used by
+         MarkdownReportWriter §9 render and the ladder-eligibility harness. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/analysis/BandLadder.vb" />
+    <!-- D6 A27c: the offline report writer's D4 before/after section (BuildD4Section).
+         Host-agnostic (StringBuilder only); AnalysisRunner stays OUT — it needs a live
+         Deribit OHLC fetch. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/analysis/MarkdownReportWriter.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/analysis/ForwardWindowJoiner.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/analysis/DeribitOhlcFetcher.vb" />
+    <!-- offline-whatif-replay (A30): the host-agnostic overlay whitelist + the replay core
+         (adapter → the shipped SignalEmitter.ComputeSideLevels + verdict re-derivation). The
+         report writer joins the harness in A41d (docs/fee-aware-min-move-proposal.md §6.1
+         rider) so the net-of-fees label + σ dispersion column are pinned; the console
+         Program stays OUT (it carries its own Main). docs/offline-whatif-replay-proposal.md §5. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/WhatIfRunner/WhatIfOverlay.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/WhatIfRunner/WhatIfReplay.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/WhatIfRunner/WhatIfReport.vb" />
+    <!-- A36f (geometry-arbitration-modes v56): WhatIfSettings so the mode-1 overlay
+         round-trips through the runner's real Clone → ApplyKnob path (the WhatIfSettings
+         is where "the overlay actually reaches the new POCO fields" is proved). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/WhatIfRunner/WhatIfSettings.vb" />
+    <!-- v36 Phase-2a (A15a–A15g): the AutoTweaker chain so MatchesPopulation,
+         the re-seed path (RunAsync), and SettingsDiffApplier.Validate run as the
+         real shipped code. AutoTweakerProgram.vb is excluded — it carries its own
+         Main, which would collide with the harness's Module Program. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/TweakerConfig.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/TweakerState.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/SettingsDiffApplier.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/PromptBuilder.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/ClaudeApiClient.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/ConditionsExtractor.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/CompositeScorer.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/RoundStatsBuilder.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/SnapshotManager.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/AutoTweaker/AutoTweakerCore.vb" />
+    <!-- W6-4 ceiling audit (A39 — docs/w6-4-ceiling-audit-method-proposal.md §5): the
+         hand-rolled L2 logistic + metrics + block bootstrap + feature matrix, exercised
+         against synthetic fixtures. The report writer + Program stay OUT (Program carries
+         its own Main; the report writer takes only a POCO). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/CeilingAudit/L2Logistic.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/CeilingAudit/CsvFeatureBuilder.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/CeilingAudit/FeatureMatrix.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/CeilingAudit/AuditMetrics.vb" />
+    <!-- Backtest synthesizer (A43 — docs/backtest-synthesizer-proposal.md §4):
+         the pure slicing helpers + the local CSV writer + the store (link-only for
+         type resolution; the harness never calls its HTTP paths — same idiom as
+         DeribitClient already linked above). BacktestProgram stays OUT — it carries
+         its own Main. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/BacktestRunner/HistoricalStore.vb" />
+    <!-- [v64] The funding-sample struct moved out of ReplayLoop.vb into its own file so the
+         app could link HistoricalStore for gap repair without the replay pipeline. Still
+         network-free, so the harness links it exactly as before. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/BacktestRunner/BacktestFundingSample.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/BacktestRunner/ReplayLoop.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/BacktestRunner/BacktestRowWriter.vb" />
+    <!-- Overlap validator (A44 — docs/backtest-synthesizer-proposal.md §4): the pure
+         join + comparison helpers (FloorToBucket + column tables). The validate CLI verb
+         lives in BacktestProgram, which stays OUT (its own Main). -->
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/BacktestRunner/OverlapValidator.vb" />
+    <!-- Trade-store coverage report (A49 — docs/trade-store-coverage-report-proposal.md):
+         the `coverage` verb's host-agnostic classification core. BacktestProgram stays
+         OUT — its own Main. -->
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/BacktestRunner/CoverageReport.vb" />
+  </ItemGroup>
+
+</Project>

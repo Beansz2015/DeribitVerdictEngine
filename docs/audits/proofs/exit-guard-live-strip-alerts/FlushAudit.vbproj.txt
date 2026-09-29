@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>FlushAudit</RootNamespace>
+    <NoWarn>$(NoWarn);BC42016;BC42017;BC42018;BC42019;BC42020;BC42021;BC42022;BC42104;BC42105;BC42108;BC42353;BC42354;BC42355;BC40000</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(DVE_REPO)/DeribitClient.vb" />
+    <Compile Include="$(DVE_REPO)/DynamicNorms.vb" />
+    <Compile Include="$(DVE_REPO)/Core/ExecutionResolution.vb" />
+    <Compile Include="$(DVE_REPO)/Core/IndicatorResults.vb" />
+    <Compile Include="$(DVE_REPO)/Core/Indicators_Momentum.vb" />
+    <Compile Include="$(DVE_REPO)/Core/Indicators_OrderFlow.vb" />
+    <Compile Include="$(DVE_REPO)/Core/Indicators_Structure.vb" />
+    <Compile Include="$(DVE_REPO)/Core/Indicators_Volatility.vb" />
+    <Compile Include="$(DVE_REPO)/Core/ScoringEngine_Types.vb" />
+    <Compile Include="$(DVE_REPO)/Core/ScoringEngine_Helpers.vb" />
+    <Compile Include="$(DVE_REPO)/Core/ScoringEngine_Calculate_Scoring.vb" />
+    <Compile Include="$(DVE_REPO)/Core/ScoringEngine_Calculate_Verdict.vb" />
+    <Compile Include="$(DVE_REPO)/Core/ScoringEngine_Kelly.vb" />
+    <Compile Include="$(DVE_REPO)/Core/Settings/EngineSettings.vb" />
+    <Compile Include="$(DVE_REPO)/Core/Settings/SettingsLoader.vb" />
+    <Compile Include="$(DVE_REPO)/IMarketDataSource.vb" />
+    <Compile Include="$(DVE_REPO)/MarketState.vb" />
+    <Compile Include="$(DVE_REPO)/WsMarketDataSource.vb" />
+    <Compile Include="$(DVE_REPO)/MtfRefreshPolicy.vb" />
+    <Compile Include="$(DVE_REPO)/Core/OfiAccumulator.vb" />
+    <Compile Include="$(DVE_REPO)/Core/AggressorVelocityAccumulator.vb" />
+    <Compile Include="$(DVE_REPO)/Core/LevelAbsorptionTracker.vb" />
+    <Compile Include="$(DVE_REPO)/Core/AlertsTracker.vb" />
+    <Compile Include="$(DVE_REPO)/Core/WsHealthLog.vb" />
+    <Compile Include="$(DVE_REPO)/Core/WsFeedLog.vb" />
+    <Compile Include="$(DVE_REPO)/Core/VenueStatusLog.vb" />
+    <Compile Include="$(DVE_REPO)/Core/RepairStatusLog.vb" />
+    <Compile Include="$(DVE_REPO)/Core/TradeStoreWriter.vb" />
+    <Compile Include="$(DVE_REPO)/Core/CaptureMarkerLog.vb" />
+    <Compile Include="$(DVE_REPO)/Core/StoreFiles.vb" />
+    <Compile Include="$(DVE_REPO)/AnalysisLogger.vb" />
+    <Compile Include="$(DVE_REPO)/Core/BarCloseDetector.vb" />
+    <Compile Include="$(DVE_REPO)/ExitGuardEvaluator.vb" />
+    <Compile Include="$(DVE_REPO)/Core/ProcessIdentity.vb" />
+    <Compile Include="$(DVE_REPO)/Core/SignalEmitter.vb" />
+    <Compile Include="$(DVE_REPO)/LiveMicrostructureEvaluator.vb" />
+    <Compile Include="$(DVE_REPO)/LivePerformanceTracker.vb" />
+    <Compile Include="$(DVE_REPO)/OhlcCache.vb" />
+    <Compile Include="$(DVE_REPO)/analysis/FailureRateMatrix.vb" />
+    <Compile Include="$(DVE_REPO)/analysis/AnalysisConstants.vb" />
+    <Compile Include="$(DVE_REPO)/analysis/AnalysisReport.vb" />
+    <Compile Include="$(DVE_REPO)/analysis/BandLadder.vb" />
+    <Compile Include="$(DVE_REPO)/analysis/MarkdownReportWriter.vb" />
+    <Compile Include="$(DVE_REPO)/analysis/ForwardWindowJoiner.vb" />
+    <Compile Include="$(DVE_REPO)/analysis/DeribitOhlcFetcher.vb" />
+    <Compile Include="$(DVE_REPO)/tools/WhatIfRunner/WhatIfOverlay.vb" />
+    <Compile Include="$(DVE_REPO)/tools/WhatIfRunner/WhatIfReplay.vb" />
+    <Compile Include="$(DVE_REPO)/tools/WhatIfRunner/WhatIfReport.vb" />
+    <Compile Include="$(DVE_REPO)/tools/WhatIfRunner/WhatIfSettings.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/TweakerConfig.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/TweakerState.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/SettingsDiffApplier.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/PromptBuilder.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/ClaudeApiClient.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/ConditionsExtractor.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/CompositeScorer.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/RoundStatsBuilder.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/SnapshotManager.vb" />
+    <Compile Include="$(DVE_REPO)/tools/AutoTweaker/AutoTweakerCore.vb" />
+    <Compile Include="$(DVE_REPO)/tools/CeilingAudit/L2Logistic.vb" />
+    <Compile Include="$(DVE_REPO)/tools/CeilingAudit/CsvFeatureBuilder.vb" />
+    <Compile Include="$(DVE_REPO)/tools/CeilingAudit/FeatureMatrix.vb" />
+    <Compile Include="$(DVE_REPO)/tools/CeilingAudit/AuditMetrics.vb" />
+    <Compile Include="$(DVE_REPO)/tools/BacktestRunner/HistoricalStore.vb" />
+    <Compile Include="$(DVE_REPO)/tools/BacktestRunner/BacktestFundingSample.vb" />
+    <Compile Include="$(DVE_REPO)/tools/BacktestRunner/ReplayLoop.vb" />
+    <Compile Include="$(DVE_REPO)/tools/BacktestRunner/BacktestRowWriter.vb" />
+    <Compile Include="$(DVE_REPO)/tools/BacktestRunner/OverlapValidator.vb" />
+    <Compile Include="$(DVE_REPO)/tools/BacktestRunner/CoverageReport.vb" />
+  </ItemGroup>
+</Project>

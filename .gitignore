@@ -405,6 +405,12 @@ verify/*
 !verify/ordercheck/**
 verify/ordercheck/bin/
 verify/ordercheck/obj/
+# Adversarial-audit proof harness (docs/adversarial-audit-2026-09-24.md): committed so every
+# proof in that report is re-runnable; same shape as ordercheck, artefacts ignored.
+!verify/auditproofs/
+!verify/auditproofs/**
+verify/auditproofs/bin/
+verify/auditproofs/obj/
 
 # Archived pre-correctness-pass calibration data (engine-correctness-pass-proposal.md §9)
 data-archive/

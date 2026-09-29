@@ -1,0 +1,440 @@
+Option Strict Off
+Option Infer On
+Imports System.Globalization
+Imports System.IO
+Imports System.Reflection
+Imports System.Collections.Generic
+Imports System.Linq
+Imports System.Threading.Tasks
+
+' Isolated audit proofs. Links the shipped sources (see AuditProof.vbproj); writes only to a temp dir
+' and to this project's own bin dir (AnalysisLogger hardcodes BaseDirectory).
+Module AuditProof
+    Private ReadOnly LPT As Type = GetType(LivePerformanceTracker)
+    Private Const SF As BindingFlags = BindingFlags.NonPublic Or BindingFlags.Public Or BindingFlags.Static
+    Private _root As String
+    Private _settingsPath As String
+
+    Function GetF(name As String) As Object
+        Return LPT.GetField(name, SF).GetValue(Nothing)
+    End Function
+    Sub SetF(name As String, v As Object)
+        LPT.GetField(name, SF).SetValue(Nothing, v)
+    End Sub
+    Function Priv(name As String, ParamArray args() As Object) As Object
+        Dim m = LPT.GetMethods(SF).First(Function(x) x.Name = name AndAlso x.GetParameters().Length = args.Length)
+        Return m.Invoke(Nothing, args)
+    End Function
+    Function Ms(t As DateTime) As Long
+        Return New DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)).ToUnixTimeMilliseconds()
+    End Function
+    Sub Hdr(s As String)
+        Console.WriteLine()
+        Console.WriteLine("==== " & s & " ====")
+    End Sub
+    Function U(y As Integer, mo As Integer, d As Integer, h As Integer, mi As Integer, Optional s As Integer = 0, Optional msec As Integer = 0) As DateTime
+        Return New DateTime(y, mo, d, h, mi, s, msec, DateTimeKind.Utc)
+    End Function
+    Function NoFetch() As Func(Of DateTime, DateTime, Task(Of List(Of OhlcBar)))
+        Return Function(a As DateTime, b As DateTime) Task.FromResult(New List(Of OhlcBar)())
+    End Function
+    Function Fresh(name As String) As String
+        Return Path.Combine(_root, name)
+    End Function
+
+    Sub Main()
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture
+        _root = Path.Combine(Path.GetTempPath(), "auditproof_" & Guid.NewGuid().ToString("N").Substring(0, 8))
+        Directory.CreateDirectory(_root)
+        _settingsPath = Path.Combine(_root, "settings.json")
+        File.Copy("/home/user/DeribitVerdictEngine/settings.json", _settingsPath)
+        SettingsLoader.Initialise(_settingsPath)
+        Dim cfg = SettingsLoader.Current
+        Console.WriteLine("settings v" & cfg.Version & "  EffectiveMinMovePct=" &
+                          cfg.Scoring.TradeCosts.EffectiveMinMovePct.ToString("R", CultureInfo.InvariantCulture) &
+                          "  perf.enabled=" & cfg.PerformanceDisplay.Enabled & "  tmp=" & _root)
+
+        T1_FormingBarFreeze(ambiguous:=True)
+        T1_FormingBarFreeze(ambiguous:=False)
+        T2_SessionLastHour()
+        T10_PartialCoverage()
+        T11_T3SkipsStopOut()
+        T5_EvalCacheNonAtomicAndCost()
+        T6_OutputDumpTrimCost()
+        T7_MostProfitableDegenerate()
+        T8_LoggerSilentDrop()
+        T9_TimestampCulture()
+        ' T3/T4 mutate settings (floor) — run last.
+        T3_FloorHotReload()
+        T4_FloorReevalDestroysOldRows()
+        Console.WriteLine()
+        Console.WriteLine("done")
+        Environment.Exit(0)
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    ' Synthetic flush path around the trace: complete 1m bars keyed by OPEN minute.
+    ' ------------------------------------------------------------------------------------------
+    Function FlushPath(ambiguous As Boolean) As SortedDictionary(Of DateTime, Candle)
+        Dim d As New SortedDictionary(Of DateTime, Candle)()
+        Dim t0 As DateTime = U(2026, 9, 24, 13, 0)
+        Dim px As Double = 59600
+        ' 13:00-13:58 flush down toward 59,020
+        For i As Integer = 0 To 58
+            Dim o = px : Dim c = px - 10
+            d(t0.AddMinutes(i)) = New Candle With {.Timestamp = Ms(t0.AddMinutes(i)), .Open = o, .High = o + 5, .Low = c - 5, .Close = c, .Volume = 5}
+            px = c
+        Next
+        Dim add = Sub(h As Integer, m As Integer, o As Double, hi As Double, lo As Double, c As Double)
+                      d(U(2026, 9, 24, h, m)) = New Candle With {.Timestamp = Ms(U(2026, 9, 24, h, m)), .Open = o, .High = hi, .Low = lo, .Close = c, .Volume = 5}
+                  End Sub
+        add(13, 59, 59020, 59030, 58990, 59003.5)
+        add(14, 0, 59003.5, 59040, 58960, 59010)
+        add(14, 1, 59010, 59040, 58980, 59000)
+        add(14, 2, 59000, 59030, 58970, 59010)
+        add(14, 3, 59010, 59050, 58990, 59020)
+        If ambiguous Then
+            add(14, 4, 59020, 59085, 58790, 58950)   ' touches BOTH 59,079.15 and 58,811.13
+            Dim c0 As Double = 58950
+            For m As Integer = 5 To 30
+                add(14, m, c0, c0 + 20, c0 - 20, c0)
+            Next
+        Else
+            add(14, 4, 59020, 59085, 59000, 59060)   ' touches target only (wick)
+            Dim c0 As Double = 59060
+            For m As Integer = 5 To 30
+                add(14, m, c0, c0 + 10, c0 - 20, c0)
+            Next
+        End If
+        Return d
+    End Function
+
+    Function MakeR(price As Double) As IndicatorResults
+        Dim r As New IndicatorResults()
+        r.CurrentPrice = price
+        r.ATR = 192.37 / 1.6          ' 1.6 x ATR = 192.37 -> stop 58,811.13
+        r.SwingTargetLong = 59079.15  ' structural target (0.63 ATR)
+        r.SwingStopLong = 0           ' no structural stop -> FALLBACK_ATR
+        r.SessionUtcHour = 14
+        r.ExecResolution = 1
+        Return r
+    End Function
+
+    Sub T1_FormingBarFreeze(ambiguous As Boolean)
+        Hdr("T1 forming-bar stub is frozen into the live OHLC cache (" & If(ambiguous, "both-touch bar", "target-wick bar") & ")")
+        Dim cfg = SettingsLoader.Current
+        SetF("_ohlcLookup", New Dictionary(Of DateTime, OhlcBar)())
+        Dim tag = If(ambiguous, "a", "b")
+        Dim initRes = LivePerformanceTracker.InitialiseAsync(Fresh("eval_t1" & tag & ".csv"), Fresh("ohlc_t1" & tag & ".csv"),
+                                                             Fresh("nolog.csv"), cfg, False, NoFetch()).GetAwaiter().GetResult()
+        Console.WriteLine("init: " & initRes)
+        Dim path = FlushPath(ambiguous)
+        Dim complete As New Dictionary(Of DateTime, OhlcBar)()
+        For Each kv In path : complete(LivePerformanceTracker.CandleToBar(kv.Value).CloseTime) = LivePerformanceTracker.CandleToBar(kv.Value) : Next
+
+        Dim sigTs As DateTime = Nothing
+        ' on_close cadence: each run fires ~1.2 s after the 1m roll; last candle = forming stub
+        For m As Integer = 40 To 77
+            Dim openMin As DateTime = U(2026, 9, 24, 13, 0).AddMinutes(m)
+            Dim runUtc As DateTime = openMin.AddMilliseconds(1200)
+            Dim formingFull = path(openMin)
+            Dim stub As New Candle With {.Timestamp = formingFull.Timestamp, .Open = formingFull.Open, .High = formingFull.Open,
+                                         .Low = formingFull.Open, .Close = formingFull.Open, .Volume = 0.01}
+            Dim candles1m = path.Where(Function(kv) kv.Key < openMin AndAlso kv.Key >= openMin.AddMinutes(-250)).Select(Function(kv) kv.Value).ToList()
+            candles1m.Add(stub)
+            Dim isSignal As Boolean = (openMin = U(2026, 9, 24, 14, 0))
+            Dim v As New VerdictResult With {.Verdict = If(isSignal, "STRONG LONG", "NO TRADE")}
+            Dim r = MakeR(stub.Close)
+            ProcessIdentity.NextSignalId()
+            If isSignal Then
+                Dim lv = SignalEmitter.ComputeSideLevels(v, r, cfg, isLong:=True)
+                Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
+                    "signal @ {0:HH:mm:ss.fff}Z entry={1:F2} placed target={2:F2} ({3}) stop={4:F2} ({5})",
+                    runUtc, lv.Entry, lv.Target, lv.TargetReason, lv.StopPx, lv.StopReason))
+                sigTs = runUtc
+            End If
+            LivePerformanceTracker.UpdateAsync(v, r, candles1m, runUtc).GetAwaiter().GetResult()
+        Next
+
+        Dim lookup = CType(GetF("_ohlcLookup"), Dictionary(Of DateTime, OhlcBar))
+        Dim k As DateTime = U(2026, 9, 24, 14, 5)
+        Dim live = lookup(k) : Dim full = complete(k)
+        Console.WriteLine(String.Format(CultureInfo.InvariantCulture,
+            "bar CloseTime 14:05  cached O/H/L/C = {0}/{1}/{2}/{3}   exchange O/H/L/C = {4}/{5}/{6}/{7}",
+            live.Open, live.High, live.Low, live.Close, full.Open, full.High, full.Low, full.Close))
+        Dim stubCount As Integer = lookup.Values.Where(Function(b) b.CloseTime > U(2026, 9, 24, 13, 41) AndAlso b.High = b.Low).Count()
+        Dim totalAfter As Integer = lookup.Values.Where(Function(b) b.CloseTime > U(2026, 9, 24, 13, 41)).Count()
+        Console.WriteLine(String.Format("cached bars after first run with High=Low (stubs): {0} of {1}", stubCount, totalAfter))
+
+        Dim cache = CType(GetF("_evalCache"), List(Of LivePerformanceTracker.EvalCacheEntry))
+        Dim e = cache.First(Function(x) x.Verdict = "STRONG LONG")
+        Dim truth = LivePerformanceTracker.EvaluateEntry(e, e.Timestamp, sigTs.AddMinutes(20), complete)
+        Console.WriteLine(String.Format("eval cache outcome (live path): {0}, TargetEverHit={1}", e.EvalOutcome, e.TargetEverHit))
+        Console.WriteLine(String.Format("same row against the exchange's complete bars: {0}, TargetEverHit={1}", truth.outcome, truth.targetHit))
+        Console.WriteLine(If(e.EvalOutcome <> truth.outcome, "PROVEN: live strip outcome differs from the tape", "NOT PROVEN"))
+        Dim w = LivePerformanceTracker.ComputeWindows(sigTs.AddMinutes(20), cfg)
+        Console.WriteLine(String.Format("NY cell: success={0} failure={1} targetHits={2}", w(5).SuccessCount, w(5).FailureCount, w(5).TargetHitCount))
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T2_SessionLastHour()
+        Hdr("T2 perf-strip session blocks drop the last (inclusive) hour of every session")
+        Dim cfg = SettingsLoader.Current
+        For Each s In cfg.SessionVolume.Sessions
+            Console.WriteLine(String.Format("  session {0}: {1}-{2} UTC, res {3}; engine bucket for hour {2} = {4}",
+                s.Name, s.StartHour, s.EndHour, s.ExecutionResolution, ExecutionResolution.ResolveResolution(cfg, s.EndHour)))
+        Next
+        Dim mk = Function(t As DateTime, res As Integer) New LivePerformanceTracker.EvalCacheEntry With {
+            .Timestamp = t, .Verdict = "STRONG LONG", .EvalOutcome = "SUCCESS", .TargetEverHit = True, .ExecResolution = res, .FavBar = 1, .AdvBar = 1, .EntryPrice = 1}
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry) From {
+            mk(U(2026, 9, 24, 6, 30), 3), mk(U(2026, 9, 24, 7, 30), 3),
+            mk(U(2026, 9, 24, 11, 30), 3), mk(U(2026, 9, 24, 12, 30), 3),
+            mk(U(2026, 9, 24, 22, 30), 1), mk(U(2026, 9, 24, 23, 30), 1)}
+        SetF("_evalCache", rows)
+        Dim show = Sub(label As String, nowUtc As DateTime, idx As Integer, expectAll As Integer)
+                       Dim w = LivePerformanceTracker.ComputeWindows(nowUtc, cfg)(idx)
+                       Console.WriteLine(String.Format("  {0,-38} now={1:ddd HH:mm}Z  n={2} (rows really in session: {3})  IsActive={4}  range(UTC+8) {5:MM-dd HH:mm}->{6:MM-dd HH:mm}",
+                                         label, nowUtc, w.SuccessCount + w.FailureCount, expectAll, w.IsActive, w.RangeStart, w.RangeEnd))
+                   End Sub
+        show("Asia block (06:30 + 07:30 rows)", U(2026, 9, 24, 8, 30), 3, 2)
+        show("London block (11:30 + 12:30 rows)", U(2026, 9, 24, 13, 30), 4, 2)
+        show("NY block (22:30 + 23:30 rows)", U(2026, 9, 25, 0, 30), 5, 2)
+        show("London while LIVE at 12:45 UTC", U(2026, 9, 24, 12, 45), 4, 2)
+        show("NY while LIVE at 23:45 UTC", U(2026, 9, 24, 23, 45), 5, 2)
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T10_PartialCoverage()
+        Hdr("T10 partial OHLC coverage is judged as full coverage (1 of 13 bars -> WINDOW_EXPIRED, not NO_DATA)")
+        Dim ts = U(2026, 9, 24, 14, 0, 1, 200)
+        Dim e As New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = ts, .Verdict = "STRONG LONG", .EntryPrice = 59003.5,
+                                                                  .FavBar = 59079.15, .AdvBar = 58811.13, .EvalOutcome = "PENDING", .ExecResolution = 1}
+        Dim lk As New Dictionary(Of DateTime, OhlcBar)()
+        lk(U(2026, 9, 24, 14, 3)) = New OhlcBar With {.CloseTime = U(2026, 9, 24, 14, 3), .Open = 59000, .High = 59010, .Low = 58990, .Close = 59000}
+        Dim ev = LivePerformanceTracker.EvaluateEntry(e, ts, ts.AddMinutes(30), lk)
+        Console.WriteLine("  bars available: 1 of 13 -> outcome " & ev.outcome & " (counted as FAILURE in AggregateRange)")
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T11_T3SkipsStopOut()
+        Hdr("T11 T+3 floor: a stop-out inside the first 2 minutes is invisible; later target touch scores SUCCESS")
+        Dim ts = U(2026, 9, 24, 14, 0, 1, 200)
+        Dim e As New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = ts, .Verdict = "STRONG LONG", .EntryPrice = 59003.5,
+                                                                  .FavBar = 59079.15, .AdvBar = 58811.13, .EvalOutcome = "PENDING", .ExecResolution = 1}
+        Dim lk As New Dictionary(Of DateTime, OhlcBar)()
+        Dim b = Sub(h As Integer, m As Integer, hi As Double, lo As Double)
+                    lk(U(2026, 9, 24, h, m)) = New OhlcBar With {.CloseTime = U(2026, 9, 24, h, m), .Open = 59000, .High = hi, .Low = lo, .Close = 59000}
+                End Sub
+        b(14, 1, 59010, 58900)
+        b(14, 2, 59000, 58780)   ' flush wick through the placed stop at T+1..T+2 min
+        For m = 3 To 15 : b(14, m, If(m = 9, 59090, 59040), 58900) : Next
+        Dim ev = LivePerformanceTracker.EvaluateEntry(e, ts, ts.AddMinutes(30), lk)
+        Console.WriteLine("  stop pierced at bar CloseTime 14:02 (58,780 < 58,811.13); eval outcome = " & ev.outcome)
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T5_EvalCacheNonAtomicAndCost()
+        Hdr("T5 WriteEvalCache truncates first: any exception mid-write destroys the cache; cost at production size")
+        Dim p = Fresh("eval_t5.csv")
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        Dim t = U(2026, 7, 1, 0, 0)
+        For i = 0 To 74999
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = t.AddMinutes(i), .Verdict = "STRONG LONG", .EntryPrice = 59003.5,
+                     .FavBar = 59079.15, .AdvBar = 58811.13, .EvalOutcome = "ADVERSE_HIT", .TargetEverHit = False, .ExecResolution = 1,
+                     .InstanceId = Guid.NewGuid().ToString(), .SignalId = i})
+        Next
+        Dim sw = Diagnostics.Stopwatch.StartNew()
+        LivePerformanceTracker.WriteEvalCache(p, rows)
+        sw.Stop()
+        Dim bytes = New FileInfo(p).Length
+        Console.WriteLine(String.Format("  full rewrite of 75,000 rows: {0:N1} MB in {1} ms (runs on the UI thread on every PENDING resolution)", bytes / 1048576.0, sw.ElapsedMilliseconds))
+        SetF("_evalCache", rows)
+        sw.Restart()
+        Dim w = LivePerformanceTracker.ComputeWindows(U(2026, 9, 24, 12, 0), SettingsLoader.Current)
+        sw.Stop()
+        Console.WriteLine(String.Format("  ComputeWindows over 75,000 rows: {0} ms", sw.ElapsedMilliseconds))
+        Dim broken As New List(Of LivePerformanceTracker.EvalCacheEntry)(rows)
+        broken(40000) = Nothing       ' stand-in for an IOException / process kill mid-write
+        LivePerformanceTracker.WriteEvalCache(p, broken)
+        Dim after = LivePerformanceTracker.LoadEvalCache(p).Count
+        Console.WriteLine(String.Format("  after a mid-write fault: file holds {0:N0} of 75,000 rows; the previous good file is gone", after))
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T6_OutputDumpTrimCost()
+        Hdr("T6 AnalysisOutputDump at cap: every run re-reads and rewrites the whole dump on the UI thread")
+        Dim p = Fresh("dump.md")
+        Dim block As New Text.StringBuilder()
+        For i = 1 To 70 : block.AppendLine("  SIGNAL LINE " & i.ToString("000") & New String("x"c, 66)) : Next
+        Dim body = block.ToString()
+        Using w As New StreamWriter(p)
+            For i = 1 To 3000
+                w.WriteLine("## Run 2026-09-2" & (i Mod 9) & " 12:00:00 UTC+8")
+                w.Write(body) : w.WriteLine() : w.WriteLine("---") : w.WriteLine()
+            Next
+        End Using
+        Console.WriteLine(String.Format("  dump at cap: 3,000 blocks, {0:N1} MB (production archive was 16.8 MB)", New FileInfo(p).Length / 1048576.0))
+        Dim sw = Diagnostics.Stopwatch.StartNew()
+        For i = 1 To 5
+            AnalysisOutputDump.Append(DateTime.Now, body, p, True, 3000, "PERF STRIP [B] x")
+        Next
+        sw.Stop()
+        Console.WriteLine(String.Format("  mean Append() at cap: {0} ms per run (ReadAllLines + WriteAllLines of the whole file); runs still {1}",
+                                        sw.ElapsedMilliseconds \ 5, AnalysisOutputDump.CountRuns(p)))
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T7_MostProfitableDegenerate()
+        Hdr("T7 FailureRateMatrix.IsMostProfitable is structurally pinned to the longest window")
+        Dim notLongest As Integer = 0, flagged As Integer = 0
+        For seed = 1 To 200
+            Dim rnd As New Random(seed)
+            Dim map As New Dictionary(Of DateTime, OhlcBar)()
+            Dim t0 = U(2026, 9, 1, 0, 0)
+            Dim px As Double = 60000
+            For i = 0 To 20000
+                Dim o = px
+                Dim c = px + (rnd.NextDouble() - 0.5) * 60
+                Dim hi = Math.Max(o, c) + rnd.NextDouble() * 25
+                Dim lo = Math.Min(o, c) - rnd.NextDouble() * 25
+                map(t0.AddMinutes(i + 1)) = New OhlcBar With {.CloseTime = t0.AddMinutes(i + 1), .Open = o, .High = hi, .Low = lo, .Close = c}
+                px = c
+            Next
+            Dim tiers = {"STRONG LONG", "LONG", "STRONG SHORT", "SHORT"}
+            Dim rows As New List(Of CsvRow)()
+            For i = 0 To 19900 Step 7
+                Dim ts = t0.AddMinutes(i + 1).AddSeconds(1)
+                Dim entry = map(t0.AddMinutes(i + 1)).Close
+                Dim v = tiers(rnd.Next(4))
+                Dim isLong = v.Contains("LONG")
+                rows.Add(New CsvRow With {.Timestamp = ts, .Price = entry, .ATR = 50, .Verdict = v, .HasPlaced = True,
+                         .PlacedTargetLong = entry + 60, .PlacedStopLong = entry - 90, .PlacedTargetShort = entry - 60, .PlacedStopShort = entry + 90})
+            Next
+            ForwardWindowJoiner.PopulateForwardBars(rows, map)
+            Dim a, b, c1, d, e1, f As Integer
+            Dim cells = FailureRateMatrix.Compute(rows, a, b, c1, d, e1, f, 0.0008, 1.75, 1)
+            For Each cell In cells.Where(Function(x) x.IsMostProfitable)
+                flagged += 1
+                If cell.WindowMin <> 15 Then notLongest += 1
+            Next
+        Next
+        Console.WriteLine(String.Format("  200 random-walk books x 4 tiers: IsMostProfitable flagged {0} cells, {1} of them NOT the 15-min window", flagged, notLongest))
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T8_LoggerSilentDrop()
+        Hdr("T8 AnalysisLogger.LogRun drops the row silently when another process holds the CSV (e.g. Excel)")
+        Dim cfg = SettingsLoader.Current
+        Dim p = AnalysisLogger.GetLogPath()
+        If File.Exists(p) Then File.Delete(p)
+        Dim v As New VerdictResult With {.Verdict = "STRONG LONG"}
+        Dim r = MakeR(59003.5)
+        AnalysisLogger.LogRun(r, v, cfg)
+        Dim before = AnalysisLogger.CountDataRows(p)
+        Dim captured As New StringWriter()
+        Dim oldOut = Console.Out
+        Using lockFs As New FileStream(p, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+            Console.SetOut(captured)
+            AnalysisLogger.LogRun(r, v, cfg)
+            Console.SetOut(oldOut)
+        End Using
+        Dim after = AnalysisLogger.CountDataRows(p)
+        Console.WriteLine(String.Format("  rows before={0} after locked LogRun={1}; console output during the drop: '{2}'", before, after, captured.ToString().Trim()))
+        File.Delete(p)
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T9_TimestampCulture()
+        Hdr("T9 CSV Timestamp is culture-formatted (the ':' and the calendar follow CurrentCulture)")
+        Dim t = U(2026, 9, 24, 14, 0, 1)
+        Dim inv = t.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+        Dim bad = CultureInfo.GetCultures(CultureTypes.SpecificCultures).
+                  Where(Function(c) t.ToString("yyyy-MM-dd HH:mm:ss", c) <> inv).ToList()
+        Console.WriteLine(String.Format("  ICU cultures: {0} specific cultures produce a different CSV timestamp. Examples:", bad.Count))
+        For Each c In bad.Take(6)
+            Console.WriteLine("    " & c.Name & " -> " & t.ToString("yyyy-MM-dd HH:mm:ss", c))
+        Next
+        For Each nm In {"en-SG", "zh-SG", "zh-CN", "zh-HK", "zh-TW", "ms-MY", "fil-PH", "en-AU", "en-US"}
+            Dim c = CultureInfo.GetCultureInfo(nm)
+            Dim s = t.ToString("yyyy-MM-dd HH:mm:ss", c)
+            If s <> inv Then Console.WriteLine("    UTC+8-plausible locale affected: " & nm & " -> " & s)
+        Next
+        ' End-to-end: th-TH writes a Buddhist-calendar year; the backfill parser reads it as a real year.
+        Dim p = AnalysisLogger.GetLogPath()
+        If File.Exists(p) Then File.Delete(p)
+        Dim old = CultureInfo.CurrentCulture
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("th-TH")
+        AnalysisLogger.LogRun(MakeR(59003.5), New VerdictResult With {.Verdict = "STRONG LONG"}, SettingsLoader.Current)
+        CultureInfo.CurrentCulture = old
+        Dim rows = LivePerformanceTracker.ParseAnalysisLog(p)
+        Dim fw = ForwardWindowJoiner.Load(p)
+        Console.WriteLine(String.Format("  th-TH LogRun -> backfill parser Timestamp={0:yyyy-MM-dd HH:mm:ss}; offline loader Timestamp={1:yyyy-MM-dd}",
+                                        rows(0).Timestamp, fw(0).Timestamp))
+        File.Delete(p)
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Function WriteLog(p As String, rows As IEnumerable(Of String)) As String
+        Dim hdr = "Timestamp,Price,Verdict,ATR,SwingStopLong,SwingStopShort,ExecResolution,PlacedTargetLong,PlacedStopLong,PlacedTargetShort,PlacedStopShort,InstanceId,SignalId"
+        File.WriteAllLines(p, New String() {hdr}.Concat(rows))
+        Return p
+    End Function
+
+    Sub T3_FloorHotReload()
+        Hdr("T3 a hot-reloaded floor change re-stamps floor_pct without re-evaluating -> the self-heal never fires")
+        Dim now = DateTime.UtcNow
+        now = New DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, DateTimeKind.Utc)
+        Dim r1 = now.AddHours(-3) : Dim r2 = now.AddMinutes(-10)
+        Dim bars As New List(Of OhlcBar)()
+        Dim start = New DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, DateTimeKind.Utc).AddHours(-5)
+        For i = 0 To 330
+            Dim ct = start.AddMinutes(i)
+            Dim hi = If(ct > r1.AddMinutes(4) AndAlso ct <= r1.AddMinutes(6), 60040.0, 60005.0)
+            bars.Add(New OhlcBar With {.CloseTime = ct, .Open = 60000, .High = hi, .Low = 59995, .Close = 60000})
+        Next
+        Dim fetch As Func(Of DateTime, DateTime, Task(Of List(Of OhlcBar))) =
+            Function(a As DateTime, b As DateTime) Task.FromResult(bars.Where(Function(x) x.CloseTime >= a AndAlso x.CloseTime <= b).ToList())
+        Dim f = Function(t As DateTime) t.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+        Dim logP = WriteLog(Fresh("log_t3.csv"), {
+            f(r1) & ",60000.00,LONG,50.0,0,0,1,60036.00,59900.00,59964.00,60100.00,inst-A,1",
+            f(r2) & ",60000.00,LONG,50.0,0,0,1,60100.00,59900.00,59900.00,60100.00,inst-A,2"})
+        Dim evalP = Fresh("eval_t3.csv") : Dim ohlcP = Fresh("ohlc_t3.csv")
+        SetF("_ohlcLookup", New Dictionary(Of DateTime, OhlcBar)())
+        Dim cfgA = SettingsLoader.Current
+        LivePerformanceTracker.InitialiseAsync(evalP, ohlcP, logP, cfgA, True, fetch).GetAwaiter().GetResult()
+        Dim show = Sub(stage As String)
+                       Dim c = LivePerformanceTracker.LoadEvalCache(evalP)
+                       Dim r1e = c.First(Function(x) x.SignalId = 1)
+                       Dim fl = File.ReadLines(evalP).First()
+                       Console.WriteLine(String.Format("  {0,-44} R1(target 6.0 bps)={1,-24} file {2}", stage, r1e.EvalOutcome, fl.Substring(fl.IndexOf("floor_pct="))))
+                   End Sub
+        show("start, floor 8 bps:")
+        ' Trader lowers min_net_move_pct 5 -> 1 bps via the UI; settings.json hot-reloads.
+        File.WriteAllText(_settingsPath, File.ReadAllText(_settingsPath).Replace("""min_net_move_pct"": 0.0005", """min_net_move_pct"": 0.0001"))
+        SettingsLoader.Initialise(_settingsPath)
+        Console.WriteLine("  floor now " & SettingsLoader.Current.Scoring.TradeCosts.EffectiveMinMovePct.ToString("R", CultureInfo.InvariantCulture))
+        LivePerformanceTracker.UpdateAsync(New VerdictResult With {.Verdict = "NO TRADE"}, MakeR(60000), Nothing, now.AddMinutes(6)).GetAwaiter().GetResult()
+        show("after one live run (R2 resolved, file rewrite):")
+        LivePerformanceTracker.InitialiseAsync(evalP, ohlcP, logP, SettingsLoader.Current, True, fetch).GetAwaiter().GetResult()
+        show("after restart at floor 4 bps:")
+        SetF("_ohlcLookup", New Dictionary(Of DateTime, OhlcBar)())
+        Dim evalC = Fresh("eval_t3_control.csv")
+        LivePerformanceTracker.InitialiseAsync(evalC, Fresh("ohlc_t3c.csv"), logP, SettingsLoader.Current, True, fetch).GetAwaiter().GetResult()
+        Console.WriteLine("  control: fresh cache built at floor 4 bps -> R1 = " & LivePerformanceTracker.LoadEvalCache(evalC).First(Function(x) x.SignalId = 1).EvalOutcome)
+    End Sub
+
+    ' ------------------------------------------------------------------------------------------
+    Sub T4_FloorReevalDestroysOldRows()
+        Hdr("T4 a floor change at startup re-walks rows older than the 7-day OHLC cache -> resolved outcomes become NO_DATA")
+        Dim p = Fresh("eval_t4.csv")
+        Dim comment = CStr(LPT.GetField("EVAL_SCHEMA_COMMENT", SF).GetValue(Nothing)) & " floor_pct=0.0008"
+        Dim header = CStr(LPT.GetField("EVAL_COL_HEADER", SF).GetValue(Nothing))
+        Dim old = DateTime.UtcNow.AddDays(-10).ToString("o", CultureInfo.InvariantCulture)
+        File.WriteAllLines(p, {comment, header,
+            old & ",STRONG LONG,59003.50,59150.00,58811.13,SUCCESS,1,1,inst-old,7",
+            DateTime.UtcNow.AddDays(-9).ToString("o", CultureInfo.InvariantCulture) & ",SHORT,59003.50,58850.00,59195.00,ADVERSE_HIT,0,1,inst-old,8"})
+        Console.WriteLine("  before: " & String.Join(" | ", LivePerformanceTracker.LoadEvalCache(p).Select(Function(x) x.Verdict & "=" & x.EvalOutcome)))
+        LivePerformanceTracker.InitialiseAsync(p, Fresh("ohlc_t4.csv"), Fresh("nolog.csv"), SettingsLoader.Current, False, NoFetch()).GetAwaiter().GetResult()
+        Console.WriteLine("  after restart with floor 4 bps: " & String.Join(" | ", LivePerformanceTracker.LoadEvalCache(p).Select(Function(x) x.Verdict & "=" & x.EvalOutcome & "/TEH=" & If(x.TargetEverHit.HasValue, x.TargetEverHit.ToString(), "null"))))
+    End Sub
+End Module

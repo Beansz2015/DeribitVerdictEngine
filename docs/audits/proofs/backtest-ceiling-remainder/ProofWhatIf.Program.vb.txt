@@ -1,0 +1,66 @@
+' Audit proof harness — WhatIfReport.Build (2026-09-25 backtest-ceiling-remainder).
+' Builds WhatIfReportModel exactly as WhatIfProgram does (6e74181, WhatIfProgram.vb:153-190),
+' with hand-set EV samples, and prints what the SHIPPED WhatIfReport.Build renders.
+Imports System.Collections.Generic
+Imports System.Linq
+
+Public Module ProofWhatIf
+
+    Function Samples(vals As IEnumerable(Of Double)) As List(Of WhatIfEvSample)
+        Return vals.Select(Function(v) New WhatIfEvSample With {.Timestamp = New DateTime(2026, 9, 1), .EvAtr = v}).ToList()
+    End Function
+
+    Function Cell(idx As Integer, knob As Double, selMean As Double, selN As Integer, holdMean As Double, holdN As Integer) As WhatIfGridCell
+        Dim sel = Enumerable.Repeat(selMean, selN).ToList()
+        Dim hold = Enumerable.Repeat(holdMean, holdN).ToList()
+        Dim c As New WhatIfGridCell With {
+            .Index = idx, .Cell = New Dictionary(Of String, Double) From {{"scoring.structural_levels.stop_max_atr_mult", knob}},
+            .EvalWindowBars = 15, .EvSamples = Samples(sel.Concat(hold))}
+        c.EvFull = WhatIfEvStat.Of_(sel.Concat(hold))
+        c.EvSel = WhatIfEvStat.Of_(sel)
+        c.EvHold = WhatIfEvStat.Of_(hold)
+        c.Divergent = (c.EvSel.N > 0 AndAlso c.EvHold.N > 0 AndAlso c.EvHold.Mean < c.EvSel.CiLow)
+        Return c
+    End Function
+
+    ' WhatIfProgram.vb:163-167 winner rule, verbatim.
+    Function ProgramWinner(cells As List(Of WhatIfGridCell)) As Integer
+        If cells.Count <= 1 Then Return 0
+        Return cells.OrderByDescending(Function(c) If(c.EvSel.N > 0, c.EvSel.Mean, Double.NegativeInfinity)).
+                     ThenByDescending(Function(c) c.EvFull.Mean).First().Index
+    End Function
+
+    Function Model(cells As List(Of WhatIfGridCell)) As WhatIfReportModel
+        Dim live As New EngineSettings()
+        Return New WhatIfReportModel With {
+            .Stamp = "proof", .OverlayPath = "w61-london-stop-grid.json", .CsvPath = "synthetic",
+            .SpanFrom = New DateTime(2026, 8, 1), .SpanTo = New DateTime(2026, 9, 1),
+            .TotalRows = 500, .PocExcluded = 0, .GridCellCount = cells.Count,
+            .SweptKnobs = New List(Of String) From {"scoring.structural_levels.stop_max_atr_mult"},
+            .OverlaySummary = "", .OverfitCounter = cells.Count, .Cells = cells, .WinnerIndex = ProgramWinner(cells),
+            .LiveCfg = live, .WinnerCfg = live, .BaselineRows = New List(Of CsvRow)(), .WinnerRows = New List(Of CsvRow)(),
+            .SettingsVersion = live.Version}
+    End Function
+
+    Sub Show(title As String, m As WhatIfReportModel)
+        Console.WriteLine("=== " & title & "   (WhatIfProgram winner index = " & m.WinnerIndex & ")")
+        Dim md = WhatIfReport.Build(m)
+        For Each l In md.Split({vbLf}, StringSplitOptions.None)
+            If l.StartsWith("| ") OrElse l.StartsWith("**Winner") OrElse l.StartsWith("## ") OrElse l.Contains("EV") Then Console.WriteLine("  " & l)
+        Next
+        Console.WriteLine()
+    End Sub
+
+    Function Main(args As String()) As Integer
+        ' Four stop_max cells. 2.2 produced no directional row on the selection half (every
+        ' selection-day row flipped BELOW_MIN or had no forward data); the others lose money net of fees.
+        Show("P-WI1  ranking table vs the program's winner", Model(New List(Of WhatIfGridCell) From {
+            Cell(0, 1.6, -0.08, 60, -0.09, 55),
+            Cell(1, 1.8, -0.05, 58, -0.30, 50),
+            Cell(2, 2.0, -0.07, 57, -0.06, 52),
+            Cell(3, 2.2, 0.0, 0, -0.40, 12)}))
+        Show("P-WI2  single-cell overlay: which EV does the report print?", Model(New List(Of WhatIfGridCell) From {
+            Cell(0, 2.0, -0.25, 60, -0.27, 55)}))
+        Return 0
+    End Function
+End Module

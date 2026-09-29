@@ -1,0 +1,89 @@
+settings v68  EffectiveMinMovePct=0.0007999999999999999  perf.enabled=True  tmp=/tmp/auditproof_ef29eee0
+
+==== T1 forming-bar stub is frozen into the live OHLC cache (both-touch bar) ====
+init: ok — ohlcBars=0 evalRows=0 backfilled=0
+signal @ 14:00:01.200Z entry=59003.50 placed target=59079.15 (SWING_HIGH_5M) stop=58811.13 (FALLBACK_ATR)
+bar CloseTime 14:05  cached O/H/L/C = 59020/59020/59020/59020   exchange O/H/L/C = 59020/59085/58790/58950
+cached bars after first run with High=Low (stubs): 37 of 37
+eval cache outcome (live path): WINDOW_EXPIRED, TargetEverHit=False
+same row against the exchange's complete bars: AMBIGUOUS, TargetEverHit=True
+PROVEN: live strip outcome differs from the tape
+NY cell: success=0 failure=1 targetHits=0
+
+==== T1 forming-bar stub is frozen into the live OHLC cache (target-wick bar) ====
+init: ok — ohlcBars=0 evalRows=0 backfilled=0
+signal @ 14:00:01.200Z entry=59003.50 placed target=59079.15 (SWING_HIGH_5M) stop=58811.13 (FALLBACK_ATR)
+bar CloseTime 14:05  cached O/H/L/C = 59020/59020/59020/59020   exchange O/H/L/C = 59020/59085/59000/59060
+cached bars after first run with High=Low (stubs): 37 of 37
+eval cache outcome (live path): WINDOW_EXPIRED, TargetEverHit=False
+same row against the exchange's complete bars: SUCCESS, TargetEverHit=True
+PROVEN: live strip outcome differs from the tape
+NY cell: success=0 failure=1 targetHits=0
+
+==== T2 perf-strip session blocks drop the last (inclusive) hour of every session ====
+  session ASIA: 0-7 UTC, res 3; engine bucket for hour 7 = 3
+  session LONDON: 8-12 UTC, res 3; engine bucket for hour 12 = 3
+  session NY: 13-23 UTC, res 1; engine bucket for hour 23 = 1
+  Asia block (06:30 + 07:30 rows)        now=Thu 08:30Z  n=1 (rows really in session: 2)  IsActive=False  range(UTC+8) 09-24 08:00->09-24 15:00
+  London block (11:30 + 12:30 rows)      now=Thu 13:30Z  n=1 (rows really in session: 2)  IsActive=False  range(UTC+8) 09-24 16:00->09-24 20:00
+  NY block (22:30 + 23:30 rows)          now=Fri 00:30Z  n=1 (rows really in session: 2)  IsActive=False  range(UTC+8) 09-24 21:00->09-25 07:00
+  London while LIVE at 12:45 UTC         now=Thu 12:45Z  n=1 (rows really in session: 2)  IsActive=False  range(UTC+8) 09-24 16:00->09-24 20:00
+  NY while LIVE at 23:45 UTC             now=Thu 23:45Z  n=1 (rows really in session: 2)  IsActive=False  range(UTC+8) 09-24 21:00->09-25 07:00
+
+==== T10 partial OHLC coverage is judged as full coverage (1 of 13 bars -> WINDOW_EXPIRED, not NO_DATA) ====
+  bars available: 1 of 13 -> outcome WINDOW_EXPIRED (counted as FAILURE in AggregateRange)
+
+==== T11 T+3 floor: a stop-out inside the first 2 minutes is invisible; later target touch scores SUCCESS ====
+  stop pierced at bar CloseTime 14:02 (58,780 < 58,811.13); eval outcome = SUCCESS
+
+==== T5 WriteEvalCache truncates first: any exception mid-write destroys the cache; cost at production size ====
+  full rewrite of 75,000 rows: 9.1 MB in 643 ms (runs on the UI thread on every PENDING resolution)
+  ComputeWindows over 75,000 rows: 8 ms
+[LivePerformanceTracker] WriteEvalCache failed: Object reference not set to an instance of an object.
+  after a mid-write fault: file holds 40,000 of 75,000 rows; the previous good file is gone
+
+==== T6 AnalysisOutputDump at cap: every run re-reads and rewrites the whole dump on the UI thread ====
+  dump at cap: 3,000 blocks, 16.9 MB (production archive was 16.8 MB)
+  mean Append() at cap: 348 ms per run (ReadAllLines + WriteAllLines of the whole file); runs still 3000
+
+==== T7 FailureRateMatrix.IsMostProfitable is structurally pinned to the longest window ====
+  200 random-walk books x 4 tiers: IsMostProfitable flagged 800 cells, 0 of them NOT the 15-min window
+
+==== T8 AnalysisLogger.LogRun drops the row silently when another process holds the CSV (e.g. Excel) ====
+  rows before=1 after locked LogRun=1; console output during the drop: ''
+
+==== T9 CSV Timestamp is culture-formatted (the ':' and the calendar follow CurrentCulture) ====
+  ICU cultures: 22 specific cultures produce a different CSV timestamp. Examples:
+    ar-SA -> 1448-04-13 14:00:01
+    as-IN -> 2026-09-24 14.00.01
+    ckb-IR -> 1405-07-02 14:00:01
+    da-DK -> 2026-09-24 14.00.01
+    da-GL -> 2026-09-24 14.00.01
+    en-DK -> 2026-09-24 14.00.01
+  th-TH LogRun -> backfill parser Timestamp=2569-09-24 13:21:28; offline loader Timestamp=2569-09-24
+
+==== T3 a hot-reloaded floor change re-stamps floor_pct without re-evaluating -> the self-heal never fires ====
+[LivePerformanceTracker] Gap-fill call 1 of 1: 2026-09-17T13:21Z → 2026-09-24T08:20Z (9780 bars expected)
+[LivePerformanceTracker] Gap-fill call 1 received: 0 bar(s) (0 new, 0 duplicate/already-present)
+[LivePerformanceTracker] Gap-fill complete: 1 gap(s) filled, 0 bar(s) added across 2 call(s)
+  start, floor 8 bps:                          R1(target 6.0 bps)=EXCLUDED_BELOW_MIN_MOVE  file floor_pct=0.0007999999999999999
+  floor now 0.00039999999999999996
+  after one live run (R2 resolved, file rewrite): R1(target 6.0 bps)=EXCLUDED_BELOW_MIN_MOVE  file floor_pct=0.00039999999999999996
+[LivePerformanceTracker] Gap-fill call 1 of 1: 2026-09-17T13:21Z → 2026-09-24T08:20Z (9780 bars expected)
+[LivePerformanceTracker] Gap-fill call 1 received: 0 bar(s) (0 new, 0 duplicate/already-present)
+[LivePerformanceTracker] Gap-fill complete: 1 gap(s) filled, 0 bar(s) added across 2 call(s)
+  after restart at floor 4 bps:                R1(target 6.0 bps)=EXCLUDED_BELOW_MIN_MOVE  file floor_pct=0.00039999999999999996
+[LivePerformanceTracker] Gap-fill call 1 of 1: 2026-09-17T13:21Z → 2026-09-24T08:20Z (9780 bars expected)
+[LivePerformanceTracker] Gap-fill call 1 received: 0 bar(s) (0 new, 0 duplicate/already-present)
+[LivePerformanceTracker] Gap-fill complete: 1 gap(s) filled, 0 bar(s) added across 2 call(s)
+  control: fresh cache built at floor 4 bps -> R1 = SUCCESS
+
+==== T4 a floor change at startup re-walks rows older than the 7-day OHLC cache -> resolved outcomes become NO_DATA ====
+  before: STRONG LONG=SUCCESS | SHORT=ADVERSE_HIT
+[LivePerformanceTracker] Gap-fill call 1 of 1: 2026-09-17T13:21Z → 2026-09-24T08:20Z (9780 bars expected)
+[LivePerformanceTracker] Gap-fill call 1 received: 0 bar(s) (0 new, 0 duplicate/already-present)
+[LivePerformanceTracker] Gap-fill complete: 1 gap(s) filled, 0 bar(s) added across 2 call(s)
+[LivePerformanceTracker] min-tradeable-move floor re-eval (0.040 %): 0 excluded, 0 recovered.
+  after restart with floor 4 bps: STRONG LONG=NO_DATA/TEH=null | SHORT=NO_DATA/TEH=null
+
+done

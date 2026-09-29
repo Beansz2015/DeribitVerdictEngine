@@ -1,0 +1,20 @@
+Imports System.IO
+Imports System.Collections.Generic
+Module Bench
+    Sub Main()
+        Dim p = Path.Combine(Path.GetTempPath(), "bench_eval.csv")
+        Dim rows As New List(Of LivePerformanceTracker.EvalCacheEntry)()
+        Dim t = New DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc)
+        For i = 0 To 89999
+            rows.Add(New LivePerformanceTracker.EvalCacheEntry With {.Timestamp = t.AddMinutes(i).AddMilliseconds(123), .Verdict = "STRONG LONG", .EntryPrice = 59003.5,
+                     .FavBar = 59079.15, .AdvBar = 58811.13, .EvalOutcome = "ADVERSE_HIT", .TargetEverHit = False, .ExecResolution = 1,
+                     .InstanceId = Guid.NewGuid().ToString(), .SignalId = i})
+        Next
+        For k = 1 To 6
+            Dim sw = Diagnostics.Stopwatch.StartNew()
+            LivePerformanceTracker.WriteEvalCache(p, rows)
+            sw.Stop()
+            Console.WriteLine(String.Format("rewrite #{0}: 90,000 rows {1:N1} MB {2} ms", k, New FileInfo(p).Length / 1048576.0, sw.ElapsedMilliseconds))
+        Next
+    End Sub
+End Module

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><RootNamespace></RootNamespace><OptionStrict>Off</OptionStrict><Nullable>disable</Nullable><ImplicitUsings>disable</ImplicitUsings><AssemblyName>ProbeHost</AssemblyName></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/TradeStoreWriter.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/Core/StoreFiles.vb" />
+    <Compile Include="/home/user/DeribitVerdictEngine/tools/BacktestRunner/HistoricalStore.vb" />
+  </ItemGroup>
+  <ItemGroup><Import Include="System" /><Import Include="System.Collections.Generic" /><Import Include="System.Linq" /><Import Include="System.Threading.Tasks" /></ItemGroup>
+</Project>

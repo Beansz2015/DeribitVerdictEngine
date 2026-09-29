@@ -1,0 +1,29 @@
+# Closed-form numbers behind findings F7 and F12 of docs/audits/2026-09-24-autotweaker.md.
+# Same arithmetic that was run inline during the audit, saved here so it can be re-run.
+from math import comb
+import math
+
+def tail(n, p, k):  # P(X >= k), X ~ Binomial(n, p)
+    return sum(comb(n, i) * p**i * (1 - p)**(n - i) for i in range(k, n + 1))
+
+# F12: how often a cell prints >= 40% failure when the true rate is below the threshold.
+for p in (0.30, 0.35):
+    for n in (30, 45, 60):
+        k = math.ceil(0.40 * n)
+        print(f"true fail {p:.2f} n={n}: P(obs>=40%)={tail(n,p,k):.3f}")
+
+# F7: idealised driftless barrier race (continuous, no expiry): P(target first) = S/(T+S).
+# Fees: maker entry 1.5 bps + maker TP 1.5 bps on a win (3 bps); maker entry 1.5 + taker stop 3.5 on a loss (5 bps).
+# BTC ~ $64,000 is illustrative (the repo's "$51 floor = 0.0008" anchor); the floor test is 8 bps.
+P = 64000.0
+for A in (140, 40):
+    for (T, S, label) in ((1.75, 1.6, 'shipped'), (1.25, 2.2, 'tweak')):
+        Tb = T * A / P * 1e4
+        Sb = S * A / P * 1e4
+        p = S / (T + S)
+        ev = p * (Tb - 3.0) - (1 - p) * (Sb + 5.0)
+        print(f"ATR {A}: {label} T={T}xATR ({Tb:.1f}bps) S={S}xATR ({Sb:.1f}bps) p_success={p:.3f} fail={1-p:.3f} EV_zero_edge={ev:+.2f}bps floor_ok={Tb>=8.0}")
+
+# Inverse-contract asymmetry for a long at equal USD distance d: |loss_BTC| / gain_BTC = (1+d)/(1-d).
+d = 0.0035
+print("inverse long loss/gain BTC ratio at 35bps:", (1 + d) / (1 - d))

@@ -1,0 +1,19 @@
+' Runner for AuditProofs.vb.txt (added 2026-09-25 by the consolidating session; see
+' docs/audits/2026-09-24-review-batch-summary.md §4). Links against the same 69 sources as
+' verify/auditproofs. P1 runs LAST because it leaves a task pending.
+Module M6aRunMain
+    Sub Main()
+        For Each p As Action In New Action() {
+                AddressOf AuditProofs.P2_NaNPassesValidationAndDisablesGate,
+                AddressOf AuditProofs.P3_WsSegmentOverflow,
+                AddressOf AuditProofs.P4_MtfGateFailsOpen,
+                AddressOf AuditProofs.P1_UpdateAsyncHangsWithoutInit}
+            Try
+                p()
+            Catch ex As Exception
+                Console.WriteLine("threw: " & ex.GetType().Name & ": " & ex.Message)
+            End Try
+        Next
+        Environment.Exit(0)
+    End Sub
+End Module

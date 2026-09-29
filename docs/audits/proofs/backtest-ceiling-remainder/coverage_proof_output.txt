@@ -1,0 +1,92 @@
+================ S-A_ws_outage_mid_hour
+  captured hours      3
+  DEFECT              1   ← capture defects
+  trailing-edge        0   ← silence to the observed edge, not a gap between trades
+  expected-missing     0
+  out-of-scope-venue     0
+  seq gaps (local)    *** 540 TRADE(S) MISSING *** in 1 run(s), longest 540, across 2334 sequenced row(s)
+  VERDICT: 1 defect hour(s)
+--- non-captured hour table (markdown):
+| Hour (UTC) | Class | Instance | Reason |
+|---|---|---|---|
+| 2026-09-16 10:00 | Defect | aaaaaaaa-0000-0000-0000-000000000001 | gap-breach(2705000ms) |
+EXIT CODE (--strict): 1
+================ S-B_crash_restart_mid_hour
+  captured hours      3
+  DEFECT              0   ← capture defects
+  trailing-edge        1   ← silence to the observed edge, not a gap between trades
+  expected-missing     0
+  out-of-scope-venue     0
+  seq gaps (local)    *** 546 TRADE(S) MISSING *** in 1 run(s), longest 546, across 2328 sequenced row(s)
+  VERDICT: 0 defect hour(s) + 1 trailing-edge hour(s)
+--- non-captured hour table (markdown):
+| Hour (UTC) | Class | Instance | Reason |
+|---|---|---|---|
+| 2026-09-16 10:00 | TrailingEdge |  | split@10:52 :: [10:00] TrailingEdge(trailing-edge(2704999ms)) | [10:52] Captured |
+EXIT CODE (--strict): 0
+================ S-C_straddle_hour_boundary
+  captured hours      4
+  DEFECT              0   ← capture defects
+  trailing-edge        0   ← silence to the observed edge, not a gap between trades
+  expected-missing     0
+  out-of-scope-venue     0
+  seq gaps (local)    *** 648 TRADE(S) MISSING *** in 1 run(s), longest 648, across 2226 sequenced row(s)
+  VERDICT: clean — no capture defects, candles + funding complete
+--- non-captured hour table (markdown):
+| Hour (UTC) | Class | Instance | Reason |
+|---|---|---|---|
+EXIT CODE (--strict): 0
+================ S-D0_restart_then_defect_no_venue_log
+  captured hours      2
+  DEFECT              1   ← capture defects
+  trailing-edge        1   ← silence to the observed edge, not a gap between trades
+  expected-missing     0
+  out-of-scope-venue     0
+  seq gaps (local)    *** 786 TRADE(S) MISSING *** in 2 run(s), longest 546, across 2088 sequenced row(s)
+  VERDICT: 1 defect hour(s) + 1 trailing-edge hour(s)
+--- non-captured hour table (markdown):
+| Hour (UTC) | Class | Instance | Reason |
+|---|---|---|---|
+| 2026-09-16 10:00 | TrailingEdge |  | split@10:52 :: [10:00] TrailingEdge(trailing-edge(2704999ms)) | [10:52] Captured |
+| 2026-09-16 12:00 | Defect | bbbbbbbb-0000-0000-0000-000000000002 | gap-breach(1205000ms) |
+EXIT CODE (--strict): 1
+================ S-D1_restart_then_defect_venue503_open
+  captured hours      1
+  DEFECT              0   ← capture defects
+  trailing-edge        1   ← silence to the observed edge, not a gap between trades
+  expected-missing     0
+  out-of-scope-venue     2
+  seq gaps (local)    *** 786 TRADE(S) MISSING *** in 2 run(s), longest 546, across 2088 sequenced row(s)
+  VERDICT: 0 defect hour(s) + 1 trailing-edge hour(s)
+--- non-captured hour table (markdown):
+| Hour (UTC) | Class | Instance | Reason |
+|---|---|---|---|
+| 2026-09-16 10:00 | TrailingEdge |  | split@10:52 :: [10:00] TrailingEdge(trailing-edge(2704999ms)) | [10:52] Captured |
+EXIT CODE (--strict): 0
+================ S-E0_no_evidence_files
+  captured hours      3
+  DEFECT              1   ← capture defects
+  trailing-edge        0   ← silence to the observed edge, not a gap between trades
+  expected-missing     0
+  out-of-scope-venue     0
+  S1 (uptime)         SKIPPED — ws_health.log absent and analysis_log.csv has no rows in range — S1 skipped, judging by store presence alone; S2-S4 still run
+  seq gaps (local)    *** 540 TRADE(S) MISSING *** in 1 run(s), longest 540, across 2340 sequenced row(s)
+  VERDICT: 1 defect hour(s)
+--- non-captured hour table (markdown):
+| Hour (UTC) | Class | Instance | Reason |
+|---|---|---|---|
+| 2026-09-16 10:00 | Defect |  | gap-breach(S1 skipped,2705000ms) |
+EXIT CODE (--strict): 1
+================ S-E1_header_only_analysis_log
+  captured hours      3
+  DEFECT              0   ← capture defects
+  trailing-edge        0   ← silence to the observed edge, not a gap between trades
+  expected-missing     1
+  out-of-scope-venue     0
+  seq gaps (local)    *** 540 TRADE(S) MISSING *** in 1 run(s), longest 540, across 2340 sequenced row(s)
+  VERDICT: clean — no capture defects, candles + funding complete
+--- non-captured hour table (markdown):
+| Hour (UTC) | Class | Instance | Reason |
+|---|---|---|---|
+| 2026-09-16 10:00 | ExpectedMissing |  |  |
+EXIT CODE (--strict): 0

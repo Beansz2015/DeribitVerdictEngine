@@ -1,0 +1,19 @@
+=== P-WI1  ranking table vs the program's winner   (WhatIfProgram winner index = 1)
+  ## ⚠ Guard-rails (binding)
+  ## Grid ranking — per-trade EV/ATR (net of fees)
+  _Ranking objective is EV/trade in ATR units, never win-rate (§3b): target-touch → +targetDist, stop/ambiguous → −stopDist, window-expiry → mark-to-window-end. **Net of round-trip fees** (§6.1 rider) — the per-row fee drag (`round_trip_fee_pct × price / ATR`) is subtracted unconditionally across all three outcome arms. Winner selected on the selection half (alternating session-days); holdout is the unseen half. **DIVERGENT** = holdout mean below the selection-half CI. σ is the population std of the per-trade EvAtr samples (dispersion beside the mean)._
+  _Net-EV rankings are **not comparable** to pre-rider (gross) runs._
+  | rank | cell | n | EV full | σ | EV (sel) | EV (holdout) | flag |
+  | 1 | stop_max_atr_mult=2.2 | 12 | -0.400 | 0.000 | — | -0.400 [-0.400,-0.400] n=12 | n<30 |
+  | 2 | stop_max_atr_mult=1.8 | 108 | -0.166 | 0.125 | -0.050 [-0.050,-0.050] n=58 | -0.300 [-0.300,-0.300] n=50 | ◆ winner ⚠ DIVERGENT |
+  | 3 | stop_max_atr_mult=2 | 109 | -0.065 | 0.005 | -0.070 [-0.070,-0.070] n=57 | -0.060 [-0.060,-0.060] n=52 |  |
+  | 4 | stop_max_atr_mult=1.6 | 115 | -0.085 | 0.005 | -0.080 [-0.080,-0.080] n=60 | -0.090 [-0.090,-0.090] n=55 | ⚠ DIVERGENT |
+  **Winner (cell stop_max_atr_mult=1.8):** full effective overlay below; every knob not listed inherits the live setting.
+  ## Population shift (directional count: baseline → overlay)
+  ## Baseline vs overlay — failure matrix (winner cell)
+
+=== P-WI2  single-cell overlay: which EV does the report print?   (WhatIfProgram winner index = 0)
+  ## ⚠ Guard-rails (binding)
+  ## Population shift (directional count: baseline → overlay)
+  ## Baseline vs overlay — failure matrix (winner cell)
+
