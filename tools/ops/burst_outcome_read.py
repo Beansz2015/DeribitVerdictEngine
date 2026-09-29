@@ -248,7 +248,12 @@ def rw_run(sr, strat, name, ctx):
     res = {}
     for hn, hr in halves(sr).items():
         pt, lo, hi, cnt = boot(hr, cb, 2 * K, stat)
-        res[hn] = (pt, lo, hi, [sum(cnt[:K]), sum(cnt[K:])])
+        # ⚠ DEVIATES from the verbatim copy (orchestrator ruling 2026-09-29, before any outcome was seen):
+        # readability counts only COVERED strata (both arms present), the rows `stat` actually uses —
+        # docs/burst-outcome-read-spec.md §5 "n >= 100 in every group a statistic uses". The copy counted
+        # every row, including A rows in strata with no B row, which the statistic drops.
+        cov = [i for i in range(K) if cnt[i] > 0 and cnt[K + i] > 0]
+        res[hn] = (pt, lo, hi, [sum(cnt[i] for i in cov), sum(cnt[K + i] for i in cov)])
     lab = label(res, (0, 1))
     ALL_LABELS.append((ctx, name, lab, res["FULL"]))
     return res, lab, keys

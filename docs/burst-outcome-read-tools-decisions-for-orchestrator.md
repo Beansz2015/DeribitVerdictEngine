@@ -71,3 +71,20 @@ All are tools-only and undone by one revert. None touches scoring, `settings.jso
 - ⚠ **What I checked:** only the error text. The error names the permission check, not the shell process, and `Bash` failed the same way as `PowerShell`. So I cannot confirm the cause. A load-related failure of the check is as likely as a busy PowerShell.
 - **Effect on the work:** no handle was skipped. `H-1` to `H-4` and `H-6` ran before or between the failures. `H-5` ran after the shell came back and is pasted in the spec-back. The only effect was the delayed docs commit.
 - **For future seats:** if the check fails, stop after two or three retries and do read-only work. After ten failures in a row the turn ends.
+
+---
+
+## 5. Orchestrator rulings — 2026-09-29 (UTC), before any outcome was seen
+
+**Build ACCEPTED.** Re-run by the orchestrator: `--selftest` → `SELFTEST PASSED (0 failed)`; `--counts-only` on `aws_fetch/20260928-121255` → arm table identical to the power count (ASIA 79 / 943, LONDON 77 / 845, NY 169 / 2,862), and counts-only carries an explicit guard (`FORBIDDEN_IN_COUNTS`) against opening outcome columns.
+
+| ID | Ruling |
+|---|---|
+| `TB-D5` | ✅ **(b)**, the new label. It is the truthful option, and it is added to the pre-registered label set now, before any outcome — recorded in `docs/burst-outcome-read-spec.md` §5 (Label row) |
+| `TB-D4` | ✅ Accepted as built (two-sided bootstrap p, Holm step-down, adjusted CI at 1 − α_i) |
+| `TB-D6` | ✅ Accepted: it follows the spec's own wording for each family |
+| `TB-D8` | ✅ Accepted: halves must be recomputed on the analysis population, or run 1 and run 2 would split wrongly |
+| `TB-D1`–`D3`, `D7`, `D9`–`D13` | ✅ Accepted as logged |
+| Readability ("worth a look") | ✅ **Ruled: count covered strata only** — the spec's own words are "every group a statistic uses". Implemented by the orchestrator in `rw_run` as a marked deviation from the verbatim copy; `--selftest` re-run: PASSED. Recorded in `docs/burst-outcome-read-spec.md` §5 (Readable row) |
+| Rider: `census` / `rescore` / `pocgate` / `liqflag` modes on a fetch with a rotated book | Noted, not built. Do not run those modes on such a fetch until their raw loaders read the rotated books (small follow-up, Sonnet 5, low); queued in `trader-tick-queue.md` §2 |
+| Shell outage note (§4) | Consistent with a second seat active at the same time; the same "no safety verdict" failure stopped one of this seat's agents on 2026-09-28. Advice kept: stop after 2–3 retries, do read-only work |
