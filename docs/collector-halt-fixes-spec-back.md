@@ -91,6 +91,15 @@ All seven (`CH-1`–`CH-7`) were auto-proceeded, as logged in the spec's §4. No
 
 ---
 
+## 4a. Launch test — run 2026-09-29 20:37–20:40 UTC, trader-authorised
+
+The Release build at `f3bc9fc` ran on the dev machine, with the overlay keeping tape capture off, for three `ON_CLOSE` runs:
+- 3 rows at 20:38:02, 20:39:01 and 20:40:06. Each was `WsHealth=OK`, `SettingsVersion=69`, `NO TRADE`.
+- No `run_errors.log` was written, and no error window appeared.
+- Status line (read by UI Automation): `WS OK · 1/3/5/15 fresh · trades 560 · Log: 3 rows`. At about 4 s it already read `fresh`, so the `awaiting first frame` text was **not observed**: the first frame arrived before the first render.
+
+The app closed normally. This covers the normal path only. The error path (a run exception with auto-run on) was not forced.
+
 ## 5. What I did not verify
 
 - **Rows B2 and B3 in the running app.** `MainForm_*.vb` and `Program.vb` are outside the harness. The edits were checked by compile and by reading. I did not launch the app. The dev overlay in `bin\Release` does keep tape capture off (`{"trade_store": {"enabled": false}}`, read 2026-09-29), but a launch starts auto-run (`start_engaged` is true in the tracked file) and the signal bridge writes `verdict_signal.json`. That is a live run on your machine, and it is yours to start. **Your pre-push test:** launch, confirm the status line reads `WS OK · awaiting first frame` for the first second or so, then `fresh`, and that a normal run writes no `run_errors.log`.
