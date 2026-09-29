@@ -167,6 +167,29 @@ The audit says every success-rate surface has three flaws (report §A item 3). R
 
 ---
 
+## 7a. Sequencing checked against `roadmap.md` (added 2026-09-29, trader-asked)
+
+The first draft was sequenced without reading [`roadmap.md`](roadmap.md), which `CLAUDE.md` requires for sequencing work. Read afterwards. Four findings, none of which moves the pre-holiday plan (§0; C-8 is not scoring):
+
+| # | `roadmap.md` says | Effect on this triage |
+|---|---|---|
+| **R-1** | `roadmap.md` §5 rule 1: **one scoring change per dataset boundary**; bundling several at one boundary needs trader sign-off | §2.5 says "rule them together by root". **Ruling together is fine; shipping is not.** C-1/C-2 (stop geometry), C-3 (loss-path floor), C-4 (trade staleness), C-6 (15m fail-closed) and the K2 fix are each a ⚠ boundary. After 2026-11-25 they ship one per boundary, or as one signed-off bundle |
+| **R-2** | Burst outcome **run 2** reads rows from 2026-11-25 onward, on or after 2027-01-27, and "must replicate before (c) ships" ([`burst-outcome-read-spec.md`](burst-outcome-read-spec.md) §6.1). A scoring change inside that window makes run 2 a before/after read (its §6.1 last bullet) | ⛔ **New conflict.** Every reserved scoring fix from §C shipped between 2026-11-25 and about 2027-01-27 puts a boundary inside run 2's population. **Decision `AT-6` below** |
+| **R-3** | `roadmap.md` §5 rule 5: **autotrade safety is consumer-gated, engine-informed** — the engine never suppresses information for the bridge; it emits health flags and stand-down states, and the order app owns the decision to act | Shapes decision C-1. Its engine half should be a **payload flag or stand-down state with a reason**, not a directional verdict silently turned into NO TRADE. The app half refuses at the fill. The audit's read (c) fits rule 5 only in that form |
+| **R-4** | Standing rulings that rest on surfaces the audit flags (decision C-11): **W6-1** LONDON stop "no change" (what-if runner, EV pooled across sessions — audit row C21 names this exact overlay) · **W6-3 / E1** "the tier ladder does not separate" (band ladder and matrix — rows C2–C4) · **W6-4** INCONCLUSIVE, which parks **W6-5** (B1 weights) and **W6-7** Tier-C spend (CeilingAudit — row C18) | C-11's list is now concrete: these three `roadmap.md` §3 W6 rulings, plus the CeilingAudit §4 text. None changes anything before the holiday; each is re-opened only when its instrument is fixed |
+
+Two smaller notes:
+- `roadmap.md` §3 W3 still reads "**live-at-min-size unlocked**". The audit's three order-app S0s now gate arming autotrade (`AT-Q1`). A note was added to that row.
+- The C1 fix (the OHLC stub freeze) touches `LivePerformanceTracker`'s cache handling, as does the unspecced `_evalCache` decoupling (`roadmap.md` §4). **Spec them together**, or at least serialise them. Both rewrite what the eval cache holds.
+
+**New decision for the trader:**
+
+| ID | Decision | Options | My read |
+|---|---|---|---|
+| `AT-6` | Reserved scoring fixes from §C against burst run 2's window (2026-11-25 → about 2027-01-27) | (a) hold every §C scoring fix until run 2 is read · (b) ship them after 2026-11-25 and read run 2 as before/after with an era stratum · (c) move run 2's start to after the fixes ship | **(a) for everything except a fix the order app needs before autotrade is armed.** Run 2 is the replication that gates `AVR-2` (c); a boundary inside it weakens the only forward test the project has pre-registered. (b) is cheaper in calendar time and gives up that replication. ⛔ Economy class: reserved |
+
+---
+
 ## 8. What I did not verify
 
 - Any Band A row. The order app's code was not opened; `8232e9e` is the audit's pin, not checked against the app's current master.
