@@ -520,6 +520,10 @@ Partial Public Class MainForm
                     End Sub)
                 End If
             End Function)
+        Else
+            ' [C-8 / CH-4] Disabled at start-up: complete the tracker's init task, or a later
+            ' flip to enabled would hang every run in UpdateAsync (adversarial audit row B1).
+            LivePerformanceTracker.MarkInitSkipped()
         End If
     End Sub
 
@@ -1993,11 +1997,20 @@ Partial Public Class MainForm
                                 _wsFeed.CurrentBackoffSec, _wsFeed.ReconnectCount)
         Else
             Dim n As Integer = If(_marketState IsNot Nothing, _marketState.TradeCount, 0)
-            Dim ageSec As Integer = CInt(Math.Max(0, (DateTime.UtcNow - _wsFeed.LastFrameUtc).TotalSeconds))
-            If ageSec <= net.WsStaleAfterSec Then
-                seg = String.Format("WS OK · 1/3/5/15 fresh · trades {0}", n)
+            ' [C-8 / CH-5, docs/collector-halt-fixes-spec.md] Before the first frame LastFrameUtc
+            ' is DateTime.MinValue, and CInt of that age (~6.4e10 s) overflowed, raising an
+            ' exception out of the status line (adversarial audit row B3). Say what is true
+            ' instead, and cap the age as a Double before any integer conversion.
+            Dim lastFrame As DateTime = _wsFeed.LastFrameUtc
+            If lastFrame = DateTime.MinValue Then
+                seg = String.Format("WS OK · awaiting first frame · trades {0}", n)
             Else
-                seg = String.Format("WS OK · streams {0}s stale · trades {1}", ageSec, n)
+                Dim ageSec As Integer = CInt(Math.Min(Integer.MaxValue, Math.Max(0.0, (DateTime.UtcNow - lastFrame).TotalSeconds)))
+                If ageSec <= net.WsStaleAfterSec Then
+                    seg = String.Format("WS OK · 1/3/5/15 fresh · trades {0}", n)
+                Else
+                    seg = String.Format("WS OK · streams {0}s stale · trades {1}", ageSec, n)
+                End If
             End If
         End If
 

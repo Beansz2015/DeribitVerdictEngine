@@ -41,6 +41,7 @@
     <Compile Include="../../Core/WsHealthLog.vb" />
     <Compile Include="../../Core/WsFeedLog.vb" />
     <Compile Include="../../Core/VenueStatusLog.vb" />
+    <Compile Include="../../Core/RunErrorLog.vb" />
     <Compile Include="../../Core/RepairStatusLog.vb" />
     <Compile Include="../../Core/TradeStoreWriter.vb" />
     <Compile Include="../../Core/CaptureMarkerLog.vb" />

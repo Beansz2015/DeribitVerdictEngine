@@ -10,7 +10,8 @@
 
   Prints: the analysis_log.csv* files, the header width, the last rows (InstanceId, SignalId,
   TriggerMode, WsHealth, SettingsVersion ...), the absorption_episodes.log and repair_status.log tails,
-  the ws_health.log tail, memory/commit/paging, and the liquidation probe's status line if it runs.
+  the ws_health.log tail, the run_errors.log line count and tail (C-8, docs/collector-halt-fixes-spec.md),
+  memory/commit/paging, and the liquidation probe's status line if it runs.
 
   Usage:  powershell -NoProfile -ExecutionPolicy Bypass -File tools/ops/collector-readback.ps1 -InstanceId i-0d6c133058876273e
 #>
@@ -32,6 +33,7 @@ $cmds = @(
  '''EPISODES_TAIL''; if (Test-Path C:\DeribitEngine\absorption_episodes.log) { Get-Content C:\DeribitEngine\absorption_episodes.log -Tail 2 | ForEach-Object { $_.Substring(0, [math]::Min(200, $_.Length)) } } else { ''ABSENT'' }',
  '''REPAIR_TAIL''; if (Test-Path C:\DeribitEngine\repair_status.log) { Get-Content C:\DeribitEngine\repair_status.log -Tail 3 | ForEach-Object { $_.Substring(0, [math]::Min(220, $_.Length)) } }',
  '''WSHEALTH_TAIL''; Get-Content C:\DeribitEngine\ws_health.log -Tail 3',
+ '''RUNERR_TAIL''; if (Test-Path C:\DeribitEngine\run_errors.log) { ''RUNERR_LINES='' + @(Get-Content C:\DeribitEngine\run_errors.log).Count; Get-Content C:\DeribitEngine\run_errors.log -Tail 3 | ForEach-Object { $_.Substring(0, [math]::Min(220, $_.Length)) } } else { ''ABSENT (no run error logged since the C-8 build)'' }',
  '$a = @(Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue); ''APP_COUNT='' + $a.Count; foreach ($x in $a) { ''APP PID='' + $x.Id + '' PRIV_MB='' + [math]::Round($x.PrivateMemorySize64/1MB) + '' THREADS='' + $x.Threads.Count + '' START='' + $x.StartTime.ToUniversalTime().ToString(''u'') }',
  '$os = Get-CimInstance Win32_OperatingSystem; ''MEM_FREE_MB='' + [math]::Round($os.FreePhysicalMemory/1KB) + '' COMMIT_FREE_MB='' + [math]::Round($os.FreeVirtualMemory/1KB) + '' COMMIT_LIMIT_MB='' + [math]::Round($os.TotalVirtualMemorySize/1KB) + '' DISK_FREE_GB='' + [math]::Round((Get-PSDrive C).Free/1GB,2)',
  '$c = Get-Counter ''\Memory\Pages Output/sec'',''\Memory\Pages Input/sec'' -SampleInterval 2 -MaxSamples 3; $c.CounterSamples | Group-Object Path | ForEach-Object { ''CTR '' + $_.Name + '' mean='' + [math]::Round(($_.Group | Measure-Object CookedValue -Average).Average,1) }',

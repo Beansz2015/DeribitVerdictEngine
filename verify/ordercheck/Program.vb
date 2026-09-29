@@ -656,6 +656,17 @@ Module Program
         A92b_IdentifiedRowsOnlyWriteNoSeqlessLine()
         A92c_SeqlessRowsBeforeCutoverAreNotCounted()
 
+        ' [A93 — collector-halt fixes, adversarial-audit decision C-8, docs/collector-halt-fixes-spec.md
+        ' §5] A93a: the run-error line is seven sanitised, capped fields. A93b/A93c: the tracker's
+        ' UpdateAsync can no longer hang on an init task nobody completes (audit row B1). A93d/A93e:
+        ' the REST timeout is resolved per request and validated, never set in the static
+        ' constructor (audit row B4). Rows B2/B3 live in MainForm_*.vb, outside this harness.
+        A93a_RunErrorLineIsSevenSanitisedCappedFields()
+        A93b_DisabledTrackerUpdateDoesNotAwaitInit()
+        A93c_MarkInitSkippedReleasesUpdateAfterAFlipToEnabled()
+        A93d_RequestTimeoutIsValidatedAgainstTheRange()
+        A93e_HttpClientTimeoutIsInfiniteAfterTypeInit()
+
         ' [A57 — thin-trade-window skip gate, docs/thin-trade-window-skip-gate-proposal.md §6]
         ' Every guard on the trade path tested Count = 0; nothing tested for a THIN list. A57c
         ' is the mutation proof: revert ScoringEngine.MinTradesForScoring to a hardcoded 50 and
@@ -12825,6 +12836,125 @@ Module Program
         Finally
             A48Cleanup(dir)
         End Try
+    End Sub
+
+    ' =======================================================================
+    ' A93 — collector-halt fixes (adversarial-audit decision C-8, docs/collector-halt-fixes-spec.md
+    ' §5). Each fixture's failing input is named in its comment; each was mutation-run.
+    ' =======================================================================
+
+    ' -- A93a: one line, exactly seven fields, separator and line breaks replaced, message capped.
+    ' The input that makes it fail: a message carrying " | " and a CRLF — unsanitised, the line
+    ' splits into more than seven fields and into two lines. MECHANISM literals throughout.
+    Private Sub A93a_RunErrorLineIsSevenSanitisedCappedFields()
+        Dim path As String = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                                                    "a93a_" & Guid.NewGuid().ToString("N") & ".log")
+        Try
+            Dim msg As String = "left | right" & vbCrLf & "next line " & New String("x"c, 600)
+            Dim ex As Exception = Nothing
+            Try
+                Throw New InvalidOperationException(msg)
+            Catch caught As Exception
+                ex = caught
+            End Try
+            Dim utc As New DateTime(2026, 9, 29, 12, 0, 0, 123, DateTimeKind.Utc)
+            Dim wrote As Boolean = RunErrorLog.LogTo(path, RunErrorLog.OriginRun, ex, "ON_CLOSE", "iid-a93a", utc)
+            Dim lines As String() = System.IO.File.ReadAllText(path).Split({vbLf}, StringSplitOptions.RemoveEmptyEntries)
+            Dim fields As String() = If(lines.Length > 0, lines(0).Split({" | "}, StringSplitOptions.None), New String() {})
+            Dim ok As Boolean = wrote AndAlso lines.Length = 1 AndAlso fields.Length = 7 AndAlso
+                                fields(0) = "2026-09-29T12:00:00.123Z" AndAlso
+                                fields(1) = RunErrorLog.OriginRun AndAlso fields(2) = "iid-a93a" AndAlso
+                                fields(3) = "ON_CLOSE" AndAlso fields(4) = GetType(InvalidOperationException).FullName AndAlso
+                                fields(5).StartsWith("left / right  next line", StringComparison.Ordinal) AndAlso
+                                fields(5).Length = RunErrorLog.MaxMessageChars AndAlso
+                                fields(6).StartsWith("at ", StringComparison.Ordinal) AndAlso
+                                fields(6).Length <= RunErrorLog.MaxFrameChars
+            Check("A93a C-8 — run_errors.log: one line, seven fields, ' | ' and CR/LF in the message replaced, message capped at MaxMessageChars, top frame present",
+                  ok, String.Format("wrote={0} lines={1} fields={2} msgLen={3} f0='{4}' f5='{5}'",
+                                    wrote, lines.Length, fields.Length,
+                                    If(fields.Length > 5, fields(5).Length, -1),
+                                    If(fields.Length > 0, fields(0), ""),
+                                    If(fields.Length > 5, fields(5).Substring(0, Math.Min(40, fields(5).Length)), "")))
+        Finally
+            Try : System.IO.File.Delete(path) : Catch : End Try
+        End Try
+    End Sub
+
+    ' -- A93b: tracker disabled, init task fresh (never completed): UpdateAsync must return.
+    ' The input that makes it fail: the Enabled check back AFTER the init await — then it waits
+    ' forever (audit row B1; the audit's own proof P14, verify/auditproofs/Program.vb). The 3 s
+    ' bound is MECHANISM: the fixed path returns synchronously.
+    Private Sub A93b_DisabledTrackerUpdateDoesNotAwaitInit()
+        Dim pd = SettingsLoader.Current.PerformanceDisplay
+        Dim was As Boolean = pd.Enabled
+        LivePerformanceTracker.ResetInitForTest()
+        Try
+            pd.Enabled = False
+            Dim v As New VerdictResult With {.Verdict = "NO TRADE", .Confidence = "N/A"}
+            Dim t = LivePerformanceTracker.UpdateAsync(v, New IndicatorResults(), New List(Of Candle)(), DateTime.UtcNow)
+            Dim finished As Boolean = t.Wait(3000)
+            Check("A93b C-8 — performance_display disabled and the init task never completed: UpdateAsync returns (no hang before emission)",
+                  finished, "UpdateAsync still pending after 3 s — it is awaiting the init task")
+        Finally
+            pd.Enabled = was
+            LivePerformanceTracker.MarkInitSkipped()   ' release any awaiter a mutation left hanging
+        End Try
+    End Sub
+
+    ' -- A93c: disabled at start-up, so the form calls MarkInitSkipped; later flipped to enabled.
+    ' UpdateAsync must return (it stays inert: the empty-path guard). The input that makes it
+    ' fail: MarkInitSkipped not completing the task — then the flipped run waits forever.
+    Private Sub A93c_MarkInitSkippedReleasesUpdateAfterAFlipToEnabled()
+        Dim pd = SettingsLoader.Current.PerformanceDisplay
+        Dim was As Boolean = pd.Enabled
+        LivePerformanceTracker.ResetInitForTest()
+        Try
+            LivePerformanceTracker.MarkInitSkipped()
+            pd.Enabled = True
+            Dim v As New VerdictResult With {.Verdict = "NO TRADE", .Confidence = "N/A"}
+            Dim t = LivePerformanceTracker.UpdateAsync(v, New IndicatorResults(), New List(Of Candle)(), DateTime.UtcNow)
+            Dim finished As Boolean = t.Wait(3000)
+            Check("A93c C-8 — disabled at start-up (MarkInitSkipped), then flipped to enabled: UpdateAsync returns instead of awaiting forever",
+                  finished, "UpdateAsync still pending after 3 s — MarkInitSkipped did not complete the init task")
+        Finally
+            pd.Enabled = was
+            LivePerformanceTracker.MarkInitSkipped()
+        End Try
+    End Sub
+
+    ' -- A93d: request_timeout_seconds validated per request. SHIPPED BEHAVIOUR for the fallback
+    ' (derived from the POCO default, never restated); MECHANISM for 0, -5 and the midpoint
+    ' (any in-range and out-of-range values serve). The input that makes it fail: 0 accepted.
+    Private Sub A93d_RequestTimeoutIsValidatedAgainstTheRange()
+        Dim def As Integer = New NetworkSettings().RequestTimeoutSeconds
+        Dim lo As Integer = DeribitClient.MinRequestTimeoutSeconds
+        Dim hi As Integer = DeribitClient.MaxRequestTimeoutSeconds
+        Dim mid As Integer = (lo + hi) \ 2
+        Dim cases As (input As Integer, want As Integer, wantRejected As Boolean)() = {
+            (mid, mid, False), (lo, lo, False), (hi, hi, False),
+            (0, def, True), (-5, def, True), (lo - 1, def, True), (hi + 1, def, True)}
+        Dim bad As New List(Of String)()
+        For Each c In cases
+            Dim rejected As Boolean
+            Dim got As TimeSpan = DeribitClient.ResolveRequestTimeout(c.input, rejected)
+            If got <> TimeSpan.FromSeconds(c.want) OrElse rejected <> c.wantRejected Then
+                bad.Add(String.Format("{0}->{1}s rejected={2} (want {3}s {4})", c.input, got.TotalSeconds, rejected, c.want, c.wantRejected))
+            End If
+        Next
+        Check(String.Format("A93d C-8 — ResolveRequestTimeout: [{0}, {1}] s used as given; 0, -5 and outside the range fall back to the POCO default ({2} s) and report rejected", lo, hi, def),
+              bad.Count = 0, String.Join("; ", bad))
+    End Sub
+
+    ' -- A93e: the shared HttpClient carries NO timeout of its own after type initialisation; each
+    ' GET runs under a per-request token. The input that makes it fail: the static-constructor
+    ' assignment restored (audit row B4: a 0 there poisoned every REST call for the process).
+    Private Sub A93e_HttpClientTimeoutIsInfiniteAfterTypeInit()
+        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(GetType(DeribitClient).TypeHandle)
+        Dim fi = GetType(DeribitClient).GetField("_http", Reflection.BindingFlags.NonPublic Or Reflection.BindingFlags.Static)
+        Dim http = If(fi IsNot Nothing, TryCast(fi.GetValue(Nothing), System.Net.Http.HttpClient), Nothing)
+        Check("A93e C-8 — DeribitClient's shared HttpClient.Timeout is infinite after type initialisation (the timeout is per request)",
+              http IsNot Nothing AndAlso http.Timeout = System.Threading.Timeout.InfiniteTimeSpan,
+              If(http Is Nothing, "field _http not found", "Timeout=" & http.Timeout.ToString()))
     End Sub
 
     ' =======================================================================

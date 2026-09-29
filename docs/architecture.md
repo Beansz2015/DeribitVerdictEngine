@@ -155,6 +155,9 @@ DeribitVerdictEngine/
 │   │                                   errors, VENUE_OK on recovery. (added 2026-09-14)
 │   ├── WsHealthLog.vb                  Transition-only ws_health.log of the OK/DEGRADED/DOWN/REST
 │   │                                   state. (added 2026-09-14)
+│   ├── RunErrorLog.vb                  run_errors.log: one line per run, UI-thread, crash or
+│   │                                   config failure; replaces the modal error box on auto-run.
+│   │                                   Never throws. (added 2026-09-29, collector-halt-fixes-spec.md)
 │   └── Indicators_Structure.vb         CalcDonchian (quartilePct from cfg),
 │                                       CalcOBV,
 │                                       CalcVPFRLite v2 (VAH/VAL + nearest HVN/LVN,
@@ -225,7 +228,7 @@ DeribitVerdictEngine/
 │   ├── checks/                         verify-gate.ps1 (pre-push, CI, Stop hook), rotation-
 │   │                                   riders.ps1, doc-trim-verify.ps1, hook installers. (added
 │   │                                   2026-09-14)
-│   ├── ops/                            collector.ps1 (SSM status, fetch, deploy), kelly-trigger-
+│   ├── ops/                            collector.ps1 (SSM status, fetch, deploy, restart), kelly-trigger-
 │   │                                   read.ps1, absorption-episode-age-read.ps1. (added
 │   │                                   2026-09-14)
 │   ├── *.ps1                           UI automation for the running MainForm (screenshot, click,

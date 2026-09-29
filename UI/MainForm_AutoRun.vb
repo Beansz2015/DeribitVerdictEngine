@@ -227,6 +227,26 @@ Partial Public Class MainForm
         Return _autoRunTimer.IsRunning OrElse _onCloseActive
     End Function
 
+    ''' <summary>[C-8 / CH-1, CH-2, docs/collector-halt-fixes-spec.md] The Application.ThreadException
+    ''' handler (attached in Program.Main). Every UI-thread exception is written to run_errors.log;
+    ''' a box is shown only when auto-run is not engaged, so a human is at the screen. Before this,
+    ''' the default .NET dialog was modal and stopped the unattended collector (adversarial audit
+    ''' row B2). Never throws.</summary>
+    Friend Sub OnUiThreadException(sender As Object, e As System.Threading.ThreadExceptionEventArgs)
+        RunErrorLog.Log(RunErrorLog.OriginUiThread, e.Exception, "", ProcessIdentity.InstanceId)
+        Try
+            If Not AutoRunEngaged() Then
+                MessageBox.Show(Me,
+                    "Unexpected error:" & Environment.NewLine & Environment.NewLine &
+                    e.Exception.Message & Environment.NewLine & Environment.NewLine &
+                    "Logged to " & RunErrorLog.GetPath(),
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            End If
+        Catch
+            ' The handler must never raise a second exception into the message loop.
+        End Try
+    End Sub
+
     ''' <summary>On-close is selected AND a live WS MarketState feed exists to read bar rolls from.
     ''' transport=rest or an unconstructed feed → False (caller falls back to interval mode, §4.4).</summary>
     Private Function OnCloseModeActive() As Boolean

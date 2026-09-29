@@ -29,20 +29,27 @@ Partial Public Class MainForm
     Private Async Sub btnAnalyze_Click(sender As Object, e As EventArgs) Handles btnAnalyze.Click
         btnAnalyze.Enabled = False
         btnAnalyze.Text    = "Fetching..."
+        ' Captured before RunAnalysisAsync consumes and resets _pendingTrigger ([RIDER-3]).
+        Dim trigger As String = _pendingTrigger
 
         Try
             Await RunAnalysisAsync()
         Catch ex As Exception
-            ' P5b — errors surface via MessageBox now that the legacy txtOutput
-            ' writer is gone. Briefly blocks the auto-run timer; acceptable per
-            ' the P5b kickoff §3.2.1 trade-off (errors are rare, trader wants
-            ' to see them). Swap to a transient header Pill if disruptive.
-            MessageBox.Show(
-                "Analysis failed:" & Environment.NewLine & Environment.NewLine &
-                ex.Message,
-                "Analysis Error",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error)
+            ' [C-8 / CH-1, CH-2, docs/collector-halt-fixes-spec.md] Every failure is written to
+            ' run_errors.log. The MessageBox (P5b §3.2.1: the trader wants to see errors) is shown
+            ' ONLY when auto-run is not engaged, so a human is at the screen. It used to show
+            ' always, and while it waited for OK this Finally could not re-enable btnAnalyze, so
+            ' RunAutoAnalysis dropped every later fire: one exception stopped the unattended
+            ' collector until someone clicked OK (adversarial audit row B2).
+            RunErrorLog.Log(RunErrorLog.OriginRun, ex, trigger, ProcessIdentity.InstanceId)
+            If Not AutoRunEngaged() Then
+                MessageBox.Show(
+                    "Analysis failed:" & Environment.NewLine & Environment.NewLine &
+                    ex.Message,
+                    "Analysis Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error)
+            End If
         Finally
             btnAnalyze.Enabled = True
             btnAnalyze.Text    = "Analyze Now"

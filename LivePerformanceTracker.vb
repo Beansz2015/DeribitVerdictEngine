@@ -343,6 +343,21 @@ Public Class LivePerformanceTracker
     ' the schema comment by SchemaCommentLine().
     Private Shared _floorPctInEffect As Double = 0.0008
 
+    ''' <summary>[C-8 / CH-4] Completes the init task when the tracker is disabled at start-up
+    ''' and InitialiseAsync is therefore never called. Without it, a later flip of
+    ''' performance_display.enabled to true made every UpdateAsync await forever.
+    ''' Idempotent.</summary>
+    Public Shared Sub MarkInitSkipped()
+        _initTcs.TrySetResult(True)
+    End Sub
+
+    ''' <summary>Test-only (fixtures A93b/A93c): a fresh, uncompleted init task, so each fixture
+    ''' sets its own precondition instead of depending on fixture order. Never called by the
+    ''' app.</summary>
+    Friend Shared Sub ResetInitForTest()
+        _initTcs = New TaskCompletionSource(Of Boolean)()
+    End Sub
+
     ' -----------------------------------------------------------------------
     ' Public: initialise from disk (eager backfill)
     ' -----------------------------------------------------------------------
@@ -662,11 +677,18 @@ Public Class LivePerformanceTracker
             nowUtc     As DateTime
         ) As Task
 
-        ' Wait for eager backfill to complete before touching shared state.
-        Await _initTcs.Task
-
+        ' [C-8 / CH-4, docs/collector-halt-fixes-spec.md] The Enabled check runs BEFORE the init
+        ' await. It used to run after it: with performance_display.enabled false at start-up the
+        ' form never calls InitialiseAsync, nothing completed _initTcs, and every run hung here
+        ' before emission (adversarial audit row B1). The form now also calls MarkInitSkipped in
+        ' that case, so a later flip to true does not hang either — it stays INERT until a
+        ' restart (the empty-path guard below), because initialising the strip mid-process would
+        ' change when it renders, a reserved rendered-value change (CH-4).
         Dim cfg As EngineSettings = SettingsLoader.Current
         If Not cfg.PerformanceDisplay.Enabled Then Return
+
+        ' Wait for eager backfill to complete before touching shared state.
+        Await _initTcs.Task
         If String.IsNullOrEmpty(_evalCachePath) Then Return
 
         ' Keep the schema-comment floor in sync (stamped when AppendEvalRows / WriteEvalCache

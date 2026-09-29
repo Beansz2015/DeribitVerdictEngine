@@ -12,6 +12,9 @@
                allowlist ONLY (docs/aws-collector-deploy-checklist.md §1): the .exe/.dll/
                .deps.json/.runtimeconfig.json, settings.json, fonts\. NEVER backtest_data\,
                NEVER analysis_log.csv, NEVER settings.local.json.
+    restart -- [2026-09-29, docs/collector-halt-fixes-spec.md §3] stops and relaunches the SAME
+               build, then runs deploy's two-row gate. Writes NO file on the box. Needs -Yes;
+               without it, prints the plan and stops. Exit codes as deploy's.
 
   Out of scope, named so it is never assumed back in (proposal §2.7):
     - No pooling/dedup/analysis in `fetch` -- it moves bytes. The §3b minute-key dedup in
@@ -47,7 +50,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('status', 'fetch', 'deploy')]
+    [ValidateSet('status', 'fetch', 'deploy', 'restart')]
     [string]$Verb,
 
     # D-7: named explicitly on every invocation, no default. A tool that defaults to a
@@ -70,7 +73,12 @@ param(
     [switch]$DryRun,
 
     # fetch only: skip the post-fetch venue sample (tools/ops/venue-check.ps1).
-    [switch]$SkipVenueCheck
+    [switch]$SkipVenueCheck,
+
+    # restart only (docs/collector-halt-fixes-spec.md §3, CH-7): without -Yes, restart prints its
+    # plan and stops with nothing changed. A seat's shell cannot answer a prompt, so the explicit
+    # switch is the deliberate step.
+    [switch]$Yes
 )
 
 $ErrorActionPreference = 'Continue'  # native aws.exe stderr foot-gun -- see verify-gate.ps1
@@ -142,7 +150,11 @@ $OptionalPdb = 'DeribitVerdictEngine.pdb'
 # [D-6d Stage 1, 2026-09-24] absorption_episodes.log -- the counting-gap sidecar
 # (Core/AbsorptionEpisodeLog.vb), one line per run. Stage 1's read needs it on this machine;
 # absent until the first post-deploy run, which the absent-on-box arm already handles.
-$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv', 'ws_feed.log', 'absorption_episodes.log')
+# [C-8, 2026-09-29] run_errors.log -- the run-error sidecar (Core/RunErrorLog.vb,
+# docs/collector-halt-fixes-spec.md). Before it, an auto-run exception raised a modal box and the
+# cause stayed on the screen of an unattended box. Absent until the first failure, which the
+# absent-on-box arm already handles.
+$FetchFiles = @('analysis_log.csv', 'analysis_log.csv.v0.7.bak', 'ws_health.log', 'venue_status.log', 'capture_marker.log', 'repair_status.log', 'analysis_eval_cache.csv', 'ws_feed.log', 'absorption_episodes.log', 'run_errors.log')
 # [RIDER-2b] Every rotated analysis_log book on the box matches this. Discovered at fetch time.
 $BakFilter = 'analysis_log.csv*.bak'
 $FetchDirs  = @('backtest_data', 'settings_snapshots')
@@ -1033,8 +1045,69 @@ function Wait-DeployGate {
 }
 
 # ===========================================================================
+<# [C-8 / AT-4, 2026-09-29] restart -- stop and relaunch the SAME build, then run the deploy's own
+   two-row acceptance gate. docs/collector-halt-fixes-spec.md §3. It exists for the holiday rule in
+   trader-tick-queue.md's state banner (trader ruling AT-4 (a)): a seat whose read-back shows no new
+   analysis_log.csv row for 30 minutes may restart the collector. It changes NO file on the box --
+   no build, no settings, no book, no store.
+
+   The install dir is resolved WITHOUT requiring a live process ($ResolveSingleProcCmd aborts on
+   zero, and a crashed collector has zero): the running process's dir if exactly one runs, else
+   $DefaultRemoteDir if the exe is there. Two or more processes: refuse, as everywhere else.
+
+   Exit codes: 0 restarted and the gate passed · 1 nothing changed (plan only, or a pre-flight
+   failure) · 2 the app was stopped/relaunched and the gate did NOT pass -- STOP AND INVESTIGATE BY
+   HAND, as for a deploy. #>
+$DefaultRemoteDir = 'C:\DeribitEngine'
+function Invoke-Restart {
+    Section "restart -- $InstanceId ($Region)  [PRODUCTION -- confirm this is the intended box]"
+
+    Section '1. pre-flight (remote)'
+    $preCmds = @(
+        "`$procs = @(Get-Process DeribitVerdictEngine -ErrorAction SilentlyContinue)",
+        "'PROC_COUNT=' + `$procs.Count",
+        "if (`$procs.Count -gt 1) { 'ERROR=' + `$procs.Count + ' DeribitVerdictEngine instances are running (PIDs ' + ((`$procs | ForEach-Object { `$_.Id }) -join ',') + '). The box is ambiguous; refusing to act.'; exit 1 }",
+        "if (`$procs.Count -eq 1) { `$dir = Split-Path `$procs[0].Path; 'REMOTE_PID=' + `$procs[0].Id } else { `$dir = '$DefaultRemoteDir'; 'REMOTE_PID=NONE' }",
+        "if (-not (Test-Path (Join-Path `$dir 'DeribitVerdictEngine.exe'))) { 'ERROR=DeribitVerdictEngine.exe not found in ' + `$dir; exit 1 }",
+        "'REMOTE_DIR=' + `$dir",
+        "`$csv = Join-Path `$dir 'analysis_log.csv'",
+        "if (Test-Path `$csv) { 'LAST_ROW=' + ((Get-Content `$csv -Tail 1).Split(',')[0]) }"
+    )
+    $pre = Invoke-RemotePs -InstanceId $InstanceId -Region $Region -Commands $preCmds -TimeoutSec 60
+    if ($pre.Status -ne 'Success' -or $pre.StdOut -match 'ERROR=') {
+        Fail "remote pre-flight failed (SSM status $($pre.Status)) -- nothing changed"
+        $pre.StdOut, $pre.StdErr | ForEach-Object { $_ -split "`r?`n" } | Where-Object { $_ } | ForEach-Object { Info $_ }
+        exit 1
+    }
+    $st = ConvertFrom-KeyValueLines $pre.StdOut
+    $remoteDir = $st['REMOTE_DIR']
+    if (-not $remoteDir) { Fail 'could not resolve the remote install directory -- nothing changed'; exit 1 }
+
+    Section '2. plan'
+    Info "target: $InstanceId ($Region), dir $remoteDir"
+    Info "running PID: $($st['REMOTE_PID'])   last analysis_log.csv row: $($st['LAST_ROW']) (UTC)"
+    Info 'will: stop the app (if running), relaunch the SAME build, then wait for 2 new rows >=45 s apart (12 min max)'
+    if (-not $Yes) { Warn 'no -Yes: stopping here. Nothing changed.'; exit 1 }
+
+    Section '3. stop'
+    if (-not (Stop-RemoteApp -Context 'restart')) { Fail 'could not confirm the app stopped -- nothing relaunched'; exit 2 }
+
+    Section '4. relaunch'
+    $restartUtc = (Get-Date).ToUniversalTime()
+    if (-not (Start-RemoteApp -RemoteDir $remoteDir)) { Fail 'relaunch did not confirm a running process -- STOP AND INVESTIGATE BY HAND'; exit 2 }
+
+    Section '5. acceptance gate (2 new CSV rows >=45s apart, within 12 minutes)'
+    if (Wait-DeployGate -RestartUtc $restartUtc -RemoteDir $remoteDir) {
+        Ok 'RESTARTED -- the analysis loop fired more than once on the same build. Check run_errors.log and ws_feed.log for why it had stopped.'
+        exit 0
+    }
+    Fail 'gate did not pass within 12 minutes -- the app is up but not producing rows at cadence. STOP AND INVESTIGATE BY HAND.'
+    exit 2
+}
+
 switch ($Verb) {
-    'status' { Invoke-Status }
-    'fetch'  { Invoke-Fetch }
-    'deploy' { Invoke-Deploy }
+    'status'  { Invoke-Status }
+    'fetch'   { Invoke-Fetch }
+    'deploy'  { Invoke-Deploy }
+    'restart' { Invoke-Restart }
 }

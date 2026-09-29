@@ -36,6 +36,7 @@
          ProcessIdentity.InstanceId and VenueStatusLog in GetStringOrRecordAsync. -->
     <Compile Include="..\..\Core\ProcessIdentity.vb" />
     <Compile Include="..\..\Core\VenueStatusLog.vb" />
+    <Compile Include="..\..\Core\RunErrorLog.vb" />
     <Compile Include="..\..\DeribitClient.vb" />
     <Compile Include="..\..\DynamicNorms.vb" />
     <Compile Include="..\..\analysis\AnalysisConstants.vb" />

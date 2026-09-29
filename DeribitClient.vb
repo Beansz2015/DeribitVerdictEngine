@@ -23,10 +23,56 @@ Public Class DeribitClient
     Private Shared ReadOnly _http As New HttpClient(New HttpClientHandler With {.UseProxy = False})
     Private Const BaseUrl As String = "https://www.deribit.com/api/v2"
 
+    ''' <summary>[C-8 / CH-6, docs/collector-halt-fixes-spec.md] The valid range for
+    ''' network.request_timeout_seconds. MECHANISM bounds, not tuning: below 1 s every call
+    ''' times out; above 300 s a hung call outlives several runs. Public so fixture A93d reads
+    ''' them rather than restating them.</summary>
+    Public Const MinRequestTimeoutSeconds As Integer = 1
+    Public Const MaxRequestTimeoutSeconds As Integer = 300
+
+    ' Distinct rejected values already logged in this process, so a bad value logs once, not
+    ' once per GET.
+    Private Shared ReadOnly _rejectedTimeoutsLogged As New HashSet(Of Integer)()
+
     Shared Sub New()
         _http.DefaultRequestHeaders.Add("User-Agent", "DeribitScalpVerdictApp/1.0")
-        _http.Timeout = TimeSpan.FromSeconds(SettingsLoader.Current.Network.RequestTimeoutSeconds)
+        ' [C-8 / CH-6] The timeout is NOT set here any more. It was read once, in this static
+        ' constructor: a 0 made the Timeout setter throw, the type initialiser failed, and every
+        ' REST call failed for the life of the process, even after settings.json was fixed
+        ' (adversarial audit row B4). Each GET now runs under its own token built from the
+        ' CURRENT settings value (GetStringOrRecordAsync), so a hot reload takes effect too.
+        _http.Timeout = System.Threading.Timeout.InfiniteTimeSpan
     End Sub
+
+    ''' <summary>[C-8 / CH-6] The timeout one GET runs under. A value inside
+    ''' [MinRequestTimeoutSeconds, MaxRequestTimeoutSeconds] is used as given; anything else
+    ''' falls back to the POCO default (NetworkSettings.RequestTimeoutSeconds), and
+    ''' <paramref name="rejected"/> is True. Pure.</summary>
+    Public Shared Function ResolveRequestTimeout(seconds As Integer, ByRef rejected As Boolean) As TimeSpan
+        rejected = seconds < MinRequestTimeoutSeconds OrElse seconds > MaxRequestTimeoutSeconds
+        Dim used As Integer = If(rejected, New NetworkSettings().RequestTimeoutSeconds, seconds)
+        Return TimeSpan.FromSeconds(used)
+    End Function
+
+    Private Shared Function CurrentRequestTimeout() As TimeSpan
+        Dim configured As Integer = SettingsLoader.Current.Network.RequestTimeoutSeconds
+        Dim rejected As Boolean
+        Dim t As TimeSpan = ResolveRequestTimeout(configured, rejected)
+        If rejected Then
+            Dim first As Boolean
+            SyncLock _rejectedTimeoutsLogged
+                first = _rejectedTimeoutsLogged.Add(configured)
+            End SyncLock
+            If first Then
+                Dim msg As String = String.Format(CultureInfo.InvariantCulture,
+                    "network.request_timeout_seconds={0} is outside [{1}, {2}]; using {3} s",
+                    configured, MinRequestTimeoutSeconds, MaxRequestTimeoutSeconds, CInt(t.TotalSeconds))
+                Console.WriteLine("[DeribitClient] " & msg)
+                RunErrorLog.LogText(RunErrorLog.OriginConfig, "RequestTimeoutRejected", msg, ProcessIdentity.InstanceId)
+            End If
+        End If
+        Return t
+    End Function
 
     ' ── Venue-status helper ───────────────────────────────────────────────────────────────────
     ' Drop-in replacement for _http.GetStringAsync that additionally records a venue-status
@@ -45,7 +91,14 @@ Public Class DeribitClient
     ' RecordVenueIfNeeded is Friend (not Private) so A74e can call it directly to prove the
     ' drop-in property: body-in = body-out regardless of whether a log line was written.
     Private Shared Async Function GetStringOrRecordAsync(url As String) As Task(Of String)
-        Dim response As HttpResponseMessage = Await _http.GetAsync(url)
+        ' [C-8 / CH-6] Per-request timeout from the current settings. GetAsync buffers the
+        ' body (ResponseContentRead), so this token bounds the whole read, as HttpClient.Timeout
+        ' did. A timeout surfaces as TaskCanceledException, which ExecuteWithRetry already treats
+        ' as transient; there is no caller token for it to be confused with.
+        Dim response As HttpResponseMessage
+        Using cts As New System.Threading.CancellationTokenSource(CurrentRequestTimeout())
+            response = Await _http.GetAsync(url, cts.Token)
+        End Using
         Dim body As String = Await response.Content.ReadAsStringAsync()
         Dim code As Integer = CInt(response.StatusCode)
         RecordVenueIfNeeded(code, body, ProcessIdentity.InstanceId)
