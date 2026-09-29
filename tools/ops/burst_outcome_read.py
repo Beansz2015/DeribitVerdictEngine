@@ -660,8 +660,11 @@ def run_full(cx, pop, opt):
             if n == 0:
                 cx.p("| %s | %s | 0 | n/a | n/a | n/a | n/a | n/a |" % (s, an)); continue
             succ = 100.0 * sum(1 for r in rs if r["outcome"] == 1) / n
-            gbe = 100.0 * sum(r["sbps"] / (r["tbps"] + r["sbps"]) for r in rs) / n
-            nbe = 100.0 * sum((r["sbps"] + cx.fee) / (r["tbps"] + r["sbps"]) for r in rs) / n
+            # DeribitIndicatorProject.md §5a rule 1: pool breakevens with the Σ formulas (distance-weighted),
+            # never a simple average of per-signal rates. Corrected by the orchestrator 2026-09-29, pre-outcome.
+            den = sum(r["tbps"] + r["sbps"] for r in rs)
+            gbe = 100.0 * sum(r["sbps"] for r in rs) / den
+            nbe = 100.0 * sum(r["sbps"] + cx.fee for r in rs) / den
             b = boot(rs, lambda r: [(0, r["ev_main"])], 1, lambda s_, c: s_[0] / c[0] if c[0] > 0 else float("nan"))
             cx.p("| %s | %s | %d%s | %.1f | %.1f | %.1f | %+.1f | %s |" % (s, an, n, "" if n >= FLOOR else " (NOT READABLE)", succ, gbe, nbe, succ - nbe, ci(*b[:3])))
     cx.p()
