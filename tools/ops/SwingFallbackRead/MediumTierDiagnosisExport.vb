@@ -31,10 +31,13 @@ Partial Module SwingFallbackReadProgram
         "TTMHistogram", "VerdictContext", "VolumeRatio", "AggrVelSignal", "OBVTrend", "MicroCVDSignal", "TrendStructure5m", "FundingBias",
         "MTFGateReason", "SignalId"}
 
-    Private Function RunDiagExport(header As StringBuilder, sigs As List(Of Sig), fees As FeeCase, pooledPath As String, livePath As String,
+    Private Function RunDiagExport(header As StringBuilder, sigs As List(Of Sig), fees As FeeCase, pooledPath As String, rotatedPaths As String(), livePath As String,
                                    outCsv As String, outMd As String) As Integer
         Dim raw As New Dictionary(Of DateTime, RsRaw)()
         RsLoadRaw(pooledPath, raw)
+        For Each rp In rotatedPaths   ' the rotated books, in the merge's order (docs/burst-outcome-read-spec.md section 5.2)
+            RsLoadRaw(rp, raw)
+        Next
         RsLoadRaw(livePath, raw)
 
         Dim days = sigs.Select(Function(x) x.Ts.Date).Distinct().OrderBy(Function(x) x).ToList()

@@ -202,6 +202,11 @@ Public Module SwingFallbackReadProgram
         Dim pooledPath As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "pooled", Path.Combine("AWS-copybacks", "pooled-book-2026-09-09", "analysis_log_pooled.csv"))))
         Dim bakPath As String = Path.Combine(fetchDir, "analysis_log.csv.v0.7.bak")
         Dim livePath As String = Path.Combine(fetchDir, "analysis_log.csv")
+        ' Rotated header-change books (analysis_log.csv.<N>col-<id>.<stamp>.bak), oldest rotation stamp first.
+        ' Added for docs/burst-outcome-read-spec.md section 5.2: the 116-column book carries the only rows
+        ' of instances 3fe57c53 and ee159d03 (2026-09-01 -> 09-24). A fetch without one is read exactly as before.
+        Dim rotatedPaths As String() = Directory.GetFiles(fetchDir, "analysis_log.csv.*col-*.bak").
+            OrderBy(Function(p) Path.GetFileName(p).Split("."c).Reverse().Skip(1).First(), StringComparer.Ordinal).ToArray()
         Dim evalPath As String = Path.Combine(fetchDir, "analysis_eval_cache.csv")
         Dim trackedSettings As String = Path.Combine(root, "settings.json")
         Dim cacheDir As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "cache", Path.Combine("backtest_data", "swing-fallback-read"))))
@@ -214,6 +219,7 @@ Public Module SwingFallbackReadProgram
         o.AppendLine("- Run at (UTC): " & DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss", Inv))
         o.AppendLine("- Pooled log: " & pooledPath)
         o.AppendLine("- Box logs: " & bakPath & " + " & livePath)
+        If rotatedPaths.Length > 0 Then o.AppendLine("- Rotated box logs (in the box-log set and the merge): " & String.Join(" + ", rotatedPaths))
         o.AppendLine("- Eval cache: " & evalPath)
 
         ' ---- settings: load a byte-identical COPY so the tracked file is never opened for write
@@ -252,20 +258,27 @@ Public Module SwingFallbackReadProgram
         Dim pooled = LoadWithInstance(pooledPath)
         Dim bak = LoadWithInstance(bakPath)
         Dim live = LoadWithInstance(livePath)
-        Dim collectorIds As New HashSet(Of String)(bak.Concat(live).Select(Function(x) x.Item2))
-        Dim collectorStart As DateTime = bak.Concat(live).Where(Function(x) x.Item1.Timestamp <> DateTime.MinValue).Min(Function(x) x.Item1.Timestamp)
+        Dim rotated As New List(Of Tuple(Of CsvRow, String))()
+        For Each rp In rotatedPaths
+            rotated.AddRange(LoadWithInstance(rp))
+        Next
+        ' Box-log set = v0.7 bak + rotated books + live. A rotated book merged but left out of this set would
+        ' have every row dropped by the concurrent-instance rule below.
+        Dim boxRows = bak.Concat(rotated).Concat(live).ToList()
+        Dim collectorIds As New HashSet(Of String)(boxRows.Select(Function(x) x.Item2))
+        Dim collectorStart As DateTime = boxRows.Where(Function(x) x.Item1.Timestamp <> DateTime.MinValue).Min(Function(x) x.Item1.Timestamp)
 
         ' ---- join diagnosis (brief §2)
         Dim evalRows = LoadEval(evalPath)
         Dim boxLog As New Dictionary(Of DateTime, CsvRow)()
-        For Each x In bak.Concat(live)
+        For Each x In boxRows
             If x.Item1.Timestamp <> DateTime.MinValue Then boxLog(x.Item1.Timestamp) = x.Item1
         Next
 
-        ' ---- merge population rows
+        ' ---- merge population rows (first seen wins: pooled, rotated books, live)
         Dim merged As New Dictionary(Of DateTime, Tuple(Of CsvRow, String))()
         Dim nLoaded As Integer = 0, nIdentDup As Integer = 0, nConflict As Integer = 0, nUnparsed As Integer = 0
-        For Each x In pooled.Concat(live)
+        For Each x In pooled.Concat(rotated).Concat(live)
             nLoaded += 1
             If x.Item1.Timestamp = DateTime.MinValue Then nUnparsed += 1 : Continue For
             Dim prev As Tuple(Of CsvRow, String) = Nothing
@@ -390,7 +403,7 @@ Public Module SwingFallbackReadProgram
         ' ---- --mode diagexport: the MEDIUM-tier diagnosis per-row export (MediumTierDiagnosisExport.vb). Default mode unchanged.
         If ArgOr(a, "mode", "swing").Equals("diagexport", StringComparison.OrdinalIgnoreCase) Then
             Dim dxCsv As String = Path.GetFullPath(Path.Combine(root, ArgOr(a, "out", Path.Combine(cacheDir, "diagnosis-rows.csv"))))
-            Return RunDiagExport(o, sigs, fees, pooledPath, livePath, dxCsv, Path.ChangeExtension(dxCsv, ".md"))
+            Return RunDiagExport(o, sigs, fees, pooledPath, rotatedPaths, livePath, dxCsv, Path.ChangeExtension(dxCsv, ".md"))
         End If
 
         ' ================================================================== report
