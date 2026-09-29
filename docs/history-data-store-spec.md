@@ -53,6 +53,26 @@
 
 **Rollback at any stage:** `trade_store.enabled` → `true` restarts capture; the dev store keeps everything already fetched.
 
+### 2a. ⛔ DROP LIST — items that retire with the box trade store (trader-directed 2026-09-29)
+
+**Whoever runs stage 4 or stage 5 must work through this list and mark each item DROPPED in `trader-tick-queue.md` with the date and this section as the reason.** Each item exists only to keep the box's trade store complete or to judge that completeness. Until stage 4, keep them.
+
+| # | Item | Where it lives | Drop at | Note |
+|---|---|---|---|---|
+| 1 | `ws_health.log` under-reports capture outages | `trader-tick-queue.md` §2 row | Stage 5 | Its consequence was the coverage report treating `OK` as capture evidence. ⚠ Check first that nothing else uses `ws_health.log` as capture evidence (not verified 2026-09-29); `WsHealth` itself stays (CSV column, signal bridge) |
+| 2 | `D-2b` `SEQLESS_AFTER_CUTOVER` watch and its read-backs | `trader-tick-queue.md` state banner (pre-holiday row 2); [`gap-repair-rr1-d2-d2b-spec-back.md`](gap-repair-rr1-d2-d2b-spec-back.md) | Stage 5 (with gap repair) | Keep the read-backs until then |
+| 3 | The automatic post-fetch venue check (`tools/ops/venue-check.ps1`, the `collector.ps1` hook) | `trader-tick-queue.md` §2 "Run S0 `--verify-venue`" row | Stage 4 | Its dated review was dropped 2026-09-29; the check keeps running as a monitor until box capture stops |
+| 4 | Gap repair (`TradeStoreGapRepair.vb`, `HistoricalStore` repair path, `repair_status.log`), the write guard, `CoverageReport` | Code | Stage 5 | Engine-code removal: its own spec, reserved deploy |
+| 5 | `collector.ps1 fetch` copying `backtest_data` | `tools/ops/collector.ps1` | Stage 4 | Part of stage 4 itself |
+
+### 2b. Items the history store reshapes — edit them when the store exists
+
+| Item | Where | Change when the store exists (after stage 2b) |
+|---|---|---|
+| Re-derive `large_liq_size` from real liquidation sizes (finding `L-3`, ruling `D-6`) | `trader-tick-queue.md` §2 liquidation-flag row | **No longer waits for engine-fix B2.** Run it on the dev store's flagged trades |
+| `A4` liquidation × OFI flip (queue item `E7`) | `trader-tick-queue.md` §1 Cluster E | The liquidation half is available historically; the OFI half (book) is still forward-only, so the study stays blocked on the book side |
+| Engine-fix B2 | `trader-tick-queue.md` §2 liquidation-flag row | Research no longer needs it; only live scoring does. Still gated on the raw-channel result |
+
 ---
 
 ## 3. Stage 2 — the dev-machine history store

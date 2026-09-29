@@ -1,6 +1,8 @@
 # Liquidation-flag probe — run record, 2026-09-21 (UTC)
 
-**Status: RUN 1 DIED. RUN 2 (dev machine) STOPPED. RUN 3 (box) STOPPED — its REST arm froze. ⭐ RUN 4 RUNNING ON THE AWS COLLECTOR BOX since 2026-09-24 16:53 UTC (PID 11248). The measurement has NOT returned yet.**
+**⛔ CLOSED 2026-09-29 (trader-directed): run 4 STOPPED via its STOP file; this probe is retired.** Its question is answered: the `liquidation` flag arrives ~60 min after the trade on every public source (§0000), and `history.deribit.com` carries it for research ([`history-host-and-raw-channel-read-2026-09-28.md`](history-host-and-raw-channel-read-2026-09-28.md)). Real-time flags are the raw-channel test's question ([`raw-channel-liquidation-test-spec-back.md`](raw-channel-liquidation-test-spec-back.md)). Do not restart it.
+
+~~**Status: RUN 1 DIED. RUN 2 (dev machine) STOPPED. RUN 3 (box) STOPPED — its REST arm froze. ⭐ RUN 4 RUNNING ON THE AWS COLLECTOR BOX since 2026-09-24 16:53 UTC (PID 11248). The measurement has NOT returned yet.**~~ (superseded status line, kept)
 
 ## 0000. ⛔ Run 4's zero is an INSTRUMENT MISS, not a quiet market (added 2026-09-28 UTC)
 
