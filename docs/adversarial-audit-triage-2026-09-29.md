@@ -128,6 +128,17 @@ The audit says every success-rate surface has three flaws (report §A item 3). R
 
 ## 6. For the trader
 
+> ✅ **RULED 2026-09-29 (UTC), trader:** `AT-1` = **(b)** · `AT-2` to `AT-5` = **as read** ((a), (b), (a), (a)) · `AT-Q1`: **no live orders yet** · `AT-Q2`: yes, where the orchestrator deems it necessary to find more bugs.
+>
+> **What each ruling set in motion (2026-09-29):**
+> - `AT-1` (b): the collector-halt fixes (decision C-8) are specced in [`collector-halt-fixes-spec.md`](collector-halt-fixes-spec.md) and built first; the history store's stage-2 build follows before 2026-10-14 only if C-8 is deployed clean and usage allows.
+> - `AT-2` (a): [`burst-outcome-read-spec.md`](burst-outcome-read-spec.md) §6.2 gains the daylight-saving seams as an era stratum plus a pre-seam sensitivity run. The tool change is owed before run 1.
+> - `AT-3` (b): [`history-data-store-spec.md`](history-data-store-spec.md) §2a gains the box-store audit rows; §3.7 carries the two lessons into the stage-2 build.
+> - `AT-4` (a): the holiday block of the [`trader-tick-queue.md`](trader-tick-queue.md) state banner permits one restart; `tools/ops/collector.ps1` gains a `restart` verb in the C-8 build.
+> - `AT-5` (a): PR #3 merged locally (`b00b644`); it closes on GitHub when the trader pushes.
+> - `AT-Q1`: no live orders, so rows A12 and A13 are not live money risks today. **They gate the bridge going live:** decision C-16 (position protection) and the testnet checks (X-1) come before autotrade is armed.
+> - `AT-Q2`: X-1 is necessary, but only before autotrade is armed, so it is scheduled against that gate, not now. X-2 needs trade records, and none exist yet; its CSV half (the share of directional rows whose stop sits inside the app's 0.6 × ATR entry drift) runs with the stop-geometry rulings C-1 and C-2.
+
 **Rulings:**
 
 | ID | Decision | Options | My read |

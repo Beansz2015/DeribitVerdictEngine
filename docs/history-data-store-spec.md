@@ -64,6 +64,7 @@
 | 3 | The automatic post-fetch venue check (`tools/ops/venue-check.ps1`, the `collector.ps1` hook) | `trader-tick-queue.md` §2 "Run S0 `--verify-venue`" row | Stage 4 | Its dated review was dropped 2026-09-29; the check keeps running as a monitor until box capture stops |
 | 4 | Gap repair (`TradeStoreGapRepair.vb`, `HistoricalStore` repair path, `repair_status.log`), the write guard, `CoverageReport` | Code | Stage 5 | Engine-code removal: its own spec, reserved deploy |
 | 5 | `collector.ps1 fetch` copying `backtest_data` | `tools/ops/collector.ps1` | Stage 4 | Part of stage 4 itself |
+| 6 | **The adversarial audit's box-store rows, NOT fixed on the box** (trader ruling `AT-3` (b), 2026-09-29): rows E1–E6 (tape-store integrity), row C19 and decision C-19's coverage-report fixes, and row B5's gap-repair half, all in [`adversarial-audit-2026-09-24.md`](adversarial-audit-2026-09-24.md) §B/§C | [`adversarial-audit-triage-2026-09-29.md`](adversarial-audit-triage-2026-09-29.md) §2.3 | Stage 4 (C19, with the venue check) · Stage 5 (the rest, with gap repair) | Their lessons go into the dev store (§3.7). ⚠ Until stage 4, a `--strict` coverage pass is not proof of completeness (row C19); the history host is the completeness evidence |
 
 ### 2b. Items the history store reshapes — edit them when the store exists
 
@@ -113,6 +114,13 @@
 ### 3.6 Top-up
 
 - A session-start command: fetch every complete day from the last checkpoint to (now − 24 h). Expected cost: a few minutes per day of tape.
+
+### 3.7 Lessons from the 2026-09-24 adversarial audit (trader ruling `AT-3` (b), 2026-09-29)
+
+The audit found box-store defects that are not fixed on the box, because that store retires ([`adversarial-audit-triage-2026-09-29.md`](adversarial-audit-triage-2026-09-29.md) §2.3). The dev store must not repeat them. Row IDs are rows of [`adversarial-audit-2026-09-24.md`](adversarial-audit-2026-09-24.md) §B.
+
+- **A torn row must not poison a scan (row E1).** On the box, a half-written row mid-file becomes a phantom hole of about 3×10¹⁵ seqs, a lost trade, or a tail window disabled for the month. Parse defensively: a row that does not parse is counted and reported, and it never becomes a seq bound.
+- **Count rows only after the write is flushed (row E2).** On the box, repair reports `PASS_CLEAN` over pages that never reached disk, and a full disk still counts rows as appended. A day is checkpointed complete (§3.3) only after its file is flushed and re-read.
 
 ---
 
