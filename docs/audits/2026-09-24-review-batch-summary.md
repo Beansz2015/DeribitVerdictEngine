@@ -1,17 +1,18 @@
 # Adversarial audit follow-up: review batch summary (2026-09-24)
 
-**What this is.** The record of the 12 follow-up reviews that prompts M1–M10 in [`../adversarial-audit-2026-09-24.md`](../adversarial-audit-2026-09-24.md) §7 produced. **The full audit report, with the ranked list and the decisions for the orchestrator, is that file.** This one keeps the per-lane record and the verdict on every finding. The runnable handles and the feedback on my prompts are in [`2026-09-24-review-batch-spec-back.md`](2026-09-24-review-batch-spec-back.md).
+**What this is.** The record of the 12 follow-up reviews that prompts M1–M10 in [`../adversarial-audit-2026-09-24.md`](../adversarial-audit-2026-09-24.md) §7 produced, and of the six completion lanes L-1 to L-6 from §7.1, folded in on 2026-09-29. **The full audit report, with the ranked list and the decisions for the orchestrator, is that file.** This one keeps the per-lane record and the verdict on every finding. The runnable handles and the feedback on my prompts are in [`2026-09-24-review-batch-spec-back.md`](2026-09-24-review-batch-spec-back.md).
 
 **Pinned to.** Engine commit `6e74181` (settings v68) and order app commit `8232e9e`. Every finding and verdict here is against those trees. Master moved on after the reviews started. The trader ruled that the newer code is out of scope, so nothing here was re-checked against it.
 
 **Where the reviews live.**
 - The 11 engine-side reviews are merged into this branch as they were pushed: `docs/audits/2026-09-24-*.md`, with proofs under `docs/audits/proofs/`.
 - M9 ran in the order app's repo. It is copied byte for byte into [`order-app/`](order-app/README.md).
+- The five engine-side completion lanes (L-1, L-2, L-3, L-5, L-6) are cherry-picked in as `docs/audits/2026-09-25-*.md`, with proofs under `docs/audits/proofs/`. L-4 ran in the order app's repo and is copied byte for byte into `order-app/`, with its proofs under `order-app/proofs/order-app-gap/`.
 
 **How each claim was checked.**
-- Every proof set that ships a runnable harness was re-run in this session and matched its recorded output. That covers five compiled VB/C# harnesses and four Python ports.
+- Every proof set that ships a runnable harness was re-run in this session and matched its recorded output. For M1–M10 that covers five compiled VB/C# harnesses and four Python ports. For the completion lanes, it covers L-4's harness and L-5's three proof sets. L-6's proof needs Windows. L-1's was superseded by reading the code.
 - I also ran M6a's proofs, which that session had never executed.
-- Claims with no proof were checked by reading the cited code. The first pass left 42 unchecked; all 42 were checked on 2026-09-25. One remains open in part (M9 F7), and a lane covers it.
+- Claims with no proof were checked by reading the cited code. For M1–M10 the first pass left 42 unchecked; all 42 were checked on 2026-09-25. M9 F7, open in part, was closed by L-4. For L-1 to L-6, 15 of 53 findings rest on the lane, and all but one of them are S3 or S4 (§3).
 
 ---
 
@@ -40,7 +41,24 @@ The headline findings and the ranked list of confirmed defects now live in the f
 | M9 order app | [`order-app/2026-09-24-signal-to-exchange-order-path.md`](order-app/2026-09-24-signal-to-exchange-order-path.md) | Opus 5.5 high | Fable 5.1 xhigh | **Partial**: SL-chase and edit functions unread | Python trace: re-run, match. VB fixture unrun | 12 |
 | M10 ops readers | [`2026-09-24-swing-fallback-read-wstradeprobe.md`](2026-09-24-swing-fallback-read-wstradeprobe.md) | Sonnet 5 high | Sonnet 5 high, 2 sittings | Full, 9 of 9 files | None | 5 |
 
-No lane reviewed PR #3 itself. The PR-review row in §7.0 never ran.
+No lane reviewed PR #3 itself. The PR-review row in §7.0 never ran. Its replacement is L-7 (report §D), which hasn't run yet.
+
+**The completion lanes (L-1 to L-6, delivered 2026-09-25 to 2026-09-29).** "Ran on" is what each report says about itself; only L-3 states it.
+
+| Lane | Report | Ran on | Recommended | Coverage of its prompt | Proofs | Findings |
+|---|---|---|---|---|---|---|
+| L-1 (M8a) | [`2026-09-25-fixture-harness-a.md`](2026-09-25-fixture-harness-a.md) | Not stated | Sonnet 5 high | `Program.vb` 1–5,600, full | Harness run (425 / 0) + ProofCheck proofs 1–2. **Not re-run here**; both claims confirmed by reading the code instead | 4 |
+| L-2 (M8b) | [`2026-09-25-fixture-harness-b.md`](2026-09-25-fixture-harness-b.md) | Not stated | Sonnet 5 high | 5,601–11,200, full; about 130 fixtures | Harness run (425 / 0). No proof code | 3 |
+| L-3 (M8c) | [`2026-09-25-fixture-harness-c.md`](2026-09-25-fixture-harness-c.md) | Sonnet 5 high | Sonnet 5 high | 11,201–16,764, full; `SignalEmitter` and `Indicators_OrderFlow` cited, not read | Harness run twice (default, `ORDERCHECK_KNOWN_DEFECTS=1`). **Re-run here, same four known-defect FAIL lines**; the base totals differ by host (below) | 6 |
+| L-4 (M9b) | [`order-app/2026-09-25-order-app-gap.md`](order-app/2026-09-25-order-app-gap.md) | Not stated | Opus 5.5 xhigh | Every member the brief listed, in full; `FrmIndicators` update methods and the manual-button region not read | .NET 8 harness over 37 verbatim line ranges of `frmMainPageV2.vb` plus six whole files. **Re-run here at `8232e9e`: identical once timings are stripped** | 20 |
+| L-5 (M7b-2) | [`2026-09-25-backtest-ceiling-remainder.md`](2026-09-25-backtest-ceiling-remainder.md) | Not stated | Opus 5.5 high | CoverageReport remainder, `FeatureMatrix`, `L2Logistic`, `AuditReport` in full; the first audit's F1–F12 not read | Shipped `BacktestRunner coverage --strict` on 7 generated evidence sets; the shipped CeilingAudit and What-If sources linked into two proof projects. **All three re-run here at `6e74181`: identical** (coverage once fixture paths are normalised) | 16 |
+| L-6 (M6b-2) | [`2026-09-25-ui-controls.md`](2026-09-25-ui-controls.md) | Not stated | Sonnet 5 high | All 14 unread `UI/Controls` files | A `net8.0-windows` transcription of the paint and clamp logic, run on Windows 11. **Not runnable here**; F1, F3 and F4 confirmed by reading the controls | 4 |
+
+**The harness baseline depends on the host.** L-1 to L-3 each recorded 425 PASS / 0 FAIL. Re-running the same tree here on Linux gave 421 / 4 under the POSIX locale and 423 / 2 under `LANG=en_US.UTF-8`:
+- A34a and A35a pin culture-formatted percentages.
+- A79m and A79o assume Windows share modes.
+
+With `ORDERCHECK_KNOWN_DEFECTS=1`, the same four A80b and A81b FAIL lines L-3 recorded are added on top. Report row C23.
 
 ---
 
@@ -190,7 +208,7 @@ A finding carries the reviewer's own severity until the report's §B gives it a 
 - F4: C. Its severity turns on the chase functions nobody read.
 - F5: C. X on severity: it needs two non-default settings.
 - F6: C that the field is sent. N on what Deribit does with it.
-- F7: C in part. The placement ack covers only the entry order (`frmMainPageV2.vb:1902` onward). Whether the order-state branches catch a rejected stop leg is still open; lane M9b covers it (report §7.1).
+- F7: R, closed by L-4 (G2, Q1). The placement ack covers only the entry order (`frmMainPageV2.vb:1902` onward), and the order-state chain has no `rejected` branch. L-4's `q1` run, re-run here, shows 0 log lines, 0 alerts and 0 frames when the stop leg is rejected or cancelled after the fill. *Was "C in part" until 2026-09-29.*
 - F8, F9: C.
 - F10: C (`SignalBridge.vb:857-864`).
 - F11: C. `ExecuteOrderAsync` returns early before `RegisterPendingPlacement` (`frmMainPageV2.vb:4113`).
@@ -207,14 +225,67 @@ A finding carries the reviewer's own severity until the report's §B gives it a 
 
 | Verdict | Count |
 |---|---|
-| Reproduced here (R or R\*) | 63 |
+| Reproduced here (R or R\*) | 64 |
 | Confirmed by reading the code | 65 |
 | Duplicate of an audit-report item, adding nothing new | 7 |
 | Holds only in part (M9 F1) | 1 |
 | Refuted (M6b absorption) | 1 |
-| Confirmed in part; the rest is in lane M9b (M9 F7) | 1 |
 
-Four confirmed findings also had their severity cut: M6a #4 (a narrow trigger), M6b Kelly (the app doesn't read it), M9 F5 (needs two non-default settings) and M3 #1 (synthetic tape only).
+M9 F7 moved from "confirmed in part" to R on 2026-09-29, when L-4 closed it.
+
+Four confirmed findings also had their severity cut: M6a #4 (a narrow trigger), M6b Kelly (the app doesn't read it), M9 F5 (needs two non-default settings) and M3 #1 (synthetic tape only). One was raised: M9 F1's residual, now row A8 at S1 on L-4's evidence.
+
+### The completion lanes, L-1 to L-6
+
+**L-1 fixture harness, lines 1–5,600**
+- F1 (S1, the stop floor ignores ATR and fees): C (`Core/SignalEmitter.vb:455`: floor = `StopMinFloorTicks × TickSize`, no ATR term). The production defect is A1/C-2, already S0. It's folded into A1 as the evidence that the floor doesn't read ATR.
+- F2 (S3, `Validate` has no value bounds): C (no bounds test anywhere in `SettingsDiffApplier.vb`). Row C22, and C8's fix list.
+- F3 (S3, A31h never changes ATR mid-episode): N.
+- F4 (S4, A26c never tests the floor's own boundary): N.
+
+**L-2 fixture harness, lines 5,601–11,200**
+- A36/A42 geometry at a fixed ATR 40 (S3): C (8 matches for `.ATR = 40.0`).
+- Min-move floor tested only at ATR 13–100 (S3): N.
+- A57e never drives the thin-buffer silence through a spike (S3): N. The lane doesn't dispute the D-4 ruling itself.
+
+**L-3 fixture harness, lines 11,201–16,764**
+- F1 (the `ORDERCHECK_KNOWN_DEFECTS` hatch): R (SKIP by default, the four FAIL lines with it set) and C (0 matches in `verify-gate.ps1` and `verify.yml`). **Severity cut S1 → S2**: the gate places nothing. What it hides is live scoring, which is why it's in §A.
+- F2 (K1 never applies): D (K1). The lane's 1.68 % is quoted from `docs/medium-tier-bug-hunt-2026-09-16-poc-gate-output.md` §7.1, and I checked it there. 104 of the 143 rows are WEAK.
+- F3 (maker-side liquidations booked to the taker's side): D (K2), with the A81b FAIL reproduced here.
+- F4 (A79g pins a duplicate-write race): C in part. `HistoricalStore.LoadTradeRange` dedupes; the other readers weren't checked. Row E6.
+- Nit, the A73a name typo ("Capured"): C.
+- Nit, A74d's share-mode repro is Windows-only: N as written, but C23 generalises it.
+
+**L-4 order app, the code M9 didn't read**
+- G1, G2, G3, G5, G6, G7, G8, G9 (the 0 frames), G10, G12, G13, G18: R. L-4's harness was re-run at `8232e9e`, identical once timings are stripped. G1 and G2 are also C (`frmMainPageV2.vb:4675-4698`; the `orderState` chain at `:3155`, `:3386`, `:3430`, `:3541`).
+- G11: R, as the lane's transcription of the append rule. The compiled `FrmIndicators` isn't run.
+- G4: C (`:1318-1379`: 10 attempts, then only a local `Alert`).
+- G16: C (`:1177-1180`: the auth reply is awaited on the main token, with no timeout).
+- G17: C (`:3624` sets the flag, and `:2902` exits on it).
+- G14, G15, G19, G20: N, the lane's reading.
+- Severities as the lane gave them. G3 is S1 at the shipped 10 USD and S0 above it. The report's §B says so.
+
+**L-5 CoverageReport remainder, CeilingAudit, What-If**
+- R-1, R-2, R-3, R-4, R-5, R-6, R-8, R-9, R-10, R-14: R. All three proof sets were re-run at `6e74181` and matched exactly. R-4 is also C (`FeatureMatrix.vb` has no side term) and R-5 C (`AuditReport.vb:227-232`). X on one sub-claim of R-5: the header's first bullet states the one-sided rule itself, so it isn't a header contradiction.
+- R-7: C (`overlays/w61-london-stop-grid.json` sweeps the global `scoring.structural_levels.stop_max_atr_mult`).
+- R-11, R-12, R-13, R-15, R-16: N, the lane's reading.
+
+**L-6 the 14 unread UI controls**
+- F1 (the TAPE strip's burst colour runs to the end of the line): C (`TapeStripLabel.vb:42-49`).
+- F2 (stale card values after a bind-time exception): N.
+- F3 (NaN passes the `MiniMeter.Pct` clamp): C (`MiniMeter.vb:59-60`).
+- F4 (negative `tailRect` width): C (`TapeStripLabel.vb:58-60`, no clamp). L-6 ran it on Windows: no throw, and the tail isn't drawn.
+
+**Tally for the completion lanes** (53 findings; each counted once, under its primary verdict):
+
+| Verdict | Count |
+|---|---|
+| Reproduced here (R) | 24 |
+| Confirmed by reading the code | 12 |
+| Duplicate of a known item (K1, K2) | 2 |
+| Not checked here; rests on the lane | 15 |
+
+All 15 unchecked findings are S3 or S4 except one: L-6 F2, S2 and display only.
 
 ---
 

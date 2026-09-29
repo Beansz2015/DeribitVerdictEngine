@@ -2,7 +2,7 @@
 
 **For the project orchestrator.** This is the full audit report and its single entry point. It ranks every confirmed defect (§B), sets out every decision a fix needs, with the audit's read on each (§C), and lists what the audit still has to do (§D). **Deciding and sequencing the fixes is the orchestrator's job, not this audit's.** Decisions in a CLAUDE.md reserved class also need the trader's ruling, and each one in §C says whether it does.
 
-**Status: open.** The line-level audit and 12 follow-up review lanes are done and consolidated. Six lanes, four external checks and a review of the audit itself are still to run (§D).
+**Status: open.** The line-level audit, 12 follow-up review lanes and six completion lanes (L-1 to L-6, folded in 2026-09-29) are done and consolidated. What's left is one review of the audit itself (L-7) and four external checks (§D). **Whoever picks this up next starts at [`audits/2026-09-29-orchestrator-handoff.md`](audits/2026-09-29-orchestrator-handoff.md).**
 
 **Report only.** No engine source, settings file or order-app code was changed. The only code this audit added is proof harnesses: `verify/auditproofs/` and `docs/audits/proofs/`.
 
@@ -12,11 +12,13 @@
 
 | Document | What it holds |
 |---|---|
-| This file | The entry point. §A–§D: status, the ranked list, decisions for the orchestrator, and what's left. §0–§8: the original line-level audit (AUD-01 to AUD-24). §7: every lane prompt, including the ones still to run (§7.1) |
+| This file | The entry point. §A–§D: status, the ranked list, decisions for the orchestrator, and what's left. §0–§8: the original line-level audit (AUD-01 to AUD-24). §7: every lane prompt; §7.1 holds the completion lanes, of which only L-7 is still to run |
 | [`audits/2026-09-24-review-batch-summary.md`](audits/2026-09-24-review-batch-summary.md) | The record: the per-lane table, a verdict on each of the 138 review findings, and the first run of M6a's proofs |
 | [`audits/2026-09-24-review-batch-spec-back.md`](audits/2026-09-24-review-batch-spec-back.md) | Runnable handles H-1 to H-9 with the output they gave, feedback on the lane prompts, and what couldn't be verified |
 | `audits/2026-09-24-*.md` (11 files) and [`audits/order-app/`](audits/order-app/README.md) | The 12 lane reports, unchanged from how they were delivered |
-| `verify/auditproofs/`, `audits/proofs/` | The proof code, each set with its run command |
+| `audits/2026-09-25-*.md` (5 files) and [`audits/order-app/2026-09-25-order-app-gap.md`](audits/order-app/2026-09-25-order-app-gap.md) | The six completion-lane reports (L-1 to L-6), unchanged from how they were delivered |
+| `verify/auditproofs/`, `audits/proofs/`, `audits/order-app/proofs/` | The proof code, each set with its run command |
+| [`audits/2026-09-29-orchestrator-handoff.md`](audits/2026-09-29-orchestrator-handoff.md) | The handoff: how to read this audit from a local checkout, and what's left |
 
 **Severity scale** (unchanged from §3):
 - **S0:** a wrong-side, unprotected or unbounded order on the exchange under shipped config.
@@ -35,16 +37,33 @@
    - The app never checks which side of the fill the stop is on (M9 F2).
 
    So a long that fills 2 USD or more under the engine's entry goes to Deribit with its sell-stop trigger at or above the fill. A settings-inverted stop (AUD-03) takes the same path. What Deribit does with that stop is not verified. Either answer costs money: an immediate stop-out, or a rejected stop leg that nothing notices (M9 F7). How often a swing stop lands that close to entry isn't measured.
-2. **Every success-rate surface is unfit for rulings as it stands.** That means the perf strip, the failure matrix, the band ladder, the offline report, the what-if runner and the auto-tweaker's trigger. The reviews found the same three flaws in all of them, independently:
+2. **Two more S0s, both in the order app, both proven by run (lane L-4; re-run here, output identical apart from timings).** Every app-side protection hangs off the stop order's own lifecycle. None of it hangs off the position.
+   - **G1 (row A12).** The M.SL emergency sends cancel-all first. Then it sends a reduce-only market order and never checks the result. Then it logs "Emergency Sell Market Order Executed." and posts an urgent notification regardless. If the reduce is rejected, or the send fails, the long is left with no orders at all. The chase is off, the emergency latch stays set, and the one message a human would see says it's closed. The run shows 0 frames over the next 300–380 USD of fall (`frmMainPageV2.vb:4675-4698`, app repo).
+   - **G2 (row A13).** There is no position-level loss cap. If the exchange rejects or cancels the stop leg after the fill, nothing notices, chases or caps. The state machine has no `rejected` branch. The M.SL cap only arms after an `open` echo on the stop. The executor feedback keeps publishing the dead leg as `working.stop`. That closes M9 F7 in full: nothing notices, ever. Whether Deribit does reject a crossed stop at OTOCO activation is X-1(a). So A1 and G2 are one path when it does.
+
+   Lane L-4 also settles A2: with M.SL off, nothing bounds the triggered stop's loss, and with the socket down, nothing runs at all. It adds four S1s: a partial fill can flip the account short with no stop (A14), reconnect gives up for good after 10 attempts (A15), position management takes its side from a UI toggle (A16), and a stood-down entry is chased toward the market (A8, raised).
+3. **Every success-rate surface is unfit for rulings as it stands.** That means the perf strip, the failure matrix, the band ladder, the offline report, the what-if runner and the auto-tweaker's trigger. The reviews found the same three flaws in all of them, independently:
    - **No fee-inclusive EV anywhere.** The loss path costs 5 bps, not 3. Found by M4, M7a, M7b and M8, and consistent with AUD-01.
    - **A two-minute blind spot with the entry still priced at T.** The walk starts at the bar closing at T+3, and the fastest stop-outs happen before it. Found by M1, M4, M7a and M7b. M7b measured the bias at +0.19 ATR for a 0.6 × ATR stop.
    - **Consecutive minute rows counted as independent trades.** M4 cites 12.6 NY signals per episode. So CIs and n ≥ 30 gates overstate the evidence by roughly an order of magnitude. Found by M4, M7a and M7b.
 
    On top of those, **the live strip's NY numbers carry no outcome information at all** (M4 #1, reproduced). Every bar in its OHLC cache is a roughly one-second stub of the minute's first trade, because the completed bar never replaces it. So every touch reads as a timeout. Any ruling that leaned on these surfaces should be treated as unverified.
-3. **The Kelly findings drop to display-only.** The order app never reads `kelly.*`; it appears only in a comment (`SignalBridge.vb:678`, app repo). So AUD-15, M2 F7 and M6b's "CRITICAL" are S3: an inconsistent display, not a sizing hazard.
-4. **The harness audit (M8) is effectively not done.** My prompt shipped with an unfilled `<RANGE>` placeholder and should have been three prompts. The session read about 1,100 of 16,764 lines, and three of its four findings restate the known-gap list the prompt gave it. That's my error, not the reviewer's. Lanes L-1 to L-3 (§7.1) redo it.
-5. **Two corrections to reviewer claims:**
-   - **M9 F1 overstates.** The entry chase cancels the order once price drifts more than 0.6 × ATR (`frmMainPageV2.vb:2383-2385` long, `:2436-2438` short). The bridge can't start with that guard unchecked (`SignalBridge.vb:316`). So a stale bid can't rest for hours and fill later. What remains is that a stand-down never cancels the working entry.
+4. **A standing research ruling rests on a model that can't see which side a row is on (lane L-5, R-4 and R-5, row C18).** CeilingAudit's §4 decision closed W6-5/B1 and D3–D6 as "no measured headroom". Its challenger's design matrix has no side column and no side-oriented features, so every directional signal is uninformative by construction. Its verdict rule declares a ceiling whenever the CI's upper bound is under the margin, and that includes a challenger that's significantly *worse*. On the same synthetic rows with real headroom, the shipped encoding prints CEILING DECLARED. A side-aligned encoding of the same information prints B1 PRIZE MEASURED. This belongs with C-11.
+5. **The coverage report can certify holed tape as clean (L-5 R-1 to R-3, row C19).** A 54-minute outage split by an hour boundary reads Captured, `VERDICT: clean`, exit 0, while the same output prints 648 trades missing. One `VENUE_503` line before a restart excuses every later hour. A header-only `analysis_log.csv`, which every schema rotation writes, turns every Defect into ExpectedMissing. `--strict` passes all three.
+6. **The ship gate never runs the fixtures for the two known scoring defects (L-3 F1, row C20).** A80b (K1, the POC-tier gate) and A81b (K2, maker-side liquidations) skip unless `ORDERCHECK_KNOWN_DEFECTS=1`. Neither `tools/checks/verify-gate.ps1` nor `.github/workflows/verify.yml` sets it (0 matches). So the gate prints `ALL PASS` over two confirmed, line-cited scoring defects, with no ledger and no expiry. An existing repo measurement puts K1 at 143 of 8,508 verified rows (1.68 %) that would flip to NO TRADE if the cap worked. 39 of those are STRONG or MEDIUM and 104 are WEAK. The figures are quoted from `docs/medium-tier-bug-hunt-2026-09-16-poc-gate-output.md` §7.1, not re-measured.
+7. **The Kelly findings drop to display-only.** The order app never reads `kelly.*`; it appears only in a comment (`SignalBridge.vb:678`, app repo). So AUD-15, M2 F7 and M6b's "CRITICAL" are S3: an inconsistent display, not a sizing hazard.
+8. **The harness audit is now done (L-1 to L-3), and it found coverage gaps, not false fixtures.** M8 read about 7 % of `verify/ordercheck/Program.vb` because my prompt shipped with an unfilled `<RANGE>`. L-1 to L-3 read the rest. Apart from the known A41 and the escape hatch in item 6, they found no fixture asserting a false property. A79g pins a known duplicate-write race, and says so. What they did find is gaps:
+   - Every geometry fixture in A36 and A42 uses `r.ATR = 40.0` (8 occurrences), so nothing drives stop and target placement through a volatility spike (L-2).
+   - Nothing puts a near-floor stop and its fees in one test. L-1's proof shows the 4-tick floor accepts a 2.5 USD stop identically at ATR 30 and ATR 140 (L-1 F1, the A1/C-2 floor).
+   - `SettingsDiffApplier.Validate` has no value bounds: `stop_max_atr_mult` −50 and `target_max_atr_mult` 999,999 both pass (L-1 F2, row C8).
+
+   **The harness's own totals depend on the machine.** L-1 to L-3 recorded 425 PASS / 0 FAIL. L-6's proof says it ran on Windows 11; the host for L-1 to L-3 isn't stated. Here on Linux, the same tree gives 421 PASS / 4 FAIL under the POSIX locale and 423 / 2 under en-US:
+   - A34a and A35a pin culture-formatted percentages. `{0:P0}` renders "40 %" under the invariant culture.
+   - A79m and A79o assume Windows mandatory share modes, and Linux file locks are advisory.
+
+   It's S3 on its own. But a ship gate whose answer depends on the box matters before the Linux port.
+9. **Corrections to reviewer claims:**
+   - **M9 F1 overstates, and then L-4 finds something worse underneath it.** The entry chase cancels the order once price drifts more than 0.6 × ATR (`frmMainPageV2.vb:2383-2385` long, `:2436-2438` short). The bridge can't start with that guard unchecked (`SignalBridge.vb:316`). So a stale bid can't rest for hours and fill later. But a stood-down entry isn't left resting either. The chase keeps re-pricing it toward the market, and each stand-down payload resizes its abort cap (72 → 70 → 90 → 70 in L-4's run). Row A8 is now S1.
    - **M6b's absorption "HIGH" is refuted.** The TAPE strip renders the live absorption tag and burst state (`UI/MainForm_LiveStrip.vb:224-272`).
 
 ---
@@ -63,19 +82,32 @@ Band C's measurement defects place no orders, so none of them is S0 or S1 on thi
 
 ### Band A: the order path
 
+Rows are in severity order. IDs A12 onward came from lane L-4 on 2026-09-29, so they aren't sequential. The L-4 harness compiles 37 verbatim line ranges of `frmMainPageV2.vb` plus six whole app files, and stubs only WinForms, the socket and the sinks. Every L-4 scenario named below was re-run here at `8232e9e`, and the output matched its recorded output line for line once timings were stripped.
+
 | # | Sev | Defect | Found by | Evidence |
 |---|---|---|---|---|
-| A1 | **S0** | A long can reach Deribit with its stop at or above the fill. The engine's 2-USD `SWING_STOP` floor, the app's entry at its own bid (slipping up to 0.6 × ATR) and the missing side check combine to do it. A settings-inverted stop takes the same path | AUD-05, AUD-03, M2 F6, M9 F2, F3 | R (H-P16, H-P05), R\* (M9 `trace.py` cases B, C), C (`SignalBridge.vb:687`, `:1053`; `frmMainPageV2.vb:3721-3723`) |
-| A2 | S1 | A triggered stop becomes a post-only limit (`stop_limit`, `post_only`, `trigger: last_price`). Getting out depends on the app's chase plus the optional M.SL market fallback; with WS down in a flush the loss has no bound. A stop leg the exchange rejects after the fill may go unnoticed (M9 F7) | M9 F4, F7 | C (`frmMainPageV2.vb:4081-4090`, `:2575-2580`). The chase functions and the order-state branches are unread; lane M9b covers them |
+| A1 | **S0** | A long can reach Deribit with its stop at or above the fill. The engine's 2-USD `SWING_STOP` floor, the app's entry at its own bid (slipping up to 0.6 × ATR) and the missing side check combine to do it. A settings-inverted stop takes the same path. The floor doesn't read ATR: a 2.5 USD structural stop is accepted identically at ATR 30 and ATR 140 | AUD-05, AUD-03, M2 F6, M9 F2, F3, L-1 F1, L-4 Q4 | R (H-P16, H-P05; L-4 `trace`), R\* (M9 `trace.py` cases B, C), C (`SignalBridge.vb:687`, `:1053`; `frmMainPageV2.vb:3721-3723`) |
+| A12 | **S0** | The M.SL emergency sends cancel-all first, then a reduce-only market order it never checks, then logs "Executed" and posts an urgent notification whatever happened. A rejected reduce, or a failed send, leaves the position with no orders, the chase off (`SLTriggered` cleared), the latch set, and a reconnect that skips the restore. The message tells the one human who could intervene that it's closed | L-4 G1 | R (L-4 `emergency-rejected`, `trace-emergency-send-fails`), C (`frmMainPageV2.vb:4675-4698`) |
+| A13 | **S0** | No position-level loss cap. If the exchange rejects or cancels the stop leg after the fill, nothing notices, chases or caps: there's no `rejected` branch, the M.SL cap arms only after an `open` stop echo, and the executor feedback reports the dead leg as `working.stop`. Closes M9 F7. Whether Deribit rejects a crossed stop at OTOCO activation is X-1(a) | L-4 G2, Q1; M9 F7 | R (L-4 `q1`: 0 log lines, 0 alerts, 0 frames over a 298 USD flush), C (the `orderState` chain at `frmMainPageV2.vb:3155`, `:3386`, `:3430`, `:3541` has no `rejected` case) |
+| A2 | S1 | A triggered stop becomes a post-only limit (`stop_limit`, `post_only`, `trigger: last_price`) chased one tick above the bid, with no time or distance limit. The only cap is M.SL, a fixed 70 USD (A18). With M.SL unticked nothing bounds the loss: the stop reached 58,833 after 10 more seconds and 25 edits. With the socket down nothing runs at all: 0 frames in 20 s | M9 F4, L-4 Q2 | R (L-4 `trace`, `trace-msl-off`), C (`frmMainPageV2.vb:4081-4090`, `:2523`, `:2575-2580`) |
 | A3 | S1 | The min-move gate prices the target path only, maker/maker. It can be switched off silently by a maker rebate, a negative `min_net_move_pct`, or a NaN typed into the UI box | AUD-01, M2 F5, M6a #5, M7b F4, M8 (A41) | R (H-P03, M2 P7, M6a P2), C (`MainForm_Layout.vb:1570-1588`) |
 | A4 | S1 | WS trades carry no age gate on a connected socket | AUD-02 | R (H-P08) |
 | A5 | S1 | Nothing validates settings values that reach scoring. Session names act as unchecked foreign keys across three blocks; sign slips bring back padding; `min_of` 0/1 bans shorts; wrong JSON types pass the tweaker and kill the next reload | AUD-03, M2 F2, F3, F4, M1 F5 | R (H-P05, M2 P2, P3, P5, P13, P14, P18, M1 P2) |
 | A6 | S1 | The 15m hard veto fails open on missing or short data, keeps a failed-fetch cache with no age bound, and can only vote bull below 50 bars | AUD-07, M2 F3, M6a #3, M8 | R (H-P01, H-P02, M6a P4, M2 P5) |
+| A8 | S1 | A stand-down (stale, SKIPPED, ARM off) never cancels the working entry. The chase keeps re-pricing it toward the market, and each stand-down payload resizes its abort cap (72.12 → 70 → 90 → 70 in the run: an ARM-off payload *widened* it). Meanwhile the executor feedback says FLAT and a later fill is attributed to the stale signal | M9 F1 (corrected), L-4 G5, Q3 | R (L-4 `standdown`: 8 re-prices after SKIPPED, 8 after ARM-off), C (`SignalBridge.vb:521-533`, `:623-634`; `frmMainPageV2.vb:2366-2408`) |
+| A14 | S1 | A partial entry fill arms full-size exit legs (`first_hit`), and the TP leg isn't reduce-only. A full-size TP fill against a small long leaves a short with no stop, and `TradeMode` still says LONG. S0 as soon as size exceeds 10 USD; the shipped 10 USD is one contract and can't partially fill. Deribit's `first_hit` sizing is from a web-search summary, not verified | L-4 G3 | R (L-4 `partial`, Amount 500: position −490, 0 alerts, 0 frames over a 400 USD rally) |
+| A15 | S1 | Reconnect gives up for good after 10 attempts (about 72 s of delays plus up to 30 s per connect). After that there's only a local sound and flash, no remote notification and no retry, while the position stays open. One attempt can hang forever on the auth reply (G16) | L-4 G4, G16 | C (`frmMainPageV2.vb:1318-1379`; `:1177-1180` awaits the auth reply on the main token, no timeout) |
+| A16 | S1 | Position management takes its direction from the Buy/Sell UI toggle (`TradeMode`), not the position's sign. One click while a long is open makes the chase and the cap ignore adverse moves, and a 70 USD favourable move then market-sells the long, logged as "Emergency Buy" | L-4 G6 | R (L-4 `mode-flip`), C (`frmMainPageV2.vb:2550-2554`, `:4675`, `:4688`) |
 | A7 | S2 | Freshness is emission time, checked against a window the payload itself declares (`2.5 × exec_resolution_min`, no upper bound) | AUD-06, M9 F8, M6a #2 | C (`SignalBridge.vb:602`) |
-| A8 | S2 | A stand-down (stale, SKIPPED, ARM off) never cancels the working entry, so it can still fill | M9 F1 (corrected) | C (`SignalBridge.vb:521-533`) |
-| A9 | S2 | The stop leg is sent with `trigger_offset` 30. The app's own spec says the exchange then trails it | M9 F6 | C (the field is sent); what Deribit does with it: N |
+| A9 | S2 | The stop leg is sent with `trigger_offset` 30. The app's own spec says the exchange then trails it. The app never reads a trailed trigger back, and its own arithmetic uses `txtStopLoss`, not `txtTriggerOffset` (both default 30, which hides it) | M9 F6, L-4 Q5 | C (the field is sent; L-4 `q5`: no edit path touches it); what Deribit does with it: N |
 | A10 | S2 | Risk sizing is uncapped when `max_size_usd` ≤ 0. A 2-USD stop sizes to 737,540 USD. Needs two non-default settings | M9 F5 | C (`SignalBridge.vb:1123-1128`, `AppUserSettings.vb:44-52`) |
+| A17 | S2 | A position that closes during a socket gap is never completed: no DB row, no close alert, and the cooloff isn't anchored, so the bridge re-enters at once. The triggered-stop context survives while flat, and a phantom emergency then sends cancel-all plus a market sell of the Amount box | L-4 G7 | R (L-4 `close-in-gap`: signal #103 `acted` where a normally observed close gives `refused: cooloff`) |
+| A18 | S2 | The M.SL cap is a fixed 70 USD from an anchor the chase picks, with no relation to the engine's stop or ATR: 37× a 2 USD planned risk. It re-bases on every reconnect | L-4 G8 | R (L-4 `trace`: realised −25 bp net against a planned 0.34 bp) |
+| A19 | S2 | No staleness watchdog. Protection runs only on quote messages; "connected" means `State = Open`; a stall of 20 s or less is never detected, and a longer one takes up to 50 s | L-4 G9 | R (L-4 `trace`: 0 frames during the gap); detection timing C, and it rests on .NET `KeepAliveTimeout` behaviour L-4 didn't verify |
+| A20 | S2 | The restore scan never checks that an open position has a stop, and reads an empty order list as a flat restart | L-4 G10 | R (L-4 `restore`: no alert with no orders, one cyan `SL=none` line with TP only) |
 | A11 | S3 | Nearest-tick rounding ignores direction, ±12.5 % of a 2-USD stop | AUD-10, M9 F9 | C (`frmMainPageV2.vb:381`) |
+| A21 | S3 | Six smaller order-app gaps. The fallback ATR keeps each bar's first update only (0.537 of true in the run, G11). The executor feedback reports target 0 in every open bridge position (G12). The journal stores a wrong-side stop as normal risk (`Math.Abs`, G13). Gate config fails open: unpersisted gates reset on restart, a bad session rule is dropped silently and then erased by the next save (G14). After a gap the chase compares against the pre-trigger limit (G15) | L-4 G11–G15 | R (G11 as a transcription, G12, G13), C (G14, G15: L-4's reading, not re-checked here) |
+| A22 | S4 | Log lines name the wrong side and ATR (G18). The live-position refresh on echoes is dead code: it sets the flag its callee exits on (G17). `ForceStopLossUpdate`'s bypass is undone by its caller (G19). Edit ids are shared, so responses can't be matched to requests (G20) | L-4 G17–G20 | C (G17 checked here: `frmMainPageV2.vb:3624` → `:2902`); G18 R; G19, G20 L-4's reading |
 
 ### Band B: the collector stops
 
@@ -104,12 +136,19 @@ Band C's measurement defects place no orders, so none of them is S0 or S1 on thi
 | C11 | S2 | A floor edit while running stops re-evaluation; a floor change at startup turns rows older than 7 days into NO_DATA | M4 #5, #6 | R (M4 T3, T4) |
 | C12 | S2 | SwingFallbackRead builds its population from pooled + live only, so rows sitting only in the current `.bak` vanish with no funnel line | M10 | C (`SwingFallbackRead.vb:268`). Impact depends on what the pooled books contain |
 | C13 | S2 | The validator's OI check matches labels the engine never emits | M7b F6 | C (`OverlapValidator.vb:511` vs `MainForm_Analysis.vb:374-376`) |
+| C18 | S2 | CeilingAudit can't measure the question it closed. The challenger's design matrix has no side column and no side-oriented features, so directional signals are uninformative by construction. The verdict rule is one-sided: any CI whose upper bound is under the margin prints CEILING DECLARED, including one entirely below zero (a *worse* challenger). The §4 text it prints closes W6-5/B1 and D3–D6 as "no measured headroom". Also: the fit is iteration-limited (R-10) and the coefficient table ranks incomparable numbers (R-12) | L-5 R-4, R-5, R-10, R-12 | R (L-5 P-CA1: shipped encoding CEILING DECLARED, side-aligned B1 PRIZE MEASURED, same rows; P-CA2; P-CA3), C (`FeatureMatrix.vb`: no side term anywhere; `AuditReport.vb:227-232`). X on one sub-claim: the header's first bullet (`:6`) states the one-sided rule itself, so the defect is the rule, not a header mismatch |
+| C19 | S2 | The coverage report certifies holed tape. An outage split by an hour boundary or a restart marker reads Captured or TrailingEdge, and `SequenceGaps.MissingCount`, the one counter that sees it, gates neither the VERDICT nor the exit code. A pre-restart `VENUE_503` window never closes, so it excuses every later hour. A header-only `analysis_log.csv` turns every Defect into ExpectedMissing. `--strict` also exits 0 when the report's own VERDICT isn't clean (R-8). Extends M7b F5 | L-5 R-1, R-2, R-3, R-8 | R (L-5: the shipped `BacktestRunner coverage --strict` CLI on seven generated evidence sets), C (`CoverageReport.vb:2011-2025`, `:491-512`, `:1792`; `BacktestProgram.vb:423-426`) |
+| C20 | S2 | The ship gate skips the two known scoring-defect fixtures. A80b (K1) and A81b (K2) return early unless `ORDERCHECK_KNOWN_DEFECTS=1`, and neither `tools/checks/verify-gate.ps1` nor `.github/workflows/verify.yml` sets it. No ledger, no expiry, and the same three-line `If` silences the next one. Lane rated it S1; S2 here because the gate itself places nothing, but what it hides is live scoring (K1, K2) | L-3 F1, F2, F3 | R (harness run here: SKIP by default, 4 FAIL lines with the variable set), C (`verify/ordercheck/Program.vb:15886`, `:15977`; 0 matches in both gate files) |
+| C21 | S2 | The What-If report prints no EV for a single-cell overlay and never prints the live baseline's EV, so a pinned candidate shows only the success rates §3b forbids ranking on. The "W6-1 LONDON stop" overlay sweeps a global key and ranks EV pooled across all sessions. The ranking table and the winner rule use different keys, so a zero-trade cell can sit at rank 1 (R-14) | L-5 R-6, R-7, R-14 | R (L-5 P-WI1, P-WI2), C (`WhatIfReport.vb:94`, `:110`; `overlays/w61-london-stop-grid.json` names a global `scoring.structural_levels.stop_max_atr_mult`) |
 | C14 | S3 | The session cells drop the last UTC hour of every session | M4 #7 | R (M4 T2), C (`LivePerformanceTracker.vb:621`, `:656+`) |
 | C15 | S3 | The stale `AdverseFallbackAtrMultiplier = 1.2` (settings 1.6) gives legacy-yardstick rows a tighter stop | M7a F7 | C (`AnalysisConstants.vb:26`, `FailureRateMatrix.vb:96,103`) |
 | C16 | S3 | OutlierAudit returns ASYMMETRIC_ALGORITHM when no regime qualifies | M7a F9 | C (`OutlierAudit.vb:95-107`) |
 | C17 | S3 | Fixture A41 pins maker/maker drag on the stop arm as correct, so it will reject the fix to A3 | M8 | C (`verify/ordercheck/Program.vb:6872`) |
+| C22 | S3 | Harness coverage gaps. Every A36/A42 geometry fixture uses `r.ATR = 40.0`, and the min-move floor is tested only at ATR 13–100 (L-2). No fixture puts a near-floor stop with its fees (L-1 F1). `SettingsDiffApplier.Validate` has no value bounds, so −50 and 999,999 pass; `Apply` throwing is the only thing stopping them (L-1 F2, row C8). A31h never changes ATR inside one episode (L-1 F3) | L-1 F1–F4, L-2 ×3 | C (8 matches for `.ATR = 40.0`; `SignalEmitter.vb:455` floor = ticks × tick size, no ATR term; no bounds check anywhere in `SettingsDiffApplier.vb`). L-1's own proof runs weren't repeated here |
+| C23 | S3 | The harness's result depends on the host. On Linux: 421 PASS / 4 FAIL under the POSIX locale, 423 / 2 under en-US, against 425 / 0 in the lane runs. A34a/A35a pin culture-formatted percentages (`{0:P0}` gives "40 %" under the invariant culture, so the offline report's own text is culture-dependent too). A79m/A79o assume Windows mandatory share modes | This audit, while re-running L-1 to L-3 | R (three runs here) |
+| C24 | S3 | Smaller CoverageReport, CeilingAudit and What-If gaps. Short rows are admitted as placed-schema rows with zero placed levels (R-9). Rows dropped at labelling don't appear in the report (R-11). The informational Absorption/AggrVel table ignores side (R-13). The geometry overlays filter on the live ladder's POC outcome (R-15). Nits (R-16) | L-5 R-9, R-11, R-13, R-15, R-16 | R (L-5 P-CA4, for R-9); the rest is the lane's reading |
 
-### Band D: the exit tools a trader acts on
+### Band D: the exit tools and live surfaces a trader acts on
 
 | # | Sev | Defect | Found by | Evidence |
 |---|---|---|---|---|
@@ -117,9 +156,12 @@ Band C's measurement defects place no orders, so none of them is S0 or S1 on thi
 | D2 | S2 | The exit guard latches on noise: 45–55 false EXITs per hour on synthetic balanced tape. The flow arms double-count the same prints. **Real-tape rate unmeasured** | M3 #1, #6 | R (M3 noise control, trace) |
 | D3 | S2 | The latch auto-clears at maximum drawdown, and the guard reads the side from radio buttons, not the real position | M3 #3, #4 | R (#3 trace); C (#4, `MainForm_ExitGuard.vb:85-92`) |
 | D4 | S2 | The absorption tag is manufactured by the approach itself: a top-10 ladder can't see the band depth | M3 #5 | R (M3 U7) |
+| D8 | S2 | The TAPE strip paints everything from the first "BURST" to the end of the line in the burst accent colour, so the absorption tag that follows it (`ABS↑ 60510 (3.4×)`) reads as part of the burst call-out. When the strip overflows its column the highlighted tail gets a negative-width rectangle and isn't drawn at all (L-6 F4, S4) | L-6 F1, F4 | C (`UI/Controls/TapeStripLabel.vb:42-49`, `:58-61`: no clamp); L-6 run on Windows (a transcription of the paint logic, not the shipped control) |
+| D9 | S2 | After a bind-time exception (B2's trigger), `ContextBadge`, `MtfRow` and `RegimeAnchorWarn` keep showing the previous run's value with no staleness cue | L-6 F2 | The lane's reading; not re-checked here |
 | D5 | S3 | The cascade alarm is dead on WS. When fed, it infers the side from the aggressor, which is K2's defect, and does disk I/O under the MarketState lock | K2, M3 #8 | R (M3 U4) |
 | D6 | S3 | MicroCVD votes "adverse" at exhaustion and abstains during the one-way leg | M3 #7 | R (M3 U1) |
 | D7 | S3 | Approach alerts are a 2 s-sampled state, invisible at flush speed | M3 #9 | R (M3 stats) |
+| D10 | S3 | `MiniMeter.Pct`'s clamp doesn't catch NaN, so a NaN spread renders as an empty bar that looks healthy, next to a raw "NaN bps" label | L-6 F3 | C (`UI/Controls/MiniMeter.vb:59-60`: two comparisons, both false for NaN) |
 
 ### Band E: tape store integrity
 
@@ -129,6 +171,7 @@ Band C's measurement defects place no orders, so none of them is S0 or S1 on thi
 | E2 | S2 | Repair reports `PASS_CLEAN` over pages that never reached disk, and `AppendRows` counts rows a full disk refused, so the status reads NORMAL | M5 F2, F3 | R (M5 probe, `/dev/full`: 86 counted, 0 written) |
 | E3 | S3 | The funding coverage check counts each sample twice, so a half-filled month reads as covered | M5 F6 | R |
 | E4 | S3 | A full-month scan runs on the WS receive thread, under a lock the UI polls: 1.6 s on 1.8M rows here | M5 F5 | R |
+| E6 | S3 | Fixture A79g pins a streaming-writer versus gap-repair race that writes 3 duplicate rows as the passing state, and relies on "readers dedupe" | L-3 F4 | C, in part: `HistoricalStore.LoadTradeRange` calls `DedupTrades`; the other readers of `trades_*.csv` weren't checked |
 | E5 | S3 | The REST seed blocks the WS subscribe, so capture goes dark for the whole retry budget | M5 F9 | C (`DeribitWsFeed.vb:215-218`) |
 
 ### Band F: settings and hot-reload plumbing
@@ -159,8 +202,9 @@ This section supersedes the D-list that the spec-back carried before 2026-09-25.
 **Decisions that share a root, and are cheaper ruled together:**
 - C-1 and C-2 are both stop geometry.
 - C-3, C-10 and the fixture in row C17 all rest on the fee model.
-- C-9, C-10 and C-11 are all measurement.
+- C-9, C-10, C-11 and C-19 are all measurement.
 - C-5 and C-12 both need a value range table, and M2's is the spec for both.
+- C-15, C-16, C-17 and C-18 are the order app's. C-16 is the backstop for C-1: a position-level cap catches a wrong-side stop whatever put it there.
 
 **C-1: where the stop-side check lives (row A1, the S0).**
 - **Options:**
@@ -247,6 +291,7 @@ This section supersedes the D-list that the spec-back carried before 2026-09-25.
 **C-11: past rulings that read these surfaces.**
 - Which rulings leaned on the strip, the matrix, the ladder, the what-if runner or the tweaker's trigger is the trader's knowledge, so the audit has no read here.
 - **Scope:** grep the D-tables and `docs/trader-tick-queue.md` for `FailureRateMatrix`, `BandLadder`, `WhatIf`, `perf strip` and `IsRecommended`.
+- **One ruling is already known to rest on a broken instrument:** CeilingAudit's §4 decision, "combination spend stops; W6-5/B1 + D3-D6 close as 'no measured headroom'" (row C18). Add `CeilingAudit`, `W6-5` and `no measured headroom` to the grep.
 
 **C-12: the AutoTweaker (C7, C8).**
 - **Options:**
@@ -264,14 +309,60 @@ This section supersedes the D-list that the spec-back carried before 2026-09-25.
   - routing every store read through `OpenStoreForScan`.
 - **Trader ruling:** yes, because the fixes change store writes.
 
-**C-14: the exit tools (D1–D7).**
-- **Read:** no design change until the real-tape false-latch rate exists (§D, X-3).
+**C-14: the exit tools and live surfaces (D1–D10).**
+- **Read:** no design change to D1–D7 until the real-tape false-latch rate exists (§D, X-3). D8–D10 don't need that data: they're rendering defects in two controls.
 - D1, the pivot repaint, shares its cause with the scoring path's swing stop (AUD-14). A ruling on closed-bar pivots moves both.
 - **Trader ruling:** yes for D1 (scoring). For the rest, yes, because they move rendered values.
 
-**C-15: the order-app items (A2, A8–A11, and M9 F7, F10 and F11).**
+**C-15: the order-app items (A2, A7–A11, A17–A22, and M9 F10 and F11).**
 - These belong to the order app's owner and repo.
-- A2 and M9 F7 wait on lane M9b (§D).
+- Lane M9b (L-4) has run. It settled A2 (unbounded with M.SL off, dead with the socket down) and closed M9 F7 in full (row A13).
+
+**C-16: order-app position protection (A12, A13, A15, A16, A18, A19, A20).**
+- **Options:**
+  - (a) Patch each one: send the reduce first and cancel only on confirmed flat, re-arm on failure, and log only what was confirmed (A12); add a `rejected` branch (A13); take the side from `positionSizeUSD` (A16); retry reconnect forever with capped back-off and page someone (A15).
+  - (b) (a), plus a loss cap keyed to the position (`positionSizeUSD`, `positionAvgEntry`) rather than the stop order's lifecycle, scaled to the signal's own stop or ATR (A18), and a 1–2 s quote-silence watchdog that stands the bridge down and alerts (A19). The restore scan compares the position with its orders (A20).
+  - (c) Move primary protection to the exchange: a reduce-only stop-market as the stop, with the post-only chase as an improvement on top.
+- **Read:** (b) now, and weigh (c) once X-1 answers. The common root of A12, A13 and A16 is that every protection is keyed to one order's state machine or to a UI toggle. (a) is cheaper and keeps that root.
+- **Trader ruling:** yes. It changes live order behaviour, under the app repo's rules.
+
+**C-17: partial fills (A14).**
+- **Options:**
+  - (a) Make the TP reduce-only, and track filled quantity (`incremental`, or resize the legs on each fill).
+  - (b) Enforce a one-contract (10 USD) hard cap in the app until (a) ships.
+  - (c) Both.
+- **Read:** (c). The shipped 10 USD can't partially fill, so (b) costs nothing today. It stops anyone raising Amount or enabling risk sizing into an S0.
+- **Trader ruling:** yes (order behaviour, app repo).
+
+**C-18: what a stand-down does (A8).**
+- **Options:**
+  - (a) Cancel the working entry on every stand-down.
+  - (b) Freeze it: stop chasing, and keep the cap fixed at placement.
+  - (c) (a), and publish the working entry in the executor feedback, so the engine can see it.
+- **Read:** (c). A stand-down that keeps chasing is still acting on the old signal. An ARM-off payload that widens the cap inverts the intent.
+- **Trader ruling:** yes (order behaviour; (c) also changes the feedback schema).
+
+**C-19: CeilingAudit and the coverage report (C18, C19).**
+- **CeilingAudit options:**
+  - (a) Withdraw the "no measured headroom" ruling now, and leave the tool as it is.
+  - (b) Side-align the features (encode each directional state as agrees or opposes the row's side), make the verdict two-sided (a CI wholly below zero reads CHALLENGER DEFECTIVE, not CEILING DECLARED), then re-run.
+  - (c) Both: (a) now, (b) before any new ruling.
+- **Read:** (c). (a) alone is cheaper, and it leaves a tool that will declare the same false ceiling the next time anyone runs it.
+- **Coverage report:** make `SequenceGaps.MissingCount` gate the VERDICT and `--strict`, close a venue window at the next process start, rank the store's own first trade above `before-first`, and make `--strict` agree with the VERDICT line. Any copy-back certified by `--strict` before the fix should be treated as uncertified.
+- **Trader ruling:** yes for withdrawing or re-opening a research ruling. The tool fixes change no engine behaviour, and one revert undoes each. But they change what past `--strict` passes mean, so the trader should hear about them before relying on an old pass.
+
+**C-20: the ship gate's known-defects hatch (C20).**
+- **Options:**
+  - (a) Keep the environment-variable skip.
+  - (b) The gate runs the known-defect fixtures and reports them as a separate count against a ledger, the way `docs/csv-rotation-riders.md` works. A skip with no ledger row fails the gate.
+  - (c) Fix K1 and K2 (already specced in `engine-fix-build-spec-2026-09-21.md` §3 and §4) and delete the hatch.
+- **Read:** (b) now, then (c). (a) is the cheaper option and it's the one that lets a confirmed scoring defect ship under `ALL PASS`. CLAUDE.md's own truthful-over-cheap prior points the same way.
+- **Also:** C23's host dependence belongs in the same change. Either pin the culture in the harness's `Main` and mark A79m/A79o Windows-only, or give them a Linux repro.
+- **Trader ruling:** no for (b), which is harness tooling that one revert undoes. Yes for (c), which is scoring.
+
+**C-21: the harness's coverage gaps (C22).**
+- **Read:** add a volatility-spike case (ATR 30 → 140 inside one episode) to the geometry, min-move and exit-guard families, and a value-bounds case to `Validate`, in the same commits as the fixes they guard (C-2, C-3, C-5, C-12). On their own they'd pin today's behaviour, including the defects.
+- **Trader ruling:** no, fixtures are auto-proceed. The fixes they sit beside are reserved.
 
 ---
 
@@ -283,41 +374,51 @@ This section supersedes the D-list that the spec-back carried before 2026-09-25.
 
   | Verdict | Count |
   |---|---|
-  | Reproduced by re-running proof code | 63 |
+  | Reproduced by re-running proof code | 64 |
   | Confirmed by reading the code | 65 |
   | Duplicate | 7 |
   | Corrected | 1 |
   | Refuted | 1 |
-  | Confirmed in part, with the rest in lane M9b | 1 |
+
+  M9 F7, "confirmed in part" until lane L-4 closed it, is now in the first row.
 
 - Every committed proof set was re-run and matched its recorded output.
+- Six completion lanes, L-1 to L-6, folded in on 2026-09-29. Their 53 findings each have a verdict in the summary's §3:
 
-**Lanes still to run.** Their paste-ready prompts are in §7.1.
+  | Lane | Report | Findings | What it changed here |
+  |---|---|---|---|
+  | L-1 | [`audits/2026-09-25-fixture-harness-a.md`](audits/2026-09-25-fixture-harness-a.md) | 4 | A1 (the floor ignores ATR), C22 |
+  | L-2 | [`audits/2026-09-25-fixture-harness-b.md`](audits/2026-09-25-fixture-harness-b.md) | 3 | C22 |
+  | L-3 | [`audits/2026-09-25-fixture-harness-c.md`](audits/2026-09-25-fixture-harness-c.md) | 6 | C20, E6, and K1's incidence |
+  | L-4 | [`audits/order-app/2026-09-25-order-app-gap.md`](audits/order-app/2026-09-25-order-app-gap.md) | 20 | A12–A22, A2, A8, A9; closes M9 F7 |
+  | L-5 | [`audits/2026-09-25-backtest-ceiling-remainder.md`](audits/2026-09-25-backtest-ceiling-remainder.md) | 16 | C18, C19, C21, C24, C-11 |
+  | L-6 | [`audits/2026-09-25-ui-controls.md`](audits/2026-09-25-ui-controls.md) | 4 | D8–D10 |
+
+- Proofs re-run here:
+  - The L-4 harness matched its record line for line once timings were stripped.
+  - All three L-5 proof sets (coverage, CeilingAudit, What-If) matched exactly.
+  - The engine harness, run three ways, gave C23's host-dependent totals and L-3's four known-defect FAIL lines.
+
+  L-1's and L-6's proofs weren't re-run. L-6's needs Windows, and L-1's two claims were confirmed by reading the code instead.
+
+**Still to run: one lane.** Its paste-ready prompt is §7.1 L-7.
 
 | ID | Lane | Why it's needed | Run on |
 |---|---|---|---|
-| L-1 | M8a: fixture harness, lines 1–5,600 | M8 covered about 7 % of the harness. The prompt shipped with an unfilled `<RANGE>` | Sonnet 5, high |
-| L-2 | M8b: fixture harness, lines 5,601–11,200 | Same | Sonnet 5, high |
-| L-3 | M8c: fixture harness, lines 11,201–16,764 | Same | Sonnet 5, high |
-| L-4 | M9b: the order-app code M9 didn't read | It decides A2's severity and closes M9 F7 | Opus 5.5, xhigh |
-| L-5 | M7b-2: CoverageReport remainder, and the CeilingAudit fit and report | M7b read about 40 % of CoverageReport and none of the logistic fit | Opus 5.5, high |
-| L-6 | M6b-2: the 14 unread `UI/Controls` files | A control that throws during a bind halts the collector (B2) | Sonnet 5, high |
-| L-7 | R-1: an independent review of this whole audit | No seat but the auditing one has checked the verdicts or the S0 | Fable 5.1, high. **Run it last**, after L-1 to L-6 are folded in |
-
-L-1 to L-6 are independent and can run in parallel.
+| L-7 | R-1: an independent review of this whole audit | No seat but the auditing one has checked the verdicts, the three S0s, or the severity calls on L-4's findings | Fable 5.1, high. L-1 to L-6 are folded in, so it can run now |
 
 **Facts the code can't settle.** These need the trader, or the collector box:
 
 | ID | What | Why | What's needed |
 |---|---|---|---|
-| X-1 | Deribit's behaviour | Decides A1's, A2's and A9's severity | Three testnet orders:<br>(a) an OTOCO buy whose sell `stop_limit` leg's trigger is already above the market when the entry fills: is it triggered, rejected, or left resting?<br>(b) a `stop_limit` with `trigger_offset` 30: does the trigger trail?<br>(c) a triggered `post_only` stop whose limit would cross: where does it rest, and is it repriced? |
+| X-1 | Deribit's behaviour | Decides the trigger rate for A1 and A13, and A2's, A9's and A14's severity. L-4 had only web-search summaries of Deribit's support pages; docs.deribit.com was blocked from its session | Testnet orders:<br>(a) an OTOCO buy whose sell `stop_limit` leg's trigger is already above the market when the entry fills: is it triggered, rejected, or left resting? If rejected or cancelled, what `order_state` does `user.changes` push?<br>(b) a `stop_limit` with `trigger_offset` 30: does the trigger trail, and does `user.changes` push the new trigger?<br>(c) a triggered `post_only` stop whose limit would cross: where does it rest, and is it repriced?<br>(d) OTOCO with `trigger_fill_condition: first_hit`: on a partial fill of the primary, are the secondaries placed for the full primary amount?<br>(e) does a triggered stop keep its `order_id`? |
 | X-2 | How often A1 fires | The S0's frequency | `analysis_log.csv` plus its rotated `.bak` files for a period when the app was trading, and the app's trade records (`TradeRecord.SignalId`, `EntryPrice`) for the same period. The join key is `SignalId` (+ `InstanceId`). A long is exposed when `EntryPrice ≤ PlacedStopLong`, and a short mirrors it. The CSV alone already gives the exposure: the share of directional rows whose stop is closer than the app's 0.6 × ATR drift allowance. The repo is public, so don't push these files to it |
 | X-3 | The exit guard's false-latch rate on real tape | D2 was measured on synthetic tape only | A few days of the collector's trade store (`trades_YYYY-MM.csv`, which is public exchange data), replayed through M3's harness |
-| X-4 | Windows-only behaviour | C8's reload half, and E-band collisions | M1's probe P9 (the watcher on a rename-save), run on the Windows box. A store-read versus repair `FileShare` collision (M5 F4), for which no proof exists yet |
+| X-4 | Windows-only behaviour | C8's reload half, E-band collisions, and C23 | M1's probe P9 (the watcher on a rename-save), run on the Windows box. A store-read versus repair `FileShare` collision (M5 F4), for which no proof exists yet. L-6's proof harness (`net8.0-windows`). One harness run on the Windows box with its console culture printed, to pin which environment the 425 / 0 baseline belongs to |
 
-**The audit seat's own remaining work:**
-- Fold in each lane and each answer as it lands: re-check its claims, and update §B, §C and the summary's verdict table.
-- Write the readers for X-2 and X-3 once the data can reach a session. That is audit-support code only.
+**What's left, and who can do it.** The trader has passed the rest to the project orchestrator, who decides whether to finish it or leave it. [`audits/2026-09-29-orchestrator-handoff.md`](audits/2026-09-29-orchestrator-handoff.md) has the steps:
+- Run L-7 and fold in its answer. Re-check each claim, then update §B, §C and the summary's verdict table.
+- X-1 to X-4 as the data or the testnet account allows. The readers for X-2 and X-3 are audit-support code, and nothing has been written for them yet.
 
 ---
 
@@ -628,7 +729,7 @@ Code-read findings (AUD-09, AUD-11, AUD-17 to AUD-20, parts of AUD-06) have no r
 
 ## 7. Modular prompts for the unaudited remainder
 
-**Status 2026-09-25:** M1–M10 below ran on 2026-09-24. Their results are in §B and the summary. M8 is superseded by M8a–c in §7.1, because its `lines <RANGE>` was never filled in. §7.1 holds every prompt still to run.
+**Status 2026-09-25:** M1–M10 below ran on 2026-09-24. Their results are in §B and the summary. M8 is superseded by M8a–c in §7.1, because its `lines <RANGE>` was never filled in. §7.1 holds the completion-lane prompts. L-1 to L-6 ran and were folded in on 2026-09-29; only L-7 is still to run.
 
 Each prompt is standalone. Paste it, then paste (or open, in Claude Code) the files it names.
 
@@ -788,7 +889,7 @@ These fix what went wrong with the first round (spec-back §3):
 - Each lists what not to report again.
 - Each ends with an instruction to commit the report and its proofs.
 
-Paste each prompt as it stands; nothing needs filling in. L-1 to L-6 can run in parallel. Run L-7 last, after the other lanes have been folded in.
+Paste each prompt as it stands; nothing needs filling in. L-1 to L-6 ran and were folded in on 2026-09-29. L-7 can run now. Its prompt was updated that day for the two new S0s and the completion lanes.
 
 #### L-1, L-2, L-3: M8a, M8b, M8c, the fixture harness in three sittings
 
@@ -893,14 +994,14 @@ When you finish: write your report to docs/audits/2026-09-25-ui-controls.md in y
 #### L-7: R-1, an independent review of this audit (run last)
 
 **Run on:** Fable 5.1, high, one sitting, in a session with both repos attached.
-- **Why this tier:** independence from the auditing seat's model matters, because this audit sets the order in which fixes get built.
+- **Why this tier:** independence from the auditing seat's model matters, because this audit sets the order in which fixes get built. The prompt is written for a cloud session (a Linux container, `apt-get` for .NET). On a Windows machine, skip the install. The harness totals depend on the host (row C23): the lanes recorded 425 / 0, and Linux gives 421 / 4 or 423 / 2.
 - **Where it slips:** accepting a proof that exercises a mechanism on inputs the live engine never produces; not running the handles.
 - **Escalate:** there's no tier above. If a handle can't run, record CAN'T TELL rather than infer.
 
 ```text
 You are reviewing an adversarial audit, not the code it audited. Be as hostile to the audit as it was to the code. Do not praise, do not fix any code, and do not edit any existing file.
 The audit: docs/adversarial-audit-2026-09-24.md in Beansz2015/DeribitVerdictEngine, on branch claude/great-keller-s5f4gp (or on master, if that branch has been merged). It is the entry point, and it links the batch summary, the spec-back, the lane reports and their proofs. It audits engine commit 6e74181 and order-app commit 8232e9e (Beansz2015/DeribitOrderPlacementApp, public). Make a worktree at each commit. If you need .NET, install it with `apt-get install -y dotnet-sdk-8.0` (the Microsoft download host is blocked; apt works).
-Do this: (1) Run every handle, H-1 to H-9, in docs/audits/2026-09-24-review-batch-spec-back.md §1, and compare its output with the output quoted there. (2) Re-check every Band A and Band B row of the report's §B against the cited code, in both repos. (3) Trace the S0 (row A1) end to end: engine emission, payload, the app's gates, the order sent, and what Deribit receives. Say whether S0 is right on the report's own severity scale. (4) Pick 15 findings at random from the summary's §3 and check their verdicts. (5) For each decision in the report's §C, say whether the options are complete, whether the audit's read is the more truthful option or merely the cheaper one (CLAUDE.md, the three-step test), and whether its reserved-class flag is right. (6) List separately any defect the audit missed that you find along the way.
+Do this: (1) Run every handle, H-1 to H-9, in docs/audits/2026-09-24-review-batch-spec-back.md §1, and compare its output with the output quoted there. Also run the L-4 order-app harness (docs/audits/order-app/README.md has the command) and compare it with the output recorded in its proof README. (2) Re-check every Band A and Band B row of the report's §B against the cited code, in both repos. (3) Trace the three S0s (rows A1, A12, A13) end to end: engine emission, payload, the app's gates, the order sent, what Deribit receives, and what the app does when a leg or a reduce fails. Say whether each is S0 on the report's own severity scale. (4) Pick 15 findings at random from the summary's §3, including at least 5 from the completion lanes L-1 to L-6, and check their verdicts. (5) For each decision in the report's §C, say whether the options are complete, whether the audit's read is the more truthful option or merely the cheaper one (CLAUDE.md, the three-step test), and whether its reserved-class flag is right. (6) List separately any defect the audit missed that you find along the way.
 Mark each item AGREE, DISAGREE (with evidence) or CAN'T TELL. Write the review to docs/audits/2026-09-25-audit-review.md, starting with anything in this list you did not do. Commit and push to your working branch. Do not open a pull request, and do not change any other file.
 ```
 

@@ -23,6 +23,9 @@ Every `H-n` below was run in this session, and the output quoted is what it prin
 | **H-7** | M6a P1–P4: A3 (NaN), A6, B1, B3 | See the block below this table | `P2b: gateFires=False` · `P3: OverflowException …` · `P4: passLong=True passShort=True …` · `P1: HANGS …` |
 | **H-8** | M7b ports: C3, C5 | `diff <(python3 docs/audits/proofs/backtest-whatif-ceilingaudit/audit_proofs.py) docs/audits/proofs/backtest-whatif-ceilingaudit/out_audit_proofs.txt` | Prints nothing |
 | **H-9** | M9, A1's app half | Read `SignalBridge.vb:687` (the only level check: `StopLevel <= 0 OrElse Target <= 0`) and `frmMainPageV2.vb:3720-3723` (the slippage anchor is the first bid seen) in the order app at `8232e9e`. Then run `python3 docs/audits/order-app/proofs/signal-to-exchange-order-path/trace.py` | `side check: none` in all three cases. Case B's placed trigger is 59,001.5, 4 ticks under the engine's entry |
+| **H-10** | L-4: the two app S0s (A12, A13) and A2, A8, A14, A16, A17, A20 | `git -C <app-clone> worktree add <dir> 8232e9e`, then `bash docs/audits/order-app/proofs/order-app-gap/run.sh <dir> all` (about 2.5 min; needs nuget.org). Added 2026-09-29 | Scenario EMERGENCY-REJECTED: `flush continues to 58617.5 (-380.5 from the fill): frames sent = 0; exchange holds a 10 USD long with NO orders`. Scenario Q1: `alerts produced: 0` and `flush to bid 58697.5 (-298 USD): frames sent = 0, alerts = 0`, for both `rejected` and `cancelled`. The whole run matches the proof README once timings are stripped |
+| **H-11** | L-5: C18 (CeilingAudit), C19 (coverage), C21 (What-If) | The three blocks under "Exact commands run" in `docs/audits/proofs/backtest-ceiling-remainder/README.md`, in a worktree at `6e74181`. Added 2026-09-29 | P-CA1: `SHIPPED encoding … CEILING DECLARED` and `CONTROL encoding … B1 PRIZE MEASURED` on the same rows. Coverage S-C: `*** 648 TRADE(S) MISSING ***`, `VERDICT: clean`, `EXIT CODE (--strict): 0`. All three outputs are identical to the committed ones |
+| **H-12** | L-3 F1: the ship gate's known-defects hatch (C20) | `dotnet run --project verify/ordercheck/OrderCheck.vbproj -c Release`, once plain and once with `ORDERCHECK_KNOWN_DEFECTS=1`. Then `grep -c ORDERCHECK_KNOWN_DEFECTS tools/checks/verify-gate.ps1 .github/workflows/verify.yml`. Added 2026-09-29 | Plain: two `SKIP  A80b`/`A81b known-defect repro` lines. With the variable: four `FAIL … KNOWN DEFECT` lines. The grep prints 0 for both files. ⚠ The PASS total depends on the host (report row C23): Linux gives 421 or 423 where the lanes recorded 425 |
 
 H-7's command:
 
@@ -74,7 +77,7 @@ The decisions a fix needs now live in the full audit report, [`../adversarial-au
 
 ## 4. What I did not verify
 
-- **Review findings.** None is left unchecked. On 2026-09-25 I checked the 42 the first pass had marked N; 41 hold as described. M9 F7 is confirmed only in part, and lane L-4 covers the rest.
+- **Review findings.** None of M1–M10's is left unchecked. On 2026-09-25 I checked the 42 the first pass had marked N; 41 hold as described. M9 F7, confirmed only in part then, was closed by L-4 on 2026-09-29. **Of L-1 to L-6's 53 findings, 15 rest on the lane** (summary §3). All but L-6 F2 are S3 or S4.
 - **Deribit behaviour.** A1, A2 and A9 all turn on three things, and none was checked against the venue:
   - what happens to a sell stop whose trigger has already been crossed when the OTOCO legs are created;
   - what `trigger_offset` does on a `stop_limit` order;
@@ -82,7 +85,8 @@ The decisions a fix needs now live in the full audit report, [`../adversarial-au
 - **How often A1 fires.** It needs the distribution of `SWING_STOP` distances next to fill drift. There's no CSV or tape in the clone.
 - **The real-tape false-latch rate for D2.**
 - **Windows-only behaviour.** The watcher's response to a rename-save (C8), `FileShare` collisions (M5 F4), and the modal loop (B2). All are reasoned or proven on Linux only.
-- **Four order-app functions nobody read:** `UpdateStopLossForTriggeredStopLossOrder`, `ForceStopLossUpdate`, `SendRateLimitedUpdate`, and the `cancelled` order-state branch.
+- ~~**Four order-app functions nobody read**~~ **Read by L-4 on 2026-09-25.** It covered `UpdateStopLossForTriggeredStopLossOrder`, `ForceStopLossUpdate`, `SendRateLimitedUpdate` and the `cancelled` branch. Its findings are rows A12–A22.
+- **Deribit behaviour, added by L-4:** `first_hit` sizing on a partial fill, and whether `user.changes` pushes a trailed trigger. Both are in report §D, X-1.
 - **M2's per-key range table** was not re-derived.
 - **M10's impact.** It depends on whether the pooled books already contain the rotated rows.
 - **Commits after `6e74181`** were ruled out of scope.
