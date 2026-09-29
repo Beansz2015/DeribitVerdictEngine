@@ -98,3 +98,21 @@ Fill when the summary prints. Required content:
 - **Whether the dev machine stays awake.** The keep-awake call blocks idle sleep. It does not block a manual sleep, a logoff, a shutdown or a Windows restart. The trader must not do those until after 17:55 UTC.
 - **`starbase_*` meaning and the stored-copy comparison** (section 2).
 - **Clock skew.** Receive delays run negative by 0.2–0.9 s; the skew was not measured against a time source.
+
+---
+
+## 6. Orchestrator review — INTERIM, 2026-09-29 08:44 UTC (the run is live; the result is not in)
+
+**Instrument: ACCEPTED so far. Result: not reviewed — §2 is pending.** Re-review when §2 is filled (~17:55 UTC).
+
+| Check | Result |
+|---|---|
+| Diff scope `a08ccd9..64b5b42` | `tools/WsTradeProbe/RawChannelProbe.vb` (new), `WsTradeProbeProgram.vb` (+12), this doc. `LiqFlagProbe.vb` untouched, so the AWS probe's source is unchanged |
+| `H-3`, code half, re-run | 8 hits, all an env-var read (`:117`), a comment, the refresh request builder (`:408`, `:432`), the response parser (`:527`) or the redactor (`:594`). No literal secret |
+| `H-3`, run-folder half, re-run at 08:44 | **0** files contain `access_token`, `refresh_token` or `client_secret` |
+| Liveness at 08:44 (20 min in) | Status every 5 min; `auth 1 refresh 0 reconn 0`; 19 MB private; delivered 100ms 3,252 · agg2 3,252 · raw 3,244; `histFlagged 0` so far (judging starts at 90 min) |
+| ⚠ Raw delivered count | **8 fewer than 100ms from the first status line on, and constant since** (962/954 at 5 min; 3,252/3,244 at 20 min). A constant offset reads as raw subscribing a few trades later at start, not as raw dropping trades. Confirm with `H-5` (`delivered trades absent on history`) at the end |
+| `starbase_match_id` / `starbase_timestamp` | A real "field the history host lacks" answer to the trader's question, but on the public channels too. Trader note: needs institutional access, so not used. Recorded, no action |
+| Brief feedback on the commit trailer | Correct: the orchestrator's brief hardcoded its own trailer. Future briefs: tell the seat to use its own session's attribution line |
+
+⚠ **The dev machine must stay on, awake and logged in until ~17:55 UTC (01:55 GMT+8).** A sleep, logoff or restart ends the run.
