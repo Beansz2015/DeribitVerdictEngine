@@ -28,6 +28,8 @@
 >
 > **During the holiday:** no builds, no deploys, no scoring or settings changes. A seat opened then does read-only checks only.
 >
+> **After 2026-11-25 — also:** the **history data store** build (stage 2 of [`history-data-store-spec.md`](history-data-store-spec.md), Opus 5.5 high), then its backfill and a parallel run of at least 14 days before box trade capture is switched off (stage 4, reserved). Its rulings `HDS-1`–`HDS-4` are owed BEFORE 2026-10-14.
+>
 > **After 2026-11-25 — first seats back:** burst outcome **run 1** (data cut fixed at 2026-11-25 00:00:00 UTC, by 2026-12-04) → decide `AVR-2` (c) from it (`BO-D1` = run 1) → if it argues for (c), write the (c) spec → **run 2 on or after 2027-01-27** must replicate before (c) ships. Also: the next burst-watch reads, and whatever the holiday left.
 >
 > **Sequence of record for the burst outcome read** (trader-confirmed 2026-09-28): build tools → run 1 → decide → (c) spec only if run 1 argues for it → run 2 replicates → build and ship (c). Detail: [`burst-outcome-read-spec.md`](burst-outcome-read-spec.md) §6.1 and the `BO-D1` row.
