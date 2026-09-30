@@ -89,6 +89,7 @@ and `SettingsLoader` deep-merges it over `settings.json` at load. The file is gi
 - On the app: set auto-run REPEAT + ON-CLOSE, start it, then **disconnect RDP — do not log off** (logoff kills the GUI session).
 - No crash watchdog exists: a crash stops collection until someone RDPs in. The WS feed reconnects itself; app death does not.
 - ⛔ **MEASURED on the current box `i-0d6c133058876273e`, 2026-09-30 (read-back, read-only):** **neither of the first bullet's two items is in place.** `AutoAdminLogon` is empty, and the only Startup-folder item is AWS's `RunWallpaperSetup.cmd`. The only non-Microsoft scheduled tasks are the disabled EC2 launch task and `RedInnCourt-DynamicPricing-Hourly` (another app on the same box). **So a reboot or a crash leaves the collector down until someone RDPs in.** `collector-readback.ps1` now prints `TASK`, `STARTUP_ITEM` and `AUTOLOGON` lines, so this can be re-checked at any read-back.
+- ✅ **Auto-logon ENABLED 2026-09-30 by the trader** (Sysinternals Autologon, password as an LSA secret; [`collector-watchdog-spec.md`](collector-watchdog-spec.md) §1). Read-back 19:31:50 UTC: `AUTOLOGON=1 USER=Administrator`; the app kept running through it (same PID 19472, rows at 19:29, 19:30 and 19:31). **A reboot still does not start the app until the watchdog is installed** (its at-logon trigger).
 
 ## 3. Daily one-glance health check (RDP in, ~30 seconds)
 
